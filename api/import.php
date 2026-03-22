@@ -280,25 +280,21 @@ try {
                 }
             }
 
-            // Actieve transponder (slot 0) — de door de voorbereider geselecteerde code
-            // null = geen transponder; leeg string behandelen als geen
+            // Actieve transponder (slot 0) — de door de voorbereider geselecteerde code.
+            // Altijd opslaan (ook bij "geen"), zodat de bewuste keuze bewaard blijft:
+            //   code = 'KS-44038'  → geselecteerde transponder
+            //   code = NULL        → expliciet "geen" transponder
             if (array_key_exists('transponder_actief', $c)) {
-                $tpActief = trim($c['transponder_actief'] ?? '');
-                if ($tpActief !== '') {
-                    $stmtTp->execute([
-                        ':person_license' => $lk,
-                        ':comp_id'        => $compId,
-                        ':slot'           => 0,
-                        ':code'           => $tpActief,
-                        ':source'         => 'manual',
-                    ]);
-                } else {
-                    // Expliciete "geen" keuze — verwijder eerder opgeslagen slot 0
-                    $pdo->prepare("
-                        DELETE FROM transponders
-                        WHERE person_license = ? AND competition_id = ? AND slot = 0
-                    ")->execute([$lk, $compId]);
-                }
+                $tpActief = ($c['transponder_actief'] !== null && $c['transponder_actief'] !== '')
+                    ? trim($c['transponder_actief'])
+                    : null;
+                $stmtTp->execute([
+                    ':person_license' => $lk,
+                    ':comp_id'        => $compId,
+                    ':slot'           => 0,
+                    ':code'           => $tpActief,
+                    ':source'         => 'manual',
+                ]);
             }
 
             $aantalDeelnemers++;

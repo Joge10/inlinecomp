@@ -597,6 +597,23 @@ header .badge {
     font-weight: 700;
     margin-left: 3px;
 }
+.badge-anoniem {
+    display: inline-block;
+    background: #e0e0e0;
+    color: #555;
+    border-radius: 3px;
+    padding: 1px 5px;
+    font-size: .7rem;
+    font-weight: 700;
+    margin-left: 3px;
+    letter-spacing: .3px;
+}
+.inp-readonly {
+    background: #f0f0f0;
+    color: #888;
+    cursor: not-allowed;
+    border-color: #ddd;
+}
 
 /* Tab-badges (afgemeld / nieuw) */
 .tab-badge {
@@ -1074,3 +1091,77 @@ header .badge {
     white-space: nowrap;
 }
 .tp-toevoegen:hover { background: #c9530a; }
+
+/* ── Bevestigingsdialoog ── */
+.modal-overlay {
+    position: fixed;
+    inset: 0;
+    background: rgba(0, 0, 0, .45);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 2000;
+    animation: modal-fade .15s ease;
+}
+@keyframes modal-fade {
+    from { opacity: 0; }
+    to   { opacity: 1; }
+}
+.modal-dialog {
+    background: var(--wit);
+    border-radius: 10px;
+    box-shadow: 0 8px 32px rgba(0, 0, 0, .25);
+    width: 90%;
+    max-width: 420px;
+    overflow: hidden;
+    animation: modal-slide .15s ease;
+}
+@keyframes modal-slide {
+    from { transform: translateY(-12px); opacity: 0; }
+    to   { transform: translateY(0);     opacity: 1; }
+}
+.modal-header {
+    background: var(--blauw);
+    color: var(--wit);
+    padding: 13px 20px;
+    font-weight: 600;
+    font-size: .95rem;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+.modal-header .modal-icon { font-size: 1.1rem; }
+.modal-body {
+    padding: 18px 20px 14px;
+    color: var(--tekst);
+    line-height: 1.55;
+    font-size: .9rem;
+}
+.modal-knoppen {
+    display: flex;
+    gap: 10px;
+    justify-content: flex-end;
+    padding: 12px 20px;
+    border-top: 1px solid var(--border);
+    background: var(--grijs);
+}
+.modal-btn {
+    padding: 7px 20px;
+    border-radius: 5px;
+    font-size: .88rem;
+    font-weight: 600;
+    cursor: pointer;
+    border: 1px solid transparent;
+    transition: background .15s;
+}
+.modal-annuleer {
+    background: var(--wit);
+    border-color: var(--border);
+    color: var(--tekst);
+}
+.modal-annuleer:hover { background: #e8ecf0; }
+.modal-doorgaan {
+    background: var(--oranje);
+    color: var(--wit);
+}
+.modal-doorgaan:hover { background: #c9530a; }

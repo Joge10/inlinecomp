@@ -141,7 +141,7 @@ function renderWedstrijdLijst() {
 
 async function selectWedstrijd(card, comp) {
     if (heeftWijzigingen) {
-        if (!confirm('Er zijn onopgeslagen wijzigingen.\nDoorgaan zonder op te slaan?')) return;
+        if (!await toonBevestigDialog('Er zijn onopgeslagen wijzigingen.\nDoorgaan zonder op te slaan?')) return;
     }
     if (activeCard) activeCard.classList.remove('active');
     card.classList.add('active');
@@ -178,6 +178,46 @@ async function selectWedstrijd(card, comp) {
     }
 }
 
+// ── Bevestigingsdialoog ───────────────────────────────────────────────────────
+
+function toonBevestigDialog(bericht, titel = 'Onopgeslagen wijzigingen') {
+    return new Promise(resolve => {
+        const overlay = document.createElement('div');
+        overlay.className = 'modal-overlay';
+        overlay.innerHTML = `
+            <div class="modal-dialog" role="dialog" aria-modal="true">
+                <div class="modal-header">
+                    <span class="modal-icon">⚠</span>
+                    <span>${escHtml(titel)}</span>
+                </div>
+                <div class="modal-body">${escHtml(bericht)}</div>
+                <div class="modal-knoppen">
+                    <button class="modal-btn modal-annuleer">Annuleren</button>
+                    <button class="modal-btn modal-doorgaan">Doorgaan</button>
+                </div>
+            </div>`;
+
+        document.body.appendChild(overlay);
+
+        const sluit = (resultaat) => {
+            overlay.remove();
+            document.removeEventListener('keydown', onKey);
+            resolve(resultaat);
+        };
+
+        const onKey = e => {
+            if (e.key === 'Escape') sluit(false);
+            if (e.key === 'Enter')  sluit(true);
+        };
+
+        overlay.querySelector('.modal-annuleer').addEventListener('click', () => sluit(false));
+        overlay.querySelector('.modal-doorgaan').addEventListener('click', () => sluit(true));
+        overlay.addEventListener('click', e => { if (e.target === overlay) sluit(false); });
+        document.addEventListener('keydown', onKey);
+        overlay.querySelector('.modal-annuleer').focus();
+    });
+}
+
 // ── Navigatie ─────────────────────────────────────────────────────────────────
 
 function initNav() {
@@ -203,10 +243,10 @@ function initNav() {
     });
 
     document.querySelectorAll('.nav-item').forEach(item => {
-        item.addEventListener('click', () => {
+        item.addEventListener('click', async () => {
             const page = item.dataset.page;
             if (heeftWijzigingen && page !== 'importeer') {
-                if (!confirm('Er zijn onopgeslagen wijzigingen.\nDoorgaan zonder op te slaan?')) return;
+                if (!await toonBevestigDialog('Er zijn onopgeslagen wijzigingen.\nDoorgaan zonder op te slaan?')) return;
             }
             document.querySelectorAll('.nav-item').forEach(i => i.classList.remove('active'));
             item.classList.add('active');

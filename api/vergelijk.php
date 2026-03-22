@@ -37,6 +37,16 @@ function apiGet(string $url): ?array {
     return $raw === false ? null : json_decode($raw, true);
 }
 
+// Bouw licentie-sleutel: voor anonieme rijders (leeg licenseKey) een synthetische sleutel
+// op basis van startnummer + categorie, bv. "196_DKA_Anoniem"
+function buildLicenseKey(?string $licenseKey, $startNumber, ?string $category): ?string {
+    if ($licenseKey !== null && $licenseKey !== '') return $licenseKey;
+    if ($startNumber !== null && $startNumber !== '' && $category) {
+        return $startNumber . '_' . $category . '_Anoniem';
+    }
+    return null;
+}
+
 try {
     $base = 'https://inschrijven.schaatsen.nl/api';
 
@@ -44,11 +54,16 @@ try {
     $groepen = apiGet("$base/competitions/$compId/competitors");
     if (!$groepen) throw new RuntimeException('Kan deelnemers niet ophalen van KNSB');
 
-    // 2. Alle license keys verzamelen
+    // 2. Alle license keys verzamelen (incl. synthetische sleutels voor anonieme rijders)
     $licenseKeys = [];
     foreach ($groepen as $groep) {
         foreach ($groep['competitors'] ?? [] as $item) {
-            $lk = $item['competitor']['licenseKey'] ?? null;
+            $c  = $item['competitor'] ?? [];
+            $lk = buildLicenseKey(
+                $c['licenseKey']  ?? null,
+                $c['startNumber'] ?? null,
+                $c['category']    ?? null
+            );
             if ($lk) $licenseKeys[] = $lk;
         }
     }
@@ -94,7 +109,12 @@ try {
             $c  = $item['competitor'] ?? null;
             if (!$c) continue;
 
-            $lk       = $c['licenseKey'] ?? null;
+            $lk       = buildLicenseKey(
+                $c['licenseKey']  ?? null,
+                $c['startNumber'] ?? null,
+                $c['category']    ?? null
+            );
+            $isAnoniem = ($c['licenseKey'] ?? null) === '' || $c['licenseKey'] === null;
             $dbPerson = $lk ? ($dbPersons[$lk] ?? null) : null;
             $dbEntry  = $lk ? ($dbEntries[$dcId][$lk] ?? null) : null;
             $tp1      = $lk ? ($dbTp[$lk][1] ?? null) : null;
@@ -124,6 +144,7 @@ try {
 
             $rows[] = [
                 'license_key'   => $lk,
+                'is_anoniem'    => $isAnoniem,
                 'knsb_entry_id' => $c['id'] ?? null,
                 'entry_status'  => $item['status'],   // buitenste status
                 'reserve'       => $reserve,

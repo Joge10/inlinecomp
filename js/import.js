@@ -149,8 +149,11 @@ function toonVergelijkTabel(cat) {
             ? `<span class="badge-reserve">R${ee.reserve}</span>`
             : '';
 
+        const isAnoniem = !!item.is_anoniem;
+
         let badgesHtml = '';
         if (isNew)         badgesHtml += '<span class="badge-nieuw">NIEUW</span>';
+        if (isAnoniem)     badgesHtml += '<span class="badge-anoniem" title="Anonieme rijder — licentienummer onbekend">ANON</span>';
         if (diffs.length)  badgesHtml += '<span class="badge-diff" title="Afwijking t.o.v. database">!</span>';
 
         html += `
@@ -161,8 +164,10 @@ function toonVergelijkTabel(cat) {
                 ${snDiff ? `<div class="knsb-hint">KNSB: ${escHtml(String(knsbSn))}</div>` : ''}
             </td>
             <td class="td-naam ${naamDiff ? 'cell-diff' : ''}">
-                <input type="text" class="inp inp-naam" value="${escHtml(pe.full_name ?? '')}"
-                       data-field="full_name" data-lk="${escHtml(lk)}">
+                <input type="text" class="inp inp-naam${isAnoniem ? ' inp-readonly' : ''}"
+                       value="${escHtml(pe.full_name ?? '')}"
+                       data-field="full_name" data-lk="${escHtml(lk)}"
+                       ${isAnoniem ? 'readonly title="Naam is anoniem — kan niet worden gewijzigd"' : ''}>
                 ${naamDiff ? `<div class="knsb-hint">KNSB: ${escHtml(knsbNaam)}</div>` : ''}
             </td>
             <td class="td-club">${escHtml(pe.club_full ?? '')}</td>
