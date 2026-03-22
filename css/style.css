@@ -521,6 +521,27 @@ header .badge {
 }
 .merge-status { font-size: .82rem; }
 
+/* ── Split-panel ── */
+#split-panel { margin-bottom: 6px; }
+.split-sectie { margin-bottom: 4px; }
+.split-kop { border-radius: 4px; }
+.split-sectie + .split-sectie .split-kop { border-radius: 4px; }
+.split-cat-naam { font-weight: 600; width: 70px; }
+.split-cat-tel  { width: 36px; text-align: right; color: #888; font-size: .82rem; }
+.split-groep-cel { display: flex; align-items: center; gap: 4px; }
+.split-groep-inp { flex: 1; max-width: 200px; }
+
+/* Geen-afstanden melding op startlijst-pagina */
+.sl-no-dist-info {
+    background: #f0f8ff;
+    border: 1px solid #c0d8f0;
+    border-radius: 4px;
+    padding: 8px 12px;
+    margin-bottom: 10px;
+    font-size: .85rem;
+    color: #2E75B6;
+}
+
 /* Tab-badge voor samengevoegde categorieën */
 .tab-badge-merged {
     display: inline-block;

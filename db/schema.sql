@@ -155,4 +155,25 @@ CREATE TABLE IF NOT EXISTS transponders (
         ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
+-- ------------------------------------------------------------
+-- Splits  (één DC opsplitsen in meerdere startlijstgroepen)
+--
+--   Gebruikt wanneer een organisatie alle categorieën in
+--   één distance_combination plaatst.
+--   category  = KNSB categorie-code (bijv. DKA, HKA, DJA …)
+--   split_group = gewenste groepsnaam in de startlijst
+-- ------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS dc_splits (
+    competition_id  VARCHAR(36)  NOT NULL,
+    dc_id           VARCHAR(36)  NOT NULL,
+    category        VARCHAR(20)  NOT NULL,
+    split_group     VARCHAR(50)  NOT NULL,
+    PRIMARY KEY (dc_id, category),
+    KEY idx_splits_comp (competition_id),
+    CONSTRAINT fk_split_dc
+        FOREIGN KEY (dc_id)
+        REFERENCES distance_combinations (id)
+        ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
 SET FOREIGN_KEY_CHECKS = 1;

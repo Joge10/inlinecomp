@@ -88,6 +88,7 @@
                         </div>
                         <div id="import-result"></div>
                         <div id="merge-panel"></div>
+                        <div id="split-panel"></div>
                         <div class="tab-bar" id="imp-cat-tabs"></div>
                         <div id="imp-cat-content"></div>
                     </div>

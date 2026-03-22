@@ -107,6 +107,14 @@ try {
         $mergeGroups[$row['id']] = $row['merge_group'];
     }
 
+    // 5c. Split-configuratie voor déze competitie
+    $splitConfig = [];   // {dc_id: {category: split_group}}
+    $stmt = $pdo->prepare("SELECT dc_id, category, split_group FROM dc_splits WHERE competition_id = ?");
+    $stmt->execute([$compId]);
+    foreach ($stmt->fetchAll() as $row) {
+        $splitConfig[$row['dc_id']][$row['category']] = $row['split_group'];
+    }
+
     // 6. Resultaat opbouwen
     $result = [];
     foreach ($groepen as $groep) {
@@ -194,9 +202,11 @@ try {
 
         $result[] = [
             'dc_id'       => $dcId,
-            'dc_name'     => $groep['name']         ?? '',
-            'dc_number'   => $groep['number']       ?? 0,
-            'merge_group' => $mergeGroups[$dcId]    ?? null,
+            'dc_name'     => $groep['name']             ?? '',
+            'dc_number'   => $groep['number']           ?? 0,
+            'merge_group' => $mergeGroups[$dcId]        ?? null,
+            'splits'      => $splitConfig[$dcId]        ?? [],   // {category: split_group}
+            'has_distances' => !empty($groep['distances']),
             'competitors' => $rows,
         ];
     }

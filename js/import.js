@@ -78,7 +78,7 @@ function bouwMergePanel() {
                        value="${escHtml(cat.merge_group || '')}"
                        placeholder="eigen groep" maxlength="40">
                 <button class="merge-wis-btn" title="Groep verwijderen" tabindex="-1"
-                        style="${cat.merge_group ? '' : 'visibility:hidden'}">&#10005;</button>
+                        style="${cat.merge_group ? '' : 'visibility:hidden'}">&#128465;</button>
             </td>
          </tr>`
     ).join('');
@@ -181,6 +181,158 @@ async function slaaMergesOp() {
     }
 }
 
+// ── Split-panel bouwen ────────────────────────────────────────────────────────
+
+function bouwSplitPanel() {
+    const panel = el('split-panel');
+    if (!panel) return;
+    panel.innerHTML = '';
+
+    // Detecteer DCs met meerdere categorieën in hun deelnemers
+    const teSpitsen = vergelijkData.filter(cat => {
+        const categorieen = [...new Set(
+            cat.competitors.map(c => c.knsb?.category).filter(Boolean)
+        )];
+        return categorieen.length > 1;
+    });
+
+    if (!teSpitsen.length) return;
+
+    // Bouw één sectie per splitbare DC
+    teSpitsen.forEach(cat => {
+        // Unieke categorieën + tellingen
+        const catTelling = {};
+        cat.competitors.forEach(c => {
+            const k = c.knsb?.category;
+            if (k) catTelling[k] = (catTelling[k] || 0) + 1;
+        });
+        const categorieën = Object.keys(catTelling).sort();
+        const heeftSplits = Object.keys(cat.splits || {}).length > 0;
+        const dcSectionId = 'split-body-' + cat.dc_id.replace(/[^a-z0-9]/gi, '');
+
+        const rows = categorieën.map(k => {
+            const groep = (cat.splits || {})[k] || '';
+            return `<tr>
+                <td class="split-cat-naam">${escHtml(k)}</td>
+                <td class="split-cat-tel">${catTelling[k]}</td>
+                <td class="split-groep-cel">
+                    <input type="text" class="inp split-groep-inp"
+                           list="split-groepnamen-${escHtml(cat.dc_id)}"
+                           data-dc-id="${escHtml(cat.dc_id)}"
+                           data-category="${escHtml(k)}"
+                           value="${escHtml(groep)}"
+                           placeholder="groepsnaam" maxlength="40">
+                    <button class="merge-wis-btn" title="Groep verwijderen" tabindex="-1"
+                            style="${groep ? '' : 'visibility:hidden'}">&#128465;</button>
+                </td>
+            </tr>`;
+        }).join('');
+
+        const sectie = document.createElement('div');
+        sectie.className = 'split-sectie';
+        sectie.innerHTML = `
+            <datalist id="split-groepnamen-${escHtml(cat.dc_id)}"></datalist>
+            <div class="merge-kop split-kop" data-target="${dcSectionId}">
+                <span>&#9986; Splitsen: <em>${escHtml(cat.dc_name)}</em></span>
+                <span class="merge-toggle-icon">${heeftSplits ? '&#9650;' : '&#9660;'}</span>
+            </div>
+            <div class="merge-body" id="${dcSectionId}" style="display:${heeftSplits ? 'block' : 'none'}">
+                <p class="merge-uitleg">
+                    Wijs elke categorie een groepsnaam toe.
+                    Categorieën met dezelfde naam vormen één gecombineerde startlijst.
+                    Laat leeg om niet te splitsen.
+                </p>
+                <table class="merge-tabel">
+                    <thead><tr><th>Categorie</th><th>#</th><th>Groepsnaam</th></tr></thead>
+                    <tbody>${rows}</tbody>
+                </table>
+                <div class="merge-acties">
+                    <button class="btn-secondary split-opslaan-btn"
+                            data-dc-id="${escHtml(cat.dc_id)}">&#10003; Opslaan</button>
+                    <span class="merge-status split-status-${escHtml(cat.dc_id)}"></span>
+                </div>
+            </div>`;
+
+        panel.appendChild(sectie);
+
+        // Toggle kop
+        sectie.querySelector('.split-kop').addEventListener('click', function() {
+            const body = document.getElementById(dcSectionId);
+            const icon = this.querySelector('.merge-toggle-icon');
+            const open = body.style.display !== 'none';
+            body.style.display = open ? 'none' : 'block';
+            icon.innerHTML     = open ? '&#9660;' : '&#9650;';
+        });
+
+        // Datalist live bijwerken
+        function verversSplitNamen() {
+            const namen = [...new Set(
+                [...sectie.querySelectorAll('.split-groep-inp')]
+                    .map(i => i.value.trim()).filter(Boolean)
+            )];
+            const dl = document.getElementById('split-groepnamen-' + cat.dc_id);
+            if (dl) dl.innerHTML = namen.map(n => `<option value="${escHtml(n)}">`).join('');
+        }
+        verversSplitNamen();
+
+        sectie.addEventListener('input', e => {
+            if (!e.target.classList.contains('split-groep-inp')) return;
+            const wisBtn = e.target.nextElementSibling;
+            if (wisBtn) wisBtn.style.visibility = e.target.value.trim() ? 'visible' : 'hidden';
+            verversSplitNamen();
+        });
+
+        sectie.addEventListener('click', e => {
+            if (!e.target.classList.contains('merge-wis-btn')) return;
+            const inp = e.target.previousElementSibling;
+            inp.value = '';
+            e.target.style.visibility = 'hidden';
+            verversSplitNamen();
+        });
+
+        // Opslaan
+        sectie.querySelector('.split-opslaan-btn').addEventListener('click', () =>
+            slaaSplitsOp(cat.dc_id, sectie)
+        );
+    });
+}
+
+async function slaaSplitsOp(dcId, sectie) {
+    const btn    = sectie.querySelector('.split-opslaan-btn');
+    const status = sectie.querySelector(`.split-status-${dcId}`);
+    btn.disabled = true;
+    status.textContent = 'Opslaan…';
+
+    const splits = [...sectie.querySelectorAll('.split-groep-inp')].map(inp => ({
+        category:    inp.dataset.category,
+        split_group: inp.value.trim() || null,
+    }));
+
+    try {
+        const res  = await fetch('api/splits.php', {
+            method:  'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body:    JSON.stringify({ competition_id: huidigCompId, dc_id: dcId, splits }),
+        });
+        const data = await res.json();
+        if (data.error) throw new Error(data.error);
+
+        // Werk vergelijkData bij zodat startlijsten direct de nieuwe splits kennen
+        const cat = vergelijkData.find(c => c.dc_id === dcId);
+        if (cat) {
+            cat.splits = {};
+            splits.forEach(s => { if (s.split_group) cat.splits[s.category] = s.split_group; });
+        }
+
+        status.innerHTML = '<span style="color:var(--oranje)">&#10003; Opgeslagen</span>';
+        setTimeout(() => { status.textContent = ''; }, 2500);
+    } catch(e) {
+        status.innerHTML = `<span style="color:#c00">⚠ ${escHtml(e.message)}</span>`;
+    } finally {
+        btn.disabled = false;
+    }
+}
+
 // ── Categorietabbladen bouwen ─────────────────────────────────────────────────
 
 function bouwVergelijkTabbladen() {
@@ -193,6 +345,7 @@ function bouwVergelijkTabbladen() {
     }
 
     bouwMergePanel();
+    bouwSplitPanel();
 
     tabs.innerHTML = '';
     vergelijkData.forEach((cat, i) => {

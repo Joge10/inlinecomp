@@ -1,6 +1,6 @@
 /* InlineComp – startlijsten */
 
-// ── Startlijst-groepen bouwen (samengevoegde categorieën als één groep) ───────
+// ── Startlijst-groepen bouwen (merge + split + normaal) ───────────────────────
 
 function bouwStartlijstGroepen() {
     const groepen = [];
@@ -9,23 +9,63 @@ function bouwStartlijstGroepen() {
     for (const cat of vergelijkData) {
         if (gezien.has(cat.dc_id)) continue;
 
+        // ── Merge: meerdere DCs samenvoegen ──────────────────────────────────
         const mg = cat.merge_group;
         if (mg) {
-            // Alle cats met dezelfde merge_group samenvoegen
             const merged = vergelijkData.filter(c => c.merge_group === mg);
             merged.forEach(c => gezien.add(c.dc_id));
-
             groepen.push({
-                dc_id:       merged[0].dc_id,                          // primaire DC (voor afstanden)
-                dc_ids:      merged.map(c => c.dc_id),
-                dc_name:     merged.map(c => c.dc_name).join(' + '),
-                merge_group: mg,
-                competitors: merged.flatMap(c => c.competitors),
+                dc_id:        merged[0].dc_id,
+                dc_ids:       merged.map(c => c.dc_id),
+                dc_name:      merged.map(c => c.dc_name).join(' + '),
+                merge_group:  mg,
+                has_distances: merged[0].has_distances,
+                competitors:  merged.flatMap(c => c.competitors),
             });
-        } else {
-            gezien.add(cat.dc_id);
-            groepen.push({ ...cat, dc_ids: [cat.dc_id] });
+            continue;
         }
+
+        gezien.add(cat.dc_id);
+
+        // ── Split: één DC opsplitsen per categorie ────────────────────────────
+        const splits = cat.splits || {};
+        if (Object.keys(splits).length > 0) {
+            // Groepeer split-namen → welke categorieën horen bij elke naam
+            const splitNamen = {};
+            Object.entries(splits).forEach(([catCode, naam]) => {
+                if (!splitNamen[naam]) splitNamen[naam] = [];
+                splitNamen[naam].push(catCode);
+            });
+
+            // Categorieën zonder split-toewijzing → eigen groep per categorie
+            const toegewezen = new Set(Object.keys(splits));
+            const alleCategorieen = [...new Set(
+                cat.competitors.map(c => c.knsb?.category).filter(Boolean)
+            )];
+            alleCategorieen.filter(c => !toegewezen.has(c)).forEach(c => {
+                splitNamen[c] = [c];
+            });
+
+            Object.entries(splitNamen).forEach(([naam, catCodes]) => {
+                const catFilter = catCodes;
+                const deelnemers = cat.competitors.filter(c =>
+                    catFilter.includes(c.knsb?.category)
+                );
+                groepen.push({
+                    dc_id:           cat.dc_id,
+                    dc_ids:          [cat.dc_id],
+                    dc_name:         naam,
+                    category_filter: catFilter,
+                    has_distances:   cat.has_distances,
+                    is_split:        true,
+                    competitors:     deelnemers,
+                });
+            });
+            continue;
+        }
+
+        // ── Normaal: één op één ───────────────────────────────────────────────
+        groepen.push({ ...cat, dc_ids: [cat.dc_id] });
     }
     return groepen;
 }
@@ -79,25 +119,49 @@ async function toonStartlijstConfig(groep) {
     const content = el('sl-cat-content');
     content.innerHTML = '<div class="status-msg loading"><span class="spinner"></span>Afstanden laden…</div>';
 
+    // Info-label: samengevoegde of gesplitste groep
+    const infoLabelHtml = groep.dc_ids?.length > 1
+        ? `<div class="sl-merge-label">&#8644; Samengevoegd: <strong>${escHtml(groep.dc_name)}</strong></div>`
+        : groep.is_split
+            ? `<div class="sl-merge-label">&#9986; Gesplitst uit: <strong>${escHtml(
+                  vergelijkData.find(c => c.dc_id === groep.dc_id)?.dc_name || groep.dc_id
+              )}</strong></div>`
+            : '';
+
+    // Als de DC geen distances heeft → direct naar heat-config, geen distance-tabs
+    if (!groep.has_distances) {
+        content.innerHTML = `
+            ${infoLabelHtml}
+            <div class="sl-no-dist-info">
+                &#8505; Geen afstanden bekend — startlijst wordt gegenereerd voor alle bevestigde deelnemers.
+            </div>
+            <div id="sl-dist-content"></div>`;
+        toonAfstandConfig(groep, '_geen_', 'Alle deelnemers');
+        return;
+    }
+
     let afstanden;
     try {
-        // Gebruik altijd de primaire dc_id voor het ophalen van afstanden
         const res = await fetch(`api/distances_db.php?dc_id=${encodeURIComponent(groep.dc_id)}`);
         afstanden = await res.json();
         if (afstanden.error) throw new Error(afstanden.error);
-        if (!afstanden.length) throw new Error('Geen afstanden gevonden voor deze categorie');
+        if (!afstanden.length) {
+            // DB heeft geen afstanden → direct naar heat-config
+            content.innerHTML = `
+                ${infoLabelHtml}
+                <div class="sl-no-dist-info">
+                    &#8505; Geen afstanden bekend — startlijst wordt gegenereerd voor alle bevestigde deelnemers.
+                </div>
+                <div id="sl-dist-content"></div>`;
+            toonAfstandConfig(groep, '_geen_', 'Alle deelnemers');
+            return;
+        }
     } catch(e) {
         content.innerHTML = `<div class="status-msg error">⚠ ${escHtml(e.message)}</div>`;
         return;
     }
 
     const eersteActief = afstanden[0];
-
-    // Label: bij samenvoeging de gecombineerde naam tonen
-    const mergeLabelHtml = groep.dc_ids?.length > 1
-        ? `<div class="sl-merge-label">&#8644; Samengevoegd: <strong>${escHtml(groep.dc_name)}</strong></div>`
-        : '';
-
     const tabsHtml = afstanden.map((a, i) =>
         `<button class="tab-btn sl-dist-tab${i === 0 ? ' active' : ''}"
                  data-dist-id="${escHtml(a.id)}"
@@ -107,7 +171,7 @@ async function toonStartlijstConfig(groep) {
     ).join('');
 
     content.innerHTML = `
-        ${mergeLabelHtml}
+        ${infoLabelHtml}
         <div class="tab-bar sl-dist-tabs">${tabsHtml}</div>
         <div id="sl-dist-content"></div>`;
 
@@ -231,7 +295,9 @@ function zetAantalRondes(cacheKey, n) {
 // ── Startlijst – configuratie per afstand ────────────────────────────────────
 
 function toonAfstandConfig(groep, distId, distNaam) {
-    const cacheKey = `${groep.dc_id}_${distId}`;
+    // CacheKey: dc_id + distance + eventuele category_filter (voor splits)
+    const cfKey    = (groep.category_filter || []).slice().sort().join('+');
+    const cacheKey = `${groep.dc_id}_${distId}${cfKey ? '_' + cfKey : ''}`;
 
     if (!startlijstCache[cacheKey]) {
         startlijstCache[cacheKey] = {
@@ -443,14 +509,17 @@ async function genereerAllesInEenKeer(cacheKey, groep, distId) {
 
     const ronde0 = cache.rondenConfig[0];
     try {
-        // dc_ids: alle dc_ids van de (samengevoegde) groep, kommagescheiden
         const dcIds = (groep.dc_ids || [groep.dc_id]).join(',');
-        const url = `api/startlijst_genereer.php`
-                  + `?competition_id=${encodeURIComponent(huidigCompId)}`
-                  + `&dc_ids=${encodeURIComponent(dcIds)}`
-                  + `&distance_id=${encodeURIComponent(distId)}`
-                  + `&max_per_heat=${ronde0.maxPerHeat}`
-                  + `&methode=${encodeURIComponent(ronde0.methode || 'willekeurig')}`;
+        let url = `api/startlijst_genereer.php`
+                + `?competition_id=${encodeURIComponent(huidigCompId)}`
+                + `&dc_ids=${encodeURIComponent(dcIds)}`
+                + `&distance_id=${encodeURIComponent(distId)}`
+                + `&max_per_heat=${ronde0.maxPerHeat}`
+                + `&methode=${encodeURIComponent(ronde0.methode || 'willekeurig')}`;
+        // Bij splits: filter op de bijbehorende categorieën
+        if (groep.category_filter?.length) {
+            url += `&category_filter=${encodeURIComponent(groep.category_filter.join(','))}`;
+        }
 
         const res  = await fetch(url);
         const data = await res.json();

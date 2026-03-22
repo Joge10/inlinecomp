@@ -23,18 +23,23 @@ header('Access-Control-Allow-Origin: *');
 require_once __DIR__ . '/../../config_inlinecomp.php';
 
 $compId     = trim($_GET['competition_id'] ?? '');
-$distId     = trim($_GET['distance_id']    ?? '');  // voor labeling/toekomstig gebruik
+$distId     = trim($_GET['distance_id']    ?? '');  // voor labeling; optioneel bij no-distance DCs
 $maxPerHeat = max(2, intval($_GET['max_per_heat'] ?? 6));
 $methode    = trim($_GET['methode']        ?? 'willekeurig');
 
 // dc_ids: kommagescheiden lijst (ondersteunt ook samengevoegde categorieën)
-// Valt terug op enkelvoudig dc_id voor backwards-compatibiliteit
 $dcIdsRaw = trim($_GET['dc_ids'] ?? $_GET['dc_id'] ?? '');
 $dcIds    = array_values(array_filter(array_map('trim', explode(',', $dcIdsRaw))));
 
-if (!$compId || !$dcIds || !$distId) {
+// category_filter: optioneel, voor gesplitste DCs (bijv. "DKA,DKB")
+$catFilterRaw = trim($_GET['category_filter'] ?? '');
+$catFilter    = $catFilterRaw
+    ? array_values(array_filter(array_map('trim', explode(',', $catFilterRaw))))
+    : [];
+
+if (!$compId || !$dcIds) {
     http_response_code(400);
-    echo json_encode(['error' => 'competition_id, dc_ids en distance_id zijn verplicht']);
+    echo json_encode(['error' => 'competition_id en dc_ids zijn verplicht']);
     exit;
 }
 
@@ -43,16 +48,27 @@ try {
     // 1. Bevestigde deelnemers voor deze categorie(ën) ophalen
     //    Ondersteunt meerdere dc_ids voor samengevoegde categorieën
     // --------------------------------------------------------
-    $ph   = implode(',', array_fill(0, count($dcIds), '?'));
+    $ph     = implode(',', array_fill(0, count($dcIds), '?'));
+    $params = $dcIds;
+
+    // Optioneel filteren op categorieën (voor gesplitste DCs)
+    $catWhere = '';
+    if ($catFilter) {
+        $catPh    = implode(',', array_fill(0, count($catFilter), '?'));
+        $catWhere = "AND p.category IN ($catPh)";
+        $params   = array_merge($params, $catFilter);
+    }
+
     $stmt = $pdo->prepare("
         SELECT p.license_key, p.full_name, p.short_name,
-               p.start_number, p.club_short, p.club_full, p.city
+               p.start_number, p.club_short, p.club_full, p.city, p.category
         FROM entries e
         JOIN persons p ON e.person_license = p.license_key
         WHERE e.distance_combination_id IN ($ph)
           AND e.status = 1
+          $catWhere
     ");
-    $stmt->execute($dcIds);
+    $stmt->execute($params);
     $rijders = $stmt->fetchAll();
 
     if (empty($rijders)) {
