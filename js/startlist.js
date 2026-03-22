@@ -128,36 +128,26 @@ async function toonStartlijstConfig(groep) {
               )}</strong></div>`
             : '';
 
-    // Als de DC geen distances heeft → direct naar heat-config, geen distance-tabs
-    if (!groep.has_distances) {
-        content.innerHTML = `
-            ${infoLabelHtml}
-            <div class="sl-no-dist-info">
-                &#8505; Geen afstanden bekend — startlijst wordt gegenereerd voor alle bevestigde deelnemers.
-            </div>
-            <div id="sl-dist-content"></div>`;
-        toonAfstandConfig(groep, '_geen_', 'Alle deelnemers');
-        return;
-    }
-
     let afstanden;
     try {
         const res = await fetch(`api/distances_db.php?dc_id=${encodeURIComponent(groep.dc_id)}`);
         afstanden = await res.json();
         if (afstanden.error) throw new Error(afstanden.error);
-        if (!afstanden.length) {
-            // DB heeft geen afstanden → direct naar heat-config
-            content.innerHTML = `
-                ${infoLabelHtml}
-                <div class="sl-no-dist-info">
-                    &#8505; Geen afstanden bekend — startlijst wordt gegenereerd voor alle bevestigde deelnemers.
-                </div>
-                <div id="sl-dist-content"></div>`;
-            toonAfstandConfig(groep, '_geen_', 'Alle deelnemers');
-            return;
-        }
     } catch(e) {
         content.innerHTML = `<div class="status-msg error">⚠ ${escHtml(e.message)}</div>`;
+        return;
+    }
+
+    // Geen afstanden → direct naar heat-config, met melding
+    if (!afstanden.length) {
+        content.innerHTML = `
+            ${infoLabelHtml}
+            <div class="sl-no-dist-info">
+                &#8505; Geen afstanden bekend — voeg ze toe via <strong>Importeer</strong>.
+                Startlijst wordt gegenereerd voor alle bevestigde deelnemers.
+            </div>
+            <div id="sl-dist-content"></div>`;
+        toonAfstandConfig(groep, '_geen_', 'Alle deelnemers');
         return;
     }
 

@@ -521,6 +521,15 @@ header .badge {
 }
 .merge-status { font-size: .82rem; }
 
+/* ── Afstanden-panel ── */
+#afstanden-panel    { margin-bottom: 6px; }
+.afstanden-sectie   { margin-bottom: 4px; }
+.afd-th-nr  { width: 44px; }
+.afd-th-m   { width: 80px; }
+.afd-inp-num    { width: 44px; text-align: center; }
+.afd-inp-naam   { width: 130px; }
+.afd-inp-meters { width: 74px; }
+
 /* ── Split-panel ── */
 #split-panel { margin-bottom: 6px; }
 .split-sectie { margin-bottom: 4px; }

@@ -169,11 +169,7 @@ CREATE TABLE IF NOT EXISTS dc_splits (
     category        VARCHAR(20)  NOT NULL,
     split_group     VARCHAR(50)  NOT NULL,
     PRIMARY KEY (dc_id, category),
-    KEY idx_splits_comp (competition_id),
-    CONSTRAINT fk_split_dc
-        FOREIGN KEY (dc_id)
-        REFERENCES distance_combinations (id)
-        ON DELETE CASCADE
+    KEY idx_splits_comp (competition_id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
 SET FOREIGN_KEY_CHECKS = 1;

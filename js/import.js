@@ -333,6 +333,148 @@ async function slaaSplitsOp(dcId, sectie) {
     }
 }
 
+// ── Afstanden-panel bouwen ────────────────────────────────────────────────────
+
+async function bouwAfstandenPanel() {
+    const panel = el('afstanden-panel');
+    if (!panel) return;
+    panel.innerHTML = '';
+    if (!vergelijkData.length) return;
+
+    // Laad afstanden voor alle DCs parallel
+    const distMap = {};
+    await Promise.all(vergelijkData.map(async cat => {
+        try {
+            const res  = await fetch(`api/distances_db.php?dc_id=${encodeURIComponent(cat.dc_id)}`);
+            const data = await res.json();
+            distMap[cat.dc_id] = Array.isArray(data) ? data : [];
+        } catch {
+            distMap[cat.dc_id] = [];
+        }
+    }));
+
+    vergelijkData.forEach(cat => {
+        bouwAfstandenSectie(panel, cat, distMap[cat.dc_id] || []);
+    });
+}
+
+function bouwAfstandenSectie(panel, cat, afstanden) {
+    const sectieId = 'afd-body-' + cat.dc_id.replace(/[^a-z0-9]/gi, '');
+    const open     = afstanden.length === 0;   // auto-open als geen afstanden
+
+    const sectie = document.createElement('div');
+    sectie.className = 'afstanden-sectie';
+    sectie.innerHTML = `
+        <div class="merge-kop afd-kop">
+            <span>&#128207; Afstanden: <em>${escHtml(cat.dc_name)}</em></span>
+            <span class="merge-toggle-icon">${open ? '&#9650;' : '&#9660;'}</span>
+        </div>
+        <div class="merge-body afd-body" id="${sectieId}" style="display:${open ? 'block' : 'none'}">
+            ${afstandenTabelHtml(afstanden)}
+            <div class="merge-acties">
+                <button class="btn-secondary afd-toevoegen-btn">+ Afstand toevoegen</button>
+                <button class="btn-secondary afd-opslaan-btn"
+                        data-dc-id="${escHtml(cat.dc_id)}">&#10003; Opslaan</button>
+                <span class="merge-status afd-status"></span>
+            </div>
+        </div>`;
+
+    panel.appendChild(sectie);
+
+    // Toggle
+    sectie.querySelector('.afd-kop').addEventListener('click', function() {
+        const body = el(sectieId);
+        const icon = this.querySelector('.merge-toggle-icon');
+        const isOpen = body.style.display !== 'none';
+        body.style.display = isOpen ? 'none' : 'block';
+        icon.innerHTML     = isOpen ? '&#9660;' : '&#9650;';
+    });
+
+    // Rij verwijderen
+    sectie.addEventListener('click', e => {
+        if (e.target.closest('.afd-wis-btn')) e.target.closest('tr').remove();
+    });
+
+    // Toevoegen
+    sectie.querySelector('.afd-toevoegen-btn').addEventListener('click', () => {
+        const tbody = sectie.querySelector('.afd-tabel tbody');
+        const volgNr = tbody.querySelectorAll('tr').length + 1;
+        tbody.insertAdjacentHTML('beforeend', afstandRijHtml('', volgNr, '', ''));
+        tbody.lastElementChild.querySelector('.afd-inp-naam').focus();
+    });
+
+    // Opslaan
+    sectie.querySelector('.afd-opslaan-btn').addEventListener('click', () =>
+        slaAfstandenOp(cat.dc_id, sectie)
+    );
+}
+
+function afstandenTabelHtml(afstanden) {
+    const rows = afstanden.map(a =>
+        afstandRijHtml(a.id, a.number, a.name, a.value_meters)
+    ).join('');
+    return `<table class="merge-tabel afd-tabel">
+        <thead><tr>
+            <th class="afd-th-nr">#</th>
+            <th>Naam</th>
+            <th class="afd-th-m">Meters</th>
+            <th></th>
+        </tr></thead>
+        <tbody>${rows}</tbody>
+    </table>`;
+}
+
+function afstandRijHtml(id, num, naam, meters) {
+    return `<tr data-afd-id="${escHtml(id || '')}">
+        <td><input type="number" class="inp afd-inp-num"
+                   value="${escHtml(String(num ?? ''))}" min="1" max="99"></td>
+        <td><input type="text" class="inp afd-inp-naam"
+                   value="${escHtml(naam || '')}" placeholder="bijv. 500m" maxlength="50"></td>
+        <td><input type="number" class="inp afd-inp-meters"
+                   value="${escHtml(String(meters ?? ''))}" placeholder="—" min="0"></td>
+        <td><button class="merge-wis-btn afd-wis-btn" title="Verwijderen">&#128465;</button></td>
+    </tr>`;
+}
+
+async function slaAfstandenOp(dcId, sectie) {
+    const btn    = sectie.querySelector('.afd-opslaan-btn');
+    const status = sectie.querySelector('.afd-status');
+    btn.disabled = true;
+    status.textContent = 'Opslaan…';
+
+    const distances = [...sectie.querySelectorAll('.afd-tabel tbody tr')].map(tr => ({
+        id:           tr.dataset.afdId || null,
+        number:       parseInt(tr.querySelector('.afd-inp-num').value)    || null,
+        name:         tr.querySelector('.afd-inp-naam').value.trim(),
+        value_meters: parseInt(tr.querySelector('.afd-inp-meters').value) || null,
+    })).filter(d => d.name);
+
+    try {
+        const res  = await fetch('api/afstanden_beheer.php', {
+            method:  'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body:    JSON.stringify({ dc_id: dcId, distances }),
+        });
+        const data = await res.json();
+        if (data.error) throw new Error(data.error);
+
+        // Bijwerken: server-gegenereerde IDs in de DOM zetten
+        const rows = [...sectie.querySelectorAll('.afd-tabel tbody tr')];
+        data.distances.forEach((d, i) => { if (rows[i]) rows[i].dataset.afdId = d.id; });
+
+        // has_distances in vergelijkData bijwerken
+        const cat = vergelijkData.find(c => c.dc_id === dcId);
+        if (cat) cat.has_distances = data.distances.length > 0;
+
+        status.innerHTML = '<span style="color:var(--oranje)">&#10003; Opgeslagen</span>';
+        setTimeout(() => { status.textContent = ''; }, 2500);
+    } catch(e) {
+        status.innerHTML = `<span style="color:#c00">⚠ ${escHtml(e.message)}</span>`;
+    } finally {
+        btn.disabled = false;
+    }
+}
+
 // ── Categorietabbladen bouwen ─────────────────────────────────────────────────
 
 function bouwVergelijkTabbladen() {
@@ -346,6 +488,7 @@ function bouwVergelijkTabbladen() {
 
     bouwMergePanel();
     bouwSplitPanel();
+    bouwAfstandenPanel();   // async, laadt op de achtergrond
 
     tabs.innerHTML = '';
     vergelijkData.forEach((cat, i) => {
