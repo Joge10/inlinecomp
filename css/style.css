@@ -501,7 +501,19 @@ header .badge {
 .merge-tabel td { padding: 4px 8px; }
 .merge-tabel tr:nth-child(even) { background: var(--grijs); }
 .merge-cat-naam { font-weight: 500; white-space: nowrap; }
-.merge-groep-inp { width: 100%; max-width: 180px; }
+.merge-groep-cel { display: flex; align-items: center; gap: 4px; }
+.merge-groep-inp { flex: 1; max-width: 180px; }
+.merge-wis-btn {
+    background: none;
+    border: none;
+    color: #aaa;
+    cursor: pointer;
+    font-size: .85rem;
+    padding: 2px 4px;
+    line-height: 1;
+    border-radius: 3px;
+}
+.merge-wis-btn:hover { color: #c00; background: #fee; }
 .merge-acties {
     display: flex;
     align-items: center;

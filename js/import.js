@@ -71,14 +71,20 @@ function bouwMergePanel() {
     const rows = vergelijkData.map(cat =>
         `<tr>
             <td class="merge-cat-naam">${escHtml(cat.dc_name)}</td>
-            <td><input type="text" class="inp merge-groep-inp"
+            <td class="merge-groep-cel">
+                <input type="text" class="inp merge-groep-inp"
+                       list="merge-groepnamen"
                        data-dc-id="${escHtml(cat.dc_id)}"
                        value="${escHtml(cat.merge_group || '')}"
-                       placeholder="eigen groep" maxlength="40"></td>
+                       placeholder="eigen groep" maxlength="40">
+                <button class="merge-wis-btn" title="Groep verwijderen" tabindex="-1"
+                        style="${cat.merge_group ? '' : 'visibility:hidden'}">&#10005;</button>
+            </td>
          </tr>`
     ).join('');
 
     panel.innerHTML = `
+        <datalist id="merge-groepnamen"></datalist>
         <div class="merge-kop" id="merge-kop">
             <span>&#8644; Categorieën samenvoegen</span>
             <span class="merge-toggle-icon" id="merge-toggle-icon">${heeftMerges ? '&#9650;' : '&#9660;'}</span>
@@ -86,7 +92,7 @@ function bouwMergePanel() {
         <div class="merge-body" id="merge-body" style="display:${heeftMerges ? 'block' : 'none'}">
             <p class="merge-uitleg">
                 Vul dezelfde groepsnaam in bij categorieën die samen één startlijst krijgen.
-                Laat leeg voor een eigen aparte startlijst.
+                Laat leeg (of maak leeg) voor een eigen aparte startlijst.
             </p>
             <table class="merge-tabel">
                 <thead><tr><th>Categorie</th><th>Groepsnaam</th></tr></thead>
@@ -104,6 +110,37 @@ function bouwMergePanel() {
         const open = body.style.display !== 'none';
         body.style.display = open ? 'none' : 'block';
         icon.innerHTML     = open ? '&#9660;' : '&#9650;';
+    });
+
+    // Datalist live bijwerken: alle unieke niet-lege namen die al ingevuld zijn
+    function verversGroepnamen() {
+        const namen = [...new Set(
+            [...document.querySelectorAll('.merge-groep-inp')]
+                .map(i => i.value.trim())
+                .filter(Boolean)
+        )];
+        const dl = document.getElementById('merge-groepnamen');
+        if (dl) dl.innerHTML = namen.map(n => `<option value="${escHtml(n)}">`).join('');
+    }
+
+    // ×-knop: veld leegmaken en knop verbergen
+    panel.addEventListener('click', e => {
+        if (!e.target.classList.contains('merge-wis-btn')) return;
+        const inp = e.target.previousElementSibling;
+        inp.value = '';
+        e.target.style.visibility = 'hidden';
+        verversGroepnamen();
+    });
+
+    // Initieel vullen vanuit opgeslagen waarden
+    verversGroepnamen();
+
+    // Live bijwerken terwijl je typt; ×-knop tonen/verbergen
+    panel.addEventListener('input', e => {
+        if (!e.target.classList.contains('merge-groep-inp')) return;
+        const wisBtn = e.target.nextElementSibling;
+        if (wisBtn) wisBtn.style.visibility = e.target.value.trim() ? 'visible' : 'hidden';
+        verversGroepnamen();
     });
 
     el('btn-merge-opslaan').addEventListener('click', slaaMergesOp);
