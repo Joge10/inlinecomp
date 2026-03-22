@@ -15,14 +15,30 @@ if (!$dcId) {
 
 require_once __DIR__ . '/../../config_inlinecomp.php';
 
+// Optioneel filteren op split-groep:
+//   NULL-groepen altijd tonen (gelden voor alle groepen)
+//   Specifieke groepnaam: alleen die + de NULLs
+$splitGroup = $_GET['split_group'] ?? null;
+
 try {
-    $stmt = $pdo->prepare("
-        SELECT id, number, name, value_meters, discipline
-        FROM distances
-        WHERE distance_combination_id = ?
-        ORDER BY number
-    ");
-    $stmt->execute([$dcId]);
+    if ($splitGroup !== null && $splitGroup !== '') {
+        $stmt = $pdo->prepare("
+            SELECT id, number, name, target_group, value_meters, discipline
+            FROM distances
+            WHERE distance_combination_id = ?
+              AND (target_group IS NULL OR target_group = ?)
+            ORDER BY number
+        ");
+        $stmt->execute([$dcId, $splitGroup]);
+    } else {
+        $stmt = $pdo->prepare("
+            SELECT id, number, name, target_group, value_meters, discipline
+            FROM distances
+            WHERE distance_combination_id = ?
+            ORDER BY number
+        ");
+        $stmt->execute([$dcId]);
+    }
     echo json_encode($stmt->fetchAll(), JSON_UNESCAPED_UNICODE);
 } catch (Throwable $e) {
     http_response_code(500);

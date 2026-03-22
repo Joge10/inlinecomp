@@ -73,20 +73,23 @@ try {
 
     $stmt = $pdo->prepare("
         INSERT INTO distances
-               (id, distance_combination_id, number, name, value_meters, discipline, starts)
-        VALUES (:id, :dc_id, :number, :name, :value_meters, NULL, NULL)
+               (id, distance_combination_id, number, name, target_group, value_meters, discipline, starts)
+        VALUES (:id, :dc_id, :number, :name, :target_group, :value_meters, NULL, NULL)
         ON DUPLICATE KEY UPDATE
                number       = VALUES(number),
                name         = VALUES(name),
+               target_group = VALUES(target_group),
                value_meters = VALUES(value_meters)
     ");
 
     $resultaat = [];
     foreach ($dists as $i => $d) {
-        $naam   = trim($d['name']         ?? '');
-        $meters = isset($d['value_meters']) && $d['value_meters'] !== ''
-                    ? (int) $d['value_meters'] : null;
-        if (!$naam) continue;   // lege rijen overslaan
+        $naam        = trim($d['name']         ?? '');
+        $meters      = isset($d['value_meters']) && $d['value_meters'] !== ''
+                         ? (int) $d['value_meters'] : null;
+        $targetGroup = (isset($d['target_group']) && $d['target_group'] !== '')
+                         ? trim($d['target_group']) : null;
+        if (!$naam) continue;
 
         $id  = (isset($d['id']) && $d['id'] !== '') ? $d['id'] : uuid4();
         $num = (int) ($d['number'] ?? ($i + 1));
@@ -96,10 +99,17 @@ try {
             ':dc_id'        => $dcId,
             ':number'       => $num,
             ':name'         => $naam,
+            ':target_group' => $targetGroup,
             ':value_meters' => $meters,
         ]);
 
-        $resultaat[] = ['id' => $id, 'number' => $num, 'name' => $naam, 'value_meters' => $meters];
+        $resultaat[] = [
+            'id'           => $id,
+            'number'       => $num,
+            'name'         => $naam,
+            'target_group' => $targetGroup,
+            'value_meters' => $meters,
+        ];
     }
 
     $pdo->commit();

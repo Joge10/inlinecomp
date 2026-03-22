@@ -90,6 +90,7 @@ CREATE TABLE IF NOT EXISTS distances (
     distance_combination_id VARCHAR(36)  NOT NULL,
     number                  TINYINT      UNSIGNED,
     name                    VARCHAR(100),
+    target_group            VARCHAR(50)  DEFAULT NULL,  -- NULL=alle groepen, anders split-groepnaam
     value_meters            INT          UNSIGNED, -- 500, 3000 …
     discipline              VARCHAR(100),
     starts                  DATETIME,

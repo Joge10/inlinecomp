@@ -529,6 +529,8 @@ header .badge {
 .afd-inp-num    { width: 44px; text-align: center; }
 .afd-inp-naam   { width: 130px; }
 .afd-inp-meters { width: 74px; }
+.afd-th-groep   { width: 140px; }
+.afd-inp-groep  { width: 130px; }
 
 /* ── Split-panel ── */
 #split-panel { margin-bottom: 6px; }
@@ -539,6 +541,79 @@ header .badge {
 .split-cat-tel  { width: 36px; text-align: right; color: #888; font-size: .82rem; }
 .split-groep-cel { display: flex; align-items: center; gap: 4px; }
 .split-groep-inp { flex: 1; max-width: 200px; }
+.split-afd-wrap  { margin-top: 12px; border-top: 1px solid var(--border); padding-top: 10px; }
+.split-afd-kop   {
+    font-size: .8rem; font-weight: 600; color: var(--blauw);
+    text-transform: uppercase; letter-spacing: .4px; margin-bottom: 6px;
+}
+.split-afd-acties { margin-top: 6px; }
+
+/* ── Split-tabel: inline afstanden kolom ── */
+.split-tabel { width: 100%; }
+.split-th-cat  { width: 70px; }
+.split-th-n    { width: 36px; }
+.split-th-groep { width: 180px; }
+/* 4e kolom (Afstanden) neemt de rest */
+
+.split-afd-cel {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 4px;
+    padding: 4px 2px;
+}
+
+/* Eén afstand-chip */
+.afd-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 2px;
+    background: #eaf3fb;
+    border: 1px solid #b8d4ec;
+    border-radius: 4px;
+    padding: 2px 4px;
+}
+.afd-chip-naam {
+    width: 100px;
+    font-size: .82rem;
+    padding: 1px 4px;
+}
+.afd-chip-m {
+    width: 64px;
+    font-size: .82rem;
+    padding: 1px 4px;
+    text-align: right;
+}
+.afd-chip-del {
+    padding: 0 3px;
+    font-size: .8rem;
+    line-height: 1.4;
+    min-width: 0;
+}
+
+/* + knop om afstand toe te voegen */
+.afd-plus-btn {
+    background: var(--middenblauw);
+    color: var(--wit);
+    border: none;
+    border-radius: 12px;
+    width: 22px; height: 22px;
+    font-size: 1rem;
+    line-height: 1;
+    cursor: pointer;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+}
+.afd-plus-btn:hover { background: var(--blauw); }
+
+/* Placeholder als er geen groep geselecteerd is */
+.afd-geen {
+    color: #aaa;
+    font-size: .82rem;
+    font-style: italic;
+}
 
 /* Geen-afstanden melding op startlijst-pagina */
 .sl-no-dist-info {

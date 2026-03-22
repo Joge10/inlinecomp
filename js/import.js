@@ -183,48 +183,83 @@ async function slaaMergesOp() {
 
 // ── Split-panel bouwen ────────────────────────────────────────────────────────
 
-function bouwSplitPanel() {
+// Rendert de inline afstands-chips voor één groep
+function afdInlineHtml(groepNaam, groepAfstanden) {
+    if (!groepNaam) return '<span class="afd-geen">—</span>';
+    const dists = groepAfstanden[groepNaam] || [];
+    const chips = dists.map((d, i) =>
+        `<span class="afd-chip" data-idx="${i}" data-afd-id="${escHtml(d.id || '')}">
+            <input class="inp afd-chip-naam" value="${escHtml(d.name || '')}"
+                   placeholder="naam" title="Naam afstand">
+            <input class="inp afd-chip-m" type="number" min="0"
+                   value="${escHtml(String(d.value_meters ?? ''))}"
+                   placeholder="m" title="Afstand in meters">
+            <button class="merge-wis-btn afd-chip-del" title="Verwijder afstand">&#128465;</button>
+        </span>`
+    ).join('');
+    return chips + `<button class="afd-plus-btn" title="Afstand toevoegen">+</button>`;
+}
+
+async function bouwSplitPanel() {
     const panel = el('split-panel');
     if (!panel) return;
     panel.innerHTML = '';
 
-    // Detecteer DCs met meerdere categorieën in hun deelnemers
     const teSpitsen = vergelijkData.filter(cat => {
-        const categorieen = [...new Set(
-            cat.competitors.map(c => c.knsb?.category).filter(Boolean)
-        )];
-        return categorieen.length > 1;
+        const cats = [...new Set(cat.competitors.map(c => c.knsb?.category).filter(Boolean))];
+        return cats.length > 1;
     });
-
     if (!teSpitsen.length) return;
 
-    // Bouw één sectie per splitbare DC
+    // Laad bestaande afstanden voor DCs die al splits hebben
+    const distMap = {};
+    await Promise.all(
+        teSpitsen
+            .filter(cat => Object.keys(cat.splits || {}).length > 0)
+            .map(async cat => {
+                try {
+                    const res  = await fetch(`api/distances_db.php?dc_id=${encodeURIComponent(cat.dc_id)}`);
+                    const data = await res.json();
+                    distMap[cat.dc_id] = Array.isArray(data) ? data : [];
+                } catch { distMap[cat.dc_id] = []; }
+            })
+    );
+
     teSpitsen.forEach(cat => {
-        // Unieke categorieën + tellingen
         const catTelling = {};
         cat.competitors.forEach(c => {
             const k = c.knsb?.category;
             if (k) catTelling[k] = (catTelling[k] || 0) + 1;
         });
-        const categorieën = Object.keys(catTelling).sort();
+
         const heeftSplits = Object.keys(cat.splits || {}).length > 0;
         const dcSectionId = 'split-body-' + cat.dc_id.replace(/[^a-z0-9]/gi, '');
 
-        const rows = categorieën.map(k => {
+        // groepAfstanden: gedeelde databron per groep voor dit DC
+        // { groepNaam: [{id, number, name, value_meters}, ...] }
+        const groepAfstanden = {};
+        (distMap[cat.dc_id] || []).forEach(d => {
+            const k = d.target_group || '';
+            if (!groepAfstanden[k]) groepAfstanden[k] = [];
+            groepAfstanden[k].push({ id: d.id || '', number: d.number,
+                                     name: d.name, value_meters: d.value_meters });
+        });
+
+        const catRows = Object.keys(catTelling).sort().map(k => {
             const groep = (cat.splits || {})[k] || '';
-            return `<tr>
+            return `<tr data-cat="${escHtml(k)}">
                 <td class="split-cat-naam">${escHtml(k)}</td>
                 <td class="split-cat-tel">${catTelling[k]}</td>
                 <td class="split-groep-cel">
                     <input type="text" class="inp split-groep-inp"
                            list="split-groepnamen-${escHtml(cat.dc_id)}"
-                           data-dc-id="${escHtml(cat.dc_id)}"
                            data-category="${escHtml(k)}"
                            value="${escHtml(groep)}"
                            placeholder="groepsnaam" maxlength="40">
-                    <button class="merge-wis-btn" title="Groep verwijderen" tabindex="-1"
+                    <button class="merge-wis-btn split-groep-wis" tabindex="-1"
                             style="${groep ? '' : 'visibility:hidden'}">&#128465;</button>
                 </td>
+                <td class="split-afd-cel">${afdInlineHtml(groep, groepAfstanden)}</td>
             </tr>`;
         }).join('');
 
@@ -232,39 +267,61 @@ function bouwSplitPanel() {
         sectie.className = 'split-sectie';
         sectie.innerHTML = `
             <datalist id="split-groepnamen-${escHtml(cat.dc_id)}"></datalist>
-            <div class="merge-kop split-kop" data-target="${dcSectionId}">
+            <div class="merge-kop split-kop">
                 <span>&#9986; Splitsen: <em>${escHtml(cat.dc_name)}</em></span>
                 <span class="merge-toggle-icon">${heeftSplits ? '&#9650;' : '&#9660;'}</span>
             </div>
-            <div class="merge-body" id="${dcSectionId}" style="display:${heeftSplits ? 'block' : 'none'}">
+            <div class="merge-body" id="${dcSectionId}"
+                 style="display:${heeftSplits ? 'block' : 'none'}">
                 <p class="merge-uitleg">
-                    Wijs elke categorie een groepsnaam toe.
-                    Categorieën met dezelfde naam vormen één gecombineerde startlijst.
-                    Laat leeg om niet te splitsen.
+                    Wijs elke categorie een groepsnaam toe. Categorieën met dezelfde naam
+                    vormen één startlijst. Voeg per groep afstanden toe via <strong>+</strong>.
                 </p>
-                <table class="merge-tabel">
-                    <thead><tr><th>Categorie</th><th>#</th><th>Groepsnaam</th></tr></thead>
-                    <tbody>${rows}</tbody>
+                <table class="merge-tabel split-tabel">
+                    <thead><tr>
+                        <th class="split-th-cat">Cat.</th>
+                        <th class="split-th-n">#</th>
+                        <th class="split-th-groep">Groepsnaam</th>
+                        <th>Afstanden</th>
+                    </tr></thead>
+                    <tbody>${catRows}</tbody>
                 </table>
                 <div class="merge-acties">
-                    <button class="btn-secondary split-opslaan-btn"
-                            data-dc-id="${escHtml(cat.dc_id)}">&#10003; Opslaan</button>
-                    <span class="merge-status split-status-${escHtml(cat.dc_id)}"></span>
+                    <button class="btn-secondary split-opslaan-btn">&#10003; Opslaan</button>
+                    <span class="merge-status split-status"></span>
                 </div>
             </div>`;
 
         panel.appendChild(sectie);
 
-        // Toggle kop
-        sectie.querySelector('.split-kop').addEventListener('click', function() {
-            const body = document.getElementById(dcSectionId);
-            const icon = this.querySelector('.merge-toggle-icon');
-            const open = body.style.display !== 'none';
-            body.style.display = open ? 'none' : 'block';
-            icon.innerHTML     = open ? '&#9660;' : '&#9650;';
-        });
+        const tbody = sectie.querySelector('tbody');
 
-        // Datalist live bijwerken
+        // Herrender alle cellen van een groep vanuit groepAfstanden
+        function refreshGroepCellen(groepNaam) {
+            tbody.querySelectorAll('tr').forEach(row => {
+                if (row.querySelector('.split-groep-inp')?.value.trim() === groepNaam) {
+                    row.querySelector('.split-afd-cel').innerHTML =
+                        afdInlineHtml(groepNaam, groepAfstanden);
+                }
+            });
+        }
+
+        // Sync DOM → groepAfstanden voor één groep (vanuit eerste rij met die groep)
+        function syncVanDom(groepNaam) {
+            if (!groepNaam) return;
+            const rij = [...tbody.querySelectorAll('tr')].find(r =>
+                r.querySelector('.split-groep-inp')?.value.trim() === groepNaam
+            );
+            if (!rij) return;
+            groepAfstanden[groepNaam] = [...rij.querySelectorAll('.afd-chip')].map((chip, i) => ({
+                id:           chip.dataset.afdId || '',
+                number:       i + 1,
+                name:         chip.querySelector('.afd-chip-naam')?.value.trim() || '',
+                value_meters: parseInt(chip.querySelector('.afd-chip-m')?.value) || null,
+            })).filter(d => d.name);
+        }
+
+        // Datalist bijhouden
         function verversSplitNamen() {
             const namen = [...new Set(
                 [...sectie.querySelectorAll('.split-groep-inp')]
@@ -275,54 +332,155 @@ function bouwSplitPanel() {
         }
         verversSplitNamen();
 
-        sectie.addEventListener('input', e => {
-            if (!e.target.classList.contains('split-groep-inp')) return;
-            const wisBtn = e.target.nextElementSibling;
-            if (wisBtn) wisBtn.style.visibility = e.target.value.trim() ? 'visible' : 'hidden';
-            verversSplitNamen();
+        // Toggle
+        sectie.querySelector('.split-kop').addEventListener('click', function() {
+            const body = el(dcSectionId);
+            const icon = this.querySelector('.merge-toggle-icon');
+            const open = body.style.display !== 'none';
+            body.style.display = open ? 'none' : 'block';
+            icon.innerHTML     = open ? '&#9660;' : '&#9650;';
         });
 
+        // Input-events: groepnaam wijzigen / afstand bewerken
+        sectie.addEventListener('input', e => {
+            if (e.target.classList.contains('split-groep-inp')) {
+                const row      = e.target.closest('tr');
+                const nieuw    = e.target.value.trim();
+                const wisBtn   = e.target.nextElementSibling;
+                if (wisBtn) wisBtn.style.visibility = nieuw ? 'visible' : 'hidden';
+                row.querySelector('.split-afd-cel').innerHTML =
+                    afdInlineHtml(nieuw, groepAfstanden);
+                verversSplitNamen();
+            }
+            if (e.target.classList.contains('afd-chip-naam') ||
+                e.target.classList.contains('afd-chip-m')) {
+                const groep = e.target.closest('tr')
+                              ?.querySelector('.split-groep-inp')?.value.trim();
+                if (groep) syncVanDom(groep);
+            }
+        });
+
+        // Klik-events: wis groep / verwijder afstand / voeg afstand toe
         sectie.addEventListener('click', e => {
-            if (!e.target.classList.contains('merge-wis-btn')) return;
-            const inp = e.target.previousElementSibling;
-            inp.value = '';
-            e.target.style.visibility = 'hidden';
-            verversSplitNamen();
+            // Wis groepsnaam
+            if (e.target.classList.contains('split-groep-wis')) {
+                const inp = e.target.previousElementSibling;
+                inp.value = '';
+                e.target.style.visibility = 'hidden';
+                e.target.closest('tr').querySelector('.split-afd-cel').innerHTML =
+                    afdInlineHtml('', groepAfstanden);
+                verversSplitNamen();
+                return;
+            }
+            // Verwijder afstand-chip
+            if (e.target.closest('.afd-chip-del')) {
+                const chip  = e.target.closest('.afd-chip');
+                const groep = chip.closest('tr')?.querySelector('.split-groep-inp')?.value.trim();
+                const idx   = parseInt(chip.dataset.idx);
+                if (groep && groepAfstanden[groep]) {
+                    groepAfstanden[groep].splice(idx, 1);
+                    refreshGroepCellen(groep);
+                }
+                return;
+            }
+            // Voeg afstand toe
+            if (e.target.classList.contains('afd-plus-btn')) {
+                const groep = e.target.closest('tr')
+                              ?.querySelector('.split-groep-inp')?.value.trim();
+                if (!groep) return;
+                syncVanDom(groep);
+                if (!groepAfstanden[groep]) groepAfstanden[groep] = [];
+                groepAfstanden[groep].push({
+                    id: '', number: groepAfstanden[groep].length + 1,
+                    name: '', value_meters: null,
+                });
+                refreshGroepCellen(groep);
+                // Focus eerste lege naam-input in huidige rij
+                const huidigeRij = e.target.closest('tr');
+                const inputs     = huidigeRij.querySelectorAll('.afd-chip-naam');
+                if (inputs.length) inputs[inputs.length - 1].focus();
+                return;
+            }
         });
 
         // Opslaan
         sectie.querySelector('.split-opslaan-btn').addEventListener('click', () =>
-            slaaSplitsOp(cat.dc_id, sectie)
+            slaaSplitsEnAfstandenOp(cat.dc_id, sectie, groepAfstanden)
         );
     });
 }
 
-async function slaaSplitsOp(dcId, sectie) {
+async function slaaSplitsEnAfstandenOp(dcId, sectie, groepAfstanden) {
     const btn    = sectie.querySelector('.split-opslaan-btn');
-    const status = sectie.querySelector(`.split-status-${dcId}`);
+    const status = sectie.querySelector('.split-status');
     btn.disabled = true;
     status.textContent = 'Opslaan…';
+
+    // Sync DOM → groepAfstanden voor alle groepen
+    const alleGroepen = [...new Set(
+        [...sectie.querySelectorAll('.split-groep-inp')]
+            .map(i => i.value.trim()).filter(Boolean)
+    )];
+    const tbody = sectie.querySelector('tbody');
+    alleGroepen.forEach(groep => {
+        const rij = [...tbody.querySelectorAll('tr')].find(r =>
+            r.querySelector('.split-groep-inp')?.value.trim() === groep
+        );
+        if (!rij) return;
+        groepAfstanden[groep] = [...rij.querySelectorAll('.afd-chip')].map((chip, i) => ({
+            id:           chip.dataset.afdId || null,
+            number:       i + 1,
+            name:         chip.querySelector('.afd-chip-naam')?.value.trim() || '',
+            value_meters: parseInt(chip.querySelector('.afd-chip-m')?.value) || null,
+        })).filter(d => d.name);
+    });
 
     const splits = [...sectie.querySelectorAll('.split-groep-inp')].map(inp => ({
         category:    inp.dataset.category,
         split_group: inp.value.trim() || null,
     }));
 
-    try {
-        const res  = await fetch('api/splits.php', {
-            method:  'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body:    JSON.stringify({ competition_id: huidigCompId, dc_id: dcId, splits }),
-        });
-        const data = await res.json();
-        if (data.error) throw new Error(data.error);
+    // Alle afstanden uit alle groepen, met target_group
+    const distances = Object.entries(groepAfstanden).flatMap(([groep, dists]) =>
+        dists.map((d, i) => ({
+            id:           d.id || null,
+            number:       d.number || (i + 1),
+            name:         d.name,
+            value_meters: d.value_meters,
+            target_group: groep || null,
+        }))
+    ).filter(d => d.name);
 
-        // Werk vergelijkData bij zodat startlijsten direct de nieuwe splits kennen
-        const cat = vergelijkData.find(c => c.dc_id === dcId);
-        if (cat) {
-            cat.splits = {};
-            splits.forEach(s => { if (s.split_group) cat.splits[s.category] = s.split_group; });
+    try {
+        const [r1, r2] = await Promise.all([
+            fetch('api/splits.php', {
+                method: 'POST', headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ competition_id: huidigCompId, dc_id: dcId, splits }),
+            }),
+            fetch('api/afstanden_beheer.php', {
+                method: 'POST', headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ dc_id: dcId, distances }),
+            }),
+        ]);
+        const [d1, d2] = await Promise.all([r1.json(), r2.json()]);
+        if (d1.error) throw new Error(d1.error);
+        if (d2.error) throw new Error(d2.error);
+
+        // vergelijkData bijwerken
+        const catObj = vergelijkData.find(c => c.dc_id === dcId);
+        if (catObj) {
+            catObj.splits       = {};
+            catObj.has_distances = (d2.distances || []).length > 0;
+            splits.forEach(s => { if (s.split_group) catObj.splits[s.category] = s.split_group; });
         }
+
+        // Server-IDs terugschrijven in groepAfstanden
+        (d2.distances || []).forEach(d => {
+            const g = d.target_group || '';
+            if (!groepAfstanden[g]) return;
+            const item = groepAfstanden[g].find(x => x.name === d.name && !x.id);
+            if (item) item.id = d.id;
+        });
 
         status.innerHTML = '<span style="color:var(--oranje)">&#10003; Opgeslagen</span>';
         setTimeout(() => { status.textContent = ''; }, 2500);
@@ -341,9 +499,15 @@ async function bouwAfstandenPanel() {
     panel.innerHTML = '';
     if (!vergelijkData.length) return;
 
-    // Laad afstanden voor alle DCs parallel
+    // DCs met splits: afstanden worden beheerd in het split-panel
+    const dcZonderSplits = vergelijkData.filter(cat =>
+        Object.keys(cat.splits || {}).length === 0
+    );
+    if (!dcZonderSplits.length) { panel.innerHTML = ''; return; }
+
+    // Laad afstanden voor DCs zonder splits parallel
     const distMap = {};
-    await Promise.all(vergelijkData.map(async cat => {
+    await Promise.all(dcZonderSplits.map(async cat => {
         try {
             const res  = await fetch(`api/distances_db.php?dc_id=${encodeURIComponent(cat.dc_id)}`);
             const data = await res.json();
@@ -353,14 +517,16 @@ async function bouwAfstandenPanel() {
         }
     }));
 
-    vergelijkData.forEach(cat => {
+    dcZonderSplits.forEach(cat => {
         bouwAfstandenSectie(panel, cat, distMap[cat.dc_id] || []);
     });
 }
 
 function bouwAfstandenSectie(panel, cat, afstanden) {
-    const sectieId = 'afd-body-' + cat.dc_id.replace(/[^a-z0-9]/gi, '');
-    const open     = afstanden.length === 0;   // auto-open als geen afstanden
+    const sectieId    = 'afd-body-' + cat.dc_id.replace(/[^a-z0-9]/gi, '');
+    const open        = afstanden.length === 0;
+    // Split-groepen voor deze DC (voor de groep-dropdown)
+    const splitGroepen = [...new Set(Object.values(cat.splits || {}))].sort();
 
     const sectie = document.createElement('div');
     sectie.className = 'afstanden-sectie';
@@ -370,7 +536,7 @@ function bouwAfstandenSectie(panel, cat, afstanden) {
             <span class="merge-toggle-icon">${open ? '&#9650;' : '&#9660;'}</span>
         </div>
         <div class="merge-body afd-body" id="${sectieId}" style="display:${open ? 'block' : 'none'}">
-            ${afstandenTabelHtml(afstanden)}
+            ${afstandenTabelHtml(afstanden, splitGroepen)}
             <div class="merge-acties">
                 <button class="btn-secondary afd-toevoegen-btn">+ Afstand toevoegen</button>
                 <button class="btn-secondary afd-opslaan-btn"
@@ -397,9 +563,9 @@ function bouwAfstandenSectie(panel, cat, afstanden) {
 
     // Toevoegen
     sectie.querySelector('.afd-toevoegen-btn').addEventListener('click', () => {
-        const tbody = sectie.querySelector('.afd-tabel tbody');
+        const tbody  = sectie.querySelector('.afd-tabel tbody');
         const volgNr = tbody.querySelectorAll('tr').length + 1;
-        tbody.insertAdjacentHTML('beforeend', afstandRijHtml('', volgNr, '', ''));
+        tbody.insertAdjacentHTML('beforeend', afstandRijHtml('', volgNr, '', '', null, splitGroepen));
         tbody.lastElementChild.querySelector('.afd-inp-naam').focus();
     });
 
@@ -409,22 +575,35 @@ function bouwAfstandenSectie(panel, cat, afstanden) {
     );
 }
 
-function afstandenTabelHtml(afstanden) {
+function afstandenTabelHtml(afstanden, splitGroepen = []) {
     const rows = afstanden.map(a =>
-        afstandRijHtml(a.id, a.number, a.name, a.value_meters)
+        afstandRijHtml(a.id, a.number, a.name, a.value_meters, a.target_group, splitGroepen)
     ).join('');
+    const groepKolom = splitGroepen.length
+        ? '<th class="afd-th-groep">Groep</th>' : '';
     return `<table class="merge-tabel afd-tabel">
         <thead><tr>
             <th class="afd-th-nr">#</th>
             <th>Naam</th>
             <th class="afd-th-m">Meters</th>
+            ${groepKolom}
             <th></th>
         </tr></thead>
         <tbody>${rows}</tbody>
     </table>`;
 }
 
-function afstandRijHtml(id, num, naam, meters) {
+function afstandRijHtml(id, num, naam, meters, targetGroup = null, splitGroepen = []) {
+    let groepKolom = '';
+    if (splitGroepen.length) {
+        const opties = `<option value="">— alle groepen —</option>` +
+            splitGroepen.map(g =>
+                `<option value="${escHtml(g)}"${targetGroup === g ? ' selected' : ''}>${escHtml(g)}</option>`
+            ).join('');
+        groepKolom = `<td><select class="inp afd-inp-groep">${opties}</select></td>`;
+    } else {
+        groepKolom = `<input type="hidden" class="afd-inp-groep" value="">`;
+    }
     return `<tr data-afd-id="${escHtml(id || '')}">
         <td><input type="number" class="inp afd-inp-num"
                    value="${escHtml(String(num ?? ''))}" min="1" max="99"></td>
@@ -432,6 +611,7 @@ function afstandRijHtml(id, num, naam, meters) {
                    value="${escHtml(naam || '')}" placeholder="bijv. 500m" maxlength="50"></td>
         <td><input type="number" class="inp afd-inp-meters"
                    value="${escHtml(String(meters ?? ''))}" placeholder="—" min="0"></td>
+        ${groepKolom}
         <td><button class="merge-wis-btn afd-wis-btn" title="Verwijderen">&#128465;</button></td>
     </tr>`;
 }
@@ -447,6 +627,7 @@ async function slaAfstandenOp(dcId, sectie) {
         number:       parseInt(tr.querySelector('.afd-inp-num').value)    || null,
         name:         tr.querySelector('.afd-inp-naam').value.trim(),
         value_meters: parseInt(tr.querySelector('.afd-inp-meters').value) || null,
+        target_group: (tr.querySelector('.afd-inp-groep')?.value || '') || null,
     })).filter(d => d.name);
 
     try {

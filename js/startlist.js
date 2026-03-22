@@ -130,7 +130,11 @@ async function toonStartlijstConfig(groep) {
 
     let afstanden;
     try {
-        const res = await fetch(`api/distances_db.php?dc_id=${encodeURIComponent(groep.dc_id)}`);
+        // Bij een split-groep: filter afstanden op groepnaam (target_group IS NULL OR = groepnaam)
+        const splitParam = groep.is_split
+            ? `&split_group=${encodeURIComponent(groep.dc_name)}`
+            : '';
+        const res = await fetch(`api/distances_db.php?dc_id=${encodeURIComponent(groep.dc_id)}${splitParam}`);
         afstanden = await res.json();
         if (afstanden.error) throw new Error(afstanden.error);
     } catch(e) {
