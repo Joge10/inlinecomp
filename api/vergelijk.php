@@ -99,6 +99,14 @@ try {
         $dbTp[$t['person_license']][$t['slot']] = $t;
     }
 
+    // 5b. Merge-groepen voor déze competitie
+    $mergeGroups = [];
+    $stmt = $pdo->prepare("SELECT id, merge_group FROM distance_combinations WHERE competition_id = ?");
+    $stmt->execute([$compId]);
+    foreach ($stmt->fetchAll() as $row) {
+        $mergeGroups[$row['id']] = $row['merge_group'];
+    }
+
     // 6. Resultaat opbouwen
     $result = [];
     foreach ($groepen as $groep) {
@@ -186,8 +194,9 @@ try {
 
         $result[] = [
             'dc_id'       => $dcId,
-            'dc_name'     => $groep['name']   ?? '',
-            'dc_number'   => $groep['number'] ?? 0,
+            'dc_name'     => $groep['name']         ?? '',
+            'dc_number'   => $groep['number']       ?? 0,
+            'merge_group' => $mergeGroups[$dcId]    ?? null,
             'competitors' => $rows,
         ];
     }

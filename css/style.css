@@ -453,6 +453,86 @@ header .badge {
 
 #import-result { margin-bottom: 10px; }
 
+/* ── Merge-panel (categorieën samenvoegen) ── */
+#merge-panel {
+    margin-bottom: 6px;
+}
+.merge-kop {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 6px 12px;
+    background: var(--lichtblauw);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: .85rem;
+    font-weight: 600;
+    color: var(--blauw);
+    user-select: none;
+}
+.merge-kop:hover { background: #c8ddf0; }
+.merge-toggle-icon { font-size: .75rem; }
+.merge-body {
+    border: 1px solid var(--border);
+    border-top: none;
+    border-radius: 0 0 4px 4px;
+    padding: 12px;
+    background: #fff;
+}
+.merge-uitleg {
+    font-size: .82rem;
+    color: #666;
+    margin-bottom: 10px;
+}
+.merge-tabel {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: .875rem;
+    margin-bottom: 10px;
+}
+.merge-tabel th {
+    text-align: left;
+    font-weight: 600;
+    padding: 4px 8px;
+    border-bottom: 2px solid var(--border);
+    color: var(--blauw);
+}
+.merge-tabel td { padding: 4px 8px; }
+.merge-tabel tr:nth-child(even) { background: var(--grijs); }
+.merge-cat-naam { font-weight: 500; white-space: nowrap; }
+.merge-groep-inp { width: 100%; max-width: 180px; }
+.merge-acties {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+}
+.merge-status { font-size: .82rem; }
+
+/* Tab-badge voor samengevoegde categorieën */
+.tab-badge-merged {
+    display: inline-block;
+    background: var(--oranje);
+    color: var(--wit);
+    border-radius: 8px;
+    font-size: .68rem;
+    font-weight: 700;
+    padding: 1px 5px;
+    margin-left: 3px;
+    vertical-align: middle;
+}
+
+/* Info-label bovenaan gecombineerde startlijst */
+.sl-merge-label {
+    background: #fff8f0;
+    border: 1px solid #f0d9c0;
+    border-radius: 4px;
+    padding: 6px 12px;
+    margin-bottom: 10px;
+    font-size: .82rem;
+    color: var(--oranje);
+}
+
 /* ── KNSB tijdstempel ── */
 #knsb-sync-info { margin-top: 3px; }
 .knsb-ts {

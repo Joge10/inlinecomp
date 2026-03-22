@@ -69,6 +69,7 @@ CREATE TABLE IF NOT EXISTS distance_combinations (
     number          TINYINT      UNSIGNED,          -- volgorde binnen wedstrijd
     name            VARCHAR(255),
     category_filter VARCHAR(20),                   -- DKA*, HKA* …
+    merge_group     VARCHAR(50)  DEFAULT NULL,      -- samengevoegde startlijstgroep (bv. 'Junior')
     PRIMARY KEY (id),
     KEY idx_dc_competition (competition_id),
     CONSTRAINT fk_dc_competition

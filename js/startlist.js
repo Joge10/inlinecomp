@@ -1,5 +1,35 @@
 /* InlineComp – startlijsten */
 
+// ── Startlijst-groepen bouwen (samengevoegde categorieën als één groep) ───────
+
+function bouwStartlijstGroepen() {
+    const groepen = [];
+    const gezien  = new Set();
+
+    for (const cat of vergelijkData) {
+        if (gezien.has(cat.dc_id)) continue;
+
+        const mg = cat.merge_group;
+        if (mg) {
+            // Alle cats met dezelfde merge_group samenvoegen
+            const merged = vergelijkData.filter(c => c.merge_group === mg);
+            merged.forEach(c => gezien.add(c.dc_id));
+
+            groepen.push({
+                dc_id:       merged[0].dc_id,                          // primaire DC (voor afstanden)
+                dc_ids:      merged.map(c => c.dc_id),
+                dc_name:     merged.map(c => c.dc_name).join(' + '),
+                merge_group: mg,
+                competitors: merged.flatMap(c => c.competitors),
+            });
+        } else {
+            gezien.add(cat.dc_id);
+            groepen.push({ ...cat, dc_ids: [cat.dc_id] });
+        }
+    }
+    return groepen;
+}
+
 // ── Startlijst pagina tonen ───────────────────────────────────────────────────
 
 function toonStartlijstenPagina() {
@@ -19,33 +49,40 @@ function toonStartlijstenPagina() {
     if (header) header.innerHTML =
         `<h2 class="sl-page-titel">${escHtml(huidigComp?.name || '')}</h2>`;
 
+    const groepen = bouwStartlijstGroepen();
+
     catTabs.innerHTML = '';
-    vergelijkData.forEach((cat, i) => {
+    groepen.forEach((groep, i) => {
         const btn = document.createElement('button');
         btn.className = 'tab-btn' + (i === 0 ? ' active' : '');
-        btn.textContent = cat.dc_name + ' (' + cat.competitors.length + ')';
+        const totaal  = groep.competitors.length;
+        const label   = groep.dc_ids.length > 1
+            ? `${escHtml(groep.dc_name)} <span class="tab-badge-merged" title="Samengevoegde categorieën">${groep.dc_ids.length}</span>`
+            : escHtml(groep.dc_name);
+        btn.innerHTML = label + ` (${totaal})`;
         btn.addEventListener('click', () => {
             catTabs.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
             btn.classList.add('active');
-            activeCat = cat;
-            toonStartlijstConfig(cat);
+            activeCat = groep;
+            toonStartlijstConfig(groep);
         });
         catTabs.appendChild(btn);
     });
 
-    activeCat = vergelijkData[0];
-    toonStartlijstConfig(vergelijkData[0]);
+    activeCat = groepen[0];
+    toonStartlijstConfig(groepen[0]);
 }
 
 // ── Startlijst – configuratie tonen (per afstand) ────────────────────────────
 
-async function toonStartlijstConfig(cat) {
+async function toonStartlijstConfig(groep) {
     const content = el('sl-cat-content');
     content.innerHTML = '<div class="status-msg loading"><span class="spinner"></span>Afstanden laden…</div>';
 
     let afstanden;
     try {
-        const res = await fetch(`api/distances_db.php?dc_id=${encodeURIComponent(cat.dc_id)}`);
+        // Gebruik altijd de primaire dc_id voor het ophalen van afstanden
+        const res = await fetch(`api/distances_db.php?dc_id=${encodeURIComponent(groep.dc_id)}`);
         afstanden = await res.json();
         if (afstanden.error) throw new Error(afstanden.error);
         if (!afstanden.length) throw new Error('Geen afstanden gevonden voor deze categorie');
@@ -55,6 +92,12 @@ async function toonStartlijstConfig(cat) {
     }
 
     const eersteActief = afstanden[0];
+
+    // Label: bij samenvoeging de gecombineerde naam tonen
+    const mergeLabelHtml = groep.dc_ids?.length > 1
+        ? `<div class="sl-merge-label">&#8644; Samengevoegd: <strong>${escHtml(groep.dc_name)}</strong></div>`
+        : '';
+
     const tabsHtml = afstanden.map((a, i) =>
         `<button class="tab-btn sl-dist-tab${i === 0 ? ' active' : ''}"
                  data-dist-id="${escHtml(a.id)}"
@@ -64,6 +107,7 @@ async function toonStartlijstConfig(cat) {
     ).join('');
 
     content.innerHTML = `
+        ${mergeLabelHtml}
         <div class="tab-bar sl-dist-tabs">${tabsHtml}</div>
         <div id="sl-dist-content"></div>`;
 
@@ -71,11 +115,11 @@ async function toonStartlijstConfig(cat) {
         btn.addEventListener('click', () => {
             content.querySelectorAll('.sl-dist-tab').forEach(b => b.classList.remove('active'));
             btn.classList.add('active');
-            toonAfstandConfig(cat, btn.dataset.distId, btn.dataset.distNaam);
+            toonAfstandConfig(groep, btn.dataset.distId, btn.dataset.distNaam);
         });
     });
 
-    toonAfstandConfig(cat, eersteActief.id, eersteActief.name);
+    toonAfstandConfig(groep, eersteActief.id, eersteActief.name);
 }
 
 // ── Startlijst – client-side slangenpatroon ──────────────────────────────────
@@ -186,8 +230,8 @@ function zetAantalRondes(cacheKey, n) {
 
 // ── Startlijst – configuratie per afstand ────────────────────────────────────
 
-function toonAfstandConfig(cat, distId, distNaam) {
-    const cacheKey = `${cat.dc_id}_${distId}`;
+function toonAfstandConfig(groep, distId, distNaam) {
+    const cacheKey = `${groep.dc_id}_${distId}`;
 
     if (!startlijstCache[cacheKey]) {
         startlijstCache[cacheKey] = {
@@ -218,7 +262,7 @@ function toonAfstandConfig(cat, distId, distNaam) {
 
     el('sl-genereer').addEventListener('click', async () => {
         syncRondenCfg(cacheKey);
-        await genereerAllesInEenKeer(cacheKey, cat, distId);
+        await genereerAllesInEenKeer(cacheKey, groep, distId);
     });
 }
 
@@ -391,7 +435,7 @@ function syncRondenCfg(cacheKey) {
 
 // ── Startlijst – alles in één keer genereren ─────────────────────────────────
 
-async function genereerAllesInEenKeer(cacheKey, cat, distId) {
+async function genereerAllesInEenKeer(cacheKey, groep, distId) {
     const cache     = startlijstCache[cacheKey];
     const resultDiv = el('sl-resultaten');
     resultDiv.innerHTML =
@@ -399,9 +443,11 @@ async function genereerAllesInEenKeer(cacheKey, cat, distId) {
 
     const ronde0 = cache.rondenConfig[0];
     try {
+        // dc_ids: alle dc_ids van de (samengevoegde) groep, kommagescheiden
+        const dcIds = (groep.dc_ids || [groep.dc_id]).join(',');
         const url = `api/startlijst_genereer.php`
                   + `?competition_id=${encodeURIComponent(huidigCompId)}`
-                  + `&dc_id=${encodeURIComponent(cat.dc_id)}`
+                  + `&dc_ids=${encodeURIComponent(dcIds)}`
                   + `&distance_id=${encodeURIComponent(distId)}`
                   + `&max_per_heat=${ronde0.maxPerHeat}`
                   + `&methode=${encodeURIComponent(ronde0.methode || 'willekeurig')}`;

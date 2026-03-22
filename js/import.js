@@ -60,6 +60,90 @@ function initEdits() {
     }
 }
 
+// ── Merge-panel bouwen ────────────────────────────────────────────────────────
+
+function bouwMergePanel() {
+    const panel = el('merge-panel');
+    if (!panel) return;
+
+    const heeftMerges = vergelijkData.some(c => c.merge_group);
+
+    const rows = vergelijkData.map(cat =>
+        `<tr>
+            <td class="merge-cat-naam">${escHtml(cat.dc_name)}</td>
+            <td><input type="text" class="inp merge-groep-inp"
+                       data-dc-id="${escHtml(cat.dc_id)}"
+                       value="${escHtml(cat.merge_group || '')}"
+                       placeholder="eigen groep" maxlength="40"></td>
+         </tr>`
+    ).join('');
+
+    panel.innerHTML = `
+        <div class="merge-kop" id="merge-kop">
+            <span>&#8644; Categorieën samenvoegen</span>
+            <span class="merge-toggle-icon" id="merge-toggle-icon">${heeftMerges ? '&#9650;' : '&#9660;'}</span>
+        </div>
+        <div class="merge-body" id="merge-body" style="display:${heeftMerges ? 'block' : 'none'}">
+            <p class="merge-uitleg">
+                Vul dezelfde groepsnaam in bij categorieën die samen één startlijst krijgen.
+                Laat leeg voor een eigen aparte startlijst.
+            </p>
+            <table class="merge-tabel">
+                <thead><tr><th>Categorie</th><th>Groepsnaam</th></tr></thead>
+                <tbody>${rows}</tbody>
+            </table>
+            <div class="merge-acties">
+                <button class="btn-secondary" id="btn-merge-opslaan">&#10003; Opslaan</button>
+                <span class="merge-status" id="merge-status"></span>
+            </div>
+        </div>`;
+
+    el('merge-kop').addEventListener('click', () => {
+        const body = el('merge-body');
+        const icon = el('merge-toggle-icon');
+        const open = body.style.display !== 'none';
+        body.style.display = open ? 'none' : 'block';
+        icon.innerHTML     = open ? '&#9660;' : '&#9650;';
+    });
+
+    el('btn-merge-opslaan').addEventListener('click', slaaMergesOp);
+}
+
+async function slaaMergesOp() {
+    const btn    = el('btn-merge-opslaan');
+    const status = el('merge-status');
+    btn.disabled = true;
+    status.textContent = 'Opslaan…';
+
+    const merges = [...document.querySelectorAll('.merge-groep-inp')].map(inp => ({
+        dc_id:       inp.dataset.dcId,
+        merge_group: inp.value.trim() || null,
+    }));
+
+    try {
+        const res  = await fetch('api/samenvoeg.php', {
+            method:  'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body:    JSON.stringify({ competition_id: huidigCompId, merges }),
+        });
+        const data = await res.json();
+        if (data.error) throw new Error(data.error);
+
+        // Werk vergelijkData bij zodat startlijsten direct de nieuwe groepen kennen
+        merges.forEach(m => {
+            const cat = vergelijkData.find(c => c.dc_id === m.dc_id);
+            if (cat) cat.merge_group = m.merge_group;
+        });
+
+        status.innerHTML = '<span style="color:var(--oranje)">&#10003; Opgeslagen</span>';
+        setTimeout(() => { status.textContent = ''; }, 2500);
+    } catch(e) {
+        status.innerHTML = `<span style="color:#c00">⚠ ${escHtml(e.message)}</span>`;
+    } finally {
+        btn.disabled = false;
+    }
+}
+
 // ── Categorietabbladen bouwen ─────────────────────────────────────────────────
 
 function bouwVergelijkTabbladen() {
@@ -70,6 +154,8 @@ function bouwVergelijkTabbladen() {
         statusMsg(content, 'info', 'Geen deelnemers gevonden.');
         return;
     }
+
+    bouwMergePanel();
 
     tabs.innerHTML = '';
     vergelijkData.forEach((cat, i) => {
@@ -164,10 +250,9 @@ function toonVergelijkTabel(cat) {
                 ${snDiff ? `<div class="knsb-hint">KNSB: ${escHtml(String(knsbSn))}</div>` : ''}
             </td>
             <td class="td-naam ${naamDiff ? 'cell-diff' : ''}">
-                <input type="text" class="inp inp-naam${isAnoniem ? ' inp-readonly' : ''}"
-                       value="${escHtml(pe.full_name ?? '')}"
+                <input type="text" class="inp inp-naam" value="${escHtml(pe.full_name ?? '')}"
                        data-field="full_name" data-lk="${escHtml(lk)}"
-                       ${isAnoniem ? 'readonly title="Naam is anoniem — kan niet worden gewijzigd"' : ''}>
+                       ${isAnoniem ? 'placeholder="Vul echte naam in voor startlijst"' : ''}>
                 ${naamDiff ? `<div class="knsb-hint">KNSB: ${escHtml(knsbNaam)}</div>` : ''}
             </td>
             <td class="td-club">${escHtml(pe.club_full ?? '')}</td>
