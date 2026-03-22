@@ -21,6 +21,7 @@ const STATUS_CSS    = ['status-0',        'status-1',  'status-2'];
 let startlijstCache  = {};    // {cacheKey: {rondenConfig, ronde1, cFinale, bFinale}}
 let isGeimporteerd   = false; // ≥1 deelnemer heeft db_entry in DB
 let heeftWijzigingen = false; // onopgeslagen bewerkingen in huidige sessie
+let gewijzigdeRijen  = new Set(); // license_keys van gewijzigde (nog niet opgeslagen) rijen
 
 // ── Hulpfuncties ──────────────────────────────────────────────────────────────
 

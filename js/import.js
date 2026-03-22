@@ -8,6 +8,7 @@ function initEdits() {
     entryEdits       = {};
     manualTp         = new Set();
     heeftWijzigingen = false;
+    gewijzigdeRijen  = new Set();
 
     isGeimporteerd = vergelijkData.some(cat =>
         cat.competitors.some(c => c.db_entry !== null)
@@ -130,9 +131,10 @@ function toonVergelijkTabel(cat) {
         const diffs = item.diffs || [];
 
         let rowClass = '';
-        if      (st === 2)    rowClass = 'row-withdrawn';
-        else if (isNew)       rowClass = 'row-new';
+        if      (st === 2)     rowClass = 'row-withdrawn';
+        else if (isNew)        rowClass = 'row-new';
         else if (diffs.length) rowClass = 'row-diff';
+        if (gewijzigdeRijen.has(lk)) rowClass += ' row-modified';
 
         const isGuest = sn !== '' && sn !== null && Number(sn) >= 1000;
 
@@ -277,7 +279,8 @@ function markeerGewijzigd(row) {
     heeftWijzigingen = true;
     updateImportBtn();
     if (!row) return;
-    row.classList.add('row-modified');   // oranje voor elke gewijzigde rij
+    row.classList.add('row-modified');
+    if (row.dataset.lk) gewijzigdeRijen.add(row.dataset.lk);
 }
 
 // ── Herlaad vergelijking na import ───────────────────────────────────────────
