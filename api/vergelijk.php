@@ -206,7 +206,13 @@ try {
             'dc_number'   => $groep['number']           ?? 0,
             'merge_group' => $mergeGroups[$dcId]        ?? null,
             'splits'      => $splitConfig[$dcId]        ?? [],   // {category: split_group}
-            'has_distances' => !empty($groep['distances']),
+            'has_distances'   => !empty($groep['distances']),
+            'knsb_distances'  => array_map(fn($d) => [
+                'id'           => null,
+                'name'         => $d['name']        ?? '',
+                'number'       => $d['number']       ?? 0,
+                'value_meters' => $d['valueMeters']  ?? null,
+            ], $groep['distances'] ?? []),
             'competitors' => $rows,
         ];
     }
