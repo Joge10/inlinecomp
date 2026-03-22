@@ -79,17 +79,17 @@
                         <div class="detail-header">
                             <div>
                                 <h2 id="detail-title"></h2>
-                                <div class="meta" id="detail-meta"></div>
-                                <div id="knsb-sync-info"></div>
+                                <div class="meta-rij">
+                                    <div class="meta" id="detail-meta"></div>
+                                    <div id="knsb-sync-info"></div>
+                                </div>
                             </div>
                             <button id="btn-import" class="btn-import" title="Wedstrijd importeren in database">
                                 &#8659; Importeer
                             </button>
                         </div>
                         <div id="import-result"></div>
-                        <div id="merge-panel"></div>
-                        <div id="split-panel"></div>
-                        <div id="afstanden-panel"></div>
+                        <div id="beheer-panel"></div>
                         <div class="tab-bar" id="imp-cat-tabs"></div>
                         <div id="imp-cat-content"></div>
                     </div>

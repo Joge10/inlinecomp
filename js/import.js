@@ -60,444 +60,498 @@ function initEdits() {
     }
 }
 
-// ── Merge-panel bouwen ────────────────────────────────────────────────────────
+// ── Beheer-tabel ──────────────────────────────────────────────────────────────
+// Toont effectieve rijen: merged DCs = 1 rij, gesplitste DC = meerdere rijen.
+// Kolommen: Distance Combination | Categorieën | Afstand 1 | Afstand 2 | … | +
 
-function bouwMergePanel() {
-    const panel = el('merge-panel');
-    if (!panel) return;
-
-    const heeftMerges = vergelijkData.some(c => c.merge_group);
-
-    const rows = vergelijkData.map(cat =>
-        `<tr>
-            <td class="merge-cat-naam">${escHtml(cat.dc_name)}</td>
-            <td class="merge-groep-cel">
-                <input type="text" class="inp merge-groep-inp"
-                       list="merge-groepnamen"
-                       data-dc-id="${escHtml(cat.dc_id)}"
-                       value="${escHtml(cat.merge_group || '')}"
-                       placeholder="eigen groep" maxlength="40">
-                <button class="merge-wis-btn" title="Groep verwijderen" tabindex="-1"
-                        style="${cat.merge_group ? '' : 'visibility:hidden'}">&#128465;</button>
-            </td>
-         </tr>`
-    ).join('');
-
-    panel.innerHTML = `
-        <datalist id="merge-groepnamen"></datalist>
-        <div class="merge-kop" id="merge-kop">
-            <span>&#8644; Categorieën samenvoegen</span>
-            <span class="merge-toggle-icon" id="merge-toggle-icon">${heeftMerges ? '&#9650;' : '&#9660;'}</span>
-        </div>
-        <div class="merge-body" id="merge-body" style="display:${heeftMerges ? 'block' : 'none'}">
-            <p class="merge-uitleg">
-                Vul dezelfde groepsnaam in bij categorieën die samen één startlijst krijgen.
-                Laat leeg (of maak leeg) voor een eigen aparte startlijst.
-            </p>
-            <table class="merge-tabel">
-                <thead><tr><th>Categorie</th><th>Groepsnaam</th></tr></thead>
-                <tbody>${rows}</tbody>
-            </table>
-            <div class="merge-acties">
-                <button class="btn-secondary" id="btn-merge-opslaan">&#10003; Opslaan</button>
-                <span class="merge-status" id="merge-status"></span>
-            </div>
-        </div>`;
-
-    el('merge-kop').addEventListener('click', () => {
-        const body = el('merge-body');
-        const icon = el('merge-toggle-icon');
-        const open = body.style.display !== 'none';
-        body.style.display = open ? 'none' : 'block';
-        icon.innerHTML     = open ? '&#9660;' : '&#9650;';
-    });
-
-    // Datalist live bijwerken: alle unieke niet-lege namen die al ingevuld zijn
-    function verversGroepnamen() {
-        const namen = [...new Set(
-            [...document.querySelectorAll('.merge-groep-inp')]
-                .map(i => i.value.trim())
-                .filter(Boolean)
-        )];
-        const dl = document.getElementById('merge-groepnamen');
-        if (dl) dl.innerHTML = namen.map(n => `<option value="${escHtml(n)}">`).join('');
-    }
-
-    // ×-knop: veld leegmaken en knop verbergen
-    panel.addEventListener('click', e => {
-        if (!e.target.classList.contains('merge-wis-btn')) return;
-        const inp = e.target.previousElementSibling;
-        inp.value = '';
-        e.target.style.visibility = 'hidden';
-        verversGroepnamen();
-    });
-
-    // Initieel vullen vanuit opgeslagen waarden
-    verversGroepnamen();
-
-    // Live bijwerken terwijl je typt; ×-knop tonen/verbergen
-    panel.addEventListener('input', e => {
-        if (!e.target.classList.contains('merge-groep-inp')) return;
-        const wisBtn = e.target.nextElementSibling;
-        if (wisBtn) wisBtn.style.visibility = e.target.value.trim() ? 'visible' : 'hidden';
-        verversGroepnamen();
-    });
-
-    el('btn-merge-opslaan').addEventListener('click', slaaMergesOp);
+// Module-niveau helpers — ook nodig in slaaBeheerOp (buiten bouwBeheerTabel scope)
+function distKey(dcId, splitGroup) {
+    return splitGroup ? `${dcId}::${splitGroup}` : dcId;
+}
+function parseDistKey(key) {
+    const sep = key.indexOf('::');
+    return sep === -1
+        ? { dcId: key, splitGroup: null }
+        : { dcId: key.substring(0, sep), splitGroup: key.substring(sep + 2) };
 }
 
-async function slaaMergesOp() {
-    const btn    = el('btn-merge-opslaan');
-    const status = el('merge-status');
-    btn.disabled = true;
-    status.textContent = 'Opslaan…';
+async function bouwBeheerTabel() {
+    const panel = el('beheer-panel');
+    if (!panel || !vergelijkData.length) return;
 
-    const merges = [...document.querySelectorAll('.merge-groep-inp')].map(inp => ({
-        dc_id:       inp.dataset.dcId,
-        merge_group: inp.value.trim() || null,
+    // Laad DB-afstanden (gegroepeerd op target_group); fallback naar KNSB
+    const dcDistances = {};
+    await Promise.all(vergelijkData.map(async cat => {
+        try {
+            const res  = await fetch(`api/distances_db.php?dc_id=${encodeURIComponent(cat.dc_id)}`);
+            const data = await res.json();
+            if (Array.isArray(data) && data.length) {
+                // Groepeer op target_group → aparte sleutels per splitgroep
+                data.forEach(d => {
+                    const k = distKey(cat.dc_id, d.target_group || null);
+                    if (!dcDistances[k]) dcDistances[k] = [];
+                    dcDistances[k].push({ id: d.id, number: d.number, name: d.name, value_meters: d.value_meters });
+                });
+                if (!dcDistances[cat.dc_id]) dcDistances[cat.dc_id] = [];
+            } else {
+                dcDistances[cat.dc_id] =
+                    (cat.knsb_distances || []).map(d => ({ id: '', number: d.number, name: d.name, value_meters: d.value_meters }));
+            }
+        } catch {
+            dcDistances[cat.dc_id] =
+                (cat.knsb_distances || []).map(d => ({ id: '', number: d.number, name: d.name, value_meters: d.value_meters }));
+        }
     }));
 
-    try {
-        const res  = await fetch('api/samenvoeg.php', {
-            method:  'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body:    JSON.stringify({ competition_id: huidigCompId, merges }),
-        });
-        const data = await res.json();
-        if (data.error) throw new Error(data.error);
+    // Standaard ingeklapt bij laden — gebruiker klapt open als aanpassing nodig is
+    let beheerIngeklapt = true;
 
-        // Werk vergelijkData bij zodat startlijsten direct de nieuwe groepen kennen
-        merges.forEach(m => {
-            const cat = vergelijkData.find(c => c.dc_id === m.dc_id);
-            if (cat) cat.merge_group = m.merge_group;
-        });
+    // Vaste buitenste structuur (nooit overschreven → event-handlers blijven actief)
+    panel.innerHTML =
+        `<div id="beheer-tabel-wrap"></div>` +
+        `<div class="beheer-acties">` +
+        `<button class="btn-secondary" id="btn-beheer-opslaan">&#10003; Opslaan</button>` +
+        `<span class="beheer-status" id="beheer-status"></span>` +
+        `</div>`;
 
-        status.innerHTML = '<span style="color:var(--oranje)">&#10003; Opgeslagen</span>';
-        setTimeout(() => { status.textContent = ''; }, 2500);
-    } catch(e) {
-        status.innerHTML = `<span style="color:#c00">⚠ ${escHtml(e.message)}</span>`;
-    } finally {
-        btn.disabled = false;
+    // ── Effectieve rijen berekenen ─────────────────────────────────────────────
+    // Elke rij = één toekomstige startlijst
+    function computeRows() {
+        const usedIds = new Set();
+        const rows    = [];
+
+        vergelijkData.forEach(cat => {
+            if (usedIds.has(cat.dc_id)) return;
+            usedIds.add(cat.dc_id);
+
+            // Alle DCs in dezelfde merge-groep samenpakken
+            let dcGroup = [cat];
+            if (cat.merge_group) {
+                vergelijkData.forEach(c => {
+                    if (!usedIds.has(c.dc_id) && c.merge_group === cat.merge_group) {
+                        usedIds.add(c.dc_id);
+                        dcGroup.push(c);
+                    }
+                });
+            }
+
+            // Gecombineerde categorieën (met bijhouden welke DC elke cat bezit)
+            const catInfo = {};   // { catNaam: { dcId, count } }
+            dcGroup.forEach(dc => {
+                dc.competitors.forEach(c => {
+                    const k = c.knsb?.category;
+                    if (!k) return;
+                    if (!catInfo[k]) catInfo[k] = { dcId: dc.dc_id, count: 0 };
+                    catInfo[k].count++;
+                });
+            });
+
+            // Gecombineerde split-configuratie
+            const allSplits = {};   // { catNaam: splitgroep }
+            dcGroup.forEach(dc => {
+                Object.entries(dc.splits || {}).forEach(([k, v]) => { if (v) allSplits[k] = v; });
+            });
+
+            const allCats   = Object.keys(catInfo).sort();
+            const splitGrps = [...new Set(Object.values(allSplits))].sort();
+            const meerdere  = allCats.length > 1;
+
+            if (splitGrps.length) {
+                // Elke splitgroep → eigen rij
+                splitGrps.forEach(sg => {
+                    const sgCats = allCats.filter(k => allSplits[k] === sg);
+                    if (!sgCats.length) return;
+                    const sgInfo = {};
+                    sgCats.forEach(k => { sgInfo[k] = catInfo[k]; });
+                    rows.push({ type: 'split', displayName: sg, primaryDcId: cat.dc_id,
+                                dcGroup, catInfo: sgInfo, allCatInfo: catInfo, allSplits, splitGroup: sg, meerdere });
+                });
+                // Niet-toegewezen categorieën → resterende rij
+                const unsplit = allCats.filter(k => !allSplits[k]);
+                if (unsplit.length) {
+                    const uInfo = {};
+                    unsplit.forEach(k => { uInfo[k] = catInfo[k]; });
+                    rows.push({ type: 'rest', displayName: cat.dc_name, primaryDcId: cat.dc_id,
+                                dcGroup, catInfo: uInfo, allCatInfo: catInfo, allSplits, meerdere });
+                }
+            } else {
+                rows.push({ type: dcGroup.length > 1 ? 'merged' : 'normal',
+                            displayName: cat.dc_name, primaryDcId: cat.dc_id,
+                            dcGroup, catInfo, allCatInfo: catInfo, allSplits, meerdere });
+            }
+        });
+        return rows;
     }
-}
 
-// ── Split-panel bouwen ────────────────────────────────────────────────────────
+    // ── Tabel renderen ─────────────────────────────────────────────────────────
+    function renderTabel() {
+        const rows     = computeRows();
+        // maxDists over alle sleutels (inclusief split-groep sleutels)
+        const maxDists = Math.max(0, ...Object.values(dcDistances).map(a => a.length));
+        const pijl    = beheerIngeklapt ? '&#9654;' : '&#9660;';
+        const distThs = beheerIngeklapt ? '' : Array.from({ length: maxDists }, (_, i) =>
+            `<th class="dc-th-afd">Afstand ${i + 1}</th>`).join('');
 
-// Rendert de inline afstands-chips voor één groep.
-// knsbBase: fallback-afstanden uit KNSB-API (tonen als er nog geen DB-afstanden zijn).
-function afdInlineHtml(groepNaam, groepAfstanden, knsbBase = []) {
-    if (!groepNaam) return '<span class="afd-geen">—</span>';
-    const dists = (groepAfstanden[groepNaam] && groepAfstanden[groepNaam].length)
-        ? groepAfstanden[groepNaam]
-        : knsbBase;
-    const chips = dists.map((d, i) =>
-        `<span class="afd-chip" data-idx="${i}" data-afd-id="${escHtml(d.id || '')}">
-            <input class="inp afd-chip-naam" value="${escHtml(d.name || '')}"
-                   placeholder="naam" title="Naam afstand"
-                   size="${Math.max(3, (d.name || '').length || 4)}">
-            <input class="inp afd-chip-m" type="number" min="0"
-                   value="${escHtml(String(d.value_meters ?? ''))}"
-                   placeholder="m" title="Meters">
-            <button class="merge-wis-btn afd-chip-del" title="Verwijder">&#128465;</button>
-        </span>`
-    ).join('');
-    return chips + `<button class="afd-plus-btn" title="Afstand toevoegen">+</button>`;
-}
+        const rowsHtml = rows.map(row => {
+            const { type, displayName, primaryDcId, dcGroup, catInfo, allCatInfo, allSplits, meerdere } = row;
+            const cats    = Object.keys(catInfo).sort();
+            const allCats = Object.keys(allCatInfo).sort();
 
-async function bouwSplitPanel() {
-    const panel = el('split-panel');
-    if (!panel) return;
-    panel.innerHTML = '';
+            // ── Kolom 1: DC-namen + samenvoeg-control ──────────────────────────
+            let naamCel = '';
+            dcGroup.forEach(dc => {
+                naamCel += `<div class="dc-groep-naam">` +
+                    `<span class="dc-groep-lbl">${escHtml(dc.dc_name)}</span>` +
+                    (dcGroup.length > 1
+                        ? `<button class="dc-ontkoppel" data-dc-id="${escHtml(dc.dc_id)}" title="Samenvoegen ongedaan maken">&#x2715;</button>`
+                        : '') +
+                    `</div>`;
+            });
 
-    const teSpitsen = vergelijkData.filter(cat => {
-        const cats = [...new Set(cat.competitors.map(c => c.knsb?.category).filter(Boolean))];
-        return cats.length > 1;
-    });
-    if (!teSpitsen.length) return;
+            // Merge-select: toon alleen als dit geen split-rij is
+            if (type === 'normal' || type === 'merged') {
+                const uitsluitIds = new Set(dcGroup.map(d => d.dc_id));
+                const vrijeDCsLijst = vergelijkData.filter(c => !uitsluitIds.has(c.dc_id) && !c.merge_group);
+                if (vrijeDCsLijst.length) {
+                    const opties = vrijeDCsLijst.map(c =>
+                        `<option value="${escHtml(c.dc_id)}">${escHtml(c.dc_name)}</option>`).join('');
+                    naamCel += `<div class="dc-merge-rij">` +
+                        `<span class="dc-merge-lbl">&#8644;</span>` +
+                        `<select class="inp dc-merge-sel" data-primary-dc-id="${escHtml(primaryDcId)}">` +
+                        `<option value="">— samenvoegen met… —</option>` + opties +
+                        `</select></div>`;
+                }
+            }
 
-    // Laad bestaande afstanden voor DCs die al splits hebben
-    const distMap = {};
-    await Promise.all(
-        teSpitsen
-            .filter(cat => Object.keys(cat.splits || {}).length > 0)
-            .map(async cat => {
-                try {
-                    const res  = await fetch(`api/distances_db.php?dc_id=${encodeURIComponent(cat.dc_id)}`);
-                    const data = await res.json();
-                    distMap[cat.dc_id] = Array.isArray(data) ? data : [];
-                } catch { distMap[cat.dc_id] = []; }
-            })
-    );
+            // ── Kolom 2: Categorieën + split-inputs ────────────────────────────
+            const catCel = cats.length
+                ? cats.map(k => {
+                    const info     = catInfo[k];
+                    const splitVal = allSplits[k] || '';
+                    const splitDeel = meerdere
+                        ? ` <span class="dc-pijl">&#8594;</span>` +
+                          `<input type="text" class="inp dc-split-inp"` +
+                          ` data-cat-dc-id="${escHtml(info.dcId)}"` +
+                          ` data-category="${escHtml(k)}"` +
+                          ` value="${escHtml(splitVal)}" placeholder="splitgroep…" maxlength="40">` +
+                          `<button class="merge-wis-btn dc-split-wis" tabindex="-1"` +
+                          ` style="${splitVal ? '' : 'visibility:hidden'}">&#128465;</button>`
+                        : '';
+                    return `<div class="dc-cat-rij">` +
+                           `<span class="dc-cat-badge">${escHtml(k)}</span>` +
+                           `<span class="dc-cat-tel">${info.count}</span>` +
+                           splitDeel + `</div>`;
+                }).join('')
+                : `<span class="dc-geen">—</span>`;
 
-    teSpitsen.forEach(cat => {
-        const catTelling = {};
-        cat.competitors.forEach(c => {
-            const k = c.knsb?.category;
-            if (k) catTelling[k] = (catTelling[k] || 0) + 1;
-        });
+            // ── Afstandscellen: elke rij heeft zijn eigen sleutel ───────────────
+            // Split-rijen: sleutel = dc_id::splitGroep (eigen afstanden per groep)
+            // Normal/merged/rest: sleutel = dc_id (of per DC binnen merged groep)
+            const rowSplitGroup = row.splitGroup || null;
+            const rowDistKey    = distKey(primaryDcId, rowSplitGroup);
 
-        const heeftSplits = Object.keys(cat.splits || {}).length > 0;
-        const dcSectionId = 'split-body-' + cat.dc_id.replace(/[^a-z0-9]/gi, '');
+            if (rowSplitGroup && !dcDistances[rowDistKey]) {
+                // Nieuwe splitgroep: initialiseer als kopie van basis-afstanden
+                dcDistances[rowDistKey] = (dcDistances[primaryDcId] || [])
+                    .map(d => ({ ...d, id: '' }));  // id='' → nieuwe DB-rijen
+            }
 
-        // groepAfstanden: gedeelde databron per groep voor dit DC
-        // { groepNaam: [{id, number, name, value_meters}, ...] }
-        const groepAfstanden = {};
-        (distMap[cat.dc_id] || []).forEach(d => {
-            const k = d.target_group || '';
-            if (!groepAfstanden[k]) groepAfstanden[k] = [];
-            groepAfstanden[k].push({ id: d.id || '', number: d.number,
-                                     name: d.name, value_meters: d.value_meters });
-        });
+            const allDists = [];
+            if (rowSplitGroup) {
+                // Splitrij: eigen afstanden
+                (dcDistances[rowDistKey] || []).forEach((d, i) =>
+                    allDists.push({ ...d, _dcId: primaryDcId, _key: rowDistKey }));
+            } else {
+                // Normal/merged/rest: combineer alle DCs in de groep (dedup op naam)
+                const seenNames = new Set();
+                dcGroup.forEach(dc => {
+                    (dcDistances[dc.dc_id] || []).forEach(d => {
+                        if (d.name && seenNames.has(d.name)) return;
+                        if (d.name) seenNames.add(d.name);
+                        allDists.push({ ...d, _dcId: dc.dc_id, _key: dc.dc_id });
+                    });
+                });
+            }
 
-        // KNSB-afstanden als fallback (tonen als er nog geen DB-afstanden zijn)
-        const knsbBase = (cat.knsb_distances || []).map(d => ({
-            id: '', number: d.number, name: d.name, value_meters: d.value_meters,
-        }));
+            const distCells = Array.from({ length: maxDists }, (_, i) => {
+                const d = allDists[i];
+                if (!d) return `<td class="dc-afd-leeg"></td>`;
+                return `<td class="dc-afd-kol" data-dist-key="${escHtml(d._key)}"` +
+                    ` data-idx="${i}" data-afd-id="${escHtml(d.id || '')}">` +
+                    `<div class="dc-afd-kol-inner">` +
+                    `<input class="inp dc-afd-naam" value="${escHtml(d.name || '')}" placeholder="naam" title="${escHtml(d.name || '')}">` +
+                    `<input class="inp dc-afd-m" type="number" min="0" max="99999"` +
+                    ` value="${escHtml(String(d.value_meters ?? ''))}" placeholder="m">` +
+                    `<button class="dc-afd-del">&#128465;</button>` +
+                    `</div></td>`;
+            }).join('');
 
-        const catRows = Object.keys(catTelling).sort().map(k => {
-            const groep = (cat.splits || {})[k] || '';
-            return `<tr data-cat="${escHtml(k)}">
-                <td class="split-cat-naam">${escHtml(k)}</td>
-                <td class="split-cat-tel">${catTelling[k]}</td>
-                <td class="split-groep-cel">
-                    <input type="text" class="inp split-groep-inp"
-                           list="split-groepnamen-${escHtml(cat.dc_id)}"
-                           data-category="${escHtml(k)}"
-                           value="${escHtml(groep)}"
-                           placeholder="groepsnaam" maxlength="40">
-                    <button class="merge-wis-btn split-groep-wis" tabindex="-1"
-                            style="${groep ? '' : 'visibility:hidden'}">&#128465;</button>
-                    <span class="split-afd-inline">${afdInlineHtml(groep, groepAfstanden, knsbBase)}</span>
-                </td>
-            </tr>`;
+            const plusCel = `<td class="dc-afd-plus-cel">` +
+                `<button class="afd-plus-btn" data-dist-key="${escHtml(rowDistKey)}">+</button>` +
+                `</td>`;
+
+            return `<tr data-primary-dc-id="${escHtml(primaryDcId)}">` +
+                `<td class="dc-naam-cel">${naamCel}</td>` +
+                `<td class="dc-cats-cel">${catCel}</td>` +
+                distCells +
+                plusCel + `</tr>`;
         }).join('');
 
-        const sectie = document.createElement('div');
-        sectie.className = 'split-sectie';
-        sectie.innerHTML = `
-            <datalist id="split-groepnamen-${escHtml(cat.dc_id)}"></datalist>
-            <div class="merge-kop split-kop">
-                <span>&#9986; Splitsen: <em>${escHtml(cat.dc_name)}</em></span>
-                <span class="merge-toggle-icon">${heeftSplits ? '&#9650;' : '&#9660;'}</span>
-            </div>
-            <div class="merge-body" id="${dcSectionId}"
-                 style="display:${heeftSplits ? 'block' : 'none'}">
-                <p class="merge-uitleg">
-                    Wijs elke categorie een groepsnaam toe. Categorieën met dezelfde naam
-                    vormen één startlijst. Voeg per groep afstanden toe via <strong>+</strong>.
-                </p>
-                <table class="merge-tabel split-tabel">
-                    <thead><tr>
-                        <th class="split-th-cat">Cat.</th>
-                        <th class="split-th-n">#</th>
-                        <th>Groep &amp; Afstanden</th>
-                    </tr></thead>
-                    <tbody>${catRows}</tbody>
-                </table>
-                <div class="merge-acties">
-                    <button class="btn-secondary split-opslaan-btn">&#10003; Opslaan</button>
-                    <span class="merge-status split-status"></span>
-                </div>
-            </div>`;
+        // Beheer-acties (opslaan-knop) verbergen als ingeklapt
+        const actiesEl = panel.querySelector('.beheer-acties');
+        if (actiesEl) actiesEl.style.display = beheerIngeklapt ? 'none' : '';
 
-        panel.appendChild(sectie);
+        el('beheer-tabel-wrap').innerHTML =
+            `<table class="beheer-tabel">` +
+            `<thead class="beheer-thead-toggle">` +
+            `<tr>` +
+            `<th class="dc-th-naam">Distance Combinations <span class="beheer-pijl">${pijl}</span></th>` +
+            (beheerIngeklapt ? '' :
+                `<th class="dc-th-cats">Categorieën</th>` +
+                distThs +
+                `<th class="dc-th-plus"></th>`) +
+            `</tr>` +
+            `</thead>` +
+            (beheerIngeklapt ? '' : `<tbody>${rowsHtml}</tbody>`) +
+            `</table>`;
+    }
 
-        const tbody = sectie.querySelector('tbody');
+    renderTabel();
 
-        // Herrender alle cellen van een groep vanuit groepAfstanden
-        function refreshGroepCellen(groepNaam) {
-            tbody.querySelectorAll('tr').forEach(row => {
-                if (row.querySelector('.split-groep-inp')?.value.trim() === groepNaam) {
-                    row.querySelector('.split-afd-inline').innerHTML =
-                        afdInlineHtml(groepNaam, groepAfstanden, knsbBase);
-                }
-            });
-        }
+    // ── Sync-hulpfuncties ──────────────────────────────────────────────────────
 
-        // Sync DOM → groepAfstanden voor één groep (vanuit eerste rij met die groep)
-        function syncVanDom(groepNaam) {
-            if (!groepNaam) return;
-            const rij = [...tbody.querySelectorAll('tr')].find(r =>
-                r.querySelector('.split-groep-inp')?.value.trim() === groepNaam
-            );
-            if (!rij) return;
-            groepAfstanden[groepNaam] = [...rij.querySelectorAll('.afd-chip')].map((chip, i) => ({
-                id:           chip.dataset.afdId || '',
-                number:       i + 1,
-                name:         chip.querySelector('.afd-chip-naam')?.value.trim() || '',
-                value_meters: parseInt(chip.querySelector('.afd-chip-m')?.value) || null,
-            })).filter(d => d.name);
-        }
-
-        // Datalist bijhouden
-        function verversSplitNamen() {
-            const namen = [...new Set(
-                [...sectie.querySelectorAll('.split-groep-inp')]
-                    .map(i => i.value.trim()).filter(Boolean)
-            )];
-            const dl = document.getElementById('split-groepnamen-' + cat.dc_id);
-            if (dl) dl.innerHTML = namen.map(n => `<option value="${escHtml(n)}">`).join('');
-        }
-        verversSplitNamen();
-
-        // Toggle
-        sectie.querySelector('.split-kop').addEventListener('click', function() {
-            const body = el(dcSectionId);
-            const icon = this.querySelector('.merge-toggle-icon');
-            const open = body.style.display !== 'none';
-            body.style.display = open ? 'none' : 'block';
-            icon.innerHTML     = open ? '&#9660;' : '&#9650;';
+    function syncSplitsVanDom() {
+        // Reset alle splits
+        vergelijkData.forEach(c => { c.splits = {}; });
+        panel.querySelectorAll('.dc-split-inp').forEach(inp => {
+            const dcId = inp.dataset.catDcId;
+            const cat  = vergelijkData.find(c => c.dc_id === dcId);
+            if (!cat) return;
+            const val = inp.value.trim();
+            if (val) cat.splits[inp.dataset.category] = val;
         });
+    }
 
-        // Input-events: groepnaam wijzigen / afstand bewerken
-        sectie.addEventListener('input', e => {
-            if (e.target.classList.contains('split-groep-inp')) {
-                const row      = e.target.closest('tr');
-                const nieuw    = e.target.value.trim();
-                const wisBtn   = e.target.nextElementSibling;
-                if (wisBtn) wisBtn.style.visibility = nieuw ? 'visible' : 'hidden';
-                row.querySelector('.split-afd-inline').innerHTML =
-                    afdInlineHtml(nieuw, groepAfstanden, knsbBase);
-                verversSplitNamen();
-            }
-            if (e.target.classList.contains('afd-chip-naam') ||
-                e.target.classList.contains('afd-chip-m')) {
-                const groep = e.target.closest('tr')
-                              ?.querySelector('.split-groep-inp')?.value.trim();
-                if (groep) syncVanDom(groep);
-            }
-        });
+    function syncDistVanDom(key) {
+        const cels = [...panel.querySelectorAll(`td.dc-afd-kol[data-dist-key="${CSS.escape(key)}"]`)];
+        if (!cels.length) return;
+        dcDistances[key] = cels.map((cel, i) => ({
+            id:           cel.dataset.afdId || '',
+            number:       i + 1,
+            name:         cel.querySelector('.dc-afd-naam')?.value.trim() || '',
+            value_meters: parseInt(cel.querySelector('.dc-afd-m')?.value) || null,
+        }));
+    }
 
-        // Klik-events: wis groep / verwijder afstand / voeg afstand toe
-        sectie.addEventListener('click', e => {
-            // Wis groepsnaam
-            if (e.target.classList.contains('split-groep-wis')) {
-                const inp = e.target.previousElementSibling;
-                inp.value = '';
-                e.target.style.visibility = 'hidden';
-                e.target.closest('tr').querySelector('.split-afd-inline').innerHTML =
-                    afdInlineHtml('', groepAfstanden);
-                verversSplitNamen();
-                return;
-            }
-            // Verwijder afstand-chip
-            if (e.target.closest('.afd-chip-del')) {
-                const chip  = e.target.closest('.afd-chip');
-                const groep = chip.closest('tr')?.querySelector('.split-groep-inp')?.value.trim();
-                const idx   = parseInt(chip.dataset.idx);
-                if (groep && groepAfstanden[groep]) {
-                    groepAfstanden[groep].splice(idx, 1);
-                    refreshGroepCellen(groep);
-                }
-                return;
-            }
-            // Voeg afstand toe
-            if (e.target.classList.contains('afd-plus-btn')) {
-                const groep = e.target.closest('tr')
-                              ?.querySelector('.split-groep-inp')?.value.trim();
-                if (!groep) return;
-                syncVanDom(groep);
-                if (!groepAfstanden[groep]) groepAfstanden[groep] = [];
-                groepAfstanden[groep].push({
-                    id: '', number: groepAfstanden[groep].length + 1,
-                    name: '', value_meters: null,
-                });
-                refreshGroepCellen(groep);
-                // Focus eerste lege naam-input in huidige rij
-                const huidigeRij = e.target.closest('tr');
-                const inputs     = huidigeRij.querySelectorAll('.afd-chip-naam');
-                if (inputs.length) inputs[inputs.length - 1].focus();
-                return;
-            }
-        });
+    function syncAllesVanDom() {
+        syncSplitsVanDom();
+        // Vind alle unieke dist-keys in het DOM en sync elk één keer
+        const keys = new Set();
+        panel.querySelectorAll('td.dc-afd-kol[data-dist-key]').forEach(cel => keys.add(cel.dataset.distKey));
+        keys.forEach(key => syncDistVanDom(key));
+    }
 
-        // Opslaan
-        sectie.querySelector('.split-opslaan-btn').addEventListener('click', () =>
-            slaaSplitsEnAfstandenOp(cat.dc_id, sectie, groepAfstanden)
-        );
+    function cleanupMergeGroups() {
+        // Als een merge-groep maar 1 DC over heeft, wis die merge_group
+        const counts = {};
+        vergelijkData.forEach(c => { if (c.merge_group) counts[c.merge_group] = (counts[c.merge_group] || 0) + 1; });
+        vergelijkData.forEach(c => { if (c.merge_group && counts[c.merge_group] < 2) c.merge_group = null; });
+    }
+
+    // ── Event delegation ───────────────────────────────────────────────────────
+
+    panel.addEventListener('input', e => {
+        if (e.target.classList.contains('dc-split-inp')) {
+            const wis = e.target.nextElementSibling;
+            if (wis?.classList.contains('dc-split-wis'))
+                wis.style.visibility = e.target.value.trim() ? 'visible' : 'hidden';
+        }
     });
+
+    panel.addEventListener('change', e => {
+        // Samenvoegen: selecteer een andere DC
+        if (e.target.classList.contains('dc-merge-sel')) {
+            const targetDcId  = e.target.value;
+            if (!targetDcId) return;
+            const primaryDcId = e.target.dataset.primaryDcId;
+            const primary     = vergelijkData.find(c => c.dc_id === primaryDcId);
+            const target      = vergelijkData.find(c => c.dc_id === targetDcId);
+            if (!primary || !target) return;
+            const mergeKey = primaryDcId;   // gebruik dc_id als unieke merge-sleutel
+            primary.merge_group = mergeKey;
+            target.merge_group  = mergeKey;
+            syncAllesVanDom();
+            renderTabel(); return;
+        }
+        // Split-veld: rij opsplitsen na invullen
+        if (e.target.classList.contains('dc-split-inp')) {
+            syncAllesVanDom();
+            renderTabel(); return;
+        }
+    });
+
+    panel.addEventListener('click', e => {
+        // Thead-rij: in-/uitklappen
+        if (e.target.closest('.beheer-thead-toggle')) {
+            syncAllesVanDom();
+            beheerIngeklapt = !beheerIngeklapt;
+            renderTabel(); return;
+        }
+        // Samenvoegen ongedaan maken
+        if (e.target.classList.contains('dc-ontkoppel')) {
+            const dcId = e.target.dataset.dcId;
+            const cat  = vergelijkData.find(c => c.dc_id === dcId);
+            if (cat) cat.merge_group = null;
+            cleanupMergeGroups();
+            syncAllesVanDom();
+            renderTabel(); return;
+        }
+        // Split-veld wissen
+        if (e.target.classList.contains('dc-split-wis')) {
+            const inp = e.target.previousElementSibling;
+            inp.value = ''; e.target.style.visibility = 'hidden';
+            syncAllesVanDom();
+            renderTabel(); return;
+        }
+        // Afstand verwijderen
+        if (e.target.classList.contains('dc-afd-del')) {
+            const kol = e.target.closest('.dc-afd-kol');
+            const key = kol?.dataset?.distKey;
+            const idx = parseInt(kol?.dataset?.idx ?? '-1');
+            if (!key || idx < 0) return;
+            syncAllesVanDom();
+            if (dcDistances[key]) {
+                dcDistances[key].splice(idx, 1);
+                dcDistances[key] = dcDistances[key].filter(d => d.name || d.value_meters);
+            }
+            renderTabel(); return;
+        }
+        // Afstand toevoegen
+        if (e.target.classList.contains('afd-plus-btn')) {
+            const key = e.target.dataset?.distKey;
+            if (!key) return;
+            syncAllesVanDom();
+            if (!dcDistances[key]) dcDistances[key] = [];
+            dcDistances[key] = dcDistances[key].filter(d => d.name || d.value_meters);
+            dcDistances[key].push({ id: '', number: dcDistances[key].length + 1, name: '', value_meters: null });
+            renderTabel();
+            const nms = panel.querySelectorAll(`td.dc-afd-kol[data-dist-key="${CSS.escape(key)}"] .dc-afd-naam`);
+            if (nms.length) nms[nms.length - 1].focus();
+            return;
+        }
+    });
+
+    el('btn-beheer-opslaan').addEventListener('click', () => slaaBeheerOp(panel, dcDistances));
 }
 
-async function slaaSplitsEnAfstandenOp(dcId, sectie, groepAfstanden) {
-    const btn    = sectie.querySelector('.split-opslaan-btn');
-    const status = sectie.querySelector('.split-status');
+async function slaaBeheerOp(panel, dcDistances) {
+    const btn    = el('btn-beheer-opslaan');
+    const status = el('beheer-status');
     btn.disabled = true;
     status.textContent = 'Opslaan…';
 
-    // Sync DOM → groepAfstanden voor alle groepen
-    const alleGroepen = [...new Set(
-        [...sectie.querySelectorAll('.split-groep-inp')]
-            .map(i => i.value.trim()).filter(Boolean)
-    )];
-    const tbody = sectie.querySelector('tbody');
-    alleGroepen.forEach(groep => {
-        const rij = [...tbody.querySelectorAll('tr')].find(r =>
-            r.querySelector('.split-groep-inp')?.value.trim() === groep
-        );
-        if (!rij) return;
-        groepAfstanden[groep] = [...rij.querySelectorAll('.afd-chip')].map((chip, i) => ({
-            id:           chip.dataset.afdId || null,
+    // Sync alles uit DOM vóór opslaan (inline: slaaBeheerOp staat buiten bouwBeheerTabel)
+    vergelijkData.forEach(c => { c.splits = {}; });
+    panel.querySelectorAll('.dc-split-inp').forEach(inp => {
+        const cat = vergelijkData.find(c => c.dc_id === inp.dataset.catDcId);
+        if (!cat) return;
+        const val = inp.value.trim();
+        if (val) cat.splits[inp.dataset.category] = val;
+    });
+    const distKeys = new Set();
+    panel.querySelectorAll('td.dc-afd-kol[data-dist-key]').forEach(cel => distKeys.add(cel.dataset.distKey));
+    distKeys.forEach(key => {
+        const cels = [...panel.querySelectorAll(`td.dc-afd-kol[data-dist-key="${CSS.escape(key)}"]`)];
+        dcDistances[key] = cels.map((cel, i) => ({
+            id:           cel.dataset.afdId || '',
             number:       i + 1,
-            name:         chip.querySelector('.afd-chip-naam')?.value.trim() || '',
-            value_meters: parseInt(chip.querySelector('.afd-chip-m')?.value) || null,
-        })).filter(d => d.name);
+            name:         cel.querySelector('.dc-afd-naam')?.value.trim() || '',
+            value_meters: parseInt(cel.querySelector('.dc-afd-m')?.value) || null,
+        }));
     });
 
-    const splits = [...sectie.querySelectorAll('.split-groep-inp')].map(inp => ({
-        category:    inp.dataset.category,
-        split_group: inp.value.trim() || null,
-    }));
-
-    // Alle afstanden uit alle groepen, met target_group
-    const distances = Object.entries(groepAfstanden).flatMap(([groep, dists]) =>
-        dists.map((d, i) => ({
-            id:           d.id || null,
-            number:       d.number || (i + 1),
-            name:         d.name,
-            value_meters: d.value_meters,
-            target_group: groep || null,
-        }))
-    ).filter(d => d.name);
+    const merges     = vergelijkData.map(c => ({ dc_id: c.dc_id, merge_group: c.merge_group || null }));
+    const splitsByDc = {};
+    vergelijkData.forEach(c => {
+        if (Object.keys(c.splits || {}).length)
+            splitsByDc[c.dc_id] = Object.entries(c.splits).map(([cat, sg]) => ({ category: cat, split_group: sg }));
+    });
+    // Zorg dat DCs zonder splits ook een lege splits-lijst krijgen (verwijdert oude splits)
+    vergelijkData.forEach(c => {
+        if (!splitsByDc[c.dc_id]) splitsByDc[c.dc_id] = [];
+    });
 
     try {
-        const [r1, r2] = await Promise.all([
-            fetch('api/splits.php', {
+        const basisRes = await Promise.all([
+            fetch('api/samenvoeg.php', {
                 method: 'POST', headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ competition_id: huidigCompId, dc_id: dcId, splits }),
-            }),
-            fetch('api/afstanden_beheer.php', {
-                method: 'POST', headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ dc_id: dcId, distances }),
-            }),
+                body: JSON.stringify({ competition_id: huidigCompId, merges }),
+            }).then(r => r.json()),
+            ...Object.entries(splitsByDc).map(([dcId, splits]) =>
+                fetch('api/splits.php', {
+                    method: 'POST', headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ competition_id: huidigCompId, dc_id: dcId, splits }),
+                }).then(r => r.json())
+            ),
         ]);
-        const [d1, d2] = await Promise.all([r1.json(), r2.json()]);
-        if (d1.error) throw new Error(d1.error);
-        if (d2.error) throw new Error(d2.error);
-
-        // vergelijkData bijwerken
-        const catObj = vergelijkData.find(c => c.dc_id === dcId);
-        if (catObj) {
-            catObj.splits       = {};
-            catObj.has_distances = (d2.distances || []).length > 0;
-            splits.forEach(s => { if (s.split_group) catObj.splits[s.category] = s.split_group; });
+        // Verwijder afstanden van vervallen splitgroepen (sleutels die nog in dcDistances
+        // zitten maar niet meer actief zijn in de DOM → splits zijn verwijderd).
+        const staleKeys = Object.keys(dcDistances).filter(k => k.includes('::') && !distKeys.has(k));
+        for (const key of staleKeys) {
+            const { dcId, splitGroup } = parseDistKey(key);
+            await fetch('api/afstanden_beheer.php', {
+                method: 'POST', headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ dc_id: dcId, split_group: splitGroup, distances: [] }),
+            });
+            delete dcDistances[key];
         }
 
-        // Server-IDs terugschrijven in groepAfstanden
-        (d2.distances || []).forEach(d => {
-            const g = d.target_group || '';
-            if (!groepAfstanden[g]) return;
-            const item = groepAfstanden[g].find(x => x.name === d.name && !x.id);
-            if (item) item.id = d.id;
+        // Sequentieel i.p.v. Promise.all: voorkomt gelijktijdige transacties
+        // op de distances-tabel (InnoDB gap-locks → deadlock bij parallel).
+        // Alleen actieve sleutels opslaan (distKeys = wat momenteel zichtbaar is in DOM).
+        const afdRes = [];
+        for (const [key, dists] of Object.entries(dcDistances)) {
+            if (!distKeys.has(key)) continue;   // sla nooit inactieve sleutels op
+            const { dcId, splitGroup } = parseDistKey(key);
+            const data = await fetch('api/afstanden_beheer.php', {
+                method: 'POST', headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    dc_id:       dcId,
+                    split_group: splitGroup,
+                    distances: dists.filter(d => d.name).map((d, i) => ({
+                        id: d.id || null, number: i + 1,
+                        name: d.name, value_meters: d.value_meters,
+                    })),
+                }),
+            }).then(r => r.json()).then(res => ({ key, dcId, ...res }));
+            afdRes.push(data);
+        }
+
+        const fouten = [...basisRes, ...afdRes].filter(r => r.error);
+        if (fouten.length) throw new Error(fouten.map(r => r.error).join('; '));
+
+        // Server-IDs terugschrijven
+        afdRes.forEach(r => {
+            if (!r.distances || !r.key || !dcDistances[r.key]) return;
+            r.distances.forEach(d => {
+                const item = dcDistances[r.key].find(x => x.name === d.name && !x.id);
+                if (item) item.id = d.id;
+            });
         });
 
         status.innerHTML = '<span style="color:var(--oranje)">&#10003; Opgeslagen</span>';
         setTimeout(() => { status.textContent = ''; }, 2500);
     } catch(e) {
-        status.innerHTML = `<span style="color:#c00">⚠ ${escHtml(e.message)}</span>`;
+        status.innerHTML = `<span style="color:#c00">&#9888; ${escHtml(e.message)}</span>`;
     } finally {
         btn.disabled = false;
     }
 }
+
+
+
+
+
 
 
 // ── Categorietabbladen bouwen ─────────────────────────────────────────────────
@@ -511,8 +565,7 @@ function bouwVergelijkTabbladen() {
         return;
     }
 
-    bouwMergePanel();
-    bouwSplitPanel();
+    bouwBeheerTabel();
 
     tabs.innerHTML = '';
     vergelijkData.forEach((cat, i) => {
@@ -903,6 +956,7 @@ async function importeerWedstrijd(compId, compNaam) {
                     ✔ <strong>${escHtml(compNaam)}</strong> geïmporteerd
                     <ul class="import-log">${logHtml}</ul>
                  </div>`;
+            setTimeout(() => { if (resultDiv) resultDiv.innerHTML = ''; }, 4000);
             isGeimporteerd   = true;
             heeftWijzigingen = false;
             // Automatisch resync met KNSB — toont nieuwe inschrijvingen en bijgewerkte diffs

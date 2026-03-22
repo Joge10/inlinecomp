@@ -15,22 +15,44 @@ if (!$dcId) {
 
 require_once __DIR__ . '/../../config_inlinecomp.php';
 
-// Optioneel filteren op split-groep:
-//   NULL-groepen altijd tonen (gelden voor alle groepen)
-//   Specifieke groepnaam: alleen die + de NULLs
-$splitGroup = $_GET['split_group'] ?? null;
+// Optioneel filteren op split-groep.
+// Als split_group opgegeven is én er bestaan rijen met die target_group → geef alleen die.
+// Als split_group opgegeven is maar er zijn géén split-specifieke rijen → val terug op basis (NULL).
+// Zonder split_group: geef alle rijen terug (o.a. voor laden in beheer-tabel).
+$splitGroup = isset($_GET['split_group']) && $_GET['split_group'] !== '' ? $_GET['split_group'] : null;
 
 try {
-    if ($splitGroup !== null && $splitGroup !== '') {
-        $stmt = $pdo->prepare("
-            SELECT id, number, name, target_group, value_meters, discipline
-            FROM distances
-            WHERE distance_combination_id = ?
-              AND (target_group IS NULL OR target_group = ?)
-            ORDER BY number
+    if ($splitGroup !== null) {
+        // Check of er split-specifieke afstanden bestaan
+        $check = $pdo->prepare("
+            SELECT COUNT(*) FROM distances
+            WHERE distance_combination_id = ? AND target_group = ?
         ");
-        $stmt->execute([$dcId, $splitGroup]);
+        $check->execute([$dcId, $splitGroup]);
+        $heeftSplit = (int) $check->fetchColumn() > 0;
+
+        if ($heeftSplit) {
+            // Split-specifieke afstanden gevonden → alleen die
+            $stmt = $pdo->prepare("
+                SELECT id, number, name, target_group, value_meters, discipline
+                FROM distances
+                WHERE distance_combination_id = ? AND target_group = ?
+                ORDER BY number
+            ");
+            $stmt->execute([$dcId, $splitGroup]);
+        } else {
+            // Geen split-specifiek → basis-afstanden (target_group IS NULL)
+            $stmt = $pdo->prepare("
+                SELECT id, number, name, target_group, value_meters, discipline
+                FROM distances
+                WHERE distance_combination_id = ?
+                  AND (target_group IS NULL OR target_group = '')
+                ORDER BY number
+            ");
+            $stmt->execute([$dcId]);
+        }
     } else {
+        // Geen filter → alle afstanden (voor laden in beheer-tabel)
         $stmt = $pdo->prepare("
             SELECT id, number, name, target_group, value_meters, discipline
             FROM distances

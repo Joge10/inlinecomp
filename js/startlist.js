@@ -723,18 +723,21 @@ function maakHeatGrid(data, methode) {
             const lk       = r.license_key;
             const tpActief = personEdits[lk]?.transponder_actief;
             const tp = tpActief !== undefined
-                ? (tpActief || '—')                                                             // sessie: null = geen
-                : (r.transponder_actief || r.transponders_extra?.[0] || r.transponder1 || r.transponder2 || '—');  // DB of fallback
-            const sn = r.start_number ? `<span class="heat-sn">${r.start_number}</span>` : '';
-            rows += `<tr><td class="heat-pos">${i + 1}</td>` +
-                    `<td class="heat-naam">${sn}${escHtml(r.full_name)}</td>` +
+                ? (tpActief || '—')
+                : (r.transponder_actief || r.transponders_extra?.[0] || r.transponder1 || r.transponder2 || '—');
+            rows += `<tr>` +
+                    `<td class="heat-pos">${i + 1}</td>` +
+                    `<td class="heat-snr">${r.start_number || ''}</td>` +
+                    `<td class="heat-cat">${escHtml(r.category || '')}</td>` +
+                    `<td class="heat-naam">${escHtml(r.full_name)}</td>` +
                     `<td class="heat-tp">${escHtml(tp)}</td></tr>`;
         });
         card.innerHTML =
             `<div class="heat-titel">Heat ${heat.nummer}` +
             `<span class="heat-count">${heat.rijders.length}</span></div>` +
-            `<table class="heat-tabel"><thead><tr><th>#</th><th>Naam</th><th>Transponder</th></tr></thead>` +
-            `<tbody>${rows}</tbody></table>`;
+            `<table class="heat-tabel"><thead><tr>` +
+            `<th>#</th><th>Snr</th><th>Cat</th><th>Naam</th><th>Transponder</th>` +
+            `</tr></thead><tbody>${rows}</tbody></table>`;
         grid.appendChild(card);
     }
     wrapper.appendChild(grid);

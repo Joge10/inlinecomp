@@ -453,155 +453,202 @@ header .badge {
 
 #import-result { margin-bottom: 10px; }
 
-/* ── Merge-panel (categorieën samenvoegen) ── */
-#merge-panel {
-    margin-bottom: 6px;
-}
-.merge-kop {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    padding: 6px 12px;
-    background: var(--lichtblauw);
-    border: 1px solid var(--border);
-    border-radius: 4px;
-    cursor: pointer;
-    font-size: .85rem;
-    font-weight: 600;
-    color: var(--blauw);
-    user-select: none;
-}
-.merge-kop:hover { background: #c8ddf0; }
-.merge-toggle-icon { font-size: .75rem; }
-.merge-body {
-    border: 1px solid var(--border);
-    border-top: none;
-    border-radius: 0 0 4px 4px;
-    padding: 12px;
-    background: #fff;
-}
-.merge-uitleg {
-    font-size: .82rem;
-    color: #666;
-    margin-bottom: 10px;
-}
-.merge-tabel {
-    width: 100%;
+/* ── Beheer-tabel: distance combinations ── */
+#beheer-panel { margin-bottom: 10px; }
+
+.beheer-thead-toggle { cursor: pointer; user-select: none; }
+.beheer-thead-toggle:hover th { background: #dce8f5; }
+.beheer-pijl { font-size: .7rem; margin-left: 5px; opacity: .7; }
+
+#beheer-tabel-wrap { overflow-x: auto; }
+
+.beheer-tabel {
     border-collapse: collapse;
     font-size: .875rem;
     margin-bottom: 10px;
+    width: 100%;             /* vult beschikbare ruimte; kolommen groeien mee */
+    /* table-layout: auto → browser verdeelt ruimte op basis van inhoud       */
 }
-.merge-tabel th {
+.beheer-tabel th {
     text-align: left;
     font-weight: 600;
-    padding: 4px 8px;
+    padding: 5px 8px;
     border-bottom: 2px solid var(--border);
     color: var(--blauw);
+    background: var(--lichtblauw);
+    white-space: nowrap;
 }
-.merge-tabel td { padding: 4px 8px; }
-.merge-tabel tr:nth-child(even) { background: var(--grijs); }
-.merge-cat-naam { font-weight: 500; white-space: nowrap; }
-.merge-groep-cel { display: flex; align-items: center; gap: 4px; }
-.merge-groep-inp { flex: 1; max-width: 180px; }
+.beheer-tabel td {
+    padding: 5px 8px;
+    vertical-align: middle;
+    border-bottom: 1px solid #e8eef4;
+}
+.dc-th-naam { min-width: 140px; }
+.dc-th-cats { min-width: 120px; }
+
+/* Kolom 1: DC naam + samenvoeg-input */
+.dc-naam-cel { vertical-align: middle; }
+.dc-naam {
+    font-weight: 600;
+    font-size: .875rem;
+    color: var(--blauw);
+    margin-bottom: 4px;
+}
+.dc-merge-rij {
+    display: flex;
+    align-items: center;
+    gap: 3px;
+}
+.dc-merge-lbl {
+    color: var(--middenblauw);
+    font-size: .9rem;
+    flex-shrink: 0;
+}
+.dc-merge-inp {
+    width: 130px;
+    font-size: .78rem;
+    padding: 2px 5px;
+}
+
+/* Kolom 2: Categorieën + split-inputs */
+.dc-cats-cel { vertical-align: middle; }
+.dc-cat-rij {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    margin-bottom: 3px;
+    flex-wrap: nowrap;
+}
+.dc-cat-rij:last-child { margin-bottom: 0; }
+.dc-cat-badge {
+    background: var(--lichtblauw);
+    border: 1px solid #b8d4ec;
+    border-radius: 4px;
+    padding: 1px 6px;
+    font-size: .78rem;
+    font-weight: 600;
+    color: var(--blauw);
+    white-space: nowrap;
+    flex-shrink: 0;
+}
+.dc-cat-tel {
+    font-size: .78rem;
+    color: #888;
+    flex-shrink: 0;
+    min-width: 18px;
+}
+.dc-pijl {
+    color: var(--middenblauw);
+    font-size: .8rem;
+    flex-shrink: 0;
+}
+.dc-split-inp {
+    width: 90px;
+    font-size: .78rem;
+    padding: 2px 4px;
+}
+.dc-geen { color: #ccc; font-size: .78rem; }
+
+/* Kolom 3: Afstanden als chips in flex-wrap container */
+.dc-afd-cel { vertical-align: middle; }
+.afd-wrap {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 4px;
+}
+
+/* Wis-knoppen */
 .merge-wis-btn {
     background: none;
     border: none;
     color: #aaa;
     cursor: pointer;
-    font-size: .85rem;
-    padding: 2px 4px;
+    font-size: .8rem;
+    padding: 1px 3px;
     line-height: 1;
     border-radius: 3px;
+    flex-shrink: 0;
 }
 .merge-wis-btn:hover { color: #c00; background: #fee; }
-.merge-acties {
+
+/* Actie-balk onderaan tabel */
+.beheer-acties {
     display: flex;
     align-items: center;
     gap: 12px;
+    padding: 4px 0 2px;
 }
-.merge-status { font-size: .82rem; }
+.beheer-status { font-size: .82rem; }
 
+/* Afstanden: tabelkolommen per afstand (naam + meters op 1 regel)               */
+/* overflow:hidden op <td> werkt niet in browsers → inner div knipt af.          */
+.dc-th-afd  { min-width: 140px; }   /* groeit mee; scroll als tabel te breed */
+.dc-th-plus { width: 30px; }
 
-/* ── Split-panel ── */
-#split-panel { margin-bottom: 6px; }
-.split-sectie { margin-bottom: 4px; }
-.split-kop { border-radius: 4px; }
-.split-sectie + .split-sectie .split-kop { border-radius: 4px; }
-.split-cat-naam { font-weight: 600; width: 70px; }
-.split-cat-tel  { width: 36px; text-align: right; color: #888; font-size: .82rem; }
-.split-groep-cel {
+.dc-afd-kol {
+    vertical-align: middle;
+    padding: 3px 6px;
+}
+.dc-afd-kol-inner {
     display: flex;
     align-items: center;
-    flex-wrap: nowrap;
-    gap: 4px;
-    overflow-x: auto;
-}
-.split-groep-inp { width: 120px; flex-shrink: 0; }
-
-/* Inline afstanden naast groepnaam */
-.split-afd-inline {
-    display: contents; /* chips & plus-btn worden directe flex-kinderen van split-groep-cel */
-}
-
-/* ── Split-tabel: inline afstanden kolom ── */
-.split-tabel { width: 100%; }
-.split-th-cat  { width: 70px; }
-.split-th-n    { width: 36px; }
-.split-th-groep { width: 180px; }
-/* 4e kolom (Afstanden) neemt de rest */
-
-/* Eén afstand-chip: pil-stijl, alles compact naast elkaar */
-.afd-chip {
-    display: inline-flex;
-    align-items: center;
     gap: 2px;
-    background: #ddeefa;
-    border: 1px solid #a8c8e8;
-    border-radius: 10px;
-    padding: 1px 5px 1px 6px;
+    overflow: hidden;        /* knipt af wat buiten de flex-container valt */
+    /* geen max-width: auto table-layout laat cel groeien op inhoud           */
+}
+/* Naam: vult beschikbare ruimte, krimpt als kolom te smal is.           */
+/* .dc-afd-kol .dc-afd-naam = specificiteit 20 > .inp = 10 → wint altijd */
+.dc-afd-kol .dc-afd-naam {
+    box-sizing: border-box;
+    flex: 1 1 auto;
+    min-width: 50px;         /* kolom krimpt nooit verder dan dit */
+    width: auto;             /* overschrijft .inp { width:100% } expliciet */
+    font-size: .8rem;
+    padding: 2px 4px;
+    overflow: hidden;
+    white-space: nowrap;
+    text-overflow: ellipsis; /* lange namen: afkappen met … */
+}
+/* Meters: smal maar genoeg voor 5 cijfers (max 42000), geen spinner      */
+.dc-afd-kol .dc-afd-m {
+    box-sizing: border-box;
+    width: 46px !important;  /* .inp { width:100% } staat later in sheet  */
     flex-shrink: 0;
-}
-/* Naam: transparante input in de pil, auto-breed via size= attribuut */
-.afd-chip-naam {
-    background: transparent;
-    border: none;
-    outline: none;
-    font-size: .78rem;
-    font-weight: 600;
-    color: var(--blauw);
-    padding: 0;
-    min-width: 28px;
-    max-width: 90px;
-}
-/* Kleine meters-input */
-.afd-chip-m {
-    width: 46px;
-    font-size: .78rem;
-    padding: 1px 3px;
-    border: 1px solid #b8d4ec;
-    border-radius: 3px;
-    background: #f4f9fd;
+    font-size: .8rem;
+    padding: 2px 3px;
     text-align: right;
+    -moz-appearance: textfield;
 }
-.afd-chip-del {
+.dc-afd-m::-webkit-outer-spin-button,
+.dc-afd-m::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
+.dc-afd-del {
     background: none;
     border: none;
     cursor: pointer;
-    font-size: .7rem;
-    padding: 0 1px;
-    color: #7aabcc;
+    font-size: .75rem;
+    padding: 0;
+    color: #aaa;
     line-height: 1;
+    flex-shrink: 0;
+    width: 16px;
+    text-align: center;
 }
-.afd-chip-del:hover { color: #c00; }
-
-/* + knop om afstand toe te voegen */
+.dc-afd-del:hover { color: #c00; }
+.dc-afd-leeg { padding: 4px 6px; }
+.dc-afd-gedeeld { text-align: center; color: #ccc; font-size: .75rem; cursor: default; }
+.dc-afd-plus-cel {
+    text-align: center;
+    vertical-align: middle;
+    padding: 4px;
+}
 .afd-plus-btn {
     background: var(--middenblauw);
     color: var(--wit);
     border: none;
     border-radius: 50%;
-    width: 20px; height: 20px;
-    font-size: .95rem;
+    width: 22px; height: 22px;
+    font-size: 1rem;
     line-height: 1;
     cursor: pointer;
     display: inline-flex;
@@ -611,12 +658,6 @@ header .badge {
 }
 .afd-plus-btn:hover { background: var(--blauw); }
 
-/* Placeholder als er geen groep geselecteerd is */
-.afd-geen {
-    color: #bbb;
-    font-size: .78rem;
-    font-style: italic;
-}
 
 /* Geen-afstanden melding op startlijst-pagina */
 .sl-no-dist-info {
@@ -653,8 +694,16 @@ header .badge {
     color: var(--oranje);
 }
 
+/* ── Meta-rij: datum/locatie + KNSB-tijdstempel op één regel ── */
+.meta-rij {
+    display: flex;
+    align-items: baseline;
+    flex-wrap: wrap;
+    gap: 0 12px;
+}
+#knsb-sync-info { margin-top: 0; }
+
 /* ── KNSB tijdstempel ── */
-#knsb-sync-info { margin-top: 3px; }
 .knsb-ts {
     font-size: .75rem;
     color: #888;
@@ -938,9 +987,10 @@ header .badge {
 .heat-tabel td { padding: 4px 8px; border-bottom: 1px solid #eef2f6; }
 .heat-tabel tr:last-child td { border-bottom: none; }
 .heat-tabel tr:hover td { background: #f8fafc; }
-.heat-pos  { color: #999; width: 22px; text-align: center; }
+.heat-pos  { color: #999; width: 20px; text-align: center; }
+.heat-snr  { width: 32px; text-align: right; font-weight: 600; color: var(--blauw); padding-right: 6px !important; }
+.heat-cat  { width: 36px; font-size: .75rem; color: #666; white-space: nowrap; }
 .heat-naam { }
-.heat-sn   { font-size: .72rem; color: #999; margin-right: 4px; }
 .heat-tp   { font-family: monospace; font-size: .78rem; color: #555; }
 
 /* ── Ronde blok ── */

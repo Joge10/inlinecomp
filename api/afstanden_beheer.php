@@ -31,9 +31,11 @@ if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
 
 require_once __DIR__ . '/../../config_inlinecomp.php';
 
-$body  = json_decode(file_get_contents('php://input'), true);
-$dcId  = trim($body['dc_id']    ?? '');
-$dists = $body['distances']     ?? null;
+$body       = json_decode(file_get_contents('php://input'), true);
+$dcId       = trim($body['dc_id']    ?? '');
+$dists      = $body['distances']     ?? null;
+// null = basis-afstanden (target_group IS NULL), string = specifieke splitgroep
+$splitGroup = array_key_exists('split_group', $body) ? ($body['split_group'] ?: null) : null;
 
 if (!$dcId) {
     http_response_code(400);
@@ -57,18 +59,33 @@ function uuid4(): string {
 try {
     $pdo->beginTransaction();
 
-    // Verwijder afstanden die niet meer in de lijst staan
-    $nieuweIds = array_filter(array_column($dists, 'id'));
-    if ($nieuweIds) {
-        $ph   = implode(',', array_fill(0, count($nieuweIds), '?'));
-        $pdo->prepare("
-            DELETE FROM distances
-            WHERE distance_combination_id = ? AND id NOT IN ($ph)
-        ")->execute(array_merge([$dcId], array_values($nieuweIds)));
+    // Verwijder afstanden die niet meer in de lijst staan, gescoopt op target_group
+    $nieuweIds = array_values(array_filter(array_column($dists, 'id')));
+
+    if ($splitGroup !== null) {
+        // Splitgroep-afstanden: scope op target_group = $splitGroup
+        if ($nieuweIds) {
+            $ph = implode(',', array_fill(0, count($nieuweIds), '?'));
+            $pdo->prepare("
+                DELETE FROM distances
+                WHERE distance_combination_id = ? AND target_group = ? AND id NOT IN ($ph)
+            ")->execute(array_merge([$dcId, $splitGroup], $nieuweIds));
+        } else {
+            $pdo->prepare("DELETE FROM distances WHERE distance_combination_id = ? AND target_group = ?")
+                ->execute([$dcId, $splitGroup]);
+        }
     } else {
-        // Geen bestaande IDs opgegeven → alles verwijderen
-        $pdo->prepare("DELETE FROM distances WHERE distance_combination_id = ?")
-            ->execute([$dcId]);
+        // Basis-afstanden: scope op target_group IS NULL
+        if ($nieuweIds) {
+            $ph = implode(',', array_fill(0, count($nieuweIds), '?'));
+            $pdo->prepare("
+                DELETE FROM distances
+                WHERE distance_combination_id = ? AND (target_group IS NULL OR target_group = '') AND id NOT IN ($ph)
+            ")->execute(array_merge([$dcId], $nieuweIds));
+        } else {
+            $pdo->prepare("DELETE FROM distances WHERE distance_combination_id = ? AND (target_group IS NULL OR target_group = '')")
+                ->execute([$dcId]);
+        }
     }
 
     $stmt = $pdo->prepare("
@@ -84,11 +101,9 @@ try {
 
     $resultaat = [];
     foreach ($dists as $i => $d) {
-        $naam        = trim($d['name']         ?? '');
+        $naam        = trim($d['name'] ?? '');
         $meters      = isset($d['value_meters']) && $d['value_meters'] !== ''
                          ? (int) $d['value_meters'] : null;
-        $targetGroup = (isset($d['target_group']) && $d['target_group'] !== '')
-                         ? trim($d['target_group']) : null;
         if (!$naam) continue;
 
         $id  = (isset($d['id']) && $d['id'] !== '') ? $d['id'] : uuid4();
@@ -99,7 +114,7 @@ try {
             ':dc_id'        => $dcId,
             ':number'       => $num,
             ':name'         => $naam,
-            ':target_group' => $targetGroup,
+            ':target_group' => $splitGroup,  // null = basis, string = splitgroep
             ':value_meters' => $meters,
         ]);
 
