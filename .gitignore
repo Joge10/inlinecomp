@@ -1,0 +1,17 @@
+# SFTP configuratie — bevat wachtwoorden, NOOIT committen
+.vscode/sftp.json
+
+# Database configuratie (staat buiten projectmap, voor de zekerheid)
+config_inlinecomp.php
+config*.php
+
+# VS Code overige instellingen (optioneel bewaren)
+# .vscode/
+
+# OS rommel
+.DS_Store
+Thumbs.db
+
+# Editor tijdelijke bestanden
+*.swp
+*~

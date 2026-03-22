@@ -1,0 +1,1076 @@
+/* InlineComp – huisstijl */
+:root {
+    --blauw:       #1F4E79;
+    --middenblauw: #2E75B6;
+    --lichtblauw:  #D6E4F0;
+    --oranje:      #E8630A;
+    --wit:         #ffffff;
+    --tekst:       #1a1a1a;
+    --grijs:       #f4f6f8;
+    --border:      #cdd8e3;
+}
+
+* { box-sizing: border-box; margin: 0; padding: 0; }
+
+body {
+    font-family: 'Segoe UI', Arial, sans-serif;
+    font-size: 15px;
+    color: var(--tekst);
+    background: var(--grijs);
+}
+
+/* ── Header ── */
+header {
+    background: var(--blauw);
+    color: var(--wit);
+    padding: 0 24px;
+    display: flex;
+    align-items: center;
+    height: 56px;
+    gap: 16px;
+}
+header h1 {
+    font-size: 1.25rem;
+    font-weight: 600;
+    letter-spacing: .5px;
+}
+header .badge {
+    background: var(--oranje);
+    color: var(--wit);
+    font-size: .7rem;
+    font-weight: 700;
+    padding: 2px 7px;
+    border-radius: 10px;
+    letter-spacing: .5px;
+    text-transform: uppercase;
+}
+
+/* sidebar-toggle zit nu in het panel zelf, niet in de header */
+
+/* ── Layout: sidebar + content naast elkaar ── */
+.layout {
+    display: flex;
+    height: calc(100vh - 56px);
+    overflow: hidden;
+}
+
+/* ── Sidebar ── */
+#sidebar {
+    width: 220px;
+    min-width: 220px;
+    background: var(--middenblauw);
+    display: flex;
+    flex-direction: column;
+    transition: width .2s ease, min-width .2s ease;
+    overflow: hidden;
+    position: relative;
+}
+#sidebar.collapsed {
+    width: 48px;
+    min-width: 48px;
+}
+
+/* Inklapknop bovenaan het panel */
+#sidebar-toggle {
+    background: none;
+    border: none;
+    border-bottom: 1px solid rgba(255,255,255,.15);
+    color: rgba(255,255,255,.8);
+    font-size: 1rem;
+    cursor: pointer;
+    padding: 10px 0;
+    width: 100%;
+    text-align: right;
+    padding-right: 14px;
+    flex-shrink: 0;
+    transition: background .12s;
+}
+#sidebar-toggle:hover {
+    background: rgba(255,255,255,.1);
+    color: var(--wit);
+}
+
+.nav-menu {
+    list-style: none;
+    padding: 12px 0;
+    margin: 0;
+}
+.nav-bottom {
+    margin-top: auto;
+    border-top: 1px solid rgba(255,255,255,.15);
+}
+
+.nav-item {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 11px 14px;
+    color: rgba(255,255,255,.75);
+    cursor: pointer;
+    white-space: nowrap;
+    transition: background .12s, color .12s;
+    border-left: 3px solid transparent;
+}
+.nav-item:hover {
+    background: rgba(255,255,255,.1);
+    color: var(--wit);
+}
+.nav-item.active {
+    background: rgba(255,255,255,.15);
+    color: var(--wit);
+    border-left-color: var(--oranje);
+    font-weight: 600;
+}
+
+.nav-icon {
+    font-size: 1.1rem;
+    flex-shrink: 0;
+    width: 20px;
+    text-align: center;
+}
+.nav-label {
+    font-size: .9rem;
+    transition: opacity .15s;
+}
+#sidebar.collapsed .nav-label {
+    opacity: 0;
+    pointer-events: none;
+}
+
+/* ── Main content ── */
+#main-content {
+    flex: 1;
+    overflow-y: auto;
+    padding: 24px 24px;
+    background: var(--grijs);
+}
+
+/* ── Pagina's ── */
+.page { display: none; }
+.page.active { display: block; }
+
+/* ── Sectie ── */
+.section-title {
+    font-size: 1rem;
+    font-weight: 600;
+    color: var(--blauw);
+    margin-bottom: 12px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+.section-title::after {
+    content: '';
+    flex: 1;
+    height: 1px;
+    background: var(--border);
+}
+
+/* ── Datumfilter ── */
+.date-filter {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    margin-bottom: 12px;
+}
+.date-filter label {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 6px;
+    font-size: .83rem;
+    color: #555;
+}
+.date-filter input[type="date"] {
+    border: 1px solid var(--border);
+    border-radius: 5px;
+    padding: 4px 6px;
+    font-size: .83rem;
+    font-family: inherit;
+    color: var(--tekst);
+    background: var(--wit);
+    width: 148px;
+}
+.date-filter input[type="date"]:focus,
+.date-filter select:focus {
+    outline: none;
+    border-color: var(--middenblauw);
+}
+.date-filter select {
+    border: 1px solid var(--border);
+    border-radius: 5px;
+    padding: 4px 6px;
+    font-size: .83rem;
+    font-family: inherit;
+    color: var(--tekst);
+    background: var(--wit);
+    width: 148px;
+}
+#filter-reset {
+    padding: 4px 10px;
+    border: 1px solid var(--border);
+    border-radius: 5px;
+    background: var(--grijs);
+    color: #555;
+    font-size: .8rem;
+    cursor: pointer;
+    align-self: flex-start;
+    transition: background .12s;
+}
+#filter-reset:hover {
+    background: var(--lichtblauw);
+    border-color: var(--middenblauw);
+    color: var(--blauw);
+}
+
+/* ── Voorbereiding twee-kolom layout ── */
+.voorb-layout {
+    display: flex;
+    gap: 24px;
+    align-items: flex-start;
+    height: 100%;
+}
+.voorb-left {
+    width: 260px;
+    flex-shrink: 0;
+}
+.voorb-right {
+    flex: 1;
+    min-width: 0;
+}
+
+/* ── Wedstrijdenlijst ── */
+#comp-list {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    margin-bottom: 16px;
+}
+
+.comp-card {
+    background: var(--wit);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 16px 18px;
+    cursor: pointer;
+    transition: border-color .15s, box-shadow .15s;
+}
+.comp-card:hover {
+    border-color: var(--middenblauw);
+    box-shadow: 0 2px 8px rgba(46,117,182,.15);
+}
+.comp-card.active {
+    border-color: var(--oranje);
+    box-shadow: 0 0 0 2px rgba(232,99,10,.25);
+}
+.comp-card .comp-name {
+    font-weight: 600;
+    color: var(--blauw);
+    margin-bottom: 6px;
+}
+.comp-card .comp-date {
+    font-size: .85rem;
+    color: #555;
+}
+.comp-card .comp-location {
+    font-size: .85rem;
+    color: #555;
+}
+
+/* ── Detail panel ── */
+#detail-panel {
+    background: var(--wit);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 20px 24px;
+    margin-bottom: 32px;
+}
+#detail-panel h2 {
+    font-size: 1.1rem;
+    color: var(--blauw);
+    margin-bottom: 4px;
+}
+#detail-panel .meta {
+    font-size: .85rem;
+    color: #666;
+    margin-bottom: 16px;
+}
+
+/* ── Tabbladen categorieën ── */
+.tab-bar {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    margin-bottom: 16px;
+}
+.tab-btn {
+    padding: 5px 14px;
+    border: 1px solid var(--border);
+    border-radius: 20px;
+    background: var(--grijs);
+    color: var(--tekst);
+    font-size: .82rem;
+    cursor: pointer;
+    transition: background .12s, border-color .12s;
+}
+.tab-btn:hover { background: var(--lichtblauw); }
+.tab-btn.active {
+    background: var(--middenblauw);
+    border-color: var(--middenblauw);
+    color: var(--wit);
+    font-weight: 600;
+}
+
+/* ── Deelnemerstabel ── */
+.comp-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: .88rem;
+}
+.comp-table th {
+    background: var(--blauw);
+    color: var(--wit);
+    text-align: left;
+    padding: 8px 10px;
+    font-weight: 600;
+}
+.comp-table td {
+    padding: 7px 10px;
+    border-bottom: 1px solid var(--border);
+}
+.comp-table tr:last-child td { border-bottom: none; }
+.comp-table tr:hover td { background: var(--lichtblauw); }
+.comp-table .transponder {
+    font-family: 'Consolas', monospace;
+    font-size: .82rem;
+    color: #444;
+}
+.comp-table .no-transponder {
+    color: #aaa;
+    font-style: italic;
+}
+.comp-table .startnr {
+    font-weight: 700;
+    color: var(--blauw);
+    text-align: center;
+    width: 48px;
+}
+
+/* ── Status / laadindicator ── */
+.status-msg {
+    padding: 10px 14px;
+    border-radius: 6px;
+    font-size: .9rem;
+}
+.status-msg.loading {
+    background: var(--lichtblauw);
+    color: var(--blauw);
+}
+.status-msg.error {
+    background: #fde8dc;
+    color: #b94000;
+}
+.status-msg.info {
+    background: #edf7ed;
+    color: #2e6b2e;
+}
+.status-msg.ok {
+    background: #e6f4ea;
+    color: #1e5c2a;
+    border-left: 4px solid #34a853;
+}
+.status-msg.ok .import-log {
+    margin: 6px 0 0 16px;
+    font-size: .85rem;
+    opacity: .85;
+}
+
+/* ── Hoofd-tabbladen (Deelnemers / Startlijsten) ── */
+.hoofd-tabs {
+    display: flex;
+    gap: 0;
+    border-bottom: 2px solid var(--blauw);
+    margin-bottom: 12px;
+}
+.hoofd-tab {
+    padding: 7px 20px;
+    border: 1px solid var(--border);
+    border-bottom: none;
+    border-radius: 6px 6px 0 0;
+    background: var(--grijs);
+    color: #666;
+    cursor: pointer;
+    font-size: .88rem;
+    font-family: inherit;
+    margin-right: 3px;
+    position: relative;
+    bottom: -2px;
+    transition: background .12s, color .12s;
+}
+.hoofd-tab:hover  { background: var(--lichtblauw); color: var(--blauw); }
+.hoofd-tab.active {
+    background: var(--wit);
+    color: var(--blauw);
+    font-weight: 700;
+    border-color: var(--blauw);
+    border-bottom: 2px solid var(--wit);
+    z-index: 1;
+}
+.hoofd-tab.tab-disabled {
+    opacity: .4;
+    cursor: not-allowed;
+    pointer-events: none;
+}
+.hoofd-tab.tab-disabled:hover {
+    background: var(--grijs);
+    color: #666;
+}
+
+/* ── Detail header met importknop ── */
+.detail-header {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 16px;
+    margin-bottom: 8px;
+}
+.btn-import {
+    flex-shrink: 0;
+    background: var(--oranje);
+    color: var(--wit);
+    border: none;
+    border-radius: 6px;
+    padding: 8px 16px;
+    font-size: .9rem;
+    font-weight: 600;
+    cursor: pointer;
+    white-space: nowrap;
+    transition: background .15s;
+}
+.btn-import:hover           { background: #c9530a; }
+.btn-import:disabled        { background: #bbb; color: #fff; cursor: not-allowed; opacity: .7; }
+.btn-import:disabled:hover  { background: #bbb; }
+
+#import-result { margin-bottom: 10px; }
+
+/* ── KNSB tijdstempel ── */
+#knsb-sync-info { margin-top: 3px; }
+.knsb-ts {
+    font-size: .75rem;
+    color: #888;
+    font-style: italic;
+}
+
+/* ── Spinner ── */
+.spinner {
+    display: inline-block;
+    width: 14px; height: 14px;
+    border: 2px solid var(--lichtblauw);
+    border-top-color: var(--middenblauw);
+    border-radius: 50%;
+    animation: spin .7s linear infinite;
+    vertical-align: middle;
+    margin-right: 6px;
+}
+@keyframes spin { to { transform: rotate(360deg); } }
+
+/* ── Vergelijktabel ─────────────────────────────────────────────── */
+
+.vergelijk-wrap { overflow-x: auto; }
+
+.vergelijk-tabel {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: .84rem;
+}
+.vergelijk-tabel thead th {
+    background: var(--blauw);
+    color: var(--wit);
+    padding: 7px 8px;
+    text-align: left;
+    font-weight: 600;
+    position: sticky;
+    top: 0;
+    z-index: 1;
+}
+.vergelijk-tabel td {
+    padding: 4px 6px;
+    border-bottom: 1px solid var(--border);
+    vertical-align: top;
+}
+.vergelijk-tabel tbody tr:hover td { background: rgba(0,0,0,.03); }
+
+/* Rijkleuren */
+.row-new td        { background: #e8f5e9; }   /* groen        – nieuw, nog niet geïmporteerd  */
+.row-modified td   { background: #fff3e0; }   /* licht-oranje – gewijzigd in deze sessie      */
+.row-diff td       { background: #fff9e6; }   /* geel         – afwijkt van DB na import      */
+.row-withdrawn td  { opacity: .5; }
+.row-withdrawn .inp-naam { text-decoration: line-through; color: #888; }
+
+/* Cel-level diff (transponder / naam) */
+.cell-diff { background: #fff0c0 !important; }
+
+/* Gast/proef: start# >= 1000 */
+.guest-nr .inp-sn { color: var(--oranje); font-weight: 700; }
+
+/* Kolombreedte */
+.th-sn     { width: 72px;  }
+.th-naam   { min-width: 160px; }
+.th-club   { min-width: 110px; }
+.th-tp-sel { width: 200px; }
+.th-status { width: 145px; }
+.th-badges { width: 80px;  }
+.td-club   { font-size: .8rem; color: #555; }
+
+/* Bewerkbare inputs */
+.inp {
+    width: 100%;
+    border: 1px solid transparent;
+    border-radius: 3px;
+    padding: 2px 4px;
+    font-size: .83rem;
+    font-family: inherit;
+    background: transparent;
+    box-sizing: border-box;
+}
+.inp:hover, .inp:focus {
+    border-color: var(--middenblauw);
+    background: var(--wit);
+    outline: none;
+}
+.inp-sn  { width: 60px; }
+.inp-tp  { font-family: monospace; font-size: .8rem; }
+
+/* KNSB-hint: afwijkende waarde tonen */
+.knsb-hint {
+    font-size: .71rem;
+    color: #b85000;
+    margin-top: 1px;
+    white-space: nowrap;
+}
+
+/* Status-badges in tabel */
+.status-badge {
+    display: inline-block;
+    padding: 2px 8px;
+    border-radius: 10px;
+    font-size: .75rem;
+    font-weight: 600;
+    cursor: pointer;
+    user-select: none;
+    white-space: nowrap;
+    transition: background .1s;
+}
+.status-0 { background: #fff3e0; color: #e65100; }
+.status-1 { background: #e8f5e9; color: #2e7d32; }
+.status-2 { background: #fce4e4; color: #b71c1c; }
+
+/* Reserve-badge: R1, R2 … */
+.badge-reserve {
+    display: inline-block;
+    background: var(--lichtblauw);
+    color: var(--blauw);
+    border-radius: 10px;
+    padding: 2px 6px;
+    font-size: .7rem;
+    font-weight: 700;
+    margin-left: 4px;
+}
+
+/* NIEUW / ! badges in laatste kolom */
+.badge-nieuw {
+    display: inline-block;
+    background: #c8e6c9;
+    color: #1b5e20;
+    border-radius: 3px;
+    padding: 1px 5px;
+    font-size: .7rem;
+    font-weight: 700;
+}
+.badge-diff {
+    display: inline-block;
+    background: #ffcc80;
+    color: #e65100;
+    border-radius: 3px;
+    padding: 1px 5px;
+    font-size: .78rem;
+    font-weight: 700;
+    margin-left: 3px;
+}
+
+/* Tab-badges (afgemeld / nieuw) */
+.tab-badge {
+    display: inline-block;
+    border-radius: 8px;
+    padding: 1px 5px;
+    font-size: .7rem;
+    font-weight: 700;
+    margin-left: 3px;
+    vertical-align: middle;
+}
+.tab-badge.afgemeld { background: #fce4e4; color: #b71c1c; }
+.tab-badge.nieuw    { background: #c8e6c9; color: #1b5e20; }
+
+/* ── Startlijst config ── */
+.sl-config {
+    display: flex;
+    align-items: flex-start;
+    gap: 20px;
+    flex-wrap: wrap;
+    padding: 12px;
+    background: var(--grijs);
+    border-radius: 8px;
+    margin-bottom: 14px;
+    border: 1px solid var(--border);
+}
+.sl-label {
+    display: flex;
+    flex-direction: column;
+    font-size: .85rem;
+    color: #444;
+    gap: 4px;
+}
+.sl-inp {
+    width: 70px;
+    border: 1px solid var(--border);
+    border-radius: 5px;
+    padding: 4px 6px;
+    font-size: .9rem;
+    font-family: inherit;
+}
+.sl-methode {
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 6px 12px;
+    font-size: .85rem;
+    display: flex;
+    gap: 10px;
+    flex-wrap: wrap;
+    align-items: center;
+}
+.sl-methode legend { font-size: .8rem; color: #666; padding: 0 4px; }
+.sl-methode label  { display: flex; align-items: center; gap: 4px; cursor: pointer; }
+.sl-disabled       { opacity: .4; cursor: not-allowed; }
+.sl-disabled input { cursor: not-allowed; }
+
+.btn-genereer {
+    background: var(--middenblauw);
+    color: var(--wit);
+    border: none;
+    border-radius: 6px;
+    padding: 8px 18px;
+    font-size: .9rem;
+    font-weight: 600;
+    cursor: pointer;
+    white-space: nowrap;
+    align-self: flex-end;
+    transition: background .15s;
+}
+.btn-genereer:hover { background: var(--blauw); }
+
+/* ── Heat grid ── */
+.sl-info {
+    font-size: .82rem;
+    color: #666;
+    margin-bottom: 10px;
+}
+.heat-grid {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 12px;
+}
+.heat-card {
+    background: var(--wit);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    min-width: 220px;
+    flex: 1 1 220px;
+    max-width: 300px;
+    overflow: hidden;
+}
+.heat-titel {
+    background: var(--blauw);
+    color: var(--wit);
+    padding: 6px 12px;
+    font-weight: 700;
+    font-size: .9rem;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+.heat-count {
+    background: rgba(255,255,255,.2);
+    border-radius: 10px;
+    padding: 1px 7px;
+    font-size: .78rem;
+    font-weight: 400;
+}
+.heat-tabel {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: .82rem;
+}
+.heat-tabel th {
+    background: var(--lichtblauw);
+    color: var(--blauw);
+    padding: 4px 8px;
+    text-align: left;
+    font-weight: 600;
+    font-size: .77rem;
+}
+.heat-tabel td { padding: 4px 8px; border-bottom: 1px solid #eef2f6; }
+.heat-tabel tr:last-child td { border-bottom: none; }
+.heat-tabel tr:hover td { background: #f8fafc; }
+.heat-pos  { color: #999; width: 22px; text-align: center; }
+.heat-naam { }
+.heat-sn   { font-size: .72rem; color: #999; margin-right: 4px; }
+.heat-tp   { font-family: monospace; font-size: .78rem; color: #555; }
+
+/* ── Ronde blok ── */
+.ronde-blok {
+    margin-bottom: 2rem;
+}
+.ronde-kop {
+    display: flex;
+    align-items: baseline;
+    gap: .75rem;
+    margin-bottom: .75rem;
+    padding-bottom: .5rem;
+    border-bottom: 2px solid var(--blauw);
+}
+.ronde-nr {
+    font-size: .75rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: .06em;
+    color: #888;
+}
+.ronde-titel {
+    font-size: 1.05rem;
+    font-weight: 700;
+    color: var(--blauw);
+}
+
+/* ── Startlijst vooraf-configuratie ── */
+.sl-vooraf {
+    background: #f0f4f8;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 1rem 1.25rem 1.25rem;
+    margin-bottom: 1.5rem;
+}
+
+/* Rondes-kiezer: ronde cirkels 1 / 2 / 3 / 4 */
+.rondes-kiezer {
+    display: flex;
+    align-items: center;
+    gap: .75rem;
+    margin-bottom: 1rem;
+    padding-bottom: .75rem;
+    border-bottom: 1px solid var(--border);
+}
+.rondes-kiezer-label {
+    font-size: .85rem;
+    font-weight: 700;
+    color: var(--blauw);
+}
+.rondes-kiezer-btns { display: flex; gap: .4rem; }
+.btn-ronde-n {
+    width: 2.1rem;
+    height: 2.1rem;
+    border-radius: 50%;
+    border: 2px solid var(--border);
+    background: white;
+    font-size: .88rem;
+    font-weight: 700;
+    cursor: pointer;
+    font-family: inherit;
+    line-height: 1;
+    transition: border-color .12s, background .12s, color .12s;
+}
+.btn-ronde-n:hover  { border-color: var(--middenblauw); background: var(--lichtblauw); }
+.btn-ronde-n.actief { border-color: var(--blauw); background: var(--blauw); color: white; }
+
+/* Config-blokken per ronde */
+.sl-ronden-cfg { display: flex; flex-direction: column; gap: .6rem; margin-bottom: 1rem; }
+
+.ronde-cfg-blok {
+    background: white;
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: .6rem .85rem .7rem;
+}
+.ronde-cfg-kop {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: .45rem .9rem;
+    margin-bottom: .45rem;
+}
+.ronde-cfg-nr {
+    font-size: .74rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: .05em;
+    color: #888;
+    min-width: 4rem;
+}
+.ronde-naam-inp { width: 11rem; }
+.ronde-max-label {
+    display: flex;
+    align-items: center;
+    gap: .35rem;
+    font-size: .83rem;
+    color: #444;
+}
+
+/* Doorstroom fieldset */
+.doorstroom-veld {
+    border: 1px solid #dce4ed;
+    border-radius: 5px;
+    padding: .4rem .7rem .5rem;
+    font-size: .81rem;
+    background: #fafbfc;
+    margin-top: .15rem;
+}
+.doorstroom-veld legend { font-size: .74rem; color: #888; padding: 0 .25rem; }
+.ds-opties { display: flex; flex-direction: column; gap: .38rem; margin-top: .2rem; }
+.ds-radio-label {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: .3rem .6rem;
+    cursor: pointer;
+}
+.ds-sub {
+    display: flex;
+    align-items: center;
+    gap: .25rem;
+    font-size: .79rem;
+    color: #555;
+}
+.ds-sub input[type="number"] { width: 4.5rem; }
+
+/* Placeholder rondes */
+.ronde-blok-placeholder .heat-card {
+    border-style: dashed;
+    background: #fafbfc;
+}
+.heat-titel-ph {
+    background: var(--middenblauw);
+    color: var(--wit);
+    padding: 6px 12px;
+    font-weight: 700;
+    font-size: .9rem;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+.heat-placeholder-naam {
+    color: #555;
+    font-style: italic;
+    font-size: .8rem;
+}
+
+/* ── Extra finales (B/C) – config sectie ── */
+.extra-finales-blok {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: .5rem 1.5rem;
+    padding: .6rem .85rem;
+    background: white;
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    margin-bottom: .5rem;
+    font-size: .83rem;
+}
+.extra-finales-titel {
+    font-size: .74rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: .05em;
+    color: #888;
+    flex: 0 0 100%;
+    margin-bottom: .1rem;
+}
+.extra-finale-rij {
+    display: flex;
+    align-items: center;
+    gap: .4rem .7rem;
+    flex-wrap: wrap;
+    cursor: pointer;
+}
+.extra-finale-naam {
+    font-weight: 700;
+    color: var(--blauw);
+}
+.extra-finale-info {
+    font-size: .78rem;
+    color: #777;
+}
+
+/* ── B/C finale resultaat blokken ── */
+.ronde-nr-badge {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 1.6rem;
+    height: 1.6rem;
+    border-radius: 50%;
+    font-size: .78rem;
+    font-weight: 800;
+    color: white;
+    flex-shrink: 0;
+}
+.ronde-nr-b { background: var(--middenblauw); }
+.ronde-nr-c { background: #6c757d; }
+
+.ronde-nr-info {
+    font-size: .78rem;
+    color: #999;
+    margin-left: .25rem;
+}
+
+.ronde-blok-bfinale .heat-titel-ph { background: var(--middenblauw); }
+.ronde-blok-cfinale .heat-titel-ph { background: #6c757d; }
+
+/* ── Transponder dropdown (in tabel) ── */
+.td-tp-sel { white-space: nowrap; }
+
+.tp-sel-wrap {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+}
+.tp-sel-drop {
+    font-family: monospace;
+    font-size: .78rem;
+    padding: 2px 4px;
+    border: 1px solid var(--border);
+    border-radius: 3px;
+    background: var(--wit);
+    color: var(--tekst);
+    flex: 1;
+    min-width: 0;
+    cursor: pointer;
+}
+.tp-sel-drop:focus { outline: 2px solid var(--middenblauw); }
+
+.tp-add-btn {
+    flex-shrink: 0;
+    background: var(--lichtblauw);
+    color: var(--blauw);
+    border: 1px solid var(--border);
+    border-radius: 3px;
+    padding: 1px 6px;
+    cursor: pointer;
+    font-size: .85rem;
+    font-weight: 700;
+    line-height: 1.6;
+}
+.tp-add-btn:hover { background: #c0d8f0; }
+
+.tp-nieuw-inp {
+    width: 90px;
+    font-family: monospace;
+    font-size: .78rem;
+    padding: 2px 5px;
+    border: 1px solid var(--middenblauw);
+    border-radius: 3px;
+    outline: none;
+}
+
+/* ── Textra popup ── */
+.textra-popup {
+    position: absolute;
+    z-index: 1000;
+    background: var(--wit);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    box-shadow: 0 4px 18px rgba(0,0,0,.18);
+    width: 250px;
+    font-size: .85rem;
+}
+.tp-header {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 8px 10px;
+    border-bottom: 1px solid var(--border);
+    background: var(--lichtblauw);
+    border-radius: 8px 8px 0 0;
+}
+.tp-header strong { color: var(--blauw); }
+.tp-naam {
+    flex: 1;
+    font-size: .78rem;
+    color: #555;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+.tp-sluiten {
+    background: none;
+    border: none;
+    cursor: pointer;
+    font-size: 1rem;
+    color: #888;
+    line-height: 1;
+    padding: 0 2px;
+}
+.tp-sluiten:hover { color: #333; }
+
+.tp-lijst {
+    list-style: none;
+    margin: 0;
+    padding: 6px 0;
+    max-height: 140px;
+    overflow-y: auto;
+}
+.tp-lijst li {
+    display: flex;
+    align-items: center;
+    padding: 4px 10px;
+    gap: 6px;
+}
+.tp-lijst li:hover { background: var(--grijs); }
+.tp-code {
+    flex: 1;
+    font-family: monospace;
+    font-size: .85rem;
+}
+.tp-leeg-item { color: #aaa; font-style: italic; }
+.tp-verwijder {
+    background: none;
+    border: none;
+    cursor: pointer;
+    color: #b71c1c;
+    font-size: .9rem;
+    padding: 0 3px;
+    opacity: .6;
+}
+.tp-verwijder:hover { opacity: 1; }
+
+.tp-invoer {
+    display: flex;
+    gap: 5px;
+    padding: 8px 10px;
+    border-top: 1px solid var(--border);
+}
+.tp-invoer .tp-nieuw {
+    flex: 1;
+    min-width: 0;
+}
+.tp-toevoegen {
+    background: var(--oranje);
+    color: var(--wit);
+    border: none;
+    border-radius: 5px;
+    padding: 3px 10px;
+    cursor: pointer;
+    font-size: .8rem;
+    font-weight: 600;
+    white-space: nowrap;
+}
+.tp-toevoegen:hover { background: #c9530a; }
