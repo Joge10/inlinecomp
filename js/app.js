@@ -22,6 +22,7 @@ let startlijstCache  = {};    // {cacheKey: {rondenConfig, ronde1, cFinale, bFin
 let isGeimporteerd   = false; // ≥1 deelnemer heeft db_entry in DB
 let heeftWijzigingen = false; // onopgeslagen bewerkingen in huidige sessie
 let gewijzigdeRijen  = new Set(); // license_keys van gewijzigde (nog niet opgeslagen) rijen
+let huidigOrganisatie = null; // organisatie-object van huidig geselecteerde wedstrijd
 
 // ── Hulpfuncties ──────────────────────────────────────────────────────────────
 
@@ -158,15 +159,18 @@ async function selectWedstrijd(card, comp) {
     startlijstCache = {};
     setHTML('imp-cat-content', '<div class="status-msg loading"><span class="spinner"></span>Vergelijken met database…</div>');
 
-    el('btn-import').onclick = () => importeerWedstrijd(comp.id, comp.name || '');
+    el('btn-import').onclick        = () => importeerWedstrijd(comp.id, comp.name || '');
+    el('btn-print-tekenlijst').onclick = () => printTekenlijsten();
 
     panel.scrollIntoView({ behavior: 'smooth', block: 'start' });
 
     try {
         const res = await fetch('api/vergelijk.php?id=' + encodeURIComponent(comp.id));
         if (!res.ok) throw new Error('HTTP ' + res.status);
-        vergelijkData = await res.json();
-        if (vergelijkData.error) throw new Error(vergelijkData.error);
+        const vData = await res.json();
+        if (vData.error) throw new Error(vData.error);
+        vergelijkData    = vData.groepen     ?? vData; // backwards compat
+        huidigOrganisatie = vData.organisatie ?? null;
 
         zetKnsbTimestamp();
         initEdits();

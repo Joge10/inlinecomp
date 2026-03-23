@@ -47,8 +47,59 @@ function buildLicenseKey(?string $licenseKey, $startNumber, ?string $category): 
     return null;
 }
 
+function newUuid(): string {
+    $b    = random_bytes(16);
+    $b[6] = chr(ord($b[6]) & 0x0f | 0x40);
+    $b[8] = chr(ord($b[8]) & 0x3f | 0x80);
+    return vsprintf('%s%s-%s-%s-%s-%s%s%s', str_split(bin2hex($b), 4));
+}
+
 try {
     $base = 'https://inschrijven.schaatsen.nl/api';
+
+    // 1a. KNSB competitie-detail ophalen (voor organisatie + sponsor info)
+    $compDetail = apiGet("$base/competitions/$compId") ?? [];
+    $orgNaam    = trim($compDetail['contact']['organizationName'] ?? '');
+    $orgWebsite = trim($compDetail['contact']['url']              ?? '') ?: null;
+    $knsb_sponsor = trim($compDetail['sponsor'] ?? '') ?: null;
+
+    // 1b. Organisatie opzoeken of aanmaken
+    $organisatie = null;
+    if ($orgNaam) {
+        $stmt = $pdo->prepare("SELECT * FROM organisaties WHERE naam = ?");
+        $stmt->execute([$orgNaam]);
+        $organisatie = $stmt->fetch() ?: null;
+
+        if (!$organisatie) {
+            $orgId = newUuid();
+            $pdo->prepare("INSERT INTO organisaties (id, naam, website) VALUES (?, ?, ?)")
+                ->execute([$orgId, $orgNaam, $orgWebsite]);
+            $organisatie = ['id' => $orgId, 'naam' => $orgNaam,
+                            'website' => $orgWebsite, 'logo_path' => null, 'sponsors' => []];
+
+            // Hoofdsponsor uit KNSB meteen aanmaken
+            if ($knsb_sponsor) {
+                $sId = newUuid();
+                $pdo->prepare(
+                    "INSERT INTO organisatie_sponsors (id, organisatie_id, naam, volgorde) VALUES (?,?,?,0)"
+                )->execute([$sId, $orgId, $knsb_sponsor]);
+                $organisatie['sponsors'][] = ['id' => $sId, 'naam' => $knsb_sponsor,
+                                               'logo_path' => null, 'url' => null, 'volgorde' => 0];
+            }
+        } else {
+            // Sponsors ophalen
+            $stmt = $pdo->prepare(
+                "SELECT * FROM organisatie_sponsors WHERE organisatie_id = ? ORDER BY volgorde, naam"
+            );
+            $stmt->execute([$organisatie['id']]);
+            $organisatie['sponsors'] = $stmt->fetchAll();
+        }
+
+        // Competitie koppelen aan organisatie (als nog niet gekoppeld)
+        $pdo->prepare(
+            "UPDATE competitions SET organisatie_id = ? WHERE id = ? AND (organisatie_id IS NULL OR organisatie_id = '')"
+        )->execute([$organisatie['id'], $compId]);
+    }
 
     // 1. KNSB deelnemers ophalen
     $groepen = apiGet("$base/competitions/$compId/competitors");
@@ -219,7 +270,10 @@ try {
 
     usort($result, fn($a, $b) => $a['dc_number'] - $b['dc_number']);
 
-    echo json_encode($result, JSON_UNESCAPED_UNICODE);
+    echo json_encode([
+        'groepen'     => $result,
+        'organisatie' => $organisatie,
+    ], JSON_UNESCAPED_UNICODE);
 
 } catch (Throwable $e) {
     http_response_code(500);

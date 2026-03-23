@@ -301,6 +301,7 @@ function toonAfstandConfig(groep, distId, distNaam) {
         };
         zetAantalRondes(cacheKey, 1);
     }
+    startlijstCache[cacheKey].aantalRijders = groep.competitors.length;
 
     const slDist = el('sl-dist-content');
     slDist.innerHTML = `
@@ -368,7 +369,8 @@ function hertekenRondenCfg(cacheKey) {
                 <input type="text" class="inp ronde-naam-inp" value="${escHtml(ronde.naam)}"
                        placeholder="Naam" data-idx="${idx}">
                 <label class="ronde-max-label">Max/heat:&nbsp;
-                    <input type="number" class="sl-inp ronde-max-inp" min="2" max="20"
+                    <input type="number" class="sl-inp ronde-max-inp" min="2"
+                           max="${startlijstCache[cacheKey]?.aantalRijders || 20}"
                            value="${ronde.maxPerHeat || 6}" data-idx="${idx}">
                 </label>
                 ${idx === 0 ? `

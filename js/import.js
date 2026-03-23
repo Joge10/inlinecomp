@@ -79,6 +79,12 @@ async function bouwBeheerTabel() {
     const panel = el('beheer-panel');
     if (!panel || !vergelijkData.length) return;
 
+    // Verwijder event listeners van een vorige competitie
+    if (panel._beheerAbort) panel._beheerAbort.abort();
+    const beheerAbort  = new AbortController();
+    panel._beheerAbort = beheerAbort;
+    const { signal }   = beheerAbort;
+
     // Laad DB-afstanden (gegroepeerd op target_group); fallback naar KNSB
     const dcDistances = {};
     await Promise.all(vergelijkData.map(async cat => {
@@ -366,7 +372,7 @@ async function bouwBeheerTabel() {
             if (wis?.classList.contains('dc-split-wis'))
                 wis.style.visibility = e.target.value.trim() ? 'visible' : 'hidden';
         }
-    });
+    }, { signal });
 
     panel.addEventListener('change', e => {
         // Samenvoegen: selecteer een andere DC
@@ -388,12 +394,12 @@ async function bouwBeheerTabel() {
             syncAllesVanDom();
             renderTabel(); return;
         }
-    });
+    }, { signal });
 
     panel.addEventListener('click', e => {
         // Thead-rij: in-/uitklappen
         if (e.target.closest('.beheer-thead-toggle')) {
-            syncAllesVanDom();
+            if (!beheerIngeklapt) syncAllesVanDom(); // alleen synchen als tabel open is (inputs bestaan)
             beheerIngeklapt = !beheerIngeklapt;
             renderTabel(); return;
         }
@@ -439,9 +445,9 @@ async function bouwBeheerTabel() {
             if (nms.length) nms[nms.length - 1].focus();
             return;
         }
-    });
+    }, { signal });
 
-    el('btn-beheer-opslaan').addEventListener('click', () => slaaBeheerOp(panel, dcDistances));
+    el('btn-beheer-opslaan').addEventListener('click', () => slaaBeheerOp(panel, dcDistances), { signal });
 }
 
 async function slaaBeheerOp(panel, dcDistances) {
@@ -759,6 +765,157 @@ function updateImportBtn() {
                 ? 'Nieuwe inschrijvingen opslaan'
                 : 'Wedstrijd importeren in database')
         : 'Alles is opgeslagen — geen wijzigingen';
+    const btnPrint = el('btn-print-tekenlijst');
+    if (btnPrint) btnPrint.disabled = moetImporteren;
+}
+
+// ── Tekenlijsten afdrukken ────────────────────────────────────────────────────
+
+function groepeerVoorPrint() {
+    const usedIds = new Set();
+    const groepen = [];
+
+    vergelijkData.forEach(cat => {
+        if (usedIds.has(cat.dc_id)) return;
+        usedIds.add(cat.dc_id);
+
+        let dcGroup = [cat];
+        if (cat.merge_group) {
+            vergelijkData.forEach(c => {
+                if (!usedIds.has(c.dc_id) && c.merge_group === cat.merge_group) {
+                    usedIds.add(c.dc_id);
+                    dcGroup.push(c);
+                }
+            });
+        }
+
+        const allComps = [];
+        dcGroup.forEach(dc => {
+            dc.competitors.forEach(c => {
+                if ((c.entry_status ?? 1) === 2) return;
+                const pe = personEdits[c.license_key] || {};
+                allComps.push({
+                    start_number: pe.start_number     ?? c.knsb?.start_number ?? '',
+                    full_name:    pe.full_name         ?? c.knsb?.full_name    ?? '',
+                    category:     pe.category          ?? c.knsb?.category     ?? '',
+                    transponder:  pe.transponder_actief ?? pe.transponder1      ?? c.knsb?.transponder1 ?? '',
+                });
+            });
+        });
+
+        const sorteer = arr => arr.sort((a, b) =>
+            (Number(a.start_number) || 9999) - (Number(b.start_number) || 9999));
+
+        const allSplits = {};
+        dcGroup.forEach(dc => {
+            Object.entries(dc.splits || {}).forEach(([k, v]) => { if (v) allSplits[k] = v; });
+        });
+        const splitGrps = [...new Set(Object.values(allSplits))].sort();
+        const basisNaam = dcGroup.map(d => d.dc_name).filter(Boolean).join(' + ');
+
+        if (splitGrps.length) {
+            splitGrps.forEach(sg => {
+                const sgCats  = Object.keys(allSplits).filter(k => allSplits[k] === sg);
+                const sgComps = allComps.filter(c => sgCats.includes(c.category));
+                groepen.push({ naam: `${basisNaam} — ${sg}`, deelnemers: sorteer(sgComps) });
+            });
+            const restComps = allComps.filter(c => !Object.keys(allSplits).includes(c.category));
+            if (restComps.length)
+                groepen.push({ naam: `${basisNaam} — overig`, deelnemers: sorteer(restComps) });
+        } else {
+            groepen.push({ naam: basisNaam, deelnemers: sorteer(allComps) });
+        }
+    });
+    return groepen;
+}
+
+function printTekenlijsten() {
+    if (!vergelijkData?.length || !huidigComp) return;
+
+    const groepen  = groepeerVoorPrint();
+    const compNaam = escHtml(huidigComp.name || huidigComp.title || '');
+    const compMeta = escHtml(formatDatum(huidigComp.starts) + ' · ' + getLocatie(huidigComp));
+
+    const MAX_RIJEN = 18;
+    const baseUrl   = new URL('.', window.location.href).href;
+
+    // Org-logo header HTML
+    const org = huidigOrganisatie;
+    const orgLogoHtml = org?.logo_path
+        ? `<img src="${escHtml(baseUrl + org.logo_path)}" alt="${escHtml(org.naam)}">`
+        : `<span class="pagina-hdr-org-naam">${escHtml(org?.naam ?? '')}</span>`;
+
+    // Sponsors footer HTML
+    let footerHtml = '';
+    if (org?.sponsors?.length) {
+        const sponsorItems = org.sponsors.map(s =>
+            `<span class="sponsor-item">` +
+            (s.logo_path
+                ? `<img src="${escHtml(baseUrl + s.logo_path)}" alt="${escHtml(s.naam)}">`
+                : `<span>${escHtml(s.naam)}</span>`) +
+            `</span>`
+        ).join('');
+        footerHtml = `<div class="pagina-footer">
+            <span class="pagina-footer-label">Gesponsord door</span>
+            ${sponsorItems}
+        </div>`;
+    }
+
+    const thead = `<thead><tr>
+                    <th class="td-nr">#</th>
+                    <th class="td-sn">Start#</th>
+                    <th class="td-naam">Naam</th>
+                    <th class="td-cat">Categorie</th>
+                    <th class="td-tp">Transponder</th>
+                    <th class="td-tp-cor">Correctie</th>
+                    <th class="td-hand">Handtekening</th>
+                </tr></thead>`;
+
+    const paginaHtml = groepen.flatMap(g => {
+        const totaal      = g.deelnemers.length;
+        const totaalPag   = Math.ceil(totaal / MAX_RIJEN);
+        return Array.from({ length: totaalPag }, (_, p) => {
+            const chunk  = g.deelnemers.slice(p * MAX_RIJEN, (p + 1) * MAX_RIJEN);
+            const pLabel = totaalPag > 1 ? ` — pagina ${p + 1} van ${totaalPag}` : '';
+            const rijen  = chunk.map((d, i) =>
+                `<tr>
+                    <td class="td-nr">${p * MAX_RIJEN + i + 1}</td>
+                    <td class="td-sn">${escHtml(String(d.start_number))}</td>
+                    <td class="td-naam">${escHtml(d.full_name)}</td>
+                    <td class="td-cat">${escHtml(d.category)}</td>
+                    <td class="td-tp">${escHtml(String(d.transponder ?? ''))}</td>
+                    <td class="td-tp-cor"><div class="tp-boxes"><span class="tp-box"></span><span class="tp-box"></span><span class="tp-sep">-</span><span class="tp-box"></span><span class="tp-box"></span><span class="tp-box"></span><span class="tp-box"></span><span class="tp-box"></span></div></td>
+                    <td class="td-hand"></td>
+                </tr>`
+            ).join('');
+            return `<div class="pagina">
+            <div class="pagina-hdr">
+                <div class="pagina-hdr-info">
+                    <div class="hdr-comp">${compNaam}</div>
+                    <div class="hdr-meta">${compMeta}</div>
+                </div>
+                <div class="pagina-hdr-logo">${orgLogoHtml}</div>
+            </div>
+            <div class="groep-naam">${escHtml(g.naam)}
+                <span class="groep-tel">(${totaal} deelnemer${totaal !== 1 ? 's' : ''}${pLabel})</span>
+            </div>
+            <table>${thead}<tbody>${rijen}</tbody></table>
+            ${footerHtml}
+        </div>`;
+        });
+    }).join('');
+
+    const w = window.open('', '_blank');
+    const cssUrl = new URL('css/tekenlijst.css', window.location.href).href;
+    w.document.write(`<!DOCTYPE html>
+<html lang="nl"><head>
+<meta charset="utf-8">
+<title>Tekenlijsten – ${compNaam}</title>
+<link rel="stylesheet" href="${cssUrl}">
+</head><body>${paginaHtml}</body></html>`);
+    w.document.close();
+    w.focus();
+    w.print();
 }
 
 // ── Tijdstempel ───────────────────────────────────────────────────────────────
@@ -790,10 +947,12 @@ async function herlaadVergelijking() {
         '<div class="status-msg loading"><span class="spinner"></span>Synchroniseren met KNSB…</div>'
     );
     try {
-        const res = await fetch('api/vergelijk.php?id=' + encodeURIComponent(huidigCompId));
+        const res   = await fetch('api/vergelijk.php?id=' + encodeURIComponent(huidigCompId));
         if (!res.ok) throw new Error('HTTP ' + res.status);
-        vergelijkData = await res.json();
-        if (vergelijkData.error) throw new Error(vergelijkData.error);
+        const vData = await res.json();
+        if (vData.error) throw new Error(vData.error);
+        vergelijkData     = vData.groepen     ?? vData;
+        huidigOrganisatie = vData.organisatie ?? huidigOrganisatie;
         zetKnsbTimestamp();
         initEdits();
         bouwVergelijkTabbladen();
