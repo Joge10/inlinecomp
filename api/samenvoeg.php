@@ -45,19 +45,21 @@ if (!is_array($merges)) {
 try {
     $stmt = $pdo->prepare("
         UPDATE distance_combinations
-        SET merge_group = ?
+        SET merge_group = ?, merge_label = ?
         WHERE id = ? AND competition_id = ?
     ");
 
     foreach ($merges as $m) {
-        $dcId  = $m['dc_id']      ?? null;
+        $dcId  = $m['dc_id']       ?? null;
         $groep = $m['merge_group'] ?? null;
+        $label = $m['merge_label'] ?? null;
         if (!$dcId) continue;
 
         // Lege string → NULL (eigen groep, geen samenvoeging)
         $groepVal = ($groep !== null && trim($groep) !== '') ? trim($groep) : null;
+        $labelVal = ($label !== null && trim($label) !== '') ? trim($label) : null;
 
-        $stmt->execute([$groepVal, $dcId, $compId]);
+        $stmt->execute([$groepVal, $labelVal, $dcId, $compId]);
     }
 
     echo json_encode(['ok' => true]);

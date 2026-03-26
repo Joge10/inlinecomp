@@ -55,50 +55,114 @@ function newUuid(): string {
 }
 
 try {
+
     $base = 'https://inschrijven.schaatsen.nl/api';
 
     // 1a. KNSB competitie-detail ophalen (voor organisatie + sponsor info)
-    $compDetail = apiGet("$base/competitions/$compId") ?? [];
-    $orgNaam    = trim($compDetail['contact']['organizationName'] ?? '');
-    $orgWebsite = trim($compDetail['contact']['url']              ?? '') ?: null;
-    $knsb_sponsor = trim($compDetail['sponsor'] ?? '') ?: null;
+    $compDetail   = apiGet("$base/competitions/$compId") ?? [];
+    $contact      = $compDetail['settings']['contact'] ?? [];
+    $orgNaam      = trim($contact['organizationName'] ?? '');
+    $orgEmail     = trim($contact['email']            ?? '') ?: null;
+    $knsb_sponsor = trim($compDetail['sponsor']       ?? '') ?: null;
 
     // 1b. Organisatie opzoeken of aanmaken
+    //     Volgorde: 1) e-mail (meest betrouwbaar, vangt naamswijzigingen op)
+    //               2) exacte naam
+    //               3) alias
+    //               Nieuw aanmaken als niets gevonden.
+    //     Elke nieuwe naamvariant wordt automatisch als alias opgeslagen.
     $organisatie = null;
-    if ($orgNaam) {
-        $stmt = $pdo->prepare("SELECT * FROM organisaties WHERE naam = ?");
-        $stmt->execute([$orgNaam]);
-        $organisatie = $stmt->fetch() ?: null;
+    if ($orgNaam || $orgEmail) {
 
-        if (!$organisatie) {
-            $orgId = newUuid();
-            $pdo->prepare("INSERT INTO organisaties (id, naam, website) VALUES (?, ?, ?)")
-                ->execute([$orgId, $orgNaam, $orgWebsite]);
-            $organisatie = ['id' => $orgId, 'naam' => $orgNaam,
-                            'website' => $orgWebsite, 'logo_path' => null, 'sponsors' => []];
+        // 1. Match op e-mailadres
+        if ($orgEmail) {
+            $stmt = $pdo->prepare("SELECT * FROM organisaties WHERE email = ?");
+            $stmt->execute([$orgEmail]);
+            $organisatie = $stmt->fetch() ?: null;
+        }
 
-            // Hoofdsponsor uit KNSB meteen aanmaken
-            if ($knsb_sponsor) {
-                $sId = newUuid();
-                $pdo->prepare(
-                    "INSERT INTO organisatie_sponsors (id, organisatie_id, naam, volgorde) VALUES (?,?,?,0)"
-                )->execute([$sId, $orgId, $knsb_sponsor]);
-                $organisatie['sponsors'][] = ['id' => $sId, 'naam' => $knsb_sponsor,
-                                               'logo_path' => null, 'url' => null, 'volgorde' => 0];
+        // 2. Match op exacte naam
+        if (!$organisatie && $orgNaam) {
+            $stmt = $pdo->prepare("SELECT * FROM organisaties WHERE naam = ?");
+            $stmt->execute([$orgNaam]);
+            $organisatie = $stmt->fetch() ?: null;
+        }
+
+        // 3. Match via alias
+        if (!$organisatie && $orgNaam) {
+            $stmt = $pdo->prepare(
+                "SELECT o.* FROM organisaties o
+                 JOIN organisatie_aliassen a ON a.organisatie_id = o.id
+                 WHERE a.naam = ?"
+            );
+            $stmt->execute([$orgNaam]);
+            $organisatie = $stmt->fetch() ?: null;
+        }
+
+        if ($organisatie) {
+            // Email aanvullen als die nog ontbrak
+            if (empty($organisatie['email']) && $orgEmail) {
+                $pdo->prepare("UPDATE organisaties SET email = ?, updated_at = NOW() WHERE id = ?")
+                    ->execute([$orgEmail, $organisatie['id']]);
+                $organisatie['email'] = $orgEmail;
             }
-        } else {
+
+            // Nieuwe naamvariant als alias bewaren (zodat we hem later herkennen)
+            if ($orgNaam && $orgNaam !== $organisatie['naam']) {
+                $bestaatAl = $pdo->prepare(
+                    "SELECT 1 FROM organisatie_aliassen WHERE naam = ?"
+                );
+                $bestaatAl->execute([$orgNaam]);
+                if (!$bestaatAl->fetchColumn()) {
+                    $pdo->prepare(
+                        "INSERT INTO organisatie_aliassen (id, organisatie_id, naam) VALUES (?,?,?)"
+                    )->execute([newUuid(), $organisatie['id'], $orgNaam]);
+                }
+            }
+
             // Sponsors ophalen
             $stmt = $pdo->prepare(
                 "SELECT * FROM organisatie_sponsors WHERE organisatie_id = ? ORDER BY volgorde, naam"
             );
             $stmt->execute([$organisatie['id']]);
             $organisatie['sponsors'] = $stmt->fetchAll();
+
+            // Hoofdsponsor aanvullen als er nog geen sponsors zijn
+            if (empty($organisatie['sponsors']) && $knsb_sponsor) {
+                $sId = newUuid();
+                $pdo->prepare(
+                    "INSERT INTO organisatie_sponsors (id, organisatie_id, naam, volgorde) VALUES (?,?,?,0)"
+                )->execute([$sId, $organisatie['id'], $knsb_sponsor]);
+                $organisatie['sponsors'] = [['id' => $sId, 'naam' => $knsb_sponsor,
+                                              'logo_path' => null, 'url' => null, 'volgorde' => 0]];
+            }
+        } else {
+            // Nieuw aanmaken (alleen als we een naam hebben)
+            if ($orgNaam) {
+                $orgId = newUuid();
+                $pdo->prepare("INSERT INTO organisaties (id, naam, email) VALUES (?, ?, ?)")
+                    ->execute([$orgId, $orgNaam, $orgEmail]);
+                $organisatie = ['id' => $orgId, 'naam' => $orgNaam,
+                                'email' => $orgEmail, 'logo_path' => null, 'sponsors' => []];
+
+                // Hoofdsponsor uit KNSB meteen aanmaken
+                if ($knsb_sponsor) {
+                    $sId = newUuid();
+                    $pdo->prepare(
+                        "INSERT INTO organisatie_sponsors (id, organisatie_id, naam, volgorde) VALUES (?,?,?,0)"
+                    )->execute([$sId, $orgId, $knsb_sponsor]);
+                    $organisatie['sponsors'][] = ['id' => $sId, 'naam' => $knsb_sponsor,
+                                                   'logo_path' => null, 'url' => null, 'volgorde' => 0];
+                }
+            }
         }
 
         // Competitie koppelen aan organisatie (als nog niet gekoppeld)
-        $pdo->prepare(
-            "UPDATE competitions SET organisatie_id = ? WHERE id = ? AND (organisatie_id IS NULL OR organisatie_id = '')"
-        )->execute([$organisatie['id'], $compId]);
+        if ($organisatie) {
+            $pdo->prepare(
+                "UPDATE competitions SET organisatie_id = ? WHERE id = ? AND (organisatie_id IS NULL OR organisatie_id = '')"
+            )->execute([$organisatie['id'], $compId]);
+        }
     }
 
     // 1. KNSB deelnemers ophalen
@@ -150,12 +214,31 @@ try {
         $dbTp[$t['person_license']][$t['slot']] = $t;
     }
 
-    // 5b. Merge-groepen voor déze competitie
-    $mergeGroups = [];
-    $stmt = $pdo->prepare("SELECT id, merge_group FROM distance_combinations WHERE competition_id = ?");
+    // 5b. Merge-groepen + category_filter voor déze competitie
+    $mergeGroups  = [];
+    $mergeLabels  = [];
+    $catFilters   = [];
+    $stmt = $pdo->prepare("SELECT id, merge_group, merge_label, category_filter FROM distance_combinations WHERE competition_id = ?");
     $stmt->execute([$compId]);
     foreach ($stmt->fetchAll() as $row) {
         $mergeGroups[$row['id']] = $row['merge_group'];
+        $mergeLabels[$row['id']] = $row['merge_label'];
+        $catFilters[$row['id']]  = $row['category_filter'] ?? null;
+    }
+
+    // 5d. Extra license-keys laden: org-toegevoegde rijders (in DB maar niet in KNSB API)
+    $allDbLks = [];
+    foreach ($dbEntries as $entries) {
+        foreach (array_keys($entries) as $lk) {
+            if (!in_array($lk, $licenseKeys, true)) $allDbLks[] = $lk;
+        }
+    }
+    $allDbLks = array_values(array_unique($allDbLks));
+    if ($allDbLks) {
+        $ph   = implode(',', array_fill(0, count($allDbLks), '?'));
+        $stmt = $pdo->prepare("SELECT * FROM persons WHERE license_key IN ($ph)");
+        $stmt->execute($allDbLks);
+        foreach ($stmt->fetchAll() as $p) $dbPersons[$p['license_key']] = $p;
     }
 
     // 5c. Split-configuratie voor déze competitie
@@ -213,7 +296,21 @@ try {
                 'license_key'   => $lk,
                 'is_anoniem'    => $isAnoniem,
                 'knsb_entry_id' => $c['id'] ?? null,
-                'entry_status'  => $item['status'],   // buitenste status
+                // knsb_status = altijd de status zoals de KNSB API hem geeft (0/1/2); nooit overschreven.
+                // entry_status = effectieve status: eigen org-statussen (3/4/5) bewaren bij resync;
+                //   KNSB-afgemeld (2) heeft altijd voorrang.
+                //   Status 5 (Bevestigd bij org.) vervalt als KNSB de rijder alsnog bevestigt (→ status 1).
+                'knsb_status'   => (int)($item['status'] ?? 1),
+                'entry_status'  => (function() use ($item, $dbEntry) {
+                    $knsbSt = (int)($item['status'] ?? 1);
+                    $dbSt   = $dbEntry ? (int)$dbEntry['status'] : null;
+                    if ($dbSt !== null && $dbSt >= 3 && $knsbSt !== 2) {
+                        // Status 5 (bevestigd bij org.) vervalt als KNSB nu bevestigt
+                        if ($dbSt === 5 && $knsbSt !== 0) return $knsbSt;
+                        return $dbSt;
+                    }
+                    return $knsbSt;
+                })(),
                 'reserve'       => $reserve,
                 'is_new'        => $dbPerson === null,
                 'diffs'         => $diffs,
@@ -242,21 +339,71 @@ try {
         }
 
         // Sortering: afgemelden onderaan, dan op effectief start_number
+        // Status 5 (Bevestigd bij org.) telt als actief (niet onderaan)
         usort($rows, function($a, $b) {
-            $wA = ($a['entry_status'] === 2) ? 1 : 0;
-            $wB = ($b['entry_status'] === 2) ? 1 : 0;
+            $wA = ($a['entry_status'] >= 2 && $a['entry_status'] !== 5) ? 1 : 0;
+            $wB = ($b['entry_status'] >= 2 && $b['entry_status'] !== 5) ? 1 : 0;
             if ($wA !== $wB) return $wA - $wB;
             $snA = $a['db_person']['start_number'] ?? $a['knsb']['start_number'] ?? 9999;
             $snB = $b['db_person']['start_number'] ?? $b['knsb']['start_number'] ?? 9999;
             return $snA - $snB;
         });
 
+        // Org-toegevoegde rijders: in DB maar niet in KNSB API (status >= 3)
+        $knsbLkSet = array_flip(array_column($rows, 'license_key'));
+        foreach ($dbEntries[$dcId] ?? [] as $lk => $entry) {
+            if (isset($knsbLkSet[$lk])) continue;          // al verwerkt vanuit KNSB
+            if ((int)$entry['status'] < 3) continue;       // alleen org-statussen bewaren
+            $dbPerson = $dbPersons[$lk] ?? null;
+            $tp1      = $dbTp[$lk][1]  ?? null;
+            $tp2      = $dbTp[$lk][2]  ?? null;
+            $tpActiefIsset = isset($dbTp[$lk][0]);
+            $tpActief = $tpActiefIsset ? $dbTp[$lk][0]['code'] : null;
+            $tpExtra  = [];
+            foreach ($dbTp[$lk] ?? [] as $slot => $tp) {
+                if ($slot >= 3) $tpExtra[] = $tp['code'];
+            }
+            $rows[] = [
+                'license_key'        => $lk,
+                'is_anoniem'         => false,
+                'knsb_entry_id'      => $entry['knsb_entry_id'] ?? null,
+                'knsb_status'        => (int)$entry['status'],
+                'entry_status'       => (int)$entry['status'],
+                'reserve'            => null,
+                'is_new'             => false,
+                'diffs'              => [],
+                'knsb' => [
+                    'start_number' => $dbPerson['start_number'] ?? null,
+                    'full_name'    => $dbPerson['full_name']    ?? '',
+                    'short_name'   => $dbPerson['short_name']   ?? null,
+                    'gender'       => $dbPerson['gender']       ?? null,
+                    'category'     => $dbPerson['category']     ?? null,
+                    'nationality'  => $dbPerson['nationality']  ?? 'NED',
+                    'club_code'    => $dbPerson['club_code']    ?? null,
+                    'club_short'   => $dbPerson['club_short']   ?? null,
+                    'club_full'    => $dbPerson['club_full']    ?? null,
+                    'city'         => $dbPerson['city']         ?? null,
+                    'transponder1' => $tp1 ? $tp1['code'] : null,
+                    'transponder2' => $tp2 ? $tp2['code'] : null,
+                ],
+                'db_person'          => $dbPerson,
+                'db_entry'           => $entry,
+                'db_tp1'             => $tp1,
+                'db_tp2'             => $tp2,
+                'db_tp_extra'        => $tpExtra,
+                'db_tp_actief'       => $tpActief,
+                'db_tp_actief_isset' => $tpActiefIsset,
+            ];
+        }
+
         $result[] = [
-            'dc_id'       => $dcId,
-            'dc_name'     => $groep['name']             ?? '',
-            'dc_number'   => $groep['number']           ?? 0,
-            'merge_group' => $mergeGroups[$dcId]        ?? null,
-            'splits'      => $splitConfig[$dcId]        ?? [],   // {category: split_group}
+            'dc_id'           => $dcId,
+            'dc_name'         => $groep['name']             ?? '',
+            'dc_number'       => $groep['number']           ?? 0,
+            'merge_group'     => $mergeGroups[$dcId]        ?? null,
+            'merge_label'     => $mergeLabels[$dcId]        ?? null,
+            'splits'          => $splitConfig[$dcId]        ?? [],
+            'category_filter' => $catFilters[$dcId]         ?? null,
             'has_distances'   => !empty($groep['distances']),
             'knsb_distances'  => array_map(fn($d) => [
                 'id'           => null,
@@ -270,9 +417,29 @@ try {
 
     usort($result, fn($a, $b) => $a['dc_number'] - $b['dc_number']);
 
+    // Stand-datums:
+    // knsb_stand: null → JS genereert lokale browsertijd zodat tijdzone correct is
+    // db_stand:   ruwe UTC datetime string → JS parseert met 'Z'-suffix naar lokale tijd
+    $knsb_stand = null;
+    $db_stand   = null;
+    $dbStandRow = $pdo->prepare(
+        "SELECT DATE_FORMAT(updated_at, '%Y-%m-%d %H:%i') FROM competitions WHERE id = ?"
+    );
+    $dbStandRow->execute([$compId]);
+    $db_stand = $dbStandRow->fetchColumn() ?: null;
+
+    // Haal versienummers op voor optimistic locking
+    $vStmt = $pdo->prepare("SELECT entries_version, tijdschema_version FROM competitions WHERE id = ?");
+    $vStmt->execute([$compId]);
+    $vers = $vStmt->fetch(PDO::FETCH_ASSOC);
+    $entriesVersion = (int)($vers['entries_version'] ?? 0);
+
     echo json_encode([
-        'groepen'     => $result,
-        'organisatie' => $organisatie,
+        'groepen'          => $result,
+        'organisatie'      => $organisatie,
+        'knsb_stand'       => $knsb_stand,
+        'db_stand'         => $db_stand,
+        'entries_version'  => $entriesVersion,
     ], JSON_UNESCAPED_UNICODE);
 
 } catch (Throwable $e) {

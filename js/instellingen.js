@@ -1,8 +1,9 @@
 /* InlineComp – Instellingen: organisaties & sponsors */
 
-let orgs         = [];      // geladen organisatielijst
-let actieveOrg   = null;    // huidig geselecteerde org
-let orgLijstKaart = null;   // actieve kaart in lijst
+let orgs          = [];      // geladen organisatielijst
+let actieveOrg    = null;    // huidig geselecteerde org
+let orgLijstKaart = null;    // actieve kaart in lijst
+let actiefTab     = 'gegevens'; // actief tabblad
 
 // ── Initialisatie ──────────────────────────────────────────────────────────────
 
@@ -16,7 +17,130 @@ function initInstellingen() {
         if (e.target.files[0]) uploadLogo('org', actieveOrg?.id, e.target.files[0]);
     });
 
+    // Alias-knoppen (null-safe: werkt ook als index.php nog niet gesynced is)
+    function on(id, evt, fn) {
+        const e = el(id);
+        if (e) e.addEventListener(evt, fn);
+    }
+
+    on('btn-alias-add', 'click', () => {
+        el('alias-toevoeg-rij').style.display = '';
+        el('btn-alias-add').style.display     = 'none';
+        el('alias-nieuw-naam').value          = '';
+        el('alias-nieuw-naam').focus();
+    });
+    on('btn-alias-ann', 'click', () => {
+        el('alias-toevoeg-rij').style.display = 'none';
+        el('btn-alias-add').style.display     = '';
+    });
+    on('btn-alias-ok',    'click',   () => voegAliasToe());
+    on('alias-nieuw-naam','keydown', e => {
+        if (e.key === 'Enter')  voegAliasToe();
+        if (e.key === 'Escape') el('btn-alias-ann')?.click();
+    });
+
+    // Samenvoeg-knoppen
+    on('btn-samenvoeg',     'click', () => toonSamenvoegPanel());
+    on('btn-samenvoeg-ann', 'click', () => {
+        el('samenvoeg-panel').style.display = 'none';
+    });
+    on('btn-samenvoeg-ok',  'click', () => voerSamenvoegUit());
+
+    // Tab-navigatie
+    document.querySelectorAll('.org-tab-btn').forEach(btn => {
+        btn.addEventListener('click', () => schakelTab(btn.dataset.tab));
+    });
+
     laadOrgs();
+}
+
+// ── Tab-logica ────────────────────────────────────────────────────────────────
+
+function schakelTab(tab) {
+    actiefTab = tab;
+    document.querySelectorAll('.org-tab-btn').forEach(b =>
+        b.classList.toggle('active', b.dataset.tab === tab));
+    document.querySelectorAll('.org-tab-content').forEach(c =>
+        c.style.display = c.id === `org-tab-${tab}` ? '' : 'none');
+
+    if (tab === 'wedstrijden') laadOrgWedstrijden();
+    if (tab === 'klassementen') laadOrgKlassementen();
+}
+
+async function laadOrgWedstrijden() {
+    const lijst = el('org-wedstrijden-list');
+    if (!actieveOrg || !lijst) return;
+
+    lijst.innerHTML = '<div class="status-msg loading"><span class="spinner"></span>Laden…</div>';
+
+    // Wedstrijden in lokale DB ophalen
+    let dbIds = new Set();
+    try {
+        const res = await fetch('api/organisaties.php?action=wedstrijden&id=' + encodeURIComponent(actieveOrg.id));
+        const data = await res.json();
+        dbIds = new Set((data ?? []).map(w => w.id));
+    } catch { /* stil falen */ }
+
+    // Filter allWedstrijden op naam/email/alias van deze org
+    const orgNamen = new Set([
+        actieveOrg.naam?.toLowerCase(),
+        actieveOrg.email?.toLowerCase(),
+        ...(actieveOrg.aliassen ?? []).map(a => a.naam?.toLowerCase()),
+    ].filter(Boolean));
+
+    const matches = (allWedstrijden ?? []).filter(w => {
+        const email = (w.settings?.contact?.email ?? '').toLowerCase().trim();
+        const naam  = (w.settings?.contact?.organizationName
+                    ?? w.settings?.contact?.organization ?? '').toLowerCase().trim();
+        return orgNamen.has(email) || orgNamen.has(naam);
+    });
+
+    if (!matches.length && !dbIds.size) {
+        lijst.innerHTML = '<div class="status-msg info">Geen wedstrijden gevonden voor deze organisatie.</div>';
+        return;
+    }
+
+    lijst.innerHTML = matches.map(w => {
+        const inDb   = dbIds.has(w.id);
+        const datum  = w.starts ? new Date(w.starts).toLocaleDateString('nl-NL', {day:'2-digit',month:'long',year:'numeric'}) : '—';
+        return `<div class="beheer-wedstrijd-rij ${inDb ? 'in-db' : ''}">
+            <div class="beheer-wedstrijd-info">
+                <span class="beheer-wedstrijd-naam">${escHtml(w.name ?? w.title ?? w.id)}</span>
+                <span class="beheer-wedstrijd-datum">${datum}</span>
+                ${inDb ? '<span class="beheer-wedstrijd-badge">In database</span>' : '<span class="beheer-wedstrijd-badge badge-extern">inschrijven.schaatsen.nl</span>'}
+            </div>
+            ${inDb ? `<button class="btn-danger btn-sm beheer-comp-del" data-id="${escHtml(w.id)}" data-naam="${escHtml(w.name ?? w.id)}">Verwijderen</button>` : ''}
+        </div>`;
+    }).join('');
+
+    lijst.querySelectorAll('.beheer-comp-del').forEach(btn => {
+        btn.addEventListener('click', () => verwijderCompetitie(btn.dataset.id, btn.dataset.naam));
+    });
+}
+
+async function verwijderCompetitie(id, naam) {
+    if (!confirm(`Wedstrijd "${naam}" compleet verwijderen uit de database?\n\nAlle deelnemers, afstandsinstellingen en programma worden gewist. Dit kan niet ongedaan worden gemaakt.`)) return;
+    try {
+        const res = await fetch(`api/import.php?id=${encodeURIComponent(id)}`, { method: 'DELETE' });
+        const d   = await res.json();
+        if (!res.ok) throw new Error(d.error ?? `HTTP ${res.status}`);
+        // Reset import-module als de verwijderde wedstrijd de actief geselecteerde is
+        if (typeof resetImportModule === 'function') resetImportModule(id);
+        // Wedstrijdenlijst in importeer ook verversen
+        if (typeof laadWedstrijden === 'function') laadWedstrijden();
+        laadOrgWedstrijden();
+        laadOrgs(); // comp_count bijwerken in lijst
+    } catch(e) {
+        alert('Fout: ' + e.message);
+    }
+}
+
+function laadOrgKlassementen() {
+    if (!actieveOrg) return;
+    // Geef de actieve org door aan ranking.js en (her)initialiseer
+    if (typeof setRankingOrgContext === 'function') {
+        setRankingOrgContext(actieveOrg.id, actieveOrg.naam);
+    }
 }
 
 // ── Organisaties laden ─────────────────────────────────────────────────────────
@@ -25,7 +149,9 @@ async function laadOrgs() {
     const lijst = el('org-list');
     try {
         const res  = await fetch('api/organisaties.php');
-        orgs       = await res.json();
+        const data = await res.json();
+        if (data?.error) throw new Error(data.error);
+        orgs = Array.isArray(data) ? data : [];
         renderOrgLijst();
     } catch(e) {
         lijst.innerHTML = `<div class="status-msg error">⚠ ${escHtml(e.message)}</div>`;
@@ -39,16 +165,25 @@ function renderOrgLijst() {
         return;
     }
     lijst.innerHTML = '';
+    orgLijstKaart = null;   // reset — oude DOM-referentie vervalt na herrender
     orgs.forEach(o => {
         const kaart = document.createElement('div');
-        kaart.className = 'org-kaart' + (actieveOrg?.id === o.id ? ' active' : '');
+        const isActief = actieveOrg?.id === o.id;
+        kaart.className = 'org-kaart' + (isActief ? ' active' : '');
+
+        const metaDelen = [];
+        if (o.comp_count > 0) metaDelen.push(`${o.comp_count} wedstrijd${o.comp_count !== 1 ? 'en' : ''}`);
+        if (o.sponsor_count > 0) metaDelen.push(`${o.sponsor_count} sponsor${o.sponsor_count !== 1 ? 's' : ''}`);
+        if (o.aliassen?.length) metaDelen.push(`${o.aliassen.length} alias${o.aliassen.length !== 1 ? 'sen' : ''}`);
+
         kaart.innerHTML =
             `<div class="org-kaart-naam">${escHtml(o.naam)}</div>` +
-            (o.sponsor_count > 0
-                ? `<div class="org-kaart-meta">${o.sponsor_count} sponsor${o.sponsor_count !== 1 ? 's' : ''}</div>`
-                : '');
+            (metaDelen.length ? `<div class="org-kaart-meta">${escHtml(metaDelen.join(' · '))}</div>` : '');
         kaart.addEventListener('click', () => selecteerOrg(kaart, o.id));
         lijst.appendChild(kaart);
+
+        // Herverbind pointer zodat selecteerOrg het nieuwe element kent
+        if (isActief) orgLijstKaart = kaart;
     });
 }
 
@@ -64,8 +199,11 @@ async function selecteerOrg(kaart, orgId) {
         const org = await res.json();
         actieveOrg = org;
         vulOrgFormulier(org);
+        // Als de actieve tab inhoud nodig heeft, laad die opnieuw
+        if (actiefTab === 'wedstrijden')   laadOrgWedstrijden();
+        if (actiefTab === 'klassementen')  laadOrgKlassementen();
     } catch(e) {
-        el('org-status').innerHTML = `<div class="status-msg error">⚠ ${escHtml(e.message)}</div>`;
+        el('org-status')?.innerHTML && (el('org-status').innerHTML = `<div class="status-msg error">⚠ ${escHtml(e.message)}</div>`);
     }
 }
 
@@ -79,12 +217,20 @@ function nieuweOrg() {
 // ── Formulier vullen ───────────────────────────────────────────────────────────
 
 function vulOrgFormulier(org) {
-    el('org-form-panel').style.display = 'block';
-    el('org-form-titel').textContent   = org ? org.naam : 'Nieuwe organisatie';
-    el('org-naam').value               = org?.naam    ?? '';
-    el('org-website').value            = org?.website ?? '';
+    el('org-geen-selectie').style.display = 'none';
+    el('org-tabs-wrap').style.display     = '';
+    el('org-form-titel').textContent      = org ? org.naam : 'Nieuwe organisatie';
+    // Nieuw → zet terug naar gegevens-tab
+    if (!org) schakelTab('gegevens');
+    el('org-naam').value               = org?.naam  ?? '';
+    el('org-email').value              = org?.email ?? '';
     el('org-status').innerHTML         = '';
-    el('btn-org-verwijderen').style.display = org ? '' : 'none';
+    const isBestaand = !!org;
+    el('btn-org-verwijderen').style.display             = isBestaand ? '' : 'none';
+    if (el('samenvoeg-panel'))    el('samenvoeg-panel').style.display    = 'none';
+    if (el('alias-toevoeg-rij'))  el('alias-toevoeg-rij').style.display  = 'none';
+    if (el('btn-samenvoeg'))      el('btn-samenvoeg').style.display      = isBestaand ? '' : 'none';
+    if (el('btn-alias-add'))      el('btn-alias-add').style.display      = isBestaand ? '' : 'none';
 
     // Logo
     const preview = el('org-logo-preview');
@@ -100,8 +246,130 @@ function vulOrgFormulier(org) {
     }
     el('org-logo-file').value = '';
 
+    // Aliassen
+    renderAliassen(org?.aliassen ?? []);
+
     // Sponsors
     renderSponsors(org?.sponsors ?? []);
+}
+
+// ── Aliassen ──────────────────────────────────────────────────────────────────
+
+function renderAliassen(aliassen) {
+    const wrap = el('org-aliassen-list');
+    if (!wrap) return;
+    wrap.innerHTML = '';
+    if (!aliassen.length) {
+        wrap.innerHTML = '<span class="alias-leeg">Geen aliassen — alle wedstrijden verschijnen onder één naam.</span>';
+        return;
+    }
+    aliassen.forEach(a => {
+        const tag = document.createElement('span');
+        tag.className = 'alias-tag';
+        tag.innerHTML =
+            `${escHtml(a.naam)}` +
+            `<button class="btn-del alias-del" data-id="${escHtml(a.id)}" title="Verwijderen">&#128465;</button>`;
+        tag.querySelector('.alias-del').addEventListener('click', () => verwijderAlias(a.id));
+        wrap.appendChild(tag);
+    });
+}
+
+async function voegAliasToe() {
+    if (!actieveOrg) return;
+    const naam = el('alias-nieuw-naam').value.trim();
+    if (!naam) return;
+
+    el('btn-alias-ok').disabled = true;
+    try {
+        const res = await fetch('api/organisaties.php', {
+            method:  'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body:    JSON.stringify({ action: 'alias_toevoegen', org_id: actieveOrg.id, naam }),
+        });
+        const data = await res.json();
+        if (data.error) throw new Error(data.error);
+        actieveOrg = data;
+        renderAliassen(data.aliassen ?? []);
+        el('alias-toevoeg-rij').style.display = 'none';
+        el('btn-alias-add').style.display     = '';
+        await laadOrgs();
+    } catch(e) {
+        el('org-status').innerHTML = `<div class="status-msg error">⚠ ${escHtml(e.message)}</div>`;
+    } finally {
+        el('btn-alias-ok').disabled = false;
+    }
+}
+
+async function verwijderAlias(aliasId) {
+    if (!actieveOrg) return;
+    try {
+        const res = await fetch('api/organisaties.php', {
+            method:  'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body:    JSON.stringify({ action: 'alias_verwijderen', id: aliasId, org_id: actieveOrg.id }),
+        });
+        const data = await res.json();
+        if (data.error) throw new Error(data.error);
+        actieveOrg = data;
+        renderAliassen(data.aliassen ?? []);
+        await laadOrgs();
+    } catch(e) {
+        el('org-status').innerHTML = `<div class="status-msg error">⚠ ${escHtml(e.message)}</div>`;
+    }
+}
+
+// ── Samenvoegen ───────────────────────────────────────────────────────────────
+
+function toonSamenvoegPanel() {
+    if (!actieveOrg) return;
+    const kies = el('samenvoeg-kies');
+    kies.innerHTML = '<option value="">— kies organisatie —</option>';
+    orgs.filter(o => o.id !== actieveOrg.id).forEach(o => {
+        const opt = document.createElement('option');
+        opt.value       = o.id;
+        opt.textContent = o.naam + (o.aliassen?.length ? ` (${o.aliassen.join(', ')})` : '');
+        kies.appendChild(opt);
+    });
+    el('samenvoeg-naar-naam').textContent = actieveOrg.naam;
+    el('samenvoeg-panel').style.display   = '';
+}
+
+async function voerSamenvoegUit() {
+    if (!actieveOrg) return;
+    const vanId = el('samenvoeg-kies').value;
+    if (!vanId) {
+        el('org-status').innerHTML = '<div class="status-msg error">Kies een organisatie om samen te voegen.</div>';
+        return;
+    }
+    const vanOrg = orgs.find(o => o.id === vanId);
+    if (!confirm(`"${vanOrg?.naam}" samenvoegen met "${actieveOrg.naam}"?\n\n` +
+                 `"${vanOrg?.naam}" verdwijnt en wordt als alias opgeslagen.\n` +
+                 `Wedstrijden en sponsors worden overgenomen. Dit kan niet ongedaan worden gemaakt.`)) return;
+
+    el('btn-samenvoeg-ok').disabled = true;
+    try {
+        const res = await fetch('api/organisaties.php', {
+            method:  'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body:    JSON.stringify({
+                action:   'samenvoegen',
+                van_id:   vanId,       // verdwijnt
+                naar_id:  actieveOrg.id, // blijft
+            }),
+        });
+        const data = await res.json();
+        if (data.error) throw new Error(data.error);
+        actieveOrg = data;
+        el('samenvoeg-panel').style.display = 'none';
+        vulOrgFormulier(data);
+        await laadOrgs();
+        el('org-status').innerHTML = '<div class="status-msg success">✓ Samengevoegd.</div>';
+        setTimeout(() => { el('org-status').innerHTML = ''; }, 3000);
+    } catch(e) {
+        el('org-status').innerHTML = `<div class="status-msg error">⚠ ${escHtml(e.message)}</div>`;
+    } finally {
+        el('btn-samenvoeg-ok').disabled = false;
+    }
 }
 
 // ── Sponsors ──────────────────────────────────────────────────────────────────
@@ -130,7 +398,7 @@ function voegSponsorRijToe(sponsor = null) {
                value="${escHtml(sponsor?.naam ?? '')}">
         <input type="url"  class="inp sponsor-url"  placeholder="https://…"
                value="${escHtml(sponsor?.url ?? '')}">
-        <button class="btn-sponsor-del" title="Verwijderen">&#128465;</button>`;
+        <button class="btn-del btn-sponsor-del" title="Verwijderen">&#128465;</button>`;
 
     rij.querySelector('.sponsor-logo-file').addEventListener('change', e => {
         if (!e.target.files[0]) return;
@@ -180,7 +448,7 @@ async function slaOrgOp() {
         action:   'save',
         id:       actieveOrg?.id ?? null,
         naam,
-        website:  el('org-website').value.trim() || null,
+        email:   el('org-email').value.trim() || null,
         sponsors,
     };
 

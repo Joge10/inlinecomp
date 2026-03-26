@@ -1,5 +1,17 @@
 /* InlineComp – startlijsten */
 
+// Gecachete klassementen-lijst voor loting-UI (lazy geladen)
+let slKlassementen = null;
+async function laadSlKlassementen() {
+    if (slKlassementen) return slKlassementen;
+    try {
+        const r = await fetch('api/klassement_import.php?action=list');
+        const d = await r.json();
+        slKlassementen = Array.isArray(d) ? d : [];
+    } catch { slKlassementen = []; }
+    return slKlassementen;
+}
+
 // ── Startlijst-groepen bouwen (merge + split + normaal) ───────────────────────
 
 function bouwStartlijstGroepen() {
@@ -77,31 +89,40 @@ function toonStartlijstenPagina() {
     const catTabs = el('sl-cat-tabs');
     const content = el('sl-cat-content');
 
+    const distTabs = el('sl-dist-tabs');
+
     if (!huidigCompId || !isGeimporteerd) {
-        catTabs.innerHTML = '';
-        content.innerHTML = `<div class="status-msg info">
+        catTabs.innerHTML  = '';
+        distTabs.innerHTML = '';
+        distTabs.style.display = 'none';
+        content.innerHTML  = `<div class="status-msg info">
             Selecteer en importeer eerst een wedstrijd via <strong>Importeer</strong>.
         </div>`;
         if (header) header.textContent = '';
         return;
     }
 
-    if (header) header.innerHTML =
-        `<h2 class="sl-page-titel">${escHtml(huidigComp?.name || '')}</h2>`;
+    if (header) header.innerHTML = `
+        <div class="ts-top">
+            <div>
+                <div class="ts-comp-naam">${escHtml(huidigComp?.name || '')}</div>
+                <div class="ts-comp-meta">${escHtml(formatDatum(huidigComp?.starts || ''))} · ${escHtml(getLocatie(huidigComp || {}))}</div>
+            </div>
+        </div>`;
 
     const groepen = bouwStartlijstGroepen();
 
     catTabs.innerHTML = '';
     groepen.forEach((groep, i) => {
         const btn = document.createElement('button');
-        btn.className = 'tab-btn' + (i === 0 ? ' active' : '');
+        btn.className = 'org-tab-btn' + (i === 0 ? ' active' : '');
         const totaal  = groep.competitors.length;
         const label   = groep.dc_ids.length > 1
             ? `${escHtml(groep.dc_name)} <span class="tab-badge-merged" title="Samengevoegde categorieën">${groep.dc_ids.length}</span>`
             : escHtml(groep.dc_name);
         btn.innerHTML = label + ` (${totaal})`;
         btn.addEventListener('click', () => {
-            catTabs.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+            catTabs.querySelectorAll('.org-tab-btn').forEach(b => b.classList.remove('active'));
             btn.classList.add('active');
             activeCat = groep;
             toonStartlijstConfig(groep);
@@ -116,17 +137,12 @@ function toonStartlijstenPagina() {
 // ── Startlijst – configuratie tonen (per afstand) ────────────────────────────
 
 async function toonStartlijstConfig(groep) {
-    const content = el('sl-cat-content');
-    content.innerHTML = '<div class="status-msg loading"><span class="spinner"></span>Afstanden laden…</div>';
+    const content  = el('sl-cat-content');
+    const distTabs = el('sl-dist-tabs');
 
-    // Info-label: samengevoegde of gesplitste groep
-    const infoLabelHtml = groep.dc_ids?.length > 1
-        ? `<div class="sl-merge-label">&#8644; Samengevoegd: <strong>${escHtml(groep.dc_name)}</strong></div>`
-        : groep.is_split
-            ? `<div class="sl-merge-label">&#9986; Gesplitst uit: <strong>${escHtml(
-                  vergelijkData.find(c => c.dc_id === groep.dc_id)?.dc_name || groep.dc_id
-              )}</strong></div>`
-            : '';
+    content.innerHTML  = '<div class="status-msg loading"><span class="spinner"></span>Afstanden laden…</div>';
+    distTabs.innerHTML = '';
+    distTabs.style.display = 'none';
 
     let afstanden;
     try {
@@ -142,6 +158,15 @@ async function toonStartlijstConfig(groep) {
         return;
     }
 
+    // Info-label: samengevoegde of gesplitste groep (boven de heat-config)
+    const infoLabelHtml = groep.dc_ids?.length > 1
+        ? `<div class="sl-merge-label">&#8644; Samengevoegd: <strong>${escHtml(groep.dc_name)}</strong></div>`
+        : groep.is_split
+            ? `<div class="sl-merge-label">&#9986; Gesplitst uit: <strong>${escHtml(
+                  vergelijkData.find(c => c.dc_id === groep.dc_id)?.dc_name || groep.dc_id
+              )}</strong></div>`
+            : '';
+
     // Geen afstanden → direct naar heat-config, met melding
     if (!afstanden.length) {
         content.innerHTML = `
@@ -155,29 +180,26 @@ async function toonStartlijstConfig(groep) {
         return;
     }
 
-    const eersteActief = afstanden[0];
-    const tabsHtml = afstanden.map((a, i) =>
-        `<button class="tab-btn sl-dist-tab${i === 0 ? ' active' : ''}"
-                 data-dist-id="${escHtml(a.id)}"
-                 data-dist-naam="${escHtml(a.name)}">
-             ${escHtml(a.name)}
-         </button>`
-    ).join('');
-
-    content.innerHTML = `
-        ${infoLabelHtml}
-        <div class="tab-bar sl-dist-tabs">${tabsHtml}</div>
-        <div id="sl-dist-content"></div>`;
-
-    content.querySelectorAll('.sl-dist-tab').forEach(btn => {
+    // ── Rij 2: afstand-tabs in de vaste sl-dist-tabs balk ────────────────────
+    afstanden.forEach((a, i) => {
+        const btn = document.createElement('button');
+        btn.className = 'org-tab-btn sl-dist-tab' + (i === 0 ? ' active' : '');
+        btn.dataset.distId   = a.id;
+        btn.dataset.distNaam = a.name;
+        btn.textContent      = a.name;
         btn.addEventListener('click', () => {
-            content.querySelectorAll('.sl-dist-tab').forEach(b => b.classList.remove('active'));
+            distTabs.querySelectorAll('.sl-dist-tab').forEach(b => b.classList.remove('active'));
             btn.classList.add('active');
-            toonAfstandConfig(groep, btn.dataset.distId, btn.dataset.distNaam);
+            toonAfstandConfig(groep, a.id, a.name);
         });
+        distTabs.appendChild(btn);
     });
+    distTabs.style.display = '';
 
-    toonAfstandConfig(groep, eersteActief.id, eersteActief.name);
+    // ── Inhoud: only sl-dist-content placeholder + optionele info-label ──────
+    content.innerHTML = `${infoLabelHtml}<div id="sl-dist-content"></div>`;
+
+    toonAfstandConfig(groep, afstanden[0].id, afstanden[0].name);
 }
 
 // ── Startlijst – client-side slangenpatroon ──────────────────────────────────
@@ -380,9 +402,17 @@ function hertekenRondenCfg(cacheKey) {
                         ${(ronde.methode || 'willekeurig') === 'willekeurig' ? 'checked' : ''}> Willekeurig</label>
                     <label><input type="radio" name="sl-m" value="startnummer"
                         ${ronde.methode === 'startnummer' ? 'checked' : ''}> Op startnummer</label>
-                    <label class="sl-disabled" title="Vereist klassementsdata">
-                        <input type="radio" disabled> Op klassement</label>
-                </fieldset>` : ''}
+                    <label><input type="radio" name="sl-m" value="klassement"
+                        ${ronde.methode === 'klassement' ? 'checked' : ''}> Op klassement</label>
+                </fieldset>
+                <div class="sl-klassement-kiezer" id="sl-kl-kiezer" style="${ronde.methode === 'klassement' ? '' : 'display:none'}">
+                    <select class="inp sl-inp" id="sl-kl-sel-kl">
+                        <option value="">— kies klassement —</option>
+                    </select>
+                    <select class="inp sl-inp" id="sl-kl-sel-sec" ${ronde.klassementId ? '' : 'disabled'}>
+                        <option value="">— kies sectie —</option>
+                    </select>
+                </div>` : ''}
             </div>
             ${!isLaatste ? `
             <fieldset class="doorstroom-veld">
@@ -411,6 +441,90 @@ function hertekenRondenCfg(cacheKey) {
     wrap.querySelectorAll('[data-idx], input[name="sl-m"]').forEach(inp =>
         inp.addEventListener('change', () => syncRondenCfg(cacheKey))
     );
+
+    // ── Klassement-kiezer logica ──────────────────────────────────────────────
+    const klKiezer  = el('sl-kl-kiezer');
+    const klSelKl   = el('sl-kl-sel-kl');
+    const klSelSec  = el('sl-kl-sel-sec');
+
+    // Toon/verberg kiezer bij wisselen methode
+    wrap.querySelectorAll('input[name="sl-m"]').forEach(r => {
+        r.addEventListener('change', () => {
+            if (klKiezer) klKiezer.style.display = r.value === 'klassement' ? '' : 'none';
+        });
+    });
+
+    // Laad klassementen lazy in de dropdown
+    if (klSelKl) {
+        laadSlKlassementen().then(lijst => {
+            // Bepaal org_id van de huidige wedstrijd (via huidigOrganisatie)
+            const orgId = huidigOrganisatie?.id ?? null;
+
+            // Geselecteerde id: opgeslagen waarde of (als geen opgeslagen) meest recente van zelfde org
+            let geselecteerdId = startlijstCache[cacheKey]?.rondenConfig[0]?.klassementId ?? null;
+            if (!geselecteerdId && orgId) {
+                const suggestie = lijst.find(k => k.org_id === orgId);
+                if (suggestie) geselecteerdId = suggestie.id;
+            }
+
+            klSelKl.innerHTML = '<option value="">— kies klassement —</option>'
+                + lijst.map(k => {
+                    const orgNaam = k.org_id ? (rkOrgs?.find?.(o => o.id === k.org_id)?.naam ?? '') : '';
+                    const label   = k.naam + (k.seizoen ? ` (${k.seizoen})` : '') + (orgNaam ? ` · ${orgNaam}` : '');
+                    return `<option value="${escHtml(k.id)}" ${geselecteerdId === k.id ? 'selected' : ''}>${escHtml(label)}</option>`;
+                }).join('');
+
+            if (geselecteerdId) {
+                // Zorg dat klassementId ook in de cache staat — anders vuurt de change-handler
+                // nooit als het klassement via suggestie auto-geselecteerd werd
+                if (startlijstCache[cacheKey]?.rondenConfig?.[0]) {
+                    startlijstCache[cacheKey].rondenConfig[0].klassementId = geselecteerdId;
+                }
+                vulSecties(geselecteerdId, startlijstCache[cacheKey]?.rondenConfig[0]?.klassementSectie);
+            }
+        });
+
+        klSelKl.addEventListener('change', () => {
+            const kid = klSelKl.value;
+            startlijstCache[cacheKey].rondenConfig[0].klassementId      = kid || null;
+            startlijstCache[cacheKey].rondenConfig[0].klassementSectie  = null;
+            vulSecties(kid, null);
+        });
+    }
+
+    if (klSelSec) {
+        klSelSec.addEventListener('change', () => {
+            startlijstCache[cacheKey].rondenConfig[0].klassementSectie = klSelSec.value || null;
+        });
+    }
+
+    function vulSecties(klassementId, huidigeSectie) {
+        if (!klSelSec) return;
+        if (!klassementId) {
+            klSelSec.innerHTML = '<option value="">— kies sectie —</option>';
+            klSelSec.disabled = true;
+            return;
+        }
+        const kl   = (slKlassementen || []).find(k => k.id === klassementId);
+        const cats = Array.isArray(kl?.categorieen) ? kl.categorieen : [];
+        const opties = cats.map(c => {
+            const label = c.label ?? c;
+            return `<option value="${escHtml(label)}" ${huidigeSectie === label ? 'selected' : ''}>${escHtml(label)}</option>`;
+        }).join('');
+        klSelSec.innerHTML = '<option value="">— kies sectie —</option>' + opties;
+        klSelSec.disabled = cats.length === 0;
+
+        // Auto-selecteer als er maar één sectie is, of als nog niets geselecteerd is maar er
+        // een eerder opgeslagen waarde is die overeenkomt
+        const gekozen = huidigeSectie ?? (cats.length === 1 ? (cats[0].label ?? cats[0]) : null);
+        if (gekozen) {
+            klSelSec.value = gekozen;
+            // Sla direct op in cache zodat PHP de sectie meekrijgt
+            if (startlijstCache[cacheKey]?.rondenConfig?.[0]) {
+                startlijstCache[cacheKey].rondenConfig[0].klassementSectie = klSelSec.value || null;
+            }
+        }
+    }
 
     hertekenExtraFinales(cacheKey);
 }
@@ -474,6 +588,8 @@ function syncRondenCfg(cacheKey) {
         if (idx === 0) {
             const mInp = wrap.querySelector('input[name="sl-m"]:checked');
             if (mInp) ronde.methode = mInp.value;
+            // Klassement-keuze wordt direct opgeslagen via de change-handlers van de dropdowns
+            // (klassementId en klassementSectie leven al in ronde object)
         }
         if (idx < rc.length - 1) {
             if (!ronde.doorstroom) ronde.doorstroom = {};
@@ -515,6 +631,11 @@ async function genereerAllesInEenKeer(cacheKey, groep, distId) {
         // Bij splits: filter op de bijbehorende categorieën
         if (groep.category_filter?.length) {
             url += `&category_filter=${encodeURIComponent(groep.category_filter.join(','))}`;
+        }
+        // Bij klassement-methode: gekozen klassement + sectie meegeven
+        if (ronde0.methode === 'klassement' && ronde0.klassementId && ronde0.klassementSectie) {
+            url += `&klassement_id=${encodeURIComponent(ronde0.klassementId)}`
+                 + `&klassement_sectie=${encodeURIComponent(ronde0.klassementSectie)}`;
         }
 
         const res  = await fetch(url);
@@ -737,9 +858,13 @@ function maakHeatGrid(data, methode) {
         card.innerHTML =
             `<div class="heat-titel">Heat ${heat.nummer}` +
             `<span class="heat-count">${heat.rijders.length}</span></div>` +
-            `<table class="heat-tabel"><thead><tr>` +
-            `<th>#</th><th>Snr</th><th>Cat</th><th>Naam</th><th>Transponder</th>` +
-            `</tr></thead><tbody>${rows}</tbody></table>`;
+            `<table class="heat-tabel">` +
+            `<colgroup>` +
+            `<col class="heat-pos"><col class="heat-snr"><col class="heat-cat">` +
+            `<col class="heat-naam"><col class="heat-tp">` +
+            `</colgroup>` +
+            `<thead><tr><th>#</th><th>Snr</th><th>Cat</th><th>Naam</th><th>Transp.</th></tr></thead>` +
+            `<tbody>${rows}</tbody></table>`;
         grid.appendChild(card);
     }
     wrapper.appendChild(grid);

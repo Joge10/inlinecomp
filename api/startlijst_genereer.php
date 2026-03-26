@@ -25,7 +25,9 @@ require_once __DIR__ . '/../../config_inlinecomp.php';
 $compId     = trim($_GET['competition_id'] ?? '');
 $distId     = trim($_GET['distance_id']    ?? '');  // voor labeling; optioneel bij no-distance DCs
 $maxPerHeat = max(2, intval($_GET['max_per_heat'] ?? 6));
-$methode    = trim($_GET['methode']        ?? 'willekeurig');
+$methode         = trim($_GET['methode']           ?? 'willekeurig');
+$klassementId    = trim($_GET['klassement_id']    ?? '');
+$klassementSectie= trim($_GET['klassement_sectie']?? '');
 
 // dc_ids: kommagescheiden lijst (ondersteunt ook samengevoegde categorieën)
 $dcIdsRaw = trim($_GET['dc_ids'] ?? $_GET['dc_id'] ?? '');
@@ -65,7 +67,7 @@ try {
         FROM entries e
         JOIN persons p ON e.person_license = p.license_key
         WHERE e.distance_combination_id IN ($ph)
-          AND e.status = 1
+          AND e.status IN (1, 5)
           $catWhere
     ");
     $stmt->execute($params);
@@ -125,6 +127,46 @@ try {
             usort($heeftPositie, fn($a,$b) => $a['start_number'] - $b['start_number']);
             break;
 
+        case 'klassement':
+            if (!$klassementId || !$klassementSectie) {
+                // Fallback naar startnummer als geen klassement gekozen
+                $methode = 'startnummer';
+                foreach ($rijders as $r) {
+                    if ($r['start_number']) $heeftPositie[] = $r;
+                    else                   $zonderPositie[] = $r;
+                }
+                usort($heeftPositie, fn($a,$b) => $a['start_number'] - $b['start_number']);
+                break;
+            }
+            // Klassement-posities ophalen op startnummer
+            $klStmt = $pdo->prepare("
+                SELECT start_number, positie
+                FROM klassement_posities
+                WHERE klassement_id = ? AND categorie = ?
+                ORDER BY positie ASC
+            ");
+            $klStmt->execute([$klassementId, $klassementSectie]);
+            // Map: start_number → positie (als int voor sortering)
+            $klMap = [];
+            foreach ($klStmt->fetchAll() as $row) {
+                $klMap[(string)$row['start_number']] = (int)$row['positie'];
+            }
+            // Rijders verdelen: in klassement vs niet
+            foreach ($rijders as $r) {
+                $sn = (string)($r['start_number'] ?? '');
+                if ($sn && isset($klMap[$sn])) {
+                    $heeftPositie[] = $r + ['_klPos' => $klMap[$sn]];
+                } else {
+                    $zonderPositie[] = $r;
+                }
+            }
+            // Klassement-rijders: gesorteerd op rangpositie
+            usort($heeftPositie, fn($a,$b) => $a['_klPos'] - $b['_klPos']);
+            // Niet in klassement: op startnummer achteraan
+            usort($zonderPositie, fn($a,$b) =>
+                ($a['start_number'] ?: PHP_INT_MAX) - ($b['start_number'] ?: PHP_INT_MAX));
+            break;
+
         case 'willekeurig':
         default:
             $methode     = 'willekeurig';
@@ -133,13 +175,17 @@ try {
             break;
     }
 
-    // Rijders zonder positie: alfabetisch op achternaam
-    usort($zonderPositie, fn($a,$b) =>
-        strcasecmp(
-            $a['short_name'] ?? (preg_match('/\S+$/', $a['full_name'], $m) ? $m[0] : $a['full_name']),
-            $b['short_name'] ?? (preg_match('/\S+$/', $b['full_name'], $m) ? $m[0] : $b['full_name'])
-        )
-    );
+    // Rijders zonder positie:
+    //   klassement-methode → al gesorteerd op startnummer in de switch, niet opnieuw sorteren
+    //   overige methoden   → alfabetisch op achternaam (rijders zonder startnummer)
+    if ($methode !== 'klassement') {
+        usort($zonderPositie, fn($a,$b) =>
+            strcasecmp(
+                $a['short_name'] ?? (preg_match('/\S+$/', $a['full_name'], $m) ? $m[0] : $a['full_name']),
+                $b['short_name'] ?? (preg_match('/\S+$/', $b['full_name'], $m) ? $m[0] : $b['full_name'])
+            )
+        );
+    }
 
     $gesorteerd = array_merge($heeftPositie, $zonderPositie);
     $n          = count($gesorteerd);

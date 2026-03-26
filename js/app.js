@@ -15,14 +15,19 @@ let manualTp      = new Set();  // "lk_1" / "lk_2" — handmatig gewijzigde tran
 let huidigCompId  = null;       // competition id van de geopende wedstrijd
 let huidigComp    = null;       // volledig comp-object van de geopende wedstrijd
 
-const STATUS_LABELS = ['Niet bevestigd', 'Bevestigd', 'Afgemeld'];
-const STATUS_CSS    = ['status-0',        'status-1',  'status-2'];
+const STATUS_LABELS = ['Niet bevestigd', 'Bevestigd', 'Afgemeld', 'Afgem. bij org.', 'Niet getekend', 'Bevestigd bij org.'];
+const STATUS_CSS    = ['status-0',        'status-1',  'status-2', 'status-3',        'status-4',      'status-5'];
 
 let startlijstCache  = {};    // {cacheKey: {rondenConfig, ronde1, cFinale, bFinale}}
 let isGeimporteerd   = false; // ≥1 deelnemer heeft db_entry in DB
 let heeftWijzigingen = false; // onopgeslagen bewerkingen in huidige sessie
+let entriesVersion   = null;  // voor optimistic locking bij import
 let gewijzigdeRijen  = new Set(); // license_keys van gewijzigde (nog niet opgeslagen) rijen
 let huidigOrganisatie = null; // organisatie-object van huidig geselecteerde wedstrijd
+let dcDistances       = {};   // {dc_id: [{id, number, name, value_meters}]} – KNSB afstanden per DC
+let standDatum        = '';   // tijdstip KNSB-ophaling voor tekenlijst (dd-mm-yyyy HH:mm)
+let dbStandDatum      = '';   // tijdstip laatste DB-import voor tekenlijst (dd-mm-yyyy HH:mm)
+let vergelijkAbort    = null; // AbortController voor lopende vergelijk.php-fetch
 
 // ── Hulpfuncties ──────────────────────────────────────────────────────────────
 
@@ -43,6 +48,17 @@ function getLocatie(comp) {
     return (comp.location || '').split('\n')[0].trim();
 }
 
+function getOrganisatieEmail(comp) {
+    return (comp.settings?.contact?.email ?? '').toLowerCase().trim();
+}
+
+function getOrganisatieNaam(comp) {
+    return (comp.settings?.contact?.organizationName
+         ?? comp.organizer?.name
+         ?? comp.organiser?.name
+         ?? '').trim();
+}
+
 function formatDatum(str) {
     if (!str) return '';
     const d = new Date(str);
@@ -57,10 +73,24 @@ function escHtml(str) {
         .replace(/"/g,'&quot;');
 }
 
+// Vult de ts-comp-naam / ts-comp-meta header op een pagina met de huidige wedstrijd
+function vulPaginaHeader(naamId, metaId) {
+    const naamEl = el(naamId);
+    const metaEl = el(metaId);
+    if (naamEl) naamEl.textContent = huidigComp?.name || '';
+    if (metaEl) metaEl.textContent = huidigComp
+        ? formatDatum(huidigComp.starts || '') + ' · ' + getLocatie(huidigComp)
+        : '';
+}
+
 // ── Wedstrijdenlijst laden ────────────────────────────────────────────────────
 
 async function laadWedstrijden() {
     const list = el('comp-list');
+    const btn  = el('btn-ververs-wedstrijden');
+    const icon = el('ververs-icon');
+    if (btn)  btn.disabled = true;
+    if (icon) icon.style.animation = 'spin 0.8s linear infinite';
     try {
         const res  = await fetch(BASE + 'api/competitions.php');
         if (!res.ok) throw new Error('HTTP ' + res.status);
@@ -74,10 +104,14 @@ async function laadWedstrijden() {
 
         allWedstrijden = data;
         vulLocatieDropdown();
+        vulOrganisatieDropdown();
         renderWedstrijdLijst();
 
     } catch(e) {
         statusMsg(list, 'error', '⚠ Kon wedstrijden niet laden: ' + e.message);
+    } finally {
+        if (btn)  btn.disabled = false;
+        if (icon) icon.style.animation = '';
     }
 }
 
@@ -95,16 +129,60 @@ function vulLocatieDropdown() {
     });
 }
 
+function vulOrganisatieDropdown() {
+    const sel    = el('filter-organisatie');
+    const huidig = sel.value;
+
+    // Groepeer op email (of naam als fallback) → tel per naam hoe vaak die voorkomt
+    const groepen = new Map();  // key (email|naam) → Map(naam → count)
+    for (const comp of allWedstrijden) {
+        const email = getOrganisatieEmail(comp);
+        const naam  = getOrganisatieNaam(comp);
+        if (!email && !naam) continue;
+        const key = email || naam;
+        if (!groepen.has(key)) groepen.set(key, new Map());
+        if (naam) {
+            const tellers = groepen.get(key);
+            tellers.set(naam, (tellers.get(naam) ?? 0) + 1);
+        }
+    }
+
+    // Canonieke naam per groep = meest voorkomende naam
+    const opties = [];
+    for (const [key, namenMap] of groepen) {
+        if (!namenMap.size) continue;
+        const canoniek = [...namenMap.entries()]
+            .sort((a, b) => b[1] - a[1])[0][0];
+        opties.push({ key, label: canoniek });
+    }
+    opties.sort((a, b) => a.label.localeCompare(b.label, 'nl'));
+
+    sel.innerHTML = '<option value="">— alle —</option>';
+    for (const { key, label } of opties) {
+        const opt = document.createElement('option');
+        opt.value       = key;
+        opt.textContent = label;
+        if (key === huidig) opt.selected = true;
+        sel.appendChild(opt);
+    }
+}
+
 function renderWedstrijdLijst() {
     const list = el('comp-list');
     const van  = el('filter-van').value;
     const tot  = el('filter-tot').value;
     const loc  = el('filter-locatie').value;
+    const org  = el('filter-organisatie').value;
 
     let gefilterd = allWedstrijden;
     if (van) gefilterd = gefilterd.filter(c => (c.starts || '') >= van);
     if (tot) gefilterd = gefilterd.filter(c => (c.starts || '') <= tot + 'T23:59:59');
     if (loc) gefilterd = gefilterd.filter(c => getLocatie(c) === loc);
+    if (org) gefilterd = gefilterd.filter(c => {
+        const email = getOrganisatieEmail(c);
+        const naam  = getOrganisatieNaam(c);
+        return (email || naam) === org;
+    });
 
     if (!gefilterd.length) {
         statusMsg(list, 'info', 'Geen wedstrijden gevonden met deze filters.');
@@ -118,7 +196,10 @@ function renderWedstrijdLijst() {
     zichtbaar.forEach(comp => {
         const card = document.createElement('div');
         card.className = 'comp-card';
-        if (activeCard && comp.id === huidigCompId) card.classList.add('active');
+        if (activeCard && comp.id === huidigCompId) {
+            card.classList.add('active');
+            activeCard = card;   // synchroon houden met opnieuw-gerenderd DOM-element
+        }
 
         const loc  = getLocatie(comp);
         const datum = formatDatum(comp.starts);
@@ -144,6 +225,11 @@ async function selectWedstrijd(card, comp) {
     if (heeftWijzigingen) {
         if (!await toonBevestigDialog('Er zijn onopgeslagen wijzigingen.\nDoorgaan zonder op te slaan?')) return;
     }
+
+    // Annuleer eventueel lopende vergelijk.php-aanvraag om 503 door server-overload te voorkomen
+    if (vergelijkAbort) vergelijkAbort.abort();
+    vergelijkAbort = new AbortController();
+
     if (activeCard) activeCard.classList.remove('active');
     card.classList.add('active');
     activeCard   = card;
@@ -159,18 +245,24 @@ async function selectWedstrijd(card, comp) {
     startlijstCache = {};
     setHTML('imp-cat-content', '<div class="status-msg loading"><span class="spinner"></span>Vergelijken met database…</div>');
 
-    el('btn-import').onclick        = () => importeerWedstrijd(comp.id, comp.name || '');
+    el('btn-import').onclick           = () => importeerWedstrijd(comp.id, comp.name || '');
     el('btn-print-tekenlijst').onclick = () => printTekenlijsten();
+    el('btn-print-deelnemers').onclick = () => printDeelnemerslijst();
 
     panel.scrollIntoView({ behavior: 'smooth', block: 'start' });
 
+    const myAbort = vergelijkAbort;
     try {
-        const res = await fetch('api/vergelijk.php?id=' + encodeURIComponent(comp.id));
+        const res = await fetch('api/vergelijk.php?id=' + encodeURIComponent(comp.id),
+                                { signal: myAbort.signal });
         if (!res.ok) throw new Error('HTTP ' + res.status);
         const vData = await res.json();
         if (vData.error) throw new Error(vData.error);
-        vergelijkData    = vData.groepen     ?? vData; // backwards compat
+        vergelijkData     = vData.groepen     ?? vData; // backwards compat
         huidigOrganisatie = vData.organisatie ?? null;
+        standDatum        = vData.knsb_stand  ?? '';
+        dbStandDatum      = vData.db_stand    ?? '';
+        entriesVersion    = vData.entries_version ?? 0;
 
         zetKnsbTimestamp();
         initEdits();
@@ -178,11 +270,47 @@ async function selectWedstrijd(card, comp) {
         updateImportBtn();
 
     } catch(e) {
+        if (e.name === 'AbortError') return; // nieuwere klik heeft deze aanvraag afgebroken
         setHTML('imp-cat-content', `<div class="status-msg error">⚠ ${escHtml(e.message)}</div>`);
     }
 }
 
 // ── Bevestigingsdialoog ───────────────────────────────────────────────────────
+
+// Wis de import-module volledig na verwijderen van de actieve wedstrijd
+function resetImportModule(verwijderdId) {
+    // Geen actie als het een andere wedstrijd is
+    if (verwijderdId && huidigCompId !== verwijderdId) return;
+
+    // Globals wissen
+    huidigCompId      = null;
+    huidigComp        = null;
+    vergelijkData     = [];
+    personEdits       = {};
+    entryEdits        = {};
+    manualTp          = new Set();
+    heeftWijzigingen  = false;
+    standDatum        = '';
+    dbStandDatum      = '';
+    huidigOrganisatie = null;
+    startlijstCache   = {};
+
+    // Actieve kaart deselecteren
+    if (activeCard) { activeCard.classList.remove('active'); activeCard = null; }
+
+    // Detail-panel verbergen en inhoud wissen
+    const panel = el('detail-panel');
+    if (panel) panel.style.display = 'none';
+
+    const tabs    = el('imp-cat-tabs');
+    const content = el('imp-cat-content');
+    const result  = el('import-result');
+    if (tabs)    tabs.innerHTML    = '';
+    if (content) content.innerHTML = '<div class="status-msg info">Selecteer een wedstrijd om te importeren.</div>';
+    if (result)  result.innerHTML  = '';
+
+    if (typeof updateImportBtn === 'function') updateImportBtn();
+}
 
 function toonBevestigDialog(bericht, titel = 'Onopgeslagen wijzigingen') {
     return new Promise(resolve => {
@@ -235,10 +363,12 @@ function initNav() {
     el('filter-van').addEventListener('change', renderWedstrijdLijst);
     el('filter-tot').addEventListener('change', renderWedstrijdLijst);
     el('filter-locatie').addEventListener('change', renderWedstrijdLijst);
+    el('filter-organisatie').addEventListener('change', renderWedstrijdLijst);
     el('filter-reset').addEventListener('click', () => {
-        el('filter-van').value     = '';
-        el('filter-tot').value     = '';
-        el('filter-locatie').value = '';
+        el('filter-van').value          = '';
+        el('filter-tot').value          = '';
+        el('filter-locatie').value      = '';
+        el('filter-organisatie').value  = '';
         renderWedstrijdLijst();
     });
 
@@ -252,12 +382,19 @@ function initNav() {
             if (heeftWijzigingen && page !== 'importeer') {
                 if (!await toonBevestigDialog('Er zijn onopgeslagen wijzigingen.\nDoorgaan zonder op te slaan?')) return;
             }
+            if (typeof stopTsPolling === 'function') stopTsPolling();
+            if (page === 'importeer') {
+                document.querySelector('.nav-update-dot')?.remove();
+            }
             document.querySelectorAll('.nav-item').forEach(i => i.classList.remove('active'));
             item.classList.add('active');
             document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
             const target = document.getElementById('page-' + page);
             if (target) target.classList.add('active');
             if (page === 'startlijsten') toonStartlijstenPagina();
+            if (page === 'tijdschema')   toonTijdschemaPagina();
+            if (page === 'klassementen') vulPaginaHeader('uitslag-comp-naam', 'uitslag-comp-meta');
+            if (page === 'live')         vulPaginaHeader('live-comp-naam',    'live-comp-meta');
         });
     });
 
@@ -273,3 +410,4 @@ function initNav() {
 
 initNav();
 laadWedstrijden();
+el('btn-ververs-wedstrijden')?.addEventListener('click', laadWedstrijden);

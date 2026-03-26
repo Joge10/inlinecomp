@@ -6,7 +6,7 @@
 CREATE TABLE IF NOT EXISTS organisaties (
     id         VARCHAR(36)  NOT NULL,
     naam       VARCHAR(255) NOT NULL,
-    website    VARCHAR(500) DEFAULT NULL,
+    email      VARCHAR(255) DEFAULT NULL,
     logo_path  VARCHAR(500) DEFAULT NULL,
     created_at TIMESTAMP    DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP    DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
@@ -29,3 +29,9 @@ CREATE TABLE IF NOT EXISTS organisatie_sponsors (
 -- Koppel competitie aan organisatie
 ALTER TABLE competitions
     ADD COLUMN IF NOT EXISTS organisatie_id VARCHAR(36) DEFAULT NULL;
+
+-- Migratie: website → email (voor bestaande installaties)
+ALTER TABLE organisaties
+    ADD COLUMN IF NOT EXISTS email VARCHAR(255) DEFAULT NULL;
+ALTER TABLE organisaties
+    DROP COLUMN IF EXISTS website;

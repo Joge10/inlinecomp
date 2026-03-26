@@ -53,6 +53,7 @@ function initEdits() {
             const ek = cat.dc_id + '_' + lk;
             entryEdits[ek] = {
                 entry_status:  item.entry_status,
+                knsb_status:   item.knsb_status ?? item.entry_status,  // altijd originele KNSB API-status (0/1/2)
                 reserve:       item.reserve,
                 knsb_entry_id: item.knsb_entry_id,
             };
@@ -86,7 +87,8 @@ async function bouwBeheerTabel() {
     const { signal }   = beheerAbort;
 
     // Laad DB-afstanden (gegroepeerd op target_group); fallback naar KNSB
-    const dcDistances = {};
+    // Globale dcDistances zodat printDeelnemerslijst er ook bij kan
+    dcDistances = {};
     await Promise.all(vergelijkData.map(async cat => {
         try {
             const res  = await fetch(`api/distances_db.php?dc_id=${encodeURIComponent(cat.dc_id)}`);
@@ -209,10 +211,21 @@ async function bouwBeheerTabel() {
                 naamCel += `<div class="dc-groep-naam">` +
                     `<span class="dc-groep-lbl">${escHtml(dc.dc_name)}</span>` +
                     (dcGroup.length > 1
-                        ? `<button class="dc-ontkoppel" data-dc-id="${escHtml(dc.dc_id)}" title="Samenvoegen ongedaan maken">&#x2715;</button>`
+                        ? `<button class="btn-del dc-ontkoppel" data-dc-id="${escHtml(dc.dc_id)}" title="Samenvoegen ongedaan maken">&#128465;</button>`
                         : '') +
                     `</div>`;
             });
+
+            // Label-input bij samengevoegde groep (zodat de naam in het schema leesbaar blijft)
+            if (type === 'merged') {
+                const huidigLabel = (dcGroup.find(d => d.merge_label) ?? {}).merge_label ?? '';
+                naamCel += `<div class="dc-merge-label-rij">` +
+                    `<span class="dc-merge-lbl" title="Naam in tijdschema">✏</span>` +
+                    `<input type="text" class="inp dc-merge-label-inp"` +
+                    ` data-primary-dc-id="${escHtml(primaryDcId)}"` +
+                    ` value="${escHtml(huidigLabel)}" placeholder="Naam in tijdschema…" maxlength="80">` +
+                    `</div>`;
+            }
 
             // Merge-select: toon alleen als dit geen split-rij is
             if (type === 'normal' || type === 'merged') {
@@ -240,7 +253,7 @@ async function bouwBeheerTabel() {
                           ` data-cat-dc-id="${escHtml(info.dcId)}"` +
                           ` data-category="${escHtml(k)}"` +
                           ` value="${escHtml(splitVal)}" placeholder="splitgroep…" maxlength="40">` +
-                          `<button class="merge-wis-btn dc-split-wis" tabindex="-1"` +
+                          `<button class="btn-del merge-wis-btn dc-split-wis" tabindex="-1"` +
                           ` style="${splitVal ? '' : 'visibility:hidden'}">&#128465;</button>`
                         : '';
                     return `<div class="dc-cat-rij">` +
@@ -288,7 +301,7 @@ async function bouwBeheerTabel() {
                     `<input class="inp dc-afd-naam" value="${escHtml(d.name || '')}" placeholder="naam" title="${escHtml(d.name || '')}">` +
                     `<input class="inp dc-afd-m" type="number" min="0" max="99999"` +
                     ` value="${escHtml(String(d.value_meters ?? ''))}" placeholder="m">` +
-                    `<button class="dc-afd-del">&#128465;</button>` +
+                    `<button class="btn-del dc-afd-del">&#128465;</button>` +
                     `</div></td>`;
             }).join('');
 
@@ -476,7 +489,23 @@ async function slaaBeheerOp(panel, dcDistances) {
         }));
     });
 
-    const merges     = vergelijkData.map(c => ({ dc_id: c.dc_id, merge_group: c.merge_group || null }));
+    // Sync merge_label vanuit DOM (label-input bij samengevoegde groepen)
+    panel.querySelectorAll('.dc-merge-label-inp').forEach(inp => {
+        const primaryId = inp.dataset.primaryDcId;
+        const label     = inp.value.trim() || null;
+        // Alle DCs in dezelfde merge-groep krijgen hetzelfde label
+        const primary   = vergelijkData.find(c => c.dc_id === primaryId);
+        const mergeKey  = primary?.merge_group;
+        if (!mergeKey) return;
+        vergelijkData.filter(c => c.merge_group === mergeKey)
+                     .forEach(c => { c.merge_label = label; });
+    });
+
+    const merges = vergelijkData.map(c => ({
+        dc_id:       c.dc_id,
+        merge_group: c.merge_group  || null,
+        merge_label: c.merge_label  ?? null,
+    }));
     const splitsByDc = {};
     vergelijkData.forEach(c => {
         if (Object.keys(c.splits || {}).length)
@@ -576,7 +605,7 @@ function bouwVergelijkTabbladen() {
     tabs.innerHTML = '';
     vergelijkData.forEach((cat, i) => {
         const totaal    = cat.competitors.length;
-        const afgemeld  = cat.competitors.filter(c => c.entry_status === 2).length;
+        const afgemeld  = cat.competitors.filter(c => c.entry_status >= 2 && c.entry_status !== 5).length;
         const nieuw     = cat.competitors.filter(c => c.is_new).length;
 
         let badge = '';
@@ -605,7 +634,13 @@ function toonVergelijkTabel(cat) {
     const content = el('imp-cat-content');
 
     if (!cat.competitors.length) {
-        statusMsg(content, 'info', 'Geen deelnemers in deze categorie.');
+        content.innerHTML =
+            `<div class="vergelijk-wrap">
+                <div class="status-msg info">Geen deelnemers in deze categorie.</div>
+                <button class="btn-deelnemer-add" data-dc-id="${escHtml(cat.dc_id)}">+ Deelnemer toevoegen</button>
+             </div>`;
+        content.querySelector('.btn-deelnemer-add')
+            ?.addEventListener('click', () => openDeelnemerModal(cat.dc_id));
         return;
     }
 
@@ -633,9 +668,9 @@ function toonVergelijkTabel(cat) {
         const diffs = item.diffs || [];
 
         let rowClass = '';
-        if      (st === 2)     rowClass = 'row-withdrawn';
-        else if (isNew)        rowClass = 'row-new';
-        else if (diffs.length) rowClass = 'row-diff';
+        if      (st >= 2 && st !== 5) rowClass = 'row-withdrawn';   // 5=Bevestigd bij org. → actief
+        else if (isNew)               rowClass = 'row-new';
+        else if (diffs.length)        rowClass = 'row-diff';
         if (gewijzigdeRijen.has(lk)) rowClass += ' row-modified';
 
         const isGuest = sn !== '' && sn !== null && Number(sn) >= 1000;
@@ -686,7 +721,9 @@ function toonVergelijkTabel(cat) {
         </tr>`;
     }
 
-    html += '</tbody></table></div>';
+    html += `</tbody></table>
+    <button class="btn-deelnemer-add" data-dc-id="${escHtml(cat.dc_id)}">+ Deelnemer toevoegen</button>
+    </div>`;
     content.innerHTML = html;
 
     // ── Event listeners ──
@@ -722,17 +759,39 @@ function toonVergelijkTabel(cat) {
         });
     });
 
+    // "+ Deelnemer toevoegen" knop
+    content.querySelector('.btn-deelnemer-add')
+        ?.addEventListener('click', () => openDeelnemerModal(cat.dc_id));
+
     content.querySelectorAll('.status-badge').forEach(badge => {
         badge.addEventListener('click', () => {
             const lk   = badge.dataset.lk;
             const dcId = badge.dataset.dc;
             const ek   = dcId + '_' + lk;
 
-            const huidig = entryEdits[ek]?.entry_status ?? 1;
-            const nieuw  = (huidig + 1) % 3;
-
             if (!entryEdits[ek]) entryEdits[ek] = {};
+
+            const huidig     = entryEdits[ek].entry_status ?? 1;
+            const knsbStatus = entryEdits[ek].knsb_status  ?? huidig;
+
+            // Status 2 (afgemeld bij KNSB) is niet wijzigbaar — alleen KNSB kan dat terugdraaien.
+            if (knsbStatus === 2) return;
+
+            // Cyclus afhankelijk van KNSB-status:
+            //   KNSB=1 (bevestigd):            1 → 3 → 4 → 1
+            //   KNSB=0 / org-toegevoegd (5):   5 → 3 → 4 → 5
+            //                                  0 → 5 → 3 → 4 → 5
+            // Vanuit 4 terug naar 1 alleen als knsb_status écht bevestigd (1) is;
+            // anders altijd terug naar 5 (Bevestigd bij org.) zodat org-status niet verloren gaat.
+            let nieuw;
+            if      (huidig === 5)                          nieuw = 3;
+            else if (huidig === 3)                          nieuw = 4;
+            else if (huidig === 4)                          nieuw = (knsbStatus === 1) ? 1 : 5;
+            else if (knsbStatus === 0 && huidig === 0)      nieuw = 5;   // niet-bevestigd → Bevestigd bij org.
+            else                                            nieuw = 3;   // bevestigd (1) → Afgem. bij org.
+
             entryEdits[ek].entry_status = nieuw;
+            heeftWijzigingen = true;
 
             badge.className   = 'status-badge ' + STATUS_CSS[nieuw];
             badge.textContent = STATUS_LABELS[nieuw];
@@ -740,9 +799,11 @@ function toonVergelijkTabel(cat) {
             const row = badge.closest('tr');
             if (row) {
                 row.classList.remove('row-withdrawn', 'row-new', 'row-diff');
-                if (nieuw === 2) row.classList.add('row-withdrawn');
-                else             markeerGewijzigd(row);
+                // Status 5 (Bevestigd bij org.) = actief → geen row-withdrawn
+                if (nieuw >= 2 && nieuw !== 5) row.classList.add('row-withdrawn');
+                else                           markeerGewijzigd(row);
             }
+            updateImportBtn();
         });
     });
 }
@@ -767,6 +828,8 @@ function updateImportBtn() {
         : 'Alles is opgeslagen — geen wijzigingen';
     const btnPrint = el('btn-print-tekenlijst');
     if (btnPrint) btnPrint.disabled = moetImporteren;
+    const btnDl = el('btn-print-deelnemers');
+    if (btnDl) btnDl.disabled = moetImporteren;
 }
 
 // ── Tekenlijsten afdrukken ────────────────────────────────────────────────────
@@ -792,13 +855,15 @@ function groepeerVoorPrint() {
         const allComps = [];
         dcGroup.forEach(dc => {
             dc.competitors.forEach(c => {
-                if ((c.entry_status ?? 1) === 2) return;
+                const status = c.entry_status ?? 1;
+                if (status === 2 || status === 3 || status === 4) return;  // niet op tekenlijst (5=Bevestigd bij org. wél)
                 const pe = personEdits[c.license_key] || {};
                 allComps.push({
-                    start_number: pe.start_number     ?? c.knsb?.start_number ?? '',
-                    full_name:    pe.full_name         ?? c.knsb?.full_name    ?? '',
-                    category:     pe.category          ?? c.knsb?.category     ?? '',
-                    transponder:  pe.transponder_actief ?? pe.transponder1      ?? c.knsb?.transponder1 ?? '',
+                    start_number:  pe.start_number      ?? c.knsb?.start_number ?? '',
+                    full_name:     pe.full_name          ?? c.knsb?.full_name    ?? '',
+                    category:      pe.category           ?? c.knsb?.category     ?? '',
+                    transponder:   pe.transponder_actief ?? pe.transponder1       ?? c.knsb?.transponder1 ?? '',
+                    entry_status:  status,
                 });
             });
         });
@@ -832,33 +897,83 @@ function groepeerVoorPrint() {
 function printTekenlijsten() {
     if (!vergelijkData?.length || !huidigComp) return;
 
-    const groepen  = groepeerVoorPrint();
-    const compNaam = escHtml(huidigComp.name || huidigComp.title || '');
-    const compMeta = escHtml(formatDatum(huidigComp.starts) + ' · ' + getLocatie(huidigComp));
+    const groepen   = groepeerVoorPrint();
+    const compNaam  = escHtml(huidigComp.name || huidigComp.title || '');
+    const compMeta  = escHtml(formatDatum(huidigComp.starts) + ' · ' + getLocatie(huidigComp));
+    const standTxt  = standDatum   ? `Stand: ${standDatum}`
+                    : dbStandDatum ? `Stand: ${dbStandDatum}`
+                    : '';
 
-    const MAX_RIJEN = 18;
-    const baseUrl   = new URL('.', window.location.href).href;
+    // ── Paginaberekening ──────────────────────────────────────────────────────
+    // A4 landscape, 8mm marge boven/onder → 194mm bruikbare hoogte
+    // Rijhoogte: tp-box is 6mm + td-padding 0.6mm + border + regelafstand ≈ 8mm
+    // Sponsorfooter ≈ 18mm (alleen op de laatste pagina van een groep)
+    //
+    // Pagina 1 (met volledige header):
+    //   overhead: logo 25mm + scheiding 2mm + groepnaam 6mm + thead 6mm + padding 2mm + marges 9mm ≈ 50mm
+    //   → 18 rijen normaal, 15 rijen als er footer bij moet
+    //
+    // Vervolgpagina's (zonder header, alleen groepnaam + tabel):
+    //   overhead: groepnaam 8mm + thead 6mm + padding 2mm + marges 4mm ≈ 20mm
+    //   → 21 rijen normaal, 18 rijen als er footer bij moet (alleen laatste pag. van groep)
+    const PAGINA_H        = 194;
+    const RIJ_H           = 8;
+    const FOOTER_H        = 18;
+    const OVERHEAD_EERSTE = 50;
+    const OVERHEAD_VERVOLG = 20;
+    const MAX_EERSTE       = Math.floor((PAGINA_H - OVERHEAD_EERSTE)  / RIJ_H); // 18
+    const MAX_VERVOLG      = Math.floor((PAGINA_H - OVERHEAD_VERVOLG) / RIJ_H); // 21
+    const MAX_EERSTE_LAST  = Math.floor((PAGINA_H - OVERHEAD_EERSTE  - FOOTER_H) / RIJ_H); // 15
+    const MAX_VERVOLG_LAST = Math.floor((PAGINA_H - OVERHEAD_VERVOLG - FOOTER_H) / RIJ_H); // 22→18 rij
+
+    // Verdeelt 'totaal' rijen over pagina's zodat:
+    //  • pagina 1 ≤ MAX_EERSTE rijen
+    //  • vervolgpagina's ≤ MAX_VERVOLG rijen
+    //  • de laatste pagina ≤ MAX_*_LAST rijen (ruimte voor footer)
+    //  • de laatste pagina altijd ≥ 1 rij
+    function berekenChunks(totaal, heeftFooter) {
+        if (totaal === 0) return [];
+        const maxEerste  = heeftFooter && totaal <= MAX_EERSTE_LAST  ? MAX_EERSTE_LAST  : MAX_EERSTE;
+        const maxVervolg = heeftFooter ? MAX_VERVOLG_LAST : MAX_VERVOLG;
+
+        // Eerste pagina
+        if (totaal <= maxEerste) return [totaal];
+
+        const chunks = [maxEerste];
+        let rest = totaal - maxEerste;
+
+        while (rest > maxVervolg) {
+            const neem = Math.min(MAX_VERVOLG, rest - 1); // laat altijd ≥1 over voor laatste pagina
+            chunks.push(neem);
+            rest -= neem;
+        }
+        chunks.push(rest);
+        return chunks;
+    }
+
+    const baseUrl = new URL('.', window.location.href).href;
 
     // Org-logo header HTML
     const org = huidigOrganisatie;
     const orgLogoHtml = org?.logo_path
-        ? `<img src="${escHtml(baseUrl + org.logo_path)}" alt="${escHtml(org.naam)}">`
-        : `<span class="pagina-hdr-org-naam">${escHtml(org?.naam ?? '')}</span>`;
+        ? `<span style="display:block;height:25mm;max-width:55mm;overflow:hidden;line-height:0;text-align:right;">` +
+          `<img src="${escHtml(baseUrl + org.logo_path)}" alt="${escHtml(org.naam)}" ` +
+          `style="height:25mm;width:auto;max-width:55mm;display:inline-block;object-fit:contain;vertical-align:top;"></span>`
+        : `<span style="font-size:8pt;color:#555;font-style:italic;">${escHtml(org?.naam ?? '')}</span>`;
 
     // Sponsors footer HTML
     let footerHtml = '';
     if (org?.sponsors?.length) {
         const sponsorItems = org.sponsors.map(s =>
-            `<span class="sponsor-item">` +
+            `<span style="display:inline-flex;align-items:center;">` +
             (s.logo_path
-                ? `<img src="${escHtml(baseUrl + s.logo_path)}" alt="${escHtml(s.naam)}">`
-                : `<span>${escHtml(s.naam)}</span>`) +
+                ? `<span style="display:inline-block;height:10mm;max-width:35mm;overflow:hidden;line-height:0;">` +
+                  `<img src="${escHtml(baseUrl + s.logo_path)}" alt="${escHtml(s.naam)}" ` +
+                  `style="height:10mm;width:auto;max-width:35mm;display:block;object-fit:contain;"></span>`
+                : `<span style="font-size:7pt;color:#555;">${escHtml(s.naam)}</span>`) +
             `</span>`
         ).join('');
-        footerHtml = `<div class="pagina-footer">
-            <span class="pagina-footer-label">Gesponsord door</span>
-            ${sponsorItems}
-        </div>`;
+        footerHtml = `<div style="margin-top:3mm;border-top:1px solid #ddd;padding-top:2mm;display:flex;align-items:center;justify-content:center;gap:5mm;flex-wrap:wrap;">${sponsorItems}</div>`;
     }
 
     const thead = `<thead><tr>
@@ -872,50 +987,393 @@ function printTekenlijsten() {
                 </tr></thead>`;
 
     const paginaHtml = groepen.flatMap(g => {
-        const totaal      = g.deelnemers.length;
-        const totaalPag   = Math.ceil(totaal / MAX_RIJEN);
-        return Array.from({ length: totaalPag }, (_, p) => {
-            const chunk  = g.deelnemers.slice(p * MAX_RIJEN, (p + 1) * MAX_RIJEN);
+        const totaal  = g.deelnemers.length;
+        const chunks  = berekenChunks(totaal, !!footerHtml);
+        const totaalPag = chunks.length;
+        let offset = 0;
+        return chunks.map((aantalRijen, p) => {
+            const chunkStart = offset;
+            const chunk  = g.deelnemers.slice(offset, offset + aantalRijen);
+            offset += aantalRijen;
             const pLabel = totaalPag > 1 ? ` — pagina ${p + 1} van ${totaalPag}` : '';
-            const rijen  = chunk.map((d, i) =>
-                `<tr>
-                    <td class="td-nr">${p * MAX_RIJEN + i + 1}</td>
+            const isLaatstePag = p === totaalPag - 1;
+            const rijen  = chunk.map((d, i) => {
+                // Bepaal meldpunten voor handtekening-cel
+                const sn        = Number(d.start_number);
+                const meldingen = [];
+                if (d.entry_status === 0) meldingen.push('melding');
+                if (!d.transponder)                  meldingen.push('Geen transponder');
+                if (sn >= 1000)                      meldingen.push(`Startnr. ${sn}`);
+
+                const handCel = meldingen.length
+                    ? `<div class="meld-attentie">
+                           <span class="meld-uitroep">⚠️</span>
+                           <span class="meld-tekst">Graag even persoonlijk melden</span>
+                           <span class="meld-uitroep">⚠️</span>
+                       </div>`
+                    : '';
+
+                return `<tr>
+                    <td class="td-nr">${chunkStart + i + 1}</td>
                     <td class="td-sn">${escHtml(String(d.start_number))}</td>
                     <td class="td-naam">${escHtml(d.full_name)}</td>
                     <td class="td-cat">${escHtml(d.category)}</td>
                     <td class="td-tp">${escHtml(String(d.transponder ?? ''))}</td>
                     <td class="td-tp-cor"><div class="tp-boxes"><span class="tp-box"></span><span class="tp-box"></span><span class="tp-sep">-</span><span class="tp-box"></span><span class="tp-box"></span><span class="tp-box"></span><span class="tp-box"></span><span class="tp-box"></span></div></td>
-                    <td class="td-hand"></td>
-                </tr>`
-            ).join('');
+                    <td class="td-hand">${handCel}</td>
+                </tr>`;
+            }).join('');
+            const isEerstePag = p === 0;
+            const paginaHeader = isEerstePag
+                ? `<div style="display:flex;flex-wrap:nowrap;align-items:stretch;justify-content:space-between;gap:4mm;">
+                    <div style="flex:1;min-width:0;display:flex;flex-direction:column;justify-content:space-between;min-height:25mm;">
+                        <div>
+                            <div class="hdr-comp">${compNaam}</div>
+                            <div class="hdr-meta">${compMeta}</div>
+                            ${standTxt ? `<div class="hdr-stand">${escHtml(standTxt)}</div>` : ''}
+                        </div>
+                        <div style="font-size:10pt;font-weight:bold;line-height:1.2;">${escHtml(g.naam)}
+                            <span style="font-size:8pt;font-weight:normal;color:#555;">(${totaal} deelnemer${totaal !== 1 ? 's' : ''}${pLabel})</span>
+                        </div>
+                    </div>
+                    <div style="flex-shrink:0;display:flex;align-items:flex-start;">${orgLogoHtml}</div>
+                   </div>`
+                : `<div style="font-size:10pt;font-weight:bold;line-height:1.2;padding-bottom:1mm;">
+                       ${escHtml(g.naam)}
+                       <span style="font-size:8pt;font-weight:normal;color:#555;">(vervolg${pLabel})</span>
+                   </div>`;
             return `<div class="pagina">
-            <div class="pagina-hdr">
-                <div class="pagina-hdr-info">
-                    <div class="hdr-comp">${compNaam}</div>
-                    <div class="hdr-meta">${compMeta}</div>
-                </div>
-                <div class="pagina-hdr-logo">${orgLogoHtml}</div>
-            </div>
-            <div class="groep-naam">${escHtml(g.naam)}
-                <span class="groep-tel">(${totaal} deelnemer${totaal !== 1 ? 's' : ''}${pLabel})</span>
-            </div>
+            ${paginaHeader}
+            <div style="border-bottom:2px solid #1a3a5c;margin:0 0 1.5mm 0;"></div>
             <table>${thead}<tbody>${rijen}</tbody></table>
-            ${footerHtml}
+            ${isLaatstePag ? footerHtml : ''}
         </div>`;
         });
     }).join('');
 
-    const w = window.open('', '_blank');
-    const cssUrl = new URL('css/tekenlijst.css', window.location.href).href;
+    const w      = window.open('', '_blank');
+    const cssUrl = new URL('css/tekenlijst.css?v=' + Date.now(), window.location.href).href;
     w.document.write(`<!DOCTYPE html>
 <html lang="nl"><head>
 <meta charset="utf-8">
 <title>Tekenlijsten – ${compNaam}</title>
 <link rel="stylesheet" href="${cssUrl}">
-</head><body>${paginaHtml}</body></html>`);
+</head><body>${paginaHtml}
+<script>window.addEventListener('load', function(){ window.focus(); window.print(); window.close(); });<\/script>
+</body></html>`);
     w.document.close();
-    w.focus();
-    w.print();
+}
+
+// ── Definitieve deelnemerslijst ───────────────────────────────────────────────
+
+function printDeelnemerslijst() {
+    if (!vergelijkData?.length || !huidigComp) return;
+
+    const compNaam = escHtml(huidigComp.name || huidigComp.title || '');
+    const compMeta = escHtml(formatDatum(huidigComp.starts) + ' · ' + getLocatie(huidigComp));
+    const standTxt = standDatum   ? `Stand: ${standDatum}`
+                   : dbStandDatum ? `Stand: ${dbStandDatum}` : '';
+    const baseUrl  = new URL('.', window.location.href).href;
+
+    // ── 1. Alle unieke afstanden verzamelen als kolom-headers ─────────────────
+    // Gebruik de globale dcDistances (gevuld door bouwBeheerTabel):
+    //   dcDistances[dc_id] = [{id, number, name, value_meters}]  (KNSB, zonder splits)
+    // Fallback: knsb_distances rechtstreeks van vergelijkData-object.
+    // Flexibele/lokale afstanden en splitgroepen worden NIET meegenomen —
+    // alleen de basiskoppeling op dc_id (geen split-sleutels zoals "dc_id::DP3/4").
+    const afstandMap = new Map(); // name → value_meters
+    vergelijkData.forEach(dc => {
+        const bronAfst = dcDistances[dc.dc_id]?.length
+            ? dcDistances[dc.dc_id]
+            : (dc.knsb_distances || []);
+        bronAfst.forEach(d => {
+            if (!afstandMap.has(d.name))
+                afstandMap.set(d.name, d.value_meters ?? 0);
+        });
+    });
+    // Sorteer: kortste afstand eerst; bij gelijk getal: alfabetisch
+    const afstandKols = [...afstandMap.entries()]
+        .sort((a, b) => (a[1] - b[1]) || a[0].localeCompare(b[0], 'nl'))
+        .map(([name]) => name);
+
+    // ── 2. Per rijder alle DC-participaties samenvoegen ───────────────────────
+    // Deduplicatie-sleutel: license_key indien aanwezig, anders dc_id + volgnummer
+    // (zelfde aanpak als groepeerVoorPrint: geen harde eis op license_key)
+    const rijdersMap = new Map();
+
+    vergelijkData.forEach(dc => {
+        // Zelfde bron als afstandMap: dc_id-entry uit dcDistances, geen split-sleutels
+        const bronAfst  = dcDistances[dc.dc_id]?.length
+            ? dcDistances[dc.dc_id]
+            : (dc.knsb_distances || []);
+        const dcAfstanden = bronAfst.map(d => d.name);
+
+        dc.competitors.forEach((c, idx) => {
+            // Status: gebruik entryEdits als die bijgewerkt zijn, anders direct van object
+            const lk     = c.license_key || null;
+            const ek     = lk ? (dc.dc_id + '_' + lk) : null;
+            const ee     = (ek && entryEdits[ek]) || {};
+            const status = Number(ee.entry_status ?? c.entry_status ?? 1);
+            const pe     = lk ? (personEdits[lk] || {}) : {};
+
+            // Kaartsleutel: license_key heeft voorkeur (rijder deelt naam over DCs),
+            // anders uniek per DC-entry zodat rijder toch verschijnt
+            const kaartSleutel = lk ?? `${dc.dc_id}::${idx}`;
+
+            if (!rijdersMap.has(kaartSleutel)) {
+                rijdersMap.set(kaartSleutel, {
+                    start_number:       pe.start_number      ?? c.knsb?.start_number ?? '',
+                    full_name:          pe.full_name          ?? c.knsb?.full_name    ?? '',
+                    category:           pe.category           ?? c.knsb?.category     ?? '',
+                    transponder_actief: pe.transponder_actief ?? pe.transponder1       ?? c.knsb?.transponder1 ?? '',
+                    knsb_transponder:   c.knsb?.transponder1  ?? '',
+                    is_actief:          false,
+                    is_org_toegevoegd:  false,
+                    afstanden_actief:   new Set(),
+                    afstanden_afwezig:  new Set(),
+                    statussen:          [],
+                });
+            }
+
+            const r = rijdersMap.get(kaartSleutel);
+            r.statussen.push({ dc_naam: dc.dc_name, status });
+
+            // Status 1 (bevestigd) of 5 (bevestigd bij org.) → actief, X op deelnemerslijst
+            // Status 0/2/3/4 → geen X, wél opnemen in wijzigingen/afwezig lijst
+            if (status === 1 || status === 5) {
+                r.is_actief = true;
+                dcAfstanden.forEach(n => r.afstanden_actief.add(n));
+            } else {
+                dcAfstanden.forEach(n => r.afstanden_afwezig.add(n));
+            }
+            if (status === 5) r.is_org_toegevoegd = true;
+        });
+    });
+
+    // ── 3. Lijsten opbouwen ───────────────────────────────────────────────────
+    const sortSn = arr => arr.sort((a, b) =>
+        (Number(a.start_number) || 9999) - (Number(b.start_number) || 9999));
+
+    const alleRijders      = sortSn([...rijdersMap.values()]);
+    const actieveRijders   = alleRijders.filter(r => r.is_actief);
+    // Door organisatie toegevoegd (status 5)
+    const orgRijders       = alleRijders.filter(r => r.is_org_toegevoegd);
+    // Afwezig = heeft minstens één afwezige afstand
+    const afwezigRijders   = alleRijders.filter(r => r.afstanden_afwezig.size > 0);
+
+    // Transponder-wijzigingen: actieve transponder wijkt af van KNSB-waarde
+    const tpWijzigingen = actieveRijders.filter(r =>
+        r.knsb_transponder && r.transponder_actief &&
+        String(r.transponder_actief).trim() !== String(r.knsb_transponder).trim());
+
+    // ── 4. Org-logo + printdatum ──────────────────────────────────────────────
+    const org = huidigOrganisatie;
+    const orgLogoHtml = org?.logo_path
+        ? `<img src="${escHtml(baseUrl + org.logo_path)}" alt="${escHtml(org.naam)}"
+               style="height:18mm;width:auto;max-width:45mm;object-fit:contain;display:block;">`
+        : `<span style="font-size:8pt;color:#555;font-style:italic;">${escHtml(org?.naam ?? '')}</span>`;
+
+    const printDatum = new Date().toLocaleString('nl-NL',
+        { day: '2-digit', month: 'long', year: 'numeric', hour: '2-digit', minute: '2-digit' });
+
+    // ── 5. Tabel-helpers ──────────────────────────────────────────────────────
+    // Deelnemerstabel: kolommen start# | naam | cat | afstand...
+    const afstColW  = afstandKols.length ? Math.max(13, Math.floor(55 / afstandKols.length)) : 14;
+    const colgrpDl  = `<colgroup>
+        <col style="width:12mm">
+        <col style="width:auto">
+        <col style="width:16mm">
+        ${afstandKols.map(() => `<col style="width:${afstColW}mm">`).join('')}
+    </colgroup>`;
+
+    const theadDl = `<thead><tr>
+        <th class="tc">#</th>
+        <th>Naam</th>
+        <th>Cat</th>
+        ${afstandKols.map(n => `<th class="tc">${escHtml(n)}</th>`).join('')}
+    </tr></thead>`;
+
+    function rijDl(r, i) {
+        const afstCellen = afstandKols.map(n =>
+            `<td class="tc">${r.afstanden_actief.has(n) ? '✕' : ''}</td>`
+        ).join('');
+        return `<tr class="${i % 2 === 1 ? 'z' : ''}">
+            <td class="tc">${escHtml(String(r.start_number))}</td>
+            <td>${escHtml(r.full_name)}</td>
+            <td class="sm">${escHtml(r.category)}</td>
+            ${afstCellen}
+        </tr>`;
+    }
+
+    // ── 6. Sectie-HTML bouwen ─────────────────────────────────────────────────
+    const heeftOrg     = orgRijders.length     > 0;
+    const heeftAfwezig = afwezigRijders.length > 0;
+    const heeftTpWijz  = tpWijzigingen.length  > 0;
+
+    // --- Sectie 0: Door organisatie toegevoegd ---
+    let sectie0 = '';
+    if (heeftOrg) {
+        const rijen = orgRijders.map((r, i) => {
+            const dcNamen = r.statussen
+                .filter(s => s.status === 5)
+                .map(s => s.dc_naam)
+                .filter((v, j, a) => a.indexOf(v) === j)
+                .join(', ');
+            return `<tr class="${i % 2 === 1 ? 'z-blauw' : ''}">
+                <td class="tc">${escHtml(String(r.start_number))}</td>
+                <td>${escHtml(r.full_name)}</td>
+                <td class="sm">${escHtml(r.category)}</td>
+                <td class="sm">${escHtml(r.transponder_actief)}</td>
+                <td class="sm blauw">${escHtml(dcNamen)}</td>
+            </tr>`;
+        }).join('');
+        sectie0 = `<h2 class="sectie-titel sectie-blauw">Door organisatie toegevoegd &nbsp;<span class="teller">${orgRijders.length}</span></h2>
+        <table><colgroup>
+            <col style="width:12mm"><col style="width:auto"><col style="width:16mm">
+            <col style="width:36mm"><col style="width:auto">
+        </colgroup>
+        <thead><tr>
+            <th class="tc">#</th><th>Naam</th><th>Cat</th>
+            <th>Transponder</th><th>Groep</th>
+        </tr></thead>
+        <tbody>${rijen}</tbody></table>`;
+    }
+
+    // --- Sectie 1: Niet aanwezig / afgemeld ---
+    let sectie1 = '';
+    if (heeftAfwezig) {
+        const rijen = afwezigRijders.map((r, i) => {
+            // Status 0 (niet bevestigd) telt als niet-aanwezig, zelfde label als status 4
+            const statusTxt = r.statussen
+                .filter(s => s.status !== 1)
+                .map(s => s.status === 0 ? STATUS_LABELS[4] : (STATUS_LABELS[s.status] ?? `status ${s.status}`))
+                .filter((v, j, a) => a.indexOf(v) === j)
+                .join(', ');
+            const afstTxt = [...r.afstanden_afwezig].join(', ');
+            return `<tr class="${i % 2 === 1 ? 'z-rood' : ''}">
+                <td class="tc">${escHtml(String(r.start_number))}</td>
+                <td>${escHtml(r.full_name)}</td>
+                <td class="sm">${escHtml(r.category)}</td>
+                <td class="sm">${escHtml(afstTxt)}</td>
+                <td class="sm rood">${escHtml(statusTxt)}</td>
+            </tr>`;
+        }).join('');
+        sectie1 = `<h2 class="sectie-titel">Niet aanwezig / afgemeld &nbsp;<span class="teller">${afwezigRijders.length}</span></h2>
+        <table><colgroup>
+            <col style="width:12mm"><col style="width:auto"><col style="width:16mm">
+            <col style="width:auto"><col style="width:32mm">
+        </colgroup>
+        <thead><tr>
+            <th class="tc">#</th><th>Naam</th><th>Cat</th>
+            <th>Afstanden</th><th>Status</th>
+        </tr></thead>
+        <tbody>${rijen}</tbody></table>`;
+    }
+
+    // --- Sectie 2: Transponder aanpassingen ---
+    let sectie2 = '';
+    if (heeftTpWijz) {
+        const rijen = tpWijzigingen.map((r, i) =>
+            `<tr class="${i % 2 === 1 ? 'z' : ''}">
+                <td class="tc">${escHtml(String(r.start_number))}</td>
+                <td>${escHtml(r.full_name)}</td>
+                <td class="sm">${escHtml(r.category)}</td>
+                <td class="sm grijs">${escHtml(String(r.knsb_transponder))}</td>
+                <td class="sm vet">${escHtml(String(r.transponder_actief))}</td>
+            </tr>`
+        ).join('');
+        sectie2 = `<h2 class="sectie-titel">Transponder aanpassingen tov KNSB &nbsp;<span class="teller">${tpWijzigingen.length}</span></h2>
+        <table><colgroup>
+            <col style="width:12mm"><col style="width:auto"><col style="width:16mm">
+            <col style="width:42mm"><col style="width:42mm">
+        </colgroup>
+        <thead><tr>
+            <th class="tc">#</th><th>Naam</th><th>Cat</th>
+            <th>Transponder KNSB</th><th>Transponder gebruikt</th>
+        </tr></thead>
+        <tbody>${rijen}</tbody></table>`;
+    }
+
+    // --- Sectie 3: Volledige deelnemerslijst ---
+    const sectie3 = `<h2 class="sectie-titel">Deelnemerslijst &nbsp;<span class="teller">${actieveRijders.length} deelnemers</span></h2>
+    <table>${colgrpDl}${theadDl}
+    <tbody>${actieveRijders.map((r, i) => rijDl(r, i)).join('')}</tbody></table>`;
+
+    // ── 7. Volledig document ──────────────────────────────────────────────────
+    // Volgorde: niet aanwezig → transponders → deelnemers
+    // Eén header bovenaan, één footer onderaan, tabelkoppen herhalen via CSS thead.
+    const bodyHtml = `
+    <header class="doc-header">
+        <div class="hdr-links">
+            <div class="hdr-comp">${compNaam}</div>
+            <div class="hdr-meta">${compMeta}</div>
+            ${standTxt ? `<div class="hdr-stand">${escHtml(standTxt)}</div>` : ''}
+        </div>
+        <div class="hdr-logo">${orgLogoHtml}</div>
+    </header>
+    <div class="hdr-lijn"></div>
+    ${sectie0}
+    ${sectie1}
+    ${sectie2}
+    ${sectie3}
+    <footer class="doc-footer">afgedrukt: ${escHtml(printDatum)}</footer>`;
+
+    // ── 8. Venster openen en afdrukken ────────────────────────────────────────
+    const w      = window.open('', '_blank');
+    const cssUrl = new URL('css/tekenlijst.css?v=' + Date.now(), window.location.href).href;
+    w.document.write(`<!DOCTYPE html>
+<html lang="nl"><head>
+<meta charset="utf-8">
+<title>Deelnemerslijst – ${compNaam}</title>
+<link rel="stylesheet" href="${cssUrl}">
+<style>
+@page { size: A4 portrait; margin: 10mm 12mm 12mm 12mm; }
+body  { font-family: Arial, sans-serif; font-size: 8.5pt; margin: 0; color: #111; }
+
+/* Document-header: alleen bovenaan pagina 1 */
+.doc-header { display:flex; justify-content:space-between; align-items:flex-start;
+              gap:4mm; margin-bottom:1.5mm; }
+.hdr-links  { flex:1; }
+.hdr-comp   { font-size:12pt; font-weight:bold; line-height:1.2; }
+.hdr-meta   { font-size:8pt; color:#555; }
+.hdr-stand  { font-size:7.5pt; color:#888; font-style:italic; }
+.hdr-logo   { flex-shrink:0; }
+.hdr-lijn   { border-bottom:2.5px solid #1a3a5c; margin-bottom:3mm; }
+
+/* Sectie-titels */
+.sectie-titel { font-size:10pt; font-weight:bold; margin:4mm 0 1mm 0;
+                page-break-after:avoid; border-bottom:1px solid #bbb; padding-bottom:0.5mm; }
+.sectie-titel .teller { font-size:8.5pt; font-weight:normal; color:#555; }
+
+/* Tabellen: header herhaalt automatisch op elke nieuwe pagina */
+table  { border-collapse:collapse; width:100%; margin-bottom:2mm; }
+thead  { display:table-header-group; }   /* herhaal op elke pagina */
+th     { background:#dce6f0; padding:0.7mm 2mm; font-size:7.5pt;
+         border-bottom:1.5px solid #1a3a5c; text-align:left; line-height:1.2; }
+td     { padding:0.35mm 2mm; font-size:8pt; border-bottom:1px solid #e0e0e0;
+         vertical-align:middle; line-height:1.3; }
+tr     { page-break-inside:avoid; }
+
+/* Hulpklassen */
+.tc    { text-align:center; }
+.sm    { font-size:7.5pt; }
+.rood  { color:#c00; }
+.blauw { color:#1a3a5c; font-weight:500; }
+.grijs { color:#888; }
+.vet   { font-weight:bold; }
+.z       { background:#f7f9fc; }
+.z-rood  { background:#fff3f3; }
+.z-blauw { background:#eef4fb; }
+.sectie-blauw { border-bottom-color:#1a3a5c; color:#1a3a5c; }
+
+/* Document-footer: strikt onderaan, vloeit mee met content */
+.doc-footer { margin-top:4mm; border-top:1px solid #ccc;
+              padding-top:1.5mm; font-size:7pt; color:#888; }
+</style>
+</head><body>${bodyHtml}
+<script>window.addEventListener('load', function(){ window.focus(); window.print(); window.close(); });<\/script>
+</body></html>`);
+    w.document.close();
 }
 
 // ── Tijdstempel ───────────────────────────────────────────────────────────────
@@ -953,6 +1411,20 @@ async function herlaadVergelijking() {
         if (vData.error) throw new Error(vData.error);
         vergelijkData     = vData.groepen     ?? vData;
         huidigOrganisatie = vData.organisatie ?? huidigOrganisatie;
+        entriesVersion    = vData.entries_version ?? 0;
+        // knsb_stand: server stuurt null → genereer lokale browsertijd
+        standDatum   = new Date().toLocaleString('nl-NL', {
+            day: '2-digit', month: '2-digit', year: 'numeric',
+            hour: '2-digit', minute: '2-digit',
+        });
+        // db_stand: server stuurt UTC datetime → parseer met 'Z' suffix naar lokale tijd
+        if (vData.db_stand) {
+            const utc = new Date(vData.db_stand.replace(' ', 'T') + 'Z');
+            dbStandDatum = utc.toLocaleString('nl-NL', {
+                day: '2-digit', month: '2-digit', year: 'numeric',
+                hour: '2-digit', minute: '2-digit',
+            });
+        }
         zetKnsbTimestamp();
         initEdits();
         bouwVergelijkTabbladen();
@@ -962,6 +1434,10 @@ async function herlaadVergelijking() {
             `<div class="status-msg error">⚠ Synchronisatie mislukt: ${escHtml(e.message)}</div>`
         );
     }
+}
+
+function herlaadVergelijk() {
+    if (huidigComp) selectWedstrijd(activeCard, huidigComp);
 }
 
 // ── Transponder helpers ───────────────────────────────────────────────────────
@@ -1078,7 +1554,7 @@ function collectImportData(compId) {
         categories.push({ dc_id: cat.dc_id, competitors });
     }
 
-    return { competition_id: compId, categories };
+    return { competition_id: compId, categories, entries_version: entriesVersion ?? 0 };
 }
 
 // ── Import naar database ──────────────────────────────────────────────────────
@@ -1104,11 +1580,19 @@ async function importeerWedstrijd(compId, compNaam) {
         });
         const data = await res.json();
 
-        if (!res.ok || data.error) {
+        if (res.status === 409 || data.error === 'conflict') {
+            resultDiv.innerHTML =
+                `<div class="status-msg warning">
+                    ⚠ <strong>Conflict:</strong> ${escHtml(data.message || 'Inschrijvingen gewijzigd door iemand anders.')}
+                    <button class="btn-secondary" onclick="herlaadVergelijk()" style="margin-left:8px">↺ Herlaad</button>
+                 </div>`;
+            btn.disabled = false;
+        } else if (!res.ok || data.error) {
             resultDiv.innerHTML =
                 `<div class="status-msg error">⚠ Import mislukt: ${escHtml(data.error || 'onbekende fout')}</div>`;
             btn.disabled = false;
         } else {
+            if (data.entries_version != null) entriesVersion = data.entries_version;
             const logHtml = (data.log || []).map(r => `<li>${escHtml(r)}</li>`).join('');
             resultDiv.innerHTML =
                 `<div class="status-msg ok">
@@ -1125,5 +1609,370 @@ async function importeerWedstrijd(compId, compNaam) {
         resultDiv.innerHTML =
             `<div class="status-msg error">⚠ Verbindingsfout: ${escHtml(e.message)}</div>`;
         btn.disabled = false;
+    }
+}
+
+
+// ══════════════════════════════════════════════════════════════════════════════
+// ── Deelnemer handmatig toevoegen ─────────────────────────────────────────────
+// ══════════════════════════════════════════════════════════════════════════════
+
+let _modalDcId   = null;   // actief DC-id terwijl modal open is
+let _clubsCache  = null;   // [{club_full, club_short}] eenmalig geladen
+let _catOverride = false;  // true = gebruiker heeft categorie-waarschuwing bevestigd
+
+function initDeelnemerModal() {
+    const div = document.createElement('div');
+    div.innerHTML = `
+<div class="modal-overlay" id="modal-deelnemer" style="display:none">
+  <div class="modal-box">
+    <div class="modal-kop">
+      <div>
+        <h3>Deelnemer toevoegen</h3>
+        <div class="modal-subtitel" id="modal-dc-naam-lbl"></div>
+      </div>
+      <button class="btn-del" id="modal-sluiten" title="Sluiten">&#128465;</button>
+    </div>
+
+    <div class="modal-zoek-sectie">
+      <div class="modal-ztabs">
+        <button class="modal-ztab active" data-ztab="relatie">Op relatienummer</button>
+        <button class="modal-ztab"        data-ztab="startnr">Op startnr + categorie</button>
+      </div>
+      <div id="mz-relatie" class="mz-invoer">
+        <input type="text"   id="mz-lk"  class="inp" placeholder="Relatienummer…" style="flex:1">
+        <button class="btn-secondary" id="mz-lk-btn">Zoeken</button>
+      </div>
+      <div id="mz-startnr" class="mz-invoer" style="display:none">
+        <input type="number" id="mz-sn"  class="inp" placeholder="Startnr" style="width:80px;flex:0">
+        <input type="text"   id="mz-cat" class="inp" placeholder="Categorie (bijv. DKA)" style="flex:1">
+        <button class="btn-secondary" id="mz-sn-btn">Zoeken</button>
+      </div>
+      <div id="mz-status" class="mz-status"></div>
+    </div>
+
+    <div class="modal-form-sectie">
+      <div class="mf-rij mf-2col">
+        <label class="mf-lbl">Relatienummer
+          <input type="text" id="f-dt-lk" class="inp" placeholder="leeg = geen KNSB-lid">
+        </label>
+        <label class="mf-lbl">Startnummer <span class="vereist">*</span>
+          <input type="number" id="f-dt-sn" class="inp" required min="1">
+        </label>
+      </div>
+      <div class="mf-rij">
+        <label class="mf-lbl">Volledige naam <span class="vereist">*</span>
+          <input type="text" id="f-dt-naam" class="inp" required>
+        </label>
+      </div>
+      <div class="mf-rij mf-2col">
+        <label class="mf-lbl">Korte naam <span class="vereist">*</span>
+          <input type="text" id="f-dt-kort" class="inp" required>
+        </label>
+        <label class="mf-lbl">Categorie <span class="vereist">*</span>
+          <input type="text" id="f-dt-cat" class="inp" required placeholder="bijv. DKA">
+        </label>
+      </div>
+      <div class="mf-rij mf-2col">
+        <label class="mf-lbl">Nationaliteit <span class="vereist">*</span>
+          <input type="text" id="f-dt-nat" class="inp" value="NED" required maxlength="3">
+        </label>
+        <label class="mf-lbl">Geslacht <span class="vereist">*</span>
+          <select id="f-dt-gender" class="inp" required>
+            <option value="">— kies —</option>
+            <option value="0">Man</option>
+            <option value="1">Vrouw</option>
+          </select>
+        </label>
+      </div>
+      <div class="mf-rij mf-2col">
+        <label class="mf-lbl">Club (volledig)
+          <input type="text" id="f-dt-club" class="inp" list="modal-clubs-dl" placeholder="optioneel">
+        </label>
+        <label class="mf-lbl">Club (kort)
+          <input type="text" id="f-dt-club-kort" class="inp" placeholder="optioneel" maxlength="20">
+        </label>
+      </div>
+      <div class="mf-rij">
+        <label class="mf-lbl">Transponder
+          <input type="text" id="f-dt-tp" class="inp" placeholder="optioneel">
+        </label>
+      </div>
+      <datalist id="modal-clubs-dl"></datalist>
+      <div id="modal-waarsch" class="status-msg warning" style="display:none;margin-top:.5rem;"></div>
+    </div>
+
+    <div class="modal-footer">
+      <button class="btn-secondary" id="modal-dt-annuleer">Annuleren</button>
+      <button class="btn-primary"   id="modal-dt-bevestig">Toevoegen</button>
+    </div>
+  </div>
+</div>`;
+    document.body.appendChild(div.firstElementChild);
+
+    // Zoek-tab wisselen
+    document.querySelectorAll('.modal-ztab').forEach(btn => {
+        btn.addEventListener('click', () => {
+            document.querySelectorAll('.modal-ztab').forEach(b => b.classList.remove('active'));
+            btn.classList.add('active');
+            const tab = btn.dataset.ztab;
+            el('mz-relatie').style.display = tab === 'relatie' ? '' : 'none';
+            el('mz-startnr').style.display = tab === 'startnr' ? '' : 'none';
+        });
+    });
+
+    el('mz-lk-btn').addEventListener('click', () => zoekPersoon('relatie'));
+    el('mz-sn-btn').addEventListener('click', () => zoekPersoon('startnr'));
+    el('mz-lk') .addEventListener('keydown', e => { if (e.key === 'Enter') zoekPersoon('relatie'); });
+    el('mz-sn') .addEventListener('keydown', e => { if (e.key === 'Enter') zoekPersoon('startnr'); });
+    el('mz-cat').addEventListener('keydown', e => { if (e.key === 'Enter') zoekPersoon('startnr'); });
+
+    el('modal-sluiten')     .addEventListener('click', sluitDeelnemerModal);
+    el('modal-dt-annuleer') .addEventListener('click', sluitDeelnemerModal);
+    el('modal-dt-bevestig') .addEventListener('click', bevestigDeelnemer);
+
+    // ESC sluit modal
+    document.addEventListener('keydown', e => {
+        if (e.key === 'Escape' && el('modal-deelnemer')?.style.display !== 'none')
+            sluitDeelnemerModal();
+    });
+    // Klik op overlay sluit modal
+    el('modal-deelnemer').addEventListener('click', e => {
+        if (e.target === el('modal-deelnemer')) sluitDeelnemerModal();
+    });
+
+    // Club autocomplete: vul club-kort automatisch in
+    el('f-dt-club').addEventListener('change', () => {
+        if (!_clubsCache) return;
+        const val  = el('f-dt-club').value.trim();
+        const club = _clubsCache.find(c => c.club_full === val);
+        if (club?.club_short && !el('f-dt-club-kort').value.trim())
+            el('f-dt-club-kort').value = club.club_short;
+    });
+
+    // Categorie-wijziging reset waarschuwing
+    el('f-dt-cat').addEventListener('input', () => {
+        _catOverride = false;
+        el('modal-waarsch').style.display = 'none';
+        el('modal-dt-bevestig').textContent = 'Toevoegen';
+    });
+}
+
+function openDeelnemerModal(dcId) {
+    if (!el('modal-deelnemer')) initDeelnemerModal();
+
+    _modalDcId   = dcId;
+    _catOverride = false;
+
+    const dc = vergelijkData.find(d => d.dc_id === dcId);
+    el('modal-dc-naam-lbl').textContent = dc?.dc_name ?? '';
+
+    // Formulier resetten
+    ['f-dt-lk','f-dt-sn','f-dt-naam','f-dt-kort','f-dt-cat',
+     'f-dt-club','f-dt-club-kort','f-dt-tp'].forEach(id => {
+        const inp = el(id); if (inp) inp.value = '';
+    });
+    el('f-dt-nat').value    = 'NED';
+    el('f-dt-gender').value = '';
+    el('mz-lk').value  = '';
+    el('mz-sn').value  = '';
+    el('mz-cat').value = '';
+    el('mz-status').textContent   = '';
+    el('modal-waarsch').style.display = 'none';
+    el('modal-dt-bevestig').textContent = 'Toevoegen';
+
+    // Zoektab resetten naar 'relatie'
+    document.querySelectorAll('.modal-ztab').forEach((b, i) => b.classList.toggle('active', i === 0));
+    el('mz-relatie').style.display = '';
+    el('mz-startnr').style.display = 'none';
+
+    el('modal-deelnemer').style.display = 'flex';
+    el('mz-lk').focus();
+
+    if (!_clubsCache) laadClubsLijst();
+}
+
+function sluitDeelnemerModal() {
+    const m = el('modal-deelnemer');
+    if (m) m.style.display = 'none';
+    _modalDcId = null;
+}
+
+async function laadClubsLijst() {
+    try {
+        const res   = await fetch('api/persoon_zoek.php?action=clubs');
+        _clubsCache = await res.json();
+        const dl    = el('modal-clubs-dl');
+        if (!dl || !Array.isArray(_clubsCache)) return;
+        dl.innerHTML = _clubsCache
+            .map(c => `<option value="${escHtml(c.club_full ?? '')}"></option>`)
+            .join('');
+    } catch { /* stil falen */ }
+}
+
+async function zoekPersoon(type) {
+    const statusEl = el('mz-status');
+    statusEl.innerHTML = '<span class="spinner"></span> Zoeken…';
+
+    let url;
+    if (type === 'relatie') {
+        const lk = el('mz-lk').value.trim();
+        if (!lk) { statusEl.textContent = 'Vul een relatienummer in.'; return; }
+        url = `api/persoon_zoek.php?license_key=${encodeURIComponent(lk)}`;
+    } else {
+        const sn  = el('mz-sn').value.trim();
+        const cat = el('mz-cat').value.trim();
+        if (!sn) { statusEl.textContent = 'Vul een startnummer in.'; return; }
+        url = `api/persoon_zoek.php?start_number=${encodeURIComponent(sn)}`
+            + (cat ? `&category=${encodeURIComponent(cat)}` : '');
+    }
+
+    try {
+        const res     = await fetch(url);
+        const data    = await res.json();
+        const personen = Array.isArray(data) ? data : (data ? [data] : []);
+
+        if (!personen.length) {
+            statusEl.textContent = 'Geen rijder gevonden — vul gegevens handmatig in.';
+            return;
+        }
+        vulModalFormulier(personen[0]);
+        statusEl.innerHTML = personen.length > 1
+            ? `<span style="color:green">✓ ${personen.length} rijders gevonden, eerste ingevuld.</span>`
+            : `<span style="color:green">✓ Gevonden: ${escHtml(personen[0].full_name ?? '')}</span>`;
+    } catch(e) {
+        statusEl.textContent = '⚠ Fout bij zoeken: ' + e.message;
+    }
+}
+
+function vulModalFormulier(p) {
+    if (p.license_key  != null) el('f-dt-lk').value          = p.license_key;
+    if (p.start_number != null) el('f-dt-sn').value           = p.start_number;
+    if (p.full_name)             el('f-dt-naam').value         = p.full_name;
+    if (p.short_name)            el('f-dt-kort').value         = p.short_name;
+    if (p.category)              el('f-dt-cat').value          = p.category;
+    if (p.nationality)           el('f-dt-nat').value          = p.nationality;
+    if (p.gender != null)        el('f-dt-gender').value       = String(p.gender);
+    if (p.club_full)             el('f-dt-club').value         = p.club_full;
+    if (p.club_short)            el('f-dt-club-kort').value    = p.club_short;
+    // Transponder: voorkeur tp1, anders tp2
+    const tp = p.transponder1 || p.transponder2 || null;
+    if (tp)                      el('f-dt-tp').value           = tp;
+}
+
+function bevestigDeelnemer() {
+    const dc = vergelijkData.find(d => d.dc_id === _modalDcId);
+    if (!dc) return;
+
+    const lkInput  = el('f-dt-lk').value.trim();
+    const sn       = parseInt(el('f-dt-sn').value)  || null;
+    const naam     = el('f-dt-naam').value.trim();
+    const kort     = el('f-dt-kort').value.trim();
+    const cat      = el('f-dt-cat').value.trim().toUpperCase();
+    const nat      = (el('f-dt-nat').value.trim().toUpperCase() || 'NED').slice(0, 3);
+    const gender   = el('f-dt-gender').value !== '' ? Number(el('f-dt-gender').value) : null;
+    const clubFull = el('f-dt-club').value.trim()      || null;
+    const clubKort = el('f-dt-club-kort').value.trim() || null;
+    const tp1      = el('f-dt-tp').value.trim()        || null;
+
+    // Verplichte velden
+    if (!sn)            { el('f-dt-sn').focus();     return; }
+    if (!naam)          { el('f-dt-naam').focus();   return; }
+    if (!kort)          { el('f-dt-kort').focus();   return; }
+    if (!cat)           { el('f-dt-cat').focus();    return; }
+    if (gender === null){ el('f-dt-gender').focus(); return; }
+
+    // Categorie-check tov DC (tenzij al overruled door gebruiker)
+    if (!_catOverride) {
+        const catFilter = dc.category_filter
+            ? String(dc.category_filter).split(',').map(c => c.trim()).filter(Boolean)
+            : [];
+        if (catFilter.length && !catFilter.includes(cat)) {
+            const w = el('modal-waarsch');
+            w.textContent = `Categorie "${cat}" past mogelijk niet in "${escHtml(dc.dc_name)}" `
+                          + `(verwacht: ${catFilter.join(', ')}). Klik nogmaals om toch toe te voegen.`;
+            w.style.display = '';
+            _catOverride = true;
+            el('modal-dt-bevestig').textContent = 'Toch toevoegen';
+            return;
+        }
+    }
+
+    // Dubbele inschrijving voorkomen (alleen als relatienummer ingevuld)
+    const lk = lkInput || `manual_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`;
+    if (lkInput && dc.competitors.find(c => c.license_key === lk)) {
+        el('mz-status').innerHTML =
+            `<span style="color:#c00">Rijder met relatienummer "${escHtml(lk)}" staat al in deze groep.</span>`;
+        return;
+    }
+
+    // Maak competitor-object aan (zelfde structuur als vergelijkData)
+    const newComp = {
+        license_key:         lk,
+        is_anoniem:          false,
+        knsb_entry_id:       null,
+        knsb_status:         0,
+        entry_status:        5,       // Bevestigd bij org.
+        reserve:             null,
+        is_new:              true,
+        diffs:               [],
+        is_manual:           true,
+        knsb: {
+            start_number: sn,
+            full_name:    naam,
+            short_name:   kort,
+            gender,
+            category:     cat,
+            nationality:  nat,
+            club_code:    null,
+            club_short:   clubKort,
+            club_full:    clubFull,
+            city:         null,
+            transponder1: tp1,
+            transponder2: null,
+        },
+        db_person: null, db_entry: null,
+        db_tp1: null, db_tp2: null, db_tp_extra: [],
+        db_tp_actief: null, db_tp_actief_isset: false,
+    };
+
+    dc.competitors.push(newComp);
+
+    // Registreer in personEdits
+    personEdits[lk] = {
+        start_number: sn,
+        full_name:    naam,
+        short_name:   kort,
+        category:     cat,
+        nationality:  nat,
+        gender,
+        club_full:    clubFull,
+        club_short:   clubKort,
+        ...(tp1 ? { transponder_actief: tp1 } : {}),
+    };
+
+    // Registreer in entryEdits
+    const ek = dc.dc_id + '_' + lk;
+    entryEdits[ek] = {
+        entry_status:  5,
+        knsb_status:   0,
+        reserve:       null,
+        knsb_entry_id: null,
+        is_manual:     true,
+    };
+
+    heeftWijzigingen = true;
+    sluitDeelnemerModal();
+    toonVergelijkTabel(dc);
+    updateImportBtn();
+
+    // Update tab-badge teller
+    const tabBtn = document.querySelector(`.imp-cat-tab[data-dc-id="${CSS.escape(dc.dc_id)}"]`);
+    if (tabBtn) {
+        const totaal = dc.competitors.length;
+        const nieuw  = dc.competitors.filter(c => c.is_new).length;
+        const badge  = nieuw ? `<span class="tab-badge">${totaal}</span><span class="tab-badge-new">+${nieuw}</span>`
+                             : `<span class="tab-badge">${totaal}</span>`;
+        tabBtn.innerHTML = `${escHtml(dc.dc_name)} ${badge}`;
     }
 }

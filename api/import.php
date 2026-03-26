@@ -12,7 +12,7 @@
 //          {
 //            "license_key":   "10219545",
 //            "knsb_entry_id": "<UUID>",
-//            "entry_status":  1,        // 0=niet bevestigd  1=bevestigd  2=afgemeld
+//            "entry_status":  1,        // 0=niet bevestigd  1=bevestigd  2=afgemeld  3=afgem.bij org.  4=niet getekend  5=bevestigd bij org.
 //            "reserve":       null,     // null of volgnummer 1, 2 …
 //            "start_number":  53,
 //            "full_name":     "Eline van Leijenhorst",
@@ -42,13 +42,34 @@
 
 header('Content-Type: application/json; charset=utf-8');
 header('Access-Control-Allow-Origin: *');
-header('Access-Control-Allow-Methods: POST, OPTIONS');
+header('Access-Control-Allow-Methods: POST, DELETE, OPTIONS');
 header('Access-Control-Allow-Headers: Content-Type');
 
 if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') { exit; }
+
+// ── DELETE: verwijder wedstrijd volledig uit de database ─────────────────────
+if ($_SERVER['REQUEST_METHOD'] === 'DELETE') {
+    require_once __DIR__ . '/../../config_inlinecomp.php';
+    $delId = trim($_GET['id'] ?? '');
+    if (!preg_match('/^[a-f0-9\-]{36}$/i', $delId)) {
+        http_response_code(400);
+        echo json_encode(['error' => 'Ongeldig competition ID']);
+        exit;
+    }
+    try {
+        // CASCADE op distance_combinations, competitors, transponders etc.
+        $pdo->prepare("DELETE FROM competitions WHERE id = ?")->execute([$delId]);
+        echo json_encode(['ok' => true]);
+    } catch (Exception $e) {
+        http_response_code(500);
+        echo json_encode(['error' => $e->getMessage()]);
+    }
+    exit;
+}
+
 if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
     http_response_code(405);
-    echo json_encode(['error' => 'Gebruik POST']);
+    echo json_encode(['error' => 'Gebruik POST of DELETE']);
     exit;
 }
 
@@ -211,6 +232,23 @@ try {
                updated_at = CURRENT_TIMESTAMP
     ");
 
+    // Optimistic locking: controleer entries_version
+    $clientVersion = isset($body['entries_version']) ? (int)$body['entries_version'] : null;
+    if ($clientVersion !== null) {
+        $vStmt = $pdo->prepare("SELECT entries_version FROM competitions WHERE id = ?");
+        $vStmt->execute([$compId]);
+        $dbVersion = (int)($vStmt->fetchColumn() ?? 0);
+        if ($dbVersion !== $clientVersion) {
+            http_response_code(409);
+            echo json_encode([
+                'error'      => 'conflict',
+                'message'    => 'De inschrijvingen zijn ondertussen gewijzigd door iemand anders. Herlaad de pagina om de actuele stand te zien.',
+                'db_version' => $dbVersion,
+            ]);
+            exit;
+        }
+    }
+
     $aantalDeelnemers = 0;
     $overgeslagen     = 0;
 
@@ -304,10 +342,16 @@ try {
     $log[] = "$aantalDeelnemers deelnemers verwerkt"
            . ($overgeslagen ? " ($overgeslagen overgeslagen: geen licentienummer)" : '');
 
+    // Bump entries_version
+    $pdo->prepare("UPDATE competitions SET entries_version = entries_version + 1 WHERE id = ?")
+        ->execute([$compId]);
+    $newVersion = (int)$pdo->query("SELECT entries_version FROM competitions WHERE id = " . $pdo->quote($compId))->fetchColumn();
+
     echo json_encode([
-        'ok'             => true,
-        'competition_id' => $compId,
-        'log'            => $log,
+        'ok'              => true,
+        'competition_id'  => $compId,
+        'log'             => $log,
+        'entries_version' => $newVersion,
     ], JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE);
 
 } catch (Throwable $e) {

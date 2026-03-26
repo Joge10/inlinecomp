@@ -122,7 +122,7 @@ try {
             'id'           => $id,
             'number'       => $num,
             'name'         => $naam,
-            'target_group' => $targetGroup,
+            'target_group' => $splitGroup,
             'value_meters' => $meters,
         ];
     }
