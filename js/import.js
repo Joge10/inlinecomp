@@ -1,5 +1,7 @@
 /* InlineComp – import & vergelijk */
 
+let _importLeesOnly = false;  // true als huidige gebruiker geen schrijfrechten heeft
+
 // ── Edit-staat initialiseren ──────────────────────────────────────────────────
 // Effectieve startwaarden: DB heeft voorrang, KNSB is fallback
 
@@ -592,6 +594,7 @@ async function slaaBeheerOp(panel, dcDistances) {
 // ── Categorietabbladen bouwen ─────────────────────────────────────────────────
 
 function bouwVergelijkTabbladen() {
+    _importLeesOnly = !magSchrijven('importeer');
     const tabs    = el('imp-cat-tabs');
     const content = el('imp-cat-content');
 
@@ -806,6 +809,12 @@ function toonVergelijkTabel(cat) {
             updateImportBtn();
         });
     });
+
+    // Lees-alleen modus: schrijf-elementen disablen na render
+    if (_importLeesOnly) {
+        toonLeesAlleenBanner(content);
+        pasSchrijfLockToe(content);
+    }
 }
 
 // ── Importeer-knop status ─────────────────────────────────────────────────────
@@ -813,6 +822,11 @@ function toonVergelijkTabel(cat) {
 function updateImportBtn() {
     const btn = el('btn-import');
     if (!btn) return;
+    if (_importLeesOnly) {
+        btn.disabled = true;
+        btn.title = 'Geen schrijfrechten voor importeer';
+        return;
+    }
     // Zijn er deelnemers die nog niet in de DB staan?
     const heeftNieuwe = vergelijkData.some(cat =>
         cat.competitors.some(c => c.db_entry === null)
@@ -1437,6 +1451,9 @@ async function herlaadVergelijking() {
 }
 
 function herlaadVergelijk() {
+    // Wijzigingen zijn door het conflict verloren — heeftWijzigingen resetten
+    // zodat de "onopgeslagen wijzigingen" popup niet verschijnt (die geeft valse hoop)
+    heeftWijzigingen = false;
     if (huidigComp) selectWedstrijd(activeCard, huidigComp);
 }
 
@@ -1584,6 +1601,7 @@ async function importeerWedstrijd(compId, compNaam) {
             resultDiv.innerHTML =
                 `<div class="status-msg warning">
                     ⚠ <strong>Conflict:</strong> ${escHtml(data.message || 'Inschrijvingen gewijzigd door iemand anders.')}
+                    <br><small style="opacity:.8">Jouw niet-opgeslagen wijzigingen gaan verloren bij het herladen.</small>
                     <button class="btn-secondary" onclick="herlaadVergelijk()" style="margin-left:8px">↺ Herlaad</button>
                  </div>`;
             btn.disabled = false;
@@ -1617,9 +1635,11 @@ async function importeerWedstrijd(compId, compNaam) {
 // ── Deelnemer handmatig toevoegen ─────────────────────────────────────────────
 // ══════════════════════════════════════════════════════════════════════════════
 
-let _modalDcId   = null;   // actief DC-id terwijl modal open is
-let _clubsCache  = null;   // [{club_full, club_short}] eenmalig geladen
-let _catOverride = false;  // true = gebruiker heeft categorie-waarschuwing bevestigd
+let _modalDcId        = null;   // actief DC-id terwijl modal open is
+let _clubsCache       = null;   // [{club_full, club_short}] eenmalig geladen
+let _catOverride      = false;  // true = gebruiker heeft categorie-waarschuwing bevestigd
+let _tpBevestigd      = false;  // true = gebruiker heeft onbekende transponder bevestigd
+let _personZoekResult = null;   // laatste zoekresultaat (bevat bekende transponders)
 
 function initDeelnemerModal() {
     const div = document.createElement('div');
@@ -1653,31 +1673,31 @@ function initDeelnemerModal() {
 
     <div class="modal-form-sectie">
       <div class="mf-rij mf-2col">
-        <label class="mf-lbl">Relatienummer
+        <label class="mf-lbl"><span>Relatienummer</span>
           <input type="text" id="f-dt-lk" class="inp" placeholder="leeg = geen KNSB-lid">
         </label>
-        <label class="mf-lbl">Startnummer <span class="vereist">*</span>
+        <label class="mf-lbl"><span>Startnummer <span class="vereist">*</span></span>
           <input type="number" id="f-dt-sn" class="inp" required min="1">
         </label>
       </div>
       <div class="mf-rij">
-        <label class="mf-lbl">Volledige naam <span class="vereist">*</span>
+        <label class="mf-lbl"><span>Volledige naam <span class="vereist">*</span></span>
           <input type="text" id="f-dt-naam" class="inp" required>
         </label>
       </div>
       <div class="mf-rij mf-2col">
-        <label class="mf-lbl">Korte naam <span class="vereist">*</span>
+        <label class="mf-lbl"><span>Korte naam <span class="vereist">*</span></span>
           <input type="text" id="f-dt-kort" class="inp" required>
         </label>
-        <label class="mf-lbl">Categorie <span class="vereist">*</span>
+        <label class="mf-lbl"><span>Categorie <span class="vereist">*</span></span>
           <input type="text" id="f-dt-cat" class="inp" required placeholder="bijv. DKA">
         </label>
       </div>
       <div class="mf-rij mf-2col">
-        <label class="mf-lbl">Nationaliteit <span class="vereist">*</span>
+        <label class="mf-lbl"><span>Nationaliteit <span class="vereist">*</span></span>
           <input type="text" id="f-dt-nat" class="inp" value="NED" required maxlength="3">
         </label>
-        <label class="mf-lbl">Geslacht <span class="vereist">*</span>
+        <label class="mf-lbl"><span>Geslacht <span class="vereist">*</span></span>
           <select id="f-dt-gender" class="inp" required>
             <option value="">— kies —</option>
             <option value="0">Man</option>
@@ -1686,17 +1706,24 @@ function initDeelnemerModal() {
         </label>
       </div>
       <div class="mf-rij mf-2col">
-        <label class="mf-lbl">Club (volledig)
+        <label class="mf-lbl"><span>Club (volledig)</span>
           <input type="text" id="f-dt-club" class="inp" list="modal-clubs-dl" placeholder="optioneel">
         </label>
-        <label class="mf-lbl">Club (kort)
+        <label class="mf-lbl"><span>Club (kort)</span>
           <input type="text" id="f-dt-club-kort" class="inp" placeholder="optioneel" maxlength="20">
         </label>
       </div>
       <div class="mf-rij">
-        <label class="mf-lbl">Transponder
+        <label class="mf-lbl"><span>Transponder</span>
           <input type="text" id="f-dt-tp" class="inp" placeholder="optioneel">
         </label>
+      </div>
+      <div id="f-dt-tp-check" class="status-msg warning" style="display:none;margin-top:.3rem">
+        <div id="f-dt-tp-check-tekst"></div>
+        <div style="display:flex;gap:6px;margin-top:6px">
+          <button class="btn-primary"   id="f-dt-tp-ja">Ja, klopt</button>
+          <button class="btn-secondary" id="f-dt-tp-nee">Nee, corrigeren</button>
+        </div>
       </div>
       <datalist id="modal-clubs-dl"></datalist>
       <div id="modal-waarsch" class="status-msg warning" style="display:none;margin-top:.5rem;"></div>
@@ -1741,6 +1768,23 @@ function initDeelnemerModal() {
         if (e.target === el('modal-deelnemer')) sluitDeelnemerModal();
     });
 
+    // Transponder-bevestiging: "Ja, klopt" → doorgaan; "Nee" → terug naar invoer
+    el('f-dt-tp-ja').addEventListener('click', () => {
+        _tpBevestigd = true;
+        el('f-dt-tp-check').style.display = 'none';
+        bevestigDeelnemer();
+    });
+    el('f-dt-tp-nee').addEventListener('click', () => {
+        _tpBevestigd = false;
+        el('f-dt-tp-check').style.display = 'none';
+        el('f-dt-tp').focus();
+    });
+    // Transponder-veld wijzigen → bevestiging verbergen
+    el('f-dt-tp').addEventListener('input', () => {
+        _tpBevestigd = false;
+        el('f-dt-tp-check').style.display = 'none';
+    });
+
     // Club autocomplete: vul club-kort automatisch in
     el('f-dt-club').addEventListener('change', () => {
         if (!_clubsCache) return;
@@ -1777,9 +1821,12 @@ function openDeelnemerModal(dcId) {
     el('mz-lk').value  = '';
     el('mz-sn').value  = '';
     el('mz-cat').value = '';
-    el('mz-status').textContent   = '';
-    el('modal-waarsch').style.display = 'none';
-    el('modal-dt-bevestig').textContent = 'Toevoegen';
+    el('mz-status').textContent          = '';
+    el('modal-waarsch').style.display    = 'none';
+    el('f-dt-tp-check').style.display    = 'none';
+    el('modal-dt-bevestig').textContent  = 'Toevoegen';
+    _tpBevestigd      = false;
+    _personZoekResult = null;
 
     // Zoektab resetten naar 'relatie'
     document.querySelectorAll('.modal-ztab').forEach((b, i) => b.classList.toggle('active', i === 0));
@@ -1855,9 +1902,13 @@ function vulModalFormulier(p) {
     if (p.gender != null)        el('f-dt-gender').value       = String(p.gender);
     if (p.club_full)             el('f-dt-club').value         = p.club_full;
     if (p.club_short)            el('f-dt-club-kort').value    = p.club_short;
-    // Transponder: voorkeur tp1, anders tp2
-    const tp = p.transponder1 || p.transponder2 || null;
-    if (tp)                      el('f-dt-tp').value           = tp;
+    // Meest recente bekende transponder als standaard tonen
+    el('f-dt-tp').value = p.transponder1 || p.transponder2 || '';
+    // Sla zoekresultaat op zodat bevestigDeelnemer bekende transponders kan vergelijken
+    _personZoekResult = p;
+    // Verberg eventuele eerdere tp-check
+    el('f-dt-tp-check').style.display = 'none';
+    _tpBevestigd = false;
 }
 
 function bevestigDeelnemer() {
@@ -1871,9 +1922,9 @@ function bevestigDeelnemer() {
     const cat      = el('f-dt-cat').value.trim().toUpperCase();
     const nat      = (el('f-dt-nat').value.trim().toUpperCase() || 'NED').slice(0, 3);
     const gender   = el('f-dt-gender').value !== '' ? Number(el('f-dt-gender').value) : null;
-    const clubFull = el('f-dt-club').value.trim()      || null;
-    const clubKort = el('f-dt-club-kort').value.trim() || null;
-    const tp1      = el('f-dt-tp').value.trim()        || null;
+    const clubFull   = el('f-dt-club').value.trim()      || null;
+    const clubKort   = el('f-dt-club-kort').value.trim() || null;
+    const tp         = el('f-dt-tp').value.trim()        || null;
 
     // Verplichte velden
     if (!sn)            { el('f-dt-sn').focus();     return; }
@@ -1887,13 +1938,43 @@ function bevestigDeelnemer() {
         const catFilter = dc.category_filter
             ? String(dc.category_filter).split(',').map(c => c.trim()).filter(Boolean)
             : [];
-        if (catFilter.length && !catFilter.includes(cat)) {
+        // Wildcard-matching: "DKA*" matcht "DKA", "DKA1", etc.
+        const catPast = !catFilter.length || catFilter.some(patroon => {
+            if (patroon.includes('*') || patroon.includes('?')) {
+                const re = new RegExp(
+                    '^' + patroon.replace(/[.+^${}()|[\]\\]/g, '\\$&')
+                                 .replace(/\*/g, '.*')
+                                 .replace(/\?/g, '.') + '$', 'i'
+                );
+                return re.test(cat);
+            }
+            return patroon.toUpperCase() === cat;
+        });
+        if (!catPast) {
             const w = el('modal-waarsch');
-            w.textContent = `Categorie "${cat}" past mogelijk niet in "${escHtml(dc.dc_name)}" `
+            w.textContent = `Categorie "${cat}" past mogelijk niet in "${dc.dc_name}" `
                           + `(verwacht: ${catFilter.join(', ')}). Klik nogmaals om toch toe te voegen.`;
             w.style.display = '';
             _catOverride = true;
             el('modal-dt-bevestig').textContent = 'Toch toevoegen';
+            return;
+        }
+    }
+
+    // Transponder-check: vergelijk ingevoerde transponder met alle bekende transponders
+    // (KNSB T1, T2 én lokale extras uit de transponders-tabel)
+    if (tp && !_tpBevestigd && _personZoekResult) {
+        const bekendeTs = [
+            _personZoekResult.transponder1,
+            _personZoekResult.transponder2,
+            ...(_personZoekResult.transponders_extra ?? []),
+        ].filter(Boolean);
+        if (bekendeTs.length && !bekendeTs.includes(tp)) {
+            el('f-dt-tp-check-tekst').textContent =
+                `Is transponder "${tp}" de juiste voor deze rijder?`
+                + ` (Bekende transponders: ${bekendeTs.join(', ')})`;
+            el('f-dt-tp-check').style.display = '';
+            el('f-dt-tp-check').scrollIntoView({ behavior: 'smooth', block: 'nearest' });
             return;
         }
     }
@@ -1928,8 +2009,8 @@ function bevestigDeelnemer() {
             club_short:   clubKort,
             club_full:    clubFull,
             city:         null,
-            transponder1: tp1,
-            transponder2: null,
+            transponder1: _personZoekResult?.transponder1 || tp,
+            transponder2: _personZoekResult?.transponder2 || null,
         },
         db_person: null, db_entry: null,
         db_tp1: null, db_tp2: null, db_tp_extra: [],
@@ -1938,17 +2019,30 @@ function bevestigDeelnemer() {
 
     dc.competitors.push(newComp);
 
-    // Registreer in personEdits
+    // T1 en T2 komen van KNSB (via zoekresultaat) en zijn onveranderlijk.
+    // Het ingevoerde 'tp' is de actieve transponder voor de race:
+    //   - matcht T1 of T2 → gewoon tpActief zetten, geen extra opslaan
+    //   - onbekend + bevestigd (_tpBevestigd) → als extra opslaan
+    //   - geen zoekresultaat (handmatig) → tp is de primaire transponder
+    const zoekTp1 = _personZoekResult?.transponder1 || null;
+    const zoekTp2 = _personZoekResult?.transponder2 || null;
+
     personEdits[lk] = {
-        start_number: sn,
-        full_name:    naam,
-        short_name:   kort,
-        category:     cat,
-        nationality:  nat,
+        start_number:       sn,
+        full_name:          naam,
+        short_name:         kort,
+        category:           cat,
+        nationality:        nat,
         gender,
-        club_full:    clubFull,
-        club_short:   clubKort,
-        ...(tp1 ? { transponder_actief: tp1 } : {}),
+        club_full:          clubFull,
+        club_short:         clubKort,
+        transponder1:       zoekTp1 || tp,   // KNSB T1 heeft prioriteit; bij nieuw = ingevoerde tp
+        transponder2:       zoekTp2,         // KNSB T2 ongewijzigd
+        // Bevestigde onbekende transponder toevoegen aan bestaande extras (dedupliceren)
+        transponders_extra: _tpBevestigd && tp
+            ? [...new Set([...(_personZoekResult?.transponders_extra ?? []), tp])]
+            : (_personZoekResult?.transponders_extra ?? []),
+        transponder_actief: tp,              // welke transponder wordt gebruikt op de baan
     };
 
     // Registreer in entryEdits

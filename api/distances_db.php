@@ -14,6 +14,8 @@ if (!$dcId) {
 }
 
 require_once __DIR__ . '/../../config_inlinecomp.php';
+require_once __DIR__ . '/../auth/session.php';
+$_authUser = requireAuth($pdo);
 
 // Optioneel filteren op split-groep.
 // Als split_group opgegeven is én er bestaan rijen met die target_group → geef alleen die.

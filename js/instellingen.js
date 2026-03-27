@@ -1,13 +1,15 @@
 /* InlineComp – Instellingen: organisaties & sponsors */
 
-let orgs          = [];      // geladen organisatielijst
-let actieveOrg    = null;    // huidig geselecteerde org
-let orgLijstKaart = null;    // actieve kaart in lijst
-let actiefTab     = 'gegevens'; // actief tabblad
+let orgs           = [];         // geladen organisatielijst
+let actieveOrg     = null;       // huidig geselecteerde org
+let orgLijstKaart  = null;       // actieve kaart in lijst
+let actiefTab      = 'gegevens'; // actief tabblad
+let _beheerLeesOnly = false;     // true als gebruiker geen schrijfrechten heeft voor beheer
 
 // ── Initialisatie ──────────────────────────────────────────────────────────────
 
 function initInstellingen() {
+    _beheerLeesOnly = !magSchrijven('beheer');
     el('btn-nieuw-org').addEventListener('click', () => nieuweOrg());
     el('btn-org-opslaan').addEventListener('click', () => slaOrgOp());
     el('btn-org-verwijderen').addEventListener('click', () => verwijderOrg());
@@ -116,6 +118,8 @@ async function laadOrgWedstrijden() {
     lijst.querySelectorAll('.beheer-comp-del').forEach(btn => {
         btn.addEventListener('click', () => verwijderCompetitie(btn.dataset.id, btn.dataset.naam));
     });
+
+    if (_beheerLeesOnly) pasSchrijfLockToe(lijst.closest('.org-tab-content') ?? lijst);
 }
 
 async function verwijderCompetitie(id, naam) {
@@ -153,6 +157,11 @@ async function laadOrgs() {
         if (data?.error) throw new Error(data.error);
         orgs = Array.isArray(data) ? data : [];
         renderOrgLijst();
+        if (_beheerLeesOnly) {
+            const btn = el('btn-nieuw-org');
+            if (btn) { btn.disabled = true; btn.title = 'Geen schrijfrechten voor beheer'; }
+            toonLeesAlleenBanner(el('page-instellingen'));
+        }
     } catch(e) {
         lijst.innerHTML = `<div class="status-msg error">⚠ ${escHtml(e.message)}</div>`;
     }
@@ -251,6 +260,11 @@ function vulOrgFormulier(org) {
 
     // Sponsors
     renderSponsors(org?.sponsors ?? []);
+
+    // Lees-alleen modus: schrijf-elementen per tab-inhoud disablen (tabs zelf blijven klikbaar)
+    if (_beheerLeesOnly) {
+        document.querySelectorAll('.org-tab-content').forEach(tabEl => pasSchrijfLockToe(tabEl));
+    }
 }
 
 // ── Aliassen ──────────────────────────────────────────────────────────────────

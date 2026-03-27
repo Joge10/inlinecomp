@@ -21,6 +21,13 @@ header('Content-Type: application/json; charset=utf-8');
 header('Access-Control-Allow-Origin: *');
 
 require_once __DIR__ . '/../../config_inlinecomp.php';
+require_once __DIR__ . '/../auth/session.php';
+$_authUser = requireAuth($pdo);
+if (!kanSchrijven($_authUser, 'startlijsten')) {
+    http_response_code(403);
+    echo json_encode(['error' => 'Geen schrijfrechten voor startlijsten.']);
+    exit;
+}
 
 $compId     = trim($_GET['competition_id'] ?? '');
 $distId     = trim($_GET['distance_id']    ?? '');  // voor labeling; optioneel bij no-distance DCs

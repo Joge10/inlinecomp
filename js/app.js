@@ -395,6 +395,7 @@ function initNav() {
             if (page === 'tijdschema')   toonTijdschemaPagina();
             if (page === 'klassementen') vulPaginaHeader('uitslag-comp-naam', 'uitslag-comp-meta');
             if (page === 'live')         vulPaginaHeader('live-comp-naam',    'live-comp-meta');
+            if (page === 'gebruikers')   toonGebruikersPagina();
         });
     });
 
@@ -406,8 +407,56 @@ function initNav() {
     });
 }
 
+// ── Uitloggen ─────────────────────────────────────────────────────────────────
+
+el('btn-uitloggen')?.addEventListener('click', async () => {
+    await fetch('api/auth.php', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'logout' }),
+    });
+    window.location.href = 'login.php';
+});
+
+// ── Rol-gebaseerde toegang ─────────────────────────────────────────────────────
+
+function pasRolToe() {
+    const rol = currentUser.role;
+
+    // Gebruikers nav-item: alleen owner en admin
+    if (['owner','admin'].includes(rol)) {
+        document.querySelector('.nav-item-gebruikers')?.style.removeProperty('display');
+    }
+
+    // Schrijf-lock: alle schrijf-elementen op readonly pagina's disablen
+    // Dit wordt per pagina aangeroepen in toonXxxPagina() via checkSchrijfRechten()
+}
+
+// Disable alle schrijf-elementen in een container; tab-knoppen blijven klikbaar
+function pasSchrijfLockToe(containerEl) {
+    if (!containerEl) return;
+    // Navigatie-tabs (org-tab-btn, imp-cat-tab, modal-ztab) uitzonderen
+    containerEl.querySelectorAll(
+        'button:not(.btn-del):not([data-altijd-actief]):not(.org-tab-btn):not(.tab-btn):not(.imp-cat-tab):not(.modal-ztab):not(.ts-blok-tab), input, select, textarea'
+    ).forEach(e => {
+        e.disabled = true;
+        e.title = e.title || 'Geen schrijfrechten voor deze module';
+    });
+    containerEl.classList.add('readonly-modus');
+}
+
+// Toont een lees-alleen banner bovenaan een container (eenmalig)
+function toonLeesAlleenBanner(containerEl) {
+    if (!containerEl || containerEl.querySelector('.leesalleen-banner')) return;
+    const div = document.createElement('div');
+    div.className = 'leesalleen-banner status-msg info';
+    div.textContent = '👁 Lees-alleen — uw rol heeft geen schrijfrechten voor deze module.';
+    containerEl.prepend(div);
+}
+
 // ── Start ─────────────────────────────────────────────────────────────────────
 
+pasRolToe();
 initNav();
 laadWedstrijden();
 el('btn-ververs-wedstrijden')?.addEventListener('click', laadWedstrijden);

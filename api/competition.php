@@ -2,6 +2,10 @@
 header('Content-Type: application/json');
 header('Access-Control-Allow-Origin: *');
 
+require_once __DIR__ . '/../../config_inlinecomp.php';
+require_once __DIR__ . '/../auth/session.php';
+requireAuth($pdo);
+
 $id = isset($_GET['id']) ? trim($_GET['id']) : '';
 if (!preg_match('/^[a-f0-9\-]{36}$/i', $id)) {
     http_response_code(400);

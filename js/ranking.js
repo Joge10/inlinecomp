@@ -70,6 +70,12 @@ async function initRanking() {
         }
     } catch { /* org dropdown niet kritiek */ }
     await laadLijst();
+
+    // Lees-alleen: upload-sectie disablen als gebruiker geen schrijfrechten heeft
+    if (typeof magSchrijven === 'function' && !magSchrijven('beheer')) {
+        const uploadWrap = rkEl('rk-dropzone');
+        if (uploadWrap) pasSchrijfLockToe(uploadWrap);
+    }
 }
 
 // ── HTML skelet ───────────────────────────────────────────────────────────────
@@ -237,6 +243,14 @@ async function laadLijst() {
                 verwijderKlassement(btn.dataset.id, btn.closest('.rk-item')?.querySelector('.rk-item-naam')?.textContent);
             });
         });
+
+        // Lees-alleen: verwijder-knoppen verbergen (btn-del is uitgezonderd van pasSchrijfLockToe)
+        if (typeof magSchrijven === 'function' && !magSchrijven('beheer')) {
+            box.querySelectorAll('.rk-btn-verwijder').forEach(btn => {
+                btn.disabled = true;
+                btn.style.visibility = 'hidden';
+            });
+        }
     } catch(e) {
         box.innerHTML = `<div class="rk-fout-tekst">Fout bij laden: ${rkEsc(e.message)}</div>`;
     }

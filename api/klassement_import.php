@@ -14,8 +14,16 @@ header('Content-Type: application/json; charset=utf-8');
 header('Access-Control-Allow-Origin: *');
 
 require_once __DIR__ . '/../../config_inlinecomp.php';
+require_once __DIR__ . '/../auth/session.php';
+$_authUser = requireAuth($pdo);
 
 $method = $_SERVER['REQUEST_METHOD'] ?? 'GET';
+if ($method !== 'GET' && !kanSchrijven($_authUser, 'beheer')) {
+    http_response_code(403);
+    echo json_encode(['error' => 'Geen schrijfrechten voor beheer.']);
+    exit;
+}
+
 $action = trim($_GET['action'] ?? 'upload');
 $id     = trim($_GET['id']     ?? '');
 

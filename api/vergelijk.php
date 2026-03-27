@@ -26,6 +26,8 @@ if (!$compId) {
 }
 
 require_once __DIR__ . '/../../config_inlinecomp.php';
+require_once __DIR__ . '/../auth/session.php';
+$_authUser = requireAuth($pdo);
 
 function apiGet(string $url): ?array {
     $ctx = stream_context_create(['http' => [

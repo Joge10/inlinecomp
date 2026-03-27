@@ -2,6 +2,10 @@
 header('Content-Type: application/json');
 header('Access-Control-Allow-Origin: *');
 
+require_once __DIR__ . '/../../config_inlinecomp.php';
+require_once __DIR__ . '/../auth/session.php';
+requireAuth($pdo);
+
 $url = 'https://inschrijven.schaatsen.nl/api/competitions';
 
 $ch = curl_init($url);

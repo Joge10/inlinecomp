@@ -20,6 +20,13 @@ header('Access-Control-Allow-Headers: Content-Type');
 if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') { exit; }
 
 require_once __DIR__ . '/../../config_inlinecomp.php';
+require_once __DIR__ . '/../auth/session.php';
+$_authUser = requireAuth($pdo);
+if ($_SERVER['REQUEST_METHOD'] !== 'GET' && !kanSchrijven($_authUser, 'beheer')) {
+    http_response_code(403);
+    echo json_encode(['error' => 'Geen schrijfrechten voor beheer.']);
+    exit;
+}
 
 function newUuid(): string {
     $b    = random_bytes(16);

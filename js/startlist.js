@@ -1,5 +1,7 @@
 /* InlineComp – startlijsten */
 
+let _slLeesOnly = false;  // true als huidige gebruiker geen schrijfrechten heeft
+
 // Gecachete klassementen-lijst voor loting-UI (lazy geladen)
 let slKlassementen = null;
 async function laadSlKlassementen() {
@@ -85,6 +87,7 @@ function bouwStartlijstGroepen() {
 // ── Startlijst pagina tonen ───────────────────────────────────────────────────
 
 function toonStartlijstenPagina() {
+    _slLeesOnly = !magSchrijven('startlijsten');
     const header  = el('sl-page-header');
     const catTabs = el('sl-cat-tabs');
     const content = el('sl-cat-content');
@@ -527,6 +530,13 @@ function hertekenRondenCfg(cacheKey) {
     }
 
     hertekenExtraFinales(cacheKey);
+
+    // Lees-alleen modus: schrijf-elementen disablen na render
+    if (_slLeesOnly) {
+        const content = el('sl-cat-content');
+        toonLeesAlleenBanner(content);
+        pasSchrijfLockToe(content);
+    }
 }
 
 // ── B/C-finale selectievakjes tekenen ────────────────────────────────────────

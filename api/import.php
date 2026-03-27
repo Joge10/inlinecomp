@@ -50,6 +50,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') { exit; }
 // ── DELETE: verwijder wedstrijd volledig uit de database ─────────────────────
 if ($_SERVER['REQUEST_METHOD'] === 'DELETE') {
     require_once __DIR__ . '/../../config_inlinecomp.php';
+    require_once __DIR__ . '/../auth/session.php';
+    $_authUser = requireAuth($pdo, ['owner', 'admin']);
     $delId = trim($_GET['id'] ?? '');
     if (!preg_match('/^[a-f0-9\-]{36}$/i', $delId)) {
         http_response_code(400);
@@ -74,6 +76,13 @@ if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
 }
 
 require_once __DIR__ . '/../../config_inlinecomp.php';
+require_once __DIR__ . '/../auth/session.php';
+$_authUser = requireAuth($pdo);
+if (!kanSchrijven($_authUser, 'importeer')) {
+    http_response_code(403);
+    echo json_encode(['error' => 'Geen schrijfrechten voor importeer.']);
+    exit;
+}
 
 $body       = json_decode(file_get_contents('php://input'), true);
 $compId     = trim($body['competition_id'] ?? '');

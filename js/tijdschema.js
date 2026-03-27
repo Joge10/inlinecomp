@@ -5,6 +5,7 @@ let tsAfstandOpen      = null;   // naam van open afstand-panel
 let programmaVerouderd = false;  // true als afstand/import gewijzigd na laatste generatie
 let tijdschemaVersion  = 0;      // voor optimistic locking bij tijdschema-writes
 let _tsPollingInterval = null;   // interval-handle voor auto-poll
+let _tsLeesOnly        = false;  // true als huidige gebruiker geen schrijfrechten heeft
 
 // ── Heat-duur hulpfuncties (seconden ↔ "m:ss") ────────────────────────────────
 
@@ -121,6 +122,7 @@ function berekenRunnerUpHeats(uitv, ruMax, ruMin) {
 // ── Startpunt ─────────────────────────────────────────────────────────────────
 
 function toonTijdschemaPagina() {
+    _tsLeesOnly = !magSchrijven('tijdschema');
     const container = el('ts-container');
     if (!huidigCompId) {
         container.innerHTML = '<div class="status-msg info">Selecteer eerst een wedstrijd via <strong>Importeer</strong>.</div>';
@@ -268,6 +270,12 @@ function renderTijdschema() {
     }
 
     bindTsEvents(afstandGroepen);
+
+    // Lees-alleen modus: schrijf-elementen disablen na render
+    if (_tsLeesOnly) {
+        toonLeesAlleenBanner(container);
+        pasSchrijfLockToe(container);
+    }
 }
 
 // ── Systeem-balk ──────────────────────────────────────────────────────────────
@@ -2489,6 +2497,7 @@ function toonTsConflictWaarschuwing(msg) {
     div.className = 'status-msg warning ts-conflict-banner';
     div.style.cssText = 'position:sticky;top:0;z-index:10;margin-bottom:.5rem;';
     div.innerHTML = `⚠ <strong>Conflict:</strong> ${escHtml(msg || 'Tijdschema gewijzigd door iemand anders.')}
+        <br><small style="opacity:.8">Niet-opgeslagen wijzigingen gaan verloren bij het herladen.</small>
         <button class="btn-secondary" onclick="toonTijdschemaPagina()" style="margin-left:8px">↺ Herlaad</button>`;
     container?.prepend(div);
 }

@@ -1,4 +1,13 @@
-<!DOCTYPE html>
+<?php
+require_once __DIR__ . '/../config_inlinecomp.php';
+require_once __DIR__ . '/auth/session.php';
+
+$gebruiker = getSession($pdo);
+if (!$gebruiker) {
+    header('Location: login.php');
+    exit;
+}
+?><!DOCTYPE html>
 <html lang="nl">
 <head>
     <meta charset="UTF-8">
@@ -12,6 +21,12 @@
 <header>
     <h1>InlineComp</h1>
     <span class="badge">KNSB Inline</span>
+    <div class="header-user">
+        <span class="header-user-naam"><?= htmlspecialchars($gebruiker['naam']) ?></span>
+        <span class="header-user-rol"><?= htmlspecialchars($gebruiker['role']) ?></span>
+        <button class="header-handleiding-btn" id="btn-handleiding" title="Handleiding openen" onclick="openHandleiding()">&#128366; Handleiding</button>
+        <button class="header-uitlog-btn" id="btn-uitloggen" title="Uitloggen">&#10148;</button>
+    </div>
 </header>
 
 <div class="layout">
@@ -46,6 +61,10 @@
             <li class="nav-item" data-page="instellingen">
                 <span class="nav-icon">&#9881;</span>
                 <span class="nav-label">Beheer</span>
+            </li>
+            <li class="nav-item nav-item-gebruikers" data-page="gebruikers" style="display:none">
+                <span class="nav-icon">&#128100;</span>
+                <span class="nav-label">Gebruikers</span>
             </li>
             <li class="nav-item" data-page="info">
                 <span class="nav-icon">&#8505;</span>
@@ -267,6 +286,15 @@
         </div><!-- /page-instellingen -->
 
         <!-- Pagina: Info -->
+        <!-- Pagina: Gebruikers -->
+        <div id="page-gebruikers" class="page">
+            <div class="pagina-inhoud">
+                <div id="gb-container">
+                    <div class="status-msg loading"><span class="spinner"></span>Laden…</div>
+                </div>
+            </div>
+        </div>
+
         <div id="page-info" class="page">
             <div class="section-title">Info</div>
             <p style="color:#666;">Nog geen inhoud.</p>
@@ -275,6 +303,29 @@
     </main>
 </div>
 
+<script>
+// Huidige gebruiker (server-side ingespoten)
+const currentUser = <?= json_encode([
+    'id'       => (int)$gebruiker['id'],
+    'username' => $gebruiker['username'],
+    'naam'     => $gebruiker['naam'],
+    'role'     => $gebruiker['role'],
+]) ?>;
+
+// Schrijfrechten per module
+const SCHRIJF_ROLLEN = {
+    importeer:    ['owner','admin','importer'],
+    tijdschema:   ['owner','admin','planner'],
+    startlijsten: ['owner','admin','planner'],
+    live:         ['owner','admin','timer'],
+    uitslag:      ['owner','admin','timer'],
+    instellingen: ['owner','admin'],
+    gebruikers:   ['owner','admin'],
+};
+function magSchrijven(module) {
+    return (SCHRIJF_ROLLEN[module] ?? ['owner']).includes(currentUser.role);
+}
+</script>
 <script src="js/app.js"></script>
 <script src="js/import.js"></script>
 <script src="js/startlist.js"></script>
@@ -282,5 +333,7 @@
 <script src="js/live.js"></script>
 <script src="js/ranking.js"></script>
 <script src="js/instellingen.js"></script>
+<script src="js/gebruikers.js"></script>
+<script src="js/handleiding.js"></script>
 </body>
 </html>

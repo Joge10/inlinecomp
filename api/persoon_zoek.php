@@ -11,15 +11,18 @@ header('Content-Type: application/json; charset=utf-8');
 header('Access-Control-Allow-Origin: *');
 
 require_once __DIR__ . '/../../config_inlinecomp.php';
+require_once __DIR__ . '/../auth/session.php';
+$_authUser = requireAuth($pdo);
 
 // Verrijkt een array van persons-rijen met hun meest recente transponders
+// Geeft transponder1, transponder2 (KNSB, slot 1/2) en transponders_extra (slot ≥ 3) terug
 function voegTranspondersToe(PDO $pdo, array $rows): array {
     if (!$rows) return $rows;
     $lks = array_unique(array_column($rows, 'license_key'));
     $ph  = implode(',', array_fill(0, count($lks), '?'));
 
-    // Meest recente code per (person_license, slot) over alle wedstrijden
-    $stmt = $pdo->prepare("
+    // Meest recente code per (person_license, slot) over alle wedstrijden — slot 1 en 2
+    $stmtKnsb = $pdo->prepare("
         SELECT t1.person_license, t1.slot, t1.code
         FROM transponders t1
         INNER JOIN (
@@ -33,17 +36,33 @@ function voegTranspondersToe(PDO $pdo, array $rows): array {
              AND t1.slot          = t2.slot
              AND t1.updated_at    = t2.max_at
     ");
-    $stmt->execute($lks);
+    $stmtKnsb->execute($lks);
 
     $tps = [];
-    foreach ($stmt->fetchAll(PDO::FETCH_ASSOC) as $t) {
+    foreach ($stmtKnsb->fetchAll(PDO::FETCH_ASSOC) as $t) {
         $tps[$t['person_license']][$t['slot']] = $t['code'];
     }
 
-    return array_map(function($row) use ($tps) {
+    // Extra (lokale) transponders — slot ≥ 3, alle unieke codes per rijder
+    $stmtExtra = $pdo->prepare("
+        SELECT DISTINCT person_license, code
+        FROM transponders
+        WHERE person_license IN ($ph)
+          AND slot >= 3
+          AND code IS NOT NULL AND code != ''
+    ");
+    $stmtExtra->execute($lks);
+
+    $extras = [];
+    foreach ($stmtExtra->fetchAll(PDO::FETCH_ASSOC) as $t) {
+        $extras[$t['person_license']][] = $t['code'];
+    }
+
+    return array_map(function($row) use ($tps, $extras) {
         $lk = $row['license_key'];
-        $row['transponder1'] = $tps[$lk][1] ?? null;
-        $row['transponder2'] = $tps[$lk][2] ?? null;
+        $row['transponder1']       = $tps[$lk][1] ?? null;
+        $row['transponder2']       = $tps[$lk][2] ?? null;
+        $row['transponders_extra'] = $extras[$lk] ?? [];
         return $row;
     }, $rows);
 }
