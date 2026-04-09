@@ -965,30 +965,8 @@ function printTekenlijsten() {
         return chunks;
     }
 
-    const baseUrl = new URL('.', window.location.href).href;
-
-    // Org-logo header HTML
-    const org = huidigOrganisatie;
-    const orgLogoHtml = org?.logo_path
-        ? `<span style="display:block;height:25mm;max-width:55mm;overflow:hidden;line-height:0;text-align:right;">` +
-          `<img src="${escHtml(baseUrl + org.logo_path)}" alt="${escHtml(org.naam)}" ` +
-          `style="height:25mm;width:auto;max-width:55mm;display:inline-block;object-fit:contain;vertical-align:top;"></span>`
-        : `<span style="font-size:8pt;color:#555;font-style:italic;">${escHtml(org?.naam ?? '')}</span>`;
-
-    // Sponsors footer HTML
-    let footerHtml = '';
-    if (org?.sponsors?.length) {
-        const sponsorItems = org.sponsors.map(s =>
-            `<span style="display:inline-flex;align-items:center;">` +
-            (s.logo_path
-                ? `<span style="display:inline-block;height:10mm;max-width:35mm;overflow:hidden;line-height:0;">` +
-                  `<img src="${escHtml(baseUrl + s.logo_path)}" alt="${escHtml(s.naam)}" ` +
-                  `style="height:10mm;width:auto;max-width:35mm;display:block;object-fit:contain;"></span>`
-                : `<span style="font-size:7pt;color:#555;">${escHtml(s.naam)}</span>`) +
-            `</span>`
-        ).join('');
-        footerHtml = `<div style="margin-top:3mm;border-top:1px solid #ddd;padding-top:2mm;display:flex;align-items:center;justify-content:center;gap:5mm;flex-wrap:wrap;">${sponsorItems}</div>`;
-    }
+    // Org-logo header + sponsors footer (gedeelde helper)
+    const { orgLogoHtml, footerHtml } = bouwOrgHeaderFooter(escHtml);
 
     const thead = `<thead><tr>
                     <th class="td-nr">#</th>
@@ -1188,12 +1166,8 @@ function printDeelnemerslijst() {
         !String(r.transponder_actief ?? '').trim()
     );
 
-    // ── 4. Org-logo + printdatum ──────────────────────────────────────────────
-    const org = huidigOrganisatie;
-    const orgLogoHtml = org?.logo_path
-        ? `<img src="${escHtml(baseUrl + org.logo_path)}" alt="${escHtml(org.naam)}"
-               style="height:18mm;width:auto;max-width:45mm;object-fit:contain;display:block;">`
-        : `<span style="font-size:8pt;color:#555;font-style:italic;">${escHtml(org?.naam ?? '')}</span>`;
+    // ── 4. Org-logo (alleen header, geen footer — intern document) ─────────
+    const { orgLogoHtml } = bouwOrgHeaderFooter(escHtml);
 
     const printDatum = new Date().toLocaleString('nl-NL',
         { day: '2-digit', month: 'long', year: 'numeric', hour: '2-digit', minute: '2-digit' });

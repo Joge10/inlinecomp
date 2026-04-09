@@ -73,6 +73,39 @@ function escHtml(str) {
         .replace(/"/g,'&quot;');
 }
 
+// ── Gedeelde org-logo header + sponsor-footer voor print ─────────────────────
+// Gebruikt door: uitslag, tijdschema, tekenlijsten, deelnemerslijst
+// Retourneert { orgLogoHtml, footerHtml } — volledig inline-styled,
+// geen externe CSS nodig.
+function bouwOrgHeaderFooter(esc) {
+    const baseUrl = new URL('.', window.location.href).href;
+    const org = huidigOrganisatie;
+
+    // Organisatie-logo (rechtsboven in header)
+    const orgLogoHtml = org?.logo_path
+        ? `<span style="display:block;height:20mm;max-width:50mm;overflow:hidden;line-height:0;text-align:right;">` +
+          `<img src="${esc(baseUrl + org.logo_path)}" alt="${esc(org.naam)}" ` +
+          `style="height:20mm;width:auto;max-width:50mm;display:inline-block;object-fit:contain;vertical-align:top;"></span>`
+        : (org?.naam ? `<span style="font-size:8pt;color:#555;font-style:italic;">${esc(org.naam)}</span>` : '');
+
+    // Sponsor-footer (volledig inline-styled)
+    let footerHtml = '';
+    if (org?.sponsors?.length) {
+        const sponsorItems = org.sponsors.map(s =>
+            `<span style="display:inline-flex;align-items:center;">` +
+            (s.logo_path
+                ? `<span style="display:inline-block;height:10mm;max-width:35mm;overflow:hidden;line-height:0;">` +
+                  `<img src="${esc(baseUrl + s.logo_path)}" alt="${esc(s.naam)}" ` +
+                  `style="height:10mm;width:auto;max-width:35mm;display:block;object-fit:contain;"></span>`
+                : `<span style="font-size:7pt;color:#555;">${esc(s.naam)}</span>`) +
+            `</span>`
+        ).join('');
+        footerHtml = `<div style="margin-top:3mm;border-top:1px solid #ddd;padding-top:2mm;display:flex;align-items:center;justify-content:center;gap:5mm;flex-wrap:wrap;">${sponsorItems}</div>`;
+    }
+
+    return { orgLogoHtml, footerHtml };
+}
+
 // Vult de ts-comp-naam / ts-comp-meta header op een pagina met de huidige wedstrijd
 function vulPaginaHeader(naamId, metaId) {
     const naamEl = el(naamId);

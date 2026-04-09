@@ -2268,29 +2268,8 @@ function publiceerTijdschema() {
         }
     };
 
-    // ── Org-logo header ───────────────────────────────────────────────────────
-    const org = huidigOrganisatie;
-    const baseUrl = new URL('.', window.location.href).href;
-    const orgLogoHtml = org?.logo_path
-        ? `<span style="display:block;height:20mm;max-width:50mm;overflow:hidden;line-height:0;text-align:right;">` +
-          `<img src="${esc(baseUrl + org.logo_path)}" alt="${esc(org.naam)}" ` +
-          `style="height:20mm;width:auto;max-width:50mm;display:inline-block;object-fit:contain;vertical-align:top;"></span>`
-        : `<span style="font-size:8pt;color:#555;font-style:italic;">${esc(org?.naam ?? '')}</span>`;
-
-    // ── Sponsors footer ───────────────────────────────────────────────────────
-    let footerHtml = '';
-    if (org?.sponsors?.length) {
-        const sponsorItems = org.sponsors.map(s =>
-            `<span style="display:inline-flex;align-items:center;">` +
-            (s.logo_path
-                ? `<span style="display:inline-block;height:9mm;max-width:32mm;overflow:hidden;line-height:0;">` +
-                  `<img src="${esc(baseUrl + s.logo_path)}" alt="${esc(s.naam)}" ` +
-                  `style="height:9mm;width:auto;max-width:32mm;display:block;object-fit:contain;"></span>`
-                : `<span style="font-size:7pt;color:#555;">${esc(s.naam)}</span>`) +
-            `</span>`
-        ).join('');
-        footerHtml = `<div class="sponsors">${sponsorItems}</div>`;
-    }
+    // ── Org-logo header + sponsors footer (gedeelde helper) ─────────────────
+    const { orgLogoHtml, footerHtml } = bouwOrgHeaderFooter(esc);
 
     // ── HTML via rijen (volgorde-gebaseerd) ──────────────────────────────────
     let bloHtml = '';
@@ -2488,12 +2467,9 @@ body{font-family:Arial,Helvetica,sans-serif;font-size:10.5pt;margin:.6cm 1.2cm 1
 .cat-ovr-tijd{min-width:1.1cm;flex-shrink:0;font-variant-numeric:tabular-nums;
               color:#c47200;font-weight:700;font-size:9.5pt}
 .cat-ovr-tekst{font-size:9.5pt;color:#7a4200}
-.sponsors{margin-top:6mm;border-top:1px solid #ddd;padding-top:3mm;
-          display:flex;align-items:center;justify-content:center;gap:5mm;flex-wrap:wrap}
 @media print{
   body{margin:.5cm 1cm 1cm}
   .blok{page-break-inside:avoid}
-  .sponsors{position:running(footer)}
   @page{margin:1cm 1.2cm;size:A4 portrait}
 }
 </style></head>
@@ -2673,30 +2649,9 @@ function publiceerTijdschemaIntern() {
         }
     });
 
-    // ── Org-logo header ───────────────────────────────────────────────────────
-    const org = huidigOrganisatie;
-    const baseUrl = new URL('.', window.location.href).href;
+    // ── Org-logo header + sponsors footer (gedeelde helper) ─────────────────
     const esc = s => String(s ?? '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
-    const orgLogoHtml = org?.logo_path
-        ? `<span style="display:block;height:20mm;max-width:50mm;overflow:hidden;line-height:0;text-align:right;">` +
-          `<img src="${esc(baseUrl + org.logo_path)}" alt="${esc(org.naam)}" ` +
-          `style="height:20mm;width:auto;max-width:50mm;display:inline-block;object-fit:contain;vertical-align:top;"></span>`
-        : `<span style="font-size:8pt;color:#555;font-style:italic;">${esc(org?.naam ?? '')}</span>`;
-
-    // ── Sponsors footer ───────────────────────────────────────────────────────
-    let footerHtml = '';
-    if (org?.sponsors?.length) {
-        const sponsorItems = org.sponsors.map(s =>
-            `<span style="display:inline-flex;align-items:center;">` +
-            (s.logo_path
-                ? `<span style="display:inline-block;height:9mm;max-width:32mm;overflow:hidden;line-height:0;">` +
-                  `<img src="${esc(baseUrl + s.logo_path)}" alt="${esc(s.naam)}" ` +
-                  `style="height:9mm;width:auto;max-width:32mm;display:block;object-fit:contain;"></span>`
-                : `<span style="font-size:7pt;color:#555;">${esc(s.naam)}</span>`) +
-            `</span>`
-        ).join('');
-        footerHtml = `<div class="sponsors">${sponsorItems}</div>`;
-    }
+    const { orgLogoHtml, footerHtml } = bouwOrgHeaderFooter(esc);
 
     // ── DC-namen opzoektabel ──────────────────────────────────────────────────
     const dcNaamMap = new Map();
@@ -2852,13 +2807,10 @@ tr.rit-rij td{border-bottom:1px solid #eee}
 td.ti-ovr{color:#c47200}
 tr.rit-opm td{padding-bottom:0!important;border-bottom:none}
 td.opm{font-size:8pt;color:#7a4200;font-style:italic;padding-left:12px;padding-top:4px}
-.sponsors{margin-top:6mm;border-top:1px solid #ddd;padding-top:3mm;
-          display:flex;align-items:center;justify-content:center;gap:5mm;flex-wrap:wrap}
 @media print{
   body{margin:.4cm .9cm .9cm}
   tr{page-break-inside:avoid}
   tr.groep-hdr{page-break-before:auto}
-  .sponsors{position:running(footer)}
   @page{margin:1cm 1.2cm;size:A4 portrait}
 }
 </style></head>

@@ -645,6 +645,8 @@ async function toonUitslagKlassement(groep) {
     }
 }
 
+// ── Afdrukken (gebruikt globale bouwOrgHeaderFooter uit app.js) ───────────────
+
 // ── Afdrukken ─────────────────────────────────────────────────────────────────
 
 async function drukUitslagAf(optData) {
@@ -668,6 +670,7 @@ async function _drukKlassement(optData) {
     const locatie = comp ? getLocatie(comp) : '';
     const metaTxt = [datum, locatie].filter(Boolean).join(' \u00b7 ');
     const dcIds   = optData.dcIds ?? [optData.dcId];
+    const { orgLogoHtml, footerHtml } = bouwOrgHeaderFooter(esc);
 
     let data;
     try {
@@ -729,7 +732,7 @@ async function _drukKlassement(optData) {
 <style>
 *{box-sizing:border-box}
 body{font-family:Arial,Helvetica,sans-serif;font-size:9pt;margin:.6cm 1cm;color:#111;line-height:1.35}
-.pr-header{display:flex;justify-content:space-between;align-items:flex-end;
+.pr-header{display:flex;justify-content:space-between;align-items:stretch;
            border-bottom:2px solid #1a3a5c;padding-bottom:.3cm;margin-bottom:.4cm}
 .pr-comp{font-size:13pt;font-weight:700}
 .pr-meta{font-size:8.5pt;color:#555;margin-top:1mm}
@@ -757,13 +760,12 @@ tr:nth-child(even) td{background:#f8fafc}
 </style></head>
 <body>
 <div class="pr-header">
-  <div>
+  <div style="flex:1;min-width:0;">
     <div class="pr-comp">${esc(comp?.name ?? '')}</div>
     <div class="pr-meta">${esc(metaTxt)}</div>
+    <div class="pr-type" style="margin-top:2mm;">${esc(optData.dcName)} \u2013 ${esc(typeLabel)}</div>
   </div>
-  <div style="text-align:right">
-    <div class="pr-type">${esc(optData.dcName)} \u2013 ${esc(typeLabel)}</div>
-  </div>
+  ${orgLogoHtml ? `<div style="flex-shrink:0;">${orgLogoHtml}</div>` : ''}
 </div>
 <table>
   <thead><tr>
@@ -777,6 +779,7 @@ tr:nth-child(even) td{background:#f8fafc}
   <tbody>${tbody}</tbody>
 </table>
 ${voetnoot}
+${footerHtml}
 </body></html>`;
 
     const win = window.open('', '_blank');
@@ -798,6 +801,7 @@ async function _drukAfstandUitslag(optData) {
     const dcIds   = optData.dcIds ?? [optData.dcId];
     const toonRonde = optData.toonRonde;
     const toonTijd  = optData.toonTijd;
+    const { orgLogoHtml, footerHtml } = bouwOrgHeaderFooter(esc);
 
     let data;
     try {
@@ -853,7 +857,7 @@ async function _drukAfstandUitslag(optData) {
              <th class="pr-col-cat">Cat</th>
              ${thExtra}
              <th class="pr-col-totaal">Totaal</th>`,
-            tbody, 'Gecombineerd (serie + finale)');
+            tbody, 'Gecombineerd (serie + finale)', orgLogoHtml, footerHtml);
 
         const win = window.open('', '_blank');
         if (!win) { alert('Pop-up geblokkeerd \u2013 sta pop-ups toe voor deze pagina.'); return; }
@@ -898,7 +902,7 @@ async function _drukAfstandUitslag(optData) {
          <th class="pr-col-cat">Cat</th>
          ${thExtra}
          <th class="pr-col-sanctie">Sanctie</th>`,
-        tbody, '');
+        tbody, '', orgLogoHtml, footerHtml);
 
     const win = window.open('', '_blank');
     if (!win) { alert('Pop-up geblokkeerd \u2013 sta pop-ups toe voor deze pagina.'); return; }
@@ -910,14 +914,14 @@ async function _drukAfstandUitslag(optData) {
 
 // ── HTML-bouwer voor per-afstand print ───────────────────────────────────────
 
-function _bouwAfstandHtml(esc, comp, metaTxt, optData, pageSize, theadHtml, tbodyHtml, subtitel) {
+function _bouwAfstandHtml(esc, comp, metaTxt, optData, pageSize, theadHtml, tbodyHtml, subtitel, orgLogoHtml, footerHtml) {
     return `<!DOCTYPE html><html lang="nl">
 <head><meta charset="UTF-8">
 <title>Uitslag \u2013 ${esc(optData.dcName)} \u2013 ${esc(optData.distNaam)}</title>
 <style>
 *{box-sizing:border-box}
 body{font-family:Arial,Helvetica,sans-serif;font-size:9pt;margin:.6cm 1cm;color:#111;line-height:1.35}
-.pr-header{display:flex;justify-content:space-between;align-items:flex-end;
+.pr-header{display:flex;justify-content:space-between;align-items:stretch;
            border-bottom:2px solid #1a3a5c;padding-bottom:.3cm;margin-bottom:.4cm}
 .pr-comp{font-size:13pt;font-weight:700}
 .pr-meta{font-size:8.5pt;color:#555;margin-top:1mm}
@@ -943,18 +947,18 @@ tr:nth-child(even) td{background:#f8fafc}
 </style></head>
 <body>
 <div class="pr-header">
-  <div>
+  <div style="flex:1;min-width:0;">
     <div class="pr-comp">${esc(comp?.name ?? '')}</div>
     <div class="pr-meta">${esc(metaTxt)}</div>
-  </div>
-  <div style="text-align:right">
-    <div class="pr-type">${esc(optData.dcName)} \u2013 ${esc(optData.distNaam)}</div>
+    <div class="pr-type" style="margin-top:2mm;">${esc(optData.dcName)} \u2013 ${esc(optData.distNaam)}</div>
     ${subtitel ? `<div class="pr-subtitel">${esc(subtitel)}</div>` : ''}
   </div>
+  ${orgLogoHtml ? `<div style="flex-shrink:0;display:flex;align-items:flex-start;">${orgLogoHtml}</div>` : ''}
 </div>
 <table>
   <thead><tr>${theadHtml}</tr></thead>
   <tbody>${tbodyHtml}</tbody>
 </table>
+${footerHtml || ''}
 </body></html>`;
 }
