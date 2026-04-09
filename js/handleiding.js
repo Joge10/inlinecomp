@@ -196,7 +196,9 @@ function hlgContent() { return `
     <tr><td><strong>Slangenpatroon</strong></td><td>Verdeelmethode waarbij rijders zigzag over heats worden verdeeld: rijder 1→heat 1, 2→heat 2, 3→heat 3, 4→heat 3, 5→heat 2, 6→heat 1, enz. Dit zorgt voor gelijke sterkte per heat.</td></tr>
     <tr><td><strong>Full-Final systeem</strong></td><td>Wedstrijdformat waarbij alle rijders een finale rijden: de snelsten in de A-finale, de rest in B-finales (B1, B2, enz.). Niemand valt af.</td></tr>
     <tr><td><strong>Punten</strong></td><td>Positie-gebaseerd: 1e plaats = 1 punt, 2e = 2 punten, enz. <strong>Lager totaal = beter.</strong></td></tr>
-    <tr><td><strong>Sanctie</strong></td><td>Straf voor een overtreding: FS (valse start/waarschuwing), DQ-SF, DQ-DF (diskwalificatie), DNS (niet gestart), DNF (niet gefinisht).</td></tr>
+    <tr><td><strong>Sanctie</strong></td><td>Straf voor een overtreding, conform het World Skate Speed Rulebook: FS (valse start), DQ-SF (sportfout), DQ-DF (disciplinaire fout), DNS (niet gestart), DNF (niet gefinisht). Zie sectie 6.3 voor details.</td></tr>
+    <tr><td><strong>Ex-aequo</strong></td><td>Gelijke stand. Bij gelijk puntentotaal beslist: (1) beste individuele resultaat, (2) resultaat op de laatst gereden afstand, (3) gedeelde positie.</td></tr>
+    <tr><td><strong>RR</strong></td><td>Reduction in Rank — terugzetting in positie als sanctie voor een (onopzettelijke) sportfout. De jury past de positie handmatig aan.</td></tr>
     <tr><td><strong>Tekenlijst</strong></td><td>Afdruk waarop rijders bij aankomst fysiek tekenen om hun aanwezigheid te bevestigen.</td></tr>
   </tbody>
 </table>
@@ -939,18 +941,28 @@ function hlgContent() { return `
 <p>Rijen kleuren mee met de status: <span style="background:#eafaf1;padding:1px 5px;border-radius:3px;font-size:.8em">groen</span> = heeft tijd, <span style="background:#fdf0f0;padding:1px 5px;border-radius:3px;font-size:.8em">rood</span> = heeft sanctie (DNS/DNF/DQ), <span style="background:#fff;padding:1px 5px;border:1px solid #ddd;border-radius:3px;font-size:.8em">wit</span> = nog leeg.</p>
 
 <h3>6.3 Sanctiecodes</h3>
-<p>De volgende sanctiecodes zijn beschikbaar:</p>
+<p>De sanctiecodes zijn gebaseerd op het <strong>World Skate Speed Rulebook 2026</strong>. De volgende codes zijn beschikbaar in InlineComp:</p>
 <table>
-  <thead><tr><th>Code</th><th>Betekenis</th><th>Effect op uitslag</th></tr></thead>
+  <thead><tr><th>Code</th><th>Officiële naam</th><th>Wanneer</th><th>Effect in InlineComp</th></tr></thead>
   <tbody>
-    <tr><td><strong>FS</strong></td><td>False Start (valse start)</td><td>Waarschuwing — rijder behoudt positie en tijd. Wordt vermeld op de uitslag.</td></tr>
-    <tr><td><strong>DQ-SF</strong></td><td>Diskwalificatie Start Finish</td><td>Geen positie, wel tijd — rijder krijgt standaard-punten (laatste positie).</td></tr>
-    <tr><td><strong>DQ-DF</strong></td><td>Diskwalificatie Definitief</td><td>Geen positie, geen tijd — rijder wordt uitgesloten van de uitslag.</td></tr>
-    <tr><td><strong>DNS</strong></td><td>Did Not Start</td><td>Rijder is niet gestart — wordt uitgesloten.</td></tr>
-    <tr><td><strong>DNF</strong></td><td>Did Not Finish</td><td>Rijder is niet gefinished — krijgt standaard-punten.</td></tr>
-    <tr><td><strong>DC</strong></td><td>Diskwalificatie (algemeen)</td><td>Alleen in uitslag — wordt automatisch afgeleid bij vastleggen.</td></tr>
+    <tr><td><strong>FS</strong></td><td>False Start</td>
+        <td>Valse start: te vroeg bewegen, buiten de box starten, etc. Eén FS per race per rijder toegestaan; bij een tweede FS volgt DQ-TF.</td>
+        <td><strong>Waarschuwing</strong> — rijder behoudt positie en tijd. Wordt vermeld op de uitslag als voetnoot.</td></tr>
+    <tr><td><strong>DQ-SF</strong></td><td>Disqualified – Sports Fault</td>
+        <td>Sporttechnische fout: hinderen, duwen, verkeerde baan, ongeoorloofde hulp, etc. Rijder wordt niet gerangschikt.</td>
+        <td>Geen positie in de uitslag. Krijgt standaard-punten (= laatste positie in de heat) voor het klassement. Punten handmatig aanpasbaar.</td></tr>
+    <tr><td><strong>DQ-DF</strong></td><td>Disqualified – Disciplinary Fault</td>
+        <td>Disciplinaire fout: opzettelijk blesseren, agressie, onsportief gedrag. Rijder wordt geschorst voor de volgende race.</td>
+        <td>Geen positie, geen tijd. Wordt volledig uitgesloten — bij 0 punten niet in het klassement opgenomen.</td></tr>
+    <tr><td><strong>DNS</strong></td><td>Did Not Start</td>
+        <td>Rijder is opgeroepen maar niet verschenen aan de start. Na twee oproepen met één minuut tussentijd wordt DNS genoteerd.</td>
+        <td>Uitgesloten van de uitslag voor deze afstand.</td></tr>
+    <tr><td><strong>DNF</strong></td><td>Did Not Finish</td>
+        <td>Rijder is gestart maar niet gefinisht (val, opgave, uitvallen).</td>
+        <td>Krijgt standaard-punten (laatste positie) voor het klassement. Punten handmatig aanpasbaar.</td></tr>
   </tbody>
 </table>
+<div class="hlg-tip">&#128161; <strong>W1/W2</strong> (waarschuwingen) en <strong>RR</strong> (Reduction in Rank, terugzetting in positie) zijn officiële sancties die de jury kan uitdelen. In InlineComp worden deze geregistreerd maar hebben ze geen automatisch effect op de puntenberekening — de jury past de positie handmatig aan als dat nodig is.</div>
 
 <!-- MOCKUP: live verwerking -->
 <div class="hlg-mock">
@@ -1099,7 +1111,8 @@ function hlgContent() { return `
   <li>Resultaat op de laatst gereden afstand</li>
   <li>Bij volledig ex-aequo: gedeelde positie</li>
 </ol>
-<p><strong>Sanctie-rijders</strong> krijgen standaard het aantal punten van de laatste positie in hun heat. Dit kun je handmatig aanpassen. <strong>0 punten</strong> invoeren = de rijder wordt volledig uitgesloten uit het klassement.</p>
+<p><strong>Sanctie-rijders</strong> krijgen standaard het aantal punten van de laatste positie in hun heat. Dit kun je handmatig aanpassen via het klassement. <strong>0 punten</strong> invoeren = de rijder wordt volledig uitgesloten uit het klassement en verschijnt onderaan bij "Uitgesloten".</p>
+<div class="hlg-tip">&#128161; <strong>Uit het regelement (Art. 142):</strong> bij DQ-SF/DQ-DF in een finale schuift de volgende rijder op — er ontstaan geen lege posities in de officiële uitslag. InlineComp berekent dit automatisch bij het vastleggen.</div>
 
 <h3>Punten aanpassen (sanctie-rijders)</h3>
 <p>Rijders met een sanctie op een afstand krijgen bewerkbare puntenvelden. Je kunt de punten handmatig aanpassen:</p>
