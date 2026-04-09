@@ -364,16 +364,16 @@ try {
     }
 
     // ── Klassement samenstellen ───────────────────────────────────────────────
-    // Rijders met 0 punten (of alleen 0-punten afstanden) worden uitgesloten
-    // uit het klassement en apart onderaan getoond met sanctie-info.
+    // Rijders met een afstand op 0 punten (sanctie/uitgesloten) worden niet
+    // opgenomen in het klassement en apart onderaan getoond.
     $klassement  = [];
     $uitgesloten = [];
     foreach ($puntenMap as $lic => $distPunten) {
         $totaal = 0.0;
-        $heeftPunten = false;
+        $heeftNulAfstand = false;
         foreach ($distPunten as $dp) {
             $totaal += $dp['punten'];
-            if ($dp['punten'] > 0) $heeftPunten = true;
+            if ($dp['punten'] == 0) $heeftNulAfstand = true;
         }
         $info = $personCache[$lic] ?? [];
         $entry = [
@@ -386,7 +386,7 @@ try {
             'alle_sancties'  => $alleSancties[$lic] ?? [],
             'afstanden'      => $distPunten,
         ];
-        if ($heeftPunten) {
+        if (!$heeftNulAfstand) {
             $klassement[] = $entry;
         } else {
             $entry['uitgesloten'] = true;

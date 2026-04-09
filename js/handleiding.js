@@ -150,7 +150,7 @@ function hlgContent() { return `
 <div class="cover">
   <h1>InlineComp</h1>
   <div class="sub">Handleiding voor wedstrijdbeheer – KNSB Inline</div>
-  <div class="versie">Versie 2025 &nbsp;·&nbsp; Laatste update: ${new Date().toLocaleDateString('nl-NL',{day:'2-digit',month:'long',year:'numeric'})}</div>
+  <div class="versie">Versie 2026 &nbsp;·&nbsp; Laatste update: ${new Date().toLocaleDateString('nl-NL',{day:'2-digit',month:'long',year:'numeric'})}</div>
 </div>
 
 <!-- ═══════════════════════════════════════════════════════════ 1 INLOGGEN -->
@@ -187,8 +187,32 @@ function hlgContent() { return `
 <p class="hlg-mock-caption">↑ Het inlogscherm — vul gebruikersnaam en wachtwoord in en klik op Inloggen</p>
 
 <h3>Uitloggen</h3>
-<p>Klik op de pijlknop <button class="header-uitlog-btn" id="btn-uitloggen" title="Uitloggen" style="border: 1px solid rgba(100, 100, 100, .35); color: black;">➤</button> rechtsboven naast uw naam om uit te loggen. De sessie wordt direct beëindigd.</p>
-<div class="hlg-tip">&#128161; Sessies verlopen automatisch na 24 uur inactiviteit.</div>
+<p>Klik op de pijlknop <strong>➤</strong> rechtsboven naast uw naam om uit te loggen. De sessie wordt direct beëindigd.</p>
+
+<h3>Sessie verlopen</h3>
+<p>Sessies verlopen automatisch na 24 uur. Als uw sessie verloopt terwijl u aan het werk bent, verschijnt automatisch een login-venster. Na opnieuw inloggen kunt u direct verder waar u was — er gaat geen werk verloren.</p>
+
+<!-- MOCKUP: sessie verlopen modal -->
+<div class="hlg-mock">
+  <div style="background:rgba(0,0,0,.3);padding:20px;display:flex;justify-content:center">
+    <div style="background:#fff;border-radius:10px;width:300px;overflow:hidden;box-shadow:0 4px 20px rgba(0,0,0,.2)">
+      <div style="background:#1a3a5c;color:#fff;padding:10px 16px;font-size:.82rem;font-weight:600;display:flex;align-items:center;gap:6px">
+        &#128274; Sessie verlopen
+      </div>
+      <div style="padding:14px 16px">
+        <p style="font-size:.76rem;color:#333;margin-bottom:10px">Je sessie is verlopen. Log opnieuw in om verder te gaan.</p>
+        ${mockInput('Gebruikersnaam', 'geert')}
+        ${mockInput('Wachtwoord', '••••••••')}
+      </div>
+      <div style="padding:8px 16px;border-top:1px solid #dde;background:#f4f6f8;text-align:right">
+        <div style="display:inline-block;background:#e86c1b;color:#fff;border-radius:5px;padding:6px 16px;font-size:.78rem;font-weight:600">Inloggen</div>
+      </div>
+    </div>
+  </div>
+</div>
+<p class="hlg-mock-caption">↑ Sessie-verlopen modal — verschijnt automatisch, gebruikersnaam is vooringevuld</p>
+
+<div class="hlg-tip">&#128161; Alle bevestigingen en foutmeldingen in InlineComp verschijnen als nette modale vensters in de huisstijl — nooit als browser pop-ups.</div>
 </div>
 
 <!-- ═══════════════════════════════════════════════════════════ 2 ROLLEN -->
@@ -366,10 +390,10 @@ function hlgContent() { return `
 </ul>
 
 <h3>3.4 Deelnemer handmatig toevoegen</h3>
-<p>Onderaan elke categorie staat de knop <strong>+ Deelnemer toevoegen</strong>. In het venster dat verschijnt:</p>
+<p>Onderaan elke categorie staat de knop <strong>+ Deelnemer toevoegen</strong>. Dit is ideaal voor last-minute aanmeldingen op de wedstrijddag. In het venster dat verschijnt:</p>
 <ol>
   <li>Zoek op <em>relatienummer</em> of <em>startnummer + categorie</em> om gegevens automatisch in te vullen.</li>
-  <li>Vul ontbrekende velden in (naam, categorie, geslacht zijn verplicht).</li>
+  <li>Vul de velden in: <strong>Voornaam</strong> en <strong>Achternaam</strong> (apart), startnummer, categorie en geslacht zijn verplicht. De volledige naam wordt automatisch samengesteld.</li>
   <li><strong>Transponder:</strong> voer het transpondernummer in. Het systeem vergelijkt dit met bekende transponders (T1, T2, extras) van deze rijder:
     <ul>
       <li>Match gevonden → transponder wordt direct als actief ingesteld.</li>
@@ -379,11 +403,11 @@ function hlgContent() { return `
   <li>Klik <strong>Toevoegen</strong>. De deelnemer verschijnt in de tabel met status <em>Bevestigd bij org.</em></li>
 </ol>
 
-<!-- MOCKUP: deelnemer toevoegen modal met transponder-waarschuwing -->
+<!-- MOCKUP: deelnemer toevoegen modal -->
 <div class="hlg-mock">
   <div style="background:#1a3a5c;color:#fff;padding:6px 14px;font-size:.8rem;font-weight:700;display:flex;align-items:center;justify-content:space-between">
     <span>Deelnemer toevoegen</span>
-    <span style="opacity:.6;font-size:.85rem">✕</span>
+    <span style="opacity:.6;font-size:.95rem;cursor:pointer">&times;</span>
   </div>
   <div style="padding:10px 14px">
     <div style="display:flex;gap:4px;margin-bottom:10px">
@@ -391,29 +415,14 @@ function hlgContent() { return `
       <div style="background:#f0f0f0;color:#666;padding:2px 9px;border-radius:12px;font-size:.7rem">Op startnr./cat.</div>
     </div>
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:7px;margin-bottom:8px">
-      <div>
-        <div style="font-size:.68rem;color:#666;margin-bottom:2px">Naam *</div>
-        <div style="border:1px solid #ccc;border-radius:4px;padding:4px 7px;background:#fff;font-size:.77rem">Anna Bakker</div>
-      </div>
-      <div>
-        <div style="font-size:.68rem;color:#666;margin-bottom:2px">Relatienummer</div>
-        <div style="border:1px solid #ccc;border-radius:4px;padding:4px 7px;background:#fff;font-size:.77rem">12345</div>
-      </div>
-      <div>
-        <div style="font-size:.68rem;color:#666;margin-bottom:2px">Categorie *</div>
-        <div style="border:1px solid #ccc;border-radius:4px;padding:4px 7px;background:#fff;font-size:.77rem;color:#444">Junioren A ▾</div>
-      </div>
-      <div>
-        <div style="font-size:.68rem;color:#666;margin-bottom:2px">Transponder</div>
-        <div style="border:1px solid #e86c1b;border-radius:4px;padding:4px 7px;background:#fff;font-size:.77rem;font-family:monospace">X9Y8Z7</div>
-      </div>
-    </div>
-    <div style="background:#fff8e1;border-left:3px solid #f59e0b;padding:5px 9px;border-radius:3px;font-size:.73rem;margin-bottom:9px">
-      ⚠ Is transponder "X9Y8Z7" de juiste voor deze rijder? (Bekende transponders: A1B2C3, D4E5F6)
-      <div style="margin-top:5px;display:flex;gap:6px">
-        <div style="background:#1a3a5c;color:#fff;border-radius:4px;padding:2px 8px;font-size:.7rem;font-weight:600">Ja, klopt</div>
-        <div style="border:1px solid #ccc;border-radius:4px;padding:2px 8px;font-size:.7rem;color:#555">Nee, aanpassen</div>
-      </div>
+      ${mockInput('Startnummer *', '86')}
+      <div></div>
+      ${mockInput('Voornaam *', 'Anna')}
+      ${mockInput('Achternaam *', 'Bakker')}
+      ${mockInput('Categorie *', 'DJA')}
+      ${mockInput('Geslacht *', 'Vrouw')}
+      ${mockInput('Nationaliteit', 'NED')}
+      ${mockInput('Transponder', 'A1B2C3', true)}
     </div>
     <div style="display:flex;gap:6px;justify-content:flex-end">
       <div style="border:1px solid #ccc;border-radius:5px;padding:4px 10px;font-size:.77rem;color:#555">Annuleren</div>
@@ -421,7 +430,7 @@ function hlgContent() { return `
     </div>
   </div>
 </div>
-<p class="hlg-mock-caption">↑ Modal voor handmatig toevoegen: onbekende transponder triggert een bevestigingsvraag met Ja/Nee keuze</p>
+<p class="hlg-mock-caption">↑ Modal voor handmatig toevoegen: voornaam en achternaam apart invoeren, transponder met oranje rand als aandachtspunt</p>
 
 <div class="hlg-tip">&#128161; Als de ingevoerde categorie niet overeenkomt met de verwachte categorieën voor dit onderdeel, verschijnt een vergelijkbare waarschuwing. Klik nogmaals op <em>Toch toevoegen</em> om door te gaan.</div>
 
@@ -767,36 +776,315 @@ function hlgContent() { return `
 </div>
 <p class="hlg-mock-caption">↑ Startlijsten: categorie- en afstandstabs, rondes-kiezer (hier 2 gekozen), ronde-configuratie met loting en doorstroomregel, en Genereer-knop</p>
 
-<h3>5.3 Startlijst genereren en resultaten</h3>
-<p>Klik op <strong>&#9654; Genereer startlijst</strong>. Het systeem verdeelt de bevestigde deelnemers over de heats via een <em>slangenpatroon</em> (gelijke verdeling over heats). Voor ronde 2 en verder verschijnen placeholders (<em>"Winnaar Heat 1"</em>, <em>"Tijdsnelste 2"</em>, enz.) die na de wedstrijd worden ingevuld.</p>
-<p>De gegenereerde heats verschijnen per ronde naast elkaar. U kunt de loting opnieuw uitvoeren door nogmaals op <em>Genereer</em> te klikken.</p>
-<div class="hlg-tip">&#128161; Bij loting op klassement wordt het geselecteerde KNSB-klassement gebruikt. Kies eerst het klassement en de sectie (bijv. "Nationaal 2024-2025 – Junioren A"); de startlijst wordt dan gesorteerd op klassementspositie voordat het slangenpatroon wordt toegepast.</div>
+<h3>5.3 Startlijst genereren</h3>
+<p>Klik op <strong>&#9654; Genereer</strong>. Het systeem verdeelt de bevestigde deelnemers over de heats via een <em>slangenpatroon</em> (gelijke verdeling). Voor vervolgrondes verschijnen placeholders (<em>"Winnaar Heat 1"</em>, enz.) die na de wedstrijd worden ingevuld.</p>
+<div class="hlg-tip">&#128161; Bij loting op klassement wordt het geselecteerde KNSB-klassement gebruikt. De startlijst wordt gesorteerd op klassementspositie voordat het slangenpatroon wordt toegepast.</div>
 
-<h3>5.4 Categorieën samenvoegen en splitsen</h3>
-<p>Samenvoegen en splitsen worden ingesteld in de <strong>Importeer</strong>-module, niet in Startlijsten. Na samenvoegen verschijnen de betrokken categorieën als één gecombineerde tab (met badge). Na splitsen verschijnt elke subgroep als aparte tab met een schaar-label. De startlijst-configuratie werkt daarna volledig per groep.</p>
+<h3>5.4 Deelnemerspaneel (rijders toevoegen/verwijderen)</h3>
+<p>Na het genereren verschijnt links het <strong>deelnemerspaneel</strong>. Dit toont alle geregistreerde deelnemers met hun heat-toewijzing per ronde. Dit is essentieel voor last-minute wijzigingen:</p>
+<ul>
+  <li><strong>Rijder toevoegen aan heat:</strong> typ het heat-nummer in het invoerveld naast de naam → druk Enter. De rijder verschijnt in de startlijst.</li>
+  <li><strong>Rijder verwijderen uit heat:</strong> maak het heat-nummer leeg → druk Enter. De rijder verdwijnt en de startposities schuiven automatisch op.</li>
+  <li><strong>Oranje markering:</strong> rijders zonder heat-nummer worden gemarkeerd met een oranje achtergrond als waarschuwing.</li>
+</ul>
+
+<!-- MOCKUP: deelnemerspaneel -->
+<div class="hlg-mock">
+  ${mockHeader('Startlijsten – Deelnemerspaneel')}
+  <div style="display:flex;min-height:130px">
+    <div style="width:200px;flex-shrink:0;border-right:1px solid #dde;padding:6px 8px;background:#f8f9fb">
+      <div style="font-size:.7rem;font-weight:700;color:#1a3a5c;margin-bottom:5px">Alle deelnemers</div>
+      <table style="width:100%;border-collapse:collapse;font-size:.68rem">
+        <thead><tr style="background:#f0f4f8">
+          <th style="padding:2px 4px;font-weight:600">Snr</th><th style="padding:2px 4px;font-weight:600">Naam</th><th style="padding:2px 4px;font-weight:600">S</th>
+        </tr></thead>
+        <tbody>
+          <tr><td style="padding:2px 4px;color:#1a3a5c;font-weight:600">10</td><td style="padding:2px 4px">Tycho Hanemaaijer</td>
+              <td style="padding:2px 4px"><div style="border:1px solid #ccc;border-radius:3px;padding:1px 4px;background:#fff;width:22px;text-align:center;font-size:.7rem">1</div></td></tr>
+          <tr style="background:#fff3cd"><td style="padding:2px 4px;color:#1a3a5c;font-weight:600">24</td><td style="padding:2px 4px">Izaak Stenneke</td>
+              <td style="padding:2px 4px"><div style="border:1px solid #e0a800;border-radius:3px;padding:1px 4px;background:#fff;width:22px;text-align:center;font-size:.7rem"></div></td></tr>
+          <tr><td style="padding:2px 4px;color:#1a3a5c;font-weight:600">86</td><td style="padding:2px 4px">Daan Borst</td>
+              <td style="padding:2px 4px"><div style="border:1px solid #ccc;border-radius:3px;padding:1px 4px;background:#fff;width:22px;text-align:center;font-size:.7rem">1</div></td></tr>
+        </tbody>
+      </table>
+    </div>
+    <div style="flex:1;padding:6px 8px">
+      <div style="font-size:.72rem;color:#1a3a5c;font-weight:700;margin-bottom:4px">Heat 1 — A-Finale Sprint</div>
+      <div style="font-size:.68rem;color:#666">1. Tycho Hanemaaijer (10)<br>2. Daan Borst (86)</div>
+    </div>
+  </div>
+</div>
+<p class="hlg-mock-caption">↑ Deelnemerspaneel links: Izaak (oranje) is nog niet ingedeeld. Typ "1" en druk Enter om hem toe te voegen aan heat 1.</p>
+
+<h3>5.5 Alleen A-finale (geen series)</h3>
+<p>Bij categorieën die direct een A-finale rijden (zonder voorrondes), werkt het systeem identiek: de loting wordt gegenereerd en het deelnemerspaneel is beschikbaar voor last-minute wijzigingen. Dit is ideaal voor <strong>regionale wedstrijden</strong> waar flexibiliteit gewenst is.</p>
+
+<h3>5.6 Startlijst afdrukken</h3>
+<p>Gebruik de afdrukoptions bovenaan (categorie → afstand → ronde) om de startlijst af te drukken. De printout is geoptimaliseerd voor zwart-wit laserprinters: heat-titels zijn goed leesbaar en deelnemersnamen zijn voldoende groot.</p>
+
+<h3>5.7 Categorieën samenvoegen en splitsen</h3>
+<p>Samenvoegen en splitsen worden ingesteld in de <strong>Importeer</strong>-module. Na samenvoegen verschijnen de categorieën als één gecombineerde tab (met badge). Na splitsen verschijnt elke subgroep als aparte tab met schaar-label.</p>
+
+<h3>5.8 Loting wissen</h3>
+<p>De knop <strong>&#128465; Wis loting</strong> verwijdert alle heats voor de geselecteerde afstand. Na het wissen kunt u opnieuw loten met andere instellingen. Er verschijnt een bevestigingsvraag voordat de actie wordt uitgevoerd.</p>
 </div>
 
 <!-- ═══════════════════════════════════════════════════════════ 6 LIVE -->
 <div class="hlg-sectie">
 <h2 id="hlg-live">6. Live verwerking</h2>
-<p>De module <strong>Live</strong> wordt gebruikt tijdens de wedstrijd voor real-time tijdregistratie en verwerking van resultaten per rit.</p>
+<p>De module <strong>Live</strong> wordt gebruikt tijdens de wedstrijd om resultaten per rit in te voeren. Ritten worden weergegeven in een carrousel die overeenkomt met het gepubliceerde tijdschema.</p>
+
+<h3>6.1 Rit selecteren</h3>
+<p>De carrousel toont alle ritten uit het tijdschema in volgorde. Navigeer met de pijlknoppen of klik direct op een rit. De actieve rit toont de deelnemers met hun startnummers en transponders.</p>
+
+<h3>6.2 Resultaten invoeren</h3>
+<p>Per deelnemer kunt u invoeren:</p>
 <ul>
-  <li>Selecteer de huidige rit vanuit het gepubliceerde tijdschema.</li>
-  <li>Voer finishvolgorde en tijden in per rijder.</li>
-  <li>Resultaten worden direct zichtbaar in de Uitslag-module.</li>
+  <li><strong>Tijd:</strong> in formaat mm:ss.hh (bijv. 1:23.45) — wordt omgerekend naar milliseconden.</li>
+  <li><strong>Rondes:</strong> optioneel, voor afstanden waarbij rondes geteld worden.</li>
+  <li><strong>Sanctie:</strong> selecteer een sanctiecode als de rijder een overtreding heeft begaan.</li>
 </ul>
-<div class="hlg-tip">&#128161; Alleen gebruikers met de rol <em>Timer</em>, <em>Admin</em> of <em>Owner</em> kunnen resultaten invoeren.</div>
+
+<h3>6.3 Sanctiecodes</h3>
+<p>De volgende sanctiecodes zijn beschikbaar:</p>
+<table>
+  <thead><tr><th>Code</th><th>Betekenis</th><th>Effect op uitslag</th></tr></thead>
+  <tbody>
+    <tr><td><strong>FS</strong></td><td>False Start (valse start)</td><td>Waarschuwing — rijder behoudt positie en tijd. Wordt vermeld op de uitslag.</td></tr>
+    <tr><td><strong>DQ-SF</strong></td><td>Diskwalificatie Start Finish</td><td>Geen positie, wel tijd — rijder krijgt standaard-punten (laatste positie).</td></tr>
+    <tr><td><strong>DQ-DF</strong></td><td>Diskwalificatie Definitief</td><td>Geen positie, geen tijd — rijder wordt uitgesloten van de uitslag.</td></tr>
+    <tr><td><strong>DNS</strong></td><td>Did Not Start</td><td>Rijder is niet gestart — wordt uitgesloten.</td></tr>
+    <tr><td><strong>DNF</strong></td><td>Did Not Finish</td><td>Rijder is niet gefinished — krijgt standaard-punten.</td></tr>
+    <tr><td><strong>DC</strong></td><td>Diskwalificatie (algemeen)</td><td>Geen positie — wordt uitgesloten.</td></tr>
+  </tbody>
+</table>
+
+<!-- MOCKUP: live verwerking -->
+<div class="hlg-mock">
+  <div style="background:#1a3a5c;color:#fff;padding:5px 12px;font-size:.78rem;font-weight:700">Live verwerking</div>
+  <div style="padding:8px 12px">
+    <div style="display:flex;align-items:center;gap:6px;margin-bottom:8px">
+      <div style="border:1px solid #ccc;border-radius:4px;padding:3px 8px;font-size:.73rem;color:#888">◀</div>
+      <div style="flex:1;text-align:center;font-size:.82rem;font-weight:700;color:#1a3a5c">Rit 5 — A-Finale Sprint · Pup 4, 3 &amp; 2</div>
+      <div style="border:1px solid #ccc;border-radius:4px;padding:3px 8px;font-size:.73rem;color:#888">▶</div>
+    </div>
+    <table style="width:100%;border-collapse:collapse;font-size:.71rem">
+      <thead><tr style="background:#f0f4f8">
+        <th style="padding:3px 5px;border-bottom:1px solid #dde;font-weight:600">Snr</th>
+        <th style="padding:3px 5px;border-bottom:1px solid #dde;font-weight:600">Naam</th>
+        <th style="padding:3px 5px;border-bottom:1px solid #dde;font-weight:600">Tijd</th>
+        <th style="padding:3px 5px;border-bottom:1px solid #dde;font-weight:600">Sanctie</th>
+      </tr></thead>
+      <tbody>
+        <tr><td style="padding:3px 5px;font-weight:600;color:#1a3a5c">10</td><td style="padding:3px 5px">Tycho Hanemaaijer</td>
+            <td style="padding:3px 5px"><div style="border:1px solid #ccc;border-radius:3px;padding:2px 6px;background:#fff;font-family:monospace;font-size:.74rem">35.40</div></td>
+            <td style="padding:3px 5px;color:#aaa">—</td></tr>
+        <tr style="background:#f8f9fb"><td style="padding:3px 5px;font-weight:600;color:#1a3a5c">86</td><td style="padding:3px 5px">Daan Borst</td>
+            <td style="padding:3px 5px"><div style="border:1px solid #ccc;border-radius:3px;padding:2px 6px;background:#fff;font-family:monospace;font-size:.74rem">53.40</div></td>
+            <td style="padding:3px 5px">${mockBadge('FS', 'oranje')}</td></tr>
+        <tr><td style="padding:3px 5px;font-weight:600;color:#1a3a5c">605</td><td style="padding:3px 5px">Evie Vijverberg</td>
+            <td style="padding:3px 5px"><div style="border:1px solid #ccc;border-radius:3px;padding:2px 6px;background:#fff;font-family:monospace;font-size:.74rem">37.80</div></td>
+            <td style="padding:3px 5px;color:#aaa">—</td></tr>
+      </tbody>
+    </table>
+    <div style="display:flex;justify-content:flex-end;margin-top:8px">
+      <div style="background:#e86c1b;color:#fff;border-radius:4px;padding:5px 12px;font-size:.73rem;font-weight:600">&#128190; Opslaan</div>
+    </div>
+  </div>
+</div>
+<p class="hlg-mock-caption">↑ Live verwerking: tijden invoeren per rijder, sanctie (FS) bij Daan Borst. Alle sancties worden doorgetrokken naar de uitslag.</p>
+
+<h3>6.4 Volgende ronde genereren</h3>
+<p>Na het invoeren van alle resultaten voor een ronde, kunt u de volgende ronde genereren. Het systeem bepaalt automatisch welke rijders doorstromen op basis van de ingestelde doorstroomregels.</p>
+<div class="hlg-tip">&#128161; Bij een full-final systeem worden rijders verdeeld over A-finale en B-finales. De B-finales worden automatisch aangemaakt op basis van het aantal rijders.</div>
+<div class="hlg-warn">&#9888; Alleen gebruikers met de rol <em>Timer</em>, <em>Admin</em> of <em>Owner</em> kunnen resultaten invoeren en rondes genereren.</div>
 </div>
 
 <!-- ═══════════════════════════════════════════════════════════ 7 UITSLAG -->
 <div class="hlg-sectie">
 <h2 id="hlg-uitslag">7. Uitslag</h2>
-<p>De module <strong>Uitslag</strong> toont een overzicht van alle resultaten van de lopende of afgelopen wedstrijd, gegroepeerd per categorie en afstand.</p>
+<p>De module <strong>Uitslag</strong> toont de resultaten per categorie en afstand, berekent het klassement, en biedt afdrukfuncties voor de officiële wedstrijddocumenten.</p>
+
+<h3>7.1 Navigatie</h3>
+<p>Bovenaan de pagina staan <strong>categorietabs</strong> en daaronder <strong>afstandstabs</strong> + een <strong>Klassement</strong>-tab. De tabs hebben kleuren die de status aangeven:</p>
+<table>
+  <thead><tr><th>Kleur</th><th>Betekenis</th></tr></thead>
+  <tbody>
+    <tr><td style="background:#f5f5f5">Standaard (grijs)</td><td>Nog geen resultaten beschikbaar voor deze afstand.</td></tr>
+    <tr><td style="background:#fef9e7;color:#92700a">Geel</td><td>Resultaten beschikbaar maar nog niet bevestigd (afstand) / tussenklassement (klassement).</td></tr>
+    <tr><td style="background:#eaf6ea;color:#2e7d32">Groen</td><td>Uitslag bevestigd (afstand) / klassement vastgelegd.</td></tr>
+  </tbody>
+</table>
+
+<!-- MOCKUP: uitslag tabs -->
+<div class="hlg-mock">
+  ${mockHeader('Uitslag – Pup 4, 3 &amp; 2 (M/V)')}
+  <div style="padding:8px 12px">
+    <div style="display:flex;gap:3px;margin-bottom:4px;flex-wrap:wrap">
+      <div style="background:#eaf6ea;color:#2e7d32;padding:3px 10px;border-radius:6px 6px 0 0;font-size:.72rem;font-weight:600;border-bottom:3px solid #4caf50">Tijdrit</div>
+      <div style="background:#eaf6ea;color:#2e7d32;padding:3px 10px;border-radius:6px 6px 0 0;font-size:.72rem;font-weight:600;border-bottom:3px solid #4caf50">Sprint</div>
+      <div style="background:#fef9e7;color:#92700a;padding:3px 10px;border-radius:6px 6px 0 0;font-size:.72rem;font-weight:600;border-bottom:3px solid #e0a800">Lange afstand</div>
+      <div style="background:#fef9e7;color:#92700a;padding:3px 10px;border-radius:6px 6px 0 0;font-size:.72rem;font-weight:600;border-bottom:3px solid #e0a800;margin-left:auto">&#127942; Klassement</div>
+    </div>
+    <div style="font-size:.72rem;color:#888;font-style:italic;padding:6px 0">↑ Tijdrit en Sprint zijn bevestigd (groen), Lange afstand beschikbaar maar nog niet bevestigd (geel), Klassement is tussenstand (geel)</div>
+  </div>
+</div>
+<p class="hlg-mock-caption">↑ Afstandstabs met statuskleur: groen = bevestigd, geel = beschikbaar</p>
+
+<h3>7.2 Uitslag per afstand</h3>
+<p>Per afstand ziet u een tabel met alle finales samengevoegd (A-finale, B1, B2, enz.) met positie, naam, tijd en eventuele sancties. Bij een <strong>gecombineerd systeem</strong> (serie + A-finale) worden de serie- en finalepunten apart getoond.</p>
+<p>De knop <strong>✓ Uitslag bevestigen</strong> slaat de officiële uitslag op voor deze afstand. Na het bevestigen kleurt de afstandstab groen.</p>
+
+<!-- MOCKUP: uitslag per afstand -->
+<div class="hlg-mock">
+  ${mockHeader('Sprint – Uitslag')}
+  <div style="padding:8px 12px">
+    <div style="background:#e8f5e9;border:1px solid #4caf50;border-radius:5px;padding:6px 10px;margin-bottom:8px;display:flex;align-items:center;gap:8px">
+      <div style="background:#198754;color:#fff;border-radius:5px;padding:4px 10px;font-size:.75rem;font-weight:600">✓ Uitslag bevestigen</div>
+      <span style="font-size:.7rem;color:#666;font-style:italic">Sla de officiële uitslag van deze afstand op</span>
+    </div>
+    <table style="width:100%;border-collapse:collapse;font-size:.71rem">
+      <thead><tr style="background:#dce6f0">
+        <th style="padding:3px 6px;color:#1a3a5c;font-size:.68rem">#</th>
+        <th style="padding:3px 6px;color:#1a3a5c;font-size:.68rem">Naam</th>
+        <th style="padding:3px 6px;color:#1a3a5c;font-size:.68rem">Snr</th>
+        <th style="padding:3px 6px;color:#1a3a5c;font-size:.68rem">Finale</th>
+        <th style="padding:3px 6px;color:#1a3a5c;font-size:.68rem">Tijd</th>
+        <th style="padding:3px 6px;color:#1a3a5c;font-size:.68rem">Sanctie</th>
+      </tr></thead>
+      <tbody>
+        <tr><td style="padding:3px 6px">1</td><td style="padding:3px 6px"><strong>Tycho Hanemaaijer</strong></td><td style="padding:3px 6px;color:#1a3a5c;font-weight:600">10</td><td style="padding:3px 6px">A-Finale</td><td style="padding:3px 6px;font-family:monospace">35.40</td><td style="padding:3px 6px"></td></tr>
+        <tr style="background:#f8fafc"><td style="padding:3px 6px">2</td><td style="padding:3px 6px"><strong>Evie Vijverberg</strong></td><td style="padding:3px 6px;color:#1a3a5c;font-weight:600">605</td><td style="padding:3px 6px">A-Finale</td><td style="padding:3px 6px;font-family:monospace">37.80</td><td style="padding:3px 6px"></td></tr>
+        <tr style="color:#888"><td style="padding:3px 6px">5</td><td style="padding:3px 6px">Daan Borst</td><td style="padding:3px 6px;font-weight:600">86</td><td style="padding:3px 6px">B1-Finale</td><td style="padding:3px 6px;font-family:monospace">53.40</td><td style="padding:3px 6px;color:#b00">Serie:FS</td></tr>
+      </tbody>
+    </table>
+  </div>
+</div>
+<p class="hlg-mock-caption">↑ Uitslag per afstand: sanctie-kolom toont alle sancties van die afstand (incl. serie). Knop "Uitslag bevestigen" bovenaan.</p>
+
+<h3>7.3 Klassement</h3>
+<p>Het <strong>Klassement</strong>-tab toont de totaalstand over alle afstanden. Punten worden berekend op basis van de positie per afstand (1e = 1 punt, 2e = 2 punten, enz.).</p>
+
+<h3>Punten aanpassen (sanctie-rijders)</h3>
+<p>Rijders met een sanctie op een afstand krijgen bewerkbare puntenvelden. U kunt de punten handmatig aanpassen:</p>
 <ul>
-  <li>Resultaten worden automatisch bijgewerkt vanuit de Live-module.</li>
-  <li>De eindstand wordt berekend op basis van het ingestelde competitiesysteem (punten, tijd, knock-out).</li>
-  <li>Via de afdrukfunctie kunt u de uitslag als PDF exporteren.</li>
+  <li>Typ het gewenste aantal punten in het gele invoerveld.</li>
+  <li>Het totaal wordt <strong>live</strong> herberekend terwijl u typt.</li>
+  <li>Klik <strong>&#128190; Correcties opslaan</strong> om de aanpassingen op te slaan.</li>
+  <li><strong>0 punten</strong> invoeren = rijder wordt uitgesloten uit het klassement en verschijnt onderaan bij "Uitgesloten".</li>
 </ul>
+
+<h3>Klassement vastleggen</h3>
+<p>De knop <strong>&#127942; Klassement vastleggen</strong> legt het definitieve klassement vast. Deze knop is pas beschikbaar als:</p>
+<ul>
+  <li>Alle afstanden zijn bevestigd (groen in de tabs).</li>
+  <li>Er geen onopgeslagen puntencorrecties zijn.</li>
+</ul>
+
+<!-- MOCKUP: klassement -->
+<div class="hlg-mock">
+  ${mockHeader('Klassement – Pup 4, 3 &amp; 2 (M/V)')}
+  <div style="padding:8px 12px">
+    <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:8px">
+      <div>
+        <div style="border:1px solid #ccc;border-radius:5px;padding:4px 10px;font-size:.73rem;color:#555;background:#fff">&#128190; Correcties opslaan</div>
+        <div style="font-size:.65rem;color:#888;font-style:italic;margin-top:2px">Sla aangepaste punten op voor gesanctioneerde rijders</div>
+      </div>
+      <div>
+        <div style="background:#198754;color:#fff;border-radius:5px;padding:4px 10px;font-size:.73rem;font-weight:600">&#127942; Klassement vastleggen</div>
+        <div style="font-size:.65rem;color:#888;font-style:italic;margin-top:2px">Alle afstanden zijn bevestigd — klaar om vast te leggen</div>
+      </div>
+    </div>
+    <table style="width:100%;border-collapse:collapse;font-size:.71rem">
+      <thead><tr style="background:#dce6f0">
+        <th style="padding:3px 6px;color:#1a3a5c;font-size:.68rem">#</th>
+        <th style="padding:3px 6px;color:#1a3a5c;font-size:.68rem">Naam</th>
+        <th style="padding:3px 6px;color:#1a3a5c;font-size:.68rem">Snr</th>
+        <th style="padding:3px 6px;color:#198754;font-size:.68rem;font-weight:700">Tijdrit</th>
+        <th style="padding:3px 6px;color:#198754;font-size:.68rem;font-weight:700">Sprint</th>
+        <th style="padding:3px 6px;color:#198754;font-size:.68rem;font-weight:700">Lange afs.</th>
+        <th style="padding:3px 6px;color:#1a3a5c;font-size:.68rem;font-weight:700">Totaal</th>
+      </tr></thead>
+      <tbody>
+        <tr><td style="padding:3px 6px">1</td><td style="padding:3px 6px"><strong>Evie Vijverberg</strong></td><td style="padding:3px 6px;color:#1a3a5c;font-weight:600">605</td>
+            <td style="padding:3px 6px;text-align:center">1</td><td style="padding:3px 6px;text-align:center">2</td><td style="padding:3px 6px;text-align:center">2</td><td style="padding:3px 6px;text-align:center;font-weight:700">5</td></tr>
+        <tr style="background:#f8fafc"><td style="padding:3px 6px">2</td><td style="padding:3px 6px"><strong>Anouschka Belt Buitenhuis</strong></td><td style="padding:3px 6px;color:#1a3a5c;font-weight:600">587</td>
+            <td style="padding:3px 6px;text-align:center">2</td><td style="padding:3px 6px;text-align:center">3</td><td style="padding:3px 6px;text-align:center">1</td><td style="padding:3px 6px;text-align:center;font-weight:700">6</td></tr>
+      </tbody>
+      <tbody>
+        <tr style="border-top:2px solid #ddd"><td colspan="7" style="padding:5px 6px;color:#888;font-style:italic;font-size:.68rem;background:#f8f0f0">Uitgesloten (sanctie / 0 punten)</td></tr>
+        <tr style="color:#999"><td style="padding:3px 6px">—</td><td style="padding:3px 6px">Daan Borst</td><td style="padding:3px 6px">86</td>
+            <td style="padding:3px 6px;text-align:center">3</td><td style="padding:3px 6px;text-align:center">5 <span style="color:#b00;font-size:.63rem">FS</span></td><td style="padding:3px 6px;text-align:center">—</td><td style="padding:3px 6px;text-align:center">—</td></tr>
+      </tbody>
+    </table>
+  </div>
+</div>
+<p class="hlg-mock-caption">↑ Klassement: afstandskolommen groen = bevestigd. Daan Borst is uitgesloten (0 punten op Lange afstand, met sancties FS en DQ-DF). Punten bewerkbaar bij sanctie-rijders.</p>
+
+<h3>7.4 Afdrukken</h3>
+<p>Bovenaan de uitslag-pagina staan afdrukopties. Selecteer een categorie en kies wat u wilt afdrukken:</p>
+<ul>
+  <li><strong>Per afstand</strong> (bijv. "Sprint"): de totaaluitslag van die afstand, met alle finales.
+    <ul>
+      <li>Checkbox <strong>Ronde</strong>: toon in welke finale elke rijder zat.</li>
+      <li>Checkbox <strong>Tijd</strong>: toon de finishtijd.</li>
+    </ul>
+  </li>
+  <li><strong>Tussenklassement</strong>: de tussenstand als nog niet alle afstanden gereden zijn.</li>
+  <li><strong>Eindklassement</strong>: de definitieve stand over alle afstanden.</li>
+</ul>
+
+<p>Alle afdrukken bevatten:</p>
+<ul>
+  <li>Wedstrijdnaam, datum en locatie in de kop.</li>
+  <li>Organisatielogo (rechtsboven).</li>
+  <li>Sponsorlogo's als voettekst.</li>
+  <li><strong>Sanctie-voetnoten:</strong> per rijder met sancties een genummerde voetnoot, bijv. <em>"(1) Daan Borst: Sprint Serie: FS, Lange afstand Finale: DQ-DF"</em></li>
+</ul>
+
+<!-- MOCKUP: printvoorbeeld klassement -->
+<div class="hlg-mock">
+  <div style="padding:10px 14px;font-size:.72rem;font-family:Arial,sans-serif">
+    <div style="display:flex;justify-content:space-between;align-items:flex-start;border-bottom:2px solid #1a3a5c;padding-bottom:5px;margin-bottom:6px">
+      <div>
+        <div style="font-size:.92rem;font-weight:700">JSC 1</div>
+        <div style="font-size:.68rem;color:#555">19 april 2026 · Leiderdorp</div>
+        <div style="font-size:.78rem;font-weight:700;color:#1a3a5c;margin-top:3px">Pup 4, 3 &amp; 2 (M/V) – Eindklassement</div>
+      </div>
+      <div style="width:50px;height:25px;background:#e8ecf0;border-radius:3px;display:flex;align-items:center;justify-content:center;font-size:.6rem;color:#999">LOGO</div>
+    </div>
+    <table style="width:100%;border-collapse:collapse;font-size:.68rem">
+      <thead><tr style="background:#dce6f0">
+        <th style="padding:2px 4px;color:#1a3a5c;font-size:.63rem">#</th><th style="padding:2px 4px;color:#1a3a5c;font-size:.63rem">Naam</th>
+        <th style="padding:2px 4px;color:#1a3a5c;font-size:.63rem">Snr</th><th style="padding:2px 4px;color:#1a3a5c;font-size:.63rem">Tijdr.</th>
+        <th style="padding:2px 4px;color:#1a3a5c;font-size:.63rem">Sprint</th><th style="padding:2px 4px;color:#1a3a5c;font-size:.63rem">Lange</th>
+        <th style="padding:2px 4px;color:#1a3a5c;font-size:.63rem;font-weight:700">Tot.</th>
+      </tr></thead>
+      <tbody>
+        <tr><td style="padding:2px 4px">1</td><td style="padding:2px 4px">Evie Vijverberg</td><td style="padding:2px 4px">605</td><td style="padding:2px 4px;text-align:center">1</td><td style="padding:2px 4px;text-align:center">2</td><td style="padding:2px 4px;text-align:center">2</td><td style="padding:2px 4px;text-align:center;font-weight:700">5</td></tr>
+        <tr style="background:#f8fafc"><td style="padding:2px 4px">2</td><td style="padding:2px 4px">Anouschka Belt B.</td><td style="padding:2px 4px">587</td><td style="padding:2px 4px;text-align:center">2</td><td style="padding:2px 4px;text-align:center">3</td><td style="padding:2px 4px;text-align:center">1</td><td style="padding:2px 4px;text-align:center;font-weight:700">6</td></tr>
+        <tr style="color:#888"><td style="padding:2px 4px">—</td><td style="padding:2px 4px">Daan Borst <sup style="color:#b00;font-weight:700">(1)</sup></td><td style="padding:2px 4px">86</td><td style="padding:2px 4px;text-align:center">3</td><td style="padding:2px 4px;text-align:center">5</td><td style="padding:2px 4px;text-align:center">—</td><td style="padding:2px 4px;text-align:center">—</td></tr>
+      </tbody>
+    </table>
+    <div style="font-size:.62rem;color:#555;margin-top:5px;border-top:1px solid #ddd;padding-top:3px">
+      <strong>(1)</strong> Daan Borst: Sprint Serie: FS, Lange afstand Finale: DQ-DF
+    </div>
+    <div style="margin-top:5px;border-top:1px solid #ddd;padding-top:3px;display:flex;align-items:center;justify-content:center;gap:8px">
+      <div style="width:40px;height:12px;background:#e8ecf0;border-radius:2px"></div>
+      <div style="width:40px;height:12px;background:#e8ecf0;border-radius:2px"></div>
+    </div>
+  </div>
+</div>
+<p class="hlg-mock-caption">↑ Printvoorbeeld eindklassement: header met logo, voetnoten voor sancties, sponsorlogos onderaan</p>
+
+<h3>7.5 Workflow samengevat</h3>
+<p>De aanbevolen workflow voor de uitslag:</p>
+<ol>
+  <li>Per afstand: bekijk de resultaten → klik <strong>✓ Uitslag bevestigen</strong> → tab kleurt groen.</li>
+  <li>In het Klassement: controleer de stand → pas eventueel punten aan voor sanctie-rijders → klik <strong>&#128190; Correcties opslaan</strong>.</li>
+  <li>Als alle afstanden groen zijn: klik <strong>&#127942; Klassement vastleggen</strong> → klassement-tab kleurt groen.</li>
+  <li>Druk af: kies de gewenste afdruk (per afstand of klassement) via de print-selector bovenaan.</li>
+</ol>
 </div>
 
 <!-- ═══════════════════════════════════════════════════════════ 8 BEHEER -->
@@ -959,12 +1247,25 @@ function hlgContent() { return `
 <!-- ═══════════════════════════════════════════════════════════ 10 TIPS -->
 <div class="hlg-sectie">
 <h2 id="hlg-tips">10. Algemene tips</h2>
+
+<h3>Wedstrijddag workflow</h3>
+<ol>
+  <li><strong>Voorbereiding:</strong> importeer deelnemers, configureer tijdschema, genereer startlijsten, druk tekenlijsten en startlijsten af.</li>
+  <li><strong>Bij aankomst rijders:</strong> controleer tekenstatus, voeg last-minute deelnemers toe via het deelnemerspaneel of het invoerformulier.</li>
+  <li><strong>Tijdens de wedstrijd:</strong> voer resultaten in via Live verwerking. Genereer volgende rondes wanneer nodig.</li>
+  <li><strong>Na de wedstrijd:</strong> bevestig uitslagen per afstand, pas eventueel punten aan, leg het klassement vast, druk de officiële uitslag af.</li>
+</ol>
+
+<h3>Handige weetjes</h3>
 <ul>
-  <li><strong>Gelijktijdige bewerking:</strong> meerdere gebruikers kunnen tegelijk ingelogd zijn. Het systeem detecteert conflicten automatisch en toont een melding.</li>
+  <li><strong>Gelijktijdige bewerking:</strong> meerdere gebruikers kunnen tegelijk ingelogd zijn. Het systeem detecteert conflicten automatisch.</li>
   <li><strong>Transponders:</strong> het systeem houdt per wedstrijd bij welk transpondernummer actief is. Dit kan afwijken van de officiële KNSB-transponders T1 en T2.</li>
   <li><strong>Handmatig toegevoegde deelnemers</strong> blijven zichtbaar na een hersynch met de KNSB-API, zolang hun status niet "Afgemeld (KNSB)" is.</li>
-  <li><strong>Wedstrijd kwijt na herlaad?</strong> Klik linksboven op het pijltje om de wedstrijdenlijst te verversen.</li>
-  <li><strong>PDF afdrukken:</strong> gebruik de afdrukfunctie in de Importeer-module voor tekenlijsten en deelnemerslijsten. Uw browser zet dit automatisch om naar PDF.</li>
+  <li><strong>Tab-kleuren:</strong> geel = beschikbaar/tussenstatus, groen = gereed/vastgelegd. Dit geldt in zowel Startlijsten als Uitslag.</li>
+  <li><strong>Sessie verlopen?</strong> Er verschijnt automatisch een login-venster. Na inloggen kunt u direct verder — geen werk gaat verloren.</li>
+  <li><strong>Alle afdrukken</strong> (startlijsten, tijdschema, uitslagen, tekenlijsten) bevatten automatisch het organisatielogo en sponsorlogos. Configureer deze in de Beheer-module.</li>
+  <li><strong>0 punten = uitgesloten:</strong> als u 0 punten invoert voor een gesanctioneerde rijder, wordt deze uitgesloten uit het klassement en verschijnt onderaan bij "Uitgesloten".</li>
+  <li><strong>Sancties op de printout:</strong> alle sancties (inclusief waarschuwingen uit eerdere rondes) worden als genummerde voetnoten op de officiële uitslag vermeld.</li>
   <li><strong>Handleiding als PDF:</strong> klik op <em>Opslaan als PDF</em> rechtsboven in dit venster om de volledige handleiding af te drukken.</li>
 </ul>
 </div>

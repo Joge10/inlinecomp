@@ -396,13 +396,13 @@ try {
     $distNaamMap = $allDistNaamStmt->fetchAll(PDO::FETCH_KEY_PAIR); // id => name
 
     // Totaal per rijder + punten_detail
-    // Rijders met alleen 0-punten worden uitgesloten uit het klassement
+    // Rijders met een afstand op 0 punten worden uitgesloten uit het klassement
     $klasRows = [];
     foreach ($allPunten as $lic => $distPunten) {
         $totaal = array_sum($distPunten);
-        $heeftPunten = false;
-        foreach ($distPunten as $p) { if ($p > 0) { $heeftPunten = true; break; } }
-        if (!$heeftPunten) continue; // 0 punten = uitgesloten van klassement
+        $heeftNulAfstand = false;
+        foreach ($distPunten as $p) { if ($p == 0) { $heeftNulAfstand = true; break; } }
+        if ($heeftNulAfstand) continue; // 0 punten op een afstand = uitgesloten
         $detail = [];
         foreach ($distPunten as $dId => $p) {
             $detail[$distNaamMap[$dId] ?? $dId] = $p;

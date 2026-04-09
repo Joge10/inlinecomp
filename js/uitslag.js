@@ -593,7 +593,7 @@ async function toonUitslagKlassement(groep) {
                     const sanctieLbl = dp.sanctie ? sanctieLabel(dp.sanctie) : '';
                     tdAfst += `<td class="u-klas-col-punten u-klas-bewerkbaar">` +
                         `<input type="number" class="u-klas-punten-inp" ` +
-                        `  min="0" step="1" value="${dp.punten}" ` +
+                        `  min="0" step="1" value="${dp.punten || ''}" ` +
                         `  data-lic="${escHtml(r.person_license)}" ` +
                         `  data-dist-id="${escHtml(a.id)}" ` +
                         `  data-dist-naam="${escHtml(a.name)}" ` +
@@ -602,7 +602,7 @@ async function toonUitslagKlassement(groep) {
                         (dp.override ? `<span class="u-klas-override-badge" title="Aangepast">✎</span>` : '') +
                         `</td>`;
                 } else {
-                    const puntTxt = dp.punten % 1 === 0 ? dp.punten : dp.punten.toFixed(1);
+                    const puntTxt = dp.punten == 0 ? '\u2014' : (dp.punten % 1 === 0 ? dp.punten : dp.punten.toFixed(1));
                     const sanctieInfo = dp.sanctie
                         ? ` <span class="u-klas-sanctie-hint" title="${escHtml(sanctieLabel(dp.sanctie))}">(${escHtml(sanctieLabel(dp.sanctie))})</span>`
                         : '';
@@ -834,7 +834,7 @@ async function _drukKlassement(optData) {
         for (const a of afstanden) {
             const dp = r.afstanden?.[a.id];
             if (!dp) { tdAfst += `<td class="pr-col-punten">\u2014</td>`; continue; }
-            const val = dp.punten % 1 === 0 ? dp.punten : dp.punten.toFixed(1);
+            const val = dp.punten == 0 ? '\u2014' : (dp.punten % 1 === 0 ? dp.punten : dp.punten.toFixed(1));
             tdAfst += `<td class="pr-col-punten${dp.sanctie ? ' pr-cel-sanctie' : ''}">${val}</td>`;
         }
 
