@@ -153,18 +153,65 @@ function hlgContent() { return `
   <div class="versie">Versie 2026 &nbsp;·&nbsp; Laatste update: ${new Date().toLocaleDateString('nl-NL',{day:'2-digit',month:'long',year:'numeric'})}</div>
 </div>
 
+<!-- ═══════════════════════════════════════════════════════════ INTRO -->
+<div class="hlg-sectie">
+<h2 id="hlg-intro">Introductie</h2>
+<p><strong>InlineComp</strong> is een webapplicatie voor het beheren van inline skeelerwedstrijden. Het vervangt de handmatige Excel-workflow door een geïntegreerd systeem dat draait op een laptop in het lokale netwerk tijdens de wedstrijddag.</p>
+
+<h3>Wat doet InlineComp?</h3>
+<ul>
+  <li>Deelnemers importeren vanuit de KNSB-inschrijvingssite</li>
+  <li>Tijdschema opstellen met starttijden en programma-volgorde</li>
+  <li>Startlijsten genereren en afdrukken (inclusief last-minute wijzigingen)</li>
+  <li>Resultaten invoeren tijdens de wedstrijd</li>
+  <li>Uitslagen en klassementen berekenen en afdrukken</li>
+</ul>
+
+<h3>Wedstrijddag workflow (overzicht)</h3>
+<p>Een typische wedstrijddag verloopt in deze volgorde:</p>
+<ol>
+  <li><strong>Voorbereiding</strong> (thuis/vooraf): importeer deelnemers, stel het tijdschema in, genereer startlijsten.</li>
+  <li><strong>Op locatie — voor aanvang:</strong> druk tekenlijsten en startlijsten af. Verwerk afmeldingen en last-minute aanmeldingen.</li>
+  <li><strong>Tijdens de wedstrijd:</strong> voer resultaten in per rit via de Live-module. Genereer de volgende ronde wanneer alle heats van de huidige ronde gereden zijn.</li>
+  <li><strong>Na de wedstrijd:</strong> bevestig de uitslag per afstand, pas eventueel punten aan, leg het klassement vast en druk de officiële uitslag af.</li>
+</ol>
+<div class="hlg-tip">&#128161; De modules in het menu (Importeer → Tijdschema → Startlijsten → Live → Uitslag) volgen precies deze workflow van links naar rechts.</div>
+
+<h3>Begrippen en afkortingen</h3>
+<table>
+  <thead><tr><th>Term</th><th>Betekenis</th></tr></thead>
+  <tbody>
+    <tr><td><strong>KNSB</strong></td><td>Koninklijke Nederlandsche Schaatsenrijders Bond — de sportbond die inline skeelerwedstrijden organiseert in Nederland.</td></tr>
+    <tr><td><strong>Categorie</strong></td><td>Leeftijds-/geslachtsgroep (bijv. "Dames Junioren A", afgekort "DJA"). Bepaalt in welke groep een rijder start.</td></tr>
+    <tr><td><strong>Afstand / Onderdeel</strong></td><td>De te rijden afstand (bijv. 500m, Sprint, Tijdrit). Elk onderdeel heeft eigen heats en een eigen uitslag. Deze termen zijn inwisselbaar.</td></tr>
+    <tr><td><strong>Heat / Rit</strong></td><td>Eén race met een groep rijders. Meerdere heats vormen samen een ronde. <em>Heat</em> wordt gebruikt bij de startindeling, <em>rit</em> bij het tijdschema.</td></tr>
+    <tr><td><strong>Ronde</strong></td><td>Een fase in de wedstrijd: series (voorronde), kwartfinale, halve finale, A-finale, B-finales.</td></tr>
+    <tr><td><strong>Transponder</strong></td><td>Elektronische tijdmeting-chip die aan de schoen van de rijder bevestigd is. Wordt uitgelezen door het MyLaps/Orbits systeem.</td></tr>
+    <tr><td><strong>Startnummer (Snr)</strong></td><td>Het rugnummer van de rijder, zichtbaar op het wedstrijdpak. Wordt toegekend door de KNSB of de organisatie.</td></tr>
+    <tr><td><strong>Relatienummer</strong></td><td>Het unieke KNSB-lidmaatschapsnummer van een rijder.</td></tr>
+    <tr><td><strong>Loting</strong></td><td>De verdeling van rijders over heats. Kan willekeurig, op startnummer of op basis van een extern klassement.</td></tr>
+    <tr><td><strong>Doorstroom</strong></td><td>De regel die bepaalt welke rijders doorstromen naar de volgende ronde (bijv. "top 8 op tijd" of "2 winnaars per heat + tijdsnelsten").</td></tr>
+    <tr><td><strong>Slangenpatroon</strong></td><td>Verdeelmethode waarbij rijders zigzag over heats worden verdeeld: rijder 1→heat 1, 2→heat 2, 3→heat 3, 4→heat 3, 5→heat 2, 6→heat 1, enz. Dit zorgt voor gelijke sterkte per heat.</td></tr>
+    <tr><td><strong>Full-Final systeem</strong></td><td>Wedstrijdformat waarbij alle rijders een finale rijden: de snelsten in de A-finale, de rest in B-finales (B1, B2, enz.). Niemand valt af.</td></tr>
+    <tr><td><strong>Punten</strong></td><td>Positie-gebaseerd: 1e plaats = 1 punt, 2e = 2 punten, enz. <strong>Lager totaal = beter.</strong></td></tr>
+    <tr><td><strong>Sanctie</strong></td><td>Straf voor een overtreding: FS (valse start/waarschuwing), DQ-SF, DQ-DF (diskwalificatie), DNS (niet gestart), DNF (niet gefinisht).</td></tr>
+    <tr><td><strong>Tekenlijst</strong></td><td>Afdruk waarop rijders bij aankomst fysiek tekenen om hun aanwezigheid te bevestigen.</td></tr>
+  </tbody>
+</table>
+</div>
+
 <!-- ═══════════════════════════════════════════════════════════ 1 INLOGGEN -->
 <div class="hlg-sectie">
 <h2 id="hlg-inloggen">1. Inloggen</h2>
-<p>InlineComp is beveiligd met een gebruikerssysteem. U hebt een geldige gebruikersnaam en wachtwoord nodig om toegang te krijgen.</p>
+<p>InlineComp is beveiligd met een gebruikerssysteem. Je hebt een gebruikersnaam en wachtwoord nodig om toegang te krijgen. Deze worden aangemaakt door de beheerder (Owner of Admin) — er is geen zelfregistratie.</p>
 
 <h3>Inloggen</h3>
 <ol>
-  <li>Navigeer naar de login-pagina.</li>
-  <li>Voer uw gebruikersnaam en wachtwoord in.</li>
+  <li>Open de webapplicatie in je browser (het adres krijg je van de beheerder).</li>
+  <li>Voer je gebruikersnaam en wachtwoord in.</li>
   <li>Klik op <strong>Inloggen</strong>.</li>
 </ol>
-<p>Na een succesvolle login wordt u direct doorgestuurd naar het hoofdscherm. Uw naam en rol zijn zichtbaar rechts bovenin de navigatiebalk.</p>
+<p>Na het inloggen kom je op het hoofdscherm. Je naam en rol zijn zichtbaar rechts bovenin de navigatiebalk.</p>
 
 <!-- MOCKUP: inlogscherm -->
 <div class="hlg-mock">
@@ -187,10 +234,10 @@ function hlgContent() { return `
 <p class="hlg-mock-caption">↑ Het inlogscherm — vul gebruikersnaam en wachtwoord in en klik op Inloggen</p>
 
 <h3>Uitloggen</h3>
-<p>Klik op de pijlknop <strong>➤</strong> rechtsboven naast uw naam om uit te loggen. De sessie wordt direct beëindigd.</p>
+<p>Klik op de pijlknop <strong>➤</strong> rechtsboven naast je naam om uit te loggen.</p>
 
 <h3>Sessie verlopen</h3>
-<p>Sessies verlopen automatisch na 24 uur. Als uw sessie verloopt terwijl u aan het werk bent, verschijnt automatisch een login-venster. Na opnieuw inloggen kunt u direct verder waar u was — er gaat geen werk verloren.</p>
+<p>Sessies verlopen automatisch na 24 uur. Als je sessie verloopt terwijl je aan het werk bent, verschijnt automatisch een login-venster. Na opnieuw inloggen kun je direct verder waar je was — er gaat geen werk verloren.</p>
 
 <!-- MOCKUP: sessie verlopen modal -->
 <div class="hlg-mock">
@@ -218,7 +265,8 @@ function hlgContent() { return `
 <!-- ═══════════════════════════════════════════════════════════ 2 ROLLEN -->
 <div class="hlg-sectie">
 <h2 id="hlg-rollen">2. Rollen en rechten</h2>
-<p>Elke gebruiker heeft één van de volgende rollen. De rol bepaalt welke modules de gebruiker mag <em>bewerken</em>. Alle modules zijn voor iedereen <em>leesbaar</em> met uitzondering van de gebruikers module, voor deze module moet je minimaal beschikken over admin rechten.</p>
+<p>Elke gebruiker heeft één rol. De rol bepaalt welke modules je mag <em>bewerken</em>. Alle modules zijn voor iedereen <em>leesbaar</em>, behalve Gebruikersbeheer (alleen voor Owner/Admin). Een gebruiker kan maar één rol hebben.</p>
+<p>De <strong>Owner</strong> is de hoofdbeheerder (wordt bij installatie aangemaakt). De <strong>Admin</strong> heeft dezelfde rechten, maar kan geen andere Admins of de Owner bewerken. Gebruik Admin voor medewerkers die ook volledige toegang nodig hebben.</p>
 
 <table>
   <thead><tr>
@@ -241,8 +289,8 @@ function hlgContent() { return `
         <td>👁</td><td>👁</td><td>👁</td><td>👁</td><td>👁</td><td>—</td></tr>
   </tbody>
 </table>
-<p style="font-size:9pt;color:#666">* Admin kan geen andere admins of de owner bewerken.</p>
-<p>Modules waarvoor u geen schrijfrechten heeft worden weergegeven met een blauw <em>"Lees-alleen"</em> banner bovenin. Knoppen en invoervelden zijn dan uitgeschakeld.</p>
+<p style="font-size:9pt;color:#666">* Admin kan geen andere Admins of de Owner bewerken.</p>
+<p>Modules waarvoor je geen schrijfrechten hebt worden weergegeven met een blauw <em>"Lees-alleen"</em> banner bovenin. Knoppen en invoervelden zijn dan uitgeschakeld.</p>
 
 <!-- MOCKUP: hoofdscherm met lees-alleen banner -->
 <div class="hlg-mock">
@@ -267,7 +315,7 @@ function hlgContent() { return `
     </div>
     <div style="flex:1;padding:10px 14px">
       <div style="background:#e8f0fb;border-left:3px solid #2E75B6;color:#1a3a5c;padding:5px 10px;border-radius:4px;font-size:.74rem;margin-bottom:8px">
-        👁 Lees-alleen — uw rol heeft geen schrijfrechten voor deze module.
+        👁 Lees-alleen — je rol heeft geen schrijfrechten voor deze module.
       </div>
       <div style="font-size:.82rem;font-weight:700;color:#1a3a5c;margin-bottom:4px">Tijdschema</div>
       <div style="display:flex;gap:6px">
@@ -284,14 +332,14 @@ function hlgContent() { return `
 <!-- ═══════════════════════════════════════════════════════════ 3 IMPORTEER -->
 <div class="hlg-sectie">
 <h2 id="hlg-importeer">3. Importeer</h2>
-<p>De module <strong>Importeer</strong> is het startpunt voor elke wedstrijd. Hier worden deelnemers vanuit de KNSB-API gesynchroniseerd en beheerd.</p>
+<p>De module <strong>Importeer</strong> is het startpunt voor elke wedstrijd. Hier importeer je deelnemers vanuit de KNSB-inschrijvingssite (via een internetverbinding) en beheer je hun status.</p>
 
 <h3>3.1 Wedstrijd selecteren</h3>
 <ol>
-  <li>Klik links in de lijst op een wedstrijd om deze te selecteren.</li>
-  <li>Gebruik de datumfilters en dropdowns bovenaan om de lijst te verfijnen.</li>
+  <li>Klik links in de lijst op een wedstrijd om deze te selecteren. Gebruik de datumfilters bovenaan om de lijst te verfijnen.</li>
   <li>Na selectie worden de deelnemers automatisch opgehaald vanuit de KNSB-API en vergeleken met de lokale database.</li>
 </ol>
+<div class="hlg-tip">&#128161; Geen internetverbinding? Eerder geïmporteerde deelnemers blijven beschikbaar in de lokale database. Alleen het ophalen van nieuwe KNSB-data vereist internet.</div>
 
 <h3>3.2 De vergelijktabel</h3>
 <p>Na het ophalen verschijnt per categorie een tabel met alle ingeschreven deelnemers. Elke deelnemer heeft een <strong>status</strong>:</p>
@@ -397,7 +445,7 @@ function hlgContent() { return `
   <li><strong>Transponder:</strong> voer het transpondernummer in. Het systeem vergelijkt dit met bekende transponders (T1, T2, extras) van deze rijder:
     <ul>
       <li>Match gevonden → transponder wordt direct als actief ingesteld.</li>
-      <li>Geen match → u wordt gevraagd te bevestigen of dit de juiste transponder is. Bij <em>Ja</em> wordt hij als extra opgeslagen; bij <em>Nee</em> kunt u corrigeren.</li>
+      <li>Geen match → je wordt gevraagd te bevestigen of dit de juiste transponder is. Bij <em>Ja</em> wordt hij als extra opgeslagen; bij <em>Nee</em> kun je corrigeren.</li>
     </ul>
   </li>
   <li>Klik <strong>Toevoegen</strong>. De deelnemer verschijnt in de tabel met status <em>Bevestigd bij org.</em></li>
@@ -435,33 +483,44 @@ function hlgContent() { return `
 <div class="hlg-tip">&#128161; Als de ingevoerde categorie niet overeenkomt met de verwachte categorieën voor dit onderdeel, verschijnt een vergelijkbare waarschuwing. Klik nogmaals op <em>Toch toevoegen</em> om door te gaan.</div>
 
 <h3>3.5 Transponders beheren</h3>
-<p>In de kolom <em>Transponder</em> van de tabel kunt u per deelnemer de actieve transponder selecteren via een dropdown. De dropdown toont:</p>
+<p>In de kolom <em>Transponder</em> van de tabel kun je per deelnemer de actieve transponder selecteren via een dropdown. De dropdown toont:</p>
 <ul>
   <li><strong>T1</strong> – officiële KNSB transponder slot 1</li>
   <li><strong>T2</strong> – officiële KNSB transponder slot 2</li>
   <li><strong>Extra</strong> – lokaal toegevoegde transponders (per wedstrijd)</li>
 </ul>
-<p>Via de <strong>+</strong> knop naast de dropdown kunt u een nieuwe extra transponder toevoegen.</p>
+<p>Via de <strong>+</strong> knop naast de dropdown kun je een nieuwe extra transponder toevoegen.</p>
 
-<h3>3.6 Importeren</h3>
-<p>Als alle aanpassingen klaar zijn klikt u op de oranje knop <strong>Importeer</strong>. Dit slaat alle deelnemers, statussen en transponders op in de lokale database. Na import zijn de gegevens beschikbaar voor tijdschema en startlijsten.</p>
-<div class="hlg-warn">&#9888; Bij gelijktijdige bewerking door meerdere gebruikers detecteert het systeem een conflict. Er verschijnt een melding met de knop <em>Herlaad</em> om de meest recente versie op te halen.</div>
+<h3>3.6 Categorieën samenvoegen en splitsen</h3>
+<p>Soms wil je meerdere categorieën samen laten rijden (bijv. Dames Kadetten + Heren Kadetten in één startgroep), of juist een grote categorie opsplitsen. Dit doe je in de Importeer-module:</p>
+<ul>
+  <li><strong>Samenvoegen:</strong> klik op het koppel-icoon naast een categorie en selecteer de categorieën die samen moeten rijden. Ze verschijnen daarna als één gecombineerde tab met een badge die het aantal samengevoegde groepen toont.</li>
+  <li><strong>Splitsen:</strong> bij een categorie met meerdere subgroepen kun je deze opsplitsen zodat elke subgroep een eigen startlijst krijgt. De split verschijnt als aparte tab met een schaar-label.</li>
+</ul>
+<div class="hlg-tip">&#128161; Samenvoegen en splitsen kan ook na het genereren van startlijsten. De startlijst-configuratie werkt per groep.</div>
 
-<h3>3.7 Afdrukken</h3>
+<h3>3.7 Importeren (opslaan)</h3>
+<p>Als alle aanpassingen klaar zijn klik je op de oranje knop <strong>Importeer</strong>. Dit slaat alle deelnemers, statussen en transponders op in de lokale database. Na import zijn de gegevens beschikbaar voor de volgende modules.</p>
+<p>Je kunt opnieuw importeren om wijzigingen van de KNSB-site op te halen. Bestaande lokale aanpassingen (statussen, transponders) blijven behouden.</p>
+<div class="hlg-warn">&#9888; Bij gelijktijdige bewerking door meerdere gebruikers detecteert het systeem een conflict. Er verschijnt een melding met de keuze om te herladen.</div>
+
+<h3>3.8 Afdrukken</h3>
 <p>Na import zijn twee afdrukopties beschikbaar:</p>
 <ul>
-  <li><strong>Tekenlijst</strong> – lijst per categorie voor handtekeningen bij aankomst</li>
-  <li><strong>Deelnemerslijst</strong> – overzicht van alle bevestigde deelnemers per categorie</li>
+  <li><strong>Tekenlijst</strong> – per categorie een lijst met handtekeningvakjes. Rijders tekenen hier bij aankomst op de wedstrijddag om hun aanwezigheid te bevestigen.</li>
+  <li><strong>Deelnemerslijst</strong> – overzicht van alle bevestigde deelnemers per categorie, met transponder- en afstandsinformatie. Bedoeld als intern document voor de jury.</li>
 </ul>
+<p>Beide afdrukken bevatten automatisch het organisatielogo (bovenaan) en sponsorlogos (onderaan). Configureer deze in de <em>Beheer</em>-module.</p>
 </div>
 
 <!-- ═══════════════════════════════════════════════════════════ 4 TIJDSCHEMA -->
 <div class="hlg-sectie">
 <h2 id="hlg-tijdschema">4. Tijdschema</h2>
-<p>In de module <strong>Tijdschema</strong> stelt u het competitiesysteem in, configureert u per afstand de rondes en duur, bouwt u de programma-volgorde op met extra blokken (pauze, inrijden, enz.) en genereert u daarna het volledige schema met starttijden.</p>
+<p>De module <strong>Tijdschema</strong> bepaalt de <em>structuur</em> van de wedstrijd: welk competitiesysteem, welke rondes per afstand, hoe lang elke heat duurt, en in welke volgorde alles gereden wordt. Het resultaat is een compleet programma met berekende starttijden.</p>
+<div class="hlg-tip">&#128161; <strong>Tijdschema vs Startlijsten:</strong> het Tijdschema bepaalt <em>wat</em> er wanneer gereden wordt (het programma). De Startlijsten bepalen <em>wie</em> in welke heat zit (de indeling). Eerst het tijdschema opstellen, dan de startlijsten genereren.</div>
 
 <h3>4.1 Tijdschema aanmaken</h3>
-<p>Als er nog geen tijdschema bestaat voor de geselecteerde wedstrijd, klikt u op <strong>Tijdschema aanmaken</strong>. Er is eerst een geïmporteerde wedstrijd nodig (zie module <em>Importeer</em>).</p>
+<p>Klik op <strong>Tijdschema aanmaken</strong>. Vereiste: er moet al een geïmporteerde wedstrijd zijn (zie module <em>Importeer</em>). Zonder import verschijnt een melding.</p>
 
 <h3>4.2 Competitiesysteem kiezen</h3>
 <p>Bovenaan staat de <strong>Competitiesysteem</strong>-balk. Er zijn drie opties:</p>
@@ -591,14 +650,14 @@ function hlgContent() { return `
 <p class="hlg-mock-caption">↑ Afstandskaarten: 500m is gesloten (samenvatting zichtbaar), 1000m is open. Per categorie selecteer je rondes en duur per heat.</p>
 
 <h3>4.4 Programma-volgorde (blokken)</h3>
-<p>Zodra de afstandsinstellingen zijn opgeslagen, verschijnt de sectie <strong>Programma-volgorde</strong>. De ronde-blokken (Series, Halve finale, Finale, enz.) worden <em>automatisch</em> aangemaakt per afstand en categorie. U voegt daar extra blokken aan toe via de knoppen onderaan:</p>
+<p>Zodra de afstandsinstellingen zijn opgeslagen, verschijnt de sectie <strong>Programma-volgorde</strong>. De ronde-blokken (Series, Halve finale, Finale, enz.) worden <em>automatisch</em> aangemaakt per afstand en categorie. Je voegt daar extra blokken aan toe via de knoppen onderaan:</p>
 <ul>
   <li><strong>+ Pauze toevoegen</strong> – vrije pauze, duur instelbaar in minuten</li>
   <li><strong>+ Inrijden toevoegen</strong> – inrijdblok, duur instelbaar</li>
   <li><strong>+ Ceremonie toevoegen</strong> – huldigingsblok, duur instelbaar</li>
   <li><strong>+ Wedstrijd start</strong> – officieel startmoment (max. één per schema). Ronde-blokken mogen <em>niet</em> vóór de wedstrijdstart worden geplaatst.</li>
 </ul>
-<p>De volgorde past u aan via de <strong>↑ ↓ pijlknoppen</strong> of via <strong>drag-and-drop</strong>. Elk blok heeft een instelbare duur. Klik <strong>💾 Volgorde opslaan</strong> om de volgorde te bewaren.</p>
+<p>De volgorde past je aan via de <strong>↑ ↓ pijlknoppen</strong> of via <strong>drag-and-drop</strong>. Elk blok heeft een instelbare duur. Klik <strong>💾 Volgorde opslaan</strong> om de volgorde te bewaren.</p>
 
 <!-- MOCKUP: programma-volgorde -->
 <div class="hlg-mock">
@@ -685,7 +744,7 @@ function hlgContent() { return `
 
 <h3>4.5 Programma genereren en publiceren</h3>
 <p>Klik op <strong>▶ Genereer programma</strong>. Het systeem berekent voor elke rit een starttijd op basis van de blokken-volgorde en duraties. Het resultaat verschijnt als <em>Gegenereerd programma</em> met alle ritten op tijdstip. Het tijdstip van de laatste generatie wordt getoond; bij gewijzigde afstandsinstellingen verschijnt de waarschuwing <em>"mogelijk verouderd"</em>.</p>
-<p>Via de knop <strong>&#128196; Publiceer schema</strong> (rechts in de titel van het gegenereerd programma) stelt u het schema beschikbaar voor de <em>Live verwerking</em>-module.</p>
+<p>Via de knop <strong>&#128196; Publiceer schema</strong> (rechts in de titel van het gegenereerd programma) stel je het schema beschikbaar voor de <em>Live verwerking</em>-module.</p>
 <div class="hlg-tip">&#128161; Het tijdschema wordt elke 30 seconden automatisch bijgewerkt als andere gebruikers wijzigingen opslaan. Bij gelijktijdig opslaan door meerdere gebruikers verschijnt een conflictmelding met de knop <em>Herlaad</em>.</div>
 </div>
 
@@ -698,7 +757,7 @@ function hlgContent() { return `
 <p>Bovenaan de pagina staan de <strong>categorietabs</strong> (één per rijdersgroep). Samengevoegde groepen worden aangegeven met een badge (bijv. <em>"Junioren A + B ²"</em>); gesplitste groepen met een schaar-label. Onder de categorietabs staan de <strong>afstandstabs</strong> (500m, 1000m, enz.) voor de geselecteerde categorie.</p>
 
 <h3>5.2 Rondes configureren</h3>
-<p>Per afstand stelt u het aantal rondes in door op de nummers <strong>1 · 2 · 3 · 4</strong> te klikken. Per ronde configureert u:</p>
+<p>Per afstand stel je het aantal rondes in door op de nummers <strong>1 · 2 · 3 · 4</strong> te klikken. Per ronde configureer je:</p>
 <ul>
   <li><strong>Naam</strong> – vrij in te vullen (standaard: "Heats", "Halve finales", "Finale")</li>
   <li><strong>Max. per heat</strong> – maximum aantal rijders per heat in deze ronde</li>
@@ -826,7 +885,7 @@ function hlgContent() { return `
 <p>Samenvoegen en splitsen worden ingesteld in de <strong>Importeer</strong>-module. Na samenvoegen verschijnen de categorieën als één gecombineerde tab (met badge). Na splitsen verschijnt elke subgroep als aparte tab met schaar-label.</p>
 
 <h3>5.8 Loting wissen</h3>
-<p>De knop <strong>&#128465; Wis loting</strong> verwijdert alle heats voor de geselecteerde afstand. Na het wissen kunt u opnieuw loten met andere instellingen. Er verschijnt een bevestigingsvraag voordat de actie wordt uitgevoerd.</p>
+<p>De knop <strong>&#128465; Wis loting</strong> verwijdert alle heats voor de geselecteerde afstand. Na het wissen kun je opnieuw loten met andere instellingen. Er verschijnt een bevestigingsvraag voordat de actie wordt uitgevoerd.</p>
 </div>
 
 <!-- ═══════════════════════════════════════════════════════════ 6 LIVE -->
@@ -838,7 +897,7 @@ function hlgContent() { return `
 <p>De carrousel toont alle ritten uit het tijdschema in volgorde. Navigeer met de pijlknoppen of klik direct op een rit. De actieve rit toont de deelnemers met hun startnummers en transponders.</p>
 
 <h3>6.2 Resultaten invoeren</h3>
-<p>Per deelnemer kunt u invoeren:</p>
+<p>Per deelnemer kun je invoeren:</p>
 <ul>
   <li><strong>Tijd:</strong> in formaat mm:ss.hh (bijv. 1:23.45) — wordt omgerekend naar milliseconden.</li>
   <li><strong>Rondes:</strong> optioneel, voor afstanden waarbij rondes geteld worden.</li>
@@ -894,9 +953,25 @@ function hlgContent() { return `
 </div>
 <p class="hlg-mock-caption">↑ Live verwerking: tijden invoeren per rijder, sanctie (FS) bij Daan Borst. Alle sancties worden doorgetrokken naar de uitslag.</p>
 
+<h3>6.3a Resultaten opslaan en corrigeren</h3>
+<p>Klik op <strong>&#128190; Opslaan</strong> om de ingevoerde tijden en sancties op te slaan. Je kunt resultaten altijd opnieuw opslaan om correcties door te voeren — eerdere waarden worden overschreven.</p>
+<div class="hlg-tip">&#128161; Resultaten worden <strong>niet automatisch opgeslagen</strong>. Vergeet niet op Opslaan te klikken voordat je naar een andere rit navigeert!</div>
+
 <h3>6.4 Volgende ronde genereren</h3>
-<p>Na het invoeren van alle resultaten voor een ronde, kunt u de volgende ronde genereren. Het systeem bepaalt automatisch welke rijders doorstromen op basis van de ingestelde doorstroomregels.</p>
-<div class="hlg-tip">&#128161; Bij een full-final systeem worden rijders verdeeld over A-finale en B-finales. De B-finales worden automatisch aangemaakt op basis van het aantal rijders.</div>
+<p>Als alle heats van de huidige ronde resultaten hebben, verschijnt de knop om de volgende ronde te genereren. Het systeem:</p>
+<ol>
+  <li>Bepaalt welke rijders doorstromen op basis van de doorstroomregels (ingesteld in het Tijdschema).</li>
+  <li>Verdeelt de doorstromers over de heats van de volgende ronde via het slangenpatroon.</li>
+  <li>Bij een <strong>full-final systeem</strong>: de snelste rijders gaan naar de A-finale, de rest wordt verdeeld over B-finales (B1, B2, enz.).</li>
+</ol>
+<p>De gegenereerde volgende ronde verschijnt direct in de startlijsten-module en kan daar nog handmatig aangepast worden.</p>
+
+<h3>6.5 Veelvoorkomende situaties</h3>
+<ul>
+  <li><strong>Verkeerde tijd ingevoerd?</strong> Ga terug naar de rit, corrigeer de tijd, klik opnieuw op Opslaan.</li>
+  <li><strong>Rijder geswapped?</strong> Pas de startlijst aan via het deelnemerspaneel in de Startlijsten-module.</li>
+  <li><strong>Race herstart?</strong> Overschrijf de resultaten met de nieuwe tijden en sla opnieuw op.</li>
+</ul>
 <div class="hlg-warn">&#9888; Alleen gebruikers met de rol <em>Timer</em>, <em>Admin</em> of <em>Owner</em> kunnen resultaten invoeren en rondes genereren.</div>
 </div>
 
@@ -932,7 +1007,7 @@ function hlgContent() { return `
 <p class="hlg-mock-caption">↑ Afstandstabs met statuskleur: groen = bevestigd, geel = beschikbaar</p>
 
 <h3>7.2 Uitslag per afstand</h3>
-<p>Per afstand ziet u een tabel met alle finales samengevoegd (A-finale, B1, B2, enz.) met positie, naam, tijd en eventuele sancties. Bij een <strong>gecombineerd systeem</strong> (serie + A-finale) worden de serie- en finalepunten apart getoond.</p>
+<p>Per afstand zie je een tabel met alle finales samengevoegd (A-finale, B1, B2, enz.) met positie, naam, tijd en eventuele sancties. Bij een <strong>gecombineerd systeem</strong> (serie + A-finale) worden de serie- en finalepunten apart getoond.</p>
 <p>De knop <strong>✓ Uitslag bevestigen</strong> slaat de officiële uitslag op voor deze afstand. Na het bevestigen kleurt de afstandstab groen.</p>
 
 <!-- MOCKUP: uitslag per afstand -->
@@ -962,14 +1037,24 @@ function hlgContent() { return `
 </div>
 <p class="hlg-mock-caption">↑ Uitslag per afstand: sanctie-kolom toont alle sancties van die afstand (incl. serie). Knop "Uitslag bevestigen" bovenaan.</p>
 
-<h3>7.3 Klassement</h3>
-<p>Het <strong>Klassement</strong>-tab toont de totaalstand over alle afstanden. Punten worden berekend op basis van de positie per afstand (1e = 1 punt, 2e = 2 punten, enz.).</p>
+<h3>7.3 Klassement en puntensysteem</h3>
+<p>Het <strong>Klassement</strong>-tab toont de totaalstand over alle afstanden.</p>
+
+<h3>Hoe werken de punten?</h3>
+<p>Punten zijn gebaseerd op finishpositie: <strong>1e = 1 punt, 2e = 2 punten, 3e = 3 punten</strong>, enz. <strong>Lager totaal = beter.</strong> Dit is het tegenovergestelde van veel andere sporten!</p>
+<p>Bij een gelijk puntentotaal geldt deze tiebreaker-volgorde:</p>
+<ol>
+  <li>Beste individuele resultaat (laagste punten op een enkele afstand)</li>
+  <li>Resultaat op de laatst gereden afstand</li>
+  <li>Bij volledig ex-aequo: gedeelde positie</li>
+</ol>
+<p><strong>Sanctie-rijders</strong> krijgen standaard het aantal punten van de laatste positie in hun heat. Dit kun je handmatig aanpassen. <strong>0 punten</strong> invoeren = de rijder wordt volledig uitgesloten uit het klassement.</p>
 
 <h3>Punten aanpassen (sanctie-rijders)</h3>
-<p>Rijders met een sanctie op een afstand krijgen bewerkbare puntenvelden. U kunt de punten handmatig aanpassen:</p>
+<p>Rijders met een sanctie op een afstand krijgen bewerkbare puntenvelden. Je kunt de punten handmatig aanpassen:</p>
 <ul>
   <li>Typ het gewenste aantal punten in het gele invoerveld.</li>
-  <li>Het totaal wordt <strong>live</strong> herberekend terwijl u typt.</li>
+  <li>Het totaal wordt <strong>live</strong> herberekend terwijl je typt.</li>
   <li>Klik <strong>&#128190; Correcties opslaan</strong> om de aanpassingen op te slaan.</li>
   <li><strong>0 punten</strong> invoeren = rijder wordt uitgesloten uit het klassement en verschijnt onderaan bij "Uitgesloten".</li>
 </ul>
@@ -1022,7 +1107,7 @@ function hlgContent() { return `
 <p class="hlg-mock-caption">↑ Klassement: afstandskolommen groen = bevestigd. Daan Borst is uitgesloten (0 punten op Lange afstand, met sancties FS en DQ-DF). Punten bewerkbaar bij sanctie-rijders.</p>
 
 <h3>7.4 Afdrukken</h3>
-<p>Bovenaan de uitslag-pagina staan afdrukopties. Selecteer een categorie en kies wat u wilt afdrukken:</p>
+<p>Bovenaan de uitslag-pagina staan afdrukopties. Selecteer een categorie en kies wat je wilt afdrukken:</p>
 <ul>
   <li><strong>Per afstand</strong> (bijv. "Sprint"): de totaaluitslag van die afstand, met alle finales.
     <ul>
@@ -1148,7 +1233,7 @@ function hlgContent() { return `
 
 <h3>8.2 Wedstrijden</h3>
 <p>Het tabblad <em>Wedstrijden</em> toont alle KNSB-wedstrijden die overeenkomen met de organisatienaam of e-mailadres. Wedstrijden die al in de lokale database staan worden gemarkeerd als <em>"In database"</em>.</p>
-<p>Via de <strong>Verwijderen</strong>-knop kunt u een wedstrijd compleet uit de database verwijderen. <strong>Let op:</strong> dit verwijdert ook alle deelnemers, het tijdschema en de startlijsten van die wedstrijd.</p>
+<p>Via de <strong>Verwijderen</strong>-knop kun je een wedstrijd compleet uit de database verwijderen. <strong>Let op:</strong> dit verwijdert ook alle deelnemers, het tijdschema en de startlijsten van die wedstrijd.</p>
 <div class="hlg-warn">&#9888; Verwijderen kan niet ongedaan worden gemaakt.</div>
 
 <h3>8.3 Klassementen</h3>
@@ -1228,10 +1313,10 @@ function hlgContent() { return `
 <p>Klik op het potlood-icoon (&#9998;) naast een gebruiker. Naam, gebruikersnaam, e-mail en rol zijn aanpasbaar.</p>
 
 <h3>9.4 Wachtwoord wijzigen</h3>
-<p>Klik op het sleutel-icoon (&#128273;) naast een gebruiker. U kunt uw eigen wachtwoord altijd wijzigen; voor andere gebruikers heeft u schrijfrechten nodig.</p>
+<p>Klik op het sleutel-icoon (&#128273;) naast een gebruiker. Je kunt je eigen wachtwoord altijd wijzigen; voor andere gebruikers heb je schrijfrechten nodig.</p>
 
 <h3>9.5 Activeren / deactiveren</h3>
-<p>Via de groene/rode bol (&#9679;) naast een gebruiker kunt u een account deactiveren (de gebruiker kan dan niet meer inloggen) of weer activeren.</p>
+<p>Via de groene/rode bol (&#9679;) naast een gebruiker kun je een account deactiveren (de gebruiker kan dan niet meer inloggen) of weer activeren.</p>
 
 <h3>9.6 Verwijderen</h3>
 <p>Via de prullenbak-knop (&#128465;) wordt een gebruiker definitief verwijderd. De owner-account kan niet worden verwijderd.</p>
@@ -1240,7 +1325,7 @@ function hlgContent() { return `
 <ul>
   <li>Een <em>Admin</em> kan geen andere admins of de owner beheren.</li>
   <li>De owner-account kan niet worden gedeactiveerd of verwijderd.</li>
-  <li>U kunt uw eigen account niet verwijderen of deactiveren.</li>
+  <li>U kun jew eigen account niet verwijderen of deactiveren.</li>
 </ul>
 </div>
 
@@ -1262,9 +1347,9 @@ function hlgContent() { return `
   <li><strong>Transponders:</strong> het systeem houdt per wedstrijd bij welk transpondernummer actief is. Dit kan afwijken van de officiële KNSB-transponders T1 en T2.</li>
   <li><strong>Handmatig toegevoegde deelnemers</strong> blijven zichtbaar na een hersynch met de KNSB-API, zolang hun status niet "Afgemeld (KNSB)" is.</li>
   <li><strong>Tab-kleuren:</strong> geel = beschikbaar/tussenstatus, groen = gereed/vastgelegd. Dit geldt in zowel Startlijsten als Uitslag.</li>
-  <li><strong>Sessie verlopen?</strong> Er verschijnt automatisch een login-venster. Na inloggen kunt u direct verder — geen werk gaat verloren.</li>
+  <li><strong>Sessie verlopen?</strong> Er verschijnt automatisch een login-venster. Na inloggen kun je direct verder — geen werk gaat verloren.</li>
   <li><strong>Alle afdrukken</strong> (startlijsten, tijdschema, uitslagen, tekenlijsten) bevatten automatisch het organisatielogo en sponsorlogos. Configureer deze in de Beheer-module.</li>
-  <li><strong>0 punten = uitgesloten:</strong> als u 0 punten invoert voor een gesanctioneerde rijder, wordt deze uitgesloten uit het klassement en verschijnt onderaan bij "Uitgesloten".</li>
+  <li><strong>0 punten = uitgesloten:</strong> als je 0 punten invoert voor een gesanctioneerde rijder, wordt deze uitgesloten uit het klassement en verschijnt onderaan bij "Uitgesloten".</li>
   <li><strong>Sancties op de printout:</strong> alle sancties (inclusief waarschuwingen uit eerdere rondes) worden als genummerde voetnoten op de officiële uitslag vermeld.</li>
   <li><strong>Handleiding als PDF:</strong> klik op <em>Opslaan als PDF</em> rechtsboven in dit venster om de volledige handleiding af te drukken.</li>
 </ul>
