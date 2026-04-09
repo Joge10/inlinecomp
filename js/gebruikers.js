@@ -39,6 +39,126 @@ async function herlaadGebruikers() {
     }
 }
 
+// ── Logboek ───────────────────────────────────────────────────────────────────
+
+let gbLogboekOpen = false;
+
+async function laadLogboek(userId = '') {
+    const tbody   = el('gb-log-tbody');
+    const statusEl = el('gb-log-status');
+    if (!tbody) return;
+    tbody.innerHTML = '<tr><td colspan="6" class="gb-log-laden">Laden…</td></tr>';
+    if (statusEl) statusEl.textContent = '';
+    try {
+        const url = `api/logboek.php${userId ? '?user_id=' + encodeURIComponent(userId) : ''}`;
+        const res  = await fetch(url);
+        const logs = await res.json();
+        if (!Array.isArray(logs)) throw new Error(logs.error ?? 'Fout');
+
+        if (!logs.length) {
+            tbody.innerHTML = '<tr><td colspan="6" class="gb-log-laden">Geen vermeldingen.</td></tr>';
+            return;
+        }
+
+        const ACTIE_BADGE = {
+            login:          '<span class="gb-log-badge gb-log-in">ingelogd</span>',
+            logout:         '<span class="gb-log-badge gb-log-out">uitgelogd</span>',
+            login_mislukt:  '<span class="gb-log-badge gb-log-fout">mislukt</span>',
+        };
+
+        tbody.innerHTML = logs.map(r => {
+            const dt  = new Date(r.tijdstip.replace(' ', 'T') + 'Z');
+            const ts  = dt.toLocaleString('nl-NL', {
+                day:'2-digit', month:'2-digit', year:'numeric',
+                hour:'2-digit', minute:'2-digit', second:'2-digit'
+            });
+            const badge   = ACTIE_BADGE[r.actie] ?? `<span class="gb-log-badge">${escHtml(r.actie)}</span>`;
+            const browser = [r.browser, r.os].filter(Boolean).join(' / ');
+            const locatie = r.land
+                ? escHtml(r.land) + (r.stad ? `<span class="gb-log-stad">, ${escHtml(r.stad)}</span>` : '')
+                : '—';
+            return `<tr class="${r.actie === 'login_mislukt' ? 'gb-log-rij-fout' : ''}">
+                <td class="gb-log-ts">${ts}</td>
+                <td>${escHtml(r.naam)}<span class="gb-username"> @${escHtml(r.username)}</span></td>
+                <td>${badge}</td>
+                <td class="gb-log-ip">${escHtml(r.ip_adres)}</td>
+                <td class="gb-log-loc">${locatie}</td>
+                <td class="gb-log-br">${escHtml(browser)}</td>
+            </tr>`;
+        }).join('');
+    } catch(e) {
+        tbody.innerHTML = `<tr><td colspan="6" class="status-msg error">⚠ ${escHtml(e.message)}</td></tr>`;
+    }
+}
+
+async function opschonenLogboek(dagen) {
+    const statusEl = el('gb-log-status');
+    try {
+        const res  = await fetch('api/logboek.php', {
+            method: 'POST', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ action: 'opschonen', dagen }),
+        });
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.error ?? 'Fout');
+        if (statusEl) statusEl.textContent = `${data.verwijderd} vermelding(en) verwijderd.`;
+        laadLogboek(el('gb-log-filter')?.value ?? '');
+    } catch(e) {
+        if (statusEl) statusEl.textContent = `Fout: ${e.message}`;
+    }
+}
+
+function renderLogboekSectie() {
+    const gebruikerOpties = gbGebruikers.map(u =>
+        `<option value="${u.id}">${escHtml(u.naam)} (@${escHtml(u.username)})</option>`
+    ).join('');
+
+    return `
+    <div class="gb-logboek-sectie" id="gb-logboek-sectie">
+        <div class="gb-kop gb-logboek-kop">
+            <div class="section-title">Login-logboek</div>
+            <div class="gb-log-acties">
+                <select id="gb-log-filter" class="inp gb-log-filter-sel">
+                    <option value="">— Alle gebruikers —</option>
+                    ${gebruikerOpties}
+                </select>
+                <button class="btn-secondary" id="gb-log-vernieuwen">↻ Vernieuwen</button>
+                <button class="btn-secondary" id="gb-log-opschonen">🗑 Opschonen…</button>
+            </div>
+        </div>
+        <div id="gb-log-status" class="gb-log-status"></div>
+        <table class="gb-tabel gb-log-tabel">
+            <thead><tr>
+                <th>Tijdstip</th>
+                <th>Gebruiker</th>
+                <th>Actie</th>
+                <th>IP-adres</th>
+                <th>Locatie</th>
+                <th>Browser / OS</th>
+            </tr></thead>
+            <tbody id="gb-log-tbody">
+                <tr><td colspan="6" class="gb-log-laden">Laden…</td></tr>
+            </tbody>
+        </table>
+    </div>`;
+}
+
+function bindLogboekEvents() {
+    el('gb-log-filter')?.addEventListener('change', () =>
+        laadLogboek(el('gb-log-filter').value));
+
+    el('gb-log-vernieuwen')?.addEventListener('click', () =>
+        laadLogboek(el('gb-log-filter')?.value ?? ''));
+
+    el('gb-log-opschonen')?.addEventListener('click', () => {
+        const dagen = prompt('Verwijder vermeldingen ouder dan hoeveel dagen?', '30');
+        if (dagen === null) return;
+        const d = parseInt(dagen);
+        if (!d || d < 1) { alert('Voer een geldig aantal dagen in.'); return; }
+        if (confirm(`Alle vermeldingen ouder dan ${d} dagen verwijderen?`))
+            opschonenLogboek(d);
+    });
+}
+
 function renderGebruikers() {
     const container = el('gb-container');
 
@@ -84,7 +204,8 @@ function renderGebruikers() {
             </thead>
             <tbody>${rijen}</tbody>
         </table>
-        <div id="gb-form-wrap" style="display:none"></div>`;
+        <div id="gb-form-wrap" style="display:none"></div>
+        ${renderLogboekSectie()}`;
 
     // Events
     el('gb-btn-nieuw').addEventListener('click', () => openGbForm(null));
@@ -100,6 +221,9 @@ function renderGebruikers() {
 
     container.querySelectorAll('.gb-btn-del').forEach(btn =>
         btn.addEventListener('click', () => verwijderGebruiker(parseInt(btn.dataset.id))));
+
+    bindLogboekEvents();
+    laadLogboek();
 }
 
 // ── Gebruiker bewerken / aanmaken ─────────────────────────────────────────────

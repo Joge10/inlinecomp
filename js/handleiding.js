@@ -158,10 +158,7 @@ function hlgContent() { return `
 <h2 id="hlg-inloggen">1. Inloggen</h2>
 <p>InlineComp is beveiligd met een gebruikerssysteem. U hebt een geldige gebruikersnaam en wachtwoord nodig om toegang te krijgen.</p>
 
-<h3>Eerste gebruik (installatie)</h3>
-<p>Bij de allereerste keer dat de applicatie wordt geopend verschijnt een speciaal formulier om een <strong>Owner</strong>-account aan te maken. Dit is het hoofdbeheerder-account en kan daarna via <em>Gebruikers</em> aanvullende gebruikers aanmaken.</p>
-
-<h3>Normaal inloggen</h3>
+<h3>Inloggen</h3>
 <ol>
   <li>Navigeer naar de login-pagina.</li>
   <li>Voer uw gebruikersnaam en wachtwoord in.</li>
@@ -190,15 +187,14 @@ function hlgContent() { return `
 <p class="hlg-mock-caption">↑ Het inlogscherm — vul gebruikersnaam en wachtwoord in en klik op Inloggen</p>
 
 <h3>Uitloggen</h3>
-<p>Klik op de pijlknop (&#10148;) rechtsboven naast uw naam om uit te loggen. De sessie wordt direct beëindigd.</p>
-
+<p>Klik op de pijlknop <button class="header-uitlog-btn" id="btn-uitloggen" title="Uitloggen" style="border: 1px solid rgba(100, 100, 100, .35); color: black;">➤</button> rechtsboven naast uw naam om uit te loggen. De sessie wordt direct beëindigd.</p>
 <div class="hlg-tip">&#128161; Sessies verlopen automatisch na 24 uur inactiviteit.</div>
 </div>
 
 <!-- ═══════════════════════════════════════════════════════════ 2 ROLLEN -->
 <div class="hlg-sectie">
 <h2 id="hlg-rollen">2. Rollen en rechten</h2>
-<p>Elke gebruiker heeft één van de volgende rollen. De rol bepaalt welke modules de gebruiker mag <em>bewerken</em>. Alle modules zijn voor iedereen <em>leesbaar</em>.</p>
+<p>Elke gebruiker heeft één van de volgende rollen. De rol bepaalt welke modules de gebruiker mag <em>bewerken</em>. Alle modules zijn voor iedereen <em>leesbaar</em> met uitzondering van de gebruikers module, voor deze module moet je minimaal beschikken over admin rechten.</p>
 
 <table>
   <thead><tr>
@@ -453,176 +449,331 @@ function hlgContent() { return `
 <!-- ═══════════════════════════════════════════════════════════ 4 TIJDSCHEMA -->
 <div class="hlg-sectie">
 <h2 id="hlg-tijdschema">4. Tijdschema</h2>
-<p>In de module <strong>Tijdschema</strong> wordt het programma van de wedstrijd opgebouwd: welke afstanden worden gereden, in welke volgorde, en hoe lang duurt elk blok.</p>
+<p>In de module <strong>Tijdschema</strong> stelt u het competitiesysteem in, configureert u per afstand de rondes en duur, bouwt u de programma-volgorde op met extra blokken (pauze, inrijden, enz.) en genereert u daarna het volledige schema met starttijden.</p>
 
 <h3>4.1 Tijdschema aanmaken</h3>
-<p>Als er nog geen tijdschema bestaat, klikt u op <strong>Tijdschema aanmaken</strong>. Daarna kiest u het <strong>competitiesysteem</strong>:</p>
-<ul>
-  <li><strong>Punten</strong> – klassiek inline-systeem met heats en punten</li>
-  <li><strong>Tijdrit</strong> – iedereen rijdt individueel op tijd</li>
-  <li><strong>Knock-out</strong> – directe uitschakeling per rit</li>
-</ul>
-<div class="hlg-warn">&#9888; Wisselen van systeem verwijdert alle afstandsinstellingen en het gegenereerde programma.</div>
+<p>Als er nog geen tijdschema bestaat voor de geselecteerde wedstrijd, klikt u op <strong>Tijdschema aanmaken</strong>. Er is eerst een geïmporteerde wedstrijd nodig (zie module <em>Importeer</em>).</p>
 
-<h3>4.2 Afstanden configureren</h3>
-<p>Per afstand (onderdeel) stelt u in:</p>
-<ul>
-  <li>Starttijd van het eerste blok</li>
-  <li>Duur per rit (in m:ss)</li>
-  <li>Aantal ritten per heat</li>
-  <li>Pauze tussen heats</li>
-</ul>
+<h3>4.2 Competitiesysteem kiezen</h3>
+<p>Bovenaan staat de <strong>Competitiesysteem</strong>-balk. Er zijn drie opties:</p>
+<table>
+  <thead><tr><th>Systeem</th><th>Omschrijving</th><th>Typisch gebruik</th></tr></thead>
+  <tbody>
+    <tr>
+      <td><strong>Full-Final</strong></td>
+      <td>Iedereen rijdt series; indeling in A‑finale + B1‑, B2‑…Bn‑finales op basis van tijd. Geen uitval — iedereen start een finale.</td>
+      <td>Regionale wedstrijden</td>
+    </tr>
+    <tr>
+      <td><strong>Internationaal oud</strong></td>
+      <td>Knock-out per ronde. Optioneel: kwartfinale en halve finale. B-finale voor verliezers halve finale. Runner-up voor uitvallers in de series.</td>
+      <td>Grotere nationale wedstrijden (klassiek KNSB-format)</td>
+    </tr>
+    <tr>
+      <td><strong>Internationaal nieuw</strong></td>
+      <td>Knock-out per ronde. Optioneel: kwartfinale en halve finale. Geen B-finale; wel optionele runner-up. Modern KNSB-format.</td>
+      <td>NK, kampioenschappen</td>
+    </tr>
+  </tbody>
+</table>
+<p>Kies het systeem, klik <strong>Opslaan</strong>. Onder de selector verschijnt een toelichting met de rondevolgorde van het gekozen systeem.</p>
+<div class="hlg-warn">&#9888; Wisselen van systeem verwijdert alle afstandsinstellingen, programma-blokken en het gegenereerde programma. Er verschijnt een bevestigingsvraag voordat dit definitief wordt uitgevoerd.</div>
 
-<h3>4.3 Programmaopbouw</h3>
-<p>Via de knoppen onderaan voegt u blokken toe aan het programma:</p>
-<ul>
-  <li><strong>Pauze</strong> – vrije pauze met instelbare duur</li>
-  <li><strong>Inrijden</strong> – inrijdblok gekoppeld aan één of meer categorieën</li>
-  <li><strong>Wedstrijdstart</strong> – officieel startmoment van de wedstrijd</li>
-  <li><strong>Ceremonie</strong> – huldigingsblok</li>
-</ul>
-<p>Blokken kunt u via de pijlknoppen omhoog of omlaag verplaatsen, en verwijderen met de prullenbak-knop.</p>
-
-<!-- MOCKUP: tijdschema blokken -->
+<!-- MOCKUP: systeem kiezen -->
 <div class="hlg-mock">
-  <div style="background:#1a3a5c;color:#fff;padding:5px 12px;font-size:.78rem;font-weight:700">Tijdschema</div>
-  <div style="padding:10px 14px">
-    <div style="font-size:.84rem;font-weight:700;color:#1a3a5c;margin-bottom:1px">NK Inline 2025</div>
-    <div style="font-size:.71rem;color:#888;margin-bottom:10px">Systeem: Punten &nbsp;·&nbsp; Zoetermeer</div>
-    <div style="display:flex;flex-direction:column;gap:5px">
-      <div style="display:flex;align-items:center;gap:8px">
-        <div style="width:42px;flex-shrink:0;text-align:right;font-size:.68rem;color:#999">09:00</div>
-        <div style="flex:1;background:#e8f0fb;border-left:3px solid #2E75B6;border-radius:4px;padding:4px 8px;font-size:.74rem;color:#1a3a5c;display:flex;align-items:center;justify-content:space-between">
-          <span><strong>Inrijden</strong> &nbsp;·&nbsp; Junioren A + B (15 min)</span>
-          <span style="color:#aaa;font-size:.8rem">↑ ↓ 🗑</span>
-        </div>
+  <div style="background:#1a3a5c;color:#fff;padding:5px 12px;font-size:.78rem;font-weight:700">Tijdschema – NK Inline 2025</div>
+  <div style="padding:8px 12px">
+    <div style="background:#f5f7fa;border:1px solid #dde;border-radius:6px;padding:8px 12px">
+      <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">
+        <span style="font-size:.74rem;color:#555;font-weight:600">Competitiesysteem</span>
+        <div style="border:1px solid #ccc;border-radius:4px;padding:4px 10px;background:#fff;font-size:.77rem;color:#1a3a5c">Internationaal nieuw ▾</div>
+        <div style="border:1px solid #ccc;border-radius:4px;padding:4px 8px;font-size:.73rem;color:#aaa;background:#f8f8f8">Opslaan</div>
+        <span style="background:#d4edda;color:#155724;border-radius:10px;padding:2px 9px;font-size:.69rem;font-weight:600">✔ Actief: Internationaal nieuw</span>
       </div>
-      <div style="display:flex;align-items:center;gap:8px">
-        <div style="width:42px;flex-shrink:0;text-align:right;font-size:.68rem;color:#999">09:15</div>
-        <div style="flex:1;background:#fff3cd;border-left:3px solid #e86c1b;border-radius:4px;padding:4px 8px;font-size:.74rem;color:#7c4000;display:flex;align-items:center;justify-content:space-between">
-          <span><strong>Wedstrijdstart</strong></span>
-          <span style="color:#aaa;font-size:.8rem">↑ ↓ 🗑</span>
-        </div>
+      <div style="margin-top:8px;font-size:.72rem;color:#444;border-left:3px solid #1a3a5c;padding-left:8px;line-height:1.5">
+        <strong>Modern knock-outsysteem</strong> — uitval per ronde, geen B-finales maar wel een runner-up optie.<br>
+        <span style="color:#777">1. Series &nbsp;→&nbsp; 2. Kwartfinale (opt.) &nbsp;→&nbsp; 3. Halve finale (opt.) &nbsp;→&nbsp; 4. A-finale &nbsp;·&nbsp; 5. Runner-up (opt.)</span><br>
+        <span style="color:#888;font-style:italic">&#128161; KNSB-format voor de landelijke wedstrijden (met runner-up) en nationale kampioenschappen (zonder runner-up).</span>
       </div>
-      <div style="display:flex;align-items:center;gap:8px">
-        <div style="width:42px;flex-shrink:0;text-align:right;font-size:.68rem;color:#999">09:15</div>
-        <div style="flex:1;background:#d4edda;border-left:3px solid #28a745;border-radius:4px;padding:4px 8px;font-size:.74rem;color:#155724;display:flex;align-items:center;justify-content:space-between">
-          <span><strong>Heat 1</strong> &nbsp;·&nbsp; Junioren A &nbsp;·&nbsp; 4 rijders &nbsp;·&nbsp; 8 min</span>
-          <span style="color:#aaa;font-size:.8rem">↑ ↓ 🗑</span>
-        </div>
-      </div>
-      <div style="display:flex;align-items:center;gap:8px">
-        <div style="width:42px;flex-shrink:0;text-align:right;font-size:.68rem;color:#999">09:23</div>
-        <div style="flex:1;background:#d4edda;border-left:3px solid #28a745;border-radius:4px;padding:4px 8px;font-size:.74rem;color:#155724;display:flex;align-items:center;justify-content:space-between">
-          <span><strong>Heat 2</strong> &nbsp;·&nbsp; Junioren A &nbsp;·&nbsp; 4 rijders &nbsp;·&nbsp; 8 min</span>
-          <span style="color:#aaa;font-size:.8rem">↑ ↓ 🗑</span>
-        </div>
-      </div>
-      <div style="display:flex;align-items:center;gap:8px">
-        <div style="width:42px;flex-shrink:0;text-align:right;font-size:.68rem;color:#999">09:35</div>
-        <div style="flex:1;background:#ede0ff;border-left:3px solid #9C27B0;border-radius:4px;padding:4px 8px;font-size:.74rem;color:#4a148c;display:flex;align-items:center;justify-content:space-between">
-          <span><strong>Pauze</strong> &nbsp;·&nbsp; 15 min</span>
-          <span style="color:#aaa;font-size:.8rem">↑ ↓ 🗑</span>
-        </div>
-      </div>
-      <div style="display:flex;align-items:center;gap:8px">
-        <div style="width:42px;flex-shrink:0;text-align:right;font-size:.68rem;color:#999">09:50</div>
-        <div style="flex:1;background:#d4edda;border-left:3px solid #28a745;border-radius:4px;padding:4px 8px;font-size:.74rem;color:#155724;display:flex;align-items:center;justify-content:space-between">
-          <span><strong>Heat 1</strong> &nbsp;·&nbsp; Junioren B &nbsp;·&nbsp; 5 rijders &nbsp;·&nbsp; 8 min</span>
-          <span style="color:#aaa;font-size:.8rem">↑ ↓ 🗑</span>
-        </div>
-      </div>
-    </div>
-    <div style="display:flex;gap:6px;margin-top:10px">
-      <div style="border:1px dashed #ccc;border-radius:4px;padding:3px 9px;font-size:.71rem;color:#666">+ Pauze</div>
-      <div style="border:1px dashed #ccc;border-radius:4px;padding:3px 9px;font-size:.71rem;color:#666">+ Inrijden</div>
-      <div style="border:1px dashed #ccc;border-radius:4px;padding:3px 9px;font-size:.71rem;color:#666">+ Ceremonie</div>
-      <div style="background:#e86c1b;color:#fff;border-radius:4px;padding:3px 9px;font-size:.71rem;font-weight:600;margin-left:auto">Genereer programma</div>
     </div>
   </div>
 </div>
-<p class="hlg-mock-caption">↑ Tijdschema: blokken met kleurcodering — blauw=inrijden, geel=wedstrijdstart, groen=heat, paars=pauze. Pijlen verplaatsen blokken.</p>
+<p class="hlg-mock-caption">↑ Competitiesysteem-balk: dropdown om systeem te kiezen, Opslaan-knop, actieve badge en automatische uitleg eronder</p>
 
-<h3>4.4 Ritten genereren</h3>
-<p>Klik op <strong>Genereer programma</strong> om alle ritten automatisch te plannen op basis van de ingestelde parameters. Het gegenereerde programma toont alle ritten met starttijden.</p>
-<div class="hlg-tip">&#128161; Het tijdschema wordt automatisch bijgewerkt als andere gebruikers wijzigingen opslaan (elke 30 seconden).</div>
+<h3>4.3 Afstandsinstellingen</h3>
+<p>Onder het competitiesysteem staat de sectie <strong>Afstandsinstellingen</strong>. Per afstand (onderdeel) verschijnt een kaart met een korte samenvatting van de rondevolgorde. Klik op <strong>✏ Bewerken</strong> om de configuratie uit te klappen.</p>
 
-<h3>4.5 Schema publiceren</h3>
-<p>Via <strong>&#128196; Publiceer schema</strong> wordt het tijdschema beschikbaar gesteld voor de live-verwerking module.</p>
+<p><strong>Full-Final instellingen (gedeeld, voor alle categorieën binnen de afstand):</strong></p>
+<ul>
+  <li><strong>A-finale:</strong> max. rijders per A-finale</li>
+  <li><strong>B-finales:</strong> max. rijders per B-finale (Bn-finales voor de rest)</li>
+  <li>Checkbox: <em>"Laatste B-finale (Bn) is de grootste"</em></li>
+</ul>
+<p><strong>Internationaal oud/nieuw instellingen:</strong></p>
+<ul>
+  <li><strong>Runner-up:</strong> aan/uit, max. per heat, min. per heat</li>
+  <li><strong>Per categorie:</strong> welke rondes er zijn (series, kwartfinale, halve finale) en de duur per heat (in m:ss)</li>
+</ul>
+<p>Klik <strong>💾 Opslaan</strong> om de instellingen op te slaan. De samenvatting op de kaart wordt direct bijgewerkt (bijv. <em>"Series → Halve finale → Finale"</em>).</p>
+
+<!-- MOCKUP: afstandskaarten -->
+<div class="hlg-mock">
+  <div style="background:#1a3a5c;color:#fff;padding:5px 12px;font-size:.78rem;font-weight:700">Tijdschema – Afstandsinstellingen</div>
+  <div style="padding:8px 12px;display:flex;flex-direction:column;gap:6px">
+    <!-- Gesloten kaart -->
+    <div style="border:1px solid #dde;border-radius:6px;overflow:hidden">
+      <div style="display:flex;align-items:center;gap:10px;padding:6px 10px;background:#f8f9fb">
+        <span style="font-weight:700;font-size:.8rem;color:#1a3a5c;min-width:36px">500m</span>
+        <span style="font-size:.71rem;color:#888">Junioren A &nbsp;·&nbsp; Junioren B</span>
+        <span style="font-size:.71rem;color:#333;flex:1;font-style:italic">Series → Halve finale → A-finale</span>
+        <div style="border:1px solid #ccc;border-radius:4px;padding:2px 8px;font-size:.7rem;color:#444;background:#fff;white-space:nowrap">✏ Bewerken</div>
+      </div>
+    </div>
+    <!-- Open kaart (configuratiepaneel) -->
+    <div style="border:2px solid #1a3a5c;border-radius:6px;overflow:hidden">
+      <div style="display:flex;align-items:center;gap:10px;padding:6px 10px;background:#eef2f8">
+        <span style="font-weight:700;font-size:.8rem;color:#1a3a5c;min-width:36px">1000m</span>
+        <span style="font-size:.71rem;color:#888">Senioren</span>
+        <span style="font-size:.71rem;color:#333;flex:1;font-style:italic">Series · Runner-up → A-finale</span>
+        <div style="border:1px solid #1a3a5c;border-radius:4px;padding:2px 8px;font-size:.7rem;color:#1a3a5c;background:#fff;font-weight:600;white-space:nowrap">▲ Sluiten</div>
+      </div>
+      <div style="padding:8px 12px;background:#fff;border-top:1px solid #dde">
+        <div style="font-size:.7rem;font-weight:700;color:#666;margin-bottom:6px;text-transform:uppercase;letter-spacing:.3px">Gedeeld – 1000m</div>
+        <div style="display:flex;align-items:center;gap:8px;margin-bottom:5px;font-size:.72rem">
+          <span style="width:88px;color:#555;flex-shrink:0">Runner-up</span>
+          <span style="display:flex;align-items:center;gap:4px"><input type="checkbox" checked disabled> Niet-gekwalificeerden rijden runner-up</span>
+        </div>
+        <div style="display:flex;align-items:center;gap:8px;margin-bottom:5px;font-size:.72rem">
+          <span style="width:88px;color:#555;flex-shrink:0">Max/heat</span>
+          <div style="border:1px solid #ccc;border-radius:3px;padding:2px 6px;background:#fff;font-size:.74rem;width:34px;text-align:center">6</div>
+          <span style="color:#888">rijders per runner-up heat</span>
+        </div>
+        <div style="margin-top:8px;font-size:.7rem;font-weight:700;color:#666;margin-bottom:5px;text-transform:uppercase;letter-spacing:.3px">Per categorie</div>
+        <table style="width:100%;border-collapse:collapse;font-size:.69rem">
+          <thead><tr style="background:#f0f4f8">
+            <th style="padding:2px 5px;text-align:left;border-bottom:1px solid #dde;font-weight:600">Categorie</th>
+            <th style="padding:2px 5px;border-bottom:1px solid #dde;font-weight:600;text-align:center">Series</th>
+            <th style="padding:2px 5px;border-bottom:1px solid #dde;font-weight:600;text-align:center">Kwart-finale</th>
+            <th style="padding:2px 5px;border-bottom:1px solid #dde;font-weight:600;text-align:center">Halve finale</th>
+            <th style="padding:2px 5px;border-bottom:1px solid #dde;font-weight:600">Duur/heat</th>
+          </tr></thead>
+          <tbody>
+            <tr><td style="padding:2px 5px">Senioren heren</td>
+                <td style="padding:2px 5px;text-align:center">✔</td>
+                <td style="padding:2px 5px;text-align:center;color:#bbb">—</td>
+                <td style="padding:2px 5px;text-align:center">✔</td>
+                <td style="padding:2px 5px"><div style="border:1px solid #ccc;border-radius:3px;padding:1px 5px;background:#fff;width:38px">1:30</div></td>
+            </tr>
+            <tr style="background:#f8f9fb"><td style="padding:2px 5px">Senioren dames</td>
+                <td style="padding:2px 5px;text-align:center">✔</td>
+                <td style="padding:2px 5px;text-align:center;color:#bbb">—</td>
+                <td style="padding:2px 5px;text-align:center;color:#bbb">—</td>
+                <td style="padding:2px 5px"><div style="border:1px solid #ccc;border-radius:3px;padding:1px 5px;background:#fff;width:38px">1:30</div></td>
+            </tr>
+          </tbody>
+        </table>
+        <div style="display:flex;justify-content:flex-end;margin-top:8px">
+          <div style="background:#e86c1b;color:#fff;border-radius:4px;padding:4px 10px;font-size:.72rem;font-weight:600">💾 Opslaan</div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+<p class="hlg-mock-caption">↑ Afstandskaarten: 500m is gesloten (samenvatting zichtbaar), 1000m is open. Per categorie selecteer je rondes en duur per heat.</p>
+
+<h3>4.4 Programma-volgorde (blokken)</h3>
+<p>Zodra de afstandsinstellingen zijn opgeslagen, verschijnt de sectie <strong>Programma-volgorde</strong>. De ronde-blokken (Series, Halve finale, Finale, enz.) worden <em>automatisch</em> aangemaakt per afstand en categorie. U voegt daar extra blokken aan toe via de knoppen onderaan:</p>
+<ul>
+  <li><strong>+ Pauze toevoegen</strong> – vrije pauze, duur instelbaar in minuten</li>
+  <li><strong>+ Inrijden toevoegen</strong> – inrijdblok, duur instelbaar</li>
+  <li><strong>+ Ceremonie toevoegen</strong> – huldigingsblok, duur instelbaar</li>
+  <li><strong>+ Wedstrijd start</strong> – officieel startmoment (max. één per schema). Ronde-blokken mogen <em>niet</em> vóór de wedstrijdstart worden geplaatst.</li>
+</ul>
+<p>De volgorde past u aan via de <strong>↑ ↓ pijlknoppen</strong> of via <strong>drag-and-drop</strong>. Elk blok heeft een instelbare duur. Klik <strong>💾 Volgorde opslaan</strong> om de volgorde te bewaren.</p>
+
+<!-- MOCKUP: programma-volgorde -->
+<div class="hlg-mock">
+  <div style="background:#1a3a5c;color:#fff;padding:5px 12px;font-size:.78rem;font-weight:700">Tijdschema – Programma-volgorde</div>
+  <div style="padding:8px 12px">
+    <div style="font-size:.7rem;color:#888;margin-bottom:7px;font-style:italic">Gebruik ↑↓ of sleep blokken om de volgorde aan te passen. Ronde-blokken kunnen niet vóór de wedstrijdstart geplaatst worden.</div>
+    <div style="display:flex;flex-direction:column;gap:4px">
+      <!-- Inrijden -->
+      <div style="display:flex;align-items:center;gap:6px;background:#e0ecff;border:1px solid #b3cfef;border-radius:5px;padding:5px 8px">
+        <span style="background:#2E75B6;color:#fff;border-radius:3px;padding:1px 7px;font-size:.67rem;font-weight:700;white-space:nowrap">── INRIJDEN ──</span>
+        <span style="font-size:.72rem;color:#1a3a5c;flex:1">Alle categorieën</span>
+        <span style="display:flex;align-items:center;gap:3px;font-size:.68rem;color:#555">
+          <div style="border:1px solid #ccc;border-radius:3px;padding:1px 5px;background:#fff">20</div> min &nbsp;↑ ↓
+          <span style="color:#c00;border:1px solid #fcc;border-radius:3px;padding:1px 5px;background:#fff5f5;margin-left:3px">🗑</span>
+        </span>
+      </div>
+      <!-- Wedstrijdstart -->
+      <div style="display:flex;align-items:center;gap:6px;background:#fff3cd;border:1px solid #f59e0b;border-radius:5px;padding:5px 8px">
+        <span style="background:#e86c1b;color:#fff;border-radius:3px;padding:1px 7px;font-size:.67rem;font-weight:700;white-space:nowrap">── WEDSTRIJD START ──</span>
+        <span style="font-size:.72rem;color:#7c4000;flex:1">09:30</span>
+        <span style="display:flex;align-items:center;gap:3px;font-size:.68rem;color:#555">↑ ↓
+          <span style="color:#c00;border:1px solid #fcc;border-radius:3px;padding:1px 5px;background:#fff5f5;margin-left:3px">🗑</span>
+        </span>
+      </div>
+      <!-- Series ronde-blok -->
+      <div style="display:flex;align-items:center;gap:6px;background:#cce5ff;border:1px solid #86c1f9;border-radius:5px;padding:5px 8px">
+        <span style="background:#0d6efd;color:#fff;border-radius:3px;padding:1px 7px;font-size:.67rem;font-weight:700">Series</span>
+        <span style="font-size:.72rem;color:#004085;flex:1">500m · Junioren A</span>
+        <span style="display:flex;align-items:center;gap:3px;font-size:.68rem;color:#555">
+          Duur/heat: <div style="border:1px solid #ccc;border-radius:3px;padding:1px 5px;background:#fff">1:30</div> &nbsp;↑ ↓
+          <span style="color:#c00;border:1px solid #fcc;border-radius:3px;padding:1px 5px;background:#fff5f5;margin-left:3px">🗑</span>
+        </span>
+      </div>
+      <!-- Series ronde-blok 2 -->
+      <div style="display:flex;align-items:center;gap:6px;background:#cce5ff;border:1px solid #86c1f9;border-radius:5px;padding:5px 8px">
+        <span style="background:#0d6efd;color:#fff;border-radius:3px;padding:1px 7px;font-size:.67rem;font-weight:700">Series</span>
+        <span style="font-size:.72rem;color:#004085;flex:1">500m · Junioren B</span>
+        <span style="display:flex;align-items:center;gap:3px;font-size:.68rem;color:#555">
+          Duur/heat: <div style="border:1px solid #ccc;border-radius:3px;padding:1px 5px;background:#fff">1:30</div> &nbsp;↑ ↓
+          <span style="color:#c00;border:1px solid #fcc;border-radius:3px;padding:1px 5px;background:#fff5f5;margin-left:3px">🗑</span>
+        </span>
+      </div>
+      <!-- Pauze -->
+      <div style="display:flex;align-items:center;gap:6px;background:#e9ecef;border:1px solid #ced4da;border-radius:5px;padding:5px 8px">
+        <span style="background:#6c757d;color:#fff;border-radius:3px;padding:1px 7px;font-size:.67rem;font-weight:700;white-space:nowrap">── PAUZE ──</span>
+        <span style="flex:1"></span>
+        <span style="display:flex;align-items:center;gap:3px;font-size:.68rem;color:#555">
+          <div style="border:1px solid #ccc;border-radius:3px;padding:1px 5px;background:#fff">15</div> min &nbsp;↑ ↓
+          <span style="color:#c00;border:1px solid #fcc;border-radius:3px;padding:1px 5px;background:#fff5f5;margin-left:3px">🗑</span>
+        </span>
+      </div>
+      <!-- Halve finale -->
+      <div style="display:flex;align-items:center;gap:6px;background:#ffe5cc;border:1px solid #fd7e14;border-radius:5px;padding:5px 8px">
+        <span style="background:#fd7e14;color:#fff;border-radius:3px;padding:1px 7px;font-size:.67rem;font-weight:700;white-space:nowrap">Halve finale</span>
+        <span style="font-size:.72rem;color:#7c4000;flex:1">500m · Junioren A</span>
+        <span style="display:flex;align-items:center;gap:3px;font-size:.68rem;color:#555">
+          Duur/heat: <div style="border:1px solid #ccc;border-radius:3px;padding:1px 5px;background:#fff">2:00</div> &nbsp;↑ ↓
+          <span style="color:#c00;border:1px solid #fcc;border-radius:3px;padding:1px 5px;background:#fff5f5;margin-left:3px">🗑</span>
+        </span>
+      </div>
+      <!-- A-finale -->
+      <div style="display:flex;align-items:center;gap:6px;background:#d1e7dd;border:1px solid #a3cfbb;border-radius:5px;padding:5px 8px">
+        <span style="background:#198754;color:#fff;border-radius:3px;padding:1px 7px;font-size:.67rem;font-weight:700">A-finale</span>
+        <span style="font-size:.72rem;color:#155724;flex:1">500m · Junioren A</span>
+        <span style="display:flex;align-items:center;gap:3px;font-size:.68rem;color:#555">
+          Duur/heat: <div style="border:1px solid #ccc;border-radius:3px;padding:1px 5px;background:#fff">2:30</div> &nbsp;↑ ↓
+          <span style="color:#c00;border:1px solid #fcc;border-radius:3px;padding:1px 5px;background:#fff5f5;margin-left:3px">🗑</span>
+        </span>
+      </div>
+    </div>
+    <!-- Actie-knoppen -->
+    <div style="display:flex;gap:5px;margin-top:9px;flex-wrap:wrap;align-items:center">
+      <div style="border:1px solid #ccc;border-radius:4px;padding:3px 8px;font-size:.69rem;color:#555;background:#fff">+ Pauze toevoegen</div>
+      <div style="border:1px solid #ccc;border-radius:4px;padding:3px 8px;font-size:.69rem;color:#555;background:#fff">+ Inrijden toevoegen</div>
+      <div style="border:1px solid #ccc;border-radius:4px;padding:3px 8px;font-size:.69rem;color:#555;background:#fff">+ Ceremonie toevoegen</div>
+      <div style="border:1px solid #aaa;border-radius:4px;padding:3px 8px;font-size:.69rem;color:#aaa;background:#f5f5f5">+ Wedstrijd start (al aanwezig)</div>
+      <div style="flex:1"></div>
+      <div style="border:1px solid #ccc;border-radius:4px;padding:3px 8px;font-size:.69rem;color:#444;background:#fff">💾 Volgorde opslaan</div>
+      <div style="background:#e86c1b;color:#fff;border-radius:4px;padding:3px 9px;font-size:.69rem;font-weight:600">▶ Genereer programma</div>
+    </div>
+  </div>
+</div>
+<p class="hlg-mock-caption">↑ Programma-volgorde: ronde-blokken automatisch aangemaakt (blauw=series, oranje=halve finale, groen=A-finale); pauze en inrijden handmatig toegevoegd. De duur per heat is per blok instelbaar.</p>
+
+<h3>4.5 Programma genereren en publiceren</h3>
+<p>Klik op <strong>▶ Genereer programma</strong>. Het systeem berekent voor elke rit een starttijd op basis van de blokken-volgorde en duraties. Het resultaat verschijnt als <em>Gegenereerd programma</em> met alle ritten op tijdstip. Het tijdstip van de laatste generatie wordt getoond; bij gewijzigde afstandsinstellingen verschijnt de waarschuwing <em>"mogelijk verouderd"</em>.</p>
+<p>Via de knop <strong>&#128196; Publiceer schema</strong> (rechts in de titel van het gegenereerd programma) stelt u het schema beschikbaar voor de <em>Live verwerking</em>-module.</p>
+<div class="hlg-tip">&#128161; Het tijdschema wordt elke 30 seconden automatisch bijgewerkt als andere gebruikers wijzigingen opslaan. Bij gelijktijdig opslaan door meerdere gebruikers verschijnt een conflictmelding met de knop <em>Herlaad</em>.</div>
 </div>
 
 <!-- ═══════════════════════════════════════════════════════════ 5 STARTLIJSTEN -->
 <div class="hlg-sectie">
 <h2 id="hlg-startlijsten">5. Startlijsten</h2>
-<p>De module <strong>Startlijsten</strong> genereert de rijdersverdeling over heats per afstand.</p>
+<p>De module <strong>Startlijsten</strong> verdeelt de geïmporteerde deelnemers over heats per afstand, configureerbaar in 1 t/m 4 rondes met instelbare doorstroom.</p>
 
-<h3>5.1 Categorieën en afstanden</h3>
-<p>Bovenaan staan de categorietabs. Per categorie kunnen meerdere afstanden beschikbaar zijn (via de afstandstabs).</p>
+<h3>5.1 Categorietabs en afstandstabs</h3>
+<p>Bovenaan de pagina staan de <strong>categorietabs</strong> (één per rijdersgroep). Samengevoegde groepen worden aangegeven met een badge (bijv. <em>"Junioren A + B ²"</em>); gesplitste groepen met een schaar-label. Onder de categorietabs staan de <strong>afstandstabs</strong> (500m, 1000m, enz.) voor de geselecteerde categorie.</p>
 
-<h3>5.2 Rondes instellen</h3>
-<p>Per afstand stelt u het aantal rondes in (1 t/m 4). Elke ronde heeft een:</p>
+<h3>5.2 Rondes configureren</h3>
+<p>Per afstand stelt u het aantal rondes in door op de nummers <strong>1 · 2 · 3 · 4</strong> te klikken. Per ronde configureert u:</p>
 <ul>
-  <li><strong>Naam</strong> – bijv. "Heats", "Halve finales", "Finale"</li>
-  <li><strong>Max. rijders per heat</strong></li>
-  <li><strong>Loting-methode</strong> (ronde 1): willekeurig, op startnummer, of op klassement</li>
-  <li><strong>Doorstroom naar volgende ronde</strong>: X tijdsnelsten of X winnaars per heat</li>
+  <li><strong>Naam</strong> – vrij in te vullen (standaard: "Heats", "Halve finales", "Finale")</li>
+  <li><strong>Max. per heat</strong> – maximum aantal rijders per heat in deze ronde</li>
+  <li><strong>Loting-methode</strong> (alleen ronde 1): <em>Willekeurig</em>, <em>Op startnummer</em>, of <em>Op klassement</em> (kies dan ook het klassement en de sectie)</li>
+  <li><strong>Doorstroom</strong> (voor alle rondes behalve de laatste):
+    <ul>
+      <li><em>X tijdsnelsten</em> – het opgegeven aantal snelste rijders over alle heats stroomt door</li>
+      <li><em>X winnaars per heat + totaal doorstromers</em> – per heat de X beste, aangevuld met tijdsnelsten tot het totaal</li>
+    </ul>
+  </li>
 </ul>
 
-<h3>5.3 Startlijst genereren</h3>
-<p>Klik op <strong>Genereer startlijst</strong>. Het systeem verdeelt de bevestigde deelnemers over de heats. Bij loting op klassement wordt het geselecteerde KNSB-klassement gebruikt voor de volgorde.</p>
-
-<!-- MOCKUP: startlijsten heats -->
+<!-- MOCKUP: startlijsten configuratie -->
 <div class="hlg-mock">
   <div style="background:#1a3a5c;color:#fff;padding:5px 12px;font-size:.78rem;font-weight:700">Startlijsten</div>
   <div style="padding:8px 12px">
+    <!-- Categorie tabs -->
     <div style="display:flex;gap:4px;margin-bottom:5px;flex-wrap:wrap">
-      <div style="background:#e86c1b;color:#fff;padding:2px 10px;border-radius:12px;font-size:.7rem;font-weight:600">Junioren A</div>
-      <div style="background:#f0f0f0;color:#666;padding:2px 10px;border-radius:12px;font-size:.7rem">Junioren B</div>
-      <div style="background:#f0f0f0;color:#666;padding:2px 10px;border-radius:12px;font-size:.7rem">Senioren</div>
+      <div style="background:#e86c1b;color:#fff;padding:2px 10px;border-radius:12px;font-size:.69rem;font-weight:600">Junioren A (12)</div>
+      <div style="background:#f0f0f0;color:#666;padding:2px 10px;border-radius:12px;font-size:.69rem">Junioren B + C <span style="background:#888;color:#fff;border-radius:8px;padding:0 5px;font-size:.63rem;font-weight:700">2</span></div>
+      <div style="background:#f0f0f0;color:#666;padding:2px 10px;border-radius:12px;font-size:.69rem">Senioren (8)</div>
     </div>
-    <div style="display:flex;gap:4px;margin-bottom:10px">
-      <div style="background:#1a3a5c;color:#fff;padding:2px 8px;border-radius:8px;font-size:.68rem">500m</div>
-      <div style="background:#f0f0f0;color:#666;padding:2px 8px;border-radius:8px;font-size:.68rem">1000m</div>
-      <div style="background:#f0f0f0;color:#666;padding:2px 8px;border-radius:8px;font-size:.68rem">1500m</div>
+    <!-- Afstand tabs -->
+    <div style="display:flex;gap:4px;margin-bottom:9px">
+      <div style="background:#1a3a5c;color:#fff;padding:2px 9px;border-radius:8px;font-size:.67rem">500m</div>
+      <div style="background:#f0f0f0;color:#666;padding:2px 9px;border-radius:8px;font-size:.67rem">1000m</div>
     </div>
-    <div style="font-size:.72rem;color:#555;margin-bottom:6px">Ronde 1 – Heats &nbsp;·&nbsp; Max 4 per heat &nbsp;·&nbsp; Loting: willekeurig</div>
-    <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:7px">
-      <div style="border:1px solid #dde;border-radius:6px;overflow:hidden">
-        <div style="background:#f0f4f8;padding:3px 8px;font-size:.71rem;font-weight:700;color:#1a3a5c;border-bottom:1px solid #dde">Heat 1 &nbsp;<span style="font-weight:400;color:#888">09:15</span></div>
-        <div style="padding:4px 8px">
-          <div style="font-size:.7rem;padding:2px 0;border-bottom:1px solid #f0f0f0;display:flex;gap:5px"><span style="color:#bbb;width:14px">1</span>Anna Bakker</div>
-          <div style="font-size:.7rem;padding:2px 0;border-bottom:1px solid #f0f0f0;display:flex;gap:5px"><span style="color:#bbb;width:14px">2</span>Mark de Wit</div>
-          <div style="font-size:.7rem;padding:2px 0;display:flex;gap:5px"><span style="color:#bbb;width:14px">3</span>Lena Visser</div>
-        </div>
-      </div>
-      <div style="border:1px solid #dde;border-radius:6px;overflow:hidden">
-        <div style="background:#f0f4f8;padding:3px 8px;font-size:.71rem;font-weight:700;color:#1a3a5c;border-bottom:1px solid #dde">Heat 2 &nbsp;<span style="font-weight:400;color:#888">09:23</span></div>
-        <div style="padding:4px 8px">
-          <div style="font-size:.7rem;padding:2px 0;border-bottom:1px solid #f0f0f0;display:flex;gap:5px"><span style="color:#bbb;width:14px">1</span>Tom Jansen</div>
-          <div style="font-size:.7rem;padding:2px 0;border-bottom:1px solid #f0f0f0;display:flex;gap:5px"><span style="color:#bbb;width:14px">2</span>Piet Smits</div>
-          <div style="font-size:.7rem;padding:2px 0;display:flex;gap:5px"><span style="color:#bbb;width:14px">3</span>Sara Berg</div>
-        </div>
-      </div>
-      <div style="border:1px solid #dde;border-radius:6px;overflow:hidden">
-        <div style="background:#f0f4f8;padding:3px 8px;font-size:.71rem;font-weight:700;color:#1a3a5c;border-bottom:1px solid #dde">Finale &nbsp;<span style="font-weight:400;color:#888">10:30</span></div>
-        <div style="padding:4px 8px">
-          <div style="font-size:.7rem;padding:2px 0;border-bottom:1px solid #f0f0f0;color:#bbb;font-style:italic">↳ winnaar H1</div>
-          <div style="font-size:.7rem;padding:2px 0;border-bottom:1px solid #f0f0f0;color:#bbb;font-style:italic">↳ winnaar H2</div>
-          <div style="font-size:.7rem;padding:2px 0;color:#bbb;font-style:italic">↳ snelste verliezer</div>
-        </div>
+    <!-- Rondes kiezer -->
+    <div style="display:flex;align-items:center;gap:8px;margin-bottom:9px">
+      <span style="font-size:.72rem;color:#555;font-weight:600">Aantal rondes:</span>
+      <div style="display:flex;gap:3px">
+        <div style="border:1px solid #ccc;border-radius:4px;padding:2px 9px;font-size:.72rem;background:#f5f5f5;color:#888">1</div>
+        <div style="border:2px solid #e86c1b;border-radius:4px;padding:2px 9px;font-size:.72rem;background:#fff3ec;color:#e86c1b;font-weight:700">2</div>
+        <div style="border:1px solid #ccc;border-radius:4px;padding:2px 9px;font-size:.72rem;background:#f5f5f5;color:#888">3</div>
+        <div style="border:1px solid #ccc;border-radius:4px;padding:2px 9px;font-size:.72rem;background:#f5f5f5;color:#888">4</div>
       </div>
     </div>
-    <div style="display:flex;justify-content:flex-end;margin-top:8px">
-      <div style="background:#e86c1b;color:#fff;border-radius:4px;padding:4px 10px;font-size:.72rem;font-weight:600">Genereer startlijst</div>
+    <!-- Ronde 1 config -->
+    <div style="border:1px solid #dde;border-radius:6px;padding:7px 10px;margin-bottom:7px;background:#f8f9fb">
+      <div style="display:flex;align-items:center;gap:8px;margin-bottom:5px;flex-wrap:wrap">
+        <span style="font-size:.7rem;font-weight:700;color:#1a3a5c;min-width:54px">Ronde 1</span>
+        <div style="border:1px solid #ccc;border-radius:3px;padding:2px 7px;background:#fff;font-size:.72rem;width:80px">Heats</div>
+        <span style="font-size:.7rem;color:#555">Max/heat:</span>
+        <div style="border:1px solid #ccc;border-radius:3px;padding:2px 6px;background:#fff;font-size:.72rem;width:32px;text-align:center">6</div>
+      </div>
+      <div style="font-size:.7rem;color:#555;margin-bottom:4px;display:flex;align-items:center;gap:8px;flex-wrap:wrap">
+        <strong>Loting:</strong>
+        <label style="display:flex;align-items:center;gap:3px"><input type="radio" checked disabled> Willekeurig</label>
+        <label style="display:flex;align-items:center;gap:3px"><input type="radio" disabled> Op startnummer</label>
+        <label style="display:flex;align-items:center;gap:3px"><input type="radio" disabled> Op klassement</label>
+      </div>
+      <!-- Doorstroom -->
+      <div style="background:#eef2f8;border-radius:4px;padding:5px 8px;font-size:.7rem;margin-top:3px">
+        <strong style="color:#1a3a5c">Doorstroom naar Ronde 2:</strong>
+        <div style="margin-top:4px;display:flex;flex-direction:column;gap:3px">
+          <label style="display:flex;align-items:center;gap:5px"><input type="radio" disabled> X tijdsnelsten &nbsp; Aantal: <div style="border:1px solid #ccc;border-radius:3px;padding:1px 5px;background:#fff;width:28px">8</div></label>
+          <label style="display:flex;align-items:center;gap:5px"><input type="radio" checked disabled> X winnaars/heat &nbsp; Winnaars/heat: <div style="border:1px solid #ccc;border-radius:3px;padding:1px 5px;background:#fff;width:24px">2</div> &nbsp; Totaal: <div style="border:1px solid #ccc;border-radius:3px;padding:1px 5px;background:#fff;width:28px">6</div></label>
+        </div>
+      </div>
+    </div>
+    <!-- Ronde 2 config (finale) -->
+    <div style="border:1px solid #dde;border-radius:6px;padding:7px 10px;margin-bottom:8px;background:#f8f9fb">
+      <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
+        <span style="font-size:.7rem;font-weight:700;color:#1a3a5c;min-width:54px">Ronde 2</span>
+        <div style="border:1px solid #ccc;border-radius:3px;padding:2px 7px;background:#fff;font-size:.72rem;width:80px">Finale</div>
+        <span style="font-size:.7rem;color:#555">Max/heat:</span>
+        <div style="border:1px solid #ccc;border-radius:3px;padding:2px 6px;background:#fff;font-size:.72rem;width:32px;text-align:center">6</div>
+        <span style="font-size:.69rem;color:#aaa;font-style:italic">(Geen doorstroom — laatste ronde)</span>
+      </div>
+    </div>
+    <div style="display:flex;justify-content:flex-end">
+      <div style="background:#e86c1b;color:#fff;border-radius:4px;padding:5px 12px;font-size:.73rem;font-weight:600">&#9654; Genereer startlijst</div>
     </div>
   </div>
 </div>
-<p class="hlg-mock-caption">↑ Startlijsten: categorietabs + afstandstabs bovenaan, heats naast elkaar. Ronde 2 (finale) toont doorstroomplaatsen als placeholder.</p>
+<p class="hlg-mock-caption">↑ Startlijsten: categorie- en afstandstabs, rondes-kiezer (hier 2 gekozen), ronde-configuratie met loting en doorstroomregel, en Genereer-knop</p>
 
-<div class="hlg-tip">&#128161; B- en C-finales kunnen optioneel worden ingeschakeld voor niet-geplaatste rijders.</div>
+<h3>5.3 Startlijst genereren en resultaten</h3>
+<p>Klik op <strong>&#9654; Genereer startlijst</strong>. Het systeem verdeelt de bevestigde deelnemers over de heats via een <em>slangenpatroon</em> (gelijke verdeling over heats). Voor ronde 2 en verder verschijnen placeholders (<em>"Winnaar Heat 1"</em>, <em>"Tijdsnelste 2"</em>, enz.) die na de wedstrijd worden ingevuld.</p>
+<p>De gegenereerde heats verschijnen per ronde naast elkaar. U kunt de loting opnieuw uitvoeren door nogmaals op <em>Genereer</em> te klikken.</p>
+<div class="hlg-tip">&#128161; Bij loting op klassement wordt het geselecteerde KNSB-klassement gebruikt. Kies eerst het klassement en de sectie (bijv. "Nationaal 2024-2025 – Junioren A"); de startlijst wordt dan gesorteerd op klassementspositie voordat het slangenpatroon wordt toegepast.</div>
 
 <h3>5.4 Categorieën samenvoegen en splitsen</h3>
-<p>Via de <strong>Importeer</strong>-module kunnen categorieën worden samengevoegd (meerdere categorieën in dezelfde heat) of gesplitst (één categorie verdeeld over meerdere groepen).</p>
+<p>Samenvoegen en splitsen worden ingesteld in de <strong>Importeer</strong>-module, niet in Startlijsten. Na samenvoegen verschijnen de betrokken categorieën als één gecombineerde tab (met badge). Na splitsen verschijnt elke subgroep als aparte tab met een schaar-label. De startlijst-configuratie werkt daarna volledig per groep.</p>
 </div>
 
 <!-- ═══════════════════════════════════════════════════════════ 6 LIVE -->

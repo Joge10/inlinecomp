@@ -80,6 +80,7 @@ CREATE TABLE tijdschema_cat_config (
     heeft_heats         TINYINT(1)    NOT NULL DEFAULT 1,
     heats_aantal        TINYINT UNSIGNED DEFAULT NULL,
     heats_q             SMALLINT UNSIGNED DEFAULT NULL,
+    heats_q_heat        TINYINT UNSIGNED  NOT NULL DEFAULT 0,
     heeft_kwartfinale   TINYINT(1)    NOT NULL DEFAULT 0,
     kwart_heats         TINYINT UNSIGNED DEFAULT NULL,
     kwart_door          SMALLINT UNSIGNED NOT NULL DEFAULT 4,

@@ -107,6 +107,14 @@ async function laadWedstrijden() {
         vulOrganisatieDropdown();
         renderWedstrijdLijst();
 
+        // Als er al een wedstrijd geselecteerd is: update huidigComp met verse KNSB-data
+        // en herlaad de vergelijking zodat nieuwe/gewijzigde inschrijvingen zichtbaar worden
+        if (huidigCompId) {
+            const vernieuwd = allWedstrijden.find(c => c.id === huidigCompId);
+            if (vernieuwd) huidigComp = vernieuwd;
+            herlaadVergelijking();
+        }
+
     } catch(e) {
         statusMsg(list, 'error', '⚠ Kon wedstrijden niet laden: ' + e.message);
     } finally {
@@ -393,8 +401,8 @@ function initNav() {
             if (target) target.classList.add('active');
             if (page === 'startlijsten') toonStartlijstenPagina();
             if (page === 'tijdschema')   toonTijdschemaPagina();
-            if (page === 'klassementen') vulPaginaHeader('uitslag-comp-naam', 'uitslag-comp-meta');
-            if (page === 'live')         vulPaginaHeader('live-comp-naam',    'live-comp-meta');
+            if (page === 'klassementen') toonUitslagPagina();
+            if (page === 'live')         { vulPaginaHeader('live-comp-naam', 'live-comp-meta'); toonLivePagina(); }
             if (page === 'gebruikers')   toonGebruikersPagina();
         });
     });

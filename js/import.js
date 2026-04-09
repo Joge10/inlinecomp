@@ -1175,10 +1175,18 @@ function printDeelnemerslijst() {
     // Afwezig = heeft minstens één afwezige afstand
     const afwezigRijders   = alleRijders.filter(r => r.afstanden_afwezig.size > 0);
 
-    // Transponder-wijzigingen: actieve transponder wijkt af van KNSB-waarde
-    const tpWijzigingen = actieveRijders.filter(r =>
-        r.knsb_transponder && r.transponder_actief &&
-        String(r.transponder_actief).trim() !== String(r.knsb_transponder).trim());
+    // Transponder-wijzigingen: actieve transponder wijkt af van KNSB-waarde,
+    // óf er is een handmatig toegevoegde transponder zonder KNSB-transponder
+    const tpWijzigingen = actieveRijders.filter(r => {
+        const actief = String(r.transponder_actief ?? '').trim();
+        const knsb   = String(r.knsb_transponder   ?? '').trim();
+        return actief !== '' && actief !== knsb;
+    });
+
+    // Geen transponder: actieve deelnemers zonder ingestelde transponder
+    const geenTpRijders = actieveRijders.filter(r =>
+        !String(r.transponder_actief ?? '').trim()
+    );
 
     // ── 4. Org-logo + printdatum ──────────────────────────────────────────────
     const org = huidigOrganisatie;
@@ -1220,9 +1228,33 @@ function printDeelnemerslijst() {
     }
 
     // ── 6. Sectie-HTML bouwen ─────────────────────────────────────────────────
+    const heeftGeenTp  = geenTpRijders.length  > 0;
     const heeftOrg     = orgRijders.length     > 0;
     const heeftAfwezig = afwezigRijders.length > 0;
     const heeftTpWijz  = tpWijzigingen.length  > 0;
+
+    // --- Sectie GT: Geen transponder geregistreerd ---
+    let sectieGT = '';
+    if (heeftGeenTp) {
+        const rijen = geenTpRijders.map((r, i) =>
+            `<tr class="${i % 2 === 1 ? 'z-rood' : ''}">
+                <td class="tc">${escHtml(String(r.start_number))}</td>
+                <td>${escHtml(r.full_name)}</td>
+                <td class="sm">${escHtml(r.category)}</td>
+                <td class="tp-invul"></td>
+            </tr>`
+        ).join('');
+        sectieGT = `<h2 class="sectie-titel sectie-oranje">Geen transponder geregistreerd &nbsp;<span class="teller">${geenTpRijders.length}</span></h2>
+        <table><colgroup>
+            <col style="width:12mm"><col style="width:auto"><col style="width:16mm">
+            <col style="width:55mm">
+        </colgroup>
+        <thead><tr>
+            <th class="tc">#</th><th>Naam</th><th>Cat</th>
+            <th>Transponder (invullen)</th>
+        </tr></thead>
+        <tbody>${rijen}</tbody></table>`;
+    }
 
     // --- Sectie 0: Door organisatie toegevoegd ---
     let sectie0 = '';
@@ -1314,7 +1346,7 @@ function printDeelnemerslijst() {
     <tbody>${actieveRijders.map((r, i) => rijDl(r, i)).join('')}</tbody></table>`;
 
     // ── 7. Volledig document ──────────────────────────────────────────────────
-    // Volgorde: niet aanwezig → transponders → deelnemers
+    // Volgorde: geen transponder → org-toegevoegd → niet aanwezig → transponders → deelnemers
     // Eén header bovenaan, één footer onderaan, tabelkoppen herhalen via CSS thead.
     const bodyHtml = `
     <header class="doc-header">
@@ -1326,6 +1358,7 @@ function printDeelnemerslijst() {
         <div class="hdr-logo">${orgLogoHtml}</div>
     </header>
     <div class="hdr-lijn"></div>
+    ${sectieGT}
     ${sectie0}
     ${sectie1}
     ${sectie2}
@@ -1378,7 +1411,9 @@ tr     { page-break-inside:avoid; }
 .z       { background:#f7f9fc; }
 .z-rood  { background:#fff3f3; }
 .z-blauw { background:#eef4fb; }
-.sectie-blauw { border-bottom-color:#1a3a5c; color:#1a3a5c; }
+.sectie-blauw   { border-bottom-color:#1a3a5c; color:#1a3a5c; }
+.sectie-oranje  { border-bottom-color:#c06000; color:#c06000; }
+.tp-invul { border-bottom:1px solid #aaa !important; min-height:5mm; }
 
 /* Document-footer: strikt onderaan, vloeit mee met content */
 .doc-footer { margin-top:4mm; border-top:1px solid #ccc;

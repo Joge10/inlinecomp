@@ -22,9 +22,9 @@ if (!$gebruiker) {
     <h1>InlineComp</h1>
     <span class="badge">KNSB Inline</span>
     <div class="header-user">
+        <button class="header-handleiding-btn" id="btn-handleiding" title="Handleiding openen" onclick="openHandleiding()">&#128366; Handleiding</button>
         <span class="header-user-naam"><?= htmlspecialchars($gebruiker['naam']) ?></span>
         <span class="header-user-rol"><?= htmlspecialchars($gebruiker['role']) ?></span>
-        <button class="header-handleiding-btn" id="btn-handleiding" title="Handleiding openen" onclick="openHandleiding()">&#128366; Handleiding</button>
         <button class="header-uitlog-btn" id="btn-uitloggen" title="Uitloggen">&#10148;</button>
     </div>
 </header>
@@ -165,16 +165,19 @@ if (!$gebruiker) {
             <div class="pagina-inhoud" id="live-container">
                 <div class="ts-comp-naam" id="live-comp-naam"></div>
                 <div class="ts-comp-meta" id="live-comp-meta"></div>
-                <div class="status-msg info" style="margin-top:1rem;">Live verwerking — nog niet geïmplementeerd (MyLaps RMonitor koppeling).</div>
+                <div id="live-inhoud"></div>
             </div>
         </div>
 
         <!-- Pagina: Uitslag -->
         <div id="page-klassementen" class="page">
-            <div class="pagina-inhoud" id="uitslag-container">
-                <div class="ts-comp-naam" id="uitslag-comp-naam"></div>
-                <div class="ts-comp-meta" id="uitslag-comp-meta"></div>
-                <div class="status-msg info" style="margin-top:1rem;">Uitslag van de lopende wedstrijd – nog niet beschikbaar.</div>
+            <div class="pagina-inhoud">
+                <div id="u-page-header"></div>
+                <nav class="org-tabs-nav sl-cat-tabs-nav" id="u-cat-tabs"></nav>
+                <nav class="org-tabs-nav sl-dist-tabs-nav u-dist-tabs-nav" id="u-dist-tabs" style="display:none;"></nav>
+                <div id="u-cat-content">
+                    <div class="status-msg info">Selecteer en importeer eerst een wedstrijd via <strong>Importeer</strong>.</div>
+                </div>
             </div>
         </div>
 
@@ -331,6 +334,7 @@ function magSchrijven(module) {
 <script src="js/startlist.js"></script>
 <script src="js/tijdschema.js"></script>
 <script src="js/live.js"></script>
+<script src="js/uitslag.js"></script>
 <script src="js/ranking.js"></script>
 <script src="js/instellingen.js"></script>
 <script src="js/gebruikers.js"></script>

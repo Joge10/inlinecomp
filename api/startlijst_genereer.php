@@ -31,14 +31,20 @@ if (!kanSchrijven($_authUser, 'startlijsten')) {
 
 $compId     = trim($_GET['competition_id'] ?? '');
 $distId     = trim($_GET['distance_id']    ?? '');  // voor labeling; optioneel bij no-distance DCs
-$maxPerHeat = max(2, intval($_GET['max_per_heat'] ?? 6));
+$heatsAantal = max(1, intval($_GET['heats_aantal'] ?? 1));
 $methode         = trim($_GET['methode']           ?? 'willekeurig');
 $klassementId    = trim($_GET['klassement_id']    ?? '');
 $klassementSectie= trim($_GET['klassement_sectie']?? '');
 
+// Welke ronde wordt gegenereerd (default: series)
+$geldigeRondeTypes = ['heats','kwartfinale','halve_finale','finale','finale_a','finale_b','runner_up'];
+$rondeType = trim($_GET['ronde_type'] ?? 'heats');
+if (!in_array($rondeType, $geldigeRondeTypes, true)) $rondeType = 'heats';
+
 // dc_ids: kommagescheiden lijst (ondersteunt ook samengevoegde categorieën)
-$dcIdsRaw = trim($_GET['dc_ids'] ?? $_GET['dc_id'] ?? '');
-$dcIds    = array_values(array_filter(array_map('trim', explode(',', $dcIdsRaw))));
+$dcIdsRaw    = trim($_GET['dc_ids'] ?? $_GET['dc_id'] ?? '');
+$dcIds       = array_values(array_filter(array_map('trim', explode(',', $dcIdsRaw))));
+$primaryDcId = $dcIds[0] ?? '';
 
 // category_filter: optioneel, voor gesplitste DCs (bijv. "DKA,DKB")
 $catFilterRaw = trim($_GET['category_filter'] ?? '');
@@ -174,6 +180,57 @@ try {
                 ($a['start_number'] ?: PHP_INT_MAX) - ($b['start_number'] ?: PHP_INT_MAX));
             break;
 
+        case 'alfabetisch':
+            // Sorteren op achternaam (short_name) of laatste woord van full_name
+            $heeftPositie = $rijders;
+            usort($heeftPositie, fn($a, $b) =>
+                strcasecmp(
+                    $a['short_name'] ?? (preg_match('/\S+$/', $a['full_name'], $m) ? $m[0] : $a['full_name']),
+                    $b['short_name'] ?? (preg_match('/\S+$/', $b['full_name'], $m) ? $m[0] : $b['full_name'])
+                )
+            );
+            break;
+
+        case 'tussenklassement':
+            // Bereken tussenklassement dynamisch uit al vastgelegde uitslag_afstand records
+            // voor deze competition + DC, exclusief de huidige afstand (die nu geloot wordt).
+            // Sortering: laagste puntentotaal eerst (beste); bij gelijke punten beste afzonderlijke rang.
+            // Rijders zonder uitslag gaan achteraan, gesorteerd op startnummer.
+            $tkDistWhere = $distId ? 'AND distance_id <> ?' : '';
+            $tkParams    = $distId
+                ? [$compId, $primaryDcId, $distId]
+                : [$compId, $primaryDcId];
+            $tkSql = "
+                SELECT   person_license,
+                         SUM(COALESCE(punten, 9999)) AS totaal_punten,
+                         MIN(COALESCE(rang,   9999)) AS beste_rang
+                FROM     uitslag_afstand
+                WHERE    competition_id          = ?
+                  AND    distance_combination_id = ?
+                  {$tkDistWhere}
+                GROUP BY person_license
+                ORDER BY totaal_punten ASC, beste_rang ASC
+            ";
+            $tkStmt = $pdo->prepare($tkSql);
+            $tkStmt->execute($tkParams);
+            $tkMap = [];
+            $tkRank = 1;
+            foreach ($tkStmt->fetchAll(PDO::FETCH_ASSOC) as $row) {
+                $tkMap[$row['person_license']] = $tkRank++;
+            }
+            foreach ($rijders as $r) {
+                $lk = $r['license_key'];
+                if (isset($tkMap[$lk])) {
+                    $heeftPositie[] = $r + ['_tkPos' => $tkMap[$lk]];
+                } else {
+                    $zonderPositie[] = $r;
+                }
+            }
+            usort($heeftPositie, fn($a, $b) => $a['_tkPos'] - $b['_tkPos']);
+            usort($zonderPositie, fn($a, $b) =>
+                ($a['start_number'] ?: PHP_INT_MAX) - ($b['start_number'] ?: PHP_INT_MAX));
+            break;
+
         case 'willekeurig':
         default:
             $methode     = 'willekeurig';
@@ -183,9 +240,9 @@ try {
     }
 
     // Rijders zonder positie:
-    //   klassement-methode → al gesorteerd op startnummer in de switch, niet opnieuw sorteren
+    //   klassement/tussenklassement-methode → al gesorteerd, niet opnieuw sorteren
     //   overige methoden   → alfabetisch op achternaam (rijders zonder startnummer)
-    if ($methode !== 'klassement') {
+    if ($methode !== 'klassement' && $methode !== 'tussenklassement') {
         usort($zonderPositie, fn($a,$b) =>
             strcasecmp(
                 $a['short_name'] ?? (preg_match('/\S+$/', $a['full_name'], $m) ? $m[0] : $a['full_name']),
@@ -201,7 +258,7 @@ try {
     // 4. Heatverdeling: zo gelijkmatig mogelijk
     //    Grotere heats komen eerst (heat 1, 2, ...)
     // --------------------------------------------------------
-    $aantalHeats = (int) ceil($n / $maxPerHeat);
+    $aantalHeats = min($heatsAantal, $n);  // nooit meer heats dan rijders
     $basis       = (int) floor($n / $aantalHeats);
     $extras      = $n % $aantalHeats;
 
@@ -233,6 +290,80 @@ try {
             if (count($heats[$h]['rijders']) < $heats[$h]['capaciteit']) {
                 $heats[$h]['rijders'][] = $gesorteerd[$ri++];
             }
+        }
+    }
+
+    // --------------------------------------------------------
+    // 6. Opslaan in database (heats + heat_entries)
+    //    Eerst eventuele bestaande ronde-1 heats verwijderen
+    //    (mag alleen als ze nog geen resultaten hebben).
+    // --------------------------------------------------------
+    $primaryDcId = $dcIds[0];
+    $splitGroup  = $catFilter ? implode(',', $catFilter) : null;
+
+    $pdo->prepare("
+        DELETE FROM heats
+        WHERE competition_id          = ?
+          AND distance_combination_id = ?
+          AND (distance_id = ? OR (distance_id IS NULL AND ? = ''))
+          AND (split_group = ? OR (split_group IS NULL AND ? IS NULL))
+          AND ronde = 1
+    ")->execute([$compId, $primaryDcId, $distId, $distId, $splitGroup, $splitGroup]);
+
+    // Tijdschema_ritten opzoeken voor correcte rit_naam, volgorde en heat_nr
+    // Gebruik de ronde_type die via de URL is meegegeven (bijv. 'kwartfinale' voor
+    // categorieën die niet met series beginnen).
+    $ritStmt = $pdo->prepare("
+        SELECT r.id, r.heat_nr, r.volgorde, r.rit_naam
+        FROM tijdschema_ritten r
+        JOIN competition_tijdschema ts ON ts.id = r.tijdschema_id
+        WHERE ts.competition_id = ?
+          AND r.dc_id           = ?
+          AND (r.distance_id = ? OR (r.distance_id IS NULL AND ? = ''))
+          AND r.ronde_type = ?
+        ORDER BY r.heat_nr
+    ");
+    $ritStmt->execute([$compId, $primaryDcId, $distId, $distId, $rondeType]);
+    $rittenMap = []; // heat_nr → { id, volgorde, rit_naam }
+    foreach ($ritStmt->fetchAll(PDO::FETCH_ASSOC) as $r) {
+        $rittenMap[(int)$r['heat_nr']] = $r;
+    }
+
+    $insHeat = $pdo->prepare("
+        INSERT INTO heats
+            (competition_id, distance_combination_id, distance_id,
+             split_group, ronde, tijdschema_rit_id, rit_volgorde,
+             heat_naam, heat_nr, methode, dc_ids)
+        VALUES (?,?,?,?,1,?,?,?,?,?,?)
+    ");
+    $insEntry = $pdo->prepare("
+        INSERT INTO heat_entries (heat_id, person_license, categorie, startpositie, startnummer)
+        VALUES (?,?,?,?,?)
+    ");
+
+    $dcIdsJson = json_encode($dcIds);
+    foreach ($heats as $heat) {
+        $hNr     = (int)$heat['nummer'];
+        $rit     = $rittenMap[$hNr] ?? null;
+        $ritId   = $rit ? (int)$rit['id']       : null;
+        $ritVolg = $rit ? (int)$rit['volgorde']  : null;
+        $heatNaam = $rit ? $rit['rit_naam'] : "Heat {$hNr}";
+        $insHeat->execute([
+            $compId, $primaryDcId,
+            $distId ?: null,
+            $splitGroup,
+            $ritId, $ritVolg,
+            $heatNaam, $hNr, $methode, $dcIdsJson,
+        ]);
+        $heatId = (int)$pdo->lastInsertId();
+        foreach ($heat['rijders'] as $pos => $r) {
+            $insEntry->execute([
+                $heatId,
+                $r['license_key'],
+                $r['category']     ?? null,
+                $pos + 1,
+                $r['start_number'] ?? null,
+            ]);
         }
     }
 

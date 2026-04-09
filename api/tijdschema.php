@@ -14,6 +14,7 @@
 //  POST action=save_blok           → duur / inrijd-cats opslaan
 //  POST action=genereer            → ritten genereren
 //  POST action=herorden_ritten     → volgorde ritten aanpassen
+//  POST action=save_rit_override   → starttijd-override + opmerking per heat opslaan
 // ============================================================
 
 header('Content-Type: application/json; charset=utf-8');
@@ -71,6 +72,11 @@ function fetchSchema(PDO $pdo, string $compId): ?array {
     $vStmt = $pdo->prepare("SELECT tijdschema_version FROM competitions WHERE id = ?");
     $vStmt->execute([$compId]);
     $schema['tijdschema_version'] = (int)($vStmt->fetchColumn() ?? 0);
+
+    // Check of er al startlijsten (heats) gegenereerd zijn voor deze wedstrijd
+    $hStmt = $pdo->prepare("SELECT COUNT(*) FROM heats WHERE competition_id = ? AND ronde = 1");
+    $hStmt->execute([$compId]);
+    $schema['heeft_loting'] = (int)$hStmt->fetchColumn() > 0;
 
     return $schema;
 }
@@ -435,7 +441,7 @@ function genereerRitten(PDO $pdo, int $tsId, string $compId, ?array $catVanJS = 
     }
 
     $ritten   = [];
-    $volgorde = 0;
+    $volgorde = 1;
 
     foreach ($blokken as $blok) {
         if ($blok['blok_type'] !== 'ronde') continue; // sla pauze en inrijden over
@@ -847,7 +853,7 @@ try {
         $tsId    = (int)($body['tijdschema_id'] ?? 0);
         $systeem = $body['systeem'] ?? '';
         $reset   = !empty($body['reset']);
-        $toegestaan = ['full-final', 'internationaal-oud', 'internationaal-nieuw'];
+        $toegestaan = ['full-final', 'internationaal-oud', 'internationaal-nieuw']; // internationaal-oud behouden voor bestaande data
         if (!$tsId || !in_array($systeem, $toegestaan, true)) {
             http_response_code(400);
             echo json_encode(['error' => 'Ongeldige invoer']);
@@ -937,15 +943,16 @@ try {
         $insCC = $pdo->prepare("
             INSERT INTO tijdschema_cat_config
                 (tijdschema_id, dc_id, distance_id,
-                 heeft_heats, heats_aantal, heats_q,
+                 heeft_heats, heats_aantal, heats_q, heats_q_heat,
                  heeft_kwartfinale, kwart_heats, kwart_door, kwart_q_heat,
                  heeft_halve_finale, half_heats, half_door, half_q_heat,
                  heeft_runner_up)
-            VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+            VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
             ON DUPLICATE KEY UPDATE
                 heeft_heats        = VALUES(heeft_heats),
                 heats_aantal       = VALUES(heats_aantal),
                 heats_q            = VALUES(heats_q),
+                heats_q_heat       = VALUES(heats_q_heat),
                 heeft_kwartfinale  = VALUES(heeft_kwartfinale),
                 kwart_heats        = VALUES(kwart_heats),
                 kwart_door         = VALUES(kwart_door),
@@ -967,16 +974,17 @@ try {
             $insCC->execute([
                 $tsId, $dcId, $distId,
                 $heeftH,
-                $heeftH ? max(1, (int)($cc['heats_aantal'] ?? 1)) : null,
-                $heeftH ? max(0, (int)($cc['heats_q']     ?? 0)) : null,
+                $heeftH ? max(1, (int)($cc['heats_aantal']  ?? 1)) : null,
+                $heeftH ? max(0, (int)($cc['heats_q']      ?? 0)) : null,
+                $heeftH ? max(0, (int)($cc['heats_q_heat'] ?? 0)) : 0,
                 $heeftK,
                 $heeftK ? max(1, (int)($cc['kwart_heats'] ?? 1)) : null,
                 $heeftK ? max(1, (int)($cc['kwart_door']     ?? 4)) : 4,
-                $heeftK ? max(1, (int)($cc['kwart_q_heat']   ?? 1)) : 1,
+                $heeftK ? max(0, (int)($cc['kwart_q_heat']   ?? 1)) : 0,
                 $heeftP,
                 $heeftP ? max(1, (int)($cc['half_heats']  ?? 1)) : null,
                 $heeftP ? max(1, (int)($cc['half_door']      ?? 4)) : 4,
-                $heeftP ? max(1, (int)($cc['half_q_heat']    ?? 1)) : 1,
+                $heeftP ? max(0, (int)($cc['half_q_heat']    ?? 1)) : 0,
                 $heeftR,
             ]);
         }
@@ -1163,6 +1171,39 @@ try {
         exit;
     }
 
+    // ── Herstart toevoegen ────────────────────────────────────────────────────
+    if ($action === 'add_herstart') {
+        $tsId = (int)($body['tijdschema_id'] ?? 0);
+        if (!$tsId) {
+            http_response_code(400);
+            echo json_encode(['error' => 'tijdschema_id ontbreekt']);
+            exit;
+        }
+        $compId = $getCompId($tsId);
+        // Optimistic locking
+        $clientTsVer = isset($body['tijdschema_version']) ? (int)$body['tijdschema_version'] : null;
+        if ($clientTsVer !== null) {
+            $vStmt = $pdo->prepare("SELECT tijdschema_version FROM competitions WHERE id = ?");
+            $vStmt->execute([$compId]);
+            $dbTsVer = (int)($vStmt->fetchColumn() ?? 0);
+            if ($dbTsVer !== $clientTsVer) {
+                http_response_code(409);
+                echo json_encode(['error' => 'conflict', 'message' => 'Het tijdschema is ondertussen gewijzigd door iemand anders. De pagina wordt ververst.', 'db_version' => $dbTsVer]);
+                exit;
+            }
+        }
+        $s = $pdo->prepare("SELECT COALESCE(MAX(volgorde),0) FROM tijdschema_blokken WHERE tijdschema_id = ?");
+        $s->execute([$tsId]);
+        $maxV = (int)$s->fetchColumn();
+        $pdo->prepare(
+            "INSERT INTO tijdschema_blokken (tijdschema_id, volgorde, blok_type) VALUES (?,?,'herstart')"
+        )->execute([$tsId, $maxV + 1]);
+        $pdo->prepare("UPDATE competitions SET tijdschema_version = tijdschema_version + 1 WHERE id = ?")
+            ->execute([$compId]);
+        echo json_encode(fetchSchema($pdo, $compId));
+        exit;
+    }
+
     // ── Blok opslaan (duur / inrijd-cats / tijdstip / heat-duur) ─────────────
     if ($action === 'save_blok') {
         $tsId   = (int)($body['tijdschema_id'] ?? 0);
@@ -1212,6 +1253,16 @@ try {
                 $pdo->prepare("UPDATE tijdschema_blokken SET tijdstip = ? WHERE id = ? AND tijdschema_id = ?")
                     ->execute([$tijdstip ?: null, $blokId, $tsId]);
                 break;
+            case 'herstart':
+                $tijdstip = isset($body['tijdstip']) && $body['tijdstip'] !== ''
+                            ? substr(preg_replace('/[^0-9:]/', '', $body['tijdstip']), 0, 5)
+                            : null;
+                $opmerking = isset($body['opmerking']) && $body['opmerking'] !== ''
+                             ? substr(trim($body['opmerking']), 0, 255)
+                             : null;
+                $pdo->prepare("UPDATE tijdschema_blokken SET tijdstip = ?, opmerking = ? WHERE id = ? AND tijdschema_id = ?")
+                    ->execute([$tijdstip ?: null, $opmerking, $blokId, $tsId]);
+                break;
             case 'ronde':
                 $heatDuurRaw = trim((string)($body['heat_duur'] ?? ''));
                 if ($heatDuurRaw === '') {
@@ -1257,7 +1308,7 @@ try {
             }
         }
         $pdo->prepare(
-            "DELETE FROM tijdschema_blokken WHERE id = ? AND tijdschema_id = ? AND blok_type IN ('pauze','inrijden','wedstrijdstart','ceremonie')"
+            "DELETE FROM tijdschema_blokken WHERE id = ? AND tijdschema_id = ? AND blok_type IN ('pauze','inrijden','wedstrijdstart','ceremonie','herstart')"
         )->execute([$blokId, $tsId]);
         $pdo->prepare("UPDATE competitions SET tijdschema_version = tijdschema_version + 1 WHERE id = ?")
             ->execute([$compId]);
@@ -1325,6 +1376,52 @@ try {
             $pdo->prepare("UPDATE competitions SET tijdschema_version = tijdschema_version + 1 WHERE id = ?")
                 ->execute([$compId]);
         }
+        echo json_encode(fetchSchema($pdo, $compId));
+        exit;
+    }
+
+    // ── Override starttijd per heat opslaan ──────────────────────────────────
+    if ($action === 'save_rit_override') {
+        $tsId   = (int)($body['tijdschema_id'] ?? 0);
+        $ritId  = (int)($body['rit_id']        ?? 0);
+        $compId = trim($body['competition_id'] ?? '');
+        if (!$tsId || !$ritId || !$compId) {
+            http_response_code(400);
+            echo json_encode(['error' => 'Ongeldige invoer']);
+            exit;
+        }
+
+        // Optimistic locking
+        $clientTsVer = isset($body['tijdschema_version']) ? (int)$body['tijdschema_version'] : null;
+        if ($clientTsVer !== null) {
+            $vStmt = $pdo->prepare("SELECT tijdschema_version FROM competitions WHERE id = ?");
+            $vStmt->execute([$compId]);
+            $dbTsVer = (int)($vStmt->fetchColumn() ?? 0);
+            if ($dbTsVer !== $clientTsVer) {
+                http_response_code(409);
+                echo json_encode(['error' => 'conflict', 'message' => 'Het tijdschema is ondertussen gewijzigd door iemand anders. De pagina wordt ververst.', 'db_version' => $dbTsVer]);
+                exit;
+            }
+        }
+
+        // Saniteer tijdstip_override: accepteer alleen HH:MM, anders null (= wis override)
+        $tijdstipRaw = trim($body['tijdstip_override'] ?? '');
+        $tijdstipOverride = ($tijdstipRaw && preg_match('/^\d{2}:\d{2}$/', $tijdstipRaw))
+            ? $tijdstipRaw : null;
+
+        // Saniteer opmerking
+        $opmerking = isset($body['opmerking']) && trim($body['opmerking']) !== ''
+            ? substr(trim($body['opmerking']), 0, 255) : null;
+
+        $pdo->prepare(
+            "UPDATE tijdschema_ritten SET tijdstip_override = ?, opmerking = ?
+             WHERE id = ? AND tijdschema_id = ?"
+        )->execute([$tijdstipOverride, $opmerking, $ritId, $tsId]);
+
+        $pdo->prepare(
+            "UPDATE competitions SET tijdschema_version = tijdschema_version + 1 WHERE id = ?"
+        )->execute([$compId]);
+
         echo json_encode(fetchSchema($pdo, $compId));
         exit;
     }

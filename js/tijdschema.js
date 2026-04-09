@@ -33,8 +33,7 @@ function mmSsNaarSec(str) {
 
 const TS_SYSTEEM_LABEL = {
     'full-final':           'Full-Final',
-    'internationaal-oud':   'Internationaal oud',
-    'internationaal-nieuw': 'Internationaal nieuw',
+    'internationaal-nieuw': 'Internationaal',
 };
 
 const TS_SYSTEEM_INFO = {
@@ -47,18 +46,6 @@ const TS_SYSTEEM_INFO = {
         ],
         tip: 'Geschikt voor wedstrijden waarbij iedere deelnemer gegarandeerd een finalestart heeft. Voorkeurssysteem voor regionale wedstrijden.',
     },
-    'internationaal-oud': {
-        samenvatting: 'Klassiek knock-outsysteem: uitval per ronde, B-finale voor verliezers halve finale.',
-        stappen: [
-            'Series — doorstroom naar volgende ronde: x aantal tijdsnelsten.',
-            'Kwartfinale (optioneel) — doorstroom naar halve finale x aantal, verdeling over heat winnaars (Q) en tijdsnelsten (q).',
-            'Halve finale (optioneel) — doorstroom naar finale x aantal, verdeling over heat winnaars (Q) en tijdsnelsten (q).',
-            'A-finale — met aantal gekwalificeerden uit de voorgaande ronde.',
-            'B-finale — rijders die in de halve finale zijn uitgevallen rijden een B-finale.',
-            'Runner-up (optioneel) — rijders die al in de series zijn uitgevallen rijden een aparte runner-up race.',
-        ],
-        tip: 'Traditioneel KNSB-systeem voor grotere categorieën met meerdere rondes.',
-    },
     'internationaal-nieuw': {
         samenvatting: 'Modern knock-outsysteem: uitval per ronde, geen B-finales maar wel een runner-up optie.',
         stappen: [
@@ -68,7 +55,7 @@ const TS_SYSTEEM_INFO = {
             'A-finale — met aantal gekwalificeerden uit de voorgaande ronde.',
             'Runner-up (optioneel) — rijders die in de series zijn uitgevallen rijden een aparte runner-up race.',
         ],
-        tip: 'Modern systeem zonder B-finales; eenvoudigere programmaopbouw dan Internationaal oud. KNSB-format voor de landelijke wedstrijden (met runner-up) en nationale kampioenschappen (zonder runner-up).',
+        tip: 'Modern knock-outsysteem zonder B-finales. KNSB-format voor de landelijke wedstrijden (met runner-up) en nationale kampioenschappen (zonder runner-up).',
     },
 };
 
@@ -151,6 +138,7 @@ async function laadTijdschema() {
         huidigTijdschema = data;
         tijdschemaVersion = data?.tijdschema_version ?? 0;
 
+
         const distArrays = await Promise.all(distResArr.map(r => r.json()));
         uniekeDcIds.forEach((dcId, i) => {
             const alle = Array.isArray(distArrays[i]) ? distArrays[i] : [];
@@ -193,6 +181,7 @@ async function postTs(body) {
 // ── Hoofd-render ──────────────────────────────────────────────────────────────
 
 function renderTijdschema() {
+    _tsLeesOnly = !magSchrijven('tijdschema');
     const container = el('ts-container');
     const schema    = huidigTijdschema;
     const comp      = huidigComp;
@@ -228,6 +217,9 @@ function renderTijdschema() {
     // ── Sectie 2: Afstandsinstellingen ────────────────────────────────────────
     html += `<div class="ts-sectie">
         <div class="ts-sectie-titel">Afstandsinstellingen</div>`;
+    if (schema.heeft_loting) {
+        html += `<div class="status-msg warn" style="margin-bottom:.5rem">🔒 Niet bewerkbaar zolang er startlijsten zijn. Wis eerst alle lotingen in de module <strong>Startlijsten</strong>.</div>`;
+    }
     if (!afstandGroepen.length) {
         html += `<div class="status-msg info">Geen categorieën geladen. Importeer eerst de wedstrijd.</div>`;
     } else {
@@ -254,7 +246,8 @@ function renderTijdschema() {
                 <span class="ts-ritten-teller">${schema.ritten.length} ritten</span>
                 ${gegLabel ? `<span class="ts-gegenereerd-op" title="Tijdstip laatste generatie">🕐 ${escHtml(gegLabel)}</span>` : ''}
                 ${oudWarn}
-                <button class="btn-secondary ts-btn-sm ts-btn-publiceer" id="ts-btn-publiceer">📄 Publiceer schema</button>
+                <button class="btn-secondary ts-btn-sm ts-btn-publiceer" id="ts-btn-publiceer">📄 Publiceer extern</button>
+                <button class="btn-secondary ts-btn-sm ts-btn-publiceer" id="ts-btn-publiceer-intern">🗒 Publiceer intern</button>
             </div>`;
         html += renderRittenLijst(schema.ritten, schema.blokken);
         html += `</div>`;
@@ -275,6 +268,9 @@ function renderTijdschema() {
     if (_tsLeesOnly) {
         toonLeesAlleenBanner(container);
         pasSchrijfLockToe(container);
+    } else if (huidigTijdschema?.heeft_loting) {
+        // Alleen de afstandsinstellingen-formulieren vergrendelen
+        container.querySelectorAll('.ts-panel-form').forEach(form => pasSchrijfLockToe(form));
     }
 }
 
@@ -340,7 +336,7 @@ function renderAfstandKaart(afstand, schema) {
             <span class="ts-kaart-naam">${escHtml(afstand.naam)}</span>
             <span class="ts-kaart-cats">${catNamen}</span>
             <span class="ts-kaart-samenvatting">${samenvatting}</span>
-            <button class="ts-btn-bewerk" data-naam="${escHtml(afstand.naam)}">✏ Bewerken</button>
+            <button class="ts-btn-bewerk" data-naam="${escHtml(afstand.naam)}">${huidigTijdschema?.heeft_loting ? '👁 Bekijken' : '✏ Bewerken'}</button>
         </div>
         <div class="ts-kaart-panel" id="${panelId}" style="${isOpen ? '' : 'display:none'}">
             ${renderAfstandPanel(afstand, cfg, catConfigMap)}
@@ -437,8 +433,8 @@ function renderAfstandPanel(afstand, cfg, catConfigMap) {
                 <div class="ts-gedeeld-rij ts-ru-max-rij" ${hRAny ? '' : 'style="display:none"'}>
                     <span class="ts-gedeeld-lbl">Max. per heat</span>
                     <span class="ts-gedeeld-inputs">
-                        <input type="number" name="runner_up_max" value="${cfg?.runner_up_max ?? 6}"
-                               min="2" max="30" class="ts-inp-sm">
+                        <input type="number" name="runner_up_max" value="${cfg?.runner_up_max ?? 0}"
+                               min="0" max="30" class="ts-inp-sm">
                         rijders per runner-up heat
                     </span>
                     <span class="ts-veld-hint">Eerste heats krijgen max. rijders, laatste heat de rest</span>
@@ -506,12 +502,12 @@ function renderAfstandPanel(afstand, cfg, catConfigMap) {
         const hK  = cc?.heeft_kwartfinale  ?? false;
         const hHf = cc?.heeft_halve_finale ?? false;
         const hR  = cc?.heeft_runner_up    ?? false;
-        const nH  = cc?.heats_aantal ?? (Math.ceil(cat.n / 6) || 1);
-        // Standaard doorgang: helft van de deelnemers (afgerond omhoog), min 1
-        const qDef = cc?.heats_q != null ? cc.heats_q : Math.max(1, Math.round(cat.n / 2));
-        const nKH = cc?.kwart_heats ?? 2;
-        const nHH = cc?.half_heats  ?? 2;
-        const ph  = cat.n > 0 && nH > 0 ? berekenPerHeat(cat.n, nH) : '—';
+        // Standaard 0 als nog nooit opgeslagen; liever leeg dan een berekende gok
+        const nH   = cc?.heats_aantal ?? 0;
+        const qDef = cc?.heats_q      ?? 0;
+        const nKH  = cc?.kwart_heats  ?? 0;
+        const nHH  = cc?.half_heats   ?? 0;
+        const ph   = cat.n > 0 && nH > 0 ? berekenPerHeat(cat.n, nH) : '—';
 
         html += `<tr class="ts-cat-rij" data-dc-id="${escHtml(cat.dc_id)}"
                      data-dist-id="${escHtml(cat.distance_id ?? '')}"
@@ -522,19 +518,19 @@ function renderAfstandPanel(afstand, cfg, catConfigMap) {
                     class="ts-cb-heats" ${hH ? 'checked' : ''}></td>
             <td class="ts-td-c ts-heats-velden" style="${hH ? '' : 'visibility:hidden'}">
                 <input type="number" name="heats_aantal" value="${nH}"
-                       min="1" max="50" class="ts-inp-sm ts-inp-heats-aantal" data-n="${cat.n}">
+                       min="0" max="50" class="ts-inp-sm ts-inp-heats-aantal" data-n="${cat.n}">
                 <span class="ts-per-heat-cel">${escHtml(ph)}/h</span>
             </td>`;
 
         if (!isFF) {
             // Als geen series: input voor kwart/half is het totale startaantal
             const kwartIn = hH ? qDef : cat.n;
-            const kDoor   = cc?.kwart_door   ?? Math.max(1, Math.round(kwartIn / 2));
-            const kQH     = cc?.kwart_q_heat ?? 1;
+            const kDoor   = cc?.kwart_door   ?? 0;
+            const kQH     = cc?.kwart_q_heat ?? 0;
             const kQAfl   = Math.max(0, kDoor - kQH * nKH);
             const halfIn  = hK ? kDoor : kwartIn;
-            const hDoor   = cc?.half_door    ?? Math.max(1, Math.round(halfIn / 2));
-            const hQH     = cc?.half_q_heat  ?? 1;
+            const hDoor   = cc?.half_door    ?? 0;
+            const hQH     = cc?.half_q_heat  ?? 0;
             const hQAfl   = Math.max(0, hDoor - hQH * nHH);
             // Per-heat previews
             const phKwart = hK ? escHtml(berekenPerHeat(kwartIn, nKH)) + '/h' : '—';
@@ -543,8 +539,9 @@ function renderAfstandPanel(afstand, cfg, catConfigMap) {
             html += `
             <td class="ts-td-c ts-heats-q-cel" style="${hH ? '' : 'visibility:hidden'}">
                 <input type="number" name="heats_q" value="${qDef}"
-                       min="1" max="500" class="ts-inp-sm"
-                       title="Totaal tijdsnelsten vanuit de series">
+                       min="0" max="500" class="ts-inp-sm"
+                       title="Totaal tijdsnelsten vanuit de series (q)">
+                <input type="hidden" name="heats_q_heat" value="0">
             </td>
             <td class="ts-td-c ts-sectie-start">
                 <input type="checkbox" name="heeft_kwartfinale"
@@ -552,13 +549,13 @@ function renderAfstandPanel(afstand, cfg, catConfigMap) {
             </td>
             <td class="ts-td-c ts-kwart-velden" style="${hK ? '' : 'visibility:hidden'}">
                 <input type="number" name="kwart_heats" value="${nKH}"
-                       min="1" max="50" class="ts-inp-sm ts-inp-kwart-aantal"
+                       min="0" max="50" class="ts-inp-sm ts-inp-kwart-aantal"
                        data-q="${kwartIn}">
                 <span class="ts-per-heat-cel">${phKwart}</span>
             </td>
             <td class="ts-td-c ts-kwart-velden" style="${hK ? '' : 'visibility:hidden'}">
                 <input type="number" name="kwart_door" value="${kDoor}"
-                       min="1" max="500" class="ts-inp-sm ts-inp-kwart-door"
+                       min="0" max="500" class="ts-inp-sm ts-inp-kwart-door"
                        title="Totaal doorstromers kwartfinale → volgende ronde">
             </td>
             <td class="ts-td-c ts-kwart-velden" style="${hK ? '' : 'visibility:hidden'}">
@@ -573,13 +570,13 @@ function renderAfstandPanel(afstand, cfg, catConfigMap) {
             </td>
             <td class="ts-td-c ts-half-velden" style="${hHf ? '' : 'visibility:hidden'}">
                 <input type="number" name="half_heats" value="${nHH}"
-                       min="1" max="50" class="ts-inp-sm ts-inp-half-aantal"
+                       min="0" max="50" class="ts-inp-sm ts-inp-half-aantal"
                        data-in="${halfIn}">
                 <span class="ts-per-heat-cel ts-per-heat-half">${phHalf}</span>
             </td>
             <td class="ts-td-c ts-half-velden" style="${hHf ? '' : 'visibility:hidden'}">
                 <input type="number" name="half_door" value="${hDoor}"
-                       min="1" max="500" class="ts-inp-sm"
+                       min="0" max="500" class="ts-inp-sm"
                        title="Totaal doorstromers halve finale → finale">
             </td>
             <td class="ts-td-c ts-half-velden" style="${hHf ? '' : 'visibility:hidden'}">
@@ -592,6 +589,7 @@ function renderAfstandPanel(afstand, cfg, catConfigMap) {
             // Full-final: verborgen velden zodat save-handler waarden heeft
             html += `
             <input type="hidden" name="heats_q"            value="${cat.n}">
+            <input type="hidden" name="heats_q_heat"       value="0">
             <input type="hidden" name="heeft_kwartfinale"  value="0">
             <input type="hidden" name="kwart_heats"        value="0">
             <input type="hidden" name="kwart_door"         value="0">
@@ -646,9 +644,9 @@ function renderAfstandCalc(afstand, cfg, catConfigMap) {
         const nVH   = parseInt(cc.heats_aantal) || 1;
         const qDoor = isFF ? cat.n : (parseInt(cc.heats_q) || 0);
         const kDoor = parseInt(cc.kwart_door)   || 0;
-        const kQH   = parseInt(cc.kwart_q_heat) || 1;
+        const kQH   = parseInt(cc.kwart_q_heat ?? 1);
         const hDoor = parseInt(cc.half_door)    || 0;
-        const hQH   = parseInt(cc.half_q_heat)  || 1;
+        const hQH   = parseInt(cc.half_q_heat  ?? 1);
         const nKH   = parseInt(cc.kwart_heats)  || 1;
         const nHHf  = parseInt(cc.half_heats)   || 1;
 
@@ -868,6 +866,24 @@ function renderBlokken(schema, afstandGroepen) {
                 ${delBtn}
             </div>`;
 
+        } else if (blok.blok_type === 'herstart') {
+            const tijdVal = blok.tijdstip ? blok.tijdstip.substring(0,5) : '';
+            const opmVal  = escHtml(blok.opmerking ?? '');
+            html += `<div class="ts-blok-item ts-blok-herstart" draggable="true" data-blok-id="${blok.id}">
+                ${dragHandle}${navBtns}
+                <span class="ts-blok-herstart-lbl">🔄 HERSTART</span>
+                <label class="ts-blok-duur-lbl">
+                    Tijd:&nbsp;<input type="time" class="ts-inp-tijdstip" data-blok-id="${blok.id}"
+                                     value="${tijdVal}">
+                </label>
+                <label class="ts-blok-duur-lbl ts-blok-opm-lbl">
+                    Opmerking:&nbsp;<input type="text" class="ts-inp-opmerking" data-blok-id="${blok.id}"
+                                          value="${opmVal}" placeholder="bijv. vertraging door…" maxlength="120"
+                                          style="width:16em">
+                </label>
+                ${delBtn}
+            </div>`;
+
         } else {
             // ronde
             const rLabel = TS_RONDE_LABEL[blok.ronde_type] ?? blok.ronde_type;
@@ -892,6 +908,7 @@ function renderBlokken(schema, afstandGroepen) {
             <button class="ts-btn-annuleer ts-btn-sm" id="ts-btn-add-inrijden">+ Inrijden toevoegen</button>
             <button class="ts-btn-cerem ts-btn-sm" id="ts-btn-add-ceremonie">+ Ceremonie toevoegen</button>
             <button class="ts-btn-wsstart ts-btn-sm" id="ts-btn-add-wsstart" ${heeftWsStart ? 'disabled' : ''}>+ Wedstrijd start</button>
+            <button class="ts-btn-herstart ts-btn-sm" id="ts-btn-add-herstart">🔄 Herstart toevoegen</button>
             <span class="ts-blokken-acties-sep"></span>
             <button class="btn-secondary ts-btn-sm" id="ts-btn-save-blokken">💾 Volgorde opslaan</button>
             <button class="btn-primary ts-btn-sm" id="ts-btn-genereer">▶ Genereer programma</button>
@@ -976,7 +993,19 @@ function renderRittenLijst(ritten, blokken) {
                 if (rij.type === 'pauze' || rij.type === 'inrijden' || rij.type === 'ceremonie') {
                     blokTijdMap.set(rij.blok.id, secNaarTijd(cur));
                     cur += (parseInt(rij.blok.duur) || 0) * 60;
+                } else if (rij.type === 'herstart') {
+                    // Reset cursortijd naar de nieuwe starttijd; markeer op de nieuwe tijd
+                    if (rij.blok.tijdstip) {
+                        const d = rij.blok.tijdstip.split(':').map(Number);
+                        cur = (d[0] || 0) * 3600 + (d[1] || 0) * 60;
+                    }
+                    blokTijdMap.set(rij.blok.id, secNaarTijd(cur));
                 } else if (rij.type === 'rit') {
+                    // Override: pin de cursortijd aan het handmatig ingestelde tijdstip
+                    if (rij.rit.tijdstip_override) {
+                        const d = rij.rit.tijdstip_override.split(':').map(Number);
+                        cur = (d[0] || 0) * 3600 + (d[1] || 0) * 60;
+                    }
                     startTijdMap.set(rij.rit.id, secNaarTijd(cur));
                     startRawSecMap.set(rij.rit.id, cur);              // raw seconden opslaan
                     cur += heatDuurMap.get(parseInt(rij.rit.blok_id)) || 0;
@@ -1134,6 +1163,14 @@ function renderRittenLijst(ritten, blokken) {
                 ${tijdCel(rij.blok.id)}
                 <td colspan="${restCols}" class="ts-cerem-cel">🏆 Ceremonie${escHtml(duurTxt)}</td>
             </tr>`;
+        } else if (rij.type === 'herstart') {
+            prevGroepKey = null;
+            const tijdstip = rij.blok?.tijdstip ? rij.blok.tijdstip.substring(0,5) : '—';
+            const opmTxt   = rij.blok?.opmerking ? ` — ${escHtml(rij.blok.opmerking)}` : '';
+            html += `<tr class="ts-herstart-rij">
+                ${tijdCel(rij.blok.id, 'ts-herstart-tijd')}
+                <td colspan="${restCols}" class="ts-herstart-cel">🔄 Herstart — <strong>${escHtml(tijdstip)}</strong>${opmTxt}</td>
+            </tr>`;
         } else {
             const rit      = rij.rit;
             const groepKey = `${rit.blok_id ?? ''}:${rit.dc_id}:${rit.dc_naam ?? ''}:${rit.ronde_type}`;
@@ -1185,9 +1222,31 @@ function renderRittenLijst(ritten, blokken) {
 
             // ── Individuele heat-rij ───────────────────────────────────────────
             ritNr++;
+            const hasOverride  = !!rit.tijdstip_override;
+            const ovTijdVal    = hasOverride ? escHtml(rit.tijdstip_override.substring(0, 5)) : '';
+            const ovOpmVal     = rit.opmerking ? escHtml(rit.opmerking) : '';
+            const startTijdTxt = startTijdMap.get(rit.id) ?? '—';
+            let tijdCelHtml = '';
+            if (heeftStartTijden) {
+                if (!_tsLeesOnly) {
+                    tijdCelHtml = `<td class="ts-rit-startijd${hasOverride ? ' ts-rit-startijd-override' : ''} ts-rit-tijd-klik"
+                        data-rit-id="${rit.id}" data-override="${ovTijdVal}" data-opm="${ovOpmVal}"
+                        title="${hasOverride ? 'Override actief — klik om te wijzigen' : 'Klik om starttijd vast te leggen'}"
+                        >${startTijdTxt}${hasOverride ? '&nbsp;📌' : ''}</td>`;
+                } else {
+                    tijdCelHtml = `<td class="ts-rit-startijd${hasOverride ? ' ts-rit-startijd-override' : ''}">${startTijdTxt}${hasOverride ? '&nbsp;📌' : ''}</td>`;
+                }
+            }
+            if (ovOpmVal) {
+                html += `<tr class="ts-rit-opm-rij" data-groep-key="${escHtml(groepKey)}">
+                    ${heeftStartTijden ? '<td></td>' : ''}
+                    <td></td>
+                    <td colspan="3" class="ts-rit-opm-cel">📝 ${ovOpmVal}</td>
+                </tr>`;
+            }
             html += `<tr class="ts-rit-rij ts-rit-sub" data-rit-id="${rit.id}"
                         data-groep-key="${escHtml(groepKey)}">
-                ${heeftStartTijden ? `<td class="ts-rit-startijd">${startTijdMap.get(rit.id) ?? '—'}</td>` : ''}
+                ${tijdCelHtml}
                 <td class="ts-rit-nr">${ritNr}</td>
                 <td class="ts-rit-naam">${escHtml(rit.rit_naam)}</td>
                 <td><span class="ts-type-badge ts-type-badge-sm" style="background:${kleur}">${escHtml(label)}${escHtml(fin)}</span></td>
@@ -1198,6 +1257,25 @@ function renderRittenLijst(ritten, blokken) {
 
     html += `</tbody></table></div>`;
     return html;
+}
+
+// ── Rit override opslaan ─────────────────────────────────────────────────────
+
+async function saveRitOverride(ritId, tijdstip, opmerking, tsId) {
+    try {
+        const data = await postTs({
+            action:              'save_rit_override',
+            tijdschema_id:       tsId,
+            competition_id:      huidigCompId,
+            rit_id:              ritId,
+            tijdstip_override:   tijdstip,
+            opmerking:           opmerking,
+            tijdschema_version:  tijdschemaVersion,
+        });
+        if (data?.tijdschema_version != null) tijdschemaVersion = data.tijdschema_version;
+        huidigTijdschema = data;
+        renderTijdschema();
+    } catch(e) { alert('Fout: ' + e.message); }
 }
 
 // ── Events ────────────────────────────────────────────────────────────────────
@@ -1360,12 +1438,18 @@ function bindTsEvents(afstandGroepen) {
     });
 
     // ── Live: overige invoer → overzicht bijwerken ───────────────────────────
-    // Runner-up vinkje: toon/verberg max-per-heat rij
+    // Runner-up vinkje: toon/verberg ALLE max/min-per-heat rijen
     container.querySelectorAll('.ts-cb-runner-up').forEach(cb => {
         cb.addEventListener('change', () => {
-            const rij = cb.closest('.ts-panel-form')?.querySelector('.ts-ru-max-rij');
-            if (rij) rij.style.display = cb.checked ? '' : 'none';
-            updateCalc(cb.closest('.ts-panel-form'), afstandGroepen);
+            const form = cb.closest('.ts-panel-form');
+            form?.querySelectorAll('.ts-ru-max-rij').forEach(rij => {
+                rij.style.display = cb.checked ? '' : 'none';
+                if (!cb.checked) {
+                    // Reset waarden naar 0 bij uitvinken
+                    rij.querySelectorAll('input[type="number"]').forEach(inp => inp.value = 0);
+                }
+            });
+            updateCalc(form, afstandGroepen);
         });
     });
 
@@ -1462,6 +1546,7 @@ function bindTsEvents(afstandGroepen) {
             const spanK = tr.querySelector('.ts-inp-kwart-aantal')?.closest('td')?.querySelector('.ts-per-heat-cel');
             if (spanK) spanK.textContent = qDoor > 0 ? berekenPerHeat(qDoor, nKH) + '/h' : '—';
             tr.querySelector('.ts-inp-kwart-aantal')?.setAttribute('data-q', qDoor);
+            updateCalc(inp.closest('.ts-panel-form'), afstandGroepen);
         });
     });
 
@@ -1482,7 +1567,7 @@ function bindTsEvents(afstandGroepen) {
 
             const num     = n => parseInt(form.querySelector(`[name="${n}"]`)?.value) || 0;
             const heeftRU = form.querySelector('[name="heeft_runner_up"]')?.checked ? 1 : 0;
-            const ruMax   = num('runner_up_max') || 6;
+            const ruMax   = num('runner_up_max');
             const ruMin   = num('runner_up_min');
 
             // Per-categorie config uitlezen; runner-up komt van gedeeld vinkje
@@ -1499,11 +1584,11 @@ function bindTsEvents(afstandGroepen) {
                     heeft_kwartfinale:  chk('heeft_kwartfinale')  ? 1 : 0,
                     kwart_heats:        cn('kwart_heats') || 2,
                     kwart_door:         cn('kwart_door'),
-                    kwart_q_heat:       cn('kwart_q_heat') || 1,
+                    kwart_q_heat:       parseInt(tr.querySelector('[name="kwart_q_heat"]')?.value ?? '1'),
                     heeft_halve_finale: chk('heeft_halve_finale') ? 1 : 0,
                     half_heats:         cn('half_heats')  || 2,
                     half_door:          cn('half_door'),
-                    half_q_heat:        cn('half_q_heat') || 1,
+                    half_q_heat:        parseInt(tr.querySelector('[name="half_q_heat"]')?.value  ?? '1'),
                     heeft_runner_up:    heeftRU,
                 });
             });
@@ -1576,9 +1661,15 @@ function bindTsEvents(afstandGroepen) {
         catch(e) { alert('Fout: ' + e.message); }
     });
 
-    // ── Blok opslaan (pauze / inrijden / ceremonie / wedstrijdstart / ronde) ──
+    // Herstart toevoegen
+    el('ts-btn-add-herstart')?.addEventListener('click', async () => {
+        try { await postTs({ action: 'add_herstart', tijdschema_id: tsId }); }
+        catch(e) { alert('Fout: ' + e.message); }
+    });
+
+    // ── Blok opslaan (pauze / inrijden / ceremonie / wedstrijdstart / herstart / ronde) ──
     const slaBlokOp = async (blokId) => {
-        const blokDiv = container.querySelector(`.ts-blok-pauze[data-blok-id="${blokId}"], .ts-blok-inrijd[data-blok-id="${blokId}"], .ts-blok-cerem[data-blok-id="${blokId}"], .ts-blok-wsstart[data-blok-id="${blokId}"], .ts-blok-ronde[data-blok-id="${blokId}"]`);
+        const blokDiv = container.querySelector(`.ts-blok-pauze[data-blok-id="${blokId}"], .ts-blok-inrijd[data-blok-id="${blokId}"], .ts-blok-cerem[data-blok-id="${blokId}"], .ts-blok-wsstart[data-blok-id="${blokId}"], .ts-blok-herstart[data-blok-id="${blokId}"], .ts-blok-ronde[data-blok-id="${blokId}"]`);
         if (!blokDiv) return;
         const blok = (huidigTijdschema?.blokken ?? []).find(b => b.id == blokId);
         if (!blok) return;
@@ -1591,6 +1682,9 @@ function bindTsEvents(afstandGroepen) {
                 .filter(cb => cb.checked).map(cb => cb.value);
         } else if (blok.blok_type === 'wedstrijdstart') {
             postBody.tijdstip = blokDiv.querySelector('.ts-inp-tijdstip')?.value || null;
+        } else if (blok.blok_type === 'herstart') {
+            postBody.tijdstip  = blokDiv.querySelector('.ts-inp-tijdstip')?.value  || null;
+            postBody.opmerking = blokDiv.querySelector('.ts-inp-opmerking')?.value.trim() || null;
         } else if (blok.blok_type === 'ronde') {
             postBody.heat_duur = mmSsNaarSec(blokDiv.querySelector('.ts-inp-heat-duur')?.value);
         }
@@ -1607,6 +1701,10 @@ function bindTsEvents(afstandGroepen) {
     });
 
     container.querySelectorAll('.ts-inp-tijdstip').forEach(inp => {
+        inp.addEventListener('change', () => slaBlokOp(inp.dataset.blokId));
+    });
+
+    container.querySelectorAll('.ts-inp-opmerking').forEach(inp => {
         inp.addEventListener('change', () => slaBlokOp(inp.dataset.blokId));
     });
 
@@ -1702,6 +1800,7 @@ function bindTsEvents(afstandGroepen) {
     });
 
     el('ts-btn-publiceer')?.addEventListener('click', publiceerTijdschema);
+    el('ts-btn-publiceer-intern')?.addEventListener('click', publiceerTijdschemaIntern);
 
     // (↑↓ knoppen vervangen door groep-drag-and-drop hieronder)
 
@@ -1814,7 +1913,24 @@ function bindTsEvents(afstandGroepen) {
             if (!dragGroepKey) return;
             const tr = e.target.closest('tr');
             if (!tr) return;
-            const targetHdr = vindHdr(tr);
+            let targetHdr = vindHdr(tr);
+
+            // Speciale rij (herstart / wsstart / pauze / etc.): geen groep-header.
+            // Zoek de eerstvolgende ronde-groep ónder deze rij en gebruik die als doel
+            // met dropAbove=true, zodat de groep direct ná de speciale rij belandt.
+            if (!targetHdr && !tr.dataset.groepKey) {
+                let volgende = tr.nextElementSibling;
+                while (volgende && !volgende.classList.contains('ts-rit-groep-hdr'))
+                    volgende = volgende.nextElementSibling;
+                if (!volgende || volgende.dataset.groepKey === dragGroepKey) return;
+                e.preventDefault();
+                e.dataTransfer.dropEffect = 'move';
+                clearRitClasses();
+                volgende.classList.add('ts-drop-above');
+                dropAbove = true;
+                return;
+            }
+
             if (!targetHdr || targetHdr.dataset.groepKey === dragGroepKey) return;
 
             e.preventDefault();
@@ -1839,7 +1955,18 @@ function bindTsEvents(afstandGroepen) {
             if (!dragGroepKey) return;
             const tr = e.target.closest('tr');
             if (!tr) return;
-            const targetHdr = vindHdr(tr);
+            let targetHdr = vindHdr(tr);
+
+            // Speciale rij (herstart etc.): zelfde logica als dragover — gebruik volgende groep
+            if (!targetHdr && !tr.dataset.groepKey) {
+                let volgende = tr.nextElementSibling;
+                while (volgende && !volgende.classList.contains('ts-rit-groep-hdr'))
+                    volgende = volgende.nextElementSibling;
+                if (!volgende || volgende.dataset.groepKey === dragGroepKey) return;
+                targetHdr = volgende;
+                dropAbove = true; // altijd vóór de volgende groep plaatsen
+            }
+
             if (!targetHdr || targetHdr.dataset.groepKey === dragGroepKey) return;
 
             const above = dropAbove;
@@ -1866,7 +1993,7 @@ function bindTsEvents(afstandGroepen) {
             setTimeout(renderTijdschema, 0);
 
             // ── Achtergrond-save: volgorde opslaan ───────────────────────────
-            const volgorde = nieuweRitIds.map((id, i) => ({ id, volgorde: i }));
+            const volgorde = nieuweRitIds.map((id, i) => ({ id, volgorde: i + 1 }));
             fetch('api/tijdschema.php', {
                 method:  'POST',
                 headers: { 'Content-Type': 'application/json' },
@@ -1882,6 +2009,71 @@ function bindTsEvents(afstandGroepen) {
                 huidigTijdschema = data;
             })
             .catch(err => { alert('Opslaan mislukt: ' + err.message); renderTijdschema(); });
+        });
+
+        // ── Starttijd-override per heat (klik op tijdcel) ─────────────────────
+        rittenTbody.addEventListener('click', e => {
+            const td = e.target.closest('.ts-rit-tijd-klik');
+            if (!td) return;
+
+            // Sluit evt. al open panel
+            document.querySelector('.ts-rit-override-panel')?.remove();
+
+            const ritId    = parseInt(td.dataset.ritId);
+            const override = td.dataset.override ?? '';
+            const opm      = td.dataset.opm ?? '';
+
+            const panel = document.createElement('div');
+            panel.className = 'ts-rit-override-panel';
+            panel.innerHTML = `
+                <div class="ts-rit-override-kop">📌 Starttijd vastleggen</div>
+                <label>Tijdstip<input type="time" class="ts-ovr-tijd" value="${escHtml(override)}"></label>
+                <label>Opmerking<input type="text" class="ts-ovr-opm" value="${escHtml(opm)}"
+                       placeholder="bijv. vertraging…" maxlength="120" style="width:100%"></label>
+                <div class="ts-rit-override-btns">
+                    <button class="ts-btn-sm ts-btn-success ts-ovr-sla">Opslaan</button>
+                    ${override ? `<button class="ts-btn-sm ts-ovr-wis">Wis override</button>` : ''}
+                    <button class="ts-btn-sm ts-ovr-ann">Annuleer</button>
+                </div>`;
+            document.body.appendChild(panel);
+
+            // Positioneer onder (of boven als te weinig ruimte) de tijdcel
+            const rect       = td.getBoundingClientRect();
+            const spaceBelow = window.innerHeight - rect.bottom;
+            const panelTop   = spaceBelow > 190
+                ? rect.bottom + window.scrollY + 4
+                : rect.top   + window.scrollY - 195;
+            panel.style.top  = `${Math.max(panelTop, window.scrollY + 8)}px`;
+            panel.style.left = `${Math.min(rect.left + window.scrollX, window.innerWidth + window.scrollX - 300)}px`;
+
+            panel.querySelector('.ts-ovr-ann').addEventListener('click', () => panel.remove());
+            panel.querySelector('.ts-ovr-wis')?.addEventListener('click', async () => {
+                panel.remove();
+                await saveRitOverride(ritId, '', '', tsId);
+            });
+            panel.querySelector('.ts-ovr-sla').addEventListener('click', async () => {
+                const tijdVal = panel.querySelector('.ts-ovr-tijd').value;
+                const opmVal  = panel.querySelector('.ts-ovr-opm').value.trim();
+                panel.remove();
+                await saveRitOverride(ritId, tijdVal, opmVal, tsId);
+            });
+
+            // Enter in tijdveld = sla op
+            panel.querySelector('.ts-ovr-opm').addEventListener('keydown', ev => {
+                if (ev.key === 'Enter') panel.querySelector('.ts-ovr-sla').click();
+                if (ev.key === 'Escape') panel.remove();
+            });
+
+            // Sluiten bij klik buiten het panel
+            setTimeout(() => {
+                const sluit = ev => {
+                    if (!panel.contains(ev.target) && ev.target !== td) {
+                        panel.remove();
+                        document.removeEventListener('click', sluit);
+                    }
+                };
+                document.addEventListener('click', sluit);
+            }, 10);
         });
     }
 }
@@ -1904,7 +2096,7 @@ function updateCalc(form, afstandGroepen) {
         finale_b_grootte:    num('finale_b_grootte')    || 6,
         laatste_b_grootste:  form.querySelector('[name="laatste_b_grootste"]')?.checked ?? true,
         heeft_runner_up:     form.querySelector('[name="heeft_runner_up"]')?.checked ?? false,
-        runner_up_max:       num('runner_up_max') || 6,
+        runner_up_max:       num('runner_up_max'),
         runner_up_min:       num('runner_up_min'),
     };
 
@@ -1999,7 +2191,18 @@ function publiceerTijdschema() {
                 if (rij.type === 'pauze' || rij.type === 'inrijden' || rij.type === 'ceremonie') {
                     btMap.set(rij.blok.id, mNT(cur));
                     cur += (parseInt(rij.blok.duur) || 0) * 60;   // duur in minuten → seconden
+                } else if (rij.type === 'herstart') {
+                    // Reset cursortijd naar de nieuwe starttijd; markeer op de nieuwe tijd
+                    if (rij.blok.tijdstip) {
+                        const d = rij.blok.tijdstip.split(':').map(Number);
+                        cur = (d[0] || 0) * 3600 + (d[1] || 0) * 60;
+                    }
+                    btMap.set(rij.blok.id, mNT(cur));
                 } else if (rij.type === 'rit') {
+                    if (rij.rit.tijdstip_override) {
+                        const d = rij.rit.tijdstip_override.split(':').map(Number);
+                        cur = (d[0] || 0) * 3600 + (d[1] || 0) * 60;
+                    }
                     stMap.set(rij.rit.id, mNT(cur));
                     cur += heatDuurMapP.get(parseInt(rij.rit.blok_id)) || 0;  // al in seconden
                 }
@@ -2138,6 +2341,18 @@ function publiceerTijdschema() {
                 <span class="cat-naam">${esc(naam)}</span>
                 <span class="cat-details">${detail}</span>
             </div>`;
+
+            // Toon per heat die een override heeft: vastgezette tijd + reden
+            cr.forEach((r, i) => {
+                if (!r.tijdstip_override) return;
+                const ovTijd = stMap.get(r.id) ?? r.tijdstip_override.substring(0, 5);
+                const opmTxt  = r.opmerking ? ` — ${esc(r.opmerking)}` : '';
+                const heatDeel = nH > 1 ? ` - heat ${i + 1}` : '';
+                catHtml += `<div class="cat-ovr-rij">
+                    <span class="cat-ovr-tijd">${esc(ovTijd)}</span>
+                    <span class="cat-ovr-tekst">📌 ${esc(naam)}${esc(heatDeel)}${opmTxt}</span>
+                </div>`;
+            });
         });
 
         bloHtml += `<div class="blok ronde">
@@ -2211,6 +2426,15 @@ function publiceerTijdschema() {
                         <span class="blok-titel">🏆 Ceremonie</span>
                         ${duur ? `<span class="blok-info">${esc(duur)}</span>` : ''}
                     </div></div>`;
+
+            } else if (rij.type === 'herstart') {
+                const ts  = blok.tijdstip?.substring(0, 5) ?? '—';
+                const opm = blok.opmerking ? ` — ${esc(blok.opmerking)}` : '';
+                bloHtml += `<div class="blok herstart">
+                    <div class="blok-kop">
+                        <span class="blok-tijd">${esc(bTijd || ts)}</span>
+                        <span class="blok-titel">🔄 HERSTART${opm}</span>
+                    </div></div>`;
             }
         }
     }
@@ -2257,6 +2481,13 @@ body{font-family:Arial,Helvetica,sans-serif;font-size:10.5pt;margin:.6cm 1.2cm 1
 .inrijd .blok-titel{color:#1a3d8a}
 .cerem .blok-kop{border-bottom:2px solid #c0392b}
 .cerem .blok-titel,.cerem .blok-tijd{color:#8b1a1a}
+.herstart .blok-kop{border-bottom:2px solid #c47200}
+.herstart .blok-titel,.herstart .blok-tijd{color:#7a4200;font-weight:700}
+.cat-ovr-rij{display:flex;align-items:baseline;gap:.4cm;padding:.05cm 0 .05cm 1.9cm;
+             border-left:3px solid #c47200;margin:.05cm 0 .05cm .3cm;background:#fff8ee}
+.cat-ovr-tijd{min-width:1.1cm;flex-shrink:0;font-variant-numeric:tabular-nums;
+              color:#c47200;font-weight:700;font-size:9.5pt}
+.cat-ovr-tekst{font-size:9.5pt;color:#7a4200}
 .sponsors{margin-top:6mm;border-top:1px solid #ddd;padding-top:3mm;
           display:flex;align-items:center;justify-content:center;gap:5mm;flex-wrap:wrap}
 @media print{
@@ -2280,6 +2511,372 @@ body{font-family:Arial,Helvetica,sans-serif;font-size:10.5pt;margin:.6cm 1.2cm 1
   ⚠ De vermelde starttijden zijn <strong>indicatieve richtijden</strong>. De werkelijke uitvoering kan afwijken van dit programma. Houd zelf het verloop van het programma in de gaten — je bent zelf verantwoordelijk voor het op tijd aan de start verschijnen.
 </div>
 ${bloHtml}
+${footerHtml}
+</body></html>`;
+
+    const win = window.open('', '_blank');
+    if (!win) { alert('Pop-up geblokkeerd — sta pop-ups toe voor deze pagina.'); return; }
+    win.document.write(htmlDoc);
+    win.document.close();
+    win.focus();
+    setTimeout(() => win.print(), 500);
+}
+
+// ── Publiceer intern tijdschema ───────────────────────────────────────────────
+
+function publiceerTijdschemaIntern() {
+    const schema = huidigTijdschema;
+    const comp   = huidigComp;
+    if (!schema) return;
+
+    const ritten  = schema.ritten  ?? [];
+    const blokken = schema.blokken ?? [];
+
+    const mNT = sec => {
+        const s = Math.round(parseInt(sec) || 0);
+        return `${String(Math.floor(s / 3600) % 24).padStart(2,'0')}:${String(Math.floor((s % 3600) / 60)).padStart(2,'0')}`;
+    };
+
+    // ── Hulpstructuren ────────────────────────────────────────────────────────
+    const blokById = new Map((blokken ?? []).map(b => [parseInt(b.id), b]));
+    const heatDuurMap = new Map(
+        (blokken ?? []).filter(b => b.blok_type === 'ronde')
+                       .map(b => [parseInt(b.id), parseInt(b.heat_duur) || 0])
+    );
+    const nonRondeBlokken = (blokken ?? [])
+        .filter(b => b.blok_type !== 'ronde')
+        .sort((a, b) => (parseInt(a.volgorde) || 0) - (parseInt(b.volgorde) || 0));
+    const rondeBlokVolgorde = new Map(
+        (blokken ?? []).filter(b => b.blok_type === 'ronde')
+                       .map(b => [parseInt(b.id), parseInt(b.volgorde) || 0])
+    );
+
+    // ── Bouw rijen ────────────────────────────────────────────────────────────
+    const rijen = [];
+    let nrbIdx = 0;
+    for (const r of ritten) {
+        const rBV = rondeBlokVolgorde.get(parseInt(r.blok_id)) ?? 0;
+        while (nrbIdx < nonRondeBlokken.length &&
+               (parseInt(nonRondeBlokken[nrbIdx].volgorde) || 0) <= rBV) {
+            const nb = nonRondeBlokken[nrbIdx++];
+            rijen.push({ type: nb.blok_type, blok: nb });
+        }
+        rijen.push({ type: 'rit', rit: r });
+    }
+    while (nrbIdx < nonRondeBlokken.length) {
+        rijen.push({ type: nonRondeBlokken[nrbIdx].blok_type, blok: nonRondeBlokken[nrbIdx++] });
+    }
+
+    // ── Starttijden berekenen ─────────────────────────────────────────────────
+    const stMap = new Map();
+    const btMap = new Map();
+    const stRawMap = new Map();
+    const wsBlok = blokken.find(b => b.blok_type === 'wedstrijdstart' && b.tijdstip);
+    if (wsBlok) {
+        const d = wsBlok.tijdstip.split(':').map(Number);
+        const wsSec = (d[0] || 0) * 3600 + (d[1] || 0) * 60;
+        let cur = wsSec, gestart = false;
+        for (const rij of rijen) {
+            if (rij.type === 'wedstrijdstart') {
+                btMap.set(rij.blok.id, mNT(cur)); gestart = true;
+            } else if (gestart) {
+                if (rij.type === 'pauze' || rij.type === 'inrijden' || rij.type === 'ceremonie') {
+                    btMap.set(rij.blok.id, mNT(cur));
+                    cur += (parseInt(rij.blok.duur) || 0) * 60;
+                } else if (rij.type === 'rit') {
+                    if (rij.rit.tijdstip_override) {
+                        const d = rij.rit.tijdstip_override.split(':').map(Number);
+                        cur = (d[0] || 0) * 3600 + (d[1] || 0) * 60;
+                    }
+                    stMap.set(rij.rit.id, mNT(cur));
+                    stRawMap.set(rij.rit.id, cur);
+                    cur += heatDuurMap.get(parseInt(rij.rit.blok_id)) || 0;
+                }
+            }
+        }
+        const wsIdx = rijen.findIndex(r => r.type === 'wedstrijdstart');
+        let back = wsSec;
+        for (let i = wsIdx - 1; i >= 0; i--) {
+            const rij = rijen[i];
+            if (rij.type === 'pauze' || rij.type === 'inrijden' || rij.type === 'ceremonie') {
+                back -= (parseInt(rij.blok.duur) || 0) * 60;
+                btMap.set(rij.blok.id, mNT(back));
+            }
+        }
+    }
+
+    // ── Rusttijden ────────────────────────────────────────────────────────────
+    const rustTijdMap = new Map();
+    if (stRawMap.size > 0) {
+        const calcGroepen = new Map();
+        const renderGkNaarCk = new Map();
+        const VOORGANGERS = {
+            kwartfinale:  ['heats'],
+            halve_finale: ['kwartfinale', 'heats'],
+            finale_b:     ['halve_finale', 'kwartfinale', 'heats'],
+            finale:       ['halve_finale', 'kwartfinale', 'heats'],
+            finale_a:     ['halve_finale', 'kwartfinale', 'heats'],
+            runner_up:    ['heats'],
+        };
+        for (const rij of rijen) {
+            if (rij.type !== 'rit') continue;
+            const rit = rij.rit;
+            const sec = stRawMap.get(rit.id);
+            if (sec === undefined) continue;
+            const catKey   = `${rit.dc_id ?? ''}|${rit.distance_id ?? ''}|${rit.dc_naam ?? ''}`;
+            const ck       = `${catKey}:${rit.ronde_type}`;
+            const renderGk = `${rit.blok_id ?? ''}:${rit.dc_id}:${rit.dc_naam ?? ''}:${rit.ronde_type}`;
+            const heatDuur = heatDuurMap.get(parseInt(rit.blok_id)) || 0;
+            const endSec   = sec + heatDuur;
+            if (!calcGroepen.has(ck)) {
+                calcGroepen.set(ck, { catKey, rondeType: rit.ronde_type, firstSec: sec, lastEndSec: endSec });
+            } else {
+                const gt = calcGroepen.get(ck);
+                if (sec < gt.firstSec)   gt.firstSec   = sec;
+                if (endSec > gt.lastEndSec) gt.lastEndSec = endSec;
+            }
+            renderGkNaarCk.set(renderGk, ck);
+        }
+        const catRondeMap = new Map();
+        for (const [ck, gt] of calcGroepen) {
+            if (!catRondeMap.has(gt.catKey)) catRondeMap.set(gt.catKey, new Map());
+            catRondeMap.get(gt.catKey).set(gt.rondeType, ck);
+        }
+        const rustTijdByCk = new Map();
+        for (const [catKey, rondeMap] of catRondeMap) {
+            for (const [rondeType, ck] of rondeMap) {
+                const vgs = VOORGANGERS[rondeType];
+                if (!vgs) continue;
+                for (const vrt of vgs) {
+                    const vorigeCk = rondeMap.get(vrt);
+                    if (!vorigeCk) continue;
+                    const prev = calcGroepen.get(vorigeCk);
+                    const curr = calcGroepen.get(ck);
+                    if (prev && curr) rustTijdByCk.set(ck, curr.firstSec - prev.lastEndSec);
+                    break;
+                }
+            }
+        }
+        for (const [renderGk, ck] of renderGkNaarCk) {
+            if (rustTijdByCk.has(ck)) rustTijdMap.set(renderGk, rustTijdByCk.get(ck));
+        }
+    }
+
+    const heeftTijden = stMap.size > 0 || btMap.size > 0;
+    const RUST_WARN_SEC = 30 * 60;
+
+    const groepGrootte = {};
+    rijen.forEach(r => {
+        if (r.type === 'rit') {
+            const gk = `${r.rit.blok_id ?? ''}:${r.rit.dc_id}:${r.rit.dc_naam ?? ''}:${r.rit.ronde_type}`;
+            groepGrootte[gk] = (groepGrootte[gk] ?? 0) + 1;
+        }
+    });
+
+    // ── Org-logo header ───────────────────────────────────────────────────────
+    const org = huidigOrganisatie;
+    const baseUrl = new URL('.', window.location.href).href;
+    const esc = s => String(s ?? '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+    const orgLogoHtml = org?.logo_path
+        ? `<span style="display:block;height:20mm;max-width:50mm;overflow:hidden;line-height:0;text-align:right;">` +
+          `<img src="${esc(baseUrl + org.logo_path)}" alt="${esc(org.naam)}" ` +
+          `style="height:20mm;width:auto;max-width:50mm;display:inline-block;object-fit:contain;vertical-align:top;"></span>`
+        : `<span style="font-size:8pt;color:#555;font-style:italic;">${esc(org?.naam ?? '')}</span>`;
+
+    // ── Sponsors footer ───────────────────────────────────────────────────────
+    let footerHtml = '';
+    if (org?.sponsors?.length) {
+        const sponsorItems = org.sponsors.map(s =>
+            `<span style="display:inline-flex;align-items:center;">` +
+            (s.logo_path
+                ? `<span style="display:inline-block;height:9mm;max-width:32mm;overflow:hidden;line-height:0;">` +
+                  `<img src="${esc(baseUrl + s.logo_path)}" alt="${esc(s.naam)}" ` +
+                  `style="height:9mm;width:auto;max-width:32mm;display:block;object-fit:contain;"></span>`
+                : `<span style="font-size:7pt;color:#555;">${esc(s.naam)}</span>`) +
+            `</span>`
+        ).join('');
+        footerHtml = `<div class="sponsors">${sponsorItems}</div>`;
+    }
+
+    // ── DC-namen opzoektabel ──────────────────────────────────────────────────
+    const dcNaamMap = new Map();
+    bouwAfstandGroepen().forEach(af =>
+        af.cats.forEach(c => { if (!dcNaamMap.has(c.dc_id)) dcNaamMap.set(c.dc_id, c.dc_naam); })
+    );
+
+    // ── Tabel-rijen genereren ─────────────────────────────────────────────────
+    const tijdTh = heeftTijden ? '<th class="ti">Tijd</th>' : '';
+    const restCols = 4;
+    let tBody = '';
+    let ritNr = 0;
+    let prevGroepKey = null;
+
+    rijen.forEach(rij => {
+        const cols = heeftTijden ? restCols + 1 : restCols;
+        if (rij.type === 'wedstrijdstart') {
+            prevGroepKey = null;
+            const ts = rij.blok?.tijdstip?.substring(0,5) ?? '—';
+            const bTijd = btMap.get(rij.blok.id) ?? '';
+            tBody += `<tr class="wsstart">
+                ${heeftTijden ? `<td class="ti">${esc(bTijd || ts)}</td>` : ''}
+                <td colspan="${restCols}" class="special">🏁 Wedstrijd start — <strong>${esc(ts)}</strong></td>
+            </tr>`;
+        } else if (rij.type === 'pauze') {
+            prevGroepKey = null;
+            const bTijd = btMap.get(rij.blok.id) ?? '';
+            const duurTxt = rij.blok?.duur ? ` – ${rij.blok.duur} min` : '';
+            tBody += `<tr class="pauze">
+                ${heeftTijden ? `<td class="ti">${esc(bTijd)}</td>` : ''}
+                <td colspan="${restCols}" class="special">⏸ Pauze${esc(duurTxt)}</td>
+            </tr>`;
+        } else if (rij.type === 'inrijden') {
+            prevGroepKey = null;
+            const bTijd = btMap.get(rij.blok.id) ?? '';
+            const duurTxt = rij.blok?.duur ? ` – ${rij.blok.duur} min` : '';
+            const cats = (() => { try { return JSON.parse(rij.blok?.inrijd_cats || '[]'); } catch(e) { return []; } })();
+            const catNamen = cats.map(id => esc(dcNaamMap.get(id) ?? id)).join(', ');
+            tBody += `<tr class="inrijd">
+                ${heeftTijden ? `<td class="ti">${esc(bTijd)}</td>` : ''}
+                <td colspan="${restCols}" class="special">🛼 Inrijden${esc(duurTxt)}${catNamen ? ' — ' + catNamen : ''}</td>
+            </tr>`;
+        } else if (rij.type === 'ceremonie') {
+            prevGroepKey = null;
+            const bTijd = btMap.get(rij.blok.id) ?? '';
+            const duurTxt = rij.blok?.duur ? ` – ${rij.blok.duur} min` : '';
+            tBody += `<tr class="cerem">
+                ${heeftTijden ? `<td class="ti">${esc(bTijd)}</td>` : ''}
+                <td colspan="${restCols}" class="special">🏆 Ceremonie${esc(duurTxt)}</td>
+            </tr>`;
+        } else if (rij.type === 'herstart') {
+            prevGroepKey = null;
+            const bTijd   = btMap.get(rij.blok.id) ?? '';
+            const ts      = rij.blok?.tijdstip?.substring(0,5) ?? '—';
+            const opmTxt  = rij.blok?.opmerking ? ` — ${esc(rij.blok.opmerking)}` : '';
+            tBody += `<tr class="herstart">
+                ${heeftTijden ? `<td class="ti">${esc(bTijd || ts)}</td>` : ''}
+                <td colspan="${restCols}" class="special">🔄 Herstart — <strong>${esc(ts)}</strong>${opmTxt}</td>
+            </tr>`;
+        } else {
+            const rit      = rij.rit;
+            const groepKey = `${rit.blok_id ?? ''}:${rit.dc_id}:${rit.dc_naam ?? ''}:${rit.ronde_type}`;
+            const kleur    = TS_RONDE_KLEUR[rit.ronde_type] ?? '#adb5bd';
+            const label    = (rit.ronde_type === 'finale_b' && rit.finale_label)
+                ? rit.finale_label + '-finale'
+                : (TS_RONDE_LABEL[rit.ronde_type] ?? rit.ronde_type);
+            const fin = (rit.ronde_type === 'finale_b') ? '' : (rit.finale_label ? ` ${rit.finale_label}` : '');
+
+            if (groepKey !== prevGroepKey) {
+                prevGroepKey = groepKey;
+                const n    = groepGrootte[groepKey] ?? 1;
+                const nTxt = n === 1 ? '1 rit' : `${n} heats`;
+                const gTijd = heeftTijden ? `<span class="gt">${stMap.get(rit.id) ?? '—'}</span>` : '';
+                let rustHtml = '';
+                if (rustTijdMap.has(groepKey)) {
+                    const rustSec = rustTijdMap.get(groepKey);
+                    const rustMin = Math.round(rustSec / 60);
+                    const isWarn  = rustSec < RUST_WARN_SEC;
+                    rustHtml = `<span class="rust${isWarn ? ' rust-warn' : ''}">${isWarn ? '⚠' : '✓'} rust ${rustMin} min</span>`;
+                }
+                tBody += `<tr class="groep-hdr">
+                    <td colspan="${cols}">
+                        ${gTijd}
+                        <span class="badge" style="background:${kleur};color:#fff">${esc(label)}${esc(fin)}</span>
+                        <strong>${esc(rit.dc_naam)}</strong>
+                        <span class="gc">(${nTxt})</span>
+                        ${rustHtml}
+                    </td>
+                </tr>`;
+            }
+
+            ritNr++;
+            const hd = heatDuurMap.get(parseInt(rit.blok_id)) || 0;
+            const hdTxt = hd ? secNaarMmSs(hd) : '';
+            const hasOvr = !!rit.tijdstip_override;
+            if (rit.opmerking) {
+                tBody += `<tr class="rit-opm">
+                    ${heeftTijden ? '<td></td>' : ''}
+                    <td></td>
+                    <td colspan="3" class="opm">📝 ${esc(rit.opmerking)}</td>
+                </tr>`;
+            }
+            tBody += `<tr class="rit-rij">
+                ${heeftTijden ? `<td class="ti${hasOvr ? ' ti-ovr' : ''}">${stMap.get(rit.id) ?? '—'}${hasOvr ? '&nbsp;📌' : ''}</td>` : ''}
+                <td class="nr">${ritNr}</td>
+                <td class="naam">${esc(rit.rit_naam)}${hdTxt ? `<span class="hd"> (${esc(hdTxt)})</span>` : ''}</td>
+                <td><span class="badge sm" style="background:${kleur};color:#fff">${esc(label)}${esc(fin)}</span></td>
+                <td class="vw">${rit.verwacht ?? '?'}</td>
+            </tr>`;
+        }
+    });
+
+    const datum   = comp?.starts ? formatDatum(comp.starts) : '';
+    const locatie = comp ? getLocatie(comp) : '';
+    const metaTxt = [datum, locatie].filter(Boolean).map(esc).join(' &nbsp;·&nbsp; ');
+
+    const htmlDoc = `<!DOCTYPE html><html lang="nl">
+<head><meta charset="UTF-8">
+<title>Intern programma${comp?.name ? ' — ' + esc(comp.name) : ''}</title>
+<style>
+*{box-sizing:border-box}
+body{font-family:Arial,Helvetica,sans-serif;font-size:9.5pt;margin:.5cm 1cm 1cm;color:#111;line-height:1.4}
+.pagina-header{display:flex;flex-wrap:nowrap;align-items:stretch;justify-content:space-between;gap:4mm;margin-bottom:0}
+.hdr-links{flex:1;min-width:0;display:flex;flex-direction:column;justify-content:flex-end}
+.hdr-comp{font-size:15pt;font-weight:700;line-height:1.2;margin-bottom:.5mm}
+.hdr-meta{font-size:9pt;color:#555}
+.hdr-versie{font-size:7.5pt;color:#999;margin-top:1mm}
+.hdr-rechts{flex-shrink:0;display:flex;align-items:flex-start}
+.hdr-lijn{border:none;border-top:2px solid #1a3a5c;margin:.4cm 0 .4cm 0}
+table{border-collapse:collapse;width:100%;font-size:9.5pt}
+th{background:#1a3a5c;color:#fff;text-align:left;padding:3px 6px;font-size:8.5pt}
+th.ti{width:1.3cm}
+td{padding:2px 6px;vertical-align:middle}
+td.ti{font-variant-numeric:tabular-nums;color:#003366;font-weight:700;white-space:nowrap}
+td.nr{color:#666;font-size:8.5pt;width:.9cm;text-align:right}
+td.naam{font-weight:500}
+td.vw{text-align:right;width:1cm;color:#444}
+.hd{font-size:8pt;color:#888;font-weight:400}
+tr.groep-hdr td{background:#eef2f7;padding:4px 6px;font-size:9pt;border-top:1.5px solid #1a3a5c}
+.gt{font-weight:700;color:#003366;margin-right:.4cm;font-variant-numeric:tabular-nums}
+.gc{color:#666;font-size:8.5pt}
+.badge{display:inline-block;padding:1px 5px;border-radius:3px;font-size:8pt;font-weight:700;margin-right:4px}
+.badge.sm{font-size:7.5pt;padding:0 4px}
+.rust{font-size:8pt;color:#2e7d32;margin-left:.5cm}
+.rust-warn{color:#b26a00}
+tr.wsstart td{background:#e8f5e9;color:#1e5c1e;font-weight:700;padding:4px 6px;border-top:1.5px solid #2e8b2e}
+tr.herstart td{background:#fff3e0;color:#7a4200;font-weight:700;padding:4px 6px;border-top:1.5px solid #c47200}
+tr.pauze td{background:#fffde7;color:#7a5800;padding:4px 6px}
+tr.inrijd td{background:#e8eaf6;color:#1a3d8a;padding:4px 6px}
+tr.cerem td{background:#fce4ec;color:#8b1a1a;padding:4px 6px}
+tr.rit-rij:nth-child(even) td{background:#f9f9f9}
+tr.rit-rij td{border-bottom:1px solid #eee}
+td.ti-ovr{color:#c47200}
+tr.rit-opm td{padding-bottom:0!important;border-bottom:none}
+td.opm{font-size:8pt;color:#7a4200;font-style:italic;padding-left:12px;padding-top:4px}
+.sponsors{margin-top:6mm;border-top:1px solid #ddd;padding-top:3mm;
+          display:flex;align-items:center;justify-content:center;gap:5mm;flex-wrap:wrap}
+@media print{
+  body{margin:.4cm .9cm .9cm}
+  tr{page-break-inside:avoid}
+  tr.groep-hdr{page-break-before:auto}
+  .sponsors{position:running(footer)}
+  @page{margin:1cm 1.2cm;size:A4 portrait}
+}
+</style></head>
+<body>
+<div class="pagina-header">
+  <div class="hdr-links">
+    <div class="hdr-comp">${esc(comp?.name ?? 'Wedstrijdprogramma')}</div>
+    ${metaTxt ? `<div class="hdr-meta">${metaTxt}</div>` : ''}
+    ${schema.gegenereerd_op ? `<div class="hdr-versie">Programma gegenereerd op: ${esc(new Date(schema.gegenereerd_op.replace(' ','T')+'Z').toLocaleString('nl-NL',{day:'2-digit',month:'long',year:'numeric',hour:'2-digit',minute:'2-digit'}))}</div>` : ''}
+    <div class="hdr-versie" style="color:#b00">Intern gebruik — niet publiceren</div>
+  </div>
+  <div class="hdr-rechts">${orgLogoHtml}</div>
+</div>
+<hr class="hdr-lijn">
+<table>
+  <thead><tr>${tijdTh}<th class="nr">#</th><th>Rit</th><th>Type</th><th class="vw">Verwacht</th></tr></thead>
+  <tbody>${tBody}</tbody>
+</table>
 ${footerHtml}
 </body></html>`;
 

@@ -17,6 +17,82 @@ $method = $_SERVER['REQUEST_METHOD'];
 $body   = json_decode(file_get_contents('php://input'), true) ?? [];
 $action = $body['action'] ?? $_GET['action'] ?? '';
 
+// ── Login-log helpers ─────────────────────────────────────────────────────────
+
+function landVlag(string $code): string {
+    if (strlen($code) !== 2) return '';
+    $o = 0x1F1E6 - ord('A');
+    return mb_chr(ord($code[0]) + $o, 'UTF-8') . mb_chr(ord($code[1]) + $o, 'UTF-8');
+}
+
+function geoloceer(string $ip): array {
+    // Privé / lokale IP-adressen niet opzoeken
+    if (!$ip || filter_var($ip, FILTER_VALIDATE_IP,
+            FILTER_FLAG_NO_PRIV_RANGE | FILTER_FLAG_NO_RES_RANGE) === false) {
+        return ['land' => 'Lokaal', 'stad' => ''];
+    }
+    $url = 'http://ip-api.com/json/' . rawurlencode($ip) . '?fields=country,countryCode,city&lang=nl';
+    $geo = [];
+    if (function_exists('curl_init')) {
+        $ch = curl_init($url);
+        curl_setopt_array($ch, [CURLOPT_RETURNTRANSFER => true,
+                                CURLOPT_TIMEOUT => 2, CURLOPT_CONNECTTIMEOUT => 2]);
+        $resp = curl_exec($ch);
+        curl_close($ch);
+        if ($resp) $geo = json_decode($resp, true) ?? [];
+    } elseif (ini_get('allow_url_fopen')) {
+        $ctx  = stream_context_create(['http' => ['timeout' => 2]]);
+        $resp = @file_get_contents($url, false, $ctx);
+        if ($resp) $geo = json_decode($resp, true) ?? [];
+    }
+    if (!$geo || ($geo['status'] ?? '') === 'fail') return ['land' => '', 'stad' => ''];
+    $vlag = landVlag($geo['countryCode'] ?? '');
+    return [
+        'land' => ($vlag ? $vlag . ' ' : '') . ($geo['country'] ?? ''),
+        'stad' => $geo['city'] ?? '',
+    ];
+}
+
+function parseerBrowser(string $ua): string {
+    if (!$ua) return 'Onbekend';
+    if (str_contains($ua, 'Edg/') || str_contains($ua, 'Edge/'))   return 'Edge';
+    if (str_contains($ua, 'OPR/') || str_contains($ua, 'Opera/'))  return 'Opera';
+    if (str_contains($ua, 'Chrome/'))  return 'Chrome';
+    if (str_contains($ua, 'Firefox/')) return 'Firefox';
+    if (str_contains($ua, 'Safari/') && str_contains($ua, 'Version/')) return 'Safari';
+    if (str_contains($ua, 'MSIE') || str_contains($ua, 'Trident/')) return 'IE';
+    return 'Onbekend';
+}
+
+function parseerOS(string $ua): string {
+    if (!$ua) return '';
+    if (str_contains($ua, 'Windows NT')) return 'Windows';
+    if (str_contains($ua, 'Macintosh') || str_contains($ua, 'Mac OS X')) return 'macOS';
+    if (str_contains($ua, 'Android'))    return 'Android';
+    if (str_contains($ua, 'iPhone') || str_contains($ua, 'iPad')) return 'iOS';
+    if (str_contains($ua, 'Linux'))      return 'Linux';
+    return '';
+}
+
+function schrijfLog(PDO $pdo, ?int $userId, string $naam, string $username, string $actie): void {
+    try {
+        $ua   = $_SERVER['HTTP_USER_AGENT'] ?? '';
+        $ip   = $_SERVER['HTTP_X_FORWARDED_FOR']
+             ?? $_SERVER['HTTP_X_REAL_IP']
+             ?? $_SERVER['REMOTE_ADDR']
+             ?? '';
+        $ip   = trim(explode(',', $ip)[0]);
+        $geo  = geoloceer($ip);
+        $pdo->prepare("
+            INSERT INTO login_logs
+                (user_id, naam, username, actie, ip_adres, land, stad, browser, os, user_agent)
+            VALUES (?,?,?,?,?,?,?,?,?,?)
+        ")->execute([$userId, $naam, $username, $actie, $ip,
+                     $geo['land'], $geo['stad'],
+                     parseerBrowser($ua), parseerOS($ua), $ua]);
+    } catch (Throwable) { /* logging mag nooit de hoofd-flow blokkeren */ }
+}
+
 try {
 
     // ── GET me ───────────────────────────────────────────────────────────────
@@ -50,6 +126,9 @@ try {
         $user = $stmt->fetch(PDO::FETCH_ASSOC);
 
         if (!$user || !password_verify($password, $user['password_hash'])) {
+            // Log mislukte poging (user_id null als gebruiker onbekend)
+            schrijfLog($pdo, $user ? (int)$user['id'] : null,
+                       $user['naam'] ?? '', $username, 'login_mislukt');
             http_response_code(401);
             echo json_encode(['error' => 'Gebruikersnaam of wachtwoord onjuist']);
             exit;
@@ -72,6 +151,8 @@ try {
             'samesite' => 'Strict',
         ]);
 
+        schrijfLog($pdo, (int)$user['id'], $user['naam'], $user['username'], 'login');
+
         echo json_encode([
             'ok'   => true,
             'user' => [
@@ -88,6 +169,12 @@ try {
     if ($method === 'POST' && $action === 'logout') {
         $token = $_COOKIE['ic_session'] ?? '';
         if ($token) {
+            // Zoek gebruikersinfo op vóór verwijderen sessie
+            $s = $pdo->prepare("SELECT u.id, u.naam, u.username FROM sessions s
+                                 JOIN users u ON u.id = s.user_id WHERE s.token = ?");
+            $s->execute([$token]);
+            $su = $s->fetch(PDO::FETCH_ASSOC);
+            if ($su) schrijfLog($pdo, (int)$su['id'], $su['naam'], $su['username'], 'logout');
             $pdo->prepare("DELETE FROM sessions WHERE token = ?")->execute([$token]);
         }
         setcookie('ic_session', '', [

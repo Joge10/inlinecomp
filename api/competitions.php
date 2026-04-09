@@ -35,14 +35,14 @@ if (!is_array($data)) {
     exit;
 }
 
-// Filter: alleen SpeedSkating.Inline wedstrijden vanaf vandaag
-$vandaag = date('Y-m-d');
-$inline = array_values(array_filter($data, function($item) use ($vandaag) {
+// Filter: alleen SpeedSkating.Inline wedstrijden vanaf een week geleden
+$eenWeekGeleden = date('Y-m-d', strtotime('-7 days'));
+$inline = array_values(array_filter($data, function($item) use ($eenWeekGeleden) {
     if (!isset($item['discipline']) || stripos($item['discipline'], 'SpeedSkating.Inline') === false) {
         return false;
     }
     $starts = isset($item['starts']) ? substr($item['starts'], 0, 10) : '';
-    return $starts >= $vandaag;
+    return $starts >= $eenWeekGeleden;
 }));
 
 // Sorteer op startdatum oplopend
