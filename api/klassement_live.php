@@ -107,6 +107,20 @@ try {
         ORDER BY he.startpositie
     ");
 
+    // ── Vastgelegd-status per afstand ophalen ────────────────────────────────
+    $vastStmt = $pdo->prepare("
+        SELECT distance_id, COUNT(*) AS n
+        FROM uitslag_afstand
+        WHERE competition_id             = ?
+          AND distance_combination_id IN ($dcPh)
+        GROUP BY distance_id
+    ");
+    $vastStmt->execute(array_merge([$compId], $dcIds));
+    $vastgelegdMap = []; // distance_id → true
+    foreach ($vastStmt->fetchAll(PDO::FETCH_ASSOC) as $v) {
+        $vastgelegdMap[$v['distance_id']] = (int)$v['n'] > 0;
+    }
+
     $personCache = [];  // person_license → info
     $puntenMap   = [];  // person_license → [ dist_id → {...} ]
     $afstandenInfo = [];
@@ -140,7 +154,8 @@ try {
         $heats = $heatStmt->fetchAll(PDO::FETCH_ASSOC);
 
         if (empty($heats)) {
-            $afstandenInfo[] = ['id' => $distId, 'name' => $dist['name'], 'compleet' => false];
+            $afstandenInfo[] = ['id' => $distId, 'name' => $dist['name'], 'compleet' => false,
+                                 'vastgelegd' => !empty($vastgelegdMap[$distId])];
             continue;
         }
 
@@ -249,7 +264,7 @@ try {
             }
 
             $afstandenInfo[] = ['id' => $distId, 'name' => $dist['name'], 'compleet' => $distCompleet,
-                                 'modus' => 'gecombineerd'];
+                                 'modus' => 'gecombineerd', 'vastgelegd' => !empty($vastgelegdMap[$distId])];
             continue;
         }
 
@@ -306,24 +321,77 @@ try {
             $rangOffset += $nRijders;
         }
 
-        $afstandenInfo[] = ['id' => $distId, 'name' => $dist['name'], 'compleet' => $distCompleet];
+        $afstandenInfo[] = ['id' => $distId, 'name' => $dist['name'], 'compleet' => $distCompleet,
+                             'vastgelegd' => !empty($vastgelegdMap[$distId])];
+    }
+
+    // ── Alle sancties per rijder over alle rondes + afstanden ───────────────
+    $alleLics = array_keys($puntenMap);
+    $alleSancties = []; // person_license => [{afstand, ronde, sanctie}]
+    if ($alleLics) {
+        $licPh = implode(',', array_fill(0, count($alleLics), '?'));
+        $sanctieStmt = $pdo->prepare("
+            SELECT DISTINCT he.person_license,
+                   d.name AS afstand_naam,
+                   CASE COALESCE(ts_r.ronde_type, CONCAT('ronde_', h.ronde))
+                       WHEN 'heats'        THEN 'Serie'
+                       WHEN 'kwartfinale'   THEN 'KF'
+                       WHEN 'halve_finale'  THEN 'HF'
+                       WHEN 'finale_a'      THEN 'Finale'
+                       WHEN 'finale_b'      THEN CONCAT('B', h.heat_nr, '-Finale')
+                       ELSE CONCAT('R', h.ronde)
+                   END AS ronde_label,
+                   res.sanctie
+            FROM heat_entries he
+            JOIN heats h ON h.id = he.heat_id
+            LEFT JOIN tijdschema_ritten ts_r ON ts_r.id = h.tijdschema_rit_id
+            LEFT JOIN distances d ON d.id = COALESCE(h.distance_id, ts_r.distance_id)
+            JOIN results res ON res.heat_entry_id = he.id
+            WHERE he.person_license IN ($licPh)
+              AND h.competition_id = ?
+              AND h.distance_combination_id IN ($dcPh)
+              AND res.sanctie IS NOT NULL
+            ORDER BY d.number, h.ronde, h.heat_nr
+        ");
+        $sanctieStmt->execute(array_merge($alleLics, [$compId], $dcIds));
+        foreach ($sanctieStmt->fetchAll(PDO::FETCH_ASSOC) as $s) {
+            $alleSancties[$s['person_license']][] = [
+                'afstand' => $s['afstand_naam'] ?? '',
+                'ronde'   => $s['ronde_label'],
+                'sanctie' => $s['sanctie'],
+            ];
+        }
     }
 
     // ── Klassement samenstellen ───────────────────────────────────────────────
-    $klassement = [];
+    // Rijders met 0 punten (of alleen 0-punten afstanden) worden uitgesloten
+    // uit het klassement en apart onderaan getoond met sanctie-info.
+    $klassement  = [];
+    $uitgesloten = [];
     foreach ($puntenMap as $lic => $distPunten) {
         $totaal = 0.0;
-        foreach ($distPunten as $dp) $totaal += $dp['punten'];
+        $heeftPunten = false;
+        foreach ($distPunten as $dp) {
+            $totaal += $dp['punten'];
+            if ($dp['punten'] > 0) $heeftPunten = true;
+        }
         $info = $personCache[$lic] ?? [];
-        $klassement[] = [
+        $entry = [
             'person_license' => $lic,
             'full_name'      => $info['full_name']    ?? '',
             'short_name'     => $info['short_name']   ?? '',
             'start_number'   => $info['start_number'] ?? null,
             'categorie'      => $info['categorie']    ?? '',
             'totaal_punten'  => $totaal,
+            'alle_sancties'  => $alleSancties[$lic] ?? [],
             'afstanden'      => $distPunten,
         ];
+        if ($heeftPunten) {
+            $klassement[] = $entry;
+        } else {
+            $entry['uitgesloten'] = true;
+            $uitgesloten[] = $entry;
+        }
     }
 
     // ── Vergelijkfunctie: totaal → beste resultaat → laatste afstand ──────────
@@ -371,13 +439,27 @@ try {
         }
     }
 
+    // Uitgesloten rijders (0 punten / sanctie) onderaan toevoegen zonder rang
+    foreach ($uitgesloten as &$u) { $u['rang'] = null; }
+    unset($u);
+    $klassement = array_merge($klassement, $uitgesloten);
+
     $hasResults = !empty(array_filter($afstandenInfo, fn($a) => $a['compleet']));
 
+    // Is het klassement al vastgelegd in uitslag_klassement?
+    $klasVastStmt = $pdo->prepare("
+        SELECT COUNT(*) FROM uitslag_klassement
+        WHERE competition_id = ? AND distance_combination_id IN ($dcPh)
+    ");
+    $klasVastStmt->execute(array_merge([$compId], $dcIds));
+    $klassementVastgelegd = (int)$klasVastStmt->fetchColumn() > 0;
+
     echo json_encode([
-        'systeem'     => $systeem,
-        'afstanden'   => $afstandenInfo,
-        'klassement'  => $klassement,
-        'has_results' => $hasResults,
+        'systeem'               => $systeem,
+        'afstanden'             => $afstandenInfo,
+        'klassement'            => $klassement,
+        'has_results'           => $hasResults,
+        'klassement_vastgelegd' => $klassementVastgelegd,
     ], JSON_UNESCAPED_UNICODE);
 
 } catch (Throwable $e) {

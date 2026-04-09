@@ -1660,7 +1660,7 @@ function initDeelnemerModal() {
         <h3>Deelnemer toevoegen</h3>
         <div class="modal-subtitel" id="modal-dc-naam-lbl"></div>
       </div>
-      <button class="btn-del" id="modal-sluiten" title="Sluiten">&#128465;</button>
+      <button class="btn-del" id="modal-sluiten" title="Sluiten">&times;</button>
     </div>
 
     <div class="modal-zoek-sectie">
@@ -1689,15 +1689,18 @@ function initDeelnemerModal() {
           <input type="number" id="f-dt-sn" class="inp" required min="1">
         </label>
       </div>
-      <div class="mf-rij">
-        <label class="mf-lbl"><span>Volledige naam <span class="vereist">*</span></span>
-          <input type="text" id="f-dt-naam" class="inp" required>
-        </label>
-      </div>
       <div class="mf-rij mf-2col">
-        <label class="mf-lbl"><span>Korte naam <span class="vereist">*</span></span>
+        <label class="mf-lbl"><span>Voornaam <span class="vereist">*</span></span>
+          <input type="text" id="f-dt-voornaam" class="inp" required>
+        </label>
+        <label class="mf-lbl"><span>Achternaam <span class="vereist">*</span></span>
           <input type="text" id="f-dt-kort" class="inp" required>
         </label>
+      </div>
+      <div class="mf-rij" style="display:none">
+        <input type="hidden" id="f-dt-naam">
+      </div>
+      <div class="mf-rij mf-2col">
         <label class="mf-lbl"><span>Categorie <span class="vereist">*</span></span>
           <input type="text" id="f-dt-cat" class="inp" required placeholder="bijv. DKA">
         </label>
@@ -1821,7 +1824,7 @@ function openDeelnemerModal(dcId) {
     el('modal-dc-naam-lbl').textContent = dc?.dc_name ?? '';
 
     // Formulier resetten
-    ['f-dt-lk','f-dt-sn','f-dt-naam','f-dt-kort','f-dt-cat',
+    ['f-dt-lk','f-dt-sn','f-dt-voornaam','f-dt-naam','f-dt-kort','f-dt-cat',
      'f-dt-club','f-dt-club-kort','f-dt-tp'].forEach(id => {
         const inp = el(id); if (inp) inp.value = '';
     });
@@ -1904,7 +1907,15 @@ async function zoekPersoon(type) {
 function vulModalFormulier(p) {
     if (p.license_key  != null) el('f-dt-lk').value          = p.license_key;
     if (p.start_number != null) el('f-dt-sn').value           = p.start_number;
-    if (p.full_name)             el('f-dt-naam').value         = p.full_name;
+    if (p.full_name) {
+        el('f-dt-naam').value = p.full_name;
+        // Splits full_name in voornaam + achternaam (achternaam = short_name of laatste deel)
+        const achternaam = p.short_name || '';
+        const voornaam   = achternaam && p.full_name.endsWith(achternaam)
+            ? p.full_name.slice(0, -achternaam.length).trim()
+            : p.full_name.split(' ').slice(0, -1).join(' ');
+        el('f-dt-voornaam').value = voornaam;
+    }
     if (p.short_name)            el('f-dt-kort').value         = p.short_name;
     if (p.category)              el('f-dt-cat').value          = p.category;
     if (p.nationality)           el('f-dt-nat').value          = p.nationality;
@@ -1926,8 +1937,9 @@ function bevestigDeelnemer() {
 
     const lkInput  = el('f-dt-lk').value.trim();
     const sn       = parseInt(el('f-dt-sn').value)  || null;
-    const naam     = el('f-dt-naam').value.trim();
+    const voornaam = el('f-dt-voornaam').value.trim();
     const kort     = el('f-dt-kort').value.trim();
+    const naam     = (voornaam && kort) ? voornaam + ' ' + kort : (voornaam || kort);
     const cat      = el('f-dt-cat').value.trim().toUpperCase();
     const nat      = (el('f-dt-nat').value.trim().toUpperCase() || 'NED').slice(0, 3);
     const gender   = el('f-dt-gender').value !== '' ? Number(el('f-dt-gender').value) : null;
@@ -1936,9 +1948,9 @@ function bevestigDeelnemer() {
     const tp         = el('f-dt-tp').value.trim()        || null;
 
     // Verplichte velden
-    if (!sn)            { el('f-dt-sn').focus();     return; }
-    if (!naam)          { el('f-dt-naam').focus();   return; }
-    if (!kort)          { el('f-dt-kort').focus();   return; }
+    if (!sn)            { el('f-dt-sn').focus();       return; }
+    if (!voornaam)      { el('f-dt-voornaam').focus(); return; }
+    if (!kort)          { el('f-dt-kort').focus();     return; }
     if (!cat)           { el('f-dt-cat').focus();    return; }
     if (gender === null){ el('f-dt-gender').focus(); return; }
 

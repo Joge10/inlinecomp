@@ -8,6 +8,16 @@
     --tekst:       #1a1a1a;
     --grijs:       #f4f6f8;
     --border:      #cdd8e3;
+
+    /* Tab status-kleuren (globaal) */
+    --tab-gereed-bg:       #eaf6ea;
+    --tab-gereed-bg-hover: #d6eed6;
+    --tab-gereed-tekst:    #2e7d32;
+    --tab-gereed-rand:     #4caf50;
+    --tab-deels-bg:        #fef9e7;
+    --tab-deels-bg-hover:  #fef3c7;
+    --tab-deels-tekst:     #92700a;
+    --tab-deels-rand:      #e0a800;
 }
 
 * { box-sizing: border-box; margin: 0; padding: 0; }
@@ -925,7 +935,7 @@ header .badge {
 .u-klas-rij-sanctie td  { color: #6c757d; }
 
 /* Bewerkbare punten-cel (sanctie-rijder) */
-.u-klas-bewerkbaar  { position: relative; }
+.u-klas-bewerkbaar  { position: relative; white-space: nowrap; }
 .u-klas-punten-inp  {
     width: 52px; padding: 2px 4px; font-size: 12px;
     border: 1px solid var(--border); border-radius: 3px;
@@ -938,11 +948,29 @@ header .badge {
     font-size: 10px; color: var(--oranje); margin-left: 3px;
     vertical-align: middle;
 }
+.u-klas-sanctie-hint {
+    font-size: 10px; color: #b00; font-weight: 600;
+}
+.u-klas-uitgesloten-kop td {
+    background: #f8f0f0; color: #888; font-size: .8rem; font-style: italic;
+    padding: 6px 8px; border-top: 2px solid #ddd;
+}
+.u-klas-rij-uitgesloten td { color: #999; }
 
-/* Vastleggen knop */
-.u-vastleg-btn        { font-size: 13px; padding: 5px 12px; margin-bottom: 8px; }
-.u-vastleg-btn-ok     { background: #198754 !important; color: #fff !important;
-                         border-color: #198754 !important; }
+/* Vastleggen knoppen */
+.u-vastleg-wrap        { margin-bottom: 10px; }
+.u-vastleg-btn         { font-size: 13px; padding: 5px 12px; }
+.u-vastleg-btn-ok      { background: #198754 !important; color: #fff !important;
+                          border-color: #198754 !important; }
+.u-vastleg-beschrijving { font-size: 11px; color: #777; margin-top: 3px; font-style: italic; }
+/* Klassement kolomheader kleuren */
+.u-klas-dist-vastgelegd  { color: #198754 !important; font-weight: 700; }
+.u-klas-dist-beschikbaar { color: #856404 !important; }
+.u-klas-dist-onvolledig  { color: #999 !important; font-style: italic; }
+.u-klas-opslaan-balk   { display: flex; flex-wrap: wrap; gap: 1rem; align-items: flex-start;
+                          margin-bottom: 10px; }
+.u-klas-correctie-blok { flex-shrink: 0; }
+.u-klas-vastleg-blok   { flex-shrink: 0; }
 
 /* Info-label bovenaan gecombineerde startlijst */
 .sl-merge-label {
@@ -1741,12 +1769,14 @@ col.heat-tp   { width: 72px; }   /* XX-12345 = 8 monospace tekens */
 .org-tab-btn.active   { color: var(--blauw); border-bottom-color: var(--blauw); background: #f0f4fa; }
 
 /* ── Startlijst tab-status kleuren ── */
-.org-tab-btn.sl-tab-volledig        { background: #eaf6ea; color: #2e7d32; }
-.org-tab-btn.sl-tab-volledig:hover  { background: #d6eed6; }
-.org-tab-btn.sl-tab-volledig.active { background: #d6eed6; border-bottom-color: #4caf50; color: #2e7d32; }
-.org-tab-btn.sl-tab-deels          { background: #fef9e7; color: #92700a; }
-.org-tab-btn.sl-tab-deels:hover    { background: #fef3c7; }
-.org-tab-btn.sl-tab-deels.active   { background: #fef3c7; border-bottom-color: #e0a800; color: #92700a; }
+/* Tab status-kleuren (globaal – herbruikbaar over alle modules) */
+.org-tab-btn.tab-gereed        { background: var(--tab-gereed-bg); color: var(--tab-gereed-tekst); }
+.org-tab-btn.tab-gereed:hover  { background: var(--tab-gereed-bg-hover); }
+.org-tab-btn.tab-gereed.active { background: var(--tab-gereed-bg-hover); border-bottom-color: var(--tab-gereed-rand); color: var(--tab-gereed-tekst); }
+.org-tab-btn.tab-deels         { background: var(--tab-deels-bg); color: var(--tab-deels-tekst); }
+.org-tab-btn.tab-deels:hover   { background: var(--tab-deels-bg-hover); }
+.org-tab-btn.tab-deels.active  { background: var(--tab-deels-bg-hover); border-bottom-color: var(--tab-deels-rand); color: var(--tab-deels-tekst); }
+
 
 /* ── Wedstrijden-tab ── */
 .beheer-wedstrijd-rij  { display: flex; align-items: center; justify-content: space-between;

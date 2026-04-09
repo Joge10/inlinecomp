@@ -244,6 +244,50 @@ try {
 
         $hasResults = $serieCompleet && $finaleCompleet && !empty($gecombineerd);
 
+        // Alle sancties over alle rondes per rijder
+        $alleLics = array_column($gecombineerd, 'person_license');
+        $sanctieMap = [];
+        if ($alleLics) {
+            $licPh = implode(',', array_fill(0, count($alleLics), '?'));
+            $distSanctieFilter = $distId
+                ? "AND (COALESCE(h.distance_id, ts_r.distance_id) = ? OR (h.distance_id IS NULL AND ts_r.distance_id IS NULL))"
+                : "";
+            $distSanctieParams = $distId ? [$distId] : [];
+            $sanctieStmt = $pdo->prepare("
+                SELECT DISTINCT he.person_license,
+                       CASE COALESCE(ts_r.ronde_type, CONCAT('ronde_', h.ronde))
+                           WHEN 'heats'        THEN 'Serie'
+                           WHEN 'kwartfinale'   THEN 'KF'
+                           WHEN 'halve_finale'  THEN 'HF'
+                           WHEN 'finale_a'      THEN 'Finale'
+                           WHEN 'finale_b'      THEN CONCAT('B', h.heat_nr, '-Finale')
+                           ELSE CONCAT('R', h.ronde)
+                       END AS ronde_label,
+                       res.sanctie
+                FROM heat_entries he
+                JOIN heats h ON h.id = he.heat_id
+                LEFT JOIN tijdschema_ritten ts_r ON ts_r.id = h.tijdschema_rit_id
+                JOIN results res ON res.heat_entry_id = he.id
+                WHERE he.person_license IN ($licPh)
+                  AND h.competition_id = ?
+                  AND h.distance_combination_id IN ($dcPh)
+                  {$distSanctieFilter}
+                  AND res.sanctie IS NOT NULL
+                ORDER BY h.ronde, h.heat_nr
+            ");
+            $sanctieStmt->execute(array_merge($alleLics, [$compId], $dcIds, $distSanctieParams));
+            foreach ($sanctieStmt->fetchAll(PDO::FETCH_ASSOC) as $s) {
+                $sanctieMap[$s['person_license']][] = [
+                    'ronde'   => $s['ronde_label'],
+                    'sanctie' => $s['sanctie'],
+                ];
+            }
+        }
+        foreach ($gecombineerd as &$gc) {
+            $gc['alle_sancties'] = $sanctieMap[$gc['person_license']] ?? [];
+        }
+        unset($gc);
+
         echo json_encode([
             'systeem'      => $systeem,
             'modus'        => 'gecombineerd',
@@ -280,6 +324,7 @@ try {
         $rijders = [];
         foreach ($finishers as $i => $r) {
             $rijders[] = [
+                'person_license'=> $r['person_license'],
                 'rang'          => $rangs[$i],
                 'full_name'     => $r['full_name'],
                 'short_name'    => $r['short_name'],
@@ -292,6 +337,7 @@ try {
         }
         foreach ($overigen as $r) {
             $rijders[] = [
+                'person_license'=> $r['person_license'],
                 'rang'          => null,
                 'full_name'     => $r['full_name'],
                 'short_name'    => $r['short_name'],
@@ -325,6 +371,60 @@ try {
     }
 
     $hasResults = !empty(array_filter($finales, fn($f) => $f['compleet']));
+
+    // ── Alle sancties over alle rondes per rijder ophalen ─────────────────
+    // (inclusief serie-sancties zoals FS die niet in de finale-data zitten)
+    $alleLics = [];
+    foreach ($finales as $f) foreach ($f['rijders'] as $r) $alleLics[] = $r['person_license'];
+    $alleLics = array_values(array_unique($alleLics));
+
+    $sanctieMap = []; // person_license => [{ronde, sanctie}]
+    if ($alleLics) {
+        $licPh = implode(',', array_fill(0, count($alleLics), '?'));
+        // Haal sancties op voor deze afstand: match op distance_id OF heats zonder distance_id
+        $distSanctieFilter = $distId
+            ? "AND (COALESCE(h.distance_id, ts_r.distance_id) = ? OR (h.distance_id IS NULL AND ts_r.distance_id IS NULL))"
+            : "";
+        $distSanctieParams = $distId ? [$distId] : [];
+        $sanctieStmt = $pdo->prepare("
+            SELECT DISTINCT he.person_license,
+                   CASE COALESCE(ts_r.ronde_type, CONCAT('ronde_', h.ronde))
+                       WHEN 'heats'        THEN 'Serie'
+                       WHEN 'kwartfinale'   THEN 'KF'
+                       WHEN 'halve_finale'  THEN 'HF'
+                       WHEN 'finale_a'      THEN 'Finale'
+                       WHEN 'finale_b'      THEN CONCAT('B', h.heat_nr, '-Finale')
+                       ELSE CONCAT('R', h.ronde)
+                   END AS ronde_label,
+                   res.sanctie
+            FROM heat_entries he
+            JOIN heats h ON h.id = he.heat_id
+            LEFT JOIN tijdschema_ritten ts_r ON ts_r.id = h.tijdschema_rit_id
+            JOIN results res ON res.heat_entry_id = he.id
+            WHERE he.person_license IN ($licPh)
+              AND h.competition_id = ?
+              AND h.distance_combination_id IN ($dcPh)
+              {$distSanctieFilter}
+              AND res.sanctie IS NOT NULL
+            ORDER BY h.ronde, h.heat_nr
+        ");
+        $sanctieStmt->execute(array_merge($alleLics, [$compId], $dcIds, $distSanctieParams));
+        foreach ($sanctieStmt->fetchAll(PDO::FETCH_ASSOC) as $s) {
+            $sanctieMap[$s['person_license']][] = [
+                'ronde'   => $s['ronde_label'],
+                'sanctie' => $s['sanctie'],
+            ];
+        }
+    }
+
+    // Sancties toevoegen aan rijder-objecten
+    foreach ($finales as &$finale) {
+        foreach ($finale['rijders'] as &$r) {
+            $r['alle_sancties'] = $sanctieMap[$r['person_license']] ?? [];
+        }
+        unset($r);
+    }
+    unset($finale);
 
     echo json_encode([
         'systeem'     => $systeem,

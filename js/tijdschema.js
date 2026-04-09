@@ -202,7 +202,7 @@ function renderTijdschema() {
         container.innerHTML = html;
         el('ts-btn-init').addEventListener('click', async () => {
             try { await postTs({ action: 'init', competition_id: huidigCompId }); }
-            catch(e) { alert('Fout: ' + e.message); }
+            catch(e) { toonBevestigDialog(e.message, 'Fout'); }
         });
         return;
     }
@@ -1275,7 +1275,7 @@ async function saveRitOverride(ritId, tijdstip, opmerking, tsId) {
         if (data?.tijdschema_version != null) tijdschemaVersion = data.tijdschema_version;
         huidigTijdschema = data;
         renderTijdschema();
-    } catch(e) { alert('Fout: ' + e.message); }
+    } catch(e) { toonBevestigDialog(e.message, 'Fout'); }
 }
 
 // ── Events ────────────────────────────────────────────────────────────────────
@@ -1289,7 +1289,7 @@ function bindTsEvents(afstandGroepen) {
         try {
             await postTs({ action: 'save_systeem', tijdschema_id: tsId,
                            systeem: nieuwSysteem, reset: reset ? 1 : 0 });
-        } catch(e) { alert('Fout: ' + e.message); }
+        } catch(e) { toonBevestigDialog(e.message, 'Fout'); }
     };
 
     const updateSysteemSaveBtn = () => {
@@ -1613,7 +1613,7 @@ function bindTsEvents(afstandGroepen) {
                 // Markeer programma als mogelijk verouderd als er al ritten zijn
                 if (huidigTijdschema?.ritten?.length) programmaVerouderd = true;
             } catch(e) {
-                alert('Fout bij opslaan: ' + e.message);
+                toonBevestigDialog('Fout bij opslaan: ' + e.message, 'Fout');
             }
         });
     });
@@ -1633,38 +1633,38 @@ function bindTsEvents(afstandGroepen) {
             const volgorde = blokken.map((b, i) => ({ id: b.id, volgorde: i }));
             try {
                 await postTs({ action: 'save_blokken', tijdschema_id: tsId, volgorde });
-            } catch(e) { alert('Fout: ' + e.message); }
+            } catch(e) { toonBevestigDialog(e.message, 'Fout'); }
         });
     });
 
     // Pauze toevoegen
     el('ts-btn-add-pauze')?.addEventListener('click', async () => {
         try { await postTs({ action: 'add_pauze',     tijdschema_id: tsId }); }
-        catch(e) { alert('Fout: ' + e.message); }
+        catch(e) { toonBevestigDialog(e.message, 'Fout'); }
     });
 
     // Inrijden toevoegen
     el('ts-btn-add-inrijden')?.addEventListener('click', async () => {
         try { await postTs({ action: 'add_inrijden',  tijdschema_id: tsId }); }
-        catch(e) { alert('Fout: ' + e.message); }
+        catch(e) { toonBevestigDialog(e.message, 'Fout'); }
     });
 
     // Ceremonie toevoegen
     el('ts-btn-add-ceremonie')?.addEventListener('click', async () => {
         try { await postTs({ action: 'add_ceremonie', tijdschema_id: tsId }); }
-        catch(e) { alert('Fout: ' + e.message); }
+        catch(e) { toonBevestigDialog(e.message, 'Fout'); }
     });
 
     // Wedstrijd start toevoegen
     el('ts-btn-add-wsstart')?.addEventListener('click', async () => {
         try { await postTs({ action: 'add_wedstrijdstart', tijdschema_id: tsId }); }
-        catch(e) { alert('Fout: ' + e.message); }
+        catch(e) { toonBevestigDialog(e.message, 'Fout'); }
     });
 
     // Herstart toevoegen
     el('ts-btn-add-herstart')?.addEventListener('click', async () => {
         try { await postTs({ action: 'add_herstart', tijdschema_id: tsId }); }
-        catch(e) { alert('Fout: ' + e.message); }
+        catch(e) { toonBevestigDialog(e.message, 'Fout'); }
     });
 
     // ── Blok opslaan (pauze / inrijden / ceremonie / wedstrijdstart / herstart / ronde) ──
@@ -1689,7 +1689,7 @@ function bindTsEvents(afstandGroepen) {
             postBody.heat_duur = mmSsNaarSec(blokDiv.querySelector('.ts-inp-heat-duur')?.value);
         }
         try { await postTs(postBody); }
-        catch(e) { alert('Fout: ' + e.message); }
+        catch(e) { toonBevestigDialog(e.message, 'Fout'); }
     };
 
     container.querySelectorAll('.ts-inp-duur').forEach(inp => {
@@ -1717,7 +1717,7 @@ function bindTsEvents(afstandGroepen) {
         btn.addEventListener('click', async () => {
             try {
                 await postTs({ action: 'delete_blok', tijdschema_id: tsId, blok_id: parseInt(btn.dataset.blokId) });
-            } catch(e) { alert('Fout: ' + e.message); }
+            } catch(e) { toonBevestigDialog(e.message, 'Fout'); }
         });
     });
 
@@ -1727,12 +1727,12 @@ function bindTsEvents(afstandGroepen) {
         const volgorde = blokken.map((b, i) => ({ id: b.id, volgorde: i }));
         try {
             await postTs({ action: 'save_blokken', tijdschema_id: tsId, volgorde });
-        } catch(e) { alert('Fout: ' + e.message); }
+        } catch(e) { toonBevestigDialog(e.message, 'Fout'); }
     });
 
     // ── Genereer ─────────────────────────────────────────────────────────────
     el('ts-btn-genereer')?.addEventListener('click', async () => {
-        if (!confirm('Bestaand programma overschrijven en opnieuw genereren?')) return;
+        if (!await toonBevestigDialog('Bestaand programma overschrijven en opnieuw genereren?', 'Programma genereren')) return;
 
         const btn = el('ts-btn-genereer');
         const origTxt = btn?.textContent ?? '';
@@ -1781,19 +1781,18 @@ function bindTsEvents(afstandGroepen) {
             const nRitten = result?.ritten?.length ?? 0;
             if (nRitten === 0) {
                 const isFF = (huidigTijdschema?.systeem ?? '') === 'full-final';
-                alert(
-                    'Programma gegenereerd, maar er zijn geen heats aangemaakt.\n\n' +
-                    'Mogelijke oorzaken:\n' +
+                toonBevestigDialog(
+                    'Programma gegenereerd, maar er zijn geen heats aangemaakt. ' +
                     (isFF
-                        ? '• Geen categorieën met deelnemers gevonden voor de ingestelde afstanden\n' +
-                          '• Controleer de afstandsinstellingen in het Importeer-tabblad'
-                        : '• Categorieën nog niet geconfigureerd (klik op ✏ Bewerken per afstand)\n' +
-                          '• Vakje "Rijdt series" staat uit voor alle categorieën\n' +
-                          '• Geen rondes-blokken aangemaakt (sla afstandsinstellingen op)')
+                        ? 'Geen categorieën met deelnemers gevonden voor de ingestelde afstanden. ' +
+                          'Controleer de afstandsinstellingen in het Importeer-tabblad.'
+                        : 'Categorieën nog niet geconfigureerd (klik op ✏ Bewerken per afstand), ' +
+                          'of vakje "Rijdt series" staat uit, of er zijn geen rondes-blokken aangemaakt.'),
+                    'Geen heats'
                 );
             }
         } catch(e) {
-            alert('Fout bij genereren:\n' + e.message);
+            toonBevestigDialog('Fout bij genereren: ' + e.message, 'Fout');
         } finally {
             if (btn) { btn.disabled = false; btn.textContent = origTxt; }
         }
@@ -1862,7 +1861,7 @@ function bindTsEvents(afstandGroepen) {
                 const volgorde = [...blokLijst.querySelectorAll(':scope > .ts-blok-item')]
                     .map((el, i) => ({ id: parseInt(el.dataset.blokId), volgorde: i }));
                 try { await postTs({ action: 'save_blokken', tijdschema_id: tsId, volgorde }); }
-                catch(err) { alert('Fout: ' + err.message); renderTijdschema(); }
+                catch(err) { toonBevestigDialog(err.message, 'Fout'); renderTijdschema(); }
             });
         });
     }
@@ -2004,11 +2003,11 @@ function bindTsEvents(afstandGroepen) {
             .then(r => r.json())
             .then(data => {
                 if (data?.error === 'conflict') { toonTsConflictWaarschuwing(data.message); return; }
-                if (data?.error) { alert('Opslaan mislukt: ' + data.error); return; }
+                if (data?.error) { toonBevestigDialog('Opslaan mislukt: ' + data.error, 'Fout'); return; }
                 if (data?.tijdschema_version != null) tijdschemaVersion = data.tijdschema_version;
                 huidigTijdschema = data;
             })
-            .catch(err => { alert('Opslaan mislukt: ' + err.message); renderTijdschema(); });
+            .catch(err => { toonBevestigDialog('Opslaan mislukt: ' + err.message, 'Fout'); renderTijdschema(); });
         });
 
         // ── Starttijd-override per heat (klik op tijdcel) ─────────────────────
@@ -2491,7 +2490,7 @@ ${footerHtml}
 </body></html>`;
 
     const win = window.open('', '_blank');
-    if (!win) { alert('Pop-up geblokkeerd — sta pop-ups toe voor deze pagina.'); return; }
+    if (!win) { toonBevestigDialog('Pop-up geblokkeerd — sta pop-ups toe voor deze pagina.', 'Afdrukken'); return; }
     win.document.write(htmlDoc);
     win.document.close();
     win.focus();
@@ -2833,7 +2832,7 @@ ${footerHtml}
 </body></html>`;
 
     const win = window.open('', '_blank');
-    if (!win) { alert('Pop-up geblokkeerd — sta pop-ups toe voor deze pagina.'); return; }
+    if (!win) { toonBevestigDialog('Pop-up geblokkeerd — sta pop-ups toe voor deze pagina.', 'Afdrukken'); return; }
     win.document.write(htmlDoc);
     win.document.close();
     win.focus();

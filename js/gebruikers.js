@@ -31,7 +31,7 @@ async function herlaadGebruikers() {
     const container = el('gb-container');
     try {
         const res = await fetch('api/gebruikers.php');
-        if (res.status === 401) { window.location.href = 'login.php'; return; }
+        if (!res.ok) return; // 401 wordt afgevangen door globale interceptor
         gbGebruikers = await res.json();
         renderGebruikers();
     } catch(e) {
@@ -153,9 +153,9 @@ function bindLogboekEvents() {
         const dagen = prompt('Verwijder vermeldingen ouder dan hoeveel dagen?', '30');
         if (dagen === null) return;
         const d = parseInt(dagen);
-        if (!d || d < 1) { alert('Voer een geldig aantal dagen in.'); return; }
-        if (confirm(`Alle vermeldingen ouder dan ${d} dagen verwijderen?`))
-            opschonenLogboek(d);
+        if (!d || d < 1) { toonBevestigDialog('Voer een geldig aantal dagen in.', 'Logboek'); return; }
+        toonBevestigDialog(`Alle vermeldingen ouder dan ${d} dagen verwijderen?`, 'Logboek opschonen')
+            .then(ok => { if (ok) opschonenLogboek(d); });
     });
 }
 
@@ -366,18 +366,18 @@ async function toggleActief(id) {
         body: JSON.stringify({ action: 'toggle_actief', id }),
     });
     const data = await res.json();
-    if (!res.ok) { alert(data.error ?? 'Fout'); return; }
+    if (!res.ok) { toonBevestigDialog(data.error ?? 'Fout', 'Fout'); return; }
     await herlaadGebruikers();
 }
 
 async function verwijderGebruiker(id) {
     const user = gbGebruikers.find(u => u.id === id);
-    if (!confirm(`Gebruiker "${user?.naam}" verwijderen?`)) return;
+    if (!await toonBevestigDialog(`Gebruiker "${user?.naam}" verwijderen?`, 'Gebruiker verwijderen')) return;
     const res  = await fetch('api/gebruikers.php', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ action: 'delete', id }),
     });
     const data = await res.json();
-    if (!res.ok) { alert(data.error ?? 'Fout'); return; }
+    if (!res.ok) { toonBevestigDialog(data.error ?? 'Fout', 'Fout'); return; }
     await herlaadGebruikers();
 }

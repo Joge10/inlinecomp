@@ -13,6 +13,14 @@ let _uActieveDist  = null;     // geselecteerde afstand { id, name }
 let _uDistCache    = {};       // dc_id → afstanden[]  (eigen cache naast startlijst)
 let _uPrintOpties  = new Map();// Map< catLabel, Map< distId, { distNaam, opties[] } > >
 
+// DB-sanctiecodes → gebruikersvriendelijke weergave
+const _SANCTIE_LABEL = {
+    'DSQ-TF': 'DQ-DF', 'DSQ-SF': 'DQ-SF', 'FS1': 'FS',
+    'DNS': 'DNS', 'DNF': 'DNF', 'DC': 'DC',
+    'W1': 'W1', 'W2': 'W2', 'RR': 'RR',
+};
+function sanctieLabel(s) { return s ? (_SANCTIE_LABEL[s] ?? s) : ''; }
+
 // ── Hulpfuncties ──────────────────────────────────────────────────────────────
 
 async function uLaadAfstanden(groep) {
@@ -199,6 +207,39 @@ function toonUitslagPagina() {
     });
 }
 
+// ── Tab-kleuren op basis van status ──────────────────────────────────────────
+// Kleuren: standaard → geel (uitslag beschikbaar, niet vastgelegd) → groen (vastgelegd)
+async function _uKleurTabs(groep) {
+    try {
+        const dcParam = groep.dc_ids.map(encodeURIComponent).join(',');
+        const res = await fetch(
+            `api/klassement_live.php?competition_id=${encodeURIComponent(huidigCompId)}&dc_ids=${dcParam}&_t=${Date.now()}`
+        );
+        const data = await res.json();
+        if (!data.afstanden) return;
+
+        const distTabs = el('u-dist-tabs');
+        if (!distTabs) return;
+
+        // Afstand-tabs kleuren (hergebruik startlijst classes)
+        for (const a of data.afstanden) {
+            const tab = distTabs.querySelector(`.u-dist-tab[data-dist-id="${a.id}"]`);
+            if (!tab) continue;
+            tab.classList.remove('tab-deels', 'tab-gereed');
+            if (a.vastgelegd)     tab.classList.add('tab-gereed');
+            else if (a.compleet) tab.classList.add('tab-deels');
+        }
+
+        // Klassement-tab kleuren
+        const klasTab = distTabs.querySelector('.u-klas-tab');
+        if (klasTab) {
+            klasTab.classList.remove('tab-deels', 'tab-gereed');
+            if (data.klassement_vastgelegd)            klasTab.classList.add('tab-gereed');
+            else if (data.afstanden.some(a => a.vastgelegd)) klasTab.classList.add('tab-deels');
+        }
+    } catch { /* stil falen — tabs blijven standaard kleur */ }
+}
+
 // ── Afstand-tabs per categorie (rij 2) ────────────────────────────────────────
 
 async function toonUitslagAfstandConfig(groep) {
@@ -256,6 +297,9 @@ async function toonUitslagAfstandConfig(groep) {
     distTabs.appendChild(klasBtn);
 
     distTabs.style.display = '';
+
+    // ── Tab-kleuren op basis van status (async) ──────────────────────────────
+    _uKleurTabs(groep);
 
     // ── Inhoud ────────────────────────────────────────────────────────────────
     content.innerHTML = `${infoLabelHtml}<div id="u-dist-content"></div>`;
@@ -322,10 +366,10 @@ async function toonUitslagVoorAfstand(groep, afstand) {
                     const rangTxt      = r.rang           != null ? r.rang           : '—';
                     const serieTxt     = r.serie_rang     != null
                         ? `${r.serie_rang} pt${r.serie_tijd_ms != null ? ' (' + msTijd(r.serie_tijd_ms) + ')' : ''}`
-                        : (r.sanctie ? escHtml(r.sanctie) : '—');
+                        : (r.sanctie ? escHtml(sanctieLabel(r.sanctie)) : '—');
                     const finaleTxt    = r.finale_rang    != null
                         ? `${r.finale_rang} pt${r.finale_tijd_ms != null ? ' (' + msTijd(r.finale_tijd_ms) + ')' : ''}`
-                        : (r.sanctie ? escHtml(r.sanctie) : '—');
+                        : (r.sanctie ? escHtml(sanctieLabel(r.sanctie)) : '—');
                     const totaalTxt    = r.totaal_punten  != null ? r.totaal_punten  : '—';
                     const rowClass     = r.sanctie ? 'u-rij-sanctie' : '';
                     html += `<tr class="${rowClass}">
@@ -344,13 +388,18 @@ async function toonUitslagVoorAfstand(groep, afstand) {
             }
 
             if (data.has_results) {
+                const wrap = document.createElement('div');
+                wrap.className = 'u-vastleg-wrap';
                 const vastlegBtn = document.createElement('button');
-                vastlegBtn.className = 'btn-secondary u-vastleg-btn';
-                vastlegBtn.innerHTML = '💾 Uitslag vastleggen';
-                vastlegBtn.title = 'Sla de officiële uitslag op in de database (uitslag_afstand + klassement)';
+                vastlegBtn.className = 'btn-primary u-vastleg-btn';
+                vastlegBtn.innerHTML = '✓ Uitslag bevestigen';
                 vastlegBtn.addEventListener('click', () =>
                     _uVastleggen(groep, afstand, vastlegBtn));
-                content.prepend(vastlegBtn);
+                const desc = document.createElement('div');
+                desc.className = 'u-vastleg-beschrijving';
+                desc.textContent = 'Sla de officiële uitslag van deze afstand op';
+                wrap.append(vastlegBtn, desc);
+                content.prepend(wrap);
             }
             return;
         }
@@ -387,7 +436,7 @@ async function toonUitslagVoorAfstand(groep, afstand) {
             for (const r of finale.rijders) {
                 const rangTxt    = r.rang    != null ? r.rang    : '—';
                 const tijdTxt    = r.tijd_ms != null ? msTijd(r.tijd_ms) : '—';
-                const sanctieTxt = r.sanctie ?? '';
+                const sanctieTxt = sanctieLabel(r.sanctie);
                 const rowClass   = sanctieTxt ? 'u-rij-sanctie' : '';
                 html += `<tr class="${rowClass}">
                     <td class="u-col-rang">${rangTxt}</td>
@@ -406,13 +455,18 @@ async function toonUitslagVoorAfstand(groep, afstand) {
 
         // ── Vastleggen-knop (alleen als uitslag compleet is) ───────────────
         if (data.has_results) {
+            const wrap = document.createElement('div');
+            wrap.className = 'u-vastleg-wrap';
             const vastlegBtn = document.createElement('button');
-            vastlegBtn.className = 'btn-secondary u-vastleg-btn';
-            vastlegBtn.innerHTML = '💾 Uitslag vastleggen';
-            vastlegBtn.title = 'Sla de officiële uitslag op in de database (uitslag_afstand + klassement)';
+            vastlegBtn.className = 'btn-primary u-vastleg-btn';
+            vastlegBtn.innerHTML = '✓ Uitslag bevestigen';
             vastlegBtn.addEventListener('click', () =>
                 _uVastleggen(groep, afstand, vastlegBtn));
-            content.prepend(vastlegBtn);
+            const desc = document.createElement('div');
+            desc.className = 'u-vastleg-beschrijving';
+            desc.textContent = 'Sla de officiële uitslag van deze afstand op';
+            wrap.append(vastlegBtn, desc);
+            content.prepend(wrap);
         }
 
     } catch (e) {
@@ -440,8 +494,10 @@ async function _uVastleggen(groep, afstand, btnEl) {
         const data = await res.json();
         if (data.ok) {
             if (btnEl) {
-                btnEl.innerHTML = '✓ Vastgelegd';
+                btnEl.innerHTML = '✓ Bevestigd';
                 btnEl.classList.add('u-vastleg-btn-ok');
+                // Tab-kleuren bijwerken
+                if (_uActieveCat) _uKleurTabs(_uActieveCat);
                 setTimeout(() => {
                     btnEl.innerHTML = origTekst;
                     btnEl.classList.remove('u-vastleg-btn-ok');
@@ -449,11 +505,11 @@ async function _uVastleggen(groep, afstand, btnEl) {
                 }, 3000);
             }
         } else {
-            alert(data.error ?? data.melding ?? 'Fout bij vastleggen');
+            toonBevestigDialog(data.error ?? data.melding ?? 'Fout bij vastleggen', 'Fout');
             if (btnEl) { btnEl.innerHTML = origTekst; btnEl.disabled = false; }
         }
     } catch (e) {
-        alert(`Fout: ${e.message}`);
+        toonBevestigDialog(e.message, 'Fout');
         if (btnEl) { btnEl.innerHTML = origTekst; btnEl.disabled = false; }
     }
 }
@@ -502,18 +558,29 @@ async function toonUitslagKlassement(groep) {
         const displayNaam = groep.merge_label || groep.dc_name;
         const dcNaam      = displayNaam;
 
-        // ── Tabel-header ──────────────────────────────────────────────────────
+        // ── Tabel-header (kleur bij status) ──────────────────────────────
+        const alleVastgelegd = afstanden.every(a => a.vastgelegd);
         let thAfst = '';
         for (const a of afstanden) {
-            const kls = a.compleet ? '' : ' u-klas-dist-onvolledig';
-            thAfst += `<th class="u-klas-col-punten${kls}" title="${escHtml(a.name)}">${escHtml(a.name)}</th>`;
+            const klsCls = a.vastgelegd ? ' u-klas-dist-vastgelegd'
+                         : a.compleet  ? ' u-klas-dist-beschikbaar'
+                         :               ' u-klas-dist-onvolledig';
+            const statusTxt = a.vastgelegd ? ' (bevestigd)' : a.compleet ? ' (beschikbaar)' : ' (onvolledig)';
+            thAfst += `<th class="u-klas-col-punten${klsCls}" title="${escHtml(a.name)}${statusTxt}">${escHtml(a.name)}</th>`;
         }
 
         // ── Rijen ─────────────────────────────────────────────────────────────
         let tbody = '';
+        let uitgeslTussenKop = false;
         for (const r of klassement) {
-            const rowClass = Object.values(r.afstanden ?? {}).some(d => d.bewerkbaar)
-                ? 'u-klas-rij-sanctie' : '';
+            // Tussenrij voor uitgesloten rijders
+            if (r.uitgesloten && !uitgeslTussenKop) {
+                uitgeslTussenKop = true;
+                const cols = 4 + afstanden.length + 1;
+                tbody += `<tr class="u-klas-uitgesloten-kop"><td colspan="${cols}">Uitgesloten (sanctie / 0 punten)</td></tr>`;
+            }
+            const rowClass = r.uitgesloten ? 'u-klas-rij-uitgesloten'
+                : Object.values(r.afstanden ?? {}).some(d => d.bewerkbaar) ? 'u-klas-rij-sanctie' : '';
 
             let tdAfst = '';
             for (const a of afstanden) {
@@ -523,18 +590,23 @@ async function toonUitslagKlassement(groep) {
                     continue;
                 }
                 if (dp.bewerkbaar) {
-                    const sanctieTxt = dp.sanctie ? ` (${escHtml(dp.sanctie)})` : '';
+                    const sanctieLbl = dp.sanctie ? sanctieLabel(dp.sanctie) : '';
                     tdAfst += `<td class="u-klas-col-punten u-klas-bewerkbaar">` +
                         `<input type="number" class="u-klas-punten-inp" ` +
                         `  min="0" step="1" value="${dp.punten}" ` +
                         `  data-lic="${escHtml(r.person_license)}" ` +
                         `  data-dist-id="${escHtml(a.id)}" ` +
                         `  data-dist-naam="${escHtml(a.name)}" ` +
-                        `  title="Sanctie${sanctieTxt} – punten aanpassen">` +
+                        `  title="Sanctie (${sanctieLbl}) – punten aanpassen">` +
+                        (sanctieLbl ? `<span class="u-klas-sanctie-hint">${escHtml(sanctieLbl)}</span>` : '') +
                         (dp.override ? `<span class="u-klas-override-badge" title="Aangepast">✎</span>` : '') +
                         `</td>`;
                 } else {
-                    tdAfst += `<td class="u-klas-col-punten">${dp.punten % 1 === 0 ? dp.punten : dp.punten.toFixed(1)}</td>`;
+                    const puntTxt = dp.punten % 1 === 0 ? dp.punten : dp.punten.toFixed(1);
+                    const sanctieInfo = dp.sanctie
+                        ? ` <span class="u-klas-sanctie-hint" title="${escHtml(sanctieLabel(dp.sanctie))}">(${escHtml(sanctieLabel(dp.sanctie))})</span>`
+                        : '';
+                    tdAfst += `<td class="u-klas-col-punten">${puntTxt}${sanctieInfo}</td>`;
                 }
             }
 
@@ -552,15 +624,29 @@ async function toonUitslagKlassement(groep) {
         const heeftBewerkbaar = klassement.some(r =>
             Object.values(r.afstanden ?? {}).some(d => d.bewerkbaar)
         );
+        const nietVastgelegd = afstanden.filter(a => !a.vastgelegd).map(a => a.name);
+        const klasDisabled  = !alleVastgelegd;
+        const klasTooltip   = klasDisabled
+            ? `Nog niet bevestigd: ${nietVastgelegd.join(', ')}`
+            : 'Leg het definitieve klassement vast';
+
         const opslaanBalk = `<div class="u-klas-opslaan-balk">
             ${heeftBewerkbaar
-                ? `<button class="btn-primary" id="u-klas-btn-opslaan">💾 Puntenaanpassingen opslaan</button>
-                   <span class="u-klas-opslaan-status" id="u-klas-opslaan-status"></span>`
+                ? `<div class="u-klas-correctie-blok">
+                       <button class="btn-secondary" id="u-klas-btn-opslaan">💾 Correcties opslaan</button>
+                       <span class="u-klas-opslaan-status" id="u-klas-opslaan-status"></span>
+                       <div class="u-vastleg-beschrijving">Sla aangepaste punten op voor gesanctioneerde rijders</div>
+                   </div>`
                 : ''}
-            <button class="btn-secondary u-vastleg-btn" id="u-klas-btn-vastleggen"
-                    title="Sla alle complete afstanden + klassement definitief op">
-                📥 Alles vastleggen
-            </button>
+            <div class="u-klas-vastleg-blok">
+                <button class="btn-primary u-vastleg-btn" id="u-klas-btn-vastleggen"
+                        title="${escHtml(klasTooltip)}" ${klasDisabled ? 'disabled' : ''}>
+                    🏆 Klassement vastleggen
+                </button>
+                <div class="u-vastleg-beschrijving">${klasDisabled
+                    ? `Bevestig eerst: ${escHtml(nietVastgelegd.join(', '))}`
+                    : 'Alle afstanden zijn bevestigd — klaar om vast te leggen'}</div>
+            </div>
         </div>`;
 
         content.innerHTML = `
@@ -583,6 +669,51 @@ async function toonUitslagKlassement(groep) {
                 </table>
                 </div>
             </div>`;
+
+        // ── Live totaal herberekenen + dirty-tracking bij puntenwijziging ─────
+        let _klasDirty = false;
+        const klasBtn = el('u-klas-btn-vastleggen');
+
+        const updateKlasBtn = () => {
+            if (!klasBtn) return;
+            if (_klasDirty) {
+                klasBtn.disabled = true;
+                klasBtn.title = 'Sla eerst de puntencorrecties op';
+            } else if (!alleVastgelegd) {
+                klasBtn.disabled = true;
+                klasBtn.title = `Nog niet bevestigd: ${nietVastgelegd.join(', ')}`;
+            } else {
+                klasBtn.disabled = false;
+                klasBtn.title = 'Leg het definitieve klassement vast';
+            }
+        };
+
+        content.querySelectorAll('.u-klas-punten-inp').forEach(inp => {
+            const origVal = inp.value;
+            inp.addEventListener('input', () => {
+                // Dirty-tracking
+                const wasDirty = _klasDirty;
+                _klasDirty = [...content.querySelectorAll('.u-klas-punten-inp')].some(
+                    i => i.value !== i.dataset.origVal
+                );
+                if (_klasDirty !== wasDirty) updateKlasBtn();
+
+                // Live totaal herberekenen
+                const rij = inp.closest('tr');
+                if (!rij) return;
+                let totaal = 0;
+                rij.querySelectorAll('.u-klas-punten-inp').forEach(i => {
+                    totaal += parseFloat(i.value) || 0;
+                });
+                rij.querySelectorAll('.u-klas-col-punten:not(.u-klas-bewerkbaar)').forEach(td => {
+                    const v = parseFloat(td.textContent);
+                    if (!isNaN(v)) totaal += v;
+                });
+                const totaalTd = rij.querySelector('.u-klas-col-totaal');
+                if (totaalTd) totaalTd.textContent = totaal % 1 === 0 ? totaal : totaal.toFixed(1);
+            });
+            inp.dataset.origVal = origVal;
+        });
 
         // ── Alles vastleggen knop ─────────────────────────────────────────────
         el('u-klas-btn-vastleggen')?.addEventListener('click', async (e) => {
@@ -617,21 +748,8 @@ async function toonUitslagKlassement(groep) {
                 });
                 const d = await r.json();
                 if (d.ok) {
-                    if (statusEl) {
-                        statusEl.textContent = `✓ ${d.opgeslagen} aanpassing(en) opgeslagen`;
-                        setTimeout(() => { if (statusEl) statusEl.textContent = ''; }, 3000);
-                    }
-                    // Badge bijwerken
-                    content.querySelectorAll('.u-klas-punten-inp').forEach(inp => {
-                        let badge = inp.nextElementSibling;
-                        if (!badge || !badge.classList.contains('u-klas-override-badge')) {
-                            badge = document.createElement('span');
-                            badge.className = 'u-klas-override-badge';
-                            badge.title = 'Aangepast';
-                            badge.textContent = '✎';
-                            inp.after(badge);
-                        }
-                    });
+                    // Herlaad het klassement zodat totalen, rangorde en badges kloppen
+                    toonUitslagKlassement(groep);
                 } else {
                     if (statusEl) statusEl.textContent = `⚠ ${d.error ?? 'Fout'}`;
                 }
@@ -678,11 +796,11 @@ async function _drukKlassement(optData) {
             `api/klassement_live.php?competition_id=${encodeURIComponent(huidigCompId)}&dc_ids=${dcIds.map(encodeURIComponent).join(',')}`
         );
         data = await res.json();
-    } catch (e) { alert('Fout bij laden: ' + e.message); return; }
+    } catch (e) { toonBevestigDialog('Fout bij laden: ' + e.message, 'Fout'); return; }
 
-    if (data.error) { alert(data.error); return; }
-    if (data.systeem !== 'full-final') { alert(data.melding ?? 'Systeem niet beschikbaar.'); return; }
-    if (!data.has_results || !data.klassement?.length) { alert('Nog geen resultaten beschikbaar.'); return; }
+    if (data.error) { toonBevestigDialog(data.error, 'Fout'); return; }
+    if (data.systeem !== 'full-final') { toonBevestigDialog(data.melding ?? 'Systeem niet beschikbaar.', 'Info'); return; }
+    if (!data.has_results || !data.klassement?.length) { toonBevestigDialog('Nog geen resultaten beschikbaar.', 'Info'); return; }
 
     const afstanden  = data.afstanden ?? [];
     const klassement = data.klassement;
@@ -697,9 +815,19 @@ async function _drukKlassement(optData) {
     }
 
     // Rijen
+    // Sanctie-voetnoten: gebruik alle_sancties (alle rondes + afstanden)
+    const sanctieNoten = []; // [{ naam, items: [{ronde, afstand, sanctie}] }]
     let tbody = '';
     for (const r of klassement) {
-        const heeftSanctie = Object.values(r.afstanden ?? {}).some(d => d.sanctie);
+        const rijderSancties = (r.alle_sancties ?? []).map(s => ({
+            afstand: s.afstand ?? '', ronde: s.ronde ?? '', sanctie: sanctieLabel(s.sanctie)
+        }));
+        const heeftSanctie = rijderSancties.length > 0;
+        let nootNr = 0;
+        if (heeftSanctie) {
+            sanctieNoten.push({ naam: r.full_name, items: rijderSancties });
+            nootNr = sanctieNoten.length;
+        }
         const rowCls = heeftSanctie ? ' class="pr-rij-sanctie"' : '';
 
         let tdAfst = '';
@@ -707,15 +835,14 @@ async function _drukKlassement(optData) {
             const dp = r.afstanden?.[a.id];
             if (!dp) { tdAfst += `<td class="pr-col-punten">\u2014</td>`; continue; }
             const val = dp.punten % 1 === 0 ? dp.punten : dp.punten.toFixed(1);
-            const sanctieMark = dp.sanctie ? ` <span class="pr-sanctie-mark">(${esc(dp.sanctie)})</span>` : '';
-            const overrideMark = dp.override ? ' \u270e' : '';
-            tdAfst += `<td class="pr-col-punten${dp.sanctie ? ' pr-cel-sanctie' : ''}">${val}${sanctieMark}${overrideMark}</td>`;
+            tdAfst += `<td class="pr-col-punten${dp.sanctie ? ' pr-cel-sanctie' : ''}">${val}</td>`;
         }
 
         const totVal = r.totaal_punten % 1 === 0 ? r.totaal_punten : r.totaal_punten.toFixed(1);
+        const nootMark = nootNr ? ` <sup class="pr-noot-ref">(${nootNr})</sup>` : '';
         tbody += `<tr${rowCls}>
             <td class="pr-col-rang">${r.rang ?? '\u2014'}</td>
-            <td class="pr-col-naam">${esc(r.full_name ?? '')}</td>
+            <td class="pr-col-naam">${esc(r.full_name ?? '')}${nootMark}</td>
             <td class="pr-col-snr">${esc(String(r.start_number ?? ''))}</td>
             <td class="pr-col-cat">${esc(r.categorie ?? '')}</td>
             ${tdAfst}
@@ -723,8 +850,23 @@ async function _drukKlassement(optData) {
         </tr>`;
     }
 
-    const voetnoot = heeftOnvolledige
-        ? `<div class="pr-voetnoot">* ${esc(typeLabel)} \u2013 niet alle afstanden zijn voltooid</div>` : '';
+    // Voetnoten opbouwen
+    let voetnotenHtml = '';
+    if (sanctieNoten.length) {
+        const items = sanctieNoten.map((n, i) =>
+            `<div class="pr-noot-item"><strong>(${i + 1})</strong> ${esc(n.naam)}: ${
+                n.items.map(s => {
+                    const loc = [s.afstand, s.ronde].filter(Boolean).join(' ');
+                    return loc ? esc(loc) + ': ' + esc(s.sanctie) : esc(s.sanctie);
+                }).join(', ')
+            }</div>`
+        ).join('');
+        voetnotenHtml = `<div class="pr-noten">${items}</div>`;
+    }
+
+    const voetnoot = (heeftOnvolledige
+        ? `<div class="pr-voetnoot">* ${esc(typeLabel)} \u2013 niet alle afstanden zijn voltooid</div>` : '')
+        + voetnotenHtml;
 
     const htmlDoc = `<!DOCTYPE html><html lang="nl">
 <head><meta charset="UTF-8">
@@ -747,14 +889,17 @@ tr:nth-child(even) td{background:#f8fafc}
 .pr-col-naam{}
 .pr-col-snr{width:32px;text-align:right;font-weight:600;color:#1a3a5c}
 .pr-col-cat{width:30px;font-size:7.5pt;color:#666}
-.pr-col-punten{width:55px;text-align:center}
+.pr-col-punten{width:70px;text-align:center;white-space:nowrap}
 .pr-col-totaal{width:50px;text-align:center;font-weight:700}
 .pr-dist-onvolledig{font-style:italic;color:#999}
 .pr-cel-sanctie{color:#999;font-style:italic}
-.pr-sanctie-mark{font-size:6.5pt;color:#b00}
+.pr-sanctie-mark{font-size:6pt;color:#b00}
 .pr-rij-sanctie td{color:#888}
 .pr-voetnoot{font-size:7.5pt;color:#888;font-style:italic;margin-top:.4cm;
              border-top:1px solid #ddd;padding-top:.2cm}
+.pr-noot-ref{font-size:7pt;color:#b00;font-weight:700}
+.pr-noten{font-size:7.5pt;color:#555;margin-top:.3cm;border-top:1px solid #ddd;padding-top:.2cm}
+.pr-noot-item{margin-bottom:1px}
 @page{size:A4 landscape;margin:.8cm 1cm}
 @media print{body{margin:.5cm .8cm}}
 </style></head>
@@ -783,7 +928,7 @@ ${footerHtml}
 </body></html>`;
 
     const win = window.open('', '_blank');
-    if (!win) { alert('Pop-up geblokkeerd \u2013 sta pop-ups toe voor deze pagina.'); return; }
+    if (!win) { toonBevestigDialog('Pop-up geblokkeerd \u2013 sta pop-ups toe voor deze pagina.', 'Afdrukken'); return; }
     win.document.write(htmlDoc);
     win.document.close();
     win.focus();
@@ -811,14 +956,14 @@ async function _drukAfstandUitslag(optData) {
             `api/uitslag_afstand.php?competition_id=${encodeURIComponent(huidigCompId)}&dc_ids=${dcParam}${distParam}`
         );
         data = await res.json();
-    } catch (e) { alert('Fout bij laden: ' + e.message); return; }
+    } catch (e) { toonBevestigDialog('Fout bij laden: ' + e.message, 'Fout'); return; }
 
-    if (data.error) { alert(data.error); return; }
-    if (data.systeem !== 'full-final') { alert(data.melding ?? 'Systeem niet beschikbaar.'); return; }
+    if (data.error) { toonBevestigDialog(data.error, 'Fout'); return; }
+    if (data.systeem !== 'full-final') { toonBevestigDialog(data.melding ?? 'Systeem niet beschikbaar.', 'Info'); return; }
 
     // ── Gecombineerde modus ──────────────────────────────────────────────────
     if (data.modus === 'gecombineerd') {
-        if (!data.gecombineerd?.length) { alert('Nog geen uitslag beschikbaar.'); return; }
+        if (!data.gecombineerd?.length) { toonBevestigDialog('Nog geen uitslag beschikbaar.', 'Info'); return; }
 
         let thExtra = '';
         if (toonRonde) thExtra += '<th class="pr-col-serie">Serie</th><th class="pr-col-finale">Finale</th>';
@@ -826,11 +971,15 @@ async function _drukAfstandUitslag(optData) {
 
         let tbody = '';
         for (const r of data.gecombineerd) {
-            const rowCls = r.sanctie ? ' class="pr-rij-sanctie"' : '';
+            const alleSancties = (r.alle_sancties ?? [])
+                .map(s => `${esc(s.ronde)}:${esc(sanctieLabel(s.sanctie))}`)
+                .join(', ');
+            const heeftSanctie = alleSancties || r.sanctie;
+            const rowCls = heeftSanctie ? ' class="pr-rij-sanctie"' : '';
             let tdExtra = '';
             if (toonRonde) {
-                const serieTxt  = r.serie_rang  != null ? `${r.serie_rang} pt` : (r.sanctie ? esc(r.sanctie) : '\u2014');
-                const finaleTxt = r.finale_rang != null ? `${r.finale_rang} pt` : (r.sanctie ? esc(r.sanctie) : '\u2014');
+                const serieTxt  = r.serie_rang  != null ? `${r.serie_rang} pt` : (r.sanctie ? esc(sanctieLabel(r.sanctie)) : '\u2014');
+                const finaleTxt = r.finale_rang != null ? `${r.finale_rang} pt` : (r.sanctie ? esc(sanctieLabel(r.sanctie)) : '\u2014');
                 tdExtra += `<td class="pr-col-serie">${serieTxt}</td><td class="pr-col-finale">${finaleTxt}</td>`;
             }
             if (toonTijd) {
@@ -846,6 +995,7 @@ async function _drukAfstandUitslag(optData) {
                 <td class="pr-col-cat">${esc(r.categorie ?? '')}</td>
                 ${tdExtra}
                 <td class="pr-col-totaal">${totaalTxt}</td>
+                <td class="pr-col-sanctie">${alleSancties || ''}</td>
             </tr>`;
         }
 
@@ -856,11 +1006,12 @@ async function _drukAfstandUitslag(optData) {
              <th class="pr-col-snr">Snr</th>
              <th class="pr-col-cat">Cat</th>
              ${thExtra}
-             <th class="pr-col-totaal">Totaal</th>`,
+             <th class="pr-col-totaal">Totaal</th>
+             <th class="pr-col-sanctie">Sanctie</th>`,
             tbody, 'Gecombineerd (serie + finale)', orgLogoHtml, footerHtml);
 
         const win = window.open('', '_blank');
-        if (!win) { alert('Pop-up geblokkeerd \u2013 sta pop-ups toe voor deze pagina.'); return; }
+        if (!win) { toonBevestigDialog('Pop-up geblokkeerd \u2013 sta pop-ups toe voor deze pagina.', 'Afdrukken'); return; }
         win.document.write(htmlDoc);
         win.document.close();
         win.focus();
@@ -869,7 +1020,7 @@ async function _drukAfstandUitslag(optData) {
     }
 
     // ── Normaal: finales ─────────────────────────────────────────────────────
-    if (!data.finales?.length) { alert('Nog geen finales gevonden.'); return; }
+    if (!data.finales?.length) { toonBevestigDialog('Nog geen finales gevonden.', 'Info'); return; }
 
     let thExtra = '';
     if (toonRonde) thExtra += '<th class="pr-col-finale">Finale</th>';
@@ -878,18 +1029,22 @@ async function _drukAfstandUitslag(optData) {
     let tbody = '';
     for (const finale of data.finales) {
         for (const r of finale.rijders) {
-            const rowCls = r.sanctie ? ' class="pr-rij-sanctie"' : '';
+            // Alle sancties van deze rijder voor deze afstand (serie + finale)
+            const alleSancties = (r.alle_sancties ?? [])
+                .map(s => `${esc(s.ronde)}:${esc(sanctieLabel(s.sanctie))}`)
+                .join(', ');
+            const heeftSanctie = alleSancties || r.sanctie;
+            const rowCls = heeftSanctie ? ' class="pr-rij-sanctie"' : '';
             let tdExtra = '';
             if (toonRonde) tdExtra += `<td class="pr-col-finale">${esc(finale.label)}</td>`;
             if (toonTijd)  tdExtra += `<td class="pr-col-tijd">${r.tijd_ms != null ? msTijd(r.tijd_ms) : '\u2014'}</td>`;
-            const sanctieTxt = r.sanctie ? esc(r.sanctie) : '';
             tbody += `<tr${rowCls}>
                 <td class="pr-col-rang">${r.rang ?? '\u2014'}</td>
                 <td class="pr-col-naam">${esc(r.full_name ?? '')}</td>
                 <td class="pr-col-snr">${esc(String(r.start_number ?? ''))}</td>
                 <td class="pr-col-cat">${esc(r.categorie ?? '')}</td>
                 ${tdExtra}
-                <td class="pr-col-sanctie">${sanctieTxt}</td>
+                <td class="pr-col-sanctie">${alleSancties || ''}</td>
             </tr>`;
         }
     }
@@ -905,7 +1060,7 @@ async function _drukAfstandUitslag(optData) {
         tbody, '', orgLogoHtml, footerHtml);
 
     const win = window.open('', '_blank');
-    if (!win) { alert('Pop-up geblokkeerd \u2013 sta pop-ups toe voor deze pagina.'); return; }
+    if (!win) { toonBevestigDialog('Pop-up geblokkeerd \u2013 sta pop-ups toe voor deze pagina.', 'Afdrukken'); return; }
     win.document.write(htmlDoc);
     win.document.close();
     win.focus();
@@ -927,20 +1082,22 @@ body{font-family:Arial,Helvetica,sans-serif;font-size:9pt;margin:.6cm 1cm;color:
 .pr-meta{font-size:8.5pt;color:#555;margin-top:1mm}
 .pr-type{font-size:10pt;font-weight:700;color:#1a3a5c}
 .pr-subtitel{font-size:8pt;color:#555;font-style:italic;margin-top:1mm}
-table{width:100%;border-collapse:collapse;font-size:8.5pt}
+table{width:100%;border-collapse:collapse;font-size:8.5pt;table-layout:auto}
 thead{display:table-header-group}
 th{background:#dce6f0;color:#1a3a5c;padding:3px 6px;font-size:7.5pt;
-   text-align:left;font-weight:600;border-bottom:1px solid #bbb}
-td{padding:3px 6px;border-bottom:1px solid #eee}
+   text-align:left;font-weight:600;border-bottom:1px solid #bbb;white-space:nowrap}
+td{padding:3px 6px;border-bottom:1px solid #eee;white-space:nowrap}
+td.pr-col-naam{white-space:normal}
+td.pr-col-sanctie{white-space:normal}
 tr:nth-child(even) td{background:#f8fafc}
-.pr-col-rang{width:22px;text-align:center}
-.pr-col-naam{}
-.pr-col-snr{width:32px;text-align:right;font-weight:600;color:#1a3a5c}
-.pr-col-cat{width:30px;font-size:7.5pt;color:#666}
-.pr-col-serie,.pr-col-finale{width:55px;text-align:center}
-.pr-col-tijd{width:60px;text-align:right;font-family:monospace;font-size:8pt}
-.pr-col-totaal{width:50px;text-align:center;font-weight:700}
-.pr-col-sanctie{width:50px;font-size:7.5pt;color:#b00}
+.pr-col-rang{text-align:center}
+.pr-col-naam{width:auto}
+.pr-col-snr{text-align:right;font-weight:600;color:#1a3a5c}
+.pr-col-cat{font-size:7.5pt;color:#666}
+.pr-col-serie,.pr-col-finale{text-align:center}
+.pr-col-tijd{text-align:right;font-family:monospace;font-size:8pt}
+.pr-col-totaal{text-align:center;font-weight:700}
+.pr-col-sanctie{font-size:7.5pt;color:#b00}
 .pr-rij-sanctie td{color:#888}
 @page{size:${pageSize};margin:.8cm 1cm}
 @media print{body{margin:.5cm .8cm}}

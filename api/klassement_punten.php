@@ -52,21 +52,15 @@ try {
     $compNaam  = $comp['name']   ?? '';
     $compDatum = $comp['starts'] ? date('Y-m-d', strtotime($comp['starts'])) : null;
 
-    $upsert = $pdo->prepare("
-        INSERT INTO uitslag_afstand
-            (competition_id, competition_naam, competition_datum,
-             distance_combination_id, dc_naam,
-             distance_id, distance_naam,
-             person_license, categorie,
-             punten)
-        VALUES (?,?,?,?,?,?,?,?,
-                (SELECT category FROM persons WHERE license_key = ? LIMIT 1),
-                ?)
-        ON DUPLICATE KEY UPDATE
-            punten          = VALUES(punten),
-            competition_naam = VALUES(competition_naam),
-            dc_naam         = VALUES(dc_naam),
-            distance_naam   = VALUES(distance_naam)
+    // Update alleen het punten-veld van bestaande uitslag_afstand records.
+    // Geen INSERT — correcties zijn alleen zinvol als er al een uitslag vastgelegd is.
+    $updateStmt = $pdo->prepare("
+        UPDATE uitslag_afstand
+        SET punten = ?, vastgelegd_at = CURRENT_TIMESTAMP
+        WHERE competition_id             = ?
+          AND distance_combination_id    = ?
+          AND distance_id                = ?
+          AND person_license             = ?
     ");
 
     $pdo->beginTransaction();
@@ -75,20 +69,12 @@ try {
     foreach ($items as $item) {
         $lic      = trim($item['person_license'] ?? '');
         $distId   = trim($item['distance_id']    ?? '');
-        $distNaam = trim($item['distance_naam']  ?? '');
         $punten   = isset($item['punten']) ? (float)$item['punten'] : null;
 
         if (!$lic || !$distId || $punten === null) continue;
 
-        $upsert->execute([
-            $compId, $compNaam, $compDatum,
-            $dcId, $dcNaam,
-            $distId, $distNaam,
-            $lic,
-            $lic,   // voor subquery categorie
-            $punten,
-        ]);
-        $opgeslagen++;
+        $updateStmt->execute([$punten, $compId, $dcId, $distId, $lic]);
+        if ($updateStmt->rowCount() > 0) $opgeslagen++;
     }
 
     $pdo->commit();

@@ -35,13 +35,13 @@ if (!$compId || !$dcIds) {
 $primaryDcId = $dcIds[0];
 
 try {
+    // Verwijder alle heats voor deze categorie/afstand (ronde 1 + eventuele ghost heats)
     $stmt = $pdo->prepare("
         DELETE FROM heats
         WHERE competition_id          = ?
           AND distance_combination_id = ?
           AND (distance_id = ? OR (distance_id IS NULL AND ? = ''))
           AND (split_group = ? OR (split_group IS NULL AND ? IS NULL))
-          AND ronde = 1
     ");
     $stmt->execute([$compId, $primaryDcId, $distId, $distId, $splitGroup, $splitGroup]);
 

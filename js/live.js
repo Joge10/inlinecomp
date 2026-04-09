@@ -1234,7 +1234,7 @@ function _liveBind(idx) {
 
 async function _livePuntenOpslaan(ritIdx) {
     const rit = _liveRitten[ritIdx];
-    if (!rit?.heat_id) { alert('Geen heat gevonden voor deze rit.'); return; }
+    if (!rit?.heat_id) { toonBevestigDialog('Geen heat gevonden voor deze rit.', 'Fout'); return; }
 
     const btn = el('live-btn-punten-' + ritIdx);
     if (btn) { btn.disabled = true; btn.textContent = 'Bezig…'; }
@@ -1276,7 +1276,7 @@ async function _livePuntenOpslaan(ritIdx) {
             setTimeout(() => { if (btn) { btn.textContent = '💾 Punten opslaan'; btn.classList.remove('btn-opgeslagen'); } }, 2500);
         }
     } catch (e) {
-        alert('Fout bij opslaan punten: ' + e.message);
+        toonBevestigDialog('Fout bij opslaan punten: ' + e.message, 'Fout');
         if (btn) { btn.disabled = false; btn.textContent = '💾 Punten opslaan'; }
     }
 }
@@ -2011,7 +2011,7 @@ async function _liveOpslaanRit(ritIdx) {
             btn.disabled    = false;
             btn.textContent = '💾 Opslaan';
         }
-        alert('Fout bij opslaan: ' + e.message);
+        toonBevestigDialog('Fout bij opslaan: ' + e.message, 'Fout');
     }
 }
 

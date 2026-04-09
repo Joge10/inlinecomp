@@ -45,9 +45,10 @@ if (!$compId || !$license || !$dcId) {
 try {
     $pdo->beginTransaction();
 
-    // Verwijder huidige heat-entry voor deze rijder in deze ronde
-    $pdo->prepare("
-        DELETE he FROM heat_entries he
+    // Zoek huidige heat van deze rijder (voor hernummering na verwijdering)
+    $oudHeatStmt = $pdo->prepare("
+        SELECT he.id, he.heat_id, he.startpositie
+        FROM heat_entries he
         JOIN heats h ON h.id = he.heat_id
         WHERE h.competition_id          = ?
           AND h.distance_combination_id = ?
@@ -55,7 +56,22 @@ try {
           AND (h.split_group = ? OR (h.split_group IS NULL AND ? IS NULL))
           AND h.ronde         = ?
           AND he.person_license = ?
-    ")->execute([$compId, $dcId, $distId, $distId, $splitGroup, $splitGroup, $ronde, $license]);
+        LIMIT 1
+    ");
+    $oudHeatStmt->execute([$compId, $dcId, $distId, $distId, $splitGroup, $splitGroup, $ronde, $license]);
+    $oudEntry = $oudHeatStmt->fetch(PDO::FETCH_ASSOC);
+
+    // Verwijder huidige heat-entry
+    if ($oudEntry) {
+        $pdo->prepare("DELETE FROM heat_entries WHERE id = ?")->execute([$oudEntry['id']]);
+
+        // Hernummer startposities: schuif iedereen erboven naar beneden
+        $pdo->prepare("
+            UPDATE heat_entries
+            SET startpositie = startpositie - 1
+            WHERE heat_id = ? AND startpositie > ?
+        ")->execute([$oudEntry['heat_id'], $oudEntry['startpositie']]);
+    }
 
     if ($heatNr !== null) {
         // Zoek de doelstelling heat op.

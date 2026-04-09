@@ -95,6 +95,20 @@ try {
     // ── dc_ids placeholder ────────────────────────────────────────────────────
     $dcPh = implode(',', array_fill(0, count($dcIds), '?'));
 
+    // ── Bestaande puntencorrecties ophalen (handmatig aangepast via klassement) ──
+    $overrideStmt = $pdo->prepare("
+        SELECT person_license, distance_id, punten
+        FROM uitslag_afstand
+        WHERE competition_id             = ?
+          AND distance_combination_id IN ($dcPh)
+          AND punten IS NOT NULL
+    ");
+    $overrideStmt->execute(array_merge([$compId], $dcIds));
+    $bestaandeOverrides = []; // [person_license][distance_id] => punten
+    foreach ($overrideStmt->fetchAll(PDO::FETCH_ASSOC) as $ov) {
+        $bestaandeOverrides[$ov['person_license']][$ov['distance_id']] = (float)$ov['punten'];
+    }
+
     // ── Rijder-query ──────────────────────────────────────────────────────────
     $rijderStmt = $pdo->prepare("
         SELECT he.person_license,
@@ -256,6 +270,8 @@ try {
                 $punten = (float)$gc['rang'];
                 $sanctieDb = null;
                 if ($gc['sanctie'] !== null) {
+                    // Respecteer bestaande handmatige correctie
+                    $punten = $bestaandeOverrides[$lic][$distId] ?? $punten;
                     $sanctieDb = match($gc['sanctie']) {
                         'DSQ-SF', 'DQ-SF' => 'DSQ-SF',
                         'DSQ-TF', 'DQ-DF' => 'DC',
@@ -316,13 +332,13 @@ try {
                 $puntenMap[$lic][$distId] = $punten;
             }
 
-            // Sanctie-rijders
+            // Sanctie-rijders (respecteer bestaande handmatige correcties)
             $defaultPunten = (float)($rangOffset + $nRijders);
             foreach ($overigen as $r) {
                 $s = $r['sanctie'] ?? null;
                 if (!$s) continue;
                 $lic    = $r['person_license'];
-                $punten = $defaultPunten;
+                $punten = $bestaandeOverrides[$lic][$distId] ?? $defaultPunten;
                 // Sanctie normaliseren naar uitslag_afstand ENUM
                 $sanctieDb = match($s) {
                     'DSQ-SF', 'DQ-SF' => 'DSQ-SF',
@@ -380,9 +396,13 @@ try {
     $distNaamMap = $allDistNaamStmt->fetchAll(PDO::FETCH_KEY_PAIR); // id => name
 
     // Totaal per rijder + punten_detail
+    // Rijders met alleen 0-punten worden uitgesloten uit het klassement
     $klasRows = [];
     foreach ($allPunten as $lic => $distPunten) {
         $totaal = array_sum($distPunten);
+        $heeftPunten = false;
+        foreach ($distPunten as $p) { if ($p > 0) { $heeftPunten = true; break; } }
+        if (!$heeftPunten) continue; // 0 punten = uitgesloten van klassement
         $detail = [];
         foreach ($distPunten as $dId => $p) {
             $detail[$distNaamMap[$dId] ?? $dId] = $p;
@@ -391,7 +411,7 @@ try {
             'lic'         => $lic,
             'totaal'      => $totaal,
             'detail'      => $detail,
-            'dist_punten' => $distPunten, // [dist_id => punten] voor tiebreakers
+            'dist_punten' => $distPunten,
         ];
     }
 

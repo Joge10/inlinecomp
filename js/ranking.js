@@ -371,7 +371,7 @@ function bindDetailEvents(container) {
 
 // ── Verwijderen ───────────────────────────────────────────────────────────────
 async function verwijderKlassement(id, naam) {
-    if (!confirm(`Klassement "${naam ?? id}" verwijderen?`)) return;
+    if (!await toonBevestigDialog(`Klassement "${naam ?? id}" verwijderen?`, 'Klassement verwijderen')) return;
     try {
         const fd = new FormData();
         await rkPost(`api/klassement_import.php?action=delete&id=${encodeURIComponent(id)}`, fd);
@@ -384,7 +384,7 @@ async function verwijderKlassement(id, naam) {
         }
         await laadLijst();
     } catch(e) {
-        alert('Fout bij verwijderen: ' + e.message);
+        toonBevestigDialog('Fout bij verwijderen: ' + e.message, 'Fout');
     }
 }
 

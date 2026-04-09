@@ -50,7 +50,7 @@ function zetDistTabKleur(distId, heeftLoting) {
     if (!distTabsEl) return;
     const btn = distTabsEl.querySelector(`[data-dist-id="${String(distId ?? '').replace(/"/g, '\\"')}"]`);
     if (!btn) return;
-    btn.classList.toggle('sl-tab-volledig', !!heeftLoting);
+    btn.classList.toggle('tab-gereed', !!heeftLoting);
 }
 
 // Kleur alle cat-tabs op basis van loting-status (achtergrond, niet-blokkerend)
@@ -78,9 +78,9 @@ async function kleurAlleTabsAsync(groepen, catTabsEl) {
             const nGeloot = keys.filter(k => geloot.has(k)).length;
             const nTotaal = keys.length;
 
-            btn.classList.remove('sl-tab-volledig', 'sl-tab-deels');
-            if      (nGeloot > 0 && nGeloot >= nTotaal) btn.classList.add('sl-tab-volledig');
-            else if (nGeloot > 0)                        btn.classList.add('sl-tab-deels');
+            btn.classList.remove('tab-gereed', 'tab-deels');
+            if      (nGeloot > 0 && nGeloot >= nTotaal) btn.classList.add('tab-gereed');
+            else if (nGeloot > 0)                        btn.classList.add('tab-deels');
         }));
     } catch { /* silent – kleuren zijn niet-kritiek */ }
 }
@@ -129,7 +129,7 @@ function bouwSlFlow(catCfg, systeem) {
     const KLEUREN = typeof TS_RONDE_KLEUR !== 'undefined' ? TS_RONDE_KLEUR : {};
     if (!catCfg || !systeem) return [{ sleutel: 'heats', naam: 'Series', kleur: KLEUREN.heats || '#0d6efd' }];
     const flow = [];
-    if (catCfg.heeft_heats !== false)
+    if (catCfg.heeft_heats && catCfg.heeft_heats !== '0')
         flow.push({ sleutel: 'heats',        naam: 'Series',       kleur: KLEUREN.heats        || '#0d6efd' });
     if (catCfg.heeft_kwartfinale)
         flow.push({ sleutel: 'kwartfinale',  naam: 'Kwartfinale',  kleur: KLEUREN.kwartfinale  || '#6610f2' });
@@ -374,8 +374,8 @@ async function drukStartlijstAf(optData) {
                       + (cf.length ? `&category_filter=${encodeURIComponent(cf.join(','))}` : '');
             const res = await fetch(url);
             data = await res.json();
-            if (!data?.exists) { alert('Geen loting gevonden.'); return; }
-        } catch (e) { alert('Fout bij laden: ' + e.message); return; }
+            if (!data?.exists) { toonBevestigDialog('Geen loting gevonden.', 'Laden'); return; }
+        } catch (e) { toonBevestigDialog('Fout bij laden: ' + e.message, 'Fout'); return; }
     }
 
     // Rit-lookup voor rit-nummer badges (uit tijdschema)
@@ -473,7 +473,7 @@ async function drukStartlijstAf(optData) {
             rows += `<tr>
                 <td class="pr-pos">${i + 1}</td>
                 <td class="pr-snr">${esc(r.start_number ?? '')}</td>
-                <td class="pr-cat">${esc(r.category ?? '')}</td>
+                <td class="pr-cat">${esc(r.categorie ?? r.category ?? '')}</td>
                 <td class="pr-naam">${esc(r.full_name ?? '')}</td>
                 <td class="pr-opm">${esc(opm)}</td>
             </tr>`;
@@ -524,9 +524,9 @@ body{font-family:Arial,Helvetica,sans-serif;font-size:9pt;margin:.6cm 1cm;color:
 .pr-header{display:flex;justify-content:space-between;align-items:flex-end;
            border-bottom:2px solid #1a3a5c;padding-bottom:.3cm;margin-bottom:.4cm}
 .pr-comp{font-size:13pt;font-weight:700}
-.pr-meta{font-size:8.5pt;color:#555;margin-top:1mm}
-.pr-ronde{font-size:10pt;font-weight:700;color:#1a3a5c}
-.pr-methode{font-size:8pt;color:#555;margin-top:1mm;font-style:italic}
+.pr-meta{font-size:8.5pt;color:#000;margin-top:1mm}
+.pr-ronde{font-size:10pt;font-weight:700;color:#000}
+.pr-methode{font-size:8pt;color:#000;margin-top:1mm;font-style:italic}
 .pr-grid{display:grid;grid-template-columns:repeat(${gridCols},1fr);gap:.5cm}
 .pr-card{border:1px solid #bbb;border-radius:5px;overflow:hidden;break-inside:avoid}
 .pr-titel{background:#1a3a5c;color:#fff;padding:5px 8px;font-weight:700;font-size:8.5pt;
@@ -535,7 +535,7 @@ body{font-family:Arial,Helvetica,sans-serif;font-size:9pt;margin:.6cm 1cm;color:
           font-weight:700;flex-shrink:0}
 .pr-count{margin-left:auto;background:rgba(255,255,255,.2);border-radius:8px;
           padding:0 5px;font-size:7.5pt;font-weight:400}
-.pr-tabel{width:100%;border-collapse:collapse;font-size:8.5pt;table-layout:fixed}
+.pr-tabel{width:100%;border-collapse:collapse;font-size:9.5pt;table-layout:fixed}
 .pr-tabel th{background:#dce6f0;color:#1a3a5c;padding:2px 4px;font-size:7.5pt;
              text-align:left;font-weight:600;border-bottom:1px solid #bbb}
 .pr-tabel td{padding:3px 4px;border-bottom:1px solid #eee}
@@ -561,6 +561,10 @@ col.pr-col-opm{width:60px}
 @media print{
   body{margin:.5cm .8cm}
   .pr-card{break-inside:avoid}
+  .pr-titel{background:#e8ecf0!important;color:#000!important;border-bottom:2px solid #000}
+  .pr-ritnr{background:#000!important;color:#fff!important}
+  .pr-count{background:#ccc!important;color:#000!important;font-weight:700}
+  .pr-tabel th{background:#eee!important;color:#000!important}
 }
 </style></head>
 <body>
@@ -578,7 +582,7 @@ col.pr-col-opm{width:60px}
 </body></html>`;
 
     const win = window.open('', '_blank');
-    if (!win) { alert('Pop-up geblokkeerd — sta pop-ups toe voor deze pagina.'); return; }
+    if (!win) { toonBevestigDialog('Pop-up geblokkeerd — sta pop-ups toe voor deze pagina.', 'Afdrukken'); return; }
     win.document.write(htmlDoc);
     win.document.close();
     win.focus();
@@ -852,7 +856,7 @@ async function toonStartlijstConfig(groep) {
     laadSlStatus().then(geloot => {
         distTabs.querySelectorAll('.sl-dist-tab').forEach(btn => {
             const key = `${dcId}||${btn.dataset.distId ?? ''}||${splitGroup}`;
-            btn.classList.toggle('sl-tab-volledig', geloot.has(key));
+            btn.classList.toggle('tab-gereed', geloot.has(key));
         });
     }).catch(() => {});
 
@@ -1006,9 +1010,10 @@ async function toonAfstandConfig(groep, distId, distNaam) {
                    + `?competition_id=${encodeURIComponent(huidigCompId)}`
                    + `&dc_ids=${encodeURIComponent(dcIds)}`
                    + `&distance_id=${encodeURIComponent(distId ?? '')}`
-                   + (cf.length ? `&category_filter=${encodeURIComponent(cf.join(','))}` : '');
+                   + (cf.length ? `&category_filter=${encodeURIComponent(cf.join(','))}` : '')
+                   + `&_t=${Date.now()}`;
 
-    const laadRes  = await fetch(laadUrl);
+    const laadRes  = await fetch(laadUrl, { cache: 'no-store' });
     if (!slDist.isConnected) return;
     const laadData = await laadRes.json();
 
@@ -1214,6 +1219,8 @@ async function genereerRonde1(cacheKey) {
         if (data.error) throw new Error(data.error);
 
         cache.resultaat = data;
+        // Zet het werkelijke ronde_type zodat het deelnemerspaneel de juiste kolom activeert
+        cache.resultaat.ronde_1_ronde_type = cache.flow?.[0]?.sleutel ?? 'heats';
         // Na opslaan: toon vergrendelde weergave + refresh tab-kleuren + print-select
         invalideerSlStatus();
         zetDistTabKleur(distId, true);
@@ -1512,7 +1519,7 @@ function toonSlResultaten(cacheKey, vergrendeld = false) {
     const wisBtn = blok1.querySelector('#sl-btn-wis');
     if (wisBtn && !_slLeesOnly) {
         wisBtn.addEventListener('click', async () => {
-            if (!confirm('Loting verwijderen? Dit kan niet ongedaan worden gemaakt.')) return;
+            if (!await toonBevestigDialog('Loting verwijderen? Dit kan niet ongedaan worden gemaakt.', 'Loting wissen')) return;
             wisBtn.disabled = true;
             wisBtn.textContent = 'Verwijderen…';
             try {
@@ -1536,7 +1543,7 @@ function toonSlResultaten(cacheKey, vergrendeld = false) {
             } catch (e) {
                 wisBtn.disabled = false;
                 wisBtn.textContent = '🗑 Wis loting';
-                alert('Fout bij verwijderen: ' + e.message);
+                toonBevestigDialog('Fout bij verwijderen: ' + e.message, 'Fout');
             }
         });
     } else if (wisBtn) {
@@ -1616,18 +1623,23 @@ function maakDeelnemersPaneel(container, cache, cacheKey, flow, groep, distId) {
         short_name:   c.db_person?.short_name   ?? c.knsb?.short_name   ?? c.short_name   ?? '',
     });
 
+    // Werkelijk ronde_type van de ronde-1 heats (uit API; bijv. 'finale_a' bij geen series)
+    const ronde1Type = cache.resultaat?.ronde_1_ronde_type ?? 'heats';
+
     // Heat-toewijzing per ronde: sleutel → { license_key → heat_nr }
     const heatMapPerRonde = {};
 
-    // Ronde 1: series
-    heatMapPerRonde['heats'] = {};
+    // Ronde 1: gebruik het werkelijke ronde_type als sleutel
+    heatMapPerRonde[ronde1Type] = {};
     for (const heat of (cache.resultaat?.heats || []))
         for (const r of (heat.rijders || []))
-            heatMapPerRonde['heats'][r.license_key] = heat.nummer;
+            heatMapPerRonde[ronde1Type][r.license_key] = heat.nummer;
 
     // Volgende rondes: uit cache.resultaat.volgende_rondes
+    // Skip ronde_type die al door ronde-1 is gevuld (voorkomt overschrijven bij ghost heats)
     const volgendeRondes = cache.resultaat?.volgende_rondes ?? [];
     for (const vr of volgendeRondes) {
+        if (vr.ronde_type === ronde1Type) continue;  // ronde-1 data heeft voorrang
         heatMapPerRonde[vr.ronde_type] = {};
         for (const heat of (vr.heats || []))
             for (const r of (heat.rijders || []))
@@ -1635,17 +1647,24 @@ function maakDeelnemersPaneel(container, cache, cacheKey, flow, groep, distId) {
     }
 
     // Welke rondes zijn al gegenereerd in de DB
-    const gegenereerdeRonden = new Set(['heats']);
+    const gegenereerdeRonden = new Set([ronde1Type]);
     for (const vr of volgendeRondes) gegenereerdeRonden.add(vr.ronde_type);
+
+
 
     // Alle rijders: geregistreerd + uit alle rondes (voor rijders die evt. niet in competitors staan)
     const rijderMap = {};
     for (const c of (groep?.competitors || []))
         rijderMap[c.license_key] = normaliseer(c);
-    for (const sleutel of Object.keys(heatMapPerRonde))
-        for (const heat of (sleutel === 'heats' ? (cache.resultaat?.heats || []) : (volgendeRondes.find(vr => vr.ronde_type === sleutel)?.heats || [])))
+    for (const sleutel of Object.keys(heatMapPerRonde)) {
+        // Ronde-1 data zit in cache.resultaat.heats (ook als sleutel bijv. 'finale_a' is)
+        const heatsArr = sleutel === ronde1Type
+            ? (cache.resultaat?.heats || [])
+            : (volgendeRondes.find(vr => vr.ronde_type === sleutel)?.heats || []);
+        for (const heat of heatsArr)
             for (const r of (heat.rijders || []))
                 if (!rijderMap[r.license_key]) rijderMap[r.license_key] = normaliseer(r);
+    }
 
     const rijders = Object.values(rijderMap).sort(
         (a, b) => (parseInt(a.start_number) || 9999) - (parseInt(b.start_number) || 9999)
@@ -1675,7 +1694,7 @@ function maakDeelnemersPaneel(container, cache, cacheKey, flow, groep, distId) {
     for (const rijder of rijders) {
         const lk   = rijder.license_key;
         const snr  = rijder.start_number || '–';
-        const naam = escHtml(rijder.short_name || rijder.full_name || '?');
+        const naam = escHtml(rijder.full_name || rijder.short_name || '?');
 
         let tdRondes = '';
 
@@ -1730,7 +1749,11 @@ function maakDeelnemersPaneel(container, cache, cacheKey, flow, groep, distId) {
         input.addEventListener('change', async () => {
             const license      = input.dataset.license;
             const rondeSleutel = input.dataset.rondeSleutel || 'heats';
-            const rondeNr      = RONDE_NR[rondeSleutel] ?? 1;
+            // Als dit het ronde-1 type is (bijv. 'finale_a' zonder series),
+            // dan zit de heat in ronde=1 in de DB, niet op het standaard rondenummer.
+            const rondeNr = (rondeSleutel === ronde1Type)
+                ? 1
+                : (RONDE_NR[rondeSleutel] ?? 1);
             const heatNr       = input.value.trim() ? parseInt(input.value) : null;
             if (String(heatNr ?? '') === origVal) return;
 
@@ -1753,7 +1776,7 @@ function maakDeelnemersPaneel(container, cache, cacheKey, flow, groep, distId) {
                 });
                 const data = await res.json();
                 if (data.error) {
-                    alert('Fout: ' + data.error);
+                    toonBevestigDialog(data.error, 'Fout');
                     input.value = origVal;
                     input.disabled = false;
                     input.classList.remove('sl-heat-input-saving');
@@ -1762,7 +1785,7 @@ function maakDeelnemersPaneel(container, cache, cacheKey, flow, groep, distId) {
                     toonAfstandConfig(groep, distId, cache._distNaam ?? '');
                 }
             } catch (e) {
-                alert('Netwerkfout: ' + e.message);
+                toonBevestigDialog('Netwerkfout: ' + e.message, 'Fout');
                 input.value = origVal;
                 input.disabled = false;
                 input.classList.remove('sl-heat-input-saving');
@@ -1802,7 +1825,7 @@ function maakDeelnemersPaneel(container, cache, cacheKey, flow, groep, distId) {
                 });
                 const data = await res.json();
                 if (data.error) {
-                    alert('Fout: ' + data.error);
+                    toonBevestigDialog(data.error, 'Fout');
                     cb.checked = !cb.checked; // terugdraaien
                     cb.disabled = false;
                 } else {
@@ -1810,7 +1833,7 @@ function maakDeelnemersPaneel(container, cache, cacheKey, flow, groep, distId) {
                     toonAfstandConfig(groep, distId, cache._distNaam ?? '');
                 }
             } catch (e) {
-                alert('Netwerkfout: ' + e.message);
+                toonBevestigDialog('Netwerkfout: ' + e.message, 'Fout');
                 cb.checked = !cb.checked;
                 cb.disabled = false;
             }

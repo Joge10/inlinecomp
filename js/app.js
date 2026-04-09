@@ -33,6 +33,109 @@ let vergelijkAbort    = null; // AbortController voor lopende vergelijk.php-fetc
 
 function el(id) { return document.getElementById(id); }
 
+// ── Globale 401-interceptor: sessie verlopen → login-modal ───────────────────
+(function() {
+    const _origFetch = window.fetch;
+    let _loginPromise = null;  // gedeelde promise waar alle 401-requests op wachten
+
+    window.fetch = async function(...args) {
+        const res = await _origFetch.apply(this, args);
+        if (res.status === 401) {
+            // Voorkom dat auth-endpoint zelf de modal triggert
+            const url = String(args[0]?.url ?? args[0] ?? '');
+            if (url.includes('api/auth.php')) return res;
+
+            // Eerste 401 opent de modal; volgende wachten op dezelfde promise
+            if (!_loginPromise) {
+                _loginPromise = _toonLoginModal().finally(() => { _loginPromise = null; });
+            }
+            await _loginPromise;
+
+            // Na succesvol inloggen: origineel request opnieuw uitvoeren
+            return _origFetch.apply(this, args);
+        }
+        return res;
+    };
+
+    function _toonLoginModal() {
+        return new Promise(resolve => {
+            const overlay = document.createElement('div');
+            overlay.className = 'modal-overlay';
+            overlay.innerHTML = `
+                <div class="modal-dialog" role="dialog" aria-modal="true" style="max-width:360px">
+                    <div class="modal-header">
+                        <span class="modal-icon">🔒</span>
+                        <span>Sessie verlopen</span>
+                    </div>
+                    <div class="modal-body">
+                        <p style="margin-bottom:12px">Je sessie is verlopen. Log opnieuw in om verder te gaan.</p>
+                        <label style="display:block;margin-bottom:8px">
+                            <span style="font-size:.85rem;font-weight:600">Gebruikersnaam</span>
+                            <input type="text" id="relogin-user" class="inp" style="width:100%;margin-top:3px" autocomplete="username">
+                        </label>
+                        <label style="display:block;margin-bottom:4px">
+                            <span style="font-size:.85rem;font-weight:600">Wachtwoord</span>
+                            <input type="password" id="relogin-pass" class="inp" style="width:100%;margin-top:3px" autocomplete="current-password">
+                        </label>
+                        <div id="relogin-fout" style="color:#c00;font-size:.82rem;min-height:1.2em;margin-top:6px"></div>
+                    </div>
+                    <div class="modal-knoppen">
+                        <button class="modal-btn modal-doorgaan" id="relogin-btn">Inloggen</button>
+                    </div>
+                </div>`;
+
+            document.body.appendChild(overlay);
+
+            const userInp = overlay.querySelector('#relogin-user');
+            const passInp = overlay.querySelector('#relogin-pass');
+            const btn     = overlay.querySelector('#relogin-btn');
+            const foutEl  = overlay.querySelector('#relogin-fout');
+
+            // Prefill gebruikersnaam als die bekend is
+            if (typeof currentUser !== 'undefined' && currentUser?.username)
+                userInp.value = currentUser.username;
+
+            const doeLogin = async () => {
+                foutEl.textContent = '';
+                btn.disabled = true;
+                btn.textContent = 'Bezig…';
+                try {
+                    const r = await _origFetch('api/auth.php', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                            action:   'login',
+                            username: userInp.value.trim(),
+                            password: passInp.value,
+                        }),
+                    });
+                    const d = await r.json();
+                    if (!r.ok) {
+                        foutEl.textContent = d.error ?? 'Inloggen mislukt';
+                        btn.disabled = false;
+                        btn.textContent = 'Inloggen';
+                        passInp.value = '';
+                        passInp.focus();
+                        return;
+                    }
+                    overlay.remove();
+                    resolve();
+                } catch (e) {
+                    foutEl.textContent = 'Netwerkfout: ' + e.message;
+                    btn.disabled = false;
+                    btn.textContent = 'Inloggen';
+                }
+            };
+
+            btn.addEventListener('click', doeLogin);
+            passInp.addEventListener('keydown', e => { if (e.key === 'Enter') doeLogin(); });
+            userInp.addEventListener('keydown', e => { if (e.key === 'Enter') passInp.focus(); });
+
+            setTimeout(() => (userInp.value ? passInp : userInp).focus(), 100);
+        });
+    }
+})();
+
 function setHTML(id, html) { el(id).innerHTML = html; }
 
 function statusMsg(container, type, tekst) {

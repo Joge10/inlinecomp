@@ -165,7 +165,7 @@ async function verwijderCompetitie(id, naam) {
         laadOrgWedstrijden();
         laadOrgs();
     } catch(e) {
-        alert('Fout: ' + e.message);
+        toonBevestigDialog(e.message, 'Fout');
     }
 }
 
@@ -386,9 +386,11 @@ async function voerSamenvoegUit() {
         return;
     }
     const vanOrg = orgs.find(o => o.id === vanId);
-    if (!confirm(`"${vanOrg?.naam}" samenvoegen met "${actieveOrg.naam}"?\n\n` +
-                 `"${vanOrg?.naam}" verdwijnt en wordt als alias opgeslagen.\n` +
-                 `Wedstrijden en sponsors worden overgenomen. Dit kan niet ongedaan worden gemaakt.`)) return;
+    if (!await toonBevestigDialog(
+        `"${vanOrg?.naam}" samenvoegen met "${actieveOrg.naam}"? ` +
+        `"${vanOrg?.naam}" verdwijnt en wordt als alias opgeslagen. ` +
+        `Wedstrijden en sponsors worden overgenomen. Dit kan niet ongedaan worden gemaakt.`,
+        'Organisaties samenvoegen')) return;
 
     el('btn-samenvoeg-ok').disabled = true;
     try {
@@ -522,7 +524,7 @@ async function slaOrgOp() {
 
 async function verwijderOrg() {
     if (!actieveOrg) return;
-    if (!confirm(`Organisatie "${actieveOrg.naam}" verwijderen? Dit kan niet ongedaan worden gemaakt.`)) return;
+    if (!await toonBevestigDialog(`Organisatie "${actieveOrg.naam}" verwijderen? Dit kan niet ongedaan worden gemaakt.`, 'Organisatie verwijderen')) return;
 
     await fetch('api/organisaties.php', {
         method:  'POST',

@@ -42,10 +42,13 @@ $primaryDcId = $dcIds[0];
 
 try {
     // Zoek heats voor deze categorie/afstand (ronde 1), gesorteerd op tijdschema-volgorde
+    // JOIN op tijdschema_ritten om ronde_type te achterhalen (bijv. 'finale_a' bij geen series)
     $stmt = $pdo->prepare("
         SELECT h.id, h.heat_nr, h.heat_naam, h.methode, h.gegenereerd_op,
-               COALESCE(h.rit_volgorde, h.heat_nr) AS rit_volgorde
+               COALESCE(h.rit_volgorde, h.heat_nr) AS rit_volgorde,
+               tsr.ronde_type AS werkelijk_ronde_type
         FROM heats h
+        LEFT JOIN tijdschema_ritten tsr ON tsr.id = h.tijdschema_rit_id
         WHERE h.competition_id          = ?
           AND h.distance_combination_id = ?
           AND (h.distance_id = ? OR (h.distance_id IS NULL AND ? = ''))
@@ -314,15 +317,19 @@ try {
         }
     }
 
+    // Werkelijk ronde_type van ronde-1 heats (bijv. 'finale_a' als er geen series zijn)
+    $werkelijkRondeType = $heatRows ? ($heatRows[0]['werkelijk_ronde_type'] ?? 'heats') : 'heats';
+
     echo json_encode([
-        'exists'          => true,
-        'methode'         => $methode,
-        'gegenereerd_op'  => $gegenereerd,
-        'aantalHeats'     => count($heats),
-        'totaalRijders'   => $totaalRijders,
-        'heats'           => $heats,
-        'ronde_1_compleet'=> $ronde1Compleet,
-        'volgende_rondes' => $volgRondes,
+        'exists'              => true,
+        'methode'             => $methode,
+        'gegenereerd_op'      => $gegenereerd,
+        'aantalHeats'         => count($heats),
+        'totaalRijders'       => $totaalRijders,
+        'heats'               => $heats,
+        'ronde_1_ronde_type'  => $werkelijkRondeType,
+        'ronde_1_compleet'    => $ronde1Compleet,
+        'volgende_rondes'     => $volgRondes,
     ], JSON_UNESCAPED_UNICODE);
 
 } catch (Throwable $e) {
