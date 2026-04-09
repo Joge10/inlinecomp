@@ -190,6 +190,8 @@ function hlgContent() { return `
     <tr><td><strong>Startnummer (Snr)</strong></td><td>Het rugnummer van de rijder, zichtbaar op het wedstrijdpak. Wordt toegekend door de KNSB of de organisatie.</td></tr>
     <tr><td><strong>Relatienummer</strong></td><td>Het unieke KNSB-lidmaatschapsnummer van een rijder.</td></tr>
     <tr><td><strong>Loting</strong></td><td>De verdeling van rijders over heats. Kan willekeurig, op startnummer of op basis van een extern klassement.</td></tr>
+    <tr><td><strong>Seeding</strong></td><td>De sorteervolgorde waarmee rijders over heats verdeeld worden. Bijv. "op startnummer" of "op klassement". De seeding bepaalt de volgorde, het slangenpatroon verdeelt ze daarna over de heats.</td></tr>
+    <tr><td><strong>Carrousel</strong></td><td>Horizontaal navigeerbare weergave in de Live-module: elke "kaart" toont één rit. Navigeer met pijlknoppen of de dropdown.</td></tr>
     <tr><td><strong>Doorstroom</strong></td><td>De regel die bepaalt welke rijders doorstromen naar de volgende ronde (bijv. "top 8 op tijd" of "2 winnaars per heat + tijdsnelsten").</td></tr>
     <tr><td><strong>Slangenpatroon</strong></td><td>Verdeelmethode waarbij rijders zigzag over heats worden verdeeld: rijder 1→heat 1, 2→heat 2, 3→heat 3, 4→heat 3, 5→heat 2, 6→heat 1, enz. Dit zorgt voor gelijke sterkte per heat.</td></tr>
     <tr><td><strong>Full-Final systeem</strong></td><td>Wedstrijdformat waarbij alle rijders een finale rijden: de snelsten in de A-finale, de rest in B-finales (B1, B2, enz.). Niemand valt af.</td></tr>
@@ -568,21 +570,24 @@ function hlgContent() { return `
 </div>
 <p class="hlg-mock-caption">↑ Competitiesysteem-balk: dropdown om systeem te kiezen, Opslaan-knop, actieve badge en automatische uitleg eronder</p>
 
-<h3>4.3 Afstandsinstellingen</h3>
-<p>Onder het competitiesysteem staat de sectie <strong>Afstandsinstellingen</strong>. Per afstand (onderdeel) verschijnt een kaart met een korte samenvatting van de rondevolgorde. Klik op <strong>✏ Bewerken</strong> om de configuratie uit te klappen.</p>
+<h3>4.3 Afstandsinstellingen (rondes configureren)</h3>
+<p>Onder het competitiesysteem staat de sectie <strong>Afstandsinstellingen</strong>. Per afstand verschijnt een kaart met een samenvatting van de rondevolgorde. Klik op <strong>✏ Bewerken</strong> om de configuratie uit te klappen.</p>
+<div class="hlg-tip">&#128161; <strong>Dit is dé plek waar je de rondestructuur instelt.</strong> Welke rondes er zijn (series, kwartfinale, halve finale), de doorstroomregels, heat-grootte en heat-duur — alles wordt hier bepaald. De Startlijsten-module voert de loting uit op basis van deze instellingen.</div>
 
-<p><strong>Full-Final instellingen (gedeeld, voor alle categorieën binnen de afstand):</strong></p>
+<p><strong>Full-Final instellingen</strong> (gedeeld voor alle categorieën binnen een afstand):</p>
 <ul>
-  <li><strong>A-finale:</strong> max. rijders per A-finale</li>
-  <li><strong>B-finales:</strong> max. rijders per B-finale (Bn-finales voor de rest)</li>
+  <li><strong>A-finale grootte:</strong> maximum aantal rijders in de A-finale</li>
+  <li><strong>B-finale grootte:</strong> maximum aantal rijders per B-finale (rest wordt verdeeld over B1, B2, enz.)</li>
   <li>Checkbox: <em>"Laatste B-finale (Bn) is de grootste"</em></li>
 </ul>
-<p><strong>Internationaal oud/nieuw instellingen:</strong></p>
+<p><strong>Internationaal instellingen</strong> (per categorie binnen een afstand):</p>
 <ul>
-  <li><strong>Runner-up:</strong> aan/uit, max. per heat, min. per heat</li>
-  <li><strong>Per categorie:</strong> welke rondes er zijn (series, kwartfinale, halve finale) en de duur per heat (in m:ss)</li>
+  <li><strong>Rijdt series:</strong> aan/uit — uit betekent dat de categorie direct in de finale start (zonder voorronde)</li>
+  <li><strong>Kwartfinale / Halve finale:</strong> aan/uit per categorie</li>
+  <li><strong>Duur per heat:</strong> in m:ss formaat (bijv. 1:30) — bepaalt de berekende starttijden</li>
+  <li><strong>Runner-up:</strong> aan/uit, max. en min. rijders per heat</li>
 </ul>
-<p>Klik <strong>💾 Opslaan</strong> om de instellingen op te slaan. De samenvatting op de kaart wordt direct bijgewerkt (bijv. <em>"Series → Halve finale → Finale"</em>).</p>
+<p>Klik <strong>💾 Opslaan</strong> om de instellingen op te slaan. De samenvatting op de kaart wordt direct bijgewerkt (bijv. <em>"Series → Halve finale → A-finale"</em>).</p>
 
 <!-- MOCKUP: afstandskaarten -->
 <div class="hlg-mock">
@@ -751,141 +756,163 @@ function hlgContent() { return `
 <!-- ═══════════════════════════════════════════════════════════ 5 STARTLIJSTEN -->
 <div class="hlg-sectie">
 <h2 id="hlg-startlijsten">5. Startlijsten</h2>
-<p>De module <strong>Startlijsten</strong> verdeelt de geïmporteerde deelnemers over heats per afstand, configureerbaar in 1 t/m 4 rondes met instelbare doorstroom.</p>
+<p>De module <strong>Startlijsten</strong> verdeelt de geïmporteerde deelnemers over heats. De rondestructuur (series, kwartfinale, finales, doorstroomregels) wordt ingesteld in het <em>Tijdschema</em> onder Afstandsinstellingen. De Startlijsten-module voert de loting uit en biedt de mogelijkheid om last-minute wijzigingen te doen.</p>
 
-<h3>5.1 Categorietabs en afstandstabs</h3>
-<p>Bovenaan de pagina staan de <strong>categorietabs</strong> (één per rijdersgroep). Samengevoegde groepen worden aangegeven met een badge (bijv. <em>"Junioren A + B ²"</em>); gesplitste groepen met een schaar-label. Onder de categorietabs staan de <strong>afstandstabs</strong> (500m, 1000m, enz.) voor de geselecteerde categorie.</p>
+<h3>5.1 Navigatie: categorie- en afstandstabs</h3>
+<p>Bovenaan staan <strong>categorietabs</strong> met het aantal deelnemers, daaronder <strong>afstandstabs</strong>. De tabs hebben statuskleur:</p>
+<table>
+  <thead><tr><th>Kleur</th><th>Betekenis</th></tr></thead>
+  <tbody>
+    <tr><td style="background:#f5f5f5">Standaard (wit)</td><td>Nog geen loting gemaakt voor deze afstand</td></tr>
+    <tr><td style="background:#fef9e7;color:#92700a">Geel</td><td>Sommige (maar niet alle) afstanden in deze categorie hebben een loting</td></tr>
+    <tr><td style="background:#eaf6ea;color:#2e7d32">Groen</td><td>Alle afstanden in deze categorie hebben een loting</td></tr>
+  </tbody>
+</table>
 
-<h3>5.2 Rondes configureren</h3>
-<p>Per afstand stel je het aantal rondes in door op de nummers <strong>1 · 2 · 3 · 4</strong> te klikken. Per ronde configureer je:</p>
+<h3>5.2 Programmaflow en seeding</h3>
+<p>Bij het selecteren van een afstand verschijnt de <strong>programmaflow</strong> — een visuele weergave van de rondes (bijv. <em>Series → Halve finale → A-finale → B-finale(s)</em>). Deze flow komt automatisch uit het Tijdschema.</p>
+<p>Daaronder kies je de <strong>seeding-methode</strong> voor de eerste ronde:</p>
 <ul>
-  <li><strong>Naam</strong> – vrij in te vullen (standaard: "Heats", "Halve finales", "Finale")</li>
-  <li><strong>Max. per heat</strong> – maximum aantal rijders per heat in deze ronde</li>
-  <li><strong>Loting-methode</strong> (alleen ronde 1): <em>Willekeurig</em>, <em>Op startnummer</em>, of <em>Op klassement</em> (kies dan ook het klassement en de sectie)</li>
-  <li><strong>Doorstroom</strong> (voor alle rondes behalve de laatste):
-    <ul>
-      <li><em>X tijdsnelsten</em> – het opgegeven aantal snelste rijders over alle heats stroomt door</li>
-      <li><em>X winnaars per heat + totaal doorstromers</em> – per heat de X beste, aangevuld met tijdsnelsten tot het totaal</li>
-    </ul>
-  </li>
+  <li><strong>🔢 Op startnummer</strong> — rijders gesorteerd op startnummer</li>
+  <li><strong>🔤 Alfabetisch</strong> — rijders op naam gesorteerd</li>
+  <li><strong>🏆 Op klassement</strong> — op basis van een extern KNSB-klassement (kies het klassement en de sectie in de dropdowns die verschijnen)</li>
+  <li><strong>🏁 Op tussenklassement</strong> — op basis van de tussenstand van eerdere afstanden in deze wedstrijd</li>
 </ul>
+<p>Klik op <strong>▶ Genereer [rondenaam]</strong> om de loting uit te voeren. Het systeem verdeelt de bevestigde deelnemers via een slangenpatroon over de heats.</p>
 
-<!-- MOCKUP: startlijsten configuratie -->
+<!-- MOCKUP: seeding configuratie -->
 <div class="hlg-mock">
-  <div style="background:#1a3a5c;color:#fff;padding:5px 12px;font-size:.78rem;font-weight:700">Startlijsten</div>
+  ${mockHeader('Startlijsten – Sprint – Pup 4, 3 &amp; 2')}
   <div style="padding:8px 12px">
-    <!-- Categorie tabs -->
-    <div style="display:flex;gap:4px;margin-bottom:5px;flex-wrap:wrap">
-      <div style="background:#e86c1b;color:#fff;padding:2px 10px;border-radius:12px;font-size:.69rem;font-weight:600">Junioren A (12)</div>
-      <div style="background:#f0f0f0;color:#666;padding:2px 10px;border-radius:12px;font-size:.69rem">Junioren B + C <span style="background:#888;color:#fff;border-radius:8px;padding:0 5px;font-size:.63rem;font-weight:700">2</span></div>
-      <div style="background:#f0f0f0;color:#666;padding:2px 10px;border-radius:12px;font-size:.69rem">Senioren (8)</div>
+    <!-- Programmaflow -->
+    <div style="display:flex;align-items:center;gap:4px;margin-bottom:8px;flex-wrap:wrap;font-size:.72rem">
+      <span style="color:#555;font-weight:600">Programmaflow:</span>
+      <span style="border:2px solid #0d6efd;color:#0d6efd;border-radius:12px;padding:1px 8px;font-weight:700">Series</span>
+      <span style="color:#aaa">→</span>
+      <span style="border:2px solid #198754;color:#198754;border-radius:12px;padding:1px 8px">A-finale</span>
+      <span style="color:#aaa">→</span>
+      <span style="border:2px solid #20c997;color:#20c997;border-radius:12px;padding:1px 8px">B-finale(s)</span>
     </div>
-    <!-- Afstand tabs -->
-    <div style="display:flex;gap:4px;margin-bottom:9px">
-      <div style="background:#1a3a5c;color:#fff;padding:2px 9px;border-radius:8px;font-size:.67rem">500m</div>
-      <div style="background:#f0f0f0;color:#666;padding:2px 9px;border-radius:8px;font-size:.67rem">1000m</div>
-    </div>
-    <!-- Rondes kiezer -->
-    <div style="display:flex;align-items:center;gap:8px;margin-bottom:9px">
-      <span style="font-size:.72rem;color:#555;font-weight:600">Aantal rondes:</span>
-      <div style="display:flex;gap:3px">
-        <div style="border:1px solid #ccc;border-radius:4px;padding:2px 9px;font-size:.72rem;background:#f5f5f5;color:#888">1</div>
-        <div style="border:2px solid #e86c1b;border-radius:4px;padding:2px 9px;font-size:.72rem;background:#fff3ec;color:#e86c1b;font-weight:700">2</div>
-        <div style="border:1px solid #ccc;border-radius:4px;padding:2px 9px;font-size:.72rem;background:#f5f5f5;color:#888">3</div>
-        <div style="border:1px solid #ccc;border-radius:4px;padding:2px 9px;font-size:.72rem;background:#f5f5f5;color:#888">4</div>
+    <!-- Seeding methode knoppen -->
+    <div style="background:#f0f4f8;border:1px solid #dde;border-radius:6px;padding:8px 12px">
+      <div style="font-size:.73rem;font-weight:700;color:#1a3a5c;margin-bottom:6px">Seeding Series</div>
+      <div style="display:flex;gap:4px;flex-wrap:wrap;margin-bottom:8px">
+        <div style="background:#2f7dbb;color:#fff;padding:4px 10px;border-radius:7px;font-size:.72rem;font-weight:600">🔢 Op startnummer</div>
+        <div style="border:2px solid #d0d5dd;padding:4px 10px;border-radius:7px;font-size:.72rem;color:#555">🔤 Alfabetisch</div>
+        <div style="border:2px solid #d0d5dd;padding:4px 10px;border-radius:7px;font-size:.72rem;color:#555">🏆 Op klassement</div>
+        <div style="border:2px solid #d0d5dd;padding:4px 10px;border-radius:7px;font-size:.72rem;color:#555">🏁 Op tussenklassement</div>
       </div>
-    </div>
-    <!-- Ronde 1 config -->
-    <div style="border:1px solid #dde;border-radius:6px;padding:7px 10px;margin-bottom:7px;background:#f8f9fb">
-      <div style="display:flex;align-items:center;gap:8px;margin-bottom:5px;flex-wrap:wrap">
-        <span style="font-size:.7rem;font-weight:700;color:#1a3a5c;min-width:54px">Ronde 1</span>
-        <div style="border:1px solid #ccc;border-radius:3px;padding:2px 7px;background:#fff;font-size:.72rem;width:80px">Heats</div>
-        <span style="font-size:.7rem;color:#555">Max/heat:</span>
-        <div style="border:1px solid #ccc;border-radius:3px;padding:2px 6px;background:#fff;font-size:.72rem;width:32px;text-align:center">6</div>
+      <div style="display:flex;align-items:center;justify-content:space-between">
+        <span style="font-size:.72rem;color:#666">Aantal heats (tijdschema): <strong>2</strong> &nbsp;·&nbsp; 6 deelnemers</span>
+        <div style="background:#2f7dbb;color:#fff;border-radius:6px;padding:6px 14px;font-size:.75rem;font-weight:600">▶ Genereer Series</div>
       </div>
-      <div style="font-size:.7rem;color:#555;margin-bottom:4px;display:flex;align-items:center;gap:8px;flex-wrap:wrap">
-        <strong>Loting:</strong>
-        <label style="display:flex;align-items:center;gap:3px"><input type="radio" checked disabled> Willekeurig</label>
-        <label style="display:flex;align-items:center;gap:3px"><input type="radio" disabled> Op startnummer</label>
-        <label style="display:flex;align-items:center;gap:3px"><input type="radio" disabled> Op klassement</label>
-      </div>
-      <!-- Doorstroom -->
-      <div style="background:#eef2f8;border-radius:4px;padding:5px 8px;font-size:.7rem;margin-top:3px">
-        <strong style="color:#1a3a5c">Doorstroom naar Ronde 2:</strong>
-        <div style="margin-top:4px;display:flex;flex-direction:column;gap:3px">
-          <label style="display:flex;align-items:center;gap:5px"><input type="radio" disabled> X tijdsnelsten &nbsp; Aantal: <div style="border:1px solid #ccc;border-radius:3px;padding:1px 5px;background:#fff;width:28px">8</div></label>
-          <label style="display:flex;align-items:center;gap:5px"><input type="radio" checked disabled> X winnaars/heat &nbsp; Winnaars/heat: <div style="border:1px solid #ccc;border-radius:3px;padding:1px 5px;background:#fff;width:24px">2</div> &nbsp; Totaal: <div style="border:1px solid #ccc;border-radius:3px;padding:1px 5px;background:#fff;width:28px">6</div></label>
-        </div>
-      </div>
-    </div>
-    <!-- Ronde 2 config (finale) -->
-    <div style="border:1px solid #dde;border-radius:6px;padding:7px 10px;margin-bottom:8px;background:#f8f9fb">
-      <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
-        <span style="font-size:.7rem;font-weight:700;color:#1a3a5c;min-width:54px">Ronde 2</span>
-        <div style="border:1px solid #ccc;border-radius:3px;padding:2px 7px;background:#fff;font-size:.72rem;width:80px">Finale</div>
-        <span style="font-size:.7rem;color:#555">Max/heat:</span>
-        <div style="border:1px solid #ccc;border-radius:3px;padding:2px 6px;background:#fff;font-size:.72rem;width:32px;text-align:center">6</div>
-        <span style="font-size:.69rem;color:#aaa;font-style:italic">(Geen doorstroom — laatste ronde)</span>
-      </div>
-    </div>
-    <div style="display:flex;justify-content:flex-end">
-      <div style="background:#e86c1b;color:#fff;border-radius:4px;padding:5px 12px;font-size:.73rem;font-weight:600">&#9654; Genereer startlijst</div>
     </div>
   </div>
 </div>
-<p class="hlg-mock-caption">↑ Startlijsten: categorie- en afstandstabs, rondes-kiezer (hier 2 gekozen), ronde-configuratie met loting en doorstroomregel, en Genereer-knop</p>
+<p class="hlg-mock-caption">↑ Seeding-scherm: programmaflow bovenaan (blauw = actieve ronde), vier methode-knoppen, en de Genereer-knop</p>
 
-<h3>5.3 Startlijst genereren</h3>
-<p>Klik op <strong>&#9654; Genereer</strong>. Het systeem verdeelt de bevestigde deelnemers over de heats via een <em>slangenpatroon</em> (gelijke verdeling). Voor vervolgrondes verschijnen placeholders (<em>"Winnaar Heat 1"</em>, enz.) die na de wedstrijd worden ingevuld.</p>
-<div class="hlg-tip">&#128161; Bij loting op klassement wordt het geselecteerde KNSB-klassement gebruikt. De startlijst wordt gesorteerd op klassementspositie voordat het slangenpatroon wordt toegepast.</div>
-
-<h3>5.4 Deelnemerspaneel (rijders toevoegen/verwijderen)</h3>
-<p>Na het genereren verschijnt links het <strong>deelnemerspaneel</strong>. Dit toont alle geregistreerde deelnemers met hun heat-toewijzing per ronde. Dit is essentieel voor last-minute wijzigingen:</p>
+<h3>5.3 Na het genereren: heat-cards + deelnemerspaneel</h3>
+<p>Na het genereren verschijnt een tweedelig scherm:</p>
 <ul>
-  <li><strong>Rijder toevoegen aan heat:</strong> typ het heat-nummer in het invoerveld naast de naam → druk Enter. De rijder verschijnt in de startlijst.</li>
-  <li><strong>Rijder verwijderen uit heat:</strong> maak het heat-nummer leeg → druk Enter. De rijder verdwijnt en de startposities schuiven automatisch op.</li>
-  <li><strong>Oranje markering:</strong> rijders zonder heat-nummer worden gemarkeerd met een oranje achtergrond als waarschuwing.</li>
+  <li><strong>Rechts: heat-cards</strong> in een grid (3 kolommen). Elke card toont de heat-naam, ritnummer, rijders met startnummer, categorie, naam en transponder.</li>
+  <li><strong>Links: deelnemerspaneel</strong> — een sticky tabel met alle geregistreerde deelnemers en hun heat-toewijzing per ronde. Dit is het centrale punt voor last-minute wijzigingen.</li>
 </ul>
 
-<!-- MOCKUP: deelnemerspaneel -->
+<h3>5.4 Deelnemerspaneel: rijders toevoegen en verwijderen</h3>
+<p>In het deelnemerspaneel (links) staat per rijder een invoerveld per ronde (bijv. kolom "S" voor Series, "A-fin" voor A-finale):</p>
+<ul>
+  <li><strong>Rijder aan heat toevoegen:</strong> typ het heat-nummer in het veld → druk Enter. De rijder verschijnt in de heat-card rechts.</li>
+  <li><strong>Rijder uit heat verwijderen:</strong> maak het veld leeg → druk Enter. De rijder verdwijnt uit de heat en alle startposities schuiven automatisch op (geen gaten).</li>
+  <li><strong>Oranje markering:</strong> rijders die niet aan een heat zijn toegewezen krijgen een oranje achtergrond — zo zie je direct wie er nog ontbreekt.</li>
+  <li><strong>B-finale kolommen:</strong> bij full-final verschijnen extra kolommen (B1, B2, enz.) met checkboxen voor B-finale toewijzing.</li>
+</ul>
+
+<!-- MOCKUP: volledig startlijsten scherm -->
 <div class="hlg-mock">
-  ${mockHeader('Startlijsten – Deelnemerspaneel')}
-  <div style="display:flex;min-height:130px">
-    <div style="width:200px;flex-shrink:0;border-right:1px solid #dde;padding:6px 8px;background:#f8f9fb">
-      <div style="font-size:.7rem;font-weight:700;color:#1a3a5c;margin-bottom:5px">Alle deelnemers</div>
-      <table style="width:100%;border-collapse:collapse;font-size:.68rem">
-        <thead><tr style="background:#f0f4f8">
-          <th style="padding:2px 4px;font-weight:600">Snr</th><th style="padding:2px 4px;font-weight:600">Naam</th><th style="padding:2px 4px;font-weight:600">S</th>
+  ${mockHeader('Startlijsten – na genereren')}
+  <div style="display:flex;min-height:170px">
+    <!-- Deelnemerspaneel (links) -->
+    <div style="width:260px;flex-shrink:0;padding:6px 8px;background:#fff;border-right:1px solid #dde">
+      <div style="font-size:.74rem;font-weight:700;color:#1a3a5c;border-bottom:2px solid #1a3a5c;padding-bottom:3px;margin-bottom:4px;display:flex;align-items:center;gap:5px">
+        Deelnemers <span style="background:#1a3a5c;color:#fff;border-radius:10px;padding:0 6px;font-size:.67rem">6</span>
+      </div>
+      <table style="width:100%;border-collapse:collapse;font-size:.7rem">
+        <thead><tr style="background:#f7f9fc">
+          <th style="padding:2px 4px;font-size:.68rem;font-weight:600">Snr</th>
+          <th style="padding:2px 4px;font-size:.68rem;font-weight:600">Naam</th>
+          <th style="padding:2px 4px;font-size:.68rem;font-weight:600" title="Series">S</th>
+          <th style="padding:2px 4px;font-size:.68rem;font-weight:600" title="A-finale">A-fin</th>
         </tr></thead>
         <tbody>
-          <tr><td style="padding:2px 4px;color:#1a3a5c;font-weight:600">10</td><td style="padding:2px 4px">Tycho Hanemaaijer</td>
-              <td style="padding:2px 4px"><div style="border:1px solid #ccc;border-radius:3px;padding:1px 4px;background:#fff;width:22px;text-align:center;font-size:.7rem">1</div></td></tr>
-          <tr style="background:#fff3cd"><td style="padding:2px 4px;color:#1a3a5c;font-weight:600">24</td><td style="padding:2px 4px">Izaak Stenneke</td>
-              <td style="padding:2px 4px"><div style="border:1px solid #e0a800;border-radius:3px;padding:1px 4px;background:#fff;width:22px;text-align:center;font-size:.7rem"></div></td></tr>
-          <tr><td style="padding:2px 4px;color:#1a3a5c;font-weight:600">86</td><td style="padding:2px 4px">Daan Borst</td>
-              <td style="padding:2px 4px"><div style="border:1px solid #ccc;border-radius:3px;padding:1px 4px;background:#fff;width:22px;text-align:center;font-size:.7rem">1</div></td></tr>
+          <tr><td style="padding:2px 4px;font-weight:600;color:#555">10</td><td style="padding:2px 4px">Tycho Hanemaaijer</td>
+              <td style="padding:2px 4px"><div style="border:1px solid #ccc;border-radius:3px;padding:1px 4px;background:#fff;width:22px;text-align:center;font-size:.7rem">1</div></td>
+              <td style="padding:2px 4px;color:#ccc;text-align:center">–</td></tr>
+          <tr style="background:#fff3e0"><td style="padding:2px 4px;font-weight:600;color:#555">24</td><td style="padding:2px 4px">Izaak Stenneke</td>
+              <td style="padding:2px 4px"><div style="border:1px solid #e0a800;border-radius:3px;padding:1px 4px;background:#fff;width:22px;text-align:center;font-size:.7rem"></div></td>
+              <td style="padding:2px 4px;color:#ccc;text-align:center">–</td></tr>
+          <tr><td style="padding:2px 4px;font-weight:600;color:#555">86</td><td style="padding:2px 4px">Daan Borst</td>
+              <td style="padding:2px 4px"><div style="border:1px solid #ccc;border-radius:3px;padding:1px 4px;background:#fff;width:22px;text-align:center;font-size:.7rem">2</div></td>
+              <td style="padding:2px 4px;color:#ccc;text-align:center">–</td></tr>
+          <tr><td style="padding:2px 4px;font-weight:600;color:#555">605</td><td style="padding:2px 4px">Evie Vijverberg</td>
+              <td style="padding:2px 4px"><div style="border:1px solid #ccc;border-radius:3px;padding:1px 4px;background:#fff;width:22px;text-align:center;font-size:.7rem">2</div></td>
+              <td style="padding:2px 4px;color:#ccc;text-align:center">–</td></tr>
         </tbody>
       </table>
     </div>
+    <!-- Heat cards (rechts) -->
     <div style="flex:1;padding:6px 8px">
-      <div style="font-size:.72rem;color:#1a3a5c;font-weight:700;margin-bottom:4px">Heat 1 — A-Finale Sprint</div>
-      <div style="font-size:.68rem;color:#666">1. Tycho Hanemaaijer (10)<br>2. Daan Borst (86)</div>
+      <div style="display:flex;align-items:center;gap:6px;margin-bottom:6px">
+        <span style="font-weight:700;font-size:.78rem;color:#0d6efd">Series</span>
+        <span style="font-size:.72rem;color:#666">🔒 Loting vastgelegd · 09-04-2026 11:30</span>
+        <span style="border:1px solid #c00;color:#c00;border-radius:4px;padding:1px 7px;font-size:.68rem;margin-left:auto">🗑 Wis loting</span>
+      </div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px">
+        <!-- Heat 1 -->
+        <div style="border:1px solid #dde;border-radius:5px;overflow:hidden">
+          <div style="background:#0d6efd;color:#fff;padding:4px 8px;font-size:.72rem;font-weight:700;display:flex;align-items:center;gap:5px">
+            <span style="background:rgba(0,0,0,.25);border-radius:3px;padding:0 4px;font-size:.67rem">1</span>
+            Heat 1 – Sprint
+            <span style="margin-left:auto;background:rgba(255,255,255,.2);border-radius:8px;padding:0 5px;font-size:.67rem">3</span>
+          </div>
+          <table style="width:100%;border-collapse:collapse;font-size:.7rem">
+            <thead><tr style="background:#dce6f0"><th style="padding:2px 4px;font-size:.65rem;color:#1a3a5c">#</th><th style="padding:2px 4px;font-size:.65rem;color:#1a3a5c">Snr</th><th style="padding:2px 4px;font-size:.65rem;color:#1a3a5c">Naam</th></tr></thead>
+            <tbody>
+              <tr><td style="padding:2px 4px;color:#aaa">1</td><td style="padding:2px 4px;font-weight:600;color:#1a3a5c">10</td><td style="padding:2px 4px">Tycho Hanemaaijer</td></tr>
+              <tr><td style="padding:2px 4px;color:#aaa">2</td><td style="padding:2px 4px;font-weight:600;color:#1a3a5c">70</td><td style="padding:2px 4px">Milas Kemner</td></tr>
+              <tr><td style="padding:2px 4px;color:#aaa">3</td><td style="padding:2px 4px;font-weight:600;color:#1a3a5c">587</td><td style="padding:2px 4px">Anouschka Belt B.</td></tr>
+            </tbody>
+          </table>
+        </div>
+        <!-- Heat 2 -->
+        <div style="border:1px solid #dde;border-radius:5px;overflow:hidden">
+          <div style="background:#0d6efd;color:#fff;padding:4px 8px;font-size:.72rem;font-weight:700;display:flex;align-items:center;gap:5px">
+            <span style="background:rgba(0,0,0,.25);border-radius:3px;padding:0 4px;font-size:.67rem">2</span>
+            Heat 2 – Sprint
+            <span style="margin-left:auto;background:rgba(255,255,255,.2);border-radius:8px;padding:0 5px;font-size:.67rem">3</span>
+          </div>
+          <table style="width:100%;border-collapse:collapse;font-size:.7rem">
+            <thead><tr style="background:#dce6f0"><th style="padding:2px 4px;font-size:.65rem;color:#1a3a5c">#</th><th style="padding:2px 4px;font-size:.65rem;color:#1a3a5c">Snr</th><th style="padding:2px 4px;font-size:.65rem;color:#1a3a5c">Naam</th></tr></thead>
+            <tbody>
+              <tr><td style="padding:2px 4px;color:#aaa">1</td><td style="padding:2px 4px;font-weight:600;color:#1a3a5c">86</td><td style="padding:2px 4px">Daan Borst</td></tr>
+              <tr><td style="padding:2px 4px;color:#aaa">2</td><td style="padding:2px 4px;font-weight:600;color:#1a3a5c">605</td><td style="padding:2px 4px">Evie Vijverberg</td></tr>
+              <tr><td style="padding:2px 4px;color:#aaa">3</td><td style="padding:2px 4px;font-weight:600;color:#1a3a5c">587</td><td style="padding:2px 4px">Anouschka Belt B.</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
     </div>
   </div>
 </div>
-<p class="hlg-mock-caption">↑ Deelnemerspaneel links: Izaak (oranje) is nog niet ingedeeld. Typ "1" en druk Enter om hem toe te voegen aan heat 1.</p>
+<p class="hlg-mock-caption">↑ Na genereren: links het deelnemerspaneel (Izaak = oranje, nog niet ingedeeld), rechts de heat-cards met ritnummer, naam en rijders. Kolommen S en A-fin in het paneel — "–" betekent dat die ronde nog niet gegenereerd is.</p>
 
 <h3>5.5 Alleen A-finale (geen series)</h3>
-<p>Bij categorieën die direct een A-finale rijden (zonder voorrondes), werkt het systeem identiek: de loting wordt gegenereerd en het deelnemerspaneel is beschikbaar voor last-minute wijzigingen. Dit is ideaal voor <strong>regionale wedstrijden</strong> waar flexibiliteit gewenst is.</p>
+<p>Bij categorieën die direct een A-finale rijden (ingesteld in het Tijdschema via <em>Afstandsinstellingen</em> → "Rijdt series" uit), werkt het systeem identiek. De loting wordt gegenereerd voor de A-finale en het deelnemerspaneel is beschikbaar voor last-minute wijzigingen. Dit is ideaal voor <strong>regionale wedstrijden</strong> waar flexibiliteit gewenst is en rijders zich tot kort voor aanvang kunnen aanmelden.</p>
 
 <h3>5.6 Startlijst afdrukken</h3>
-<p>Gebruik de afdrukoptions bovenaan (categorie → afstand → ronde) om de startlijst af te drukken. De printout is geoptimaliseerd voor zwart-wit laserprinters: heat-titels zijn goed leesbaar en deelnemersnamen zijn voldoende groot.</p>
+<p>Gebruik de drie dropdowns rechtsboven: <strong>Categorie → Afstand → Ronde</strong> en klik op <strong>🖨 Druk af</strong>. De printout opent in een nieuw tabblad en is geoptimaliseerd voor zwart-wit laserprinters.</p>
 
-<h3>5.7 Categorieën samenvoegen en splitsen</h3>
-<p>Samenvoegen en splitsen worden ingesteld in de <strong>Importeer</strong>-module. Na samenvoegen verschijnen de categorieën als één gecombineerde tab (met badge). Na splitsen verschijnt elke subgroep als aparte tab met schaar-label.</p>
-
-<h3>5.8 Loting wissen</h3>
-<p>De knop <strong>&#128465; Wis loting</strong> verwijdert alle heats voor de geselecteerde afstand. Na het wissen kun je opnieuw loten met andere instellingen. Er verschijnt een bevestigingsvraag voordat de actie wordt uitgevoerd.</p>
+<h3>5.7 Loting wissen</h3>
+<p>De knop <strong>🗑 Wis loting</strong> (rechtsboven naast de heat-cards) verwijdert alle heats voor de geselecteerde afstand. Er verschijnt een bevestigingsvraag. Na het wissen kun je opnieuw loten met andere instellingen.</p>
 </div>
 
 <!-- ═══════════════════════════════════════════════════════════ 6 LIVE -->
@@ -894,15 +921,22 @@ function hlgContent() { return `
 <p>De module <strong>Live</strong> wordt gebruikt tijdens de wedstrijd om resultaten per rit in te voeren. Ritten worden weergegeven in een carrousel die overeenkomt met het gepubliceerde tijdschema.</p>
 
 <h3>6.1 Rit selecteren</h3>
-<p>De carrousel toont alle ritten uit het tijdschema in volgorde. Navigeer met de pijlknoppen of klik direct op een rit. De actieve rit toont de deelnemers met hun startnummers en transponders.</p>
+<p>De carrousel toont alle ritten uit het gepubliceerde tijdschema. Navigeer met:</p>
+<ul>
+  <li><strong>◄ / ► pijlknoppen</strong> — vorige/volgende rit</li>
+  <li><strong>Dropdown</strong> (bovenaan) — spring direct naar een specifieke rit</li>
+  <li><strong>Teller</strong> — toont je positie (bijv. "3 / 12")</li>
+</ul>
+<p>Elke rit-card toont: ritnummer, starttijd, ritnaam, ronde-badge (Series/KF/HF/Finale) en het aantal rijders.</p>
 
 <h3>6.2 Resultaten invoeren</h3>
-<p>Per deelnemer kun je invoeren:</p>
+<p>Per deelnemer vul je in:</p>
 <ul>
-  <li><strong>Tijd:</strong> in formaat mm:ss.hh (bijv. 1:23.45) — wordt omgerekend naar milliseconden.</li>
-  <li><strong>Rondes:</strong> optioneel, voor afstanden waarbij rondes geteld worden.</li>
-  <li><strong>Sanctie:</strong> selecteer een sanctiecode als de rijder een overtreding heeft begaan.</li>
+  <li><strong>Tijd:</strong> typ in seconden (bijv. "47.321") of als m:ss.mmm (bijv. "1:23.456"). Het systeem accepteert beide formaten.</li>
+  <li><strong>Sanctie:</strong> kies uit de dropdown (DNS, DNF, DQ-SF, DQ-DF, FS). Bij een sanctie anders dan FS wordt de tijd gewist.</li>
+  <li><strong>Rondes:</strong> (optioneel) alleen bij lange afstanden/puntenkoers — aantal gereden rondes.</li>
 </ul>
+<p>Rijen kleuren mee met de status: <span style="background:#eafaf1;padding:1px 5px;border-radius:3px;font-size:.8em">groen</span> = heeft tijd, <span style="background:#fdf0f0;padding:1px 5px;border-radius:3px;font-size:.8em">rood</span> = heeft sanctie (DNS/DNF/DQ), <span style="background:#fff;padding:1px 5px;border:1px solid #ddd;border-radius:3px;font-size:.8em">wit</span> = nog leeg.</p>
 
 <h3>6.3 Sanctiecodes</h3>
 <p>De volgende sanctiecodes zijn beschikbaar:</p>
@@ -914,18 +948,33 @@ function hlgContent() { return `
     <tr><td><strong>DQ-DF</strong></td><td>Diskwalificatie Definitief</td><td>Geen positie, geen tijd — rijder wordt uitgesloten van de uitslag.</td></tr>
     <tr><td><strong>DNS</strong></td><td>Did Not Start</td><td>Rijder is niet gestart — wordt uitgesloten.</td></tr>
     <tr><td><strong>DNF</strong></td><td>Did Not Finish</td><td>Rijder is niet gefinished — krijgt standaard-punten.</td></tr>
-    <tr><td><strong>DC</strong></td><td>Diskwalificatie (algemeen)</td><td>Geen positie — wordt uitgesloten.</td></tr>
+    <tr><td><strong>DC</strong></td><td>Diskwalificatie (algemeen)</td><td>Alleen in uitslag — wordt automatisch afgeleid bij vastleggen.</td></tr>
   </tbody>
 </table>
 
 <!-- MOCKUP: live verwerking -->
 <div class="hlg-mock">
-  <div style="background:#1a3a5c;color:#fff;padding:5px 12px;font-size:.78rem;font-weight:700">Live verwerking</div>
+  ${mockHeader('Live verwerking')}
   <div style="padding:8px 12px">
-    <div style="display:flex;align-items:center;gap:6px;margin-bottom:8px">
-      <div style="border:1px solid #ccc;border-radius:4px;padding:3px 8px;font-size:.73rem;color:#888">◀</div>
-      <div style="flex:1;text-align:center;font-size:.82rem;font-weight:700;color:#1a3a5c">Rit 5 — A-Finale Sprint · Pup 4, 3 &amp; 2</div>
-      <div style="border:1px solid #ccc;border-radius:4px;padding:3px 8px;font-size:.73rem;color:#888">▶</div>
+    <!-- Navigation bar -->
+    <div style="display:flex;align-items:center;gap:6px;margin-bottom:6px">
+      <div style="border:1px solid #ccc;border-radius:4px;padding:3px 8px;font-size:.73rem;color:#1a3a5c;font-weight:600">Rit 5 — A-Finale Sprint ▾</div>
+      <span style="font-size:.72rem;color:#888;margin-left:auto">5 / 12</span>
+    </div>
+    <!-- Carousel card -->
+    <div style="border:1px solid #dde;border-radius:6px;overflow:hidden;margin-bottom:6px">
+    <div style="display:flex;align-items:center;gap:6px;margin-bottom:0px">
+      <div style="border:1px solid #ccc;border-radius:4px;padding:3px 8px;font-size:.73rem;color:#888">◄</div>
+      <div style="flex:1">
+        <div style="background:#1a3a5c;color:#fff;padding:5px 10px;font-size:.75rem;font-weight:700;display:flex;align-items:center;gap:6px">
+          <span style="background:rgba(0,0,0,.25);border-radius:3px;padding:0 5px;font-size:.67rem">5</span>
+          <span style="font-size:.68rem;color:rgba(255,255,255,.7)">10:45</span>
+          A-Finale Sprint · Pup 4, 3 &amp; 2
+          ${mockBadge('A-Finale', 'groen')}
+          <span style="margin-left:auto;background:rgba(255,255,255,.2);border-radius:8px;padding:0 5px;font-size:.67rem">3</span>
+        </div>
+      </div>
+      <div style="border:1px solid #ccc;border-radius:4px;padding:3px 8px;font-size:.73rem;color:#888">►</div>
     </div>
     <table style="width:100%;border-collapse:collapse;font-size:.71rem">
       <thead><tr style="background:#f0f4f8">
@@ -946,18 +995,20 @@ function hlgContent() { return `
             <td style="padding:3px 5px;color:#aaa">—</td></tr>
       </tbody>
     </table>
-    <div style="display:flex;justify-content:flex-end;margin-top:8px">
-      <div style="background:#e86c1b;color:#fff;border-radius:4px;padding:5px 12px;font-size:.73rem;font-weight:600">&#128190; Opslaan</div>
+    </div><!-- end card -->
+    <div style="display:flex;gap:6px;justify-content:flex-end;margin-top:6px">
+      <div style="border:1px solid #ccc;border-radius:4px;padding:4px 10px;font-size:.73rem;color:#555">📋 Import</div>
+      <div style="background:#e86c1b;color:#fff;border-radius:4px;padding:4px 10px;font-size:.73rem;font-weight:600">💾 Opslaan</div>
     </div>
   </div>
 </div>
-<p class="hlg-mock-caption">↑ Live verwerking: tijden invoeren per rijder, sanctie (FS) bij Daan Borst. Alle sancties worden doorgetrokken naar de uitslag.</p>
+<p class="hlg-mock-caption">↑ Live verwerking: carousel met ritnummer + starttijd in de header, pijlnavigatie, tijdinvoer per rijder, sanctie-dropdown (FS bij Daan), en Opslaan-knop</p>
 
-<h3>6.3a Resultaten opslaan en corrigeren</h3>
+<h3>6.4 Resultaten opslaan en corrigeren</h3>
 <p>Klik op <strong>&#128190; Opslaan</strong> om de ingevoerde tijden en sancties op te slaan. Je kunt resultaten altijd opnieuw opslaan om correcties door te voeren — eerdere waarden worden overschreven.</p>
 <div class="hlg-tip">&#128161; Resultaten worden <strong>niet automatisch opgeslagen</strong>. Vergeet niet op Opslaan te klikken voordat je naar een andere rit navigeert!</div>
 
-<h3>6.4 Volgende ronde genereren</h3>
+<h3>6.5 Volgende ronde genereren</h3>
 <p>Als alle heats van de huidige ronde resultaten hebben, verschijnt de knop om de volgende ronde te genereren. Het systeem:</p>
 <ol>
   <li>Bepaalt welke rijders doorstromen op basis van de doorstroomregels (ingesteld in het Tijdschema).</li>
@@ -966,7 +1017,7 @@ function hlgContent() { return `
 </ol>
 <p>De gegenereerde volgende ronde verschijnt direct in de startlijsten-module en kan daar nog handmatig aangepast worden.</p>
 
-<h3>6.5 Veelvoorkomende situaties</h3>
+<h3>6.6 Veelvoorkomende situaties</h3>
 <ul>
   <li><strong>Verkeerde tijd ingevoerd?</strong> Ga terug naar de rit, corrigeer de tijd, klik opnieuw op Opslaan.</li>
   <li><strong>Rijder geswapped?</strong> Pas de startlijst aan via het deelnemerspaneel in de Startlijsten-module.</li>
