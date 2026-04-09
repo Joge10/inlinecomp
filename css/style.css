@@ -1904,6 +1904,8 @@ col.heat-tp   { width: 72px; }   /* XX-12345 = 8 monospace tekens */
 /* Print-bar in startlijsten header */
 .sl-print-bar        { display: flex; align-items: center; gap: .5rem; flex-shrink: 0; }
 .sl-print-sel        { min-width: 160px; max-width: 220px; }
+.u-chk-label         { font-size: .8rem; color: #444; cursor: pointer; display: inline-flex; align-items: center; gap: .25rem; }
+.u-chk-label input   { margin: 0; }
 
 /* Leeg-staat */
 .ts-leeg             { text-align: center; padding: 2.5rem 1rem; color: #666; }
