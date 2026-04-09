@@ -37,6 +37,10 @@ async function toonLivePagina() {
         _liveSysteem    = data.systeem    || null;
         _liveOngeslagen = false;
 
+        // Corrigeer finishposities voor PK-ritten op basis van punten→rondes→tid.
+        // DB-waarden kunnen verkeerd zijn als ze met een oudere versie zijn opgeslagen.
+        _liveRitten.forEach(_liveHerrekenPKFinishposities);
+
         if (_liveRitten.length === 0) {
             container.innerHTML = '<div class="status-msg info">Geen ritten gevonden. Genereer eerst een tijdschema met startlijsten.</div>';
             return;
@@ -72,6 +76,33 @@ function _liveRitDeels(rit) {
 
 function _liveHasHeat(rit) {
     return rit.heat_id !== null && rit.rijders && rit.rijders.length > 0;
+}
+
+// Herbereken finishposities voor een PK-rit: punten DESC → rondes DESC (null=Infinity) → tid ASC.
+// Corrigeert evt. foute waarden uit de DB (opgeslagen met oudere versie zonder rondes-stap).
+function _liveHerrekenPKFinishposities(rit) {
+    if (rit.race_type !== 'puntenkoers') return;
+
+    const puntenMap = new Map();
+    rit.rijders.forEach(r => { if (r.punten != null) puntenMap.set(r.entry_id, r.punten); });
+
+    // Alleen rijders met een geldige tijd
+    const metTijd = rit.rijders.filter(r => r.tijd_ms !== null && r.tijd_ms > 0);
+
+    metTijd.sort((a, b) => {
+        const pA = puntenMap.get(a.entry_id) ?? 0;
+        const pB = puntenMap.get(b.entry_id) ?? 0;
+        if (pA !== pB) return pB - pA;                  // 1. punten DESC
+        const rA = a.rondes ?? Infinity;
+        const rB = b.rondes ?? Infinity;
+        if (rA !== rB) return rB - rA;                   // 2. rondes DESC (null = best)
+        return a.tijd_ms - b.tijd_ms;                    // 3. tid ASC
+    });
+
+    metTijd.forEach((r, i) => {
+        const rider = rit.rijders.find(x => x.entry_id === r.entry_id);
+        if (rider) rider.finishpositie = i + 1;
+    });
 }
 
 // Tijdnotatie: ms → "M:SS.mmm" (bijv. 47321 → "0:47.321")
@@ -1666,9 +1697,22 @@ function _liveActiveerWisselDropdowns(ritIdx) {
 
     rit.rijders.forEach(r => {
         if (!r.finishpositie) return;
-        const rij   = kaart.querySelector(`[data-entry="${r.entry_id}"]`);
+        const rij      = kaart.querySelector(`[data-entry="${r.entry_id}"]`);
+        const bestaand = rij?.querySelector('.live-finish-sel');
+        if (bestaand) {
+            // Dropdown bestaat al: update geselecteerde waarde en optie-lijst
+            bestaand.innerHTML = '';
+            validPosities.forEach(p => {
+                const opt = document.createElement('option');
+                opt.value       = p;
+                opt.textContent = p;
+                opt.selected    = (p === r.finishpositie);
+                bestaand.appendChild(opt);
+            });
+            return;
+        }
         const badge = rij?.querySelector('.live-finish-badge');
-        if (!badge) return; // al een dropdown
+        if (!badge) return;
 
         const sel = document.createElement('select');
         sel.className = 'live-finish-sel';

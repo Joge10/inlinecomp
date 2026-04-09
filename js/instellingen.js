@@ -123,17 +123,47 @@ async function laadOrgWedstrijden() {
 }
 
 async function verwijderCompetitie(id, naam) {
-    if (!confirm(`Wedstrijd "${naam}" compleet verwijderen uit de database?\n\nAlle deelnemers, afstandsinstellingen en programma worden gewist. Dit kan niet ongedaan worden gemaakt.`)) return;
+    // Stap 1: keuze uitslag bewaren of ook verwijderen
+    const uitslagKeuze = await new Promise(resolve => {
+        const overlay = document.createElement('div');
+        overlay.className = 'modal-overlay';
+        overlay.innerHTML = `
+            <div class="modal-dialog" role="dialog" aria-modal="true">
+                <div class="modal-header">
+                    <span class="modal-icon">⚠</span>
+                    <span>Wedstrijd verwijderen</span>
+                </div>
+                <div class="modal-body">
+                    <strong>${escHtml(naam)}</strong> verwijderen uit de database?<br><br>
+                    Deelnemers, afstandsinstellingen en programma worden gewist.<br><br>
+                    <strong>Wat moet er met vastgelegde uitslag- en klassementgegevens gebeuren?</strong>
+                </div>
+                <div class="modal-knoppen">
+                    <button class="modal-btn modal-annuleer">Annuleren</button>
+                    <button class="modal-btn modal-bewaar">Uitslag bewaren</button>
+                    <button class="modal-btn modal-alles btn-danger">Ook uitslag verwijderen</button>
+                </div>
+            </div>`;
+        document.body.appendChild(overlay);
+        const sluit = v => { document.body.removeChild(overlay); resolve(v); };
+        overlay.querySelector('.modal-annuleer').addEventListener('click', () => sluit(null));
+        overlay.querySelector('.modal-bewaar' ).addEventListener('click', () => sluit('bewaar'));
+        overlay.querySelector('.modal-alles'  ).addEventListener('click', () => sluit('alles'));
+        overlay.addEventListener('click', e => { if (e.target === overlay) sluit(null); });
+        overlay.querySelector('.modal-bewaar').focus();
+    });
+
+    if (!uitslagKeuze) return; // Annuleren
+
     try {
-        const res = await fetch(`api/import.php?id=${encodeURIComponent(id)}`, { method: 'DELETE' });
+        const url = `api/import.php?id=${encodeURIComponent(id)}${uitslagKeuze === 'alles' ? '&uitslag=1' : ''}`;
+        const res = await fetch(url, { method: 'DELETE' });
         const d   = await res.json();
         if (!res.ok) throw new Error(d.error ?? `HTTP ${res.status}`);
-        // Reset import-module als de verwijderde wedstrijd de actief geselecteerde is
         if (typeof resetImportModule === 'function') resetImportModule(id);
-        // Wedstrijdenlijst in importeer ook verversen
         if (typeof laadWedstrijden === 'function') laadWedstrijden();
         laadOrgWedstrijden();
-        laadOrgs(); // comp_count bijwerken in lijst
+        laadOrgs();
     } catch(e) {
         alert('Fout: ' + e.message);
     }

@@ -58,8 +58,16 @@ if ($_SERVER['REQUEST_METHOD'] === 'DELETE') {
         echo json_encode(['error' => 'Ongeldig competition ID']);
         exit;
     }
+    $ookUitslag = !empty($_GET['uitslag']);
     try {
-        // CASCADE op distance_combinations, competitors, transponders etc.
+        // uitslag_afstand en uitslag_klassement hebben geen ON DELETE CASCADE:
+        // ze worden standaard bewaard voor historische inzage en competitieklassement.
+        // Alleen als &uitslag=1 meegegeven wordt (bv. testwedstrijden) worden ze ook verwijderd.
+        if ($ookUitslag) {
+            $pdo->prepare("DELETE FROM uitslag_afstand    WHERE competition_id = ?")->execute([$delId]);
+            $pdo->prepare("DELETE FROM uitslag_klassement WHERE competition_id = ?")->execute([$delId]);
+        }
+        // De overige tabellen (distance_combinations, competitors, heats, etc.) cascaden automatisch.
         $pdo->prepare("DELETE FROM competitions WHERE id = ?")->execute([$delId]);
         echo json_encode(['ok' => true]);
     } catch (Exception $e) {
