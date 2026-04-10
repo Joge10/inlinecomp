@@ -962,32 +962,64 @@ if ($action === 'genereer_volgende_ronde') {
             }
         }
 
-        // ── Overflow-rijders (ex-aequo) toevoegen aan heat 1, 2, 3, … ──────────
-        // Heat 1 krijgt altijd de eerste overflow, dan heat 2, etc.
-        // Dit staat los van het snake-patroon hierboven.
-        // Full-final: ex-aequo is al verwerkt in $allSlots (A-finale) en $bSlots (B-finales),
-        // dus $overflowRijders hier NIET opnieuw invoegen (dat zou duplicates geven).
+        // ── Overflow-rijders (ex-aequo) ─────────────────────────────────────────
+        // Full-final: ex-aequo is al verwerkt in $allSlots/$bSlots, skip hier.
         if (!$isFullFinal && !empty($overflowRijders)) {
-            $overflowIdx = 0;
-            foreach ($overflowRijders as $rijder) {
-                $heatNr = $heatNummers[$overflowIdx % $nDest];
-                $startposPerHeat[$heatNr]++;
-                $startpos = $startposPerHeat[$heatNr];
-                $heatInfo = &$heatIds[$heatNr];
-                $insEntry->execute([
-                    $heatInfo['id'],
-                    $rijder['person_license'],
-                    $rijder['categorie'],
-                    $startpos,
-                    $rijder['startnummer'],
-                ]);
-                $heatInfo['rijders'][] = [
-                    'startpositie' => $startpos,
-                    'full_name'    => $rijder['full_name'],
-                    'club_short'   => $rijder['club_short'],
-                ];
-                unset($heatInfo);
-                $overflowIdx++;
+            // Meerdere finale-heats (bijv. DTT): maak extra heat(s) aan
+            // KF/HF of 1 finale-heat: voeg toe aan bestaande heats (heat 1, 2, ...)
+            $isMultiFinale = ($naarRondeType === 'finale_a') && ($nDest > 1);
+
+            if ($isMultiFinale) {
+                // Extra heat(s) aanmaken voor overflow-rijders
+                $extraHeatNr = max($heatNummers) + 1;
+                $perHeat = max(1, (int)ceil(count($allSlots) / $nDest)); // zelfde grootte als andere heats
+                $extraHeats = array_chunk($overflowRijders, max(1, $perHeat));
+
+                foreach ($extraHeats as $chunk) {
+                    $extraNaam = "A-finale heat {$extraHeatNr} (ex-aequo)";
+                    $insHeat->execute([
+                        $compId, $dcId, $distanceId ?: null,
+                        $rondeNr, null, null,
+                        $extraNaam, $extraHeatNr, $dcIdsJson,
+                    ]);
+                    $extraId = (int)$pdo->lastInsertId();
+                    $heatIds[$extraHeatNr] = ['id' => $extraId, 'rit_naam' => $extraNaam, 'rijders' => []];
+
+                    $pos = 0;
+                    foreach ($chunk as $rijder) {
+                        $pos++;
+                        $insEntry->execute([$extraId, $rijder['person_license'], $rijder['categorie'], $pos, $rijder['startnummer']]);
+                        $heatIds[$extraHeatNr]['rijders'][] = [
+                            'startpositie' => $pos,
+                            'full_name'    => $rijder['full_name'],
+                            'club_short'   => $rijder['club_short'],
+                        ];
+                    }
+                    $extraHeatNr++;
+                }
+            } else {
+                // KF/HF/enkele finale: overflow toevoegen aan bestaande heats (heat 1, 2, ...)
+                $overflowIdx = 0;
+                foreach ($overflowRijders as $rijder) {
+                    $heatNr = $heatNummers[$overflowIdx % $nDest];
+                    $startposPerHeat[$heatNr]++;
+                    $startpos = $startposPerHeat[$heatNr];
+                    $heatInfo = &$heatIds[$heatNr];
+                    $insEntry->execute([
+                        $heatInfo['id'],
+                        $rijder['person_license'],
+                        $rijder['categorie'],
+                        $startpos,
+                        $rijder['startnummer'],
+                    ]);
+                    $heatInfo['rijders'][] = [
+                        'startpositie' => $startpos,
+                        'full_name'    => $rijder['full_name'],
+                        'club_short'   => $rijder['club_short'],
+                    ];
+                    unset($heatInfo);
+                    $overflowIdx++;
+                }
             }
         }
 
