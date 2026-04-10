@@ -524,8 +524,6 @@ async function drukStartlijstAf(optData) {
 <style>
 *{box-sizing:border-box}
 body{font-family:Arial,Helvetica,sans-serif;font-size:9pt;margin:.6cm 1cm;color:#111;line-height:1.35}
-.pr-header{display:flex;justify-content:space-between;align-items:flex-end;
-           border-bottom:2px solid #1a3a5c;padding-bottom:.3cm;margin-bottom:.4cm}
 .pr-comp{font-size:13pt;font-weight:700}
 .pr-meta{font-size:8.5pt;color:#000;margin-top:1mm}
 .pr-ronde{font-size:10pt;font-weight:700;color:#000}
@@ -560,28 +558,45 @@ col.pr-col-opm{width:60px}
 .pr-sectie-a{color:#198754}
 /* A-finale altijd aan de linkerkantlijn (grid-kolom 1) */
 .pr-card-links{grid-column-start:1}
-@page{size:${pageSize};margin:.8cm 1cm}
+@page{size:${pageSize};margin:.8cm 1cm 1.2cm;
+  @bottom-center{content:"blad " counter(page) " van " counter(pages);font-size:7.5pt;color:#888}
+}
 @media print{
   body{margin:.5cm .8cm}
   .pr-card{break-inside:avoid}
   .pr-titel{background:#e8ecf0!important;color:#000!important;border-bottom:2px solid #000}
   .pr-ritnr{background:#000!important;color:#fff!important}
-  .pr-count{background:#ccc!important;color:#000!important;font-weight:700}
   .pr-tabel th{background:#eee!important;color:#000!important}
 }
+/* Wrapper-tabel: thead herhaalt automatisch op elke pagina bij print */
+.pr-wrap{width:100%;border-collapse:collapse}
+.pr-wrap thead td{padding:0}
+.pr-wrap .pr-hdr-row td{padding-bottom:.2cm;border-bottom:2px solid #1a3a5c}
+.pr-wrap .pr-hdr-spacer td{height:.5cm}
+.pr-wrap tbody td{padding:0}
+.pr-hdr-inner{display:flex;justify-content:space-between;align-items:flex-end}
 </style></head>
 <body>
-<div class="pr-header">
-  <div>
-    <div class="pr-comp">${esc(comp?.name ?? '')}</div>
-    <div class="pr-meta">${esc(metaTxt)}</div>
-  </div>
-  <div style="text-align:right">
-    <div class="pr-ronde">${esc(dcName)}${esc(distLabel)}&nbsp;–&nbsp;${esc(rondeLabel)}</div>
-    ${methodeLabel ? `<div class="pr-methode">${esc(methodeLabel)}</div>` : ''}
-  </div>
-</div>
-<div class="pr-grid">${cardsHtml}</div>
+<table class="pr-wrap">
+  <thead>
+    <tr class="pr-hdr-row"><td>
+      <div class="pr-hdr-inner">
+        <div>
+          <div class="pr-comp">${esc(comp?.name ?? '')}</div>
+          <div class="pr-meta">${esc(metaTxt)}</div>
+        </div>
+        <div style="text-align:right">
+          <div class="pr-ronde">${esc(dcName)}${esc(distLabel)}&nbsp;–&nbsp;${esc(rondeLabel)}</div>
+          ${methodeLabel ? `<div class="pr-methode">${esc(methodeLabel)}</div>` : ''}
+        </div>
+      </div>
+    </td></tr>
+    <tr class="pr-hdr-spacer"><td></td></tr>
+  </thead>
+  <tbody><tr><td>
+    <div class="pr-grid">${cardsHtml}</div>
+  </td></tr></tbody>
+</table>
 </body></html>`;
 
     const win = window.open('', '_blank');
