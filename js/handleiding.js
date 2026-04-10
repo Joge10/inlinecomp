@@ -156,14 +156,14 @@ function hlgContent() { return `
 <!-- ═══════════════════════════════════════════════════════════ INTRO -->
 <div class="hlg-sectie">
 <h2 id="hlg-intro">Introductie</h2>
-<p><strong>InlineComp</strong> is een webapplicatie voor het beheren van inline skeelerwedstrijden. Het vervangt de handmatige Excel-workflow door een geïntegreerd systeem dat draait op een laptop in het lokale netwerk tijdens de wedstrijddag.</p>
+<p><strong>InlineComp</strong> is een webapplicatie voor het beheren van inline skeelerwedstrijden. Het vervangt de handmatige Excel-workflow door een geïntegreerd systeem dat via de browser bereikbaar is.</p>
 
 <h3>Wat doet InlineComp?</h3>
 <ul>
   <li>Deelnemers importeren vanuit de KNSB-inschrijvingssite</li>
   <li>Tijdschema opstellen met starttijden en programma-volgorde</li>
   <li>Startlijsten genereren en afdrukken (inclusief last-minute wijzigingen)</li>
-  <li>Resultaten invoeren tijdens de wedstrijd</li>
+  <li>Resultaten invoeren tijdens de wedstrijd (handmatig of via automatische CSV-upload vanuit Orbits)</li>
   <li>Uitslagen en klassementen berekenen en afdrukken</li>
 </ul>
 
@@ -186,10 +186,10 @@ function hlgContent() { return `
     <tr><td><strong>Afstand / Onderdeel</strong></td><td>De te rijden afstand (bijv. 500m, Sprint, Tijdrit). Elk onderdeel heeft eigen heats en een eigen uitslag. Deze termen zijn inwisselbaar.</td></tr>
     <tr><td><strong>Heat / Rit</strong></td><td>Eén race met een groep rijders. Meerdere heats vormen samen een ronde. <em>Heat</em> wordt gebruikt bij de startindeling, <em>rit</em> bij het tijdschema.</td></tr>
     <tr><td><strong>Ronde</strong></td><td>Een fase in de wedstrijd: series (voorronde), kwartfinale, halve finale, A-finale, B-finales.</td></tr>
-    <tr><td><strong>Transponder</strong></td><td>Elektronische tijdmeting-chip die aan de schoen van de rijder bevestigd is. Wordt uitgelezen door het MyLaps/Orbits systeem.</td></tr>
+    <tr><td><strong>Transponder</strong></td><td>Elektronische tijdmeting-chip die met een strap om de enkel van de rijder bevestigd wordt (reglementair verplicht). Wordt uitgelezen door het MyLaps/Orbits systeem.</td></tr>
     <tr><td><strong>Startnummer (Snr)</strong></td><td>Het rugnummer van de rijder, zichtbaar op het wedstrijdpak. Wordt toegekend door de KNSB of de organisatie.</td></tr>
     <tr><td><strong>Relatienummer</strong></td><td>Het unieke KNSB-lidmaatschapsnummer van een rijder.</td></tr>
-    <tr><td><strong>Loting</strong></td><td>De verdeling van rijders over heats. Kan willekeurig, op startnummer of op basis van een extern klassement.</td></tr>
+    <tr><td><strong>Loting</strong></td><td>De verdeling van rijders over heats. Vier methodes: op startnummer, alfabetisch, op tussenklassement (huidige wedstrijd), of op basis van een klassement uit de wedstrijdserie.</td></tr>
     <tr><td><strong>Seeding</strong></td><td>De sorteervolgorde waarmee rijders over heats verdeeld worden. Bijv. "op startnummer" of "op klassement". De seeding bepaalt de volgorde, het slangenpatroon verdeelt ze daarna over de heats.</td></tr>
     <tr><td><strong>Carrousel</strong></td><td>Horizontaal navigeerbare weergave in de Live-module: elke "kaart" toont één rit. Navigeer met pijlknoppen of de dropdown.</td></tr>
     <tr><td><strong>Doorstroom</strong></td><td>De regel die bepaalt welke rijders doorstromen naar de volgende ronde (bijv. "top 8 op tijd" of "2 winnaars per heat + tijdsnelsten").</td></tr>
@@ -200,6 +200,8 @@ function hlgContent() { return `
     <tr><td><strong>Ex-aequo</strong></td><td>Gelijke stand. Bij gelijk puntentotaal beslist: (1) beste individuele resultaat, (2) resultaat op de laatst gereden afstand, (3) gedeelde positie.</td></tr>
     <tr><td><strong>RR</strong></td><td>Reduction in Rank — terugzetting in positie als sanctie voor een (onopzettelijke) sportfout. De jury past de positie handmatig aan.</td></tr>
     <tr><td><strong>Tekenlijst</strong></td><td>Afdruk waarop rijders bij aankomst fysiek tekenen om hun aanwezigheid te bevestigen.</td></tr>
+    <tr><td><strong>MyLaps / Orbits</strong></td><td>Elektronisch tijdwaarnemingssysteem. Orbits is de software die transponders uitleest en CSV-bestanden exporteert met finishtijden.</td></tr>
+    <tr><td><strong>CSV Upload Monitor</strong></td><td>Hulpprogramma dat Orbits CSV-exports automatisch naar InlineComp uploadt. Draait op de timing-laptop.</td></tr>
   </tbody>
 </table>
 </div>
@@ -263,14 +265,14 @@ function hlgContent() { return `
 </div>
 <p class="hlg-mock-caption">↑ Sessie-verlopen modal — verschijnt automatisch, gebruikersnaam is vooringevuld</p>
 
-<div class="hlg-tip">&#128161; Alle bevestigingen en foutmeldingen in InlineComp verschijnen als nette modale vensters in de huisstijl — nooit als browser pop-ups.</div>
+<div class="hlg-warn">&#9888; Bij belangrijke acties (loting wissen, gebruiker verwijderen, enz.) verschijnt altijd een bevestigingsvraag. Lees deze goed door voordat je op <em>Doorgaan</em> klikt — sommige acties kunnen niet ongedaan worden gemaakt. Foutmeldingen bevatten vaak een aanwijzing over de oorzaak; neem even de tijd om ze te lezen.</div>
 </div>
 
 <!-- ═══════════════════════════════════════════════════════════ 2 ROLLEN -->
 <div class="hlg-sectie">
 <h2 id="hlg-rollen">2. Rollen en rechten</h2>
 <p>Elke gebruiker heeft één rol. De rol bepaalt welke modules je mag <em>bewerken</em>. Alle modules zijn voor iedereen <em>leesbaar</em>, behalve Gebruikersbeheer (alleen voor Owner/Admin). Een gebruiker kan maar één rol hebben.</p>
-<p>De <strong>Owner</strong> is de hoofdbeheerder (wordt bij installatie aangemaakt). De <strong>Admin</strong> heeft dezelfde rechten, maar kan geen andere Admins of de Owner bewerken. Gebruik Admin voor medewerkers die ook volledige toegang nodig hebben.</p>
+<p>De <strong>Owner</strong> is de hoofdbeheerder van InlineComp (inlinecomp@devriesen.com). De <strong>Admin</strong> heeft dezelfde rechten, maar kan geen andere Admins of de Owner bewerken. Gebruik Admin voor medewerkers die ook volledige toegang nodig hebben.</p>
 
 <table>
   <thead><tr>
@@ -343,19 +345,19 @@ function hlgContent() { return `
   <li>Klik links in de lijst op een wedstrijd om deze te selecteren. Gebruik de datumfilters bovenaan om de lijst te verfijnen.</li>
   <li>Na selectie worden de deelnemers automatisch opgehaald vanuit de KNSB-API en vergeleken met de lokale database.</li>
 </ol>
-<div class="hlg-tip">&#128161; Geen internetverbinding? Eerder geïmporteerde deelnemers blijven beschikbaar in de lokale database. Alleen het ophalen van nieuwe KNSB-data vereist internet.</div>
+<div class="hlg-warn">&#9888; InlineComp vereist een actieve internetverbinding. Zonder internet kun je geen deelnemers ophalen en is de applicatie niet bereikbaar.</div>
 
 <h3>3.2 De vergelijktabel</h3>
 <p>Na het ophalen verschijnt per categorie een tabel met alle ingeschreven deelnemers. Elke deelnemer heeft een <strong>status</strong>:</p>
 <table>
   <thead><tr><th>Status</th><th>Betekenis</th><th>Kleur</th></tr></thead>
   <tbody>
-    <tr><td>Bevestigd</td><td>KNSB heeft deelname bevestigd</td><td>Groen</td></tr>
-    <tr><td>Bevestigd bij org.</td><td>Organisatie heeft deelname bevestigd (niet via KNSB)</td><td>Blauw</td></tr>
-    <tr><td>Niet bevestigd</td><td>Ingeschreven maar nog niet bevestigd door KNSB</td><td>Grijs</td></tr>
-    <tr><td>Afgemeld (KNSB)</td><td>Via KNSB afgemeld — kan niet worden gewijzigd</td><td>Rood</td></tr>
-    <tr><td>Afgemeld bij org.</td><td>Door de organisatie afgemeld</td><td>Oranje</td></tr>
-    <tr><td>Niet getekend</td><td>Deelnemer heeft niet getekend bij aankomst</td><td>Paars</td></tr>
+    <tr><td>Bevestigd</td><td>KNSB heeft deelname bevestigd — rijder doet mee</td><td><span style="background:#e8f5e9;color:#2e7d32;padding:1px 7px;border-radius:10px;font-size:.85em">Groen</span></td></tr>
+    <tr><td>Bevestigd bij org.</td><td>Door de organisatie bevestigd (niet via KNSB, bijv. last-minute aanmelding)</td><td><span style="background:#e0f7fa;color:#006064;padding:1px 7px;border-radius:10px;font-size:.85em">Teal</span></td></tr>
+    <tr><td>Niet bevestigd</td><td>Ingeschreven maar nog niet bevestigd door KNSB</td><td><span style="background:#fff3e0;color:#e65100;padding:1px 7px;border-radius:10px;font-size:.85em">Oranje</span></td></tr>
+    <tr><td>Afgemeld (KNSB)</td><td>Via KNSB afgemeld — kan niet worden gewijzigd</td><td><span style="background:#fce4e4;color:#b71c1c;padding:1px 7px;border-radius:10px;font-size:.85em">Rood</span></td></tr>
+    <tr><td>Afgemeld bij org.</td><td>Door de organisatie afgemeld</td><td><span style="background:#f3e5f5;color:#6a1b9a;padding:1px 7px;border-radius:10px;font-size:.85em">Paars</span></td></tr>
+    <tr><td>Niet getekend</td><td>Deelnemer heeft niet getekend bij aankomst</td><td><span style="background:#e8eaf6;color:#283593;padding:1px 7px;border-radius:10px;font-size:.85em">Donkerblauw</span></td></tr>
   </tbody>
 </table>
 
@@ -399,31 +401,31 @@ function hlgContent() { return `
           <tr>
             <td style="padding:3px 5px;color:#999">1</td>
             <td style="padding:3px 5px">Anna Bakker</td>
-            <td style="padding:3px 5px"><span style="background:#d4edda;color:#155724;border-radius:10px;padding:1px 7px;font-size:.66rem;font-weight:600">Bevestigd</span></td>
+            <td style="padding:3px 5px"><span style="background:#e8f5e9;color:#2e7d32;border-radius:10px;padding:1px 7px;font-size:.66rem;font-weight:600">Bevestigd</span></td>
             <td style="padding:3px 5px;font-family:monospace">A1B2C3</td>
           </tr>
           <tr style="background:#f8f9fb">
             <td style="padding:3px 5px;color:#999">2</td>
             <td style="padding:3px 5px">Tom Jansen</td>
-            <td style="padding:3px 5px"><span style="background:#cce5ff;color:#004085;border-radius:10px;padding:1px 7px;font-size:.66rem;font-weight:600">Bev. bij org.</span></td>
+            <td style="padding:3px 5px"><span style="background:#e0f7fa;color:#006064;border-radius:10px;padding:1px 7px;font-size:.66rem;font-weight:600">Bev. bij org.</span></td>
             <td style="padding:3px 5px;font-family:monospace">D4E5F6</td>
           </tr>
           <tr>
             <td style="padding:3px 5px;color:#999">3</td>
             <td style="padding:3px 5px">Lena Visser</td>
-            <td style="padding:3px 5px"><span style="background:#f8d7da;color:#721c24;border-radius:10px;padding:1px 7px;font-size:.66rem;font-weight:600">Afgemeld (KNSB)</span></td>
+            <td style="padding:3px 5px"><span style="background:#fce4e4;color:#b71c1c;border-radius:10px;padding:1px 7px;font-size:.66rem;font-weight:600">Afgemeld (KNSB)</span></td>
             <td style="padding:3px 5px;color:#bbb">—</td>
           </tr>
           <tr style="background:#f8f9fb">
             <td style="padding:3px 5px;color:#999">4</td>
             <td style="padding:3px 5px">Mark de Wit</td>
-            <td style="padding:3px 5px"><span style="background:#e2e3e5;color:#383d41;border-radius:10px;padding:1px 7px;font-size:.66rem;font-weight:600">Niet bevestigd</span></td>
+            <td style="padding:3px 5px"><span style="background:#fff3e0;color:#e65100;border-radius:10px;padding:1px 7px;font-size:.66rem;font-weight:600">Niet bevestigd</span></td>
             <td style="padding:3px 5px;font-family:monospace">G7H8I9</td>
           </tr>
           <tr>
             <td style="padding:3px 5px;color:#999">5</td>
             <td style="padding:3px 5px">Sara Berg</td>
-            <td style="padding:3px 5px"><span style="background:#ffe5cc;color:#7c3500;border-radius:10px;padding:1px 7px;font-size:.66rem;font-weight:600">Afgemeld bij org.</span></td>
+            <td style="padding:3px 5px"><span style="background:#f3e5f5;color:#6a1b9a;border-radius:10px;padding:1px 7px;font-size:.66rem;font-weight:600">Afgemeld bij org.</span></td>
             <td style="padding:3px 5px;color:#bbb">—</td>
           </tr>
         </tbody>
@@ -501,7 +503,7 @@ function hlgContent() { return `
   <li><strong>Samenvoegen:</strong> klik op het koppel-icoon naast een categorie en selecteer de categorieën die samen moeten rijden. Ze verschijnen daarna als één gecombineerde tab met een badge die het aantal samengevoegde groepen toont.</li>
   <li><strong>Splitsen:</strong> bij een categorie met meerdere subgroepen kun je deze opsplitsen zodat elke subgroep een eigen startlijst krijgt. De split verschijnt als aparte tab met een schaar-label.</li>
 </ul>
-<div class="hlg-tip">&#128161; Samenvoegen en splitsen kan ook na het genereren van startlijsten. De startlijst-configuratie werkt per groep.</div>
+<div class="hlg-warn">&#9888; Samenvoegen en splitsen moet je doen <strong>voordat</strong> je startlijsten genereert en het tijdschema opstelt. Achteraf wijzigen kan leiden tot fouten in de heat-indelingen en het tijdschema.</div>
 
 <h3>3.7 Importeren (opslaan)</h3>
 <p>Als alle aanpassingen klaar zijn klik je op de oranje knop <strong>Importeer</strong>. Dit slaat alle deelnemers, statussen en transponders op in de lokale database. Na import zijn de gegevens beschikbaar voor de volgende modules.</p>
@@ -1029,7 +1031,17 @@ function hlgContent() { return `
 </ol>
 <p>De gegenereerde volgende ronde verschijnt direct in de startlijsten-module en kan daar nog handmatig aangepast worden.</p>
 
-<h3>6.6 Veelvoorkomende situaties</h3>
+<h3>6.6 CSV Upload Monitor (Orbits-koppeling)</h3>
+<p>Op de wedstrijddag kunnen tijden automatisch worden geïmporteerd vanuit het MyLaps/Orbits systeem. De <strong>InlineComp CSV Upload Monitor</strong> is een apart hulpprogramma (Windows) dat:</p>
+<ol>
+  <li>Een map monitort waar Orbits de CSV-exports naartoe schrijft.</li>
+  <li>Nieuwe of gewijzigde CSV-bestanden automatisch detecteert.</li>
+  <li>De bestanden uploadt naar de InlineComp-server via SFTP.</li>
+</ol>
+<p>Na de upload verschijnen de tijden in de Live-module en hoeven ze niet handmatig overgetypt te worden. De configuratie (map, interval, serveradres) wordt ingesteld in het bestand <code>InlineComp.ini</code>.</p>
+<div class="hlg-tip">&#128161; De CSV Upload Monitor draait los van InlineComp — je start hem op de laptop die verbonden is met het MyLaps/Orbits systeem. Raadpleeg de beheerder voor de installatie.</div>
+
+<h3>6.7 Veelvoorkomende situaties</h3>
 <ul>
   <li><strong>Verkeerde tijd ingevoerd?</strong> Ga terug naar de rit, corrigeer de tijd, klik opnieuw op Opslaan.</li>
   <li><strong>Rijder geswapped?</strong> Pas de startlijst aan via het deelnemerspaneel in de Startlijsten-module.</li>
