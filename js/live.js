@@ -2150,17 +2150,9 @@ async function _liveGenereerVolgendeRonde(dcId, distanceId, van, naar, compleet 
         // Invalideer startlijst cache zodat startlist.js de nieuwe data laadt
         if (typeof startlijstCache !== 'undefined') startlijstCache = {};
 
-        // Herlaad ritten van API — GEEN navigatie naar nieuwe ronde
-        const herlaadRes = await fetch('api/live.php?competition_id=' + encodeURIComponent(huidigCompId));
-        if (herlaadRes.ok) {
-            const herlaadData = await herlaadRes.json();
-            if (!herlaadData.error) {
-                _liveRitten     = herlaadData.ritten     || [];
-                _liveCatConfigs = herlaadData.catConfigs || {};
-                _liveSysteem    = herlaadData.systeem    ?? _liveSysteem;
-                // Herbereken huidige kaart, maar NIET navigeren
-                _liveHerbereken(_liveHuidigIdx);
-            }
+        // Herlaad de hele Live module zodat nieuwe ritten (incl. ex-aequo extra) in de carousel verschijnen
+        if (typeof toonLivePagina === 'function') {
+            toonLivePagina();
         }
 
         // Als startlijsten pagina nu actief is: meteen vernieuwen
