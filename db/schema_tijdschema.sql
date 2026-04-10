@@ -28,7 +28,7 @@ DROP TABLE IF EXISTS competition_tijdschema;
 CREATE TABLE competition_tijdschema (
     id              INT UNSIGNED  NOT NULL AUTO_INCREMENT,
     competition_id  VARCHAR(36)   NOT NULL,
-    systeem         ENUM('full-final','internationaal-oud','internationaal-nieuw')
+    systeem         ENUM('full-final','internationaal-nieuw')
                                   NOT NULL DEFAULT 'full-final',
     status          ENUM('concept','gepubliceerd') NOT NULL DEFAULT 'concept',
     aangemaakt_at   DATETIME      NOT NULL DEFAULT CURRENT_TIMESTAMP,

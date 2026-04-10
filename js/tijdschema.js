@@ -741,21 +741,6 @@ function renderAfstandCalc(afstand, cfg, catConfigMap) {
                 }
                 parts.push(`A-finale`);
                 stappen.push(`${finR} → ${parts.join(' + ')}`);
-            } else if (systeem === 'internationaal-oud') {
-                // B-finale: rijders in de ronde net vóór A-finale die niet Q haalden
-                // voorLaatste = ingang van die ronde (niet het totaal uit de series!)
-                // hHf+hK: kwart_door = ingang halve finale; hHf only: heats_q = ingang halve finale
-                const voorLaatste = hHf ? (hK ? kDoor : qDoor) : (hK ? qDoor : (hH ? qDoor : cat.n));
-                const bR = Math.max(0, voorLaatste - finR);
-                if (bR > 0) {
-                    const ruMaxPH = parseInt(cfg?.runner_up_max) || 6;
-                    const nBH     = bR <= ruMaxPH ? 1 : Math.ceil(bR / Math.max(1, finR));
-                    const bLbls   = [];
-                    for (let b = nBH; b >= 1; b--) bLbls.push(`B${b}-finale`);
-                    stappen.push(`${bLbls.join(' + ')} + A-finale: ${finR}`);
-                } else {
-                    stappen.push(`A-finale: ${finR}`);
-                }
             } else {
                 stappen.push(`A-finale: ${finR}`);
             }

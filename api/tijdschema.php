@@ -566,9 +566,6 @@ function genereerRitten(PDO $pdo, int $tsId, string $compId, ?array $catVanJS = 
                     // Als er geen series zijn, of iedereen gaat door, is er geen runner-up.
                     if (empty($cc['heeft_heats'])) continue;
                     $heatsQ     = (int)($cc['heats_q'] ?? 0);
-                    // Voor internationaal-oud: B-finalisten rijden GEEN runner-up.
-                    // B-finale rijders zijn degenen die WEL door de series kwamen maar niet in A-finale.
-                    // Runner-up zijn alleen de series-uitvallers (n - heats_q).
                     $uitvallers = max(0, $cat['n'] - $heatsQ);
                     if ($uitvallers === 0) continue;
                     $aantallen = verdeelRunnerUpHeats($uitvallers, $ruMax, $ruMin);
@@ -686,62 +683,6 @@ function genereerRitten(PDO $pdo, int $tsId, string $compId, ?array $catVanJS = 
                     } else {
                         $aRijders = $rijders;
 
-                        // ── B-finale (alleen internationaal-oud) ──────────────
-                        if ($systeem === 'internationaal-oud') {
-                            // Hoeveel rijders zaten in de ronde net vóór de A-finale?
-                            if (!empty($cc['heeft_halve_finale'])) {
-                                // Als er ook een kwartfinale is, stromen kwart_door door naar halve finale.
-                                // Zonder kwartfinale is het heats_q.
-                                if (!empty($cc['heeft_kwartfinale'])) {
-                                    $voorLaatste = max(0, (int)($cc['kwart_door'] ?? 0));
-                                } else {
-                                    $voorLaatste = max(0, (int)($cc['heats_q'] ?? 0));
-                                }
-                            } elseif (!empty($cc['heeft_kwartfinale'])) {
-                                $voorLaatste = max(0, (int)($cc['heats_q'] ?? 0));
-                            } else {
-                                $voorLaatste = !empty($cc['heeft_heats'])
-                                    ? max(0, (int)($cc['heats_q'] ?? 0))
-                                    : $cat['n'];
-                            }
-                            $bRijders = max(0, $voorLaatste - $aRijders);
-
-                            if ($bRijders > 0) {
-                                $ruMax = max(2, (int)($afCfg['runner_up_max'] ?? 6));
-                                if ($bRijders <= $ruMax) {
-                                    // Klein aantal: allemaal in één B-finale
-                                    $nBHeats    = 1;
-                                    $bAantallen = [$bRijders];
-                                } else {
-                                    // B-finale heats elk even groot als A-finale
-                                    $nBHeats    = max(1, (int)ceil($bRijders / max(1, $aRijders)));
-                                    $bAantallen = verdeel($bRijders, $nBHeats);
-                                }
-                                $catRitten = [];
-                                for ($b = 1; $b <= $nBHeats; $b++) {
-                                    $catRitten[] = [
-                                        'blok_id'      => $blokId,
-                                        'volgorde'     => 0,
-                                        'dc_id'        => $cat['dc_id'],
-                                        'distance_id'  => $cat['distance_id'],
-                                        'afstand_naam' => $afstandNaam,
-                                        'ronde_type'   => 'finale_b',
-                                        'finale_label' => 'B' . $b,
-                                        'heat_nr'      => $b,
-                                        'rit_naam'     => "B{$b}-finale {$afstandNaam} – {$cat['dc_naam']}",
-                                        'dc_naam'      => $cat['dc_naam'],
-                                        'verwacht'     => $bAantallen[$b - 1] ?? 0,
-                                    ];
-                                }
-                                // Bn eerst, B1 als laatste vóór A-finale
-                                $catRitten = array_reverse($catRitten);
-                                foreach ($catRitten as $r) {
-                                    $r['volgorde'] = $volgorde++;
-                                    $ritten[] = $r;
-                                }
-                            }
-                        }
-
                         // ── A-finale ─────────────────────────────────────────
                         $ritten[] = [
                             'blok_id'      => $blokId,
@@ -853,7 +794,7 @@ try {
         $tsId    = (int)($body['tijdschema_id'] ?? 0);
         $systeem = $body['systeem'] ?? '';
         $reset   = !empty($body['reset']);
-        $toegestaan = ['full-final', 'internationaal-oud', 'internationaal-nieuw']; // internationaal-oud behouden voor bestaande data
+        $toegestaan = ['full-final', 'internationaal-nieuw'];
         if (!$tsId || !in_array($systeem, $toegestaan, true)) {
             http_response_code(400);
             echo json_encode(['error' => 'Ongeldige invoer']);
