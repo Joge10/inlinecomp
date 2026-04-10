@@ -155,8 +155,11 @@ if ($action === 'rit_detail') {
         // Zoek de heat via rit_naam koppeling
         $stmt = $pdo->prepare("
             SELECT h.id, h.heat_naam, h.ronde,
-                   COALESCE(tsr.ronde_type, 'heats') AS ronde_type,
-                   tsr.rit_naam
+                   COALESCE(tsr.ronde_type,
+                       CASE WHEN h.heat_naam LIKE '%finale%' OR h.heat_naam LIKE '%ex-aequo%' THEN 'finale_a'
+                            ELSE 'heats' END
+                   ) AS ronde_type,
+                   COALESCE(tsr.rit_naam, h.heat_naam) AS rit_naam
             FROM heats h
             LEFT JOIN tijdschema_ritten tsr ON tsr.id = h.tijdschema_rit_id
             WHERE h.competition_id = ?
@@ -253,7 +256,10 @@ if ($action === 'lookup') {
         $heatStmt = $pdo->prepare("
             SELECT DISTINCT h.id AS heat_id, h.heat_naam, h.ronde,
                    he.startpositie,
-                   COALESCE(tsr.ronde_type, 'heats') AS ronde_type,
+                   COALESCE(tsr.ronde_type,
+                       CASE WHEN h.heat_naam LIKE '%finale%' OR h.heat_naam LIKE '%ex-aequo%' THEN 'finale_a'
+                            ELSE 'heats' END
+                   ) AS ronde_type,
                    tsr.rit_naam,
                    res.finishpositie, res.tijd_ms, res.sanctie,
                    tsr.volgorde AS rit_volgorde
