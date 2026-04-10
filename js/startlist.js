@@ -461,10 +461,14 @@ async function drukStartlijstAf(optData) {
     const gridCols   = isPortrait ? 2 : 3;
     const pageSize   = isPortrait ? 'A4 portrait' : 'A4 landscape';
 
-    // Helper: bouw één heat-card
-    const maakCard = (heat, lookup, extraClass = '') => {
+    // Helper: bouw één heat-card (totaalHeats = totaal in deze sectie, voor "Heat x/n")
+    const maakCard = (heat, lookup, extraClass = '', totaalHeats = 0) => {
         const rit      = lookup?.[heat.nummer];
-        const naam     = heat.heat_naam || rit?.rit_naam || `Heat ${heat.nummer}`;
+        // Naam aanpassen: "Heat 1" → "Heat 1/N" als er meerdere heats zijn
+        let naam = heat.heat_naam || rit?.rit_naam || `Heat ${heat.nummer}`;
+        if (totaalHeats > 1) {
+            naam = naam.replace(/\bHeat\s+(\d+)\b/i, `Heat $1/${totaalHeats}`);
+        }
         const volg     = heat.rit_volgorde ?? rit?.volgorde ?? null;
         const ritBadge = volg != null ? `<span class="pr-ritnr">${volg}</span>` : '';
         let rows = '';
@@ -479,7 +483,7 @@ async function drukStartlijstAf(optData) {
             </tr>`;
         });
         return `<div class="pr-card${extraClass ? ' ' + extraClass : ''}">
-            <div class="pr-titel">${ritBadge}${esc(naam)}<span class="pr-count">${heat.rijders?.length ?? 0}</span></div>
+            <div class="pr-titel">${ritBadge}${esc(naam)}</div>
             <table class="pr-tabel">
                 <colgroup>
                     <col class="pr-col-pos"><col class="pr-col-snr"><col class="pr-col-cat">
@@ -499,20 +503,19 @@ async function drukStartlijstAf(optData) {
         if (bHeats.length) {
             cardsHtml += `<div class="pr-sectie-kop pr-sectie-b">B-Finales</div>`;
             for (const heat of bHeats)
-                cardsHtml += maakCard(heat, rlB);
+                cardsHtml += maakCard(heat, rlB, '', bHeats.length);
         }
         if (aHeats.length) {
-            // A-finale sectie: kop spant alle kolommen; eerste kaart altijd aan de linkerkantlijn
             cardsHtml += `<div class="pr-sectie-kop pr-sectie-a">A-Finale</div>`;
             let first = true;
             for (const heat of aHeats) {
-                cardsHtml += maakCard(heat, rlA, first ? 'pr-card-links' : '');
+                cardsHtml += maakCard(heat, rlA, first ? 'pr-card-links' : '', aHeats.length);
                 first = false;
             }
         }
     } else {
         for (const heat of afdrukHeats)
-            cardsHtml += maakCard(heat, rl);
+            cardsHtml += maakCard(heat, rl, '', afdrukHeats.length);
     }
 
     const htmlDoc = `<!DOCTYPE html><html lang="nl">
