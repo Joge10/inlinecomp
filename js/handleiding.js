@@ -199,6 +199,7 @@ function hlgContent() { return `
     <tr><td><strong>Sanctie</strong></td><td>Straf voor een overtreding, conform het World Skate Speed Rulebook: FS (valse start), DQ-SF (sportfout), DQ-DF (disciplinaire fout), DNS (niet gestart), DNF (niet gefinisht). Zie sectie 6.3 voor details.</td></tr>
     <tr><td><strong>Ex-aequo</strong></td><td>Gelijke stand. Bij gelijk puntentotaal beslist: (1) beste individuele resultaat, (2) resultaat op de laatst gereden afstand, (3) gedeelde positie.</td></tr>
     <tr><td><strong>RR</strong></td><td>Reduction in Rank — terugzetting in positie als sanctie voor een (onopzettelijke) sportfout. De jury past de positie handmatig aan.</td></tr>
+    <tr><td><strong>Runner-up</strong></td><td>Extra race voor rijders die in de series zijn uitgevallen en niet gekwalificeerd zijn voor de (halve) finale. Bij KNSB landelijke wedstrijden wordt dit de "B-finale" genoemd. Alleen beschikbaar in het Internationaal systeem.</td></tr>
     <tr><td><strong>Tekenlijst</strong></td><td>Afdruk waarop rijders bij aankomst fysiek tekenen om hun aanwezigheid te bevestigen.</td></tr>
     <tr><td><strong>MyLaps / Orbits</strong></td><td>Elektronisch tijdwaarnemingssysteem. Orbits is de software die transponders uitleest en CSV-bestanden exporteert met finishtijden.</td></tr>
     <tr><td><strong>CSV Upload Monitor</strong></td><td>Hulpprogramma dat Orbits CSV-exports automatisch naar InlineComp uploadt. Draait op de timing-laptop.</td></tr>
@@ -529,7 +530,7 @@ function hlgContent() { return `
 <p>Klik op <strong>Tijdschema aanmaken</strong>. Vereiste: er moet al een geïmporteerde wedstrijd zijn (zie module <em>Importeer</em>). Zonder import verschijnt een melding.</p>
 
 <h3>4.2 Competitiesysteem kiezen</h3>
-<p>Bovenaan staat de <strong>Competitiesysteem</strong>-balk. Er zijn drie opties:</p>
+<p>Bovenaan staat de <strong>Competitiesysteem</strong>-balk. Er zijn twee opties:</p>
 <table>
   <thead><tr><th>Systeem</th><th>Omschrijving</th><th>Typisch gebruik</th></tr></thead>
   <tbody>
@@ -540,7 +541,7 @@ function hlgContent() { return `
     </tr>
     <tr>
       <td><strong>Internationaal</strong></td>
-      <td>Knock-out per ronde. Optioneel: kwartfinale en halve finale. Optionele runner-up voor niet-gekwalificeerden. KNSB/World Skate format.</td>
+      <td>Knock-out per ronde. Optioneel: kwartfinale en halve finale. Optionele runner-up race voor rijders die in de series zijn uitgevallen. World Skate / KNSB format.</td>
       <td>Nationale wedstrijden, NK, kampioenschappen</td>
     </tr>
   </tbody>
@@ -560,9 +561,9 @@ function hlgContent() { return `
         <span style="background:#d4edda;color:#155724;border-radius:10px;padding:2px 9px;font-size:.69rem;font-weight:600">✔ Actief: Internationaal</span>
       </div>
       <div style="margin-top:8px;font-size:.72rem;color:#444;border-left:3px solid #1a3a5c;padding-left:8px;line-height:1.5">
-        <strong>Modern knock-outsysteem</strong> — uitval per ronde, geen B-finales maar wel een runner-up optie.<br>
+        <strong>Knock-outsysteem</strong> — uitval per ronde, met optionele runner-up race.<br>
         <span style="color:#777">1. Series &nbsp;→&nbsp; 2. Kwartfinale (opt.) &nbsp;→&nbsp; 3. Halve finale (opt.) &nbsp;→&nbsp; 4. A-finale &nbsp;·&nbsp; 5. Runner-up (opt.)</span><br>
-        <span style="color:#888;font-style:italic">&#128161; KNSB-format voor de landelijke wedstrijden (met runner-up) en nationale kampioenschappen (zonder runner-up).</span>
+        <span style="color:#888;font-style:italic">&#128161; Runner-up = wat bij KNSB landelijke wedstrijden de "B-finale" wordt genoemd: een extra race voor rijders die in de series zijn uitgevallen.</span>
       </div>
     </div>
   </div>
@@ -579,13 +580,17 @@ function hlgContent() { return `
   <li><strong>B-finale grootte:</strong> maximum aantal rijders per B-finale (rest wordt verdeeld over B1, B2, enz.)</li>
   <li>Checkbox: <em>"Laatste B-finale (Bn) is de grootste"</em></li>
 </ul>
-<p><strong>Internationaal instellingen</strong> (per categorie binnen een afstand):</p>
+<p><strong>Internationaal instellingen:</strong></p>
 <ul>
-  <li><strong>Rijdt series:</strong> aan/uit — uit betekent dat de categorie direct in de finale start (zonder voorronde)</li>
-  <li><strong>Kwartfinale / Halve finale:</strong> aan/uit per categorie</li>
-  <li><strong>Duur per heat:</strong> in m:ss formaat (bijv. 1:30) — bepaalt de berekende starttijden</li>
-  <li><strong>Runner-up:</strong> aan/uit, max. en min. rijders per heat</li>
+  <li><strong>Runner-up</strong> (gedeeld): aan/uit, max. en min. rijders per heat — de runner-up race is voor rijders die in de series uitvielen (bij KNSB landelijke wedstrijden bekend als "B-finale")</li>
+  <li><strong>Per categorie</strong> (tabel): welke rondes er zijn en de doorstroomregels:
+    <ul>
+      <li><strong>Rijdt series:</strong> aan/uit — uit betekent dat de categorie direct in de finale start</li>
+      <li><strong>Kwartfinale / Halve finale:</strong> aan/uit, met totaal door en Q per heat (hoeveel winnaars per heat + hoeveel tijdsnelsten)</li>
+    </ul>
+  </li>
 </ul>
+<div class="hlg-tip">&#128161; De <strong>duur per heat</strong> (in m:ss) wordt niet hier ingesteld, maar verderop bij de <em>Programma-volgorde</em> (sectie 4.4) — per ronde-blok.</div>
 <p>Klik <strong>💾 Opslaan</strong> om de instellingen op te slaan. De samenvatting op de kaart wordt direct bijgewerkt (bijv. <em>"Series → Halve finale → A-finale"</em>).</p>
 
 <!-- MOCKUP: afstandskaarten -->
@@ -620,27 +625,33 @@ function hlgContent() { return `
           <div style="border:1px solid #ccc;border-radius:3px;padding:2px 6px;background:#fff;font-size:.74rem;width:34px;text-align:center">6</div>
           <span style="color:#888">rijders per runner-up heat</span>
         </div>
-        <div style="margin-top:8px;font-size:.7rem;font-weight:700;color:#666;margin-bottom:5px;text-transform:uppercase;letter-spacing:.3px">Per categorie</div>
+        <div style="margin-top:8px;font-size:.7rem;font-weight:700;color:#666;margin-bottom:5px;text-transform:uppercase;letter-spacing:.3px">Rondes per categorie</div>
         <table style="width:100%;border-collapse:collapse;font-size:.69rem">
           <thead><tr style="background:#f0f4f8">
             <th style="padding:2px 5px;text-align:left;border-bottom:1px solid #dde;font-weight:600">Categorie</th>
-            <th style="padding:2px 5px;border-bottom:1px solid #dde;font-weight:600;text-align:center">Series</th>
-            <th style="padding:2px 5px;border-bottom:1px solid #dde;font-weight:600;text-align:center">Kwart-finale</th>
-            <th style="padding:2px 5px;border-bottom:1px solid #dde;font-weight:600;text-align:center">Halve finale</th>
-            <th style="padding:2px 5px;border-bottom:1px solid #dde;font-weight:600">Duur/heat</th>
+            <th style="padding:2px 5px;border-bottom:1px solid #dde;font-weight:600;text-align:center">Deel-<br>nemers</th>
+            <th style="padding:2px 5px;border-bottom:1px solid #dde;font-weight:600;text-align:center">Rijdt<br>series</th>
+            <th style="padding:2px 5px;border-bottom:1px solid #dde;font-weight:600;text-align:center">Heats</th>
+            <th style="padding:2px 5px;border-bottom:1px solid #dde;font-weight:600;text-align:center">Door →</th>
+            <th style="padding:2px 5px;border-bottom:1px solid #dde;font-weight:600;text-align:center">Rijdt<br>HF</th>
+            <th style="padding:2px 5px;border-bottom:1px solid #dde;font-weight:600;text-align:center">Door →</th>
           </tr></thead>
           <tbody>
             <tr><td style="padding:2px 5px">Senioren heren</td>
+                <td style="padding:2px 5px;text-align:center">24</td>
                 <td style="padding:2px 5px;text-align:center">✔</td>
-                <td style="padding:2px 5px;text-align:center;color:#bbb">—</td>
+                <td style="padding:2px 5px;text-align:center">4</td>
+                <td style="padding:2px 5px;text-align:center">12</td>
                 <td style="padding:2px 5px;text-align:center">✔</td>
-                <td style="padding:2px 5px"><div style="border:1px solid #ccc;border-radius:3px;padding:1px 5px;background:#fff;width:38px">1:30</div></td>
+                <td style="padding:2px 5px;text-align:center">6</td>
             </tr>
             <tr style="background:#f8f9fb"><td style="padding:2px 5px">Senioren dames</td>
+                <td style="padding:2px 5px;text-align:center">18</td>
                 <td style="padding:2px 5px;text-align:center">✔</td>
+                <td style="padding:2px 5px;text-align:center">3</td>
+                <td style="padding:2px 5px;text-align:center">6</td>
                 <td style="padding:2px 5px;text-align:center;color:#bbb">—</td>
                 <td style="padding:2px 5px;text-align:center;color:#bbb">—</td>
-                <td style="padding:2px 5px"><div style="border:1px solid #ccc;border-radius:3px;padding:1px 5px;background:#fff;width:38px">1:30</div></td>
             </tr>
           </tbody>
         </table>
@@ -651,7 +662,7 @@ function hlgContent() { return `
     </div>
   </div>
 </div>
-<p class="hlg-mock-caption">↑ Afstandskaarten: 500m is gesloten (samenvatting zichtbaar), 1000m is open. Per categorie selecteer je rondes en duur per heat.</p>
+<p class="hlg-mock-caption">↑ Afstandsinstellingen (Internationaal): 500m is gesloten (samenvatting zichtbaar), 1000m is open met runner-up instelling en per-categorie tabel voor rondes en doorstroomregels.</p>
 
 <h3>4.4 Programma-volgorde (blokken)</h3>
 <p>Zodra de afstandsinstellingen zijn opgeslagen, verschijnt de sectie <strong>Programma-volgorde</strong>. De ronde-blokken (Series, Halve finale, Finale, enz.) worden <em>automatisch</em> aangemaakt per afstand en categorie. Je voegt daar extra blokken aan toe via de knoppen onderaan:</p>
