@@ -683,20 +683,28 @@ function genereerRitten(PDO $pdo, int $tsId, string $compId, ?array $catVanJS = 
                     } else {
                         $aRijders = $rijders;
 
-                        // ── A-finale ─────────────────────────────────────────
-                        $ritten[] = [
-                            'blok_id'      => $blokId,
-                            'volgorde'     => $volgorde++,
-                            'dc_id'        => $cat['dc_id'],
-                            'distance_id'  => $cat['distance_id'],
-                            'afstand_naam' => $afstandNaam,
-                            'ronde_type'   => 'finale_a',
-                            'finale_label' => 'A',
-                            'heat_nr'      => 1,
-                            'rit_naam'     => "A-finale {$afstandNaam} – {$cat['dc_naam']}",
-                            'dc_naam'      => $cat['dc_naam'],
-                            'verwacht'     => $rijders,
-                        ];
+                        // ── A-finale (1 of meer heats) ───────────────────────
+                        $nFinaleHeats = max(1, (int)($cc['finale_heats'] ?? 1));
+                        $verwachtPerHeat = (int)ceil($rijders / max(1, $nFinaleHeats));
+                        for ($fh = 1; $fh <= $nFinaleHeats; $fh++) {
+                            $fhVerwacht = min($verwachtPerHeat, $rijders - $verwachtPerHeat * ($fh - 1));
+                            $fhNaam = $nFinaleHeats > 1
+                                ? "A-finale heat {$fh} {$afstandNaam} – {$cat['dc_naam']}"
+                                : "A-finale {$afstandNaam} – {$cat['dc_naam']}";
+                            $ritten[] = [
+                                'blok_id'      => $blokId,
+                                'volgorde'     => $volgorde++,
+                                'dc_id'        => $cat['dc_id'],
+                                'distance_id'  => $cat['distance_id'],
+                                'afstand_naam' => $afstandNaam,
+                                'ronde_type'   => 'finale_a',
+                                'finale_label' => 'A',
+                                'heat_nr'      => $fh,
+                                'rit_naam'     => $fhNaam,
+                                'dc_naam'      => $cat['dc_naam'],
+                                'verwacht'     => max(0, $fhVerwacht),
+                            ];
+                        }
                     }
                 }
                 break;
@@ -855,9 +863,11 @@ try {
         // Gedeelde afstand-instellingen (Q/q + finale HG)
         $qD              = max(0, (int)($body['q_direct'] ?? 2));
         $qT              = max(0, (int)($body['q_tijd']   ?? 0));
-        $finaleHg        = max(2, min(20, (int)($body['finale_heat_grootte'] ?? 6)));
-        $finaleBg        = max($finaleHg, min(20, (int)($body['finale_b_grootte'] ?? 6)));
+        $finaleHg        = max(1, (int)($body['finale_heat_grootte'] ?? 6));
+        $finaleBg        = max($finaleHg, (int)($body['finale_b_grootte'] ?? 6));
         $bLaatstGrootst  = !empty($body['laatste_b_grootste']) ? 1 : 0;
+        $finaleSeeding   = in_array($body['finale_seeding'] ?? '', ['slang', 'tijdkoppeling'], true)
+                         ? $body['finale_seeding'] : 'slang';
 
         $heeftRU  = !empty($body['heeft_runner_up']) ? 1 : 0;
         $ruMax    = max(2, min(30, (int)($body['runner_up_max'] ?? 6)));
@@ -866,18 +876,20 @@ try {
         $pdo->prepare("
             INSERT INTO tijdschema_afstand_config
                 (tijdschema_id, afstand_naam, q_direct, q_tijd, finale_heat_grootte,
-                 finale_b_grootte, laatste_b_grootste, heeft_runner_up, runner_up_max, runner_up_min)
-            VALUES (?,?,?,?,?,?,?,?,?,?)
+                 finale_b_grootte, laatste_b_grootste, finale_seeding,
+                 heeft_runner_up, runner_up_max, runner_up_min)
+            VALUES (?,?,?,?,?,?,?,?,?,?,?)
             ON DUPLICATE KEY UPDATE
                 q_direct            = VALUES(q_direct),
                 q_tijd              = VALUES(q_tijd),
                 finale_heat_grootte = VALUES(finale_heat_grootte),
                 finale_b_grootte    = VALUES(finale_b_grootte),
                 laatste_b_grootste  = VALUES(laatste_b_grootste),
+                finale_seeding      = VALUES(finale_seeding),
                 heeft_runner_up     = VALUES(heeft_runner_up),
                 runner_up_max       = VALUES(runner_up_max),
                 runner_up_min       = VALUES(runner_up_min)
-        ")->execute([$tsId, $afstandNaam, $qD, $qT, $finaleHg, $finaleBg, $bLaatstGrootst, $heeftRU, $ruMax, $ruMin]);
+        ")->execute([$tsId, $afstandNaam, $qD, $qT, $finaleHg, $finaleBg, $bLaatstGrootst, $finaleSeeding, $heeftRU, $ruMax, $ruMin]);
 
         // Per-categorie config opslaan
         $catConfigs = $body['cat_configs'] ?? [];
@@ -887,8 +899,8 @@ try {
                  heeft_heats, heats_aantal, heats_q, heats_q_heat,
                  heeft_kwartfinale, kwart_heats, kwart_door, kwart_q_heat,
                  heeft_halve_finale, half_heats, half_door, half_q_heat,
-                 heeft_runner_up)
-            VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+                 heeft_runner_up, finale_heats)
+            VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
             ON DUPLICATE KEY UPDATE
                 heeft_heats        = VALUES(heeft_heats),
                 heats_aantal       = VALUES(heats_aantal),
@@ -902,7 +914,8 @@ try {
                 half_heats         = VALUES(half_heats),
                 half_door          = VALUES(half_door),
                 half_q_heat        = VALUES(half_q_heat),
-                heeft_runner_up    = VALUES(heeft_runner_up)
+                heeft_runner_up    = VALUES(heeft_runner_up),
+                finale_heats       = VALUES(finale_heats)
         ");
         foreach ($catConfigs as $cc) {
             $dcId   = trim($cc['dc_id']      ?? '');
@@ -927,6 +940,7 @@ try {
                 $heeftP ? max(1, (int)($cc['half_door']      ?? 4)) : 4,
                 $heeftP ? max(0, (int)($cc['half_q_heat']    ?? 1)) : 0,
                 $heeftR,
+                max(1, (int)($cc['finale_heats'] ?? 1)),
             ]);
         }
 

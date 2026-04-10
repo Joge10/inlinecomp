@@ -1358,7 +1358,7 @@ function berekenSchemaHeats(r, catCfg, totaalRijders, ritLookup = null, systeem 
     if (systeem === 'full-final' && afstandCfg) {
         const finaleHg = Math.max(2, int(afstandCfg.finale_heat_grootte ?? 6));
         if (r.sleutel === 'finale_a') {
-            // Placeholder: top finaleHg rijders uit de series
+            // Full-Final: altijd 1 A-finale heat (B-finales regelen de verdeling)
             const prevNH = int(catCfg.heats_aantal) || 1;
             const slots  = bouwSchemaSlots('serie', prevNH, finaleHg, 0);
             return [{ nummer: 1, slots }];
@@ -1451,7 +1451,7 @@ function berekenSchemaHeats(r, catCfg, totaalRijders, ritLookup = null, systeem 
                 prevNaam   = 'serie';
                 qPerHeat   = int(catCfg.heats_q_heat ?? 1);
             }
-            nHeats = 1;
+            nHeats = Math.max(1, int(catCfg.finale_heats ?? 1));
             break;
         case 'finale_b':
             return null;
@@ -1461,7 +1461,23 @@ function berekenSchemaHeats(r, catCfg, totaalRijders, ritLookup = null, systeem 
 
     if (nSlots <= 0 || prevNHeats <= 0) return null;
     const slots = bouwSchemaSlots(prevNaam, prevNHeats, nSlots, qPerHeat);
-    return nHeats === 1 ? [{ nummer: 1, slots }] : snakeVerdeelSlots(slots, nHeats);
+    if (nHeats === 1) return [{ nummer: 1, slots }];
+
+    // Tijdkoppeling: paren van achteren, langzaamsten in heat 1, snelsten in laatste heat
+    if (afstandCfg?.finale_seeding === 'tijdkoppeling' && r.sleutel === 'finale_a') {
+        const heats = [];
+        const reversed = [...slots].reverse(); // langzaamste eerst
+        const perHeat = Math.max(1, Math.ceil(reversed.length / nHeats));
+        for (let h = 0; h < nHeats; h++) {
+            const chunk = reversed.slice(h * perHeat, (h + 1) * perHeat);
+            // Binnen elk paar: snelste eerst (= laatste element van de chunk, want reversed)
+            chunk.reverse();
+            heats.push({ nummer: h + 1, slots: chunk });
+        }
+        return heats;
+    }
+
+    return snakeVerdeelSlots(slots, nHeats);
 }
 
 // ── Resultaten weergeven ──────────────────────────────────────────────────────

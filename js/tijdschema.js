@@ -448,7 +448,22 @@ function renderAfstandPanel(afstand, cfg, catConfigMap) {
                     </span>
                     <span class="ts-veld-hint">0 = geen minimum</span>
                 </div>
-                <input type="hidden" name="finale_heat_grootte" value="${fHg}">`;
+                <div class="ts-gedeeld-rij">
+                    <span class="ts-gedeeld-lbl">Finale-grootte</span>
+                    <span class="ts-gedeeld-inputs">
+                        <input type="number" name="finale_heat_grootte" value="${fHg}"
+                               min="1" class="ts-inp-sm"> rijders in de finale
+                    </span>
+                </div>
+                <div class="ts-gedeeld-rij">
+                    <span class="ts-gedeeld-lbl">Finale-seeding</span>
+                    <span class="ts-gedeeld-inputs">
+                        <select name="finale_seeding" class="ts-sel-sm">
+                            <option value="slang" ${(cfg?.finale_seeding ?? 'slang') === 'slang' ? 'selected' : ''}>Slangenpatroon (standaard)</option>
+                            <option value="tijdkoppeling" ${cfg?.finale_seeding === 'tijdkoppeling' ? 'selected' : ''}>Tijdkoppeling (langzaamsten eerst, snelsten laatste heat)</option>
+                        </select>
+                    </span>
+                </div>`;
     }
 
     html += `
@@ -478,6 +493,7 @@ function renderAfstandPanel(afstand, cfg, catConfigMap) {
                 <th colspan="3" class="ts-th-sectie">Series</th>
                 <th colspan="4" class="ts-th-sectie ts-sectie-start">Kwartfinale</th>
                 <th colspan="4" class="ts-th-sectie ts-sectie-start">Halve finale</th>
+                <th colspan="1" class="ts-th-sectie ts-sectie-start">Finale</th>
             </tr><tr>
                 <th class="ts-th-c">Rijdt<br>series</th>
                 <th class="ts-th-c">Aantal<br>heats</th>
@@ -490,6 +506,7 @@ function renderAfstandPanel(afstand, cfg, catConfigMap) {
                 <th class="ts-th-c">Aantal<br>heats</th>
                 <th class="ts-th-c">Totaal<br>door →</th>
                 <th class="ts-th-c">Q per<br>heat</th>
+                <th class="ts-th-c ts-sectie-start">Aantal<br>heats</th>
             </tr>`;
     }
 
@@ -584,6 +601,11 @@ function renderAfstandPanel(afstand, cfg, catConfigMap) {
                        min="0" max="20" class="ts-inp-sm ts-inp-half-qh"
                        title="Directe kwalificatie per heat (Q)">
                 <span class="ts-q-afgeleid">+${hQAfl}q</span>
+            </td>
+            <td class="ts-td-c ts-sectie-start">
+                <input type="number" name="finale_heats" value="${cc?.finale_heats ?? 1}"
+                       min="1" max="30" class="ts-inp-sm"
+                       title="Aantal A-finale heats">
             </td>`;
         } else {
             // Full-final: verborgen velden zodat save-handler waarden heeft
@@ -598,7 +620,8 @@ function renderAfstandPanel(afstand, cfg, catConfigMap) {
             <input type="hidden" name="half_heats"         value="0">
             <input type="hidden" name="half_door"          value="0">
             <input type="hidden" name="half_q_heat"        value="0">
-            <input type="hidden" name="heeft_runner_up"    value="0">`;
+            <input type="hidden" name="heeft_runner_up"    value="0">
+            <input type="hidden" name="finale_heats"       value="1">`;
         }
 
         html += `</tr>`;
@@ -1575,6 +1598,7 @@ function bindTsEvents(afstandGroepen) {
                     half_door:          cn('half_door'),
                     half_q_heat:        parseInt(tr.querySelector('[name="half_q_heat"]')?.value  ?? '1'),
                     heeft_runner_up:    heeftRU,
+                    finale_heats:       cn('finale_heats') || 1,
                 });
             });
 
@@ -1589,6 +1613,7 @@ function bindTsEvents(afstandGroepen) {
                     finale_heat_grootte: num('finale_heat_grootte') || 6,
                     finale_b_grootte:    num('finale_b_grootte')    || 6,
                     laatste_b_grootste:  form.querySelector('[name="laatste_b_grootste"]')?.checked ? 1 : 0,
+                    finale_seeding:      form.querySelector('[name="finale_seeding"]')?.value ?? 'slang',
                     heeft_runner_up:     heeftRU,
                     runner_up_max:       ruMax,
                     runner_up_min:       ruMin,

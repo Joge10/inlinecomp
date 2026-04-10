@@ -525,38 +525,38 @@ if ($action === 'genereer_volgende_ronde') {
         // ook de B-finales worden aangemaakt op basis van finale_heat_grootte.
         $isFullFinal = ($systeem === 'full-final') && ($naarRondeType === 'finale_a');
 
-        // Haal afstand-config op voor full-final (nodig voor finaleHg en B-verdeling)
+        // Haal afstand-config op (nodig voor finaleHg, B-verdeling en seeding-methode)
         $finaleHg       = 6;
         $bFinaleHg      = 6;
         $bLaatstGrootst = true;
+        $finaleSeeding  = 'slang';
         $bSlots         = [];
 
-        if ($isFullFinal) {
-            // Zoek afstand_naam via een bestaande tijdschema_rit voor deze cat
-            $afNaamStmt = $pdo->prepare("
-                SELECT afstand_naam FROM tijdschema_ritten
-                WHERE tijdschema_id = ? AND dc_id = ?
-                  AND (distance_id = ? OR (distance_id IS NULL AND ? = ''))
+        // Zoek afstand_naam via een bestaande tijdschema_rit voor deze cat
+        $afNaamStmt = $pdo->prepare("
+            SELECT afstand_naam FROM tijdschema_ritten
+            WHERE tijdschema_id = ? AND dc_id = ?
+              AND (distance_id = ? OR (distance_id IS NULL AND ? = ''))
+            LIMIT 1
+        ");
+        $afNaamStmt->execute([$tsId, $dcId, $distanceId, $distanceId]);
+        $afstandNaam = $afNaamStmt->fetchColumn();
+
+        if ($afstandNaam) {
+            $afCfgStmt = $pdo->prepare("
+                SELECT finale_heat_grootte, finale_b_grootte, laatste_b_grootste, finale_seeding
+                FROM tijdschema_afstand_config
+                WHERE tijdschema_id = ? AND afstand_naam = ?
                 LIMIT 1
             ");
-            $afNaamStmt->execute([$tsId, $dcId, $distanceId, $distanceId]);
-            $afstandNaam = $afNaamStmt->fetchColumn();
-
-            if ($afstandNaam) {
-                $afCfgStmt = $pdo->prepare("
-                    SELECT finale_heat_grootte, finale_b_grootte, laatste_b_grootste
-                    FROM tijdschema_afstand_config
-                    WHERE tijdschema_id = ? AND afstand_naam = ?
-                    LIMIT 1
-                ");
-                $afCfgStmt->execute([$tsId, $afstandNaam]);
-                $afCfg = $afCfgStmt->fetch(PDO::FETCH_ASSOC);
-                if ($afCfg) {
-                    $finaleHg       = max(2, (int)($afCfg['finale_heat_grootte'] ?? 6));
-                    $bFinaleHgRaw   = max(2, (int)($afCfg['finale_b_grootte']    ?? 6));
-                    $bFinaleHg      = max($finaleHg, $bFinaleHgRaw); // B mag nooit kleiner zijn dan A
-                    $bLaatstGrootst = !empty($afCfg['laatste_b_grootste']);
-                }
+            $afCfgStmt->execute([$tsId, $afstandNaam]);
+            $afCfg = $afCfgStmt->fetch(PDO::FETCH_ASSOC);
+            if ($afCfg) {
+                $finaleHg       = max(1, (int)($afCfg['finale_heat_grootte'] ?? 6));
+                $bFinaleHgRaw   = max(1, (int)($afCfg['finale_b_grootte']    ?? 6));
+                $bFinaleHg      = max($finaleHg, $bFinaleHgRaw);
+                $bLaatstGrootst = !empty($afCfg['laatste_b_grootste']);
+                $finaleSeeding  = $afCfg['finale_seeding'] ?? 'slang';
             }
         }
 
@@ -895,24 +895,45 @@ if ($action === 'genereer_volgende_ronde') {
             ];
         }
 
-        // ── Snake-seed alle slots (incl. lege) naar dest-heats ───────────────
-        // Elk slot verhoogt de startpositie-teller, ook als het slot leeg is.
-        // Zo blijven posities correct gereserveerd voor nog niet gespeelde heats.
+        // ── Seed alle slots naar dest-heats ──────────────────────────────────
         $heatNummers     = array_keys($heatIds);
         sort($heatNummers);
         $nDest           = count($heatNummers);
         $aantalSlots     = count($allSlots);
 
-        // Genereer slangenpatroon voor alle slots
         $seq = [];
-        $si  = 0;
-        while ($si < $aantalSlots) {
-            for ($h = 0; $h < $nDest && $si < $aantalSlots; $h++, $si++) {
-                $seq[] = $heatNummers[$h];
+        if ($finaleSeeding === 'tijdkoppeling') {
+            // Tijdkoppeling: langzaamsten eerst, snelsten in laatste heat.
+            // allSlots is gesorteerd snelste eerst (index 0 = snelste).
+            // Bouw paren van achteren: (N-1,N-2), (N-3,N-4), ..., (1,0)
+            // Binnen elk paar: snelste op startpositie 1 (mag startkant kiezen).
+            $paired = [];
+            for ($i = $aantalSlots - 1; $i >= 0; $i -= 2) {
+                $pair = [];
+                if ($i - 1 >= 0) $pair[] = $allSlots[$i - 1]; // snelste van het paar
+                $pair[] = $allSlots[$i];                        // langzaamste van het paar
+                $paired[] = $pair;
             }
-            if ($si >= $aantalSlots) break;
-            for ($h = $nDest - 1; $h >= 0 && $si < $aantalSlots; $h--, $si++) {
-                $seq[] = $heatNummers[$h];
+            // paired[0] = langzaamste paar → heat 1, paired[last] = snelste paar → laatste heat
+            $allSlots = [];
+            foreach ($paired as $hi => $pair) {
+                $hNr = $heatNummers[$hi] ?? end($heatNummers);
+                foreach ($pair as $rijder) {
+                    $allSlots[] = $rijder;
+                    $seq[] = $hNr;
+                }
+            }
+        } else {
+            // Slangenpatroon (standaard): gelijke sterkte per heat
+            $si = 0;
+            while ($si < $aantalSlots) {
+                for ($h = 0; $h < $nDest && $si < $aantalSlots; $h++, $si++) {
+                    $seq[] = $heatNummers[$h];
+                }
+                if ($si >= $aantalSlots) break;
+                for ($h = $nDest - 1; $h >= 0 && $si < $aantalSlots; $h--, $si++) {
+                    $seq[] = $heatNummers[$h];
+                }
             }
         }
 

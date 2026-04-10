@@ -55,6 +55,7 @@ CREATE TABLE tijdschema_afstand_config (
     finale_heat_grootte TINYINT UNSIGNED NOT NULL DEFAULT 6,
     finale_b_grootte    TINYINT UNSIGNED NOT NULL DEFAULT 6,
     laatste_b_grootste  TINYINT(1)       NOT NULL DEFAULT 1,
+    finale_seeding      ENUM('slang','tijdkoppeling') NOT NULL DEFAULT 'slang',
     heeft_runner_up     TINYINT(1)    NOT NULL DEFAULT 0,
     runner_up_max       TINYINT UNSIGNED NOT NULL DEFAULT 6,
     runner_up_min       TINYINT UNSIGNED NOT NULL DEFAULT 0,
@@ -90,6 +91,7 @@ CREATE TABLE tijdschema_cat_config (
     half_door           SMALLINT UNSIGNED NOT NULL DEFAULT 4,
     half_q_heat         TINYINT UNSIGNED  NOT NULL DEFAULT 1,
     heeft_runner_up     TINYINT(1)    NOT NULL DEFAULT 0,
+    finale_heats        TINYINT UNSIGNED NOT NULL DEFAULT 1,
     PRIMARY KEY (id),
     UNIQUE KEY uq_tcc (tijdschema_id, dc_id, distance_id),
     CONSTRAINT fk_tcc_schema
