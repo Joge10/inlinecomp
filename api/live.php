@@ -840,7 +840,7 @@ if ($action === 'genereer_volgende_ronde') {
         $delTypes = ['finale_a', 'finale_b'];
         foreach ($delTypes as $delType) {
             $delIds = $pdo->prepare("
-                SELECT h.id FROM heats h
+                SELECT h.id, h.tijdschema_rit_id FROM heats h
                 JOIN tijdschema_ritten r ON r.id = h.tijdschema_rit_id
                 WHERE h.competition_id          = ?
                   AND h.distance_combination_id = ?
@@ -848,10 +848,21 @@ if ($action === 'genereer_volgende_ronde') {
                   AND r.ronde_type = ?
             ");
             $delIds->execute([$compId, $dcId, $distanceId, $distanceId, $delType]);
-            $ids = $delIds->fetchAll(PDO::FETCH_COLUMN);
+            $rows = $delIds->fetchAll(PDO::FETCH_ASSOC);
+            $ids    = array_column($rows, 'id');
+            $ritIds = array_filter(array_column($rows, 'tijdschema_rit_id'));
             if ($ids) {
                 $ph = implode(',', array_fill(0, count($ids), '?'));
                 $pdo->prepare("DELETE FROM heats WHERE id IN ($ph)")->execute($ids);
+            }
+            // Verwijder ook extra tijdschema_ritten die door ex-aequo overflow zijn aangemaakt
+            // (herkenbaar: rit_naam bevat 'ex-aequo')
+            if ($ritIds) {
+                $ph2 = implode(',', array_fill(0, count($ritIds), '?'));
+                $pdo->prepare("
+                    DELETE FROM tijdschema_ritten
+                    WHERE id IN ($ph2) AND rit_naam LIKE '%ex-aequo%'
+                ")->execute($ritIds);
             }
         }
         // Fallback: ook heats zonder rit-koppeling op ronde=N opruimen
@@ -896,6 +907,90 @@ if ($action === 'genereer_volgende_ronde') {
                 'rit_naam' => $rit['rit_naam'],
                 'rijders'  => [],
             ];
+        }
+
+        // ── Multi-finale overflow: merge + herverdeel VÓÓR de normale seeding ──
+        $isMultiFinale = !$isFullFinal && ($naarRondeType === 'finale_a') && (count($heatIds) > 1) && !empty($overflowRijders);
+        if ($isMultiFinale) {
+            $allSlots = array_merge($allSlots, $overflowRijders);
+            $overflowRijders = []; // verwerkt
+
+            $aantalSlots = count($allSlots);
+            $heatNummers = array_keys($heatIds);
+            sort($heatNummers);
+            $origPerHeat = max(1, (int)round(($aantalSlots - count($overflowRijders)) / max(1, count($heatNummers))));
+            $neededHeats = (int)ceil($aantalSlots / max(1, $origPerHeat ?: 2));
+
+            // Extra heats aanmaken als nodig
+            while (count($heatIds) < $neededHeats) {
+                // Bij tijdkoppeling: extra heat vóór de rest (laag heat_nr → langzaamsten)
+                if ($finaleSeeding === 'tijdkoppeling') {
+                    $extraHeatNr = min(array_keys($heatIds)) - 1;
+                } else {
+                    $extraHeatNr = max(array_keys($heatIds)) + 1;
+                }
+                $afNaam = $refRit['afstand_naam'] ?? ($volgendeRitten[0]['afstand_naam'] ?? '');
+                $dcNaamExtra = $volgendeRitten[0]['dc_naam'] ?? '';
+                $extraNaam = "A-finale heat ex-aequo (extra) {$afNaam} – {$dcNaamExtra}";
+                $extraVerwacht = max(1, (int)ceil(($aantalSlots - $origPerHeat * count($heatIds)) / max(1, $neededHeats - count($heatIds))));
+
+                $refRitStmt = $pdo->prepare("
+                    SELECT r.id, r.blok_id, r.volgorde, r.tijdschema_id, r.afstand_naam
+                    FROM tijdschema_ritten r
+                    JOIN competition_tijdschema ct ON ct.id = r.tijdschema_id
+                    WHERE ct.competition_id = ? AND r.dc_id = ? AND r.ronde_type = 'finale_a'
+                    ORDER BY r.volgorde ASC LIMIT 1
+                ");
+                $refRitStmt->execute([$compId, $dcId]);
+                $refRit = $refRitStmt->fetch(PDO::FETCH_ASSOC);
+                $ritVolgorde = $refRit ? (int)$refRit['volgorde'] : 0;
+
+                // Schuif alle bestaande finale-ritten van deze categorie 1 positie op
+                if ($refRit) {
+                    $pdo->prepare("
+                        UPDATE tijdschema_ritten
+                        SET volgorde = volgorde + 1
+                        WHERE tijdschema_id = ?
+                          AND dc_id = ?
+                          AND ronde_type = 'finale_a'
+                          AND volgorde >= ?
+                    ")->execute([$refRit['tijdschema_id'], $dcId, $ritVolgorde]);
+
+                    // Update ook de heats.rit_volgorde
+                    $pdo->prepare("
+                        UPDATE heats h
+                        JOIN tijdschema_ritten r ON r.id = h.tijdschema_rit_id
+                        SET h.rit_volgorde = r.volgorde
+                        WHERE h.competition_id = ?
+                          AND h.distance_combination_id = ?
+                          AND h.ronde = ?
+                    ")->execute([$compId, $dcId, $rondeNr]);
+                }
+
+                $extraRitId = null;
+                if ($refRit) {
+                    $pdo->prepare("
+                        INSERT INTO tijdschema_ritten
+                            (tijdschema_id, blok_id, volgorde, dc_id, distance_id,
+                             afstand_naam, ronde_type, heat_nr, rit_naam, dc_naam, verwacht)
+                        VALUES (?, ?, ?, ?, ?, ?, 'finale_a', ?, ?, ?, ?)
+                    ")->execute([
+                        $refRit['tijdschema_id'], $refRit['blok_id'], $ritVolgorde,
+                        $dcId, $distanceId ?: null,
+                        $afNaam, $extraHeatNr, $extraNaam,
+                        $dcNaamExtra, $extraVerwacht,
+                    ]);
+                    $extraRitId = (int)$pdo->lastInsertId();
+                }
+                $insHeat->execute([
+                    $compId, $dcId, $distanceId ?: null,
+                    $rondeNr, $extraRitId, $ritVolgorde,
+                    $extraNaam, $extraHeatNr, $dcIdsJson,
+                ]);
+                $heatIds[$extraHeatNr] = [
+                    'id' => (int)$pdo->lastInsertId(), 'rit_naam' => $extraNaam, 'rijders' => [],
+                ];
+            }
         }
 
         // ── Seed alle slots naar dest-heats ──────────────────────────────────
@@ -970,37 +1065,7 @@ if ($action === 'genereer_volgende_ronde') {
         if (!$isFullFinal && !empty($overflowRijders)) {
             // Meerdere finale-heats (bijv. DTT): maak extra heat(s) aan
             // KF/HF of 1 finale-heat: voeg toe aan bestaande heats (heat 1, 2, ...)
-            $isMultiFinale = ($naarRondeType === 'finale_a') && ($nDest > 1);
-
-            if ($isMultiFinale) {
-                // Extra heat(s) aanmaken voor overflow-rijders
-                $extraHeatNr = max($heatNummers) + 1;
-                $perHeat = max(1, (int)ceil(count($allSlots) / $nDest)); // zelfde grootte als andere heats
-                $extraHeats = array_chunk($overflowRijders, max(1, $perHeat));
-
-                foreach ($extraHeats as $chunk) {
-                    $extraNaam = "A-finale heat {$extraHeatNr} (ex-aequo)";
-                    $insHeat->execute([
-                        $compId, $dcId, $distanceId ?: null,
-                        $rondeNr, null, null,
-                        $extraNaam, $extraHeatNr, $dcIdsJson,
-                    ]);
-                    $extraId = (int)$pdo->lastInsertId();
-                    $heatIds[$extraHeatNr] = ['id' => $extraId, 'rit_naam' => $extraNaam, 'rijders' => []];
-
-                    $pos = 0;
-                    foreach ($chunk as $rijder) {
-                        $pos++;
-                        $insEntry->execute([$extraId, $rijder['person_license'], $rijder['categorie'], $pos, $rijder['startnummer']]);
-                        $heatIds[$extraHeatNr]['rijders'][] = [
-                            'startpositie' => $pos,
-                            'full_name'    => $rijder['full_name'],
-                            'club_short'   => $rijder['club_short'],
-                        ];
-                    }
-                    $extraHeatNr++;
-                }
-            } else {
+            {
                 // KF/HF/enkele finale: overflow toevoegen aan bestaande heats (heat 1, 2, ...)
                 $overflowIdx = 0;
                 foreach ($overflowRijders as $rijder) {
