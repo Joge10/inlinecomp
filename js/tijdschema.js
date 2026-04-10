@@ -448,22 +448,8 @@ function renderAfstandPanel(afstand, cfg, catConfigMap) {
                     </span>
                     <span class="ts-veld-hint">0 = geen minimum</span>
                 </div>
-                <div class="ts-gedeeld-rij">
-                    <span class="ts-gedeeld-lbl">Finale-grootte</span>
-                    <span class="ts-gedeeld-inputs">
-                        <input type="number" name="finale_heat_grootte" value="${fHg}"
-                               min="1" class="ts-inp-sm"> rijders in de finale
-                    </span>
-                </div>
-                <div class="ts-gedeeld-rij">
-                    <span class="ts-gedeeld-lbl">Finale-seeding</span>
-                    <span class="ts-gedeeld-inputs">
-                        <select name="finale_seeding" class="ts-sel-sm">
-                            <option value="slang" ${(cfg?.finale_seeding ?? 'slang') === 'slang' ? 'selected' : ''}>Slangenpatroon (standaard)</option>
-                            <option value="tijdkoppeling" ${cfg?.finale_seeding === 'tijdkoppeling' ? 'selected' : ''}>Tijdkoppeling (langzaamsten eerst, snelsten laatste heat)</option>
-                        </select>
-                    </span>
-                </div>`;
+                <input type="hidden" name="finale_heat_grootte" value="${fHg}">
+`;
     }
 
     html += `
@@ -493,7 +479,7 @@ function renderAfstandPanel(afstand, cfg, catConfigMap) {
                 <th colspan="3" class="ts-th-sectie">Series</th>
                 <th colspan="4" class="ts-th-sectie ts-sectie-start">Kwartfinale</th>
                 <th colspan="4" class="ts-th-sectie ts-sectie-start">Halve finale</th>
-                <th colspan="1" class="ts-th-sectie ts-sectie-start">Finale</th>
+                <th colspan="2" class="ts-th-sectie ts-sectie-start">Finale</th>
             </tr><tr>
                 <th class="ts-th-c">Rijdt<br>series</th>
                 <th class="ts-th-c">Aantal<br>heats</th>
@@ -507,6 +493,7 @@ function renderAfstandPanel(afstand, cfg, catConfigMap) {
                 <th class="ts-th-c">Totaal<br>door →</th>
                 <th class="ts-th-c">Q per<br>heat</th>
                 <th class="ts-th-c ts-sectie-start">Aantal<br>heats</th>
+                <th class="ts-th-c">Seeding</th>
             </tr>`;
     }
 
@@ -604,8 +591,15 @@ function renderAfstandPanel(afstand, cfg, catConfigMap) {
             </td>
             <td class="ts-td-c ts-sectie-start">
                 <input type="number" name="finale_heats" value="${cc?.finale_heats ?? 1}"
-                       min="1" max="30" class="ts-inp-sm"
+                       min="1" max="30" class="ts-inp-sm ts-inp-finale-heats"
                        title="Aantal A-finale heats">
+            </td>
+            <td class="ts-td-c">
+                <select name="finale_seeding" class="ts-sel-sm ts-sel-finale-seeding"
+                        title="Slangenpatroon: gelijke sterkte per heat&#10;Tijdkoppeling: langzaamsten in heat 1, snelsten in laatste heat (200m DTT)">
+                    <option value="slang" ${(cfg?.finale_seeding ?? 'slang') === 'slang' ? 'selected' : ''}>Standaard</option>
+                    <option value="tijdkoppeling" ${cfg?.finale_seeding === 'tijdkoppeling' ? 'selected' : ''}>Tijdkoppeling</option>
+                </select>
             </td>`;
         } else {
             // Full-final: verborgen velden zodat save-handler waarden heeft
@@ -1555,6 +1549,17 @@ function bindTsEvents(afstandGroepen) {
             if (spanK) spanK.textContent = qDoor > 0 ? berekenPerHeat(qDoor, nKH) + '/h' : '—';
             tr.querySelector('.ts-inp-kwart-aantal')?.setAttribute('data-q', qDoor);
             updateCalc(inp.closest('.ts-panel-form'), afstandGroepen);
+        });
+    });
+
+    // Auto-switch finale-seeding bij wijziging finale_heats: 1 → standaard, ≥2 → tijdkoppeling
+    container.querySelectorAll('.ts-inp-finale-heats').forEach(inp => {
+        inp.addEventListener('change', () => {
+            const sel = inp.closest('tr')?.querySelector('.ts-sel-finale-seeding');
+            if (!sel) return;
+            const n = parseInt(inp.value) || 1;
+            if (n < 1) inp.value = 1;
+            sel.value = n >= 2 ? 'tijdkoppeling' : 'slang';
         });
     });
 

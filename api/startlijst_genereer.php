@@ -313,17 +313,19 @@ try {
     // Tijdschema_ritten opzoeken voor correcte rit_naam, volgorde en heat_nr
     // Gebruik de ronde_type die via de URL is meegegeven (bijv. 'kwartfinale' voor
     // categorieën die niet met series beginnen).
+    // Zoek tijdschema_ritten: probeer eerst op dc_id + distance_id, dan op dc_id alleen
+    $dcPh = implode(',', array_fill(0, count($dcIds), '?'));
     $ritStmt = $pdo->prepare("
         SELECT r.id, r.heat_nr, r.volgorde, r.rit_naam
         FROM tijdschema_ritten r
         JOIN competition_tijdschema ts ON ts.id = r.tijdschema_id
         WHERE ts.competition_id = ?
-          AND r.dc_id           = ?
-          AND (r.distance_id = ? OR (r.distance_id IS NULL AND ? = ''))
+          AND r.dc_id IN ($dcPh)
+          AND (r.distance_id = ? OR r.distance_id IS NULL OR ? = '')
           AND r.ronde_type = ?
         ORDER BY r.heat_nr
     ");
-    $ritStmt->execute([$compId, $primaryDcId, $distId, $distId, $rondeType]);
+    $ritStmt->execute(array_merge([$compId], $dcIds, [$distId, $distId, $rondeType]));
     $rittenMap = []; // heat_nr → { id, volgorde, rit_naam }
     foreach ($ritStmt->fetchAll(PDO::FETCH_ASSOC) as $r) {
         $rittenMap[(int)$r['heat_nr']] = $r;
