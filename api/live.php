@@ -945,26 +945,14 @@ if ($action === 'genereer_volgende_ronde') {
                 $refRit = $refRitStmt->fetch(PDO::FETCH_ASSOC);
                 $ritVolgorde = $refRit ? (int)$refRit['volgorde'] : 0;
 
-                // Schuif alle bestaande finale-ritten van deze categorie 1 positie op
+                // Schuif ALLE ritten in het tijdschema op die op of na de insert-positie komen
                 if ($refRit) {
                     $pdo->prepare("
                         UPDATE tijdschema_ritten
                         SET volgorde = volgorde + 1
                         WHERE tijdschema_id = ?
-                          AND dc_id = ?
-                          AND ronde_type = 'finale_a'
                           AND volgorde >= ?
-                    ")->execute([$refRit['tijdschema_id'], $dcId, $ritVolgorde]);
-
-                    // Update ook de heats.rit_volgorde
-                    $pdo->prepare("
-                        UPDATE heats h
-                        JOIN tijdschema_ritten r ON r.id = h.tijdschema_rit_id
-                        SET h.rit_volgorde = r.volgorde
-                        WHERE h.competition_id = ?
-                          AND h.distance_combination_id = ?
-                          AND h.ronde = ?
-                    ")->execute([$compId, $dcId, $rondeNr]);
+                    ")->execute([$refRit['tijdschema_id'], $ritVolgorde]);
                 }
 
                 $extraRitId = null;
