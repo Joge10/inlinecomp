@@ -2509,7 +2509,7 @@ ${footerHtml}
     win.document.write(htmlDoc);
     win.document.close();
     win.focus();
-    setTimeout(() => win.print(), 500);
+    setTimeout(() => { win.print(); win.close(); }, 500);
 }
 
 // ── Publiceer intern tijdschema ───────────────────────────────────────────────
@@ -2851,7 +2851,7 @@ ${footerHtml}
     win.document.write(htmlDoc);
     win.document.close();
     win.focus();
-    setTimeout(() => win.print(), 500);
+    setTimeout(() => { win.print(); win.close(); }, 500);
 }
 
 // ── Hulpfuncties ──────────────────────────────────────────────────────────────

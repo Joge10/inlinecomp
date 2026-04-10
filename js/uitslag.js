@@ -932,7 +932,7 @@ ${footerHtml}
     win.document.write(htmlDoc);
     win.document.close();
     win.focus();
-    setTimeout(() => win.print(), 400);
+    setTimeout(() => { win.print(); win.close(); }, 400);
 }
 
 // ── Per-afstand uitslag afdrukken ────────────────────────────────────────────
@@ -1015,7 +1015,7 @@ async function _drukAfstandUitslag(optData) {
         win.document.write(htmlDoc);
         win.document.close();
         win.focus();
-        setTimeout(() => win.print(), 400);
+        setTimeout(() => { win.print(); win.close(); }, 400);
         return;
     }
 
@@ -1064,7 +1064,7 @@ async function _drukAfstandUitslag(optData) {
     win.document.write(htmlDoc);
     win.document.close();
     win.focus();
-    setTimeout(() => win.print(), 400);
+    setTimeout(() => { win.print(); win.close(); }, 400);
 }
 
 // ── HTML-bouwer voor per-afstand print ───────────────────────────────────────
