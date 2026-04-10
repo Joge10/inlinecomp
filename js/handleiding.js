@@ -539,14 +539,9 @@ function hlgContent() { return `
       <td>Regionale wedstrijden</td>
     </tr>
     <tr>
-      <td><strong>Internationaal oud</strong></td>
-      <td>Knock-out per ronde. Optioneel: kwartfinale en halve finale. B-finale voor verliezers halve finale. Runner-up voor uitvallers in de series.</td>
-      <td>Grotere nationale wedstrijden (klassiek KNSB-format)</td>
-    </tr>
-    <tr>
-      <td><strong>Internationaal nieuw</strong></td>
-      <td>Knock-out per ronde. Optioneel: kwartfinale en halve finale. Geen B-finale; wel optionele runner-up. Modern KNSB-format.</td>
-      <td>NK, kampioenschappen</td>
+      <td><strong>Internationaal</strong></td>
+      <td>Knock-out per ronde. Optioneel: kwartfinale en halve finale. Optionele runner-up voor niet-gekwalificeerden. KNSB/World Skate format.</td>
+      <td>Nationale wedstrijden, NK, kampioenschappen</td>
     </tr>
   </tbody>
 </table>
@@ -560,9 +555,9 @@ function hlgContent() { return `
     <div style="background:#f5f7fa;border:1px solid #dde;border-radius:6px;padding:8px 12px">
       <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">
         <span style="font-size:.74rem;color:#555;font-weight:600">Competitiesysteem</span>
-        <div style="border:1px solid #ccc;border-radius:4px;padding:4px 10px;background:#fff;font-size:.77rem;color:#1a3a5c">Internationaal nieuw ▾</div>
+        <div style="border:1px solid #ccc;border-radius:4px;padding:4px 10px;background:#fff;font-size:.77rem;color:#1a3a5c">Internationaal ▾</div>
         <div style="border:1px solid #ccc;border-radius:4px;padding:4px 8px;font-size:.73rem;color:#aaa;background:#f8f8f8">Opslaan</div>
-        <span style="background:#d4edda;color:#155724;border-radius:10px;padding:2px 9px;font-size:.69rem;font-weight:600">✔ Actief: Internationaal nieuw</span>
+        <span style="background:#d4edda;color:#155724;border-radius:10px;padding:2px 9px;font-size:.69rem;font-weight:600">✔ Actief: Internationaal</span>
       </div>
       <div style="margin-top:8px;font-size:.72rem;color:#444;border-left:3px solid #1a3a5c;padding-left:8px;line-height:1.5">
         <strong>Modern knock-outsysteem</strong> — uitval per ronde, geen B-finales maar wel een runner-up optie.<br>

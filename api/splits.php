@@ -54,6 +54,30 @@ if (!is_array($splits)) {
 }
 
 try {
+    // ── Blokkeer als er al heats of tijdschema-config bestaan ────────────
+    $heatCheck = $pdo->prepare("
+        SELECT COUNT(*) FROM heats
+        WHERE competition_id = ? AND distance_combination_id = ?
+    ");
+    $heatCheck->execute([$compId, $dcId]);
+    if ((int)$heatCheck->fetchColumn() > 0) {
+        http_response_code(409);
+        echo json_encode(['error' => 'Splitsen niet mogelijk: er bestaan al startlijsten voor deze categorie. Wis eerst de loting in de Startlijsten-module.']);
+        exit;
+    }
+
+    $tsCheck = $pdo->prepare("
+        SELECT COUNT(*) FROM tijdschema_cat_config tcc
+        JOIN competition_tijdschema ct ON ct.id = tcc.tijdschema_id
+        WHERE ct.competition_id = ? AND tcc.dc_id = ?
+    ");
+    $tsCheck->execute([$compId, $dcId]);
+    if ((int)$tsCheck->fetchColumn() > 0) {
+        http_response_code(409);
+        echo json_encode(['error' => 'Splitsen niet mogelijk: deze categorie is al geconfigureerd in het tijdschema. Verwijder het tijdschema eerst.']);
+        exit;
+    }
+
     // Verwijder eerst alle bestaande splits voor déze DC
     $pdo->prepare("DELETE FROM dc_splits WHERE dc_id = ? AND competition_id = ?")
         ->execute([$dcId, $compId]);
