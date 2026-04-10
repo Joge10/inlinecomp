@@ -590,6 +590,10 @@ function _liveRenderCarousel() {
 
 // ── Links panel: alle rijders in categorie+ronde ──────────────────────────────
 
+function _liveInitPanelListeners() {
+    el('live-btn-opslaan-panel')?.addEventListener('click', () => _liveOpslaanLinksPanel());
+}
+
 function _liveBouwLinksPanel(dcId, distanceId, rondeType) {
     const ritten = _liveRitten.filter(r =>
         r.dc_id === dcId &&
@@ -2068,6 +2072,20 @@ async function _liveOpslaanRit(ritIdx) {
             _liveSyncInvoer(r.entry_id, r.tijd_ms ? _msTijdNaarDisplay(r.tijd_ms) : '', r.sanctie || '');
         });
         _livePanelHerbereken();
+
+        // Als de ronde compleet is: herbouw het linkerpaneel zodat Q/q markers verschijnen
+        const panelEl = el('live-panel-links');
+        if (panelEl) {
+            const pDcId     = panelEl.dataset.dcId;
+            const pDistId   = panelEl.dataset.distanceId;
+            const pRondeType = panelEl.dataset.rondeType;
+            if (pDcId && pRondeType) {
+                const nieuwePanel = _liveBouwLinksPanel(pDcId, pDistId, pRondeType);
+                panelEl.outerHTML = nieuwePanel;
+                // Re-attach panel event listeners
+                _liveInitPanelListeners();
+            }
+        }
 
         // Update dropdown-icoon voor deze rit
         const dropdown = el('live-nav-dropdown');
