@@ -572,7 +572,7 @@ col.pr-col-opm{width:60px}
 .pr-wrap{width:100%;border-collapse:collapse}
 .pr-wrap thead td{padding:0}
 .pr-wrap .pr-hdr-row td{padding-bottom:.2cm;border-bottom:2px solid #1a3a5c}
-.pr-wrap .pr-hdr-spacer td{height:.5cm}
+.pr-wrap .pr-hdr-spacer td{height:0.3cm}
 .pr-wrap tbody td{padding:0}
 .pr-hdr-inner{display:flex;justify-content:space-between;align-items:flex-end}
 </style></head>
@@ -604,7 +604,182 @@ col.pr-col-opm{width:60px}
     win.document.write(htmlDoc);
     win.document.close();
     win.focus();
-    setTimeout(() => win.print(), 400);
+    setTimeout(() => {
+        win.print();
+        win.close();
+    }, 400);
+}
+
+// ── Download alle startlijsten als ZIP met PDFs ─────────────────────────────
+
+async function downloadAlleStartlijsten() {
+    if (typeof html2pdf === 'undefined' || typeof JSZip === 'undefined') {
+        toonBevestigDialog('PDF-libraries worden nog geladen. Probeer het over een paar seconden opnieuw.', 'Even geduld');
+        return;
+    }
+
+    const btn = el('sl-btn-download-all');
+    if (btn) { btn.disabled = true; btn.textContent = '⏳ Genereren…'; }
+
+    try {
+        const zip = new JSZip();
+        const printOpties = _slPrintOpties;
+        if (!printOpties?.size) {
+            toonBevestigDialog('Geen startlijsten beschikbaar om te downloaden.', 'Download');
+            return;
+        }
+
+        let teller = 0;
+        let totaal = 0;
+        // Tel totaal
+        for (const [, distMap] of printOpties)
+            for (const [, { ronden }] of distMap)
+                totaal += ronden.length;
+
+        for (const [catLabel, distMap] of printOpties) {
+            for (const [distId, { distNaam, ronden }] of distMap) {
+                for (const ronde of ronden) {
+                    const optData = ronde.optData;
+                    teller++;
+                    if (btn) btn.textContent = `⏳ ${teller}/${totaal}…`;
+
+                    // Genereer de print-HTML (hergebruik bestaande functie)
+                    const htmlStr = await _bouwStartlijstHtml(optData);
+                    if (!htmlStr) continue;
+
+                    // Bepaal bestandsnaam: Cat-Afstand-Ronde.pdf
+                    const safeNaam = s => String(s).replace(/[^a-zA-Z0-9À-ÿ _()-]/g, '').trim();
+                    const bestandsnaam = `${safeNaam(catLabel)}-${safeNaam(distNaam)}-${safeNaam(optData.rondeLabel)}.pdf`;
+
+                    // Genereer PDF via html2pdf vanuit HTML string
+                    // Wrap in een volledig HTML document zodat styles correct gerenderd worden
+                    const fullHtml = `<html><head><style>
+                        *{box-sizing:border-box}
+                        body{font-family:Arial,sans-serif;font-size:9pt;color:#111;margin:0;padding:0}
+                    </style></head><body>${htmlStr}</body></html>`;
+
+                    const pdfBlob = await html2pdf().set({
+                        margin:      [8, 10, 12, 10],
+                        filename:    bestandsnaam,
+                        image:       { type: 'jpeg', quality: 0.95 },
+                        html2canvas: { scale: 2, useCORS: true, scrollY: 0 },
+                        jsPDF:       { unit: 'mm', format: 'a4', orientation: 'landscape' },
+                    }).from(fullHtml, 'string').outputPdf('blob');
+
+                    zip.file(bestandsnaam, pdfBlob);
+                }
+            }
+        }
+
+        if (teller === 0) {
+            toonBevestigDialog('Geen startlijsten gevonden om te downloaden.', 'Download');
+            return;
+        }
+
+        // Genereer en download ZIP met datum+tijd in de naam
+        if (btn) btn.textContent = '⏳ ZIP maken…';
+        const zipBlob = await zip.generateAsync({ type: 'blob' });
+        const nu = new Date();
+        const datum = nu.toISOString().slice(0,10);
+        const tijd = String(nu.getHours()).padStart(2,'0') + String(nu.getMinutes()).padStart(2,'0');
+        const compNaam = (huidigComp?.name ?? 'wedstrijd').replace(/[^a-zA-Z0-9À-ÿ()-]/g, '_').replace(/_+/g, '_');
+        const zipNaam = `Startlijsten_${compNaam}_${datum}_${tijd}.zip`;
+
+        const a = document.createElement('a');
+        a.href = URL.createObjectURL(zipBlob);
+        a.download = zipNaam;
+        a.click();
+        URL.revokeObjectURL(a.href);
+
+    } catch (e) {
+        toonBevestigDialog('Fout bij genereren: ' + e.message, 'Download');
+    } finally {
+        // Ruim eventuele achtergebleven containers op
+        document.querySelectorAll('[data-pdf-temp]').forEach(el => el.remove());
+        if (btn) { btn.disabled = false; btn.textContent = '📥 Download alles'; }
+    }
+}
+
+// ── Helper: genereer print-HTML string voor één startlijst (zonder venster) ──
+
+async function _bouwStartlijstHtml(optData) {
+    const { cacheKey, dcIds, dcName, distId, distNaam, categoryFilter,
+            rondeSleutel = 'heats', rondeLabel = 'Series' } = optData;
+
+    // Data laden
+    let data = startlijstCache[cacheKey]?.resultaat;
+    if (!data) {
+        try {
+            const cf  = Array.isArray(categoryFilter) ? categoryFilter : [];
+            const url = `api/startlijst_laden.php`
+                      + `?competition_id=${encodeURIComponent(huidigCompId)}`
+                      + `&dc_ids=${encodeURIComponent((dcIds ?? [optData.dcId]).join(','))}`
+                      + `&distance_id=${encodeURIComponent(distId ?? '')}`
+                      + (cf.length ? `&category_filter=${encodeURIComponent(cf.join(','))}` : '')
+                      + `&_t=${Date.now()}`;
+            const res = await fetch(url);
+            data = await res.json();
+            if (!data?.exists) return null;
+        } catch { return null; }
+    }
+
+    const esc = s => String(s ?? '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+    const comp = huidigComp;
+    const datum   = comp?.starts ? formatDatum(comp.starts) : '';
+    const locatie = comp ? getLocatie(comp) : '';
+    const metaTxt = [datum, locatie].filter(Boolean).join(' · ');
+    const distLabel = distNaam ? ` – ${distNaam}` : '';
+
+    // Heats bepalen
+    let afdrukHeats;
+    if (rondeSleutel === 'full_final_finales') {
+        const bRonde = (data.volgende_rondes ?? []).find(vr => vr.ronde_type === 'finale_b');
+        const aRonde = (data.volgende_rondes ?? []).find(vr => vr.ronde_type === 'finale_a');
+        const bHeats = [...(bRonde?.heats ?? [])].sort((a, b) => b.nummer - a.nummer);
+        const aHeats = aRonde?.heats ?? [];
+        afdrukHeats = [...bHeats, ...aHeats];
+    } else {
+        afdrukHeats = (!optData.rondeNr || optData.rondeNr <= 1 || rondeSleutel === 'heats')
+            ? (data.heats ?? [])
+            : ((data.volgende_rondes ?? []).find(vr => vr.ronde_type === rondeSleutel)?.heats ?? []);
+    }
+    if (!afdrukHeats.length) return null;
+
+    const totaalHeats = afdrukHeats.length;
+
+    // HTML bouwen
+    let cardsHtml = '';
+    for (const heat of afdrukHeats) {
+        let naam = heat.heat_naam || `Heat ${heat.nummer}`;
+        if (totaalHeats > 1) naam = naam.replace(/\bHeat\s+(\d+)\b/i, `Heat $1/${totaalHeats}`);
+        let rows = '';
+        (heat.rijders ?? []).forEach((r, i) => {
+            rows += `<tr>
+                <td style="color:#aaa;text-align:center;font-size:7.5pt">${i + 1}</td>
+                <td style="text-align:right;font-weight:600;color:#1a3a5c">${esc(r.start_number ?? '')}</td>
+                <td style="font-size:7.5pt;color:#666">${esc(r.categorie ?? r.category ?? '')}</td>
+                <td>${esc(r.full_name ?? '')}</td>
+            </tr>`;
+        });
+        cardsHtml += `<div style="border:1px solid #bbb;border-radius:5px;overflow:hidden;break-inside:avoid">
+            <div style="background:#e8ecf0;color:#000;padding:5px 8px;font-weight:700;font-size:8.5pt;border-bottom:2px solid #000">${esc(naam)}</div>
+            <table style="width:100%;border-collapse:collapse;font-size:9.5pt">
+            <tbody>${rows}</tbody></table>
+        </div>`;
+    }
+
+    return `<div style="font-family:Arial,sans-serif;font-size:9pt;color:#111;line-height:1.35">
+        <div style="display:flex;justify-content:space-between;align-items:flex-end;border-bottom:2px solid #1a3a5c;padding-bottom:.3cm;margin-bottom:.4cm">
+            <div>
+                <div style="font-size:13pt;font-weight:700">${esc(comp?.name ?? '')}</div>
+                <div style="font-size:8.5pt;color:#000">${esc(metaTxt)}</div>
+            </div>
+            <div style="text-align:right">
+                <div style="font-size:10pt;font-weight:700;color:#000">${esc(dcName)}${esc(distLabel)} – ${esc(rondeLabel)}</div>
+            </div>
+        </div>
+        <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:.5cm">${cardsHtml}</div>
+    </div>`;
 }
 
 // ── Startlijst pagina tonen ───────────────────────────────────────────────────
@@ -645,6 +820,7 @@ function toonStartlijstenPagina() {
                     <option value="">— Ronde —</option>
                 </select>
                 <button id="sl-btn-print" class="btn-secondary" disabled>🖨 Druk af</button>
+                <button id="sl-btn-download-all" class="btn-secondary" title="Download alle startlijsten als ZIP met PDFs">📥 Download alles</button>
             </div>
         </div>`;
 
@@ -806,6 +982,8 @@ function toonStartlijstenPagina() {
         if (!val) return;
         drukStartlijstAf(JSON.parse(val));
     });
+
+    el('sl-btn-download-all')?.addEventListener('click', downloadAlleStartlijsten);
 }
 
 // ── Startlijst – configuratie tonen (per afstand) ────────────────────────────
