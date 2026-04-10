@@ -211,6 +211,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'GET') {
                 'heeft_heats'       => (bool)($cc['heeft_heats']       ?? false),
                 'heeft_kwartfinale' => (bool)($cc['heeft_kwartfinale'] ?? false),
                 'heeft_halve_finale'=> (bool)($cc['heeft_halve_finale']?? false),
+                'heats_q_heat'      => (int)($cc['heats_q_heat']       ?? 0),
+                'kwart_q_heat'      => (int)($cc['kwart_q_heat']       ?? 1),
+                'half_q_heat'       => (int)($cc['half_q_heat']        ?? 1),
             ];
         }
 

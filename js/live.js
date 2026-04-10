@@ -599,20 +599,101 @@ function _liveBouwLinksPanel(dcId, distanceId, rondeType) {
 
     const rondeNaam = RONDE_LABEL[rondeType] || rondeType;
 
-    // Alle rijders uit alle ritten in deze categorie+ronde, plat, gesorteerd op startnummer
+    // Alle rijders uit alle ritten in deze categorie+ronde, plat
     const alleRijders = [];
     for (const rit of ritten) {
         if (_liveHasHeat(rit)) {
             for (const r of rit.rijders) {
-                alleRijders.push({ ...r, rit_id: rit.rit_id });
+                alleRijders.push({ ...r, rit_id: rit.rit_id, heat_nr: rit.heat_nr });
             }
         }
     }
-    alleRijders.sort((a, b) => {
-        const sa = a.startnummer ?? 99999;
-        const sb = b.startnummer ?? 99999;
-        return sa - sb;
-    });
+
+    // Bepaal Q/q kwalificatie per rijder (alleen als er resultaten zijn)
+    // Q = positie-kwalificatie (top N per heat), q = tijd-kwalificatie
+    const heeftResultaten = alleRijders.some(r => r.finishpositie != null);
+    if (heeftResultaten) {
+        // Doorstroomregels uit catConfig
+        const ccKey = dcId + '|' + (distanceId ?? '');
+        const cc = _liveCatConfigs[ccKey] ?? {};
+        let qPerHeat = 0, totaalDoor = 0;
+        if (rondeType === 'heats') {
+            qPerHeat  = parseInt(cc.heats_q_heat ?? 0);
+            totaalDoor = parseInt(cc.heats_q ?? 0);
+        } else if (rondeType === 'kwartfinale') {
+            qPerHeat  = parseInt(cc.kwart_q_heat ?? 1);
+            totaalDoor = parseInt(cc.kwart_door ?? 0);
+        } else if (rondeType === 'halve_finale') {
+            qPerHeat  = parseInt(cc.half_q_heat ?? 1);
+            totaalDoor = parseInt(cc.half_door ?? 0);
+        }
+
+        // Groepeer per heat, bepaal Q per heat
+        const perHeat = {};
+        for (const r of alleRijders) {
+            const hk = r.heat_nr ?? r.rit_id;
+            if (!perHeat[hk]) perHeat[hk] = [];
+            perHeat[hk].push(r);
+        }
+        // Sorteer elke heat op finishpositie
+        for (const hk of Object.keys(perHeat)) {
+            perHeat[hk].sort((a, b) => (a.finishpositie ?? 999) - (b.finishpositie ?? 999));
+        }
+
+        // Markeer Q-rijders (top qPerHeat per heat, als qPerHeat > 0)
+        const qRijders = new Set();
+        if (qPerHeat > 0) {
+            for (const hk of Object.keys(perHeat)) {
+                const heatRijders = perHeat[hk];
+                for (let i = 0; i < Math.min(qPerHeat, heatRijders.length); i++) {
+                    if (heatRijders[i].finishpositie != null && !heatRijders[i].sanctie)
+                        qRijders.add(heatRijders[i].entry_id);
+                }
+            }
+        }
+
+        // Alle rijders met tijd gesorteerd, markeer q-rijders (tijdsnelsten)
+        // Inclusief ex-aequo: als de laatste q-spot dezelfde tijd heeft als de volgende, gaan die ook mee
+        const metTijd = alleRijders
+            .filter(r => r.tijd_ms != null && !qRijders.has(r.entry_id) && !r.sanctie)
+            .sort((a, b) => a.tijd_ms - b.tijd_ms);
+        const aantalQ = qRijders.size;
+        const aantalq = Math.max(0, totaalDoor - aantalQ);
+        const qTijdRijders = new Set();
+        for (let i = 0; i < Math.min(aantalq, metTijd.length); i++) {
+            qTijdRijders.add(metTijd[i].entry_id);
+        }
+        // Ex-aequo: als de laatst-gekwalificeerde q dezelfde tijd heeft als de volgende, ook meenemen
+        if (aantalq > 0 && metTijd[aantalq - 1] && metTijd[aantalq]) {
+            const grensTijd = metTijd[aantalq - 1].tijd_ms;
+            for (let i = aantalq; i < metTijd.length; i++) {
+                if (metTijd[i].tijd_ms === grensTijd) qTijdRijders.add(metTijd[i].entry_id);
+                else break;
+            }
+        }
+
+        // Markeer alle rijders
+        for (const r of alleRijders) {
+            if (qRijders.has(r.entry_id))      r._kwal = 'Q';
+            else if (qTijdRijders.has(r.entry_id)) r._kwal = 'q';
+            else                                    r._kwal = '';
+        }
+
+        // Sorteer: Q eerst (op positie), dan q (op tijd), dan rest (op tijd, daarna startnummer)
+        alleRijders.sort((a, b) => {
+            const ordA = a._kwal === 'Q' ? 0 : a._kwal === 'q' ? 1 : 2;
+            const ordB = b._kwal === 'Q' ? 0 : b._kwal === 'q' ? 1 : 2;
+            if (ordA !== ordB) return ordA - ordB;
+            if (ordA === 0) return (a.finishpositie ?? 999) - (b.finishpositie ?? 999); // Q: op positie
+            // q en rest: op tijd, dan startnummer
+            const tA = a.tijd_ms ?? 999999, tB = b.tijd_ms ?? 999999;
+            if (tA !== tB) return tA - tB;
+            return (a.startnummer ?? 99999) - (b.startnummer ?? 99999);
+        });
+    } else {
+        // Geen resultaten: sorteer op startnummer
+        alleRijders.sort((a, b) => (a.startnummer ?? 99999) - (b.startnummer ?? 99999));
+    }
 
     const sanctieUiMap = { 'DNS':'DNS','DNF':'DNF','DSQ-SF':'DQ-SF','DSQ-TF':'DQ-DF','FS1':'FS' };
     const disabled = _liveLeesOnly ? 'disabled' : '';
@@ -633,10 +714,14 @@ function _liveBouwLinksPanel(dcId, distanceId, rondeType) {
             const rondesTd  = heeftRondes
                 ? `<td class="live-col-rondes">${r.rondes != null ? escHtml(String(r.rondes)) : ''}</td>`
                 : '';
+            const kwalBadge = r._kwal === 'Q' ? '<span style="color:#198754;font-weight:700">Q</span>'
+                           : r._kwal === 'q' ? '<span style="color:#0d6efd;font-weight:600">q</span>'
+                           : '';
             tbody +=
                 `<tr class="live-panel-rij ${statusKls}" data-panel-entry="${r.entry_id}" data-rit-id="${r.rit_id}" data-rondes="${r.rondes ?? ''}">` +
                 `<td>${r.startnummer ?? ''}</td>` +
                 `<td>${escHtml(r.full_name || '')}</td>` +
+                `<td style="text-align:center;width:24px">${kwalBadge}</td>` +
                 rondesTd +
                 `<td class="live-col-tijd">` +
                 `<input type="text" class="live-tijd-inp" value="${escHtml(tijdVal)}" placeholder="0:00.000" ${disabled} inputmode="decimal">` +
@@ -662,6 +747,7 @@ function _liveBouwLinksPanel(dcId, distanceId, rondeType) {
         : '';
     const rndColHtml  = heeftRondes ? `<col class="live-col-rondes">` : '';
     const rndHeadHtml = heeftRondes ? `<th class="live-col-rondes" title="Ronden">Rnd</th>` : '';
+    const kwalHead = `<th style="width:24px;text-align:center" title="Q=positie, q=tijd">Q</th>`;
 
     return `<div class="live-panel-links" id="live-panel-links"` +
         ` data-dc-id="${escHtml(dcId)}"` +
@@ -671,11 +757,11 @@ function _liveBouwLinksPanel(dcId, distanceId, rondeType) {
         `<div class="live-panel-scroll">` +
         `<table class="live-panel-tabel">` +
         `<colgroup>` +
-        `<col class="live-col-snr"><col>${rndColHtml}` +
+        `<col class="live-col-snr"><col><col style="width:24px">${rndColHtml}` +
         `<col class="live-col-tijd"><col class="live-col-sanctie"><col class="live-col-finish">` +
         `</colgroup>` +
         `<thead><tr>` +
-        `<th>Snr</th><th>Naam</th>${rndHeadHtml}` +
+        `<th>Snr</th><th>Naam</th>${kwalHead}${rndHeadHtml}` +
         `<th>Tijd</th>` +
         `<th>Sanctie</th><th>Fin.</th>` +
         `</tr></thead>` +
