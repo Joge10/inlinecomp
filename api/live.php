@@ -856,7 +856,6 @@ if ($action === 'genereer_volgende_ronde') {
                 $pdo->prepare("DELETE FROM heats WHERE id IN ($ph)")->execute($ids);
             }
             // Verwijder ook extra tijdschema_ritten die door ex-aequo overflow zijn aangemaakt
-            // (herkenbaar: rit_naam bevat 'ex-aequo')
             if ($ritIds) {
                 $ph2 = implode(',', array_fill(0, count($ritIds), '?'));
                 $pdo->prepare("
@@ -864,6 +863,24 @@ if ($action === 'genereer_volgende_ronde') {
                     WHERE id IN ($ph2) AND rit_naam LIKE '%ex-aequo%'
                 ")->execute($ritIds);
             }
+        }
+
+        // Brede cleanup: verwijder ALLE verweesd ex-aequo heats en ritten voor deze DC
+        $pdo->prepare("
+            DELETE FROM heats
+            WHERE competition_id = ? AND distance_combination_id = ?
+              AND (heat_naam LIKE '%ex-aequo%' OR heat_naam LIKE '%extra%' OR heat_nr <= 0)
+        ")->execute([$compId, $dcId]);
+
+        $tsIdStmt = $pdo->prepare("SELECT id FROM competition_tijdschema WHERE competition_id = ?");
+        $tsIdStmt->execute([$compId]);
+        $cleanTsId = $tsIdStmt->fetchColumn();
+        if ($cleanTsId) {
+            $pdo->prepare("
+                DELETE FROM tijdschema_ritten
+                WHERE tijdschema_id = ? AND dc_id = ?
+                  AND (rit_naam LIKE '%ex-aequo%' OR rit_naam LIKE '%extra%' OR heat_nr <= 0)
+            ")->execute([$cleanTsId, $dcId]);
         }
         // Fallback: ook heats zonder rit-koppeling op ronde=N opruimen
         $pdo->prepare("
@@ -953,6 +970,14 @@ if ($action === 'genereer_volgende_ronde') {
                         WHERE tijdschema_id = ?
                           AND volgorde >= ?
                     ")->execute([$refRit['tijdschema_id'], $ritVolgorde]);
+
+                    // Sync heats.rit_volgorde met de nieuwe tijdschema_ritten.volgorde
+                    $pdo->prepare("
+                        UPDATE heats h
+                        JOIN tijdschema_ritten r ON r.id = h.tijdschema_rit_id
+                        SET h.rit_volgorde = r.volgorde
+                        WHERE h.competition_id = ?
+                    ")->execute([$compId]);
                 }
 
                 $extraRitId = null;
