@@ -53,6 +53,12 @@ function fetchOrg(PDO $pdo, string $id): ?array {
     $stmt->execute([$id]);
     $org['aliassen'] = $stmt->fetchAll();
 
+    $stmt = $pdo->prepare(
+        "SELECT * FROM organisatie_transponders WHERE organisatie_id = ? ORDER BY CAST(intern_nummer AS UNSIGNED), intern_nummer"
+    );
+    $stmt->execute([$id]);
+    $org['transponders'] = $stmt->fetchAll();
+
     return $org;
 }
 
@@ -270,6 +276,31 @@ try {
                         "INSERT INTO organisatie_sponsors (id, organisatie_id, naam, url, volgorde)
                          VALUES (?, ?, ?, ?, ?)"
                     )->execute([newUuid(), $id, $sNam, $sUrl, $i]);
+                }
+            }
+
+            // Transponders opslaan (volledige vervanging)
+            $transponders = $body['transponders'] ?? null;
+            if (is_array($transponders)) {
+                $pdo->prepare("DELETE FROM organisatie_transponders WHERE organisatie_id = ?")->execute([$id]);
+                $insTp = $pdo->prepare("
+                    INSERT INTO organisatie_transponders
+                        (organisatie_id, intern_nummer, transponder_code, eigendom,
+                         toegewezen_snr, toegewezen_naam, categorie, betaald)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                ");
+                foreach ($transponders as $t) {
+                    $nr   = trim($t['intern_nummer'] ?? '');
+                    $code = trim($t['transponder_code'] ?? '');
+                    if (!$nr || !$code) continue;
+                    $insTp->execute([
+                        $id, $nr, $code,
+                        trim($t['eigendom'] ?? '') ?: null,
+                        !empty($t['toegewezen_snr']) ? (int)$t['toegewezen_snr'] : null,
+                        trim($t['toegewezen_naam'] ?? '') ?: null,
+                        trim($t['categorie'] ?? '') ?: null,
+                        !empty($t['betaald']) ? 1 : 0,
+                    ]);
                 }
             }
 

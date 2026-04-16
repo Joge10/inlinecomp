@@ -13,13 +13,8 @@ let _uActieveDist  = null;     // geselecteerde afstand { id, name }
 let _uDistCache    = {};       // dc_id → afstanden[]  (eigen cache naast startlijst)
 let _uPrintOpties  = new Map();// Map< catLabel, Map< distId, { distNaam, opties[] } > >
 
-// DB-sanctiecodes → gebruikersvriendelijke weergave
-const _SANCTIE_LABEL = {
-    'DSQ-TF': 'DQ-DF', 'DSQ-SF': 'DQ-SF', 'FS1': 'FS',
-    'DNS': 'DNS', 'DNF': 'DNF', 'DC': 'DC',
-    'W1': 'W1', 'W2': 'W2', 'RR': 'RR',
-};
-function sanctieLabel(s) { return s ? (_SANCTIE_LABEL[s] ?? s) : ''; }
+// DB = UI codes, geen mapping meer nodig
+function sanctieLabel(s) { return s ?? ''; }
 
 // ── Hulpfuncties ──────────────────────────────────────────────────────────────
 
@@ -51,32 +46,51 @@ async function vulUitslagPrintSelect() {
 
     _uPrintOpties = new Map();
     catSel.innerHTML  = '<option value="">— Categorie —</option>';
-    if (klasSel) { klasSel.innerHTML = '<option value="">— Uitslag —</option>'; klasSel.disabled = true; }
+    if (klasSel) { klasSel.innerHTML = '<option value="">— Kies uitslag —</option>'; klasSel.disabled = true; }
     if (btn) btn.disabled = true;
 
     for (const groep of _uGroepen) {
         const afstanden = await uLaadAfstanden(groep);
         const displayNaam = groep.merge_label || groep.dc_name;
 
+        // Klassement-status ophalen om te weten welke afstanden data hebben
+        let afstandStatus = {};  // distId → { compleet, vastgelegd }
+        let heeftKlassement = false;
+        try {
+            const dcParam = (groep.dc_ids || [groep.dc_id]).map(encodeURIComponent).join(',');
+            const res = await fetch(`api/klassement_live.php?competition_id=${encodeURIComponent(huidigCompId)}&dc_ids=${dcParam}`);
+            const kData = await res.json();
+            if (kData.afstanden) {
+                for (const a of kData.afstanden) {
+                    afstandStatus[a.id] = { compleet: a.compleet, vastgelegd: a.vastgelegd };
+                }
+            }
+            heeftKlassement = !!kData.klassement_vastgelegd;
+        } catch { /* stil */ }
+
         const opties = [];
 
-        // Per afstand: totaaluitslag
+        // Per afstand: alleen tonen als er resultaten zijn (compleet of vastgelegd)
         for (const a of afstanden) {
+            const st = afstandStatus[a.id];
+            if (!st || (!st.compleet && !st.vastgelegd)) continue;
             opties.push({ label: a.name, sleutel: 'afstand',
                           dcId: groep.dc_id, dcIds: groep.dc_ids,
                           dcName: displayNaam, distId: a.id, distNaam: a.name });
         }
 
-        // Tussenklassement: beschikbaar als er meer dan 1 afstand is
-        if (afstanden.length > 1) {
+        // Tussenklassement: alleen als er ≥1 afstand met resultaten is en >1 afstand totaal
+        if (opties.length >= 1 && afstanden.length > 1) {
             opties.push({ label: 'Tussenklassement', sleutel: 'tussenklassement',
                           dcId: groep.dc_id, dcIds: groep.dc_ids, dcName: displayNaam });
         }
-        // Eindklassement
-        opties.push({ label: 'Eindklassement', sleutel: 'eindklassement',
-                      dcId: groep.dc_id, dcIds: groep.dc_ids, dcName: displayNaam });
+        // Eindklassement: alleen als er resultaten zijn
+        if (heeftKlassement) {
+            opties.push({ label: 'Eindklassement', sleutel: 'eindklassement',
+                          dcId: groep.dc_id, dcIds: groep.dc_ids, dcName: displayNaam });
+        }
 
-        if (!_uPrintOpties.has(displayNaam))
+        if (opties.length && !_uPrintOpties.has(displayNaam))
             _uPrintOpties.set(displayNaam, opties);
     }
 
@@ -168,7 +182,7 @@ function toonUitslagPagina() {
             const klasSel = el('u-print-klas-sel');
             const btn     = el('u-btn-print');
             const opties  = _uPrintOpties.get(catSel.value) ?? [];
-            klasSel.innerHTML = '<option value="">— Klassement —</option>';
+            klasSel.innerHTML = '<option value="">— Kies uitslag —</option>';
             if (btn) btn.disabled = true;
             if (!opties.length) { klasSel.disabled = true; return; }
             opties.forEach(o => {
@@ -335,8 +349,109 @@ async function toonUitslagVoorAfstand(groep, afstand) {
             return;
         }
 
-        if (data.systeem !== 'full-final') {
-            content.innerHTML = `<div class="status-msg info">${escHtml(data.melding ?? 'Systeem nog niet beschikbaar.')}</div>`;
+        // ── Internationaal systeem: cascading elimination ranking ─────────────
+        if (data.modus === 'internationaal') {
+            // ── Ranking instellingen per ronde ───────────────────────────────
+            const rondeLabels = {heats:'Serie', kwartfinale:'Kwartfinale', halve_finale:'Halve finale', finale_a:'Finale'};
+            const rondeKeys   = {heats:'heats', kwartfinale:'kwart', halve_finale:'half', finale_a:'finale'};
+            const ranking     = data.ranking ?? {};
+            const rondes      = data.rondes ?? ['heats', 'finale_a'];
+            const afNaam      = data.afstand_naam ?? afstand.name ?? '';
+            let rankHtml = `<div class="u-ranking-details">
+                <div class="u-ranking-rij">
+                    <span class="u-ranking-afstand">Ranking:</span>`;
+            for (const rt of rondes) {
+                const key = rondeKeys[rt] ?? rt;
+                const val = ranking[key] ?? 'time';
+                rankHtml += `<label class="u-ranking-sel-wrap">
+                    ${rondeLabels[rt] ?? rt}:
+                    <select class="u-ranking-sel" data-afstand="${escHtml(afNaam)}" data-ronde="${escHtml(key)}">
+                        <option value="time" ${val === 'time' ? 'selected' : ''}>Op tijd</option>
+                        <option value="position_time" ${val === 'position_time' ? 'selected' : ''}>Positie + tijd</option>
+                    </select>
+                </label>`;
+            }
+            rankHtml += `</div></div>`;
+
+            if (!data.resultaat || data.resultaat.length === 0) {
+                content.innerHTML = rankHtml + `<div class="status-msg info">Nog geen uitslag beschikbaar voor <strong>${escHtml(afstand.name ?? '—')}</strong>.</div>`;
+            } else {
+                let html = rankHtml + `<div class="u-afstand-blokken">
+                    <div class="u-finale-blok ${data.has_results ? 'u-finale-compleet' : 'u-finale-onvolledig'}">
+                        <div class="u-finale-titel">Uitslag${data.has_results ? '' : ' <span class="u-onvolledig-badge">onvolledig</span>'}</div>
+                        <table class="u-uitslag-tabel">
+                            <thead><tr>
+                                <th class="u-col-rang">#</th>
+                                <th class="u-col-naam">Naam</th>
+                                <th class="u-col-startnr">Nr</th>
+                                <th class="u-col-cat">Cat</th>
+                                <th class="u-col-ronde">Ronde</th>
+                                ${data.heeft_rondes ? '<th class="u-col-rondes">Rnd</th>' : ''}
+                                ${data.heeft_pk_punten ? '<th class="u-col-pkpunten">Pnt</th>' : ''}
+                                <th class="u-col-tijd">Tijd</th>
+                                <th class="u-col-sanctie">Sanctie</th>
+                            </tr></thead>
+                            <tbody>`;
+
+                for (const r of data.resultaat) {
+                    const rangTxt    = r.rang    != null ? r.rang    : '—';
+                    const tijdTxt    = r.tijd_ms != null ? msTijd(r.tijd_ms) : '—';
+                    const sanctieTxt = sanctieLabel(r.sanctie);
+                    const rowClass   = r.rang == null ? 'u-rij-sanctie' : '';
+                    html += `<tr class="${rowClass}">
+                        <td class="u-col-rang">${rangTxt}</td>
+                        <td class="u-col-naam">${escHtml(r.full_name ?? '')}</td>
+                        <td class="u-col-startnr">${escHtml(String(r.start_number ?? ''))}</td>
+                        <td class="u-col-cat">${escHtml(r.categorie ?? '')}</td>
+                        <td class="u-col-ronde">${escHtml(r.ronde_label ?? '')}</td>
+                        ${data.heeft_rondes ? `<td class="u-col-rondes">${r.rondes ?? '—'}</td>` : ''}
+                        ${data.heeft_pk_punten ? `<td class="u-col-pkpunten">${r.pk_punten ?? '—'}</td>` : ''}
+                        <td class="u-col-tijd">${tijdTxt}</td>
+                        <td class="u-col-sanctie">${escHtml(sanctieTxt)}</td>
+                    </tr>`;
+                }
+
+                html += `</tbody></table></div></div>`;
+                content.innerHTML = html;
+            }
+
+            if (data.has_results) {
+                const wrap = document.createElement('div');
+                wrap.className = 'u-vastleg-wrap';
+                const vastlegBtn = document.createElement('button');
+                vastlegBtn.className = 'btn-primary u-vastleg-btn';
+                vastlegBtn.innerHTML = '✓ Uitslag bevestigen';
+                vastlegBtn.addEventListener('click', () =>
+                    _uVastleggen(groep, afstand, vastlegBtn));
+                const desc = document.createElement('div');
+                desc.className = 'u-vastleg-beschrijving';
+                desc.textContent = 'Sla de officiële uitslag van deze afstand op';
+                wrap.append(vastlegBtn, desc);
+                content.prepend(wrap);
+            }
+
+            // ── Ranking select handlers ──────────────────────────────────────
+            content.querySelectorAll('.u-ranking-sel').forEach(sel => {
+                sel.addEventListener('change', async () => {
+                    try {
+                        const res = await fetch(BASE + 'api/tijdschema.php', {
+                            method: 'POST',
+                            headers: {'Content-Type': 'application/json'},
+                            body: JSON.stringify({
+                                action:         'save_ranking',
+                                competition_id: huidigCompId,
+                                afstand_naam:   sel.dataset.afstand,
+                                [`${sel.dataset.ronde}_ranking`]: sel.value,
+                            }),
+                        });
+                        if (!res.ok) throw new Error('HTTP ' + res.status);
+                        // Herlaad uitslag met nieuwe ranking
+                        toonUitslagVoorAfstand(groep, afstand);
+                    } catch (e) {
+                        toonBevestigDialog('Fout bij opslaan ranking: ' + e.message, 'Fout');
+                    }
+                });
+            });
             return;
         }
 
@@ -427,6 +542,8 @@ async function toonUitslagVoorAfstand(groep, afstand) {
                 <th class="u-col-startnr">Nr</th>
                 <th class="u-col-cat">Cat</th>
                 <th class="u-col-finale-label">Finale</th>
+                ${data.heeft_rondes ? '<th class="u-col-rondes">Rnd</th>' : ''}
+                ${data.heeft_pk_punten ? '<th class="u-col-pkpunten">Pnt</th>' : ''}
                 <th class="u-col-tijd">Tijd</th>
                 <th class="u-col-sanctie">Sanctie</th>
             </tr></thead>
@@ -444,6 +561,8 @@ async function toonUitslagVoorAfstand(groep, afstand) {
                     <td class="u-col-startnr">${escHtml(String(r.start_number ?? ''))}</td>
                     <td class="u-col-cat">${escHtml(r.categorie ?? '')}</td>
                     <td class="u-col-finale-label">${escHtml(finale.label)}</td>
+                    ${data.heeft_rondes ? `<td class="u-col-rondes">${r.rondes ?? '—'}</td>` : ''}
+                    ${data.heeft_pk_punten ? `<td class="u-col-pkpunten">${r.pk_punten ?? '—'}</td>` : ''}
                     <td class="u-col-tijd">${tijdTxt}</td>
                     <td class="u-col-sanctie">${escHtml(sanctieTxt)}</td>
                 </tr>`;
@@ -544,10 +663,7 @@ async function toonUitslagKlassement(groep) {
             content.innerHTML = `<div class="status-msg error">⚠ ${escHtml(data.error)}</div>`;
             return;
         }
-        if (data.systeem !== 'full-final') {
-            content.innerHTML = `<div class="status-msg info">${escHtml(data.melding ?? 'Systeem nog niet beschikbaar.')}</div>`;
-            return;
-        }
+        // Print ondersteunt full-final en internationaal systeem
         if (!data.has_results || !data.klassement?.length) {
             content.innerHTML = `<div class="status-msg info">Nog geen resultaten beschikbaar voor het klassement.</div>`;
             return;
@@ -799,7 +915,7 @@ async function _drukKlassement(optData) {
     } catch (e) { toonBevestigDialog('Fout bij laden: ' + e.message, 'Fout'); return; }
 
     if (data.error) { toonBevestigDialog(data.error, 'Fout'); return; }
-    if (data.systeem !== 'full-final') { toonBevestigDialog(data.melding ?? 'Systeem niet beschikbaar.', 'Info'); return; }
+    // Vastleggen/klassement ondersteunt alle systemen
     if (!data.has_results || !data.klassement?.length) { toonBevestigDialog('Nog geen resultaten beschikbaar.', 'Info'); return; }
 
     const afstanden  = data.afstanden ?? [];
@@ -959,7 +1075,57 @@ async function _drukAfstandUitslag(optData) {
     } catch (e) { toonBevestigDialog('Fout bij laden: ' + e.message, 'Fout'); return; }
 
     if (data.error) { toonBevestigDialog(data.error, 'Fout'); return; }
-    if (data.systeem !== 'full-final') { toonBevestigDialog(data.melding ?? 'Systeem niet beschikbaar.', 'Info'); return; }
+    // Vastleggen/klassement ondersteunt alle systemen
+
+    // ── Internationaal systeem ──────────────────────────────────────────────
+    if (data.modus === 'internationaal') {
+        if (!data.resultaat?.length) { toonBevestigDialog('Nog geen uitslag beschikbaar.', 'Info'); return; }
+
+        let thExtra = '';
+        if (toonRonde) thExtra += '<th class="pr-col-ronde">Ronde</th>';
+        if (data.heeft_rondes)    thExtra += '<th class="pr-col-rondes">Rnd</th>';
+        if (data.heeft_pk_punten) thExtra += '<th class="pr-col-pkpunten">Pnt</th>';
+        if (toonTijd)  thExtra += '<th class="pr-col-tijd">Tijd</th>';
+
+        let tbody = '';
+        for (const r of data.resultaat) {
+            const alleSancties = (r.alle_sancties ?? [])
+                .map(s => `${esc(s.ronde)}:${esc(sanctieLabel(s.sanctie))}`)
+                .join(', ');
+            const heeftSanctie = alleSancties || r.sanctie;
+            const rowCls = heeftSanctie ? ' class="pr-rij-sanctie"' : '';
+            let tdExtra = '';
+            if (toonRonde) tdExtra += `<td class="pr-col-ronde">${esc(r.ronde_label ?? '')}</td>`;
+            if (data.heeft_rondes)    tdExtra += `<td class="pr-col-rondes">${r.rondes ?? '\u2014'}</td>`;
+            if (data.heeft_pk_punten) tdExtra += `<td class="pr-col-pkpunten">${r.pk_punten ?? '\u2014'}</td>`;
+            if (toonTijd)  tdExtra += `<td class="pr-col-tijd">${r.tijd_ms != null ? msTijd(r.tijd_ms) : '\u2014'}</td>`;
+            tbody += `<tr${rowCls}>
+                <td class="pr-col-rang">${r.rang ?? '\u2014'}</td>
+                <td class="pr-col-naam">${esc(r.full_name ?? '')}</td>
+                <td class="pr-col-snr">${esc(String(r.start_number ?? ''))}</td>
+                <td class="pr-col-cat">${esc(r.categorie ?? '')}</td>
+                ${tdExtra}
+                <td class="pr-col-sanctie">${alleSancties || ''}</td>
+            </tr>`;
+        }
+
+        const htmlDoc = _bouwAfstandHtml(esc, comp, metaTxt, optData, 'A4 portrait',
+            `<th class="pr-col-rang">#</th>
+             <th class="pr-col-naam">Naam</th>
+             <th class="pr-col-snr">Snr</th>
+             <th class="pr-col-cat">Cat</th>
+             ${thExtra}
+             <th class="pr-col-sanctie">Sanctie</th>`,
+            tbody, 'Uitslag', orgLogoHtml, footerHtml);
+
+        const win = window.open('', '_blank');
+        if (!win) { toonBevestigDialog('Pop-up geblokkeerd \u2013 sta pop-ups toe voor deze pagina.', 'Afdrukken'); return; }
+        win.document.write(htmlDoc);
+        win.document.close();
+        win.focus();
+        setTimeout(() => { win.print(); win.close(); }, 400);
+        return;
+    }
 
     // ── Gecombineerde modus ──────────────────────────────────────────────────
     if (data.modus === 'gecombineerd') {
@@ -1024,6 +1190,8 @@ async function _drukAfstandUitslag(optData) {
 
     let thExtra = '';
     if (toonRonde) thExtra += '<th class="pr-col-finale">Finale</th>';
+    if (data.heeft_rondes)    thExtra += '<th class="pr-col-rondes">Rnd</th>';
+    if (data.heeft_pk_punten) thExtra += '<th class="pr-col-pkpunten">Pnt</th>';
     if (toonTijd)  thExtra += '<th class="pr-col-tijd">Tijd</th>';
 
     let tbody = '';
@@ -1037,6 +1205,8 @@ async function _drukAfstandUitslag(optData) {
             const rowCls = heeftSanctie ? ' class="pr-rij-sanctie"' : '';
             let tdExtra = '';
             if (toonRonde) tdExtra += `<td class="pr-col-finale">${esc(finale.label)}</td>`;
+            if (data.heeft_rondes)    tdExtra += `<td class="pr-col-rondes">${r.rondes ?? '\u2014'}</td>`;
+            if (data.heeft_pk_punten) tdExtra += `<td class="pr-col-pkpunten">${r.pk_punten ?? '\u2014'}</td>`;
             if (toonTijd)  tdExtra += `<td class="pr-col-tijd">${r.tijd_ms != null ? msTijd(r.tijd_ms) : '\u2014'}</td>`;
             tbody += `<tr${rowCls}>
                 <td class="pr-col-rang">${r.rang ?? '\u2014'}</td>

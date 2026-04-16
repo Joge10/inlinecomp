@@ -54,28 +54,49 @@ if (!is_array($splits)) {
 }
 
 try {
-    // ── Blokkeer als er al heats of tijdschema-config bestaan ────────────
-    $heatCheck = $pdo->prepare("
-        SELECT COUNT(*) FROM heats
-        WHERE competition_id = ? AND distance_combination_id = ?
+    // ── Check of splits daadwerkelijk veranderd zijn ─────────────────────
+    $curStmt = $pdo->prepare("
+        SELECT category, split_group FROM dc_splits
+        WHERE dc_id = ? AND competition_id = ?
+        ORDER BY category
     ");
-    $heatCheck->execute([$compId, $dcId]);
-    if ((int)$heatCheck->fetchColumn() > 0) {
-        http_response_code(409);
-        echo json_encode(['error' => 'Splitsen niet mogelijk: er bestaan al startlijsten voor deze categorie. Wis eerst de loting in de Startlijsten-module.']);
-        exit;
+    $curStmt->execute([$dcId, $compId]);
+    $curSplits = [];
+    foreach ($curStmt->fetchAll(PDO::FETCH_ASSOC) as $row) {
+        $curSplits[$row['category']] = $row['split_group'];
     }
+    $nieuwSplits = [];
+    foreach ($splits as $s) {
+        $cat   = trim($s['category']   ?? '');
+        $groep = trim($s['split_group'] ?? '');
+        if ($cat && $groep) $nieuwSplits[$cat] = $groep;
+    }
+    $isStructureel = $curSplits != $nieuwSplits; // != vergelijkt inhoud
 
-    $tsCheck = $pdo->prepare("
-        SELECT COUNT(*) FROM tijdschema_cat_config tcc
-        JOIN competition_tijdschema ct ON ct.id = tcc.tijdschema_id
-        WHERE ct.competition_id = ? AND tcc.dc_id = ?
-    ");
-    $tsCheck->execute([$compId, $dcId]);
-    if ((int)$tsCheck->fetchColumn() > 0) {
-        http_response_code(409);
-        echo json_encode(['error' => 'Splitsen niet mogelijk: deze categorie is al geconfigureerd in het tijdschema. Verwijder het tijdschema eerst.']);
-        exit;
+    // Blokkeer alleen structurele wijzigingen als er heats of config bestaan
+    if ($isStructureel) {
+        $heatCheck = $pdo->prepare("
+            SELECT COUNT(*) FROM heats
+            WHERE competition_id = ? AND distance_combination_id = ?
+        ");
+        $heatCheck->execute([$compId, $dcId]);
+        if ((int)$heatCheck->fetchColumn() > 0) {
+            http_response_code(409);
+            echo json_encode(['error' => 'Splitsen niet mogelijk: er bestaan al startlijsten voor deze categorie. Wis eerst de loting in de Startlijsten-module.']);
+            exit;
+        }
+
+        $tsCheck = $pdo->prepare("
+            SELECT COUNT(*) FROM tijdschema_cat_config tcc
+            JOIN competition_tijdschema ct ON ct.id = tcc.tijdschema_id
+            WHERE ct.competition_id = ? AND tcc.dc_id = ?
+        ");
+        $tsCheck->execute([$compId, $dcId]);
+        if ((int)$tsCheck->fetchColumn() > 0) {
+            http_response_code(409);
+            echo json_encode(['error' => 'Splitsen niet mogelijk: deze categorie is al geconfigureerd in het tijdschema. Verwijder het tijdschema eerst.']);
+            exit;
+        }
     }
 
     // Verwijder eerst alle bestaande splits voor déze DC

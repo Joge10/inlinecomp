@@ -36,7 +36,12 @@ if (!is_array($data)) {
 }
 
 // Filter: alleen SpeedSkating.Inline wedstrijden vanaf een week geleden
+// Tenzij een eerdere datum is meegegeven via ?van=YYYY-MM-DD
 $eenWeekGeleden = date('Y-m-d', strtotime('-7 days'));
+$vanParam = trim($_GET['van'] ?? '');
+if ($vanParam && preg_match('/^\d{4}-\d{2}-\d{2}$/', $vanParam) && $vanParam < $eenWeekGeleden) {
+    $eenWeekGeleden = $vanParam;
+}
 $inline = array_values(array_filter($data, function($item) use ($eenWeekGeleden) {
     if (!isset($item['discipline']) || stripos($item['discipline'], 'SpeedSkating.Inline') === false) {
         return false;

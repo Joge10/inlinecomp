@@ -47,13 +47,6 @@ try {
     $sysStmt->execute([$compId]);
     $systeem = $sysStmt->fetchColumn() ?: 'internationaal-nieuw';
 
-    if ($systeem !== 'full-final') {
-        echo json_encode(['systeem' => $systeem, 'afstanden' => [], 'klassement' => [],
-                          'has_results' => false,
-                          'melding' => 'Internationaal systeem – nog niet beschikbaar.']);
-        exit;
-    }
-
     // ── Afstanden voor deze DC ────────────────────────────────────────────────
     $distStmt = $pdo->prepare("
         SELECT id, name, number
@@ -64,6 +57,37 @@ try {
     ");
     $distStmt->execute([$primaryDcId]);
     $distances = $distStmt->fetchAll(PDO::FETCH_ASSOC);
+
+    // ── Ranking methods per afstand (alleen internationaal) ──────────────────
+    $rankingConfigs = []; // afstand_naam => {heats_ranking, kwart_ranking, ...}
+    $tsId = null;
+    if ($systeem !== 'full-final') {
+        $tsIdStmt = $pdo->prepare("SELECT id FROM competition_tijdschema WHERE competition_id = ?");
+        $tsIdStmt->execute([$compId]);
+        $tsId = $tsIdStmt->fetchColumn();
+        if ($tsId) {
+            $rcStmt = $pdo->prepare("
+                SELECT afstand_naam, race_type,
+                       heats_ranking, kwart_ranking, half_ranking, finale_ranking
+                FROM tijdschema_afstand_config WHERE tijdschema_id = ?
+            ");
+            $rcStmt->execute([$tsId]);
+            foreach ($rcStmt->fetchAll(PDO::FETCH_ASSOC) as $rc) {
+                $rankingConfigs[$rc['afstand_naam']] = $rc;
+            }
+        }
+
+        // Beschikbare rondes per afstand ophalen (welke ronde_types bestaan er)
+        if ($tsId) {
+            $rondeStmt = $pdo->prepare("
+                SELECT DISTINCT r.ronde_type
+                FROM tijdschema_ritten r
+                WHERE r.tijdschema_id = ? AND r.dc_id = ?
+                  AND (r.distance_id = ? OR r.distance_id IS NULL)
+                ORDER BY FIELD(r.ronde_type, 'heats','kwartfinale','halve_finale','finale_a')
+            ");
+        }
+    }
 
     if (empty($distances)) {
         echo json_encode(['systeem' => $systeem, 'afstanden' => [], 'klassement' => [],
@@ -99,7 +123,8 @@ try {
         SELECT he.person_license,
                p.full_name, p.short_name, p.start_number,
                p.category  AS categorie,
-               res.finishpositie, res.tijd_ms, res.sanctie
+               res.finishpositie, res.tijd_ms, res.sanctie,
+               res.rondes, res.punten AS pk_punten
         FROM heat_entries he
         JOIN persons p ON p.license_key = he.person_license
         LEFT JOIN results res ON res.heat_entry_id = he.id
@@ -321,8 +346,27 @@ try {
             $rangOffset += $nRijders;
         }
 
-        $afstandenInfo[] = ['id' => $distId, 'name' => $dist['name'], 'compleet' => $distCompleet,
-                             'vastgelegd' => !empty($vastgelegdMap[$distId])];
+        $afInfo = ['id' => $distId, 'name' => $dist['name'], 'compleet' => $distCompleet,
+                   'vastgelegd' => !empty($vastgelegdMap[$distId])];
+
+        // Ranking methods per ronde (alleen internationaal)
+        if ($systeem !== 'full-final' && isset($rankingConfigs[$dist['name']])) {
+            $rc = $rankingConfigs[$dist['name']];
+            $afInfo['race_type'] = $rc['race_type'] ?? 'sprint';
+            $afInfo['ranking'] = [
+                'heats'   => $rc['heats_ranking']  ?? 'time',
+                'kwart'   => $rc['kwart_ranking']   ?? 'time',
+                'half'    => $rc['half_ranking']    ?? 'time',
+                'finale'  => $rc['finale_ranking']  ?? 'time',
+            ];
+            // Welke rondes bestaan er voor deze afstand?
+            if (isset($rondeStmt)) {
+                $rondeStmt->execute([$tsId, $primaryDcId, $distId]);
+                $afInfo['rondes'] = array_column($rondeStmt->fetchAll(PDO::FETCH_ASSOC), 'ronde_type');
+            }
+        }
+
+        $afstandenInfo[] = $afInfo;
     }
 
     // ── Alle sancties per rijder over alle rondes + afstanden ───────────────
@@ -447,12 +491,14 @@ try {
     $hasResults = !empty(array_filter($afstandenInfo, fn($a) => $a['compleet']));
 
     // Is het klassement al vastgelegd in uitslag_klassement?
+    // Alleen als ALLE afstanden bevestigd zijn EN er klassement-records bestaan
+    $alleVastgelegd = !empty($afstandenInfo) && empty(array_filter($afstandenInfo, fn($a) => !$a['vastgelegd']));
     $klasVastStmt = $pdo->prepare("
         SELECT COUNT(*) FROM uitslag_klassement
         WHERE competition_id = ? AND distance_combination_id IN ($dcPh)
     ");
     $klasVastStmt->execute(array_merge([$compId], $dcIds));
-    $klassementVastgelegd = (int)$klasVastStmt->fetchColumn() > 0;
+    $klassementVastgelegd = $alleVastgelegd && (int)$klasVastStmt->fetchColumn() > 0;
 
     echo json_encode([
         'systeem'               => $systeem,

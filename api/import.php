@@ -266,6 +266,11 @@ try {
         }
     }
 
+    // Org-id ophalen voor transponder-terugschrijving
+    $orgIdStmt = $pdo->prepare("SELECT organisatie_id FROM competitions WHERE id = ?");
+    $orgIdStmt->execute([$compId]);
+    $orgId = $orgIdStmt->fetchColumn() ?: null;
+
     $aantalDeelnemers = 0;
     $overgeslagen     = 0;
 
@@ -350,6 +355,22 @@ try {
                     ':code'           => $tpActief,
                     ':source'         => 'manual',
                 ]);
+
+                // Terugschrijven naar org-transponder tabel (twee-weg sync)
+                if ($tpActief && $orgId) {
+                    $startnr  = $c['start_number'] ?? null;
+                    $fullNaam = $c['full_name']     ?? '';
+                    $cat      = $c['category']      ?? '';
+                    $betaald  = !empty($c['tp_betaald']) ? 1 : 0;
+                    if (!isset($stmtOrgTpUpdate)) {
+                        $stmtOrgTpUpdate = $pdo->prepare("
+                            UPDATE organisatie_transponders
+                            SET toegewezen_snr = ?, toegewezen_naam = ?, categorie = ?, betaald = ?
+                            WHERE organisatie_id = ? AND transponder_code = ?
+                        ");
+                    }
+                    $stmtOrgTpUpdate->execute([$startnr, $fullNaam, $cat, $betaald, $orgId, $tpActief]);
+                }
             }
 
             $aantalDeelnemers++;

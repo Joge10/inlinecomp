@@ -417,7 +417,8 @@ function renderAfstandPanel(afstand, cfg, catConfigMap) {
                 </div>
                 <input type="hidden" name="q_direct"        value="0">
                 <input type="hidden" name="q_tijd"          value="0">
-                <input type="hidden" name="heeft_runner_up" value="0">`;
+                <input type="hidden" name="heeft_runner_up" value="0">
+                <input type="hidden" name="race_type"       value="sprint">`;
     } else {
         // Internationaal: doorgang per ronde ingesteld in de categorie-tabel; runner-up optie hier
         html += `
@@ -449,7 +450,16 @@ function renderAfstandPanel(afstand, cfg, catConfigMap) {
                     <span class="ts-veld-hint">0 = geen minimum</span>
                 </div>
                 <input type="hidden" name="finale_heat_grootte" value="${fHg}">
-`;
+                <div class="ts-gedeeld-rij" style="margin-top:8px;border-top:1px solid #dee2e6;padding-top:8px">
+                    <span class="ts-gedeeld-lbl">Race type</span>
+                    <span class="ts-gedeeld-inputs">
+                        <select name="race_type" class="ts-sel-sm">
+                            <option value="sprint" ${(cfg?.race_type ?? 'sprint') === 'sprint' ? 'selected' : ''}>Sprint</option>
+                            <option value="long_distance" ${cfg?.race_type === 'long_distance' ? 'selected' : ''}>Lange afstand</option>
+                        </select>
+                    </span>
+                    <span class="ts-veld-hint">Sprint: W1/W2 niet beschikbaar. Lange afstand: DNF = reverse withdrawal.</span>
+                </div>`;
     }
 
     html += `
@@ -494,7 +504,8 @@ function renderAfstandPanel(afstand, cfg, catConfigMap) {
                 <th class="ts-th-c">Q per<br>heat</th>
                 <th class="ts-th-c ts-sectie-start">Aantal<br>heats</th>
                 <th class="ts-th-c">Seeding</th>
-            </tr>`;
+            </tr>
+            <input type="hidden" name="race_type" value="${escHtml(cfg?.race_type ?? 'sprint')}">`;
     }
 
     html += `</thead><tbody>`;
@@ -914,6 +925,7 @@ function renderBlokken(schema, afstandGroepen) {
             <span class="ts-blokken-acties-sep"></span>
             <button class="btn-secondary ts-btn-sm" id="ts-btn-save-blokken">💾 Volgorde opslaan</button>
             <button class="btn-primary ts-btn-sm" id="ts-btn-genereer">▶ Genereer programma</button>
+            <button class="btn-del ts-btn-sm" id="ts-btn-wis-programma" ${huidigTijdschema?.ritten?.length ? '' : 'disabled'} title="Verwijder alles: ritten, blokken en instellingen. Het tijdschema wordt volledig leeg.">🗑 Wis programma</button>
         </div>
     </div>`;
 
@@ -1619,6 +1631,7 @@ function bindTsEvents(afstandGroepen) {
                     finale_b_grootte:    num('finale_b_grootte')    || 6,
                     laatste_b_grootste:  form.querySelector('[name="laatste_b_grootste"]')?.checked ? 1 : 0,
                     finale_seeding:      form.querySelector('[name="finale_seeding"]')?.value ?? 'slang',
+                    race_type:           form.querySelector('[name="race_type"]')?.value ?? 'sprint',
                     heeft_runner_up:     heeftRU,
                     runner_up_max:       ruMax,
                     runner_up_min:       ruMin,
@@ -1791,6 +1804,7 @@ function bindTsEvents(afstandGroepen) {
 
             // Programma is nu actueel
             programmaVerouderd = false;
+            if (typeof invalideerSlTsCache === 'function') invalideerSlTsCache();
 
             // Feedback aan gebruiker
             const nRitten = result?.ritten?.length ?? 0;
@@ -1810,6 +1824,29 @@ function bindTsEvents(afstandGroepen) {
             toonBevestigDialog('Fout bij genereren: ' + e.message, 'Fout');
         } finally {
             if (btn) { btn.disabled = false; btn.textContent = origTxt; }
+        }
+    });
+
+    el('ts-btn-wis-programma')?.addEventListener('click', async () => {
+        if (!await toonBevestigDialog(
+            'Weet je het zeker? Alles wordt verwijderd: ritten, blokken, afstandsinstellingen en categorie-configuratie.\nHet tijdschema wordt volledig leeg.',
+            'Programma wissen'
+        )) return;
+
+        const btn = el('ts-btn-wis-programma');
+        if (btn) { btn.disabled = true; btn.textContent = '⏳ Bezig…'; }
+
+        try {
+            await postTs({
+                action:        'wis_programma',
+                tijdschema_id: tsId,
+            });
+            if (typeof invalideerSlTsCache === 'function') invalideerSlTsCache();
+            await laadTijdschema();
+        } catch (e) {
+            toonBevestigDialog('Fout bij wissen: ' + e.message, 'Fout');
+        } finally {
+            if (btn) { btn.disabled = false; btn.textContent = '🗑 Wis programma'; }
         }
     });
 
@@ -3088,10 +3125,14 @@ function toonEntriesVerversIndicator() {
 function startTsPolling() {
     stopTsPolling();
     if (!huidigCompId) return;
+    let _tsPollFails = 0;
     _tsPollingInterval = setInterval(async () => {
         if (!huidigCompId) return;
+        if (_tsPollFails >= 3) { stopTsPolling(); return; }
         try {
             const res  = await fetch(`api/tijdschema.php?competition_id=${encodeURIComponent(huidigCompId)}&check_version=1`);
+            if (!res.ok) { _tsPollFails++; return; }
+            _tsPollFails = 0;
             const data = await res.json();
             if (!data || data.error) return;
             // Inschrijvingen bijgewerkt → toon badge bij Importeer nav-item
@@ -3110,7 +3151,7 @@ function startTsPolling() {
                     toonTsConflictWaarschuwing('Het tijdschema is bijgewerkt door iemand anders.');
                 }
             }
-        } catch { /* stil falen */ }
+        } catch { _tsPollFails++; }
     }, 30000);
 }
 

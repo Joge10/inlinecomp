@@ -14,6 +14,41 @@ function initInstellingen() {
     el('btn-org-opslaan').addEventListener('click', () => slaOrgOp());
     el('btn-org-verwijderen').addEventListener('click', () => verwijderOrg());
     el('btn-sponsor-add').addEventListener('click', () => voegSponsorRijToe());
+    el('btn-tp-add')?.addEventListener('click', () => voegTransponderRijToe());
+
+    // CSV transponder import
+    el('btn-tp-csv')?.addEventListener('click', () => el('tp-csv-file')?.click());
+    el('tp-csv-file')?.addEventListener('change', e => {
+        const file = e.target.files[0];
+        if (!file) return;
+        const reader = new FileReader();
+        reader.onload = () => {
+            const tekst = reader.result;
+            const sep = (tekst.split('\n')[0] || '').includes(';') ? ';' : ',';
+            const regels = tekst.trim().split('\n');
+            if (regels.length < 2) return;
+            const header = regels[0].split(sep).map(h => h.trim().toLowerCase().replace(/['"]/g, ''));
+            const body = el('org-tp-body');
+            if (body) body.innerHTML = '';
+            for (let i = 1; i < regels.length; i++) {
+                const vals = regels[i].split(sep).map(v => v.trim().replace(/['"]/g, ''));
+                const row = {};
+                header.forEach((h, j) => { row[h] = vals[j] ?? ''; });
+                voegTransponderRijToe({
+                    intern_nummer:    row['intern_nummer'] ?? row['nr'] ?? row['nummer'] ?? '',
+                    transponder_code: row['transponder_code'] ?? row['transponder'] ?? row['code'] ?? '',
+                    eigendom:         row['eigendom'] ?? '',
+                    toegewezen_snr:   row['toegewezen_snr'] ?? row['snr'] ?? row['startnummer'] ?? null,
+                    toegewezen_naam:  row['toegewezen_naam'] ?? row['naam'] ?? '',
+                    categorie:        row['categorie'] ?? row['cat'] ?? '',
+                    betaald:          ['1','ja','yes','true'].includes((row['betaald'] ?? '').toLowerCase()),
+                });
+            }
+            el('org-status').innerHTML = `<div class="status-msg info">${regels.length - 1} transponders geïmporteerd. Klik Opslaan om te bewaren.</div>`;
+        };
+        reader.readAsText(file);
+        e.target.value = '';
+    });
 
     el('org-logo-file').addEventListener('change', e => {
         if (e.target.files[0]) uploadLogo('org', actieveOrg?.id, e.target.files[0]);
@@ -291,6 +326,13 @@ function vulOrgFormulier(org) {
     // Sponsors
     renderSponsors(org?.sponsors ?? []);
 
+    // Transponders
+    renderTransponders(org?.transponders ?? []);
+    const tpWrap = el('org-transponders-wrap');
+    const tpCsv  = el('btn-tp-csv');
+    if (tpWrap) tpWrap.style.display = isBestaand ? '' : 'none';
+    if (tpCsv)  tpCsv.style.display  = isBestaand ? '' : 'none';
+
     // Lees-alleen modus: schrijf-elementen per tab-inhoud disablen (tabs zelf blijven klikbaar)
     if (_beheerLeesOnly) {
         document.querySelectorAll('.org-tab-content').forEach(tabEl => pasSchrijfLockToe(tabEl));
@@ -472,6 +514,45 @@ function voegSponsorRijToe(sponsor = null) {
     wrap.appendChild(rij);
 }
 
+// ── Transponders ─────────────────────────────────────────────────────────────
+
+function renderTransponders(transponders) {
+    const body = el('org-tp-body');
+    if (!body) return;
+    body.innerHTML = '';
+    (transponders || []).forEach(t => voegTransponderRijToe(t));
+}
+
+function voegTransponderRijToe(tp = null) {
+    const body = el('org-tp-body');
+    if (!body) return;
+    const tr = document.createElement('tr');
+    tr.className = 'org-tp-rij';
+    tr.innerHTML =
+        `<td><input type="text" class="inp tp-inp tp-nr" value="${escHtml(tp?.intern_nummer ?? '')}" placeholder="#"></td>` +
+        `<td><input type="text" class="inp tp-inp tp-code" value="${escHtml(tp?.transponder_code ?? '')}" placeholder="KS-..."></td>` +
+        `<td><input type="text" class="inp tp-inp tp-eigendom" value="${escHtml(tp?.eigendom ?? '')}" placeholder="Org/Huur"></td>` +
+        `<td><input type="number" class="inp tp-inp tp-snr" value="${tp?.toegewezen_snr ?? ''}" placeholder="—" min="0"></td>` +
+        `<td><input type="text" class="inp tp-inp tp-naam" value="${escHtml(tp?.toegewezen_naam ?? '')}" placeholder="—"></td>` +
+        `<td><input type="text" class="inp tp-inp tp-cat" value="${escHtml(tp?.categorie ?? '')}" placeholder="—"></td>` +
+        `<td class="tp-td-betaald"><input type="checkbox" class="tp-betaald" ${tp?.betaald ? 'checked' : ''}></td>` +
+        `<td><button class="btn-del tp-del" title="Verwijderen">&#128465;</button></td>`;
+    tr.querySelector('.tp-del').addEventListener('click', () => tr.remove());
+    body.appendChild(tr);
+}
+
+function verzamelTransponders() {
+    return [...(el('org-tp-body')?.querySelectorAll('.org-tp-rij') ?? [])].map(tr => ({
+        intern_nummer:    tr.querySelector('.tp-nr')?.value.trim() || null,
+        transponder_code: tr.querySelector('.tp-code')?.value.trim() || null,
+        eigendom:         tr.querySelector('.tp-eigendom')?.value.trim() || null,
+        toegewezen_snr:   tr.querySelector('.tp-snr')?.value ? parseInt(tr.querySelector('.tp-snr').value) : null,
+        toegewezen_naam:  tr.querySelector('.tp-naam')?.value.trim() || null,
+        categorie:        tr.querySelector('.tp-cat')?.value.trim() || null,
+        betaald:          tr.querySelector('.tp-betaald')?.checked ? 1 : 0,
+    })).filter(t => t.intern_nummer && t.transponder_code);
+}
+
 // ── Opslaan ───────────────────────────────────────────────────────────────────
 
 async function slaOrgOp() {
@@ -490,12 +571,15 @@ async function slaOrgOp() {
         }))
         .filter(s => s.naam);
 
+    const transponders = verzamelTransponders();
+
     const body = {
         action:   'save',
         id:       actieveOrg?.id ?? null,
         naam,
-        email:   el('org-email').value.trim() || null,
+        email:    el('org-email').value.trim() || null,
         sponsors,
+        transponders,
     };
 
     el('btn-org-opslaan').disabled = true;

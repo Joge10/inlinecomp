@@ -436,12 +436,36 @@ try {
     $vers = $vStmt->fetch(PDO::FETCH_ASSOC);
     $entriesVersion = (int)($vers['entries_version'] ?? 0);
 
+    // Check of er al een tijdschema/programma is (blokkeert DC-beheer wijzigingen)
+    $progStmt = $pdo->prepare("
+        SELECT COUNT(*) FROM tijdschema_cat_config tcc
+        JOIN competition_tijdschema ct ON ct.id = tcc.tijdschema_id
+        WHERE ct.competition_id = ?
+    ");
+    $progStmt->execute([$compId]);
+    $heeftProgramma = (int)$progStmt->fetchColumn() > 0;
+
+    // Org-transponders laden (voor opzoek in import-module)
+    $orgTransponders = [];
+    if ($organisatie && !empty($organisatie['id'])) {
+        $otStmt = $pdo->prepare("
+            SELECT intern_nummer, transponder_code, toegewezen_snr, toegewezen_naam, betaald
+            FROM organisatie_transponders
+            WHERE organisatie_id = ?
+            ORDER BY CAST(intern_nummer AS UNSIGNED), intern_nummer
+        ");
+        $otStmt->execute([$organisatie['id']]);
+        $orgTransponders = $otStmt->fetchAll(PDO::FETCH_ASSOC);
+    }
+
     echo json_encode([
-        'groepen'          => $result,
-        'organisatie'      => $organisatie,
-        'knsb_stand'       => $knsb_stand,
-        'db_stand'         => $db_stand,
-        'entries_version'  => $entriesVersion,
+        'groepen'            => $result,
+        'organisatie'        => $organisatie,
+        'knsb_stand'         => $knsb_stand,
+        'db_stand'           => $db_stand,
+        'entries_version'    => $entriesVersion,
+        'heeft_programma'    => $heeftProgramma,
+        'org_transponders'   => $orgTransponders,
     ], JSON_UNESCAPED_UNICODE);
 
 } catch (Throwable $e) {

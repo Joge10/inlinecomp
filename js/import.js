@@ -1,6 +1,8 @@
 /* InlineComp – import & vergelijk */
 
 let _importLeesOnly = false;  // true als huidige gebruiker geen schrijfrechten heeft
+let _heeftProgramma = false;  // true als er een tijdschema/programma is → DC-beheer readonly
+let _orgTransponders = [];    // [{intern_nummer, transponder_code, toegewezen_snr, betaald}]
 
 // ── Edit-staat initialiseren ──────────────────────────────────────────────────
 // Effectieve startwaarden: DB heeft voorrang, KNSB is fallback
@@ -82,6 +84,12 @@ async function bouwBeheerTabel() {
     const panel = el('beheer-panel');
     if (!panel || !vergelijkData.length) return;
 
+    // Niet tonen als de wedstrijd nog niet geïmporteerd is
+    if (!isGeimporteerd) {
+        panel.innerHTML = '';
+        return;
+    }
+
     // Verwijder event listeners van een vorige competitie
     if (panel._beheerAbort) panel._beheerAbort.abort();
     const beheerAbort  = new AbortController();
@@ -115,14 +123,44 @@ async function bouwBeheerTabel() {
 
     // Standaard ingeklapt bij laden — gebruiker klapt open als aanpassing nodig is
     let beheerIngeklapt = true;
+    let _beheerDirty = false;
+
+    function markBeheerDirty() {
+        _beheerDirty = true;
+        const btn = el('btn-beheer-opslaan');
+        if (btn) {
+            btn.disabled = false;
+            btn.classList.add('btn-beheer-dirty');
+        }
+    }
+    function markBeheerClean() {
+        _beheerDirty = false;
+        const btn = el('btn-beheer-opslaan');
+        if (btn) {
+            btn.disabled = true;
+            btn.classList.remove('btn-beheer-dirty');
+        }
+    }
+    // Exporteer dirty-check zodat navigatie-guards erbij kunnen
+    panel._isBeheerDirty = () => _beheerDirty;
+    panel._markBeheerClean = markBeheerClean;
+
+    // DC-beheer: volledig readonly of alleen structureel geblokkeerd
+    const beheerReadonly = _importLeesOnly;
+    const beheerStructuurLock = _heeftProgramma && !_importLeesOnly;
 
     // Vaste buitenste structuur (nooit overschreven → event-handlers blijven actief)
     panel.innerHTML =
+        (beheerReadonly
+            ? `<div class="beheer-readonly-melding">Geen schrijfrechten.</div>`
+            : '') +
         `<div id="beheer-tabel-wrap"></div>` +
-        `<div class="beheer-acties">` +
-        `<button class="btn-secondary" id="btn-beheer-opslaan">&#10003; Opslaan</button>` +
+        `<div class="beheer-acties"${beheerReadonly ? ' style="display:none"' : ''}>` +
+        `<button class="btn-secondary btn-beheer-dirty-btn" id="btn-beheer-opslaan" disabled>&#10003; Opslaan</button>` +
         `<span class="beheer-status" id="beheer-status"></span>` +
         `</div>`;
+    panel.dataset.readonly = beheerReadonly ? '1' : '';
+    panel.dataset.structuurLock = beheerStructuurLock ? '1' : '';
 
     // ── Effectieve rijen berekenen ─────────────────────────────────────────────
     // Elke rij = één toekomstige startlijst
@@ -195,6 +233,8 @@ async function bouwBeheerTabel() {
 
     // ── Tabel renderen ─────────────────────────────────────────────────────────
     function renderTabel() {
+        const ro       = panel.dataset.readonly === '1';
+        const sl       = panel.dataset.structuurLock === '1';  // structureel geblokkeerd
         const rows     = computeRows();
         // maxDists over alle sleutels (inclusief split-groep sleutels)
         const maxDists = Math.max(0, ...Object.values(dcDistances).map(a => a.length));
@@ -322,6 +362,10 @@ async function bouwBeheerTabel() {
         const actiesEl = panel.querySelector('.beheer-acties');
         if (actiesEl) actiesEl.style.display = beheerIngeklapt ? 'none' : '';
 
+        const slMelding = (!beheerIngeklapt && sl)
+            ? `<div class="beheer-readonly-melding">Er is een programma aangemaakt — alleen namen/labels zijn bewerkbaar. Structurele wijzigingen (samenvoegen, splitsen, afstanden) vereisen eerst "Wis programma" in het Tijdschema.</div>`
+            : '';
+
         el('beheer-tabel-wrap').innerHTML =
             `<table class="beheer-tabel">` +
             `<thead class="beheer-thead-toggle">` +
@@ -334,7 +378,23 @@ async function bouwBeheerTabel() {
             `</tr>` +
             `</thead>` +
             (beheerIngeklapt ? '' : `<tbody>${rowsHtml}</tbody>`) +
-            `</table>`;
+            `</table>` +
+            slMelding;
+
+        // Readonly: alle interactieve elementen disablen
+        if (ro) {
+            const wrap = el('beheer-tabel-wrap');
+            wrap.querySelectorAll('input, select, button').forEach(e => { e.disabled = true; });
+            wrap.querySelectorAll('.dc-ontkoppel, .dc-split-wis, .dc-afd-del, .afd-plus-btn').forEach(e => { e.style.display = 'none'; });
+        }
+        // Structuur-lock: structurele controls disablen, labels bewerkbaar houden
+        if (sl && !ro) {
+            const wrap = el('beheer-tabel-wrap');
+            // Structurele controls disablen/verbergen
+            wrap.querySelectorAll('.dc-merge-sel, .dc-split-inp, .dc-afd-naam, .dc-afd-m').forEach(e => { e.disabled = true; });
+            wrap.querySelectorAll('.dc-ontkoppel, .dc-split-wis, .dc-afd-del, .afd-plus-btn').forEach(e => { e.style.display = 'none'; });
+            // Labels NIET disablen — die blijven bewerkbaar
+        }
     }
 
     renderTabel();
@@ -364,8 +424,21 @@ async function bouwBeheerTabel() {
         }));
     }
 
+    function syncMergeLabelsVanDom() {
+        panel.querySelectorAll('.dc-merge-label-inp').forEach(inp => {
+            const primaryId = inp.dataset.primaryDcId;
+            const label     = inp.value.trim() || null;
+            const primary   = vergelijkData.find(c => c.dc_id === primaryId);
+            const mergeKey  = primary?.merge_group;
+            if (!mergeKey) return;
+            vergelijkData.filter(c => c.merge_group === mergeKey)
+                         .forEach(c => { c.merge_label = label; });
+        });
+    }
+
     function syncAllesVanDom() {
         syncSplitsVanDom();
+        syncMergeLabelsVanDom();
         // Vind alle unieke dist-keys in het DOM en sync elk één keer
         const keys = new Set();
         panel.querySelectorAll('td.dc-afd-kol[data-dist-key]').forEach(cel => keys.add(cel.dataset.distKey));
@@ -402,12 +475,18 @@ async function bouwBeheerTabel() {
             primary.merge_group = mergeKey;
             target.merge_group  = mergeKey;
             syncAllesVanDom();
+            markBeheerDirty();
             renderTabel(); return;
         }
         // Split-veld: rij opsplitsen na invullen
         if (e.target.classList.contains('dc-split-inp')) {
             syncAllesVanDom();
+            markBeheerDirty();
             renderTabel(); return;
+        }
+        // Alle overige inputs in het beheer-panel (merge-label, afstand-naam, meters)
+        if (e.target.closest('#beheer-tabel-wrap')) {
+            markBeheerDirty();
         }
     }, { signal });
 
@@ -425,6 +504,7 @@ async function bouwBeheerTabel() {
             if (cat) cat.merge_group = null;
             cleanupMergeGroups();
             syncAllesVanDom();
+            markBeheerDirty();
             renderTabel(); return;
         }
         // Split-veld wissen
@@ -432,6 +512,7 @@ async function bouwBeheerTabel() {
             const inp = e.target.previousElementSibling;
             inp.value = ''; e.target.style.visibility = 'hidden';
             syncAllesVanDom();
+            markBeheerDirty();
             renderTabel(); return;
         }
         // Afstand verwijderen
@@ -445,6 +526,7 @@ async function bouwBeheerTabel() {
                 dcDistances[key].splice(idx, 1);
                 dcDistances[key] = dcDistances[key].filter(d => d.name || d.value_meters);
             }
+            markBeheerDirty();
             renderTabel(); return;
         }
         // Afstand toevoegen
@@ -455,6 +537,7 @@ async function bouwBeheerTabel() {
             if (!dcDistances[key]) dcDistances[key] = [];
             dcDistances[key] = dcDistances[key].filter(d => d.name || d.value_meters);
             dcDistances[key].push({ id: '', number: dcDistances[key].length + 1, name: '', value_meters: null });
+            markBeheerDirty();
             renderTabel();
             const nms = panel.querySelectorAll(`td.dc-afd-kol[data-dist-key="${CSS.escape(key)}"] .dc-afd-naam`);
             if (nms.length) nms[nms.length - 1].focus();
@@ -491,11 +574,10 @@ async function slaaBeheerOp(panel, dcDistances) {
         }));
     });
 
-    // Sync merge_label vanuit DOM (label-input bij samengevoegde groepen)
+    // Sync merge_label vanuit DOM (inline — syncMergeLabelsVanDom is lokaal in bouwBeheerTabel)
     panel.querySelectorAll('.dc-merge-label-inp').forEach(inp => {
         const primaryId = inp.dataset.primaryDcId;
         const label     = inp.value.trim() || null;
-        // Alle DCs in dezelfde merge-groep krijgen hetzelfde label
         const primary   = vergelijkData.find(c => c.dc_id === primaryId);
         const mergeKey  = primary?.merge_group;
         if (!mergeKey) return;
@@ -578,10 +660,13 @@ async function slaaBeheerOp(panel, dcDistances) {
 
         status.innerHTML = '<span style="color:var(--oranje)">&#10003; Opgeslagen</span>';
         setTimeout(() => { status.textContent = ''; }, 2500);
+        // Reset dirty flag + knop na succesvol opslaan
+        if (panel._markBeheerClean) panel._markBeheerClean();
+        btn.textContent = '✓ Opslaan';
     } catch(e) {
         status.innerHTML = `<span style="color:#c00">&#9888; ${escHtml(e.message)}</span>`;
-    } finally {
         btn.disabled = false;
+        btn.textContent = '✓ Opslaan';
     }
 }
 
@@ -762,6 +847,23 @@ function toonVergelijkTabel(cat) {
         });
     });
 
+    // Org transponder opzoek: typ intern nummer → selecteer in dropdown
+    content.querySelectorAll('.tp-org-nr').forEach(inp => {
+        inp.addEventListener('change', () => {
+            const nr = inp.value.trim();
+            if (!nr) return;
+            const ot = _orgTransponders.find(t => t.intern_nummer === nr);
+            if (!ot) { inp.style.borderColor = '#c00'; return; }
+            inp.style.borderColor = '';
+            const sel = inp.closest('.tp-sel-wrap')?.querySelector('.tp-sel-drop');
+            if (sel) {
+                sel.value = ot.transponder_code;
+                sel.dispatchEvent(new Event('change', { bubbles: true }));
+            }
+            inp.value = '';
+        });
+    });
+
     // "+ Deelnemer toevoegen" knop
     content.querySelector('.btn-deelnemer-add')
         ?.addEventListener('click', () => openDeelnemerModal(cat.dc_id));
@@ -872,12 +974,18 @@ function groepeerVoorPrint() {
                 const status = c.entry_status ?? 1;
                 if (status === 2 || status === 3 || status === 4) return;  // niet op tekenlijst (5=Bevestigd bij org. wél)
                 const pe = personEdits[c.license_key] || {};
+                const tpActief = pe.transponder_actief ?? pe.transponder1 ?? c.knsb?.transponder1 ?? '';
+                // Check of deze transponder in de org-lijst staat en niet betaald is
+                const orgTp = _orgTransponders.find(ot => ot.transponder_code === tpActief);
+                const tpBetaald = orgTp ? (parseInt(orgTp.betaald) === 1) : null; // null=geen org-tp
+
                 allComps.push({
                     start_number:  pe.start_number      ?? c.knsb?.start_number ?? '',
                     full_name:     pe.full_name          ?? c.knsb?.full_name    ?? '',
                     category:      pe.category           ?? c.knsb?.category     ?? '',
-                    transponder:   pe.transponder_actief ?? pe.transponder1       ?? c.knsb?.transponder1 ?? '',
+                    transponder:   tpActief,
                     entry_status:  status,
+                    tp_betaald:    tpBetaald,
                 });
             });
         });
@@ -996,6 +1104,7 @@ function printTekenlijsten() {
                 if (d.entry_status === 0) meldingen.push('melding');
                 if (!d.transponder)                  meldingen.push('Geen transponder');
                 if (sn >= 1000)                      meldingen.push(`Startnr. ${sn}`);
+                if (d.tp_betaald === false)           meldingen.push('Transponder niet betaald');
 
                 const handCel = meldingen.length
                     ? `<div class="meld-attentie">
@@ -1435,6 +1544,8 @@ async function herlaadVergelijking() {
         vergelijkData     = vData.groepen     ?? vData;
         huidigOrganisatie = vData.organisatie ?? huidigOrganisatie;
         entriesVersion    = vData.entries_version ?? 0;
+        _heeftProgramma   = !!(vData.heeft_programma);
+        _orgTransponders  = vData.org_transponders ?? [];
         // knsb_stand: server stuurt null → genereer lokale browsertijd
         standDatum   = new Date().toLocaleString('nl-NL', {
             day: '2-digit', month: '2-digit', year: 'numeric',
@@ -1474,16 +1585,31 @@ function sluitTextraPopup() {
     if (textraPopup) { textraPopup.remove(); textraPopup = null; }
 }
 
-// Bouw de HTML voor de transponder-dropdown + '+' knop
-function maakTpDropdownHtml(lk, t1, t2, extras, actief) {
+// Bouw de HTML voor de transponder-dropdown + '+' knop + org-opzoek
+function maakTpDropdownHtml(lk, t1, t2, extras, actief, startnr) {
     let opts = `<option value=""${!actief ? ' selected' : ''}>— geen —</option>`;
     if (t1) opts += `<option value="${escHtml(t1)}"${actief === t1 ? ' selected' : ''}>T1 – ${escHtml(t1)}</option>`;
     if (t2) opts += `<option value="${escHtml(t2)}"${actief === t2 ? ' selected' : ''}>T2 – ${escHtml(t2)}</option>`;
     for (const e of (extras || [])) {
         opts += `<option value="${escHtml(e)}"${actief === e ? ' selected' : ''}>Textra – ${escHtml(e)}</option>`;
     }
+    // Org-transponders: alleen vrije (niet toegewezen aan andere rijder) + eigen
+    if (_orgTransponders.length) {
+        const vrije = _orgTransponders.filter(ot =>
+            !ot.toegewezen_snr || ot.toegewezen_snr == startnr
+        );
+        if (vrije.length) {
+            opts += `<optgroup label="Org transponders">`;
+            for (const ot of vrije) {
+                const lbl = `#${ot.intern_nummer} – ${ot.transponder_code}`;
+                opts += `<option value="${escHtml(ot.transponder_code)}"${actief === ot.transponder_code ? ' selected' : ''}>${escHtml(lbl)}</option>`;
+            }
+            opts += `</optgroup>`;
+        }
+    }
     return `<div class="tp-sel-wrap">
         <select class="inp tp-sel-drop" data-lk="${escHtml(lk)}">${opts}</select>
+        ${_orgTransponders.length ? `<input type="text" class="inp tp-org-nr" data-lk="${escHtml(lk)}" placeholder="Org#" title="Typ intern nummer" style="width:45px">` : ''}
         <button class="tp-add-btn" data-lk="${escHtml(lk)}" title="Transponder toevoegen">+</button>
     </div>`;
 }

@@ -246,6 +246,29 @@ if (!$gebruiker) {
                             <div id="org-sponsors-list"></div>
                             <button class="btn-sponsor-add" id="btn-sponsor-add">+ Sponsor toevoegen</button>
 
+                            <div class="inst-subtitel">Transponders
+                                <button class="btn-tp-csv btn-secondary" id="btn-tp-csv" style="display:none" title="Importeer transponders uit CSV">📥 CSV import</button>
+                                <input type="file" id="tp-csv-file" accept=".csv,.txt" style="display:none">
+                            </div>
+                            <div id="org-transponders-wrap" style="display:none">
+                                <div class="org-tp-tabel-wrap">
+                                    <table class="org-tp-tabel" id="org-tp-tabel">
+                                        <thead><tr>
+                                            <th class="tp-col-nr">Nr</th>
+                                            <th class="tp-col-code">Transponder</th>
+                                            <th class="tp-col-eigendom">Eigendom</th>
+                                            <th class="tp-col-snr">Snr</th>
+                                            <th class="tp-col-naam">Naam</th>
+                                            <th class="tp-col-cat">Cat</th>
+                                            <th class="tp-col-betaald">Betaald</th>
+                                            <th class="tp-col-del"></th>
+                                        </tr></thead>
+                                        <tbody id="org-tp-body"></tbody>
+                                    </table>
+                                </div>
+                                <button class="btn-tp-add" id="btn-tp-add">+ Transponder toevoegen</button>
+                            </div>
+
                             <div class="inst-acties">
                                 <button class="btn-primary" id="btn-org-opslaan">Opslaan</button>
                                 <button class="btn-samenvoeg" id="btn-samenvoeg" style="display:none">

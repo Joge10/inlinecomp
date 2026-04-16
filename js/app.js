@@ -228,7 +228,9 @@ async function laadWedstrijden() {
     if (btn)  btn.disabled = true;
     if (icon) icon.style.animation = 'spin 0.8s linear infinite';
     try {
-        const res  = await fetch(BASE + 'api/competitions.php');
+        const vanDatum = el('filter-van')?.value || '';
+        const vanParam = vanDatum ? `?van=${encodeURIComponent(vanDatum)}` : '';
+        const res  = await fetch(BASE + 'api/competitions.php' + vanParam);
         if (!res.ok) throw new Error('HTTP ' + res.status);
         const data = await res.json();
 
@@ -407,6 +409,8 @@ async function selectWedstrijd(card, comp) {
         standDatum        = vData.knsb_stand  ?? '';
         dbStandDatum      = vData.db_stand    ?? '';
         entriesVersion    = vData.entries_version ?? 0;
+        _heeftProgramma   = !!(vData.heeft_programma);
+        _orgTransponders  = vData.org_transponders ?? [];
 
         zetKnsbTimestamp();
         initEdits();
@@ -504,7 +508,7 @@ function initNav() {
         btn.innerHTML = sidebar.classList.contains('collapsed') ? '&#10095;' : '&#10094;';
     });
 
-    el('filter-van').addEventListener('change', renderWedstrijdLijst);
+    el('filter-van').addEventListener('change', () => { laadWedstrijden(); });
     el('filter-tot').addEventListener('change', renderWedstrijdLijst);
     el('filter-locatie').addEventListener('change', renderWedstrijdLijst);
     el('filter-organisatie').addEventListener('change', renderWedstrijdLijst);
@@ -513,7 +517,7 @@ function initNav() {
         el('filter-tot').value          = '';
         el('filter-locatie').value      = '';
         el('filter-organisatie').value  = '';
-        renderWedstrijdLijst();
+        laadWedstrijden();
     });
 
     document.addEventListener('click', e => {
@@ -525,6 +529,11 @@ function initNav() {
             const page = item.dataset.page;
             if (heeftWijzigingen && page !== 'importeer') {
                 if (!await toonBevestigDialog('Er zijn onopgeslagen wijzigingen.\nDoorgaan zonder op te slaan?')) return;
+            }
+            // Check onopgeslagen DC-beheer wijzigingen
+            const beheerPanel = el('beheer-panel');
+            if (beheerPanel?._isBeheerDirty?.() && page !== 'importeer') {
+                if (!await toonBevestigDialog('Er zijn onopgeslagen combination-aanpassingen.\nDoorgaan zonder op te slaan?')) return;
             }
             if (typeof stopTsPolling === 'function') stopTsPolling();
             if (page === 'importeer') {

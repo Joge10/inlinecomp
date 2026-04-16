@@ -99,6 +99,29 @@ try {
         }
     }
 
+    // Org-transponder betaald-status ophalen
+    $tpBetaaldMap = [];  // person_license => true/false
+    $orgIdStmt2 = $pdo->prepare("SELECT organisatie_id FROM competitions WHERE id = ?");
+    $orgIdStmt2->execute([$compId]);
+    $orgId2 = $orgIdStmt2->fetchColumn() ?: null;
+    if ($orgId2) {
+        $otStmt2 = $pdo->prepare("
+            SELECT transponder_code, betaald FROM organisatie_transponders WHERE organisatie_id = ?
+        ");
+        $otStmt2->execute([$orgId2]);
+        $otBetaaldMap = [];
+        foreach ($otStmt2->fetchAll(PDO::FETCH_ASSOC) as $ot) {
+            $otBetaaldMap[$ot['transponder_code']] = (int)$ot['betaald'];
+        }
+        // Koppel: rijder → actieve transponder → betaald?
+        foreach ($licenseKeys as $lk) {
+            $actief = $tpMap[$lk][0] ?? null;
+            if ($actief && isset($otBetaaldMap[$actief])) {
+                $tpBetaaldMap[$lk] = $otBetaaldMap[$actief];
+            }
+        }
+    }
+
     // Groepeer entries per heat
     $heatMap = [];
     foreach ($heatRows as $h) {
@@ -114,6 +137,7 @@ try {
         $e['transponder_actief'] = $tpMap[$lk][0] ?? null;
         $e['transponder1']       = $tpMap[$lk][1] ?? null;
         $e['transponder2']       = $tpMap[$lk][2] ?? null;
+        $e['tp_betaald']         = $tpBetaaldMap[$lk] ?? null; // null=geen org-tp, 0=niet betaald, 1=betaald
         $e['transponders_extra'] = [];
         foreach ($tpMap[$lk] ?? [] as $slot => $code) {
             if ($slot >= 3) $e['transponders_extra'][] = $code;
@@ -200,12 +224,7 @@ try {
                                            ELSE CONCAT('R', h_v.ronde)
                                        END,
                                        ':',
-                                       CASE res_v.sanctie
-                                           WHEN 'FS1'    THEN 'FS'
-                                           WHEN 'DSQ-SF' THEN 'DQ-SF'
-                                           WHEN 'DSQ-TF' THEN 'DQ-DF'
-                                           ELSE res_v.sanctie
-                                       END
+                                       res_v.sanctie
                                    )
                                    ORDER BY h_v.ronde
                                    SEPARATOR ' '

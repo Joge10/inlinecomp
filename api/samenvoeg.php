@@ -50,9 +50,32 @@ if (!is_array($merges)) {
 }
 
 try {
-    // ── Blokkeer als er al heats of tijdschema-config bestaan ────────────
+    // ── Check of er structurele wijzigingen zijn (merge_group veranderd) ──
+    // Label-only wijzigingen zijn altijd toegestaan, ook met bestaand programma.
     $dcIds = array_filter(array_map(fn($m) => trim($m['dc_id'] ?? ''), $merges));
+    $isStructureel = false;
     if ($dcIds) {
+        $dcPh = implode(',', array_fill(0, count($dcIds), '?'));
+        // Huidige merge_groups ophalen
+        $curStmt = $pdo->prepare("
+            SELECT id, merge_group FROM distance_combinations
+            WHERE id IN ($dcPh) AND competition_id = ?
+        ");
+        $curStmt->execute(array_merge($dcIds, [$compId]));
+        $curGroups = [];
+        foreach ($curStmt->fetchAll(PDO::FETCH_ASSOC) as $row) {
+            $curGroups[$row['id']] = $row['merge_group'];
+        }
+        foreach ($merges as $m) {
+            $dcId = trim($m['dc_id'] ?? '');
+            $nieuwGroep = ($m['merge_group'] ?? null) ? trim($m['merge_group']) : null;
+            $huidigGroep = $curGroups[$dcId] ?? null;
+            if ($nieuwGroep !== $huidigGroep) { $isStructureel = true; break; }
+        }
+    }
+
+    // Blokkeer alleen structurele wijzigingen als er heats of tijdschema-config bestaan
+    if ($isStructureel && $dcIds) {
         $dcPh = implode(',', array_fill(0, count($dcIds), '?'));
 
         // Check heats
@@ -98,6 +121,40 @@ try {
         $labelVal = ($label !== null && trim($label) !== '') ? trim($label) : null;
 
         $stmt->execute([$groepVal, $labelVal, $dcId, $compId]);
+    }
+
+    // ── Update dc_naam in bestaande tijdschema_ritten + heats ──────────────
+    // Zodat programma, startlijsten, live en uitslag direct de nieuwe labels tonen.
+    $getCurNaam = $pdo->prepare("
+        SELECT DISTINCT r.dc_naam FROM tijdschema_ritten r
+        JOIN competition_tijdschema ct ON ct.id = r.tijdschema_id
+        WHERE ct.competition_id = ? AND r.dc_id = ?
+        LIMIT 1
+    ");
+    $updRitNaam = $pdo->prepare("
+        UPDATE tijdschema_ritten r
+        JOIN competition_tijdschema ct ON ct.id = r.tijdschema_id
+        SET r.dc_naam = ?,
+            r.rit_naam = REPLACE(r.rit_naam, ?, ?)
+        WHERE ct.competition_id = ? AND r.dc_id = ?
+    ");
+    $updHeatNaam = $pdo->prepare("
+        UPDATE heats
+        SET heat_naam = REPLACE(heat_naam, ?, ?)
+        WHERE competition_id = ? AND distance_combination_id = ?
+    ");
+    foreach ($merges as $m) {
+        $dcId  = trim($m['dc_id'] ?? '');
+        $label = trim($m['merge_label'] ?? '');
+        if (!$dcId || !$label) continue;
+
+        // Huidige naam ophalen voor REPLACE
+        $getCurNaam->execute([$compId, $dcId]);
+        $oudeNaam = $getCurNaam->fetchColumn();
+        if (!$oudeNaam || $oudeNaam === $label) continue;
+
+        $updRitNaam->execute([$label, $oudeNaam, $label, $compId, $dcId]);
+        $updHeatNaam->execute([$oudeNaam, $label, $compId, $dcId]);
     }
 
     echo json_encode(['ok' => true]);

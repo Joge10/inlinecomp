@@ -822,7 +822,8 @@ try {
             }
         }
         if ($reset) {
-            // Verwijder alle afstand- en categorie-instellingen + programma
+            // Verwijder alles: heats (lotingen), ritten, blokken, configuratie
+            $pdo->prepare("DELETE FROM heats WHERE competition_id = ?")->execute([$compId]);
             foreach (['tijdschema_ritten', 'tijdschema_blokken',
                       'tijdschema_cat_config', 'tijdschema_afstand_config'] as $tbl) {
                 $pdo->prepare("DELETE FROM {$tbl} WHERE tijdschema_id = ?")->execute([$tsId]);
@@ -833,6 +834,48 @@ try {
         $pdo->prepare("UPDATE competitions SET tijdschema_version = tijdschema_version + 1 WHERE id = ?")
             ->execute([$compId]);
         echo json_encode(fetchSchema($pdo, $compId));
+        exit;
+    }
+
+    // ── Ranking methods opslaan (vanuit klassement-tab) ─────────────────────
+    if ($action === 'save_ranking') {
+        $afstandNaam = trim($body['afstand_naam'] ?? '');
+        if (!$afstandNaam) {
+            http_response_code(400);
+            echo json_encode(['error' => 'afstand_naam is verplicht']);
+            exit;
+        }
+        // Zoek tijdschema_id via competition_id
+        $compId = trim($body['competition_id'] ?? '');
+        $tsIdStmt = $pdo->prepare("SELECT id FROM competition_tijdschema WHERE competition_id = ?");
+        $tsIdStmt->execute([$compId]);
+        $tsId = (int)$tsIdStmt->fetchColumn();
+        if (!$tsId) {
+            http_response_code(404);
+            echo json_encode(['error' => 'Geen tijdschema gevonden']);
+            exit;
+        }
+
+        $geldigeRanking = ['time', 'position_time'];
+        $updates = [];
+        $params  = [];
+        foreach (['heats_ranking', 'kwart_ranking', 'half_ranking', 'finale_ranking'] as $col) {
+            if (isset($body[$col]) && in_array($body[$col], $geldigeRanking, true)) {
+                $updates[] = "$col = ?";
+                $params[]  = $body[$col];
+            }
+        }
+        if ($updates) {
+            $params[] = $tsId;
+            $params[] = $afstandNaam;
+            $pdo->prepare("
+                UPDATE tijdschema_afstand_config
+                SET " . implode(', ', $updates) . "
+                WHERE tijdschema_id = ? AND afstand_naam = ?
+            ")->execute($params);
+        }
+
+        echo json_encode(['ok' => true]);
         exit;
     }
 
@@ -868,6 +911,17 @@ try {
         $bLaatstGrootst  = !empty($body['laatste_b_grootste']) ? 1 : 0;
         $finaleSeeding   = in_array($body['finale_seeding'] ?? '', ['slang', 'tijdkoppeling'], true)
                          ? $body['finale_seeding'] : 'slang';
+        $raceType        = in_array($body['race_type'] ?? '', ['sprint', 'long_distance'], true)
+                         ? $body['race_type'] : 'sprint';
+        $geldigeRanking  = ['time', 'position_time'];
+        $heatsRanking    = in_array($body['heats_ranking'] ?? '', $geldigeRanking, true)
+                         ? $body['heats_ranking'] : 'time';
+        $kwartRanking    = in_array($body['kwart_ranking'] ?? '', $geldigeRanking, true)
+                         ? $body['kwart_ranking'] : 'time';
+        $halfRanking     = in_array($body['half_ranking'] ?? '', $geldigeRanking, true)
+                         ? $body['half_ranking'] : 'time';
+        $finaleRanking   = in_array($body['finale_ranking'] ?? '', $geldigeRanking, true)
+                         ? $body['finale_ranking'] : 'time';
 
         $heeftRU  = !empty($body['heeft_runner_up']) ? 1 : 0;
         $ruMax    = max(2, min(30, (int)($body['runner_up_max'] ?? 6)));
@@ -877,8 +931,9 @@ try {
             INSERT INTO tijdschema_afstand_config
                 (tijdschema_id, afstand_naam, q_direct, q_tijd, finale_heat_grootte,
                  finale_b_grootte, laatste_b_grootste, finale_seeding,
+                 race_type, heats_ranking, kwart_ranking, half_ranking, finale_ranking,
                  heeft_runner_up, runner_up_max, runner_up_min)
-            VALUES (?,?,?,?,?,?,?,?,?,?,?)
+            VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
             ON DUPLICATE KEY UPDATE
                 q_direct            = VALUES(q_direct),
                 q_tijd              = VALUES(q_tijd),
@@ -886,10 +941,17 @@ try {
                 finale_b_grootte    = VALUES(finale_b_grootte),
                 laatste_b_grootste  = VALUES(laatste_b_grootste),
                 finale_seeding      = VALUES(finale_seeding),
+                race_type           = VALUES(race_type),
+                heats_ranking       = VALUES(heats_ranking),
+                kwart_ranking       = VALUES(kwart_ranking),
+                half_ranking        = VALUES(half_ranking),
+                finale_ranking      = VALUES(finale_ranking),
                 heeft_runner_up     = VALUES(heeft_runner_up),
                 runner_up_max       = VALUES(runner_up_max),
                 runner_up_min       = VALUES(runner_up_min)
-        ")->execute([$tsId, $afstandNaam, $qD, $qT, $finaleHg, $finaleBg, $bLaatstGrootst, $finaleSeeding, $heeftRU, $ruMax, $ruMin]);
+        ")->execute([$tsId, $afstandNaam, $qD, $qT, $finaleHg, $finaleBg, $bLaatstGrootst,
+                     $finaleSeeding, $raceType, $heatsRanking, $kwartRanking, $halfRanking, $finaleRanking,
+                     $heeftRU, $ruMax, $ruMin]);
 
         // Per-categorie config opslaan
         $catConfigs = $body['cat_configs'] ?? [];
@@ -1268,6 +1330,29 @@ try {
         $pdo->prepare("UPDATE competitions SET tijdschema_version = tijdschema_version + 1 WHERE id = ?")
             ->execute([$compId]);
         echo json_encode(fetchSchema($pdo, $compId));
+        exit;
+    }
+
+    // ── Programma wissen (ritten verwijderen, blokken+config behouden) ────────
+    if ($action === 'wis_programma') {
+        $tsId = (int)($body['tijdschema_id'] ?? 0);
+        if (!$tsId) {
+            http_response_code(400);
+            echo json_encode(['error' => 'tijdschema_id is verplicht']);
+            exit;
+        }
+        $compId = $getCompId($tsId);
+        $pdo->beginTransaction();
+        // Verwijder alles: heats, ritten, blokken, configuratie (volledig schone lei)
+        $pdo->prepare("DELETE FROM heats WHERE competition_id = ?")->execute([$compId]);
+        $pdo->prepare("DELETE FROM tijdschema_ritten WHERE tijdschema_id = ?")->execute([$tsId]);
+        $pdo->prepare("DELETE FROM tijdschema_blokken WHERE tijdschema_id = ?")->execute([$tsId]);
+        $pdo->prepare("DELETE FROM tijdschema_cat_config WHERE tijdschema_id = ?")->execute([$tsId]);
+        $pdo->prepare("DELETE FROM tijdschema_afstand_config WHERE tijdschema_id = ?")->execute([$tsId]);
+        $pdo->prepare("UPDATE competition_tijdschema SET gegenereerd_op = NULL WHERE id = ?")->execute([$tsId]);
+        $pdo->commit();
+
+        echo json_encode(['ok' => true]);
         exit;
     }
 

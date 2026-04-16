@@ -255,30 +255,16 @@ if ($action === 'save_rit_results') {
     }
 
     try {
-        // Geldige sancties (UI → DB mapping)
-        $sanctieMap = [
-            'DNS'   => 'DNS',
-            'DNF'   => 'DNF',
-            'DQ-SF' => 'DSQ-SF',
-            'DQ-DF' => 'DSQ-TF',
-            'FS'    => 'FS1',
-            // Directe DB-waarden ook accepteren
-            'DSQ-SF'=> 'DSQ-SF',
-            'DSQ-TF'=> 'DSQ-TF',
-            'FS1'   => 'FS1',
-            'W1'    => 'W1',
-            'W2'    => 'W2',
-            'DC'    => 'DC',
-            'RR'    => 'RR',
-        ];
+        // Geldige sancties (DB = UI codes, geen mapping meer nodig)
+        $geldigeSancties = ['W1','W2','FS','RR','DQ-TF','DQ-SF','DQ-DF','DNS','DNF'];
 
-        // Finishpositie berekenen
-        //   FS1       → normale positie op basis van tijd (tijd wordt BEWAARD)
-        //   DNF/DSQ-SF → ex-aequo gedeeld laatste = N + 1
-        //   DNS/DSQ-TF → géén positie (niet in uitslag)
-        //   Overige sancties → géén positie
-        $GEDEELD_LAATSTE = ['DNF', 'DSQ-SF'];
-        $GEEN_UITSLAG    = ['DNS', 'DSQ-TF'];
+        // Finishpositie berekenen (internationaal systeem):
+        //   FS        → normale positie op basis van tijd (tijd BEWAARD)
+        //   W1/W2/RR  → geen automatisch effect (jury past manueel aan)
+        //   DNF/DQ-TF/DNS → ranked last in round (ex-aequo gedeeld laatste)
+        //   DQ-SF/DQ-DF   → not ranked (geen positie, geen punten)
+        $RANKED_LAST = ['DNF', 'DQ-TF', 'DNS'];
+        $NOT_RANKED  = ['DQ-SF', 'DQ-DF'];
 
         $metTijd    = [];   // normale finishers + FS rijders (positie op tijd)
         $gedeeldArr = [];   // DNF / DQ-SF (gedeeld laatste)
@@ -287,28 +273,28 @@ if ($action === 'save_rit_results') {
         foreach ($results as $r) {
             $tijdMs    = isset($r['tijd_ms']) && $r['tijd_ms'] !== null && $r['tijd_ms'] !== ''
                          ? (int)$r['tijd_ms'] : null;
-            $sanctieUi = trim($r['sanctie'] ?? '');
-            $dbSanctie = isset($sanctieMap[$sanctieUi]) ? $sanctieMap[$sanctieUi] : null;
+            $sanctie = trim($r['sanctie'] ?? '');
+            $sanctie = in_array($sanctie, $geldigeSancties, true) ? $sanctie : null;
 
             $rondes = isset($r['rondes']) && $r['rondes'] !== '' && $r['rondes'] !== null
                       ? (int)$r['rondes'] : null;
 
-            if ($dbSanctie && in_array($dbSanctie, $GEDEELD_LAATSTE, true)) {
-                // DNF / DQ-SF: ex-aequo laatste, tijd wissen
-                $gedeeldArr[] = ['entry_id' => (int)$r['entry_id'], 'tijd_ms' => null,   'rondes' => $rondes, 'sanctie' => $dbSanctie, 'notitie' => $r['notitie'] ?? ''];
-            } elseif ($dbSanctie && in_array($dbSanctie, $GEEN_UITSLAG, true)) {
-                // DNS / DQ-DF: geen positie, geen tijd
-                $zonderTijd[] = ['entry_id' => (int)$r['entry_id'], 'tijd_ms' => null,   'rondes' => $rondes, 'sanctie' => $dbSanctie, 'notitie' => $r['notitie'] ?? ''];
-            } elseif ($dbSanctie === 'FS1') {
+            if ($sanctie && in_array($sanctie, $RANKED_LAST, true)) {
+                // DNF / DQ-TF / DNS: ranked last in round, tijd wissen
+                $gedeeldArr[] = ['entry_id' => (int)$r['entry_id'], 'tijd_ms' => null,   'rondes' => $rondes, 'sanctie' => $sanctie, 'notitie' => $r['notitie'] ?? ''];
+            } elseif ($sanctie && in_array($sanctie, $NOT_RANKED, true)) {
+                // DQ-SF / DQ-DF: not ranked, geen positie, geen tijd
+                $zonderTijd[] = ['entry_id' => (int)$r['entry_id'], 'tijd_ms' => null,   'rondes' => $rondes, 'sanctie' => $sanctie, 'notitie' => $r['notitie'] ?? ''];
+            } elseif ($sanctie === 'FS') {
                 // FS: waarschuwing; tijd bewaren en normale positie toekennen
                 if ($tijdMs !== null && $tijdMs > 0) {
-                    $metTijd[]    = ['entry_id' => (int)$r['entry_id'], 'tijd_ms' => $tijdMs, 'rondes' => $rondes, 'sanctie' => 'FS1',      'notitie' => $r['notitie'] ?? ''];
+                    $metTijd[]    = ['entry_id' => (int)$r['entry_id'], 'tijd_ms' => $tijdMs, 'rondes' => $rondes, 'sanctie' => 'FS',       'notitie' => $r['notitie'] ?? ''];
                 } else {
-                    $zonderTijd[] = ['entry_id' => (int)$r['entry_id'], 'tijd_ms' => null,   'rondes' => $rondes, 'sanctie' => 'FS1',      'notitie' => $r['notitie'] ?? ''];
+                    $zonderTijd[] = ['entry_id' => (int)$r['entry_id'], 'tijd_ms' => null,   'rondes' => $rondes, 'sanctie' => 'FS',       'notitie' => $r['notitie'] ?? ''];
                 }
             } elseif ($tijdMs !== null && $tijdMs > 0) {
                 // Normale finisher
-                $metTijd[]    = ['entry_id' => (int)$r['entry_id'], 'tijd_ms' => $tijdMs, 'rondes' => $rondes, 'sanctie' => $dbSanctie, 'notitie' => $r['notitie'] ?? ''];
+                $metTijd[]    = ['entry_id' => (int)$r['entry_id'], 'tijd_ms' => $tijdMs, 'rondes' => $rondes, 'sanctie' => $sanctie, 'notitie' => $r['notitie'] ?? ''];
             } else {
                 // Geen tijd, geen geldige sanctie: wis resultaat
                 $zonderTijd[] = ['entry_id' => (int)$r['entry_id'], 'tijd_ms' => null,   'rondes' => $rondes, 'sanctie' => null,       'notitie' => $r['notitie'] ?? ''];
@@ -661,7 +647,7 @@ if ($action === 'genereer_volgende_ronde') {
         $alleRijders = $resStmt->fetchAll(PDO::FETCH_ASSOC);
 
         // Filter uitgevallen rijders
-        $sanctiesUit = ['DNS', 'DNF', 'DSQ-SF', 'DSQ-TF', 'DC', 'RR'];
+        $sanctiesUit = ['DNS', 'DNF', 'DQ-TF', 'DQ-SF', 'DQ-DF'];
         $beschikbaar = [];
         foreach ($alleRijders as $r) {
             if (in_array($r['sanctie'] ?? '', $sanctiesUit, true)) continue;
@@ -796,25 +782,6 @@ if ($action === 'genereer_volgende_ronde') {
             }
         }
 
-        // ── Volgende-ronde ritten ophalen ─────────────────────────────────────
-        $volgendeRittenStmt = $pdo->prepare("
-            SELECT r.id, r.heat_nr, r.volgorde, r.rit_naam, r.dc_naam, r.distance_id
-            FROM tijdschema_ritten r
-            WHERE r.tijdschema_id = ?
-              AND r.dc_id = ?
-              AND (r.distance_id = ? OR (r.distance_id IS NULL AND ? = ''))
-              AND r.ronde_type = ?
-            ORDER BY r.heat_nr, r.volgorde
-        ");
-        $volgendeRittenStmt->execute([$tsId, $dcId, $distanceId, $distanceId, $naarRondeType]);
-        $volgendeRitten = $volgendeRittenStmt->fetchAll(PDO::FETCH_ASSOC);
-
-        if (empty($volgendeRitten)) {
-            // Geen volgende ronde geconfigureerd in tijdschema – geen fout, gewoon overslaan
-            echo json_encode(['ok' => false, 'geen_ritten' => true], JSON_UNESCAPED_UNICODE);
-            exit;
-        }
-
         // Bepaal ronde-nummer
         $rondeNrMap = [
             'heats'        => 1,
@@ -835,9 +802,10 @@ if ($action === 'genereer_volgende_ronde') {
         // ON DELETE CASCADE verwijdert heat_entries en results automatisch.
         $pdo->beginTransaction();
 
-        // Delete via tijdschema_rit koppeling (vangt ook heats met ronde=1
-        // die direct als finale zijn gegenereerd via startlijst_genereer.php).
-        $delTypes = ['finale_a', 'finale_b'];
+        // Delete bestaande heats voor het doel-rondetype + eventuele finale_b
+        // Bevat ook heats met ronde=1 die via startlijst_genereer zijn aangemaakt.
+        $delTypes = [$naarRondeType];
+        if ($naarRondeType === 'finale_a') $delTypes[] = 'finale_b'; // B-finales mee opruimen
         foreach ($delTypes as $delType) {
             $delIds = $pdo->prepare("
                 SELECT h.id, h.tijdschema_rit_id FROM heats h
@@ -865,6 +833,15 @@ if ($action === 'genereer_volgende_ronde') {
             }
         }
 
+        // Fallback: verwijder ook heats op het juiste ronde-nummer zonder rit-koppeling
+        $pdo->prepare("
+            DELETE FROM heats
+            WHERE competition_id          = ?
+              AND distance_combination_id = ?
+              AND (distance_id = ? OR (distance_id IS NULL AND ? = ''))
+              AND ronde = ?
+        ")->execute([$compId, $dcId, $distanceId, $distanceId, $rondeNr]);
+
         // Brede cleanup: verwijder ALLE verweesd ex-aequo heats en ritten voor deze DC
         $pdo->prepare("
             DELETE FROM heats
@@ -882,15 +859,40 @@ if ($action === 'genereer_volgende_ronde') {
                   AND (rit_naam LIKE '%ex-aequo%' OR rit_naam LIKE '%extra%' OR heat_nr <= 0)
             ")->execute([$cleanTsId, $dcId]);
         }
-        // Fallback: ook heats zonder rit-koppeling op ronde=N opruimen
-        $pdo->prepare("
-            DELETE FROM heats
-            WHERE competition_id          = ?
-              AND distance_combination_id = ?
-              AND (distance_id = ? OR (distance_id IS NULL AND ? = ''))
-              AND ronde = ?
-              AND tijdschema_rit_id IS NULL
-        ")->execute([$compId, $dcId, $distanceId, $distanceId, $rondeNr]);
+        // ── Hernummer volgorde: sluit gaten van verwijderde ex-aequo ritten ──
+        // ORDER BY volgorde behoudt de bestaande relatieve volgorde exact.
+        if ($cleanTsId) {
+            $allRitIds = $pdo->prepare(
+                "SELECT id FROM tijdschema_ritten WHERE tijdschema_id = ? ORDER BY volgorde"
+            );
+            $allRitIds->execute([$cleanTsId]);
+            $ritRows = $allRitIds->fetchAll(PDO::FETCH_COLUMN);
+            $updVolg = $pdo->prepare("UPDATE tijdschema_ritten SET volgorde = ? WHERE id = ?");
+            foreach ($ritRows as $vi => $ritRowId) {
+                $updVolg->execute([$vi + 1, $ritRowId]);
+            }
+        }
+
+        // ── Volgende-ronde ritten ophalen (NA cleanup + hernummering) ────────
+        // Moet NA de cleanup staan zodat ex-aequo ritten van de vorige run
+        // niet meer worden meegeteld.
+        $volgendeRittenStmt = $pdo->prepare("
+            SELECT r.id, r.heat_nr, r.volgorde, r.rit_naam, r.dc_naam, r.distance_id
+            FROM tijdschema_ritten r
+            WHERE r.tijdschema_id = ?
+              AND r.dc_id = ?
+              AND (r.distance_id = ? OR (r.distance_id IS NULL AND ? = ''))
+              AND r.ronde_type = ?
+            ORDER BY r.heat_nr, r.volgorde
+        ");
+        $volgendeRittenStmt->execute([$tsId, $dcId, $distanceId, $distanceId, $naarRondeType]);
+        $volgendeRitten = $volgendeRittenStmt->fetchAll(PDO::FETCH_ASSOC);
+
+        if (empty($volgendeRitten)) {
+            $pdo->commit();
+            echo json_encode(['ok' => false, 'geen_ritten' => true], JSON_UNESCAPED_UNICODE);
+            exit;
+        }
 
         // ── Maak nieuwe heats aan ─────────────────────────────────────────────
         $insHeat = $pdo->prepare("
@@ -901,7 +903,7 @@ if ($action === 'genereer_volgende_ronde') {
             VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'kwalificatie', ?)
         ");
         $insEntry = $pdo->prepare("
-            INSERT INTO heat_entries (heat_id, person_license, categorie, startpositie, startnummer)
+            INSERT IGNORE INTO heat_entries (heat_id, person_license, categorie, startpositie, startnummer)
             VALUES (?, ?, ?, ?, ?)
         ");
 
@@ -929,18 +931,31 @@ if ($action === 'genereer_volgende_ronde') {
         // ── Multi-finale overflow: merge + herverdeel VÓÓR de normale seeding ──
         $isMultiFinale = !$isFullFinal && ($naarRondeType === 'finale_a') && (count($heatIds) > 1) && !empty($overflowRijders);
         if ($isMultiFinale) {
+            $nOverflow = count($overflowRijders);
             $allSlots = array_merge($allSlots, $overflowRijders);
             $overflowRijders = []; // verwerkt
 
             $aantalSlots = count($allSlots);
             $heatNummers = array_keys($heatIds);
             sort($heatNummers);
-            $origPerHeat = max(1, (int)round(($aantalSlots - count($overflowRijders)) / max(1, count($heatNummers))));
-            $neededHeats = (int)ceil($aantalSlots / max(1, $origPerHeat ?: 2));
+            // origPerHeat: hoeveel rijders per heat ZONDER de overflow
+            $origPerHeat = max(1, (int)round(($aantalSlots - $nOverflow) / max(1, count($heatNummers))));
+            $neededHeats = (int)ceil($aantalSlots / max(1, $origPerHeat));
 
             // Extra heats aanmaken als nodig
-            while (count($heatIds) < $neededHeats) {
-                // Bij tijdkoppeling: extra heat vóór de rest (laag heat_nr → langzaamsten)
+            // Referentie-rit ophalen EENMALIG
+            $refRitStmt = $pdo->prepare("
+                SELECT r.id, r.blok_id, r.volgorde, r.tijdschema_id, r.afstand_naam
+                FROM tijdschema_ritten r
+                JOIN competition_tijdschema ct ON ct.id = r.tijdschema_id
+                WHERE ct.competition_id = ? AND r.dc_id = ? AND r.ronde_type = 'finale_a'
+                ORDER BY r.volgorde ASC LIMIT 1
+            ");
+            $refRitStmt->execute([$compId, $dcId]);
+            $refRit = $refRitStmt->fetch(PDO::FETCH_ASSOC);
+
+            $maxIteraties = max(0, $neededHeats - count($heatIds));
+            for ($extraI = 0; $extraI < $maxIteraties; $extraI++) {
                 if ($finaleSeeding === 'tijdkoppeling') {
                     $extraHeatNr = min(array_keys($heatIds)) - 1;
                 } else {
@@ -951,50 +966,54 @@ if ($action === 'genereer_volgende_ronde') {
                 $extraNaam = "A-finale heat ex-aequo (extra) {$afNaam} – {$dcNaamExtra}";
                 $extraVerwacht = max(1, (int)ceil(($aantalSlots - $origPerHeat * count($heatIds)) / max(1, $neededHeats - count($heatIds))));
 
-                $refRitStmt = $pdo->prepare("
-                    SELECT r.id, r.blok_id, r.volgorde, r.tijdschema_id, r.afstand_naam
-                    FROM tijdschema_ritten r
-                    JOIN competition_tijdschema ct ON ct.id = r.tijdschema_id
-                    WHERE ct.competition_id = ? AND r.dc_id = ? AND r.ronde_type = 'finale_a'
-                    ORDER BY r.volgorde ASC LIMIT 1
-                ");
-                $refRitStmt->execute([$compId, $dcId]);
-                $refRit = $refRitStmt->fetch(PDO::FETCH_ASSOC);
-                $ritVolgorde = $refRit ? (int)$refRit['volgorde'] : 0;
-
-                // Schuif ALLE ritten in het tijdschema op die op of na de insert-positie komen
-                if ($refRit) {
-                    $pdo->prepare("
-                        UPDATE tijdschema_ritten
-                        SET volgorde = volgorde + 1
-                        WHERE tijdschema_id = ?
-                          AND volgorde >= ?
-                    ")->execute([$refRit['tijdschema_id'], $ritVolgorde]);
-
-                    // Sync heats.rit_volgorde met de nieuwe tijdschema_ritten.volgorde
-                    $pdo->prepare("
-                        UPDATE heats h
-                        JOIN tijdschema_ritten r ON r.id = h.tijdschema_rit_id
-                        SET h.rit_volgorde = r.volgorde
-                        WHERE h.competition_id = ?
-                    ")->execute([$compId]);
-                }
-
                 $extraRitId = null;
                 if ($refRit) {
+                    // Tijdkoppeling: extra heat VÓÓR de rest (langzaamsten eerst)
+                    // Slang: extra heat NÁ de rest
+                    if ($finaleSeeding === 'tijdkoppeling') {
+                        // Vers ophalen: laagste volgorde van deze DC's finale ritten
+                        $minVStmt = $pdo->prepare("
+                            SELECT MIN(r.volgorde) FROM tijdschema_ritten r
+                            WHERE r.tijdschema_id = ? AND r.dc_id = ? AND r.ronde_type = 'finale_a'
+                        ");
+                        $minVStmt->execute([$refRit['tijdschema_id'], $dcId]);
+                        $insertVolgorde = (int)$minVStmt->fetchColumn();
+                    } else {
+                        $maxVStmt = $pdo->prepare("
+                            SELECT MAX(r.volgorde) FROM tijdschema_ritten r
+                            WHERE r.tijdschema_id = ? AND r.dc_id = ? AND r.ronde_type = 'finale_a'
+                        ");
+                        $maxVStmt->execute([$refRit['tijdschema_id'], $dcId]);
+                        $insertVolgorde = (int)$maxVStmt->fetchColumn() + 1;
+                    }
+
+                    // Schuif ritten op om ruimte te maken (alleen als we ervoor invoegen)
+                    if ($finaleSeeding === 'tijdkoppeling') {
+                        $pdo->prepare("
+                            UPDATE tijdschema_ritten
+                            SET volgorde = volgorde + 1
+                            WHERE tijdschema_id = ? AND volgorde >= ?
+                        ")->execute([$refRit['tijdschema_id'], $insertVolgorde]);
+                    }
+
                     $pdo->prepare("
                         INSERT INTO tijdschema_ritten
                             (tijdschema_id, blok_id, volgorde, dc_id, distance_id,
                              afstand_naam, ronde_type, heat_nr, rit_naam, dc_naam, verwacht)
                         VALUES (?, ?, ?, ?, ?, ?, 'finale_a', ?, ?, ?, ?)
                     ")->execute([
-                        $refRit['tijdschema_id'], $refRit['blok_id'], $ritVolgorde,
+                        $refRit['tijdschema_id'], $refRit['blok_id'], $insertVolgorde,
                         $dcId, $distanceId ?: null,
                         $afNaam, $extraHeatNr, $extraNaam,
                         $dcNaamExtra, $extraVerwacht,
                     ]);
                     $extraRitId = (int)$pdo->lastInsertId();
+
+                    $ritVolgorde = $insertVolgorde;
+                } else {
+                    $ritVolgorde = 0;
                 }
+
                 $insHeat->execute([
                     $compId, $dcId, $distanceId ?: null,
                     $rondeNr, $extraRitId, $ritVolgorde,
@@ -1004,6 +1023,14 @@ if ($action === 'genereer_volgende_ronde') {
                     'id' => (int)$pdo->lastInsertId(), 'rit_naam' => $extraNaam, 'rijders' => [],
                 ];
             }
+
+            // Sync ALLE heats.rit_volgorde met de (verschoven) tijdschema_ritten
+            $pdo->prepare("
+                UPDATE heats h
+                JOIN tijdschema_ritten r ON r.id = h.tijdschema_rit_id
+                SET h.rit_volgorde = r.volgorde
+                WHERE h.competition_id = ?
+            ")->execute([$compId]);
         }
 
         // ── Seed alle slots naar dest-heats ──────────────────────────────────

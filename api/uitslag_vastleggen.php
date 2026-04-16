@@ -60,11 +60,6 @@ try {
     $sysStmt->execute([$compId]);
     $systeem = $sysStmt->fetchColumn() ?: 'internationaal-nieuw';
 
-    if ($systeem !== 'full-final') {
-        echo json_encode(['ok' => false, 'melding' => 'Internationaal systeem – vastleggen nog niet beschikbaar.']);
-        exit;
-    }
-
     // ── Afstanden ─────────────────────────────────────────────────────────────
     $distWhere = $filterDistId ? 'AND id = ?' : '';
     $distStmt  = $pdo->prepare("
@@ -114,7 +109,8 @@ try {
         SELECT he.person_license,
                p.full_name, p.short_name, p.start_number,
                p.category AS categorie,
-               res.finishpositie, res.tijd_ms, res.sanctie
+               res.finishpositie, res.tijd_ms, res.sanctie,
+               res.rondes, res.punten AS pk_punten
         FROM heat_entries he
         JOIN persons p ON p.license_key = he.person_license
         LEFT JOIN results res ON res.heat_entry_id = he.id
@@ -126,12 +122,12 @@ try {
     $upsertAfstand = $pdo->prepare("
         INSERT INTO uitslag_afstand
             (competition_id, competition_naam, competition_datum,
-             distance_combination_id, dc_naam,
+             distance_combination_id, dc_naam, split_group,
              distance_id, distance_naam, distance_meters,
              person_license, categorie,
              rang, finale_positie, finale_naam,
              tijd_ms, punten, sanctie)
-        VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+        VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
         ON DUPLICATE KEY UPDATE
             rang            = VALUES(rang),
             finale_positie  = VALUES(finale_positie),
@@ -156,28 +152,41 @@ try {
         $distNaam   = $dist['name'];
         $distMeters = $dist['value_meters'] ?? null;
 
-        // Heats: serie + finales (voor gecombineerde detectie)
-        $heatStmt = $pdo->prepare("
-            SELECT h.id, h.heat_nr, h.heat_naam,
-                   COALESCE(ts_r.ronde_type, 'finale_a') AS ronde_type
-            FROM heats h
-            LEFT JOIN tijdschema_ritten ts_r ON ts_r.id = h.tijdschema_rit_id
-            WHERE h.competition_id          = ?
-              AND h.distance_combination_id IN ($dcPh)
-              AND (
-                  ts_r.ronde_type IN ('heats', 'finale_a', 'finale_b')
-                  OR (ts_r.ronde_type IS NULL AND h.ronde = 4)
-              )
-              AND COALESCE(h.distance_id, ts_r.distance_id) = ?
-            ORDER BY
-                CASE COALESCE(ts_r.ronde_type, 'finale_a')
-                    WHEN 'heats'    THEN 0
-                    WHEN 'finale_a' THEN 1
-                    WHEN 'finale_b' THEN 2
-                    ELSE 3
-                END,
-                h.heat_nr ASC
-        ");
+        // Heats ophalen: alle ronde-types voor internationaal, serie+finales voor full-final
+        if ($systeem !== 'full-final') {
+            $heatStmt = $pdo->prepare("
+                SELECT h.id, h.heat_nr, h.heat_naam, h.ronde,
+                       COALESCE(ts_r.ronde_type, 'finale_a') AS ronde_type
+                FROM heats h
+                LEFT JOIN tijdschema_ritten ts_r ON ts_r.id = h.tijdschema_rit_id
+                WHERE h.competition_id = ?
+                  AND h.distance_combination_id IN ($dcPh)
+                  AND COALESCE(h.distance_id, ts_r.distance_id) = ?
+                ORDER BY h.ronde ASC, h.heat_nr ASC
+            ");
+        } else {
+            $heatStmt = $pdo->prepare("
+                SELECT h.id, h.heat_nr, h.heat_naam,
+                       COALESCE(ts_r.ronde_type, 'finale_a') AS ronde_type
+                FROM heats h
+                LEFT JOIN tijdschema_ritten ts_r ON ts_r.id = h.tijdschema_rit_id
+                WHERE h.competition_id          = ?
+                  AND h.distance_combination_id IN ($dcPh)
+                  AND (
+                      ts_r.ronde_type IN ('heats', 'finale_a', 'finale_b')
+                      OR (ts_r.ronde_type IS NULL AND h.ronde = 4)
+                  )
+                  AND COALESCE(h.distance_id, ts_r.distance_id) = ?
+                ORDER BY
+                    CASE COALESCE(ts_r.ronde_type, 'finale_a')
+                        WHEN 'heats'    THEN 0
+                        WHEN 'finale_a' THEN 1
+                        WHEN 'finale_b' THEN 2
+                        ELSE 3
+                    END,
+                    h.heat_nr ASC
+            ");
+        }
         $heatStmt->execute(array_merge([$compId], $dcIds, [$distId]));
         $heats = $heatStmt->fetchAll(PDO::FETCH_ASSOC);
         if (empty($heats)) continue;
@@ -196,6 +205,89 @@ try {
             unset($r);
             return $rows;
         };
+
+        // ── Internationaal systeem: cascading elimination ranking ─────────────
+        if ($systeem !== 'full-final') {
+            // Ranking methods ophalen
+            $rankingMethods = ['heats' => 'time', 'kwartfinale' => 'time',
+                               'halve_finale' => 'time', 'finale_a' => 'time'];
+            $tsIdStmt2 = $pdo->prepare("SELECT id FROM competition_tijdschema WHERE competition_id = ?");
+            $tsIdStmt2->execute([$compId]);
+            $tsId2 = $tsIdStmt2->fetchColumn();
+            if ($tsId2) {
+                $acStmt2 = $pdo->prepare("
+                    SELECT heats_ranking, kwart_ranking, half_ranking, finale_ranking
+                    FROM tijdschema_afstand_config WHERE tijdschema_id = ? AND afstand_naam = ?
+                ");
+                $acStmt2->execute([$tsId2, $distNaam]);
+                $ac2 = $acStmt2->fetch(PDO::FETCH_ASSOC);
+                if ($ac2) {
+                    $rankingMethods['heats']        = $ac2['heats_ranking']  ?? 'time';
+                    $rankingMethods['kwartfinale']   = $ac2['kwart_ranking'] ?? 'time';
+                    $rankingMethods['halve_finale']  = $ac2['half_ranking']  ?? 'time';
+                    $rankingMethods['finale_a']      = $ac2['finale_ranking'] ?? 'time';
+                }
+            }
+
+            // Groepeer heats per ronde_type
+            $rondeLabels = ['heats' => 'Serie', 'kwartfinale' => 'Kwartfinale',
+                            'halve_finale' => 'Halve finale', 'finale_a' => 'A-Finale',
+                            'runner_up' => 'Runner-up'];
+            $rondeGroepen = [];
+            foreach ($heats as $heat) {
+                $rt = $heat['ronde_type'];
+                if (!isset($rondeGroepen[$rt])) {
+                    $rondeGroepen[$rt] = [
+                        'ronde_type' => $rt,
+                        'label'      => $rondeLabels[$rt] ?? $rt,
+                        'ranking'    => $rankingMethods[$rt] ?? 'time',
+                        'rows'       => [],
+                    ];
+                }
+                $rows = $laadRows($heat);
+                foreach ($rows as $r) {
+                    $rondeGroepen[$rt]['rows'][] = $r;
+                }
+            }
+
+            // Sorteer: finale eerst → series laatst
+            $rondeVolgorde = ['finale_a' => 0, 'runner_up' => 1, 'halve_finale' => 2,
+                              'kwartfinale' => 3, 'heats' => 4];
+            $rondeDataArr = array_values($rondeGroepen);
+            usort($rondeDataArr, fn($a, $b) =>
+                ($rondeVolgorde[$a['ronde_type']] ?? 5) <=> ($rondeVolgorde[$b['ronde_type']] ?? 5)
+            );
+
+            $resultaat = berekenInternationaalResultaat($rondeDataArr);
+
+            $geldigeSancties = ['W1','W2','FS','RR','DQ-TF','DQ-SF','DQ-DF','DNS','DNF'];
+            foreach ($resultaat as $r) {
+                $lic     = $r['person_license'];
+                $punten  = $r['rang'] !== null ? (float)$r['rang'] : 0;
+                $sanctie = $r['sanctie'] ?? null;
+
+                // Respecteer bestaande handmatige correctie
+                if (isset($bestaandeOverrides[$lic][$distId])) {
+                    $punten = $bestaandeOverrides[$lic][$distId];
+                }
+
+                $sanctieDb = ($sanctie && in_array($sanctie, $geldigeSancties, true))
+                    ? $sanctie : null;
+
+                $upsertAfstand->execute([
+                    $compId, $compNaam, $compDatum,
+                    $primaryDcId, $dcNaam, '',
+                    $distId, $distNaam, $distMeters,
+                    $lic, $personCache[$lic]['categorie'] ?? $r['categorie'] ?? null,
+                    $r['rang'], null, $r['ronde_label'] ?? 'Finale',
+                    $r['tijd_ms'], $punten, $sanctieDb,
+                ]);
+                $puntenMap[$lic][$distId] = $punten;
+            }
+
+            $vastgelegdAfstanden++;
+            continue; // volgende afstand
+        }
 
         // ── Gecombineerde modus: 1 serie + alleen A-finale ────────────────────
         if (isCombineerdModus($heats)) {
@@ -272,17 +364,13 @@ try {
                 if ($gc['sanctie'] !== null) {
                     // Respecteer bestaande handmatige correctie
                     $punten = $bestaandeOverrides[$lic][$distId] ?? $punten;
-                    $sanctieDb = match($gc['sanctie']) {
-                        'DSQ-SF', 'DQ-SF' => 'DSQ-SF',
-                        'DSQ-TF', 'DQ-DF' => 'DC',
-                        'DNS'             => 'DNS',
-                        'DNF'             => 'DNF',
-                        default           => null,
-                    };
+                    $geldigeSancties = ['W1','W2','FS','RR','DQ-TF','DQ-SF','DQ-DF','DNS','DNF'];
+                    $sanctieDb = in_array($gc['sanctie'], $geldigeSancties, true)
+                        ? $gc['sanctie'] : null;
                 }
                 $upsertAfstand->execute([
                     $compId, $compNaam, $compDatum,
-                    $primaryDcId, $dcNaam,
+                    $primaryDcId, $dcNaam, '',
                     $distId, $distNaam, $distMeters,
                     $lic, $personCache[$lic]['categorie'] ?? null,
                     $gc['rang'], null, 'Serie + A-finale',
@@ -322,7 +410,7 @@ try {
                 $punten = (float)$rang;
                 $upsertAfstand->execute([
                     $compId, $compNaam, $compDatum,
-                    $primaryDcId, $dcNaam,
+                    $primaryDcId, $dcNaam, '',
                     $distId, $distNaam, $distMeters,
                     $lic, $personCache[$lic]['categorie'] ?? null,
                     $rang, (int)$r['finishpositie'], $finaleNaam,
@@ -339,17 +427,12 @@ try {
                 if (!$s) continue;
                 $lic    = $r['person_license'];
                 $punten = $bestaandeOverrides[$lic][$distId] ?? $defaultPunten;
-                // Sanctie normaliseren naar uitslag_afstand ENUM
-                $sanctieDb = match($s) {
-                    'DSQ-SF', 'DQ-SF' => 'DSQ-SF',
-                    'DSQ-TF', 'DQ-DF' => 'DC',
-                    'DNS'             => 'DNS',
-                    'DNF'             => 'DNF',
-                    default           => null,
-                };
+                // DB = UI codes, directe opslag
+                $geldigeSancties2 = ['W1','W2','FS','RR','DQ-TF','DQ-SF','DQ-DF','DNS','DNF'];
+                $sanctieDb = in_array($s, $geldigeSancties2, true) ? $s : null;
                 $upsertAfstand->execute([
                     $compId, $compNaam, $compDatum,
-                    $primaryDcId, $dcNaam,
+                    $primaryDcId, $dcNaam, '',
                     $distId, $distNaam, $distMeters,
                     $lic, $personCache[$lic]['categorie'] ?? null,
                     null, null, $finaleNaam,
@@ -451,10 +534,10 @@ try {
     $upsertKlas = $pdo->prepare("
         INSERT INTO uitslag_klassement
             (competition_id, competition_naam, competition_datum,
-             distance_combination_id, dc_naam,
+             distance_combination_id, dc_naam, split_group,
              person_license, categorie,
              rang, punten_totaal, punten_detail)
-        VALUES (?,?,?,?,?,?,?,?,?,?)
+        VALUES (?,?,?,?,?,?,?,?,?,?,?)
         ON DUPLICATE KEY UPDATE
             rang            = VALUES(rang),
             punten_totaal   = VALUES(punten_totaal),
@@ -476,7 +559,7 @@ try {
         $cat = $personCache[$kr['lic']]['categorie'] ?? null;
         $upsertKlas->execute([
             $compId, $compNaam, $compDatum,
-            $primaryDcId, $dcNaam,
+            $primaryDcId, $dcNaam, '',
             $kr['lic'], $cat,
             $rang, $kr['totaal'],
             json_encode($kr['detail'], JSON_UNESCAPED_UNICODE),

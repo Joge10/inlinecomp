@@ -148,16 +148,16 @@ function _parseTijdInvoer(str) {
 //
 // entries: [{ entry_id, tijd_ms, sanctie }]
 // Returns: Map  entry_id → positie
-const _SANCTIE_GEDEELD_LAATSTE = new Set(['DNF', 'DQ-SF']);
-const _SANCTIE_GEEN_UITSLAG    = new Set(['DQ-DF', 'DNS']);
-const _SANCTIE_WIST_TIJD       = new Set(['DNF', 'DQ-SF', 'DQ-DF', 'DNS']); // FS niet!
+const _SANCTIE_RANKED_LAST = new Set(['DNF', 'DQ-TF', 'DNS']);
+const _SANCTIE_NOT_RANKED  = new Set(['DQ-SF', 'DQ-DF']);
+const _SANCTIE_WIST_TIJD   = new Set(['DNF', 'DQ-TF', 'DQ-SF', 'DQ-DF', 'DNS']); // FS niet!
 
 // gebruikGelijkspel=true: ex-aequo-ranking (1,2,3,4,5,5,7) voor full-final series.
 // gebruikGelijkspel=false (default): opeenvolgende posities zoals internationaal.
 function _berekenPosities(entries, gebruikGelijkspel = false) {
-    // Finishers: heeft tijd, niet DQ-DF/DNS, niet DNF/DQ-SF (FS wél meenemen op tijd)
+    // Finishers: heeft tijd, niet ranked_last, niet not_ranked (FS wél meenemen op tijd)
     const finishers = entries
-        .filter(e => e.tijd_ms > 0 && !_SANCTIE_GEDEELD_LAATSTE.has(e.sanctie) && !_SANCTIE_GEEN_UITSLAG.has(e.sanctie))
+        .filter(e => e.tijd_ms > 0 && !_SANCTIE_RANKED_LAST.has(e.sanctie) && !_SANCTIE_NOT_RANKED.has(e.sanctie))
         .sort((a, b) => {
             // Lange-afstand: rondes DESC (meer ronden = betere positie), dan tijd ASC
             // null rondes = Infinity: rijder zonder geregistreerde rondes staat boven rijder met weinig rondes
@@ -168,8 +168,8 @@ function _berekenPosities(entries, gebruikGelijkspel = false) {
             }
             return a.tijd_ms - b.tijd_ms;
         });
-    const gedeeldLaatste = entries.filter(e => _SANCTIE_GEDEELD_LAATSTE.has(e.sanctie));
-    // DQ-DF en DNS worden genegeerd (geen positie)
+    const rankedLast = entries.filter(e => _SANCTIE_RANKED_LAST.has(e.sanctie));
+    // DQ-SF en DQ-DF worden genegeerd (geen positie)
 
     const posMap = new Map();
     if (gebruikGelijkspel) {
@@ -186,22 +186,27 @@ function _berekenPosities(entries, gebruikGelijkspel = false) {
     } else {
         finishers.forEach((e, i) => posMap.set(e.entry_id, i + 1));
     }
-    if (gedeeldLaatste.length > 0) {
+    if (rankedLast.length > 0) {
         const laatste = finishers.length + 1;
-        gedeeldLaatste.forEach(e => posMap.set(e.entry_id, laatste));
+        rankedLast.forEach(e => posMap.set(e.entry_id, laatste));
     }
     return posMap;
 }
 
 // Synchroniseer tijd+sanctie naar alle DOM-elementen met hetzelfde entry_id
 // (zowel in het linker panel als in de carousel-kaart)
-function _liveSyncInvoer(entryId, tijdVal, sanctieVal) {
+function _liveSyncInvoer(entryId, tijdVal, sanctieVal, rondesVal) {
     [`[data-entry="${entryId}"]`, `[data-panel-entry="${entryId}"]`].forEach(sel => {
         document.querySelectorAll(sel).forEach(rij => {
             const t = rij.querySelector('.live-tijd-inp');
             const s = rij.querySelector('.live-sanctie-sel');
+            const rn = rij.querySelector('.live-rondes-inp');
             if (t && t !== document.activeElement && t.value !== tijdVal) t.value = tijdVal;
             if (s && s !== document.activeElement && s.value !== sanctieVal) s.value = sanctieVal;
+            if (rn && rn !== document.activeElement && rondesVal !== undefined) {
+                const rv = rondesVal ?? '';
+                if (rn.value !== String(rv)) rn.value = rv;
+            }
         });
     });
 }
@@ -216,7 +221,8 @@ function _liveHerbereken(ritIdx) {
         const rij    = document.querySelector(`[data-entry="${r.entry_id}"]`);
         const inp    = rij?.querySelector('.live-tijd-inp');
         const sel    = rij?.querySelector('.live-sanctie-sel');
-        const rondes = rij?.dataset.rondes ? (parseInt(rij.dataset.rondes) || null) : (r.rondes ?? null);
+        const rnInp  = rij?.querySelector('.live-rondes-inp');
+        const rondes = rnInp ? (rnInp.value !== '' ? (parseInt(rnInp.value) || null) : null) : (r.rondes ?? null);
         return { entry_id: r.entry_id, tijd_ms: inp ? _parseTijdInvoer(inp.value) : null, sanctie: sel?.value || null, rondes };
     });
 
@@ -699,7 +705,7 @@ function _liveBouwLinksPanel(dcId, distanceId, rondeType) {
         alleRijders.sort((a, b) => (a.startnummer ?? 99999) - (b.startnummer ?? 99999));
     }
 
-    const sanctieUiMap = { 'DNS':'DNS','DNF':'DNF','DSQ-SF':'DQ-SF','DSQ-TF':'DQ-DF','FS1':'FS' };
+    // DB = UI codes, geen mapping meer nodig
     const disabled = _liveLeesOnly ? 'disabled' : '';
 
     // Rondes-kolom tonen als minimaal één rijder ronde-data heeft
@@ -711,12 +717,12 @@ function _liveBouwLinksPanel(dcId, distanceId, rondeType) {
     } else {
         for (const r of alleRijders) {
             const tijdVal   = r.tijd_ms !== null ? _msTijdNaarDisplay(r.tijd_ms) : '';
-            const sanctieUi = sanctieUiMap[r.sanctie] || r.sanctie || '';
+            const sanctieUi = r.sanctie || '';
             const statusKls = r.sanctie ? 'live-rit-status-sanctie'
                             : r.tijd_ms !== null ? 'live-rit-status-compleet'
                             : 'live-rit-status-leeg';
             const rondesTd  = heeftRondes
-                ? `<td class="live-col-rondes">${r.rondes != null ? escHtml(String(r.rondes)) : ''}</td>`
+                ? `<td class="live-col-rondes"><input type="number" class="live-rondes-inp" value="${r.rondes ?? ''}" min="0" placeholder="—" ${disabled} inputmode="numeric"></td>`
                 : '';
             const kwalBadge = r._kwal === 'Q' ? '<span style="color:#198754;font-weight:700">Q</span>'
                            : r._kwal === 'q' ? '<span style="color:#0d6efd;font-weight:600">q</span>'
@@ -733,11 +739,15 @@ function _liveBouwLinksPanel(dcId, distanceId, rondeType) {
                 `<td class="live-col-sanctie">` +
                 `<select class="live-sanctie-sel" ${disabled}>` +
                 `<option value="">—</option>` +
-                `<option value="DNS" ${sanctieUi==='DNS'?'selected':''}>DNS</option>` +
-                `<option value="DNF" ${sanctieUi==='DNF'?'selected':''}>DNF</option>` +
+                `<option value="DNS"   ${sanctieUi==='DNS'  ?'selected':''}>DNS</option>` +
+                `<option value="DNF"   ${sanctieUi==='DNF'  ?'selected':''}>DNF</option>` +
+                `<option value="FS"    ${sanctieUi==='FS'   ?'selected':''}>FS</option>` +
+                `<option value="DQ-TF" ${sanctieUi==='DQ-TF'?'selected':''}>DQ-TF</option>` +
                 `<option value="DQ-SF" ${sanctieUi==='DQ-SF'?'selected':''}>DQ-SF</option>` +
                 `<option value="DQ-DF" ${sanctieUi==='DQ-DF'?'selected':''}>DQ-DF</option>` +
-                `<option value="FS" ${sanctieUi==='FS'?'selected':''}>FS</option>` +
+                `<option value="W1"    ${sanctieUi==='W1'   ?'selected':''}>W1</option>` +
+                `<option value="W2"    ${sanctieUi==='W2'   ?'selected':''}>W2</option>` +
+                `<option value="RR"    ${sanctieUi==='RR'   ?'selected':''}>RR</option>` +
                 `</select>` +
                 `</td>` +
                 `<td class="live-col-finish"><span class="live-finish-badge">${r.finishpositie?_ordinaal(r.finishpositie):'—'}</span></td>` +
@@ -832,7 +842,7 @@ function _livePanelBind() {
         });
     });
 
-    el('live-btn-opslaan-panel')?.addEventListener('click', () => _liveOpslaanLinksPanel());
+    // Opslaan-listener wordt door _liveInitPanelListeners() toegevoegd
     _livePanelHerbereken();
 }
 
@@ -875,7 +885,8 @@ function _livePanelHerbereken() {
         const entryId = parseInt(rij.dataset.panelEntry);
         const inp     = rij.querySelector('.live-tijd-inp');
         const sel     = rij.querySelector('.live-sanctie-sel');
-        const rondes  = rij.dataset.rondes ? (parseInt(rij.dataset.rondes) || null) : null;
+        const rnInp   = rij.querySelector('.live-rondes-inp');
+        const rondes  = rnInp ? (rnInp.value !== '' ? (parseInt(rnInp.value) || null) : null) : null;
         entries.push({ entry_id: entryId, tijd_ms: inp ? _parseTijdInvoer(inp.value) : null, sanctie: sel?.value || null, rondes });
     });
 
@@ -938,12 +949,14 @@ async function _liveOpslaanLinksPanel() {
         const ritId   = parseInt(rij.dataset.ritId);
         const inp     = rij.querySelector('.live-tijd-inp');
         const sel     = rij.querySelector('.live-sanctie-sel');
+        const rondesInp = rij.querySelector('.live-rondes-inp');
         const sanctie = sel?.value || '';
         // FS: tijd bewaren; overige sancties: tijd = null
         const tijdMs  = (!sanctie || sanctie === 'FS') ? _parseTijdInvoer(inp?.value ?? '') : null;
+        const rondes  = rondesInp ? (rondesInp.value !== '' ? (parseInt(rondesInp.value) || null) : null) : null;
 
         if (!ritMap.has(ritId)) ritMap.set(ritId, []);
-        ritMap.get(ritId).push({ entry_id: entryId, tijd_ms: tijdMs, sanctie: sanctie || null, notitie: '' });
+        ritMap.get(ritId).push({ entry_id: entryId, tijd_ms: tijdMs, sanctie: sanctie || null, notitie: '', rondes });
     });
 
     let fouten = 0;
@@ -1395,7 +1408,8 @@ function _liveUpdatePuntenBadges(ritIdx) {
         const rij    = document.querySelector(`[data-entry="${r.entry_id}"]`);
         const inp    = rij?.querySelector('.live-tijd-inp');
         const sel    = rij?.querySelector('.live-sanctie-sel');
-        const rondes = rij?.dataset.rondes ? (parseInt(rij.dataset.rondes) || null) : (r.rondes ?? null);
+        const rnInp  = rij?.querySelector('.live-rondes-inp');
+        const rondes = rnInp ? (rnInp.value !== '' ? (parseInt(rnInp.value) || null) : null) : (r.rondes ?? null);
         return { entry_id: r.entry_id, tijd_ms: inp ? _parseTijdInvoer(inp.value) : null, sanctie: sel?.value || null, rondes };
     });
     const tijdPosMap = _berekenPosities(tijdEntries, _liveSysteem === 'full-final');
@@ -1742,16 +1756,14 @@ async function _liveImportLaad(ritIdx) {
         // Lokale state bijwerken (zodat linker panel herbouwt met juiste rondes)
         if (csvRij.ronden != null) r.rondes = csvRij.ronden;
 
-        // Tijd invullen + rondes zetten als data-attribuut; sanctie ongemoeid laten
+        // Tijd + rondes invullen; sanctie ongemoeid laten
         [`[data-entry="${r.entry_id}"]`, `[data-panel-entry="${r.entry_id}"]`].forEach(cssSelStr => {
             document.querySelectorAll(cssSelStr).forEach(rij => {
                 const t = rij.querySelector('.live-tijd-inp');
                 if (t && t !== document.activeElement) t.value = tijdVal;
                 if (rondenVal != null) {
-                    rij.dataset.rondes = rondenVal;
-                    // Bijwerk de rondes-cel (bestaat altijd voor lange-afstand heats)
-                    const rndCel = rij.querySelector('.live-col-rondes');
-                    if (rndCel) rndCel.textContent = rondenVal;
+                    const rnInp = rij.querySelector('.live-rondes-inp');
+                    if (rnInp) rnInp.value = rondenVal;
                 }
             });
         });
@@ -1823,15 +1835,8 @@ function _liveRijRij(r, compact = false, validPosities = [], rangMap = new Map()
     const { heeftRondes = false } = opts;
     const tijdVal = r.tijd_ms !== null ? _msTijdNaarDisplay(r.tijd_ms) : '';
 
-    // Map DB-sanctie terug naar UI-waarde voor weergave in dropdown
-    const sanctieUiMap = {
-        'DNS':    'DNS',
-        'DNF':    'DNF',
-        'DSQ-SF': 'DQ-SF',
-        'DSQ-TF': 'DQ-DF',
-        'FS1':    'FS',
-    };
-    const sanctieUi = sanctieUiMap[r.sanctie] || r.sanctie || '';
+    // DB = UI codes, geen mapping meer nodig
+    const sanctieUi = r.sanctie || '';
 
     const disabled = _liveLeesOnly ? 'disabled' : '';
 
@@ -1849,7 +1854,7 @@ function _liveRijRij(r, compact = false, validPosities = [], rangMap = new Map()
         (!compact ? `<td class="heat-snr">${r.startnummer ?? ''}</td>` : '') +
         `<td class="heat-naam">${escHtml(r.full_name || '')}</td>` +
         (!compact ? `<td class="heat-tp">${transponder}</td>` : '') +
-        (heeftRondes ? `<td class="live-col-rondes">${r.rondes != null ? r.rondes : '—'}</td>` : '') +
+        (heeftRondes ? `<td class="live-col-rondes"><input type="number" class="live-rondes-inp" value="${r.rondes ?? ''}" min="0" placeholder="—" ${disabled} inputmode="numeric"></td>` : '') +
         `<td class="live-col-tijd">` +
         `<input type="text" class="live-tijd-inp" value="${escHtml(tijdVal)}"` +
         ` placeholder="0:00.000" ${disabled} inputmode="decimal">` +
@@ -1859,9 +1864,13 @@ function _liveRijRij(r, compact = false, validPosities = [], rangMap = new Map()
         `<option value="">—</option>` +
         `<option value="DNS"   ${sanctieUi === 'DNS'   ? 'selected' : ''}>DNS</option>` +
         `<option value="DNF"   ${sanctieUi === 'DNF'   ? 'selected' : ''}>DNF</option>` +
+        `<option value="FS"    ${sanctieUi === 'FS'    ? 'selected' : ''}>FS</option>` +
+        `<option value="DQ-TF" ${sanctieUi === 'DQ-TF' ? 'selected' : ''}>DQ-TF</option>` +
         `<option value="DQ-SF" ${sanctieUi === 'DQ-SF' ? 'selected' : ''}>DQ-SF</option>` +
         `<option value="DQ-DF" ${sanctieUi === 'DQ-DF' ? 'selected' : ''}>DQ-DF</option>` +
-        `<option value="FS"    ${sanctieUi === 'FS'    ? 'selected' : ''}>FS</option>` +
+        `<option value="W1"    ${sanctieUi === 'W1'    ? 'selected' : ''}>W1</option>` +
+        `<option value="W2"    ${sanctieUi === 'W2'    ? 'selected' : ''}>W2</option>` +
+        `<option value="RR"    ${sanctieUi === 'RR'    ? 'selected' : ''}>RR</option>` +
         `</select>` +
         `</td>` +
         `<td class="live-col-finish">` +
@@ -2006,7 +2015,8 @@ async function _liveOpslaanRit(ritIdx) {
         const tijdMs     = tijdInp ? _parseTijdInvoer(tijdInp.value) : null;
         const sanctie    = sanctieSel ? sanctieSel.value : '';
         const tijdOpslaan = _SANCTIE_WIST_TIJD.has(sanctie) ? null : (tijdMs ?? null);
-        const rondes      = rij?.dataset.rondes ? (parseInt(rij.dataset.rondes) || null) : (r.rondes ?? null);
+        const rondesInp   = rij?.querySelector('.live-rondes-inp');
+        const rondes      = rondesInp ? (rondesInp.value !== '' ? (parseInt(rondesInp.value) || null) : null) : (r.rondes ?? null);
         return {
             entry_id: r.entry_id,
             tijd_ms:  tijdOpslaan,
@@ -2098,24 +2108,25 @@ async function _liveOpslaanRit(ritIdx) {
             }
         }
 
-        // Na elke save: startlijst volgende ronde bijwerken (als die nog niet bezig is)
-        const rit2 = _liveRitten[ritIdx];
-        if (rit2 && !_liveLeesOnly) {
-            const volgende2 = _volgendeRondeType(rit2.dc_id, rit2.distance_id, rit2.ronde_type);
-            if (volgende2) {
-                const compleet = _liveRondeCompleet(rit2.dc_id, rit2.distance_id, rit2.ronde_type);
-                _liveGenereerVolgendeRonde(rit2.dc_id, rit2.distance_id, rit2.ronde_type, volgende2, compleet);
-            } else {
-                el('live-ronde-compleet')?.remove();
-            }
-        }
-
     } catch(e) {
         if (btn) {
             btn.disabled    = false;
             btn.textContent = '💾 Opslaan';
         }
         toonBevestigDialog('Fout bij opslaan: ' + e.message, 'Fout');
+    }
+
+    // Na save: volgende ronde bijwerken (buiten try/catch zodat save-feedback niet verstoord wordt)
+    const rit2 = _liveRitten[ritIdx];
+    if (rit2 && !_liveLeesOnly) {
+        const volgende2 = _volgendeRondeType(rit2.dc_id, rit2.distance_id, rit2.ronde_type);
+        if (volgende2) {
+            const compleet = _liveRondeCompleet(rit2.dc_id, rit2.distance_id, rit2.ronde_type);
+            _liveGenereerVolgendeRonde(rit2.dc_id, rit2.distance_id, rit2.ronde_type, volgende2, compleet)
+                .catch(() => {}); // stil falen
+        } else {
+            el('live-ronde-compleet')?.remove();
+        }
     }
 }
 

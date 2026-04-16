@@ -101,6 +101,8 @@ async function laadSlKlassementen() {
 
 let _slTsCache = null;   // { competition_id, schema }
 
+function invalideerSlTsCache() { _slTsCache = null; }
+
 async function laadSlTijdschema() {
     if (_slTsCache?.competition_id === huidigCompId) return _slTsCache.schema;
     _slTsCache = null;
@@ -394,8 +396,8 @@ async function drukStartlijstAf(optData) {
         willekeurig:     'Willekeurig geloot',
         startnummer:     'Op startnummer',
         alfabetisch:     'Alfabetisch',
-        klassement:      'Op klassement',
-        tussenklassement:'Op tussenklassement',
+        tussenklassement:'Tussenklassement (deze wedstrijd)',
+        klassement:      'Klassement (serie)',
     };
     // Bepaal de methode van de af te drukken ronde zelf
     // (niet van de series, want bijv. KF kan alfabetisch geloot zijn)
@@ -1090,9 +1092,10 @@ function slangenpatroon(rijders, maxPerHeat) {
 // Haalt de actuele tussenklassement-ranking op en toont de heat-indeling.
 // Als er al uitslag-data is worden echte namen getoond; anders generieke slots.
 
+// Retourneert true als er echte data is, false als niet
 async function vulTussenklPreview(container, nRijders, nHeats, schema, groep, distId, flow) {
     container.innerHTML = '<span class="sl-tk-laden">⏳ Tussenstand laden…</span>';
-    if (!nRijders || !nHeats) { container.innerHTML = ''; return; }
+    if (!nRijders || !nHeats) { container.innerHTML = ''; return false; }
     nHeats = Math.min(nHeats, nRijders);
 
     const ritLookup = bouwRitLookup(schema, groep?.dc_id, distId, flow?.[0]?.sleutel ?? 'heats');
@@ -1127,6 +1130,7 @@ async function vulTussenklPreview(container, nRijders, nHeats, schema, groep, di
         const slots    = ranked;
         const heats    = nHeats === 1 ? [{ nummer: 1, slots }] : snakeVerdeelSlots(slots, nHeats);
         container.appendChild(maakSchemaHeatGrid(heats, ritLookup));
+        return true;
     } else {
         // Geen data: generieke slots
         const info = document.createElement('div');
@@ -1137,6 +1141,7 @@ async function vulTussenklPreview(container, nRijders, nHeats, schema, groep, di
         const slots = Array.from({ length: nRijders }, (_, i) => `${i + 1}e tussenklassement`);
         const heats = nHeats === 1 ? [{ nummer: 1, slots }] : snakeVerdeelSlots(slots, nHeats);
         container.appendChild(maakSchemaHeatGrid(heats, ritLookup));
+        return false;
     }
 }
 
@@ -1177,7 +1182,15 @@ async function toonAfstandConfig(groep, distId, distNaam) {
     if (!schema) {
         slDist.innerHTML =
             `<div class="status-msg warn">
-                ⚠ Genereer eerst het tijdschema voordat je een startlijst kunt maken.
+                ⚠ Maak eerst een tijdschema aan voordat je een startlijst kunt maken.
+            </div>`;
+        return;
+    }
+    // Wel tijdschema maar geen programma gegenereerd → waarschuwing
+    if (!(schema.ritten?.length)) {
+        slDist.innerHTML =
+            `<div class="status-msg warn">
+                ⚠ Genereer eerst het programma in het Tijdschema voordat je een startlijst kunt maken.
             </div>`;
         return;
     }
@@ -1255,11 +1268,11 @@ async function toonAfstandConfig(groep, distId, distNaam) {
                 <button class="sl-meth-btn${methode === 'alfabetisch' ? ' actief' : ''}" data-methode="alfabetisch">
                     🔤 Alfabetisch
                 </button>
-                <button class="sl-meth-btn${methode === 'klassement' ? ' actief' : ''}" data-methode="klassement">
-                    🏆 Op klassement
-                </button>
                 <button class="sl-meth-btn${methode === 'tussenklassement' ? ' actief' : ''}" data-methode="tussenklassement">
-                    🏁 Op tussenklassement
+                    🏁 Tussenklassement (deze wedstrijd)
+                </button>
+                <button class="sl-meth-btn${methode === 'klassement' ? ' actief' : ''}" data-methode="klassement">
+                    🏆 Klassement (serie)
                 </button>
             </div>
             <div class="sl-klassement-kiezer" id="sl-kl-kiezer"
@@ -1289,8 +1302,11 @@ async function toonAfstandConfig(groep, distId, distNaam) {
         <div id="sl-resultaten"></div>`;
 
     // ── Tussenklassement preview direct vullen indien al geselecteerd ─────────
-    if (methode === 'tussenklassement')
-        await vulTussenklPreview(el('sl-tk-preview'), groep.competitors.length, cache.heatsAantal, schema, groep, distId, flow);
+    if (methode === 'tussenklassement') {
+        const heeftData = await vulTussenklPreview(el('sl-tk-preview'), groep.competitors.length, cache.heatsAantal, schema, groep, distId, flow);
+        const genBtn = el('sl-genereer');
+        if (genBtn) genBtn.disabled = !heeftData;
+    }
 
     // ── Methode knoppen ───────────────────────────────────────────────────────
     slDist.querySelectorAll('.sl-meth-btn').forEach(btn => {
@@ -1300,8 +1316,14 @@ async function toonAfstandConfig(groep, distId, distNaam) {
             btn.classList.add('actief');
             el('sl-kl-kiezer').style.display = cache.methode === 'klassement'       ? '' : 'none';
             el('sl-tk-kiezer').style.display  = cache.methode === 'tussenklassement' ? '' : 'none';
-            if (cache.methode === 'tussenklassement')
-                await vulTussenklPreview(el('sl-tk-preview'), groep.competitors.length, cache.heatsAantal, schema, groep, distId, flow);
+            const genBtn = el('sl-genereer');
+            if (cache.methode === 'tussenklassement') {
+                if (genBtn) genBtn.disabled = true; // disabled totdat preview geladen is
+                const heeftData = await vulTussenklPreview(el('sl-tk-preview'), groep.competitors.length, cache.heatsAantal, schema, groep, distId, flow);
+                if (genBtn) genBtn.disabled = !heeftData;
+            } else {
+                if (genBtn) genBtn.disabled = false;
+            }
         });
     });
 
@@ -2057,10 +2079,11 @@ function maakDeelnemersPaneel(container, cache, cacheKey, flow, groep, distId) {
 
 function maakHeatGrid(data, methode, ritLookup) {
     const methodeLabel = {
-        willekeurig:  'Willekeurig geloot',
-        startnummer:  'Op startnummer',
-        alfabetisch:  'Alfabetisch',
-        klassement:   'Op klassement',
+        willekeurig:     'Willekeurig geloot',
+        startnummer:     'Op startnummer',
+        alfabetisch:     'Alfabetisch',
+        tussenklassement:'Tussenklassement (deze wedstrijd)',
+        klassement:      'Klassement (serie)',
     }[methode] || methode;
 
     const wrapper = document.createElement('div');

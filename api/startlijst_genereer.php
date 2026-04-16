@@ -200,29 +200,40 @@ try {
             $tkParams    = $distId
                 ? [$compId, $primaryDcId, $distId]
                 : [$compId, $primaryDcId];
+            // Rijders met uitsluitende sanctie (DQ-SF, DQ-DF, DNS met 0 punten)
+            // krijgen geen klassementspositie → achteraan op startnummer
             $tkSql = "
                 SELECT   person_license,
-                         SUM(COALESCE(punten, 9999)) AS totaal_punten,
-                         MIN(COALESCE(rang,   9999)) AS beste_rang
+                         SUM(CASE WHEN sanctie IN ('DQ-SF','DQ-DF') OR (punten IS NOT NULL AND punten = 0)
+                                  THEN 9999 ELSE COALESCE(punten, 9999) END) AS totaal_punten,
+                         MIN(COALESCE(rang, 9999)) AS beste_rang,
+                         MAX(CASE WHEN sanctie IN ('DQ-SF','DQ-DF') OR (punten IS NOT NULL AND punten = 0)
+                                  THEN 1 ELSE 0 END) AS uitgesloten
                 FROM     uitslag_afstand
                 WHERE    competition_id          = ?
                   AND    distance_combination_id = ?
                   {$tkDistWhere}
                 GROUP BY person_license
-                ORDER BY totaal_punten ASC, beste_rang ASC
+                ORDER BY uitgesloten ASC, totaal_punten ASC, beste_rang ASC
             ";
             $tkStmt = $pdo->prepare($tkSql);
             $tkStmt->execute($tkParams);
-            $tkMap = [];
+            $tkMap  = [];  // person_license => positie
+            $tkUit  = [];  // person_license => true (uitgesloten)
             $tkRank = 1;
             foreach ($tkStmt->fetchAll(PDO::FETCH_ASSOC) as $row) {
-                $tkMap[$row['person_license']] = $tkRank++;
+                if ((int)$row['uitgesloten']) {
+                    $tkUit[$row['person_license']] = true;
+                } else {
+                    $tkMap[$row['person_license']] = $tkRank++;
+                }
             }
             foreach ($rijders as $r) {
                 $lk = $r['license_key'];
                 if (isset($tkMap[$lk])) {
                     $heeftPositie[] = $r + ['_tkPos' => $tkMap[$lk]];
                 } else {
+                    // Uitgesloten of geen uitslag → achteraan op startnummer
                     $zonderPositie[] = $r;
                 }
             }

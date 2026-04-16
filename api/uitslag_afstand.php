@@ -63,9 +63,213 @@ try {
     $systeem = $sysStmt->fetchColumn() ?: 'internationaal-nieuw';
 
     if ($systeem !== 'full-final') {
-        // Internationaal systeem: nog niet geïmplementeerd
-        echo json_encode(['systeem' => $systeem, 'finales' => [], 'has_results' => false,
-                          'melding' => 'Internationaal systeem – nog niet beschikbaar.']);
+        // ── Internationaal systeem: cascading elimination ranking ─────────
+        // Haal tijdschema-id + afstandsnaam op
+        $tsStmt = $pdo->prepare("SELECT id FROM competition_tijdschema WHERE competition_id = ?");
+        $tsStmt->execute([$compId]);
+        $tsId = $tsStmt->fetchColumn();
+
+        // Ranking methods per ronde ophalen
+        $rankingMethods = ['heats' => 'time', 'kwartfinale' => 'time',
+                           'halve_finale' => 'time', 'finale_a' => 'time'];
+        if ($tsId) {
+            // Zoek afstand_naam via een rit voor deze DC
+            $afNaamStmt = $pdo->prepare("
+                SELECT afstand_naam FROM tijdschema_ritten
+                WHERE tijdschema_id = ? AND dc_id = ? LIMIT 1
+            ");
+            $afNaamStmt->execute([$tsId, $primaryDcId]);
+            $afNaam = $afNaamStmt->fetchColumn();
+            if ($afNaam) {
+                $acStmt = $pdo->prepare("
+                    SELECT heats_ranking, kwart_ranking, half_ranking, finale_ranking, race_type
+                    FROM tijdschema_afstand_config
+                    WHERE tijdschema_id = ? AND afstand_naam = ?
+                ");
+                $acStmt->execute([$tsId, $afNaam]);
+                $ac = $acStmt->fetch(PDO::FETCH_ASSOC);
+                if ($ac) {
+                    $rankingMethods['heats']        = $ac['heats_ranking']  ?? 'time';
+                    $rankingMethods['kwartfinale']   = $ac['kwart_ranking'] ?? 'time';
+                    $rankingMethods['halve_finale']  = $ac['half_ranking']  ?? 'time';
+                    $rankingMethods['finale_a']      = $ac['finale_ranking'] ?? 'time';
+                    $raceType = $ac['race_type'] ?? 'sprint';
+                }
+            }
+        }
+
+        // Alle heats voor deze afstand ophalen, per ronde
+        $dcPh = implode(',', array_fill(0, count($dcIds), '?'));
+        $distCond   = $distId ? 'AND COALESCE(h.distance_id, ts_r.distance_id) = ?' : '';
+        $distParams = $distId ? [$distId] : [];
+
+        $heatSql = "
+            SELECT h.id, h.heat_nr, h.heat_naam, h.ronde,
+                   COALESCE(ts_r.ronde_type, 'finale_a') AS ronde_type
+            FROM heats h
+            LEFT JOIN tijdschema_ritten ts_r ON ts_r.id = h.tijdschema_rit_id
+            WHERE h.competition_id = ?
+              AND h.distance_combination_id IN ($dcPh)
+              {$distCond}
+            ORDER BY h.ronde ASC, h.heat_nr ASC
+        ";
+        $heatStmt = $pdo->prepare($heatSql);
+        $heatStmt->execute(array_merge([$compId], $dcIds, $distParams));
+        $alleHeats = $heatStmt->fetchAll(PDO::FETCH_ASSOC);
+
+        if (empty($alleHeats)) {
+            echo json_encode(['systeem' => $systeem, 'finales' => [], 'has_results' => false]);
+            exit;
+        }
+
+        // Wedstrijd-startnummers
+        $snStmt = $pdo->prepare("
+            SELECT person_license, startnummer FROM competition_startnummers WHERE competition_id = ?
+        ");
+        $snStmt->execute([$compId]);
+        $snMap = [];
+        foreach ($snStmt->fetchAll(PDO::FETCH_ASSOC) as $row) {
+            $snMap[$row['person_license']] = $row['startnummer'];
+        }
+
+        // Rijders per heat laden
+        $rijderStmt = $pdo->prepare("
+            SELECT he.person_license, p.full_name, p.short_name, p.start_number,
+                   p.category AS categorie, res.finishpositie, res.tijd_ms, res.sanctie,
+                   res.rondes, res.punten AS pk_punten
+            FROM heat_entries he
+            JOIN persons p ON p.license_key = he.person_license
+            LEFT JOIN results res ON res.heat_entry_id = he.id
+            WHERE he.heat_id = ?
+            ORDER BY he.startpositie
+        ");
+
+        // Groepeer heats per ronde_type
+        $rondeGroepen = [];
+        $rondeLabels = [
+            'heats'        => 'Serie',
+            'kwartfinale'  => 'Kwartfinale',
+            'halve_finale' => 'Halve finale',
+            'finale_a'     => 'A-Finale',
+            'runner_up'    => 'Runner-up',
+        ];
+
+        foreach ($alleHeats as $heat) {
+            $rt = $heat['ronde_type'];
+            if (!isset($rondeGroepen[$rt])) {
+                $rondeGroepen[$rt] = [
+                    'ronde_type' => $rt,
+                    'label'      => $rondeLabels[$rt] ?? $rt,
+                    'ranking'    => $rankingMethods[$rt] ?? 'time',
+                    'rows'       => [],
+                ];
+            }
+            $rijderStmt->execute([(int)$heat['id']]);
+            $rows = $rijderStmt->fetchAll(PDO::FETCH_ASSOC);
+            foreach ($rows as $r) {
+                $r['start_number'] = $snMap[$r['person_license']] ?? $r['start_number'];
+                $rondeGroepen[$rt]['rows'][] = $r;
+            }
+        }
+
+        // Sorteer rondes: finale eerst → series laatst (cascade: beste bovenaan)
+        $rondeVolgorde = ['finale_a' => 0, 'runner_up' => 1, 'halve_finale' => 2,
+                          'kwartfinale' => 3, 'heats' => 4];
+        $rondeDataArr = array_values($rondeGroepen);
+        usort($rondeDataArr, fn($a, $b) =>
+            ($rondeVolgorde[$a['ronde_type']] ?? 5) <=> ($rondeVolgorde[$b['ronde_type']] ?? 5)
+        );
+
+        $resultaat = berekenInternationaalResultaat($rondeDataArr);
+        $hasResults = !empty($resultaat);
+
+        // Alle sancties ophalen voor weergave
+        $alleLics = array_column($resultaat, 'person_license');
+        $alleLics = array_values(array_unique($alleLics));
+        $sanctieMap = [];
+        if ($alleLics) {
+            $licPh = implode(',', array_fill(0, count($alleLics), '?'));
+            $distSanctieFilter = $distId
+                ? "AND (COALESCE(h.distance_id, ts_r.distance_id) = ? OR (h.distance_id IS NULL AND ts_r.distance_id IS NULL))"
+                : "";
+            $distSanctieParams = $distId ? [$distId] : [];
+            $sanctieStmt = $pdo->prepare("
+                SELECT DISTINCT he.person_license,
+                       CASE COALESCE(ts_r.ronde_type, CONCAT('ronde_', h.ronde))
+                           WHEN 'heats'        THEN 'Serie'
+                           WHEN 'kwartfinale'   THEN 'KF'
+                           WHEN 'halve_finale'  THEN 'HF'
+                           WHEN 'finale_a'      THEN 'Finale'
+                           WHEN 'finale_b'      THEN CONCAT('B', h.heat_nr, '-Finale')
+                           ELSE CONCAT('R', h.ronde)
+                       END AS ronde_label,
+                       res.sanctie
+                FROM heat_entries he
+                JOIN heats h ON h.id = he.heat_id
+                LEFT JOIN tijdschema_ritten ts_r ON ts_r.id = h.tijdschema_rit_id
+                JOIN results res ON res.heat_entry_id = he.id
+                WHERE he.person_license IN ($licPh)
+                  AND h.competition_id = ?
+                  AND h.distance_combination_id IN ($dcPh)
+                  {$distSanctieFilter}
+                  AND res.sanctie IS NOT NULL
+                ORDER BY h.ronde, h.heat_nr
+            ");
+            $sanctieStmt->execute(array_merge($alleLics, [$compId], $dcIds, $distSanctieParams));
+            foreach ($sanctieStmt->fetchAll(PDO::FETCH_ASSOC) as $s) {
+                $sanctieMap[$s['person_license']][] = [
+                    'ronde'   => $s['ronde_label'],
+                    'sanctie' => $s['sanctie'],
+                ];
+            }
+        }
+        foreach ($resultaat as &$r) {
+            $r['alle_sancties'] = $sanctieMap[$r['person_license']] ?? [];
+        }
+        unset($r);
+
+        // Beschikbare rondes uit tijdschema_ritten (niet uit heats — die bestaan
+        // pas na generatie, maar de rondes zijn al geconfigureerd in het tijdschema)
+        $rondeKeys = ['heats' => 'heats', 'kwartfinale' => 'kwart',
+                      'halve_finale' => 'half', 'finale_a' => 'finale'];
+        $beschikbareRondes = [];
+        if ($tsId) {
+            $brStmt = $pdo->prepare("
+                SELECT DISTINCT r.ronde_type FROM tijdschema_ritten r
+                WHERE r.tijdschema_id = ? AND r.dc_id IN ($dcPh)
+                  AND r.ronde_type IN ('heats','kwartfinale','halve_finale','finale_a')
+                ORDER BY FIELD(r.ronde_type, 'heats','kwartfinale','halve_finale','finale_a')
+            ");
+            $brStmt->execute(array_merge([$tsId], $dcIds));
+            $beschikbareRondes = array_column($brStmt->fetchAll(PDO::FETCH_ASSOC), 'ronde_type');
+        }
+        if (empty($beschikbareRondes)) {
+            // Fallback: gebruik rondes uit bestaande heats
+            foreach (array_keys($rondeGroepen) as $rt) {
+                if (isset($rondeKeys[$rt])) $beschikbareRondes[] = $rt;
+            }
+        }
+        $rankingConfig = [];
+        foreach ($rondeKeys as $rt => $key) {
+            $rankingConfig[$key] = $rankingMethods[$rt] ?? 'time';
+        }
+
+        // Detecteer of rondes/pk_punten relevant zijn
+        $heeftRondes   = !empty(array_filter($resultaat, fn($r) => ($r['rondes'] ?? null) !== null));
+        $heeftPkPunten = !empty(array_filter($resultaat, fn($r) => ($r['pk_punten'] ?? null) !== null));
+
+        echo json_encode([
+            'systeem'       => $systeem,
+            'modus'         => 'internationaal',
+            'resultaat'     => $resultaat,
+            'has_results'   => $hasResults,
+            'afstand_naam'  => $afNaam ?? null,
+            'rondes'        => $beschikbareRondes,
+            'ranking'       => $rankingConfig,
+            'race_type'     => $raceType ?? 'sprint',
+            'heeft_rondes'  => $heeftRondes,
+            'heeft_pk_punten' => $heeftPkPunten,
+        ], JSON_UNESCAPED_UNICODE);
         exit;
     }
 
@@ -129,7 +333,9 @@ try {
                p.category         AS categorie,
                res.finishpositie,
                res.tijd_ms,
-               res.sanctie
+               res.sanctie,
+               res.rondes,
+               res.punten AS pk_punten
         FROM heat_entries he
         JOIN persons p ON p.license_key = he.person_license
         LEFT JOIN results res ON res.heat_entry_id = he.id
@@ -333,6 +539,8 @@ try {
                 'finishpositie' => (int)$r['finishpositie'],
                 'tijd_ms'       => $r['tijd_ms'] !== null ? (int)$r['tijd_ms'] : null,
                 'sanctie'       => $r['sanctie'],
+                'rondes'        => isset($r['rondes']) && $r['rondes'] !== null ? (int)$r['rondes'] : null,
+                'pk_punten'     => isset($r['pk_punten']) && $r['pk_punten'] !== null ? (float)$r['pk_punten'] : null,
             ];
         }
         foreach ($overigen as $r) {
@@ -346,6 +554,8 @@ try {
                 'finishpositie' => null,
                 'tijd_ms'       => $r['tijd_ms'] !== null ? (int)$r['tijd_ms'] : null,
                 'sanctie'       => $r['sanctie'],
+                'rondes'        => isset($r['rondes']) && $r['rondes'] !== null ? (int)$r['rondes'] : null,
+                'pk_punten'     => isset($r['pk_punten']) && $r['pk_punten'] !== null ? (float)$r['pk_punten'] : null,
             ];
         }
 
@@ -426,10 +636,18 @@ try {
     }
     unset($finale);
 
+    // Detecteer rondes/pk_punten in finale-data
+    $alleRijders = [];
+    foreach ($finales as $f) foreach ($f['rijders'] as $r) $alleRijders[] = $r;
+    $heeftRondes   = !empty(array_filter($alleRijders, fn($r) => ($r['rondes'] ?? null) !== null));
+    $heeftPkPunten = !empty(array_filter($alleRijders, fn($r) => ($r['pk_punten'] ?? null) !== null));
+
     echo json_encode([
-        'systeem'     => $systeem,
-        'finales'     => $finales,
-        'has_results' => $hasResults,
+        'systeem'           => $systeem,
+        'finales'           => $finales,
+        'has_results'       => $hasResults,
+        'heeft_rondes'      => $heeftRondes,
+        'heeft_pk_punten'   => $heeftPkPunten,
     ], JSON_UNESCAPED_UNICODE);
 
 } catch (Throwable $e) {
