@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 192 192">
+  <rect width="192" height="192" rx="36" fill="#1F4E79"/>
+  <text x="96" y="125" font-family="Segoe UI, Arial, sans-serif" font-size="88"
+        font-weight="700" fill="#ffffff" text-anchor="middle" letter-spacing="-3">IC</text>
+  <rect x="36" y="145" width="120" height="16" rx="8" fill="#E8630A"/>
+</svg>
