@@ -14,6 +14,7 @@ function initInstellingen() {
     el('btn-org-opslaan').addEventListener('click', () => slaOrgOp());
     el('btn-org-verwijderen').addEventListener('click', () => verwijderOrg());
     el('btn-sponsor-add').addEventListener('click', () => voegSponsorRijToe());
+    el('btn-org-poster')?.addEventListener('click', () => downloadPoster());
     window._tpDirty = false;
     window.markTpDirty = function() {
         window._tpDirty = true;
@@ -449,12 +450,18 @@ async function laadOrgWedstrijden() {
                 <span class="beheer-wedstrijd-datum">${datum}</span>
                 ${badge}
             </div>
-            ${inDb ? `<button class="btn-danger btn-sm beheer-comp-del" data-id="${escHtml(w.id)}" data-naam="${escHtml(w.name ?? w.id)}">Verwijderen</button>` : ''}
+            <div class="beheer-wedstrijd-acties">
+                ${inDb ? `<button class="btn-secondary btn-sm beheer-comp-poster" data-id="${escHtml(w.id)}" title="Download promotie-poster voor deze wedstrijd">📄 Poster</button>` : ''}
+                ${inDb ? `<button class="btn-danger btn-sm beheer-comp-del" data-id="${escHtml(w.id)}" data-naam="${escHtml(w.name ?? w.id)}">Verwijderen</button>` : ''}
+            </div>
         </div>`;
     }).join('');
 
     lijst.querySelectorAll('.beheer-comp-del').forEach(btn => {
         btn.addEventListener('click', () => verwijderCompetitie(btn.dataset.id, btn.dataset.naam));
+    });
+    lijst.querySelectorAll('.beheer-comp-poster').forEach(btn => {
+        btn.addEventListener('click', () => downloadPoster(btn.dataset.id));
     });
 
     if (_beheerLeesOnly) pasSchrijfLockToe(lijst.closest('.org-tab-content') ?? lijst);
@@ -1255,6 +1262,53 @@ async function uploadLogo(type, id, file, sponsorRij = null) {
         setTimeout(() => { statusEl.innerHTML = ''; }, 3000);
     } catch(e) {
         statusEl.innerHTML = `<div class="status-msg error">⚠ ${escHtml(e.message)}</div>`;
+    }
+}
+
+// ── Promotie-poster downloaden ────────────────────────────────────────────────
+// Zonder `compId` → generieke org-poster. Met `compId` → poster voor specifieke
+// wedstrijd met juiste QR-url en wedstrijd-info. Endpoint is api/poster.php.
+async function downloadPoster(compId = null) {
+    if (!actieveOrg?.id) return;
+
+    // Visuele feedback op de knop die is geklikt
+    const btn = compId
+        ? document.querySelector(`.beheer-comp-poster[data-id="${compId}"]`)
+        : el('btn-org-poster');
+    const origLabel = btn?.textContent;
+    if (btn) { btn.disabled = true; btn.textContent = '⏳ Bezig…'; }
+
+    try {
+        const params = new URLSearchParams({ org_id: actieveOrg.id });
+        if (compId) params.set('competition_id', compId);
+
+        const res = await fetch('api/poster.php?' + params.toString());
+
+        // Fout-responses komen als JSON, PDF's als application/pdf
+        const ct = res.headers.get('content-type') ?? '';
+        if (!res.ok || !ct.startsWith('application/pdf')) {
+            const txt = await res.text();
+            let msg = 'Poster genereren mislukt.';
+            try { msg = (JSON.parse(txt).error) ?? msg; } catch { /* raw text */ }
+            throw new Error(msg);
+        }
+
+        const blob = await res.blob();
+        const naam = (res.headers.get('content-disposition') ?? '')
+            .match(/filename="([^"]+)"/)?.[1] ?? 'poster.pdf';
+
+        const url = URL.createObjectURL(blob);
+        const a   = document.createElement('a');
+        a.href    = url;
+        a.download = naam;
+        document.body.appendChild(a);
+        a.click();
+        a.remove();
+        URL.revokeObjectURL(url);
+    } catch (e) {
+        alert('Kon poster niet downloaden:\n\n' + e.message);
+    } finally {
+        if (btn) { btn.disabled = false; btn.textContent = origLabel; }
     }
 }
 

@@ -2087,6 +2087,7 @@ col.heat-tp   { width: 72px; }   /* XX-12345 = 8 monospace tekens */
                          border: 1px solid var(--border); margin-bottom: .4rem; background: #fafbfd; }
 .beheer-wedstrijd-rij.in-db { background: #f0f6ff; border-color: #c5d8f0; }
 .beheer-wedstrijd-info { display: flex; align-items: center; gap: .75rem; flex-wrap: wrap; min-width: 0; }
+.beheer-wedstrijd-acties { display: flex; gap: .4rem; flex-shrink: 0; }
 .beheer-wedstrijd-naam { font-weight: 600; color: var(--donker); }
 .beheer-wedstrijd-datum{ font-size: .82rem; color: #777; }
 .beheer-wedstrijd-badge     { font-size: .75rem; padding: 2px 8px; border-radius: 10px;

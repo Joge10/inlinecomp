@@ -251,6 +251,7 @@ if (!$gebruiker) {
                                 <button class="btn-samenvoeg" id="btn-samenvoeg" style="display:none">
                                     &#8596; Samenvoegen…
                                 </button>
+                                <button class="btn-secondary" id="btn-org-poster" title="Download een A4-promotie-poster voor deze organisatie">📄 Promotie-poster</button>
                                 <button class="btn-danger" id="btn-org-verwijderen" style="display:none">Verwijderen</button>
                             </div>
                             <div id="org-status"></div>
