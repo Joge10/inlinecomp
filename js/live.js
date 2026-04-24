@@ -563,15 +563,16 @@ function _liveRenderCarousel() {
     const huidigeRit   = _liveRitten[idx];
     const huidigLabel  = `${_liveRitIcoon(huidigeRit)} ${escHtml(huidigeRit.rit_naam)}`;
 
-    // Filter-pillen: aan/uit per status-icoon (4 stappen van niks naar klaar)
+    // Filter-pillen: aan/uit per status-icoon (4 stappen van niks naar klaar).
+    // Zelfde iconografie als /public (🚩 loting / 🏁 finish).
     const pilHtml = ['geen_lijst', 'geen_resultaat', 'deels', 'compleet'].map(s => {
-        const icoon = s === 'compleet'       ? '✓'
+        const icoon = s === 'compleet'       ? '🏁'
                     : s === 'deels'          ? '◑'
-                    : s === 'geen_resultaat' ? '○'
-                    :                          '◌';
+                    : s === 'geen_resultaat' ? '🚩'
+                    :                          '○';
         const tip   = s === 'compleet'       ? 'Alle tijden ingevuld'
                     : s === 'deels'          ? 'Deels ingevuld'
-                    : s === 'geen_resultaat' ? 'Nog geen resultaten'
+                    : s === 'geen_resultaat' ? 'Startlijst klaar, nog geen resultaten'
                     :                          'Geen startlijst';
         const act   = _liveFilter[s] ? ' active' : '';
         return `<button type="button" class="live-nav-pil${act}" data-filter="${s}" title="${tip}">${icoon}</button>`;
@@ -963,12 +964,17 @@ function _liveRitStatus(r) {
     if (_liveRitDeels(r))    return 'deels';
     return 'geen_resultaat';
 }
+// Icon-mapping consistent met /public:
+//   ○   niks (geen startlijst)
+//   🚩  loting klaar (rijders ingedeeld, nog geen tijden)
+//   ◑   deels ingevuld (niet alle tijden binnen)
+//   🏁  finish-vlag (alle tijden binnen)
 function _liveRitIcoon(r) {
     const s = _liveRitStatus(r);
-    return s === 'compleet'       ? '✓'
+    return s === 'compleet'       ? '🏁'
          : s === 'deels'          ? '◑'
-         : s === 'geen_resultaat' ? '○'
-         :                          '◌';   // geen_lijst
+         : s === 'geen_resultaat' ? '🚩'
+         :                          '○';   // geen_lijst
 }
 
 // Bouw de opties in het dropdown-paneel; filter rijden die volgens _liveFilter
