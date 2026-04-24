@@ -333,9 +333,16 @@ NK_REGEL_RE = re.compile(
 )
 
 def parse_nk_tussenstand(pdf):
+    """Parse 'KNSB Baancompetitie - Tussenstand NK deelname'-PDF.
+
+    We gebruiken de `Cat`-kolom (HSA, HJB, ...) als sectie-sleutel,
+    consistent met de KNSB-parser. De beschrijvende kop ("12 Mannen
+    Senioren Sprint") is puur tekst en triggert alleen de positie-reset.
+    Binnen elke cat-sectie geldt: volgorde in PDF = ranking.
+    """
     secties = {}
     header_info = {}
-    sectie_naam = None
+    in_sectie = False   # True na het zien van een sectie-kop
 
     for pagina in pdf.pages:
         txt = pagina.extract_text()
@@ -352,33 +359,29 @@ def parse_nk_tussenstand(pdf):
                 elif re.match(r'^\d{1,2}/\d{1,2}/\d{4}', r):
                     header_info['datum'] = r
 
-        positie_teller = 0
+        # Positie-teller per cat binnen deze pagina.
+        # Bij een sectie-kop resetten we alle tellers — de volgende rijder
+        # is positie 1 van z'n cat.
+        cat_teller = {}
+
         for regel in regels:
             r = regel.strip()
             if not r:
                 continue
 
-            # Sectie-kop?  ("12 Mannen Senioren Sprint")
-            ms = NK_SECTIE_RE.match(r)
-            if ms:
-                # Pak alles NA het leidende cijfer-block als sectie-naam
-                sectie_naam = re.sub(r'^\d+\s+', '', r).strip()
-                positie_teller = 0
-                if sectie_naam not in secties:
-                    secties[sectie_naam] = {
-                        'sectie':    sectie_naam,
-                        'cat_codes': set(),
-                        'rijders':   [],
-                    }
+            # Sectie-kop? ("12 Mannen Senioren Sprint") -> reset tellers
+            if NK_SECTIE_RE.match(r):
+                cat_teller = {}
+                in_sectie = True
                 continue
 
-            # Kolom-header overslaan ("nr Naam Cat Woonplaats Club ...")
+            # Kolom-header overslaan
             if re.match(r'^nr\s+Naam\s+Cat\b', r, re.I):
                 continue
 
             # Rijder-regel
             mr = NK_REGEL_RE.match(r)
-            if not mr or not sectie_naam:
+            if not mr or not in_sectie:
                 continue
 
             nr    = mr.group(1).strip()
@@ -390,10 +393,20 @@ def parse_nk_tussenstand(pdf):
             cijfers = [int(x) for x in tail.split()]
             eindtot = cijfers[-1] if cijfers else None
 
-            positie_teller += 1
-            secties[sectie_naam]['cat_codes'].add(cat)
-            secties[sectie_naam]['rijders'].append({
-                'positie':  positie_teller,
+            # Cat wordt de sleutel (HSA, HJB, DP1, ...). Dispatcher zet
+            # het label later om naar "Heren Senior A" via cat_label().
+            if cat not in secties:
+                secties[cat] = {
+                    'sectie':    cat,
+                    'cat_codes': set(),
+                    'rijders':   [],
+                }
+                cat_teller[cat] = 0
+            cat_teller[cat] = cat_teller.get(cat, 0) + 1
+
+            secties[cat]['cat_codes'].add(cat)
+            secties[cat]['rijders'].append({
+                'positie':  cat_teller[cat],
                 'nr':       nr,
                 'naam':     naam,
                 'cat_code': cat,
