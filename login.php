@@ -139,7 +139,10 @@ if ($token && !$eersteKeer) {
     </form>
     <?php endif; ?>
 
-    <div class="login-versie">InlineComp &copy; <?= date('Y') ?></div>
+    <div class="login-versie">
+        InlineComp &copy; <?= date('Y') ?>
+        &middot; <a href="privacyverklaring.php">Privacyverklaring</a>
+    </div>
 </div>
 
 <script>
