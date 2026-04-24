@@ -1,11 +1,18 @@
--- InlineComp – entries (inschrijvingen)
+-- InlineComp – entries (inschrijvingen per wedstrijd per DC)
+--
+-- `status` waarden:
+--   1  getekend / aanwezig — standaard-situatie
+--   2  aangemeld maar nog niet getekend aan de balie
+--   3  afgemeld
+--   4  niet getekend (afwezig aan de start)
+--   5  bevestigd bij organisatie (alternatief pad)
 
 CREATE TABLE IF NOT EXISTS `entries` (
     `id`                      INT UNSIGNED NOT NULL AUTO_INCREMENT,
     `distance_combination_id` VARCHAR(36)  NOT NULL,
     `person_license`          VARCHAR(30)  NOT NULL,
     `knsb_entry_id`           VARCHAR(36)  DEFAULT NULL,
-    `status`                  TINYINT UNSIGNED DEFAULT 1,   -- 1=bevestigd, 5=bev.bij org
+    `status`                  TINYINT UNSIGNED DEFAULT 1,
     PRIMARY KEY (`id`),
     UNIQUE KEY `uq_entry` (`distance_combination_id`, `person_license`),
     KEY `idx_entry_person` (`person_license`),
