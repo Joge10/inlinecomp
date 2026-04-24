@@ -164,7 +164,7 @@ erDiagram
         datetime ends
         varchar location
         varchar venue_name
-        varchar organisatie_id "soft FK -- null toegestaan"
+        varchar organisatie_id "soft FK, null toegestaan"
         int entries_version
         int tijdschema_version
     }
@@ -251,7 +251,7 @@ Het tijdschema per wedstrijd met blokken (programma-onderdelen) en ritten
 erDiagram
     competition_tijdschema {
         int id PK
-        varchar competition_id FK UK
+        varchar competition_id FK "uniek: 1 tijdschema per wedstrijd"
         enum systeem "full-final / internationaal-nieuw"
         enum status "concept / gepubliceerd"
         datetime gegenereerd_op
@@ -352,7 +352,7 @@ erDiagram
 
     results {
         int id PK
-        int heat_entry_id FK UK
+        int heat_entry_id FK "uniek: 1 result per heat_entry"
         tinyint finishpositie
         int tijd_ms "in ms"
         enum sanctie "W1/W2/FS/RR/DQ-TF/DQ-SF/DQ-DF/DNS/DNF"
@@ -455,7 +455,7 @@ erDiagram
 
     klassement_series {
         varchar id PK
-        varchar klassement_id FK UK "1-1 met klassementen"
+        varchar klassement_id FK "uniek: 1-1 met klassementen"
         varchar naam
         varchar seizoen
         varchar org_id "soft FK"
@@ -465,7 +465,7 @@ erDiagram
 
     klassement_serie_wedstrijden {
         varchar serie_id PK "FK"
-        varchar competition_id PK "GEEN FK -- KNSB-UUID kan zonder import"
+        varchar competition_id PK "GEEN FK, KNSB-UUID kan zonder import"
         tinyint telt_mee
         tinyint is_finale
         smallint volgorde
