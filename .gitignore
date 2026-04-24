@@ -8,10 +8,27 @@ config*.php
 # VS Code overige instellingen (optioneel bewaren)
 # .vscode/
 
+# Claude Code werkmappen en instellingen (overal in de repo)
+.claude/
+
+# IDE-specifieke mappen
+.idea/
+
+# Python-cache (poster_gen.py e.d.)
+__pycache__/
+*.pyc
+*.pyo
+
 # OS rommel
 .DS_Store
 Thumbs.db
 
 # Editor tijdelijke bestanden
 *.swp
+*.swo
 *~
+*.bak
+
+# Algemene tijdelijke bestanden en logs
+*.log
+*.tmp
