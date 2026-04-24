@@ -1,0 +1,2359 @@
+<?php
+// ============================================================
+//  InlineComp – Coach-view
+//  Geen login vereist. Coach selecteert rijders op club / sponsor /
+//  startnummer, en ziet per heat welke van zijn rijders erin zitten.
+// ============================================================
+header('Content-Type: text/html; charset=utf-8');
+require_once __DIR__ . '/../../config_inlinecomp.php';
+
+// ── Bezoektracking: upsert session-hit in coach_visits ──────────────────────
+// Alleen op de echte HTML pageload (geen action=...) om AJAX-calls niet
+// dubbel te tellen. Aparte session-cookie (ICCOACH) zodat /coach- en
+// /public-sessies los getracked worden.
+if (empty($_GET['action'])) {
+    if (session_status() === PHP_SESSION_NONE) {
+        session_name('ICCOACH');
+        session_set_cookie_params([
+            'lifetime' => 0, 'path' => '/', 'httponly' => true, 'samesite' => 'Lax',
+        ]);
+        @session_start();
+    }
+    $sid = session_id();
+    if ($sid) {
+        try {
+            $pdo->prepare(
+                "INSERT INTO coach_visits (session_id) VALUES (?)
+                 ON DUPLICATE KEY UPDATE last_seen = NOW(), hits = hits + 1"
+            )->execute([$sid]);
+            // Piek-tracking (vandaag + all-time) — zelfde patroon als /public
+            $pdo->prepare("
+                UPDATE peak_stats SET
+                    peak_today = CASE
+                        WHEN peak_today_date = CURDATE()
+                            THEN GREATEST(peak_today, (SELECT COUNT(*) FROM coach_visits WHERE last_seen > NOW() - INTERVAL 5 MINUTE))
+                        ELSE (SELECT COUNT(*) FROM coach_visits WHERE last_seen > NOW() - INTERVAL 5 MINUTE)
+                    END,
+                    peak_today_date = CURDATE(),
+                    peak_all_time_at = IF(
+                        (SELECT COUNT(*) FROM coach_visits WHERE last_seen > NOW() - INTERVAL 5 MINUTE) > peak_all_time,
+                        NOW(), peak_all_time_at),
+                    peak_all_time = GREATEST(peak_all_time,
+                        (SELECT COUNT(*) FROM coach_visits WHERE last_seen > NOW() - INTERVAL 5 MINUTE))
+                WHERE scope = 'coach'
+            ")->execute();
+        } catch (Throwable $e) { /* tracking mag nooit de pagina breken */ }
+    }
+}
+
+// ── Rate limiting: max 10 requests per 5 seconden per IP ─────────────────────
+$action = $_GET['action'] ?? '';
+if ($action) {
+    $ip = $_SERVER['REMOTE_ADDR'] ?? 'unknown';
+    $rlFile = sys_get_temp_dir() . '/rlcoach_' . md5($ip);
+    $now = time();
+    $hits = @json_decode(@file_get_contents($rlFile), true);
+    if (!is_array($hits)) $hits = [];
+    $hits = array_values(array_filter($hits, fn($t) => $t > $now - 5));
+    if (count($hits) >= 10) {
+        header('Content-Type: application/json; charset=utf-8');
+        http_response_code(429);
+        echo json_encode(['error' => 'Te veel verzoeken — wacht even']);
+        exit;
+    }
+    $hits[] = $now;
+    @file_put_contents($rlFile, json_encode($hits));
+}
+
+// ── API: wedstrijden ─────────────────────────────────────────────────────────
+if ($action === 'competitions') {
+    header('Content-Type: application/json; charset=utf-8');
+    header('Cache-Control: public, max-age=60');
+    try {
+        $stmt = $pdo->prepare("
+            SELECT c.id, c.name, c.starts, c.ends,
+                   c.organisatie_id, o.logo_path AS org_logo, o.naam AS org_naam
+            FROM competitions c
+            JOIN competition_tijdschema ct ON ct.competition_id = c.id
+            LEFT JOIN organisaties o ON o.id = c.organisatie_id
+            ORDER BY c.starts DESC
+        ");
+        $stmt->execute();
+        $comps = $stmt->fetchAll(PDO::FETCH_ASSOC);
+        // Sponsors per organisatie (zelfde aanpak als /public) — voor footer
+        $orgIds = array_unique(array_filter(array_column($comps, 'organisatie_id')));
+        $sponsorMap = [];
+        if ($orgIds) {
+            $spStmt = $pdo->prepare("
+                SELECT organisatie_id, naam, logo_path, url
+                FROM organisatie_sponsors
+                WHERE logo_path IS NOT NULL AND logo_path != ''
+                ORDER BY volgorde, naam
+            ");
+            $spStmt->execute();
+            foreach ($spStmt->fetchAll(PDO::FETCH_ASSOC) as $sp) {
+                $sponsorMap[$sp['organisatie_id']][] = [
+                    'naam' => $sp['naam'], 'logo' => $sp['logo_path'], 'url' => $sp['url'],
+                ];
+            }
+        }
+        foreach ($comps as &$c) {
+            $c['sponsors'] = $sponsorMap[$c['organisatie_id'] ?? ''] ?? [];
+        }
+        unset($c);
+        echo json_encode($comps, JSON_UNESCAPED_UNICODE);
+    } catch (Throwable $e) {
+        http_response_code(500);
+        echo json_encode(['error' => $e->getMessage()]);
+    }
+    exit;
+}
+
+// ── API: clubs in deze wedstrijd ─────────────────────────────────────────────
+if ($action === 'clubs') {
+    header('Content-Type: application/json; charset=utf-8');
+    header('Cache-Control: public, max-age=60');
+    $compId = trim($_GET['competition_id'] ?? '');
+    if (!$compId) { echo json_encode([]); exit; }
+    try {
+        // Per club_full ook een club_short meenemen (bv. "ASV") voor de
+        // weergave in de dropdown: "ASV - Almeerse SchaatsVereniging".
+        // Als er meerdere short-varianten zijn voor hetzelfde full-label,
+        // nemen we MIN() (stabiel) — komt in de praktijk bijna niet voor.
+        $stmt = $pdo->prepare("
+            SELECT p.club_full AS full,
+                   MIN(NULLIF(p.club_short, '')) AS short
+            FROM entries e
+            JOIN distance_combinations dc ON dc.id = e.distance_combination_id
+            JOIN persons p ON p.license_key = e.person_license
+            WHERE dc.competition_id = ?
+              AND p.club_full IS NOT NULL AND p.club_full != ''
+            GROUP BY p.club_full
+            ORDER BY p.club_full
+        ");
+        $stmt->execute([$compId]);
+        echo json_encode($stmt->fetchAll(PDO::FETCH_ASSOC), JSON_UNESCAPED_UNICODE);
+    } catch (Throwable $e) {
+        http_response_code(500);
+        echo json_encode(['error' => $e->getMessage()]);
+    }
+    exit;
+}
+
+// ── API: sponsors in deze wedstrijd ──────────────────────────────────────────
+if ($action === 'sponsors') {
+    header('Content-Type: application/json; charset=utf-8');
+    header('Cache-Control: public, max-age=60');
+    $compId = trim($_GET['competition_id'] ?? '');
+    if (!$compId) { echo json_encode([]); exit; }
+    try {
+        $stmt = $pdo->prepare("
+            SELECT DISTINCT p.sponsor
+            FROM entries e
+            JOIN distance_combinations dc ON dc.id = e.distance_combination_id
+            JOIN persons p ON p.license_key = e.person_license
+            WHERE dc.competition_id = ?
+              AND p.sponsor IS NOT NULL AND p.sponsor != ''
+            ORDER BY p.sponsor
+        ");
+        $stmt->execute([$compId]);
+        echo json_encode($stmt->fetchAll(PDO::FETCH_COLUMN), JSON_UNESCAPED_UNICODE);
+    } catch (Throwable $e) {
+        http_response_code(500);
+        echo json_encode(['error' => $e->getMessage()]);
+    }
+    exit;
+}
+
+// ── API: rijders op club ─────────────────────────────────────────────────────
+if ($action === 'personen_by_club') {
+    header('Content-Type: application/json; charset=utf-8');
+    $compId = trim($_GET['competition_id'] ?? '');
+    $club   = trim($_GET['club'] ?? '');
+    if (!$compId || !$club) { echo json_encode([]); exit; }
+    try {
+        $stmt = $pdo->prepare("
+            SELECT DISTINCT COALESCE(cs.startnummer, p.start_number) AS snr,
+                   p.license_key, p.full_name, p.category, p.club_full, p.sponsor
+            FROM entries e
+            JOIN distance_combinations dc ON dc.id = e.distance_combination_id
+            JOIN persons p ON p.license_key = e.person_license
+            LEFT JOIN competition_startnummers cs
+                   ON cs.person_license = e.person_license
+                  AND cs.competition_id = dc.competition_id
+            WHERE dc.competition_id = ? AND p.club_full = ?
+            ORDER BY snr
+        ");
+        $stmt->execute([$compId, $club]);
+        echo json_encode($stmt->fetchAll(PDO::FETCH_ASSOC), JSON_UNESCAPED_UNICODE);
+    } catch (Throwable $e) {
+        http_response_code(500);
+        echo json_encode(['error' => $e->getMessage()]);
+    }
+    exit;
+}
+
+// ── API: rijders op sponsor ──────────────────────────────────────────────────
+if ($action === 'personen_by_sponsor') {
+    header('Content-Type: application/json; charset=utf-8');
+    $compId  = trim($_GET['competition_id'] ?? '');
+    $sponsor = trim($_GET['sponsor'] ?? '');
+    if (!$compId || !$sponsor) { echo json_encode([]); exit; }
+    try {
+        $stmt = $pdo->prepare("
+            SELECT DISTINCT COALESCE(cs.startnummer, p.start_number) AS snr,
+                   p.license_key, p.full_name, p.category, p.club_full, p.sponsor
+            FROM entries e
+            JOIN distance_combinations dc ON dc.id = e.distance_combination_id
+            JOIN persons p ON p.license_key = e.person_license
+            LEFT JOIN competition_startnummers cs
+                   ON cs.person_license = e.person_license
+                  AND cs.competition_id = dc.competition_id
+            WHERE dc.competition_id = ? AND p.sponsor = ?
+            ORDER BY snr
+        ");
+        $stmt->execute([$compId, $sponsor]);
+        echo json_encode($stmt->fetchAll(PDO::FETCH_ASSOC), JSON_UNESCAPED_UNICODE);
+    } catch (Throwable $e) {
+        http_response_code(500);
+        echo json_encode(['error' => $e->getMessage()]);
+    }
+    exit;
+}
+
+// ── API: rijder op startnummer ───────────────────────────────────────────────
+if ($action === 'person_by_startnummer') {
+    header('Content-Type: application/json; charset=utf-8');
+    $compId = trim($_GET['competition_id'] ?? '');
+    $snr    = (int)($_GET['snr'] ?? 0);
+    if (!$compId || !$snr) { echo json_encode(null); exit; }
+    try {
+        $stmt = $pdo->prepare("
+            SELECT COALESCE(cs.startnummer, p.start_number) AS snr,
+                   p.license_key, p.full_name, p.category, p.club_full, p.sponsor
+            FROM entries e
+            JOIN distance_combinations dc ON dc.id = e.distance_combination_id
+            JOIN persons p ON p.license_key = e.person_license
+            LEFT JOIN competition_startnummers cs
+                   ON cs.person_license = e.person_license
+                  AND cs.competition_id = dc.competition_id
+            WHERE dc.competition_id = ?
+              AND COALESCE(cs.startnummer, p.start_number) = ?
+            LIMIT 1
+        ");
+        $stmt->execute([$compId, $snr]);
+        echo json_encode($stmt->fetch(PDO::FETCH_ASSOC) ?: null, JSON_UNESCAPED_UNICODE);
+    } catch (Throwable $e) {
+        http_response_code(500);
+        echo json_encode(['error' => $e->getMessage()]);
+    }
+    exit;
+}
+
+// ── API: programma (heats + blokken) — zoals /public maar lichter ─────────────
+if ($action === 'programma') {
+    header('Content-Type: application/json; charset=utf-8');
+    header('Cache-Control: public, max-age=30');
+    $compId = trim($_GET['competition_id'] ?? '');
+    if (!$compId) { echo json_encode(['error' => 'competition_id verplicht']); exit; }
+    try {
+        $tsStmt = $pdo->prepare("SELECT id FROM competition_tijdschema WHERE competition_id = ? LIMIT 1");
+        $tsStmt->execute([$compId]);
+        $tsId = $tsStmt->fetchColumn();
+        if (!$tsId) { echo json_encode(['ritten' => [], 'blokken' => []]); exit; }
+
+        // Ritten + heat_id + rijder-startnummers per heat (zodat JS kan
+        // kruisen met de coach-lijst zonder extra roundtrips).
+        // Sorteer via de volgorde van het bovenliggende blok (master) en
+        // daarbinnen op rit-volgorde. Tijdstip is onbetrouwbaar (niet elke
+        // wedstrijd vult dat in).
+        $stmt = $pdo->prepare("
+            SELECT r.volgorde AS rit_volgorde,
+                   b.volgorde AS blok_volgorde,
+                   r.blok_id, r.rit_naam, r.ronde_type, r.heat_nr, r.dc_naam,
+                   r.combi_group,
+                   r.distance_id AS rit_distance_id, r.afstand_naam AS rit_afstand_naam,
+                   b.blok_type, b.tijdstip, b.duur, b.heat_duur, b.opmerking,
+                   h.id AS heat_id,
+                   h.ronde AS heat_ronde,
+                   h.distance_combination_id AS heat_dc_id,
+                   COALESCE(h.distance_id, r.distance_id) AS heat_distance_id,
+                   (SELECT COUNT(*) FROM heat_entries he2
+                    WHERE he2.heat_id = h.id) AS entries_count,
+                   (SELECT COUNT(*) FROM results res
+                    JOIN heat_entries he ON he.id = res.heat_entry_id
+                    WHERE he.heat_id = h.id AND res.finishpositie IS NOT NULL
+                   ) AS resultaten_count
+            FROM tijdschema_ritten r
+            LEFT JOIN tijdschema_blokken b ON b.id = r.blok_id
+            LEFT JOIN heats h ON h.tijdschema_rit_id = r.id AND h.competition_id = ?
+            WHERE r.tijdschema_id = ?
+            ORDER BY b.volgorde, r.volgorde
+        ");
+        $stmt->execute([$compId, $tsId]);
+        $rittenRaw = $stmt->fetchAll(PDO::FETCH_ASSOC);
+
+        // Definitief-logica (uit /public):
+        //   ronde 1 → definitief zodra er rijders in de heat zitten
+        //   ronde > 1 → definitief als er rijders in zitten EN de vorige ronde compleet is
+        $rondeCheck = []; // cache per dc_id + ronde
+        $checkVorigeRonde = function($dcId, $ronde) use ($pdo, $compId, &$rondeCheck) {
+            if ($ronde <= 1) return true;
+            $ck = "{$dcId}_{$ronde}";
+            if (isset($rondeCheck[$ck])) return $rondeCheck[$ck];
+            $vrStmt = $pdo->prepare("
+                SELECT MAX(h.ronde) FROM heats h
+                JOIN heat_entries he ON he.heat_id = h.id
+                WHERE h.competition_id = ? AND h.distance_combination_id = ? AND h.ronde < ?
+            ");
+            $vrStmt->execute([$compId, $dcId, $ronde]);
+            $vr = $vrStmt->fetchColumn();
+            if (!$vr) { $rondeCheck[$ck] = true; return true; }
+            $s = $pdo->prepare("
+                SELECT COUNT(he.id) AS totaal,
+                       SUM(CASE WHEN res.id IS NOT NULL THEN 1 ELSE 0 END) AS klaar
+                FROM heats h JOIN heat_entries he ON he.heat_id = h.id
+                LEFT JOIN results res ON res.heat_entry_id = he.id
+                WHERE h.competition_id = ? AND h.distance_combination_id = ? AND h.ronde = ?
+            ");
+            $s->execute([$compId, $dcId, (int)$vr]);
+            $r = $s->fetch(PDO::FETCH_ASSOC);
+            $ok = $r && (int)$r['totaal'] > 0 && (int)$r['totaal'] === (int)$r['klaar'];
+            $rondeCheck[$ck] = $ok;
+            return $ok;
+        };
+        $ritten = [];
+        foreach ($rittenRaw as $r) {
+            $ronde = (int)($r['heat_ronde'] ?? 0);
+            $dcId  = $r['heat_dc_id'] ?? '';
+            $heeftEntries = (int)($r['entries_count'] ?? 0) > 0;
+            $r['definitief'] = $heeftEntries && ($ronde <= 1 || $checkVorigeRonde($dcId, $ronde));
+            $ritten[] = $r;
+        }
+
+        // Startnummers per heat in één query voor alle heats van deze wedstrijd
+        $snrStmt = $pdo->prepare("
+            SELECT he.heat_id,
+                   COALESCE(cs.startnummer, p.start_number) AS snr
+            FROM heat_entries he
+            JOIN heats h ON h.id = he.heat_id
+            JOIN persons p ON p.license_key = he.person_license
+            LEFT JOIN competition_startnummers cs
+                   ON cs.person_license = he.person_license
+                  AND cs.competition_id = h.competition_id
+            WHERE h.competition_id = ?
+        ");
+        $snrStmt->execute([$compId]);
+        $snrPerHeat = [];
+        foreach ($snrStmt->fetchAll(PDO::FETCH_ASSOC) as $row) {
+            $hid = (int)$row['heat_id'];
+            $snrPerHeat[$hid][] = (int)$row['snr'];
+        }
+        foreach ($ritten as &$r) {
+            $hid = $r['heat_id'] !== null ? (int)$r['heat_id'] : null;
+            $r['heat_snrs'] = $hid !== null ? ($snrPerHeat[$hid] ?? []) : [];
+        }
+        unset($r);
+
+        // Niet-ronde blokken (pauze / ceremonie / inrijden / etc.) —
+        // inclusief id en volgorde zodat de frontend ze op hun
+        // blok_volgorde-positie kan tussenvoegen tussen de ritten.
+        $blStmt = $pdo->prepare("
+            SELECT id, volgorde, blok_type, duur, tijdstip, opmerking
+            FROM tijdschema_blokken
+            WHERE tijdschema_id = ? AND blok_type != 'ronde'
+            ORDER BY volgorde
+        ");
+        $blStmt->execute([$tsId]);
+        $blokken = $blStmt->fetchAll(PDO::FETCH_ASSOC);
+
+        echo json_encode(['ritten' => $ritten, 'blokken' => $blokken], JSON_UNESCAPED_UNICODE);
+    } catch (Throwable $e) {
+        http_response_code(500);
+        echo json_encode(['error' => $e->getMessage()]);
+    }
+    exit;
+}
+
+// ── API: rit detail (startlijst van één heat) ────────────────────────────────
+// ── API: categorieen met uitslagen (1-op-1 uit /public) ─────────────────────
+if ($action === 'categorieen') {
+    header('Content-Type: application/json; charset=utf-8');
+    $compId = trim($_GET['competition_id'] ?? '');
+    if (!$compId) { echo json_encode(['error' => 'competition_id verplicht']); exit; }
+    try {
+        $stmt = $pdo->prepare("
+            SELECT ua.distance_combination_id AS dc_id, ua.dc_naam,
+                   ua.distance_id, ua.distance_naam
+            FROM uitslag_afstand ua
+            WHERE ua.competition_id = ?
+            GROUP BY ua.distance_combination_id, ua.distance_id
+            ORDER BY ua.dc_naam, ua.distance_naam
+        ");
+        $stmt->execute([$compId]);
+        $rows = $stmt->fetchAll(PDO::FETCH_ASSOC);
+        $klasStmt = $pdo->prepare("SELECT DISTINCT distance_combination_id FROM uitslag_klassement WHERE competition_id = ?");
+        $klasStmt->execute([$compId]);
+        $klasDcIds = $klasStmt->fetchAll(PDO::FETCH_COLUMN);
+        $result = [];
+        foreach ($rows as $r) {
+            $dcId = $r['dc_id'];
+            if (!isset($result[$dcId])) {
+                $result[$dcId] = [
+                    'dc_id' => $dcId, 'dc_naam' => $r['dc_naam'],
+                    'afstanden' => [],
+                    'klassement_beschikbaar' => in_array($dcId, $klasDcIds),
+                ];
+            }
+            $result[$dcId]['afstanden'][] = [
+                'distance_id' => $r['distance_id'],
+                'distance_naam' => $r['distance_naam'],
+            ];
+        }
+        echo json_encode(array_values($result), JSON_UNESCAPED_UNICODE);
+    } catch (Throwable $e) {
+        http_response_code(500);
+        echo json_encode(['error' => $e->getMessage()]);
+    }
+    exit;
+}
+
+// ── API: volledige uitslag per afstand of klassement (1-op-1 uit /public) ────
+if ($action === 'uitslagen') {
+    header('Content-Type: application/json; charset=utf-8');
+    $compId = trim($_GET['competition_id'] ?? '');
+    $dcId   = trim($_GET['dc_id'] ?? '');
+    $type   = trim($_GET['type'] ?? 'afstand');
+    $distId = trim($_GET['distance_id'] ?? '');
+    if (!$compId || !$dcId) { echo json_encode(['error' => 'competition_id en dc_id verplicht']); exit; }
+    try {
+        if ($type === 'klassement') {
+            $stmt = $pdo->prepare("
+                SELECT t.rang, t.punten_totaal, t.dc_naam, t.punten_detail,
+                       p.full_name, p.category AS categorie,
+                       COALESCE(cs.startnummer, p.start_number) AS snr
+                FROM uitslag_klassement t
+                INNER JOIN (
+                    SELECT MAX(id) AS max_id, person_license
+                    FROM uitslag_klassement
+                    WHERE competition_id = ? AND distance_combination_id = ?
+                    GROUP BY person_license
+                ) latest ON latest.max_id = t.id
+                JOIN persons p ON p.license_key = t.person_license
+                LEFT JOIN competition_startnummers cs ON cs.person_license = t.person_license AND cs.competition_id = ?
+                ORDER BY t.rang, t.punten_totaal
+            ");
+            $stmt->execute([$compId, $dcId, $compId]);
+            $rijders = $stmt->fetchAll(PDO::FETCH_ASSOC);
+            $afstanden = [];
+            foreach ($rijders as &$r) {
+                $r['punten_totaal'] = $r['punten_totaal'] !== null ? (float)$r['punten_totaal'] : null;
+                $detail = json_decode($r['punten_detail'], true) ?? [];
+                $r['punten_detail'] = $detail;
+                foreach (array_keys($detail) as $dn) {
+                    if (!in_array($dn, $afstanden)) $afstanden[] = $dn;
+                }
+            }
+            unset($r);
+            echo json_encode(['rijders' => $rijders, 'afstanden' => $afstanden], JSON_UNESCAPED_UNICODE);
+        } else {
+            if (!$distId) { echo json_encode(['error' => 'distance_id verplicht']); exit; }
+            $stmt = $pdo->prepare("
+                SELECT t.rang, t.finale_naam, t.tijd_ms, t.sanctie, t.distance_naam,
+                       p.full_name, p.category AS categorie,
+                       COALESCE(cs.startnummer, p.start_number) AS snr,
+                       res_agg.rondes, res_agg.pk_punten
+                FROM uitslag_afstand t
+                INNER JOIN (
+                    SELECT MAX(id) AS max_id, person_license
+                    FROM uitslag_afstand
+                    WHERE competition_id = ? AND distance_combination_id = ? AND distance_id = ?
+                    GROUP BY person_license
+                ) latest ON latest.max_id = t.id
+                JOIN persons p ON p.license_key = t.person_license
+                LEFT JOIN competition_startnummers cs ON cs.person_license = t.person_license AND cs.competition_id = ?
+                LEFT JOIN (
+                    SELECT he.person_license, res.rondes, res.punten AS pk_punten
+                    FROM heat_entries he
+                    JOIN heats h ON h.id = he.heat_id
+                    JOIN results res ON res.heat_entry_id = he.id
+                    WHERE h.competition_id = ? AND h.distance_combination_id = ?
+                      AND COALESCE(h.distance_id, '') = ?
+                      AND (res.rondes IS NOT NULL OR res.punten IS NOT NULL)
+                    ORDER BY res.id DESC
+                ) res_agg ON res_agg.person_license = t.person_license
+                ORDER BY CASE WHEN t.rang IS NULL THEN 1 ELSE 0 END, t.rang
+            ");
+            $stmt->execute([$compId, $dcId, $distId, $compId, $compId, $dcId, $distId]);
+            $rijders = $stmt->fetchAll(PDO::FETCH_ASSOC);
+            $seen = []; $unique = [];
+            foreach ($rijders as $r) {
+                $lic = $r['full_name'] . $r['snr'];
+                if (isset($seen[$lic])) continue;
+                $seen[$lic] = true; $unique[] = $r;
+            }
+            $heeftRnd = !empty(array_filter($unique, fn($r) => $r['rondes'] !== null));
+            $heeftPK  = !empty(array_filter($unique, fn($r) => $r['pk_punten'] !== null));
+            echo json_encode([
+                'rijders' => $unique, 'heeft_rondes' => $heeftRnd, 'heeft_pk_punten' => $heeftPK,
+            ], JSON_UNESCAPED_UNICODE);
+        }
+    } catch (Throwable $e) {
+        http_response_code(500);
+        echo json_encode(['error' => $e->getMessage()]);
+    }
+    exit;
+}
+
+// ── API: coach_info — status + sancties voor een set licenties ──────────────
+//    POST {competition_id, licenses:[...]}  (POST vanwege mogelijke lengte)
+if ($action === 'coach_info') {
+    header('Content-Type: application/json; charset=utf-8');
+    $body    = json_decode(file_get_contents('php://input'), true) ?: [];
+    $compId  = trim($body['competition_id'] ?? '');
+    $licenses = is_array($body['licenses'] ?? null) ? $body['licenses'] : [];
+    $licenses = array_values(array_filter(array_map('strval', $licenses)));
+    if (!$compId || !$licenses) { echo json_encode(['personen' => []]); exit; }
+    try {
+        $ph = implode(',', array_fill(0, count($licenses), '?'));
+        // Per rijder: worst-case status (hoogste entry.status → "niet getekend" (4) is belangrijkst).
+        // We nemen MAX(status); 4=niet getekend valt altijd op.
+        $stStmt = $pdo->prepare("
+            SELECT p.license_key,
+                   COALESCE(cs.startnummer, p.start_number) AS snr,
+                   p.full_name, p.category, p.club_full, p.sponsor,
+                   MAX(e.status) AS entry_status
+            FROM persons p
+            JOIN entries e ON e.person_license = p.license_key
+            JOIN distance_combinations dc ON dc.id = e.distance_combination_id
+            LEFT JOIN competition_startnummers cs
+                   ON cs.person_license = p.license_key
+                  AND cs.competition_id = dc.competition_id
+            WHERE dc.competition_id = ? AND p.license_key IN ($ph)
+            GROUP BY p.license_key
+        ");
+        $stStmt->execute(array_merge([$compId], $licenses));
+        $personen = [];
+        foreach ($stStmt->fetchAll(PDO::FETCH_ASSOC) as $row) {
+            $row['sancties'] = [];
+            $row['heats']    = [];
+            $personen[$row['license_key']] = $row;
+        }
+
+        // Heats per licentie — voor de "Heats"-tab.
+        // Per rijder tonen we in welke heats hij is ingedeeld, inclusief
+        // ronde-type, rit-naam en afstand. De query geeft voor rijders die
+        // nog nergens in zitten geen rijen terug (frontend toont dan "nog niet
+        // ingedeeld"). We nemen ook de bestaande rondes van zijn DC's mee
+        // zodat we in JS kunnen zien welke rondes ontbreken.
+        // Sorteer in dezelfde volgorde als de programma-tab:
+        //   blok.volgorde (master) → rit.volgorde (tiebreaker). Zo verschijnen
+        //   ritten per rijder in de chronologische wedstrijd-volgorde.
+        $heatStmt = $pdo->prepare("
+            SELECT he.person_license,
+                   h.id AS heat_id, h.ronde, h.heat_naam,
+                   h.distance_combination_id AS dc_id,
+                   COALESCE(h.distance_id, tsr.distance_id) AS distance_id,
+                   COALESCE(tsr.rit_naam, h.heat_naam) AS rit_naam,
+                   COALESCE(tsr.ronde_type, 'heats') AS ronde_type,
+                   COALESCE(tsr.dc_naam, '') AS dc_naam,
+                   d.name AS afstand_naam,
+                   he.startpositie,
+                   b.volgorde AS blok_volgorde,
+                   tsr.volgorde AS rit_volgorde
+            FROM heat_entries he
+            JOIN heats h ON h.id = he.heat_id
+            LEFT JOIN tijdschema_ritten tsr ON tsr.id = h.tijdschema_rit_id
+            LEFT JOIN tijdschema_blokken b ON b.id = tsr.blok_id
+            LEFT JOIN distances d ON d.id = COALESCE(h.distance_id, tsr.distance_id)
+                                 AND d.distance_combination_id = h.distance_combination_id
+            WHERE h.competition_id = ?
+              AND he.person_license IN ($ph)
+            ORDER BY b.volgorde, tsr.volgorde, h.id
+        ");
+        $heatStmt->execute(array_merge([$compId], $licenses));
+        foreach ($heatStmt->fetchAll(PDO::FETCH_ASSOC) as $h) {
+            $lic = $h['person_license'];
+            if (isset($personen[$lic])) $personen[$lic]['heats'][] = $h;
+        }
+
+        // Ingeschreven afstanden per rijder (via entries.distance_combination_id).
+        // Een afstand is ontbrekend als hij in "ingeschreven" zit maar nog niet
+        // in $personen[...]['heats'] → dat toont de frontend als "nog niet ingedeeld".
+        $entStmt = $pdo->prepare("
+            SELECT e.person_license,
+                   dc.id AS dc_id, dc.name AS dc_naam
+            FROM entries e
+            JOIN distance_combinations dc ON dc.id = e.distance_combination_id
+            WHERE dc.competition_id = ?
+              AND e.person_license IN ($ph)
+        ");
+        $entStmt->execute(array_merge([$compId], $licenses));
+        foreach ($entStmt->fetchAll(PDO::FETCH_ASSOC) as $e) {
+            $lic = $e['person_license'];
+            if (!isset($personen[$lic])) continue;
+            if (!isset($personen[$lic]['entries'])) $personen[$lic]['entries'] = [];
+            $e['afstanden'] = [];
+            $personen[$lic]['entries'][] = $e;
+        }
+
+        // Alle afstanden per DC ophalen zodat we ook afstanden tonen waarvoor
+        // nog géén programma-ritten bestaan (bv. lange afstand waar nog niet
+        // voor gelot is). We nemen alle rijen en laten het unique-maken aan
+        // PHP over (één distance_id kan meerdere keren voorkomen per DC door
+        // target_group-splits).
+        $dcIds = [];
+        foreach ($personen as $p) {
+            foreach (($p['entries'] ?? []) as $e) $dcIds[$e['dc_id']] = true;
+        }
+        if ($dcIds) {
+            $dcList = array_keys($dcIds);
+            $dcPhQ  = implode(',', array_fill(0, count($dcList), '?'));
+            $dStmt = $pdo->prepare("
+                SELECT distance_combination_id AS dc_id,
+                       id AS distance_id, name AS distance_naam, number
+                FROM distances
+                WHERE distance_combination_id IN ($dcPhQ)
+                ORDER BY number
+            ");
+            $dStmt->execute($dcList);
+            $afstandenPerDc = [];
+            foreach ($dStmt->fetchAll(PDO::FETCH_ASSOC) as $d) {
+                $afstandenPerDc[$d['dc_id']][$d['distance_id']] = [
+                    'distance_id'   => $d['distance_id'],
+                    'distance_naam' => $d['distance_naam'],
+                    'number'        => $d['number'],
+                ];
+            }
+            // Verwachte rondes per (dc_id, distance_id) uit tijdschema_cat_config.
+            // Hiermee weten we welke rondes "zouden moeten bestaan" zelfs als
+            // er nog geen heats zijn geloot — handig voor de coach om vooraf
+            // te zien hoeveel rondes een rijder op z'n programma heeft.
+            $rondesPerDcDist = []; // [dc_id][distance_id] = ['heats','finale_a',...]
+            $ccStmt = $pdo->prepare("
+                SELECT cc.dc_id, cc.distance_id,
+                       cc.heeft_heats, cc.heeft_kwartfinale, cc.heeft_halve_finale,
+                       cc.heeft_runner_up,
+                       cc.finale_heats, cc.finale_b_heats
+                FROM tijdschema_cat_config cc
+                JOIN competition_tijdschema ct ON ct.id = cc.tijdschema_id
+                WHERE ct.competition_id = ?
+                  AND cc.dc_id IN ($dcPhQ)
+            ");
+            $ccStmt->execute(array_merge([$compId], $dcList));
+            foreach ($ccStmt->fetchAll(PDO::FETCH_ASSOC) as $cc) {
+                $list = [];
+                if ((int)$cc['heeft_heats'])        $list[] = 'heats';
+                if ((int)$cc['heeft_kwartfinale'])  $list[] = 'kwartfinale';
+                if ((int)$cc['heeft_halve_finale']) $list[] = 'halve_finale';
+                if ((int)$cc['heeft_runner_up'])    $list[] = 'runner_up';
+                if ((int)($cc['finale_b_heats'] ?? 0) > 0) $list[] = 'finale_b';
+                if ((int)($cc['finale_heats']   ?? 0) > 0) $list[] = 'finale_a';
+                $rondesPerDcDist[$cc['dc_id']][$cc['distance_id']] = $list;
+            }
+
+            // Let op: PHP-references door geneste arrays zijn foutgevoelig.
+            // Hier muteren we expliciet via index op $personen zodat de
+            // wijziging gegarandeerd persisteert.
+            foreach ($personen as $lic => $persoon) {
+                if (empty($persoon['entries'])) continue;
+                foreach ($persoon['entries'] as $i => $entry) {
+                    $lijst = array_values($afstandenPerDc[$entry['dc_id']] ?? []);
+                    foreach ($lijst as $j => $af) {
+                        $lijst[$j]['expected_rondes'] =
+                            $rondesPerDcDist[$entry['dc_id']][$af['distance_id']] ?? [];
+                    }
+                    $personen[$lic]['entries'][$i]['afstanden'] = $lijst;
+                }
+            }
+        }
+
+        // Sancties: alle results met sanctie != NULL voor deze licenties in deze wedstrijd
+        $saStmt = $pdo->prepare("
+            SELECT he.person_license,
+                   res.sanctie, res.tijd_ms, res.finishpositie,
+                   COALESCE(tsr.rit_naam, h.heat_naam) AS rit_naam,
+                   COALESCE(tsr.ronde_type, 'heats') AS ronde_type,
+                   COALESCE(tsr.dc_naam, '') AS dc_naam,
+                   d.name AS afstand_naam
+            FROM heat_entries he
+            JOIN heats h ON h.id = he.heat_id
+            JOIN results res ON res.heat_entry_id = he.id
+            LEFT JOIN tijdschema_ritten tsr ON tsr.id = h.tijdschema_rit_id
+            LEFT JOIN distances d ON d.id = COALESCE(h.distance_id, tsr.distance_id)
+                                 AND d.distance_combination_id = h.distance_combination_id
+            WHERE h.competition_id = ?
+              AND he.person_license IN ($ph)
+              AND res.sanctie IS NOT NULL AND res.sanctie != ''
+            ORDER BY h.ronde, tsr.volgorde, h.id
+        ");
+        $saStmt->execute(array_merge([$compId], $licenses));
+        foreach ($saStmt->fetchAll(PDO::FETCH_ASSOC) as $s) {
+            $lic = $s['person_license'];
+            if (isset($personen[$lic])) $personen[$lic]['sancties'][] = $s;
+        }
+
+        echo json_encode(['personen' => array_values($personen)], JSON_UNESCAPED_UNICODE);
+    } catch (Throwable $e) {
+        http_response_code(500);
+        echo json_encode(['error' => $e->getMessage()]);
+    }
+    exit;
+}
+
+if ($action === 'rit_detail') {
+    header('Content-Type: application/json; charset=utf-8');
+    $compId  = trim($_GET['competition_id'] ?? '');
+    $ritNaam = trim($_GET['rit_naam'] ?? '');
+    if (!$compId || !$ritNaam) { echo json_encode(['heat' => null]); exit; }
+    try {
+        $stmt = $pdo->prepare("
+            SELECT h.id, h.heat_naam, h.ronde,
+                   h.distance_combination_id, COALESCE(h.distance_id, tsr.distance_id) AS distance_id,
+                   COALESCE(tsr.ronde_type, 'heats') AS ronde_type,
+                   COALESCE(tsr.rit_naam, h.heat_naam) AS rit_naam
+            FROM heats h
+            LEFT JOIN tijdschema_ritten tsr ON tsr.id = h.tijdschema_rit_id
+            WHERE h.competition_id = ?
+              AND (tsr.rit_naam = ? OR h.heat_naam = ?)
+            LIMIT 1
+        ");
+        $stmt->execute([$compId, $ritNaam, $ritNaam]);
+        $heat = $stmt->fetch(PDO::FETCH_ASSOC);
+        if (!$heat) { echo json_encode(['heat' => null]); exit; }
+
+        $rStmt = $pdo->prepare("
+            SELECT he.startpositie,
+                   COALESCE(cs.startnummer, p.start_number) AS snr,
+                   p.license_key, p.full_name, p.category, p.club_full, p.sponsor,
+                   res.finishpositie, res.tijd_ms, res.sanctie,
+                   res.rondes, res.punten AS pk_punten
+            FROM heat_entries he
+            JOIN persons p ON p.license_key = he.person_license
+            LEFT JOIN competition_startnummers cs
+                   ON cs.person_license = he.person_license
+                  AND cs.competition_id = ?
+            LEFT JOIN results res ON res.heat_entry_id = he.id
+            WHERE he.heat_id = ?
+            ORDER BY he.startpositie
+        ");
+        $rStmt->execute([$compId, $heat['id']]);
+        $heat['rijders'] = $rStmt->fetchAll(PDO::FETCH_ASSOC);
+        echo json_encode(['heat' => $heat], JSON_UNESCAPED_UNICODE);
+    } catch (Throwable $e) {
+        http_response_code(500);
+        echo json_encode(['error' => $e->getMessage()]);
+    }
+    exit;
+}
+?>
+<!DOCTYPE html>
+<html lang="nl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="theme-color" content="#1F4E79">
+<title>InlineComp – Coach</title>
+<link rel="icon" type="image/svg+xml" href="../favicon.svg">
+<style>
+:root { --blauw:#1F4E79; --middenblauw:#2E75B6; --lichtblauw:#D6E4F0;
+        --oranje:#E8630A; --wit:#fff; --tekst:#1a1a1a; --grijs:#f4f6f8;
+        --accent:#fff3cd; --accent-bd:#ffc107; }
+* { box-sizing:border-box; margin:0; padding:0; }
+/* Root op 20px zodat alle rem-maten ±25% groter worden — consistent met /public
+   en veel leesbaarder op een telefoon aan de rand van de baan. */
+html { font-size:20px; }
+body { font-family:'Segoe UI',Arial,sans-serif; color:var(--tekst);
+       background:var(--grijs); min-height:100vh; font-size:1rem; }
+/* ── Header (1-op-1 uit /public) ── */
+header {
+    background: var(--blauw);
+    color: var(--wit);
+    padding: 14px 16px;
+    display: flex; align-items: center; justify-content: center; position: relative;
+}
+header .hdr-center { text-align: center; }
+header h1 { font-size: 1.5rem; font-weight: 700; }
+header .sub { font-size: .95rem; opacity: .8; margin-top: 2px; }
+.hdr-btns {
+    position: absolute; right: 12px; top: 50%; transform: translateY(-50%);
+    display: flex; gap: 6px;
+}
+.btn-help {
+    background: rgba(255,255,255,.2); border: 2px solid rgba(255,255,255,.5);
+    color: #fff; width: 36px; height: 36px; border-radius: 50%;
+    font-size: 1.2rem; font-weight: 700; cursor: pointer; line-height: 1;
+    display: flex; align-items: center; justify-content: center; font-style: italic;
+}
+.btn-help:active { background: rgba(255,255,255,.35); }
+
+/* ── Org footer (1-op-1 uit /public) ── */
+.org-footer {
+    display: none;
+    background: var(--wit); border-top: 1px solid #dde3ea;
+    padding: 12px 16px;
+    position: fixed; bottom: 0; left: 0; right: 0; z-index: 100;
+    box-shadow: 0 -2px 8px rgba(0,0,0,.08);
+}
+.org-footer-inner {
+    max-width: 720px; margin: 0 auto;
+    display: flex; align-items: center; justify-content: space-between; gap: 12px;
+}
+.org-footer-logo { height: 50px; width: auto; object-fit: contain; flex-shrink: 0; }
+.org-footer-naam { font-size: .85rem; color: var(--blauw); font-weight: 600; flex-shrink: 0; }
+.org-footer-sponsors { flex: 1; overflow: hidden; display: flex; align-items: center; justify-content: flex-end; }
+.sponsor-marquee { display: flex; overflow: hidden; height: 50px; align-items: center; }
+.sponsor-marquee-inner {
+    display: flex; align-items: center; gap: 40px; flex-shrink: 0;
+    animation: marquee linear infinite;
+}
+.sponsor-marquee-inner img { height: 40px; width: auto; object-fit: contain; flex-shrink: 0; }
+@keyframes marquee { 0% { transform: translateX(0); } 100% { transform: translateX(calc(-50% - 20px)); } }
+/* Body krijgt bottom-padding zodra de footer zichtbaar is, zodat de inhoud
+   niet onder de fixed footer wegvalt. */
+body.heeft-footer .container { padding-bottom: 90px; }
+
+/* ── Help overlay (1-op-1 uit /public) ── */
+.help-overlay {
+    position: fixed; inset: 0; background: rgba(0,0,0,.6);
+    z-index: 2000; display: flex; align-items: flex-start; justify-content: center;
+    padding: 24px 12px; overflow-y: auto;
+}
+.help-box {
+    background: var(--wit); border-radius: 14px; width: 100%; max-width: 520px;
+    box-shadow: 0 12px 40px rgba(0,0,0,.3); overflow: hidden;
+}
+.help-header {
+    background: var(--blauw); color: var(--wit); padding: 14px 16px;
+    display: flex; justify-content: space-between; align-items: center;
+    font-size: 1.1rem; font-weight: 700;
+}
+.help-sluit { background: none; border: none; color: rgba(255,255,255,.7);
+              font-size: 1.5rem; cursor: pointer; line-height: 1; }
+.help-body { padding: 16px; font-size: .9rem; line-height: 1.5; color: var(--tekst); }
+.help-body h3 { font-size: .95rem; color: var(--blauw); margin: 16px 0 6px; }
+.help-body h3:first-child { margin-top: 0; }
+.help-body p { margin: 4px 0 8px; }
+.help-body .help-stap { display: flex; gap: 10px; align-items: flex-start; margin-bottom: 10px; }
+.help-body .help-stap-nr {
+    flex-shrink: 0; width: 24px; height: 24px; border-radius: 50%;
+    background: var(--oranje); color: var(--wit); font-weight: 700;
+    display: flex; align-items: center; justify-content: center; font-size: .8rem;
+}
+
+/* In-app bevestigings-dialoog (vervangt native confirm()) */
+.bev-knoppen {
+    display:flex; gap:10px; justify-content:flex-end;
+    padding:12px 16px; border-top:1px solid #eee; background:#f9fafb;
+}
+.bev-btn {
+    padding:8px 18px; font-size:.9rem; font-weight:600;
+    border:none; border-radius:6px; cursor:pointer;
+}
+.bev-btn-annuleer { background:#e5e7eb; color:#333; }
+.bev-btn-annuleer:hover { background:#d1d5db; }
+.bev-btn-bevestig { background:#b71c1c; color:#fff; }
+.bev-btn-bevestig:hover { background:#7a0000; }
+
+.container { max-width:900px; margin:0 auto; padding:12px; }
+/* Geen witte card-backgrounds meer; elementen staan direct op de body-gray.
+   We behouden de .card-classe als "visueel groepje" zonder achtergrond, zodat
+   bestaande HTML-structuur blijft werken en er alleen ruimte onderin komt. */
+.card { margin-bottom:18px; }
+.card h2 { font-size:1rem; color:var(--blauw); margin-bottom:8px; }
+
+/* Stap-label met blauw cijfer (1-op-1 uit /public) */
+.stap-label {
+    font-size: 1.05rem; font-weight: 700; color: var(--blauw);
+    margin-bottom: 10px; display: flex; align-items: center; gap: 8px;
+}
+.stap-nr {
+    background: var(--blauw); color: var(--wit);
+    width: 28px; height: 28px; border-radius: 50%;
+    display: flex; align-items: center; justify-content: center;
+    font-size: .9rem; font-weight: 700; flex-shrink: 0;
+}
+/* Secundaire sub-kop binnen een stap (bv. "Op club" / "Op sponsor"). */
+.stap-sub { font-size:.85rem; font-weight:600; color:#666;
+            margin:10px 0 4px; }
+
+/* Form-elementen — 1-op-1 uit /public voor consistente look & feel.
+   Gebruik je eigen selector in plaats van bare `select`/`input` om te
+   voorkomen dat dit doorlekt naar andere selects (filter-chips etc.). */
+.sel, .inp {
+    width: 100%; padding: 14px 14px; font-size: 1rem;
+    border: 2px solid #cdd8e3; border-radius: 8px;
+    background: var(--wit); appearance: none; -webkit-appearance: none;
+}
+select.sel {
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'%3E%3Cpath d='M6 8L1 3h10z' fill='%23666'/%3E%3C/svg%3E");
+    background-repeat: no-repeat; background-position: right 14px center; padding-right: 40px;
+}
+.sel:focus, .inp:focus { border-color: var(--middenblauw); outline: none; }
+.sel:disabled { background-color:#f5f7fa; color:#999; cursor:not-allowed; }
+
+/* Wedstrijd-info-kader (1-op-1 uit /public) */
+.comp-info {
+    background: var(--lichtblauw); border-radius: 8px;
+    padding: 12px 14px; margin-top: 10px;
+    font-size: 1rem; color: var(--blauw);
+}
+.comp-info strong { font-size: 1.1rem; display:block; }
+.comp-info small  { color:#5580a8; }
+
+/* Filter-chips onder de wedstrijd-select (1-op-1 uit /public) */
+.filter-rij { display:flex; gap:8px; margin-top:8px; }
+.filter-rij input[type=checkbox] { display:none; }
+.filter-chip {
+    display:inline-flex; align-items:center; gap:5px;
+    padding:9px 16px; border-radius:20px; font-size:.95rem; font-weight:600;
+    border:2px solid #cdd8e3; background:var(--wit); color:#888;
+    cursor:pointer; user-select:none; transition:all .15s;
+}
+.filter-chip:active { transform:scale(.96); }
+.filter-rij input:checked + .filter-chip {
+    background:var(--lichtblauw); border-color:var(--middenblauw); color:var(--blauw);
+}
+.rij { display:flex; gap:8px; margin-bottom:10px; }
+.rij > * { flex:1; }
+.btn { background:var(--middenblauw); color:var(--wit); border:none;
+       padding:8px 14px; font-size:.9rem; border-radius:5px; cursor:pointer; }
+.btn:hover { background:var(--blauw); }
+.btn:disabled { opacity:.5; cursor:not-allowed; }
+.btn-klein { padding:4px 8px; font-size:.8rem; }
+.btn-wis { background:#b71c1c; }
+
+/* Primaire actie-knop (1-op-1 uit /public btn-zoek): oranje, volle breedte. */
+.btn-primair {
+    width:100%; padding:16px; font-size:1.15rem; font-weight:700;
+    color:var(--wit); background:var(--oranje);
+    border:none; border-radius:8px; cursor:pointer; margin-top:10px;
+}
+.btn-primair:disabled { opacity:.4; cursor:not-allowed; }
+.btn-primair:active { transform:scale(.98); }
+
+/* Coach-lijst chips */
+.coach-hdr { display:flex; justify-content:space-between; align-items:center;
+             margin-bottom:8px; font-size:.9rem; color:#555; }
+.chips { display:flex; flex-wrap:wrap; gap:4px; min-height:28px; }
+.chip { display:inline-flex; align-items:center; gap:4px;
+        background:var(--lichtblauw); border:1px solid #b3cae6;
+        border-radius:14px; padding:2px 8px; font-size:.85rem; }
+.chip .x { cursor:pointer; color:#b71c1c; font-weight:700; padding:0 2px; }
+.chip .x:hover { color:#7a0000; }
+.chip-snr { font-weight:700; color:var(--blauw); }
+
+/* Programma-lijst */
+.heat-rij { background:var(--wit); border:1px solid #dde3ea;
+            border-radius:6px; padding:10px 12px; margin-bottom:6px;
+            cursor:pointer; display:flex; align-items:center; gap:10px; }
+.heat-rij:hover { background:#f0f5fa; }
+.heat-rij.mijn { border-left:4px solid var(--accent-bd); background:var(--accent); }
+.heat-rij.leeg { cursor:default; opacity:.75; background:#fafafa; }
+/* Vaste breedte voor het status-icoon zodat naam-kolom niet schuift tussen
+   regels met/zonder icoon. Emoji-glyphs zijn breder dan ○, daarom krijgt
+   de hele kolom een deterministische breedte. */
+.heat-status { width:28px; text-align:center; font-size:1rem; flex-shrink:0; }
+.heat-status-leeg { color:#bbb; font-size:.9rem; }
+.heat-info { flex:1; min-width:0; }
+.heat-naam { font-weight:600; }
+.heat-sub { font-size:.8rem; color:#666; margin-top:2px; }
+.heat-mijn-snrs { display:flex; flex-wrap:wrap; gap:3px; }
+.heat-mijn-snrs .m-snr {
+    background:var(--accent-bd); color:#000; font-weight:700;
+    font-size:.8rem; border-radius:10px; padding:2px 7px;
+}
+.badge { display:inline-block; padding:1px 6px; font-size:.75rem;
+         border-radius:3px; color:#fff; margin-right:4px; }
+.badge-serie   { background:#607d8b; }
+.badge-kf      { background:#8e24aa; }
+.badge-hf      { background:#5e35b1; }
+.badge-finale  { background:#d32f2f; }
+.badge-ru      { background:#00897b; }
+.blok-rij { background:#e8eaf6; border-radius:6px; padding:6px 10px;
+            margin-bottom:6px; font-size:.85rem; color:#333; font-style:italic; }
+
+/* Tabs (1-op-1 uit /public) */
+.tabs {
+    display:flex; background:var(--wit);
+    border-bottom:2px solid #dde3ea;
+    margin-bottom:10px;
+}
+.tab-btn {
+    flex:1; padding:12px 4px; font-size:.85rem; font-weight:600;
+    text-align:center; border:none; background:none; cursor:pointer;
+    color:#888; border-bottom:3px solid transparent; margin-bottom:-2px;
+}
+.tab-btn.active { color:var(--blauw); border-bottom-color:var(--oranje); }
+.tab-pane { display:none; }
+.tab-pane.active { display:block; }
+
+/* Sancties-tab */
+.sanc-persoon { background:var(--wit); border:1px solid #dde3ea;
+                border-radius:6px; padding:10px 12px; margin-bottom:8px; }
+.sanc-persoon-kop { display:flex; align-items:center; gap:8px;
+                    font-weight:600; margin-bottom:6px; }
+.sanc-persoon-cat { font-size:.8rem; color:#888; margin:-4px 0 6px 34px; }
+.sanc-persoon-snr { color:var(--blauw); font-weight:700; }
+.status-badge { font-size:.75rem; padding:2px 8px; border-radius:10px; font-weight:600; }
+.status-0 { background:#fff3e0; color:#e65100; }  /* Niet bevestigd */
+.status-1 { background:#e8f5e9; color:#2e7d32; }  /* Bevestigd */
+.status-2 { background:#fce4e4; color:#b71c1c; }  /* Afgemeld */
+.status-3 { background:#f3e5f5; color:#6a1b9a; }  /* Afgem. bij org. */
+.status-4 { background:#ffcdd2; color:#b71c1c; border:2px solid #b71c1c; } /* Niet getekend — opvallend! */
+.status-5 { background:#e0f7fa; color:#006064; }  /* Bev. bij org. */
+.sanc-lijst { display:flex; flex-direction:column; gap:3px; }
+.sanc-rij { font-size:.85rem; padding:3px 6px; background:#fff8e1;
+            border-left:3px solid #f9a825; border-radius:3px; }
+.sanc-rij-code { font-weight:700; color:#b71c1c; }
+.sanc-leeg { color:#888; font-style:italic; font-size:.85rem; }
+
+/* Heats-tab: DC/afstand-blokje per rijder met rondes eronder */
+.heat-toon-dc { margin:6px 0; padding:6px 8px; background:#f7fbff;
+                border-left:3px solid var(--middenblauw); border-radius:4px; }
+.heat-toon-dc-kop { font-size:.85rem; font-weight:600; color:var(--blauw); margin-bottom:3px; }
+.heat-toon-rij { display:flex; align-items:center; gap:6px;
+                 font-size:.85rem; padding:2px 0; flex-wrap:wrap; }
+.heat-toon-wachten { background:#fff8e1; border-left-color:#f9a825; }
+.heat-toon-wacht-rij { color:#8a5a00; font-style:italic; }
+.heat-toon-niet-geplaatst { color:#b71c1c; font-style:italic; }
+.chip-waarschuw { background:#ffcdd2 !important; border-color:#b71c1c !important; }
+
+/* Uitslagen-tabel */
+table.uitsl-tabel { width:100%; border-collapse:collapse; margin-top:10px; font-size:.85rem; }
+table.uitsl-tabel th { background:var(--lichtblauw); color:var(--blauw);
+                       padding:6px 4px; text-align:left; border-bottom:2px solid #b3cae6; }
+table.uitsl-tabel td { padding:6px 4px; border-bottom:1px solid #eee; }
+table.uitsl-tabel tr.mijn td { background:var(--accent); font-weight:600; }
+.col-rang { width:32px; text-align:center; font-weight:700; }
+.col-rnd, .col-pk { width:40px; text-align:right; }
+.col-tijd { width:80px; text-align:right; font-variant-numeric:tabular-nums; }
+.col-punten { width:44px; text-align:right; }
+.col-totaal { width:50px; text-align:right; font-weight:700; color:var(--blauw); }
+.col-sanctie { color:#b71c1c; font-weight:700; font-size:.8em; }
+
+/* Gecombineerde rit: ritten die tegelijk rijden in één kader */
+.prog-combi-box {
+    border:2px dashed var(--middenblauw);
+    border-radius:8px;
+    padding:6px 8px 2px;
+    margin-bottom:8px;
+    background:#f7fbff;
+}
+.prog-combi-kop {
+    font-size:.8rem; font-weight:700; color:var(--blauw);
+    padding:2px 4px 6px; letter-spacing:.3px;
+}
+.prog-combi-leden .heat-rij { margin-bottom:4px; }
+
+.overlay { position:fixed; inset:0; background:rgba(0,0,0,.4); z-index:1000;
+           display:flex; align-items:flex-start; justify-content:center;
+           padding:20px; overflow-y:auto; }
+.overlay-box { background:var(--wit); border-radius:8px; max-width:700px;
+               width:100%; padding:18px; position:relative; }
+.overlay .sluit { position:absolute; top:8px; right:12px; cursor:pointer;
+                  font-size:1.4rem; color:#666; }
+.overlay .sluit:hover { color:#000; }
+
+table.heat-tabel { width:100%; border-collapse:collapse; margin-top:10px; font-size:.85rem; }
+table.heat-tabel th { background:var(--lichtblauw); color:var(--blauw);
+                      padding:6px 4px; text-align:left; border-bottom:2px solid #b3cae6; }
+table.heat-tabel td { padding:6px 4px; border-bottom:1px solid #eee; }
+table.heat-tabel tr.mijn td { background:var(--accent); font-weight:600; }
+.col-pos { width:30px; text-align:center; }
+.col-snr { width:44px; text-align:right; font-weight:700; color:var(--blauw); }
+.col-fin { width:40px; text-align:center; }
+
+.spinner { display:inline-block; width:16px; height:16px;
+           border:2px solid #ccc; border-top-color:var(--blauw);
+           border-radius:50%; animation:spin .8s linear infinite; }
+@keyframes spin { to { transform:rotate(360deg); } }
+.leeg-melding { text-align:center; color:#888; padding:20px; font-style:italic; }
+
+/* Pull-to-refresh indicator */
+#ptr {
+    position:fixed; top:0; left:0; right:0;
+    background:var(--middenblauw); color:var(--wit);
+    text-align:center; font-size:.85rem; padding:6px 0;
+    transform:translateY(-100%); transition:transform .15s ease-out;
+    z-index:900; pointer-events:none;
+}
+#ptr.zichtbaar { transform:translateY(0); }
+#ptr.laadt { background:var(--blauw); }
+
+/* Stempeltje rechtsonder dat laat zien wanneer de laatste auto-refresh was.
+   Discreet; de user weet zo dat de pagina leeft zonder dat het opvalt.
+   Verdwijnt niet onder de sponsor-footer omdat hij absolute daarboven staat. */
+.auto-refresh-stempel {
+    position:fixed; right:8px; bottom:8px; z-index:110;
+    background:rgba(255,255,255,.9); color:#666;
+    font-size:.7rem; padding:3px 8px; border-radius:10px;
+    border:1px solid #dde3ea; pointer-events:none;
+}
+body.heeft-footer .auto-refresh-stempel { bottom:84px; }
+</style>
+</head>
+<body>
+<div id="ptr">↓ Trek verder om te vernieuwen</div>
+
+<header>
+    <div class="hdr-center">
+        <h1>InlineComp – Coach</h1>
+        <div class="sub">Volg jouw rijders: programma, sancties en uitslagen</div>
+    </div>
+    <div class="hdr-btns">
+        <button class="btn-help" onclick="toonInfo()" title="Over InlineComp">i</button>
+        <button class="btn-help" onclick="toonHelp()" title="Hoe werkt het?">?</button>
+    </div>
+</header>
+
+<div id="org-footer" class="org-footer">
+    <div class="org-footer-inner">
+        <span id="footer-org-logo"></span>
+        <span id="footer-org-naam" class="org-footer-naam"></span>
+        <div id="footer-sponsors" class="org-footer-sponsors"></div>
+    </div>
+</div>
+
+<div class="container">
+
+<div class="card">
+    <div class="stap-label"><span class="stap-nr">1</span> Kies je wedstrijd</div>
+    <select id="sel-comp" class="sel"><option value="">— kies een wedstrijd —</option></select>
+    <div class="filter-rij">
+        <input type="checkbox" id="chk-oud"><label for="chk-oud" class="filter-chip">Oude wedstrijden</label>
+        <input type="checkbox" id="chk-toekomst"><label for="chk-toekomst" class="filter-chip">Toekomstige</label>
+    </div>
+    <div id="comp-info" class="comp-info" style="display:none"></div>
+</div>
+
+<div id="sectie-selectie" class="card">
+    <div class="stap-label"><span class="stap-nr">2</span> Voeg rijders toe aan je coach-lijst</div>
+    <div class="stap-sub">Op club</div>
+    <div class="rij">
+        <select id="sel-club" class="sel" disabled><option value="">— kies eerst een wedstrijd —</option></select>
+    </div>
+    <div class="stap-sub">Op sponsor</div>
+    <div class="rij">
+        <select id="sel-sponsor" class="sel" disabled><option value="">— kies eerst een wedstrijd —</option></select>
+    </div>
+    <div class="stap-sub">Op startnummer</div>
+    <div class="rij">
+        <input id="inp-snr" class="inp" type="number" min="1" placeholder="Startnummer…" inputmode="numeric" disabled>
+    </div>
+    <button id="btn-toevoegen" class="btn-primair" disabled>Toevoegen</button>
+    <div id="snr-feedback" style="font-size:.85rem;color:#b71c1c;min-height:18px;margin-top:6px"></div>
+</div>
+
+<div id="sectie-lijst" class="card" style="display:none">
+    <div class="coach-hdr">
+        <span id="coach-aantal">0 rijders</span>
+        <button id="btn-wis-alles" class="btn btn-klein btn-wis">Wis alles</button>
+    </div>
+    <div id="coach-chips" class="chips"></div>
+</div>
+
+<div id="sectie-programma" class="card" style="display:none">
+    <div class="tabs">
+        <button class="tab-btn active" data-tab="programma">📋 Programma</button>
+        <button class="tab-btn" data-tab="heats">🏃 Heats</button>
+        <button class="tab-btn" data-tab="sancties">⚠️ Sancties</button>
+        <button class="tab-btn" data-tab="uitslagen">📊 Uitslagen</button>
+    </div>
+    <div id="tab-programma" class="tab-pane active">
+        <div id="programma"></div>
+    </div>
+    <div id="tab-heats" class="tab-pane">
+        <div id="heats"></div>
+    </div>
+    <div id="tab-sancties" class="tab-pane">
+        <div id="sancties"></div>
+    </div>
+    <div id="tab-uitslagen" class="tab-pane">
+        <div class="rij">
+            <select id="u-sel-cat" class="sel"><option value="">— kies categorie —</option></select>
+        </div>
+        <div class="rij" id="u-afstand-rij" style="display:none">
+            <select id="u-sel-afstand" class="sel"><option value="">— kies afstand —</option></select>
+        </div>
+        <div id="uitslagen"></div>
+    </div>
+</div>
+
+</div>
+<script>
+const $ = id => document.getElementById(id);
+const selComp = $('sel-comp'), selClub = $('sel-club'), selSponsor = $('sel-sponsor');
+const inpSnr = $('inp-snr'), btnToevoegen = $('btn-toevoegen');
+const secSel = $('sectie-selectie'), secLijst = $('sectie-lijst'), secProg = $('sectie-programma');
+const chipsEl = $('coach-chips'), aantalEl = $('coach-aantal');
+const progEl = $('programma'), snrFb = $('snr-feedback');
+
+let coachLijst = []; // [{snr, license_key, full_name, category, club_full, sponsor}]
+let programmaCache = null; // {ritten, blokken}
+let coachInfoCache = {}; // license_key → {entry_status, sancties:[]}
+let alleComps = []; // ruwe lijst uit /?action=competitions — gebruikt door filterComps()
+
+const STATUS_LABEL = ['Niet bevestigd','Bevestigd','Afgemeld','Afgem. bij org.','Niet getekend','Bev. bij org.'];
+const STATUS_ICON  = ['⚠',          '✓',        '✗',       '✗',              '🚨',         '✓'];
+// Status die voor een coach direct actie vereist (rood-alarm in de UI):
+const STATUS_ALARM = new Set([0, 4]); // niet bevestigd + niet getekend
+const SANCTIE_UITLEG = {
+    'W1':'1e waarschuwing','W2':'2e waarschuwing','FS':'Valse start','RR':'Reverse ranking',
+    'DQ-TF':'Diskwalificatie technische fout','DQ-SF':'Diskwalificatie sport fout',
+    'DQ-DF':'Diskwalificatie directe fout','DNS':'Niet gestart','DNF':'Niet gefinisht',
+};
+
+const BADGE = { heats:'badge-serie', kwartfinale:'badge-kf', halve_finale:'badge-hf',
+                finale_a:'badge-finale', finale_b:'badge-finale', runner_up:'badge-ru' };
+const RLABEL = { heats:'Serie', kwartfinale:'KF', halve_finale:'HF',
+                 finale_a:'Finale', finale_b:'B-Finale', runner_up:'Runner-up' };
+
+function esc(s) { return String(s??'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+function safeDatum(s) { return s ? new Date(String(s).replace(' ','T')) : null; }
+function msTijd(ms) {
+    if (ms==null) return '';
+    const d=ms%1000, s=Math.floor(ms/1000)%60, m=Math.floor(ms/60000);
+    return m>0?`${m}:${String(s).padStart(2,'0')}.${String(d).padStart(3,'0')}`
+              :`${s}.${String(d).padStart(3,'0')}`;
+}
+// ── In-app bevestiging (vervangt native confirm) ─────────────────────────────
+// Gebruik: const ok = await bevestig({ titel, tekst, bevestigLabel, annuleerLabel });
+function bevestig({ titel = 'Bevestigen', tekst = '', bevestigLabel = 'OK', annuleerLabel = 'Annuleren' } = {}) {
+    return new Promise(resolve => {
+        const overlay = document.createElement('div');
+        overlay.className = 'help-overlay';
+        overlay.innerHTML = `
+            <div class="help-box" style="max-width:420px">
+                <div class="help-header">
+                    <span>${esc(titel)}</span>
+                    <button class="help-sluit" data-bev-actie="annuleer">&times;</button>
+                </div>
+                <div class="help-body" style="padding:18px 16px">${tekst}</div>
+                <div class="bev-knoppen">
+                    <button class="bev-btn bev-btn-annuleer" data-bev-actie="annuleer">${esc(annuleerLabel)}</button>
+                    <button class="bev-btn bev-btn-bevestig" data-bev-actie="bevestig">${esc(bevestigLabel)}</button>
+                </div>
+            </div>`;
+        const sluit = (resultaat) => { overlay.remove(); resolve(resultaat); };
+        overlay.addEventListener('click', e => {
+            if (e.target === overlay) return sluit(false);
+            const actie = e.target.closest('[data-bev-actie]')?.dataset.bevActie;
+            if (actie === 'bevestig') sluit(true);
+            else if (actie === 'annuleer') sluit(false);
+        });
+        document.body.appendChild(overlay);
+        // Focus standaard op de annuleer-knop (veiliger) — bevestigen kost
+        // bewust een extra tap.
+        overlay.querySelector('.bev-btn-annuleer')?.focus();
+    });
+}
+
+async function safeFetch(url, maxRetries = 3) {
+    for (let i=0; i<maxRetries; i++) {
+        const res = await fetch(url);
+        if (res.status !== 429) return res;
+        await new Promise(r => setTimeout(r, 2000 * (i+1)));
+    }
+    return fetch(url);
+}
+
+// ── Coach-lijst persistentie (localStorage per wedstrijd) ────────────────────
+function lsKey() { return `coach_lijst_${selComp.value || 'geen'}`; }
+function saveCoachLijst() {
+    if (!selComp.value) return;
+    localStorage.setItem(lsKey(), JSON.stringify(coachLijst));
+}
+function loadCoachLijst() {
+    if (!selComp.value) { coachLijst = []; return; }
+    try { coachLijst = JSON.parse(localStorage.getItem(lsKey()) || '[]'); }
+    catch { coachLijst = []; }
+    if (!Array.isArray(coachLijst)) coachLijst = [];
+}
+
+function voegToeAanLijst(persoon) {
+    if (!persoon || !persoon.snr) return false;
+    const snr = parseInt(persoon.snr);
+    if (coachLijst.some(p => parseInt(p.snr) === snr)) return false; // al aanwezig
+    coachLijst.push({
+        snr: snr,
+        license_key: persoon.license_key,
+        full_name: persoon.full_name,
+        category: persoon.category || '',
+        club_full: persoon.club_full || '',
+        sponsor: persoon.sponsor || '',
+    });
+    return true;
+}
+
+function verwijderUitLijst(snr) {
+    snr = parseInt(snr);
+    coachLijst = coachLijst.filter(p => parseInt(p.snr) !== snr);
+}
+
+// ── UI-render ────────────────────────────────────────────────────────────────
+function renderChips() {
+    aantalEl.textContent = `${coachLijst.length} ${coachLijst.length === 1 ? 'rijder' : 'rijders'} geselecteerd`;
+    if (coachLijst.length === 0) {
+        chipsEl.innerHTML = '<span style="color:#888;font-size:.85rem">Nog niemand geselecteerd — gebruik de selectors hierboven.</span>';
+        secLijst.style.display = 'block';
+        return;
+    }
+    secLijst.style.display = 'block';
+    const gesorteerd = [...coachLijst].sort((a,b) => parseInt(a.snr) - parseInt(b.snr));
+    chipsEl.innerHTML = gesorteerd.map(p => {
+        const info = coachInfoCache[p.license_key];
+        const st = info ? parseInt(info.entry_status) : 1;
+        const alarm = STATUS_ALARM.has(st);
+        const icon = alarm ? (STATUS_ICON[st] + ' ') : '';
+        const stLabel = STATUS_LABEL[st] ?? '';
+        return `<span class="chip${alarm ? ' chip-waarschuw' : ''}" title="${esc(p.full_name)} — ${esc(p.club_full)}${p.sponsor ? ' / ' + esc(p.sponsor) : ''}\nStatus: ${esc(stLabel)}">
+            <span class="chip-snr">${esc(p.snr)}</span>
+            <span>${icon}${esc(p.full_name)}</span>
+            <span class="x" data-snr="${esc(p.snr)}">×</span>
+         </span>`;
+    }).join('');
+    chipsEl.querySelectorAll('.x').forEach(x => {
+        x.onclick = async () => {
+            const snr = parseInt(x.dataset.snr);
+            const persoon = coachLijst.find(p => parseInt(p.snr) === snr);
+            const naam = persoon?.full_name || `Startnr ${snr}`;
+            const ok = await bevestig({
+                titel: 'Rijder verwijderen?',
+                tekst: `Wil je <b>${esc(naam)}</b> (${esc(snr)}) uit je coach-lijst verwijderen?`,
+                bevestigLabel: 'Ja, verwijder',
+                annuleerLabel: 'Annuleren',
+            });
+            if (!ok) return;
+            verwijderUitLijst(snr);
+            saveCoachLijst();
+            renderChips();
+            renderProgramma();
+            await laadCoachInfo();
+            renderChips();
+            renderSancties();
+            renderHeats();
+        };
+    });
+}
+
+async function verversCoachLijstUI() {
+    renderChips();
+    renderProgramma();
+    await laadCoachInfo();
+    renderChips();
+    renderSancties();
+    renderHeats();
+}
+
+function renderProgramma() {
+    if (!programmaCache) { progEl.innerHTML = '<div class="leeg-melding">Programma wordt geladen…</div>'; return; }
+    const mijnSnrs = new Set(coachLijst.map(p => parseInt(p.snr)));
+    const { ritten, blokken } = programmaCache;
+
+    // De canonieke volgorde in het programma is:
+    //   blok_volgorde (master) → binnen een ronde-blok rit_volgorde.
+    // Niet-ronde blokken (pauze/ceremonie/etc.) krijgen HUN eigen blok_volgorde.
+    // Ritten krijgen de blok_volgorde van hun parent-blok + hun eigen
+    // rit_volgorde als tie-breaker. Blokken die op dezelfde volgorde staan
+    // als een reeks ritten tonen we NA de ritten (tiebreak=999 — pauze komt
+    // meestal ná een rondeblok).
+    const allesGesorteerd = [];
+    (ritten || []).forEach(r => allesGesorteerd.push({
+        type:'rit', data:r,
+        bv: r.blok_volgorde ?? 9999,
+        rv: r.rit_volgorde  ?? 0,
+    }));
+    (blokken || []).forEach(b => allesGesorteerd.push({
+        type:'blok', data:b,
+        bv: b.volgorde ?? 9999,
+        rv: 9999, // blok staat ná de ritten met dezelfde blok_volgorde
+    }));
+    allesGesorteerd.sort((a,b) => {
+        if (a.bv !== b.bv) return a.bv - b.bv;
+        return a.rv - b.rv;
+    });
+
+    if (!allesGesorteerd.length) {
+        progEl.innerHTML = '<div class="leeg-melding">Nog geen programma bekend.</div>';
+        return;
+    }
+
+    // Haal HH:MM uit "HH:MM:SS" (TIME) óf "YYYY-MM-DD HH:MM:SS" (DATETIME).
+    const hhmm = v => {
+        if (!v) return '';
+        const s = String(v);
+        const m = s.match(/(\d{1,2}:\d{2})/);
+        return m ? m[1] : '';
+    };
+    const ritHtml = r => {
+        const heatSnrs = (r.heat_snrs || []).map(n => parseInt(n));
+        const mijnInHeat = heatSnrs.filter(n => mijnSnrs.has(n)).sort((a,b) => a-b);
+        const leeg = !r.heat_id || (r.entries_count ?? 0) === 0;
+        const rondeBadge = r.ronde_type && BADGE[r.ronde_type]
+            ? `<span class="badge ${BADGE[r.ronde_type]}">${RLABEL[r.ronde_type] || r.ronde_type}</span>` : '';
+        const mijnStrip = mijnInHeat.length
+            ? `<div class="heat-mijn-snrs">${mijnInHeat.map(n => `<span class="m-snr">${n}</span>`).join('')}</div>`
+            : '';
+        // Status-icoon (vaste breedte zodat de layout niet schuift):
+        //   🏁 = resultaten aanwezig · 🚩 = startlijst definitief · ○ = nog niks
+        const statusIcon = (r.resultaten_count ?? 0) > 0 ? '🏁'
+                        : r.definitief                    ? '🚩'
+                        :                                   '<span class="heat-status-leeg">○</span>';
+        const klasse = 'heat-rij' + (mijnInHeat.length ? ' mijn' : '') + (leeg ? ' leeg' : '');
+        const klik = leeg ? '' :
+            ` data-rit-naam="${esc(r.rit_naam)}" data-dc-naam="${esc(r.dc_naam ?? '')}" onclick="toonRitDetail(this)"`;
+        return `<div class="${klasse}"${klik}>
+            <div class="heat-status">${statusIcon}</div>
+            <div class="heat-info">
+                <div class="heat-naam">${rondeBadge}${esc(r.rit_naam)}</div>
+                <div class="heat-sub">${esc(r.dc_naam ?? '')}${leeg ? ' · nog geen startlijst' : ''}</div>
+            </div>
+            ${mijnStrip}
+        </div>`;
+    };
+
+    // Render items. Consecutieve ritten met dezelfde combi_group worden in
+    // één kader gegroepeerd (gecombineerde rit — categorieën rijden tegelijk).
+    let html = '';
+    let vorigeCombi = null; // combi_group van het vorige item (of null)
+    for (const item of allesGesorteerd) {
+        if (item.type === 'blok') {
+            if (vorigeCombi !== null) { html += `</div></div>`; vorigeCombi = null; }
+            const b = item.data;
+            const tijd = hhmm(b.tijdstip);
+            const lbl = (b.blok_type || '').toUpperCase();
+            const tijdPrefix = tijd ? `🕓 ${esc(tijd)} · ` : '';
+            html += `<div class="blok-rij">${tijdPrefix}${esc(lbl)}${b.opmerking ? ' — ' + esc(b.opmerking) : ''}</div>`;
+            continue;
+        }
+        const r = item.data;
+        const combi = r.combi_group ? parseInt(r.combi_group) : null;
+        if (combi !== vorigeCombi) {
+            if (vorigeCombi !== null) html += `</div></div>`; // sluit vorige combi-box
+            if (combi !== null) {
+                html += `<div class="prog-combi-box">
+                    <div class="prog-combi-kop">🔗 Gecombineerde rit — rijden tegelijk</div>
+                    <div class="prog-combi-leden">`;
+            }
+            vorigeCombi = combi;
+        }
+        html += ritHtml(r);
+    }
+    if (vorigeCombi !== null) html += `</div></div>`; // sluit laatste open combi-box
+    progEl.innerHTML = html;
+}
+
+// ── Coach-info (status + sancties) ───────────────────────────────────────────
+async function laadCoachInfo() {
+    if (!selComp.value || !coachLijst.length) { coachInfoCache = {}; return; }
+    const licenses = coachLijst.map(p => p.license_key).filter(Boolean);
+    if (!licenses.length) { coachInfoCache = {}; return; }
+    try {
+        const res = await fetch(`?action=coach_info`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ competition_id: selComp.value, licenses }),
+        });
+        const data = await res.json();
+        const map = {};
+        (data.personen || []).forEach(p => { map[p.license_key] = p; });
+        coachInfoCache = map;
+    } catch { /* stil falen — UI blijft werken zonder status */ }
+}
+
+const RONDE_VOLGORDE = ['heats','kwartfinale','halve_finale','runner_up','finale_b','finale_a'];
+
+function renderHeats() {
+    const el = $('heats');
+    if (!coachLijst.length) {
+        el.innerHTML = '<div class="leeg-melding">Nog geen rijders in je lijst.</div>';
+        return;
+    }
+    // Groepeer alle programma-ritten per DC om per DC te weten welke rondes er
+    // bestaan (en per ronde de status van de heats).
+    const rittenPerDc = {};
+    for (const r of (programmaCache?.ritten || [])) {
+        const dc = r.heat_dc_id;
+        if (!dc) continue;
+        if (!rittenPerDc[dc]) rittenPerDc[dc] = [];
+        rittenPerDc[dc].push(r);
+    }
+
+    const gesorteerd = [...coachLijst].sort((a,b) => parseInt(a.snr) - parseInt(b.snr));
+    el.innerHTML = gesorteerd.map(p => {
+        const info    = coachInfoCache[p.license_key];
+        const entries = info?.entries || [];
+        const mijnHeats = info?.heats || [];
+
+        if (!info) return `<div class="sanc-persoon">
+            <div class="sanc-persoon-kop">
+                <span class="sanc-persoon-snr">${esc(p.snr)}</span>
+                <span style="flex:1">${esc(p.full_name)}</span>
+                <span style="color:#888;font-size:.8rem">${esc(p.category || '')}</span>
+            </div>
+            <div class="sanc-leeg">Laden…</div>
+        </div>`;
+
+        if (!entries.length) return `<div class="sanc-persoon">
+            <div class="sanc-persoon-kop">
+                <span class="sanc-persoon-snr">${esc(p.snr)}</span>
+                <span style="flex:1">${esc(p.full_name)}</span>
+                <span style="color:#888;font-size:.8rem">${esc(p.category || '')}</span>
+            </div>
+            <div class="sanc-leeg">Rijder heeft geen inschrijvingen in deze wedstrijd.</div>
+        </div>`;
+
+        // Bouw een lijst met één blok per (DC × afstand). De afstanden komen
+        // uit `entry.afstanden` (afgeleid van de `distances`-tabel per DC),
+        // zodat óók afstanden zonder gegenereerd programma verschijnen
+        // (bv. een lange afstand die nog geloot moet worden).
+        const afstandBlokken = [];
+        for (const e of entries) {
+            const dcRitten = rittenPerDc[e.dc_id] || [];
+            const afstanden = e.afstanden || [];
+            if (!afstanden.length) {
+                // Fallback: DC zonder distances — toon 1 wachtrij-blok
+                afstandBlokken.push({
+                    dc_naam: e.dc_naam, distance_id: null, distance_naam: null, ritten: [],
+                });
+                continue;
+            }
+            for (const a of afstanden) {
+                const ritten = dcRitten.filter(r =>
+                    String(r.rit_distance_id || r.heat_distance_id || '') === String(a.distance_id));
+                afstandBlokken.push({
+                    dc_id: e.dc_id,
+                    dc_naam: e.dc_naam,
+                    distance_id: a.distance_id,
+                    distance_naam: a.distance_naam,
+                    ritten,
+                    expected_rondes: a.expected_rondes || [],
+                });
+            }
+        }
+
+        // Sorteer alle afstand-blokken op programma-volgorde: de vroegste rit
+        // (blok_volgorde, rit_volgorde) bepaalt de positie. Blokken zonder
+        // geloot programma gaan achteraan maar onderling op dc_naam +
+        // distance_naam zodat de volgorde stabiel en leesbaar is.
+        const sortKey = b => {
+            if (!b.ritten.length) return [Infinity, Infinity];
+            let bvMin = Infinity, rvMin = Infinity;
+            for (const r of b.ritten) {
+                const bv = r.blok_volgorde ?? 9999;
+                const rv = r.rit_volgorde  ?? 9999;
+                if (bv < bvMin || (bv === bvMin && rv < rvMin)) { bvMin = bv; rvMin = rv; }
+            }
+            return [bvMin, rvMin];
+        };
+        afstandBlokken.sort((x, y) => {
+            const [xb, xr] = sortKey(x), [yb, yr] = sortKey(y);
+            if (xb !== yb) return xb - yb;
+            if (xr !== yr) return xr - yr;
+            // fallback voor blokken zonder ritten: alfabetisch stabiel
+            const a = `${x.dc_naam} ${x.distance_naam || ''}`;
+            const b = `${y.dc_naam} ${y.distance_naam || ''}`;
+            return a.localeCompare(b);
+        });
+
+        const dcBlokken = afstandBlokken.map(blok => {
+            // Kop-tekst: "DJB — 500m" als er een afstand-naam is, anders alleen DC-naam
+            const kop = blok.distance_naam
+                ? `${esc(blok.dc_naam || '(categorie)')} — ${esc(blok.distance_naam)}`
+                : esc(blok.dc_naam || '(categorie)');
+
+            // Groepeer ritten per ronde_type binnen deze afstand
+            const rondes = {};
+            for (const r of blok.ritten) {
+                const rt = r.ronde_type || 'heats';
+                if (!rondes[rt]) rondes[rt] = [];
+                rondes[rt].push(r);
+            }
+            // Vul aan met verwachte rondes uit cat_config (lege lijst als er
+            // nog geen ritten zijn geloot); frontend toont die dan als
+            // "⏳ Startlijst nog niet definitief".
+            for (const rt of (blok.expected_rondes || [])) {
+                if (!rondes[rt]) rondes[rt] = [];
+            }
+            const sortedRt = Object.keys(rondes).sort((a,b) => {
+                const ia = RONDE_VOLGORDE.indexOf(a); const ib = RONDE_VOLGORDE.indexOf(b);
+                return (ia === -1 ? 99 : ia) - (ib === -1 ? 99 : ib);
+            });
+            if (!sortedRt.length) {
+                // Afstand bestaat wel maar cat_config heeft géén rondes én er zijn
+                // geen ritten — dan tonen we één wacht-regel.
+                const tekst = blok.distance_naam
+                    ? '⏳ Nog niet geloot — geen heats beschikbaar'
+                    : '⏳ Nog geen programma voor deze categorie';
+                return `<div class="heat-toon-dc heat-toon-wachten">
+                    <div class="heat-toon-dc-kop">${kop}</div>
+                    <div class="heat-toon-rij heat-toon-wacht-rij">${tekst}</div>
+                </div>`;
+            }
+            const rijen = sortedRt.map(rt => {
+                const rittenVanRonde = rondes[rt];
+                const badge = BADGE[rt]
+                    ? `<span class="badge ${BADGE[rt]}">${RLABEL[rt] || rt}</span>`
+                    : '';
+                // 1) Zit de rijder in een heat van deze ronde ÉN deze afstand?
+                //    We matchen op dc_id (elke rit van deze ronde-groep heeft
+                //    dezelfde dc_id), op distance_id, én op ronde_type.
+                const dcIdVanRonde = rittenVanRonde[0]?.heat_dc_id;
+                const mijn = mijnHeats.find(h =>
+                    h.ronde_type === rt &&
+                    h.dc_id === dcIdVanRonde &&
+                    String(h.distance_id || '') === String(blok.distance_id || ''));
+                if (mijn) {
+                    const rit = rittenVanRonde.find(r => String(r.heat_id) === String(mijn.heat_id));
+                    const heatNr = rit?.heat_nr ?? mijn.ronde;
+                    return `<div class="heat-toon-rij">${badge}
+                        <span><b>Heat ${esc(heatNr ?? '?')}</b></span>
+                        <small style="color:#666">startpos ${esc(mijn.startpositie)}</small>
+                    </div>`;
+                }
+                // 2) Niet geplaatst: is de startlijst definitief?
+                const definitief = rittenVanRonde.some(r => r.definitief);
+                if (definitief) {
+                    return `<div class="heat-toon-rij heat-toon-niet-geplaatst">${badge}
+                        <span>Rijder niet geplaatst in deze ronde</span>
+                    </div>`;
+                }
+                return `<div class="heat-toon-rij heat-toon-wacht-rij">${badge}
+                    <span>⏳ Startlijst nog niet definitief</span>
+                </div>`;
+            }).join('');
+            return `<div class="heat-toon-dc">
+                <div class="heat-toon-dc-kop">${kop}</div>
+                ${rijen}
+            </div>`;
+        }).join('');
+
+        const st = parseInt(info.entry_status);
+        const stLabel = STATUS_LABEL[st] ?? '?';
+        return `<div class="sanc-persoon">
+            <div class="sanc-persoon-kop">
+                <span class="sanc-persoon-snr">${esc(p.snr)}</span>
+                <span style="flex:1">${esc(p.full_name)}</span>
+                <span class="status-badge status-${st}">${STATUS_ICON[st] ?? ''} ${esc(stLabel)}</span>
+            </div>
+            <div class="sanc-persoon-cat">${esc(p.category || '')}</div>
+            ${dcBlokken}
+        </div>`;
+    }).join('');
+}
+
+function renderSancties() {
+    const el = $('sancties');
+    if (!coachLijst.length) {
+        el.innerHTML = '<div class="leeg-melding">Nog geen rijders in je lijst.</div>';
+        return;
+    }
+    const gesorteerd = [...coachLijst].sort((a,b) => parseInt(a.snr) - parseInt(b.snr));
+    el.innerHTML = gesorteerd.map(p => {
+        const info = coachInfoCache[p.license_key];
+        const sanctieRijen = (info?.sancties || []).map(s => {
+            const uitleg = SANCTIE_UITLEG[s.sanctie] ?? '';
+            return `<div class="sanc-rij">
+                <span class="sanc-rij-code">${esc(s.sanctie)}</span>
+                ${uitleg ? `<small>— ${esc(uitleg)}</small>` : ''}
+                · ${esc(s.rit_naam ?? '')}
+                ${s.afstand_naam ? ` · ${esc(s.afstand_naam)}` : ''}
+            </div>`;
+        }).join('');
+        return `<div class="sanc-persoon">
+            <div class="sanc-persoon-kop">
+                <span class="sanc-persoon-snr">${esc(p.snr)}</span>
+                <span style="flex:1">${esc(p.full_name)}</span>
+                <span style="color:#888;font-size:.8rem">${esc(p.category || '')}</span>
+            </div>
+            ${sanctieRijen || '<div class="sanc-leeg">Geen sancties.</div>'}
+        </div>`;
+    }).join('');
+}
+
+// ── Uitslagen-tab ────────────────────────────────────────────────────────────
+let uitslagenCats = []; // [{dc_id, dc_naam, afstanden:[{distance_id, distance_naam}], klassement_beschikbaar}]
+
+async function laadUitslagenCategorieen() {
+    const sel = $('u-sel-cat');
+    sel.innerHTML = '<option value="">Laden…</option>';
+    try {
+        const res = await safeFetch(`?action=categorieen&competition_id=${encodeURIComponent(selComp.value)}&_t=${Date.now()}`);
+        const cats = await res.json();
+        uitslagenCats = Array.isArray(cats) ? cats : [];
+        if (!uitslagenCats.length) {
+            sel.innerHTML = '<option value="">(nog geen uitslagen beschikbaar)</option>';
+            $('uitslagen').innerHTML = '<div class="leeg-melding">Er zijn nog geen uitslagen bevestigd voor deze wedstrijd.</div>';
+            $('u-afstand-rij').style.display = 'none';
+            return;
+        }
+        sel.innerHTML = '<option value="">— kies categorie —</option>' +
+            uitslagenCats.map(c => `<option value="${esc(c.dc_id)}">${esc(c.dc_naam)}</option>`).join('');
+    } catch (e) {
+        sel.innerHTML = `<option value="">Fout: ${esc(e.message)}</option>`;
+    }
+}
+
+function opCatChange() {
+    const dcId = $('u-sel-cat').value;
+    const afstRij = $('u-afstand-rij');
+    const selAf = $('u-sel-afstand');
+    const uit = $('uitslagen');
+    uit.innerHTML = '';
+    if (!dcId) { afstRij.style.display = 'none'; return; }
+    const cat = uitslagenCats.find(c => c.dc_id === dcId);
+    if (!cat) return;
+    const opts = [
+        `<option value="">— kies afstand of klassement —</option>`,
+        ...cat.afstanden.map(a => `<option value="afstand|${esc(a.distance_id)}">${esc(a.distance_naam || 'Afstand')}</option>`),
+        cat.klassement_beschikbaar ? `<option value="klassement|">🏆 Klassement</option>` : ''
+    ].filter(Boolean);
+    selAf.innerHTML = opts.join('');
+    afstRij.style.display = 'flex';
+}
+
+async function opAfstandChange() {
+    const dcId = $('u-sel-cat').value;
+    const afVal = $('u-sel-afstand').value;
+    const uit = $('uitslagen');
+    if (!dcId || !afVal) { uit.innerHTML = ''; return; }
+    const [type, distId] = afVal.split('|');
+    uit.innerHTML = '<div class="leeg-melding"><span class="spinner"></span> Laden…</div>';
+    try {
+        const url = `?action=uitslagen&competition_id=${encodeURIComponent(selComp.value)}&dc_id=${encodeURIComponent(dcId)}&type=${encodeURIComponent(type)}${distId ? '&distance_id=' + encodeURIComponent(distId) : ''}&_t=${Date.now()}`;
+        const res = await safeFetch(url);
+        const data = await res.json();
+        if (data.error) { uit.innerHTML = `<div class="leeg-melding">⚠ ${esc(data.error)}</div>`; return; }
+        uit.innerHTML = (type === 'klassement') ? renderKlassementTabel(data) : renderAfstandTabel(data);
+    } catch (e) {
+        uit.innerHTML = `<div class="leeg-melding">Fout: ${esc(e.message)}</div>`;
+    }
+}
+
+function sl(s) { return s ?? ''; }
+
+function renderAfstandTabel(data) {
+    if (!data.rijders?.length) return '<div class="leeg-melding">Geen uitslagen beschikbaar.</div>';
+    const mijn = new Set(coachLijst.map(p => parseInt(p.snr)));
+    const heeftRnd = data.heeft_rondes, heeftPK = data.heeft_pk_punten;
+    let hdr = '<th class="col-rang">#</th><th class="col-snr">Snr</th><th>Naam</th>';
+    if (heeftRnd) hdr += '<th class="col-rnd">Rnd</th>';
+    if (heeftPK)  hdr += '<th class="col-pk">Pnt</th>';
+    hdr += '<th class="col-tijd">Tijd</th>';
+    let rows = '';
+    for (const r of data.rijders) {
+        const isMij = mijn.has(parseInt(r.snr));
+        const sanctie = sl(r.sanctie);
+        rows += `<tr class="${isMij ? 'mijn' : ''}">
+            <td class="col-rang">${r.rang ?? '—'}</td>
+            <td class="col-snr">${esc(r.snr)}</td>
+            <td>${esc(r.full_name)}${sanctie ? ` <span class="col-sanctie">${esc(sanctie)}</span>` : ''}</td>`;
+        if (heeftRnd) rows += `<td class="col-rnd">${r.rondes ?? ''}</td>`;
+        if (heeftPK)  rows += `<td class="col-pk">${r.pk_punten != null ? parseFloat(r.pk_punten) : ''}</td>`;
+        rows += `<td class="col-tijd">${r.tijd_ms != null ? msTijd(r.tijd_ms) : ''}</td>`;
+        rows += '</tr>';
+    }
+    return `<table class="uitsl-tabel"><thead><tr>${hdr}</tr></thead><tbody>${rows}</tbody></table>`;
+}
+
+function renderKlassementTabel(data) {
+    if (!data.rijders?.length) return '<div class="leeg-melding">Geen klassement beschikbaar.</div>';
+    const mijn = new Set(coachLijst.map(p => parseInt(p.snr)));
+    const afstanden = data.afstanden ?? [];
+    let hdr = '<th class="col-rang">#</th><th class="col-snr">Snr</th><th>Naam</th>';
+    for (const a of afstanden) {
+        const kort = a.length > 6 ? a.substring(0,5) + '.' : a;
+        hdr += `<th class="col-punten" title="${esc(a)}">${esc(kort)}</th>`;
+    }
+    hdr += '<th class="col-totaal">Tot</th>';
+    let rows = '';
+    for (const r of data.rijders) {
+        const isMij = mijn.has(parseInt(r.snr));
+        const detail = r.punten_detail ?? {};
+        rows += `<tr class="${isMij ? 'mijn' : ''}">
+            <td class="col-rang">${r.rang ?? '—'}</td>
+            <td class="col-snr">${esc(r.snr)}</td>
+            <td>${esc(r.full_name)}</td>`;
+        for (const a of afstanden) {
+            const p = detail[a];
+            rows += `<td class="col-punten">${p != null ? parseFloat(p) : '—'}</td>`;
+        }
+        rows += `<td class="col-totaal">${r.punten_totaal != null ? parseFloat(r.punten_totaal) : '—'}</td>`;
+        rows += '</tr>';
+    }
+    return `<table class="uitsl-tabel"><thead><tr>${hdr}</tr></thead><tbody>${rows}</tbody></table>`;
+}
+
+async function toonRitDetail(el) {
+    const ritNaam = el.dataset.ritNaam;
+    const dcNaam  = el.dataset.dcNaam;
+    const compId  = selComp.value;
+    if (!ritNaam || !compId) return;
+
+    const overlay = document.createElement('div');
+    overlay.className = 'overlay';
+    overlay.innerHTML = '<div class="overlay-box"><div style="text-align:center;padding:24px"><span class="spinner"></span> Laden…</div></div>';
+    overlay.onclick = e => { if (e.target === overlay) overlay.remove(); };
+    document.body.appendChild(overlay);
+
+    try {
+        const res = await safeFetch(`?action=rit_detail&competition_id=${encodeURIComponent(compId)}&rit_naam=${encodeURIComponent(ritNaam)}&dc_naam=${encodeURIComponent(dcNaam)}`);
+        const data = await res.json();
+        const heat = data.heat;
+        if (!heat || !heat.rijders?.length) {
+            overlay.querySelector('.overlay-box').innerHTML =
+                `<span class="sluit" onclick="this.closest('.overlay').remove()">×</span>
+                 <h3>${esc(ritNaam)}</h3>
+                 <div class="leeg-melding">Startlijst is nog niet beschikbaar.</div>`;
+            return;
+        }
+        const mijnSnrs = new Set(coachLijst.map(p => parseInt(p.snr)));
+        const rondeType = heat.ronde_type;
+        const heeftRnd = heat.rijders.some(r => r.rondes != null);
+        const heeftPK  = heat.rijders.some(r => r.pk_punten != null);
+        const rijen = heat.rijders.map(r => {
+            const isMij = mijnSnrs.has(parseInt(r.snr));
+            const sanctie = r.sanctie ? ` <small>(${esc(r.sanctie)})</small>` : '';
+            return `<tr class="${isMij ? 'mijn' : ''}">
+                <td class="col-pos">${esc(r.startpositie)}</td>
+                <td class="col-snr">${esc(r.snr)}</td>
+                <td>${esc(r.full_name)}${sanctie}<br><small style="color:#666">${esc(r.category || '')} · ${esc(r.club_full || '')}</small></td>
+                ${heeftRnd ? `<td>${r.rondes ?? ''}</td>` : ''}
+                ${heeftPK  ? `<td>${r.pk_punten != null ? parseFloat(r.pk_punten) : ''}</td>` : ''}
+                <td>${r.tijd_ms != null ? msTijd(r.tijd_ms) : ''}</td>
+                <td class="col-fin">${esc(r.finishpositie ?? '')}</td>
+            </tr>`;
+        }).join('');
+        const hdr = `<tr><th class="col-pos">#</th><th class="col-snr">Snr</th><th>Naam</th>
+                    ${heeftRnd ? '<th>Rnd</th>' : ''}
+                    ${heeftPK  ? '<th>Pnt</th>' : ''}
+                    <th>Tijd</th><th class="col-fin">Fin</th></tr>`;
+        overlay.querySelector('.overlay-box').innerHTML =
+            `<span class="sluit" onclick="this.closest('.overlay').remove()">×</span>
+             <h3 style="color:var(--blauw)">${esc(ritNaam)}</h3>
+             <div style="color:#666;font-size:.9rem;margin-bottom:4px">${esc(dcNaam || '')}</div>
+             <table class="heat-tabel">${hdr}${rijen}</table>`;
+    } catch (e) {
+        overlay.querySelector('.overlay-box').innerHTML =
+            `<span class="sluit" onclick="this.closest('.overlay').remove()">×</span>
+             <div class="leeg-melding">Fout bij laden: ${esc(e.message)}</div>`;
+    }
+}
+
+// ── Footer: org logo + sponsor-marquee (afgeleid van /public) ────────────────
+function updateHeaderLogos(opt) {
+    const footer  = $('org-footer');
+    const logoEl  = $('footer-org-logo');
+    const naamEl  = $('footer-org-naam');
+    const sponsEl = $('footer-sponsors');
+    if (!opt?.value) {
+        footer.style.display = 'none';
+        document.body.classList.remove('heeft-footer');
+        return;
+    }
+    const orgLogo = opt.dataset.orgLogo || '';
+    const orgNaam = opt.dataset.orgNaam || '';
+    let sponsors = [];
+    try { sponsors = JSON.parse(opt.dataset.sponsors || '[]'); } catch { sponsors = []; }
+    if (!orgLogo && !sponsors.length) {
+        footer.style.display = 'none';
+        document.body.classList.remove('heeft-footer');
+        return;
+    }
+    const cb = `?v=${Math.floor(Date.now() / 3600000)}`;
+    logoEl.innerHTML = orgLogo ? `<img class="org-footer-logo" src="../${esc(orgLogo)}${cb}" alt="">` : '';
+    naamEl.textContent = orgLogo ? '' : orgNaam;
+    if (sponsors.length) {
+        let imgs = '';
+        for (const s of sponsors) {
+            const img = `<img src="../${esc(s.logo)}${cb}" alt="${esc(s.naam)}" title="${esc(s.naam)}">`;
+            imgs += s.url ? `<a href="${esc(s.url)}" target="_blank" rel="noopener">${img}</a>` : img;
+        }
+        if (sponsors.length === 1) {
+            sponsEl.innerHTML = `<div style="display:flex;align-items:center;justify-content:flex-end;height:100%">${imgs}</div>`;
+        } else {
+            const duur = sponsors.length * 3;
+            sponsEl.innerHTML = `<div class="sponsor-marquee"><div class="sponsor-marquee-inner" style="animation-duration:${duur}s">${imgs}${imgs}</div></div>`;
+        }
+    } else {
+        sponsEl.innerHTML = '';
+    }
+    footer.style.display = 'block';
+    document.body.classList.add('heeft-footer');
+}
+
+// ── Info- en Help-overlays (coach-versie) ────────────────────────────────────
+function toonInfo() {
+    const overlay = document.createElement('div');
+    overlay.className = 'help-overlay';
+    overlay.addEventListener('click', e => { if (e.target === overlay) overlay.remove(); });
+    overlay.innerHTML = `
+    <div class="help-box">
+        <div class="help-header">
+            <span>Over InlineComp Coach</span>
+            <button class="help-sluit" onclick="this.closest('.help-overlay').remove()">&times;</button>
+        </div>
+        <div class="help-body">
+            <h3>Wat is dit?</h3>
+            <p>De <b>Coach-view</b> is een dashboard voor coaches: je bouwt per wedstrijd een
+               eigen lijst met rijders en ziet vervolgens hun programma, status, sancties en
+               uitslagen in één oogopslag.</p>
+            <p>Je kunt een heel clubteam in één keer toevoegen, rijders op sponsor selecteren,
+               of losse startnummers toevoegen. Je lijst wordt lokaal op je telefoon bewaard
+               (per wedstrijd) — dus een refresh of een terugkeer naar de pagina laat 'm intact.</p>
+
+            <h3>Geen login nodig</h3>
+            <p>Alle data die je hier ziet is publiek (zelfde als op <a href="../public/">/public</a>).
+               Je gebruikt gewoon je browser — niets te installeren.</p>
+
+            <h3>Tip: toevoegen aan startscherm</h3>
+            <p>Op je telefoon: open deze pagina in Safari/Chrome → menu → "Zet op startscherm".
+               Dan opent-ie als een app en heb je 'm direct bij de hand aan de rand van de baan.</p>
+
+            <h3>In ontwikkeling</h3>
+            <p>Deze coach-view wordt actief doorontwikkeld. Feedback is zeer welkom!</p>
+
+            <h3>Contact &amp; feedback</h3>
+            <p>Heb je een vraag, suggestie of bug gevonden? Laat het weten:</p>
+            <p style="text-align:center;margin:12px 0">
+                <a href="mailto:inlinecomp@devriesen.com" style="display:inline-block;background:var(--oranje);color:#fff;padding:10px 20px;border-radius:8px;text-decoration:none;font-weight:700;font-size:.95rem">inlinecomp@devriesen.com</a>
+            </p>
+
+            <h3>Anonieme bezoek-statistieken</h3>
+            <p style="font-size:.85rem;color:#555">We tellen anoniem aantal bezoekers, actieve sessies en piek gelijktijdig online — puur om te zien hoe veel de app wordt gebruikt en om de hosting stabiel te houden. Er worden <b>geen IP-adressen of persoonsgegevens</b> opgeslagen en er zijn <b>geen derde partijen</b> betrokken.</p>
+
+            <p style="font-size:.8rem;color:#999;text-align:center;margin-top:16px">InlineComp &copy; ${new Date().getFullYear()} Geert de Vries</p>
+        </div>
+    </div>`;
+    document.body.appendChild(overlay);
+}
+
+function toonHelp() {
+    const overlay = document.createElement('div');
+    overlay.className = 'help-overlay';
+    overlay.addEventListener('click', e => { if (e.target === overlay) overlay.remove(); });
+    overlay.innerHTML = `
+    <div class="help-box">
+        <div class="help-header">
+            <span>Hoe werkt de Coach-view?</span>
+            <button class="help-sluit" onclick="this.closest('.help-overlay').remove()">&times;</button>
+        </div>
+        <div class="help-body">
+            <h3>Aan de slag</h3>
+            <div class="help-stap"><span class="help-stap-nr">1</span>
+                <span>Kies je <b>wedstrijd</b> bovenaan.</span></div>
+            <div class="help-stap"><span class="help-stap-nr">2</span>
+                <span>Voeg rijders toe aan je coach-lijst op drie manieren:
+                <ul style="margin:4px 0 0 18px">
+                    <li><b>Op club</b> — selecteer een club en alle rijders daarvan komen in je lijst.</li>
+                    <li><b>Op sponsor</b> — idem op sponsor-naam.</li>
+                    <li><b>Op startnummer</b> — typ een getal en druk op Toevoegen (of Enter).</li>
+                </ul></span></div>
+            <div class="help-stap"><span class="help-stap-nr">3</span>
+                <span>Bekijk de tabs: <b>📋 Programma</b>, <b>🏃 Heats</b>, <b>⚠️ Sancties</b>, <b>📊 Uitslagen</b>.</span></div>
+
+            <h3>Programma</h3>
+            <p>Toont alle ritten van de wedstrijd. Ritten waar minstens één van jouw rijders in zit zijn
+               <b>geel gemarkeerd</b> met een strip van hun startnummers aan de rechterkant.
+               Tik een rit aan om de volledige startlijst te zien — jouw rijders zijn opnieuw geel gemarkeerd.</p>
+
+            <h3>Sancties</h3>
+            <p>Per rijder uit jouw lijst een kaartje met:</p>
+            <ul style="margin:4px 0 8px 18px">
+                <li><b>Status-badge</b> (Bevestigd / Niet getekend / Afgemeld / …)</li>
+                <li>Alle <b>sancties</b> die in heats zijn geregistreerd (W1, W2, FS, DQ-SF, DNF, …)</li>
+            </ul>
+            <p>Let op <b>🚨 Niet getekend</b> — dan moet de rijder zélf snel even naar de jury-tafel
+               om te tekenen (niet jij als coach, niet de ouders, alleen de rijder zelf).</p>
+
+            <h3>Uitslagen</h3>
+            <p>Kies een categorie + afstand om de volledige uitslag te zien, of bekijk het klassement.
+               Ook hier worden jouw eigen rijders geel gemarkeerd.</p>
+
+            <h3>Vernieuwen</h3>
+            <p>Trek de pagina <b>naar beneden</b> (pull-to-refresh) om programma, status en sancties
+               opnieuw op te halen. Op de desktop: dubbelklik op de blauwe kop.</p>
+
+            <h3>Privacy</h3>
+            <p>Je coach-lijst wordt alleen lokaal op je telefoon bewaard (localStorage). Niemand
+               anders ziet wie je op je lijst hebt staan.</p>
+        </div>
+    </div>`;
+    document.body.appendChild(overlay);
+}
+
+// ── Init-flow ────────────────────────────────────────────────────────────────
+// Filter-regel (1-op-1 uit /public):
+// - Standaard tonen we alleen "actieve" wedstrijden (vandaag ± 1 dag overlap).
+// - "Oude wedstrijden" aanvinken voegt afgesloten wedstrijden toe.
+// - "Toekomstige" aanvinken voegt wedstrijden toe die nog moeten komen.
+function filterComps() {
+    const nu = new Date();
+    const gisteren = new Date(nu); gisteren.setDate(gisteren.getDate() - 1); gisteren.setHours(0,0,0,0);
+    const morgen   = new Date(nu); morgen.setDate(morgen.getDate() + 1);   morgen.setHours(23,59,59,999);
+
+    const toonOud      = $('chk-oud').checked;
+    const toonToekomst = $('chk-toekomst').checked;
+    const vorigeWaarde = selComp.value;
+
+    selComp.innerHTML = '<option value="">— kies een wedstrijd —</option>';
+    for (const c of alleComps) {
+        const startDag = safeDatum(c.starts);
+        const eindDag  = safeDatum(c.ends) ?? startDag;
+        const isActief   = startDag && startDag <= morgen && eindDag >= gisteren;
+        const isOud      = eindDag && eindDag < gisteren;
+        const isToekomst = startDag && startDag > morgen;
+        if (!isActief && !toonOud      && isOud)      continue;
+        if (!isActief && !toonToekomst && isToekomst) continue;
+
+        const dtStr = startDag
+            ? startDag.toLocaleDateString('nl-NL',{day:'numeric',month:'long',year:'numeric'})
+            : '';
+        const o = document.createElement('option');
+        o.value = c.id;
+        o.textContent = `${c.name}${dtStr ? ' — ' + dtStr : ''}`;
+        o.dataset.orgLogo  = c.org_logo ?? '';
+        o.dataset.orgNaam  = c.org_naam ?? '';
+        o.dataset.sponsors = JSON.stringify(c.sponsors ?? []);
+        selComp.appendChild(o);
+    }
+
+    // Herstel selectie als die nog in de lijst staat
+    if (vorigeWaarde && selComp.querySelector(`option[value="${vorigeWaarde}"]`)) {
+        selComp.value = vorigeWaarde;
+    } else {
+        // Auto-selecteer als er maar 1 wedstrijd over is
+        const opties = selComp.querySelectorAll('option[value]:not([value=""])');
+        if (opties.length === 1) {
+            selComp.value = opties[0].value;
+            selComp.dispatchEvent(new Event('change'));
+        }
+    }
+}
+
+async function laadCompetitions() {
+    try {
+        const res = await safeFetch('?action=competitions');
+        const lijst = await res.json();
+        if (!Array.isArray(lijst)) return;
+        alleComps = lijst;
+        filterComps();
+    } catch (e) {
+        selComp.innerHTML = '<option value="">Fout bij laden</option>';
+    }
+}
+
+function zetStap2Enabled(enabled) {
+    // Sectie 2 blijft altijd zichtbaar; de inputs schakelen we enable/disable
+    // op basis van of er een wedstrijd is gekozen. Zo ziet de user meteen
+    // wat er na stap 1 mogelijk is.
+    selClub.disabled     = !enabled;
+    selSponsor.disabled  = !enabled;
+    inpSnr.disabled      = !enabled;
+    btnToevoegen.disabled = !enabled;
+    if (!enabled) {
+        selClub.innerHTML    = '<option value="">— kies eerst een wedstrijd —</option>';
+        selSponsor.innerHTML = '<option value="">— kies eerst een wedstrijd —</option>';
+    }
+    updateToevoegenKnop();
+}
+
+// De Toevoegen-knop is alleen "echt klikbaar" (oranje volle kracht) als er
+// iets gekozen/ingevuld is in één van de drie bronnen. Anders dimmen we 'm
+// iets zodat de user ziet dat er nog niks te doen valt.
+function updateToevoegenKnop() {
+    if (!selComp.value) { btnToevoegen.disabled = true; return; }
+    const heeftInvoer = !!(selClub.value || selSponsor.value || inpSnr.value.trim());
+    btnToevoegen.disabled = !heeftInvoer;
+}
+
+async function opCompetitionChange() {
+    const compId = selComp.value;
+    const opt = selComp.options[selComp.selectedIndex];
+    updateHeaderLogos(opt);
+    const compInfoEl = $('comp-info');
+    if (!compId) {
+        zetStap2Enabled(false);
+        secLijst.style.display = 'none';
+        secProg.style.display = 'none';
+        compInfoEl.style.display = 'none';
+        compInfoEl.innerHTML = '';
+        return;
+    }
+    // Comp-info kaartje vullen met wedstrijd-naam + datum (1-op-1 uit /public)
+    const c = alleComps.find(x => x.id === compId);
+    if (c) {
+        const dt = safeDatum(c.starts);
+        const dtStr = dt ? dt.toLocaleDateString('nl-NL', {weekday:'long', day:'numeric', month:'long', year:'numeric'}) : '';
+        compInfoEl.innerHTML = `<strong>${esc(c.name)}</strong>${dtStr ? `<small>${esc(dtStr)}</small>` : ''}`;
+        compInfoEl.style.display = 'block';
+    }
+    zetStap2Enabled(true);
+    secProg.style.display = 'block';
+    loadCoachLijst();
+    coachInfoCache = {};
+    uitslagenCats = [];
+    $('u-sel-cat').innerHTML = '<option value="">— kies categorie —</option>';
+    $('u-afstand-rij').style.display = 'none';
+    $('uitslagen').innerHTML = '';
+    renderChips();
+    renderSancties();
+    renderHeats();
+    // Clubs + sponsors + programma parallel laden
+    progEl.innerHTML = '<div class="leeg-melding"><span class="spinner"></span> Laden…</div>';
+    programmaCache = null;
+    try {
+        const [clubsRes, sponsorsRes, progRes] = await Promise.all([
+            safeFetch(`?action=clubs&competition_id=${encodeURIComponent(compId)}`),
+            safeFetch(`?action=sponsors&competition_id=${encodeURIComponent(compId)}`),
+            safeFetch(`?action=programma&competition_id=${encodeURIComponent(compId)}`),
+        ]);
+        const clubs    = await clubsRes.json();
+        const sponsors = await sponsorsRes.json();
+        programmaCache = await progRes.json();
+
+        selClub.innerHTML = '<option value="">— kies club —</option>' +
+            (Array.isArray(clubs) ? clubs : []).map(c => {
+                // Label: "ASV - Almeerse SchaatsVereniging" indien short bekend,
+                // anders alleen full. Value blijft club_full (keys blijven kloppen
+                // voor de backend-filter).
+                const label = c.short ? `${c.short} - ${c.full}` : c.full;
+                return `<option value="${esc(c.full)}">${esc(label)}</option>`;
+            }).join('');
+        selSponsor.innerHTML = '<option value="">— kies sponsor —</option>' +
+            (Array.isArray(sponsors) ? sponsors : []).map(s =>
+                `<option value="${esc(s)}">${esc(s)}</option>`).join('');
+        renderProgramma();
+        // Status + sancties ophalen voor de al bestaande coach-lijst (uit localStorage)
+        await laadCoachInfo();
+        renderChips();
+        renderSancties();
+        renderHeats();
+    } catch (e) {
+        progEl.innerHTML = `<div class="leeg-melding">Fout: ${esc(e.message)}</div>`;
+    }
+}
+
+// Eén gedeelde toevoeg-handler: pakt alle niet-lege bronnen tegelijk op
+// (club, sponsor, startnummer) en voegt wat erin zit toe aan de coach-lijst.
+async function voegAllesToe() {
+    if (!selComp.value) return;
+    const club    = selClub.value;
+    const sponsor = selSponsor.value;
+    const snr     = parseInt(inpSnr.value);
+    if (!club && !sponsor && !snr) {
+        snrFb.textContent = 'Kies een club, sponsor of vul een startnummer in.';
+        snrFb.style.color = '#b71c1c';
+        return;
+    }
+
+    const meldingen = [];
+    const foutMeldingen = [];
+
+    if (club) {
+        const res = await safeFetch(`?action=personen_by_club&competition_id=${encodeURIComponent(selComp.value)}&club=${encodeURIComponent(club)}`);
+        const lijst = await res.json();
+        let aantal = 0;
+        (Array.isArray(lijst) ? lijst : []).forEach(p => { if (voegToeAanLijst(p)) aantal++; });
+        meldingen.push(aantal ? `${aantal} rijder(s) van club "${club}"` : `Club "${club}": geen nieuwe rijders`);
+        selClub.value = '';
+    }
+
+    if (sponsor) {
+        const res = await safeFetch(`?action=personen_by_sponsor&competition_id=${encodeURIComponent(selComp.value)}&sponsor=${encodeURIComponent(sponsor)}`);
+        const lijst = await res.json();
+        let aantal = 0;
+        (Array.isArray(lijst) ? lijst : []).forEach(p => { if (voegToeAanLijst(p)) aantal++; });
+        meldingen.push(aantal ? `${aantal} rijder(s) met sponsor "${sponsor}"` : `Sponsor "${sponsor}": geen nieuwe rijders`);
+        selSponsor.value = '';
+    }
+
+    if (snr && snr >= 1) {
+        const res = await safeFetch(`?action=person_by_startnummer&competition_id=${encodeURIComponent(selComp.value)}&snr=${snr}`);
+        const p = await res.json();
+        if (!p) {
+            foutMeldingen.push(`Startnummer ${snr} niet gevonden`);
+        } else if (voegToeAanLijst(p)) {
+            meldingen.push(`${p.full_name} (snr ${snr})`);
+        } else {
+            meldingen.push(`Startnr ${snr}: stond al in lijst`);
+        }
+        inpSnr.value = '';
+    }
+
+    saveCoachLijst();
+    await verversCoachLijstUI();
+    updateToevoegenKnop();
+
+    if (foutMeldingen.length) {
+        snrFb.textContent = foutMeldingen.join(' · ');
+        snrFb.style.color = '#b71c1c';
+    } else if (meldingen.length) {
+        snrFb.textContent = 'Toegevoegd: ' + meldingen.join(' · ');
+        snrFb.style.color = '#2e7d32';
+    }
+}
+
+// ── Listeners ────────────────────────────────────────────────────────────────
+$('chk-oud').addEventListener('change', filterComps);
+$('chk-toekomst').addEventListener('change', filterComps);
+selComp.addEventListener('change', opCompetitionChange);
+// Club/sponsor/startnr: niet direct toevoegen — wacht op de Toevoegen-knop.
+// De knop wordt pas actief zodra er iets gekozen/ingevuld is.
+selClub.addEventListener('change', updateToevoegenKnop);
+selSponsor.addEventListener('change', updateToevoegenKnop);
+inpSnr.addEventListener('input', updateToevoegenKnop);
+btnToevoegen.addEventListener('click', voegAllesToe);
+inpSnr.addEventListener('keydown', e => { if (e.key === 'Enter') voegAllesToe(); });
+$('btn-wis-alles').addEventListener('click', async () => {
+    if (!coachLijst.length) return;
+    const ok = await bevestig({
+        titel: 'Coach-lijst wissen?',
+        tekst: `Je staat op het punt <b>alle ${coachLijst.length} rijder${coachLijst.length === 1 ? '' : 's'}</b> uit je coach-lijst te verwijderen.<br><br>Dit kan niet ongedaan gemaakt worden.`,
+        bevestigLabel: 'Ja, wis alles',
+        annuleerLabel: 'Annuleren',
+    });
+    if (!ok) return;
+    coachLijst = [];
+    coachInfoCache = {};
+    saveCoachLijst();
+    await verversCoachLijstUI();
+});
+
+// Tab-switch Programma ↔ Sancties ↔ Uitslagen
+document.querySelectorAll('.tab-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+        document.querySelectorAll('.tab-btn').forEach(b => b.classList.toggle('active', b === btn));
+        const tab = btn.dataset.tab;
+        document.querySelectorAll('.tab-pane').forEach(p =>
+            p.classList.toggle('active', p.id === 'tab-' + tab));
+        // Lazy-load uitslagen-categorieën bij eerste klik op die tab
+        if (tab === 'uitslagen' && !uitslagenCats.length && selComp.value) {
+            laadUitslagenCategorieen();
+        }
+    });
+});
+
+$('u-sel-cat').addEventListener('change', opCatChange);
+$('u-sel-afstand').addEventListener('change', opAfstandChange);
+
+// ── Pull-to-refresh ──────────────────────────────────────────────────────────
+// Alleen actief als we boven aan de pagina zijn én er een wedstrijd gekozen is.
+// Trekt het programma opnieuw op (zelfde endpoint, cache is 30s).
+(() => {
+    const ptrEl = $('ptr');
+    const THRESHOLD = 70;   // px slepen voor trigger
+    let startY = null, dragY = 0, actief = false, bezigLaden = false;
+
+    async function herlaadProgramma() {
+        if (!selComp.value || bezigLaden) return;
+        bezigLaden = true;
+        ptrEl.classList.add('laadt');
+        ptrEl.textContent = '⟳ Vernieuwen…';
+        try {
+            const res = await safeFetch(`?action=programma&competition_id=${encodeURIComponent(selComp.value)}&_ts=${Date.now()}`);
+            programmaCache = await res.json();
+            renderProgramma();
+            // Bij elke refresh ook status + sancties opnieuw: kan veranderen tijdens de dag
+            await laadCoachInfo();
+            renderChips();
+            renderSancties();
+            renderHeats();
+            // Uitslagen-tab: categorieën + actieve uitslag herladen als er een gekozen is
+            uitslagenCats = [];
+            if (document.querySelector('.tab-btn[data-tab="uitslagen"]').classList.contains('active')) {
+                const huidigDc = $('u-sel-cat').value;
+                const huidigAf = $('u-sel-afstand').value;
+                await laadUitslagenCategorieen();
+                if (huidigDc) {
+                    $('u-sel-cat').value = huidigDc; opCatChange();
+                    if (huidigAf) { $('u-sel-afstand').value = huidigAf; opAfstandChange(); }
+                }
+            }
+            ptrEl.textContent = '✓ Bijgewerkt';
+            setTimeout(() => { ptrEl.classList.remove('zichtbaar','laadt'); }, 600);
+        } catch (e) {
+            ptrEl.textContent = '⚠ Fout bij vernieuwen';
+            setTimeout(() => { ptrEl.classList.remove('zichtbaar','laadt'); }, 1200);
+        } finally {
+            bezigLaden = false;
+        }
+    }
+
+    document.addEventListener('touchstart', e => {
+        if (window.scrollY > 0 || bezigLaden || !selComp.value) { startY = null; return; }
+        if (e.touches.length !== 1) { startY = null; return; }
+        startY = e.touches[0].clientY;
+        dragY = 0;
+        actief = false;
+    }, { passive:true });
+
+    document.addEventListener('touchmove', e => {
+        if (startY === null) return;
+        dragY = e.touches[0].clientY - startY;
+        if (dragY <= 0) { if (actief) { ptrEl.classList.remove('zichtbaar'); actief = false; } return; }
+        if (dragY > 30 && !actief) { ptrEl.classList.add('zichtbaar'); actief = true; }
+        ptrEl.textContent = dragY >= THRESHOLD
+            ? '↑ Laat los om te vernieuwen' : '↓ Trek verder om te vernieuwen';
+    }, { passive:true });
+
+    document.addEventListener('touchend', () => {
+        if (startY === null) return;
+        const was = dragY;
+        startY = null; dragY = 0;
+        if (actief && was >= THRESHOLD) {
+            herlaadProgramma();
+        } else if (actief) {
+            ptrEl.classList.remove('zichtbaar'); actief = false;
+        }
+    });
+
+    // Desktop-fallback: dubbelklik op de header refreshed ook het programma
+    document.querySelector('header').addEventListener('dblclick', herlaadProgramma);
+
+    // ── Auto-refresh elke minuut ────────────────────────────────────────────
+    // Alleen actief als er een wedstrijd gekozen is én de tab zichtbaar is.
+    // Pauzeren bij verborgen tab scheelt verkeer én batterij. Na terugkeer
+    // pakt-ie meteen weer op om de user een verse staat te geven.
+    const AUTO_REFRESH_MS = 60_000;
+    let autoTick = null;
+    const lastEl = document.createElement('div');
+    lastEl.className = 'auto-refresh-stempel';
+    lastEl.title = 'Laatste automatische verversing';
+    document.body.appendChild(lastEl);
+    const zetStempel = () => {
+        const d = new Date();
+        const hh = String(d.getHours()).padStart(2,'0');
+        const mm = String(d.getMinutes()).padStart(2,'0');
+        lastEl.textContent = `🔄 ${hh}:${mm}`;
+    };
+    const startAutoRefresh = () => {
+        stopAutoRefresh();
+        if (!selComp.value || document.hidden) return;
+        autoTick = setInterval(async () => {
+            if (document.hidden || !selComp.value) return;
+            await herlaadProgramma();
+            zetStempel();
+        }, AUTO_REFRESH_MS);
+    };
+    const stopAutoRefresh = () => {
+        if (autoTick) { clearInterval(autoTick); autoTick = null; }
+    };
+    document.addEventListener('visibilitychange', () => {
+        if (document.hidden) stopAutoRefresh();
+        else { herlaadProgramma().then(zetStempel); startAutoRefresh(); }
+    });
+    selComp.addEventListener('change', () => {
+        if (selComp.value) { zetStempel(); startAutoRefresh(); }
+        else { stopAutoRefresh(); lastEl.textContent = ''; }
+    });
+    // Initieel: als er al een wedstrijd voorgeselecteerd is (onwaarschijnlijk maar
+    // safe), meteen starten. Anders gebeurt het via de change-listener.
+    if (selComp.value) { zetStempel(); startAutoRefresh(); }
+})();
+
+laadCompetitions();
+</script>
+</body>
+</html>
