@@ -17,7 +17,9 @@ CREATE TABLE IF NOT EXISTS `klassement_posities` (
     `start_number`   VARCHAR(20)    DEFAULT NULL,
     `license_key`    VARCHAR(30)    DEFAULT NULL,
     `naam`           VARCHAR(255)   NOT NULL,
-    `categorie`      VARCHAR(20)    DEFAULT NULL,
+    `categorie`      VARCHAR(100)   DEFAULT NULL,
+    -- Historisch VARCHAR(20); verruimd voor langere sectie-labels uit
+    -- bv. NK-tussenstand-PDFs ("Mannen Senioren Sprint" = 22 tekens).
     `punten_detail`  LONGTEXT       CHARACTER SET utf8mb4 COLLATE utf8mb4_bin DEFAULT NULL
                                     CHECK (json_valid(`punten_detail`)),
     `punten_totaal`  DECIMAL(8,2)   DEFAULT NULL,

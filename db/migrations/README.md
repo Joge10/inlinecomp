@@ -15,3 +15,4 @@ Deze map bevat éénmalige ALTER-scripts die op bestaande installaties gedraaid 
 |---|---|---|
 | 2026-04-21 | `2026-04-21_distances_add_race_type.sql` | `race_type` ENUM-kolom toevoegen aan `distances` (sprint/inline/puntenkoers/afvalkoers) |
 | 2026-04-24 | `2026-04-24_organisaties_add_sportity_kanaal.sql` | `sportity_kanaal` kolom op `organisaties` voor per-regio Sportity-kanaalnaam |
+| 2026-04-24 | `2026-04-24_klassement_posities_categorie_verruimen.sql` | `klassement_posities.categorie` van VARCHAR(20) naar VARCHAR(100) voor langere sectie-labels uit NK-tussenstand-PDFs |
