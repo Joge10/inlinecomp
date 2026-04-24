@@ -5,9 +5,14 @@ Gebruik: python pdf_klassement.py <pad/naar/klassement.pdf>
 Output : JSON naar stdout
 
 Ondersteunde formaten
-  - KNSB  : "pl nr naam Cat Woonplaats Club …"  (elke pagina = één sectie)
-  - JSC   : "Plaats Beennr Naam Vereniging kl cat punten …"  (meerdere cat. per pagina)
-  - REGIO : "categorie: pupillen 4 meisjes" headers; "pl nr naam vereniging scores…"
+  - KNSB       : "pl nr naam Cat Woonplaats Club …"  (elke pagina = één sectie)
+  - JSC        : "Plaats Beennr Naam Vereniging kl cat punten …"  (meerdere cat. per pagina)
+  - REGIO      : "categorie: pupillen 4 meisjes" headers; "pl nr naam vereniging scores…"
+  - NK_TUSSEN  : "KNSB Baancompetitie / Tussenstand NK deelname" met sectie-
+                 koppen als "12 Mannen Senioren Sprint"; rijen zonder pl-kolom
+                 ("nr Naam Cat Woonplaats Club Sponsor A1..A5 tot af tot").
+                 De volgorde in de PDF = de ranking; de laatste numerieke kolom
+                 is de eind-score (som na weggestreepte slechtste).
 """
 
 import sys, re, json
@@ -308,12 +313,105 @@ def parse_regio(pdf):
 
 
 # ═════════════════════════════════════════════════════════════════════════════
+# NK-tussenstand parser  (KNSB Baancompetitie - Tussenstand NK deelname)
+# ─────────────────────────────────────────────────────────────────────────────
+# Sectie-kop: "12 Mannen Senioren Sprint" / "7 Dames Junior A" etc. De PDF-
+# titel "Tussenstand NK deelname" geldt voor het hele document.
+# Rij-patroon zonder "pl"-kolom:
+#     557 Kai-Arne Ottenhoff HSA HEERENVEEN Hardrijders Club Heerenveen ...
+# Gevolgd door een variabel aantal scores (A1..A5) en tenslotte tot/af/eindtot.
+# De volgorde in de PDF IS al de ranking; we gebruiken positie = rij-index.
+NK_SECTIE_RE = re.compile(
+    r'^\d+\s+(Mannen|Dames|Heren)\s+[A-Za-z][A-Za-z\s]+$'
+)
+NK_REGEL_RE = re.compile(
+    r'^(\d{1,4})\s+'                                    # startnummer
+    r'([A-Z\xc0-\xd6\xd8-\xde][A-Za-z\xc0-\xff\s\'\-\.]+?)\s+'  # naam
+    r'([HD][A-Z]{1,2}\d?)\s+'                           # cat-code HSA/HJB/HP1/...
+    r'(.+?)\s+'                                         # woonplaats + club + sponsor
+    r'((?:\d+\s+){0,8}\d+)\s*$'                         # 1-9 numerieke velden op einde
+)
+
+def parse_nk_tussenstand(pdf):
+    secties = {}
+    header_info = {}
+    sectie_naam = None
+
+    for pagina in pdf.pages:
+        txt = pagina.extract_text()
+        if not txt:
+            continue
+        regels = txt.splitlines()
+
+        # Header-info (eerste pagina)
+        if not header_info:
+            for regel in regels[:6]:
+                r = regel.strip()
+                if 'Tussenstand NK deelname' in r:
+                    header_info['titel'] = r
+                elif re.match(r'^\d{1,2}/\d{1,2}/\d{4}', r):
+                    header_info['datum'] = r
+
+        positie_teller = 0
+        for regel in regels:
+            r = regel.strip()
+            if not r:
+                continue
+
+            # Sectie-kop?  ("12 Mannen Senioren Sprint")
+            ms = NK_SECTIE_RE.match(r)
+            if ms:
+                # Pak alles NA het leidende cijfer-block als sectie-naam
+                sectie_naam = re.sub(r'^\d+\s+', '', r).strip()
+                positie_teller = 0
+                if sectie_naam not in secties:
+                    secties[sectie_naam] = {
+                        'sectie':    sectie_naam,
+                        'cat_codes': set(),
+                        'rijders':   [],
+                    }
+                continue
+
+            # Kolom-header overslaan ("nr Naam Cat Woonplaats Club ...")
+            if re.match(r'^nr\s+Naam\s+Cat\b', r, re.I):
+                continue
+
+            # Rijder-regel
+            mr = NK_REGEL_RE.match(r)
+            if not mr or not sectie_naam:
+                continue
+
+            nr    = mr.group(1).strip()
+            naam  = mr.group(2).strip()
+            cat   = mr.group(3).strip()
+            tail  = mr.group(5).strip()
+
+            # Laatste getal = eindtot (lagere = beter geseed)
+            cijfers = [int(x) for x in tail.split()]
+            eindtot = cijfers[-1] if cijfers else None
+
+            positie_teller += 1
+            secties[sectie_naam]['cat_codes'].add(cat)
+            secties[sectie_naam]['rijders'].append({
+                'positie':  positie_teller,
+                'nr':       nr,
+                'naam':     naam,
+                'cat_code': cat,
+                'punten':   eindtot,   # som na strepen (kleinste is beste)
+            })
+
+    return secties, header_info
+
+
+# ═════════════════════════════════════════════════════════════════════════════
 # Formaat-detectie
 # ─────────────────────────────────────────────────────────────────────────────
 def detect_format(pdf):
     tekst = ' '.join(
         (pdf.pages[i].extract_text() or '') for i in range(min(2, len(pdf.pages)))
     )
+    if 'Tussenstand NK deelname' in tekst or 'NK deelname' in tekst:
+        return 'nk_tussen'
     if 'Beennr' in tekst or 'Algemeen klassement' in tekst:
         return 'jsc'
     if re.search(r'categorie\s*:', tekst, re.I):
@@ -335,6 +433,8 @@ def parse_pdf(pad):
             secties_raw, header_info = parse_jsc(pdf)
         elif fmt == 'regio':
             secties_raw, header_info = parse_regio(pdf)
+        elif fmt == 'nk_tussen':
+            secties_raw, header_info = parse_nk_tussenstand(pdf)
         else:
             secties_raw, header_info = parse_knsb(pdf)
 
