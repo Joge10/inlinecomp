@@ -6,6 +6,48 @@
 header('Content-Type: text/html; charset=utf-8');
 require_once __DIR__ . '/../../config_inlinecomp.php';
 
+// ── Bezoektracking: upsert session-hit in public_visits ─────────────────────
+// Alleen op de echte HTML pageload (geen action=...) om AJAX-calls niet
+// dubbel te tellen. Cookie wordt lightweight: alleen session-id voor tracking.
+if (empty($_GET['action'])) {
+    if (session_status() === PHP_SESSION_NONE) {
+        session_name('ICPUB');  // aparte cookie-naam om admin-sessies niet te raken
+        session_set_cookie_params([
+            'lifetime' => 0,         // browser-sessie
+            'path'     => '/',
+            'httponly' => true,
+            'samesite' => 'Lax',
+        ]);
+        @session_start();
+    }
+    $sid = session_id();
+    if ($sid) {
+        try {
+            $pdo->prepare(
+                "INSERT INTO public_visits (session_id) VALUES (?)
+                 ON DUPLICATE KEY UPDATE last_seen = NOW(), hits = hits + 1"
+            )->execute([$sid]);
+            // Piek bijwerken (vandaag + all-time). Eén UPDATE met subquery:
+            // goedkoop genoeg om op elke pageload te draaien.
+            $pdo->prepare("
+                UPDATE peak_stats SET
+                    peak_today = CASE
+                        WHEN peak_today_date = CURDATE()
+                            THEN GREATEST(peak_today, (SELECT COUNT(*) FROM public_visits WHERE last_seen > NOW() - INTERVAL 5 MINUTE))
+                        ELSE (SELECT COUNT(*) FROM public_visits WHERE last_seen > NOW() - INTERVAL 5 MINUTE)
+                    END,
+                    peak_today_date = CURDATE(),
+                    peak_all_time_at = IF(
+                        (SELECT COUNT(*) FROM public_visits WHERE last_seen > NOW() - INTERVAL 5 MINUTE) > peak_all_time,
+                        NOW(), peak_all_time_at),
+                    peak_all_time = GREATEST(peak_all_time,
+                        (SELECT COUNT(*) FROM public_visits WHERE last_seen > NOW() - INTERVAL 5 MINUTE))
+                WHERE scope = 'public'
+            ")->execute();
+        } catch (Throwable $e) { /* tracking mag nooit de pagina breken */ }
+    }
+}
+
 // ── Rate limiting: max 10 requests per 5 seconden per IP ────────────────────
 $action = $_GET['action'] ?? '';
 if ($action) {
@@ -32,13 +74,43 @@ if ($action === 'competitions') {
     header('Cache-Control: public, max-age=60'); // 60 sec browser cache
     try {
         $stmt = $pdo->prepare("
-            SELECT c.id, c.name, c.starts, c.ends
+            SELECT c.id, c.name, c.starts, c.ends,
+                   c.organisatie_id, o.logo_path AS org_logo, o.naam AS org_naam
             FROM competitions c
             JOIN competition_tijdschema ct ON ct.competition_id = c.id
+            LEFT JOIN organisaties o ON o.id = c.organisatie_id
             ORDER BY c.starts DESC
         ");
         $stmt->execute();
-        echo json_encode($stmt->fetchAll(PDO::FETCH_ASSOC), JSON_UNESCAPED_UNICODE);
+        $comps = $stmt->fetchAll(PDO::FETCH_ASSOC);
+
+        // Sponsors per organisatie ophalen
+        $orgIds = array_unique(array_filter(array_column($comps, 'organisatie_id')));
+        $sponsorMap = [];
+        if ($orgIds) {
+            $spStmt = $pdo->prepare("
+                SELECT organisatie_id, naam, logo_path, url
+                FROM organisatie_sponsors
+                WHERE logo_path IS NOT NULL AND logo_path != ''
+                ORDER BY volgorde, naam
+            ");
+            $spStmt->execute();
+            foreach ($spStmt->fetchAll(PDO::FETCH_ASSOC) as $sp) {
+                $sponsorMap[$sp['organisatie_id']][] = [
+                    'naam' => $sp['naam'],
+                    'logo' => $sp['logo_path'],
+                    'url'  => $sp['url'],
+                ];
+            }
+        }
+
+        // Sponsors toevoegen per wedstrijd
+        foreach ($comps as &$c) {
+            $c['sponsors'] = $sponsorMap[$c['organisatie_id'] ?? ''] ?? [];
+        }
+        unset($c);
+
+        echo json_encode($comps, JSON_UNESCAPED_UNICODE);
     } catch (Throwable $e) {
         http_response_code(500);
         echo json_encode(['error' => $e->getMessage()]);
@@ -60,6 +132,7 @@ if ($action === 'programma') {
 
         $stmt = $pdo->prepare("
             SELECT r.volgorde, r.rit_naam, r.ronde_type, r.heat_nr, r.dc_naam,
+                   r.combi_group,
                    b.blok_type, b.tijdstip, b.duur, b.heat_duur, b.opmerking,
                    h.id AS heat_id,
                    h.ronde AS heat_ronde,
@@ -234,30 +307,108 @@ if ($action === 'rit_detail') {
     exit;
 }
 
+// ── API: zoek personen op (deel van de) naam ─────────────────────────────────
+// Retourneert een lichtgewicht lijst (snr, naam, categorie, club_short,
+// license_key) — bedoeld voor een multi-pick chooser. Zwaar detail (heats)
+// wordt pas per geselecteerde persoon opgehaald via `lookup`.
+if ($action === 'search_person') {
+    header('Content-Type: application/json; charset=utf-8');
+    $compId = trim($_GET['competition_id'] ?? '');
+    $term   = trim($_GET['q'] ?? '');
+    if (!$compId || mb_strlen($term) < 2) { echo json_encode([]); exit; }
+    try {
+        // Zoek uitsluitend op short_name (= achternaam). Niet op full_name,
+        // om te voorkomen dat bv. "Jorn" matcht in voornamen van andere
+        // rijders. Zoek in de hele persons-tabel (niet beperkt tot deelnemers
+        // van deze wedstrijd) — `in_wedstrijd`-vlag laat de UI zien of ze
+        // deze keer meedoen.
+        $stmt = $pdo->prepare("
+            SELECT p.license_key, p.full_name, p.short_name,
+                   p.category, p.club_short,
+                   COALESCE(cs.startnummer, p.start_number) AS wedstrijd_snr,
+                   EXISTS (
+                       SELECT 1 FROM entries e
+                       JOIN distance_combinations dc
+                         ON dc.id = e.distance_combination_id
+                       WHERE e.person_license = p.license_key
+                         AND dc.competition_id = ?
+                   ) AS in_wedstrijd
+            FROM persons p
+            LEFT JOIN competition_startnummers cs
+                   ON cs.person_license = p.license_key AND cs.competition_id = ?
+            WHERE p.short_name LIKE ?
+            ORDER BY p.short_name, p.full_name
+            LIMIT 30
+        ");
+        $stmt->execute([$compId, $compId, '%' . $term . '%']);
+        echo json_encode($stmt->fetchAll(PDO::FETCH_ASSOC), JSON_UNESCAPED_UNICODE);
+    } catch (Throwable $e) {
+        http_response_code(500);
+        echo json_encode(['error' => $e->getMessage()]);
+    }
+    exit;
+}
+
 // ── API: lookup rijder ───────────────────────────────────────────────────────
 if ($action === 'lookup') {
     header('Content-Type: application/json; charset=utf-8');
-    $compId = trim($_GET['competition_id'] ?? '');
-    $snr    = trim($_GET['startnummer'] ?? '');
-    if (!$compId || !$snr) { echo json_encode(['error' => 'competition_id en startnummer zijn verplicht']); exit; }
+    $compId  = trim($_GET['competition_id'] ?? '');
+    $snr     = trim($_GET['startnummer'] ?? '');
+    // Optioneel: lookup direct op license_key (stabiel over wedstrijden heen).
+    // Gebruikt door multi-rijder (public-view onthoudt kinderen via license_key
+    // zodat ze ook in een volgende wedstrijd automatisch verschijnen, ongeacht
+    // of ze een ander startnummer hebben).
+    $license = trim($_GET['license_key'] ?? '');
+
+    if (!$compId || (!$snr && !$license)) {
+        echo json_encode(['error' => 'competition_id en startnummer of license_key zijn verplicht']);
+        exit;
+    }
 
     try {
-        // Zoek persoon
-        // Zoek alle personen met dit startnummer die ingeschreven zijn voor deze wedstrijd
-        $persStmt = $pdo->prepare("
-            SELECT p.license_key, p.full_name, p.category, p.start_number,
-                   COALESCE(cs.startnummer, p.start_number) AS wedstrijd_snr,
-                   e.status AS entry_status
-            FROM persons p
-            LEFT JOIN competition_startnummers cs ON cs.person_license = p.license_key AND cs.competition_id = ?
-            JOIN entries e ON e.person_license = p.license_key
-            JOIN distance_combinations dc ON dc.id = e.distance_combination_id AND dc.competition_id = ?
-            WHERE (p.start_number = ? OR cs.startnummer = ?)
-            GROUP BY p.license_key
-        ");
-        $persStmt->execute([$compId, $compId, $snr, $snr]);
+        if ($license) {
+            // License-zoek is niet gebonden aan deelname in deze wedstrijd —
+            // zo kunnen ouders kinderen alvast toevoegen die nog niet
+            // ingeschreven zijn (of deze wedstrijd overslaan). entry_status
+            // wordt NULL als er geen inschrijving is voor deze comp; de
+            // frontend toont dan een "niet ingeschreven"-placeholder.
+            $persStmt = $pdo->prepare("
+                SELECT p.license_key, p.full_name, p.category, p.start_number,
+                       p.club_short,
+                       COALESCE(cs.startnummer, p.start_number) AS wedstrijd_snr,
+                       (SELECT MAX(e.status)
+                          FROM entries e
+                          JOIN distance_combinations dc
+                            ON dc.id = e.distance_combination_id
+                         WHERE e.person_license = p.license_key
+                           AND dc.competition_id = ?) AS entry_status
+                FROM persons p
+                LEFT JOIN competition_startnummers cs
+                       ON cs.person_license = p.license_key AND cs.competition_id = ?
+                WHERE p.license_key = ?
+            ");
+            $persStmt->execute([$compId, $compId, $license]);
+        } else {
+            $persStmt = $pdo->prepare("
+                SELECT p.license_key, p.full_name, p.category, p.start_number,
+                       p.club_short,
+                       COALESCE(cs.startnummer, p.start_number) AS wedstrijd_snr,
+                       e.status AS entry_status
+                FROM persons p
+                LEFT JOIN competition_startnummers cs ON cs.person_license = p.license_key AND cs.competition_id = ?
+                JOIN entries e ON e.person_license = p.license_key
+                JOIN distance_combinations dc ON dc.id = e.distance_combination_id AND dc.competition_id = ?
+                WHERE (p.start_number = ? OR cs.startnummer = ?)
+                GROUP BY p.license_key
+            ");
+            $persStmt->execute([$compId, $compId, $snr, $snr]);
+        }
         $personen = $persStmt->fetchAll(PDO::FETCH_ASSOC);
-        if (!$personen) { echo json_encode(['error' => 'Geen rijder gevonden met startnummer ' . $snr]); exit; }
+        if (!$personen) {
+            $omschr = $license ? 'deze rijder' : "startnummer $snr";
+            echo json_encode(['error' => "Geen rijder gevonden voor $omschr in deze wedstrijd"]);
+            exit;
+        }
 
         // Heats + alle rijders per heat
         $heatStmt = $pdo->prepare("
@@ -280,6 +431,11 @@ if ($action === 'lookup') {
             ORDER BY COALESCE(tsr.volgorde, h.ronde * 100 + h.heat_nr)
         ");
 
+        // Belangrijk: uitslag_afstand kan meerdere rijen per rijder bevatten
+        // (elke "Uitslag bevestigen" voegt een nieuwe rij toe). We joinen
+        // daarom via een sub-select die alleen de laatste rij (MAX(id)) per
+        // rijder meeneemt — anders vermenigvuldigt het JOIN elke rijder met
+        // het aantal bevestigings-runs.
         $rijdersStmt = $pdo->prepare("
             SELECT he.startpositie,
                    COALESCE(cs.startnummer, p.start_number) AS snr,
@@ -291,8 +447,18 @@ if ($action === 'lookup') {
             JOIN persons p ON p.license_key = he.person_license
             LEFT JOIN competition_startnummers cs ON cs.person_license = he.person_license AND cs.competition_id = ?
             LEFT JOIN results res ON res.heat_entry_id = he.id
-            LEFT JOIN uitslag_afstand ua ON ua.person_license = he.person_license
-                AND ua.competition_id = ? AND ua.distance_combination_id = ? AND ua.distance_id = ?
+            LEFT JOIN (
+                SELECT ua1.person_license, ua1.rang
+                FROM uitslag_afstand ua1
+                INNER JOIN (
+                    SELECT MAX(id) AS max_id
+                    FROM uitslag_afstand
+                    WHERE competition_id = ?
+                      AND distance_combination_id = ?
+                      AND distance_id = ?
+                    GROUP BY person_license
+                ) latest ON latest.max_id = ua1.id
+            ) ua ON ua.person_license = he.person_license
             WHERE he.heat_id = ?
             ORDER BY he.startpositie
         ");
@@ -547,6 +713,91 @@ if ($action === 'uitslagen') {
     }
     exit;
 }
+
+// ── API: serie-klassementen waar deze wedstrijd aan meedoet ─────────────────
+if ($action === 'series_voor_comp') {
+    header('Content-Type: application/json; charset=utf-8');
+    header('Cache-Control: public, max-age=60');
+    $compId = trim($_GET['competition_id'] ?? '');
+    if (!$compId) { echo json_encode([]); exit; }
+    try {
+        // We willen alleen series tonen waar de wedstrijd meetelt en waarvan
+        // het uit-klassement (klassementen-rij) ook echt posities heeft.
+        $stmt = $pdo->prepare("
+            SELECT s.id AS serie_id, s.naam, s.seizoen, s.klassement_id,
+                   k.totaal_rijders, k.herberekend_op
+            FROM klassement_series s
+            JOIN klassement_serie_wedstrijden w ON w.serie_id = s.id
+            JOIN klassementen k ON k.id = s.klassement_id
+            LEFT JOIN klassement_series s_alias ON s_alias.id = s.id
+            WHERE w.competition_id = ? AND w.telt_mee = 1 AND k.totaal_rijders > 0
+            GROUP BY s.id
+            ORDER BY s.naam
+        ");
+        // 'herberekend_op' kolomnaam alleen in klassement_series — kleine SQL-fix:
+        $stmt = $pdo->prepare("
+            SELECT s.id AS serie_id, s.naam, s.seizoen, s.klassement_id,
+                   s.herberekend_op,
+                   k.totaal_rijders
+            FROM klassement_series s
+            JOIN klassement_serie_wedstrijden w ON w.serie_id = s.id
+            JOIN klassementen k ON k.id = s.klassement_id
+            WHERE w.competition_id = ? AND w.telt_mee = 1 AND k.totaal_rijders > 0
+            GROUP BY s.id
+            ORDER BY s.naam
+        ");
+        $stmt->execute([$compId]);
+        echo json_encode($stmt->fetchAll(PDO::FETCH_ASSOC), JSON_UNESCAPED_UNICODE);
+    } catch (Throwable $e) {
+        http_response_code(500);
+        echo json_encode(['error' => $e->getMessage()]);
+    }
+    exit;
+}
+
+// ── API: volledig serie-klassement (zonder auth) ─────────────────────────────
+if ($action === 'serie_klassement') {
+    header('Content-Type: application/json; charset=utf-8');
+    header('Cache-Control: public, max-age=60');
+    $klId = trim($_GET['klassement_id'] ?? '');
+    if (!$klId) { echo json_encode(['error' => 'klassement_id verplicht']); exit; }
+    try {
+        $kl = $pdo->prepare("
+            SELECT id, naam, seizoen, bron_bestand, totaal_rijders,
+                   categorieen, wedstrijden_meta, aangemaakt_op
+            FROM klassementen
+            WHERE id = ? AND bron_bestand = '(serie-berekening)'
+        ");
+        $kl->execute([$klId]);
+        $k = $kl->fetch(PDO::FETCH_ASSOC);
+        if (!$k) { http_response_code(404); echo json_encode(['error' => 'Niet gevonden']); exit; }
+        $k['categorieen']      = json_decode($k['categorieen']      ?? '[]', true);
+        $k['wedstrijden_meta'] = json_decode($k['wedstrijden_meta'] ?? 'null', true);
+
+        $pos = $pdo->prepare("
+            SELECT positie, start_number, license_key, naam, categorie,
+                   punten_detail, punten_totaal
+            FROM klassement_posities
+            WHERE klassement_id = ?
+            ORDER BY positie ASC
+        ");
+        $pos->execute([$klId]);
+        $rows = $pos->fetchAll(PDO::FETCH_ASSOC);
+        foreach ($rows as &$r) {
+            $r['punten_detail'] = $r['punten_detail'] !== null
+                ? json_decode($r['punten_detail'], true) : null;
+            $r['punten_totaal'] = $r['punten_totaal'] !== null
+                ? (float)$r['punten_totaal'] : null;
+        }
+        unset($r);
+        $k['posities'] = $rows;
+        echo json_encode($k, JSON_UNESCAPED_UNICODE);
+    } catch (Throwable $e) {
+        http_response_code(500);
+        echo json_encode(['error' => $e->getMessage()]);
+    }
+    exit;
+}
 ?>
 <!DOCTYPE html>
 <html lang="nl">
@@ -590,7 +841,39 @@ header h1 { font-size: 1.5rem; font-weight: 700; }
 header .sub { font-size: .95rem; opacity: .8; margin-top: 2px; }
 .hdr-btns {
     position: absolute; right: 12px; top: 50%; transform: translateY(-50%);
-    display: flex; gap: 8px;
+    display: flex; gap: 6px;
+}
+
+/* ── Org footer ── */
+.org-footer {
+    display: none; /* verborgen tot wedstrijd geselecteerd */
+    background: var(--wit); border-top: 1px solid #dde3ea;
+    padding: 12px 16px;
+    position: fixed; bottom: 0; left: 0; right: 0; z-index: 100;
+    box-shadow: 0 -2px 8px rgba(0,0,0,.08);
+}
+.org-footer-inner {
+    max-width: 720px; margin: 0 auto;
+    display: flex; align-items: center; justify-content: space-between; gap: 12px;
+}
+.org-footer-logo { height: 50px; width: auto; object-fit: contain; flex-shrink: 0; }
+.org-footer-naam { font-size: .85rem; color: var(--blauw); font-weight: 600; flex-shrink: 0; }
+.org-footer-sponsors {
+    flex: 1; overflow: hidden; display: flex; align-items: center; justify-content: flex-end;
+}
+.sponsor-marquee {
+    display: flex; overflow: hidden; height: 50px; align-items: center;
+}
+.sponsor-marquee-inner {
+    display: flex; align-items: center; gap: 40px; flex-shrink: 0;
+    animation: marquee linear infinite;
+}
+.sponsor-marquee-inner img {
+    height: 40px; width: auto; object-fit: contain; flex-shrink: 0;
+}
+@keyframes marquee {
+    0%   { transform: translateX(0); }
+    100% { transform: translateX(calc(-50% - 20px)); }
 }
 .btn-help {
     background: rgba(255,255,255,.2); border: 2px solid rgba(255,255,255,.5);
@@ -617,6 +900,36 @@ header .sub { font-size: .95rem; opacity: .8; margin-top: 2px; }
     font-size: 1.1rem; font-weight: 700;
 }
 .help-sluit { background: none; border: none; color: rgba(255,255,255,.7); font-size: 1.5rem; cursor: pointer; line-height: 1; }
+
+/* ── Disclaimer-popup bij eerste bezoek ── */
+.disc-overlay {
+    position: fixed; inset: 0; background: rgba(0,0,0,.55);
+    z-index: 3000; display: flex; align-items: center; justify-content: center;
+    padding: 16px;
+}
+.disc-box {
+    background: var(--wit); border-radius: 14px; width: 100%; max-width: 460px;
+    box-shadow: 0 12px 40px rgba(0,0,0,.35); overflow: hidden;
+    animation: disc-in .2s ease-out;
+}
+@keyframes disc-in { from { transform: translateY(10px); opacity: 0; } to { transform: none; opacity: 1; } }
+.disc-header {
+    background: var(--blauw); color: var(--wit); padding: 14px 16px;
+    font-size: 1.05rem; font-weight: 700;
+}
+.disc-body {
+    padding: 18px 18px 10px; font-size: .92rem; line-height: 1.55; color: var(--tekst);
+}
+.disc-body p { margin: 0 0 12px; }
+.disc-body p:last-child { margin-bottom: 0; font-style: italic; color: #666; font-size: .85rem; }
+.disc-footer { padding: 10px 14px 14px; text-align: right; }
+
+.disc-btn {
+    background: var(--blauw); color: var(--wit); border: none; border-radius: 6px;
+    padding: 9px 22px; font-size: .92rem; font-weight: 600; cursor: pointer;
+    transition: background .15s;
+}
+.disc-btn:hover { background: #153658; }
 .help-body { padding: 16px; font-size: .9rem; line-height: 1.5; color: var(--tekst); }
 .help-body h3 { font-size: .95rem; color: var(--blauw); margin: 16px 0 6px; }
 .help-body h3:first-child { margin-top: 0; }
@@ -660,7 +973,7 @@ header .sub { font-size: .95rem; opacity: .8; margin-top: 2px; }
 .mock-naam { flex: 1; }
 .mock-tijd { font-family: monospace; color: #666; font-size: .65rem; }
 
-.container { max-width: 720px; margin: 0 auto; padding: 6px; }
+.container { max-width: 720px; margin: 0 auto; padding: 6px; padding-bottom: 80px; }
 
 /* ── Stappen ── */
 .stap { margin-bottom: 16px; }
@@ -674,7 +987,7 @@ header .sub { font-size: .95rem; opacity: .8; margin-top: 2px; }
     display: flex; align-items: center; justify-content: center;
     font-size: .9rem; font-weight: 700; flex-shrink: 0;
 }
-select, input[type=number] {
+select, input[type=number], input[type=text], input[type=search] {
     width: 100%; padding: 14px 14px; font-size: 1rem;
     border: 2px solid #cdd8e3; border-radius: 8px;
     background: var(--wit); appearance: none; -webkit-appearance: none;
@@ -737,6 +1050,84 @@ select:focus, input:focus { border-color: var(--middenblauw); outline: none; }
     display: flex; background: var(--wit);
     border-bottom: 2px solid #dde3ea;
 }
+
+/* Naamzoek-chooser (multi-select modal) */
+.naamzoek-modal {
+    position:fixed; inset:0; background:rgba(0,0,0,.5); z-index:2500;
+    display:flex; align-items:center; justify-content:center; padding:16px;
+}
+.naamzoek-box {
+    background:var(--wit); border-radius:12px; max-width:480px; width:100%;
+    max-height:80vh; display:flex; flex-direction:column;
+    box-shadow:0 12px 40px rgba(0,0,0,.3); overflow:hidden;
+}
+.naamzoek-hdr {
+    background:var(--blauw); color:var(--wit); padding:12px 16px;
+    font-weight:700; display:flex; justify-content:space-between; align-items:center;
+}
+.naamzoek-body { overflow-y:auto; padding:8px 0; }
+.naamzoek-rij {
+    display:flex; align-items:center; gap:10px; padding:10px 14px;
+    border-bottom:1px solid #eee; cursor:pointer; user-select:none;
+}
+.naamzoek-rij:hover { background:#f0f5fa; }
+.naamzoek-rij input[type=checkbox] { width:18px; height:18px; flex-shrink:0; }
+.naamzoek-rij-snr { font-weight:700; color:var(--blauw); min-width:34px; text-align:right; }
+.naamzoek-rij-naam { flex:1; }
+.naamzoek-rij-meta { font-size:.75rem; color:#888; }
+.naamzoek-voet {
+    border-top:1px solid #eee; padding:12px 14px;
+    display:flex; gap:10px; justify-content:space-between; align-items:center;
+}
+.naamzoek-voet .aantal { font-size:.85rem; color:#666; }
+.naamzoek-leeg { padding:30px 16px; text-align:center; color:#888; font-style:italic; }
+.naamzoek-sluit { background:none; border:none; color:rgba(255,255,255,.85);
+                  font-size:1.4rem; cursor:pointer; line-height:1; }
+
+/* Kind-tabs (meerdere rijders in één weergave, bv. gezinnen met broertjes/zusjes).
+   Laat deze bovenop de persoon-header staan — klik op een tab toont de
+   bijbehorende rijder met zijn eigen sub-tabs (programma/heats/…). */
+.kind-tabs {
+    display:flex; align-items:stretch; gap:0;
+    margin-top:16px; border-bottom:2px solid #dde3ea;
+    overflow:hidden;                 /* nooit scrollen, gewoon afkappen */
+    white-space:nowrap;
+}
+.kind-tab {
+    display:inline-flex; align-items:center; gap:8px;
+    padding:10px 14px; font-size:1.35rem; font-weight:600;
+    color:#666; background:var(--wit); border:none; cursor:pointer;
+    border-bottom:12px solid transparent; margin-bottom:-2px;
+    min-width:0; flex:1 1 auto;      /* laat tabs krimpen bij weinig ruimte */
+    overflow:hidden;
+}
+/* De naam in de kind-tab mag afbreken met … als hij te lang is; de snr-badge
+   en × worden nooit afgebroken. */
+.kind-tab > span:nth-child(2) {
+    overflow:hidden; text-overflow:ellipsis; white-space:nowrap;
+    min-width:0; max-width:100%;
+}
+.kind-tab.active {
+    color:var(--blauw); border-bottom-color:var(--oranje);
+}
+.kind-tab .kind-tab-snr {
+    background:var(--lichtblauw); color:var(--blauw);
+    border-radius:8px; padding:1px 8px; font-weight:700;
+    font-size:1rem; flex-shrink:0;
+}
+.kind-tab .kind-tab-close {
+    color:#999; font-size:1.3rem; margin-left:2px; cursor:pointer;
+    flex-shrink:0;
+}
+.kind-tab .kind-tab-close:hover { color:#b71c1c; }
+.kind-tab-plus {
+    display:inline-flex; align-items:center; justify-content:center;
+    padding:10px 14px; font-size:1.35rem; font-weight:700;
+    color:var(--oranje); background:var(--wit); border:none; cursor:pointer;
+    border-bottom:12px solid transparent; margin-bottom:-2px;
+    flex-shrink:0;                   /* + knop blijft altijd volledig zichtbaar */
+}
+.kind-tab-plus:disabled { color:#bbb; cursor:not-allowed; }
 .tab-btn {
     flex: 1; padding: 12px 4px; font-size: .85rem; font-weight: 600;
     text-align: center; border: none; background: none; cursor: pointer;
@@ -839,6 +1230,19 @@ select:focus, input:focus { border-color: var(--middenblauw); outline: none; }
 .uitsl-tabel .col-sanctie { color: #c00; font-weight: 600; font-size: .8rem; }
 .uitsl-tabel .col-punten { text-align: center; font-weight: 600; }
 .uitsl-tabel .col-totaal { text-align: center; font-weight: 700; color: var(--oranje); }
+/* Serie-klassement (nieuw) */
+.serie-klas-tabel-wrap { overflow-x: auto; -webkit-overflow-scrolling: touch; }
+.serie-klas-tabel .col-w {
+    width: 36px; text-align: center; font-size: .85rem;
+}
+.serie-klas-tabel .col-tot {
+    width: 50px; text-align: right; font-weight: 700;
+    color: var(--blauw); background: #eef5fb;
+}
+.serie-klas-tabel .col-nng { color: #bbb; }
+.serie-klas-tabel tr.rij-ik td {
+    background: #fff3e0 !important; font-weight: 700;
+}
 @media (max-width: 480px) {
     .uitsl-selects { flex-direction: column; }
     .uitsl-tabel { font-size: .78rem; }
@@ -877,6 +1281,31 @@ select:focus, input:focus { border-color: var(--middenblauw); outline: none; }
 .prog-blok {
     padding: 6px 0; font-size: .85rem; color: #888;
     border-bottom: 1px solid #f0f2f5; font-style: italic;
+}
+/* ── Gecombineerde ritten: kader rondom de groep met uitleg-kopje ── */
+.prog-combi-box {
+    border: 2px solid #2E75B6;
+    border-radius: 6px;
+    background: #eef4fb;
+    margin: 8px -4px;
+    overflow: hidden;
+}
+.prog-combi-kop {
+    background: #2E75B6;
+    color: #fff;
+    font-size: .78rem;
+    font-weight: 600;
+    padding: 4px 10px;
+    letter-spacing: .02em;
+}
+.prog-combi-leden {
+    padding: 0 10px;
+}
+.prog-combi-leden .prog-rij {
+    border-bottom: 1px dashed rgba(46,117,182,.25);
+}
+.prog-combi-leden .prog-rij:last-child {
+    border-bottom: none;
 }
 
 /* ── Overlay ── */
@@ -918,6 +1347,14 @@ select:focus, input:focus { border-color: var(--middenblauw); outline: none; }
     </div>
 </header>
 
+<div id="org-footer" class="org-footer">
+    <div class="org-footer-inner">
+        <span id="footer-org-logo"></span>
+        <span id="footer-org-naam" class="org-footer-naam"></span>
+        <div id="footer-sponsors" class="org-footer-sponsors"></div>
+    </div>
+</div>
+
 <div class="container">
     <div id="pwa-banner" class="pwa-banner" style="display:none">
         <div class="pwa-banner-tekst">
@@ -937,8 +1374,8 @@ select:focus, input:focus { border-color: var(--middenblauw); outline: none; }
     </div>
     <div id="comp-info" class="comp-info" style="display:none"></div>
     <div class="stap">
-        <div class="stap-label"><span class="stap-nr">2</span> Jouw startnummer</div>
-        <input type="number" id="inp-snr" placeholder="Bijv. 86" min="1" inputmode="numeric">
+        <div class="stap-label"><span class="stap-nr">2</span> Startnummer, licentie of achternaam</div>
+        <input type="text" id="inp-snr" placeholder="Startnummer, licentienr of achternaam…" autocomplete="off" inputmode="search">
     </div>
     <button class="btn-zoek" id="btn-zoek" disabled>Zoeken</button>
     <div id="resultaat"></div>
@@ -1004,9 +1441,10 @@ function heatTabelRij(r, isIk, extra) {
     </tr>`;
 }
 function msTijd(ms) {
+    // Inline-skeeleren: reglementair duizendsten op alle afstanden.
     if (ms==null) return '';
-    const h=Math.floor((ms%1000)/10), s=Math.floor(ms/1000)%60, m=Math.floor(ms/60000);
-    return m>0?`${m}:${String(s).padStart(2,'0')}.${String(h).padStart(2,'0')}`:`${s}.${String(h).padStart(2,'0')}`;
+    const d=ms%1000, s=Math.floor(ms/1000)%60, m=Math.floor(ms/60000);
+    return m>0?`${m}:${String(s).padStart(2,'0')}.${String(d).padStart(3,'0')}`:`${s}.${String(d).padStart(3,'0')}`;
 }
 function sl(s) { return s ?? ''; }
 
@@ -1088,6 +1526,9 @@ function filterComps() {
         const o = document.createElement('option');
         o.value = c.id; o.textContent = `${c.name} — ${d}`;
         o.dataset.datum = d; o.dataset.naam = c.name;
+        o.dataset.orgLogo = c.org_logo ?? '';
+        o.dataset.orgNaam = c.org_naam ?? '';
+        o.dataset.sponsors = JSON.stringify(c.sponsors ?? []);
         selComp.appendChild(o);
     }
 
@@ -1109,27 +1550,112 @@ safeFetch('?action=competitions').then(r=>r.json()).then(comps => {
     filterComps();
 }).catch(() => { selComp.innerHTML = '<option value="">Fout bij laden</option>'; });
 
-selComp.addEventListener('change', () => {
+// ── Disclaimer bij eerste bezoek (zelfde tekst als op de poster) ─────────
+function toonDisclaimerEenmalig() {
+    try {
+        if (localStorage.getItem('ic_disclaimer_seen') === '1') return;
+    } catch { /* storage geblokkeerd: toon toch een keer per sessie */ }
+
+    const overlay = document.createElement('div');
+    overlay.className = 'disc-overlay';
+    overlay.innerHTML = `
+        <div class="disc-box">
+            <div class="disc-header">Welkom bij InlineComp!</div>
+            <div class="disc-body">
+                <p>We testen InlineComp voor het eerst tijdens deze wedstrijd — feedback is welkom!</p>
+                <p>De officiële startlijsten, uitslagen, klassementen en mededelingen vind je
+                   zoals altijd op <strong>Sportity</strong> (kanaal: <em>ISKREGIO</em>).</p>
+                <p>Aan de informatie in InlineComp kunnen geen rechten worden ontleend.</p>
+            </div>
+            <div class="disc-footer">
+                <button class="disc-btn" id="disc-ok">OK, begrepen</button>
+            </div>
+        </div>`;
+    overlay.addEventListener('click', e => {
+        if (e.target === overlay) sluit();  // klik buiten box → sluiten
+    });
+    const sluit = () => {
+        try { localStorage.setItem('ic_disclaimer_seen', '1'); }
+        catch { /* negeer */ }
+        overlay.remove();
+    };
+    document.body.appendChild(overlay);
+    document.getElementById('disc-ok').addEventListener('click', sluit);
+    // ESC sluit ook
+    const esc = ev => {
+        if (ev.key === 'Escape') { sluit(); document.removeEventListener('keydown', esc); }
+    };
+    document.addEventListener('keydown', esc);
+}
+toonDisclaimerEenmalig();
+
+selComp.addEventListener('change', async () => {
     const o = selComp.selectedOptions[0];
     if (o?.value) { divInfo.innerHTML = `<strong>${esc(o.dataset.naam)}</strong><div style="color:#555;margin-top:2px">${esc(o.dataset.datum)}</div>`; divInfo.style.display=''; }
     else divInfo.style.display='none';
     btnZoek.disabled = !(selComp.value && inpSnr.value.trim());
     divResult.innerHTML = '';
+    updateHeaderLogos(o);
+
+    // Multi-rijder-state resetten en vorige kinderen herladen uit globale
+    // store (op license_key). Kinderen die niet in deze wedstrijd meedoen
+    // worden stil overgeslagen — geen foutmelding.
+    _kinderen = [];
+    _activeKindIdx = 0;
+    if (!selComp.value) return;
+    const opgeslagen = _loadKidsUitStorage();
+    if (!opgeslagen.length) return;
+    divResult.innerHTML = '<div class="melding"><span class="spinner"></span> Je rijders ophalen…</div>';
+    let gedeeldeProg = null;
+    try {
+        const pr = await safeFetch(`?action=programma&competition_id=${encodeURIComponent(selComp.value)}`);
+        gedeeldeProg = await pr.json();
+    } catch {}
+    for (const item of opgeslagen) {
+        const k = await _fetchKind({ license_key: item.license_key }, selComp.value, gedeeldeProg);
+        if (k) _kinderen.push(k);
+        // k == null → kind doet niet mee aan deze wedstrijd, we slaan 'm stil over.
+    }
+    if (_kinderen.length) {
+        _activeKindIdx = 0;
+        renderKinderen();
+        divResult.scrollIntoView({ behavior:'smooth', block:'start' });
+    } else {
+        divResult.innerHTML = '';
+    }
 });
 inpSnr.addEventListener('input', () => { btnZoek.disabled = !(selComp.value && inpSnr.value.trim()); });
 inpSnr.addEventListener('keydown', e => { if (e.key==='Enter' && !btnZoek.disabled) btnZoek.click(); });
 
-// Zoeken
+// ── Zoek-input: detecteer of de user een startnummer, licentienummer of
+//    een achternaam typt. Regel:
+//      - alleen cijfers, 1-4 tekens → startnummer
+//      - alleen cijfers, 5+ tekens  → licentienummer (KNSB relatienr)
+//      - bevat letters              → achternaam-zoek
+function _zoekModus(tekst) {
+    const t = tekst.trim();
+    if (/^\d+$/.test(t)) return t.length <= 4 ? 'snr' : 'license';
+    return 'naam';
+}
+
 btnZoek.addEventListener('click', async () => {
-    const compId = selComp.value, snr = inpSnr.value.trim();
-    if (!compId || !snr) return;
+    const compId = selComp.value, tekst = inpSnr.value.trim();
+    if (!compId || !tekst) return;
+    const modus = _zoekModus(tekst);
+
+    if (modus === 'naam') {
+        await zoekOpNaam(compId, tekst);
+        return;
+    }
+
     divResult.innerHTML = '<div class="melding"><span class="spinner"></span> Zoeken…</div>';
     btnZoek.disabled = true;
-
     try {
-        // Parallel: lookup + programma
+        const param = modus === 'license'
+            ? `license_key=${encodeURIComponent(tekst)}`
+            : `startnummer=${encodeURIComponent(tekst)}`;
         const [lookupRes, progRes] = await Promise.all([
-            safeFetch(`?action=lookup&competition_id=${encodeURIComponent(compId)}&startnummer=${encodeURIComponent(snr)}`),
+            safeFetch(`?action=lookup&competition_id=${encodeURIComponent(compId)}&${param}`),
             safeFetch(`?action=programma&competition_id=${encodeURIComponent(compId)}`)
         ]);
         const data = await lookupRes.json();
@@ -1138,39 +1664,152 @@ btnZoek.addEventListener('click', async () => {
         if (data.error) { divResult.innerHTML = `<div class="melding melding-fout">${esc(data.error)}</div>`; return; }
         if (!data.length) { divResult.innerHTML = '<div class="melding">Geen resultaten gevonden.</div>'; return; }
 
-        // Meerdere personen met zelfde startnummer? Laat kiezen
+        // Meerdere personen met zelfde startnummer (of license) → chooser-modal
+        // met checkboxes zodat de user er meerdere tegelijk kan toevoegen.
         if (data.length > 1) {
-            let keuzeHtml = '<div class="kaart-sectie"><div class="kaart-sectie-titel">Meerdere rijders gevonden met startnummer ' + esc(snr) + '</div>';
-            for (let i = 0; i < data.length; i++) {
-                const p = data[i].persoon;
-                keuzeHtml += `<div class="prog-rij" style="cursor:pointer;padding:10px 0" onclick="toonRijder(${i})">
-                    <span style="font-weight:700;font-size:1.1rem;color:var(--blauw)">${esc(p.full_name)}</span>
-                    <span class="persoon-cat">${esc(p.category)}</span>
-                </div>`;
-            }
-            keuzeHtml += '</div>';
-            divResult.innerHTML = `<div class="kaart" style="border-radius:10px;margin-top:16px">${keuzeHtml}</div>`;
-            window._lookupData = data;
-            window._lookupSnr = snr;
-            window._lookupProg = prog;
+            const rijen = data.map(d => ({
+                license_key:  d.persoon.license_key,
+                full_name:    d.persoon.full_name,
+                wedstrijd_snr: d.persoon.wedstrijd_snr ?? d.persoon.start_number,
+                category:     d.persoon.category,
+                club_short:   d.persoon.club_short ?? '',
+            }));
+            toonChooserModal(rijen, tekst, compId);
             return;
         }
 
-        toonRijderData(data, 0, snr, prog);
-
+        // Voor license/snr gebruiken we het startnr uit de response (kan per
+        // wedstrijd verschillen); toonRijderData deduped op license_key.
+        const huidigSnr = data[0].persoon.wedstrijd_snr ?? data[0].persoon.start_number ?? tekst;
+        toonRijderData(data, 0, huidigSnr, prog);
+        inpSnr.value = '';
+        btnZoek.disabled = true;
     } catch (e) {
         divResult.innerHTML = `<div class="melding melding-fout">Fout: ${esc(e.message)}</div>`;
     } finally { btnZoek.disabled = false; }
 });
 
-async function refreshRijder() {
-    const compId = selComp.value, snr = inpSnr.value.trim();
-    if (!compId || !snr) return;
-    const gekozenIdx = window._gekozenIdx ?? 0;
-    // Onthoud actieve tab
-    const actieveTab = divResult.querySelector('.tab-btn.active')?.dataset.tab ?? 'programma';
+// ── Herbruikbare multi-select chooser-modal ─────────────────────────────────
+// Gebruikt voor zowel naam-zoek als startnummer-match met meerdere hits.
+// `rijen` moet items hebben met: {license_key, full_name, wedstrijd_snr,
+// category, club_short}. Na "Toevoegen" wordt per gekozen license_key een
+// volledige lookup gedaan en aan _kinderen toegevoegd.
+function toonChooserModal(rijen, term, compId) {
+    // Reeds in de lijst → uitschakelen
+    const al = new Set(_kinderen.map(k => k.data[k.kozen_idx ?? 0]?.persoon?.license_key).filter(Boolean));
+    const plaatsVrij = MAX_KINDEREN - _kinderen.length;
 
-    divResult.innerHTML = '<div class="melding"><span class="spinner"></span> Verversen…</div>';
+    const modal = document.createElement('div');
+    modal.className = 'naamzoek-modal';
+    modal.innerHTML = `
+        <div class="naamzoek-box">
+            <div class="naamzoek-hdr">
+                <span>Zoekresultaten voor "${esc(term)}"</span>
+                <button class="naamzoek-sluit" title="Sluiten">&times;</button>
+            </div>
+            <div class="naamzoek-body">
+                ${rijen.length === 0
+                    ? '<div class="naamzoek-leeg">Geen rijders gevonden.</div>'
+                    : rijen.map(r => {
+                        const uit = al.has(r.license_key);
+                        // search_person geeft `in_wedstrijd` (1/0); snr-pad niet,
+                        // dan behandelen we als altijd-wel (undefined === wel).
+                        const doetMee = r.in_wedstrijd === undefined ? true : !!parseInt(r.in_wedstrijd);
+                        const meta = [
+                            r.category || '',
+                            r.club_short ? esc(r.club_short) : '',
+                            uit ? '<span style="color:#999">al in lijst</span>' : '',
+                            !doetMee ? '<span style="color:#b71c1c">doet niet mee in deze wedstrijd</span>' : '',
+                        ].filter(Boolean).join(' · ');
+                        return `<label class="naamzoek-rij" style="${uit ? 'opacity:.55' : ''}">
+                            <input type="checkbox" data-lic="${esc(r.license_key)}" ${uit ? 'checked disabled' : ''}>
+                            <span class="naamzoek-rij-snr">${esc(r.wedstrijd_snr ?? '—')}</span>
+                            <div class="naamzoek-rij-naam">
+                                ${esc(r.full_name)}
+                                <div class="naamzoek-rij-meta">${meta}</div>
+                            </div>
+                        </label>`;
+                    }).join('')}
+            </div>
+            <div class="naamzoek-voet">
+                <span class="aantal">Max ${MAX_KINDEREN} rijders · ${plaatsVrij} plek(ken) vrij</span>
+                <div>
+                    <button class="btn-zoek" style="padding:8px 18px;margin:0" id="naamzoek-ok">Toevoegen</button>
+                </div>
+            </div>
+        </div>`;
+    document.body.appendChild(modal);
+    divResult.innerHTML = '';
+
+    const sluit = () => modal.remove();
+    modal.querySelector('.naamzoek-sluit').addEventListener('click', sluit);
+    modal.addEventListener('click', e => { if (e.target === modal) sluit(); });
+
+    modal.querySelector('#naamzoek-ok').addEventListener('click', async () => {
+        const vinkjes = [...modal.querySelectorAll('input[type=checkbox]:checked:not(:disabled)')];
+        if (!vinkjes.length) { sluit(); return; }
+        if (vinkjes.length > plaatsVrij) {
+            alert(`Maximum ${MAX_KINDEREN} — er is nog plek voor ${plaatsVrij}. Je hebt er ${vinkjes.length} aangevinkt.`);
+            return;
+        }
+        sluit();
+        divResult.innerHTML = '<div class="melding"><span class="spinner"></span> Rijders ophalen…</div>';
+        let prog = null;
+        try {
+            const pr = await safeFetch(`?action=programma&competition_id=${encodeURIComponent(compId)}`);
+            prog = await pr.json();
+        } catch {}
+        for (const cb of vinkjes) {
+            const lic = cb.dataset.lic;
+            if (!lic) continue;
+            try {
+                const r = await safeFetch(`?action=lookup&competition_id=${encodeURIComponent(compId)}&license_key=${encodeURIComponent(lic)}`);
+                const d = await r.json();
+                if (d && !d.error && d.length) {
+                    const huidigSnr = d[0].persoon.wedstrijd_snr ?? d[0].persoon.start_number ?? '';
+                    toonRijderData(d, 0, huidigSnr, prog);
+                }
+            } catch {}
+        }
+        inpSnr.value = '';
+        btnZoek.disabled = true;
+    });
+}
+
+// ── Naam-zoek: zoek via backend, toon chooser ────────────────────────────────
+async function zoekOpNaam(compId, term) {
+    divResult.innerHTML = '<div class="melding"><span class="spinner"></span> Zoeken op "' + esc(term) + '"…</div>';
+    btnZoek.disabled = true;
+    let rijen = [];
+    try {
+        const res = await safeFetch(`?action=search_person&competition_id=${encodeURIComponent(compId)}&q=${encodeURIComponent(term)}`);
+        rijen = await res.json();
+        if (!Array.isArray(rijen)) rijen = [];
+    } catch (e) {
+        divResult.innerHTML = `<div class="melding melding-fout">Fout bij zoeken: ${esc(e.message)}</div>`;
+        btnZoek.disabled = false;
+        return;
+    } finally { btnZoek.disabled = false; }
+    toonChooserModal(rijen, term, compId);
+}
+
+async function refreshRijder() {
+    const compId = selComp.value;
+    if (!compId) return;
+    // In multi-rijder-modus ververst het ↻-knopje alleen het actieve kind.
+    // Het startnummer halen we uit _kinderen, niet uit de input (die kan
+    // leeg zijn als de user al wat rijders heeft toegevoegd).
+    const k = _kinderen[_activeKindIdx];
+    const snr = k?.snr ?? inpSnr.value.trim();
+    if (!snr) return;
+    const gekozenIdx = k?.kozen_idx ?? 0;
+    const actieveTab = document.querySelector('#kind-content .tab-btn.active')?.dataset.tab ?? 'programma';
+
+    // Tijdens verversen: loader in kind-content (niet de hele divResult) om
+    // de kind-tabs zichtbaar te houden.
+    const target = document.getElementById('kind-content') || divResult;
+    target.innerHTML = '<div class="melding"><span class="spinner"></span> Verversen…</div>';
+
     try {
         const [lookupRes, progRes] = await Promise.all([
             safeFetch(`?action=lookup&competition_id=${encodeURIComponent(compId)}&startnummer=${encodeURIComponent(snr)}&_t=${Date.now()}`),
@@ -1178,22 +1817,21 @@ async function refreshRijder() {
         ]);
         const data = await lookupRes.json();
         const prog = await progRes.json();
-        if (data.error || !data.length) { divResult.innerHTML = `<div class="melding melding-fout">${data.error ?? 'Geen data'}</div>`; return; }
+        if (data.error || !data.length) {
+            target.innerHTML = `<div class="melding melding-fout">${data.error ?? 'Geen data'}</div>`;
+            return;
+        }
 
         window._lookupData = data;
         window._lookupSnr = snr;
         window._lookupProg = prog;
 
-        // Bij meerdere rijders: direct de eerder gekozen tonen
         const idx = Math.min(gekozenIdx, data.length - 1);
         window._gekozenIdx = idx;
-        toonRijderData(data, idx, snr, prog);
-
-        // Herstel actieve tab
-        const tabBtn = divResult.querySelector(`.tab-btn[data-tab="${actieveTab}"]`);
-        if (tabBtn) tabBtn.click();
+        if (k) { k.data = data; k.prog = prog; k.kozen_idx = idx; k.sub_tab = actieveTab; }
+        renderKinderen();
     } catch (e) {
-        divResult.innerHTML = `<div class="melding melding-fout">Fout: ${e.message}</div>`;
+        target.innerHTML = `<div class="melding melding-fout">Fout: ${e.message}</div>`;
     }
 }
 
@@ -1202,19 +1840,177 @@ function toonRijder(idx) {
     toonRijderData(window._lookupData, idx, window._lookupSnr, window._lookupProg);
 }
 
+// ── Multi-rijder-state (ouders met meerdere kinderen) ────────────────────────
+// _kinderen = [{snr, data, prog, sub_tab}] waarbij data = lookup-response
+// (array met persoon+heats) en prog = programma-response van de wedstrijd.
+// Max 4 kids om de top-tabs leesbaar te houden op een telefoon.
+const MAX_KINDEREN = 4;
+let _kinderen = [];
+let _activeKindIdx = 0;
+
+// ── Persistente kind-lijst (GLOBAAL, niet per wedstrijd) ─────────────────────
+// We bewaren `license_key` i.p.v. startnummer, zodat een kind dat in een
+// volgende wedstrijd een ander startnummer krijgt toch automatisch wordt
+// gevonden. Ook kinderen die in een wedstrijd niet meedoen worden stil
+// overgeslagen — zonder dat de ouder ze moet afvinken.
+const KIDS_LS_KEY = 'public_kinderen_licenses';
+function _saveKids() {
+    const items = _kinderen
+        .map(k => {
+            const p = k.data[k.kozen_idx ?? 0]?.persoon;
+            return p?.license_key ? { license_key: p.license_key, naam_hint: p.full_name } : null;
+        })
+        .filter(Boolean);
+    localStorage.setItem(KIDS_LS_KEY, JSON.stringify(items));
+}
+function _loadKidsUitStorage() {
+    try { return JSON.parse(localStorage.getItem(KIDS_LS_KEY) || '[]'); }
+    catch { return []; }
+}
+
+// Haal lookup op voor een license_key of startnummer. Gebruikt de shared
+// programma-respons als die al gefetcht is (scheelt netwerk-calls bij
+// meerdere kinderen).
+async function _fetchKind({ license_key = null, snr = null }, compId, gedeeldeProg = null) {
+    if (!license_key && !snr) return null;
+    const param = license_key
+        ? `license_key=${encodeURIComponent(license_key)}`
+        : `startnummer=${encodeURIComponent(snr)}`;
+    const [lookupRes, progRes] = await Promise.all([
+        safeFetch(`?action=lookup&competition_id=${encodeURIComponent(compId)}&${param}`),
+        gedeeldeProg
+            ? Promise.resolve({ json: async () => gedeeldeProg })
+            : safeFetch(`?action=programma&competition_id=${encodeURIComponent(compId)}`),
+    ]);
+    const data = await lookupRes.json();
+    const prog = await progRes.json();
+    if (data.error || !data.length) return null;
+    // Pak huidige startnr uit de response (kan in nieuwe wedstrijd anders zijn).
+    const p = data[0].persoon;
+    const huidigSnr = p.wedstrijd_snr ?? p.start_number ?? snr ?? '';
+    return { snr: String(huidigSnr), data, prog, sub_tab: 'programma', kozen_idx: 0 };
+}
+
 function toonRijderData(data, startIdx, snr, prog) {
-    const subset = [data[startIdx]];
-    renderResultaat(subset, snr, prog);
+    // Dedupeer op license_key (stabiel over wedstrijden), niet op startnummer.
+    const nieuweLic = data[startIdx]?.persoon?.license_key;
+    const bestaande = nieuweLic
+        ? _kinderen.findIndex(k => k.data[k.kozen_idx ?? 0]?.persoon?.license_key === nieuweLic)
+        : -1;
+    if (bestaande !== -1) {
+        _activeKindIdx = bestaande;
+        _kinderen[bestaande].data = data;
+        _kinderen[bestaande].prog = prog;
+        _kinderen[bestaande].kozen_idx = startIdx;
+        _kinderen[bestaande].snr = String(snr);
+    } else {
+        if (_kinderen.length >= MAX_KINDEREN) {
+            alert(`Maximum van ${MAX_KINDEREN} rijders bereikt. Verwijder eerst iemand om een nieuwe toe te voegen.`);
+            return;
+        }
+        _kinderen.push({ snr: String(snr), data, prog, sub_tab: 'programma', kozen_idx: startIdx });
+        _activeKindIdx = _kinderen.length - 1;
+    }
+    _saveKids();
+    renderKinderen();
+}
+
+// Render de complete multi-rijder-weergave: kind-tabs bovenop, met daaronder
+// de persoon-kaart van het actieve kind.
+function renderKinderen() {
+    if (!_kinderen.length) { divResult.innerHTML = ''; return; }
+
+    // Top-tabs: één knop per kind + "+ voeg toe" rechts
+    const meerdereKinderen = _kinderen.length > 1;
+    const tabsHtml = _kinderen.map((k, idx) => {
+        const p = k.data[k.kozen_idx ?? 0]?.persoon;
+        const naam = p?.full_name ? p.full_name.split(' ')[0] : ''; // alleen voornaam in tab — kort
+        const actief = idx === _activeKindIdx ? ' active' : '';
+        // ×-knop alleen bij 2+ kinderen (voor 1 kind is er geen logica in wegklikken)
+        const closeBtn = meerdereKinderen
+            ? `<span class="kind-tab-close" data-kind-close="${idx}" title="Verwijder deze rijder">×</span>`
+            : '';
+        return `<button class="kind-tab${actief}" data-kind-idx="${idx}">
+            <span class="kind-tab-snr">${esc(k.snr)}</span>
+            <span>${esc(naam || '(rijder)')}</span>
+            ${closeBtn}
+        </button>`;
+    }).join('');
+    const plusKnop = _kinderen.length < MAX_KINDEREN
+        ? `<button class="kind-tab-plus" id="kind-tab-plus" title="Voeg broertje/zusje toe">+ voeg toe</button>`
+        : `<button class="kind-tab-plus" disabled title="Maximum ${MAX_KINDEREN} rijders">+ voeg toe</button>`;
+
+    divResult.innerHTML = `
+        <div class="kind-tabs">${tabsHtml}${plusKnop}</div>
+        <div id="kind-content"></div>`;
+
+    // Click-handlers op kind-tabs
+    divResult.querySelectorAll('.kind-tab').forEach(btn => {
+        btn.addEventListener('click', e => {
+            if (e.target.classList.contains('kind-tab-close')) {
+                const ci = parseInt(e.target.dataset.kindClose);
+                verwijderKind(ci);
+                e.stopPropagation();
+                return;
+            }
+            const idx = parseInt(btn.dataset.kindIdx);
+            wisselKind(idx);
+        });
+    });
+    const plusEl = document.getElementById('kind-tab-plus');
+    if (plusEl) plusEl.addEventListener('click', () => {
+        // Scroll naar de zoekbalk en focus de startnummer-input
+        inpSnr.value = '';
+        btnZoek.disabled = true;
+        inpSnr.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        inpSnr.focus();
+    });
+
+    // Content van actieve kind renderen
+    const k = _kinderen[_activeKindIdx];
+    if (!k) return;
+    const subset = [k.data[k.kozen_idx ?? 0]];
+    renderResultaat(subset, k.snr, k.prog);
+
+    // Onthouden sub-tab herstellen (als niet 'programma')
+    if (k.sub_tab && k.sub_tab !== 'programma') {
+        const subBtn = document.querySelector(`#kind-content .tab-btn[data-tab="${k.sub_tab}"]`);
+        if (subBtn) subBtn.click();
+    }
+}
+
+function wisselKind(idx) {
+    if (idx < 0 || idx >= _kinderen.length) return;
+    // Huidige sub-tab onthouden voordat we wisselen
+    const huidigeSub = document.querySelector('#kind-content .tab-btn.active')?.dataset.tab;
+    if (huidigeSub && _kinderen[_activeKindIdx]) _kinderen[_activeKindIdx].sub_tab = huidigeSub;
+    _activeKindIdx = idx;
+    renderKinderen();
+}
+
+function verwijderKind(idx) {
+    if (idx < 0 || idx >= _kinderen.length) return;
+    _kinderen.splice(idx, 1);
+    if (_activeKindIdx >= _kinderen.length) _activeKindIdx = Math.max(0, _kinderen.length - 1);
+    _saveKids();
+    if (_kinderen.length === 0) {
+        divResult.innerHTML = '';
+    } else {
+        renderKinderen();
+    }
 }
 
 function renderResultaat(data, snr, prog) {
         let html = '';
         for (const r of data) {
             const p = r.persoon;
-            const st = parseInt(p.entry_status ?? 1);
-            const stLabel = STATUS_LABEL[st] ?? '?';
-            const stKleur = STATUS_KLEUR[st] ?? '#555';
-            const stBg    = STATUS_BG[st] ?? '#eee';
+            // entry_status kan NULL zijn als de rijder wel bestaat maar niet
+            // ingeschreven is voor deze wedstrijd (via naam/license toegevoegd).
+            const nietIngeschreven = p.entry_status === null || p.entry_status === undefined;
+            const st = nietIngeschreven ? -1 : parseInt(p.entry_status);
+            const stLabel = nietIngeschreven ? 'Niet ingeschreven' : (STATUS_LABEL[st] ?? '?');
+            const stKleur = nietIngeschreven ? '#b71c1c' : (STATUS_KLEUR[st] ?? '#555');
+            const stBg    = nietIngeschreven ? '#fce4e4' : (STATUS_BG[st] ?? '#eee');
 
             html += `
             <div style="margin-top:16px">
@@ -1229,7 +2025,7 @@ function renderResultaat(data, snr, prog) {
                 </div>
                 <div class="tabs">
                     <button class="tab-btn active" data-tab="programma">📅 Programma</button>
-                    <button class="tab-btn" data-tab="heats">🏁 Heats</button>
+                    <button class="tab-btn" data-tab="heats">🏃 Heats</button>
                     <button class="tab-btn" data-tab="resultaten">🏆 Resultaten</button>
                     <button class="tab-btn" data-tab="uitslagen">📊 Uitslagen</button>
                 </div>
@@ -1240,22 +2036,38 @@ function renderResultaat(data, snr, prog) {
             html += '<div class="kaart-sectie-titel">Wedstrijdprogramma</div>';
             if (prog.ritten?.length) {
                 let nr = 0;
+                // Combi-state: ritten met dezelfde combi_group worden samen
+                // in één kader getoond. Bij wissel van groep sluiten we de
+                // oude box af en openen eventueel een nieuwe.
+                let vorigeCombi = null;
                 for (const rit of prog.ritten) {
                     nr++;
+                    const combi = rit.combi_group ? parseInt(rit.combi_group) : null;
+                    if (combi !== vorigeCombi) {
+                        if (vorigeCombi !== null) html += `</div></div>`; // sluit vorige combi-box
+                        if (combi !== null) {
+                            html += `<div class="prog-combi-box">
+                                <div class="prog-combi-kop">🔗 Gecombineerde rit — rijden tegelijk</div>
+                                <div class="prog-combi-leden">`;
+                        }
+                    }
+                    vorigeCombi = combi;
+
                     // Highlight als deze rijder in deze rit zit
                     const isInRit = r.heats.some(h => h.rit_naam === rit.rit_naam);
                     const rt = rit.ronde_type ?? 'heats';
-                    // Status icoon: ✅ gefinisht, 📋 geloot, ⬜ nog niks
                     const statusIcon = rit.resultaten_count > 0  ? '🏁'
                                      : rit.definitief          ? '🚩'
                                      :                           '';
-                    html += `<div class="prog-rij" style="${isInRit ? 'background:#fffbe6;font-weight:600;margin:0 -16px;padding:6px 16px;border-radius:4px' : ''};cursor:pointer"
+                    html += `<div class="prog-rij${combi !== null ? ' prog-rij-combi' : ''}" style="${isInRit ? 'background:#fffbe6;font-weight:600;margin:0 -16px;padding:6px 16px;border-radius:4px' : ''};cursor:pointer"
                                  data-rit-naam="${esc(rit.rit_naam)}" data-dc-naam="${esc(rit.dc_naam)}" onclick="toonRitDetail(this)">
                         <span class="prog-nr">${statusIcon} ${nr}</span>
                         <span class="prog-naam">${esc(rit.rit_naam)}</span>
                         <span class="prog-type heat-card-badge ${BADGE[rt]??'badge-serie'}">${esc(RLABEL[rt]??rt)}</span>
                     </div>`;
                 }
+                // Sluit eventuele laatste open combi-box
+                if (vorigeCombi !== null) html += `</div></div>`;
             } else {
                 html += '<div class="melding">Programma niet beschikbaar.</div>';
             }
@@ -1337,22 +2149,31 @@ function renderResultaat(data, snr, prog) {
             html += '</div></div>';
 
             // ── TAB: Uitslagen (volledig overzicht) ──────────────────
-            html += `<div class="tab-content" data-tab="uitslagen"><div class="kaart-sectie">
-                <div class="kaart-sectie-titel">Volledige uitslagen</div>
+            html += `<div class="tab-content" data-tab="uitslagen">
+                <div class="kaart-sectie">
+                <div class="kaart-sectie-titel">Volledige uitslagen van deze wedstrijd</div>
                 <div class="uitsl-selects">
                     <select class="uitsl-cat-sel"><option value="">Laden…</option></select>
                     <select class="uitsl-dist-sel" disabled><option value="">— Kies afstand —</option></select>
                 </div>
                 <div class="uitsl-tabel-wrap"></div>
+            </div>
+            <div class="kaart-sectie" data-serie-lijst style="display:none">
+                <div class="kaart-sectie-titel">🏆 Serie-klassement</div>
+                <div data-serie-selector class="uitsl-selects"></div>
+                <div class="serie-klas-tabel-wrap"></div>
             </div></div>`;
 
             html += '</div></div>'; // kaart + wrapper
         }
 
-        divResult.innerHTML = html;
+        // Schrijf in de kind-content-container (multi-rijder-modus) als die
+        // bestaat, anders valt terug op het oude gedrag (divResult direct).
+        const target = document.getElementById('kind-content') || divResult;
+        target.innerHTML = html;
 
         // Tab-switching
-        divResult.querySelectorAll('.tab-btn').forEach(btn => {
+        target.querySelectorAll('.tab-btn').forEach(btn => {
             btn.addEventListener('click', () => {
                 const kaart = btn.closest('.tabs').nextElementSibling;
                 if (!kaart) return;
@@ -1360,6 +2181,11 @@ function renderResultaat(data, snr, prog) {
                 btn.classList.add('active');
                 kaart.querySelectorAll('.tab-content').forEach(tc => tc.classList.remove('active'));
                 kaart.querySelector(`.tab-content[data-tab="${btn.dataset.tab}"]`)?.classList.add('active');
+
+                // Sub-tab-keuze onthouden per kind (voor multi-rijder-modus)
+                if (typeof _kinderen !== 'undefined' && _kinderen[_activeKindIdx]) {
+                    _kinderen[_activeKindIdx].sub_tab = btn.dataset.tab;
+                }
 
                 // Uitslagen-tab: laad categorieën bij eerste klik
                 if (btn.dataset.tab === 'uitslagen') initUitslagenTab(kaart);
@@ -1380,6 +2206,9 @@ async function initUitslagenTab(kaart) {
 
     const compId = selComp.value;
     if (!compId) return;
+
+    // ── Serie-klassementen waar deze wedstrijd aan meedoet ──
+    initSerieKlassementen(kaart, compId);
 
     // Categorieën laden
     try {
@@ -1461,6 +2290,131 @@ async function initUitslagenTab(kaart) {
     if (cats?.length === 1) { catSel.value = cats[0].dc_id; catSel.dispatchEvent(new Event('change')); }
 }
 
+// ── Serie-klassementen voor een wedstrijd ──────────────────────────────────
+async function initSerieKlassementen(kaart, compId) {
+    const box      = kaart.querySelector('[data-serie-lijst]');
+    const selector = kaart.querySelector('[data-serie-selector]');
+    const wrap     = kaart.querySelector('.serie-klas-tabel-wrap');
+    if (!box) return;
+
+    try {
+        const res = await safeFetch(`?action=series_voor_comp&competition_id=${encodeURIComponent(compId)}`);
+        const series = await res.json();
+        if (!Array.isArray(series) || !series.length) { box.style.display = 'none'; return; }
+
+        box.style.display = '';
+        // Eén select met alle series + categorieën combineert netjes
+        selector.innerHTML = `
+            <select class="serie-sel">
+                <option value="">— Kies een serie-klassement —</option>
+                ${series.map(s => `
+                    <option value="${esc(s.klassement_id)}">
+                        ${esc(s.naam)}${s.seizoen ? ' — ' + esc(s.seizoen) : ''}
+                        (${s.totaal_rijders} rijders)
+                    </option>`).join('')}
+            </select>
+            <select class="serie-cat-sel" disabled><option value="">— Kies categorie —</option></select>`;
+
+        const serieSel = selector.querySelector('.serie-sel');
+        const catSel   = selector.querySelector('.serie-cat-sel');
+        let huidig = null; // cached klassement-response
+
+        serieSel.addEventListener('change', async () => {
+            wrap.innerHTML = '';
+            catSel.innerHTML = '<option value="">— Kies categorie —</option>';
+            catSel.disabled = true;
+            if (!serieSel.value) return;
+            wrap.innerHTML = '<div class="melding"><span class="spinner"></span> Laden…</div>';
+            try {
+                const r = await safeFetch(`?action=serie_klassement&klassement_id=${encodeURIComponent(serieSel.value)}`);
+                const data = await r.json();
+                if (data.error) { wrap.innerHTML = `<div class="melding melding-fout">${esc(data.error)}</div>`; return; }
+                huidig = data;
+                const cats = (data.categorieen ?? []).filter(Boolean);
+                if (!cats.length) {
+                    wrap.innerHTML = renderSerieKlassementTabel(data, null);
+                    return;
+                }
+                catSel.innerHTML = '<option value="">— Alle categorieën —</option>' +
+                    cats.map(c => `<option value="${esc(c)}">${esc(c)}</option>`).join('');
+                catSel.disabled = false;
+                // Auto-eerste categorie: als er maar 1 is, selecteer die
+                if (cats.length === 1) {
+                    catSel.value = cats[0];
+                    catSel.dispatchEvent(new Event('change'));
+                } else {
+                    wrap.innerHTML = '<div class="melding">Kies een categorie om het klassement te zien.</div>';
+                }
+            } catch (e) {
+                wrap.innerHTML = `<div class="melding melding-fout">Fout: ${esc(e.message)}</div>`;
+            }
+        });
+
+        catSel.addEventListener('change', () => {
+            if (!huidig) return;
+            wrap.innerHTML = renderSerieKlassementTabel(huidig, catSel.value || null);
+        });
+    } catch (e) {
+        box.style.display = 'none';
+    }
+}
+
+// Render de serie-klassement-tabel (vergelijkbaar met ranking-detail in Beheer,
+// maar met highlight voor de eigen rijder uit inpSnr).
+function renderSerieKlassementTabel(k, cat) {
+    const alle  = k.posities ?? [];
+    const rijen = cat ? alle.filter(p => p.categorie === cat) : alle;
+    if (!rijen.length) return '<div class="melding">Geen posities in deze categorie.</div>';
+    const wMeta = Array.isArray(k.wedstrijden_meta) ? k.wedstrijden_meta : [];
+    const toonW = wMeta.length > 0 && rijen.some(p => p.punten_detail && Object.keys(p.punten_detail).length);
+
+    const fmtP = n => {
+        if (n == null) return '–';
+        const v = +n;
+        return Number.isInteger(v) ? String(v) : v.toFixed(1);
+    };
+
+    // Startnummer van de actief-getoonde rijder. Na btnZoek wordt inpSnr
+    // leeggemaakt, dus we lezen uit _kinderen (werkt voor 1 kind én voor de
+    // multi-kind-tabs). Fallback op inpSnr voor de eerste render.
+    const eigenSnr = String(
+        (_kinderen?.[_activeKindIdx]?.snr) ?? inpSnr.value.trim() ?? ''
+    ).trim();
+
+    let hdr = '<tr><th class="col-rang">#</th><th class="col-snr">Snr</th><th>Naam</th>';
+    if (!cat) hdr += '<th class="col-cat">Cat</th>';
+    if (toonW) {
+        hdr += wMeta.map((w, i) =>
+            `<th class="col-w" title="${esc(w.naam)}${w.datum ? ' · ' + String(w.datum).substring(0,10) : ''}${w.is_finale ? ' · FINALE' : ''}">
+                ${w.is_finale ? 'F' : '#' + (i + 1)}
+            </th>`).join('');
+        hdr += '<th class="col-tot">Tot</th>';
+    }
+    hdr += '</tr>';
+
+    const rows = rijen.map(p => {
+        const isIk = eigenSnr && String(p.start_number) === String(eigenSnr);
+        const detail = p.punten_detail ?? {};
+        const wedstrijdCellen = toonW
+            ? wMeta.map(w => {
+                const v = detail[w.comp_id];
+                return `<td class="col-w">${v != null ? fmtP(v) : '<span class="col-nng">–</span>'}</td>`;
+              }).join('')
+            : '';
+        const totaalCel = toonW ? `<td class="col-tot">${fmtP(p.punten_totaal)}</td>` : '';
+        return `<tr class="${isIk ? 'rij-ik' : ''}">
+            <td class="col-rang">${p.positie}</td>
+            <td class="col-snr">${esc(p.start_number ?? '–')}</td>
+            <td class="col-naam">${esc(p.naam)}</td>
+            ${!cat ? `<td class="col-cat">${esc(p.categorie ?? '')}</td>` : ''}
+            ${wedstrijdCellen}
+            ${totaalCel}
+        </tr>`;
+    }).join('');
+
+    return `<table class="uitsl-tabel serie-klas-tabel"><thead>${hdr}</thead><tbody>${rows}</tbody></table>`;
+}
+
 function renderAfstandTabel(data) {
     if (!data.rijders?.length) return '<div class="melding">Geen uitslagen beschikbaar.</div>';
     const heeftRnd = data.heeft_rondes;
@@ -1516,6 +2470,57 @@ function renderKlassementTabel(data) {
 }
 
 // ── Help overlay ──────────────────────────────────────────────────────────
+// ── Footer: org logo + sponsor-ticker ─────────────────────────────────────
+function updateHeaderLogos(opt) {
+    const footer   = document.getElementById('org-footer');
+    const logoEl   = document.getElementById('footer-org-logo');
+    const naamEl   = document.getElementById('footer-org-naam');
+    const sponsEl  = document.getElementById('footer-sponsors');
+
+    if (!opt?.value) {
+        footer.style.display = 'none';
+        return;
+    }
+
+    const orgLogo  = opt.dataset.orgLogo;
+    const orgNaam  = opt.dataset.orgNaam ?? '';
+    const sponsors = JSON.parse(opt.dataset.sponsors || '[]');
+
+    // Niets te tonen? Footer verbergen
+    if (!orgLogo && !sponsors.length) {
+        footer.style.display = 'none';
+        return;
+    }
+
+    // Cache-buster zodat een vers geüpload logo niet uit de browser-cache blijft.
+    // Gebruikt het huidige uur als bust-waarde: stabiel genoeg voor normale navigatie
+    // maar een upload is uiterlijk binnen het uur zichtbaar.
+    const cb = `?v=${Math.floor(Date.now() / 3600000)}`;
+
+    // Organisatie-logo + naam
+    logoEl.innerHTML = orgLogo ? `<img class="org-footer-logo" src="../${esc(orgLogo)}${cb}" alt="">` : '';
+    naamEl.textContent = orgLogo ? '' : orgNaam; // naam alleen als fallback zonder logo
+
+    // Sponsors (lichtkrant-ticker)
+    if (sponsors.length) {
+        let imgs = '';
+        for (const s of sponsors) {
+            const img = `<img src="../${esc(s.logo)}${cb}" alt="${esc(s.naam)}" title="${esc(s.naam)}" style="height:50px;width:auto;object-fit:contain">`;
+            imgs += s.url ? `<a href="${esc(s.url)}" target="_blank" rel="noopener">${img}</a>` : img;
+        }
+        if (sponsors.length === 1) {
+            sponsEl.innerHTML = `<div style="display:flex;align-items:center;justify-content:flex-end;height:100%">${imgs}</div>`;
+        } else {
+            const duur = sponsors.length * 3;
+            sponsEl.innerHTML = `<div class="sponsor-marquee"><div class="sponsor-marquee-inner" style="animation-duration:${duur}s">${imgs}${imgs}</div></div>`;
+        }
+    } else {
+        sponsEl.innerHTML = '';
+    }
+
+    footer.style.display = 'block';
+}
+
 function toonInfo() {
     const overlay = document.createElement('div');
     overlay.className = 'help-overlay';
@@ -1538,6 +2543,15 @@ function toonInfo() {
             <p>Heb je een vraag, suggestie of bug gevonden? Laat het weten:</p>
             <p style="text-align:center;margin:12px 0">
                 <a href="mailto:inlinecomp@devriesen.com" style="display:inline-block;background:var(--oranje);color:#fff;padding:10px 20px;border-radius:8px;text-decoration:none;font-weight:700;font-size:.95rem">inlinecomp@devriesen.com</a>
+            </p>
+
+            <h3>Anonieme bezoek-statistieken</h3>
+            <p style="font-size:.85rem;color:#555">We tellen anoniem aantal bezoekers, actieve sessies en piek gelijktijdig online — puur om te zien hoe veel de app wordt gebruikt en om de hosting stabiel te houden. Er worden <b>geen IP-adressen of persoonsgegevens</b> opgeslagen en er zijn <b>geen derde partijen</b> betrokken.</p>
+
+            <h3>Privacy &amp; persoonsgegevens</h3>
+            <p>Deze app toont wedstrijdgegevens die door de KNSB aan ons worden geleverd (o.a. namen, startnummers, vereniging). In de privacyverklaring lees je welke gegevens wij verwerken, op welke grondslag en hoe je een verwijderverzoek kunt indienen.</p>
+            <p style="text-align:center;margin:12px 0">
+                <a href="../privacyverklaring.php" style="display:inline-block;background:var(--blauw,#1a3a5c);color:#fff;padding:10px 20px;border-radius:8px;text-decoration:none;font-weight:700;font-size:.95rem">📄 Bekijk privacyverklaring</a>
             </p>
 
             <p style="font-size:.8rem;color:#999;text-align:center;margin-top:16px">InlineComp &copy; ${new Date().getFullYear()} Geert de Vries</p>

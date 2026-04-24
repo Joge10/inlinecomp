@@ -8,7 +8,10 @@ CREATE TABLE IF NOT EXISTS `uitslag_klassement` (
     `competition_datum`       DATE            DEFAULT NULL,
     `distance_combination_id` VARCHAR(36)     NOT NULL,
     `dc_naam`                 VARCHAR(255)    NOT NULL,
-    `split_group`             VARCHAR(50)     DEFAULT NULL,
+    -- NOT NULL + DEFAULT '' zodat UNIQUE key betrouwbaar matcht (MySQL
+    -- behandelt NULL != NULL in UNIQUE constraints, wat bij NULL-waarden
+    -- tot duplicaat-rijen leidt bij ON DUPLICATE KEY UPDATE).
+    `split_group`             VARCHAR(50)     NOT NULL DEFAULT '',
     `person_license`          VARCHAR(30)     NOT NULL,
     `categorie`               VARCHAR(20)     DEFAULT NULL,
     `rang`                    SMALLINT UNSIGNED DEFAULT NULL,

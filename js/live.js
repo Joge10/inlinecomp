@@ -9,6 +9,9 @@ let _liveHuidigIdx   = -1;      // huidige carousel-index (-1 = nog niet gezet)
 let _liveOngeslagen  = false;   // onopgeslagen wijzigingen
 let _liveLeesOnly    = false;   // geen schrijfrechten
 
+// Filter voor de heat-dropdown (○ / ◑ / ✓). Standaard alles aan.
+let _liveFilter = { leeg: true, deels: true, compleet: true };
+
 // ── Entry point ───────────────────────────────────────────────────────────────
 
 async function toonLivePagina() {
@@ -196,18 +199,28 @@ function _berekenPosities(entries, gebruikGelijkspel = false) {
 // Synchroniseer tijd+sanctie naar alle DOM-elementen met hetzelfde entry_id
 // (zowel in het linker panel als in de carousel-kaart)
 function _liveSyncInvoer(entryId, tijdVal, sanctieVal, rondesVal) {
-    [`[data-entry="${entryId}"]`, `[data-panel-entry="${entryId}"]`].forEach(sel => {
-        document.querySelectorAll(sel).forEach(rij => {
-            const t = rij.querySelector('.live-tijd-inp');
-            const s = rij.querySelector('.live-sanctie-sel');
-            const rn = rij.querySelector('.live-rondes-inp');
-            if (t && t !== document.activeElement && t.value !== tijdVal) t.value = tijdVal;
-            if (s && s !== document.activeElement && s.value !== sanctieVal) s.value = sanctieVal;
-            if (rn && rn !== document.activeElement && rondesVal !== undefined) {
-                const rv = rondesVal ?? '';
-                if (rn.value !== String(rv)) rn.value = rv;
-            }
-        });
+    // Carousel-kaart: input-velden bijwerken (bewerkbaar).
+    document.querySelectorAll(`[data-entry="${entryId}"]`).forEach(rij => {
+        const t = rij.querySelector('.live-tijd-inp');
+        const s = rij.querySelector('.live-sanctie-sel');
+        const rn = rij.querySelector('.live-rondes-inp');
+        if (t && t !== document.activeElement && t.value !== tijdVal) t.value = tijdVal;
+        if (s && s !== document.activeElement && s.value !== sanctieVal) s.value = sanctieVal;
+        if (rn && rn !== document.activeElement && rondesVal !== undefined) {
+            const rv = rondesVal ?? '';
+            if (rn.value !== String(rv)) rn.value = rv;
+        }
+    });
+    // Panel: read-only tekst-cellen bijwerken.
+    document.querySelectorAll(`[data-panel-entry="${entryId}"]`).forEach(rij => {
+        const tTxt = rij.querySelector('.live-panel-tijd-txt');
+        const sTxt = rij.querySelector('.live-panel-sanctie-txt');
+        const rTxt = rij.querySelector('.live-panel-rondes-txt');
+        if (tTxt) tTxt.textContent = tijdVal || '—';
+        if (sTxt) sTxt.textContent = sanctieVal || '—';
+        if (rTxt && rondesVal !== undefined) {
+            rTxt.textContent = (rondesVal ?? '') === '' ? '—' : String(rondesVal);
+        }
     });
 }
 
@@ -317,6 +330,15 @@ function _liveBouwKaart(rit, idx, compact = false) {
     const rondeBadge = `<span class="live-rit-rondebadge ${rondeKls}">${escHtml(RONDE_LABEL[rit.ronde_type] || rit.ronde_type)}</span>`;
     const aantalRijders = _liveHasHeat(rit) ? rit.rijders.length : (rit.verwacht || 0);
 
+    // Combi-info: is deze rit deel van een combi-groep? Zo ja: positie in groep.
+    let combiInfoHtml = '';
+    if (rit.combi_group) {
+        const groepLeden = _liveRitten.filter(x => x.combi_group === rit.combi_group)
+                                      .sort((a, b) => (a.volgorde || 0) - (b.volgorde || 0));
+        const mijnPos = groepLeden.findIndex(x => x.rit_id === rit.rit_id) + 1;
+        combiInfoHtml = `<span class="heat-combi-badge" title="Deze rit is gecombineerd met ${groepLeden.length - 1} andere rit(ten) in het programma">🔗 ${mijnPos}/${groepLeden.length}</span>`;
+    }
+
     // Titel — dezelfde opbouw als heat-card in startlist.js
     const titelHtml =
         `<div class="heat-titel">` +
@@ -324,6 +346,7 @@ function _liveBouwKaart(rit, idx, compact = false) {
         tijdstipHtml +
         escHtml(rit.rit_naam) +
         rondeBadge +
+        combiInfoHtml +
         `<span class="heat-count">${aantalRijders}</span>` +
         `</div>`;
 
@@ -331,18 +354,22 @@ function _liveBouwKaart(rit, idx, compact = false) {
     if (_liveHasHeat(rit)) {
         // Kaart met echte startlijst
 
-        // Eerst detecteren of dit een lange-afstand heat is (voor rondes-kolom + selector)
-        const isLangeAfstand = (rit.distance_meters ?? 0) > 1000;
-        const isPuntenkoers  = rit.race_type === 'puntenkoers';
-        const isAfvalkoers   = rit.race_type === 'afvalkoers';
-        const _naamLower     = (rit.afstand_naam || '').toLowerCase();
-        const isLangeNaam    = /inline.*(lang|afstand)|lange?\s+afstand|puntenkoers|afvalkoers|point.?races?|eliminat/.test(_naamLower);
-        const toonRaceTypeSelector = isLangeAfstand || isLangeNaam || (rit.race_type && rit.race_type !== 'inline');
+        // Race-type komt uit distances.race_type (canonieke bron via API).
+        // - sprint      → geen rondes, geen punten, geen selector
+        // - inline      → rondes + tijd
+        // - puntenkoers → rondes + punten + tijd
+        // - afvalkoers  → rondes + tijd (eliminatie)
+        const raceType       = rit.race_type || 'inline';
+        const isSprint       = raceType === 'sprint';
+        const isPuntenkoers  = raceType === 'puntenkoers';
+        const isAfvalkoers   = raceType === 'afvalkoers';
+        // Selector alleen tonen voor niet-sprint-afstanden: voor sprints
+        // heeft de user geen keuze (tijd-only).
+        const toonRaceTypeSelector = !isSprint;
 
-        // Rondes-kolom tonen als er al data is, OF als het een lange-afstand heat is
-        // (dan alvast de kolom reserveren zodat CSV-import de cellen direct kan vullen)
-        const heeftRondes  = rit.rijders.some(r => r.rondes != null) || toonRaceTypeSelector;
-        const heeftPunten  = rit.rijders.some(r => r.punten != null);
+        // Rondes-kolom voor alle niet-sprint race-types; voor sprint nooit.
+        const heeftRondes  = !isSprint;
+        const heeftPunten  = isPuntenkoers || rit.rijders.some(r => r.punten != null);
         const toonPkPanel  = isPuntenkoers || heeftPunten;
 
         const validPosities = [...new Set(rit.rijders.map(r => r.finishpositie).filter(Boolean))].sort((a, b) => a - b);
@@ -440,7 +467,6 @@ function _liveBouwKaart(rit, idx, compact = false) {
                     `<div class="live-pk-panel" id="live-pk-panel-${idx}"${toonPkPanel ? '' : ' hidden'}>` +
                     `<div class="live-pk-titel">📊 Puntenkoers</div>` +
                     topHtml + bottomHtml +
-                    (!_liveLeesOnly ? `<button class="live-punten-btn" id="live-btn-punten-${idx}">💾 Punten opslaan</button>` : '') +
                     `</div>`
                 );
             })() +
@@ -494,14 +520,23 @@ function _liveBouwKaart(rit, idx, compact = false) {
           `<button class="live-opslaan-btn" id="live-btn-opslaan-${idx}">&#128190; Opslaan</button>` +
           `</div>` +
           `<div class="live-import-panel verborgen" id="live-import-panel-${idx}">` +
-          `<label class="live-import-label">Map:</label>` +
-          `<select class="live-import-map-sel" id="live-import-map-${idx}"><option value="">— laden… —</option></select>` +
-          `<label class="live-import-label">Bestand:</label>` +
-          `<select class="live-import-sel" id="live-import-sel-${idx}" disabled><option value="">— kies eerst een map —</option></select>` +
+          `<div class="live-import-row">` +
+              `<label class="live-import-label">Map:</label>` +
+              `<input type="search" class="live-import-map-filter" id="live-import-mapfilter-${idx}" placeholder="🔍 filter op naam…" autocomplete="off">` +
+              `<select class="live-import-map-sel" id="live-import-map-${idx}"><option value="">— laden… —</option></select>` +
+          `</div>` +
+          `<div class="live-import-row">` +
+              `<label class="live-import-label">Bestand:</label>` +
+              `<div class="live-import-sort" role="group" aria-label="Sorteervolgorde bestanden">` +
+                  `<button type="button" class="live-import-sort-btn" id="live-import-sort-naam-${idx}" data-sort="naam" title="Sorteer op naam">A–Z</button>` +
+                  `<button type="button" class="live-import-sort-btn" id="live-import-sort-nieuw-${idx}" data-sort="nieuw" title="Sorteer op nieuwste eerst">Nieuwste</button>` +
+              `</div>` +
+              `<select class="live-import-sel" id="live-import-sel-${idx}" disabled><option value="">— kies eerst een map —</option></select>` +
+          `</div>` +
           `<div class="live-import-preview verborgen" id="live-import-preview-${idx}"></div>` +
           `<div class="live-import-acties verborgen" id="live-import-acties-${idx}">` +
-          `<span class="live-import-status" id="live-import-status-${idx}"></span>` +
-          `<button class="live-import-laad-btn" id="live-import-laad-${idx}">Overnemen in heat</button>` +
+              `<span class="live-import-status" id="live-import-status-${idx}"></span>` +
+              `<button class="live-import-laad-btn" id="live-import-laad-${idx}">Overnemen in heat</button>` +
           `</div>` +
           `</div>`
         : `<div class="live-card-acties verborgen" id="live-card-acties-${idx}"></div>`;
@@ -522,15 +557,29 @@ function _liveRenderCarousel() {
     const idx    = _liveHuidigIdx;
     const rit    = _liveRitten[idx];
 
-    // Dropdown opties
-    const dropdownOpts = _liveRitten.map((r, i) => {
-        const icoon = !_liveHasHeat(r) ? '○' : _liveRitCompleet(r) ? '✓' : _liveRitDeels(r) ? '◑' : '○';
-        return `<option value="${i}" ${i === idx ? 'selected' : ''}>${icoon} ${escHtml(r.rit_naam)}</option>`;
+    // Dropdown opties (custom dropdown met filter-respect)
+    const dropdownOpts = _liveDdBouwOpties();
+
+    const huidigeRit   = _liveRitten[idx];
+    const huidigLabel  = `${_liveRitIcoon(huidigeRit)} ${escHtml(huidigeRit.rit_naam)}`;
+
+    // Filter-pillen: aan/uit per status-icoon
+    const pilHtml = ['leeg', 'deels', 'compleet'].map(s => {
+        const icoon = s === 'compleet' ? '✓' : s === 'deels' ? '◑' : '○';
+        const tip   = s === 'compleet' ? 'Alle tijden ingevuld'
+                    : s === 'deels'    ? 'Deels ingevuld'
+                    :                     'Nog geen resultaten / geen startlijst';
+        const act   = _liveFilter[s] ? ' active' : '';
+        return `<button type="button" class="live-nav-pil${act}" data-filter="${s}" title="${tip}">${icoon}</button>`;
     }).join('');
 
     const navHtml =
         `<div class="live-carousel-nav">` +
-        `<select class="live-nav-dropdown" id="live-nav-dropdown">${dropdownOpts}</select>` +
+        `<div class="live-nav-filter" title="Filter op status">${pilHtml}</div>` +
+        `<div class="live-nav-dd" id="live-nav-dd">` +
+          `<button type="button" class="live-nav-dropdown" id="live-nav-dd-trigger">${huidigLabel}</button>` +
+          `<div class="live-nav-dd-panel" id="live-nav-dd-panel" hidden>${dropdownOpts}</div>` +
+        `</div>` +
         `<span class="live-nav-teller">${idx + 1} / ${totaal}</span>` +
         `</div>`;
 
@@ -583,7 +632,7 @@ function _liveRenderCarousel() {
 
     el('live-btn-vorige')?.addEventListener('click',  () => _liveNavigeer(_liveHuidigIdx - 1));
     el('live-btn-volgende')?.addEventListener('click', () => _liveNavigeer(_liveHuidigIdx + 1));
-    el('live-nav-dropdown')?.addEventListener('change', e => _liveNavigeer(+e.target.value));
+    _liveBindDropdown();
 
     _liveBind(idx);
     _livePanelBind();
@@ -596,8 +645,11 @@ function _liveRenderCarousel() {
 
 // ── Links panel: alle rijders in categorie+ronde ──────────────────────────────
 
+// Panel-specifieke listeners — het panel is nu volledig read-only, dus er
+// hoeven geen listeners meer te worden gekoppeld. De functie blijft bestaan
+// als no-op zodat aanroepen elders geen crash geven.
 function _liveInitPanelListeners() {
-    el('live-btn-opslaan-panel')?.addEventListener('click', () => _liveOpslaanLinksPanel());
+    // geen listeners nodig voor een read-only panel
 }
 
 function _liveBouwLinksPanel(dcId, distanceId, rondeType) {
@@ -705,8 +757,8 @@ function _liveBouwLinksPanel(dcId, distanceId, rondeType) {
         alleRijders.sort((a, b) => (a.startnummer ?? 99999) - (b.startnummer ?? 99999));
     }
 
-    // DB = UI codes, geen mapping meer nodig
-    const disabled = _liveLeesOnly ? 'disabled' : '';
+    // Panel is read-only: alleen overzicht van Q/q-kwalificatie + gelezen
+    // tijden/sancties. Alle wijzigingen gaan via de carousel-kaart.
 
     // Rondes-kolom tonen als minimaal één rijder ronde-data heeft
     const heeftRondes = alleRijders.some(r => r.rondes != null && r.rondes !== '' && r.rondes !== 0);
@@ -716,13 +768,13 @@ function _liveBouwLinksPanel(dcId, distanceId, rondeType) {
         tbody = `<tr class="live-panel-rij-leeg"><td colspan="${heeftRondes ? 6 : 5}">Geen startlijst beschikbaar</td></tr>`;
     } else {
         for (const r of alleRijders) {
-            const tijdVal   = r.tijd_ms !== null ? _msTijdNaarDisplay(r.tijd_ms) : '';
+            const tijdVal   = r.tijd_ms !== null ? _msTijdNaarDisplay(r.tijd_ms) : '—';
             const sanctieUi = r.sanctie || '';
             const statusKls = r.sanctie ? 'live-rit-status-sanctie'
                             : r.tijd_ms !== null ? 'live-rit-status-compleet'
                             : 'live-rit-status-leeg';
             const rondesTd  = heeftRondes
-                ? `<td class="live-col-rondes"><input type="number" class="live-rondes-inp" value="${r.rondes ?? ''}" min="0" placeholder="—" ${disabled} inputmode="numeric"></td>`
+                ? `<td class="live-col-rondes"><span class="live-panel-rondes-txt">${r.rondes ?? '—'}</span></td>`
                 : '';
             const kwalBadge = r._kwal === 'Q' ? '<span style="color:#198754;font-weight:700">Q</span>'
                            : r._kwal === 'q' ? '<span style="color:#0d6efd;font-weight:600">q</span>'
@@ -733,32 +785,15 @@ function _liveBouwLinksPanel(dcId, distanceId, rondeType) {
                 `<td>${escHtml(r.full_name || '')}</td>` +
                 `<td style="text-align:center;width:24px">${kwalBadge}</td>` +
                 rondesTd +
-                `<td class="live-col-tijd">` +
-                `<input type="text" class="live-tijd-inp" value="${escHtml(tijdVal)}" placeholder="0:00.000" ${disabled} inputmode="decimal">` +
-                `</td>` +
-                `<td class="live-col-sanctie">` +
-                `<select class="live-sanctie-sel" ${disabled}>` +
-                `<option value="">—</option>` +
-                `<option value="DNS"   ${sanctieUi==='DNS'  ?'selected':''}>DNS</option>` +
-                `<option value="DNF"   ${sanctieUi==='DNF'  ?'selected':''}>DNF</option>` +
-                `<option value="FS"    ${sanctieUi==='FS'   ?'selected':''}>FS</option>` +
-                `<option value="DQ-TF" ${sanctieUi==='DQ-TF'?'selected':''}>DQ-TF</option>` +
-                `<option value="DQ-SF" ${sanctieUi==='DQ-SF'?'selected':''}>DQ-SF</option>` +
-                `<option value="DQ-DF" ${sanctieUi==='DQ-DF'?'selected':''}>DQ-DF</option>` +
-                `<option value="W1"    ${sanctieUi==='W1'   ?'selected':''}>W1</option>` +
-                `<option value="W2"    ${sanctieUi==='W2'   ?'selected':''}>W2</option>` +
-                `<option value="RR"    ${sanctieUi==='RR'   ?'selected':''}>RR</option>` +
-                `</select>` +
-                `</td>` +
+                `<td class="live-col-tijd"><span class="live-panel-tijd-txt">${escHtml(tijdVal)}</span></td>` +
+                `<td class="live-col-sanctie"><span class="live-panel-sanctie-txt">${escHtml(sanctieUi || '—')}</span></td>` +
                 `<td class="live-col-finish"><span class="live-finish-badge">${r.finishpositie?_ordinaal(r.finishpositie):'—'}</span></td>` +
                 `</tr>`;
         }
     }
 
-    const heeftRijders = alleRijders.length > 0;
-    const opslaanKnop  = (heeftRijders && !_liveLeesOnly)
-        ? `<div class="live-panel-footer"><button class="live-opslaan-btn" id="live-btn-opslaan-panel">💾 Opslaan</button></div>`
-        : '';
+    // Geen opslaan-knop meer — alle invoer + opslaan via de carousel-kaart.
+    const opslaanKnop = '';
     const rndColHtml  = heeftRondes ? `<col class="live-col-rondes">` : '';
     const rndHeadHtml = heeftRondes ? `<th class="live-col-rondes" title="Ronden">Rnd</th>` : '';
     const kwalHead = `<th style="width:24px;text-align:center" title="Q=positie, q=tijd">Q</th>`;
@@ -813,36 +848,10 @@ function _livePanelBind() {
         tr.addEventListener('click', () => _liveNavigeer(parseInt(tr.dataset.ritIdx)));
     });
 
-    // Invoer events
-    panel.querySelectorAll('.live-panel-rij').forEach(rij => {
-        const entryId    = parseInt(rij.dataset.panelEntry);
-        const tijdInp    = rij.querySelector('.live-tijd-inp');
-        const sanctieSel = rij.querySelector('.live-sanctie-sel');
+    // Panel is read-only: geen input-events meer (tijden, sancties en rondes
+    // worden alleen in de carousel-kaart bewerkt en via _liveSyncInvoer naar
+    // de read-only tekstcellen in dit panel gesynct).
 
-        tijdInp?.addEventListener('blur', () => {
-            const ms      = _parseTijdInvoer(tijdInp.value);
-            const tijdVal = ms !== null ? _msTijdNaarDisplay(ms) : '';
-            tijdInp.value = tijdVal;
-            // FS + tijd mogen samen; andere sancties wissen de tijd
-            if (ms !== null && sanctieSel?.value && sanctieSel.value !== 'FS') sanctieSel.value = '';
-            const sanctie = sanctieSel?.value || '';
-            _liveSyncInvoer(entryId, tijdVal, sanctie);
-            _liveOngeslagen = true;
-            _livePanelHerbereken();
-        });
-        tijdInp?.addEventListener('input', () => { _liveOngeslagen = true; });
-
-        sanctieSel?.addEventListener('change', () => {
-            const sanctie = sanctieSel.value;
-            // FS wist de tijd niet; andere sancties wissen de tijd
-            if (sanctie && sanctie !== 'FS' && tijdInp?.value.trim()) tijdInp.value = '';
-            _liveSyncInvoer(entryId, tijdInp?.value || '', sanctie);
-            _liveOngeslagen = true;
-            _livePanelHerbereken();
-        });
-    });
-
-    // Opslaan-listener wordt door _liveInitPanelListeners() toegevoegd
     _livePanelHerbereken();
 }
 
@@ -934,108 +943,138 @@ function _livePanelHerbereken() {
     });
 }
 
-async function _liveOpslaanLinksPanel() {
-    const panel = el('live-panel-links');
-    const btn   = el('live-btn-opslaan-panel');
-    if (!panel || !btn) return;
+// _liveOpslaanLinksPanel() is verwijderd — het linker paneel is nu read-only.
+// Alle opslaan-acties gaan via _liveOpslaanRit() (de carousel-kaart-knop).
 
-    btn.disabled    = true;
-    btn.textContent = 'Bezig…';
+// ── Custom dropdown helpers ──────────────────────────────────────────────
 
-    // Groepeer entries per rit_id
-    const ritMap = new Map(); // rit_id → [{ entry_id, tijd_ms, sanctie }]
-    panel.querySelectorAll('.live-panel-rij[data-panel-entry]').forEach(rij => {
-        const entryId = parseInt(rij.dataset.panelEntry);
-        const ritId   = parseInt(rij.dataset.ritId);
-        const inp     = rij.querySelector('.live-tijd-inp');
-        const sel     = rij.querySelector('.live-sanctie-sel');
-        const rondesInp = rij.querySelector('.live-rondes-inp');
-        const sanctie = sel?.value || '';
-        // FS: tijd bewaren; overige sancties: tijd = null
-        const tijdMs  = (!sanctie || sanctie === 'FS') ? _parseTijdInvoer(inp?.value ?? '') : null;
-        const rondes  = rondesInp ? (rondesInp.value !== '' ? (parseInt(rondesInp.value) || null) : null) : null;
+// Bepaal de status van een rit voor de filter: 'leeg' | 'deels' | 'compleet'
+function _liveRitStatus(r) {
+    if (!_liveHasHeat(r))    return 'leeg';
+    if (_liveRitCompleet(r)) return 'compleet';
+    if (_liveRitDeels(r))    return 'deels';
+    return 'leeg';
+}
+function _liveRitIcoon(r) {
+    const s = _liveRitStatus(r);
+    return s === 'compleet' ? '✓' : s === 'deels' ? '◑' : '○';
+}
 
-        if (!ritMap.has(ritId)) ritMap.set(ritId, []);
-        ritMap.get(ritId).push({ entry_id: entryId, tijd_ms: tijdMs, sanctie: sanctie || null, notitie: '', rondes });
+// Bouw de opties in het dropdown-paneel; filter rijden die volgens _liveFilter
+// verborgen moeten zijn. De huidige rit wordt altijd getoond zodat de
+// selected-indicator zichtbaar blijft.
+function _liveDdBouwOpties() {
+    const idx = _liveHuidigIdx;
+    const stukken = _liveRitten.map((r, i) => {
+        const status = _liveRitStatus(r);
+        if (!_liveFilter[status] && i !== idx) return null;
+        const icoon = _liveRitIcoon(r);
+        const sel   = i === idx ? ' selected' : '';
+        return `<div class="live-nav-dd-option${sel}" data-idx="${i}">${icoon} ${escHtml(r.rit_naam)}</div>`;
+    }).filter(Boolean);
+    if (!stukken.length) {
+        return `<div class="live-nav-dd-leeg">Geen ritten in deze filter</div>`;
+    }
+    return stukken.join('');
+}
+
+function _liveBindDropdown() {
+    const dd      = el('live-nav-dd');
+    const trigger = el('live-nav-dd-trigger');
+    const panel   = el('live-nav-dd-panel');
+    if (!dd || !trigger || !panel) return;
+
+    const sluit = () => { dd.classList.remove('open'); panel.hidden = true; };
+    const open  = () => {
+        dd.classList.add('open');
+        panel.hidden = false;
+        // scroll selected in view
+        const sel = panel.querySelector('.live-nav-dd-option.selected');
+        if (sel) sel.scrollIntoView({ block: 'nearest' });
+    };
+
+    trigger.addEventListener('click', e => {
+        e.stopPropagation();
+        if (panel.hidden) open(); else sluit();
+    });
+    panel.addEventListener('click', e => {
+        const opt = e.target.closest('.live-nav-dd-option');
+        if (!opt) return;
+        const i = parseInt(opt.dataset.idx);
+        sluit();
+        _liveNavigeer(i);
+    });
+    // click buiten: sluiten
+    document.addEventListener('click', e => {
+        if (!panel.hidden && !dd.contains(e.target)) sluit();
+    });
+    // ESC sluit
+    document.addEventListener('keydown', e => {
+        if (e.key === 'Escape' && !panel.hidden) sluit();
     });
 
-    let fouten = 0;
-    for (const [ritId, results] of ritMap) {
-        const rit = _liveRitten.find(r => r.rit_id === ritId);
-        if (!rit) continue;
-        try {
-            const res = await fetch('api/live.php', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    action:         'save_rit_results',
-                    competition_id: huidigCompId,
-                    rit_id:         ritId,
-                    results,
-                }),
-            });
-            if (!res.ok) throw new Error('HTTP ' + res.status);
-            const data = await res.json();
-            if (data.error) throw new Error(data.error);
-
-            // Update lokale state — gebruik finishposities van server (correct voor PK/rondes)
-            const serverFpP = data.finishposities ?? {};
-            const pm        = _berekenPosities(results, _liveSysteem === 'full-final'); // fallback
-            rit.rijders = rit.rijders.map(r => {
-                const g = results.find(x => x.entry_id === r.entry_id);
-                if (!g) return r;
-                const fp = Object.prototype.hasOwnProperty.call(serverFpP, r.entry_id)
-                    ? (serverFpP[r.entry_id] ?? null)
-                    : (pm.get(r.entry_id) ?? null);
-                return { ...r, tijd_ms: g.tijd_ms, sanctie: g.sanctie, finishpositie: fp };
-            });
-        } catch { fouten++; }
-    }
-
-    _liveOngeslagen = false;
-
-    if (btn) {
-        btn.disabled    = false;
-        btn.textContent = fouten ? `⚠ ${fouten} fout(en)` : '✓ Opgeslagen';
-        btn.classList.toggle('btn-opgeslagen', !fouten);
-        setTimeout(() => {
-            if (btn) { btn.textContent = '💾 Opslaan alle ritten'; btn.classList.remove('btn-opgeslagen'); }
-        }, 2500);
-    }
-
-    // Update carousel-kaarten + dropdown-iconen voor alle opgeslagen ritten
-    const dropdown = el('live-nav-dropdown');
-    const geziendeRonden = new Set(); // voorkom dubbele volgende-ronde triggers
-
-    ritMap.forEach((_, ritId) => {
-        const i = _liveRitten.findIndex(r => r.rit_id === ritId);
-        if (i < 0) return;
-
-        _liveHerbereken(i);
-        _liveActiveerWisselDropdowns(i);
-
-        if (dropdown?.options[i]) {
-            const r     = _liveRitten[i];
-            const icoon = _liveRitCompleet(r) ? '✓' : _liveRitDeels(r) ? '◑' : '○';
-            dropdown.options[i].text = icoon + ' ' + r.rit_naam;
-        }
-
-        // Volgende ronde seeden (zelfde logica als _liveOpslaanRit)
-        if (!_liveLeesOnly) {
-            const rit = _liveRitten[i];
-            const rondeKey = `${rit.dc_id}|${rit.distance_id}|${rit.ronde_type}`;
-            if (!geziendeRonden.has(rondeKey)) {
-                geziendeRonden.add(rondeKey);
-                const volgende = _volgendeRondeType(rit.dc_id, rit.distance_id, rit.ronde_type);
-                if (volgende) {
-                    const compleet = _liveRondeCompleet(rit.dc_id, rit.distance_id, rit.ronde_type);
-                    _liveGenereerVolgendeRonde(rit.dc_id, rit.distance_id, rit.ronde_type, volgende, compleet);
-                } else {
-                    el('live-ronde-compleet')?.remove();
-                }
+    // Filter-pillen: klik toggelt status, paneel-opties worden herbouwd
+    document.querySelectorAll('.live-nav-pil').forEach(pil => {
+        pil.addEventListener('click', e => {
+            e.stopPropagation();
+            const status = pil.dataset.filter;
+            if (!status || !(status in _liveFilter)) return;
+            _liveFilter[status] = !_liveFilter[status];
+            pil.classList.toggle('active', _liveFilter[status]);
+            panel.innerHTML = _liveDdBouwOpties();
+            if (!panel.hidden) {
+                // Hergebruik: zorg dat geselecteerde optie (indien zichtbaar) in beeld blijft
+                const sel = panel.querySelector('.live-nav-dd-option.selected');
+                if (sel) sel.scrollIntoView({ block: 'nearest' });
             }
-        }
+        });
     });
+}
+
+// Label van de trigger bijwerken (icoon + ritnaam van rit i)
+function _liveDdUpdateLabel(i) {
+    const trigger = el('live-nav-dd-trigger');
+    if (!trigger) return;
+    const r = _liveRitten[i];
+    if (!r) return;
+    trigger.textContent = _liveRitIcoon(r) + ' ' + r.rit_naam;
+}
+
+// Tekst van één optie in het paneel bijwerken. Als het status-icoon verandert
+// (bv. van ◑ → ✓ na een save) en die status nu gefilterd is, wordt het hele
+// paneel opnieuw opgebouwd zodat de filter correct toegepast blijft.
+function _liveDdUpdateOptie(i) {
+    const panel = el('live-nav-dd-panel');
+    if (!panel) return;
+    const opt = panel.querySelector(`.live-nav-dd-option[data-idx="${i}"]`);
+    const r   = _liveRitten[i];
+    if (!r) return;
+    const nieuweStatus = _liveRitStatus(r);
+    const zichtbaar   = _liveFilter[nieuweStatus] || i === _liveHuidigIdx;
+
+    if (!opt && zichtbaar) {
+        // Was verborgen, moet nu zichtbaar worden → volledige rebuild (correcte volgorde)
+        panel.innerHTML = _liveDdBouwOpties();
+        return;
+    }
+    if (opt && !zichtbaar) {
+        // Was zichtbaar, moet nu verborgen → volledige rebuild
+        panel.innerHTML = _liveDdBouwOpties();
+        return;
+    }
+    if (opt) {
+        opt.textContent = _liveRitIcoon(r) + ' ' + r.rit_naam;
+    }
+}
+
+// Geselecteerde optie markeren + trigger-label bijwerken
+function _liveDdSetValue(idx) {
+    const panel = el('live-nav-dd-panel');
+    if (!panel) return;
+    panel.querySelectorAll('.live-nav-dd-option').forEach(o => {
+        o.classList.toggle('selected', parseInt(o.dataset.idx) === idx);
+    });
+    _liveDdUpdateLabel(idx);
 }
 
 // Markeer de actieve kaart en toon/verberg opslaan-knoppen
@@ -1043,6 +1082,8 @@ function _liveUpdateKaartActief(idx) {
     document.querySelectorAll('.live-carousel-card').forEach((card, i) => {
         const isActief = i === idx;
         card.classList.toggle('live-card-actief', isActief);
+        card.classList.toggle('live-card-prev',   i === idx - 1);
+        card.classList.toggle('live-card-next',   i === idx + 1);
         // Opslaan-knop: alleen tonen op actieve kaart met startlijst
         const acties = document.getElementById('live-card-acties-' + i);
         if (acties) {
@@ -1089,8 +1130,11 @@ function _liveBind(idx) {
             const ms      = _parseTijdInvoer(tijdInp.value);
             const tijdVal = ms !== null ? _msTijdNaarDisplay(ms) : '';
             tijdInp.value = tijdVal;
-            // Sanctie wissen bij tijdinvoer, TENZIJ het een FS is (FS + tijd mogen samen)
-            if (ms !== null && sanctieSel?.value && sanctieSel.value !== 'FS') sanctieSel.value = '';
+            // Alleen sancties die fundamenteel geen tijd hebben (DNS/DNF/DQ-*)
+            // worden gewist bij tijdinvoer. FS, RR, W1 en W2 blijven staan.
+            if (ms !== null && sanctieSel?.value && _SANCTIE_WIST_TIJD.has(sanctieSel.value)) {
+                sanctieSel.value = '';
+            }
             const sanctie = sanctieSel?.value || '';
             _liveSyncInvoer(r.entry_id, tijdVal, sanctie);
             _liveOngeslagen = true;
@@ -1100,8 +1144,11 @@ function _liveBind(idx) {
 
         sanctieSel?.addEventListener('change', () => {
             const sanctie = sanctieSel.value;
-            // Tijd wissen bij sanctie, TENZIJ het een FS is
-            if (sanctie && sanctie !== 'FS' && tijdInp?.value.trim()) tijdInp.value = '';
+            // Alleen DNS/DNF/DQ-* wissen de tijd; FS, RR, W1 en W2 houden de
+            // tijd (de jury past alleen handmatig de positie aan).
+            if (sanctie && _SANCTIE_WIST_TIJD.has(sanctie) && tijdInp?.value.trim()) {
+                tijdInp.value = '';
+            }
             _liveSyncInvoer(r.entry_id, tijdInp?.value || '', sanctie);
             _liveOngeslagen = true;
             _liveHerbereken(idx);
@@ -1323,66 +1370,21 @@ function _liveBind(idx) {
         if (e.key === 'Enter') { e.preventDefault(); _livePkInvoerBevestig(idx); }
     });
 
-    // PK-punten opslaan
-    el('live-btn-punten-' + idx)?.addEventListener('click', () => _livePuntenOpslaan(idx));
+    // PK-punten worden nu meegenomen in de algemene Opslaan-knop
+    // (_liveOpslaanRit). De aparte "Punten opslaan"-knop is verwijderd.
 
     // Import-knop: toggle panel + vul mappenlijst
-    el('live-btn-import-'  + idx)?.addEventListener('click',  () => _liveImportToggle(idx));
-    el('live-import-map-'  + idx)?.addEventListener('change', () => _liveImportMapGekozen(idx));
-    el('live-import-sel-'  + idx)?.addEventListener('change', () => _liveImportPreview(idx));
-    el('live-import-laad-' + idx)?.addEventListener('click',  () => _liveImportLaad(idx));
+    el('live-btn-import-'     + idx)?.addEventListener('click',  () => _liveImportToggle(idx));
+    el('live-import-map-'     + idx)?.addEventListener('change', () => _liveImportMapGekozen(idx));
+    el('live-import-mapfilter-'+ idx)?.addEventListener('input',  () => _liveImportMapFilter(idx));
+    el('live-import-sel-'     + idx)?.addEventListener('change', () => _liveImportPreview(idx));
+    el('live-import-sort-naam-' + idx)?.addEventListener('click', () => _liveImportFileSort(idx, 'naam'));
+    el('live-import-sort-nieuw-'+ idx)?.addEventListener('click', () => _liveImportFileSort(idx, 'nieuw'));
+    el('live-import-laad-'    + idx)?.addEventListener('click',  () => _liveImportLaad(idx));
 }
 
-// ── Puntenkoers: punten opslaan + badges bijwerken ────────────────────────────
-
-async function _livePuntenOpslaan(ritIdx) {
-    const rit = _liveRitten[ritIdx];
-    if (!rit?.heat_id) { toonBevestigDialog('Geen heat gevonden voor deze rit.', 'Fout'); return; }
-
-    const btn = el('live-btn-punten-' + ritIdx);
-    if (btn) { btn.disabled = true; btn.textContent = 'Bezig…'; }
-
-    // Verzamel punten uit verborgen data-inputs
-    const kaart = document.querySelector(`.live-carousel-card[data-idx="${ritIdx}"]`);
-    const aanpassingen = [];
-    kaart?.querySelectorAll('.live-punten-inp[data-pk-entry]').forEach(inp => {
-        const entryId = parseInt(inp.dataset.pkEntry);
-        const val     = inp.value.trim();
-        aanpassingen.push({
-            entry_id: entryId,
-            punten:   val !== '' ? parseFloat(val) : null,
-        });
-    });
-
-    try {
-        const res = await fetch('api/live.php', {
-            method:  'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body:    JSON.stringify({ action: 'sla_punten_op', heat_id: rit.heat_id, aanpassingen }),
-        });
-        const data = await res.json();
-        if (data.error) throw new Error(data.error);
-
-        // Lokale state bijwerken
-        aanpassingen.forEach(a => {
-            const r = rit.rijders.find(x => x.entry_id === a.entry_id);
-            if (r) r.punten = a.punten;
-        });
-
-        // Finish-badges bijwerken op punten-ranking
-        _liveUpdatePuntenBadges(ritIdx);
-
-        if (btn) {
-            btn.disabled  = false;
-            btn.textContent = '✓ Opgeslagen';
-            btn.classList.add('btn-opgeslagen');
-            setTimeout(() => { if (btn) { btn.textContent = '💾 Punten opslaan'; btn.classList.remove('btn-opgeslagen'); } }, 2500);
-        }
-    } catch (e) {
-        toonBevestigDialog('Fout bij opslaan punten: ' + e.message, 'Fout');
-        if (btn) { btn.disabled = false; btn.textContent = '💾 Punten opslaan'; }
-    }
-}
+// _livePuntenOpslaan is verwijderd — puntenkoers-punten worden nu meegenomen
+// in _liveOpslaanRit samen met tijden en sancties, zodat er één Opslaan-knop is.
 
 // Bereken punten-gebaseerde ranking en update finish-badges in heat card én linker panel.
 // Leest punten uit hidden inputs (real-time). Berekent tijdpositie dynamisch voor tiebreaking.
@@ -1533,8 +1535,41 @@ function _livePkInvoerBevestig(idx) {
 
 // ── CSV-import panel ──────────────────────────────────────────────────────────
 
-const _IMPORT_MAP_KEY  = 'liveImportMap';  // localStorage sleutel voor onthouden map
+const _IMPORT_MAP_KEY       = 'liveImportMap';       // localStorage: onthouden map
+const _IMPORT_FILE_SORT_KEY = 'liveImportFileSort';  // localStorage: 'naam' | 'nieuw'
+const _IMPORT_USED_KEY      = 'liveImportUsed';      // localStorage: {"map|file": mtimeAtUse}
 const _importCsvCache  = new Map();        // key: "map|filename" → geparseerde rows
+const _IMPORT_POLL_MS  = 4000;             // elke 4s checken op nieuwe CSV's in de gekozen map
+const _IMPORT_NEW_TTL_MS = 60000;          // 🆕-label verdwijnt na 60s
+const _importPollHandles = new Map();      // ritIdx → intervalHandle (auto-refresh bestandenlijst)
+
+// ── Al-geïmporteerde bestanden bijhouden ────────────────────────────────────
+// Na een succesvolle import van "map/file" onthouden we de mtime van dat
+// bestand op dat moment. Bij latere renders komt er een ✓-prefix zolang het
+// bestand niet is aangepast (mtime gelijk of lager). Wordt de CSV later
+// overschreven met nieuwere data? Dan is mtime groter dan wat we opsloegen
+// en verdwijnt het ✓ vanzelf — je ziet het weer als "onaangeraakt".
+function _liveImportLoadUsed() {
+    try { return JSON.parse(localStorage.getItem(_IMPORT_USED_KEY) || '{}'); }
+    catch { return {}; }
+}
+function _liveImportSaveUsed(obj) {
+    try { localStorage.setItem(_IMPORT_USED_KEY, JSON.stringify(obj)); }
+    catch {} // quota / disabled storage — stil negeren
+}
+function _liveImportMarkUsed(map, filename, mtime) {
+    if (!map || !filename) return;
+    const used = _liveImportLoadUsed();
+    used[map + '|' + filename] = mtime || 0;
+    _liveImportSaveUsed(used);
+}
+function _liveImportIsUsed(map, filename, mtime, usedCache) {
+    const k = map + '|' + filename;
+    const usedAtMtime = usedCache[k];
+    if (usedAtMtime === undefined) return false;
+    // Bestand sindsdien overschreven? → niet meer als "gebruikt" tonen
+    return (mtime || 0) <= usedAtMtime;
+}
 
 // Toggle import-panel; laad mappenlijst bij eerste opening
 async function _liveImportToggle(ritIdx) {
@@ -1544,7 +1579,16 @@ async function _liveImportToggle(ritIdx) {
 
     const openend = !panel.classList.contains('verborgen');
     panel.classList.toggle('verborgen', openend);
-    if (openend || mapSel.dataset.geladen) return;   // sluiten of al geladen
+    if (openend) {
+        // Paneel ging net dicht → poll stoppen
+        _liveImportStopPoll(ritIdx);
+        return;
+    }
+    if (mapSel.dataset.geladen) {
+        // Al eerder geladen → poll (opnieuw) starten als er een map actief is
+        if (mapSel.value) _liveImportStartPoll(ritIdx);
+        return;
+    }
 
     mapSel.disabled = true;
     mapSel.innerHTML = '<option value="">— laden… —</option>';
@@ -1557,18 +1601,25 @@ async function _liveImportToggle(ritIdx) {
         const data = await res.json();
         if (data.error) throw new Error(data.error);
 
-        const mappen = data.mappen || [];
+        // Backwards-compat: oude API leverde array van strings, nieuwe levert
+        // array van {name, mtime}. Normaliseer naar {name, mtime?}.
+        const mappenRaw = data.mappen || [];
+        const mappen = mappenRaw.map(m =>
+            (typeof m === 'string') ? { name: m } : m
+        );
+
         if (mappen.length === 0) {
             mapSel.innerHTML = '<option value="">— geen mappen gevonden —</option>';
         } else {
+            // Stash volledige lijst op het select-element zodat de filter zonder
+            // extra server-call kan re-rendereren.
+            mapSel.dataset.allMappen = JSON.stringify(mappen.map(m => m.name));
+
             const onthouden = localStorage.getItem(_IMPORT_MAP_KEY) || '';
-            mapSel.innerHTML =
-                '<option value="">— kies een map —</option>' +
-                mappen.map(m =>
-                    `<option value="${escHtml(m)}"${m === onthouden ? ' selected' : ''}>${escHtml(m)}</option>`
-                ).join('');
+            _liveImportRenderMapOpties(ritIdx, '', onthouden);
+
             // Als onthouden map beschikbaar is: laad direct de bestandenlijst
-            if (onthouden && mappen.includes(onthouden)) {
+            if (onthouden && mappen.some(m => m.name === onthouden)) {
                 mapSel.dataset.geladen = '1';
                 mapSel.disabled = false;
                 await _liveImportMapGekozen(ritIdx);
@@ -1580,6 +1631,129 @@ async function _liveImportToggle(ritIdx) {
         mapSel.innerHTML = `<option value="">⚠ ${escHtml(e.message)}</option>`;
     }
     mapSel.disabled = false;
+}
+
+// Render de <option>-lijst voor de map-select op basis van de gestashte
+// volledige lijst en een optionele filter-string (case-insensitive substring).
+// $preselect is optioneel: als die waarde bestaat in de gefilterde lijst,
+// wordt die voorgeselecteerd.
+function _liveImportRenderMapOpties(ritIdx, filter = '', preselect = '') {
+    const mapSel = el('live-import-map-' + ritIdx);
+    if (!mapSel) return;
+    const allJson = mapSel.dataset.allMappen || '[]';
+    let all;
+    try { all = JSON.parse(allJson); } catch { all = []; }
+    const q = (filter || '').trim().toLowerCase();
+    const mapped = q
+        ? all.filter(n => n.toLowerCase().includes(q))
+        : all;
+
+    if (mapped.length === 0) {
+        mapSel.innerHTML = '<option value="">— geen match —</option>';
+        return;
+    }
+    mapSel.innerHTML =
+        '<option value="">— kies een map —</option>' +
+        mapped.map(n =>
+            `<option value="${escHtml(n)}"${n === preselect ? ' selected' : ''}>${escHtml(n)}</option>`
+        ).join('');
+}
+
+// Gebruiker typt in het filter-veld → opties bijwerken. Huidige selectie
+// proberen te behouden als die nog in de gefilterde lijst past.
+function _liveImportMapFilter(ritIdx) {
+    const mapSel    = el('live-import-map-'       + ritIdx);
+    const filterInp = el('live-import-mapfilter-' + ritIdx);
+    if (!mapSel || !filterInp) return;
+    const huidig = mapSel.value;
+    _liveImportRenderMapOpties(ritIdx, filterInp.value, huidig);
+}
+
+// ── Bestanden-sortering: 'naam' (A-Z) of 'nieuw' (mtime DESC) ───────────────
+function _liveImportGetFileSort() {
+    const s = localStorage.getItem(_IMPORT_FILE_SORT_KEY);
+    return s === 'nieuw' ? 'nieuw' : 'naam';
+}
+
+// Visuele active-state van de sort-knoppen synchroniseren met de voorkeur.
+function _liveImportSyncSortButtons(ritIdx) {
+    const sort = _liveImportGetFileSort();
+    const bN = el('live-import-sort-naam-'  + ritIdx);
+    const bNw = el('live-import-sort-nieuw-' + ritIdx);
+    bN?.classList.toggle('actief',  sort === 'naam');
+    bNw?.classList.toggle('actief', sort === 'nieuw');
+}
+
+// Render <option>-lijst voor bestand-select uit de gestashte volledige lijst,
+// gesorteerd op de huidige voorkeur.
+//
+// Prefix-logica (waarde blijft de ruwe bestandsnaam):
+//   🆕  nieuw gedetecteerd bestand (nog niet geïmporteerd, binnen TTL)
+//   ✓   al geïmporteerd door gebruiker (persist via localStorage) en
+//       bestand is sindsdien niet overschreven
+//   —   plain / geen prefix
+// 🆕 wint van ✓ (importeren wist trouwens de isNew-vlag).
+function _liveImportRenderFileOpties(ritIdx, preselect = '') {
+    const fileSel = el('live-import-sel-' + ritIdx);
+    const mapSel  = el('live-import-map-' + ritIdx);
+    if (!fileSel) return;
+    let all = [];
+    try { all = JSON.parse(fileSel.dataset.allFiles || '[]'); } catch {}
+    const mapNaam = mapSel?.value || '';
+    const used    = _liveImportLoadUsed();
+
+    const sort = _liveImportGetFileSort();
+    const sorted = [...all].sort((a, b) => {
+        if (sort === 'nieuw') {
+            const mA = a.mtime || 0, mB = b.mtime || 0;
+            if (mA !== mB) return mB - mA; // nieuwste eerst
+        }
+        // fallback / naam-sort: natuurlijke alfabetische volgorde
+        return (a.name || '').localeCompare(b.name || '', undefined,
+            { numeric: true, sensitivity: 'base' });
+    });
+
+    // Behoud huidige selectie als geen preselect meegegeven is
+    const curVal = preselect || fileSel.value || '';
+    fileSel.innerHTML = sorted.map(f => {
+        let prefix = '';
+        if (f.isNew) {
+            prefix = '🆕 ';
+        } else if (_liveImportIsUsed(mapNaam, f.name, f.mtime, used)) {
+            prefix = '✓ ';
+        }
+        const label = prefix + f.name;
+        const sel   = (f.name === curVal) ? ' selected' : '';
+        return `<option value="${escHtml(f.name)}"${sel}>${escHtml(label)}</option>`;
+    }).join('');
+}
+
+// Wis het 🆕-label voor één specifiek bestand (bv. na importeren of bij
+// het nogmaals openen van het paneel). Past de cache aan en re-rendert.
+function _liveImportClearNewFlag(ritIdx, filename) {
+    const fileSel = el('live-import-sel-' + ritIdx);
+    if (!fileSel) return;
+    let all = [];
+    try { all = JSON.parse(fileSel.dataset.allFiles || '[]'); } catch { return; }
+    let changed = false;
+    for (const f of all) {
+        if (f.name === filename && f.isNew) {
+            f.isNew = false;
+            changed = true;
+        }
+    }
+    if (changed) {
+        fileSel.dataset.allFiles = JSON.stringify(all);
+        _liveImportRenderFileOpties(ritIdx);
+    }
+}
+
+// Gebruiker klikt op sort-knop.
+function _liveImportFileSort(ritIdx, mode) {
+    if (mode !== 'naam' && mode !== 'nieuw') return;
+    localStorage.setItem(_IMPORT_FILE_SORT_KEY, mode);
+    _liveImportSyncSortButtons(ritIdx);
+    _liveImportRenderFileOpties(ritIdx);
 }
 
 // Gebruiker kiest een map → laad bestandenlijst
@@ -1617,18 +1791,118 @@ async function _liveImportMapGekozen(ritIdx) {
         const data = await res.json();
         if (data.error) throw new Error(data.error);
 
-        const files = data.files || [];
+        // Backwards-compat: oude API leverde array van strings, nieuwe levert
+        // {name, mtime}. Normaliseer naar {name, mtime, isNew?}.
+        const files = (data.files || []).map(f =>
+            (typeof f === 'string') ? { name: f } : f
+        );
+
+        // Volledige lijst stashen voor sort-toggle + poll-merge
+        fileSel.dataset.allFiles = JSON.stringify(files);
+
         if (files.length === 0) {
             fileSel.innerHTML = '<option value="">— geen CSV-bestanden —</option>';
         } else {
-            fileSel.innerHTML = files.map(f =>
-                `<option value="${escHtml(f)}"${f === data.preselect ? ' selected' : ''}>${escHtml(f)}</option>`
-            ).join('');
+            _liveImportRenderFileOpties(ritIdx, data.preselect || '');
             fileSel.disabled = false;
             laadBtn.disabled = false;
+            _liveImportSyncSortButtons(ritIdx);
+
+            // Preview direct triggeren voor het geselecteerde bestand.
+            // Normaal doet de 'change' listener dit, maar bij slechts 1 file
+            // (of een preselect) vuurt er geen change-event en bleef de preview leeg.
+            if (fileSel.value) _liveImportPreview(ritIdx);
         }
+
+        // Start auto-refresh: tijdens een wedstrijd wil je dat nieuwe CSV's
+        // die in de upload-map verschijnen direct zichtbaar worden zonder
+        // handmatig de map te moeten her-selecteren.
+        _liveImportStartPoll(ritIdx);
     } catch(e) {
         fileSel.innerHTML = `<option value="">⚠ ${escHtml(e.message)}</option>`;
+    }
+}
+
+// ── Auto-refresh bestandenlijst ─────────────────────────────────────────────
+// Polling (4s) terwijl het import-paneel open is en een map geselecteerd is.
+// Nieuwe bestanden worden stilletjes aan de dropdown toegevoegd met een 🆕-prefix.
+// De huidige selectie en preview blijven onaangetast.
+function _liveImportStartPoll(ritIdx) {
+    _liveImportStopPoll(ritIdx); // dubbele intervals voorkomen
+    const handle = setInterval(() => _liveImportPollTick(ritIdx), _IMPORT_POLL_MS);
+    _importPollHandles.set(ritIdx, handle);
+}
+
+function _liveImportStopPoll(ritIdx) {
+    const h = _importPollHandles.get(ritIdx);
+    if (h) {
+        clearInterval(h);
+        _importPollHandles.delete(ritIdx);
+    }
+}
+
+async function _liveImportPollTick(ritIdx) {
+    const panel   = el('live-import-panel-' + ritIdx);
+    const mapSel  = el('live-import-map-'   + ritIdx);
+    const fileSel = el('live-import-sel-'   + ritIdx);
+    // DOM verdwenen (carousel rebuild) of paneel dicht → stop
+    if (!panel || !mapSel || !fileSel || panel.classList.contains('verborgen')) {
+        _liveImportStopPoll(ritIdx);
+        return;
+    }
+    const map = mapSel.value;
+    if (!map) return; // geen map geselecteerd — blijf tick'en voor later
+
+    try {
+        const res  = await fetch('api/live.php', {
+            method:  'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body:    JSON.stringify({ action: 'lijst_uploads', map }),
+        });
+        const data = await res.json();
+        if (data.error) return;
+        // Normaliseer naar {name, mtime}
+        const nieuwLijst = (data.files || []).map(f =>
+            (typeof f === 'string') ? { name: f } : f
+        );
+
+        // Bestaande lijst + isNew-flags uit dataset halen
+        let huidig = [];
+        try { huidig = JSON.parse(fileSel.dataset.allFiles || '[]'); } catch {}
+        const bestaandMap = new Map();
+        for (const h of huidig) bestaandMap.set(h.name, h);
+
+        // Merge: nieuwe items krijgen isNew=true + timestamp, oude behouden
+        // hun flag TENZIJ de TTL verlopen is (dan verdwijnt het 🆕-label).
+        const nu = Date.now();
+        let aantalNieuw = 0;
+        let aantalVerlopen = 0;
+        const merged = nieuwLijst.map(f => {
+            const prev = bestaandMap.get(f.name);
+            if (prev) {
+                let isNew = !!prev.isNew;
+                if (isNew && prev.newSince && (nu - prev.newSince) > _IMPORT_NEW_TTL_MS) {
+                    isNew = false;
+                    aantalVerlopen++;
+                }
+                return { ...f, isNew, newSince: prev.newSince };
+            }
+            aantalNieuw++;
+            return { ...f, isNew: true, newSince: nu };
+        });
+
+        fileSel.dataset.allFiles = JSON.stringify(merged);
+
+        if (aantalNieuw > 0 || aantalVerlopen > 0) {
+            _liveImportRenderFileOpties(ritIdx);
+            if (aantalNieuw > 0) {
+                fileSel.disabled = false;
+                const laadBtn = el('live-import-laad-' + ritIdx);
+                if (laadBtn) laadBtn.disabled = false;
+            }
+        }
+    } catch(_) {
+        // Stil falen — volgende tick proberen we het weer
     }
 }
 
@@ -1716,6 +1990,9 @@ async function _liveImportLaad(ritIdx) {
     const filename = fileSel.value;
     if (!map || !filename) return;
 
+    // 🆕-markering weghalen voor dit bestand zodra het geïmporteerd wordt
+    _liveImportClearNewFlag(ritIdx, filename);
+
     // Gebruik cache; haal opnieuw op als cache ontbreekt (edge-case)
     const cacheKey = map + '|' + filename;
     let rows = _importCsvCache.get(cacheKey);
@@ -1785,6 +2062,17 @@ async function _liveImportLaad(ritIdx) {
     status.className = 'live-import-status ' + (gevonden > 0 ? 'import-ok' : 'import-warn');
     _liveOngeslagen  = true;
     laadBtn.disabled = false;
+
+    // Markeer bestand als "gebruikt" (✓-prefix, persistent over refresh heen).
+    // Opslag bevat de mtime-op-moment-van-import zodat een latere overschrijving
+    // van dezelfde filename automatisch weer plain getoond wordt.
+    if (gevonden > 0) {
+        let allFiles = [];
+        try { allFiles = JSON.parse(fileSel.dataset.allFiles || '[]'); } catch {}
+        const fileObj = allFiles.find(f => f.name === filename);
+        _liveImportMarkUsed(map, filename, fileObj?.mtime || 0);
+        _liveImportRenderFileOpties(ritIdx);
+    }
 }
 
 // Vervang finish-badges door wissel-dropdowns na opslaan
@@ -1904,8 +2192,7 @@ async function _liveNavigeer(nieuweIdx) {
     const track = el('live-carousel-track');
     if (track) {
         // Update dropdown en teller
-        const dropdown = el('live-nav-dropdown');
-        if (dropdown) dropdown.value = nieuweIdx;
+        _liveDdSetValue(nieuweIdx);
         const teller = document.querySelector('.live-nav-teller');
         if (teller) teller.textContent = (nieuweIdx + 1) + ' / ' + _liveRitten.length;
 
@@ -2026,6 +2313,20 @@ async function _liveOpslaanRit(ritIdx) {
         };
     });
 
+    // Bij puntenkoers: punten meenemen in dezelfde opslag-actie
+    const isPuntenkoers = rit.race_type === 'puntenkoers';
+    const kaart = document.querySelector(`.live-carousel-card[data-idx="${ritIdx}"]`);
+    if (isPuntenkoers && kaart) {
+        kaart.querySelectorAll('.live-punten-inp[data-pk-entry]').forEach(inp => {
+            const entryId = parseInt(inp.dataset.pkEntry);
+            const val     = inp.value.trim();
+            const result  = results.find(r => r.entry_id === entryId);
+            if (result) {
+                result.punten = val !== '' ? parseFloat(val) : null;
+            }
+        });
+    }
+
     try {
         const res = await fetch('api/live.php', {
             method:  'POST',
@@ -2098,15 +2399,8 @@ async function _liveOpslaanRit(ritIdx) {
         }
 
         // Update dropdown-icoon voor deze rit
-        const dropdown = el('live-nav-dropdown');
-        if (dropdown) {
-            const opt = dropdown.options[ritIdx];
-            if (opt) {
-                const r    = _liveRitten[ritIdx];
-                const icoon = _liveRitCompleet(r) ? '✓' : _liveRitDeels(r) ? '◑' : '○';
-                opt.text   = icoon + ' ' + r.rit_naam;
-            }
-        }
+        _liveDdUpdateOptie(ritIdx);
+        if (ritIdx === _liveHuidigIdx) _liveDdUpdateLabel(ritIdx);
 
     } catch(e) {
         if (btn) {
@@ -2127,6 +2421,17 @@ async function _liveOpslaanRit(ritIdx) {
         } else {
             el('live-ronde-compleet')?.remove();
         }
+    }
+
+    // Auto-advance: na succesvol opslaan automatisch naar de volgende rit
+    // (alleen als er nog een volgende is en we niet in leesonly-modus zitten)
+    if (!_liveLeesOnly && ritIdx === _liveHuidigIdx && ritIdx + 1 < _liveRitten.length) {
+        setTimeout(() => {
+            // Nog één keer checken: gebruiker kan intussen handmatig genavigeerd zijn
+            if (_liveHuidigIdx === ritIdx) {
+                _liveNavigeer(ritIdx + 1);
+            }
+        }, 700);
     }
 }
 

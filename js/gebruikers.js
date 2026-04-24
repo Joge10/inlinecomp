@@ -205,6 +205,67 @@ function renderGebruikers() {
             <tbody>${rijen}</tbody>
         </table>
         <div id="gb-form-wrap" style="display:none"></div>
+
+        <!-- Publieke-pagina statistieken -->
+        <div class="section-title" style="margin-top:1.5rem">Publieke pagina — bezoekers</div>
+        <div class="gb-stats" id="gb-stats">
+            <div class="gb-stat-kaart">
+                <div class="gb-stat-waarde" id="gb-stat-actief">—</div>
+                <div class="gb-stat-label">Nu actief <span class="gb-stat-hint">(laatste 5 min)</span></div>
+            </div>
+            <div class="gb-stat-kaart">
+                <div class="gb-stat-waarde" id="gb-stat-vandaag">—</div>
+                <div class="gb-stat-label">Unieke bezoekers vandaag</div>
+            </div>
+            <div class="gb-stat-kaart">
+                <div class="gb-stat-waarde" id="gb-stat-uniek">—</div>
+                <div class="gb-stat-label">Unieke bezoekers ooit</div>
+            </div>
+            <div class="gb-stat-kaart">
+                <div class="gb-stat-waarde" id="gb-stat-hits">—</div>
+                <div class="gb-stat-label">Totaal page-views</div>
+            </div>
+            <div class="gb-stat-kaart">
+                <div class="gb-stat-waarde" id="gb-stat-peak-today">—</div>
+                <div class="gb-stat-label">Piek gelijktijdig <span class="gb-stat-hint">(vandaag)</span></div>
+            </div>
+            <div class="gb-stat-kaart">
+                <div class="gb-stat-waarde" id="gb-stat-peak">—</div>
+                <div class="gb-stat-label">Piek gelijktijdig <span class="gb-stat-hint" id="gb-stat-peak-at">(ooit)</span></div>
+            </div>
+        </div>
+        <div class="gb-stat-voetnoot" id="gb-stat-voet">Laatst bijgewerkt: —</div>
+
+        <!-- Coach-pagina statistieken -->
+        <div class="section-title" style="margin-top:1.5rem">Coach-pagina — bezoekers</div>
+        <div class="gb-stats" id="gb-stats-coach">
+            <div class="gb-stat-kaart">
+                <div class="gb-stat-waarde" id="gb-stat-coach-actief">—</div>
+                <div class="gb-stat-label">Nu actief <span class="gb-stat-hint">(laatste 5 min)</span></div>
+            </div>
+            <div class="gb-stat-kaart">
+                <div class="gb-stat-waarde" id="gb-stat-coach-vandaag">—</div>
+                <div class="gb-stat-label">Unieke bezoekers vandaag</div>
+            </div>
+            <div class="gb-stat-kaart">
+                <div class="gb-stat-waarde" id="gb-stat-coach-uniek">—</div>
+                <div class="gb-stat-label">Unieke bezoekers ooit</div>
+            </div>
+            <div class="gb-stat-kaart">
+                <div class="gb-stat-waarde" id="gb-stat-coach-hits">—</div>
+                <div class="gb-stat-label">Totaal page-views</div>
+            </div>
+            <div class="gb-stat-kaart">
+                <div class="gb-stat-waarde" id="gb-stat-coach-peak-today">—</div>
+                <div class="gb-stat-label">Piek gelijktijdig <span class="gb-stat-hint">(vandaag)</span></div>
+            </div>
+            <div class="gb-stat-kaart">
+                <div class="gb-stat-waarde" id="gb-stat-coach-peak">—</div>
+                <div class="gb-stat-label">Piek gelijktijdig <span class="gb-stat-hint" id="gb-stat-coach-peak-at">(ooit)</span></div>
+            </div>
+        </div>
+        <div class="gb-stat-voetnoot" id="gb-stat-coach-voet">Laatst bijgewerkt: —</div>
+
         ${renderLogboekSectie()}`;
 
     // Events
@@ -224,7 +285,64 @@ function renderGebruikers() {
 
     bindLogboekEvents();
     laadLogboek();
+    startPublicStatsRefresh();
 }
+
+// ── Publieke-pagina bezoekersstatistiek ───────────────────────────────────
+let _gbStatsTimer = null;
+
+async function _laadStatsBlok(endpoint, idPrefix, voetId) {
+    try {
+        const res = await fetch(endpoint);
+        if (!res.ok) return;
+        const data = await res.json();
+        const set = (id, val) => { const e = el(id); if (e) e.textContent = val; };
+        set(`${idPrefix}-actief`,      data.actief         ?? 0);
+        set(`${idPrefix}-vandaag`,     data.actief_vandaag ?? 0);
+        set(`${idPrefix}-uniek`,       data.totaal_uniek   ?? 0);
+        set(`${idPrefix}-hits`,        data.totaal_hits    ?? 0);
+        set(`${idPrefix}-peak-today`,  data.peak_today     ?? 0);
+        set(`${idPrefix}-peak`,        data.peak_all_time  ?? 0);
+        // Timestamp van de all-time-piek in de hint van die card plaatsen
+        const hintEl = el(`${idPrefix}-peak-at`);
+        if (hintEl) {
+            if (data.peak_at) {
+                const d = new Date(String(data.peak_at).replace(' ', 'T'));
+                const dt = d.toLocaleString('nl-NL', {day:'2-digit', month:'short', hour:'2-digit', minute:'2-digit'});
+                hintEl.textContent = `(ooit, ${dt})`;
+            } else {
+                hintEl.textContent = '(ooit)';
+            }
+        }
+        const v = el(voetId);
+        if (v) {
+            const t = new Date().toLocaleTimeString('nl-NL', {hour:'2-digit', minute:'2-digit', second:'2-digit'});
+            v.textContent = 'Laatst bijgewerkt: ' + t;
+        }
+    } catch { /* stil */ }
+}
+
+async function laadPublicStats() {
+    await _laadStatsBlok('api/public_stats.php', 'gb-stat',       'gb-stat-voet');
+    await _laadStatsBlok('api/coach_stats.php',  'gb-stat-coach', 'gb-stat-coach-voet');
+}
+
+function startPublicStatsRefresh() {
+    if (_gbStatsTimer) clearInterval(_gbStatsTimer);
+    laadPublicStats();
+    // Elke 30 sec refreshen zodat "nu actief" up-to-date blijft
+    _gbStatsTimer = setInterval(laadPublicStats, 30_000);
+}
+
+// Stop het interval als de gebruiker weg navigeert
+document.addEventListener('visibilitychange', () => {
+    if (document.hidden && _gbStatsTimer) {
+        clearInterval(_gbStatsTimer);
+        _gbStatsTimer = null;
+    } else if (!document.hidden && !_gbStatsTimer && el('gb-stats')) {
+        startPublicStatsRefresh();
+    }
+});
 
 // ── Gebruiker bewerken / aanmaken ─────────────────────────────────────────────
 

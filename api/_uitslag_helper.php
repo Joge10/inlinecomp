@@ -5,15 +5,60 @@
 //  en uitslag_vastleggen.php.
 // ============================================================
 
+// ── Eindsanctie = rijder heeft geen geldige finish ──────────────────────────
+// DNS/DNF/DQ-* betekenen: géén geregistreerde finish, ongeacht of finishpositie
+// in de DB (per ongeluk of door eerdere invoer) gevuld is.
+// FS/RR/W1/W2 zijn sancties die de finish-status NIET wegnemen.
+function isEindSanctie(?string $s): bool {
+    if ($s === null || $s === '') return false;
+    return in_array($s, ['DNS', 'DNF', 'DQ-TF', 'DQ-SF', 'DQ-DF'], true);
+}
+
+// ── Splits rijders in finishers + overigen ──────────────────────────────────
+// Gebruik deze i.p.v. rechtstreeks filteren op finishpositie, zodat rijders
+// met een eindsanctie ALTIJD in overigen belanden — ook als finishpositie per
+// ongeluk gevuld is (bv. na een DQ-TF → DNS omzetting waarbij de positie niet
+// gereset werd).
+function splitsFinishersOverigen(array $rows): array {
+    $finishers = [];
+    $overigen  = [];
+    foreach ($rows as $r) {
+        if ($r['finishpositie'] !== null && !isEindSanctie($r['sanctie'] ?? null)) {
+            $finishers[] = $r;
+        } else {
+            $overigen[] = $r;
+        }
+    }
+    return [array_values($finishers), array_values($overigen)];
+}
+
 // ── Sorteert een set heat-rijen ──────────────────────────────────────────────
 // Detecteert automatisch puntenkoers (pk_punten) en lange afstand (rondes).
+// Rijders met eindsanctie (DNS/DNF/DQ-*) behandelen we als "geen finish"
+// ongeacht of finishpositie gevuld is, zodat ze altijd achteraan sorteren.
 function sorteerRijdersOpTijd(array $rows): array {
     $isPK     = !empty(array_filter($rows, fn($r) => isset($r['pk_punten']) && $r['pk_punten'] !== null));
-    $heeftRnd = !empty(array_filter($rows, fn($r) => isset($r['rondes']) && $r['rondes'] !== null));
+    // Lange-afstand-detectie: alleen activeren als ALLE finishers rondes
+    // hebben én er minstens één rijder > 0 rondes heeft. Voorkomt dat
+    // losse rondes-restwaarden (bv. achtergebleven na een gewiste DNS op een
+    // sprint) de sort-volgorde gaan bepalen.
+    $finishers = array_filter($rows, fn($r) =>
+        $r['finishpositie'] !== null && !isEindSanctie($r['sanctie'] ?? null));
+    $heeftRnd = false;
+    if (!empty($finishers)) {
+        $allesGevuld = true; $maxRnd = 0;
+        foreach ($finishers as $r) {
+            $rd = $r['rondes'] ?? null;
+            if ($rd === null) { $allesGevuld = false; break; }
+            if ((int)$rd > $maxRnd) $maxRnd = (int)$rd;
+        }
+        $heeftRnd = $allesGevuld && $maxRnd > 0;
+    }
 
     usort($rows, function ($a, $b) use ($isPK, $heeftRnd) {
-        $hasA = $a['finishpositie'] !== null;
-        $hasB = $b['finishpositie'] !== null;
+        // Eindsanctie overschrijft finishpositie → behandel als "geen finish"
+        $hasA = $a['finishpositie'] !== null && !isEindSanctie($a['sanctie'] ?? null);
+        $hasB = $b['finishpositie'] !== null && !isEindSanctie($b['sanctie'] ?? null);
         if (!$hasA && !$hasB) return 0;
         if (!$hasA) return 1;
         if (!$hasB) return -1;
@@ -102,13 +147,19 @@ function isCombineerdModus(array $heats): bool {
 // $sancties     : [ person_license => sanctie|null ]  (finale-sanctie)
 //
 // Retourneert array gesorteerd op totaal_punten ASC, tiebreaker finale_rang ASC.
+//
+// $serieAlleenStartvolgorde: true = full-final variant waarin de serie alleen
+//   de startvolgorde in de A-finale bepaalt; het eindresultaat komt dan
+//   volledig uit de finale (serie-punten tellen niet mee voor totaal en
+//   ook niet als tiebreaker).
 function berekenCombineerdResultaat(
     array $serieRangs,
     array $finaleRangs,
     array $rijderInfo,
     array $serieTijden,
     array $finaleTijden,
-    array $sancties
+    array $sancties,
+    bool  $serieAlleenStartvolgorde = false
 ): array {
     // Alle bekende rijders (unie van serie- en finale-deelnemers)
     $licenties = array_unique(array_merge(
@@ -124,7 +175,18 @@ function berekenCombineerdResultaat(
         // (of we nemen ze mee maar geven sanctie default-punten)
         $seriePunten  = $serieRang  !== null ? (float)$serieRang  : null;
         $finalePunten = $finaleRang !== null ? (float)$finaleRang : null;
-        $totaal = ($seriePunten ?? 0) + ($finalePunten ?? 0);
+        // Als de serie alleen als startvolgorde telt: totaal = enkel finale-punten.
+        // Rijders zonder finale-rang krijgen PHP_INT_MAX zodat ze onderaan landen.
+        // Bij niet-SAS: als een rijder ontbreekt in serie OF finale → PHP_INT_MAX
+        // (i.p.v. ?? 0 → anders krijgt sparse-data rijder kunstmatig laag totaal
+        // en sorteert onterecht naar bovenaan met rang=1).
+        $totaal = $serieAlleenStartvolgorde
+            ? ($finalePunten ?? PHP_INT_MAX)
+            : (
+                $seriePunten === null || $finalePunten === null
+                    ? PHP_INT_MAX
+                    : $seriePunten + $finalePunten
+              );
 
         $info = $rijderInfo[$lic] ?? [];
         $rijen[] = [
@@ -134,7 +196,9 @@ function berekenCombineerdResultaat(
             'start_number'   => $info['start_number'] ?? null,
             'categorie'      => $info['categorie']    ?? '',
             'serie_rang'     => $serieRang,
-            'serie_punten'   => $seriePunten,
+            // Bij serie-alleen-startvolgorde telt de serie niet mee voor het totaal,
+            // dus ook niet als aparte "punten" in de uitslag.
+            'serie_punten'   => $serieAlleenStartvolgorde ? null : $seriePunten,
             'serie_tijd_ms'  => $serieTijden[$lic]  ?? null,
             'finale_rang'    => $finaleRang,
             'finale_punten'  => $finalePunten,
@@ -293,7 +357,23 @@ function berekenInternationaalResultaat(array $rondeData): array {
         // Detecteer puntenkoers: als minstens 1 rijder pk_punten heeft
         $isPK = !empty(array_filter($uitgevallen, fn($r) => ($r['pk_punten'] ?? null) !== null));
 
-        usort($uitgevallen, function ($a, $b) use ($rankingMethod, $isPK) {
+        // Lange-afstand-detectie: alleen activeren als ALLE échte finishers
+        // (niet-ranked_last) rondes hebben én er minstens één > 0 is.
+        // Voorkomt dat per ongeluk achtergebleven rondes-waardes (bv. na een
+        // teruggedraaide DNS op een sprint) de volgorde gaan bepalen.
+        $heeftRnd = false;
+        $echteFin = array_filter($uitgevallen, fn($r) => empty($r['_ranked_last']));
+        if (!empty($echteFin)) {
+            $allesGevuld = true; $maxRnd = 0;
+            foreach ($echteFin as $r) {
+                $rd = $r['rondes'] ?? null;
+                if ($rd === null) { $allesGevuld = false; break; }
+                if ((int)$rd > $maxRnd) $maxRnd = (int)$rd;
+            }
+            $heeftRnd = $allesGevuld && $maxRnd > 0;
+        }
+
+        usort($uitgevallen, function ($a, $b) use ($rankingMethod, $isPK, $heeftRnd) {
             // ranked_last altijd onderaan
             if ($a['_ranked_last'] && !$b['_ranked_last']) return 1;
             if (!$a['_ranked_last'] && $b['_ranked_last']) return -1;
@@ -312,8 +392,8 @@ function berekenInternationaalResultaat(array $rondeData): array {
                 return $tA <=> $tB; // ASC
             }
 
-            // Lange afstand: rondes DESC → tijd ASC
-            if (($a['rondes'] ?? null) !== null || ($b['rondes'] ?? null) !== null) {
+            // Lange afstand: rondes DESC → tijd ASC (alleen als $heeftRnd)
+            if ($heeftRnd) {
                 $rA = $a['rondes'] ?? PHP_INT_MAX;
                 $rB = $b['rondes'] ?? PHP_INT_MAX;
                 if ($rA !== $rB) return $rB <=> $rA; // DESC (meer rondes = beter)
@@ -352,8 +432,8 @@ function berekenInternationaalResultaat(array $rondeData): array {
                     $exAequo = $r['finishpositie'] === $prev['finishpositie']
                             && $r['tijd_ms'] === $prev['tijd_ms'];
                 } else {
-                    // Lange afstand: rondes + tijd
-                    if (($r['rondes'] ?? null) !== null || ($prev['rondes'] ?? null) !== null) {
+                    // Lange afstand: rondes + tijd — alleen als $heeftRnd
+                    if ($heeftRnd) {
                         $exAequo = ($r['rondes'] ?? null) === ($prev['rondes'] ?? null)
                                 && $r['tijd_ms'] !== null && $prev['tijd_ms'] !== null
                                 && $r['tijd_ms'] === $prev['tijd_ms'];

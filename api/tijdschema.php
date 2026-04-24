@@ -90,6 +90,7 @@ function enabledRondesVoorAfstand(PDO $pdo, int $tsId, string $afstandNaam, stri
         SELECT cc.*
         FROM tijdschema_cat_config cc
         JOIN distances d      ON d.id  = cc.distance_id
+                              AND d.distance_combination_id = cc.dc_id
         JOIN distance_combinations dc ON dc.id = cc.dc_id
         WHERE cc.tijdschema_id = ?
           AND d.name = ?
@@ -631,17 +632,34 @@ function genereerRitten(PDO $pdo, int $tsId, string $compId, ?array $catVanJS = 
                     if ($rijders <= 0) continue;
 
                     if ($systeem === 'full-final') {
-                        // A-finale: top $finaleHg rijders
-                        $aRijders  = min($rijders, $finaleHg);
+                        // Per-cat instellingen (wint) met fallback naar afstand-defaults.
+                        $catARaw  = $cc['finale_a_grootte']   ?? null;
+                        $catBHRaw = $cc['finale_b_heats']     ?? null;
+                        $catLbg   = $cc['laatste_b_grootste'] ?? null;
+
+                        $catA      = ($catARaw  !== null && $catARaw  !== '') ? max(1, (int)$catARaw)  : $finaleHg;
+                        $nBHeatsCfg= ($catBHRaw !== null && $catBHRaw !== '') ? max(0, (int)$catBHRaw) : null;
+                        $lbgLocal  = ($catLbg   !== null) ? !empty($catLbg) : $bLaatstGrootst;
+
+                        // A-finale: top $catA rijders (gecapt op beschikbaar aantal)
+                        $aRijders  = min($rijders, $catA);
                         $bRijders  = max(0, $rijders - $aRijders);
                         $catRitten = [];
 
-                        // B-finales: resterende rijders verdeeld
+                        // B-finales: resterende rijders verdeeld over N B-heats.
+                        // Per-cat nBHeatsCfg wint; als null → afstand-default (ceil(rest/bFinaleHg)).
+                        // 0 B-heats = geen B-finale (rest valt af).
                         if ($bRijders > 0) {
-                            $nBHeats    = max(1, (int)ceil($bRijders / $bFinaleHg));
-                            $bAantallen = $bLaatstGrootst
-                                ? verdeelLaatstGrootst($bRijders, $nBHeats)
-                                : verdeel($bRijders, $nBHeats);
+                            if ($nBHeatsCfg !== null) {
+                                $nBHeats = min($nBHeatsCfg, $bRijders);
+                            } else {
+                                $nBHeats = max(1, (int)ceil($bRijders / $bFinaleHg));
+                            }
+                            $bAantallen = $nBHeats > 0
+                                ? ($lbgLocal
+                                    ? verdeelLaatstGrootst($bRijders, $nBHeats)
+                                    : verdeel($bRijders, $nBHeats))
+                                : [];
                             for ($b = 1; $b <= $nBHeats; $b++) {
                                 $catRitten[] = [
                                     'blok_id'      => $blokId,
@@ -911,8 +929,12 @@ try {
         $bLaatstGrootst  = !empty($body['laatste_b_grootste']) ? 1 : 0;
         $finaleSeeding   = in_array($body['finale_seeding'] ?? '', ['slang', 'tijdkoppeling'], true)
                          ? $body['finale_seeding'] : 'slang';
-        $raceType        = in_array($body['race_type'] ?? '', ['sprint', 'long_distance'], true)
-                         ? $body['race_type'] : 'sprint';
+        // race_type wordt niet meer uit het tijdschema-formulier gelezen:
+        // canonieke bron is distances.race_type (Beheer → afstand-dropdown én
+        // live-view voor lange-afstand heats). We zetten hier voor backward-
+        // compatibility een vaste waarde (de kolom blijft bestaan voor oude
+        // queries, maar de readers afleiden voortaan uit distances.race_type).
+        $raceType        = 'sprint';
         $geldigeRanking  = ['time', 'position_time'];
         $heatsRanking    = in_array($body['heats_ranking'] ?? '', $geldigeRanking, true)
                          ? $body['heats_ranking'] : 'time';
@@ -961,8 +983,10 @@ try {
                  heeft_heats, heats_aantal, heats_q, heats_q_heat,
                  heeft_kwartfinale, kwart_heats, kwart_door, kwart_q_heat,
                  heeft_halve_finale, half_heats, half_door, half_q_heat,
-                 heeft_runner_up, finale_heats)
-            VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+                 heeft_runner_up, finale_heats,
+                 finale_a_grootte, finale_b_heats, laatste_b_grootste,
+                 series_alleen_startvolgorde)
+            VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
             ON DUPLICATE KEY UPDATE
                 heeft_heats        = VALUES(heeft_heats),
                 heats_aantal       = VALUES(heats_aantal),
@@ -977,7 +1001,11 @@ try {
                 half_door          = VALUES(half_door),
                 half_q_heat        = VALUES(half_q_heat),
                 heeft_runner_up    = VALUES(heeft_runner_up),
-                finale_heats       = VALUES(finale_heats)
+                finale_heats       = VALUES(finale_heats),
+                finale_a_grootte   = VALUES(finale_a_grootte),
+                finale_b_heats     = VALUES(finale_b_heats),
+                laatste_b_grootste = VALUES(laatste_b_grootste),
+                series_alleen_startvolgorde = VALUES(series_alleen_startvolgorde)
         ");
         foreach ($catConfigs as $cc) {
             $dcId   = trim($cc['dc_id']      ?? '');
@@ -987,10 +1015,28 @@ try {
             $heeftK = !empty($cc['heeft_kwartfinale'])  ? 1 : 0;
             $heeftP = !empty($cc['heeft_halve_finale']) ? 1 : 0;
             $heeftR = !empty($cc['heeft_runner_up'])    ? 1 : 0;
+
+            // Per-cat FF-velden: null = niet aangeleverd (gebruik afstand-defaults)
+            $fAGrootteRaw = $cc['finale_a_grootte']   ?? null;
+            $fBHeatsRaw   = $cc['finale_b_heats']     ?? null;
+            $lbgRaw       = $cc['laatste_b_grootste'] ?? null;
+            $fAGrootte = ($fAGrootteRaw === null || $fAGrootteRaw === '')
+                ? null : max(1, (int)$fAGrootteRaw);
+            $fBHeats   = ($fBHeatsRaw === null || $fBHeatsRaw === '')
+                ? null : max(0, (int)$fBHeatsRaw);
+            $lbg       = ($lbgRaw === null) ? null : (!empty($lbgRaw) ? 1 : 0);
+
+            // Serie-alleen-startvolgorde: alleen 1 als echt aangevinkt én zinvol
+            // (één serie-heat). Bij meer dan 1 heat of zonder series-ronde forceren
+            // we 0 zodat de DB geen inconsistente toestand kan krijgen.
+            $heatsAantal = $heeftH ? max(1, (int)($cc['heats_aantal'] ?? 1)) : 0;
+            $sasRaw      = !empty($cc['series_alleen_startvolgorde']) ? 1 : 0;
+            $sas         = ($heeftH && $heatsAantal === 1) ? $sasRaw : 0;
+
             $insCC->execute([
                 $tsId, $dcId, $distId,
                 $heeftH,
-                $heeftH ? max(1, (int)($cc['heats_aantal']  ?? 1)) : null,
+                $heeftH ? $heatsAantal : null,
                 $heeftH ? max(0, (int)($cc['heats_q']      ?? 0)) : null,
                 $heeftH ? max(0, (int)($cc['heats_q_heat'] ?? 0)) : 0,
                 $heeftK,
@@ -1003,6 +1049,10 @@ try {
                 $heeftP ? max(0, (int)($cc['half_q_heat']    ?? 1)) : 0,
                 $heeftR,
                 max(1, (int)($cc['finale_heats'] ?? 1)),
+                $fAGrootte,
+                $fBHeats,
+                $lbg,
+                $sas,
             ]);
         }
 
@@ -1457,6 +1507,171 @@ try {
             "UPDATE tijdschema_ritten SET tijdstip_override = ?, opmerking = ?
              WHERE id = ? AND tijdschema_id = ?"
         )->execute([$tijdstipOverride, $opmerking, $ritId, $tsId]);
+
+        $pdo->prepare(
+            "UPDATE competitions SET tijdschema_version = tijdschema_version + 1 WHERE id = ?"
+        )->execute([$compId]);
+
+        echo json_encode(fetchSchema($pdo, $compId));
+        exit;
+    }
+
+    // ── Ritten combineren (visueel in programma/live/print) ───────────────────
+    // POST action=set_combi  body: {tijdschema_id, competition_id, rit_ids:[...]}
+    // POST action=clear_combi body: {tijdschema_id, competition_id, rit_ids:[...]}
+    if ($action === 'set_combi' || $action === 'clear_combi') {
+        $tsId   = (int)($body['tijdschema_id'] ?? 0);
+        $compId = trim($body['competition_id'] ?? '');
+        $ritIdsRaw = $body['rit_ids'] ?? [];
+        $ritIds = is_array($ritIdsRaw)
+            ? array_values(array_filter(array_map('intval', $ritIdsRaw), fn($v) => $v > 0))
+            : [];
+        if (!$tsId || !$compId || empty($ritIds)) {
+            http_response_code(400);
+            echo json_encode(['error' => 'Ongeldige invoer (tijdschema_id, competition_id, rit_ids verplicht)']);
+            exit;
+        }
+
+        if ($action === 'clear_combi') {
+            // Wis combi_group voor de opgegeven ritten
+            $ph = implode(',', array_fill(0, count($ritIds), '?'));
+            $pdo->prepare(
+                "UPDATE tijdschema_ritten SET combi_group = NULL
+                 WHERE tijdschema_id = ? AND id IN ($ph)"
+            )->execute(array_merge([$tsId], $ritIds));
+            $pdo->prepare(
+                "UPDATE competitions SET tijdschema_version = tijdschema_version + 1 WHERE id = ?"
+            )->execute([$compId]);
+            echo json_encode(fetchSchema($pdo, $compId));
+            exit;
+        }
+
+        // set_combi: valideren + nieuwe combi_group toewijzen
+
+        // 0) Alleen voor full-final competitie-systeem
+        $sysStmt = $pdo->prepare(
+            "SELECT systeem FROM competition_tijdschema WHERE id = ?"
+        );
+        $sysStmt->execute([$tsId]);
+        $systeem = $sysStmt->fetchColumn();
+        if ($systeem !== 'full-final') {
+            http_response_code(400);
+            echo json_encode([
+                'error' => 'Ritten combineren is alleen beschikbaar bij het full-final systeem',
+            ]);
+            exit;
+        }
+
+        // 1) Max 4 ritten
+        if (count($ritIds) < 2 || count($ritIds) > 4) {
+            http_response_code(400);
+            echo json_encode(['error' => 'Selecteer 2 tot 4 ritten om te combineren']);
+            exit;
+        }
+
+        // 2) Haal ritten op en valideer ronde_type + volgorde + dc/afstand
+        $ph = implode(',', array_fill(0, count($ritIds), '?'));
+        $rStmt = $pdo->prepare(
+            "SELECT id, volgorde, ronde_type, dc_id, distance_id, afstand_naam
+             FROM tijdschema_ritten
+             WHERE tijdschema_id = ? AND id IN ($ph)
+             ORDER BY volgorde"
+        );
+        $rStmt->execute(array_merge([$tsId], $ritIds));
+        $ritten = $rStmt->fetchAll(PDO::FETCH_ASSOC);
+
+        if (count($ritten) !== count($ritIds)) {
+            http_response_code(400);
+            echo json_encode(['error' => 'Niet alle rit_ids gevonden in dit tijdschema']);
+            exit;
+        }
+
+        // Alleen finale_a-ritten mogen gecombineerd worden
+        foreach ($ritten as $r) {
+            if ($r['ronde_type'] !== 'finale_a') {
+                http_response_code(400);
+                echo json_encode([
+                    'error' => 'Alleen A-finale ritten mogen gecombineerd worden ('
+                             . $r['rit_naam'] ?? $r['id'] . ' is ' . $r['ronde_type'] . ')',
+                ]);
+                exit;
+            }
+        }
+
+        // 3) Opvolgende volgorde: check dat de volgorde-nummers aaneengesloten zijn
+        //    in het programma (geen ritten ertussen).
+        $firstVolgorde = (int)$ritten[0]['volgorde'];
+        $lastVolgorde  = (int)$ritten[count($ritten) - 1]['volgorde'];
+        $tussenStmt = $pdo->prepare(
+            "SELECT COUNT(*) FROM tijdschema_ritten
+             WHERE tijdschema_id = ? AND volgorde >= ? AND volgorde <= ?"
+        );
+        $tussenStmt->execute([$tsId, $firstVolgorde, $lastVolgorde]);
+        $aantalTussen = (int)$tussenStmt->fetchColumn();
+        if ($aantalTussen !== count($ritten)) {
+            http_response_code(400);
+            echo json_encode(['error' => 'Alleen opeenvolgende ritten kunnen gecombineerd worden']);
+            exit;
+        }
+
+        // 4) Elke rit moet tot een cat/afstand behoren die GEEN andere rondes
+        //    heeft (geen series, kwart, half, runner-up, finale_b). Dat betekent:
+        //    · cat_config: heeft_heats/kwart/half/runner_up allemaal 0
+        //    · tijdschema_ritten: geen finale_b voor dezelfde dc+distance
+        foreach ($ritten as $r) {
+            $ccStmt = $pdo->prepare(
+                "SELECT heeft_heats, heeft_kwartfinale, heeft_halve_finale, heeft_runner_up
+                 FROM tijdschema_cat_config
+                 WHERE tijdschema_id = ? AND dc_id = ?
+                   AND (distance_id = ? OR (distance_id IS NULL AND ? = ''))
+                 LIMIT 1"
+            );
+            $ccStmt->execute([$tsId, $r['dc_id'], $r['distance_id'] ?? '', $r['distance_id'] ?? '']);
+            $cc = $ccStmt->fetch(PDO::FETCH_ASSOC);
+            if ($cc && (
+                !empty($cc['heeft_heats']) ||
+                !empty($cc['heeft_kwartfinale']) ||
+                !empty($cc['heeft_halve_finale']) ||
+                !empty($cc['heeft_runner_up'])
+            )) {
+                http_response_code(400);
+                echo json_encode([
+                    'error' => 'Rit ' . $r['id'] . ' hoort bij een categorie met '
+                             . 'series/KF/HF/runner-up — alleen finale_a-only ritten kunnen worden gecombineerd',
+                ]);
+                exit;
+            }
+
+            $bStmt = $pdo->prepare(
+                "SELECT COUNT(*) FROM tijdschema_ritten
+                 WHERE tijdschema_id = ? AND dc_id = ?
+                   AND (distance_id = ? OR (distance_id IS NULL AND ? = ''))
+                   AND ronde_type = 'finale_b'"
+            );
+            $bStmt->execute([$tsId, $r['dc_id'], $r['distance_id'] ?? '', $r['distance_id'] ?? '']);
+            if ((int)$bStmt->fetchColumn() > 0) {
+                http_response_code(400);
+                echo json_encode([
+                    'error' => 'Rit ' . $r['id'] . ' heeft een B-finale in het programma — '
+                             . 'alleen enkel-A-finale ritten kunnen worden gecombineerd',
+                ]);
+                exit;
+            }
+        }
+
+        // 5) Nieuwe combi_group ID: max + 1 voor dit tijdschema
+        $maxStmt = $pdo->prepare(
+            "SELECT COALESCE(MAX(combi_group), 0) FROM tijdschema_ritten WHERE tijdschema_id = ?"
+        );
+        $maxStmt->execute([$tsId]);
+        $nieuweGroep = (int)$maxStmt->fetchColumn() + 1;
+
+        // 6) Schrijven
+        $updStmt = $pdo->prepare(
+            "UPDATE tijdschema_ritten SET combi_group = ?
+             WHERE tijdschema_id = ? AND id IN ($ph)"
+        );
+        $updStmt->execute(array_merge([$nieuweGroep, $tsId], $ritIds));
 
         $pdo->prepare(
             "UPDATE competitions SET tijdschema_version = tijdschema_version + 1 WHERE id = ?"

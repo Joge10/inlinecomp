@@ -95,16 +95,29 @@ try {
         }
     }
 
+    // race_type: user kan expliciet meesturen; anders default op basis van naam/meters.
     $stmt = $pdo->prepare("
         INSERT INTO distances
-               (id, distance_combination_id, number, name, target_group, value_meters, discipline, starts)
-        VALUES (:id, :dc_id, :number, :name, :target_group, :value_meters, NULL, NULL)
+               (id, distance_combination_id, number, name, target_group,
+                value_meters, discipline, starts, race_type)
+        VALUES (:id, :dc_id, :number, :name, :target_group,
+                :value_meters, NULL, NULL, :race_type)
         ON DUPLICATE KEY UPDATE
                number       = VALUES(number),
                name         = VALUES(name),
                target_group = VALUES(target_group),
-               value_meters = VALUES(value_meters)
+               value_meters = VALUES(value_meters),
+               race_type    = VALUES(race_type)
     ");
+    $bepaalRaceType = function(?string $name, $meters): string {
+        $n = mb_strtolower($name ?? '');
+        if (str_contains($n, 'puntenkoers') || str_contains($n, 'punten koers')) return 'puntenkoers';
+        if (str_contains($n, 'afvalkoers')  || str_contains($n, 'afval koers'))  return 'afvalkoers';
+        if (str_contains($n, 'lange afstand')) return 'inline';
+        if (is_numeric($meters) && (int)$meters > 1000)                           return 'inline';
+        return 'sprint';
+    };
+    $geldigeRaceTypes = ['sprint','inline','puntenkoers','afvalkoers'];
 
     $resultaat = [];
     foreach ($dists as $i => $d) {
@@ -116,6 +129,10 @@ try {
         $id  = (isset($d['id']) && $d['id'] !== '') ? $d['id'] : uuid4();
         $num = (int) ($d['number'] ?? ($i + 1));
 
+        $raceType = (isset($d['race_type']) && in_array($d['race_type'], $geldigeRaceTypes, true))
+                      ? $d['race_type']
+                      : $bepaalRaceType($naam, $meters);
+
         $stmt->execute([
             ':id'           => $id,
             ':dc_id'        => $dcId,
@@ -123,6 +140,7 @@ try {
             ':name'         => $naam,
             ':target_group' => $splitGroup,  // null = basis, string = splitgroep
             ':value_meters' => $meters,
+            ':race_type'    => $raceType,
         ]);
 
         $resultaat[] = [
@@ -131,6 +149,7 @@ try {
             'name'         => $naam,
             'target_group' => $splitGroup,
             'value_meters' => $meters,
+            'race_type'    => $raceType,
         ];
     }
 

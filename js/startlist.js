@@ -85,15 +85,24 @@ async function kleurAlleTabsAsync(groepen, catTabsEl) {
     } catch { /* silent – kleuren zijn niet-kritiek */ }
 }
 
-// Gecachete klassementen-lijst voor loting-UI (lazy geladen)
+// Gecachete klassementen-lijst voor loting-UI. Per competition gecacht
+// want de seeding-dropdown toont alleen voor deze wedstrijd relevante
+// klassementen (serie-klassementen waarvan deze wedstrijd deel is +
+// PDF-klassementen van dezelfde organisatie).
 let slKlassementen = null;
+let slKlassementenCompId = null;
+function invalideerSlKlassementen() { slKlassementen = null; slKlassementenCompId = null; }
 async function laadSlKlassementen() {
-    if (slKlassementen) return slKlassementen;
+    if (slKlassementen && slKlassementenCompId === huidigCompId) return slKlassementen;
     try {
-        const r = await fetch('api/klassement_import.php?action=list');
+        const url = huidigCompId
+            ? `api/klassement_import.php?action=list_for_seeding&competition_id=${encodeURIComponent(huidigCompId)}`
+            : 'api/klassement_import.php?action=list';
+        const r = await fetch(url);
         const d = await r.json();
         slKlassementen = Array.isArray(d) ? d : [];
-    } catch { slKlassementen = []; }
+        slKlassementenCompId = huidigCompId;
+    } catch { slKlassementen = []; slKlassementenCompId = huidigCompId; }
     return slKlassementen;
 }
 
@@ -141,7 +150,15 @@ function bouwSlFlow(catCfg, systeem) {
         flow.push({ sleutel: 'runner_up',    naam: 'Runner-up',    kleur: KLEUREN.runner_up    || '#6c757d' });
     if (systeem === 'full-final') {
         flow.push({ sleutel: 'finale_a', naam: 'A-finale', kleur: KLEUREN.finale_a || '#198754' });
-        flow.push({ sleutel: 'finale_b', naam: 'B-finale(s)', kleur: KLEUREN.finale_b || '#20c997' });
+        // B-finale alleen toevoegen als de planner hem daadwerkelijk wil.
+        // Per-cat finale_b_heats === 0 (expliciet) → géén B-finale in de flow,
+        // zodat er ook geen "pro forma" placeholder-kaart verschijnt.
+        const catBH = catCfg.finale_b_heats;
+        const heeftGeenB = catBH !== null && catBH !== undefined && catBH !== ''
+                        && parseInt(catBH) === 0;
+        if (!heeftGeenB) {
+            flow.push({ sleutel: 'finale_b', naam: 'B-finale(s)', kleur: KLEUREN.finale_b || '#20c997' });
+        }
     } else {
         flow.push({ sleutel: 'finale_a', naam: 'A-finale', kleur: KLEUREN.finale_a || '#198754' });
     }
@@ -239,14 +256,22 @@ async function vulPrintSelect() {
     const distSel  = el('sl-print-dist-sel');
     const rondeSel = el('sl-print-ronde-sel');
     const btn      = el('sl-btn-print');
-    if (!catSel) return;
+    // DOM-elementen optioneel: Print-Center roept deze functie ook aan
+    // zónder dat de Startlijsten-pagina gerenderd is. In dat geval vullen
+    // we alleen _slPrintOpties en slaan we DOM-manipulatie over.
 
     // Volledig reset
     _slPrintOpties = new Map();
-    catSel.innerHTML   = '<option value="">— Categorie —</option>';
+    if (catSel)   catSel.innerHTML   = '<option value="">— Categorie —</option>';
     if (distSel)  { distSel.innerHTML  = '<option value="">— Afstand —</option>';  distSel.disabled  = true; }
     if (rondeSel) { rondeSel.innerHTML = '<option value="">— Ronde —</option>';    rondeSel.disabled = true; }
     if (btn) btn.disabled = true;
+
+    // Zorg dat _slGroepen gevuld is (normaal gebeurt dat in toonStartlijstenPagina;
+    // voor Print-Center doen we het hier als dat nog niet gebeurd is).
+    if (!_slGroepen?.length && typeof bouwStartlijstGroepen === 'function') {
+        _slGroepen = bouwStartlijstGroepen();
+    }
 
     // Altijd verse status ophalen: nieuwe rondes (gegenereerd in live verwerking)
     // moeten hier direct zichtbaar zijn zonder dat een page refresh nodig is.
@@ -343,26 +368,56 @@ async function vulPrintSelect() {
             verzamel('', '');
     }
 
-    // Eerste select (categorie) vullen
-    for (const naam of _slPrintOpties.keys()) {
-        const opt = document.createElement('option');
-        opt.value = naam;
-        opt.textContent = naam;
-        catSel.appendChild(opt);
-    }
-
-    // Auto-select bij één categorie
-    if (_slPrintOpties.size === 1) {
-        catSel.selectedIndex = 1;
-        catSel.dispatchEvent(new Event('change'));
+    // Eerste select (categorie) vullen — alleen als DOM er is
+    if (catSel) {
+        for (const naam of _slPrintOpties.keys()) {
+            const opt = document.createElement('option');
+            opt.value = naam;
+            opt.textContent = naam;
+            catSel.appendChild(opt);
+        }
+        // Auto-select bij één categorie
+        if (_slPrintOpties.size === 1) {
+            catSel.selectedIndex = 1;
+            catSel.dispatchEvent(new Event('change'));
+        }
     }
 }
 
-// ── Startlijst afdrukken ──────────────────────────────────────────────────────
-
-async function drukStartlijstAf(optData) {
+// ── Startlijst body-bouwer ────────────────────────────────────────────────────
+// Returns { bodyHtml, cssLinks, extraCss, pageOrientation, title, subType }
+// of null. Combi-detectie en dynamische portrait/landscape zitten hierin.
+// Wordt aangeroepen door `bouwStartlijstBody()` voor Print-Center. Er is
+// geen losse "Druk af"-knop meer in de UI — alles via Print-Center.
+async function _bouwStartlijstDrukInternal(optData) {
     const { cacheKey, dcIds, dcName, distId, distNaam, categoryFilter,
             rondeSleutel = 'heats', rondeLabel = 'Series' } = optData;
+
+    // ── Combi-detectie ─────────────────────────────────────────────────────
+    // Als de geselecteerde rit(ten) een combi_group hebben, print ALLE heats
+    // van de hele combi (over dc's heen) op één landscape-pagina.
+    const schemaVoorCombi = _slTsCache?.competition_id === huidigCompId ? _slTsCache.schema : null;
+    let combiGroup       = null;
+    let combiDcIds       = null;     // alle dc's in de combi
+    let combiRittenMap   = null;     // heat_nr → { dc_id, distance_id, rit_naam, volgorde, combi_group }
+
+    if (schemaVoorCombi?.ritten && rondeSleutel === 'finale_a') {
+        const myDcIds = dcIds ?? [optData.dcId];
+        const mijnRit = schemaVoorCombi.ritten.find(r =>
+            myDcIds.includes(r.dc_id) &&
+            String(r.distance_id ?? '') === String(distId ?? '') &&
+            r.ronde_type === 'finale_a' && r.combi_group
+        );
+        if (mijnRit?.combi_group) {
+            combiGroup = parseInt(mijnRit.combi_group);
+            const combiRitten = schemaVoorCombi.ritten.filter(r =>
+                r.ronde_type === 'finale_a' &&
+                parseInt(r.combi_group) === combiGroup
+            ).sort((a, b) => (a.volgorde ?? 0) - (b.volgorde ?? 0));
+            combiDcIds     = [...new Set(combiRitten.map(r => r.dc_id))];
+            combiRittenMap = combiRitten;
+        }
+    }
 
     // Data uit cache of vers van API laden
     let data = startlijstCache[cacheKey]?.resultaat;
@@ -376,8 +431,66 @@ async function drukStartlijstAf(optData) {
                       + (cf.length ? `&category_filter=${encodeURIComponent(cf.join(','))}` : '');
             const res = await fetch(url);
             data = await res.json();
-            if (!data?.exists) { toonBevestigDialog('Geen loting gevonden.', 'Laden'); return; }
-        } catch (e) { toonBevestigDialog('Fout bij laden: ' + e.message, 'Fout'); return; }
+            if (!data?.exists) { console.warn('[Startlijst] Geen loting:', optData); return null; }
+        } catch (e) { console.warn('[Startlijst] Laad-fout:', e); return null; }
+    }
+
+    // ── Combi: haal startlijst op voor ELKE dc in de combi (niet alleen geselecteerde)
+    //    en voeg ze samen tot één heat-lijst voor de print.
+    let combiHeatsSamengevoegd = null;  // [{heat, dc_id, dc_name, rit}]
+    if (combiGroup && combiDcIds?.length > 1) {
+        try {
+            const fetches = await Promise.all(combiDcIds.map(async dcId => {
+                const url = `api/startlijst_laden.php`
+                          + `?competition_id=${encodeURIComponent(huidigCompId)}`
+                          + `&dc_ids=${encodeURIComponent(dcId)}`
+                          + `&distance_id=${encodeURIComponent(distId ?? '')}`;
+                const r = await fetch(url);
+                return { dcId, json: await r.json() };
+            }));
+            combiHeatsSamengevoegd = [];
+            const ontbrekendeRitten = []; // rit_naam van ritten zonder loting
+            for (const rit of combiRittenMap) {
+                const pack = fetches.find(f => f.dcId === rit.dc_id);
+                if (!pack?.json?.exists) {
+                    ontbrekendeRitten.push(rit.rit_naam || rit.dc_naam || rit.dc_id);
+                    continue;
+                }
+                // Zoek de finale_a heats (via volgende_rondes) of heats voor de ronde
+                const aRonde = (pack.json.volgende_rondes ?? [])
+                    .find(vr => vr.ronde_type === 'finale_a');
+                const heats = aRonde?.heats ?? pack.json.heats ?? [];
+                const h = heats.find(x => parseInt(x.nummer) === parseInt(rit.heat_nr))
+                      ?? heats[0];
+                if (h) {
+                    combiHeatsSamengevoegd.push({
+                        heat:    h,
+                        dc_id:   rit.dc_id,
+                        dc_name: rit.dc_naam || pack.json.dc_name || '',
+                        rit,
+                    });
+                } else {
+                    ontbrekendeRitten.push(rit.rit_naam || rit.dc_naam || rit.dc_id);
+                }
+            }
+
+            // Waarschuwing als er ritten zonder loting in de combi zitten
+            if (ontbrekendeRitten.length) {
+                const lijst = ontbrekendeRitten.map(n => '• ' + n).join('\n');
+                const msg = `Deze gecombineerde startlijst is niet compleet — voor `
+                          + `${ontbrekendeRitten.length} rit${ontbrekendeRitten.length !== 1 ? 'ten' : ''} `
+                          + `is er nog geen loting gemaakt:\n\n${lijst}\n\n`
+                          + `Wil je toch alleen de beschikbare ritten afdrukken?`;
+                const doorgaan = await toonBevestigDialog(
+                    msg, 'Onvolledige combi-startlijst',
+                    'Toch afdrukken', 'Annuleer'
+                );
+                if (!doorgaan) return null;
+            }
+        } catch (e) {
+            // Val terug op normaal printen
+            combiHeatsSamengevoegd = null;
+        }
     }
 
     // Rit-lookup voor rit-nummer badges (uit tijdschema)
@@ -459,7 +572,9 @@ async function drukStartlijstAf(optData) {
     // Portrait als de grootste individuele heat meer dan 20 deelnemers heeft
     const maxHeatGrootte = afdrukHeats.reduce(
         (max, h) => Math.max(max, h.rijders?.length ?? 0), 0);
-    const isPortrait = maxHeatGrootte > 20;
+    // Bij combi-print ALTIJD landscape (alle kolommen moeten op 1 pagina)
+    const isCombiMode = !!(combiHeatsSamengevoegd && combiHeatsSamengevoegd.length);
+    const isPortrait = !isCombiMode && maxHeatGrootte > 20;
     const gridCols   = isPortrait ? 2 : 3;
     const pageSize   = isPortrait ? 'A4 portrait' : 'A4 landscape';
 
@@ -473,6 +588,12 @@ async function drukStartlijstAf(optData) {
         }
         const volg     = heat.rit_volgorde ?? rit?.volgorde ?? null;
         const ritBadge = volg != null ? `<span class="pr-ritnr">${volg}</span>` : '';
+        // Combi-marker als deze rit deel van een combi-groep is
+        const combiGrp = rit?.combi_group ? parseInt(rit.combi_group) : null;
+        const combiBadge = combiGrp
+            ? `<span class="pr-combi-badge" title="Gecombineerd met andere ritten in het programma">🔗 combi</span>`
+            : '';
+        const extraCls = combiGrp ? (extraClass + ' pr-card-combi').trim() : extraClass;
         let rows = '';
         (heat.rijders ?? []).forEach((r, i) => {
             const opm = r.vorige_sancties ?? '';
@@ -484,8 +605,8 @@ async function drukStartlijstAf(optData) {
                 <td class="pr-opm">${esc(opm)}</td>
             </tr>`;
         });
-        return `<div class="pr-card${extraClass ? ' ' + extraClass : ''}">
-            <div class="pr-titel">${ritBadge}${esc(naam)}</div>
+        return `<div class="pr-card${extraCls ? ' ' + extraCls : ''}">
+            <div class="pr-titel">${ritBadge}${esc(naam)}${combiBadge}</div>
             <table class="pr-tabel">
                 <colgroup>
                     <col class="pr-col-pos"><col class="pr-col-snr"><col class="pr-col-cat">
@@ -497,8 +618,43 @@ async function drukStartlijstAf(optData) {
         </div>`;
     };
 
+    // ── Combi-modus: alle combi-heats op 1 landscape pagina in kolommen ──────
+    let isCombiPrint = false;
     let cardsHtml = '';
-    if (isFullFinalPrint) {
+    if (combiHeatsSamengevoegd && combiHeatsSamengevoegd.length) {
+        isCombiPrint = true;
+        // Bouw één combi-frame met kolommen per heat
+        const kolommen = combiHeatsSamengevoegd.map(({ heat, dc_name, rit }) => {
+            const naam = rit?.rit_naam ?? heat.heat_naam ?? dc_name ?? '';
+            const volg = heat.rit_volgorde ?? rit?.volgorde ?? null;
+            const ritBadge = volg != null ? `<span class="pr-ritnr">${volg}</span>` : '';
+            let rows = '';
+            (heat.rijders ?? []).forEach((r, i) => {
+                const opm = r.vorige_sancties ?? '';
+                rows += `<tr>
+                    <td class="pr-pos">${i + 1}</td>
+                    <td class="pr-snr">${esc(r.start_number ?? '')}</td>
+                    <td class="pr-cat">${esc(r.categorie ?? r.category ?? '')}</td>
+                    <td class="pr-naam">${esc(r.full_name ?? '')}</td>
+                    <td class="pr-opm">${esc(opm)}</td>
+                </tr>`;
+            });
+            return `<div class="pr-combi-kolom">
+                <div class="pr-titel pr-combi-kolom-titel">${ritBadge}<span class="pr-combi-naam">${esc(naam)}</span></div>
+                <table class="pr-tabel pr-combi-tabel">
+                    <colgroup>
+                        <col class="pr-col-pos"><col class="pr-col-snr"><col class="pr-col-cat"><col class="pr-col-naam"><col class="pr-col-opm">
+                    </colgroup>
+                    <thead><tr><th>#</th><th>Snr</th><th>Cat</th><th>Naam</th><th>Opm.</th></tr></thead>
+                    <tbody>${rows}</tbody>
+                </table>
+            </div>`;
+        }).join('');
+        cardsHtml = `<div class="pr-combi-frame">
+            <div class="pr-combi-header">🔗 Gecombineerde startlijst — ${combiHeatsSamengevoegd.length} ritten</div>
+            <div class="pr-combi-kolommen">${kolommen}</div>
+        </div>`;
+    } else if (isFullFinalPrint) {
         // B-finales sectie
         const bHeats = afdrukHeats.filter(h => h._finaleType === 'b');
         const aHeats = afdrukHeats.filter(h => h._finaleType === 'a');
@@ -520,17 +676,17 @@ async function drukStartlijstAf(optData) {
             cardsHtml += maakCard(heat, rl, '', afdrukHeats.length);
     }
 
-    const htmlDoc = `<!DOCTYPE html><html lang="nl">
-<head><meta charset="UTF-8">
-<title>Startlijst – ${esc(dcName)}${esc(distLabel)}</title>
-<style>
+    const titleStr = `Startlijst – ${dcName}${distLabel}`;
+    const extraCss = `
 *{box-sizing:border-box}
 body{font-family:Arial,Helvetica,sans-serif;font-size:9pt;margin:.6cm 1cm;color:#111;line-height:1.35}
 .pr-comp{font-size:13pt;font-weight:700}
 .pr-meta{font-size:8.5pt;color:#000;margin-top:1mm}
 .pr-ronde{font-size:10pt;font-weight:700;color:#000}
 .pr-methode{font-size:8pt;color:#000;margin-top:1mm;font-style:italic}
-.pr-grid{display:grid;grid-template-columns:repeat(${gridCols},1fr);gap:.5cm}
+/* grid-template-columns wordt per element inline gezet, zodat twee
+   gecombineerde startlijsten met andere kolomeisen niet botsen. */
+.pr-grid{display:grid;gap:.5cm}
 .pr-card{border:1px solid #bbb;border-radius:5px;overflow:hidden;break-inside:avoid}
 .pr-titel{background:#1a3a5c;color:#fff;padding:5px 8px;font-weight:700;font-size:8.5pt;
           display:flex;align-items:center;gap:.35cm}
@@ -544,13 +700,16 @@ body{font-family:Arial,Helvetica,sans-serif;font-size:9pt;margin:.6cm 1cm;color:
 .pr-tabel td{padding:3px 4px;border-bottom:1px solid #eee}
 .pr-tabel tr:last-child td{border-bottom:none}
 col.pr-col-pos{width:16px}
-col.pr-col-snr{width:28px}
-col.pr-col-cat{width:26px}
+col.pr-col-snr{width:36px}
+col.pr-col-cat{width:30px}
 col.pr-col-naam{}
 col.pr-col-opm{width:60px}
 .pr-pos{color:#aaa;text-align:center;font-size:7.5pt}
-.pr-snr{text-align:right;font-weight:600;color:#1a3a5c}
-.pr-cat{font-size:7.5pt;color:#666}
+/* Hogere specificiteit (td.klasse) nodig om het shorthand
+   .pr-tabel td{padding:3px 4px} te overrulen; zonder dit plakken
+   het startnummer en de categorie tegen elkaar in smalle kolommen. */
+.pr-tabel td.pr-snr{text-align:right;font-weight:600;color:#1a3a5c;padding-right:10px}
+.pr-tabel td.pr-cat{font-size:7.5pt;color:#666;padding-left:2px}
 .pr-naam{overflow:hidden;white-space:nowrap;text-overflow:ellipsis}
 .pr-opm{border-left:1px solid #ddd!important}
 /* Full-final: sectie-koppen (B-Finales / A-Finale) */
@@ -558,11 +717,34 @@ col.pr-col-opm{width:60px}
                padding:3px 0 2px;margin-top:.3cm;border-bottom:2px solid currentColor}
 .pr-sectie-b{color:#20c997}
 .pr-sectie-a{color:#198754}
+/* Combi-marker: accent-rand op kaarten van gecombineerde ritten + badge */
+.pr-card-combi{border:2px solid #2E75B6;box-shadow:inset 0 0 0 1px rgba(46,117,182,.15)}
+.pr-combi-badge{margin-left:auto;background:#2E75B6;color:#fff;font-size:7pt;font-weight:600;
+                padding:1px 7px;border-radius:8px;letter-spacing:.03em}
+/* ── Combi startlijst: alle ritten op 1 landscape pagina in kolommen ── */
+/* grid-column 1/-1 zorgt dat het frame de volledige grid-breedte pakt,
+   ongeacht gridCols. */
+.pr-combi-frame{grid-column:1/-1;width:100%;border:2px solid #2E75B6;border-radius:5px;
+                overflow:hidden;break-inside:avoid;page-break-inside:avoid}
+.pr-combi-header{background:#2E75B6;color:#fff;padding:5px 10px;font-weight:700;font-size:9pt;
+                 letter-spacing:.02em}
+.pr-combi-kolommen{display:flex;flex-direction:row;align-items:stretch;gap:0;width:100%}
+.pr-combi-kolom{flex:1 1 0;min-width:0;border-right:1px solid #2E75B6;display:flex;flex-direction:column}
+.pr-combi-kolom:last-child{border-right:none}
+.pr-combi-kolom-titel{background:#1a3a5c;color:#fff;padding:4px 7px;font-size:9pt;
+                      display:flex;align-items:center;gap:.25cm}
+.pr-combi-naam{overflow:hidden;white-space:nowrap;text-overflow:ellipsis}
+/* Ruimere tabel-lay-out: naam-kolom pakt alle resterende ruimte */
+.pr-combi-tabel{font-size:9.5pt;width:100%;table-layout:auto}
+.pr-combi-tabel td{padding:3px 5px}
+.pr-combi-tabel th{font-size:7.5pt;padding:2px 5px}
+.pr-combi-tabel .pr-naam{white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:0;width:100%}
+.pr-combi-tabel col.pr-col-pos{width:22px}
+.pr-combi-tabel col.pr-col-snr{width:36px}
+.pr-combi-tabel col.pr-col-cat{width:34px}
+.pr-combi-tabel col.pr-col-naam{width:auto}
 /* A-finale altijd aan de linkerkantlijn (grid-kolom 1) */
 .pr-card-links{grid-column-start:1}
-@page{size:${pageSize};margin:.8cm 1cm 1.2cm;
-  @bottom-center{content:"blad " counter(page) " van " counter(pages);font-size:7.5pt;color:#888}
-}
 @media print{
   body{margin:.5cm .8cm}
   .pr-card{break-inside:avoid}
@@ -577,8 +759,8 @@ col.pr-col-opm{width:60px}
 .pr-wrap .pr-hdr-spacer td{height:0.3cm}
 .pr-wrap tbody td{padding:0}
 .pr-hdr-inner{display:flex;justify-content:space-between;align-items:flex-end}
-</style></head>
-<body>
+`;
+    const bodyHtml = `
 <table class="pr-wrap">
   <thead>
     <tr class="pr-hdr-row"><td>
@@ -588,7 +770,10 @@ col.pr-col-opm{width:60px}
           <div class="pr-meta">${esc(metaTxt)}</div>
         </div>
         <div style="text-align:right">
-          <div class="pr-ronde">${esc(dcName)}${esc(distLabel)}&nbsp;–&nbsp;${esc(rondeLabel)}</div>
+          <div class="pr-ronde">${isCombiPrint
+              ? '🔗 Gecombineerde startlijst – ' + combiHeatsSamengevoegd.map(x => esc(x.dc_name || '')).filter(Boolean).join(' · ') + esc(distLabel) + '&nbsp;–&nbsp;' + esc(rondeLabel)
+              : esc(dcName) + esc(distLabel) + '&nbsp;–&nbsp;' + esc(rondeLabel)
+          }</div>
           ${methodeLabel ? `<div class="pr-methode">${esc(methodeLabel)}</div>` : ''}
         </div>
       </div>
@@ -596,192 +781,26 @@ col.pr-col-opm{width:60px}
     <tr class="pr-hdr-spacer"><td></td></tr>
   </thead>
   <tbody><tr><td>
-    <div class="pr-grid">${cardsHtml}</div>
+    <div class="pr-grid" style="grid-template-columns:repeat(${gridCols},1fr)">${cardsHtml}</div>
   </td></tr></tbody>
 </table>
-</body></html>`;
+`;
 
-    const win = window.open('', '_blank');
-    if (!win) { toonBevestigDialog('Pop-up geblokkeerd — sta pop-ups toe voor deze pagina.', 'Afdrukken'); return; }
-    win.document.write(htmlDoc);
-    win.document.close();
-    win.focus();
-    setTimeout(() => {
-        win.print();
-        win.close();
-    }, 400);
+    return {
+        bodyHtml,
+        cssLinks:        [],
+        extraCss,
+        pageOrientation: isPortrait ? 'portrait' : 'landscape',
+        title:           titleStr,
+        subType:         'Startlijst ' + [distNaam, rondeLabel].filter(Boolean).join(' — '),
+    };
 }
 
-// ── Download alle startlijsten als ZIP met PDFs ─────────────────────────────
-
-async function downloadAlleStartlijsten() {
-    if (typeof html2pdf === 'undefined' || typeof JSZip === 'undefined') {
-        toonBevestigDialog('PDF-libraries worden nog geladen. Probeer het over een paar seconden opnieuw.', 'Even geduld');
-        return;
-    }
-
-    const btn = el('sl-btn-download-all');
-    if (btn) { btn.disabled = true; btn.textContent = '⏳ Genereren…'; }
-
-    try {
-        const zip = new JSZip();
-        const printOpties = _slPrintOpties;
-        if (!printOpties?.size) {
-            toonBevestigDialog('Geen startlijsten beschikbaar om te downloaden.', 'Download');
-            return;
-        }
-
-        let teller = 0;
-        let totaal = 0;
-        // Tel totaal
-        for (const [, distMap] of printOpties)
-            for (const [, { ronden }] of distMap)
-                totaal += ronden.length;
-
-        for (const [catLabel, distMap] of printOpties) {
-            for (const [distId, { distNaam, ronden }] of distMap) {
-                for (const ronde of ronden) {
-                    const optData = ronde.optData;
-                    teller++;
-                    if (btn) btn.textContent = `⏳ ${teller}/${totaal}…`;
-
-                    // Genereer de print-HTML (hergebruik bestaande functie)
-                    const htmlStr = await _bouwStartlijstHtml(optData);
-                    if (!htmlStr) continue;
-
-                    // Bepaal bestandsnaam: Cat-Afstand-Ronde.pdf
-                    const safeNaam = s => String(s).replace(/[^a-zA-Z0-9À-ÿ _()-]/g, '').trim();
-                    const bestandsnaam = `${safeNaam(catLabel)}-${safeNaam(distNaam)}-${safeNaam(optData.rondeLabel)}.pdf`;
-
-                    // Genereer PDF via html2pdf vanuit HTML string
-                    // Wrap in een volledig HTML document zodat styles correct gerenderd worden
-                    const fullHtml = `<html><head><style>
-                        *{box-sizing:border-box}
-                        body{font-family:Arial,sans-serif;font-size:9pt;color:#111;margin:0;padding:0}
-                    </style></head><body>${htmlStr}</body></html>`;
-
-                    const pdfBlob = await html2pdf().set({
-                        margin:      [8, 10, 12, 10],
-                        filename:    bestandsnaam,
-                        image:       { type: 'jpeg', quality: 0.95 },
-                        html2canvas: { scale: 2, useCORS: true, scrollY: 0 },
-                        jsPDF:       { unit: 'mm', format: 'a4', orientation: 'landscape' },
-                    }).from(fullHtml, 'string').outputPdf('blob');
-
-                    zip.file(bestandsnaam, pdfBlob);
-                }
-            }
-        }
-
-        if (teller === 0) {
-            toonBevestigDialog('Geen startlijsten gevonden om te downloaden.', 'Download');
-            return;
-        }
-
-        // Genereer en download ZIP met datum+tijd in de naam
-        if (btn) btn.textContent = '⏳ ZIP maken…';
-        const zipBlob = await zip.generateAsync({ type: 'blob' });
-        const nu = new Date();
-        const datum = nu.toISOString().slice(0,10);
-        const tijd = String(nu.getHours()).padStart(2,'0') + String(nu.getMinutes()).padStart(2,'0');
-        const compNaam = (huidigComp?.name ?? 'wedstrijd').replace(/[^a-zA-Z0-9À-ÿ()-]/g, '_').replace(/_+/g, '_');
-        const zipNaam = `Startlijsten_${compNaam}_${datum}_${tijd}.zip`;
-
-        const a = document.createElement('a');
-        a.href = URL.createObjectURL(zipBlob);
-        a.download = zipNaam;
-        a.click();
-        URL.revokeObjectURL(a.href);
-
-    } catch (e) {
-        toonBevestigDialog('Fout bij genereren: ' + e.message, 'Download');
-    } finally {
-        // Ruim eventuele achtergebleven containers op
-        document.querySelectorAll('[data-pdf-temp]').forEach(el => el.remove());
-        if (btn) { btn.disabled = false; btn.textContent = '📥 Download alles'; }
-    }
-}
-
-// ── Helper: genereer print-HTML string voor één startlijst (zonder venster) ──
-
-async function _bouwStartlijstHtml(optData) {
-    const { cacheKey, dcIds, dcName, distId, distNaam, categoryFilter,
-            rondeSleutel = 'heats', rondeLabel = 'Series' } = optData;
-
-    // Data laden
-    let data = startlijstCache[cacheKey]?.resultaat;
-    if (!data) {
-        try {
-            const cf  = Array.isArray(categoryFilter) ? categoryFilter : [];
-            const url = `api/startlijst_laden.php`
-                      + `?competition_id=${encodeURIComponent(huidigCompId)}`
-                      + `&dc_ids=${encodeURIComponent((dcIds ?? [optData.dcId]).join(','))}`
-                      + `&distance_id=${encodeURIComponent(distId ?? '')}`
-                      + (cf.length ? `&category_filter=${encodeURIComponent(cf.join(','))}` : '')
-                      + `&_t=${Date.now()}`;
-            const res = await fetch(url);
-            data = await res.json();
-            if (!data?.exists) return null;
-        } catch { return null; }
-    }
-
-    const esc = s => String(s ?? '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
-    const comp = huidigComp;
-    const datum   = comp?.starts ? formatDatum(comp.starts) : '';
-    const locatie = comp ? getLocatie(comp) : '';
-    const metaTxt = [datum, locatie].filter(Boolean).join(' · ');
-    const distLabel = distNaam ? ` – ${distNaam}` : '';
-
-    // Heats bepalen
-    let afdrukHeats;
-    if (rondeSleutel === 'full_final_finales') {
-        const bRonde = (data.volgende_rondes ?? []).find(vr => vr.ronde_type === 'finale_b');
-        const aRonde = (data.volgende_rondes ?? []).find(vr => vr.ronde_type === 'finale_a');
-        const bHeats = [...(bRonde?.heats ?? [])].sort((a, b) => b.nummer - a.nummer);
-        const aHeats = aRonde?.heats ?? [];
-        afdrukHeats = [...bHeats, ...aHeats];
-    } else {
-        afdrukHeats = (!optData.rondeNr || optData.rondeNr <= 1 || rondeSleutel === 'heats')
-            ? (data.heats ?? [])
-            : ((data.volgende_rondes ?? []).find(vr => vr.ronde_type === rondeSleutel)?.heats ?? []);
-    }
-    if (!afdrukHeats.length) return null;
-
-    const totaalHeats = afdrukHeats.length;
-
-    // HTML bouwen
-    let cardsHtml = '';
-    for (const heat of afdrukHeats) {
-        let naam = heat.heat_naam || `Heat ${heat.nummer}`;
-        if (totaalHeats > 1) naam = naam.replace(/\bHeat\s+(\d+)\b/i, `Heat $1/${totaalHeats}`);
-        let rows = '';
-        (heat.rijders ?? []).forEach((r, i) => {
-            rows += `<tr>
-                <td style="color:#aaa;text-align:center;font-size:7.5pt">${i + 1}</td>
-                <td style="text-align:right;font-weight:600;color:#1a3a5c">${esc(r.start_number ?? '')}</td>
-                <td style="font-size:7.5pt;color:#666">${esc(r.categorie ?? r.category ?? '')}</td>
-                <td>${esc(r.full_name ?? '')}</td>
-            </tr>`;
-        });
-        cardsHtml += `<div style="border:1px solid #bbb;border-radius:5px;overflow:hidden;break-inside:avoid">
-            <div style="background:#e8ecf0;color:#000;padding:5px 8px;font-weight:700;font-size:8.5pt;border-bottom:2px solid #000">${esc(naam)}</div>
-            <table style="width:100%;border-collapse:collapse;font-size:9.5pt">
-            <tbody>${rows}</tbody></table>
-        </div>`;
-    }
-
-    return `<div style="font-family:Arial,sans-serif;font-size:9pt;color:#111;line-height:1.35">
-        <div style="display:flex;justify-content:space-between;align-items:flex-end;border-bottom:2px solid #1a3a5c;padding-bottom:.3cm;margin-bottom:.4cm">
-            <div>
-                <div style="font-size:13pt;font-weight:700">${esc(comp?.name ?? '')}</div>
-                <div style="font-size:8.5pt;color:#000">${esc(metaTxt)}</div>
-            </div>
-            <div style="text-align:right">
-                <div style="font-size:10pt;font-weight:700;color:#000">${esc(dcName)}${esc(distLabel)} – ${esc(rondeLabel)}</div>
-            </div>
-        </div>
-        <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:.5cm">${cardsHtml}</div>
-    </div>`;
+// ── Publieke body-builder voor Print-Center ─────────────────────────────────
+// Gebruikt dezelfde hoogwaardige layout als de voormalige "Druk af"-knop
+// (combi-detectie + dynamische portrait/landscape).
+async function bouwStartlijstBody(optData) {
+    return await _bouwStartlijstDrukInternal(optData);
 }
 
 // ── Startlijst pagina tonen ───────────────────────────────────────────────────
@@ -811,19 +830,6 @@ function toonStartlijstenPagina() {
                 <div class="ts-comp-naam">${escHtml(huidigComp?.name || '')}</div>
                 <div class="ts-comp-meta">${escHtml(formatDatum(huidigComp?.starts || ''))} · ${escHtml(getLocatie(huidigComp || {}))}</div>
             </div>
-            <div class="sl-print-bar">
-                <select id="sl-print-cat-sel" class="inp sl-inp sl-print-sel">
-                    <option value="">— Categorie —</option>
-                </select>
-                <select id="sl-print-dist-sel" class="inp sl-inp sl-print-sel" disabled>
-                    <option value="">— Afstand —</option>
-                </select>
-                <select id="sl-print-ronde-sel" class="inp sl-inp sl-print-sel" disabled>
-                    <option value="">— Ronde —</option>
-                </select>
-                <button id="sl-btn-print" class="btn-secondary" disabled>🖨 Druk af</button>
-                <button id="sl-btn-download-all" class="btn-secondary" title="Download alle startlijsten als ZIP met PDFs">📥 Download alles</button>
-            </div>
         </div>`;
 
     const groepen = bouwStartlijstGroepen();
@@ -850,142 +856,10 @@ function toonStartlijstenPagina() {
     activeCat = groepen[0];
     toonStartlijstConfig(groepen[0]);
 
-    // Tab-kleuren + print-select in achtergrond bepalen (niet-blokkerend)
+    // Tab-kleuren + print-opties in achtergrond opbouwen (niet-blokkerend).
+    // `vulPrintSelect()` vult `_slPrintOpties` ten behoeve van Print-Center.
     kleurAlleTabsAsync(groepen, catTabs);
     vulPrintSelect();
-
-    // Categorie → vul afstanden
-    el('sl-print-cat-sel')?.addEventListener('change', () => {
-        const catSel   = el('sl-print-cat-sel');
-        const distSel  = el('sl-print-dist-sel');
-        const rondeSel = el('sl-print-ronde-sel');
-        const btn      = el('sl-btn-print');
-        const distMap  = _slPrintOpties.get(catSel.value);
-        distSel.innerHTML  = '<option value="">— Afstand —</option>';
-        rondeSel.innerHTML = '<option value="">— Ronde —</option>';
-        rondeSel.disabled  = true;
-        if (btn) btn.disabled = true;
-        if (!distMap?.size) { distSel.disabled = true; return; }
-        distMap.forEach(({ distNaam }, distId) => {
-            const opt = document.createElement('option');
-            opt.value = distId;
-            opt.textContent = distNaam || '—';
-            distSel.appendChild(opt);
-        });
-        distSel.disabled = false;
-        if (distMap.size === 1) {
-            distSel.selectedIndex = 1;
-            distSel.dispatchEvent(new Event('change'));
-        }
-    });
-
-    // Afstand → vul rondes
-    el('sl-print-dist-sel')?.addEventListener('change', () => {
-        const catSel   = el('sl-print-cat-sel');
-        const distSel  = el('sl-print-dist-sel');
-        const rondeSel = el('sl-print-ronde-sel');
-        const btn      = el('sl-btn-print');
-        const ronden   = _slPrintOpties.get(catSel.value)?.get(distSel.value)?.ronden ?? [];
-        rondeSel.innerHTML = '<option value="">— Ronde —</option>';
-        if (btn) btn.disabled = true;
-        if (!ronden.length) { rondeSel.disabled = true; return; }
-        ronden.forEach(r => {
-            const opt = document.createElement('option');
-            opt.value = JSON.stringify(r.optData);
-            opt.textContent = r.label;
-            rondeSel.appendChild(opt);
-        });
-        rondeSel.disabled = false;
-        if (ronden.length === 1) {
-            rondeSel.selectedIndex = 1;
-            if (btn) btn.disabled = false;
-        }
-    });
-
-    // Ronde → activeer print-knop (alleen als vorige ronde compleet)
-    el('sl-print-ronde-sel')?.addEventListener('change', async () => {
-        const btn      = el('sl-btn-print');
-        const rondeSel = el('sl-print-ronde-sel');
-        if (!rondeSel.value) { if (btn) btn.disabled = true; return; }
-
-        const optData = JSON.parse(rondeSel.value);
-
-        // Ronde 1 (series): altijd printbaar
-        if (!optData.rondeNr || optData.rondeNr <= 1) {
-            if (btn) btn.disabled = false;
-            // Verwijder eventuele waarschuwing
-            rondeSel.closest('.sl-print-bar')?.querySelector('.sl-print-waarschuwing')?.remove();
-            return;
-        }
-
-        // Volgende ronde: controleer of vorige ronde compleet is via cache of API
-        if (btn) btn.disabled = true;
-        const cf      = Array.isArray(optData.categoryFilter) ? optData.categoryFilter : [];
-        const laadUrl = `api/startlijst_laden.php`
-                      + `?competition_id=${encodeURIComponent(huidigCompId)}`
-                      + `&dc_ids=${encodeURIComponent((optData.dcIds ?? [optData.dcId]).join(','))}`
-                      + `&distance_id=${encodeURIComponent(optData.distId ?? '')}`
-                      + (cf.length ? `&category_filter=${encodeURIComponent(cf.join(','))}` : '');
-
-        try {
-            const res  = await fetch(laadUrl);
-            const data = await res.json();
-            const bar  = rondeSel.closest('.sl-print-bar');
-            bar?.querySelector('.sl-print-waarschuwing')?.remove();
-
-            // Zoek de bijbehorende volgende ronde in de data.
-            // Full-final "Finales" is geen echte ronde_type: check beide A- en B-finale.
-            let compleet;
-            if (optData.rondeSleutel === 'full_final_finales') {
-                const vrA = (data.volgende_rondes ?? []).find(r => r.ronde_type === 'finale_a');
-                const vrB = (data.volgende_rondes ?? []).find(r => r.ronde_type === 'finale_b');
-                // Printbaar als minstens één finale gegenereerd is;
-                // "vorige ronde compleet" geldt voor beide want het is dezelfde bronronde.
-                const heeftFinales = !!(vrA?.heats?.length || vrB?.heats?.length);
-                compleet = heeftFinales &&
-                    !!(vrA?.vorige_ronde_compleet || vrB?.vorige_ronde_compleet);
-                // Als de finales wél gegenereerd zijn maar de series nog niet formeel
-                // compleet, toon dan een zachte waarschuwing maar blokkeer niet.
-                if (heeftFinales && !compleet) {
-                    if (bar) {
-                        const warn = document.createElement('span');
-                        warn.className = 'sl-print-waarschuwing';
-                        warn.textContent = '⚠ Voorlopige indeling – nog niet alle serieresultaten ingevoerd';
-                        bar.appendChild(warn);
-                    }
-                    if (btn) btn.disabled = false; // toch printbaar
-                    compleet = true; // skip dubbele waarschuwing hieronder
-                } else if (!heeftFinales) {
-                    compleet = false; // geen finales gegenereerd → blokkeren
-                }
-            } else {
-                const vr = (data.volgende_rondes ?? []).find(r => r.ronde_type === optData.rondeSleutel);
-                compleet = vr ? vr.vorige_ronde_compleet : false;
-            }
-
-            if (compleet) {
-                if (btn) btn.disabled = false;
-            } else {
-                // Toon waarschuwing, knop blijft geblokkeerd
-                if (bar) {
-                    const warn = document.createElement('span');
-                    warn.className = 'sl-print-waarschuwing';
-                    warn.textContent = '⏳ Niet alle resultaten van de vorige ronde zijn ingevoerd';
-                    bar.appendChild(warn);
-                }
-            }
-        } catch {
-            if (btn) btn.disabled = false; // bij fout: toch toestaan
-        }
-    });
-
-    el('sl-btn-print')?.addEventListener('click', () => {
-        const val = el('sl-print-ronde-sel')?.value;
-        if (!val) return;
-        drukStartlijstAf(JSON.parse(val));
-    });
-
-    el('sl-btn-download-all')?.addEventListener('click', downloadAlleStartlijsten);
 }
 
 // ── Startlijst – configuratie tonen (per afstand) ────────────────────────────
@@ -1353,12 +1227,19 @@ async function toonAfstandConfig(groep, distId, distNaam) {
         const laadSecties = (id) => {
             const ges  = lijst.find(k => k.id === id);
             const cats = ges?.categorieen ?? [];
-            if (cats.length) {
-                klSelSec.innerHTML = cats.map(s =>
+            // Categorieën komen in twee vormen:
+            //   PDF-klassementen  → [{ label, cat_codes, … }]
+            //   Serie-klassementen → ['DJB', 'DKA', …]  (gewone strings)
+            // Normaliseer eerst naar {label}-objecten zodat de rest werkt.
+            const norm = cats
+                .map(s => typeof s === 'string' ? { label: s } : s)
+                .filter(s => s && s.label);
+            if (norm.length) {
+                klSelSec.innerHTML = norm.map(s =>
                     `<option value="${escHtml(s.label)}" ${cache.klassementSectie === s.label ? 'selected' : ''}>${escHtml(s.label)}</option>`
                 ).join('');
                 klSelSec.disabled = false;
-                if (!cache.klassementSectie) cache.klassementSectie = cats[0].label;
+                if (!cache.klassementSectie) cache.klassementSectie = norm[0].label;
             } else {
                 klSelSec.innerHTML = '<option value="">— kies sectie —</option>';
                 klSelSec.disabled = true;
@@ -1525,9 +1406,10 @@ function bouwRitLookup(schema, dcId, distId, rondeType) {
             String(rit.distance_id ?? '') === dStr &&
             rit.ronde_type === rondeType) {
             lookup[parseInt(rit.heat_nr)] = {
-                volgorde:  parseInt(rit.volgorde),
-                rit_naam:  rit.rit_naam,
-                verwacht:  parseInt(rit.verwacht ?? 0) || 0,
+                volgorde:    parseInt(rit.volgorde),
+                rit_naam:    rit.rit_naam,
+                verwacht:    parseInt(rit.verwacht ?? 0) || 0,
+                combi_group: rit.combi_group ? parseInt(rit.combi_group) : null,
             };
         }
     }
@@ -1574,27 +1456,59 @@ function berekenSchemaHeats(r, catCfg, totaalRijders, ritLookup = null, systeem 
 
     // ── Full-final speciale afhandeling ───────────────────────────────────────
     if (systeem === 'full-final' && afstandCfg) {
-        const finaleHg = Math.max(2, int(afstandCfg.finale_heat_grootte ?? 6));
+        // Per-cat wint over afstand-defaults
+        const finaleHgAfstand = Math.max(2, int(afstandCfg.finale_heat_grootte ?? 6));
+        const catAG           = parseInt(catCfg.finale_a_grootte);
+        const effA            = Number.isFinite(catAG) && catAG > 0 ? catAG : finaleHgAfstand;
+
+        // Per-cat aantal B-heats (null = legacy/afstand-based afleiding)
+        const catBHRaw = catCfg.finale_b_heats;
+        const hasCatBH = catBHRaw !== null && catBHRaw !== undefined && catBHRaw !== '';
+        const catBH    = hasCatBH ? (parseInt(catBHRaw) || 0) : null;
+
+        const bRijders = Math.max(0, totaalRijders - effA);
+
         if (r.sleutel === 'finale_a') {
-            // Full-Final: altijd 1 A-finale heat (B-finales regelen de verdeling)
+            // A-finale = 1 heat. Als per-cat 0 B-heats is ingesteld met rest-rijders,
+            // schuiven die naar de A-finale zodat géén "pro forma" B getoond wordt.
+            const aEff   = (catBH === 0 && bRijders > 0) ? effA + bRijders : effA;
             const prevNH = int(catCfg.heats_aantal) || 1;
-            const slots  = bouwSchemaSlots('serie', prevNH, finaleHg, 0);
+            const slots  = bouwSchemaSlots('serie', prevNH, aEff, 0);
             return [{ nummer: 1, slots }];
         }
         if (r.sleutel === 'finale_b') {
-            // Placeholder: dynamische verdeling via verdeelBFinalesJS()
-            // Zelfde logica als in live.php (verdeelBFinales).
-            const bRijders = Math.max(0, totaalRijders - finaleHg);
+            // Geen rest-rijders → geen B-finale.
             if (bRijders <= 0) return null;
+            // Planner heeft expliciet 0 B-heats ingesteld → géén B-finale tonen
+            // (rest-rijders zijn al verwerkt in A-finale hierboven).
+            if (catBH === 0) return null;
 
-            const bFinaleHgRaw  = Math.max(2, int(afstandCfg?.finale_b_grootte ?? 6));
-            const bFinaleHg     = Math.max(finaleHg, bFinaleHgRaw);
-            const bLaatstGrootst = !!(afstandCfg?.laatste_b_grootste ?? 1);
+            let bAantallen;
+            const lbgRaw = catCfg.laatste_b_grootste;
+            const bLaatstGrootst = (lbgRaw !== null && lbgRaw !== undefined)
+                ? !!parseInt(lbgRaw)
+                : !!(afstandCfg?.laatste_b_grootste ?? 1);
 
-            const bAantallen = verdeelBFinalesJS(bRijders, bFinaleHg, bLaatstGrootst);
+            if (catBH !== null && catBH > 0) {
+                // Per-cat aantal B-heats: verdeel gelijk; rest naar B1 of B-laatste
+                const nBH   = Math.min(catBH, bRijders);
+                const basis = Math.floor(bRijders / nBH);
+                const extra = bRijders % nBH;
+                bAantallen = [];
+                for (let i = 0; i < nBH; i++) {
+                    bAantallen.push(basis + (bLaatstGrootst
+                        ? (i >= nBH - extra ? 1 : 0)
+                        : (i < extra ? 1 : 0)));
+                }
+            } else {
+                // Legacy / afstand-based: afleiden uit max-per-heat
+                const bFinaleHgRaw = Math.max(2, int(afstandCfg?.finale_b_grootte ?? 6));
+                const bFinaleHg    = Math.max(finaleHgAfstand, bFinaleHgRaw);
+                bAantallen = verdeelBFinalesJS(bRijders, bFinaleHg, bLaatstGrootst);
+            }
             if (!bAantallen.length) return null;
 
-            let rank = finaleHg + 1;
+            let rank = effA + 1;
             return bAantallen.map((aantalInHeat, i) => {
                 const slots = [];
                 for (let j = 0; j < aantalInHeat && rank <= totaalRijders; j++, rank++) {

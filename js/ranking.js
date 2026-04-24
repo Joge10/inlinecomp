@@ -7,9 +7,18 @@
 const rkEl  = id => document.getElementById(id);
 const rkEsc = s  => String(s ?? '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
 
-async function rkPost(url, formData) {
-    const r = await fetch(url, { method: 'POST', body: formData });
-    if (!r.ok) throw new Error(`HTTP ${r.status}`);
+async function rkPost(url, body, contentType) {
+    // Ondersteunt zowel FormData (legacy PDF-upload) als JSON (serie-wizard).
+    const opts = { method: 'POST' };
+    if (body instanceof FormData) {
+        opts.body = body;
+    } else {
+        opts.headers = { 'Content-Type': contentType || 'application/json' };
+        opts.body = typeof body === 'string' ? body : JSON.stringify(body);
+    }
+    const r = await fetch(url, opts);
+    // 400/500 kunnen JSON-foutmelding bevatten — laten we die doorlezen
+    if (!r.ok && r.status !== 400 && r.status !== 500) throw new Error(`HTTP ${r.status}`);
     return r.json();
 }
 async function rkGet(url) {
@@ -105,6 +114,11 @@ function renderShell() {
       <div id="rk-upload-status" class="rk-upload-status" style="display:none"></div>
     </div>
 
+    <!-- Genereer uit wedstrijden (serie-klassement) -->
+    <button class="btn-primary rk-serie-btn" id="rk-btn-serie-nieuw" title="Maak een klassement op basis van eigen wedstrijd-uitslagen">
+      📊 Bereken uit wedstrijden
+    </button>
+
     <!-- Lijst van opgeslagen klassementen -->
     <div id="rk-lijstbox">
       <div class="rk-loading">Laden…</div>
@@ -143,6 +157,14 @@ function bindEvents() {
     });
 
     rkEl('rk-btn-upload')?.addEventListener('click', uploadPdf);
+
+    // Nieuw serie-klassement
+    rkEl('rk-btn-serie-nieuw')?.addEventListener('click', () => {
+        if (typeof openSerieWizard !== 'function') {
+            alert('Serie-wizard module is niet geladen.'); return;
+        }
+        openSerieWizard({ orgId: rkActieveOrgId || '' });
+    });
 }
 
 let huidigBestand = null;
@@ -257,10 +279,15 @@ async function laadLijst() {
 }
 
 function renderLijst(lijst) {
-    if (!lijst.length) return `<div class="rk-leeg-tekst">Nog geen klassementen geïmporteerd.</div>`;
-    return lijst.map(k => `
+    if (!lijst.length) return `<div class="rk-leeg-tekst">Nog geen klassementen geïmporteerd of berekend.</div>`;
+    return lijst.map(k => {
+        const isSerie = k.bron_bestand === '(serie-berekening)';
+        const badge = isSerie
+            ? '<span class="rk-type-badge rk-badge-serie" title="Berekend uit wedstrijd-uitslagen">📊</span>'
+            : '<span class="rk-type-badge rk-badge-pdf"   title="Geïmporteerd uit PDF">📄</span>';
+        return `
         <div class="rk-item ${rkHuidig?.id === k.id ? 'rk-item-actief' : ''}" data-id="${rkEsc(k.id)}">
-            <div class="rk-item-naam">${rkEsc(k.naam)}</div>
+            <div class="rk-item-naam">${badge} ${rkEsc(k.naam)}</div>
             <div class="rk-item-meta">
                 ${k.seizoen ? `<span>${rkEsc(k.seizoen)}</span> · ` : ''}
                 <span>${k.totaal_rijders} rijders</span>
@@ -268,7 +295,8 @@ function renderLijst(lijst) {
                 ${k.categorieen?.length ? ` · <span>${k.categorieen.map(c => c.label ?? c).join(', ')}</span>` : ''}
             </div>
             <button class="btn-del rk-btn-verwijder" data-id="${rkEsc(k.id)}" title="Verwijder klassement">&#128465;</button>
-        </div>`).join('');
+        </div>`;
+    }).join('');
 }
 
 // ── Klassement openen ─────────────────────────────────────────────────────────
@@ -314,13 +342,51 @@ function renderDetail(k) {
     // Cat-code kolom tonen als sectie meerdere cat-codes heeft
     const toonCatCol = cats.find(c => (c.label ?? c) === activeCat)?.cat_codes?.length > 1;
 
-    const rijen = gefilterd.map(p => `
-        <tr>
+    // Serie-kolommen: per wedstrijd een kolom met de punten-bijdrage, plus
+    // een totaal-kolom. Alleen tonen bij serie-klassementen (wedstrijden_meta
+    // is niet-leeg) én als er daadwerkelijk detail-data is.
+    const wMeta = Array.isArray(k.wedstrijden_meta) ? k.wedstrijden_meta : [];
+    const toonWedstrijden = wMeta.length > 0
+        && gefilterd.some(p => p.punten_detail && Object.keys(p.punten_detail).length);
+    // Format-helper: 50.1 → "50.1", 10 → "10" (geen .0 achter geheel getal).
+    const fmtP = n => {
+        if (n == null) return '–';
+        const v = +n;
+        return Number.isInteger(v) ? String(v) : v.toFixed(1);
+    };
+
+    const rijen = gefilterd.map(p => {
+        const detail = p.punten_detail ?? {};
+        const wedstrijdCellen = toonWedstrijden
+            ? wMeta.map(w => {
+                const waarde = detail[w.comp_id];
+                return `<td class="tc rk-w">${waarde != null ? fmtP(waarde) : '<span class="rk-nng">–</span>'}</td>`;
+              }).join('')
+            : '';
+        const totaalCel = toonWedstrijden
+            ? `<td class="tc rk-totaal">${fmtP(p.punten_totaal)}</td>`
+            : '';
+        return `<tr>
             <td class="tc rk-pos">${p.positie}</td>
             <td class="tc rk-nr">${rkEsc(p.start_number ?? '–')}</td>
             <td class="rk-naam">${rkEsc(p.naam)}</td>
             ${toonCatCol ? `<td class="tc rk-cat">${rkEsc(p.categorie ?? '')}</td>` : ''}
-        </tr>`).join('');
+            ${wedstrijdCellen}
+            ${totaalCel}
+        </tr>`;
+    }).join('');
+
+    const isSerie = k.bron_bestand === '(serie-berekening)';
+    const serieActies = isSerie
+        ? `<div class="rk-detail-acties">
+             <button class="btn-primary rk-detail-btn" data-serie-act="herbereken">🔄 Herbereken</button>
+             <button class="btn-secondary rk-detail-btn" data-serie-act="bewerken">✏️ Bewerken</button>
+             <button class="btn-secondary rk-detail-btn" data-serie-act="diag">🔍 Diagnose</button>
+           </div>`
+        : '';
+    const bronLabel = isSerie
+        ? '📊 Berekend uit wedstrijden'
+        : (k.bron_bestand ? `📄 ${rkEsc(k.bron_bestand)}` : '');
 
     return `
 <div class="rk-detail-header">
@@ -330,10 +396,11 @@ function renderDetail(k) {
             ${k.seizoen ? `<span>${rkEsc(k.seizoen)}</span> · ` : ''}
             <span>${k.totaal_rijders} rijders</span>
             ${k.org_id ? ` · <span class="rk-org-label">🏢 ${rkEsc(rkOrgs.find(o => o.id === k.org_id)?.naam ?? '…')}</span>` : ''}
-            ${datum ? ` · <span>geïmporteerd ${datum}</span>` : ''}
-            ${k.bron_bestand ? ` · <span class="rk-bronbestand">📄 ${rkEsc(k.bron_bestand)}</span>` : ''}
+            ${datum ? ` · <span>${isSerie ? 'berekend' : 'geïmporteerd'} ${datum}</span>` : ''}
+            ${bronLabel ? ` · <span class="rk-bronbestand">${bronLabel}</span>` : ''}
         </div>
     </div>
+    ${serieActies}
 </div>
 
 ${filterTabs}
@@ -341,11 +408,22 @@ ${filterTabs}
 <div class="rk-tabel-wrap">
 <table class="rk-tabel">
     <thead>
+        ${toonWedstrijden && wMeta.length > 1 ? `
+        <tr class="rk-sub-hdr">
+            <th class="tc" colspan="${3 + (toonCatCol ? 1 : 0)}"></th>
+            <th class="tc rk-wedstrijden-kop" colspan="${wMeta.length}">Wedstrijden</th>
+            <th class="tc"></th>
+        </tr>` : ''}
         <tr>
             <th class="tc">Pos.</th>
             <th class="tc">Start#</th>
             <th>Naam</th>
             ${toonCatCol ? `<th class="tc">Cat.</th>` : ''}
+            ${toonWedstrijden ? wMeta.map((w, i) =>
+                `<th class="tc rk-w" title="${rkEsc(w.naam)}${w.datum ? ' · ' + String(w.datum).substring(0,10) : ''}${w.is_finale ? ' · FINALE' : ''}">
+                    ${w.is_finale ? 'F' : '#' + (i + 1)}
+                </th>`).join('') : ''}
+            ${toonWedstrijden ? `<th class="tc rk-totaal">Totaal</th>` : ''}
         </tr>
     </thead>
     <tbody>${rijen}</tbody>
@@ -365,6 +443,31 @@ function bindDetailEvents(container) {
             rkFilterCat = tab.dataset.cat || null;
             rkEl('rk-detail').innerHTML = renderDetail(rkHuidig);
             bindDetailEvents(rkEl('rk-detail'));
+        });
+    });
+
+    // Serie-acties (alleen aanwezig bij serie-klassementen)
+    container.querySelectorAll('[data-serie-act]').forEach(btn => {
+        btn.addEventListener('click', async () => {
+            const act = btn.dataset.serieAct;
+            // Zoek de serie-id via het klassement-id
+            let serieId = null;
+            try {
+                const rows = await rkGet(
+                    `api/klassement_serie.php?action=list${rkActieveOrgId ? '&org_id=' + encodeURIComponent(rkActieveOrgId) : ''}`
+                );
+                serieId = rows.find(r => r.klassement_id === rkHuidig.id)?.id ?? null;
+            } catch {}
+            if (!serieId) { alert('Serie-definitie niet gevonden.'); return; }
+
+            if (act === 'herbereken') {
+                btn.disabled = true; btn.textContent = 'Bezig…';
+                await herbereken(serieId);
+            } else if (act === 'bewerken') {
+                openSerieWizard({ orgId: rkActieveOrgId || rkHuidig.org_id || '', serieId });
+            } else if (act === 'diag') {
+                await diagnoseSerieer(serieId);
+            }
         });
     });
 }

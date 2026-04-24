@@ -42,12 +42,18 @@ async function vulUitslagPrintSelect() {
     const catSel  = el('u-print-cat-sel');
     const klasSel = el('u-print-klas-sel');
     const btn     = el('u-btn-print');
-    if (!catSel) return;
+    // DOM optioneel: Print-Center gebruikt deze functie ook om _uPrintOpties
+    // te vullen zónder Uitslag-pagina te openen.
 
     _uPrintOpties = new Map();
-    catSel.innerHTML  = '<option value="">— Categorie —</option>';
+    if (catSel)  catSel.innerHTML  = '<option value="">— Categorie —</option>';
     if (klasSel) { klasSel.innerHTML = '<option value="">— Kies uitslag —</option>'; klasSel.disabled = true; }
     if (btn) btn.disabled = true;
+
+    // Zorg dat _uGroepen gevuld is (normaal in toonUitslagPagina).
+    if (!_uGroepen?.length && typeof uBouwGroepen === 'function') {
+        _uGroepen = uBouwGroepen();
+    }
 
     for (const groep of _uGroepen) {
         const afstanden = await uLaadAfstanden(groep);
@@ -94,16 +100,17 @@ async function vulUitslagPrintSelect() {
             _uPrintOpties.set(displayNaam, opties);
     }
 
-    for (const naam of _uPrintOpties.keys()) {
-        const opt = document.createElement('option');
-        opt.value = naam;
-        opt.textContent = naam;
-        catSel.appendChild(opt);
-    }
-
-    if (_uPrintOpties.size === 1) {
-        catSel.selectedIndex = 1;
-        catSel.dispatchEvent(new Event('change'));
+    if (catSel) {
+        for (const naam of _uPrintOpties.keys()) {
+            const opt = document.createElement('option');
+            opt.value = naam;
+            opt.textContent = naam;
+            catSel.appendChild(opt);
+        }
+        if (_uPrintOpties.size === 1) {
+            catSel.selectedIndex = 1;
+            catSel.dispatchEvent(new Event('change'));
+        }
     }
 }
 
@@ -133,19 +140,6 @@ function toonUitslagPagina() {
                 <div class="ts-comp-naam">${escHtml(huidigComp?.name || '')}</div>
                 <div class="ts-comp-meta">${escHtml(formatDatum(huidigComp?.starts || ''))} · ${escHtml(getLocatie(huidigComp || {}))}</div>
             </div>
-            <div class="sl-print-bar">
-                <select id="u-print-cat-sel" class="inp sl-inp sl-print-sel">
-                    <option value="">— Categorie —</option>
-                </select>
-                <select id="u-print-klas-sel" class="inp sl-inp sl-print-sel" disabled>
-                    <option value="">— Uitslag —</option>
-                </select>
-                <span id="u-print-opties" style="display:none">
-                    <label class="u-chk-label"><input type="checkbox" id="u-chk-ronde" checked> Ronde</label>
-                    <label class="u-chk-label"><input type="checkbox" id="u-chk-tijd" checked> Tijd</label>
-                </span>
-                <button id="u-btn-print" class="btn-secondary" disabled>🖨 Druk af</button>
-            </div>
         </div>`;
 
     // ── Categorie-tabs (rij 1) ─────────────────────────────────────────────
@@ -174,51 +168,9 @@ function toonUitslagPagina() {
     _uActieveCat = groepen[0];
     toonUitslagAfstandConfig(groepen[0]);
 
-    // Print-select in achtergrond vullen
-    vulUitslagPrintSelect().then(() => {
-        // Categorie → klassement-opties
-        el('u-print-cat-sel')?.addEventListener('change', () => {
-            const catSel  = el('u-print-cat-sel');
-            const klasSel = el('u-print-klas-sel');
-            const btn     = el('u-btn-print');
-            const opties  = _uPrintOpties.get(catSel.value) ?? [];
-            klasSel.innerHTML = '<option value="">— Kies uitslag —</option>';
-            if (btn) btn.disabled = true;
-            if (!opties.length) { klasSel.disabled = true; return; }
-            opties.forEach(o => {
-                const opt = document.createElement('option');
-                opt.value = JSON.stringify(o);
-                opt.textContent = o.label;
-                klasSel.appendChild(opt);
-            });
-            klasSel.disabled = false;
-            if (opties.length === 1) {
-                klasSel.selectedIndex = 1;
-                klasSel.dispatchEvent(new Event('change'));
-            }
-        });
-
-        el('u-print-klas-sel')?.addEventListener('change', () => {
-            const klasSel = el('u-print-klas-sel');
-            const btn     = el('u-btn-print');
-            const opties  = el('u-print-opties');
-            if (btn) btn.disabled = !klasSel.value;
-            // Checkboxen tonen bij afstand-selectie
-            if (opties) {
-                try {
-                    const parsed = klasSel.value ? JSON.parse(klasSel.value) : null;
-                    opties.style.display = parsed?.sleutel === 'afstand' ? '' : 'none';
-                } catch { opties.style.display = 'none'; }
-            }
-        });
-
-        el('u-btn-print')?.addEventListener('click', () => {
-            const klasSel = el('u-print-klas-sel');
-            if (!klasSel?.value) return;
-            const optData = JSON.parse(klasSel.value);
-            drukUitslagAf(optData);
-        });
-    });
+    // Vul `_uPrintOpties` op de achtergrond — die wordt gebruikt door
+    // Print-Center om de beschikbare uitslagen/klassementen te tonen.
+    vulUitslagPrintSelect();
 }
 
 // ── Tab-kleuren op basis van status ──────────────────────────────────────────
@@ -330,6 +282,37 @@ async function toonUitslagAfstandConfig(groep) {
 
 // ── Inhoud: uitslag per afstand ───────────────────────────────────────────────
 
+// Serie-alleen-startvolgorde: staat in tijdschema_cat_config.
+// De checkbox in de uitslag-module schrijft rechtstreeks naar die kolom zodat
+// de keuze gedeeld is over laptops/gebruikers (geen localStorage nodig).
+async function _uSasSet(dcIds, distId, distNaam, value) {
+    const res = await fetch('api/uitslag_afstand.php', {
+        method:  'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body:    JSON.stringify({
+            action:         'set_sas',
+            competition_id: huidigCompId,
+            dc_ids:         Array.isArray(dcIds) ? dcIds : [dcIds],
+            distance_id:    distId  || '',
+            distance_naam:  distNaam || '',  // fallback-match als distance_id niet overeenkomt
+            value:          value ? 1 : 0,
+        }),
+    });
+    // Probeer altijd eerst de body als JSON te lezen zodat we de server-melding
+    // kunnen meenemen bij een foutstatus.
+    let data = null;
+    try { data = await res.json(); } catch (e) { /* niet-JSON respons */ }
+
+    if (!res.ok) {
+        const msg = data?.error
+            ? `${res.status}: ${data.error}`
+            : `HTTP ${res.status}`;
+        throw new Error(msg);
+    }
+    if (data?.error) throw new Error(data.error);
+    return data;
+}
+
 async function toonUitslagVoorAfstand(groep, afstand) {
     const content = el('u-dist-content');
     if (!content) return;
@@ -337,10 +320,11 @@ async function toonUitslagVoorAfstand(groep, afstand) {
     content.innerHTML = '<div class="status-msg loading"><span class="spinner"></span>Uitslag laden…</div>';
 
     try {
-        const dcParam   = groep.dc_ids.map(encodeURIComponent).join(',');
-        const distParam = afstand.id ? `&distance_id=${encodeURIComponent(afstand.id)}` : '';
+        const dcParam    = groep.dc_ids.map(encodeURIComponent).join(',');
+        const distParam  = afstand.id   ? `&distance_id=${encodeURIComponent(afstand.id)}`     : '';
+        const naamParam  = afstand.name ? `&distance_naam=${encodeURIComponent(afstand.name)}` : '';
         const res  = await fetch(
-            `api/uitslag_afstand.php?competition_id=${encodeURIComponent(huidigCompId)}&dc_ids=${dcParam}${distParam}`
+            `api/uitslag_afstand.php?competition_id=${encodeURIComponent(huidigCompId)}&dc_ids=${dcParam}${distParam}${naamParam}`
         );
         const data = await res.json();
 
@@ -457,12 +441,36 @@ async function toonUitslagVoorAfstand(groep, afstand) {
 
         // ── Gecombineerde modus: 1 serie + alleen A-finale ────────────────────
         if (data.modus === 'gecombineerd') {
+            const sasActief = !!data.serie_alleen_startvolgorde;
+            const titelBase = sasActief
+                ? 'Uitslag (alleen A-finale telt — serie bepaalt startvolgorde)'
+                : 'Gecombineerde uitslag (serie + finale)';
+
+            const sasToggleHtml = `
+                <div class="u-sas-toggle">
+                    <label>
+                        <input type="checkbox" class="u-sas-cb" ${sasActief ? 'checked' : ''}>
+                        Serie alleen voor startvolgorde (alleen A-finale telt)
+                    </label>
+                    <span class="u-sas-hint">Wijziging werkt door in de tijdschema-instelling - Afstandinstellingen - Series -> Alleen startvolgorde</span>
+                </div>`;
+
             if (!data.gecombineerd || data.gecombineerd.length === 0) {
-                content.innerHTML = `<div class="status-msg info">Nog geen uitslag beschikbaar voor <strong>${escHtml(afstand.name ?? '—')}</strong>.</div>`;
+                content.innerHTML = sasToggleHtml + `<div class="status-msg info">Nog geen uitslag beschikbaar voor <strong>${escHtml(afstand.name ?? '—')}</strong>.</div>`;
             } else {
-                let html = `<div class="u-afstand-blokken">
+                // Kolomopbouw verschilt per variant:
+                //  - sasActief (alleen A-finale telt): toon alleen tijden, geen punten
+                //  - normaal: serie-punten + finale-punten + totaal
+                const headerCols = sasActief
+                    ? `<th class="u-col-serie">Serie-tijd</th>
+                       <th class="u-col-finale">Finale-tijd</th>`
+                    : `<th class="u-col-serie">Serie</th>
+                       <th class="u-col-finale">Finale</th>
+                       <th class="u-col-totaal">Totaal</th>`;
+
+                let html = sasToggleHtml + `<div class="u-afstand-blokken">
                     <div class="u-finale-blok u-finale-gecombineerd ${data.has_results ? 'u-finale-compleet' : 'u-finale-onvolledig'}">
-                        <div class="u-finale-titel">Gecombineerde uitslag (serie + finale)${data.has_results ? '' : ' <span class="u-onvolledig-badge">onvolledig</span>'}</div>
+                        <div class="u-finale-titel">${titelBase}${data.has_results ? '' : ' <span class="u-onvolledig-badge">onvolledig</span>'}</div>
                         <table class="u-uitslag-tabel">
                             <thead>
                                 <tr>
@@ -470,31 +478,62 @@ async function toonUitslagVoorAfstand(groep, afstand) {
                                     <th class="u-col-naam">Naam</th>
                                     <th class="u-col-startnr">Nr</th>
                                     <th class="u-col-cat">Cat</th>
-                                    <th class="u-col-serie">Serie</th>
-                                    <th class="u-col-finale">Finale</th>
-                                    <th class="u-col-totaal">Totaal</th>
+                                    ${headerCols}
                                 </tr>
                             </thead>
                             <tbody>`;
 
                 for (const r of data.gecombineerd) {
                     const rangTxt      = r.rang           != null ? r.rang           : '—';
-                    const serieTxt     = r.serie_rang     != null
-                        ? `${r.serie_rang} pt${r.serie_tijd_ms != null ? ' (' + msTijd(r.serie_tijd_ms) + ')' : ''}`
-                        : (r.sanctie ? escHtml(sanctieLabel(r.sanctie)) : '—');
-                    const finaleTxt    = r.finale_rang    != null
-                        ? `${r.finale_rang} pt${r.finale_tijd_ms != null ? ' (' + msTijd(r.finale_tijd_ms) + ')' : ''}`
-                        : (r.sanctie ? escHtml(sanctieLabel(r.sanctie)) : '—');
-                    const totaalTxt    = r.totaal_punten  != null ? r.totaal_punten  : '—';
-                    const rowClass     = r.sanctie ? 'u-rij-sanctie' : '';
+                    // alle_sancties bevat per rijder alle sancties uit serie + finale
+                    // (bv. serie-DNF + finale-DNS). We tonen ze in de juiste kolom
+                    // zodat de UI consistent is met de print-out.
+                    const serieSanc  = (r.alle_sancties ?? []).find(s => s.ronde === 'Serie');
+                    const finaleSanc = (r.alle_sancties ?? []).find(s => s.ronde === 'Finale');
+                    const heeftSanctie = (r.alle_sancties?.length || r.sanctie);
+                    const rowClass   = heeftSanctie ? 'u-rij-sanctie' : '';
+
+                    let dataCols;
+                    if (sasActief) {
+                        // Alleen tijden — de serie bepaalt slechts startvolgorde
+                        const sTijd = r.serie_tijd_ms  != null
+                            ? msTijd(r.serie_tijd_ms)
+                            : (serieSanc ? escHtml(sanctieLabel(serieSanc.sanctie)) : '—');
+                        const fTijd = r.finale_tijd_ms != null ? msTijd(r.finale_tijd_ms) : '—';
+                        const sCel  = r.finale_tijd_ms != null
+                            ? fTijd
+                            : (finaleSanc
+                                ? escHtml(sanctieLabel(finaleSanc.sanctie))
+                                : (r.sanctie ? escHtml(sanctieLabel(r.sanctie)) : fTijd));
+                        dataCols = `
+                            <td class="u-col-serie">${sTijd}</td>
+                            <td class="u-col-finale"><strong>${sCel}</strong></td>`;
+                    } else {
+                        const serieTxt = r.serie_rang  != null
+                            ? `${r.serie_rang} pt${r.serie_tijd_ms != null ? ' (' + msTijd(r.serie_tijd_ms) + ')' : ''}${serieSanc ? ' · ' + escHtml(sanctieLabel(serieSanc.sanctie)) : ''}`
+                            : (serieSanc
+                                ? escHtml(sanctieLabel(serieSanc.sanctie))
+                                : (r.sanctie ? escHtml(sanctieLabel(r.sanctie)) : '—'));
+                        const finaleTxt = r.finale_rang != null
+                            ? `${r.finale_rang} pt${r.finale_tijd_ms != null ? ' (' + msTijd(r.finale_tijd_ms) + ')' : ''}${finaleSanc ? ' · ' + escHtml(sanctieLabel(finaleSanc.sanctie)) : ''}`
+                            : (finaleSanc
+                                ? escHtml(sanctieLabel(finaleSanc.sanctie))
+                                : (r.sanctie ? escHtml(sanctieLabel(r.sanctie)) : '—'));
+                        const totaalTxt = (r.totaal_punten != null && r.totaal_punten < Number.MAX_SAFE_INTEGER)
+                            ? r.totaal_punten
+                            : '—';
+                        dataCols = `
+                            <td class="u-col-serie">${serieTxt}</td>
+                            <td class="u-col-finale">${finaleTxt}</td>
+                            <td class="u-col-totaal"><strong>${totaalTxt}</strong></td>`;
+                    }
+
                     html += `<tr class="${rowClass}">
                         <td class="u-col-rang">${rangTxt}</td>
                         <td class="u-col-naam">${escHtml(r.full_name ?? '')}</td>
                         <td class="u-col-startnr">${escHtml(String(r.start_number ?? ''))}</td>
                         <td class="u-col-cat">${escHtml(r.categorie ?? '')}</td>
-                        <td class="u-col-serie">${serieTxt}</td>
-                        <td class="u-col-finale">${finaleTxt}</td>
-                        <td class="u-col-totaal"><strong>${totaalTxt}</strong></td>
+                        ${dataCols}
                     </tr>`;
                 }
 
@@ -515,6 +554,31 @@ async function toonUitslagVoorAfstand(groep, afstand) {
                 desc.textContent = 'Sla de officiële uitslag van deze afstand op';
                 wrap.append(vastlegBtn, desc);
                 content.prepend(wrap);
+            }
+
+            // ── Serie-alleen-startvolgorde toggle ────────────────────────
+            const sasCb = content.querySelector('.u-sas-cb');
+            if (sasCb) {
+                sasCb.addEventListener('change', async () => {
+                    sasCb.disabled = true;
+                    try {
+                        // Hele dc_ids array + afstand_naam: bij samengevoegde
+                        // combos krijgen alle betrokken dc's dezelfde instelling;
+                        // de afstand_naam dient als fallback-match als distance_id
+                        // niet 1-op-1 overeenkomt (bv. bij split-groepen).
+                        await _uSasSet(
+                            groep.dc_ids,
+                            afstand.id   || '',
+                            afstand.name || '',
+                            sasCb.checked,
+                        );
+                        toonUitslagVoorAfstand(groep, afstand);
+                    } catch (e) {
+                        toonBevestigDialog('Fout bij opslaan: ' + e.message, 'Fout');
+                        sasCb.checked  = !sasCb.checked;  // rollback UI
+                        sasCb.disabled = false;
+                    }
+                });
             }
             return;
         }
@@ -633,15 +697,17 @@ async function _uVastleggen(groep, afstand, btnEl) {
     }
 }
 
-// ── Hulp: milliseconden → m:ss.hh ─────────────────────────────────────────────
+// ── Hulp: milliseconden → m:ss.mmm ────────────────────────────────────────────
+// Inline-skeeleren hanteert reglementair duizendsten op alle afstanden
+// (in tegenstelling tot schaatsen dat met honderdsten werkt).
 function msTijd(ms) {
     if (ms == null) return '—';
-    const honderdsten = Math.floor((ms % 1000) / 10);
+    const duizendsten = ms % 1000;
     const seconden    = Math.floor(ms / 1000) % 60;
     const minuten     = Math.floor(ms / 60000);
     const s = String(seconden).padStart(2, '0');
-    const h = String(honderdsten).padStart(2, '0');
-    return minuten > 0 ? `${minuten}:${s}.${h}` : `${s}.${h}`;
+    const d = String(duizendsten).padStart(3, '0');
+    return minuten > 0 ? `${minuten}:${s}.${d}` : `${s}.${d}`;
 }
 
 // ── Inhoud: klassement ───────────────────────────────────────────────────────
@@ -879,25 +945,17 @@ async function toonUitslagKlassement(groep) {
     }
 }
 
-// ── Afdrukken (gebruikt globale bouwOrgHeaderFooter uit app.js) ───────────────
-
-// ── Afdrukken ─────────────────────────────────────────────────────────────────
-
-async function drukUitslagAf(optData) {
-    // Checkbox-waarden meelezen
-    optData.toonRonde = el('u-chk-ronde')?.checked ?? true;
-    optData.toonTijd  = el('u-chk-tijd')?.checked ?? true;
-
-    if (optData.sleutel === 'afstand') {
-        await _drukAfstandUitslag(optData);
-    } else {
-        await _drukKlassement(optData);
-    }
-}
+// ── Body-bouwers voor Print-Center ───────────────────────────────────────────
+// De directe "Druk af"-knoppen zijn weg; Print-Center gebruikt rechtstreeks
+// `bouwKlassementBody()` / `bouwUitslagAfstandBody()` hieronder.
 
 // ── Klassement afdrukken ─────────────────────────────────────────────────────
 
-async function _drukKlassement(optData) {
+// Interne body-bouwer voor klassement-print. Returns
+// { bodyHtml, cssLinks, extraCss, pageOrientation, title } of null.
+// Print-Center gebruikt deze via `bouwKlassementBody()`; de bestaande
+// "Druk af"-knop op de uitslag-pagina via `_drukKlassement()`.
+async function _bouwKlassementInternal(optData) {
     const esc  = s => String(s ?? '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
     const comp = huidigComp;
     const datum   = comp?.starts ? formatDatum(comp.starts) : '';
@@ -912,11 +970,11 @@ async function _drukKlassement(optData) {
             `api/klassement_live.php?competition_id=${encodeURIComponent(huidigCompId)}&dc_ids=${dcIds.map(encodeURIComponent).join(',')}`
         );
         data = await res.json();
-    } catch (e) { toonBevestigDialog('Fout bij laden: ' + e.message, 'Fout'); return; }
+    } catch (e) { console.warn('[Klassement] Laad-fout:', e); return null; }
 
-    if (data.error) { toonBevestigDialog(data.error, 'Fout'); return; }
-    // Vastleggen/klassement ondersteunt alle systemen
-    if (!data.has_results || !data.klassement?.length) { toonBevestigDialog('Nog geen resultaten beschikbaar.', 'Info'); return; }
+    if (data.error) { console.warn('[Klassement] API-error:', data.error); return null; }
+    // Klassement ondersteunt alle systemen
+    if (!data.has_results || !data.klassement?.length) return null;
 
     const afstanden  = data.afstanden ?? [];
     const klassement = data.klassement;
@@ -929,6 +987,12 @@ async function _drukKlassement(optData) {
         const kls = a.compleet ? '' : ' pr-dist-onvolledig';
         thAfst += `<th class="pr-col-punten${kls}">${esc(a.name)}${a.compleet ? '' : '*'}</th>`;
     }
+
+    // Sub-rang per categorie: bij ≥2 categorieën een eigen kolom per
+    // categorie (#DJA, #DJB, ...) met alleen de rang in die kolom.
+    const uniekeCats = [...new Set(klassement.map(r => r.categorie).filter(Boolean))].sort();
+    const toonCatRang = uniekeCats.length > 1;
+    const catTeller = {};
 
     // Rijen
     // Sanctie-voetnoten: gebruik alle_sancties (alle rondes + afstanden)
@@ -946,6 +1010,18 @@ async function _drukKlassement(optData) {
         }
         const rowCls = heeftSanctie ? ' class="pr-rij-sanctie"' : '';
 
+        let catCellen = '';
+        if (toonCatRang) {
+            for (const cat of uniekeCats) {
+                let txt = '';
+                if (r.rang != null && r.categorie === cat) {
+                    catTeller[cat] = (catTeller[cat] ?? 0) + 1;
+                    txt = String(catTeller[cat]);
+                }
+                catCellen += `<td class="pr-col-catrang">${txt}</td>`;
+            }
+        }
+
         let tdAfst = '';
         for (const a of afstanden) {
             const dp = r.afstanden?.[a.id];
@@ -956,11 +1032,18 @@ async function _drukKlassement(optData) {
 
         const totVal = r.totaal_punten % 1 === 0 ? r.totaal_punten : r.totaal_punten.toFixed(1);
         const nootMark = nootNr ? ` <sup class="pr-noot-ref">(${nootNr})</sup>` : '';
+        // Club: gebruik korte naam indien aanwezig, anders volledig
+        const clubTxt = r.club_short || r.club_full || '';
+        // Sponsor: alleen tonen als het daadwerkelijk gevuld is
+        const sponsorTxt = r.sponsor || '';
         tbody += `<tr${rowCls}>
             <td class="pr-col-rang">${r.rang ?? '\u2014'}</td>
+            ${catCellen}
             <td class="pr-col-naam">${esc(r.full_name ?? '')}${nootMark}</td>
             <td class="pr-col-snr">${esc(String(r.start_number ?? ''))}</td>
             <td class="pr-col-cat">${esc(r.categorie ?? '')}</td>
+            <td class="pr-col-club">${esc(clubTxt)}</td>
+            <td class="pr-col-sponsor">${esc(sponsorTxt)}</td>
             ${tdAfst}
             <td class="pr-col-totaal">${totVal}</td>
         </tr>`;
@@ -984,10 +1067,7 @@ async function _drukKlassement(optData) {
         ? `<div class="pr-voetnoot">* ${esc(typeLabel)} \u2013 niet alle afstanden zijn voltooid</div>` : '')
         + voetnotenHtml;
 
-    const htmlDoc = `<!DOCTYPE html><html lang="nl">
-<head><meta charset="UTF-8">
-<title>${esc(typeLabel)} \u2013 ${esc(optData.dcName)}</title>
-<style>
+    const extraCss = `
 *{box-sizing:border-box}
 body{font-family:Arial,Helvetica,sans-serif;font-size:9pt;margin:.6cm 1cm;color:#111;line-height:1.35}
 .pr-header{display:flex;justify-content:space-between;align-items:stretch;
@@ -1002,9 +1082,12 @@ th{background:#dce6f0;color:#1a3a5c;padding:3px 6px;font-size:7.5pt;
 td{padding:3px 6px;border-bottom:1px solid #eee}
 tr:nth-child(even) td{background:#f8fafc}
 .pr-col-rang{width:22px;text-align:center}
+.pr-col-catrang{width:26px;text-align:center;font-size:7.5pt;color:#1a3a5c;font-weight:600}
 .pr-col-naam{}
 .pr-col-snr{width:32px;text-align:right;font-weight:600;color:#1a3a5c}
 .pr-col-cat{width:30px;font-size:7.5pt;color:#666}
+.pr-col-club{width:40mm;min-width:40mm;max-width:40mm;font-size:7.5pt;color:#456;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.pr-col-sponsor{width:60mm;min-width:60mm;max-width:60mm;font-size:7.5pt;color:#666;font-style:italic;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .pr-col-punten{width:70px;text-align:center;white-space:nowrap}
 .pr-col-totaal{width:50px;text-align:center;font-weight:700}
 .pr-dist-onvolledig{font-style:italic;color:#999}
@@ -1016,10 +1099,9 @@ tr:nth-child(even) td{background:#f8fafc}
 .pr-noot-ref{font-size:7pt;color:#b00;font-weight:700}
 .pr-noten{font-size:7.5pt;color:#555;margin-top:.3cm;border-top:1px solid #ddd;padding-top:.2cm}
 .pr-noot-item{margin-bottom:1px}
-@page{size:A4 landscape;margin:.8cm 1cm}
 @media print{body{margin:.5cm .8cm}}
-</style></head>
-<body>
+`;
+    const bodyHtml = `
 <div class="pr-header">
   <div style="flex:1;min-width:0;">
     <div class="pr-comp">${esc(comp?.name ?? '')}</div>
@@ -1031,9 +1113,12 @@ tr:nth-child(even) td{background:#f8fafc}
 <table>
   <thead><tr>
     <th class="pr-col-rang">#</th>
+    ${toonCatRang ? uniekeCats.map(c => `<th class="pr-col-catrang">#${esc(c)}</th>`).join('') : ''}
     <th class="pr-col-naam">Naam</th>
     <th class="pr-col-snr">Snr</th>
     <th class="pr-col-cat">Cat</th>
+    <th class="pr-col-club">Club</th>
+    <th class="pr-col-sponsor">Sponsor</th>
     ${thAfst}
     <th class="pr-col-totaal">Totaal</th>
   </tr></thead>
@@ -1041,27 +1126,66 @@ tr:nth-child(even) td{background:#f8fafc}
 </table>
 ${voetnoot}
 ${footerHtml}
-</body></html>`;
+`;
 
+    return {
+        bodyHtml,
+        cssLinks:        [],
+        extraCss,
+        pageOrientation: 'landscape',
+        title:           typeLabel + ' – ' + (optData.dcName ?? ''),
+        subType:         typeLabel,   // "Tussenklassement" of "Eindklassement"
+    };
+}
+
+// Publieke body-builder voor Print-Center (wrapper rond _bouwKlassementInternal).
+async function bouwKlassementBody(optData) {
+    return await _bouwKlassementInternal(optData);
+}
+
+// ── Per-afstand uitslag ──────────────────────────────────────────────────────
+// Publieke body-builder voor Print-Center — wraps _bouwUitslagAfstandInternal.
+async function bouwUitslagAfstandBody(optData) {
+    return await _bouwUitslagAfstandInternal(optData);
+}
+
+// _drukKlassement en _drukAfstandUitslag (directe print-wrappers) zijn weg;
+// Print-Center gebruikt de bouwXxxBody()-functies rechtstreeks.
+/* verwijderde directe-print-wrapper voor uitslag per afstand:
+async function _drukAfstandUitslag(optData) {
+    const data = await _bouwUitslagAfstandInternal(optData);
+    if (!data) {
+        toonBevestigDialog('Nog geen uitslag beschikbaar.', 'Info');
+        return;
+    }
     const win = window.open('', '_blank');
     if (!win) { toonBevestigDialog('Pop-up geblokkeerd \u2013 sta pop-ups toe voor deze pagina.', 'Afdrukken'); return; }
-    win.document.write(htmlDoc);
+    win.document.write(`<!DOCTYPE html><html lang="nl">
+<head><meta charset="UTF-8">
+<title>${escHtml(data.title)}</title>
+<style>@page{size:A4 ${data.pageOrientation};margin:.8cm 1cm}
+${data.extraCss}</style></head>
+<body>${data.bodyHtml}</body></html>`);
     win.document.close();
     win.focus();
     setTimeout(() => { win.print(); win.close(); }, 400);
 }
+*/
 
-// ── Per-afstand uitslag afdrukken ────────────────────────────────────────────
-
-async function _drukAfstandUitslag(optData) {
+// Interne body-bouwer voor uitslag-per-afstand. Ondersteunt de 3 modi:
+// internationaal, gecombineerd, en normaal (met finales).
+// Returns { bodyHtml, cssLinks, extraCss, pageOrientation, title } of null.
+async function _bouwUitslagAfstandInternal(optData) {
     const esc  = s => String(s ?? '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
     const comp = huidigComp;
     const datum   = comp?.starts ? formatDatum(comp.starts) : '';
     const locatie = comp ? getLocatie(comp) : '';
     const metaTxt = [datum, locatie].filter(Boolean).join(' \u00b7 ');
     const dcIds   = optData.dcIds ?? [optData.dcId];
-    const toonRonde = optData.toonRonde;
-    const toonTijd  = optData.toonTijd;
+    // Defaults op `true` zodat Print-Center-aanroepen (zonder deze flags)
+    // automatisch rondes/tijden tonen. Expliciete `false` respecteren we.
+    const toonRonde = optData.toonRonde ?? true;
+    const toonTijd  = optData.toonTijd  ?? true;
     const { orgLogoHtml, footerHtml } = bouwOrgHeaderFooter(esc);
 
     let data;
@@ -1072,14 +1196,23 @@ async function _drukAfstandUitslag(optData) {
             `api/uitslag_afstand.php?competition_id=${encodeURIComponent(huidigCompId)}&dc_ids=${dcParam}${distParam}`
         );
         data = await res.json();
-    } catch (e) { toonBevestigDialog('Fout bij laden: ' + e.message, 'Fout'); return; }
+    } catch (e) { console.warn('[Uitslag] Laad-fout:', e); return null; }
 
-    if (data.error) { toonBevestigDialog(data.error, 'Fout'); return; }
+    if (data.error) { console.warn('[Uitslag] API-error:', data.error); return null; }
+
+    const baseTitle = 'Uitslag – ' + [optData.dcName, optData.distNaam].filter(Boolean).join(' – ');
     // Vastleggen/klassement ondersteunt alle systemen
 
     // ── Internationaal systeem ──────────────────────────────────────────────
     if (data.modus === 'internationaal') {
-        if (!data.resultaat?.length) { toonBevestigDialog('Nog geen uitslag beschikbaar.', 'Info'); return; }
+        if (!data.resultaat?.length) return null;
+
+        // Sub-rang per categorie: bij >1 categorie in de tabel een eigen
+        // kolom per categorie (#DJA, #DJB, ...). Elke rijder krijgt zijn
+        // nummer alleen in de kolom van zijn eigen categorie.
+        const uniekeCats = [...new Set(data.resultaat.map(r => r.categorie).filter(Boolean))].sort();
+        const toonCatRang = uniekeCats.length > 1;
+        const catTeller = {};
 
         let thExtra = '';
         if (toonRonde) thExtra += '<th class="pr-col-ronde">Ronde</th>';
@@ -1094,6 +1227,19 @@ async function _drukAfstandUitslag(optData) {
                 .join(', ');
             const heeftSanctie = alleSancties || r.sanctie;
             const rowCls = heeftSanctie ? ' class="pr-rij-sanctie"' : '';
+            // Cat-rang per categorie-kolom: alleen de kolom van deze
+            // rijder z'n eigen categorie wordt ingevuld, rest blijft leeg.
+            let catCellen = '';
+            if (toonCatRang) {
+                for (const cat of uniekeCats) {
+                    let txt = '';
+                    if (r.rang != null && r.categorie === cat) {
+                        catTeller[cat] = (catTeller[cat] ?? 0) + 1;
+                        txt = String(catTeller[cat]);
+                    }
+                    catCellen += `<td class="pr-col-catrang">${txt}</td>`;
+                }
+            }
             let tdExtra = '';
             if (toonRonde) tdExtra += `<td class="pr-col-ronde">${esc(r.ronde_label ?? '')}</td>`;
             if (data.heeft_rondes)    tdExtra += `<td class="pr-col-rondes">${r.rondes ?? '\u2014'}</td>`;
@@ -1101,6 +1247,7 @@ async function _drukAfstandUitslag(optData) {
             if (toonTijd)  tdExtra += `<td class="pr-col-tijd">${r.tijd_ms != null ? msTijd(r.tijd_ms) : '\u2014'}</td>`;
             tbody += `<tr${rowCls}>
                 <td class="pr-col-rang">${r.rang ?? '\u2014'}</td>
+                ${catCellen}
                 <td class="pr-col-naam">${esc(r.full_name ?? '')}</td>
                 <td class="pr-col-snr">${esc(String(r.start_number ?? ''))}</td>
                 <td class="pr-col-cat">${esc(r.categorie ?? '')}</td>
@@ -1109,31 +1256,50 @@ async function _drukAfstandUitslag(optData) {
             </tr>`;
         }
 
-        const htmlDoc = _bouwAfstandHtml(esc, comp, metaTxt, optData, 'A4 portrait',
+        const catRangHeaders = toonCatRang
+            ? uniekeCats.map(c => `<th class="pr-col-catrang">#${esc(c)}</th>`).join('')
+            : '';
+
+        const bodyHtml = _bouwAfstandBody(esc, comp, metaTxt, optData,
             `<th class="pr-col-rang">#</th>
+             ${catRangHeaders}
              <th class="pr-col-naam">Naam</th>
              <th class="pr-col-snr">Snr</th>
              <th class="pr-col-cat">Cat</th>
              ${thExtra}
              <th class="pr-col-sanctie">Sanctie</th>`,
             tbody, 'Uitslag', orgLogoHtml, footerHtml);
-
-        const win = window.open('', '_blank');
-        if (!win) { toonBevestigDialog('Pop-up geblokkeerd \u2013 sta pop-ups toe voor deze pagina.', 'Afdrukken'); return; }
-        win.document.write(htmlDoc);
-        win.document.close();
-        win.focus();
-        setTimeout(() => { win.print(); win.close(); }, 400);
-        return;
+        return {
+            bodyHtml,
+            cssLinks:        [],
+            extraCss:        _bouwAfstandExtraCss(),
+            pageOrientation: 'portrait',
+            title:           baseTitle,
+            subType:         'Uitslag ' + (optData.distNaam ?? ''),
+        };
     }
 
     // ── Gecombineerde modus ──────────────────────────────────────────────────
     if (data.modus === 'gecombineerd') {
-        if (!data.gecombineerd?.length) { toonBevestigDialog('Nog geen uitslag beschikbaar.', 'Info'); return; }
+        if (!data.gecombineerd?.length) return null;
 
-        let thExtra = '';
-        if (toonRonde) thExtra += '<th class="pr-col-serie">Serie</th><th class="pr-col-finale">Finale</th>';
-        if (toonTijd)  thExtra += '<th class="pr-col-tijd">Tijd serie</th><th class="pr-col-tijd">Tijd finale</th>';
+        const sasActief = !!data.serie_alleen_startvolgorde;
+
+        // Sub-rang per categorie (zie internationaal-blok voor uitleg)
+        const uniekeCats = [...new Set(data.gecombineerd.map(r => r.categorie).filter(Boolean))].sort();
+        const toonCatRang = uniekeCats.length > 1;
+        const catTeller = {};
+
+        let thExtra = '', thTotaal = '';
+        if (sasActief) {
+            // Serie alleen startvolgorde: geen punten, alleen tijden (serie + finale)
+            thExtra = '<th class="pr-col-tijd">Serie-tijd</th><th class="pr-col-tijd">Finale-tijd</th>';
+            thTotaal = ''; // Geen totaal-kolom
+        } else {
+            if (toonRonde) thExtra += '<th class="pr-col-serie">Serie</th><th class="pr-col-finale">Finale</th>';
+            if (toonTijd)  thExtra += '<th class="pr-col-tijd">Tijd serie</th><th class="pr-col-tijd">Tijd finale</th>';
+            thTotaal = '<th class="pr-col-totaal">Totaal</th>';
+        }
 
         let tbody = '';
         for (const r of data.gecombineerd) {
@@ -1142,51 +1308,88 @@ async function _drukAfstandUitslag(optData) {
                 .join(', ');
             const heeftSanctie = alleSancties || r.sanctie;
             const rowCls = heeftSanctie ? ' class="pr-rij-sanctie"' : '';
-            let tdExtra = '';
-            if (toonRonde) {
-                const serieTxt  = r.serie_rang  != null ? `${r.serie_rang} pt` : (r.sanctie ? esc(sanctieLabel(r.sanctie)) : '\u2014');
-                const finaleTxt = r.finale_rang != null ? `${r.finale_rang} pt` : (r.sanctie ? esc(sanctieLabel(r.sanctie)) : '\u2014');
-                tdExtra += `<td class="pr-col-serie">${serieTxt}</td><td class="pr-col-finale">${finaleTxt}</td>`;
-            }
-            if (toonTijd) {
+            let tdExtra = '', tdTotaal = '';
+
+            if (sasActief) {
                 const stTxt = r.serie_tijd_ms  != null ? msTijd(r.serie_tijd_ms)  : '\u2014';
-                const ftTxt = r.finale_tijd_ms != null ? msTijd(r.finale_tijd_ms) : '\u2014';
-                tdExtra += `<td class="pr-col-tijd">${stTxt}</td><td class="pr-col-tijd">${ftTxt}</td>`;
+                const ftTxt = r.finale_tijd_ms != null ? msTijd(r.finale_tijd_ms)
+                           : (r.sanctie ? esc(sanctieLabel(r.sanctie)) : '\u2014');
+                tdExtra = `<td class="pr-col-tijd">${stTxt}</td><td class="pr-col-tijd"><strong>${ftTxt}</strong></td>`;
+            } else {
+                if (toonRonde) {
+                    const serieTxt  = r.serie_rang  != null ? `${r.serie_rang} pt`
+                                                            : (r.sanctie ? esc(sanctieLabel(r.sanctie)) : '\u2014');
+                    const finaleTxt = r.finale_rang != null ? `${r.finale_rang} pt`
+                                                            : (r.sanctie ? esc(sanctieLabel(r.sanctie)) : '\u2014');
+                    tdExtra += `<td class="pr-col-serie">${serieTxt}</td><td class="pr-col-finale">${finaleTxt}</td>`;
+                }
+                if (toonTijd) {
+                    const stTxt = r.serie_tijd_ms  != null ? msTijd(r.serie_tijd_ms)  : '\u2014';
+                    const ftTxt = r.finale_tijd_ms != null ? msTijd(r.finale_tijd_ms) : '\u2014';
+                    tdExtra += `<td class="pr-col-tijd">${stTxt}</td><td class="pr-col-tijd">${ftTxt}</td>`;
+                }
+                const totaalTxt = r.totaal_punten != null ? r.totaal_punten : '\u2014';
+                tdTotaal = `<td class="pr-col-totaal">${totaalTxt}</td>`;
             }
-            const totaalTxt = r.totaal_punten != null ? r.totaal_punten : '\u2014';
+
+            let catCellen = '';
+            if (toonCatRang) {
+                for (const cat of uniekeCats) {
+                    let txt = '';
+                    if (r.rang != null && r.categorie === cat) {
+                        catTeller[cat] = (catTeller[cat] ?? 0) + 1;
+                        txt = String(catTeller[cat]);
+                    }
+                    catCellen += `<td class="pr-col-catrang">${txt}</td>`;
+                }
+            }
             tbody += `<tr${rowCls}>
                 <td class="pr-col-rang">${r.rang ?? '\u2014'}</td>
+                ${catCellen}
                 <td class="pr-col-naam">${esc(r.full_name ?? '')}</td>
                 <td class="pr-col-snr">${esc(String(r.start_number ?? ''))}</td>
                 <td class="pr-col-cat">${esc(r.categorie ?? '')}</td>
                 ${tdExtra}
-                <td class="pr-col-totaal">${totaalTxt}</td>
+                ${tdTotaal}
                 <td class="pr-col-sanctie">${alleSancties || ''}</td>
             </tr>`;
         }
 
-        const pageSize = (toonRonde && toonTijd) ? 'A4 landscape' : 'A4 portrait';
-        const htmlDoc = _bouwAfstandHtml(esc, comp, metaTxt, optData, pageSize,
+        const pageOrient = (!sasActief && toonRonde && toonTijd) ? 'landscape' : 'portrait';
+        const titel = sasActief
+            ? 'Uitslag (A-finale bepalend, serie = startvolgorde)'
+            : 'Gecombineerd (serie + finale)';
+        const catRangHeaders = toonCatRang
+            ? uniekeCats.map(c => `<th class="pr-col-catrang">#${esc(c)}</th>`).join('')
+            : '';
+        const bodyHtml = _bouwAfstandBody(esc, comp, metaTxt, optData,
             `<th class="pr-col-rang">#</th>
+             ${catRangHeaders}
              <th class="pr-col-naam">Naam</th>
              <th class="pr-col-snr">Snr</th>
              <th class="pr-col-cat">Cat</th>
              ${thExtra}
-             <th class="pr-col-totaal">Totaal</th>
+             ${thTotaal}
              <th class="pr-col-sanctie">Sanctie</th>`,
-            tbody, 'Gecombineerd (serie + finale)', orgLogoHtml, footerHtml);
-
-        const win = window.open('', '_blank');
-        if (!win) { toonBevestigDialog('Pop-up geblokkeerd \u2013 sta pop-ups toe voor deze pagina.', 'Afdrukken'); return; }
-        win.document.write(htmlDoc);
-        win.document.close();
-        win.focus();
-        setTimeout(() => { win.print(); win.close(); }, 400);
-        return;
+            tbody, titel, orgLogoHtml, footerHtml);
+        return {
+            bodyHtml,
+            cssLinks:        [],
+            extraCss:        _bouwAfstandExtraCss(),
+            pageOrientation: pageOrient,
+            title:           baseTitle,
+            subType:         'Uitslag ' + (optData.distNaam ?? ''),
+        };
     }
 
     // ── Normaal: finales ─────────────────────────────────────────────────────
-    if (!data.finales?.length) { toonBevestigDialog('Nog geen finales gevonden.', 'Info'); return; }
+    if (!data.finales?.length) return null;
+
+    // Sub-rang per categorie (zie internationaal-blok voor uitleg)
+    const alleRijdersNormaal = data.finales.flatMap(f => f.rijders ?? []);
+    const uniekeCats = [...new Set(alleRijdersNormaal.map(r => r.categorie).filter(Boolean))].sort();
+    const toonCatRang = uniekeCats.length > 1;
+    const catTeller = {};
 
     let thExtra = '';
     if (toonRonde) thExtra += '<th class="pr-col-finale">Finale</th>';
@@ -1203,6 +1406,17 @@ async function _drukAfstandUitslag(optData) {
                 .join(', ');
             const heeftSanctie = alleSancties || r.sanctie;
             const rowCls = heeftSanctie ? ' class="pr-rij-sanctie"' : '';
+            let catCellen = '';
+            if (toonCatRang) {
+                for (const cat of uniekeCats) {
+                    let txt = '';
+                    if (r.rang != null && r.categorie === cat) {
+                        catTeller[cat] = (catTeller[cat] ?? 0) + 1;
+                        txt = String(catTeller[cat]);
+                    }
+                    catCellen += `<td class="pr-col-catrang">${txt}</td>`;
+                }
+            }
             let tdExtra = '';
             if (toonRonde) tdExtra += `<td class="pr-col-finale">${esc(finale.label)}</td>`;
             if (data.heeft_rondes)    tdExtra += `<td class="pr-col-rondes">${r.rondes ?? '\u2014'}</td>`;
@@ -1210,6 +1424,7 @@ async function _drukAfstandUitslag(optData) {
             if (toonTijd)  tdExtra += `<td class="pr-col-tijd">${r.tijd_ms != null ? msTijd(r.tijd_ms) : '\u2014'}</td>`;
             tbody += `<tr${rowCls}>
                 <td class="pr-col-rang">${r.rang ?? '\u2014'}</td>
+                ${catCellen}
                 <td class="pr-col-naam">${esc(r.full_name ?? '')}</td>
                 <td class="pr-col-snr">${esc(String(r.start_number ?? ''))}</td>
                 <td class="pr-col-cat">${esc(r.categorie ?? '')}</td>
@@ -1219,22 +1434,27 @@ async function _drukAfstandUitslag(optData) {
         }
     }
 
-    const pageSize = (toonRonde && toonTijd) ? 'A4 landscape' : 'A4 portrait';
-    const htmlDoc = _bouwAfstandHtml(esc, comp, metaTxt, optData, pageSize,
+    const pageOrient = (toonRonde && toonTijd) ? 'landscape' : 'portrait';
+    const catRangHeaders = toonCatRang
+        ? uniekeCats.map(c => `<th class="pr-col-catrang">#${esc(c)}</th>`).join('')
+        : '';
+    const bodyHtml = _bouwAfstandBody(esc, comp, metaTxt, optData,
         `<th class="pr-col-rang">#</th>
+         ${catRangHeaders}
          <th class="pr-col-naam">Naam</th>
          <th class="pr-col-snr">Snr</th>
          <th class="pr-col-cat">Cat</th>
          ${thExtra}
          <th class="pr-col-sanctie">Sanctie</th>`,
         tbody, '', orgLogoHtml, footerHtml);
-
-    const win = window.open('', '_blank');
-    if (!win) { toonBevestigDialog('Pop-up geblokkeerd \u2013 sta pop-ups toe voor deze pagina.', 'Afdrukken'); return; }
-    win.document.write(htmlDoc);
-    win.document.close();
-    win.focus();
-    setTimeout(() => { win.print(); win.close(); }, 400);
+    return {
+        bodyHtml,
+        cssLinks:        [],
+        extraCss:        _bouwAfstandExtraCss(),
+        pageOrientation: pageOrient,
+        title:           baseTitle,
+        subType:         'Uitslag ' + (optData.distNaam ?? ''),
+    };
 }
 
 // ── HTML-bouwer voor per-afstand print ───────────────────────────────────────
@@ -1243,7 +1463,34 @@ function _bouwAfstandHtml(esc, comp, metaTxt, optData, pageSize, theadHtml, tbod
     return `<!DOCTYPE html><html lang="nl">
 <head><meta charset="UTF-8">
 <title>Uitslag \u2013 ${esc(optData.dcName)} \u2013 ${esc(optData.distNaam)}</title>
-<style>
+<style>${_bouwAfstandExtraCss()}
+@page{size:${pageSize};margin:.8cm 1cm}</style></head>
+<body>${_bouwAfstandBody(esc, comp, metaTxt, optData, theadHtml, tbodyHtml, subtitel, orgLogoHtml, footerHtml)}
+</body></html>`;
+}
+
+// Gesplitste body-variant voor Print-Center gebruik.
+function _bouwAfstandBody(esc, comp, metaTxt, optData, theadHtml, tbodyHtml, subtitel, orgLogoHtml, footerHtml) {
+    return `
+<div class="pr-header">
+  <div style="flex:1;min-width:0;">
+    <div class="pr-comp">${esc(comp?.name ?? '')}</div>
+    <div class="pr-meta">${esc(metaTxt)}</div>
+    <div class="pr-type" style="margin-top:2mm;">${esc(optData.dcName)} \u2013 ${esc(optData.distNaam)}</div>
+    ${subtitel ? `<div class="pr-subtitel">${esc(subtitel)}</div>` : ''}
+  </div>
+  ${orgLogoHtml ? `<div style="flex-shrink:0;display:flex;align-items:flex-start;">${orgLogoHtml}</div>` : ''}
+</div>
+<table>
+  <thead><tr>${theadHtml}</tr></thead>
+  <tbody>${tbodyHtml}</tbody>
+</table>
+${footerHtml || ''}
+`;
+}
+
+function _bouwAfstandExtraCss() {
+    return `
 *{box-sizing:border-box}
 body{font-family:Arial,Helvetica,sans-serif;font-size:9pt;margin:.6cm 1cm;color:#111;line-height:1.35}
 .pr-header{display:flex;justify-content:space-between;align-items:stretch;
@@ -1264,28 +1511,12 @@ tr:nth-child(even) td{background:#f8fafc}
 .pr-col-naam{width:auto}
 .pr-col-snr{text-align:right;font-weight:600;color:#1a3a5c}
 .pr-col-cat{font-size:7.5pt;color:#666}
+.pr-col-catrang{width:28px;text-align:center;font-size:7.5pt;color:#1a3a5c;font-weight:600}
 .pr-col-serie,.pr-col-finale{text-align:center}
 .pr-col-tijd{text-align:right;font-family:monospace;font-size:8pt}
 .pr-col-totaal{text-align:center;font-weight:700}
 .pr-col-sanctie{font-size:7.5pt;color:#b00}
 .pr-rij-sanctie td{color:#888}
-@page{size:${pageSize};margin:.8cm 1cm}
 @media print{body{margin:.5cm .8cm}}
-</style></head>
-<body>
-<div class="pr-header">
-  <div style="flex:1;min-width:0;">
-    <div class="pr-comp">${esc(comp?.name ?? '')}</div>
-    <div class="pr-meta">${esc(metaTxt)}</div>
-    <div class="pr-type" style="margin-top:2mm;">${esc(optData.dcName)} \u2013 ${esc(optData.distNaam)}</div>
-    ${subtitel ? `<div class="pr-subtitel">${esc(subtitel)}</div>` : ''}
-  </div>
-  ${orgLogoHtml ? `<div style="flex-shrink:0;display:flex;align-items:flex-start;">${orgLogoHtml}</div>` : ''}
-</div>
-<table>
-  <thead><tr>${theadHtml}</tr></thead>
-  <tbody>${tbodyHtml}</tbody>
-</table>
-${footerHtml || ''}
-</body></html>`;
+`;
 }

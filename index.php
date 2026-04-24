@@ -24,6 +24,7 @@ if (!$gebruiker) {
     <h1>InlineComp</h1>
     <span class="badge">KNSB Inline</span>
     <div class="header-user">
+        <button class="header-printcenter-btn" id="btn-printcenter" title="Print-Center openen" disabled>&#128424; Print-Center</button>
         <button class="header-handleiding-btn" id="btn-handleiding" title="Handleiding openen" onclick="openHandleiding()">&#128366; Handleiding</button>
         <span class="header-user-naam"><?= htmlspecialchars($gebruiker['naam']) ?></span>
         <span class="header-user-rol"><?= htmlspecialchars($gebruiker['role']) ?></span>
@@ -67,6 +68,10 @@ if (!$gebruiker) {
             <li class="nav-item nav-item-gebruikers" data-page="gebruikers" style="display:none">
                 <span class="nav-icon">&#128100;</span>
                 <span class="nav-label">Gebruikers</span>
+            </li>
+            <li class="nav-item nav-item-rijders" data-page="rijders" style="display:none">
+                <span class="nav-icon">&#128101;</span>
+                <span class="nav-label">Rijders</span>
             </li>
             <li class="nav-item" data-page="info">
                 <span class="nav-icon">&#8505;</span>
@@ -122,12 +127,6 @@ if (!$gebruiker) {
                                 </div>
                             </div>
                             <div class="detail-knoppen">
-                                <button id="btn-print-tekenlijst" class="btn-print-tekenlijst" disabled title="Tekenlijsten afdrukken">
-                                    &#128438; Tekenlijsten
-                                </button>
-                                <button id="btn-print-deelnemers" class="btn-print-tekenlijst" disabled title="Definitieve deelnemerslijst afdrukken">
-                                    &#128203; Deelnemerslijst
-                                </button>
                                 <button id="btn-import" class="btn-import" title="Wedstrijd importeren in database">
                                     &#8659; Importeer
                                 </button>
@@ -205,6 +204,7 @@ if (!$gebruiker) {
                             <h2 id="org-form-titel">Organisatie</h2>
                             <nav class="org-tabs-nav" id="org-tabs-nav">
                                 <button class="org-tab-btn active" data-tab="gegevens">Gegevens</button>
+                                <button class="org-tab-btn" data-tab="transponders">Transponders</button>
                                 <button class="org-tab-btn" data-tab="wedstrijden">Wedstrijden</button>
                                 <button class="org-tab-btn" data-tab="klassementen">Klassementen</button>
                             </nav>
@@ -246,29 +246,6 @@ if (!$gebruiker) {
                             <div id="org-sponsors-list"></div>
                             <button class="btn-sponsor-add" id="btn-sponsor-add">+ Sponsor toevoegen</button>
 
-                            <div class="inst-subtitel">Transponders
-                                <button class="btn-tp-csv btn-secondary" id="btn-tp-csv" style="display:none" title="Importeer transponders uit CSV">📥 CSV import</button>
-                                <input type="file" id="tp-csv-file" accept=".csv,.txt" style="display:none">
-                            </div>
-                            <div id="org-transponders-wrap" style="display:none">
-                                <div class="org-tp-tabel-wrap">
-                                    <table class="org-tp-tabel" id="org-tp-tabel">
-                                        <thead><tr>
-                                            <th class="tp-col-nr">Nr</th>
-                                            <th class="tp-col-code">Transponder</th>
-                                            <th class="tp-col-eigendom">Eigendom</th>
-                                            <th class="tp-col-snr">Snr</th>
-                                            <th class="tp-col-naam">Naam</th>
-                                            <th class="tp-col-cat">Cat</th>
-                                            <th class="tp-col-betaald">Betaald</th>
-                                            <th class="tp-col-del"></th>
-                                        </tr></thead>
-                                        <tbody id="org-tp-body"></tbody>
-                                    </table>
-                                </div>
-                                <button class="btn-tp-add" id="btn-tp-add">+ Transponder toevoegen</button>
-                            </div>
-
                             <div class="inst-acties">
                                 <button class="btn-primary" id="btn-org-opslaan">Opslaan</button>
                                 <button class="btn-samenvoeg" id="btn-samenvoeg" style="display:none">
@@ -297,6 +274,57 @@ if (!$gebruiker) {
                         </div><!-- /tab gegevens -->
 
                         <!-- Tab 2: Wedstrijden -->
+                        <!-- Tab 2: Transponders -->
+                        <div class="org-tab-content" id="org-tab-transponders" style="display:none">
+                            <div class="org-tp-acties">
+                                <button class="btn-tp-csv btn-secondary" id="btn-tp-csv" title="Importeer transponders uit CSV">📥 CSV import</button>
+                                <input type="file" id="tp-csv-file" accept=".csv,.txt" style="display:none">
+                                <button class="btn-primary" id="btn-tp-opslaan">💾 Opslaan</button>
+                                <button class="btn-secondary" id="btn-tp-print" title="Druk de uitgeleverde transponders af">🖨 Print uitgeleverd</button>
+                                <span id="tp-status"></span>
+                            </div>
+                            <div class="org-tp-tabel-wrap">
+                                <table class="org-tp-tabel" id="org-tp-tabel">
+                                    <thead><tr>
+                                        <th class="tp-col-nr tp-sortable" data-sort="nr">Nr<span class="tp-sort-ico" aria-hidden="true">⇅</span></th>
+                                        <th class="tp-col-code">Transponder</th>
+                                        <th class="tp-col-eigendom">Eigendom</th>
+                                        <th class="tp-col-snr tp-sortable" data-sort="snr">Snr<span class="tp-sort-ico" aria-hidden="true">⇅</span></th>
+                                        <th class="tp-col-naam">Naam</th>
+                                        <th class="tp-col-license">Licentie</th>
+                                        <th class="tp-col-cat">Cat</th>
+                                        <th class="tp-col-betaald">
+    Betaald<button type="button" class="tp-filter-btn" id="tp-filter-btn" title="Filter" aria-haspopup="true" aria-expanded="false" aria-label="Filter">
+        <svg class="tp-filter-ico" viewBox="0 0 16 16" width="13" height="13" aria-hidden="true">
+            <path d="M1 2h14l-5.5 7v5l-3-1.5V9L1 2z" fill="currentColor"/>
+        </svg>
+    </button>
+    <div class="tp-filter-menu" id="tp-filter-menu" role="menu" hidden>
+        <button type="button" class="tp-filter-opt" data-val="alle"        role="menuitemradio">Alle</button>
+        <button type="button" class="tp-filter-opt" data-val="uitgegeven"  role="menuitemradio">Uitgegeven</button>
+        <button type="button" class="tp-filter-opt" data-val="betaald"     role="menuitemradio">Betaald</button>
+        <button type="button" class="tp-filter-opt" data-val="niet_betaald" role="menuitemradio">Niet betaald</button>
+    </div>
+</th>
+                                        <th class="tp-col-datum">Betaald op</th>
+                                        <th class="tp-col-del"></th>
+                                    </tr></thead>
+                                    <tbody id="org-tp-body"></tbody>
+                                </table>
+                            </div>
+                            <div class="org-tp-footer">
+                                <button class="btn-secondary btn-tp-add" id="btn-tp-add">+ Transponder toevoegen</button>
+                                <div class="tp-paginering" id="tp-paginering">
+                                    <button class="tp-pag-btn" id="tp-pag-eerste" title="Eerste pagina">&laquo;</button>
+                                    <button class="tp-pag-btn" id="tp-pag-vorige" title="Vorige pagina">&lsaquo;</button>
+                                    <span class="tp-pag-info" id="tp-pag-info"></span>
+                                    <button class="tp-pag-btn" id="tp-pag-volgende" title="Volgende pagina">&rsaquo;</button>
+                                    <button class="tp-pag-btn" id="tp-pag-laatste" title="Laatste pagina">&raquo;</button>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Tab 3: Wedstrijden -->
                         <div class="org-tab-content" id="org-tab-wedstrijden" style="display:none">
                             <div id="org-wedstrijden-list">
                                 <div class="status-msg loading"><span class="spinner"></span>Laden…</div>
@@ -319,6 +347,32 @@ if (!$gebruiker) {
             <div class="pagina-inhoud">
                 <div id="gb-container">
                     <div class="status-msg loading"><span class="spinner"></span>Laden…</div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Pagina: Rijders (AVG-beheer) -->
+        <div id="page-rijders" class="page">
+            <div class="pagina-inhoud">
+                <div class="section-title">Rijderbeheer — persoonsgegevens &amp; wedstrijdhistorie</div>
+                <div class="rij-avg-info">
+                    <strong>AVG-beheer.</strong> Hier kun je van rijders hun gegevens inzien, hun wedstrijdhistorie bekijken en — op verzoek — hun persoonsgegevens anonimiseren.
+                    Na anonimisatie blijft het <em>licentienummer</em> aan de wedstrijduitslagen gekoppeld, maar naam en overige gegevens zijn onomkeerbaar vervangen door <em>"Verwijderd"</em>/leeg.
+                </div>
+                <div class="rij-layout">
+                    <div class="rij-left">
+                        <div class="rij-zoek-rij">
+                            <input type="text" id="rij-zoek-inp" class="inp" placeholder="Zoek op achternaam, startnummer of licentienummer…" autocomplete="off">
+                            <button class="btn-secondary" id="rij-zoek-btn">Zoek</button>
+                        </div>
+                        <div class="rij-zoek-hint">Zoekt gelijktijdig op startnummer, achternaam en naam. Licentienummer wordt meegenomen vanaf 4 tekens (overal in de licentie — ook de laatste 4 cijfers werken).</div>
+                        <div id="rij-zoek-resultaat"></div>
+                    </div>
+                    <div class="rij-right">
+                        <div id="rij-detail">
+                            <div class="status-msg" style="color:#666">Selecteer links een rijder voor de details.</div>
+                        </div>
+                    </div>
                 </div>
             </div>
         </div>
@@ -361,8 +415,11 @@ function magSchrijven(module) {
 <script src="js/live.js"></script>
 <script src="js/uitslag.js"></script>
 <script src="js/ranking.js"></script>
+<script src="js/klassement_serie_ui.js"></script>
 <script src="js/instellingen.js"></script>
 <script src="js/gebruikers.js"></script>
+<script src="js/rijders.js"></script>
 <script src="js/handleiding.js"></script>
+<script src="js/print_module.js"></script>
 </body>
 </html>

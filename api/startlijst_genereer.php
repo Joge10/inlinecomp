@@ -86,6 +86,38 @@ try {
     $stmt->execute($params);
     $rijders = $stmt->fetchAll();
 
+    // Vangnet: rijders die al een uitslag_afstand-rij hebben voor deze DC
+    // (dus al feitelijk hebben gereden) worden automatisch meegenomen,
+    // ongeacht hun entries.status. In de praktijk blijft `Niet getekend`
+    // (status 4) soms per ongeluk staan terwijl de rijder gewoon aan de start
+    // kwam — die moet bij de volgende-ronde-loting gewoon weer verschijnen.
+    try {
+        $extraPh     = implode(',', array_fill(0, count($dcIds), '?'));
+        $extraParams = array_merge([$compId], $dcIds);
+        $extraWhere  = '';
+        if ($catFilter) {
+            $catPhX       = implode(',', array_fill(0, count($catFilter), '?'));
+            $extraWhere   = " AND p.category IN ($catPhX)";
+            $extraParams  = array_merge($extraParams, $catFilter);
+        }
+        $alBekend = array_fill_keys(array_column($rijders, 'license_key'), true);
+        $extraStmt = $pdo->prepare("
+            SELECT DISTINCT p.license_key, p.full_name, p.short_name,
+                            p.start_number, p.club_short, p.club_full, p.city, p.category
+            FROM uitslag_afstand ua
+            JOIN persons p ON p.license_key = ua.person_license
+            WHERE ua.competition_id = ?
+              AND ua.distance_combination_id IN ($extraPh)
+              $extraWhere
+        ");
+        $extraStmt->execute($extraParams);
+        foreach ($extraStmt->fetchAll() as $r) {
+            if (isset($alBekend[$r['license_key']])) continue;
+            $rijders[] = $r;
+            $alBekend[$r['license_key']] = true;
+        }
+    } catch (Throwable $e) { /* vangnet mag niks stuk maken */ }
+
     if (empty($rijders)) {
         echo json_encode(['error' => 'Geen bevestigde deelnemers gevonden voor deze categorie']);
         exit;

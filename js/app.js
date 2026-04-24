@@ -183,27 +183,36 @@ function escHtml(str) {
 function bouwOrgHeaderFooter(esc) {
     const baseUrl = new URL('.', window.location.href).href;
     const org = huidigOrganisatie;
+    // Cache-buster zodat een nieuw geüpload logo niet uit de browser-cache blijft
+    // hangen in prints. Gebruikt updated_at indien aanwezig (stabiel = cache-vriendelijk
+    // als er niks verandert), anders Date.now() als veilige fallback.
+    const cb = encodeURIComponent(
+        org?.updated_at ?? org?.logo_updated_at ?? String(Date.now())
+    );
 
     // Organisatie-logo (rechtsboven in header)
     const orgLogoHtml = org?.logo_path
         ? `<span style="display:block;height:20mm;max-width:50mm;overflow:hidden;line-height:0;text-align:right;">` +
-          `<img src="${esc(baseUrl + org.logo_path)}" alt="${esc(org.naam)}" ` +
+          `<img src="${esc(baseUrl + org.logo_path)}?v=${cb}" alt="${esc(org.naam)}" ` +
           `style="height:20mm;width:auto;max-width:50mm;display:inline-block;object-fit:contain;vertical-align:top;"></span>`
         : (org?.naam ? `<span style="font-size:8pt;color:#555;font-style:italic;">${esc(org.naam)}</span>` : '');
 
     // Sponsor-footer (volledig inline-styled)
     let footerHtml = '';
     if (org?.sponsors?.length) {
-        const sponsorItems = org.sponsors.map(s =>
-            `<span style="display:inline-flex;align-items:center;">` +
+        const sponsorItems = org.sponsors.map(s => {
+            const sCb = encodeURIComponent(
+                s?.updated_at ?? s?.logo_updated_at ?? cb
+            );
+            return `<span style="display:inline-flex;align-items:center;">` +
             (s.logo_path
                 ? `<span style="display:inline-block;height:10mm;max-width:35mm;overflow:hidden;line-height:0;">` +
-                  `<img src="${esc(baseUrl + s.logo_path)}" alt="${esc(s.naam)}" ` +
+                  `<img src="${esc(baseUrl + s.logo_path)}?v=${sCb}" alt="${esc(s.naam)}" ` +
                   `style="height:10mm;width:auto;max-width:35mm;display:block;object-fit:contain;"></span>`
                 : `<span style="font-size:7pt;color:#555;">${esc(s.naam)}</span>`) +
-            `</span>`
-        ).join('');
-        footerHtml = `<div style="margin-top:3mm;border-top:1px solid #ddd;padding-top:2mm;display:flex;align-items:center;justify-content:center;gap:5mm;flex-wrap:wrap;">${sponsorItems}</div>`;
+            `</span>`;
+        }).join('');
+        footerHtml = `<div class="org-sponsor-footer" style="margin-top:3mm;border-top:1px solid #ddd;padding-top:2mm;display:flex;align-items:center;justify-content:center;gap:5mm;flex-wrap:wrap;">${sponsorItems}</div>`;
     }
 
     return { orgLogoHtml, footerHtml };
@@ -382,6 +391,9 @@ async function selectWedstrijd(card, comp) {
     huidigCompId = comp.id;
     huidigComp   = comp;
 
+    // Print-Center state resetten bij (andere) wedstrijd — header-knop enablen
+    window.printCenterResetVoorWedstrijd?.(comp.id);
+
     const panel = el('detail-panel');
     panel.style.display = 'block';
     el('detail-title').textContent = comp.name || comp.title || '';
@@ -391,9 +403,7 @@ async function selectWedstrijd(card, comp) {
     startlijstCache = {};
     setHTML('imp-cat-content', '<div class="status-msg loading"><span class="spinner"></span>Vergelijken met database…</div>');
 
-    el('btn-import').onclick           = () => importeerWedstrijd(comp.id, comp.name || '');
-    el('btn-print-tekenlijst').onclick = () => printTekenlijsten();
-    el('btn-print-deelnemers').onclick = () => printDeelnemerslijst();
+    el('btn-import').onclick = () => importeerWedstrijd(comp.id, comp.name || '');
 
     panel.scrollIntoView({ behavior: 'smooth', block: 'start' });
 
@@ -437,6 +447,7 @@ function resetImportModule(verwijderdId) {
     personEdits       = {};
     entryEdits        = {};
     manualTp          = new Set();
+    window.printCenterResetVoorWedstrijd?.(null);
     heeftWijzigingen  = false;
     standDatum        = '';
     dbStandDatum      = '';
@@ -460,8 +471,11 @@ function resetImportModule(verwijderdId) {
     if (typeof updateImportBtn === 'function') updateImportBtn();
 }
 
-function toonBevestigDialog(bericht, titel = 'Onopgeslagen wijzigingen') {
+function toonBevestigDialog(bericht, titel = 'Onopgeslagen wijzigingen', labelOk = 'Doorgaan', labelAnnuleer = 'Annuleren') {
     return new Promise(resolve => {
+        // Als labelAnnuleer leeg is, tonen we alleen de OK-knop (= pure melding,
+        // geen keuze). Klikken buiten of Escape = gewoon sluiten.
+        const toonAnnuleer = !!labelAnnuleer;
         const overlay = document.createElement('div');
         overlay.className = 'modal-overlay';
         overlay.innerHTML = `
@@ -472,8 +486,8 @@ function toonBevestigDialog(bericht, titel = 'Onopgeslagen wijzigingen') {
                 </div>
                 <div class="modal-body">${escHtml(bericht)}</div>
                 <div class="modal-knoppen">
-                    <button class="modal-btn modal-annuleer">Annuleren</button>
-                    <button class="modal-btn modal-doorgaan">Doorgaan</button>
+                    ${toonAnnuleer ? `<button class="modal-btn modal-annuleer">${escHtml(labelAnnuleer)}</button>` : ''}
+                    <button class="modal-btn modal-doorgaan">${escHtml(labelOk)}</button>
                 </div>
             </div>`;
 
@@ -490,11 +504,13 @@ function toonBevestigDialog(bericht, titel = 'Onopgeslagen wijzigingen') {
             if (e.key === 'Enter')  sluit(true);
         };
 
-        overlay.querySelector('.modal-annuleer').addEventListener('click', () => sluit(false));
+        if (toonAnnuleer) {
+            overlay.querySelector('.modal-annuleer').addEventListener('click', () => sluit(false));
+        }
         overlay.querySelector('.modal-doorgaan').addEventListener('click', () => sluit(true));
         overlay.addEventListener('click', e => { if (e.target === overlay) sluit(false); });
         document.addEventListener('keydown', onKey);
-        overlay.querySelector('.modal-annuleer').focus();
+        overlay.querySelector(toonAnnuleer ? '.modal-annuleer' : '.modal-doorgaan').focus();
     });
 }
 
@@ -535,9 +551,21 @@ function initNav() {
             if (beheerPanel?._isBeheerDirty?.() && page !== 'importeer') {
                 if (!await toonBevestigDialog('Er zijn onopgeslagen combination-aanpassingen.\nDoorgaan zonder op te slaan?')) return;
             }
+            // Check onopgeslagen transponder-wijzigingen
+            if (window._isTpDirty?.() && page !== 'instellingen') {
+                if (!await toonBevestigDialog('Er zijn onopgeslagen transponder-wijzigingen.\nDoorgaan zonder op te slaan?')) return;
+                markTpClean();
+            }
+            // Check onopgeslagen wijzigingen in Live verwerking (tijden, sancties, rondes, punten)
+            if (typeof _liveOngeslagen !== 'undefined' && _liveOngeslagen && page !== 'live') {
+                if (!await toonBevestigDialog('Er zijn onopgeslagen wijzigingen in Live verwerking.\nDoorgaan zonder op te slaan?')) return;
+                _liveOngeslagen = false;
+            }
             if (typeof stopTsPolling === 'function') stopTsPolling();
             if (page === 'importeer') {
                 document.querySelector('.nav-update-dot')?.remove();
+                // Herlaad vergelijkdata (transponders kunnen gewijzigd zijn in beheer)
+                if (huidigCompId && typeof herlaadVergelijking === 'function') herlaadVergelijking();
             }
             document.querySelectorAll('.nav-item').forEach(i => i.classList.remove('active'));
             item.classList.add('active');
@@ -549,6 +577,7 @@ function initNav() {
             if (page === 'klassementen') toonUitslagPagina();
             if (page === 'live')         { vulPaginaHeader('live-comp-naam', 'live-comp-meta'); toonLivePagina(); }
             if (page === 'gebruikers')   toonGebruikersPagina();
+            if (page === 'rijders')      toonRijdersPagina();
         });
     });
 
@@ -576,9 +605,10 @@ el('btn-uitloggen')?.addEventListener('click', async () => {
 function pasRolToe() {
     const rol = currentUser.role;
 
-    // Gebruikers nav-item: alleen owner en admin
+    // Gebruikers + Rijders nav-items: alleen owner en admin
     if (['owner','admin'].includes(rol)) {
         document.querySelector('.nav-item-gebruikers')?.style.removeProperty('display');
+        document.querySelector('.nav-item-rijders')?.style.removeProperty('display');
     }
 
     // Schrijf-lock: alle schrijf-elementen op readonly pagina's disablen

@@ -29,12 +29,32 @@ function initEdits() {
                 const t2     = item.knsb.transponder2  || null;
                 const extras = [...(item.db_tp_extra   || [])];
 
+                // Org-transponder: heeft deze rijder al een seizoens-toewijzing
+                // in de organisatie-inventaris? Match op (toegewezen_snr +
+                // toegewezen_naam) tegen _orgTransponders. Zo ja → die code
+                // gebruiken als default voor slot 0. Dit zorgt dat rijders
+                // die van de organisatie een transponder hebben gekregen, die
+                // automatisch in de dropdown staan bij een nieuwe wedstrijd.
+                const persoonSnr  = String(p ? (p.start_number ?? item.knsb.start_number) : item.knsb.start_number ?? '');
+                const persoonNaam = String(p ? (p.full_name    ?? item.knsb.full_name)    : item.knsb.full_name    ?? '').trim();
+                const orgMatch = _orgTransponders.find(ot =>
+                    String(ot.toegewezen_snr  ?? '') === persoonSnr &&
+                    String(ot.toegewezen_naam ?? '').trim() === persoonNaam &&
+                    persoonSnr !== '' && persoonNaam !== ''
+                );
+                const orgTpCode = orgMatch?.transponder_code || null;
+
                 // Actieve transponder:
                 //   - slot 0 bewust opgeslagen in DB → gebruik DB-waarde (null = expliciete "geen")
-                //   - nog nooit opgeslagen           → slim default: T1 → T2 → Textra → null
+                //   - nog nooit opgeslagen           → slim default:
+                //       T1 (eigen KNSB)  → T2 → org-toewijzing → Textra → null
+                //   Eigen transponders gaan voor op de org-uitleen: een rijder
+                //   die een eigen T1 heeft gekocht/opgegeven in KNSB, gebruikt
+                //   die standaard. De org-transponder is dan een reservedie
+                //   je handmatig kunt kiezen als het nodig is.
                 const defaultTp = item.db_tp_actief_isset
                     ? item.db_tp_actief
-                    : (t1 ?? t2 ?? extras[0] ?? null);
+                    : (t1 ?? t2 ?? orgTpCode ?? extras[0] ?? null);
 
                 personEdits[lk] = {
                     start_number:       p ? (p.start_number ?? item.knsb.start_number) : item.knsb.start_number,
@@ -50,6 +70,7 @@ function initEdits() {
                     club_code:          item.knsb.club_code,
                     club_short:         item.knsb.club_short,
                     club_full:          item.knsb.club_full,
+                    sponsor:            item.knsb.sponsor,
                     city:               item.knsb.city,
                 };
             }
@@ -108,16 +129,19 @@ async function bouwBeheerTabel() {
                 data.forEach(d => {
                     const k = distKey(cat.dc_id, d.target_group || null);
                     if (!dcDistances[k]) dcDistances[k] = [];
-                    dcDistances[k].push({ id: d.id, number: d.number, name: d.name, value_meters: d.value_meters });
+                    dcDistances[k].push({ id: d.id, number: d.number, name: d.name,
+                                          value_meters: d.value_meters, race_type: d.race_type });
                 });
                 if (!dcDistances[cat.dc_id]) dcDistances[cat.dc_id] = [];
             } else {
                 dcDistances[cat.dc_id] =
-                    (cat.knsb_distances || []).map(d => ({ id: '', number: d.number, name: d.name, value_meters: d.value_meters }));
+                    (cat.knsb_distances || []).map(d => ({ id: '', number: d.number, name: d.name,
+                                                           value_meters: d.value_meters, race_type: d.race_type }));
             }
         } catch {
             dcDistances[cat.dc_id] =
-                (cat.knsb_distances || []).map(d => ({ id: '', number: d.number, name: d.name, value_meters: d.value_meters }));
+                (cat.knsb_distances || []).map(d => ({ id: '', number: d.number, name: d.name,
+                                                       value_meters: d.value_meters, race_type: d.race_type }));
         }
     }));
 
@@ -337,12 +361,24 @@ async function bouwBeheerTabel() {
             const distCells = Array.from({ length: maxDists }, (_, i) => {
                 const d = allDists[i];
                 if (!d) return `<td class="dc-afd-leeg"></td>`;
+                // race_type-default voor nieuwe afstanden: sprint als <=1000m,
+                // anders inline. Een expliciet opgeslagen race_type wint altijd.
+                const _defaultRt = ((d.value_meters ?? 0) > 1000) ? 'inline' : 'sprint';
+                const _rt = d.race_type || _defaultRt;
+                const _opt = (val, lbl) =>
+                    `<option value="${val}"${_rt === val ? ' selected' : ''}>${lbl}</option>`;
                 return `<td class="dc-afd-kol" data-dist-key="${escHtml(d._key)}"` +
                     ` data-idx="${i}" data-afd-id="${escHtml(d.id || '')}">` +
                     `<div class="dc-afd-kol-inner">` +
                     `<input class="inp dc-afd-naam" value="${escHtml(d.name || '')}" placeholder="naam" title="${escHtml(d.name || '')}">` +
                     `<input class="inp dc-afd-m" type="number" min="0" max="99999"` +
                     ` value="${escHtml(String(d.value_meters ?? ''))}" placeholder="m">` +
+                    `<select class="inp dc-afd-race-type" title="Race-type">` +
+                        _opt('sprint',      'Sprint') +
+                        _opt('inline',      'Inline') +
+                        _opt('puntenkoers', 'Puntenkoers') +
+                        _opt('afvalkoers',  'Afvalkoers') +
+                    `</select>` +
                     `<button class="btn-del dc-afd-del">&#128465;</button>` +
                     `</div></td>`;
             }).join('');
@@ -421,6 +457,7 @@ async function bouwBeheerTabel() {
             number:       i + 1,
             name:         cel.querySelector('.dc-afd-naam')?.value.trim() || '',
             value_meters: parseInt(cel.querySelector('.dc-afd-m')?.value) || null,
+            race_type:    cel.querySelector('.dc-afd-race-type')?.value || 'sprint',
         }));
     }
 
@@ -571,6 +608,7 @@ async function slaaBeheerOp(panel, dcDistances) {
             number:       i + 1,
             name:         cel.querySelector('.dc-afd-naam')?.value.trim() || '',
             value_meters: parseInt(cel.querySelector('.dc-afd-m')?.value) || null,
+            race_type:    cel.querySelector('.dc-afd-race-type')?.value || 'sprint',
         }));
     });
 
@@ -640,6 +678,7 @@ async function slaaBeheerOp(panel, dcDistances) {
                     distances: dists.filter(d => d.name).map((d, i) => ({
                         id: d.id || null, number: i + 1,
                         name: d.name, value_meters: d.value_meters,
+                        race_type: d.race_type || 'sprint',
                     })),
                 }),
             }).then(r => r.json()).then(res => ({ key, dcId, ...res }));
@@ -781,6 +820,15 @@ function toonVergelijkTabel(cat) {
         if (isAnoniem)     badgesHtml += '<span class="badge-anoniem" title="Anonieme rijder — licentienummer onbekend">ANON</span>';
         if (diffs.length)  badgesHtml += '<span class="badge-diff" title="Afwijking t.o.v. database">!</span>';
 
+        // Persoonlijk-melden info-badge: zelfde redenen als op de tekenlijst,
+        // zodat de persoon achter de tekenbalie in 1 oogopslag ziet waarom
+        // deze rijder zich persoonlijk moet melden.
+        const meldingen = _berekenMeldingen(st, actief, sn);
+        if (meldingen.length) {
+            const tooltip = 'Graag persoonlijk melden:\n• ' + meldingen.join('\n• ');
+            badgesHtml += `<span class="badge-meld" title="${escHtml(tooltip)}">ⓘ</span>`;
+        }
+
         html += `
         <tr class="${rowClass}" data-lk="${escHtml(lk)}" data-dc="${escHtml(cat.dc_id)}">
             <td class="td-sn ${isGuest ? 'guest-nr' : ''}">
@@ -796,7 +844,7 @@ function toonVergelijkTabel(cat) {
             </td>
             <td class="td-club">${escHtml(pe.club_full ?? '')}</td>
             <td class="td-tp-sel">
-                ${maakTpDropdownHtml(lk, pe.transponder1, pe.transponder2, extras, actief)}
+                ${maakTpDropdownHtml(lk, pe.transponder1, pe.transponder2, extras, actief, sn)}
             </td>
             <td class="td-status">
                 <span class="status-badge ${STATUS_CSS[st]}"
@@ -826,16 +874,95 @@ function toonVergelijkTabel(cat) {
                 ? (parseInt(inp.value) || null)
                 : (inp.value.trim() || null);
             markeerGewijzigd(inp.closest('tr'));
+            // Startnummer beïnvloedt de gast-melding
+            if (field === 'start_number') _hertekenMeldBadge(inp.closest('tr'));
         });
     });
 
     // Transponder dropdown: selectie opslaan
     content.querySelectorAll('.tp-sel-drop').forEach(sel => {
-        sel.addEventListener('change', () => {
-            const lk = sel.dataset.lk;
+        sel.addEventListener('change', async () => {
+            const lk           = sel.dataset.lk;
+            const oudeWaarde   = sel.dataset.prev || null;
+            const nieuweWaarde = sel.value || null;
+
             if (!personEdits[lk]) personEdits[lk] = {};
-            personEdits[lk].transponder_actief = sel.value || null;
+            personEdits[lk].transponder_actief = nieuweWaarde;
             markeerGewijzigd(sel.closest('tr'));
+
+            // Belangrijk: als we een org-transponder aan deze rijder toewijzen,
+            // moeten we 'm weghalen bij een eventuele VORIGE eigenaar in
+            // personEdits. initEdits vult personEdits[lk].transponder_actief
+            // vanuit DB bij load, dus dat is de gezaghebbende bron.
+            // Zonder deze wissing stuurt collectImportData de transponder voor
+            // BEIDE rijders door en overschrijft de laatste de eerste op de server.
+            if (nieuweWaarde) {
+                const isOrgTp = _orgTransponders.some(ot => ot.transponder_code === nieuweWaarde);
+                if (isOrgTp) {
+                    for (const [otherLk, otherPe] of Object.entries(personEdits || {})) {
+                        if (otherLk === lk) continue;
+                        if (otherPe?.transponder_actief !== nieuweWaarde) continue;
+
+                        // Wis bij de vorige eigenaar
+                        personEdits[otherLk].transponder_actief = null;
+                        // Update eventueel zichtbare dropdown in DOM
+                        content.querySelectorAll(
+                            `.tp-sel-drop[data-lk="${CSS.escape(otherLk)}"]`
+                        ).forEach(os => {
+                            if (os.value === nieuweWaarde) {
+                                os.value = '';
+                                os.dataset.prev = '';
+                            }
+                        });
+                        // Markeer die rij als gewijzigd
+                        content.querySelectorAll(
+                            `tr[data-lk="${CSS.escape(otherLk)}"]`
+                        ).forEach(tr => markeerGewijzigd(tr));
+                    }
+                }
+            }
+
+            // Haal startnr + naam uit de rij (voor lokale _orgTransponders-sync)
+            const row     = sel.closest('tr');
+            const snrInp  = row?.querySelector('input[data-field="start_number"]');
+            const naamInp = row?.querySelector('input[data-field="full_name"]');
+            const startnr = snrInp  ? (parseInt(snrInp.value) || null) : null;
+            const naam    = naamInp ? naamInp.value : '';
+
+            // Oude org-transponder (indien aanwezig) weer vrijgeven in de lokale cache
+            if (oudeWaarde && oudeWaarde !== nieuweWaarde) {
+                const oudOt = _orgTransponders.find(ot => ot.transponder_code === oudeWaarde);
+                if (oudOt) {
+                    oudOt.toegewezen_snr  = null;
+                    oudOt.toegewezen_naam = null;
+                }
+            }
+
+            // Nieuwe org-transponder toewijzen in de lokale cache + betaald-vraag
+            const orgTp = nieuweWaarde
+                ? _orgTransponders.find(ot => ot.transponder_code === nieuweWaarde)
+                : null;
+            if (orgTp && nieuweWaarde !== oudeWaarde) {
+                orgTp.toegewezen_snr  = startnr;
+                orgTp.toegewezen_naam = naam;
+
+                const betaald = await toonBevestigDialog(
+                    `Transponder #${orgTp.intern_nummer} toewijzen.\nIs de borg/huur betaald?`,
+                    'Transponder betaald?',
+                    'Ja, betaald', 'Nee'
+                );
+                orgTp.betaald = betaald ? 1 : 0;
+                personEdits[lk].tp_betaald = betaald ? 1 : 0;
+            }
+
+            // Onthoud de nieuwe waarde voor de volgende wijziging
+            sel.dataset.prev = nieuweWaarde || '';
+
+            // Meld-badge van deze rij opnieuw berekenen (transponder/betaald veranderd)
+            _hertekenMeldBadge(sel.closest('tr'));
+
+            // Ververs org-transponder opties in alle andere dropdowns in deze tab
+            if (_orgTransponders.length) _vervrisOrgTpOpties(content);
         });
     });
 
@@ -907,6 +1034,7 @@ function toonVergelijkTabel(cat) {
                 // Status 5 (Bevestigd bij org.) = actief → geen row-withdrawn
                 if (nieuw >= 2 && nieuw !== 5) row.classList.add('row-withdrawn');
                 else                           markeerGewijzigd(row);
+                _hertekenMeldBadge(row);
             }
             updateImportBtn();
         });
@@ -942,10 +1070,6 @@ function updateImportBtn() {
                 ? 'Nieuwe inschrijvingen opslaan'
                 : 'Wedstrijd importeren in database')
         : 'Alles is opgeslagen — geen wijzigingen';
-    const btnPrint = el('btn-print-tekenlijst');
-    if (btnPrint) btnPrint.disabled = moetImporteren;
-    const btnDl = el('btn-print-deelnemers');
-    if (btnDl) btnDl.disabled = moetImporteren;
 }
 
 // ── Tekenlijsten afdrukken ────────────────────────────────────────────────────
@@ -978,12 +1102,14 @@ function groepeerVoorPrint() {
                 // Check of deze transponder in de org-lijst staat en niet betaald is
                 const orgTp = _orgTransponders.find(ot => ot.transponder_code === tpActief);
                 const tpBetaald = orgTp ? (parseInt(orgTp.betaald) === 1) : null; // null=geen org-tp
+                const tpOrgNr   = orgTp ? String(orgTp.intern_nummer ?? '') : '';
 
                 allComps.push({
                     start_number:  pe.start_number      ?? c.knsb?.start_number ?? '',
                     full_name:     pe.full_name          ?? c.knsb?.full_name    ?? '',
                     category:      pe.category           ?? c.knsb?.category     ?? '',
                     transponder:   tpActief,
+                    tp_org_nr:     tpOrgNr,
                     entry_status:  status,
                     tp_betaald:    tpBetaald,
                 });
@@ -1016,9 +1142,19 @@ function groepeerVoorPrint() {
     return groepen;
 }
 
-function printTekenlijsten() {
-    if (!vergelijkData?.length || !huidigComp) return;
+// Body-builder: levert alleen de HTML-inhoud + css-links zonder een eigen
+// window te openen. Gebruikt door Print-Center om meerdere prints in één
+// venster te combineren. Returns: { bodyHtml, cssLinks, title } of null.
+function bouwTekenlijstenBody() {
+    if (!vergelijkData?.length || !huidigComp) return null;
+    return _bouwTekenlijstenInternal();
+}
 
+// Interne body-bouwer (het oorspronkelijke werk van printTekenlijsten).
+// Wordt aangeroepen door `bouwTekenlijstenBody()` hierboven, dat weer door
+// Print-Center wordt gebruikt. Er is geen directe print-knop meer in de UI.
+// Returns { bodyHtml, cssLinks, title } voor zowel directe print als combined.
+function _bouwTekenlijstenInternal() {
     const groepen   = groepeerVoorPrint();
     const compNaam  = escHtml(huidigComp.name || huidigComp.title || '');
     const compMeta  = escHtml(formatDatum(huidigComp.starts) + ' · ' + getLocatie(huidigComp));
@@ -1114,12 +1250,18 @@ function printTekenlijsten() {
                        </div>`
                     : '';
 
+                // Org-transponder → prefix met "#<intern_nummer> " zodat de
+                // tekenbalie in 1 oogopslag ziet welk nummer uit de inventaris het is
+                const tpTxt = d.tp_org_nr
+                    ? `#${d.tp_org_nr} ${d.transponder ?? ''}`.trim()
+                    : String(d.transponder ?? '');
+
                 return `<tr>
                     <td class="td-nr">${chunkStart + i + 1}</td>
                     <td class="td-sn">${escHtml(String(d.start_number))}</td>
                     <td class="td-naam">${escHtml(d.full_name)}</td>
                     <td class="td-cat">${escHtml(d.category)}</td>
-                    <td class="td-tp">${escHtml(String(d.transponder ?? ''))}</td>
+                    <td class="td-tp">${escHtml(tpTxt)}</td>
                     <td class="td-tp-cor"><div class="tp-boxes"><span class="tp-box"></span><span class="tp-box"></span><span class="tp-sep">-</span><span class="tp-box"></span><span class="tp-box"></span><span class="tp-box"></span><span class="tp-box"></span><span class="tp-box"></span></div></td>
                     <td class="td-hand">${handCel}</td>
                 </tr>`;
@@ -1152,24 +1294,25 @@ function printTekenlijsten() {
         });
     }).join('');
 
-    const w      = window.open('', '_blank');
-    const cssUrl = new URL('css/tekenlijst.css?v=' + Date.now(), window.location.href).href;
-    w.document.write(`<!DOCTYPE html>
-<html lang="nl"><head>
-<meta charset="utf-8">
-<title>Tekenlijsten – ${compNaam}</title>
-<link rel="stylesheet" href="${cssUrl}">
-</head><body>${paginaHtml}
-<script>window.addEventListener('load', function(){ window.focus(); window.print(); window.close(); });<\/script>
-</body></html>`);
-    w.document.close();
+    return {
+        bodyHtml:        paginaHtml,
+        cssLinks:        ['css/tekenlijst.css'],
+        pageOrientation: 'landscape',
+        title:           'Tekenlijsten – ' + (huidigComp.name || huidigComp.title || ''),
+        subType:         'Tekenlijsten',
+    };
 }
 
 // ── Definitieve deelnemerslijst ───────────────────────────────────────────────
 
-function printDeelnemerslijst() {
-    if (!vergelijkData?.length || !huidigComp) return;
+function bouwDeelnemerslijstBody() {
+    if (!vergelijkData?.length || !huidigComp) return null;
+    return _bouwDeelnemerslijstInternal();
+}
 
+// Interne body-bouwer — aangeroepen door `bouwDeelnemerslijstBody()` voor
+// Print-Center. Er is geen directe print-knop meer in de UI.
+function _bouwDeelnemerslijstInternal() {
     const compNaam = escHtml(huidigComp.name || huidigComp.title || '');
     const compMeta = escHtml(formatDatum(huidigComp.starts) + ' · ' + getLocatie(huidigComp));
     const standTxt = standDatum   ? `Stand: ${standDatum}`
@@ -1228,6 +1371,7 @@ function printDeelnemerslijst() {
                     category:           pe.category           ?? c.knsb?.category     ?? '',
                     transponder_actief: pe.transponder_actief ?? pe.transponder1       ?? c.knsb?.transponder1 ?? '',
                     knsb_transponder:   c.knsb?.transponder1  ?? '',
+                    knsb_transponder2:  c.knsb?.transponder2  ?? '',
                     is_actief:          false,
                     is_org_toegevoegd:  false,
                     afstanden_actief:   new Set(),
@@ -1262,18 +1406,37 @@ function printDeelnemerslijst() {
     // Afwezig = heeft minstens één afwezige afstand
     const afwezigRijders   = alleRijders.filter(r => r.afstanden_afwezig.size > 0);
 
-    // Transponder-wijzigingen: actieve transponder wijkt af van KNSB-waarde,
-    // óf er is een handmatig toegevoegde transponder zonder KNSB-transponder
+    // Transponder-wijzigingen: alleen als de actieve transponder afwijkt van
+    // ZOWEL T1 als T2. T1 en T2 staan normaal al in Orbits/MyLaps, dus als
+    // actief = T1 óf actief = T2 is er niks te melden.
+    // Rijders zonder enige KNSB-transponder (T1 én T2 leeg) horen hier ook
+    // niet — die staan al in "Met organisatie-transponder" of
+    // "Geen transponder geregistreerd".
     const tpWijzigingen = actieveRijders.filter(r => {
         const actief = String(r.transponder_actief ?? '').trim();
-        const knsb   = String(r.knsb_transponder   ?? '').trim();
-        return actief !== '' && actief !== knsb;
+        const t1     = String(r.knsb_transponder   ?? '').trim();
+        const t2     = String(r.knsb_transponder2  ?? '').trim();
+        if (actief === '') return false;
+        if (t1 === '' && t2 === '') return false;
+        return actief !== t1 && actief !== t2;
     });
 
     // Geen transponder: actieve deelnemers zonder ingestelde transponder
     const geenTpRijders = actieveRijders.filter(r =>
         !String(r.transponder_actief ?? '').trim()
     );
+
+    // Met organisatie-transponder: actieve deelnemers wiens transponder-code
+    // voorkomt in _orgTransponders (de transponder-inventaris van de eigen org)
+    const orgTpMap = new Map((_orgTransponders || []).map(ot => [ot.transponder_code, ot]));
+    const orgTpRijders = actieveRijders
+        .map(r => {
+            const code = String(r.transponder_actief ?? '').trim();
+            if (!code) return null;
+            const ot = orgTpMap.get(code);
+            return ot ? { ...r, _ot: ot } : null;
+        })
+        .filter(Boolean);
 
     // ── 4. Org-logo (alleen header, geen footer — intern document) ─────────
     const { orgLogoHtml } = bouwOrgHeaderFooter(escHtml);
@@ -1282,12 +1445,13 @@ function printDeelnemerslijst() {
         { day: '2-digit', month: 'long', year: 'numeric', hour: '2-digit', minute: '2-digit' });
 
     // ── 5. Tabel-helpers ──────────────────────────────────────────────────────
-    // Deelnemerstabel: kolommen start# | naam | cat | afstand...
-    const afstColW  = afstandKols.length ? Math.max(13, Math.floor(55 / afstandKols.length)) : 14;
+    // Deelnemerstabel: kolommen start# | naam | cat | transponder | afstand...
+    const afstColW  = afstandKols.length ? Math.max(13, Math.floor(40 / afstandKols.length)) : 14;
     const colgrpDl  = `<colgroup>
         <col style="width:12mm">
         <col style="width:auto">
         <col style="width:16mm">
+        <col style="width:22mm">
         ${afstandKols.map(() => `<col style="width:${afstColW}mm">`).join('')}
     </colgroup>`;
 
@@ -1295,6 +1459,7 @@ function printDeelnemerslijst() {
         <th class="tc">#</th>
         <th>Naam</th>
         <th>Cat</th>
+        <th>Transp</th>
         ${afstandKols.map(n => `<th class="tc">${escHtml(n)}</th>`).join('')}
     </tr></thead>`;
 
@@ -1302,16 +1467,21 @@ function printDeelnemerslijst() {
         const afstCellen = afstandKols.map(n =>
             `<td class="tc">${r.afstanden_actief.has(n) ? '✕' : ''}</td>`
         ).join('');
+        // Transponder-kolom: toon actuele code (eigen KNSB of org-uitleen).
+        // Bij leeg → dash.
+        const tpCode = String(r.transponder_actief ?? '').trim();
         return `<tr class="${i % 2 === 1 ? 'z' : ''}">
             <td class="tc">${escHtml(String(r.start_number))}</td>
             <td>${escHtml(r.full_name)}</td>
             <td class="sm">${escHtml(r.category)}</td>
+            <td class="sm">${tpCode ? escHtml(tpCode) : '<span class="grijs">—</span>'}</td>
             ${afstCellen}
         </tr>`;
     }
 
     // ── 6. Sectie-HTML bouwen ─────────────────────────────────────────────────
     const heeftGeenTp  = geenTpRijders.length  > 0;
+    const heeftOrgTp   = orgTpRijders.length   > 0;
     const heeftOrg     = orgRijders.length     > 0;
     const heeftAfwezig = afwezigRijders.length > 0;
     const heeftTpWijz  = tpWijzigingen.length  > 0;
@@ -1335,6 +1505,34 @@ function printDeelnemerslijst() {
         <thead><tr>
             <th class="tc">#</th><th>Naam</th><th>Cat</th>
             <th>Transponder (invullen)</th>
+        </tr></thead>
+        <tbody>${rijen}</tbody></table>`;
+    }
+
+    // --- Sectie OT: Met organisatie transponder ---
+    let sectieOT = '';
+    if (heeftOrgTp) {
+        const rijen = orgTpRijders.map((r, i) => {
+            const betaald    = parseInt(r._ot.betaald) === 1;
+            const betaaldTxt = betaald ? '✓' : '✗';
+            const betaaldCls = betaald ? 'groen' : 'rood';
+            return `<tr class="${i % 2 === 1 ? 'z-groen' : ''}">
+                <td class="tc">${escHtml(String(r.start_number))}</td>
+                <td>${escHtml(r.full_name)}</td>
+                <td class="sm">${escHtml(r.category)}</td>
+                <td class="tc sm">${escHtml(String(r._ot.intern_nummer))}</td>
+                <td class="sm">${escHtml(String(r._ot.transponder_code))}</td>
+                <td class="tc sm ${betaaldCls} vet">${betaaldTxt}</td>
+            </tr>`;
+        }).join('');
+        sectieOT = `<h2 class="sectie-titel sectie-groen">Met organisatie-transponder &nbsp;<span class="teller">${orgTpRijders.length}</span></h2>
+        <table><colgroup>
+            <col style="width:12mm"><col style="width:auto"><col style="width:16mm">
+            <col style="width:14mm"><col style="width:36mm"><col style="width:20mm">
+        </colgroup>
+        <thead><tr>
+            <th class="tc">#</th><th>Naam</th><th>Cat</th>
+            <th class="tc">Org #</th><th>Transponder</th><th class="tc">Betaald</th>
         </tr></thead>
         <tbody>${rijen}</tbody></table>`;
     }
@@ -1402,15 +1600,18 @@ function printDeelnemerslijst() {
     // --- Sectie 2: Transponder aanpassingen ---
     let sectie2 = '';
     if (heeftTpWijz) {
-        const rijen = tpWijzigingen.map((r, i) =>
-            `<tr class="${i % 2 === 1 ? 'z' : ''}">
+        const rijen = tpWijzigingen.map((r, i) => {
+            const t1 = String(r.knsb_transponder  ?? '').trim();
+            const t2 = String(r.knsb_transponder2 ?? '').trim();
+            const knsbTxt = [t1, t2].filter(Boolean).join(' · ');
+            return `<tr class="${i % 2 === 1 ? 'z' : ''}">
                 <td class="tc">${escHtml(String(r.start_number))}</td>
                 <td>${escHtml(r.full_name)}</td>
                 <td class="sm">${escHtml(r.category)}</td>
-                <td class="sm grijs">${escHtml(String(r.knsb_transponder))}</td>
+                <td class="sm grijs">${escHtml(knsbTxt)}</td>
                 <td class="sm vet">${escHtml(String(r.transponder_actief))}</td>
-            </tr>`
-        ).join('');
+            </tr>`;
+        }).join('');
         sectie2 = `<h2 class="sectie-titel">Transponder aanpassingen tov KNSB &nbsp;<span class="teller">${tpWijzigingen.length}</span></h2>
         <table><colgroup>
             <col style="width:12mm"><col style="width:auto"><col style="width:16mm">
@@ -1429,7 +1630,7 @@ function printDeelnemerslijst() {
     <tbody>${actieveRijders.map((r, i) => rijDl(r, i)).join('')}</tbody></table>`;
 
     // ── 7. Volledig document ──────────────────────────────────────────────────
-    // Volgorde: geen transponder → org-toegevoegd → niet aanwezig → transponders → deelnemers
+    // Volgorde: niet aanwezig → org-toegevoegd → geen transponder → tp-aanpassingen → met org-transponder → deelnemers
     // Eén header bovenaan, één footer onderaan, tabelkoppen herhalen via CSS thead.
     const bodyHtml = `
     <header class="doc-header">
@@ -1441,22 +1642,15 @@ function printDeelnemerslijst() {
         <div class="hdr-logo">${orgLogoHtml}</div>
     </header>
     <div class="hdr-lijn"></div>
-    ${sectieGT}
-    ${sectie0}
     ${sectie1}
+    ${sectie0}
+    ${sectieGT}
     ${sectie2}
+    ${sectieOT}
     ${sectie3}
     <footer class="doc-footer">afgedrukt: ${escHtml(printDatum)}</footer>`;
 
-    // ── 8. Venster openen en afdrukken ────────────────────────────────────────
-    const w      = window.open('', '_blank');
-    const cssUrl = new URL('css/tekenlijst.css?v=' + Date.now(), window.location.href).href;
-    w.document.write(`<!DOCTYPE html>
-<html lang="nl"><head>
-<meta charset="utf-8">
-<title>Deelnemerslijst – ${compNaam}</title>
-<link rel="stylesheet" href="${cssUrl}">
-<style>
+    const extraCss = `
 @page { size: A4 portrait; margin: 10mm 12mm 12mm 12mm; }
 body  { font-family: Arial, sans-serif; font-size: 8.5pt; margin: 0; color: #111; }
 
@@ -1489,23 +1683,30 @@ tr     { page-break-inside:avoid; }
 .sm    { font-size:7.5pt; }
 .rood  { color:#c00; }
 .blauw { color:#1a3a5c; font-weight:500; }
+.groen { color:#2a7a2a; }
 .grijs { color:#888; }
 .vet   { font-weight:bold; }
 .z       { background:#f7f9fc; }
 .z-rood  { background:#fff3f3; }
 .z-blauw { background:#eef4fb; }
+.z-groen { background:#eef7ee; }
 .sectie-blauw   { border-bottom-color:#1a3a5c; color:#1a3a5c; }
 .sectie-oranje  { border-bottom-color:#c06000; color:#c06000; }
+.sectie-groen   { border-bottom-color:#2a7a2a; color:#2a7a2a; }
 .tp-invul { border-bottom:1px solid #aaa !important; min-height:5mm; }
 
 /* Document-footer: strikt onderaan, vloeit mee met content */
 .doc-footer { margin-top:4mm; border-top:1px solid #ccc;
               padding-top:1.5mm; font-size:7pt; color:#888; }
-</style>
-</head><body>${bodyHtml}
-<script>window.addEventListener('load', function(){ window.focus(); window.print(); window.close(); });<\/script>
-</body></html>`);
-    w.document.close();
+`;
+    return {
+        bodyHtml:        bodyHtml,
+        cssLinks:        ['css/tekenlijst.css'],
+        extraCss:        extraCss,
+        pageOrientation: 'portrait',
+        title:           'Deelnemerslijst – ' + (huidigComp.name || huidigComp.title || ''),
+        subType:         'Deelnemerslijst',
+    };
 }
 
 // ── Tijdstempel ───────────────────────────────────────────────────────────────
@@ -1577,6 +1778,66 @@ function herlaadVergelijk() {
     if (huidigComp) selectWedstrijd(activeCard, huidigComp);
 }
 
+// ── Meld-badge helpers ────────────────────────────────────────────────────────
+// Retourneert een array met redenen waarom deze rijder zich persoonlijk moet
+// melden (zelfde logica als de ⚠️ op de tekenlijst). Leeg = geen melding.
+function _berekenMeldingen(status, transponderActief, startnr) {
+    const meldingen = [];
+    const sn = Number(startnr);
+
+    if (status === 0) meldingen.push('Status: nog niet bevestigd');
+    if (!transponderActief) meldingen.push('Geen transponder');
+    if (sn && sn >= 1000) meldingen.push(`Gast-startnummer (${sn})`);
+
+    if (transponderActief) {
+        const orgTp = (_orgTransponders || []).find(
+            ot => ot.transponder_code === transponderActief
+        );
+        if (orgTp && parseInt(orgTp.betaald) !== 1) {
+            meldingen.push('Organisatie-transponder nog niet betaald');
+        }
+    }
+    return meldingen;
+}
+
+// Herbereken en werk de meld-badge van een enkele rij bij (na dropdown-wijziging,
+// status-wissel, startnr-wissel, etc.)
+function _hertekenMeldBadge(tr) {
+    if (!tr) return;
+    const badgesTd = tr.querySelector('.td-badges');
+    if (!badgesTd) return;
+
+    const lk       = tr.dataset.lk;
+    const pe       = personEdits[lk] || {};
+    const snInp    = tr.querySelector('input[data-field="start_number"]');
+    const sn       = snInp ? snInp.value : (pe.start_number ?? '');
+    const actief   = pe.transponder_actief;
+    const statusEl = tr.querySelector('.status-badge');
+    const stCls    = statusEl ? statusEl.className : '';
+    // Status uit classname matchen (STATUS_CSS heeft sleutels 0..5)
+    let st = 1;
+    for (const [k, v] of Object.entries(STATUS_CSS)) {
+        if (stCls.includes(v)) { st = Number(k); break; }
+    }
+
+    const meldingen = _berekenMeldingen(st, actief, sn);
+    const oude      = badgesTd.querySelector('.badge-meld');
+    if (meldingen.length) {
+        const tooltip = 'Graag persoonlijk melden:\n• ' + meldingen.join('\n• ');
+        if (oude) {
+            oude.title = tooltip;
+        } else {
+            const span = document.createElement('span');
+            span.className = 'badge-meld';
+            span.title     = tooltip;
+            span.textContent = 'ⓘ';
+            badgesTd.appendChild(span);
+        }
+    } else if (oude) {
+        oude.remove();
+    }
+}
+
 // ── Transponder helpers ───────────────────────────────────────────────────────
 
 // textraPopup bestaat nog zodat app.js (click-buiten handler) er naar kan verwijzen
@@ -1593,25 +1854,96 @@ function maakTpDropdownHtml(lk, t1, t2, extras, actief, startnr) {
     for (const e of (extras || [])) {
         opts += `<option value="${escHtml(e)}"${actief === e ? ' selected' : ''}>Textra – ${escHtml(e)}</option>`;
     }
-    // Org-transponders: alleen vrije (niet toegewezen aan andere rijder) + eigen
+    // Org-transponders: alleen vrije (niet toegewezen aan andere rijder) + eigen.
+    // Een transponder is "in gebruik" als er OFWEL een startnr OFWEL een naam
+    // aan hangt. Op die manier blijft 'ie ook terecht geblokkeerd als startnr
+    // null of 0 is maar er wel een naam bekend is.
+    const _isToegewezen = ot => {
+        const s = ot.toegewezen_snr;
+        const n = (ot.toegewezen_naam ?? '').toString().trim();
+        return (s !== null && s !== undefined && s !== '') || n !== '';
+    };
+    const alleOpties = new Set([t1, t2, ...(extras || [])].filter(Boolean));
     if (_orgTransponders.length) {
         const vrije = _orgTransponders.filter(ot =>
-            !ot.toegewezen_snr || ot.toegewezen_snr == startnr
+            !_isToegewezen(ot)
+            || (startnr && ot.toegewezen_snr == startnr)
+            || ot.transponder_code === actief
         );
         if (vrije.length) {
             opts += `<optgroup label="Org transponders">`;
             for (const ot of vrije) {
+                if (alleOpties.has(ot.transponder_code)) continue; // al als T1/T2/Textra getoond
                 const lbl = `#${ot.intern_nummer} – ${ot.transponder_code}`;
                 opts += `<option value="${escHtml(ot.transponder_code)}"${actief === ot.transponder_code ? ' selected' : ''}>${escHtml(lbl)}</option>`;
+                alleOpties.add(ot.transponder_code);
             }
             opts += `</optgroup>`;
         }
     }
+    // Vangnet: als actief een waarde heeft die nergens in de dropdown zit, toch tonen
+    if (actief && !alleOpties.has(actief)) {
+        opts += `<option value="${escHtml(actief)}" selected>${escHtml(actief)}</option>`;
+    }
+    // Tooltip-samenvatting: wat heeft deze rijder aan transponders beschikbaar?
+    // Helpt de voorbereider in één oogopslag zien dat bv. zowel eigen T1 als
+    // een club-transponder bestaan, ook als er nu maar één is geselecteerd.
+    const tipRegels = [];
+    if (t1)         tipRegels.push(`Eigen T1: ${t1}`);
+    if (t2)         tipRegels.push(`Eigen T2: ${t2}`);
+    if (extras?.length) tipRegels.push(`Extra: ${extras.join(', ')}`);
+    const orgToew = _orgTransponders.find(ot =>
+        String(ot.toegewezen_snr ?? '') === String(startnr ?? '') &&
+        (ot.toegewezen_naam ?? '').trim()
+    );
+    if (orgToew) tipRegels.push(`Club-transponder #${orgToew.intern_nummer}: ${orgToew.transponder_code}`);
+    const tipTitel = tipRegels.length
+        ? 'Transponders van deze rijder:\n• ' + tipRegels.join('\n• ')
+        : 'Geen transponders bekend bij deze rijder';
     return `<div class="tp-sel-wrap">
-        <select class="inp tp-sel-drop" data-lk="${escHtml(lk)}">${opts}</select>
-        ${_orgTransponders.length ? `<input type="text" class="inp tp-org-nr" data-lk="${escHtml(lk)}" placeholder="Org#" title="Typ intern nummer" style="width:45px">` : ''}
+        <select class="inp tp-sel-drop" data-lk="${escHtml(lk)}" data-prev="${escHtml(actief || '')}"
+                title="${escHtml(tipTitel)}">${opts}</select>
         <button class="tp-add-btn" data-lk="${escHtml(lk)}" title="Transponder toevoegen">+</button>
     </div>`;
+}
+
+// Ververs org-transponder optgroups in alle dropdowns na selectie.
+// Gebruikt _orgTransponders[i].toegewezen_snr (live bijgewerkt bij dropdown-change)
+// zodat toewijzingen in andere categorie-tabs ook hier in de filter worden meegenomen.
+function _vervrisOrgTpOpties(content) {
+    if (!_orgTransponders.length) return;
+    content.querySelectorAll('.tp-sel-drop').forEach(sel => {
+        const huidigeWaarde = sel.value;
+        const row           = sel.closest('tr');
+        const snrInp        = row?.querySelector('input[data-field="start_number"]');
+        const eigenSn       = snrInp ? (parseInt(snrInp.value) || null) : null;
+
+        // Verwijder bestaande optgroup
+        sel.querySelector('optgroup')?.remove();
+
+        // Vrij = niet toegewezen (GEEN snr EN GEEN naam), OF aan deze rijder,
+        // OF de eigen huidige selectie (zodat die altijd in de lijst staat).
+        const vrije = _orgTransponders.filter(ot => {
+            const s = ot.toegewezen_snr;
+            const n = (ot.toegewezen_naam ?? '').toString().trim();
+            const toegewezen = (s !== null && s !== undefined && s !== '') || n !== '';
+            return !toegewezen
+                || (eigenSn !== null && s == eigenSn)
+                || ot.transponder_code === huidigeWaarde;
+        });
+        if (vrije.length) {
+            const grp = document.createElement('optgroup');
+            grp.label = 'Org transponders';
+            for (const ot of vrije) {
+                const opt = document.createElement('option');
+                opt.value = ot.transponder_code;
+                opt.textContent = `#${ot.intern_nummer} – ${ot.transponder_code}`;
+                if (ot.transponder_code === huidigeWaarde) opt.selected = true;
+                grp.appendChild(opt);
+            }
+            sel.appendChild(grp);
+        }
+    });
 }
 
 // Bouw de opties van een bestaande <select> opnieuw op
@@ -1655,6 +1987,7 @@ function voegTpToe(lk, btn, content) {
         if (sel) {
             const pe = personEdits[lk];
             hertekenTpDropdown(sel, pe.transponder1, pe.transponder2, pe.transponders_extra, val);
+            sel.dataset.prev = val;  // synchroon houden voor de volgende change
         }
     };
 
@@ -1695,11 +2028,13 @@ function collectImportData(compId) {
                 club_code:      pe.club_code         ?? item.knsb.club_code,
                 club_short:     pe.club_short        ?? item.knsb.club_short,
                 club_full:      pe.club_full         ?? item.knsb.club_full,
+                sponsor:        pe.sponsor           ?? item.knsb.sponsor,
                 city:           pe.city              ?? item.knsb.city,
                 transponder1:       item.knsb.transponder1,
                 transponder2:       item.knsb.transponder2,
                 transponders_extra: pe.transponders_extra  ?? [],
                 transponder_actief: pe.transponder_actief  ?? null,
+                tp_betaald:         pe.tp_betaald          ?? null,
             });
         }
 
@@ -1747,12 +2082,21 @@ async function importeerWedstrijd(compId, compNaam) {
         } else {
             if (data.entries_version != null) entriesVersion = data.entries_version;
             const logHtml = (data.log || []).map(r => `<li>${escHtml(r)}</li>`).join('');
+            // Details openklappen → automatisch inklappen na 4s, maar de
+            // volledige log blijft onder het summary-knopje beschikbaar
+            // zodat de user 'm later nog kan terugzien.
             resultDiv.innerHTML =
-                `<div class="status-msg ok">
-                    ✔ <strong>${escHtml(compNaam)}</strong> geïmporteerd
+                `<details class="status-msg ok import-log-details" open>
+                    <summary>
+                        ✔ <strong>${escHtml(compNaam)}</strong> geïmporteerd
+                        <span class="import-log-hint">· klik voor details</span>
+                    </summary>
                     <ul class="import-log">${logHtml}</ul>
-                 </div>`;
-            setTimeout(() => { if (resultDiv) resultDiv.innerHTML = ''; }, 4000);
+                 </details>`;
+            setTimeout(() => {
+                const det = resultDiv?.querySelector('details.import-log-details');
+                if (det) det.open = false;
+            }, 4000);
             isGeimporteerd   = true;
             heeftWijzigingen = false;
             // Automatisch resync met KNSB — toont nieuwe inschrijvingen en bijgewerkte diffs
@@ -1813,6 +2157,7 @@ function initDeelnemerModal() {
         </label>
         <label class="mf-lbl"><span>Startnummer <span class="vereist">*</span></span>
           <input type="number" id="f-dt-sn" class="inp" required min="1">
+          <span class="mf-hint">💡 Gebruik <strong>1001+</strong> voor gastrijders zonder KNSB-nummer. Organisaties die hun eigen G/0-prefix willen tonen op prints kunnen dat in een komende versie per-org instellen.</span>
         </label>
       </div>
       <div class="mf-rij mf-2col">

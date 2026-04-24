@@ -246,8 +246,6 @@ function renderTijdschema() {
                 <span class="ts-ritten-teller">${schema.ritten.length} ritten</span>
                 ${gegLabel ? `<span class="ts-gegenereerd-op" title="Tijdstip laatste generatie">🕐 ${escHtml(gegLabel)}</span>` : ''}
                 ${oudWarn}
-                <button class="btn-secondary ts-btn-sm ts-btn-publiceer" id="ts-btn-publiceer">📄 Publiceer extern</button>
-                <button class="btn-secondary ts-btn-sm ts-btn-publiceer" id="ts-btn-publiceer-intern">🗒 Publiceer intern</button>
             </div>`;
         html += renderRittenLijst(schema.ritten, schema.blokken);
         html += `</div>`;
@@ -387,38 +385,26 @@ function renderAfstandPanel(afstand, cfg, catConfigMap) {
     });
 
     if (isFF) {
-        // Full-final: A-finale + B-finales; iedereen rijdt een finale op basis van tijd
-        const fBg          = cfg?.finale_b_grootte   ?? 6;
-        const bLaatstGrootst = cfg?.laatste_b_grootste ?? 1;
+        // Full-final: finales worden per categorie geconfigureerd (in de tabel hieronder).
+        // Alleen defaults als hidden velden voor afstand-config backward compat.
         html += `
                 <div class="ts-gedeeld-rij">
-                    <span class="ts-gedeeld-lbl">A-finale</span>
-                    <span class="ts-gedeeld-inputs">
-                        Max.&nbsp;<input type="number" name="finale_heat_grootte" value="${fHg}"
-                               min="2" max="20" class="ts-inp-sm">&nbsp;rijders
+                    <span class="ts-veld-hint">
+                        De grootte van de A-finale en het aantal B-finales worden per categorie
+                        ingesteld in de tabel hieronder — zo kun je ze afstemmen op het aantal
+                        deelnemers per categoriegroep.
                     </span>
-                    <span class="ts-veld-hint">Beste rijders. Altijd één A-finale.</span>
                 </div>
-                <div class="ts-gedeeld-rij">
-                    <span class="ts-gedeeld-lbl">B-finales</span>
-                    <span class="ts-gedeeld-inputs">
-                        Max.&nbsp;<input type="number" name="finale_b_grootte" value="${fBg}"
-                               min="2" max="20" class="ts-inp-sm">&nbsp;rijders per B-finale
-                    </span>
-                    <span class="ts-veld-hint">Mag niet minder zijn dan de A-finale. Overige rijders worden verdeeld over B1, B2 … Bn.</span>
-                </div>
-                <div class="ts-gedeeld-rij">
-                    <span class="ts-gedeeld-lbl">&nbsp;</span>
-                    <label class="ts-gedeeld-inputs">
-                        <input type="checkbox" name="laatste_b_grootste" ${bLaatstGrootst ? 'checked' : ''}>
-                        Laatste B-finale (Bn) is de grootste
-                    </label>
-                    <span class="ts-veld-hint">Uitgevinkt = B1 heeft de meeste rijders</span>
-                </div>
-                <input type="hidden" name="q_direct"        value="0">
-                <input type="hidden" name="q_tijd"          value="0">
-                <input type="hidden" name="heeft_runner_up" value="0">
-                <input type="hidden" name="race_type"       value="sprint">`;
+                <input type="hidden" name="finale_heat_grootte" value="${fHg}">
+                <input type="hidden" name="finale_b_grootte"    value="${cfg?.finale_b_grootte   ?? 6}">
+                <input type="hidden" name="laatste_b_grootste"  value="${cfg?.laatste_b_grootste ?? 1}">
+                <input type="hidden" name="q_direct"             value="0">
+                <input type="hidden" name="q_tijd"               value="0">
+                <input type="hidden" name="heeft_runner_up"      value="0">`;
+                // race_type wordt niet meer hier opgeslagen — het is een
+                // eigenschap van de afstand zelf (distances.race_type),
+                // bewerkbaar via Beheer categorieën & afstanden én via de
+                // live-view voor lange-afstand heats.
     } else {
         // Internationaal: doorgang per ronde ingesteld in de categorie-tabel; runner-up optie hier
         html += `
@@ -449,17 +435,13 @@ function renderAfstandPanel(afstand, cfg, catConfigMap) {
                     </span>
                     <span class="ts-veld-hint">0 = geen minimum</span>
                 </div>
-                <input type="hidden" name="finale_heat_grootte" value="${fHg}">
-                <div class="ts-gedeeld-rij" style="margin-top:8px;border-top:1px solid #dee2e6;padding-top:8px">
-                    <span class="ts-gedeeld-lbl">Race type</span>
-                    <span class="ts-gedeeld-inputs">
-                        <select name="race_type" class="ts-sel-sm">
-                            <option value="sprint" ${(cfg?.race_type ?? 'sprint') === 'sprint' ? 'selected' : ''}>Sprint</option>
-                            <option value="long_distance" ${cfg?.race_type === 'long_distance' ? 'selected' : ''}>Lange afstand</option>
-                        </select>
-                    </span>
-                    <span class="ts-veld-hint">Sprint: W1/W2 niet beschikbaar. Lange afstand: DNF = reverse withdrawal.</span>
-                </div>`;
+                <input type="hidden" name="finale_heat_grootte" value="${fHg}">`;
+                // Race type wordt hier niet meer ingesteld — dat gebeurt nu op
+                // de afstand zelf (Beheer categorieën & afstanden). Het
+                // sanctie-gedrag (W1/W2, DNF = reverse withdrawal bij lange
+                // afstand) wordt in de backend automatisch afgeleid uit
+                // distances.race_type: sprint-afstand → sprint-gedrag, alle
+                // andere → long_distance-gedrag.
     }
 
     html += `
@@ -477,10 +459,15 @@ function renderAfstandPanel(afstand, cfg, catConfigMap) {
         html += `<tr>
                 <th class="ts-th-catnaam" rowspan="2">Categorie</th>
                 <th class="ts-th-c ts-th-n" rowspan="2">Deel&shy;nemers</th>
-                <th colspan="2" class="ts-th-sectie">Series</th>
+                <th colspan="3" class="ts-th-sectie">Series</th>
+                <th colspan="3" class="ts-th-sectie ts-sectie-start">Finales</th>
             </tr><tr>
                 <th class="ts-th-c">Rijdt<br>series</th>
                 <th class="ts-th-c">Aantal<br>heats</th>
+                <th class="ts-th-c" title="Aangevinkt: de serie dient alleen als startvolgorde-bepaling voor de A-finale. De einduitslag komt volledig uit de A-finale (serie-punten tellen niet mee). Alleen beschikbaar bij 1 serie-heat.">Alleen<br>startvolgorde</th>
+                <th class="ts-th-c ts-sectie-start" title="Aantal rijders in de A-finale (max = aantal deelnemers)">A-finale<br>rijders</th>
+                <th class="ts-th-c" title="Aantal B-finale heats — overige rijders worden gelijk verdeeld">B-finales<br>aantal</th>
+                <th class="ts-th-c" title="Aangevinkt: B-laatste krijgt de rest. Uitgevinkt: B1 krijgt de rest.">Laatste B<br>grootste</th>
             </tr>`;
     } else {
         html += `<tr>
@@ -504,8 +491,8 @@ function renderAfstandPanel(afstand, cfg, catConfigMap) {
                 <th class="ts-th-c">Q per<br>heat</th>
                 <th class="ts-th-c ts-sectie-start">Aantal<br>heats</th>
                 <th class="ts-th-c">Seeding</th>
-            </tr>
-            <input type="hidden" name="race_type" value="${escHtml(cfg?.race_type ?? 'sprint')}">`;
+            </tr>`;
+            // race_type niet meer hier — zie distances.race_type
     }
 
     html += `</thead><tbody>`;
@@ -613,8 +600,50 @@ function renderAfstandPanel(afstand, cfg, catConfigMap) {
                 </select>
             </td>`;
         } else {
-            // Full-final: verborgen velden zodat save-handler waarden heeft
+            // Full-final: zichtbare finale-kolommen per categorie + hidden placeholders
+            // voor de internationaal-velden zodat de save-handler complete rijen ontvangt.
+            const afg = parseInt(cc?.finale_a_grootte);
+            const aDef = Number.isFinite(afg) && afg > 0 ? afg : Math.min(cat.n, fHg);
+            const bhCfg = parseInt(cc?.finale_b_heats);
+            // Default B-heats: als cat.n > A-finale, één B-heat; anders 0 (geen B nodig)
+            const bhDef = Number.isFinite(bhCfg) && bhCfg >= 0
+                ? bhCfg
+                : (cat.n > aDef ? 1 : 0);
+            const lbgCfg = cc?.laatste_b_grootste;
+            const lbgDef = (lbgCfg === null || lbgCfg === undefined)
+                ? (cfg?.laatste_b_grootste ?? 1)
+                : (lbgCfg ? 1 : 0);
+            // Series-alleen-startvolgorde: alleen zinvol met 1 serie-heat.
+            // Gebruik parseInt: PDO levert TINYINT als string ("0"/"1"),
+            // dus !!"0" zou ten onrechte true geven.
+            const sasChecked = parseInt(cc?.series_alleen_startvolgorde) === 1;
+            const sasEnabled = hH && parseInt(nH) === 1;
+
             html += `
+            <td class="ts-td-c">
+                <input type="checkbox" name="series_alleen_startvolgorde"
+                       class="ts-cb-sas" ${sasChecked && sasEnabled ? 'checked' : ''}
+                       ${sasEnabled ? '' : 'disabled'}
+                       title="Serie is alleen bepalend voor de startvolgorde in de A-finale; de einduitslag komt volledig uit de A-finale.&#10;Alleen selecteerbaar bij 1 serie-heat.">
+            </td>
+            <td class="ts-td-c ts-sectie-start">
+                <input type="number" name="finale_a_grootte" value="${aDef}"
+                       min="1" max="${cat.n}" class="ts-inp-sm ts-inp-finale-a"
+                       data-n="${cat.n}"
+                       title="Aantal rijders in de A-finale (max ${cat.n} = aantal deelnemers)">
+                <span class="ts-per-heat-cel ts-per-heat-finale-a">${berekenFinaleAPreview(cat.n, aDef, bhDef)}</span>
+            </td>
+            <td class="ts-td-c">
+                <input type="number" name="finale_b_heats" value="${bhDef}"
+                       min="0" max="${Math.max(0, cat.n - 1)}" class="ts-inp-sm ts-inp-finale-bh"
+                       title="Aantal B-finale heats (0 = geen B-finale, alle niet-A-finalisten bij A)">
+                <span class="ts-per-heat-cel ts-per-heat-finale-b">${berekenFinaleBPreview(cat.n, aDef, bhDef)}</span>
+            </td>
+            <td class="ts-td-c">
+                <input type="checkbox" name="laatste_b_grootste" class="ts-cb-laatste-b"
+                       ${lbgDef ? 'checked' : ''}
+                       title="Rest schuift naar B-laatste (aan) of B1 (uit)">
+            </td>
             <input type="hidden" name="heats_q"            value="${cat.n}">
             <input type="hidden" name="heats_q_heat"       value="0">
             <input type="hidden" name="heeft_kwartfinale"  value="0">
@@ -756,18 +785,35 @@ function renderAfstandCalc(afstand, cfg, catConfigMap) {
 
         if (finR > 0) {
             if (isFF) {
-                const aHg  = Math.max(2, parseInt(cfg?.finale_heat_grootte) || 6);
-                const bHgR = Math.max(2, parseInt(cfg?.finale_b_grootte)    || 6);
-                const bHg  = Math.max(bHgR, aHg);
+                // Per-cat finale_a_grootte wint; anders afstand-default; anders 6
+                const aRaw = parseInt(cc?.finale_a_grootte);
+                const aHg  = Number.isFinite(aRaw) && aRaw > 0
+                    ? aRaw
+                    : Math.max(2, parseInt(cfg?.finale_heat_grootte) || 6);
                 const aR   = Math.min(finR, aHg);
                 const bR   = Math.max(0, finR - aR);
-                const parts = [];
-                if (bR > 0) {
-                    const nB = Math.ceil(bR / bHg);
-                    // Programma-volgorde: Bn eerst, dan B(n-1)...B1, dan A
-                    for (let b = nB; b >= 1; b--) parts.push(`B${b}-finale`);
+
+                // Per-cat aantal B-heats wint; fallback: afgeleid van finale_b_grootte
+                const bhRaw = parseInt(cc?.finale_b_heats);
+                let nB;
+                if (Number.isFinite(bhRaw)) {
+                    nB = Math.max(0, Math.min(bhRaw, bR)); // niet meer B-heats dan B-rijders
+                } else {
+                    const bHgR = Math.max(2, parseInt(cfg?.finale_b_grootte) || 6);
+                    nB = bR > 0 ? Math.ceil(bR / Math.max(bHgR, aHg)) : 0;
                 }
-                parts.push(`A-finale`);
+
+                const parts = [];
+                if (bR > 0 && nB > 0) {
+                    for (let b = nB; b >= 1; b--) parts.push(`B${b}-finale`);
+                    parts.push(`A-finale (${aR})`);
+                } else if (bR > 0 && nB === 0) {
+                    // 0 B-heats ingesteld met rest-rijders: ze worden toegevoegd
+                    // aan de A-finale (de planner ziet dit en bepaalt zelf of dat mag).
+                    parts.push(`A-finale (${aR + bR})`);
+                } else {
+                    parts.push(`A-finale (${aR})`);
+                }
                 stappen.push(`${finR} → ${parts.join(' + ')}`);
             } else {
                 stappen.push(`A-finale: ${finR}`);
@@ -790,6 +836,38 @@ function berekenPerHeat(n, nHeats) {
     const extra = n % nHeats;
     if (extra === 0) return String(basis);
     return `${basis}-${basis + 1}`;
+}
+
+// Full-final previews voor de A- en B-finale cel ("x/h" naast de input).
+// - A-finale heeft altijd 1 heat; met 0 B-heats + rest-rijders schuiven die
+//   naar A, dus effectieve A-grootte wordt dan aFin + bR.
+// - B-finales: grootste heat = ceil(rest / nBHeats).
+function berekenFinaleAPreview(n, aFin, nBHeats) {
+    const aR = Math.min(n, Math.max(0, aFin));
+    const bR = Math.max(0, n - aR);
+    const eff = (nBHeats > 0) ? aR : aR + bR;  // 0 B-heats → rest naar A
+    return eff > 0 ? `${eff}/h` : '—';
+}
+function berekenFinaleBPreview(n, aFin, nBHeats) {
+    const aR = Math.min(n, Math.max(0, aFin));
+    const bR = Math.max(0, n - aR);
+    if (nBHeats <= 0 || bR <= 0) return '—';
+    const max = Math.ceil(bR / nBHeats);
+    return `max ${max}/h`;
+}
+
+// Werk beide previews in één rij bij (aangeroepen bij input-wijzigingen)
+function herberekenFinalePreview(tr) {
+    if (!tr) return;
+    const n    = parseInt(tr.dataset.n) || 0;
+    const aInp = tr.querySelector('.ts-inp-finale-a');
+    const bInp = tr.querySelector('.ts-inp-finale-bh');
+    const aS   = tr.querySelector('.ts-per-heat-finale-a');
+    const bS   = tr.querySelector('.ts-per-heat-finale-b');
+    const aFin = parseInt(aInp?.value)  || 0;
+    const nBH  = parseInt(bInp?.value)  || 0;
+    if (aS) aS.textContent = berekenFinaleAPreview(n, aFin, nBH);
+    if (bS) bS.textContent = berekenFinaleBPreview(n, aFin, nBH);
 }
 
 // ── Programma-volgorde ────────────────────────────────────────────────────────
@@ -999,6 +1077,11 @@ function renderRittenLijst(ritten, blokken) {
         // ── Voorwaarts: vanaf wedstrijdstart via rijen ────────────────────────
         let cur = wsSec;
         let started = false;
+        // Combi: als een rit dezelfde combi_group heeft als de vorige, krijgt 'ie
+        // dezelfde starttijd en wordt cur NIET verhoogd (ze rijden tegelijk in
+        // één fysieke heat).
+        let prevRitCombi = null;
+        let prevRitCurSec = null;
         for (const rij of rijen) {
             if (rij.type === 'wedstrijdstart') {
                 blokTijdMap.set(rij.blok.id, secNaarTijd(cur));
@@ -1007,22 +1090,36 @@ function renderRittenLijst(ritten, blokken) {
                 if (rij.type === 'pauze' || rij.type === 'inrijden' || rij.type === 'ceremonie') {
                     blokTijdMap.set(rij.blok.id, secNaarTijd(cur));
                     cur += (parseInt(rij.blok.duur) || 0) * 60;
+                    prevRitCombi = null;
                 } else if (rij.type === 'herstart') {
-                    // Reset cursortijd naar de nieuwe starttijd; markeer op de nieuwe tijd
                     if (rij.blok.tijdstip) {
                         const d = rij.blok.tijdstip.split(':').map(Number);
                         cur = (d[0] || 0) * 3600 + (d[1] || 0) * 60;
                     }
                     blokTijdMap.set(rij.blok.id, secNaarTijd(cur));
+                    prevRitCombi = null;
                 } else if (rij.type === 'rit') {
-                    // Override: pin de cursortijd aan het handmatig ingestelde tijdstip
+                    const combiGrp    = rij.rit.combi_group ? parseInt(rij.rit.combi_group) : null;
+                    const zelfdeCombi = combiGrp !== null && combiGrp === prevRitCombi;
+
                     if (rij.rit.tijdstip_override) {
                         const d = rij.rit.tijdstip_override.split(':').map(Number);
                         cur = (d[0] || 0) * 3600 + (d[1] || 0) * 60;
+                        startTijdMap.set(rij.rit.id, secNaarTijd(cur));
+                        startRawSecMap.set(rij.rit.id, cur);
+                        cur += heatDuurMap.get(parseInt(rij.rit.blok_id)) || 0;
+                        prevRitCurSec = cur - (heatDuurMap.get(parseInt(rij.rit.blok_id)) || 0);
+                    } else if (zelfdeCombi) {
+                        // Combi-member: zelfde tijd als leider, cur blijft staan
+                        startTijdMap.set(rij.rit.id, secNaarTijd(prevRitCurSec));
+                        startRawSecMap.set(rij.rit.id, prevRitCurSec);
+                    } else {
+                        startTijdMap.set(rij.rit.id, secNaarTijd(cur));
+                        startRawSecMap.set(rij.rit.id, cur);
+                        prevRitCurSec = cur;
+                        cur += heatDuurMap.get(parseInt(rij.rit.blok_id)) || 0;
                     }
-                    startTijdMap.set(rij.rit.id, secNaarTijd(cur));
-                    startRawSecMap.set(rij.rit.id, cur);              // raw seconden opslaan
-                    cur += heatDuurMap.get(parseInt(rij.rit.blok_id)) || 0;
+                    prevRitCombi = combiGrp;
                 }
             }
         }
@@ -1128,8 +1225,18 @@ function renderRittenLijst(ritten, blokken) {
         }
     });
 
+    // Combineer-toolbar: alleen voor full-final met schrijfrechten
+    const systeemFFTop = (huidigTijdschema?.systeem ?? '') === 'full-final';
+    const combineerToolbar = (systeemFFTop && !_tsLeesOnly)
+        ? `<div class="ts-combi-toolbar" id="ts-combi-toolbar">
+               <span class="ts-combi-toolbar-hint">🔗 Selecteer 2–4 opeenvolgende A-finale ritten om te combineren in het programma</span>
+               <button class="btn-primary ts-btn-combi" id="ts-btn-combi" disabled>Combineer selectie (<span id="ts-combi-count">0</span>)</button>
+           </div>`
+        : '';
+
     let html = `<div class="ts-ritten-wrap">
         <div class="ts-ritten-hint">Sleep <span class="ts-drag-handle" style="display:inline-block;vertical-align:middle">⠿</span> om een complete categoriegroep te verplaatsen.</div>
+        ${combineerToolbar}
         <table class="ts-ritten-tabel">
             <thead><tr>${heeftStartTijden ? '<th>Tijd</th>' : ''}<th>#</th><th>Rit</th><th>Type</th><th>Verwacht</th></tr></thead>
             <tbody>`;
@@ -1145,7 +1252,7 @@ function renderRittenLijst(ritten, blokken) {
 
     let prevGroepKey = null;
 
-    rijen.forEach(rij => {
+    rijen.forEach((rij, idx) => {
         if (rij.type === 'wedstrijdstart') {
             prevGroepKey = null;
             const tijdstip = rij.blok?.tijdstip ? rij.blok.tijdstip.substring(0,5) : '—';
@@ -1236,6 +1343,27 @@ function renderRittenLijst(ritten, blokken) {
 
             // ── Individuele heat-rij ───────────────────────────────────────────
             ritNr++;
+
+            // Combi-logica: ritten met dezelfde combi_group worden visueel
+            // samengevoegd. De eerste (laagste volgorde) is de "leider" en toont
+            // het ritnummer; volgende leden verbergen hun nummer.
+            const combiGrp   = rit.combi_group ? parseInt(rit.combi_group) : null;
+            const prevRit    = idx > 0 ? rijen[idx - 1].rit : null;
+            const prevCombi  = prevRit?.combi_group ? parseInt(prevRit.combi_group) : null;
+            const nextRij    = rijen[idx + 1];
+            const nextRit    = nextRij?.type === 'rit' ? nextRij.rit : null;
+            const nextCombi  = nextRit?.combi_group ? parseInt(nextRit.combi_group) : null;
+            const isCombi    = combiGrp !== null;
+            const isCombiLeider = isCombi && combiGrp !== prevCombi;
+            const isCombiEnd    = isCombi && combiGrp !== nextCombi;
+            let combiCls = '';
+            if (isCombi) {
+                combiCls = 'ts-combi';
+                if (isCombiLeider) combiCls += ' ts-combi-start';
+                if (isCombiEnd)    combiCls += ' ts-combi-end';
+                if (!isCombiLeider && !isCombiEnd) combiCls += ' ts-combi-mid';
+            }
+
             const hasOverride  = !!rit.tijdstip_override;
             const ovTijdVal    = hasOverride ? escHtml(rit.tijdstip_override.substring(0, 5)) : '';
             const ovOpmVal     = rit.opmerking ? escHtml(rit.opmerking) : '';
@@ -1258,10 +1386,34 @@ function renderRittenLijst(ritten, blokken) {
                     <td colspan="3" class="ts-rit-opm-cel">📝 ${ovOpmVal}</td>
                 </tr>`;
             }
-            html += `<tr class="ts-rit-rij ts-rit-sub" data-rit-id="${rit.id}"
-                        data-groep-key="${escHtml(groepKey)}">
+            // Combi-eligibility voor UI: alleen full-final + finale_a ritten
+            const systeemFF = (huidigTijdschema?.systeem ?? '') === 'full-final';
+            const combiEligible = systeemFF && rit.ronde_type === 'finale_a' && !_tsLeesOnly;
+
+            // Ritnummer: leider toont nummer + 🔗, middle/end leden tonen niks
+            let nrCelInhoud;
+            if (isCombi && !isCombiLeider) {
+                nrCelInhoud = '';
+            } else if (isCombiLeider) {
+                nrCelInhoud = `${ritNr} <button class="ts-combi-unlink" title="Ontkoppel"
+                                   data-combi-group="${combiGrp}">🔗</button>`;
+            } else if (combiEligible) {
+                nrCelInhoud = `<label class="ts-combi-sel-lbl">
+                                   <input type="checkbox" class="ts-combi-sel"
+                                          data-rit-id="${rit.id}"
+                                          data-volgorde="${rit.volgorde}">
+                                   <span class="ts-rit-nr-inner">${ritNr}</span>
+                               </label>`;
+            } else {
+                nrCelInhoud = String(ritNr);
+            }
+
+            html += `<tr class="ts-rit-rij ts-rit-sub ${combiCls}" data-rit-id="${rit.id}"
+                        data-groep-key="${escHtml(groepKey)}"
+                        data-combi-group="${combiGrp ?? ''}"
+                        data-ronde-type="${escHtml(rit.ronde_type)}">
                 ${tijdCelHtml}
-                <td class="ts-rit-nr">${ritNr}</td>
+                <td class="ts-rit-nr">${nrCelInhoud}</td>
                 <td class="ts-rit-naam">${escHtml(rit.rit_naam)}</td>
                 <td><span class="ts-type-badge ts-type-badge-sm" style="background:${kleur}">${escHtml(label)}${escHtml(fin)}</span></td>
                 <td class="ts-rit-verwacht">${rit.verwacht ?? '?'}</td>
@@ -1391,6 +1543,17 @@ function bindTsEvents(afstandGroepen) {
                 if (halfCb)  halfCb.checked  = false;
                 tr.querySelectorAll('.ts-kwart-velden, .ts-half-velden').forEach(el => setVis(el, false));
             }
+            // Full-final: "Serie alleen startvolgorde" uit + disable als geen series
+            const sasCb = tr.querySelector('.ts-cb-sas');
+            if (sasCb) {
+                if (!cb.checked) {
+                    sasCb.checked  = false;
+                    sasCb.disabled = true;
+                } else {
+                    const nh = parseInt(tr.querySelector('.ts-inp-heats-aantal')?.value) || 0;
+                    sasCb.disabled = (nh !== 1);
+                }
+            }
             updateCalc(cb.closest('.ts-panel-form'), afstandGroepen);
         });
     });
@@ -1447,6 +1610,26 @@ function bindTsEvents(afstandGroepen) {
             const n    = parseInt(inp.dataset.n) || 0;
             const nh   = parseInt(inp.value) || 0;
             if (span) span.textContent = n > 0 && nh > 0 ? berekenPerHeat(n, nh) + '/h' : '—';
+
+            // Full-final: "Serie alleen startvolgorde" alleen enabled bij 1 heat
+            const sasCb = inp.closest('tr')?.querySelector('.ts-cb-sas');
+            if (sasCb) {
+                if (nh === 1) {
+                    sasCb.disabled = false;
+                } else {
+                    sasCb.checked  = false;
+                    sasCb.disabled = true;
+                }
+            }
+
+            updateCalc(inp.closest('.ts-panel-form'), afstandGroepen);
+        });
+    });
+
+    // ── Live: FF A-finale / B-heats preview per cel ──────────────────────────
+    container.querySelectorAll('.ts-inp-finale-a, .ts-inp-finale-bh').forEach(inp => {
+        inp.addEventListener('input', () => {
+            herberekenFinalePreview(inp.closest('tr'));
             updateCalc(inp.closest('.ts-panel-form'), afstandGroepen);
         });
     });
@@ -1575,7 +1758,7 @@ function bindTsEvents(afstandGroepen) {
         });
     });
 
-    const calcInputs = ['heats_q','kwart_heats','kwart_door','kwart_q_heat','half_heats','half_door','half_q_heat','q_direct','q_tijd','finale_heat_grootte','finale_b_grootte','laatste_b_grootste','heeft_runner_up','heats_aantal','runner_up_max','runner_up_min'];
+    const calcInputs = ['heats_q','kwart_heats','kwart_door','kwart_q_heat','half_heats','half_door','half_q_heat','q_direct','q_tijd','finale_heat_grootte','finale_b_grootte','laatste_b_grootste','heeft_runner_up','heats_aantal','runner_up_max','runner_up_min','finale_a_grootte','finale_b_heats'];
     calcInputs.forEach(name => {
         container.querySelectorAll(`[name="${name}"]`).forEach(inp => {
             inp.addEventListener('input',  () => updateCalc(inp.closest('.ts-panel-form'), afstandGroepen));
@@ -1600,6 +1783,18 @@ function bindTsEvents(afstandGroepen) {
             form.querySelectorAll('tbody tr.ts-cat-rij').forEach(tr => {
                 const chk = n => tr.querySelector(`[name="${n}"]`)?.checked ?? false;
                 const cn  = n => parseInt(tr.querySelector(`[name="${n}"]`)?.value) || 0;
+
+                // Full-final per-cat finale-instellingen (null als niet aanwezig)
+                const aInp  = tr.querySelector('[name="finale_a_grootte"]');
+                const bhInp = tr.querySelector('[name="finale_b_heats"]');
+                const lbgEl = tr.querySelector('[name="laatste_b_grootste"]');
+                const sasEl = tr.querySelector('[name="series_alleen_startvolgorde"]');
+                const finale_a_grootte   = aInp  ? (parseInt(aInp.value)  || 0) : null;
+                const finale_b_heats     = bhInp ? (parseInt(bhInp.value) || 0) : null;
+                const laatste_b_grootste = lbgEl ? (lbgEl.checked ? 1 : 0) : null;
+                // Alleen 1 als daadwerkelijk aangevinkt én enabled (heats=1 + heeft_heats)
+                const series_alleen_startvolgorde = sasEl && sasEl.checked && !sasEl.disabled ? 1 : 0;
+
                 catConfigs.push({
                     dc_id:              tr.dataset.dcId,
                     distance_id:        tr.dataset.distId,
@@ -1616,6 +1811,11 @@ function bindTsEvents(afstandGroepen) {
                     half_q_heat:        parseInt(tr.querySelector('[name="half_q_heat"]')?.value  ?? '1'),
                     heeft_runner_up:    heeftRU,
                     finale_heats:       cn('finale_heats') || 1,
+                    // Per-cat FF-velden (null als niet in deze rij)
+                    finale_a_grootte,
+                    finale_b_heats,
+                    laatste_b_grootste,
+                    series_alleen_startvolgorde,
                 });
             });
 
@@ -1629,9 +1829,15 @@ function bindTsEvents(afstandGroepen) {
                     q_tijd:              num('q_tijd'),
                     finale_heat_grootte: num('finale_heat_grootte') || 6,
                     finale_b_grootte:    num('finale_b_grootte')    || 6,
-                    laatste_b_grootste:  form.querySelector('[name="laatste_b_grootste"]')?.checked ? 1 : 0,
+                    // FF-gedeeld: hidden input met value. INT: bestaat niet.
+                    // (Per-cat checkboxes voor laatste_b_grootste worden in catConfigs meegestuurd.)
+                    laatste_b_grootste:  (() => {
+                        const e = form.querySelector('.ts-gedeeld-velden [name="laatste_b_grootste"]');
+                        if (!e) return 1;
+                        return e.type === 'checkbox' ? (e.checked ? 1 : 0) : (parseInt(e.value) ? 1 : 0);
+                    })(),
                     finale_seeding:      form.querySelector('[name="finale_seeding"]')?.value ?? 'slang',
-                    race_type:           form.querySelector('[name="race_type"]')?.value ?? 'sprint',
+                    // race_type niet meer meesturen — afgeleid uit distances.race_type
                     heeft_runner_up:     heeftRU,
                     runner_up_max:       ruMax,
                     runner_up_min:       ruMin,
@@ -1849,9 +2055,6 @@ function bindTsEvents(afstandGroepen) {
             if (btn) { btn.disabled = false; btn.textContent = '🗑 Wis programma'; }
         }
     });
-
-    el('ts-btn-publiceer')?.addEventListener('click', publiceerTijdschema);
-    el('ts-btn-publiceer-intern')?.addEventListener('click', publiceerTijdschemaIntern);
 
     // (↑↓ knoppen vervangen door groep-drag-and-drop hieronder)
 
@@ -2126,6 +2329,89 @@ function bindTsEvents(afstandGroepen) {
                 document.addEventListener('click', sluit);
             }, 10);
         });
+
+        // ── Ritten combineren: selectie + combineer-knop ──────────────────────
+        const combiBtn   = el('ts-btn-combi');
+        const combiCount = el('ts-combi-count');
+
+        const updateCombiBtn = () => {
+            const sels = container.querySelectorAll('.ts-combi-sel:checked');
+            const aantal = sels.length;
+            if (combiCount) combiCount.textContent = aantal;
+            if (!combiBtn) return;
+            combiBtn.disabled = (aantal < 2 || aantal > 4);
+        };
+
+        rittenTbody.addEventListener('change', e => {
+            if (e.target.classList.contains('ts-combi-sel')) updateCombiBtn();
+        });
+
+        combiBtn?.addEventListener('click', async () => {
+            const sels = container.querySelectorAll('.ts-combi-sel:checked');
+            const selArr = [...sels].map(cb => ({
+                id: parseInt(cb.dataset.ritId),
+                volgorde: parseInt(cb.dataset.volgorde),
+            }));
+            if (selArr.length < 2 || selArr.length > 4) return;
+            // Sorteer op volgorde en check dat ze opeenvolgend zijn
+            selArr.sort((a, b) => a.volgorde - b.volgorde);
+            for (let i = 1; i < selArr.length; i++) {
+                if (selArr[i].volgorde !== selArr[i - 1].volgorde + 1) {
+                    toonBevestigDialog(
+                        'Alleen opeenvolgende ritten kunnen gecombineerd worden.',
+                        'Combineren'
+                    );
+                    return;
+                }
+            }
+            combiBtn.disabled = true;
+            try {
+                const data = await postTs({
+                    action:         'set_combi',
+                    tijdschema_id:  tsId,
+                    competition_id: huidigCompId,
+                    rit_ids:        selArr.map(x => x.id),
+                });
+                if (data?.error) throw new Error(data.error);
+                if (data?.tijdschema_version != null) tijdschemaVersion = data.tijdschema_version;
+                huidigTijdschema = data;
+                renderTijdschema();
+            } catch (e) {
+                toonBevestigDialog('Combineren mislukt: ' + e.message, 'Fout');
+                combiBtn.disabled = false;
+            }
+        });
+
+        // Ontkoppel-knop op een combi-leider
+        rittenTbody.addEventListener('click', async e => {
+            const btn = e.target.closest('.ts-combi-unlink');
+            if (!btn) return;
+            e.stopPropagation();
+            const groep = parseInt(btn.dataset.combiGroup);
+            if (!groep) return;
+            // Verzamel alle rit_ids in deze groep
+            const trs = container.querySelectorAll(
+                `tr.ts-combi[data-combi-group="${groep}"]`
+            );
+            const ritIds = [...trs].map(tr => parseInt(tr.dataset.ritId));
+            if (!ritIds.length) return;
+            btn.disabled = true;
+            try {
+                const data = await postTs({
+                    action:         'clear_combi',
+                    tijdschema_id:  tsId,
+                    competition_id: huidigCompId,
+                    rit_ids:        ritIds,
+                });
+                if (data?.error) throw new Error(data.error);
+                if (data?.tijdschema_version != null) tijdschemaVersion = data.tijdschema_version;
+                huidigTijdschema = data;
+                renderTijdschema();
+            } catch (e) {
+                toonBevestigDialog('Ontkoppelen mislukt: ' + e.message, 'Fout');
+                btn.disabled = false;
+            }
+        });
     }
 }
 
@@ -2160,6 +2446,16 @@ function updateCalc(form, afstandGroepen) {
         const key = tr.dataset.dcId + '|' + tr.dataset.distId;
         const chk = n => tr.querySelector(`[name="${n}"]`)?.checked ?? false;
         const cn  = n => parseInt(tr.querySelector(`[name="${n}"]`)?.value) || 0;
+
+        // Full-final per-cat finale-instellingen (alleen aanwezig in FF-rijen)
+        const aInp  = tr.querySelector('[name="finale_a_grootte"]');
+        const bhInp = tr.querySelector('[name="finale_b_heats"]');
+        const lbgEl = tr.querySelector('[name="laatste_b_grootste"]');
+        // null = rij heeft geen FF-velden (INT-mode) → renderAfstandCalc valt terug op liveCfg
+        const finale_a_grootte   = aInp  ? (parseInt(aInp.value)  || 0) : null;
+        const finale_b_heats     = bhInp ? (parseInt(bhInp.value) || 0) : null;
+        const laatste_b_grootste = lbgEl ? (lbgEl.checked ? 1 : 0) : null;
+
         liveCatMap[key] = {
             heeft_heats:        chk('heeft_heats'),
             heats_aantal:       cn('heats_aantal') || 1,
@@ -2173,6 +2469,10 @@ function updateCalc(form, afstandGroepen) {
             half_door:          cn('half_door'),
             half_q_heat:        cn('half_q_heat'),    // 0 is geldig
             heeft_runner_up:    heeftRU,
+            // Per-cat FF-velden (null als niet aanwezig in deze rij)
+            finale_a_grootte,
+            finale_b_heats,
+            laatste_b_grootste,
         };
     });
 
@@ -2182,11 +2482,14 @@ function updateCalc(form, afstandGroepen) {
 }
 
 // ── Publiceer tijdschema ──────────────────────────────────────────────────────
+// Interne body-bouwer — returns { bodyHtml, cssLinks, extraCss, title }
+// of null. Aangeroepen door `bouwProgrammaExternBody()` (voor Print-Center)
+// en door `publiceerTijdschema()` (de eigen knop op Tijdschema-pagina).
 
-function publiceerTijdschema() {
+function _bouwProgrammaExternInternal() {
     const schema = huidigTijdschema;
     const comp   = huidigComp;
-    if (!schema) return;
+    if (!schema) return null;
 
     const ritten  = schema.ritten  ?? [];
     const blokken = schema.blokken ?? [];
@@ -2235,27 +2538,41 @@ function publiceerTijdschema() {
         const d = wsBlok.tijdstip.split(':').map(Number);
         const wsSec = (d[0] || 0) * 3600 + (d[1] || 0) * 60;
         let cur = wsSec, gestart = false;
+        // Combi: gelijke starttijd, geen dubbele heat-duur optellen
+        let prevRitCombi = null;
+        let prevRitCurSec = null;
         for (const rij of rijdenP) {
             if (rij.type === 'wedstrijdstart') {
                 btMap.set(rij.blok.id, mNT(cur)); gestart = true;
             } else if (gestart) {
                 if (rij.type === 'pauze' || rij.type === 'inrijden' || rij.type === 'ceremonie') {
                     btMap.set(rij.blok.id, mNT(cur));
-                    cur += (parseInt(rij.blok.duur) || 0) * 60;   // duur in minuten → seconden
+                    cur += (parseInt(rij.blok.duur) || 0) * 60;
+                    prevRitCombi = null;
                 } else if (rij.type === 'herstart') {
-                    // Reset cursortijd naar de nieuwe starttijd; markeer op de nieuwe tijd
                     if (rij.blok.tijdstip) {
                         const d = rij.blok.tijdstip.split(':').map(Number);
                         cur = (d[0] || 0) * 3600 + (d[1] || 0) * 60;
                     }
                     btMap.set(rij.blok.id, mNT(cur));
+                    prevRitCombi = null;
                 } else if (rij.type === 'rit') {
+                    const combiGrp    = rij.rit.combi_group ? parseInt(rij.rit.combi_group) : null;
+                    const zelfdeCombi = combiGrp !== null && combiGrp === prevRitCombi;
                     if (rij.rit.tijdstip_override) {
                         const d = rij.rit.tijdstip_override.split(':').map(Number);
                         cur = (d[0] || 0) * 3600 + (d[1] || 0) * 60;
+                        stMap.set(rij.rit.id, mNT(cur));
+                        prevRitCurSec = cur;
+                        cur += heatDuurMapP.get(parseInt(rij.rit.blok_id)) || 0;
+                    } else if (zelfdeCombi) {
+                        stMap.set(rij.rit.id, mNT(prevRitCurSec));
+                    } else {
+                        stMap.set(rij.rit.id, mNT(cur));
+                        prevRitCurSec = cur;
+                        cur += heatDuurMapP.get(parseInt(rij.rit.blok_id)) || 0;
                     }
-                    stMap.set(rij.rit.id, mNT(cur));
-                    cur += heatDuurMapP.get(parseInt(rij.rit.blok_id)) || 0;  // al in seconden
+                    prevRitCombi = combiGrp;
                 }
             }
         }
@@ -2348,8 +2665,9 @@ function publiceerTijdschema() {
         });
 
         const isFinale = blok.ronde_type === 'finale';
-        let catHtml = '';
-        catMap.forEach(({ naam, ritten: cr, key }) => {
+
+        // Render-helper voor één cat-rij (eventueel met override-rijen eronder)
+        const renderCatRij = ({ naam, ritten: cr, key }) => {
             const cc = catCfgMap[key];
             const nH = cr.length;
             const totRj = cr.reduce((s, r) => s + (parseInt(r.verwacht) || 0), 0);
@@ -2366,24 +2684,52 @@ function publiceerTijdschema() {
                 const dt = doorTxt(blok.ronde_type, cc, nH);
                 detail = `${totRj} rijders, ${nH} heat${nH > 1 ? 's' : ''}${dt ? ' · ' + esc(dt) : ''}`;
             }
-            catHtml += `<div class="cat-rij">
+            let inner = `<div class="cat-rij">
                 <span class="cat-tijd">${esc(catTijd)}</span>
                 <span class="cat-naam">${esc(naam)}</span>
                 <span class="cat-details">${detail}</span>
             </div>`;
-
-            // Toon per heat die een override heeft: vastgezette tijd + reden
             cr.forEach((r, i) => {
                 if (!r.tijdstip_override) return;
                 const ovTijd = stMap.get(r.id) ?? r.tijdstip_override.substring(0, 5);
                 const opmTxt  = r.opmerking ? ` — ${esc(r.opmerking)}` : '';
                 const heatDeel = nH > 1 ? ` - heat ${i + 1}` : '';
-                catHtml += `<div class="cat-ovr-rij">
+                inner += `<div class="cat-ovr-rij">
                     <span class="cat-ovr-tijd">${esc(ovTijd)}</span>
                     <span class="cat-ovr-tekst">📌 ${esc(naam)}${esc(heatDeel)}${opmTxt}</span>
                 </div>`;
             });
+            return inner;
+        };
+
+        // Verzamel cats met combi-info; groepeer consecutieve cats met dezelfde
+        // combi_group in één kader. Zo ontstaan geen per ongeluk aaneengesloten
+        // rechthoeken van twee aparte combi-groepen.
+        const catList = [...catMap.values()].map(entry => {
+            const grps = [...new Set(entry.ritten.map(r => r.combi_group).filter(Boolean))];
+            return { ...entry, combiGrp: grps[0] || null };
         });
+
+        let catHtml = '';
+        let i = 0;
+        while (i < catList.length) {
+            const entry = catList[i];
+            if (entry.combiGrp) {
+                let j = i;
+                while (j < catList.length && catList[j].combiGrp === entry.combiGrp) j++;
+                // Alle rijen binnen dit combi-kader samen
+                const binnen = catList.slice(i, j).map(renderCatRij).join('');
+                const aantal = j - i;
+                catHtml += `<div class="combi-box">
+                    <div class="combi-box-kop">🔗 Gecombineerde rit — ${aantal} categorieën rijden samen</div>
+                    ${binnen}
+                </div>`;
+                i = j;
+            } else {
+                catHtml += renderCatRij(entry);
+                i++;
+            }
+        }
 
         bloHtml += `<div class="blok ronde">
             <div class="blok-kop">
@@ -2475,10 +2821,7 @@ function publiceerTijdschema() {
     const locatie = comp ? getLocatie(comp) : '';
     const metaTxt = [datum, locatie].filter(Boolean).map(esc).join(' &nbsp;·&nbsp; ');
 
-    const htmlDoc = `<!DOCTYPE html><html lang="nl">
-<head><meta charset="UTF-8">
-<title>Wedstrijdprogramma${comp?.name ? ' — ' + esc(comp.name) : ''}</title>
-<style>
+    const extraCss = `
 *{box-sizing:border-box}
 body{font-family:Arial,Helvetica,sans-serif;font-size:10.5pt;margin:.6cm 1.2cm 1.2cm;color:#111;line-height:1.5}
 .pagina-header{display:flex;flex-wrap:nowrap;align-items:stretch;justify-content:space-between;
@@ -2500,6 +2843,13 @@ body{font-family:Arial,Helvetica,sans-serif;font-size:10.5pt;margin:.6cm 1.2cm 1
 .blok-info{font-size:9pt;color:#666;white-space:nowrap}
 .blok-cats{padding-left:1.9cm;font-size:10pt;color:#444}
 .cat-rij{display:flex;gap:.4cm;padding:.04cm 0 .04cm 1.9cm;font-size:10pt;align-items:baseline}
+.combi-box{border:2px solid #2E75B6;border-radius:5px;background:#eef4fb;
+           margin:.2cm 1cm .2cm .95cm;padding:.1cm 0 .1cm;page-break-inside:avoid}
+.combi-box + .combi-box{margin-top:.25cm}
+.combi-box-kop{background:#2E75B6;color:#fff;font-size:9pt;font-weight:700;
+               padding:2mm 4mm;letter-spacing:.02em;margin:-.1cm 0 .1cm 0;
+               border-top-left-radius:3px;border-top-right-radius:3px}
+.combi-box .cat-rij{padding-left:.9cm}
 .cat-tijd{min-width:1.1cm;flex-shrink:0;font-variant-numeric:tabular-nums;color:#555;font-size:9.5pt}
 .cat-naam{font-weight:600;flex-shrink:0}
 .cat-details{color:#444;font-size:9.5pt}
@@ -2523,8 +2873,8 @@ body{font-family:Arial,Helvetica,sans-serif;font-size:10.5pt;margin:.6cm 1.2cm 1
   .blok{page-break-inside:avoid}
   @page{margin:1cm 1.2cm;size:A4 portrait}
 }
-</style></head>
-<body>
+`;
+    const bodyHtml = `
 <div class="pagina-header">
   <div class="hdr-links">
     <div class="hdr-comp">${esc(comp?.name ?? 'Wedstrijdprogramma')}</div>
@@ -2539,22 +2889,36 @@ body{font-family:Arial,Helvetica,sans-serif;font-size:10.5pt;margin:.6cm 1.2cm 1
 </div>
 ${bloHtml}
 ${footerHtml}
-</body></html>`;
+`;
 
-    const win = window.open('', '_blank');
-    if (!win) { toonBevestigDialog('Pop-up geblokkeerd — sta pop-ups toe voor deze pagina.', 'Afdrukken'); return; }
-    win.document.write(htmlDoc);
-    win.document.close();
-    win.focus();
-    setTimeout(() => { win.print(); win.close(); }, 500);
+    return {
+        bodyHtml:        bodyHtml,
+        cssLinks:        [],
+        extraCss:        extraCss,
+        pageOrientation: 'portrait',
+        title:           'Wedstrijdprogramma' + (comp?.name ? ' — ' + comp.name : ''),
+        subType:         'Wedstrijdprogramma',
+    };
 }
 
-// ── Publiceer intern tijdschema ───────────────────────────────────────────────
+// Publieke body-builder voor Print-Center.
+function bouwProgrammaExternBody() {
+    if (!huidigTijdschema) return null;
+    return _bouwProgrammaExternInternal();
+}
 
-function publiceerTijdschemaIntern() {
+// publiceerTijdschema() is verwijderd — printen gebeurt nu via Print-Center
+// dat `bouwProgrammaExternBody()` gebruikt.
+
+// ── Publiceer intern tijdschema ───────────────────────────────────────────────
+// Interne body-bouwer — returns { bodyHtml, cssLinks, extraCss, title } of
+// null. Aangeroepen door `bouwProgrammaInternBody()` (voor Print-Center) en
+// door `publiceerTijdschemaIntern()` (de eigen knop op Tijdschema-pagina).
+
+function _bouwProgrammaInternInternal() {
     const schema = huidigTijdschema;
     const comp   = huidigComp;
-    if (!schema) return;
+    if (!schema) return null;
 
     const ritten  = schema.ritten  ?? [];
     const blokken = schema.blokken ?? [];
@@ -2603,6 +2967,9 @@ function publiceerTijdschemaIntern() {
         const d = wsBlok.tijdstip.split(':').map(Number);
         const wsSec = (d[0] || 0) * 3600 + (d[1] || 0) * 60;
         let cur = wsSec, gestart = false;
+        // Combi: gelijke starttijd, geen dubbele heat-duur optellen
+        let prevRitCombi = null;
+        let prevRitCurSec = null;
         for (const rij of rijen) {
             if (rij.type === 'wedstrijdstart') {
                 btMap.set(rij.blok.id, mNT(cur)); gestart = true;
@@ -2610,14 +2977,27 @@ function publiceerTijdschemaIntern() {
                 if (rij.type === 'pauze' || rij.type === 'inrijden' || rij.type === 'ceremonie') {
                     btMap.set(rij.blok.id, mNT(cur));
                     cur += (parseInt(rij.blok.duur) || 0) * 60;
+                    prevRitCombi = null;
                 } else if (rij.type === 'rit') {
+                    const combiGrp    = rij.rit.combi_group ? parseInt(rij.rit.combi_group) : null;
+                    const zelfdeCombi = combiGrp !== null && combiGrp === prevRitCombi;
                     if (rij.rit.tijdstip_override) {
                         const d = rij.rit.tijdstip_override.split(':').map(Number);
                         cur = (d[0] || 0) * 3600 + (d[1] || 0) * 60;
+                        stMap.set(rij.rit.id, mNT(cur));
+                        stRawMap.set(rij.rit.id, cur);
+                        prevRitCurSec = cur;
+                        cur += heatDuurMap.get(parseInt(rij.rit.blok_id)) || 0;
+                    } else if (zelfdeCombi) {
+                        stMap.set(rij.rit.id, mNT(prevRitCurSec));
+                        stRawMap.set(rij.rit.id, prevRitCurSec);
+                    } else {
+                        stMap.set(rij.rit.id, mNT(cur));
+                        stRawMap.set(rij.rit.id, cur);
+                        prevRitCurSec = cur;
+                        cur += heatDuurMap.get(parseInt(rij.rit.blok_id)) || 0;
                     }
-                    stMap.set(rij.rit.id, mNT(cur));
-                    stRawMap.set(rij.rit.id, cur);
-                    cur += heatDuurMap.get(parseInt(rij.rit.blok_id)) || 0;
+                    prevRitCombi = combiGrp;
                 }
             }
         }
@@ -2717,7 +3097,7 @@ function publiceerTijdschemaIntern() {
     let ritNr = 0;
     let prevGroepKey = null;
 
-    rijen.forEach(rij => {
+    rijen.forEach((rij, idx) => {
         const cols = heeftTijden ? restCols + 1 : restCols;
         if (rij.type === 'wedstrijdstart') {
             prevGroepKey = null;
@@ -2798,6 +3178,27 @@ function publiceerTijdschemaIntern() {
             const hd = heatDuurMap.get(parseInt(rit.blok_id)) || 0;
             const hdTxt = hd ? secNaarMmSs(hd) : '';
             const hasOvr = !!rit.tijdstip_override;
+
+            // Combi-logica: ritten met dezelfde combi_group als visuele groep
+            const combiGrp    = rit.combi_group ? parseInt(rit.combi_group) : null;
+            const prevRitTmp  = idx > 0 && rijen[idx - 1].type === 'rit' ? rijen[idx - 1].rit : null;
+            const nextRijTmp  = rijen[idx + 1];
+            const nextRitTmp  = nextRijTmp?.type === 'rit' ? nextRijTmp.rit : null;
+            const prevCombi   = prevRitTmp?.combi_group ? parseInt(prevRitTmp.combi_group) : null;
+            const nextCombi   = nextRitTmp?.combi_group ? parseInt(nextRitTmp.combi_group) : null;
+            const isCombi     = combiGrp !== null;
+            const isCombiLead = isCombi && combiGrp !== prevCombi;
+            const isCombiEnd  = isCombi && combiGrp !== nextCombi;
+            let combiCls = '';
+            if (isCombi) {
+                combiCls = ' combi';
+                if (isCombiLead) combiCls += ' combi-start';
+                if (isCombiEnd)  combiCls += ' combi-end';
+            }
+            // Ritnr: leider toont nummer + 🔗, leden tonen leeg
+            const nrTxt = (isCombi && !isCombiLead) ? ''
+                       : (isCombiLead ? `${ritNr} 🔗` : String(ritNr));
+
             if (rit.opmerking) {
                 tBody += `<tr class="rit-opm">
                     ${heeftTijden ? '<td></td>' : ''}
@@ -2805,9 +3206,9 @@ function publiceerTijdschemaIntern() {
                     <td colspan="3" class="opm">📝 ${esc(rit.opmerking)}</td>
                 </tr>`;
             }
-            tBody += `<tr class="rit-rij">
+            tBody += `<tr class="rit-rij${combiCls}">
                 ${heeftTijden ? `<td class="ti${hasOvr ? ' ti-ovr' : ''}">${stMap.get(rit.id) ?? '—'}${hasOvr ? '&nbsp;📌' : ''}</td>` : ''}
-                <td class="nr">${ritNr}</td>
+                <td class="nr">${nrTxt}</td>
                 <td class="naam">${esc(rit.rit_naam)}${hdTxt ? `<span class="hd"> (${esc(hdTxt)})</span>` : ''}</td>
                 <td><span class="badge sm" style="background:${kleur};color:#fff">${esc(label)}${esc(fin)}</span></td>
                 <td class="vw">${rit.verwacht ?? '?'}</td>
@@ -2819,10 +3220,7 @@ function publiceerTijdschemaIntern() {
     const locatie = comp ? getLocatie(comp) : '';
     const metaTxt = [datum, locatie].filter(Boolean).map(esc).join(' &nbsp;·&nbsp; ');
 
-    const htmlDoc = `<!DOCTYPE html><html lang="nl">
-<head><meta charset="UTF-8">
-<title>Intern programma${comp?.name ? ' — ' + esc(comp.name) : ''}</title>
-<style>
+    const extraCss = `
 *{box-sizing:border-box}
 body{font-family:Arial,Helvetica,sans-serif;font-size:9.5pt;margin:.5cm 1cm 1cm;color:#111;line-height:1.4}
 .pagina-header{display:flex;flex-wrap:nowrap;align-items:stretch;justify-content:space-between;gap:4mm;margin-bottom:0}
@@ -2855,6 +3253,10 @@ tr.inrijd td{background:#e8eaf6;color:#1a3d8a;padding:4px 6px}
 tr.cerem td{background:#fce4ec;color:#8b1a1a;padding:4px 6px}
 tr.rit-rij:nth-child(even) td{background:#f9f9f9}
 tr.rit-rij td{border-bottom:1px solid #eee}
+tr.rit-rij.combi td{background:#eef4fb !important;border-left:3px solid #2E75B6;border-right:3px solid #2E75B6}
+tr.rit-rij.combi td:first-child{border-left:3px solid #2E75B6}
+tr.rit-rij.combi-start td{border-top:3px solid #2E75B6}
+tr.rit-rij.combi-end td{border-bottom:3px solid #2E75B6}
 td.ti-ovr{color:#c47200}
 tr.rit-opm td{padding-bottom:0!important;border-bottom:none}
 td.opm{font-size:8pt;color:#7a4200;font-style:italic;padding-left:12px;padding-top:4px}
@@ -2864,8 +3266,8 @@ td.opm{font-size:8pt;color:#7a4200;font-style:italic;padding-left:12px;padding-t
   tr.groep-hdr{page-break-before:auto}
   @page{margin:1cm 1.2cm;size:A4 portrait}
 }
-</style></head>
-<body>
+`;
+    const bodyHtml = `
 <div class="pagina-header">
   <div class="hdr-links">
     <div class="hdr-comp">${esc(comp?.name ?? 'Wedstrijdprogramma')}</div>
@@ -2881,15 +3283,42 @@ td.opm{font-size:8pt;color:#7a4200;font-style:italic;padding-left:12px;padding-t
   <tbody>${tBody}</tbody>
 </table>
 ${footerHtml}
-</body></html>`;
+`;
 
+    return {
+        bodyHtml:        bodyHtml,
+        cssLinks:        [],
+        extraCss:        extraCss,
+        pageOrientation: 'portrait',
+        title:           'Intern programma' + (comp?.name ? ' — ' + comp.name : ''),
+        subType:         'Intern programma',
+    };
+}
+
+// Publieke body-builder voor Print-Center.
+function bouwProgrammaInternBody() {
+    if (!huidigTijdschema) return null;
+    return _bouwProgrammaInternInternal();
+}
+
+// publiceerTijdschemaIntern() is verwijderd — printen gebeurt nu via
+// Print-Center dat `bouwProgrammaInternBody()` gebruikt.
+/* verwijderd:
+function publiceerTijdschemaIntern() {
+    const data = bouwProgrammaInternBody();
+    if (!data) return;
     const win = window.open('', '_blank');
     if (!win) { toonBevestigDialog('Pop-up geblokkeerd — sta pop-ups toe voor deze pagina.', 'Afdrukken'); return; }
-    win.document.write(htmlDoc);
+    win.document.write(`<!DOCTYPE html><html lang="nl">
+<head><meta charset="UTF-8">
+<title>${escHtml(data.title)}</title>
+<style>${data.extraCss}</style></head>
+<body>${data.bodyHtml}</body></html>`);
     win.document.close();
     win.focus();
     setTimeout(() => { win.print(); win.close(); }, 500);
 }
+*/
 
 // ── Hulpfuncties ──────────────────────────────────────────────────────────────
 

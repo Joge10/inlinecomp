@@ -32,6 +32,30 @@ $_authUser = requireAuth($pdo);
 //   ceil(15/4)=4, laatste rest=3 < 4 → samenvoegen → 3 heats
 //   bLaatstGrootst=true  → [4, 4, 7]
 //   bLaatstGrootst=false → [7, 4, 4]
+// Gelijkmatige verdeling (eerste heats krijgen de rest) — dupliceert
+// tijdschema.php:verdeel() zodat live.php standalone werkt.
+function verdeel(int $n, int $k): array {
+    if ($k <= 0) return [];
+    $basis = (int)floor($n / $k);
+    $extra = $n % $k;
+    $result = [];
+    for ($i = 0; $i < $k; $i++) {
+        $result[] = $basis + ($i < $extra ? 1 : 0);
+    }
+    return $result;
+}
+// Zelfde logica maar laatste heats krijgen de rest (grootste achteraan).
+function verdeelLaatstGrootst(int $n, int $k): array {
+    if ($k <= 0) return [];
+    $basis = (int)floor($n / $k);
+    $extra = $n % $k;
+    $result = [];
+    for ($i = 0; $i < $k; $i++) {
+        $result[] = $basis + ($i >= $k - $extra ? 1 : 0);
+    }
+    return $result;
+}
+
 function verdeelBFinales(int $n, int $bFinaleHg, bool $bLaatstGrootst): array {
     if ($n <= 0 || $bFinaleHg <= 0) return [];
 
@@ -108,7 +132,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'GET') {
                 r.dc_naam,
                 r.tijdstip_override,
                 r.afstand_naam,
+                r.combi_group,
                 d.value_meters,
+                d.race_type    AS dist_race_type,
                 (SELECT h.id FROM heats h
                  WHERE h.tijdschema_rit_id = r.id
                    AND h.competition_id = ?
@@ -190,7 +216,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'GET') {
                 'dc_naam'          => $rit['dc_naam'],
                 'tijdstip'         => $rit['tijdstip_override'],
                 'heat_id'          => $heatId,
-                'race_type'        => $rit['heat_race_type'] ?? 'inline',
+                // race_type: distances is de canonieke bron (user-instelbaar);
+                // heats.race_type blijft als fallback voor oude data die nog
+                // niet via de nieuwe afstand-editor is bijgewerkt.
+                'race_type'        => $rit['dist_race_type'] ?? $rit['heat_race_type'] ?? 'inline',
+                'combi_group'      => $rit['combi_group'] !== null ? (int)$rit['combi_group'] : null,
                 'rijders'          => $rijders,
             ];
         }
@@ -255,6 +285,25 @@ if ($action === 'save_rit_results') {
     }
 
     try {
+        // ── Race-type van de bijbehorende afstand ophalen ────────────────
+        // Dit is de canonieke bron: distances.race_type. Op basis hiervan
+        // forceren we rondes/punten op NULL als de afstand ze niet kent.
+        // Voorkomt vervuilde residuals (bv. achtergebleven rondes na een
+        // getogglede DNS op een sprint).
+        $rtStmt = $pdo->prepare("
+            SELECT d.race_type
+            FROM tijdschema_ritten r
+            JOIN distances d ON d.id = r.distance_id
+                            AND d.distance_combination_id = r.dc_id
+            WHERE r.id = ?
+            LIMIT 1
+        ");
+        $rtStmt->execute([$ritId]);
+        $distRaceType = $rtStmt->fetchColumn();
+        if (!$distRaceType) $distRaceType = 'inline'; // veilige default als lookup faalt
+        $accepteertRondes = in_array($distRaceType, ['inline','puntenkoers','afvalkoers'], true);
+        $accepteertPunten = ($distRaceType === 'puntenkoers');
+
         // Geldige sancties (DB = UI codes, geen mapping meer nodig)
         $geldigeSancties = ['W1','W2','FS','RR','DQ-TF','DQ-SF','DQ-DF','DNS','DNF'];
 
@@ -278,60 +327,62 @@ if ($action === 'save_rit_results') {
 
             $rondes = isset($r['rondes']) && $r['rondes'] !== '' && $r['rondes'] !== null
                       ? (int)$r['rondes'] : null;
+            // Punten worden alleen bij puntenkoersen meegestuurd; null is OK
+            $punten = isset($r['punten']) && $r['punten'] !== '' && $r['punten'] !== null
+                      ? (float)$r['punten'] : null;
+            // Forceer NULL als de afstand dit veld niet kent — ongeacht wat
+            // de frontend per ongeluk stuurde (bv. residuals van toggelen
+            // DNS/DNF in eenzelfde sessie).
+            if (!$accepteertRondes) $rondes = null;
+            if (!$accepteertPunten) $punten = null;
+
+            $base = [
+                'entry_id' => (int)$r['entry_id'],
+                'rondes'   => $rondes,
+                'punten'   => $punten,
+                'notitie'  => $r['notitie'] ?? '',
+            ];
 
             if ($sanctie && in_array($sanctie, $RANKED_LAST, true)) {
                 // DNF / DQ-TF / DNS: ranked last in round, tijd wissen
-                $gedeeldArr[] = ['entry_id' => (int)$r['entry_id'], 'tijd_ms' => null,   'rondes' => $rondes, 'sanctie' => $sanctie, 'notitie' => $r['notitie'] ?? ''];
+                $gedeeldArr[] = $base + ['tijd_ms' => null, 'sanctie' => $sanctie];
             } elseif ($sanctie && in_array($sanctie, $NOT_RANKED, true)) {
                 // DQ-SF / DQ-DF: not ranked, geen positie, geen tijd
-                $zonderTijd[] = ['entry_id' => (int)$r['entry_id'], 'tijd_ms' => null,   'rondes' => $rondes, 'sanctie' => $sanctie, 'notitie' => $r['notitie'] ?? ''];
+                $zonderTijd[] = $base + ['tijd_ms' => null, 'sanctie' => $sanctie];
             } elseif ($sanctie === 'FS') {
                 // FS: waarschuwing; tijd bewaren en normale positie toekennen
                 if ($tijdMs !== null && $tijdMs > 0) {
-                    $metTijd[]    = ['entry_id' => (int)$r['entry_id'], 'tijd_ms' => $tijdMs, 'rondes' => $rondes, 'sanctie' => 'FS',       'notitie' => $r['notitie'] ?? ''];
+                    $metTijd[]    = $base + ['tijd_ms' => $tijdMs, 'sanctie' => 'FS'];
                 } else {
-                    $zonderTijd[] = ['entry_id' => (int)$r['entry_id'], 'tijd_ms' => null,   'rondes' => $rondes, 'sanctie' => 'FS',       'notitie' => $r['notitie'] ?? ''];
+                    $zonderTijd[] = $base + ['tijd_ms' => null,    'sanctie' => 'FS'];
                 }
             } elseif ($tijdMs !== null && $tijdMs > 0) {
                 // Normale finisher
-                $metTijd[]    = ['entry_id' => (int)$r['entry_id'], 'tijd_ms' => $tijdMs, 'rondes' => $rondes, 'sanctie' => $sanctie, 'notitie' => $r['notitie'] ?? ''];
+                $metTijd[]    = $base + ['tijd_ms' => $tijdMs, 'sanctie' => $sanctie];
             } else {
                 // Geen tijd, geen geldige sanctie: wis resultaat
-                $zonderTijd[] = ['entry_id' => (int)$r['entry_id'], 'tijd_ms' => null,   'rondes' => $rondes, 'sanctie' => null,       'notitie' => $r['notitie'] ?? ''];
+                $zonderTijd[] = $base + ['tijd_ms' => null, 'sanctie' => null];
             }
         }
 
-        // Detecteer race_type (puntenkoers?) en laad punten indien nodig
-        $heatRaceType  = '';
+        // Voor sortering gebruiken we de punten uit deze binnenkomende request
+        // (die zojuist in dezelfde call worden opgeslagen) — niet de DB-waarde
+        // die nog stale kan zijn. race_type komt uit distances (canonieke bron).
+        $heatRaceType  = $distRaceType;
         $heatPuntenMap = [];
-        $heatLookupStmt = $pdo->prepare("
-            SELECT h.race_type, h.id AS heat_id
-            FROM tijdschema_ritten r
-            JOIN heats h ON h.tijdschema_rit_id = r.id
-            WHERE r.id = ?
-            LIMIT 1
-        ");
-        $heatLookupStmt->execute([$ritId]);
-        $heatLookupRow = $heatLookupStmt->fetch(PDO::FETCH_ASSOC);
-        if ($heatLookupRow) {
-            $heatRaceType = $heatLookupRow['race_type'] ?? '';
-            if ($heatRaceType === 'puntenkoers') {
-                // Laad bestaande punten (opgeslagen via save_punten_koers)
-                $puntenLookupStmt = $pdo->prepare("
-                    SELECT he.id AS entry_id, COALESCE(res.punten, 0) AS punten
-                    FROM heat_entries he
-                    LEFT JOIN results res ON res.heat_entry_id = he.id
-                    WHERE he.heat_id = ?
-                ");
-                $puntenLookupStmt->execute([$heatLookupRow['heat_id']]);
-                foreach ($puntenLookupStmt->fetchAll(PDO::FETCH_ASSOC) as $p) {
-                    $heatPuntenMap[(int)$p['entry_id']] = (float)$p['punten'];
-                }
+        if ($heatRaceType === 'puntenkoers') {
+            foreach ($results as $r) {
+                $eid = (int)($r['entry_id'] ?? 0);
+                if (!$eid) continue;
+                $heatPuntenMap[$eid] = isset($r['punten']) && $r['punten'] !== '' && $r['punten'] !== null
+                    ? (float)$r['punten'] : 0.0;
             }
         }
 
-        // Sorteer finishers: PK → punten DESC → rondes DESC → tijd ASC; anders → rondes DESC → tijd ASC
-        // null rondes = PHP_INT_MAX: rijder zonder geregistreerde rondes staat boven rijder met weinig rondes
+        // Sorteer finishers:
+        //   puntenkoers → punten DESC → rondes DESC → tijd ASC
+        //   inline/afvalkoers → rondes DESC → tijd ASC
+        //   sprint → alleen tijd ASC (rondes is altijd null)
         if ($heatRaceType === 'puntenkoers') {
             usort($metTijd, function ($a, $b) use ($heatPuntenMap) {
                 $pA = $heatPuntenMap[$a['entry_id']] ?? 0;
@@ -376,12 +427,13 @@ if ($action === 'save_rit_results') {
         $pdo->beginTransaction();
 
         $upsert = $pdo->prepare("
-            INSERT INTO results (heat_entry_id, finishpositie, tijd_ms, rondes, sanctie, notitie)
-            VALUES (?, ?, ?, ?, ?, ?)
+            INSERT INTO results (heat_entry_id, finishpositie, tijd_ms, rondes, punten, sanctie, notitie)
+            VALUES (?, ?, ?, ?, ?, ?, ?)
             ON DUPLICATE KEY UPDATE
                 finishpositie = VALUES(finishpositie),
                 tijd_ms       = VALUES(tijd_ms),
                 rondes        = VALUES(rondes),
+                punten        = VALUES(punten),
                 sanctie       = VALUES(sanctie),
                 notitie       = VALUES(notitie)
         ");
@@ -392,6 +444,7 @@ if ($action === 'save_rit_results') {
                 $r['finishpositie'],
                 $r['tijd_ms'],
                 $r['rondes'],
+                $r['punten'] ?? null,
                 $r['sanctie'],
                 $r['notitie'],
             ]);
@@ -565,6 +618,23 @@ if ($action === 'genereer_volgende_ronde') {
             exit;
         }
 
+        // Per-cat FF-instellingen (wint) overschrijven de afstand-defaults.
+        // Zo kun je per categoriegroep instellen hoeveel rijders in de A-finale
+        // zitten, hoeveel B-finales er zijn en waar de "rest" terecht komt.
+        if ($isFullFinal) {
+            if (isset($cc['finale_a_grootte']) && $cc['finale_a_grootte'] !== null && $cc['finale_a_grootte'] !== '') {
+                $finaleHg = max(1, (int)$cc['finale_a_grootte']);
+            }
+            if (isset($cc['laatste_b_grootste']) && $cc['laatste_b_grootste'] !== null) {
+                $bLaatstGrootst = !empty($cc['laatste_b_grootste']);
+            }
+            // finale_b_heats is een aantal heats, niet een grootte-per-heat.
+            // We converteren naar een "maximale grootte per B-heat" zodat de bestaande
+            // verdeelBFinales-logica werkt. Met N rest-rijders verdeeld over K heats:
+            // max per heat = ceil(N / K). Dit wordt later pas berekend omdat we
+            // nog niet weten hoeveel B-rijders er uiteindelijk zullen zijn.
+        }
+
         // Bepaal hoeveel rijders door mogen
         $aantalDoor = 0;
         if ($vanRondeType === 'heats') {
@@ -578,7 +648,30 @@ if ($action === 'genereer_volgende_ronde') {
         // Voor full-final: A-finale krijgt max $finaleHg rijders; de rest gaat naar B-finales.
         // heats_q is voor full-final gelijk aan cat.n (iedereen), maar dat klopt niet voor A-finale.
         if ($isFullFinal) {
-            $aantalDoor = $finaleHg;
+            // Check of er daadwerkelijk B-finale ritten in het tijdschema staan.
+            // Als een rijder later is bijgekomen (nadat de planning al was gemaakt
+            // voor bv. max 4 rijders), is er géén B-finale gepland. In dat geval
+            // willen we géén fake B-finale aanmaken: iedereen gaat naar de A-finale,
+            // ook als het er meer dan $finaleHg worden.
+            $bCheckStmt = $pdo->prepare("
+                SELECT COUNT(*) FROM tijdschema_ritten
+                WHERE tijdschema_id = ?
+                  AND dc_id = ?
+                  AND ronde_type = 'finale_b'
+                  AND (distance_id = ? OR (distance_id IS NULL AND ? = ''))
+            ");
+            $bCheckStmt->execute([$tsId, $dcId, $distanceId, $distanceId]);
+            $bRittenGeconfigureerd = (int)$bCheckStmt->fetchColumn() > 0;
+
+            if ($bRittenGeconfigureerd) {
+                $aantalDoor = $finaleHg;
+            } else {
+                // Geen B-finale gepland → iedereen in de A-finale.
+                // PHP_INT_MAX is veilig: array_slice() met een te groot lengte-
+                // argument pakt gewoon alle beschikbare rijders. ($beschikbaar
+                // bestaat op dit punt nog niet, dus count() kan hier niet.)
+                $aantalDoor = PHP_INT_MAX;
+            }
         }
 
         if ($aantalDoor <= 0) {
@@ -626,6 +719,7 @@ if ($action === 'genereer_volgende_ronde') {
                 p.full_name,
                 p.club_short,
                 res.tijd_ms,
+                res.rondes,
                 res.finishpositie,
                 res.sanctie
             FROM tijdschema_ritten r
@@ -660,17 +754,43 @@ if ($action === 'genereer_volgende_ronde') {
         // Ze worden NIET snake-geseed maar toegevoegd aan heat 1, 2, … in volgorde.
         $overflowRijders = [];
 
+        // Als er geen expliciete Q per heat is gezet maar wel meerdere bron-
+        // heats bestaan, en de user kiest "Standaard" (slang), én het gaat om
+        // een LANGE-afstand / puntenkoers (minstens één rijder heeft rondes
+        // > 0), dan interpreteren we "totaal door = N" als "top-N/bronheats
+        // per heat + alternerend" (rank-snake: rank1-H1, rank1-H2, rank2-H1,
+        // rank2-H2, …).
+        // Bij sprint (alle rijders hebben `rondes = NULL`) blijven we op
+        // pure tijd-sortering — want daar is tijd het enige zinvolle
+        // criterium en is snake juist niet gewenst.
+        $hasRondes = false;
+        foreach ($beschikbaar as $r) {
+            if ($r['rondes'] !== null && (int)$r['rondes'] > 0) { $hasRondes = true; break; }
+        }
+        if ($qPerHeat === 0 && $naarRondeType === 'finale_a'
+            && $nBronHeats > 1 && $finaleSeeding !== 'tijdkoppeling'
+            && $hasRondes) {
+            $qPerHeat = (int)ceil($aantalDoor / max(1, $nBronHeats));
+        }
+
         if ($qPerHeat > 0) {
             // Groepeer per heat_nr, sorteer op finishpositie
             $byHeat = [];
             foreach ($beschikbaar as $r) {
                 $byHeat[(int)$r['heat_nr']][] = $r;
             }
+            // Sorteer per heat: rondes DESC (lange afstand / puntenkoers;
+            // meer rondes = beter) en dan finishpositie ASC. Voor sprints
+            // waar `rondes` altijd NULL is, valt het terug op puur finishpositie.
             foreach ($byHeat as $hn => &$riders) {
-                usort($riders, fn($a, $b) =>
-                    ($a['finishpositie'] === null ? PHP_INT_MAX : (int)$a['finishpositie'])
-                    - ($b['finishpositie'] === null ? PHP_INT_MAX : (int)$b['finishpositie'])
-                );
+                usort($riders, function($a, $b) {
+                    $rA = $a['rondes'] !== null ? (int)$a['rondes'] : PHP_INT_MIN;
+                    $rB = $b['rondes'] !== null ? (int)$b['rondes'] : PHP_INT_MIN;
+                    if ($rA !== $rB) return $rB - $rA;  // DESC
+                    $fA = $a['finishpositie'] === null ? PHP_INT_MAX : (int)$a['finishpositie'];
+                    $fB = $b['finishpositie'] === null ? PHP_INT_MAX : (int)$b['finishpositie'];
+                    return $fA - $fB;
+                });
             }
             unset($riders);
 
@@ -736,10 +856,19 @@ if ($action === 'genereer_volgende_ronde') {
                 $allSlots[] = $qPool[$i] ?? null;
             }
         } else {
-            // Puur tijdsortering (heats → kwartfinale / runner_up)
+            // Puur tijdsortering (heats → kwartfinale / runner_up / finale).
+            // Voor lange afstand / puntenkoers: eerst rondes DESC (meer rondes
+            // = beter), dan tijd ASC. Rijders die niet de volledige afstand
+            // hebben gereden (bv. DNF met 13 van 15 rondes) vallen zo onder
+            // de rijders die wel de volle afstand uitreden.
             $metTijd    = array_values(array_filter($beschikbaar, fn($r) => $r['tijd_ms'] !== null));
             $zonderTijd = array_values(array_filter($beschikbaar, fn($r) => $r['tijd_ms'] === null));
-            usort($metTijd, fn($a, $b) => (int)$a['tijd_ms'] - (int)$b['tijd_ms']);
+            usort($metTijd, function($a, $b) {
+                $rA = $a['rondes'] !== null ? (int)$a['rondes'] : PHP_INT_MIN;
+                $rB = $b['rondes'] !== null ? (int)$b['rondes'] : PHP_INT_MIN;
+                if ($rA !== $rB) return $rB - $rA; // DESC
+                return (int)$a['tijd_ms'] - (int)$b['tijd_ms'];
+            });
 
             // Ex-aequo: check grens bij $aantalDoor
             if ($aantalDoor > 0 && isset($metTijd[$aantalDoor - 1], $metTijd[$aantalDoor])) {
@@ -1134,6 +1263,38 @@ if ($action === 'genereer_volgende_ronde') {
         // ── Full-Final: genereer B-finale heats ──────────────────────────────────
         $bHeatIds = [];
         if ($isFullFinal && !empty($bSlots)) {
+            // Als de planner per-cat 0 B-heats heeft ingesteld: alle B-rijders
+            // toevoegen aan de A-finale. De planner is verantwoordelijk voor
+            // het in de gaten houden of de A-finale dan niet te vol wordt.
+            $catBHeatsCheck = $cc['finale_b_heats'] ?? null;
+            if ($catBHeatsCheck !== null && $catBHeatsCheck !== '' && (int)$catBHeatsCheck === 0) {
+                if (!empty($heatNummers)) {
+                    $eersteAHeat = $heatNummers[0];
+                    if (isset($heatIds[$eersteAHeat])) {
+                        $heatInfoMerge = &$heatIds[$eersteAHeat];
+                        foreach ($bSlots as $rijder) {
+                            $startposPerHeat[$eersteAHeat]++;
+                            $startposMerge = $startposPerHeat[$eersteAHeat];
+                            $insEntry->execute([
+                                $heatInfoMerge['id'],
+                                $rijder['person_license'],
+                                $rijder['categorie'],
+                                $startposMerge,
+                                $rijder['startnummer'],
+                            ]);
+                            $heatInfoMerge['rijders'][] = [
+                                'startpositie' => $startposMerge,
+                                'full_name'    => $rijder['full_name'],
+                                'club_short'   => $rijder['club_short'],
+                            ];
+                        }
+                        unset($heatInfoMerge);
+                    }
+                }
+                $bSlots = [];  // verwerkt — geen B-finale nodig
+            }
+        }
+        if ($isFullFinal && !empty($bSlots)) {
             // Haal finale_b ritten op uit tijdschema
             $bRittenStmt = $pdo->prepare("
                 SELECT r.id, r.heat_nr, r.volgorde, r.rit_naam, r.dc_naam, r.distance_id,
@@ -1149,27 +1310,67 @@ if ($action === 'genereer_volgende_ronde') {
             $bRitten = $bRittenStmt->fetchAll(PDO::FETCH_ASSOC);
 
             if (empty($bRitten)) {
-                // B-finale ritten zijn niet geconfigureerd in het tijdschema terwijl er
-                // wel B-riders zijn. Dit wijst op een onvolledig tijdschema.
-                $pdo->rollBack();
-                http_response_code(400);
-                echo json_encode([
-                    'error' => 'Full-Final: er zijn ' . count($bSlots) . ' rijders voor de B-finale(s), '
-                             . 'maar er zijn geen B-finale heats in het tijdschema geconfigureerd. '
-                             . 'Genereer het tijdschema opnieuw om de B-finale heats aan te maken.',
-                ], JSON_UNESCAPED_UNICODE);
-                exit;
+                // Vangnet: geen B-finale ritten in het tijdschema (bv. door
+                // laat-toegevoegde rijders nadat de planning al was gemaakt).
+                // In plaats van een error te gooien en de transactie te rollbacken,
+                // voegen we de B-rijders achteraan in de eerste A-finale heat.
+                // Resultaat: één A-finale met alle rijders, geen fake B-finale.
+                if (!empty($heatNummers)) {
+                    $eersteAHeat = $heatNummers[0];
+                    if (isset($heatIds[$eersteAHeat])) {
+                        $heatInfoFallback = &$heatIds[$eersteAHeat];
+                        foreach ($bSlots as $rijder) {
+                            $startposPerHeat[$eersteAHeat]++;
+                            $startposFb = $startposPerHeat[$eersteAHeat];
+                            $insEntry->execute([
+                                $heatInfoFallback['id'],
+                                $rijder['person_license'],
+                                $rijder['categorie'],
+                                $startposFb,
+                                $rijder['startnummer'],
+                            ]);
+                            $heatInfoFallback['rijders'][] = [
+                                'startpositie' => $startposFb,
+                                'full_name'    => $rijder['full_name'],
+                                'club_short'   => $rijder['club_short'],
+                            ];
+                        }
+                        unset($heatInfoFallback);
+                    }
+                }
+                $bSlots = [];  // verwerkt — geen B-finale generatie meer nodig
             }
 
             // Full-final B-finale: dynamische verdeling op basis van werkelijk aantal B-rijders.
             // B1 krijgt de snelste B-rijders, B2 de volgende groep, Bn de traagste.
-            // De aantallen per heat worden berekend via verdeelBFinales():
-            //   · bFinaleHg = max rijders per B-heat (uit afstand config)
-            //   · bLaatstGrootst = richting (laatste of eerste B-heat is de grootste)
             // $bSlots is gesorteerd van snel naar traag.
-            $bTotaal    = count($bSlots);
-            $bAantallen = verdeelBFinales($bTotaal, $bFinaleHg, $bLaatstGrootst);
-            $nBNodig    = count($bAantallen);
+            $bTotaal = count($bSlots);
+
+            // Per-cat finale_b_heats (wint): gebruik dit om het exacte aantal B-heats
+            // te bepalen in plaats van af te leiden uit bFinaleHg. Overige rijders
+            // worden gelijk verdeeld; de "rest" schuift naar B1 of B-laatste afhankelijk
+            // van laatste_b_grootste.
+            $catBHeatsRaw = $cc['finale_b_heats'] ?? null;
+            $catBHeats    = ($catBHeatsRaw !== null && $catBHeatsRaw !== '')
+                ? max(0, (int)$catBHeatsRaw) : null;
+
+            if ($catBHeats !== null) {
+                // Expliciet aantal B-heats ingesteld per categorie
+                $nBHeatsWanted = min($catBHeats, $bTotaal);
+                if ($nBHeatsWanted <= 0) {
+                    $bAantallen = [];
+                } elseif ($nBHeatsWanted === 1) {
+                    $bAantallen = [$bTotaal];
+                } else {
+                    $bAantallen = $bLaatstGrootst
+                        ? verdeelLaatstGrootst($bTotaal, $nBHeatsWanted)
+                        : verdeel($bTotaal, $nBHeatsWanted);
+                }
+            } else {
+                // Legacy: afleiden uit max-per-heat (bFinaleHg uit afstand config)
+                $bAantallen = verdeelBFinales($bTotaal, $bFinaleHg, $bLaatstGrootst);
+            }
+            $nBNodig = count($bAantallen);
 
             // Zijn er minder B-ritten in het tijdschema dan we nodig hebben?
             // Dan herbereken we voor het beschikbare aantal ritten.
@@ -1286,23 +1487,30 @@ if ($action === 'genereer_volgende_ronde') {
 define('TIMING_BASE_DIR', __DIR__ . '/../uploader/');
 
 // ── lijst_mappen ──────────────────────────────────────────────────────────────
-// Geeft alle submappen van TIMING_BASE_DIR terug, gesorteerd op naam.
+// Geeft alle submappen van TIMING_BASE_DIR terug, gesorteerd op mtime DESC
+// (nieuwste/recentst-gewijzigde map bovenaan). Handig tijdens wedstrijden:
+// de relevante map staat steevast bovenaan. Backwards-compat: elke item
+// is een object {name, mtime} i.p.v. alleen een string.
 if ($action === 'lijst_mappen') {
     $mappen = [];
     if (is_dir(TIMING_BASE_DIR)) {
         foreach (scandir(TIMING_BASE_DIR) as $entry) {
             if ($entry === '.' || $entry === '..') continue;
-            if (is_dir(TIMING_BASE_DIR . $entry)) $mappen[] = $entry;
+            $pad = TIMING_BASE_DIR . $entry;
+            if (is_dir($pad)) {
+                $mappen[] = ['name' => $entry, 'mtime' => (int)@filemtime($pad)];
+            }
         }
-        natcasesort($mappen);
-        $mappen = array_values($mappen);
+        usort($mappen, fn($a, $b) => $b['mtime'] <=> $a['mtime']); // nieuwste eerst
     }
     echo json_encode(['mappen' => $mappen], JSON_UNESCAPED_UNICODE);
     exit;
 }
 
 // ── lijst_uploads ─────────────────────────────────────────────────────────────
-// Geeft alle *.csv-bestanden in TIMING_BASE_DIR/{map}/ terug.
+// Geeft alle *.csv-bestanden in TIMING_BASE_DIR/{map}/ terug, inclusief mtime
+// zodat de frontend zelf kan sorteren (naam / nieuwste). Voor backwards-compat
+// blijft `files` een array van objects {name, mtime}.
 // Pre-selectie: eerste bestand waarvan de naam een '1' bevat (heat 1).
 if ($action === 'lijst_uploads') {
     $map = trim($body['map'] ?? '');
@@ -1316,16 +1524,19 @@ if ($action === 'lijst_uploads') {
     $files = [];
     if (is_dir($dir)) {
         foreach (glob($dir . '*.csv') as $path) {
-            $files[] = basename($path);
+            $files[] = [
+                'name'  => basename($path),
+                'mtime' => (int)@filemtime($path),
+            ];
         }
-        natcasesort($files);
-        $files = array_values($files);
+        // Alfabetische volgorde als default (frontend kan hersorteren op mtime)
+        usort($files, fn($a, $b) => strnatcasecmp($a['name'], $b['name']));
     }
     $preselect = '';
     foreach ($files as $f) {
-        if (strpos($f, '1') !== false) { $preselect = $f; break; }
+        if (strpos($f['name'], '1') !== false) { $preselect = $f['name']; break; }
     }
-    if (!$preselect && count($files)) $preselect = $files[0];
+    if (!$preselect && count($files)) $preselect = $files[0]['name'];
 
     echo json_encode(['files' => $files, 'preselect' => $preselect], JSON_UNESCAPED_UNICODE);
     exit;
@@ -1387,10 +1598,17 @@ if ($action === 'lees_csv') {
         if (count($cols) < count($header)) continue;
         $row = array_combine($header, array_map(fn($v) => $toUtf8(trim(trim($v), '"')), $cols));
 
-        $pos     = (int)($row['pos']      ?? $row['#']          ?? 0);
-        $nr      = (int)($row['nr.']      ?? $row['nr']         ?? $row['startnummer'] ?? 0);
-        $naam    =       $row['naam']      ?? $row['name']       ?? '';
-        $tijdStr =       $row['tot. tijd'] ?? $row['tot.tijd']   ?? $row['tijd'] ?? $row['time'] ?? '';
+        // Header-varianten ondersteunen (NL + EN timing-software):
+        //   pos / #
+        //   nr. / nr / no. / no / startnummer
+        //   naam / name
+        //   tot. tijd / tot.tijd / tijd / total tm / total time / time
+        $pos     = (int)($row['pos']       ?? $row['#']           ?? 0);
+        $nr      = (int)($row['nr.']       ?? $row['nr']          ?? $row['no.']
+                      ?? $row['no']        ?? $row['startnummer'] ?? 0);
+        $naam    =       $row['naam']      ?? $row['name']        ?? '';
+        $tijdStr =       $row['tot. tijd'] ?? $row['tot.tijd']    ?? $row['tijd']
+                      ?? $row['total tm']  ?? $row['total time']  ?? $row['time'] ?? '';
 
         $tijdMs = null;
         if ($tijdStr !== '') {
@@ -1477,9 +1695,23 @@ if ($action === 'set_race_type') {
         exit;
     }
     try {
+        $pdo->beginTransaction();
+        // Update op de heat zelf (legacy; nog gebruikt in queries elders).
         $pdo->prepare("UPDATE heats SET race_type = ? WHERE id = ?")->execute([$raceType, $heatId]);
+        // Belangrijker: update ook distances.race_type voor de afstand+DC
+        // van deze heat. Distances is de canonieke bron en voedt de live-view,
+        // uitslag-verwerking, klassement en print-center.
+        $pdo->prepare("
+            UPDATE distances d
+            JOIN heats h ON h.distance_id = d.id
+                        AND h.distance_combination_id = d.distance_combination_id
+            SET d.race_type = ?
+            WHERE h.id = ?
+        ")->execute([$raceType, $heatId]);
+        $pdo->commit();
         echo json_encode(['ok' => true]);
     } catch (Throwable $e) {
+        $pdo->rollBack();
         http_response_code(500);
         echo json_encode(['error' => $e->getMessage()]);
     }

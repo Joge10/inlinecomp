@@ -23,6 +23,7 @@
 //            "club_code":     6821,
 //            "club_short":    "RADBOUD",
 //            "club_full":     "Radboud Inline-skating",
+//            "sponsor":       "Team mijnten.nl",  // of null als geen persoonlijke sponsor
 //            "city":          "Lelystad",
 //            "transponder1":  "KS-44038",
 //            "transponder2":  null,
@@ -174,15 +175,30 @@ try {
                number = VALUES(number), name = VALUES(name),
                category_filter = VALUES(category_filter)
     ");
+    // race_type wordt bij nieuwe rijen bepaald op basis van naam/meters;
+    // bestaande rijen behouden hun (mogelijk handmatig aangepaste) race_type
+    // via COALESCE, zodat een re-import de user-keuze niet overschrijft.
     $stmtDist = $pdo->prepare("
         INSERT INTO distances
-               (id, distance_combination_id, number, name, value_meters, discipline, starts)
-        VALUES (:id, :dc_id, :number, :name, :value_meters, :discipline, :starts)
+               (id, distance_combination_id, number, name, value_meters,
+                discipline, starts, race_type)
+        VALUES (:id, :dc_id, :number, :name, :value_meters,
+                :discipline, :starts, :race_type)
         ON DUPLICATE KEY UPDATE
                number = VALUES(number), name = VALUES(name),
                value_meters = VALUES(value_meters), discipline = VALUES(discipline),
                starts = VALUES(starts)
+               -- race_type NIET overschrijven: user-instelling blijft behouden
     ");
+    // Heuristiek voor verse rijen — user kan achteraf per afstand bijstellen.
+    $bepaalRaceType = function(?string $name, $meters): string {
+        $n = mb_strtolower($name ?? '');
+        if (str_contains($n, 'puntenkoers') || str_contains($n, 'punten koers')) return 'puntenkoers';
+        if (str_contains($n, 'afvalkoers')  || str_contains($n, 'afval koers'))  return 'afvalkoers';
+        if (str_contains($n, 'lange afstand')) return 'inline';
+        if (is_numeric($meters) && (int)$meters > 1000)                           return 'inline';
+        return 'sprint';
+    };
     foreach ($dcs as $dc) {
         $stmtDC->execute([
             ':id'         => $dc['id'],
@@ -200,6 +216,7 @@ try {
                 ':value_meters' => $dist['value']      ?? null,
                 ':discipline'   => $dist['discipline'] ?? null,
                 ':starts'       => dt($dist['starts']  ?? null),
+                ':race_type'    => $bepaalRaceType($dist['name'] ?? null, $dist['value'] ?? null),
             ]);
         }
     }
@@ -211,19 +228,22 @@ try {
     $stmtPers = $pdo->prepare("
         INSERT INTO persons
                (license_key, full_name, short_name, gender, category,
-                nationality, start_number, club_code, club_short, club_full, city)
+                nationality, start_number, club_code, club_short, club_full, sponsor, city)
         VALUES (:license_key, :full_name, :short_name, :gender, :category,
-                :nationality, :start_number, :club_code, :club_short, :club_full, :city)
+                :nationality, :start_number, :club_code, :club_short, :club_full, :sponsor, :city)
         ON DUPLICATE KEY UPDATE
-               full_name    = VALUES(full_name),
-               short_name   = VALUES(short_name),
+               -- Behoud bestaande waarde als de nieuwe leeg/null is,
+               -- zodat een per ongeluk leeg ingestuurde naam geen goede naam wist.
+               full_name    = COALESCE(NULLIF(VALUES(full_name), ''), full_name),
+               short_name   = COALESCE(NULLIF(VALUES(short_name), ''), short_name),
                gender       = VALUES(gender),
-               category     = VALUES(category),
+               category     = COALESCE(NULLIF(VALUES(category), ''), category),
                nationality  = VALUES(nationality),
                start_number = COALESCE(VALUES(start_number), start_number),
                club_code    = VALUES(club_code),
                club_short   = VALUES(club_short),
                club_full    = VALUES(club_full),
+               sponsor      = VALUES(sponsor),
                city         = VALUES(city),
                updated_at   = CURRENT_TIMESTAMP
     ");
@@ -271,6 +291,51 @@ try {
     $orgIdStmt->execute([$compId]);
     $orgId = $orgIdStmt->fetchColumn() ?: null;
 
+    // Nog geen koppeling? Probeer 'm nu te leggen via KNSB-contactgegevens,
+    // dezelfde match-volgorde als vergelijk.php (email → naam → alias).
+    // Zo staat de koppeling vast vóór de transponder-sync en verschijnt de
+    // waarschuwing alleen als er echt geen organisatie te vinden is.
+    if (!$orgId) {
+        $contact  = $comp['settings']['contact'] ?? [];
+        $orgEmail = strtolower(trim($contact['email']            ?? '')) ?: null;
+        $orgNaam  = trim($contact['organizationName'] ?? '');
+        $gevonden = null;
+        if ($orgEmail) {
+            $s = $pdo->prepare("SELECT id FROM organisaties WHERE LOWER(email) = ?");
+            $s->execute([$orgEmail]);
+            $gevonden = $s->fetchColumn() ?: null;
+        }
+        if (!$gevonden && $orgNaam) {
+            $s = $pdo->prepare("SELECT id FROM organisaties WHERE naam = ?");
+            $s->execute([$orgNaam]);
+            $gevonden = $s->fetchColumn() ?: null;
+        }
+        if (!$gevonden && $orgNaam) {
+            $s = $pdo->prepare("
+                SELECT o.id FROM organisaties o
+                JOIN organisatie_aliassen a ON a.organisatie_id = o.id
+                WHERE a.naam = ?
+            ");
+            $s->execute([$orgNaam]);
+            $gevonden = $s->fetchColumn() ?: null;
+        }
+        if ($gevonden) {
+            $pdo->prepare("UPDATE competitions SET organisatie_id = ? WHERE id = ?")
+                ->execute([$gevonden, $compId]);
+            $orgId = $gevonden;
+            $log[] = "Organisatie automatisch gekoppeld: $orgNaam";
+        }
+    }
+
+    // Diagnostiek: laat operator zien of de transponder-sync überhaupt draait
+    if (!$orgId) {
+        $log[] = '⚠ Deze wedstrijd heeft geen organisatie-koppeling — '
+               . 'org-transponders worden NIET bijgewerkt. '
+               . 'Zet competitions.organisatie_id om dit te fixen.';
+    }
+    $orgTpUpdates = 0;    // hoeveel toewijzingen zijn doorgeschreven
+    $orgTpSkipped = 0;    // hoeveel overgeslagen (geen match op code)
+
     $aantalDeelnemers = 0;
     $overgeslagen     = 0;
 
@@ -294,6 +359,7 @@ try {
                 ':club_code'    => $c['club_code']    ?? null,
                 ':club_short'   => $c['club_short']   ?? null,
                 ':club_full'    => $c['club_full']    ?? null,
+                ':sponsor'      => $c['sponsor']      ?? null,
                 ':city'         => $c['city']         ?? null,
             ]);
 
@@ -357,19 +423,130 @@ try {
                 ]);
 
                 // Terugschrijven naar org-transponder tabel (twee-weg sync)
-                if ($tpActief && $orgId) {
+                if ($orgId) {
                     $startnr  = $c['start_number'] ?? null;
-                    $fullNaam = $c['full_name']     ?? '';
-                    $cat      = $c['category']      ?? '';
-                    $betaald  = !empty($c['tp_betaald']) ? 1 : 0;
-                    if (!isset($stmtOrgTpUpdate)) {
-                        $stmtOrgTpUpdate = $pdo->prepare("
+
+                    // UPDATE met expliciete betaald/betaald_op (gebruiken als client 0 of 1 meestuurt)
+                    if (!isset($stmtOrgTpUpdateMetBetaald)) {
+                        $stmtOrgTpUpdateMetBetaald = $pdo->prepare("
                             UPDATE organisatie_transponders
-                            SET toegewezen_snr = ?, toegewezen_naam = ?, categorie = ?, betaald = ?
+                            SET person_license = ?, toegewezen_snr = ?, toegewezen_naam = ?, categorie = ?,
+                                betaald = ?, betaald_op = ?
                             WHERE organisatie_id = ? AND transponder_code = ?
                         ");
                     }
-                    $stmtOrgTpUpdate->execute([$startnr, $fullNaam, $cat, $betaald, $orgId, $tpActief]);
+                    // UPDATE zonder betaald/betaald_op aan te raken (behoudt bestaande waardes
+                    // als de client geen tp_betaald meestuurt, bv. bij re-import zonder
+                    // dat de dropdown is aangeraakt). Voorkomt dat betaald=1 per ongeluk
+                    // op 0 wordt gezet bij elke import.
+                    if (!isset($stmtOrgTpUpdateBehoudBetaald)) {
+                        $stmtOrgTpUpdateBehoudBetaald = $pdo->prepare("
+                            UPDATE organisatie_transponders
+                            SET person_license = ?, toegewezen_snr = ?, toegewezen_naam = ?, categorie = ?
+                            WHERE organisatie_id = ? AND transponder_code = ?
+                        ");
+                    }
+                    // Vrijgeven: transponders die eerder aan DEZE rijder waren toegewezen,
+                    // behalve de huidige tpActief. Match primair op license_key (stabiel
+                    // over naamswijzigingen heen), met fallback op naam+snr voor oude
+                    // data waar person_license nog niet is ingevuld.
+                    if (!isset($stmtOrgTpVrijgeven)) {
+                        $stmtOrgTpVrijgeven = $pdo->prepare("
+                            UPDATE organisatie_transponders
+                            SET person_license = NULL, toegewezen_snr = NULL, toegewezen_naam = NULL,
+                                categorie = NULL, betaald = 0, betaald_op = NULL
+                            WHERE organisatie_id = ?
+                              AND transponder_code != ?
+                              AND (
+                                  person_license = ?
+                                  OR (person_license IS NULL
+                                      AND toegewezen_snr  = ?
+                                      AND toegewezen_naam = ?)
+                              )
+                        ");
+                    }
+
+                    // Eerst: oude toewijzing voor deze rijder vrijgeven (behalve huidige).
+                    // BELANGRIJK: alleen vrijgeven als de rijder in deze import
+                    // daadwerkelijk een ANDERE org-transponder krijgt toegewezen.
+                    $naamVrijgeven = trim((string)($c['full_name'] ?? ''));
+                    $tpIsOrgTp = false;
+                    if ($tpActief && $orgId) {
+                        if (!isset($stmtCheckOrgTp)) {
+                            $stmtCheckOrgTp = $pdo->prepare("
+                                SELECT 1 FROM organisatie_transponders
+                                WHERE organisatie_id = ? AND transponder_code = ?
+                                LIMIT 1
+                            ");
+                        }
+                        $stmtCheckOrgTp->execute([$orgId, $tpActief]);
+                        $tpIsOrgTp = (bool)$stmtCheckOrgTp->fetchColumn();
+                    }
+                    if ($tpIsOrgTp && $lk) {
+                        $stmtOrgTpVrijgeven->execute([
+                            $orgId, $tpActief, $lk, $startnr, $naamVrijgeven
+                        ]);
+                    }
+
+                    // Dan: als de nieuwe transponder een org-transponder is, toewijzen
+                    if ($tpActief) {
+                        $fullNaam  = trim((string)($c['full_name'] ?? ''));
+                        $cat       = trim((string)($c['category']  ?? ''));
+
+                        // Vangnet: als de client geen naam meestuurt, haal 'm uit de
+                        // persons-tabel op basis van license_key.
+                        if ($fullNaam === '' && $lk) {
+                            if (!isset($stmtHaalNaam)) {
+                                $stmtHaalNaam = $pdo->prepare(
+                                    "SELECT full_name FROM persons WHERE license_key = ?"
+                                );
+                            }
+                            $stmtHaalNaam->execute([$lk]);
+                            $row = $stmtHaalNaam->fetch(PDO::FETCH_ASSOC);
+                            if ($row && !empty($row['full_name'])) {
+                                $fullNaam = $row['full_name'];
+                            }
+                        }
+
+                        // tp_betaald: null/ontbrekend = behoud bestaande waarde,
+                        //             0 = expliciet 'niet betaald',
+                        //             1 = expliciet 'betaald' (met datum vandaag)
+                        $betaaldProvided = array_key_exists('tp_betaald', $c)
+                                         && $c['tp_betaald'] !== null;
+
+                        if ($betaaldProvided) {
+                            $betaald   = ((int)$c['tp_betaald']) === 1 ? 1 : 0;
+                            $betaaldOp = $betaald ? date('Y-m-d') : null;
+                            $stmtOrgTpUpdateMetBetaald->execute([
+                                $lk, $startnr, $fullNaam, $cat, $betaald, $betaaldOp,
+                                $orgId, $tpActief
+                            ]);
+                            $raakte = $stmtOrgTpUpdateMetBetaald->rowCount();
+                        } else {
+                            $stmtOrgTpUpdateBehoudBetaald->execute([
+                                $lk, $startnr, $fullNaam, $cat, $orgId, $tpActief
+                            ]);
+                            $raakte = $stmtOrgTpUpdateBehoudBetaald->rowCount();
+                        }
+                        // Diagnostiek: detecteer wanneer UPDATE niet bestaande
+                        // org-transponder raakt (code hoort niet tot deze org).
+                        // rowCount kan 0 zijn als de waarden gelijk waren, maar
+                        // dan bestond de rij wel — we checken dus via SELECT.
+                        if ($raakte === 0) {
+                            $exStmt = $pdo->prepare(
+                                "SELECT COUNT(*) FROM organisatie_transponders
+                                 WHERE organisatie_id = ? AND transponder_code = ?"
+                            );
+                            $exStmt->execute([$orgId, $tpActief]);
+                            if ((int)$exStmt->fetchColumn() === 0) {
+                                $orgTpSkipped++;
+                            } else {
+                                $orgTpUpdates++;  // bestond maar waarde identiek
+                            }
+                        } else {
+                            $orgTpUpdates++;
+                        }
+                    }
                 }
             }
 
@@ -377,6 +554,43 @@ try {
         }
     }
 
+    if ($orgId) {
+        $log[] = "Org-transponder sync: {$orgTpUpdates} toewijzingen doorgeschreven"
+               . ($orgTpSkipped > 0 ? ", {$orgTpSkipped} codes niet gevonden in org-inventaris" : '');
+
+        // Info-regels: rijders die wél een club-transponder hebben toegewezen,
+        // maar in deze wedstrijd een andere code gebruiken (bv. eigen T1).
+        // Zo heeft de voorbereider een overzicht waar "afwijkingen" zitten —
+        // handig bij de balie of bij het uitleveren van transponders.
+        try {
+            // Primaire match op license_key (stabiel), fallback op naam+snr
+            // voor oude data die nog geen person_license heeft.
+            $afwijkStmt = $pdo->prepare("
+                SELECT p.full_name, ot.intern_nummer,
+                       ot.transponder_code AS org_code,
+                       t.code AS gebruikt_code
+                FROM organisatie_transponders ot
+                JOIN persons p
+                  ON (ot.person_license IS NOT NULL AND p.license_key = ot.person_license)
+                  OR (ot.person_license IS NULL
+                      AND p.full_name     = ot.toegewezen_naam
+                      AND p.start_number  = ot.toegewezen_snr)
+                JOIN transponders t ON t.person_license = p.license_key
+                                    AND t.competition_id = ?
+                                    AND t.slot = 0
+                                    AND t.code IS NOT NULL
+                                    AND t.code != ot.transponder_code
+                WHERE ot.organisatie_id = ?
+                  AND (ot.person_license IS NOT NULL OR ot.toegewezen_snr IS NOT NULL)
+                ORDER BY CAST(ot.intern_nummer AS UNSIGNED)
+            ");
+            $afwijkStmt->execute([$compId, $orgId]);
+            foreach ($afwijkStmt->fetchAll(PDO::FETCH_ASSOC) as $r) {
+                $log[] = "ℹ {$r['full_name']}: club-transponder #{$r['intern_nummer']} ({$r['org_code']}) "
+                       . "toegewezen, gebruikt in deze wedstrijd {$r['gebruikt_code']}";
+            }
+        } catch (Throwable $e) { /* info-regel mag niks breken */ }
+    }
     $log[] = "$aantalDeelnemers deelnemers verwerkt"
            . ($overgeslagen ? " ($overgeslagen overgeslagen: geen licentienummer)" : '');
 

@@ -16,6 +16,12 @@ CREATE TABLE IF NOT EXISTS `tijdschema_ritten` (
     `rit_naam`          VARCHAR(150) NOT NULL,
     `dc_naam`           VARCHAR(255) NOT NULL,
     `verwacht`          TINYINT UNSIGNED DEFAULT NULL,
+    -- Ritten samenvoegen (alleen visueel in programma/live/print):
+    -- ritten met dezelfde `combi_group` verschijnen als één gecombineerde
+    -- eenheid. Alleen toegestaan voor opeenvolgende finale_a-only ritten
+    -- (max 4 per groep). De loting/uitslag/klassement blijft per categorie.
+    -- NULL = geen combi.
+    `combi_group`       INT UNSIGNED DEFAULT NULL,
     PRIMARY KEY (`id`),
     KEY `idx_tr_schema`   (`tijdschema_id`),
     KEY `idx_tr_volgorde` (`tijdschema_id`, `volgorde`),

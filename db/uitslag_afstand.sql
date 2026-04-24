@@ -8,8 +8,11 @@ CREATE TABLE IF NOT EXISTS `uitslag_afstand` (
     `competition_datum`       DATE            DEFAULT NULL,
     `distance_combination_id` VARCHAR(36)     NOT NULL,
     `dc_naam`                 VARCHAR(255)    NOT NULL,
-    `split_group`             VARCHAR(50)     DEFAULT NULL,
-    `distance_id`             VARCHAR(36)     DEFAULT NULL,
+    -- NOT NULL + DEFAULT '' zodat UNIQUE key betrouwbaar matcht (MySQL
+    -- behandelt NULL != NULL in UNIQUE constraints, wat bij NULL-waarden
+    -- tot duplicaat-rijen leidt bij ON DUPLICATE KEY UPDATE).
+    `split_group`             VARCHAR(50)     NOT NULL DEFAULT '',
+    `distance_id`             VARCHAR(36)     NOT NULL DEFAULT '',
     `distance_naam`           VARCHAR(100)    NOT NULL,
     `distance_meters`         INT UNSIGNED    DEFAULT NULL,
     `person_license`          VARCHAR(30)     NOT NULL,

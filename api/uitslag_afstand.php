@@ -42,6 +42,165 @@ require_once __DIR__ . '/../auth/session.php';
 require_once __DIR__ . '/_uitslag_helper.php';
 requireAuth($pdo);
 
+// ── POST: serie-alleen-startvolgorde toggle vanuit uitslag ───────────────────
+// Actie: set_sas {competition_id, dc_ids:[...], distance_id, value:0|1}
+// Schrijft rechtstreeks in tijdschema_cat_config.series_alleen_startvolgorde
+// zodat er één bron van waarheid is. Voor samengevoegde DC-groepen (merge)
+// worden alle betrokken dc_ids meegenomen zodat de instelling consistent blijft.
+if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+    $body   = json_decode(file_get_contents('php://input'), true) ?: [];
+    $action = $body['action'] ?? '';
+    $cId    = trim($body['competition_id'] ?? '');
+
+    // dc_ids kan komen als array (merged combo) of als enkele dc_id (legacy)
+    $dcIdsPost = [];
+    if (!empty($body['dc_ids']) && is_array($body['dc_ids'])) {
+        $dcIdsPost = array_values(array_filter(array_map('trim', $body['dc_ids'])));
+    } elseif (!empty($body['dc_id'])) {
+        $dcIdsPost = [trim($body['dc_id'])];
+    }
+    $dId    = trim($body['distance_id']    ?? '');
+    $dNaam  = trim($body['distance_naam']  ?? '');
+
+    if (!$cId || empty($dcIdsPost)) {
+        http_response_code(400);
+        echo json_encode(['error' => 'competition_id en dc_ids zijn verplicht']);
+        exit;
+    }
+
+    try {
+        if ($action === 'set_sas') {
+            $val = !empty($body['value']) ? 1 : 0;
+
+            // Vind het tijdschema voor deze competitie
+            $tsStmt = $pdo->prepare(
+                "SELECT id FROM competition_tijdschema WHERE competition_id = ?"
+            );
+            $tsStmt->execute([$cId]);
+            $tsId = $tsStmt->fetchColumn();
+            if (!$tsId) {
+                http_response_code(404);
+                echo json_encode(['error' => 'Geen tijdschema gevonden']);
+                exit;
+            }
+
+            $totaalBijgewerkt = 0;
+            $problemen = [];
+            foreach ($dcIdsPost as $dcId) {
+                // Bepaal WELKE cat-config rij(en) de toggle moeten krijgen via
+                // een fallback-ladder. SELECT eerst (niet UPDATE + rowCount)
+                // omdat MySQL/PDO rowCount=0 geeft als de nieuwe waarde gelijk
+                // is aan de bestaande — dan zouden we ten onrechte denken dat
+                // de rij niet bestaat.
+                $matchIds = [];
+
+                // Stap 1: exacte distance_id
+                $s1 = $pdo->prepare("
+                    SELECT id FROM tijdschema_cat_config
+                    WHERE tijdschema_id = ? AND dc_id = ?
+                      AND (distance_id = ? OR (distance_id IS NULL AND ? = ''))
+                ");
+                $s1->execute([$tsId, $dcId, $dId, $dId]);
+                $matchIds = $s1->fetchAll(PDO::FETCH_COLUMN);
+
+                // Stap 2a: distance_id via distances-tabel (naam → id)
+                if (empty($matchIds) && $dNaam !== '') {
+                    $s2 = $pdo->prepare("
+                        SELECT cc.id FROM tijdschema_cat_config cc
+                        WHERE cc.tijdschema_id = ? AND cc.dc_id = ?
+                          AND cc.distance_id IN (
+                              SELECT d.id FROM distances d
+                              WHERE d.distance_combination_id = ? AND d.name = ?
+                          )
+                    ");
+                    $s2->execute([$tsId, $dcId, $dcId, $dNaam]);
+                    $matchIds = $s2->fetchAll(PDO::FETCH_COLUMN);
+                }
+
+                // Stap 2b: distance_id via tijdschema_ritten
+                if (empty($matchIds) && $dNaam !== '') {
+                    $s3 = $pdo->prepare("
+                        SELECT cc.id FROM tijdschema_cat_config cc
+                        WHERE cc.tijdschema_id = ? AND cc.dc_id = ?
+                          AND cc.distance_id IN (
+                              SELECT DISTINCT r.distance_id
+                              FROM tijdschema_ritten r
+                              WHERE r.tijdschema_id = ? AND r.dc_id = ?
+                                AND r.afstand_naam = ?
+                                AND r.distance_id IS NOT NULL
+                          )
+                    ");
+                    $s3->execute([$tsId, $dcId, $tsId, $dcId, $dNaam]);
+                    $matchIds = $s3->fetchAll(PDO::FETCH_COLUMN);
+                }
+
+                // Stap 3: als er precies 1 cat-config rij is voor dit dc_id
+                if (empty($matchIds)) {
+                    $s4 = $pdo->prepare("
+                        SELECT id FROM tijdschema_cat_config
+                        WHERE tijdschema_id = ? AND dc_id = ?
+                    ");
+                    $s4->execute([$tsId, $dcId]);
+                    $alle = $s4->fetchAll(PDO::FETCH_COLUMN);
+                    if (count($alle) === 1) {
+                        $matchIds = $alle;
+                    } elseif (!empty($alle)) {
+                        // Echte mismatch — diagnostics verzamelen
+                        $distStmt = $pdo->prepare("
+                            SELECT distance_id FROM tijdschema_cat_config
+                            WHERE tijdschema_id = ? AND dc_id = ?
+                        ");
+                        $distStmt->execute([$tsId, $dcId]);
+                        $aanwezig = array_map(
+                            fn($v) => $v === '' ? '""' : $v,
+                            $distStmt->fetchAll(PDO::FETCH_COLUMN)
+                        );
+                        $problemen[] = "dc_id={$dcId}: " . count($alle)
+                                     . " rijen [" . implode(',', $aanwezig) . "]; "
+                                     . "zoekt='{$dId}' naam='{$dNaam}' — geen match";
+                    }
+                    // lege $alle (secondary DC): geen probleem, stilletjes overslaan
+                }
+
+                // UPDATE de gevonden rijen via primaire-key (altijd betrouwbaar)
+                if (!empty($matchIds)) {
+                    $ph = implode(',', array_fill(0, count($matchIds), '?'));
+                    $upd = $pdo->prepare("
+                        UPDATE tijdschema_cat_config
+                        SET series_alleen_startvolgorde = ?
+                        WHERE id IN ($ph)
+                    ");
+                    $upd->execute(array_merge([$val], $matchIds));
+                    $totaalBijgewerkt += count($matchIds);
+                }
+            }
+
+            if ($totaalBijgewerkt === 0) {
+                http_response_code(404);
+                echo json_encode([
+                    'error' => 'Geen enkele cat-config bijgewerkt. '
+                             . implode('; ', $problemen),
+                ]);
+                exit;
+            }
+
+            echo json_encode([
+                'ok' => true, 'value' => $val,
+                'rows' => $totaalBijgewerkt,
+                'problemen' => $problemen,  // deel-fouten bij merged combos
+            ]);
+            exit;
+        }
+        http_response_code(400);
+        echo json_encode(['error' => 'Onbekende action']);
+        exit;
+    } catch (Throwable $e) {
+        http_response_code(500);
+        echo json_encode(['error' => $e->getMessage()]);
+        exit;
+    }
+}
+
 $compId    = trim($_GET['competition_id'] ?? '');
 $dcIdsRaw  = trim($_GET['dc_ids'] ?? $_GET['dc_id'] ?? '');
 $dcIds     = array_values(array_filter(array_map('trim', explode(',', $dcIdsRaw))));
@@ -55,19 +214,19 @@ if (!$compId || !$primaryDcId) {
 }
 
 try {
-    // ── Systeem bepalen ───────────────────────────────────────────────────────
+    // ── Systeem + tijdschema-id bepalen ───────────────────────────────────────
+    // tsId wordt zowel in de internationaal- als de full-final-flow gebruikt,
+    // dus we halen 'm eenmaal bovenaan op.
     $sysStmt = $pdo->prepare("
-        SELECT systeem FROM competition_tijdschema WHERE competition_id = ?
+        SELECT id, systeem FROM competition_tijdschema WHERE competition_id = ?
     ");
     $sysStmt->execute([$compId]);
-    $systeem = $sysStmt->fetchColumn() ?: 'internationaal-nieuw';
+    $tsRow   = $sysStmt->fetch(PDO::FETCH_ASSOC);
+    $tsId    = $tsRow['id']      ?? null;
+    $systeem = $tsRow['systeem'] ?? 'internationaal-nieuw';
 
     if ($systeem !== 'full-final') {
         // ── Internationaal systeem: cascading elimination ranking ─────────
-        // Haal tijdschema-id + afstandsnaam op
-        $tsStmt = $pdo->prepare("SELECT id FROM competition_tijdschema WHERE competition_id = ?");
-        $tsStmt->execute([$compId]);
-        $tsId = $tsStmt->fetchColumn();
 
         // Ranking methods per ronde ophalen
         $rankingMethods = ['heats' => 'time', 'kwartfinale' => 'time',
@@ -82,7 +241,7 @@ try {
             $afNaam = $afNaamStmt->fetchColumn();
             if ($afNaam) {
                 $acStmt = $pdo->prepare("
-                    SELECT heats_ranking, kwart_ranking, half_ranking, finale_ranking, race_type
+                    SELECT heats_ranking, kwart_ranking, half_ranking, finale_ranking
                     FROM tijdschema_afstand_config
                     WHERE tijdschema_id = ? AND afstand_naam = ?
                 ");
@@ -93,9 +252,23 @@ try {
                     $rankingMethods['kwartfinale']   = $ac['kwart_ranking'] ?? 'time';
                     $rankingMethods['halve_finale']  = $ac['half_ranking']  ?? 'time';
                     $rankingMethods['finale_a']      = $ac['finale_ranking'] ?? 'time';
-                    $raceType = $ac['race_type'] ?? 'sprint';
                 }
             }
+        }
+        // race_type (sprint/long_distance) afleiden uit distances.race_type —
+        // canonieke bron. distances.race_type = 'sprint' → sprint-sanctie-
+        // gedrag; alles anders → long_distance-gedrag (W1/W2 beschikbaar,
+        // DNF = reverse withdrawal).
+        $raceType = 'sprint';
+        if ($distId) {
+            $drt = $pdo->prepare("
+                SELECT race_type FROM distances
+                WHERE distance_combination_id = ? AND id = ?
+                LIMIT 1
+            ");
+            $drt->execute([$primaryDcId, $distId]);
+            $distRt = $drt->fetchColumn();
+            if ($distRt && $distRt !== 'sprint') $raceType = 'long_distance';
         }
 
         // Alle heats voor deze afstand ophalen, per ronde
@@ -367,6 +540,14 @@ try {
         $rijderInfo   = [];   // person_license => [full_name, short_name, start_number, categorie]
         $sancties     = [];   // person_license => sanctie|null (finale-sanctie)
 
+        // Track welke rijders in "overigen" (sanctie/geen finish) vallen — zowel
+        // in serie als finale. In gecombineerde modus horen alle rijders in de
+        // A-finale; sanctie-rijders moeten als "laatste van de hele afstand"
+        // worden gerankt (niet laatste van hun mini-heat als ze in een heat van
+        // 1 rijder zitten door eerdere data-anomalie).
+        $serieOverigenLics  = [];
+        $finaleOverigenLics = [];
+
         // ── Serie ─────────────────────────────────────────────────────────────
         $serieOffset = 0;
         $serieCompleet = true;
@@ -376,7 +557,7 @@ try {
             $rows = sorteerRijdersOpTijd($rows);
             if (!isHeatCompleet($rows)) $serieCompleet = false;
             $nRijders  = count($rows);
-            $finishers = array_values(array_filter($rows, fn($r) => $r['finishpositie'] !== null));
+            [$finishers, $overigen] = splitsFinishersOverigen($rows);
             $rangs     = berekenExAequoRangs($finishers, $serieOffset);
             foreach ($finishers as $i => $r) {
                 $lic = $r['person_license'];
@@ -389,12 +570,16 @@ try {
                     'categorie'    => $r['categorie'],
                 ];
             }
-            // Sanctie-rijders: rang = laatste plek in deze heat
-            $overigen = array_values(array_filter($rows, fn($r) => $r['finishpositie'] === null));
+            // Sanctie-rijders: voorlopig heat-local, post-correctie hieronder
             foreach ($overigen as $r) {
                 $lic = $r['person_license'];
                 $serieRangs[$lic]  = $serieOffset + $nRijders;
                 $serieTijden[$lic] = null;
+                $serieOverigenLics[$lic] = true;
+                // Serie-sanctie meenemen (finale-sanctie overschrijft later indien aanwezig)
+                if (!empty($r['sanctie']) && !isset($sancties[$lic])) {
+                    $sancties[$lic] = $r['sanctie'];
+                }
                 $rijderInfo[$lic]  = [
                     'full_name'    => $r['full_name'],
                     'short_name'   => $r['short_name'],
@@ -403,6 +588,10 @@ try {
                 ];
             }
             $serieOffset += $nRijders;
+        }
+        // Post-correctie series: overigen = laatste van alle serie-rijders
+        foreach (array_keys($serieOverigenLics) as $lic) {
+            $serieRangs[$lic] = $serieOffset;
         }
 
         // ── Finale ────────────────────────────────────────────────────────────
@@ -414,7 +603,7 @@ try {
             $rows = sorteerRijdersOpTijd($rows);
             if (!isHeatCompleet($rows)) $finaleCompleet = false;
             $nRijders  = count($rows);
-            $finishers = array_values(array_filter($rows, fn($r) => $r['finishpositie'] !== null));
+            [$finishers, $overigen] = splitsFinishersOverigen($rows);
             $rangs     = berekenExAequoRangs($finishers, $finaleOffset);
             foreach ($finishers as $i => $r) {
                 $lic = $r['person_license'];
@@ -427,12 +616,17 @@ try {
                     'categorie'    => $r['categorie'],
                 ];
             }
-            $overigen = array_values(array_filter($rows, fn($r) => $r['finishpositie'] === null));
             foreach ($overigen as $r) {
                 $lic = $r['person_license'];
                 $finaleRangs[$lic]  = $finaleOffset + $nRijders;
                 $finaleTijden[$lic] = null;
-                $sancties[$lic]     = $r['sanctie'];
+                $finaleOverigenLics[$lic] = true;
+                // Finale-sanctie wint van serie-sanctie, maar alleen als er echt
+                // een finale-sanctie is (anders kan een pending rijder per ongeluk
+                // z'n serie-sanctie kwijtraken).
+                if (!empty($r['sanctie'])) {
+                    $sancties[$lic] = $r['sanctie'];
+                }
                 $rijderInfo[$lic] ??= [
                     'full_name'    => $r['full_name'],
                     'short_name'   => $r['short_name'],
@@ -442,10 +636,78 @@ try {
             }
             $finaleOffset += $nRijders;
         }
+        // Post-correctie finale: overigen = laatste van alle finale-rijders
+        // (gecombineerde modus = alleen A-finale → geen heat-lokaal maar totaal)
+        foreach (array_keys($finaleOverigenLics) as $lic) {
+            $finaleRangs[$lic] = $finaleOffset;
+        }
+
+        // Per-cat vlag: serie telt alleen als startvolgorde (full-final variant).
+        // Één bron van waarheid: tijdschema_cat_config.series_alleen_startvolgorde.
+        // Fallback-ladder (zelfde logica als in de POST):
+        //   1. exacte match op distance_id
+        //   2. via afstand_naam → tijdschema_ritten → distance_id's (voor splits)
+        //   3. als er precies 1 rij is voor dit dc_id, gebruik die
+        $distNaamGet = trim($_GET['distance_naam'] ?? '');
+        $sasStmt = $pdo->prepare("
+            SELECT series_alleen_startvolgorde
+            FROM tijdschema_cat_config
+            WHERE tijdschema_id = ? AND dc_id = ?
+              AND (distance_id = ? OR (distance_id IS NULL AND ? = ''))
+            LIMIT 1
+        ");
+        $sasStmt->execute([$tsId, $primaryDcId, $distId, $distId]);
+        $sasRaw = $sasStmt->fetchColumn();
+
+        if ($sasRaw === false && $distNaamGet !== '') {
+            // Match via distances-tabel (naam → id)
+            $sasStmtA = $pdo->prepare("
+                SELECT cc.series_alleen_startvolgorde
+                FROM tijdschema_cat_config cc
+                WHERE cc.tijdschema_id = ? AND cc.dc_id = ?
+                  AND cc.distance_id IN (
+                      SELECT d.id FROM distances d
+                      WHERE d.distance_combination_id = ? AND d.name = ?
+                  )
+                LIMIT 1
+            ");
+            $sasStmtA->execute([$tsId, $primaryDcId, $primaryDcId, $distNaamGet]);
+            $sasRaw = $sasStmtA->fetchColumn();
+        }
+        if ($sasRaw === false && $distNaamGet !== '') {
+            // Of via tijdschema_ritten (als er ritten bestaan)
+            $sasStmt2 = $pdo->prepare("
+                SELECT cc.series_alleen_startvolgorde
+                FROM tijdschema_cat_config cc
+                WHERE cc.tijdschema_id = ? AND cc.dc_id = ?
+                  AND cc.distance_id IN (
+                      SELECT DISTINCT r.distance_id
+                      FROM tijdschema_ritten r
+                      WHERE r.tijdschema_id = ? AND r.dc_id = ?
+                        AND r.afstand_naam = ?
+                        AND r.distance_id IS NOT NULL
+                  )
+                LIMIT 1
+            ");
+            $sasStmt2->execute([$tsId, $primaryDcId, $tsId, $primaryDcId, $distNaamGet]);
+            $sasRaw = $sasStmt2->fetchColumn();
+        }
+        if ($sasRaw === false) {
+            $sasStmt3 = $pdo->prepare("
+                SELECT series_alleen_startvolgorde
+                FROM tijdschema_cat_config
+                WHERE tijdschema_id = ? AND dc_id = ?
+            ");
+            $sasStmt3->execute([$tsId, $primaryDcId]);
+            $rows = $sasStmt3->fetchAll(PDO::FETCH_COLUMN);
+            if (count($rows) === 1) $sasRaw = $rows[0];
+        }
+        $sasFlag = (bool)(int)($sasRaw === false ? 0 : $sasRaw);
 
         $gecombineerd = berekenCombineerdResultaat(
             $serieRangs, $finaleRangs, $rijderInfo,
-            $serieTijden, $finaleTijden, $sancties
+            $serieTijden, $finaleTijden, $sancties,
+            $sasFlag
         );
 
         $hasResults = $serieCompleet && $finaleCompleet && !empty($gecombineerd);
@@ -499,6 +761,7 @@ try {
             'modus'        => 'gecombineerd',
             'gecombineerd' => $gecombineerd,
             'has_results'  => $hasResults,
+            'serie_alleen_startvolgorde' => $sasFlag,
         ], JSON_UNESCAPED_UNICODE);
         exit;
     }
@@ -522,8 +785,7 @@ try {
         $compleet = isHeatCompleet($rows);
 
         // ── Ex-aequo rang toekennen ───────────────────────────────────────────
-        $finishers = array_values(array_filter($rows, fn($r) => $r['finishpositie'] !== null));
-        $overigen  = array_values(array_filter($rows, fn($r) => $r['finishpositie'] === null));
+        [$finishers, $overigen] = splitsFinishersOverigen($rows);
 
         $rangs = berekenExAequoRangs($finishers, $rangOffset);
 

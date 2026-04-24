@@ -1,20 +1,26 @@
 <?php
 // ============================================================
-//  InlineComp – Live klassement
+//  InlineComp – (Tussen)klassement op basis van vastgelegde uitslagen
 //
 //  GET ?competition_id=X&dc_ids=A,B[&dc_id=Y]
 //
-//  Berekent het (tussen)klassement op basis van de huidige
-//  finale-resultaten in heats/results.
-//  Punten = rang per afstand (1e = 1 pt, 2e = 2 pt, …).
-//  Sanctie-rijders krijgen standaard de laatste positie
-//  van hun heat als punten (bewerkbaar via POST opslaan).
+//  Het klassement wordt puur afgeleid van `uitslag_afstand` — de tabel
+//  waarin elke "Uitslag bevestigen"-actie de cascading rang + punten +
+//  sanctie per rijder per afstand schrijft. Er gebeurt geen live
+//  herberekening in deze endpoint: een wijziging werkt pas door in het
+//  klassement nadat de operator de bijbehorende afstand opnieuw heeft
+//  bevestigd.
+//
+//  Bewerkbaarheid:
+//    - full-final + sanctie: operator kan de punten lokaal aanpassen
+//      (verschillende competities hanteren eigen regels voor sancties)
+//    - internationaal: sanctie volgt strict het reglement → niet bewerkbaar
+//    - niet-sanctie rijders: nooit bewerkbaar, punten = rang
 //
 //  Respons:
 //  {
-//    "afstanden":  [{ "id", "name", "compleet" }],
-//    "klassement": [{ "rang", "person_license", "full_name",
-//                     "start_number", "categorie",
+//    "afstanden":  [{ "id", "name", "compleet", "vastgelegd" }],
+//    "klassement": [{ "rang", "person_license", "full_name", ...,
 //                     "totaal_punten",
 //                     "afstanden": { dist_id: { rang, punten,
 //                       sanctie, bewerkbaar, override } } }],
@@ -27,7 +33,6 @@ header('Access-Control-Allow-Origin: *');
 
 require_once __DIR__ . '/../../config_inlinecomp.php';
 require_once __DIR__ . '/../auth/session.php';
-require_once __DIR__ . '/_uitslag_helper.php';
 requireAuth($pdo);
 
 $compId      = trim($_GET['competition_id'] ?? '');
@@ -49,7 +54,7 @@ try {
 
     // ── Afstanden voor deze DC ────────────────────────────────────────────────
     $distStmt = $pdo->prepare("
-        SELECT id, name, number
+        SELECT id, name, number, race_type
         FROM distances
         WHERE distance_combination_id = ?
           AND (target_group IS NULL OR target_group = '')
@@ -67,7 +72,7 @@ try {
         $tsId = $tsIdStmt->fetchColumn();
         if ($tsId) {
             $rcStmt = $pdo->prepare("
-                SELECT afstand_naam, race_type,
+                SELECT afstand_naam,
                        heats_ranking, kwart_ranking, half_ranking, finale_ranking
                 FROM tijdschema_afstand_config WHERE tijdschema_id = ?
             ");
@@ -104,33 +109,31 @@ try {
     }
 
     // ── Overrides uit uitslag_afstand ─────────────────────────────────────────
+    // Haal per rijder/afstand de vastgelegde uitslag op. Deze tabel bevat
+    // de cascading rang zoals berekend door uitslag_vastleggen (incl. KF/HF
+    // via berekenInternationaalResultaat). We gebruiken hieruit:
+    //   - `rang` als de "vastgelegde" rang voor rijders die niet in de live
+    //     finale_a/b heats zitten (KF/HF-losers bij internationaal)
+    //   - `punten` als override (alleen relevant voor sanctie-rijders, waar
+    //     de operator lokaal afwijkt van de default)
+    //   - `sanctie` zodat we weten of de vastgelegde rij een sanctie-rijder
+    //     betrof
     $dcPh = implode(',', array_fill(0, count($dcIds), '?'));
     $ovStmt = $pdo->prepare("
-        SELECT person_license, distance_id, punten
+        SELECT person_license, distance_id, rang, punten, sanctie
         FROM uitslag_afstand
         WHERE competition_id             = ?
           AND distance_combination_id IN ($dcPh)
-          AND punten IS NOT NULL
     ");
     $ovStmt->execute(array_merge([$compId], $dcIds));
-    $overrides = []; // [person_license][distance_id] => punten
+    $vastgelegdeRijen = []; // [lic][distId] => { rang, punten, sanctie }
     foreach ($ovStmt->fetchAll(PDO::FETCH_ASSOC) as $ov) {
-        $overrides[$ov['person_license']][$ov['distance_id']] = (float)$ov['punten'];
+        $vastgelegdeRijen[$ov['person_license']][$ov['distance_id']] = [
+            'rang'    => $ov['rang'] !== null ? (int)$ov['rang'] : null,
+            'punten'  => $ov['punten'] !== null ? (float)$ov['punten'] : null,
+            'sanctie' => $ov['sanctie'],
+        ];
     }
-
-    // ── Rijder-info ophalen (alle finale deelnemers) ──────────────────────────
-    $rijderStmt = $pdo->prepare("
-        SELECT he.person_license,
-               p.full_name, p.short_name, p.start_number,
-               p.category  AS categorie,
-               res.finishpositie, res.tijd_ms, res.sanctie,
-               res.rondes, res.punten AS pk_punten
-        FROM heat_entries he
-        JOIN persons p ON p.license_key = he.person_license
-        LEFT JOIN results res ON res.heat_entry_id = he.id
-        WHERE he.heat_id = ?
-        ORDER BY he.startpositie
-    ");
 
     // ── Vastgelegd-status per afstand ophalen ────────────────────────────────
     $vastStmt = $pdo->prepare("
@@ -146,227 +149,100 @@ try {
         $vastgelegdMap[$v['distance_id']] = (int)$v['n'] > 0;
     }
 
-    $personCache = [];  // person_license → info
-    $puntenMap   = [];  // person_license → [ dist_id → {...} ]
+    // ── Persons-info ophalen voor alle rijders met vastgelegde uitslag ──────
+    // Klassement werkt puur op basis van vastgelegde uitslagen — we hoeven
+    // dus niet meer door heat_entries/results te lopen om rijder-info op
+    // te halen. Alleen wie een uitslag_afstand rij heeft, verschijnt in
+    // het klassement.
+    $personCache = [];
+    $alleKlasLics = array_keys($vastgelegdeRijen);
+    if ($alleKlasLics) {
+        $licPh = implode(',', array_fill(0, count($alleKlasLics), '?'));
+        $pStmt = $pdo->prepare("
+            SELECT license_key, full_name, short_name, start_number,
+                   category AS categorie, club_short, club_full, sponsor
+            FROM persons
+            WHERE license_key IN ($licPh)
+        ");
+        $pStmt->execute($alleKlasLics);
+        foreach ($pStmt->fetchAll(PDO::FETCH_ASSOC) as $p) {
+            $personCache[$p['license_key']] = [
+                'full_name'    => $p['full_name'],
+                'short_name'   => $p['short_name'],
+                'start_number' => $snMap[$p['license_key']] ?? $p['start_number'],
+                'categorie'    => $p['categorie'],
+                'club_short'   => $p['club_short'] ?? null,
+                'club_full'    => $p['club_full']  ?? null,
+                'sponsor'      => $p['sponsor']    ?? null,
+            ];
+        }
+    }
+
+    // ── puntenMap vullen uit vastgelegde uitslagen ──────────────────────────
+    $puntenMap     = [];  // person_license → [ dist_id → {...} ]
     $afstandenInfo = [];
+    $isFullFinal   = ($systeem === 'full-final');
 
     foreach ($distances as $dist) {
-        $distId = $dist['id'];
+        $distId       = $dist['id'];
+        $isVastgelegd = !empty($vastgelegdMap[$distId]);
 
-        // Heats voor deze afstand (serie + finales, voor gecombineerde detectie)
-        $heatStmt = $pdo->prepare("
-            SELECT h.id, h.heat_nr,
-                   COALESCE(ts_r.ronde_type, 'finale_a') AS ronde_type
-            FROM heats h
-            LEFT JOIN tijdschema_ritten ts_r ON ts_r.id = h.tijdschema_rit_id
-            WHERE h.competition_id          = ?
-              AND h.distance_combination_id IN ($dcPh)
-              AND (
-                  ts_r.ronde_type IN ('heats', 'finale_a', 'finale_b')
-                  OR (ts_r.ronde_type IS NULL AND h.ronde = 4)
-              )
-              AND COALESCE(h.distance_id, ts_r.distance_id) = ?
-            ORDER BY
-                CASE COALESCE(ts_r.ronde_type, 'finale_a')
-                    WHEN 'heats'    THEN 0
-                    WHEN 'finale_a' THEN 1
-                    WHEN 'finale_b' THEN 2
-                    ELSE 3
-                END,
-                h.heat_nr ASC
-        ");
-        $heatStmt->execute(array_merge([$compId], $dcIds, [$distId]));
-        $heats = $heatStmt->fetchAll(PDO::FETCH_ASSOC);
-
-        if (empty($heats)) {
-            $afstandenInfo[] = ['id' => $distId, 'name' => $dist['name'], 'compleet' => false,
-                                 'vastgelegd' => !empty($vastgelegdMap[$distId])];
-            continue;
-        }
-
-        // ── Helper: rows laden voor één heat ───────────────────────────────────
-        $laadRows = function(array $heat) use ($rijderStmt, $snMap, &$personCache): array {
-            $rijderStmt->execute([(int)$heat['id']]);
-            $rows = $rijderStmt->fetchAll(PDO::FETCH_ASSOC);
-            foreach ($rows as &$r) {
-                $r['start_number'] = $snMap[$r['person_license']] ?? $r['start_number'];
-                $personCache[$r['person_license']] ??= [
-                    'full_name'    => $r['full_name'],
-                    'short_name'   => $r['short_name'],
-                    'start_number' => $r['start_number'],
-                    'categorie'    => $r['categorie'],
-                ];
-            }
-            unset($r);
-            return $rows;
-        };
-
-        $distCompleet = false;
-
-        // ── Gecombineerde modus: 1 serie + alleen A-finale ────────────────────
-        if (isCombineerdModus($heats)) {
-            $serieHeats  = array_values(array_filter($heats, fn($h) => $h['ronde_type'] === 'heats'));
-            $finaleHeats = array_values(array_filter($heats, fn($h) => $h['ronde_type'] !== 'heats'));
-
-            $serieRangs  = []; $finaleRangs  = [];
-            $serieTijden = []; $finaleTijden = [];
-            $rijderInfo  = []; $sancties     = [];
-            $serieCompleet  = true;
-            $finaleCompleet = true;
-
-            $serieOffset = 0;
-            foreach ($serieHeats as $heat) {
-                $rows = $laadRows($heat);
-                if (!$rows) { $serieCompleet = false; continue; }
-                $rows = sorteerRijdersOpTijd($rows);
-                if (!isHeatCompleet($rows)) $serieCompleet = false;
-                $nRijders  = count($rows);
-                $finishers = array_values(array_filter($rows, fn($r) => $r['finishpositie'] !== null));
-                $overigen  = array_values(array_filter($rows, fn($r) => $r['finishpositie'] === null));
-                $rangs     = berekenExAequoRangs($finishers, $serieOffset);
-                foreach ($finishers as $i => $r) {
-                    $lic = $r['person_license'];
-                    $serieRangs[$lic]  = $rangs[$i];
-                    $serieTijden[$lic] = $r['tijd_ms'] !== null ? (int)$r['tijd_ms'] : null;
-                    $rijderInfo[$lic]  = $personCache[$lic];
-                }
-                foreach ($overigen as $r) {
-                    $lic = $r['person_license'];
-                    $serieRangs[$lic]  = $serieOffset + $nRijders;
-                    $serieTijden[$lic] = null;
-                    $rijderInfo[$lic]  = $personCache[$lic];
-                }
-                $serieOffset += $nRijders;
-            }
-
-            $finaleOffset = 0;
-            foreach ($finaleHeats as $heat) {
-                $rows = $laadRows($heat);
-                if (!$rows) { $finaleCompleet = false; continue; }
-                $rows = sorteerRijdersOpTijd($rows);
-                if (!isHeatCompleet($rows)) $finaleCompleet = false;
-                $nRijders  = count($rows);
-                $finishers = array_values(array_filter($rows, fn($r) => $r['finishpositie'] !== null));
-                $overigen  = array_values(array_filter($rows, fn($r) => $r['finishpositie'] === null));
-                $rangs     = berekenExAequoRangs($finishers, $finaleOffset);
-                foreach ($finishers as $i => $r) {
-                    $lic = $r['person_license'];
-                    $finaleRangs[$lic]  = $rangs[$i];
-                    $finaleTijden[$lic] = $r['tijd_ms'] !== null ? (int)$r['tijd_ms'] : null;
-                    $rijderInfo[$lic] ??= $personCache[$lic];
-                }
-                foreach ($overigen as $r) {
-                    $lic = $r['person_license'];
-                    $finaleRangs[$lic]  = $finaleOffset + $nRijders;
-                    $finaleTijden[$lic] = null;
-                    $sancties[$lic]     = $r['sanctie'];
-                    $rijderInfo[$lic] ??= $personCache[$lic];
-                }
-                $finaleOffset += $nRijders;
-            }
-
-            $distCompleet = $serieCompleet && $finaleCompleet;
-            $gecombineerd = berekenCombineerdResultaat(
-                $serieRangs, $finaleRangs, $rijderInfo,
-                $serieTijden, $finaleTijden, $sancties
-            );
-
-            foreach ($gecombineerd as $gc) {
-                $lic      = $gc['person_license'];
-                $override = $overrides[$lic][$distId] ?? null;
-                $isSanctie = $gc['sanctie'] !== null;
-                if (!isset($puntenMap[$lic])) $puntenMap[$lic] = [];
-                $puntenMap[$lic][$distId] = [
-                    'rang'       => $gc['rang'],
-                    'punten'     => $override !== null ? $override : (float)$gc['rang'],
-                    'sanctie'    => $gc['sanctie'],
-                    'bewerkbaar' => $isSanctie,
-                    'override'   => $override !== null,
-                    'modus'      => 'gecombineerd',
-                    'serie_rang' => $gc['serie_rang'],
-                    'finale_rang'=> $gc['finale_rang'],
-                ];
-            }
-
-            $afstandenInfo[] = ['id' => $distId, 'name' => $dist['name'], 'compleet' => $distCompleet,
-                                 'modus' => 'gecombineerd', 'vastgelegd' => !empty($vastgelegdMap[$distId])];
-            continue;
-        }
-
-        // ── Normaal: finales ──────────────────────────────────────────────────
-        $finaleHeatsOnly = array_values(array_filter($heats, fn($h) => $h['ronde_type'] !== 'heats'));
-        $rangOffset = 0;
-
-        foreach ($finaleHeatsOnly as $heat) {
-            $rows = $laadRows($heat);
-            $nRijders = count($rows);
-            if (!$nRijders) continue;
-
-            if (isHeatCompleet($rows)) $distCompleet = true;
-
-            $rows = sorteerRijdersOpTijd($rows);
-
-            $finishers = array_values(array_filter($rows, fn($r) => $r['finishpositie'] !== null));
-            $overigen  = array_values(array_filter($rows, fn($r) => $r['finishpositie'] === null));
-
-            $rangs = berekenExAequoRangs($finishers, $rangOffset);
-
-            // Finishers: punten = rang
-            foreach ($finishers as $i => $r) {
-                $lic = $r['person_license'];
-                if (!isset($puntenMap[$lic])) $puntenMap[$lic] = [];
-                $override = $overrides[$lic][$distId] ?? null;
-                $puntenMap[$lic][$distId] = [
-                    'rang'       => $rangs[$i],
-                    'punten'     => $override !== null ? $override : (float)$rangs[$i],
-                    'sanctie'    => null,
-                    'bewerkbaar' => false,
-                    'override'   => $override !== null,
-                ];
-            }
-
-            // Sanctie-rijders: default punten = laatste positie van deze heat
-            $defaultPunten = (float)($rangOffset + $nRijders);
-            foreach ($overigen as $r) {
-                $s = $r['sanctie'] ?? null;
-                if (!$s) continue; // nog niet ingevuld
-                $lic = $r['person_license'];
-                if (!isset($puntenMap[$lic])) $puntenMap[$lic] = [];
-                $override = $overrides[$lic][$distId] ?? null;
-                $puntenMap[$lic][$distId] = [
-                    'rang'       => null,
-                    'punten'     => $override !== null ? $override : $defaultPunten,
-                    'sanctie'    => $s,
-                    'bewerkbaar' => true,
-                    'override'   => $override !== null,
-                ];
-            }
-
-            // Offset: totale heat-grootte (ook DNS/DNF bezetten een slot)
-            $rangOffset += $nRijders;
-        }
-
-        $afInfo = ['id' => $distId, 'name' => $dist['name'], 'compleet' => $distCompleet,
-                   'vastgelegd' => !empty($vastgelegdMap[$distId])];
-
-        // Ranking methods per ronde (alleen internationaal)
-        if ($systeem !== 'full-final' && isset($rankingConfigs[$dist['name']])) {
+        $afInfo = [
+            'id'         => $distId,
+            'name'       => $dist['name'],
+            'compleet'   => $isVastgelegd,
+            'vastgelegd' => $isVastgelegd,
+        ];
+        // Ranking-methods per ronde (alleen internationaal) voor UI-info.
+        // race_type (sprint/long_distance) wordt afgeleid uit distances.race_type —
+        // canonieke bron, ongeacht systeem.
+        if (!$isFullFinal && isset($rankingConfigs[$dist['name']])) {
             $rc = $rankingConfigs[$dist['name']];
-            $afInfo['race_type'] = $rc['race_type'] ?? 'sprint';
+            $distRt = $dist['race_type'] ?? 'sprint';
+            $afInfo['race_type'] = ($distRt && $distRt !== 'sprint') ? 'long_distance' : 'sprint';
             $afInfo['ranking'] = [
-                'heats'   => $rc['heats_ranking']  ?? 'time',
-                'kwart'   => $rc['kwart_ranking']   ?? 'time',
-                'half'    => $rc['half_ranking']    ?? 'time',
-                'finale'  => $rc['finale_ranking']  ?? 'time',
+                'heats'  => $rc['heats_ranking']  ?? 'time',
+                'kwart'  => $rc['kwart_ranking']  ?? 'time',
+                'half'   => $rc['half_ranking']   ?? 'time',
+                'finale' => $rc['finale_ranking'] ?? 'time',
             ];
-            // Welke rondes bestaan er voor deze afstand?
             if (isset($rondeStmt)) {
                 $rondeStmt->execute([$tsId, $primaryDcId, $distId]);
                 $afInfo['rondes'] = array_column($rondeStmt->fetchAll(PDO::FETCH_ASSOC), 'ronde_type');
             }
         }
-
         $afstandenInfo[] = $afInfo;
+
+        // Voor elke rijder die een vastgelegde rij heeft voor deze afstand,
+        // vul de klassement-entry:
+        //   punten  = uitslag_afstand.punten (valt terug op rang als leeg)
+        //   sanctie = uitslag_afstand.sanctie
+        //   bewerkbaar: alleen bij full-final + sanctie (operator kan dan
+        //     afwijken van de default per lokale competitie-regel). Bij
+        //     internationaal volgt de sanctie het reglement strict, dus
+        //     niet bewerkbaar.
+        foreach ($vastgelegdeRijen as $lic => $perDist) {
+            if (!isset($perDist[$distId])) continue;
+            $row       = $perDist[$distId];
+            $isSanctie = !empty($row['sanctie']);
+            $rang      = $row['rang'];
+            $punten    = $row['punten'];
+            if ($punten === null && $rang !== null) $punten = (float)$rang;
+            if ($punten === null) $punten = 0.0;
+            $bewerkbaar = $isFullFinal && $isSanctie;
+            $heeftOverride = $isFullFinal
+                && $rang !== null
+                && (float)$rang !== (float)$punten;
+
+            if (!isset($puntenMap[$lic])) $puntenMap[$lic] = [];
+            $puntenMap[$lic][$distId] = [
+                'rang'       => $rang,
+                'punten'     => $punten,
+                'sanctie'    => $row['sanctie'],
+                'bewerkbaar' => $bewerkbaar,
+                'override'   => $heeftOverride,
+            ];
+        }
     }
 
     // ── Alle sancties per rijder over alle rondes + afstanden ───────────────
@@ -390,6 +266,7 @@ try {
             JOIN heats h ON h.id = he.heat_id
             LEFT JOIN tijdschema_ritten ts_r ON ts_r.id = h.tijdschema_rit_id
             LEFT JOIN distances d ON d.id = COALESCE(h.distance_id, ts_r.distance_id)
+                                 AND d.distance_combination_id = h.distance_combination_id
             JOIN results res ON res.heat_entry_id = he.id
             WHERE he.person_license IN ($licPh)
               AND h.competition_id = ?
@@ -426,6 +303,9 @@ try {
             'short_name'     => $info['short_name']   ?? '',
             'start_number'   => $info['start_number'] ?? null,
             'categorie'      => $info['categorie']    ?? '',
+            'club_short'     => $info['club_short']   ?? null,
+            'club_full'      => $info['club_full']    ?? null,
+            'sponsor'        => $info['sponsor']      ?? null,
             'totaal_punten'  => $totaal,
             'alle_sancties'  => $alleSancties[$lic] ?? [],
             'afstanden'      => $distPunten,

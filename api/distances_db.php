@@ -36,7 +36,7 @@ try {
         if ($heeftSplit) {
             // Split-specifieke afstanden gevonden → alleen die
             $stmt = $pdo->prepare("
-                SELECT id, number, name, target_group, value_meters, discipline
+                SELECT id, number, name, target_group, value_meters, discipline, race_type
                 FROM distances
                 WHERE distance_combination_id = ? AND target_group = ?
                 ORDER BY number
@@ -45,7 +45,7 @@ try {
         } else {
             // Geen split-specifiek → basis-afstanden (target_group IS NULL)
             $stmt = $pdo->prepare("
-                SELECT id, number, name, target_group, value_meters, discipline
+                SELECT id, number, name, target_group, value_meters, discipline, race_type
                 FROM distances
                 WHERE distance_combination_id = ?
                   AND (target_group IS NULL OR target_group = '')
@@ -56,7 +56,7 @@ try {
     } else {
         // Geen filter → alle afstanden (voor laden in beheer-tabel)
         $stmt = $pdo->prepare("
-            SELECT id, number, name, target_group, value_meters, discipline
+            SELECT id, number, name, target_group, value_meters, discipline, race_type
             FROM distances
             WHERE distance_combination_id = ?
             ORDER BY number

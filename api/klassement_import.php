@@ -41,6 +41,48 @@ if ($method === 'GET') {
         exit;
     }
 
+    // ── Gefilterde lijst voor seeding-flow ──────────────────────────────
+    //   Bij een specifieke wedstrijd toont deze actie alleen de klassementen
+    //   die voor seeding relevant zijn:
+    //     * serie-klassementen waarvan deze wedstrijd deel uitmaakt
+    //       (klassement_serie_wedstrijden.competition_id = X, telt_mee = 1)
+    //     * PDF-geïmporteerde klassementen van dezelfde organisatie
+    //       als de wedstrijd
+    //   Dit vermijdt dat de dropdown bij loten uit 50+ klassementen bestaat
+    //   die historisch zijn opgebouwd.
+    if ($action === 'list_for_seeding') {
+        $compId = trim($_GET['competition_id'] ?? '');
+        if (!$compId) { echo json_encode([]); exit; }
+        $stmt = $pdo->prepare("
+            SELECT k.id, k.naam, k.seizoen, k.bron_bestand, k.categorieen,
+                   k.totaal_rijders, k.org_id, k.aangemaakt_op
+            FROM klassementen k
+            WHERE
+                -- (1) Serie-klassementen waarvan deze wedstrijd deel is
+                k.id IN (
+                    SELECT s.klassement_id
+                    FROM klassement_series s
+                    JOIN klassement_serie_wedstrijden w ON w.serie_id = s.id
+                    WHERE w.competition_id = ? AND w.telt_mee = 1
+                )
+                -- (2) PDF-klassementen van dezelfde organisatie als de wedstrijd
+                OR (
+                    k.bron_bestand <> '(serie-berekening)'
+                    AND k.org_id = (
+                        SELECT c.organisatie_id FROM competitions c WHERE c.id = ? LIMIT 1
+                    )
+                )
+            ORDER BY k.aangemaakt_op DESC
+        ");
+        $stmt->execute([$compId, $compId]);
+        $rows = $stmt->fetchAll(PDO::FETCH_ASSOC);
+        foreach ($rows as &$r) {
+            $r['categorieen'] = json_decode($r['categorieen'] ?? '[]', true) ?? [];
+        }
+        echo json_encode($rows);
+        exit;
+    }
+
     if ($action === 'list') {
         $orgFilter = trim($_GET['org_id'] ?? '');
         if ($orgFilter) {
@@ -67,21 +109,32 @@ if ($method === 'GET') {
     } elseif ($action === 'get' && $id) {
         $kl = $pdo->prepare(
             "SELECT id, naam, seizoen, bron_bestand, categorieen, totaal_rijders,
-                    org_id, aangemaakt_op
+                    org_id, aangemaakt_op, wedstrijden_meta
              FROM klassementen WHERE id = ?"
         );
         $kl->execute([$id]);
         $k = $kl->fetch(PDO::FETCH_ASSOC);
         if (!$k) { http_response_code(404); echo json_encode(['error' => 'Niet gevonden']); exit; }
-        $k['categorieen'] = json_decode($k['categorieen'] ?? '[]');
+        $k['categorieen']      = json_decode($k['categorieen']      ?? '[]');
+        $k['wedstrijden_meta'] = json_decode($k['wedstrijden_meta'] ?? 'null', true);
 
         $pos = $pdo->prepare(
-            "SELECT positie, start_number, naam, categorie
+            "SELECT positie, start_number, naam, categorie, punten_detail, punten_totaal
              FROM klassement_posities WHERE klassement_id = ?
              ORDER BY positie ASC"
         );
         $pos->execute([$id]);
-        $k['posities'] = $pos->fetchAll(PDO::FETCH_ASSOC);
+        $posRows = $pos->fetchAll(PDO::FETCH_ASSOC);
+        foreach ($posRows as &$p) {
+            $p['punten_detail'] = $p['punten_detail'] !== null
+                ? json_decode($p['punten_detail'], true)
+                : null;
+            $p['punten_totaal'] = $p['punten_totaal'] !== null
+                ? (float)$p['punten_totaal']
+                : null;
+        }
+        unset($p);
+        $k['posities'] = $posRows;
         echo json_encode($k);
     } else {
         http_response_code(400);

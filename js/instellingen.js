@@ -14,9 +14,131 @@ function initInstellingen() {
     el('btn-org-opslaan').addEventListener('click', () => slaOrgOp());
     el('btn-org-verwijderen').addEventListener('click', () => verwijderOrg());
     el('btn-sponsor-add').addEventListener('click', () => voegSponsorRijToe());
-    el('btn-tp-add')?.addEventListener('click', () => voegTransponderRijToe());
+    window._tpDirty = false;
+    window.markTpDirty = function() {
+        window._tpDirty = true;
+        const btn = el('btn-tp-opslaan');
+        if (btn) btn.classList.add('btn-tp-dirty');
+    };
+    window.markTpClean = function() {
+        window._tpDirty = false;
+        const btn = el('btn-tp-opslaan');
+        if (btn) btn.classList.remove('btn-tp-dirty');
+    };
+    window._isTpDirty = () => window._tpDirty;
 
-    // CSV transponder import
+    el('btn-tp-add')?.addEventListener('click', () => { voegTransponderRijToe(); markTpDirty(); });
+
+    // Paginering
+    el('tp-pag-eerste')?.addEventListener('click',   () => { _tpSyncAllePagina(); _tpPagina = 0; _tpToonPagina(); });
+    el('tp-pag-vorige')?.addEventListener('click',   () => { _tpSyncAllePagina(); _tpPagina--; _tpToonPagina(); });
+    el('tp-pag-volgende')?.addEventListener('click', () => { _tpSyncAllePagina(); _tpPagina++; _tpToonPagina(); });
+    el('tp-pag-laatste')?.addEventListener('click',  () => { _tpSyncAllePagina(); _tpPagina = Math.max(0, Math.ceil(_tpGezichtLijst().length / _TP_PER_PAGINA) - 1); _tpToonPagina(); });
+
+    // Sort via klikbare kolom-headers (Excel-stijl): 1e klik = asc, 2e klik = desc.
+    // Wissel van kolom resetten we naar asc. Sync eerst zichtbare rijen (om edits
+    // niet te verliezen), dan pagina 0 en opnieuw renderen.
+    document.querySelectorAll('#org-tp-tabel th.tp-sortable').forEach(th => {
+        th.addEventListener('click', () => {
+            _tpSyncAllePagina();
+            const kol = th.dataset.sort; // 'nr' of 'snr'
+            if (_tpSort === kol) {
+                _tpSortDir = _tpSortDir === 'asc' ? 'desc' : 'asc';
+            } else {
+                _tpSort = kol;
+                _tpSortDir = 'asc';
+            }
+            _tpPagina = 0;
+            _tpToonPagina();
+        });
+    });
+    // Filter-knop in de "Betaald"-header: klik opent een klein menu.
+    // Keuzes: alle / uitgegeven (= toegewezen_snr gevuld) / betaald / niet_betaald.
+    const filterBtn  = el('tp-filter-btn');
+    const filterMenu = el('tp-filter-menu');
+    // Positioneer het menu net onder de knop. position:fixed is gekoppeld aan
+    // viewport, dus we hoeven ons niets aan te trekken van overflow-parents.
+    const positioneerFilterMenu = () => {
+        const r = filterBtn.getBoundingClientRect();
+        filterMenu.style.top  = (r.bottom + 2) + 'px';
+        // Rechter-uitlijnen met de knop — met minimale marge van 4px vanaf de linkerrand
+        const menuBreed = filterMenu.offsetWidth || 140;
+        filterMenu.style.left = Math.max(4, r.right - menuBreed) + 'px';
+    };
+    filterBtn?.addEventListener('click', (e) => {
+        e.stopPropagation();
+        const open = !filterMenu.hidden;
+        filterMenu.hidden = open;
+        filterBtn.setAttribute('aria-expanded', open ? 'false' : 'true');
+        if (!open) positioneerFilterMenu();
+    });
+    // Herpositioneer bij scroll/resize zolang het menu openstaat
+    window.addEventListener('scroll', () => { if (!filterMenu?.hidden) positioneerFilterMenu(); }, true);
+    window.addEventListener('resize', () => { if (!filterMenu?.hidden) positioneerFilterMenu(); });
+    filterMenu?.querySelectorAll('.tp-filter-opt').forEach(btn => {
+        btn.addEventListener('click', (e) => {
+            e.stopPropagation();
+            _tpSyncAllePagina();
+            _tpFilter = btn.dataset.val;
+            _tpPagina = 0;
+            filterMenu.hidden = true;
+            filterBtn.setAttribute('aria-expanded', 'false');
+            _tpToonPagina();
+        });
+    });
+    // Klik buiten menu → dicht
+    document.addEventListener('click', (e) => {
+        if (filterMenu && !filterMenu.hidden
+            && !filterMenu.contains(e.target)
+            && e.target !== filterBtn) {
+            filterMenu.hidden = true;
+            filterBtn?.setAttribute('aria-expanded', 'false');
+        }
+    });
+
+    // Dirty bij elke wijziging in het transponders-tab
+    el('org-tab-transponders')?.addEventListener('input', () => markTpDirty());
+    el('org-tab-transponders')?.addEventListener('change', () => markTpDirty());
+
+    // Print uitgeleverde transponders
+    el('btn-tp-print')?.addEventListener('click', () => {
+        _tpSyncAllePagina();
+        printUitgeleverdeTransponders();
+    });
+
+    // Transponders eigen opslaan-knop
+    el('btn-tp-opslaan')?.addEventListener('click', async () => {
+        const btn    = el('btn-tp-opslaan');
+        const status = el('tp-status');
+        if (!actieveOrg?.id) return;
+        btn.disabled = true;
+        if (status) status.textContent = 'Opslaan…';
+        try {
+            const res = await fetch('api/organisaties.php', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    action: 'save_transponders',
+                    organisatie_id: actieveOrg.id,
+                    transponders: verzamelTransponders(),
+                }),
+            });
+            const data = await res.json();
+            if (data.error) throw new Error(data.error);
+            // Update lokale cache
+            actieveOrg.transponders = data.transponders ?? verzamelTransponders();
+            markTpClean();
+            if (status) { status.innerHTML = '<span class="tp-save-ok">✓ Opgeslagen</span>'; setTimeout(() => { status.textContent = ''; }, 2500); }
+        } catch (e) {
+            if (status) status.innerHTML = `<span style="color:#c00">⚠ ${escHtml(e.message)}</span>`;
+        } finally {
+            btn.disabled = false;
+        }
+    });
+
+    // CSV transponder import — twee-staps: (1) bestand lezen + headers tonen, (2) mapping kiezen + importeren
+    let _csvData = null; // {headers: string[], rows: string[][], sep: string}
+
     el('btn-tp-csv')?.addEventListener('click', () => el('tp-csv-file')?.click());
     el('tp-csv-file')?.addEventListener('change', e => {
         const file = e.target.files[0];
@@ -25,26 +147,173 @@ function initInstellingen() {
         reader.onload = () => {
             const tekst = reader.result;
             const sep = (tekst.split('\n')[0] || '').includes(';') ? ';' : ',';
-            const regels = tekst.trim().split('\n');
-            if (regels.length < 2) return;
-            const header = regels[0].split(sep).map(h => h.trim().toLowerCase().replace(/['"]/g, ''));
-            const body = el('org-tp-body');
-            if (body) body.innerHTML = '';
-            for (let i = 1; i < regels.length; i++) {
-                const vals = regels[i].split(sep).map(v => v.trim().replace(/['"]/g, ''));
-                const row = {};
-                header.forEach((h, j) => { row[h] = vals[j] ?? ''; });
-                voegTransponderRijToe({
-                    intern_nummer:    row['intern_nummer'] ?? row['nr'] ?? row['nummer'] ?? '',
-                    transponder_code: row['transponder_code'] ?? row['transponder'] ?? row['code'] ?? '',
-                    eigendom:         row['eigendom'] ?? '',
-                    toegewezen_snr:   row['toegewezen_snr'] ?? row['snr'] ?? row['startnummer'] ?? null,
-                    toegewezen_naam:  row['toegewezen_naam'] ?? row['naam'] ?? '',
-                    categorie:        row['categorie'] ?? row['cat'] ?? '',
-                    betaald:          ['1','ja','yes','true'].includes((row['betaald'] ?? '').toLowerCase()),
-                });
+            const regels = tekst.trim().split('\n').map(r => r.split(sep).map(v => v.trim().replace(/['"]/g, '')));
+
+            // Zoek de header-rij: eerste rij met ≥3 niet-lege cellen
+            let headerIdx = 0;
+            for (let i = 0; i < Math.min(regels.length, 10); i++) {
+                const nietLeeg = regels[i].filter(c => c !== '').length;
+                if (nietLeeg >= 3) { headerIdx = i; break; }
             }
-            el('org-status').innerHTML = `<div class="status-msg info">${regels.length - 1} transponders geïmporteerd. Klik Opslaan om te bewaren.</div>`;
+            const headers = regels[headerIdx];
+            const dataRows = regels.slice(headerIdx + 1).filter(r => r.some(c => c !== ''));
+
+            _csvData = { headers, rows: dataRows };
+
+            // Toon mapping-dialoog
+            const dbVelden = [
+                { key: '',                label: '— overslaan —' },
+                { key: 'intern_nummer',   label: 'Intern nummer (Nr)' },
+                { key: 'transponder_code',label: 'Transponder code' },
+                { key: 'eigendom',        label: 'Eigendom' },
+                { key: 'toegewezen_snr',  label: 'Startnummer (Snr)' },
+                { key: 'toegewezen_naam', label: 'Naam' },
+                { key: 'categorie',       label: 'Categorie' },
+                { key: 'betaald',         label: 'Betaald' },
+            ];
+            // Auto-detect: probeer headers te matchen
+            const autoMap = {};
+            const hints = {
+                'vakje': 'intern_nummer', 'nr': 'intern_nummer', 'nummer': 'intern_nummer', 'intern_nummer': 'intern_nummer',
+                'transponder': 'transponder_code', 'code': 'transponder_code', 'transponder_code': 'transponder_code',
+                'eigendom': 'eigendom',
+                'beennr': 'toegewezen_snr', 'snr': 'toegewezen_snr', 'startnummer': 'toegewezen_snr',
+                'naam': 'toegewezen_naam', 'name': 'toegewezen_naam',
+                'categorie': 'categorie', 'cat': 'categorie',
+                'betaald': 'betaald',
+            };
+            const gebruiktVelden = new Set();
+            headers.forEach((h, i) => {
+                const lc = h.toLowerCase().trim();
+                const match = hints[lc];
+                if (match && !gebruiktVelden.has(match)) {
+                    autoMap[i] = match;
+                    gebruiktVelden.add(match);
+                }
+            });
+
+            let mapHtml = `<div class="tp-csv-mapping" id="tp-csv-mapping">
+                <div class="tp-csv-titel">CSV kolommen toewijzen</div>
+                <div class="tp-csv-preview">Bestand: <strong>${escHtml(file.name)}</strong> — ${dataRows.length} rijen, ${headers.length} kolommen</div>
+                <table class="tp-csv-map-tabel"><thead><tr><th>CSV kolom</th><th>Voorbeeld</th><th>Toewijzen aan</th></tr></thead><tbody>`;
+            headers.forEach((h, i) => {
+                const voorbeeld = dataRows[0]?.[i] ?? '';
+                const opts = dbVelden.map(v =>
+                    `<option value="${v.key}"${autoMap[i] === v.key ? ' selected' : ''}>${escHtml(v.label)}</option>`
+                ).join('');
+                mapHtml += `<tr>
+                    <td><strong>${escHtml(h || `Kolom ${i+1}`)}</strong></td>
+                    <td class="tp-csv-voorbeeld">${escHtml(voorbeeld)}</td>
+                    <td><select class="inp tp-csv-map-sel" data-col="${i}">${opts}</select></td>
+                </tr>`;
+            });
+            mapHtml += `</tbody></table>
+                <div class="tp-csv-map-acties">
+                    <button class="btn-primary" id="btn-csv-toepassen">✓ Importeer</button>
+                    <button class="btn-secondary" id="btn-csv-annuleer">Annuleren</button>
+                </div>
+            </div>`;
+
+            // Toon boven de tabel
+            const wrap = el('org-tab-transponders');
+            let bestaand = el('tp-csv-mapping');
+            if (bestaand) bestaand.remove();
+            wrap.insertAdjacentHTML('afterbegin', mapHtml);
+
+            el('btn-csv-annuleer').addEventListener('click', () => {
+                el('tp-csv-mapping')?.remove();
+                _csvData = null;
+            });
+
+            el('btn-csv-toepassen').addEventListener('click', async () => {
+                if (!_csvData) return;
+                // Bouw mapping: kolom-index → db-veld
+                const mapping = {};
+                wrap.querySelectorAll('.tp-csv-map-sel').forEach(sel => {
+                    if (sel.value) mapping[parseInt(sel.dataset.col)] = sel.value;
+                });
+                // Check minimaal intern_nummer + transponder_code
+                const heeftNr   = Object.values(mapping).includes('intern_nummer');
+                const heeftCode = Object.values(mapping).includes('transponder_code');
+                if (!heeftNr || !heeftCode) {
+                    toonBevestigDialog('Wijs minimaal "Intern nummer" en "Transponder code" toe.', 'Mapping onvolledig');
+                    return;
+                }
+
+                // Sync huidige pagina vóór merge
+                _tpSyncAllePagina();
+
+                // Bouw lookup van bestaande data op intern_nummer
+                const bestaandMap = new Map();
+                _tpAlleData.forEach((t, i) => { if (t.intern_nummer) bestaandMap.set(String(t.intern_nummer), i); });
+
+                let nieuw = 0, bijgewerkt = 0, overgeslagen = 0;
+                for (const row of _csvData.rows) {
+                    const obj = {};
+                    for (const [colStr, veld] of Object.entries(mapping)) {
+                        obj[veld] = row[parseInt(colStr)] ?? '';
+                    }
+                    if (!obj.intern_nummer || !obj.transponder_code) continue;
+
+                    const nr = String(obj.intern_nummer);
+                    const bestaandIdx = bestaandMap.get(nr);
+
+                    if (bestaandIdx !== undefined) {
+                        const bestaand = _tpAlleData[bestaandIdx];
+                        if (bestaand.toegewezen_snr) {
+                            // Toegewezen → vraag wat te doen
+                            const toewijsInfo = [bestaand.toegewezen_snr, bestaand.toegewezen_naam, bestaand.categorie].filter(Boolean).join(' ');
+                            const overschrijven = await toonBevestigDialog(
+                                `Transponder #${nr} is toegewezen aan ${toewijsInfo || '(onbekend)'}.\nOverschrijven? De toewijzing wordt gewist.`,
+                                'Transponder al toegewezen',
+                                'Overschrijven', 'Overslaan'
+                            );
+                            if (!overschrijven) { overgeslagen++; continue; }
+                            // Overschrijven: inventaris-velden updaten, toewijzing wissen
+                            bestaand.transponder_code = obj.transponder_code;
+                            bestaand.eigendom = obj.eigendom || bestaand.eigendom;
+                            bestaand.toegewezen_snr = null;
+                            bestaand.toegewezen_naam = null;
+                            bestaand.person_license = null;
+                            bestaand.categorie = null;
+                            bestaand.betaald = 0;
+                            bestaand.betaald_op = null;
+                        } else {
+                            // Niet toegewezen → gewoon overschrijven
+                            bestaand.transponder_code = obj.transponder_code;
+                            bestaand.eigendom = obj.eigendom || bestaand.eigendom;
+                        }
+                        bijgewerkt++;
+                    } else {
+                        // Nieuw nummer → toevoegen
+                        _tpAlleData.push({
+                            intern_nummer:    obj.intern_nummer,
+                            transponder_code: obj.transponder_code,
+                            eigendom:         obj.eigendom ?? '',
+                            toegewezen_snr:   null,
+                            toegewezen_naam:  null,
+                            person_license:   null,
+                            categorie:        null,
+                            betaald:          0,
+                            betaald_op:       null,
+                        });
+                        nieuw++;
+                    }
+                }
+
+                _tpPagina = 0;
+                _tpToonPagina();
+                markTpDirty();
+
+                el('tp-csv-mapping')?.remove();
+                _csvData = null;
+                const delen = [];
+                if (nieuw) delen.push(`${nieuw} nieuw`);
+                if (bijgewerkt) delen.push(`${bijgewerkt} bijgewerkt`);
+                if (overgeslagen) delen.push(`${overgeslagen} overgeslagen`);
+                const st = el('tp-status');
+                if (st) { st.innerHTML = `<span class="tp-save-ok">${delen.join(', ')}. Klik Opslaan.</span>`; setTimeout(() => { st.textContent = ''; }, 5000); }
+            });
         };
         reader.readAsText(file);
         e.target.value = '';
@@ -93,7 +362,12 @@ function initInstellingen() {
 
 // ── Tab-logica ────────────────────────────────────────────────────────────────
 
-function schakelTab(tab) {
+async function schakelTab(tab) {
+    // Waarschuwing bij onopgeslagen transponders
+    if (window._isTpDirty?.() && actiefTab === 'transponders' && tab !== 'transponders') {
+        if (!await toonBevestigDialog('Er zijn onopgeslagen transponder-wijzigingen.\nDoorgaan zonder op te slaan?')) return;
+        markTpClean();
+    }
     actiefTab = tab;
     document.querySelectorAll('.org-tab-btn').forEach(b =>
         b.classList.toggle('active', b.dataset.tab === tab));
@@ -102,6 +376,7 @@ function schakelTab(tab) {
 
     if (tab === 'wedstrijden') laadOrgWedstrijden();
     if (tab === 'klassementen') laadOrgKlassementen();
+    if (tab === 'transponders') laadOrgTransponders();
 }
 
 async function laadOrgWedstrijden() {
@@ -110,13 +385,15 @@ async function laadOrgWedstrijden() {
 
     lijst.innerHTML = '<div class="status-msg loading"><span class="spinner"></span>Laden…</div>';
 
-    // Wedstrijden in lokale DB ophalen
-    let dbIds = new Set();
+    // Wedstrijden in lokale DB ophalen (inclusief details voor wedstrijden die
+    // niet meer in de KNSB-feed staan, zodat ze alsnog verwijderd kunnen worden)
+    let dbComps = [];
     try {
         const res = await fetch('api/organisaties.php?action=wedstrijden&id=' + encodeURIComponent(actieveOrg.id));
         const data = await res.json();
-        dbIds = new Set((data ?? []).map(w => w.id));
+        dbComps = Array.isArray(data) ? data : [];
     } catch { /* stil falen */ }
+    const dbIds = new Set(dbComps.map(w => w.id));
 
     // Filter allWedstrijden op naam/email/alias van deze org
     const orgNamen = new Set([
@@ -132,19 +409,45 @@ async function laadOrgWedstrijden() {
         return orgNamen.has(email) || orgNamen.has(naam);
     });
 
-    if (!matches.length && !dbIds.size) {
+    // Voeg DB-wedstrijden toe die NIET in de KNSB-feed zitten (oude wedstrijden,
+    // of die handmatig aan deze org zijn gekoppeld). Normaliseer naar hetzelfde
+    // object-shape als `matches` zodat ze gezamenlijk gerenderd kunnen worden.
+    const matchIds   = new Set(matches.map(w => w.id));
+    const extraFromDb = dbComps
+        .filter(c => !matchIds.has(c.id))
+        .map(c => ({
+            id:     c.id,
+            name:   c.name,
+            starts: c.starts,
+            _alleenDb: true,  // marker: niet in KNSB-feed
+        }));
+    const alleItems = [...matches, ...extraFromDb]
+        // Sorteer ASC op starts (oudste eerst), wedstrijden zonder datum achteraan
+        .sort((a, b) => {
+            if (!a.starts && !b.starts) return 0;
+            if (!a.starts) return 1;   // a zonder datum → einde
+            if (!b.starts) return -1;  // b zonder datum → einde
+            return new Date(a.starts).getTime() - new Date(b.starts).getTime();
+        });
+
+    if (!alleItems.length) {
         lijst.innerHTML = '<div class="status-msg info">Geen wedstrijden gevonden voor deze organisatie.</div>';
         return;
     }
 
-    lijst.innerHTML = matches.map(w => {
+    lijst.innerHTML = alleItems.map(w => {
         const inDb   = dbIds.has(w.id);
         const datum  = w.starts ? new Date(w.starts).toLocaleDateString('nl-NL', {day:'2-digit',month:'long',year:'numeric'}) : '—';
+        const badge  = inDb && w._alleenDb
+            ? '<span class="beheer-wedstrijd-badge badge-alleen-db">Alleen in database</span>'
+            : inDb
+                ? '<span class="beheer-wedstrijd-badge">In database</span>'
+                : '<span class="beheer-wedstrijd-badge badge-extern">inschrijven.schaatsen.nl</span>';
         return `<div class="beheer-wedstrijd-rij ${inDb ? 'in-db' : ''}">
             <div class="beheer-wedstrijd-info">
                 <span class="beheer-wedstrijd-naam">${escHtml(w.name ?? w.title ?? w.id)}</span>
                 <span class="beheer-wedstrijd-datum">${datum}</span>
-                ${inDb ? '<span class="beheer-wedstrijd-badge">In database</span>' : '<span class="beheer-wedstrijd-badge badge-extern">inschrijven.schaatsen.nl</span>'}
+                ${badge}
             </div>
             ${inDb ? `<button class="btn-danger btn-sm beheer-comp-del" data-id="${escHtml(w.id)}" data-naam="${escHtml(w.name ?? w.id)}">Verwijderen</button>` : ''}
         </div>`;
@@ -264,6 +567,12 @@ function renderOrgLijst() {
 // ── Organisatie selecteren ─────────────────────────────────────────────────────
 
 async function selecteerOrg(kaart, orgId) {
+    // Dirty-check transponders
+    if (window._isTpDirty?.()) {
+        if (!await toonBevestigDialog('Er zijn onopgeslagen transponder-wijzigingen.\nDoorgaan zonder op te slaan?')) return;
+        markTpClean();
+    }
+
     if (orgLijstKaart) orgLijstKaart.classList.remove('active');
     kaart.classList.add('active');
     orgLijstKaart = kaart;
@@ -276,6 +585,7 @@ async function selecteerOrg(kaart, orgId) {
         // Als de actieve tab inhoud nodig heeft, laad die opnieuw
         if (actiefTab === 'wedstrijden')   laadOrgWedstrijden();
         if (actiefTab === 'klassementen')  laadOrgKlassementen();
+        if (actiefTab === 'transponders')  laadOrgTransponders();
     } catch(e) {
         el('org-status')?.innerHTML && (el('org-status').innerHTML = `<div class="status-msg error">⚠ ${escHtml(e.message)}</div>`);
     }
@@ -325,13 +635,6 @@ function vulOrgFormulier(org) {
 
     // Sponsors
     renderSponsors(org?.sponsors ?? []);
-
-    // Transponders
-    renderTransponders(org?.transponders ?? []);
-    const tpWrap = el('org-transponders-wrap');
-    const tpCsv  = el('btn-tp-csv');
-    if (tpWrap) tpWrap.style.display = isBestaand ? '' : 'none';
-    if (tpCsv)  tpCsv.style.display  = isBestaand ? '' : 'none';
 
     // Lees-alleen modus: schrijf-elementen per tab-inhoud disablen (tabs zelf blijven klikbaar)
     if (_beheerLeesOnly) {
@@ -516,41 +819,343 @@ function voegSponsorRijToe(sponsor = null) {
 
 // ── Transponders ─────────────────────────────────────────────────────────────
 
+async function laadOrgTransponders() {
+    if (!actieveOrg?.id) return;
+    try {
+        const res = await fetch(`api/organisaties.php?id=${encodeURIComponent(actieveOrg.id)}`);
+        const org = await res.json();
+        if (org?.transponders) {
+            actieveOrg.transponders = org.transponders;
+        }
+    } catch { /* stil */ }
+    renderTransponders(actieveOrg?.transponders ?? []);
+}
+
+let _tpAlleData = [];   // volledige dataset in geheugen
+let _tpPagina   = 0;
+let _tpSort    = 'nr';    // 'nr' of 'snr'
+let _tpSortDir = 'asc';   // 'asc' of 'desc'
+let _tpFilter  = 'alle';  // 'alle' | 'uitgegeven' | 'betaald' | 'niet_betaald'
+const _TP_PER_PAGINA = 20;
+
+// Bouw een afgeleide lijst met originele indices — zodat edits/deletes via
+// `tr.dataset.idx` nog steeds de juiste rij in `_tpAlleData` raken, ook na
+// filter/sort.
+function _tpGezichtLijst() {
+    const vorm = _tpAlleData.map((tp, origIdx) => ({ tp, origIdx }));
+    // "betaald" impliceert ook "uitgegeven" — een niet-uitgegeven transponder
+    // kan niet écht betaald zijn. Als oude data toch betaald=1 zonder snr heeft,
+    // filteren we die hier weg (de sync-logica corrigeert het later alsnog).
+    const isUitgegeven = t => !!(t.toegewezen_snr || t.toegewezen_naam);
+    const isBetaald    = t => isUitgegeven(t) && parseInt(t.betaald) === 1;
+    let gefilterd = vorm;
+    if (_tpFilter === 'uitgegeven') {
+        gefilterd = vorm.filter(x => isUitgegeven(x.tp));
+    } else if (_tpFilter === 'betaald') {
+        gefilterd = vorm.filter(x => isBetaald(x.tp));
+    } else if (_tpFilter === 'niet_betaald') {
+        gefilterd = vorm.filter(x => isUitgegeven(x.tp) && !isBetaald(x.tp));
+    }
+    const asNum = v => {
+        const n = parseInt(String(v ?? '').replace(/[^\d-]/g, ''), 10);
+        return isNaN(n) ? Number.MAX_SAFE_INTEGER : n;
+    };
+    gefilterd.sort((a, b) => {
+        const va = _tpSort === 'snr' ? asNum(a.tp.toegewezen_snr) : asNum(a.tp.intern_nummer);
+        const vb = _tpSort === 'snr' ? asNum(b.tp.toegewezen_snr) : asNum(b.tp.intern_nummer);
+        return _tpSortDir === 'desc' ? (vb - va) : (va - vb);
+    });
+    return gefilterd;
+}
+
 function renderTransponders(transponders) {
+    _tpAlleData = (transponders || []).map(t => ({ ...t }));
+    _tpPagina = 0;
+    _tpToonPagina();
+}
+
+function _tpToonPagina() {
     const body = el('org-tp-body');
     if (!body) return;
     body.innerHTML = '';
-    (transponders || []).forEach(t => voegTransponderRijToe(t));
+
+    // Sort-iconen in kolomheaders bijwerken: actieve kolom krijgt ▲/▼,
+    // inactieve kolommen krijgen de neutrale ⇅.
+    document.querySelectorAll('#org-tp-tabel th.tp-sortable').forEach(th => {
+        const ico = th.querySelector('.tp-sort-ico');
+        const actief = th.dataset.sort === _tpSort;
+        if (ico) ico.textContent = actief ? (_tpSortDir === 'desc' ? '▼' : '▲') : '⇅';
+        th.classList.toggle('tp-sort-actief', actief);
+    });
+
+    // Filter-knop: actief-indicator + tooltip met huidige keuze, en
+    // het geselecteerde menu-item markeren.
+    const filterBtn  = el('tp-filter-btn');
+    const filterMenu = el('tp-filter-menu');
+    if (filterBtn) {
+        const labels = { alle: 'Alle', uitgegeven: 'Uitgegeven', betaald: 'Betaald', niet_betaald: 'Niet betaald' };
+        filterBtn.classList.toggle('tp-filter-actief', _tpFilter !== 'alle');
+        filterBtn.title = 'Filter: ' + (labels[_tpFilter] ?? 'Alle');
+    }
+    filterMenu?.querySelectorAll('.tp-filter-opt').forEach(btn => {
+        btn.classList.toggle('actief', btn.dataset.val === _tpFilter);
+    });
+
+    const gezicht = _tpGezichtLijst();              // [{tp, origIdx}]
+    const totaal  = gezicht.length;
+    const paginas = Math.max(1, Math.ceil(totaal / _TP_PER_PAGINA));
+    if (_tpPagina >= paginas) _tpPagina = paginas - 1;
+    if (_tpPagina < 0) _tpPagina = 0;
+
+    const start = _tpPagina * _TP_PER_PAGINA;
+    const slice = gezicht.slice(start, start + _TP_PER_PAGINA);
+
+    slice.forEach(({ tp, origIdx }) => {
+        const idx = origIdx; // index in _tpAlleData (ongeacht sort/filter)
+        const tr = document.createElement('tr');
+        tr.className = 'org-tp-rij';
+        tr.dataset.idx = idx;
+        tr.innerHTML =
+            `<td><input type="text" class="inp tp-inp tp-nr" value="${escHtml(tp.intern_nummer ?? '')}" placeholder="#"></td>` +
+            `<td><input type="text" class="inp tp-inp tp-code" value="${escHtml(tp.transponder_code ?? '')}" placeholder="KS-..."></td>` +
+            `<td><input type="text" class="inp tp-inp tp-eigendom" value="${escHtml(tp.eigendom ?? '')}" placeholder="Org/Huur"></td>` +
+            `<td class="tp-ro">${tp.toegewezen_snr ?? '—'}<input type="hidden" class="tp-snr" value="${tp.toegewezen_snr ?? ''}"></td>` +
+            `<td class="tp-ro">${escHtml(tp.toegewezen_naam ?? '—')}<input type="hidden" class="tp-naam" value="${escHtml(tp.toegewezen_naam ?? '')}"></td>` +
+            `<td class="tp-ro">${escHtml(tp.person_license ?? '—')}<input type="hidden" class="tp-license" value="${escHtml(tp.person_license ?? '')}"></td>` +
+            `<td class="tp-ro">${escHtml(tp.categorie ?? '—')}<input type="hidden" class="tp-cat" value="${escHtml(tp.categorie ?? '')}"></td>` +
+            // Niet-uitgegeven transponders kunnen niet betaald zijn — forceer
+            // leeg vinkje, ongeacht wat er in de data staat.
+            `<td class="tp-td-betaald"><input type="checkbox" class="tp-betaald" ${tp.toegewezen_snr && parseInt(tp.betaald) === 1 ? 'checked' : ''} ${tp.toegewezen_snr ? '' : 'disabled'} title="${tp.toegewezen_snr ? '' : 'Eerst toewijzen via Import'}"></td>` +
+            `<td class="tp-ro tp-td-datum">${tp.toegewezen_snr && parseInt(tp.betaald) === 1 && tp.betaald_op ? tp.betaald_op : '—'}<input type="hidden" class="tp-betaald-op" value="${escHtml(tp.toegewezen_snr && parseInt(tp.betaald) === 1 && tp.betaald_op ? tp.betaald_op : '')}"></td>` +
+            `<td class="tp-td-acties">` +
+                `<button class="btn-icon tp-vrijgeven" ${(tp.toegewezen_snr || tp.toegewezen_naam) ? '' : 'disabled'} title="Toewijzing vrijgeven (rijder heeft transponder ingeleverd) — transponder blijft in de lijst">&#8630;</button>` +
+                `<button class="btn-del tp-del" title="Verwijderen uit lijst (transponder is kwijt/stuk)">&#128465;</button>` +
+            `</td>`;
+        // Sync wijzigingen terug naar _tpAlleData
+        tr.querySelectorAll('input').forEach(inp => {
+            inp.addEventListener('change', () => { _tpSyncRij(tr); if (typeof markTpDirty === 'function') markTpDirty(); });
+        });
+        // Betaald checkbox → auto-datum
+        tr.querySelector('.tp-betaald').addEventListener('change', (e) => {
+            const datumCel = tr.querySelector('.tp-td-datum');
+            const datumInp = tr.querySelector('.tp-betaald-op');
+            if (e.target.checked) {
+                const vandaag = new Date().toISOString().slice(0, 10);
+                datumCel.firstChild.textContent = vandaag;
+                datumInp.value = vandaag;
+            } else {
+                datumCel.firstChild.textContent = '—';
+                datumInp.value = '';
+            }
+            _tpSyncRij(tr);
+        });
+        tr.querySelector('.tp-del').addEventListener('click', () => {
+            _tpAlleData.splice(parseInt(tr.dataset.idx), 1);
+            if (typeof markTpDirty === 'function') markTpDirty();
+            _tpToonPagina();
+        });
+        // Vrijgeven: laat de transponder in de lijst maar wis de toewijzing.
+        // Gebruikt als een rijder zijn transponder fysiek heeft ingeleverd en
+        // de transponder weer beschikbaar is voor uitgifte aan iemand anders.
+        tr.querySelector('.tp-vrijgeven')?.addEventListener('click', () => {
+            const idx = parseInt(tr.dataset.idx);
+            if (isNaN(idx) || !_tpAlleData[idx]) return;
+            const huidig = _tpAlleData[idx];
+            const info = [huidig.toegewezen_snr, huidig.toegewezen_naam, huidig.categorie].filter(Boolean).join(' ');
+            if (!confirm(`Toewijzing vrijgeven?\n\nTransponder ${huidig.transponder_code || ''} is nu toegewezen aan ${info || '(onbekend)'}.\nNa vrijgeven komt hij weer beschikbaar; de transponder zelf blijft in de lijst.`)) return;
+            _tpAlleData[idx] = {
+                ...huidig,
+                toegewezen_snr:  null,
+                toegewezen_naam: null,
+                person_license:  null,
+                categorie:       null,
+                betaald:         0,
+                betaald_op:      null,
+            };
+            if (typeof markTpDirty === 'function') markTpDirty();
+            _tpToonPagina();
+        });
+        body.appendChild(tr);
+    });
+
+    // Paginering bijwerken
+    const info = el('tp-pag-info');
+    if (info) info.textContent = totaal > 0 ? `${start+1}–${Math.min(start+_TP_PER_PAGINA, totaal)} van ${totaal}` : 'Geen transponders';
+    const btnE = el('tp-pag-eerste'), btnV = el('tp-pag-vorige');
+    const btnN = el('tp-pag-volgende'), btnL = el('tp-pag-laatste');
+    if (btnE) btnE.disabled = _tpPagina === 0;
+    if (btnV) btnV.disabled = _tpPagina === 0;
+    if (btnN) btnN.disabled = _tpPagina >= paginas - 1;
+    if (btnL) btnL.disabled = _tpPagina >= paginas - 1;
+}
+
+function _tpSyncRij(tr) {
+    const idx = parseInt(tr.dataset.idx);
+    if (isNaN(idx) || !_tpAlleData[idx]) return;
+    const snr = tr.querySelector('.tp-snr')?.value
+        ? parseInt(tr.querySelector('.tp-snr').value) : null;
+    // Niet-uitgegeven transponders kunnen niet betaald zijn — forceer 0
+    // zodat oude/rotte data vanzelf wordt gecorrigeerd bij opslag.
+    const betaald = snr && tr.querySelector('.tp-betaald')?.checked ? 1 : 0;
+    _tpAlleData[idx] = {
+        intern_nummer:    tr.querySelector('.tp-nr')?.value.trim() || '',
+        transponder_code: tr.querySelector('.tp-code')?.value.trim() || '',
+        eigendom:         tr.querySelector('.tp-eigendom')?.value.trim() || null,
+        toegewezen_snr:   snr,
+        toegewezen_naam:  tr.querySelector('.tp-naam')?.value.trim() || null,
+        person_license:   tr.querySelector('.tp-license')?.value.trim() || null,
+        categorie:        tr.querySelector('.tp-cat')?.value.trim() || null,
+        betaald:          betaald,
+        betaald_op:       betaald ? (tr.querySelector('.tp-betaald-op')?.value || null) : null,
+    };
+}
+
+// Sync alle zichtbare rijen vóór paginawissel of opslaan
+function _tpSyncAllePagina() {
+    (el('org-tp-body')?.querySelectorAll('.org-tp-rij') ?? []).forEach(tr => _tpSyncRij(tr));
+}
+
+// ── Afdruk: uitgeleverde transponders ─────────────────────────────────────
+// Print alle transponders waarvan toegewezen_snr gevuld is (= uitgeleverd).
+// Gebruikt voor overzicht aan de balie / archief.
+function printUitgeleverdeTransponders() {
+    const esc = s => String(s ?? '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+    const uitgeleverd = (_tpAlleData || []).filter(tp =>
+        tp.toegewezen_snr !== null && tp.toegewezen_snr !== undefined && tp.toegewezen_snr !== ''
+    );
+
+    if (!uitgeleverd.length) {
+        toonBevestigDialog('Geen uitgeleverde transponders om af te drukken.', 'Info');
+        return;
+    }
+
+    // Sorteer op startnummer (= logisch voor de balie)
+    uitgeleverd.sort((a, b) => (Number(a.toegewezen_snr) || 0) - (Number(b.toegewezen_snr) || 0));
+
+    const orgNaam = actieveOrg?.naam ?? '';
+    const datum   = new Date().toLocaleString('nl-NL',
+        { day: '2-digit', month: 'long', year: 'numeric', hour: '2-digit', minute: '2-digit' });
+
+    const { orgLogoHtml } = (typeof bouwOrgHeaderFooter === 'function')
+        ? bouwOrgHeaderFooter(esc)
+        : { orgLogoHtml: '' };
+
+    let rows = '';
+    uitgeleverd.forEach((tp, i) => {
+        const betaald = parseInt(tp.betaald) === 1;
+        const betaaldTxt = betaald ? '✓' : '✗';
+        const betaaldCls = betaald ? 'ja' : 'nee';
+        const datumTxt = betaald && tp.betaald_op ? tp.betaald_op : '—';
+        rows += `<tr class="${i % 2 === 1 ? 'z' : ''}">
+            <td class="c">${esc(tp.intern_nummer ?? '')}</td>
+            <td>${esc(tp.transponder_code ?? '')}</td>
+            <td class="c">${esc(tp.toegewezen_snr ?? '')}</td>
+            <td>${esc(tp.toegewezen_naam ?? '')}</td>
+            <td class="c">${esc(tp.categorie ?? '')}</td>
+            <td>${esc(tp.eigendom ?? '')}</td>
+            <td class="c ${betaaldCls}">${betaaldTxt}</td>
+            <td class="c">${esc(datumTxt)}</td>
+        </tr>`;
+    });
+
+    const htmlDoc = `<!DOCTYPE html><html lang="nl">
+<head><meta charset="UTF-8">
+<title>Uitgeleverde transponders${orgNaam ? ' – ' + esc(orgNaam) : ''}</title>
+<style>
+*{box-sizing:border-box}
+body{font-family:Arial,Helvetica,sans-serif;font-size:9.5pt;margin:.8cm 1.2cm 1.2cm;color:#111}
+header{display:flex;justify-content:space-between;align-items:flex-start;gap:4mm;margin-bottom:3mm}
+.hdr-links{flex:1;min-width:0}
+.hdr-titel{font-size:14pt;font-weight:700;margin-bottom:1mm}
+.hdr-meta{font-size:9pt;color:#555}
+.hdr-rechts{flex-shrink:0}
+hr{border:none;border-top:2px solid #1a3a5c;margin:2mm 0 4mm}
+table{width:100%;border-collapse:collapse;font-size:9.5pt}
+thead tr{background:#1a3a5c;color:#fff}
+th{padding:4px 7px;text-align:left;font-size:8.5pt;font-weight:600;letter-spacing:.02em}
+td{padding:4px 7px;border-bottom:1px solid #eee;vertical-align:middle}
+.c{text-align:center}
+tr.z td{background:#f9f9f9}
+td.ja{color:#2a7a2a;font-weight:700}
+td.nee{color:#c00;font-weight:700}
+footer{margin-top:5mm;border-top:1px solid #ccc;padding-top:2mm;font-size:7.5pt;color:#888;
+       display:flex;justify-content:space-between}
+@page{size:A4 portrait;margin:1cm}
+@media print{
+  tr{page-break-inside:avoid}
+  thead{display:table-header-group}
+}
+</style></head>
+<body>
+<header>
+  <div class="hdr-links">
+    <div class="hdr-titel">Uitgeleverde transponders</div>
+    <div class="hdr-meta">${esc(orgNaam)} · ${uitgeleverd.length} transponder${uitgeleverd.length !== 1 ? 's' : ''} in gebruik</div>
+  </div>
+  <div class="hdr-rechts">${orgLogoHtml}</div>
+</header>
+<hr>
+<table>
+  <thead><tr>
+    <th class="c">Nr</th>
+    <th>Transponder</th>
+    <th class="c">Startnr</th>
+    <th>Naam</th>
+    <th class="c">Cat</th>
+    <th>Eigendom</th>
+    <th class="c">Betaald</th>
+    <th class="c">Betaald op</th>
+  </tr></thead>
+  <tbody>${rows}</tbody>
+</table>
+<footer>
+  <span>Afgedrukt: ${esc(datum)}</span>
+  <span>Totaal: ${uitgeleverd.length}</span>
+</footer>
+<script>window.addEventListener('load', () => { window.focus(); window.print(); window.close(); });<\/script>
+</body></html>`;
+
+    const win = window.open('', '_blank');
+    if (!win) { toonBevestigDialog('Pop-up geblokkeerd — sta pop-ups toe.', 'Afdrukken'); return; }
+    win.document.write(htmlDoc);
+    win.document.close();
 }
 
 function voegTransponderRijToe(tp = null) {
-    const body = el('org-tp-body');
-    if (!body) return;
-    const tr = document.createElement('tr');
-    tr.className = 'org-tp-rij';
-    tr.innerHTML =
-        `<td><input type="text" class="inp tp-inp tp-nr" value="${escHtml(tp?.intern_nummer ?? '')}" placeholder="#"></td>` +
-        `<td><input type="text" class="inp tp-inp tp-code" value="${escHtml(tp?.transponder_code ?? '')}" placeholder="KS-..."></td>` +
-        `<td><input type="text" class="inp tp-inp tp-eigendom" value="${escHtml(tp?.eigendom ?? '')}" placeholder="Org/Huur"></td>` +
-        `<td><input type="number" class="inp tp-inp tp-snr" value="${tp?.toegewezen_snr ?? ''}" placeholder="—" min="0"></td>` +
-        `<td><input type="text" class="inp tp-inp tp-naam" value="${escHtml(tp?.toegewezen_naam ?? '')}" placeholder="—"></td>` +
-        `<td><input type="text" class="inp tp-inp tp-cat" value="${escHtml(tp?.categorie ?? '')}" placeholder="—"></td>` +
-        `<td class="tp-td-betaald"><input type="checkbox" class="tp-betaald" ${tp?.betaald ? 'checked' : ''}></td>` +
-        `<td><button class="btn-del tp-del" title="Verwijderen">&#128465;</button></td>`;
-    tr.querySelector('.tp-del').addEventListener('click', () => tr.remove());
-    body.appendChild(tr);
+    _tpSyncAllePagina();
+    _tpAlleData.push({
+        intern_nummer:    tp?.intern_nummer ?? '',
+        transponder_code: tp?.transponder_code ?? '',
+        eigendom:         tp?.eigendom ?? null,
+        toegewezen_snr:   tp?.toegewezen_snr ?? null,
+        toegewezen_naam:  tp?.toegewezen_naam ?? null,
+        person_license:   tp?.person_license ?? null,
+        categorie:        tp?.categorie ?? null,
+        betaald:          tp?.betaald ? 1 : 0,
+    });
+    // Ga naar laatste pagina waar het nieuwe item staat
+    _tpPagina = Math.floor((_tpAlleData.length - 1) / _TP_PER_PAGINA);
+    _tpToonPagina();
+    // Focus op het nieuwe nr-veld
+    const rijen = el('org-tp-body')?.querySelectorAll('.org-tp-rij');
+    if (rijen?.length) rijen[rijen.length - 1].querySelector('.tp-nr')?.focus();
 }
 
 function verzamelTransponders() {
-    return [...(el('org-tp-body')?.querySelectorAll('.org-tp-rij') ?? [])].map(tr => ({
-        intern_nummer:    tr.querySelector('.tp-nr')?.value.trim() || null,
-        transponder_code: tr.querySelector('.tp-code')?.value.trim() || null,
-        eigendom:         tr.querySelector('.tp-eigendom')?.value.trim() || null,
-        toegewezen_snr:   tr.querySelector('.tp-snr')?.value ? parseInt(tr.querySelector('.tp-snr').value) : null,
-        toegewezen_naam:  tr.querySelector('.tp-naam')?.value.trim() || null,
-        categorie:        tr.querySelector('.tp-cat')?.value.trim() || null,
-        betaald:          tr.querySelector('.tp-betaald')?.checked ? 1 : 0,
-    })).filter(t => t.intern_nummer && t.transponder_code);
+    _tpSyncAllePagina();
+    return _tpAlleData
+        .filter(t => t.intern_nummer && t.transponder_code)
+        .map(t => ({
+            intern_nummer:    t.intern_nummer,
+            transponder_code: t.transponder_code,
+            eigendom:         t.eigendom || null,
+            toegewezen_snr:   t.toegewezen_snr || null,
+            toegewezen_naam:  t.toegewezen_naam || null,
+            person_license:   t.person_license || null,
+            categorie:        t.categorie || null,
+            betaald:          t.betaald ? 1 : 0,
+            betaald_op:       t.betaald_op || null,
+        }));
 }
 
 // ── Opslaan ───────────────────────────────────────────────────────────────────
@@ -571,15 +1176,12 @@ async function slaOrgOp() {
         }))
         .filter(s => s.naam);
 
-    const transponders = verzamelTransponders();
-
     const body = {
         action:   'save',
         id:       actieveOrg?.id ?? null,
         naam,
         email:    el('org-email').value.trim() || null,
         sponsors,
-        transponders,
     };
 
     el('btn-org-opslaan').disabled = true;
