@@ -10,7 +10,7 @@ let _liveOngeslagen  = false;   // onopgeslagen wijzigingen
 let _liveLeesOnly    = false;   // geen schrijfrechten
 
 // Filter voor de heat-dropdown (○ / ◑ / ✓). Standaard alles aan.
-let _liveFilter = { leeg: true, deels: true, compleet: true };
+let _liveFilter = { geen_lijst: true, geen_resultaat: true, deels: true, compleet: true };
 
 // ── Entry point ───────────────────────────────────────────────────────────────
 
@@ -563,12 +563,16 @@ function _liveRenderCarousel() {
     const huidigeRit   = _liveRitten[idx];
     const huidigLabel  = `${_liveRitIcoon(huidigeRit)} ${escHtml(huidigeRit.rit_naam)}`;
 
-    // Filter-pillen: aan/uit per status-icoon
-    const pilHtml = ['leeg', 'deels', 'compleet'].map(s => {
-        const icoon = s === 'compleet' ? '✓' : s === 'deels' ? '◑' : '○';
-        const tip   = s === 'compleet' ? 'Alle tijden ingevuld'
-                    : s === 'deels'    ? 'Deels ingevuld'
-                    :                     'Nog geen resultaten / geen startlijst';
+    // Filter-pillen: aan/uit per status-icoon (4 stappen van niks naar klaar)
+    const pilHtml = ['geen_lijst', 'geen_resultaat', 'deels', 'compleet'].map(s => {
+        const icoon = s === 'compleet'       ? '✓'
+                    : s === 'deels'          ? '◑'
+                    : s === 'geen_resultaat' ? '○'
+                    :                          '◌';
+        const tip   = s === 'compleet'       ? 'Alle tijden ingevuld'
+                    : s === 'deels'          ? 'Deels ingevuld'
+                    : s === 'geen_resultaat' ? 'Nog geen resultaten'
+                    :                          'Geen startlijst';
         const act   = _liveFilter[s] ? ' active' : '';
         return `<button type="button" class="live-nav-pil${act}" data-filter="${s}" title="${tip}">${icoon}</button>`;
     }).join('');
@@ -948,16 +952,23 @@ function _livePanelHerbereken() {
 
 // ── Custom dropdown helpers ──────────────────────────────────────────────
 
-// Bepaal de status van een rit voor de filter: 'leeg' | 'deels' | 'compleet'
+// Bepaal de status van een rit voor de filter:
+//   geen_lijst     — heat bestaat niet / geen rijders ingedeeld
+//   geen_resultaat — rijders ingedeeld maar nog geen tijden/sancties
+//   deels          — deel van de rijders heeft tijd/sanctie
+//   compleet       — alle rijders hebben tijd of sanctie
 function _liveRitStatus(r) {
-    if (!_liveHasHeat(r))    return 'leeg';
+    if (!_liveHasHeat(r))    return 'geen_lijst';
     if (_liveRitCompleet(r)) return 'compleet';
     if (_liveRitDeels(r))    return 'deels';
-    return 'leeg';
+    return 'geen_resultaat';
 }
 function _liveRitIcoon(r) {
     const s = _liveRitStatus(r);
-    return s === 'compleet' ? '✓' : s === 'deels' ? '◑' : '○';
+    return s === 'compleet'       ? '✓'
+         : s === 'deels'          ? '◑'
+         : s === 'geen_resultaat' ? '○'
+         :                          '◌';   // geen_lijst
 }
 
 // Bouw de opties in het dropdown-paneel; filter rijden die volgens _liveFilter
