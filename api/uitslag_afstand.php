@@ -402,18 +402,25 @@ try {
         unset($r);
 
         // Beschikbare rondes uit tijdschema_ritten (niet uit heats — die bestaan
-        // pas na generatie, maar de rondes zijn al geconfigureerd in het tijdschema)
+        // pas na generatie, maar de rondes zijn al geconfigureerd in het tijdschema).
+        // Filter óók op afstand_naam zodat ranking-dropdowns alleen verschijnen
+        // voor ronden die werkelijk voor déze afstand zijn gepland (niet voor
+        // de andere afstand(en) in dezelfde DC).
         $rondeKeys = ['heats' => 'heats', 'kwartfinale' => 'kwart',
                       'halve_finale' => 'half', 'finale_a' => 'finale'];
         $beschikbareRondes = [];
         if ($tsId) {
-            $brStmt = $pdo->prepare("
-                SELECT DISTINCT r.ronde_type FROM tijdschema_ritten r
-                WHERE r.tijdschema_id = ? AND r.dc_id IN ($dcPh)
-                  AND r.ronde_type IN ('heats','kwartfinale','halve_finale','finale_a')
-                ORDER BY FIELD(r.ronde_type, 'heats','kwartfinale','halve_finale','finale_a')
-            ");
-            $brStmt->execute(array_merge([$tsId], $dcIds));
+            $sql = "SELECT DISTINCT r.ronde_type FROM tijdschema_ritten r
+                    WHERE r.tijdschema_id = ? AND r.dc_id IN ($dcPh)
+                      AND r.ronde_type IN ('heats','kwartfinale','halve_finale','finale_a')";
+            $args = array_merge([$tsId], $dcIds);
+            if (!empty($afNaam)) {
+                $sql .= " AND r.afstand_naam = ?";
+                $args[] = $afNaam;
+            }
+            $sql .= " ORDER BY FIELD(r.ronde_type, 'heats','kwartfinale','halve_finale','finale_a')";
+            $brStmt = $pdo->prepare($sql);
+            $brStmt->execute($args);
             $beschikbareRondes = array_column($brStmt->fetchAll(PDO::FETCH_ASSOC), 'ronde_type');
         }
         if (empty($beschikbareRondes)) {
