@@ -104,7 +104,18 @@ if ($comp && !empty($comp['starts'])) {
         $compDatum = ltrim($m[3], '0') . ' ' . ($maanden[$m[2]] ?? $m[2]) . ' ' . $m[1];
     }
 }
-$compLocatie = $comp ? trim(($comp['venue_name'] ?? '') . ' ' . ($comp['venue_city'] ?? '')) : '';
+// Venue_name bevat vaak al de stad ("Skeelerbaan Lisserbroek"). Alleen
+// venue_city erachter plakken als die niet al in de naam voorkomt.
+$compLocatie = '';
+if ($comp) {
+    $vn = trim($comp['venue_name'] ?? '');
+    $vc = trim($comp['venue_city'] ?? '');
+    if ($vn && $vc && stripos($vn, $vc) === false) {
+        $compLocatie = $vn . ', ' . $vc;
+    } else {
+        $compLocatie = $vn ?: $vc;
+    }
+}
 
 // ── Python-binary zoeken (zelfde patroon als klassement_import.php) ────
 if (!function_exists('shell_exec') || ini_get('safe_mode')) {
