@@ -76,9 +76,9 @@ try {
     $organisatie = null;
     if ($orgNaam || $orgEmail) {
 
-        // 1. Match op e-mailadres
+        // 1. Match op e-mailadres (case-insensitive)
         if ($orgEmail) {
-            $stmt = $pdo->prepare("SELECT * FROM organisaties WHERE email = ?");
+            $stmt = $pdo->prepare("SELECT * FROM organisaties WHERE LOWER(email) = LOWER(?)");
             $stmt->execute([$orgEmail]);
             $organisatie = $stmt->fetch() ?: null;
         }
@@ -326,6 +326,7 @@ try {
                     'club_code'    => $c['clubCode']        ?? null,
                     'club_short'   => $c['clubShortName']   ?? null,
                     'club_full'    => $c['clubFullName']    ?? null,
+                    'sponsor'      => $c['sponsor']         ?? null,
                     'city'         => $c['from']            ?? null,
                     'transponder1' => $c['transponder1']    ?? null,
                     'transponder2' => $c['transponder2']    ?? null,
@@ -449,7 +450,7 @@ try {
     $orgTransponders = [];
     if ($organisatie && !empty($organisatie['id'])) {
         $otStmt = $pdo->prepare("
-            SELECT intern_nummer, transponder_code, toegewezen_snr, toegewezen_naam, betaald
+            SELECT intern_nummer, transponder_code, toegewezen_snr, toegewezen_naam, person_license, categorie, betaald
             FROM organisatie_transponders
             WHERE organisatie_id = ?
             ORDER BY CAST(intern_nummer AS UNSIGNED), intern_nummer

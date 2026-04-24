@@ -237,6 +237,83 @@ try {
             exit;
         }
 
+        // ── Transponders apart opslaan ──
+        if ($action === 'save_transponders') {
+            $orgId = trim($body['organisatie_id'] ?? '');
+            if (!$orgId) {
+                http_response_code(400);
+                echo json_encode(['error' => 'organisatie_id is verplicht']);
+                exit;
+            }
+            $transponders = $body['transponders'] ?? [];
+
+            // Bepaal welke codes verdwijnen → verwijder uit wedstrijd-transponders
+            $oudeStmt = $pdo->prepare("SELECT transponder_code FROM organisatie_transponders WHERE organisatie_id = ?");
+            $oudeStmt->execute([$orgId]);
+            $oudeCodes = array_column($oudeStmt->fetchAll(PDO::FETCH_ASSOC), 'transponder_code');
+            $nieuweCodes = array_filter(array_map(fn($t) => trim($t['transponder_code'] ?? ''), $transponders));
+            $verwijderd = array_diff($oudeCodes, $nieuweCodes);
+
+            if ($verwijderd) {
+                // Verwijder uit transponders tabel (slot 0 + slot ≥3) voor alle wedstrijden van deze org
+                $vPh = implode(',', array_fill(0, count($verwijderd), '?'));
+                $pdo->prepare("
+                    DELETE t FROM transponders t
+                    JOIN competitions c ON c.id = t.competition_id
+                    WHERE c.organisatie_id = ?
+                      AND t.code IN ($vPh)
+                      AND t.slot IN (0, 3, 4, 5, 6, 7, 8, 9)
+                ")->execute(array_merge([$orgId], array_values($verwijderd)));
+            }
+
+            $pdo->prepare("DELETE FROM organisatie_transponders WHERE organisatie_id = ?")->execute([$orgId]);
+            $insTp = $pdo->prepare("
+                INSERT INTO organisatie_transponders
+                    (organisatie_id, intern_nummer, transponder_code, eigendom,
+                     toegewezen_snr, toegewezen_naam, person_license, categorie, betaald, betaald_op)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            ");
+            foreach ($transponders as $t) {
+                $nr   = trim($t['intern_nummer'] ?? '');
+                $code = trim($t['transponder_code'] ?? '');
+                if (!$nr || !$code) continue;
+                $snr       = !empty($t['toegewezen_snr']) ? (int)$t['toegewezen_snr'] : null;
+                // Niet-uitgegeven transponders kunnen niet betaald zijn — forceer 0.
+                $betaald   = ($snr && ((int)($t['betaald'] ?? 0)) === 1) ? 1 : 0;
+                $betaaldOp = $betaald ? ((!empty($t['betaald_op']) && $t['betaald_op'] !== '—') ? $t['betaald_op'] : date('Y-m-d')) : null;
+                $insTp->execute([
+                    $orgId, $nr, $code,
+                    trim($t['eigendom'] ?? '') ?: null,
+                    $snr,
+                    trim($t['toegewezen_naam'] ?? '') ?: null,
+                    trim($t['person_license'] ?? '') ?: null,
+                    trim($t['categorie'] ?? '') ?: null,
+                    $betaald,
+                    $betaaldOp,
+                ]);
+            }
+            // Cleanup: transponders die niet meer zijn toegewezen → verwijder uit wedstrijden
+            $ontkoppeldStmt = $pdo->prepare("
+                SELECT transponder_code FROM organisatie_transponders
+                WHERE organisatie_id = ? AND toegewezen_snr IS NULL
+            ");
+            $ontkoppeldStmt->execute([$orgId]);
+            $ontkoppeldCodes = array_column($ontkoppeldStmt->fetchAll(PDO::FETCH_ASSOC), 'transponder_code');
+            if ($ontkoppeldCodes) {
+                $oPh = implode(',', array_fill(0, count($ontkoppeldCodes), '?'));
+                $pdo->prepare("
+                    DELETE t FROM transponders t
+                    JOIN competitions c ON c.id = t.competition_id
+                    WHERE c.organisatie_id = ?
+                      AND t.code IN ($oPh)
+                      AND t.slot IN (0, 3, 4, 5, 6, 7, 8, 9)
+                ")->execute(array_merge([$orgId], $ontkoppeldCodes));
+            }
+
+            echo json_encode(['ok' => true, 'transponders' => fetchOrg($pdo, $orgId)['transponders'] ?? []]);
+            exit;
+        }
+
         // ── Opslaan (aanmaken of bijwerken) ──
         if ($action === 'save') {
             $id    = !empty($body['id']) ? $body['id'] : null;
@@ -276,31 +353,6 @@ try {
                         "INSERT INTO organisatie_sponsors (id, organisatie_id, naam, url, volgorde)
                          VALUES (?, ?, ?, ?, ?)"
                     )->execute([newUuid(), $id, $sNam, $sUrl, $i]);
-                }
-            }
-
-            // Transponders opslaan (volledige vervanging)
-            $transponders = $body['transponders'] ?? null;
-            if (is_array($transponders)) {
-                $pdo->prepare("DELETE FROM organisatie_transponders WHERE organisatie_id = ?")->execute([$id]);
-                $insTp = $pdo->prepare("
-                    INSERT INTO organisatie_transponders
-                        (organisatie_id, intern_nummer, transponder_code, eigendom,
-                         toegewezen_snr, toegewezen_naam, categorie, betaald)
-                    VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-                ");
-                foreach ($transponders as $t) {
-                    $nr   = trim($t['intern_nummer'] ?? '');
-                    $code = trim($t['transponder_code'] ?? '');
-                    if (!$nr || !$code) continue;
-                    $insTp->execute([
-                        $id, $nr, $code,
-                        trim($t['eigendom'] ?? '') ?: null,
-                        !empty($t['toegewezen_snr']) ? (int)$t['toegewezen_snr'] : null,
-                        trim($t['toegewezen_naam'] ?? '') ?: null,
-                        trim($t['categorie'] ?? '') ?: null,
-                        !empty($t['betaald']) ? 1 : 0,
-                    ]);
                 }
             }
 
