@@ -35,6 +35,15 @@ except ImportError as e:
     print("Installeer met: pip install qrcode pillow reportlab", file=sys.stderr)
     sys.exit(2)
 
+# SVG-ondersteuning is optioneel — sommige sponsors uploaden een .svg
+# (bijv. Oomssport). Zonder svglib skippen we die netjes.
+try:
+    from svglib.svglib import svg2rlg
+    from reportlab.graphics import renderPM
+    HEEFT_SVG = True
+except ImportError:
+    HEEFT_SVG = False
+
 
 BLAUW       = HexColor('#1F4E79')
 ORANJE      = HexColor('#E8630A')
@@ -63,8 +72,48 @@ def parse_sponsors(raw):
     return resultaat
 
 
+def laad_logo_als_pil(pad):
+    """Laadt een logo-bestand in als PIL-image.
+
+    Ondersteunt PNG / JPG / WEBP direct via PIL. Voor SVG gebruiken we svglib
+    (als beschikbaar) om het als rasterbeeld te renderen. Retourneert None bij
+    falen, zodat de aanroeper de sponsor kan skippen.
+    """
+    if not pad or not os.path.isfile(pad):
+        return None
+    is_svg = pad.lower().endswith('.svg')
+
+    if is_svg:
+        if not HEEFT_SVG:
+            print(f"WAARSCHUWING: SVG gevonden ({pad}) maar svglib niet geinstalleerd. "
+                  "Installeer met: pip install --user svglib", file=sys.stderr)
+            return None
+        try:
+            drawing = svg2rlg(pad)
+            if drawing is None:
+                return None
+            # Render naar hoge resolutie PNG-bytes, dan terug naar PIL
+            png_bytes = renderPM.drawToString(drawing, fmt='PNG', dpi=300)
+            return Image.open(io.BytesIO(png_bytes)).convert('RGBA')
+        except Exception as e:
+            print(f"WAARSCHUWING: SVG-render mislukt ({pad}): {e}", file=sys.stderr)
+            return None
+
+    try:
+        return Image.open(pad).convert('RGBA')
+    except Exception as e:
+        print(f"WAARSCHUWING: Logo laden mislukt ({pad}): {e}", file=sys.stderr)
+        return None
+
+
 def bouw_qr(qr_url, kleur_hex='#1F4E79'):
-    """QR-code met ingebed 'IC'-logo in het midden."""
+    """Kale QR-code zonder middenlogo.
+
+    Het IC-logo wordt later door reportlab op de canvas getekend (vector),
+    dat geeft strakkere typografie dan het met PIL in een PIL-image rasteren.
+    Wel error_correction=H aanhouden zodat het overlappende logo de scanbaarheid
+    niet aantast.
+    """
     qr = qrcode.QRCode(
         version=1,
         error_correction=qrcode.constants.ERROR_CORRECT_H,
@@ -73,64 +122,44 @@ def bouw_qr(qr_url, kleur_hex='#1F4E79'):
     )
     qr.add_data(qr_url)
     qr.make(fit=True)
-    img = qr.make_image(fill_color=kleur_hex, back_color='white').convert('RGBA')
+    return qr.make_image(fill_color=kleur_hex, back_color='white').convert('RGB')
 
-    qr_w, qr_h = img.size
-    # Recreate de favicon.svg-layout exact — zelfde verhoudingen (32x32
-    # SVG: rect rx=6, tekst op y=22 size 15, balk 20x3 op y=25 rx=1.5),
-    # maar in PIL zodat het op grote QR's goed rastert.
-    logo_size = qr_w // 4
 
-    def make_favicon(size):
-        s = size
-        im = Image.new('RGBA', (s, s), (0, 0, 0, 0))
-        d  = ImageDraw.Draw(im)
-        # Blauw afgerond vierkant (SVG: rx=6 op 32px → 18.75%)
-        rad = int(s * 0.1875)
-        d.rounded_rectangle([0, 0, s - 1, s - 1], radius=rad,
-                            fill=(31, 78, 121, 255))
-        # 'IC' tekst (SVG: font 15 op 32 → 47%, y=22 → 69% baseline).
-        # Met anchor='mm' willen we 'middle' op ~55% hoogte (tussen center en baseline).
-        fs = int(s * 0.58)
-        f = None
-        for name in ('arialbd.ttf', 'Arial Bold.ttf', 'arial.ttf',
-                     'DejaVuSans-Bold.ttf', 'LiberationSans-Bold.ttf'):
-            try:
-                f = ImageFont.truetype(name, fs)
-                break
-            except Exception:
-                continue
-        if f is None:
-            f = ImageFont.load_default()
-        try:
-            d.text((s / 2, s * 0.46), "IC",
-                   fill=(255, 255, 255, 255), font=f, anchor='mm')
-        except TypeError:
-            bbox = d.textbbox((0, 0), "IC", font=f)
-            tw, th = bbox[2] - bbox[0], bbox[3] - bbox[1]
-            d.text(((s - tw) // 2, int(s * 0.46 - th / 2)), "IC",
-                   fill=(255, 255, 255, 255), font=f)
-        # Oranje streep (SVG: 20×3 op 32 → 62% breed × 9% hoog, start y=25=78%)
-        bar_w = int(s * 0.62)
-        bar_h = int(s * 0.09)
-        bar_x = (s - bar_w) // 2
-        bar_y = int(s * 0.78)
-        d.rounded_rectangle([bar_x, bar_y, bar_x + bar_w, bar_y + bar_h],
-                            radius=bar_h // 2, fill=(232, 99, 10, 255))
-        return im
+def teken_ic_logo(c, cx, cy, size):
+    """Teken het favicon-InlineComp-logo gecentreerd op (cx, cy) met given size.
 
-    logo = make_favicon(logo_size)
+    Zelfde layout als favicon.svg:
+      - blauw afgerond vierkant (rx = 18.75% = 6/32)
+      - wit 'IC' bold tekst
+      - oranje streepje onderin (62% breed × 9% hoog, op 78% hoogte)
+    """
+    # Wit kadertje iets groter dan het logo zelf — maskeert QR-modules
+    kader_size = size * 1.18
+    c.setFillColor(WIT)
+    c.roundRect(cx - kader_size / 2, cy - kader_size / 2,
+                kader_size, kader_size,
+                kader_size * 0.08, fill=True, stroke=False)
 
-    pad = logo_size // 6
-    padded = Image.new('RGBA',
-                       (logo_size + pad * 2, logo_size + pad * 2),
-                       (255, 255, 255, 255))
-    padded.paste(logo, (pad, pad), logo)
-    lx = (qr_w - padded.width) // 2
-    ly = (qr_h - padded.height) // 2
-    img.paste(padded, (lx, ly), padded)
+    # Blauw afgerond vierkant
+    c.setFillColor(BLAUW)
+    c.roundRect(cx - size / 2, cy - size / 2,
+                size, size,
+                size * 0.1875, fill=True, stroke=False)
 
-    return img.convert('RGB')
+    # 'IC' tekst: op 50%-hoogte, drawCentredString tekent vanaf de baseline
+    # dus we schuiven iets omlaag zodat het visueel in de bovenste helft valt.
+    c.setFillColor(WIT)
+    c.setFont('Helvetica-Bold', size * 0.5)
+    c.drawCentredString(cx, cy - size * 0.07, "IC")
+
+    # Oranje streepje
+    bar_w = size * 0.62
+    bar_h = size * 0.09
+    c.setFillColor(ORANJE)
+    c.roundRect(cx - bar_w / 2,
+                cy - size * 0.32,
+                bar_w, bar_h,
+                bar_h / 2, fill=True, stroke=False)
 
 
 def genereer_poster(args):
@@ -185,9 +214,10 @@ def genereer_poster(args):
     # Strakke witte kaart rondom het logo met minimale padding (5% rondom)
     # zodat het logo prominent in z'n vlak staat, niet "verdwaald" in wit.
     # Container is rechthoekig met behoud van aspect-ratio.
-    if args.org_logo and os.path.isfile(args.org_logo):
+    lo_org = laad_logo_als_pil(args.org_logo) if args.org_logo else None
+    if lo_org is not None:
         try:
-            lo = Image.open(args.org_logo).convert('RGBA')
+            lo = lo_org
 
             # Schaal naar redelijke werk-resolutie
             lo.thumbnail((800, 800), Image.LANCZOS)
@@ -244,6 +274,13 @@ def genereer_poster(args):
                 5 * mm, fill=True, stroke=True)
     c.drawImage(ImageReader(buf), qr_x, qr_y, qr_print_size, qr_print_size)
 
+    # InlineComp-logo in het midden (favicon-stijl, als vector op de canvas)
+    ic_size = qr_print_size * 0.22
+    teken_ic_logo(c,
+                  qr_x + qr_print_size / 2,
+                  qr_y + qr_print_size / 2,
+                  ic_size)
+
     # ── 3 stappen ─────────────────────────────────────────────────────────
     step_top = qr_y - 12 * mm
     stap1 = f'Kies "{args.comp_naam}"' if heeft_comp else 'Kies je wedstrijd'
@@ -252,8 +289,9 @@ def genereer_poster(args):
         ('2', 'Vul je startnummer in'),
         ('3', 'Bekijk je heats, tijden en resultaten'),
     ]
+    step_gap = 13 * mm     # tune: compacter = 11, ruimer = 15
     for i, (nr, tekst) in enumerate(steps):
-        y = step_top - i * 11 * mm
+        y = step_top - i * step_gap
         cx = 28 * mm
         c.setFillColor(ORANJE)
         c.circle(cx, y + 2 * mm, 5.5 * mm, fill=True, stroke=False)
@@ -280,48 +318,50 @@ def genereer_poster(args):
     c.drawCentredString(width / 2, disc_top - 4 * mm,
         'Offici\u00eble startlijsten, uitslagen en mededelingen via Sportity (kanaal: ISKREGIO).')
 
-    # ── Sponsors-strook (alleen sponsors mét een logo) ────────────────────
-    # Sponsors zonder beschikbaar logo worden overgeslagen: een zwevend
-    # stukje tekst naast echte logo's ziet er rommelig uit.
-    sponsors_met_logo = [(naam, pad) for naam, pad in sponsors if pad]
-    if sponsors_met_logo:
-        logo_h = 14 * mm
-        gap    = 8 * mm
-        logo_imgs = []
-        totaal_breedte = 0
-        for naam, pad in sponsors_met_logo:
+    # ── Sponsors-strook (alleen sponsors mét een geldig logo) ─────────────
+    # Laadt elk sponsor-logo in PIL (ook SVG via svglib), beweist daarmee dat
+    # het renderbaar is, en rendert vervolgens via reportlab. Sponsors waarvoor
+    # geen of een onleesbaar logo geconfigureerd is worden genegeerd.
+    sponsor_renderables = []   # [(naam, pil_image, breedte_mm)]
+    logo_h = 14 * mm
+    gap    = 8 * mm
+    totaal_breedte = 0
+    for naam, pad in sponsors:
+        pil = laad_logo_als_pil(pad)
+        if pil is None:
+            continue
+        ratio = pil.width / pil.height
+        w = min(logo_h * ratio, 45 * mm)
+        sponsor_renderables.append((naam, pil, w))
+        totaal_breedte += w
+
+    if sponsor_renderables:
+        totaal_breedte += gap * max(0, len(sponsor_renderables) - 1)
+        max_breedte = width - 30 * mm
+        schaal = min(1.0, max_breedte / totaal_breedte) if totaal_breedte else 1.0
+
+        sponsor_logo_y  = 58 * mm
+        sponsor_title_y = sponsor_logo_y + logo_h * schaal + 3 * mm
+
+        c.setFillColor(BLAUW)
+        c.setFont('Helvetica-Bold', 10)
+        c.drawCentredString(width / 2, sponsor_title_y, 'Mede mogelijk gemaakt door:')
+
+        cur_x = (width - totaal_breedte * schaal) / 2
+        for naam, pil, w in sponsor_renderables:
+            w_final = w * schaal
+            h_final = logo_h * schaal
+            buf = io.BytesIO()
+            pil.save(buf, format='PNG')
+            buf.seek(0)
             try:
-                img = Image.open(pad).convert('RGBA')
-                ratio = img.width / img.height
-                w = min(logo_h * ratio, 45 * mm)
-            except Exception:
-                continue
-            logo_imgs.append((naam, pad, w))
-            totaal_breedte += w
-        totaal_breedte += gap * max(0, len(logo_imgs) - 1)
-
-        if logo_imgs:
-            max_breedte = width - 30 * mm
-            schaal = min(1.0, max_breedte / totaal_breedte) if totaal_breedte else 1.0
-
-            sponsor_logo_y  = 58 * mm
-            sponsor_title_y = sponsor_logo_y + logo_h * schaal + 3 * mm
-
-            c.setFillColor(BLAUW)
-            c.setFont('Helvetica-Bold', 10)
-            c.drawCentredString(width / 2, sponsor_title_y, 'Mede mogelijk gemaakt door:')
-
-            cur_x = (width - totaal_breedte * schaal) / 2
-            for naam, pad, w in logo_imgs:
-                w_final = w * schaal
-                h_final = logo_h * schaal
-                try:
-                    c.drawImage(pad, cur_x, sponsor_logo_y, w_final, h_final,
-                                preserveAspectRatio=True, mask='auto')
-                except Exception as e:
-                    print(f"WAARSCHUWING: sponsor-logo {naam} niet getekend: {e}",
-                          file=sys.stderr)
-                cur_x += w_final + gap * schaal
+                c.drawImage(ImageReader(buf), cur_x, sponsor_logo_y,
+                            w_final, h_final,
+                            preserveAspectRatio=True, mask='auto')
+            except Exception as e:
+                print(f"WAARSCHUWING: sponsor-logo {naam} niet getekend: {e}",
+                      file=sys.stderr)
+            cur_x += w_final + gap * schaal
 
     # ── Blauwe footer ─────────────────────────────────────────────────────
     footer_h = 32 * mm

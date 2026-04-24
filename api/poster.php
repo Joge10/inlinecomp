@@ -83,12 +83,45 @@ function absPad(?string $rel) {
 $orgLogo      = absPad($org['logo_path']);
 $sponsorsArg  = '';
 $sponsorItems = [];
+$debugPaden   = [];   // voor ?debug=1
 foreach ($sponsors as $s) {
     $p = absPad($s['logo_path']);
-    $n = str_replace(['|', ':'], [' ', ' '], $s['naam']);  // separator-safe
+    $n = str_replace(['|', ':'], [' ', ' '], $s['naam']);
     $sponsorItems[] = $n . ':' . $p;
+
+    // Debug-info: wat staat er in de DB, waar zoekt PHP, vindt-ie het?
+    $gezocht = $s['logo_path'] ? $webroot . DIRECTORY_SEPARATOR . ltrim($s['logo_path'], '/') : '';
+    $debugPaden[] = [
+        'naam'      => $s['naam'],
+        'db_path'   => $s['logo_path'],
+        'abs_path'  => $gezocht,
+        'bestaat'   => $gezocht ? is_file($gezocht) : false,
+        'leesbaar'  => $gezocht ? is_readable($gezocht) : false,
+    ];
 }
 if ($sponsorItems) $sponsorsArg = implode('|', $sponsorItems);
+
+// Debug-modus: geef JSON terug i.p.v. PDF
+if (!empty($_GET['debug'])) {
+    header('Content-Type: application/json; charset=utf-8');
+    echo json_encode([
+        'webroot'       => $webroot,
+        'org'           => [
+            'naam'     => $org['naam'],
+            'logo_db'  => $org['logo_path'],
+            'logo_abs' => $orgLogo,
+            'logo_ok'  => $orgLogo !== '',
+        ],
+        'sponsors' => $debugPaden,
+        'comp'     => $comp ? [
+            'naam'     => $comp['name'],
+            'starts'   => $comp['starts'],
+            'locatie'  => $compLocatie,
+        ] : null,
+        'qr_url'   => '(wordt pas later bepaald, zie code)',
+    ], JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES);
+    exit;
+}
 
 // ── QR-url: specifiek per comp als die er is, anders generiek ────────────
 $baseUrl = 'https://inlineresults.devriesen.com/public/';
