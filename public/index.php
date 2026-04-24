@@ -1547,7 +1547,31 @@ chkToekomst.addEventListener('change', filterComps);
 
 safeFetch('?action=competitions').then(r=>r.json()).then(comps => {
     alleComps = comps;
+
+    // Directe-link-support: ?comp=<uuid> in de URL selecteert direct die
+    // wedstrijd. Gebruikt door de QR-code op de promotie-poster per wedstrijd.
+    // Als de wedstrijd buiten het "actieve" venster valt (oud of toekomstig)
+    // vinken we automatisch het juiste filter aan zodat de optie zichtbaar is.
+    const urlParams = new URLSearchParams(window.location.search);
+    const wantedComp = urlParams.get('comp');
+    if (wantedComp) {
+        const comp = alleComps.find(c => c.id === wantedComp);
+        if (comp) {
+            const nu = new Date();
+            const startDag = comp.starts ? new Date(comp.starts) : null;
+            const eindDag  = comp.ends   ? new Date(comp.ends)   : startDag;
+            if (eindDag && eindDag < nu)       chkOud.checked = true;
+            if (startDag && startDag > nu)     chkToekomst.checked = true;
+        }
+    }
+
     filterComps();
+
+    // Na filterComps: selecteer 'm als de optie nu beschikbaar is
+    if (wantedComp && selComp.querySelector(`option[value="${wantedComp}"]`)) {
+        selComp.value = wantedComp;
+        selComp.dispatchEvent(new Event('change'));
+    }
 }).catch(() => { selComp.innerHTML = '<option value="">Fout bij laden</option>'; });
 
 // ── Disclaimer bij eerste bezoek (zelfde tekst als op de poster) ─────────
