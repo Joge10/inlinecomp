@@ -37,9 +37,11 @@ except ImportError as e:
 
 # SVG-ondersteuning is optioneel — sommige sponsors uploaden een .svg
 # (bijv. Oomssport). Zonder svglib skippen we die netjes.
+# SVG's worden als *vector* op het canvas getekend via reportlab.renderPDF
+# (geen cairo/renderPM nodig die op shared hosting vaak niet werkt).
 try:
     from svglib.svglib import svg2rlg
-    from reportlab.graphics import renderPM
+    from reportlab.graphics import renderPDF
     HEEFT_SVG = True
 except ImportError:
     HEEFT_SVG = False
@@ -72,38 +74,67 @@ def parse_sponsors(raw):
     return resultaat
 
 
-def laad_logo_als_pil(pad):
-    """Laadt een logo-bestand in als PIL-image.
+def laad_logo(pad):
+    """Laadt een logo-bestand.
 
-    Ondersteunt PNG / JPG / WEBP direct via PIL. Voor SVG gebruiken we svglib
-    (als beschikbaar) om het als rasterbeeld te renderen. Retourneert None bij
-    falen, zodat de aanroeper de sponsor kan skippen.
+    Retourneert een tuple (kind, data, breedte, hoogte):
+      kind='pil'  : data is een PIL Image (PNG/JPG/WEBP)
+      kind='svg'  : data is een reportlab Drawing (vector)
+      kind=None   : logo kon niet geladen worden
     """
     if not pad or not os.path.isfile(pad):
-        return None
-    is_svg = pad.lower().endswith('.svg')
+        return (None, None, 0, 0)
 
-    if is_svg:
+    if pad.lower().endswith('.svg'):
         if not HEEFT_SVG:
-            print(f"WAARSCHUWING: SVG gevonden ({pad}) maar svglib niet geinstalleerd. "
-                  "Installeer met: pip install --user svglib", file=sys.stderr)
-            return None
+            print(f"WAARSCHUWING: SVG gevonden ({pad}) maar svglib niet geinstalleerd.",
+                  file=sys.stderr)
+            return (None, None, 0, 0)
         try:
             drawing = svg2rlg(pad)
-            if drawing is None:
-                return None
-            # Render naar hoge resolutie PNG-bytes, dan terug naar PIL
-            png_bytes = renderPM.drawToString(drawing, fmt='PNG', dpi=300)
-            return Image.open(io.BytesIO(png_bytes)).convert('RGBA')
+            if drawing is None or drawing.width == 0 or drawing.height == 0:
+                return (None, None, 0, 0)
+            return ('svg', drawing, drawing.width, drawing.height)
         except Exception as e:
-            print(f"WAARSCHUWING: SVG-render mislukt ({pad}): {e}", file=sys.stderr)
-            return None
+            print(f"WAARSCHUWING: SVG parse mislukt ({pad}): {e}", file=sys.stderr)
+            return (None, None, 0, 0)
 
     try:
-        return Image.open(pad).convert('RGBA')
+        pil = Image.open(pad).convert('RGBA')
+        return ('pil', pil, pil.width, pil.height)
     except Exception as e:
         print(f"WAARSCHUWING: Logo laden mislukt ({pad}): {e}", file=sys.stderr)
-        return None
+        return (None, None, 0, 0)
+
+
+def teken_logo(c, kind, data, x, y, w, h):
+    """Teken een logo op canvas `c` binnen het vak (x, y, w, h).
+
+    SVG wordt als vector getekend (uniform schalen, origineel center-aligned).
+    Raster wordt als PNG gedrukt met preserveAspectRatio.
+    """
+    if kind == 'svg':
+        dw, dh = data.width, data.height
+        if dw == 0 or dh == 0:
+            return
+        # Uniform schalen zodat het in (w, h) past
+        s = min(w / dw, h / dh)
+        data.scale(s, s)
+        data.width  = dw * s
+        data.height = dh * s
+        # Center binnen het vak
+        off_x = (w - data.width)  / 2
+        off_y = (h - data.height) / 2
+        renderPDF.draw(data, c, x + off_x, y + off_y)
+    elif kind == 'pil':
+        buf = io.BytesIO()
+        data.save(buf, format='PNG')
+        buf.seek(0)
+        try:
+            c.drawImage(ImageReader(buf), x, y, w, h,
+                        preserveAspectRatio=True, mask='auto')
+        except Exception as e:
+            print(f"WAARSCHUWING: logo niet getekend: {e}", file=sys.stderr)
 
 
 def bouw_qr(qr_url, kleur_hex='#1F4E79'):
@@ -211,49 +242,35 @@ def genereer_poster(args):
     c.drawCentredString(width / 2, instr_y - 9 * mm, chr(9660))
 
     # Organisatie-logo in header (rechtsboven)
-    # Strakke witte kaart rondom het logo met minimale padding (5% rondom)
-    # zodat het logo prominent in z'n vlak staat, niet "verdwaald" in wit.
-    # Container is rechthoekig met behoud van aspect-ratio.
-    lo_org = laad_logo_als_pil(args.org_logo) if args.org_logo else None
-    if lo_org is not None:
-        try:
-            lo = lo_org
+    # Witte afgeronde kaart met het logo erin. Werkt voor zowel raster
+    # (PNG/JPG) als vector (SVG via reportlab.renderPDF).
+    org_kind, org_data, org_w, org_h = laad_logo(args.org_logo) if args.org_logo else (None, None, 0, 0)
+    if org_kind is not None:
+        logo_max_h = 32 * mm
+        logo_max_w = 40 * mm
+        ratio = org_w / org_h if org_h else 1.0
+        if ratio >= 1:
+            draw_w = min(logo_max_w, logo_max_h * ratio)
+            draw_h = draw_w / ratio
+        else:
+            draw_h = logo_max_h
+            draw_w = draw_h * ratio
+        marge = 8 * mm
 
-            # Schaal naar redelijke werk-resolutie
-            lo.thumbnail((800, 800), Image.LANCZOS)
+        # Witte kaart als achtergrond (contrast met blauwe header)
+        kaart_pad = 2 * mm
+        card_x = width  - draw_w - marge - kaart_pad
+        card_y = height - draw_h - marge - kaart_pad
+        c.setFillColor(WIT)
+        c.setStrokeColor(HexColor('#dde3ea'))
+        c.setLineWidth(0.5)
+        c.roundRect(card_x, card_y,
+                    draw_w + kaart_pad * 2, draw_h + kaart_pad * 2,
+                    1.5 * mm, fill=True, stroke=True)
 
-            # Strakke padding: 6% van de langste zijde
-            pad = int(max(lo.width, lo.height) * 0.06)
-            bg_w = lo.width  + pad * 2
-            bg_h = lo.height + pad * 2
-            bg = Image.new('RGBA', (bg_w, bg_h), (255, 255, 255, 255))
-            if lo.mode == 'RGBA':
-                bg.paste(lo, (pad, pad), lo)
-            else:
-                bg.paste(lo, (pad, pad))
-            buf = io.BytesIO()
-            bg.save(buf, format='PNG')
-            buf.seek(0)
-
-            # Plaatsen: 32mm hoog max, breedte volgt aspect-ratio
-            logo_max_h = 32 * mm
-            logo_max_w = 40 * mm
-            ratio = bg.width / bg.height
-            if ratio >= 1:
-                draw_w = min(logo_max_w, logo_max_h * ratio)
-                draw_h = draw_w / ratio
-            else:
-                draw_h = logo_max_h
-                draw_w = draw_h * ratio
-
-            marge = 8 * mm
-            c.drawImage(ImageReader(buf),
-                        width - draw_w - marge,
-                        height - draw_h - marge,
-                        draw_w, draw_h,
-                        preserveAspectRatio=True, mask='auto')
-        except Exception as e:
-            print(f"WAARSCHUWING: org-logo niet getekend: {e}", file=sys.stderr)
+        teken_logo(c, org_kind, org_data,
+                   card_x + kaart_pad, card_y + kaart_pad,
+                   draw_w, draw_h)
 
     # ── QR Code ───────────────────────────────────────────────────────────
     qr_img = bouw_qr(args.qr_url)
@@ -326,20 +343,19 @@ def genereer_poster(args):
     c.drawCentredString(width / 2, disc_top - 4 * mm, sportity_tekst)
 
     # ── Sponsors-strook (alleen sponsors mét een geldig logo) ─────────────
-    # Laadt elk sponsor-logo in PIL (ook SVG via svglib), beweist daarmee dat
-    # het renderbaar is, en rendert vervolgens via reportlab. Sponsors waarvoor
-    # geen of een onleesbaar logo geconfigureerd is worden genegeerd.
-    sponsor_renderables = []   # [(naam, pil_image, breedte_mm)]
+    # Ondersteunt zowel raster als SVG; SVG wordt als vector getekend via
+    # reportlab.renderPDF (geen cairo/renderPM nodig op shared hosting).
+    sponsor_renderables = []   # [(naam, kind, data, breedte_mm)]
     logo_h = 14 * mm
     gap    = 8 * mm
     totaal_breedte = 0
     for naam, pad in sponsors:
-        pil = laad_logo_als_pil(pad)
-        if pil is None:
+        kind, data, lw, lh = laad_logo(pad)
+        if kind is None or not lh:
             continue
-        ratio = pil.width / pil.height
+        ratio = lw / lh
         w = min(logo_h * ratio, 45 * mm)
-        sponsor_renderables.append((naam, pil, w))
+        sponsor_renderables.append((naam, kind, data, w))
         totaal_breedte += w
 
     if sponsor_renderables:
@@ -355,19 +371,10 @@ def genereer_poster(args):
         c.drawCentredString(width / 2, sponsor_title_y, 'Mede mogelijk gemaakt door:')
 
         cur_x = (width - totaal_breedte * schaal) / 2
-        for naam, pil, w in sponsor_renderables:
+        for naam, kind, data, w in sponsor_renderables:
             w_final = w * schaal
             h_final = logo_h * schaal
-            buf = io.BytesIO()
-            pil.save(buf, format='PNG')
-            buf.seek(0)
-            try:
-                c.drawImage(ImageReader(buf), cur_x, sponsor_logo_y,
-                            w_final, h_final,
-                            preserveAspectRatio=True, mask='auto')
-            except Exception as e:
-                print(f"WAARSCHUWING: sponsor-logo {naam} niet getekend: {e}",
-                      file=sys.stderr)
+            teken_logo(c, kind, data, cur_x, sponsor_logo_y, w_final, h_final)
             cur_x += w_final + gap * schaal
 
     # ── Blauwe footer ─────────────────────────────────────────────────────
