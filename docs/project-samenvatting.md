@@ -9,7 +9,8 @@ Gerelateerde docs:
 
 - [`database-schema.md`](database-schema.md) — ER-diagrammen per domein
 - [`offline-modus-spec.md`](offline-modus-spec.md) — open vraagstuk voor robuustheid
-- `InlineComp_Samenvatting.pdf` — vorige compacte PDF-versie (historisch)
+Genereer een PDF-versie indien nodig via pandoc:
+`pandoc docs/project-samenvatting.md -o docs/project-samenvatting.pdf`
 
 ---
 
@@ -509,8 +510,7 @@ inlinecomp/
 ├── docs/                        project-documentatie
 │   ├── project-samenvatting.md  (deze file)
 │   ├── database-schema.md       ER-diagrammen
-│   ├── offline-modus-spec.md    open vraagstuk
-│   └── InlineComp_Samenvatting.pdf  historische versie
+│   └── offline-modus-spec.md    open vraagstuk
 │
 ├── js/                          13 frontend-modules
 │   ├── app.js                   SPA-shell, routing, rol-gate
@@ -524,8 +524,10 @@ inlinecomp/
 ├── public/                      publieke pagina + PWA-manifest + SW
 ├── coach/                       coach-view (self-contained)
 │
-├── tools/pdf_klassement.py      KNSB-klassement PDF → JSON import helper
-├── poster_gen.py                promotie-poster generator (QR → /public)
+├── tools/                       losse scripts (geen onderdeel van webapp)
+│   ├── pdf_klassement.py        KNSB-klassement PDF → JSON import helper
+│   ├── poster_gen.py            promotie-poster generator (QR → /public)
+│   └── poster-inlinecomp.pdf    laatst gegenereerde poster
 │
 ├── index.php                    admin-SPA-shell
 ├── login.php                    login + owner-bootstrap
