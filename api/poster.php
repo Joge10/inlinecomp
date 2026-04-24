@@ -37,7 +37,7 @@ if (!$orgId) {
 }
 
 // ── Organisatie + sponsors ophalen ───────────────────────────────────────
-$orgStmt = $pdo->prepare("SELECT id, naam, logo_path FROM organisaties WHERE id = ?");
+$orgStmt = $pdo->prepare("SELECT id, naam, logo_path, sportity_kanaal FROM organisaties WHERE id = ?");
 $orgStmt->execute([$orgId]);
 $org = $orgStmt->fetch(PDO::FETCH_ASSOC);
 if (!$org) {
@@ -194,11 +194,14 @@ $parts = [
     '--qr-url',       escapeshellarg($qrUrl),
     '--org-naam',     escapeshellarg($org['naam']),
 ];
-if ($orgLogo)     { $parts[] = '--org-logo';     $parts[] = escapeshellarg($orgLogo); }
-if ($comp)        { $parts[] = '--comp-naam';    $parts[] = escapeshellarg($comp['name']); }
-if ($compDatum)   { $parts[] = '--comp-datum';   $parts[] = escapeshellarg($compDatum); }
-if ($compLocatie) { $parts[] = '--comp-locatie'; $parts[] = escapeshellarg($compLocatie); }
-if ($sponsorsArg) { $parts[] = '--sponsors';     $parts[] = escapeshellarg($sponsorsArg); }
+if ($orgLogo)     { $parts[] = '--org-logo';       $parts[] = escapeshellarg($orgLogo); }
+if ($comp)        { $parts[] = '--comp-naam';      $parts[] = escapeshellarg($comp['name']); }
+if ($compDatum)   { $parts[] = '--comp-datum';     $parts[] = escapeshellarg($compDatum); }
+if ($compLocatie) { $parts[] = '--comp-locatie';   $parts[] = escapeshellarg($compLocatie); }
+if ($sponsorsArg) { $parts[] = '--sponsors';       $parts[] = escapeshellarg($sponsorsArg); }
+if (!empty($org['sportity_kanaal'])) {
+    $parts[] = '--sportity-kanaal'; $parts[] = escapeshellarg($org['sportity_kanaal']);
+}
 
 $cmd    = implode(' ', $parts) . ' 2>&1';
 $output = shell_exec($cmd);

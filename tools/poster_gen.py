@@ -310,13 +310,20 @@ def genereer_poster(args):
     #   (boven)    stappen (zelf-plaatsend vanaf qr_y - 12 mm)
 
     # ── Disclaimer (boven footer) ─────────────────────────────────────────
+    # Sportity-kanaal komt uit de organisatie-instelling. Leeg = algemene
+    # formulering zonder kanaal-naam.
     disc_top = 48 * mm
+    if args.sportity_kanaal:
+        sportity_tekst = (u'Offici\u00eble startlijsten, uitslagen en mededelingen '
+                          u'via Sportity (kanaal: %s).' % args.sportity_kanaal)
+    else:
+        sportity_tekst = (u'Offici\u00eble startlijsten, uitslagen en mededelingen '
+                          u'via Sportity.')
     c.setFillColor(GRIJS)
     c.setFont('Helvetica', 9.5)
     c.drawCentredString(width / 2, disc_top,
         'Aan de informatie in InlineComp kunnen geen rechten worden ontleend.')
-    c.drawCentredString(width / 2, disc_top - 4 * mm,
-        'Offici\u00eble startlijsten, uitslagen en mededelingen via Sportity (kanaal: ISKREGIO).')
+    c.drawCentredString(width / 2, disc_top - 4 * mm, sportity_tekst)
 
     # ── Sponsors-strook (alleen sponsors mét een geldig logo) ─────────────
     # Laadt elk sponsor-logo in PIL (ook SVG via svglib), beweist daarmee dat
@@ -399,6 +406,9 @@ def main():
     p.add_argument('--comp-locatie', default='')
     p.add_argument('--sponsors',     default='',
                    help='Formaat: "Naam1:/pad1|Naam2:/pad2"')
+    p.add_argument('--sportity-kanaal', default='',
+                   help='Naam van het Sportity-kanaal (bv. ISKREGIO); '
+                        'leeg = algemene verwijzing naar Sportity')
     args = p.parse_args()
 
     genereer_poster(args)

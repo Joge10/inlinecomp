@@ -316,9 +316,10 @@ try {
 
         // ── Opslaan (aanmaken of bijwerken) ──
         if ($action === 'save') {
-            $id    = !empty($body['id']) ? $body['id'] : null;
-            $naam  = trim($body['naam']  ?? '');
-            $email = trim($body['email'] ?? '') ?: null;
+            $id       = !empty($body['id']) ? $body['id'] : null;
+            $naam     = trim($body['naam']  ?? '');
+            $email    = trim($body['email'] ?? '') ?: null;
+            $sportity = trim($body['sportity_kanaal'] ?? '') ?: null;
 
             if (!$naam) {
                 http_response_code(400);
@@ -328,13 +329,13 @@ try {
 
             if ($id) {
                 $pdo->prepare(
-                    "UPDATE organisaties SET naam = ?, email = ?, updated_at = NOW() WHERE id = ?"
-                )->execute([$naam, $email, $id]);
+                    "UPDATE organisaties SET naam = ?, email = ?, sportity_kanaal = ?, updated_at = NOW() WHERE id = ?"
+                )->execute([$naam, $email, $sportity, $id]);
             } else {
                 $id = newUuid();
                 $pdo->prepare(
-                    "INSERT INTO organisaties (id, naam, email) VALUES (?, ?, ?)"
-                )->execute([$id, $naam, $email]);
+                    "INSERT INTO organisaties (id, naam, email, sportity_kanaal) VALUES (?, ?, ?, ?)"
+                )->execute([$id, $naam, $email, $sportity]);
             }
 
             // Sponsors opslaan

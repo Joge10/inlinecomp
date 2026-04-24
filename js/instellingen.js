@@ -615,6 +615,7 @@ function vulOrgFormulier(org) {
     if (!org) schakelTab('gegevens');
     el('org-naam').value               = org?.naam  ?? '';
     el('org-email').value              = org?.email ?? '';
+    el('org-sportity').value           = org?.sportity_kanaal ?? '';
     el('org-status').innerHTML         = '';
     const isBestaand = !!org;
     el('btn-org-verwijderen').style.display             = isBestaand ? '' : 'none';
@@ -1188,6 +1189,7 @@ async function slaOrgOp() {
         id:       actieveOrg?.id ?? null,
         naam,
         email:    el('org-email').value.trim() || null,
+        sportity_kanaal: el('org-sportity').value.trim() || null,
         sponsors,
     };
 

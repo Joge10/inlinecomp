@@ -14,3 +14,4 @@ Deze map bevat éénmalige ALTER-scripts die op bestaande installaties gedraaid 
 | Datum | Bestand | Omschrijving |
 |---|---|---|
 | 2026-04-21 | `2026-04-21_distances_add_race_type.sql` | `race_type` ENUM-kolom toevoegen aan `distances` (sprint/inline/puntenkoers/afvalkoers) |
+| 2026-04-24 | `2026-04-24_organisaties_add_sportity_kanaal.sql` | `sportity_kanaal` kolom op `organisaties` voor per-regio Sportity-kanaalnaam |

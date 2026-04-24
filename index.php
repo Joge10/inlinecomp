@@ -221,6 +221,10 @@ if (!$gebruiker) {
                                 <input type="email" id="org-email" placeholder="info@organisatie.nl">
                             </div>
                             <div class="inst-veld">
+                                <label for="org-sportity">Sportity-kanaal <span class="label-hint">(voor disclaimer op promotie-poster)</span></label>
+                                <input type="text" id="org-sportity" placeholder="bv. ISKREGIO" maxlength="50">
+                            </div>
+                            <div class="inst-veld">
                                 <label>Logo</label>
                                 <div class="logo-preview-wrap">
                                     <img id="org-logo-preview" src="" alt="" style="display:none">

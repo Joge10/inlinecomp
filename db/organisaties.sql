@@ -5,12 +5,13 @@
 -- sponsors in `organisatie_sponsors`.
 
 CREATE TABLE IF NOT EXISTS `organisaties` (
-    `id`         VARCHAR(36)  NOT NULL,
-    `naam`       VARCHAR(255) NOT NULL,
-    `logo_path`  VARCHAR(500) DEFAULT NULL,
-    `created_at` TIMESTAMP    NULL DEFAULT CURRENT_TIMESTAMP,
-    `updated_at` TIMESTAMP    NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-    `email`      VARCHAR(255) DEFAULT NULL,
+    `id`               VARCHAR(36)  NOT NULL,
+    `naam`             VARCHAR(255) NOT NULL,
+    `logo_path`        VARCHAR(500) DEFAULT NULL,
+    `created_at`       TIMESTAMP    NULL DEFAULT CURRENT_TIMESTAMP,
+    `updated_at`       TIMESTAMP    NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    `email`            VARCHAR(255) DEFAULT NULL,
+    `sportity_kanaal`  VARCHAR(50)  DEFAULT NULL,   -- bv. 'ISKREGIO' — verschilt per KNSB-regio
     PRIMARY KEY (`id`),
     UNIQUE KEY `uq_naam` (`naam`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
