@@ -1,0 +1,1190 @@
+<!DOCTYPE html>
+<html lang="nl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>InlineComp — Handleiding</title>
+<style>
+/* ─── Kleuren uit de echte app (css/style.css variables) ─── */
+:root {
+    --blauw:       #1a3a5c;
+    --middenblauw: #2e75b6;
+    --oranje:      #e86c1b;
+    --oranje-licht:#ff8c42;
+    --licht:       #f5f7fa;
+    --border:      #d6dce5;
+    --groen:       #2a7a2a;
+    --rood:        #c62828;
+    --geel:        #fff8e1;
+    --geel-bord:   #ffe082;
+}
+*, *::before, *::after { box-sizing: border-box; }
+html { scroll-behavior: smooth; }
+body {
+    font-family: 'Segoe UI', 'Helvetica Neue', Arial, sans-serif;
+    font-size: 15px; line-height: 1.55; color: #222; margin: 0; background: #fafbfd;
+}
+.wrap { max-width: 1020px; margin: 0 auto; padding: 30px 24px 80px; background: #fff;
+        box-shadow: 0 0 18px rgba(0,0,0,.04); }
+h1 { font-size: 30px; color: var(--blauw); margin: 40px 0 10px; padding-bottom: 8px;
+     border-bottom: 2px solid var(--oranje); }
+h2 { font-size: 22px; color: var(--blauw); margin: 28px 0 8px; padding-left: 10px;
+     border-left: 4px solid var(--oranje); }
+h3 { font-size: 17px; color: #333; margin: 20px 0 6px; }
+h4 { font-size: 14px; color: #555; margin: 14px 0 4px; text-transform: uppercase; letter-spacing: .5px; }
+p  { margin: 6px 0 12px; }
+ul, ol { margin: 4px 0 12px 24px; padding: 0; }
+li { margin-bottom: 3px; }
+code { background: #eef1f5; padding: 1px 5px; border-radius: 3px; font-size: .9em;
+       color: #c7254e; font-family: Consolas, 'Courier New', monospace; }
+kbd { background: #333; color: #fff; padding: 1px 7px; border-radius: 3px;
+      font-size: .85em; font-family: inherit; }
+.cover { text-align: center; padding: 30px 0 20px; border-bottom: 3px solid var(--oranje); margin-bottom: 24px; }
+.cover h1 { font-size: 38px; margin: 0 0 6px; border: none; }
+.cover .sub { color: #555; font-size: 18px; }
+.cover .versie { color: #aaa; font-size: 13px; margin-top: 12px; }
+.wip { background: var(--geel); border: 1px solid var(--geel-bord); color: #7a5800;
+       padding: 10px 14px; border-radius: 6px; margin: 14px 0; }
+.wip b { color: #5a3e00; }
+
+.toc { background: var(--licht); border-radius: 8px; padding: 16px 22px; margin: 20px 0 30px; }
+.toc h2 { margin-top: 0; border: none; padding: 0; font-size: 18px; }
+.toc ul { list-style: none; margin: 0; padding: 0; }
+.toc ul li { margin: 3px 0; }
+.toc ul ul { margin: 2px 0 4px 16px; font-size: .92em; color: #666; }
+.toc a { color: var(--blauw); text-decoration: none; }
+.toc a:hover { text-decoration: underline; color: var(--oranje); }
+
+.tip  { background: var(--geel); border-left: 4px solid #f59e0b; padding: 10px 14px; margin: 12px 0; border-radius: 4px; }
+.warn { background: #ffebee; border-left: 4px solid var(--rood); padding: 10px 14px; margin: 12px 0; border-radius: 4px; }
+.info { background: #e3f2fd; border-left: 4px solid var(--middenblauw); padding: 10px 14px; margin: 12px 0; border-radius: 4px; }
+.src  { font-family: Consolas, monospace; font-size: .82em; color: #888;
+        background: #f5f5f5; padding: 1px 6px; border-radius: 2px; }
+
+/* Tabellen in de tekst */
+table.ref { width: 100%; border-collapse: collapse; margin: 10px 0 16px; font-size: 13.5px; }
+table.ref th { background: var(--blauw); color: #fff; padding: 6px 10px; text-align: left; font-weight: 600; }
+table.ref td { padding: 5px 10px; border: 1px solid var(--border); }
+table.ref tr:nth-child(even) td { background: #f9fafc; }
+
+/* ═══════════════════════════════════════════════════════════════════════════ */
+/* Mock-ups — exact dezelfde kleuren/stijlen als de echte app                   */
+/* ═══════════════════════════════════════════════════════════════════════════ */
+.mock {
+    border: 1px solid var(--border); border-radius: 8px; overflow: hidden;
+    margin: 14px 0 6px; background: #fff;
+    box-shadow: 0 2px 6px rgba(0,0,0,.05);
+    font-family: 'Segoe UI', 'Helvetica Neue', Arial, sans-serif;
+}
+.mock-caption { text-align: center; font-size: 12px; color: #888;
+                font-style: italic; margin: 0 0 20px; }
+
+/* App-header stijl (uit style.css) */
+.mock-appheader {
+    background: linear-gradient(135deg, #1F4E79 0%, #2E75B6 100%);
+    color: #fff; padding: 10px 20px; display: flex;
+    justify-content: space-between; align-items: center; font-size: 14px;
+}
+.mock-appheader .titel { font-weight: 700; font-size: 16px; letter-spacing: -.3px; }
+.mock-appheader .gebruiker { display: flex; gap: 10px; align-items: center; font-size: 13px; }
+.mock-appheader .rol-badge { background: rgba(255,255,255,.2); padding: 2px 10px; border-radius: 12px; font-size: 11px; font-weight: 600; text-transform: uppercase; }
+.mock-appheader .uitlog { background: transparent; border: none; color: #fff; cursor: pointer; font-size: 16px; }
+
+/* Sidebar */
+.mock-sidebar {
+    background: var(--blauw); color: #cfd8e3; padding: 10px 0;
+    width: 180px; font-size: 13px; flex-shrink: 0;
+}
+.mock-sidebar .nav-item {
+    padding: 9px 16px; display: flex; align-items: center; gap: 10px;
+    border-left: 3px solid transparent;
+}
+.mock-sidebar .nav-item .ico { font-size: 14px; width: 20px; text-align: center; }
+.mock-sidebar .nav-item.active {
+    background: rgba(255,255,255,.06); color: #fff; border-left-color: var(--oranje);
+    font-weight: 600;
+}
+.mock-sidebar .nav-item.hidden { display: none; }
+.mock-sidebar .nav-sep {
+    height: 1px; background: rgba(255,255,255,.12); margin: 10px 14px;
+}
+
+.mock-layout { display: flex; min-height: 300px; }
+.mock-content { flex: 1; padding: 16px 20px; background: var(--licht); overflow: hidden; }
+
+/* Login-kaart (exact na login.php CSS) */
+.mock-loginbg {
+    background: linear-gradient(135deg, #1F4E79 0%, #2E75B6 100%);
+    padding: 34px; display: flex; justify-content: center;
+}
+.mock-logincard {
+    background: #fff; border-radius: 12px; padding: 30px 24px;
+    width: 340px; box-shadow: 0 8px 32px rgba(0,0,0,.25);
+}
+.mock-logincard .logo { text-align: center; font-size: 22px; font-weight: 700;
+                        color: var(--blauw); letter-spacing: -.5px; margin-bottom: 4px; }
+.mock-logincard .sub { text-align: center; font-size: 11px; color: #888; margin-bottom: 24px; }
+.mock-logincard .info-balk {
+    background: var(--geel); border: 1px solid var(--geel-bord); color: #7a5800;
+    border-radius: 6px; padding: 8px 12px; font-size: 12px; margin-bottom: 14px;
+}
+.mock-logincard .veld { margin-bottom: 14px; }
+.mock-logincard .veld label { display: block; font-size: 12px; color: #555; font-weight: 600; margin-bottom: 4px; }
+.mock-logincard .veld input {
+    width: 100%; padding: 8px 10px; border: 1px solid var(--border);
+    border-radius: 6px; font-size: 14px; font-family: inherit;
+}
+.mock-logincard .btn-login {
+    width: 100%; padding: 9px; background: var(--middenblauw); color: #fff;
+    border: none; border-radius: 6px; font-size: 14px; font-weight: 600;
+    margin-top: 8px; cursor: default;
+}
+.mock-logincard .versie {
+    text-align: center; font-size: 11px; color: #bbb; margin-top: 16px;
+}
+.mock-logincard .versie a { color: #bbb; }
+
+/* Knoppen in de app (komen uit style.css) */
+.btn-app {
+    display: inline-block; padding: 6px 14px; border-radius: 6px; font-size: 13px;
+    font-weight: 600; cursor: default; line-height: 1.3; border: 1px solid transparent;
+}
+.btn-app.btn-primary   { background: var(--middenblauw); color: #fff; }
+.btn-app.btn-import    { background: var(--oranje); color: #fff; padding: 8px 16px; font-size: 14px; }
+.btn-app.btn-secondary { background: #fff; color: #333; border-color: var(--border); }
+.btn-app.btn-danger    { background: var(--rood); color: #fff; }
+.btn-app.btn-dirty     { background: var(--oranje-licht); color: #fff; }
+.btn-app.disabled      { opacity: .5; }
+
+/* Input-veld */
+.inp-app {
+    display: inline-block; padding: 5px 8px; border: 1px solid var(--border);
+    border-radius: 5px; font-size: 13px; background: #fff; color: #222; font-family: inherit;
+    vertical-align: middle;
+}
+
+/* Wedstrijd-kaart (uit comp-card CSS) */
+.mock-comp-card {
+    background: #fff; border: 1px solid var(--border); border-radius: 7px;
+    padding: 10px 14px; margin-bottom: 8px; cursor: default;
+}
+.mock-comp-card.active { border-color: var(--middenblauw); box-shadow: 0 0 0 2px rgba(46,117,182,.2); }
+.mock-comp-card .naam { font-weight: 600; color: #222; font-size: 14px; }
+.mock-comp-card .meta { color: #666; font-size: 12px; margin-top: 3px; }
+
+/* Datumfilter-blok */
+.mock-date-filter {
+    background: #eef2f7; padding: 8px 10px; border-radius: 6px; margin-bottom: 10px;
+    display: flex; flex-wrap: wrap; gap: 6px 10px; font-size: 12px; align-items: center;
+}
+.mock-date-filter label { display: flex; align-items: center; gap: 4px; color: #555; }
+.mock-date-filter input, .mock-date-filter select {
+    padding: 3px 6px; border: 1px solid var(--border); border-radius: 4px; font-size: 12px;
+    background: #fff;
+}
+
+/* Tabs (uit tab-bar CSS) */
+.mock-tab-bar {
+    display: flex; gap: 3px; border-bottom: 2px solid var(--blauw);
+    padding: 0 10px; background: #eef2f7; flex-wrap: wrap;
+}
+.mock-tab-bar .tab-btn {
+    padding: 7px 14px; background: #dde3ea; color: #555; font-size: 13px;
+    border-radius: 4px 4px 0 0; cursor: default; display: flex; align-items: center; gap: 6px;
+}
+.mock-tab-bar .tab-btn.active { background: var(--blauw); color: #fff; font-weight: 600; }
+.tab-badge { display: inline-block; padding: 1px 6px; border-radius: 10px; font-size: 10px; font-weight: 700; }
+.tab-badge.afgemeld { background: #ffcdd2; color: var(--rood); }
+.tab-badge.nieuw    { background: #c8e6c9; color: var(--groen); }
+
+/* Vergelijk-tabel */
+.mock-vergelijk-tabel { width: 100%; border-collapse: collapse; font-size: 12.5px; background: #fff; }
+.mock-vergelijk-tabel th {
+    background: var(--blauw); color: #fff; padding: 6px 8px; text-align: left; font-size: 11.5px; font-weight: 600;
+}
+.mock-vergelijk-tabel td { padding: 4px 8px; border-bottom: 1px solid #eef1f5; vertical-align: middle; }
+.mock-vergelijk-tabel tr.row-new       { background: #f0fff4; }
+.mock-vergelijk-tabel tr.row-diff      { background: #fff4e5; }
+.mock-vergelijk-tabel tr.row-withdrawn { opacity: .55; background: #fafafa; }
+.mock-vergelijk-tabel tr.row-modified  { box-shadow: inset 3px 0 0 var(--oranje-licht); }
+.mock-vergelijk-tabel .inp-sn   { width: 60px; padding: 3px 5px; border: 1px solid var(--border); border-radius: 4px; font-size: 12.5px; }
+.mock-vergelijk-tabel .inp-naam { width: 100%; padding: 3px 5px; border: 1px solid var(--border); border-radius: 4px; font-size: 12.5px; }
+.mock-vergelijk-tabel .knsb-hint {
+    font-size: 10px; color: #d84315; margin-top: 2px; font-style: italic;
+}
+.mock-vergelijk-tabel .cell-diff { background: #fff3e0; }
+.mock-vergelijk-tabel .tp-sel-drop { width: 100%; padding: 3px 5px; border: 1px solid var(--border); border-radius: 4px; font-size: 12px; background: #fff; }
+.mock-vergelijk-tabel .tp-add-btn { margin-left: 3px; padding: 2px 6px; background: #f0f3f8; border: 1px solid var(--border); border-radius: 3px; font-size: 11px; cursor: default; }
+.mock-vergelijk-tabel .status-badge {
+    display: inline-block; padding: 2px 8px; border-radius: 10px; font-size: 11px; font-weight: 600;
+    cursor: default;
+}
+.status-0 { background: #f0f3f8; color: #555; }
+.status-1 { background: #c8e6c9; color: var(--groen); }
+.status-2 { background: #ffcdd2; color: var(--rood); }
+.status-3 { background: #ffe0b2; color: #bf360c; }
+.status-4 { background: #ffe0b2; color: #bf360c; }
+.status-5 { background: #d1e7ff; color: var(--blauw); }
+.badge-reserve { background: #f0f3f8; color: #555; padding: 1px 6px; border-radius: 10px; font-size: 10px; margin-left: 4px; }
+.badge-nieuw   { background: var(--groen); color: #fff; padding: 1px 6px; border-radius: 3px; font-size: 10px; font-weight: 700; margin-right: 3px; }
+.badge-anoniem { background: #999; color: #fff; padding: 1px 6px; border-radius: 3px; font-size: 10px; font-weight: 700; margin-right: 3px; }
+.badge-diff    { background: var(--oranje); color: #fff; padding: 1px 7px; border-radius: 3px; font-size: 11px; font-weight: 700; margin-right: 3px; }
+.badge-meld    { background: var(--middenblauw); color: #fff; padding: 1px 6px; border-radius: 3px; font-size: 11px; font-weight: 700; cursor: default; }
+.guest-nr .inp-sn { border-color: #fdd835; background: #fffde7; }
+.btn-deelnemer-add {
+    margin-top: 10px; padding: 5px 12px; background: #fff; border: 1px dashed var(--middenblauw);
+    border-radius: 5px; color: var(--middenblauw); font-size: 12.5px; cursor: default;
+}
+
+/* Detail-panel header */
+.mock-detail-header {
+    background: #fff; padding: 12px 16px; border-bottom: 1px solid var(--border);
+    display: flex; justify-content: space-between; align-items: flex-start; gap: 16px;
+}
+.mock-detail-header h2 { margin: 0 0 4px; font-size: 18px; color: var(--blauw); border: none; padding: 0; }
+.mock-detail-header .meta { font-size: 12px; color: #666; }
+.mock-detail-header .knsb-sync { font-size: 11px; color: #888; margin-top: 2px; }
+
+/* Beheer-panel */
+.mock-beheer-wrap { background: #fff; border: 1px solid var(--border); border-radius: 6px; padding: 10px 14px; margin: 8px 0; }
+.mock-beheer-wrap .kop { display: flex; align-items: center; gap: 6px; font-weight: 600; color: var(--blauw); cursor: default; font-size: 13px; }
+.mock-beheer-tabel { width: 100%; border-collapse: collapse; font-size: 12px; margin-top: 8px; }
+.mock-beheer-tabel th { background: #eef2f7; color: #333; padding: 5px 8px; text-align: left; font-size: 11px; font-weight: 600; border-bottom: 1px solid var(--border); }
+.mock-beheer-tabel td { padding: 6px 8px; border-bottom: 1px solid #eef1f5; vertical-align: top; }
+.dc-groep-naam { display: flex; align-items: center; gap: 4px; font-weight: 600; font-size: 12.5px; margin-bottom: 2px; }
+.dc-merge-rij, .dc-merge-label-rij { display: flex; align-items: center; gap: 4px; margin-top: 4px; font-size: 11px; color: #666; }
+.dc-merge-sel { padding: 2px 6px; border: 1px solid var(--border); border-radius: 3px; background: #fff; font-size: 11px; }
+.dc-merge-label-inp { padding: 2px 6px; border: 1px solid var(--border); border-radius: 3px; font-size: 11px; }
+.dc-cat-rij { display: flex; align-items: center; gap: 4px; font-size: 11.5px; margin-bottom: 2px; }
+.dc-cat-badge { background: #f0f3f8; padding: 1px 6px; border-radius: 3px; font-weight: 600; color: var(--blauw); }
+.dc-cat-tel { color: #888; }
+.dc-split-inp { padding: 2px 6px; border: 1px solid var(--border); border-radius: 3px; font-size: 11px; width: 90px; }
+.dc-pijl { color: #aaa; }
+.dc-afd-kol-inner { display: flex; flex-direction: column; gap: 2px; min-width: 130px; }
+.dc-afd-naam, .dc-afd-m, .dc-afd-race-type { padding: 2px 5px; border: 1px solid var(--border); border-radius: 3px; font-size: 11px; background: #fff; }
+.btn-del { background: none; border: none; color: var(--rood); cursor: default; padding: 0 4px; font-size: 13px; }
+.beheer-acties { display: flex; gap: 8px; margin-top: 10px; align-items: center; }
+
+/* Modal overlay */
+.mock-modal-ovl { background: rgba(0,0,0,.45); padding: 30px; display: flex; justify-content: center; }
+.mock-modal {
+    background: #fff; border-radius: 10px; width: 520px; max-width: 100%; overflow: hidden;
+    box-shadow: 0 10px 40px rgba(0,0,0,.3);
+}
+.mock-modal .kop {
+    background: var(--blauw); color: #fff; padding: 10px 16px;
+    display: flex; justify-content: space-between; align-items: center;
+}
+.mock-modal .kop h3 { margin: 0; font-size: 15px; font-weight: 600; }
+.mock-modal .kop .sub { font-size: 11px; opacity: .8; }
+.mock-modal .body { padding: 14px 18px; font-size: 13px; }
+.mock-modal .voet { padding: 10px 18px; background: #f5f7fa; border-top: 1px solid var(--border); display: flex; justify-content: flex-end; gap: 6px; }
+.mock-modal .mz-tabs { display: flex; gap: 2px; margin-bottom: 8px; }
+.mock-modal .mz-tab {
+    padding: 5px 12px; font-size: 12px; background: #e0e7ef; border-radius: 4px 4px 0 0;
+    border-bottom: 2px solid transparent;
+}
+.mock-modal .mz-tab.active { background: #fff; border-bottom-color: var(--oranje); font-weight: 600; }
+.mock-modal .mz-invoer { display: flex; gap: 6px; margin-bottom: 8px; align-items: center; }
+.mock-modal .mf-rij { margin-bottom: 10px; }
+.mock-modal .mf-rij.twee { display: flex; gap: 10px; }
+.mock-modal .mf-lbl { display: flex; flex-direction: column; gap: 3px; flex: 1; font-size: 11.5px; color: #555; }
+.mock-modal .mf-lbl input, .mock-modal .mf-lbl select {
+    padding: 5px 7px; border: 1px solid var(--border); border-radius: 4px; font-size: 13px;
+}
+.mock-modal .mf-hint { font-size: 10px; color: #888; margin-top: 2px; }
+.vereist { color: var(--rood); }
+
+/* Import-result-details */
+.mock-import-log {
+    background: #e8f5e9; border: 1px solid #a5d6a7; color: #1b5e20;
+    padding: 8px 14px; border-radius: 6px; font-size: 13px; margin: 10px 0;
+}
+.mock-import-log ul { margin: 6px 0 0 20px; font-size: 12px; font-family: Consolas, monospace; color: #333; }
+.mock-import-log li { margin: 1px 0; }
+
+/* Print-button + print-css */
+.print-btn {
+    position: fixed; top: 16px; right: 16px; padding: 8px 14px;
+    background: var(--blauw); color: #fff; border: none; border-radius: 6px;
+    cursor: pointer; font-size: 13px; font-weight: 600; z-index: 999;
+    box-shadow: 0 2px 8px rgba(0,0,0,.2);
+}
+@media print {
+    body { background: #fff; font-size: 11pt; }
+    .wrap { box-shadow: none; padding: 0; max-width: none; }
+    .mock { page-break-inside: avoid; }
+    .noprint { display: none !important; }
+    h1, h2 { page-break-after: avoid; }
+}
+</style>
+</head>
+<body>
+
+<button class="print-btn noprint" onclick="window.print()">🖨 Opslaan als PDF / Printen</button>
+
+<div class="wrap">
+
+<div class="cover">
+    <h1>InlineComp</h1>
+    <p class="sub">Handleiding — admin, publiek, coach</p>
+    <p class="versie">versie april 2026 — <a href="https://inlineresults.devriesen.com" style="color:#999;text-decoration:none">inlineresults.devriesen.com</a></p>
+</div>
+
+<div class="wip"><b>WIP:</b> deze handleiding wordt module-voor-module gevuld op basis van code-inspectie (niet meer van geheugen). Op dit moment is alleen <b>Login + layout</b> en <b>Module Importeer</b> volledig gecontroleerd tegen de bron. Onderaan zie je welke modules nog aan de beurt zijn. Bij elk scherm staat een bronverwijzing <span class="src">bestand:regel</span> zodat je elke claim kunt verifiëren.</div>
+
+<div class="toc">
+    <h2>Inhoudsopgave</h2>
+    <ul>
+        <li><b><a href="#deel-admin">Deel 1 — Admin-applicatie</a></b>
+            <ul>
+                <li><a href="#a-login">1.1 Login en rollen</a></li>
+                <li><a href="#a-layout">1.2 Layout en navigatie</a></li>
+                <li><a href="#a-importeer">1.3 Module Importeer</a></li>
+                <li style="color:#aaa">1.4 Module Tijdschema <em>(volgende sessie)</em></li>
+                <li style="color:#aaa">1.5 Module Startlijsten <em>(volgende sessie)</em></li>
+                <li style="color:#aaa">1.6 Module Live verwerking <em>(volgende sessie)</em></li>
+                <li style="color:#aaa">1.7 Module Uitslag <em>(volgende sessie)</em></li>
+                <li style="color:#aaa">1.8 Module Beheer <em>(volgende sessie)</em></li>
+                <li style="color:#aaa">1.9 Module Gebruikers <em>(volgende sessie)</em></li>
+                <li style="color:#aaa">1.10 Module Rijders (AVG) <em>(volgende sessie)</em></li>
+            </ul>
+        </li>
+        <li style="color:#aaa"><b>Deel 2 — Publieke applicatie</b> <em>(volgende sessie)</em></li>
+        <li style="color:#aaa"><b>Deel 3 — Coach-applicatie</b> <em>(volgende sessie)</em></li>
+    </ul>
+</div>
+
+<h1 id="deel-admin">Deel 1 — Admin-applicatie</h1>
+<p>Bereikbaar op <code>https://inlineresults.devriesen.com/</code> (de root van het domein). Inloggen is verplicht.</p>
+
+<h2 id="a-login">1.1 Login en rollen</h2>
+<p class="src">Bron: login.php · api/auth.php · db/users.sql</p>
+
+<h3>Twee modi: eerste-keer vs. normaal</h3>
+<p>Het loginscherm kijkt bij openen eerst of er al gebruikers in de database staan (<code>SELECT COUNT(*) FROM users</code>, login.php regel 10). Als het aantal nul is, verschijnt er een uitgebreid <b>owner-aanmaakformulier</b>. Anders het standaard login-scherm.</p>
+
+<h4>Eerste keer: owner-account aanmaken</h4>
+
+<!-- MOCKUP: owner-bootstrap -->
+<div class="mock">
+  <div class="mock-loginbg">
+    <div class="mock-logincard">
+        <div class="logo">InlineComp</div>
+        <div class="sub">Wedstrijdbeheer inline-skaten</div>
+        <div class="info-balk">Geen gebruikers gevonden. Maak het eerste owner-account aan.</div>
+        <div class="veld"><label>Volledige naam</label><input type="text" value=""></div>
+        <div class="veld"><label>Gebruikersnaam</label><input type="text" value=""></div>
+        <div class="veld"><label>Wachtwoord</label><input type="password" value=""></div>
+        <div class="veld"><label>Wachtwoord herhalen</label><input type="password" value=""></div>
+        <button class="btn-login">Owner-account aanmaken</button>
+        <div class="versie">InlineComp © 2026 · <a href="#">Privacyverklaring</a></div>
+    </div>
+  </div>
+</div>
+<p class="mock-caption">↑ Loginscherm in owner-bootstrap-modus. Vier velden, gele info-balk bovenin.</p>
+
+<ul>
+    <li><b>Volledige naam</b> — wordt opgeslagen in <code>users.naam</code> en weergegeven in de header.</li>
+    <li><b>Gebruikersnaam</b> — moet uniek zijn (<code>UNIQUE KEY</code> op <code>users.username</code>).</li>
+    <li><b>Wachtwoord</b> — minimum 8 tekens (HTML-attribuut <code>minlength="8"</code>, login.php regel 118). Server-side opgeslagen als bcrypt-hash (<code>password_hash()</code>).</li>
+    <li><b>Wachtwoord herhalen</b> — client-side check dat de twee velden overeenkomen.</li>
+</ul>
+<p>Bij succes: het account krijgt rol <code>owner</code> en de gebruiker wordt meteen ingelogd.</p>
+
+<h4>Normaal inloggen</h4>
+
+<!-- MOCKUP: normaal login -->
+<div class="mock">
+  <div class="mock-loginbg">
+    <div class="mock-logincard">
+        <div class="logo">InlineComp</div>
+        <div class="sub">Wedstrijdbeheer inline-skaten</div>
+        <div class="veld"><label>Gebruikersnaam</label><input type="text" value="geert"></div>
+        <div class="veld"><label>Wachtwoord</label><input type="password" value="••••••••••"></div>
+        <button class="btn-login">Inloggen</button>
+        <div class="versie">InlineComp © 2026 · <a href="#">Privacyverklaring</a></div>
+    </div>
+  </div>
+</div>
+<p class="mock-caption">↑ Normale login. Linkje naar de publieke privacyverklaring onderaan.</p>
+
+<p>Na succesvolle verificatie wordt een sessie-cookie <code>ic_session</code> gezet met een 64-hex-token. Die token staat ook in de tabel <code>sessions</code> met een <code>expires_at</code>-datum.</p>
+
+<h3>De zes rollen</h3>
+<p class="src">Bron: db/users.sql (ENUM) · js/app.js SCHRIJF_ROLLEN-constant</p>
+
+<table class="ref">
+<tr><th>Rol</th><th>Schrijfrechten</th></tr>
+<tr><td><code>viewer</code></td><td>Geen — alleen lezen op alle modules</td></tr>
+<tr><td><code>timer</code></td><td><code>live</code>, <code>uitslag</code></td></tr>
+<tr><td><code>planner</code></td><td><code>tijdschema</code>, <code>startlijsten</code></td></tr>
+<tr><td><code>importer</code></td><td><code>importeer</code></td></tr>
+<tr><td><code>admin</code></td><td>Alle modules behalve gebruikersbeheer</td></tr>
+<tr><td><code>owner</code></td><td>Alles, inclusief gebruikersbeheer</td></tr>
+</table>
+
+<p>De JS-helper <code>magSchrijven(module)</code> bepaalt of de huidige gebruiker in de rollen-lijst voor die module staat. Zo niet, dan wordt de pagina in <b>read-only modus</b> gerenderd: formulier-velden krijgen <code>disabled</code> en bovenin verschijnt een banner.</p>
+
+<h3>Sessie verlopen</h3>
+<p>Alle <code>fetch()</code>-oproepen vanuit de JS worden geïntercepteerd. Komt er een 401-respons terug, dan verschijnt automatisch een mini-loginmodal met je gebruikersnaam al ingevuld. Na herinloggen gaat de oorspronkelijke request door. Geen data-verlies.</p>
+
+<h3>Uitloggen</h3>
+<p>Knop <code>#btn-uitloggen</code> (pijltje ➤) rechtsboven. Roept <code>api/auth.php</code> met <code>action=logout</code>, wist het sessie-token en stuurt door naar <code>login.php</code>.</p>
+
+<h2 id="a-layout">1.2 Layout en navigatie</h2>
+<p class="src">Bron: index.php regel 1-144 · js/app.js (nav-handling)</p>
+
+<h3>Hoofdindeling: header + sidebar + content</h3>
+
+<!-- MOCKUP: hoofdlayout -->
+<div class="mock">
+  <div class="mock-appheader">
+    <div class="titel">InlineComp</div>
+    <div class="gebruiker">
+        <span>Geert de Vries</span>
+        <span class="rol-badge">owner</span>
+        <button class="uitlog" title="Uitloggen">➤</button>
+    </div>
+  </div>
+  <div class="mock-layout">
+    <div class="mock-sidebar">
+        <div class="nav-item"><span class="ico">⇓</span><span>Importeer</span></div>
+        <div class="nav-item"><span class="ico">📅</span><span>Tijdschema</span></div>
+        <div class="nav-item"><span class="ico">📋</span><span>Startlijsten</span></div>
+        <div class="nav-item active"><span class="ico">▶</span><span>Live verwerking</span></div>
+        <div class="nav-item"><span class="ico">🏆</span><span>Uitslag</span></div>
+        <div class="nav-sep"></div>
+        <div class="nav-item"><span class="ico">⚙</span><span>Beheer</span></div>
+        <div class="nav-item"><span class="ico">👤</span><span>Gebruikers</span></div>
+        <div class="nav-item"><span class="ico">👥</span><span>Rijders</span></div>
+        <div class="nav-item"><span class="ico">ℹ</span><span>Info</span></div>
+    </div>
+    <div class="mock-content">
+        <div style="color:var(--blauw);font-weight:600;font-size:16px;margin-bottom:8px">Huidig scherm: Live verwerking</div>
+        <div style="color:#888;font-size:13px">(inhoud van de geselecteerde module wordt hier gerenderd)</div>
+    </div>
+  </div>
+</div>
+<p class="mock-caption">↑ Hoofdlayout. Header met gradient, sidebar met oranje accent op de actieve module.</p>
+
+<h3>Sidebar — nav-items</h3>
+<p class="src">Bron: index.php regel 40-81</p>
+
+<table class="ref">
+<tr><th>Icoon</th><th>data-page</th><th>Label</th><th>Positie</th><th>Zichtbaarheid</th></tr>
+<tr><td>⇓</td><td>importeer</td><td>Importeer</td><td>Boven</td><td>Altijd</td></tr>
+<tr><td>📅</td><td>tijdschema</td><td>Tijdschema</td><td>Boven</td><td>Altijd</td></tr>
+<tr><td>📋</td><td>startlijsten</td><td>Startlijsten</td><td>Boven</td><td>Altijd</td></tr>
+<tr><td>▶</td><td>live</td><td>Live verwerking</td><td>Boven</td><td>Altijd</td></tr>
+<tr><td>🏆</td><td>klassementen</td><td>Uitslag</td><td>Boven</td><td>Altijd</td></tr>
+<tr><td>⚙</td><td>instellingen</td><td>Beheer</td><td>Onder</td><td>Altijd</td></tr>
+<tr><td>👤</td><td>gebruikers</td><td>Gebruikers</td><td>Onder</td><td><code>owner</code>/<code>admin</code> (staat standaard op <code>display:none</code>)</td></tr>
+<tr><td>👥</td><td>rijders</td><td>Rijders</td><td>Onder</td><td><code>owner</code>/<code>admin</code> (idem)</td></tr>
+<tr><td>ℹ</td><td>info</td><td>Info</td><td>Onder</td><td>Altijd</td></tr>
+</table>
+
+<p>Opvallend: de nav-item voor <em>Uitslag</em> gebruikt <code>data-page="klassementen"</code>, niet <code>uitslag</code>. Dit is een historische naamgeving — het label in de UI zegt "Uitslag" maar de module-key is <code>klassementen</code>.</p>
+
+<h3>Sidebar in-/uitklappen</h3>
+<p>Knopje <code>#sidebar-toggle</code> (❮) bovenaan de sidebar. Maakt de sidebar smaller (alleen iconen) via een CSS-class op de <code>&lt;nav&gt;</code>. De voorkeur wordt onthouden in <code>localStorage</code>.</p>
+
+<h3>Pagina-wisseling</h3>
+<p>De content-kant is één <code>&lt;main&gt;</code> met per module een <code>&lt;div class="page"&gt;</code> (bv. <code>#page-importeer</code>, <code>#page-tijdschema</code>). Bij nav-click wordt aan de actieve <code>.page</code> ook de class <code>active</code> toegevoegd; andere worden weggehaald via CSS.</p>
+
+<h3>Dirty-tracking</h3>
+<p>Globale JS-variabele <code>heeftWijzigingen</code>. Wordt op <code>true</code> gezet zodra je iets aanpast. Impact:</p>
+<ul>
+    <li>Navigeer je naar een andere module via de sidebar → <code>toonBevestigDialog()</code> vraagt of je door wilt gaan zonder opslaan.</li>
+    <li>Probeer je de tab te sluiten → browser-native waarschuwing via <code>beforeunload</code>-event (<code>app.js</code>).</li>
+</ul>
+
+<h2 id="a-importeer">1.3 Module Importeer</h2>
+<p class="src">Bron: index.php regel 86-143 · js/app.js (wedstrijdlijst) · js/import.js · api/competitions.php · api/vergelijk.php · api/import.php</p>
+
+<p>De ingang van elke nieuwe wedstrijd. Wedstrijden van de KNSB-API ophalen, vergelijken met de lokale database, en importeren (met alle deelnemer-edits meegenomen).</p>
+
+<h3>1.3.1 Tweedelige opzet</h3>
+<p>De pagina <code>#page-importeer</code> bestaat uit twee kolommen:</p>
+
+<!-- MOCKUP: importeer-tweedeling (leeg, geen wedstrijd geselecteerd) -->
+<div class="mock">
+  <div class="mock-appheader">
+    <div class="titel">InlineComp</div>
+    <div class="gebruiker"><span>Geert de Vries</span><span class="rol-badge">owner</span><button class="uitlog">➤</button></div>
+  </div>
+  <div class="mock-layout">
+    <div class="mock-sidebar">
+        <div class="nav-item active"><span class="ico">⇓</span><span>Importeer</span></div>
+        <div class="nav-item"><span class="ico">📅</span><span>Tijdschema</span></div>
+        <div class="nav-item"><span class="ico">📋</span><span>Startlijsten</span></div>
+        <div class="nav-item"><span class="ico">▶</span><span>Live verwerking</span></div>
+        <div class="nav-item"><span class="ico">🏆</span><span>Uitslag</span></div>
+        <div class="nav-sep"></div>
+        <div class="nav-item"><span class="ico">⚙</span><span>Beheer</span></div>
+    </div>
+    <div class="mock-content" style="display:flex;gap:16px;padding:14px">
+        <div style="width:300px;flex-shrink:0">
+            <div style="color:var(--blauw);font-weight:700;font-size:14px;margin-bottom:8px">Wedstrijden</div>
+            <div class="mock-date-filter">
+                <label>Van <input type="date"></label>
+                <label>Tot <input type="date"></label>
+                <label>Locatie <select><option>— alle —</option></select></label>
+                <label>Organisatie <select><option>— alle —</option></select></label>
+                <button class="btn-app btn-secondary">Wis</button>
+                <button class="btn-app btn-secondary">↻</button>
+            </div>
+            <div class="mock-comp-card">
+                <div class="naam">JSC 1</div>
+                <div class="meta">zaterdag 19 april 2026 · Inline-skatecentrum Heerenveen</div>
+            </div>
+            <div class="mock-comp-card active">
+                <div class="naam">KNSB Baan/Weg 1</div>
+                <div class="meta">zaterdag 4 april 2026 · Heerenveen</div>
+            </div>
+            <div class="mock-comp-card">
+                <div class="naam">KNSB Baan/Weg 2</div>
+                <div class="meta">zaterdag 9 mei 2026 · Lisserbroek</div>
+            </div>
+        </div>
+        <div style="flex:1;background:#fff;border:1px solid var(--border);border-radius:6px;padding:30px;text-align:center;color:#888;font-size:13px;font-style:italic">
+            Klik links op een wedstrijd om details te zien
+        </div>
+    </div>
+  </div>
+</div>
+<p class="mock-caption">↑ Importeer-pagina met wedstrijdenlijst links, details-panel rechts (in initiele leeg-toestand).</p>
+
+<p>Links: <code>.voorb-left</code> met de wedstrijdenlijst en filters. Rechts: <code>.voorb-right</code> met <code>#detail-panel</code> dat verborgen blijft tot je een wedstrijd selecteert.</p>
+
+<h3>1.3.2 Wedstrijdenlijst laden</h3>
+<p class="src">Bron: js/app.js regel 233 (<code>laadWedstrijden</code>)</p>
+
+<p>Bij openen van de app wordt <code>laadWedstrijden()</code> aangeroepen. Die doet:</p>
+<ol>
+    <li>Fetcht <code>api/competitions.php</code>, met optioneel <code>?van=&lt;datum&gt;</code> als je het Van-datumfilter hebt ingevuld.</li>
+    <li>Vult globale <code>allWedstrijden</code> met de JSON-respons.</li>
+    <li>Roept <code>vulLocatieDropdown()</code> en <code>vulOrganisatieDropdown()</code> aan.</li>
+    <li>Roept <code>renderWedstrijdLijst()</code> aan.</li>
+    <li>Als er al een wedstrijd geselecteerd was (<code>huidigCompId</code>): opnieuw ophalen van de vergelijk-data via <code>herlaadVergelijking()</code>.</li>
+</ol>
+
+<p>Tijdens het laden:</p>
+<ul>
+    <li>Verversknop <code>#btn-ververs-wedstrijden</code> wordt <code>disabled</code>.</li>
+    <li>Icoon <code>#ververs-icon</code> draait (CSS <code>animation: spin 0.8s linear infinite</code>).</li>
+</ul>
+
+<h3>1.3.3 Filters</h3>
+<p class="src">Bron: js/app.js regel 325 (<code>renderWedstrijdLijst</code>)</p>
+
+<p>Vier filters, allemaal gecombineerd met AND:</p>
+
+<table class="ref">
+<tr><th>Filter</th><th>Element</th><th>Werking</th></tr>
+<tr><td>Van-datum</td><td><code>#filter-van</code></td><td><code>c.starts &gt;= van</code></td></tr>
+<tr><td>Tot-datum</td><td><code>#filter-tot</code></td><td><code>c.starts &lt;= tot + 'T23:59:59'</code> (hele dag meegenomen)</td></tr>
+<tr><td>Locatie</td><td><code>#filter-locatie</code></td><td>Exacte match op <code>getLocatie(c)</code></td></tr>
+<tr><td>Organisatie</td><td><code>#filter-organisatie</code></td><td>Exacte match op email of naam uit <code>c.settings.contact</code></td></tr>
+</table>
+
+<p><b>Locatie-dropdown</b> (<code>vulLocatieDropdown</code>): unieke waarden uit <code>allWedstrijden</code>, alfabetisch gesorteerd.</p>
+
+<p><b>Organisatie-dropdown</b> (<code>vulOrganisatieDropdown</code>): slimmer. Wedstrijden worden gegroepeerd op e-mailadres (of naam als fallback). Per groep wordt de <b>meest voorkomende naam</b> als label gekozen. Zo worden typo-varianten ("KNSB ZH" / "KNSB Gewest ZH Inline") automatisch verenigd onder één dropdown-optie.</p>
+
+<h3>1.3.4 Knoppen in het filter-blok</h3>
+<p class="src">Bron: index.php regel 107-109</p>
+
+<ul>
+    <li><code>#filter-reset</code> (label "Wis") — zet alle filter-velden op leeg.</li>
+    <li><code>#btn-ververs-wedstrijden</code> met icoon ↻ — roept <code>laadWedstrijden()</code> opnieuw aan.</li>
+</ul>
+
+<h3>1.3.5 Wedstrijd-kaarten</h3>
+<p class="src">Bron: js/app.js regel 350-374</p>
+
+<p>Elke wedstrijd in de lijst wordt als een <code>&lt;div class="comp-card"&gt;</code> gerenderd met:</p>
+<ul>
+    <li><code>.comp-naam</code> — wedstrijdnaam (<code>comp.name</code> of <code>comp.title</code>)</li>
+    <li><code>.comp-meta</code> — <code>formatDatum(comp.starts)</code> + optioneel <code>' · ' + getLocatie(comp)</code></li>
+</ul>
+
+<div class="warn"><b>Let op:</b> er staan <b>geen badges</b> zoals "In DB" of "Nieuw" op de kaarten zelf. De enige visuele markering is de <code>.active</code>-class voor de geselecteerde wedstrijd (blauwe rand).</div>
+
+<h3>1.3.6 Limiet zonder filter</h3>
+<p>Er is een constante <code>MAX_ZONDER_FILTER</code> in <code>app.js</code>. Als er meer wedstrijden in de lijst zitten dan die limiet én er is géén filter actief, wordt de lijst ingekort met een <code>+ N meer — gebruik filters om te verfijnen</code>-regel onderaan.</p>
+
+<h3>1.3.7 Een wedstrijd selecteren</h3>
+<p class="src">Bron: js/app.js regel 379 (<code>selectWedstrijd</code>)</p>
+
+<p>Bij klik op een wedstrijdkaart:</p>
+<ol>
+    <li>Als er onopgeslagen wijzigingen zijn → <code>toonBevestigDialog</code> vraagt of je door wilt.</li>
+    <li>Eventuele lopende <code>vergelijk.php</code>-fetch wordt geannuleerd (<code>AbortController</code>).</li>
+    <li>Actieve kaart-markering wordt verplaatst naar de nieuw aangeklikte.</li>
+    <li>Globals <code>huidigCompId</code> en <code>huidigComp</code> worden geset.</li>
+    <li><code>#detail-panel</code> wordt zichtbaar, titel + meta ingevuld.</li>
+    <li>Fetch <code>api/vergelijk.php?id=&lt;id&gt;</code> en verwerk de response.</li>
+    <li><code>initEdits()</code> — lokale edit-state opzetten.</li>
+    <li><code>bouwVergelijkTabbladen()</code> — tabs renderen.</li>
+    <li><code>updateImportBtn()</code> — importeer-knop state (enabled/disabled).</li>
+</ol>
+
+<h3>1.3.8 Detail-header</h3>
+<p class="src">Bron: index.php regel 120-134</p>
+
+<!-- MOCKUP: detail-header -->
+<div class="mock">
+  <div class="mock-detail-header">
+    <div>
+        <h2>KNSB Baan/Weg 1</h2>
+        <div class="meta">zaterdag 4 april 2026 · Heerenveen</div>
+        <div class="knsb-sync">KNSB-sync: 10:23 vandaag · DB-stand: 14-04-2026</div>
+    </div>
+    <button class="btn-app btn-import">⇓ Importeer</button>
+  </div>
+</div>
+<p class="mock-caption">↑ Detail-header met wedstrijd-info links, importeer-knop rechts.</p>
+
+<ul>
+    <li><code>#detail-title</code> — wedstrijdnaam</li>
+    <li><code>#detail-meta</code> — datum + locatie</li>
+    <li><code>#knsb-sync-info</code> — wordt gevuld door <code>zetKnsbTimestamp()</code>. Toont wanneer de KNSB-data laatst werd opgehaald en wanneer de lokale DB-stand is bijgewerkt.</li>
+    <li><code>#btn-import</code> — krijgt een klik-handler gebonden aan <code>importeerWedstrijd(comp.id, comp.name)</code></li>
+</ul>
+
+<h3>1.3.9 Categorie-tabs</h3>
+<p class="src">Bron: js/import.js regel 720 (<code>bouwVergelijkTabbladen</code>)</p>
+
+<!-- MOCKUP: categorie-tabs -->
+<div class="mock">
+  <div style="padding:10px 14px;background:#fff">
+    <div class="mock-tab-bar">
+        <div class="tab-btn active">HSA (22)</div>
+        <div class="tab-btn">HSB (18) <span class="tab-badge afgemeld">1✗</span></div>
+        <div class="tab-btn">DSA (17) <span class="tab-badge nieuw">2N</span></div>
+        <div class="tab-btn">DSB (14)</div>
+        <div class="tab-btn">HPA (28) <span class="tab-badge nieuw">3N</span></div>
+    </div>
+  </div>
+</div>
+<p class="mock-caption">↑ Categorie-tabs. Label = dc_name (totaal). Rode ×-badge = aantal afgemeld. Groene N-badge = aantal nieuwe rijders.</p>
+
+<p>Voor elke categorie (distance_combination, kortweg DC) één tab-knop:</p>
+<ul>
+    <li><b>Tekst</b>: <code>&lt;dc_name&gt; (&lt;totaal&gt;)</code> waar <code>totaal</code> het aantal deelnemers in die DC is.</li>
+    <li><b>Rood badge <code>N✗</code></b>: aantal deelnemers met <code>entry_status</code> &ge; 2 (niet 5). Dat zijn: afgemeld, afgem. bij org., niet getekend.</li>
+    <li><b>Groen badge <code>NN</code></b>: aantal deelnemers waar <code>is_new === true</code> (nog niet in de DB).</li>
+</ul>
+<p>De eerste tab is standaard actief. Klikken wisselt en roept <code>toonVergelijkTabel(cat)</code> aan.</p>
+
+<h3>1.3.10 De vergelijk-tabel</h3>
+<p class="src">Bron: js/import.js regel 760 (<code>toonVergelijkTabel</code>)</p>
+
+<!-- MOCKUP: vergelijk-tabel -->
+<div class="mock">
+  <div style="padding:0 4px">
+    <div class="mock-tab-bar" style="margin:0 10px">
+        <div class="tab-btn active">HSA (22)</div>
+        <div class="tab-btn">HSB (18)</div>
+    </div>
+    <table class="mock-vergelijk-tabel">
+        <thead>
+            <tr>
+                <th style="width:80px">Start#</th>
+                <th style="width:200px">Naam</th>
+                <th>Club</th>
+                <th style="width:200px">Transponder</th>
+                <th style="width:130px">Status</th>
+                <th style="width:80px"></th>
+            </tr>
+        </thead>
+        <tbody>
+            <tr>
+                <td><input class="inp-sn" value="557"></td>
+                <td><input class="inp-naam" value="Kai-Arne Ottenhoff"></td>
+                <td>SV Heerenveen</td>
+                <td>
+                    <select class="tp-sel-drop"><option>T1 – KS-12345</option></select>
+                    <button class="tp-add-btn">+</button>
+                </td>
+                <td><span class="status-badge status-1">Bevestigd</span></td>
+                <td></td>
+            </tr>
+            <tr class="row-new">
+                <td><input class="inp-sn" value="445"></td>
+                <td><input class="inp-naam" value="Menno van Eig"></td>
+                <td>Radboud Inline-skating</td>
+                <td>
+                    <select class="tp-sel-drop"><option>— geen —</option></select>
+                    <button class="tp-add-btn">+</button>
+                </td>
+                <td><span class="status-badge status-1">Bevestigd</span></td>
+                <td><span class="badge-nieuw">NIEUW</span></td>
+            </tr>
+            <tr class="row-diff">
+                <td>
+                    <input class="inp-sn" value="135">
+                    <div class="knsb-hint">KNSB: 138</div>
+                </td>
+                <td><input class="inp-naam" value="Joes van Deursen"></td>
+                <td>IJsvereniging Woubrugge</td>
+                <td>
+                    <select class="tp-sel-drop"><option>T1 – KS-78901</option></select>
+                    <button class="tp-add-btn">+</button>
+                </td>
+                <td><span class="status-badge status-5">Bevestigd bij org.</span></td>
+                <td><span class="badge-diff">!</span></td>
+            </tr>
+            <tr class="row-withdrawn">
+                <td><input class="inp-sn" value="220"></td>
+                <td><input class="inp-naam" value="Teun de Wit"></td>
+                <td>Schaatsvereniging Rotterdam</td>
+                <td>
+                    <select class="tp-sel-drop"><option>— geen —</option></select>
+                    <button class="tp-add-btn">+</button>
+                </td>
+                <td><span class="status-badge status-2">Afgemeld</span></td>
+                <td></td>
+            </tr>
+            <tr class="row-modified">
+                <td><input class="inp-sn" value="1001"></td>
+                <td><input class="inp-naam" value="Gast Rijder"></td>
+                <td></td>
+                <td>
+                    <select class="tp-sel-drop"><option>— geen —</option></select>
+                    <button class="tp-add-btn">+</button>
+                </td>
+                <td><span class="status-badge status-4">Niet getekend</span><span class="badge-reserve">R1</span></td>
+                <td><span class="badge-anoniem">ANON</span><span class="badge-meld">ⓘ</span></td>
+            </tr>
+        </tbody>
+    </table>
+    <button class="btn-deelnemer-add">+ Deelnemer toevoegen</button>
+  </div>
+</div>
+<p class="mock-caption">↑ Vergelijk-tabel per categorie. Kleuren tonen status: groen=nieuw, oranje=afwijking, grijs=afgemeld, oranje-randje links=lokaal gewijzigd.</p>
+
+<h4>Kolommen</h4>
+<table class="ref">
+<tr><th>Kolom</th><th>Class</th><th>Inhoud</th></tr>
+<tr><td>Start#</td><td><code>.th-sn</code> / <code>.td-sn</code></td><td>Bewerkbaar <code>&lt;input type="number"&gt;</code>. Bij afwijking t.o.v. KNSB verschijnt eronder een rode <code>.knsb-hint</code> met de KNSB-waarde.</td></tr>
+<tr><td>Naam</td><td><code>.th-naam</code> / <code>.td-naam</code></td><td>Bewerkbaar <code>&lt;input type="text"&gt;</code>. Bij anonieme rijders staat een placeholder "Vul echte naam in voor startlijst". Cel krijgt <code>.cell-diff</code>-klasse bij afwijking.</td></tr>
+<tr><td>Club</td><td><code>.th-club</code></td><td>Alleen-lezen tekst. Volledige clubnaam uit <code>pe.club_full</code>.</td></tr>
+<tr><td>Transponder</td><td><code>.th-tp-sel</code></td><td>Custom dropdown (zie 1.3.11). Rechts een <code>+</code>-knop om handmatig een transponder toe te voegen.</td></tr>
+<tr><td>Status</td><td><code>.th-status</code></td><td>Status-badge + optioneel reserve-badge <code>R1</code>/<code>R2</code>/... Klikken opent een dropdown om status te wijzigen.</td></tr>
+<tr><td>(Badges)</td><td><code>.th-badges</code></td><td>Visuele markeringen: NIEUW, ANON, !, ⓘ.</td></tr>
+</table>
+
+<h4>Rij-kleuren (CSS-class op <code>&lt;tr&gt;</code>)</h4>
+<p class="src">Bron: js/import.js regel 797-801</p>
+
+<table class="ref">
+<tr><th>Class</th><th>Voorwaarde</th><th>Visueel</th></tr>
+<tr><td><code>row-withdrawn</code></td><td><code>entry_status</code> in {2, 3, 4} (dus NIET 5)</td><td>Grijs, doorzichtig</td></tr>
+<tr><td><code>row-new</code></td><td><code>item.is_new</code> — rijder stond nog niet in de DB</td><td>Lichtgroen</td></tr>
+<tr><td><code>row-diff</code></td><td><code>diffs.length &gt; 0</code> — afwijking tussen KNSB en DB</td><td>Licht oranje</td></tr>
+<tr><td><code>row-modified</code></td><td>Lokaal gewijzigd, nog niet opgeslagen</td><td>Oranje randje links</td></tr>
+</table>
+<p>Alleen één class tegelijk behalve <code>row-modified</code> die kan gecombineerd met de andere.</p>
+
+<h4>Startnummer-kleuring</h4>
+<p>Als <code>sn &ge; 1000</code>: de <code>&lt;td&gt;</code> krijgt class <code>guest-nr</code>. Visueel: gele achtergrond op de input. Gast-startnummers zijn bewust &ge; 1000 om ze te onderscheiden van KNSB-startnummers.</p>
+
+<h4>Status-labels</h4>
+<p class="src">Bron: js/app.js regel 18-19</p>
+
+<table class="ref">
+<tr><th>Waarde</th><th>Label</th><th>CSS-class</th><th>Betekenis</th></tr>
+<tr><td>0</td><td>Niet bevestigd</td><td><code>status-0</code></td><td>KNSB-status onbekend/pending</td></tr>
+<tr><td>1</td><td>Bevestigd</td><td><code>status-1</code></td><td>Normale deelnemer</td></tr>
+<tr><td>2</td><td>Afgemeld</td><td><code>status-2</code></td><td>Afgemeld bij KNSB</td></tr>
+<tr><td>3</td><td>Afgem. bij org.</td><td><code>status-3</code></td><td>Afmelding rechtstreeks bij organisatie</td></tr>
+<tr><td>4</td><td>Niet getekend</td><td><code>status-4</code></td><td>Aanwezigheid niet geregistreerd aan balie</td></tr>
+<tr><td>5</td><td>Bevestigd bij org.</td><td><code>status-5</code></td><td>Laat-aangemeld rechtstreeks bij organisatie (actief!)</td></tr>
+</table>
+
+<h4>Badges</h4>
+<table class="ref">
+<tr><th>Badge</th><th>Class</th><th>Wanneer</th></tr>
+<tr><td><span class="badge-nieuw">NIEUW</span></td><td><code>badge-nieuw</code></td><td><code>item.is_new</code> — bestaat nog niet in DB</td></tr>
+<tr><td><span class="badge-anoniem">ANON</span></td><td><code>badge-anoniem</code></td><td>Rijder zonder licentienummer bekend</td></tr>
+<tr><td><span class="badge-diff">!</span></td><td><code>badge-diff</code></td><td>Afwijking tussen KNSB en DB (bv. naam of startnummer gewijzigd)</td></tr>
+<tr><td><span class="badge-meld">ⓘ</span></td><td><code>badge-meld</code></td><td>Rijder moet zich persoonlijk melden aan de balie. Tooltip legt uit waarom (bv. geen transponder, gastnummer, niet-getekend, etc.)</td></tr>
+<tr><td><span class="badge-reserve">R1</span></td><td><code>badge-reserve</code></td><td>Rijder is reserve met nummer <code>R1</code>, <code>R2</code>, etc.</td></tr>
+</table>
+
+<h3>1.3.11 Transponder-dropdown</h3>
+<p class="src">Bron: js/import.js regel 1850 (<code>maakTpDropdownHtml</code>)</p>
+
+<p>Per rijder een dropdown met alle beschikbare transponders. Opties in vaste volgorde:</p>
+
+<!-- MOCKUP: transponder-dropdown opengeklapt -->
+<div class="mock">
+  <div style="padding:16px 20px;background:#fff;max-width:360px">
+    <div style="font-size:11px;color:#666;margin-bottom:4px">Transponder-dropdown (opengeklapt):</div>
+    <div style="border:1px solid var(--border);border-radius:5px;padding:4px;background:#fff;font-size:12.5px">
+        <div style="padding:4px 8px;background:#f0f3f8">— geen —</div>
+        <div style="padding:4px 8px"><b>T1</b> – KS-12345</div>
+        <div style="padding:4px 8px"><b>T2</b> – KS-98765</div>
+        <div style="padding:4px 8px"><b>Textra</b> – KS-11111</div>
+        <div style="padding:3px 8px;font-weight:600;color:#888;background:#eef2f7;font-size:11px">Org transponders</div>
+        <div style="padding:4px 8px">#3 – KS-ORG001</div>
+        <div style="padding:4px 8px">#7 – KS-ORG002</div>
+    </div>
+    <div style="margin-top:8px;font-size:11px;color:#666">
+        <b>Tooltip</b> (mouseover):<br>
+        Transponders van deze rijder:<br>
+        • Eigen T1: KS-12345<br>
+        • Eigen T2: KS-98765<br>
+        • Extra: KS-11111<br>
+        • Club-transponder #3: KS-ORG001
+    </div>
+  </div>
+</div>
+<p class="mock-caption">↑ Transponder-dropdown voor een rijder met eigen T1/T2, extra, en een org-transponder.</p>
+
+<h4>Opbouw van de opties</h4>
+<ol>
+    <li><b>"— geen —"</b> — eerste optie; default selected als <code>actief</code> null is</li>
+    <li><b><code>T1 – &lt;code&gt;</code></b> — KNSB-slot-1-transponder (persoonlijk eigendom), als aanwezig</li>
+    <li><b><code>T2 – &lt;code&gt;</code></b> — KNSB-slot-2-transponder, als aanwezig</li>
+    <li><b><code>Textra – &lt;code&gt;</code></b> — eerder handmatig toegevoegde transponders (meerdere mogelijk)</li>
+    <li><b><code>&lt;optgroup label="Org transponders"&gt;</code></b> — organisatie-uitleen. Alleen <i>vrije</i> transponders en die aan deze rijder toegewezen worden getoond. Format: <code>#&lt;intern_nummer&gt; – &lt;code&gt;</code></li>
+    <li><b>Vangnet</b>: als <code>actief</code> een waarde heeft die nergens in de dropdown zit, wordt die als losse optie toegevoegd en selected</li>
+</ol>
+
+<h4>Wanneer is een org-transponder "vrij"?</h4>
+<p>Een transponder in <code>organisatie_transponders</code> is "in gebruik" als er OFWEL een <code>toegewezen_snr</code> staat OFWEL een <code>toegewezen_naam</code>. Vrije transponders worden altijd getoond. Bezette transponders worden <b>alleen</b> getoond als ze aan de huidige rijder horen (zelfde startnummer), of als ze de huidige selectie zijn.</p>
+
+<h4>Kruis-bescherming</h4>
+<p>Zodra je een org-transponder aan rijder A toekent die al aan rijder B hangt, wordt de toewijzing bij B automatisch weggehaald in <code>personEdits</code>. Zonder die bescherming zou de server beide rijders dezelfde transponder geven en zou er eentje worden overschreven.</p>
+
+<h4>De <b>+</b>-knop rechts van de dropdown</h4>
+<p>Opent een klein dialoogje om handmatig een transponder-code toe te voegen aan deze rijder (komt als "Textra" in de dropdown).</p>
+
+<h3>1.3.12 Import-knop</h3>
+<p class="src">Bron: js/import.js regel 2049 (<code>importeerWedstrijd</code>)</p>
+
+<p>De oranje <code>⇓ Importeer</code>-knop rechts in de detail-header start het echte importeren.</p>
+
+<h4>Flow bij klikken</h4>
+<ol>
+    <li>Check dat er vergelijk-data is.</li>
+    <li>Knop wordt <code>disabled</code>; in <code>#import-result</code> verschijnt een laad-spinner met "Importeren…".</li>
+    <li><code>collectImportData(compId)</code> bouwt de POST-body met:
+        <ul>
+            <li>Alle persons-wijzigingen uit <code>personEdits</code></li>
+            <li>Alle entry-wijzigingen uit <code>entryEdits</code></li>
+            <li>Handmatig toegevoegde rijders (zonder KNSB-entry)</li>
+            <li>Transponder-toewijzingen</li>
+        </ul>
+    </li>
+    <li>POST naar <code>api/import.php</code>.</li>
+    <li>Response-afhandeling: zie hieronder.</li>
+</ol>
+
+<h4>Mogelijke responses</h4>
+
+<table class="ref">
+<tr><th>Status</th><th>Reactie in de UI</th></tr>
+<tr><td>HTTP 409 of <code>error: 'conflict'</code></td><td>Waarschuwing: <em>"Conflict: inschrijvingen gewijzigd door iemand anders."</em> + knop <b>↺ Herlaad</b>. Jouw niet-opgeslagen wijzigingen gaan verloren bij herlaad.</td></tr>
+<tr><td>Andere fout</td><td>Rode error-balk met de foutmelding.</td></tr>
+<tr><td>200 OK</td><td>Groene succes-balk met uitklapbare details (zie mockup hieronder). Klapt automatisch in na 4 seconden. <code>herlaadVergelijking()</code> wordt aangeroepen om de nieuwe stand op te halen.</td></tr>
+</table>
+
+<!-- MOCKUP: import-result succes -->
+<div class="mock">
+  <div style="padding:14px;background:#fff">
+    <div class="mock-import-log">
+        ✔ <b>KNSB Baan/Weg 1</b> geïmporteerd · klik voor details
+        <ul>
+            <li>3 nieuwe rijders toegevoegd (Jan Jansen, Kees Klaas, Piet Peters)</li>
+            <li>2 transponders gewijzigd</li>
+            <li>1 rijder afgemeld (Mieke de Bruin)</li>
+            <li>Organisatie gekoppeld: KNSB ZH Inline</li>
+            <li>0 afwijkingen na import</li>
+        </ul>
+    </div>
+  </div>
+</div>
+<p class="mock-caption">↑ Succesvolle import. De <code>&lt;details&gt;</code> klapt automatisch in na 4 seconden.</p>
+
+<h3>1.3.13 DC-beheer panel</h3>
+<p class="src">Bron: js/import.js regel 104 (<code>bouwBeheerTabel</code>)</p>
+
+<p>Het <code>#beheer-panel</code> verschijnt <b>alleen</b> nadat een wedstrijd ten minste één keer is geïmporteerd (<code>isGeimporteerd === true</code>). Dit panel is ingeklapt bij laden — je klikt het zelf open als je iets wilt aanpassen.</p>
+
+<!-- MOCKUP: beheer-panel uitgeklapt -->
+<div class="mock">
+  <div style="padding:14px;background:#fff">
+    <div class="mock-beheer-wrap">
+        <div class="kop">▼ DC-beheer &amp; afstanden</div>
+        <table class="mock-beheer-tabel">
+            <thead>
+                <tr>
+                    <th style="width:180px">Distance Combination</th>
+                    <th style="width:180px">Categorieën</th>
+                    <th>Afstand 1</th>
+                    <th>Afstand 2</th>
+                    <th>Afstand 3</th>
+                </tr>
+            </thead>
+            <tbody>
+                <tr>
+                    <td>
+                        <div class="dc-groep-naam"><span>HSA</span></div>
+                        <div class="dc-merge-rij">
+                            <span>⇄</span>
+                            <select class="dc-merge-sel"><option>— samenvoegen met… —</option></select>
+                        </div>
+                    </td>
+                    <td>
+                        <div class="dc-cat-rij"><span class="dc-cat-badge">HSA</span><span class="dc-cat-tel">22</span></div>
+                    </td>
+                    <td>
+                        <div class="dc-afd-kol-inner">
+                            <input class="dc-afd-naam" value="500m sprint">
+                            <input class="dc-afd-m" type="number" value="500">
+                            <select class="dc-afd-race-type"><option>Sprint</option></select>
+                        </div>
+                    </td>
+                    <td>
+                        <div class="dc-afd-kol-inner">
+                            <input class="dc-afd-naam" value="3000m">
+                            <input class="dc-afd-m" type="number" value="3000">
+                            <select class="dc-afd-race-type"><option>Inline</option></select>
+                        </div>
+                    </td>
+                    <td>
+                        <div class="dc-afd-kol-inner">
+                            <input class="dc-afd-naam" value="Puntenkoers 3km">
+                            <input class="dc-afd-m" type="number" value="3000">
+                            <select class="dc-afd-race-type"><option>Puntenkoers</option></select>
+                        </div>
+                    </td>
+                </tr>
+                <tr>
+                    <td>
+                        <div class="dc-groep-naam"><span>DSA</span><button class="btn-del" title="Samenvoegen ongedaan">🗑</button></div>
+                        <div class="dc-groep-naam"><span>DSB</span><button class="btn-del" title="Samenvoegen ongedaan">🗑</button></div>
+                        <div class="dc-merge-label-rij">
+                            <span>✏</span>
+                            <input class="dc-merge-label-inp" value="Dames Senior A+B" placeholder="Naam in tijdschema…">
+                        </div>
+                    </td>
+                    <td>
+                        <div class="dc-cat-rij"><span class="dc-cat-badge">DSA</span><span class="dc-cat-tel">17</span><span class="dc-pijl">→</span><input class="dc-split-inp" placeholder="splitgroep…"></div>
+                        <div class="dc-cat-rij"><span class="dc-cat-badge">DSB</span><span class="dc-cat-tel">14</span><span class="dc-pijl">→</span><input class="dc-split-inp" placeholder="splitgroep…"></div>
+                    </td>
+                    <td><div class="dc-afd-kol-inner"><input class="dc-afd-naam" value="500m sprint"><input class="dc-afd-m" value="500"><select class="dc-afd-race-type"><option>Sprint</option></select></div></td>
+                    <td><div class="dc-afd-kol-inner"><input class="dc-afd-naam" value="3000m"><input class="dc-afd-m" value="3000"><select class="dc-afd-race-type"><option>Inline</option></select></div></td>
+                    <td></td>
+                </tr>
+            </tbody>
+        </table>
+        <div class="beheer-acties">
+            <button class="btn-app btn-secondary btn-dirty">✓ Opslaan</button>
+            <span style="font-size:11px;color:#888">(wordt oranje als er wijzigingen zijn)</span>
+        </div>
+    </div>
+  </div>
+</div>
+<p class="mock-caption">↑ DC-beheer-panel uitgeklapt. Een normale DC (HSA) en een samengevoegde (DSA+DSB).</p>
+
+<h4>Wat doet dit panel?</h4>
+<ul>
+    <li><b>DC's samenvoegen</b>: de dropdown "— samenvoegen met… —" bij elke normale DC laat je hem koppelen aan een andere. Samengevoegde DC's rijden in dezelfde series/heats.</li>
+    <li><b>Naam in tijdschema</b>: bij een samengevoegde DC verschijnt een label-input (✏) om een leesbare naam te kiezen voor weergave in het tijdschema (bijv. "Dames Senior A+B" in plaats van "DSA/DSB").</li>
+    <li><b>Ontkoppelen</b>: de 🗑-knoppen bij de individuele DC's in een samengevoegde groep halen die DC uit de groep.</li>
+    <li><b>Categorieën splitsen</b>: per categorie in een DC kun je een "splitgroep"-naam geven. Zo kunnen bijvoorbeeld Dames en Heren in één gemengde DC rijden maar apart gerankt worden.</li>
+    <li><b>Afstanden per DC</b>: elke kolom "Afstand N" heeft drie velden:
+        <ul>
+            <li>Naam (bv. "500m sprint")</li>
+            <li>Meters (integer)</li>
+            <li>Race-type: <b>Sprint</b>, <b>Inline</b>, <b>Puntenkoers</b> of <b>Afvalkoers</b></li>
+            <li>🗑 om de afstand te verwijderen</li>
+        </ul>
+    </li>
+</ul>
+
+<h4>Readonly en structuur-lock</h4>
+<ul>
+    <li>Geen schrijfrechten op <code>importeer</code>: hele panel is readonly, boven de tabel een melding.</li>
+    <li>Er bestaat al een tijdschema/programma voor deze wedstrijd (<code>_heeftProgramma === true</code>): <b>structurele</b> wijzigingen (samenvoegen/splitsen, afstand toevoegen/verwijderen) worden geblokkeerd, maar namen en labels blijven bewerkbaar.</li>
+</ul>
+
+<h4>Opslaan</h4>
+<p>De knop <code>#btn-beheer-opslaan</code> is standaard disabled. Zodra je iets wijzigt (<code>markBeheerDirty()</code>) wordt hij oranje en klikbaar. Na opslaan komt er een status-bericht in <code>#beheer-status</code>.</p>
+
+<h3>1.3.14 Deelnemer handmatig toevoegen</h3>
+<p class="src">Bron: js/import.js regel 2123 (<code>initDeelnemerModal</code>) · regel 2288 (<code>openDeelnemerModal</code>)</p>
+
+<p>Onder elke categorie-tabel staat een knop <code>+ Deelnemer toevoegen</code>. Klikken opent een modal waarmee je een rijder die niet in de KNSB-lijst staat handmatig aan de wedstrijd toevoegt.</p>
+
+<!-- MOCKUP: deelnemer-modal -->
+<div class="mock">
+  <div class="mock-modal-ovl">
+    <div class="mock-modal">
+        <div class="kop">
+            <div>
+                <h3>Deelnemer toevoegen</h3>
+                <div class="sub">HSA — Mannen Senior A</div>
+            </div>
+            <button class="btn-del" style="color:#fff;font-size:20px">×</button>
+        </div>
+        <div class="body">
+            <div class="mz-tabs">
+                <div class="mz-tab active">Op relatienummer</div>
+                <div class="mz-tab">Op startnr + categorie</div>
+            </div>
+            <div class="mz-invoer">
+                <input type="text" class="inp-app" style="flex:1" placeholder="Relatienummer…">
+                <button class="btn-app btn-secondary">Zoeken</button>
+            </div>
+            <div style="font-size:11px;color:#888;margin-bottom:10px">
+                (bij succesvol gevonden: het formulier wordt automatisch ingevuld met KNSB-data)
+            </div>
+
+            <div class="mf-rij twee">
+                <label class="mf-lbl"><span>Relatienummer</span>
+                    <input type="text" placeholder="leeg = geen KNSB-lid">
+                </label>
+                <label class="mf-lbl">
+                    <span>Startnummer <span class="vereist">*</span></span>
+                    <input type="number" value="1002">
+                    <div class="mf-hint">💡 Gebruik <b>1001+</b> voor gastrijders zonder KNSB-nummer.</div>
+                </label>
+            </div>
+            <div class="mf-rij twee">
+                <label class="mf-lbl"><span>Voornaam <span class="vereist">*</span></span><input type="text"></label>
+                <label class="mf-lbl"><span>Achternaam <span class="vereist">*</span></span><input type="text"></label>
+            </div>
+            <div class="mf-rij twee">
+                <label class="mf-lbl"><span>Categorie <span class="vereist">*</span></span><input type="text" placeholder="bijv. DKA"></label>
+            </div>
+            <div class="mf-rij twee">
+                <label class="mf-lbl"><span>Nationaliteit <span class="vereist">*</span></span><input type="text" value="NED"></label>
+                <label class="mf-lbl">
+                    <span>Geslacht <span class="vereist">*</span></span>
+                    <select><option>— kies —</option><option>Man</option><option>Vrouw</option></select>
+                </label>
+            </div>
+            <div class="mf-rij twee">
+                <label class="mf-lbl"><span>Club (volledig)</span><input type="text" placeholder="optioneel"></label>
+                <label class="mf-lbl"><span>Club (kort)</span><input type="text" placeholder="optioneel"></label>
+            </div>
+            <div class="mf-rij">
+                <label class="mf-lbl"><span>Transponder</span><input type="text" placeholder="optioneel"></label>
+            </div>
+        </div>
+        <div class="voet">
+            <button class="btn-app btn-secondary">Annuleren</button>
+            <button class="btn-app btn-primary">Toevoegen</button>
+        </div>
+    </div>
+  </div>
+</div>
+<p class="mock-caption">↑ Deelnemer-toevoegen-modal. Zoek-tab bovenaan om KNSB-data op te halen, formulier eronder.</p>
+
+<h4>Zoek-sectie bovenin</h4>
+<p>Twee sub-tabs om een bestaande KNSB-rijder op te zoeken (dan wordt het formulier eronder automatisch ingevuld):</p>
+<ul>
+    <li><b>Op relatienummer</b> — één invoerveld met het KNSB-licentienummer</li>
+    <li><b>Op startnr + categorie</b> — twee velden: startnummer + categorie-code</li>
+</ul>
+<p><kbd>Enter</kbd> in een zoek-veld = klik op "Zoeken".</p>
+
+<h4>Formulier-velden</h4>
+
+<table class="ref">
+<tr><th>Veld</th><th>Verplicht?</th><th>Toelichting</th></tr>
+<tr><td>Relatienummer</td><td>Nee</td><td>Laat leeg bij niet-KNSB-rijder (gastrijder)</td></tr>
+<tr><td>Startnummer</td><td>Ja</td><td>Min. 1. Gebruik 1001+ voor gastrijders zonder KNSB-nummer</td></tr>
+<tr><td>Voornaam</td><td>Ja</td><td>—</td></tr>
+<tr><td>Achternaam</td><td>Ja</td><td>Volledige naam wordt samengesteld uit voor- + achternaam</td></tr>
+<tr><td>Categorie</td><td>Ja</td><td>Codes als DKA, HSA, HJB etc. Moet matchen met de DC — anders verschijnt een waarschuwing</td></tr>
+<tr><td>Nationaliteit</td><td>Ja</td><td>Default NED. Max 3 tekens.</td></tr>
+<tr><td>Geslacht</td><td>Ja</td><td>Man (0) of Vrouw (1)</td></tr>
+<tr><td>Club (volledig)</td><td>Nee</td><td>Autocomplete vanuit <code>_clubsCache</code></td></tr>
+<tr><td>Club (kort)</td><td>Nee</td><td>Max 20 tekens. Wordt automatisch ingevuld als je een volledige clubnaam kiest</td></tr>
+<tr><td>Transponder</td><td>Nee</td><td>Code als <code>KS-12345</code>. Onbekende transponder → bevestigingsvraag</td></tr>
+</table>
+
+<h4>Categorie-waarschuwing</h4>
+<p>Als de ingevulde categorie niet past bij de DC waarvoor je toevoegt (bv. HSA-rijder in DKA-tabel), verschijnt een gele waarschuwings-melding. Je moet dan bevestigen dat je bewust afwijkt (<code>_catOverride</code>), anders blokkeert opslaan.</p>
+
+<h4>Transponder-bevestiging</h4>
+<p>Als je een transponder-code invoert die niet bij deze rijder of in de org-inventaris voorkomt, verschijnt een <b>extra bevestigingsblok</b>:</p>
+
+<!-- MOCKUP: transponder-bevestiging -->
+<div class="mock">
+  <div style="padding:14px;background:#fff;max-width:380px">
+    <div style="background:var(--geel);border:1px solid var(--geel-bord);color:#7a5800;padding:10px 14px;border-radius:5px;font-size:12.5px">
+        ⚠ <b>Onbekende transponder:</b> KS-99999 is niet bekend bij deze rijder of in de organisatie-inventaris.<br>
+        <div style="display:flex;gap:6px;margin-top:8px">
+            <button class="btn-app btn-primary">Ja, klopt</button>
+            <button class="btn-app btn-secondary">Nee, corrigeren</button>
+        </div>
+    </div>
+  </div>
+</div>
+<p class="mock-caption">↑ Transponder-bevestiging voor onbekende code.</p>
+
+<h4>Sluiten</h4>
+<p>Op drie manieren: ×-knop rechtsboven, Annuleren-knop onderaan, of klikken op de overlay buiten de modal. Ook <kbd>Esc</kbd> sluit.</p>
+
+<h3>1.3.15 Samenvatting van de data-flow</h3>
+
+<pre style="background:#f5f7fa;padding:12px 16px;border-radius:6px;font-size:12px;overflow:auto">
+1. laadWedstrijden()         GET  api/competitions.php[?van=...]
+                              → allWedstrijden[]
+                              → renderWedstrijdLijst()
+
+2. Klik op wedstrijd → selectWedstrijd()
+                              GET  api/vergelijk.php?id=...
+                              → vergelijkData, huidigOrganisatie,
+                                standDatum, dbStandDatum,
+                                _heeftProgramma, _orgTransponders
+                              → initEdits()
+                              → bouwVergelijkTabbladen()
+                              → bouwBeheerTabel() (leest api/distances_db.php per DC)
+
+3. Wijzigen in tabel         → personEdits[lk] / entryEdits[ek]
+                              → markeerGewijzigd(tr)  (row-modified)
+
+4. Klik Importeer            → collectImportData(compId)
+                              POST api/import.php  (alle edits)
+                              → log[], entries_version, ok|conflict|error
+                              → herlaadVergelijking() (refetch api/vergelijk.php)
+
+5. DC-beheer opslaan        POST api/samenvoeg.php / api/splits.php / api/afstanden_beheer.php
+                             (afhankelijk van welk type wijziging)
+</pre>
+
+<div class="info"><b>Volgende sessie:</b> <code>collectImportData()</code> zelf ontleden — welke velden precies in de POST-body gaan. Voor nu houden we het op "alle edits in <code>personEdits</code>, <code>entryEdits</code>, en handmatig toegevoegde rijders".</div>
+
+<hr style="margin:40px 0;border:none;border-top:2px solid var(--oranje)">
+
+<h1>Nog niet gedocumenteerd</h1>
+<p>De volgende modules en applicaties volgen in aparte sessies, elk met dezelfde methode: eerst code-inspectie, dan schrijven, met <span class="src">bestand:regel</span>-bronverwijzingen.</p>
+
+<table class="ref">
+<tr><th>Deel</th><th>Hoofd-bestanden om te lezen</th></tr>
+<tr><td>1.4 Tijdschema</td><td><code>js/tijdschema.js</code> (3589 regels) + <code>api/tijdschema.php</code></td></tr>
+<tr><td>1.5 Startlijsten</td><td><code>js/startlist.js</code> (2091 regels) + <code>api/startlijst_*.php</code></td></tr>
+<tr><td>1.6 Live verwerking</td><td><code>js/live.js</code> (2532 regels) + <code>api/live.php</code></td></tr>
+<tr><td>1.7 Uitslag</td><td><code>js/uitslag.js</code> (1529 regels) + <code>api/uitslag_afstand.php</code></td></tr>
+<tr><td>1.8 Beheer (organisaties)</td><td><code>js/instellingen.js</code> (1328 regels) + <code>api/organisaties.php</code></td></tr>
+<tr><td>1.9 Gebruikers</td><td><code>js/gebruikers.js</code> (501 regels) + <code>api/gebruikers.php</code></td></tr>
+<tr><td>1.10 Rijders (AVG)</td><td><code>js/rijders.js</code> (272 regels) + <code>api/persoon_*.php</code></td></tr>
+<tr><td>Deel 2 — Publiek</td><td><code>public/index.php</code> (2737 regels, HTML+JS+CSS)</td></tr>
+<tr><td>Deel 3 — Coach</td><td><code>coach/index.php</code> (2359 regels)</td></tr>
+</table>
+
+<p>Elk aan de beurt krijgt dezelfde behandeling als Importeer hierboven: volledige beschrijving met alle sub-secties, HTML-mock-ups die passen bij de werkelijke UI-klassen, en bronverwijzingen.</p>
+
+</div>
+</body>
+</html>
+
