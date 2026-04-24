@@ -858,6 +858,7 @@ try {
     // ── Ranking methods opslaan (vanuit klassement-tab) ─────────────────────
     if ($action === 'save_ranking') {
         $afstandNaam = trim($body['afstand_naam'] ?? '');
+        $dcId        = trim($body['dc_id'] ?? '') ?: null;
         if (!$afstandNaam) {
             http_response_code(400);
             echo json_encode(['error' => 'afstand_naam is verplicht']);
@@ -875,22 +876,31 @@ try {
         }
 
         $geldigeRanking = ['time', 'position_time'];
-        $updates = [];
-        $params  = [];
+        $setValues = [];
         foreach (['heats_ranking', 'kwart_ranking', 'half_ranking', 'finale_ranking'] as $col) {
             if (isset($body[$col]) && in_array($body[$col], $geldigeRanking, true)) {
-                $updates[] = "$col = ?";
-                $params[]  = $body[$col];
+                $setValues[$col] = $body[$col];
             }
         }
-        if ($updates) {
-            $params[] = $tsId;
-            $params[] = $afstandNaam;
-            $pdo->prepare("
-                UPDATE tijdschema_afstand_config
-                SET " . implode(', ', $updates) . "
-                WHERE tijdschema_id = ? AND afstand_naam = ?
-            ")->execute($params);
+
+        if ($setValues) {
+            // Per (tijdschema_id, dc_id, afstand_naam) een eigen rij — upsert.
+            // Bestaande globale rij (dc_id IS NULL) blijft als fallback staan.
+            // MySQL's unique key UNIQUE(ts, dc_id, afstand_naam) triggered
+            // ON DUPLICATE KEY UPDATE zodra dezelfde combinatie terugkomt.
+            $cols = ['tijdschema_id', 'dc_id', 'afstand_naam'];
+            $vals = [$tsId, $dcId, $afstandNaam];
+            foreach ($setValues as $col => $v) {
+                $cols[] = $col;
+                $vals[] = $v;
+            }
+            $placeholders = implode(', ', array_fill(0, count($cols), '?'));
+            $updateClause = implode(', ',
+                array_map(fn($c) => "$c = VALUES($c)", array_keys($setValues)));
+            $sql = "INSERT INTO tijdschema_afstand_config (" . implode(', ', $cols) . ")
+                    VALUES ($placeholders)
+                    ON DUPLICATE KEY UPDATE $updateClause";
+            $pdo->prepare($sql)->execute($vals);
         }
 
         echo json_encode(['ok' => true]);

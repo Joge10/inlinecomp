@@ -250,12 +250,19 @@ try {
                 $afNaam = $afNaamStmt->fetchColumn();
             }
             if ($afNaam) {
+                // Ranking kan per categorie (dc_id) afwijken. Zoek eerst een
+                // DC-specifieke rij voor primaryDcId; als die er niet is,
+                // gebruik de globale rij (dc_id IS NULL) als fallback.
+                // ORDER BY (dc_id IS NULL) ASC zet specifieke rij vóór NULL.
                 $acStmt = $pdo->prepare("
                     SELECT heats_ranking, kwart_ranking, half_ranking, finale_ranking
                     FROM tijdschema_afstand_config
                     WHERE tijdschema_id = ? AND afstand_naam = ?
+                      AND (dc_id = ? OR dc_id IS NULL)
+                    ORDER BY (dc_id IS NULL) ASC
+                    LIMIT 1
                 ");
-                $acStmt->execute([$tsId, $afNaam]);
+                $acStmt->execute([$tsId, $afNaam, $primaryDcId]);
                 $ac = $acStmt->fetch(PDO::FETCH_ASSOC);
                 if ($ac) {
                     $rankingMethods['heats']        = $ac['heats_ranking']  ?? 'time';

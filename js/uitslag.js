@@ -341,6 +341,9 @@ async function toonUitslagVoorAfstand(groep, afstand) {
             const ranking     = data.ranking ?? {};
             const rondes      = data.rondes ?? ['heats', 'finale_a'];
             const afNaam      = data.afstand_naam ?? afstand.name ?? '';
+            // Per-categorie ranking: we bewaren de geselecteerde DC via data-dc-id
+            // zodat de save naar tijdschema_afstand_config met juiste key gaat.
+            const primaryDcId = (groep.dc_ids ?? [])[0] ?? '';
             let rankHtml = `<div class="u-ranking-details">
                 <div class="u-ranking-rij">
                     <span class="u-ranking-afstand">Ranking:</span>`;
@@ -349,7 +352,10 @@ async function toonUitslagVoorAfstand(groep, afstand) {
                 const val = ranking[key] ?? 'time';
                 rankHtml += `<label class="u-ranking-sel-wrap">
                     ${rondeLabels[rt] ?? rt}:
-                    <select class="u-ranking-sel" data-afstand="${escHtml(afNaam)}" data-ronde="${escHtml(key)}">
+                    <select class="u-ranking-sel"
+                            data-afstand="${escHtml(afNaam)}"
+                            data-dc-id="${escHtml(primaryDcId)}"
+                            data-ronde="${escHtml(key)}">
                         <option value="time" ${val === 'time' ? 'selected' : ''}>Op tijd</option>
                         <option value="position_time" ${val === 'position_time' ? 'selected' : ''}>Positie + tijd</option>
                     </select>
@@ -425,6 +431,7 @@ async function toonUitslagVoorAfstand(groep, afstand) {
                                 action:         'save_ranking',
                                 competition_id: huidigCompId,
                                 afstand_naam:   sel.dataset.afstand,
+                                dc_id:          sel.dataset.dcId || null,
                                 [`${sel.dataset.ronde}_ranking`]: sel.value,
                             }),
                         });
