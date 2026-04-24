@@ -1945,15 +1945,14 @@ function renderKinderen() {
     if (!_kinderen.length) { divResult.innerHTML = ''; return; }
 
     // Top-tabs: één knop per kind + "+ voeg toe" rechts
-    const meerdereKinderen = _kinderen.length > 1;
     const tabsHtml = _kinderen.map((k, idx) => {
         const p = k.data[k.kozen_idx ?? 0]?.persoon;
         const naam = p?.full_name ? p.full_name.split(' ')[0] : ''; // alleen voornaam in tab — kort
         const actief = idx === _activeKindIdx ? ' active' : '';
-        // ×-knop alleen bij 2+ kinderen (voor 1 kind is er geen logica in wegklikken)
-        const closeBtn = meerdereKinderen
-            ? `<span class="kind-tab-close" data-kind-close="${idx}" title="Verwijder deze rijder">×</span>`
-            : '';
+        // ×-knop altijd beschikbaar — ook bij 1 kind handig (je hebt misschien
+        // per ongeluk de verkeerde rijder geselecteerd). verwijderKind()
+        // ruimt bij laatste-kind de view netjes op.
+        const closeBtn = `<span class="kind-tab-close" data-kind-close="${idx}" title="Verwijder deze rijder">×</span>`;
         return `<button class="kind-tab${actief}" data-kind-idx="${idx}">
             <span class="kind-tab-snr">${esc(k.snr)}</span>
             <span>${esc(naam || '(rijder)')}</span>
