@@ -206,6 +206,7 @@ $dcIdsRaw  = trim($_GET['dc_ids'] ?? $_GET['dc_id'] ?? '');
 $dcIds     = array_values(array_filter(array_map('trim', explode(',', $dcIdsRaw))));
 $primaryDcId = $dcIds[0] ?? '';
 $distId    = trim($_GET['distance_id'] ?? '');
+$distNaam  = trim($_GET['distance_naam'] ?? '');
 
 if (!$compId || !$primaryDcId) {
     http_response_code(400);
@@ -232,13 +233,22 @@ try {
         $rankingMethods = ['heats' => 'time', 'kwartfinale' => 'time',
                            'halve_finale' => 'time', 'finale_a' => 'time'];
         if ($tsId) {
-            // Zoek afstand_naam via een rit voor deze DC
-            $afNaamStmt = $pdo->prepare("
-                SELECT afstand_naam FROM tijdschema_ritten
-                WHERE tijdschema_id = ? AND dc_id = ? LIMIT 1
-            ");
-            $afNaamStmt->execute([$tsId, $primaryDcId]);
-            $afNaam = $afNaamStmt->fetchColumn();
+            // Bepaal de afstandsnaam. Als de UI expliciet een `distance_naam`-
+            // parameter meegeeft (tab-klik op een specifieke afstand), die is
+            // leidend — anders pakken we de eerste rit van de DC (legacy).
+            // Voorheen altijd de eerste rit: dan werden ranking-instellingen
+            // van de tweede afstand binnen dezelfde DC nooit teruggelezen,
+            // waardoor het leek alsof opslag niet werkte.
+            if ($distNaam !== '') {
+                $afNaam = $distNaam;
+            } else {
+                $afNaamStmt = $pdo->prepare("
+                    SELECT afstand_naam FROM tijdschema_ritten
+                    WHERE tijdschema_id = ? AND dc_id = ? LIMIT 1
+                ");
+                $afNaamStmt->execute([$tsId, $primaryDcId]);
+                $afNaam = $afNaamStmt->fetchColumn();
+            }
             if ($afNaam) {
                 $acStmt = $pdo->prepare("
                     SELECT heats_ranking, kwart_ranking, half_ranking, finale_ranking
