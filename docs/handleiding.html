@@ -331,7 +331,7 @@ table.ref tr:nth-child(even) td { background: #f9fafc; }
     <p class="versie">versie april 2026 — <a href="https://inlineresults.devriesen.com" style="color:#999;text-decoration:none">inlineresults.devriesen.com</a></p>
 </div>
 
-<div class="wip"><b>WIP:</b> deze handleiding wordt module-voor-module gevuld op basis van code-inspectie (niet meer van geheugen). Op dit moment is alleen <b>Login + layout</b> en <b>Module Importeer</b> volledig gecontroleerd tegen de bron. Onderaan zie je welke modules nog aan de beurt zijn. Bij elk scherm staat een bronverwijzing <span class="src">bestand:regel</span> zodat je elke claim kunt verifiëren.</div>
+<div class="wip"><b>In opbouw:</b> deze handleiding wordt module voor module geschreven. Op dit moment zijn alleen <b>Login &amp; layout</b> en <b>Importeren</b> klaar. Onderaan zie je welke modules nog aan de beurt zijn. Voor de techneuten staat helemaal achterin een appendix met verwijzingen naar de broncode.</div>
 
 <div class="toc">
     <h2>Inhoudsopgave</h2>
@@ -352,6 +352,7 @@ table.ref tr:nth-child(even) td { background: #f9fafc; }
         </li>
         <li style="color:#aaa"><b>Deel 2 — Publieke applicatie</b> <em>(volgende sessie)</em></li>
         <li style="color:#aaa"><b>Deel 3 — Coach-applicatie</b> <em>(volgende sessie)</em></li>
+        <li><b><a href="#appendix">Appendix — Voor de techneuten</a></b> (broncode-verwijzingen, klassen, state-variabelen)</li>
     </ul>
 </div>
 
@@ -359,7 +360,6 @@ table.ref tr:nth-child(even) td { background: #f9fafc; }
 <p>Bereikbaar op <code>https://inlineresults.devriesen.com/</code> (de root van het domein). Inloggen is verplicht.</p>
 
 <h2 id="a-login">1.1 Login en rollen</h2>
-<p class="src">Bron: login.php · api/auth.php · db/users.sql</p>
 
 <h3>Inloggen</h3>
 
@@ -381,7 +381,6 @@ table.ref tr:nth-child(even) td { background: #f9fafc; }
 <p>Na succesvolle verificatie wordt een sessie-cookie <code>ic_session</code> gezet met een 64-hex-token. Die token staat ook in de tabel <code>sessions</code> met een <code>expires_at</code>-datum.</p>
 
 <h3>De zes rollen</h3>
-<p class="src">Bron: db/users.sql (ENUM) · js/app.js SCHRIJF_ROLLEN-constant</p>
 
 <table class="ref">
 <tr><th>Rol</th><th>Schrijfrechten</th></tr>
@@ -393,16 +392,15 @@ table.ref tr:nth-child(even) td { background: #f9fafc; }
 <tr><td><code>owner</code></td><td>Alles, inclusief gebruikersbeheer</td></tr>
 </table>
 
-<p>De JS-helper <code>magSchrijven(module)</code> bepaalt of de huidige gebruiker in de rollen-lijst voor die module staat. Zo niet, dan wordt de pagina in <b>read-only modus</b> gerenderd: formulier-velden krijgen <code>disabled</code> en bovenin verschijnt een banner.</p>
+<p>InlineComp kijkt bij elke module of jouw rol mag schrijven. Zo niet, dan opent de pagina in <b>alleen-lezen-modus</b>: alle invulvelden zijn grijs en niet aan te passen, en bovenin verschijnt een melding dat je in lees-modus zit.</p>
 
 <h3>Sessie verlopen</h3>
-<p>Alle <code>fetch()</code>-oproepen vanuit de JS worden geïntercepteerd. Komt er een 401-respons terug, dan verschijnt automatisch een mini-loginmodal met je gebruikersnaam al ingevuld. Na herinloggen gaat de oorspronkelijke request door. Geen data-verlies.</p>
+<p>Als je sessie verloopt terwijl je aan het werk bent, verschijnt automatisch een klein inlog-vensterje met je gebruikersnaam al ingevuld. Vul je wachtwoord in en de actie waar je mee bezig was wordt automatisch hervat. Geen data-verlies.</p>
 
 <h3>Uitloggen</h3>
-<p>Knop <code>#btn-uitloggen</code> (pijltje ➤) rechtsboven. Roept <code>api/auth.php</code> met <code>action=logout</code>, wist het sessie-token en stuurt door naar <code>login.php</code>.</p>
+<p>Het pijltje ➤ rechtsboven (naast je rol-badge) logt je uit. Je komt terug op het loginscherm.</p>
 
 <h2 id="a-layout">1.2 Layout en navigatie</h2>
-<p class="src">Bron: index.php regel 1-144 · js/app.js (nav-handling)</p>
 
 <h3>Hoofdindeling: header + sidebar + content</h3>
 
@@ -438,7 +436,6 @@ table.ref tr:nth-child(even) td { background: #f9fafc; }
 <p class="mock-caption">↑ Hoofdlayout. Header met gradient, sidebar met oranje accent op de actieve module.</p>
 
 <h3>Sidebar — nav-items</h3>
-<p class="src">Bron: index.php regel 40-81</p>
 
 <table class="ref">
 <tr><th>Icoon</th><th>data-page</th><th>Label</th><th>Positie</th><th>Zichtbaarheid</th></tr>
@@ -456,10 +453,10 @@ table.ref tr:nth-child(even) td { background: #f9fafc; }
 <p>Opvallend: de nav-item voor <em>Uitslag</em> gebruikt <code>data-page="klassementen"</code>, niet <code>uitslag</code>. Dit is een historische naamgeving — het label in de UI zegt "Uitslag" maar de module-key is <code>klassementen</code>.</p>
 
 <h3>Sidebar in-/uitklappen</h3>
-<p>Knopje <code>#sidebar-toggle</code> (❮) bovenaan de sidebar. Maakt de sidebar smaller (alleen iconen) via een CSS-class op de <code>&lt;nav&gt;</code>. De voorkeur wordt onthouden in <code>localStorage</code>.</p>
+<p>Met het ❮-knopje bovenin de sidebar maak je hem smaller — alleen de iconen blijven zichtbaar, geen labels. Je voorkeur wordt onthouden, ook na uitloggen of het sluiten van de browser.</p>
 
 <h3>Pagina-wisseling</h3>
-<p>De content-kant is één <code>&lt;main&gt;</code> met per module een <code>&lt;div class="page"&gt;</code> (bv. <code>#page-importeer</code>, <code>#page-tijdschema</code>). Bij nav-click wordt aan de actieve <code>.page</code> ook de class <code>active</code> toegevoegd; andere worden weggehaald via CSS.</p>
+<p>Klikken op een onderdeel in de sidebar wisselt direct van module — alleen het gekozen scherm is zichtbaar, de rest wordt verborgen.</p>
 
 <h3>Dirty-tracking</h3>
 <p>Globale JS-variabele <code>heeftWijzigingen</code>. Wordt op <code>true</code> gezet zodra je iets aanpast. Impact:</p>
@@ -487,7 +484,6 @@ table.ref tr:nth-child(even) td { background: #f9fafc; }
 
 <p>Zodra je naar <b>Importeer</b> gaat (sidebar links, eerste icoon ⇓) zie je twee kolommen: links een lijst van wedstrijden uit de KNSB-feed, rechts een leeg paneel dat zich vult zodra je iets aanklikt.</p>
 
-<p class="src">Bron: index.php regel 86-143 · js/app.js (wedstrijdlijst) · api/competitions.php</p>
 
 <!-- MOCKUP: importeer-tweedeling (leeg, geen wedstrijd geselecteerd) -->
 <div class="mock">
@@ -537,7 +533,7 @@ table.ref tr:nth-child(even) td { background: #f9fafc; }
 </div>
 <p class="mock-caption">↑ Importeer-pagina met wedstrijdenlijst links, details-panel rechts (in initiele leeg-toestand).</p>
 
-<p>Links: <code>.voorb-left</code> met de wedstrijdenlijst en filters. Rechts: <code>.voorb-right</code> met <code>#detail-panel</code> dat verborgen blijft tot je een wedstrijd selecteert.</p>
+<p>Links de wedstrijdenlijst met filters bovenaan. Rechts blijft een leeg paneel staan tot je een wedstrijd uit de lijst aanklikt — dan vult dat paneel zich met de details.</p>
 
 <h4>De lijst filteren</h4>
 
@@ -563,7 +559,6 @@ table.ref tr:nth-child(even) td { background: #f9fafc; }
 <p>Zodra je rechts iets ziet verschijnen, vergelijkt InlineComp wat de KNSB <em>nu</em> opgeeft met wat jij vorige keer hebt geïmporteerd (of niks, als dit de eerste keer is). Bovenin de naam, datum en locatie van de wedstrijd, plus de <b>Importeer</b>-knop. De timestamp <em>"KNSB-sync: 10:23 vandaag"</em> vertelt wanneer de KNSB-data laatst werd opgehaald.</p>
 
 <h4>Detail-kop</h4>
-<p class="src">Bron: index.php regel 120-134</p>
 
 <!-- MOCKUP: detail-header -->
 <div class="mock">
@@ -579,10 +574,10 @@ table.ref tr:nth-child(even) td { background: #f9fafc; }
 <p class="mock-caption">↑ Detail-header met wedstrijd-info links, importeer-knop rechts.</p>
 
 <ul>
-    <li><code>#detail-title</code> — wedstrijdnaam</li>
-    <li><code>#detail-meta</code> — datum + locatie</li>
-    <li><code>#knsb-sync-info</code> — wordt gevuld door <code>zetKnsbTimestamp()</code>. Toont wanneer de KNSB-data laatst werd opgehaald en wanneer de lokale DB-stand is bijgewerkt.</li>
-    <li><code>#btn-import</code> — krijgt een klik-handler gebonden aan <code>importeerWedstrijd(comp.id, comp.name)</code></li>
+    <li><b>Wedstrijdnaam</b> — links bovenaan, in groot blauw</li>
+    <li><b>Datum + locatie</b> — eronder in een kleinere meta-regel</li>
+    <li><b>KNSB-sync-info</b> — kleine tekst die vertelt wanneer de KNSB-data voor het laatst is opgehaald en wanneer jij voor het laatst hebt geïmporteerd</li>
+    <li><b>Importeer-knop</b> — rechts in oranje, hier klik je als je klaar bent om de wijzigingen op te slaan</li>
 </ul>
 
 <h4>Categorieën als tabs</h4>
@@ -591,7 +586,6 @@ table.ref tr:nth-child(even) td { background: #f9fafc; }
     <li>🟥 <b>3✗</b> — drie afmeldingen in deze cat</li>
     <li>🟩 <b>2N</b> — twee nieuwe rijders die nog niet in jouw DB stonden</li>
 </ul>
-<p class="src">Bron: js/import.js regel 720 (<code>bouwVergelijkTabbladen</code>)</p>
 
 <!-- MOCKUP: categorie-tabs -->
 <div class="mock">
@@ -635,7 +629,6 @@ table.ref tr:nth-child(even) td { background: #f9fafc; }
 
 <p>De Club-kolom is alleen-lezen.</p>
 
-<p class="src">Bron: js/import.js regel 760 (<code>toonVergelijkTabel</code>)</p>
 
 <!-- MOCKUP: vergelijk-tabel -->
 <div class="mock">
@@ -751,7 +744,6 @@ table.ref tr:nth-child(even) td { background: #f9fafc; }
 
 <p>De transponder-kolom is een dropdown met alle bekende transponders voor deze rijder. Je krijgt automatisch een slimme voorinvulling op basis van wat KNSB en jouw organisatie weten:</p>
 
-<p class="src">Bron: js/import.js regel 1850 (<code>maakTpDropdownHtml</code>)</p>
 
 <p><b>Wat staat er in de dropdown:</b></p>
 
@@ -804,7 +796,6 @@ table.ref tr:nth-child(even) td { background: #f9fafc; }
     <li>De vergelijk-tabel wordt automatisch ververst zodat je de nieuwe stand ziet.</li>
 </ul>
 
-<p class="src">Bron: js/import.js regel 2049 (<code>importeerWedstrijd</code>)</p>
 
 <h4>Wanneer kun je tegen iets aanlopen?</h4>
 
@@ -845,7 +836,6 @@ table.ref tr:nth-child(even) td { background: #f9fafc; }
     <li>Als jouw afstand-naam afwijkt van wat KNSB doorgeeft (bv. KNSB stuurt "1500m" maar je rijdt "Puntenkoers 1500m") → naam aanpassen, race-type kiezen.</li>
 </ul>
 
-<p class="src">Bron: js/import.js regel 104 (<code>bouwBeheerTabel</code>)</p>
 
 <!-- MOCKUP: beheer-panel uitgeklapt -->
 <div class="mock">
@@ -996,9 +986,8 @@ table.ref tr:nth-child(even) td { background: #f9fafc; }
 
 <h3 id="stap-5-handmatig">Stap 5 — Een rijder handmatig toevoegen</h3>
 
-<p>Soms staat er iemand aan de balie die wel mag rijden maar niet in de KNSB-lijst voorkomt: een laat-aangemelde, een gastrijder, of iemand die rechtstreeks bij jouw organisatie heeft betaald. Onderaan elke categorie-tabel staat de knop <span class="btn-app btn-secondary">+ Deelnemer toevoegen</span>. Die opent een modal.</p>
+<p>Soms staat er iemand aan de balie die wel mag rijden maar niet in de KNSB-lijst voorkomt: een laat-aangemelde, een gastrijder, of iemand die rechtstreeks bij jouw organisatie heeft betaald. Onderaan elke categorie-tabel staat de knop <span class="btn-app btn-secondary">+ Deelnemer toevoegen</span>. Die opent een invul-venster.</p>
 
-<p class="src">Bron: js/import.js regel 2123 (<code>initDeelnemerModal</code>) · regel 2288 (<code>openDeelnemerModal</code>)</p>
 
 <!-- MOCKUP: deelnemer-modal -->
 <div class="mock">
@@ -1063,11 +1052,11 @@ table.ref tr:nth-child(even) td { background: #f9fafc; }
     </div>
   </div>
 </div>
-<p class="mock-caption">↑ Deelnemer-toevoegen-modal. Zoek-tab bovenaan om KNSB-data op te halen, formulier eronder.</p>
+<p class="mock-caption">↑ Het venster om een rijder toe te voegen. Bovenaan een zoek-blokje om snel iemand uit een eerdere wedstrijd terug te vinden, daaronder het invulformulier.</p>
 
 <h4>Eerst proberen op te zoeken in je eigen database</h4>
 
-<p>Bovenin de modal staan twee zoek-tabs. <b>Let op:</b> deze zoeken in <em>jouw eigen InlineComp-database</em>, niet rechtstreeks bij de KNSB. Het is bedoeld om rijders die je in een eerdere wedstrijd al hebt geïmporteerd snel te hervinden, zonder alle gegevens opnieuw in te tikken.</p>
+<p>Bovenin het venster staan twee zoek-tabs. <b>Let op:</b> deze zoeken in <em>jouw eigen InlineComp-database</em>, niet rechtstreeks bij de KNSB. Het is bedoeld om rijders die je in een eerdere wedstrijd al hebt geïmporteerd snel te hervinden, zonder alle gegevens opnieuw in te tikken.</p>
 
 <ul>
     <li><b>Op relatienummer</b> — KNSB-licentienummer (meestal de meest betrouwbare match — uniek per rijder)</li>
@@ -1080,7 +1069,6 @@ table.ref tr:nth-child(even) td { background: #f9fafc; }
     <li><b>Niet gevonden:</b> melding <em>"Geen rijder gevonden — vul gegevens handmatig in."</em> Dat is normaal voor een rijder die nog nooit in jouw systeem heeft gezeten.</li>
 </ul>
 
-<p class="src">Bron: js/import.js regel 2343 (<code>zoekPersoon</code>) → api/persoon_zoek.php (zoekt in <code>persons</code>-tabel)</p>
 
 <div class="info"><b>Wanneer levert zoeken niets op?</b> Bij een rijder die <em>nooit eerder</em> aan een wedstrijd in jouw InlineComp heeft meegedaan. KNSB-data wordt pas geïmporteerd op het moment dat je een wedstrijd binnenhaalt — er is geen direct doorzoeken van de KNSB-ledendatabase. Voor een echte gastrijder vul je gewoon alle velden handmatig in.</div>
 
@@ -1120,13 +1108,12 @@ table.ref tr:nth-child(even) td { background: #f9fafc; }
 </div>
 <p class="mock-caption">↑ Transponder-bevestiging voor onbekende code.</p>
 
-<p>Sluiten kan op drie manieren: het ×-knopje, de Annuleren-knop, of klik op de donkere overlay buiten de modal. <kbd>Esc</kbd> werkt ook.</p>
+<p>Sluiten kan op drie manieren: het ×-knopje rechtsboven, de Annuleren-knop, of klikken op de donkere achtergrond rondom het venster. De <kbd>Esc</kbd>-toets werkt ook.</p>
 
 <h3 id="stap-6-tekenlijst">Stap 6 — Tekenlijsten printen voor de balie</h3>
 
 <p>Een paar dagen vóór de wedstrijd of op de ochtend zelf wil je een papieren tekenlijst aan de balie hebben — eentje per categorie, of voor de hele wedstrijd. Dat doe je via het <b>Print-Center</b>, bereikbaar via de knop <span class="btn-app btn-secondary">🖨 Print-Center</span> rechtsboven in de hoofd-header (naast je gebruikersnaam).</p>
 
-<p class="src">Bron: js/print_module.js · js/import.js regel 1148 (<code>bouwTekenlijstenBody</code>)</p>
 
 <!-- MOCKUP: print-center -->
 <div class="mock">
@@ -1189,7 +1176,6 @@ table.ref tr:nth-child(even) td { background: #f9fafc; }
 
 <p>Op de wedstrijddag komt de tekenlijst terug van de balie. Sommige rijders hebben getekend, sommige zijn niet gekomen, sommige hebben zich rechtstreeks bij de organisatie aangemeld. Die info werk je bij in de vergelijk-tabel door simpelweg <b>op de status-badge te klikken</b> per rijder.</p>
 
-<p class="src">Bron: js/import.js regel 998-1040 (status-badge click handler)</p>
 
 <h4>De cyclus van klikken</h4>
 
@@ -1227,7 +1213,6 @@ Beide kleuren actief; de twee anderen (afgemeld bij org., niet getekend) maken d
 
 <p>Na Stap 7 — alle statussen verwerkt en wijzigingen opgeslagen — kun je een schone deelnemerslijst uitdraaien voor de scheidsrechter, juryleden, of voor de archiefmap.</p>
 
-<p class="src">Bron: js/import.js regel 1308 (<code>bouwDeelnemerslijstBody</code>)</p>
 
 <ol>
     <li>Klik weer op <span class="btn-app btn-secondary">🖨 Print-Center</span> rechtsboven.</li>
@@ -1242,7 +1227,7 @@ Beide kleuren actief; de twee anderen (afgemeld bij org., niet getekend) maken d
 <hr style="margin:40px 0;border:none;border-top:2px solid var(--oranje)">
 
 <h1>Nog niet gedocumenteerd</h1>
-<p>De volgende modules en applicaties volgen in aparte sessies, elk met dezelfde methode: eerst code-inspectie, dan schrijven, met <span class="src">bestand:regel</span>-bronverwijzingen.</p>
+<p>De volgende modules en applicaties volgen in aparte sessies. Telkens dezelfde aanpak: eerst zorgvuldig de code lezen, dan opschrijven wat de gebruiker daadwerkelijk ziet en doet.</p>
 
 <table class="ref">
 <tr><th>Deel</th><th>Hoofd-bestanden om te lezen</th></tr>
@@ -1257,7 +1242,114 @@ Beide kleuren actief; de twee anderen (afgemeld bij org., niet getekend) maken d
 <tr><td>Deel 3 — Coach</td><td><code>coach/index.php</code> (2359 regels)</td></tr>
 </table>
 
-<p>Elk aan de beurt krijgt dezelfde behandeling als Importeer hierboven: volledige beschrijving met alle sub-secties, HTML-mock-ups die passen bij de werkelijke UI-klassen, en bronverwijzingen.</p>
+<p>Elk aan de beurt krijgt dezelfde behandeling als Importeer hierboven: stap-voor-stap-uitleg vanuit gebruikersperspectief, met levensechte mock-ups van wat je werkelijk op het scherm ziet.</p>
+
+<hr style="margin:50px 0;border:none;border-top:2px solid var(--blauw)">
+
+<h1 id="appendix">Appendix — Voor de techneuten</h1>
+
+<p style="color:#666;font-size:13.5px">Dit deel is niet bedoeld voor dagelijks gebruik. Het is een referentie voor wie code-wijzigingen wil doen of een claim uit de handleiding wil verifiëren tegen de bron.</p>
+
+<h2>A. Bron-bestanden per onderwerp</h2>
+
+<table class="ref">
+<tr><th>Onderwerp</th><th>Hoofdbestanden</th><th>Functie / regel</th></tr>
+<tr><td>Login + sessies</td><td><code>login.php</code>, <code>api/auth.php</code>, <code>auth/session.php</code></td><td>—</td></tr>
+<tr><td>Rollen-definitie</td><td><code>db/users.sql</code> (ENUM), <code>js/app.js</code></td><td>SCHRIJF_ROLLEN-constant</td></tr>
+<tr><td>Layout sidebar + nav</td><td><code>index.php</code> regel 1-144, <code>js/app.js</code></td><td>nav-handling</td></tr>
+<tr><td>Wedstrijdenlijst laden</td><td><code>js/app.js</code></td><td><code>laadWedstrijden()</code> regel 233</td></tr>
+<tr><td>Filters wedstrijdenlijst</td><td><code>js/app.js</code></td><td><code>renderWedstrijdLijst()</code> regel 325</td></tr>
+<tr><td>Wedstrijd selecteren</td><td><code>js/app.js</code></td><td><code>selectWedstrijd()</code> regel 379</td></tr>
+<tr><td>Vergelijking ophalen</td><td><code>api/vergelijk.php</code></td><td>—</td></tr>
+<tr><td>Categorie-tabs bouwen</td><td><code>js/import.js</code></td><td><code>bouwVergelijkTabbladen()</code> regel 720</td></tr>
+<tr><td>Vergelijk-tabel renderen</td><td><code>js/import.js</code></td><td><code>toonVergelijkTabel()</code> regel 760</td></tr>
+<tr><td>Status-cyclus klikken</td><td><code>js/import.js</code></td><td>regel 998-1040 (status-badge click handler)</td></tr>
+<tr><td>Transponder-dropdown</td><td><code>js/import.js</code></td><td><code>maakTpDropdownHtml()</code> regel 1850</td></tr>
+<tr><td>Importeer-knop</td><td><code>js/import.js</code> + <code>api/import.php</code></td><td><code>importeerWedstrijd()</code> regel 2049</td></tr>
+<tr><td>DC-beheer panel</td><td><code>js/import.js</code></td><td><code>bouwBeheerTabel()</code> regel 104</td></tr>
+<tr><td>Samenvoegen DC's</td><td><code>api/samenvoeg.php</code></td><td>—</td></tr>
+<tr><td>Splitsen DC's</td><td><code>api/splits.php</code></td><td>—</td></tr>
+<tr><td>Afstanden bewerken</td><td><code>api/afstanden_beheer.php</code> + <code>api/distances_db.php</code></td><td>—</td></tr>
+<tr><td>Deelnemer-modal</td><td><code>js/import.js</code></td><td><code>initDeelnemerModal()</code> regel 2123 · <code>openDeelnemerModal()</code> regel 2288</td></tr>
+<tr><td>Persoon zoeken in eigen DB</td><td><code>js/import.js</code> + <code>api/persoon_zoek.php</code></td><td><code>zoekPersoon()</code> regel 2343</td></tr>
+<tr><td>Tekenlijst printen</td><td><code>js/import.js</code></td><td><code>bouwTekenlijstenBody()</code> regel 1148</td></tr>
+<tr><td>Deelnemerslijst printen</td><td><code>js/import.js</code></td><td><code>bouwDeelnemerslijstBody()</code> regel 1308</td></tr>
+<tr><td>Print-Center hoofdvenster</td><td><code>js/print_module.js</code></td><td><code>_pcBouwModal()</code></td></tr>
+</table>
+
+<h2>B. HTML-id's en CSS-klassen die in de tekst voorkomen</h2>
+
+<p>Voor wie de UI in de browser-DevTools wil inspecteren of nieuwe elementen wil hangen aan bestaande structuren:</p>
+
+<table class="ref">
+<tr><th>UI-element</th><th>HTML-id of class</th></tr>
+<tr><td>Pagina-container Importeer</td><td><code>#page-importeer</code></td></tr>
+<tr><td>Linker- / rechterkolom Importeer</td><td><code>.voorb-left</code> / <code>.voorb-right</code></td></tr>
+<tr><td>Wedstrijdenlijst-container</td><td><code>#comp-list</code></td></tr>
+<tr><td>Wedstrijd-kaart</td><td><code>.comp-card</code> (active: <code>.active</code>)</td></tr>
+<tr><td>Datumfilter</td><td><code>#filter-van</code> / <code>#filter-tot</code> / <code>#filter-locatie</code> / <code>#filter-organisatie</code></td></tr>
+<tr><td>Verversen-knop</td><td><code>#btn-ververs-wedstrijden</code> + <code>#ververs-icon</code></td></tr>
+<tr><td>Detail-paneel</td><td><code>#detail-panel</code> met daarin <code>#detail-title</code>, <code>#detail-meta</code>, <code>#knsb-sync-info</code></td></tr>
+<tr><td>Importeer-knop</td><td><code>#btn-import</code> (class <code>.btn-import</code>)</td></tr>
+<tr><td>Importeer-resultaat-blok</td><td><code>#import-result</code></td></tr>
+<tr><td>DC-beheer paneel</td><td><code>#beheer-panel</code> met opslaan-knop <code>#btn-beheer-opslaan</code></td></tr>
+<tr><td>Categorie-tabs</td><td><code>#imp-cat-tabs</code> met <code>.tab-btn</code>'s</td></tr>
+<tr><td>Vergelijk-tabel-content</td><td><code>#imp-cat-content</code> met <code>.vergelijk-tabel</code></td></tr>
+<tr><td>Rij-statussen</td><td><code>.row-new</code> (groen, nieuwe rijder), <code>.row-diff</code> (oranje, KNSB-afwijking), <code>.row-withdrawn</code> (grijs, afgemeld), <code>.row-modified</code> (oranje randje, lokaal gewijzigd)</td></tr>
+<tr><td>Status-badge</td><td><code>.status-badge</code> met <code>.status-0</code> t/m <code>.status-5</code></td></tr>
+<tr><td>Marker-badges</td><td><code>.badge-nieuw</code>, <code>.badge-anoniem</code>, <code>.badge-diff</code>, <code>.badge-meld</code>, <code>.badge-reserve</code></td></tr>
+<tr><td>Transponder-dropdown</td><td><code>.tp-sel-drop</code> met data-attribute <code>data-lk</code> (license_key)</td></tr>
+<tr><td>Header rechtsboven</td><td><code>#btn-uitloggen</code>, <code>#btn-printcenter</code></td></tr>
+<tr><td>Sidebar in/uit</td><td><code>#sidebar-toggle</code></td></tr>
+<tr><td>Deelnemer-toevoegen-venster</td><td><code>#modal-deelnemer</code> met <code>.modal-ztab</code>'s en <code>.mz-invoer</code></td></tr>
+<tr><td>Print-Center venster</td><td><code>#pc-modal</code></td></tr>
+</table>
+
+<h2>C. Globale JS-state-variabelen</h2>
+
+<table class="ref">
+<tr><th>Variabele</th><th>Inhoud</th></tr>
+<tr><td><code>currentUser</code></td><td>Server-injected info over de ingelogde gebruiker (id, username, naam, role)</td></tr>
+<tr><td><code>allWedstrijden</code></td><td>Volledige KNSB-feed-array uit <code>api/competitions.php</code></td></tr>
+<tr><td><code>huidigComp</code> / <code>huidigCompId</code></td><td>De geselecteerde wedstrijd</td></tr>
+<tr><td><code>huidigOrganisatie</code></td><td>Aan de wedstrijd gekoppelde organisatie</td></tr>
+<tr><td><code>vergelijkData</code></td><td>Output van <code>api/vergelijk.php</code> — array van DC-objecten met <code>.competitors</code></td></tr>
+<tr><td><code>personEdits</code></td><td>Lokale wijzigingen aan <code>persons</code>-velden, gekeyd op <code>license_key</code></td></tr>
+<tr><td><code>entryEdits</code></td><td>Lokale wijzigingen aan <code>entries</code>-velden, gekeyd op <code>dc_id + '_' + license_key</code></td></tr>
+<tr><td><code>heeftWijzigingen</code></td><td>Boolean. Triggert "weet je het zeker?"-dialoog bij wegnavigeren</td></tr>
+<tr><td><code>_orgTransponders</code></td><td>Inventaris van organisatie-transponders, voor matching tegen toegewezen rijders</td></tr>
+<tr><td><code>_heeftProgramma</code></td><td>Boolean. <code>true</code> als er een tijdschema bestaat → DC-beheer wordt structureel-gelocked</td></tr>
+<tr><td><code>dcDistances</code></td><td>Map van <code>dc_id</code>/<code>dc_id::splitgroep</code> → array afstanden uit DB</td></tr>
+<tr><td><code>STATUS_LABELS</code> / <code>STATUS_CSS</code></td><td>Labels en kleurklassen voor entry_status 0..5 (in <code>js/app.js</code> regel 18-19)</td></tr>
+</table>
+
+<h2>D. Database-tabellen meest geraakt door Importeer</h2>
+
+<table class="ref">
+<tr><th>Tabel</th><th>Wanneer geraakt</th></tr>
+<tr><td><code>competitions</code></td><td>Bij eerste import (insert), bij re-import (update)</td></tr>
+<tr><td><code>persons</code></td><td>Per rijder: insert (NIEUW) of update (naam/categorie/etc.)</td></tr>
+<tr><td><code>entries</code></td><td>Insert per (dc_id × person_license), update bij status-wijziging</td></tr>
+<tr><td><code>transponders</code></td><td>Per rijder per slot — nieuwe codes worden bewaard, oude blijven historisch</td></tr>
+<tr><td><code>dc_splits</code></td><td>Bij splitsen van een gemengde DC</td></tr>
+<tr><td><code>distance_combinations</code></td><td>Update <code>merge_group</code> + <code>merge_label</code> bij samenvoegen</td></tr>
+<tr><td><code>distances</code></td><td>Bewerken van afstand-namen, lengtes, race_type</td></tr>
+<tr><td><code>organisatie_transponders</code></td><td>Sync na import: vrijgemaakte transponders, nieuwe toewijzingen</td></tr>
+</table>
+
+<h2>E. HTTP status-codes die je in de UI kunt tegenkomen</h2>
+
+<table class="ref">
+<tr><th>Code</th><th>Wat betekent het</th></tr>
+<tr><td>200</td><td>OK — alles goed gegaan</td></tr>
+<tr><td>400</td><td>Verkeerde input — bv. ontbrekend verplicht veld in formulier</td></tr>
+<tr><td>401</td><td>Niet (meer) ingelogd — inlog-modal verschijnt automatisch</td></tr>
+<tr><td>403</td><td>Geen rechten voor deze actie</td></tr>
+<tr><td>404</td><td>Object niet gevonden (bv. wedstrijd-id bestaat niet)</td></tr>
+<tr><td>409</td><td>Conflict — meestal: iemand anders heeft tussendoor gewijzigd, of structurele wijziging niet toegestaan in deze fase</td></tr>
+<tr><td>410</td><td>Gone — een endpoint die er bewust uit is gehaald (bv. oude owner-bootstrap)</td></tr>
+<tr><td>500</td><td>Server-fout — meestal een PHP-error die niet was opgevangen. Check error-log op de server</td></tr>
+</table>
 
 </div>
 </body>
