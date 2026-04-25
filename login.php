@@ -1,24 +1,39 @@
 <?php
 // ============================================================
 //  InlineComp – inlogpagina
-//  Als er nog geen gebruikers zijn: toon owner-aanmaak formulier
+//
+//  Veiligheidsnoot: er is GEEN web-bootstrap meer voor het aanmaken
+//  van het eerste owner-account. Een lege users-tabel zou eerder
+//  betekenen dat een aanvaller via login.php gratis een owner kon
+//  registreren — laaghangend fruit voor misbruik na een ongelukkige
+//  backup-restore of DB-reset.
+//
+//  Eerste account aanmaken (eenmalig na installatie) gaat via
+//  phpMyAdmin met een handmatige INSERT en een bcrypt-hash van het
+//  gewenste wachtwoord. Voorbeeld:
+//      INSERT INTO users (username, password_hash, naam, role, actief)
+//      VALUES ('owner1', '<bcrypt-hash>', 'Volledige naam', 'owner', 1);
+//  De hash kun je genereren via PHP CLI:
+//      php -r "echo password_hash('jouw-wachtwoord', PASSWORD_BCRYPT);"
 // ============================================================
 
 require_once __DIR__ . '/../config_inlinecomp.php';
 
-// Controleer of er al gebruikers zijn
-$aantalUsers = (int)$pdo->query("SELECT COUNT(*) FROM users")->fetchColumn();
-$eersteKeer  = ($aantalUsers === 0);
-
 // Al ingelogd? → direct door
 $token = $_COOKIE['ic_session'] ?? '';
-if ($token && !$eersteKeer) {
+if ($token) {
     require_once __DIR__ . '/auth/session.php';
     if (getSession($pdo)) {
         header('Location: index.php');
         exit;
     }
 }
+
+// Als er toch geen gebruikers in de DB staan: geen formulier maar een
+// duidelijke melding. Beheerder moet zelf via phpMyAdmin een account
+// aanmaken (zie comment bovenaan dit bestand).
+$aantalUsers = (int)$pdo->query("SELECT COUNT(*) FROM users")->fetchColumn();
+$geenUsers   = ($aantalUsers === 0);
 ?><!DOCTYPE html>
 <html lang="nl">
 <head>
@@ -100,30 +115,12 @@ if ($token && !$eersteKeer) {
     <div class="login-logo">InlineComp</div>
     <div class="login-subtitel">Wedstrijdbeheer inline-skaten</div>
 
-    <?php if ($eersteKeer): ?>
+    <?php if ($geenUsers): ?>
     <div class="login-info">
-        Geen gebruikers gevonden. Maak het eerste owner-account aan.
+        Er zijn op dit moment geen gebruikersaccounts in de database.<br><br>
+        Een beheerder moet handmatig een account aanmaken via de hosting-DB.
+        Zie de instructies bovenaan <code>login.php</code>.
     </div>
-    <form id="login-form">
-        <div class="login-veld">
-            <label for="naam">Volledige naam</label>
-            <input type="text" id="naam" name="naam" required autocomplete="name">
-        </div>
-        <div class="login-veld">
-            <label for="username">Gebruikersnaam</label>
-            <input type="text" id="username" name="username" required autocomplete="username">
-        </div>
-        <div class="login-veld">
-            <label for="password">Wachtwoord</label>
-            <input type="password" id="password" name="password" required autocomplete="new-password" minlength="8">
-        </div>
-        <div class="login-veld">
-            <label for="password2">Wachtwoord herhalen</label>
-            <input type="password" id="password2" name="password2" required autocomplete="new-password">
-        </div>
-        <div class="login-fout" id="login-fout"></div>
-        <button type="submit" class="login-btn" id="login-btn">Owner-account aanmaken</button>
-    </form>
     <?php else: ?>
     <form id="login-form">
         <div class="login-veld">
@@ -146,49 +143,26 @@ if ($token && !$eersteKeer) {
 </div>
 
 <script>
-const eersteKeer = <?= $eersteKeer ? 'true' : 'false' ?>;
-
-document.getElementById('login-form').addEventListener('submit', async e => {
+// Login-formulier alleen actief als het in de DOM staat (bij lege users-
+// tabel rendert PHP géén formulier, alleen een instructie-melding).
+const formEl = document.getElementById('login-form');
+if (formEl) formEl.addEventListener('submit', async e => {
     e.preventDefault();
     const btn  = document.getElementById('login-btn');
     const fout = document.getElementById('login-fout');
     fout.style.display = 'none';
     btn.disabled = true;
-    btn.textContent = eersteKeer ? 'Aanmaken…' : 'Inloggen…';
+    btn.textContent = 'Inloggen…';
 
     try {
-        if (eersteKeer) {
-            const naam   = document.getElementById('naam').value.trim();
-            const user   = document.getElementById('username').value.trim();
-            const pw1    = document.getElementById('password').value;
-            const pw2    = document.getElementById('password2').value;
-            if (pw1 !== pw2) {
-                toonFout('Wachtwoorden komen niet overeen.');
-                return;
-            }
-            if (pw1.length < 8) {
-                toonFout('Wachtwoord moet minimaal 8 tekens zijn.');
-                return;
-            }
-            const res  = await fetch('api/gebruikers.php', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ action: 'eerste_owner', naam, username: user, password: pw1 }),
-            });
-            const data = await res.json();
-            if (!res.ok) { toonFout(data.error ?? 'Fout bij aanmaken.'); return; }
-            // Nu inloggen
-            await loginRequest(user, pw1);
-        } else {
-            const user = document.getElementById('username').value.trim();
-            const pw   = document.getElementById('password').value;
-            await loginRequest(user, pw);
-        }
+        const user = document.getElementById('username').value.trim();
+        const pw   = document.getElementById('password').value;
+        await loginRequest(user, pw);
     } catch(e) {
         toonFout('Verbindingsfout: ' + e.message);
     } finally {
         btn.disabled = false;
-        btn.textContent = eersteKeer ? 'Owner-account aanmaken' : 'Inloggen';
+        btn.textContent = 'Inloggen';
     }
 });
 

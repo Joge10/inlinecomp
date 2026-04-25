@@ -22,26 +22,17 @@ $action = $body['action'] ?? $_GET['action'] ?? '';
 
 try {
 
-    // ── Eerste owner aanmaken (geen auth vereist, maar alleen als tabel leeg) ──
+    // ── Eerste-owner-bootstrap is uitgeschakeld ─────────────────────────────
+    // Voorheen kon je via action=eerste_owner zonder auth een owner-account
+    // aanmaken zolang de users-tabel leeg was. Risico: bij een per ongeluk
+    // lege tabel (backup-restore, foute migratie, SQL-injectie elders) kon
+    // de eerstvolgende bezoeker zonder verificatie owner worden.
+    //
+    // Nieuw account aanmaken zonder bestaande owner gaat nu alleen via
+    // direct SQL-insert in phpMyAdmin (zie comment bovenaan login.php).
     if ($action === 'eerste_owner') {
-        $aantal = (int)$pdo->query("SELECT COUNT(*) FROM users")->fetchColumn();
-        if ($aantal > 0) {
-            http_response_code(403);
-            echo json_encode(['error' => 'Er zijn al gebruikers. Gebruik inloggen.']);
-            exit;
-        }
-        $username = trim($body['username'] ?? '');
-        $naam     = trim($body['naam']     ?? '');
-        $password = $body['password']      ?? '';
-        if (!$username || !$naam || strlen($password) < 8) {
-            http_response_code(400);
-            echo json_encode(['error' => 'Vul alle velden in (wachtwoord min. 8 tekens)']);
-            exit;
-        }
-        $hash = password_hash($password, PASSWORD_DEFAULT);
-        $pdo->prepare("INSERT INTO users (username, naam, password_hash, role) VALUES (?,?,?,'owner')")
-            ->execute([$username, $naam, $hash]);
-        echo json_encode(['ok' => true]);
+        http_response_code(410);   // Gone — bewust verwijderd
+        echo json_encode(['error' => 'Bootstrap is uitgeschakeld. Maak een account aan via de DB.']);
         exit;
     }
 
