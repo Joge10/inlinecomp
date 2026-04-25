@@ -361,38 +361,7 @@ table.ref tr:nth-child(even) td { background: #f9fafc; }
 <h2 id="a-login">1.1 Login en rollen</h2>
 <p class="src">Bron: login.php · api/auth.php · db/users.sql</p>
 
-<h3>Twee modi: eerste-keer vs. normaal</h3>
-<p>Het loginscherm kijkt bij openen eerst of er al gebruikers in de database staan (<code>SELECT COUNT(*) FROM users</code>, login.php regel 10). Als het aantal nul is, verschijnt er een uitgebreid <b>owner-aanmaakformulier</b>. Anders het standaard login-scherm.</p>
-
-<h4>Eerste keer: owner-account aanmaken</h4>
-
-<!-- MOCKUP: owner-bootstrap -->
-<div class="mock">
-  <div class="mock-loginbg">
-    <div class="mock-logincard">
-        <div class="logo">InlineComp</div>
-        <div class="sub">Wedstrijdbeheer inline-skaten</div>
-        <div class="info-balk">Geen gebruikers gevonden. Maak het eerste owner-account aan.</div>
-        <div class="veld"><label>Volledige naam</label><input type="text" value=""></div>
-        <div class="veld"><label>Gebruikersnaam</label><input type="text" value=""></div>
-        <div class="veld"><label>Wachtwoord</label><input type="password" value=""></div>
-        <div class="veld"><label>Wachtwoord herhalen</label><input type="password" value=""></div>
-        <button class="btn-login">Owner-account aanmaken</button>
-        <div class="versie">InlineComp © 2026 · <a href="#">Privacyverklaring</a></div>
-    </div>
-  </div>
-</div>
-<p class="mock-caption">↑ Loginscherm in owner-bootstrap-modus. Vier velden, gele info-balk bovenin.</p>
-
-<ul>
-    <li><b>Volledige naam</b> — wordt opgeslagen in <code>users.naam</code> en weergegeven in de header.</li>
-    <li><b>Gebruikersnaam</b> — moet uniek zijn (<code>UNIQUE KEY</code> op <code>users.username</code>).</li>
-    <li><b>Wachtwoord</b> — minimum 8 tekens (HTML-attribuut <code>minlength="8"</code>, login.php regel 118). Server-side opgeslagen als bcrypt-hash (<code>password_hash()</code>).</li>
-    <li><b>Wachtwoord herhalen</b> — client-side check dat de twee velden overeenkomen.</li>
-</ul>
-<p>Bij succes: het account krijgt rol <code>owner</code> en de gebruiker wordt meteen ingelogd.</p>
-
-<h4>Normaal inloggen</h4>
+<h3>Inloggen</h3>
 
 <!-- MOCKUP: normaal login -->
 <div class="mock">
@@ -499,13 +468,26 @@ table.ref tr:nth-child(even) td { background: #f9fafc; }
     <li>Probeer je de tab te sluiten → browser-native waarschuwing via <code>beforeunload</code>-event (<code>app.js</code>).</li>
 </ul>
 
-<h2 id="a-importeer">1.3 Module Importeer</h2>
-<p class="src">Bron: index.php regel 86-143 · js/app.js (wedstrijdlijst) · js/import.js · api/competitions.php · api/vergelijk.php · api/import.php</p>
+<h2 id="a-importeer">1.3 Module Importeer — van wedstrijdlijst tot deelnemerslijst</h2>
 
-<p>De ingang van elke nieuwe wedstrijd. Wedstrijden van de KNSB-API ophalen, vergelijken met de lokale database, en importeren (met alle deelnemer-edits meegenomen).</p>
+<p>Dit is waar je een nieuwe wedstrijd "binnenhaalt" en de deelnemerslijst klaarmaakt voor de wedstrijddag. De stappen volgen een natuurlijke volgorde:</p>
 
-<h3>1.3.1 Tweedelige opzet</h3>
-<p>De pagina <code>#page-importeer</code> bestaat uit twee kolommen:</p>
+<ol>
+    <li><a href="#stap-1-wedstrijd-kiezen">Wedstrijd kiezen uit de lijst</a></li>
+    <li><a href="#stap-2-verschillen">Verschillen met de database bekijken</a></li>
+    <li><a href="#stap-3-importeren">Voor het eerst importeren</a></li>
+    <li><a href="#stap-4-dcs">Categorieën aanpassen of splitsen (DC-beheer)</a></li>
+    <li><a href="#stap-5-handmatig">Rijders handmatig toevoegen</a></li>
+    <li><a href="#stap-6-tekenlijst">Tekenlijsten printen voor de balie</a></li>
+    <li><a href="#stap-7-verwerken">Tekenlijst verwerken op de wedstrijddag</a></li>
+    <li><a href="#stap-8-deelnemers">Definitieve deelnemerslijst printen</a></li>
+</ol>
+
+<h3 id="stap-1-wedstrijd-kiezen">Stap 1 — Wedstrijd kiezen uit de lijst</h3>
+
+<p>Zodra je naar <b>Importeer</b> gaat (sidebar links, eerste icoon ⇓) zie je twee kolommen: links een lijst van wedstrijden uit de KNSB-feed, rechts een leeg paneel dat zich vult zodra je iets aanklikt.</p>
+
+<p class="src">Bron: index.php regel 86-143 · js/app.js (wedstrijdlijst) · api/competitions.php</p>
 
 <!-- MOCKUP: importeer-tweedeling (leeg, geen wedstrijd geselecteerd) -->
 <div class="mock">
@@ -557,80 +539,30 @@ table.ref tr:nth-child(even) td { background: #f9fafc; }
 
 <p>Links: <code>.voorb-left</code> met de wedstrijdenlijst en filters. Rechts: <code>.voorb-right</code> met <code>#detail-panel</code> dat verborgen blijft tot je een wedstrijd selecteert.</p>
 
-<h3>1.3.2 Wedstrijdenlijst laden</h3>
-<p class="src">Bron: js/app.js regel 233 (<code>laadWedstrijden</code>)</p>
+<h4>De lijst filteren</h4>
 
-<p>Bij openen van de app wordt <code>laadWedstrijden()</code> aangeroepen. Die doet:</p>
-<ol>
-    <li>Fetcht <code>api/competitions.php</code>, met optioneel <code>?van=&lt;datum&gt;</code> als je het Van-datumfilter hebt ingevuld.</li>
-    <li>Vult globale <code>allWedstrijden</code> met de JSON-respons.</li>
-    <li>Roept <code>vulLocatieDropdown()</code> en <code>vulOrganisatieDropdown()</code> aan.</li>
-    <li>Roept <code>renderWedstrijdLijst()</code> aan.</li>
-    <li>Als er al een wedstrijd geselecteerd was (<code>huidigCompId</code>): opnieuw ophalen van de vergelijk-data via <code>herlaadVergelijking()</code>.</li>
-</ol>
-
-<p>Tijdens het laden:</p>
+<p>Bovenin de linkerkolom staan vier filters:</p>
 <ul>
-    <li>Verversknop <code>#btn-ververs-wedstrijden</code> wordt <code>disabled</code>.</li>
-    <li>Icoon <code>#ververs-icon</code> draait (CSS <code>animation: spin 0.8s linear infinite</code>).</li>
+    <li><b>Van</b> — ontstaansdatum vanaf wanneer wedstrijden mogen verschijnen.</li>
+    <li><b>Tot</b> — eindigend bij datum.</li>
+    <li><b>Locatie</b> — alle unieke locaties uit de KNSB-feed verschijnen automatisch in de dropdown.</li>
+    <li><b>Organisatie</b> — slim: wedstrijden van dezelfde organisator (gegroepeerd op e-mail) worden onder één naam getoond, ook bij kleine spelling-verschillen ("KNSB ZH" / "KNSB Gewest ZH Inline").</li>
 </ul>
 
-<h3>1.3.3 Filters</h3>
-<p class="src">Bron: js/app.js regel 325 (<code>renderWedstrijdLijst</code>)</p>
+<p>Knop <b>Wis</b> reset de filters. Knop <b>↻</b> ververst de lijst rechtstreeks bij de KNSB-API (icoon draait tijdens het ophalen).</p>
 
-<p>Vier filters, allemaal gecombineerd met AND:</p>
+<div class="tip"><b>Veel wedstrijden in de lijst?</b> Zonder filter toont de lijst maar een beperkt aantal en eindigt met een regel <em>"+ N meer — gebruik filters om te verfijnen"</em>. Vul minimaal de "Van"-datum in om alles te zien.</div>
 
-<table class="ref">
-<tr><th>Filter</th><th>Element</th><th>Werking</th></tr>
-<tr><td>Van-datum</td><td><code>#filter-van</code></td><td><code>c.starts &gt;= van</code></td></tr>
-<tr><td>Tot-datum</td><td><code>#filter-tot</code></td><td><code>c.starts &lt;= tot + 'T23:59:59'</code> (hele dag meegenomen)</td></tr>
-<tr><td>Locatie</td><td><code>#filter-locatie</code></td><td>Exacte match op <code>getLocatie(c)</code></td></tr>
-<tr><td>Organisatie</td><td><code>#filter-organisatie</code></td><td>Exacte match op email of naam uit <code>c.settings.contact</code></td></tr>
-</table>
+<h4>Een wedstrijd kiezen</h4>
+<p>Klik op een wedstrijdkaart. De kaart krijgt een blauwe rand en het paneel rechts vult zich. Bij onopgeslagen wijzigingen vraagt de app eerst of je echt wil overschakelen.</p>
 
-<p><b>Locatie-dropdown</b> (<code>vulLocatieDropdown</code>): unieke waarden uit <code>allWedstrijden</code>, alfabetisch gesorteerd.</p>
+<div class="info"><b>Geen "in DB"-badge op de kaarten.</b> Of een wedstrijd al in jouw database zit zie je pas zodra je hem aanklikt — dan toont het rechterpaneel het verschil tussen KNSB en jouw eigen stand.</div>
 
-<p><b>Organisatie-dropdown</b> (<code>vulOrganisatieDropdown</code>): slimmer. Wedstrijden worden gegroepeerd op e-mailadres (of naam als fallback). Per groep wordt de <b>meest voorkomende naam</b> als label gekozen. Zo worden typo-varianten ("KNSB ZH" / "KNSB Gewest ZH Inline") automatisch verenigd onder één dropdown-optie.</p>
+<h3 id="stap-2-verschillen">Stap 2 — Verschillen met de database bekijken</h3>
 
-<h3>1.3.4 Knoppen in het filter-blok</h3>
-<p class="src">Bron: index.php regel 107-109</p>
+<p>Zodra je rechts iets ziet verschijnen, vergelijkt InlineComp wat de KNSB <em>nu</em> opgeeft met wat jij vorige keer hebt geïmporteerd (of niks, als dit de eerste keer is). Bovenin de naam, datum en locatie van de wedstrijd, plus de <b>Importeer</b>-knop. De timestamp <em>"KNSB-sync: 10:23 vandaag"</em> vertelt wanneer de KNSB-data laatst werd opgehaald.</p>
 
-<ul>
-    <li><code>#filter-reset</code> (label "Wis") — zet alle filter-velden op leeg.</li>
-    <li><code>#btn-ververs-wedstrijden</code> met icoon ↻ — roept <code>laadWedstrijden()</code> opnieuw aan.</li>
-</ul>
-
-<h3>1.3.5 Wedstrijd-kaarten</h3>
-<p class="src">Bron: js/app.js regel 350-374</p>
-
-<p>Elke wedstrijd in de lijst wordt als een <code>&lt;div class="comp-card"&gt;</code> gerenderd met:</p>
-<ul>
-    <li><code>.comp-naam</code> — wedstrijdnaam (<code>comp.name</code> of <code>comp.title</code>)</li>
-    <li><code>.comp-meta</code> — <code>formatDatum(comp.starts)</code> + optioneel <code>' · ' + getLocatie(comp)</code></li>
-</ul>
-
-<div class="warn"><b>Let op:</b> er staan <b>geen badges</b> zoals "In DB" of "Nieuw" op de kaarten zelf. De enige visuele markering is de <code>.active</code>-class voor de geselecteerde wedstrijd (blauwe rand).</div>
-
-<h3>1.3.6 Limiet zonder filter</h3>
-<p>Er is een constante <code>MAX_ZONDER_FILTER</code> in <code>app.js</code>. Als er meer wedstrijden in de lijst zitten dan die limiet én er is géén filter actief, wordt de lijst ingekort met een <code>+ N meer — gebruik filters om te verfijnen</code>-regel onderaan.</p>
-
-<h3>1.3.7 Een wedstrijd selecteren</h3>
-<p class="src">Bron: js/app.js regel 379 (<code>selectWedstrijd</code>)</p>
-
-<p>Bij klik op een wedstrijdkaart:</p>
-<ol>
-    <li>Als er onopgeslagen wijzigingen zijn → <code>toonBevestigDialog</code> vraagt of je door wilt.</li>
-    <li>Eventuele lopende <code>vergelijk.php</code>-fetch wordt geannuleerd (<code>AbortController</code>).</li>
-    <li>Actieve kaart-markering wordt verplaatst naar de nieuw aangeklikte.</li>
-    <li>Globals <code>huidigCompId</code> en <code>huidigComp</code> worden geset.</li>
-    <li><code>#detail-panel</code> wordt zichtbaar, titel + meta ingevuld.</li>
-    <li>Fetch <code>api/vergelijk.php?id=&lt;id&gt;</code> en verwerk de response.</li>
-    <li><code>initEdits()</code> — lokale edit-state opzetten.</li>
-    <li><code>bouwVergelijkTabbladen()</code> — tabs renderen.</li>
-    <li><code>updateImportBtn()</code> — importeer-knop state (enabled/disabled).</li>
-</ol>
-
-<h3>1.3.8 Detail-header</h3>
+<h4>Detail-kop</h4>
 <p class="src">Bron: index.php regel 120-134</p>
 
 <!-- MOCKUP: detail-header -->
@@ -653,7 +585,12 @@ table.ref tr:nth-child(even) td { background: #f9fafc; }
     <li><code>#btn-import</code> — krijgt een klik-handler gebonden aan <code>importeerWedstrijd(comp.id, comp.name)</code></li>
 </ul>
 
-<h3>1.3.9 Categorie-tabs</h3>
+<h4>Categorieën als tabs</h4>
+<p>Per categorie (DC = "distance combination") één tab. Op het tab-label staat het aantal deelnemers, en kleine badges:</p>
+<ul>
+    <li>🟥 <b>3✗</b> — drie afmeldingen in deze cat</li>
+    <li>🟩 <b>2N</b> — twee nieuwe rijders die nog niet in jouw DB stonden</li>
+</ul>
 <p class="src">Bron: js/import.js regel 720 (<code>bouwVergelijkTabbladen</code>)</p>
 
 <!-- MOCKUP: categorie-tabs -->
@@ -678,7 +615,26 @@ table.ref tr:nth-child(even) td { background: #f9fafc; }
 </ul>
 <p>De eerste tab is standaard actief. Klikken wisselt en roept <code>toonVergelijkTabel(cat)</code> aan.</p>
 
-<h3>1.3.10 De vergelijk-tabel</h3>
+<h4>De vergelijk-tabel: wat zie je per rij?</h4>
+
+<p>Per categorie zie je een tabel met alle ingeschreven rijders. Rijen kleuren naar status:</p>
+<ul>
+    <li><b>Lichtgroen</b> = nieuwe rijder (stond nog niet in jouw DB).</li>
+    <li><b>Lichtoranje</b> = afwijking met de KNSB (bv. naam of startnummer is gewijzigd) — bij die rij staat ook een oranje <b>!</b>-badge.</li>
+    <li><b>Grijs/doorzichtig</b> = afgemeld of niet getekend.</li>
+    <li><b>Oranje randje links</b> = je hebt deze rij zelf gewijzigd, nog niet opgeslagen.</li>
+</ul>
+
+<p>Velden die je <b>direct kunt aanpassen</b>:</p>
+<ul>
+    <li><b>Start#</b> — als de rijder zonder KNSB-startnummer is, gebruik <b>1001+</b> voor gastrijders. Bij afwijking met KNSB verschijnt eronder een rode hint <em>KNSB: 138</em>.</li>
+    <li><b>Naam</b> — als KNSB-naam wijzigt, kun je hier de oude bewaren of overnemen.</li>
+    <li><b>Transponder</b> — dropdown met alle bekende transponders voor deze rijder (zie sub-sectie hieronder).</li>
+    <li><b>Status-badge</b> — klik om door de status-cyclus te lopen (zie Stap 7 voor de volledige uitleg).</li>
+</ul>
+
+<p>De Club-kolom is alleen-lezen.</p>
+
 <p class="src">Bron: js/import.js regel 760 (<code>toonVergelijkTabel</code>)</p>
 
 <!-- MOCKUP: vergelijk-tabel -->
@@ -765,59 +721,39 @@ table.ref tr:nth-child(even) td { background: #f9fafc; }
 </div>
 <p class="mock-caption">↑ Vergelijk-tabel per categorie. Kleuren tonen status: groen=nieuw, oranje=afwijking, grijs=afgemeld, oranje-randje links=lokaal gewijzigd.</p>
 
-<h4>Kolommen</h4>
-<table class="ref">
-<tr><th>Kolom</th><th>Class</th><th>Inhoud</th></tr>
-<tr><td>Start#</td><td><code>.th-sn</code> / <code>.td-sn</code></td><td>Bewerkbaar <code>&lt;input type="number"&gt;</code>. Bij afwijking t.o.v. KNSB verschijnt eronder een rode <code>.knsb-hint</code> met de KNSB-waarde.</td></tr>
-<tr><td>Naam</td><td><code>.th-naam</code> / <code>.td-naam</code></td><td>Bewerkbaar <code>&lt;input type="text"&gt;</code>. Bij anonieme rijders staat een placeholder "Vul echte naam in voor startlijst". Cel krijgt <code>.cell-diff</code>-klasse bij afwijking.</td></tr>
-<tr><td>Club</td><td><code>.th-club</code></td><td>Alleen-lezen tekst. Volledige clubnaam uit <code>pe.club_full</code>.</td></tr>
-<tr><td>Transponder</td><td><code>.th-tp-sel</code></td><td>Custom dropdown (zie 1.3.11). Rechts een <code>+</code>-knop om handmatig een transponder toe te voegen.</td></tr>
-<tr><td>Status</td><td><code>.th-status</code></td><td>Status-badge + optioneel reserve-badge <code>R1</code>/<code>R2</code>/... Klikken opent een dropdown om status te wijzigen.</td></tr>
-<tr><td>(Badges)</td><td><code>.th-badges</code></td><td>Visuele markeringen: NIEUW, ANON, !, ⓘ.</td></tr>
-</table>
+<h4>Badges in de laatste kolom</h4>
 
-<h4>Rij-kleuren (CSS-class op <code>&lt;tr&gt;</code>)</h4>
-<p class="src">Bron: js/import.js regel 797-801</p>
+<p>Aan het einde van een rij verschijnen kleine markeringen die jouw aandacht vragen:</p>
 
 <table class="ref">
-<tr><th>Class</th><th>Voorwaarde</th><th>Visueel</th></tr>
-<tr><td><code>row-withdrawn</code></td><td><code>entry_status</code> in {2, 3, 4} (dus NIET 5)</td><td>Grijs, doorzichtig</td></tr>
-<tr><td><code>row-new</code></td><td><code>item.is_new</code> — rijder stond nog niet in de DB</td><td>Lichtgroen</td></tr>
-<tr><td><code>row-diff</code></td><td><code>diffs.length &gt; 0</code> — afwijking tussen KNSB en DB</td><td>Licht oranje</td></tr>
-<tr><td><code>row-modified</code></td><td>Lokaal gewijzigd, nog niet opgeslagen</td><td>Oranje randje links</td></tr>
+<tr><th>Badge</th><th>Wanneer</th><th>Wat doe je ermee</th></tr>
+<tr><td><span class="badge-nieuw">NIEUW</span></td><td>Rijder zat nog niet in jouw database</td><td>Niks, automatisch bij import opgeslagen</td></tr>
+<tr><td><span class="badge-anoniem">ANON</span></td><td>Rijder zonder bekend licentienummer</td><td>Vul handmatig de naam in voordat je startlijsten genereert</td></tr>
+<tr><td><span class="badge-diff">!</span></td><td>De KNSB heeft iets gewijzigd t.o.v. jouw DB</td><td>Bekijk de rode <em>KNSB: ...</em>-hint en beslis of je overneemt</td></tr>
+<tr><td><span class="badge-meld">ⓘ</span></td><td>Deze rijder moet zich melden aan de balie</td><td>Hover over de badge voor de reden (gastnummer, geen transponder, etc.)</td></tr>
+<tr><td><span class="badge-reserve">R1</span></td><td>Reserve-rijder met volgnummer 1, 2, ...</td><td>Wordt actief als een ander uitvalt</td></tr>
 </table>
-<p>Alleen één class tegelijk behalve <code>row-modified</code> die kan gecombineerd met de andere.</p>
 
-<h4>Startnummer-kleuring</h4>
-<p>Als <code>sn &ge; 1000</code>: de <code>&lt;td&gt;</code> krijgt class <code>guest-nr</code>. Visueel: gele achtergrond op de input. Gast-startnummers zijn bewust &ge; 1000 om ze te onderscheiden van KNSB-startnummers.</p>
-
-<h4>Status-labels</h4>
-<p class="src">Bron: js/app.js regel 18-19</p>
+<h4>De zes mogelijke statussen</h4>
+<p>Klik op de status-badge om de cyclus af te lopen. Volledige uitleg in <a href="#stap-7-verwerken">Stap 7</a>.</p>
 
 <table class="ref">
-<tr><th>Waarde</th><th>Label</th><th>CSS-class</th><th>Betekenis</th></tr>
-<tr><td>0</td><td>Niet bevestigd</td><td><code>status-0</code></td><td>KNSB-status onbekend/pending</td></tr>
-<tr><td>1</td><td>Bevestigd</td><td><code>status-1</code></td><td>Normale deelnemer</td></tr>
-<tr><td>2</td><td>Afgemeld</td><td><code>status-2</code></td><td>Afgemeld bij KNSB</td></tr>
-<tr><td>3</td><td>Afgem. bij org.</td><td><code>status-3</code></td><td>Afmelding rechtstreeks bij organisatie</td></tr>
-<tr><td>4</td><td>Niet getekend</td><td><code>status-4</code></td><td>Aanwezigheid niet geregistreerd aan balie</td></tr>
-<tr><td>5</td><td>Bevestigd bij org.</td><td><code>status-5</code></td><td>Laat-aangemeld rechtstreeks bij organisatie (actief!)</td></tr>
+<tr><th>Label</th><th>Betekenis</th></tr>
+<tr><td><span class="status-badge status-1">Bevestigd</span></td><td>Standaard KNSB-deelnemer, getekend</td></tr>
+<tr><td><span class="status-badge status-5">Bevestigd bij org.</span></td><td>Laat aangemeld rechtstreeks bij de organisatie — telt mee als actief</td></tr>
+<tr><td><span class="status-badge status-3">Afgem. bij org.</span></td><td>Afmelding bij de organisatie — niet meer actief</td></tr>
+<tr><td><span class="status-badge status-4">Niet getekend</span></td><td>Niet aanwezig aan de balie — niet meer actief</td></tr>
+<tr><td><span class="status-badge status-2">Afgemeld</span></td><td>Afgemeld via KNSB-systeem — kan niet handmatig worden teruggezet</td></tr>
+<tr><td><span class="status-badge status-0">Niet bevestigd</span></td><td>KNSB-pending — komt zelden voor</td></tr>
 </table>
 
-<h4>Badges</h4>
-<table class="ref">
-<tr><th>Badge</th><th>Class</th><th>Wanneer</th></tr>
-<tr><td><span class="badge-nieuw">NIEUW</span></td><td><code>badge-nieuw</code></td><td><code>item.is_new</code> — bestaat nog niet in DB</td></tr>
-<tr><td><span class="badge-anoniem">ANON</span></td><td><code>badge-anoniem</code></td><td>Rijder zonder licentienummer bekend</td></tr>
-<tr><td><span class="badge-diff">!</span></td><td><code>badge-diff</code></td><td>Afwijking tussen KNSB en DB (bv. naam of startnummer gewijzigd)</td></tr>
-<tr><td><span class="badge-meld">ⓘ</span></td><td><code>badge-meld</code></td><td>Rijder moet zich persoonlijk melden aan de balie. Tooltip legt uit waarom (bv. geen transponder, gastnummer, niet-getekend, etc.)</td></tr>
-<tr><td><span class="badge-reserve">R1</span></td><td><code>badge-reserve</code></td><td>Rijder is reserve met nummer <code>R1</code>, <code>R2</code>, etc.</td></tr>
-</table>
+<h4>Transponder kiezen voor een rijder</h4>
 
-<h3>1.3.11 Transponder-dropdown</h3>
+<p>De transponder-kolom is een dropdown met alle bekende transponders voor deze rijder. Je krijgt automatisch een slimme voorinvulling op basis van wat KNSB en jouw organisatie weten:</p>
+
 <p class="src">Bron: js/import.js regel 1850 (<code>maakTpDropdownHtml</code>)</p>
 
-<p>Per rijder een dropdown met alle beschikbare transponders. Opties in vaste volgorde:</p>
+<p><b>Wat staat er in de dropdown:</b></p>
 
 <!-- MOCKUP: transponder-dropdown opengeklapt -->
 <div class="mock">
@@ -844,54 +780,42 @@ table.ref tr:nth-child(even) td { background: #f9fafc; }
 </div>
 <p class="mock-caption">↑ Transponder-dropdown voor een rijder met eigen T1/T2, extra, en een org-transponder.</p>
 
-<h4>Opbouw van de opties</h4>
 <ol>
-    <li><b>"— geen —"</b> — eerste optie; default selected als <code>actief</code> null is</li>
-    <li><b><code>T1 – &lt;code&gt;</code></b> — KNSB-slot-1-transponder (persoonlijk eigendom), als aanwezig</li>
-    <li><b><code>T2 – &lt;code&gt;</code></b> — KNSB-slot-2-transponder, als aanwezig</li>
-    <li><b><code>Textra – &lt;code&gt;</code></b> — eerder handmatig toegevoegde transponders (meerdere mogelijk)</li>
-    <li><b><code>&lt;optgroup label="Org transponders"&gt;</code></b> — organisatie-uitleen. Alleen <i>vrije</i> transponders en die aan deze rijder toegewezen worden getoond. Format: <code>#&lt;intern_nummer&gt; – &lt;code&gt;</code></li>
-    <li><b>Vangnet</b>: als <code>actief</code> een waarde heeft die nergens in de dropdown zit, wordt die als losse optie toegevoegd en selected</li>
+    <li><b>— geen —</b> — als deze rijder nu zonder transponder rijdt</li>
+    <li><b>T1 / T2</b> — eigen transponders die de rijder bij de KNSB heeft geregistreerd</li>
+    <li><b>Textra</b> — extra transponders die jij eerder handmatig hebt toegevoegd</li>
+    <li><b>Org-transponders</b> (in een aparte groep) — transponders uit jouw organisatie-inventaris die nog vrij zijn, of die al aan deze rijder zijn toegewezen voor het seizoen</li>
 </ol>
 
-<h4>Wanneer is een org-transponder "vrij"?</h4>
-<p>Een transponder in <code>organisatie_transponders</code> is "in gebruik" als er OFWEL een <code>toegewezen_snr</code> staat OFWEL een <code>toegewezen_naam</code>. Vrije transponders worden altijd getoond. Bezette transponders worden <b>alleen</b> getoond als ze aan de huidige rijder horen (zelfde startnummer), of als ze de huidige selectie zijn.</p>
+<p>Bezette org-transponders die aan een <em>andere</em> rijder horen, worden niet getoond. Bij hover op de dropdown verschijnt een tooltip met alle beschikbare transponders voor deze rijder ("Eigen T1: ..., Club-transponder #3: ...").</p>
 
-<h4>Kruis-bescherming</h4>
-<p>Zodra je een org-transponder aan rijder A toekent die al aan rijder B hangt, wordt de toewijzing bij B automatisch weggehaald in <code>personEdits</code>. Zonder die bescherming zou de server beide rijders dezelfde transponder geven en zou er eentje worden overschreven.</p>
+<div class="info"><b>Slim veiligheidsnet:</b> als je per ongeluk een org-transponder van rijder A naar rijder B verplaatst, wordt de toewijzing bij A automatisch weggehaald. Geen dubbele toewijzing mogelijk.</div>
 
-<h4>De <b>+</b>-knop rechts van de dropdown</h4>
-<p>Opent een klein dialoogje om handmatig een transponder-code toe te voegen aan deze rijder (komt als "Textra" in de dropdown).</p>
+<p>Het <b>+</b>-knopje rechts van de dropdown opent een klein dialoogje om handmatig een transponder-code voor deze rijder toe te voegen. Die verschijnt daarna als "Textra" in de lijst.</p>
 
-<h3>1.3.12 Import-knop</h3>
+<h3 id="stap-3-importeren">Stap 3 — Voor het eerst importeren</h3>
+
+<p>Heb je alle wijzigingen in de tabel naar wens? Klik op de <span class="btn-app btn-import">⇓ Importeer</span>-knop rechtsboven in het detail-paneel. Wat er gebeurt:</p>
+
+<ul>
+    <li>De knop wordt grijs en er verschijnt <em>"Importeren…"</em>.</li>
+    <li>Alle gegevens (rijders, transponders, statussen, jouw eigen wijzigingen) worden in één keer naar de database geschreven.</li>
+    <li>Bij succes verschijnt een groen blok <em>✔ &lt;wedstrijd&gt; geïmporteerd · klik voor details</em> met een opsomming van wat er is gedaan. Het klapt na 4 seconden vanzelf in (de log blijft beschikbaar).</li>
+    <li>De vergelijk-tabel wordt automatisch ververst zodat je de nieuwe stand ziet.</li>
+</ul>
+
 <p class="src">Bron: js/import.js regel 2049 (<code>importeerWedstrijd</code>)</p>
 
-<p>De oranje <code>⇓ Importeer</code>-knop rechts in de detail-header start het echte importeren.</p>
-
-<h4>Flow bij klikken</h4>
-<ol>
-    <li>Check dat er vergelijk-data is.</li>
-    <li>Knop wordt <code>disabled</code>; in <code>#import-result</code> verschijnt een laad-spinner met "Importeren…".</li>
-    <li><code>collectImportData(compId)</code> bouwt de POST-body met:
-        <ul>
-            <li>Alle persons-wijzigingen uit <code>personEdits</code></li>
-            <li>Alle entry-wijzigingen uit <code>entryEdits</code></li>
-            <li>Handmatig toegevoegde rijders (zonder KNSB-entry)</li>
-            <li>Transponder-toewijzingen</li>
-        </ul>
-    </li>
-    <li>POST naar <code>api/import.php</code>.</li>
-    <li>Response-afhandeling: zie hieronder.</li>
-</ol>
-
-<h4>Mogelijke responses</h4>
+<h4>Wanneer kun je tegen iets aanlopen?</h4>
 
 <table class="ref">
-<tr><th>Status</th><th>Reactie in de UI</th></tr>
-<tr><td>HTTP 409 of <code>error: 'conflict'</code></td><td>Waarschuwing: <em>"Conflict: inschrijvingen gewijzigd door iemand anders."</em> + knop <b>↺ Herlaad</b>. Jouw niet-opgeslagen wijzigingen gaan verloren bij herlaad.</td></tr>
-<tr><td>Andere fout</td><td>Rode error-balk met de foutmelding.</td></tr>
-<tr><td>200 OK</td><td>Groene succes-balk met uitklapbare details (zie mockup hieronder). Klapt automatisch in na 4 seconden. <code>herlaadVergelijking()</code> wordt aangeroepen om de nieuwe stand op te halen.</td></tr>
+<tr><th>Wat zie je?</th><th>Wat is er aan de hand?</th><th>Wat doe je?</th></tr>
+<tr><td>Rode balk: <em>"Conflict: inschrijvingen gewijzigd door iemand anders"</em></td><td>Een collega heeft tussendoor ook geïmporteerd</td><td>Klik op <b>↺ Herlaad</b>. Jouw niet-opgeslagen wijzigingen ben je dan kwijt — controleer of ze nog nodig zijn.</td></tr>
+<tr><td>Rode balk met andere foutmelding</td><td>Server-fout of databaseprobleem</td><td>Probeer opnieuw. Blijft het aanhouden? Stuur de foutmelding door.</td></tr>
+<tr><td>Groene balk + log met N rijders</td><td>Alles goed gegaan</td><td>Door naar Stap 4 of Stap 6.</td></tr>
 </table>
+
+<div class="tip"><b>Wanneer importeer je opnieuw?</b> Elke keer dat je in de KNSB-feed nieuwe wijzigingen ziet (bv. last-minute afmeldingen, nieuwe inschrijvingen, gewijzigde transponders). Klik op <b>↻</b> linksboven om de KNSB-data opnieuw op te halen, en zie of er een rode "afgemeld"-badge of groene "nieuw"-badge bij komt op een tab.</div>
 
 <!-- MOCKUP: import-result succes -->
 <div class="mock">
@@ -910,10 +834,18 @@ table.ref tr:nth-child(even) td { background: #f9fafc; }
 </div>
 <p class="mock-caption">↑ Succesvolle import. De <code>&lt;details&gt;</code> klapt automatisch in na 4 seconden.</p>
 
-<h3>1.3.13 DC-beheer panel</h3>
-<p class="src">Bron: js/import.js regel 104 (<code>bouwBeheerTabel</code>)</p>
+<h3 id="stap-4-dcs">Stap 4 — Categorieën aanpassen of splitsen</h3>
 
-<p>Het <code>#beheer-panel</code> verschijnt <b>alleen</b> nadat een wedstrijd ten minste één keer is geïmporteerd (<code>isGeimporteerd === true</code>). Dit panel is ingeklapt bij laden — je klikt het zelf open als je iets wilt aanpassen.</p>
+<p>Direct na de eerste import verschijnt onder de import-knop een <b>DC-beheer-paneel</b>. Standaard ingeklapt (klik op de pijl ▶ om uit te klappen). Hier kun je categorieën samenvoegen, splitsen, en afstanden aanpassen.</p>
+
+<p>Wanneer is dat nodig?</p>
+<ul>
+    <li>Als <b>DSA en DSB samen rijden</b> in dezelfde series → samenvoegen.</li>
+    <li>Als <b>HPA en HPB in één DC</b> staan maar je ze in het klassement <em>apart</em> wilt rangschikken → split-groepen toekennen.</li>
+    <li>Als jouw afstand-naam afwijkt van wat de KNSB doorgeeft (bv. KNSB stuurt "1500m" maar je rijdt "Puntenkoers 1500m") → naam aanpassen, race-type kiezen.</li>
+</ul>
+
+<p class="src">Bron: js/import.js regel 104 (<code>bouwBeheerTabel</code>)</p>
 
 <!-- MOCKUP: beheer-panel uitgeklapt -->
 <div class="mock">
@@ -992,35 +924,48 @@ table.ref tr:nth-child(even) td { background: #f9fafc; }
 </div>
 <p class="mock-caption">↑ DC-beheer-panel uitgeklapt. Een normale DC (HSA) en een samengevoegde (DSA+DSB).</p>
 
-<h4>Wat doet dit panel?</h4>
+<h4>Twee categorieën samenvoegen</h4>
+
+<p>In de eerste kolom staat per DC een dropdown <b>⇄ samenvoegen met… —</b>. Kies een andere DC en de twee worden samengevoegd in één rij. In de mock-up zie je dat met "DSA + DSB samen": beide categorieën verschijnen onder elkaar in dezelfde rij. Onder de namen kun je een leesbaar label invullen (✏-icoontje), bijvoorbeeld <em>"Dames Senior A+B"</em> — dat is wat in het tijdschema komt te staan.</p>
+
+<p>Een samengevoegde groep ontkoppelen? Klik op het 🗑-knopje naast de individuele DC-naam.</p>
+
+<h4>Categorieën splitsen voor het klassement</h4>
+
+<p>Bij elke categorie binnen een DC met meerdere cats verschijnt een input-veldje <em>splitgroep…</em>. Daar geef je een naam aan een sub-groep. Categorieën met dezelfde split-groep komen samen in één klassement, andere apart.</p>
+
+<p>Voorbeeld: in de DSA+DSB-rij vul je voor DSA <em>"DSA"</em> in en voor DSB <em>"DSB"</em>. Resultaat: ze rijden in dezelfde series (samengevoegd) maar krijgen aparte klassementen (gesplitst).</p>
+
+<h4>Afstanden, lengte en race-type</h4>
+
+<p>Per afstand-kolom staan drie inputs onder elkaar:</p>
 <ul>
-    <li><b>DC's samenvoegen</b>: de dropdown "— samenvoegen met… —" bij elke normale DC laat je hem koppelen aan een andere. Samengevoegde DC's rijden in dezelfde series/heats.</li>
-    <li><b>Naam in tijdschema</b>: bij een samengevoegde DC verschijnt een label-input (✏) om een leesbare naam te kiezen voor weergave in het tijdschema (bijv. "Dames Senior A+B" in plaats van "DSA/DSB").</li>
-    <li><b>Ontkoppelen</b>: de 🗑-knoppen bij de individuele DC's in een samengevoegde groep halen die DC uit de groep.</li>
-    <li><b>Categorieën splitsen</b>: per categorie in een DC kun je een "splitgroep"-naam geven. Zo kunnen bijvoorbeeld Dames en Heren in één gemengde DC rijden maar apart gerankt worden.</li>
-    <li><b>Afstanden per DC</b>: elke kolom "Afstand N" heeft drie velden:
-        <ul>
-            <li>Naam (bv. "500m sprint")</li>
-            <li>Meters (integer)</li>
-            <li>Race-type: <b>Sprint</b>, <b>Inline</b>, <b>Puntenkoers</b> of <b>Afvalkoers</b></li>
-            <li>🗑 om de afstand te verwijderen</li>
-        </ul>
-    </li>
+    <li><b>Naam</b> — bv. "500m sprint" of "Puntenkoers 3km"</li>
+    <li><b>Meters</b> — bv. 500</li>
+    <li><b>Race-type</b> — Sprint, Inline, Puntenkoers of Afvalkoers</li>
 </ul>
 
-<h4>Readonly en structuur-lock</h4>
+<p>Het race-type bepaalt later in de app (Live verwerking, Uitslag) hoe rijders worden gerankt:</p>
 <ul>
-    <li>Geen schrijfrechten op <code>importeer</code>: hele panel is readonly, boven de tabel een melding.</li>
-    <li>Er bestaat al een tijdschema/programma voor deze wedstrijd (<code>_heeftProgramma === true</code>): <b>structurele</b> wijzigingen (samenvoegen/splitsen, afstand toevoegen/verwijderen) worden geblokkeerd, maar namen en labels blijven bewerkbaar.</li>
+    <li><b>Sprint</b> = pure tijdvergelijking</li>
+    <li><b>Inline</b> = rondes-eerst-dan-tijd (lange afstand)</li>
+    <li><b>Puntenkoers</b> = punten DESC, rondes DESC, tijd ASC</li>
+    <li><b>Afvalkoers</b> = afvalrace</li>
 </ul>
 
-<h4>Opslaan</h4>
-<p>De knop <code>#btn-beheer-opslaan</code> is standaard disabled. Zodra je iets wijzigt (<code>markBeheerDirty()</code>) wordt hij oranje en klikbaar. Na opslaan komt er een status-bericht in <code>#beheer-status</code>.</p>
+<p>Het 🗑-knopje verwijdert een afstand (alleen mogelijk vóór er een tijdschema is gegenereerd).</p>
 
-<h3>1.3.14 Deelnemer handmatig toevoegen</h3>
+<h4>Opslaan en wat er kán/niet kán</h4>
+
+<p>De <b>✓ Opslaan</b>-knop onderaan blijft grijs tot je iets wijzigt — dan kleurt hij oranje. Na opslaan komt er een korte status-melding ernaast.</p>
+
+<div class="warn"><b>Heb je al een tijdschema gemaakt?</b> Dan kun je geen DC's meer samenvoegen of afstanden toevoegen/verwijderen ("structuur-lock"). Naam-aanpassingen blijven wel mogelijk. Wil je toch structureel wijzigen, gooi dan eerst het tijdschema weg via <em>Tijdschema → Wis programma</em>.</div>
+
+<h3 id="stap-5-handmatig">Stap 5 — Een rijder handmatig toevoegen</h3>
+
+<p>Soms staat er iemand aan de balie die wel mag rijden maar niet in de KNSB-lijst voorkomt: een laat-aangemelde, een gastrijder, of iemand die rechtstreeks bij jouw organisatie heeft betaald. Onderaan elke categorie-tabel staat de knop <span class="btn-app btn-secondary">+ Deelnemer toevoegen</span>. Die opent een modal.</p>
+
 <p class="src">Bron: js/import.js regel 2123 (<code>initDeelnemerModal</code>) · regel 2288 (<code>openDeelnemerModal</code>)</p>
-
-<p>Onder elke categorie-tabel staat een knop <code>+ Deelnemer toevoegen</code>. Klikken opent een modal waarmee je een rijder die niet in de KNSB-lijst staat handmatig aan de wedstrijd toevoegt.</p>
 
 <!-- MOCKUP: deelnemer-modal -->
 <div class="mock">
@@ -1087,35 +1032,36 @@ table.ref tr:nth-child(even) td { background: #f9fafc; }
 </div>
 <p class="mock-caption">↑ Deelnemer-toevoegen-modal. Zoek-tab bovenaan om KNSB-data op te halen, formulier eronder.</p>
 
-<h4>Zoek-sectie bovenin</h4>
-<p>Twee sub-tabs om een bestaande KNSB-rijder op te zoeken (dan wordt het formulier eronder automatisch ingevuld):</p>
-<ul>
-    <li><b>Op relatienummer</b> — één invoerveld met het KNSB-licentienummer</li>
-    <li><b>Op startnr + categorie</b> — twee velden: startnummer + categorie-code</li>
-</ul>
-<p><kbd>Enter</kbd> in een zoek-veld = klik op "Zoeken".</p>
+<h4>Eerst proberen op te zoeken</h4>
 
-<h4>Formulier-velden</h4>
+<p>Bovenin de modal staan twee zoek-tabs. Als de rijder al ergens bij de KNSB bekend is, vul je niets handmatig in maar zoek je hem op:</p>
+<ul>
+    <li><b>Op relatienummer</b> — KNSB-licentienummer is meestal beter (uniek)</li>
+    <li><b>Op startnr + categorie</b> — als je het licentienummer niet bij de hand hebt</li>
+</ul>
+<p>Klik op <b>Zoeken</b> (of druk <kbd>Enter</kbd>). Bij gevonden: het formulier eronder wordt automatisch ingevuld met naam, club, geslacht etc. — je hoeft alleen nog startnummer + transponder + categorie te bevestigen.</p>
+
+<h4>Het formulier handmatig invullen</h4>
+
+<p>Niet gevonden? Of gastrijder zonder KNSB? Vul de velden zelf in:</p>
 
 <table class="ref">
-<tr><th>Veld</th><th>Verplicht?</th><th>Toelichting</th></tr>
-<tr><td>Relatienummer</td><td>Nee</td><td>Laat leeg bij niet-KNSB-rijder (gastrijder)</td></tr>
-<tr><td>Startnummer</td><td>Ja</td><td>Min. 1. Gebruik 1001+ voor gastrijders zonder KNSB-nummer</td></tr>
-<tr><td>Voornaam</td><td>Ja</td><td>—</td></tr>
-<tr><td>Achternaam</td><td>Ja</td><td>Volledige naam wordt samengesteld uit voor- + achternaam</td></tr>
-<tr><td>Categorie</td><td>Ja</td><td>Codes als DKA, HSA, HJB etc. Moet matchen met de DC — anders verschijnt een waarschuwing</td></tr>
-<tr><td>Nationaliteit</td><td>Ja</td><td>Default NED. Max 3 tekens.</td></tr>
-<tr><td>Geslacht</td><td>Ja</td><td>Man (0) of Vrouw (1)</td></tr>
-<tr><td>Club (volledig)</td><td>Nee</td><td>Autocomplete vanuit <code>_clubsCache</code></td></tr>
-<tr><td>Club (kort)</td><td>Nee</td><td>Max 20 tekens. Wordt automatisch ingevuld als je een volledige clubnaam kiest</td></tr>
-<tr><td>Transponder</td><td>Nee</td><td>Code als <code>KS-12345</code>. Onbekende transponder → bevestigingsvraag</td></tr>
+<tr><th>Veld</th><th>Verplicht?</th><th>Tip</th></tr>
+<tr><td>Relatienummer</td><td>Nee</td><td>Laat leeg voor niet-KNSB-rijders</td></tr>
+<tr><td>Startnummer</td><td><b>Ja</b></td><td><b>Gebruik 1001+ voor gastrijders</b> — die krijgen automatisch een gele markering en de melding <em>"persoonlijk melden"</em> aan de balie</td></tr>
+<tr><td>Voornaam + Achternaam</td><td><b>Ja</b></td><td>Apart velden; volledige naam wordt automatisch samengesteld</td></tr>
+<tr><td>Categorie</td><td><b>Ja</b></td><td>Codes zoals DKA, HSA, HJB. Past die niet bij deze DC, dan komt er een gele waarschuwing — je moet expliciet bevestigen dat je bewust afwijkt</td></tr>
+<tr><td>Nationaliteit</td><td><b>Ja</b></td><td>Default NED, max 3 tekens (ISO-3-code)</td></tr>
+<tr><td>Geslacht</td><td><b>Ja</b></td><td>Man of Vrouw — verplicht voor de officiële uitslag</td></tr>
+<tr><td>Club (volledig + kort)</td><td>Nee</td><td>Volledige naam met autocomplete uit bekende clubs; korte naam wordt automatisch ingevuld als je iets uit de autocomplete kiest</td></tr>
+<tr><td>Transponder</td><td>Nee</td><td>Onbekende code? Dan vraagt de app eerst <em>"Ja, klopt"</em> of <em>"Nee, corrigeren"</em></td></tr>
 </table>
 
-<h4>Categorie-waarschuwing</h4>
-<p>Als de ingevulde categorie niet past bij de DC waarvoor je toevoegt (bv. HSA-rijder in DKA-tabel), verschijnt een gele waarschuwings-melding. Je moet dan bevestigen dat je bewust afwijkt (<code>_catOverride</code>), anders blokkeert opslaan.</p>
+<h4>Twee waarschuwingen die kunnen verschijnen</h4>
 
-<h4>Transponder-bevestiging</h4>
-<p>Als je een transponder-code invoert die niet bij deze rijder of in de org-inventaris voorkomt, verschijnt een <b>extra bevestigingsblok</b>:</p>
+<p><b>Categorie past niet bij de DC</b> — bv. je voegt een HSA-rijder toe aan een DKA-tabel. Een gele balk vraagt om bevestiging dat dit echt klopt. Pas daarna kun je opslaan.</p>
+
+<p><b>Transponder onbekend</b> — als de code niet eerder bij deze rijder of in jouw inventaris is gezien, krijg je deze bevestiging:</p>
 
 <!-- MOCKUP: transponder-bevestiging -->
 <div class="mock">
@@ -1131,38 +1077,124 @@ table.ref tr:nth-child(even) td { background: #f9fafc; }
 </div>
 <p class="mock-caption">↑ Transponder-bevestiging voor onbekende code.</p>
 
-<h4>Sluiten</h4>
-<p>Op drie manieren: ×-knop rechtsboven, Annuleren-knop onderaan, of klikken op de overlay buiten de modal. Ook <kbd>Esc</kbd> sluit.</p>
+<p>Sluiten kan op drie manieren: het ×-knopje, de Annuleren-knop, of klik op de donkere overlay buiten de modal. <kbd>Esc</kbd> werkt ook.</p>
 
-<h3>1.3.15 Samenvatting van de data-flow</h3>
+<h3 id="stap-6-tekenlijst">Stap 6 — Tekenlijsten printen voor de balie</h3>
 
-<pre style="background:#f5f7fa;padding:12px 16px;border-radius:6px;font-size:12px;overflow:auto">
-1. laadWedstrijden()         GET  api/competitions.php[?van=...]
-                              → allWedstrijden[]
-                              → renderWedstrijdLijst()
+<p>Een paar dagen vóór de wedstrijd of op de ochtend zelf wil je een papieren tekenlijst aan de balie hebben — eentje per categorie, of voor de hele wedstrijd. Dat doe je via het <b>Print-Center</b>, bereikbaar via de knop <span class="btn-app btn-secondary">🖨 Print-Center</span> rechtsboven in de hoofd-header (naast je gebruikersnaam).</p>
 
-2. Klik op wedstrijd → selectWedstrijd()
-                              GET  api/vergelijk.php?id=...
-                              → vergelijkData, huidigOrganisatie,
-                                standDatum, dbStandDatum,
-                                _heeftProgramma, _orgTransponders
-                              → initEdits()
-                              → bouwVergelijkTabbladen()
-                              → bouwBeheerTabel() (leest api/distances_db.php per DC)
+<p class="src">Bron: js/print_module.js · js/import.js regel 1148 (<code>bouwTekenlijstenBody</code>)</p>
 
-3. Wijzigen in tabel         → personEdits[lk] / entryEdits[ek]
-                              → markeerGewijzigd(tr)  (row-modified)
+<!-- MOCKUP: print-center -->
+<div class="mock">
+  <div class="mock-modal-ovl" style="padding:20px">
+    <div class="mock-modal" style="width:600px">
+      <div class="kop">
+        <h3>🖨 Print-Center</h3>
+        <button class="btn-del" style="color:#fff;font-size:20px">×</button>
+      </div>
+      <div style="padding:8px 18px;background:#eef2f7;border-bottom:1px solid var(--border);display:flex;justify-content:space-between;align-items:center;font-size:12.5px">
+        <label style="display:flex;align-items:center;gap:6px"><input type="checkbox"> 🌳 Boom-saver: prints combineren op minder papier</label>
+        <div>
+          <button class="btn-app btn-secondary">Alles uit</button>
+          <button class="btn-app btn-primary">🖨 Print selectie</button>
+        </div>
+      </div>
+      <div class="body">
+        <div style="margin-bottom:14px">
+          <div style="font-weight:600;color:var(--blauw);margin-bottom:6px">📋 Wedstrijd-overzichten</div>
+          <div style="display:flex;gap:12px;flex-wrap:wrap">
+            <label style="display:flex;align-items:center;gap:5px"><input type="checkbox" checked> Tekenlijsten (alle categorieën)</label>
+            <label style="display:flex;align-items:center;gap:5px"><input type="checkbox"> Deelnemerslijst (definitief)</label>
+            <label style="display:flex;align-items:center;gap:5px"><input type="checkbox"> Programma</label>
+          </div>
+        </div>
+        <div>
+          <div style="font-weight:600;color:var(--blauw);margin-bottom:6px">📋 Startlijsten per heat</div>
+          <div style="font-size:11px;color:#888">— laden… —</div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+<p class="mock-caption">↑ Print-Center: vink aan wat je wilt printen, klik 🖨 Print selectie. Het opent één print-window met alles erin.</p>
 
-4. Klik Importeer            → collectImportData(compId)
-                              POST api/import.php  (alle edits)
-                              → log[], entries_version, ok|conflict|error
-                              → herlaadVergelijking() (refetch api/vergelijk.php)
+<h4>Wat zit erin?</h4>
 
-5. DC-beheer opslaan        POST api/samenvoeg.php / api/splits.php / api/afstanden_beheer.php
-                             (afhankelijk van welk type wijziging)
-</pre>
+<ul>
+    <li><b>Tekenlijsten</b> — één compleet overzicht per categorie met startnummer, naam, club, transponder en een tekenstrook. Bedoeld om uit te printen, mee te nemen naar de balie en daar te laten tekenen.</li>
+    <li><b>Deelnemerslijst (definitief)</b> — pas zinvol nadat de tekenlijst verwerkt is (Stap 7). Toont alle daadwerkelijke deelnemers per afstand.</li>
+    <li><b>Programma</b> — als je een tijdschema hebt, het volledige programma met starttijden.</li>
+    <li><b>Startlijsten per heat</b> — pas beschikbaar nadat je startlijsten hebt gegenereerd (zie module Startlijsten, in een latere sessie van deze handleiding).</li>
+</ul>
 
-<div class="info"><b>Volgende sessie:</b> <code>collectImportData()</code> zelf ontleden — welke velden precies in de POST-body gaan. Voor nu houden we het op "alle edits in <code>personEdits</code>, <code>entryEdits</code>, en handmatig toegevoegde rijders".</div>
+<h4>Boom-saver</h4>
+
+<p>Vink aan om prints op zo min mogelijk papier te combineren. Categorieën met weinig deelnemers worden samen op één pagina gezet in plaats van elk een aparte. Handig om papier te besparen, maar minder makkelijk te splitsen op de balie.</p>
+
+<h4>Werkstroom</h4>
+
+<ol>
+    <li>Vink <b>Tekenlijsten</b> aan.</li>
+    <li>Klik <b>🖨 Print selectie</b>.</li>
+    <li>Er opent een nieuw browser-venster met alle tekenlijsten in liggend A4 (landscape).</li>
+    <li>Browser-print-dialog opent automatisch — kies je printer of "Opslaan als PDF".</li>
+    <li>Lever af op de balie.</li>
+</ol>
+
+<h3 id="stap-7-verwerken">Stap 7 — De tekenlijst verwerken</h3>
+
+<p>Op de wedstrijddag komt de tekenlijst terug van de balie. Sommige rijders hebben getekend, sommige zijn niet gekomen, sommige hebben zich rechtstreeks bij de organisatie aangemeld. Die info werk je bij in de vergelijk-tabel door simpelweg <b>op de status-badge te klikken</b> per rijder.</p>
+
+<p class="src">Bron: js/import.js regel 998-1040 (status-badge click handler)</p>
+
+<h4>De cyclus van klikken</h4>
+
+<p>Wat er gebeurt bij elke klik hangt af van wat de KNSB origineel van de rijder zei:</p>
+
+<table class="ref">
+<tr><th>Rijder is...</th><th>Bij elke klik...</th></tr>
+<tr><td>Bevestigd door KNSB (status 1)</td><td>Bevestigd → Afgem. bij org. → Niet getekend → Bevestigd → ...</td></tr>
+<tr><td>Niet bevestigd (status 0)</td><td>Niet bevestigd → Bevestigd bij org. → Afgem. bij org. → Niet getekend → Bevestigd bij org. → ...</td></tr>
+<tr><td>Bevestigd bij org. (status 5)</td><td>Bevestigd bij org. → Afgem. bij org. → Niet getekend → Bevestigd bij org. → ...</td></tr>
+<tr><td>Afgemeld bij KNSB (status 2)</td><td>(niets — niet wijzigbaar, alleen KNSB kan dit terugzetten)</td></tr>
+</table>
+
+<h4>Praktische werkstroom</h4>
+
+<p>Klik per rijder die <em>niet</em> normaal getekend heeft:</p>
+
+<ul>
+    <li><b>Niet komen opdagen</b>: klik 1× of 2× tot er <span class="status-badge status-4">Niet getekend</span> staat. Rij wordt grijs/doorzichtig.</li>
+    <li><b>Aan de balie afgemeld (zonder KNSB-bericht)</b>: klik tot er <span class="status-badge status-3">Afgem. bij org.</span> staat.</li>
+    <li><b>Laat aangemeld (was <em>niet</em> bevestigd, nu wel actief)</b>: klik tot er <span class="status-badge status-5">Bevestigd bij org.</span> staat. Rij blijft ingekleurd als actief.</li>
+    <li><b>Per ongeluk verkeerd geklikt</b>: doorklikken tot je weer terug bent waar je begon. Eén volle ronde door de cyclus.</li>
+</ul>
+
+<div class="info"><b>Wat is het verschil tussen <em>"Bevestigd"</em> en <em>"Bevestigd bij org."</em>?</b><br>
+"Bevestigd" = stond zo bij KNSB binnen, telt automatisch mee.<br>
+"Bevestigd bij org." = de organisatie heeft de rijder zelf laat-toegevoegd of bevestigd, telt óók mee.<br>
+Beide kleuren actief; de twee anderen (afgemeld bij org., niet getekend) maken de rij grijs.</div>
+
+<h4>Vergeet niet op te slaan</h4>
+
+<p>Status-wijzigingen zijn lokale edits totdat je weer op <span class="btn-app btn-import">⇓ Importeer</span> klikt. Dat is niet "alles opnieuw uit KNSB halen" — wijzigingen worden vermengd met de huidige KNSB-stand en samen opgeslagen. Doe dit zodra je klaar bent met tekenlijst verwerken.</p>
+
+<h3 id="stap-8-deelnemers">Stap 8 — Definitieve deelnemerslijst printen</h3>
+
+<p>Na Stap 7 — alle statussen verwerkt en wijzigingen opgeslagen — kun je een schone deelnemerslijst uitdraaien voor de scheidsrechter, juryleden, of voor de archiefmap.</p>
+
+<p class="src">Bron: js/import.js regel 1308 (<code>bouwDeelnemerslijstBody</code>)</p>
+
+<ol>
+    <li>Klik weer op <span class="btn-app btn-secondary">🖨 Print-Center</span> rechtsboven.</li>
+    <li>Vink <b>Deelnemerslijst (definitief)</b> aan, vink Tekenlijst eventueel <em>uit</em>.</li>
+    <li>Klik <b>🖨 Print selectie</b>.</li>
+</ol>
+
+<p>Wat je krijgt: één matrix-overzicht met per rijder een rij en per afstand een kolom. Vinkje als de rijder die afstand rijdt. Afgemelde of niet-getekende rijders staan er niet in.</p>
+
+<div class="tip"><b>Tip:</b> Print de tekenlijst (Stap 6) en deelnemerslijst (Stap 8) op verschillend gekleurd papier. Wit voor balie-tekenen, blauw of geel voor de definitieve lijst. Voorkomt verwarring tijdens de wedstrijd.</div>
 
 <hr style="margin:40px 0;border:none;border-top:2px solid var(--oranje)">
 
