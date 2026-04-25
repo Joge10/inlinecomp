@@ -1065,14 +1065,24 @@ table.ref tr:nth-child(even) td { background: #f9fafc; }
 </div>
 <p class="mock-caption">↑ Deelnemer-toevoegen-modal. Zoek-tab bovenaan om KNSB-data op te halen, formulier eronder.</p>
 
-<h4>Eerst proberen op te zoeken</h4>
+<h4>Eerst proberen op te zoeken in je eigen database</h4>
 
-<p>Bovenin de modal staan twee zoek-tabs. Als de rijder al ergens bij de KNSB bekend is, vul je niets handmatig in maar zoek je hem op:</p>
+<p>Bovenin de modal staan twee zoek-tabs. <b>Let op:</b> deze zoeken in <em>jouw eigen InlineComp-database</em>, niet rechtstreeks bij de KNSB. Het is bedoeld om rijders die je in een eerdere wedstrijd al hebt geïmporteerd snel te hervinden, zonder alle gegevens opnieuw in te tikken.</p>
+
 <ul>
-    <li><b>Op relatienummer</b> — KNSB-licentienummer is meestal beter (uniek)</li>
+    <li><b>Op relatienummer</b> — KNSB-licentienummer (meestal de meest betrouwbare match — uniek per rijder)</li>
     <li><b>Op startnr + categorie</b> — als je het licentienummer niet bij de hand hebt</li>
 </ul>
-<p>Klik op <b>Zoeken</b> (of druk <kbd>Enter</kbd>). Bij gevonden: het formulier eronder wordt automatisch ingevuld met naam, club, geslacht etc. — je hoeft alleen nog startnummer + transponder + categorie te bevestigen.</p>
+
+<p>Klik op <b>Zoeken</b> (of druk <kbd>Enter</kbd>). Wat er gebeurt:</p>
+<ul>
+    <li><b>Gevonden:</b> het formulier eronder wordt automatisch ingevuld met naam, club, geslacht, en eerder gebruikte transponders. Je hoeft alleen nog het startnummer voor déze wedstrijd te bevestigen en eventueel de transponder te kiezen.</li>
+    <li><b>Niet gevonden:</b> melding <em>"Geen rijder gevonden — vul gegevens handmatig in."</em> Dat is normaal voor een rijder die nog nooit in jouw systeem heeft gezeten.</li>
+</ul>
+
+<p class="src">Bron: js/import.js regel 2343 (<code>zoekPersoon</code>) → api/persoon_zoek.php (zoekt in <code>persons</code>-tabel)</p>
+
+<div class="info"><b>Wanneer levert zoeken niets op?</b> Bij een rijder die <em>nooit eerder</em> aan een wedstrijd in jouw InlineComp heeft meegedaan. KNSB-data wordt pas geïmporteerd op het moment dat je een wedstrijd binnenhaalt — er is geen direct doorzoeken van de KNSB-ledendatabase. Voor een echte gastrijder vul je gewoon alle velden handmatig in.</div>
 
 <h4>Het formulier handmatig invullen</h4>
 
