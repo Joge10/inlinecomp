@@ -840,9 +840,9 @@ table.ref tr:nth-child(even) td { background: #f9fafc; }
 
 <p>Wanneer is dat nodig?</p>
 <ul>
-    <li>Als <b>DSA en DSB samen rijden</b> in dezelfde series → samenvoegen.</li>
-    <li>Als <b>HPA en HPB in één DC</b> staan maar je ze in het klassement <em>apart</em> wilt rangschikken → split-groepen toekennen.</li>
-    <li>Als jouw afstand-naam afwijkt van wat de KNSB doorgeeft (bv. KNSB stuurt "1500m" maar je rijdt "Puntenkoers 1500m") → naam aanpassen, race-type kiezen.</li>
+    <li>Als <b>DSA en DSB samen rijden</b> in dezelfde heats omdat er per categorie te weinig deelnemers zijn → <b>samenvoegen</b>.</li>
+    <li>Als KNSB een <b>gemengde DC</b> levert (bv. "Pupillen 1+2" met HP1/HP2/DP1/DP2 door elkaar) en je wilt dat die categorieën sportief <b>uit elkaar</b> rijden in eigen series → <b>splitsen</b> (split-groepen toekennen per categorie).</li>
+    <li>Als jouw afstand-naam afwijkt van wat KNSB doorgeeft (bv. KNSB stuurt "1500m" maar je rijdt "Puntenkoers 1500m") → naam aanpassen, race-type kiezen.</li>
 </ul>
 
 <p class="src">Bron: js/import.js regel 104 (<code>bouwBeheerTabel</code>)</p>
@@ -906,11 +906,29 @@ table.ref tr:nth-child(even) td { background: #f9fafc; }
                         </div>
                     </td>
                     <td>
-                        <div class="dc-cat-rij"><span class="dc-cat-badge">DSA</span><span class="dc-cat-tel">17</span><span class="dc-pijl">→</span><input class="dc-split-inp" placeholder="splitgroep…"></div>
-                        <div class="dc-cat-rij"><span class="dc-cat-badge">DSB</span><span class="dc-cat-tel">14</span><span class="dc-pijl">→</span><input class="dc-split-inp" placeholder="splitgroep…"></div>
+                        <div class="dc-cat-rij"><span class="dc-cat-badge">DSA</span><span class="dc-cat-tel">17</span></div>
+                        <div class="dc-cat-rij"><span class="dc-cat-badge">DSB</span><span class="dc-cat-tel">14</span></div>
                     </td>
                     <td><div class="dc-afd-kol-inner"><input class="dc-afd-naam" value="500m sprint"><input class="dc-afd-m" value="500"><select class="dc-afd-race-type"><option>Sprint</option></select></div></td>
                     <td><div class="dc-afd-kol-inner"><input class="dc-afd-naam" value="3000m"><input class="dc-afd-m" value="3000"><select class="dc-afd-race-type"><option>Inline</option></select></div></td>
+                    <td></td>
+                </tr>
+                <tr>
+                    <td>
+                        <div class="dc-groep-naam"><span>Pupillen 1+2 (gemengd)</span></div>
+                        <div class="dc-merge-rij">
+                            <span>⇄</span>
+                            <select class="dc-merge-sel"><option>— samenvoegen met… —</option></select>
+                        </div>
+                    </td>
+                    <td>
+                        <div class="dc-cat-rij"><span class="dc-cat-badge">HP1</span><span class="dc-cat-tel">8</span><span class="dc-pijl">→</span><input class="dc-split-inp" value="HP1"></div>
+                        <div class="dc-cat-rij"><span class="dc-cat-badge">HP2</span><span class="dc-cat-tel">11</span><span class="dc-pijl">→</span><input class="dc-split-inp" value="HP2"></div>
+                        <div class="dc-cat-rij"><span class="dc-cat-badge">DP1</span><span class="dc-cat-tel">9</span><span class="dc-pijl">→</span><input class="dc-split-inp" value="DP1"></div>
+                        <div class="dc-cat-rij"><span class="dc-cat-badge">DP2</span><span class="dc-cat-tel">12</span><span class="dc-pijl">→</span><input class="dc-split-inp" value="DP2"></div>
+                    </td>
+                    <td><div class="dc-afd-kol-inner"><input class="dc-afd-naam" value="200m sprint"><input class="dc-afd-m" value="200"><select class="dc-afd-race-type"><option>Sprint</option></select></div></td>
+                    <td><div class="dc-afd-kol-inner"><input class="dc-afd-naam" value="500m"><input class="dc-afd-m" value="500"><select class="dc-afd-race-type"><option>Sprint</option></select></div></td>
                     <td></td>
                 </tr>
             </tbody>
@@ -922,7 +940,7 @@ table.ref tr:nth-child(even) td { background: #f9fafc; }
     </div>
   </div>
 </div>
-<p class="mock-caption">↑ DC-beheer-panel uitgeklapt. Een normale DC (HSA) en een samengevoegde (DSA+DSB).</p>
+<p class="mock-caption">↑ DC-beheer-panel uitgeklapt. Drie rijen: een normale DC (HSA), een samengevoegde (DSA+DSB rijden in dezelfde heats) en een gesplitste gemengde DC (Pupillen 1+2 wordt vier aparte series HP1/HP2/DP1/DP2).</p>
 
 <h4>Twee categorieën samenvoegen</h4>
 
@@ -930,11 +948,26 @@ table.ref tr:nth-child(even) td { background: #f9fafc; }
 
 <p>Een samengevoegde groep ontkoppelen? Klik op het 🗑-knopje naast de individuele DC-naam.</p>
 
-<h4>Categorieën splitsen voor het klassement</h4>
+<h4>Een gemengde DC splitsen in aparte categorieën</h4>
 
-<p>Bij elke categorie binnen een DC met meerdere cats verschijnt een input-veldje <em>splitgroep…</em>. Daar geef je een naam aan een sub-groep. Categorieën met dezelfde split-groep komen samen in één klassement, andere apart.</p>
+<p>Soms levert KNSB een DC waarin meerdere categorieën door elkaar zitten (bv. één DC "Pupillen 1+2" met daarin HP1, HP2, DP1 en DP2). Wil je dat die categorieën <em>uit elkaar</em> rijden — eigen series, eigen heats, eigen uitslag — dan geef je ze elk een eigen <b>splitgroep</b>.</p>
 
-<p>Voorbeeld: in de DSA+DSB-rij vul je voor DSA <em>"DSA"</em> in en voor DSB <em>"DSB"</em>. Resultaat: ze rijden in dezelfde series (samengevoegd) maar krijgen aparte klassementen (gesplitst).</p>
+<p>Bij elke categorie binnen zo'n gemengde DC verschijnt een input-veldje <em>splitgroep…</em>. Vul daar een naam in. Categorieën met dezelfde split-groep krijgen samen één set heats; andere split-groepen krijgen hun eigen set heats.</p>
+
+<p><b>Voorbeeld:</b> in een DC "Pupillen 1+2" met HP1, HP2, DP1, DP2:</p>
+<ul>
+    <li>HP1 → splitgroep <em>"HP1"</em></li>
+    <li>HP2 → splitgroep <em>"HP2"</em></li>
+    <li>DP1 → splitgroep <em>"DP1"</em></li>
+    <li>DP2 → splitgroep <em>"DP2"</em></li>
+</ul>
+<p>Resultaat: vier aparte series in plaats van één gemengde, elk met eigen rijders, heats en klassement.</p>
+
+<div class="info"><b>Verschil samenvoegen vs. splitsen:</b><br>
+<b>Samenvoegen</b> (merge) = twee aparte DC's gaan samen rijden in dezelfde heats — voor categorieën met te weinig deelnemers om apart een serie te maken.<br>
+<b>Splitsen</b> (split) = één gemengde DC wordt uit elkaar gehaald in eigen series — als de categorieën sportief beter apart kunnen rijden.</div>
+
+<div class="warn"><b>Splitsen kan alleen vóór generatie.</b> Zodra er heats zijn gegenereerd of er een tijdschema-config voor de DC is, weigert de server de wijziging (HTTP 409). Wis dan eerst de loting en/of het tijdschema voor die DC.</div>
 
 <h4>Afstanden, lengte en race-type</h4>
 
