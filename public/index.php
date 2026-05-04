@@ -73,12 +73,29 @@ if ($action === 'competitions') {
     header('Content-Type: application/json; charset=utf-8');
     header('Cache-Control: public, max-age=60'); // 60 sec browser cache
     try {
+        // Baan-velden gebruiken cross-org-fallback: als deze org's baan-rij
+        // geen logo of geen vereniging-naam heeft, pakken we die uit een
+        // andere org-rij met dezelfde baan-naam (zelfde fysieke locatie).
         $stmt = $pdo->prepare("
             SELECT c.id, c.name, c.starts, c.ends,
-                   c.organisatie_id, o.logo_path AS org_logo, o.naam AS org_naam
+                   c.organisatie_id, o.logo_path AS org_logo, o.naam AS org_naam,
+                   c.baan_id,
+                   COALESCE(b.logo_path, (
+                       SELECT b2.logo_path FROM banen b2
+                       WHERE b2.naam = b.naam AND b2.id != b.id
+                         AND b2.logo_path IS NOT NULL AND b2.logo_path != ''
+                       LIMIT 1
+                   )) AS baan_logo,
+                   COALESCE(b.vereniging_naam, (
+                       SELECT b2.vereniging_naam FROM banen b2
+                       WHERE b2.naam = b.naam AND b2.id != b.id
+                         AND b2.vereniging_naam IS NOT NULL AND b2.vereniging_naam != ''
+                       LIMIT 1
+                   )) AS baan_vereniging
             FROM competitions c
             JOIN competition_tijdschema ct ON ct.competition_id = c.id
             LEFT JOIN organisaties o ON o.id = c.organisatie_id
+            LEFT JOIN banen b ON b.id = c.baan_id
             ORDER BY c.starts DESC
         ");
         $stmt->execute();
@@ -823,11 +840,18 @@ if ($action === 'serie_klassement') {
 }
 * { box-sizing: border-box; margin: 0; padding: 0; }
 html { font-size: 20px; }
+html {
+    /* Native pull-to-refresh van de browser uitschakelen — moet op html
+       én body staan voor brede browser-compatibiliteit. Onze eigen
+       PTR-handler vangt de gesture in plaats. */
+    overscroll-behavior-y: contain;
+}
 body {
     font-family: 'Segoe UI', Arial, sans-serif;
     font-size: 1rem;
     color: var(--tekst);
     background: var(--grijs);
+    overscroll-behavior-y: contain;
     min-height: 100vh;
 }
 header {
@@ -883,6 +907,12 @@ header .sub { font-size: .95rem; opacity: .8; margin-top: 2px; }
     font-style: italic;
 }
 .btn-help:active { background: rgba(255,255,255,.35); }
+.btn-meldingen   { font-style: normal; font-size: 1.1rem; position: relative; }
+.meld-badge      { position: absolute; top: -4px; right: -4px; background: #d22;
+                   color: #fff; font-size: .65rem; font-weight: 700;
+                   min-width: 17px; height: 17px; padding: 0 4px; border-radius: 9px;
+                   display: flex; align-items: center; justify-content: center;
+                   border: 2px solid #fff; line-height: 1; }
 
 /* ── Help overlay ── */
 .help-overlay {
@@ -977,6 +1007,12 @@ header .sub { font-size: .95rem; opacity: .8; margin-top: 2px; }
 
 /* ── Stappen ── */
 .stap { margin-bottom: 16px; }
+.auto-stempel {
+    font-size: .7rem; color: #888; font-weight: normal; line-height: 1.4;
+    white-space: nowrap;
+}
+/* In stap-1-label valt de stempel rechts op de regel (oude positie). */
+.stap-label .auto-stempel { float: right; }
 .stap-label {
     font-size: 1.05rem; font-weight: 700; color: var(--blauw);
     margin-bottom: 6px; display: flex; align-items: center; gap: 6px;
@@ -998,7 +1034,7 @@ select {
 }
 select:focus, input:focus { border-color: var(--middenblauw); outline: none; }
 .filter-rij {
-    display: flex; gap: 8px; margin-top: 8px;
+    display: flex; gap: 8px; margin-bottom: 8px;
 }
 .filter-rij input[type=checkbox] { display: none; }
 .filter-chip {
@@ -1037,13 +1073,16 @@ select:focus, input:focus { border-color: var(--middenblauw); outline: none; }
 .persoon-naam { font-size: 1.35rem; font-weight: 700; }
 .persoon-snr { font-size: .9rem; opacity: .8; }
 .persoon-cat { font-size: .85rem; background: rgba(255,255,255,.2); border-radius: 10px; padding: 2px 10px; }
-.btn-refresh {
-    background: none; border: none; color: rgba(255,255,255,.7);
-    font-size: 3rem; cursor: pointer; padding: 0; line-height: 1;
-    transition: transform .3s, color .2s;
+/* Stempel in persoon-card-header: zelfde kleur + grootte als .persoon-snr
+   (witte tekst met .8 opacity op blauwe achtergrond). Icoon boven de tijd
+   gestapeld zodat het compact blijft naast de cat-badge. */
+.persoon-header .auto-stempel {
+    color: #fff; opacity: .8; font-size: .9rem;
+    display: inline-flex; flex-direction: column; align-items: center;
+    line-height: 1.05;
 }
-.btn-refresh:hover { color: #fff; }
-.btn-refresh:active { transform: rotate(360deg); }
+.persoon-header .auto-stempel .aut-icon { font-size: .85rem; }
+.persoon-header .auto-stempel .aut-tijd { font-weight: 600; font-variant-numeric: tabular-nums; }
 
 /* ── Tabs ── */
 .tabs {
@@ -1332,9 +1371,22 @@ select:focus, input:focus { border-color: var(--middenblauw); outline: none; }
     vertical-align: middle; margin-right: 6px;
 }
 @keyframes spin { to { transform: rotate(360deg); } }
+
+/* Pull-to-refresh indicator (zelfde patroon als coach-app) */
+#ptr {
+    position: fixed; top: 0; left: 0; right: 0;
+    background: var(--middenblauw); color: var(--wit);
+    text-align: center; font-size: .85rem; padding: 6px 0;
+    transform: translateY(-100%); transition: transform .15s ease-out;
+    z-index: 900; pointer-events: none;
+}
+#ptr.zichtbaar { transform: translateY(0); }
+#ptr.laadt     { background: var(--blauw); }
 </style>
 </head>
 <body>
+
+<div id="ptr">↓ Trek verder om te vernieuwen</div>
 
 <header>
     <div class="hdr-center">
@@ -1342,6 +1394,7 @@ select:focus, input:focus { border-color: var(--middenblauw); outline: none; }
         <div class="sub">Zoek je heats, starttijden en resultaten</div>
     </div>
     <div class="hdr-btns">
+        <button class="btn-help btn-meldingen" id="btn-meldingen-overzicht" title="Mededelingen voor deze wedstrijd">📢<span id="meldingen-badge" class="meld-badge" style="display:none">0</span></button>
         <button class="btn-help" onclick="toonInfo()" title="Over InlineComp">i</button>
         <button class="btn-help" onclick="toonHelp()" title="Hoe werkt het?">?</button>
     </div>
@@ -1352,6 +1405,7 @@ select:focus, input:focus { border-color: var(--middenblauw); outline: none; }
         <span id="footer-org-logo"></span>
         <span id="footer-org-naam" class="org-footer-naam"></span>
         <div id="footer-sponsors" class="org-footer-sponsors"></div>
+        <span id="footer-baan-logo"></span>
     </div>
 </div>
 
@@ -1365,12 +1419,15 @@ select:focus, input:focus { border-color: var(--middenblauw); outline: none; }
         <button class="btn-sluit" id="pwa-sluit" title="Sluiten">&times;</button>
     </div>
     <div class="stap">
-        <div class="stap-label"><span class="stap-nr">1</span> Kies je wedstrijd</div>
-        <select id="sel-comp"><option value="">Laden…</option></select>
+        <div class="stap-label">
+            <span class="stap-nr">1</span> Kies je wedstrijd
+            <span class="auto-stempel"></span>
+        </div>
         <div class="filter-rij">
             <input type="checkbox" id="chk-oud"><label for="chk-oud" class="filter-chip">Oude wedstrijden</label>
             <input type="checkbox" id="chk-toekomst"><label for="chk-toekomst" class="filter-chip">Toekomstige</label>
         </div>
+        <select id="sel-comp"><option value="">Laden…</option></select>
     </div>
     <div id="comp-info" class="comp-info" style="display:none"></div>
     <div class="stap">
@@ -1528,6 +1585,8 @@ function filterComps() {
         o.dataset.datum = d; o.dataset.naam = c.name;
         o.dataset.orgLogo = c.org_logo ?? '';
         o.dataset.orgNaam = c.org_naam ?? '';
+        o.dataset.baanLogo = c.baan_logo ?? '';
+        o.dataset.baanVereniging = c.baan_vereniging ?? '';
         o.dataset.sponsors = JSON.stringify(c.sponsors ?? []);
         selComp.appendChild(o);
     }
@@ -1817,47 +1876,8 @@ async function zoekOpNaam(compId, term) {
     toonChooserModal(rijen, term, compId);
 }
 
-async function refreshRijder() {
-    const compId = selComp.value;
-    if (!compId) return;
-    // In multi-rijder-modus ververst het ↻-knopje alleen het actieve kind.
-    // Het startnummer halen we uit _kinderen, niet uit de input (die kan
-    // leeg zijn als de user al wat rijders heeft toegevoegd).
-    const k = _kinderen[_activeKindIdx];
-    const snr = k?.snr ?? inpSnr.value.trim();
-    if (!snr) return;
-    const gekozenIdx = k?.kozen_idx ?? 0;
-    const actieveTab = document.querySelector('#kind-content .tab-btn.active')?.dataset.tab ?? 'programma';
-
-    // Tijdens verversen: loader in kind-content (niet de hele divResult) om
-    // de kind-tabs zichtbaar te houden.
-    const target = document.getElementById('kind-content') || divResult;
-    target.innerHTML = '<div class="melding"><span class="spinner"></span> Verversen…</div>';
-
-    try {
-        const [lookupRes, progRes] = await Promise.all([
-            safeFetch(`?action=lookup&competition_id=${encodeURIComponent(compId)}&startnummer=${encodeURIComponent(snr)}&_t=${Date.now()}`),
-            safeFetch(`?action=programma&competition_id=${encodeURIComponent(compId)}&_t=${Date.now()}`)
-        ]);
-        const data = await lookupRes.json();
-        const prog = await progRes.json();
-        if (data.error || !data.length) {
-            target.innerHTML = `<div class="melding melding-fout">${data.error ?? 'Geen data'}</div>`;
-            return;
-        }
-
-        window._lookupData = data;
-        window._lookupSnr = snr;
-        window._lookupProg = prog;
-
-        const idx = Math.min(gekozenIdx, data.length - 1);
-        window._gekozenIdx = idx;
-        if (k) { k.data = data; k.prog = prog; k.kozen_idx = idx; k.sub_tab = actieveTab; }
-        renderKinderen();
-    } catch (e) {
-        target.innerHTML = `<div class="melding melding-fout">Fout: ${e.message}</div>`;
-    }
-}
+// refreshRijder() is verwijderd — was gekoppeld aan het ↻-knopje dat door
+// de auto-refresh + ↻-stempel-indicator overbodig is geworden.
 
 function toonRijder(idx) {
     window._gekozenIdx = idx;
@@ -2043,7 +2063,7 @@ function renderResultaat(data, snr, prog) {
                          <span style="font-size:.75rem;background:${stBg};color:${stKleur};border-radius:10px;padding:1px 8px;margin-left:6px">${esc(stLabel)}</span></div>
                     <div style="display:flex;align-items:center;gap:8px">
                         <span class="persoon-cat">${esc(p.category)}</span>
-                        <button onclick="refreshRijder()" class="btn-refresh" title="Ververs data">↻</button>
+                        <span class="auto-stempel" title="Tijdstip laatste auto-refresh">${_huidigStempel}</span>
                     </div>
                 </div>
                 <div class="tabs">
@@ -2499,18 +2519,21 @@ function updateHeaderLogos(opt) {
     const logoEl   = document.getElementById('footer-org-logo');
     const naamEl   = document.getElementById('footer-org-naam');
     const sponsEl  = document.getElementById('footer-sponsors');
+    const baanEl   = document.getElementById('footer-baan-logo');
 
     if (!opt?.value) {
         footer.style.display = 'none';
         return;
     }
 
-    const orgLogo  = opt.dataset.orgLogo;
-    const orgNaam  = opt.dataset.orgNaam ?? '';
-    const sponsors = JSON.parse(opt.dataset.sponsors || '[]');
+    const orgLogo   = opt.dataset.orgLogo;
+    const orgNaam   = opt.dataset.orgNaam ?? '';
+    const baanLogo  = opt.dataset.baanLogo ?? '';
+    const baanVer   = opt.dataset.baanVereniging ?? '';
+    const sponsors  = JSON.parse(opt.dataset.sponsors || '[]');
 
-    // Niets te tonen? Footer verbergen
-    if (!orgLogo && !sponsors.length) {
+    // Niets te tonen? Footer verbergen (incl. check op baan-logo).
+    if (!orgLogo && !sponsors.length && !baanLogo && !baanVer) {
         footer.style.display = 'none';
         return;
     }
@@ -2520,9 +2543,19 @@ function updateHeaderLogos(opt) {
     // maar een upload is uiterlijk binnen het uur zichtbaar.
     const cb = `?v=${Math.floor(Date.now() / 3600000)}`;
 
-    // Organisatie-logo + naam
+    // Organisatie-logo + naam (links in footer)
     logoEl.innerHTML = orgLogo ? `<img class="org-footer-logo" src="../${esc(orgLogo)}${cb}" alt="">` : '';
     naamEl.textContent = orgLogo ? '' : orgNaam; // naam alleen als fallback zonder logo
+
+    // Gastheer-vereniging-logo (rechts in footer). Heeft de baan geen logo
+    // maar wel een vereniging-naam? Dan tonen we die als compacte tekst.
+    if (baanLogo) {
+        baanEl.innerHTML = `<img class="org-footer-logo" src="../${esc(baanLogo)}${cb}" alt="">`;
+    } else if (baanVer) {
+        baanEl.innerHTML = `<span class="org-footer-naam">${esc(baanVer)}</span>`;
+    } else {
+        baanEl.innerHTML = '';
+    }
 
     // Sponsors (lichtkrant-ticker)
     if (sponsors.length) {
@@ -2696,6 +2729,356 @@ function toonHelp() {
     </div>`;
     document.body.appendChild(overlay);
 }
+
+// ── Mededelingen (pop-ups bij belangrijke aankondigingen) ────────────────
+const _MELDING_PRIO = {
+    info:   { kleur: '#1a3a5c', bg: '#e8f0f7', icoon: 'ℹ️' },
+    warn:   { kleur: '#7a5800', bg: '#fff8d6', icoon: '⚠️' },
+    urgent: { kleur: '#a00',    bg: '#ffe5e5', icoon: '🚨' },
+};
+const _meldingenLsKey = (compId) => `meldingen_gezien_${compId}`;
+const _gezienSet = (compId) => {
+    try { return new Set(JSON.parse(localStorage.getItem(_meldingenLsKey(compId)) || '[]')); }
+    catch { return new Set(); }
+};
+const _markGezien = (compId, id) => {
+    const set = _gezienSet(compId);
+    set.add(id);
+    localStorage.setItem(_meldingenLsKey(compId), JSON.stringify([...set]));
+};
+// Cache van actieve meldingen-lijst (laatste API-response). Gebruikt om
+// na het sluiten van één pop-up direct de volgende ongeziene te tonen,
+// zonder op de volgende poll-tick te wachten.
+let _meldingLijst = [];
+let _meldingActief = false;     // staat er al een pop-up open?
+
+async function checkMeldingen(compId) {
+    if (!compId) return;
+    try {
+        const res = await safeFetch('../api/meldingen.php?comp_id=' + encodeURIComponent(compId)
+            + '&_t=' + Date.now());
+        const lijst = await res.json();
+        if (!Array.isArray(lijst)) return;
+        // Defensieve client-side filter: alleen actieve meldingen tonen.
+        // De API filtert al, maar bij clock-drift, caching of een service
+        // worker-replay kan een net-verlopen melding doorglippen — die
+        // willen we ook hier nog wegfilteren.
+        const nu = Date.now();
+        _meldingLijst = lijst.filter(m => {
+            const van = m.geldig_van ? Date.parse(m.geldig_van.replace(' ', 'T')) : 0;
+            const tot = m.geldig_tot ? Date.parse(m.geldig_tot.replace(' ', 'T')) : null;
+            if (van && van > nu)        return false;       // nog niet begonnen
+            if (tot !== null && tot < nu) return false;     // verlopen
+            return true;
+        });
+        // Badge bijwerken (totaal aantal actieve meldingen, ongeacht gezien)
+        updateMeldingenBadge();
+        // Pop-up alleen als er nog geen open staat (avoid stacken)
+        if (!_meldingActief) toonVolgendeMelding(compId);
+    } catch { /* stil */ }
+}
+
+function updateMeldingenBadge() {
+    const btn = document.getElementById('btn-meldingen-overzicht');
+    const badge = document.getElementById('meldingen-badge');
+    if (!btn || !badge) return;
+    if (_meldingLijst.length > 0) {
+        btn.style.display = '';
+        badge.textContent = _meldingLijst.length;
+        badge.style.display = '';
+    } else {
+        btn.style.display = 'none';
+        badge.style.display = 'none';
+    }
+}
+
+// Klik op 📢-knop: toont een lijst van alle nu-actieve meldingen
+// (chronologisch). Geen "begrepen"-knop — dit is een lookup-paneel,
+// niet een interrupterende pop-up. Eerder geziene meldingen blijven
+// hier zichtbaar zodat je ze terug kan vinden.
+function toonMeldingenOverzicht() {
+    if (!_meldingLijst.length) return;
+    const overlay = document.createElement('div');
+    overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.55);z-index:9400;display:flex;align-items:flex-start;justify-content:center;padding:4vh 1rem;overflow-y:auto;';
+    const items = _meldingLijst.map(m => {
+        const stijl = _MELDING_PRIO[m.prio] ?? _MELDING_PRIO.info;
+        const tijd = m.geldig_van
+            ? new Date(m.geldig_van.replace(' ', 'T')).toLocaleString('nl-NL',
+                {day:'2-digit',month:'short',hour:'2-digit',minute:'2-digit'})
+            : '';
+        const tot = m.geldig_tot
+            ? ' tot ' + new Date(m.geldig_tot.replace(' ', 'T')).toLocaleString('nl-NL',
+                {day:'2-digit',month:'short',hour:'2-digit',minute:'2-digit'})
+            : '';
+        return `<div style="background:${stijl.bg};border-left:4px solid ${stijl.kleur};
+                            padding:.7rem .9rem;margin-bottom:.6rem;border-radius:5px;">
+            <div style="display:flex;align-items:center;gap:.4rem;margin-bottom:.3rem;">
+                <span style="font-size:1.2rem">${stijl.icoon}</span>
+                <strong style="color:${stijl.kleur};flex:1;">${esc(m.titel)}</strong>
+            </div>
+            <div style="color:#222;line-height:1.4;font-size:.9rem;white-space:pre-wrap;">${esc(m.bericht)}</div>
+            <div style="font-size:.75rem;color:#888;margin-top:.3rem;">${esc(tijd)}${esc(tot)}</div>
+        </div>`;
+    }).join('');
+    overlay.innerHTML = `
+        <div style="background:#fff;border-radius:8px;max-width:480px;width:100%;
+                    box-shadow:0 10px 30px rgba(0,0,0,.3);">
+            <div style="display:flex;align-items:center;justify-content:space-between;
+                        padding:.8rem 1rem;border-bottom:1px solid #e0e0e0;">
+                <h3 style="margin:0;color:var(--blauw);font-size:1.05rem;">📢 Mededelingen</h3>
+                <button class="meld-overz-sluit" style="background:none;border:none;
+                        font-size:1.6rem;cursor:pointer;color:#666;padding:0;line-height:1;">&times;</button>
+            </div>
+            <div style="padding:1rem;">${items}</div>
+        </div>`;
+    document.body.appendChild(overlay);
+    overlay.querySelector('.meld-overz-sluit').addEventListener('click', () => overlay.remove());
+    overlay.addEventListener('click', e => { if (e.target === overlay) overlay.remove(); });
+}
+
+// Knop wiring (één keer bij script-load)
+document.getElementById('btn-meldingen-overzicht')?.addEventListener('click', toonMeldingenOverzicht);
+// Pak de eerstvolgende niet-geziene melding uit de gecachte lijst en toon 'm.
+// Wordt aangeroepen door checkMeldingen (na poll) en door de Begrepen-knop
+// (na sluiten — direct doorrollen, geen wachttijd).
+function toonVolgendeMelding(compId) {
+    if (_meldingActief) return;
+    const gezien = _gezienSet(compId);
+    for (const m of _meldingLijst) {
+        if (!gezien.has(m.id)) {
+            toonMelding(m, compId);
+            return;
+        }
+    }
+}
+function toonMelding(m, compId) {
+    if (_meldingActief) return;     // double-click guard
+    _meldingActief = true;
+    const stijl = _MELDING_PRIO[m.prio] ?? _MELDING_PRIO.info;
+    const overlay = document.createElement('div');
+    overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:9500;display:flex;align-items:center;justify-content:center;padding:1rem;';
+    overlay.innerHTML = `
+        <div style="background:${stijl.bg};border:3px solid ${stijl.kleur};border-radius:10px;
+                    max-width:400px;width:100%;padding:1.5rem;box-shadow:0 10px 40px rgba(0,0,0,.4);
+                    animation:meldingPop .3s ease-out;">
+            <div style="display:flex;align-items:center;gap:.6rem;margin-bottom:.6rem;">
+                <span style="font-size:1.8rem">${stijl.icoon}</span>
+                <h2 style="margin:0;color:${stijl.kleur};font-size:1.1rem;flex:1;">${esc(m.titel)}</h2>
+            </div>
+            <div style="color:#222;line-height:1.5;font-size:.95rem;margin-bottom:1rem;
+                        white-space:pre-wrap;">${esc(m.bericht)}</div>
+            <button class="meld-ok" style="background:${stijl.kleur};color:#fff;border:none;
+                                            padding:.6rem 1.4rem;border-radius:6px;font-size:1rem;
+                                            font-weight:600;cursor:pointer;width:100%;">
+                ✓ Begrepen
+            </button>
+        </div>`;
+    document.body.appendChild(overlay);
+    overlay.querySelector('.meld-ok').addEventListener('click', () => {
+        _markGezien(compId, m.id);
+        overlay.remove();
+        _meldingActief = false;
+        // Direct doorrollen naar volgende ongeziene melding (geen poll-wait)
+        const compNu = selComp.value;
+        if (compNu) toonVolgendeMelding(compNu);
+    });
+}
+// keyframe voor pop-up animatie
+(() => {
+    const style = document.createElement('style');
+    style.textContent = '@keyframes meldingPop { from {opacity:0;transform:scale(.85)} to {opacity:1;transform:scale(1)} }';
+    document.head.appendChild(style);
+})();
+
+// ── Auto-refresh ──────────────────────────────────────────────────────────
+// Stille refresh van programma + lookup voor alle actieve kinderen, elke
+// minuut. Stopt als het tabblad onzichtbaar wordt en hervat zodra het weer
+// actief is. Toont een tijdstempel "🔄 HH:MM" naast de wedstrijd-keuze
+// zodat duidelijk is wanneer de data voor het laatst is bijgewerkt.
+//
+// Patroon overgenomen uit coach/index.php (regel 2319-2353) — zelfde gedrag,
+// zelfde tab-aware optimalisatie.
+// Globale stempel-tekst — gebruikt door zowel de persoon-card-template
+// (die bij elke render z'n eigen .auto-stempel-span maakt) als de bestaande
+// stempel-spans in de DOM. Update via zetStempel().
+let _huidigStempel = '';
+
+(function() {
+    const AUTO_REFRESH_MS = 60_000;
+    let autoTick = null;
+
+    const zetStempel = () => {
+        const d = new Date();
+        const hh = String(d.getHours()).padStart(2, '0');
+        const mm = String(d.getMinutes()).padStart(2, '0');
+        // Twee aparte spans: in stap-1-label staan ze inline naast elkaar,
+        // in de persoon-card stapelen ze verticaal (icoon boven, tijd onder)
+        // — verschil zit in de CSS-context.
+        _huidigStempel = `<span class="aut-icon">🔄</span> <span class="aut-tijd">${hh}:${mm}</span>`;
+        document.querySelectorAll('.auto-stempel').forEach(el => {
+            el.innerHTML = _huidigStempel;
+        });
+    };
+
+    const wisStempel = () => {
+        _huidigStempel = '';
+        document.querySelectorAll('.auto-stempel').forEach(el => { el.innerHTML = ''; });
+    };
+
+    // Stille refresh: alle kinderen + gedeeld programma in één parallel-batch
+    // (geen loader-flash, geen UI-tussenstaten). Bij faal: stempel niet
+    // bijwerken — gebruiker ziet dat de tijd "blijft staan".
+    const stilleRefresh = async () => {
+        const compId = selComp.value;
+        if (!compId) return;
+
+        // Mededelingen-check loopt onafhankelijk van of er kinderen zijn —
+        // zo zie je ook meldingen als je net naar de wedstrijd kijkt zonder
+        // nog een rijder te hebben toegevoegd.
+        checkMeldingen(compId);
+
+        if (!_kinderen.length) return;
+        try {
+            const progRes = await safeFetch(
+                `?action=programma&competition_id=${encodeURIComponent(compId)}&_t=${Date.now()}`
+            );
+            const prog = await progRes.json();
+            // Per kind een lookup; parallel uitvoeren voor lagere latency.
+            const kindRefreshes = _kinderen.map(async k => {
+                if (!k?.snr) return;
+                try {
+                    const r = await safeFetch(
+                        `?action=lookup&competition_id=${encodeURIComponent(compId)}&startnummer=${encodeURIComponent(k.snr)}&_t=${Date.now()}`
+                    );
+                    const data = await r.json();
+                    if (Array.isArray(data) && data.length) {
+                        k.data = data;
+                        k.prog = prog;
+                        k.kozen_idx = Math.min(k.kozen_idx ?? 0, data.length - 1);
+                    }
+                } catch { /* stil — volgende tick probeert opnieuw */ }
+            });
+            await Promise.all(kindRefreshes);
+            // Globale state synchroniseren met actieve kind
+            const actief = _kinderen[_activeKindIdx];
+            if (actief) {
+                window._lookupData = actief.data;
+                window._lookupSnr  = actief.snr;
+                window._lookupProg = actief.prog;
+                window._gekozenIdx = actief.kozen_idx ?? 0;
+            }
+            renderKinderen();
+            zetStempel();
+        } catch { /* stil */ }
+    };
+
+    const start = () => {
+        stop();
+        if (!selComp.value || document.hidden) return;
+        autoTick = setInterval(() => {
+            if (document.hidden || !selComp.value) return;
+            stilleRefresh();
+        }, AUTO_REFRESH_MS);
+    };
+
+    const stop = () => {
+        if (autoTick) { clearInterval(autoTick); autoTick = null; }
+    };
+
+    document.addEventListener('visibilitychange', () => {
+        if (document.hidden) {
+            stop();
+        } else if (selComp.value) {
+            stilleRefresh();
+            start();
+        }
+    });
+
+    selComp.addEventListener('change', () => {
+        if (selComp.value) {
+            zetStempel();
+            start();
+            // Direct meldingen ophalen — niet wachten op eerste poll-tick.
+            // Werkt ook als de gebruiker nog geen rijder heeft toegevoegd
+            // (anders dan stilleRefresh, die pas met kinderen rolt).
+            checkMeldingen(selComp.value);
+        }
+        else {
+            stop();
+            wisStempel();
+            // Badge weghalen als wedstrijd weggekozen wordt
+            _meldingLijst = [];
+            updateMeldingenBadge();
+        }
+    });
+
+    // Initieel: als er bij page-load al een wedstrijd voorgeselecteerd is
+    // (via ?comp=X URL-parameter) → meteen starten + meldingen-check.
+    if (selComp.value) { zetStempel(); start(); checkMeldingen(selComp.value); }
+
+    // ── Pull-to-refresh ────────────────────────────────────────────────────
+    // Patroon overgenomen uit coach/index.php: alleen actief boven aan de
+    // pagina, met 70 px slepen-drempel. Wikkelt stilleRefresh + zetStempel
+    // in een ptrEl-status-flow.
+    const ptrEl = document.getElementById('ptr');
+    const PTR_DREMPEL = 70;
+    let ptrStartY = null, ptrDragY = 0, ptrActief = false, ptrBezig = false;
+
+    async function ptrHerlaad() {
+        if (!selComp.value || ptrBezig) return;
+        ptrBezig = true;
+        ptrEl.classList.add('laadt');
+        ptrEl.textContent = '⟳ Vernieuwen…';
+        try {
+            await stilleRefresh();
+            zetStempel();
+            ptrEl.textContent = '✓ Bijgewerkt';
+            setTimeout(() => { ptrEl.classList.remove('zichtbaar', 'laadt'); }, 600);
+        } catch {
+            ptrEl.textContent = '⚠ Fout bij vernieuwen';
+            setTimeout(() => { ptrEl.classList.remove('zichtbaar', 'laadt'); }, 1200);
+        } finally {
+            ptrBezig = false;
+        }
+    }
+
+    document.addEventListener('touchstart', e => {
+        if (window.scrollY > 0 || ptrBezig || !selComp.value) { ptrStartY = null; return; }
+        if (e.touches.length !== 1) { ptrStartY = null; return; }
+        ptrStartY = e.touches[0].clientY;
+        ptrDragY = 0;
+        ptrActief = false;
+    }, { passive: true });
+
+    document.addEventListener('touchmove', e => {
+        if (ptrStartY === null) return;
+        ptrDragY = e.touches[0].clientY - ptrStartY;
+        if (ptrDragY <= 0) {
+            if (ptrActief) { ptrEl.classList.remove('zichtbaar'); ptrActief = false; }
+            return;
+        }
+        // Actief naar beneden trekken vanaf scroll-top: blokkeer native
+        // browser-PTR door preventDefault() (vereist passive:false).
+        if (e.cancelable) e.preventDefault();
+        if (ptrDragY > 30 && !ptrActief) { ptrEl.classList.add('zichtbaar'); ptrActief = true; }
+        ptrEl.textContent = ptrDragY >= PTR_DREMPEL
+            ? '↑ Laat los om te vernieuwen' : '↓ Trek verder om te vernieuwen';
+    }, { passive: false });
+
+    document.addEventListener('touchend', () => {
+        if (ptrStartY === null) return;
+        const was = ptrDragY;
+        ptrStartY = null; ptrDragY = 0;
+        if (ptrActief && was >= PTR_DREMPEL) {
+            ptrHerlaad();
+        } else if (ptrActief) {
+            ptrEl.classList.remove('zichtbaar'); ptrActief = false;
+        }
+    });
+
+    // Desktop-fallback: dubbelklik op de header refreshed ook
+    document.querySelector('header')?.addEventListener('dblclick', ptrHerlaad);
+})();
 
 // ── PWA: service worker + install prompt ─────────────────────────────────
 if ('serviceWorker' in navigator) {

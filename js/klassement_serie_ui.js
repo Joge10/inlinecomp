@@ -15,7 +15,9 @@ const SERIE_DEFAULT_REGELS = {
     tie_break: 'beste_resultaten_dan_laatste',
     vereist_finale: false,
     streepresultaten: 0,
+    streep_direct: false,
     min_deelnames: 0,
+    non_deelname_punten: false,
 };
 
 async function openSerieWizard({ orgId = '', serieId = null } = {}) {
@@ -301,6 +303,7 @@ function _renderStap3(state, body) {
             <div class="ks-veld">
                 <label>Streepresultaten (slechtste N wegstrepen)</label>
                 <input type="number" class="inp" id="ks-streep" min="0" value="${r.streepresultaten}">
+                <label style="display:block;margin-top:6px;font-size:11.5px"><input type="checkbox" id="ks-streep-direct" ${r.streep_direct?'checked':''}> Direct toepassen (ook in tussenstand)</label>
             </div>
         </div>
 
@@ -324,6 +327,16 @@ function _renderStap3(state, body) {
             <label><input type="checkbox" id="ks-vereist-finale" ${r.vereist_finale?'checked':''}> Finale-aanwezigheid verplicht voor klassering</label>
         </div>
 
+        <div class="ks-veld">
+            <label><input type="checkbox" id="ks-non-deelname" ${r.non_deelname_punten?'checked':''}> Punten voor niet-deelname (rang laatste + 1)</label>
+            <div style="font-size:11.5px;color:#666;margin:4px 0 0 22px">
+                Rijders die wél elders in deze serie scoren maar in een specifieke wedstrijd
+                ontbraken (of punten = 0 hadden), krijgen voor die wedstrijd de punten op
+                rang "laatste deelnemer + 1" uit de tabel. Bij meerdere afwezigen krijgen
+                ze allemaal dezelfde rang.
+            </div>
+        </div>
+
         <div class="ks-veld" style="border-top:1px solid #eee;padding-top:12px;margin-top:12px">
             <label><input type="checkbox" id="ks-save-preset"> Regels opslaan als preset voor deze organisatie</label>
             <input type="text" class="inp" id="ks-preset-naam" placeholder="Preset-naam (bv. 'KNSB tabel 2026')" style="display:none">
@@ -345,9 +358,11 @@ function _renderStap3(state, body) {
     });
     get('#ks-min-pnt').addEventListener('input', e => r.min_punten_bij_deelname = parseFloat(e.target.value) || 0);
     get('#ks-streep').addEventListener('input',  e => r.streepresultaten        = Math.max(0, parseInt(e.target.value) || 0));
+    get('#ks-streep-direct').addEventListener('change', e => r.streep_direct    = e.target.checked);
     get('#ks-tie').addEventListener('change',    e => r.tie_break               = e.target.value);
     get('#ks-min-d').addEventListener('input',   e => r.min_deelnames           = Math.max(0, parseInt(e.target.value) || 0));
     get('#ks-vereist-finale').addEventListener('change', e => r.vereist_finale  = e.target.checked);
+    get('#ks-non-deelname').addEventListener('change',   e => r.non_deelname_punten = e.target.checked);
 
     get('#ks-save-preset')?.addEventListener('change', e => {
         get('#ks-preset-naam').style.display = e.target.checked ? '' : 'none';
@@ -478,10 +493,13 @@ async function diagnoseSerieer(serieId) {
         }).join('');
 
         const finaleG = !Array.isArray(resp) && resp.finale_gereden;
+        const streepDirect = !Array.isArray(resp) && resp.regels?.streep_direct;
         const finaleStatus = !Array.isArray(resp)
             ? (finaleG
                 ? '<span style="color:#2e7d32">✅ finale is gereden</span>'
-                : '<span style="color:#b71c1c">⏳ finale nog niet gereden — <b>streepresultaten, min_deelnames en vereist_finale worden tijdelijk NIET toegepast</b></span>')
+                : streepDirect
+                    ? '<span style="color:#b71c1c">⏳ finale nog niet gereden — <b>min_deelnames en vereist_finale worden tijdelijk NIET toegepast</b> (streepresultaten staat op "direct toepassen" en is wél actief)</span>'
+                    : '<span style="color:#b71c1c">⏳ finale nog niet gereden — <b>streepresultaten, min_deelnames en vereist_finale worden tijdelijk NIET toegepast</b></span>')
             : '';
         const regelsSamenv = regels.type
             ? `<div class="ks-hint">

@@ -1145,16 +1145,23 @@ function groepeerVoorPrint() {
 // Body-builder: levert alleen de HTML-inhoud + css-links zonder een eigen
 // window te openen. Gebruikt door Print-Center om meerdere prints in één
 // venster te combineren. Returns: { bodyHtml, cssLinks, title } of null.
-function bouwTekenlijstenBody() {
+function bouwTekenlijstenBody(opts = {}) {
     if (!vergelijkData?.length || !huidigComp) return null;
-    return _bouwTekenlijstenInternal();
+    return _bouwTekenlijstenInternal(opts);
 }
 
 // Interne body-bouwer (het oorspronkelijke werk van printTekenlijsten).
 // Wordt aangeroepen door `bouwTekenlijstenBody()` hierboven, dat weer door
 // Print-Center wordt gebruikt. Er is geen directe print-knop meer in de UI.
 // Returns { bodyHtml, cssLinks, title } voor zowel directe print als combined.
-function _bouwTekenlijstenInternal() {
+//
+// `opts.boomSaver` (default false): wanneer true worden meerdere kleine
+// categorieën op één pagina gepakt (greedy first-fit). De wedstrijd-header
+// verschijnt alleen op pagina 1; vervolgcategorieën op dezelfde pagina krijgen
+// een compacte titel. Categorieën die niet op één pagina passen worden via
+// dezelfde chunk-logica als zonder boom-saver opgeknipt.
+function _bouwTekenlijstenInternal(opts = {}) {
+    const boomSaver = !!opts.boomSaver;
     const groepen   = groepeerVoorPrint();
     const compNaam  = escHtml(huidigComp.name || huidigComp.title || '');
     const compMeta  = escHtml(formatDatum(huidigComp.starts) + ' · ' + getLocatie(huidigComp));
@@ -1209,8 +1216,8 @@ function _bouwTekenlijstenInternal() {
         return chunks;
     }
 
-    // Org-logo header + sponsors footer (gedeelde helper)
-    const { orgLogoHtml, footerHtml } = bouwOrgHeaderFooter(escHtml);
+    // Org-logo header + sponsors footer + baan-logo (gedeelde helper)
+    const { orgLogoHtml, baanLogoHtml, footerHtml } = bouwOrgHeaderFooter(escHtml);
 
     const thead = `<thead><tr>
                     <th class="td-nr">#</th>
@@ -1222,77 +1229,175 @@ function _bouwTekenlijstenInternal() {
                     <th class="td-hand">Handtekening</th>
                 </tr></thead>`;
 
-    const paginaHtml = groepen.flatMap(g => {
-        const totaal  = g.deelnemers.length;
-        const chunks  = berekenChunks(totaal, !!footerHtml);
-        const totaalPag = chunks.length;
+    // ── Helper: render rijen voor één stuk-deelnemers ─────────────────────────
+    const renderRijen = (chunk, chunkStart) => chunk.map((d, i) => {
+        const sn        = Number(d.start_number);
+        const meldingen = [];
+        if (d.entry_status === 0) meldingen.push('melding');
+        if (!d.transponder)                  meldingen.push('Geen transponder');
+        if (sn >= 1000)                      meldingen.push(`Startnr. ${sn}`);
+        if (d.tp_betaald === false)           meldingen.push('Transponder niet betaald');
+
+        const handCel = meldingen.length
+            ? `<div class="meld-attentie">
+                   <span class="meld-uitroep">⚠️</span>
+                   <span class="meld-tekst">Graag even persoonlijk melden</span>
+                   <span class="meld-uitroep">⚠️</span>
+               </div>`
+            : '';
+
+        const tpTxt = d.tp_org_nr
+            ? `#${d.tp_org_nr} ${d.transponder ?? ''}`.trim()
+            : String(d.transponder ?? '');
+
+        return `<tr>
+            <td class="td-nr">${chunkStart + i + 1}</td>
+            <td class="td-sn">${escHtml(String(d.start_number))}</td>
+            <td class="td-naam">${escHtml(d.full_name)}</td>
+            <td class="td-cat">${escHtml(d.category)}</td>
+            <td class="td-tp">${escHtml(tpTxt)}</td>
+            <td class="td-tp-cor"><div class="tp-boxes"><span class="tp-box"></span><span class="tp-box"></span><span class="tp-sep">-</span><span class="tp-box"></span><span class="tp-box"></span><span class="tp-box"></span><span class="tp-box"></span><span class="tp-box"></span></div></td>
+            <td class="td-hand">${handCel}</td>
+        </tr>`;
+    }).join('');
+
+    // ── Helper: full pagina-header (logo + comp-info) — alleen pagina 1 ──────
+    // Layout: [comp-info links] [baan-logo + org-logo rechts]
+    // De categorie-titel-regel (groepNaamRegelHtml) wordt NA het flex-block
+    // gerenderd zodat 'ie full-width onder de header staat en netjes
+    // uitgelijnd is met de tabel-eerste-kolom.
+    const compHeaderBlok = (groepNaamRegelHtml) => `
+        <div style="display:flex;flex-wrap:nowrap;align-items:flex-start;justify-content:space-between;gap:4mm;min-height:20mm;">
+            <div style="flex:1;min-width:0;">
+                <div class="hdr-comp">${compNaam}</div>
+                <div class="hdr-meta">${compMeta}</div>
+                ${standTxt ? `<div class="hdr-stand">${escHtml(standTxt)}</div>` : ''}
+            </div>
+            ${baanLogoHtml ? `<div style="flex-shrink:0;display:flex;align-items:flex-start;">${baanLogoHtml}</div>` : ''}
+            <div style="flex-shrink:0;display:flex;align-items:flex-start;">${orgLogoHtml}</div>
+        </div>
+        <div style="margin-top:2mm;">${groepNaamRegelHtml}</div>`;
+
+    // ── Bouw alle "stukken" — elke stuk is één groep + slice die op één
+    //    pagina past (volgens de bestaande chunk-logica). ────────────────────
+    const stukken = groepen.flatMap(g => {
+        const totaal     = g.deelnemers.length;
+        const chunks     = berekenChunks(totaal, !!footerHtml);
+        const totaalPag  = chunks.length;
         let offset = 0;
-        return chunks.map((aantalRijen, p) => {
-            const chunkStart = offset;
-            const chunk  = g.deelnemers.slice(offset, offset + aantalRijen);
-            offset += aantalRijen;
-            const pLabel = totaalPag > 1 ? ` — pagina ${p + 1} van ${totaalPag}` : '';
-            const isLaatstePag = p === totaalPag - 1;
-            const rijen  = chunk.map((d, i) => {
-                // Bepaal meldpunten voor handtekening-cel
-                const sn        = Number(d.start_number);
-                const meldingen = [];
-                if (d.entry_status === 0) meldingen.push('melding');
-                if (!d.transponder)                  meldingen.push('Geen transponder');
-                if (sn >= 1000)                      meldingen.push(`Startnr. ${sn}`);
-                if (d.tp_betaald === false)           meldingen.push('Transponder niet betaald');
+        return chunks.map((aantal, idx) => {
+            const stuk = {
+                groep:       g,
+                slice:       g.deelnemers.slice(offset, offset + aantal),
+                chunkStart:  offset,
+                aantalRijen: aantal,
+                isVervolg:   idx > 0,
+                isLaatste:   idx === totaalPag - 1,
+                pLabel:      totaalPag > 1 ? ` — pagina ${idx + 1} van ${totaalPag}` : '',
+                totaal,
+            };
+            offset += aantal;
+            return stuk;
+        });
+    });
 
-                const handCel = meldingen.length
-                    ? `<div class="meld-attentie">
-                           <span class="meld-uitroep">⚠️</span>
-                           <span class="meld-tekst">Graag even persoonlijk melden</span>
-                           <span class="meld-uitroep">⚠️</span>
-                       </div>`
-                    : '';
+    let paginaHtml;
 
-                // Org-transponder → prefix met "#<intern_nummer> " zodat de
-                // tekenbalie in 1 oogopslag ziet welk nummer uit de inventaris het is
-                const tpTxt = d.tp_org_nr
-                    ? `#${d.tp_org_nr} ${d.transponder ?? ''}`.trim()
-                    : String(d.transponder ?? '');
-
-                return `<tr>
-                    <td class="td-nr">${chunkStart + i + 1}</td>
-                    <td class="td-sn">${escHtml(String(d.start_number))}</td>
-                    <td class="td-naam">${escHtml(d.full_name)}</td>
-                    <td class="td-cat">${escHtml(d.category)}</td>
-                    <td class="td-tp">${escHtml(tpTxt)}</td>
-                    <td class="td-tp-cor"><div class="tp-boxes"><span class="tp-box"></span><span class="tp-box"></span><span class="tp-sep">-</span><span class="tp-box"></span><span class="tp-box"></span><span class="tp-box"></span><span class="tp-box"></span><span class="tp-box"></span></div></td>
-                    <td class="td-hand">${handCel}</td>
-                </tr>`;
-            }).join('');
-            const isEerstePag = p === 0;
+    if (!boomSaver) {
+        // Default: elke stuk een eigen pagina (oorspronkelijk gedrag).
+        // Footer (sponsorbalk) staat op de laatste chunk van elke groep —
+        // ongewijzigd t.o.v. de oude implementatie.
+        paginaHtml = stukken.map(st => {
+            const g = st.groep;
+            const isEerstePag = !st.isVervolg;
+            const groepRegel = `<div style="font-size:10pt;font-weight:bold;line-height:1.2;">${escHtml(g.naam)}
+                <span style="font-size:8pt;font-weight:normal;color:#555;">(${st.totaal} deelnemer${st.totaal !== 1 ? 's' : ''}${st.pLabel})</span>
+            </div>`;
             const paginaHeader = isEerstePag
-                ? `<div style="display:flex;flex-wrap:nowrap;align-items:stretch;justify-content:space-between;gap:4mm;">
-                    <div style="flex:1;min-width:0;display:flex;flex-direction:column;justify-content:space-between;min-height:25mm;">
-                        <div>
-                            <div class="hdr-comp">${compNaam}</div>
-                            <div class="hdr-meta">${compMeta}</div>
-                            ${standTxt ? `<div class="hdr-stand">${escHtml(standTxt)}</div>` : ''}
-                        </div>
-                        <div style="font-size:10pt;font-weight:bold;line-height:1.2;">${escHtml(g.naam)}
-                            <span style="font-size:8pt;font-weight:normal;color:#555;">(${totaal} deelnemer${totaal !== 1 ? 's' : ''}${pLabel})</span>
-                        </div>
-                    </div>
-                    <div style="flex-shrink:0;display:flex;align-items:flex-start;">${orgLogoHtml}</div>
-                   </div>`
+                ? compHeaderBlok(groepRegel)
                 : `<div style="font-size:10pt;font-weight:bold;line-height:1.2;padding-bottom:1mm;">
                        ${escHtml(g.naam)}
-                       <span style="font-size:8pt;font-weight:normal;color:#555;">(vervolg${pLabel})</span>
+                       <span style="font-size:8pt;font-weight:normal;color:#555;">(vervolg${st.pLabel})</span>
                    </div>`;
             return `<div class="pagina">
-            ${paginaHeader}
-            <div style="border-bottom:2px solid #1a3a5c;margin:0 0 1.5mm 0;"></div>
-            <table>${thead}<tbody>${rijen}</tbody></table>
-            ${isLaatstePag ? footerHtml : ''}
-        </div>`;
-        });
-    }).join('');
+                ${paginaHeader}
+                <div style="border-bottom:2px solid #1a3a5c;margin:0 0 1.5mm 0;"></div>
+                <table>${thead}<tbody>${renderRijen(st.slice, st.chunkStart)}</tbody></table>
+                ${st.isLaatste ? footerHtml : ''}
+            </div>`;
+        }).join('');
+    } else {
+        // Boom-saver: pak meerdere stukken op één pagina (greedy first-fit).
+        // Maatvoering (mm):
+        //   PAG_H        = 194 (bruikbaar bij A4 landscape, marges 8mm)
+        //   HEADER_H     = 25 (logo + comp-info + scheidingslijn op pagina 1)
+        //   STUK_OVERHEAD = 12 (groep-titel + thead + kleine padding)
+        //   RIJ_H        = 8
+        //   SPACER_H     = 4 (ruimte tussen twee stukken op dezelfde pagina)
+        //   FOOTER_H     = 18 (sponsorbalk, alleen op laatste pagina)
+        const PAG_H = 194, HEADER_H = 25, STUK_OVERHEAD = 12,
+              RIJ_H = 8, SPACER_H = 4, FOOTER_H = 18;
+
+        const paginas = []; // [{ stukken:[], heeftCompHeader, heeftFooter, gebruiktMm }]
+        let isFirstPage = true;
+        for (const st of stukken) {
+            const stukH = STUK_OVERHEAD + st.aantalRijen * RIJ_H;
+            const huidig = paginas[paginas.length - 1];
+            const budget = isFirstPage ? PAG_H - HEADER_H : PAG_H;
+            const candidate = huidig
+                ? huidig.gebruiktMm + SPACER_H + stukH
+                : stukH;
+            if (huidig && candidate <= budget) {
+                huidig.stukken.push(st);
+                huidig.gebruiktMm = candidate;
+            } else {
+                paginas.push({
+                    stukken:        [st],
+                    heeftCompHeader: isFirstPage,
+                    heeftFooter:    false,
+                    gebruiktMm:     stukH,
+                });
+                isFirstPage = false;
+            }
+        }
+        // Footer alleen op de allerlaatste pagina; als 'ie niet meer past, push
+        // het laatste stuk naar een nieuwe pagina.
+        if (paginas.length > 0 && footerHtml) {
+            const lp = paginas[paginas.length - 1];
+            const budget = lp.heeftCompHeader ? PAG_H - HEADER_H : PAG_H;
+            if (lp.gebruiktMm + FOOTER_H > budget && lp.stukken.length > 1) {
+                const laatste = lp.stukken.pop();
+                lp.gebruiktMm -= (SPACER_H + STUK_OVERHEAD + laatste.aantalRijen * RIJ_H);
+                paginas.push({
+                    stukken:         [laatste],
+                    heeftCompHeader: false,
+                    heeftFooter:     true,
+                    gebruiktMm:      STUK_OVERHEAD + laatste.aantalRijen * RIJ_H,
+                });
+            } else {
+                lp.heeftFooter = true;
+            }
+        }
+
+        // In boom-saver mode rendert Print-Center zelf één gedeelde comp-header
+        // bovenaan het document. We hoeven hier alleen de gepakte categorieën
+        // te tonen — geen logo of comp-info per pagina. Pagina 1 begint dus
+        // ook gewoon met een compacte categorie-titel.
+        paginaHtml = paginas.map(p => {
+            const inhoud = p.stukken.map((st, i) => `<div style="font-size:10pt;font-weight:bold;line-height:1.2;${i > 0 ? 'margin-top:' + SPACER_H + 'mm;' : ''}padding-bottom:1mm;">
+                    ${escHtml(st.groep.naam)}
+                    <span style="font-size:8pt;font-weight:normal;color:#555;">${
+                        st.isVervolg ? '(vervolg' + st.pLabel + ')'
+                                     : `(${st.totaal} deelnemer${st.totaal !== 1 ? 's' : ''}${st.pLabel})`
+                    }</span>
+                </div>
+                <table>${thead}<tbody>${renderRijen(st.slice, st.chunkStart)}</tbody></table>`).join('');
+            return `<div class="pagina">
+                ${inhoud}
+                ${p.heeftFooter ? footerHtml : ''}
+            </div>`;
+        }).join('');
+    }
 
     return {
         bodyHtml:        paginaHtml,
@@ -1438,8 +1543,8 @@ function _bouwDeelnemerslijstInternal() {
         })
         .filter(Boolean);
 
-    // ── 4. Org-logo (alleen header, geen footer — intern document) ─────────
-    const { orgLogoHtml } = bouwOrgHeaderFooter(escHtml);
+    // ── 4. Org-logo + baan-logo (alleen header, geen footer — intern document) ─
+    const { orgLogoHtml, baanLogoHtml } = bouwOrgHeaderFooter(escHtml);
 
     const printDatum = new Date().toLocaleString('nl-NL',
         { day: '2-digit', month: 'long', year: 'numeric', hour: '2-digit', minute: '2-digit' });
@@ -1624,6 +1729,122 @@ function _bouwDeelnemerslijstInternal() {
         <tbody>${rijen}</tbody></table>`;
     }
 
+    // --- Sectie OV: Overzicht race-groepen (DC × afstanden × categorieën) ---
+    // Toont per "race-groep" — na eventueel mergen/splitsen van DCs — welke
+    // categorieën er rijden, hoeveel deelnemers per categorie, en welke
+    // afstanden de groep rijdt. Helpt jurytafel/speaker om in één oogopslag
+    // de structuur van de wedstrijd te zien.
+    const overzichtGroepen = [];
+    {
+        const usedIds = new Set();
+        vergelijkData.forEach(cat => {
+            if (usedIds.has(cat.dc_id)) return;
+            usedIds.add(cat.dc_id);
+
+            // Verzamel alle DCs in dezelfde merge-cluster
+            const dcGroup = [cat];
+            if (cat.merge_group) {
+                vergelijkData.forEach(c => {
+                    if (!usedIds.has(c.dc_id) && c.merge_group === cat.merge_group) {
+                        usedIds.add(c.dc_id);
+                        dcGroup.push(c);
+                    }
+                });
+            }
+
+            // Basis-naam (merge_label of dc_name'en + ' + ')
+            const basisNaam = (dcGroup.find(d => d.merge_label) ?? {}).merge_label
+                           || dcGroup.map(d => d.dc_name).filter(Boolean).join(' + ');
+
+            // Afstanden van deze cluster (uniek op naam, meegesleurd met meters)
+            const afsMap = new Map(); // name → meters
+            dcGroup.forEach(dc => {
+                const bron = dcDistances[dc.dc_id]?.length
+                    ? dcDistances[dc.dc_id]
+                    : (dc.knsb_distances || []);
+                bron.forEach(d => {
+                    if (!afsMap.has(d.name)) afsMap.set(d.name, d.value_meters ?? 0);
+                });
+            });
+            const afstanden = [...afsMap.entries()]
+                .sort((a, b) => (a[1] - b[1]) || a[0].localeCompare(b[0], 'nl'));
+
+            // Actieve deelnemers per categorie (status 1 of 5 = aanwezig)
+            const perCat = new Map(); // cat → aantal
+            dcGroup.forEach(dc => {
+                dc.competitors.forEach(c => {
+                    const lk = c.license_key || null;
+                    const ek = lk ? (dc.dc_id + '_' + lk) : null;
+                    const ee = (ek && entryEdits[ek]) || {};
+                    const st = Number(ee.entry_status ?? c.entry_status ?? 1);
+                    if (st !== 1 && st !== 5) return;
+                    const pe = lk ? (personEdits[lk] || {}) : {};
+                    const cats = pe.category ?? c.knsb?.category ?? '?';
+                    perCat.set(cats, (perCat.get(cats) || 0) + 1);
+                });
+            });
+
+            // Splits: als er splits zijn, splitsen we de groep in sub-groepen
+            const allSplits = {};
+            dcGroup.forEach(dc => {
+                Object.entries(dc.splits || {}).forEach(([k, v]) => { if (v) allSplits[k] = v; });
+            });
+            const splitGrps = [...new Set(Object.values(allSplits))].sort();
+
+            if (splitGrps.length) {
+                splitGrps.forEach(sg => {
+                    const sgCats = Object.keys(allSplits).filter(k => allSplits[k] === sg);
+                    const sgPerCat = new Map();
+                    sgCats.forEach(c => { if (perCat.has(c)) sgPerCat.set(c, perCat.get(c)); });
+                    if (sgPerCat.size === 0) return;
+                    overzichtGroepen.push({
+                        naam: `${basisNaam} — ${sg}`,
+                        afstanden,
+                        perCat: sgPerCat,
+                    });
+                });
+                // Restcategorieën (niet in splits) als aparte groep
+                const restCats = [...perCat.keys()].filter(c => !Object.keys(allSplits).includes(c));
+                if (restCats.length) {
+                    const restPerCat = new Map();
+                    restCats.forEach(c => restPerCat.set(c, perCat.get(c)));
+                    overzichtGroepen.push({
+                        naam: `${basisNaam} — overig`,
+                        afstanden,
+                        perCat: restPerCat,
+                    });
+                }
+            } else {
+                if (perCat.size > 0) {
+                    overzichtGroepen.push({ naam: basisNaam, afstanden, perCat });
+                }
+            }
+        });
+    }
+
+    let sectieOV = '';
+    if (overzichtGroepen.length) {
+        const ovRijen = overzichtGroepen.map((g, i) => {
+            const totaal = [...g.perCat.values()].reduce((a, b) => a + b, 0);
+            const afsTxt = g.afstanden
+                .map(([n, m]) => `${escHtml(n)}${m ? ` <span class="grijs">(${m}m)</span>` : ''}`)
+                .join(' &nbsp;·&nbsp; ');
+            return `<tr class="${i % 2 === 1 ? 'z' : ''}">
+                <td class="vet">${escHtml(g.naam)}</td>
+                <td class="tc vet">${totaal}</td>
+                <td class="sm">${afsTxt}</td>
+            </tr>`;
+        }).join('');
+        sectieOV = `<h2 class="sectie-titel">Race-groepen overzicht &nbsp;<span class="teller">${overzichtGroepen.length} groepen</span></h2>
+        <table><colgroup>
+            <col style="width:auto"><col style="width:18mm"><col style="width:auto">
+        </colgroup>
+        <thead><tr>
+            <th>Race-groep</th><th class="tc">Aantal</th><th>Afstanden</th>
+        </tr></thead>
+        <tbody>${ovRijen}</tbody></table>`;
+    }
+
     // --- Sectie 3: Volledige deelnemerslijst ---
     const sectie3 = `<h2 class="sectie-titel">Deelnemerslijst &nbsp;<span class="teller">${actieveRijders.length} deelnemers</span></h2>
     <table>${colgrpDl}${theadDl}
@@ -1639,6 +1860,7 @@ function _bouwDeelnemerslijstInternal() {
             <div class="hdr-meta">${compMeta}</div>
             ${standTxt ? `<div class="hdr-stand">${escHtml(standTxt)}</div>` : ''}
         </div>
+        ${baanLogoHtml ? `<div class="hdr-baan">${baanLogoHtml}</div>` : ''}
         <div class="hdr-logo">${orgLogoHtml}</div>
     </header>
     <div class="hdr-lijn"></div>
@@ -1647,6 +1869,7 @@ function _bouwDeelnemerslijstInternal() {
     ${sectieGT}
     ${sectie2}
     ${sectieOT}
+    ${sectieOV}
     ${sectie3}
     <footer class="doc-footer">afgedrukt: ${escHtml(printDatum)}</footer>`;
 
@@ -1657,6 +1880,7 @@ body  { font-family: Arial, sans-serif; font-size: 8.5pt; margin: 0; color: #111
 /* Document-header: alleen bovenaan pagina 1 */
 .doc-header { display:flex; justify-content:space-between; align-items:flex-start;
               gap:4mm; margin-bottom:1.5mm; }
+.hdr-baan   { flex-shrink:0; }
 .hdr-links  { flex:1; }
 .hdr-comp   { font-size:12pt; font-weight:bold; line-height:1.2; }
 .hdr-meta   { font-size:8pt; color:#555; }

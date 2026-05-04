@@ -357,10 +357,20 @@ function renderDetail(k) {
 
     const rijen = gefilterd.map(p => {
         const detail = p.punten_detail ?? {};
+        // _gestreept = array van comp_ids die bij streepresultaten zijn
+        // weggehaald. Tonen we doorgehaald + gedimd, zodat de gebruiker ziet
+        // welke score wegvalt (en dus niet meetelt in het totaal).
+        const gestreeptSet = new Set(detail._gestreept ?? []);
         const wedstrijdCellen = toonWedstrijden
             ? wMeta.map(w => {
                 const waarde = detail[w.comp_id];
-                return `<td class="tc rk-w">${waarde != null ? fmtP(waarde) : '<span class="rk-nng">–</span>'}</td>`;
+                if (waarde == null) {
+                    return `<td class="tc rk-w"><span class="rk-nng">–</span></td>`;
+                }
+                if (gestreeptSet.has(w.comp_id)) {
+                    return `<td class="tc rk-w rk-w-streep" title="Weggestreept resultaat (telt niet mee in totaal)">${fmtP(waarde)}</td>`;
+                }
+                return `<td class="tc rk-w">${fmtP(waarde)}</td>`;
               }).join('')
             : '';
         const totaalCel = toonWedstrijden
@@ -380,6 +390,7 @@ function renderDetail(k) {
     const serieActies = isSerie
         ? `<div class="rk-detail-acties">
              <button class="btn-primary rk-detail-btn" data-serie-act="herbereken">🔄 Herbereken</button>
+             <button class="btn-secondary rk-detail-btn" data-serie-act="print">🖨 Print</button>
              <button class="btn-secondary rk-detail-btn" data-serie-act="bewerken">✏️ Bewerken</button>
              <button class="btn-secondary rk-detail-btn" data-serie-act="diag">🔍 Diagnose</button>
            </div>`
@@ -450,7 +461,12 @@ function bindDetailEvents(container) {
     container.querySelectorAll('[data-serie-act]').forEach(btn => {
         btn.addEventListener('click', async () => {
             const act = btn.dataset.serieAct;
-            // Zoek de serie-id via het klassement-id
+            // Print heeft geen serie-id nodig — direct uit klassement printen.
+            if (act === 'print') {
+                await printSerieKlassement(rkHuidig);
+                return;
+            }
+            // Zoek de serie-id via het klassement-id (nodig voor herbereken/bewerken/diag)
             let serieId = null;
             try {
                 const rows = await rkGet(
@@ -514,4 +530,220 @@ async function getRankingSeeding(klassementId, categorie) {
  */
 async function getKlassementen() {
     return rkGet('api/klassement_import.php?action=list');
+}
+
+// ── Print: serie-klassement (alle categorieën) ────────────────────────────────
+//
+// Opent een nieuw venster met een schoon HTML-document — per categorie een
+// tabel met posities, wedstrijdkolommen en totaal. Weggestreepte resultaten
+// (streepresultaten-regel) worden doorgehaald + gedimd weergegeven, met een
+// voetnoot eronder. De window-print() wordt automatisch getriggerd.
+async function printSerieKlassement(k) {
+    if (!k) return;
+    // Org-data ophalen voor logo + sponsors. `bouwOrgHeaderFooter()` leest
+    // uit het globale `huidigOrganisatie`, dat op de klassement-pagina niet
+    // gevuld is — we zetten 'm hier tijdelijk en herstellen na de render.
+    let _origOrg = (typeof huidigOrganisatie !== 'undefined') ? huidigOrganisatie : null;
+    if (k.org_id) {
+        try {
+            const r = await fetch('api/organisaties.php?id=' + encodeURIComponent(k.org_id));
+            if (r.ok) {
+                const orgData = await r.json();
+                if (orgData && !orgData.error && typeof huidigOrganisatie !== 'undefined') {
+                    // eslint-disable-next-line no-global-assign
+                    huidigOrganisatie = orgData;
+                }
+            }
+        } catch (e) { /* stil — print gaat door zonder logo */ }
+    }
+    const wMeta = Array.isArray(k.wedstrijden_meta) ? k.wedstrijden_meta : [];
+    const allePos = k.posities ?? [];
+    if (!allePos.length) {
+        alert('Geen posities om te printen.');
+        return;
+    }
+    // Categorieën in dezelfde volgorde als de tabbladen op de detail-pagina.
+    const cats = k.categorieen ?? [];
+    const catLabels = cats.length
+        ? cats.map(c => c.label ?? c)
+        : [...new Set(allePos.map(p => p.categorie))];
+
+    const fmtP = n => {
+        if (n == null) return '–';
+        const v = +n;
+        return Number.isInteger(v) ? String(v) : v.toFixed(1);
+    };
+    const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({
+        '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'
+    }[c]));
+
+    // Per categorie een blok bouwen
+    const heeftWedstrijden = wMeta.length > 0
+        && allePos.some(p => p.punten_detail && Object.keys(p.punten_detail).length);
+
+    const blokkenHtml = catLabels.map(cat => {
+        const rijen = allePos.filter(p => p.categorie === cat);
+        if (!rijen.length) return '';
+        const wedstrijdHdr = heeftWedstrijden
+            ? wMeta.map((w, i) => {
+                const tip = esc(w.naam || '') + (w.datum ? ' · ' + String(w.datum).substring(0, 10) : '');
+                return `<th class="pk-w" title="${tip}">${w.is_finale ? 'F' : '#' + (i + 1)}</th>`;
+            }).join('')
+            : '';
+        const rijenHtml = rijen.map(p => {
+            const detail = p.punten_detail ?? {};
+            const gestreept = new Set(detail._gestreept ?? []);
+            const wCellen = heeftWedstrijden
+                ? wMeta.map(w => {
+                    const v = detail[w.comp_id];
+                    if (v == null) return `<td class="pk-w pk-nng">–</td>`;
+                    const cls = gestreept.has(w.comp_id) ? ' pk-streep' : '';
+                    return `<td class="pk-w${cls}">${fmtP(v)}</td>`;
+                }).join('')
+                : '';
+            const tot = heeftWedstrijden
+                ? `<td class="pk-tot">${fmtP(p.punten_totaal)}</td>`
+                : '';
+            return `<tr>
+                <td class="pk-pos">${esc(p.positie)}</td>
+                <td class="pk-snr">${esc(p.start_number ?? '–')}</td>
+                <td class="pk-naam">${esc(p.naam)}</td>
+                ${wCellen}
+                ${tot}
+            </tr>`;
+        }).join('');
+        // Wedstrijd-legenda onder de tabel
+        const legendaRijen = heeftWedstrijden
+            ? wMeta.map((w, i) => `<li><b>${w.is_finale ? 'F' : '#' + (i + 1)}</b> — ${esc(w.naam || '')}${w.datum ? ' (' + String(w.datum).substring(0, 10) + ')' : ''}${w.is_finale ? ' · finale' : ''}</li>`).join('')
+            : '';
+
+        return `<section class="pk-cat-blok">
+            <h2 class="pk-cat-titel">${esc(cat)}<span class="pk-cat-tel">(${rijen.length} rijders)</span></h2>
+            <table class="pk-tabel">
+                <thead>
+                    <tr>
+                        <th class="pk-pos">Pos.</th>
+                        <th class="pk-snr">Start#</th>
+                        <th>Naam</th>
+                        ${wedstrijdHdr}
+                        ${heeftWedstrijden ? '<th class="pk-tot">Totaal</th>' : ''}
+                    </tr>
+                </thead>
+                <tbody>${rijenHtml}</tbody>
+            </table>
+            ${legendaRijen ? `<ul class="pk-legenda">${legendaRijen}</ul>` : ''}
+        </section>`;
+    }).join('');
+
+    const datumNu = new Date().toLocaleString('nl-NL', {
+        day: '2-digit', month: '2-digit', year: 'numeric',
+        hour: '2-digit', minute: '2-digit',
+    });
+    const titel = esc(k.naam || 'Serie-klassement');
+    const subtitel = [
+        k.seizoen,
+        k.totaal_rijders ? k.totaal_rijders + ' rijders' : '',
+        'afgedrukt ' + datumNu,
+    ].filter(Boolean).map(esc).join(' · ');
+
+    const heeftStreep = allePos.some(p => (p.punten_detail?._gestreept ?? []).length > 0);
+
+    // Org-logo + baan-logo + sponsor-footer ophalen via de gedeelde helper.
+    let orgLogoHtml = '';
+    let baanLogoHtml = '';
+    let footerHtml = '';
+    if (typeof bouwOrgHeaderFooter === 'function') {
+        const h = bouwOrgHeaderFooter(esc);
+        orgLogoHtml  = h?.orgLogoHtml  ?? '';
+        baanLogoHtml = h?.baanLogoHtml ?? '';
+        footerHtml   = h?.footerHtml   ?? '';
+    }
+
+    const w = window.open('', '_blank');
+    if (!w) {
+        alert('Pop-up geblokkeerd. Sta pop-ups toe voor deze site.');
+        return;
+    }
+    w.document.write(`<!DOCTYPE html>
+<html lang="nl"><head>
+<meta charset="utf-8">
+<title>${titel}</title>
+<style>
+@page { size: A4 landscape; margin: 8mm 10mm; }
+* { box-sizing: border-box; }
+body { font-family: Arial, sans-serif; font-size: 9pt; color: #000; margin: 0; padding: 0; }
+
+/* Header: titel/subtitel links, org-logo rechts. NIET page-break-inside-avoid
+   — anders kan een grote eerste categorie-blok hem op een eigen lege pagina
+   duwen. De header is klein genoeg om altijd op pagina 1 te passen. */
+.pk-header   { display: flex; justify-content: space-between; align-items: flex-start;
+               border-bottom: 2px solid #1a3a5c; padding-bottom: 2mm; margin-bottom: 4mm;
+               gap: 6mm; }
+.pk-titel    { font-size: 14pt; font-weight: 700; color: #1a3a5c; margin: 0; line-height: 1.2; }
+.pk-subtitel { font-size: 8.5pt; color: #555; margin-top: 1mm; }
+.pk-orglogo  { flex-shrink: 0; }
+.pk-baan     { flex-shrink: 0; }
+
+/* Categorie-blokken: GEEN page-break-inside-avoid (anders worden grote
+   tabellen naar nieuwe pagina geduwd, met holle ruimte op de vorige).
+   Wel page-break-after-avoid op de categorie-titel zodat de titel niet
+   wees-onderaan een pagina blijft staan. */
+.pk-cat-blok    { margin-bottom: 6mm; }
+.pk-cat-titel   { font-size: 11pt; font-weight: 700; color: #1a3a5c;
+                  margin: 0 0 1.5mm 0; line-height: 1.2;
+                  page-break-after: avoid; break-after: avoid; }
+.pk-cat-tel     { font-size: 8pt; font-weight: normal; color: #666; margin-left: 6px; }
+
+.pk-tabel       { width: 100%; border-collapse: collapse; table-layout: auto; }
+.pk-tabel th    { background: #dce6f0; text-align: left; padding: 1.2mm 2mm;
+                  font-size: 8.5pt; border-bottom: 1px solid #1a3a5c; line-height: 1.2; }
+.pk-tabel td    { padding: 0.8mm 2mm; font-size: 9pt; border-bottom: 1px solid #ddd;
+                  vertical-align: middle; line-height: 1.3; }
+.pk-tabel tr:nth-child(even) td { background: #f7f9fc; }
+
+.pk-pos    { width: 12mm; text-align: center; font-weight: 700; }
+.pk-snr    { width: 14mm; text-align: center; }
+.pk-naam   { width: auto; }
+.pk-w      { width: 14mm; text-align: center; font-variant-numeric: tabular-nums; }
+.pk-tot    { width: 18mm; text-align: center; font-weight: 700; color: #1a3a5c;
+             background: #eef4f9 !important; }
+
+.pk-nng    { color: #bbb; }
+.pk-streep { text-decoration: line-through; color: #999; }
+
+.pk-legenda { font-size: 7.5pt; color: #555; list-style: none; padding-left: 0;
+              margin: 1mm 0 0 0; columns: 2; column-gap: 6mm; }
+.pk-legenda li { padding: 0.3mm 0; break-inside: avoid; }
+
+.pk-streep-noot { font-size: 7.5pt; color: #777; margin-top: 3mm;
+                  border-top: 1px dotted #ccc; padding-top: 1.5mm; font-style: italic; }
+</style></head>
+<body>
+<div class="pk-header">
+    <div>
+        <h1 class="pk-titel">${titel}</h1>
+        <div class="pk-subtitel">${subtitel}</div>
+    </div>
+    ${baanLogoHtml ? `<div class="pk-baan">${baanLogoHtml}</div>` : ''}
+    ${orgLogoHtml ? `<div class="pk-orglogo">${orgLogoHtml}</div>` : ''}
+</div>
+${blokkenHtml}
+${heeftStreep ? `<div class="pk-streep-noot">Doorgehaalde scores zijn weggestreept (streepresultaten-regel) en tellen niet mee in het totaal.</div>` : ''}
+${footerHtml}
+<script>
+window.addEventListener('load', function(){
+    setTimeout(function(){ window.focus(); window.print(); }, 200);
+});
+window.addEventListener('afterprint', function(){
+    setTimeout(function(){ window.close(); }, 100);
+});
+<\/script>
+</body></html>`);
+    w.document.close();
+
+    // Globale state herstellen
+    if (typeof huidigOrganisatie !== 'undefined') {
+        // eslint-disable-next-line no-global-assign
+        huidigOrganisatie = _origOrg;
+    }
 }

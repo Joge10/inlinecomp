@@ -167,6 +167,58 @@ try {
         }
     }
 
+    // ── Baan koppelen / aanmaken (per organisatie) ────────────────────────
+    // Alleen als er een org-koppeling is en venue_name uit de KNSB-feed
+    // beschikbaar is. Eerst: bestaat er voor deze org al een baan met deze
+    // naam (of alias)? Zo ja → koppelen. Zo nee → nieuwe baan aanmaken met
+    // basis-info (naam + stad uit de feed); de beheerder vult later het logo
+    // en de gastheer-vereniging aan.
+    if ($organisatie) {
+        $compRow = $pdo->prepare(
+            "SELECT venue_name, venue_city, baan_id FROM competitions WHERE id = ?"
+        );
+        $compRow->execute([$compId]);
+        $compInfo = $compRow->fetch(PDO::FETCH_ASSOC) ?: [];
+        $venueName = $compInfo['venue_name'] ?? null;
+        $venueCity = $compInfo['venue_city'] ?? null;
+        $heeftBaanId = !empty($compInfo['baan_id']);
+
+        if ($venueName && !$heeftBaanId) {
+            // 1) Match op exacte naam binnen deze organisatie
+            $bStmt = $pdo->prepare(
+                "SELECT id FROM banen WHERE organisatie_id = ? AND naam = ? LIMIT 1"
+            );
+            $bStmt->execute([$organisatie['id'], $venueName]);
+            $baanId = $bStmt->fetchColumn() ?: null;
+
+            // 2) Match via alias binnen deze organisatie
+            if (!$baanId) {
+                $aStmt = $pdo->prepare("
+                    SELECT a.baan_id FROM baan_aliassen a
+                    JOIN banen b ON b.id = a.baan_id
+                    WHERE b.organisatie_id = ? AND a.naam = ?
+                    LIMIT 1
+                ");
+                $aStmt->execute([$organisatie['id'], $venueName]);
+                $baanId = $aStmt->fetchColumn() ?: null;
+            }
+
+            // 3) Niet gevonden → automatisch aanmaken met basis-info
+            if (!$baanId) {
+                $baanId = newUuid();
+                $pdo->prepare("
+                    INSERT INTO banen (id, organisatie_id, naam, stad)
+                    VALUES (?, ?, ?, ?)
+                ")->execute([$baanId, $organisatie['id'], $venueName, $venueCity]);
+            }
+
+            // Koppel de wedstrijd aan deze baan
+            $pdo->prepare(
+                "UPDATE competitions SET baan_id = ? WHERE id = ?"
+            )->execute([$baanId, $compId]);
+        }
+    }
+
     // 1. KNSB deelnemers ophalen
     $groepen = apiGet("$base/competitions/$compId/competitors");
     if (!$groepen) throw new RuntimeException('Kan deelnemers niet ophalen van KNSB');
@@ -459,9 +511,47 @@ try {
         $orgTransponders = $otStmt->fetchAll(PDO::FETCH_ASSOC);
     }
 
+    // Baan ophalen voor deze wedstrijd (als baan_id gekoppeld is — auto via
+    // import op venue_name + alias, of handmatig via Beheer). Levert het
+    // baan-logo + vereniging-naam voor de print-headers.
+    //
+    // Cross-org fallback: als deze org's baan-rij geen logo of geen
+    // vereniging-naam heeft, kijken we of een andere org een baan met
+    // dezelfde naam heeft die het wél weet. Dezelfde fysieke baan kan
+    // namelijk onder meerdere orgs als aparte rij voorkomen — daar één
+    // keer uploaden moet voldoende zijn.
+    $baan = null;
+    $baanStmt = $pdo->prepare("
+        SELECT b.id, b.naam, b.stad,
+               COALESCE(b.vereniging_naam, (
+                   SELECT b2.vereniging_naam FROM banen b2
+                   WHERE b2.naam = b.naam AND b2.id != b.id
+                     AND b2.vereniging_naam IS NOT NULL AND b2.vereniging_naam != ''
+                   LIMIT 1
+               )) AS vereniging_naam,
+               COALESCE(b.logo_path, (
+                   SELECT b2.logo_path FROM banen b2
+                   WHERE b2.naam = b.naam AND b2.id != b.id
+                     AND b2.logo_path IS NOT NULL AND b2.logo_path != ''
+                   LIMIT 1
+               )) AS logo_path,
+               COALESCE(b.logo_updated_at, (
+                   SELECT b2.logo_updated_at FROM banen b2
+                   WHERE b2.naam = b.naam AND b2.id != b.id
+                     AND b2.logo_path IS NOT NULL AND b2.logo_path != ''
+                   LIMIT 1
+               )) AS logo_updated_at
+        FROM banen b
+        JOIN competitions c ON c.baan_id = b.id
+        WHERE c.id = ?
+    ");
+    $baanStmt->execute([$compId]);
+    $baan = $baanStmt->fetch(PDO::FETCH_ASSOC) ?: null;
+
     echo json_encode([
         'groepen'            => $result,
         'organisatie'        => $organisatie,
+        'baan'               => $baan,
         'knsb_stand'         => $knsb_stand,
         'db_stand'           => $db_stand,
         'entries_version'    => $entriesVersion,

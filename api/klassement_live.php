@@ -92,6 +92,21 @@ try {
                 ORDER BY FIELD(r.ronde_type, 'heats','kwartfinale','halve_finale','finale_a')
             ");
         }
+
+        // Cat-config per afstand: heeft_heats/kwart/half om eerste actieve
+        // ronde te bepalen voor de race-type-aware ranking-defaults (sprint).
+        $catRondesMap = []; // distance_id => ['heeft_heats', 'heeft_kwartfinale', 'heeft_halve_finale']
+        if ($tsId) {
+            $crStmt = $pdo->prepare("
+                SELECT distance_id, heeft_heats, heeft_kwartfinale, heeft_halve_finale
+                FROM tijdschema_cat_config
+                WHERE tijdschema_id = ? AND dc_id = ?
+            ");
+            $crStmt->execute([$tsId, $primaryDcId]);
+            foreach ($crStmt->fetchAll(PDO::FETCH_ASSOC) as $row) {
+                $catRondesMap[$row['distance_id']] = $row;
+            }
+        }
     }
 
     if (empty($distances)) {
@@ -200,11 +215,35 @@ try {
             $rc = $rankingConfigs[$dist['name']];
             $distRt = $dist['race_type'] ?? 'sprint';
             $afInfo['race_type'] = ($distRt && $distRt !== 'sprint') ? 'long_distance' : 'sprint';
+
+            // Race-type-aware defaults. Opgeslagen voorkeur via ?? heeft voorrang.
+            //  Sprint: eerste actieve ronde = time (ongeacht of dat heats/KF/HF is),
+            //          tussenrondes = position_time, A-finale = time.
+            //  Long distance: voorronden = position_time, A-finale = time (UI verbergt).
+            $isSprint = ($afInfo['race_type'] === 'sprint');
+            // Eerste actieve ronde detecteren via cat-config (zelfde keten als runner-up)
+            $eersteRonde = null;
+            $cr = $catRondesMap[$dist['id']] ?? null;
+            if ($cr) {
+                if (!empty($cr['heeft_heats']))            $eersteRonde = 'heats';
+                elseif (!empty($cr['heeft_kwartfinale']))  $eersteRonde = 'kwartfinale';
+                elseif (!empty($cr['heeft_halve_finale'])) $eersteRonde = 'halve_finale';
+            }
+            if ($isSprint) {
+                $defH = $eersteRonde === 'heats'        ? 'time' : 'position_time';
+                $defK = $eersteRonde === 'kwartfinale'  ? 'time' : 'position_time';
+                $defL = $eersteRonde === 'halve_finale' ? 'time' : 'position_time';
+            } else {
+                $defH = 'position_time';
+                $defK = 'position_time';
+                $defL = 'position_time';
+            }
+            $defF = 'time';
             $afInfo['ranking'] = [
-                'heats'  => $rc['heats_ranking']  ?? 'time',
-                'kwart'  => $rc['kwart_ranking']  ?? 'time',
-                'half'   => $rc['half_ranking']   ?? 'time',
-                'finale' => $rc['finale_ranking'] ?? 'time',
+                'heats'  => $rc['heats_ranking']  ?? $defH,
+                'kwart'  => $rc['kwart_ranking']  ?? $defK,
+                'half'   => $rc['half_ranking']   ?? $defL,
+                'finale' => $rc['finale_ranking'] ?? $defF,
             ];
             if (isset($rondeStmt)) {
                 $rondeStmt->execute([$tsId, $primaryDcId, $distId]);

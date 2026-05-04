@@ -563,11 +563,22 @@ function genereerRitten(PDO $pdo, int $tsId, string $compId, ?array $catVanJS = 
                 $ruMin = max(0, (int)($afCfg['runner_up_min'] ?? 0));
                 foreach ($alleCats as $cat) {
                     $cc     = $catConfigMap[$cat['dc_id'] . '|' . $cat['distance_id']] ?? null;
-                    // Runner-up = rijders die niet voorbij de series zijn gekomen.
-                    // Als er geen series zijn, of iedereen gaat door, is er geen runner-up.
-                    if (empty($cc['heeft_heats'])) continue;
-                    $heatsQ     = (int)($cc['heats_q'] ?? 0);
-                    $uitvallers = max(0, $cat['n'] - $heatsQ);
+                    // Runner-up = rijders die afvallen na de eerste ronde van de
+                    // afstand — ongeacht of die eerste ronde Series, Kwartfinale
+                    // of Halve finale is. Detecteer welke ronde voorafgaat en
+                    // gebruik bijbehorende doorstroom-waarde voor de uitvallers-
+                    // berekening.
+                    if (!empty($cc['heeft_heats'])) {
+                        $eersteRondeQ = (int)($cc['heats_q']    ?? 0);
+                    } elseif (!empty($cc['heeft_kwartfinale'])) {
+                        $eersteRondeQ = (int)($cc['kwart_door'] ?? 0);
+                    } elseif (!empty($cc['heeft_halve_finale'])) {
+                        $eersteRondeQ = (int)($cc['half_door']  ?? 0);
+                    } else {
+                        // Geen voorafgaande ronde → geen afvallers → geen runner-up
+                        continue;
+                    }
+                    $uitvallers = max(0, $cat['n'] - $eersteRondeQ);
                     if ($uitvallers === 0) continue;
                     $aantallen = verdeelRunnerUpHeats($uitvallers, $ruMax, $ruMin);
                     $nHeats    = count($aantallen);
@@ -576,7 +587,7 @@ function genereerRitten(PDO $pdo, int $tsId, string $compId, ?array $catVanJS = 
                     // Heat 1 → hoogste plaatsen (net na de gekwalificeerden)
                     // Heat nHeats → laagste plaatsen (grootste heat)
                     $plekStart = [];
-                    $cumul     = $heatsQ;
+                    $cumul     = $eersteRondeQ;
                     for ($i = 0; $i < $nHeats; $i++) {
                         $plekStart[$i] = $cumul + 1;
                         $cumul        += $aantallen[$i];

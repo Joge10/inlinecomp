@@ -378,6 +378,7 @@ async function schakelTab(tab) {
     if (tab === 'wedstrijden') laadOrgWedstrijden();
     if (tab === 'klassementen') laadOrgKlassementen();
     if (tab === 'transponders') laadOrgTransponders();
+    if (tab === 'banen' && typeof laadBanen === 'function') laadBanen();
 }
 
 async function laadOrgWedstrijden() {
@@ -451,6 +452,7 @@ async function laadOrgWedstrijden() {
                 ${badge}
             </div>
             <div class="beheer-wedstrijd-acties">
+                ${inDb ? `<button class="btn-secondary btn-sm beheer-comp-meld" data-id="${escHtml(w.id)}" data-naam="${escHtml(w.name ?? w.id)}" title="Mededelingen versturen naar publiek + coach apps">📢 Meldingen</button>` : ''}
                 ${inDb ? `<button class="btn-secondary btn-sm beheer-comp-poster" data-id="${escHtml(w.id)}" title="Download promotie-poster voor deze wedstrijd">📄 Poster</button>` : ''}
                 ${inDb ? `<button class="btn-danger btn-sm beheer-comp-del" data-id="${escHtml(w.id)}" data-naam="${escHtml(w.name ?? w.id)}">Verwijderen</button>` : ''}
             </div>
@@ -462,6 +464,12 @@ async function laadOrgWedstrijden() {
     });
     lijst.querySelectorAll('.beheer-comp-poster').forEach(btn => {
         btn.addEventListener('click', () => downloadPoster(btn.dataset.id));
+    });
+    lijst.querySelectorAll('.beheer-comp-meld').forEach(btn => {
+        btn.addEventListener('click', () =>
+            typeof openMeldingenModal === 'function'
+                ? openMeldingenModal(btn.dataset.id, btn.dataset.naam)
+                : null);
     });
 
     if (_beheerLeesOnly) pasSchrijfLockToe(lijst.closest('.org-tab-content') ?? lijst);

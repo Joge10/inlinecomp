@@ -160,6 +160,9 @@ try {
         ':discipline' => $comp['discipline'] ?? null,
     ]);
     $log[] = "Wedstrijd: {$comp['name']}";
+    // Auto-baan-koppeling gebeurt later in vergelijk.php — daar is de
+    // organisatie-context al bekend. Hier hebben we alleen venue_name +
+    // venue_city, maar nog geen organisatie_id.
 
     // --------------------------------------------------------
     // 2. Afstandscombinaties + afstanden van KNSB ophalen

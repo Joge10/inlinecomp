@@ -71,7 +71,27 @@ function normaliseerRegels(array $in): array {
         'min_deelnames'           => max(0, (int)($in['min_deelnames'] ?? 0)),
         'tie_break'               => $tieBreak,
         'vereist_finale'          => !empty($in['vereist_finale']),
+        // Optioneel: rijders die in een wedstrijd uit de serie NIET meededen
+        // (of punten=0 kregen) maar elders in de serie wel scoren, krijgen
+        // voor die gemiste wedstrijd de "rang laatste + 1" — d.w.z. de punten
+        // die in de tabel op die positie staan. Bij meerdere afwezigen krijgen
+        // ze allemaal dezelfde rang ("laatste + 1"), niet oplopend.
+        'non_deelname_punten'     => !empty($in['non_deelname_punten']),
+        // Optioneel: streepresultaten direct toepassen, ook tijdens de
+        // tussenstand (vóór de finale gereden is). Default false →
+        // streep wordt pas actief zodra de finale gereden is, zoals
+        // klassieke series-regels.
+        'streep_direct'           => !empty($in['streep_direct']),
     ];
+}
+
+// Bepaalt of de punten-tabel oplopend is (rang 1 → laagste punten, dus
+// laagste totaal wint). Bij default-tabel [50.1, 47, 45, …] is dit false.
+// Bij masker [1, 2, 3, …] is dit true. Eén lookup is genoeg — een mengvorm
+// (bv. [10, 5, 8]) komt in de praktijk niet voor.
+function tabelIsOplopend(array $tabel): bool {
+    if (count($tabel) < 2) return false;
+    return $tabel[0] < $tabel[1];
 }
 
 // ──────────────────────────────────────────────────────────────────────────
@@ -156,9 +176,21 @@ function berekenSerie(PDO $pdo, string $serieId): array {
         $finaleGereden = !empty($aanwezigInFinale);
     }
 
+    // Sort-richting wordt afgeleid uit de punten-tabel: oplopend (1, 2, 3, …)
+    // → laagste totaal wint; aflopend (50, 47, 45, …) → hoogste wint.
+    $oplopend = tabelIsOplopend($regels['punten_tabel']);
+
     // Accumulator per (license_key, categorie)
     //   [lic][cat] = ['naam'=>…, 'startnr'=>…, 'totaal'=>0.0, 'detail'=>[wedstrijd_naam=>punten], 'deelnames'=>N]
     $acc = [];
+
+    // Hulpmaps voor non-deelname-regel:
+    //   $aantalPerCompCat[$compId][$cat] = aantal deelnemers in die (comp, cat)
+    //   $compNaamMap[$compId]            = naam van de wedstrijd (voor detail-label)
+    //   $catNaamPerComp[$compId][$cat]   = dc_naam waarin deze cat voorkwam
+    $aantalPerCompCat = [];
+    $compNaamMap = [];
+    $catNaamPerComp = [];
 
     if ($compIds) {
         $ph = implode(',', array_fill(0, count($compIds), '?'));
@@ -193,94 +225,157 @@ function berekenSerie(PDO $pdo, string $serieId): array {
             $dcTypes[$d['dc_id']] = $type;
         }
 
-        // DC-filter: welke DCs horen bij dit serie-type?
-        $dcOk = function($dcId) use ($regels, $dcTypes) {
-            $t = $dcTypes[$dcId] ?? null;
-            if (!$t || $t === 'leeg') return false;
-            switch ($regels['afstand_filter']) {
-                case 'sprint':   return $t === 'sprint';
-                case 'lang':     return $t === 'lang';
-                case 'alle':
-                default:         return true; // ook sprint/lang/gecombineerd allemaal OK
-            }
-        };
+        // ── Bron-keuze afhankelijk van afstand-filter ─────────────────────
+        //
+        // Bij filter='alle' (gecombineerd type): we lezen uit `uitslag_klassement`
+        // — daar staat de DC-combined ranking (over alle afstanden binnen een DC
+        // samen). Eén ranking per (comp, DC, split, cat).
+        //
+        // Bij filter='sprint' / 'lang' / 'per_naam': we lezen uit `uitslag_afstand`
+        // per matchende afstand. Zo kunnen we ook gecombineerde DCs (die zowel
+        // een sprint als een lange afstand bevatten) meenemen — dan tellen
+        // alleen de afstanden die bij het filter horen. Een DC met 500m + 5000m
+        // levert in een sprint-serie alleen het 500m-resultaat op.
+        $isAfstandLevel = ($regels['afstand_filter'] !== 'alle');
 
-        // ── Stap 2a: welke rijders zijn UITGESLOTEN per (comp, dc)?
-        //   De UI sluit rijders uit als admin `punten = 0` op een afstand heeft
-        //   gezet (sanctie / DNS / bewust weggeklikt). In `uitslag_klassement`
-        //   kunnen oude rijen met rang+punten nog blijven staan — daarom
-        //   kruisen we hier tegen `uitslag_afstand`. Als er voor deze rijder
-        //   in deze DC een `punten = 0`-rij is, slaan we 'm over.
-        $uitgeslotenSql = "
-            SELECT DISTINCT competition_id, distance_combination_id, person_license
-            FROM uitslag_afstand
-            WHERE competition_id IN ($ph) AND punten = 0
-        ";
-        $uStmt = $pdo->prepare($uitgeslotenSql);
-        $uStmt->execute($compIds);
-        $uitgeslotenSet = [];
-        foreach ($uStmt->fetchAll(PDO::FETCH_ASSOC) as $row) {
-            $k = $row['competition_id'] . '|' . $row['distance_combination_id'] . '|' . $row['person_license'];
-            $uitgeslotenSet[$k] = true;
+        if ($isAfstandLevel) {
+            // ── uitslag_afstand pad ──────────────────────────────────────
+            // Filter-condities op race_type / distance.name; uitgesloten-rijders
+            // (punten=0) worden in dezelfde query weggegooid.
+            $extraWhere = '';
+            $extraParams = [];
+            if ($regels['afstand_filter'] === 'sprint') {
+                $extraWhere = " AND d.race_type = 'sprint'";
+            } elseif ($regels['afstand_filter'] === 'lang') {
+                $extraWhere = " AND d.race_type <> 'sprint'";
+            } elseif ($regels['afstand_filter'] === 'per_naam'
+                      && !empty($regels['afstand_namen'])) {
+                $namenPh = implode(',', array_fill(0, count($regels['afstand_namen']), '?'));
+                $extraWhere = " AND d.name IN ($namenPh)";
+                $extraParams = $regels['afstand_namen'];
+            } elseif ($regels['afstand_filter'] === 'per_naam') {
+                // Geen namen geselecteerd → niets matcht → lege resultaten
+                $extraWhere = " AND 1=0";
+            }
+
+            $kSql = "
+                SELECT ua.competition_id,
+                       ua.distance_combination_id AS dc_id, ua.dc_naam,
+                       ua.distance_id, ua.distance_naam,
+                       ua.split_group, ua.person_license, ua.categorie,
+                       ua.rang, ua.punten AS punten_totaal,
+                       c.name AS comp_naam,
+                       p.full_name, p.short_name, p.category AS persoon_cat,
+                       COALESCE(cs.startnummer, p.start_number) AS wedstrijd_snr
+                FROM uitslag_afstand ua
+                JOIN distances d
+                    ON d.distance_combination_id = ua.distance_combination_id
+                   AND d.id = ua.distance_id
+                JOIN competitions c ON c.id = ua.competition_id
+                JOIN persons p ON p.license_key = ua.person_license
+                LEFT JOIN competition_startnummers cs
+                       ON cs.person_license = ua.person_license
+                      AND cs.competition_id = ua.competition_id
+                WHERE ua.competition_id IN ($ph)
+                  AND ua.punten IS NOT NULL
+                  AND ua.punten > 0
+                  AND ua.rang IS NOT NULL
+                  $extraWhere
+            ";
+            $kStmt = $pdo->prepare($kSql);
+            $kStmt->execute(array_merge($compIds, $extraParams));
+            $rijen = $kStmt->fetchAll(PDO::FETCH_ASSOC);
+        } else {
+            // ── uitslag_klassement pad (DC-combined) ─────────────────────
+            // DC-filter alleen relevant voor 'alle': elke DC mag mee, behalve
+            // 'leeg'-DCs.
+            $dcOk = function($dcId) use ($dcTypes) {
+                $t = $dcTypes[$dcId] ?? null;
+                return $t && $t !== 'leeg';
+            };
+
+            // Welke rijders zijn UITGESLOTEN per (comp, dc)? De UI sluit
+            // rijders uit als admin `punten = 0` op een afstand heeft gezet
+            // (sanctie / DNS / bewust weggeklikt). In `uitslag_klassement`
+            // kunnen oude rijen met rang+punten nog blijven staan — daarom
+            // kruisen we hier tegen `uitslag_afstand`.
+            $uitgeslotenSql = "
+                SELECT DISTINCT competition_id, distance_combination_id, person_license
+                FROM uitslag_afstand
+                WHERE competition_id IN ($ph) AND punten = 0
+            ";
+            $uStmt = $pdo->prepare($uitgeslotenSql);
+            $uStmt->execute($compIds);
+            $uitgeslotenSet = [];
+            foreach ($uStmt->fetchAll(PDO::FETCH_ASSOC) as $row) {
+                $k = $row['competition_id'] . '|' . $row['distance_combination_id'] . '|' . $row['person_license'];
+                $uitgeslotenSet[$k] = true;
+            }
+
+            $kSql = "
+                SELECT uk.competition_id, uk.distance_combination_id AS dc_id, uk.dc_naam,
+                       NULL AS distance_id, NULL AS distance_naam,
+                       uk.split_group, uk.person_license, uk.categorie,
+                       uk.rang, uk.punten_totaal,
+                       c.name AS comp_naam,
+                       p.full_name, p.short_name, p.category AS persoon_cat,
+                       COALESCE(cs.startnummer, p.start_number) AS wedstrijd_snr
+                FROM uitslag_klassement uk
+                JOIN competitions c ON c.id = uk.competition_id
+                JOIN persons p ON p.license_key = uk.person_license
+                LEFT JOIN competition_startnummers cs
+                       ON cs.person_license = uk.person_license
+                      AND cs.competition_id = uk.competition_id
+                WHERE uk.competition_id IN ($ph)
+            ";
+            $kStmt = $pdo->prepare($kSql);
+            $kStmt->execute($compIds);
+            $rijen = $kStmt->fetchAll(PDO::FETCH_ASSOC);
+
+            // Filter op DC-type + rang-geldigheid + uitgesloten-set.
+            $rijen = array_values(array_filter($rijen, function($r) use ($dcOk, $uitgeslotenSet) {
+                if (!$dcOk($r['dc_id'])) return false;
+                if ((float)($r['punten_totaal'] ?? 0) <= 0) return false;
+                if ($r['rang'] === null) return false;
+                $k = $r['competition_id'] . '|' . $r['dc_id'] . '|' . $r['person_license'];
+                if (isset($uitgeslotenSet[$k])) return false;
+                return true;
+            }));
         }
 
-        // ── Stap 2: lees eindklassement per (comp, dc, split_group) uit
-        //   uitslag_klassement. Filter op het DC-type.
-        $kSql = "
-            SELECT uk.competition_id, uk.distance_combination_id AS dc_id, uk.dc_naam,
-                   uk.split_group, uk.person_license, uk.categorie,
-                   uk.rang, uk.punten_totaal,
-                   c.name AS comp_naam,
-                   p.full_name, p.short_name, p.category AS persoon_cat,
-                   COALESCE(cs.startnummer, p.start_number) AS wedstrijd_snr
-            FROM uitslag_klassement uk
-            JOIN competitions c ON c.id = uk.competition_id
-            JOIN persons p ON p.license_key = uk.person_license
-            LEFT JOIN competition_startnummers cs
-                   ON cs.person_license = uk.person_license
-                  AND cs.competition_id = uk.competition_id
-            WHERE uk.competition_id IN ($ph)
-        ";
-        $kStmt = $pdo->prepare($kSql);
-        $kStmt->execute($compIds);
-        $rijen = $kStmt->fetchAll(PDO::FETCH_ASSOC);
-
-        // Filter op DC-type + rang-geldigheid + uitgesloten-set.
-        $rijen = array_values(array_filter($rijen, function($r) use ($dcOk, $regels, $uitgeslotenSet) {
-            if (!$dcOk($r['dc_id'])) return false;
-            if ((float)($r['punten_totaal'] ?? 0) <= 0) return false;
-            if ($r['rang'] === null) return false;
-            // Kruis-check: staat deze rijder in uitslag_afstand met een
-            // punten=0 (= uitgesloten door admin) voor deze DC? Dan
-            // negeren — ook al heeft de uitslag_klassement-rij nog oude data.
-            $k = $r['competition_id'] . '|' . $r['dc_id'] . '|' . $r['person_license'];
-            if (isset($uitgeslotenSet[$k])) return false;
-            return true;
-        }));
-
-        // Groeperen per (competition_id, dc_id, split_group, persoons-categorie)
-        // om binnen-cat-rang toe te kennen.
+        // Groeperen per (comp, dc, [distance,] split, persoons-categorie) om
+        // binnen-cat-rang toe te kennen. Bij afstand-level (sprint/lang/per_naam)
+        // wordt distance_id mee in de sleutel genomen — een DC met meerdere
+        // matchende afstanden levert dan per afstand een aparte ranking.
         $groepen = [];
-        // Én: ruimere groepering per (comp, dc, split) om voor gemengde DCs
-        // óók een gecombineerd klassement ("cluster") op te bouwen. Labelt als
-        // gesorteerde cat-codes met "/" ertussen (bv. "DP1/DP2/DP3"). Wordt
-        // gebruikt voor seeding bij vervolgwedstrijden die dezelfde cluster
-        // weer gecombineerd laten rijden.
+        // Én: ruimere groepering voor cluster-klassement (= zelfde DC met
+        // meerdere cats die samen rijden). Cluster wordt alleen opgebouwd in
+        // het uitslag_klassement-pad; bij afstand-level laten we cluster
+        // achterwege omdat een per-afstand-cluster qua interpretatie minder
+        // duidelijk is en het use-case minder relevant.
         $dcGroepen = [];
         foreach ($rijen as $r) {
-            $key = implode('|', [
+            $keyParts = [
                 $r['competition_id'],
                 $r['dc_id'],
                 $r['split_group'] ?? '',
                 $r['persoon_cat'] ?? '',
-            ]);
+            ];
+            if ($isAfstandLevel) {
+                // Voeg distance_id toe — anders zou een DC met 500m + 1000m
+                // sprint één gemerged groepje vormen i.p.v. twee aparte rankings.
+                $keyParts[] = $r['distance_id'] ?? '';
+            }
+            $key = implode('|', $keyParts);
             $groepen[$key][] = $r;
-            $dcKey = implode('|', [
-                $r['competition_id'],
-                $r['dc_id'],
-                $r['split_group'] ?? '',
-            ]);
-            $dcGroepen[$dcKey][] = $r;
+            if (!$isAfstandLevel) {
+                $dcKey = implode('|', [
+                    $r['competition_id'],
+                    $r['dc_id'],
+                    $r['split_group'] ?? '',
+                ]);
+                $dcGroepen[$dcKey][] = $r;
+            }
         }
 
         foreach ($groepen as $groep) {
@@ -290,6 +385,15 @@ function berekenSerie(PDO $pdo, string $serieId): array {
                 $rb = $b['rang'] !== null ? (int)$b['rang'] : PHP_INT_MAX;
                 return $ra <=> $rb;
             });
+            // Tellingen voor non-deelname-regel: aantal rijders in deze (comp, cat).
+            if ($groep) {
+                $compId = $groep[0]['competition_id'];
+                $catKey = $groep[0]['persoon_cat'] ?? $groep[0]['categorie'] ?? '';
+                $aantalPerCompCat[$compId][$catKey] =
+                    ($aantalPerCompCat[$compId][$catKey] ?? 0) + count($groep);
+                $compNaamMap[$compId] = $groep[0]['comp_naam'];
+                $catNaamPerComp[$compId][$catKey] = $groep[0]['dc_naam'] ?? '';
+            }
             foreach ($groep as $i => $r) {
                 $catRang = $i + 1;
                 $punten  = $regels['punten_tabel'][$catRang - 1]
@@ -312,7 +416,13 @@ function berekenSerie(PDO $pdo, string $serieId): array {
                 }
                 $acc[$lic][$cat]['totaal']   += (float)$punten;
                 $acc[$lic][$cat]['deelnames']++;
+                // Detail-label: bij afstand-level voegen we de afstand-naam toe
+                // zodat een DC met meerdere matchende afstanden in de
+                // detail-tooltip per afstand een eigen regel krijgt.
                 $wNaam = $r['comp_naam'] . ' · ' . ($r['dc_naam'] ?? '?');
+                if ($isAfstandLevel && !empty($r['distance_naam'])) {
+                    $wNaam .= ' · ' . $r['distance_naam'];
+                }
                 $acc[$lic][$cat]['detail'][$wNaam] =
                     ($acc[$lic][$cat]['detail'][$wNaam] ?? 0) + $punten;
                 $acc[$lic][$cat]['per_wedstrijd'][$r['competition_id']] =
@@ -368,6 +478,44 @@ function berekenSerie(PDO $pdo, string $serieId): array {
                 if (!empty($r['wedstrijd_snr'])) $acc[$lic][$clusterLabel]['startnr'] = $r['wedstrijd_snr'];
             }
         }
+
+        // ── Non-deelname-regel: rijders die elders in de serie wél scoren
+        //    maar in een specifieke wedstrijd ontbreken (of punten=0 hadden),
+        //    krijgen voor die wedstrijd de punten op rang "laatste + 1" uit
+        //    de tabel. Bij meerdere afwezigen krijgen ze allemaal dezelfde
+        //    rang. Cluster-klassementen worden niet aangepast (te complex en
+        //    minder relevant — een cluster bestaat alleen waar cats samen
+        //    rijden, dus "afwezig in deze cluster" is sowieso onduidelijk).
+        if (!empty($regels['non_deelname_punten'])) {
+            foreach ($acc as $lic => &$perCatMap) {
+                foreach ($perCatMap as $cat => &$row) {
+                    // Skip cluster-rijen (cat-label bevat '/')
+                    if (strpos($cat, '/') !== false) continue;
+                    foreach ($compIds as $cId) {
+                        // Heeft de rijder al punten in deze wedstrijd in deze cat?
+                        if (isset($row['per_wedstrijd'][$cId])) continue;
+                        // Hoeveel deelnemers waren er in (cId, cat)? Zonder rijders
+                        // is er ook geen "laatste rang" — sla over.
+                        $aantal = $aantalPerCompCat[$cId][$cat] ?? 0;
+                        if ($aantal === 0) continue;
+                        // Rang = laatste + 1; punten via tabel of fallback.
+                        $rang   = $aantal + 1;
+                        $punten = $regels['punten_tabel'][$rang - 1]
+                                  ?? $regels['min_punten_bij_deelname'];
+                        $row['totaal'] += (float)$punten;
+                        $row['per_wedstrijd'][$cId] = (float)$punten;
+                        $compNaam = $compNaamMap[$cId] ?? $cId;
+                        $dcNaam   = $catNaamPerComp[$cId][$cat] ?? '?';
+                        $wLabel   = $compNaam . ' · ' . $dcNaam . ' (afwezig)';
+                        $row['detail'][$wLabel] = (float)$punten;
+                        // Geen $row['deelnames']++ — afwezigheid telt niet als deelname,
+                        // anders zou je min_deelnames-drempel kunnen omzeilen.
+                    }
+                }
+                unset($row);
+            }
+            unset($perCatMap);
+        }
     }
 
     // Markeer "aanwezig in finale" per rijder (ongeacht punten) op basis van
@@ -387,7 +535,11 @@ function berekenSerie(PDO $pdo, string $serieId): array {
     // anders zou een tussenstand rijders onterecht uit de tussenstand
     // strepen (bv. vereist_finale op finale-die-nog-niet-gereden-is = iedereen weg).
     $perCat = [];
-    $streep = $finaleGereden ? (int)$regels['streepresultaten'] : 0;
+    // Streep wordt pas na finale toegepast, tenzij `streep_direct` aan staat —
+    // dan al tijdens de tussenstand (slechtste resultaten uit de tot nu toe
+    // gereden wedstrijden worden weggestreept).
+    $streepDirect = !empty($regels['streep_direct']);
+    $streep = ($finaleGereden || $streepDirect) ? (int)$regels['streepresultaten'] : 0;
     $minD   = $finaleGereden ? (int)$regels['min_deelnames']    : 0;
     $vereistFin = $finaleGereden ? !empty($regels['vereist_finale']) : false;
     foreach ($acc as $lic => $perCatMap) {
@@ -395,41 +547,62 @@ function berekenSerie(PDO $pdo, string $serieId): array {
             if ($minD > 0 && $row['deelnames'] < $minD) continue;
             if ($vereistFin && !$row['in_laatste']) continue;
 
-            // Punten per wedstrijd DESC — gebruikt voor streepresultaten én tie-break.
-            $rijdensPunten = array_values($row['per_wedstrijd']);
-            rsort($rijdensPunten);
-
-            // Streepresultaten: drop de N slechtste wedstrijden. Ook als de
-            // finale-wedstrijd toevallig de slechtste is, wordt die gewoon
-            // weggestreept — aanwezigheid bij finale (vereist_finale) is
-            // een separate regel en heeft geen invloed op wélke scores blijven.
-            if ($streep > 0 && count($rijdensPunten) > $streep) {
-                $teHouden = count($rijdensPunten) - $streep;
-                $gekozen = array_slice($rijdensPunten, 0, $teHouden);
-                $row['totaal'] = array_sum($gekozen);
-                $row['_beste_resultaten'] = $gekozen;
-            } else {
-                $row['_beste_resultaten'] = $rijdensPunten;
+            // Sorteer (comp_id, punten)-paren in tabel-richting: bij aflopende
+            // tabel staat hoog vooraan (DESC), bij oplopende tabel laag
+            // vooraan (ASC). De eerste N elementen zijn dan altijd de
+            // "beste" resultaten — gebruikt voor streepresultaten én
+            // tie-break. Werken op paren (i.p.v. losse waarden) is nodig
+            // omdat we ook willen vastleggen WELKE wedstrijden zijn
+            // weggestreept (voor weergave in de UI).
+            $paren = [];
+            foreach ($row['per_wedstrijd'] as $cid => $punten) {
+                $paren[] = ['comp_id' => $cid, 'punten' => (float)$punten];
             }
+            usort($paren, function($a, $b) use ($oplopend) {
+                return $oplopend ? ($a['punten'] <=> $b['punten'])
+                                 : ($b['punten'] <=> $a['punten']);
+            });
+
+            // Streepresultaten: drop de N slechtste wedstrijden (= laatste
+            // N paren na bovenstaande sort). Ook als de finale-wedstrijd
+            // toevallig de slechtste is, wordt die gewoon weggestreept —
+            // aanwezigheid bij finale (vereist_finale) is een separate regel.
+            $gestreeptIds = [];
+            if ($streep > 0 && count($paren) > $streep) {
+                $teHouden     = count($paren) - $streep;
+                $gekozen      = array_slice($paren, 0, $teHouden);
+                $weggestreept = array_slice($paren, $teHouden);
+                $row['totaal'] = array_sum(array_column($gekozen, 'punten'));
+                $row['_beste_resultaten'] = array_column($gekozen, 'punten');
+                $gestreeptIds = array_column($weggestreept, 'comp_id');
+            } else {
+                $row['_beste_resultaten'] = array_column($paren, 'punten');
+            }
+            $row['_gestreept'] = $gestreeptIds;
             $row['_laatste_punten'] = $row['per_wedstrijd'][$laatsteComp] ?? 0;
             $perCat[$cat][] = $row;
         }
     }
 
-    // Vergelijkfunctie: totaal DESC, daarna tie-break volgens regel.
-    $cmpTB = function($a, $b) use ($regels) {
+    // Vergelijkfunctie: totaal in de tabel-richting (oplopend = ASC, aflopend
+    // = DESC), daarna tie-break.
+    $cmpTB = function($a, $b) use ($regels, $oplopend) {
         $tb = $regels['tie_break'];
-        $cmpBeste = function($a, $b) {
-            // Vergelijk beste-resultaten-vector lexicografisch DESC.
+        $cmpBeste = function($a, $b) use ($oplopend) {
+            // Vergelijk beste-resultaten-vector lexicografisch in tabel-richting.
             $n = max(count($a['_beste_resultaten']), count($b['_beste_resultaten']));
             for ($i = 0; $i < $n; $i++) {
                 $av = $a['_beste_resultaten'][$i] ?? 0;
                 $bv = $b['_beste_resultaten'][$i] ?? 0;
-                if ($av != $bv) return $bv <=> $av;
+                if ($av != $bv) return $oplopend ? ($av <=> $bv) : ($bv <=> $av);
             }
             return 0;
         };
-        $cmpLaatste = fn($a, $b) => ($b['_laatste_punten'] ?? 0) <=> ($a['_laatste_punten'] ?? 0);
+        $cmpLaatste = function($a, $b) use ($oplopend) {
+            $av = $a['_laatste_punten'] ?? 0;
+            $bv = $b['_laatste_punten'] ?? 0;
+            return $oplopend ? ($av <=> $bv) : ($bv <=> $av);
+        };
         switch ($tb) {
             case 'laatste':                       return $cmpLaatste($a, $b);
             case 'beste_resultaten':              return $cmpBeste($a, $b);
@@ -444,8 +617,9 @@ function berekenSerie(PDO $pdo, string $serieId): array {
     // ex aequo. Zodra de finale binnen is: volledige sortering inclusief
     // tie-break voor unieke posities.
     foreach ($perCat as &$lijst) {
-        usort($lijst, function($a, $b) use ($cmpTB, $finaleGereden) {
-            $c = $b['totaal'] <=> $a['totaal'];
+        usort($lijst, function($a, $b) use ($cmpTB, $finaleGereden, $oplopend) {
+            $c = $oplopend ? ($a['totaal'] <=> $b['totaal'])
+                           : ($b['totaal'] <=> $a['totaal']);
             if ($c !== 0) return $c;
             return $finaleGereden ? $cmpTB($a, $b) : 0;
         });
@@ -524,7 +698,16 @@ function schrijfKlassement(PDO $pdo, array $serie, array $berekend): void {
             $vorigePos   = $pos;
 
             $kpId = substr(bin2hex(random_bytes(8)), 0, 16);
-            $detail = json_encode($r['per_wedstrijd'] ?? new stdClass(), JSON_UNESCAPED_UNICODE);
+            // JSON-detail: comp_id → punten (vlakke map, zoals voorheen) plus
+            // een aparte `_gestreept`-sleutel met een array van comp_ids die
+            // bij de streepresultaten zijn weggehaald. De `_`-prefix zorgt
+            // dat oudere lezers (die alleen comp_id-keys verwachten) deze
+            // sleutel negeren — de waarde matcht geen comp_id.
+            $detailObj = $r['per_wedstrijd'] ?? [];
+            if (!empty($r['_gestreept'])) {
+                $detailObj['_gestreept'] = array_values($r['_gestreept']);
+            }
+            $detail = json_encode($detailObj ?: new stdClass(), JSON_UNESCAPED_UNICODE);
             $ins->execute([
                 $kpId, $klId, $pos,
                 (string)($r['startnr'] ?? ''),

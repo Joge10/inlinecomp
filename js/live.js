@@ -12,6 +12,14 @@ let _liveLeesOnly    = false;   // geen schrijfrechten
 // Filter voor de heat-dropdown (○ / ◑ / ✓). Standaard alles aan.
 let _liveFilter = { geen_lijst: true, geen_resultaat: true, deels: true, compleet: true };
 
+// Afvalkoers-state per rit (key = ritIdx).
+//   afgevallen      : [{entry_id, plek, sanctie}] gesetste afvallingen, volgorde van toevoeging.
+//   voorlopig_2de   : [entry_id, ...] geselecteerde "2de"-rijders nog niet-geset.
+//   voorlopig_1ste  : [entry_id, ...] geselecteerde "1ste"-rijders nog niet-geset.
+//   geselecteerd    : [entry_id, ...] huidige startnummer-selectie.
+//   historie        : stack voor Undo, elk item = { type: 'set'|'2de'|'1ste'|'fault', entries }.
+let _afvalState = {};
+
 // ── Entry point ───────────────────────────────────────────────────────────────
 
 async function toonLivePagina() {
@@ -66,14 +74,22 @@ async function toonLivePagina() {
 
 // ── Hulpfuncties ──────────────────────────────────────────────────────────────
 
+// Een rijder is "afgehandeld" als hij een tijd, een sanctie OF — bij afvalkoers —
+// een afval_rang heeft (eliminatie zonder eindtijd telt ook als compleet).
+function _liveRijderAfgehandeld(r) {
+    return r.tijd_ms !== null
+        || (r.sanctie && r.sanctie !== '')
+        || (r.afval_rang != null);
+}
+
 function _liveRitCompleet(rit) {
     if (!rit.rijders || rit.rijders.length === 0) return false;
-    return rit.rijders.every(r => r.tijd_ms !== null || (r.sanctie && r.sanctie !== ''));
+    return rit.rijders.every(_liveRijderAfgehandeld);
 }
 
 function _liveRitDeels(rit) {
     if (!rit.rijders || rit.rijders.length === 0) return false;
-    const heeftIets = rit.rijders.some(r => r.tijd_ms !== null || (r.sanctie && r.sanctie !== ''));
+    const heeftIets = rit.rijders.some(_liveRijderAfgehandeld);
     return heeftIets && !_liveRitCompleet(rit);
 }
 
@@ -155,9 +171,12 @@ const _SANCTIE_RANKED_LAST = new Set(['DNF', 'DQ-TF', 'DNS']);
 const _SANCTIE_NOT_RANKED  = new Set(['DQ-SF', 'DQ-DF']);
 const _SANCTIE_WIST_TIJD   = new Set(['DNF', 'DQ-TF', 'DQ-SF', 'DQ-DF', 'DNS']); // FS niet!
 
-// gebruikGelijkspel=true: ex-aequo-ranking (1,2,3,4,5,5,7) voor full-final series.
-// gebruikGelijkspel=false (default): opeenvolgende posities zoals internationaal.
-function _berekenPosities(entries, gebruikGelijkspel = false) {
+// Ex-aequo-ranking volgens reglement: gelijke tijden krijgen dezelfde positie
+// (1,2,3,3,5). Aansluitend op api/_uitslag_helper.php::berekenExAequoRangs(),
+// die de uitslag-laag gebruikt — beide systemen (full-final én internationaal)
+// horen reglementair ex-aequo te krijgen bij 100% gelijke tijden.
+// De parameter blijft staan voor terugcompat; aanroepers geven 'true' mee.
+function _berekenPosities(entries, gebruikGelijkspel = true) {
     // Finishers: heeft tijd, niet ranked_last, niet not_ranked (FS wél meenemen op tijd)
     const finishers = entries
         .filter(e => e.tijd_ms > 0 && !_SANCTIE_RANKED_LAST.has(e.sanctie) && !_SANCTIE_NOT_RANKED.has(e.sanctie))
@@ -239,7 +258,7 @@ function _liveHerbereken(ritIdx) {
         return { entry_id: r.entry_id, tijd_ms: inp ? _parseTijdInvoer(inp.value) : null, sanctie: sel?.value || null, rondes };
     });
 
-    const posMap        = _berekenPosities(entries, _liveSysteem === 'full-final');
+    const posMap        = _berekenPosities(entries, true);
     const isPuntenkoers = rit.race_type === 'puntenkoers';
 
     // Update finish-badges (dropdowns worden NIET overschreven — die zijn via wissel beheerd)
@@ -470,11 +489,8 @@ function _liveBouwKaart(rit, idx, compact = false) {
                     `</div>`
                 );
             })() +
-            // ── Afvalkoers panel (placeholder) ───────────────────────────────
-            `<div class="live-av-panel" id="live-av-panel-${idx}"${isAfvalkoers ? '' : ' hidden'}>` +
-            `<div class="live-av-titel">🚫 Afvalkoers</div>` +
-            `<p class="live-av-info">Afvalkoers-invoer is in ontwikkeling.</p>` +
-            `</div>`;
+            // ── Afvalkoers panel ─────────────────────────────────────────────
+            _bouwAfvalPaneel(rit, idx, isAfvalkoers);
     } else {
         // Kaart zonder startlijst — placeholder slots
         const verwacht = rit.verwacht || 0;
@@ -904,7 +920,7 @@ function _livePanelHerbereken() {
         entries.push({ entry_id: entryId, tijd_ms: inp ? _parseTijdInvoer(inp.value) : null, sanctie: sel?.value || null, rondes });
     });
 
-    const posMap = _berekenPosities(entries, _liveSysteem === 'full-final');
+    const posMap = _berekenPosities(entries, true);
 
     // Overschrijf met finishpositie uit lokale state (weerspiegelt wisselaars)
     _liveRitten
@@ -1169,6 +1185,13 @@ function _liveBind(idx) {
             _liveSyncInvoer(r.entry_id, tijdInp?.value || '', sanctie);
             _liveOngeslagen = true;
             _liveHerbereken(idx);
+
+            // Afvalkoers: DNS = niet gestart = direct geklasseerd op huidige laagste
+            // plek. Bij wegnemen van DNS: rijder uit afgevallen-stack halen.
+            if (rit.race_type === 'afvalkoers') {
+                _afvalSyncSanctie(idx, r.entry_id, sanctie);
+                _afvalRerenderPaneel(idx);
+            }
         });
     });
 
@@ -1188,6 +1211,36 @@ function _liveBind(idx) {
         // Zoek rijder B (huidig houder van de gewenste positie)
         const riderB = rit.rijders.find(r => r.finishpositie === nieuwePosA && r.entry_id !== entryIdA);
         if (!riderB) { finSel.value = oudePosA; return; }
+
+        // Afvalkoers: swap is alléén toegestaan tussen twee afgevallen rijders
+        // (of, in theorie, twee finishgroep-rijders — die hebben geen afval_rang).
+        // Een afgevallene wisselen met een sprinter zou de afgevallen-stack
+        // inconsistent maken (de "nog-in-koers" zou plots een afval_rang krijgen),
+        // dus dat blokkeren we met een silent rollback.
+        if (rit.race_type === 'afvalkoers') {
+            const st = _afvalState[idx];
+            const aIdx = st ? st.afgevallen.findIndex(a => a.entry_id === entryIdA) : -1;
+            const bIdx = st ? st.afgevallen.findIndex(a => a.entry_id === riderB.entry_id) : -1;
+            const aIsAfgevallen = aIdx !== -1;
+            const bIsAfgevallen = bIdx !== -1;
+            if (aIsAfgevallen !== bIsAfgevallen) {
+                // Eén afgevallene + één sprinter: niet ondersteund. Silent rollback.
+                finSel.value = oudePosA;
+                return;
+            }
+            if (aIsAfgevallen && bIsAfgevallen) {
+                // Beide afgevallen: wissel ook de plek-waarden in afgevallen-stack,
+                // anders zet de eerstvolgende save-payload de oude rang terug.
+                const plekA = st.afgevallen[aIdx].plek;
+                const plekB = st.afgevallen[bIdx].plek;
+                st.afgevallen[aIdx].plek = plekB;
+                st.afgevallen[bIdx].plek = plekA;
+                // Rijder-objecten ook bijwerken zodat een rerender van het paneel
+                // (bv. via _afvalRerenderPaneel) de juiste rang toont.
+                riderA.afval_rang = plekB;
+                riderB.afval_rang = plekA;
+            }
+        }
 
         const oudeRondesA = riderA.rondes;
         const oudeRondesB = riderB.rondes;
@@ -1293,6 +1346,9 @@ function _liveBind(idx) {
     _liveHerbereken(idx);
     el('live-btn-opslaan-' + idx)?.addEventListener('click', () => _liveOpslaanRit(idx));
 
+    // Afvalkoers-paneel events binden (alleen actief als rit afvalkoers is)
+    _afvalBindKnoppen(idx);
+
     // Race-type selector (lange-afstand heats)
     el('live-race-type-' + idx)?.addEventListener('change', async function () {
         const nieuweType = this.value;
@@ -1304,6 +1360,18 @@ function _liveBind(idx) {
         const avPanel = el('live-av-panel-' + idx);
         if (pkPanel) pkPanel.hidden = nieuweType !== 'puntenkoers';
         if (avPanel) avPanel.hidden = nieuweType !== 'afvalkoers';
+        // Bij wisselen NAAR afvalkoers: paneel-inhoud opbouwen + handlers binden.
+        // Bij wisselen WEG van afvalkoers: state opschonen zodat eventuele restanten
+        // niet onbedoeld worden meegestuurd bij opslaan.
+        if (nieuweType === 'afvalkoers') {
+            const tijdelijkeRit = { ..._liveRitten[idx], race_type: 'afvalkoers' };
+            if (avPanel) {
+                avPanel.outerHTML = _bouwAfvalPaneel(tijdelijkeRit, idx, true);
+                _afvalBindKnoppen(idx);
+            }
+        } else {
+            delete _afvalState[idx];
+        }
 
         // Opslaan in DB
         try {
@@ -1403,6 +1471,352 @@ function _liveBind(idx) {
 // _livePuntenOpslaan is verwijderd — puntenkoers-punten worden nu meegenomen
 // in _liveOpslaanRit samen met tijden en sancties, zodat er één Opslaan-knop is.
 
+// ── Afvalkoers helpers ────────────────────────────────────────────────────────
+
+// Bouwt de afval-state voor een rit. Bij eerste aanroep: reconstrueer afgevallen-stack
+// uit rit.rijders[].afval_rang (DB-data). Bij latere aanroepen: bestaande state
+// behouden — anders zouden lokale wijzigingen (Set/By Fault/Undo) bij elke rerender
+// gewist worden.
+function _afvalInitVoorRit(ritIdx) {
+    const rit = _liveRitten[ritIdx];
+    if (!rit) return null;
+
+    if (_afvalState[ritIdx]) {
+        // State bestaat al — niet overschrijven met (mogelijk verouderde) DB-data.
+        return _afvalState[ritIdx];
+    }
+
+    // Eerste init: bouw afgevallen-stack uit DB-data.
+    // Sortering: afval_rang DESC (eerste afvaller = hoogste rang, links in de UI-rij).
+    const afgevallen = (rit.rijders || [])
+        .filter(r => r.afval_rang != null)
+        .map(r => ({ entry_id: r.entry_id, plek: r.afval_rang, sanctie: r.sanctie || null }))
+        .sort((a, b) => b.plek - a.plek);
+
+    _afvalState[ritIdx] = {
+        afgevallen,
+        voorlopig_2de:  [],
+        voorlopig_1ste: [],
+        geselecteerd:   [],
+        historie:       [],
+    };
+    return _afvalState[ritIdx];
+}
+
+// Geeft entry_ids terug van rijders die NOG IN KOERS zijn:
+// niet in afgevallen-stack en niet in voorlopig_2de/voorlopig_1ste.
+function _afvalNogInKoersIds(ritIdx) {
+    const rit = _liveRitten[ritIdx];
+    const st  = _afvalState[ritIdx];
+    if (!rit || !st) return [];
+    const uit = new Set([
+        ...st.afgevallen.map(a => a.entry_id),
+        ...st.voorlopig_2de,
+        ...st.voorlopig_1ste,
+    ]);
+    return (rit.rijders || []).map(r => r.entry_id).filter(id => !uit.has(id));
+}
+
+// Volgende beschikbare afval-plek = aantal-nog-in-koers (na voorlopige toewijzing weg).
+// Bij ex-aequo K rijders: gedeelde plek = (volgende-vrij) - K + 1, daarna volgende-vrij - K.
+function _afvalVolgendePlek(ritIdx) {
+    return _afvalNogInKoersIds(ritIdx).length;
+}
+
+// Pas voorlopige '2de'-selectie toe: rijders krijgen tijdelijk de huidige laatste
+// vrije plekken. Knop '2de' wordt na deze actie disabled tot Set/Undo.
+function _afvalKies2de(ritIdx) {
+    const st = _afvalState[ritIdx];
+    if (!st || st.voorlopig_2de.length > 0 || st.geselecteerd.length === 0) return;
+    st.voorlopig_2de = [...st.geselecteerd];
+    st.geselecteerd  = [];
+    st.historie.push({ type: 'kies-2de', entries: [...st.voorlopig_2de] });
+}
+
+function _afvalKies1ste(ritIdx) {
+    const st = _afvalState[ritIdx];
+    if (!st || st.voorlopig_1ste.length > 0 || st.geselecteerd.length === 0) return;
+    st.voorlopig_1ste = [...st.geselecteerd];
+    st.geselecteerd   = [];
+    st.historie.push({ type: 'kies-1ste', entries: [...st.voorlopig_1ste] });
+}
+
+// Set: voorlopige selecties definitief maken (ronde afgesloten).
+// Plek-toekenning: 2de-groep krijgt eerst (slechtste plekken), dan 1ste-groep.
+function _afvalSet(ritIdx) {
+    const st = _afvalState[ritIdx];
+    if (!st || (st.voorlopig_2de.length === 0 && st.voorlopig_1ste.length === 0)) return;
+
+    const nogVrij = _afvalNogInKoersIds(ritIdx).length
+                  + st.voorlopig_2de.length + st.voorlopig_1ste.length;
+    // 2de-groep: K rijders, gedeelde plek = nogVrij - K + 1
+    const k2 = st.voorlopig_2de.length;
+    const plek2 = nogVrij - k2 + 1;
+    const ronde = [];
+    st.voorlopig_2de.forEach(eid => {
+        ronde.push({ entry_id: eid, plek: plek2, sanctie: null });
+    });
+    // 1ste-groep: K1 rijders, gedeelde plek = (nogVrij - k2) - K1 + 1
+    const k1 = st.voorlopig_1ste.length;
+    const plek1 = (nogVrij - k2) - k1 + 1;
+    st.voorlopig_1ste.forEach(eid => {
+        ronde.push({ entry_id: eid, plek: plek1, sanctie: null });
+    });
+    // Voeg toe aan afgevallen-stack
+    ronde.forEach(item => st.afgevallen.unshift(item));
+    // Reset voorlopig en log undo
+    st.historie.push({ type: 'set', entries: ronde });
+    st.voorlopig_2de  = [];
+    st.voorlopig_1ste = [];
+    st.geselecteerd   = [];
+}
+
+// By-fault: jury wijst rijder(s) aan voor afvalling met DQ-TF, krijgen huidige
+// laatste vrije plek (of bij meerdere: ex-aequo gedeelde plek). Direct geset,
+// geen voorlopige tussenstap.
+function _afvalByFault(ritIdx) {
+    const st = _afvalState[ritIdx];
+    if (!st || st.geselecteerd.length === 0) return;
+    const nogVrij = _afvalNogInKoersIds(ritIdx).length;
+    const k = st.geselecteerd.length;
+    const plek = nogVrij - k + 1;
+    const ronde = st.geselecteerd.map(eid => ({
+        entry_id: eid, plek, sanctie: 'DQ-TF',
+    }));
+    ronde.forEach(item => st.afgevallen.unshift(item));
+    st.historie.push({ type: 'fault', entries: ronde });
+    st.geselecteerd = [];
+}
+
+// Undo: rolt de laatste historie-actie terug.
+// Let op: 'dns'-acties komen uit een sanctie-wijziging in de heat-tabel —
+// bij undo halen we de rijder uit de afgevallen-stack, maar de sanctie-dropdown
+// blijft op DNS staan. De gebruiker moet de sanctie zelf terugzetten.
+function _afvalUndo(ritIdx) {
+    const st = _afvalState[ritIdx];
+    if (!st || st.historie.length === 0) return;
+    const laatste = st.historie.pop();
+    if (laatste.type === 'kies-2de') {
+        st.voorlopig_2de = [];
+    } else if (laatste.type === 'kies-1ste') {
+        st.voorlopig_1ste = [];
+    } else if (laatste.type === 'set' || laatste.type === 'fault' || laatste.type === 'dns') {
+        const ids = new Set(laatste.entries.map(e => e.entry_id));
+        st.afgevallen = st.afgevallen.filter(a => !ids.has(a.entry_id));
+    }
+}
+
+// Toggle een rijder in de huidige selectie.
+function _afvalToggleSelectie(ritIdx, entryId) {
+    const st = _afvalState[ritIdx];
+    if (!st) return;
+    const idx = st.geselecteerd.indexOf(entryId);
+    if (idx >= 0) st.geselecteerd.splice(idx, 1);
+    else          st.geselecteerd.push(entryId);
+}
+
+// Sync een sanctie-wijziging in de heat-tabel met de afval-state. Specifiek voor
+// DNS: rijder is niet gestart, wordt direct geklasseerd op de huidige laagste plek.
+// Andere wist-tijd-sancties (DNF, DQ-*) worden NIET automatisch verwerkt — die
+// horen via de By Fault-knop of via expliciete actie te lopen.
+function _afvalSyncSanctie(ritIdx, entryId, nieuweSanctie) {
+    const st = _afvalState[ritIdx];
+    if (!st) return;
+
+    const reedsAfgevallen = st.afgevallen.find(a => a.entry_id === entryId);
+
+    if (nieuweSanctie === 'DNS') {
+        if (reedsAfgevallen) {
+            // Al in stack — alleen sanctie bijwerken
+            reedsAfgevallen.sanctie = 'DNS';
+            return;
+        }
+        // Niet meer geselecteerd of voorlopig — opschonen
+        st.geselecteerd   = st.geselecteerd.filter(id => id !== entryId);
+        st.voorlopig_2de  = st.voorlopig_2de.filter(id => id !== entryId);
+        st.voorlopig_1ste = st.voorlopig_1ste.filter(id => id !== entryId);
+        // Toevoegen op huidige laagste plek
+        const plek = _afvalNogInKoersIds(ritIdx).length;
+        st.afgevallen.unshift({ entry_id: entryId, plek, sanctie: 'DNS' });
+        st.historie.push({ type: 'dns', entries: [{ entry_id: entryId, plek, sanctie: 'DNS' }] });
+        return;
+    }
+
+    // Sanctie weggehaald of gewijzigd weg van DNS → rijder uit afgevallen-stack
+    // halen ALLEEN als hij eerder via DNS-flow is toegevoegd (sanctie='DNS' in stack).
+    if (reedsAfgevallen && reedsAfgevallen.sanctie === 'DNS') {
+        st.afgevallen = st.afgevallen.filter(a => a.entry_id !== entryId);
+        // Optionele undo-traceer: laatste DNS-actie voor deze entry vinden en verwijderen
+        // (eenvoudig: gewoon één DNS-historie-event ongedaan)
+        for (let i = st.historie.length - 1; i >= 0; i--) {
+            if (st.historie[i].type === 'dns' &&
+                st.historie[i].entries[0]?.entry_id === entryId) {
+                st.historie.splice(i, 1);
+                break;
+            }
+        }
+    }
+}
+
+// Bouwt de HTML voor het afvalkoers-paneel. Wordt aangeroepen vanuit _liveBouwKaart.
+// 'tonen' = false → paneel hidden (niet-afvalkoers ritten).
+function _bouwAfvalPaneel(rit, idx, tonen) {
+    const hiddenAttr = tonen ? '' : ' hidden';
+    if (!tonen) {
+        return `<div class="live-av-panel" id="live-av-panel-${idx}"${hiddenAttr}></div>`;
+    }
+
+    _afvalInitVoorRit(idx);
+    const st = _afvalState[idx];
+    if (!st) return `<div class="live-av-panel" id="live-av-panel-${idx}"></div>`;
+
+    const rijderMap = new Map((rit.rijders || []).map(r => [r.entry_id, r]));
+    const nogIds   = _afvalNogInKoersIds(idx);
+    const nogVrij  = nogIds.length;
+    const k2       = st.voorlopig_2de.length;
+    const k1       = st.voorlopig_1ste.length;
+    const plek2    = k2 > 0 ? (nogVrij + k2 + k1) - k2 + 1 : null; // tijdelijke plek voor 2de-groep
+    const plek1    = k1 > 0 ? (nogVrij + k1) - k1 + 1 : null;       // tijdelijke plek voor 1ste-groep
+
+    // Header
+    const hdr = `<div class="live-av-header">
+        <span class="live-av-tel"><b>Nog in koers:</b> ${nogVrij}</span>
+        <span class="live-av-tel"><b>Volgende plek:</b> ${nogVrij > 0 ? nogVrij : '—'}</span>
+    </div>`;
+
+    // Afgevallen-rij (zelf gesetste afval-kaartjes)
+    const afgHtml = st.afgevallen.length === 0
+        ? `<div class="live-av-leeg">Nog geen afvallingen.</div>`
+        : st.afgevallen.map(a => {
+            const r = rijderMap.get(a.entry_id);
+            const snr = r?.startnummer ?? '?';
+            const cls = a.sanctie === 'DQ-TF' ? ' live-av-fault' : '';
+            return `<button class="live-av-kaart-uit${cls}" disabled>` +
+                `<span class="live-av-snr">${escHtml(String(snr))}</span>` +
+                `<span class="live-av-plek">#${a.plek}</span>` +
+                (a.sanctie === 'DQ-TF' ? `<span class="live-av-faultlbl">DQ-TF</span>` : '') +
+                `</button>`;
+        }).join('');
+
+    // Knoppen-rij
+    const btn2deDis = (st.voorlopig_2de.length > 0 || st.geselecteerd.length === 0) ? ' disabled' : '';
+    const btn1stDis = (st.voorlopig_1ste.length > 0 || st.geselecteerd.length === 0) ? ' disabled' : '';
+    const btnFaultDis = st.geselecteerd.length === 0 ? ' disabled' : '';
+    const btnSetDis = (st.voorlopig_2de.length === 0 && st.voorlopig_1ste.length === 0) ? ' disabled' : '';
+    const btnUndoDis = st.historie.length === 0 ? ' disabled' : '';
+
+    const knoppenHtml = `<div class="live-av-knoppen">
+        <button class="live-av-btn live-av-btn-fault" data-act="fault"${btnFaultDis}>🚩 By Fault</button>
+        <button class="live-av-btn live-av-btn-undo" data-act="undo"${btnUndoDis}>↶ Undo</button>
+        <button class="live-av-btn live-av-btn-set" data-act="set"${btnSetDis}>✓ Set</button>
+        <span class="live-av-spacer"></span>
+        <button class="live-av-btn live-av-btn-1ste" data-act="1ste"${btn1stDis}>1ste</button>
+        <button class="live-av-btn live-av-btn-2de"  data-act="2de"${btn2deDis}>2de</button>
+    </div>`;
+
+    // Helper: format één rijder als "snr — naam"
+    const fmtRijder = (eid) => {
+        const r = rijderMap.get(eid);
+        const snr = r?.startnummer ?? '?';
+        const naam = r?.full_name ?? '';
+        return naam ? `${snr} — ${escHtml(naam)}` : String(snr);
+    };
+
+    // Voorlopige rijen — alleen tonen als er iets in zit
+    let voorlopigHtml = '';
+    if (st.voorlopig_1ste.length > 0) {
+        const items = st.voorlopig_1ste.map(eid =>
+            `<div class="live-av-voorlopig-item">${fmtRijder(eid)}</div>`).join('');
+        voorlopigHtml += `<div class="live-av-voorlopig-rij">
+            <b>Voorlopig 1ste${plek1 != null ? ` (plek ${plek1})` : ''}:</b>
+            ${items}
+        </div>`;
+    }
+    if (st.voorlopig_2de.length > 0) {
+        const items = st.voorlopig_2de.map(eid =>
+            `<div class="live-av-voorlopig-item">${fmtRijder(eid)}</div>`).join('');
+        voorlopigHtml += `<div class="live-av-voorlopig-rij">
+            <b>Voorlopig 2de${plek2 != null ? ` (plek ${plek2})` : ''}:</b>
+            ${items}
+        </div>`;
+    }
+
+    // Nog-in-koers grid (klikbare startnummer-kaartjes)
+    const nogHtml = nogIds.length === 0
+        ? `<div class="live-av-leeg">Geen rijders meer over.</div>`
+        : nogIds.map(eid => {
+            const r = rijderMap.get(eid);
+            const snr = r?.startnummer ?? '?';
+            const isSel = st.geselecteerd.includes(eid);
+            const selCls = isSel ? ' live-av-kaart-sel' : '';
+            return `<button class="live-av-kaart${selCls}" data-entry="${eid}" type="button">` +
+                `<span class="live-av-snr">${escHtml(String(snr))}</span>` +
+                `</button>`;
+        }).join('');
+
+    // Geselecteerd-balk — startnummer + naam, één per regel als controle-referentie
+    let selHtml;
+    if (st.geselecteerd.length === 0) {
+        selHtml = `<div class="live-av-sel-balk"><b>Geselecteerd:</b> —</div>`;
+    } else {
+        const items = st.geselecteerd.map(eid =>
+            `<div class="live-av-sel-item">${fmtRijder(eid)}</div>`).join('');
+        selHtml = `<div class="live-av-sel-balk"><b>Geselecteerd:</b>${items}</div>`;
+    }
+
+    return `<div class="live-av-panel" id="live-av-panel-${idx}">
+        <div class="live-av-titel">🚫 Afvalkoers</div>
+        ${hdr}
+        <div class="live-av-afgevallen-rij">${afgHtml}</div>
+        ${knoppenHtml}
+        ${voorlopigHtml}
+        <div class="live-av-grid">${nogHtml}</div>
+        ${selHtml}
+    </div>`;
+}
+
+// Re-render alleen het afval-paneel binnen één heat-card (zonder hele carousel-rebuild).
+function _afvalRerenderPaneel(idx) {
+    const rit = _liveRitten[idx];
+    if (!rit) return;
+    const oude = el('live-av-panel-' + idx);
+    if (!oude) return;
+    const isAfvalkoers = (rit.race_type === 'afvalkoers');
+    const nieuwe = _bouwAfvalPaneel(rit, idx, isAfvalkoers);
+    oude.outerHTML = nieuwe;
+    _afvalBindKnoppen(idx);
+}
+
+// Bind eventhandlers aan het afval-paneel van rit idx.
+function _afvalBindKnoppen(idx) {
+    const paneel = el('live-av-panel-' + idx);
+    if (!paneel || paneel.hidden) return;
+
+    // Klik op een nog-in-koers startnummer-kaart → toggle selectie
+    paneel.querySelectorAll('.live-av-kaart').forEach(btn => {
+        btn.addEventListener('click', () => {
+            const eid = parseInt(btn.dataset.entry);
+            if (!eid) return;
+            _afvalToggleSelectie(idx, eid);
+            _afvalRerenderPaneel(idx);
+        });
+    });
+
+    // Klik op actie-knop (1ste/2de/By Fault/Set/Undo)
+    paneel.querySelectorAll('.live-av-btn').forEach(btn => {
+        btn.addEventListener('click', () => {
+            const act = btn.dataset.act;
+            if (act === '2de')        _afvalKies2de(idx);
+            else if (act === '1ste')  _afvalKies1ste(idx);
+            else if (act === 'fault') _afvalByFault(idx);
+            else if (act === 'set')   _afvalSet(idx);
+            else if (act === 'undo')  _afvalUndo(idx);
+            _liveOngeslagen = true;
+            _afvalRerenderPaneel(idx);
+        });
+    });
+}
+
 // Bereken punten-gebaseerde ranking en update finish-badges in heat card én linker panel.
 // Leest punten uit hidden inputs (real-time). Berekent tijdpositie dynamisch voor tiebreaking.
 // Volgorde: punten DESC → tijdpositie ASC (voor 0-puntenrijders en bij ex-aequo punten).
@@ -1431,7 +1845,7 @@ function _liveUpdatePuntenBadges(ritIdx) {
         const rondes = rnInp ? (rnInp.value !== '' ? (parseInt(rnInp.value) || null) : null) : (r.rondes ?? null);
         return { entry_id: r.entry_id, tijd_ms: inp ? _parseTijdInvoer(inp.value) : null, sanctie: sel?.value || null, rondes };
     });
-    const tijdPosMap = _berekenPosities(tijdEntries, _liveSysteem === 'full-final');
+    const tijdPosMap = _berekenPosities(tijdEntries, true);
 
     // 3. Alle rijders samenvoegen en sorteren: punten DESC → sortPos ASC
     //    sortPos = finishpositie (wissel-gecorrigeerd) als beschikbaar, anders rondes+tijd
@@ -2311,22 +2725,48 @@ async function _liveOpslaanRit(ritIdx) {
     const btn = el('live-btn-opslaan-' + ritIdx);
     if (btn) { btn.disabled = true; btn.textContent = 'Bezig…'; }
 
+    // Bij afvalkoers: per rijder de afval_rang (en eventueel sanctie DQ-TF voor by-fault)
+    // ophalen uit _afvalState. Voorlopige selecties (niet-gesette 1ste/2de) tellen NIET mee
+    // bij opslaan — alleen wat in afgevallen-stack staat is definitief.
+    const isAfvalkoers = rit.race_type === 'afvalkoers';
+    const afvalMap = new Map(); // entry_id → { plek, sanctie }
+    if (isAfvalkoers) {
+        const st = _afvalState[ritIdx];
+        (st?.afgevallen || []).forEach(a => {
+            afvalMap.set(a.entry_id, { plek: a.plek, sanctie: a.sanctie });
+        });
+    }
+
     // Verzamel resultaten uit DOM (inclusief rondes)
     const results = rit.rijders.map(r => {
         const rij        = document.querySelector(`[data-entry="${r.entry_id}"]`);
         const tijdInp    = rij?.querySelector('.live-tijd-inp');
         const sanctieSel = rij?.querySelector('.live-sanctie-sel');
         const tijdMs     = tijdInp ? _parseTijdInvoer(tijdInp.value) : null;
-        const sanctie    = sanctieSel ? sanctieSel.value : '';
-        const tijdOpslaan = _SANCTIE_WIST_TIJD.has(sanctie) ? null : (tijdMs ?? null);
-        const rondesInp   = rij?.querySelector('.live-rondes-inp');
-        const rondes      = rondesInp ? (rondesInp.value !== '' ? (parseInt(rondesInp.value) || null) : null) : (r.rondes ?? null);
+        const sanctieDom = sanctieSel ? sanctieSel.value : '';
+        const rondesInp  = rij?.querySelector('.live-rondes-inp');
+        const rondes     = rondesInp ? (rondesInp.value !== '' ? (parseInt(rondesInp.value) || null) : null) : (r.rondes ?? null);
+
+        // Bij afvalkoers: afval-state wint van DOM-sanctie/tijd (anders zou by-fault DQ-TF
+        // door _SANCTIE_WIST_TIJD de tijd wegblazen, terwijl we 'm willen bewaren).
+        const afval = afvalMap.get(r.entry_id);
+        if (isAfvalkoers && afval) {
+            return {
+                entry_id:   r.entry_id,
+                tijd_ms:    tijdMs ?? null,           // tijd uit CSV mag blijven voor archief
+                sanctie:    afval.sanctie || null,    // DQ-TF voor by-fault, anders null
+                rondes,
+                afval_rang: afval.plek,
+            };
+        }
+
+        const tijdOpslaan = _SANCTIE_WIST_TIJD.has(sanctieDom) ? null : (tijdMs ?? null);
         return {
-            entry_id: r.entry_id,
-            tijd_ms:  tijdOpslaan,
-            sanctie:  sanctie || null,
-            notitie:  r.notitie || '',
+            entry_id:   r.entry_id,
+            tijd_ms:    tijdOpslaan,
+            sanctie:    sanctieDom || null,
             rondes,
+            afval_rang: null, // niet-afvalkoers OF afvalkoers-finishgroep
         };
     });
 
@@ -2363,7 +2803,7 @@ async function _liveOpslaanRit(ritIdx) {
 
         // Lokale state bijwerken — gebruik finishposities van server (correct voor PK/rondes)
         const serverFp  = data.finishposities ?? {};
-        const posMap    = _berekenPosities(results, _liveSysteem === 'full-final'); // fallback
+        const posMap    = _berekenPosities(results, true); // fallback
         rit.rijders = rit.rijders.map(r => {
             const gesav = results.find(x => x.entry_id === r.entry_id);
             if (!gesav) return r;

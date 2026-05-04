@@ -349,8 +349,14 @@ function berekenInternationaalResultaat(array $rondeData): array {
                 '_ranked_last'   => $isRankedLast,
                 'rondes'         => isset($r['rondes']) && $r['rondes'] !== null ? (int)$r['rondes'] : null,
                 'pk_punten'      => isset($r['pk_punten']) && $r['pk_punten'] !== null ? (float)$r['pk_punten'] : null,
+                'afval_rang'     => isset($r['afval_rang']) && $r['afval_rang'] !== null ? (int)$r['afval_rang'] : null,
             ];
         }
+
+        // Afvalkoers-detectie: minstens 1 rijder met afval_rang in deze ronde.
+        // Bij afvalkoers leidt finishpositie de ranking — sprinters hebben pos 1..X
+        // (uit rondes/tijd-sortering bij save), afvallers hebben pos = afval_rang.
+        $isAfvalkoers = !empty(array_filter($uitgevallen, fn($r) => $r['afval_rang'] !== null));
 
         // Sorteer uitgevallen rijders per ranking method
         // Eerst finishers, dan ranked_last
@@ -373,11 +379,20 @@ function berekenInternationaalResultaat(array $rondeData): array {
             $heeftRnd = $allesGevuld && $maxRnd > 0;
         }
 
-        usort($uitgevallen, function ($a, $b) use ($rankingMethod, $isPK, $heeftRnd) {
+        usort($uitgevallen, function ($a, $b) use ($rankingMethod, $isPK, $heeftRnd, $isAfvalkoers) {
             // ranked_last altijd onderaan
             if ($a['_ranked_last'] && !$b['_ranked_last']) return 1;
             if (!$a['_ranked_last'] && $b['_ranked_last']) return -1;
             if ($a['_ranked_last'] && $b['_ranked_last']) return 0; // ex-aequo
+
+            // Afvalkoers: finishpositie ASC is leidend — sprinters (1..X) bovenaan,
+            // afvallers (X+1..N op afval_rang) daaronder. Geen tijd/rondes-fallback,
+            // want afvallers hebben die typisch niet ingevuld.
+            if ($isAfvalkoers) {
+                $pA = $a['finishpositie'] ?? PHP_INT_MAX;
+                $pB = $b['finishpositie'] ?? PHP_INT_MAX;
+                return $pA <=> $pB;
+            }
 
             // Puntenkoers: punten DESC → rondes DESC → tijd ASC
             if ($isPK) {
@@ -424,7 +439,12 @@ function berekenInternationaalResultaat(array $rondeData): array {
                 $r['rang'] = $rangOffset + 1;
             } else {
                 $prev = $uitgevallen[$i - 1];
-                if ($isPK) {
+                if ($isAfvalkoers) {
+                    // Ex-aequo bij afvalkoers = gelijke finishpositie (= gelijke
+                    // afval_rang, bv. een groep die jury samen eruit haalt).
+                    $exAequo = $r['finishpositie'] !== null
+                            && $r['finishpositie'] === $prev['finishpositie'];
+                } elseif ($isPK) {
                     $exAequo = ($r['pk_punten'] ?? null) === ($prev['pk_punten'] ?? null)
                             && ($r['rondes'] ?? null) === ($prev['rondes'] ?? null)
                             && $r['tijd_ms'] === $prev['tijd_ms'];

@@ -24,6 +24,7 @@ let heeftWijzigingen = false; // onopgeslagen bewerkingen in huidige sessie
 let entriesVersion   = null;  // voor optimistic locking bij import
 let gewijzigdeRijen  = new Set(); // license_keys van gewijzigde (nog niet opgeslagen) rijen
 let huidigOrganisatie = null; // organisatie-object van huidig geselecteerde wedstrijd
+let huidigBaan        = null; // baan-object (gastheer-vereniging + logo) van huidige wedstrijd
 let dcDistances       = {};   // {dc_id: [{id, number, name, value_meters}]} – KNSB afstanden per DC
 let standDatum        = '';   // tijdstip KNSB-ophaling voor tekenlijst (dd-mm-yyyy HH:mm)
 let dbStandDatum      = '';   // tijdstip laatste DB-import voor tekenlijst (dd-mm-yyyy HH:mm)
@@ -176,18 +177,45 @@ function escHtml(str) {
         .replace(/"/g,'&quot;');
 }
 
-// ── Gedeelde org-logo header + sponsor-footer voor print ─────────────────────
-// Gebruikt door: uitslag, tijdschema, tekenlijsten, deelnemerslijst
-// Retourneert { orgLogoHtml, footerHtml } — volledig inline-styled,
-// geen externe CSS nodig.
+// ── Gedeelde org-logo + baan-logo header + sponsor-footer voor print ─────────
+// Gebruikt door: uitslag, tijdschema, tekenlijsten, deelnemerslijst, ranking,
+// print-center shared-header.
+// Retourneert { orgLogoHtml, baanLogoHtml, footerHtml } — volledig inline-styled,
+// geen externe CSS nodig. Plaats baanLogoHtml links in de header (= gastheer-
+// vereniging) en orgLogoHtml rechts (= hoofdorganisator).
+// ── Info-pagina vullen ────────────────────────────────────────────────────────
+function toonInfoPagina() {
+    const ROL_LABELS = {
+        owner: 'Owner', admin: 'Admin', importer: 'Importer',
+        planner: 'Planner', timer: 'Timer', viewer: 'Viewer',
+    };
+    const userEl = el('info-user');
+    const rolEl  = el('info-rol');
+    if (userEl) userEl.textContent = currentUser?.naam || currentUser?.username || '—';
+    if (rolEl)  rolEl.textContent  = ROL_LABELS[currentUser?.role] || currentUser?.role || '—';
+
+    const brEl = el('info-browser');
+    if (brEl) {
+        const ua  = navigator.userAgent;
+        const m   = /(Edg|Chrome|Firefox|Safari)\/(\d+)/.exec(ua);
+        brEl.textContent = m ? `${m[1]} ${m[2]}` : ua.substring(0, 80);
+    }
+    const onEl = el('info-online');
+    if (onEl) onEl.textContent = navigator.onLine ? 'online' : 'offline';
+}
+
 function bouwOrgHeaderFooter(esc) {
     const baseUrl = new URL('.', window.location.href).href;
     const org = huidigOrganisatie;
+    const baan = (typeof huidigBaan !== 'undefined') ? huidigBaan : null;
     // Cache-buster zodat een nieuw geüpload logo niet uit de browser-cache blijft
     // hangen in prints. Gebruikt updated_at indien aanwezig (stabiel = cache-vriendelijk
     // als er niks verandert), anders Date.now() als veilige fallback.
     const cb = encodeURIComponent(
         org?.updated_at ?? org?.logo_updated_at ?? String(Date.now())
+    );
+    const baanCb = encodeURIComponent(
+        baan?.logo_updated_at ?? baan?.updated_at ?? String(Date.now())
     );
 
     // Organisatie-logo (rechtsboven in header)
@@ -196,6 +224,19 @@ function bouwOrgHeaderFooter(esc) {
           `<img src="${esc(baseUrl + org.logo_path)}?v=${cb}" alt="${esc(org.naam)}" ` +
           `style="height:20mm;width:auto;max-width:50mm;display:inline-block;object-fit:contain;vertical-align:top;"></span>`
         : (org?.naam ? `<span style="font-size:8pt;color:#555;font-style:italic;">${esc(org.naam)}</span>` : '');
+
+    // Baan-logo (linksboven in header — gastheer-vereniging). Alleen het logo
+    // zelf, geen bijschrift; print blijft zo schoner. Heeft de baan geen logo
+    // maar wel een vereniging-naam? Dan tonen we die als kleine tekst zodat
+    // duidelijk is welke club gastheer is.
+    let baanLogoHtml = '';
+    if (baan?.logo_path) {
+        baanLogoHtml = `<span style="display:block;height:20mm;max-width:50mm;overflow:hidden;line-height:0;text-align:left;">` +
+            `<img src="${esc(baseUrl + baan.logo_path)}?v=${baanCb}" alt="${esc(baan.vereniging_naam ?? baan.naam ?? '')}" ` +
+            `style="height:20mm;width:auto;max-width:50mm;display:inline-block;object-fit:contain;vertical-align:top;"></span>`;
+    } else if (baan?.vereniging_naam) {
+        baanLogoHtml = `<span style="display:block;font-size:9pt;font-weight:600;color:#1a3a5c;line-height:1.2;">${esc(baan.vereniging_naam)}</span>`;
+    }
 
     // Sponsor-footer (volledig inline-styled)
     let footerHtml = '';
@@ -215,7 +256,7 @@ function bouwOrgHeaderFooter(esc) {
         footerHtml = `<div class="org-sponsor-footer" style="margin-top:3mm;border-top:1px solid #ddd;padding-top:2mm;display:flex;align-items:center;justify-content:center;gap:5mm;flex-wrap:wrap;">${sponsorItems}</div>`;
     }
 
-    return { orgLogoHtml, footerHtml };
+    return { orgLogoHtml, baanLogoHtml, footerHtml };
 }
 
 // Vult de ts-comp-naam / ts-comp-meta header op een pagina met de huidige wedstrijd
@@ -416,6 +457,7 @@ async function selectWedstrijd(card, comp) {
         if (vData.error) throw new Error(vData.error);
         vergelijkData     = vData.groepen     ?? vData; // backwards compat
         huidigOrganisatie = vData.organisatie ?? null;
+        huidigBaan        = vData.baan        ?? null;
         standDatum        = vData.knsb_stand  ?? '';
         dbStandDatum      = vData.db_stand    ?? '';
         entriesVersion    = vData.entries_version ?? 0;
@@ -452,6 +494,7 @@ function resetImportModule(verwijderdId) {
     standDatum        = '';
     dbStandDatum      = '';
     huidigOrganisatie = null;
+    huidigBaan        = null;
     startlijstCache   = {};
 
     // Actieve kaart deselecteren
@@ -578,6 +621,7 @@ function initNav() {
             if (page === 'live')         { vulPaginaHeader('live-comp-naam', 'live-comp-meta'); toonLivePagina(); }
             if (page === 'gebruikers')   toonGebruikersPagina();
             if (page === 'rijders')      toonRijdersPagina();
+            if (page === 'info')         toonInfoPagina();
         });
     });
 

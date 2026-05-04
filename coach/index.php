@@ -786,6 +786,12 @@ header .sub { font-size: .95rem; opacity: .8; margin-top: 2px; }
     display: flex; align-items: center; justify-content: center; font-style: italic;
 }
 .btn-help:active { background: rgba(255,255,255,.35); }
+.btn-meldingen   { font-style: normal; font-size: 1.1rem; position: relative; }
+.meld-badge      { position: absolute; top: -4px; right: -4px; background: #d22;
+                   color: #fff; font-size: .65rem; font-weight: 700;
+                   min-width: 17px; height: 17px; padding: 0 4px; border-radius: 9px;
+                   display: flex; align-items: center; justify-content: center;
+                   border: 2px solid #fff; line-height: 1; }
 
 /* ── Org footer (1-op-1 uit /public) ── */
 .org-footer {
@@ -902,7 +908,7 @@ select.sel {
 .comp-info small  { color:#5580a8; }
 
 /* Filter-chips onder de wedstrijd-select (1-op-1 uit /public) */
-.filter-rij { display:flex; gap:8px; margin-top:8px; }
+.filter-rij { display:flex; gap:8px; margin-bottom:8px; }
 .filter-rij input[type=checkbox] { display:none; }
 .filter-chip {
     display:inline-flex; align-items:center; gap:5px;
@@ -1102,6 +1108,7 @@ body.heeft-footer .auto-refresh-stempel { bottom:84px; }
         <div class="sub">Volg jouw rijders: programma, sancties en uitslagen</div>
     </div>
     <div class="hdr-btns">
+        <button class="btn-help btn-meldingen" id="btn-meldingen-overzicht" title="Mededelingen voor deze wedstrijd">📢<span id="meldingen-badge" class="meld-badge" style="display:none">0</span></button>
         <button class="btn-help" onclick="toonInfo()" title="Over InlineComp">i</button>
         <button class="btn-help" onclick="toonHelp()" title="Hoe werkt het?">?</button>
     </div>
@@ -1119,11 +1126,11 @@ body.heeft-footer .auto-refresh-stempel { bottom:84px; }
 
 <div class="card">
     <div class="stap-label"><span class="stap-nr">1</span> Kies je wedstrijd</div>
-    <select id="sel-comp" class="sel"><option value="">— kies een wedstrijd —</option></select>
     <div class="filter-rij">
         <input type="checkbox" id="chk-oud"><label for="chk-oud" class="filter-chip">Oude wedstrijden</label>
         <input type="checkbox" id="chk-toekomst"><label for="chk-toekomst" class="filter-chip">Toekomstige</label>
     </div>
+    <select id="sel-comp" class="sel"><option value="">— kies een wedstrijd —</option></select>
     <div id="comp-info" class="comp-info" style="display:none"></div>
 </div>
 
@@ -1199,9 +1206,9 @@ const STATUS_ICON  = ['⚠',          '✓',        '✗',       '✗',         
 // Status die voor een coach direct actie vereist (rood-alarm in de UI):
 const STATUS_ALARM = new Set([0, 4]); // niet bevestigd + niet getekend
 const SANCTIE_UITLEG = {
-    'W1':'1e waarschuwing','W2':'2e waarschuwing','FS':'Valse start','RR':'Reverse ranking',
+    'W1':'1e waarschuwing','W2':'2e waarschuwing','FS':'Valse start','RR':'Rank reduction',
     'DQ-TF':'Diskwalificatie technische fout','DQ-SF':'Diskwalificatie sport fout',
-    'DQ-DF':'Diskwalificatie directe fout','DNS':'Niet gestart','DNF':'Niet gefinisht',
+    'DQ-DF':'Diskwalificatie disciplinaire fout','DNS':'Niet gestart','DNF':'Niet gefinisht',
 };
 
 const BADGE = { heats:'badge-serie', kwartfinale:'badge-kf', halve_finale:'badge-hf',
@@ -2238,6 +2245,145 @@ document.querySelectorAll('.tab-btn').forEach(btn => {
 $('u-sel-cat').addEventListener('change', opCatChange);
 $('u-sel-afstand').addEventListener('change', opAfstandChange);
 
+// ── Mededelingen (pop-ups bij belangrijke aankondigingen) ──────────────
+const _MELDING_PRIO = {
+    info:   { kleur: '#1a3a5c', bg: '#e8f0f7', icoon: 'ℹ️' },
+    warn:   { kleur: '#7a5800', bg: '#fff8d6', icoon: '⚠️' },
+    urgent: { kleur: '#a00',    bg: '#ffe5e5', icoon: '🚨' },
+};
+const _meldingenLsKey = (compId) => `meldingen_gezien_${compId}`;
+const _gezienSet = (compId) => {
+    try { return new Set(JSON.parse(localStorage.getItem(_meldingenLsKey(compId)) || '[]')); }
+    catch { return new Set(); }
+};
+const _markGezien = (compId, id) => {
+    const set = _gezienSet(compId);
+    set.add(id);
+    localStorage.setItem(_meldingenLsKey(compId), JSON.stringify([...set]));
+};
+let _meldingLijst = [];
+let _meldingActief = false;
+
+async function checkMeldingen(compId) {
+    if (!compId) return;
+    try {
+        const res = await safeFetch('../api/meldingen.php?comp_id=' + encodeURIComponent(compId)
+            + '&_t=' + Date.now());
+        const lijst = await res.json();
+        if (!Array.isArray(lijst)) return;
+        const nu = Date.now();
+        _meldingLijst = lijst.filter(m => {
+            const van = m.geldig_van ? Date.parse(m.geldig_van.replace(' ', 'T')) : 0;
+            const tot = m.geldig_tot ? Date.parse(m.geldig_tot.replace(' ', 'T')) : null;
+            if (van && van > nu)        return false;
+            if (tot !== null && tot < nu) return false;
+            return true;
+        });
+        updateMeldingenBadge();
+        if (!_meldingActief) toonVolgendeMelding(compId);
+    } catch { /* stil */ }
+}
+
+function updateMeldingenBadge() {
+    const btn = document.getElementById('btn-meldingen-overzicht');
+    const badge = document.getElementById('meldingen-badge');
+    if (!btn || !badge) return;
+    if (_meldingLijst.length > 0) {
+        btn.style.display = '';
+        badge.textContent = _meldingLijst.length;
+        badge.style.display = '';
+    } else {
+        btn.style.display = 'none';
+        badge.style.display = 'none';
+    }
+}
+
+function toonMeldingenOverzicht() {
+    if (!_meldingLijst.length) return;
+    const escFn = (typeof esc === 'function') ? esc : (s => String(s).replace(/[&<>]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;'}[c])));
+    const overlay = document.createElement('div');
+    overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.55);z-index:9400;display:flex;align-items:flex-start;justify-content:center;padding:4vh 1rem;overflow-y:auto;';
+    const items = _meldingLijst.map(m => {
+        const stijl = _MELDING_PRIO[m.prio] ?? _MELDING_PRIO.info;
+        const tijd = m.geldig_van
+            ? new Date(m.geldig_van.replace(' ', 'T')).toLocaleString('nl-NL',
+                {day:'2-digit',month:'short',hour:'2-digit',minute:'2-digit'})
+            : '';
+        const tot = m.geldig_tot
+            ? ' tot ' + new Date(m.geldig_tot.replace(' ', 'T')).toLocaleString('nl-NL',
+                {day:'2-digit',month:'short',hour:'2-digit',minute:'2-digit'})
+            : '';
+        return `<div style="background:${stijl.bg};border-left:4px solid ${stijl.kleur};
+                            padding:.7rem .9rem;margin-bottom:.6rem;border-radius:5px;">
+            <div style="display:flex;align-items:center;gap:.4rem;margin-bottom:.3rem;">
+                <span style="font-size:1.2rem">${stijl.icoon}</span>
+                <strong style="color:${stijl.kleur};flex:1;">${escFn(m.titel)}</strong>
+            </div>
+            <div style="color:#222;line-height:1.4;font-size:.9rem;white-space:pre-wrap;">${escFn(m.bericht)}</div>
+            <div style="font-size:.75rem;color:#888;margin-top:.3rem;">${escFn(tijd)}${escFn(tot)}</div>
+        </div>`;
+    }).join('');
+    overlay.innerHTML = `
+        <div style="background:#fff;border-radius:8px;max-width:480px;width:100%;
+                    box-shadow:0 10px 30px rgba(0,0,0,.3);">
+            <div style="display:flex;align-items:center;justify-content:space-between;
+                        padding:.8rem 1rem;border-bottom:1px solid #e0e0e0;">
+                <h3 style="margin:0;color:var(--blauw);font-size:1.05rem;">📢 Mededelingen</h3>
+                <button class="meld-overz-sluit" style="background:none;border:none;
+                        font-size:1.6rem;cursor:pointer;color:#666;padding:0;line-height:1;">&times;</button>
+            </div>
+            <div style="padding:1rem;">${items}</div>
+        </div>`;
+    document.body.appendChild(overlay);
+    overlay.querySelector('.meld-overz-sluit').addEventListener('click', () => overlay.remove());
+    overlay.addEventListener('click', e => { if (e.target === overlay) overlay.remove(); });
+}
+
+document.getElementById('btn-meldingen-overzicht')?.addEventListener('click', toonMeldingenOverzicht);
+function toonVolgendeMelding(compId) {
+    if (_meldingActief) return;
+    const gezien = _gezienSet(compId);
+    for (const m of _meldingLijst) {
+        if (!gezien.has(m.id)) { toonMelding(m, compId); return; }
+    }
+}
+function toonMelding(m, compId) {
+    if (_meldingActief) return;
+    _meldingActief = true;
+    const stijl = _MELDING_PRIO[m.prio] ?? _MELDING_PRIO.info;
+    const overlay = document.createElement('div');
+    overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:9500;display:flex;align-items:center;justify-content:center;padding:1rem;';
+    const escFn = (typeof esc === 'function') ? esc : (s => String(s).replace(/[&<>]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;'}[c])));
+    overlay.innerHTML = `
+        <div style="background:${stijl.bg};border:3px solid ${stijl.kleur};border-radius:10px;
+                    max-width:400px;width:100%;padding:1.5rem;box-shadow:0 10px 40px rgba(0,0,0,.4);
+                    animation:meldingPop .3s ease-out;">
+            <div style="display:flex;align-items:center;gap:.6rem;margin-bottom:.6rem;">
+                <span style="font-size:1.8rem">${stijl.icoon}</span>
+                <h2 style="margin:0;color:${stijl.kleur};font-size:1.1rem;flex:1;">${escFn(m.titel)}</h2>
+            </div>
+            <div style="color:#222;line-height:1.5;font-size:.95rem;margin-bottom:1rem;
+                        white-space:pre-wrap;">${escFn(m.bericht)}</div>
+            <button class="meld-ok" style="background:${stijl.kleur};color:#fff;border:none;
+                                            padding:.6rem 1.4rem;border-radius:6px;font-size:1rem;
+                                            font-weight:600;cursor:pointer;width:100%;">
+                ✓ Begrepen
+            </button>
+        </div>`;
+    document.body.appendChild(overlay);
+    overlay.querySelector('.meld-ok').addEventListener('click', () => {
+        _markGezien(compId, m.id); overlay.remove();
+        _meldingActief = false;
+        const compNu = selComp.value;
+        if (compNu) toonVolgendeMelding(compNu);
+    });
+}
+(() => {
+    const style = document.createElement('style');
+    style.textContent = '@keyframes meldingPop { from {opacity:0;transform:scale(.85)} to {opacity:1;transform:scale(1)} }';
+    document.head.appendChild(style);
+})();
+
 // ── Pull-to-refresh ──────────────────────────────────────────────────────────
 // Alleen actief als we boven aan de pagina zijn én er een wedstrijd gekozen is.
 // Trekt het programma opnieuw op (zelfde endpoint, cache is 30s).
@@ -2251,6 +2397,8 @@ $('u-sel-afstand').addEventListener('change', opAfstandChange);
         bezigLaden = true;
         ptrEl.classList.add('laadt');
         ptrEl.textContent = '⟳ Vernieuwen…';
+        // Mededelingen-check parallel — pop-up zodra een nieuwe binnenkomt
+        if (typeof checkMeldingen === 'function') checkMeldingen(selComp.value);
         try {
             const res = await safeFetch(`?action=programma&competition_id=${encodeURIComponent(selComp.value)}&_ts=${Date.now()}`);
             programmaCache = await res.json();
@@ -2345,12 +2493,25 @@ $('u-sel-afstand').addEventListener('change', opAfstandChange);
         else { herlaadProgramma().then(zetStempel); startAutoRefresh(); }
     });
     selComp.addEventListener('change', () => {
-        if (selComp.value) { zetStempel(); startAutoRefresh(); }
-        else { stopAutoRefresh(); lastEl.textContent = ''; }
+        if (selComp.value) {
+            zetStempel();
+            startAutoRefresh();
+            // Direct meldingen-check — niet wachten op eerste 60s tick
+            if (typeof checkMeldingen === 'function') checkMeldingen(selComp.value);
+        } else {
+            stopAutoRefresh();
+            lastEl.textContent = '';
+            // Badge weghalen als wedstrijd weggekozen wordt
+            _meldingLijst = [];
+            if (typeof updateMeldingenBadge === 'function') updateMeldingenBadge();
+        }
     });
     // Initieel: als er al een wedstrijd voorgeselecteerd is (onwaarschijnlijk maar
-    // safe), meteen starten. Anders gebeurt het via de change-listener.
-    if (selComp.value) { zetStempel(); startAutoRefresh(); }
+    // safe), meteen starten + meldingen-check.
+    if (selComp.value) {
+        zetStempel(); startAutoRefresh();
+        if (typeof checkMeldingen === 'function') checkMeldingen(selComp.value);
+    }
 })();
 
 laadCompetitions();

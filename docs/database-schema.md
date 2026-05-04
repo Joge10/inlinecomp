@@ -358,7 +358,6 @@ erDiagram
         enum sanctie "W1/W2/FS/RR/DQ-TF/DQ-SF/DQ-DF/DNS/DNF"
         smallint rondes "voor lange afstand/puntenkoers"
         decimal punten
-        varchar notitie
     }
 
     heats        ||--o{ heat_entries : startlijst

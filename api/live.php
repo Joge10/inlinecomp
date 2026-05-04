@@ -167,7 +167,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'GET') {
                 res.rondes,
                 res.punten,
                 res.sanctie,
-                res.notitie
+                res.afval_rang
             FROM heat_entries he
             JOIN persons p ON p.license_key = he.person_license
             LEFT JOIN transponders tp ON tp.person_license = he.person_license
@@ -198,7 +198,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'GET') {
                         'rondes'            => $r['rondes'] !== null ? (int)$r['rondes'] : null,
                         'punten'            => $r['punten'] !== null ? (float)$r['punten'] : null,
                         'sanctie'           => $r['sanctie'],
-                        'notitie'           => $r['notitie'] ?? '',
+                        'afval_rang'        => $r['afval_rang'] !== null ? (int)$r['afval_rang'] : null,
                     ];
                 }
             }
@@ -312,12 +312,22 @@ if ($action === 'save_rit_results') {
         //   W1/W2/RR  → geen automatisch effect (jury past manueel aan)
         //   DNF/DQ-TF/DNS → ranked last in round (ex-aequo gedeeld laatste)
         //   DQ-SF/DQ-DF   → not ranked (geen positie, geen punten)
+        //
+        // Speciaal voor afvalkoers (race_type='afvalkoers'):
+        //   Rijders met afval_rang gevuld → finishpositie = afval_rang
+        //     (tijd en rondes uit CSV worden bewaard, maar niet leidend voor positie).
+        //     Sanctie DQ-TF op afgevallene = "by-fault" afvalling.
+        //   Rijders zonder afval_rang en mét tijd → finish-groep, krijgen positie 1..X
+        //     op rondes DESC + tijd ASC (zelfde als inline).
         $RANKED_LAST = ['DNF', 'DQ-TF', 'DNS'];
         $NOT_RANKED  = ['DQ-SF', 'DQ-DF'];
+
+        $isAfvalkoers = ($distRaceType === 'afvalkoers');
 
         $metTijd    = [];   // normale finishers + FS rijders (positie op tijd)
         $gedeeldArr = [];   // DNF / DQ-SF (gedeeld laatste)
         $zonderTijd = [];   // DNS / DQ-DF / leeg (geen positie)
+        $afgevallen = [];   // afvalkoers: afgevallen rijders (positie = afval_rang)
 
         foreach ($results as $r) {
             $tijdMs    = isset($r['tijd_ms']) && $r['tijd_ms'] !== null && $r['tijd_ms'] !== ''
@@ -330,6 +340,14 @@ if ($action === 'save_rit_results') {
             // Punten worden alleen bij puntenkoersen meegestuurd; null is OK
             $punten = isset($r['punten']) && $r['punten'] !== '' && $r['punten'] !== null
                       ? (float)$r['punten'] : null;
+
+            // afval_rang: alleen relevant voor afvalkoers; bij andere race-types negeren
+            $afvalRang = null;
+            if ($isAfvalkoers && isset($r['afval_rang']) && $r['afval_rang'] !== null && $r['afval_rang'] !== '') {
+                $afvalRang = (int)$r['afval_rang'];
+                if ($afvalRang < 1) $afvalRang = null;
+            }
+
             // Forceer NULL als de afstand dit veld niet kent — ongeacht wat
             // de frontend per ongeluk stuurde (bv. residuals van toggelen
             // DNS/DNF in eenzelfde sessie).
@@ -337,11 +355,20 @@ if ($action === 'save_rit_results') {
             if (!$accepteertPunten) $punten = null;
 
             $base = [
-                'entry_id' => (int)$r['entry_id'],
-                'rondes'   => $rondes,
-                'punten'   => $punten,
-                'notitie'  => $r['notitie'] ?? '',
+                'entry_id'   => (int)$r['entry_id'],
+                'rondes'     => $rondes,
+                'punten'     => $punten,
+                'afval_rang' => $afvalRang,
             ];
+
+            // Afvalkoers + afval_rang ingevuld → afgevallen rijder. Hier overslaan we de
+            // normale tijd/sanctie-classificatie: positie wordt dwingend afval_rang.
+            // Sanctie blijft bewaard (bv. DQ-TF voor by-fault). Tijd uit CSV mag blijven
+            // (bewaard voor uitslag-archief; bepaalt niet de positie).
+            if ($isAfvalkoers && $afvalRang !== null) {
+                $afgevallen[] = $base + ['tijd_ms' => $tijdMs, 'sanctie' => $sanctie];
+                continue;
+            }
 
             if ($sanctie && in_array($sanctie, $RANKED_LAST, true)) {
                 // DNF / DQ-TF / DNS: ranked last in round, tijd wissen
@@ -411,6 +438,11 @@ if ($action === 'save_rit_results') {
             $r['finishpositie'] = $pos + 1;
             $alleResultaten[] = $r;
         }
+        // Afvalkoers: afgevallen rijders → finishpositie = afval_rang (al toegekend door operator)
+        foreach ($afgevallen as $r) {
+            $r['finishpositie'] = $r['afval_rang'];
+            $alleResultaten[] = $r;
+        }
         // DNF / DQ-SF → gedeeld laatste = N + 1
         $gedeeldPos = $n + 1;
         foreach ($gedeeldArr as $r) {
@@ -427,7 +459,7 @@ if ($action === 'save_rit_results') {
         $pdo->beginTransaction();
 
         $upsert = $pdo->prepare("
-            INSERT INTO results (heat_entry_id, finishpositie, tijd_ms, rondes, punten, sanctie, notitie)
+            INSERT INTO results (heat_entry_id, finishpositie, tijd_ms, rondes, punten, sanctie, afval_rang)
             VALUES (?, ?, ?, ?, ?, ?, ?)
             ON DUPLICATE KEY UPDATE
                 finishpositie = VALUES(finishpositie),
@@ -435,7 +467,7 @@ if ($action === 'save_rit_results') {
                 rondes        = VALUES(rondes),
                 punten        = VALUES(punten),
                 sanctie       = VALUES(sanctie),
-                notitie       = VALUES(notitie)
+                afval_rang    = VALUES(afval_rang)
         ");
 
         foreach ($alleResultaten as $r) {
@@ -446,7 +478,7 @@ if ($action === 'save_rit_results') {
                 $r['rondes'],
                 $r['punten'] ?? null,
                 $r['sanctie'],
-                $r['notitie'],
+                $r['afval_rang'] ?? null,
             ]);
         }
 

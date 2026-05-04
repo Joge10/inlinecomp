@@ -344,11 +344,19 @@ async function toonUitslagVoorAfstand(groep, afstand) {
             // Per-categorie ranking: we bewaren de geselecteerde DC via data-dc-id
             // zodat de save naar tijdschema_afstand_config met juiste key gaat.
             const primaryDcId = (groep.dc_ids ?? [])[0] ?? '';
+            // Bij lange-afstand-A-finale wordt de sortering door race_type-regels
+            // bepaald (rondes/tijd voor inline+afvalkoers, punten/rondes/tijd voor
+            // puntenkoers). Geen keuze nodig — toon statisch label i.p.v. dropdown.
+            const isLongDistance = data.race_type === 'long_distance';
             let rankHtml = `<div class="u-ranking-details">
                 <div class="u-ranking-rij">
                     <span class="u-ranking-afstand">Ranking:</span>`;
             for (const rt of rondes) {
                 const key = rondeKeys[rt] ?? rt;
+                if (isLongDistance && rt === 'finale_a') {
+                    rankHtml += `<span class="u-ranking-info">${rondeLabels[rt] ?? rt}: <em>automatisch (rondes/tijd)</em></span>`;
+                    continue;
+                }
                 const val = ranking[key] ?? 'time';
                 rankHtml += `<label class="u-ranking-sel-wrap">
                     ${rondeLabels[rt] ?? rt}:
@@ -969,7 +977,7 @@ async function _bouwKlassementInternal(optData) {
     const locatie = comp ? getLocatie(comp) : '';
     const metaTxt = [datum, locatie].filter(Boolean).join(' \u00b7 ');
     const dcIds   = optData.dcIds ?? [optData.dcId];
-    const { orgLogoHtml, footerHtml } = bouwOrgHeaderFooter(esc);
+    const { orgLogoHtml, baanLogoHtml, footerHtml } = bouwOrgHeaderFooter(esc);
 
     let data;
     try {
@@ -1115,6 +1123,7 @@ tr:nth-child(even) td{background:#f8fafc}
     <div class="pr-meta">${esc(metaTxt)}</div>
     <div class="pr-type" style="margin-top:2mm;">${esc(optData.dcName)} \u2013 ${esc(typeLabel)}</div>
   </div>
+  ${baanLogoHtml ? `<div style="flex-shrink:0;">${baanLogoHtml}</div>` : ''}
   ${orgLogoHtml ? `<div style="flex-shrink:0;">${orgLogoHtml}</div>` : ''}
 </div>
 <table>
@@ -1193,7 +1202,7 @@ async function _bouwUitslagAfstandInternal(optData) {
     // automatisch rondes/tijden tonen. Expliciete `false` respecteren we.
     const toonRonde = optData.toonRonde ?? true;
     const toonTijd  = optData.toonTijd  ?? true;
-    const { orgLogoHtml, footerHtml } = bouwOrgHeaderFooter(esc);
+    const { orgLogoHtml, baanLogoHtml, footerHtml } = bouwOrgHeaderFooter(esc);
 
     let data;
     try {
@@ -1275,7 +1284,7 @@ async function _bouwUitslagAfstandInternal(optData) {
              <th class="pr-col-cat">Cat</th>
              ${thExtra}
              <th class="pr-col-sanctie">Sanctie</th>`,
-            tbody, 'Uitslag', orgLogoHtml, footerHtml);
+            tbody, 'Uitslag', orgLogoHtml, footerHtml, baanLogoHtml);
         return {
             bodyHtml,
             cssLinks:        [],
@@ -1378,7 +1387,7 @@ async function _bouwUitslagAfstandInternal(optData) {
              ${thExtra}
              ${thTotaal}
              <th class="pr-col-sanctie">Sanctie</th>`,
-            tbody, titel, orgLogoHtml, footerHtml);
+            tbody, titel, orgLogoHtml, footerHtml, baanLogoHtml);
         return {
             bodyHtml,
             cssLinks:        [],
@@ -1453,7 +1462,7 @@ async function _bouwUitslagAfstandInternal(optData) {
          <th class="pr-col-cat">Cat</th>
          ${thExtra}
          <th class="pr-col-sanctie">Sanctie</th>`,
-        tbody, '', orgLogoHtml, footerHtml);
+        tbody, '', orgLogoHtml, footerHtml, baanLogoHtml);
     return {
         bodyHtml,
         cssLinks:        [],
@@ -1466,18 +1475,18 @@ async function _bouwUitslagAfstandInternal(optData) {
 
 // ── HTML-bouwer voor per-afstand print ───────────────────────────────────────
 
-function _bouwAfstandHtml(esc, comp, metaTxt, optData, pageSize, theadHtml, tbodyHtml, subtitel, orgLogoHtml, footerHtml) {
+function _bouwAfstandHtml(esc, comp, metaTxt, optData, pageSize, theadHtml, tbodyHtml, subtitel, orgLogoHtml, footerHtml, baanLogoHtml) {
     return `<!DOCTYPE html><html lang="nl">
 <head><meta charset="UTF-8">
 <title>Uitslag \u2013 ${esc(optData.dcName)} \u2013 ${esc(optData.distNaam)}</title>
 <style>${_bouwAfstandExtraCss()}
 @page{size:${pageSize};margin:.8cm 1cm}</style></head>
-<body>${_bouwAfstandBody(esc, comp, metaTxt, optData, theadHtml, tbodyHtml, subtitel, orgLogoHtml, footerHtml)}
+<body>${_bouwAfstandBody(esc, comp, metaTxt, optData, theadHtml, tbodyHtml, subtitel, orgLogoHtml, footerHtml, baanLogoHtml)}
 </body></html>`;
 }
 
 // Gesplitste body-variant voor Print-Center gebruik.
-function _bouwAfstandBody(esc, comp, metaTxt, optData, theadHtml, tbodyHtml, subtitel, orgLogoHtml, footerHtml) {
+function _bouwAfstandBody(esc, comp, metaTxt, optData, theadHtml, tbodyHtml, subtitel, orgLogoHtml, footerHtml, baanLogoHtml) {
     return `
 <div class="pr-header">
   <div style="flex:1;min-width:0;">
@@ -1486,6 +1495,7 @@ function _bouwAfstandBody(esc, comp, metaTxt, optData, theadHtml, tbodyHtml, sub
     <div class="pr-type" style="margin-top:2mm;">${esc(optData.dcName)} \u2013 ${esc(optData.distNaam)}</div>
     ${subtitel ? `<div class="pr-subtitel">${esc(subtitel)}</div>` : ''}
   </div>
+  ${baanLogoHtml ? `<div style="flex-shrink:0;display:flex;align-items:flex-start;">${baanLogoHtml}</div>` : ''}
   ${orgLogoHtml ? `<div style="flex-shrink:0;display:flex;align-items:flex-start;">${orgLogoHtml}</div>` : ''}
 </div>
 <table>

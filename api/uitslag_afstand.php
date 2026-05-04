@@ -229,9 +229,73 @@ try {
     if ($systeem !== 'full-final') {
         // ── Internationaal systeem: cascading elimination ranking ─────────
 
-        // Ranking methods per ronde ophalen
-        $rankingMethods = ['heats' => 'time', 'kwartfinale' => 'time',
-                           'halve_finale' => 'time', 'finale_a' => 'time'];
+        // race_type (sprint/long_distance) afleiden uit distances.race_type —
+        // canonieke bron. distances.race_type = 'sprint' → sprint-sanctie-
+        // gedrag; alles anders → long_distance-gedrag (W1/W2 beschikbaar,
+        // DNF = reverse withdrawal).
+        // Wordt ook gebruikt voor de race-type-aware ranking-defaults hieronder.
+        $raceType = 'sprint';
+        if ($distId) {
+            $drt = $pdo->prepare("
+                SELECT race_type FROM distances
+                WHERE distance_combination_id = ? AND id = ?
+                LIMIT 1
+            ");
+            $drt->execute([$primaryDcId, $distId]);
+            $distRt = $drt->fetchColumn();
+            if ($distRt && $distRt !== 'sprint') $raceType = 'long_distance';
+        }
+
+        // Eerste actieve ronde bepalen voor deze categorie — nodig om de
+        // sprint-default "eerste ronde = Op tijd" correct te leggen, ongeacht
+        // of de cat met series, kwartfinale of halve finale begint. Zelfde
+        // detectie-keten als runner-up in tijdschema.php.
+        $eersteRonde = null;
+        if ($tsId && $primaryDcId) {
+            $ccStmt = $pdo->prepare("
+                SELECT heeft_heats, heeft_kwartfinale, heeft_halve_finale
+                FROM tijdschema_cat_config
+                WHERE tijdschema_id = ? AND dc_id = ?
+                LIMIT 1
+            ");
+            $ccStmt->execute([$tsId, $primaryDcId]);
+            $cc = $ccStmt->fetch(PDO::FETCH_ASSOC);
+            if ($cc) {
+                if (!empty($cc['heeft_heats']))            $eersteRonde = 'heats';
+                elseif (!empty($cc['heeft_kwartfinale']))  $eersteRonde = 'kwartfinale';
+                elseif (!empty($cc['heeft_halve_finale'])) $eersteRonde = 'halve_finale';
+            }
+        }
+
+        // Race-type-aware ranking-defaults (gebruikt wanneer er nog geen
+        // expliciete keuze in tijdschema_afstand_config staat). Opgeslagen
+        // voorkeuren krijgen altijd voorrang via de `?? $default`-fallback.
+        //
+        //  Sprint: eerste actieve ronde (heats/KF/HF afhankelijk van cat)
+        //          op tijd, tussenrondes op positie+tijd, A-finale op tijd.
+        //  Long distance: voorronden op positie+tijd. De A-finale wordt
+        //          sowieso door race_type-regels gesorteerd (rondes/tijd
+        //          voor inline+afvalkoers, punten/rondes/tijd voor
+        //          puntenkoers); UI verbergt die dropdown — server-side
+        //          maakt 'time' vs 'position_time' niet uit, we kiezen
+        //          'time' als technische default.
+        $isSprint = ($raceType === 'sprint');
+        if ($isSprint) {
+            $rankingMethods = [
+                'heats'        => $eersteRonde === 'heats'        ? 'time' : 'position_time',
+                'kwartfinale'  => $eersteRonde === 'kwartfinale'  ? 'time' : 'position_time',
+                'halve_finale' => $eersteRonde === 'halve_finale' ? 'time' : 'position_time',
+                'finale_a'     => 'time',
+            ];
+        } else {
+            $rankingMethods = [
+                'heats'        => 'position_time',
+                'kwartfinale'  => 'position_time',
+                'halve_finale' => 'position_time',
+                'finale_a'     => 'time',
+            ];
+        }
+
         if ($tsId) {
             // Bepaal de afstandsnaam. Als de UI expliciet een `distance_naam`-
             // parameter meegeeft (tab-klik op een specifieke afstand), die is
@@ -265,27 +329,13 @@ try {
                 $acStmt->execute([$tsId, $afNaam, $primaryDcId]);
                 $ac = $acStmt->fetch(PDO::FETCH_ASSOC);
                 if ($ac) {
-                    $rankingMethods['heats']        = $ac['heats_ranking']  ?? 'time';
-                    $rankingMethods['kwartfinale']   = $ac['kwart_ranking'] ?? 'time';
-                    $rankingMethods['halve_finale']  = $ac['half_ranking']  ?? 'time';
-                    $rankingMethods['finale_a']      = $ac['finale_ranking'] ?? 'time';
+                    // Opgeslagen voorkeur heeft voorrang; ontbrekend veld → race-type-aware default
+                    $rankingMethods['heats']        = $ac['heats_ranking']  ?? $rankingMethods['heats'];
+                    $rankingMethods['kwartfinale']   = $ac['kwart_ranking'] ?? $rankingMethods['kwartfinale'];
+                    $rankingMethods['halve_finale']  = $ac['half_ranking']  ?? $rankingMethods['halve_finale'];
+                    $rankingMethods['finale_a']      = $ac['finale_ranking'] ?? $rankingMethods['finale_a'];
                 }
             }
-        }
-        // race_type (sprint/long_distance) afleiden uit distances.race_type —
-        // canonieke bron. distances.race_type = 'sprint' → sprint-sanctie-
-        // gedrag; alles anders → long_distance-gedrag (W1/W2 beschikbaar,
-        // DNF = reverse withdrawal).
-        $raceType = 'sprint';
-        if ($distId) {
-            $drt = $pdo->prepare("
-                SELECT race_type FROM distances
-                WHERE distance_combination_id = ? AND id = ?
-                LIMIT 1
-            ");
-            $drt->execute([$primaryDcId, $distId]);
-            $distRt = $drt->fetchColumn();
-            if ($distRt && $distRt !== 'sprint') $raceType = 'long_distance';
         }
 
         // Alle heats voor deze afstand ophalen, per ronde
@@ -326,7 +376,7 @@ try {
         $rijderStmt = $pdo->prepare("
             SELECT he.person_license, p.full_name, p.short_name, p.start_number,
                    p.category AS categorie, res.finishpositie, res.tijd_ms, res.sanctie,
-                   res.rondes, res.punten AS pk_punten
+                   res.rondes, res.punten AS pk_punten, res.afval_rang
             FROM heat_entries he
             JOIN persons p ON p.license_key = he.person_license
             LEFT JOIN results res ON res.heat_entry_id = he.id

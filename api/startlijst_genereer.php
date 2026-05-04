@@ -7,7 +7,7 @@
 //    competition_id  – UUID van de wedstrijd
 //    dc_id           – UUID van de afstandscombinatie (categorie)
 //    max_per_heat    – max aantal rijders per heat  (default 6)
-//    methode         – willekeurig | startnummer
+//    methode         – startnummer | alfabetisch | klassement | tussenklassement
 //                      (klassement / vorige_distance: toekomstig)
 //
 //  Verdeling: zo gelijkmatig mogelijk, grotere heats eerst.
@@ -32,7 +32,7 @@ if (!kanSchrijven($_authUser, 'startlijsten')) {
 $compId     = trim($_GET['competition_id'] ?? '');
 $distId     = trim($_GET['distance_id']    ?? '');  // voor labeling; optioneel bij no-distance DCs
 $heatsAantal = max(1, intval($_GET['heats_aantal'] ?? 1));
-$methode         = trim($_GET['methode']           ?? 'willekeurig');
+$methode         = trim($_GET['methode']           ?? 'startnummer');
 $klassementId    = trim($_GET['klassement_id']    ?? '');
 $klassementSectie= trim($_GET['klassement_sectie']?? '');
 
@@ -274,11 +274,14 @@ try {
                 ($a['start_number'] ?: PHP_INT_MAX) - ($b['start_number'] ?: PHP_INT_MAX));
             break;
 
-        case 'willekeurig':
         default:
-            $methode     = 'willekeurig';
-            $heeftPositie = $rijders;
-            shuffle($heeftPositie);
+            // Onbekende methode → val terug op startnummer (deterministisch, voorspelbaar)
+            $methode = 'startnummer';
+            foreach ($rijders as $r) {
+                if ($r['start_number']) $heeftPositie[] = $r;
+                else                    $zonderPositie[] = $r;
+            }
+            usort($heeftPositie, fn($a,$b) => $a['start_number'] - $b['start_number']);
             break;
     }
 
@@ -298,40 +301,124 @@ try {
     $n          = count($gesorteerd);
 
     // --------------------------------------------------------
-    // 4. Heatverdeling: zo gelijkmatig mogelijk
-    //    Grotere heats komen eerst (heat 1, 2, ...)
+    // 4. Bepaal verdelings-strategie + heat-capaciteiten
+    //
+    // Default = snake (slangenpatroon): gelijke sterkte per heat. De "extra"
+    // rijders (rest na delen) gaan naar de eerste heats — heat 1 is dan de
+    // grootste. Goed voor series (heats), waar verspreiding fair is.
+    //
+    // Tijdkoppeling: voor finale-rondes met meerdere finale-heats (bv. "200m
+    // DT" met 3 A-finales). Werkt zoals bij heats→finale-overgang in live.php:
+    // zwakste rijders in heat 1, beste in laatste heat. Binnen een heat
+    // staat de hoger geklasseerde vooraan (mag baan kiezen). Niet-geklasseer-
+    // den komen in heat 1, eerst genoemd op startnummer-volgorde, daarna
+    // de zwakste geklasseerde rijders. **De laatste heat (snelste) moet
+    // altijd vol zijn** — extras gaan dus naar de LAATSTE heats; alleen
+    // heat 1 (zwakste) blijft eventueel onder-bezet.
+    //
+    // Conditie: ronde-type is finale-variant + methode is (tussen)klassement
+    // + finale_seeding van de afstand staat op 'tijdkoppeling'.
     // --------------------------------------------------------
+    $rondeIsFinale = in_array($rondeType, ['finale', 'finale_a', 'finale_b'], true);
+    $methodeOpKlassement = in_array($methode, ['klassement', 'tussenklassement'], true);
+
+    $finaleSeeding = 'slang';
+    if ($rondeIsFinale && $methodeOpKlassement) {
+        $tsStmt = $pdo->prepare(
+            "SELECT id FROM competition_tijdschema WHERE competition_id = ? LIMIT 1"
+        );
+        $tsStmt->execute([$compId]);
+        $tsId = $tsStmt->fetchColumn();
+        if ($tsId && $distId) {
+            $afNaamStmt = $pdo->prepare(
+                "SELECT name FROM distances WHERE id = ? LIMIT 1"
+            );
+            $afNaamStmt->execute([$distId]);
+            $afstandNaam = $afNaamStmt->fetchColumn();
+            if ($afstandNaam) {
+                $cfgStmt = $pdo->prepare(
+                    "SELECT finale_seeding FROM tijdschema_afstand_config
+                     WHERE tijdschema_id = ? AND afstand_naam = ? LIMIT 1"
+                );
+                $cfgStmt->execute([$tsId, $afstandNaam]);
+                $cfgVal = $cfgStmt->fetchColumn();
+                if ($cfgVal) $finaleSeeding = $cfgVal;
+            }
+        }
+    }
+
+    $isTijdkoppeling = $rondeIsFinale && $methodeOpKlassement
+                       && $finaleSeeding === 'tijdkoppeling';
+
     $aantalHeats = min($heatsAantal, $n);  // nooit meer heats dan rijders
     $basis       = (int) floor($n / $aantalHeats);
     $extras      = $n % $aantalHeats;
 
     $heats = [];
     for ($i = 0; $i < $aantalHeats; $i++) {
+        // Standaard: extras in de eerste heats (snake-conventie).
+        // Tijdkoppeling: extras in de LAATSTE heats — de laatste finale moet
+        // altijd vol zijn; alleen de eerste finale mag eventueel kleiner zijn.
+        // Voorbeeld 8 finales × 15 rijders: caps = [1, 2, 2, 2, 2, 2, 2, 2].
+        $cap = $isTijdkoppeling
+            ? ($i < ($aantalHeats - $extras) ? $basis : $basis + 1)
+            : ($i < $extras ? $basis + 1 : $basis);
         $heats[] = [
             'nummer'     => $i + 1,
-            'capaciteit' => $i < $extras ? $basis + 1 : $basis,
+            'capaciteit' => $cap,
             'rijders'    => [],
         ];
     }
 
-    // --------------------------------------------------------
-    // 5. Slangenpatroon (snake)
-    //    Vooruit H1→Hn, achteruit Hn→H1, herhalen
-    //    Volle heats worden overgeslagen
-    // --------------------------------------------------------
-    $ri = 0;
-    while ($ri < $n) {
-        // Vooruit
-        for ($h = 0; $h < $aantalHeats && $ri < $n; $h++) {
-            if (count($heats[$h]['rijders']) < $heats[$h]['capaciteit']) {
-                $heats[$h]['rijders'][] = $gesorteerd[$ri++];
+    if ($isTijdkoppeling) {
+        // ── Tijdkoppeling-blokverdeling ──────────────────────────────────
+        // "Zwak naar sterk"-rij: niet-geklasseerden vooraan op startnr ASC,
+        // daarna geklasseerden in rang DESC (zwakste rang eerst). Sequentieel
+        // verdelen: heat 1 krijgt de eerste cap rijders (zwakste), de laatste
+        // heat de laatste cap (sterkste).
+        $zwakNaarSterk = array_merge(
+            $zonderPositie,                  // al gesorteerd op startnr ASC
+            array_reverse($heeftPositie)     // omgekeerd: rang DESC
+        );
+        $idx = 0;
+        foreach ($heats as &$heat) {
+            for ($k = 0; $k < $heat['capaciteit'] && $idx < $n; $k++) {
+                $heat['rijders'][] = $zwakNaarSterk[$idx++];
             }
         }
-        if ($ri >= $n) break;
-        // Achteruit
-        for ($h = $aantalHeats - 1; $h >= 0 && $ri < $n; $h--) {
-            if (count($heats[$h]['rijders']) < $heats[$h]['capaciteit']) {
-                $heats[$h]['rijders'][] = $gesorteerd[$ri++];
+        unset($heat);
+
+        // Reorder binnen elke heat: niet-geklasseerden eerst (op startnr ASC),
+        // daarna geklasseerden op rang ASC (= beste eerst → mag baan kiezen).
+        $rangKey = ($methode === 'tussenklassement') ? '_tkPos' : '_klPos';
+        foreach ($heats as &$heat) {
+            $ngekl = [];
+            $gekl  = [];
+            foreach ($heat['rijders'] as $r) {
+                if (isset($r[$rangKey])) $gekl[] = $r;
+                else                     $ngekl[] = $r;
+            }
+            usort($ngekl, fn($a, $b) =>
+                ($a['start_number'] ?: PHP_INT_MAX) - ($b['start_number'] ?: PHP_INT_MAX));
+            usort($gekl, fn($a, $b) => $a[$rangKey] - $b[$rangKey]);
+            $heat['rijders'] = array_merge($ngekl, $gekl);
+        }
+        unset($heat);
+    } else {
+        // ── Slangenpatroon (default) ─────────────────────────────────────
+        // Vooruit H1→Hn, achteruit Hn→H1, herhalen. Volle heats overgeslagen.
+        $ri = 0;
+        while ($ri < $n) {
+            for ($h = 0; $h < $aantalHeats && $ri < $n; $h++) {
+                if (count($heats[$h]['rijders']) < $heats[$h]['capaciteit']) {
+                    $heats[$h]['rijders'][] = $gesorteerd[$ri++];
+                }
+            }
+            if ($ri >= $n) break;
+            for ($h = $aantalHeats - 1; $h >= 0 && $ri < $n; $h--) {
+                if (count($heats[$h]['rijders']) < $heats[$h]['capaciteit']) {
+                    $heats[$h]['rijders'][] = $gesorteerd[$ri++];
+                }
             }
         }
     }

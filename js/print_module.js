@@ -170,7 +170,9 @@ function _pcOpties() {
                     label:  'Tekenlijsten (per categorie)',
                     beschikbaar:          _pcImportKlaar(),
                     redenNietBeschikbaar: _pcImportReden(),
-                    build: () => (typeof bouwTekenlijstenBody === 'function' ? bouwTekenlijstenBody() : null),
+                    build: () => (typeof bouwTekenlijstenBody === 'function'
+                                  ? bouwTekenlijstenBody({ boomSaver: !!_pcState.boomSaver })
+                                  : null),
                 },
                 {
                     id:     'deelnemerslijst',
@@ -827,11 +829,11 @@ async function _pcStartPrint() {
         vorigeOrient = orient;
     });
 
-    // Gedeelde comp-header bovenaan het document bij boom-saver: 1× de
-    // wedstrijd-info links + logo rechts + gemeenschappelijke sub-type
-    // ("Eindklassement", "Tussenklassement", of combinatie als er meerdere
-    // types geselecteerd zijn). De individuele secties krijgen géén eigen
-    // header meer — ze plakken direct tegen elkaar met puur de content.
+    // Bij boom-saver injecteren we één gedeelde header bovenaan: comp-naam,
+    // datum, locatie, eventueel "Stand: <tijdstip>" en de gecombineerde
+    // sub-types ("Tekenlijsten · Klassement"). De individuele body-headers
+    // worden via CSS verborgen — zo zie je niet drie keer dezelfde wedstrijd-
+    // info als je drie prints combineert.
     if (boomSaver) {
         let compHeaderHtml = '';
         try {
@@ -843,12 +845,20 @@ async function _pcStartPrint() {
                               && typeof getLocatie === 'function')
                 ? getLocatie(huidigComp) : '';
             const metaTxt  = [datum, locatie].filter(Boolean).join(' · ');
+            // Stand-info: optioneel, alleen als er een actieve standDatum is
+            // (uit Importeer/Tijdschema-state). Globale vars zijn niet altijd
+            // gedefinieerd in elke module — vandaar de typeof-check.
+            const stand    = (typeof standDatum   !== 'undefined' && standDatum)   ? standDatum
+                           : (typeof dbStandDatum !== 'undefined' && dbStandDatum) ? dbStandDatum
+                           : '';
+            const standTxt = stand ? `Stand: ${stand}` : '';
             let orgLogoHtml = '';
+            let baanLogoHtml = '';
             if (typeof bouwOrgHeaderFooter === 'function') {
                 const h = bouwOrgHeaderFooter(_escHtml);
-                orgLogoHtml = h?.orgLogoHtml ?? '';
+                orgLogoHtml  = h?.orgLogoHtml  ?? '';
+                baanLogoHtml = h?.baanLogoHtml ?? '';
             }
-            // Verzamel unieke sub-types over alle geselecteerde items
             const subTypes = [...new Set(bodies.map(({ data }) => data.subType).filter(Boolean))];
             const subTypeLabel = subTypes.join(' · ');
 
@@ -857,14 +867,13 @@ async function _pcStartPrint() {
   <div class="pc-shared-info">
     <div class="pc-shared-naam">${_escHtml(compNaam)}</div>
     ${metaTxt ? `<div class="pc-shared-meta">${_escHtml(metaTxt)}</div>` : ''}
+    ${standTxt ? `<div class="pc-shared-stand">${_escHtml(standTxt)}</div>` : ''}
     ${subTypeLabel ? `<div class="pc-shared-type">${_escHtml(subTypeLabel)}</div>` : ''}
   </div>
+  ${baanLogoHtml ? `<div class="pc-shared-baan">${baanLogoHtml}</div>` : ''}
   ${orgLogoHtml ? `<div class="pc-shared-logo">${orgLogoHtml}</div>` : ''}
 </div>`;
         } catch (e) { console.warn('[PC] Shared header mislukt:', e); }
-        // Inject de header binnen de eerste <section> zodat hij onder dezelfde
-        // named @page valt als de eerste body — anders forceert de browser
-        // een aparte (portrait) pagina voor de header.
         if (compHeaderHtml && bodyParts.length > 0) {
             bodyParts[0] = bodyParts[0].replace(/(<section\b[^>]*>)/, `$1${compHeaderHtml}`);
         }
@@ -903,9 +912,10 @@ ${pageRules.join('\n')}
 /* Print-Center layout: scheid secties met een page-break wanneer nodig. */
 .pc-section { }
 .pc-break { page-break-before: always; }
-/* Boom-saver: alle module-headers hiden (comp-naam, datum, locatie, titel-
-   regel, disclaimer) — ook van de eerste sectie. Die info is toch alleen
-   van toepassing op díe ene startlijst, niet op alle gecombineerde. */
+/* Boom-saver: alle module-headers verbergen (comp-naam, datum, locatie,
+   ronde-titel, disclaimer). De gedeelde shared-header bovenaan vervangt
+   ze; voor sub-info (zoals heat-naam of categorie) hebben de bodies hun
+   eigen interne titels die wel zichtbaar blijven. */
 body.pc-boomsaver .pr-hdr-row,
 body.pc-boomsaver .pr-hdr-spacer,
 body.pc-boomsaver .pr-header,
@@ -943,8 +953,10 @@ body.pc-boomsaver .pc-section-klassement {
 .pc-shared-info  { flex: 1 1 auto; min-width: 0; }
 .pc-shared-naam  { font-size: 13pt; font-weight: 700; color: #111; line-height: 1.2; }
 .pc-shared-meta  { font-size: 8.5pt; color: #555; margin-top: 1mm; }
+.pc-shared-stand { font-size: 8pt; color: #777; margin-top: 0.8mm; font-style: italic; }
 .pc-shared-type  { font-size: 10pt; font-weight: 700; color: #1a3a5c; margin-top: 2mm; }
 .pc-shared-logo  { flex: 0 0 auto; }
+.pc-shared-baan  { flex: 0 0 auto; }
 /* Per-sectie CSS (uit de individuele body-builders). */
 ${inlineCssParts.join('\n\n/* --- volgende sectie --- */\n\n')}
 </style>

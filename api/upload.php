@@ -3,8 +3,8 @@
 //  InlineComp – Logo upload
 //
 //  POST multipart/form-data
-//    type  = 'org' | 'sponsor'
-//    id    = UUID van organisatie of sponsor
+//    type  = 'org' | 'sponsor' | 'baan'
+//    id    = UUID van organisatie / sponsor / baan
 //    logo  = bestandsveld (image/*)
 // ============================================================
 
@@ -68,6 +68,9 @@ try {
             ->execute([$relPath, $id]);
     } elseif ($type === 'sponsor') {
         $pdo->prepare("UPDATE organisatie_sponsors SET logo_path = ? WHERE id = ?")
+            ->execute([$relPath, $id]);
+    } elseif ($type === 'baan') {
+        $pdo->prepare("UPDATE banen SET logo_path = ?, logo_updated_at = NOW(), updated_at = NOW() WHERE id = ?")
             ->execute([$relPath, $id]);
     }
     echo json_encode(['path' => $relPath]);

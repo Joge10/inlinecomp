@@ -116,7 +116,7 @@ try {
                p.full_name, p.short_name, p.start_number,
                p.category AS categorie,
                res.finishpositie, res.tijd_ms, res.sanctie,
-               res.rondes, res.punten AS pk_punten
+               res.rondes, res.punten AS pk_punten, res.afval_rang
         FROM heat_entries he
         JOIN persons p ON p.license_key = he.person_license
         LEFT JOIN results res ON res.heat_entry_id = he.id

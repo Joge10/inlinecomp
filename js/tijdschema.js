@@ -53,7 +53,7 @@ const TS_SYSTEEM_INFO = {
             'Kwartfinale (optioneel) — doorstroom naar halve finale x aantal, verdeling over heat winnaars (Q) en tijdsnelsten (q).',
             'Halve finale (optioneel) — doorstroom naar finale x aantal, verdeling over heat winnaars (Q) en tijdsnelsten (q).',
             'A-finale — met aantal gekwalificeerden uit de voorgaande ronde.',
-            'Runner-up (optioneel) — rijders die in de series zijn uitgevallen rijden een aparte runner-up race.',
+            'Runner-up (optioneel) — rijders die afvallen na de eerste ronde (series, kwartfinale of halve finale) rijden een aparte runner-up race.',
         ],
         tip: 'Modern knock-outsysteem zonder B-finales. KNSB-format voor de landelijke wedstrijden (met runner-up) en nationale kampioenschappen (zonder runner-up).',
     },
@@ -2637,7 +2637,7 @@ function _bouwProgrammaExternInternal() {
     };
 
     // ── Org-logo header + sponsors footer (gedeelde helper) ─────────────────
-    const { orgLogoHtml, footerHtml } = bouwOrgHeaderFooter(esc);
+    const { orgLogoHtml, baanLogoHtml, footerHtml } = bouwOrgHeaderFooter(esc);
 
     // ── HTML via rijen (volgorde-gebaseerd) ──────────────────────────────────
     let bloHtml = '';
@@ -2830,6 +2830,7 @@ body{font-family:Arial,Helvetica,sans-serif;font-size:10.5pt;margin:.6cm 1.2cm 1
 .hdr-comp{font-size:16pt;font-weight:700;line-height:1.2;margin-bottom:.5mm}
 .hdr-meta{font-size:9.5pt;color:#555}
 .hdr-versie{font-size:8pt;color:#999;margin-top:1mm}
+.hdr-baan{flex-shrink:0;display:flex;align-items:flex-start}
 .hdr-rechts{flex-shrink:0;display:flex;align-items:flex-start}
 .hdr-lijn{border:none;border-top:2px solid #1a3a5c;margin:.4cm 0 .5cm 0}
 .disclaimer{background:#fffbee;border:1px solid #e6c800;border-left:4px solid #e6c800;
@@ -2881,6 +2882,7 @@ body{font-family:Arial,Helvetica,sans-serif;font-size:10.5pt;margin:.6cm 1.2cm 1
     ${metaTxt ? `<div class="hdr-meta">${metaTxt}</div>` : ''}
     ${schema.gegenereerd_op ? `<div class="hdr-versie">Programma gegenereerd op: ${esc(new Date(schema.gegenereerd_op.replace(' ','T')+'Z').toLocaleString('nl-NL',{day:'2-digit',month:'long',year:'numeric',hour:'2-digit',minute:'2-digit'}))}</div>` : ''}
   </div>
+  ${baanLogoHtml ? `<div class="hdr-baan">${baanLogoHtml}</div>` : ''}
   <div class="hdr-rechts">${orgLogoHtml}</div>
 </div>
 <hr class="hdr-lijn">
@@ -3082,7 +3084,7 @@ function _bouwProgrammaInternInternal() {
 
     // ── Org-logo header + sponsors footer (gedeelde helper) ─────────────────
     const esc = s => String(s ?? '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
-    const { orgLogoHtml, footerHtml } = bouwOrgHeaderFooter(esc);
+    const { orgLogoHtml, baanLogoHtml, footerHtml } = bouwOrgHeaderFooter(esc);
 
     // ── DC-namen opzoektabel ──────────────────────────────────────────────────
     const dcNaamMap = new Map();
@@ -3228,6 +3230,7 @@ body{font-family:Arial,Helvetica,sans-serif;font-size:9.5pt;margin:.5cm 1cm 1cm;
 .hdr-comp{font-size:15pt;font-weight:700;line-height:1.2;margin-bottom:.5mm}
 .hdr-meta{font-size:9pt;color:#555}
 .hdr-versie{font-size:7.5pt;color:#999;margin-top:1mm}
+.hdr-baan{flex-shrink:0;display:flex;align-items:flex-start}
 .hdr-rechts{flex-shrink:0;display:flex;align-items:flex-start}
 .hdr-lijn{border:none;border-top:2px solid #1a3a5c;margin:.4cm 0 .4cm 0}
 table{border-collapse:collapse;width:100%;font-size:9.5pt}
@@ -3275,6 +3278,7 @@ td.opm{font-size:8pt;color:#7a4200;font-style:italic;padding-left:12px;padding-t
     ${schema.gegenereerd_op ? `<div class="hdr-versie">Programma gegenereerd op: ${esc(new Date(schema.gegenereerd_op.replace(' ','T')+'Z').toLocaleString('nl-NL',{day:'2-digit',month:'long',year:'numeric',hour:'2-digit',minute:'2-digit'}))}</div>` : ''}
     <div class="hdr-versie" style="color:#b00">Intern gebruik — niet publiceren</div>
   </div>
+  ${baanLogoHtml ? `<div class="hdr-baan">${baanLogoHtml}</div>` : ''}
   <div class="hdr-rechts">${orgLogoHtml}</div>
 </div>
 <hr class="hdr-lijn">

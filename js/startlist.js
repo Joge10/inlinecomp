@@ -506,7 +506,6 @@ async function _bouwStartlijstDrukInternal(optData) {
 
     // Seeding-methode label
     const METHODE_LABEL = {
-        willekeurig:     'Willekeurig geloot',
         startnummer:     'Op startnummer',
         alfabetisch:     'Alfabetisch',
         tussenklassement:'Tussenklassement (deze wedstrijd)',
@@ -714,7 +713,10 @@ col.pr-col-opm{width:60px}
 .pr-opm{border-left:1px solid #ddd!important}
 /* Full-final: sectie-koppen (B-Finales / A-Finale) */
 .pr-sectie-kop{grid-column:1/-1;font-weight:700;font-size:9pt;letter-spacing:.03em;
-               padding:3px 0 2px;margin-top:.3cm;border-bottom:2px solid currentColor}
+               padding:3px 0 2px;margin-top:.3cm;border-bottom:2px solid currentColor;
+               /* Houd de sectie-kop bij de eerstvolgende heat-card; geen
+                  page-break direct ná deze regel. */
+               page-break-after:avoid;break-after:avoid}
 .pr-sectie-b{color:#20c997}
 .pr-sectie-a{color:#198754}
 /* Combi-marker: accent-rand op kaarten van gecombineerde ritten + badge */
@@ -1993,7 +1995,6 @@ function maakDeelnemersPaneel(container, cache, cacheKey, flow, groep, distId) {
 
 function maakHeatGrid(data, methode, ritLookup) {
     const methodeLabel = {
-        willekeurig:     'Willekeurig geloot',
         startnummer:     'Op startnummer',
         alfabetisch:     'Alfabetisch',
         tussenklassement:'Tussenklassement (deze wedstrijd)',

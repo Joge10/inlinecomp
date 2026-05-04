@@ -25,7 +25,7 @@ if (!$gebruiker) {
     <span class="badge">KNSB Inline</span>
     <div class="header-user">
         <button class="header-printcenter-btn" id="btn-printcenter" title="Print-Center openen" disabled>&#128424; Print-Center</button>
-        <button class="header-handleiding-btn" id="btn-handleiding" title="Handleiding openen" onclick="openHandleiding()">&#128366; Handleiding</button>
+        <button class="header-handleiding-btn" id="btn-handleiding" title="Handleiding openen" onclick="window.open('docs/handleiding.html', '_blank', 'noopener')">&#128366; Handleiding</button>
         <span class="header-user-naam"><?= htmlspecialchars($gebruiker['naam']) ?></span>
         <span class="header-user-rol"><?= htmlspecialchars($gebruiker['role']) ?></span>
         <button class="header-uitlog-btn" id="btn-uitloggen" title="Uitloggen">&#10148;</button>
@@ -204,6 +204,7 @@ if (!$gebruiker) {
                             <h2 id="org-form-titel">Organisatie</h2>
                             <nav class="org-tabs-nav" id="org-tabs-nav">
                                 <button class="org-tab-btn active" data-tab="gegevens">Gegevens</button>
+                                <button class="org-tab-btn" data-tab="banen">Banen</button>
                                 <button class="org-tab-btn" data-tab="transponders">Transponders</button>
                                 <button class="org-tab-btn" data-tab="wedstrijden">Wedstrijden</button>
                                 <button class="org-tab-btn" data-tab="klassementen">Klassementen</button>
@@ -341,6 +342,19 @@ if (!$gebruiker) {
                             <div id="ranking-container"></div>
                         </div>
 
+                        <!-- Tab: Banen -->
+                        <div class="org-tab-content" id="org-tab-banen" style="display:none">
+                            <div class="label-hint" style="margin-bottom:.6rem">
+                                Banen waar deze organisatie wedstrijden houdt — gastheer-vereniging
+                                + logo voor de print-headers. Bij import wordt automatisch een
+                                rij aangemaakt op basis van de KNSB-venue als die nog niet bestaat.
+                            </div>
+                            <div id="banen-container">
+                                <div class="status-msg loading"><span class="spinner"></span>Laden…</div>
+                            </div>
+                            <button class="btn-nieuw-org" id="btn-nieuwe-baan">+ Nieuwe baan</button>
+                        </div>
+
                     </div><!-- /org-tabs-wrap -->
                 </div><!-- /inst-right -->
             </div><!-- /inst-layout -->
@@ -383,8 +397,55 @@ if (!$gebruiker) {
         </div>
 
         <div id="page-info" class="page">
-            <div class="section-title">Info</div>
-            <p style="color:#666;">Nog geen inhoud.</p>
+            <div class="pagina-inhoud">
+                <div class="section-title">Info</div>
+
+                <div class="info-blok">
+                    <h3>InlineComp</h3>
+                    <p>Webapplicatie voor het beheren van inline-skatewedstrijden:
+                       deelnemers importeren, tijdschema opstellen, startlijsten loten,
+                       resultaten verwerken, uitslagen en klassementen berekenen en afdrukken.</p>
+                    <p>Ingelogd als <strong id="info-user">…</strong>
+                       (rol: <span id="info-rol">…</span>).</p>
+                </div>
+
+                <div class="info-blok">
+                    <h3>Documentatie</h3>
+                    <ul class="info-lijst">
+                        <li>📖 <a href="docs/handleiding.html" target="_blank" rel="noopener">
+                            Handleiding</a> — stap-voor-stap uitleg per module en een
+                            appendix voor techneuten.</li>
+                        <li>🔒 <a href="privacyverklaring.php" target="_blank" rel="noopener">
+                            Privacyverklaring (AVG)</a> — welke persoonsgegevens InlineComp
+                            verwerkt, waarom, en hoe lang ze bewaard blijven.</li>
+                    </ul>
+                </div>
+
+                <div class="info-blok">
+                    <h3>Versie en techniek</h3>
+                    <ul class="info-lijst">
+                        <li>InlineComp draait in jouw browser; alle gegevens worden
+                            opgeslagen op de server van de organisatie.</li>
+                        <li>Browser: <code id="info-browser">…</code></li>
+                        <li>Verbinding: <code id="info-online">…</code></li>
+                    </ul>
+                </div>
+
+                <div class="info-blok">
+                    <h3>Hulp en feedback</h3>
+                    <p>Loop je tegen iets aan, of mis je een functie?
+                       Open een issue of mail naar <a href="mailto:inlinecomp@devriesen.com">
+                       inlinecomp@devriesen.com</a>. Dat helpt om InlineComp beter te maken
+                       voor iedereen.</p>
+                </div>
+
+                <div class="info-blok info-blok-laatst">
+                    <h3>Met dank aan</h3>
+                    <p>Iedereen die feedback gaf tijdens de ontwikkeling — speakers,
+                       juryleden, tijdwaarnemers, coaches, rijders (m/v), publiek
+                       en de KNSB.</p>
+                </div>
+            </div>
         </div>
 
     </main>
@@ -422,9 +483,10 @@ function magSchrijven(module) {
 <script src="js/ranking.js"></script>
 <script src="js/klassement_serie_ui.js"></script>
 <script src="js/instellingen.js"></script>
+<script src="js/banen.js"></script>
+<script src="js/meldingen.js"></script>
 <script src="js/gebruikers.js"></script>
 <script src="js/rijders.js"></script>
-<script src="js/handleiding.js"></script>
 <script src="js/print_module.js"></script>
 </body>
 </html>
