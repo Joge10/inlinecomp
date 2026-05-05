@@ -248,7 +248,12 @@ function berekenCombineerdResultaat(
 //   categorie, finishpositie, tijd_ms, sanctie
 //
 // Retourneert: array gesorteerd van plek 1..N, met NOT_RANKED onderaan.
-function berekenInternationaalResultaat(array $rondeData): array {
+function berekenInternationaalResultaat(array $rondeData, string $raceSubType = 'sprint'): array {
+    // $raceSubType: 'sprint' (default), 'inline', 'puntenkoers', of 'afvalkoers'.
+    // Voor alle drie de lange-afstanden geldt: niet-doorgestroomde rijders uit
+    // een serie/kwart/halve worden ex-aequo geklasseerd op heat-positie. Alleen
+    // de finale wordt op tijd/rondes/punten gerankt.
+    $isLangeAfstand = in_array($raceSubType, ['inline', 'puntenkoers', 'afvalkoers'], true);
     $NOT_RANKED  = ['DQ-SF', 'DQ-DF'];
     $RANKED_LAST = ['DNF', 'DQ-TF', 'DNS'];
 
@@ -353,10 +358,15 @@ function berekenInternationaalResultaat(array $rondeData): array {
             ];
         }
 
-        // Afvalkoers-detectie: minstens 1 rijder met afval_rang in deze ronde.
-        // Bij afvalkoers leidt finishpositie de ranking — sprinters hebben pos 1..X
-        // (uit rondes/tijd-sortering bij save), afvallers hebben pos = afval_rang.
-        $isAfvalkoers = !empty(array_filter($uitgevallen, fn($r) => $r['afval_rang'] !== null));
+        // Afvalkoers-detectie (legacy heuristiek + expliciete race_subtype)
+        $isAfvalkoers = $raceSubType === 'afvalkoers'
+                     || !empty(array_filter($uitgevallen, fn($r) => $r['afval_rang'] !== null));
+
+        // Niet-doorgestroomde rijders bij lange afstanden: positie ex-aequo,
+        // ongeacht race_subtype (inline/puntenkoers/afvalkoers). De finale
+        // (finale_a / runner_up) blijft op tijd/rondes/punten gerankt.
+        $isFinaleRonde = in_array($rondeType, ['finale_a', 'runner_up'], true);
+        $useFiPosExAequo = ($isLangeAfstand && !$isFinaleRonde) || $isAfvalkoers;
 
         // Sorteer uitgevallen rijders per ranking method
         // Eerst finishers, dan ranked_last
@@ -379,16 +389,16 @@ function berekenInternationaalResultaat(array $rondeData): array {
             $heeftRnd = $allesGevuld && $maxRnd > 0;
         }
 
-        usort($uitgevallen, function ($a, $b) use ($rankingMethod, $isPK, $heeftRnd, $isAfvalkoers) {
+        usort($uitgevallen, function ($a, $b) use ($rankingMethod, $isPK, $heeftRnd, $useFiPosExAequo) {
             // ranked_last altijd onderaan
             if ($a['_ranked_last'] && !$b['_ranked_last']) return 1;
             if (!$a['_ranked_last'] && $b['_ranked_last']) return -1;
             if ($a['_ranked_last'] && $b['_ranked_last']) return 0; // ex-aequo
 
-            // Afvalkoers: finishpositie ASC is leidend — sprinters (1..X) bovenaan,
-            // afvallers (X+1..N op afval_rang) daaronder. Geen tijd/rondes-fallback,
-            // want afvallers hebben die typisch niet ingevuld.
-            if ($isAfvalkoers) {
+            // Lange afstand of afvalkoers, niet-finale ronde: finishpositie
+            // is leidend en alle gelijke posities zijn ex-aequo (geen tijd-
+            // tiebreak, want heats zijn niet onderling vergelijkbaar).
+            if ($useFiPosExAequo) {
                 $pA = $a['finishpositie'] ?? PHP_INT_MAX;
                 $pB = $b['finishpositie'] ?? PHP_INT_MAX;
                 return $pA <=> $pB;
@@ -439,9 +449,10 @@ function berekenInternationaalResultaat(array $rondeData): array {
                 $r['rang'] = $rangOffset + 1;
             } else {
                 $prev = $uitgevallen[$i - 1];
-                if ($isAfvalkoers) {
-                    // Ex-aequo bij afvalkoers = gelijke finishpositie (= gelijke
-                    // afval_rang, bv. een groep die jury samen eruit haalt).
+                if ($useFiPosExAequo) {
+                    // Ex-aequo bij positie-gebaseerde rangschikking: gelijke
+                    // finishpositie deelt rang. Geldt voor afvalkoers (alle
+                    // rondes) en voor lange-afstand series/kwart/halve.
                     $exAequo = $r['finishpositie'] !== null
                             && $r['finishpositie'] === $prev['finishpositie'];
                 } elseif ($isPK) {

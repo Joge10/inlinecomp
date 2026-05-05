@@ -235,6 +235,7 @@ try {
         // DNF = reverse withdrawal).
         // Wordt ook gebruikt voor de race-type-aware ranking-defaults hieronder.
         $raceType = 'sprint';
+        $raceSubType = 'sprint';
         if ($distId) {
             $drt = $pdo->prepare("
                 SELECT race_type FROM distances
@@ -244,6 +245,9 @@ try {
             $drt->execute([$primaryDcId, $distId]);
             $distRt = $drt->fetchColumn();
             if ($distRt && $distRt !== 'sprint') $raceType = 'long_distance';
+            // Specifiekere subcategorie voor frontend (bv. ranking-keuze
+            // verbergen bij afvalkoers — die kent geen tijd-fallback).
+            $raceSubType = $distRt ?: 'sprint';
         }
 
         // Eerste actieve ronde bepalen voor deze categorie — nodig om de
@@ -420,7 +424,7 @@ try {
             ($rondeVolgorde[$a['ronde_type']] ?? 5) <=> ($rondeVolgorde[$b['ronde_type']] ?? 5)
         );
 
-        $resultaat = berekenInternationaalResultaat($rondeDataArr);
+        $resultaat = berekenInternationaalResultaat($rondeDataArr, $raceSubType);
         $hasResults = !empty($resultaat);
 
         // Alle sancties ophalen voor weergave
@@ -514,6 +518,7 @@ try {
             'rondes'        => $beschikbareRondes,
             'ranking'       => $rankingConfig,
             'race_type'     => $raceType ?? 'sprint',
+            'race_subtype'  => $raceSubType ?? 'sprint',
             'heeft_rondes'  => $heeftRondes,
             'heeft_pk_punten' => $heeftPkPunten,
         ], JSON_UNESCAPED_UNICODE);

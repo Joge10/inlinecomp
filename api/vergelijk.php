@@ -548,10 +548,18 @@ try {
     $baanStmt->execute([$compId]);
     $baan = $baanStmt->fetch(PDO::FETCH_ASSOC) ?: null;
 
+    // Geïmporteerd-flag — bestaat de competition row in de database? Pas dan
+    // kan baan_id gekoppeld worden. UI gebruikt dit om "eerst importeren" te
+    // tonen voor nog-nooit-geïmporteerde wedstrijden.
+    $impStmt = $pdo->prepare("SELECT 1 FROM competitions WHERE id = ?");
+    $impStmt->execute([$compId]);
+    $isImported = (bool)$impStmt->fetchColumn();
+
     echo json_encode([
         'groepen'            => $result,
         'organisatie'        => $organisatie,
         'baan'               => $baan,
+        'imported'           => $isImported,
         'knsb_stand'         => $knsb_stand,
         'db_stand'           => $db_stand,
         'entries_version'    => $entriesVersion,

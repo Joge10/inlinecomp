@@ -25,6 +25,7 @@ let entriesVersion   = null;  // voor optimistic locking bij import
 let gewijzigdeRijen  = new Set(); // license_keys van gewijzigde (nog niet opgeslagen) rijen
 let huidigOrganisatie = null; // organisatie-object van huidig geselecteerde wedstrijd
 let huidigBaan        = null; // baan-object (gastheer-vereniging + logo) van huidige wedstrijd
+let huidigImported    = false; // is de huidige wedstrijd al geïmporteerd? (DB-row aanwezig)
 let dcDistances       = {};   // {dc_id: [{id, number, name, value_meters}]} – KNSB afstanden per DC
 let standDatum        = '';   // tijdstip KNSB-ophaling voor tekenlijst (dd-mm-yyyy HH:mm)
 let dbStandDatum      = '';   // tijdstip laatste DB-import voor tekenlijst (dd-mm-yyyy HH:mm)
@@ -458,6 +459,7 @@ async function selectWedstrijd(card, comp) {
         vergelijkData     = vData.groepen     ?? vData; // backwards compat
         huidigOrganisatie = vData.organisatie ?? null;
         huidigBaan        = vData.baan        ?? null;
+        huidigImported    = !!vData.imported;
         standDatum        = vData.knsb_stand  ?? '';
         dbStandDatum      = vData.db_stand    ?? '';
         entriesVersion    = vData.entries_version ?? 0;
@@ -468,11 +470,129 @@ async function selectWedstrijd(card, comp) {
         initEdits();
         bouwVergelijkTabbladen();
         updateImportBtn();
+        renderBaanRij();
 
     } catch(e) {
         if (e.name === 'AbortError') return; // nieuwere klik heeft deze aanvraag afgebroken
         setHTML('imp-cat-content', `<div class="status-msg error">⚠ ${escHtml(e.message)}</div>`);
     }
+}
+
+// ── Baan-rij in detail-header ────────────────────────────────────────────────
+//
+// Toont de huidig gekoppelde baan onder de wedstrijd-meta, met een ✎-knop om
+// een andere baan te kiezen (of een baan toe te wijzen aan een wedstrijd die
+// nog géén baan heeft — bv. oude imports zonder venue_name). De dropdown bevat
+// alle unieke banen over alle organisaties heen.
+
+function renderBaanRij() {
+    const rij = el('detail-baan-rij');
+    const txt = el('detail-baan');
+    if (!rij || !txt || !huidigCompId) return;
+
+    // Niet-geïmporteerde wedstrijd: geen baan-koppeling mogelijk (er is nog
+    // geen competition-rij in de DB). Toon hint i.p.v. "geen baan toegewezen".
+    if (!huidigImported) {
+        txt.innerHTML = `<b>Baan:</b> <span class="baan-leeg">— eerst importeren —</span>`;
+        rij.style.display = '';
+        return;
+    }
+
+    const baanLabel = huidigBaan
+        ? `<span class="baan-naam">${escHtml(huidigBaan.naam || '—')}</span>`
+          + (huidigBaan.stad ? ` <span class="baan-stad">(${escHtml(huidigBaan.stad)})</span>` : '')
+        : '<span class="baan-leeg">geen baan toegewezen</span>';
+
+    txt.innerHTML = `<b>Baan:</b> ${baanLabel} `
+        + `<button type="button" class="baan-edit-btn" id="btn-baan-edit" title="Baan wijzigen">✎</button>`;
+    rij.style.display = '';
+
+    el('btn-baan-edit')?.addEventListener('click', openBaanModal);
+}
+
+async function openBaanModal() {
+    if (!huidigCompId) return;
+    let banen = [];
+    try {
+        const res = await fetch('api/banen.php?action=alle');
+        if (!res.ok) throw new Error('HTTP ' + res.status);
+        banen = await res.json();
+    } catch (e) {
+        toonBevestigDialog('Banen laden mislukt: ' + e.message, 'Fout');
+        return;
+    }
+
+    // Match op naam: de dropdown is gededupliceerd op naam (MIN(id)), dus de
+    // id in de lijst kan een andere zijn dan huidigBaan.id (dezelfde fysieke
+    // baan kan onder meerdere orgs als aparte rij voorkomen). Naam is uniek
+    // per fysieke baan, dus dat is de stabiele match-key.
+    const huidigNaam = huidigBaan?.naam ?? '';
+    // Voor de zekerheid: als huidige baan-naam toch niet in de lijst zit,
+    // voeg hem alsnog vooraan toe zodat de gebruiker hem geselecteerd ziet.
+    const heeftHuidig = huidigNaam && banen.some(b => b.naam === huidigNaam);
+    const lijst = heeftHuidig
+        ? banen
+        : (huidigBaan ? [{ id: huidigBaan.id, naam: huidigBaan.naam, stad: huidigBaan.stad }, ...banen] : banen);
+
+    const opties = ['<option value="">— geen baan —</option>']
+        .concat(lijst.map(b => {
+            const label = b.naam + (b.stad ? ` (${b.stad})` : '');
+            const sel   = (b.naam === huidigNaam) ? ' selected' : '';
+            return `<option value="${escHtml(b.id)}"${sel}>${escHtml(label)}</option>`;
+        }))
+        .join('');
+
+    const overlay = document.createElement('div');
+    overlay.className = 'modal-overlay';
+    overlay.innerHTML = `
+        <div class="modal-dialog" role="dialog" aria-modal="true">
+            <div class="modal-header">
+                <span class="modal-icon">📍</span>
+                <span>Baan toewijzen</span>
+            </div>
+            <div class="modal-body">
+                <label class="baan-modal-veld">
+                    <span>Kies een baan voor deze wedstrijd:</span>
+                    <select id="baan-modal-sel" class="inp">${opties}</select>
+                    <small>alle unieke banen, ongeacht organisatie</small>
+                </label>
+            </div>
+            <div class="modal-knoppen">
+                <button class="modal-btn modal-annuleer">Annuleren</button>
+                <button class="modal-btn modal-doorgaan">Opslaan</button>
+            </div>
+        </div>`;
+    document.body.appendChild(overlay);
+
+    const sluit = () => overlay.remove();
+    overlay.querySelector('.modal-annuleer').addEventListener('click', sluit);
+    overlay.addEventListener('click', e => { if (e.target === overlay) sluit(); });
+    document.addEventListener('keydown', function onKey(e) {
+        if (e.key === 'Escape') { sluit(); document.removeEventListener('keydown', onKey); }
+    });
+
+    overlay.querySelector('.modal-doorgaan').addEventListener('click', async () => {
+        const baanId = overlay.querySelector('#baan-modal-sel').value;
+        const fd = new FormData();
+        fd.append('action', 'koppel_wedstrijd');
+        fd.append('competition_id', huidigCompId);
+        fd.append('baan_id', baanId);
+        try {
+            const res = await fetch('api/banen.php', { method: 'POST', body: fd });
+            const data = await res.json();
+            if (!res.ok) {
+                toonBevestigDialog(data.error || 'Fout bij opslaan', 'Fout');
+                return;
+            }
+            sluit();
+            // Vergelijk-data herladen om de nieuwe baan-info (logo, vereniging) op te halen
+            herlaadVergelijking();
+        } catch (e) {
+            toonBevestigDialog('Fout: ' + e.message, 'Fout');
+        }
+    });
+
+    setTimeout(() => overlay.querySelector('#baan-modal-sel')?.focus(), 0);
 }
 
 // ── Bevestigingsdialoog ───────────────────────────────────────────────────────
@@ -495,6 +615,7 @@ function resetImportModule(verwijderdId) {
     dbStandDatum      = '';
     huidigOrganisatie = null;
     huidigBaan        = null;
+    huidigImported    = false;
     startlijstCache   = {};
 
     // Actieve kaart deselecteren
@@ -503,6 +624,8 @@ function resetImportModule(verwijderdId) {
     // Detail-panel verbergen en inhoud wissen
     const panel = el('detail-panel');
     if (panel) panel.style.display = 'none';
+    const baanRij = el('detail-baan-rij');
+    if (baanRij) baanRij.style.display = 'none';
 
     const tabs    = el('imp-cat-tabs');
     const content = el('imp-cat-content');

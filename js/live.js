@@ -17,7 +17,7 @@ let _liveFilter = { geen_lijst: true, geen_resultaat: true, deels: true, complee
 //   voorlopig_2de   : [entry_id, ...] geselecteerde "2de"-rijders nog niet-geset.
 //   voorlopig_1ste  : [entry_id, ...] geselecteerde "1ste"-rijders nog niet-geset.
 //   geselecteerd    : [entry_id, ...] huidige startnummer-selectie.
-//   historie        : stack voor Undo, elk item = { type: 'set'|'2de'|'1ste'|'fault', entries }.
+// Correcties: klik op een afgevallen-kaart zet rijder terug in koers.
 let _afvalState = {};
 
 // ── Entry point ───────────────────────────────────────────────────────────────
@@ -261,6 +261,13 @@ function _liveHerbereken(ritIdx) {
     const posMap        = _berekenPosities(entries, true);
     const isPuntenkoers = rit.race_type === 'puntenkoers';
 
+    // Voor afvalkoers: ook rijders met afval_rang (via UI gemarkeerd) tellen
+    // als 'compleet' voor de rij-kleur, zelfs zonder tijd of sanctie.
+    const isAfvalkoers = rit.race_type === 'afvalkoers';
+    const afvalIds = isAfvalkoers
+        ? new Set((_afvalState[ritIdx]?.afgevallen || []).map(a => a.entry_id))
+        : null;
+
     // Update finish-badges (dropdowns worden NIET overschreven — die zijn via wissel beheerd)
     // Bij puntenkoers: badges worden door _liveUpdatePuntenBadges beheerd, hier alleen rijkleur
     rit.rijders.forEach(r => {
@@ -285,11 +292,13 @@ function _liveHerbereken(ritIdx) {
         const inp = rij.querySelector('.live-tijd-inp');
         const ms  = inp ? _parseTijdInvoer(inp.value) : null;
         const sanctieWaarde = sel?.value || '';
+        const isAfgevallen  = afvalIds && afvalIds.has(r.entry_id);
         rij.classList.remove('live-rit-status-compleet', 'live-rit-status-sanctie', 'live-rit-status-leeg');
-        if (sanctieWaarde === 'FS') rij.classList.add(ms > 0 ? 'live-rit-status-compleet' : 'live-rit-status-leeg');
-        else if (heeftSanctie)      rij.classList.add('live-rit-status-sanctie');
-        else if (ms > 0)            rij.classList.add('live-rit-status-compleet');
-        else                        rij.classList.add('live-rit-status-leeg');
+        if (sanctieWaarde === 'FS')   rij.classList.add(ms > 0 ? 'live-rit-status-compleet' : 'live-rit-status-leeg');
+        else if (heeftSanctie)        rij.classList.add('live-rit-status-sanctie');
+        else if (ms > 0)              rij.classList.add('live-rit-status-compleet');
+        else if (isAfgevallen)        rij.classList.add('live-rit-status-compleet');
+        else                          rij.classList.add('live-rit-status-leeg');
     });
 
     if (isPuntenkoers) _liveUpdatePuntenBadges(ritIdx);
@@ -327,6 +336,18 @@ function _volgendeRondeType(dcId, distanceId, vanRondeType) {
     }
     if (vanRondeType === 'halve_finale') return 'finale_a';
     return null;
+}
+
+// Is de huidige ronde de eerste van de keten voor deze categorie?
+// Eerste ronde = heats (als die er zijn), anders kwart, anders half.
+// Alleen ná de eerste ronde komt de runner-up race in beeld: dat zijn
+// immers de afvallers van die eerste ronde.
+function _isEersteRondeKeten(cc, rondeType) {
+    if (!cc) return false;
+    if (cc.heeft_heats)         return rondeType === 'heats';
+    if (cc.heeft_kwartfinale)   return rondeType === 'kwartfinale';
+    if (cc.heeft_halve_finale)  return rondeType === 'halve_finale';
+    return false;
 }
 
 const RONDE_LABEL = {
@@ -660,7 +681,7 @@ function _liveRenderCarousel() {
 
     el('live-btn-volgende-ronde')?.addEventListener('click', e => {
         const b = e.currentTarget;
-        _liveGenereerVolgendeRonde(b.dataset.dcId, b.dataset.distanceId, b.dataset.van, b.dataset.naar);
+        _liveGenereerKetenStap(b.dataset.dcId, b.dataset.distanceId, b.dataset.van, b.dataset.naar);
     });
 }
 
@@ -1488,9 +1509,18 @@ function _afvalInitVoorRit(ritIdx) {
 
     // Eerste init: bouw afgevallen-stack uit DB-data.
     // Sortering: afval_rang DESC (eerste afvaller = hoogste rang, links in de UI-rij).
+    // Bij init kunnen we niet onderscheiden tussen Set en By Decision uit DB-
+    // data alleen (beide hebben sanctie=null). DQ-TF herkennen we wel als Fault.
+    // Voor By Decision is dat helaas een verlies bij refresh — we beschouwen
+    // sanctie=null als Set, en alleen DQ-TF/DNS als buiten_schema.
     const afgevallen = (rit.rijders || [])
         .filter(r => r.afval_rang != null)
-        .map(r => ({ entry_id: r.entry_id, plek: r.afval_rang, sanctie: r.sanctie || null }))
+        .map(r => ({
+            entry_id: r.entry_id,
+            plek:     r.afval_rang,
+            sanctie:  r.sanctie || null,
+            buiten_schema: (r.sanctie === 'DQ-TF' || r.sanctie === 'DNS'),
+        }))
         .sort((a, b) => b.plek - a.plek);
 
     _afvalState[ritIdx] = {
@@ -1498,7 +1528,6 @@ function _afvalInitVoorRit(ritIdx) {
         voorlopig_2de:  [],
         voorlopig_1ste: [],
         geselecteerd:   [],
-        historie:       [],
     };
     return _afvalState[ritIdx];
 }
@@ -1524,21 +1553,20 @@ function _afvalVolgendePlek(ritIdx) {
 }
 
 // Pas voorlopige '2de'-selectie toe: rijders krijgen tijdelijk de huidige laatste
-// vrije plekken. Knop '2de' wordt na deze actie disabled tot Set/Undo.
+// vrije plekken. Bij hernieuwde aanroep worden vorige voorlopig-rijders weer
+// vrijgegeven (overschrijven), zodat een verkeerde keuze eenvoudig hersteld is.
 function _afvalKies2de(ritIdx) {
     const st = _afvalState[ritIdx];
-    if (!st || st.voorlopig_2de.length > 0 || st.geselecteerd.length === 0) return;
+    if (!st || st.geselecteerd.length === 0) return;
     st.voorlopig_2de = [...st.geselecteerd];
     st.geselecteerd  = [];
-    st.historie.push({ type: 'kies-2de', entries: [...st.voorlopig_2de] });
 }
 
 function _afvalKies1ste(ritIdx) {
     const st = _afvalState[ritIdx];
-    if (!st || st.voorlopig_1ste.length > 0 || st.geselecteerd.length === 0) return;
+    if (!st || st.geselecteerd.length === 0) return;
     st.voorlopig_1ste = [...st.geselecteerd];
     st.geselecteerd   = [];
-    st.historie.push({ type: 'kies-1ste', entries: [...st.voorlopig_1ste] });
 }
 
 // Set: voorlopige selecties definitief maken (ronde afgesloten).
@@ -1564,16 +1592,17 @@ function _afvalSet(ritIdx) {
     });
     // Voeg toe aan afgevallen-stack
     ronde.forEach(item => st.afgevallen.unshift(item));
-    // Reset voorlopig en log undo
-    st.historie.push({ type: 'set', entries: ronde });
     st.voorlopig_2de  = [];
     st.voorlopig_1ste = [];
     st.geselecteerd   = [];
+
+    // Auto-rondes toekennen op basis van heat-config (indien ingevuld).
+    _afvalAssignRondes(ritIdx, ronde);
 }
 
-// By-fault: jury wijst rijder(s) aan voor afvalling met DQ-TF, krijgen huidige
-// laatste vrije plek (of bij meerdere: ex-aequo gedeelde plek). Direct geset,
-// geen voorlopige tussenstap.
+// By-fault: jury wijst rijder(s) aan voor afvalling met DQ-TF (overtreding),
+// krijgen huidige laatste vrije plek (of bij meerdere: ex-aequo gedeelde plek).
+// Buiten het schema — verkleint setTeElim. Vraagt rondebord.
 function _afvalByFault(ritIdx) {
     const st = _afvalState[ritIdx];
     if (!st || st.geselecteerd.length === 0) return;
@@ -1581,29 +1610,193 @@ function _afvalByFault(ritIdx) {
     const k = st.geselecteerd.length;
     const plek = nogVrij - k + 1;
     const ronde = st.geselecteerd.map(eid => ({
-        entry_id: eid, plek, sanctie: 'DQ-TF',
+        entry_id: eid, plek, sanctie: 'DQ-TF', buiten_schema: true,
     }));
     ronde.forEach(item => st.afgevallen.unshift(item));
-    st.historie.push({ type: 'fault', entries: ronde });
     st.geselecteerd = [];
+
+    _afvalAssignRondesBuitenSchema(ritIdx, ronde, 'fault');
 }
 
-// Undo: rolt de laatste historie-actie terug.
-// Let op: 'dns'-acties komen uit een sanctie-wijziging in de heat-tabel —
-// bij undo halen we de rijder uit de afgevallen-stack, maar de sanctie-dropdown
-// blijft op DNS staan. De gebruiker moet de sanctie zelf terugzetten.
-function _afvalUndo(ritIdx) {
+// By Decision: rijder(s) door jury uit koers gehaald zonder overtreding —
+// val, gedubbeld worden, opgeven. GEEN sanctie, wél buiten het schema,
+// gedeelde plek aan onderkant. Verkleint setTeElim. Vraagt rondebord.
+function _afvalByDecision(ritIdx) {
     const st = _afvalState[ritIdx];
-    if (!st || st.historie.length === 0) return;
-    const laatste = st.historie.pop();
-    if (laatste.type === 'kies-2de') {
-        st.voorlopig_2de = [];
-    } else if (laatste.type === 'kies-1ste') {
-        st.voorlopig_1ste = [];
-    } else if (laatste.type === 'set' || laatste.type === 'fault' || laatste.type === 'dns') {
-        const ids = new Set(laatste.entries.map(e => e.entry_id));
-        st.afgevallen = st.afgevallen.filter(a => !ids.has(a.entry_id));
+    if (!st || st.geselecteerd.length === 0) return;
+    const nogVrij = _afvalNogInKoersIds(ritIdx).length;
+    const k = st.geselecteerd.length;
+    const plek = nogVrij - k + 1;
+    const ronde = st.geselecteerd.map(eid => ({
+        entry_id: eid, plek, sanctie: null, buiten_schema: true,
+    }));
+    ronde.forEach(item => st.afgevallen.unshift(item));
+    st.geselecteerd = [];
+
+    _afvalAssignRondesBuitenSchema(ritIdx, ronde, 'decision');
+}
+
+// Kent automatisch ronde-getallen toe aan zojuist afgevallen rijders, op
+// basis van de heat-config. Schrijft naar zowel rit.rijders[].rondes als
+// het DOM-input (.live-rondes-inp) zodat opslaan + linker panel correct
+// updaten. Doet niets als config niet ingevuld is.
+// Schrijft een ronde-getal naar zowel rit.rijders[].rondes als de DOM-input.
+function _afvalSchrijfRondes(rit, entryId, ronde) {
+    const r = rit.rijders.find(x => x.entry_id === entryId);
+    if (r) r.rondes = ronde;
+    [`[data-entry="${entryId}"]`, `[data-panel-entry="${entryId}"]`].forEach(sel => {
+        document.querySelectorAll(sel).forEach(rij => {
+            const inp = rij.querySelector('.live-rondes-inp');
+            if (inp) inp.value = String(ronde);
+            if (rij.dataset) rij.dataset.rondes = String(ronde);
+        });
+    });
+}
+
+// Hercompute het schema voor alle Set-items in de stack op basis van het
+// huidige aantal nog-te-elimineren-via-Set. Doet niets als cfg incompleet.
+// Wordt aangeroepen na elke Set én elke ByFault, want bij ByFault verschuift
+// het schema (één scheduled-slot minder nodig → dubbel--).
+function _afvalHercomputeSetRondes(ritIdx) {
+    const rit = _liveRitten[ritIdx];
+    const st  = _afvalState[ritIdx];
+    if (!rit || !st) return;
+    const cfg = _afvalCfgGet(rit.heat_id);
+    if (!cfg || !cfg.eerste_afval || !cfg.totaal_ronden || !cfg.eindsprint) return;
+
+    // Aantal Set-afvallers TOTAAL die het schema moet leveren =
+    // totaal te elimineren = (starters - eindsprint) - aantal_byfaults.
+    // Van die N pakt het schema de eerste N posities (afvalpos 1..N).
+    const totaal = (rit.rijders || []).length;
+    const buiten = st.afgevallen.filter(a => a.buiten_schema === true).length;
+    const setCount = Math.max(0, totaal - parseInt(cfg.eindsprint) - buiten);
+    if (setCount === 0) return;
+
+    // Set-items in volgorde van toevoeging (oudste = afvalpos 1).
+    // Stack heeft newest at index 0, dus we lopen van eind naar begin.
+    const setItems = [];
+    for (let i = st.afgevallen.length - 1; i >= 0; i--) {
+        const a = st.afgevallen[i];
+        if (a.buiten_schema === true) continue;
+        setItems.push(a); // oudste eerst
     }
+    setItems.forEach((a, idx) => {
+        const ronde = _afvalRondeVoorPositie(idx + 1, cfg, setCount);
+        if (ronde == null) return;
+        _afvalSchrijfRondes(rit, a.entry_id, ronde);
+    });
+}
+
+// Wordt aangeroepen na _afvalSet — alleen het schema hercomputen.
+function _afvalAssignRondes(ritIdx, _items) {
+    _afvalHercomputeSetRondes(ritIdx);
+}
+
+// Vraagt rondebord van de buiten-schema uitval (in-house pop-up, async),
+// schrijft ronde-getal voor de items, en hercomputeert het schema.
+async function _afvalAssignRondesBuitenSchema(ritIdx, items, oorzaak) {
+    const rit = _liveRitten[ritIdx];
+    const st  = _afvalState[ritIdx];
+    if (!rit || !st || !items.length) return;
+    const cfg = _afvalCfgGet(rit.heat_id) || {};
+    const tr  = parseInt(cfg.totaal_ronden) || 0;
+
+    let bord = null;
+    if (tr) {
+        const setCount = _afvalSetTeElimineren(ritIdx);
+        const setGedaan = st.afgevallen.filter(a =>
+            a.buiten_schema !== true && !items.includes(a)).length;
+        const next = _afvalRondeVoorPositie(setGedaan + 1, cfg, setCount);
+        const defaultBord = next ? (tr - next + 1) : '';
+        const titel = oorzaak === 'fault'
+            ? 'By Fault — overtreding (DQ-TF)'
+            : 'By Decision — val / dubbel / opgeven';
+        bord = await _afvalBordPrompt(titel, tr, defaultBord);
+    }
+    if (bord != null) {
+        const ronde = tr - bord;
+        items.forEach(item => _afvalSchrijfRondes(rit, item.entry_id, ronde));
+    }
+    _afvalHercomputeSetRondes(ritIdx);
+    _afvalRerenderPaneel(ritIdx);
+}
+
+// In-house prompt voor rondebord-invoer. Promise → integer 1..max, of null.
+// Hergebruikt de modal-* klassen uit toonBevestigDialog voor visuele consistentie.
+function _afvalBordPrompt(titel, max, defaultValue) {
+    return new Promise(resolve => {
+        const overlay = document.createElement('div');
+        overlay.className = 'modal-overlay';
+        overlay.innerHTML = `
+            <div class="modal-dialog" role="dialog" aria-modal="true">
+                <div class="modal-header">
+                    <span class="modal-icon">🏁</span>
+                    <span>${escHtml(titel)}</span>
+                </div>
+                <div class="modal-body">
+                    <label class="live-av-bord-prompt">
+                        <span>Wat staat er op het rondebord?</span>
+                        <input type="number" id="av-bord-inp" min="1" max="${max}"
+                               value="${escHtml(String(defaultValue ?? ''))}"
+                               class="inp" autocomplete="off">
+                        <small>tussen 1 en ${max}</small>
+                    </label>
+                </div>
+                <div class="modal-knoppen">
+                    <button class="modal-btn modal-annuleer">Annuleren</button>
+                    <button class="modal-btn modal-doorgaan">OK</button>
+                </div>
+            </div>`;
+        document.body.appendChild(overlay);
+        const inp = overlay.querySelector('#av-bord-inp');
+
+        const sluit = (val) => {
+            overlay.remove();
+            document.removeEventListener('keydown', onKey);
+            resolve(val);
+        };
+        const ok = () => {
+            const n = parseInt(inp.value);
+            if (!isNaN(n) && n >= 1 && n <= max) sluit(n);
+            else { inp.classList.add('inp-fout'); inp.focus(); inp.select(); }
+        };
+        const onKey = e => {
+            if (e.key === 'Escape') sluit(null);
+            if (e.key === 'Enter')  { e.preventDefault(); ok(); }
+        };
+
+        overlay.querySelector('.modal-annuleer').addEventListener('click', () => sluit(null));
+        overlay.querySelector('.modal-doorgaan').addEventListener('click', ok);
+        overlay.addEventListener('click', e => { if (e.target === overlay) sluit(null); });
+        document.addEventListener('keydown', onKey);
+        setTimeout(() => { inp.focus(); inp.select(); }, 0);
+    });
+}
+
+// Releast één afgevallen rijder terug naar 'nog in koers'. Hercomputeert
+// het Set-schema (de bevrijde positie schuift weer terug). Bedoeld voor het
+// corrigeren van een verkeerd aangeklikte rijder bij By Fault/Decision.
+function _afvalRelease(ritIdx, entryId) {
+    const st  = _afvalState[ritIdx];
+    const rit = _liveRitten[ritIdx];
+    if (!st || !rit) return;
+    const idx = st.afgevallen.findIndex(a => a.entry_id === entryId);
+    if (idx < 0) return;
+    st.afgevallen.splice(idx, 1);
+
+    // Rondes wissen: rit.rijders + DOM-input
+    const r = rit.rijders.find(x => x.entry_id === entryId);
+    if (r) r.rondes = null;
+    [`[data-entry="${entryId}"]`, `[data-panel-entry="${entryId}"]`].forEach(sel => {
+        document.querySelectorAll(sel).forEach(rij => {
+            const inp = rij.querySelector('.live-rondes-inp');
+            if (inp) inp.value = '';
+            if (rij.dataset) rij.dataset.rondes = '';
+        });
+    });
+
+    // Schema voor resterende Set-items hercomputen.
+    _afvalHercomputeSetRondes(ritIdx);
 }
 
 // Toggle een rijder in de huidige selectie.
@@ -1637,8 +1830,7 @@ function _afvalSyncSanctie(ritIdx, entryId, nieuweSanctie) {
         st.voorlopig_1ste = st.voorlopig_1ste.filter(id => id !== entryId);
         // Toevoegen op huidige laagste plek
         const plek = _afvalNogInKoersIds(ritIdx).length;
-        st.afgevallen.unshift({ entry_id: entryId, plek, sanctie: 'DNS' });
-        st.historie.push({ type: 'dns', entries: [{ entry_id: entryId, plek, sanctie: 'DNS' }] });
+        st.afgevallen.unshift({ entry_id: entryId, plek, sanctie: 'DNS', buiten_schema: true });
         return;
     }
 
@@ -1646,16 +1838,127 @@ function _afvalSyncSanctie(ritIdx, entryId, nieuweSanctie) {
     // halen ALLEEN als hij eerder via DNS-flow is toegevoegd (sanctie='DNS' in stack).
     if (reedsAfgevallen && reedsAfgevallen.sanctie === 'DNS') {
         st.afgevallen = st.afgevallen.filter(a => a.entry_id !== entryId);
-        // Optionele undo-traceer: laatste DNS-actie voor deze entry vinden en verwijderen
-        // (eenvoudig: gewoon één DNS-historie-event ongedaan)
-        for (let i = st.historie.length - 1; i >= 0; i--) {
-            if (st.historie[i].type === 'dns' &&
-                st.historie[i].entries[0]?.entry_id === entryId) {
-                st.historie.splice(i, 1);
-                break;
-            }
-        }
     }
+}
+
+// ── Afvalkoers-config (localStorage per heat-id) ─────────────────────────────
+// Heat-config bevat: totaal_ronden, eerste_afval, aantal_dubbel, eindsprint.
+// Wordt door admin in de Live-UI ingevuld (na DNS-check, want pas op start-
+// moment weten we hoeveel deelnemers werkelijk staan). Niet in DB opgeslagen
+// — de afval-rangen + per-rijder-rondes (in `results.rondes`) zijn de echte
+// permanente data; deze cfg is alleen UI-help om automatisch ronde-getallen
+// voor te stellen bij elke nieuwe afvalling.
+function _afvalCfgKey(heatId) { return 'afvalcfg_' + heatId; }
+
+function _afvalCfgGet(heatId) {
+    if (!heatId) return null;
+    try {
+        const raw = localStorage.getItem(_afvalCfgKey(heatId));
+        return raw ? JSON.parse(raw) : null;
+    } catch { return null; }
+}
+
+function _afvalCfgSet(heatId, cfg) {
+    if (!heatId) return;
+    try {
+        if (cfg) localStorage.setItem(_afvalCfgKey(heatId), JSON.stringify(cfg));
+        else     localStorage.removeItem(_afvalCfgKey(heatId));
+    } catch { /* quotum bereikt — best-effort */ }
+}
+
+// Aantal vaste laatste afvalrondes (rondebord 3, 2, 1) — altijd 1 afvaller
+// per ronde, ongeacht het globale interval.
+const _AFVAL_LAATSTE_VAST = 3;
+
+// cfg.eerste_afval is een RONDEBORD-nummer = 'rondes te gaan' bij eerste
+// afvalling. Schema telt af in borden: ea, ea-iv, ea-2*iv, … > 3,
+// daarna vaste borden 3, 2, 1. Conversie naar "voltooide rondes":
+// rondes = totaal_ronden − bord. Voorbeeld: totaal=25, bord 21 → 4 rondes
+// voltooid (rijder valt aan einde van de bord-21-ronde, voor finish-lijn);
+// bord 1 → 24 rondes voltooid (laatste afvalling vóór de eindsprint).
+function _afvalSchema(cfg, teElimineren) {
+    if (!cfg) return [];
+    const ea = parseInt(cfg.eerste_afval)  || 0;  // rondebord
+    const tr = parseInt(cfg.totaal_ronden) || 0;
+    const iv = parseInt(cfg.interval)      || 1;
+    if (!ea || !tr || !teElimineren) return [];
+
+    teElimineren = Math.max(0, teElimineren);
+    if (teElimineren === 0) return [];
+
+    // Eerste-fase borden: ea, ea-iv, ea-2*iv, … > _AFVAL_LAATSTE_VAST (= > 3)
+    const eersteBorden = [];
+    for (let b = ea; b > _AFVAL_LAATSTE_VAST; b -= iv) eersteBorden.push(b);
+    const eersteAantal = eersteBorden.length;
+
+    // Vaste fase: borden 3, 2, 1
+    const vastBorden = [];
+    for (let b = _AFVAL_LAATSTE_VAST; b >= 1; b--) vastBorden.push(b);
+
+    // Aantal afvallers per fase
+    const vastAantal    = Math.min(vastBorden.length, teElimineren);
+    const eersteTeElim  = teElimineren - vastAantal;
+    const dubbel        = Math.max(0, eersteTeElim - eersteAantal);
+
+    const arr = [];
+    let dubbelLeft = dubbel;
+    for (const b of eersteBorden) {
+        const n = (dubbelLeft > 0) ? 2 : 1;
+        for (let i = 0; i < n; i++) arr.push(tr - b);
+        if (dubbelLeft > 0) dubbelLeft--;
+    }
+    for (const b of vastBorden) {
+        if (arr.length >= teElimineren) break;
+        arr.push(tr - b);
+    }
+    return arr;
+}
+
+// Overzicht-info voor de afgeleide-balk in de cfg-modal.
+function _afvalAfgeleidDubbel(cfg, teElimineren) {
+    const leeg = { dubbel: 0, afvalrondes: 0, teElimineren: 0, ok: false,
+                   capaciteit: 0, eersteAantal: 0, vastAantal: 0, eersteBorden: [] };
+    if (!cfg) return leeg;
+    const ea = parseInt(cfg.eerste_afval)  || 0;
+    const tr = parseInt(cfg.totaal_ronden) || 0;
+    const iv = parseInt(cfg.interval)      || 1;
+    if (!ea || !tr || !teElimineren) return leeg;
+
+    teElimineren = Math.max(0, teElimineren);
+    const eersteBorden = [];
+    for (let b = ea; b > _AFVAL_LAATSTE_VAST; b -= iv) eersteBorden.push(b);
+    const eersteAantal = eersteBorden.length;
+    const vastAantal   = Math.min(_AFVAL_LAATSTE_VAST, teElimineren);
+    const eersteTeElim = teElimineren - vastAantal;
+    const dubbel       = Math.max(0, eersteTeElim - eersteAantal);
+    const capaciteit   = 2 * eersteAantal + _AFVAL_LAATSTE_VAST;
+    const afvalrondes  = eersteAantal + _AFVAL_LAATSTE_VAST;
+    const ok = teElimineren <= capaciteit && dubbel <= eersteAantal && ea > _AFVAL_LAATSTE_VAST && ea <= tr;
+    return { dubbel, afvalrondes, teElimineren, ok, capaciteit, eersteAantal, vastAantal, eersteBorden };
+}
+
+// Bereken ronde-volgnummer voor een afval-positie via het schema.
+// teElimineren = aantal Set-afvallers nog te plannen (excl. ByFaults).
+function _afvalRondeVoorPositie(afvalPositie, cfg, teElimineren) {
+    const arr = _afvalSchema(cfg, teElimineren || 0);
+    if (afvalPositie < 1 || afvalPositie > arr.length) return null;
+    return arr[afvalPositie - 1];
+}
+
+// Helper: aantal scheduled-Set afvallers nog te plannen, gegeven de
+// huidige stack. ByFaults (sanctie='DQ-TF') én DNS tellen NIET als
+// scheduled — die zijn al "gratis" uit de koers en verkorten het schema.
+function _afvalSetTeElimineren(ritIdx) {
+    const rit = _liveRitten[ritIdx];
+    const st  = _afvalState[ritIdx];
+    if (!rit) return 0;
+    const cfg = _afvalCfgGet(rit.heat_id) || {};
+    const es  = parseInt(cfg.eindsprint) || 0;
+    if (!es) return 0;
+    const totaal = (rit.rijders || []).length;
+    const buitenSchema = (st?.afgevallen || [])
+        .filter(a => a.buiten_schema === true).length;
+    return Math.max(0, totaal - es - buitenSchema);
 }
 
 // Bouwt de HTML voor het afvalkoers-paneel. Wordt aangeroepen vanuit _liveBouwKaart.
@@ -1678,37 +1981,89 @@ function _bouwAfvalPaneel(rit, idx, tonen) {
     const plek2    = k2 > 0 ? (nogVrij + k2 + k1) - k2 + 1 : null; // tijdelijke plek voor 2de-groep
     const plek1    = k1 > 0 ? (nogVrij + k1) - k1 + 1 : null;       // tijdelijke plek voor 1ste-groep
 
-    // Header
+    // Heat-config strook bovenin (bewaard in localStorage, default leeg).
+    // Toont een 1-regel-samenvatting met ✎-knop voor wijzigen. De cfg helpt
+    // om automatisch ronde-getallen voor te stellen bij Set/By-Fault.
+    const cfg = _afvalCfgGet(rit.heat_id) || {};
+    const cfgIngevuld = !!(cfg.totaal_ronden && cfg.eerste_afval && cfg.eindsprint);
+    const _afInfo = cfgIngevuld ? _afvalAfgeleidDubbel(cfg, _afvalSetTeElimineren(idx)) : null;
+    const cfgSamenvatting = cfgIngevuld
+        ? `${cfg.totaal_ronden} ronden · vanaf bord ${cfg.eerste_afval}`
+          + (parseInt(cfg.interval) === 2 ? ' · om-de-ronde' : ' · elke ronde')
+          + (_afInfo && _afInfo.dubbel > 0 ? ` · ${_afInfo.dubbel}× dubbel` : '')
+          + ` · eindsprint ${cfg.eindsprint}`
+        : '<span class="live-av-cfg-onbekend">⚠ niet ingesteld — rondes worden niet automatisch toegekend</span>';
+    const cfgHtml = `<div class="live-av-cfg">
+        <span class="live-av-cfg-icon">⚙</span>
+        <span class="live-av-cfg-tekst">${cfgSamenvatting}</span>
+        <button class="live-av-cfg-edit" data-act="cfg" type="button" title="Heat-config wijzigen">✎</button>
+    </div>`;
+
+    // Header met tellers
+    const totaalDeelnemers = (rit.rijders || []).length;
+    // Volgende geplande Set-positie = aantal Set-items reeds afgevallen + 1
+    const setGedaan = st.afgevallen.filter(a => a.buiten_schema !== true).length;
+    const setTeElim = _afvalSetTeElimineren(idx);
+    const autoRonde = _afvalRondeVoorPositie(setGedaan + 1, cfg, setTeElim);
+    const trCfg = parseInt(cfg.totaal_ronden) || 0;
+    const autoBord = (autoRonde != null && trCfg) ? (trCfg - autoRonde) : null;
+
+    // Dubbel-resterend: hoeveel borden nog 2-tegelijk vallen (op basis van
+    // huidige schema). Eerste 2*dubbel posities zijn dubbel; resterend bord
+    // = ceil((2*dubbel - setGedaan) / 2).
+    let dubbelOver = null;
+    if (cfgIngevuld && _afInfo) {
+        const dubbelPos = 2 * _afInfo.dubbel;
+        const restPos = Math.max(0, dubbelPos - setGedaan);
+        dubbelOver = Math.ceil(restPos / 2);
+    }
+
     const hdr = `<div class="live-av-header">
         <span class="live-av-tel"><b>Nog in koers:</b> ${nogVrij}</span>
         <span class="live-av-tel"><b>Volgende plek:</b> ${nogVrij > 0 ? nogVrij : '—'}</span>
+        ${autoRonde != null ? `<span class="live-av-tel"><b>Volgende ronde:</b> r.${autoRonde}</span>` : ''}
+        ${autoBord != null ? `<span class="live-av-tel"><b>Rondebord:</b> ${autoBord}</span>` : ''}
+        ${dubbelOver != null && dubbelOver > 0
+            ? `<span class="live-av-tel live-av-tel-dubbel"><b>Dubbel over:</b> ${dubbelOver}×</span>`
+            : ''}
     </div>`;
 
-    // Afgevallen-rij (zelf gesetste afval-kaartjes)
+    // Afgevallen-rij (zelf gesetste afval-kaartjes) — toont nu ook het
+    // rondes-getal per rijder (uit rit.rijders[].rondes).
     const afgHtml = st.afgevallen.length === 0
         ? `<div class="live-av-leeg">Nog geen afvallingen.</div>`
         : st.afgevallen.map(a => {
             const r = rijderMap.get(a.entry_id);
             const snr = r?.startnummer ?? '?';
-            const cls = a.sanctie === 'DQ-TF' ? ' live-av-fault' : '';
-            return `<button class="live-av-kaart-uit${cls}" disabled>` +
+            const rondes = r?.rondes;
+            const isFault    = a.sanctie === 'DQ-TF';
+            const isDecision = a.buiten_schema === true && !isFault;
+            const cls = isFault    ? ' live-av-fault'
+                      : isDecision ? ' live-av-decision'
+                      : '';
+            const lbl = isFault    ? `<span class="live-av-faultlbl">DQ-TF</span>`
+                      : isDecision ? `<span class="live-av-declbl">uit</span>`
+                      : '';
+            return `<button class="live-av-kaart-uit${cls}" data-release="${a.entry_id}" `
+                + `type="button" title="Klik om terug te zetten in koers">` +
                 `<span class="live-av-snr">${escHtml(String(snr))}</span>` +
                 `<span class="live-av-plek">#${a.plek}</span>` +
-                (a.sanctie === 'DQ-TF' ? `<span class="live-av-faultlbl">DQ-TF</span>` : '') +
+                (rondes != null ? `<span class="live-av-rondes">r.${rondes}</span>` : '') +
+                lbl +
                 `</button>`;
         }).join('');
 
     // Knoppen-rij
     const btn2deDis = (st.voorlopig_2de.length > 0 || st.geselecteerd.length === 0) ? ' disabled' : '';
     const btn1stDis = (st.voorlopig_1ste.length > 0 || st.geselecteerd.length === 0) ? ' disabled' : '';
-    const btnFaultDis = st.geselecteerd.length === 0 ? ' disabled' : '';
+    const btnFaultDis    = st.geselecteerd.length === 0 ? ' disabled' : '';
+    const btnDecisionDis = st.geselecteerd.length === 0 ? ' disabled' : '';
     const btnSetDis = (st.voorlopig_2de.length === 0 && st.voorlopig_1ste.length === 0) ? ' disabled' : '';
-    const btnUndoDis = st.historie.length === 0 ? ' disabled' : '';
 
     const knoppenHtml = `<div class="live-av-knoppen">
-        <button class="live-av-btn live-av-btn-fault" data-act="fault"${btnFaultDis}>🚩 By Fault</button>
-        <button class="live-av-btn live-av-btn-undo" data-act="undo"${btnUndoDis}>↶ Undo</button>
-        <button class="live-av-btn live-av-btn-set" data-act="set"${btnSetDis}>✓ Set</button>
+        <button class="live-av-btn live-av-btn-fault"    data-act="fault"${btnFaultDis}>🚩 By Fault</button>
+        <button class="live-av-btn live-av-btn-decision" data-act="decision"${btnDecisionDis}>⨯ By Decision</button>
+        <button class="live-av-btn live-av-btn-set"      data-act="set"${btnSetDis}>✓ Set</button>
         <span class="live-av-spacer"></span>
         <button class="live-av-btn live-av-btn-1ste" data-act="1ste"${btn1stDis}>1ste</button>
         <button class="live-av-btn live-av-btn-2de"  data-act="2de"${btn2deDis}>2de</button>
@@ -1741,10 +2096,16 @@ function _bouwAfvalPaneel(rit, idx, tonen) {
         </div>`;
     }
 
-    // Nog-in-koers grid (klikbare startnummer-kaartjes)
-    const nogHtml = nogIds.length === 0
+    // Nog-in-koers grid (klikbare startnummer-kaartjes), gesorteerd op
+    // startnummer (numeriek oplopend) — eenvoudiger zoeken in een drukke heat.
+    const nogIdsSorted = [...nogIds].sort((a, b) => {
+        const sa = parseInt(rijderMap.get(a)?.startnummer) || 0;
+        const sb = parseInt(rijderMap.get(b)?.startnummer) || 0;
+        return sa - sb;
+    });
+    const nogHtml = nogIdsSorted.length === 0
         ? `<div class="live-av-leeg">Geen rijders meer over.</div>`
-        : nogIds.map(eid => {
+        : nogIdsSorted.map(eid => {
             const r = rijderMap.get(eid);
             const snr = r?.startnummer ?? '?';
             const isSel = st.geselecteerd.includes(eid);
@@ -1766,6 +2127,7 @@ function _bouwAfvalPaneel(rit, idx, tonen) {
 
     return `<div class="live-av-panel" id="live-av-panel-${idx}">
         <div class="live-av-titel">🚫 Afvalkoers</div>
+        ${cfgHtml}
         ${hdr}
         <div class="live-av-afgevallen-rij">${afgHtml}</div>
         ${knoppenHtml}
@@ -1785,6 +2147,8 @@ function _afvalRerenderPaneel(idx) {
     const nieuwe = _bouwAfvalPaneel(rit, idx, isAfvalkoers);
     oude.outerHTML = nieuwe;
     _afvalBindKnoppen(idx);
+    // Heat-card rij-kleuren bijwerken zodat afgevallen rijders ook groen worden
+    if (isAfvalkoers) _liveHerbereken(idx);
 }
 
 // Bind eventhandlers aan het afval-paneel van rit idx.
@@ -1802,19 +2166,189 @@ function _afvalBindKnoppen(idx) {
         });
     });
 
-    // Klik op actie-knop (1ste/2de/By Fault/Set/Undo)
-    paneel.querySelectorAll('.live-av-btn').forEach(btn => {
+    // Klik op een afgevallen-kaart → direct terugzetten naar in-koers
+    // (geen bevestiging — bij onterecht terugzetten gewoon opnieuw afvallen).
+    paneel.querySelectorAll('.live-av-kaart-uit[data-release]').forEach(btn => {
         btn.addEventListener('click', () => {
-            const act = btn.dataset.act;
-            if (act === '2de')        _afvalKies2de(idx);
-            else if (act === '1ste')  _afvalKies1ste(idx);
-            else if (act === 'fault') _afvalByFault(idx);
-            else if (act === 'set')   _afvalSet(idx);
-            else if (act === 'undo')  _afvalUndo(idx);
+            const eid = parseInt(btn.dataset.release);
+            if (!eid) return;
+            _afvalRelease(idx, eid);
             _liveOngeslagen = true;
             _afvalRerenderPaneel(idx);
         });
     });
+
+    // Klik op actie-knop (1ste/2de/By Fault/Set/Undo)
+    paneel.querySelectorAll('.live-av-btn').forEach(btn => {
+        btn.addEventListener('click', () => {
+            const act = btn.dataset.act;
+            if (act === '2de')           _afvalKies2de(idx);
+            else if (act === '1ste')     _afvalKies1ste(idx);
+            else if (act === 'fault')    _afvalByFault(idx);
+            else if (act === 'decision') _afvalByDecision(idx);
+            else if (act === 'set')      _afvalSet(idx);
+            _liveOngeslagen = true;
+            _afvalRerenderPaneel(idx);
+        });
+    });
+
+    // Klik op cfg ✎-knop → open config-modal
+    const cfgBtn = paneel.querySelector('.live-av-cfg-edit');
+    if (cfgBtn) {
+        cfgBtn.addEventListener('click', () => _afvalOpenCfgModal(idx));
+    }
+}
+
+// Modal voor heat-config (totaal_ronden, eerste_afval, aantal_dubbel, eindsprint).
+// Wordt opgeroepen vanuit de ✎-knop in het afval-paneel. Save → localStorage +
+// rerender; recompute rondes voor reeds afgevallen rijders die nog géén ronde
+// hebben (zodat instellen achteraf alsnog correct rondes invult).
+function _afvalOpenCfgModal(ritIdx) {
+    const rit = _liveRitten[ritIdx];
+    if (!rit) return;
+    const cfg = _afvalCfgGet(rit.heat_id) || {};
+    const totDeeln = (rit.rijders || []).length;
+
+    const overlay = document.createElement('div');
+    overlay.className = 'live-av-cfg-overlay';
+    overlay.innerHTML = `
+        <div class="live-av-cfg-box">
+            <h3>⚙ Afvalkoers-configuratie</h3>
+            <p class="live-av-cfg-uitleg">
+                ${totDeeln} starters in deze heat. Vul in hoe het afval-schema er
+                uitziet zodat ronde-getallen automatisch worden toegekend.
+            </p>
+            <label class="live-av-cfg-veld">
+                <span>Totaal aantal ronden</span>
+                <input type="number" id="avcfg-totaal" min="1" value="${cfg.totaal_ronden ?? ''}" placeholder="bv. 18">
+            </label>
+            <label class="live-av-cfg-veld">
+                <span>Eerste afval-rondebord</span>
+                <input type="number" id="avcfg-eerste" min="4" value="${cfg.eerste_afval ?? ''}" placeholder="bv. 21">
+                <small>rondes-te-gaan bij eerste afvalling (rondebord-nummer)</small>
+            </label>
+            <label class="live-av-cfg-veld">
+                <span>Afval-interval</span>
+                <select id="avcfg-interval">
+                    <option value="1" ${parseInt(cfg.interval) !== 2 ? 'selected' : ''}>Elke ronde</option>
+                    <option value="2" ${parseInt(cfg.interval) === 2 ? 'selected' : ''}>Om de ronde</option>
+                </select>
+            </label>
+            <label class="live-av-cfg-veld">
+                <span>Eindsprint (aantal rijders)</span>
+                <input type="number" id="avcfg-eindsprint" min="0" value="${cfg.eindsprint ?? ''}" placeholder="bv. 4">
+                <small>hoeveel rijders strijden om de eindsprint</small>
+            </label>
+            <div class="live-av-cfg-afgeleid" id="avcfg-afgeleid">
+                <!-- live berekend overzicht -->
+            </div>
+            <div class="live-av-cfg-acties">
+                <button class="btn-secondary" id="avcfg-annuleer">Annuleren</button>
+                <button class="btn-danger"    id="avcfg-wis">Wissen</button>
+                <button class="btn-primary"   id="avcfg-opslaan">Opslaan</button>
+            </div>
+        </div>`;
+    document.body.appendChild(overlay);
+
+    overlay.addEventListener('click', e => { if (e.target === overlay) overlay.remove(); });
+    overlay.querySelector('#avcfg-annuleer').addEventListener('click', () => overlay.remove());
+    overlay.querySelector('#avcfg-wis').addEventListener('click', () => {
+        if (!confirm('Heat-configuratie wissen?')) return;
+        _afvalCfgSet(rit.heat_id, null);
+        overlay.remove();
+        _afvalRerenderPaneel(ritIdx);
+    });
+    overlay.querySelector('#avcfg-opslaan').addEventListener('click', () => {
+        const nieuw = {
+            totaal_ronden: parseInt(overlay.querySelector('#avcfg-totaal').value)     || null,
+            eerste_afval:  parseInt(overlay.querySelector('#avcfg-eerste').value)     || null,
+            interval:      parseInt(overlay.querySelector('#avcfg-interval').value)   || 1,
+            eindsprint:    parseInt(overlay.querySelector('#avcfg-eindsprint').value) || null,
+        };
+        if (!nieuw.totaal_ronden || !nieuw.eerste_afval || !nieuw.eindsprint) {
+            alert('Totaal aantal ronden, eerste afval-ronde en eindsprint zijn verplicht.');
+            return;
+        }
+        // aantal_dubbel afleiden + opslaan (als hulpgetal voor de formule).
+        // Modal toont ideaal-schema vóór ByFaults — gebruik totale starters.
+        const teElimModal = Math.max(0, totDeeln - nieuw.eindsprint);
+        const af = _afvalAfgeleidDubbel(nieuw, teElimModal);
+        nieuw.aantal_dubbel = Math.max(0, af.dubbel);
+        if (!af.ok) {
+            const door = af.dubbel < 0
+                ? `Te weinig afvalrondes: ${af.afvalrondes} beschikbaar, maar ${af.teElimineren} rijders te elimineren.`
+                : `Te veel dubbele rondes nodig (${af.dubbel}) voor ${af.afvalrondes} afvalrondes.`;
+            if (!confirm(`Let op: cfg klopt niet helemaal.\n${door}\nToch opslaan?`)) return;
+        }
+        _afvalCfgSet(rit.heat_id, nieuw);
+        overlay.remove();
+
+        // Recompute rondes voor reeds afgevallen rijders zonder ronde-getal
+        const st = _afvalState[ritIdx];
+        if (st && st.afgevallen.length > 0) {
+            const totaalAfgevallen = st.afgevallen.length;
+            st.afgevallen.forEach((a, stackIdx) => {
+                const r = rit.rijders.find(x => x.entry_id === a.entry_id);
+                if (!r || r.rondes != null) return;
+                const afvalPos = totaalAfgevallen - stackIdx;
+                const ronde = _afvalRondeVoorPositie(afvalPos, nieuw, totDeeln);
+                if (ronde == null) return;
+                r.rondes = ronde;
+                [`[data-entry="${a.entry_id}"]`, `[data-panel-entry="${a.entry_id}"]`]
+                    .forEach(sel => {
+                        document.querySelectorAll(sel).forEach(rij => {
+                            const inp = rij.querySelector('.live-rondes-inp');
+                            if (inp) inp.value = String(ronde);
+                            if (rij.dataset) rij.dataset.rondes = String(ronde);
+                        });
+                    });
+            });
+            _liveOngeslagen = true;
+        }
+        _afvalRerenderPaneel(ritIdx);
+    });
+
+    // Live-update van het afgeleide overzicht (afvalrondes / dubbel)
+    const updateAfgeleid = () => {
+        const tmp = {
+            totaal_ronden: parseInt(overlay.querySelector('#avcfg-totaal').value)     || 0,
+            eerste_afval:  parseInt(overlay.querySelector('#avcfg-eerste').value)     || 0,
+            interval:      parseInt(overlay.querySelector('#avcfg-interval').value)   || 1,
+            eindsprint:    parseInt(overlay.querySelector('#avcfg-eindsprint').value) || 0,
+        };
+        const af = _afvalAfgeleidDubbel(tmp, totDeeln);
+        const wrap = overlay.querySelector('#avcfg-afgeleid');
+        if (!tmp.totaal_ronden || !tmp.eerste_afval || !tmp.eindsprint) {
+            wrap.innerHTML = '<i>Vul de velden in voor een berekening.</i>';
+            wrap.classList.remove('av-fout', 'av-ok');
+            return;
+        }
+        const ivLabel = tmp.interval === 2 ? 'om-de-ronde' : 'elke ronde';
+        const teveelAfval = af.teElimineren > af.capaciteit;
+        const dubbelTxt = teveelAfval
+            ? `<span class="av-fout-tekst">capaciteit ${af.capaciteit}, tekort van ${af.teElimineren - af.capaciteit}</span>`
+            : af.dubbel > 0
+                ? `eerste <b>${af.dubbel}</b> bord${af.dubbel > 1 ? 'en' : ''} dubbel (2 afvallers)`
+                : 'geen dubbele rondes nodig';
+        const allBorden = [...af.eersteBorden, 3, 2, 1];
+        wrap.innerHTML =
+            `<b>${totDeeln}</b> starters → <b>${af.teElimineren}</b> elimineren · `
+            + `${af.eersteAantal} bord${af.eersteAantal !== 1 ? 'en' : ''} (${ivLabel}) `
+            + `+ <b>3</b> vaste laatste borden.<br>`
+            + `Borden: ${allBorden.join(', ')}.<br>`
+            + dubbelTxt + '.';
+        wrap.classList.toggle('av-fout', !af.ok);
+        wrap.classList.toggle('av-ok',    af.ok);
+    };
+    ['#avcfg-totaal','#avcfg-eerste','#avcfg-interval','#avcfg-eindsprint']
+        .forEach(s => overlay.querySelector(s).addEventListener('input', updateAfgeleid));
+    overlay.querySelector('#avcfg-interval').addEventListener('change', updateAfgeleid);
+    updateAfgeleid();
+
+    // Focus op eerste leeg veld
+    const firstEmpty = ['#avcfg-totaal','#avcfg-eerste','#avcfg-eindsprint']
+        .map(s => overlay.querySelector(s)).find(i => !i.value);
+    (firstEmpty || overlay.querySelector('#avcfg-totaal')).focus();
 }
 
 // Bereken punten-gebaseerde ranking en update finish-badges in heat card én linker panel.
@@ -2453,16 +2987,29 @@ async function _liveImportLaad(ritIdx) {
     for (const row of rows) csvMap.set(row.nr, row);
 
     let gevonden = 0;
+    // Afvalkoers-bescherming: voor rijders die via de UI al een afval-rang
+    // hebben gekregen (= afgevallen) zijn de rondes handmatig door admin
+    // ingevoerd. Die mogen NIET door MyLaps-CSV worden overschreven —
+    // ze representeren tot welke ronde de rijder mee heeft gereden, niet
+    // de transponder-rondes (die kunnen er minder zijn als de rijder uit
+    // koers is gehaald). Tijd mag wel ververst worden voor het archief.
+    const isAfvalkoers = rit.race_type === 'afvalkoers';
     for (const r of rit.rijders) {
         if (r.startnummer == null) continue;
         const csvRij = csvMap.get(r.startnummer);
         if (!csvRij) continue;
         gevonden++;
         const tijdVal   = csvRij.tijd_ms ? _msTijdNaarDisplay(csvRij.tijd_ms) : '';
-        const rondenVal = csvRij.ronden != null ? String(csvRij.ronden) : null;
+
+        // Beschermings-conditie: bij afvalkoers-afgevallene → rondes niet
+        // overschrijven. Geldt ook als handmatige rondes-input al ingevuld is
+        // (admin heeft expliciet iets gezet).
+        const beschermRondes = isAfvalkoers && r.afval_rang != null;
+        const rondenVal = (!beschermRondes && csvRij.ronden != null)
+            ? String(csvRij.ronden) : null;
 
         // Lokale state bijwerken (zodat linker panel herbouwt met juiste rondes)
-        if (csvRij.ronden != null) r.rondes = csvRij.ronden;
+        if (!beschermRondes && csvRij.ronden != null) r.rondes = csvRij.ronden;
 
         // Tijd + rondes invullen; sanctie ongemoeid laten
         [`[data-entry="${r.entry_id}"]`, `[data-panel-entry="${r.entry_id}"]`].forEach(cssSelStr => {
@@ -2678,7 +3225,7 @@ async function _liveNavigeer(nieuweIdx) {
                     container?.appendChild(div);
                     div.querySelector('#live-btn-volgende-ronde')?.addEventListener('click', e => {
                         const b = e.currentTarget;
-                        _liveGenereerVolgendeRonde(b.dataset.dcId, b.dataset.distanceId, b.dataset.van, b.dataset.naar);
+                        _liveGenereerKetenStap(b.dataset.dcId, b.dataset.distanceId, b.dataset.van, b.dataset.naar);
                     });
                 }
             } else {
@@ -2873,7 +3420,7 @@ async function _liveOpslaanRit(ritIdx) {
         const volgende2 = _volgendeRondeType(rit2.dc_id, rit2.distance_id, rit2.ronde_type);
         if (volgende2) {
             const compleet = _liveRondeCompleet(rit2.dc_id, rit2.distance_id, rit2.ronde_type);
-            _liveGenereerVolgendeRonde(rit2.dc_id, rit2.distance_id, rit2.ronde_type, volgende2, compleet)
+            _liveGenereerKetenStap(rit2.dc_id, rit2.distance_id, rit2.ronde_type, volgende2, compleet)
                 .catch(() => {}); // stil falen
         } else {
             el('live-ronde-compleet')?.remove();
@@ -2893,6 +3440,18 @@ async function _liveOpslaanRit(ritIdx) {
 }
 
 // ── Volgende ronde genereren ───────────────────────────────────────────────────
+
+// Genereert de volgende ronde én — indien van toepassing — de runner-up in
+// dezelfde stap. Runner-up moet ALTIJD ná de doorstroom-ronde draaien zodat
+// de backend ex-aequo doorstromers correct uit de afvallers-lijst kan filteren.
+async function _liveGenereerKetenStap(dcId, distanceId, van, naar, compleet = true) {
+    await _liveGenereerVolgendeRonde(dcId, distanceId, van, naar, compleet);
+    // Zelfde key-conventie als _volgendeRondeType: dcId + '|' + distanceId
+    const cc = _liveCatConfigs[dcId + '|' + distanceId];
+    if (cc?.heeft_runner_up && _isEersteRondeKeten(cc, van)) {
+        await _liveGenereerVolgendeRonde(dcId, distanceId, van, 'runner_up', compleet);
+    }
+}
 
 // compleet = alle heats in de ronde zijn klaar (anders is het een voorlopige update)
 async function _liveGenereerVolgendeRonde(dcId, distanceId, van, naar, compleet = true) {

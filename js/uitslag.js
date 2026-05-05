@@ -348,11 +348,26 @@ async function toonUitslagVoorAfstand(groep, afstand) {
             // bepaald (rondes/tijd voor inline+afvalkoers, punten/rondes/tijd voor
             // puntenkoers). Geen keuze nodig — toon statisch label i.p.v. dropdown.
             const isLongDistance = data.race_type === 'long_distance';
+            // Lange afstanden (inline, puntenkoers, afvalkoers): geen ranking-
+            // keuze — niet-doorgestroomde series-rijders worden ex-aequo op
+            // heat-positie geklasseerd, finale wordt automatisch op
+            // rondes/tijd (of punten/rondes/tijd bij PK) gerankt.
+            const isLangeAfstand = ['inline', 'puntenkoers', 'afvalkoers']
+                .includes(data.race_subtype);
             let rankHtml = `<div class="u-ranking-details">
                 <div class="u-ranking-rij">
                     <span class="u-ranking-afstand">Ranking:</span>`;
             for (const rt of rondes) {
                 const key = rondeKeys[rt] ?? rt;
+                if (isLangeAfstand) {
+                    const auto = (rt === 'finale_a' || rt === 'runner_up')
+                        ? (data.race_subtype === 'puntenkoers'
+                            ? 'automatisch (punten/rondes/tijd)'
+                            : 'automatisch (rondes/tijd)')
+                        : 'automatisch (positie ex-aequo)';
+                    rankHtml += `<span class="u-ranking-info">${rondeLabels[rt] ?? rt}: <em>${auto}</em></span>`;
+                    continue;
+                }
                 if (isLongDistance && rt === 'finale_a') {
                     rankHtml += `<span class="u-ranking-info">${rondeLabels[rt] ?? rt}: <em>automatisch (rondes/tijd)</em></span>`;
                     continue;

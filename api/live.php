@@ -667,6 +667,201 @@ if ($action === 'genereer_volgende_ronde') {
             // nog niet weten hoeveel B-rijders er uiteindelijk zullen zijn.
         }
 
+        // ── Runner-up: speciale verdeling over geplande RU-ritten ────────────
+        // Pakt de afvallers van de eerste ronde van de keten (heats / kwart /
+        // half — afhankelijk van wat er voor deze cat is geconfigureerd) en
+        // verdeelt ze sequentieel over de in het tijdschema geplande
+        // runner-up ritten op basis van het `verwacht` veld per rit.
+        // De rit_naam-labels (bv. "plek 17-22") blijven zoals gepland; de
+        // werkelijke rijders worden bepaald door wie níet is doorgestroomd
+        // (incl. eventuele ex-aequo overflow in de volgende ronde).
+        if ($naarRondeType === 'runner_up') {
+            if (empty($cc['heeft_runner_up'])) {
+                echo json_encode(['ok' => false, 'geen_ritten' => true]);
+                exit;
+            }
+
+            // Eerste ronde van de keten detecteren — zelfde keten als
+            // tijdschema.php case 'runner_up'.
+            $eersteRondeType = null;
+            if (!empty($cc['heeft_heats'])) {
+                $eersteRondeType = 'heats';
+            } elseif (!empty($cc['heeft_kwartfinale'])) {
+                $eersteRondeType = 'kwartfinale';
+            } elseif (!empty($cc['heeft_halve_finale'])) {
+                $eersteRondeType = 'halve_finale';
+            } else {
+                // Geen voorafgaande ronde → geen afvallers → geen runner-up
+                echo json_encode(['ok' => false, 'geen_ritten' => true]);
+                exit;
+            }
+
+            // Caller mag een afwijkende vanRondeType meegeven (bv. 'heats'
+            // ook als deze cat met kwart begint). We forceren de eerste ronde.
+            $vanRondeType = $eersteRondeType;
+
+            // Geplande RU-ritten ophalen (gesorteerd op heat_nr ASC: heat 1 =
+            // hoogste plek-nummers net boven de afvallers, heat-laatste = grootst)
+            $ruRittenStmt = $pdo->prepare("
+                SELECT id, heat_nr, volgorde, rit_naam,
+                       COALESCE(verwacht, 0) AS verwacht
+                FROM tijdschema_ritten
+                WHERE tijdschema_id = ? AND dc_id = ?
+                  AND (distance_id = ? OR (distance_id IS NULL AND ? = ''))
+                  AND ronde_type = 'runner_up'
+                ORDER BY heat_nr
+            ");
+            $ruRittenStmt->execute([$tsId, $dcId, $distanceId, $distanceId]);
+            $ruRitten = $ruRittenStmt->fetchAll(PDO::FETCH_ASSOC);
+            if (empty($ruRitten)) {
+                echo json_encode(['ok' => false, 'geen_ritten' => true]);
+                exit;
+            }
+
+            // Resultaten van de eerste ronde ophalen
+            $resStmt = $pdo->prepare("
+                SELECT he.person_license, he.categorie, he.startnummer,
+                       p.full_name, p.club_short,
+                       res.tijd_ms, res.rondes, res.sanctie
+                FROM tijdschema_ritten r
+                JOIN heats h ON h.tijdschema_rit_id = r.id AND h.competition_id = ?
+                JOIN heat_entries he ON he.heat_id = h.id
+                JOIN persons p ON p.license_key = he.person_license
+                JOIN results res ON res.heat_entry_id = he.id
+                WHERE r.tijdschema_id = ? AND r.dc_id = ?
+                  AND (r.distance_id = ? OR (r.distance_id IS NULL AND ? = ''))
+                  AND r.ronde_type = ?
+            ");
+            $resStmt->execute([$compId, $tsId, $dcId,
+                               $distanceId, $distanceId, $vanRondeType]);
+            $alleRijders = $resStmt->fetchAll(PDO::FETCH_ASSOC);
+
+            // Filter uitvallers (DNS / DNF / DQ)
+            $sanctiesUit = ['DNS', 'DNF', 'DQ-TF', 'DQ-SF', 'DQ-DF'];
+            $beschikbaar = [];
+            foreach ($alleRijders as $r) {
+                if (in_array($r['sanctie'] ?? '', $sanctiesUit, true)) continue;
+                $beschikbaar[] = $r;
+            }
+
+            // Sorteer op tijd (rondes DESC voor lange afstand / puntenkoers,
+            // dan tijd ASC). Rijders zonder tijd achteraan.
+            $metTijd    = array_values(array_filter($beschikbaar, fn($r) => $r['tijd_ms'] !== null));
+            $zonderTijd = array_values(array_filter($beschikbaar, fn($r) => $r['tijd_ms'] === null));
+            usort($metTijd, function($a, $b) {
+                $rA = $a['rondes'] !== null ? (int)$a['rondes'] : PHP_INT_MIN;
+                $rB = $b['rondes'] !== null ? (int)$b['rondes'] : PHP_INT_MIN;
+                if ($rA !== $rB) return $rB - $rA;
+                return (int)$a['tijd_ms'] - (int)$b['tijd_ms'];
+            });
+            $alleGesorteerd = array_merge($metTijd, $zonderTijd);
+
+            // Wie is al ingedeeld in een vervolgronde (kwart/half/finale)?
+            // Die rijders horen NIET in de runner-up — ook als ze door
+            // ex-aequo overflow alsnog mochten doorstromen.
+            $alDoorStmt = $pdo->prepare("
+                SELECT DISTINCT he.person_license
+                FROM heats h
+                JOIN heat_entries he ON he.heat_id = h.id
+                JOIN tijdschema_ritten r ON r.id = h.tijdschema_rit_id
+                WHERE h.competition_id = ? AND h.distance_combination_id = ?
+                  AND (r.distance_id = ? OR (r.distance_id IS NULL AND ? = ''))
+                  AND r.ronde_type IN ('kwartfinale','halve_finale','finale','finale_a','finale_b')
+            ");
+            $alDoorStmt->execute([$compId, $dcId, $distanceId, $distanceId]);
+            $alDoor = array_fill_keys($alDoorStmt->fetchAll(PDO::FETCH_COLUMN), true);
+
+            $afvallers = array_values(array_filter(
+                $alleGesorteerd,
+                fn($r) => !isset($alDoor[$r['person_license']])
+            ));
+
+            if (empty($afvallers)) {
+                echo json_encode(['ok' => false, 'geen_ritten' => true]);
+                exit;
+            }
+
+            // ── Bestaande RU-heats opruimen + nieuwe insert ──────────────
+            $pdo->beginTransaction();
+
+            $delIds = $pdo->prepare("
+                SELECT h.id FROM heats h
+                JOIN tijdschema_ritten r ON r.id = h.tijdschema_rit_id
+                WHERE h.competition_id = ? AND h.distance_combination_id = ?
+                  AND (r.distance_id = ? OR (r.distance_id IS NULL AND ? = ''))
+                  AND r.ronde_type = 'runner_up'
+            ");
+            $delIds->execute([$compId, $dcId, $distanceId, $distanceId]);
+            $ids = $delIds->fetchAll(PDO::FETCH_COLUMN);
+            if ($ids) {
+                $ph = implode(',', array_fill(0, count($ids), '?'));
+                $pdo->prepare("DELETE FROM heats WHERE id IN ($ph)")->execute($ids);
+            }
+
+            $insHeat = $pdo->prepare("
+                INSERT INTO heats
+                    (competition_id, distance_combination_id, distance_id,
+                     ronde, tijdschema_rit_id, rit_volgorde,
+                     heat_naam, heat_nr, methode, dc_ids)
+                VALUES (?, ?, ?, 4, ?, ?, ?, ?, 'kwalificatie', ?)
+            ");
+            $insEntry = $pdo->prepare("
+                INSERT IGNORE INTO heat_entries
+                    (heat_id, person_license, categorie, startpositie, startnummer)
+                VALUES (?, ?, ?, ?, ?)
+            ");
+            $dcIdsJson = json_encode([$dcId]);
+
+            $heatsOut = [];
+            $offset   = 0;
+            $totaal   = count($afvallers);
+            foreach ($ruRitten as $rit) {
+                $insHeat->execute([
+                    $compId, $dcId, $distanceId ?: null,
+                    (int)$rit['id'], (int)$rit['volgorde'],
+                    $rit['rit_naam'], (int)$rit['heat_nr'], $dcIdsJson,
+                ]);
+                $heatId = (int)$pdo->lastInsertId();
+
+                // Aantal rijders voor deze heat = `verwacht`. Laatste heat
+                // krijgt de rest (vangnet als afvallers > som van verwacht).
+                $verwacht = max(0, (int)$rit['verwacht']);
+                $isLaatste = ($rit === end($ruRitten));
+                $aantal = $isLaatste ? max($verwacht, $totaal - $offset) : $verwacht;
+                $blok = array_slice($afvallers, $offset, $aantal);
+                $offset += count($blok);
+
+                $rijdersUit = [];
+                $startpos = 0;
+                foreach ($blok as $rijder) {
+                    $startpos++;
+                    $insEntry->execute([
+                        $heatId,
+                        $rijder['person_license'],
+                        $rijder['categorie'],
+                        $startpos,
+                        $rijder['startnummer'],
+                    ]);
+                    $rijdersUit[] = [
+                        'startpositie' => $startpos,
+                        'full_name'    => $rijder['full_name'],
+                        'club_short'   => $rijder['club_short'],
+                    ];
+                }
+                $heatsOut[] = [
+                    'heat_nr'   => (int)$rit['heat_nr'],
+                    'heat_naam' => $rit['rit_naam'],
+                    'rijders'   => $rijdersUit,
+                ];
+            }
+
+            $pdo->commit();
+
+            echo json_encode(['ok' => true, 'heats' => $heatsOut],
+                             JSON_UNESCAPED_UNICODE);
+            exit;
+        }
+
         // Bepaal hoeveel rijders door mogen
         $aantalDoor = 0;
         if ($vanRondeType === 'heats') {

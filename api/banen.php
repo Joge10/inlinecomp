@@ -61,6 +61,26 @@ try {
         exit;
     }
 
+    // ── GET: alle unieke banen (cross-org) — voor handmatige toewijzing ────
+    // Deduplicatie op naam: één rij per fysieke baan, met gegevens van de
+    // 'meest complete' rij (logo + vereniging-naam + stad). Bedoeld voor de
+    // dropdown bij wedstrijd-baan-koppeling, ook over org-grenzen heen.
+    if ($method === 'GET' && $action === 'alle') {
+        $stmt = $pdo->query("
+            SELECT
+                MIN(id) AS id,
+                naam,
+                MAX(stad)             AS stad,
+                MAX(vereniging_naam)  AS vereniging_naam,
+                MAX(logo_path)        AS logo_path
+            FROM banen
+            GROUP BY naam
+            ORDER BY naam
+        ");
+        echo json_encode($stmt->fetchAll(PDO::FETCH_ASSOC), JSON_UNESCAPED_UNICODE);
+        exit;
+    }
+
     // ── GET: lijst banen voor één organisatie ──────────────────────────────
     if ($method === 'GET') {
         if ($orgId === '') {
@@ -99,6 +119,36 @@ try {
     if ($method !== 'POST') {
         http_response_code(405);
         echo json_encode(['error' => 'Methode niet toegestaan']);
+        exit;
+    }
+
+    // Koppel een baan aan een wedstrijd (handmatig — voor wedstrijden die
+    // bij import géén venue_name meekregen of onbekende baan hadden).
+    // baan_id leeg = ontkoppelen.
+    if ($action === 'koppel_wedstrijd') {
+        $compId = trim($_POST['competition_id'] ?? '');
+        $bid    = trim($_POST['baan_id']        ?? '');
+        if ($compId === '') {
+            http_response_code(400);
+            echo json_encode(['error' => 'competition_id ontbreekt']);
+            exit;
+        }
+        if ($bid === '') {
+            $pdo->prepare("UPDATE competitions SET baan_id = NULL WHERE id = ?")
+                ->execute([$compId]);
+            echo json_encode(['ok' => true, 'baan_id' => null]);
+            exit;
+        }
+        $chk = $pdo->prepare("SELECT 1 FROM banen WHERE id = ?");
+        $chk->execute([$bid]);
+        if (!$chk->fetchColumn()) {
+            http_response_code(404);
+            echo json_encode(['error' => 'Baan niet gevonden']);
+            exit;
+        }
+        $pdo->prepare("UPDATE competitions SET baan_id = ? WHERE id = ?")
+            ->execute([$bid, $compId]);
+        echo json_encode(['ok' => true, 'baan_id' => $bid]);
         exit;
     }
 

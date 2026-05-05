@@ -368,14 +368,19 @@ function berekenSerie(PDO $pdo, string $serieId): array {
             }
             $key = implode('|', $keyParts);
             $groepen[$key][] = $r;
-            if (!$isAfstandLevel) {
-                $dcKey = implode('|', [
-                    $r['competition_id'],
-                    $r['dc_id'],
-                    $r['split_group'] ?? '',
-                ]);
-                $dcGroepen[$dcKey][] = $r;
+            // Cluster-klassement (gecombineerde cats binnen dezelfde DC) ook
+            // voor afstand-level — dan inclusief distance_id zodat 500m en
+            // 1000m van een gecombineerde DC elk hun eigen cluster krijgen.
+            $dcKeyParts = [
+                $r['competition_id'],
+                $r['dc_id'],
+                $r['split_group'] ?? '',
+            ];
+            if ($isAfstandLevel) {
+                $dcKeyParts[] = $r['distance_id'] ?? '';
             }
+            $dcKey = implode('|', $dcKeyParts);
+            $dcGroepen[$dcKey][] = $r;
         }
 
         foreach ($groepen as $groep) {
@@ -471,6 +476,9 @@ function berekenSerie(PDO $pdo, string $serieId): array {
                 $acc[$lic][$clusterLabel]['totaal']   += (float)$punten;
                 $acc[$lic][$clusterLabel]['deelnames']++;
                 $wNaam = $r['comp_naam'] . ' · ' . ($r['dc_naam'] ?? '?');
+                if ($isAfstandLevel && !empty($r['distance_naam'])) {
+                    $wNaam .= ' · ' . $r['distance_naam'];
+                }
                 $acc[$lic][$clusterLabel]['detail'][$wNaam] =
                     ($acc[$lic][$clusterLabel]['detail'][$wNaam] ?? 0) + $punten;
                 $acc[$lic][$clusterLabel]['per_wedstrijd'][$r['competition_id']] =

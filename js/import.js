@@ -1968,6 +1968,8 @@ async function herlaadVergelijking() {
         if (vData.error) throw new Error(vData.error);
         vergelijkData     = vData.groepen     ?? vData;
         huidigOrganisatie = vData.organisatie ?? huidigOrganisatie;
+        huidigBaan        = vData.baan        ?? null;
+        huidigImported    = !!vData.imported;
         entriesVersion    = vData.entries_version ?? 0;
         _heeftProgramma   = !!(vData.heeft_programma);
         _orgTransponders  = vData.org_transponders ?? [];
@@ -1988,6 +1990,7 @@ async function herlaadVergelijking() {
         initEdits();
         bouwVergelijkTabbladen();
         updateImportBtn();
+        if (typeof renderBaanRij === 'function') renderBaanRij();
     } catch(e) {
         setHTML('imp-cat-content',
             `<div class="status-msg error">⚠ Synchronisatie mislukt: ${escHtml(e.message)}</div>`

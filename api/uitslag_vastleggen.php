@@ -153,10 +153,18 @@ try {
 
     $pdo->beginTransaction();
 
+    // race_subtype lookup voor ranking-logica (sprint/inline/puntenkoers/afvalkoers).
+    $raceSubTypeStmt = $pdo->prepare("
+        SELECT race_type FROM distances
+        WHERE distance_combination_id = ? AND id = ? LIMIT 1
+    ");
+
     foreach ($distances as $dist) {
         $distId     = $dist['id'];
         $distNaam   = $dist['name'];
         $distMeters = $dist['value_meters'] ?? null;
+        $raceSubTypeStmt->execute([$primaryDcId, $distId]);
+        $raceSubType = $raceSubTypeStmt->fetchColumn() ?: 'sprint';
 
         // Heats ophalen: alle ronde-types voor internationaal, serie+finales voor full-final
         if ($systeem !== 'full-final') {
@@ -264,7 +272,7 @@ try {
                 ($rondeVolgorde[$a['ronde_type']] ?? 5) <=> ($rondeVolgorde[$b['ronde_type']] ?? 5)
             );
 
-            $resultaat = berekenInternationaalResultaat($rondeDataArr);
+            $resultaat = berekenInternationaalResultaat($rondeDataArr, $raceSubType);
 
             $geldigeSancties = ['W1','W2','FS','RR','DQ-TF','DQ-SF','DQ-DF','DNS','DNF'];
             foreach ($resultaat as $r) {

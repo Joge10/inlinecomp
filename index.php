@@ -125,6 +125,9 @@ if (!$gebruiker) {
                                     <div class="meta" id="detail-meta"></div>
                                     <div id="knsb-sync-info"></div>
                                 </div>
+                                <div class="meta-rij" id="detail-baan-rij" style="display:none;">
+                                    <div class="meta" id="detail-baan"></div>
+                                </div>
                             </div>
                             <div class="detail-knoppen">
                                 <button id="btn-import" class="btn-import" title="Wedstrijd importeren in database">
