@@ -222,24 +222,68 @@ try {
 
         // ── Internationaal systeem: cascading elimination ranking ─────────────
         if ($systeem !== 'full-final') {
-            // Ranking methods ophalen
-            $rankingMethods = ['heats' => 'time', 'kwartfinale' => 'time',
-                               'halve_finale' => 'time', 'finale_a' => 'time'];
+            // Race-type-aware ranking-defaults (identiek aan live display in
+            // uitslag_afstand.php). Hardcoded 'time' als fallback gaf stale
+            // klassement-rangen voor sprint-tussenrondes (display gebruikte
+            // position_time, vastleggen gebruikte time → mismatch).
             $tsIdStmt2 = $pdo->prepare("SELECT id FROM competition_tijdschema WHERE competition_id = ?");
             $tsIdStmt2->execute([$compId]);
             $tsId2 = $tsIdStmt2->fetchColumn();
+
+            // Eerste actieve ronde detecteren (zelfde keten als runner-up).
+            $eersteRonde = null;
+            if ($tsId2 && $primaryDcId) {
+                $ccStmt2 = $pdo->prepare("
+                    SELECT heeft_heats, heeft_kwartfinale, heeft_halve_finale
+                    FROM tijdschema_cat_config
+                    WHERE tijdschema_id = ? AND dc_id = ?
+                    LIMIT 1
+                ");
+                $ccStmt2->execute([$tsId2, $primaryDcId]);
+                $cc2 = $ccStmt2->fetch(PDO::FETCH_ASSOC);
+                if ($cc2) {
+                    if (!empty($cc2['heeft_heats']))            $eersteRonde = 'heats';
+                    elseif (!empty($cc2['heeft_kwartfinale']))  $eersteRonde = 'kwartfinale';
+                    elseif (!empty($cc2['heeft_halve_finale'])) $eersteRonde = 'halve_finale';
+                }
+            }
+
+            $isSprint = ($raceSubType === 'sprint');
+            if ($isSprint) {
+                $rankingMethods = [
+                    'heats'        => $eersteRonde === 'heats'        ? 'time' : 'position_time',
+                    'kwartfinale'  => $eersteRonde === 'kwartfinale'  ? 'time' : 'position_time',
+                    'halve_finale' => $eersteRonde === 'halve_finale' ? 'time' : 'position_time',
+                    'finale_a'     => 'time',
+                ];
+            } else {
+                $rankingMethods = [
+                    'heats'        => 'position_time',
+                    'kwartfinale'  => 'position_time',
+                    'halve_finale' => 'position_time',
+                    'finale_a'     => 'time',
+                ];
+            }
+
             if ($tsId2) {
+                // DC-specifieke rij heeft voorrang boven globale (NULL) rij,
+                // identiek aan uitslag_afstand.php.
                 $acStmt2 = $pdo->prepare("
                     SELECT heats_ranking, kwart_ranking, half_ranking, finale_ranking
-                    FROM tijdschema_afstand_config WHERE tijdschema_id = ? AND afstand_naam = ?
+                    FROM tijdschema_afstand_config
+                    WHERE tijdschema_id = ? AND afstand_naam = ?
+                      AND (dc_id = ? OR dc_id IS NULL)
+                    ORDER BY (dc_id IS NULL) ASC
+                    LIMIT 1
                 ");
-                $acStmt2->execute([$tsId2, $distNaam]);
+                $acStmt2->execute([$tsId2, $distNaam, $primaryDcId]);
                 $ac2 = $acStmt2->fetch(PDO::FETCH_ASSOC);
                 if ($ac2) {
-                    $rankingMethods['heats']        = $ac2['heats_ranking']  ?? 'time';
-                    $rankingMethods['kwartfinale']   = $ac2['kwart_ranking'] ?? 'time';
-                    $rankingMethods['halve_finale']  = $ac2['half_ranking']  ?? 'time';
-                    $rankingMethods['finale_a']      = $ac2['finale_ranking'] ?? 'time';
+                    // Opgeslagen voorkeur heeft voorrang; ontbrekend veld → race-type-aware default
+                    $rankingMethods['heats']        = $ac2['heats_ranking']  ?? $rankingMethods['heats'];
+                    $rankingMethods['kwartfinale']   = $ac2['kwart_ranking'] ?? $rankingMethods['kwartfinale'];
+                    $rankingMethods['halve_finale']  = $ac2['half_ranking']  ?? $rankingMethods['halve_finale'];
+                    $rankingMethods['finale_a']      = $ac2['finale_ranking'] ?? $rankingMethods['finale_a'];
                 }
             }
 
