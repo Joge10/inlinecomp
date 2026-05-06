@@ -83,24 +83,20 @@ const TS_RONDE_KLEUR = {
 // Geeft array van heatgroottes terug [heat1, heat2, …, heatN]
 function berekenRunnerUpHeats(uitv, ruMax, ruMin) {
     if (uitv <= 0) return [];
-    const nHeats0 = Math.max(1, Math.ceil(uitv / ruMax));
+    let n = Math.max(1, Math.ceil(uitv / ruMax));
 
-    if (!ruMin) {
-        // Origineel gedrag: gelijkmatig, laatste is grootste
-        const basis = Math.floor(uitv / nHeats0);
-        const extra = uitv % nHeats0;
-        return Array.from({ length: nHeats0 }, (_, i) =>
-            basis + (i >= nHeats0 - extra ? 1 : 0));
-    }
-
-    // Min-check: merge laatste heat als die te klein is
-    let n = nHeats0;
-    while (n > 1) {
-        const last = uitv - ruMax * (n - 1);
-        if (last < ruMin) { n--; } else { break; }
+    // Min-check: merge laatste heat in vorige als die kleiner zou zijn dan ruMin.
+    // Alleen actief als ruMin > 0; bij 0 mag de laatste heat klein zijn.
+    if (ruMin > 0) {
+        while (n > 1) {
+            const last = uitv - ruMax * (n - 1);
+            if (last < ruMin) { n--; } else { break; }
+        }
     }
 
     if (n === 1) return [uitv];
+    // Eerste (n-1) heats krijgen elk PRECIES ruMax (= beste plekken na de
+    // gekwalificeerden); laatste heat krijgt de rest.
     const sizes = Array(n - 1).fill(ruMax);
     sizes.push(uitv - ruMax * (n - 1));
     return sizes;

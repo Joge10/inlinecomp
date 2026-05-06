@@ -412,13 +412,40 @@ try {
             $rows = $rijderStmt->fetchAll(PDO::FETCH_ASSOC);
             foreach ($rows as $r) {
                 $r['start_number'] = $snMap[$r['person_license']] ?? $r['start_number'];
+                // heat_nr meegeven zodat runner_up per heat geranked kan worden
+                // (heat 1 = beste plekken-blok, heat N = slechtste).
+                $r['heat_nr']      = (int)$heat['heat_nr'];
                 $rondeGroepen[$rt]['rows'][] = $r;
             }
         }
 
-        // Sorteer rondes: finale eerst → series laatst (cascade: beste bovenaan)
-        $rondeVolgorde = ['finale_a' => 0, 'runner_up' => 1, 'halve_finale' => 2,
-                          'kwartfinale' => 3, 'heats' => 4];
+        // Sorteer rondes: finale eerst → series laatst (cascade: beste bovenaan).
+        // Runner-up moet ALTIJD vóór z'n bron-ronde komen (= eerste ronde van
+        // de keten), zodat de RU-race-uitslag de bron-rang overschrijft.
+        // Bron = laagste niet-runner_up ronde die rijen heeft.
+        //   chain heats → … → finale + RU  → orde: finale, half, kwart, RU, heats
+        //   chain kwart → finale + RU       → orde: finale, half, RU, kwart
+        //   chain HF    → finale + RU       → orde: finale, RU, half
+        $standaardVolgorde = ['finale_a', 'halve_finale', 'kwartfinale', 'heats'];
+        if (isset($rondeGroepen['runner_up'])) {
+            $aanwezig = array_keys($rondeGroepen);
+            $bron = null;
+            foreach (['heats', 'kwartfinale', 'halve_finale'] as $r) {
+                if (in_array($r, $aanwezig, true)) { $bron = $r; break; }
+            }
+            $nieuw = [];
+            $ruIngevoegd = false;
+            foreach ($standaardVolgorde as $r) {
+                if ($bron && $r === $bron && !$ruIngevoegd) {
+                    $nieuw[] = 'runner_up';
+                    $ruIngevoegd = true;
+                }
+                $nieuw[] = $r;
+            }
+            if (!$ruIngevoegd) $nieuw[] = 'runner_up'; // vangnet
+            $standaardVolgorde = $nieuw;
+        }
+        $rondeVolgorde = array_flip($standaardVolgorde);
         $rondeDataArr = array_values($rondeGroepen);
         usort($rondeDataArr, fn($a, $b) =>
             ($rondeVolgorde[$a['ronde_type']] ?? 5) <=> ($rondeVolgorde[$b['ronde_type']] ?? 5)
@@ -443,6 +470,7 @@ try {
                            WHEN 'heats'        THEN 'Serie'
                            WHEN 'kwartfinale'   THEN 'KF'
                            WHEN 'halve_finale'  THEN 'HF'
+                           WHEN 'runner_up'     THEN 'Runner-up'
                            WHEN 'finale_a'      THEN 'Finale'
                            WHEN 'finale_b'      THEN CONCAT('B', h.heat_nr, '-Finale')
                            ELSE CONCAT('R', h.ronde)
@@ -806,6 +834,7 @@ try {
                            WHEN 'heats'        THEN 'Serie'
                            WHEN 'kwartfinale'   THEN 'KF'
                            WHEN 'halve_finale'  THEN 'HF'
+                           WHEN 'runner_up'     THEN 'Runner-up'
                            WHEN 'finale_a'      THEN 'Finale'
                            WHEN 'finale_b'      THEN CONCAT('B', h.heat_nr, '-Finale')
                            ELSE CONCAT('R', h.ronde)
@@ -943,6 +972,7 @@ try {
                        WHEN 'heats'        THEN 'Serie'
                        WHEN 'kwartfinale'   THEN 'KF'
                        WHEN 'halve_finale'  THEN 'HF'
+                       WHEN 'runner_up'     THEN 'Runner-up'
                        WHEN 'finale_a'      THEN 'Finale'
                        WHEN 'finale_b'      THEN CONCAT('B', h.heat_nr, '-Finale')
                        ELSE CONCAT('R', h.ronde)

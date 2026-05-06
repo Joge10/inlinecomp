@@ -23,8 +23,24 @@ const MELDING_PRIO = {
 };
 
 // ── Admin-modal ───────────────────────────────────────────────────────────
+// compId: string  → wedstrijd-specifieke mededelingen
+// compId: null/''  → globale mededelingen (zichtbaar voor alle bezoekers van
+//                    public/coach, óók op landing-pagina vóór wedstrijd-keuze)
 async function openMeldingenModal(compId, compNaam) {
-    if (!compId) return;
+    const isGlobal = !compId;
+    const titelTxt = isGlobal
+        ? '🌐 Globale mededelingen'
+        : `📢 Mededelingen — ${escHtml(compNaam || 'Wedstrijd')}`;
+    const uitlegTxt = isGlobal
+        ? `Globale mededelingen verschijnen bij <strong>iedereen</strong> die public of
+           coach opent — ook vóór ze een wedstrijd kiezen. Voorbeeld: "Storing op
+           publieke pagina, herstart om 14:00". Gebruik spaarzaam (alleen
+           cross-wedstrijd info).`
+        : `Mededelingen verschijnen automatisch als pop-up bij iedereen die
+           op dit moment de publieke pagina of coach-app voor deze wedstrijd
+           open heeft staan (binnen één refresh-cyclus, dus &lt; 1 minuut).
+           Elke kijker ziet de pop-up één keer; daarna staat de melding nog
+           in de programma-pagina.`;
 
     // Modal-overlay opbouwen
     const overlay = document.createElement('div');
@@ -32,17 +48,11 @@ async function openMeldingenModal(compId, compNaam) {
     overlay.innerHTML = `
         <div class="mld-box">
             <div class="mld-kop">
-                <h3>📢 Mededelingen — ${escHtml(compNaam || 'Wedstrijd')}</h3>
+                <h3>${titelTxt}</h3>
                 <button class="mld-sluit" title="Sluiten">&times;</button>
             </div>
             <div class="mld-body">
-                <div class="mld-uitleg">
-                    Mededelingen verschijnen automatisch als pop-up bij iedereen die
-                    op dit moment de publieke pagina of coach-app voor deze wedstrijd
-                    open heeft staan (binnen één refresh-cyclus, dus &lt; 1 minuut).
-                    Elke kijker ziet de pop-up één keer; daarna staat de melding nog
-                    in de programma-pagina.
-                </div>
+                <div class="mld-uitleg">${uitlegTxt}</div>
                 <div id="mld-lijst" class="mld-lijst">
                     <div class="status-msg loading"><span class="spinner"></span>Laden…</div>
                 </div>
@@ -63,11 +73,15 @@ async function openMeldingenModal(compId, compNaam) {
 async function mldRefreshLijst(compId) {
     const wrap = document.getElementById('mld-lijst');
     if (!wrap) return;
+    const isGlobal = !compId;
     try {
-        const res = await fetch('api/meldingen.php?action=lijst&comp_id=' + encodeURIComponent(compId));
+        const url = isGlobal
+            ? 'api/meldingen.php?action=lijst&global=1'
+            : 'api/meldingen.php?action=lijst&comp_id=' + encodeURIComponent(compId);
+        const res = await fetch(url);
         const data = await res.json();
         if (!Array.isArray(data) || !data.length) {
-            wrap.innerHTML = '<div class="mld-leeg">Nog geen mededelingen voor deze wedstrijd.</div>';
+            wrap.innerHTML = `<div class="mld-leeg">Nog geen ${isGlobal ? 'globale' : ''} mededelingen.</div>`;
             return;
         }
         const nu = new Date();
@@ -186,7 +200,8 @@ async function mldOpslaan(compId) {
     const fd = new FormData();
     fd.append('action', 'save');
     if (id) fd.append('id', id);
-    fd.append('comp_id', compId);
+    if (compId) fd.append('comp_id', compId);
+    else        fd.append('global', '1');
     fd.append('titel', titel);
     fd.append('bericht', bericht);
     fd.append('prio', prio);

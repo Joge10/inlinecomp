@@ -744,6 +744,7 @@ function initNav() {
             if (page === 'live')         { vulPaginaHeader('live-comp-naam', 'live-comp-meta'); toonLivePagina(); }
             if (page === 'gebruikers')   toonGebruikersPagina();
             if (page === 'rijders')      toonRijdersPagina();
+            if (page === 'uploads')      toonUploadsPagina();
             if (page === 'info')         toonInfoPagina();
         });
     });
@@ -772,10 +773,11 @@ el('btn-uitloggen')?.addEventListener('click', async () => {
 function pasRolToe() {
     const rol = currentUser.role;
 
-    // Gebruikers + Rijders nav-items: alleen owner en admin
+    // Gebruikers + Rijders + Uploads nav-items: alleen owner en admin
     if (['owner','admin'].includes(rol)) {
         document.querySelector('.nav-item-gebruikers')?.style.removeProperty('display');
         document.querySelector('.nav-item-rijders')?.style.removeProperty('display');
+        document.querySelector('.nav-item-uploads')?.style.removeProperty('display');
     }
 
     // Schrijf-lock: alle schrijf-elementen op readonly pagina's disablen

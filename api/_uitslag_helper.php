@@ -279,6 +279,35 @@ function berekenInternationaalResultaat(array $rondeData, string $raceSubType = 
     $nietGerankt = [];    // DQ-SF/DQ-DF rijders
     $rangOffset = 0;
 
+    // Runner-up: elke heat strijdt om z'n eigen plek-blok. Heat 1 = beste
+    // plekken (net na de gekwalificeerden), heat N = slechtste plekken.
+    // Een rijder uit heat 2 kan NOOIT hoger eindigen dan rijders uit heat 1,
+    // ook niet bij snellere tijd. We splitsen daarom de runner_up ronde-
+    // entry op in één sub-ronde per heat — de bestaande per-ronde loop
+    // hieronder geeft dan automatisch oplopende rangs per heat-blok.
+    $expandedRondeData = [];
+    foreach ($rondeData as $ronde) {
+        if (($ronde['ronde_type'] ?? '') !== 'runner_up') {
+            $expandedRondeData[] = $ronde;
+            continue;
+        }
+        $byHeat = [];
+        foreach ($ronde['rows'] as $r) {
+            $hn = isset($r['heat_nr']) ? (int)$r['heat_nr'] : 1;
+            $byHeat[$hn][] = $r;
+        }
+        ksort($byHeat); // heat_nr ASC = beste plekken eerst
+        foreach ($byHeat as $rows) {
+            $expandedRondeData[] = [
+                'ronde_type' => 'runner_up',
+                'label'      => $ronde['label'] ?? 'Runner-up',
+                'ranking'    => $ronde['ranking'] ?? 'time',
+                'rows'       => $rows,
+            ];
+        }
+    }
+    $rondeData = $expandedRondeData;
+
     foreach ($rondeData as $ronde) {
         $rankingMethod = $ronde['ranking'] ?? 'time';
         $rondeType     = $ronde['ronde_type'] ?? '';
@@ -438,13 +467,23 @@ function berekenInternationaalResultaat(array $rondeData, string $raceSubType = 
 
         // Ken rang toe
         $nUitgevallen = count($uitgevallen);
+        // Tel "echte" finishers (alles behalve ranked_last) zodat DNS/DNF/DQ-TF
+        // de gedeelde rang krijgen die direct ná de laatste finisher komt
+        // (standard competition ranking, niet "modified"). Bv. 12 finishers
+        // + 2 DNS → DNS gedeeld 13e, niet gedeeld 14e.
+        $nRanked = 0;
+        foreach ($uitgevallen as $u) {
+            if (!($u['sanctie'] && in_array($u['sanctie'], $RANKED_LAST, true))) {
+                $nRanked++;
+            }
+        }
         for ($i = 0; $i < $nUitgevallen; $i++) {
             $r = &$uitgevallen[$i];
             unset($r['_ranked_last']); // interne vlag verwijderen
 
             if ($r['sanctie'] && in_array($r['sanctie'], $RANKED_LAST, true)) {
-                // Ranked last: gedeeld laatste in deze groep
-                $r['rang'] = $rangOffset + $nUitgevallen;
+                // Ranked last: gedeeld op rang direct ná de laatste finisher.
+                $r['rang'] = $rangOffset + $nRanked + 1;
             } elseif ($i === 0) {
                 $r['rang'] = $rangOffset + 1;
             } else {

@@ -260,13 +260,39 @@ try {
                 }
                 $rows = $laadRows($heat);
                 foreach ($rows as $r) {
+                    // heat_nr meegeven zodat runner_up per heat geranked kan
+                    // worden (heat 1 = beste plekken-blok, heat N = slechtste).
+                    $r['heat_nr'] = (int)$heat['heat_nr'];
                     $rondeGroepen[$rt]['rows'][] = $r;
                 }
             }
 
-            // Sorteer: finale eerst → series laatst
-            $rondeVolgorde = ['finale_a' => 0, 'runner_up' => 1, 'halve_finale' => 2,
-                              'kwartfinale' => 3, 'heats' => 4];
+            // Runner-up moet ALTIJD vóór z'n bron-ronde komen (= eerste ronde
+            // van de keten), zodat de RU-race-uitslag de bron-rang overschrijft.
+            // Bron = laagste niet-runner_up ronde die rijen heeft.
+            //   chain heats → … → finale + RU  → orde: finale, half, kwart, RU, heats
+            //   chain kwart → finale + RU       → orde: finale, half, RU, kwart
+            //   chain HF    → finale + RU       → orde: finale, RU, half
+            $standaardVolgorde = ['finale_a', 'halve_finale', 'kwartfinale', 'heats'];
+            if (isset($rondeGroepen['runner_up'])) {
+                $aanwezig = array_keys($rondeGroepen);
+                $bron = null;
+                foreach (['heats', 'kwartfinale', 'halve_finale'] as $r) {
+                    if (in_array($r, $aanwezig, true)) { $bron = $r; break; }
+                }
+                $nieuw = [];
+                $ruIngevoegd = false;
+                foreach ($standaardVolgorde as $r) {
+                    if ($bron && $r === $bron && !$ruIngevoegd) {
+                        $nieuw[] = 'runner_up';
+                        $ruIngevoegd = true;
+                    }
+                    $nieuw[] = $r;
+                }
+                if (!$ruIngevoegd) $nieuw[] = 'runner_up'; // vangnet
+                $standaardVolgorde = $nieuw;
+            }
+            $rondeVolgorde = array_flip($standaardVolgorde);
             $rondeDataArr = array_values($rondeGroepen);
             usort($rondeDataArr, fn($a, $b) =>
                 ($rondeVolgorde[$a['ronde_type']] ?? 5) <=> ($rondeVolgorde[$b['ronde_type']] ?? 5)
@@ -549,15 +575,17 @@ try {
     // Lees alle afstand-data voor deze DC opnieuw uit uitslag_afstand
     // (bevat ook afstanden die eerder zijn vastgelegd maar nu niet opnieuw berekend).
     $allPuntenStmt = $pdo->prepare("
-        SELECT person_license, distance_id, punten
+        SELECT person_license, distance_id, punten, sanctie
         FROM uitslag_afstand
         WHERE competition_id          = ?
           AND distance_combination_id = ?
     ");
     $allPuntenStmt->execute([$compId, $primaryDcId]);
-    $allPunten = []; // person_license => [dist_id => punten]
+    $allPunten   = []; // person_license => [dist_id => punten]
+    $allSancties = []; // person_license => [dist_id => sanctie|null]
     foreach ($allPuntenStmt->fetchAll(PDO::FETCH_ASSOC) as $row) {
-        $allPunten[$row['person_license']][$row['distance_id']] = (float)$row['punten'];
+        $allPunten  [$row['person_license']][$row['distance_id']] = (float)$row['punten'];
+        $allSancties[$row['person_license']][$row['distance_id']] = $row['sanctie'] ?? null;
     }
 
     // Laatste afstand van deze DC (voor tiebreaker 3)
@@ -578,27 +606,56 @@ try {
     $distNaamMap = $allDistNaamStmt->fetchAll(PDO::FETCH_KEY_PAIR); // id => name
 
     // Totaal per rijder + punten_detail
-    // Rijders met een afstand op 0 punten worden uitgesloten uit het klassement
-    $klasRows = [];
+    // Nieuwe regel (jury 2026-05): rijders die niet álle afstanden gereden
+    // hebben worden NIET geschrapt; ze komen achteraan op aantal-gereden.
+    // Eerst rijders met N afstanden, dan N-1, dan N-2, … Binnen elke groep
+    // sorteren op totaal_punten + bekende tiebreakers.
+    // Uitzondering: DQ-SF / DQ-DF blijven uitgesloten (actieve diskwalificatie),
+    // net als rijders zonder enige score.
+    $excluderendeSancties = ['DQ-SF', 'DQ-DF'];
+    $klasRows       = [];
+    $uitgeslotenRows = [];   // rang=null + totaal=0 — overschrijft stale data
     foreach ($allPunten as $lic => $distPunten) {
         $totaal = array_sum($distPunten);
-        $heeftNulAfstand = false;
-        foreach ($distPunten as $p) { if ($p == 0) { $heeftNulAfstand = true; break; } }
-        if ($heeftNulAfstand) continue; // 0 punten op een afstand = uitgesloten
+        $aantalGereden    = 0;
+        $heeftDQExclusion = false;
+        foreach ($distPunten as $dId => $p) {
+            if ($p > 0) $aantalGereden++;
+            $s = $allSancties[$lic][$dId] ?? null;
+            if (in_array($s, $excluderendeSancties, true)) {
+                $heeftDQExclusion = true;
+            }
+        }
         $detail = [];
         foreach ($distPunten as $dId => $p) {
             $detail[$distNaamMap[$dId] ?? $dId] = $p;
         }
+        if ($heeftDQExclusion || $aantalGereden === 0) {
+            // Uitgesloten — wel opslaan met rang=null/totaal=0 zodat eerdere
+            // (stale) klassement-rijen voor deze rijder worden overschreven.
+            // Anders blijft een rijder die ooit rang 5 had nu nog steeds rang 5
+            // tonen in public/print, ondanks dat 'ie nu DQ-SF heeft.
+            $uitgeslotenRows[] = [
+                'lic'    => $lic,
+                'detail' => $detail,
+            ];
+            continue;
+        }
         $klasRows[] = [
-            'lic'         => $lic,
-            'totaal'      => $totaal,
-            'detail'      => $detail,
-            'dist_punten' => $distPunten,
+            'lic'            => $lic,
+            'totaal'         => $totaal,
+            'aantal_gereden' => $aantalGereden,
+            'detail'         => $detail,
+            'dist_punten'    => $distPunten,
         ];
     }
 
-    // ── Vergelijkfunctie: totaal → beste resultaat → laatste afstand ──────────
+    // ── Vergelijkfunctie: aantal-gereden → totaal → beste resultaat → laatste afstand
     $vergelijkKlas = function (array $a, array $b) use ($lastDistId): int {
+        // 0. Aantal afstanden gereden DESC (meer = beter)
+        if (($a['aantal_gereden'] ?? 0) !== ($b['aantal_gereden'] ?? 0)) {
+            return ($b['aantal_gereden'] ?? 0) <=> ($a['aantal_gereden'] ?? 0);
+        }
         // 1. Totaal punten ASC
         $diff = $a['totaal'] <=> $b['totaal'];
         if ($diff !== 0) return $diff;
@@ -662,6 +719,21 @@ try {
             $kr['lic'], $cat,
             $rang, $kr['totaal'],
             json_encode($kr['detail'], JSON_UNESCAPED_UNICODE),
+        ]);
+    }
+
+    // Uitgesloten rijders: rang=null + totaal=0. Belangrijk om hier ALTIJD te
+    // schrijven — anders blijft een eerdere rang voor deze rijder staan in
+    // uitslag_klassement, waardoor 'ie in public-views op de oude positie
+    // blijft verschijnen ondanks de huidige DQ-SF/DQ-DF.
+    foreach ($uitgeslotenRows as $ur) {
+        $cat = $personCache[$ur['lic']]['categorie'] ?? null;
+        $upsertKlas->execute([
+            $compId, $compNaam, $compDatum,
+            $primaryDcId, $dcNaam, '',
+            $ur['lic'], $cat,
+            null, 0,
+            json_encode($ur['detail'], JSON_UNESCAPED_UNICODE),
         ]);
     }
 

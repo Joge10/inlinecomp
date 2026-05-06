@@ -272,24 +272,24 @@ function verdeelRunnerUpHeats(int $uitv, int $ruMax, int $ruMin): array {
     if ($uitv <= 0) return [];
     $nHeats = max(1, (int)ceil($uitv / $ruMax));
 
-    if ($ruMin <= 0) {
-        // Origineel gedrag: gelijkmatig, laatste is grootste
-        return verdeelLaatstGrootst($uitv, $nHeats);
-    }
-
-    // Min-check: merge laatste heat als die te klein is
-    while ($nHeats > 1) {
-        $last = $uitv - $ruMax * ($nHeats - 1);
-        if ($last < $ruMin) {
-            $nHeats--;
-        } else {
-            break;
+    // Min-check: merge laatste heat in vorige als die kleiner zou zijn dan ruMin.
+    // Alleen actief als ruMin > 0; bij ruMin = 0 is een kleine laatste heat OK.
+    if ($ruMin > 0) {
+        while ($nHeats > 1) {
+            $last = $uitv - $ruMax * ($nHeats - 1);
+            if ($last < $ruMin) {
+                $nHeats--;
+            } else {
+                break;
+            }
         }
     }
 
     if ($nHeats === 1) return [$uitv];
 
-    // Eerste (nHeats-1) heats krijgen elk ruMax; laatste krijgt de rest
+    // Eerste (nHeats-1) heats krijgen elk PRECIES ruMax (= beste plekken,
+    // direct ná de gekwalificeerden — die mogen niet "uitgesmeerd" worden).
+    // Laatste heat krijgt de rest.
     $result = array_fill(0, $nHeats - 1, $ruMax);
     $result[] = $uitv - $ruMax * ($nHeats - 1);
     return $result;
@@ -299,6 +299,22 @@ function verdeelRunnerUpHeats(int $uitv, int $ruMax, int $ruMin): array {
 
 function genereerRitten(PDO $pdo, int $tsId, string $compId, ?array $catVanJS = null): void {
     $pdo->prepare("DELETE FROM tijdschema_ritten WHERE tijdschema_id = ?")->execute([$tsId]);
+
+    // Verweesde afstand-config rijen opruimen: instellingen onder een
+    // afstand_naam die niet (meer) als distances.name in deze wedstrijd
+    // bestaat. Voorkomt dat een hernoemde afstand later — bij een terug-
+    // hernoemen — z'n oude (verborgen) instellingen weer activeert.
+    // Alleen instellingen, geen ritten/resultaten — risicovrij.
+    $pdo->prepare("
+        DELETE tac FROM tijdschema_afstand_config tac
+        WHERE tac.tijdschema_id = ?
+          AND NOT EXISTS (
+              SELECT 1 FROM distances d
+              JOIN distance_combinations dc ON dc.id = d.distance_combination_id
+              WHERE dc.competition_id = ?
+                AND d.name = tac.afstand_naam
+          )
+    ")->execute([$tsId, $compId]);
 
     // Wedstrijd-breed systeem
     $s = $pdo->prepare("SELECT systeem FROM competition_tijdschema WHERE id = ?");

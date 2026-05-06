@@ -1759,10 +1759,12 @@ function maakDeelnemersPaneel(container, cache, cacheKey, flow, groep, distId) {
         runner_up: 'RU', finale_a: 'A-fin', finale_b: 'B-fin', finale: 'Fin',
     };
 
-    // Ronde-sleutel → rondenummer (zelfde als live.js)
+    // Ronde-sleutel → rondenummer (zelfde als live.js + api/live.php).
+    // runner_up = ronde 4 (chronologisch vlak vóór de finale gereden,
+    // dezelfde DB-ronde als finale_a/finale_b).
     const RONDE_NR = {
         heats: 1, kwartfinale: 2, halve_finale: 3,
-        runner_up: 3, finale_a: 4, finale_b: 4, finale: 4,
+        runner_up: 4, finale_a: 4, finale_b: 4, finale: 4,
     };
 
     // Hulpfunctie: normaliseer competitor-object naar plat formaat

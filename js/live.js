@@ -3445,17 +3445,35 @@ async function _liveOpslaanRit(ritIdx) {
 // dezelfde stap. Runner-up moet ALTIJD ná de doorstroom-ronde draaien zodat
 // de backend ex-aequo doorstromers correct uit de afvallers-lijst kan filteren.
 async function _liveGenereerKetenStap(dcId, distanceId, van, naar, compleet = true) {
-    await _liveGenereerVolgendeRonde(dcId, distanceId, van, naar, compleet);
     // Zelfde key-conventie als _volgendeRondeType: dcId + '|' + distanceId
     const cc = _liveCatConfigs[dcId + '|' + distanceId];
-    if (cc?.heeft_runner_up && _isEersteRondeKeten(cc, van)) {
-        await _liveGenereerVolgendeRonde(dcId, distanceId, van, 'runner_up', compleet);
-    }
+    const ookRu = !!(cc?.heeft_runner_up && _isEersteRondeKeten(cc, van));
+
+    // Beide rondes met onderdrukte toast — de toast obliterates anders de
+    // vorige en de gebruiker mist de eerste melding. We bouwen 1 gecombineerde
+    // toast aan het einde.
+    const r1 = await _liveGenereerVolgendeRonde(dcId, distanceId, van, naar, compleet, { silent: ookRu });
+    if (!ookRu) return;
+
+    const r2 = await _liveGenereerVolgendeRonde(dcId, distanceId, van, 'runner_up', compleet, { silent: true });
+
+    // Combined toast — toon ALTIJD beide regels, ook als één leeg is, zodat
+    // de gebruiker direct ziet of de runner-up wel/niet ritten heeft gekregen.
+    const lijn = (res, label) => res
+        ? `${label}: ${res.aantal} rijders`
+        : `${label}: niet aangemaakt`;
+    const bericht = compleet
+        ? `✓ Startlijsten klaar — ${lijn(r1, r1?.label || naar)}; ${lijn(r2, 'Runner-up')}`
+        : `📋 Voorlopig bijgewerkt — ${lijn(r1, r1?.label || naar)}; ${lijn(r2, 'Runner-up')}`;
+    _liveToast(bericht, compleet ? 'ok' : 'bezig', compleet ? 5000 : 3500);
 }
 
 // compleet = alle heats in de ronde zijn klaar (anders is het een voorlopige update)
-async function _liveGenereerVolgendeRonde(dcId, distanceId, van, naar, compleet = true) {
-    if (!huidigCompId || !dcId || !van || !naar) return; // Guard: ontbrekende params
+// opts.silent = true → geen success-toast (voor combined toast door keten-helper)
+// Returns: { aantal, label } op succes, null op fout/skip.
+async function _liveGenereerVolgendeRonde(dcId, distanceId, van, naar, compleet = true, opts = {}) {
+    if (!huidigCompId || !dcId || !van || !naar) return null; // Guard: ontbrekende params
+    const silent = !!opts.silent;
     const btn = el('live-btn-volgende-ronde');
     if (btn) { btn.disabled = true; btn.textContent = 'Bezig…'; }
 
@@ -3484,11 +3502,14 @@ async function _liveGenereerVolgendeRonde(dcId, distanceId, van, naar, compleet 
         const heefBFinale = (data.heats || []).some(h => (h.heat_naam || '').toLowerCase().includes('b'));
         const toastLabel  = (naar === 'finale_a' && heefBFinale) ? 'Finales' : label;
 
-        // Toast: definitief (groen, lang) of voorlopig (blauw, kort)
-        if (compleet) {
-            _liveToast(`✓ ${toastLabel} startlijst klaar — ${aantalRijders} rijders verdeeld`, 'ok', 4000);
-        } else {
-            _liveToast(`📋 ${toastLabel} voorlopig bijgewerkt (${aantalRijders} rijders op basis van huidige tijden)`, 'bezig', 3000);
+        // Toast: definitief (groen, lang) of voorlopig (blauw, kort) — alleen
+        // als de keten-helper niet zelf een gecombineerde toast bouwt.
+        if (!silent) {
+            if (compleet) {
+                _liveToast(`✓ ${toastLabel} startlijst klaar — ${aantalRijders} rijders verdeeld`, 'ok', 4000);
+            } else {
+                _liveToast(`📋 ${toastLabel} voorlopig bijgewerkt (${aantalRijders} rijders op basis van huidige tijden)`, 'bezig', 3000);
+            }
         }
 
         // Hergeneer-knop bijwerken
@@ -3511,9 +3532,13 @@ async function _liveGenereerVolgendeRonde(dcId, distanceId, van, naar, compleet 
             toonStartlijstenPagina();
         }
 
+        return { aantal: aantalRijders, label: toastLabel };
+
     } catch(e) {
-        _liveToast(`⚠ Fout bij genereren: ${e.message}`, 'error');
+        // Errors altijd tonen, ook in silent-mode — gebruiker moet zien dat er iets mis ging.
+        _liveToast(`⚠ Fout bij genereren ${label.toLowerCase()}: ${e.message}`, 'error');
         if (btn) { btn.disabled = false; btn.textContent = `↻ Hergeneer ${label}`; }
+        return null;
     }
 }
 

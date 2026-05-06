@@ -241,6 +241,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'GET') {
                 'heeft_heats'       => (bool)($cc['heeft_heats']       ?? false),
                 'heeft_kwartfinale' => (bool)($cc['heeft_kwartfinale'] ?? false),
                 'heeft_halve_finale'=> (bool)($cc['heeft_halve_finale']?? false),
+                'heeft_runner_up'   => (bool)($cc['heeft_runner_up']   ?? false),
                 'heats_q_heat'      => (int)($cc['heats_q_heat']       ?? 0),
                 'kwart_q_heat'      => (int)($cc['kwart_q_heat']       ?? 1),
                 'half_q_heat'       => (int)($cc['half_q_heat']        ?? 1),
@@ -759,6 +760,16 @@ if ($action === 'genereer_volgende_ronde') {
             // Wie is al ingedeeld in een vervolgronde (kwart/half/finale)?
             // Die rijders horen NIET in de runner-up — ook als ze door
             // ex-aequo overflow alsnog mochten doorstromen.
+            // De rondes ná de eerste ronde — afhankelijk van wat dé eerste is.
+            // Als HF de eerste ronde is, is HF zélf NIET een vervolgronde
+            // (dan zouden alle HF-rijders worden uitgefilterd → 0 afvallers).
+            $naRondes = match ($eersteRondeType) {
+                'heats'        => ['kwartfinale','halve_finale','finale','finale_a','finale_b'],
+                'kwartfinale'  => ['halve_finale','finale','finale_a','finale_b'],
+                'halve_finale' => ['finale','finale_a','finale_b'],
+                default        => ['finale','finale_a','finale_b'],
+            };
+            $naPh = implode(',', array_fill(0, count($naRondes), '?'));
             $alDoorStmt = $pdo->prepare("
                 SELECT DISTINCT he.person_license
                 FROM heats h
@@ -766,9 +777,12 @@ if ($action === 'genereer_volgende_ronde') {
                 JOIN tijdschema_ritten r ON r.id = h.tijdschema_rit_id
                 WHERE h.competition_id = ? AND h.distance_combination_id = ?
                   AND (r.distance_id = ? OR (r.distance_id IS NULL AND ? = ''))
-                  AND r.ronde_type IN ('kwartfinale','halve_finale','finale','finale_a','finale_b')
+                  AND r.ronde_type IN ($naPh)
             ");
-            $alDoorStmt->execute([$compId, $dcId, $distanceId, $distanceId]);
+            $alDoorStmt->execute(array_merge(
+                [$compId, $dcId, $distanceId, $distanceId],
+                $naRondes
+            ));
             $alDoor = array_fill_keys($alDoorStmt->fetchAll(PDO::FETCH_COLUMN), true);
 
             $afvallers = array_values(array_filter(
@@ -812,17 +826,18 @@ if ($action === 'genereer_volgende_ronde') {
             ");
             $dcIdsJson = json_encode([$dcId]);
 
+            // Plek-base = werkelijk aantal doorgestroomden (incl. eventuele
+            // jury-toevoegingen / RR-extras). Loopt op met elke runner_up
+            // heat zodat de label-ranges aansluiten op de actuele situatie.
+            $plekBase = count($alDoor);
+            $updRit   = $pdo->prepare(
+                "UPDATE tijdschema_ritten SET rit_naam = ? WHERE id = ?"
+            );
+
             $heatsOut = [];
             $offset   = 0;
             $totaal   = count($afvallers);
             foreach ($ruRitten as $rit) {
-                $insHeat->execute([
-                    $compId, $dcId, $distanceId ?: null,
-                    (int)$rit['id'], (int)$rit['volgorde'],
-                    $rit['rit_naam'], (int)$rit['heat_nr'], $dcIdsJson,
-                ]);
-                $heatId = (int)$pdo->lastInsertId();
-
                 // Aantal rijders voor deze heat = `verwacht`. Laatste heat
                 // krijgt de rest (vangnet als afvallers > som van verwacht).
                 $verwacht = max(0, (int)$rit['verwacht']);
@@ -830,6 +845,34 @@ if ($action === 'genereer_volgende_ronde') {
                 $aantal = $isLaatste ? max($verwacht, $totaal - $offset) : $verwacht;
                 $blok = array_slice($afvallers, $offset, $aantal);
                 $offset += count($blok);
+
+                // Werkelijke plek-range voor deze heat → "(plek X)" of
+                // "(plek X-Y)" in de rit-naam vervangen. Speakers en uitslag-
+                // titels lopen zo gelijk met de actuele doorstroom-aantallen.
+                $aantalReal = count($blok);
+                $van = $plekBase + 1;
+                $tot = $plekBase + $aantalReal;
+                $plekBase += $aantalReal;
+                $plekLbl = ($aantalReal === 0)
+                    ? null
+                    : ($van === $tot ? "plek {$van}" : "plek {$van}-{$tot}");
+                $nieuweRitNaam = $plekLbl
+                    ? preg_replace(
+                        '/\(plek\s+\d+(?:-\d+)?\)/u',
+                        "({$plekLbl})",
+                        $rit['rit_naam']
+                    )
+                    : $rit['rit_naam'];
+                if ($nieuweRitNaam !== $rit['rit_naam']) {
+                    $updRit->execute([$nieuweRitNaam, (int)$rit['id']]);
+                }
+
+                $insHeat->execute([
+                    $compId, $dcId, $distanceId ?: null,
+                    (int)$rit['id'], (int)$rit['volgorde'],
+                    $nieuweRitNaam, (int)$rit['heat_nr'], $dcIdsJson,
+                ]);
+                $heatId = (int)$pdo->lastInsertId();
 
                 $rijdersUit = [];
                 $startpos = 0;
@@ -850,7 +893,7 @@ if ($action === 'genereer_volgende_ronde') {
                 }
                 $heatsOut[] = [
                     'heat_nr'   => (int)$rit['heat_nr'],
-                    'heat_naam' => $rit['rit_naam'],
+                    'heat_naam' => $nieuweRitNaam,
                     'rijders'   => $rijdersUit,
                 ];
             }
@@ -1189,13 +1232,18 @@ if ($action === 'genereer_volgende_ronde') {
             }
         }
 
-        // Fallback: verwijder ook heats op het juiste ronde-nummer zonder rit-koppeling
+        // Fallback: verwijder ook heats op het juiste ronde-nummer zonder rit-koppeling.
+        // BELANGRIJK: runner_up heats delen ronde=4 met finale_a/finale_b. Bij het
+        // genereren van de finale moeten runner_up heats blijven staan — daarom
+        // sluiten we runner_up expliciet uit via een LEFT JOIN op de rit.
         $pdo->prepare("
-            DELETE FROM heats
-            WHERE competition_id          = ?
-              AND distance_combination_id = ?
-              AND (distance_id = ? OR (distance_id IS NULL AND ? = ''))
-              AND ronde = ?
+            DELETE h FROM heats h
+            LEFT JOIN tijdschema_ritten r ON r.id = h.tijdschema_rit_id
+            WHERE h.competition_id          = ?
+              AND h.distance_combination_id = ?
+              AND (h.distance_id = ? OR (h.distance_id IS NULL AND ? = ''))
+              AND h.ronde = ?
+              AND (r.ronde_type IS NULL OR r.ronde_type <> 'runner_up')
         ")->execute([$compId, $dcId, $distanceId, $distanceId, $rondeNr]);
 
         // Brede cleanup: verwijder ALLE verweesd ex-aequo heats en ritten voor deze DC

@@ -575,9 +575,35 @@ function berekenSerie(PDO $pdo, string $serieId): array {
             // N paren na bovenstaande sort). Ook als de finale-wedstrijd
             // toevallig de slechtste is, wordt die gewoon weggestreept —
             // aanwezigheid bij finale (vereist_finale) is een separate regel.
+            //
+            // Gemiste wedstrijden (rijder niet aanwezig terwijl cat wél
+            // gereden heeft) vullen de streep-quota EERST — een rijder die
+            // 1 wedstrijd miste op een serie met streep=1 hoeft daardoor géén
+            // echte uitslag weg te strepen.
+            //
+            // Voor cluster-rijen (cat-label = "DSA/JDSA") splitsen we op '/'
+            // en is "wedstrijd gereden voor cluster" = minstens één constituent-
+            // cat had deelnemers — anders is een cluster-rijer onzichtbaar
+            // voor deze correctie en wordt z'n echte uitslag onterecht gestreept.
+            $effectStreep = $streep;
+            if ($streep > 0) {
+                $constituents = explode('/', $cat);
+                $nGereden = 0;
+                foreach ($compIds as $cId) {
+                    foreach ($constituents as $c) {
+                        if (($aantalPerCompCat[$cId][$c] ?? 0) > 0) {
+                            $nGereden++;
+                            break;
+                        }
+                    }
+                }
+                $rijderMissed = max(0, $nGereden - count($paren));
+                $effectStreep = max(0, $streep - $rijderMissed);
+            }
+
             $gestreeptIds = [];
-            if ($streep > 0 && count($paren) > $streep) {
-                $teHouden     = count($paren) - $streep;
+            if ($effectStreep > 0 && count($paren) > $effectStreep) {
+                $teHouden     = count($paren) - $effectStreep;
                 $gekozen      = array_slice($paren, 0, $teHouden);
                 $weggestreept = array_slice($paren, $teHouden);
                 $row['totaal'] = array_sum(array_column($gekozen, 'punten'));

@@ -1472,6 +1472,7 @@ function _bouwDeelnemerslijstInternal() {
             if (!rijdersMap.has(kaartSleutel)) {
                 rijdersMap.set(kaartSleutel, {
                     start_number:       pe.start_number      ?? c.knsb?.start_number ?? '',
+                    knsb_start_number:  c.knsb?.start_number  ?? '',
                     full_name:          pe.full_name          ?? c.knsb?.full_name    ?? '',
                     category:           pe.category           ?? c.knsb?.category     ?? '',
                     transponder_actief: pe.transponder_actief ?? pe.transponder1       ?? c.knsb?.transponder1 ?? '',
@@ -1510,6 +1511,16 @@ function _bouwDeelnemerslijstInternal() {
     const orgRijders       = alleRijders.filter(r => r.is_org_toegevoegd);
     // Afwezig = heeft minstens één afwezige afstand
     const afwezigRijders   = alleRijders.filter(r => r.afstanden_afwezig.size > 0);
+
+    // Startnummer-wijzigingen: actief startnummer wijkt af van het KNSB-startnummer.
+    // Door org toegevoegden (status 5) hebben geen KNSB-nummer en horen hier niet —
+    // die staan al in "Door organisatie toegevoegd".
+    const snWijzigingen = actieveRijders.filter(r => {
+        const cur  = String(r.start_number      ?? '').trim();
+        const knsb = String(r.knsb_start_number ?? '').trim();
+        if (knsb === '') return false; // geen KNSB-waarde om mee te vergelijken
+        return cur !== knsb;
+    });
 
     // Transponder-wijzigingen: alleen als de actieve transponder afwijkt van
     // ZOWEL T1 als T2. T1 en T2 staan normaal al in Orbits/MyLaps, dus als
@@ -1590,6 +1601,7 @@ function _bouwDeelnemerslijstInternal() {
     const heeftOrg     = orgRijders.length     > 0;
     const heeftAfwezig = afwezigRijders.length > 0;
     const heeftTpWijz  = tpWijzigingen.length  > 0;
+    const heeftSnWijz  = snWijzigingen.length  > 0;
 
     // --- Sectie GT: Geen transponder geregistreerd ---
     let sectieGT = '';
@@ -1725,6 +1737,27 @@ function _bouwDeelnemerslijstInternal() {
         <thead><tr>
             <th class="tc">#</th><th>Naam</th><th>Cat</th>
             <th>Transponder KNSB</th><th>Transponder gebruikt</th>
+        </tr></thead>
+        <tbody>${rijen}</tbody></table>`;
+    }
+
+    // --- Sectie SN: Startnummer aanpassingen ---
+    let sectieSN = '';
+    if (heeftSnWijz) {
+        const rijen = snWijzigingen.map((r, i) =>
+            `<tr class="${i % 2 === 1 ? 'z' : ''}">
+                <td class="tc grijs">${escHtml(String(r.knsb_start_number))}</td>
+                <td class="tc vet">${escHtml(String(r.start_number))}</td>
+                <td>${escHtml(r.full_name)}</td>
+                <td class="sm">${escHtml(r.category)}</td>
+            </tr>`
+        ).join('');
+        sectieSN = `<h2 class="sectie-titel">Startnummer aanpassingen tov KNSB &nbsp;<span class="teller">${snWijzigingen.length}</span></h2>
+        <table><colgroup>
+            <col style="width:18mm"><col style="width:18mm"><col style="width:auto"><col style="width:16mm">
+        </colgroup>
+        <thead><tr>
+            <th class="tc">KNSB</th><th class="tc">Gebruikt</th><th>Naam</th><th>Cat</th>
         </tr></thead>
         <tbody>${rijen}</tbody></table>`;
     }
@@ -1868,6 +1901,7 @@ function _bouwDeelnemerslijstInternal() {
     ${sectie0}
     ${sectieGT}
     ${sectie2}
+    ${sectieSN}
     ${sectieOT}
     ${sectieOV}
     ${sectie3}

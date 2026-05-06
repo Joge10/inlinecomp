@@ -296,6 +296,7 @@ try {
                        WHEN 'heats'        THEN 'Serie'
                        WHEN 'kwartfinale'   THEN 'KF'
                        WHEN 'halve_finale'  THEN 'HF'
+                       WHEN 'runner_up'     THEN 'Runner-up'
                        WHEN 'finale_a'      THEN 'Finale'
                        WHEN 'finale_b'      THEN CONCAT('B', h.heat_nr, '-Finale')
                        ELSE CONCAT('R', h.ronde)
@@ -324,16 +325,28 @@ try {
     }
 
     // ── Klassement samenstellen ───────────────────────────────────────────────
-    // Rijders met een afstand op 0 punten (sanctie/uitgesloten) worden niet
-    // opgenomen in het klassement en apart onderaan getoond.
+    // Nieuwe regel (jury 2026-05): rijders die niet álle afstanden gereden hebben
+    // worden NIET meer geschrapt; ze worden achteraan ingedeeld op aantal-gereden.
+    // Eerst: wie alle N afstanden reed, dan N-1, dan N-2, … binnen elke groep
+    // sorteren op totaal_punten + bekende tiebreakers.
+    // Uitzondering: rijders met DQ-SF of DQ-DF in een afstand blijven uitgesloten
+    // (actieve diskwalificatie ≠ niet-gestart).
+    $excluderendeSancties = ['DQ-SF', 'DQ-DF'];
     $klassement  = [];
     $uitgesloten = [];
     foreach ($puntenMap as $lic => $distPunten) {
         $totaal = 0.0;
-        $heeftNulAfstand = false;
+        $aantalGereden = 0;
+        $heeftDQExclusion = false;
         foreach ($distPunten as $dp) {
             $totaal += $dp['punten'];
-            if ($dp['punten'] == 0) $heeftNulAfstand = true;
+            // "Gereden" = werkelijk een score (punten > 0). DNS-eerste-ronde
+            // (sanctie='DNS', punten=0) telt als "niet gereden". DNF/DQ-TF in
+            // een latere ronde geeft wél een rang/punten en telt dus mee.
+            if ($dp['punten'] > 0) $aantalGereden++;
+            if (in_array($dp['sanctie'] ?? '', $excluderendeSancties, true)) {
+                $heeftDQExclusion = true;
+            }
         }
         $info = $personCache[$lic] ?? [];
         $entry = [
@@ -346,22 +359,29 @@ try {
             'club_full'      => $info['club_full']    ?? null,
             'sponsor'        => $info['sponsor']      ?? null,
             'totaal_punten'  => $totaal,
+            'aantal_gereden' => $aantalGereden,
             'alle_sancties'  => $alleSancties[$lic] ?? [],
             'afstanden'      => $distPunten,
         ];
-        if (!$heeftNulAfstand) {
-            $klassement[] = $entry;
-        } else {
+        if ($heeftDQExclusion || $aantalGereden === 0) {
+            // DQ-SF/DQ-DF blijven uitgesloten; rijders zonder enige score ook
+            // (anders krijgen pure DNS-iedereen rijders rang 1 met 0 punten).
             $entry['uitgesloten'] = true;
             $uitgesloten[] = $entry;
+        } else {
+            $klassement[] = $entry;
         }
     }
 
-    // ── Vergelijkfunctie: totaal → beste resultaat → laatste afstand ──────────
+    // ── Vergelijkfunctie: aantal-gereden → totaal → beste resultaat → laatste afstand
     // Retourneert 0 bij echte ex-aequo, anders negatief/positief.
     $lastDistId = !empty($distances) ? end($distances)['id'] : null;
 
     $vergelijkKlassement = function (array $a, array $b) use ($lastDistId): int {
+        // 0. Aantal afstanden gereden DESC (meer gereden = hoger geklasseerd)
+        if (($a['aantal_gereden'] ?? 0) !== ($b['aantal_gereden'] ?? 0)) {
+            return ($b['aantal_gereden'] ?? 0) <=> ($a['aantal_gereden'] ?? 0);
+        }
         // 1. Totaal punten ASC
         $diff = $a['totaal_punten'] <=> $b['totaal_punten'];
         if ($diff !== 0) return $diff;

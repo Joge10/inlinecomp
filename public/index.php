@@ -500,7 +500,7 @@ if ($action === 'lookup') {
                 WHERE person_license = ? AND competition_id = ?
                 GROUP BY distance_combination_id
             ) latest ON latest.max_id = t.id
-            ORDER BY t.rang
+            ORDER BY CASE WHEN t.rang IS NULL THEN 1 ELSE 0 END, t.rang
         ");
 
         $resultaten = [];
@@ -655,7 +655,9 @@ if ($action === 'uitslagen') {
                 ) latest ON latest.max_id = t.id
                 JOIN persons p ON p.license_key = t.person_license
                 LEFT JOIN competition_startnummers cs ON cs.person_license = t.person_license AND cs.competition_id = ?
-                ORDER BY t.rang, t.punten_totaal
+                -- Uitgesloten rijders (rang IS NULL, bv. DQ-SF/DQ-DF) sorteren
+                -- naar het einde, niet naar het begin (MySQL default = NULL eerst).
+                ORDER BY CASE WHEN t.rang IS NULL THEN 1 ELSE 0 END, t.rang, t.punten_totaal
             ");
             $stmt->execute([$compId, $dcId, $compId]);
             $rijders = $stmt->fetchAll(PDO::FETCH_ASSOC);
@@ -2736,15 +2738,18 @@ const _MELDING_PRIO = {
     warn:   { kleur: '#7a5800', bg: '#fff8d6', icoon: '⚠️' },
     urgent: { kleur: '#a00',    bg: '#ffe5e5', icoon: '🚨' },
 };
-const _meldingenLsKey = (compId) => `meldingen_gezien_${compId}`;
-const _gezienSet = (compId) => {
-    try { return new Set(JSON.parse(localStorage.getItem(_meldingenLsKey(compId)) || '[]')); }
+// Sleutel per melding-scope: globaal (geen competition_id) krijgt eigen
+// localStorage-bucket zodat 'gezien' niet wisselt als je van wedstrijd switcht.
+const _meldingScope = (m) => m?.competition_id ? m.competition_id : 'global';
+const _meldingenLsKey = (scope) => `meldingen_gezien_${scope}`;
+const _gezienSet = (scope) => {
+    try { return new Set(JSON.parse(localStorage.getItem(_meldingenLsKey(scope)) || '[]')); }
     catch { return new Set(); }
 };
-const _markGezien = (compId, id) => {
-    const set = _gezienSet(compId);
+const _markGezien = (scope, id) => {
+    const set = _gezienSet(scope);
     set.add(id);
-    localStorage.setItem(_meldingenLsKey(compId), JSON.stringify([...set]));
+    localStorage.setItem(_meldingenLsKey(scope), JSON.stringify([...set]));
 };
 // Cache van actieve meldingen-lijst (laatste API-response). Gebruikt om
 // na het sluiten van één pop-up direct de volgende ongeziene te tonen,
@@ -2753,10 +2758,13 @@ let _meldingLijst = [];
 let _meldingActief = false;     // staat er al een pop-up open?
 
 async function checkMeldingen(compId) {
-    if (!compId) return;
+    // compId leeg → fetch alleen globale meldingen (landing-pagina).
+    // compId gevuld → fetch wedstrijd-specifiek + globaal samen (één call).
     try {
-        const res = await safeFetch('../api/meldingen.php?comp_id=' + encodeURIComponent(compId)
-            + '&_t=' + Date.now());
+        const url = compId
+            ? '../api/meldingen.php?comp_id=' + encodeURIComponent(compId) + '&_t=' + Date.now()
+            : '../api/meldingen.php?global=1&_t=' + Date.now();
+        const res = await safeFetch(url);
         const lijst = await res.json();
         if (!Array.isArray(lijst)) return;
         // Defensieve client-side filter: alleen actieve meldingen tonen.
@@ -2843,9 +2851,10 @@ document.getElementById('btn-meldingen-overzicht')?.addEventListener('click', to
 // (na sluiten — direct doorrollen, geen wachttijd).
 function toonVolgendeMelding(compId) {
     if (_meldingActief) return;
-    const gezien = _gezienSet(compId);
+    // Per melding gezien-set ophalen (afhankelijk van scope = global of compId).
     for (const m of _meldingLijst) {
-        if (!gezien.has(m.id)) {
+        const scope = _meldingScope(m);
+        if (!_gezienSet(scope).has(m.id)) {
             toonMelding(m, compId);
             return;
         }
@@ -2875,12 +2884,13 @@ function toonMelding(m, compId) {
         </div>`;
     document.body.appendChild(overlay);
     overlay.querySelector('.meld-ok').addEventListener('click', () => {
-        _markGezien(compId, m.id);
+        _markGezien(_meldingScope(m), m.id);
         overlay.remove();
         _meldingActief = false;
-        // Direct doorrollen naar volgende ongeziene melding (geen poll-wait)
-        const compNu = selComp.value;
-        if (compNu) toonVolgendeMelding(compNu);
+        // Direct doorrollen naar volgende ongeziene melding (geen poll-wait).
+        // Werkt ook zonder geselecteerde wedstrijd — globale melding-keten
+        // mag altijd doorscrollen.
+        toonVolgendeMelding(selComp.value);
     });
 }
 // keyframe voor pop-up animatie
@@ -2930,14 +2940,13 @@ let _huidigStempel = '';
     // bijwerken — gebruiker ziet dat de tijd "blijft staan".
     const stilleRefresh = async () => {
         const compId = selComp.value;
-        if (!compId) return;
 
-        // Mededelingen-check loopt onafhankelijk van of er kinderen zijn —
-        // zo zie je ook meldingen als je net naar de wedstrijd kijkt zonder
-        // nog een rijder te hebben toegevoegd.
+        // Mededelingen-check loopt onafhankelijk van of er een wedstrijd is
+        // gekozen of kinderen zijn toegevoegd. Zonder compId krijgen we de
+        // globale meldingen; mét compId per-wedstrijd + globaal samen.
         checkMeldingen(compId);
 
-        if (!_kinderen.length) return;
+        if (!compId || !_kinderen.length) return;
         try {
             const progRes = await safeFetch(
                 `?action=programma&competition_id=${encodeURIComponent(compId)}&_t=${Date.now()}`
@@ -2974,6 +2983,11 @@ let _huidigStempel = '';
 
     const start = () => {
         stop();
+        // Auto-tick alleen actief als er een wedstrijd is gekozen — dan is
+        // er ook iets om te verversen (programma, kinderen, meldingen).
+        // Zonder gekozen wedstrijd: globale meldingen worden alleen bij
+        // page-open / visibility-change / wedstrijd-keuze opgehaald (geen
+        // achtergrond-poll → geen onnodige load van static landing-pages).
         if (!selComp.value || document.hidden) return;
         autoTick = setInterval(() => {
             if (document.hidden || !selComp.value) return;
@@ -2988,7 +3002,8 @@ let _huidigStempel = '';
     document.addEventListener('visibilitychange', () => {
         if (document.hidden) {
             stop();
-        } else if (selComp.value) {
+        } else {
+            // Eén-shot check (ook globale meldingen) bij terugkeer naar tab.
             stilleRefresh();
             start();
         }
@@ -2999,22 +3014,19 @@ let _huidigStempel = '';
             zetStempel();
             start();
             // Direct meldingen ophalen — niet wachten op eerste poll-tick.
-            // Werkt ook als de gebruiker nog geen rijder heeft toegevoegd
-            // (anders dan stilleRefresh, die pas met kinderen rolt).
             checkMeldingen(selComp.value);
-        }
-        else {
+        } else {
             stop();
             wisStempel();
-            // Badge weghalen als wedstrijd weggekozen wordt
-            _meldingLijst = [];
-            updateMeldingenBadge();
+            // Switch terug naar landing → één-malig globale meldingen ophalen.
+            checkMeldingen('');
         }
     });
 
-    // Initieel: als er bij page-load al een wedstrijd voorgeselecteerd is
-    // (via ?comp=X URL-parameter) → meteen starten + meldingen-check.
-    if (selComp.value) { zetStempel(); start(); checkMeldingen(selComp.value); }
+    // Initieel: stempel + auto-tick alleen als wedstrijd voorgeselecteerd.
+    // Globale meldingen-check loopt sowieso bij page-open.
+    if (selComp.value) { zetStempel(); start(); }
+    checkMeldingen(selComp.value || '');
 
     // ── Pull-to-refresh ────────────────────────────────────────────────────
     // Patroon overgenomen uit coach/index.php: alleen actief boven aan de

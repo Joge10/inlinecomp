@@ -10,9 +10,11 @@
 -- De client onthoudt per device welke melding-id's al gezien zijn (in
 -- localStorage), zodat dezelfde melding maar één keer als pop-up verschijnt.
 
+-- competition_id = NULL → globale melding, zichtbaar voor alle bezoekers van
+-- public/coach (ook op landing-pagina, vóór een wedstrijd is gekozen).
 CREATE TABLE IF NOT EXISTS `public_meldingen` (
     `id`               VARCHAR(36)  NOT NULL,
-    `competition_id`   VARCHAR(36)  NOT NULL,
+    `competition_id`   VARCHAR(36)  NULL DEFAULT NULL,
     `titel`            VARCHAR(255) NOT NULL,
     `bericht`          TEXT         NOT NULL,
     `prio`             ENUM('info','warn','urgent') NOT NULL DEFAULT 'info',

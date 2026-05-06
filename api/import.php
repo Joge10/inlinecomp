@@ -178,9 +178,16 @@ try {
                number = VALUES(number), name = VALUES(name),
                category_filter = VALUES(category_filter)
     ");
-    // race_type wordt bij nieuwe rijen bepaald op basis van naam/meters;
-    // bestaande rijen behouden hun (mogelijk handmatig aangepaste) race_type
-    // via COALESCE, zodat een re-import de user-keuze niet overschrijft.
+    // Bij nieuwe rijen worden alle velden uit de KNSB-data gevuld; bestaande
+    // rijen behouden hun handmatig aangepaste waarden voor velden die de
+    // user via de afstanden-beheer UI kan wijzigen:
+    //   · name         — hernoemen (bv. "200 meter dual" → "one lap")
+    //   · value_meters — aangepaste afstand (bv. baan korter ingericht)
+    //   · race_type    — sprint/inline/puntenkoers/afvalkoers per afstand
+    // Een re-import voor een late inschrijving mag die niet ongedaan maken,
+    // anders raken tijdschema_afstand_config en tijdschema_ritten verweesd
+    // onder de oude waarden terwijl de instellingen aan de nieuwe hangen.
+    // KNSB-only velden (number, discipline, starts) blijven we wel syncen.
     $stmtDist = $pdo->prepare("
         INSERT INTO distances
                (id, distance_combination_id, number, name, value_meters,
@@ -188,10 +195,11 @@ try {
         VALUES (:id, :dc_id, :number, :name, :value_meters,
                 :discipline, :starts, :race_type)
         ON DUPLICATE KEY UPDATE
-               number = VALUES(number), name = VALUES(name),
-               value_meters = VALUES(value_meters), discipline = VALUES(discipline),
+               number = VALUES(number),
+               discipline = VALUES(discipline),
                starts = VALUES(starts)
-               -- race_type NIET overschrijven: user-instelling blijft behouden
+               -- name, value_meters en race_type NIET overschrijven:
+               -- user-instellingen blijven behouden
     ");
     // Heuristiek voor verse rijen — user kan achteraf per afstand bijstellen.
     $bepaalRaceType = function(?string $name, $meters): string {

@@ -30,6 +30,14 @@ function initInstellingen() {
 
     el('btn-tp-add')?.addEventListener('click', () => { voegTransponderRijToe(); markTpDirty(); });
 
+    // Globale mededelingen — gebruikt dezelfde modal als per-wedstrijd, maar
+    // met compId=null. Werkt voor owner/admin (server-check is leidend).
+    el('btn-globale-meldingen')?.addEventListener('click', () => {
+        if (typeof openMeldingenModal === 'function') {
+            openMeldingenModal(null, null);
+        }
+    });
+
     // Paginering
     el('tp-pag-eerste')?.addEventListener('click',   () => { _tpSyncAllePagina(); _tpPagina = 0; _tpToonPagina(); });
     el('tp-pag-vorige')?.addEventListener('click',   () => { _tpSyncAllePagina(); _tpPagina--; _tpToonPagina(); });

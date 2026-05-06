@@ -441,7 +441,8 @@ if ($action === 'uitslagen') {
                 ) latest ON latest.max_id = t.id
                 JOIN persons p ON p.license_key = t.person_license
                 LEFT JOIN competition_startnummers cs ON cs.person_license = t.person_license AND cs.competition_id = ?
-                ORDER BY t.rang, t.punten_totaal
+                -- Uitgesloten rijders (rang IS NULL) sorteren naar het eind.
+                ORDER BY CASE WHEN t.rang IS NULL THEN 1 ELSE 0 END, t.rang, t.punten_totaal
             ");
             $stmt->execute([$compId, $dcId, $compId]);
             $rijders = $stmt->fetchAll(PDO::FETCH_ASSOC);
@@ -2251,24 +2252,30 @@ const _MELDING_PRIO = {
     warn:   { kleur: '#7a5800', bg: '#fff8d6', icoon: '⚠️' },
     urgent: { kleur: '#a00',    bg: '#ffe5e5', icoon: '🚨' },
 };
-const _meldingenLsKey = (compId) => `meldingen_gezien_${compId}`;
-const _gezienSet = (compId) => {
-    try { return new Set(JSON.parse(localStorage.getItem(_meldingenLsKey(compId)) || '[]')); }
+// Sleutel per melding-scope: globaal (geen competition_id) krijgt eigen
+// localStorage-bucket zodat 'gezien' niet wisselt als je van wedstrijd switcht.
+const _meldingScope = (m) => m?.competition_id ? m.competition_id : 'global';
+const _meldingenLsKey = (scope) => `meldingen_gezien_${scope}`;
+const _gezienSet = (scope) => {
+    try { return new Set(JSON.parse(localStorage.getItem(_meldingenLsKey(scope)) || '[]')); }
     catch { return new Set(); }
 };
-const _markGezien = (compId, id) => {
-    const set = _gezienSet(compId);
+const _markGezien = (scope, id) => {
+    const set = _gezienSet(scope);
     set.add(id);
-    localStorage.setItem(_meldingenLsKey(compId), JSON.stringify([...set]));
+    localStorage.setItem(_meldingenLsKey(scope), JSON.stringify([...set]));
 };
 let _meldingLijst = [];
 let _meldingActief = false;
 
 async function checkMeldingen(compId) {
-    if (!compId) return;
+    // compId leeg → alleen globale meldingen ophalen (landing-pagina).
+    // compId gevuld → wedstrijd-specifiek + globaal samen (één call).
     try {
-        const res = await safeFetch('../api/meldingen.php?comp_id=' + encodeURIComponent(compId)
-            + '&_t=' + Date.now());
+        const url = compId
+            ? '../api/meldingen.php?comp_id=' + encodeURIComponent(compId) + '&_t=' + Date.now()
+            : '../api/meldingen.php?global=1&_t=' + Date.now();
+        const res = await safeFetch(url);
         const lijst = await res.json();
         if (!Array.isArray(lijst)) return;
         const nu = Date.now();
@@ -2342,9 +2349,9 @@ function toonMeldingenOverzicht() {
 document.getElementById('btn-meldingen-overzicht')?.addEventListener('click', toonMeldingenOverzicht);
 function toonVolgendeMelding(compId) {
     if (_meldingActief) return;
-    const gezien = _gezienSet(compId);
     for (const m of _meldingLijst) {
-        if (!gezien.has(m.id)) { toonMelding(m, compId); return; }
+        const scope = _meldingScope(m);
+        if (!_gezienSet(scope).has(m.id)) { toonMelding(m, compId); return; }
     }
 }
 function toonMelding(m, compId) {
@@ -2372,10 +2379,12 @@ function toonMelding(m, compId) {
         </div>`;
     document.body.appendChild(overlay);
     overlay.querySelector('.meld-ok').addEventListener('click', () => {
-        _markGezien(compId, m.id); overlay.remove();
+        _markGezien(_meldingScope(m), m.id);
+        overlay.remove();
         _meldingActief = false;
-        const compNu = selComp.value;
-        if (compNu) toonVolgendeMelding(compNu);
+        // Direct doorrollen — werkt ook zonder geselecteerde wedstrijd
+        // (globale meldingen mogen altijd aaneengeschakeld scrollen).
+        toonVolgendeMelding(selComp.value);
     });
 }
 (() => {
@@ -2501,17 +2510,14 @@ function toonMelding(m, compId) {
         } else {
             stopAutoRefresh();
             lastEl.textContent = '';
-            // Badge weghalen als wedstrijd weggekozen wordt
-            _meldingLijst = [];
-            if (typeof updateMeldingenBadge === 'function') updateMeldingenBadge();
+            // Switch terug naar landing → één-malig globale meldingen ophalen.
+            if (typeof checkMeldingen === 'function') checkMeldingen('');
         }
     });
-    // Initieel: als er al een wedstrijd voorgeselecteerd is (onwaarschijnlijk maar
-    // safe), meteen starten + meldingen-check.
-    if (selComp.value) {
-        zetStempel(); startAutoRefresh();
-        if (typeof checkMeldingen === 'function') checkMeldingen(selComp.value);
-    }
+    // Initieel: als er al een wedstrijd voorgeselecteerd is, meteen tick starten.
+    // Globale meldingen-check loopt sowieso bij page-open (compId mag leeg zijn).
+    if (selComp.value) { zetStempel(); startAutoRefresh(); }
+    if (typeof checkMeldingen === 'function') checkMeldingen(selComp.value || '');
 })();
 
 laadCompetitions();

@@ -73,6 +73,10 @@ if (!$gebruiker) {
                 <span class="nav-icon">&#128101;</span>
                 <span class="nav-label">Rijders</span>
             </li>
+            <li class="nav-item nav-item-uploads" data-page="uploads" style="display:none">
+                <span class="nav-icon">&#128193;</span>
+                <span class="nav-label">Uploads</span>
+            </li>
             <li class="nav-item" data-page="info">
                 <span class="nav-icon">&#8505;</span>
                 <span class="nav-label">Info</span>
@@ -335,6 +339,12 @@ if (!$gebruiker) {
 
                         <!-- Tab 3: Wedstrijden -->
                         <div class="org-tab-content" id="org-tab-wedstrijden" style="display:none">
+                            <div class="org-wedstrijden-acties">
+                                <button class="btn-secondary" id="btn-globale-meldingen"
+                                        title="Mededelingen die voor alle bezoekers van public/coach zichtbaar zijn — ook vóór ze een wedstrijd kiezen">
+                                    🌐 Globale mededelingen
+                                </button>
+                            </div>
                             <div id="org-wedstrijden-list">
                                 <div class="status-msg loading"><span class="spinner"></span>Laden…</div>
                             </div>
@@ -395,6 +405,33 @@ if (!$gebruiker) {
                             <div class="status-msg" style="color:#666">Selecteer links een rijder voor de details.</div>
                         </div>
                     </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Pagina: Uploads (Orbits/MyLaps CSV-archief beheer, owner/admin) -->
+        <div id="page-uploads" class="page">
+            <div class="pagina-inhoud">
+                <div class="section-title">Uploads — Orbits/MyLaps CSV-archief</div>
+                <div class="up-info">
+                    Per wedstrijd worden CSV-exports vanuit Orbits/MyLaps in een submap onder
+                    <code>uploader/</code> opgeslagen. Hier kun je oude mappen handmatig verwijderen
+                    om ruimte vrij te maken. <strong>Dit is onomkeerbaar.</strong>
+                </div>
+                <div class="up-toolbar">
+                    <label>Toon alleen ouder dan:
+                        <select id="up-filter-age">
+                            <option value="0">— alle mappen —</option>
+                            <option value="30">30 dagen</option>
+                            <option value="90">3 maanden</option>
+                            <option value="180">6 maanden</option>
+                            <option value="365">1 jaar</option>
+                        </select>
+                    </label>
+                    <button class="btn-secondary" id="up-btn-refresh">&#8634; Vernieuw</button>
+                </div>
+                <div id="up-container">
+                    <div class="status-msg loading"><span class="spinner"></span>Laden…</div>
                 </div>
             </div>
         </div>
@@ -490,6 +527,7 @@ function magSchrijven(module) {
 <script src="js/meldingen.js"></script>
 <script src="js/gebruikers.js"></script>
 <script src="js/rijders.js"></script>
+<script src="js/uploads.js"></script>
 <script src="js/print_module.js"></script>
 </body>
 </html>
