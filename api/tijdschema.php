@@ -973,14 +973,46 @@ try {
         // queries, maar de readers afleiden voortaan uit distances.race_type).
         $raceType        = 'sprint';
         $geldigeRanking  = ['time', 'position_time'];
+
+        // Race-type-aware ranking-defaults (gebruikt wanneer body geen
+        // expliciete keuze heeft — typisch bij eerste save van de afstand-form).
+        // Sprint: eerste actieve ronde = time, tussenrondes = position_time,
+        //         A-finale = time.
+        // Lange afstand: voorronden = position_time, A-finale = time (UI verbergt
+        //         die sowieso — race_type bepaalt finale-sortering automatisch).
+        // race_type wordt opgehaald uit distances.race_type — canonieke bron.
+        $rtStmt = $pdo->prepare(
+            "SELECT race_type FROM distances d
+             JOIN distance_combinations dc ON dc.id = d.distance_combination_id
+             JOIN competition_tijdschema ct ON ct.competition_id = dc.competition_id
+             WHERE ct.id = ? AND d.name = ? LIMIT 1"
+        );
+        $rtStmt->execute([$tsId, $afstandNaam]);
+        $distRt = $rtStmt->fetchColumn() ?: 'sprint';
+        $isSprint = ($distRt === 'sprint');
+
+        // Eerste actieve ronde uit body cat_configs bepalen — zelfde keten als
+        // bij runner-up: heats > kwart > half. Default 'heats' als fallback.
+        $eersteRonde = 'heats';
+        foreach ($body['cat_configs'] ?? [] as $cc) {
+            if (!empty($cc['heeft_heats']))            { $eersteRonde = 'heats';        break; }
+            if (!empty($cc['heeft_kwartfinale']))      { $eersteRonde = 'kwartfinale';  break; }
+            if (!empty($cc['heeft_halve_finale']))     { $eersteRonde = 'halve_finale'; break; }
+        }
+
+        $defH = $isSprint ? ($eersteRonde === 'heats'        ? 'time' : 'position_time') : 'position_time';
+        $defK = $isSprint ? ($eersteRonde === 'kwartfinale'  ? 'time' : 'position_time') : 'position_time';
+        $defL = $isSprint ? ($eersteRonde === 'halve_finale' ? 'time' : 'position_time') : 'position_time';
+        $defF = 'time';
+
         $heatsRanking    = in_array($body['heats_ranking'] ?? '', $geldigeRanking, true)
-                         ? $body['heats_ranking'] : 'time';
+                         ? $body['heats_ranking'] : $defH;
         $kwartRanking    = in_array($body['kwart_ranking'] ?? '', $geldigeRanking, true)
-                         ? $body['kwart_ranking'] : 'time';
+                         ? $body['kwart_ranking'] : $defK;
         $halfRanking     = in_array($body['half_ranking'] ?? '', $geldigeRanking, true)
-                         ? $body['half_ranking'] : 'time';
+                         ? $body['half_ranking'] : $defL;
         $finaleRanking   = in_array($body['finale_ranking'] ?? '', $geldigeRanking, true)
-                         ? $body['finale_ranking'] : 'time';
+                         ? $body['finale_ranking'] : $defF;
 
         $heeftRU  = !empty($body['heeft_runner_up']) ? 1 : 0;
         $ruMax    = max(2, min(30, (int)($body['runner_up_max'] ?? 6)));
