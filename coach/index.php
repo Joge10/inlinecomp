@@ -1979,9 +1979,16 @@ function toonHelp() {
             <p>Kies een categorie + afstand om de volledige uitslag te zien, of bekijk het klassement.
                Ook hier worden jouw eigen rijders geel gemarkeerd.</p>
 
-            <h3>Vernieuwen</h3>
-            <p>Trek de pagina <b>naar beneden</b> (pull-to-refresh) om programma, status en sancties
-               opnieuw op te halen. Op de desktop: dubbelklik op de blauwe kop.</p>
+            <h3>Automatisch bijgewerkt</h3>
+            <p>De pagina ververst zichzelf elke minuut zolang het tabblad zichtbaar is.
+               Het tijdstip van de laatste verversing zie je rechtsboven (<b>🔄 HH:MM</b>).
+               Direct verversen kan ook: trek de pagina <b>naar beneden</b> (pull-to-refresh)
+               of dubbelklik op de blauwe kop.</p>
+
+            <h3>Mededelingen</h3>
+            <p>Bovenaan verschijnt een <b>📢-knop</b> zodra er een mededeling van de organisatie
+               actief is. Belangrijke aankondigingen verschijnen automatisch als pop-up en blijven
+               daarna onder die knop bereikbaar.</p>
 
             <h3>Privacy</h3>
             <p>Je coach-lijst wordt alleen lokaal op je telefoon bewaard (localStorage). Niemand

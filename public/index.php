@@ -2637,11 +2637,11 @@ function toonHelp() {
             </div>
             <div class="help-stap">
                 <span class="help-stap-nr">2</span>
-                <span>Vul je <b>startnummer</b> in</span>
+                <span>Vul je <b>startnummer</b> in en klik op <b>Zoeken</b> — je persoonlijke overzicht verschijnt.</span>
             </div>
             <div class="help-stap">
                 <span class="help-stap-nr">3</span>
-                <span>Klik op <b>Zoeken</b> — je persoonlijke overzicht verschijnt</span>
+                <span>Wil je meerdere rijders volgen (bv. broer, zus of een teamgenoot)? Klik op <b>+ rijder toevoegen</b>. Je kunt tot <b>4 rijders</b> tegelijk volgen — switch via de tabs bovenaan.</span>
             </div>
 
             <!-- Mockup: zoekscherm -->
@@ -2723,8 +2723,17 @@ function toonHelp() {
                 </div>
             </div>
 
-            <h3>Tips</h3>
-            <p>&#x21bb; Gebruik de <b>ververs-knop</b> naast je naam om live updates te zien tijdens de wedstrijd.</p>
+            <h3>Automatisch bijgewerkt</h3>
+            <p>De pagina ververst zichzelf elke minuut zolang het tabblad zichtbaar is.
+               Naast de wedstrijdnaam zie je <b>🔄 HH:MM</b> — dat is het tijdstip van
+               de laatste verversing.</p>
+
+            <h3>Mededelingen</h3>
+            <p>Bovenaan staat een <b>📢-knop</b> (zichtbaar zodra er een mededeling actief is).
+               Belangrijke aankondigingen van de organisatie verschijnen automatisch als pop-up
+               en blijven daarna onder deze knop bereikbaar — bv. "Programma loopt 15 min uit".</p>
+
+            <h3>Tip</h3>
             <p>Geen resultaten? De uitslag verschijnt zodra de jury de resultaten heeft bevestigd.</p>
 
         </div>

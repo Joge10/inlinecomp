@@ -321,11 +321,31 @@ a.ref-back:hover { text-decoration: underline; }
     box-shadow: 0 2px 8px rgba(0,0,0,.2);
 }
 @media print {
-    body { background: #fff; font-size: 11pt; }
+    /* Forceer dat browsers achtergrondkleuren én -gradients tóch printen.
+       Standaard worden die weggelaten om inkt te besparen — voor een
+       handleiding met mock-ups van een gekleurde UI willen we ze juist wél. */
+    *, *::before, *::after {
+        -webkit-print-color-adjust: exact !important;
+        print-color-adjust: exact !important;
+        color-adjust: exact !important;
+    }
+    @page { margin: 14mm 12mm; }
+    body { background: #fff; font-size: 10pt; }
     .wrap { box-shadow: none; padding: 0; max-width: none; }
-    .mock { page-break-inside: avoid; }
     .noprint { display: none !important; }
-    h1, h2 { page-break-after: avoid; }
+
+    /* Mock-ups en info-blokken niet midden doorgesneden afdrukken */
+    .mock, .info, .warn, .tip, .wip { page-break-inside: avoid; break-inside: avoid; }
+    table.ref tr  { page-break-inside: avoid; break-inside: avoid; }
+
+    /* Koppen niet als laatste regel onderaan een pagina */
+    h1, h2, h3, h4 { page-break-after: avoid; break-after: avoid; }
+    h1 { page-break-before: auto; }
+
+    /* Links zonder onderstreping kleuren (anders krijg je veel oranje) */
+    a { color: inherit; text-decoration: none; }
+    .toc a { color: var(--blauw); }
+    sup.ref-link a, a.ref-back { color: var(--oranje); }
 }
 </style>
 </head>
@@ -341,7 +361,7 @@ a.ref-back:hover { text-decoration: underline; }
     <p class="versie">versie april 2026 — <a href="https://inlineresults.devriesen.com" style="color:#999;text-decoration:none">inlineresults.devriesen.com</a></p>
 </div>
 
-<div class="wip"><b>In opbouw:</b> deze handleiding wordt module voor module geschreven. Op dit moment zijn <b>Login &amp; layout</b>, <b>Importeren</b>, <b>Tijdschema</b>, <b>Startlijsten</b>, <b>Live verwerking</b> en <b>Uitslag</b> klaar. Onderaan zie je welke modules nog aan de beurt zijn. Voor de techneuten staat helemaal achterin een appendix met verwijzingen naar de broncode.</div>
+<div class="wip"><b>In opbouw:</b> deze handleiding is bijna compleet. Alle admin-modules (Login &amp; layout, Importeer, Tijdschema, Startlijsten, Live verwerking, Uitslag, Beheer, Gebruikers, Rijders, Uploads), de Publieke applicatie en de Coach-applicatie zijn beschreven. Alleen Deel 4 (de InlineComp Client / CSV Upload Monitor op de timing-PC) volgt nog in een aparte sessie. Voor de techneuten staat helemaal achterin een appendix met verwijzingen naar de broncode.</div>
 
 <div class="toc">
     <h2>Inhoudsopgave</h2>
@@ -352,18 +372,119 @@ a.ref-back:hover { text-decoration: underline; }
             <ul>
                 <li><a href="#a-login">1.1 Login en rollen</a></li>
                 <li><a href="#a-layout">1.2 Layout en navigatie</a></li>
-                <li><a href="#a-importeer">1.3 Module Importeer</a></li>
-                <li><a href="#a-tijdschema">1.4 Module Tijdschema</a></li>
-                <li><a href="#a-startlijsten">1.5 Module Startlijsten</a></li>
-                <li><a href="#a-live">1.6 Module Live verwerking</a></li>
-                <li><a href="#a-uitslag">1.7 Module Uitslag</a></li>
-                <li style="color:#aaa">1.8 Module Beheer <em>(volgende sessie)</em></li>
-                <li><a href="#a-gebruikers">1.9 Module Gebruikers</a></li>
-                <li><a href="#a-rijders">1.10 Module Rijders (AVG)</a></li>
+                <li><a href="#a-importeer">1.3 Module Importeer</a>
+                    <ul>
+                        <li><a href="#stap-1-wedstrijd-kiezen">1.3.1 Wedstrijd kiezen uit de lijst</a></li>
+                        <li><a href="#stap-2-verschillen">1.3.2 Verschillen met de database bekijken</a></li>
+                        <li><a href="#stap-3-importeren">1.3.3 Voor het eerst importeren</a></li>
+                        <li><a href="#stap-4-dcs">1.3.4 Categorieën aanpassen of splitsen</a></li>
+                        <li><a href="#stap-5-handmatig">1.3.5 Een rijder handmatig toevoegen</a></li>
+                        <li><a href="#stap-6-tekenlijst">1.3.6 Tekenlijsten printen voor de balie</a></li>
+                        <li><a href="#stap-7-verwerken">1.3.7 De tekenlijst verwerken</a></li>
+                        <li><a href="#stap-8-deelnemers">1.3.8 Definitieve deelnemerslijst printen</a></li>
+                    </ul>
+                </li>
+                <li><a href="#a-tijdschema">1.4 Module Tijdschema</a>
+                    <ul>
+                        <li><a href="#tjs-1-init">1.4.1 Een leeg tijdschema starten</a></li>
+                        <li><a href="#tjs-2-systeem">1.4.2 Wedstrijdsysteem kiezen</a></li>
+                        <li><a href="#tjs-3-afstand">1.4.3 Per afstand de rondes instellen</a></li>
+                        <li><a href="#tjs-4-blokken">1.4.4 De dag-volgorde opbouwen</a></li>
+                        <li><a href="#tjs-5-genereer">1.4.5 Programma genereren</a></li>
+                        <li><a href="#tjs-6-fijn">1.4.6 Verfijnen: tijden, opmerkingen, finales combineren</a></li>
+                        <li><a href="#tjs-7-print">1.4.7 Programma printen of publiceren</a></li>
+                    </ul>
+                </li>
+                <li><a href="#a-startlijsten">1.5 Module Startlijsten</a>
+                    <ul>
+                        <li><a href="#sl-1-overzicht">1.5.1 Naar Startlijsten gaan en het overzicht bekijken</a></li>
+                        <li><a href="#sl-2-tabs">1.5.2 Categorie en afstand kiezen via de tabs</a></li>
+                        <li><a href="#sl-3-seeding">1.5.3 Seeding-methode kiezen</a></li>
+                        <li><a href="#sl-4-genereer">1.5.4 Loting genereren voor de eerste ronde</a></li>
+                        <li><a href="#sl-5-verplaats">1.5.5 Een rijder handmatig aan een ronde toevoegen of verplaatsen</a></li>
+                        <li><a href="#sl-6-wis">1.5.6 Loting wissen en opnieuw beginnen</a></li>
+                        <li><a href="#sl-7-print">1.5.7 Startlijsten printen</a></li>
+                    </ul>
+                </li>
+                <li><a href="#a-live">1.6 Module Live verwerking</a>
+                    <ul>
+                        <li><a href="#liv-1-overzicht">1.6.1 Naar Live verwerking gaan en de pagina-opbouw begrijpen</a></li>
+                        <li><a href="#liv-2-rit">1.6.2 Een rit kiezen</a></li>
+                        <li><a href="#liv-3-tijden">1.6.3 Tijden invoeren</a></li>
+                        <li><a href="#liv-4-sanctie">1.6.4 Sancties toekennen</a></li>
+                        <li><a href="#liv-5-opslaan">1.6.5 Opslaan</a></li>
+                        <li><a href="#liv-6-volgende">1.6.6 Vervolgrondes laten genereren</a></li>
+                        <li><a href="#liv-7-concurrency">1.6.7 Multi-user gedrag en lees-modus</a></li>
+                    </ul>
+                </li>
+                <li><a href="#a-uitslag">1.7 Module Uitslag</a>
+                    <ul>
+                        <li><a href="#uit-1-overzicht">1.7.1 Naar Uitslag gaan en de pagina-opbouw begrijpen</a></li>
+                        <li><a href="#uit-2-tabs">1.7.2 Categorie en afstand kiezen via de tabs</a></li>
+                        <li><a href="#uit-3-afstand">1.7.3 Per-afstand uitslag bekijken</a></li>
+                        <li><a href="#uit-4-bevestigen">1.7.4 Uitslag per afstand bevestigen</a></li>
+                        <li><a href="#uit-5-klassement">1.7.5 Klassement bekijken en correcties maken</a></li>
+                        <li><a href="#uit-6-vastleggen">1.7.6 Klassement definitief vastleggen</a></li>
+                        <li><a href="#uit-7-printen">1.7.7 Uitslagen en klassementen printen</a></li>
+                    </ul>
+                </li>
+                <li><a href="#a-beheer">1.8 Module Beheer</a>
+                    <ul>
+                        <li><a href="#beh-1-overzicht">1.8.1 Naar Beheer gaan en de pagina-opbouw begrijpen</a></li>
+                        <li><a href="#beh-2-gegevens">1.8.2 Tabblad Gegevens</a></li>
+                        <li><a href="#beh-3-banen">1.8.3 Tabblad Banen</a></li>
+                        <li><a href="#beh-4-transponders">1.8.4 Tabblad Transponders</a></li>
+                        <li><a href="#beh-5-wedstrijden">1.8.5 Tabblad Wedstrijden</a></li>
+                        <li><a href="#beh-6-meldingen">1.8.6 Mededelingen aanmaken — wedstrijd-specifiek én globaal</a></li>
+                        <li><a href="#beh-7-klassementen">1.8.7 Tabblad Klassementen</a></li>
+                    </ul>
+                </li>
+                <li><a href="#a-gebruikers">1.9 Module Gebruikers</a>
+                    <ul>
+                        <li><a href="#gb-1-overzicht">1.9.1 Naar Gebruikers gaan en de pagina-opbouw begrijpen</a></li>
+                        <li><a href="#gb-2-rollen">1.9.2 Rollen en wat ze mogen</a></li>
+                        <li><a href="#gb-3-aanmaken">1.9.3 Een nieuwe gebruiker aanmaken</a></li>
+                        <li><a href="#gb-4-bewerken">1.9.4 Bewerken, wachtwoord, activeren, verwijderen</a></li>
+                        <li><a href="#gb-5-stats">1.9.5 Bezoekersstatistieken</a></li>
+                        <li><a href="#gb-6-logboek">1.9.6 Login-logboek</a></li>
+                    </ul>
+                </li>
+                <li><a href="#a-rijders">1.10 Module Rijders (AVG)</a>
+                    <ul>
+                        <li><a href="#rij-1-overzicht">1.10.1 Naar Rijders gaan en de pagina-opbouw begrijpen</a></li>
+                        <li><a href="#rij-2-zoeken">1.10.2 Een rijder zoeken</a></li>
+                        <li><a href="#rij-3-detail">1.10.3 Detail-paneel</a></li>
+                        <li><a href="#rij-4-anonimiseren">1.10.4 Een rijder anonimiseren (AVG)</a></li>
+                        <li><a href="#rij-5-undo">1.10.5 Anonimisatie-vlag opheffen</a></li>
+                    </ul>
+                </li>
+                <li><a href="#a-uploads">1.11 Module Uploads</a> <em style="color:#888">(admin)</em>
+                    <ul>
+                        <li><a href="#up-1-overzicht">1.11.1 Naar Uploads gaan en de pagina-opbouw begrijpen</a></li>
+                        <li><a href="#up-2-filter">1.11.2 Mappen filteren op leeftijd</a></li>
+                        <li><a href="#up-3-verwijderen">1.11.3 Een map verwijderen</a></li>
+                    </ul>
+                </li>
             </ul>
         </li>
-        <li><b><a href="#deel-publiek">Deel 2 — Publieke applicatie</a></b></li>
-        <li><b><a href="#deel-coach">Deel 3 — Coach-applicatie</a></b></li>
+        <li><b><a href="#deel-publiek">Deel 2 — Publieke applicatie</a></b>
+            <ul>
+                <li><a href="#pub-1-wedstrijd">2.1 Wedstrijd kiezen</a></li>
+                <li><a href="#pub-2-zoeken">2.2 Rijder zoeken en toevoegen</a></li>
+                <li><a href="#pub-3-tabs">2.3 Vier tabbladen per rijder</a></li>
+                <li><a href="#pub-4-meerdere">2.4 Meerdere rijders tegelijk volgen</a></li>
+                <li><a href="#pub-5-pwa">2.5 Installeren als app (PWA) en offline-gedrag</a></li>
+            </ul>
+        </li>
+        <li><b><a href="#deel-coach">Deel 3 — Coach-applicatie</a></b>
+            <ul>
+                <li><a href="#cch-1-wedstrijd">3.1 Wedstrijd kiezen</a></li>
+                <li><a href="#cch-2-rijders">3.2 Rijders toevoegen — drie methodes</a></li>
+                <li><a href="#cch-3-tabs">3.3 Vier tabbladen</a></li>
+                <li><a href="#cch-4-status">3.4 Status-alarm</a></li>
+                <li><a href="#cch-5-refresh">3.5 Pull-to-refresh</a></li>
+            </ul>
+        </li>
         <li style="color:#aaa"><b>Deel 4 — InlineComp Client (CSV Upload Monitor)</b> <em>(volgende sessie)</em></li>
         <li><b><a href="#appendix">Appendix — Voor de techneuten</a></b> (broncode-verwijzingen, klassen, state-variabelen)</li>
     </ul>
@@ -763,10 +884,10 @@ a.ref-back:hover { text-decoration: underline; }
 <p>Voor elke categorie (distance_combination, kortweg DC) één tab-knop:</p>
 <ul>
     <li><b>Tekst</b>: <code>&lt;dc_name&gt; (&lt;totaal&gt;)</code> waar <code>totaal</code> het aantal deelnemers in die DC is.</li>
-    <li><b>Rood badge <code>N✗</code></b>: aantal deelnemers met <code>entry_status</code> &ge; 2 (niet 5). Dat zijn: afgemeld, afgem. bij org., niet getekend.</li>
-    <li><b>Groen badge <code>NN</code></b>: aantal deelnemers waar <code>is_new === true</code> (nog niet in de DB).</li>
+    <li><b>Rood badge <code>N✗</code></b>: aantal deelnemers die problematisch zijn (afgemeld, afgemeld bij organisatie, niet getekend)<sup class="ref-link" id="refsrc-53"><a href="#ref-13">[13]</a></sup>.</li>
+    <li><b>Groen badge <code>NN</code></b>: aantal deelnemers die nog niet in de eigen database staan (nieuw vanuit de KNSB-feed).</li>
 </ul>
-<p>De eerste tab is standaard actief. Klikken wisselt en roept <code>toonVergelijkTabel(cat)</code> aan.</p>
+<p>De eerste tab is standaard actief. Klikken wisselt naar die categorie.</p>
 
 <h4>De vergelijk-tabel: wat zie je per rij?</h4>
 
@@ -982,7 +1103,7 @@ a.ref-back:hover { text-decoration: underline; }
     </div>
   </div>
 </div>
-<p class="mock-caption">↑ Succesvolle import. De <code>&lt;details&gt;</code> klapt automatisch in na 4 seconden.</p>
+<p class="mock-caption">↑ Succesvolle import. Het uitklap-blok klapt automatisch in na 4 seconden.</p>
 
 <h3 id="stap-4-dcs">Stap 4 — Categorieën aanpassen of splitsen<sup class="ref-link" id="refsrc-9"><a href="#ref-9">[9]</a></sup></h3>
 
@@ -1136,6 +1257,8 @@ a.ref-back:hover { text-decoration: underline; }
 </ul>
 
 <p>Het 🗑-knopje verwijdert een afstand (alleen mogelijk vóór er een tijdschema is gegenereerd).</p>
+
+<div class="info"><b>Lokale aanpassingen blijven behouden bij een re-import.</b> Pas je hier <b>naam</b>, <b>meters</b> of <b>race-type</b> van een afstand aan — bijvoorbeeld omdat je door weersomstandigheden de "200 meter dual" inkort tot een "one lap" — dan overleeft die wijziging een latere re-import voor late inschrijvingen. KNSB-only velden (volgnummer, discipline, starttijd) worden bij re-import wel gesynchroniseerd; die zijn niet user-bewerkbaar.</div>
 
 <h4>Opslaan en wat er kán/niet kán</h4>
 
@@ -1379,7 +1502,19 @@ Beide kleuren actief; de twee anderen (afgemeld bij org., niet getekend) maken d
     <li>Klik <b>🖨 Print selectie</b>.</li>
 </ol>
 
-<p>Wat je krijgt: één matrix-overzicht met per rijder een rij en per afstand een kolom. Vinkje als de rijder die afstand rijdt. Afgemelde of niet-getekende rijders staan er niet in.</p>
+<p>Wat je krijgt: één document met meerdere secties onder elkaar (alleen die secties verschijnen die op deze wedstrijd van toepassing zijn):</p>
+
+<table class="ref">
+<tr><th>Sectie</th><th>Wanneer zichtbaar</th><th>Waarvoor handig</th></tr>
+<tr><td><b>Niet aanwezig / afgemeld</b></td><td>Als ≥1 rijder een afwezig-status heeft</td><td>Wie van de jury doorgeeft dat een rijder niet komt — staat ook bij welke afstanden hij weg is en met welke status (afgemeld, niet getekend, …).</td></tr>
+<tr><td><b>Door organisatie toegevoegd</b></td><td>Als ≥1 rijder met status 5 ("Bevestigd bij org.")</td><td>Overzicht van last-minute-aanmeldingen die niet via KNSB liepen.</td></tr>
+<tr><td><b>Geen transponder geregistreerd</b></td><td>Als ≥1 actieve rijder zonder transponder-code</td><td>Lijst voor de balie om transponder-nummers in te vullen.</td></tr>
+<tr><td><b>Transponder aanpassingen tov KNSB</b></td><td>Als ≥1 actieve rijder met afwijkende transponder t.o.v. KNSB</td><td>Voor de tijdwaarneming — welke transponder is daadwerkelijk in gebruik (en wijkt af van wat in MyLaps staat).</td></tr>
+<tr><td><b>Startnummer aanpassingen tov KNSB</b></td><td>Als ≥1 actieve rijder met een ander startnummer dan in de KNSB-data</td><td>Voor de speaker en de tijdwaarneming — welk nummer ze op het rugnummer dragen vs. wat KNSB doorgaf.</td></tr>
+<tr><td><b>Met organisatie-transponder</b></td><td>Als ≥1 actieve rijder een uitleen-transponder van de organisatie heeft</td><td>Voor de balie — wie nog moet betalen of een uitleen-transponder retourneren.</td></tr>
+<tr><td><b>Race-groepen overzicht</b></td><td>Altijd</td><td>Per race-groep (na merge/split) welke categorieën erin zitten, hoeveel deelnemers en welke afstanden.</td></tr>
+<tr><td><b>Deelnemerslijst</b></td><td>Altijd</td><td>De volledige matrix: rij per rijder, kolom per afstand, kruisje waar 'ie meedoet.</td></tr>
+</table>
 
 <div class="tip"><b>Tip:</b> Print de tekenlijst (Stap 6) en deelnemerslijst (Stap 8) op verschillend gekleurd papier. Wit voor balie-tekenen, blauw of geel voor de definitieve lijst. Voorkomt verwarring tijdens de wedstrijd.</div>
 
@@ -1495,8 +1630,9 @@ Beide kleuren actief; de twee anderen (afgemeld bij org., niet getekend) maken d
         <div style="font-weight:700;color:var(--blauw);font-size:14px;margin-bottom:8px">500m sprint <span style="font-weight:400;color:#666;font-size:11.5px">— bewerken</span></div>
 
         <div style="background:#eef4fa;padding:8px 10px;border-radius:4px;font-size:11.5px;margin-bottom:10px">
-            <label style="display:flex;align-items:center;gap:5px"><input type="checkbox" checked> <b>Runner-up</b> regeling (verliezers met beste tijd alsnog door)</label>
-            <label style="display:flex;align-items:center;gap:8px;margin-top:4px">Min. per heat <input type="number" value="6" style="width:50px"> Max. per heat <input type="number" value="9" style="width:50px"></label>
+            <label style="display:flex;align-items:center;gap:5px"><input type="checkbox" checked> <b>Runner-up</b> — niet-gekwalificeerden rijden een runner-up race</label>
+            <label style="display:flex;align-items:center;gap:8px;margin-top:4px">Max. per heat <input type="number" value="4" style="width:50px"> rijders per runner-up heat <span style="color:#888;font-size:10.5px">— eerste heats krijgen max. rijders, laatste heat de rest</span></label>
+            <label style="display:flex;align-items:center;gap:8px;margin-top:4px">Min. per heat <input type="number" value="4" style="width:50px"> rijders <span style="color:#888;font-size:10.5px">— bij ≥2 heats: samenvoegen als laatste heat kleiner is. 0 = geen minimum</span></label>
         </div>
 
         <table style="width:100%;font-size:11.5px;border-collapse:collapse">
@@ -1553,6 +1689,16 @@ Beide kleuren actief; de twee anderen (afgemeld bij org., niet getekend) maken d
 </ul>
 
 <div class="info"><b>De live-berekening geeft soms een waarschuwing.</b> Als je instellingen niet logisch zijn (bv. 4 series met elk 8 rijders → 32 doorstromers naar 1 halve finale van max 9), kleurt het preview-blok geel of rood en krijg je een tip wat aan te passen.</div>
+
+<div class="info"><b>Hoe runner-up-heats worden verdeeld.</b>
+<ul style="margin-top:6px">
+    <li>Aantal heats = afronden naar boven van <em>uitvallers ÷ Max. per heat</em>.</li>
+    <li>De <b>eerste heats</b> (= beste plek-blok, direct ná de doorgestroomden) krijgen elk precies <b>Max. per heat</b> rijders. De <b>laatste heat</b> (= slechtste plek-blok, chronologisch het eerst gereden) krijgt de rest.</li>
+    <li>Is <b>Min. per heat</b> &gt; 0 én zou de laatste heat kleiner zijn dan dat minimum? Dan wordt 'ie samengevoegd met de heat ervóór. Voorbeeld bij 9 uitvallers, max=4, min=4: zonder merge zou heat-laatste 1 rijder hebben → wordt samengevoegd met de heat ervóór tot één heat van 5 rijders.</li>
+    <li>Min = 0 betekent: de laatste heat mag een onderbezetting hebben (bv. heat-laatste van 1 rijder).</li>
+</ul></div>
+
+<div class="info"><b>Tip — wijzig je instellingen na het genereren? Regenereer dan ook het tijdschema.</b> Bij elke regenerate ruimt InlineComp automatisch verweesde afstand-config-rijen op (bv. nadat een afstand is hernoemd in de import-module). Dat voorkomt dat oude instellingen onder een verdwenen afstand-naam ineens weer actief worden als je later toevallig terug-hernoemt. Voor de runner-up: een aanpassing aan Max. of Min. per heat wordt pas zichtbaar in het programma na <em>Tijdschema regenereren</em> — anders blijven de oude rit-aantallen staan.</div>
 
 <p>Klik <b>💾 Opslaan</b> en de kaart vouwt weer dicht met de bijgewerkte samenvatting. Achter de schermen worden ook de programma-blokken voor deze afstand gesynchroniseerd (zie volgende stap): heb je nu een halve finale aangezet die er eerst niet was, dan verschijnt automatisch een blok "Halve finale 500m" in de programma-volgorde.</p>
 
@@ -1705,8 +1851,8 @@ Beide kleuren actief; de twee anderen (afgemeld bij org., niet getekend) maken d
 
 <ul>
     <li><b>Printen:</b> via het <b>🖨 Print-Center</b> rechtsboven (zie §1.3 stap 6) vink <em>Programma</em> aan en klik <b>Print selectie</b>. Eén compleet A4-overzicht met tijden, ritten, pauzes.</li>
-    <li><b>Publiek beschikbaar:</b> zodra je tijdschema is opgeslagen verschijnt het automatisch op de publieke site (<code>/public/</code>). Geen aparte "publiceer"-knop — wat je opslaat is meteen zichtbaar.</li>
-    <li><b>Coach-app:</b> coaches met een toegangscode zien hetzelfde programma in hun eigen weergave (<code>/coach/</code>) met aangepaste filters.</li>
+    <li><b>Publiek beschikbaar:</b> zodra je tijdschema is opgeslagen verschijnt het automatisch in de publieke applicatie (Deel 2). Geen aparte "publiceer"-knop — wat je opslaat is meteen zichtbaar.</li>
+    <li><b>Coach-app:</b> coaches met een toegangscode zien hetzelfde programma in hun eigen weergave (Deel 3) met aangepaste filters.</li>
 </ul>
 
 <div class="info"><b>Veranderingen tijdens de wedstrijd.</b> Wijzig je het tijdschema op de wedstrijddag zelf (bv. een Herstart-blok toevoegen na een onderbreking), dan zien de publieke pagina en de coach-app dat binnen enkele seconden — ze halen het tijdschema regelmatig opnieuw op.</div>
@@ -1977,13 +2123,17 @@ Beide kleuren actief; de twee anderen (afgemeld bij org., niet getekend) maken d
     </div>
   </div>
 </div>
-<p class="mock-caption">↑ De gegenereerde loting. Links een vast deelnemers-paneel met invul-veldjes per ronde (S = Series, KF = Kwartfinale, HF = Halve finale, A-fin = A-finale). Rechts de drie heats naast elkaar — voor leesbaarheid is de Cat- en Transp.-kolom in deze mockup weggelaten; in de echte UI staan die er wel bij. Het cijfer linksboven in elke heat-kop is het ritnummer uit het tijdschema; het cijfer rechts is het aantal rijders.</p>
+<p class="mock-caption">↑ De gegenereerde loting. Links een vast deelnemers-paneel met invul-veldjes per ronde (S = Series, KF = Kwartfinale, HF = Halve finale, RU = Runner-up, A-fin = A-finale). Rechts de drie heats naast elkaar — voor leesbaarheid is de Cat- en Transp.-kolom in deze mockup weggelaten; in de echte UI staan die er wel bij. Het cijfer linksboven in elke heat-kop is het ritnummer uit het tijdschema; het cijfer rechts is het aantal rijders.</p>
 
 <div class="warn"><b>Foutmelding "Geen bevestigde deelnemers gevonden"?</b> Dat betekent dat álle rijders nog status <em>Niet bevestigd</em> of <em>Afgemeld</em> hebben. Ga terug naar Importeer (§1.3, Stap 7) en zet de juiste rijders op <em>Bevestigd</em> of <em>Bevestigd bij org.</em>.</div>
 
+<div class="info"><b>Vervolgrondes en runner-up loot je hier niet — die komen automatisch.</b> In Startlijsten genereer je alleen de <b>eerste ronde</b> (Series, of Kwartfinale/Halve finale als die voor deze cat de eerste ronde is — zie §1.4). Zodra alle resultaten van die eerste ronde zijn opgeslagen in <b>Live verwerking</b> (§1.6), bouwt InlineComp zelf de doorstroom-ronde op én de runner-up-loting (als die voor de afstand is aangevinkt). Plek-labels in runner-up-rit-namen worden bij elke loting live herrekend op basis van het werkelijke aantal doorgestroomden — zie §1.6.6 voor het detail.</div>
+
 <h3 id="sl-5-verplaats">Stap 5 — Een rijder handmatig aan een ronde toevoegen of verplaatsen<sup class="ref-link" id="refsrc-23"><a href="#ref-23">[23]</a></sup></h3>
 
-<p>Het deelnemers-paneel links (zoals zichtbaar in Stap 4) is niet alleen een leesweergave — je kunt er ook actief mee ingrijpen op de loting. De praktijkreden waar dit voor bestaat: tijdens de wedstrijd kan een scheidsrechter beslissen dat een rijder die door toedoen van een ander benadeeld is alsnog door mag naar de volgende ronde. Door in de bijbehorende kolom (KF, HF of A-fin) een heatnummer te typen, voeg je die rijder aan die ronde toe. Hetzelfde mechanisme werkt om iemand binnen één ronde van heat te wisselen — typ gewoon een ander nummer in dezelfde kolom.</p>
+<p>Het deelnemers-paneel links (zoals zichtbaar in Stap 4) is niet alleen een leesweergave — je kunt er ook actief mee ingrijpen op de loting. De praktijkreden waar dit voor bestaat: tijdens de wedstrijd kan een scheidsrechter beslissen dat een rijder die door toedoen van een ander benadeeld is alsnog door mag naar de volgende ronde. Door in de bijbehorende kolom (KF, HF, RU of A-fin) een heatnummer te typen, voeg je die rijder aan die ronde toe. Hetzelfde mechanisme werkt om iemand binnen één ronde van heat te wisselen — typ gewoon een ander nummer in dezelfde kolom.</p>
+
+<div class="info"><b>De RU-kolom (runner-up) verschijnt alleen als runner-up voor deze afstand is aangevinkt</b> in §1.4. Bij een chain die met halve finale begint en runner-up heeft die uit 2 heats bestaat na samenvoeging, kun je dus tussen RU-heat 1 en RU-heat 2 schuiven door 1 of 2 in te typen.</div>
 
 <!-- MOCKUP: zoom-in op deelnemers-paneel -->
 <div class="mock">
@@ -2031,7 +2181,7 @@ Beide kleuren actief; de twee anderen (afgemeld bij org., niet getekend) maken d
 <div class="warn"><b>Wat blijft staan, en wat niet:</b>
 <ul style="margin-top:6px">
     <li>Wist <b>alle rondes</b> voor deze categorie × afstand (series, kwartfinale, halve, finales).</li>
-    <li>Eerder ingevoerde <em>tijden/uitslagen</em> (in <code>results</code>) blijven in de database staan — die zijn historisch en worden bij opnieuw loten niet automatisch teruggezet in nieuwe heats. Dat is bedoeld als veiligheidsnet, maar betekent ook dat je bij een loting-reset midden in een wedstrijd voorzichtig moet zijn.</li>
+    <li>Eerder ingevoerde <em>tijden/uitslagen</em> blijven in de database staan<sup class="ref-link" id="refsrc-52"><a href="#ref-48">[48]</a></sup> — die zijn historisch en worden bij opnieuw loten niet automatisch teruggezet in nieuwe heats. Dat is bedoeld als veiligheidsnet, maar betekent ook dat je bij een loting-reset midden in een wedstrijd voorzichtig moet zijn.</li>
     <li>Andere afstanden / categorieën blijven onaangeraakt.</li>
 </ul></div>
 
@@ -2291,7 +2441,18 @@ Beide kleuren actief; de twee anderen (afgemeld bij org., niet getekend) maken d
 
 <p>Bij een afvalkoers-rit verschijnt onder de heat-tabel een apart <b>Afvalkoers-paneel</b>. Daar wijs je tijdens de race rijders aan die uit koers gaan; het paneel kent ze <b>van achter naar voren</b> een afval-plek toe (eerste afvaller = laagste plek, laatste rijder over = plek 1).</p>
 
-<p>Het paneel bestaat uit (van boven naar beneden): titelbalk, een rij met al <b>afgevallen</b> rijders (links de eerste afvaller, rechts de laatst afgevallen), de <b>knoppen-rij</b>, eventueel <b>voorlopige</b> 1ste/2de-rijen, en onderaan het <b>grid</b> van rijders die nog in koers zijn. Helemaal onderin staat de <b>geselecteerd-balk</b> met de actieve selectie.</p>
+<p>Het paneel bestaat uit (van boven naar beneden): titelbalk met <b>heat-config-knop</b> (⚙), een rij met al <b>afgevallen</b> rijders (links de eerste afvaller, rechts de laatst afgevallen), de <b>knoppen-rij</b>, eventueel <b>voorlopige</b> 1ste/2de-rijen, en onderaan het <b>grid</b> van rijders die nog in koers zijn. Helemaal onderin staat de <b>geselecteerd-balk</b> met de actieve selectie.</p>
+
+<p><b>Heat-configuratie</b> (⚙ rechtsboven in het paneel) — eenmalig per heat invullen:</p>
+<table class="ref" style="margin-top:4px">
+<tr><th>Veld</th><th>Wat vul je in</th></tr>
+<tr><td><b>Totaal aantal ronden</b></td><td>Het aantal ronden dat de hele heat duurt (bv. 18).</td></tr>
+<tr><td><b>Eerste afval-rondebord</b></td><td>Het rondebord-nummer (= rondes te gaan) bij de eerste afvalling. Bv. 21 betekent dat de eerste afvalling valt als het bord 21 toont.</td></tr>
+<tr><td><b>Afval-interval</b></td><td>Elke ronde of om de ronde — afhankelijk van wat de jury vooraf afspreekt voor deze afstand.</td></tr>
+<tr><td><b>Eindsprint</b></td><td>Het aantal rijders dat in de laatste ronde nog op het parcours staat en in de eindsprint strijdt om plek 1..x.</td></tr>
+</table>
+
+<p>Wanneer deze configuratie is ingevuld, kent InlineComp <b>automatisch</b> een ronde-getal toe aan elke afgevallen rijder (= rondebord op moment van afvallen → rondes voltooid). Dat verschijnt direct in de gewone <em>Rondes</em>-input van de heat-tabel. Bij een By Fault of By Decision (zie hieronder) verschuift het schema mee — die afvallingen vallen <em>buiten</em> het normale schema, dus de overige Set-afvallingen schuiven een slot vooruit.</p>
 
 <!-- MOCKUP: afvalkoers-paneel -->
 <div class="mock">
@@ -2339,7 +2500,7 @@ Beide kleuren actief; de twee anderen (afgemeld bij org., niet getekend) maken d
             <!-- knoppen-rij -->
             <div style="display:flex;align-items:center;gap:6px;margin-bottom:10px">
                 <button style="background:#fff;border:1px solid var(--border);border-radius:4px;padding:4px 10px;font-size:11.5px;cursor:not-allowed;color:#bbb" disabled>🚩 By Fault</button>
-                <button style="background:#fff;border:1px solid var(--border);border-radius:4px;padding:4px 10px;font-size:11.5px;cursor:pointer">↶ Undo</button>
+                <button style="background:#fff;border:1px solid var(--border);border-radius:4px;padding:4px 10px;font-size:11.5px;cursor:not-allowed;color:#bbb" disabled>🤝 By Decision</button>
                 <button style="background:#fff;border:1px solid var(--border);border-radius:4px;padding:4px 10px;font-size:11.5px;font-weight:700;cursor:not-allowed;color:#bbb" disabled>✓ Set</button>
                 <span style="flex:1"></span>
                 <button style="background:#fff;border:1px solid var(--border);border-radius:4px;padding:4px 12px;font-size:11.5px;cursor:not-allowed;color:#bbb" disabled>1ste</button>
@@ -2361,17 +2522,18 @@ Beide kleuren actief; de twee anderen (afgemeld bij org., niet getekend) maken d
     </div>
   </div>
 </div>
-<p class="mock-caption">↑ Afvalkoers-paneel midden in een race. Bovenin de tellers (<b>5</b> rijders nog in koers, volgende afval-plek wordt <b>#5</b>). Daaronder de afgevallen-strip: links rijder 109 die als eerste afviel (plek <b>#12</b>), daarna 103 (#11), <b>111 met DQ-TF</b> (rood, "By Fault" — krijgt #10 én een DQ-TF-sanctie automatisch), 104 (#9), 106 (#8), 110 (#7), 102 (#6). De grid eronder bevat de <b>5 nog-in-koers</b> rijders; #107 is geselecteerd (blauw kader + glow). Knoppen <b>1ste</b>, <b>2de</b>, <b>By Fault</b> en <b>Set</b> staan disabled tot er een geldige actie kan; <b>Undo</b> is actief zodra er minstens één actie in de historie zit.</p>
+<p class="mock-caption">↑ Afvalkoers-paneel midden in een race. Bovenin de tellers (<b>5</b> rijders nog in koers, volgende afval-plek wordt <b>#5</b>). Daaronder de afgevallen-strip: links rijder 109 die als eerste afviel (plek <b>#12</b>), daarna 103 (#11), <b>111 met DQ-TF</b> (rood, "By Fault"), 104 (#9), 106 (#8), 110 (#7), 102 (#6). De grid eronder bevat de <b>5 nog-in-koers</b> rijders; #107 is geselecteerd (blauw kader + glow). Knoppen <b>1ste</b>, <b>2de</b>, <b>By Fault</b>, <b>By Decision</b> en <b>Set</b> staan disabled tot er een geldige actie kan.</p>
 
 <p><b>Normale flow:</b> eerst volgen meestal enkele rondes met een <b>dubbele afvalling</b> (twee rijders gaan in dezelfde afval-actie uit koers, één daarvan finishte net vóór de andere — vandaar de knoppen <b>1ste</b> en <b>2de</b>). Daarna meestal nog een aantal rondes met <b>enkele afvallingen</b> (één rijder per ronde). Tot er <b>x</b> rijders overblijven die in de laatste ronde sprinten voor plek 1..x — die plekken vul je in via de gewone tijd-input in de heat-tabel, dus niet via dit paneel.</p>
 
 <p><b>Wat de knoppen doen:</b></p>
 <table class="ref" style="margin-top:4px">
 <tr><th>Knop</th><th>Actie</th></tr>
-<tr><td><b>1ste</b> / <b>2de</b></td><td>Plaatst de geselecteerde rijder(s) in een voorlopige rij boven het grid (de afvalling is dan nog niet definitief — pas bij <b>Set</b>). <b>Bij een dubbele afvalling</b>: selecteer de rijder die als <em>tweede</em> over de finish kwam → klik <b>2de</b> (krijgt de laagste plek). Selecteer dan de rijder die als <em>eerste</em> finishte → klik <b>1ste</b> (krijgt de plek net erboven). <b>Bij een enkele afvalling</b>: selecteer de rijder → klik <b>1ste</b> (of <b>2de</b>, beide leveren dezelfde plek op). Klik daarna <b>Set</b>.</td></tr>
-<tr><td><b>Set</b></td><td>Maakt de voorlopige 1ste/2de-rij(en) definitief: de rijder(s) verhuizen naar de afgevallen-strip met de bijbehorende plek(ken). Werkt alleen als er minstens één rijder in een voorlopige rij staat.</td></tr>
-<tr><td><b>By Fault</b></td><td>Selecteer de rijder → klik <b>By Fault</b>. Hij gaat direct naar de afgevallen-strip op de eerstvolgende vrije plek én krijgt automatisch sanctie <b>DQ-TF</b> (rood label in de strip). Geen 1ste/2de of Set nodig.</td></tr>
-<tr><td><b>Undo</b></td><td>Rolt de laatst uitgevoerde actie terug. Werkt alleen op acties uit de huidige sessie — na een page-refresh start de historie leeg.</td></tr>
+<tr><td><b>1ste</b> / <b>2de</b></td><td>Plaatst de geselecteerde rijder(s) in een voorlopige rij boven het grid (de afvalling is dan nog niet definitief — pas bij <b>Set</b>). <b>Bij een dubbele afvalling</b>: selecteer de rijder die als <em>tweede</em> over de finish kwam → klik <b>2de</b> (krijgt de laagste plek). Selecteer dan de rijder die als <em>eerste</em> finishte → klik <b>1ste</b> (krijgt de plek net erboven). <b>Bij een enkele afvalling</b>: selecteer de rijder → klik <b>1ste</b> (of <b>2de</b>, beide leveren dezelfde plek op). Klik daarna <b>Set</b>.<br><br><em>Voorlopige selectie overschrijven:</em> klik gewoon opnieuw — de vorige voorlopige rijder(s) komen automatisch terug in het grid. Geen aparte annuleer-actie nodig.</td></tr>
+<tr><td><b>Set</b></td><td>Maakt de voorlopige 1ste/2de-rij(en) definitief: de rijder(s) verhuizen naar de afgevallen-strip met de bijbehorende plek(ken). Werkt alleen als er minstens één rijder in een voorlopige rij staat. Direct na Set kent InlineComp het juiste ronde-getal toe (op basis van de heat-config) en vult dat in de Rondes-input.</td></tr>
+<tr><td><b>By Fault</b><br>(buiten schema)</td><td>Selecteer de rijder → klik <b>By Fault</b>. Een pop-up vraagt het rondebord-nummer; bevestig en de rijder gaat direct naar de afgevallen-strip op de eerstvolgende vrije plek met sanctie <b>DQ-TF</b> (rood label). Het overige afvalschema schuift een slot vooruit zodat de geplande Set-afvallingen gewoon op het juiste rondebord blijven vallen.</td></tr>
+<tr><td><b>By Decision</b><br>(buiten schema)</td><td>Voor "geen overtreding maar wel uit koers": een val, gedubbeld worden, opgeven. Selecteer de rijder → klik <b>By Decision</b>. Idem rondebord-pop-up, idem schema-shift, maar <b>geen sanctie</b>. De rijder krijgt z'n plek + ronde, in de uitslag staat geen W/DQ-code.</td></tr>
+<tr><td>Klik op een afgevallen-kaart</td><td>Zet de rijder direct terug in koers. Z'n plek + ronde worden gewist; de overige Set-afvallingen schuiven een slot terug. Handig voor correcties — bv. By Fault per ongeluk op de verkeerde rijder geklikt.</td></tr>
 <tr><td>Sanctie <b>DNS</b></td><td>Zodra je in de heat-tabel een sanctie op DNS zet, gaat de rijder automatisch naar de afgevallen-strip op de op dat moment laagste vrije plek. Geen Set nodig.</td></tr>
 <tr><td><b>Fin.</b>-dropdown</td><td>Snelle correctie: twee afgevallen rijders van plek wisselen. Werkt alleen tussen twee rijders die <em>beide</em> al in de afgevallen-strip staan; combineren met een nog-in-koers rijder wordt geblokkeerd.</td></tr>
 </table>
@@ -2379,6 +2541,13 @@ Beide kleuren actief; de twee anderen (afgemeld bij org., niet getekend) maken d
 <p>Onder de heat-tabel staat per rijder ook de gewone <b>tijd</b>-input. Voor afgevallen rijders is de afval-plek bepalend; tijden zijn optioneel. Voor de laatste <em>x</em> rijders die de eindsprint rijden vul je daar de finish-tijd (en bij lange afstanden de rondes) in, en bepaalt de gewone heat-sortering plek 1..x.</p>
 
 <div class="info"><b>Uitzondering — meer dan twee rijders tegelijk uit koers</b> (bv. een groep wordt door de kop gedubbeld en collectief uit koers gehaald): selecteer alle betrokken rijders tegelijk → <b>Set</b>. Ze krijgen dezelfde gedeelde plek volgens <em>plek = nog-vrije-plekken − K + 1</em> (K = aantal gedeelde rijders). De plekken erboven schuiven mee, de afgesproken sluitronde-x verandert niet.</div>
+
+<div class="info"><b>Vergissingen ongedaan maken.</b> Het paneel werkt zonder aparte Undo-knop:
+<ul style="margin-top:6px">
+    <li><b>Verkeerde rijder afgevallen?</b> Klik op z'n kaart in de afgevallen-strip — hij gaat direct terug naar het in-koers grid, plek + ronde worden gewist, en het schema schuift een slot terug.</li>
+    <li><b>Verkeerde 1ste of 2de geselecteerd?</b> Selecteer de juiste rijder(s) en klik opnieuw op <b>1ste</b> of <b>2de</b>. De vorige voorlopige rijders gaan automatisch terug in het grid.</li>
+</ul>
+Pas op het moment dat je <b>Set</b> klikt is de afvalling definitief. Daarvóór kun je vrij blijven klikken zonder verlies van werk.</div>
 
 <h4>CSV-import uit een transponder-systeem<sup class="ref-link" id="refsrc-29"><a href="#ref-29">[29]</a></sup></h4>
 
@@ -2471,7 +2640,7 @@ Komt jouw timing-systeem met andere kolomnamen? Dan herkent de parser het bestan
 
 <h3 id="liv-6-volgende">Stap 6 — Vervolgrondes laten genereren<sup class="ref-link" id="refsrc-32"><a href="#ref-32">[32]</a></sup></h3>
 
-<p>Hier zit de echte kracht: zodra <b>alle ritten van een ronde compleet zijn</b> (elke rijder heeft tijd of sanctie), kan InlineComp automatisch de volgende ronde opbouwen.</p>
+<p>Zodra <b>alle ritten van een ronde compleet zijn</b> (elke rijder heeft een tijd of een sanctie) bouwt InlineComp de vervolgronde(s) automatisch op. Je hoeft niets te doen — bij het opslaan van het laatste resultaat draait de generatie meteen door en zie je een groene toast verschijnen.</p>
 
 <p>De volgorde wordt afgeleid uit het tijdschema:</p>
 
@@ -2479,7 +2648,7 @@ Komt jouw timing-systeem met andere kolomnamen? Dan herkent de parser het bestan
     <li>Series → kwartfinale (als die in de afstandsinstellingen aan staat)</li>
     <li>Series of kwartfinale → halve finale</li>
     <li>Halve finale → A-finale (en eventueel B-finales bij Full-Final: B1, B2, B3, …)</li>
-    <li>Bij internationaal-systeem met runner-up aangevinkt: extra runner-up-ronde voor de rijders die afvallen na de eerste ronde van de afstand (Series, Kwartfinale of Halve finale), op tijd-volgorde verdeeld in runner-up-heats.</li>
+    <li>Bij internationaal-systeem met runner-up aangevinkt: extra runner-up-ronde voor de rijders die afvallen na de <b>eerste</b> ronde van de afstand. De eerste ronde kan Series, Kwartfinale of Halve finale zijn — afhankelijk van wat voor die afstand is geconfigureerd.</li>
 </ul>
 
 <div class="info"><b>Over runner-up</b><sup class="ref-link" id="refsrc-36"><a href="#ref-36">[36]</a></sup>: runner-up is een KNSB-toevoeging voor landelijke wedstrijden — bedoeld om de wedstrijd ook voor lager geklasseerde rijders aantrekkelijk te houden. Geen onderdeel van het World Skate-reglement. InlineComp genereert deze ronde voor afvallers van de eerste ronde van de afstand: bij een wedstrijd met Series zijn dat de series-uitvallers, bij een afstand zonder Series maar met Kwartfinale zijn dat de KF-uitvallers, enzovoort. De runner-up-heats worden in canonieke programma-volgorde direct vóór de A-finale geplaatst (alle finales bij elkaar) — wil je 'm op een andere plek, dan kun je 'm in §1.4 stap 4 handmatig verslepen.
@@ -2495,6 +2664,16 @@ Komt jouw timing-systeem met andere kolomnamen? Dan herkent de parser het bestan
     <li><b>Seeding in de nieuwe heats</b>: standaard via <b>slangenpatroon</b> (gelijke sterkte per heat). Bij sommige ronde-typen wordt tijd-koppeling gebruikt: snelsten in de laatste heat.</li>
     <li><b>Plaatsing van ex-aequo extra rijders</b>: reglementair worden die toegevoegd aan heat 1, daarna heat 2, daarna heat 3, enzovoort. Voorbeeld: 16 doorstromers naar 4 KF-heats; bij 4 rijders ex-aequo op plek 16 (totaal 19 doorstromers) komt er één extra rijder in heat 1, één in heat 2 en één in heat 3.</li>
 </ol>
+
+<h4>Doorstroom én runner-up tegelijk</h4>
+
+<p>Heeft de afstand óók een runner-up-ronde, dan worden er na save van de eerste ronde <b>twee</b> dingen achter elkaar geregeld: de doorstroom-ronde (kwart/half/finale) én de runner-up-loting. Je krijgt één gecombineerde groene toast die beide bevestigt:</p>
+
+<p style="font-style:italic;color:#555;margin-left:1.5rem">✓ Startlijsten klaar — Halve finale: 16 rijders; Runner-up: 7 rijders</p>
+
+<p>De runner-up wordt altijd <b>na</b> de doorstroom geloot — zo worden eventuele ex-aequo doorstromers correct uit de afvallers-lijst gefilterd. Drukt iemand later op de groene <b>"Hergeneer …"</b>-knop onderaan de carousel om opnieuw te loten? Dan wordt automatisch óók de runner-up opnieuw gegenereerd, met dezelfde volgorde.</p>
+
+<div class="info"><b>Plek-labels in runner-up-rit-namen worden live herrekend.</b> Stel de jury heeft door RR/jury-correctie 17 rijders naar de kwartfinale doorgestuurd in plaats van de geplande 16. Dan past InlineComp automatisch de plek-ranges in de runner-up-ritnamen aan: heat 1 wordt "(plek 18-21)" in plaats van de oorspronkelijke "(plek 17-20)". Speakers en uitslag-titels lopen zo synchroon met de werkelijke doorstroom-aantallen.</div>
 
 <div class="info"><b>Combineerde A-finales</b> (alleen Full-Final, zie §1.4 stap 6) verschijnen in de carousel met een 🔗-badge en een nummer "1/2", "2/2" etc. — zo zie je in welke combi-groep de rit zit. Het invoer-proces blijft hetzelfde als bij een gewone rit.</div>
 
@@ -2611,7 +2790,7 @@ Komt jouw timing-systeem met andere kolomnamen? Dan herkent de parser het bestan
 <tr><td><b>Inline / Puntenkoers / Afvalkoers</b></td><td>Positie + tijd</td><td><em>geen dropdown</em> — race-type bepaalt sortering automatisch (inline/afvalkoers: rondes → tijd; puntenkoers: punten → rondes → tijd). In plaats van een dropdown staat hier het label <em>"automatisch (rondes/tijd)"</em>.</td></tr>
 </table>
 
-<p style="margin-top:6px;font-size:12px"><em>"Eerste actieve ronde" wordt dynamisch bepaald uit de cat-config (<code>heeft_heats</code> &gt; <code>heeft_kwartfinale</code> &gt; <code>heeft_halve_finale</code>) — dezelfde detectie-keten als bij runner-up (§1.4). Een sprint-categorie zonder series die direct in de kwartfinale start, krijgt dus correct kwartfinale = Op tijd.</em></p>
+<p style="margin-top:6px;font-size:12px"><em>"Eerste actieve ronde" wordt dynamisch bepaald uit de tijdschema-instellingen voor deze categorie<sup class="ref-link" id="refsrc-52"><a href="#ref-36">[36]</a></sup> — dezelfde detectie-keten als bij runner-up (§1.4). Een sprint-categorie zonder series die direct in de kwartfinale start, krijgt dus correct kwartfinale = Op tijd.</em></p>
 </div>
 
 <!-- MOCKUP: per-afstand uitslag (internationaal — één cascading-elimination tabel) -->
@@ -2667,6 +2846,14 @@ Komt jouw timing-systeem met andere kolomnamen? Dan herkent de parser het bestan
   </div>
 </div>
 <p class="mock-caption">↑ Per-afstand uitslag in <b>Internationaal-modus</b> — één tabel met cascading-elimination ranking. <b>Bovenaan</b> de Uitslag bevestigen-knop met korte uitleg. <b>Daaronder</b> de Ranking-rij: per ronde kies je hoe afgevallen rijders worden geklassificeerd. <b>De tabel</b>: A-finalisten op rang 1-4, halve-finale-uitvallers op rang 5-8, KF-uitvallers vanaf rang 9, serie-uitvallers onderaan. Rijder L. Voorbeeld kreeg een False Start in de Serie — geen rang (—), regel grijs.</p>
+
+<div class="info"><b>Met runner-up: rijders krijgen hun runner-up-rang, niet hun bron-rang.</b> Heeft de afstand een runner-up-ronde, dan worden de afvallers van de eerste ronde geplaatst op basis van hun runner-up-race-resultaat — niet op basis van hun positie in de eerste ronde.
+
+<br><br>
+De runner-up-ronde wordt bovendien <b>per heat</b> verwerkt: heat 1 (= beste plek-blok, direct ná de doorgestroomden) levert de eerste runner-up-rangen op, heat 2 daaronder, enzovoort. Een snelle tijd in heat 2 kan dus nooit een rijder uit heat 1 inhalen — elk heat strijdt om z'n eigen plek-blok.
+
+<br><br>
+Voorbeeld bij chain Series → KF → Finale + Runner-up: A-finalisten 1-4, KF-eliminees 5-12, runner-up heat 1 13-16, runner-up heat 2 17+ (bij chain HF → Finale + Runner-up: A-finalisten 1-4, runner-up heat 1 5-8, runner-up heat 2 9+).</div>
 
 <h4>Full-Final — twee tabel-vormen</h4>
 
@@ -2841,6 +3028,20 @@ Een <em>echte</em> gedeelde rang krijg je alleen als rijders zowel hetzelfde tot
 </div>
 <p class="mock-caption">↑ Klassement-tabel met per afstand een kolom. <b>Boven de tabel</b> staat de blauwe knop <b>🏆 Klassement vastleggen</b> met een kort hint-zinnetje ernaast (welke afstand nog niet bevestigd is). De knop is disabled zolang niet alle relevante afstanden bevestigd zijn — pas als alles op groen staat wordt 'ie klikbaar. <b>Kolom-headertekst</b>: afstanden die zijn bevestigd staan in <b>groen</b> (500m, 3000m, telt mee in dit klassement), nog niet bevestigde afstanden staan in <b>grijs/cursief</b> (PK 5km, telt niet mee). <b>Onderaan</b> een aparte sectie <em>Uitgesloten (sanctie / 0 punten)</em> voor rijders die met DQ-DF/DQ-SF buiten het klassement vallen.</p>
 
+<div class="info"><b>Wedstrijden met meerdere afstanden — rijders met onvolledige deelname tellen mee.</b> Iemand die niet álle afstanden van de wedstrijd heeft gereden (bv. 2 van de 3) wordt <b>niet meer geschrapt</b> uit het klassement. De volgorde is:
+<ol style="margin-top:6px">
+    <li>Eerst alle rijders die <b>alle N afstanden</b> hebben gereden, gesorteerd op laagste totaal-punten.</li>
+    <li>Daarna rijders met <b>N-1 afstanden</b> gereden, weer op totaal.</li>
+    <li>Daarna N-2, N-3, enzovoort.</li>
+</ol>
+Binnen elke groep gelden de bekende tiebreakers (gesorteerde individuele punten, dan punten in de laatste afstand). Een rijder die maar 1 afstand reed eindigt dus achter iedereen die er 2 reed, ongeacht hoe weinig punten 'ie haalde — hij krijgt wél een rang.
+
+<br><br>
+<b>Wat telt als "afstand gereden"</b>: een afstand levert &gt; 0 punten op. Een DNS in de eerste ronde geeft 0 punten en telt dus als <em>niet gereden</em>; een DNS in een latere ronde geeft wel punten (laatste plek van die ronde) en telt dus wél als gereden.
+
+<br><br>
+<b>Uitsluiting blijft alleen gelden bij DQ-SF / DQ-DF</b>: actieve diskwalificatie volgens reglement art. 142. Die rijders staan in de aparte sectie <em>"Uitgesloten (sanctie / 0 punten)"</em> onderaan, zonder rang. Ook rijders met 0 afstanden gereden (puur DNS over de hele wedstrijd) belanden daar.</div>
+
 <h4>Jury-correcties bij gesanctioneerde rijders<sup class="ref-link" id="refsrc-35b"><a href="#ref-35">[35]</a></sup></h4>
 
 <p>Bij <b>Full-Final</b> verschijnen voor gesanctioneerde rijders <em>bewerkbare</em> punten-velden in de klassement-kolommen. De jury kan dan handmatig een aangepast aantal punten toekennen — bijvoorbeeld als een onsportieve rijder na overleg toch een paar punten meekrijgt. Onder de tabel verschijnt dan een knop <b>[💾 Correcties opslaan]</b>:</p>
@@ -2859,11 +3060,171 @@ Een <em>echte</em> gedeelde rang krijg je alleen als rijders zowel hetzelfde tot
 
 <p>Zodra alle afstanden bevestigd zijn (groene tabs) en eventuele correcties zijn opgeslagen, wordt de <b>[🏆 Klassement vastleggen]</b>-knop oranje en klikbaar. Klikken slaat het hele klassement van deze categorie definitief op. De knop toont kort <b>"✓ Bevestigd"</b> in groen, daarna ververst de pagina met de definitieve stand.</p>
 
-<div class="info"><b>Wat "definitief" betekent.</b> Vastleggen schrijft de officiële uitslag in de tabel <code>uitslag_afstand</code>. Daarna is het klassement zichtbaar in de publieke applicatie (Deel 2) en exporteerbaar via Print-Center. Wijzigen kan technisch nog wel — opnieuw bevestigen + opnieuw vastleggen — maar dat is dan een bewuste handeling.</div>
+<div class="info"><b>Wat "definitief" betekent.</b> Vastleggen schrijft de officiële uitslag weg in de database<sup class="ref-link" id="refsrc-51"><a href="#ref-48">[48]</a></sup>. Daarna is het klassement zichtbaar in de publieke applicatie (Deel 2) en exporteerbaar via Print-Center. Wijzigen kan technisch nog wel — opnieuw bevestigen + opnieuw vastleggen — maar dat is dan een bewuste handeling.</div>
 
 <div class="warn"><b>Geen optimistic locking.</b> Net als Live verwerking (§1.6) heeft Uitslag geen versie-controle. Twee gebruikers die tegelijk dezelfde afstand of hetzelfde klassement vastleggen → de laatste wint. Praktisch advies: één persoon doet de uitslag-bevestiging en het vastleggen, of — als meerdere personen tegelijk werken — maak een duidelijke verdeling wie welke categorieën doet zodat dezelfde afstand of hetzelfde klassement nooit door twee mensen tegelijk wordt vastgelegd.</div>
 
 <p>Daarmee is het klassement van deze categorie compleet. Het overzicht is nu te delen via Print-Center, en de publieke applicatie (Deel 2) toont het automatisch.</p>
+
+<h3 id="uit-7-printen">Stap 7 — Uitslagen en klassementen printen</h3>
+
+<p>Alle uitslagen en klassementen worden geprint via het centrale <b>🖨 Print-Center</b> rechtsboven in de hoofd-header (zoals voor tekenlijsten en startlijsten — §1.3 / §1.5). Onder het kopje <b>Uitslagen</b> verschijnen drie soorten items:</p>
+
+<table class="ref">
+<tr><th>Wat</th><th>Wanneer beschikbaar</th><th>Waar in Print-Center</th></tr>
+<tr><td><b>Uitslag per afstand</b></td><td>Zodra alle ritten van die afstand compleet zijn in Live verwerking — dus <em>al vóór</em> je 'm bevestigt in Stap 4. Bevestiging is alleen nodig om het klassement te kunnen vastleggen, niet om de uitslag te kunnen printen.</td><td>Onder de groep met de afstandsnaam (bv. "500m sprint"). Per categorie één regel.</td></tr>
+<tr><td><b>Tussenklassement</b></td><td>Zodra minstens één afstand resultaten heeft (compleet of bevestigd) én de wedstrijd meer dan één afstand kent. Toont de stand op basis van de afstanden die op dat moment data hebben.</td><td>Onder de groep "Klassementen", sub-groep "Tussenklassement". Per categorie één regel.</td></tr>
+<tr><td><b>Eindklassement</b></td><td>Pas zodra het klassement is <em>vastgelegd</em> in Stap 6.</td><td>Onder de groep "Klassementen", sub-groep "Eindklassement". Per categorie één regel.</td></tr>
+</table>
+
+<p><b>Werkwijze</b>: open Print-Center, vink aan wat je wilt printen (kan over meerdere groepen heen), klik <b>Print selectie</b>. Wat je hebt aangevinkt komt achter elkaar in één PDF — handig om bv. alle afstand-uitslagen + het tussenklassement van een categorie in één doc samen te voegen voor de jurytafel.</p>
+
+<div class="info"><b>Tussenklassement vs Eindklassement op de print.</b> De tabel-opbouw is identiek (kolom per afstand, totaal-kolom rechts). Verschil zit in de status: tussenklassement-print toont in de header dat het de stand <em>op dit moment</em> is en bevat alleen kolommen van afstanden die al data hebben (overige afstanden niet zichtbaar). Eindklassement is de definitieve versie ná vastlegging — alle afstanden zitten erbij, met de officiële stand zoals 'ie in de DB staat.</div>
+
+<div class="info"><b>Sancties als voetnoot onder de uitslag.</b> Bij elke print van een afstand-uitslag worden alle sancties van die afstand (W1, W2, FS, RR, DQ-TF, DQ-SF, DQ-DF, DNS, DNF) als genummerde voetnoten onder de tabel gezet — zo zien jurytafel en speaker direct in welke ronde wat is uitgedeeld zonder de Live-module te hoeven openen.</div>
+
+<hr style="margin:40px 0;border:none;border-top:2px solid var(--oranje)">
+
+<h2 id="a-beheer">1.8 Module Beheer — organisaties, banen, transponders, wedstrijden, klassementen</h2>
+
+<p>De Beheer-module verzamelt alle <em>cross-wedstrijd</em>-instellingen op één plek: organisatie-gegevens (incl. logo, sponsoren, aliassen), banen waar je rijdt, het transponder-archief, de wedstrijden-lijst per organisatie, en de cross-wedstrijd serie-klassementen. Bereikbaar via <b>⚙ Beheer</b> in de zijbalk linksonder. Schrijfrechten alleen voor <b>owner</b> en <b>admin</b>; andere rollen zien de pagina in lees-modus.</p>
+
+<ol>
+    <li><a href="#beh-1-overzicht">Naar Beheer gaan en de pagina-opbouw begrijpen</a></li>
+    <li><a href="#beh-2-gegevens">Tabblad Gegevens</a></li>
+    <li><a href="#beh-3-banen">Tabblad Banen</a></li>
+    <li><a href="#beh-4-transponders">Tabblad Transponders</a></li>
+    <li><a href="#beh-5-wedstrijden">Tabblad Wedstrijden</a></li>
+    <li><a href="#beh-6-meldingen">Mededelingen aanmaken — wedstrijd-specifiek én globaal</a></li>
+    <li><a href="#beh-7-klassementen">Tabblad Klassementen — serie-klassementen</a></li>
+</ol>
+
+<h3 id="beh-1-overzicht">Stap 1 — Naar Beheer gaan en de pagina-opbouw begrijpen</h3>
+
+<p>De pagina heeft twee kolommen:</p>
+
+<ul>
+    <li><b>Links</b>: lijst van organisaties + een <b>+ Nieuwe organisatie</b>-knop onderaan. Klik een organisatie om 'm te selecteren.</li>
+    <li><b>Rechts</b>: vijf tabbladen voor de geselecteerde organisatie — <em>Gegevens, Banen, Transponders, Wedstrijden, Klassementen</em>.</li>
+</ul>
+
+<p>Zonder selectie staat in de rechter-kolom een hint <em>"Selecteer een organisatie of maak een nieuwe aan."</em> Zodra je een organisatie kiest verschijnen de tabbladen. De keuze van het tabblad wordt onthouden binnen één sessie.</p>
+
+<h3 id="beh-2-gegevens">Stap 2 — Tabblad Gegevens</h3>
+
+<p>De basis-info van de organisatie:</p>
+
+<table class="ref">
+<tr><th>Veld / sectie</th><th>Wat het doet</th></tr>
+<tr><td><b>Naam, E-mail</b></td><td>Identificatie en contact.</td></tr>
+<tr><td><b>Sportity-kanaal</b></td><td>Naam van het Sportity-kanaal (bv. <em>ISKREGIO</em>) — wordt op promotie-posters genoemd zodat rijders/coaches weten waar ze de live-info vinden.</td></tr>
+<tr><td><b>Logo</b></td><td>Upload via <em>Logo uploaden</em>. Wordt o.a. in print-headers en op posters gebruikt.</td></tr>
+<tr><td><b>Naam-aliassen</b></td><td>Lijst alternatieve namen waaronder deze organisatie bekend is. Bij een import herkent InlineComp een KNSB-organisatie ook als de naam afwijkt — bijvoorbeeld een afkorting tegenover de officiële naam.</td></tr>
+<tr><td><b>Sponsoren</b></td><td>Lijst sponsoren die op printouts en posters verschijnen. Per sponsor: naam, logo (optioneel) en eventueel een URL.</td></tr>
+<tr><td><b>📄 Promotie-poster</b></td><td>Genereert een A4-poster met logo + Sportity-kanaal voor algemene promotie van deze organisatie (geen wedstrijd-specifieke).</td></tr>
+<tr><td><b>↔ Samenvoegen…</b></td><td>Combineert twee organisaties: de geselecteerde verdwijnt en haar naam komt als alias bij de doel-organisatie. Wedstrijden + sponsors verhuizen mee. Handig na een fusie of als KNSB twee varianten van dezelfde club doorgeeft.</td></tr>
+<tr><td><b>Verwijderen</b></td><td>Definitief verwijderen — alleen mogelijk als de organisatie geen wedstrijden, klassementen of transponders meer heeft.</td></tr>
+</table>
+
+<h3 id="beh-3-banen">Stap 3 — Tabblad Banen</h3>
+
+<p>Banen waar deze organisatie wedstrijden organiseert. Bij een import van een wedstrijd wordt automatisch een baan-rij aangemaakt op basis van de KNSB-venue, als die nog niet bestond. Per baan kun je:</p>
+
+<ul>
+    <li>Naam, locatie en logo invullen — gebruikt voor de print-headers van die baan.</li>
+    <li>De baan koppelen aan een bestaande wedstrijd (handig als de KNSB-venue niet matcht).</li>
+    <li>Verwijderen — alleen als er geen wedstrijden meer aan gekoppeld zijn.</li>
+</ul>
+
+<h3 id="beh-4-transponders">Stap 4 — Tabblad Transponders</h3>
+
+<p>Het transponder-archief van de organisatie. Per regel: intern volgnummer, transponder-code, eigendom (organisatie of rijder), bijbehorende rijder + categorie en betaalstatus. Functies:</p>
+
+<ul>
+    <li><b>📥 CSV import</b>: importeert een lijst transponders uit een CSV-export.</li>
+    <li><b>+ Transponder toevoegen</b>: voeg handmatig een rij toe.</li>
+    <li><b>Filter</b> op betaalstatus (alle / uitgegeven / betaald / niet betaald) via het filter-icoon in de Betaald-kolom.</li>
+    <li><b>Sorteren</b> op Nr of Snr door op de kolom-header te klikken (toggle asc/desc).</li>
+    <li><b>Paginering</b> onderaan — handig bij grote archieven.</li>
+    <li><b>🖨 Print uitgeleverd</b>: drukt een lijst af van transponders die in gebruik zijn (handig als balie-overzicht).</li>
+    <li><b>💾 Opslaan</b>: knop wordt oranje zodra je iets hebt gewijzigd. Slaat alle wijzigingen in één keer op.</li>
+</ul>
+
+<h3 id="beh-5-wedstrijden">Stap 5 — Tabblad Wedstrijden</h3>
+
+<p>Een lijst van alle wedstrijden van deze organisatie. Per rij zie je naam, datum en een badge die de bron aangeeft:</p>
+
+<table class="ref">
+<tr><th>Badge</th><th>Wat het betekent</th></tr>
+<tr><td><b>In database</b></td><td>Wedstrijd is geïmporteerd en wordt actief gebruikt.</td></tr>
+<tr><td><b>Alleen in database</b></td><td>De wedstrijd staat alleen lokaal — KNSB heeft 'm niet (meer) in de feed. Komt voor bij oude wedstrijden of bij handmatige aanmaak.</td></tr>
+<tr><td><b>inschrijven.schaatsen.nl</b></td><td>Externe wedstrijd uit de KNSB-feed die nog niet is geïmporteerd. Geen acties — eerst importeren via §1.3.</td></tr>
+</table>
+
+<p>Geïmporteerde wedstrijden hebben drie acties per rij:</p>
+
+<ul>
+    <li><b>📢 Meldingen</b> — opent de mededelingen-modal voor deze wedstrijd (zie Stap 6).</li>
+    <li><b>📄 Poster</b> — download een wedstrijd-specifieke promotie-poster (datum, logo, sponsoren).</li>
+    <li><b>Verwijderen</b> — keuze tussen "uitslag bewaren" en "alles weg". Vraagt expliciet bevestiging want is onomkeerbaar.</li>
+</ul>
+
+<h3 id="beh-6-meldingen">Stap 6 — Mededelingen aanmaken — wedstrijd-specifiek én globaal</h3>
+
+<p>Mededelingen verschijnen als pop-up bij gebruikers van de publieke (Deel 2) en coach-app (Deel 3). Aanmaken doe je via een modal die opent vanuit de wedstrijden-lijst (Stap 5, knop <b>📢 Meldingen</b>). Je kunt mededelingen maken per wedstrijd of <b>globaal</b> (cross-wedstrijd, zichtbaar voor alle bezoekers — ook vóór ze een wedstrijd hebben gekozen).</p>
+
+<h4>De modal openen</h4>
+
+<p>Klik in de Wedstrijden-lijst op <b>📢 Meldingen</b> bij een wedstrijd. De modal opent met de wedstrijdnaam in de titel (bv. <em>"Mededelingen — KNSB Baan/Weg 1"</em>). De lijst toont alle bestaande mededelingen voor deze wedstrijd <b>plus alle globale mededelingen</b> (laatste met paarse 🌐-badge). Globale mededelingen verschijnen dus in elke wedstrijd-modal — ze zijn vanuit elke wedstrijd-context zichtbaar én bewerkbaar.</p>
+
+<h4>Een nieuwe mededeling aanmaken</h4>
+
+<p>Klik op <b>+ Nieuwe mededeling</b> onderaan de lijst. Het formulier:</p>
+
+<table class="ref">
+<tr><th>Veld</th><th>Wat vul je in</th></tr>
+<tr><td><b>Titel</b> *</td><td>Korte kop (bv. <em>"Programma loopt 15 min uit"</em>). Verplicht.</td></tr>
+<tr><td><b>Bericht</b> *</td><td>Uitleg-tekst die in de pop-up onder de titel verschijnt. Verplicht. Meerdere regels mogen.</td></tr>
+<tr><td><b>Prioriteit</b></td><td>Vier opties (zie hieronder): ℹ️ Info, ⚠️ Waarschuwing, 🚨 Urgent, of 🌐 Globaal.</td></tr>
+<tr><td><b>Geldig van</b></td><td>Optioneel — leeg = direct (nu).</td></tr>
+<tr><td><b>Geldig tot</b></td><td>Default: einde van vandaag (23:59). Leeg laten = onbeperkt geldig (voor langlopende info, bv. wifi-wachtwoord).</td></tr>
+</table>
+
+<p>Klik <b>Opslaan + versturen</b>. Vanaf dat moment wordt de mededeling binnen één refresh-cyclus (≤ 1 minuut) getoond bij iedereen die de bijbehorende app open heeft — en bewaard in de pop-up-historie zodat 'ie ook terug te vinden is via de 📢-knop in de apps.</p>
+
+<h4>Wedstrijd-specifiek of globaal — de Prioriteit-dropdown</h4>
+
+<p>De Prioriteit bepaalt zowel de kleur in de pop-up als het bereik:</p>
+
+<table class="ref">
+<tr><th>Prioriteit</th><th>Bereik</th><th>Kleur in pop-up</th></tr>
+<tr><td>ℹ️ <b>Info</b></td><td>Alleen voor de wedstrijd waar je de modal voor opent.</td><td>Blauw</td></tr>
+<tr><td>⚠️ <b>Waarschuwing</b></td><td>Idem, alleen deze wedstrijd.</td><td>Geel</td></tr>
+<tr><td>🚨 <b>Urgent</b></td><td>Idem, alleen deze wedstrijd.</td><td>Rood</td></tr>
+<tr><td>🌐 <b>Globaal</b></td><td><b>Alle wedstrijden + landing-pagina van public/coach.</b> Ongeacht vanuit welke wedstrijd-modal je 'm aanmaakt.</td><td>Paars</td></tr>
+</table>
+
+<div class="info"><b>Bedoeld voor systeem-brede communicatie.</b> Globale mededelingen zijn handig voor zaken die niet aan één wedstrijd gebonden zijn — bv. <em>"Public-pagina ligt er even uit, herstart om 14:00"</em> of <em>"Test-versie: niet bindend"</em>. Maak ze spaarzaam: ze schreeuwen aandacht over alle wedstrijden heen.</div>
+
+<div class="info"><b>Alleen owner/admin mag globaal aanmaken.</b> Andere rollen die meldingen mogen aanmaken (timer, planner) zien de Globaal-optie wel in de dropdown maar krijgen een 403-fout bij opslaan.</div>
+
+<h4>Bewerken of verwijderen</h4>
+
+<p>In de modal-lijst staat per mededeling een ✎ Bewerken-knop en een 🗑 Verwijderen-knop. Bewerken opent het formulier voorgevuld; verwijderen vraagt bevestiging en haalt de mededeling weg. Werkt voor zowel wedstrijd-specifieke als globale mededelingen — de globale herken je aan de paarse 🌐-badge naast de titel.</p>
+
+<p>Status-badges per mededeling helpen je snel te zien wat actief is:</p>
+
+<ul>
+    <li><span style="background:#e8f5e8;color:#1e6b35;padding:1px 6px;border-radius:3px;font-size:.85em">● actief</span> — geldig op dit moment, wordt nu getoond.</li>
+    <li><span style="background:#f0f0f0;color:#888;padding:1px 6px;border-radius:3px;font-size:.85em">● verlopen</span> — geldig-tot is verstreken.</li>
+    <li><span style="background:#fff8d6;color:#7a5800;padding:1px 6px;border-radius:3px;font-size:.85em">● gepland</span> — geldig-van ligt in de toekomst.</li>
+</ul>
+
+<h3 id="beh-7-klassementen">Stap 7 — Tabblad Klassementen — serie-klassementen</h3>
+
+<p>Hier beheer je <b>cross-wedstrijd serie-klassementen</b>: een puntentelling die over meerdere wedstrijddagen loopt (bv. een seizoenscompetitie of een meerwedstrijden-cup). Per klassement leg je vast: welke wedstrijden meedoen, welke punten-tabel geldt, of er streep-resultaten zijn, of er een minimum-aantal-deelnames is, en op welke uitslag-velden tie-breaks worden gedaan.</p>
+
+<p>Een uitgewerkte beschrijving van dit tabblad krijgt z'n eigen sessie. Voor nu: zie de bestaande series in de organisatie + de seeding-optie <em>Klassement (serie)</em> in §1.5.3 die 'm gebruikt om rijders te seeden in vervolg-wedstrijden.</p>
 
 <hr style="margin:40px 0;border:none;border-top:2px solid var(--oranje)">
 
@@ -2898,9 +3259,9 @@ Een <em>echte</em> gedeelde rang krijg je alleen als rijders zowel hetzelfde tot
 <tr><td><b>Viewer</b></td><td>Geen schrijfrechten — kan alle modules in lees-modus bekijken.</td></tr>
 </table>
 
-<p>Schrijfrechten zijn afkomstig uit de <code>SCHRIJF_ROLLEN</code>-tabel in <code>index.php</code> (regel 403-411). Owner en admin staan op vrijwel elke regel; de overige rollen zijn taakgericht.</p>
+<p>Schrijfrechten zijn vastgelegd in een centrale rollen-tabel<sup class="ref-link" id="refsrc-49"><a href="#ref-49">[49]</a></sup>. Owner en admin staan op vrijwel elke regel; de overige rollen zijn taakgericht.</p>
 
-<div class="info"><b>De allereerste owner aanmaken</b> kan niet via de UI — die functie is bewust verwijderd. Maak het eerste account aan via een directe SQL-insert in phpMyAdmin (zie de comment bovenaan <code>auth/login.php</code>). Reden: een per-ongeluk lege users-tabel zou anders een toevallige bezoeker tot owner kunnen maken.</div>
+<div class="info"><b>De allereerste owner aanmaken</b> kan niet via de UI — die functie is bewust verwijderd. Maak het eerste account aan via een directe SQL-insert in phpMyAdmin<sup class="ref-link" id="refsrc-50"><a href="#ref-50">[50]</a></sup>. Reden: een per-ongeluk lege users-tabel zou anders een toevallige bezoeker tot owner kunnen maken.</div>
 
 <h3 id="gb-3-aanmaken">Stap 3 — Een nieuwe gebruiker aanmaken</h3>
 
@@ -2993,26 +3354,24 @@ Een <em>echte</em> gedeelde rang krijg je alleen als rijders zowel hetzelfde tot
     <li><b>Persoonsgegevens</b>: volledige naam, achternaam, geslacht, geboortejaar, KNSB-categorie, nationaliteit, startnummer, woonplaats, sponsor, vereniging (volledig + kort), KNSB-vereniging-code, aangemaakt-op en laatst gewijzigd-op.</li>
     <li><b>Transponder-toewijzingen</b>: tabel per organisatie met intern nummer, transponder-code, categorie en betaalstatus.</li>
     <li><b>Wedstrijd-historie (eindklassementen)</b>: tabel met datum, wedstrijdnaam, categorie, eindpositie en behaalde punten per gereden wedstrijd.</li>
-    <li><b>Per-afstand-uitslagen</b>: een uitklapbare <code>&lt;details&gt;</code>-sectie met alle individuele afstand-resultaten (datum, wedstrijd, categorie, afstand, finale, tijd, positie, punten, sanctie).</li>
+    <li><b>Per-afstand-uitslagen</b>: een uitklapbare sectie met alle individuele afstand-resultaten (datum, wedstrijd, categorie, afstand, finale, tijd, positie, punten, sanctie).</li>
 </ul>
 
 <h3 id="rij-4-anonimiseren">Stap 4 — Een rijder anonimiseren (AVG)</h3>
 
 <p>Bij een AVG-verzoek (recht op vergetelheid) gebruik je de rode knop <b>⚠ Rijder anonimiseren (AVG)</b>. Er volgt een prompt waarin je het <em>licentienummer</em> exact moet overtypen ter bevestiging — een typo of klik-op-Annuleren = geen actie.</p>
 
-<p>Wat er gebeurt na bevestiging:</p>
+<p>Wat er gebeurt na bevestiging<sup class="ref-link" id="refsrc-45"><a href="#ref-45">[45]</a></sup>:</p>
 
-<table class="ref">
-<tr><th>Veld in <code>persons</code></th><th>Wordt</th></tr>
-<tr><td><code>full_name</code></td><td>Letterlijk de tekst <em>"Verwijderd"</em></td></tr>
-<tr><td><code>short_name</code>, <code>birth_year</code>, <code>city</code>, <code>sponsor</code>, <code>start_number</code></td><td>NULL</td></tr>
-<tr><td><code>anonymized_at</code></td><td>Tijdstempel <em>nu</em></td></tr>
-<tr><td><code>gender</code>, <code>category</code>, <code>club_*</code></td><td>Blijven staan — zonder naam zijn die niet herleidbaar tot een persoon, en ze zijn nuttig voor statistiek.</td></tr>
-</table>
+<ul>
+    <li><b>Naam wordt vervangen</b> door de letterlijke tekst <em>"Verwijderd"</em>.</li>
+    <li><b>Persoonlijke gegevens worden gewist</b>: korte naam, geboortejaar, woonplaats, sponsor en startnummer.</li>
+    <li><b>Geslacht, categorie en clubgegevens blijven staan</b> — zonder naam zijn die niet herleidbaar tot een persoon, en ze zijn nuttig voor statistiek.</li>
+    <li><b>Een tijdstempel</b> markeert wanneer de anonimisatie heeft plaatsgevonden.</li>
+    <li><b>De transponder-toewijzing</b> van deze rijder bij elke organisatie wordt ook leeggemaakt (naam, startnummer, koppeling, categorie, betaal-status).</li>
+</ul>
 
-<p>Daarnaast wordt in <code>organisatie_transponders</code> de toewijzing leeggemaakt: <code>toegewezen_naam</code>, <code>toegewezen_snr</code>, <code>person_license</code>, <code>categorie</code>, <code>betaald</code> en <code>betaald_op</code> gaan op NULL/0.</p>
-
-<p>De <b>wedstrijdgeschiedenis blijft volledig intact</b> — heat-entries, results en klassement-rijen verwijzen alleen via <code>license_key</code>, en daar staat geen naam in opgeslagen. In uitslagen en klassementen verschijnt voortaan <em>"Verwijderd"</em> in plaats van de naam.</p>
+<p>De <b>wedstrijdgeschiedenis blijft volledig intact</b> — heats, tijden en klassementen verwijzen alleen via licentienummer, en daar staat geen naam in opgeslagen. In uitslagen en klassementen verschijnt voortaan <em>"Verwijderd"</em> in plaats van de naam.</p>
 
 <p>De actie wordt vastgelegd in het systeem-logboek (welke admin, wanneer, welk licentienummer — geen naam, want die is nu juist weg).</p>
 
@@ -3022,15 +3381,53 @@ Een <em>echte</em> gedeelde rang krijg je alleen als rijders zowel hetzelfde tot
 
 <p>Was er een fout in de bevestiging — bijvoorbeeld de verkeerde rijder geselecteerd, of bedenkt de rijder zich na een hernieuwde inschrijving — dan kun je de anonimisatie-vlag opheffen via de groene knop in het detail-paneel.</p>
 
-<p>Wat dit doet: <code>persons.anonymized_at</code> wordt teruggezet op NULL, zodat de rijder niet meer als geanonimiseerd wordt getoond. De gewiste velden (naam, geboortejaar, woonplaats, sponsor, startnummer) blijven leeg — die zijn echt verwijderd. Pas een nieuwe KNSB-import (of handmatige invoer via Importeer §1.3) vult ze opnieuw met de actuele gegevens.</p>
+<p>Wat dit doet: alleen de anonimisatie-vlag wordt opgeheven, zodat de rijder niet meer als geanonimiseerd wordt getoond<sup class="ref-link" id="refsrc-46"><a href="#ref-46">[46]</a></sup>. De gewiste velden (naam, geboortejaar, woonplaats, sponsor, startnummer) blijven leeg — die zijn echt verwijderd. Pas een nieuwe KNSB-import (of handmatige invoer via Importeer §1.3) vult ze opnieuw met de actuele gegevens.</p>
 
 <div class="info"><b>Wanneer wel/niet undo?</b> Vlag opheffen heeft alleen zin als je verwacht dat de rijder binnenkort weer in een KNSB-import voorkomt — anders blijft het record gewoon leeg in beeld. Voor échte verwijdering is de anonimisatie zelf al voldoende; undo is een veiligheidsnet voor vergissingen.</div>
+
+<h2 id="a-uploads">1.11 Module Uploads — Orbits/MyLaps CSV-archief opruimen</h2>
+
+<p>Per wedstrijd worden de CSV-exports vanuit Orbits/MyLaps in een eigen submap op de server opgeslagen<sup class="ref-link" id="refsrc-47"><a href="#ref-47">[47]</a></sup>. Na verloop van tijd stapelen die mappen op. Deze module geeft een admin de tools om handmatig oud archief op te ruimen. Alleen zichtbaar voor <b>owner</b> en <b>admin</b>; andere rollen zien het Uploads-icoon niet eens in de zijbalk.</p>
+
+<ol>
+    <li><a href="#up-1-overzicht">Naar Uploads gaan en de pagina-opbouw begrijpen</a></li>
+    <li><a href="#up-2-filter">Mappen filteren op leeftijd</a></li>
+    <li><a href="#up-3-verwijderen">Een map verwijderen</a></li>
+</ol>
+
+<h3 id="up-1-overzicht">Stap 1 — Naar Uploads gaan en de pagina-opbouw begrijpen</h3>
+
+<p>Klik in de zijbalk linksonder op <b>📁 Uploads</b>. De pagina toont een tabel met alle submappen, gesorteerd op laatste-wijzigingstijd (nieuwste bovenaan). Per map zie je:</p>
+
+<table class="ref">
+<tr><th>Kolom</th><th>Wat staat er</th></tr>
+<tr><td><b>Map</b></td><td>De mapnaam (zoals door Orbits aangemaakt — vaak een wedstrijdcode/datum).</td></tr>
+<tr><td><b>Bestanden</b></td><td>Aantal bestanden in de map.</td></tr>
+<tr><td><b>Grootte</b></td><td>Totale grootte (B / kB / MB / GB).</td></tr>
+<tr><td><b>Laatst gewijzigd</b></td><td>Datum + tijd van het meest recente bestand in de map.</td></tr>
+<tr><td><b>Leeftijd</b></td><td>Aantal dagen sinds laatste wijziging. Vanaf 90 dagen rood vet als visuele cue voor "kandidaat voor opruimen".</td></tr>
+<tr><td><b>Actie</b></td><td>🗑️ Verwijder-knop per rij.</td></tr>
+</table>
+
+<p>Bovenaan staat een samenvatting met aantal mappen + totale ruimte van wat zichtbaar is, plus een filter (Stap 2) en een refresh-knop.</p>
+
+<h3 id="up-2-filter">Stap 2 — Mappen filteren op leeftijd</h3>
+
+<p>De filter-dropdown bovenaan biedt vier presets: <em>alle mappen</em>, <em>30 dagen</em>, <em>3 maanden</em>, <em>6 maanden</em> of <em>1 jaar</em>. Kies een preset om alleen mappen te tonen die ouder zijn dan dat aantal dagen — handig om in één blik te zien wat opgeruimd kan worden zonder door alles te scrollen.</p>
+
+<h3 id="up-3-verwijderen">Stap 3 — Een map verwijderen</h3>
+
+<p>Klik op <b>🗑️ Verwijder</b> in de juiste rij. Er volgt een bevestigings-dialoog: <em>"Weet je zeker dat je map &lt;naam&gt; definitief wilt verwijderen? Dit is onomkeerbaar."</em> Bevestig je, dan worden alle bestanden in die map (incl. eventuele submappen) van de server gewist en verdwijnt de rij uit de tabel.</p>
+
+<div class="warn"><b>Onomkeerbaar — geen prullenbak.</b> De bestanden zijn na bevestiging definitief weg. Wil je een veilig vangnet, sla de mappen dan vooraf zelf op (bv. via FTP downloaden) voor je verwijdert. De auto-cleanup uit eerdere voorstellen is bewust níet ingebouwd — je beslist altijd zelf welke map weg mag.</div>
+
+<div class="info"><b>Geen invloed op de wedstrijd-data.</b> De CSV-bestanden zijn alleen het ruwe archief vanuit Orbits/MyLaps. De ingelezen tijden, sancties en klassementen zitten al in de InlineComp-database<sup class="ref-link" id="refsrc-48"><a href="#ref-48">[48]</a></sup> en blijven gewoon staan bij het verwijderen van de upload-map.</div>
 
 <hr style="margin:50px 0;border:none;border-top:2px solid var(--blauw)">
 
 <h1 id="deel-publiek">Deel 2 — Publieke applicatie</h1>
 
-<p>De publieke applicatie is bedoeld voor <b>toeschouwers</b>: rijders zelf, ouders, fans, scheidsrechters in de zaal. Iedereen kan 'm openen, geen login. Hij draait primair op de telefoon — viewport-breedte volgt het scherm, layout is maximaal 720 px breed en daarboven gewoon gecentreerd. URL: <code>public/index.php</code> (vaak ook bereikbaar via een QR-code op het wedstrijdbord). Deze app is ook een <b>PWA</b>: je kunt 'm op je beginscherm zetten en gebruiken zoals een echte app.</p>
+<p>De publieke applicatie is bedoeld voor <b>toeschouwers</b>: rijders zelf, ouders en fans. Iedereen kan 'm openen, geen login. Hij draait primair op de telefoon — viewport-breedte volgt het scherm, layout is maximaal 720 px breed en daarboven gewoon gecentreerd. Bereikbaar via een eigen URL op de server (vaak ook via een QR-code op het wedstrijdbord). Deze app is ook een <b>PWA</b>: je kunt 'm op je beginscherm zetten en gebruiken zoals een echte app.</p>
 
 <ol>
     <li><a href="#pub-1-wedstrijd">Wedstrijd kiezen</a></li>
@@ -3058,7 +3455,7 @@ Een <em>echte</em> gedeelde rang krijg je alleen als rijders zowel hetzelfde tot
 
 <p>Druk op Enter of de Zoek-knop. De gevonden rijder krijgt een eigen <em>kaart</em> met daarboven een tab (rond knopje met startnummer + initiaal). Tikken op een andere kaart-tab schakelt over.</p>
 
-<div class="info"><b>Onthouden over wedstrijden heen.</b> De licentienummers van rijders die je toevoegt worden lokaal in de browser bewaard (in <code>localStorage</code>). De volgende keer dat je naar een wedstrijd kijkt waar dezelfde rijder ook meedoet, wordt 'ie automatisch gevonden — ook al is z'n startnummer veranderd. Lokaal apparaat-only; er gaat niets naar de server.</div>
+<div class="info"><b>Onthouden over wedstrijden heen.</b> De licentienummers van rijders die je toevoegt worden lokaal in je browser bewaard. De volgende keer dat je naar een wedstrijd kijkt waar dezelfde rijder ook meedoet, wordt 'ie automatisch gevonden — ook al is z'n startnummer veranderd. Lokaal apparaat-only; er gaat niets naar de server.</div>
 
 <h3 id="pub-3-tabs">Stap 3 — Vier tabbladen per rijder</h3>
 
@@ -3072,7 +3469,13 @@ Een <em>echte</em> gedeelde rang krijg je alleen als rijders zowel hetzelfde tot
 <tr><td>📊 <b>Uitslagen</b></td><td>Bredere zoekmogelijkheid in volledige uitslagen: dropdown met categorieën, dropdown met afstanden, en daaronder de complete uitslag-tabel. Wisselt tussen Internationaal-modus (kolom <em>Ronde</em>) en Full-Final-modus (kolom <em>Finale</em>) automatisch op basis van de afstand.</td></tr>
 </table>
 
-<p><b>Geen automatische refresh.</b> De data ververst niet uit zichzelf — onderaan de kaart staat een ↻ Vernieuwen-knop. Dat is een bewuste keuze om server-belasting te beperken op piekdagen met honderden tegelijkertijd kijkende fans.</p>
+<p><b>Automatisch bijgewerkt — geen knop nodig.</b> Zolang het tabblad zichtbaar is, ververst de pagina zichzelf elke minuut. Naast de wedstrijdnaam zie je <b>🔄 HH:MM</b> — dat is het tijdstip van de laatste verversing. Wordt het tabblad onzichtbaar (andere tab, scherm dicht), dan stopt de refresh; bij terugkeer pakt 'ie meteen weer op met een eerste check.</p>
+
+<h4>Mededelingen van de organisatie</h4>
+
+<p>Bovenaan in de header staat een <b>📢-knop</b>. Die verschijnt zodra er een mededeling actief is voor deze wedstrijd of een globale mededeling die voor iedereen geldt. Belangrijke aankondigingen (bv. "Programma loopt 15 min uit", "Pauze verlengd tot 13:45", of een organisatie-brede storingsmelding) verschijnen direct als pop-up tijdens de eerstvolgende refresh-cyclus. Elke pop-up zie je één keer; daarna blijft de melding bereikbaar onder de 📢-knop.</p>
+
+<div class="info"><b>Globale mededelingen werken óók zonder gekozen wedstrijd.</b> Op de landing-pagina (vóór je een wedstrijd hebt gekozen) wordt eenmalig gecheckt of er een globale mededeling actief is — zo zie je bijvoorbeeld een storingsmelding meteen, ook als je nog geen wedstrijd hebt geselecteerd. Eenmaal weggeklikt onthoudt de browser dat — geen herhaling bij volgend bezoek.</div>
 
 <!-- MOCKUP: publieke app op telefoon — Programma-tab -->
 <div class="mock">
@@ -3087,7 +3490,9 @@ Een <em>echte</em> gedeelde rang krijg je alleen als rijders zowel hetzelfde tot
                 <div style="font-weight:700;color:var(--blauw);font-size:15px">InlineComp</div>
                 <div style="font-size:11px;color:#666">Zoek je heats, starttijden en resultaten</div>
             </div>
-            <div style="display:flex;gap:6px">
+            <div style="display:flex;gap:6px;align-items:center">
+                <span style="font-size:10.5px;color:#666">🔄 10:42</span>
+                <button style="border:1px solid var(--oranje);background:#fff5e6;border-radius:50%;width:24px;height:24px;font-size:11px;position:relative" title="Mededelingen">📢<span style="position:absolute;top:-3px;right:-3px;background:var(--oranje);color:#fff;font-size:8px;border-radius:50%;width:11px;height:11px;display:flex;align-items:center;justify-content:center;font-weight:700">2</span></button>
                 <button style="border:1px solid #ccc;background:#fff;border-radius:50%;width:24px;height:24px;font-size:11px">?</button>
                 <button style="border:1px solid #ccc;background:#fff;border-radius:50%;width:24px;height:24px;font-size:11px">i</button>
             </div>
@@ -3138,28 +3543,25 @@ Een <em>echte</em> gedeelde rang krijg je alleen als rijders zowel hetzelfde tot
             <div style="font-size:11.5px">14:05 — A-Finale</div>
             <div style="color:#666;font-size:10.5px">200m · Meisjes Kadetten</div>
         </div>
-        <div style="text-align:center;margin-top:10px;padding-top:8px;border-top:1px solid #e5e5e5">
-            <button style="background:#fff;border:1px solid #ccc;border-radius:14px;padding:5px 14px;font-size:11px">↻ Vernieuwen</button>
-        </div>
     </div>
 
     <!-- Voet -->
     <div style="background:#000;color:#fff;padding:4px 14px;font-size:10px;text-align:center">— Sponsorbalk: KNSB · Cadomotus · Tempish —</div>
   </div>
 </div>
-<p class="mock-caption">↑ De publieke app op een telefoon. Bovenin de wedstrijd-dropdown, daaronder de tab-rij van actieve rijders (kind 53 nu actief), en de vier sub-tabs (Programma actief). De ritten waarin de actieve rijder meedoet zijn oranje gemarkeerd; pauzes/blokken in lichtgrijs. ↻ Vernieuwen onderaan voor handmatige refresh.</p>
+<p class="mock-caption">↑ De publieke app op een telefoon. <b>Header rechtsboven</b>: 🔄-stempel met laatste verversingstijd, 📢-knop voor mededelingen (met oranje badge "2" = aantal actieve), ?- en i-knoppen voor help/info. <b>Daaronder</b> de wedstrijd-dropdown, dan de tab-rij van actieve rijders (kind 53 nu actief), en de vier sub-tabs (Programma actief). De ritten waarin de actieve rijder meedoet zijn oranje gemarkeerd; pauzes/blokken in lichtgrijs. <em>Geen handmatige vernieuw-knop meer</em> — auto-refresh elke minuut zolang het tabblad zichtbaar is.</p>
 
 <h3 id="pub-4-meerdere">Stap 4 — Meerdere rijders tegelijk volgen</h3>
 
-<p>Als ouder/coach wil je vaak <b>meerdere rijders tegelijk</b> volgen — bijvoorbeeld twee kinderen of een hele club-deelgroep. Klik op de <b>+</b>-tab rechts naast de actieve kaart om een tweede rijder toe te voegen via dezelfde zoek-flow. Maximaal 4 rijders tegelijk; meer wordt te druk op een telefoonscherm.</p>
+<p>Wil je <b>meerdere rijders tegelijk</b> volgen — bijvoorbeeld als ouder met meer dan één kind dat rijdt — klik dan op de <b>+</b>-tab rechts naast de actieve kaart om een extra rijder toe te voegen via dezelfde zoek-flow. Maximaal 4 rijders tegelijk; meer wordt te druk op een telefoonscherm. <em>Coaches die tientallen rijders willen volgen gebruiken Deel 3 — Coach-applicatie.</em></p>
 
 <p>De Programma-data wordt voor alle kinderen gedeeld (één API-call), zodat extra rijders <em>niet</em> evenredig meer netwerkverkeer geven. De rijder-specifieke data per kind (heats, sancties, klassementen) wordt wel apart geladen.</p>
 
 <h3 id="pub-5-pwa">Stap 5 — Installeren als app (PWA) en offline-gedrag</h3>
 
-<p>Onder in beeld kan een banner verschijnen met "Installeer app" — een Progressive Web App-prompt. Klik je op installeren, dan wordt de app op je beginscherm geplaatst alsof het een echte app is, met eigen icoon, eigen launcher en zonder de browser-balk. Hiervoor wordt het bestand <code>public/manifest.json</code> gebruikt.</p>
+<p>Onder in beeld kan een banner verschijnen met "Installeer app" — een Progressive Web App-prompt<sup class="ref-link" id="refsrc-54"><a href="#ref-54">[54]</a></sup>. Klik je op installeren, dan wordt de app op je beginscherm geplaatst alsof het een echte app is, met eigen icoon, eigen launcher en zonder de browser-balk.</p>
 
-<p>Een service worker (<code>public/sw.js</code>) zorgt voor de offline-fallback: <b>het skelet van de app blijft bekijkbaar</b> als je even geen netwerk hebt (in een sporthal-kelder, op het sportpark zonder bereik). API-calls — programma, klassementen, heats — gaan altijd via het netwerk en worden bewust <em>niet</em> gecached, zodat je nooit verouderde tijden te zien krijgt. Geen netwerk = je ziet de laatst geladen data plus een melding.</p>
+<p>Een ingebouwde offline-fallback zorgt dat <b>het skelet van de app blijft bekijkbaar</b> als je even geen netwerk hebt (in een sporthal-kelder, op het sportpark zonder bereik). De data zelf — programma, klassementen, heats — wordt altijd via het netwerk opgehaald en bewust <em>niet</em> gecached, zodat je nooit verouderde tijden te zien krijgt. Geen netwerk = je ziet de laatst geladen data plus een melding.</p>
 
 <div class="info"><b>Geen pushmeldingen.</b> De PWA stuurt geen push-notificaties bij nieuwe tijden of veranderingen in het programma. Wil je weten wanneer je rijder aan de start moet, gebruik dan de <em>Programma</em>-tab en vernieuw zelf op het juiste moment.</div>
 
@@ -3173,10 +3575,10 @@ Een <em>echte</em> gedeelde rang krijg je alleen als rijders zowel hetzelfde tot
     <li>Volg <b>tientallen rijders</b> tegelijk — typisch een hele club of de gesponsorden van één team. De publieke app kapt op 4.</li>
     <li>Voeg rijders toe op club, sponsor of startnummer — geen typewerk per persoon.</li>
     <li>Aparte tabs voor <b>sancties</b> (W1/W2/DQ-codes met uitleg) en voor <b>status-alarmen</b> (rijders die nog niet getekend hebben bv.).</li>
-    <li><b>Pull-to-refresh</b> in plaats van een knop — typisch mobiel gebaar.</li>
+    <li>Auto-refresh elke minuut + <b>pull-to-refresh</b> voor directe verversing — typisch mobiel gebaar.</li>
 </ul>
 
-<p>URL: <code>coach/index.php</code>. Net als Deel 2 is dit een PWA met manifest en service worker.</p>
+<p>Bereikbaar via een eigen URL op de server. Net als Deel 2 is dit een PWA met manifest en service worker.</p>
 
 <ol>
     <li><a href="#cch-1-wedstrijd">Wedstrijd kiezen</a></li>
@@ -3213,7 +3615,7 @@ Een <em>echte</em> gedeelde rang krijg je alleen als rijders zowel hetzelfde tot
 
 <p>Knoppen <b>Wis alles</b> en de teller "<em>X rijders geselecteerd</em>" staan onder de chip-rij.</p>
 
-<div class="info"><b>Onthouden per wedstrijd.</b> De coach-lijst wordt lokaal opgeslagen per wedstrijd (in <code>localStorage</code>, sleutel <code>coach_lijst_&lt;competitionId&gt;</code>). Open je een andere wedstrijd, dan begint je lijst leeg; ga je terug, dan staan je rijders er weer. Geen sync naar server, geen sync tussen apparaten.</div>
+<div class="info"><b>Onthouden per wedstrijd.</b> De coach-lijst wordt lokaal in je browser opgeslagen, apart per wedstrijd<sup class="ref-link" id="refsrc-55"><a href="#ref-55">[55]</a></sup>. Open je een andere wedstrijd, dan begint je lijst leeg; ga je terug, dan staan je rijders er weer. Geen sync naar server, geen sync tussen apparaten.</div>
 
 <h3 id="cch-3-tabs">Stap 3 — Vier tabbladen</h3>
 
@@ -3232,9 +3634,16 @@ Een <em>echte</em> gedeelde rang krijg je alleen als rijders zowel hetzelfde tot
     <div style="background:#000;color:#fff;padding:4px 14px;display:flex;justify-content:space-between;font-size:10px"><span>9:41</span><span>📶 ⚡ 87%</span></div>
 
     <!-- App-header -->
-    <div style="padding:10px 14px;border-bottom:1px solid #e5e5e5">
-        <div style="font-weight:700;color:var(--blauw);font-size:15px">InlineComp – Coach</div>
-        <div style="font-size:11px;color:#666">Volg jouw rijders: programma, sancties en uitslagen</div>
+    <div style="padding:10px 14px;border-bottom:1px solid #e5e5e5;display:flex;justify-content:space-between;align-items:flex-start;gap:8px">
+        <div>
+            <div style="font-weight:700;color:var(--blauw);font-size:15px">InlineComp – Coach</div>
+            <div style="font-size:11px;color:#666">Volg jouw rijders: programma, sancties en uitslagen</div>
+        </div>
+        <div style="display:flex;gap:6px;align-items:center;flex-shrink:0">
+            <span style="font-size:10.5px;color:#666">🔄 10:42</span>
+            <button style="border:1px solid var(--oranje);background:#fff5e6;border-radius:50%;width:24px;height:24px;font-size:11px;position:relative" title="Mededelingen">📢<span style="position:absolute;top:-3px;right:-3px;background:var(--oranje);color:#fff;font-size:8px;border-radius:50%;width:11px;height:11px;display:flex;align-items:center;justify-content:center;font-weight:700">1</span></button>
+            <button style="border:1px solid #ccc;background:#fff;border-radius:50%;width:24px;height:24px;font-size:11px">?</button>
+        </div>
     </div>
 
     <!-- Wedstrijd + toevoeg-velden: filter-chips boven dropdown -->
@@ -3292,7 +3701,7 @@ Een <em>echte</em> gedeelde rang krijg je alleen als rijders zowel hetzelfde tot
     </div>
   </div>
 </div>
-<p class="mock-caption">↑ De coach-app met 5 rijders geselecteerd. Chips kleuren: blauw = bevestigd, geel = niet bevestigd (Ellie), <b>rood met dikke rand = niet getekend</b> (Lisa — vraagt om actie!). In de Programma-tab zijn ritten met een van jouw rijders groen gemarkeerd, met een teller "<em>3/8</em>" — drie van jouw rijders in een heat van acht totaal. Bovenaan de hint "<em>Trek verder om te vernieuwen</em>" voor pull-to-refresh.</p>
+<p class="mock-caption">↑ De coach-app met 5 rijders geselecteerd. <b>Header rechtsboven</b>: 🔄-stempel met laatste verversingstijd, 📢-knop met badge (1 actieve mededeling), ?-knop voor help. Chips kleuren: blauw = bevestigd, geel = niet bevestigd (Ellie), <b>rood met dikke rand = niet getekend</b> (Lisa — vraagt om actie!). In de Programma-tab zijn ritten met een van jouw rijders groen gemarkeerd, met een teller "<em>3/8</em>" — drie van jouw rijders in een heat van acht totaal. Bovenaan de hint "<em>Trek verder om te vernieuwen</em>" voor pull-to-refresh; daarnaast loopt elke minuut automatisch een refresh-tick.</p>
 
 <h3 id="cch-4-status">Stap 4 — Status-alarm</h3>
 
@@ -3300,9 +3709,15 @@ Een <em>echte</em> gedeelde rang krijg je alleen als rijders zowel hetzelfde tot
 
 <p>De Sancties-tab bundelt alle reglements-codes in één lijst. Zie je daar een <b>DQ-TF</b> bij een van jouw rijders staan, dan kun je via de tab Heats opzoeken in welke rit het was, en bij de jurytafel langs voor de toelichting.</p>
 
-<h3 id="cch-5-refresh">Stap 5 — Pull-to-refresh</h3>
+<h3 id="cch-5-refresh">Stap 5 — Auto-refresh, pull-to-refresh en mededelingen</h3>
 
-<p>Op een telefoon ververs je de programma-tab door <b>vanaf de bovenkant naar beneden te slepen</b> — een gebaar dat in de meeste mobiele apps werkt. Boven de programma-lijst verschijnt een hint die meegroeit met de slep-afstand:</p>
+<h4>Auto-refresh</h4>
+
+<p>Zolang het tabblad zichtbaar is ververst de coach-app zichzelf elke minuut. Rechtsboven in beeld zie je <b>🔄 HH:MM</b> — het tijdstip van de laatste verversing. Wordt het tabblad onzichtbaar (andere tab, scherm dicht), dan stopt de tick; bij terugkeer pakt 'ie meteen weer op.</p>
+
+<h4>Pull-to-refresh (handmatig)</h4>
+
+<p>Direct verversen kan ook: trek de pagina <b>vanaf de bovenkant naar beneden</b> — een gebaar dat in de meeste mobiele apps werkt. Boven de programma-lijst verschijnt een hint die meegroeit met de slep-afstand:</p>
 
 <ul>
     <li><em>"↓ Trek verder om te vernieuwen"</em> — bij eerste slep, nog te kort.</li>
@@ -3313,20 +3728,25 @@ Een <em>echte</em> gedeelde rang krijg je alleen als rijders zowel hetzelfde tot
 
 <p>Alternatief op desktop of als de slep niet wil: <b>dubbel-tikken op de header</b> heeft hetzelfde effect.</p>
 
-<div class="info"><b>Wat wordt er ververst?</b> Het programma (ritten + blokken) én alle coach_info per geselecteerde rijder (status, sancties, heat-toewijzingen). De Uitslagen-tab apart laad je via de tab zelf — die zit niet in de pull-to-refresh-cyclus omdat de jury-bevestiging asynchroon loopt en je niet wil dat de app om de paar seconden complete uitslag-tabellen herlaadt.</div>
+<div class="info"><b>Wat wordt er ververst?</b> Het programma (ritten + blokken) én alle coach_info per geselecteerde rijder (status, sancties, heat-toewijzingen). De Uitslagen-tab apart laad je via de tab zelf — die zit niet in de refresh-cyclus omdat de jury-bevestiging asynchroon loopt en je niet wil dat de app om de paar seconden complete uitslag-tabellen herlaadt.</div>
+
+<h4>Mededelingen van de organisatie</h4>
+
+<p>Bovenaan in de header staat een <b>📢-knop</b>. Die verschijnt zodra er een mededeling actief is voor deze wedstrijd of een globale mededeling die voor iedereen geldt. Belangrijke aankondigingen (bv. "Programma loopt 15 min uit", "Pauze verlengd tot 13:45", of een organisatie-brede storingsmelding) verschijnen direct als pop-up tijdens de eerstvolgende refresh-cyclus. Elke pop-up zie je één keer; daarna blijft de melding bereikbaar onder de 📢-knop.</p>
+
+<div class="info"><b>Globale mededelingen werken óók zonder gekozen wedstrijd.</b> Op de landing-pagina (vóór je een wedstrijd hebt gekozen) wordt eenmalig gecheckt of er een globale mededeling actief is — zo zie je een storingsmelding meteen, ook als je nog geen wedstrijd hebt geselecteerd.</div>
 
 <hr style="margin:50px 0;border:none;border-top:2px solid var(--blauw)">
 
 <h1>Nog niet gedocumenteerd</h1>
-<p>De volgende modules en applicaties volgen in aparte sessies. Telkens dezelfde aanpak: eerst zorgvuldig de code lezen, dan opschrijven wat de gebruiker daadwerkelijk ziet en doet.</p>
+<p>De volgende applicatie volgt in een aparte sessie. Aanpak: eerst zorgvuldig de code lezen, dan opschrijven wat de gebruiker daadwerkelijk ziet en doet.</p>
 
 <table class="ref">
-<tr><th>Deel</th><th>Hoofd-bestanden om te lezen</th></tr>
-<tr><td>1.8 Beheer (organisaties)</td><td><code>js/instellingen.js</code> (1328 regels) + <code>api/organisaties.php</code></td></tr>
-<tr><td>Deel 4 — InlineComp Client (CSV Upload Monitor)</td><td>Aparte HTA-applicatie op de timing-PC; bestanden volgen in eigen sessie</td></tr>
+<tr><th>Deel</th><th>Wat het is</th></tr>
+<tr><td>Deel 4 — InlineComp Client (CSV Upload Monitor)</td><td>Aparte HTA-applicatie op de timing-PC die elke X seconden CSV-exports uit de Orbits/MyLaps-map oppikt en via SFTP naar de server uploadt. Bestanden + screenshots volgen in eigen sessie.</td></tr>
 </table>
 
-<p>Elk aan de beurt krijgt dezelfde behandeling als Importeer hierboven: stap-voor-stap-uitleg vanuit gebruikersperspectief, met levensechte mock-ups van wat je werkelijk op het scherm ziet.</p>
+<p>Krijgt dezelfde behandeling als de overige delen: stap-voor-stap-uitleg vanuit gebruikersperspectief, met levensechte mock-ups van wat je werkelijk op het scherm ziet.</p>
 
 <hr style="margin:50px 0;border:none;border-top:2px solid var(--blauw)">
 
@@ -3425,14 +3845,14 @@ Een <em>echte</em> gedeelde rang krijg je alleen als rijders zowel hetzelfde tot
 <h3>Gebruikers (§1.9)</h3>
 <table class="ref">
 <tr><th>Onderwerp</th><th>Hoofdbestanden</th><th>Functie / regel</th></tr>
-<tr><td>Pagina-skelet + zichtbaarheid</td><td><code>index.php</code> regel 68-71 (nav-item, <code>display:none</code> tot rol-check), regel 351-356 (<code>#page-gebruikers</code> + <code>#gb-container</code>) · regel 410 (<code>SCHRIJF_ROLLEN.gebruikers = ['owner','admin']</code>)</td></tr>
+<tr id="ref-49"><td>Pagina-skelet + zichtbaarheid + rollen-tabel <a class="ref-back" href="#refsrc-49" title="Terug naar tekst">↑[49]</a></td><td><code>index.php</code> regel 68-71 (nav-item, <code>display:none</code> tot rol-check), regel 351-356 (<code>#page-gebruikers</code> + <code>#gb-container</code>) · regel 403-411 (<code>SCHRIJF_ROLLEN</code>-constante per module, bv. <code>SCHRIJF_ROLLEN.gebruikers = ['owner','admin']</code>)</td></tr>
 <tr id="ref-44"><td>Lijst + render — welke knoppen tonen <a class="ref-back" href="#refsrc-44" title="Terug naar tekst">↑[44]</a></td><td><code>js/gebruikers.js</code></td><td><code>toonGebruikersPagina()</code> regel 18-28 · <code>herlaadGebruikers()</code> 30-40 · <code>renderGebruikers()</code> 162-289. Permissie-condities (regel 168-172): <code>magWijzig</code> = owner OR (admin AND target ≠ owner/admin AND target ≠ ikzelf) · <code>magWW</code> = ikzelf OR magWijzig · <code>magDel</code> = target ≠ ikzelf AND target ≠ owner AND (owner OR (admin AND target ≠ admin)). Knoppen worden alleen gerenderd als de bijbehorende variabele <code>true</code> is</td></tr>
 <tr><td>Aanmaken / bewerken</td><td><code>js/gebruikers.js</code> + <code>api/gebruikers.php</code></td><td>UI: <code>openGbForm()</code> regel 349-400 · <code>slaGebruikerOp()</code> 402-427 · POST <code>action=save</code>. API: regel 56-110 — INSERT (nieuw, hash via <code>password_hash()</code>) of UPDATE (bestaand, geen wachtwoord-update)</td></tr>
 <tr><td>Wachtwoord wijzigen</td><td><code>js/gebruikers.js</code> + <code>api/gebruikers.php</code></td><td>UI: <code>openWwForm()</code> regel 436-477 · POST <code>action=set_password</code>. API: regel 113-136 — admin mag andere admin/owner-wachtwoord niet wijzigen (uitz: eigen account altijd toegestaan)</td></tr>
 <tr><td>Activeren / verwijderen</td><td><code>js/gebruikers.js</code> + <code>api/gebruikers.php</code></td><td><code>toggleActief()</code> regel 481-489 · <code>verwijderGebruiker()</code> 491-501. API: regel 139-187 — owner kan niet gedeactiveerd/verwijderd, eigen account ook niet, admin mag andere admin niet verwijderen</td></tr>
 <tr><td>Bezoekersstatistieken (publiek + coach)</td><td><code>js/gebruikers.js</code> + <code>api/public_stats.php</code> + <code>api/coach_stats.php</code></td><td><code>_laadStatsBlok()</code> regel 294-323 — generic loader voor één endpoint · <code>laadPublicStats()</code> 325-328 · <code>startPublicStatsRefresh()</code> 330-335 (interval 30 s) · stop bij <code>visibilitychange</code> regel 338-345</td></tr>
 <tr><td>Login-logboek</td><td><code>js/gebruikers.js</code> + <code>api/logboek.php</code></td><td>Render: <code>renderLogboekSectie()</code> regel 110-143 · <code>laadLogboek(userId?)</code> 46-92 (filter op gebruiker via <code>?user_id=</code>) · <code>opschonenLogboek(dagen)</code> 94-108 — POST <code>action=opschonen</code></td></tr>
-<tr><td>Eerste-owner bootstrap (uitgeschakeld)</td><td><code>api/gebruikers.php</code> regel 33-37</td><td>Endpoint <code>action=eerste_owner</code> retourneert HTTP 410 (Gone). Eerste owner moet via direct SQL-insert in phpMyAdmin worden aangemaakt</td></tr>
+<tr id="ref-50"><td>Eerste-owner bootstrap (uitgeschakeld) <a class="ref-back" href="#refsrc-50" title="Terug naar tekst">↑[50]</a></td><td><code>api/gebruikers.php</code> regel 33-37 · comment-instructies bovenaan <code>auth/login.php</code></td><td>Endpoint <code>action=eerste_owner</code> retourneert HTTP 410 (Gone). Eerste owner moet via direct SQL-insert in phpMyAdmin worden aangemaakt</td></tr>
 </table>
 
 <h3>Rijders / AVG (§1.10)</h3>
@@ -3441,9 +3861,19 @@ Een <em>echte</em> gedeelde rang krijg je alleen als rijders zowel hetzelfde tot
 <tr><td>Pagina-skelet + zichtbaarheid</td><td><code>index.php</code> regel 72-75 (nav-item, <code>display:none</code> tot rol-check) · regel 360-383 (<code>#page-rijders</code> met <code>#rij-zoek-inp</code>, <code>#rij-zoek-resultaat</code>, <code>#rij-detail</code>). Toegang in <code>api/persoon_beheer.php</code> regel 20-24 + <code>api/persoon_anonimiseer.php</code> regel 31-35 (rol owner/admin)</td></tr>
 <tr><td>Zoeken</td><td><code>js/rijders.js</code> + <code>api/persoon_beheer.php</code></td><td><code>rijZoek()</code> regel 33-49 — debounce 350 ms (<code>setTimeout</code>), Enter direct. API <code>action=zoek</code> regel 29-72: gecombineerde query op <code>start_number</code> (cijfers), <code>license_key</code> (≥4 tekens), <code>short_name</code>, <code>full_name</code> · LIMIT 100 · exacte snr-match bovenaan via ORDER BY-CASE</td></tr>
 <tr><td>Detail-paneel</td><td><code>js/rijders.js</code> + <code>api/persoon_beheer.php</code></td><td><code>rijToonDetail(licenseKey)</code> regel 80-96 · <code>rijRenderDetail(data)</code> 98-230 (persoonsgegevens-grid, transponders, wedstrijden, per-afstand <code>&lt;details&gt;</code>). API <code>action=detail</code>: persons-record + transponders + eindklassement + per-afstand-resultaten</td></tr>
-<tr><td>Anonimiseren (AVG)</td><td><code>js/rijders.js</code> + <code>api/persoon_anonimiseer.php</code></td><td>UI: <code>rijAnonimiseer()</code> regel 232-254 — vraagt licentienummer-bevestiging via <code>prompt()</code>. API <code>action=anonimiseer</code> regel 77-128: UPDATE <code>persons</code> (full_name='Verwijderd', short_name/birth_year/city/sponsor/start_number=NULL, anonymized_at=NOW) + leegmaken <code>organisatie_transponders</code>-toewijzing · log-call via <code>logboekSchrijf()</code></td></tr>
-<tr><td>Anonimisatie-vlag opheffen</td><td><code>js/rijders.js</code> + <code>api/persoon_anonimiseer.php</code></td><td>UI: <code>rijAnonUndo()</code> regel 256-272. API <code>action=undo</code> regel 130-148: UPDATE <code>persons SET anonymized_at = NULL</code> · gegevens komen pas terug bij her-import</td></tr>
+<tr id="ref-45"><td>Anonimiseren (AVG) <a class="ref-back" href="#refsrc-45" title="Terug naar tekst">↑[45]</a></td><td><code>js/rijders.js</code> + <code>api/persoon_anonimiseer.php</code></td><td>UI: <code>rijAnonimiseer()</code> regel 232-254 — vraagt licentienummer-bevestiging via <code>prompt()</code>. API <code>action=anonimiseer</code> regel 77-128: UPDATE <code>persons</code> (full_name='Verwijderd', short_name/birth_year/city/sponsor/start_number=NULL, anonymized_at=NOW) + leegmaken <code>organisatie_transponders</code>-toewijzing (toegewezen_naam/toegewezen_snr/person_license/categorie/betaald/betaald_op = NULL/0) · gender/category/club_* blijven staan · log-call via <code>logboekSchrijf()</code> · heat_entries/results/uitslag_*-rijen verwijzen alleen via <code>license_key</code> (geen naam)</td></tr>
+<tr id="ref-46"><td>Anonimisatie-vlag opheffen <a class="ref-back" href="#refsrc-46" title="Terug naar tekst">↑[46]</a></td><td><code>js/rijders.js</code> + <code>api/persoon_anonimiseer.php</code></td><td>UI: <code>rijAnonUndo()</code> regel 256-272. API <code>action=undo</code> regel 130-148: UPDATE <code>persons SET anonymized_at = NULL</code> · gegevens komen pas terug bij her-import</td></tr>
 <tr><td>Audit-lijst (alle anonieme rijders)</td><td><code>api/persoon_anonimiseer.php</code> regel 42-51</td><td>GET <code>action=lijst</code> retourneert <code>{license_key, anonymized_at, updated_at}</code> voor alle rijders met <code>anonymized_at IS NOT NULL</code>, ORDER BY <code>anonymized_at DESC</code>. Niet aan UI gekoppeld; bedoeld voor audits via curl/admin-script</td></tr>
+</table>
+
+<h3>Uploads (§1.11)</h3>
+<table class="ref">
+<tr><th>Onderwerp</th><th>Hoofdbestanden</th><th>Functie / regel</th></tr>
+<tr id="ref-47"><td>Map-locatie CSV-archief <a class="ref-back" href="#refsrc-47" title="Terug naar tekst">↑[47]</a></td><td><code>uploader/&lt;competition_folder&gt;/</code> op de server</td><td>Eén submap per wedstrijd, gevuld door HTA-tool (zie ref-29 in §1.6 voor de upload-laag). Naam = <code>CompFolder</code>-instelling uit <code>InlineComp.ini</code></td></tr>
+<tr id="ref-48"><td>InlineComp-database tabellen wedstrijd-data <a class="ref-back" href="#refsrc-48" title="Terug naar tekst">↑[48]</a></td><td>MySQL — tabellen <code>results</code>, <code>uitslag_afstand</code>, <code>uitslag_klassement</code></td><td><code>results</code> = ruwe finish-tijden + sancties per heat-entry · <code>uitslag_afstand</code> = bevestigde rang/punten per rijder per afstand · <code>uitslag_klassement</code> = vastgelegd eindklassement</td></tr>
+<tr><td>Pagina-skelet + zichtbaarheid</td><td><code>index.php</code> (nav-item, owner/admin only), <code>js/uploader_beheer.php</code></td><td>Toegang in <code>api/uploader_beheer.php</code> (rol-check). Pagina toont mappen-lijst gesorteerd op laatste-wijzigingstijd, kolommen: naam, leeftijd in dagen, totaal-grootte, aantal bestanden</td></tr>
+<tr><td>Filteren op leeftijd</td><td><code>js/uploader_beheer.php</code></td><td>Dropdown-presets: alle / 30 dagen / 3 maanden / 6 maanden / 1 jaar — server-side filter op laatste-wijzigingstijd</td></tr>
+<tr><td>Verwijderen</td><td><code>api/uploader_beheer.php</code></td><td><code>action=delete</code>: recursieve <code>rmdir</code> na confirm-dialog. Geen prullenbak — onomkeerbaar</td></tr>
 </table>
 
 <h3>Publieke applicatie (Deel 2)</h3>
@@ -3455,7 +3885,7 @@ Een <em>echte</em> gedeelde rang krijg je alleen als rijders zowel hetzelfde tot
 <tr><td>Vier sub-tabs per rijder</td><td><code>public/index.php</code></td><td>Programma render regel 2058-2095 · Heats regel 2100-2140 · Resultaten 2143-2169 · Uitslagen 2175-2187 (lazy-load categorieën regel 2232) · gedeelde Promise.all-call voor programma over alle kinderen regel 1903</td></tr>
 <tr><td>Heat-overlay</td><td><code>public/index.php</code></td><td>Tikken op rit-kaart opent <code>.overlay</code> + <code>.overlay-box</code> regel 1452-1499 · spinner tijdens laden regel 1462</td></tr>
 <tr><td>API-endpoints</td><td><code>public/index.php</code> server-block</td><td><code>?action=competitions</code> · <code>?action=programma</code> (cache 30 s) · <code>?action=rit_detail</code> · <code>?action=lookup</code> · <code>?action=search_person</code> · <code>?action=categorieen</code> · <code>?action=uitslagen</code> · <code>?action=series_voor_comp</code> · <code>?action=serie_klassement</code></td></tr>
-<tr><td>PWA-manifest + service worker</td><td><code>public/manifest.json</code> + <code>public/sw.js</code></td><td>Manifest 31 regels: naam, iconen, <code>start_url</code>, <code>display: standalone</code>. Service worker 56 regels: cache-name <code>inlinecomp-v1</code> · network-first strategie · API-calls (<code>?action=...</code>) bewust niet gecached (regel 39) · offline-fallback naar shell-cache regel 54 · register-call in <code>public/index.php</code> regel 2702 · <code>beforeinstallprompt</code>-listener regel 2706 · banner-dismiss-key <code>pwa-dismissed</code> in localStorage regel 2710</td></tr>
+<tr id="ref-54"><td>PWA-manifest + service worker <a class="ref-back" href="#refsrc-54" title="Terug naar tekst">↑[54]</a></td><td><code>public/manifest.json</code> + <code>public/sw.js</code></td><td>Manifest 31 regels: naam, iconen, <code>start_url</code>, <code>display: standalone</code>. Service worker 56 regels: cache-name <code>inlinecomp-v1</code> · network-first strategie · API-calls (<code>?action=...</code>) bewust niet gecached (regel 39) · offline-fallback naar shell-cache regel 54 · register-call in <code>public/index.php</code> regel 2702 · <code>beforeinstallprompt</code>-listener regel 2706 · banner-dismiss-key <code>pwa-dismissed</code> in localStorage regel 2710</td></tr>
 <tr><td>Disclaimer-banner</td><td><code>public/index.php</code></td><td>localStorage-sleutel <code>ic_disclaimer_seen</code> regel 1580 — eenmalig bij eerste bezoek</td></tr>
 </table>
 
@@ -3464,7 +3894,7 @@ Een <em>echte</em> gedeelde rang krijg je alleen als rijders zowel hetzelfde tot
 <tr><th>Onderwerp</th><th>Hoofdbestanden</th><th>Functie / regel</th></tr>
 <tr><td>Pagina-skelet + sessie</td><td><code>coach/index.php</code></td><td>Sessie-naam <code>ICCOACH</code> (apart van public/admin) · viewport regel 753 · header met titel + subtekst regel 1100-1108 · ondersteunende sponsorkarusel regel 1110-1115 · pull-to-refresh-indicator <code>#ptr</code> regel 1097</td></tr>
 <tr><td>Rijders toevoegen — drie methodes</td><td><code>coach/index.php</code></td><td>Dropdowns <code>#sel-club</code> + <code>#sel-sponsor</code> regel 1132-1143 · numerieke <code>#inp-snr</code> regel 1144-1145 · feedback-regel <code>#snr-feedback</code> · API-endpoints <code>?action=clubs</code> / <code>?action=sponsors</code> / <code>?action=personen_by_club</code> / <code>?action=personen_by_sponsor</code> / <code>?action=person_by_startnummer</code></td></tr>
-<tr><td>Coach-lijst persistentie</td><td><code>coach/index.php</code></td><td>Sleutel-functie <code>lsKey()</code> regel 1261 retourneert <code>coach_lijst_&lt;competitionId&gt;</code> · automatisch laden bij wedstrijd-switch · automatisch opslaan bij toevoegen/verwijderen · daarna async <code>coach_info</code>-call voor status/sancties</td></tr>
+<tr id="ref-55"><td>Coach-lijst persistentie <a class="ref-back" href="#refsrc-55" title="Terug naar tekst">↑[55]</a></td><td><code>coach/index.php</code></td><td>Sleutel-functie <code>lsKey()</code> regel 1261 retourneert <code>coach_lijst_&lt;competitionId&gt;</code> in localStorage · automatisch laden bij wedstrijd-switch · automatisch opslaan bij toevoegen/verwijderen · daarna async <code>coach_info</code>-call voor status/sancties</td></tr>
 <tr><td>Status- en sanctie-constants</td><td><code>coach/index.php</code></td><td><code>STATUS_LABEL</code>/<code>STATUS_ICON</code> regel 1197-1210 · <code>STATUS_ALARM = new Set([0, 4])</code> ("niet bevestigd" + "niet getekend") · <code>SANCTIE_UITLEG</code>-map regel 1201-1205 met de volledige beschrijvingen per code</td></tr>
 <tr><td>Vier tabs (Programma/Heats/Sancties/Uitslagen)</td><td><code>coach/index.php</code></td><td>Tab-knoppen <code>.tab-btn[data-tab]</code> regel 1157-1181 · panes <code>#tab-programma</code>/<code>#tab-heats</code>/<code>#tab-sancties</code>/<code>#tab-uitslagen</code> · "mijn rijders"-highlight via <code>.heat-rij.mijn</code> · gecombineerde ritten <code>.prog-combi-box</code></td></tr>
 <tr><td>coach_info bulk-endpoint</td><td><code>coach/index.php</code> server-block</td><td>POST <code>?action=coach_info</code> regel 510-696 · input <code>{competition_id, licenses[]}</code> · output per rijder: <code>entry_status</code> (worst-case 0..5), <code>sancties[]</code>, <code>heats[]</code>, <code>entries[]</code> met <code>expected_rondes</code> uit <code>tijdschema_cat_config</code> regel 632-653</td></tr>
