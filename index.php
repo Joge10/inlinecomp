@@ -339,12 +339,6 @@ if (!$gebruiker) {
 
                         <!-- Tab 3: Wedstrijden -->
                         <div class="org-tab-content" id="org-tab-wedstrijden" style="display:none">
-                            <div class="org-wedstrijden-acties">
-                                <button class="btn-secondary" id="btn-globale-meldingen"
-                                        title="Mededelingen die voor alle bezoekers van public/coach zichtbaar zijn — ook vóór ze een wedstrijd kiezen">
-                                    🌐 Globale mededelingen
-                                </button>
-                            </div>
                             <div id="org-wedstrijden-list">
                                 <div class="status-msg loading"><span class="spinner"></span>Laden…</div>
                             </div>

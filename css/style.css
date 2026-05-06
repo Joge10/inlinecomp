@@ -2965,6 +2965,7 @@ th.rk-totaal, td.rk-totaal { width:55px; font-weight:700; color:var(--blauw); ba
 .mld-st-actief    { background: #e8f5e8; color: #1e6b35; }
 .mld-st-verlopen  { background: #f0f0f0; color: #888; }
 .mld-st-toekomst  { background: #fff8d6; color: #7a5800; }
+.mld-st-globaal   { background: #efe4fb; color: #6610f2; font-weight: 600; }
 .mld-form         { background: #f7fafd; border: 1px solid var(--border); border-radius: 6px;
                     padding: 1rem 1.2rem; margin-top: .5rem; }
 .mld-form h4      { color: var(--blauw); margin: 0 0 .8rem 0; font-size: 1rem; }

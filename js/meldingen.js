@@ -20,27 +20,30 @@ const MELDING_PRIO = {
     info:   { kleur: '#1a3a5c', bg: '#e8f0f7', icoon: 'ℹ️' },
     warn:   { kleur: '#7a5800', bg: '#fff8d6', icoon: '⚠️' },
     urgent: { kleur: '#a00',    bg: '#ffe5e5', icoon: '🚨' },
+    // 'globaal' is geen echte prio in de DB — competition_id IS NULL is de
+    // bron van waarheid. Maar in de admin-UI tonen we 'm als 4e dropdown-
+    // optie + eigen kleur (paars), zodat 't visueel meteen onderscheidend is.
+    globaal:{ kleur: '#6610f2', bg: '#efe4fb', icoon: '🌐' },
 };
 
 // ── Admin-modal ───────────────────────────────────────────────────────────
-// compId: string  → wedstrijd-specifieke mededelingen
-// compId: null/''  → globale mededelingen (zichtbaar voor alle bezoekers van
-//                    public/coach, óók op landing-pagina vóór wedstrijd-keuze)
+// compId: string  → wedstrijd-specifieke mededelingen + globale (samen in lijst)
+// compId: null/''  → alleen globale mededelingen
 async function openMeldingenModal(compId, compNaam) {
-    const isGlobal = !compId;
-    const titelTxt = isGlobal
+    const isGlobalOnly = !compId;
+    const titelTxt = isGlobalOnly
         ? '🌐 Globale mededelingen'
         : `📢 Mededelingen — ${escHtml(compNaam || 'Wedstrijd')}`;
-    const uitlegTxt = isGlobal
+    const uitlegTxt = isGlobalOnly
         ? `Globale mededelingen verschijnen bij <strong>iedereen</strong> die public of
-           coach opent — ook vóór ze een wedstrijd kiezen. Voorbeeld: "Storing op
-           publieke pagina, herstart om 14:00". Gebruik spaarzaam (alleen
-           cross-wedstrijd info).`
+           coach opent — ook vóór ze een wedstrijd kiezen.`
         : `Mededelingen verschijnen automatisch als pop-up bij iedereen die
            op dit moment de publieke pagina of coach-app voor deze wedstrijd
            open heeft staan (binnen één refresh-cyclus, dus &lt; 1 minuut).
            Elke kijker ziet de pop-up één keer; daarna staat de melding nog
-           in de programma-pagina.`;
+           in de programma-pagina.<br><strong>Tip:</strong> kies prio
+           "🌐 Globaal" om een mededeling cross-wedstrijd te maken — die
+           verschijnt dan in de mededelingen-modal van élke wedstrijd.`;
 
     // Modal-overlay opbouwen
     const overlay = document.createElement('div');
@@ -93,11 +96,18 @@ async function mldRefreshLijst(compId) {
             const status = actief ? '<span class="mld-st mld-st-actief">● actief</span>'
                           : verlopen ? '<span class="mld-st mld-st-verlopen">● verlopen</span>'
                           : '<span class="mld-st mld-st-toekomst">● gepland</span>';
-            const prioStyle = MELDING_PRIO[m.prio] ?? MELDING_PRIO.info;
+            // Globale melding krijgt eigen 'globaal'-styling i.p.v. prio-styling.
+            const isGlob = m.competition_id === null || m.competition_id === undefined;
+            const styleSleutel = isGlob ? 'globaal' : (m.prio || 'info');
+            const prioStyle = MELDING_PRIO[styleSleutel] ?? MELDING_PRIO.info;
+            const globBadge = isGlob
+                ? '<span class="mld-st mld-st-globaal" title="Verschijnt bij alle wedstrijden">🌐 globaal</span>'
+                : '';
             return `<div class="mld-rij" style="border-left:4px solid ${prioStyle.kleur}">
                 <div class="mld-rij-kop">
                     <span class="mld-rij-icoon">${prioStyle.icoon}</span>
                     <span class="mld-rij-titel">${escHtml(m.titel)}</span>
+                    ${globBadge}
                     ${status}
                 </div>
                 <div class="mld-rij-bericht">${escHtml(m.bericht)}</div>
@@ -139,6 +149,9 @@ function mldOpenForm(compId, id, alleMeldingen = []) {
         return `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}T23:59`;
     };
     const totDefault = m ? tsLocal(m.geldig_tot) : defaultEinde();
+    // Bij bestaande melding: globaal = competition_id is null. Anders: gewone prio.
+    const isExistingGlobal = m && (m.competition_id === null || m.competition_id === undefined);
+    const huidigePrio = isExistingGlobal ? 'globaal' : (m?.prio ?? 'info');
     wrap.style.display = '';
     wrap.innerHTML = `
         <div class="mld-form">
@@ -158,9 +171,10 @@ function mldOpenForm(compId, id, alleMeldingen = []) {
                 <label class="mld-veld">
                     <span>Prioriteit</span>
                     <select id="mld-prio" class="inp">
-                        <option value="info"   ${m?.prio === 'info'   || !m ? 'selected' : ''}>ℹ️ Info (blauw)</option>
-                        <option value="warn"   ${m?.prio === 'warn'   ? 'selected' : ''}>⚠️ Waarschuwing (geel)</option>
-                        <option value="urgent" ${m?.prio === 'urgent' ? 'selected' : ''}>🚨 Urgent (rood)</option>
+                        <option value="info"    ${huidigePrio === 'info'    ? 'selected' : ''}>ℹ️ Info (blauw)</option>
+                        <option value="warn"    ${huidigePrio === 'warn'    ? 'selected' : ''}>⚠️ Waarschuwing (geel)</option>
+                        <option value="urgent"  ${huidigePrio === 'urgent'  ? 'selected' : ''}>🚨 Urgent (rood)</option>
+                        <option value="globaal" ${huidigePrio === 'globaal' ? 'selected' : ''}>🌐 Globaal — voor alle wedstrijden</option>
                     </select>
                 </label>
                 <label class="mld-veld">
@@ -197,14 +211,21 @@ async function mldOpslaan(compId) {
         alert('Titel en bericht zijn verplicht.');
         return;
     }
+    // 'globaal' is geen DB-prio (enum kent 'm niet) maar een scope-keuze:
+    // → competition_id wordt NULL via global=1, prio valt terug op 'info'.
+    const isGlobaal = prio === 'globaal';
+    const dbPrio = isGlobaal ? 'info' : prio;
     const fd = new FormData();
     fd.append('action', 'save');
     if (id) fd.append('id', id);
-    if (compId) fd.append('comp_id', compId);
-    else        fd.append('global', '1');
+    if (isGlobaal || !compId) {
+        fd.append('global', '1');
+    } else {
+        fd.append('comp_id', compId);
+    }
     fd.append('titel', titel);
     fd.append('bericht', bericht);
-    fd.append('prio', prio);
+    fd.append('prio', dbPrio);
     if (van) fd.append('geldig_van', van.replace('T', ' '));
     if (tot) fd.append('geldig_tot', tot.replace('T', ' '));
 

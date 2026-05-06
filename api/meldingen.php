@@ -109,12 +109,15 @@ try {
             ");
             $stmt->execute();
         } elseif ($compId !== '') {
+            // Wedstrijd-modal: tonen wedstrijd-specifieke + globale samen,
+            // zodat een admin globale meldingen vanuit elke wedstrijd-context
+            // kan zien én snel verwijderen als ze tegenstrijdig zijn.
             $stmt = $pdo->prepare("
                 SELECT id, titel, bericht, prio, geldig_van, geldig_tot,
                        aangemaakt_door, aangemaakt_op, competition_id
                 FROM public_meldingen
-                WHERE competition_id = ?
-                ORDER BY geldig_van DESC
+                WHERE competition_id = ? OR competition_id IS NULL
+                ORDER BY (competition_id IS NULL) DESC, geldig_van DESC
             ");
             $stmt->execute([$compId]);
         } else {
