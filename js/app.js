@@ -446,6 +446,7 @@ async function selectWedstrijd(card, comp) {
     setHTML('imp-cat-content', '<div class="status-msg loading"><span class="spinner"></span>Vergelijken met database…</div>');
 
     el('btn-import').onclick = () => importeerWedstrijd(comp.id, comp.name || '');
+    el('btn-export').onclick = () => exporteerWedstrijdCsv(comp.id, comp.name || '');
 
     panel.scrollIntoView({ behavior: 'smooth', block: 'start' });
 

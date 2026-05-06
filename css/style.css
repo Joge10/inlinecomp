@@ -720,6 +720,22 @@ header .badge {
 .btn-import:hover           { background: #c9530a; }
 .btn-import:disabled        { background: #bbb; color: #fff; cursor: not-allowed; opacity: .7; }
 .btn-import:disabled:hover  { background: #bbb; }
+.btn-export {
+    flex-shrink: 0;
+    background: var(--wit);
+    color: var(--blauw);
+    border: 1px solid var(--blauw);
+    border-radius: 6px;
+    padding: 8px 16px;
+    font-size: .9rem;
+    font-weight: 600;
+    cursor: pointer;
+    white-space: nowrap;
+    transition: background .15s, color .15s;
+}
+.btn-export:hover           { background: var(--blauw); color: var(--wit); }
+.btn-export:disabled        { background: #f0f0f0; color: #aaa; border-color: #ccc; cursor: not-allowed; opacity: .7; }
+.btn-export:disabled:hover  { background: #f0f0f0; color: #aaa; }
 .btn-print-tekenlijst {
     flex-shrink: 0;
     background: #1a3a5c;

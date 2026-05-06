@@ -78,6 +78,143 @@ if ($_SERVER['REQUEST_METHOD'] === 'DELETE') {
     exit;
 }
 
+// ── GET: exporteer wedstrijd-deelnemers als KNSB-CSV ────────────────────────
+// Doel: heropbouw van het KNSB-CSV-formaat op basis van de actuele DB-state
+// (lokale wijzigingen in startnummer/transponder zitten in persons resp.
+// organisatie_transponders nadat de gebruiker op Importeer heeft geklikt).
+// De export-knop is in de UI geblokkeerd zolang er onopgeslagen wijzigingen
+// zijn — zo is de DB altijd source-of-truth voor wat geëxporteerd wordt.
+//
+// Alleen aanwezige rijders (status 1=getekend, 2=aangemeld nog niet getekend,
+// 5=bevestigd bij organisatie) — niet 3=afgemeld of 4=niet getekend.
+if ($_SERVER['REQUEST_METHOD'] === 'GET' && ($_GET['action'] ?? '') === 'export_knsb_csv') {
+    require_once __DIR__ . '/../../config_inlinecomp.php';
+    require_once __DIR__ . '/../auth/session.php';
+    $_authUser = requireAuth($pdo);
+
+    $expCompId = trim($_GET['competition_id'] ?? '');
+    if (!preg_match('/^[a-f0-9\-]{36}$/i', $expCompId)) {
+        http_response_code(400);
+        header('Content-Type: text/plain; charset=utf-8');
+        echo 'Ongeldig of ontbrekend competition_id';
+        exit;
+    }
+
+    // Wedstrijdnaam voor bestandsnaam
+    $cnStmt = $pdo->prepare("SELECT name FROM competitions WHERE id = ?");
+    $cnStmt->execute([$expCompId]);
+    $compNaam = $cnStmt->fetchColumn() ?: 'wedstrijd';
+    $safeName = preg_replace('/[^A-Za-z0-9_\- ]/', '_', $compNaam);
+
+    // Aanwezige deelnemers: status NOT IN (3=afgemeld, 4=niet getekend).
+    // GROUP BY license_key omdat een rijder in meerdere DC's kan ingeschreven zijn
+    // maar in de export 1 regel per rijder hoort. Effectief startnummer komt uit
+    // competition_startnummers (lokale override) of valt terug op
+    // persons.start_number — dat laatste is wat de import-module updatet
+    // wanneer je een ander startnummer toewijst.
+    $rowStmt = $pdo->prepare("
+        SELECT
+            p.license_key,
+            p.full_name,
+            p.short_name,
+            p.gender,
+            p.category,
+            p.nationality,
+            p.start_number,
+            p.club_code,
+            p.club_short,
+            p.club_full,
+            p.sponsor,
+            p.city,
+            COALESCE(csn.startnummer, p.start_number) AS effective_startnumber
+        FROM entries e
+        JOIN distance_combinations dc ON dc.id = e.distance_combination_id
+        JOIN persons p ON p.license_key = e.person_license
+        LEFT JOIN competition_startnummers csn
+            ON csn.competition_id = dc.competition_id
+           AND csn.person_license = e.person_license
+        WHERE dc.competition_id = ?
+          AND e.status NOT IN (3, 4)
+        GROUP BY p.license_key
+        ORDER BY p.category, effective_startnumber
+    ");
+    $rowStmt->execute([$expCompId]);
+    $rows = $rowStmt->fetchAll(PDO::FETCH_ASSOC);
+
+    // Transponders per rijder. T1 = de eerst-toegewezen (laagste id), T2 = de
+    // volgende. ORDER BY id ASC volgt de toewijs-volgorde aan de balie.
+    $tpStmt = $pdo->prepare("
+        SELECT person_license, transponder_code
+        FROM organisatie_transponders
+        WHERE person_license IS NOT NULL
+        ORDER BY id ASC
+    ");
+    $tpStmt->execute();
+    $tpMap = []; // license => [t1, t2, ...]
+    foreach ($tpStmt->fetchAll(PDO::FETCH_ASSOC) as $tp) {
+        $tpMap[$tp['person_license']][] = $tp['transponder_code'];
+    }
+
+    header('Content-Type: text/csv; charset=utf-8');
+    header('Content-Disposition: attachment; filename="' . $safeName . '.csv"');
+    $out = fopen('php://output', 'w');
+
+    // BOM voor Excel UTF-8 herkenning
+    fwrite($out, "\xEF\xBB\xBF");
+
+    fputcsv($out, [
+        'Category','StartNumber','LicenseKey','Initials','FirstName','PrefixedSurname',
+        'FullName','ShortName','BirthDate','Gender','City','NationalityCode',
+        'ClubCode','ClubFullName','Sponsor','Transponder1','Transponder2','VenueCode','ClubShortName',
+    ]);
+
+    foreach ($rows as $r) {
+        $tps = $tpMap[$r['license_key']] ?? [];
+        $t1  = $tps[0] ?? '';
+        $t2  = $tps[1] ?? '';
+
+        // Naam-splitsing: full_name = "Marije de Haan", short_name = "de Haan"
+        // → FirstName = "Marije". short_name kan ook leeg zijn (legacy data) →
+        // dan beschouwen we full_name als FirstName en houden PrefixedSurname leeg.
+        $fn = trim($r['full_name'] ?? '');
+        $sn = trim($r['short_name'] ?? '');
+        if ($sn !== '' && str_ends_with($fn, $sn)) {
+            $firstName = trim(substr($fn, 0, strlen($fn) - strlen($sn)));
+        } else {
+            $firstName = $fn;
+        }
+        $initials = $firstName !== '' ? mb_substr($firstName, 0, 1) . '.' : '';
+
+        // Gender: DB 0=man, 1=vrouw → KNSB M / F
+        $gn = $r['gender'];
+        $genderChar = ($gn === null || $gn === '') ? '' : (((int)$gn === 1) ? 'F' : 'M');
+
+        fputcsv($out, [
+            $r['category']             ?? '',
+            $r['effective_startnumber'] ?? '',
+            $r['license_key']          ?? '',
+            $initials,
+            $firstName,
+            $sn,
+            $fn,
+            $sn,
+            '',                         // BirthDate: leeg (DB heeft alleen jaar)
+            $genderChar,
+            $r['city']                 ?? '',
+            $r['nationality']          ?? '',
+            $r['club_code']            ?? '',
+            $r['club_full']            ?? '',
+            $r['sponsor']              ?? '',
+            $t1,
+            $t2,
+            '',                         // VenueCode: leeg in KNSB-bron
+            $r['club_short']           ?? '',
+        ]);
+    }
+    fclose($out);
+    exit;
+}
+
 if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
     http_response_code(405);
     echo json_encode(['error' => 'Gebruik POST of DELETE']);

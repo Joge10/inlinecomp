@@ -1055,6 +1055,7 @@ function updateImportBtn() {
     if (_importLeesOnly) {
         btn.disabled = true;
         btn.title = 'Geen schrijfrechten voor importeer';
+        updateExportBtn();
         return;
     }
     // Zijn er deelnemers die nog niet in de DB staan?
@@ -1070,6 +1071,36 @@ function updateImportBtn() {
                 ? 'Nieuwe inschrijvingen opslaan'
                 : 'Wedstrijd importeren in database')
         : 'Alles is opgeslagen — geen wijzigingen';
+    updateExportBtn();
+}
+
+// ── Exporteer-knop status ────────────────────────────────────────────────────
+// De export werkt op DB-data, dus blokkeren als er nog onopgeslagen wijzigingen
+// of nog-niet-geïmporteerde deelnemers in de UI staan. Anders zou je een CSV
+// downloaden die niet matcht met wat de Live-app / startlijsten gebruiken.
+function updateExportBtn() {
+    const btn = el('btn-export');
+    if (!btn) return;
+    if (!isGeimporteerd) {
+        btn.disabled = true;
+        btn.title = 'Importeer de wedstrijd eerst voordat je kunt exporteren';
+        return;
+    }
+    if (heeftWijzigingen) {
+        btn.disabled = true;
+        btn.title = 'Eerst opslaan via Importeer — anders mismatch tussen export en database';
+        return;
+    }
+    const heeftNieuwe = vergelijkData.some(cat =>
+        cat.competitors.some(c => c.db_entry === null)
+    );
+    if (heeftNieuwe) {
+        btn.disabled = true;
+        btn.title = 'Er staan nog niet-geïmporteerde deelnemers — eerst Importeer klikken';
+        return;
+    }
+    btn.disabled = false;
+    btn.title = 'Deelnemers exporteren als KNSB-CSV';
 }
 
 // ── Tekenlijsten afdrukken ────────────────────────────────────────────────────
@@ -2306,6 +2337,55 @@ function collectImportData(compId) {
 }
 
 // ── Import naar database ──────────────────────────────────────────────────────
+
+// ── Exporteer wedstrijd-deelnemers als KNSB-CSV ──────────────────────────────
+// De export werkt op DB-data, niet op de frontend-state — daarom is de knop
+// in updateExportBtn() geblokkeerd zolang er onopgeslagen wijzigingen zijn.
+// Zo voorkomen we dat een export niet matcht met wat in de DB / Live-app staat.
+//
+// Vóór de download wordt vergelijkData gecontroleerd op aanwezige rijders
+// zonder transponder (DB-state); confirm-dialog als die er zijn.
+function exporteerWedstrijdCsv(compId, compNaam) {
+    if (!compId) return;
+
+    // Aanwezig = entry_status NOT IN (3=afgemeld, 4=niet getekend). Default 1.
+    // Dedupe op license_key. Transponder uit DB-state (db_tp_actief), niet uit
+    // KNSB-feed of frontend-edits — dat matcht wat de export uit de DB haalt.
+    const zonderTp = new Map();
+    (vergelijkData || []).forEach(cat => {
+        (cat.competitors || []).forEach(c => {
+            const status = c.entry_status ?? 1;
+            if (status === 3 || status === 4) return;
+            const tp = (c.db_tp_actief ?? '').toString().trim();
+            if (tp !== '') return;
+            const lic = c.license_key || '';
+            if (!zonderTp.has(lic)) {
+                zonderTp.set(lic, (c.db_person?.full_name) || c.knsb?.full_name || lic);
+            }
+        });
+    });
+
+    if (zonderTp.size > 0) {
+        const namen = Array.from(zonderTp.values()).sort((a, b) => a.localeCompare(b));
+        const max   = 15;
+        const lijst = namen.slice(0, max).join('\n  • ');
+        const rest  = namen.length > max ? `\n  … en nog ${namen.length - max} andere(n)` : '';
+        const msg =
+            `⚠ ${zonderTp.size} aanwezige rijder${zonderTp.size === 1 ? '' : 's'} ` +
+            `${zonderTp.size === 1 ? 'heeft' : 'hebben'} geen transponder toegewezen:\n\n  • ${lijst}${rest}\n\n` +
+            `Toch exporteren? Voor deze rijders blijft Transponder1/Transponder2 leeg in de CSV.`;
+        if (!window.confirm(msg)) return;
+    }
+
+    const url = 'api/import.php?action=export_knsb_csv&competition_id=' + encodeURIComponent(compId);
+    // Eigen <a download> creëren zodat de browser de filename uit Content-Disposition pakt
+    const a = document.createElement('a');
+    a.href     = url;
+    a.download = (compNaam || 'wedstrijd') + '.csv';
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+}
 
 async function importeerWedstrijd(compId, compNaam) {
     const resultDiv = el('import-result');

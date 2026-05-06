@@ -134,6 +134,9 @@ if (!$gebruiker) {
                                 </div>
                             </div>
                             <div class="detail-knoppen">
+                                <button id="btn-export" class="btn-export" title="Deelnemers exporteren als KNSB-CSV">
+                                    Exporteren
+                                </button>
                                 <button id="btn-import" class="btn-import" title="Wedstrijd importeren in database">
                                     &#8659; Importeer
                                 </button>
