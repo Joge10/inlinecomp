@@ -2344,8 +2344,8 @@ function collectImportData(compId) {
 // Zo voorkomen we dat een export niet matcht met wat in de DB / Live-app staat.
 //
 // Vóór de download wordt vergelijkData gecontroleerd op aanwezige rijders
-// zonder transponder (DB-state); confirm-dialog als die er zijn.
-function exporteerWedstrijdCsv(compId, compNaam) {
+// zonder transponder (DB-state); appConfirm-dialog als die er zijn.
+async function exporteerWedstrijdCsv(compId, compNaam) {
     if (!compId) return;
 
     // Aanwezig = entry_status NOT IN (3=afgemeld, 4=niet getekend). Default 1.
@@ -2368,20 +2368,44 @@ function exporteerWedstrijdCsv(compId, compNaam) {
     if (zonderTp.size > 0) {
         const namen = Array.from(zonderTp.values()).sort((a, b) => a.localeCompare(b));
         const max   = 15;
-        const lijst = namen.slice(0, max).join('\n  • ');
-        const rest  = namen.length > max ? `\n  … en nog ${namen.length - max} andere(n)` : '';
-        const msg =
-            `⚠ ${zonderTp.size} aanwezige rijder${zonderTp.size === 1 ? '' : 's'} ` +
-            `${zonderTp.size === 1 ? 'heeft' : 'hebben'} geen transponder toegewezen:\n\n  • ${lijst}${rest}\n\n` +
-            `Toch exporteren? Voor deze rijders blijft Transponder1/Transponder2 leeg in de CSV.`;
-        if (!window.confirm(msg)) return;
+        const itemsHtml = namen.slice(0, max)
+            .map(n => `<li>${escHtml(n)}</li>`)
+            .join('');
+        const restHtml = namen.length > max
+            ? `<div class="lijst-rest">… en nog ${namen.length - max} andere(n)</div>`
+            : '';
+        const aantalTxt = `${zonderTp.size} aanwezige rijder${zonderTp.size === 1 ? '' : 's'} ` +
+                          `${zonderTp.size === 1 ? 'heeft' : 'hebben'} geen transponder toegewezen`;
+        const body = `
+            <p><strong>⚠ ${escHtml(aantalTxt)}:</strong></p>
+            <ul>${itemsHtml}</ul>${restHtml}
+            <p>Toch exporteren? Voor deze rijders blijft Transponder1/Transponder2 leeg in de CSV.</p>`;
+
+        const ok = await appConfirm({
+            titel:       'Rijders zonder transponder',
+            body,
+            okTekst:     'Toch exporteren',
+            cancelTekst: 'Annuleren',
+        });
+        if (!ok) return;
     }
 
-    const url = 'api/import.php?action=export_knsb_csv&competition_id=' + encodeURIComponent(compId);
-    // Eigen <a download> creëren zodat de browser de filename uit Content-Disposition pakt
+    // Bestandsnaam: <wedstrijd>_YYYY-MM-DD_HHhMM.csv — tijdstempel zodat
+    // duidelijk is wanneer de export gedraaid is. We sturen de browser-
+    // lokale tijd mee als ?t= zodat de server de identieke filename gebruikt
+    // in Content-Disposition (anders zou daar UTC of een andere server-TZ
+    // verschijnen).
+    const d  = new Date();
+    const pad = n => String(n).padStart(2, '0');
+    const tijdstempel = `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}_` +
+                        `${pad(d.getHours())}h${pad(d.getMinutes())}`;
+    const safeName = (compNaam || 'wedstrijd').replace(/[^A-Za-z0-9_\- ]/g, '_');
+    const url = 'api/import.php?action=export_knsb_csv' +
+                '&competition_id=' + encodeURIComponent(compId) +
+                '&t=' + encodeURIComponent(tijdstempel);
     const a = document.createElement('a');
     a.href     = url;
-    a.download = (compNaam || 'wedstrijd') + '.csv';
+    a.download = `${safeName}_${tijdstempel}.csv`;
     document.body.appendChild(a);
     a.click();
     document.body.removeChild(a);

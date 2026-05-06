@@ -100,11 +100,25 @@ if ($_SERVER['REQUEST_METHOD'] === 'GET' && ($_GET['action'] ?? '') === 'export_
         exit;
     }
 
-    // Wedstrijdnaam voor bestandsnaam
+    // Wedstrijdnaam + export-tijdstempel voor bestandsnaam (zo geen
+    // discussie over wanneer de export gedraaid is). De client stuurt z'n
+    // browser-lokale tijd mee als ?t=YYYY-MM-DD_HHhMM zodat de filename
+    // consistent is voor de gebruiker, ongeacht de server-timezone.
     $cnStmt = $pdo->prepare("SELECT name FROM competitions WHERE id = ?");
     $cnStmt->execute([$expCompId]);
     $compNaam = $cnStmt->fetchColumn() ?: 'wedstrijd';
     $safeName = preg_replace('/[^A-Za-z0-9_\- ]/', '_', $compNaam);
+    $tParam   = trim($_GET['t'] ?? '');
+    if (preg_match('/^\d{4}-\d{2}-\d{2}_\d{2}h\d{2}$/', $tParam)) {
+        $tijdstempel = $tParam; // client-lokale tijd, geverifieerd op formaat
+    } else {
+        // Fallback: server-tijd in Europe/Amsterdam zodat we niet UTC krijgen
+        $prevTz = date_default_timezone_get();
+        date_default_timezone_set('Europe/Amsterdam');
+        $tijdstempel = date('Y-m-d_H\hi');
+        date_default_timezone_set($prevTz);
+    }
+    $safeName .= '_' . $tijdstempel;
 
     // Aanwezige deelnemers: status NOT IN (3=afgemeld, 4=niet getekend).
     // GROUP BY license_key omdat een rijder in meerdere DC's kan ingeschreven zijn

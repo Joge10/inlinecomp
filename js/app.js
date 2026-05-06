@@ -178,6 +178,56 @@ function escHtml(str) {
         .replace(/"/g,'&quot;');
 }
 
+// ── In-app confirm-dialoog (vervangt window.confirm) ─────────────────────────
+// Gebruikt de bestaande modal-overlay/modal-box stijl zodat de pop-up matcht
+// met de rest van de app (i.p.v. de generieke browser-dialoog).
+//
+//   await appConfirm({ titel, body, okTekst?, cancelTekst?, okStijl? })
+//   → true  als gebruiker op OK klikt
+//   → false bij Annuleren / Escape / klik buiten de modal
+//
+// `body` mag een string of HTML-string zijn (intern wordt 'ie als HTML
+// ingevoegd). Geef voor user-content altijd geëscapete content mee.
+// `okStijl` = 'primary' (default, blauw) of 'gevaar' (rood, voor delete).
+function appConfirm({ titel, body, okTekst = 'OK', cancelTekst = 'Annuleren', okStijl = 'primary' } = {}) {
+    return new Promise(resolve => {
+        const overlay = document.createElement('div');
+        overlay.className = 'modal-overlay app-confirm-overlay';
+
+        const okClass = okStijl === 'gevaar' ? 'btn-danger' : 'btn-primary';
+        overlay.innerHTML = `
+            <div class="modal-box app-confirm-box" role="dialog" aria-modal="true" aria-labelledby="appcnf-titel">
+                <div class="modal-kop">
+                    <h3 id="appcnf-titel">${escHtml(titel || 'Bevestigen')}</h3>
+                </div>
+                <div class="app-confirm-body">${body || ''}</div>
+                <div class="modal-footer">
+                    <button type="button" class="btn-secondary app-confirm-cancel">${escHtml(cancelTekst)}</button>
+                    <button type="button" class="${okClass} app-confirm-ok">${escHtml(okTekst)}</button>
+                </div>
+            </div>`;
+
+        const close = (result) => {
+            document.removeEventListener('keydown', onKey);
+            overlay.remove();
+            resolve(result);
+        };
+        const onKey = (ev) => {
+            if (ev.key === 'Escape') { ev.preventDefault(); close(false); }
+            else if (ev.key === 'Enter') { ev.preventDefault(); close(true); }
+        };
+
+        overlay.querySelector('.app-confirm-ok').addEventListener('click', () => close(true));
+        overlay.querySelector('.app-confirm-cancel').addEventListener('click', () => close(false));
+        overlay.addEventListener('click', (ev) => { if (ev.target === overlay) close(false); });
+        document.addEventListener('keydown', onKey);
+
+        document.body.appendChild(overlay);
+        // Focus de OK-knop zodat Enter direct werkt
+        overlay.querySelector('.app-confirm-ok').focus();
+    });
+}
+
 // ── Gedeelde org-logo + baan-logo header + sponsor-footer voor print ─────────
 // Gebruikt door: uitslag, tijdschema, tekenlijsten, deelnemerslijst, ranking,
 // print-center shared-header.
