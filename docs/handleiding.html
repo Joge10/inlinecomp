@@ -439,30 +439,14 @@ a.ref-back:hover { text-decoration: underline; }
                         <li><a href="#beh-7-klassementen">1.8.7 Tabblad Klassementen</a></li>
                     </ul>
                 </li>
-                <li><a href="#a-gebruikers">1.9 Module Gebruikers</a>
+                <li><a href="#a-systeem">1.9 Module Systeem</a> <em style="color:#888">(admin)</em>
                     <ul>
-                        <li><a href="#gb-1-overzicht">1.9.1 Naar Gebruikers gaan en de pagina-opbouw begrijpen</a></li>
-                        <li><a href="#gb-2-rollen">1.9.2 Rollen en wat ze mogen</a></li>
-                        <li><a href="#gb-3-aanmaken">1.9.3 Een nieuwe gebruiker aanmaken</a></li>
-                        <li><a href="#gb-4-bewerken">1.9.4 Bewerken, wachtwoord, activeren, verwijderen</a></li>
-                        <li><a href="#gb-5-stats">1.9.5 Bezoekersstatistieken</a></li>
-                        <li><a href="#gb-6-logboek">1.9.6 Login-logboek</a></li>
-                    </ul>
-                </li>
-                <li><a href="#a-rijders">1.10 Module Rijders (AVG)</a>
-                    <ul>
-                        <li><a href="#rij-1-overzicht">1.10.1 Naar Rijders gaan en de pagina-opbouw begrijpen</a></li>
-                        <li><a href="#rij-2-zoeken">1.10.2 Een rijder zoeken</a></li>
-                        <li><a href="#rij-3-detail">1.10.3 Detail-paneel</a></li>
-                        <li><a href="#rij-4-anonimiseren">1.10.4 Een rijder anonimiseren (AVG)</a></li>
-                        <li><a href="#rij-5-undo">1.10.5 Anonimisatie-vlag opheffen</a></li>
-                    </ul>
-                </li>
-                <li><a href="#a-uploads">1.11 Module Uploads</a> <em style="color:#888">(admin)</em>
-                    <ul>
-                        <li><a href="#up-1-overzicht">1.11.1 Naar Uploads gaan en de pagina-opbouw begrijpen</a></li>
-                        <li><a href="#up-2-filter">1.11.2 Mappen filteren op leeftijd</a></li>
-                        <li><a href="#up-3-verwijderen">1.11.3 Een map verwijderen</a></li>
+                        <li><a href="#sys-1-overzicht">1.9.1 Naar Systeem gaan en de tabs begrijpen</a></li>
+                        <li><a href="#sys-2-gebruikers">1.9.2 Tabblad Gebruikers — accounts, rollen, aanmaken en bewerken</a></li>
+                        <li><a href="#sys-3-bezoekers">1.9.3 Tabblad Bezoekers — statistieken publieke en coach-pagina</a></li>
+                        <li><a href="#sys-4-logboek">1.9.4 Tabblad Logboek — login-logboek</a></li>
+                        <li><a href="#sys-5-rijders">1.9.5 Tabblad Rijders (AVG) — persoonsgegevens, transponder-historie, anonimiseren</a></li>
+                        <li><a href="#sys-6-uploads">1.9.6 Tabblad Uploads — Orbits/MyLaps CSV-archief opruimen</a></li>
                     </ul>
                 </li>
             </ul>
@@ -706,8 +690,7 @@ a.ref-back:hover { text-decoration: underline; }
         <div class="nav-item"><span class="ico">🏆</span><span>Uitslag</span></div>
         <div class="nav-sep"></div>
         <div class="nav-item"><span class="ico">⚙</span><span>Beheer</span></div>
-        <div class="nav-item"><span class="ico">👤</span><span>Gebruikers</span></div>
-        <div class="nav-item"><span class="ico">👥</span><span>Rijders</span></div>
+        <div class="nav-item"><span class="ico">🛠</span><span>Systeem</span></div>
         <div class="nav-item"><span class="ico">ℹ</span><span>Info</span></div>
     </div>
     <div class="mock-content">
@@ -731,8 +714,7 @@ a.ref-back:hover { text-decoration: underline; }
 <tr><td>🏆</td><td><b>Uitslag</b></td><td>Eindstanden en klassementen bekijken / publiceren</td></tr>
 <tr><td colspan="3" style="background:#f0f0f0;text-align:center;color:#888;font-style:italic">— streepje —</td></tr>
 <tr><td>⚙</td><td><b>Beheer</b></td><td>Algemene instellingen, organisatie, transponders</td></tr>
-<tr><td>👤</td><td><b>Gebruikers</b></td><td>Accounts beheren <i>(alleen zichtbaar voor Admin/Owner)</i></td></tr>
-<tr><td>👥</td><td><b>Rijders</b></td><td>Persoonsgegevens-overzicht <i>(alleen zichtbaar voor Admin/Owner)</i></td></tr>
+<tr><td>🛠</td><td><b>Systeem</b></td><td>Gebundeld admin-paneel met tabbladen voor gebruikers, bezoekersstatistiek, login-logboek, rijdersbeheer (AVG) en upload-archief. <i>(alleen zichtbaar voor Admin/Owner)</i></td></tr>
 <tr><td>ℹ</td><td><b>Info</b></td><td>Versie-info, contact</td></tr>
 </table>
 
@@ -3228,24 +3210,30 @@ Binnen elke groep gelden de bekende tiebreakers (gesorteerde individuele punten,
 
 <hr style="margin:40px 0;border:none;border-top:2px solid var(--oranje)">
 
-<h2 id="a-gebruikers">1.9 Module Gebruikers — accounts, rollen en login-logboek</h2>
+<h2 id="a-systeem">1.9 Module Systeem — admin-paneel met tabbladen</h2>
 
-<p>Beheer van wie er toegang heeft tot de admin-applicatie, met welke rol, plus een login-logboek en een paar bezoekersstatistieken voor de publieke en coach-pagina. Deze module is alleen zichtbaar voor <b>owner</b> en <b>admin</b>; voor andere rollen verschijnt het Gebruikers-icoon niet eens in de zijbalk.</p>
+<p>Een gebundeld admin-paneel met vijf tabbladen: <b>Gebruikers</b>, <b>Bezoekers</b>, <b>Logboek</b>, <b>Rijders</b> en <b>Uploads</b>. Allemaal admin-functies die niets met de wedstrijddag zelf te maken hebben — daarom samengebracht in één menu-item zodat de zijbalk niet vol staat met losse iconen. Alleen zichtbaar voor <b>owner</b> en <b>admin</b>; voor andere rollen verschijnt het Systeem-icoon niet eens in de zijbalk.</p>
 
 <ol>
-    <li><a href="#gb-1-overzicht">Naar Gebruikers gaan en de pagina-opbouw begrijpen</a></li>
-    <li><a href="#gb-2-rollen">Rollen en wat ze mogen</a></li>
-    <li><a href="#gb-3-aanmaken">Een nieuwe gebruiker aanmaken</a></li>
-    <li><a href="#gb-4-bewerken">Gebruiker bewerken, wachtwoord wijzigen, activeren/deactiveren, verwijderen</a></li>
-    <li><a href="#gb-5-stats">Bezoekersstatistieken — publieke en coach-pagina</a></li>
-    <li><a href="#gb-6-logboek">Login-logboek</a></li>
+    <li><a href="#sys-1-overzicht">Naar Systeem gaan en de tabs begrijpen</a></li>
+    <li><a href="#sys-2-gebruikers">Tabblad Gebruikers — accounts, rollen, aanmaken en bewerken</a></li>
+    <li><a href="#sys-3-bezoekers">Tabblad Bezoekers — statistieken publieke en coach-pagina</a></li>
+    <li><a href="#sys-4-logboek">Tabblad Logboek — login-logboek</a></li>
+    <li><a href="#sys-5-rijders">Tabblad Rijders (AVG) — persoonsgegevens, transponder-historie, anonimiseren</a></li>
+    <li><a href="#sys-6-uploads">Tabblad Uploads — Orbits/MyLaps CSV-archief opruimen</a></li>
 </ol>
 
-<h3 id="gb-1-overzicht">Stap 1 — Naar Gebruikers gaan en de pagina-opbouw begrijpen</h3>
+<h3 id="sys-1-overzicht">Stap 1 — Naar Systeem gaan en de tabs begrijpen</h3>
 
-<p>Klik in de zijbalk linksonder op <b>Gebruikers</b>. De pagina heeft drie blokken onder elkaar: bovenaan de <b>gebruikerstabel</b> met "Nieuwe gebruiker"-knop, daaronder de <b>bezoekersstatistieken</b> (publieke pagina + coach-pagina) en helemaal onderaan het <b>login-logboek</b>.</p>
+<p>Klik in de zijbalk linksonder op <b>🛠 Systeem</b>. De pagina opent op het tabblad <em>Gebruikers</em>. Bovenaan staat een tab-rij waarmee je tussen de vijf onderdelen wisselt; de actieve tab heeft een blauwe onderstreping. Tabs laden hun inhoud lazy — de eerste keer dat je een tab opent gaat de bijbehorende API-call uit, daarna blijft het in beeld zonder herladen.</p>
 
-<h3 id="gb-2-rollen">Stap 2 — Rollen en wat ze mogen</h3>
+<div class="info"><b>Eén rol-check voor alles.</b> De vijf tabs vallen onder dezelfde rollen-set (owner + admin). Heb je een van deze rollen, dan zie je het Systeem-icoon en kun je alle vijf tabs openen; heb je 'm niet, dan staat het hele menu-item verborgen.</div>
+
+<h3 id="sys-2-gebruikers">Stap 2 — Tabblad Gebruikers</h3>
+
+<p>Bovenaan staat een tabel met alle bestaande accounts (naam + @gebruikersnaam, rol-badge, e-mail). Rechts op elke rij vier vaste actie-slots (edit, wachtwoord, activeren/deactiveren, verwijderen) — niet-beschikbare slots blijven leeg zodat de iconen netjes onder elkaar uitlijnen over alle rijen. Rechtsboven de tabel staat <b>+ Nieuwe gebruiker</b>.</p>
+
+<h4>Rollen en wat ze mogen</h4>
 
 <p>InlineComp kent zes rollen, in volgorde van afnemende rechten:</p>
 
@@ -3263,7 +3251,7 @@ Binnen elke groep gelden de bekende tiebreakers (gesorteerde individuele punten,
 
 <div class="info"><b>De allereerste owner aanmaken</b> kan niet via de UI — die functie is bewust verwijderd. Maak het eerste account aan via een directe SQL-insert in phpMyAdmin<sup class="ref-link" id="refsrc-50"><a href="#ref-50">[50]</a></sup>. Reden: een per-ongeluk lege users-tabel zou anders een toevallige bezoeker tot owner kunnen maken.</div>
 
-<h3 id="gb-3-aanmaken">Stap 3 — Een nieuwe gebruiker aanmaken</h3>
+<h4 id="sys-2-aanmaken">Een nieuwe gebruiker aanmaken</h4>
 
 <p>Klik op <b>+ Nieuwe gebruiker</b> rechtsboven in de tabel. Onder de tabel verschijnt een formulier met:</p>
 
@@ -3276,9 +3264,9 @@ Binnen elke groep gelden de bekende tiebreakers (gesorteerde individuele punten,
 
 <p>Klik <b>Opslaan</b>. Het account verschijnt direct in de tabel. De gebruiker kan vanaf dat moment inloggen met de gebruikersnaam + opgegeven wachtwoord.</p>
 
-<h3 id="gb-4-bewerken">Stap 4 — Bewerken, wachtwoord, activeren, verwijderen</h3>
+<h4 id="sys-2-bewerken">Bewerken, wachtwoord, activeren, verwijderen</h4>
 
-<p>Per rij staan rechts kleine knopjes:</p>
+<p>Per rij staan rechts vier vaste actie-slots — altijd dezelfde 4 kolommen, niet-beschikbare acties als lege slot zodat alle iconen netjes onder elkaar uitlijnen:</p>
 
 <table class="ref">
 <tr><th>Knop</th><th>Wat doet het</th></tr>
@@ -3290,9 +3278,9 @@ Binnen elke groep gelden de bekende tiebreakers (gesorteerde individuele punten,
 
 <div class="info"><b>Welke knop verschijnt waar?</b><sup class="ref-link" id="refsrc-44"><a href="#ref-44">[44]</a></sup> De knoppen worden alleen getoond als de huidige rol ook daadwerkelijk de actie mag uitvoeren. Een admin die naar een owner-rij kijkt ziet bijvoorbeeld geen edit/wachtwoord/deactiveer/verwijder-knop — alleen het sleutel-icoon op de eigen rij.</div>
 
-<h3 id="gb-5-stats">Stap 5 — Bezoekersstatistieken</h3>
+<h3 id="sys-3-bezoekers">Stap 3 — Tabblad Bezoekers</h3>
 
-<p>Onder de gebruikerstabel staan twee blokken met zes statistiek-kaartjes elk: één voor de <b>Publieke pagina</b> (Deel 2) en één voor de <b>Coach-pagina</b> (Deel 3). Per blok zie je:</p>
+<p>Twee blokken onder elkaar met zes statistiek-kaartjes per blok: één voor de <b>Publieke pagina</b> (Deel 2) en één voor de <b>Coach-pagina</b> (Deel 3). Per blok zie je:</p>
 
 <ul>
     <li><b>Nu actief</b> (laatste 5 minuten).</li>
@@ -3305,9 +3293,9 @@ Binnen elke groep gelden de bekende tiebreakers (gesorteerde individuele punten,
 
 <p>Onder elk blok staat een <em>Laatst bijgewerkt</em>-tijdstempel. De cijfers ververen automatisch elke 30 seconden zolang het tabblad zichtbaar is — wissel je naar een ander tabblad of een andere module, dan stopt de auto-refresh tot je terugkomt.</p>
 
-<h3 id="gb-6-logboek">Stap 6 — Login-logboek</h3>
+<h3 id="sys-4-logboek">Stap 4 — Tabblad Logboek</h3>
 
-<p>Helemaal onderaan staat een tabel met alle login-acties: tijdstip, gebruiker, soort actie (ingelogd / uitgelogd / mislukt), IP-adres, geo-locatie (land en stad, voor zover bekend) en browser/OS.</p>
+<p>Een tabel met alle login-acties: tijdstip, gebruiker, soort actie (ingelogd / uitgelogd / mislukt), IP-adres, geo-locatie (land en stad, voor zover bekend) en browser/OS.</p>
 
 <p>Filteren kan via de dropdown links boven de tabel: kies een specifieke gebruiker om alleen diens vermeldingen te zien, of "Alle gebruikers" voor het hele logboek. <b>↻ Vernieuwen</b> haalt de laatste data op zonder de pagina te herladen.</p>
 
@@ -3315,25 +3303,11 @@ Binnen elke groep gelden de bekende tiebreakers (gesorteerde individuele punten,
 
 <div class="warn"><b>Geen optimistic locking in deze module.</b> Net als de andere modules heeft Gebruikers geen versie-controle. In de praktijk is het risico klein omdat hier maar zelden door meerdere mensen tegelijk wordt gewerkt — maar twee admins die exact tegelijkertijd hetzelfde account bijwerken: de laatste wint zonder waarschuwing.</div>
 
-<hr style="margin:40px 0;border:none;border-top:2px solid var(--oranje)">
+<h3 id="sys-5-rijders">Stap 5 — Tabblad Rijders (AVG)</h3>
 
-<h2 id="a-rijders">1.10 Module Rijders (AVG) — persoonsgegevens en anonimiseren</h2>
+<p>Voor AVG-vragen: je kunt van een specifieke rijder alle persoonsgegevens, transponder-historie en wedstrijdhistorie inzien, en — op verzoek van die rijder — diens persoonsgegevens onomkeerbaar anonimiseren. Bovenaan staat een korte AVG-uitleg-strook. Daaronder twee kolommen: links het <b>zoekvak</b> met resultatenlijst, rechts het <b>detail-paneel</b> dat verschijnt zodra je links een rijder aanklikt.</p>
 
-<p>Het rijderbeheer is bedoeld voor AVG-vragen: je kunt van een specifieke rijder alle persoonsgegevens, transponder-toewijzingen en wedstrijdhistorie inzien, en — op verzoek van die rijder — diens persoonsgegevens onomkeerbaar anonimiseren. Net als Gebruikers is deze module alleen zichtbaar voor <b>owner</b> en <b>admin</b>.</p>
-
-<ol>
-    <li><a href="#rij-1-overzicht">Naar Rijders gaan en de pagina-opbouw begrijpen</a></li>
-    <li><a href="#rij-2-zoeken">Een rijder zoeken</a></li>
-    <li><a href="#rij-3-detail">Detail-paneel — wat zie je per rijder</a></li>
-    <li><a href="#rij-4-anonimiseren">Een rijder anonimiseren (AVG)</a></li>
-    <li><a href="#rij-5-undo">Anonimisatie-vlag opheffen</a></li>
-</ol>
-
-<h3 id="rij-1-overzicht">Stap 1 — Naar Rijders gaan en de pagina-opbouw begrijpen</h3>
-
-<p>Klik in de zijbalk linksonder op <b>Rijders</b>. Bovenaan de pagina staat een korte AVG-uitleg-strook. Daaronder twee kolommen: links het <b>zoekvak</b> met resultatenlijst, rechts het <b>detail-paneel</b> dat verschijnt zodra je links een rijder aanklikt.</p>
-
-<h3 id="rij-2-zoeken">Stap 2 — Een rijder zoeken</h3>
+<h4 id="sys-5-zoeken">Een rijder zoeken</h4>
 
 <p>Typ in het zoekvak. Vanaf 2 tekens wordt er gezocht (350 ms na de laatste toets, of direct met Enter). Er wordt gelijktijdig gekeken naar:</p>
 
@@ -3345,19 +3319,20 @@ Binnen elke groep gelden de bekende tiebreakers (gesorteerde individuele punten,
 
 <p>De resultatenlijst toont per rijder de naam, het startnummer, de KNSB-categorie, de club en het licentienummer. Maximaal 100 resultaten; bij 100 verschijnt <em>(max)</em> achter de teller. Eerder geanonimiseerde rijders krijgen een lichtgrijze achtergrond en het label <em>"geanonimiseerd"</em>.</p>
 
-<h3 id="rij-3-detail">Stap 3 — Detail-paneel</h3>
+<h4 id="sys-5-detail">Detail-paneel — wat zie je per rijder</h4>
 
 <p>Klik op een rijder. Rechts opent het detail-paneel met deze blokken:</p>
 
 <ul>
     <li><b>AVG-actieblok</b> bovenaan: knop <em>Rijder anonimiseren</em> (rood) of, als de rijder al anoniem is, een groen blok met de anonimisatie-datum en de knop <em>Anonimisatie-vlag opheffen</em>.</li>
     <li><b>Persoonsgegevens</b>: volledige naam, achternaam, geslacht, geboortejaar, KNSB-categorie, nationaliteit, startnummer, woonplaats, sponsor, vereniging (volledig + kort), KNSB-vereniging-code, aangemaakt-op en laatst gewijzigd-op.</li>
-    <li><b>Transponder-toewijzingen</b>: tabel per organisatie met intern nummer, transponder-code, categorie en betaalstatus.</li>
+    <li><b>Bekende transponders</b>: alle transponder-codes die ooit voor deze rijder geregistreerd zijn (uit KNSB-feed of handmatig toegewezen aan de balie). Per code zie je: de code, in welke slot-typen ('Actief (balie)', 'T1', 'T2', of 'Extra N'), de bron (KNSB-feed / handmatig / beide), bij hoeveel wedstrijden en wanneer voor het laatst gezien. Handig om snel te zien welke chips bij de persoon horen, ongeacht of ze nu nog uitgegeven zijn.</li>
+    <li><b>Transponder-toewijzingen (organisatie-inventaris)</b>: tabel per organisatie met intern nummer, transponder-code, categorie en betaalstatus — wat de organisatie momenteel aan deze rijder heeft uitgeleend.</li>
     <li><b>Wedstrijd-historie (eindklassementen)</b>: tabel met datum, wedstrijdnaam, categorie, eindpositie en behaalde punten per gereden wedstrijd.</li>
     <li><b>Per-afstand-uitslagen</b>: een uitklapbare sectie met alle individuele afstand-resultaten (datum, wedstrijd, categorie, afstand, finale, tijd, positie, punten, sanctie).</li>
 </ul>
 
-<h3 id="rij-4-anonimiseren">Stap 4 — Een rijder anonimiseren (AVG)</h3>
+<h4 id="sys-5-anonimiseren">Een rijder anonimiseren (AVG)</h4>
 
 <p>Bij een AVG-verzoek (recht op vergetelheid) gebruik je de rode knop <b>⚠ Rijder anonimiseren (AVG)</b>. Er volgt een prompt waarin je het <em>licentienummer</em> exact moet overtypen ter bevestiging — een typo of klik-op-Annuleren = geen actie.</p>
 
@@ -3377,7 +3352,7 @@ Binnen elke groep gelden de bekende tiebreakers (gesorteerde individuele punten,
 
 <div class="warn"><b>Onomkeerbaar.</b> De originele waarden zijn na anonimiseren echt weg uit de tabel. <em>Anonimisatie-vlag opheffen</em> in Stap 5 herstelt alleen de vlag, niet de gegevens — die komen pas terug als de rijder opnieuw door een KNSB-import wordt opgehaald.</div>
 
-<h3 id="rij-5-undo">Stap 5 — Anonimisatie-vlag opheffen</h3>
+<h4 id="sys-5-undo">Anonimisatie-vlag opheffen</h4>
 
 <p>Was er een fout in de bevestiging — bijvoorbeeld de verkeerde rijder geselecteerd, of bedenkt de rijder zich na een hernieuwde inschrijving — dan kun je de anonimisatie-vlag opheffen via de groene knop in het detail-paneel.</p>
 
@@ -3385,19 +3360,13 @@ Binnen elke groep gelden de bekende tiebreakers (gesorteerde individuele punten,
 
 <div class="info"><b>Wanneer wel/niet undo?</b> Vlag opheffen heeft alleen zin als je verwacht dat de rijder binnenkort weer in een KNSB-import voorkomt — anders blijft het record gewoon leeg in beeld. Voor échte verwijdering is de anonimisatie zelf al voldoende; undo is een veiligheidsnet voor vergissingen.</div>
 
-<h2 id="a-uploads">1.11 Module Uploads — Orbits/MyLaps CSV-archief opruimen</h2>
+<h3 id="sys-6-uploads">Stap 6 — Tabblad Uploads</h3>
 
-<p>Per wedstrijd worden de CSV-exports vanuit Orbits/MyLaps in een eigen submap op de server opgeslagen<sup class="ref-link" id="refsrc-47"><a href="#ref-47">[47]</a></sup>. Na verloop van tijd stapelen die mappen op. Deze module geeft een admin de tools om handmatig oud archief op te ruimen. Alleen zichtbaar voor <b>owner</b> en <b>admin</b>; andere rollen zien het Uploads-icoon niet eens in de zijbalk.</p>
+<p>Per wedstrijd worden de CSV-exports vanuit Orbits/MyLaps in een eigen submap op de server opgeslagen<sup class="ref-link" id="refsrc-47"><a href="#ref-47">[47]</a></sup>. Na verloop van tijd stapelen die mappen op. Dit tabblad geeft je tools om handmatig oud archief op te ruimen.</p>
 
-<ol>
-    <li><a href="#up-1-overzicht">Naar Uploads gaan en de pagina-opbouw begrijpen</a></li>
-    <li><a href="#up-2-filter">Mappen filteren op leeftijd</a></li>
-    <li><a href="#up-3-verwijderen">Een map verwijderen</a></li>
-</ol>
+<h4 id="sys-6-overzicht">Pagina-opbouw</h4>
 
-<h3 id="up-1-overzicht">Stap 1 — Naar Uploads gaan en de pagina-opbouw begrijpen</h3>
-
-<p>Klik in de zijbalk linksonder op <b>📁 Uploads</b>. De pagina toont een tabel met alle submappen, gesorteerd op laatste-wijzigingstijd (nieuwste bovenaan). Per map zie je:</p>
+<p>De pagina toont een tabel met alle submappen, gesorteerd op laatste-wijzigingstijd (nieuwste bovenaan). Per map zie je:</p>
 
 <table class="ref">
 <tr><th>Kolom</th><th>Wat staat er</th></tr>
@@ -3411,11 +3380,11 @@ Binnen elke groep gelden de bekende tiebreakers (gesorteerde individuele punten,
 
 <p>Bovenaan staat een samenvatting met aantal mappen + totale ruimte van wat zichtbaar is, plus een filter (Stap 2) en een refresh-knop.</p>
 
-<h3 id="up-2-filter">Stap 2 — Mappen filteren op leeftijd</h3>
+<h4 id="sys-6-filter">Mappen filteren op leeftijd</h4>
 
 <p>De filter-dropdown bovenaan biedt vier presets: <em>alle mappen</em>, <em>30 dagen</em>, <em>3 maanden</em>, <em>6 maanden</em> of <em>1 jaar</em>. Kies een preset om alleen mappen te tonen die ouder zijn dan dat aantal dagen — handig om in één blik te zien wat opgeruimd kan worden zonder door alles te scrollen.</p>
 
-<h3 id="up-3-verwijderen">Stap 3 — Een map verwijderen</h3>
+<h4 id="sys-6-verwijderen">Een map verwijderen</h4>
 
 <p>Klik op <b>🗑️ Verwijder</b> in de juiste rij. Er volgt een bevestigings-dialoog: <em>"Weet je zeker dat je map &lt;naam&gt; definitief wilt verwijderen? Dit is onomkeerbaar."</em> Bevestig je, dan worden alle bestanden in die map (incl. eventuele submappen) van de server gewist en verdwijnt de rij uit de tabel.</p>
 
