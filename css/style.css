@@ -4061,24 +4061,13 @@ col.live-col-rondes  { width: 40px; }
 .baan-modal-veld > select:focus { border-color: var(--oranje); outline: none; }
 .baan-modal-veld > small { color: #888; font-size: 11px; }
 
-/* In-app confirm-dialoog (appConfirm helper in app.js) */
-.app-confirm-box       { width: min(480px, 96vw); }
-.app-confirm-body {
-    padding: 1rem 1.1rem;
-    overflow-y: auto;
-    max-height: 60vh;
-    font-size: .9rem;
-    color: #333;
-    line-height: 1.45;
-}
-.app-confirm-body p          { margin: 0 0 .6rem; }
-.app-confirm-body p:last-child { margin-bottom: 0; }
-.app-confirm-body ul {
-    margin: .4rem 0 .6rem 1.2rem;
-    padding: 0;
-}
-.app-confirm-body li         { margin: 2px 0; }
-.app-confirm-body .lijst-rest {
+/* Modal-body extras voor lijst-content (gebruikt door toonBevestigDialog
+   met bodyIsHtml=true, bv. bij export-rijders-zonder-transponder) */
+.modal-body p           { margin: 0 0 .6rem; }
+.modal-body p:last-child { margin-bottom: 0; }
+.modal-body ul          { margin: .4rem 0 .6rem 1.2rem; padding: 0; }
+.modal-body li          { margin: 2px 0; }
+.modal-body .lijst-rest {
     color: #666;
     font-style: italic;
     margin-top: .3rem;

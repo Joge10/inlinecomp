@@ -2377,16 +2377,17 @@ async function exporteerWedstrijdCsv(compId, compNaam) {
         const aantalTxt = `${zonderTp.size} aanwezige rijder${zonderTp.size === 1 ? '' : 's'} ` +
                           `${zonderTp.size === 1 ? 'heeft' : 'hebben'} geen transponder toegewezen`;
         const body = `
-            <p><strong>⚠ ${escHtml(aantalTxt)}:</strong></p>
+            <p><strong>${escHtml(aantalTxt)}:</strong></p>
             <ul>${itemsHtml}</ul>${restHtml}
             <p>Toch exporteren? Voor deze rijders blijft Transponder1/Transponder2 leeg in de CSV.</p>`;
 
-        const ok = await appConfirm({
-            titel:       'Rijders zonder transponder',
+        const ok = await toonBevestigDialog(
             body,
-            okTekst:     'Toch exporteren',
-            cancelTekst: 'Annuleren',
-        });
+            'Rijders zonder transponder',
+            'Toch exporteren',
+            'Annuleren',
+            { bodyIsHtml: true }
+        );
         if (!ok) return;
     }
 
