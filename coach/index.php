@@ -70,12 +70,30 @@ if ($action === 'competitions') {
     header('Content-Type: application/json; charset=utf-8');
     header('Cache-Control: public, max-age=60');
     try {
+        // Baan-velden gebruiken cross-org-fallback: als deze org's baan-rij
+        // geen logo of geen vereniging-naam heeft, pakken we die uit een
+        // andere org-rij met dezelfde baan-naam (zelfde fysieke locatie).
+        // Identiek aan /public.
         $stmt = $pdo->prepare("
             SELECT c.id, c.name, c.starts, c.ends,
-                   c.organisatie_id, o.logo_path AS org_logo, o.naam AS org_naam
+                   c.organisatie_id, o.logo_path AS org_logo, o.naam AS org_naam,
+                   c.baan_id,
+                   COALESCE(b.logo_path, (
+                       SELECT b2.logo_path FROM banen b2
+                       WHERE b2.naam = b.naam AND b2.id != b.id
+                         AND b2.logo_path IS NOT NULL AND b2.logo_path != ''
+                       LIMIT 1
+                   )) AS baan_logo,
+                   COALESCE(b.vereniging_naam, (
+                       SELECT b2.vereniging_naam FROM banen b2
+                       WHERE b2.naam = b.naam AND b2.id != b.id
+                         AND b2.vereniging_naam IS NOT NULL AND b2.vereniging_naam != ''
+                       LIMIT 1
+                   )) AS baan_vereniging
             FROM competitions c
             JOIN competition_tijdschema ct ON ct.competition_id = c.id
             LEFT JOIN organisaties o ON o.id = c.organisatie_id
+            LEFT JOIN banen b ON b.id = c.baan_id
             ORDER BY c.starts DESC
         ");
         $stmt->execute();
@@ -581,13 +599,18 @@ if ($action === 'coach_info') {
         // Ingeschreven afstanden per rijder (via entries.distance_combination_id).
         // Een afstand is ontbrekend als hij in "ingeschreven" zit maar nog niet
         // in $personen[...]['heats'] → dat toont de frontend als "nog niet ingedeeld".
+        // ORDER BY dc.name zodat de DC-volgorde voor elke rijder identiek is —
+        // de coach kan dan in één oogopslag zien dat badge-1 altijd dezelfde
+        // categorie betreft, badge-2 dezelfde, etc.
         $entStmt = $pdo->prepare("
             SELECT e.person_license,
-                   dc.id AS dc_id, dc.name AS dc_naam
+                   dc.id AS dc_id, dc.name AS dc_naam,
+                   e.status AS entry_status
             FROM entries e
             JOIN distance_combinations dc ON dc.id = e.distance_combination_id
             WHERE dc.competition_id = ?
               AND e.person_license IN ($ph)
+            ORDER BY dc.name
         ");
         $entStmt->execute(array_merge([$compId], $licenses));
         foreach ($entStmt->fetchAll(PDO::FETCH_ASSOC) as $e) {
@@ -770,21 +793,32 @@ body { font-family:'Segoe UI',Arial,sans-serif; color:var(--tekst);
 header {
     background: var(--blauw);
     color: var(--wit);
-    padding: 14px 16px;
-    display: flex; align-items: center; justify-content: center; position: relative;
+    padding: 12px 12px 10px;
+    display: flex; flex-direction: column;
 }
-header .hdr-center { text-align: center; }
-header h1 { font-size: 1.5rem; font-weight: 700; }
-header .sub { font-size: .95rem; opacity: .8; margin-top: 2px; }
-.hdr-btns {
-    position: absolute; right: 12px; top: 50%; transform: translateY(-50%);
-    display: flex; gap: 6px;
+/* Bovenste rij: 📢 links, titel midden, i + ? rechts. Onderste rij:
+   subtitel breeduit gecentreerd. */
+.hdr-row-top    { display: flex; align-items: center; gap: 8px; }
+.hdr-btns       { display: flex; gap: 6px; flex-shrink: 0; align-items: center; }
+.hdr-btns-right { justify-content: flex-end; }
+.hdr-spacer     { width: 36px; visibility: hidden; flex-shrink: 0; }
+header .hdr-center { flex: 1; min-width: 0; text-align: center; }
+header h1 { font-size: 1.5rem; font-weight: 700; line-height: 1.1; }
+header .sub { font-size: .95rem; opacity: .8; margin-top: 6px; text-align: center; }
+@media (max-width: 480px) {
+    header { padding: 10px 8px 8px; }
+    .hdr-spacer { width: 30px; }
+    header h1  { font-size: 1.2rem; }
+    header .sub { font-size: .78rem; margin-top: 4px; }
+    .btn-help { width: 30px; height: 30px; font-size: 1rem; }
+    .btn-meldingen { font-size: .95rem; }
 }
 .btn-help {
     background: rgba(255,255,255,.2); border: 2px solid rgba(255,255,255,.5);
     color: #fff; width: 36px; height: 36px; border-radius: 50%;
     font-size: 1.2rem; font-weight: 700; cursor: pointer; line-height: 1;
     display: flex; align-items: center; justify-content: center; font-style: italic;
+    flex-shrink: 0;          /* nooit ovaal worden in flex-container */
 }
 .btn-help:active { background: rgba(255,255,255,.35); }
 .btn-meldingen   { font-style: normal; font-size: 1.1rem; position: relative; }
@@ -999,8 +1033,12 @@ select.sel {
 .sanc-persoon { background:var(--wit); border:1px solid #dde3ea;
                 border-radius:6px; padding:10px 12px; margin-bottom:8px; }
 .sanc-persoon-kop { display:flex; align-items:center; gap:8px;
-                    font-weight:600; margin-bottom:6px; }
+                    font-weight:600; margin-bottom:6px; flex-wrap:wrap; }
 .sanc-persoon-cat { font-size:.8rem; color:#888; margin:-4px 0 6px 34px; }
+.sanc-samenvat { display:flex; flex-direction:column; gap:3px;
+                 margin:0 0 8px 0; }
+.sanc-samenvat-rij { display:flex; align-items:center; gap:8px; font-size:.85rem; }
+.sanc-samenvat-naam { flex:1; color:#444; }
 .sanc-persoon-snr { color:var(--blauw); font-weight:700; }
 .status-badge { font-size:.75rem; padding:2px 8px; border-radius:10px; font-weight:600; }
 .status-0 { background:#fff3e0; color:#e65100; }  /* Niet bevestigd */
@@ -1018,7 +1056,8 @@ select.sel {
 /* Heats-tab: DC/afstand-blokje per rijder met rondes eronder */
 .heat-toon-dc { margin:6px 0; padding:6px 8px; background:#f7fbff;
                 border-left:3px solid var(--middenblauw); border-radius:4px; }
-.heat-toon-dc-kop { font-size:.85rem; font-weight:600; color:var(--blauw); margin-bottom:3px; }
+.heat-toon-dc-kop { font-size:.85rem; font-weight:600; color:var(--blauw); margin-bottom:3px;
+                    display:flex; align-items:center; gap:6px; }
 .heat-toon-rij { display:flex; align-items:center; gap:6px;
                  font-size:.85rem; padding:2px 0; flex-wrap:wrap; }
 .heat-toon-wachten { background:#fff8e1; border-left-color:#f9a825; }
@@ -1056,8 +1095,30 @@ table.uitsl-tabel tr.mijn td { background:var(--accent); font-weight:600; }
 .overlay { position:fixed; inset:0; background:rgba(0,0,0,.4); z-index:1000;
            display:flex; align-items:flex-start; justify-content:center;
            padding:20px; overflow-y:auto; }
-.overlay-box { background:var(--wit); border-radius:8px; max-width:700px;
-               width:100%; padding:18px; position:relative; }
+.overlay-box { background:var(--wit); border-radius:8px; max-width:500px;
+               width:100%; position:relative; overflow:hidden; }
+/* Heat-overlay: blauwe kop met titel + ronde rode close-knop rechtsboven —
+   zelfde stijl als de publieke app voor visuele consistentie. */
+.heat-card-titel {
+    background: var(--blauw); color: var(--wit);
+    padding: 10px 50px 10px 14px; font-weight: 700; font-size: .95rem;
+    display: flex; align-items: center; gap: 8px;
+    position: relative;
+    border-radius: 8px 8px 0 0;
+}
+.overlay-sluit {
+    position: absolute; top: 8px; right: 8px;
+    border: none; background: #d22; color: #fff;
+    width: 28px; height: 28px; border-radius: 50%;
+    font-size: 1.1rem; font-weight: 700; cursor: pointer; line-height: 1;
+    display: flex; align-items: center; justify-content: center;
+    box-shadow: 0 1px 3px rgba(0,0,0,.25);
+    transition: background .12s, transform .08s;
+}
+.overlay-sluit:hover  { background: #b71c1c; }
+.overlay-sluit:active { transform: scale(.92); }
+.overlay-body { padding: 14px; }
+/* Oude .sluit-stijl voor andere overlays (info/help/leeg-melding fallback) */
 .overlay .sluit { position:absolute; top:8px; right:12px; cursor:pointer;
                   font-size:1.4rem; color:#666; }
 .overlay .sluit:hover { color:#000; }
@@ -1104,15 +1165,20 @@ body.heeft-footer .auto-refresh-stempel { bottom:84px; }
 <div id="ptr">↓ Trek verder om te vernieuwen</div>
 
 <header>
-    <div class="hdr-center">
-        <h1>InlineComp – Coach</h1>
-        <div class="sub">Volg jouw rijders: programma, sancties en uitslagen</div>
+    <div class="hdr-row-top">
+        <div class="hdr-btns hdr-btns-left">
+            <button class="btn-help btn-meldingen" id="btn-meldingen-overzicht" title="Mededelingen voor deze wedstrijd">📢<span id="meldingen-badge" class="meld-badge" style="display:none">0</span></button>
+            <span class="hdr-spacer" aria-hidden="true"></span>
+        </div>
+        <div class="hdr-center">
+            <h1>InlineComp – Coach</h1>
+        </div>
+        <div class="hdr-btns hdr-btns-right">
+            <button class="btn-help" onclick="toonInfo()" title="Over InlineComp">i</button>
+            <button class="btn-help" onclick="toonHelp()" title="Hoe werkt het?">?</button>
+        </div>
     </div>
-    <div class="hdr-btns">
-        <button class="btn-help btn-meldingen" id="btn-meldingen-overzicht" title="Mededelingen voor deze wedstrijd">📢<span id="meldingen-badge" class="meld-badge" style="display:none">0</span></button>
-        <button class="btn-help" onclick="toonInfo()" title="Over InlineComp">i</button>
-        <button class="btn-help" onclick="toonHelp()" title="Hoe werkt het?">?</button>
-    </div>
+    <div class="sub">Volg jouw rijders: programma, sancties en uitslagen</div>
 </header>
 
 <div id="org-footer" class="org-footer">
@@ -1120,6 +1186,7 @@ body.heeft-footer .auto-refresh-stempel { bottom:84px; }
         <span id="footer-org-logo"></span>
         <span id="footer-org-naam" class="org-footer-naam"></span>
         <div id="footer-sponsors" class="org-footer-sponsors"></div>
+        <span id="footer-baan-logo"></span>
     </div>
 </div>
 
@@ -1520,10 +1587,12 @@ function renderHeats() {
         for (const e of entries) {
             const dcRitten = rittenPerDc[e.dc_id] || [];
             const afstanden = e.afstanden || [];
+            const dcStatus  = parseInt(e.entry_status ?? 1);
             if (!afstanden.length) {
                 // Fallback: DC zonder distances — toon 1 wachtrij-blok
                 afstandBlokken.push({
-                    dc_naam: e.dc_naam, distance_id: null, distance_naam: null, ritten: [],
+                    dc_id: e.dc_id, dc_naam: e.dc_naam, dc_status: dcStatus,
+                    distance_id: null, distance_naam: null, ritten: [],
                 });
                 continue;
             }
@@ -1533,6 +1602,7 @@ function renderHeats() {
                 afstandBlokken.push({
                     dc_id: e.dc_id,
                     dc_naam: e.dc_naam,
+                    dc_status: dcStatus,
                     distance_id: a.distance_id,
                     distance_naam: a.distance_naam,
                     ritten,
@@ -1624,11 +1694,11 @@ function renderHeats() {
                 const definitief = rittenVanRonde.some(r => r.definitief);
                 if (definitief) {
                     return `<div class="heat-toon-rij heat-toon-niet-geplaatst">${badge}
-                        <span>Rijder niet geplaatst in deze ronde</span>
+                        <span>niet geplaatst</span>
                     </div>`;
                 }
                 return `<div class="heat-toon-rij heat-toon-wacht-rij">${badge}
-                    <span>⏳ Startlijst nog niet definitief</span>
+                    <span>⏳ niet definitief</span>
                 </div>`;
             }).join('');
             return `<div class="heat-toon-dc">
@@ -1637,15 +1707,33 @@ function renderHeats() {
             </div>`;
         }).join('');
 
-        const st = parseInt(info.entry_status);
-        const stLabel = STATUS_LABEL[st] ?? '?';
+        // Samenvatting per DC: één rij per ingeschreven DC. De afmelding/
+        // bevestiging gebeurt op DC-niveau, dus we tonen ook 1 badge per DC.
+        // Heeft een DC meerdere afstanden (bv. "200m · 500m" combi) dan
+        // staan die in dezelfde rij gescheiden door · zodat de coach ziet
+        // wat erbij hoort, zonder dat de badge dubbel lijkt.
+        const samenvatRijen = entries.map(e => {
+            const st      = parseInt(e.entry_status ?? 1);
+            const stLabel = STATUS_LABEL[st] ?? '?';
+            const stIco   = STATUS_ICON[st] ?? '';
+            const afstanden = e.afstanden || [];
+            const naam = afstanden.length
+                ? afstanden.map(a => a.distance_naam || '(afstand)').join(' · ')
+                : (e.dc_naam || '(categorie)');
+            return `
+                <div class="sanc-samenvat-rij">
+                    <span class="sanc-samenvat-naam">${esc(naam)}</span>
+                    <span class="status-badge status-${st}">${stIco} ${esc(stLabel)}</span>
+                </div>`;
+        }).join('');
+
         return `<div class="sanc-persoon">
             <div class="sanc-persoon-kop">
                 <span class="sanc-persoon-snr">${esc(p.snr)}</span>
                 <span style="flex:1">${esc(p.full_name)}</span>
-                <span class="status-badge status-${st}">${STATUS_ICON[st] ?? ''} ${esc(stLabel)}</span>
+                <span style="color:#888;font-size:.85rem">${esc(p.category || '')}</span>
             </div>
-            <div class="sanc-persoon-cat">${esc(p.category || '')}</div>
+            ${samenvatRijen ? `<div class="sanc-samenvat">${samenvatRijen}</div>` : ''}
             ${dcBlokken}
         </div>`;
     }).join('');
@@ -1811,41 +1899,45 @@ async function toonRitDetail(el) {
         const heat = data.heat;
         if (!heat || !heat.rijders?.length) {
             overlay.querySelector('.overlay-box').innerHTML =
-                `<span class="sluit" onclick="this.closest('.overlay').remove()">×</span>
-                 <h3>${esc(ritNaam)}</h3>
-                 <div class="leeg-melding">Startlijst is nog niet beschikbaar.</div>`;
+                `<div class="heat-card-titel">
+                    <button class="overlay-sluit" onclick="this.closest('.overlay').remove()" title="Sluiten">&times;</button>
+                    ${esc(ritNaam)}
+                 </div>
+                 <div class="leeg-melding" style="padding:24px;text-align:center;color:#888">Startlijst is nog niet beschikbaar.</div>`;
             return;
         }
         const mijnSnrs = new Set(coachLijst.map(p => parseInt(p.snr)));
-        const rondeType = heat.ronde_type;
         const heeftRnd = heat.rijders.some(r => r.rondes != null);
         const heeftPK  = heat.rijders.some(r => r.pk_punten != null);
         const rijen = heat.rijders.map(r => {
             const isMij = mijnSnrs.has(parseInt(r.snr));
-            const sanctie = r.sanctie ? ` <small>(${esc(r.sanctie)})</small>` : '';
+            const sanctie = r.sanctie ? ` <span style="color:#c00;font-weight:600;font-size:.85rem">${esc(r.sanctie)}</span>` : '';
             return `<tr class="${isMij ? 'mijn' : ''}">
                 <td class="col-pos">${esc(r.startpositie)}</td>
                 <td class="col-snr">${esc(r.snr)}</td>
-                <td>${esc(r.full_name)}${sanctie}<br><small style="color:#666">${esc(r.category || '')} · ${esc(r.club_full || '')}</small></td>
-                ${heeftRnd ? `<td>${r.rondes ?? ''}</td>` : ''}
-                ${heeftPK  ? `<td>${r.pk_punten != null ? parseFloat(r.pk_punten) : ''}</td>` : ''}
-                <td>${r.tijd_ms != null ? msTijd(r.tijd_ms) : ''}</td>
+                <td>${esc(r.full_name)}${sanctie}</td>
+                ${heeftRnd ? `<td class="col-rnd">${r.rondes ?? ''}</td>` : ''}
+                ${heeftPK  ? `<td class="col-pk">${r.pk_punten != null ? parseFloat(r.pk_punten) : ''}</td>` : ''}
+                <td class="col-tijd">${r.tijd_ms != null ? msTijd(r.tijd_ms) : ''}</td>
                 <td class="col-fin">${esc(r.finishpositie ?? '')}</td>
             </tr>`;
         }).join('');
         const hdr = `<tr><th class="col-pos">#</th><th class="col-snr">Snr</th><th>Naam</th>
-                    ${heeftRnd ? '<th>Rnd</th>' : ''}
-                    ${heeftPK  ? '<th>Pnt</th>' : ''}
-                    <th>Tijd</th><th class="col-fin">Fin</th></tr>`;
+                    ${heeftRnd ? '<th class="col-rnd">Rnd</th>' : ''}
+                    ${heeftPK  ? '<th class="col-pk">Pnt</th>' : ''}
+                    <th class="col-tijd">Tijd</th><th class="col-fin">Fin</th></tr>`;
         overlay.querySelector('.overlay-box').innerHTML =
-            `<span class="sluit" onclick="this.closest('.overlay').remove()">×</span>
-             <h3 style="color:var(--blauw)">${esc(ritNaam)}</h3>
-             <div style="color:#666;font-size:.9rem;margin-bottom:4px">${esc(dcNaam || '')}</div>
-             <table class="heat-tabel">${hdr}${rijen}</table>`;
+            `<div class="heat-card-titel">
+                <button class="overlay-sluit" onclick="this.closest('.overlay').remove()" title="Sluiten">&times;</button>
+                ${esc(ritNaam)}
+             </div>
+             <div class="overlay-body">
+                <table class="heat-tabel">${hdr}${rijen}</table>
+             </div>`;
     } catch (e) {
         overlay.querySelector('.overlay-box').innerHTML =
-            `<span class="sluit" onclick="this.closest('.overlay').remove()">×</span>
-             <div class="leeg-melding">Fout bij laden: ${esc(e.message)}</div>`;
+            `<button class="overlay-sluit" onclick="this.closest('.overlay').remove()" title="Sluiten">&times;</button>
+             <div class="leeg-melding" style="padding:24px">Fout bij laden: ${esc(e.message)}</div>`;
     }
 }
 
@@ -1855,6 +1947,7 @@ function updateHeaderLogos(opt) {
     const logoEl  = $('footer-org-logo');
     const naamEl  = $('footer-org-naam');
     const sponsEl = $('footer-sponsors');
+    const baanEl  = $('footer-baan-logo');
     if (!opt?.value) {
         footer.style.display = 'none';
         document.body.classList.remove('heeft-footer');
@@ -1862,9 +1955,11 @@ function updateHeaderLogos(opt) {
     }
     const orgLogo = opt.dataset.orgLogo || '';
     const orgNaam = opt.dataset.orgNaam || '';
+    const baanLogo = opt.dataset.baanLogo || '';
+    const baanVer  = opt.dataset.baanVereniging || '';
     let sponsors = [];
     try { sponsors = JSON.parse(opt.dataset.sponsors || '[]'); } catch { sponsors = []; }
-    if (!orgLogo && !sponsors.length) {
+    if (!orgLogo && !sponsors.length && !baanLogo && !baanVer) {
         footer.style.display = 'none';
         document.body.classList.remove('heeft-footer');
         return;
@@ -1872,6 +1967,16 @@ function updateHeaderLogos(opt) {
     const cb = `?v=${Math.floor(Date.now() / 3600000)}`;
     logoEl.innerHTML = orgLogo ? `<img class="org-footer-logo" src="../${esc(orgLogo)}${cb}" alt="">` : '';
     naamEl.textContent = orgLogo ? '' : orgNaam;
+
+    // Gastheer-vereniging-logo (rechts in footer). Heeft de baan geen logo
+    // maar wel een vereniging-naam? Dan tonen we die als compacte tekst.
+    if (baanLogo) {
+        baanEl.innerHTML = `<img class="org-footer-logo" src="../${esc(baanLogo)}${cb}" alt="">`;
+    } else if (baanVer) {
+        baanEl.innerHTML = `<span class="org-footer-naam">${esc(baanVer)}</span>`;
+    } else {
+        baanEl.innerHTML = '';
+    }
     if (sponsors.length) {
         let imgs = '';
         for (const s of sponsors) {
@@ -2028,9 +2133,11 @@ function filterComps() {
         const o = document.createElement('option');
         o.value = c.id;
         o.textContent = `${c.name}${dtStr ? ' — ' + dtStr : ''}`;
-        o.dataset.orgLogo  = c.org_logo ?? '';
-        o.dataset.orgNaam  = c.org_naam ?? '';
-        o.dataset.sponsors = JSON.stringify(c.sponsors ?? []);
+        o.dataset.orgLogo        = c.org_logo ?? '';
+        o.dataset.orgNaam        = c.org_naam ?? '';
+        o.dataset.baanLogo       = c.baan_logo ?? '';
+        o.dataset.baanVereniging = c.baan_vereniging ?? '';
+        o.dataset.sponsors       = JSON.stringify(c.sponsors ?? []);
         selComp.appendChild(o);
     }
 
