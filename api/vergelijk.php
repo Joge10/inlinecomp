@@ -501,10 +501,13 @@ try {
     // Org-transponders laden (voor opzoek in import-module)
     $orgTransponders = [];
     if ($organisatie && !empty($organisatie['id'])) {
+        // Geblokkeerde transponders uitfilteren — die zitten fysiek nog wel in
+        // inventaris (kapot/zoek) maar mogen niet meer worden toegewezen.
+        // Beheerder ziet ze nog in de Beheer-tabel; overal anders niet.
         $otStmt = $pdo->prepare("
             SELECT intern_nummer, transponder_code, toegewezen_snr, toegewezen_naam, person_license, categorie, betaald
             FROM organisatie_transponders
-            WHERE organisatie_id = ?
+            WHERE organisatie_id = ? AND COALESCE(geblokkeerd, 0) = 0
             ORDER BY CAST(intern_nummer AS UNSIGNED), intern_nummer
         ");
         $otStmt->execute([$organisatie['id']]);

@@ -642,6 +642,13 @@ header .badge {
 }
 .btn-icon:hover:not(:disabled) { background: #dde5ef; }
 .btn-icon:disabled { opacity: .35; cursor: not-allowed; }
+/* Blokkeer-knop: 🔓 = niet geblokkeerd, 🔒 = geblokkeerd. Rode achtergrond
+   maakt de geblokkeerde staat extra opvallend tegen de grijze rij. */
+.tp-blokkeer.tp-blokkeer-actief { background: #ffebee; border-color: #c62828; }
+.tp-blokkeer.tp-blokkeer-actief:hover:not(:disabled) { background: #ffcdd2; }
+/* Geblokkeerde rij: lichtgrijs + cursief zodat hij visueel "opzij" staat */
+.org-tp-rij.tp-rij-geblokkeerd td { background: #f4f4f4; color: #999; font-style: italic; }
+.org-tp-rij.tp-rij-geblokkeerd .tp-inp { background: #f4f4f4; color: #999; }
 
 /* Sort/filter-controls in de transponder-beheer-balk */
 .tp-view-ctrls { display:inline-flex; gap:12px; align-items:center; margin-left:auto; font-size:.85rem; }
@@ -3167,6 +3174,12 @@ th.rk-totaal, td.rk-totaal { width:55px; font-weight:700; color:var(--blauw); ba
     text-align: center;
 }
 .gb-btn-leeg { display: inline-block; width: 32px; }
+/* Toggle-knop: 🔓 = account actief, 🔒 (rode achtergrond) = gedeactiveerd —
+   zelfde patroon als de blokkeer-knop bij transponders. */
+.gb-btn-toggle.gb-btn-toggle-actief {
+    background: #ffebee; border-color: #c62828;
+}
+.gb-btn-toggle.gb-btn-toggle-actief:hover { background: #ffcdd2; }
 
 .gb-rol-badge     { display: inline-block; border-radius: 10px; padding: 2px 9px;
                     font-size: .75rem; font-weight: 700; }

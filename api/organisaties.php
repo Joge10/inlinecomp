@@ -270,8 +270,9 @@ try {
             $insTp = $pdo->prepare("
                 INSERT INTO organisatie_transponders
                     (organisatie_id, intern_nummer, transponder_code, eigendom,
-                     toegewezen_snr, toegewezen_naam, person_license, categorie, betaald, betaald_op)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                     toegewezen_snr, toegewezen_naam, person_license, categorie,
+                     betaald, betaald_op, geblokkeerd)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             ");
             foreach ($transponders as $t) {
                 $nr   = trim($t['intern_nummer'] ?? '');
@@ -281,6 +282,7 @@ try {
                 // Niet-uitgegeven transponders kunnen niet betaald zijn — forceer 0.
                 $betaald   = ($snr && ((int)($t['betaald'] ?? 0)) === 1) ? 1 : 0;
                 $betaaldOp = $betaald ? ((!empty($t['betaald_op']) && $t['betaald_op'] !== '—') ? $t['betaald_op'] : date('Y-m-d')) : null;
+                $geblokk   = ((int)($t['geblokkeerd'] ?? 0)) === 1 ? 1 : 0;
                 $insTp->execute([
                     $orgId, $nr, $code,
                     trim($t['eigendom'] ?? '') ?: null,
@@ -290,6 +292,7 @@ try {
                     trim($t['categorie'] ?? '') ?: null,
                     $betaald,
                     $betaaldOp,
+                    $geblokk,
                 ]);
             }
             // Cleanup: transponders die niet meer zijn toegewezen → verwijder uit wedstrijden

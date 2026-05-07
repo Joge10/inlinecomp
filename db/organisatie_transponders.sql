@@ -12,6 +12,10 @@ CREATE TABLE IF NOT EXISTS `organisatie_transponders` (
     `categorie`        VARCHAR(20)  DEFAULT NULL,
     `betaald`          TINYINT(1)   NOT NULL DEFAULT 0,
     `betaald_op`       DATE         DEFAULT NULL,
+    -- Geblokkeerd = transponder zit fysiek nog in inventaris (kapot/zoek/etc.)
+    -- maar mag niet meer worden toegewezen aan rijders. Blijft zichtbaar in
+    -- de Beheer-tabel voor administratie; wordt overal anders uitgefilterd.
+    `geblokkeerd`      TINYINT(1)   NOT NULL DEFAULT 0,
     PRIMARY KEY (`id`),
     UNIQUE KEY `uq_ot_nr` (`organisatie_id`, `intern_nummer`),
     KEY `idx_ot_license` (`person_license`),
@@ -32,3 +36,6 @@ CREATE TABLE IF NOT EXISTS `organisatie_transponders` (
 -- SET ot.person_license = p.license_key
 -- WHERE ot.person_license IS NULL
 --   AND ot.toegewezen_naam IS NOT NULL;
+--
+-- ALTER TABLE organisatie_transponders
+--     ADD COLUMN geblokkeerd TINYINT(1) NOT NULL DEFAULT 0 AFTER betaald_op;

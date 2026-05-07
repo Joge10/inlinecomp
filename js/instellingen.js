@@ -930,7 +930,9 @@ function _tpToonPagina() {
         const idx = origIdx; // index in _tpAlleData (ongeacht sort/filter)
         const tr = document.createElement('tr');
         tr.className = 'org-tp-rij';
+        if (parseInt(tp.geblokkeerd) === 1) tr.classList.add('tp-rij-geblokkeerd');
         tr.dataset.idx = idx;
+        const isGeblokkeerd = parseInt(tp.geblokkeerd) === 1;
         tr.innerHTML =
             `<td><input type="text" class="inp tp-inp tp-nr" value="${escHtml(tp.intern_nummer ?? '')}" placeholder="#"></td>` +
             `<td><input type="text" class="inp tp-inp tp-code" value="${escHtml(tp.transponder_code ?? '')}" placeholder="KS-..."></td>` +
@@ -944,6 +946,8 @@ function _tpToonPagina() {
             `<td class="tp-td-betaald"><input type="checkbox" class="tp-betaald" ${tp.toegewezen_snr && parseInt(tp.betaald) === 1 ? 'checked' : ''} ${tp.toegewezen_snr ? '' : 'disabled'} title="${tp.toegewezen_snr ? '' : 'Eerst toewijzen via Import'}"></td>` +
             `<td class="tp-ro tp-td-datum">${tp.toegewezen_snr && parseInt(tp.betaald) === 1 && tp.betaald_op ? tp.betaald_op : '—'}<input type="hidden" class="tp-betaald-op" value="${escHtml(tp.toegewezen_snr && parseInt(tp.betaald) === 1 && tp.betaald_op ? tp.betaald_op : '')}"></td>` +
             `<td class="tp-td-acties">` +
+                `<input type="hidden" class="tp-geblokkeerd" value="${isGeblokkeerd ? 1 : 0}">` +
+                `<button class="btn-icon tp-blokkeer ${isGeblokkeerd ? 'tp-blokkeer-actief' : ''}" title="${isGeblokkeerd ? 'Geblokkeerd — klik om weer beschikbaar te maken' : 'Blokkeren — transponder blijft in de lijst maar kan niet meer worden toegewezen (kapot/zoek)'}">${isGeblokkeerd ? '&#128274;' : '&#128275;'}</button>` +
                 `<button class="btn-icon tp-vrijgeven" ${(tp.toegewezen_snr || tp.toegewezen_naam) ? '' : 'disabled'} title="Toewijzing vrijgeven (rijder heeft transponder ingeleverd) — transponder blijft in de lijst">&#8630;</button>` +
                 `<button class="btn-del tp-del" title="Verwijderen uit lijst (transponder is kwijt/stuk)">&#128465;</button>` +
             `</td>`;
@@ -967,6 +971,17 @@ function _tpToonPagina() {
         });
         tr.querySelector('.tp-del').addEventListener('click', () => {
             _tpAlleData.splice(parseInt(tr.dataset.idx), 1);
+            if (typeof markTpDirty === 'function') markTpDirty();
+            _tpToonPagina();
+        });
+        // Blokkeer/deblokkeer toggle. Geblokkeerde transponders blijven in de
+        // tabel staan voor administratie, maar worden in vergelijk.php
+        // uitgefilterd zodat ze niet meer in dropdowns voor toewijzing
+        // verschijnen. Geen confirm — toggle is reversibel.
+        tr.querySelector('.tp-blokkeer')?.addEventListener('click', () => {
+            const idx = parseInt(tr.dataset.idx);
+            if (isNaN(idx) || !_tpAlleData[idx]) return;
+            _tpAlleData[idx].geblokkeerd = parseInt(_tpAlleData[idx].geblokkeerd) === 1 ? 0 : 1;
             if (typeof markTpDirty === 'function') markTpDirty();
             _tpToonPagina();
         });
@@ -1023,6 +1038,7 @@ function _tpSyncRij(tr) {
         categorie:        tr.querySelector('.tp-cat')?.value.trim() || null,
         betaald:          betaald,
         betaald_op:       betaald ? (tr.querySelector('.tp-betaald-op')?.value || null) : null,
+        geblokkeerd:      parseInt(tr.querySelector('.tp-geblokkeerd')?.value || '0') === 1 ? 1 : 0,
     };
 }
 
@@ -1148,6 +1164,7 @@ function voegTransponderRijToe(tp = null) {
         person_license:   tp?.person_license ?? null,
         categorie:        tp?.categorie ?? null,
         betaald:          tp?.betaald ? 1 : 0,
+        geblokkeerd:      tp?.geblokkeerd ? 1 : 0,
     });
     // Ga naar laatste pagina waar het nieuwe item staat
     _tpPagina = Math.floor((_tpAlleData.length - 1) / _TP_PER_PAGINA);
@@ -1171,6 +1188,7 @@ function verzamelTransponders() {
             categorie:        t.categorie || null,
             betaald:          t.betaald ? 1 : 0,
             betaald_op:       t.betaald_op || null,
+            geblokkeerd:      t.geblokkeerd ? 1 : 0,
         }));
 }
 

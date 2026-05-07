@@ -193,9 +193,9 @@ function renderGebruikersTabel() {
                     ? `<button class="btn-secondary gb-btn-ww" data-id="${u.id}" title="Wachtwoord wijzigen">&#128273;</button>`
                     : `<span class="gb-btn-leeg"></span>`}
                 ${magDel && !isOwner && actief
-                    ? `<button class="btn-secondary gb-btn-toggle" data-id="${u.id}" title="Deactiveren">&#9679;</button>`
+                    ? `<button class="btn-secondary gb-btn-toggle" data-id="${u.id}" title="Account is actief — klik om te deactiveren">&#128275;</button>`
                     : magDel && !actief
-                        ? `<button class="btn-secondary gb-btn-toggle" data-id="${u.id}" title="Activeren" style="color:green">&#9679;</button>`
+                        ? `<button class="btn-secondary gb-btn-toggle gb-btn-toggle-actief" data-id="${u.id}" title="Account is gedeactiveerd — klik om te activeren">&#128274;</button>`
                         : `<span class="gb-btn-leeg"></span>`}
                 ${magDel
                     ? `<button class="btn-del gb-btn-del" data-id="${u.id}" title="Verwijderen">&#128465;</button>`
