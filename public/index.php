@@ -859,15 +859,30 @@ body {
 header {
     background: var(--blauw);
     color: var(--wit);
-    padding: 14px 16px;
-    display: flex; align-items: center; justify-content: center; position: relative;
+    padding: 12px 12px 10px;
+    display: flex; flex-direction: column;
 }
-header .hdr-center { text-align: center; }
-header h1 { font-size: 1.5rem; font-weight: 700; }
-header .sub { font-size: .95rem; opacity: .8; margin-top: 2px; }
-.hdr-btns {
-    position: absolute; right: 12px; top: 50%; transform: translateY(-50%);
-    display: flex; gap: 6px;
+/* Bovenste rij: 📢 links, titel midden, i + ? rechts. Onderste rij:
+   subtitel breeduit centreren. */
+.hdr-row-top { display: flex; align-items: center; gap: 8px; }
+.hdr-btns       { display: flex; gap: 6px; flex-shrink: 0; align-items: center; }
+.hdr-btns-right { justify-content: flex-end; }
+/* Spacer naast 📢 (links) is even breed als 1 knop, zodat de linkerzijde
+   even veel ruimte inneemt als de twee knoppen rechts. Hierdoor staat de
+   titel visueel exact in het midden. */
+.hdr-spacer     { width: 36px; visibility: hidden; flex-shrink: 0; }
+@media (max-width: 480px) {
+    .hdr-spacer { width: 30px; }
+}
+header .hdr-center { flex: 1; min-width: 0; text-align: center; }
+header h1   { font-size: 1.5rem; font-weight: 700; line-height: 1.1; }
+header .sub { font-size: .95rem; opacity: .8; margin-top: 6px; text-align: center; }
+@media (max-width: 480px) {
+    header { padding: 10px 8px 8px; }
+    header h1  { font-size: 1.2rem; }
+    header .sub { font-size: .78rem; margin-top: 4px; }
+    .btn-help { width: 30px; height: 30px; font-size: 1rem; }
+    .btn-meldingen { font-size: .95rem; }
 }
 
 /* ── Org footer ── */
@@ -907,6 +922,7 @@ header .sub { font-size: .95rem; opacity: .8; margin-top: 2px; }
     font-size: 1.2rem; font-weight: 700; cursor: pointer; line-height: 1;
     display: flex; align-items: center; justify-content: center;
     font-style: italic;
+    flex-shrink: 0;          /* nooit ovaal worden in flex-container */
 }
 .btn-help:active { background: rgba(255,255,255,.35); }
 .btn-meldingen   { font-style: normal; font-size: 1.1rem; position: relative; }
@@ -1169,6 +1185,24 @@ select:focus, input:focus { border-color: var(--middenblauw); outline: none; }
     flex-shrink:0;                   /* + knop blijft altijd volledig zichtbaar */
 }
 .kind-tab-plus:disabled { color:#bbb; cursor:not-allowed; }
+/* Compactere tabs bij 3+ kinderen — voornaam verbergen, kleinere padding,
+   zodat snr-badge én × altijd zichtbaar blijven op telefoon-breedte. */
+.kind-tabs[data-count="3"] .kind-tab,
+.kind-tabs[data-count="4"] .kind-tab {
+    padding:10px 6px; font-size:1.1rem; gap:4px;
+}
+.kind-tabs[data-count="3"] .kind-tab > span:nth-child(2),
+.kind-tabs[data-count="4"] .kind-tab > span:nth-child(2) {
+    display:none;                    /* voornaam wegklappen */
+}
+.kind-tabs[data-count="3"] .kind-tab .kind-tab-snr,
+.kind-tabs[data-count="4"] .kind-tab .kind-tab-snr {
+    font-size:.95rem; padding:1px 6px;
+}
+.kind-tabs[data-count="3"] .kind-tab-plus,
+.kind-tabs[data-count="4"] .kind-tab-plus {
+    padding:10px 10px;
+}
 .tab-btn {
     flex: 1; padding: 12px 4px; font-size: .85rem; font-weight: 600;
     text-align: center; border: none; background: none; cursor: pointer;
@@ -1197,8 +1231,9 @@ select:focus, input:focus { border-color: var(--middenblauw); outline: none; }
 }
 .heat-card-titel {
     background: var(--blauw); color: var(--wit);
-    padding: 8px 12px; font-weight: 700; font-size: .95rem;
+    padding: 8px 44px 8px 12px; font-weight: 700; font-size: .95rem;
     display: flex; align-items: center; gap: 8px;
+    position: relative;            /* anker voor de absolute close-knop */
 }
 .heat-card-badge {
     font-size: .75rem; border-radius: 4px; padding: 1px 6px;
@@ -1288,6 +1323,17 @@ select:focus, input:focus { border-color: var(--middenblauw); outline: none; }
     .uitsl-selects { flex-direction: column; }
     .uitsl-tabel { font-size: .78rem; }
     .uitsl-tabel th, .uitsl-tabel td { padding: 4px 5px; }
+    /* Heat-tabel compacter op telefoon zodat ook puntenkoers (extra Rnd + Pnt
+       kolommen) binnen het scherm blijft staan. Bij sprints zonder die extra
+       kolommen valt het ruimer uit. */
+    .heat-card-tabel { font-size: .82rem; }
+    .heat-card-tabel th, .heat-card-tabel td { padding: 5px 4px; }
+    .heat-card-tabel .col-pos  { width: 22px; }
+    .heat-card-tabel .col-snr  { width: 32px; }
+    .heat-card-tabel .col-rnd  { width: 26px; }
+    .heat-card-tabel .col-pk   { width: 28px; }
+    .heat-card-tabel .col-fin  { width: 24px; }
+    .heat-card-tabel .col-tijd { font-size: .78rem; }
 }
 .heat-card-tabel .col-sanctie { color: #c00; font-weight: 600; font-size: .85rem; }
 .heat-card-mijn-result {
@@ -1360,9 +1406,16 @@ select:focus, input:focus { border-color: var(--middenblauw); outline: none; }
     max-height: 90vh; overflow-y: auto; box-shadow: 0 8px 32px rgba(0,0,0,.25);
 }
 .overlay-sluit {
-    float: right; border: none; background: none; font-size: 1.4rem;
-    cursor: pointer; color: #fff; padding: 4px 8px; line-height: 1;
+    position: absolute; top: 6px; right: 6px;
+    border: none; background: #d22; color: #fff;
+    width: 28px; height: 28px; border-radius: 50%;
+    font-size: 1.1rem; font-weight: 700; cursor: pointer; line-height: 1;
+    display: flex; align-items: center; justify-content: center;
+    box-shadow: 0 1px 3px rgba(0,0,0,.25);
+    transition: background .12s, transform .08s;
 }
+.overlay-sluit:hover  { background: #b71c1c; }
+.overlay-sluit:active { transform: scale(.92); }
 
 .melding { text-align: center; padding: 24px; color: #888; font-size: .95rem; }
 .melding-fout { color: #c00; }
@@ -1391,15 +1444,20 @@ select:focus, input:focus { border-color: var(--middenblauw); outline: none; }
 <div id="ptr">↓ Trek verder om te vernieuwen</div>
 
 <header>
-    <div class="hdr-center">
-        <h1>InlineComp</h1>
-        <div class="sub">Zoek je heats, starttijden en resultaten</div>
+    <div class="hdr-row-top">
+        <div class="hdr-btns hdr-btns-left">
+            <button class="btn-help btn-meldingen" id="btn-meldingen-overzicht" title="Mededelingen voor deze wedstrijd">📢<span id="meldingen-badge" class="meld-badge" style="display:none">0</span></button>
+            <span class="hdr-spacer" aria-hidden="true"></span>
+        </div>
+        <div class="hdr-center">
+            <h1>InlineComp</h1>
+        </div>
+        <div class="hdr-btns hdr-btns-right">
+            <button class="btn-help" onclick="toonInfo()" title="Over InlineComp">i</button>
+            <button class="btn-help" onclick="toonHelp()" title="Hoe werkt het?">?</button>
+        </div>
     </div>
-    <div class="hdr-btns">
-        <button class="btn-help btn-meldingen" id="btn-meldingen-overzicht" title="Mededelingen voor deze wedstrijd">📢<span id="meldingen-badge" class="meld-badge" style="display:none">0</span></button>
-        <button class="btn-help" onclick="toonInfo()" title="Over InlineComp">i</button>
-        <button class="btn-help" onclick="toonHelp()" title="Hoe werkt het?">?</button>
-    </div>
+    <div class="sub">Zoek je heats, starttijden en resultaten</div>
 </header>
 
 <div id="org-footer" class="org-footer">
@@ -1981,12 +2039,15 @@ function renderKinderen() {
             ${closeBtn}
         </button>`;
     }).join('');
+    // Bij 3+ kinderen wordt het tabblad krap op telefoon-breedte. CSS
+    // gebruikt data-count om dan compactere stijl toe te passen (voornaam
+    // weg, kleinere padding) — de × moet altijd zichtbaar blijven.
     const plusKnop = _kinderen.length < MAX_KINDEREN
-        ? `<button class="kind-tab-plus" id="kind-tab-plus" title="Voeg broertje/zusje toe">+ voeg toe</button>`
-        : `<button class="kind-tab-plus" disabled title="Maximum ${MAX_KINDEREN} rijders">+ voeg toe</button>`;
+        ? `<button class="kind-tab-plus" id="kind-tab-plus" title="Voeg broertje/zusje toe">+</button>`
+        : `<button class="kind-tab-plus" disabled title="Maximum ${MAX_KINDEREN} rijders">+</button>`;
 
     divResult.innerHTML = `
-        <div class="kind-tabs">${tabsHtml}${plusKnop}</div>
+        <div class="kind-tabs" data-count="${_kinderen.length}">${tabsHtml}${plusKnop}</div>
         <div id="kind-content"></div>`;
 
     // Click-handlers op kind-tabs
