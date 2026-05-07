@@ -1,7 +1,7 @@
 {
-  "name": "InlineComp – Mijn wedstrijd",
-  "short_name": "InlineComp",
-  "description": "Bekijk je heats, starttijden en resultaten voor inline skate wedstrijden",
+  "name": "InlineComp – Coach",
+  "short_name": "InlineComp C",
+  "description": "Volg jouw rijders: programma, sancties en uitslagen",
   "start_url": "./index.php",
   "scope": "./",
   "display": "standalone",

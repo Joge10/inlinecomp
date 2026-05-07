@@ -3,4 +3,8 @@
   <text x="96" y="125" font-family="Segoe UI, Arial, sans-serif" font-size="88"
         font-weight="700" fill="#ffffff" text-anchor="middle" letter-spacing="-3">IC</text>
   <rect x="36" y="145" width="120" height="16" rx="8" fill="#E8630A"/>
+  <!-- C-badge: oranje cirkel rechtsonder met witte rand + witte letter -->
+  <circle cx="158" cy="158" r="26" fill="#E8630A" stroke="#ffffff" stroke-width="4"/>
+  <text x="158" y="170" font-family="Segoe UI, Arial, sans-serif" font-size="32"
+        font-weight="700" fill="#ffffff" text-anchor="middle">C</text>
 </svg>

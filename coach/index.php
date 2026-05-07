@@ -777,8 +777,12 @@ if ($action === 'rit_detail') {
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <meta name="theme-color" content="#1F4E79">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <title>InlineComp – Coach</title>
 <link rel="icon" type="image/svg+xml" href="../favicon.svg">
+<link rel="manifest" href="manifest.json">
 <style>
 :root { --blauw:#1F4E79; --middenblauw:#2E75B6; --lichtblauw:#D6E4F0;
         --oranje:#E8630A; --wit:#fff; --tekst:#1a1a1a; --grijs:#f4f6f8;
@@ -1159,6 +1163,26 @@ table.heat-tabel tr.mijn td { background:var(--accent); font-weight:600; }
     border:1px solid #dde3ea; pointer-events:none;
 }
 body.heeft-footer .auto-refresh-stempel { bottom:84px; }
+
+/* ── PWA install banner (1-op-1 uit /public) ── */
+.pwa-banner {
+    background: linear-gradient(135deg, var(--blauw), var(--middenblauw));
+    color: var(--wit); padding: 10px 16px; display: flex; align-items: center;
+    gap: 10px; font-size: .85rem; border-radius: 10px; margin: 12px;
+    box-shadow: 0 2px 8px rgba(0,0,0,.15);
+}
+.pwa-banner-tekst { flex: 1; }
+.pwa-banner-tekst b { display: block; font-size: .95rem; }
+.pwa-banner .btn-install {
+    background: var(--oranje); color: #fff; border: none; border-radius: 8px;
+    padding: 8px 14px; font-weight: 700; font-size: .85rem; cursor: pointer;
+    white-space: nowrap;
+}
+.pwa-banner .btn-install:active { transform: scale(.96); }
+.pwa-banner .btn-sluit {
+    background: none; border: none; color: rgba(255,255,255,.6);
+    font-size: 1.2rem; cursor: pointer; padding: 0 4px; line-height: 1;
+}
 </style>
 </head>
 <body>
@@ -1180,6 +1204,15 @@ body.heeft-footer .auto-refresh-stempel { bottom:84px; }
     </div>
     <div class="sub">Volg jouw rijders: programma, sancties en uitslagen</div>
 </header>
+
+<div id="pwa-banner" class="pwa-banner" style="display:none">
+    <div class="pwa-banner-tekst">
+        <b>Installeer InlineComp Coach</b>
+        Voeg toe aan je startscherm voor snelle toegang
+    </div>
+    <button class="btn-install" id="pwa-install">Installeer</button>
+    <button class="btn-sluit" id="pwa-sluit" title="Sluiten">&times;</button>
+</div>
 
 <div id="org-footer" class="org-footer">
     <div class="org-footer-inner">
@@ -2635,6 +2668,39 @@ function toonMelding(m, compId) {
 })();
 
 laadCompetitions();
+
+// ── PWA: service worker + install prompt ─────────────────────────────────
+if ('serviceWorker' in navigator) {
+    navigator.serviceWorker.register('sw.js').catch(() => {});
+}
+
+let _deferredPrompt = null;
+window.addEventListener('beforeinstallprompt', e => {
+    e.preventDefault();
+    _deferredPrompt = e;
+    if (!localStorage.getItem('pwa-coach-dismissed')) {
+        document.getElementById('pwa-banner').style.display = '';
+    }
+});
+
+document.getElementById('pwa-install')?.addEventListener('click', async () => {
+    if (!_deferredPrompt) return;
+    _deferredPrompt.prompt();
+    const result = await _deferredPrompt.userChoice;
+    if (result.outcome === 'accepted') {
+        document.getElementById('pwa-banner').style.display = 'none';
+    }
+    _deferredPrompt = null;
+});
+
+document.getElementById('pwa-sluit')?.addEventListener('click', () => {
+    document.getElementById('pwa-banner').style.display = 'none';
+    localStorage.setItem('pwa-coach-dismissed', '1');
+});
+
+window.addEventListener('appinstalled', () => {
+    document.getElementById('pwa-banner').style.display = 'none';
+});
 </script>
 </body>
 </html>

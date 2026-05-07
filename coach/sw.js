@@ -1,8 +1,10 @@
-// InlineComp – Service Worker (PWA)
+// InlineComp Coach – Service Worker (PWA)
 // Strategie: network-first met offline fallback.
 // API-calls altijd via netwerk (verse data), statische shell gecacht.
+// Eigen cache-name (-coach-) zodat de coach-PWA naast de public-PWA kan
+// bestaan zonder elkaars cache te overschrijven.
 
-const CACHE_NAME = 'inlinecomp-v2';
+const CACHE_NAME = 'inlinecomp-coach-v2';
 const SHELL_URLS = [
     './index.php',
     '../favicon.svg'

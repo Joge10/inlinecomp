@@ -824,6 +824,7 @@ if ($action === 'serie_klassement') {
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <meta name="theme-color" content="#1F4E79">
+<meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <title>InlineComp – Mijn wedstrijd</title>
@@ -1450,7 +1451,7 @@ select:focus, input:focus { border-color: var(--middenblauw); outline: none; }
             <span class="hdr-spacer" aria-hidden="true"></span>
         </div>
         <div class="hdr-center">
-            <h1>InlineComp</h1>
+            <h1>InlineComp – Public</h1>
         </div>
         <div class="hdr-btns hdr-btns-right">
             <button class="btn-help" onclick="toonInfo()" title="Over InlineComp">i</button>
