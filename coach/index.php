@@ -949,8 +949,9 @@ select.sel {
 /* Filter-chips onder de wedstrijd-select (1-op-1 uit /public) */
 .filter-rij { display:flex; gap:8px; margin-bottom:8px; }
 .filter-rij input[type=checkbox] { display:none; }
+.filter-rij label.filter-chip { flex:1; }
 .filter-chip {
-    display:inline-flex; align-items:center; gap:5px;
+    display:inline-flex; align-items:center; justify-content:center; gap:5px;
     padding:9px 16px; border-radius:20px; font-size:.95rem; font-weight:600;
     border:2px solid #cdd8e3; background:var(--wit); color:#888;
     cursor:pointer; user-select:none; transition:all .15s;
@@ -1228,8 +1229,9 @@ body.heeft-footer .auto-refresh-stempel { bottom:84px; }
 <div class="card">
     <div class="stap-label"><span class="stap-nr">1</span> Kies je wedstrijd</div>
     <div class="filter-rij">
-        <input type="checkbox" id="chk-oud"><label for="chk-oud" class="filter-chip">Oude wedstrijden</label>
-        <input type="checkbox" id="chk-toekomst"><label for="chk-toekomst" class="filter-chip">Toekomstige</label>
+        <input type="checkbox" id="chk-oud"><label for="chk-oud" class="filter-chip" title="Eerdere wedstrijden">Eerder</label>
+        <input type="checkbox" id="chk-vandaag" checked><label for="chk-vandaag" class="filter-chip">Vandaag</label>
+        <input type="checkbox" id="chk-toekomst"><label for="chk-toekomst" class="filter-chip" title="Toekomstige wedstrijden">Later</label>
     </div>
     <select id="sel-comp" class="sel"><option value="">— kies een wedstrijd —</option></select>
     <div id="comp-info" class="comp-info" style="display:none"></div>
@@ -2138,27 +2140,34 @@ function toonHelp() {
 
 // ── Init-flow ────────────────────────────────────────────────────────────────
 // Filter-regel (1-op-1 uit /public):
-// - Standaard tonen we alleen "actieve" wedstrijden (vandaag ± 1 dag overlap).
-// - "Oude wedstrijden" aanvinken voegt afgesloten wedstrijden toe.
-// - "Toekomstige" aanvinken voegt wedstrijden toe die nog moeten komen.
+// Drie onafhankelijke filters: Eerder · Vandaag · Later. Wedstrijd verschijnt
+// als hij in tenminste één aangevinkte categorie valt. Alle drie uit → lege
+// lijst met helder bericht.
 function filterComps() {
     const nu = new Date();
     const gisteren = new Date(nu); gisteren.setDate(gisteren.getDate() - 1); gisteren.setHours(0,0,0,0);
     const morgen   = new Date(nu); morgen.setDate(morgen.getDate() + 1);   morgen.setHours(23,59,59,999);
 
     const toonOud      = $('chk-oud').checked;
+    const toonVandaag  = $('chk-vandaag').checked;
     const toonToekomst = $('chk-toekomst').checked;
     const vorigeWaarde = selComp.value;
+
+    if (!toonOud && !toonVandaag && !toonToekomst) {
+        selComp.innerHTML = '<option value="">— Kies tenminste één filter hierboven —</option>';
+        return;
+    }
 
     selComp.innerHTML = '<option value="">— kies een wedstrijd —</option>';
     for (const c of alleComps) {
         const startDag = safeDatum(c.starts);
         const eindDag  = safeDatum(c.ends) ?? startDag;
-        const isActief   = startDag && startDag <= morgen && eindDag >= gisteren;
-        const isOud      = eindDag && eindDag < gisteren;
-        const isToekomst = startDag && startDag > morgen;
-        if (!isActief && !toonOud      && isOud)      continue;
-        if (!isActief && !toonToekomst && isToekomst) continue;
+        const isVandaag  = startDag && startDag <= morgen && eindDag >= gisteren;
+        const isOud      = !isVandaag && eindDag   && eindDag   < gisteren;
+        const isToekomst = !isVandaag && startDag && startDag > morgen;
+        if (isVandaag  && !toonVandaag)  continue;
+        if (isOud      && !toonOud)      continue;
+        if (isToekomst && !toonToekomst) continue;
 
         const dtStr = startDag
             ? startDag.toLocaleDateString('nl-NL',{day:'numeric',month:'long',year:'numeric'})
@@ -2352,6 +2361,7 @@ async function voegAllesToe() {
 
 // ── Listeners ────────────────────────────────────────────────────────────────
 $('chk-oud').addEventListener('change', filterComps);
+$('chk-vandaag').addEventListener('change', filterComps);
 $('chk-toekomst').addEventListener('change', filterComps);
 selComp.addEventListener('change', opCompetitionChange);
 // Club/sponsor/startnr: niet direct toevoegen — wacht op de Toevoegen-knop.

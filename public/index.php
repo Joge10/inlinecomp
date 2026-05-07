@@ -1056,8 +1056,9 @@ select:focus, input:focus { border-color: var(--middenblauw); outline: none; }
     display: flex; gap: 8px; margin-bottom: 8px;
 }
 .filter-rij input[type=checkbox] { display: none; }
+.filter-rij label.filter-chip { flex: 1; }
 .filter-chip {
-    display: inline-flex; align-items: center; gap: 5px;
+    display: inline-flex; align-items: center; justify-content: center; gap: 5px;
     padding: 9px 16px; border-radius: 20px; font-size: .95rem; font-weight: 600;
     border: 2px solid #cdd8e3; background: var(--wit); color: #888;
     cursor: pointer; user-select: none; transition: all .15s;
@@ -1327,14 +1328,17 @@ select:focus, input:focus { border-color: var(--middenblauw); outline: none; }
     /* Heat-tabel compacter op telefoon zodat ook puntenkoers (extra Rnd + Pnt
        kolommen) binnen het scherm blijft staan. Bij sprints zonder die extra
        kolommen valt het ruimer uit. */
-    .heat-card-tabel { font-size: .82rem; }
-    .heat-card-tabel th, .heat-card-tabel td { padding: 5px 4px; }
-    .heat-card-tabel .col-pos  { width: 22px; }
-    .heat-card-tabel .col-snr  { width: 32px; }
-    .heat-card-tabel .col-rnd  { width: 26px; }
-    .heat-card-tabel .col-pk   { width: 28px; }
-    .heat-card-tabel .col-fin  { width: 24px; }
-    .heat-card-tabel .col-tijd { font-size: .78rem; }
+    .heat-card-tabel { font-size: .76rem; table-layout: fixed; width: 100%; }
+    .heat-card-tabel th, .heat-card-tabel td { padding: 4px 3px;
+        overflow: hidden; text-overflow: clip; }
+    .heat-card-tabel th { font-size: .68rem; }   /* headers smaller — labels iets breder dan de cijfer-data */
+    .heat-card-tabel .col-pos  { width: 22px; padding-left: 2px; padding-right: 2px; }
+    .heat-card-tabel .col-snr  { width: 30px; padding-left: 2px; padding-right: 2px; }
+    .heat-card-tabel .col-naam { word-break: break-word; }
+    .heat-card-tabel .col-rnd  { width: 26px; padding-left: 2px; padding-right: 2px; }
+    .heat-card-tabel .col-pk   { width: 26px; padding-left: 2px; padding-right: 2px; }
+    .heat-card-tabel .col-fin  { width: 26px; padding-left: 4px; padding-right: 2px; }
+    .heat-card-tabel .col-tijd { font-size: .66rem; width: 70px; padding-left: 4px; padding-right: 4px; }
 }
 .heat-card-tabel .col-sanctie { color: #c00; font-weight: 600; font-size: .85rem; }
 .heat-card-mijn-result {
@@ -1485,8 +1489,9 @@ select:focus, input:focus { border-color: var(--middenblauw); outline: none; }
             <span class="auto-stempel"></span>
         </div>
         <div class="filter-rij">
-            <input type="checkbox" id="chk-oud"><label for="chk-oud" class="filter-chip">Oude wedstrijden</label>
-            <input type="checkbox" id="chk-toekomst"><label for="chk-toekomst" class="filter-chip">Toekomstige</label>
+            <input type="checkbox" id="chk-oud"><label for="chk-oud" class="filter-chip" title="Eerdere wedstrijden">Eerder</label>
+            <input type="checkbox" id="chk-vandaag" checked><label for="chk-vandaag" class="filter-chip">Vandaag</label>
+            <input type="checkbox" id="chk-toekomst"><label for="chk-toekomst" class="filter-chip" title="Toekomstige wedstrijden">Later</label>
         </div>
         <select id="sel-comp"><option value="">Laden…</option></select>
     </div>
@@ -1506,6 +1511,7 @@ const btnZoek = document.getElementById('btn-zoek');
 const divResult = document.getElementById('resultaat');
 const divInfo   = document.getElementById('comp-info');
 const chkOud     = document.getElementById('chk-oud');
+const chkVandaag = document.getElementById('chk-vandaag');
 const chkToekomst = document.getElementById('chk-toekomst');
 let alleComps = [];
 
@@ -1618,27 +1624,39 @@ async function toonRitDetail(el) {
 }
 
 // Wedstrijden laden + filteren
+// Drie onafhankelijke filters: Oude · Vandaag · Toekomstige. Wedstrijd
+// verschijnt als hij in tenminste één van de aangevinkte categorieën valt.
+// Geen filter aangevinkt → lege lijst met helder bericht.
 function filterComps() {
     const nu = new Date();
     const gisteren = new Date(nu); gisteren.setDate(gisteren.getDate() - 1); gisteren.setHours(0,0,0,0);
     const morgen   = new Date(nu); morgen.setDate(morgen.getDate() + 1);   morgen.setHours(23,59,59,999);
 
-    const toonOud     = chkOud.checked;
+    const toonOud      = chkOud.checked;
+    const toonVandaag  = chkVandaag.checked;
     const toonToekomst = chkToekomst.checked;
     const vorigeWaarde = selComp.value;
+
+    if (!toonOud && !toonVandaag && !toonToekomst) {
+        selComp.innerHTML = '<option value="">— Kies tenminste één filter hierboven —</option>';
+        return;
+    }
 
     selComp.innerHTML = '<option value="">— Kies een wedstrijd —</option>';
     for (const c of alleComps) {
         const startDag = safeDatum(c.starts);
         const eindDag  = safeDatum(c.ends) ?? startDag;
 
-        // Standaard: alleen "actieve" wedstrijden (overlap met gisteren-morgen)
-        const isActief = startDag && startDag <= morgen && eindDag >= gisteren;
-        const isOud    = eindDag && eindDag < gisteren;
-        const isToekomst = startDag && startDag > morgen;
+        // Categoriseer: een wedstrijd is óf vandaag (overlapt met gisteren-morgen),
+        // óf oud (afgelopen vóór gisteren), óf toekomstig (begint ná morgen).
+        const isVandaag  = startDag && startDag <= morgen && eindDag >= gisteren;
+        const isOud      = !isVandaag && eindDag   && eindDag   < gisteren;
+        const isToekomst = !isVandaag && startDag && startDag > morgen;
 
-        if (!isActief && !toonOud && isOud) continue;
-        if (!isActief && !toonToekomst && isToekomst) continue;
+        // Tonen als bijbehorend filter aan staat
+        if (isVandaag  && !toonVandaag)  continue;
+        if (isOud      && !toonOud)      continue;
+        if (isToekomst && !toonToekomst) continue;
 
         const d = startDag ? startDag.toLocaleDateString('nl-NL',{day:'numeric',month:'long',year:'numeric'}) : '';
         const o = document.createElement('option');
@@ -1663,6 +1681,7 @@ function filterComps() {
 }
 
 chkOud.addEventListener('change', filterComps);
+chkVandaag.addEventListener('change', filterComps);
 chkToekomst.addEventListener('change', filterComps);
 
 safeFetch('?action=competitions').then(r=>r.json()).then(comps => {
@@ -2695,7 +2714,7 @@ function toonHelp() {
             <h3>Aan de slag</h3>
             <div class="help-stap">
                 <span class="help-stap-nr">1</span>
-                <span>Kies je <b>wedstrijd</b> uit de lijst. Standaard zie je alleen wedstrijden van vandaag. Vink <i>Oude wedstrijden</i> of <i>Toekomstige</i> aan om meer te zien.</span>
+                <span>Kies je <b>wedstrijd</b> uit de lijst. Met de drie filter-knoppen — <i>Eerder</i>, <i>Vandaag</i> en <i>Later</i> — bepaal je welke wedstrijden je ziet. Standaard staat alleen <i>Vandaag</i> aan; klik een knop aan/uit om het bereik aan te passen.</span>
             </div>
             <div class="help-stap">
                 <span class="help-stap-nr">2</span>
@@ -2703,17 +2722,26 @@ function toonHelp() {
             </div>
             <div class="help-stap">
                 <span class="help-stap-nr">3</span>
-                <span>Wil je meerdere rijders volgen (bv. broer, zus of een teamgenoot)? Klik op <b>+ rijder toevoegen</b>. Je kunt tot <b>4 rijders</b> tegelijk volgen — switch via de tabs bovenaan.</span>
+                <span>Wil je meerdere rijders volgen (bv. broer, zus of een teamgenoot)? Klik op de <b>+</b>-knop bovenin. Je kunt tot <b>4 rijders</b> tegelijk volgen — switch via de tabs bovenaan met hun startnummers.</span>
             </div>
 
-            <!-- Mockup: zoekscherm -->
+            <!-- Mockup: zoekscherm — toont actuele filter-chips + 3-knoppen-rij -->
             <div class="mock">
-                <div class="mock-hdr">InlineComp</div>
+                <div class="mock-hdr">InlineComp – Public</div>
                 <div class="mock-body">
+                    <div style="display:flex;align-items:center;gap:5px;font-size:.75rem;font-weight:700;color:var(--blauw);margin:0 0 4px">
+                        <span style="background:var(--blauw);color:#fff;width:16px;height:16px;border-radius:50%;display:inline-flex;align-items:center;justify-content:center;font-size:.65rem">1</span>
+                        Kies je wedstrijd
+                    </div>
+                    <div style="display:flex;gap:4px;margin:0 0 6px">
+                        <span style="flex:1;text-align:center;font-size:.7rem;font-weight:600;padding:4px 0;border-radius:12px;border:1.5px solid #cdd8e3;color:#888;background:#fff">Eerder</span>
+                        <span style="flex:1;text-align:center;font-size:.7rem;font-weight:600;padding:4px 0;border-radius:12px;border:1.5px solid var(--middenblauw);color:var(--blauw);background:var(--lichtblauw)">Vandaag</span>
+                        <span style="flex:1;text-align:center;font-size:.7rem;font-weight:600;padding:4px 0;border-radius:12px;border:1.5px solid #cdd8e3;color:#888;background:#fff">Later</span>
+                    </div>
                     <div class="mock-select">Voorbeeldwedstrijd — 19 april 2026</div>
-                    <div style="display:flex;gap:10px;font-size:.65rem;color:#888;margin:3px 0 6px">
-                        <label style="display:flex;align-items:center;gap:3px"><span style="display:inline-block;width:10px;height:10px;border:1.5px solid #aaa;border-radius:2px"></span> Oude wedstrijden</label>
-                        <label style="display:flex;align-items:center;gap:3px"><span style="display:inline-block;width:10px;height:10px;border:1.5px solid #aaa;border-radius:2px"></span> Toekomstige</label>
+                    <div style="display:flex;align-items:center;gap:5px;font-size:.75rem;font-weight:700;color:var(--blauw);margin:8px 0 4px">
+                        <span style="background:var(--blauw);color:#fff;width:16px;height:16px;border-radius:50%;display:inline-flex;align-items:center;justify-content:center;font-size:.65rem">2</span>
+                        Startnummer, licentie of achternaam
                     </div>
                     <div class="mock-select">Startnummer: 86</div>
                     <div style="background:var(--oranje);color:#fff;text-align:center;padding:6px;border-radius:6px;font-weight:700;font-size:.75rem;margin-top:4px">Zoeken</div>
