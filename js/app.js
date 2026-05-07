@@ -185,6 +185,44 @@ function escHtml(str) {
 // Retourneert { orgLogoHtml, baanLogoHtml, footerHtml } — volledig inline-styled,
 // geen externe CSS nodig. Plaats baanLogoHtml links in de header (= gastheer-
 // vereniging) en orgLogoHtml rechts (= hoofdorganisator).
+// ── Systeem-pagina ───────────────────────────────────────────────────────────
+// Bundelt 5 admin-functies in één pagina met sub-tabs: Gebruikers, Bezoekers,
+// Logboek, Rijders, Uploads. Tabs zijn lazy: een tab-init functie wordt pas
+// aangeroepen wanneer de tab voor het eerst geopend wordt.
+let _sysTabsGeinit = false;
+const _sysTabGeladen = new Set();
+
+function toonSysteemPagina() {
+    if (!['owner','admin'].includes(currentUser.role)) return;
+
+    if (!_sysTabsGeinit) {
+        _sysTabsGeinit = true;
+        document.querySelectorAll('#sys-tabs-nav .org-tab-btn').forEach(btn => {
+            btn.addEventListener('click', () => switchSysteemTab(btn.dataset.tab));
+        });
+    }
+
+    // Eerste keer: open Gebruikers-tab; vervolgens onthoud-actief-tab
+    const actief = document.querySelector('#sys-tabs-nav .org-tab-btn.active')?.dataset.tab || 'gebruikers';
+    switchSysteemTab(actief);
+}
+
+function switchSysteemTab(tab) {
+    document.querySelectorAll('#sys-tabs-nav .org-tab-btn').forEach(b =>
+        b.classList.toggle('active', b.dataset.tab === tab));
+    document.querySelectorAll('#page-systeem .org-tab-content').forEach(c => {
+        c.style.display = (c.id === 'sys-tab-' + tab) ? '' : 'none';
+    });
+
+    // Lazy init per tab — pas bij eerste keer openen de data laden
+    if (!_sysTabGeladen.has(tab)) {
+        _sysTabGeladen.add(tab);
+        if (tab === 'gebruikers' || tab === 'bezoekers' || tab === 'logboek') toonGebruikersPagina();
+        if (tab === 'rijders')  toonRijdersPagina();
+        if (tab === 'uploads')  toonUploadsPagina();
+    }
+}
+
 // ── Info-pagina vullen ────────────────────────────────────────────────────────
 function toonInfoPagina() {
     const ROL_LABELS = {
@@ -747,9 +785,7 @@ function initNav() {
             if (page === 'tijdschema')   toonTijdschemaPagina();
             if (page === 'klassementen') toonUitslagPagina();
             if (page === 'live')         { vulPaginaHeader('live-comp-naam', 'live-comp-meta'); toonLivePagina(); }
-            if (page === 'gebruikers')   toonGebruikersPagina();
-            if (page === 'rijders')      toonRijdersPagina();
-            if (page === 'uploads')      toonUploadsPagina();
+            if (page === 'systeem')      toonSysteemPagina();
             if (page === 'info')         toonInfoPagina();
         });
     });
@@ -778,11 +814,10 @@ el('btn-uitloggen')?.addEventListener('click', async () => {
 function pasRolToe() {
     const rol = currentUser.role;
 
-    // Gebruikers + Rijders + Uploads nav-items: alleen owner en admin
+    // Systeem-menu (Gebruikers + Bezoekers + Logboek + Rijders + Uploads):
+    // alleen voor owner en admin. Alle 5 tabs vallen onder dezelfde rol-check.
     if (['owner','admin'].includes(rol)) {
-        document.querySelector('.nav-item-gebruikers')?.style.removeProperty('display');
-        document.querySelector('.nav-item-rijders')?.style.removeProperty('display');
-        document.querySelector('.nav-item-uploads')?.style.removeProperty('display');
+        document.querySelector('.nav-item-systeem')?.style.removeProperty('display');
     }
 
     // Schrijf-lock: alle schrijf-elementen op readonly pagina's disablen

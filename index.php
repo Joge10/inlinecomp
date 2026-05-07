@@ -65,17 +65,9 @@ if (!$gebruiker) {
                 <span class="nav-icon">&#9881;</span>
                 <span class="nav-label">Beheer</span>
             </li>
-            <li class="nav-item nav-item-gebruikers" data-page="gebruikers" style="display:none">
-                <span class="nav-icon">&#128100;</span>
-                <span class="nav-label">Gebruikers</span>
-            </li>
-            <li class="nav-item nav-item-rijders" data-page="rijders" style="display:none">
-                <span class="nav-icon">&#128101;</span>
-                <span class="nav-label">Rijders</span>
-            </li>
-            <li class="nav-item nav-item-uploads" data-page="uploads" style="display:none">
-                <span class="nav-icon">&#128193;</span>
-                <span class="nav-label">Uploads</span>
+            <li class="nav-item nav-item-systeem" data-page="systeem" style="display:none">
+                <span class="nav-icon">&#128736;</span>
+                <span class="nav-label">Systeem</span>
             </li>
             <li class="nav-item" data-page="info">
                 <span class="nav-icon">&#8505;</span>
@@ -135,7 +127,7 @@ if (!$gebruiker) {
                             </div>
                             <div class="detail-knoppen">
                                 <button id="btn-export" class="btn-export" title="Deelnemers exporteren als KNSB-CSV">
-                                    Exporteren
+                                    &#8657; Exporteer
                                 </button>
                                 <button id="btn-import" class="btn-import" title="Wedstrijd importeren in database">
                                     &#8659; Importeer
@@ -370,66 +362,90 @@ if (!$gebruiker) {
             </div><!-- /inst-layout -->
         </div><!-- /page-instellingen -->
 
-        <!-- Pagina: Info -->
-        <!-- Pagina: Gebruikers -->
-        <div id="page-gebruikers" class="page">
+        <!-- Pagina: Systeem (gegroepeerde admin-functies in tabs) -->
+        <div id="page-systeem" class="page">
             <div class="pagina-inhoud">
-                <div id="gb-container">
-                    <div class="status-msg loading"><span class="spinner"></span>Laden…</div>
+                <div class="org-tabs-header">
+                    <h2>Systeem</h2>
+                    <nav class="org-tabs-nav" id="sys-tabs-nav">
+                        <button class="org-tab-btn active" data-tab="gebruikers">Gebruikers</button>
+                        <button class="org-tab-btn" data-tab="bezoekers">Bezoekers</button>
+                        <button class="org-tab-btn" data-tab="logboek">Logboek</button>
+                        <button class="org-tab-btn" data-tab="rijders">Rijders</button>
+                        <button class="org-tab-btn" data-tab="uploads">Uploads</button>
+                    </nav>
                 </div>
-            </div>
-        </div>
 
-        <!-- Pagina: Rijders (AVG-beheer) -->
-        <div id="page-rijders" class="page">
-            <div class="pagina-inhoud">
-                <div class="section-title">Rijderbeheer — persoonsgegevens &amp; wedstrijdhistorie</div>
-                <div class="rij-avg-info">
-                    <strong>AVG-beheer.</strong> Hier kun je van rijders hun gegevens inzien, hun wedstrijdhistorie bekijken en — op verzoek — hun persoonsgegevens anonimiseren.
-                    Na anonimisatie blijft het <em>licentienummer</em> aan de wedstrijduitslagen gekoppeld, maar naam en overige gegevens zijn onomkeerbaar vervangen door <em>"Verwijderd"</em>/leeg.
-                </div>
-                <div class="rij-layout">
-                    <div class="rij-left">
-                        <div class="rij-zoek-rij">
-                            <input type="text" id="rij-zoek-inp" class="inp" placeholder="Zoek op achternaam, startnummer of licentienummer…" autocomplete="off">
-                            <button class="btn-secondary" id="rij-zoek-btn">Zoek</button>
-                        </div>
-                        <div class="rij-zoek-hint">Zoekt gelijktijdig op startnummer, achternaam en naam. Licentienummer wordt meegenomen vanaf 4 tekens (overal in de licentie — ook de laatste 4 cijfers werken).</div>
-                        <div id="rij-zoek-resultaat"></div>
-                    </div>
-                    <div class="rij-right">
-                        <div id="rij-detail">
-                            <div class="status-msg" style="color:#666">Selecteer links een rijder voor de details.</div>
-                        </div>
+                <!-- Tab: Gebruikers -->
+                <div class="org-tab-content" id="sys-tab-gebruikers">
+                    <div id="gb-container">
+                        <div class="status-msg loading"><span class="spinner"></span>Laden…</div>
                     </div>
                 </div>
-            </div>
-        </div>
 
-        <!-- Pagina: Uploads (Orbits/MyLaps CSV-archief beheer, owner/admin) -->
-        <div id="page-uploads" class="page">
-            <div class="pagina-inhoud">
-                <div class="section-title">Uploads — Orbits/MyLaps CSV-archief</div>
-                <div class="up-info">
-                    Per wedstrijd worden CSV-exports vanuit Orbits/MyLaps in een submap onder
-                    <code>uploader/</code> opgeslagen. Hier kun je oude mappen handmatig verwijderen
-                    om ruimte vrij te maken. <strong>Dit is onomkeerbaar.</strong>
+                <!-- Tab: Bezoekers (publiek + coach statistieken) -->
+                <div class="org-tab-content" id="sys-tab-bezoekers" style="display:none">
+                    <div id="gb-bezoekers-container">
+                        <div class="status-msg loading"><span class="spinner"></span>Laden…</div>
+                    </div>
                 </div>
-                <div class="up-toolbar">
-                    <label>Toon alleen ouder dan:
-                        <select id="up-filter-age">
-                            <option value="0">— alle mappen —</option>
-                            <option value="30">30 dagen</option>
-                            <option value="90">3 maanden</option>
-                            <option value="180">6 maanden</option>
-                            <option value="365">1 jaar</option>
-                        </select>
-                    </label>
-                    <button class="btn-secondary" id="up-btn-refresh">&#8634; Vernieuw</button>
+
+                <!-- Tab: Logboek (login-history) -->
+                <div class="org-tab-content" id="sys-tab-logboek" style="display:none">
+                    <div id="gb-logboek-container">
+                        <div class="status-msg loading"><span class="spinner"></span>Laden…</div>
+                    </div>
                 </div>
-                <div id="up-container">
-                    <div class="status-msg loading"><span class="spinner"></span>Laden…</div>
+
+                <!-- Tab: Rijders (AVG-beheer) -->
+                <div class="org-tab-content" id="sys-tab-rijders" style="display:none">
+                    <div class="section-title">Rijderbeheer — persoonsgegevens &amp; wedstrijdhistorie</div>
+                    <div class="rij-avg-info">
+                        <strong>AVG-beheer.</strong> Hier kun je van rijders hun gegevens inzien, hun wedstrijdhistorie bekijken en — op verzoek — hun persoonsgegevens anonimiseren.
+                        Na anonimisatie blijft het <em>licentienummer</em> aan de wedstrijduitslagen gekoppeld, maar naam en overige gegevens zijn onomkeerbaar vervangen door <em>"Verwijderd"</em>/leeg.
+                    </div>
+                    <div class="rij-layout">
+                        <div class="rij-left">
+                            <div class="rij-zoek-rij">
+                                <input type="text" id="rij-zoek-inp" class="inp" placeholder="Zoek op achternaam, startnummer of licentienummer…" autocomplete="off">
+                                <button class="btn-secondary" id="rij-zoek-btn">Zoek</button>
+                            </div>
+                            <div class="rij-zoek-hint">Zoekt gelijktijdig op startnummer, achternaam en naam. Licentienummer wordt meegenomen vanaf 4 tekens (overal in de licentie — ook de laatste 4 cijfers werken).</div>
+                            <div id="rij-zoek-resultaat"></div>
+                        </div>
+                        <div class="rij-right">
+                            <div id="rij-detail">
+                                <div class="status-msg" style="color:#666">Selecteer links een rijder voor de details.</div>
+                            </div>
+                        </div>
+                    </div>
                 </div>
+
+                <!-- Tab: Uploads (Orbits/MyLaps CSV-archief beheer) -->
+                <div class="org-tab-content" id="sys-tab-uploads" style="display:none">
+                    <div class="section-title">Uploads — Orbits/MyLaps CSV-archief</div>
+                    <div class="up-info">
+                        Per wedstrijd worden CSV-exports vanuit Orbits/MyLaps in een submap onder
+                        <code>uploader/</code> opgeslagen. Hier kun je oude mappen handmatig verwijderen
+                        om ruimte vrij te maken. <strong>Dit is onomkeerbaar.</strong>
+                    </div>
+                    <div class="up-toolbar">
+                        <label>Toon alleen ouder dan:
+                            <select id="up-filter-age">
+                                <option value="0">— alle mappen —</option>
+                                <option value="30">30 dagen</option>
+                                <option value="90">3 maanden</option>
+                                <option value="180">6 maanden</option>
+                                <option value="365">1 jaar</option>
+                            </select>
+                        </label>
+                        <button class="btn-secondary" id="up-btn-refresh">&#8634; Vernieuw</button>
+                    </div>
+                    <div id="up-container">
+                        <div class="status-msg loading"><span class="spinner"></span>Laden…</div>
+                    </div>
+                </div>
+
             </div>
         </div>
 

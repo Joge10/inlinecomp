@@ -3150,8 +3150,23 @@ th.rk-totaal, td.rk-totaal { width:55px; font-weight:700; color:var(--blauw); ba
 .gb-inactief td   { opacity: .45; }
 .gb-naam          { font-weight: 600; }
 .gb-username      { font-weight: 400; color: #888; font-size: .8rem; margin-left: 6px; }
-.gb-acties        { display: flex; gap: 4px; justify-content: flex-end; }
-.gb-acties button { padding: 3px 8px; font-size: .8rem; }
+/* Vaste 4-kolom grid: edit · wachtwoord · activeren/deactiveren · verwijderen.
+   Elke slot heeft altijd dezelfde breedte zodat de iconen netjes recht onder
+   elkaar staan, ook als een rij niet alle acties heeft (bv. owner).
+   Ontbrekende acties = lege .gb-btn-leeg span die de slot opvult. */
+.gb-acties {
+    display: grid;
+    grid-template-columns: repeat(4, 32px);
+    gap: 4px;
+    justify-content: end;
+}
+.gb-acties button {
+    padding: 3px 0;
+    font-size: .8rem;
+    width: 32px;
+    text-align: center;
+}
+.gb-btn-leeg { display: inline-block; width: 32px; }
 
 .gb-rol-badge     { display: inline-block; border-radius: 10px; padding: 2px 9px;
                     font-size: .75rem; font-weight: 700; }

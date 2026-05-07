@@ -159,7 +159,16 @@ function bindLogboekEvents() {
     });
 }
 
+// Render alle drie de Systeem-tab inhouden — gebruikers-tabel in #gb-container,
+// bezoekers-stats in #gb-bezoekers-container, logboek in #gb-logboek-container.
+// Elk staat in een eigen sub-tab van de Systeem-pagina.
 function renderGebruikers() {
+    renderGebruikersTabel();
+    renderBezoekersBlok();
+    renderLogboekBlok();
+}
+
+function renderGebruikersTabel() {
     const container = el('gb-container');
 
     const rijen = gbGebruikers.map(u => {
@@ -177,13 +186,20 @@ function renderGebruikers() {
             <td><span class="gb-rol-badge gb-rol-${u.role}">${ROL_LABELS[u.role] ?? u.role}</span></td>
             <td>${escHtml(u.email ?? '—')}</td>
             <td class="gb-acties">
-                ${magWijzig ? `<button class="btn-secondary gb-btn-edit" data-id="${u.id}" title="Bewerken">&#9998;</button>` : ''}
-                ${magWW     ? `<button class="btn-secondary gb-btn-ww"   data-id="${u.id}" title="Wachtwoord wijzigen">&#128273;</button>` : ''}
+                ${magWijzig
+                    ? `<button class="btn-secondary gb-btn-edit" data-id="${u.id}" title="Bewerken">&#9998;</button>`
+                    : `<span class="gb-btn-leeg"></span>`}
+                ${magWW
+                    ? `<button class="btn-secondary gb-btn-ww" data-id="${u.id}" title="Wachtwoord wijzigen">&#128273;</button>`
+                    : `<span class="gb-btn-leeg"></span>`}
                 ${magDel && !isOwner && actief
-                    ? `<button class="btn-secondary gb-btn-toggle" data-id="${u.id}" title="Deactiveren">&#9679;</button>` : ''}
-                ${magDel && !actief
-                    ? `<button class="btn-secondary gb-btn-toggle" data-id="${u.id}" title="Activeren" style="color:green">&#9679;</button>` : ''}
-                ${magDel ? `<button class="btn-del gb-btn-del" data-id="${u.id}" title="Verwijderen">&#128465;</button>` : ''}
+                    ? `<button class="btn-secondary gb-btn-toggle" data-id="${u.id}" title="Deactiveren">&#9679;</button>`
+                    : magDel && !actief
+                        ? `<button class="btn-secondary gb-btn-toggle" data-id="${u.id}" title="Activeren" style="color:green">&#9679;</button>`
+                        : `<span class="gb-btn-leeg"></span>`}
+                ${magDel
+                    ? `<button class="btn-del gb-btn-del" data-id="${u.id}" title="Verwijderen">&#128465;</button>`
+                    : `<span class="gb-btn-leeg"></span>`}
             </td>
         </tr>`;
     }).join('');
@@ -204,10 +220,30 @@ function renderGebruikers() {
             </thead>
             <tbody>${rijen}</tbody>
         </table>
-        <div id="gb-form-wrap" style="display:none"></div>
+        <div id="gb-form-wrap" style="display:none"></div>`;
 
+    // Events
+    el('gb-btn-nieuw').addEventListener('click', () => openGbForm(null));
+
+    container.querySelectorAll('.gb-btn-edit').forEach(btn =>
+        btn.addEventListener('click', () => openGbForm(parseInt(btn.dataset.id))));
+
+    container.querySelectorAll('.gb-btn-ww').forEach(btn =>
+        btn.addEventListener('click', () => openWwForm(parseInt(btn.dataset.id))));
+
+    container.querySelectorAll('.gb-btn-toggle').forEach(btn =>
+        btn.addEventListener('click', () => toggleActief(parseInt(btn.dataset.id))));
+
+    container.querySelectorAll('.gb-btn-del').forEach(btn =>
+        btn.addEventListener('click', () => verwijderGebruiker(parseInt(btn.dataset.id))));
+}
+
+function renderBezoekersBlok() {
+    const c = el('gb-bezoekers-container');
+    if (!c) return;
+    c.innerHTML = `
         <!-- Publieke-pagina statistieken -->
-        <div class="section-title" style="margin-top:1.5rem">Publieke pagina — bezoekers</div>
+        <div class="section-title">Publieke pagina — bezoekers</div>
         <div class="gb-stats" id="gb-stats">
             <div class="gb-stat-kaart">
                 <div class="gb-stat-waarde" id="gb-stat-actief">—</div>
@@ -264,28 +300,17 @@ function renderGebruikers() {
                 <div class="gb-stat-label">Piek gelijktijdig <span class="gb-stat-hint" id="gb-stat-coach-peak-at">(ooit)</span></div>
             </div>
         </div>
-        <div class="gb-stat-voetnoot" id="gb-stat-coach-voet">Laatst bijgewerkt: —</div>
+        <div class="gb-stat-voetnoot" id="gb-stat-coach-voet">Laatst bijgewerkt: —</div>`;
 
-        ${renderLogboekSectie()}`;
+    startPublicStatsRefresh();
+}
 
-    // Events
-    el('gb-btn-nieuw').addEventListener('click', () => openGbForm(null));
-
-    container.querySelectorAll('.gb-btn-edit').forEach(btn =>
-        btn.addEventListener('click', () => openGbForm(parseInt(btn.dataset.id))));
-
-    container.querySelectorAll('.gb-btn-ww').forEach(btn =>
-        btn.addEventListener('click', () => openWwForm(parseInt(btn.dataset.id))));
-
-    container.querySelectorAll('.gb-btn-toggle').forEach(btn =>
-        btn.addEventListener('click', () => toggleActief(parseInt(btn.dataset.id))));
-
-    container.querySelectorAll('.gb-btn-del').forEach(btn =>
-        btn.addEventListener('click', () => verwijderGebruiker(parseInt(btn.dataset.id))));
-
+function renderLogboekBlok() {
+    const c = el('gb-logboek-container');
+    if (!c) return;
+    c.innerHTML = renderLogboekSectie();
     bindLogboekEvents();
     laadLogboek();
-    startPublicStatsRefresh();
 }
 
 // ── Publieke-pagina bezoekersstatistiek ───────────────────────────────────
