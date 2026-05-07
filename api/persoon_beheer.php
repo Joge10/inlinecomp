@@ -90,16 +90,26 @@ try {
         }
 
         // 2. Transponder-toewijzingen (per organisatie)
+        // Match-strategie:
+        //   primair: ot.person_license = license_key (sinds migratie)
+        //   fallback: oude rijen waar person_license = NULL maar wel
+        //             (toegewezen_naam + toegewezen_snr) matcht met de rijder
+        // Zo zien we ook transponders van vóór de license-koppeling-migratie.
         $tpStmt = $pdo->prepare("
             SELECT ot.intern_nummer, ot.transponder_code, ot.categorie,
-                   ot.betaald, ot.betaald_op,
+                   ot.betaald, ot.betaald_op, ot.eigendom,
+                   ot.person_license, ot.toegewezen_naam, ot.toegewezen_snr,
                    o.naam AS organisatie_naam
             FROM organisatie_transponders ot
             JOIN organisaties o ON o.id = ot.organisatie_id
+            JOIN persons p     ON p.license_key = ?
             WHERE ot.person_license = ?
+               OR (ot.person_license IS NULL
+                   AND ot.toegewezen_naam = p.full_name
+                   AND ot.toegewezen_snr  = p.start_number)
             ORDER BY o.naam, CAST(ot.intern_nummer AS UNSIGNED)
         ");
-        $tpStmt->execute([$lk]);
+        $tpStmt->execute([$lk, $lk]);
         $transponders = $tpStmt->fetchAll(PDO::FETCH_ASSOC);
 
         // 3. Wedstrijd-deelnames + per-DC einduitslag
@@ -156,11 +166,33 @@ try {
             return $a;
         }, $afstandenRaw);
 
+        // 5. Bekende transponders voor deze rijder — alle codes die ooit
+        // ergens voor de rijder geregistreerd zijn (KNSB-feed of handmatig
+        // toegewezen aan de balie). Per code: in welke slots gebruikt
+        // (0=actief, 1=T1, 2=T2, 3+=extra), bron, hoeveel wedstrijden,
+        // wanneer voor het laatst gezien.
+        $bktStmt = $pdo->prepare("
+            SELECT code,
+                   GROUP_CONCAT(DISTINCT slot ORDER BY slot) AS slots,
+                   GROUP_CONCAT(DISTINCT source)             AS sources,
+                   COUNT(DISTINCT competition_id)            AS aantal_wedstrijden,
+                   MAX(updated_at)                           AS laatst_gezien
+            FROM transponders
+            WHERE person_license = ?
+              AND code IS NOT NULL
+              AND code != ''
+            GROUP BY code
+            ORDER BY MAX(updated_at) DESC
+        ");
+        $bktStmt->execute([$lk]);
+        $bekendeTransponders = $bktStmt->fetchAll(PDO::FETCH_ASSOC);
+
         echo json_encode([
-            'rijder'       => $rijder,
-            'transponders' => $transponders,
-            'wedstrijden'  => $wedstrijden,
-            'afstanden'    => $afstanden,
+            'rijder'               => $rijder,
+            'transponders'         => $transponders,
+            'bekende_transponders' => $bekendeTransponders,
+            'wedstrijden'          => $wedstrijden,
+            'afstanden'            => $afstanden,
         ]);
         exit;
     }

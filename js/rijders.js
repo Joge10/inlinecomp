@@ -98,6 +98,7 @@ async function rijToonDetail(licenseKey) {
 function rijRenderDetail(data) {
     const r = data.rijder;
     const tps = data.transponders || [];
+    const bekendeTps = data.bekende_transponders || [];
     const weds = data.wedstrijden || [];
     const afstanden = data.afstanden || [];
     const anoniem = !!r.anonymized_at;
@@ -132,7 +133,34 @@ function rijRenderDetail(data) {
         </div>`;
     }
 
-    // Transponders
+    // Bekende transponders — alle codes ooit voor deze rijder geregistreerd
+    // (slot 0=actief aan balie, 1=T1, 2=T2, 3+=extra). Helpt om snel te zien
+    // welke chips bij de persoon horen, ongeacht of ze nu nog uitgegeven zijn.
+    const SLOT_LABELS = { 0: 'Actief (balie)', 1: 'T1', 2: 'T2' };
+    const slotLabel = s => SLOT_LABELS[s] ?? `Extra ${s}`;
+    let bktHtml;
+    if (bekendeTps.length) {
+        bktHtml = '<table class="rij-detail-tabel"><thead><tr><th>Code</th><th>Gebruikt als</th><th>Bron</th><th>Wedstrijden</th><th>Laatst gezien</th></tr></thead><tbody>';
+        bekendeTps.forEach(t => {
+            const slots = (t.slots ?? '').split(',').filter(Boolean).map(s => slotLabel(parseInt(s))).join(', ');
+            const bron  = (t.sources ?? '').split(',').filter(Boolean)
+                              .map(s => s === 'knsb' ? 'KNSB-feed' : 'handmatig')
+                              .join(' + ');
+            const laatst = t.laatst_gezien ? String(t.laatst_gezien).substring(0, 10) : '—';
+            bktHtml += `<tr>
+                <td><strong>${escHtml(t.code)}</strong></td>
+                <td>${escHtml(slots || '—')}</td>
+                <td>${escHtml(bron || '—')}</td>
+                <td>${escHtml(t.aantal_wedstrijden ?? 0)}</td>
+                <td>${escHtml(laatst)}</td>
+            </tr>`;
+        });
+        bktHtml += '</tbody></table>';
+    } else {
+        bktHtml = '<div class="rij-leeg">Geen transponders geregistreerd.</div>';
+    }
+
+    // Transponders (organisatie-toewijzingen)
     let tpHtml;
     if (tps.length) {
         tpHtml = '<table class="rij-detail-tabel"><thead><tr><th>Organisatie</th><th>Nr</th><th>Code</th><th>Cat</th><th>Betaald</th></tr></thead><tbody>';
@@ -215,7 +243,10 @@ function rijRenderDetail(data) {
             ${veld('Laatst gewijzigd', r.updated_at)}
         </div>
 
-        <h3>Transponder-toewijzingen</h3>
+        <h3>Bekende transponders</h3>
+        ${bktHtml}
+
+        <h3>Transponder-toewijzingen (organisatie-inventaris)</h3>
         ${tpHtml}
 
         <h3>Wedstrijd-historie (eindklassementen)</h3>
