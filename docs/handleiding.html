@@ -528,7 +528,7 @@ a.ref-back:hover { text-decoration: underline; }
 <tr><td><b>Loting</b></td><td>De verdeling van rijders over heats voor een ronde. Vier seeding-methodes (Op startnummer / Alfabetisch / Tussenklassement / Klassement) plus een slangenpatroon voor de heat-toewijzing.</td></tr>
 <tr><td><b>MyLaps</b> / <b>Orbits</b></td><td>Elektronisch tijdwaarnemingssysteem (MyLaps is hardware, Orbits is de software). Exporteert CSV-bestanden met finishtijden die InlineComp via de CSV Upload Monitor automatisch oppikt.</td></tr>
 <tr><td><b>Punten</b> (klassement)</td><td>Positie-gebaseerd: 1e plaats = 1 punt, 2e = 2 punten, enzovoort. <b>Lager totaal = beter</b>. Alleen bij <em>puntenkoers</em>-race-type betekent "punten" iets anders: punten worden tijdens de race verdiend per tussensprint en per finishpositie.</td></tr>
-<tr><td><b>Q</b> / <b>q</b></td><td><b>Q</b> = positie-kwalificatie (top-N per heat), <b>q</b> = tijd-kwalificatie (snelste tijden over alle heats heen). Verschijnen in het read-only paneel van Live verwerking als kwalificatie-markering per rijder.</td></tr>
+<tr><td><b>Q</b> / <b>q</b></td><td><b>Q</b> = positie-kwalificatie (top-N per heat), <b>q</b> = tijd-kwalificatie (snelste tijden over alle heats heen). Werkt zowel in Internationaal (KF→HF→A) als in Full-Final (Series→A) als <em>Q per heat</em> in de afstand-config ≥ 1 staat. Verschijnen in het read-only paneel van Live verwerking als kwalificatie-markering per rijder.</td></tr>
 <tr><td><b>Race-type</b></td><td>Sport-type van een afstand: <em>sprint</em>, <em>inline</em>, <em>puntenkoers</em>, <em>afvalkoers</em>. Bepaalt de sortering in de heat-uitslag (sprint: alleen tijd; inline/afvalkoers: rondes → tijd; puntenkoers: punten → rondes → tijd).</td></tr>
 <tr><td><b>Ranking</b> (per ronde)</td><td>Hoe afgevallen rijders binnen één ronde worden geklassificeerd: <em>Op tijd</em> of <em>Positie + tijd</em>. Instelling per ronde in §1.7 stap 3 (alleen Internationaal).</td></tr>
 <tr><td><b>Relatienummer</b> / <b>License key</b></td><td>Unieke KNSB-lidmaatschapscode van een rijder.</td></tr>
@@ -1666,9 +1666,25 @@ Beide kleuren actief; de twee anderen (afgemeld bij org., niet getekend) maken d
 
 <p>Wat er per categorie te configureren valt hangt af van het gekozen systeem:</p>
 <ul>
-    <li><b>Full-Final:</b> aantal series, A-finale-grootte, B-finales (aantal heats, "grootste" vlag).</li>
-    <li><b>Internationaal:</b> aantal series, kwartfinale ja/nee + heats + doorgang per heat, halve finale idem, finale-heats. Plus organisatie-brede min/max-rijders per heat en runner-up-regel.</li>
+    <li><b>Full-Final:</b> aantal series, <em>Q per heat</em> (zie info-blok hieronder), <em>Alleen startvolgorde</em>-vink, A-finale-grootte, B-finales (aantal heats, "grootste" vlag).</li>
+    <li><b>Internationaal:</b> aantal series, kwartfinale ja/nee + heats + doorgang per heat (Q en q), halve finale idem, finale-heats. Plus organisatie-brede min/max-rijders per heat en runner-up-regel.</li>
 </ul>
+
+<div class="info"><b>Q per heat in Full-Final — hoe kwalificeren rijders zich voor de A-finale?</b><br><br>
+In Full-Final gaan alle rijders na de series naar óf de A-finale óf een B-finale. <em>Q per heat</em> bepaalt hoe de A-finale wordt gevuld:
+<ul style="margin-top:6px">
+    <li><b>Q per heat = 0</b> (default, klassiek): de A-finale wordt zuiver op tijd gevuld — de N tijdsnelsten over alle series heen gaan naar de A-finale. Je kunt dus uit één snelle serie meer A-finalisten halen dan uit een langzame serie.</li>
+    <li><b>Q per heat ≥ 1</b>: de bovenste N van elke serie krijgen een gegarandeerde A-finale-plek (Q-kwalificatie, op heat-positie). De rest van de A-finale wordt aangevuld met de tijdsnelsten van de overige rijders (q-kwalificatie). Garantie: elke serie levert minstens N rijders aan de A-finale, ongeacht tijd.</li>
+</ul>
+<b>Voorbeeld</b> — 11 rijders, 2 series, A-finale=8, 1 B-finale, Q=1:
+<ul style="margin-top:6px">
+    <li>Heat-1-winnaar én heat-2-winnaar gaan direct naar A (2 Q-plekken)</li>
+    <li>De 6 tijdsnelsten van de overige 9 rijders gaan ook naar A (6 q-plekken)</li>
+    <li>De resterende 3 rijders (langzaamste niet-winnaars) gaan naar de B-finale</li>
+</ul>
+Dit is handig voor regio- en beginnerswedstrijden waar je elke serie een eerlijke kans wilt geven om in de A-finale te komen — zelfs als één serie als geheel langzamer is dan de andere.</div>
+
+<div class="info"><b>Tier-based seeding van de A-finale-startpositie.</b> Bij Q ≥ 1 worden de A-finalisten gerangschikt in twee groepen: eerst álle Q-rijders onderling op tijd (snelste heat-winnaar startpos 1, langzaamste heat-winnaar volgt), dan álle q-rijders op tijd. Een snelle nummer-2 staat dus altijd <em>na</em> de langzaamste nummer-1 op de startlijst — heat-positie weegt boven tijd.</div>
 
 <div class="info"><b>De live-berekening geeft soms een waarschuwing.</b> Als je instellingen niet logisch zijn (bv. 4 series met elk 8 rijders → 32 doorstromers naar 1 halve finale van max 9), kleurt het preview-blok geel of rood en krijg je een tip wat aan te passen.</div>
 

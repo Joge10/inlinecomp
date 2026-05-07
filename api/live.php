@@ -952,11 +952,17 @@ if ($action === 'genereer_volgende_ronde') {
 
         // ── Bepaal Q/q seeding parameters ────────────────────────────────────────
         // qPerHeat = aantal positie-qualifiers per bron-heat
-        //   heats       → volgende : 0  (puur tijdsortering)
+        //   heats       → volgende : full-final gebruikt heats_q_heat (default 0
+        //                  = puur tijdsortering, klassiek). Bij ≥1: winnaar(s)
+        //                  van elke serie direct naar A-finale, rest aangevuld
+        //                  met tijdsnelsten. Internationaal heeft géén heats →
+        //                  finale_a transitie, dus daar irrelevant.
         //   kwartfinale → volgende : kwart_q_heat (default 1)
         //   halve_finale→ volgende : half_q_heat  (default 1)
         $qPerHeat = 0;
-        if ($vanRondeType === 'kwartfinale') {
+        if ($vanRondeType === 'heats') {
+            $qPerHeat = (int)($cc['heats_q_heat'] ?? 0);
+        } elseif ($vanRondeType === 'kwartfinale') {
             $qPerHeat = (int)($cc['kwart_q_heat'] ?? 1);
         } elseif ($vanRondeType === 'halve_finale') {
             $qPerHeat = (int)($cc['half_q_heat'] ?? 1);
@@ -1120,10 +1126,54 @@ if ($action === 'genereer_volgende_ronde') {
                 }
             }
 
-            // Volledige slot-lijst (zonder overflow – die komen er apart achteraan)
-            $allSlots = $qSlots;
+            // Volledige slot-lijst (zonder overflow – die komen er apart achteraan).
+            // Tier-based seeding: eerst álle nummer-1's onderling op tijd, dan
+            // álle nummer-2's op tijd, enzovoort (klassieke WS/KNSB-conventie).
+            // Daarna pas de q-slots (tijdsnelsten) op tijd uit $qPool.
+            // Dit garandeert dat een heat-winnaar (zelfs een langzame) altijd
+            // vóór een nummer-2 (zelfs een snelle) start.
+            $sortByTijd = function($a, $b) {
+                $rA = $a['rondes'] !== null ? (int)$a['rondes'] : PHP_INT_MIN;
+                $rB = $b['rondes'] !== null ? (int)$b['rondes'] : PHP_INT_MIN;
+                if ($rA !== $rB) return $rB - $rA; // rondes DESC voor lange afstand
+                $tA = $a['tijd_ms'] === null ? PHP_INT_MAX : (int)$a['tijd_ms'];
+                $tB = $b['tijd_ms'] === null ? PHP_INT_MAX : (int)$b['tijd_ms'];
+                return $tA - $tB; // tijd ASC
+            };
+            $allSlots = [];
+            for ($rank = 1; $rank <= $qPerHeat; $rank++) {
+                // Pak alle rijders met deze rank uit elke heat (volgorde uit
+                // $qSlots: rank-1-h1, rank-1-h2, ..., rank-2-h1, rank-2-h2, ...).
+                $tier = array_slice($qSlots, ($rank - 1) * $nBronHeats, $nBronHeats);
+                $tier = array_values(array_filter($tier, fn($r) => $r !== null));
+                usort($tier, $sortByTijd);
+                foreach ($tier as $r) $allSlots[] = $r;
+            }
+            // q-slots ($qPool was al op tijd gesorteerd)
             for ($i = 0; $i < $nqSlots; $i++) {
                 $allSlots[] = $qPool[$i] ?? null;
+            }
+
+            // Full-final: overgebleven rijders (die niet in A passen) → B-finales.
+            // Pak iedereen uit $beschikbaar minus de A-finalisten en sorteer op
+            // rondes DESC dan tijd ASC (zelfde criterium als $byHeat-sortering).
+            // Rijders zonder tijd (DNF/DNS) gaan achteraan zodat ze in de
+            // langzaamste B-heat eindigen.
+            if ($isFullFinal) {
+                $aIds = array_filter(array_column($allSlots, 'entry_id'));
+                $aIdsSet = array_flip($aIds);
+                $bKandidaten = array_values(array_filter($beschikbaar,
+                    fn($r) => !isset($aIdsSet[$r['entry_id']])
+                ));
+                $metTijdB    = array_values(array_filter($bKandidaten, fn($r) => $r['tijd_ms'] !== null));
+                $zonderTijdB = array_values(array_filter($bKandidaten, fn($r) => $r['tijd_ms'] === null));
+                usort($metTijdB, function($a, $b) {
+                    $rA = $a['rondes'] !== null ? (int)$a['rondes'] : PHP_INT_MIN;
+                    $rB = $b['rondes'] !== null ? (int)$b['rondes'] : PHP_INT_MIN;
+                    if ($rA !== $rB) return $rB - $rA; // DESC
+                    return (int)$a['tijd_ms'] - (int)$b['tijd_ms'];
+                });
+                $bSlots = array_merge($metTijdB, $zonderTijdB);
             }
         } else {
             // Puur tijdsortering (heats → kwartfinale / runner_up / finale).

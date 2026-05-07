@@ -321,6 +321,21 @@ function _liveRondeCompleet(dcId, distanceId, rondeType) {
 }
 
 
+// Label voor de hergeneer-knop. Bij naar=finale_a in full-final genereren we
+// in één klik óók de B-finales (zie api/live.php). Het label moet dat
+// reflecteren: "A- en B-Finales" als er B-finale-ritten in het tijdschema
+// staan voor deze dc+distance, anders gewoon "A-Finale".
+function _liveHergeneerLabel(dcId, distanceId, naarRondeType) {
+    const baseLabel = RONDE_LABEL[naarRondeType] || naarRondeType;
+    if (naarRondeType !== 'finale_a') return baseLabel;
+    const heeftB = (_liveRitten || []).some(r =>
+        r.dc_id === dcId
+        && String(r.distance_id || '') === String(distanceId || '')
+        && r.ronde_type === 'finale_b'
+    );
+    return heeftB ? 'A- en B-Finales' : baseLabel;
+}
+
 function _volgendeRondeType(dcId, distanceId, vanRondeType) {
     const key = dcId + '|' + distanceId;
     const cc  = _liveCatConfigs[key];
@@ -641,6 +656,7 @@ function _liveRenderCarousel() {
     if (rit && !_liveLeesOnly) {
         const volgende = _volgendeRondeType(rit.dc_id, rit.distance_id, rit.ronde_type);
         if (volgende && _liveRondeCompleet(rit.dc_id, rit.distance_id, rit.ronde_type)) {
+            const label = _liveHergeneerLabel(rit.dc_id, rit.distance_id, volgende);
             volgendeHtml =
                 `<div class="live-ronde-compleet" id="live-ronde-compleet">` +
                 `✓ Alle ritten van de ${escHtml(RONDE_LABEL[rit.ronde_type] || rit.ronde_type)} zijn compleet.` +
@@ -649,7 +665,7 @@ function _liveRenderCarousel() {
                 ` data-distance-id="${escHtml(rit.distance_id || '')}"` +
                 ` data-van="${escHtml(rit.ronde_type)}"` +
                 ` data-naar="${escHtml(volgende)}">` +
-                `&#8635; Hergeneer ${escHtml(RONDE_LABEL[volgende] || volgende)}` +
+                `&#8635; Hergeneer ${escHtml(label)}` +
                 `</button>` +
                 `</div>`;
         }
@@ -3213,6 +3229,7 @@ async function _liveNavigeer(nieuweIdx) {
                     const div = document.createElement('div');
                     div.className = 'live-ronde-compleet';
                     div.id = 'live-ronde-compleet';
+                    const label = _liveHergeneerLabel(rit.dc_id, rit.distance_id, volgende);
                     div.innerHTML =
                         `✓ Alle ritten van de ${escHtml(RONDE_LABEL[rit.ronde_type] || rit.ronde_type)} zijn compleet.` +
                         `<button class="live-ronde-btn" id="live-btn-volgende-ronde"` +
@@ -3220,7 +3237,7 @@ async function _liveNavigeer(nieuweIdx) {
                         ` data-distance-id="${escHtml(rit.distance_id || '')}"` +
                         ` data-van="${escHtml(rit.ronde_type)}"` +
                         ` data-naar="${escHtml(volgende)}">` +
-                        `&#8635; Hergeneer ${escHtml(RONDE_LABEL[volgende] || volgende)}` +
+                        `&#8635; Hergeneer ${escHtml(label)}` +
                         `</button>`;
                     container?.appendChild(div);
                     div.querySelector('#live-btn-volgende-ronde')?.addEventListener('click', e => {

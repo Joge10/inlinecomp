@@ -455,11 +455,12 @@ function renderAfstandPanel(afstand, cfg, catConfigMap) {
         html += `<tr>
                 <th class="ts-th-catnaam" rowspan="2">Categorie</th>
                 <th class="ts-th-c ts-th-n" rowspan="2">Deel&shy;nemers</th>
-                <th colspan="3" class="ts-th-sectie">Series</th>
+                <th colspan="4" class="ts-th-sectie">Series</th>
                 <th colspan="3" class="ts-th-sectie ts-sectie-start">Finales</th>
             </tr><tr>
                 <th class="ts-th-c">Rijdt<br>series</th>
                 <th class="ts-th-c">Aantal<br>heats</th>
+                <th class="ts-th-c" title="Aantal directe kwalificaties per serie naar de A-finale (Q). 0 = puur tijdsnelsten. 1 = winnaar van elke serie krijgt een gegarandeerd A-finale-plek, rest van de A-finale wordt aangevuld met de tijdsnelsten van de overige rijders.">Q per<br>heat</th>
                 <th class="ts-th-c" title="Aangevinkt: de serie dient alleen als startvolgorde-bepaling voor de A-finale. De einduitslag komt volledig uit de A-finale (serie-punten tellen niet mee). Alleen beschikbaar bij 1 serie-heat.">Alleen<br>startvolgorde</th>
                 <th class="ts-th-c ts-sectie-start" title="Aantal rijders in de A-finale (max = aantal deelnemers)">A-finale<br>rijders</th>
                 <th class="ts-th-c" title="Aantal B-finale heats — overige rijders worden gelijk verdeeld">B-finales<br>aantal</th>
@@ -605,10 +606,13 @@ function renderAfstandPanel(afstand, cfg, catConfigMap) {
             const bhDef = Number.isFinite(bhCfg) && bhCfg >= 0
                 ? bhCfg
                 : (cat.n > aDef ? 1 : 0);
+            // PDO geeft TINYINT terug als string ("0"/"1") — pure truthy-check
+            // op "0" is true → checkbox zou ten onrechte aangevinkt staan.
+            // parseInt() nodig om de string-waarde correct te vergelijken.
             const lbgCfg = cc?.laatste_b_grootste;
             const lbgDef = (lbgCfg === null || lbgCfg === undefined)
-                ? (cfg?.laatste_b_grootste ?? 1)
-                : (lbgCfg ? 1 : 0);
+                ? (parseInt(cfg?.laatste_b_grootste ?? 1) === 1 ? 1 : 0)
+                : (parseInt(lbgCfg) === 1 ? 1 : 0);
             // Series-alleen-startvolgorde: alleen zinvol met 1 serie-heat.
             // Gebruik parseInt: PDO levert TINYINT als string ("0"/"1"),
             // dus !!"0" zou ten onrechte true geven.
@@ -616,6 +620,11 @@ function renderAfstandPanel(afstand, cfg, catConfigMap) {
             const sasEnabled = hH && parseInt(nH) === 1;
 
             html += `
+            <td class="ts-td-c ts-heats-velden" style="${hH ? '' : 'visibility:hidden'}">
+                <input type="number" name="heats_q_heat" value="${parseInt(cc?.heats_q_heat ?? 0)}"
+                       min="0" max="20" class="ts-inp-sm ts-inp-heats-qh"
+                       title="Q per heat: aantal rijders dat per serie direct doorgaat naar de A-finale (op basis van heat-positie). Rest van de A-finale wordt aangevuld met de tijdsnelsten van de overige rijders. 0 = puur tijdsnelsten (oude gedrag).">
+            </td>
             <td class="ts-td-c">
                 <input type="checkbox" name="series_alleen_startvolgorde"
                        class="ts-cb-sas" ${sasChecked && sasEnabled ? 'checked' : ''}
@@ -641,7 +650,6 @@ function renderAfstandPanel(afstand, cfg, catConfigMap) {
                        title="Rest schuift naar B-laatste (aan) of B1 (uit)">
             </td>
             <input type="hidden" name="heats_q"            value="${cat.n}">
-            <input type="hidden" name="heats_q_heat"       value="0">
             <input type="hidden" name="heeft_kwartfinale"  value="0">
             <input type="hidden" name="kwart_heats"        value="0">
             <input type="hidden" name="kwart_door"         value="0">
@@ -730,7 +738,17 @@ function renderAfstandCalc(afstand, cfg, catConfigMap) {
         } else {
             // Series (altijd op tijd)
             const ph = berekenPerHeat(cat.n, nVH);
-            stappen.push(`${cat.n} → ${nVH} series (${escHtml(ph)}/h) → ${qDoor}q`);
+            // Full-final met heats_q_heat ≥ 1: toon Q+q-uitsplitsing zodat de
+            // planner ziet hoeveel rijders direct via heat-positie doorgaan.
+            // Bij heats_q_heat=0 (klassiek): alleen "Nq" tonen.
+            const hQH = isFF ? Math.max(0, parseInt(cc.heats_q_heat) || 0) : 0;
+            if (isFF && hQH > 0) {
+                const Q = hQH * nVH;
+                const q = Math.max(0, cat.n - Q);
+                stappen.push(`${cat.n} → ${nVH} series (${escHtml(ph)}/h) → ${Q}Q + ${q}q`);
+            } else {
+                stappen.push(`${cat.n} → ${nVH} series (${escHtml(ph)}/h) → ${qDoor}q`);
+            }
 
             if (!isFF) {
                 // Kwartfinale
@@ -799,16 +817,29 @@ function renderAfstandCalc(afstand, cfg, catConfigMap) {
                     nB = bR > 0 ? Math.ceil(bR / Math.max(bHgR, aHg)) : 0;
                 }
 
+                // Q+q-uitsplitsing voor finale-labels (alleen bij heats_q_heat ≥ 1):
+                // A-finale toont "(2Q + 6q)" — hoeveel direct via heat-positie
+                // doorgaan en hoeveel via tijdsnelsten worden aangevuld.
+                // B-finales krijgen geen breakdown (consequent over alle B-heats),
+                // het totaal-aantal volgt impliciet uit het verschil cat.n − A.
+                const hQH2 = hH ? Math.max(0, parseInt(cc.heats_q_heat) || 0) : 0;
+                const totQ = hQH2 * nVH;
+                const aQ   = Math.min(totQ, aR);              // Q's in A
+                const aq   = Math.max(0, aR - aQ);            // q's in A
+                const aLabel = (hQH2 > 0)
+                    ? `A-finale (${aQ}Q + ${aq}q)`
+                    : `A-finale (${aR})`;
+
                 const parts = [];
                 if (bR > 0 && nB > 0) {
                     for (let b = nB; b >= 1; b--) parts.push(`B${b}-finale`);
-                    parts.push(`A-finale (${aR})`);
+                    parts.push(aLabel);
                 } else if (bR > 0 && nB === 0) {
                     // 0 B-heats ingesteld met rest-rijders: ze worden toegevoegd
                     // aan de A-finale (de planner ziet dit en bepaalt zelf of dat mag).
                     parts.push(`A-finale (${aR + bR})`);
                 } else {
-                    parts.push(`A-finale (${aR})`);
+                    parts.push(aLabel);
                 }
                 stappen.push(`${finR} → ${parts.join(' + ')}`);
             } else {
@@ -1754,7 +1785,7 @@ function bindTsEvents(afstandGroepen) {
         });
     });
 
-    const calcInputs = ['heats_q','kwart_heats','kwart_door','kwart_q_heat','half_heats','half_door','half_q_heat','q_direct','q_tijd','finale_heat_grootte','finale_b_grootte','laatste_b_grootste','heeft_runner_up','heats_aantal','runner_up_max','runner_up_min','finale_a_grootte','finale_b_heats'];
+    const calcInputs = ['heats_q','heats_q_heat','kwart_heats','kwart_door','kwart_q_heat','half_heats','half_door','half_q_heat','q_direct','q_tijd','finale_heat_grootte','finale_b_grootte','laatste_b_grootste','heeft_runner_up','heats_aantal','runner_up_max','runner_up_min','finale_a_grootte','finale_b_heats'];
     calcInputs.forEach(name => {
         container.querySelectorAll(`[name="${name}"]`).forEach(inp => {
             inp.addEventListener('input',  () => updateCalc(inp.closest('.ts-panel-form'), afstandGroepen));
@@ -1797,6 +1828,8 @@ function bindTsEvents(afstandGroepen) {
                     heeft_heats:        chk('heeft_heats')        ? 1 : 0,
                     heats_aantal:       cn('heats_aantal') || 1,
                     heats_q:            cn('heats_q'),
+                    // Q per heat voor full-final series → A-finale. 0 = puur tijdsnelsten.
+                    heats_q_heat:       parseInt(tr.querySelector('[name="heats_q_heat"]')?.value ?? '0') || 0,
                     heeft_kwartfinale:  chk('heeft_kwartfinale')  ? 1 : 0,
                     kwart_heats:        cn('kwart_heats') || 2,
                     kwart_door:         cn('kwart_door'),
@@ -2606,13 +2639,37 @@ function _bouwProgrammaExternInternal() {
         return '';
     };
 
-    // Doorstroom-tekst per ronde-type (met → volgende ronde)
-    const doorTxt = (rondeType, cc, nHeats) => {
+    // Doorstroom-tekst per ronde-type (met → volgende ronde). Voor full-final
+    // tonen we hoe rijders in series → A-/B-finale geseed worden zodat publiek
+    // en rijders weten hoe te kwalificeren voor de A-finale.
+    // Bij gebruik van Q-kwalificatie wordt een ¹-marker toegevoegd die
+    // verwijst naar de Q/q-legenda onderaan het programma.
+    const isFFschema = schema.systeem === 'full-final';
+    const QM = '¹'; // voetnoot-marker (Unicode superscript-1)
+    const doorTxt = (rondeType, cc, nHeats, totRj) => {
         if (!cc) return '';
         const vR = volgendeRonde(rondeType, cc);
         const naar = vR ? ` → ${vR}` : '';
         switch (rondeType) {
             case 'heats': {
+                if (isFFschema) {
+                    // Full-final: heats_q_heat per serie (Q) + tijdsnelsten (q)
+                    // → A-finale (finale_a_grootte). Rest → B-finale(s).
+                    const Qph = Math.max(0, parseInt(cc.heats_q_heat) || 0);
+                    const aFin = parseInt(cc.finale_a_grootte) || 0;
+                    const totQ = Qph * nHeats;
+                    const aQ   = Math.min(totQ, aFin);
+                    const aq   = Math.max(0, aFin - aQ);
+                    const bH   = parseInt(cc.finale_b_heats) || 0;
+                    const restNaarB = (totRj || 0) > aFin && bH > 0;
+                    const finaleDeel = (Qph > 0)
+                        ? `A-finale (${aQ}Q + ${aq}q)`
+                        : `A-finale (${aFin})`;
+                    const bDeel = restNaarB ? ` + B-finale${bH > 1 ? 's' : ''}` : '';
+                    return (Qph > 0)
+                        ? `${Qph}Q/heat + ${Math.max(0, aFin - totQ)}q${QM} → ${finaleDeel}${bDeel}`
+                        : `top ${aFin} op tijd → ${finaleDeel}${bDeel}`;
+                }
                 const q = parseInt(cc.heats_q) || 0;
                 return `top ${q} op tijd${naar}`;
             }
@@ -2620,13 +2677,15 @@ function _bouwProgrammaExternInternal() {
                 const kD = parseInt(cc.kwart_door)   || 0;
                 const kQ = parseInt(cc.kwart_q_heat) || 0;
                 const kq = Math.max(0, kD - kQ * nHeats);
-                return `${kQ}Q/heat + ${kq}q → ${kD} rijders${naar}`;
+                const m  = (kQ >= 1) ? QM : '';
+                return `${kQ}Q/heat + ${kq}q${m} → ${kD} rijders${naar}`;
             }
             case 'halve_finale': {
                 const hD = parseInt(cc.half_door)    || 0;
                 const hQ = parseInt(cc.half_q_heat)  || 0;
                 const hq = Math.max(0, hD - hQ * nHeats);
-                return `${hQ}Q/heat + ${hq}q → ${hD} rijders${naar}`;
+                const m  = (hQ >= 1) ? QM : '';
+                return `${hQ}Q/heat + ${hq}q${m} → ${hD} rijders${naar}`;
             }
             default: return '';
         }
@@ -2637,6 +2696,10 @@ function _bouwProgrammaExternInternal() {
 
     // ── HTML via rijen (volgorde-gebaseerd) ──────────────────────────────────
     let bloHtml = '';
+    // Eenmalig per programma de Q/q-voetnoot tonen onder het eerste blok dat
+    // Q-kwalificatie gebruikt. Daarna verwijst elke ¹ in de tabel naar deze
+    // uitleg zonder herhaling.
+    let _qqLegendaGetoond = false;
 
     // Helper: flush een verzamelde sectie (ritten van één ronde-blok) naar HTML
     const flushSectie = (sectieRitten, blok) => {
@@ -2677,7 +2740,7 @@ function _bouwProgrammaExternInternal() {
                 });
                 detail = [...seen].map(([lbl, n]) => `${esc(lbl)}-finale (${n} rijders)`).join(' · ');
             } else {
-                const dt = doorTxt(blok.ronde_type, cc, nH);
+                const dt = doorTxt(blok.ronde_type, cc, nH, totRj);
                 detail = `${totRj} rijders, ${nH} heat${nH > 1 ? 's' : ''}${dt ? ' · ' + esc(dt) : ''}`;
             }
             let inner = `<div class="cat-rij">
@@ -2735,6 +2798,30 @@ function _bouwProgrammaExternInternal() {
             </div>
             ${catHtml}
         </div>`;
+
+        // Q/q-voetnoot — direct onder dit blok plaatsen als hier voor het eerst
+        // Q-kwalificatie voorkomt. Daarna niet meer (eenmalig per programma).
+        if (!_qqLegendaGetoond) {
+            const veld = blok.ronde_type === 'heats'        ? 'heats_q_heat'
+                      : blok.ronde_type === 'kwartfinale'   ? 'kwart_q_heat'
+                      : blok.ronde_type === 'halve_finale'  ? 'half_q_heat'
+                      : null;
+            if (veld) {
+                const heeftQHier = [...catMap.keys()].some(k => {
+                    const cc = catCfgMap[k];
+                    return cc && (parseInt(cc[veld]) || 0) >= 1;
+                });
+                if (heeftQHier) {
+                    bloHtml += `<div class="qq-voetnoot" style="border-left:3px solid #2E75B6;background:#eef4fa;margin:4px 0 12px 18px;padding:8px 10px;font-size:9pt;color:#333">
+  <b>¹ Q en q — kwalificatie naar volgende ronde:</b>
+  <b>Q</b> = directe kwalificatie op heat-positie (bv. <em>1Q/heat</em> = winnaar van elke heat gaat door),
+  <b>q</b> = aanvulling op tijd (snelste tijden over alle heats heen).
+  Voorbeeld: <em>1Q/heat + 4q → 8 rijders</em> betekent: bij 4 heats stromen 4 heat-winnaars (Q) door, plus 4 tijdsnelsten (q) van de overige rijders.
+</div>`;
+                    _qqLegendaGetoond = true;
+                }
+            }
+        }
     };
 
     // Itereer rijen; groepeer opeenvolgende ritten van hetzelfde ronde-blok
