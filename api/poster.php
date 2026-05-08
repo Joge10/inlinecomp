@@ -55,6 +55,11 @@ $spStmt = $pdo->prepare("
 $spStmt->execute([$orgId]);
 $sponsors = $spStmt->fetchAll(PDO::FETCH_ASSOC);
 
+// Baan-sponsors worden later geladen op basis van $comp['baan_id'] (zie hieronder).
+// Ze worden achteraan toegevoegd aan de sponsor-array, zodat ze achter
+// de org-sponsors verschijnen in de poster-footer.
+$baanSponsors = [];
+
 // ── Wedstrijd ophalen (optioneel) ────────────────────────────────────────
 $comp = null;
 $baan = null;
@@ -94,7 +99,27 @@ if ($compId) {
     ");
     $baanStmt->execute([$compId]);
     $baan = $baanStmt->fetch(PDO::FETCH_ASSOC) ?: null;
+
+    // Baan-sponsors ophalen (alleen als deze wedstrijd een baan_id heeft).
+    // We pakken de sponsors van DEZE baan-rij — geen cross-org-fallback,
+    // omdat sponsors expliciet per (org × baan)-combinatie ingesteld worden.
+    $bidStmt = $pdo->prepare("SELECT baan_id FROM competitions WHERE id = ?");
+    $bidStmt->execute([$compId]);
+    $bid = $bidStmt->fetchColumn();
+    if ($bid) {
+        $bsStmt = $pdo->prepare("
+            SELECT naam, logo_path FROM baan_sponsors
+            WHERE baan_id = ? AND logo_path IS NOT NULL AND logo_path != ''
+            ORDER BY volgorde, naam
+        ");
+        $bsStmt->execute([$bid]);
+        $baanSponsors = $bsStmt->fetchAll(PDO::FETCH_ASSOC);
+    }
 }
+
+// Org-sponsors + baan-sponsors samenvoegen — baan achteraan zodat ze
+// "verbonden aan deze locatie"-mind blijven na de organisatie-sponsors.
+$sponsors = array_merge($sponsors, $baanSponsors);
 
 // ── Absolute paden voor logo's ──────────────────────────────────────────
 $webroot = realpath(__DIR__ . '/..');

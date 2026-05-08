@@ -72,6 +72,9 @@ try {
     } elseif ($type === 'baan') {
         $pdo->prepare("UPDATE banen SET logo_path = ?, logo_updated_at = NOW(), updated_at = NOW() WHERE id = ?")
             ->execute([$relPath, $id]);
+    } elseif ($type === 'baan_sponsor') {
+        $pdo->prepare("UPDATE baan_sponsors SET logo_path = ? WHERE id = ?")
+            ->execute([$relPath, $id]);
     }
     echo json_encode(['path' => $relPath]);
 } catch (Throwable $e) {

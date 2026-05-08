@@ -115,8 +115,29 @@ if ($action === 'competitions') {
                 ];
             }
         }
+        // Baan-sponsors (per baan_id) — verschijnen achter de org-sponsors
+        $baanIds = array_unique(array_filter(array_column($comps, 'baan_id')));
+        $baanSponsorMap = [];
+        if ($baanIds) {
+            $ph = implode(',', array_fill(0, count($baanIds), '?'));
+            $bsStmt = $pdo->prepare("
+                SELECT baan_id, naam, logo_path, url
+                FROM baan_sponsors
+                WHERE baan_id IN ($ph)
+                  AND logo_path IS NOT NULL AND logo_path != ''
+                ORDER BY volgorde, naam
+            ");
+            $bsStmt->execute(array_values($baanIds));
+            foreach ($bsStmt->fetchAll(PDO::FETCH_ASSOC) as $sp) {
+                $baanSponsorMap[$sp['baan_id']][] = [
+                    'naam' => $sp['naam'], 'logo' => $sp['logo_path'], 'url' => $sp['url'],
+                ];
+            }
+        }
         foreach ($comps as &$c) {
-            $c['sponsors'] = $sponsorMap[$c['organisatie_id'] ?? ''] ?? [];
+            $org  = $sponsorMap[$c['organisatie_id'] ?? ''] ?? [];
+            $baan = $baanSponsorMap[$c['baan_id'] ?? ''] ?? [];
+            $c['sponsors'] = array_merge($org, $baan);
         }
         unset($c);
         echo json_encode($comps, JSON_UNESCAPED_UNICODE);

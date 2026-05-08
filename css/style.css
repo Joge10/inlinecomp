@@ -2957,6 +2957,9 @@ th.rk-totaal, td.rk-totaal { width:55px; font-weight:700; color:var(--blauw); ba
 .bn-form-acties       { display: flex; gap: 8px; justify-content: flex-end;
                         margin-top: .8rem; }
 .bn-aliassen-blok     { margin-top: 1rem; }
+.bn-sponsors-blok     { margin-top: 1rem; }
+.bn-sponsors-list     { margin-bottom: .5rem; }
+.bn-sponsors-list .alias-leeg { color: #999; font-style: italic; padding: .3rem 0; }
 
 /* ── Mededelingen-modal (Beheer → Wedstrijden) ─────────────────────────── */
 .mld-overlay      { position: fixed; inset: 0; background: rgba(0,0,0,.45);

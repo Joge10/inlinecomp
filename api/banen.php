@@ -81,6 +81,25 @@ try {
         exit;
     }
 
+    // ── GET: sponsors voor één baan ─────────────────────────────────────────
+    if ($method === 'GET' && $action === 'sponsors') {
+        $bid = trim($_GET['baan_id'] ?? '');
+        if ($bid === '') {
+            http_response_code(400);
+            echo json_encode(['error' => 'baan_id ontbreekt']);
+            exit;
+        }
+        $stmt = $pdo->prepare(
+            "SELECT id, naam, logo_path, url, volgorde
+             FROM baan_sponsors
+             WHERE baan_id = ?
+             ORDER BY volgorde, naam"
+        );
+        $stmt->execute([$bid]);
+        echo json_encode($stmt->fetchAll(PDO::FETCH_ASSOC), JSON_UNESCAPED_UNICODE);
+        exit;
+    }
+
     // ── GET: lijst banen voor één organisatie ──────────────────────────────
     if ($method === 'GET') {
         if ($orgId === '') {
@@ -211,6 +230,84 @@ try {
         }
 
         echo json_encode(['ok' => true, 'id' => $bid]);
+        exit;
+    }
+
+    // ── Sponsors voor een baan opslaan (bulk: vervangt OF update bestaand) ──
+    // POST body (JSON óf form): {baan_id, sponsors: [{id?, naam, url, volgorde?}, ...]}
+    // Bestaande sponsors die NIET in de lijst staan worden ongemoeid gelaten —
+    // gebruik action=delete_sponsor om er één weg te halen. Dit volgt het
+    // patroon van organisaties.save (bestaande blijven, nieuwe = INSERT,
+    // bestaande met id = UPDATE).
+    if ($action === 'save_sponsors') {
+        $body = json_decode(file_get_contents('php://input'), true);
+        if (!is_array($body)) $body = $_POST;
+        $bid      = trim($body['baan_id'] ?? '');
+        $sponsors = $body['sponsors'] ?? [];
+        if ($bid === '') {
+            http_response_code(400);
+            echo json_encode(['error' => 'baan_id ontbreekt']);
+            exit;
+        }
+        // Check baan bestaat
+        $chk = $pdo->prepare("SELECT 1 FROM banen WHERE id = ?");
+        $chk->execute([$bid]);
+        if (!$chk->fetchColumn()) {
+            http_response_code(404);
+            echo json_encode(['error' => 'Baan niet gevonden']);
+            exit;
+        }
+        if (!is_array($sponsors)) $sponsors = [];
+
+        foreach ($sponsors as $i => $s) {
+            $sId  = !empty($s['id']) ? $s['id'] : null;
+            $sNam = trim($s['naam'] ?? '');
+            if (!$sNam) continue;
+            $sUrl = trim($s['url'] ?? '') ?: null;
+            $vol  = (int)($s['volgorde'] ?? $i);
+
+            if ($sId) {
+                $pdo->prepare(
+                    "UPDATE baan_sponsors SET naam = ?, url = ?, volgorde = ?
+                     WHERE id = ? AND baan_id = ?"
+                )->execute([$sNam, $sUrl, $vol, $sId, $bid]);
+            } else {
+                $pdo->prepare(
+                    "INSERT INTO baan_sponsors (id, baan_id, naam, url, volgorde)
+                     VALUES (?, ?, ?, ?, ?)"
+                )->execute([uuid4_b(), $bid, $sNam, $sUrl, $vol]);
+            }
+        }
+        // Geüpdatete lijst teruggeven zodat frontend nieuwe id's kan tonen
+        $stmt = $pdo->prepare(
+            "SELECT id, naam, logo_path, url, volgorde
+             FROM baan_sponsors WHERE baan_id = ? ORDER BY volgorde, naam"
+        );
+        $stmt->execute([$bid]);
+        echo json_encode([
+            'ok'       => true,
+            'sponsors' => $stmt->fetchAll(PDO::FETCH_ASSOC),
+        ], JSON_UNESCAPED_UNICODE);
+        exit;
+    }
+
+    // Sponsor verwijderen (incl. logo-bestand best-effort)
+    if ($action === 'delete_sponsor') {
+        $sId = trim($_POST['id'] ?? '');
+        if ($sId === '') {
+            http_response_code(400);
+            echo json_encode(['error' => 'id ontbreekt']);
+            exit;
+        }
+        $logoStmt = $pdo->prepare("SELECT logo_path FROM baan_sponsors WHERE id = ?");
+        $logoStmt->execute([$sId]);
+        $logoPath = $logoStmt->fetchColumn();
+        if ($logoPath) {
+            $full = __DIR__ . '/../' . ltrim($logoPath, '/');
+            if (is_file($full)) @unlink($full);
+        }
+        $pdo->prepare("DELETE FROM baan_sponsors WHERE id = ?")->execute([$sId]);
+        echo json_encode(['ok' => true]);
         exit;
     }
 

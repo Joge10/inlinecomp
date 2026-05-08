@@ -161,6 +161,12 @@ function bouwBaanForm(id) {
             </div>
         </div>` : ''}
 
+        ${b.id ? `<div class="bn-sponsors-blok">
+            <div class="inst-subtitel">Sponsors <span class="inst-subtitel-hint">(verschijnen in public/coach-footer en op de poster bij wedstrijden op deze baan)</span></div>
+            <div id="bn-sponsors-list" class="bn-sponsors-list">Laden…</div>
+            <button class="btn-secondary btn-small" id="bn-sponsor-add">+ Sponsor toevoegen</button>
+        </div>` : ''}
+
         <div class="bn-form-acties">
             <button class="btn-secondary" id="bn-form-annuleer">Annuleren</button>
             <button class="btn-primary"   id="bn-form-opslaan">Opslaan</button>
@@ -179,8 +185,120 @@ function bindBaanForm() {
     document.getElementById('bn-form-opslaan')?.addEventListener('click', slaBaanOp);
     document.getElementById('bn-logo-file')?.addEventListener('change', uploadBaanLogo);
     document.getElementById('bn-alias-ok')?.addEventListener('click', voegAliasToe);
+    document.getElementById('bn-sponsor-add')?.addEventListener('click', () => voegSponsorRijToeBaan(null));
 
-    if (bnActieveId && bnActieveId !== 'NIEUW') laadAliassen(bnActieveId);
+    if (bnActieveId && bnActieveId !== 'NIEUW') {
+        laadAliassen(bnActieveId);
+        laadBaanSponsors(bnActieveId);
+    }
+}
+
+// ── Sponsors per baan ─────────────────────────────────────────────────────
+async function laadBaanSponsors(baanId) {
+    const list = document.getElementById('bn-sponsors-list');
+    if (!list) return;
+    try {
+        const res = await fetch('api/banen.php?action=sponsors&baan_id=' + encodeURIComponent(baanId));
+        const sponsors = await res.json();
+        list.innerHTML = '';
+        if (Array.isArray(sponsors) && sponsors.length) {
+            sponsors.forEach(s => voegSponsorRijToeBaan(s));
+        } else {
+            list.innerHTML = '<div class="alias-leeg">Nog geen sponsors voor deze baan.</div>';
+        }
+    } catch (e) {
+        list.innerHTML = `<div class="status-msg error">${escHtml(e.message)}</div>`;
+    }
+}
+
+function voegSponsorRijToeBaan(sponsor) {
+    const list = document.getElementById('bn-sponsors-list');
+    if (!list) return;
+    // Eerste rij toevoegen → eerst de "leeg"-melding wissen
+    const leegMld = list.querySelector('.alias-leeg');
+    if (leegMld) leegMld.remove();
+
+    const rij = document.createElement('div');
+    rij.className  = 'sponsor-rij';
+    rij.dataset.id = sponsor?.id ?? '';
+    const baseUrl  = new URL('.', window.location.href).href;
+    const logoSrc  = sponsor?.logo_path ? (baseUrl + sponsor.logo_path + '?t=' + Date.now()) : '';
+    rij.innerHTML = `
+        <div class="sponsor-logo-wrap">
+            ${sponsor?.logo_path
+                ? `<img class="sponsor-logo-prev" src="${escHtml(logoSrc)}" alt="">`
+                : '<span class="logo-geen">Geen logo</span>'}
+        </div>
+        <label class="btn-upload btn-small">&#128247;
+            <input type="file" accept="image/*" class="sponsor-logo-file" style="display:none">
+        </label>
+        <input type="text" class="inp sponsor-naam" placeholder="Naam sponsor"
+               value="${escHtml(sponsor?.naam ?? '')}">
+        <input type="url"  class="inp sponsor-url"  placeholder="https://…"
+               value="${escHtml(sponsor?.url ?? '')}">
+        <button class="btn-del btn-sponsor-del" title="Verwijderen">&#128465;</button>`;
+
+    rij.querySelector('.sponsor-logo-file').addEventListener('change', e => {
+        if (!e.target.files[0]) return;
+        const sId = rij.dataset.id;
+        if (!sId) {
+            toonBevestigDialog(
+                'Sla eerst de baan + sponsor-naam op (klik op "Opslaan" onderaan), daarna kun je het logo uploaden.',
+                'Sponsor-logo', 'OK', '');
+            return;
+        }
+        uploadBaanSponsorLogo(sId, e.target.files[0], rij);
+    });
+    rij.querySelector('.btn-sponsor-del').addEventListener('click', async () => {
+        const sId = rij.dataset.id;
+        if (sId) {
+            const fd = new FormData();
+            fd.append('action', 'delete_sponsor');
+            fd.append('id', sId);
+            await fetch('api/banen.php', { method: 'POST', body: fd });
+        }
+        rij.remove();
+        // Als er geen rijen meer zijn, weer "leeg"-tekst tonen
+        if (!list.querySelector('.sponsor-rij')) {
+            list.innerHTML = '<div class="alias-leeg">Nog geen sponsors voor deze baan.</div>';
+        }
+    });
+    list.appendChild(rij);
+}
+
+async function uploadBaanSponsorLogo(sponsorId, file, rij) {
+    const fd = new FormData();
+    fd.append('type', 'baan_sponsor');
+    fd.append('id',   sponsorId);
+    fd.append('logo', file);
+    try {
+        const res  = await fetch('api/upload.php', { method: 'POST', body: fd });
+        const data = await res.json();
+        if (data.error) throw new Error(data.error);
+        const wrap = rij.querySelector('.sponsor-logo-wrap');
+        wrap.innerHTML = `<img class="sponsor-logo-prev" src="${escHtml(data.path)}?t=${Date.now()}" alt="">`;
+    } catch (e) {
+        toonBevestigDialog('Upload mislukt: ' + e.message, 'Sponsor-logo', 'OK', '');
+    }
+}
+
+// Lees alle sponsor-rijen uit de DOM → array voor save_sponsors API
+function leesBaanSponsorsUitForm() {
+    const list = document.getElementById('bn-sponsors-list');
+    if (!list) return [];
+    const rijen = list.querySelectorAll('.sponsor-rij');
+    const sponsors = [];
+    rijen.forEach((rij, idx) => {
+        const naam = rij.querySelector('.sponsor-naam')?.value.trim() || '';
+        if (!naam) return; // skip lege rijen
+        sponsors.push({
+            id:       rij.dataset.id || null,
+            naam,
+            url:      rij.querySelector('.sponsor-url')?.value.trim() || null,
+            volgorde: idx,
+        });
+    });
+    return sponsors;
 }
 
 async function slaBaanOp() {
@@ -204,6 +322,21 @@ async function slaBaanOp() {
         const data = await res.json();
         if (!res.ok) { toonBevestigDialog(data.error || 'Fout', 'Baan opslaan'); return; }
         bnActieveId = data.id ?? null;
+
+        // Sponsors mee-opslaan via aparte JSON-call (alleen als er een baan-id is)
+        const sponsors = leesBaanSponsorsUitForm();
+        if (bnActieveId && sponsors.length) {
+            try {
+                await fetch('api/banen.php?action=save_sponsors', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ baan_id: bnActieveId, sponsors }),
+                });
+            } catch (e) {
+                toonBevestigDialog('Sponsors-opslaan mislukt: ' + e.message, 'Baan opslaan', 'OK', '');
+            }
+        }
+
         await laadBanen();
     } catch (e) {
         toonBevestigDialog('Fout: ' + e.message, 'Baan opslaan');
