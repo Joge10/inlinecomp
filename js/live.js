@@ -919,11 +919,14 @@ function _liveInitPanelListeners() {
     // geen listeners nodig voor een read-only panel
 }
 
-function _liveBouwLinksPanel(dcId, distanceId, rondeType) {
-    // Filter ritten op deze categorie+afstand+ronde. Combi-ritten matchen
-    // óók wanneer ÉÉN VAN HUN LEDEN voor dc/distance staat (niet alleen de
-    // primary leden). Per gevonden rit nemen we vervolgens alleen de rijders
-    // mee die bij dc-id horen.
+// Verzamelt + sorteert + Q/q-markeert alle rijders voor één categorie+afstand
+// in een bepaalde ronde. Geeft een vlakke lijst met `_kwal` per rijder terug.
+// Gebruikt door _liveBouwLinksPanel — bij combi-rit roepen we deze helper
+// per leden afzonderlijk aan zodat Q/q en sortering binnen de eigen cat
+// blijven (niet kruisen tussen Mannen/Vrouwen-leden).
+function _liveVerzamelPanelRijders(dcId, distanceId, rondeType) {
+    // Filter ritten die voor dit dc/distance/ronde rijden — combi's matchen
+    // ook als ÉÉN van hun leden hierop staat.
     const ritten = _liveRitten.filter(r => {
         if (r.ronde_type !== rondeType) return false;
         if (r.is_combi) {
@@ -936,10 +939,7 @@ function _liveBouwLinksPanel(dcId, distanceId, rondeType) {
             && String(r.distance_id ?? '') === String(distanceId ?? '');
     });
 
-    const rondeNaam = RONDE_LABEL[rondeType] || rondeType;
-
-    // Alle rijders uit alle ritten in deze categorie+ronde, plat. Bij combi-rit
-    // alleen de rijders van het lid dat met dc_id+distance_id matcht.
+    // Plat: bij combi-rit alleen de rijders van het matchende leden meenemen.
     const alleRijders = [];
     for (const rit of ritten) {
         if (!_liveHasHeat(rit)) continue;
@@ -951,11 +951,8 @@ function _liveBouwLinksPanel(dcId, distanceId, rondeType) {
         }
     }
 
-    // Bepaal Q/q kwalificatie per rijder (alleen als er resultaten zijn)
-    // Q = positie-kwalificatie (top N per heat), q = tijd-kwalificatie
     const heeftResultaten = alleRijders.some(r => r.finishpositie != null);
     if (heeftResultaten) {
-        // Doorstroomregels uit catConfig
         const ccKey = dcId + '|' + (distanceId ?? '');
         const cc = _liveCatConfigs[ccKey] ?? {};
         let qPerHeat = 0, totaalDoor = 0;
@@ -970,19 +967,16 @@ function _liveBouwLinksPanel(dcId, distanceId, rondeType) {
             totaalDoor = parseInt(cc.half_door ?? 0);
         }
 
-        // Groepeer per heat, bepaal Q per heat
         const perHeat = {};
         for (const r of alleRijders) {
             const hk = r.heat_nr ?? r.rit_id;
             if (!perHeat[hk]) perHeat[hk] = [];
             perHeat[hk].push(r);
         }
-        // Sorteer elke heat op finishpositie
         for (const hk of Object.keys(perHeat)) {
             perHeat[hk].sort((a, b) => (a.finishpositie ?? 999) - (b.finishpositie ?? 999));
         }
 
-        // Markeer Q-rijders (top qPerHeat per heat, als qPerHeat > 0)
         const qRijders = new Set();
         if (qPerHeat > 0) {
             for (const hk of Object.keys(perHeat)) {
@@ -994,8 +988,6 @@ function _liveBouwLinksPanel(dcId, distanceId, rondeType) {
             }
         }
 
-        // Alle rijders met tijd gesorteerd, markeer q-rijders (tijdsnelsten)
-        // Inclusief ex-aequo: als de laatste q-spot dezelfde tijd heeft als de volgende, gaan die ook mee
         const metTijd = alleRijders
             .filter(r => r.tijd_ms != null && !qRijders.has(r.entry_id) && !r.sanctie)
             .sort((a, b) => a.tijd_ms - b.tijd_ms);
@@ -1005,7 +997,6 @@ function _liveBouwLinksPanel(dcId, distanceId, rondeType) {
         for (let i = 0; i < Math.min(aantalq, metTijd.length); i++) {
             qTijdRijders.add(metTijd[i].entry_id);
         }
-        // Ex-aequo: als de laatst-gekwalificeerde q dezelfde tijd heeft als de volgende, ook meenemen
         if (aantalq > 0 && metTijd[aantalq - 1] && metTijd[aantalq]) {
             const grensTijd = metTijd[aantalq - 1].tijd_ms;
             for (let i = aantalq; i < metTijd.length; i++) {
@@ -1014,62 +1005,112 @@ function _liveBouwLinksPanel(dcId, distanceId, rondeType) {
             }
         }
 
-        // Markeer alle rijders
         for (const r of alleRijders) {
             if (qRijders.has(r.entry_id))      r._kwal = 'Q';
             else if (qTijdRijders.has(r.entry_id)) r._kwal = 'q';
             else                                    r._kwal = '';
         }
 
-        // Sorteer: Q eerst (op positie), dan q (op tijd), dan rest (op tijd, daarna startnummer)
         alleRijders.sort((a, b) => {
             const ordA = a._kwal === 'Q' ? 0 : a._kwal === 'q' ? 1 : 2;
             const ordB = b._kwal === 'Q' ? 0 : b._kwal === 'q' ? 1 : 2;
             if (ordA !== ordB) return ordA - ordB;
-            if (ordA === 0) return (a.finishpositie ?? 999) - (b.finishpositie ?? 999); // Q: op positie
-            // q en rest: op tijd, dan startnummer
+            if (ordA === 0) return (a.finishpositie ?? 999) - (b.finishpositie ?? 999);
             const tA = a.tijd_ms ?? 999999, tB = b.tijd_ms ?? 999999;
             if (tA !== tB) return tA - tB;
             return (a.startnummer ?? 99999) - (b.startnummer ?? 99999);
         });
     } else {
-        // Geen resultaten: sorteer op startnummer
         alleRijders.sort((a, b) => (a.startnummer ?? 99999) - (b.startnummer ?? 99999));
     }
 
-    // Panel is read-only: alleen overzicht van Q/q-kwalificatie + gelezen
-    // tijden/sancties. Alle wijzigingen gaan via de carousel-kaart.
+    return alleRijders;
+}
 
-    // Rondes-kolom tonen als minimaal één rijder ronde-data heeft
-    const heeftRondes = alleRijders.some(r => r.rondes != null && r.rondes !== '' && r.rondes !== 0);
+// Bouwt tbody-rijen voor één sectie van het paneel.
+function _liveBouwPanelTbodyRijen(rijders, heeftRondes) {
+    let html = '';
+    for (const r of rijders) {
+        const tijdVal   = r.tijd_ms !== null ? _msTijdNaarDisplay(r.tijd_ms) : '—';
+        const sanctieUi = r.sanctie || '';
+        const statusKls = r.sanctie ? 'live-rit-status-sanctie'
+                        : r.tijd_ms !== null ? 'live-rit-status-compleet'
+                        : 'live-rit-status-leeg';
+        const rondesTd  = heeftRondes
+            ? `<td class="live-col-rondes"><span class="live-panel-rondes-txt">${r.rondes ?? '—'}</span></td>`
+            : '';
+        const kwalBadge = r._kwal === 'Q' ? '<span style="color:#198754;font-weight:700">Q</span>'
+                       : r._kwal === 'q' ? '<span style="color:#0d6efd;font-weight:600">q</span>'
+                       : '';
+        html +=
+            `<tr class="live-panel-rij ${statusKls}" data-panel-entry="${r.entry_id}" data-rit-id="${r.rit_id}" data-rondes="${r.rondes ?? ''}">` +
+            `<td>${r.startnummer ?? ''}</td>` +
+            `<td>${escHtml(r.full_name || '')}</td>` +
+            `<td style="text-align:center;width:24px">${kwalBadge}</td>` +
+            rondesTd +
+            `<td class="live-col-tijd"><span class="live-panel-tijd-txt">${escHtml(tijdVal)}</span></td>` +
+            `<td class="live-col-sanctie"><span class="live-panel-sanctie-txt">${escHtml(sanctieUi || '—')}</span></td>` +
+            `<td class="live-col-finish"><span class="live-finish-badge">${r.finishpositie?_ordinaal(r.finishpositie):'—'}</span></td>` +
+            `</tr>`;
+    }
+    return html;
+}
+
+function _liveBouwLinksPanel(dcId, distanceId, rondeType) {
+    const rondeNaam = RONDE_LABEL[rondeType] || rondeType;
+
+    // Bij combi-rit (huidige rit): toon ALLE leden van de combi met
+    // duidelijke scheidingsregels, elk met eigen Q/q en eigen Fin-nummering.
+    const huidigeRit = _liveRitten[_liveHuidigIdx];
+    const isCombiContext = huidigeRit?.is_combi
+        && huidigeRit.combi_leden.some(l =>
+            l.dc_id === dcId && String(l.distance_id ?? '') === String(distanceId ?? '')
+        );
+
+    // Verzamel rijders per "sectie": bij combi één per leden, anders één.
+    const secties = isCombiContext
+        ? huidigeRit.combi_leden.map(lid => ({
+            dc_id:        lid.dc_id,
+            distance_id:  lid.distance_id,
+            label:        lid.dc_naam,
+            rijders:      _liveVerzamelPanelRijders(lid.dc_id, lid.distance_id, rondeType),
+        }))
+        : [{
+            dc_id:        dcId,
+            distance_id:  distanceId,
+            label:        null,
+            rijders:      _liveVerzamelPanelRijders(dcId, distanceId, rondeType),
+        }];
+
+    // Globale "heeftRondes": als minstens één sectie ronde-data heeft, dan
+    // tonen we de Rnd-kolom voor alle secties (zo blijft de tabel uitgelijnd).
+    const heeftRondes = secties.some(s =>
+        s.rijders.some(r => r.rondes != null && r.rondes !== '' && r.rondes !== 0)
+    );
+
+    const colspan = heeftRondes ? 7 : 6;
 
     let tbody = '';
-    if (alleRijders.length === 0) {
-        tbody = `<tr class="live-panel-rij-leeg"><td colspan="${heeftRondes ? 6 : 5}">Geen startlijst beschikbaar</td></tr>`;
-    } else {
-        for (const r of alleRijders) {
-            const tijdVal   = r.tijd_ms !== null ? _msTijdNaarDisplay(r.tijd_ms) : '—';
-            const sanctieUi = r.sanctie || '';
-            const statusKls = r.sanctie ? 'live-rit-status-sanctie'
-                            : r.tijd_ms !== null ? 'live-rit-status-compleet'
-                            : 'live-rit-status-leeg';
-            const rondesTd  = heeftRondes
-                ? `<td class="live-col-rondes"><span class="live-panel-rondes-txt">${r.rondes ?? '—'}</span></td>`
-                : '';
-            const kwalBadge = r._kwal === 'Q' ? '<span style="color:#198754;font-weight:700">Q</span>'
-                           : r._kwal === 'q' ? '<span style="color:#0d6efd;font-weight:600">q</span>'
-                           : '';
+    let totaalRijders = 0;
+    secties.forEach((s, i) => {
+        // Sectie-header tussen leden: alleen tonen als er meerdere secties zijn
+        // OF als er een label is (combi-modus). Eerste sectie: extra top-margin
+        // vermijden via aparte CSS-klasse.
+        if (s.label) {
             tbody +=
-                `<tr class="live-panel-rij ${statusKls}" data-panel-entry="${r.entry_id}" data-rit-id="${r.rit_id}" data-rondes="${r.rondes ?? ''}">` +
-                `<td>${r.startnummer ?? ''}</td>` +
-                `<td>${escHtml(r.full_name || '')}</td>` +
-                `<td style="text-align:center;width:24px">${kwalBadge}</td>` +
-                rondesTd +
-                `<td class="live-col-tijd"><span class="live-panel-tijd-txt">${escHtml(tijdVal)}</span></td>` +
-                `<td class="live-col-sanctie"><span class="live-panel-sanctie-txt">${escHtml(sanctieUi || '—')}</span></td>` +
-                `<td class="live-col-finish"><span class="live-finish-badge">${r.finishpositie?_ordinaal(r.finishpositie):'—'}</span></td>` +
+                `<tr class="live-panel-leden-kop${i === 0 ? ' live-panel-leden-kop-eerste' : ''}">` +
+                `<td colspan="${colspan}">🔗 ${escHtml(s.label)}</td>` +
                 `</tr>`;
         }
+        if (s.rijders.length === 0) {
+            tbody += `<tr class="live-panel-rij-leeg"><td colspan="${colspan}">Geen startlijst beschikbaar</td></tr>`;
+        } else {
+            tbody += _liveBouwPanelTbodyRijen(s.rijders, heeftRondes);
+            totaalRijders += s.rijders.length;
+        }
+    });
+    if (totaalRijders === 0 && !secties.some(s => s.label)) {
+        tbody = `<tr class="live-panel-rij-leeg"><td colspan="${colspan}">Geen startlijst beschikbaar</td></tr>`;
     }
 
     // Geen opslaan-knop meer — alle invoer + opslaan via de carousel-kaart.

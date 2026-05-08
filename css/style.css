@@ -3796,6 +3796,23 @@ th.rk-totaal, td.rk-totaal { width:55px; font-weight:700; color:var(--blauw); ba
 .live-panel-rij.live-rit-status-leeg     { background: #fff; }
 .live-panel-rij:hover td { background: rgba(0,0,0,.025); }
 
+/* Combi-leden scheidingsrij in linker panel — toont per leden welke
+   categorie hij weergeeft, met visuele scheiding boven (behalve bij de
+   eerste sectie waar het overlapt met de tabel-thead). */
+.live-panel-leden-kop td {
+    background: var(--lichtblauw, #D6E4F0);
+    color: var(--blauw, #1F4E79);
+    font-weight: 700;
+    font-size: .8rem;
+    padding: 4px 8px;
+    border-top: 2px solid var(--blauw, #1F4E79);
+    border-bottom: 1px solid #b8c8d8;
+    letter-spacing: .02em;
+}
+.live-panel-leden-kop-eerste td {
+    border-top: none;  /* loopt aan tegen thead, dubbele lijn vermijden */
+}
+
 /* Carousel sectie (rechts): 2×cardW + 2×gap = 2×500 + 2×16 = 1032px
    Exacte breedte garandeert: halve prev + volle current + halve next zichtbaar */
 .live-carousel-sectie {
