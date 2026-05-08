@@ -1018,6 +1018,17 @@ try {
         $ruMax    = max(2, min(30, (int)($body['runner_up_max'] ?? 6)));
         $ruMin    = max(0, min(30, (int)($body['runner_up_min'] ?? 0)));
 
+        // BELANGRIJK: in MySQL behandelt UNIQUE KEY NULL als "distinct" van NULL,
+        // dus ON DUPLICATE KEY UPDATE triggert NIET op de globale rij (dc_id IS NULL).
+        // Zonder deze DELETE-stap zou elke save_afstand een NIEUWE rij maken
+        // i.p.v. de bestaande te updaten — vindAfstandConfig() zou dan een
+        // willekeurige (vaak de oudste) rij teruggeven en de zojuist
+        // ingevoerde runner_up_max/min "verdwijnen" terug naar oude waarden.
+        $pdo->prepare("
+            DELETE FROM tijdschema_afstand_config
+            WHERE tijdschema_id = ? AND dc_id IS NULL AND afstand_naam = ?
+        ")->execute([$tsId, $afstandNaam]);
+
         $pdo->prepare("
             INSERT INTO tijdschema_afstand_config
                 (tijdschema_id, afstand_naam, q_direct, q_tijd, finale_heat_grootte,
@@ -1025,21 +1036,6 @@ try {
                  race_type, heats_ranking, kwart_ranking, half_ranking, finale_ranking,
                  heeft_runner_up, runner_up_max, runner_up_min)
             VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
-            ON DUPLICATE KEY UPDATE
-                q_direct            = VALUES(q_direct),
-                q_tijd              = VALUES(q_tijd),
-                finale_heat_grootte = VALUES(finale_heat_grootte),
-                finale_b_grootte    = VALUES(finale_b_grootte),
-                laatste_b_grootste  = VALUES(laatste_b_grootste),
-                finale_seeding      = VALUES(finale_seeding),
-                race_type           = VALUES(race_type),
-                heats_ranking       = VALUES(heats_ranking),
-                kwart_ranking       = VALUES(kwart_ranking),
-                half_ranking        = VALUES(half_ranking),
-                finale_ranking      = VALUES(finale_ranking),
-                heeft_runner_up     = VALUES(heeft_runner_up),
-                runner_up_max       = VALUES(runner_up_max),
-                runner_up_min       = VALUES(runner_up_min)
         ")->execute([$tsId, $afstandNaam, $qD, $qT, $finaleHg, $finaleBg, $bLaatstGrootst,
                      $finaleSeeding, $raceType, $heatsRanking, $kwartRanking, $halfRanking, $finaleRanking,
                      $heeftRU, $ruMax, $ruMin]);
