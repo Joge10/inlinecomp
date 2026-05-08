@@ -1859,10 +1859,13 @@ function toonSlResultaten(cacheKey, vergrendeld = false) {
     const wisBtn = blok1.querySelector('#sl-btn-wis');
     if (wisBtn && !_slLeesOnly) {
         wisBtn.addEventListener('click', async () => {
-            // Stap 1: check welke side-effects de wis zou hebben
+            // Stap 1: check welke side-effects de wis zou hebben.
+            // dcIds is hier al een comma-separated string (zie regel ~1823:
+            // `const dcIds = (groep?.dc_ids || [groep?.dc_id]).join(',')`),
+            // dus géén extra .join() — die zou een TypeError geven op string.
             const baseBody = {
                 competition_id:  huidigCompId,
-                dc_ids:          dcIds.join(','),
+                dc_ids:          dcIds,
                 distance_id:     distId ?? '',
                 category_filter: cf.join(','),
             };
