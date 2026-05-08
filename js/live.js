@@ -2307,7 +2307,7 @@ function _afvalOpenCfgModal(ritIdx) {
                 const r = rit.rijders.find(x => x.entry_id === a.entry_id);
                 if (!r || r.rondes != null) return;
                 const afvalPos = totaalAfgevallen - stackIdx;
-                const ronde = _afvalRondeVoorPositie(afvalPos, nieuw, totDeeln);
+                const ronde = _afvalRondeVoorPositie(afvalPos, nieuw, teElimModal);
                 if (ronde == null) return;
                 r.rondes = ronde;
                 [`[data-entry="${a.entry_id}"]`, `[data-panel-entry="${a.entry_id}"]`]
@@ -2332,7 +2332,11 @@ function _afvalOpenCfgModal(ritIdx) {
             interval:      parseInt(overlay.querySelector('#avcfg-interval').value)   || 1,
             eindsprint:    parseInt(overlay.querySelector('#avcfg-eindsprint').value) || 0,
         };
-        const af = _afvalAfgeleidDubbel(tmp, totDeeln);
+        // Te elimineren = starters min de eindsprint-deelnemers (die rijden
+        // de eindsprint en vallen niet af in het schema). Vóórheen werd
+        // totDeeln direct doorgegeven → "11 elimineren / capaciteit 9"-fout.
+        const teElim = Math.max(0, totDeeln - tmp.eindsprint);
+        const af = _afvalAfgeleidDubbel(tmp, teElim);
         const wrap = overlay.querySelector('#avcfg-afgeleid');
         if (!tmp.totaal_ronden || !tmp.eerste_afval || !tmp.eindsprint) {
             wrap.innerHTML = '<i>Vul de velden in voor een berekening.</i>';
