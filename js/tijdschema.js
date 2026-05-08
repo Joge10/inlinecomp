@@ -940,10 +940,16 @@ function renderBlokken(schema, afstandGroepen) {
         const dragHandle = `<span class="ts-drag-handle" title="Sleep om te verplaatsen">⠿</span>`;
 
         if (blok.blok_type === 'pauze') {
+            const opmVal = escHtml(blok.opmerking ?? '');
             html += `<div class="ts-blok-item ts-blok-pauze" draggable="true" data-blok-id="${blok.id}">
                 ${dragHandle}${navBtns}
                 <span class="ts-blok-pauze-lbl">── PAUZE ──</span>
                 ${duurInp(blok)}
+                <label class="ts-blok-duur-lbl ts-blok-opm-lbl">
+                    Opmerking:&nbsp;<input type="text" class="ts-inp-opmerking" data-blok-id="${blok.id}"
+                                          value="${opmVal}" placeholder="bijv. lunch, uitloop…" maxlength="120"
+                                          style="width:14em">
+                </label>
                 ${delBtn}
             </div>`;
 
@@ -1290,9 +1296,10 @@ function renderRittenLijst(ritten, blokken) {
         } else if (rij.type === 'pauze') {
             prevGroepKey = null;
             const duurTxt = rij.blok?.duur ? ` – ${rij.blok.duur} min` : '';
+            const opmTxt  = rij.blok?.opmerking ? ` — ${escHtml(rij.blok.opmerking)}` : '';
             html += `<tr class="ts-pauze-rij">
                 ${tijdCel(rij.blok.id)}
-                <td colspan="${restCols}" class="ts-pauze-cel">⏸ Pauze${escHtml(duurTxt)}</td>
+                <td colspan="${restCols}" class="ts-pauze-cel">⏸ Pauze${escHtml(duurTxt)}${opmTxt}</td>
             </tr>`;
         } else if (rij.type === 'inrijden') {
             prevGroepKey = null;
@@ -1943,6 +1950,8 @@ function bindTsEvents(afstandGroepen) {
             postBody.duur        = parseInt(blokDiv.querySelector('.ts-inp-duur')?.value) || null;
             postBody.inrijd_cats = [...(blokDiv.querySelectorAll('.ts-inrijd-cat-cb') ?? [])]
                 .filter(cb => cb.checked).map(cb => cb.value);
+            // Pauze (en eventueel andere typen) kunnen nu ook een opmerking dragen
+            postBody.opmerking   = blokDiv.querySelector('.ts-inp-opmerking')?.value.trim() || null;
         } else if (blok.blok_type === 'wedstrijdstart') {
             postBody.tijdstip = blokDiv.querySelector('.ts-inp-tijdstip')?.value || null;
         } else if (blok.blok_type === 'herstart') {
@@ -2812,11 +2821,11 @@ function _bouwProgrammaExternInternal() {
                     return cc && (parseInt(cc[veld]) || 0) >= 1;
                 });
                 if (heeftQHier) {
-                    bloHtml += `<div class="qq-voetnoot" style="border-left:3px solid #2E75B6;background:#eef4fa;margin:4px 0 12px 18px;padding:8px 10px;font-size:9pt;color:#333">
-  <b>¹ Q en q — kwalificatie naar volgende ronde:</b>
-  <b>Q</b> = directe kwalificatie op heat-positie (bv. <em>1Q/heat</em> = winnaar van elke heat gaat door),
-  <b>q</b> = aanvulling op tijd (snelste tijden over alle heats heen).
-  Voorbeeld: <em>1Q/heat + 4q → 8 rijders</em> betekent: bij 4 heats stromen 4 heat-winnaars (Q) door, plus 4 tijdsnelsten (q) van de overige rijders.
+                    // Korte one-liner voetnoot: past op 1 regel, breekt niet
+                    // over pagina-einde, blijft dicht bij de ¹-markeringen.
+                    // page-break-inside:avoid als vangnet voor wrap.
+                    bloHtml += `<div class="qq-voetnoot" style="margin:4px 0 12px 18px;padding:4px 8px;font-size:9pt;color:#555;page-break-inside:avoid;break-inside:avoid">
+  <b>¹</b> <b>Q</b> = directe kwalificatie via heat-positie · <b>q</b> = aanvulling op tijd (snelste tijden over alle heats)
 </div>`;
                     _qqLegendaGetoond = true;
                 }
@@ -2857,10 +2866,11 @@ function _bouwProgrammaExternInternal() {
 
             } else if (rij.type === 'pauze') {
                 const duur = blok.duur ? `${blok.duur} min` : '';
+                const opm  = blok.opmerking ? ` — ${esc(blok.opmerking)}` : '';
                 bloHtml += `<div class="blok pauze">
                     <div class="blok-kop">
                         <span class="blok-tijd">${esc(bTijd)}</span>
-                        <span class="blok-titel">⏸ Pauze</span>
+                        <span class="blok-titel">⏸ Pauze${opm}</span>
                         ${duur ? `<span class="blok-info">${esc(duur)}</span>` : ''}
                     </div></div>`;
 
@@ -2956,6 +2966,12 @@ body{font-family:Arial,Helvetica,sans-serif;font-size:10.5pt;margin:.6cm 1.2cm 1
   body{margin:.5cm 1cm 1cm}
   .blok{page-break-inside:avoid}
   @page{margin:1cm 1.2cm;size:A4 portrait}
+  /* Sponsors-footer aan het laatste blok plakken — voorkomt dat alleen
+     de footer als laatste op een verder lege pagina belandt. */
+  .org-sponsor-footer{
+    page-break-before:avoid; break-before:avoid;
+    page-break-inside:avoid; break-inside:avoid;
+  }
 }
 `;
     const bodyHtml = `
@@ -3196,9 +3212,10 @@ function _bouwProgrammaInternInternal() {
             prevGroepKey = null;
             const bTijd = btMap.get(rij.blok.id) ?? '';
             const duurTxt = rij.blok?.duur ? ` – ${rij.blok.duur} min` : '';
+            const opmTxt  = rij.blok?.opmerking ? ` — ${esc(rij.blok.opmerking)}` : '';
             tBody += `<tr class="pauze">
                 ${heeftTijden ? `<td class="ti">${esc(bTijd)}</td>` : ''}
-                <td colspan="${restCols}" class="special">⏸ Pauze${esc(duurTxt)}</td>
+                <td colspan="${restCols}" class="special">⏸ Pauze${esc(duurTxt)}${opmTxt}</td>
             </tr>`;
         } else if (rij.type === 'inrijden') {
             prevGroepKey = null;
@@ -3422,8 +3439,12 @@ function bouwAfstandGroepen() {
     };
 
     // Helper: verwerk één enkelvoudige categorie (met eventuele splits)
+    // "Aanwezig" = entry_status 1 (Bevestigd) of 5 (Bevestigd bij org.) — die
+    // laatste is het label voor late toevoegingen via de + Deelnemer-modal.
+    // Beide rijden mee, dus beide tellen voor de heat-verdeling.
+    const isAanwezig = c => c?.entry_status === 1 || c?.entry_status === 5;
     const verwerkEnkel = (cat, overrideN) => {
-        const n          = overrideN ?? (cat.competitors?.filter(c => c.entry_status === 1).length ?? 0);
+        const n          = overrideN ?? (cat.competitors?.filter(isAanwezig).length ?? 0);
         const alleAfstand = cat.afstanden ?? [];
         const splits      = cat.splits || {};
         const splitNamen  = [...new Set(Object.values(splits))];
@@ -3439,7 +3460,7 @@ function bouwAfstandGroepen() {
                 // Gebruik de KNSB-codes als category_filter zodat sortering (jong→oud) werkt
                 const splitFilter = codes.join(',');
                 const splitN = cat.competitors?.filter(
-                    c => codes.includes(c.knsb?.category) && c.entry_status === 1
+                    c => codes.includes(c.knsb?.category) && isAanwezig(c)
                 ).length ?? 0;
                 if (splitN <= 0) return;
 
@@ -3482,7 +3503,7 @@ function bouwAfstandGroepen() {
     const isUuidRe = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
     for (const [mergeGroup, cats] of mergeGroepen) {
         const totaalN = cats.reduce(
-            (s, c) => s + (c.competitors?.filter(x => x.entry_status === 1).length ?? 0), 0
+            (s, c) => s + (c.competitors?.filter(isAanwezig).length ?? 0), 0
         );
         if (totaalN === 0) continue;
 
@@ -3516,7 +3537,7 @@ function bouwAfstandGroepen() {
         // category_filter: combineer de KNSB-codes van alle deelnemers in de groep
         const mergeCodes = [...new Set(
             cats.flatMap(c => c.competitors
-                ?.filter(x => x.entry_status === 1)
+                ?.filter(isAanwezig)
                 .map(x => x.knsb?.category)
                 .filter(Boolean) ?? []
             )

@@ -200,6 +200,7 @@ def genereer_poster(args):
     heeft_org  = bool(args.org_naam)
     heeft_comp = bool(args.comp_naam)
     sponsors   = parse_sponsors(args.sponsors)
+    is_coach   = args.app_type == 'coach'
 
     # ── Blauwe header ─────────────────────────────────────────────────────
     header_h = 82 * mm if heeft_comp else 80 * mm
@@ -211,9 +212,14 @@ def genereer_poster(args):
 
     c.setFillColor(WIT)
     c.setFont('Helvetica-Bold', 48)
+    # Titel is altijd 'InlineComp' — past dan netjes naast het org-logo.
+    # Coach-onderscheid maakt de subtitle ('Voor coaches…') al duidelijk.
     c.drawCentredString(width / 2, height - 30 * mm, 'InlineComp')
 
-    sub = f'Wedstrijden bij {args.org_naam}' if heeft_org else 'Volg je wedstrijd live!'
+    if is_coach:
+        sub = f'Voor coaches bij {args.org_naam}' if heeft_org else 'Voor coaches: volg al je rijders live'
+    else:
+        sub = f'Wedstrijden bij {args.org_naam}' if heeft_org else 'Volg je wedstrijd live!'
     c.setFont('Helvetica', 18)
     c.setFillColor(LICHTBLAUW)
     c.drawCentredString(width / 2, height - 44 * mm, sub)
@@ -272,6 +278,37 @@ def genereer_poster(args):
                    card_x + kaart_pad, card_y + kaart_pad,
                    draw_w, draw_h)
 
+    # Baan/vereniging-logo in header (linksboven, gastheer-vereniging).
+    # Spiegel van het org-logo rechts — zelfde grootte zodat beide visueel
+    # gelijkwaardig staan. Wit kaartje als achtergrond; logo binnen het vak
+    # op natuurlijke aspect-ratio (preserveAspectRatio in teken_logo).
+    baan_kind, baan_data, baan_w, baan_h = laad_logo(args.baan_logo) if args.baan_logo else (None, None, 0, 0)
+    if baan_kind is not None:
+        logo_max_h = 32 * mm
+        logo_max_w = 40 * mm
+        ratio = baan_w / baan_h if baan_h else 1.0
+        if ratio >= 1:
+            draw_w = min(logo_max_w, logo_max_h * ratio)
+            draw_h = draw_w / ratio
+        else:
+            draw_h = logo_max_h
+            draw_w = draw_h * ratio
+        marge = 8 * mm
+
+        kaart_pad = 2 * mm
+        card_x = marge
+        card_y = height - draw_h - marge - kaart_pad
+        c.setFillColor(WIT)
+        c.setStrokeColor(HexColor('#dde3ea'))
+        c.setLineWidth(0.5)
+        c.roundRect(card_x, card_y,
+                    draw_w + kaart_pad * 2, draw_h + kaart_pad * 2,
+                    1.5 * mm, fill=True, stroke=True)
+
+        teken_logo(c, baan_kind, baan_data,
+                   card_x + kaart_pad, card_y + kaart_pad,
+                   draw_w, draw_h)
+
     # ── QR Code ───────────────────────────────────────────────────────────
     qr_img = bouw_qr(args.qr_url)
     buf = io.BytesIO()
@@ -301,11 +338,18 @@ def genereer_poster(args):
     # ── 3 stappen ─────────────────────────────────────────────────────────
     step_top = qr_y - 12 * mm
     stap1 = f'Kies "{args.comp_naam}"' if heeft_comp else 'Kies je wedstrijd'
-    steps = [
-        ('1', stap1),
-        ('2', 'Vul je startnummer in'),
-        ('3', 'Bekijk je heats, tijden en resultaten'),
-    ]
+    if is_coach:
+        steps = [
+            ('1', stap1),
+            ('2', 'Voeg rijders toe via club, sponsor of startnummer'),
+            ('3', 'Volg programma, heats, sancties en uitslagen'),
+        ]
+    else:
+        steps = [
+            ('1', stap1),
+            ('2', 'Vul je startnummer in'),
+            ('3', 'Bekijk je heats, tijden en resultaten'),
+        ]
     step_gap = 13 * mm     # tune: compacter = 11, ruimer = 15
     for i, (nr, tekst) in enumerate(steps):
         y = step_top - i * step_gap
@@ -396,8 +440,10 @@ def genereer_poster(args):
 
     c.setFillColor(LICHTBLAUW)
     c.setFont('Helvetica', 8)
-    c.drawCentredString(width / 2, 8 * mm,
-        'Tip: voeg InlineComp toe aan je startscherm voor snelle toegang!')
+    tip = ('Tip: voeg InlineComp Coach toe aan je startscherm voor snelle toegang!'
+           if is_coach
+           else 'Tip: voeg InlineComp toe aan je startscherm voor snelle toegang!')
+    c.drawCentredString(width / 2, 8 * mm, tip)
 
     c.save()
 
@@ -408,6 +454,9 @@ def main():
     p.add_argument('--qr-url',       default='https://inlineresults.devriesen.com/public/')
     p.add_argument('--org-naam',     default='')
     p.add_argument('--org-logo',     default='')
+    p.add_argument('--baan-logo',    default='',
+                   help='Pad naar het baan/vereniging-logo (links in de header). '
+                        'Leeg = geen logo links.')
     p.add_argument('--comp-naam',    default='')
     p.add_argument('--comp-datum',   default='')
     p.add_argument('--comp-locatie', default='')
@@ -416,6 +465,9 @@ def main():
     p.add_argument('--sportity-kanaal', default='',
                    help='Naam van het Sportity-kanaal (bv. ISKREGIO); '
                         'leeg = algemene verwijzing naar Sportity')
+    p.add_argument('--app-type', default='public', choices=['public', 'coach'],
+                   help="Doelgroep van de poster: 'public' (rijders/ouders, default) "
+                        "of 'coach' (coaches die meerdere rijders tegelijk volgen)")
     args = p.parse_args()
 
     genereer_poster(args)

@@ -28,6 +28,7 @@ if (!in_array($_authUser['role'] ?? '', ['owner', 'admin', 'planner'], true)) {
 
 $orgId  = trim($_GET['org_id'] ?? '');
 $compId = trim($_GET['competition_id'] ?? '');
+$appType = ($_GET['app'] ?? 'public') === 'coach' ? 'coach' : 'public';
 
 if (!$orgId) {
     http_response_code(400);
@@ -56,6 +57,7 @@ $sponsors = $spStmt->fetchAll(PDO::FETCH_ASSOC);
 
 // ── Wedstrijd ophalen (optioneel) ────────────────────────────────────────
 $comp = null;
+$baan = null;
 if ($compId) {
     $compStmt = $pdo->prepare("
         SELECT id, name, starts, venue_name, venue_city, location
@@ -69,6 +71,29 @@ if ($compId) {
         echo json_encode(['error' => 'Wedstrijd niet gevonden bij deze organisatie.']);
         exit;
     }
+
+    // Baan-logo zoeken (zelfde cross-org fallback als in vergelijk.php) —
+    // dezelfde fysieke baan kan onder meerdere orgs bestaan; we pakken een
+    // logo van een andere org-rij voor dezelfde baan-naam als deze leeg is.
+    $baanStmt = $pdo->prepare("
+        SELECT COALESCE(b.logo_path, (
+                   SELECT b2.logo_path FROM banen b2
+                   WHERE b2.naam = b.naam AND b2.id != b.id
+                     AND b2.logo_path IS NOT NULL AND b2.logo_path != ''
+                   LIMIT 1
+               )) AS logo_path,
+               COALESCE(b.vereniging_naam, (
+                   SELECT b2.vereniging_naam FROM banen b2
+                   WHERE b2.naam = b.naam AND b2.id != b.id
+                     AND b2.vereniging_naam IS NOT NULL AND b2.vereniging_naam != ''
+                   LIMIT 1
+               )) AS vereniging_naam
+        FROM banen b
+        JOIN competitions c ON c.baan_id = b.id
+        WHERE c.id = ?
+    ");
+    $baanStmt->execute([$compId]);
+    $baan = $baanStmt->fetch(PDO::FETCH_ASSOC) ?: null;
 }
 
 // ── Absolute paden voor logo's ──────────────────────────────────────────
@@ -81,6 +106,7 @@ function absPad(?string $rel) {
 }
 
 $orgLogo      = absPad($org['logo_path']);
+$baanLogo     = $baan ? absPad($baan['logo_path']) : '';
 $sponsorsArg  = '';
 $sponsorItems = [];
 $debugPaden   = [];   // voor ?debug=1
@@ -124,7 +150,9 @@ if (!empty($_GET['debug'])) {
 }
 
 // ── QR-url: specifiek per comp als die er is, anders generiek ────────────
-$baseUrl = 'https://inlineresults.devriesen.com/public/';
+$baseUrl = $appType === 'coach'
+    ? 'https://inlineresults.devriesen.com/coach/'
+    : 'https://inlineresults.devriesen.com/public/';
 $qrUrl   = $comp ? ($baseUrl . '?comp=' . $comp['id']) : $baseUrl;
 
 // ── Datum-string ───────────────────────────────────────────────────────
@@ -195,6 +223,7 @@ $parts = [
     '--org-naam',     escapeshellarg($org['naam']),
 ];
 if ($orgLogo)     { $parts[] = '--org-logo';       $parts[] = escapeshellarg($orgLogo); }
+if ($baanLogo)    { $parts[] = '--baan-logo';      $parts[] = escapeshellarg($baanLogo); }
 if ($comp)        { $parts[] = '--comp-naam';      $parts[] = escapeshellarg($comp['name']); }
 if ($compDatum)   { $parts[] = '--comp-datum';     $parts[] = escapeshellarg($compDatum); }
 if ($compLocatie) { $parts[] = '--comp-locatie';   $parts[] = escapeshellarg($compLocatie); }
@@ -202,6 +231,7 @@ if ($sponsorsArg) { $parts[] = '--sponsors';       $parts[] = escapeshellarg($sp
 if (!empty($org['sportity_kanaal'])) {
     $parts[] = '--sportity-kanaal'; $parts[] = escapeshellarg($org['sportity_kanaal']);
 }
+$parts[] = '--app-type'; $parts[] = escapeshellarg($appType);
 
 $cmd    = implode(' ', $parts) . ' 2>&1';
 $output = shell_exec($cmd);
@@ -218,7 +248,8 @@ if (!is_file($tmpPdf) || filesize($tmpPdf) < 500) {
 }
 
 // ── PDF streamen als attachment ─────────────────────────────────────────
-$bestandsnaam = 'poster-' . preg_replace('/[^a-zA-Z0-9_-]+/', '_', $org['naam']);
+$prefix = $appType === 'coach' ? 'coach-poster' : 'poster';
+$bestandsnaam = $prefix . '-' . preg_replace('/[^a-zA-Z0-9_-]+/', '_', $org['naam']);
 if ($comp)  $bestandsnaam .= '-' . preg_replace('/[^a-zA-Z0-9_-]+/', '_', $comp['name']);
 $bestandsnaam .= '.pdf';
 

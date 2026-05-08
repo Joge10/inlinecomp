@@ -1,0 +1,513 @@
+<!DOCTYPE html>
+<html lang="nl">
+<head>
+<meta charset="UTF-8">
+<title>InlineComp Coach — Quick Reference</title>
+<style>
+:root {
+    --blauw: #1F4E79;
+    --middenblauw: #2E75B6;
+    --lichtblauw: #D6E4F0;
+    --oranje: #E8630A;
+    --grijs: #f5f5f5;
+    --tekst: #222;
+    --border: #cdd8e3;
+}
+* { box-sizing: border-box; }
+body {
+    font-family: 'Segoe UI', Arial, sans-serif;
+    color: var(--tekst);
+    background: #fafbfd;
+    margin: 0; padding: 0;
+    font-size: 10.5pt;
+    line-height: 1.4;
+}
+.page {
+    max-width: 210mm;
+    min-height: 297mm;
+    margin: 0 auto;
+    padding: 12mm 14mm;
+    background: #fff;
+    box-shadow: 0 0 12px rgba(0,0,0,.06);
+}
+.titel {
+    background: var(--blauw); color: #fff;
+    padding: 10px 14px;
+    border-radius: 6px 6px 0 0;
+    margin-bottom: 0;
+    display: flex; align-items: center; justify-content: space-between;
+}
+.titel h1 { margin: 0; font-size: 18pt; font-weight: 700; }
+.titel .subtitle { font-size: 10pt; opacity: .85; }
+.url-bar {
+    background: var(--oranje); color: #fff;
+    padding: 5px 14px;
+    font-weight: 600;
+    border-radius: 0 0 6px 6px;
+    margin-bottom: 12px;
+    display: flex; justify-content: space-between; align-items: center;
+}
+.url-bar code {
+    background: rgba(255,255,255,.18); padding: 1px 7px;
+    border-radius: 3px; font-size: 10pt;
+}
+.kolommen {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 12px;
+}
+section {
+    border: 1px solid var(--border);
+    border-radius: 5px;
+    padding: 8px 12px;
+    background: #fff;
+    page-break-inside: avoid;
+}
+section h2 {
+    margin: 0 0 6px;
+    color: var(--blauw);
+    font-size: 11.5pt;
+    border-bottom: 2px solid var(--oranje);
+    padding-bottom: 3px;
+}
+section h2 .stap-nr {
+    background: var(--blauw); color: #fff;
+    border-radius: 50%;
+    width: 18px; height: 18px;
+    display: inline-flex; align-items: center; justify-content: center;
+    font-size: 10pt; font-weight: 700;
+    margin-right: 6px;
+}
+section p { margin: 4px 0; }
+section ul { margin: 4px 0; padding-left: 18px; }
+section li { margin: 2px 0; }
+/* Voorkom dat een tip-bullet over twee kolommen heen breekt */
+section ul[style*="column-count"] li {
+    break-inside: avoid-column;
+    -webkit-column-break-inside: avoid;
+    page-break-inside: avoid;
+    margin-bottom: 5px;
+}
+section b { color: var(--blauw); }
+.span2 { grid-column: span 2; }
+
+table.compact {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 9.5pt;
+    margin-top: 4px;
+}
+table.compact th, table.compact td {
+    padding: 3px 6px;
+    border-bottom: 1px solid #eee;
+    text-align: left;
+    vertical-align: top;
+}
+table.compact th {
+    background: var(--lichtblauw);
+    color: var(--blauw);
+    font-weight: 700;
+}
+.badge {
+    display: inline-block; padding: 1px 7px;
+    border-radius: 9px;
+    font-size: 9pt; font-weight: 700;
+    white-space: nowrap;
+}
+.b-ok    { background: #e8f5e9; color: #2e7d32; }
+.b-warn  { background: #fff3e0; color: #e65100; }
+.b-err   { background: #fce4e4; color: #b71c1c; }
+.b-out   { background: #ffcdd2; color: #b71c1c; border: 1.5px solid #b71c1c; }
+.b-org   { background: #f3e5f5; color: #6a1b9a; }
+.b-confd { background: #e0f7fa; color: #006064; }
+
+.tabs {
+    display: flex; gap: 5px;
+    flex-wrap: wrap;
+    margin: 4px 0;
+}
+.tab-pill {
+    background: var(--lichtblauw); color: var(--blauw);
+    border-radius: 4px;
+    padding: 3px 8px;
+    font-size: 9.5pt; font-weight: 600;
+}
+.tip {
+    background: #fff8e1; border-left: 3px solid #f5a623;
+    padding: 6px 10px;
+    font-size: 9.5pt;
+    margin-top: 6px;
+    border-radius: 0 4px 4px 0;
+}
+.voet {
+    margin-top: 14px;
+    text-align: center;
+    color: #888;
+    font-size: 8.5pt;
+    border-top: 1px solid var(--border);
+    padding-top: 6px;
+}
+
+/* === Tab-mock-ups === */
+.mock-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 8px;
+    margin-top: 4px;
+}
+.mock-cell {
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    padding: 6px 7px;
+    background: #fafbfd;
+}
+.mock-label {
+    font-weight: 700;
+    color: var(--blauw);
+    font-size: 9.5pt;
+    margin-bottom: 4px;
+    border-bottom: 1px dashed var(--border);
+    padding-bottom: 3px;
+}
+.mock-uitleg {
+    font-size: 8.5pt;
+    margin-top: 5px;
+    color: #444;
+    line-height: 1.35;
+}
+.tab-mock {
+    background: #fff;
+    border: 1px solid #d8dde4;
+    border-radius: 3px;
+    padding: 5px 6px;
+    font-size: 8pt;
+    line-height: 1.3;
+}
+.mock-rit {
+    background: #fff;
+    border: 1px solid #eee;
+    border-left: 3px solid #d8dde4;
+    padding: 3px 5px;
+    margin: 3px 0;
+    border-radius: 0 3px 3px 0;
+}
+.mock-rit.mijn {
+    border-left-color: #f5a623;
+    background: #fffbef;
+}
+.mock-rit-sub { font-size: 7.5pt; color: #888; }
+.mock-rb {
+    display: inline-block;
+    background: #6c757d; color: #fff;
+    padding: 0 4px;
+    font-size: 7pt; font-weight: 700;
+    border-radius: 2px;
+    vertical-align: 1px;
+}
+.mock-rb.serie { background: #555; }
+.mock-rb.kf    { background: #5a4fcf; }
+.mock-rb.hf    { background: #6f4fd8; }
+.mock-rb.fa    { background: #c0392b; }
+.mock-snr {
+    display: inline-block;
+    background: #fcd34d; color: #5b3700;
+    padding: 0 5px;
+    font-size: 7.5pt; font-weight: 700;
+    border-radius: 8px;
+    margin-left: 2px;
+}
+.mock-rijder-blok {
+    border: 1px solid #ddd;
+    border-radius: 3px;
+    padding: 4px 6px;
+    margin: 3px 0;
+    background: #fff;
+}
+.mock-rijder-row {
+    display: flex; justify-content: space-between;
+    align-items: center;
+    font-size: 8pt;
+}
+.mock-snr-naam b { color: var(--blauw); }
+.mock-cat { color: #888; font-size: 7.5pt; }
+.mock-dc-blok {
+    background: #f5f8fc;
+    border-left: 2px solid var(--blauw);
+    padding: 3px 5px;
+    margin-top: 3px;
+    border-radius: 0 3px 3px 0;
+    font-size: 7.5pt;
+}
+.mock-dc-titel { color: var(--blauw); font-weight: 700; }
+.mock-sanctie {
+    background: #fff8e1;
+    border-left: 3px solid #f5a623;
+    padding: 3px 6px;
+    font-size: 7.5pt;
+    margin-top: 3px;
+    border-radius: 0 3px 3px 0;
+}
+.mock-sanctie b { color: #e65100; }
+.mock-tabel {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 7.5pt;
+    margin-top: 2px;
+}
+.mock-tabel td, .mock-tabel th {
+    padding: 1px 4px;
+    border-bottom: 1px solid #f0f0f0;
+}
+.mock-tabel th {
+    background: var(--lichtblauw);
+    color: var(--blauw);
+    text-align: left;
+}
+.mock-tabel tr.mijn { background: #fffbef; }
+.mock-tabel tr.mijn b { color: #5b3700; }
+
+@media print {
+    body { background: #fff; }
+    .page { box-shadow: none; padding: 6mm 10mm; }
+    @page { margin: 7mm 10mm; size: A4 portrait; }
+    .pdf-tip { display: none; }
+    section { padding: 6px 10px; }
+    .mock-rit.mijn,
+    .mock-tabel tr.mijn,
+    .mock-snr,
+    .mock-sanctie,
+    .mock-rb,
+    .badge {
+        -webkit-print-color-adjust: exact;
+        print-color-adjust: exact;
+    }
+}
+.pdf-tip {
+    background: #eef4fa; border-left: 3px solid var(--middenblauw);
+    padding: 6px 10px; margin-bottom: 10px; font-size: 9pt;
+    border-radius: 0 4px 4px 0;
+}
+</style>
+</head>
+<body>
+<div class="page">
+
+    <div class="pdf-tip">
+        💡 <b>Opslaan als PDF:</b> druk Ctrl+P (Cmd+P op Mac) → Bestemming "Opslaan als PDF" → Opslaan.
+        Marges + achtergrond automatisch goed.
+    </div>
+
+    <div class="titel">
+        <div>
+            <h1>InlineComp Coach</h1>
+            <div class="subtitle">Quick Reference — voor coaches die meerdere rijders tegelijk volgen</div>
+        </div>
+        <div style="font-size:24pt">👥</div>
+    </div>
+    <div class="url-bar">
+        <span>Open de coach-app:</span>
+        <code>inlineresults.devriesen.com/coach/</code>
+    </div>
+
+    <div class="kolommen">
+
+        <section>
+            <h2><span class="stap-nr">1</span>Kies je wedstrijd</h2>
+            <p>Boven aan de pagina staat een dropdown met alle wedstrijden. Standaard zie je <b>alleen vandaag</b>.</p>
+            <ul>
+                <li><b>Eerder</b>: vorige wedstrijden (na afloop)</li>
+                <li><b>Vandaag</b>: actief (default aan)</li>
+                <li><b>Later</b>: aankomende</li>
+            </ul>
+            <p>Knoppen onafhankelijk aan/uit klikbaar. Een wedstrijd kiezen activeert het programma + start de auto-refresh.</p>
+        </section>
+
+        <section>
+            <h2><span class="stap-nr">2</span>Voeg rijders toe</h2>
+            <p>Vul één of meer velden in en klik <b>+ Voeg toe</b>:</p>
+            <ul>
+                <li><b>Club</b>: dropdown → kies club → alle rijders van die club worden toegevoegd</li>
+                <li><b>Sponsor</b>: idem, alle rijders met die sponsor</li>
+                <li><b>Startnummer</b>: één rijder per nummer</li>
+            </ul>
+            <p>Je kunt de drie velden combineren — bv. een club én losse startnummers in één klik. Toegevoegde rijders verschijnen als chips bovenaan; klikken op een chip = verwijderen.</p>
+        </section>
+
+        <section class="span2">
+            <h2><span class="stap-nr">3</span>Vier tabbladen — wat zie je per tab</h2>
+            <div class="mock-grid">
+
+                <!-- Programma -->
+                <div class="mock-cell">
+                    <div class="mock-label">📅 Programma</div>
+                    <div class="tab-mock">
+                        <div class="mock-rit mijn">
+                            <div>🏁 <span class="mock-rb serie">Serie</span> <b>Heat 1</b>
+                                <span class="mock-snr">12</span><span class="mock-snr">204</span></div>
+                            <div class="mock-rit-sub">Junioren A Vrouwen — One Lap</div>
+                        </div>
+                        <div class="mock-rit">
+                            <div>🚩 <span class="mock-rb serie">Serie</span> <b>Heat 2</b></div>
+                            <div class="mock-rit-sub">Junioren A Vrouwen — One Lap</div>
+                        </div>
+                        <div class="mock-rit mijn">
+                            <div>○ <span class="mock-rb serie">Serie</span> <b>Heat 3</b>
+                                <span class="mock-snr">112</span></div>
+                            <div class="mock-rit-sub">Junioren A Vrouwen — One Lap</div>
+                        </div>
+                    </div>
+                    <div class="mock-uitleg">
+                        Chronologische ritten met status-icoon (🏁 uitslagen / 🚩 geloot / ○ niets). Ritten met jouw rijders <em>geel</em> + <b>pills</b> met startnummers. Klik = startlijst-overlay. Combi-ritten: "🔗 rijden tegelijk".
+                    </div>
+                </div>
+
+                <!-- Heats -->
+                <div class="mock-cell">
+                    <div class="mock-label">🏃 Heats</div>
+                    <div class="tab-mock">
+                        <div class="mock-rijder-blok">
+                            <div class="mock-rijder-row">
+                                <span class="mock-snr-naam"><b>218</b> Bram K.</span>
+                                <span class="mock-cat">HSA</span>
+                            </div>
+                            <div class="mock-rijder-row" style="margin-top:2px">
+                                <span>One Lap</span>
+                                <span class="badge b-ok" style="font-size:7pt">✓ Bevestigd</span>
+                            </div>
+                            <div class="mock-dc-blok">
+                                <div class="mock-dc-titel">Senioren M One Lap</div>
+                                <div><span class="mock-rb serie">Serie</span> Heat 3 — startpos 2</div>
+                                <div><span class="mock-rb hf">HF</span> Heat 1 — startpos 1</div>
+                                <div><span class="mock-rb fa">Finale</span> Heat 1 — startpos 3</div>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="mock-uitleg">
+                        Per rijder een blok met DC-status + per ronde <b>heatnummer en startpositie</b>. <em>"⏳ niet definitief"</em> = nog niet geloot; <em>"niet geplaatst"</em> = wel geloot maar rijder niet door.
+                    </div>
+                </div>
+
+                <!-- Sancties -->
+                <div class="mock-cell">
+                    <div class="mock-label">⚠ Sancties</div>
+                    <div class="tab-mock">
+                        <div class="mock-rijder-blok">
+                            <div class="mock-rijder-row">
+                                <span class="mock-snr-naam"><b>90</b> Anna J.</span>
+                                <span class="mock-cat">DJA</span>
+                            </div>
+                            <div style="color:#888;font-style:italic;font-size:7.5pt;margin-top:2px">Geen sancties.</div>
+                        </div>
+                        <div class="mock-rijder-blok">
+                            <div class="mock-rijder-row">
+                                <span class="mock-snr-naam"><b>218</b> Bram K.</span>
+                                <span class="mock-cat">HSA</span>
+                            </div>
+                            <div class="mock-sanctie">
+                                <b>FS</b> — Valse start · HF Heat 1 — Senioren M
+                            </div>
+                        </div>
+                    </div>
+                    <div class="mock-uitleg">
+                        Per rijder: óf <em>"Geen sancties"</em>, óf gele blokken met code (W1/W2, FS, RR, DQ-…) + uitleg + welke ronde/heat. Codes uitgelegd in tabel hiernaast.
+                    </div>
+                </div>
+
+                <!-- Uitslagen -->
+                <div class="mock-cell">
+                    <div class="mock-label">📊 Uitslagen</div>
+                    <div class="tab-mock">
+                        <div style="border:1px solid #ccc;border-radius:3px;padding:2px 5px;font-size:7.5pt;margin-bottom:3px;background:#fff">
+                            Junioren A Mannen One Lap ▾
+                        </div>
+                        <div style="border:1.5px solid var(--blauw);border-radius:3px;padding:2px 5px;font-size:7.5pt;margin-bottom:3px;background:#fff">
+                            One lap een ronde ▾
+                        </div>
+                        <table class="mock-tabel">
+                            <tr><th>#</th><th>Snr</th><th>Naam</th><th style="text-align:right">Tijd</th></tr>
+                            <tr><td>1</td><td><b>344</b></td><td>Anna J.</td><td style="text-align:right">39.177</td></tr>
+                            <tr><td>2</td><td><b>87</b></td><td>Bram K.</td><td style="text-align:right">39.333</td></tr>
+                            <tr><td>3</td><td><b>42</b></td><td>Carla S.</td><td style="text-align:right">39.663</td></tr>
+                            <tr><td>4</td><td><b>26</b></td><td>Daan V.</td><td style="text-align:right">40.166</td></tr>
+                            <tr class="mijn"><td>5</td><td><b>432</b></td><td>Eva M.</td><td style="text-align:right">41.904</td></tr>
+                            <tr><td>6</td><td><b>139</b></td><td>Finn P.</td><td style="text-align:right">42.048</td></tr>
+                        </table>
+                    </div>
+                    <div class="mock-uitleg">
+                        Kies eerst <b>categorie</b> (bovenste dropdown) en dan <b>ronde/afstand</b> (onderste). De eindstand verschijnt met snr, naam en tijd. Jouw rijders <em>geel gemarkeerd</em>. Verschijnt zodra de uitslag bevestigd is door de wedstrijdleider.
+                    </div>
+                </div>
+
+            </div>
+        </section>
+
+        <section>
+            <h2>Status-badges per DC</h2>
+            <p>Naast de naam van elke rijder staat per DC (categorie + afstandsgroep) een badge:</p>
+            <table class="compact">
+                <tr><td><span class="badge b-ok">✓ Bevestigd</span></td>
+                    <td>Online aangemeld én bevestigd bij de KNSB voor deze DC</td></tr>
+                <tr><td><span class="badge b-confd">✓ Bev. bij org.</span></td>
+                    <td>Late aanmelding bij organisatie</td></tr>
+                <tr><td><span class="badge b-warn">○ Niet bevestigd</span></td>
+                    <td>Inschrijving niet bevestigd bij de KNSB</td></tr>
+                <tr><td><span class="badge b-err">✗ Afgemeld</span></td>
+                    <td>KNSB-afmelding</td></tr>
+                <tr><td><span class="badge b-org">✗ Afg. bij org.</span></td>
+                    <td>Afgemeld bij organisatie</td></tr>
+                <tr><td><span class="badge b-out">! Niet getekend</span></td>
+                    <td>Niet getekend bij de balie</td></tr>
+            </table>
+        </section>
+
+        <section>
+            <h2>Sanctie-codes</h2>
+            <p>Verschijnen in de Sancties-tab en bij heat-uitslagen.</p>
+            <table class="compact">
+                <tr><td><b>W1 / W2</b></td><td>1e / 2e waarschuwing (lange afstand)</td></tr>
+                <tr><td><b>FS</b></td><td>False Start</td></tr>
+                <tr><td><b>RR</b></td><td>Rank Reduction (positie-aftrek na overtreding)</td></tr>
+                <tr><td><b>DQ-TF</b></td><td>Diskwalificatie — technische fout</td></tr>
+                <tr><td><b>DQ-SF</b></td><td>Diskwalificatie — sport fault</td></tr>
+                <tr><td><b>DQ-DF</b></td><td>Diskwalificatie — disciplinary fault</td></tr>
+                <tr><td><b>DNS / DNF</b></td><td>Did Not Start / Finish</td></tr>
+            </table>
+            <p style="font-size:9pt;color:#666;margin-top:4px">Volledige uitleg + reglements-context: zie de uitgebreide handleiding.</p>
+        </section>
+
+        <section class="span2">
+            <h2>Praktische tips</h2>
+            <ul style="column-count:2;column-gap:18px;margin:4px 0">
+                <li><b>💾 Onthouden per wedstrijd</b>: je rijderslijst wordt lokaal in je browser bewaard per wedstrijd — komt terug als je de pagina later opnieuw opent.</li>
+                <li><b>🔄 Auto-refresh</b>: programma & sancties verversen elke 60s. Tijd-stempel rechtsonder toont laatste update.</li>
+                <li><b>↓ Pull-to-refresh</b>: trek het programma omlaag voor een directe ververs (op telefoon).</li>
+                <li><b>📡 Geen verbinding?</b> Rode banner bovenaan toont 'm; data ververst automatisch zodra het netwerk terug is.</li>
+                <li><b>📢 Mededelingen</b>: belangrijke organisatie-meldingen verschijnen als pop-up (bv. "Programma 15 min uitloop").</li>
+                <li><b>🛠 Installeer als app</b>: op je telefoon → "Toevoegen aan beginscherm" → eigen icoon zonder browser-balk, snellere start.</li>
+            </ul>
+        </section>
+
+        <section class="span2" style="background:#f8fbff">
+            <h2>Probleem-oplossen — kort</h2>
+            <table class="compact">
+                <tr><th style="width:30%">Symptoom</th><th>Wat doen</th></tr>
+                <tr><td>Mijn rijder staat niet in de lijst</td>
+                    <td>Check of je de juiste wedstrijd hebt gekozen. Bij verlate inschrijving via organisatie: rij krijgt status <span class="badge b-confd">Bev. bij org.</span> — kan ~1 minuut duren voor 'ie verschijnt.</td></tr>
+                <tr><td>Heats verschijnen niet</td>
+                    <td>De startlijst wordt pas gepubliceerd zodra de wedstrijdleider deze heeft geloot. Tot dan zie je <em>"⏳ niet definitief"</em>.</td></tr>
+                <tr><td>Tijden updaten niet meer</td>
+                    <td>Pull-to-refresh of wacht op auto-refresh. Bij rode banner: zodra de verbinding terugkomt ververst de app vanzelf.</td></tr>
+                <tr><td>Bezoek-tab toont andere rijders</td>
+                    <td>De rijderslijst is per wedstrijd opgeslagen. Switchen tussen wedstrijden begint met een lege lijst — vorige selectie staat er weer als je terug gaat.</td></tr>
+            </table>
+        </section>
+
+    </div>
+
+    <div class="voet">
+        InlineComp Coach &middot; Quick Reference &middot; Volledige uitleg in de handleiding (admin → docs/handleiding.html)
+    </div>
+
+</div>
+</body>
+</html>

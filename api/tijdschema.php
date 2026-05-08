@@ -1379,8 +1379,14 @@ try {
                 $inrijdCats = isset($body['inrijd_cats'])
                               ? json_encode(array_values(array_filter((array)$body['inrijd_cats'])))
                               : null;
-                $pdo->prepare("UPDATE tijdschema_blokken SET duur = ?, inrijd_cats = ? WHERE id = ? AND tijdschema_id = ?")
-                    ->execute([$duur, $inrijdCats, $blokId, $tsId]);
+                // Opmerking-veld werd voorheen alleen voor herstart bewaard;
+                // nu ook voor pauze/inrijden/ceremonie zodat de planner een
+                // korte toelichting kan toevoegen die in het programma verschijnt.
+                $opmerking = isset($body['opmerking']) && trim((string)$body['opmerking']) !== ''
+                             ? substr(trim((string)$body['opmerking']), 0, 255)
+                             : null;
+                $pdo->prepare("UPDATE tijdschema_blokken SET duur = ?, inrijd_cats = ?, opmerking = ? WHERE id = ? AND tijdschema_id = ?")
+                    ->execute([$duur, $inrijdCats, $opmerking, $blokId, $tsId]);
                 break;
             case 'wedstrijdstart':
                 $tijdstip = isset($body['tijdstip']) && $body['tijdstip'] !== ''

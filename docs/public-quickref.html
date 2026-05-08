@@ -1,0 +1,605 @@
+<!DOCTYPE html>
+<html lang="nl">
+<head>
+<meta charset="UTF-8">
+<title>InlineComp Public — Quick Reference</title>
+<style>
+:root {
+    --blauw: #1F4E79;
+    --middenblauw: #2E75B6;
+    --lichtblauw: #D6E4F0;
+    --oranje: #E8630A;
+    --grijs: #f5f5f5;
+    --tekst: #222;
+    --border: #cdd8e3;
+}
+* { box-sizing: border-box; }
+body {
+    font-family: 'Segoe UI', Arial, sans-serif;
+    color: var(--tekst);
+    background: #fafbfd;
+    margin: 0; padding: 0;
+    font-size: 10.5pt;
+    line-height: 1.4;
+}
+.page {
+    max-width: 210mm;
+    min-height: 297mm;
+    margin: 0 auto;
+    padding: 12mm 14mm;
+    background: #fff;
+    box-shadow: 0 0 12px rgba(0,0,0,.06);
+}
+.titel {
+    background: var(--blauw); color: #fff;
+    padding: 10px 14px;
+    border-radius: 6px 6px 0 0;
+    margin-bottom: 0;
+    display: flex; align-items: center; justify-content: space-between;
+}
+.titel h1 { margin: 0; font-size: 18pt; font-weight: 700; }
+.titel .subtitle { font-size: 10pt; opacity: .85; }
+.url-bar {
+    background: var(--oranje); color: #fff;
+    padding: 5px 14px;
+    font-weight: 600;
+    border-radius: 0 0 6px 6px;
+    margin-bottom: 12px;
+    display: flex; justify-content: space-between; align-items: center;
+}
+.url-bar code {
+    background: rgba(255,255,255,.18); padding: 1px 7px;
+    border-radius: 3px; font-size: 10pt;
+}
+.kolommen {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 12px;
+}
+section {
+    border: 1px solid var(--border);
+    border-radius: 5px;
+    padding: 8px 12px;
+    background: #fff;
+    page-break-inside: avoid;
+}
+section h2 {
+    margin: 0 0 6px;
+    color: var(--blauw);
+    font-size: 11.5pt;
+    border-bottom: 2px solid var(--oranje);
+    padding-bottom: 3px;
+}
+section h2 .stap-nr {
+    background: var(--blauw); color: #fff;
+    border-radius: 50%;
+    width: 18px; height: 18px;
+    display: inline-flex; align-items: center; justify-content: center;
+    font-size: 10pt; font-weight: 700;
+    margin-right: 6px;
+}
+section p { margin: 4px 0; }
+section ul { margin: 4px 0; padding-left: 18px; }
+section li { margin: 2px 0; }
+/* Voorkom dat een tip-bullet over twee kolommen heen breekt */
+section ul[style*="column-count"] li {
+    break-inside: avoid-column;
+    -webkit-column-break-inside: avoid;
+    page-break-inside: avoid;
+    margin-bottom: 5px;
+}
+section b { color: var(--blauw); }
+.span2 { grid-column: span 2; }
+
+table.compact {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 9.5pt;
+    margin-top: 4px;
+}
+table.compact th, table.compact td {
+    padding: 3px 6px;
+    border-bottom: 1px solid #eee;
+    text-align: left;
+    vertical-align: top;
+}
+table.compact th {
+    background: var(--lichtblauw);
+    color: var(--blauw);
+    font-weight: 700;
+}
+.badge {
+    display: inline-block; padding: 1px 7px;
+    border-radius: 9px;
+    font-size: 9pt; font-weight: 700;
+    white-space: nowrap;
+}
+.b-ok    { background: #e8f5e9; color: #2e7d32; }
+.b-warn  { background: #fff3e0; color: #e65100; }
+.b-err   { background: #fce4e4; color: #b71c1c; }
+.b-out   { background: #ffcdd2; color: #b71c1c; border: 1.5px solid #b71c1c; }
+.b-org   { background: #f3e5f5; color: #6a1b9a; }
+.b-confd { background: #e0f7fa; color: #006064; }
+
+.tabs {
+    display: flex; gap: 5px;
+    flex-wrap: wrap;
+    margin: 4px 0;
+}
+.tab-pill {
+    background: var(--lichtblauw); color: var(--blauw);
+    border-radius: 4px;
+    padding: 3px 8px;
+    font-size: 9.5pt; font-weight: 600;
+}
+.tip {
+    background: #fff8e1; border-left: 3px solid #f5a623;
+    padding: 6px 10px;
+    font-size: 9.5pt;
+    margin-top: 6px;
+    border-radius: 0 4px 4px 0;
+}
+.voet {
+    margin-top: 14px;
+    text-align: center;
+    color: #888;
+    font-size: 8.5pt;
+    border-top: 1px solid var(--border);
+    padding-top: 6px;
+}
+
+/* === Tab-mock-ups === */
+.mock-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 8px;
+    margin-top: 4px;
+}
+.mock-cell {
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    padding: 6px 7px;
+    background: #fafbfd;
+}
+.mock-label {
+    font-weight: 700;
+    color: var(--blauw);
+    font-size: 9.5pt;
+    margin-bottom: 4px;
+    border-bottom: 1px dashed var(--border);
+    padding-bottom: 3px;
+}
+.mock-uitleg {
+    font-size: 8.5pt;
+    margin-top: 5px;
+    color: #444;
+    line-height: 1.35;
+}
+.tab-mock {
+    background: #fff;
+    border: 1px solid #d8dde4;
+    border-radius: 3px;
+    padding: 5px 6px;
+    font-size: 8pt;
+    line-height: 1.3;
+}
+.mock-rit {
+    background: #fff;
+    border: 1px solid #eee;
+    border-left: 3px solid #d8dde4;
+    padding: 3px 5px;
+    margin: 3px 0;
+    border-radius: 0 3px 3px 0;
+}
+.mock-rit.mijn {
+    border-left-color: #f5a623;
+    background: #fffbef;
+    font-weight: 600;
+}
+.mock-rit-sub { font-size: 7.5pt; color: #888; font-weight: 400; }
+.mock-rb {
+    display: inline-block;
+    background: #6c757d; color: #fff;
+    padding: 0 4px;
+    font-size: 7pt; font-weight: 700;
+    border-radius: 2px;
+    vertical-align: 1px;
+}
+.mock-rb.serie { background: #555; }
+.mock-rb.kf    { background: #5a4fcf; }
+.mock-rb.hf    { background: #6f4fd8; }
+.mock-rb.fa    { background: #c0392b; }
+.mock-rb.ru    { background: #2e75b6; }
+.mock-tabel {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 7.5pt;
+    margin-top: 2px;
+}
+.mock-tabel td, .mock-tabel th {
+    padding: 1px 4px;
+    border-bottom: 1px solid #f0f0f0;
+}
+.mock-tabel th {
+    background: var(--lichtblauw);
+    color: var(--blauw);
+    text-align: left;
+}
+.mock-tabel tr.mijn { background: #fffbef; }
+.mock-tabel tr.mijn b, .mock-tabel tr.mijn td { color: #5b3700; font-weight: 700; }
+
+.mock-heat-card {
+    border: 1px solid #ddd;
+    border-radius: 3px;
+    margin: 3px 0;
+    background: #fff;
+    overflow: hidden;
+}
+.mock-heat-titel {
+    background: var(--lichtblauw);
+    color: var(--blauw);
+    padding: 3px 6px;
+    font-size: 7.5pt;
+    font-weight: 700;
+    display: flex;
+    align-items: center;
+    gap: 5px;
+}
+.mock-heat-titel-naam { flex: 1; }
+.mock-jouw-result {
+    background: #e8f5e9;
+    color: #2e7d32;
+    padding: 2px 6px;
+    font-size: 7.5pt;
+    font-weight: 700;
+    display: flex;
+    justify-content: space-between;
+    border-top: 1px solid #c8e6c9;
+}
+.mock-uitslag-rij {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 3px 5px;
+    border-bottom: 1px solid #eee;
+    font-size: 8pt;
+}
+.mock-uitslag-rang {
+    font-weight: 700;
+    color: var(--blauw);
+    min-width: 22px;
+    font-size: 9pt;
+}
+.mock-uitslag-afstand { flex: 1; }
+.mock-uitslag-pt { color: #666; font-size: 7.5pt; }
+.mock-klas-blok {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 5px 6px;
+    border-top: 1px solid #eee;
+    margin-top: 4px;
+}
+.mock-klas-titel {
+    color: var(--blauw);
+    font-weight: 700;
+    font-size: 8pt;
+}
+.mock-klas-rang {
+    font-size: 14pt;
+    font-weight: 700;
+    color: var(--oranje);
+    line-height: 1;
+}
+.mock-klas-totaal { color: #666; font-size: 7.5pt; }
+
+.mock-zoek {
+    border: 1.5px solid var(--blauw);
+    border-radius: 4px;
+    padding: 4px 7px;
+    background: #fff;
+    font-size: 8pt;
+    color: #888;
+    margin: 3px 0;
+}
+.mock-chip-rij {
+    display: flex; gap: 4px; flex-wrap: wrap;
+    margin: 3px 0;
+}
+.mock-chip {
+    border: 1px solid #ccc;
+    border-radius: 12px;
+    padding: 1px 8px;
+    font-size: 7.5pt;
+    background: #fff;
+    color: #555;
+}
+.mock-chip.actief {
+    border-color: var(--oranje);
+    background: var(--oranje);
+    color: #fff;
+    font-weight: 700;
+}
+.mock-kind-tab {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    background: var(--lichtblauw);
+    color: var(--blauw);
+    border-radius: 12px;
+    padding: 2px 8px;
+    font-size: 7.5pt;
+    margin: 1px;
+}
+.mock-kind-tab.actief {
+    background: var(--blauw);
+    color: #fff;
+}
+.mock-kind-tab .snr {
+    background: rgba(255,255,255,.25);
+    border-radius: 6px;
+    padding: 0 4px;
+    font-weight: 700;
+}
+.mock-kind-tab.actief .snr {
+    background: var(--oranje);
+    color: #fff;
+}
+
+@media print {
+    body { background: #fff; }
+    .page { box-shadow: none; padding: 6mm 10mm; }
+    @page { margin: 7mm 10mm; size: A4 portrait; }
+    .pdf-tip { display: none; }
+    section { padding: 6px 10px; }
+    .mock-rit.mijn,
+    .mock-tabel tr.mijn,
+    .mock-jouw-result,
+    .mock-rb,
+    .mock-chip.actief,
+    .mock-kind-tab,
+    .badge {
+        -webkit-print-color-adjust: exact;
+        print-color-adjust: exact;
+    }
+}
+.pdf-tip {
+    background: #eef4fa; border-left: 3px solid var(--middenblauw);
+    padding: 6px 10px; margin-bottom: 10px; font-size: 9pt;
+    border-radius: 0 4px 4px 0;
+}
+</style>
+</head>
+<body>
+<div class="page">
+
+    <div class="pdf-tip">
+        💡 <b>Opslaan als PDF:</b> druk Ctrl+P (Cmd+P op Mac) → Bestemming "Opslaan als PDF" → Opslaan.
+        Marges + achtergrond automatisch goed.
+    </div>
+
+    <div class="titel">
+        <div>
+            <h1>InlineComp Public</h1>
+            <div class="subtitle">Quick Reference — voor jezelf, je zoon of dochter, en supporters</div>
+        </div>
+        <div style="font-size:24pt">🔍</div>
+    </div>
+    <div class="url-bar">
+        <span>Open de public-app:</span>
+        <code>inlineresults.devriesen.com/public/</code>
+    </div>
+
+    <div class="kolommen">
+
+        <section>
+            <h2><span class="stap-nr">1</span>Kies je wedstrijd</h2>
+            <p>Boven aan de pagina staat een dropdown met alle wedstrijden. Standaard zie je <b>alleen vandaag</b>.</p>
+            <ul>
+                <li><b>Eerder</b>: vorige wedstrijden (na afloop)</li>
+                <li><b>Vandaag</b>: actief (default aan)</li>
+                <li><b>Later</b>: aankomende</li>
+            </ul>
+            <p>Knoppen onafhankelijk aan/uit klikbaar. Een wedstrijd kiezen activeert het programma + start de auto-refresh.</p>
+        </section>
+
+        <section>
+            <h2><span class="stap-nr">2</span>Zoek jezelf, je zoon of dochter</h2>
+            <p>Eén invoerveld accepteert <b>drie</b> soorten zoekopdracht — gewoon intypen en op <b>Zoeken</b> klikken:</p>
+            <ul>
+                <li><b>Startnummer</b> (bv. <code>432</code>) — snelste manier</li>
+                <li><b>Licentienummer</b> (bv. <code>78901</code>)</li>
+                <li><b>Achternaam</b> (bv. <code>Jansen</code>) — bij meerdere matches verschijnt een keuze-popup</li>
+            </ul>
+            <p>Meer dan één persoon volgen (bv. jezelf én je kind, of broer + zus)? Na de eerste zoekactie verschijnen er <b>tabs bovenaan</b>; klik <b>+</b> om iemand toe te voegen, of het kruisje om iemand weg te halen.</p>
+        </section>
+
+        <section class="span2">
+            <h2><span class="stap-nr">3</span>Vier tabbladen — wat zie je per tab</h2>
+            <div class="mock-grid">
+
+                <!-- Programma -->
+                <div class="mock-cell">
+                    <div class="mock-label">📅 Programma</div>
+                    <div class="tab-mock">
+                        <div class="mock-rit">
+                            <div>🏁 1 Series One Lap Heat 1
+                                <span class="mock-rb serie" style="float:right">Serie</span></div>
+                        </div>
+                        <div class="mock-rit mijn">
+                            <div>🚩 2 Series One Lap Heat 2
+                                <span class="mock-rb serie" style="float:right">Serie</span></div>
+                        </div>
+                        <div class="mock-rit">
+                            <div>3 Series One Lap Heat 3
+                                <span class="mock-rb serie" style="float:right">Serie</span></div>
+                        </div>
+                        <div class="mock-rit mijn">
+                            <div>4 Halve finale Heat 1
+                                <span class="mock-rb hf" style="float:right">HF</span></div>
+                        </div>
+                        <div class="mock-rit">
+                            <div>5 Finale A
+                                <span class="mock-rb fa" style="float:right">Finale</span></div>
+                        </div>
+                    </div>
+                    <div class="mock-uitleg">
+                        Chronologisch overzicht van alle ritten in de wedstrijd. Status-icoon: 🏁 uitslagen binnen / 🚩 startlijst geloot / leeg = nog niets. Ritten waar <em>jezelf of je kind</em> in zit zijn <em>geel + dik gedrukt</em>. Klik een rit aan voor de volledige startlijst.
+                    </div>
+                </div>
+
+                <!-- Heats -->
+                <div class="mock-cell">
+                    <div class="mock-label">🏃 Heats</div>
+                    <div class="tab-mock">
+                        <div class="mock-heat-card">
+                            <div class="mock-heat-titel">
+                                <span class="mock-rb serie">Serie</span>
+                                <span class="mock-heat-titel-naam">Series One Lap Heat 2</span>
+                                <span>🏁</span>
+                            </div>
+                            <table class="mock-tabel">
+                                <tr><th>#</th><th>Snr</th><th>Naam</th><th style="text-align:right">Tijd</th><th>Fin</th></tr>
+                                <tr><td>1</td><td>87</td><td>Anna J.</td><td style="text-align:right">39.333</td><td>2</td></tr>
+                                <tr class="mijn"><td>2</td><td><b>432</b></td><td>Eva M.</td><td style="text-align:right">41.904</td><td>3</td></tr>
+                                <tr><td>3</td><td>344</td><td>Bram K.</td><td style="text-align:right">39.177</td><td>1</td></tr>
+                                <tr><td>4</td><td>26</td><td>Carla S.</td><td style="text-align:right">42.166</td><td>4</td></tr>
+                            </table>
+                            <div class="mock-jouw-result">
+                                <span>Jouw resultaat:</span>
+                                <span>41.904 #3</span>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="mock-uitleg">
+                        Per ronde een <b>heat-kaart</b> met de volledige startlijst (alle 4 deelnemers, met startpos, snr, naam, tijd en finishpositie). Jouw eigen rij (of die van je kind) is <em>geel gemarkeerd</em>. Onderaan een groene balk met <b>het eindresultaat</b>.
+                    </div>
+                </div>
+
+                <!-- Resultaten -->
+                <div class="mock-cell">
+                    <div class="mock-label">🏆 Resultaten</div>
+                    <div class="tab-mock">
+                        <div style="font-weight:700;color:var(--blauw);font-size:8pt;margin:2px 0">Uitslagen per afstand</div>
+                        <div class="mock-uitslag-rij">
+                            <span class="mock-uitslag-rang">3</span>
+                            <span class="mock-uitslag-afstand">One Lap (Finale A)</span>
+                            <span class="mock-uitslag-pt">12 pt</span>
+                        </div>
+                        <div class="mock-uitslag-rij">
+                            <span class="mock-uitslag-rang">5</span>
+                            <span class="mock-uitslag-afstand">5km punten</span>
+                            <span class="mock-uitslag-pt">8 pt</span>
+                        </div>
+                        <div class="mock-klas-blok">
+                            <div>
+                                <div class="mock-klas-titel">Klassement Sen. Mannen</div>
+                                <span class="mock-klas-rang">#3</span>
+                            </div>
+                            <div class="mock-klas-totaal">20 punten</div>
+                        </div>
+                    </div>
+                    <div class="mock-uitleg">
+                        Jouw <b>persoonlijke eindstand</b>: rang per afstand met punten, en daaronder het <b>DC-klassement</b> over de hele wedstrijd. Alleen zichtbaar zodra de uitslagen bevestigd zijn.
+                    </div>
+                </div>
+
+                <!-- Uitslagen -->
+                <div class="mock-cell">
+                    <div class="mock-label">📊 Uitslagen</div>
+                    <div class="tab-mock">
+                        <div style="font-weight:700;color:var(--blauw);font-size:7.5pt;margin:2px 0 3px">Volledige uitslagen van deze wedstrijd</div>
+                        <div style="border:1px solid #ccc;border-radius:3px;padding:2px 5px;font-size:7.5pt;margin-bottom:3px;background:#fff">
+                            Senioren Mannen One Lap ▾
+                        </div>
+                        <div style="border:1.5px solid var(--blauw);border-radius:3px;padding:2px 5px;font-size:7.5pt;margin-bottom:3px;background:#fff">
+                            One lap een ronde ▾
+                        </div>
+                        <table class="mock-tabel">
+                            <tr><th>#</th><th>Snr</th><th>Naam</th><th style="text-align:right">Tijd</th></tr>
+                            <tr><td>1</td><td><b>344</b></td><td>Bram K.</td><td style="text-align:right">39.177</td></tr>
+                            <tr><td>2</td><td><b>87</b></td><td>Anna J.</td><td style="text-align:right">39.333</td></tr>
+                            <tr class="mijn"><td>3</td><td><b>432</b></td><td>Eva M.</td><td style="text-align:right">41.904</td></tr>
+                            <tr><td>4</td><td><b>26</b></td><td>Carla S.</td><td style="text-align:right">42.166</td></tr>
+                        </table>
+                    </div>
+                    <div class="mock-uitleg">
+                        De <b>complete</b> eindstand voor élke categorie en afstand — niet alleen voor jezelf of je kind. Kies eerst categorie (boven), dan ronde/afstand (onder). De rij van jezelf/je kind is <em>geel gemarkeerd</em> in de tabel.
+                    </div>
+                </div>
+
+            </div>
+        </section>
+
+        <section>
+            <h2>Status-badges naast de naam</h2>
+            <p>Per persoon zie je een badge die laat zien of er daadwerkelijk wordt meegereden:</p>
+            <table class="compact">
+                <tr><td><span class="badge b-ok">Bevestigd</span></td>
+                    <td>Online aangemeld én bevestigd bij de KNSB</td></tr>
+                <tr><td><span class="badge b-confd">Bev. bij org.</span></td>
+                    <td>Late aanmelding bij organisatie</td></tr>
+                <tr><td><span class="badge b-warn">Niet bevestigd</span></td>
+                    <td>Inschrijving niet bevestigd bij de KNSB</td></tr>
+                <tr><td><span class="badge b-err">Afgemeld</span></td>
+                    <td>KNSB-afmelding</td></tr>
+                <tr><td><span class="badge b-org">Afg. bij org.</span></td>
+                    <td>Afgemeld bij organisatie</td></tr>
+                <tr><td><span class="badge b-out">Niet getekend</span></td>
+                    <td>Niet getekend bij de balie</td></tr>
+            </table>
+        </section>
+
+        <section>
+            <h2>Sanctie-codes</h2>
+            <p>Verschijnen achter een naam in de heat-tabel of in de Resultaten-tab.</p>
+            <table class="compact">
+                <tr><td><b>W1 / W2</b></td><td>1e / 2e waarschuwing (lange afstand)</td></tr>
+                <tr><td><b>FS</b></td><td>False Start</td></tr>
+                <tr><td><b>RR</b></td><td>Rank Reduction (positie-aftrek na overtreding)</td></tr>
+                <tr><td><b>DQ-TF</b></td><td>Diskwalificatie — technische fout</td></tr>
+                <tr><td><b>DQ-SF</b></td><td>Diskwalificatie — sport fault</td></tr>
+                <tr><td><b>DQ-DF</b></td><td>Diskwalificatie — disciplinary fault</td></tr>
+                <tr><td><b>DNS / DNF</b></td><td>Did Not Start / Finish</td></tr>
+            </table>
+        </section>
+
+        <section class="span2">
+            <h2>Praktische tips</h2>
+            <ul style="column-count:2;column-gap:18px;margin:4px 0">
+                <li><b>👥 Meerdere personen</b>: na de eerste zoekactie zie je tabs bovenaan; klik <b>+</b> om jezelf, je zoon of dochter erbij te zetten, kruisje om iemand weg te halen.</li>
+                <li><b>👨‍👩‍👧 Broers &amp; zussen in één keer</b>: zoek je op een achternaam met meerdere matches, dan verschijnt een keuze-popup. Vink <b>meerdere personen</b> tegelijk aan en klik OK — alle aangevinkte personen worden meteen als tabs toegevoegd.</li>
+                <li><b>💾 Eenmaal toevoegen, altijd onthouden</b>: je gevolgde personen worden lokaal in je browser bewaard op licentie-niveau. Bij een volgende wedstrijd staan ze er automatisch weer — je hoeft ze niet opnieuw te zoeken.</li>
+                <li><b>🔄 Auto-refresh</b>: programma & uitslagen verversen elke 60s. Tijd-stempel rechtsboven toont laatste update.</li>
+                <li><b>↓ Pull-to-refresh</b>: trek het scherm omlaag voor een directe ververs (op telefoon).</li>
+                <li><b>📡 Geen verbinding?</b> Rode banner bovenaan toont 'm; data ververst automatisch zodra het netwerk terug is.</li>
+                <li><b>📢 Mededelingen</b>: belangrijke organisatie-meldingen verschijnen als pop-up (bv. "Programma 15 min uitloop").</li>
+                <li><b>🛠 Installeer als app</b>: op je telefoon → "Toevoegen aan beginscherm" → eigen icoon zonder browser-balk, snellere start.</li>
+                <li><b>🔗 Rit-detail</b>: klik in de Programma-tab op een rit voor de volledige startlijst in een overlay.</li>
+            </ul>
+        </section>
+
+        <section class="span2" style="background:#f8fbff">
+            <h2>Probleem-oplossen — kort</h2>
+            <table class="compact">
+                <tr><th style="width:30%">Symptoom</th><th>Wat doen</th></tr>
+                <tr><td>"Ik kan mezelf / m'n zoon / m'n dochter niet vinden"</td>
+                    <td>Check of je de juiste wedstrijd hebt gekozen. Probeer op startnummer i.p.v. naam (achternaam moet exact zijn). Bij verlate inschrijving via organisatie kan het ~1 minuut duren voordat de inschrijving zichtbaar wordt.</td></tr>
+                <tr><td>Heats verschijnen niet</td>
+                    <td>De startlijst wordt pas zichtbaar zodra de wedstrijdleider de loting heeft gedaan. Tot dan zie je alleen de Programma-tab met "🚩 nog niet definitief"-indicatie.</td></tr>
+                <tr><td>Tijden updaten niet meer</td>
+                    <td>Pull-to-refresh of wacht op auto-refresh. Bij rode banner: zodra de verbinding terugkomt ververst de app vanzelf.</td></tr>
+                <tr><td>Resultaten-tab is leeg</td>
+                    <td>Officiële uitslagen verschijnen pas zodra de wedstrijdleider ze bevestigt. De tijden uit de heat-tabel zijn al wél zichtbaar tijdens de wedstrijd.</td></tr>
+            </table>
+        </section>
+
+    </div>
+
+    <div class="voet">
+        InlineComp Public &middot; Quick Reference &middot; Vragen of feedback? Mail naar <a href="mailto:inlinecomp@devriesen.com" style="color:#666;text-decoration:none">inlinecomp@devriesen.com</a>
+    </div>
+
+</div>
+</body>
+</html>

@@ -453,7 +453,8 @@ async function laadOrgWedstrijden() {
             </div>
             <div class="beheer-wedstrijd-acties">
                 ${inDb ? `<button class="btn-secondary btn-sm beheer-comp-meld" data-id="${escHtml(w.id)}" data-naam="${escHtml(w.name ?? w.id)}" title="Mededelingen versturen naar publiek + coach apps">📢 Meldingen</button>` : ''}
-                ${inDb ? `<button class="btn-secondary btn-sm beheer-comp-poster" data-id="${escHtml(w.id)}" title="Download promotie-poster voor deze wedstrijd">📄 Poster</button>` : ''}
+                ${inDb ? `<button class="btn-secondary btn-sm beheer-comp-poster" data-id="${escHtml(w.id)}" data-app="public" title="Download poster voor publiek (rijders/ouders)">📄 Public-poster</button>` : ''}
+                ${inDb ? `<button class="btn-secondary btn-sm beheer-comp-poster" data-id="${escHtml(w.id)}" data-app="coach" title="Download poster voor coaches">👥 Coach-poster</button>` : ''}
                 ${inDb ? `<button class="btn-danger btn-sm beheer-comp-del" data-id="${escHtml(w.id)}" data-naam="${escHtml(w.name ?? w.id)}">Verwijderen</button>` : ''}
             </div>
         </div>`;
@@ -463,7 +464,7 @@ async function laadOrgWedstrijden() {
         btn.addEventListener('click', () => verwijderCompetitie(btn.dataset.id, btn.dataset.naam));
     });
     lijst.querySelectorAll('.beheer-comp-poster').forEach(btn => {
-        btn.addEventListener('click', () => downloadPoster(btn.dataset.id));
+        btn.addEventListener('click', () => downloadPoster(btn.dataset.id, btn.dataset.app || 'public'));
     });
     lijst.querySelectorAll('.beheer-comp-meld').forEach(btn => {
         btn.addEventListener('click', () =>
@@ -1295,19 +1296,21 @@ async function uploadLogo(type, id, file, sponsorRij = null) {
 
 // ── Promotie-poster downloaden ────────────────────────────────────────────────
 // Zonder `compId` → generieke org-poster. Met `compId` → poster voor specifieke
-// wedstrijd met juiste QR-url en wedstrijd-info. Endpoint is api/poster.php.
-async function downloadPoster(compId = null) {
+// wedstrijd met juiste QR-url en wedstrijd-info. appType bepaalt of de QR
+// naar /public/ of /coach/ wijst en de tekst-variant ('public' default,
+// 'coach' voor de coach-app-poster). Endpoint is api/poster.php.
+async function downloadPoster(compId = null, appType = 'public') {
     if (!actieveOrg?.id) return;
 
     // Visuele feedback op de knop die is geklikt
     const btn = compId
-        ? document.querySelector(`.beheer-comp-poster[data-id="${compId}"]`)
+        ? document.querySelector(`.beheer-comp-poster[data-id="${compId}"][data-app="${appType}"]`)
         : el('btn-org-poster');
     const origLabel = btn?.textContent;
     if (btn) { btn.disabled = true; btn.textContent = '⏳ Bezig…'; }
 
     try {
-        const params = new URLSearchParams({ org_id: actieveOrg.id });
+        const params = new URLSearchParams({ org_id: actieveOrg.id, app: appType });
         if (compId) params.set('competition_id', compId);
 
         const res = await fetch('api/poster.php?' + params.toString());

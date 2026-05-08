@@ -806,6 +806,20 @@ header {
 .hdr-btns       { display: flex; gap: 6px; flex-shrink: 0; align-items: center; }
 .hdr-btns-right { justify-content: flex-end; }
 .hdr-spacer     { width: 36px; visibility: hidden; flex-shrink: 0; }
+/* Verbinding-banner: rood strookje boven aan zodra netwerk of server eruit ligt */
+.conn-banner {
+    background: linear-gradient(135deg, #c62828, #b71c1c);
+    color: #fff; text-align: center;
+    padding: 8px 12px; font-size: .9rem; font-weight: 600;
+    box-shadow: 0 2px 4px rgba(0,0,0,.2);
+    position: sticky; top: 0; z-index: 500;
+    animation: conn-pulse 2s ease-in-out infinite;
+}
+@keyframes conn-pulse {
+    0%, 100% { opacity: 1; }
+    50%      { opacity: .82; }
+}
+.conn-banner small { font-weight: 400; font-size: .78rem; opacity: .85; }
 header .hdr-center { flex: 1; min-width: 0; text-align: center; }
 header h1 { font-size: 1.5rem; font-weight: 700; line-height: 1.1; }
 header .sub { font-size: .95rem; opacity: .8; margin-top: 6px; text-align: center; }
@@ -1359,13 +1373,109 @@ function bevestig({ titel = 'Bevestigen', tekst = '', bevestigLabel = 'OK', annu
     });
 }
 
-async function safeFetch(url, maxRetries = 3) {
-    for (let i=0; i<maxRetries; i++) {
-        const res = await fetch(url);
-        if (res.status !== 429) return res;
-        await new Promise(r => setTimeout(r, 2000 * (i+1)));
+// ── Verbinding-status: detecteert offline / server-down en toont banner ────
+// Wordt door safeFetch hieronder bijgewerkt: succes → groen/verborgen,
+// fout → banner met passende tekst. window 'online'-event triggert direct
+// een refresh; visibilitychange (visible) triggert ook een refresh.
+const _conn = {
+    online: navigator.onLine,
+    serverOk: true,
+    lastSuccess: null,
+    consecutiveFails: 0,
+    refreshHook: null,
+};
+
+function _connBannerEl() {
+    let el = document.getElementById('conn-banner');
+    if (el) return el;
+    el = document.createElement('div');
+    el.id = 'conn-banner';
+    el.className = 'conn-banner';
+    el.style.display = 'none';
+    document.body.insertBefore(el, document.body.firstChild);
+    return el;
+}
+
+function _connUpdateBanner() {
+    const el = _connBannerEl();
+    let bericht = '';
+    if (!_conn.online) {
+        bericht = '📡 Geen internet — ververst zodra de verbinding terug is';
+    } else if (!_conn.serverOk) {
+        bericht = '⚠ Server niet bereikbaar — opnieuw proberen…';
     }
-    return fetch(url);
+    if (bericht) {
+        const tijd = _conn.lastSuccess
+            ? ` <small>(laatste update ${_conn.lastSuccess.toLocaleTimeString('nl-NL', {hour:'2-digit', minute:'2-digit'})})</small>`
+            : '';
+        el.innerHTML = bericht + tijd;
+        el.style.display = '';
+    } else {
+        el.style.display = 'none';
+    }
+}
+
+// Grace-periode: na een fout blijft de banner ten minste deze tijd staan,
+// ook als andere fetches in de tussentijd slagen. Voorkomt geflikker bij
+// gemengde fouten (één endpoint down, ander werkt).
+const _CONN_GRACE_MS = 10_000;
+
+function _connOk() {
+    const wasFout = !_conn.serverOk || !_conn.online;
+    _conn.lastSuccess = new Date();
+    _conn.consecutiveFails = 0;
+    const inGrace = _conn.lastFailureMs && (Date.now() - _conn.lastFailureMs) < _CONN_GRACE_MS;
+    _conn.online = true;
+    if (!inGrace) _conn.serverOk = true;
+    if (wasFout && !inGrace) _connUpdateBanner();
+}
+
+function _connFail(reden) {
+    if (reden === 'network') _conn.online = false;
+    else                     _conn.serverOk = false;
+    _conn.lastFailureMs = Date.now();
+    _conn.consecutiveFails++;
+    _connUpdateBanner();
+    setTimeout(() => {
+        if (_conn.lastFailureMs && (Date.now() - _conn.lastFailureMs) >= _CONN_GRACE_MS) {
+            _conn.serverOk = true;
+            _connUpdateBanner();
+        }
+    }, _CONN_GRACE_MS + 100);
+}
+
+window.addEventListener('online', () => {
+    _conn.online = true;
+    _connUpdateBanner();
+    if (typeof _conn.refreshHook === 'function') _conn.refreshHook();
+});
+window.addEventListener('offline', () => {
+    _conn.online = false;
+    _connUpdateBanner();
+});
+
+async function safeFetch(url, maxRetries = 3) {
+    try {
+        for (let i=0; i<maxRetries; i++) {
+            const res = await fetch(url);
+            if (res.status === 429) {
+                await new Promise(r => setTimeout(r, 2000 * (i+1)));
+                continue;
+            }
+            if (res.status >= 500) {
+                _connFail('server');
+                return res;
+            }
+            _connOk();
+            return res;
+        }
+        const res = await fetch(url);
+        if (res.status >= 500) _connFail('server'); else _connOk();
+        return res;
+    } catch (e) {
+        _connFail('network');
+        throw e;
+    }
 }
 
 // ── Coach-lijst persistentie (localStorage per wedstrijd) ────────────────────
@@ -2202,7 +2312,32 @@ async function laadCompetitions() {
         const lijst = await res.json();
         if (!Array.isArray(lijst)) return;
         alleComps = lijst;
+
+        // Directe-link-support: ?comp=<uuid> in de URL selecteert die wedstrijd.
+        // Gebruikt door de QR-code op de coach-poster. Als de wedstrijd buiten
+        // het "Vandaag"-venster valt (oud of toekomstig) vinken we automatisch
+        // het juiste filter aan zodat de optie zichtbaar is.
+        const urlParams = new URLSearchParams(window.location.search);
+        const wantedComp = urlParams.get('comp');
+        if (wantedComp) {
+            const comp = alleComps.find(c => c.id === wantedComp);
+            if (comp) {
+                const nu = new Date();
+                const startDag = comp.starts ? new Date(comp.starts) : null;
+                const eindDag  = comp.ends   ? new Date(comp.ends)   : startDag;
+                if (eindDag && eindDag < nu)   $('chk-oud').checked      = true;
+                if (startDag && startDag > nu) $('chk-toekomst').checked = true;
+            }
+        }
+
         filterComps();
+
+        // Na filteren: select 'm als de optie nu beschikbaar is, dan triggert
+        // het bestaande change-event de auto-refresh + meldingen-check.
+        if (wantedComp && selComp.querySelector(`option[value="${wantedComp}"]`)) {
+            selComp.value = wantedComp;
+            selComp.dispatchEvent(new Event('change'));
+        }
     } catch (e) {
         selComp.innerHTML = '<option value="">Fout bij laden</option>';
     }
@@ -2642,17 +2777,35 @@ function toonMelding(m, compId) {
         const mm = String(d.getMinutes()).padStart(2,'0');
         lastEl.textContent = `🔄 ${hh}:${mm}`;
     };
-    const startAutoRefresh = () => {
+    // Bereken interval op basis van consecutiveFails: bij fouten progressief
+    // langer wachten zodat we de server niet hameren als hij eruit ligt.
+    // 0-1 fouten → 60s, 2 → 90s, 3+ → 120s.
+    const _tickInterval = () => {
+        const f = _conn.consecutiveFails;
+        if (f >= 3) return Math.max(AUTO_REFRESH_MS, 120_000);
+        if (f === 2) return Math.max(AUTO_REFRESH_MS, 90_000);
+        return AUTO_REFRESH_MS;
+    };
+    const _scheduleTick = () => {
         stopAutoRefresh();
         if (!selComp.value || document.hidden) return;
-        autoTick = setInterval(async () => {
-            if (document.hidden || !selComp.value) return;
+        autoTick = setTimeout(async () => {
+            autoTick = null;
+            if (document.hidden || !selComp.value) return _scheduleTick();
             await herlaadProgramma();
             zetStempel();
-        }, AUTO_REFRESH_MS);
+            _scheduleTick();
+        }, _tickInterval());
     };
+    const startAutoRefresh = () => _scheduleTick();
     const stopAutoRefresh = () => {
-        if (autoTick) { clearInterval(autoTick); autoTick = null; }
+        if (autoTick) { clearTimeout(autoTick); autoTick = null; }
+    };
+    // Hook voor _conn: bij online-event direct refresh + scheduling resetten.
+    _conn.refreshHook = () => {
+        if (selComp.value && !document.hidden) {
+            herlaadProgramma().then(zetStempel).finally(_scheduleTick);
+        }
     };
     document.addEventListener('visibilitychange', () => {
         if (document.hidden) stopAutoRefresh();

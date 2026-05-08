@@ -875,6 +875,20 @@ header {
 @media (max-width: 480px) {
     .hdr-spacer { width: 30px; }
 }
+/* Verbinding-banner: rood strookje boven aan zodra netwerk of server eruit ligt */
+.conn-banner {
+    background: linear-gradient(135deg, #c62828, #b71c1c);
+    color: #fff; text-align: center;
+    padding: 8px 12px; font-size: .9rem; font-weight: 600;
+    box-shadow: 0 2px 4px rgba(0,0,0,.2);
+    position: sticky; top: 0; z-index: 500;
+    animation: conn-pulse 2s ease-in-out infinite;
+}
+@keyframes conn-pulse {
+    0%, 100% { opacity: 1; }
+    50%      { opacity: .82; }
+}
+.conn-banner small { font-weight: 400; font-size: .78rem; opacity: .85; }
 header .hdr-center { flex: 1; min-width: 0; text-align: center; }
 header h1   { font-size: 1.5rem; font-weight: 700; line-height: 1.1; }
 header .sub { font-size: .95rem; opacity: .8; margin-top: 6px; text-align: center; }
@@ -1527,14 +1541,120 @@ function esc(s) { return String(s??'').replace(/&/g,'&amp;').replace(/</g,'&lt;'
 // Safari kan geen "2026-04-19 10:00:00" parsen, wel "2026-04-19T10:00:00"
 function safeDatum(s) { return s ? new Date(String(s).replace(' ', 'T')) : null; }
 
-// Fetch met automatische retry bij 429 (rate limit)
-async function safeFetch(url, maxRetries = 3) {
-    for (let i = 0; i < maxRetries; i++) {
-        const res = await fetch(url);
-        if (res.status !== 429) return res;
-        await new Promise(r => setTimeout(r, 3000 * (i + 1))); // 3s, 6s, 9s
+// ── Verbinding-status: detecteert offline / server-down en toont banner ────
+// Wordt door safeFetch hieronder bijgewerkt: succes → groen/verborgen,
+// fout → banner met passende tekst. window 'online'-event triggert direct
+// een refresh; visibilitychange (visible) triggert ook een refresh.
+const _conn = {
+    online: navigator.onLine,         // browser-niveau
+    serverOk: true,                   // laatste API-call succesvol?
+    lastSuccess: null,                // Date van laatste OK-fetch
+    consecutiveFails: 0,              // voor exponentiële backoff
+    refreshHook: null,                // zetten door refresh-functie
+};
+
+function _connBannerEl() {
+    let el = document.getElementById('conn-banner');
+    if (el) return el;
+    el = document.createElement('div');
+    el.id = 'conn-banner';
+    el.className = 'conn-banner';
+    el.style.display = 'none';
+    document.body.insertBefore(el, document.body.firstChild);
+    return el;
+}
+
+function _connUpdateBanner() {
+    const el = _connBannerEl();
+    let bericht = '';
+    if (!_conn.online) {
+        bericht = '📡 Geen internet — ververst zodra de verbinding terug is';
+    } else if (!_conn.serverOk) {
+        bericht = '⚠ Server niet bereikbaar — opnieuw proberen…';
     }
-    return fetch(url); // laatste poging
+    if (bericht) {
+        const tijd = _conn.lastSuccess
+            ? ` <small style="opacity:.85">(laatste update ${_conn.lastSuccess.toLocaleTimeString('nl-NL', {hour:'2-digit', minute:'2-digit'})})</small>`
+            : '';
+        el.innerHTML = bericht + tijd;
+        el.style.display = '';
+    } else {
+        el.style.display = 'none';
+    }
+}
+
+// Grace-periode: na een fout blijft de banner ten minste deze tijd staan,
+// ook als andere fetches in de tussentijd slagen. Voorkomt geflikker bij
+// gemengde fouten (één endpoint down, ander werkt).
+const _CONN_GRACE_MS = 10_000;
+
+function _connOk() {
+    const wasFout = !_conn.serverOk || !_conn.online;
+    _conn.lastSuccess = new Date();
+    _conn.consecutiveFails = 0;
+    // Binnen grace-periode na een fout: server-vlag pas herstellen als de
+    // grace voorbij is. navigator-online vlag (echte OS-status) volgt wél
+    // direct het laatste signaal.
+    const inGrace = _conn.lastFailureMs && (Date.now() - _conn.lastFailureMs) < _CONN_GRACE_MS;
+    _conn.online = true;
+    if (!inGrace) _conn.serverOk = true;
+    if (wasFout && !inGrace) _connUpdateBanner();
+}
+
+function _connFail(reden) {
+    if (reden === 'network') _conn.online = false;
+    else                     _conn.serverOk = false;
+    _conn.lastFailureMs = Date.now();
+    _conn.consecutiveFails++;
+    _connUpdateBanner();
+    // Plan een banner-recheck na de grace-periode zodat 'ie automatisch
+    // verdwijnt als er ondertussen geen nieuwe fouten meer komen.
+    setTimeout(() => {
+        if (_conn.lastFailureMs && (Date.now() - _conn.lastFailureMs) >= _CONN_GRACE_MS) {
+            // Geen recente fouten meer — verifieer met een laatste lookup
+            _conn.serverOk = true;
+            _connUpdateBanner();
+        }
+    }, _CONN_GRACE_MS + 100);
+}
+
+// Triggers voor automatisch herstel
+window.addEventListener('online', () => {
+    _conn.online = true;
+    _connUpdateBanner();
+    if (typeof _conn.refreshHook === 'function') _conn.refreshHook();
+});
+window.addEventListener('offline', () => {
+    _conn.online = false;
+    _connUpdateBanner();
+});
+
+// Fetch met retry bij 429 + verbinding-status-tracking. Bij netwerkfout
+// (TypeError 'Failed to fetch') of 5xx: banner aan + niet retry'en
+// (auto-refresh-tick probeert vanzelf opnieuw met exponentiële backoff).
+async function safeFetch(url, maxRetries = 3) {
+    try {
+        for (let i = 0; i < maxRetries; i++) {
+            const res = await fetch(url);
+            if (res.status === 429) {
+                await new Promise(r => setTimeout(r, 3000 * (i + 1)));
+                continue;
+            }
+            if (res.status >= 500) {
+                _connFail('server');
+                return res;
+            }
+            _connOk();
+            return res;
+        }
+        const res = await fetch(url);
+        if (res.status >= 500) _connFail('server'); else _connOk();
+        return res;
+    } catch (e) {
+        // TypeError = netwerkfout (geen verbinding, DNS, etc.)
+        _connFail('network');
+        throw e;
+    }
 }
 // Detecteer extra kolommen voor heat-rijders
 function heatExtraKolommen(rijders, rondeType) {
@@ -3080,22 +3200,39 @@ let _huidigStempel = '';
         } catch { /* stil */ }
     };
 
-    const start = () => {
-        stop();
-        // Auto-tick alleen actief als er een wedstrijd is gekozen — dan is
-        // er ook iets om te verversen (programma, kinderen, meldingen).
-        // Zonder gekozen wedstrijd: globale meldingen worden alleen bij
-        // page-open / visibility-change / wedstrijd-keuze opgehaald (geen
-        // achtergrond-poll → geen onnodige load van static landing-pages).
-        if (!selComp.value || document.hidden) return;
-        autoTick = setInterval(() => {
-            if (document.hidden || !selComp.value) return;
-            stilleRefresh();
-        }, AUTO_REFRESH_MS);
+    // Bereken interval op basis van consecutiveFails: bij fouten progressief
+    // langer wachten zodat we de server niet hameren als hij eruit ligt.
+    // 0 fouten → 60s, 1 → 60s, 2 → 90s, 3+ → 120s. Bij herstel meteen terug
+    // naar 60s (gebeurt automatisch want consecutiveFails reset op succes).
+    const _tickInterval = () => {
+        const f = _conn.consecutiveFails;
+        if (f >= 3) return Math.max(AUTO_REFRESH_MS, 120_000);
+        if (f === 2) return Math.max(AUTO_REFRESH_MS, 90_000);
+        return AUTO_REFRESH_MS;
     };
 
+    const _scheduleTick = () => {
+        stop();
+        if (!selComp.value || document.hidden) return;
+        autoTick = setTimeout(async () => {
+            autoTick = null;
+            if (document.hidden || !selComp.value) return _scheduleTick();
+            await stilleRefresh();
+            _scheduleTick();
+        }, _tickInterval());
+    };
+
+    const start = () => _scheduleTick();
+
     const stop = () => {
-        if (autoTick) { clearInterval(autoTick); autoTick = null; }
+        if (autoTick) { clearTimeout(autoTick); autoTick = null; }
+    };
+
+    // Hook voor _conn: bij online-event direct refresh + scheduling resetten.
+    _conn.refreshHook = () => {
+        if (selComp.value && !document.hidden) {
+            stilleRefresh().finally(_scheduleTick);
+        }
     };
 
     document.addEventListener('visibilitychange', () => {

@@ -1272,7 +1272,7 @@ function _bouwTekenlijstenInternal(opts = {}) {
         const handCel = meldingen.length
             ? `<div class="meld-attentie">
                    <span class="meld-uitroep">⚠️</span>
-                   <span class="meld-tekst">Graag even persoonlijk melden</span>
+                   <span class="meld-tekst">persoonlijk melden</span>
                    <span class="meld-uitroep">⚠️</span>
                </div>`
             : '';
