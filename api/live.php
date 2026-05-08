@@ -1493,6 +1493,27 @@ if ($action === 'genereer_volgende_ronde') {
         $nDest           = count($heatNummers);
         $aantalSlots     = count($allSlots);
 
+        // Helper: row-snake (forward, reverse, forward, ...) over $nSlots slots
+        // distribueert ze gelijkmatig over $nDest heats.
+        $snakeHeats = function (int $nSlots, int $nDest, array $heatNrs): array {
+            $seq = [];
+            $si = 0;
+            while ($si < $nSlots) {
+                for ($h = 0; $h < $nDest && $si < $nSlots; $h++, $si++) $seq[] = $heatNrs[$h];
+                if ($si >= $nSlots) break;
+                for ($h = $nDest - 1; $h >= 0 && $si < $nSlots; $h--, $si++) $seq[] = $heatNrs[$h];
+            }
+            return $seq;
+        };
+
+        // Case-detectie voor internationaal-systeem (full-final + tijdkoppeling
+        // hebben hun eigen pad).
+        $isInternationaal = ($systeem !== 'full-final');
+        $nQTotaal         = $qPerHeat * $nBronHeats;            // 0 als qPerHeat = 0
+        $nqTotaal         = max(0, $aantalSlots - $nQTotaal);
+        $caseAlleenQ      = ($qPerHeat > 0 && $nqTotaal === 0); // bracket-pattern
+        $caseQEnQ         = ($qPerHeat > 0 && $nqTotaal > 0);   // twee-pass snake
+
         $seq = [];
         if ($finaleSeeding === 'tijdkoppeling') {
             // Tijdkoppeling: langzaamsten eerst, snelsten in laatste heat.
@@ -1515,18 +1536,55 @@ if ($action === 'genereer_volgende_ronde') {
                     $seq[] = $hNr;
                 }
             }
-        } else {
-            // Slangenpatroon (standaard): gelijke sterkte per heat
-            $si = 0;
-            while ($si < $aantalSlots) {
-                for ($h = 0; $h < $nDest && $si < $aantalSlots; $h++, $si++) {
-                    $seq[] = $heatNummers[$h];
-                }
-                if ($si >= $aantalSlots) break;
-                for ($h = $nDest - 1; $h >= 0 && $si < $aantalSlots; $h--, $si++) {
-                    $seq[] = $heatNummers[$h];
+        } elseif ($isInternationaal && $caseAlleenQ && $nDest > 0 && $nBronHeats > 0) {
+            // ── Bracket-pattern: alleen Q's, geen tijds-q ───────────────────
+            // Bron-heats worden gepaard op heat-positie: index 0 ↔ index N-1,
+            // index 1 ↔ index N-2, etc. (de "buitenste" met de "binnenste").
+            // Binnen elke destination-heat: rank-1 van eerste-bron, rank-1 van
+            // tweede-bron, daarna rank-2 van eerste-bron, rank-2 van tweede-bron, ...
+            $bronGroups = [];
+            $bronCount  = count($bronHeatNrs);
+            for ($i = 0; $i < $bronCount; $i++) {
+                $destIdx = min($i, $bronCount - 1 - $i);
+                if (!isset($bronGroups[$destIdx])) $bronGroups[$destIdx] = [];
+                $bronGroups[$destIdx][] = (int)$bronHeatNrs[$i];
+            }
+            ksort($bronGroups);
+            // Sorteer bron-heats binnen elke groep op heat-nr ASC zodat de
+            // "lagere" bron-heat als eerste in de slot-volgorde komt
+            // (matched de One Lap-conventie: Winnaar KF1 vóór Winnaar KF4).
+            foreach ($bronGroups as &$grp) sort($grp);
+            unset($grp);
+
+            $newAllSlots = [];
+            $newSeq      = [];
+            foreach ($bronGroups as $destIdx => $bronHeats) {
+                if ($destIdx >= $nDest) break;
+                $destHeatNr = $heatNummers[$destIdx];
+                for ($rank = 1; $rank <= $qPerHeat; $rank++) {
+                    foreach ($bronHeats as $bronHeatNr) {
+                        $rider = $byHeat[$bronHeatNr][$rank - 1] ?? null;
+                        $newAllSlots[] = $rider;
+                        $newSeq[]      = $destHeatNr;
+                    }
                 }
             }
+            $allSlots = $newAllSlots;
+            $seq      = $newSeq;
+        } elseif ($isInternationaal && $caseQEnQ && $nDest > 0) {
+            // ── Q + q: twee-pass snake ──────────────────────────────────────
+            // allSlots = [Q's tier+time, q's time]. Beide groepen krijgen elk
+            // hun eigen snake-distributie — de q-pass start opnieuw bij heat 1
+            // i.p.v. door te lopen vanuit de Q-pass-richting. Dit zorgt voor
+            // een eerlijkere verdeling van de tijd-q's over de dest-heats.
+            $seqQ = $snakeHeats($nQTotaal, $nDest, $heatNummers);
+            $seqq = $snakeHeats($aantalSlots - $nQTotaal, $nDest, $heatNummers);
+            $seq  = array_merge($seqQ, $seqq);
+        } else {
+            // ── Standaard snake ─────────────────────────────────────────────
+            // Alleen q in internationaal (qPerHeat = 0), full-final (alle
+            // varianten), of fallback wanneer geen $bronHeatNrs beschikbaar is.
+            $seq = $snakeHeats($aantalSlots, $nDest, $heatNummers);
         }
 
         // Wijs toe: positie altijd ophogen, INSERT alleen als rijder bekend

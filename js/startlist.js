@@ -1338,22 +1338,46 @@ async function genereerRonde1(cacheKey) {
 // ── Schema-helpers: bracket-slots voor vervolgronden ─────────────────────────
 
 // Genereer geordende slot-labels met Q/q scheiding.
-// Q-slots (positiewinnaars) gaan altijd voor q-slots (tijdsnelsten).
-// qPerHeat = aantal Q per heat (winnaar/2e/...), 0 = alles op tijd.
-function bouwSchemaSlots(prevNaam, prevNHeats, nSlots, qPerHeat) {
-    const nQ  = Math.min(nSlots, (qPerHeat ?? 1) * prevNHeats);
+// Q-slots (positie-kwalificatie, top-N per heat) gaan altijd voor q-slots
+// (tijds-kwalificatie, snelste tijden van de overige rijders).
+//
+// stijl='tijd' (full-final): tier+time → "Q 1e tijdsnelste", "Q 2e tijdsnelste",
+//                            "q 1e tijdsnelste", ... (reflecteert tier-then-time
+//                            seeding waarbij snelste rank-1 op plek 1 komt).
+//                            Bij qPerHeat ≥ 2: "Q1 ...", "Q2 ..." per rang.
+// stijl='bracket' (internationaal, default): heat-positioneel → "Winnaar KF 1",
+//                            "Winnaar KF 2", "2e KF 1", "Xe tijdsnelste".
+//                            Past bij One Lap/500m fixed-bracket én bij overige
+//                            afstanden waar tier+time geldt — beide blijven
+//                            plausibel leesbaar.
+function bouwSchemaSlots(prevNaam, prevNHeats, nSlots, qPerHeat, stijl = 'bracket') {
+    const qph = Math.max(0, qPerHeat ?? 0);
+    const nQ  = Math.min(nSlots, qph * prevNHeats);
     const nq  = Math.max(0, nSlots - nQ);
     const slots = [];
 
-    // Q-slots: "Winnaar X" (1e) of "2e/3e X" (hogere rangen)
-    for (let rank = 1; slots.length < nQ; rank++) {
-        for (let h = 1; h <= prevNHeats && slots.length < nQ; h++) {
-            slots.push(rank === 1 ? `Winnaar ${prevNaam} ${h}` : `${rank}e ${prevNaam} ${h}`);
+    if (stijl === 'tijd') {
+        // Full-final: alle Q's op tijd binnen tier
+        const enkelvoudigQ = qph === 1;
+        for (let rank = 1; rank <= qph && slots.length < nQ; rank++) {
+            const prefix = enkelvoudigQ ? 'Q' : `Q${rank}`;
+            for (let t = 1; t <= prevNHeats && slots.length < nQ; t++) {
+                slots.push(`${prefix} ${t}e tijdsnelste`);
+            }
         }
-    }
-    // q-slots: "1e tijdsnelste", "2e tijdsnelste", ...
-    for (let t = 1; t <= nq; t++) {
-        slots.push(`${t}e tijdsnelste`);
+        for (let t = 1; t <= nq; t++) {
+            slots.push(`q ${t}e tijdsnelste`);
+        }
+    } else {
+        // Internationaal: heat-positionele labels (bracket-friendly)
+        for (let rank = 1; slots.length < nQ; rank++) {
+            for (let h = 1; h <= prevNHeats && slots.length < nQ; h++) {
+                slots.push(rank === 1 ? `Winnaar ${prevNaam} ${h}` : `${rank}e ${prevNaam} ${h}`);
+            }
+        }
+        for (let t = 1; t <= nq; t++) {
+            slots.push(`${t}e tijdsnelste`);
+        }
     }
     return slots;
 }
@@ -1361,14 +1385,50 @@ function bouwSchemaSlots(prevNaam, prevNHeats, nSlots, qPerHeat) {
 // Verdeel slot-labels over heats via slangenpatroon
 function snakeVerdeelSlots(slots, nHeats) {
     const heats = Array.from({ length: nHeats }, (_, i) => ({ nummer: i + 1, slots: [] }));
+    snakeAppendSlots(slots, heats);
+    return heats;
+}
+
+// Append labels naar bestaande heats via snake-pattern (mutating).
+// Wordt gebruikt voor twee-pass-snake (Q's eerst, dan q's apart).
+function snakeAppendSlots(labels, heats) {
+    const nHeats = heats.length;
+    if (nHeats === 0) return;
     let i = 0;
-    while (i < slots.length) {
-        for (let h = 0; h < nHeats && i < slots.length; h++)
-            heats[h].slots.push(slots[i++]);
-        if (i >= slots.length) break;
-        for (let h = nHeats - 1; h >= 0 && i < slots.length; h--)
-            heats[h].slots.push(slots[i++]);
+    while (i < labels.length) {
+        for (let h = 0; h < nHeats && i < labels.length; h++)
+            heats[h].slots.push(labels[i++]);
+        if (i >= labels.length) break;
+        for (let h = nHeats - 1; h >= 0 && i < labels.length; h--)
+            heats[h].slots.push(labels[i++]);
     }
+}
+
+// Bracket-pattern verdeling: bron-heats gepaard op heat-positie {1, last},
+// {2, last-1}, etc. Binnen elke destination-heat: rank-1 van eerste-bron,
+// rank-1 van tweede-bron, daarna rank-2 van eerste-bron, rank-2 van tweede,
+// enz. Gebruikt voor "alleen Q" internationaal (One Lap/500m-conventie).
+function bracketVerdeelLabels(prevNaam, prevNHeats, qPerHeat, nHeats) {
+    const bronGroups = {}; // destIdx → [bronHeatNr, ...]
+    for (let i = 0; i < prevNHeats; i++) {
+        const destIdx = Math.min(i, prevNHeats - 1 - i);
+        if (!bronGroups[destIdx]) bronGroups[destIdx] = [];
+        bronGroups[destIdx].push(i + 1);
+    }
+    const heats = [];
+    Object.keys(bronGroups).map(Number).sort((a, b) => a - b).forEach(destIdx => {
+        if (destIdx >= nHeats) return;
+        const bronHeats = bronGroups[destIdx].slice().sort((a, b) => a - b);
+        const slots = [];
+        for (let rank = 1; rank <= qPerHeat; rank++) {
+            for (const bronHeatNr of bronHeats) {
+                slots.push(rank === 1
+                    ? `Winnaar ${prevNaam} ${bronHeatNr}`
+                    : `${rank}e ${prevNaam} ${bronHeatNr}`);
+            }
+        }
+        heats.push({ nummer: destIdx + 1, slots });
+    });
     return heats;
 }
 
@@ -1475,7 +1535,15 @@ function berekenSchemaHeats(r, catCfg, totaalRijders, ritLookup = null, systeem 
             // schuiven die naar de A-finale zodat géén "pro forma" B getoond wordt.
             const aEff   = (catBH === 0 && bRijders > 0) ? effA + bRijders : effA;
             const prevNH = int(catCfg.heats_aantal) || 1;
-            const slots  = bouwSchemaSlots('serie', prevNH, aEff, 0);
+            // heats_q_heat = aantal Q-rijders per serie die DIRECT naar A-finale
+            // gaan (positie-kwalificatie). 0 = puur op tijd (klassiek).
+            // ≥1 = de eerste N slots krijgen "Q Xe tijdsnelste"-labels (tier+time),
+            // de rest "q Xe tijdsnelste".
+            const qPerHeat = int(catCfg.heats_q_heat ?? 0);
+            // Full-final = tier+time-stijl ("Q 1e tijdsnelste"). Internationaal
+            // gebruikt buiten dit blok de bracket-stijl ("Winnaar KF 1") als
+            // default, want daar kan One Lap/500m bracket-pattern gebruiken.
+            const slots    = bouwSchemaSlots('serie', prevNH, aEff, qPerHeat, 'tijd');
             return [{ nummer: 1, slots }];
         }
         if (r.sleutel === 'finale_b') {
@@ -1594,11 +1662,12 @@ function berekenSchemaHeats(r, catCfg, totaalRijders, ritLookup = null, systeem 
     }
 
     if (nSlots <= 0 || prevNHeats <= 0) return null;
-    const slots = bouwSchemaSlots(prevNaam, prevNHeats, nSlots, qPerHeat);
-    if (nHeats === 1) return [{ nummer: 1, slots }];
 
-    // Tijdkoppeling: paren van achteren, langzaamsten in heat 1, snelsten in laatste heat
+    // Tijdkoppeling: paren van achteren, langzaamsten in heat 1, snelsten in laatste heat.
+    // Bestaande logic — bouwSchemaSlots geeft de Q+q labels, daarna pair-distributie.
     if (afstandCfg?.finale_seeding === 'tijdkoppeling' && r.sleutel === 'finale_a') {
+        const slots = bouwSchemaSlots(prevNaam, prevNHeats, nSlots, qPerHeat);
+        if (nHeats === 1) return [{ nummer: 1, slots }];
         const heats = [];
         const reversed = [...slots].reverse(); // langzaamste eerst
         const perHeat = Math.max(1, Math.ceil(reversed.length / nHeats));
@@ -1611,6 +1680,44 @@ function berekenSchemaHeats(r, catCfg, totaalRijders, ritLookup = null, systeem 
         return heats;
     }
 
+    // Case-detectie voor internationaal-systeem (de drie standaard-modi):
+    //   1) Alleen Q (geen q)  → bracket-pattern (One Lap/500m-conventie)
+    //   2) Alleen q (geen Q)  → snake-on-time
+    //   3) Q + q              → twee-pass snake: eerst Q's snake, dan q's snake
+    // Bij 1 destination-heat is verdeling triviaal: alle slots in 1 heat.
+    const qph = Math.max(0, qPerHeat || 0);
+    const nQTotaal = Math.min(nSlots, qph * prevNHeats);
+    const nqTotaal = Math.max(0, nSlots - nQTotaal);
+    const caseAlleenQ = qph > 0 && nqTotaal === 0;
+    const caseQEnQ    = qph > 0 && nqTotaal > 0;
+
+    // CASE 1: alleen Q → bracket (heat-paren {1,last}, {2,last-1}, ...)
+    if (caseAlleenQ && nHeats > 1) {
+        return bracketVerdeelLabels(prevNaam, prevNHeats, qph, nHeats);
+    }
+
+    // CASE 3: Q + q → twee-pass snake met tier+time-labels
+    if (caseQEnQ && nHeats > 1) {
+        const enkelvoudigQ = qph === 1;
+        const qLabels = [];
+        for (let rank = 1; rank <= qph; rank++) {
+            const prefix = enkelvoudigQ ? 'Q' : `Q${rank}`;
+            for (let t = 1; t <= prevNHeats; t++) qLabels.push(`${prefix} ${t}e tijdsnelste`);
+        }
+        const qqLabels = [];
+        for (let t = 1; t <= nqTotaal; t++) qqLabels.push(`q ${t}e tijdsnelste`);
+
+        const heats = Array.from({ length: nHeats }, (_, i) => ({ nummer: i + 1, slots: [] }));
+        snakeAppendSlots(qLabels, heats);
+        snakeAppendSlots(qqLabels, heats);
+        return heats;
+    }
+
+    // CASE 2 / fallback: alleen q óf 1 destination-heat — gewone snake.
+    // bouwSchemaSlots-default 'bracket'-stijl geeft "Winnaar X" voor Q en
+    // "Xe tijdsnelste" voor q (voor 1-heat finale: Q's eerst, dan q's).
+    const slots = bouwSchemaSlots(prevNaam, prevNHeats, nSlots, qph);
+    if (nHeats === 1) return [{ nummer: 1, slots }];
     return snakeVerdeelSlots(slots, nHeats);
 }
 
