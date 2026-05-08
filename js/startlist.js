@@ -1382,6 +1382,82 @@ function bouwSchemaSlots(prevNaam, prevNHeats, nSlots, qPerHeat, stijl = 'bracke
     return slots;
 }
 
+// Custom dialog voor "Wis loting" met optionele cascade-checkboxes voor
+// vastgelegde uitslag en/of klassement van de bijbehorende DC.
+// Resolves naar:
+//   null            → user annuleerde
+//   { wis_uitslag, wis_klassement } → bevestigd, met user-keuzes
+function _slToonWisDialog(info) {
+    return new Promise(resolve => {
+        const heeftResults    = (info.results_count    ?? 0) > 0;
+        const heeftUitslag    = (info.uitslag_count    ?? 0) > 0;
+        const heeftKlassement = (info.klassement_count ?? 0) > 0;
+
+        // Body bouwen — dynamisch op basis van wat er bestaat
+        const lines = ['<p>Loting verwijderen? <b>Dit kan niet ongedaan worden gemaakt.</b></p>'];
+        if (heeftResults) {
+            lines.push(`<p class="modal-warn">⚠ Er ${info.results_count === 1 ? 'is' : 'zijn'} al <b>${info.results_count}</b> tijd${info.results_count === 1 ? '' : 'en'}/positie${info.results_count === 1 ? '' : 's'} ingevoerd. Die ${info.results_count === 1 ? 'gaat' : 'gaan'} óók verloren.</p>`);
+        }
+        const checkboxes = [];
+        if (heeftUitslag) {
+            checkboxes.push(`
+                <label class="modal-check">
+                    <input type="checkbox" id="sl-wis-uitslag" checked>
+                    <span>Vastgelegde <b>uitslag voor deze afstand</b> ook verwijderen
+                          <small>(${info.uitslag_count} rijder${info.uitslag_count === 1 ? '' : 's'} in archief)</small>
+                    </span>
+                </label>`);
+        }
+        if (heeftKlassement) {
+            checkboxes.push(`
+                <label class="modal-check">
+                    <input type="checkbox" id="sl-wis-klassement" checked>
+                    <span>Vastgelegd <b>klassement van deze categorie-groep</b> ook verwijderen
+                          <small>(${info.klassement_count} rijder${info.klassement_count === 1 ? '' : 's'} in archief — geldt voor alle afstanden in deze DC)</small>
+                    </span>
+                </label>`);
+        }
+        if (checkboxes.length) {
+            lines.push('<div class="modal-checks">' + checkboxes.join('') + '</div>');
+        }
+
+        const overlay = document.createElement('div');
+        overlay.className = 'modal-overlay';
+        overlay.innerHTML = `
+            <div class="modal-dialog" role="dialog" aria-modal="true">
+                <div class="modal-header">
+                    <span class="modal-icon">⚠</span>
+                    <span>Loting wissen</span>
+                </div>
+                <div class="modal-body">${lines.join('')}</div>
+                <div class="modal-knoppen">
+                    <button class="modal-btn modal-annuleer">Annuleer</button>
+                    <button class="modal-btn modal-doorgaan">Verwijderen</button>
+                </div>
+            </div>`;
+        document.body.appendChild(overlay);
+
+        const sluit = (result) => {
+            overlay.remove();
+            document.removeEventListener('keydown', onKey);
+            resolve(result);
+        };
+        const lees = () => ({
+            wis_uitslag:    overlay.querySelector('#sl-wis-uitslag')?.checked    ?? false,
+            wis_klassement: overlay.querySelector('#sl-wis-klassement')?.checked ?? false,
+        });
+        const onKey = e => {
+            if (e.key === 'Escape') sluit(null);
+            if (e.key === 'Enter')  sluit(lees());
+        };
+        overlay.querySelector('.modal-annuleer').addEventListener('click', () => sluit(null));
+        overlay.querySelector('.modal-doorgaan').addEventListener('click', () => sluit(lees()));
+        overlay.addEventListener('click', e => { if (e.target === overlay) sluit(null); });
+        document.addEventListener('keydown', onKey);
+        overlay.querySelector('.modal-annuleer').focus();
+    });
+}
+
 // Verdeel slot-labels over heats via slangenpatroon
 function snakeVerdeelSlots(slots, nHeats) {
     const heats = Array.from({ length: nHeats }, (_, i) => ({ nummer: i + 1, slots: [] }));
@@ -1783,7 +1859,32 @@ function toonSlResultaten(cacheKey, vergrendeld = false) {
     const wisBtn = blok1.querySelector('#sl-btn-wis');
     if (wisBtn && !_slLeesOnly) {
         wisBtn.addEventListener('click', async () => {
-            if (!await toonBevestigDialog('Loting verwijderen? Dit kan niet ongedaan worden gemaakt.', 'Loting wissen')) return;
+            // Stap 1: check welke side-effects de wis zou hebben
+            const baseBody = {
+                competition_id:  huidigCompId,
+                dc_ids:          dcIds.join(','),
+                distance_id:     distId ?? '',
+                category_filter: cf.join(','),
+            };
+            let info;
+            try {
+                const res = await fetch('api/startlijst_wis.php', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ ...baseBody, mode: 'check' }),
+                });
+                info = await res.json();
+                if (info.error) throw new Error(info.error);
+            } catch (e) {
+                toonBevestigDialog('Kon impact niet bepalen: ' + e.message, 'Fout');
+                return;
+            }
+
+            // Stap 2: enriched dialog tonen met counts + checkboxes
+            const keuzes = await _slToonWisDialog(info);
+            if (!keuzes) return;  // user heeft geannuleerd
+
+            // Stap 3: daadwerkelijk wissen
             wisBtn.disabled = true;
             wisBtn.textContent = 'Verwijderen…';
             try {
@@ -1791,10 +1892,10 @@ function toonSlResultaten(cacheKey, vergrendeld = false) {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({
-                        competition_id:  huidigCompId,
-                        dc_ids:          dcIds,
-                        distance_id:     distId ?? '',
-                        category_filter: cf.join(','),
+                        ...baseBody,
+                        mode:           'delete',
+                        wis_uitslag:    keuzes.wis_uitslag,
+                        wis_klassement: keuzes.wis_klassement,
                     }),
                 });
                 // Cache leegmaken, tab-kleuren + print-select refreshen, seeding-UI opnieuw tonen

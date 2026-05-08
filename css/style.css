@@ -4118,6 +4118,46 @@ col.live-col-rondes  { width: 40px; }
     margin-top: .3rem;
     font-size: .85rem;
 }
+/* Waarschuwingsregel binnen modal (bv. "X reeds ingevoerde tijden gaan verloren") */
+.modal-body p.modal-warn {
+    background: #fff8e1;
+    border-left: 3px solid #f5a623;
+    color: #8a3f00;
+    padding: 6px 10px;
+    border-radius: 0 4px 4px 0;
+    font-size: .85rem;
+}
+/* Checkbox-blok voor cascade-keuzes (uitslag/klassement mee-verwijderen) */
+.modal-body .modal-checks {
+    background: #f8fbff;
+    border: 1px solid var(--lichtblauw, #d6e4f0);
+    border-radius: 4px;
+    padding: 8px 10px;
+    margin-top: .6rem;
+}
+.modal-body .modal-check {
+    display: flex;
+    align-items: flex-start;
+    gap: 8px;
+    cursor: pointer;
+    padding: 4px 0;
+    font-size: .88rem;
+}
+.modal-body .modal-check + .modal-check {
+    border-top: 1px dashed var(--border, #cdd8e3);
+    margin-top: 4px;
+    padding-top: 8px;
+}
+.modal-body .modal-check input[type="checkbox"] {
+    margin-top: 3px;
+    flex: 0 0 auto;
+}
+.modal-body .modal-check small {
+    display: block;
+    color: #666;
+    font-size: .78rem;
+    margin-top: 1px;
+}
 
 /* Bord-prompt (in-house pop-up voor rondebord-invoer) */
 .live-av-bord-prompt { display: flex; flex-direction: column; gap: 6px; }
