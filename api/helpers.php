@@ -25,8 +25,12 @@ $action = $body['action'] ?? '';
 // ── Scan: rapport per wedstrijd ─────────────────────────────────────────────
 if ($action === 'scan_wees_uitslagen') {
     try {
-        // Wees uitslag_afstand-rijen: groepeer per wedstrijd + DC + afstand,
-        // tel hoeveel rijders erin staan en check of er heats voor zijn.
+        // BELANGRIJK: alleen wees-rijen waar de wedstrijd nog bestaat. Als de
+        // wedstrijd zelf is verwijderd (uit competitions-tabel), is de
+        // uitslag-rij sport-archief en MOET die blijven staan — daarom
+        // bewust GEEN cascade op competition_id in uitslag_afstand/_klassement.
+        // De INNER JOIN op competitions filtert die archief-rijen weg uit de
+        // wees-detectie.
         $uaStmt = $pdo->query("
             SELECT
                 ua.competition_id,
@@ -37,6 +41,7 @@ if ($action === 'scan_wees_uitslagen') {
                 ua.split_group,
                 COUNT(*) AS rijders
             FROM uitslag_afstand ua
+            JOIN competitions c ON c.id = ua.competition_id
             WHERE NOT EXISTS (
                 SELECT 1 FROM heats h
                 WHERE h.competition_id          = ua.competition_id
@@ -50,7 +55,7 @@ if ($action === 'scan_wees_uitslagen') {
         ");
         $weesUitslag = $uaStmt->fetchAll(PDO::FETCH_ASSOC);
 
-        // Wees uitslag_klassement-rijen
+        // Wees uitslag_klassement-rijen — zelfde guard tegen archief-rijen
         $ukStmt = $pdo->query("
             SELECT
                 uk.competition_id,
@@ -60,6 +65,7 @@ if ($action === 'scan_wees_uitslagen') {
                 uk.split_group,
                 COUNT(*) AS rijders
             FROM uitslag_klassement uk
+            JOIN competitions c ON c.id = uk.competition_id
             WHERE NOT EXISTS (
                 SELECT 1 FROM heats h
                 WHERE h.competition_id          = uk.competition_id
@@ -105,9 +111,12 @@ if ($action === 'cleanup_wees_uitslagen') {
     try {
         $pdo->beginTransaction();
 
-        // uitslag_afstand
+        // uitslag_afstand — INNER JOIN op competitions zodat archief-rijen
+        // van gewiste wedstrijden NIET meegaan (die zijn bewust ontkoppeld
+        // om historie/sport-archief te bewaren).
         $sql = "
             DELETE ua FROM uitslag_afstand ua
+            JOIN competitions c ON c.id = ua.competition_id
             WHERE NOT EXISTS (
                 SELECT 1 FROM heats h
                 WHERE h.competition_id          = ua.competition_id
@@ -121,9 +130,10 @@ if ($action === 'cleanup_wees_uitslagen') {
         $stmt->execute($scope === 'all' ? [] : [$scope]);
         $uaWeg = $stmt->rowCount();
 
-        // uitslag_klassement
+        // uitslag_klassement — zelfde JOIN-guard
         $sql = "
             DELETE uk FROM uitslag_klassement uk
+            JOIN competitions c ON c.id = uk.competition_id
             WHERE NOT EXISTS (
                 SELECT 1 FROM heats h
                 WHERE h.competition_id          = uk.competition_id
