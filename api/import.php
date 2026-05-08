@@ -175,41 +175,30 @@ if ($_SERVER['REQUEST_METHOD'] === 'GET' && ($_GET['action'] ?? '') === 'export_
 
     // MyLaps Orbits is een ouderwets Windows-tijdperk-tool dat verwacht:
     //  - Windows-1252 (CP1252) encoding — geen UTF-8 BOM
-    //  - Geen dubbele quotes in tekst-velden (Orbits ziet ze als delimiter)
-    // Daarom converteren we elke string naar CP1252 (//TRANSLIT vervangt niet-
-    // representeerbare tekens als 'é' → 'e' wanneer nodig) en strippen we
-    // eventuele " uit alle text-velden vóór de CSV-write.
+    //  - Geen RFC 4180 enclosure-handling: Orbits ziet komma's áltijd als
+    //    veld-scheider, óók binnen "..."-quotes; dubbele quotes worden
+    //    gewoon mee geprint i.p.v. herkend als enclosure.
+    // Daarom strippen we ALLE potentiële delimiter-/quote-tekens uit elk
+    // tekst-veld vóór de CSV-write. Veiliger om een zeldzame komma in een
+    // clubnaam kwijt te raken dan een corrupte regel in Orbits.
     $orbits = function ($v) {
         if ($v === null || $v === '') return '';
         $s = (string)$v;
-        // Strip dubbele quotes (Orbits ziet ze als veld-delimiter en blokkeert)
-        $s = str_replace('"', '', $s);
+        // Strip alle CSV-stoorzenders: dubbele quote, komma, en newlines
+        $s = str_replace(['"', ',', "\r", "\n"], ['', '', '', ''], $s);
         // UTF-8 → CP1252 met TRANSLIT-fallback voor exotische tekens
         $conv = @iconv('UTF-8', 'CP1252//TRANSLIT//IGNORE', $s);
         return $conv !== false ? $conv : $s;
     };
 
-    // Custom CSV-row-writer: gebruikt GEEN fputcsv omdat die in PHP 8.x
-    // ALTIJD enclosure-quotes om elk veld zet dat een spatie bevat — wat
-    // strict-CSV-tools als Orbits aanvaarden, maar Orbits-import-script
-    // verwacht "alleen quotes wanneer écht nodig" (komma in waarde).
-    // RFC 4180 zegt: enclosure alleen verplicht bij delimiter, enclosure
-    // of newline in de waarde. Dat is hier wat we doen.
-    //
-    // We hebben " al gestript in $orbits(), en newlines komen niet voor
-    // in KNSB-feed-velden. Dus enige reden tot enclosure: een komma in
-    // de waarde zelf (zelden, bv. clubnaam met komma).
+    // Custom CSV-row-writer: GEEN fputcsv omdat die in PHP 8.x élk veld
+    // met een spatie tussen quotes zet, en Orbits handelt die quotes niet
+    // af als enclosure. Doordat $orbits() al alle komma's/quotes/newlines
+    // strippt, is een simpele "implode + CRLF" voldoende: enclosen is nooit
+    // meer nodig.
     $orbitsRow = function (array $velden) use (&$out) {
-        $cells = array_map(function ($v) {
-            $s = (string)$v;
-            // Alleen enclose als de waarde een komma of newline bevat.
-            if (strpbrk($s, ",\r\n") !== false) {
-                return '"' . $s . '"';
-            }
-            return $s;
-        }, $velden);
         // CRLF — Windows-tools (Orbits draait op Windows) verwachten dat.
-        fwrite($out, implode(',', $cells) . "\r\n");
+        fwrite($out, implode(',', $velden) . "\r\n");
     };
 
     header('Content-Type: text/csv; charset=windows-1252');
