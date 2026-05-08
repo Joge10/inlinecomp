@@ -175,7 +175,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'GET' && ($_GET['action'] ?? '') === 'export_
 
     // MyLaps Orbits is een ouderwets Windows-tijdperk-tool dat verwacht:
     //  - Windows-1252 (CP1252) encoding — geen UTF-8 BOM
-    //  - Geen dubbele quotes in tekst-velden (Orbits filtert die niet zelf weg)
+    //  - Geen dubbele quotes in tekst-velden (Orbits ziet ze als delimiter)
     // Daarom converteren we elke string naar CP1252 (//TRANSLIT vervangt niet-
     // representeerbare tekens als 'é' → 'e' wanneer nodig) en strippen we
     // eventuele " uit alle text-velden vóór de CSV-write.
@@ -189,12 +189,35 @@ if ($_SERVER['REQUEST_METHOD'] === 'GET' && ($_GET['action'] ?? '') === 'export_
         return $conv !== false ? $conv : $s;
     };
 
+    // Custom CSV-row-writer: gebruikt GEEN fputcsv omdat die in PHP 8.x
+    // ALTIJD enclosure-quotes om elk veld zet dat een spatie bevat — wat
+    // strict-CSV-tools als Orbits aanvaarden, maar Orbits-import-script
+    // verwacht "alleen quotes wanneer écht nodig" (komma in waarde).
+    // RFC 4180 zegt: enclosure alleen verplicht bij delimiter, enclosure
+    // of newline in de waarde. Dat is hier wat we doen.
+    //
+    // We hebben " al gestript in $orbits(), en newlines komen niet voor
+    // in KNSB-feed-velden. Dus enige reden tot enclosure: een komma in
+    // de waarde zelf (zelden, bv. clubnaam met komma).
+    $orbitsRow = function (array $velden) use (&$out) {
+        $cells = array_map(function ($v) {
+            $s = (string)$v;
+            // Alleen enclose als de waarde een komma of newline bevat.
+            if (strpbrk($s, ",\r\n") !== false) {
+                return '"' . $s . '"';
+            }
+            return $s;
+        }, $velden);
+        // CRLF — Windows-tools (Orbits draait op Windows) verwachten dat.
+        fwrite($out, implode(',', $cells) . "\r\n");
+    };
+
     header('Content-Type: text/csv; charset=windows-1252');
     header('Content-Disposition: attachment; filename="' . $safeName . '.csv"');
     $out = fopen('php://output', 'w');
 
     // GEEN UTF-8 BOM — Orbits ziet dat als 3 vreemde tekens vooraan
-    fputcsv($out, [
+    $orbitsRow([
         'Category','StartNumber','LicenseKey','Initials','FirstName','PrefixedSurname',
         'FullName','ShortName','BirthDate','Gender','City','NationalityCode',
         'ClubCode','ClubFullName','Sponsor','Transponder1','Transponder2','VenueCode','ClubShortName',
@@ -222,7 +245,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'GET' && ($_GET['action'] ?? '') === 'export_
         $gn = $r['gender'];
         $genderChar = ($gn === null || $gn === '') ? '' : (((int)$gn === 1) ? 'F' : 'M');
 
-        fputcsv($out, [
+        $orbitsRow([
             $orbits($r['category']),
             $orbits($r['effective_startnumber']),
             $orbits($r['license_key']),
