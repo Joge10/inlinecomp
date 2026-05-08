@@ -43,10 +43,12 @@ async function toonLivePagina() {
         const data = await res.json();
         if (data.error) throw new Error(data.error);
 
-        _liveRitten     = data.ritten     || [];
-        _liveCatConfigs = data.catConfigs || {};
-        _liveSysteem    = data.systeem    || null;
-        _liveOngeslagen = false;
+        const rittenRaw      = data.ritten     || [];
+        _liveRittenOrigCount = rittenRaw.length;
+        _liveRitten          = _liveMergeCombiritten(rittenRaw);
+        _liveCatConfigs      = data.catConfigs || {};
+        _liveSysteem         = data.systeem    || null;
+        _liveOngeslagen      = false;
 
         // Corrigeer finishposities voor PK-ritten op basis van punten→rondes→tid.
         // DB-waarden kunnen verkeerd zijn als ze met een oudere versie zijn opgeslagen.
@@ -74,6 +76,121 @@ async function toonLivePagina() {
 
 // ── Hulpfuncties ──────────────────────────────────────────────────────────────
 
+// Origineel aantal ritten uit DB (vóór combi-merge). Wordt gebruikt voor de
+// "X / Y" carousel-teller — Y blijft het oorspronkelijke aantal zodat de
+// gebruiker volgorde-getallen herkent uit het tijdschema.
+let _liveRittenOrigCount = 0;
+
+// Maakt één gecombineerde titel uit een lijst strings door common prefix +
+// common suffix te vinden en alleen het verschillende middenstuk te samengevoegen.
+//   ["Junioren A Mannen 1km", "Junioren A Vrouwen 1km"]
+// → "Junioren A Mannen + Vrouwen 1km"
+function _liveCombiKortsteTitel(strs) {
+    const arr = strs.filter(Boolean);
+    if (arr.length === 0) return '';
+    if (arr.length === 1) return arr[0];
+
+    // Common prefix
+    let prefixLen = arr[0].length;
+    for (const s of arr.slice(1)) {
+        let i = 0;
+        while (i < prefixLen && i < s.length && arr[0][i] === s[i]) i++;
+        prefixLen = i;
+    }
+    const prefix = arr[0].slice(0, prefixLen);
+
+    // Common suffix (op de strings ná de prefix)
+    const restjes = arr.map(s => s.slice(prefixLen));
+    let suffixLen = restjes[0].length;
+    for (const s of restjes.slice(1)) {
+        let i = 0;
+        while (i < suffixLen && i < s.length
+               && restjes[0][restjes[0].length - 1 - i] === s[s.length - 1 - i]) i++;
+        suffixLen = i;
+    }
+    const suffix = suffixLen > 0 ? restjes[0].slice(restjes[0].length - suffixLen) : '';
+
+    // Middenstukken samenvoegen
+    const middens = restjes.map(s => suffixLen > 0 ? s.slice(0, s.length - suffixLen) : s);
+    // Strip whitespace tussen prefix en midden, en midden en suffix, om
+    // dubbele spaties te voorkomen wanneer prefix/suffix al eindigen/beginnen
+    // op een spatie.
+    return prefix + middens.map(m => m.trim()).join(' + ') + suffix;
+}
+
+// Voegt ritten met hetzelfde combi_group samen tot één virtuele "merged" rit.
+// Behoudt apart-rijden ritten ongewijzigd. Op de gemergde rit:
+//   is_combi: true
+//   combi_leden: [{rit_id, heat_id, dc_id, distance_id, dc_naam, race_type}]
+//   rijders: alle leden-rijders + per rijder _combi_rit_id voor save-routing
+function _liveMergeCombiritten(rittenRaw) {
+    const result = [];
+    const groepIdx = new Map(); // combi_group → index in result
+
+    for (const r of rittenRaw) {
+        if (r.combi_group == null) {
+            result.push(r);
+            continue;
+        }
+        if (!groepIdx.has(r.combi_group)) {
+            // Eerste lid van deze groep — start gemergde rit als basis
+            const combi = {
+                ...r,
+                is_combi: true,
+                combi_leden: [{
+                    rit_id:        r.rit_id,
+                    heat_id:       r.heat_id,
+                    dc_id:         r.dc_id,
+                    dc_naam:       r.dc_naam,
+                    distance_id:   r.distance_id,
+                    afstand_naam:  r.afstand_naam,
+                    race_type:     r.race_type,
+                    rit_naam:      r.rit_naam,
+                }],
+                rijders: r.rijders.map(rij => ({
+                    ...rij,
+                    _combi_rit_id:  r.rit_id,
+                    _combi_heat_id: r.heat_id,
+                    _combi_dc_id:   r.dc_id,
+                })),
+            };
+            groepIdx.set(r.combi_group, result.length);
+            result.push(combi);
+        } else {
+            const combi = result[groepIdx.get(r.combi_group)];
+            combi.combi_leden.push({
+                rit_id:        r.rit_id,
+                heat_id:       r.heat_id,
+                dc_id:         r.dc_id,
+                dc_naam:       r.dc_naam,
+                distance_id:   r.distance_id,
+                afstand_naam:  r.afstand_naam,
+                race_type:     r.race_type,
+                rit_naam:      r.rit_naam,
+            });
+            for (const rij of r.rijders) {
+                combi.rijders.push({
+                    ...rij,
+                    _combi_rit_id:  r.rit_id,
+                    _combi_heat_id: r.heat_id,
+                    _combi_dc_id:   r.dc_id,
+                });
+            }
+        }
+    }
+
+    // Voor elke gemergde rit: gecombineerde titel + dc_naam herbouwen
+    for (const r of result) {
+        if (r.is_combi) {
+            const ritNamen = r.combi_leden.map(l => l.rit_naam);
+            const dcNamen  = r.combi_leden.map(l => l.dc_naam);
+            r.rit_naam = _liveCombiKortsteTitel(ritNamen);
+            r.dc_naam  = _liveCombiKortsteTitel(dcNamen);
+        }
+    }
+    return result;
+}
+
 // Een rijder is "afgehandeld" als hij een tijd, een sanctie OF — bij afvalkoers —
 // een afval_rang heeft (eliminatie zonder eindtijd telt ook als compleet).
 function _liveRijderAfgehandeld(r) {
@@ -94,34 +211,46 @@ function _liveRitDeels(rit) {
 }
 
 function _liveHasHeat(rit) {
+    // Bij combi-ritten kijken we of MINSTENS één leden-heat bestaat — een combi
+    // met deels-aangemaakte heats (een leden zonder rijders) telt nog wel als heat.
+    if (rit.is_combi) {
+        const heeftLedenHeat = rit.combi_leden.some(l => l.heat_id !== null);
+        return heeftLedenHeat && rit.rijders && rit.rijders.length > 0;
+    }
     return rit.heat_id !== null && rit.rijders && rit.rijders.length > 0;
 }
 
 // Herbereken finishposities voor een PK-rit: punten DESC → rondes DESC (null=Infinity) → tid ASC.
 // Corrigeert evt. foute waarden uit de DB (opgeslagen met oudere versie zonder rondes-stap).
+// Bij combi-ritten: per leden apart (elke categorie krijgt eigen 1-N nummering).
 function _liveHerrekenPKFinishposities(rit) {
     if (rit.race_type !== 'puntenkoers') return;
 
     const puntenMap = new Map();
     rit.rijders.forEach(r => { if (r.punten != null) puntenMap.set(r.entry_id, r.punten); });
 
-    // Alleen rijders met een geldige tijd
-    const metTijd = rit.rijders.filter(r => r.tijd_ms !== null && r.tijd_ms > 0);
+    const subsets = rit.is_combi
+        ? rit.combi_leden.map(l => rit.rijders.filter(r => r._combi_rit_id === l.rit_id))
+        : [rit.rijders];
 
-    metTijd.sort((a, b) => {
-        const pA = puntenMap.get(a.entry_id) ?? 0;
-        const pB = puntenMap.get(b.entry_id) ?? 0;
-        if (pA !== pB) return pB - pA;                  // 1. punten DESC
-        const rA = a.rondes ?? Infinity;
-        const rB = b.rondes ?? Infinity;
-        if (rA !== rB) return rB - rA;                   // 2. rondes DESC (null = best)
-        return a.tijd_ms - b.tijd_ms;                    // 3. tid ASC
-    });
+    for (const subset of subsets) {
+        const metTijd = subset.filter(r => r.tijd_ms !== null && r.tijd_ms > 0);
 
-    metTijd.forEach((r, i) => {
-        const rider = rit.rijders.find(x => x.entry_id === r.entry_id);
-        if (rider) rider.finishpositie = i + 1;
-    });
+        metTijd.sort((a, b) => {
+            const pA = puntenMap.get(a.entry_id) ?? 0;
+            const pB = puntenMap.get(b.entry_id) ?? 0;
+            if (pA !== pB) return pB - pA;                  // 1. punten DESC
+            const rA = a.rondes ?? Infinity;
+            const rB = b.rondes ?? Infinity;
+            if (rA !== rB) return rB - rA;                   // 2. rondes DESC (null = best)
+            return a.tijd_ms - b.tijd_ms;                    // 3. tid ASC
+        });
+
+        metTijd.forEach((r, i) => {
+            const rider = rit.rijders.find(x => x.entry_id === r.entry_id);
+            if (rider) rider.finishpositie = i + 1;
+        });
+    }
 }
 
 // Tijdnotatie: ms → "M:SS.mmm" (bijv. 47321 → "0:47.321")
@@ -258,7 +387,20 @@ function _liveHerbereken(ritIdx) {
         return { entry_id: r.entry_id, tijd_ms: inp ? _parseTijdInvoer(inp.value) : null, sanctie: sel?.value || null, rondes };
     });
 
-    const posMap        = _berekenPosities(entries, true);
+    // Bij combi: posities PER LEDEN berekenen (cat A en cat B krijgen elk hun
+    // eigen 1-N nummering), bij niet-combi alles in één pass.
+    const posMap = new Map();
+    if (rit.is_combi) {
+        for (const lid of rit.combi_leden) {
+            const subset = entries.filter(e => {
+                const rij = rit.rijders.find(rr => rr.entry_id === e.entry_id);
+                return rij && rij._combi_rit_id === lid.rit_id;
+            });
+            _berekenPosities(subset, true).forEach((v, k) => posMap.set(k, v));
+        }
+    } else {
+        _berekenPosities(entries, true).forEach((v, k) => posMap.set(k, v));
+    }
     const isPuntenkoers = rit.race_type === 'puntenkoers';
 
     // Voor afvalkoers: ook rijders met afval_rang (via UI gemarkeerd) tellen
@@ -311,13 +453,29 @@ function _ordinaal(n) {
 // ── Ronde-status berekening (voor volgende-ronde knop) ────────────────────────
 
 function _liveRondeCompleet(dcId, distanceId, rondeType) {
-    const rittenInRonde = _liveRitten.filter(r =>
-        r.dc_id === dcId &&
-        r.distance_id === distanceId &&
-        r.ronde_type === rondeType
-    );
+    // Combi-ritten matchen op ELK leden's dc/distance — voor categorie B in een
+    // combi-rit moeten we ook checken of die leden compleet is, ook al is dat
+    // niet de "primaire" dc op de gemergde rit.
+    const ritMatcht = (r) => {
+        if (r.ronde_type !== rondeType) return false;
+        if (r.is_combi) {
+            return r.combi_leden.some(l => l.dc_id === dcId && l.distance_id === distanceId);
+        }
+        return r.dc_id === dcId && r.distance_id === distanceId;
+    };
+    const rittenInRonde = _liveRitten.filter(ritMatcht);
     if (rittenInRonde.length === 0) return false;
-    return rittenInRonde.every(r => _liveHasHeat(r) && _liveRitCompleet(r));
+    // Bij combi-rit: alleen de leden-rijders voor deze dc/distance moeten
+    // compleet zijn (niet de andere combi-leden — die horen bij andere keten).
+    const ritCompleetVoorDc = (r) => {
+        if (!_liveHasHeat(r)) return false;
+        if (r.is_combi) {
+            const ledenRijders = r.rijders.filter(rij => rij._combi_dc_id === dcId);
+            return ledenRijders.length > 0 && ledenRijders.every(_liveRijderAfgehandeld);
+        }
+        return _liveRitCompleet(r);
+    };
+    return rittenInRonde.every(ritCompleetVoorDc);
 }
 
 
@@ -328,11 +486,18 @@ function _liveRondeCompleet(dcId, distanceId, rondeType) {
 function _liveHergeneerLabel(dcId, distanceId, naarRondeType) {
     const baseLabel = RONDE_LABEL[naarRondeType] || naarRondeType;
     if (naarRondeType !== 'finale_a') return baseLabel;
-    const heeftB = (_liveRitten || []).some(r =>
-        r.dc_id === dcId
-        && String(r.distance_id || '') === String(distanceId || '')
-        && r.ronde_type === 'finale_b'
-    );
+    // Match ook combi-ritten waar één van de leden voor deze dc+distance
+    // een B-finale heeft — anders zou een combi-B-finale niet meegerekend worden.
+    const heeftB = (_liveRitten || []).some(r => {
+        if (r.ronde_type !== 'finale_b') return false;
+        if (r.is_combi) {
+            return r.combi_leden.some(l =>
+                l.dc_id === dcId && String(l.distance_id || '') === String(distanceId || '')
+            );
+        }
+        return r.dc_id === dcId
+            && String(r.distance_id || '') === String(distanceId || '');
+    });
     return heeftB ? 'A- en B-Finales' : baseLabel;
 }
 
@@ -385,13 +550,17 @@ function _liveBouwKaart(rit, idx, compact = false) {
     const rondeBadge = `<span class="live-rit-rondebadge ${rondeKls}">${escHtml(RONDE_LABEL[rit.ronde_type] || rit.ronde_type)}</span>`;
     const aantalRijders = _liveHasHeat(rit) ? rit.rijders.length : (rit.verwacht || 0);
 
-    // Combi-info: is deze rit deel van een combi-groep? Zo ja: positie in groep.
+    // Combi-badge: alleen tonen wanneer combi-ritten NIET gemerged zijn (legacy
+    // pad — bij gemergde combi's geeft de gecombineerde rit_naam de leden al aan).
     let combiInfoHtml = '';
-    if (rit.combi_group) {
+    if (rit.combi_group && !rit.is_combi) {
         const groepLeden = _liveRitten.filter(x => x.combi_group === rit.combi_group)
                                       .sort((a, b) => (a.volgorde || 0) - (b.volgorde || 0));
         const mijnPos = groepLeden.findIndex(x => x.rit_id === rit.rit_id) + 1;
         combiInfoHtml = `<span class="heat-combi-badge" title="Deze rit is gecombineerd met ${groepLeden.length - 1} andere rit(ten) in het programma">🔗 ${mijnPos}/${groepLeden.length}</span>`;
+    } else if (rit.is_combi) {
+        // Gemergde combi: subtiele badge dat het 1 race is met N categorieën
+        combiInfoHtml = `<span class="heat-combi-badge" title="${rit.combi_leden.length} categorieën rijden tegelijk in deze heat">🔗 ${rit.combi_leden.length}×</span>`;
     }
 
     // Titel — dezelfde opbouw als heat-card in startlist.js
@@ -428,11 +597,25 @@ function _liveBouwKaart(rit, idx, compact = false) {
         const toonPkPanel  = isPuntenkoers || heeftPunten;
 
         const validPosities = [...new Set(rit.rijders.map(r => r.finishpositie).filter(Boolean))].sort((a, b) => a - b);
-        // Ex-aequo rangmap voor initiële render
-        const _rangMap = _berekenPosities(
-            rit.rijders.map(r => ({ entry_id: r.entry_id, tijd_ms: r.tijd_ms, sanctie: r.sanctie, rondes: r.rondes })),
-            true
-        );
+        // Ex-aequo rangmap voor initiële render. Voor combi-ritten: bereken
+        // PER LEDEN apart zodat elke categorie zijn eigen 1-N nummering krijgt
+        // (twee rijders kunnen dus beiden Fin "1" hebben — eentje per categorie).
+        const _rangMap = new Map();
+        if (rit.is_combi) {
+            for (const lid of rit.combi_leden) {
+                const subset = rit.rijders.filter(r => r._combi_rit_id === lid.rit_id);
+                const ledenMap = _berekenPosities(
+                    subset.map(r => ({ entry_id: r.entry_id, tijd_ms: r.tijd_ms, sanctie: r.sanctie, rondes: r.rondes })),
+                    true
+                );
+                ledenMap.forEach((v, k) => _rangMap.set(k, v));
+            }
+        } else {
+            _berekenPosities(
+                rit.rijders.map(r => ({ entry_id: r.entry_id, tijd_ms: r.tijd_ms, sanctie: r.sanctie, rondes: r.rondes })),
+                true
+            ).forEach((v, k) => _rangMap.set(k, v));
+        }
 
         const opts  = { heeftRondes };
         const rijen = rit.rijders.map(r => _liveRijRij(r, compact, validPosities, _rangMap, opts)).join('');
@@ -605,7 +788,10 @@ function _liveRenderCarousel() {
     const container = el('live-inhoud');
     if (!container) return;
 
-    const totaal = _liveRitten.length;
+    // Carousel-teller toont volgorde-getal van eerste leden i.p.v. array-index,
+    // zodat combi-ritten "ergens" springen (bv. 3, 6, 7 als 3-4-5 een combi is)
+    // en de noemer het totaal aantal ritten in DB blijft tonen.
+    const totaal = _liveRittenOrigCount || _liveRitten.length;
     const idx    = _liveHuidigIdx;
     const rit    = _liveRitten[idx];
 
@@ -637,7 +823,7 @@ function _liveRenderCarousel() {
           `<button type="button" class="live-nav-dropdown" id="live-nav-dd-trigger">${huidigLabel}</button>` +
           `<div class="live-nav-dd-panel" id="live-nav-dd-panel" hidden>${dropdownOpts}</div>` +
         `</div>` +
-        `<span class="live-nav-teller">${idx + 1} / ${totaal}</span>` +
+        `<span class="live-nav-teller">${rit?.volgorde ?? (idx + 1)} / ${totaal}</span>` +
         `</div>`;
 
     const alleKaarten = _liveRitten.map((r, i) => _liveBouwKaart(r, i, false)).join('');
@@ -697,8 +883,31 @@ function _liveRenderCarousel() {
 
     el('live-btn-volgende-ronde')?.addEventListener('click', e => {
         const b = e.currentTarget;
-        _liveGenereerKetenStap(b.dataset.dcId, b.dataset.distanceId, b.dataset.van, b.dataset.naar);
+        _liveHergeneerKlik(b);
     });
+}
+
+// Hergeneer-klik: bij combi-rit eerst checken of ALLE leden compleet zijn,
+// daarna ketenstap voor elke leden draaien (zodat beide categorieën hun
+// volgende ronde krijgen). Bij niet-combi: gewoon één ketenstap.
+function _liveHergeneerKlik(btn) {
+    const dcId       = btn.dataset.dcId;
+    const distanceId = btn.dataset.distanceId;
+    const van        = btn.dataset.van;
+    const naar       = btn.dataset.naar;
+
+    const huidigeRit = _liveRitten[_liveHuidigIdx];
+    if (huidigeRit?.is_combi) {
+        // Per leden: zelfde "van"-ronde en bereken passende "naar" via _volgendeRondeType
+        for (const lid of huidigeRit.combi_leden) {
+            const ledenNaar = _volgendeRondeType(lid.dc_id, lid.distance_id, van);
+            if (!ledenNaar) continue;
+            _liveGenereerKetenStap(lid.dc_id, lid.distance_id, van, ledenNaar)
+                .catch(() => {}); // fout op één leden mag niet de andere blokkeren
+        }
+        return;
+    }
+    _liveGenereerKetenStap(dcId, distanceId, van, naar);
 }
 
 // ── Links panel: alle rijders in categorie+ronde ──────────────────────────────
@@ -711,21 +920,34 @@ function _liveInitPanelListeners() {
 }
 
 function _liveBouwLinksPanel(dcId, distanceId, rondeType) {
-    const ritten = _liveRitten.filter(r =>
-        r.dc_id === dcId &&
-        String(r.distance_id ?? '') === String(distanceId ?? '') &&
-        r.ronde_type === rondeType
-    );
+    // Filter ritten op deze categorie+afstand+ronde. Combi-ritten matchen
+    // óók wanneer ÉÉN VAN HUN LEDEN voor dc/distance staat (niet alleen de
+    // primary leden). Per gevonden rit nemen we vervolgens alleen de rijders
+    // mee die bij dc-id horen.
+    const ritten = _liveRitten.filter(r => {
+        if (r.ronde_type !== rondeType) return false;
+        if (r.is_combi) {
+            return r.combi_leden.some(l =>
+                l.dc_id === dcId
+                && String(l.distance_id ?? '') === String(distanceId ?? '')
+            );
+        }
+        return r.dc_id === dcId
+            && String(r.distance_id ?? '') === String(distanceId ?? '');
+    });
 
     const rondeNaam = RONDE_LABEL[rondeType] || rondeType;
 
-    // Alle rijders uit alle ritten in deze categorie+ronde, plat
+    // Alle rijders uit alle ritten in deze categorie+ronde, plat. Bij combi-rit
+    // alleen de rijders van het lid dat met dc_id+distance_id matcht.
     const alleRijders = [];
     for (const rit of ritten) {
-        if (_liveHasHeat(rit)) {
-            for (const r of rit.rijders) {
-                alleRijders.push({ ...r, rit_id: rit.rit_id, heat_nr: rit.heat_nr });
-            }
+        if (!_liveHasHeat(rit)) continue;
+        const ledenRijders = rit.is_combi
+            ? rit.rijders.filter(rij => rij._combi_dc_id === dcId)
+            : rit.rijders;
+        for (const r of ledenRijders) {
+            alleRijders.push({ ...r, rit_id: r._combi_rit_id ?? rit.rit_id, heat_nr: rit.heat_nr });
         }
     }
 
@@ -922,12 +1144,18 @@ function _livePanelHerbereken() {
     const dcId       = panel.dataset.dcId;
     const distanceId = panel.dataset.distanceId;
     const rondeType  = panel.dataset.rondeType;
-    const pkRit = _liveRitten.find(r =>
-        String(r.dc_id) === dcId &&
-        String(r.distance_id ?? '') === distanceId &&
-        r.ronde_type === rondeType &&
-        r.race_type === 'puntenkoers'
-    );
+    // Match ook combi-ritten: zoek leden met deze dc/distance in elke combi-rit.
+    const pkRit = _liveRitten.find(r => {
+        if (r.race_type !== 'puntenkoers' || r.ronde_type !== rondeType) return false;
+        if (r.is_combi) {
+            return r.combi_leden.some(l =>
+                String(l.dc_id) === dcId
+                && String(l.distance_id ?? '') === distanceId
+            );
+        }
+        return String(r.dc_id) === dcId
+            && String(r.distance_id ?? '') === distanceId;
+    });
     if (pkRit) {
         const pkIdx = _liveRitten.indexOf(pkRit);
         // Rijkleuren bijwerken op basis van tijd
@@ -1410,16 +1638,25 @@ function _liveBind(idx) {
             delete _afvalState[idx];
         }
 
-        // Opslaan in DB
+        // Opslaan in DB. Bij combi-rit: fan-out naar alle leden-heat_ids zodat
+        // alle deelnemende heats hetzelfde race-type krijgen (samen rijden = samen scoren).
+        const heatIds = rit.is_combi
+            ? rit.combi_leden.map(l => l.heat_id).filter(Boolean)
+            : [rit.heat_id];
         try {
-            const res = await fetch('api/live.php', {
+            const calls = heatIds.map(hid => fetch('api/live.php', {
                 method:  'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body:    JSON.stringify({ action: 'set_race_type', heat_id: rit.heat_id, race_type: nieuweType }),
-            });
-            const data = await res.json();
-            if (data.error) throw new Error(data.error);
+                body:    JSON.stringify({ action: 'set_race_type', heat_id: hid, race_type: nieuweType }),
+            }).then(async r => {
+                const d = await r.json();
+                if (d.error) throw new Error(d.error);
+                return d;
+            }));
+            await Promise.all(calls);
             rit.race_type = nieuweType;
+            // Bij combi: ook leden-objecten bijwerken zodat we consistent blijven
+            if (rit.is_combi) rit.combi_leden.forEach(l => l.race_type = nieuweType);
         } catch (err) {
             _liveToast('⚠ Race-type opslaan mislukt: ' + err.message, 'error');
             // Terugdraaien in selector
@@ -3080,11 +3317,22 @@ function _liveActiveerWisselDropdowns(ritIdx) {
     const kaart = document.querySelector(`.live-carousel-card[data-idx="${ritIdx}"]`);
     if (!kaart) return;
 
-    const validPosities = [...new Set(rit.rijders.map(r => r.finishpositie).filter(Boolean))].sort((a, b) => a - b);
-    if (validPosities.length < 2) return;
+    // Bij combi-rit: validPosities PER LEDEN berekenen — een rijder kan
+    // alleen geswapt worden met een andere rijder uit dezelfde categorie,
+    // anders zou je zomaar Fin-getallen door elkaar kunnen halen tussen cats.
+    const validPositiesVoorRijder = (r) => {
+        const peers = rit.is_combi
+            ? rit.rijders.filter(rij => rij._combi_rit_id === r._combi_rit_id)
+            : rit.rijders;
+        return [...new Set(peers.map(rr => rr.finishpositie).filter(Boolean))]
+            .sort((a, b) => a - b);
+    };
 
     rit.rijders.forEach(r => {
         if (!r.finishpositie) return;
+        const validPosities = validPositiesVoorRijder(r);
+        if (validPosities.length < 2) return;
+
         const rij      = kaart.querySelector(`[data-entry="${r.entry_id}"]`);
         const bestaand = rij?.querySelector('.live-finish-sel');
         if (bestaand) {
@@ -3246,7 +3494,7 @@ async function _liveNavigeer(nieuweIdx) {
                     container?.appendChild(div);
                     div.querySelector('#live-btn-volgende-ronde')?.addEventListener('click', e => {
                         const b = e.currentTarget;
-                        _liveGenereerKetenStap(b.dataset.dcId, b.dataset.distanceId, b.dataset.van, b.dataset.naar);
+                        _liveHergeneerKlik(b);
                     });
                 }
             } else {
@@ -3353,25 +3601,73 @@ async function _liveOpslaanRit(ritIdx) {
     }
 
     try {
-        const res = await fetch('api/live.php', {
-            method:  'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body:    JSON.stringify({
-                action:         'save_rit_results',
-                competition_id: huidigCompId,
-                rit_id:         rit.rit_id,
-                results,
-            }),
-        });
-        if (!res.ok) throw new Error('HTTP ' + res.status);
-        const data = await res.json();
-        if (data.error) throw new Error(data.error);
+        // Save-fan-out: bij combi-rit één POST per leden, anders één POST.
+        // Server slaat nog steeds per heat_entry (entry_id) op — alleen het
+        // groeperen per rit_id verschilt. Promise.all faalt zodra één leden
+        // mislukt, dat is gewenst: we willen dan niet half-opgeslagen achterlaten.
+        const saveCalls = rit.is_combi
+            ? rit.combi_leden.map(lid => {
+                const ledenResults = results.filter(rs => {
+                    const rij = rit.rijders.find(rr => rr.entry_id === rs.entry_id);
+                    return rij && rij._combi_rit_id === lid.rit_id;
+                });
+                return fetch('api/live.php', {
+                    method:  'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body:    JSON.stringify({
+                        action:         'save_rit_results',
+                        competition_id: huidigCompId,
+                        rit_id:         lid.rit_id,
+                        results:        ledenResults,
+                    }),
+                }).then(async res => {
+                    if (!res.ok) throw new Error('HTTP ' + res.status);
+                    const d = await res.json();
+                    if (d.error) throw new Error(d.error);
+                    return d;
+                });
+            })
+            : [(async () => {
+                const res = await fetch('api/live.php', {
+                    method:  'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body:    JSON.stringify({
+                        action:         'save_rit_results',
+                        competition_id: huidigCompId,
+                        rit_id:         rit.rit_id,
+                        results,
+                    }),
+                });
+                if (!res.ok) throw new Error('HTTP ' + res.status);
+                const d = await res.json();
+                if (d.error) throw new Error(d.error);
+                return d;
+            })()];
+
+        const responses = await Promise.all(saveCalls);
 
         _liveOngeslagen = false;
 
-        // Lokale state bijwerken — gebruik finishposities van server (correct voor PK/rondes)
-        const serverFp  = data.finishposities ?? {};
-        const posMap    = _berekenPosities(results, true); // fallback
+        // Server-finishposities mergen uit alle responses (per leden)
+        const serverFp = {};
+        for (const d of responses) {
+            Object.assign(serverFp, d.finishposities || {});
+        }
+
+        // Lokale state bijwerken. Bij combi: bereken fallback PER LEDEN zodat
+        // de Fin-getallen ook lokaal per categorie geteld worden, conform de UI.
+        const posMap = new Map();
+        if (rit.is_combi) {
+            for (const lid of rit.combi_leden) {
+                const ledenResults = results.filter(rs => {
+                    const rij = rit.rijders.find(rr => rr.entry_id === rs.entry_id);
+                    return rij && rij._combi_rit_id === lid.rit_id;
+                });
+                _berekenPosities(ledenResults, true).forEach((v, k) => posMap.set(k, v));
+            }
+        } else {
+            _berekenPosities(results, true).forEach((v, k) => posMap.set(k, v));
+        }
         rit.rijders = rit.rijders.map(r => {
             const gesav = results.find(x => x.entry_id === r.entry_id);
             if (!gesav) return r;
@@ -3435,15 +3731,26 @@ async function _liveOpslaanRit(ritIdx) {
         toonBevestigDialog('Fout bij opslaan: ' + e.message, 'Fout');
     }
 
-    // Na save: volgende ronde bijwerken (buiten try/catch zodat save-feedback niet verstoord wordt)
+    // Na save: volgende ronde bijwerken (buiten try/catch zodat save-feedback niet verstoord wordt).
+    // Bij combi-rit: doe dit PER LEDEN — elke categorie heeft zijn eigen
+    // ronde-keten (eigen dc/distance), dus we vuren één keten-stap per leden.
     const rit2 = _liveRitten[ritIdx];
     if (rit2 && !_liveLeesOnly) {
-        const volgende2 = _volgendeRondeType(rit2.dc_id, rit2.distance_id, rit2.ronde_type);
-        if (volgende2) {
-            const compleet = _liveRondeCompleet(rit2.dc_id, rit2.distance_id, rit2.ronde_type);
-            _liveGenereerKetenStap(rit2.dc_id, rit2.distance_id, rit2.ronde_type, volgende2, compleet)
-                .catch(() => {}); // stil falen
-        } else {
+        const ketenLeden = rit2.is_combi
+            ? rit2.combi_leden.map(l => ({ dc_id: l.dc_id, distance_id: l.distance_id, ronde_type: rit2.ronde_type }))
+            : [{ dc_id: rit2.dc_id, distance_id: rit2.distance_id, ronde_type: rit2.ronde_type }];
+
+        let enigVolgendGevonden = false;
+        for (const lid of ketenLeden) {
+            const volgende2 = _volgendeRondeType(lid.dc_id, lid.distance_id, lid.ronde_type);
+            if (volgende2) {
+                enigVolgendGevonden = true;
+                const compleet = _liveRondeCompleet(lid.dc_id, lid.distance_id, lid.ronde_type);
+                _liveGenereerKetenStap(lid.dc_id, lid.distance_id, lid.ronde_type, volgende2, compleet)
+                    .catch(() => {}); // stil falen
+            }
+        }
+        if (!enigVolgendGevonden) {
             el('live-ronde-compleet')?.remove();
         }
     }
