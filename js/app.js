@@ -279,10 +279,15 @@ function bouwOrgHeaderFooter(esc) {
         baanLogoHtml = `<span style="display:block;font-size:9pt;font-weight:600;color:#1a3a5c;line-height:1.2;">${esc(baan.vereniging_naam)}</span>`;
     }
 
-    // Sponsor-footer (volledig inline-styled)
+    // Sponsor-footer: org-sponsors + baan-sponsors samenvoegen (org eerst,
+    // dan baan-sponsors achteraan — zelfde volgorde als public/coach footer).
     let footerHtml = '';
-    if (org?.sponsors?.length) {
-        const sponsorItems = org.sponsors.map(s => {
+    const alleSponsors = [
+        ...(org?.sponsors  ?? []),
+        ...(baan?.sponsors ?? []),
+    ];
+    if (alleSponsors.length) {
+        const sponsorItems = alleSponsors.map(s => {
             const sCb = encodeURIComponent(
                 s?.updated_at ?? s?.logo_updated_at ?? cb
             );

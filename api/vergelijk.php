@@ -551,6 +551,19 @@ try {
     $baanStmt->execute([$compId]);
     $baan = $baanStmt->fetch(PDO::FETCH_ASSOC) ?: null;
 
+    // Sponsors voor deze baan ophalen (per-baan-niveau, los van org-sponsors).
+    // Voeg ze toe aan het $baan-object zodat de print-center ze in de footer
+    // kan tonen naast de organisatie-sponsors.
+    if ($baan && !empty($baan['id'])) {
+        $bsStmt = $pdo->prepare(
+            "SELECT id, naam, logo_path, url, volgorde
+             FROM baan_sponsors WHERE baan_id = ?
+             ORDER BY volgorde, naam"
+        );
+        $bsStmt->execute([$baan['id']]);
+        $baan['sponsors'] = $bsStmt->fetchAll(PDO::FETCH_ASSOC);
+    }
+
     // Geïmporteerd-flag — bestaat de competition row in de database? Pas dan
     // kan baan_id gekoppeld worden. UI gebruikt dit om "eerst importeren" te
     // tonen voor nog-nooit-geïmporteerde wedstrijden.
