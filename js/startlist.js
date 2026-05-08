@@ -1697,7 +1697,11 @@ function berekenSchemaHeats(r, catCfg, totaalRijders, ritLookup = null, systeem 
     }
 
     // CASE 3: Q + q → twee-pass snake met tier+time-labels
-    if (caseQEnQ && nHeats > 1) {
+    // Werkt ook bij 1 destination-heat: dan staan Q's en q's gewoon op
+    // tijd-volgorde onder elkaar — geen verdere snake-actie maar wel
+    // tijdsnelste-labels (i.p.v. de misleidende "Winnaar HF 1"-labels
+    // die de bracket-stijl zou opleveren).
+    if (caseQEnQ) {
         const enkelvoudigQ = qph === 1;
         const qLabels = [];
         for (let rank = 1; rank <= qph; rank++) {
@@ -1707,6 +1711,9 @@ function berekenSchemaHeats(r, catCfg, totaalRijders, ritLookup = null, systeem 
         const qqLabels = [];
         for (let t = 1; t <= nqTotaal; t++) qqLabels.push(`q ${t}e tijdsnelste`);
 
+        if (nHeats === 1) {
+            return [{ nummer: 1, slots: [...qLabels, ...qqLabels] }];
+        }
         const heats = Array.from({ length: nHeats }, (_, i) => ({ nummer: i + 1, slots: [] }));
         snakeAppendSlots(qLabels, heats);
         snakeAppendSlots(qqLabels, heats);
