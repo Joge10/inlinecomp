@@ -230,13 +230,23 @@ def genereer_poster(args):
            width / 2 + 60 * mm, height - 49 * mm)
 
     if heeft_comp:
-        stukken = [args.comp_naam]
-        if args.comp_datum:   stukken.append(args.comp_datum)
-        if args.comp_locatie: stukken.append(args.comp_locatie)
-        tekst = ' \u2014 '.join(stukken)
+        # Vaste twee-regel-layout op 14pt:
+        #   regel 1: comp_naam (\u2014 comp_datum)
+        #   regel 2: comp_locatie
+        # Als datum/locatie ontbreken vallen de bijbehorende delen weg.
+        regel1_stukken = [args.comp_naam]
+        if args.comp_datum:
+            regel1_stukken.append(args.comp_datum)
+        regel1 = ' \u2014 '.join(regel1_stukken)
+        regel2 = args.comp_locatie or ''
+
         c.setFillColor(WIT)
         c.setFont('Helvetica-Bold', 14)
-        c.drawCentredString(width / 2, height - 58 * mm, tekst)
+        if regel2:
+            c.drawCentredString(width / 2, height - 56 * mm, regel1)
+            c.drawCentredString(width / 2, height - 62 * mm, regel2)
+        else:
+            c.drawCentredString(width / 2, height - 58 * mm, regel1)
 
     c.setFillColor(WIT)
     c.setFont('Helvetica', 15)
