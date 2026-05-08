@@ -4308,6 +4308,18 @@ col.live-col-rondes  { width: 40px; }
     border-color: #4d8ad0;
     box-shadow: 0 0 0 2px rgba(77,138,208,.2);
 }
+.live-import-toon-geblok {
+    flex: 0 0 auto;
+    padding: 3px 7px;
+    font-size: .9rem;
+    line-height: 1;
+    background: #fff;
+    border: 1px solid #b0c8e0;
+    border-radius: 5px;
+    cursor: pointer;
+}
+.live-import-toon-geblok:hover  { background: #eef4fa; }
+.live-import-toon-geblok.actief { background: #fff3e0; border-color: #f5a623; }
 .live-import-laad-btn {
     flex: 0 0 auto;
     padding: 4px 12px;
@@ -4636,4 +4648,19 @@ col.live-col-rondes  { width: 40px; }
                   padding:.2rem .55rem; border-radius:4px; cursor:pointer;
                   font-size:.85rem; }
 .up-btn-del:hover { background:#d9534f; color:#fff; }
+.up-btn-blok    { margin-right:.4rem; vertical-align:middle; }
+
+/* Geblokkeerde mappen: subtiel uitgegrijsd. tbody-tr-hover overrulen
+   zodat de "geblokkeerd"-look bij hover niet helemaal verdwijnt. */
+.up-tabel tbody tr.up-rij-geblokkeerd        { background:#f8f8f8; color:#999; }
+.up-tabel tbody tr.up-rij-geblokkeerd:hover  { background:#f0f0f0; }
+.up-tabel tbody tr.up-rij-geblokkeerd .up-naam > div:first-child { text-decoration: line-through; }
+.up-blok-info {
+    font-size: .72rem;
+    color: #b85a00;
+    margin-top: 2px;
+    font-family: 'Segoe UI', Arial, sans-serif;  /* terug van monospace voor leesbaarheid */
+    font-style: italic;
+}
+.up-rij-geblokkeerd .up-blok-info b { color: #8a3f00; }
 

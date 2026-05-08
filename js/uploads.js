@@ -68,13 +68,43 @@ function _upRender() {
             : '—';
         const ageStr = m.age_days != null ? `${m.age_days} dgn` : '—';
         const ageCls = m.age_days != null && m.age_days >= 90 ? 'up-oud' : '';
-        return `<tr>
-            <td class="up-naam">${escHtml(m.name)}</td>
+        const blokKls    = m.geblokkeerd ? 'tp-blokkeer-actief' : '';
+        const blokIcon   = m.geblokkeerd ? '🔒' : '🔓';
+        // Tooltip: bij geblokkeerd-toon-en-toon-info wie en wanneer
+        let blokTitle;
+        if (m.geblokkeerd) {
+            const datum = m.geblokkeerd_op
+                ? new Date(m.geblokkeerd_op.replace(' ', 'T')).toLocaleString('nl-NL',
+                    { day:'2-digit', month:'2-digit', year:'numeric', hour:'2-digit', minute:'2-digit' })
+                : '?';
+            blokTitle = `Geblokkeerd door ${m.geblokkeerd_door || '?'} op ${datum} — klik om weer te tonen in de live-import-dropdown`;
+        } else {
+            blokTitle = 'Blokkeren — verbergt deze map in de live-import-dropdown (map blijft op disk)';
+        }
+        const rijKls     = m.geblokkeerd ? 'up-rij-geblokkeerd' : '';
+        // Onder de mapnaam tonen: door wie + wanneer geblokkeerd. Compact, klein lettertype.
+        let blokInfoHtml = '';
+        if (m.geblokkeerd) {
+            const datumKort = m.geblokkeerd_op
+                ? new Date(m.geblokkeerd_op.replace(' ', 'T')).toLocaleString('nl-NL',
+                    { day:'2-digit', month:'2-digit', year:'numeric' })
+                : '?';
+            blokInfoHtml = `<div class="up-blok-info">🔒 geblokkeerd door <b>${escHtml(m.geblokkeerd_door || '?')}</b> op ${escHtml(datumKort)}</div>`;
+        }
+        return `<tr class="${rijKls}">
+            <td class="up-naam">
+                <div>${escHtml(m.name)}</div>
+                ${blokInfoHtml}
+            </td>
             <td class="tc">${m.file_count}</td>
             <td class="tr">${_upFmtBytes(m.total_size)}</td>
             <td>${escHtml(dateStr)}</td>
             <td class="tc ${ageCls}">${ageStr}</td>
             <td class="tc">
+                <button class="btn-icon tp-blokkeer up-btn-blok ${blokKls}"
+                        data-naam="${escHtml(m.name)}"
+                        data-geblokkeerd="${m.geblokkeerd ? '1' : '0'}"
+                        title="${blokTitle}">${blokIcon}</button>
                 <button class="btn-del up-btn-del" data-naam="${escHtml(m.name)}"
                         title="Verwijder map ${escHtml(m.name)}">🗑️ Verwijder</button>
             </td>
@@ -98,6 +128,28 @@ function _upRender() {
     cont.querySelectorAll('.up-btn-del').forEach(btn => {
         btn.addEventListener('click', () => _upVerwijder(btn.dataset.naam));
     });
+    cont.querySelectorAll('.up-btn-blok').forEach(btn => {
+        btn.addEventListener('click', () => _upBlokkeerToggle(btn.dataset.naam, btn.dataset.geblokkeerd === '1'));
+    });
+}
+
+async function _upBlokkeerToggle(naam, isGeblokkeerd) {
+    if (!naam) return;
+    const action = isGeblokkeerd ? 'deblokkeer' : 'blokkeer';
+    try {
+        const res = await fetch('api/uploader_beheer.php', {
+            method:  'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body:    JSON.stringify({ action, name: naam }),
+        });
+        const data = await res.json();
+        if (!res.ok || data.error) throw new Error(data.error || 'HTTP ' + res.status);
+        // Volledige refresh zodat geblokkeerd_door + geblokkeerd_op canoniek
+        // uit de DB komen (incl. current user-naam via JOIN).
+        await toonUploadsPagina();
+    } catch (e) {
+        alert('Fout bij blokkade-actie: ' + e.message);
+    }
 }
 
 async function _upVerwijder(naam) {

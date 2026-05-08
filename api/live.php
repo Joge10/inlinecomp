@@ -1817,14 +1817,32 @@ define('TIMING_BASE_DIR', __DIR__ . '/../uploader/');
 // de relevante map staat steevast bovenaan. Backwards-compat: elke item
 // is een object {name, mtime} i.p.v. alleen een string.
 if ($action === 'lijst_mappen') {
+    // Geblokkeerde mappen — by default verbergen we ze in de live-import
+    // dropdown. Met body.toon_geblokkeerd: true levert de API ze toch op
+    // (met geblokkeerd-flag), zodat de UI ze als "uitgegrijsd" kan tonen
+    // wanneer de gebruiker expliciet "toon geblokkeerd" aanvinkt.
+    $toonGeblokkeerd = !empty($body['toon_geblokkeerd']);
+    $blokkades = [];
+    try {
+        $stmt = $pdo->query("SELECT naam FROM upload_map_blokkades");
+        foreach ($stmt->fetchAll(PDO::FETCH_COLUMN) as $n) {
+            $blokkades[$n] = true;
+        }
+    } catch (Throwable $e) { /* tabel bestaat niet — niets blokkeren */ }
+
     $mappen = [];
     if (is_dir(TIMING_BASE_DIR)) {
         foreach (scandir(TIMING_BASE_DIR) as $entry) {
             if ($entry === '.' || $entry === '..') continue;
             $pad = TIMING_BASE_DIR . $entry;
-            if (is_dir($pad)) {
-                $mappen[] = ['name' => $entry, 'mtime' => (int)@filemtime($pad)];
-            }
+            if (!is_dir($pad)) continue;
+            $isBlok = isset($blokkades[$entry]);
+            if ($isBlok && !$toonGeblokkeerd) continue;  // verbergen by default
+            $mappen[] = [
+                'name'        => $entry,
+                'mtime'       => (int)@filemtime($pad),
+                'geblokkeerd' => $isBlok,
+            ];
         }
         usort($mappen, fn($a, $b) => $b['mtime'] <=> $a['mtime']); // nieuwste eerst
     }

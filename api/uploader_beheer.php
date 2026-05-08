@@ -30,6 +30,29 @@ if ($action === '') {
 
 // ── list ─────────────────────────────────────────────────────────────────────
 if ($action === 'list') {
+    // Geblokkeerde mappen ophalen — match wordt op naam gedaan, ook al staat
+    // de map niet meer op disk dan blijft de blokkade-row onschadelijk staan
+    // (cleanup zou kunnen, maar is geen probleem zolang de tabel klein blijft).
+    // Join met users om te tonen wie er heeft geblokkeerd.
+    $blokkades = [];
+    try {
+        $stmt = $pdo->query("
+            SELECT b.naam, b.geblokkeerd_op,
+                   COALESCE(u.naam, u.username, '?') AS door_naam
+            FROM upload_map_blokkades b
+            LEFT JOIN users u ON u.id = b.geblokkeerd_door
+        ");
+        foreach ($stmt->fetchAll(PDO::FETCH_ASSOC) as $r) {
+            $blokkades[$r['naam']] = [
+                'op'   => $r['geblokkeerd_op'],
+                'door' => $r['door_naam'],
+            ];
+        }
+    } catch (Throwable $e) {
+        // Tabel bestaat nog niet (migratie niet gedraaid) — gewoon doorgaan
+        // alsof er geen blokkades zijn, zodat oude installaties niet breken.
+    }
+
     $mappen = [];
     if (is_dir(UPLOAD_BASE)) {
         foreach (scandir(UPLOAD_BASE) as $entry) {
@@ -47,19 +70,56 @@ if ($action === 'list') {
                 $m = (int)@filemtime($f);
                 if ($m > $latest) $latest = $m;
             }
+            $blok = $blokkades[$entry] ?? null;
             $mappen[] = [
-                'name'         => $entry,
-                'file_count'   => $bestandsCnt,
-                'total_size'   => $totalSize,
-                'latest_mtime' => $latest,
-                'age_days'     => $latest > 0
-                                    ? (int)floor((time() - $latest) / 86400)
-                                    : null,
+                'name'              => $entry,
+                'file_count'        => $bestandsCnt,
+                'total_size'        => $totalSize,
+                'latest_mtime'      => $latest,
+                'age_days'          => $latest > 0
+                                       ? (int)floor((time() - $latest) / 86400)
+                                       : null,
+                'geblokkeerd'       => $blok !== null,
+                'geblokkeerd_op'    => $blok['op']   ?? null,
+                'geblokkeerd_door'  => $blok['door'] ?? null,
             ];
         }
         usort($mappen, fn($a, $b) => $b['latest_mtime'] <=> $a['latest_mtime']);
     }
     echo json_encode(['mappen' => $mappen], JSON_UNESCAPED_UNICODE);
+    exit;
+}
+
+// ── blokkeer ─────────────────────────────────────────────────────────────────
+// POST {action: 'blokkeer', name: 'Rotterdam_2_5_NK'} → INSERT IGNORE
+if ($action === 'blokkeer' || $action === 'deblokkeer') {
+    $body = json_decode(file_get_contents('php://input'), true) ?: [];
+    $name = trim($body['name'] ?? '');
+    if (!$name || $name !== basename($name) || str_contains($name, '..')) {
+        http_response_code(400);
+        echo json_encode(['error' => 'Ongeldige mapnaam']);
+        exit;
+    }
+
+    try {
+        if ($action === 'blokkeer') {
+            $userId = $_authUser['id'] ?? null;
+            $stmt = $pdo->prepare(
+                "INSERT INTO upload_map_blokkades (naam, geblokkeerd_door)
+                 VALUES (?, ?)
+                 ON DUPLICATE KEY UPDATE geblokkeerd_op = CURRENT_TIMESTAMP,
+                                         geblokkeerd_door = VALUES(geblokkeerd_door)"
+            );
+            $stmt->execute([$name, $userId]);
+        } else {
+            $stmt = $pdo->prepare("DELETE FROM upload_map_blokkades WHERE naam = ?");
+            $stmt->execute([$name]);
+        }
+        echo json_encode(['ok' => true, 'naam' => $name, 'geblokkeerd' => $action === 'blokkeer']);
+    } catch (Throwable $e) {
+        http_response_code(500);
+        echo json_encode(['error' => 'DB-fout: ' . $e->getMessage()]);
+    }
     exit;
 }
 

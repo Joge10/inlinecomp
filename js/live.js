@@ -758,6 +758,7 @@ function _liveBouwKaart(rit, idx, compact = false) {
           `<div class="live-import-row">` +
               `<label class="live-import-label">Map:</label>` +
               `<input type="search" class="live-import-map-filter" id="live-import-mapfilter-${idx}" placeholder="🔍 filter op naam…" autocomplete="off">` +
+              `<button type="button" class="live-import-toon-geblok" id="live-import-toon-geblok-${idx}" title="Toon ook geblokkeerde mappen (standaard verborgen)">🔓</button>` +
               `<select class="live-import-map-sel" id="live-import-map-${idx}"><option value="">— laden… —</option></select>` +
           `</div>` +
           `<div class="live-import-row">` +
@@ -1781,6 +1782,7 @@ function _liveBind(idx) {
     el('live-import-sort-naam-' + idx)?.addEventListener('click', () => _liveImportFileSort(idx, 'naam'));
     el('live-import-sort-nieuw-'+ idx)?.addEventListener('click', () => _liveImportFileSort(idx, 'nieuw'));
     el('live-import-laad-'    + idx)?.addEventListener('click',  () => _liveImportLaad(idx));
+    el('live-import-toon-geblok-' + idx)?.addEventListener('click', () => _liveImportToggleGeblokkeerd(idx));
 }
 
 // _livePuntenOpslaan is verwijderd — puntenkoers-punten worden nu meegenomen
@@ -2853,19 +2855,28 @@ async function _liveImportToggle(ritIdx) {
         return;
     }
 
+    await _liveImportLaadMappen(ritIdx, false);
+}
+
+// Haal de mappenlijst op (van API), stash op de select, render dropdown.
+// toonGeblokkeerd=true stuurt server om óók geblokkeerde mappen te leveren.
+async function _liveImportLaadMappen(ritIdx, toonGeblokkeerd) {
+    const mapSel = el('live-import-map-' + ritIdx);
+    if (!mapSel) return;
+
     mapSel.disabled = true;
     mapSel.innerHTML = '<option value="">— laden… —</option>';
     try {
         const res  = await fetch('api/live.php', {
             method:  'POST',
             headers: { 'Content-Type': 'application/json' },
-            body:    JSON.stringify({ action: 'lijst_mappen' }),
+            body:    JSON.stringify({ action: 'lijst_mappen', toon_geblokkeerd: toonGeblokkeerd }),
         });
         const data = await res.json();
         if (data.error) throw new Error(data.error);
 
         // Backwards-compat: oude API leverde array van strings, nieuwe levert
-        // array van {name, mtime}. Normaliseer naar {name, mtime?}.
+        // array van {name, mtime, geblokkeerd?}. Normaliseer naar object.
         const mappenRaw = data.mappen || [];
         const mappen = mappenRaw.map(m =>
             (typeof m === 'string') ? { name: m } : m
@@ -2874,9 +2885,10 @@ async function _liveImportToggle(ritIdx) {
         if (mappen.length === 0) {
             mapSel.innerHTML = '<option value="">— geen mappen gevonden —</option>';
         } else {
-            // Stash volledige lijst op het select-element zodat de filter zonder
-            // extra server-call kan re-rendereren.
-            mapSel.dataset.allMappen = JSON.stringify(mappen.map(m => m.name));
+            // Stash volledige lijst incl. geblokkeerd-flag voor re-render bij filter
+            mapSel.dataset.allMappen = JSON.stringify(
+                mappen.map(m => ({ name: m.name, geblokkeerd: !!m.geblokkeerd }))
+            );
 
             const onthouden = localStorage.getItem(_IMPORT_MAP_KEY) || '';
             _liveImportRenderMapOpties(ritIdx, '', onthouden);
@@ -2896,6 +2908,26 @@ async function _liveImportToggle(ritIdx) {
     mapSel.disabled = false;
 }
 
+// Toggle "ook geblokkeerde mappen tonen" — herladen mappenlijst en
+// werk knop-icoon bij (🔓 = alleen niet-geblokkeerd, 🔒 = ook geblokkeerd).
+async function _liveImportToggleGeblokkeerd(ritIdx) {
+    const btn = el('live-import-toon-geblok-' + ritIdx);
+    const mapSel = el('live-import-map-' + ritIdx);
+    if (!btn || !mapSel) return;
+
+    const wasActief = btn.classList.contains('actief');
+    const nieuwActief = !wasActief;
+    btn.classList.toggle('actief', nieuwActief);
+    btn.textContent = nieuwActief ? '🔒' : '🔓';
+    btn.title = nieuwActief
+        ? 'Geblokkeerde mappen worden meegetoond — klik om alleen actieve te tonen'
+        : 'Toon ook geblokkeerde mappen (standaard verborgen)';
+
+    // Cache invalideren zodat de volgende _liveImportLaadMappen vers ophaalt
+    delete mapSel.dataset.geladen;
+    await _liveImportLaadMappen(ritIdx, nieuwActief);
+}
+
 // Render de <option>-lijst voor de map-select op basis van de gestashte
 // volledige lijst en een optionele filter-string (case-insensitive substring).
 // $preselect is optioneel: als die waarde bestaat in de gefilterde lijst,
@@ -2904,11 +2936,16 @@ function _liveImportRenderMapOpties(ritIdx, filter = '', preselect = '') {
     const mapSel = el('live-import-map-' + ritIdx);
     if (!mapSel) return;
     const allJson = mapSel.dataset.allMappen || '[]';
-    let all;
-    try { all = JSON.parse(allJson); } catch { all = []; }
+    let allRaw;
+    try { allRaw = JSON.parse(allJson); } catch { allRaw = []; }
+    // Backwards-compat: legacy stash was array van strings, nieuwe stash is
+    // array van objects {name, geblokkeerd}. Normaliseer naar object-form.
+    const all = allRaw.map(n =>
+        (typeof n === 'string') ? { name: n, geblokkeerd: false } : n
+    );
     const q = (filter || '').trim().toLowerCase();
     const mapped = q
-        ? all.filter(n => n.toLowerCase().includes(q))
+        ? all.filter(o => o.name.toLowerCase().includes(q))
         : all;
 
     if (mapped.length === 0) {
@@ -2917,9 +2954,12 @@ function _liveImportRenderMapOpties(ritIdx, filter = '', preselect = '') {
     }
     mapSel.innerHTML =
         '<option value="">— kies een map —</option>' +
-        mapped.map(n =>
-            `<option value="${escHtml(n)}"${n === preselect ? ' selected' : ''}>${escHtml(n)}</option>`
-        ).join('');
+        mapped.map(o => {
+            const naam   = o.name;
+            const blokIc = o.geblokkeerd ? '🔒 ' : '';
+            const sel    = naam === preselect ? ' selected' : '';
+            return `<option value="${escHtml(naam)}"${sel}>${blokIc}${escHtml(naam)}</option>`;
+        }).join('');
 }
 
 // Gebruiker typt in het filter-veld → opties bijwerken. Huidige selectie
