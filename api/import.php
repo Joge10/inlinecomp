@@ -155,27 +155,45 @@ if ($_SERVER['REQUEST_METHOD'] === 'GET' && ($_GET['action'] ?? '') === 'export_
     $rowStmt->execute([$expCompId]);
     $rows = $rowStmt->fetchAll(PDO::FETCH_ASSOC);
 
-    // Transponders per rijder. T1 = de eerst-toegewezen (laagste id), T2 = de
-    // volgende. ORDER BY id ASC volgt de toewijs-volgorde aan de balie.
+    // Transponders per rijder uit de `transponders`-tabel (per persoon, per
+    // wedstrijd, per slot). Slot 0 = actieve transponder (= waarmee de rijder
+    // in deze wedstrijd start), slot 1 = backup/secondary. Dit is exact wat
+    // Orbits/MyLaps nodig heeft. Bron kan 'knsb' (uit feed) of 'manual'
+    // (via balie/Beheer) zijn — beide tellen mee.
     $tpStmt = $pdo->prepare("
-        SELECT person_license, transponder_code
-        FROM organisatie_transponders
-        WHERE person_license IS NOT NULL
-        ORDER BY id ASC
+        SELECT person_license, slot, code
+        FROM transponders
+        WHERE competition_id = ?
+          AND code IS NOT NULL AND code <> ''
+        ORDER BY person_license, slot
     ");
-    $tpStmt->execute();
-    $tpMap = []; // license => [t1, t2, ...]
+    $tpStmt->execute([$expCompId]);
+    $tpMap = []; // license_key => [slot0, slot1, ...]
     foreach ($tpStmt->fetchAll(PDO::FETCH_ASSOC) as $tp) {
-        $tpMap[$tp['person_license']][] = $tp['transponder_code'];
+        $tpMap[$tp['person_license']][(int)$tp['slot']] = $tp['code'];
     }
 
-    header('Content-Type: text/csv; charset=utf-8');
+    // MyLaps Orbits is een ouderwets Windows-tijdperk-tool dat verwacht:
+    //  - Windows-1252 (CP1252) encoding — geen UTF-8 BOM
+    //  - Geen dubbele quotes in tekst-velden (Orbits filtert die niet zelf weg)
+    // Daarom converteren we elke string naar CP1252 (//TRANSLIT vervangt niet-
+    // representeerbare tekens als 'é' → 'e' wanneer nodig) en strippen we
+    // eventuele " uit alle text-velden vóór de CSV-write.
+    $orbits = function ($v) {
+        if ($v === null || $v === '') return '';
+        $s = (string)$v;
+        // Strip dubbele quotes (Orbits ziet ze als veld-delimiter en blokkeert)
+        $s = str_replace('"', '', $s);
+        // UTF-8 → CP1252 met TRANSLIT-fallback voor exotische tekens
+        $conv = @iconv('UTF-8', 'CP1252//TRANSLIT//IGNORE', $s);
+        return $conv !== false ? $conv : $s;
+    };
+
+    header('Content-Type: text/csv; charset=windows-1252');
     header('Content-Disposition: attachment; filename="' . $safeName . '.csv"');
     $out = fopen('php://output', 'w');
 
-    // BOM voor Excel UTF-8 herkenning
-    fwrite($out, "\xEF\xBB\xBF");
-
+    // GEEN UTF-8 BOM — Orbits ziet dat als 3 vreemde tekens vooraan
     fputcsv($out, [
         'Category','StartNumber','LicenseKey','Initials','FirstName','PrefixedSurname',
         'FullName','ShortName','BirthDate','Gender','City','NationalityCode',
@@ -183,9 +201,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'GET' && ($_GET['action'] ?? '') === 'export_
     ]);
 
     foreach ($rows as $r) {
-        $tps = $tpMap[$r['license_key']] ?? [];
-        $t1  = $tps[0] ?? '';
-        $t2  = $tps[1] ?? '';
+        // Slot 0 = actieve transponder (Transponder1), slot 1 = backup (Transponder2).
+        $slots = $tpMap[$r['license_key']] ?? [];
+        $t1    = $slots[0] ?? '';
+        $t2    = $slots[1] ?? '';
 
         // Naam-splitsing: full_name = "Marije de Haan", short_name = "de Haan"
         // → FirstName = "Marije". short_name kan ook leeg zijn (legacy data) →
@@ -204,25 +223,25 @@ if ($_SERVER['REQUEST_METHOD'] === 'GET' && ($_GET['action'] ?? '') === 'export_
         $genderChar = ($gn === null || $gn === '') ? '' : (((int)$gn === 1) ? 'F' : 'M');
 
         fputcsv($out, [
-            $r['category']             ?? '',
-            $r['effective_startnumber'] ?? '',
-            $r['license_key']          ?? '',
-            $initials,
-            $firstName,
-            $sn,
-            $fn,
-            $sn,
+            $orbits($r['category']),
+            $orbits($r['effective_startnumber']),
+            $orbits($r['license_key']),
+            $orbits($initials),
+            $orbits($firstName),
+            $orbits($sn),
+            $orbits($fn),
+            $orbits($sn),
             '',                         // BirthDate: leeg (DB heeft alleen jaar)
-            $genderChar,
-            $r['city']                 ?? '',
-            $r['nationality']          ?? '',
-            $r['club_code']            ?? '',
-            $r['club_full']            ?? '',
-            $r['sponsor']              ?? '',
-            $t1,
-            $t2,
+            $orbits($genderChar),
+            $orbits($r['city']),
+            $orbits($r['nationality']),
+            $orbits($r['club_code']),
+            $orbits($r['club_full']),
+            $orbits($r['sponsor']),
+            $orbits($t1),
+            $orbits($t2),
             '',                         // VenueCode: leeg in KNSB-bron
-            $r['club_short']           ?? '',
+            $orbits($r['club_short']),
         ]);
     }
     fclose($out);
