@@ -373,6 +373,7 @@ if (!$gebruiker) {
                         <button class="org-tab-btn" data-tab="logboek">Logboek</button>
                         <button class="org-tab-btn" data-tab="rijders">Rijders</button>
                         <button class="org-tab-btn" data-tab="uploads">Uploads</button>
+                        <button class="org-tab-btn" data-tab="helpers">Helpers</button>
                     </nav>
                 </div>
 
@@ -418,6 +419,19 @@ if (!$gebruiker) {
                                 <div class="status-msg" style="color:#666">Selecteer links een rijder voor de details.</div>
                             </div>
                         </div>
+                    </div>
+                </div>
+
+                <!-- Tab: Helpers (admin-onderhoudstools) -->
+                <div class="org-tab-content" id="sys-tab-helpers" style="display:none">
+                    <div class="section-title">Helpers — onderhoud &amp; opschonen</div>
+                    <div class="hp-info">
+                        Verzameling van administratieve tools om de database consistent te houden:
+                        wees-uitslagen detecteren en opruimen, en (in de toekomst) andere
+                        onderhoudstaken die niet bij één wedstrijd horen.
+                    </div>
+                    <div id="hp-container">
+                        <div class="status-msg loading"><span class="spinner"></span>Laden…</div>
                     </div>
                 </div>
 
@@ -541,6 +555,7 @@ function magSchrijven(module) {
 <script src="js/gebruikers.js"></script>
 <script src="js/rijders.js"></script>
 <script src="js/uploads.js"></script>
+<script src="js/helpers.js"></script>
 <script src="js/print_module.js"></script>
 </body>
 </html>

@@ -4667,6 +4667,94 @@ col.live-col-rondes  { width: 40px; }
     .rij-layout { grid-template-columns: 1fr; }
 }
 
+/* ── Helpers-pagina (admin onderhoudstools) ───────────────────────────────── */
+.hp-info {
+    background: #fff7e6; border: 1px solid #f0d090; border-radius: 6px;
+    padding: .7rem 1rem; margin-bottom: 1rem; font-size: .9rem;
+}
+.hp-card {
+    background: #fff;
+    border: 1px solid var(--border, #cdd8e3);
+    border-radius: 6px;
+    padding: 1rem 1.2rem;
+    margin-bottom: 1rem;
+    box-shadow: 0 1px 3px rgba(0,0,0,.04);
+}
+.hp-card-titel {
+    margin: 0 0 .4rem;
+    color: var(--blauw, #1F4E79);
+    font-size: 1.05rem;
+}
+.hp-card-uitleg {
+    margin: 0 0 .8rem;
+    color: #555;
+    font-size: .88rem;
+    line-height: 1.5;
+}
+.hp-card-acties {
+    display: flex; align-items: center; gap: 1rem;
+    margin-bottom: .5rem;
+}
+.hp-status {
+    font-size: .9rem; color: #666;
+}
+.hp-status-ok   { color: #2e7d32; font-weight: 600; }
+.hp-status-fout { color: #b71c1c; font-weight: 600; }
+
+.hp-rapport {
+    margin-top: .8rem;
+    padding-top: .8rem;
+    border-top: 1px dashed var(--border, #cdd8e3);
+}
+.hp-rapport-leeg {
+    background: #e8f5e9;
+    color: #2e7d32;
+    padding: .6rem .9rem;
+    border-radius: 4px;
+    font-weight: 600;
+}
+.hp-rapport-samenvatting {
+    background: #fff8e1;
+    border-left: 3px solid #f5a623;
+    color: #8a3f00;
+    padding: .5rem .8rem;
+    border-radius: 0 4px 4px 0;
+    margin-bottom: .8rem;
+    font-size: .9rem;
+}
+.hp-rapport-comps { margin-bottom: 1rem; }
+.hp-rapport-comp {
+    background: #f8fbff;
+    border: 1px solid var(--lichtblauw, #d6e4f0);
+    border-radius: 4px;
+    padding: .5rem .8rem;
+    margin-bottom: .5rem;
+}
+.hp-rapport-comp-kop {
+    font-weight: 700;
+    color: var(--blauw, #1F4E79);
+    margin-bottom: .3rem;
+    font-size: .92rem;
+}
+.hp-rapport-comp-kop small { color: #666; font-weight: 400; }
+.hp-rapport-list {
+    margin: 0; padding-left: 1.2rem;
+    font-size: .85rem; color: #444;
+}
+.hp-rapport-list li { margin: .1rem 0; }
+.hp-rapport-acties {
+    display: flex; align-items: center; gap: 1rem;
+    margin-top: .8rem;
+}
+.btn-danger {
+    background: #d9534f; color: #fff; border: none;
+    padding: .5rem 1rem; border-radius: 4px;
+    font-weight: 600; cursor: pointer;
+    font-size: .9rem;
+}
+.btn-danger:hover:not(:disabled) { background: #c9302c; }
+.btn-danger:disabled { opacity: .5; cursor: default; }
+
 /* ── Uploads-pagina ───────────────────────────────────────────────────────── */
 .up-info        { background:#fff7e6; border:1px solid #f0d090; border-radius:6px;
                   padding:.7rem 1rem; margin-bottom:1rem; font-size:.9rem; }

@@ -220,6 +220,7 @@ function switchSysteemTab(tab) {
         if (tab === 'gebruikers' || tab === 'bezoekers' || tab === 'logboek') toonGebruikersPagina();
         if (tab === 'rijders')  toonRijdersPagina();
         if (tab === 'uploads')  toonUploadsPagina();
+        if (tab === 'helpers')  toonHelpersPagina();
     }
 }
 
