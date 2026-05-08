@@ -74,16 +74,41 @@ function _hpRenderRapport(data) {
         return;
     }
 
-    // Groepeer per wedstrijd voor leesbaarheid
-    const perComp = {};  // comp_id → { naam, datum, uitslag: [], klas: [] }
-    const ensure = (r) => {
+    // Groepeer per wedstrijd → DC → afstand voor de uitslag-rijen
+    // (en per wedstrijd → DC voor klassement)
+    const perComp = {};
+    const ensureComp = (r) => {
         if (!perComp[r.competition_id]) perComp[r.competition_id] = {
-            naam: r.competition_naam, datum: r.competition_datum, uitslag: [], klas: [],
+            naam: r.competition_naam, datum: r.competition_datum,
+            uitslagPerDC: {}, klasPerDC: {},
         };
         return perComp[r.competition_id];
     };
-    for (const r of (data.wees_uitslag    ?? [])) ensure(r).uitslag.push(r);
-    for (const r of (data.wees_klassement ?? [])) ensure(r).klas.push(r);
+    for (const r of (data.wees_uitslag ?? [])) {
+        const c = ensureComp(r);
+        const key = `${r.dc_naam}||${r.distance_naam}||${r.split_group ?? ''}`;
+        if (!c.uitslagPerDC[key]) c.uitslagPerDC[key] = {
+            dc_naam: r.dc_naam, distance_naam: r.distance_naam,
+            split_group: r.split_group, rijders: [],
+        };
+        c.uitslagPerDC[key].rijders.push(r);
+    }
+    for (const r of (data.wees_klassement ?? [])) {
+        const c = ensureComp(r);
+        const key = `${r.dc_naam}||${r.split_group ?? ''}`;
+        if (!c.klasPerDC[key]) c.klasPerDC[key] = {
+            dc_naam: r.dc_naam, split_group: r.split_group, rijders: [],
+        };
+        c.klasPerDC[key].rijders.push(r);
+    }
+
+    const fmtTijd = (ms) => {
+        if (ms == null) return '';
+        const d = ms % 1000, s = Math.floor(ms / 1000) % 60, m = Math.floor(ms / 60000);
+        return m > 0
+            ? `${m}:${String(s).padStart(2,'0')}.${String(d).padStart(3,'0')}`
+            : `${s}.${String(d).padStart(3,'0')}`;
+    };
 
     let html = `<div class="hp-rapport-samenvatting">
         Gevonden: <b>${totU}</b> wees-uitslag-rij${totU === 1 ? '' : 'en'} ·
@@ -98,17 +123,41 @@ function _hpRenderRapport(data) {
             ? new Date(c.datum).toLocaleDateString('nl-NL', { day:'2-digit', month:'2-digit', year:'numeric' })
             : '?';
         html += `<div class="hp-rapport-comp">
-            <div class="hp-rapport-comp-kop">${escHtml(c.naam || '?')} <small>(${escHtml(datumKort)})</small></div>
-            <ul class="hp-rapport-list">`;
-        for (const u of c.uitslag) {
-            const splitTxt = u.split_group ? ` [${escHtml(u.split_group)}]` : '';
-            html += `<li>📊 Uitslag — <b>${escHtml(u.dc_naam)}</b> / ${escHtml(u.distance_naam)}${splitTxt} — ${u.rijders} rijder${u.rijders === 1 ? '' : 's'}</li>`;
+            <div class="hp-rapport-comp-kop">${escHtml(c.naam || '?')} <small>(${escHtml(datumKort)})</small></div>`;
+
+        for (const blok of Object.values(c.uitslagPerDC)) {
+            const splitTxt = blok.split_group ? ` [${escHtml(blok.split_group)}]` : '';
+            html += `<div class="hp-rapport-blok">
+                <div class="hp-rapport-blok-kop">📊 Uitslag — <b>${escHtml(blok.dc_naam)}</b> / ${escHtml(blok.distance_naam)}${splitTxt}
+                    <span class="hp-rapport-blok-aantal">${blok.rijders.length} rijder${blok.rijders.length === 1 ? '' : 's'}</span>
+                </div>
+                <ul class="hp-rapport-rijders">`;
+            for (const r of blok.rijders) {
+                const tijdTxt    = r.sanctie ? r.sanctie : fmtTijd(r.tijd_ms);
+                const rangTxt    = r.rang != null ? `#${r.rang}` : '';
+                html += `<li><span class="hp-rij-rang">${escHtml(rangTxt)}</span>
+                             <span class="hp-rij-naam">${escHtml(r.naam || r.person_license)}</span>
+                             <span class="hp-rij-tijd">${escHtml(tijdTxt)}</span></li>`;
+            }
+            html += `</ul></div>`;
         }
-        for (const k of c.klas) {
-            const splitTxt = k.split_group ? ` [${escHtml(k.split_group)}]` : '';
-            html += `<li>🏆 Klassement — <b>${escHtml(k.dc_naam)}</b>${splitTxt} — ${k.rijders} rijder${k.rijders === 1 ? '' : 's'}</li>`;
+        for (const blok of Object.values(c.klasPerDC)) {
+            const splitTxt = blok.split_group ? ` [${escHtml(blok.split_group)}]` : '';
+            html += `<div class="hp-rapport-blok">
+                <div class="hp-rapport-blok-kop">🏆 Klassement — <b>${escHtml(blok.dc_naam)}</b>${splitTxt}
+                    <span class="hp-rapport-blok-aantal">${blok.rijders.length} rijder${blok.rijders.length === 1 ? '' : 's'}</span>
+                </div>
+                <ul class="hp-rapport-rijders">`;
+            for (const r of blok.rijders) {
+                const rangTxt = r.rang != null ? `#${r.rang}` : '';
+                const ptnTxt  = r.punten_totaal != null ? `${parseFloat(r.punten_totaal)} pt` : '';
+                html += `<li><span class="hp-rij-rang">${escHtml(rangTxt)}</span>
+                             <span class="hp-rij-naam">${escHtml(r.naam || r.person_license)}</span>
+                             <span class="hp-rij-tijd">${escHtml(ptnTxt)}</span></li>`;
+            }
+            html += `</ul></div>`;
         }
-        html += `</ul></div>`;
+        html += `</div>`;
     }
     html += '</div>';
 

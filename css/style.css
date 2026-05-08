@@ -4742,6 +4742,62 @@ col.live-col-rondes  { width: 40px; }
     font-size: .85rem; color: #444;
 }
 .hp-rapport-list li { margin: .1rem 0; }
+.hp-rapport-blok {
+    margin-top: .5rem;
+    padding: .4rem .6rem;
+    background: #fff;
+    border: 1px solid #e0e8f0;
+    border-radius: 4px;
+}
+.hp-rapport-blok-kop {
+    font-size: .87rem;
+    color: #333;
+    margin-bottom: .3rem;
+    display: flex;
+    align-items: baseline;
+    gap: .6rem;
+}
+.hp-rapport-blok-kop b { color: var(--blauw, #1F4E79); }
+.hp-rapport-blok-aantal {
+    margin-left: auto;
+    font-size: .78rem;
+    color: #888;
+    font-style: italic;
+}
+.hp-rapport-rijders {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+    gap: 2px 12px;
+}
+.hp-rapport-rijders li {
+    display: flex;
+    align-items: baseline;
+    gap: .5rem;
+    font-size: .82rem;
+    color: #444;
+    padding: 1px 0;
+}
+.hp-rij-rang {
+    flex: 0 0 32px;
+    text-align: right;
+    color: #888;
+    font-variant-numeric: tabular-nums;
+}
+.hp-rij-naam {
+    flex: 1;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+.hp-rij-tijd {
+    flex: 0 0 auto;
+    color: #666;
+    font-size: .78rem;
+    font-variant-numeric: tabular-nums;
+}
 .hp-rapport-acties {
     display: flex; align-items: center; gap: 1rem;
     margin-top: .8rem;
