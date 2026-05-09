@@ -3202,11 +3202,19 @@ let _huidigStempel = '';
             // startnummer — anders kan bij dubbele snrs (bv. een HP1 en DP1
             // met hetzelfde nummer) de array-volgorde tussen calls wisselen
             // en springt het scherm naar de andere persoon na een refresh.
-            // Fallback op startnummer alleen als er geen license_key is.
+            // Fallback-keten:
+            //   1. license_key       → 1 hit, geen verwarring mogelijk
+            //   2. startnummer + re-locate op license   (rijder kreeg later licentie?)
+            //   3. startnummer + re-locate op categorie  (geen licentie, maar
+            //                                              snr+cat is uniek
+            //                                              binnen een wedstrijd)
+            //   4. clamp kozen_idx als allerlaatste vangnet
             const kindRefreshes = _kinderen.map(async k => {
-                const huidigLic = k?.data?.[k.kozen_idx ?? 0]?.persoon?.license_key;
-                const param = huidigLic
-                    ? `license_key=${encodeURIComponent(huidigLic)}`
+                const eerderePersoon = k?.data?.[k.kozen_idx ?? 0]?.persoon;
+                const eerderLic = eerderePersoon?.license_key;
+                const eerderCat = eerderePersoon?.category;
+                const param = eerderLic
+                    ? `license_key=${encodeURIComponent(eerderLic)}`
                     : (k?.snr ? `startnummer=${encodeURIComponent(k.snr)}` : null);
                 if (!param) return;
                 try {
@@ -3217,18 +3225,20 @@ let _huidigStempel = '';
                     if (Array.isArray(data) && data.length) {
                         k.data = data;
                         k.prog = prog;
-                        // Bij license-lookup is data altijd 1 rijder → idx blijft 0.
-                        // Bij snr-lookup (fallback): kozen_idx behouden binnen
-                        // bereik, en re-locate de eerder gekozen license als die
-                        // nog in de nieuwe data zit (anders is de "verkeerde"
-                        // persoon nu eerst).
-                        if (huidigLic) {
+                        if (eerderLic) {
+                            // License-lookup → altijd 1 hit, idx blijft 0
                             k.kozen_idx = 0;
                         } else if (data.length > 1) {
-                            const eerderGekozen = k.data[k.kozen_idx ?? 0]?.persoon?.license_key;
-                            const opnieuw = eerderGekozen
-                                ? data.findIndex(d => d?.persoon?.license_key === eerderGekozen)
-                                : -1;
+                            // Snr-fallback met meerdere hits: re-locate.
+                            // Eerst op license (rijder kan tussentijds een
+                            // license toegekend hebben gekregen), dan op cat.
+                            let opnieuw = -1;
+                            if (eerderLic) {
+                                opnieuw = data.findIndex(d => d?.persoon?.license_key === eerderLic);
+                            }
+                            if (opnieuw < 0 && eerderCat) {
+                                opnieuw = data.findIndex(d => d?.persoon?.category === eerderCat);
+                            }
                             k.kozen_idx = opnieuw >= 0 ? opnieuw : Math.min(k.kozen_idx ?? 0, data.length - 1);
                         } else {
                             k.kozen_idx = 0;
