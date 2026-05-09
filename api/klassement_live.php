@@ -40,6 +40,15 @@ $dcIdsRaw    = trim($_GET['dc_ids'] ?? $_GET['dc_id'] ?? '');
 $dcIds       = array_values(array_filter(array_map('trim', explode(',', $dcIdsRaw))));
 $primaryDcId = $dcIds[0] ?? '';
 
+// Optionele tie-breaker-keuze. Default: 'standaard' (huidige multi-stap-keten).
+// Anders: een specifieke distance_id → bij gelijke totaal-punten wordt
+// uitsluitend gekeken naar de punten in DEZE afstand (oude club-traditie:
+// "winnaar van de laatste afstand wint bij gelijke stand"). De UI laat de
+// operator kiezen welke afstand dat is, want het programma kan in de
+// praktijk afwijken van de planning (weer, defecten, etc.).
+$tiebreakerDist = trim($_GET['tiebreaker_dist'] ?? 'standaard');
+if ($tiebreakerDist === 'standaard') $tiebreakerDist = null;
+
 if (!$compId || !$primaryDcId) {
     http_response_code(400);
     echo json_encode(['error' => 'competition_id en dc_id zijn verplicht']);
@@ -373,11 +382,25 @@ try {
         }
     }
 
-    // ── Vergelijkfunctie: aantal-gereden → totaal → beste resultaat → laatste afstand
-    // Retourneert 0 bij echte ex-aequo, anders negatief/positief.
+    // ── Vergelijkfunctie ──────────────────────────────────────────────────
+    // Standaard-modus (default):
+    //   0. Aantal-gereden DESC
+    //   1. Totaal-punten ASC
+    //   2. Beste resultaat (gesorteerde individuele punten) ASC
+    //   3. Laatste afstand uit `distances` ORDER BY number
+    // Single-distance-modus (tiebreaker_dist gezet):
+    //   0. Aantal-gereden DESC
+    //   1. Totaal-punten ASC
+    //   2. Punten in de gekozen afstand ASC
+    //   (geen verdere fallback — old-school regel: "winnaar van die afstand
+    //    wint bij gelijke stand", verder geen interferentie van andere data)
     $lastDistId = !empty($distances) ? end($distances)['id'] : null;
+    // tiebreaker_dist alleen toepassen als het een geldige afstand is in deze DC
+    $alleDistIds = array_column($distances, 'id');
+    $tbDistId = ($tiebreakerDist !== null && in_array($tiebreakerDist, $alleDistIds, true))
+              ? $tiebreakerDist : null;
 
-    $vergelijkKlassement = function (array $a, array $b) use ($lastDistId): int {
+    $vergelijkKlassement = function (array $a, array $b) use ($lastDistId, $tbDistId): int {
         // 0. Aantal afstanden gereden DESC (meer gereden = hoger geklasseerd)
         if (($a['aantal_gereden'] ?? 0) !== ($b['aantal_gereden'] ?? 0)) {
             return ($b['aantal_gereden'] ?? 0) <=> ($a['aantal_gereden'] ?? 0);
@@ -386,6 +409,15 @@ try {
         $diff = $a['totaal_punten'] <=> $b['totaal_punten'];
         if ($diff !== 0) return $diff;
 
+        // ── Single-distance-modus: alleen kijken naar de gekozen afstand ──
+        if ($tbDistId !== null) {
+            $lA = $a['afstanden'][$tbDistId]['punten'] ?? PHP_INT_MAX;
+            $lB = $b['afstanden'][$tbDistId]['punten'] ?? PHP_INT_MAX;
+            if ($lA != $lB) return $lA <=> $lB;
+            return 0;
+        }
+
+        // ── Standaard-modus: meerdere fallbacks ──────────────────────────
         // 2. Gesorteerde individuele punten vergelijken (beste resultaat eerst)
         $pA = array_column($a['afstanden'], 'punten');
         $pB = array_column($b['afstanden'], 'punten');
@@ -445,6 +477,11 @@ try {
         'klassement'            => $klassement,
         'has_results'           => $hasResults,
         'klassement_vastgelegd' => $klassementVastgelegd,
+        // Echo terug welke tie-breaker uiteindelijk is toegepast (= 'standaard'
+        // of de distance_id). Front-end gebruikt dit om de dropdown-status te
+        // synchroniseren — bv. als de gebruikte distance_id niet meer in de
+        // afstanden-lijst zit, valt 'm vanzelf terug op 'standaard'.
+        'tiebreaker_dist'       => $tbDistId ?? 'standaard',
     ], JSON_UNESCAPED_UNICODE);
 
 } catch (Throwable $e) {

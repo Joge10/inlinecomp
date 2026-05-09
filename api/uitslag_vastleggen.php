@@ -40,6 +40,14 @@ $primaryDcId = $dcIds[0] ?? '';
 $dcNaam      = trim($body['dc_naam'] ?? '');
 $filterDistId = trim($body['distance_id'] ?? '');
 
+// Tie-breaker-keuze (alleen voor full-final relevant). 'standaard' = de
+// klassieke multi-stap-keten; een specifieke distance_id = "alleen punten
+// in die afstand bij gelijke totalen" (oude club-conventie). Komt mee
+// vanuit de frontend zodat de archief-vastlegging dezelfde volgorde krijgt
+// als de viewing in /Klassement.
+$tiebreakerDist = trim($body['tiebreaker_dist'] ?? 'standaard');
+if ($tiebreakerDist === 'standaard') $tiebreakerDist = null;
+
 if (!$compId || !$primaryDcId) {
     http_response_code(400);
     echo json_encode(['error' => 'competition_id en dc_ids zijn verplicht']);
@@ -694,8 +702,16 @@ try {
         ];
     }
 
-    // ── Vergelijkfunctie: aantal-gereden → totaal → beste resultaat → laatste afstand
-    $vergelijkKlas = function (array $a, array $b) use ($lastDistId): int {
+    // ── Vergelijkfunctie ────────────────────────────────────────────────
+    // Standaard: aantal-gereden → totaal → beste resultaat → laatste afstand
+    // Single-distance (operator-keuze): aantal-gereden → totaal → punten in
+    //   de gekozen afstand. Geen verdere fallback (oude club-conventie).
+    // Alleen toepassen als de gekozen afstand bestaat in deze DC (anders
+    //   silentieel terugvallen op standaard).
+    $tbDistIdValid = ($tiebreakerDist !== null && isset($distNaamMap[$tiebreakerDist]))
+        ? $tiebreakerDist : null;
+
+    $vergelijkKlas = function (array $a, array $b) use ($lastDistId, $tbDistIdValid): int {
         // 0. Aantal afstanden gereden DESC (meer = beter)
         if (($a['aantal_gereden'] ?? 0) !== ($b['aantal_gereden'] ?? 0)) {
             return ($b['aantal_gereden'] ?? 0) <=> ($a['aantal_gereden'] ?? 0);
@@ -703,6 +719,14 @@ try {
         // 1. Totaal punten ASC
         $diff = $a['totaal'] <=> $b['totaal'];
         if ($diff !== 0) return $diff;
+
+        // ── Single-distance-modus: alleen kijken naar de gekozen afstand ──
+        if ($tbDistIdValid !== null) {
+            $lA = $a['dist_punten'][$tbDistIdValid] ?? PHP_INT_MAX;
+            $lB = $b['dist_punten'][$tbDistIdValid] ?? PHP_INT_MAX;
+            if ($lA != $lB) return $lA <=> $lB;
+            return 0;
+        }
 
         // 2. Gesorteerde individuele punten vergelijken (beste resultaat eerst)
         $pA = array_values($a['dist_punten']);

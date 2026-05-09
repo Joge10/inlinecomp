@@ -694,14 +694,19 @@ async function _uVastleggen(groep, afstand, btnEl) {
     if (btnEl) { btnEl.disabled = true; btnEl.innerHTML = '⏳ Bezig…'; }
 
     try {
+        // Tie-breaker-keuze meesturen zodat de archief-vastlegging dezelfde
+        // klassement-volgorde krijgt als wat de operator op het scherm ziet.
+        // Bij internationaal of standaard-keuze: 'standaard' (default in API).
+        const tiebreaker = _klasTbLees(huidigCompId, groep.dc_ids);
         const res = await fetch('api/uitslag_vastleggen.php', {
             method:  'POST',
             headers: { 'Content-Type': 'application/json' },
             body:    JSON.stringify({
-                competition_id: huidigCompId,
-                dc_ids:         groep.dc_ids,
-                dc_naam:        groep.merge_label || groep.dc_name,
-                distance_id:    afstand?.id ?? '',   // leeg = alle afstanden
+                competition_id:  huidigCompId,
+                dc_ids:          groep.dc_ids,
+                dc_naam:         groep.merge_label || groep.dc_name,
+                distance_id:     afstand?.id ?? '',   // leeg = alle afstanden
+                tiebreaker_dist: tiebreaker,
             }),
         });
         const data = await res.json();
@@ -742,6 +747,23 @@ function msTijd(ms) {
 
 // ── Inhoud: klassement ───────────────────────────────────────────────────────
 
+// localStorage key + helpers voor de gekozen tie-breaker per (comp × dc-set).
+// 'standaard' = de bestaande multi-stap-keten (default), anders een
+// distance_id → bij gelijke totaal-punten kijkt het klassement ALLEEN naar
+// de punten in die afstand (oude club-conventie: "winnaar van afstand X
+// wint bij gelijke stand"). Operator kan zelf kiezen welke afstand omdat
+// het programma kan afwijken van de planning (weer, defecten, etc.).
+function _klasTbStorageKey(compId, dcIds) {
+    return `klas_tb_${compId}_${[...dcIds].sort().join(',')}`;
+}
+function _klasTbLees(compId, dcIds) {
+    return localStorage.getItem(_klasTbStorageKey(compId, dcIds)) || 'standaard';
+}
+function _klasTbSchrijf(compId, dcIds, val) {
+    if (val === 'standaard') localStorage.removeItem(_klasTbStorageKey(compId, dcIds));
+    else                     localStorage.setItem(_klasTbStorageKey(compId, dcIds), val);
+}
+
 async function toonUitslagKlassement(groep) {
     const content = el('u-dist-content');
     if (!content) return;
@@ -750,8 +772,9 @@ async function toonUitslagKlassement(groep) {
 
     try {
         const dcParam = groep.dc_ids.map(encodeURIComponent).join(',');
+        const huidigTb = _klasTbLees(huidigCompId, groep.dc_ids);
         const res  = await fetch(
-            `api/klassement_live.php?competition_id=${encodeURIComponent(huidigCompId)}&dc_ids=${dcParam}`
+            `api/klassement_live.php?competition_id=${encodeURIComponent(huidigCompId)}&dc_ids=${dcParam}&tiebreaker_dist=${encodeURIComponent(huidigTb)}`
         );
         const data = await res.json();
 
@@ -861,9 +884,31 @@ async function toonUitslagKlassement(groep) {
             </div>
         </div>`;
 
+        // ── Tie-breaker dropdown (alleen bij full-final + ≥2 afstanden) ────
+        // Bij internationaal volgen we altijd het reglement. Bij FF kan de
+        // operator kiezen tussen de standaard-keten en "alleen afstand X".
+        const heeftTbKeuze = data.systeem === 'full-final' && afstanden.length >= 2;
+        let tbBalk = '';
+        if (heeftTbKeuze) {
+            const opts = afstanden.map(a =>
+                `<option value="${escHtml(a.id)}"${data.tiebreaker_dist === a.id ? ' selected' : ''}>op basis van: ${escHtml(a.name)}</option>`
+            ).join('');
+            const stdSel = (data.tiebreaker_dist === 'standaard' || !data.tiebreaker_dist) ? ' selected' : '';
+            tbBalk = `<div class="u-klas-tb-balk">
+                <label class="u-klas-tb-lbl">Tie-breaker bij gelijke punten:
+                    <select id="u-klas-tb-sel" class="inp-sm">
+                        <option value="standaard"${stdSel}>Standaard (beste resultaten → laatste afstand)</option>
+                        ${opts}
+                    </select>
+                </label>
+                <span class="u-klas-tb-hint" title="Standaard kijkt eerst naar het beste afzonderlijke resultaat en pas als laatste naar de allerlaatste afstand. Bij 'op basis van' wordt direct (na totaal-punten) alleen de gekozen afstand vergeleken.">ℹ</span>
+            </div>`;
+        }
+
         content.innerHTML = `
             <div class="u-klas-wrap">
                 <div class="u-klas-titel">${escHtml(dcNaam)} – Klassement</div>
+                ${tbBalk}
                 ${opslaanBalk}
                 <div class="u-klas-tabel-wrap">
                 <table class="u-klas-tabel">
@@ -881,6 +926,12 @@ async function toonUitslagKlassement(groep) {
                 </table>
                 </div>
             </div>`;
+
+        // ── Tie-breaker dropdown handler ────────────────────────────────────
+        el('u-klas-tb-sel')?.addEventListener('change', e => {
+            _klasTbSchrijf(huidigCompId, groep.dc_ids, e.target.value);
+            toonUitslagKlassement(groep);
+        });
 
         // ── Live totaal herberekenen + dirty-tracking bij puntenwijziging ─────
         let _klasDirty = false;

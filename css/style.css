@@ -1183,6 +1183,33 @@ header .badge {
 .u-klas-titel       { font-size: 15px; font-weight: 600; color: var(--blauw);
                        margin-bottom: 10px; }
 
+/* Tie-breaker keuze (alleen bij full-final + ≥2 afstanden) */
+.u-klas-tb-balk {
+    display: flex; align-items: center; gap: 6px;
+    background: #f6f9fc;
+    border: 1px solid var(--lichtblauw, #d6e4f0);
+    border-radius: 5px;
+    padding: 5px 10px;
+    margin-bottom: 8px;
+    font-size: 12.5px;
+}
+.u-klas-tb-lbl {
+    display: flex; align-items: center; gap: 6px;
+    color: #444;
+}
+.u-klas-tb-lbl select {
+    padding: 2px 6px;
+    font-size: 12px;
+    border: 1px solid var(--border, #cdd8e3);
+    border-radius: 4px;
+    background: #fff;
+}
+.u-klas-tb-hint {
+    color: var(--blauw);
+    cursor: help;
+    font-weight: 700;
+}
+
 .u-klas-opslaan-balk {
     display: flex; align-items: center; gap: 12px;
     margin-bottom: 10px;
