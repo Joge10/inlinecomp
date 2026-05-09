@@ -35,19 +35,47 @@ require_once __DIR__ . '/../../config_inlinecomp.php';
 require_once __DIR__ . '/../auth/session.php';
 requireAuth($pdo);
 
-$compId      = trim($_GET['competition_id'] ?? '');
-$dcIdsRaw    = trim($_GET['dc_ids'] ?? $_GET['dc_id'] ?? '');
+$compId      = trim($_GET['competition_id'] ?? $_POST['competition_id'] ?? '');
+$dcIdsRaw    = trim($_GET['dc_ids'] ?? $_GET['dc_id'] ?? $_POST['dc_ids'] ?? $_POST['dc_id'] ?? '');
 $dcIds       = array_values(array_filter(array_map('trim', explode(',', $dcIdsRaw))));
 $primaryDcId = $dcIds[0] ?? '';
 
-// Optionele tie-breaker-keuze. Default: 'standaard' (huidige multi-stap-keten).
-// Anders: een specifieke distance_id → bij gelijke totaal-punten wordt
-// uitsluitend gekeken naar de punten in DEZE afstand (oude club-traditie:
-// "winnaar van de laatste afstand wint bij gelijke stand"). De UI laat de
-// operator kiezen welke afstand dat is, want het programma kan in de
-// praktijk afwijken van de planning (weer, defecten, etc.).
-$tiebreakerDist = trim($_GET['tiebreaker_dist'] ?? 'standaard');
-if ($tiebreakerDist === 'standaard') $tiebreakerDist = null;
+// ── POST action=set_tiebreaker → DB-config bijwerken ──────────────────────
+// Body: {action: 'set_tiebreaker', competition_id, dc_id, tiebreaker_dist}
+// tiebreaker_dist = 'standaard' of een distance_id. NULL'en bij standaard
+// zodat we tabel-kort houden (alleen rijen met daadwerkelijke override).
+if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+    $body = json_decode(file_get_contents('php://input'), true) ?? [];
+    if (($body['action'] ?? '') === 'set_tiebreaker') {
+        $cId  = trim($body['competition_id'] ?? '');
+        $dcId = trim($body['dc_id'] ?? '');
+        $tb   = trim($body['tiebreaker_dist'] ?? 'standaard');
+        if (!$cId || !$dcId) {
+            http_response_code(400);
+            echo json_encode(['error' => 'competition_id en dc_id zijn verplicht']);
+            exit;
+        }
+        $tbVal = ($tb === '' || $tb === 'standaard') ? null : $tb;
+        $pdo->prepare("
+            INSERT INTO klassement_config (competition_id, dc_id, tiebreaker_dist)
+            VALUES (?, ?, ?)
+            ON DUPLICATE KEY UPDATE tiebreaker_dist = VALUES(tiebreaker_dist),
+                                    updated_at      = CURRENT_TIMESTAMP
+        ")->execute([$cId, $dcId, $tbVal]);
+        echo json_encode(['ok' => true, 'tiebreaker_dist' => $tbVal ?? 'standaard']);
+        exit;
+    }
+}
+
+// ── GET-pad: tiebreaker-keuze uit DB lezen ────────────────────────────────
+// Persistent op DB-niveau zodat álle operators (op verschillende PC's) en
+// uitslag_vastleggen.php dezelfde regel volgen — geen localStorage-drift.
+$tbStmt = $pdo->prepare(
+    "SELECT tiebreaker_dist FROM klassement_config
+     WHERE competition_id = ? AND dc_id = ? LIMIT 1"
+);
+$tbStmt->execute([$compId, $primaryDcId]);
+$tiebreakerDist = $tbStmt->fetchColumn() ?: null;  // NULL = standaard
 
 if (!$compId || !$primaryDcId) {
     http_response_code(400);

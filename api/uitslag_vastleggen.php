@@ -40,13 +40,19 @@ $primaryDcId = $dcIds[0] ?? '';
 $dcNaam      = trim($body['dc_naam'] ?? '');
 $filterDistId = trim($body['distance_id'] ?? '');
 
-// Tie-breaker-keuze (alleen voor full-final relevant). 'standaard' = de
-// klassieke multi-stap-keten; een specifieke distance_id = "alleen punten
-// in die afstand bij gelijke totalen" (oude club-conventie). Komt mee
-// vanuit de frontend zodat de archief-vastlegging dezelfde volgorde krijgt
-// als de viewing in /Klassement.
-$tiebreakerDist = trim($body['tiebreaker_dist'] ?? 'standaard');
-if ($tiebreakerDist === 'standaard') $tiebreakerDist = null;
+// Tie-breaker-keuze (alleen voor full-final relevant). DB-persistent in
+// klassement_config — operator stelt 'm in via /Klassement-dropdown.
+// 'standaard' (NULL in DB) = klassieke multi-stap-keten; een distance_id
+// = "alleen punten in die afstand bij gelijke totalen" (oude conventie).
+// We lezen hier uit DB i.p.v. uit de body, zodat de archief-vastlegging
+// gegarandeerd dezelfde regel volgt als wat /Klassement op het scherm
+// toont — onafhankelijk van welke browser/PC vastlegt.
+$tbConfStmt = $pdo->prepare(
+    "SELECT tiebreaker_dist FROM klassement_config
+     WHERE competition_id = ? AND dc_id = ? LIMIT 1"
+);
+$tbConfStmt->execute([$compId, $primaryDcId]);
+$tiebreakerDist = $tbConfStmt->fetchColumn() ?: null;
 
 if (!$compId || !$primaryDcId) {
     http_response_code(400);

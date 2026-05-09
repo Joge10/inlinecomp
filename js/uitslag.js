@@ -694,19 +694,16 @@ async function _uVastleggen(groep, afstand, btnEl) {
     if (btnEl) { btnEl.disabled = true; btnEl.innerHTML = '⏳ Bezig…'; }
 
     try {
-        // Tie-breaker-keuze meesturen zodat de archief-vastlegging dezelfde
-        // klassement-volgorde krijgt als wat de operator op het scherm ziet.
-        // Bij internationaal of standaard-keuze: 'standaard' (default in API).
-        const tiebreaker = _klasTbLees(huidigCompId, groep.dc_ids);
+        // Tie-breaker-keuze leeft in klassement_config-tabel; backend leest 'm
+        // daar bij vastleggen. Frontend hoeft niets mee te sturen.
         const res = await fetch('api/uitslag_vastleggen.php', {
             method:  'POST',
             headers: { 'Content-Type': 'application/json' },
             body:    JSON.stringify({
-                competition_id:  huidigCompId,
-                dc_ids:          groep.dc_ids,
-                dc_naam:         groep.merge_label || groep.dc_name,
-                distance_id:     afstand?.id ?? '',   // leeg = alle afstanden
-                tiebreaker_dist: tiebreaker,
+                competition_id: huidigCompId,
+                dc_ids:         groep.dc_ids,
+                dc_naam:        groep.merge_label || groep.dc_name,
+                distance_id:    afstand?.id ?? '',   // leeg = alle afstanden
             }),
         });
         const data = await res.json();
@@ -747,21 +744,20 @@ function msTijd(ms) {
 
 // ── Inhoud: klassement ───────────────────────────────────────────────────────
 
-// localStorage key + helpers voor de gekozen tie-breaker per (comp × dc-set).
-// 'standaard' = de bestaande multi-stap-keten (default), anders een
-// distance_id → bij gelijke totaal-punten kijkt het klassement ALLEEN naar
-// de punten in die afstand (oude club-conventie: "winnaar van afstand X
-// wint bij gelijke stand"). Operator kan zelf kiezen welke afstand omdat
-// het programma kan afwijken van de planning (weer, defecten, etc.).
-function _klasTbStorageKey(compId, dcIds) {
-    return `klas_tb_${compId}_${[...dcIds].sort().join(',')}`;
-}
-function _klasTbLees(compId, dcIds) {
-    return localStorage.getItem(_klasTbStorageKey(compId, dcIds)) || 'standaard';
-}
-function _klasTbSchrijf(compId, dcIds, val) {
-    if (val === 'standaard') localStorage.removeItem(_klasTbStorageKey(compId, dcIds));
-    else                     localStorage.setItem(_klasTbStorageKey(compId, dcIds), val);
+// Tie-breaker-keuze wordt opgeslagen in DB (klassement_config), niet meer
+// in localStorage — zodat álle operators op verschillende PC's dezelfde
+// stand zien en de archief-vastlegging dezelfde regel volgt.
+async function _klasTbSchrijf(compId, dcId, val) {
+    await fetch('api/klassement_live.php', {
+        method:  'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body:    JSON.stringify({
+            action:          'set_tiebreaker',
+            competition_id:  compId,
+            dc_id:           dcId,
+            tiebreaker_dist: val,
+        }),
+    });
 }
 
 async function toonUitslagKlassement(groep) {
@@ -772,9 +768,8 @@ async function toonUitslagKlassement(groep) {
 
     try {
         const dcParam = groep.dc_ids.map(encodeURIComponent).join(',');
-        const huidigTb = _klasTbLees(huidigCompId, groep.dc_ids);
         const res  = await fetch(
-            `api/klassement_live.php?competition_id=${encodeURIComponent(huidigCompId)}&dc_ids=${dcParam}&tiebreaker_dist=${encodeURIComponent(huidigTb)}`
+            `api/klassement_live.php?competition_id=${encodeURIComponent(huidigCompId)}&dc_ids=${dcParam}`
         );
         const data = await res.json();
 
@@ -928,8 +923,17 @@ async function toonUitslagKlassement(groep) {
             </div>`;
 
         // ── Tie-breaker dropdown handler ────────────────────────────────────
-        el('u-klas-tb-sel')?.addEventListener('change', e => {
-            _klasTbSchrijf(huidigCompId, groep.dc_ids, e.target.value);
+        // DB-update + re-render. dc_id van de primary DC (eerste in dc_ids);
+        // bij merged-DC zou je strict per primary opslaan — bestaande gedrag
+        // van klassement_live.php (die ook altijd primary gebruikt).
+        el('u-klas-tb-sel')?.addEventListener('change', async e => {
+            const sel = el('u-klas-tb-sel');
+            if (sel) sel.disabled = true;
+            try {
+                await _klasTbSchrijf(huidigCompId, groep.dc_ids[0], e.target.value);
+            } catch (err) {
+                toonBevestigDialog('Tie-breaker opslaan mislukt: ' + err.message, 'Fout');
+            }
             toonUitslagKlassement(groep);
         });
 
