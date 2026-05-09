@@ -3198,17 +3198,41 @@ let _huidigStempel = '';
             );
             const prog = await progRes.json();
             // Per kind een lookup; parallel uitvoeren voor lagere latency.
+            // BELANGRIJK: lookup op license_key wanneer beschikbaar, NIET op
+            // startnummer — anders kan bij dubbele snrs (bv. een HP1 en DP1
+            // met hetzelfde nummer) de array-volgorde tussen calls wisselen
+            // en springt het scherm naar de andere persoon na een refresh.
+            // Fallback op startnummer alleen als er geen license_key is.
             const kindRefreshes = _kinderen.map(async k => {
-                if (!k?.snr) return;
+                const huidigLic = k?.data?.[k.kozen_idx ?? 0]?.persoon?.license_key;
+                const param = huidigLic
+                    ? `license_key=${encodeURIComponent(huidigLic)}`
+                    : (k?.snr ? `startnummer=${encodeURIComponent(k.snr)}` : null);
+                if (!param) return;
                 try {
                     const r = await safeFetch(
-                        `?action=lookup&competition_id=${encodeURIComponent(compId)}&startnummer=${encodeURIComponent(k.snr)}&_t=${Date.now()}`
+                        `?action=lookup&competition_id=${encodeURIComponent(compId)}&${param}&_t=${Date.now()}`
                     );
                     const data = await r.json();
                     if (Array.isArray(data) && data.length) {
                         k.data = data;
                         k.prog = prog;
-                        k.kozen_idx = Math.min(k.kozen_idx ?? 0, data.length - 1);
+                        // Bij license-lookup is data altijd 1 rijder → idx blijft 0.
+                        // Bij snr-lookup (fallback): kozen_idx behouden binnen
+                        // bereik, en re-locate de eerder gekozen license als die
+                        // nog in de nieuwe data zit (anders is de "verkeerde"
+                        // persoon nu eerst).
+                        if (huidigLic) {
+                            k.kozen_idx = 0;
+                        } else if (data.length > 1) {
+                            const eerderGekozen = k.data[k.kozen_idx ?? 0]?.persoon?.license_key;
+                            const opnieuw = eerderGekozen
+                                ? data.findIndex(d => d?.persoon?.license_key === eerderGekozen)
+                                : -1;
+                            k.kozen_idx = opnieuw >= 0 ? opnieuw : Math.min(k.kozen_idx ?? 0, data.length - 1);
+                        } else {
+                            k.kozen_idx = 0;
+                        }
                     }
                 } catch { /* stil — volgende tick probeert opnieuw */ }
             });
