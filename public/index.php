@@ -2251,11 +2251,36 @@ function renderKinderen() {
     }
 }
 
+// Bewaar UI-state (huidige sub-tab + dropdown-keuzes binnen Uitslagen) van
+// het actief getoonde kind. Wordt aangeroepen vóór elk renderKinderen() zodat
+// na her-render de juiste keuzes hersteld kunnen worden. Zonder dit verloor
+// de gebruiker elke 60s (auto-refresh) zijn categorie/afstand-selectie in de
+// Uitslagen-tab — _kaartwissel_ deed hetzelfde. Restore gebeurt in
+// initUitslagenTab() / het serie-klassement-blok.
+function _bewaarKindUistate() {
+    const k = _kinderen[_activeKindIdx];
+    if (!k) return;
+    const kc = document.getElementById('kind-content');
+    if (!kc) return;
+    // Sub-tab (welke tab is op dit moment open?)
+    const huidigeSub = kc.querySelector('.tab-btn.active')?.dataset.tab;
+    if (huidigeSub) k.sub_tab = huidigeSub;
+    // Dropdown-keuzes binnen Uitslagen-tab
+    const uitslPane = kc.querySelector('.tab-content[data-tab="uitslagen"]');
+    if (uitslPane) {
+        k._uistate = {
+            catVal:      uitslPane.querySelector('.uitsl-cat-sel')?.value      || '',
+            distVal:     uitslPane.querySelector('.uitsl-dist-sel')?.value     || '',
+            serieVal:    uitslPane.querySelector('.serie-sel')?.value          || '',
+            serieCatVal: uitslPane.querySelector('.serie-cat-sel')?.value      || '',
+        };
+    }
+}
+
 function wisselKind(idx) {
     if (idx < 0 || idx >= _kinderen.length) return;
-    // Huidige sub-tab onthouden voordat we wisselen
-    const huidigeSub = document.querySelector('#kind-content .tab-btn.active')?.dataset.tab;
-    if (huidigeSub && _kinderen[_activeKindIdx]) _kinderen[_activeKindIdx].sub_tab = huidigeSub;
+    // Huidige sub-tab + dropdown-keuzes onthouden voordat we wisselen
+    _bewaarKindUistate();
     _activeKindIdx = idx;
     renderKinderen();
 }
@@ -2557,9 +2582,28 @@ async function initUitslagenTab(kaart) {
         }
     });
 
-    // Auto-selecteer als er maar 1 categorie is (ná binden listeners)
-    const cats = _catCache?.data;
-    if (cats?.length === 1) { catSel.value = cats[0].dc_id; catSel.dispatchEvent(new Event('change')); }
+    // Restore vorige keuze (na auto-refresh of na kind-wissel) — voorkomt dat
+    // de gebruiker zijn categorie + afstand opnieuw moet kiezen telkens als
+    // stilleRefresh() de DOM herbouwt. _bewaarKindUistate() heeft de keuze
+    // net daarvoor opgeslagen op het kind-object.
+    const saved = _kinderen?.[_activeKindIdx]?._uistate;
+    const cats  = _catCache?.data;
+    if (saved?.catVal && catSel.querySelector(`option[value="${CSS.escape(saved.catVal)}"]`)) {
+        catSel.value = saved.catVal;
+        catSel.dispatchEvent(new Event('change'));
+        // Daarna ook afstand/klassement herstellen als die nog bestaat
+        if (saved.distVal) {
+            const distOpt = distSel.querySelector(`option[value="${CSS.escape(saved.distVal)}"]`);
+            if (distOpt) {
+                distSel.value = saved.distVal;
+                distSel.dispatchEvent(new Event('change'));
+            }
+        }
+    } else if (cats?.length === 1) {
+        // Auto-selecteer als er maar 1 categorie is (ná binden listeners)
+        catSel.value = cats[0].dc_id;
+        catSel.dispatchEvent(new Event('change'));
+    }
 }
 
 // ── Serie-klassementen voor een wedstrijd ──────────────────────────────────
@@ -2626,6 +2670,29 @@ async function initSerieKlassementen(kaart, compId) {
             if (!huidig) return;
             wrap.innerHTML = renderSerieKlassementTabel(huidig, catSel.value || null);
         });
+
+        // Restore serie-klassement keuze na auto-refresh / kind-wissel
+        // (dezelfde reden als bij Uitslagen — anders verspringt elke 60s).
+        const saved = _kinderen?.[_activeKindIdx]?._uistate;
+        if (saved?.serieVal && serieSel.querySelector(`option[value="${CSS.escape(saved.serieVal)}"]`)) {
+            serieSel.value = saved.serieVal;
+            serieSel.dispatchEvent(new Event('change'));
+            // serieSel.change is async (fetch + cat-sel populate); restore
+            // de cat-keuze pas als cat-sel bevolkt is. We polleren kort —
+            // veel simpeler dan de promise-chain doorvlechten.
+            if (saved.serieCatVal) {
+                const t0 = Date.now();
+                const probeer = () => {
+                    if (catSel.querySelector(`option[value="${CSS.escape(saved.serieCatVal)}"]`)) {
+                        catSel.value = saved.serieCatVal;
+                        catSel.dispatchEvent(new Event('change'));
+                    } else if (Date.now() - t0 < 4000) {
+                        setTimeout(probeer, 80);
+                    }
+                };
+                setTimeout(probeer, 80);
+            }
+        }
     } catch (e) {
         box.style.display = 'none';
     }
@@ -3264,6 +3331,10 @@ let _huidigStempel = '';
                 window._lookupProg = actief.prog;
                 window._gekozenIdx = actief.kozen_idx ?? 0;
             }
+            // Bewaar dropdown-keuzes (Uitslagen-tab) van actieve kind vóór
+            // re-render — initUitslagenTab() zet ze daarna terug zodat de
+            // gebruiker zijn categorie/afstand niet kwijtraakt elke 60s.
+            _bewaarKindUistate();
             renderKinderen();
             zetStempel();
         } catch { /* stil */ }

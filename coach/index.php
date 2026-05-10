@@ -1025,12 +1025,17 @@ select.sel {
 .chip-snr { font-weight:700; color:var(--blauw); }
 
 /* Programma-lijst */
+/* Twee-rij-layout: bovenrij = status-icoon + naam/sub (flex), onderrij =
+   eigen-rijder-pills (volledige breedte met indent). Pills op een aparte
+   regel zetten voorkomt dat coaches met veel rijders het rit-naam-blok
+   ingedrukt zien worden of horizontaal moeten scrollen. */
 .heat-rij { background:var(--wit); border:1px solid #dde3ea;
             border-radius:6px; padding:10px 12px; margin-bottom:6px;
-            cursor:pointer; display:flex; align-items:center; gap:10px; }
+            cursor:pointer; display:flex; flex-direction:column; gap:6px; }
 .heat-rij:hover { background:#f0f5fa; }
 .heat-rij.mijn { border-left:4px solid var(--accent-bd); background:var(--accent); }
 .heat-rij.leeg { cursor:default; opacity:.75; background:#fafafa; }
+.heat-rij-top { display:flex; align-items:center; gap:10px; }
 /* Vaste breedte voor het status-icoon zodat naam-kolom niet schuift tussen
    regels met/zonder icoon. Emoji-glyphs zijn breder dan ○, daarom krijgt
    de hele kolom een deterministische breedte. */
@@ -1039,7 +1044,11 @@ select.sel {
 .heat-info { flex:1; min-width:0; }
 .heat-naam { font-weight:600; }
 .heat-sub { font-size:.8rem; color:#666; margin-top:2px; }
-.heat-mijn-snrs { display:flex; flex-wrap:wrap; gap:3px; }
+/* Pills uitlijnen onder .heat-info (28px icon + 10px gap) zodat ze visueel
+   bij het rit-naam-blok horen. flex-wrap zorgt dat veel pills netjes
+   doorlopen op meerdere regels. */
+.heat-mijn-snrs { display:flex; flex-wrap:wrap; gap:4px;
+                  padding-left:38px; }
 .heat-mijn-snrs .m-snr {
     background:var(--accent-bd); color:#000; font-weight:700;
     font-size:.8rem; border-radius:10px; padding:2px 7px;
@@ -1644,11 +1653,15 @@ function renderProgramma() {
         const klasse = 'heat-rij' + (mijnInHeat.length ? ' mijn' : '') + (leeg ? ' leeg' : '');
         const klik = leeg ? '' :
             ` data-rit-naam="${esc(r.rit_naam)}" data-dc-naam="${esc(r.dc_naam ?? '')}" onclick="toonRitDetail(this)"`;
+        // Pills komen op een aparte regel onder de naam, zodat ze bij coaches
+        // met veel rijders niet in het rit-naam-blok worden geperst.
         return `<div class="${klasse}"${klik}>
-            <div class="heat-status">${statusIcon}</div>
-            <div class="heat-info">
-                <div class="heat-naam">${rondeBadge}${esc(r.rit_naam)}</div>
-                <div class="heat-sub">${esc(r.dc_naam ?? '')}${leeg ? ' · nog geen startlijst' : ''}</div>
+            <div class="heat-rij-top">
+                <div class="heat-status">${statusIcon}</div>
+                <div class="heat-info">
+                    <div class="heat-naam">${rondeBadge}${esc(r.rit_naam)}</div>
+                    <div class="heat-sub">${esc(r.dc_naam ?? '')}${leeg ? ' · nog geen startlijst' : ''}</div>
+                </div>
             </div>
             ${mijnStrip}
         </div>`;
