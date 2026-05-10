@@ -3110,22 +3110,31 @@ function toonMelding(m, compId) {
     _meldingActief = true;
     const stijl = _MELDING_PRIO[m.prio] ?? _MELDING_PRIO.info;
     const overlay = document.createElement('div');
-    overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:9500;display:flex;align-items:center;justify-content:center;padding:1rem;';
+    // Overlay scrolt zelf óók (overflow-y:auto) als achterval voor heel kleine
+    // schermen waar zelfs de inner-box met max-height: 90vh nog te hoog is.
+    overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:9500;display:flex;align-items:center;justify-content:center;padding:1rem;overflow-y:auto;';
+    // Inner-box als flex-column: header + scrollable bericht + knop. Bericht-
+    // div krijgt overflow-y:auto + min-height:0 (cruciaal voor flex-children),
+    // knop heeft flex-shrink:0 zodat 'ie altijd onderaan zichtbaar blijft.
     overlay.innerHTML = `
         <div style="background:${stijl.bg};border:3px solid ${stijl.kleur};border-radius:10px;
-                    max-width:400px;width:100%;padding:1.5rem;box-shadow:0 10px 40px rgba(0,0,0,.4);
-                    animation:meldingPop .3s ease-out;">
-            <div style="display:flex;align-items:center;gap:.6rem;margin-bottom:.6rem;">
+                    max-width:400px;width:100%;max-height:calc(100vh - 2rem);
+                    display:flex;flex-direction:column;
+                    box-shadow:0 10px 40px rgba(0,0,0,.4);animation:meldingPop .3s ease-out;">
+            <div style="display:flex;align-items:center;gap:.6rem;padding:1.5rem 1.5rem 0;flex-shrink:0;">
                 <span style="font-size:1.8rem">${stijl.icoon}</span>
                 <h2 style="margin:0;color:${stijl.kleur};font-size:1.1rem;flex:1;">${esc(m.titel)}</h2>
             </div>
-            <div style="color:#222;line-height:1.5;font-size:.95rem;margin-bottom:1rem;
-                        white-space:pre-wrap;">${esc(m.bericht)}</div>
-            <button class="meld-ok" style="background:${stijl.kleur};color:#fff;border:none;
-                                            padding:.6rem 1.4rem;border-radius:6px;font-size:1rem;
-                                            font-weight:600;cursor:pointer;width:100%;">
-                ✓ Begrepen
-            </button>
+            <div style="color:#222;line-height:1.5;font-size:.95rem;
+                        white-space:pre-wrap;padding:.6rem 1.5rem 1rem;
+                        overflow-y:auto;flex:1 1 auto;min-height:0;">${esc(m.bericht)}</div>
+            <div style="padding:0 1.5rem 1.5rem;flex-shrink:0;">
+                <button class="meld-ok" style="background:${stijl.kleur};color:#fff;border:none;
+                                                padding:.6rem 1.4rem;border-radius:6px;font-size:1rem;
+                                                font-weight:600;cursor:pointer;width:100%;">
+                    ✓ Begrepen
+                </button>
+            </div>
         </div>`;
     document.body.appendChild(overlay);
     overlay.querySelector('.meld-ok').addEventListener('click', () => {
