@@ -1,0 +1,314 @@
+<!DOCTYPE html>
+<html lang="nl">
+<head>
+<meta charset="UTF-8">
+<title>InlineComp Operator — Quick Reference</title>
+<style>
+:root {
+    --blauw: #1F4E79;
+    --middenblauw: #2E75B6;
+    --lichtblauw: #D6E4F0;
+    --oranje: #E8630A;
+    --groen: #2e7d32;
+    --rood: #b71c1c;
+    --grijs: #f5f5f5;
+    --tekst: #222;
+    --border: #cdd8e3;
+}
+* { box-sizing: border-box; }
+body {
+    font-family: 'Segoe UI', Arial, sans-serif;
+    color: var(--tekst);
+    background: #fafbfd;
+    margin: 0; padding: 0;
+    font-size: 10.5pt;
+    line-height: 1.4;
+}
+.page {
+    max-width: 210mm;
+    min-height: 297mm;
+    margin: 0 auto;
+    padding: 12mm 14mm;
+    background: #fff;
+    box-shadow: 0 0 12px rgba(0,0,0,.06);
+}
+.titel {
+    background: var(--blauw); color: #fff;
+    padding: 10px 14px;
+    border-radius: 6px 6px 0 0;
+    margin-bottom: 0;
+    display: flex; align-items: center; justify-content: space-between;
+}
+.titel h1 { margin: 0; font-size: 18pt; font-weight: 700; }
+.titel .subtitle { font-size: 10pt; opacity: .85; }
+.url-bar {
+    background: var(--oranje); color: #fff;
+    padding: 5px 14px;
+    font-weight: 600;
+    border-radius: 0 0 6px 6px;
+    margin-bottom: 12px;
+    display: flex; justify-content: space-between; align-items: center;
+}
+.url-bar code {
+    background: rgba(255,255,255,.18); padding: 1px 7px;
+    border-radius: 3px; font-size: 10pt;
+}
+.kolommen {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 12px;
+}
+section {
+    border: 1px solid var(--border);
+    border-radius: 5px;
+    padding: 6px 10px;
+    background: #fff;
+    page-break-inside: avoid;
+}
+section h2 {
+    margin: 0 0 6px;
+    color: var(--blauw);
+    font-size: 11.5pt;
+    border-bottom: 2px solid var(--oranje);
+    padding-bottom: 3px;
+}
+section h2 .stap-nr {
+    background: var(--blauw); color: #fff;
+    border-radius: 50%;
+    width: 18px; height: 18px;
+    display: inline-flex; align-items: center; justify-content: center;
+    font-size: 10pt; font-weight: 700;
+    margin-right: 6px;
+}
+section p  { margin: 3px 0; }
+section ol { margin: 3px 0; padding-left: 20px; }
+section ul { margin: 3px 0; padding-left: 18px; }
+section li { margin: 2px 0; }
+section b  { color: var(--blauw); }
+.span2 { grid-column: span 2; }
+
+.knop {
+    display: inline-block;
+    background: var(--blauw); color: #fff;
+    padding: 1px 7px;
+    border-radius: 3px;
+    font-size: 9pt; font-weight: 600;
+    margin: 0 2px;
+}
+.knop.oranje { background: var(--oranje); }
+.knop.groen  { background: var(--groen);  }
+.knop.rood   { background: var(--rood);   }
+.knop.grijs  { background: #6c757d; }
+
+.tab {
+    display: inline-block;
+    background: var(--lichtblauw); color: var(--blauw);
+    padding: 1px 7px;
+    border-radius: 3px;
+    font-size: 9pt; font-weight: 700;
+    margin: 0 2px;
+}
+
+table.compact {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 9.5pt;
+    margin-top: 4px;
+}
+table.compact th, table.compact td {
+    padding: 2px 5px;
+    border-bottom: 1px solid #eee;
+    text-align: left;
+    vertical-align: top;
+}
+table.compact th {
+    background: var(--lichtblauw);
+    color: var(--blauw);
+    font-weight: 700;
+}
+.tip {
+    background: #fff8e1; border-left: 3px solid #f5a623;
+    padding: 5px 9px;
+    font-size: 9.5pt;
+    margin-top: 5px;
+    border-radius: 0 4px 4px 0;
+}
+.alert {
+    background: #fce4e4; border-left: 3px solid var(--rood);
+    padding: 5px 9px;
+    font-size: 9.5pt;
+    margin-top: 5px;
+    border-radius: 0 4px 4px 0;
+}
+.voet {
+    margin-top: 10px;
+    text-align: center;
+    color: #888;
+    font-size: 8.5pt;
+    border-top: 1px solid var(--border);
+    padding-top: 5px;
+}
+@media print {
+    body { background: #fff; }
+    .page { box-shadow: none; padding: 6mm 10mm; }
+    @page { margin: 7mm 10mm; size: A4 portrait; }
+    .pdf-tip { display: none; }
+}
+.pdf-tip {
+    background: #eef4fa; border-left: 3px solid var(--middenblauw);
+    padding: 6px 10px; margin-bottom: 10px; font-size: 9pt;
+    border-radius: 0 4px 4px 0;
+}
+</style>
+</head>
+<body>
+<div class="page">
+
+    <div class="pdf-tip">
+        💡 <b>Opslaan als PDF:</b> druk Ctrl+P (Cmd+P op Mac) → Bestemming "Opslaan als PDF" → Opslaan.
+        Dubbelzijdig printen aanbevolen voor lamineren.
+    </div>
+
+    <div class="titel">
+        <div>
+            <h1>InlineComp Operator</h1>
+            <div class="subtitle">Quick Reference — voor wie tijdens de wedstrijd Live + Uitslag bedient</div>
+        </div>
+        <div style="font-size:24pt">⏱</div>
+    </div>
+    <div class="url-bar">
+        <span>Inloggen op:</span>
+        <code>inlineresults.devriesen.com</code>
+    </div>
+
+    <div class="kolommen">
+
+        <section>
+            <h2><span class="stap-nr">1</span>Per heat — tijden invoeren</h2>
+            <p>Tab <span class="tab">Live</span> openen. Bovenin staat de heat-carrousel; rechts in de pijl-knoppen of dropdown door bladeren.</p>
+            <ol>
+                <li>Klik <span class="knop">📥 Import</span> bovenaan de heat-kaart</li>
+                <li>Kies de juiste <b>Map</b> (gefilterd op naam-zoekveld) en het juiste <b>CSV-bestand</b> (sorteer op nieuwste 🆕)</li>
+                <li>Klik <b>Overnemen</b> → tijden vullen automatisch in op startnummer</li>
+                <li>Check de tabel; bij sancties: kies in dropdown achter naam (zie achterkant)</li>
+                <li>Klik <span class="knop oranje">💾 Opslaan</span></li>
+            </ol>
+            <div class="tip">💡 De volgende lege heat wordt automatisch geopend na opslaan. Zelf bladeren mag ook met <b>← →</b> toetsen of de pijl-knoppen.</div>
+        </section>
+
+        <section>
+            <h2><span class="stap-nr">2</span>Hele ronde compleet</h2>
+            <p>Wanneer alle heats van een ronde (Series, KF of HF) tijden hebben, verschijnt onderaan automatisch:</p>
+            <p style="text-align:center"><span class="knop">↻ Hergeneer KF</span> / <span class="knop">↻ Hergeneer HF</span> / <span class="knop">↻ Hergeneer Finale</span></p>
+            <p>Klik 'm zodra de ronde klaar is — de volgende ronde wordt geseed op basis van de Q+q-doorstroom (winnaar per heat + tijdsnelsten).</p>
+            <div class="tip">💡 Bij One Lap / 500m gebruikt internationaal het bracket-pattern: heats {1+laatst}, {2+voorlaatst}, ... gaan samen door. Geen actie nodig — gebeurt automatisch.</div>
+        </section>
+
+        <section>
+            <h2><span class="stap-nr">3</span>Afstand klaar — uitslag vastleggen</h2>
+            <p>Wanneer alle ronden van een afstand verwerkt zijn:</p>
+            <ol>
+                <li>Tab <span class="tab">Uitslag</span> openen</li>
+                <li>Kies de juiste categorie (rij 1 tabs) en afstand (rij 2 tabs)</li>
+                <li>Controleer of de tabel klopt (kleurenstatus boven de tabs)</li>
+                <li>Klik <span class="knop oranje">🏆 Vastleggen</span> onderaan</li>
+            </ol>
+            <p>Tab kleurt <b style="color:var(--groen)">groen</b> = bevestigd. <b style="color:#a06400">Geel</b> = klaar maar nog niet bevestigd. <b style="color:#888">Grijs</b> = nog onvolledig.</p>
+        </section>
+
+        <section>
+            <h2><span class="stap-nr">4</span>Tweede afstand loten (4 DC's)</h2>
+            <p>Sommige DC's hebben een tweede afstand die geseed moet worden op basis van het tussenklassement. Dit doe je <b>na</b> het vastleggen van de eerste afstand:</p>
+            <ol>
+                <li>Tab <span class="tab">Startlijst</span> openen</li>
+                <li>Kies de juiste DC en de <b>tweede</b> afstand</li>
+                <li>Bij seeding-methode: kies <b>tussenklassement</b></li>
+                <li>Klik <span class="knop oranje">🎲 Genereer startlijst</span></li>
+            </ol>
+            <p>Daarna terug naar <span class="tab">Live</span> en flow vanaf stap 1 voor de heats van de tweede afstand.</p>
+            <div class="tip">💡 Voor de overige DC's is de loting al door Geert vooraf gedaan op serie-klassement.</div>
+        </section>
+
+        <section>
+            <h2><span class="stap-nr">5</span>Klassement vastleggen</h2>
+            <p>Wanneer <b>alle afstanden</b> van een DC zijn bevestigd:</p>
+            <ol>
+                <li>Tab <span class="tab">Uitslag</span> → <span class="tab">🏆 Klassement</span></li>
+                <li>Bij gelijke punten: tie-breaker bovenaan instellen (Geert heeft die meestal vooraf op de juiste afstand gezet — laten staan tenzij hij iets anders zegt)</li>
+                <li>Klik <span class="knop oranje">🏆 Klassement vastleggen</span></li>
+            </ol>
+            <p>Het klassement verschijnt direct in /Public, /Coach en de print-tab.</p>
+        </section>
+
+        <section>
+            <h2>Speciale gevallen in Live</h2>
+            <ul>
+                <li><b>Rijder kwam niet opdagen</b> → tijd leeg laten + sanctie <b>DNS</b> (Did Not Start)</li>
+                <li><b>Rijder uitgevallen tijdens race</b> → sanctie <b>DNF</b></li>
+                <li><b>Rijder gediskwalificeerd</b> → <b>DQ-TF</b> (technisch), <b>DQ-SF</b> (sport-fault), <b>DQ-DF</b> (disciplinair)</li>
+                <li><b>Waarschuwing</b> → <b>W1</b> of <b>W2</b> (alleen lange afstand)</li>
+                <li><b>Valse start</b> → <b>FS</b> — straf-positie achteraan</li>
+                <li><b>Rank Reduction</b> → <b>RR</b> — handmatig de finishpositie aanpassen</li>
+            </ul>
+        </section>
+
+        <section class="span2" style="background:#f8fbff">
+            <h2>Sanctie-codes — wat betekenen ze, hoe sorteren ze in de uitslag</h2>
+            <table class="compact">
+                <tr><th>Code</th><th>Betekenis</th><th>Effect op uitslag</th></tr>
+                <tr><td><b>W1 / W2</b></td><td>1e / 2e waarschuwing</td><td>Geen automatisch effect (jury past handmatig aan)</td></tr>
+                <tr><td><b>FS</b></td><td>False Start</td><td>Tijd telt — meestal handmatig naar achteraan gezet</td></tr>
+                <tr><td><b>RR</b></td><td>Rank Reduction</td><td>Geen automatisch effect — jury past finishpositie aan</td></tr>
+                <tr><td><b>DQ-TF</b></td><td>Diskwalificatie technische fout</td><td>Ranked last (achter alle finishers)</td></tr>
+                <tr><td><b>DQ-SF</b></td><td>Diskwalificatie sport fault</td><td>Niet geklasseerd, geen punten</td></tr>
+                <tr><td><b>DQ-DF</b></td><td>Diskwalificatie disciplinair</td><td>Niet geklasseerd, geen punten</td></tr>
+                <tr><td><b>DNS</b></td><td>Did Not Start</td><td>Ranked last, geen tijd nodig</td></tr>
+                <tr><td><b>DNF</b></td><td>Did Not Finish</td><td>Ranked last, tijd wist automatisch</td></tr>
+            </table>
+        </section>
+
+        <section class="span2" style="background:#f8fbff">
+            <h2>Probleem-oplossen</h2>
+            <table class="compact">
+                <tr><th style="width:32%">Symptoom</th><th>Wat doen</th></tr>
+                <tr><td>Import-knop laat geen CSV-bestanden zien</td>
+                    <td>Verkeerde map gekozen. Filter via 🔍-veld op wedstrijdnaam. Geert kan oude mappen vooraf "blokkeren" zodat ze verborgen blijven.</td></tr>
+                <tr><td>Tijden komen leeg binnen na overnemen</td>
+                    <td>Startnummer in CSV matcht niet met startnummer in heat. Controleer of MyLaps de juiste sessie heeft (check rondes-aantal).</td></tr>
+                <tr><td>"↻ Hergeneer"-knop verschijnt niet</td>
+                    <td>Niet alle heats van de ronde zijn ingevoerd. Filter de heat-dropdown op icoontje 🚩 (klaar maar niet ingevoerd) om te zien wat er nog mist.</td></tr>
+                <tr><td>Verkeerde rijder in heat</td>
+                    <td>Tab <span class="tab">Startlijst</span> → kies afstand → 🗑 Wis loting → opnieuw loten. <b>Let op:</b> al ingevoerde tijden gaan verloren — check checkbox "Uitslag ook wissen" goed.</td></tr>
+                <tr><td>Klassement-rangen kloppen niet bij gelijke punten</td>
+                    <td>Tie-breaker dropdown bovenaan klassement. <b>Standaard</b> = onze logica; <b>Op basis van afstand X</b> = oude club-conventie. Vraag Geert wat geldt.</td></tr>
+                <tr><td>Afgevallen rijder krijgt verkeerde rang</td>
+                    <td>Bij afvalkoers: gebruik het afval-paneel (knoppen rechts) om "by-decision" of "by-fault" te markeren met de juiste ronde. Zelfde ronde = ex-aequo, gegarandeerd.</td></tr>
+                <tr><td>Iets anders raars</td>
+                    <td><b>Vraag Geert (de speaker).</b> Bij echte paniek niet zelf gokken — beter even pauzeren dan verkeerd vastleggen.</td></tr>
+            </table>
+        </section>
+
+        <section class="span2">
+            <h2>Vóór de wedstrijd — laatste check</h2>
+            <ul style="column-count:2;column-gap:18px;margin:4px 0">
+                <li><b>✓ Inloggen werkt</b> op de PC die je gaat gebruiken</li>
+                <li><b>✓ Wedstrijd geselecteerd</b> in de dropdown rechtsboven</li>
+                <li><b>✓ Tijdschema klaar</b> — Geert heeft 'm vooraf gemaakt</li>
+                <li><b>✓ Programma gegenereerd</b> — heat-carrousel toont alle ritten</li>
+                <li><b>✓ Lotingen voor afstand 1</b> zijn vooraf gedaan (kleur tabs check)</li>
+                <li><b>✓ Test-import van CSV</b> samen met Geert vóór de eerste echte heat</li>
+                <li><b>✓ Print-rapport "Heatlijsten"</b> achter de hand voor de jury</li>
+                <li><b>✓ Adem rustig</b> — alles is ongedaan te maken behalve "Vastleggen"</li>
+            </ul>
+        </section>
+
+    </div>
+
+    <div class="voet">
+        InlineComp Operator &middot; Quick Reference &middot;
+        Bij twijfel of paniek: <b>vraag Geert</b> (hij staat te speaken, je mag 'm even storen)
+    </div>
+
+</div>
+</body>
+</html>
