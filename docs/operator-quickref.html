@@ -184,49 +184,53 @@ table.compact th {
     <div class="kolommen">
 
         <section>
-            <h2><span class="stap-nr">1</span>Per heat — tijden invoeren</h2>
-            <p>Tab <span class="tab">Live</span> openen. Bovenin staat de heat-carrousel; rechts in de pijl-knoppen of dropdown door bladeren.</p>
+            <h2><span class="stap-nr">1</span>Loting maken (tekensluiting voorbij!)</h2>
+            <p>Pas <b>nadat de tekentermijn voor een afstand is gesloten</b> mag je loten. Niet-getekende rijders mogen niet in de heats. Voor sommige DC's heeft Geert de loting al gedaan; voor andere doe jij dat tijdens de wedstrijd zodra de tekentermijn van die DC sluit.</p>
+            <ol>
+                <li>Tab <span class="tab">Startlijst</span> → kies de juiste DC en afstand</li>
+                <li>Bij seeding-methode kiezen:
+                    <ul>
+                        <li><b>Eerste afstand van een DC</b> (of enkele afstand) → <b>serie-klassement</b></li>
+                        <li><b>Tweede afstand</b> (alleen 4 DC's) → <b>tussenklassement</b></li>
+                    </ul>
+                </li>
+                <li>Klik <span class="knop oranje">🎲 Genereer startlijst</span></li>
+            </ol>
+            <div class="tip">💡 Status-badges naast namen: <b style="color:#2e7d32">Bevestigd</b> = doet mee · <b style="color:#e65100">Niet bevestigd</b> = nog niet door KNSB bevestigd · <b style="color:#b71c1c">Niet getekend</b> = NIET in de loting opnemen.</div>
+        </section>
+
+        <section>
+            <h2><span class="stap-nr">2</span>Per heat — tijden invoeren</h2>
+            <p>Tab <span class="tab">Live</span>. Heat-carrousel bovenin; bladeren met <b>← →</b> of pijl-knoppen.</p>
             <ol>
                 <li>Klik <span class="knop">📥 Import</span> bovenaan de heat-kaart</li>
-                <li>Kies de juiste <b>Map</b> (gefilterd op naam-zoekveld) en het juiste <b>CSV-bestand</b> (sorteer op nieuwste 🆕)</li>
-                <li>Klik <b>Overnemen</b> → tijden vullen automatisch in op startnummer</li>
-                <li>Check de tabel; bij sancties: kies in dropdown achter naam (zie achterkant)</li>
+                <li>Kies <b>Map</b> (filter via 🔍-veld) + <b>CSV-bestand</b> (sorteer op nieuwste 🆕)</li>
+                <li><b>Overnemen</b> → tijden vullen op startnummer</li>
+                <li>Check de tabel; bij sancties: dropdown achter naam (zie achterkant)</li>
                 <li>Klik <span class="knop oranje">💾 Opslaan</span></li>
             </ol>
-            <div class="tip">💡 De volgende lege heat wordt automatisch geopend na opslaan. Zelf bladeren mag ook met <b>← →</b> toetsen of de pijl-knoppen.</div>
+            <div class="tip">💡 Volgende lege heat opent automatisch na opslaan.</div>
         </section>
 
         <section>
-            <h2><span class="stap-nr">2</span>Hele ronde compleet</h2>
-            <p>Wanneer alle heats van een ronde (Series, KF of HF) tijden hebben, verschijnt onderaan automatisch:</p>
-            <p style="text-align:center"><span class="knop">↻ Hergeneer KF</span> / <span class="knop">↻ Hergeneer HF</span> / <span class="knop">↻ Hergeneer Finale</span></p>
-            <p>Klik 'm zodra de ronde klaar is — de volgende ronde wordt geseed op basis van de Q+q-doorstroom (winnaar per heat + tijdsnelsten).</p>
-            <div class="tip">💡 Bij One Lap / 500m gebruikt internationaal het bracket-pattern: heats {1+laatst}, {2+voorlaatst}, ... gaan samen door. Geen actie nodig — gebeurt automatisch.</div>
+            <h2><span class="stap-nr">3</span>Hele ronde compleet</h2>
+            <p>Zodra alle heats van een ronde (Series/KF/HF) tijden hebben, verschijnt onderaan automatisch:</p>
+            <p style="text-align:center"><span class="knop">↻ Hergeneer KF</span> &middot; <span class="knop">↻ Hergeneer HF</span> &middot; <span class="knop">↻ Hergeneer Finale</span></p>
+            <p>Klikken zodra de ronde klaar is — volgende ronde wordt geseed op Q+q-doorstroom.</p>
+            <div class="tip">💡 Bij One Lap / 500m: bracket-pattern (heats {1+laatst}, {2+voorlaatst}, ...) gebeurt automatisch.</div>
         </section>
 
         <section>
-            <h2><span class="stap-nr">3</span>Afstand klaar — uitslag vastleggen</h2>
+            <h2><span class="stap-nr">4</span>Afstand klaar — uitslag vastleggen</h2>
             <p>Wanneer alle ronden van een afstand verwerkt zijn:</p>
             <ol>
                 <li>Tab <span class="tab">Uitslag</span> openen</li>
-                <li>Kies de juiste categorie (rij 1 tabs) en afstand (rij 2 tabs)</li>
-                <li>Controleer of de tabel klopt (kleurenstatus boven de tabs)</li>
+                <li>Kies categorie (rij 1) en afstand (rij 2)</li>
+                <li>Controleer de tabel</li>
                 <li>Klik <span class="knop oranje">🏆 Vastleggen</span> onderaan</li>
             </ol>
-            <p>Tab kleurt <b style="color:var(--groen)">groen</b> = bevestigd. <b style="color:#a06400">Geel</b> = klaar maar nog niet bevestigd. <b style="color:#888">Grijs</b> = nog onvolledig.</p>
-        </section>
-
-        <section>
-            <h2><span class="stap-nr">4</span>Tweede afstand loten (4 DC's)</h2>
-            <p>Sommige DC's hebben een tweede afstand die geseed moet worden op basis van het tussenklassement. Dit doe je <b>na</b> het vastleggen van de eerste afstand:</p>
-            <ol>
-                <li>Tab <span class="tab">Startlijst</span> openen</li>
-                <li>Kies de juiste DC en de <b>tweede</b> afstand</li>
-                <li>Bij seeding-methode: kies <b>tussenklassement</b></li>
-                <li>Klik <span class="knop oranje">🎲 Genereer startlijst</span></li>
-            </ol>
-            <p>Daarna terug naar <span class="tab">Live</span> en flow vanaf stap 1 voor de heats van de tweede afstand.</p>
-            <div class="tip">💡 Voor de overige DC's is de loting al door Geert vooraf gedaan op serie-klassement.</div>
+            <p>Tab-kleur: <b style="color:var(--groen)">groen</b> = bevestigd · <b style="color:#a06400">geel</b> = klaar maar niet bevestigd · <b style="color:#888">grijs</b> = onvolledig.</p>
+            <div class="alert">⚠ Pas <b>nadat</b> een afstand vastgelegd is kun je voor diezelfde DC de tweede afstand loten op tussenklassement.</div>
         </section>
 
         <section>
@@ -234,10 +238,24 @@ table.compact th {
             <p>Wanneer <b>alle afstanden</b> van een DC zijn bevestigd:</p>
             <ol>
                 <li>Tab <span class="tab">Uitslag</span> → <span class="tab">🏆 Klassement</span></li>
-                <li>Bij gelijke punten: tie-breaker bovenaan instellen (Geert heeft die meestal vooraf op de juiste afstand gezet — laten staan tenzij hij iets anders zegt)</li>
+                <li>Tie-breaker bovenaan: laat staan tenzij Geert iets anders zegt</li>
                 <li>Klik <span class="knop oranje">🏆 Klassement vastleggen</span></li>
             </ol>
-            <p>Het klassement verschijnt direct in /Public, /Coach en de print-tab.</p>
+            <p>Verschijnt direct in /Public, /Coach en de print-tab.</p>
+        </section>
+
+        <section>
+            <h2>Volgorde-overzicht voor één DC</h2>
+            <ol style="margin-left:0;padding-left:18px">
+                <li><b>Tekensluiting afstand 1</b> — Geert (of jij) bevestigt sluiting</li>
+                <li>Loting afstand 1 (serie-klassement) — stap 1</li>
+                <li>Tijden afstand 1 — stap 2 + 3 (per ronde)</li>
+                <li>Vastleggen afstand 1 — stap 4</li>
+                <li><b>Alleen voor 4 DC's:</b> loting afstand 2 (tussenklassement) — stap 1</li>
+                <li>Tijden afstand 2 — stap 2 + 3</li>
+                <li>Vastleggen afstand 2 — stap 4</li>
+                <li>Klassement vastleggen — stap 5</li>
+            </ol>
         </section>
 
         <section>
@@ -293,10 +311,10 @@ table.compact th {
             <ul style="column-count:2;column-gap:18px;margin:4px 0">
                 <li><b>✓ Inloggen werkt</b> op de PC die je gaat gebruiken</li>
                 <li><b>✓ Wedstrijd geselecteerd</b> in de dropdown rechtsboven</li>
-                <li><b>✓ Tijdschema klaar</b> — Geert heeft 'm vooraf gemaakt</li>
-                <li><b>✓ Programma gegenereerd</b> — heat-carrousel toont alle ritten</li>
-                <li><b>✓ Lotingen voor afstand 1</b> zijn vooraf gedaan (kleur tabs check)</li>
-                <li><b>✓ Test-import van CSV</b> samen met Geert vóór de eerste echte heat</li>
+                <li><b>✓ Tijdschema + programma</b> staan klaar (heat-carrousel toont alle ritten)</li>
+                <li><b>✓ Vraag Geert per DC:</b> wanneer sluit de tekentermijn? Welke heeft hij al geloot?</li>
+                <li><b>✓ Reken op extra werk:</b> niet-getekende rijders moet je voor het loten checken (status-badges in Startlijst)</li>
+                <li><b>✓ Test-loting + test-import van CSV</b> samen met Geert vóór de eerste echte heat</li>
                 <li><b>✓ Print-rapport "Heatlijsten"</b> achter de hand voor de jury</li>
                 <li><b>✓ Adem rustig</b> — alles is ongedaan te maken behalve "Vastleggen"</li>
             </ul>
