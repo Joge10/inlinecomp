@@ -3325,35 +3325,41 @@ async function _liveImportLaad(ritIdx) {
     for (const row of rows) csvMap.set(row.nr, row);
 
     let gevonden = 0;
-    // Afvalkoers-bescherming: voor rijders die via de UI al een afval-rang
-    // hebben gekregen (= afgevallen) zijn de rondes handmatig door admin
-    // ingevoerd. Die mogen NIET door MyLaps-CSV worden overschreven —
-    // ze representeren tot welke ronde de rijder mee heeft gereden, niet
-    // de transponder-rondes (die kunnen er minder zijn als de rijder uit
-    // koers is gehaald). Tijd mag wel ververst worden voor het archief.
+    // Eliminatie-bescherming: rijders die "uit de race" zijn gezet door de
+    // admin (via afval-paneel of een eliminerende sanctie) hebben hun rondes
+    // én tijd HANDMATIG bepaald. Een CSV-import zou:
+    //   - rondes overschrijven met transponder-rondes (te laag — rijder
+    //     was al uit) → verkeerde sortering
+    //   - tijd overschrijven met transponder-tijd (geen valide finish) →
+    //     breekt ex-aequo binnen dezelfde elimination-ronde, wat juist het
+    //     hele punt van de manuele input is
+    // Daarom skippen we voor deze rijders BEIDE updates uit de CSV.
     const isAfvalkoers = rit.race_type === 'afvalkoers';
     for (const r of rit.rijders) {
         if (r.startnummer == null) continue;
         const csvRij = csvMap.get(r.startnummer);
         if (!csvRij) continue;
         gevonden++;
-        const tijdVal   = csvRij.tijd_ms ? _msTijdNaarDisplay(csvRij.tijd_ms) : '';
+        const tijdVal = csvRij.tijd_ms ? _msTijdNaarDisplay(csvRij.tijd_ms) : '';
 
-        // Beschermings-conditie: bij afvalkoers-afgevallene → rondes niet
-        // overschrijven. Geldt ook als handmatige rondes-input al ingevuld is
-        // (admin heeft expliciet iets gezet).
-        const beschermRondes = isAfvalkoers && r.afval_rang != null;
-        const rondenVal = (!beschermRondes && csvRij.ronden != null)
+        // Eliminatie-detectie: afvalkoers met afval_rang OF tijd-wissende
+        // sanctie (DNF, DQ-TF, DQ-SF, DQ-DF, DNS — al gedefinieerd in
+        // _SANCTIE_WIST_TIJD voor de save-flow).
+        const isAfgevallen = (isAfvalkoers && r.afval_rang != null)
+                          || _SANCTIE_WIST_TIJD.has(r.sanctie ?? '');
+
+        const rondenVal = (!isAfgevallen && csvRij.ronden != null)
             ? String(csvRij.ronden) : null;
 
         // Lokale state bijwerken (zodat linker panel herbouwt met juiste rondes)
-        if (!beschermRondes && csvRij.ronden != null) r.rondes = csvRij.ronden;
+        if (!isAfgevallen && csvRij.ronden != null) r.rondes = csvRij.ronden;
 
-        // Tijd + rondes invullen; sanctie ongemoeid laten
+        // Tijd + rondes invullen; sanctie ongemoeid laten.
+        // Bij afgevallen rijder: zowel tijd als rondes overslaan.
         [`[data-entry="${r.entry_id}"]`, `[data-panel-entry="${r.entry_id}"]`].forEach(cssSelStr => {
             document.querySelectorAll(cssSelStr).forEach(rij => {
                 const t = rij.querySelector('.live-tijd-inp');
-                if (t && t !== document.activeElement) t.value = tijdVal;
+                if (t && t !== document.activeElement && !isAfgevallen) t.value = tijdVal;
                 if (rondenVal != null) {
                     const rnInp = rij.querySelector('.live-rondes-inp');
                     if (rnInp) rnInp.value = rondenVal;
@@ -3644,14 +3650,19 @@ async function _liveOpslaanRit(ritIdx) {
         const rondesInp  = rij?.querySelector('.live-rondes-inp');
         const rondes     = rondesInp ? (rondesInp.value !== '' ? (parseInt(rondesInp.value) || null) : null) : (r.rondes ?? null);
 
-        // Bij afvalkoers: afval-state wint van DOM-sanctie/tijd (anders zou by-fault DQ-TF
-        // door _SANCTIE_WIST_TIJD de tijd wegblazen, terwijl we 'm willen bewaren).
+        // Bij afvalkoers: afval-state wint van DOM-sanctie/tijd. Voor een
+        // afgevallen rijder (by-decision OF by-fault) zetten we tijd_ms op
+        // NULL — de transponder heeft mogelijk nog tijden geregistreerd ná
+        // het uit-de-race-halen, maar die zijn niet representatief en zouden
+        // de ex-aequo binnen dezelfde elimination-ronde breken bij de uitslag-
+        // sortering (rondes-DESC → tijd-ASC). Geen tijd = ex-aequo blijft
+        // intact zoals admin bedoeld heeft via de handmatige ronde-input.
         const afval = afvalMap.get(r.entry_id);
         if (isAfvalkoers && afval) {
             return {
                 entry_id:   r.entry_id,
-                tijd_ms:    tijdMs ?? null,           // tijd uit CSV mag blijven voor archief
-                sanctie:    afval.sanctie || null,    // DQ-TF voor by-fault, anders null
+                tijd_ms:    null,                    // afgevallen → geen valide finish-tijd
+                sanctie:    afval.sanctie || null,   // DQ-TF voor by-fault, anders null
                 rondes,
                 afval_rang: afval.plek,
             };
