@@ -174,8 +174,9 @@ if ($action === 'programma') {
         if (!$tsId) { echo json_encode([]); exit; }
 
         $stmt = $pdo->prepare("
-            SELECT r.volgorde, r.rit_naam, r.ronde_type, r.heat_nr, r.dc_naam,
-                   r.combi_group,
+            SELECT r.volgorde AS rit_volgorde, r.rit_naam, r.ronde_type, r.heat_nr, r.dc_naam,
+                   r.combi_group, r.blok_id,
+                   b.volgorde AS blok_volgorde,
                    b.blok_type, b.tijdstip, b.duur, b.heat_duur, b.opmerking,
                    h.id AS heat_id,
                    h.ronde AS heat_ronde,
@@ -192,7 +193,7 @@ if ($action === 'programma') {
             LEFT JOIN tijdschema_blokken b ON b.id = r.blok_id
             LEFT JOIN heats h ON h.tijdschema_rit_id = r.id AND h.competition_id = ?
             WHERE r.tijdschema_id = ?
-            ORDER BY r.volgorde
+            ORDER BY b.volgorde, r.volgorde
         ");
         $stmt->execute([$compId, $tsId]);
         $rittenRaw = $stmt->fetchAll(PDO::FETCH_ASSOC);
@@ -270,15 +271,44 @@ if ($action === 'programma') {
             $ritten[] = $r;
         }
 
-        // Blokken (pauze, inrijden, etc.)
+        // Blokken (pauze, inrijden, etc.). inrijd_cats is JSON-array van
+        // dc_id-strings; we resolven die naar leesbare dc-namen zodat de
+        // frontend geen extra lookup hoeft te doen.
         $blStmt = $pdo->prepare("
-            SELECT volgorde, blok_type, duur, tijdstip, opmerking
+            SELECT id, volgorde, blok_type, duur, heat_duur, inrijd_cats, tijdstip, opmerking
             FROM tijdschema_blokken
             WHERE tijdschema_id = ? AND blok_type != 'ronde'
             ORDER BY volgorde
         ");
         $blStmt->execute([$tsId]);
         $blokken = $blStmt->fetchAll(PDO::FETCH_ASSOC);
+
+        // Verzamel alle dc_ids uit inrijd_cats en resolve naar namen in 1 query
+        $dcIds = [];
+        foreach ($blokken as $b) {
+            if (!empty($b['inrijd_cats'])) {
+                $arr = json_decode($b['inrijd_cats'], true);
+                if (is_array($arr)) foreach ($arr as $id) $dcIds[(string)$id] = true;
+            }
+        }
+        $dcNamen = [];
+        if ($dcIds) {
+            $ph = implode(',', array_fill(0, count($dcIds), '?'));
+            $dn = $pdo->prepare("SELECT id, name FROM distance_combinations WHERE id IN ($ph)");
+            $dn->execute(array_keys($dcIds));
+            foreach ($dn->fetchAll(PDO::FETCH_ASSOC) as $r) $dcNamen[(string)$r['id']] = $r['name'];
+        }
+        foreach ($blokken as &$b) {
+            $b['inrijd_cat_namen'] = '';
+            if (!empty($b['inrijd_cats'])) {
+                $arr = json_decode($b['inrijd_cats'], true);
+                if (is_array($arr)) {
+                    $namen = array_map(fn($id) => $dcNamen[(string)$id] ?? (string)$id, $arr);
+                    $b['inrijd_cat_namen'] = implode(', ', $namen);
+                }
+            }
+        }
+        unset($b);
 
         echo json_encode(['ritten' => $ritten, 'blokken' => $blokken], JSON_UNESCAPED_UNICODE);
     } catch (Throwable $e) {
@@ -1510,6 +1540,20 @@ select:focus, input:focus { border-color: var(--middenblauw); outline: none; }
     padding: 6px 0; font-size: .85rem; color: #888;
     border-bottom: 1px solid #f0f2f5; font-style: italic;
 }
+/* ── Programma-blokken (pauze, inrijden, ceremonie, herstart, start) ── */
+.prog-blok-rij { background:#e8eaf6; border-radius:6px; padding:6px 10px;
+                 margin:6px 0; font-size:.85rem; color:#333; }
+.prog-blok-top { display:flex; flex-wrap:wrap; align-items:baseline; gap:.5rem; }
+.prog-blok-rij .prog-blok-tijd { color:#666; font-variant-numeric:tabular-nums; }
+.prog-blok-rij .prog-blok-titel { font-weight:600; }
+.prog-blok-rij .prog-blok-duur { color:#555; font-size:.8rem; }
+.prog-blok-rij .prog-blok-opm { color:#555; font-style:italic; }
+.prog-blok-rij .prog-blok-cats { margin-top:2px; padding-left:1.4rem; color:#555; font-size:.78rem; }
+.prog-blok-rij.prog-blok-pauze { background:#fff3e0; }
+.prog-blok-rij.prog-blok-inrijden { background:#e3f2fd; }
+.prog-blok-rij.prog-blok-wedstrijdstart { background:#e8f5e9; }
+.prog-blok-rij.prog-blok-ceremonie { background:#fff8e1; }
+.prog-blok-rij.prog-blok-herstart { background:#ffebee; }
 /* ── Gecombineerde ritten: kader rondom de groep met uitleg-kopje ── */
 .prog-combi-box {
     border: 2px solid #2E75B6;
@@ -2428,12 +2472,54 @@ function renderResultaat(data, snr, prog) {
             html += '<div class="tab-content active" data-tab="programma"><div class="kaart-sectie">';
             html += '<div class="kaart-sectie-titel">Wedstrijdprogramma</div>';
             if (prog.ritten?.length) {
+                // Interleave ritten en niet-ronde blokken (pauze, inrijden,
+                // wedstrijdstart, ceremonie, herstart) op blok_volgorde →
+                // rit_volgorde. Blokken krijgen rv=9999 zodat ze ná de ritten
+                // met dezelfde blok_volgorde komen — match coach + admin.
+                const items = [];
+                for (const r of (prog.ritten || [])) {
+                    items.push({
+                        type:'rit', data:r,
+                        bv: r.blok_volgorde ?? 9999,
+                        rv: r.rit_volgorde  ?? 0,
+                    });
+                }
+                for (const b of (prog.blokken || [])) {
+                    items.push({ type:'blok', data:b, bv: b.volgorde ?? 9999, rv: 9999 });
+                }
+                items.sort((a,b) => a.bv !== b.bv ? a.bv - b.bv : a.rv - b.rv);
+
+                const hhmm = v => { if (!v) return ''; const m = String(v).match(/(\d{1,2}:\d{2})/); return m ? m[1] : ''; };
+                const blokIcoon = t => ({pauze:'⏸',inrijden:'🛼',wedstrijdstart:'🏁',ceremonie:'🏆',herstart:'🔄'}[t] || '🕓');
+                const blokLabel = t => ({pauze:'Pauze',inrijden:'Inrijden',wedstrijdstart:'Wedstrijd start',ceremonie:'Ceremonie',herstart:'Herstart'}[t] || (t || '').toUpperCase());
+
                 let nr = 0;
                 // Combi-state: ritten met dezelfde combi_group worden samen
                 // in één kader getoond. Bij wissel van groep sluiten we de
                 // oude box af en openen eventueel een nieuwe.
                 let vorigeCombi = null;
-                for (const rit of prog.ritten) {
+                for (const it of items) {
+                    if (it.type === 'blok') {
+                        if (vorigeCombi !== null) { html += `</div></div>`; vorigeCombi = null; }
+                        const b = it.data;
+                        const t = (b.blok_type || '').toLowerCase();
+                        const tijd = hhmm(b.tijdstip);
+                        const tijdHtml = tijd ? `<span class="prog-blok-tijd">🕓 ${esc(tijd)}</span>` : '';
+                        const duurHtml = b.duur ? `<span class="prog-blok-duur">${b.duur} min</span>` : '';
+                        const opmHtml  = b.opmerking ? `<span class="prog-blok-opm"> — ${esc(b.opmerking)}</span>` : '';
+                        const catsHtml = b.inrijd_cat_namen ? `<div class="prog-blok-cats">${esc(b.inrijd_cat_namen)}</div>` : '';
+                        html += `<div class="prog-blok-rij prog-blok-${esc(t)}">
+                            <div class="prog-blok-top">
+                                ${tijdHtml}
+                                <span class="prog-blok-titel">${blokIcoon(t)} ${esc(blokLabel(t))}</span>
+                                ${duurHtml}
+                                ${opmHtml}
+                            </div>
+                            ${catsHtml}
+                        </div>`;
+                        continue;
+                    }
+                    const rit = it.data;
                     nr++;
                     const combi = rit.combi_group ? parseInt(rit.combi_group) : null;
                     if (combi !== vorigeCombi) {

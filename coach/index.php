@@ -423,14 +423,42 @@ if ($action === 'programma') {
         // Niet-ronde blokken (pauze / ceremonie / inrijden / etc.) —
         // inclusief id en volgorde zodat de frontend ze op hun
         // blok_volgorde-positie kan tussenvoegen tussen de ritten.
+        // inrijd_cats is JSON-array van dc_id-strings; we resolven die
+        // server-side naar dc-namen.
         $blStmt = $pdo->prepare("
-            SELECT id, volgorde, blok_type, duur, tijdstip, opmerking
+            SELECT id, volgorde, blok_type, duur, heat_duur, inrijd_cats, tijdstip, opmerking
             FROM tijdschema_blokken
             WHERE tijdschema_id = ? AND blok_type != 'ronde'
             ORDER BY volgorde
         ");
         $blStmt->execute([$tsId]);
         $blokken = $blStmt->fetchAll(PDO::FETCH_ASSOC);
+
+        $dcIds = [];
+        foreach ($blokken as $b) {
+            if (!empty($b['inrijd_cats'])) {
+                $arr = json_decode($b['inrijd_cats'], true);
+                if (is_array($arr)) foreach ($arr as $id) $dcIds[(string)$id] = true;
+            }
+        }
+        $dcNamen = [];
+        if ($dcIds) {
+            $ph = implode(',', array_fill(0, count($dcIds), '?'));
+            $dn = $pdo->prepare("SELECT id, name FROM distance_combinations WHERE id IN ($ph)");
+            $dn->execute(array_keys($dcIds));
+            foreach ($dn->fetchAll(PDO::FETCH_ASSOC) as $r) $dcNamen[(string)$r['id']] = $r['name'];
+        }
+        foreach ($blokken as &$b) {
+            $b['inrijd_cat_namen'] = '';
+            if (!empty($b['inrijd_cats'])) {
+                $arr = json_decode($b['inrijd_cats'], true);
+                if (is_array($arr)) {
+                    $namen = array_map(fn($id) => $dcNamen[(string)$id] ?? (string)$id, $arr);
+                    $b['inrijd_cat_namen'] = implode(', ', $namen);
+                }
+            }
+        }
+        unset($b);
 
         echo json_encode(['ritten' => $ritten, 'blokken' => $blokken], JSON_UNESCAPED_UNICODE);
     } catch (Throwable $e) {
@@ -1228,7 +1256,18 @@ select.sel {
 .badge-finale  { background:#d32f2f; }
 .badge-ru      { background:#00897b; }
 .blok-rij { background:#e8eaf6; border-radius:6px; padding:6px 10px;
-            margin-bottom:6px; font-size:.85rem; color:#333; font-style:italic; }
+            margin-bottom:6px; font-size:.85rem; color:#333; }
+.blok-rij-top { display:flex; flex-wrap:wrap; align-items:baseline; gap:.5rem; }
+.blok-rij .blok-tijd { color:#666; font-variant-numeric:tabular-nums; }
+.blok-rij .blok-titel { font-weight:600; }
+.blok-rij .blok-duur { color:#555; font-size:.8rem; }
+.blok-rij .blok-opm { color:#555; font-style:italic; }
+.blok-rij .blok-cats { margin-top:2px; padding-left:1.4rem; color:#555; font-size:.78rem; }
+.blok-rij.blok-pauze { background:#fff3e0; }
+.blok-rij.blok-inrijden { background:#e3f2fd; }
+.blok-rij.blok-wedstrijdstart { background:#e8f5e9; }
+.blok-rij.blok-ceremonie { background:#fff8e1; }
+.blok-rij.blok-herstart { background:#ffebee; }
 
 /* Tabs (1-op-1 uit /public) */
 .tabs {
@@ -1803,6 +1842,36 @@ function renderProgramma() {
         const m = s.match(/(\d{1,2}:\d{2})/);
         return m ? m[1] : '';
     };
+    // Render één tijdschema-blok (pauze / inrijden / wedstrijdstart /
+    // ceremonie / herstart). Toont icoon, tijdstip, duur en (voor inrijden)
+    // de cats + (voor pauze/herstart) eventuele opmerking. Match in stijl
+    // de admin-tijdschema rendering zodat coach hetzelfde ziet als wat in
+    // het programma is geconfigureerd.
+    const blokHtml = b => {
+        const t = (b.blok_type || '').toLowerCase();
+        const tijd = hhmm(b.tijdstip);
+        const tijdPrefix = tijd ? `<span class="blok-tijd">🕓 ${esc(tijd)}</span>` : '';
+        const duur = b.duur ? `<span class="blok-duur">${b.duur} min</span>` : '';
+        const opm  = b.opmerking ? `<span class="blok-opm"> — ${esc(b.opmerking)}</span>` : '';
+        const cats = b.inrijd_cat_namen ? `<div class="blok-cats">${esc(b.inrijd_cat_namen)}</div>` : '';
+        let icoon, lbl;
+        if      (t === 'pauze')          { icoon = '⏸'; lbl = 'Pauze'; }
+        else if (t === 'inrijden')       { icoon = '🛼'; lbl = 'Inrijden'; }
+        else if (t === 'wedstrijdstart') { icoon = '🏁'; lbl = 'Wedstrijd start'; }
+        else if (t === 'ceremonie')      { icoon = '🏆'; lbl = 'Ceremonie'; }
+        else if (t === 'herstart')       { icoon = '🔄'; lbl = 'Herstart'; }
+        else                              { icoon = '🕓'; lbl = (b.blok_type || '').toUpperCase(); }
+        return `<div class="blok-rij blok-${esc(t)}">
+            <div class="blok-rij-top">
+                ${tijdPrefix}
+                <span class="blok-titel">${icoon} ${esc(lbl)}</span>
+                ${duur}
+                ${opm}
+            </div>
+            ${cats}
+        </div>`;
+    };
+
     const ritHtml = r => {
         const heatSnrs = (r.heat_snrs || []).map(n => parseInt(n));
         const mijnInHeat = heatSnrs.filter(n => mijnSnrs.has(n)).sort((a,b) => a-b);
@@ -1841,11 +1910,7 @@ function renderProgramma() {
     for (const item of allesGesorteerd) {
         if (item.type === 'blok') {
             if (vorigeCombi !== null) { html += `</div></div>`; vorigeCombi = null; }
-            const b = item.data;
-            const tijd = hhmm(b.tijdstip);
-            const lbl = (b.blok_type || '').toUpperCase();
-            const tijdPrefix = tijd ? `🕓 ${esc(tijd)} · ` : '';
-            html += `<div class="blok-rij">${tijdPrefix}${esc(lbl)}${b.opmerking ? ' — ' + esc(b.opmerking) : ''}</div>`;
+            html += blokHtml(item.data);
             continue;
         }
         const r = item.data;
