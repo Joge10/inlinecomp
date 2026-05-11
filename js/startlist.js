@@ -2322,6 +2322,9 @@ function maakHeatGrid(data, methode, ritLookup) {
                 const sanctieBadge = r.vorige_sancties
                     ? `<span class="heat-sanctie-badge" title="${escHtml(r.vorige_sancties)}">${escHtml(r.vorige_sancties)}</span>`
                     : '';
+                const pfBadge = r.vorige_photofinish
+                    ? `<span class="heat-pf-badge" title="Photofinish — tijd via jury-wissel aangepast in een eerdere ronde">📷</span>`
+                    : '';
                 rows += `<tr>` +
                         `<td class="heat-pos">${i + 1}</td>` +
                         `<td class="heat-snr">${r.start_number || ''}</td>` +
