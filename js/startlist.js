@@ -146,7 +146,17 @@ function bouwSlFlow(catCfg, systeem) {
         flow.push({ sleutel: 'kwartfinale',  naam: 'Kwartfinale',  kleur: KLEUREN.kwartfinale  || '#6610f2' });
     if (catCfg.heeft_halve_finale)
         flow.push({ sleutel: 'halve_finale', naam: 'Halve finale', kleur: KLEUREN.halve_finale || '#fd7e14' });
-    if (catCfg.heeft_runner_up)
+    // Runner-up draait PARALLEL uit eerste-ronde-uitvallers — heeft alleen
+    // zin als er een eerste deelnemende ronde IS (heats / KF / HF). Voor
+    // cats die direct in een A-finale starten (te weinig deelnemers, alle
+    // andere rondes uitgevinkt) zou een runner-up alleen na de finale
+    // betekenis hebben, en dan zijn alle rijders al gefinisht. In zo'n
+    // geval slaan we runner-up over — matcht ook het programma-tijdschema,
+    // dat 'm ook niet als rit aanmaakt.
+    const heeftEersteRonde = (catCfg.heeft_heats && catCfg.heeft_heats !== '0')
+                          || catCfg.heeft_kwartfinale
+                          || catCfg.heeft_halve_finale;
+    if (catCfg.heeft_runner_up && heeftEersteRonde)
         flow.push({ sleutel: 'runner_up',    naam: 'Runner-up',    kleur: KLEUREN.runner_up    || '#6c757d' });
     if (systeem === 'full-final') {
         flow.push({ sleutel: 'finale_a', naam: 'A-finale', kleur: KLEUREN.finale_a || '#198754' });
