@@ -595,13 +595,20 @@ async function _bouwStartlijstDrukInternal(optData) {
         const extraCls = combiGrp ? (extraClass + ' pr-card-combi').trim() : extraClass;
         let rows = '';
         (heat.rijders ?? []).forEach((r, i) => {
-            const opm = r.vorige_sancties ?? '';
+            const opm   = r.vorige_sancties ?? '';
+            // Photofinish-marker uit eerdere ronde: visueel signaal dat de
+            // tijd van deze rijder ergens via jury-wissel is aangepast — bij
+            // q-kwalificatie kan de transponder-tijd misleiden.
+            const pfIco = r.vorige_photofinish
+                ? `<span class="pr-pf-icon" title="Photofinish — tijd via jury-wissel aangepast in een eerdere ronde">📷</span>`
+                : '';
+            const opmCel = (opm ? esc(opm) : '') + (pfIco && opm ? ' ' : '') + pfIco;
             rows += `<tr>
                 <td class="pr-pos">${i + 1}</td>
                 <td class="pr-snr">${esc(r.start_number ?? '')}</td>
                 <td class="pr-cat">${esc(r.categorie ?? r.category ?? '')}</td>
                 <td class="pr-naam">${esc(r.full_name ?? '')}</td>
-                <td class="pr-opm">${esc(opm)}</td>
+                <td class="pr-opm">${opmCel}</td>
             </tr>`;
         });
         return `<div class="pr-card${extraCls ? ' ' + extraCls : ''}">
@@ -629,13 +636,17 @@ async function _bouwStartlijstDrukInternal(optData) {
             const ritBadge = volg != null ? `<span class="pr-ritnr">${volg}</span>` : '';
             let rows = '';
             (heat.rijders ?? []).forEach((r, i) => {
-                const opm = r.vorige_sancties ?? '';
+                const opm   = r.vorige_sancties ?? '';
+                const pfIco = r.vorige_photofinish
+                    ? `<span class="pr-pf-icon" title="Photofinish — tijd via jury-wissel aangepast in een eerdere ronde">📷</span>`
+                    : '';
+                const opmCel = (opm ? esc(opm) : '') + (pfIco && opm ? ' ' : '') + pfIco;
                 rows += `<tr>
                     <td class="pr-pos">${i + 1}</td>
                     <td class="pr-snr">${esc(r.start_number ?? '')}</td>
                     <td class="pr-cat">${esc(r.categorie ?? r.category ?? '')}</td>
                     <td class="pr-naam">${esc(r.full_name ?? '')}</td>
-                    <td class="pr-opm">${esc(opm)}</td>
+                    <td class="pr-opm">${opmCel}</td>
                 </tr>`;
             });
             return `<div class="pr-combi-kolom">
@@ -747,6 +758,8 @@ col.pr-col-opm{width:60px}
 .pr-combi-tabel col.pr-col-naam{width:auto}
 /* A-finale altijd aan de linkerkantlijn (grid-kolom 1) */
 .pr-card-links{grid-column-start:1}
+/* Photofinish-icoon in Opm.-kolom — puur sec het 📷-emoji. */
+.pr-pf-icon{margin-left:3px}
 @media print{
   body{margin:.5cm .8cm}
   .pr-card{break-inside:avoid}
@@ -1327,6 +1340,11 @@ async function genereerRonde1(cacheKey) {
         zetDistTabKleur(distId, true);
         kleurAlleTabsAsync(_slGroepen, el('sl-cat-tabs'));
         vulPrintSelect();
+        // Print-Center cache invalideren — anders zou een open of opnieuw-
+        // geopende modal nog de oude lijst zonder deze loting tonen.
+        if (typeof window.printCenterInvalideerStartlijsten === 'function') {
+            window.printCenterInvalideerStartlijsten();
+        }
         toonSlResultaten(cacheKey, true);
 
     } catch(e) {
@@ -1907,6 +1925,16 @@ function toonSlResultaten(cacheKey, vergrendeld = false) {
                 zetDistTabKleur(distId, false);
                 kleurAlleTabsAsync(_slGroepen, el('sl-cat-tabs'));
                 vulPrintSelect();
+                // Print-Center cache invalideren — wis kan ook uitslagen + klassement
+                // hebben opgeruimd (cascade-keuzes), dus beide invalideren.
+                if (typeof window.printCenterInvalideerStartlijsten === 'function') {
+                    window.printCenterInvalideerStartlijsten();
+                }
+                if (keuzes.wis_uitslag || keuzes.wis_klassement) {
+                    if (typeof window.printCenterInvalideerUitslagen === 'function') {
+                        window.printCenterInvalideerUitslagen();
+                    }
+                }
                 toonAfstandConfig(groep, distId, cache._distNaam ?? '');
             } catch (e) {
                 wisBtn.disabled = false;
@@ -2255,11 +2283,14 @@ function maakHeatGrid(data, methode, ritLookup) {
                     const sanctieBadge = r.vorige_sancties
                         ? `<span class="heat-sanctie-badge" title="${escHtml(r.vorige_sancties)}">${escHtml(r.vorige_sancties)}</span>`
                         : '';
+                    const pfBadge = r.vorige_photofinish
+                        ? `<span class="heat-pf-badge" title="Photofinish — tijd via jury-wissel aangepast in een eerdere ronde">📷</span>`
+                        : '';
                     rows += `<tr>` +
                             `<td class="heat-pos">${pos}</td>` +
                             `<td class="heat-snr">${r.start_number || ''}</td>` +
                             `<td class="heat-cat">${escHtml(r.category || '')}</td>` +
-                            `<td class="heat-naam">${escHtml(r.full_name)}${sanctieBadge}</td>` +
+                            `<td class="heat-naam">${escHtml(r.full_name)}${sanctieBadge}${pfBadge}</td>` +
                             `<td class="heat-tp">${escHtml(tp)}</td></tr>`;
                 } else {
                     rows += `<tr class="heat-row-pm">` +
@@ -2285,7 +2316,7 @@ function maakHeatGrid(data, methode, ritLookup) {
                         `<td class="heat-pos">${i + 1}</td>` +
                         `<td class="heat-snr">${r.start_number || ''}</td>` +
                         `<td class="heat-cat">${escHtml(r.category || '')}</td>` +
-                        `<td class="heat-naam">${escHtml(r.full_name)}${sanctieBadge}</td>` +
+                        `<td class="heat-naam">${escHtml(r.full_name)}${sanctieBadge}${pfBadge}</td>` +
                         `<td class="heat-tp">${escHtml(tp)}</td></tr>`;
             });
         }

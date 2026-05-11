@@ -167,7 +167,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'GET') {
                 res.rondes,
                 res.punten,
                 res.sanctie,
-                res.afval_rang
+                res.afval_rang,
+                res.is_photofinish,
+                he.person_license
             FROM heat_entries he
             JOIN persons p ON p.license_key = he.person_license
             LEFT JOIN transponders tp ON tp.person_license = he.person_license
@@ -192,6 +194,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'GET') {
                         'startpositie'      => (int)$r['startpositie'],
                         'startnummer'       => $r['startnummer'] !== null ? (int)$r['startnummer'] : null,
                         'full_name'         => $r['full_name'],
+                        'person_license'    => $r['person_license'],
                         'transponder_actief'=> $r['transponder_actief'],
                         'finishpositie'     => $r['finishpositie'] !== null ? (int)$r['finishpositie'] : null,
                         'tijd_ms'           => $r['tijd_ms'] !== null ? (int)$r['tijd_ms'] : null,
@@ -199,6 +202,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'GET') {
                         'punten'            => $r['punten'] !== null ? (float)$r['punten'] : null,
                         'sanctie'           => $r['sanctie'],
                         'afval_rang'        => $r['afval_rang'] !== null ? (int)$r['afval_rang'] : null,
+                        'is_photofinish'    => !empty($r['is_photofinish']) ? 1 : 0,
                     ];
                 }
             }
@@ -355,11 +359,18 @@ if ($action === 'save_rit_results') {
             if (!$accepteertRondes) $rondes = null;
             if (!$accepteertPunten) $punten = null;
 
+            // Photofinish-flag (jury-wissel marker). Komt mee uit de payload
+            // en wordt 1:1 opgeslagen — wissel_posities zet 'm op 1, een
+            // verse save (zonder lokaal _wisselt) zet 'm terug op 0 zodat
+            // re-imports + nieuwe saves de marker correct opschonen.
+            $isPhotofinish = !empty($r['is_photofinish']) ? 1 : 0;
+
             $base = [
-                'entry_id'   => (int)$r['entry_id'],
-                'rondes'     => $rondes,
-                'punten'     => $punten,
-                'afval_rang' => $afvalRang,
+                'entry_id'       => (int)$r['entry_id'],
+                'rondes'         => $rondes,
+                'punten'         => $punten,
+                'afval_rang'     => $afvalRang,
+                'is_photofinish' => $isPhotofinish,
             ];
 
             // Afvalkoers + afval_rang ingevuld → afgevallen rijder. Hier overslaan we de
@@ -460,15 +471,16 @@ if ($action === 'save_rit_results') {
         $pdo->beginTransaction();
 
         $upsert = $pdo->prepare("
-            INSERT INTO results (heat_entry_id, finishpositie, tijd_ms, rondes, punten, sanctie, afval_rang)
-            VALUES (?, ?, ?, ?, ?, ?, ?)
+            INSERT INTO results (heat_entry_id, finishpositie, tijd_ms, rondes, punten, sanctie, afval_rang, is_photofinish)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
             ON DUPLICATE KEY UPDATE
-                finishpositie = VALUES(finishpositie),
-                tijd_ms       = VALUES(tijd_ms),
-                rondes        = VALUES(rondes),
-                punten        = VALUES(punten),
-                sanctie       = VALUES(sanctie),
-                afval_rang    = VALUES(afval_rang)
+                finishpositie  = VALUES(finishpositie),
+                tijd_ms        = VALUES(tijd_ms),
+                rondes         = VALUES(rondes),
+                punten         = VALUES(punten),
+                sanctie        = VALUES(sanctie),
+                afval_rang     = VALUES(afval_rang),
+                is_photofinish = VALUES(is_photofinish)
         ");
 
         foreach ($alleResultaten as $r) {
@@ -480,6 +492,7 @@ if ($action === 'save_rit_results') {
                 $r['punten'] ?? null,
                 $r['sanctie'],
                 $r['afval_rang'] ?? null,
+                $r['is_photofinish'] ?? 0,
             ]);
         }
 
@@ -1242,6 +1255,97 @@ if ($action === 'genereer_volgende_ronde') {
             'runner_up'    => 4,
         ];
         $rondeNr = $rondeNrMap[$naarRondeType] ?? 2;
+
+        // ── Geen-verandering check ──────────────────────────────────────────
+        // Vergelijk de qualifying-set die we ZOUDEN gaan plaatsen met wie er
+        // NU al in de volgende ronde staat. Bij identieke set → niets doen,
+        // de bestaande KF/HF/finale-resultaten blijven intact.
+        //
+        // Dit voorkomt dat een correctie aan een eerdere ronde (bv. een
+        // vergeten DQ-TF op een rijder die toch niet kwalificeerde) de al
+        // ingevoerde resultaten van opvolgende rondes leeggooit.
+        $nieuweLicenties = [];
+        foreach ($allSlots as $r) {
+            if (!empty($r['person_license'])) $nieuweLicenties[] = $r['person_license'];
+        }
+        if ($isFullFinal) {
+            foreach (($bSlots ?? []) as $r) {
+                if (!empty($r['person_license'])) $nieuweLicenties[] = $r['person_license'];
+            }
+        }
+        sort($nieuweLicenties);
+
+        // Bestaande set: heat_entries van de doel-ronde(s). Bij full-final
+        // vergelijken we finale_a + finale_b samen (omdat regenerate beide
+        // wegblaast).
+        $cmpTypes = [$naarRondeType];
+        if ($isFullFinal) $cmpTypes[] = 'finale_b';
+        $cmpPh = implode(',', array_fill(0, count($cmpTypes), '?'));
+        $bestStmt = $pdo->prepare("
+            SELECT he.person_license
+            FROM heats h
+            JOIN heat_entries he ON he.heat_id = h.id
+            JOIN tijdschema_ritten r ON r.id = h.tijdschema_rit_id
+            WHERE h.competition_id          = ?
+              AND h.distance_combination_id = ?
+              AND (r.distance_id = ? OR (r.distance_id IS NULL AND ? = ''))
+              AND r.ronde_type IN ($cmpPh)
+        ");
+        $bestStmt->execute(array_merge(
+            [$compId, $dcId, $distanceId, $distanceId],
+            $cmpTypes
+        ));
+        $bestaandeLicenties = $bestStmt->fetchAll(PDO::FETCH_COLUMN);
+        sort($bestaandeLicenties);
+
+        if (!empty($bestaandeLicenties) && $bestaandeLicenties === $nieuweLicenties) {
+            // Volgende ronde bestaat al met EXACT dezelfde rijders — laat alle
+            // resultaten staan, doe geen DELETE/INSERT. Client krijgt een vlag
+            // mee zodat hij geen reload triggert (anders flakker je de UI
+            // alsnog onnodig).
+            echo json_encode([
+                'ok'          => true,
+                'ongewijzigd' => true,
+                'heats'       => [],   // client gebruikt deze niet bij ongewijzigd
+            ], JSON_UNESCAPED_UNICODE);
+            exit;
+        }
+
+        // Set verandert WEL — als er al resultaten in de doel-ronde staan
+        // gaan die verloren bij de DELETE. Vraag eerst bevestiging tenzij
+        // de client expliciet `force: true` meestuurt (= dialog al bevestigd).
+        // Tel per ronde-type hoeveel results er bij betrokken zijn zodat de
+        // dialog concreet kan zijn ("KF: 12 resultaten").
+        if (empty($body['force']) && !empty($bestaandeLicenties)) {
+            $resCntStmt = $pdo->prepare("
+                SELECT r.ronde_type, COUNT(res.id) AS aantal_results
+                FROM heats h
+                JOIN heat_entries he ON he.heat_id = h.id
+                JOIN tijdschema_ritten r ON r.id = h.tijdschema_rit_id
+                JOIN results res ON res.heat_entry_id = he.id
+                WHERE h.competition_id          = ?
+                  AND h.distance_combination_id = ?
+                  AND (r.distance_id = ? OR (r.distance_id IS NULL AND ? = ''))
+                  AND r.ronde_type IN ($cmpPh)
+                GROUP BY r.ronde_type
+            ");
+            $resCntStmt->execute(array_merge(
+                [$compId, $dcId, $distanceId, $distanceId],
+                $cmpTypes
+            ));
+            $teWissen = $resCntStmt->fetchAll(PDO::FETCH_ASSOC);
+            if (!empty($teWissen)) {
+                echo json_encode([
+                    'ok'                => true,
+                    'vraag_bevestiging' => true,
+                    'te_wissen'         => $teWissen,
+                    'heats'             => [],
+                ], JSON_UNESCAPED_UNICODE);
+                exit;
+            }
+            // Geen results in doel-ronde (alleen startlijst) → ongevaarlijk,
+            // gewoon doorgaan met de regenerate.
+        }
 
         // ── Verwijder bestaande heats voor deze volgende ronde ──────────────
         // Directe delete op competition + dc + distance + ronde zodat ook
@@ -2173,8 +2277,11 @@ if ($action === 'wissel_posities') {
         // PK sorteert op punten → rondes → tijd, dus rondes-aanpassing is ook nodig voor PK.
         // Bij ongelijke rondes: verliezer krijgt winnaar's rondes + tijd -10ms zodat
         // _berekenPosities (en PK-sort) na rebuild de juiste volgorde geeft.
+        // Beide rijders krijgen is_photofinish=1 — visueel signaal in de
+        // opvolgende startlijsten dat hun transponder-tijd niet meer 1:1
+        // klopt met de officiële finishvolgorde.
         $upd = $pdo->prepare("
-            UPDATE results SET rondes = ?, tijd_ms = ?, finishpositie = ? WHERE id = ?
+            UPDATE results SET rondes = ?, tijd_ms = ?, finishpositie = ?, is_photofinish = 1 WHERE id = ?
         ");
 
         if ($ron1 !== null && $ron2 !== null && $ron1 != $ron2) {

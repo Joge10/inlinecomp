@@ -4263,6 +4263,23 @@ col.live-col-rondes  { width: 40px; }
     background: #fde8e8;
     color: #b71c1c;
 }
+/* Vergrendelde positie na een wissel — operator ziet meteen dat deze rijder
+   al in een swap betrokken is en niet opnieuw kan worden geswapt. Reset
+   gebeurt bij CSV re-import. Subtiel maar herkenbaar (zacht oranje + slot). */
+.live-finish-badge.finish-pos-gewisselt {
+    background: #fff1cc;
+    color: #8a5a00;
+    border: 1px dashed #d49a2c;
+    cursor: help;
+}
+
+/* Photofinish-marker naast naam: rijder wiens tijd door een jury-wissel is
+   aangepast in de direct voorgaande ronde. Puur sec het 📷-emoji — geen
+   achtergrond, geen rand, geen pill — laat het emoji zelf het werk doen. */
+.live-pf-badge {
+    margin-left: 4px;
+    cursor: help;
+}
 
 /* ── Finish positie wissel-dropdown ── */
 .live-finish-sel {
@@ -4479,6 +4496,12 @@ col.live-col-rondes  { width: 40px; }
     border-radius: 3px;
     vertical-align: middle;
     cursor: default;
+}
+/* Photofinish-marker — puur sec het 📷-emoji, zelfde stijl overal. */
+.heat-pf-badge,
+.pr-pf-icon {
+    margin-left: 4px;
+    cursor: help;
 }
 
 /* ── Startlijst: voorlopige indeling badge ── */

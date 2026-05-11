@@ -17,3 +17,4 @@ Deze map bevat éénmalige ALTER-scripts die op bestaande installaties gedraaid 
 | 2026-04-24 | `2026-04-24_organisaties_add_sportity_kanaal.sql` | `sportity_kanaal` kolom op `organisaties` voor per-regio Sportity-kanaalnaam |
 | 2026-04-24 | `2026-04-24_klassement_posities_categorie_verruimen.sql` | `klassement_posities.categorie` van VARCHAR(20) naar VARCHAR(100) voor langere sectie-labels uit NK-tussenstand-PDFs |
 | 2026-04-24 | `2026-04-24_tac_per_categorie.sql` | `tijdschema_afstand_config` krijgt `dc_id`-kolom zodat rankings per categorie verschillen; bestaande rijen blijven als NULL-fallback |
+| 2026-05-10 | `2026-05-10_results_photofinish.sql` | `results.is_photofinish` boolean — markeert per-result resultaten waarvan de tijd door een jury-wissel is aangepast; visueel signaal in opvolgende startlijsten |

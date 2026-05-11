@@ -520,8 +520,10 @@ async function toonUitslagVoorAfstand(groep, afstand) {
                     // zodat de UI consistent is met de print-out.
                     const serieSanc  = (r.alle_sancties ?? []).find(s => s.ronde === 'Serie');
                     const finaleSanc = (r.alle_sancties ?? []).find(s => s.ronde === 'Finale');
-                    const heeftSanctie = (r.alle_sancties?.length || r.sanctie);
-                    const rowClass   = heeftSanctie ? 'u-rij-sanctie' : '';
+                    // Cursief/licht alleen bij rijders die NIET in de uitslag staan
+                    // (rang ontbreekt). DQ-TF / FS / W1 / W2 / RR met rang zijn
+                    // gewone finishers — sanctie wordt elders al getoond.
+                    const rowClass = (r.rang == null) ? 'u-rij-sanctie' : '';
 
                     let dataCols;
                     if (sasActief) {
@@ -648,7 +650,8 @@ async function toonUitslagVoorAfstand(groep, afstand) {
                 const rangTxt    = r.rang    != null ? r.rang    : '—';
                 const tijdTxt    = r.tijd_ms != null ? msTijd(r.tijd_ms) : '—';
                 const sanctieTxt = sanctieLabel(r.sanctie);
-                const rowClass   = sanctieTxt ? 'u-rij-sanctie' : '';
+                // Cursief alleen voor rijders zonder rang (= niet in uitslag).
+                const rowClass   = (r.rang == null) ? 'u-rij-sanctie' : '';
                 html += `<tr class="${rowClass}">
                     <td class="u-col-rang">${rangTxt}</td>
                     <td class="u-col-naam">${escHtml(r.full_name ?? '')}</td>
@@ -718,6 +721,18 @@ async function _uVastleggen(groep, afstand, btnEl) {
                     btnEl.classList.remove('u-vastleg-btn-ok');
                     btnEl.disabled = false;
                 }, 3000);
+            }
+            // Print-Center cache invalideren + lokale uitslag-dropdown
+            // verversen: zojuist vastgelegde uitslag moet zonder pagina-
+            // refresh meteen printbaar zijn (zowel vanuit deze pagina als
+            // vanuit het Print-Center). vulUitslagPrintSelect rebuilt
+            // _uPrintOpties + DOM-dropdown; PC-invalidatie zorgt dat een
+            // (heropende) PC-modal de verse opties oppakt.
+            if (typeof vulUitslagPrintSelect === 'function') {
+                vulUitslagPrintSelect();   // async, geen await nodig
+            }
+            if (typeof window.printCenterInvalideerUitslagen === 'function') {
+                window.printCenterInvalideerUitslagen();
             }
         } else {
             toonBevestigDialog(data.error ?? data.melding ?? 'Fout bij vastleggen', 'Fout');
@@ -1093,7 +1108,10 @@ async function _bouwKlassementInternal(optData) {
             sanctieNoten.push({ naam: r.full_name, items: rijderSancties });
             nootNr = sanctieNoten.length;
         }
-        const rowCls = heeftSanctie ? ' class="pr-rij-sanctie"' : '';
+        // Cursief/licht alleen bij rijders die NIET in het eindklassement zijn
+        // opgenomen (geen rang). Voetnoot (heeftSanctie hierboven) blijft ook
+        // bij gewone finishers met sanctie — die info is nuttig voor de jury.
+        const rowCls = (r.rang == null) ? ' class="pr-rij-sanctie"' : '';
 
         let catCellen = '';
         if (toonCatRang) {
@@ -1311,8 +1329,11 @@ async function _bouwUitslagAfstandInternal(optData) {
             const alleSancties = (r.alle_sancties ?? [])
                 .map(s => `${esc(s.ronde)}:${esc(sanctieLabel(s.sanctie))}`)
                 .join(', ');
-            const heeftSanctie = alleSancties || r.sanctie;
-            const rowCls = heeftSanctie ? ' class="pr-rij-sanctie"' : '';
+            // Cursief/licht alleen bij rijders die NIET in de uitslag staan
+            // (geen rang). DQ-TF/FS-rijders met rang zijn gewone finishers —
+            // de sanctie wordt in de Sanctie-kolom getoond, maar hoeft de
+            // rij niet visueel weg te zetten.
+            const rowCls = (r.rang == null) ? ' class="pr-rij-sanctie"' : '';
             // Cat-rang per categorie-kolom: alleen de kolom van deze
             // rijder z'n eigen categorie wordt ingevuld, rest blijft leeg.
             let catCellen = '';
@@ -1392,8 +1413,8 @@ async function _bouwUitslagAfstandInternal(optData) {
             const alleSancties = (r.alle_sancties ?? [])
                 .map(s => `${esc(s.ronde)}:${esc(sanctieLabel(s.sanctie))}`)
                 .join(', ');
-            const heeftSanctie = alleSancties || r.sanctie;
-            const rowCls = heeftSanctie ? ' class="pr-rij-sanctie"' : '';
+            // Alleen rijders zonder rang (= niet in uitslag) krijgen licht-cursief.
+            const rowCls = (r.rang == null) ? ' class="pr-rij-sanctie"' : '';
             let tdExtra = '', tdTotaal = '';
 
             if (sasActief) {
@@ -1490,8 +1511,8 @@ async function _bouwUitslagAfstandInternal(optData) {
             const alleSancties = (r.alle_sancties ?? [])
                 .map(s => `${esc(s.ronde)}:${esc(sanctieLabel(s.sanctie))}`)
                 .join(', ');
-            const heeftSanctie = alleSancties || r.sanctie;
-            const rowCls = heeftSanctie ? ' class="pr-rij-sanctie"' : '';
+            // Alleen rijders zonder rang (= niet in uitslag) krijgen licht-cursief.
+            const rowCls = (r.rang == null) ? ' class="pr-rij-sanctie"' : '';
             let catCellen = '';
             if (toonCatRang) {
                 for (const cat of uniekeCats) {

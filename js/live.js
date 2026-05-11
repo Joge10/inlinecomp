@@ -54,6 +54,16 @@ async function toonLivePagina() {
         // DB-waarden kunnen verkeerd zijn als ze met een oudere versie zijn opgeslagen.
         _liveRitten.forEach(_liveHerrekenPKFinishposities);
 
+        // is_photofinish (uit DB) → lokale _wisselt-vlag. Zo overleeft de lock
+        // op gewisselde rijders een page-refresh: dropdowns blijven verborgen
+        // achter het lock-badge tot de operator de CSV opnieuw importeert.
+        _liveRitten.forEach(rit => {
+            if (!rit?.rijders) return;
+            rit.rijders.forEach(r => {
+                if (r.is_photofinish) r._wisselt = true;
+            });
+        });
+
         if (_liveRitten.length === 0) {
             container.innerHTML = '<div class="status-msg info">Geen ritten gevonden. Genereer eerst een tijdschema met startlijsten.</div>';
             return;
@@ -299,6 +309,12 @@ function _parseTijdInvoer(str) {
 const _SANCTIE_RANKED_LAST = new Set(['DNF', 'DQ-TF', 'DNS']);
 const _SANCTIE_NOT_RANKED  = new Set(['DQ-SF', 'DQ-DF']);
 const _SANCTIE_WIST_TIJD   = new Set(['DNF', 'DQ-TF', 'DQ-SF', 'DQ-DF', 'DNS']); // FS niet!
+// Sancties die betekenen "geen geldige finish" — uitval of DQ. FS/RR/W1/W2
+// zijn waarschuwingen, die rijders horen normaal mee te tellen voor Q/q-
+// kwalificatie. Spiegelt PHP-side $sanctiesUit / isEindSanctie() in
+// _uitslag_helper.php zodat de panel-display dezelfde set rijders rangschikt
+// als de daadwerkelijke next-round-generation.
+const _SANCTIE_GEEN_FINISH = new Set(['DNS', 'DNF', 'DQ-TF', 'DQ-SF', 'DQ-DF']);
 
 // Ex-aequo-ranking volgens reglement: gelijke tijden krijgen dezelfde positie
 // (1,2,3,3,5). Aansluitend op api/_uitslag_helper.php::berekenExAequoRangs(),
@@ -342,6 +358,103 @@ function _berekenPosities(entries, gebruikGelijkspel = true) {
         rankedLast.forEach(e => posMap.set(e.entry_id, laatste));
     }
     return posMap;
+}
+
+// Volgorde van rondes voor "direct vorige ronde" detectie. Runner-up zit
+// parallel aan HF (zelfde rank) — dat is voldoende voor onze PF-vergelijking.
+const _RONDE_RANK = {
+    heats:        1,
+    kwartfinale:  2,
+    halve_finale: 3,
+    runner_up:    3,
+    finale_b:     4,
+    finale_a:     4,
+    finale:       4,
+};
+
+// Heeft een rijder een photofinish-marker uit zijn DIRECT VOORGAANDE ronde
+// in deze dc+afstand? Bedoeld voor het 📷-icoon naast de naam in een opvolgende
+// startlijst — zodat iedereen ziet WAAROM iemand er staat. Zodra de rijder
+// een ronde verder is gegaan zonder swap (= geen is_photofinish in die
+// tussenronde), verdwijnt het icoontje weer.
+//
+// `rijder`     = de rijder die nu gerenderd wordt
+// `currentRit` = de rit waarin hij nu staat (bepaalt ronde-context + dc/dist)
+function _liveHeeftPhotofinishVorigeRonde(rijder, currentRit) {
+    const lic = rijder?.person_license;
+    if (!lic || !currentRit) return false;
+    const curRank = _RONDE_RANK[currentRit.ronde_type] ?? 0;
+    if (curRank <= 1) return false;  // heats heeft geen voorganger
+
+    // Effectieve dc/distance van deze rijder — combi-rijders dragen de
+    // categorie van hun leden, niet die van de geredgrteerde rit.
+    const cDc   = rijder._combi_dc_id       ?? currentRit.dc_id;
+    const cDist = rijder._combi_distance_id ?? currentRit.distance_id;
+
+    // Zoek meest recente eerdere ronde waarin deze persoon zat (zelfde
+    // dc+afstand) en check of die result_photofinish heeft.
+    let bestRank = 0;
+    let bestPF   = 0;
+    for (const rit of _liveRitten) {
+        const ritRank = _RONDE_RANK[rit.ronde_type] ?? 0;
+        if (ritRank === 0 || ritRank >= curRank) continue;
+        if (!rit.rijders) continue;
+        for (const r of rit.rijders) {
+            if (r.person_license !== lic) continue;
+            const rDc   = r._combi_dc_id       ?? rit.dc_id;
+            const rDist = r._combi_distance_id ?? rit.distance_id;
+            if (rDc !== cDc) continue;
+            if (String(rDist ?? '') !== String(cDist ?? '')) continue;
+            if (ritRank > bestRank) {
+                bestRank = ritRank;
+                bestPF   = r.is_photofinish ? 1 : 0;
+            } else if (ritRank === bestRank && r.is_photofinish) {
+                bestPF = 1;
+            }
+        }
+    }
+    return bestPF === 1;
+}
+
+// Photofinish-icon HTML. Klein, sanctie-stijl. Tooltip legt uit waarom hij
+// er staat — operator hoeft niet te raden welke wedstrijd / wissel.
+function _livePhotofinishIcon() {
+    return ` <span class="live-pf-badge" title="Photofinish — tijd via jury-wissel aangepast in een eerdere of huidige rit">📷</span>`;
+}
+
+// Bepaalt of een rit "alles groen" is: elke rijder heeft tijd ÓF sanctie ÓF
+// (afvalkoers + afgevallen). Pas dán is de jury aan zet en mag de fin-kolom
+// dropdowns tonen — voor die tijd zijn de waarden nog onvolledig en kunnen
+// posities verspringen door late tijden, dat zou verwarrend zijn.
+//
+// Gebruikt DOM-waarden indien beschikbaar (typing wordt direct meegerekend),
+// valt anders terug op rit.rijders[].tijd_ms / .sanctie (initiële render).
+function _liveAllesCompleet(ritIdx) {
+    const rit = _liveRitten[ritIdx];
+    if (!rit?.rijders?.length) return false;
+    const isAfvalkoers = rit.race_type === 'afvalkoers';
+    const afvalIds = isAfvalkoers
+        ? new Set((_afvalState[ritIdx]?.afgevallen || []).map(a => a.entry_id))
+        : null;
+    const kaart = document.querySelector(`.live-carousel-card[data-idx="${ritIdx}"]`);
+    return rit.rijders.every(r => {
+        // DOM heeft voorrang — typing-wijzigingen zijn nog niet gesynct met r.*
+        let tijdMs = null, sanctie = '';
+        const rij = kaart?.querySelector(`[data-entry="${r.entry_id}"]`);
+        if (rij) {
+            const inp = rij.querySelector('.live-tijd-inp');
+            const sel = rij.querySelector('.live-sanctie-sel');
+            tijdMs = inp ? _parseTijdInvoer(inp.value) : null;
+            sanctie = sel?.value || '';
+        } else {
+            tijdMs  = r.tijd_ms;
+            sanctie = r.sanctie || '';
+        }
+        if (tijdMs > 0)              return true;
+        if (sanctie)                 return true;
+        if (afvalIds?.has(r.entry_id)) return true;
+        return false;
+    });
 }
 
 // Synchroniseer tijd+sanctie naar alle DOM-elementen met hetzelfde entry_id
@@ -444,6 +557,28 @@ function _liveHerbereken(ritIdx) {
     });
 
     if (isPuntenkoers) _liveUpdatePuntenBadges(ritIdx);
+
+    // Wissel-dropdowns activeren zodra de jury-fase begint: alle rijders zijn
+    // verwerkt (tijd / sanctie / afvalling). Tot dat moment blijven badges
+    // staan — operator zou anders al kunnen wisselen terwijl er nog rijders
+    // ontbreken, wat verwarrend is bij late tijden of laat-toegekende sancties.
+    // Voor PK skippen we (PK krijgt dropdowns na save zoals voorheen — punten-
+    // gebaseerde finpos vereist een save-roundtrip om correct gesynct te zijn).
+    if (!isPuntenkoers && _liveAllesCompleet(ritIdx)) {
+        // Eerst r.finishpositie syncen voor rijders die nog geen positie hebben
+        // (eerste-keer activatie). Reeds gewisselde rijders niet aanraken — hun
+        // r.finishpositie reflecteert de operator-keuze.
+        rit.rijders.forEach(r => {
+            if (r.finishpositie == null) {
+                const p = posMap.get(r.entry_id);
+                if (p != null) r.finishpositie = p;
+            }
+        });
+        // Nu kunnen we badges → dropdowns omzetten waar van toepassing.
+        // _liveActiveerWisselDropdowns laat bestaande dropdowns staan en
+        // werkt alleen badges bij — perfect voor deze idempotente flow.
+        _liveActiveerWisselDropdowns(ritIdx);
+    }
 }
 
 function _ordinaal(n) {
@@ -617,7 +752,12 @@ function _liveBouwKaart(rit, idx, compact = false) {
             ).forEach((v, k) => _rangMap.set(k, v));
         }
 
-        const opts  = { heeftRondes };
+        // Alles-compleet detectie: dropdowns alleen tonen als alle rijders een
+        // status hebben (tijd, sanctie of afvalling). Op dit moment heeft de
+        // DOM nog geen kaart voor deze idx (we bouwen 'm net), dus de helper
+        // valt automatisch terug op rit.rijders-state.
+        const allesCompleet = _liveAllesCompleet(idx);
+        const opts  = { heeftRondes, allesCompleet, currentRit: rit };
         const rijen = rit.rijders.map(r => _liveRijRij(r, compact, validPosities, _rangMap, opts)).join('');
 
         const rndCol  = heeftRondes ? `<col class="live-col-rondes">` : '';
@@ -983,14 +1123,24 @@ function _liveVerzamelPanelRijders(dcId, distanceId, rondeType) {
             for (const hk of Object.keys(perHeat)) {
                 const heatRijders = perHeat[hk];
                 for (let i = 0; i < Math.min(qPerHeat, heatRijders.length); i++) {
-                    if (heatRijders[i].finishpositie != null && !heatRijders[i].sanctie)
-                        qRijders.add(heatRijders[i].entry_id);
+                    // Alleen "echte uitvallers" (DNS/DNF/DQ-*) niet meetellen
+                    // voor Q-kwalificatie. FS/RR/W1/W2 zijn waarschuwingen —
+                    // de rijder heeft normaal gefinisht en moet zijn Q-positie
+                    // gewoon krijgen, anders verschuift hij ten onrechte
+                    // omlaag in de panel-weergave.
+                    const r = heatRijders[i];
+                    if (r.finishpositie != null && !_SANCTIE_GEEN_FINISH.has(r.sanctie ?? ''))
+                        qRijders.add(r.entry_id);
                 }
             }
         }
 
         const metTijd = alleRijders
-            .filter(r => r.tijd_ms != null && !qRijders.has(r.entry_id) && !r.sanctie)
+            // Zelfde regel: FS/RR/W1/W2-rijder met tijd hoort gewoon mee te
+            // tellen voor de q-pool (tijdkwalificatie naar volgende ronde).
+            .filter(r => r.tijd_ms != null
+                       && !qRijders.has(r.entry_id)
+                       && !_SANCTIE_GEEN_FINISH.has(r.sanctie ?? ''))
             .sort((a, b) => a.tijd_ms - b.tijd_ms);
         const aantalQ = qRijders.size;
         const aantalq = Math.max(0, totaalDoor - aantalQ);
@@ -1029,12 +1179,19 @@ function _liveVerzamelPanelRijders(dcId, distanceId, rondeType) {
 }
 
 // Bouwt tbody-rijen voor één sectie van het paneel.
-function _liveBouwPanelTbodyRijen(rijders, heeftRondes) {
+// `panelRit` = pseudo-rit met dc_id/distance_id/ronde_type van de sectie,
+// nodig voor de PF-icoon-context (alleen tonen bij wissel in vorige ronde).
+function _liveBouwPanelTbodyRijen(rijders, heeftRondes, panelRit = null) {
     let html = '';
     for (const r of rijders) {
         const tijdVal   = r.tijd_ms !== null ? _msTijdNaarDisplay(r.tijd_ms) : '—';
         const sanctieUi = r.sanctie || '';
-        const statusKls = r.sanctie ? 'live-rit-status-sanctie'
+        // Status — zelfde logica als heat-card: FS+tijd telt als compleet
+        // (groen), niet als sanctie (rood). FS is een waarschuwing, geen
+        // uitval. Andere sancties (DNS/DNF/DQ-*) blijven rood.
+        const statusKls = (r.sanctie === 'FS')
+                        ? (r.tijd_ms !== null ? 'live-rit-status-compleet' : 'live-rit-status-leeg')
+                        : r.sanctie ? 'live-rit-status-sanctie'
                         : r.tijd_ms !== null ? 'live-rit-status-compleet'
                         : 'live-rit-status-leeg';
         const rondesTd  = heeftRondes
@@ -1043,10 +1200,11 @@ function _liveBouwPanelTbodyRijen(rijders, heeftRondes) {
         const kwalBadge = r._kwal === 'Q' ? '<span style="color:#198754;font-weight:700">Q</span>'
                        : r._kwal === 'q' ? '<span style="color:#0d6efd;font-weight:600">q</span>'
                        : '';
+        const pfIcon = _liveHeeftPhotofinishVorigeRonde(r, panelRit) ? _livePhotofinishIcon() : '';
         html +=
             `<tr class="live-panel-rij ${statusKls}" data-panel-entry="${r.entry_id}" data-rit-id="${r.rit_id}" data-rondes="${r.rondes ?? ''}">` +
             `<td>${r.startnummer ?? ''}</td>` +
-            `<td>${escHtml(r.full_name || '')}</td>` +
+            `<td>${escHtml(r.full_name || '')}${pfIcon}</td>` +
             `<td style="text-align:center;width:24px">${kwalBadge}</td>` +
             rondesTd +
             `<td class="live-col-tijd"><span class="live-panel-tijd-txt">${escHtml(tijdVal)}</span></td>` +
@@ -1106,7 +1264,11 @@ function _liveBouwLinksPanel(dcId, distanceId, rondeType) {
         if (s.rijders.length === 0) {
             tbody += `<tr class="live-panel-rij-leeg"><td colspan="${colspan}">Geen startlijst beschikbaar</td></tr>`;
         } else {
-            tbody += _liveBouwPanelTbodyRijen(s.rijders, heeftRondes);
+            // Pseudo-rit voor PF-context: dc/distance van deze sectie + de
+            // ronde die het panel toont. _liveHeeftPhotofinishVorigeRonde
+            // gebruikt dit om alleen wissels uit DIRECT vorige ronde te tonen.
+            const panelRit = { dc_id: s.dc_id, distance_id: s.distance_id, ronde_type: rondeType };
+            tbody += _liveBouwPanelTbodyRijen(s.rijders, heeftRondes, panelRit);
             totaalRijders += s.rijders.length;
         }
     });
@@ -1519,6 +1681,16 @@ function _liveBind(idx) {
         const riderB = rit.rijders.find(r => r.finishpositie === nieuwePosA && r.entry_id !== entryIdA);
         if (!riderB) { finSel.value = oudePosA; return; }
 
+        // Swap-lock: elke rijder mag in deze sessie maar in 1 wissel betrokken
+        // zijn. Cascading swaps (A↔B, dan B↔C) maken de tijd-state onleesbaar
+        // (B's "tijd" is dan A's faked tijd, etc.). Operator moet bij twijfel
+        // de CSV opnieuw importeren — dat reset alle wissels.
+        if (riderA._wisselt || riderB._wisselt) {
+            finSel.value = oudePosA;
+            _liveToast('⚠ Deze rijder is al gewisseld. Importeer de CSV opnieuw om wissels te resetten.', 'info');
+            return;
+        }
+
         // Afvalkoers: swap is alléén toegestaan tussen twee afgevallen rijders
         // (of, in theorie, twee finishgroep-rijders — die hebben geen afval_rang).
         // Een afgevallene wisselen met een sprinter zou de afgevallen-stack
@@ -1624,9 +1796,33 @@ function _liveBind(idx) {
                     heat_entry_id_2: riderB.entry_id,
                 }),
             });
-            if (!res.ok) throw new Error('HTTP ' + res.status);
-            const data = await res.json();
-            if (data.error) throw new Error(data.error);
+            if (res.status === 404) {
+                // Pre-save wissel: er staan nog geen results-rijen in DB voor
+                // (één van) beide rijders. Lokaal is de swap al doorgevoerd
+                // (finishpositie/tijd_ms hierboven), dus we markeren de rit
+                // als ongesaved zodat de operator op Opslaan klikt — dan
+                // schrijft save_rit_results de gewisselde state in één keer
+                // naar DB, inclusief is_photofinish=1 (via r._wisselt).
+                _liveOngeslagen = true;
+            } else if (!res.ok) {
+                throw new Error('HTTP ' + res.status);
+            } else {
+                const data = await res.json();
+                if (data.error) throw new Error(data.error);
+            }
+
+            // Markeer beide rijders als "in een wissel betrokken" — voorkomt
+            // cascading swaps waarbij de tijd-state verworden tot een soep.
+            // Reset gebeurt automatisch bij volgende CSV-import (via
+            // _liveResetFinishCellen → cel-rebuild met nieuwe data).
+            riderA._wisselt = true;
+            riderB._wisselt = true;
+
+            // Beide cellen converteren van dropdown naar badge zodat operator
+            // visueel ziet dat ze "vergrendeld" zijn. Reëel: hun finpos staat
+            // vast tot een re-import.
+            _liveLockGewisseldeCel(idx, riderA);
+            _liveLockGewisseldeCel(idx, riderB);
 
             // Herbereken heat card + linker panel
             _liveSyncInvoer(entryIdA,        tijdInpA?.value || '', rij?.querySelector('.live-sanctie-sel')?.value || '');
@@ -3369,6 +3565,12 @@ async function _liveImportLaad(ritIdx) {
     }
 
     _liveHerbereken(ritIdx);
+    // Stale wissel-dropdowns van vóór de import bevatten nog oude posities.
+    // _liveHerbereken laat die met opzet ongemoeid (om manuele wissel-keuzes
+    // te beschermen tijdens typen). Bij CSV-import komen alle tijden vers
+    // binnen → dan moet de "Fin." kolom direct kloppen, dus dropdowns +
+    // r.finishpositie hier opnieuw bouwen i.p.v. wachten op een save.
+    _liveResetFinishCellen(ritIdx);
 
     // Herbouw linker panel zodat rondes-kolom ook daar zichtbaar is
     const panelOud = el('live-panel-links');
@@ -3397,6 +3599,118 @@ async function _liveImportLaad(ritIdx) {
     }
 }
 
+// Bouw alle finish-cellen opnieuw op basis van de huidige DOM-state (tijden +
+// sancties + rondes). Bedoeld voor situaties waarin de oude wissel-dropdowns
+// stale zijn — typisch ná een CSV-import: _liveHerbereken() werkt alleen de
+// .live-finish-badge-elementen bij, dropdowns zou dat manuele wissel-keuzes
+// overschrijven. Bij CSV-import bestaan die manuele keuzes echter nog niet
+// (alle tijden komen vers binnen) — dan moet de "Fin." kolom direct kloppen,
+// anders ziet de operator nepposities tot hij eerst opslaat.
+function _liveResetFinishCellen(ritIdx) {
+    const rit = _liveRitten[ritIdx];
+    if (!rit || !rit.rijders) return;
+    const kaart = document.querySelector(`.live-carousel-card[data-idx="${ritIdx}"]`);
+    if (!kaart) return;
+
+    const isPuntenkoers = rit.race_type === 'puntenkoers';
+
+    // 1) DOM → rijder-state synchroniseren (tijd_ms, sanctie, rondes). Nodig
+    //    omdat de PK-specifieke positie-berekening via r.* werkt en de save-
+    //    payload ook van r.* uitgaat. Bij CSV-import is r.tijd_ms anders nog
+    //    de oude DB-waarde terwijl de DOM-input al de nieuwe tijd toont.
+    //    Tegelijk: wissel-locks resetten — re-import is bewust de "undo" voor
+    //    eerdere swaps, dus de _wisselt-flags moeten weg en de cellen worden
+    //    daarna als verse dropdowns/badges opgebouwd.
+    rit.rijders.forEach(r => {
+        const rij    = kaart.querySelector(`[data-entry="${r.entry_id}"]`);
+        if (!rij) return;
+        const inp    = rij.querySelector('.live-tijd-inp');
+        const sel    = rij.querySelector('.live-sanctie-sel');
+        const rnInp  = rij.querySelector('.live-rondes-inp');
+        if (inp)  r.tijd_ms = _parseTijdInvoer(inp.value);
+        if (sel)  r.sanctie = sel.value || null;
+        if (rnInp) r.rondes = rnInp.value !== '' ? (parseInt(rnInp.value) || null) : null;
+        delete r._wisselt;
+    });
+
+    // 2) Posities berekenen — PK via punten→rondes→tijd, andere races via de
+    //    standaard _berekenPosities (combi-aware).
+    if (isPuntenkoers) {
+        // Werkt rechtstreeks op rit.rijders, schrijft r.finishpositie
+        _liveHerrekenPKFinishposities(rit);
+    } else {
+        const entries = rit.rijders.map(r => ({
+            entry_id: r.entry_id,
+            tijd_ms:  r.tijd_ms,
+            sanctie:  r.sanctie,
+            rondes:   r.rondes,
+        }));
+        const posMap = new Map();
+        if (rit.is_combi) {
+            for (const lid of rit.combi_leden) {
+                const subset = entries.filter(e => {
+                    const rij = rit.rijders.find(rr => rr.entry_id === e.entry_id);
+                    return rij && rij._combi_rit_id === lid.rit_id;
+                });
+                _berekenPosities(subset, true).forEach((v, k) => posMap.set(k, v));
+            }
+        } else {
+            _berekenPosities(entries, true).forEach((v, k) => posMap.set(k, v));
+        }
+        rit.rijders.forEach(r => {
+            r.finishpositie = posMap.get(r.entry_id) ?? null;
+        });
+    }
+
+    // 3) ValidPosities per (combi-)groep — alleen wisselen tussen peers in
+    //    dezelfde categorie heeft betekenis.
+    const validPositiesVoorRijder = (r) => {
+        const peers = rit.is_combi
+            ? rit.rijders.filter(rij => rij._combi_rit_id === r._combi_rit_id)
+            : rit.rijders;
+        return [...new Set(peers.map(rr => rr.finishpositie).filter(Boolean))]
+            .sort((a, b) => a - b);
+    };
+
+    // 4) Vervang elke .live-col-finish-cel door de juiste markup.
+    //    Event-delegation op .live-finish-sel zit op de kaart (zie _liveBind),
+    //    dus nieuwe selects krijgen automatisch de change-handler.
+    //    Dropdowns alleen als de rit "alles compleet" is — anders zou een
+    //    half-geïmporteerde CSV al wisselbare posities tonen, terwijl er nog
+    //    rijders zonder tijd zijn. Operator wacht eerst op volledige invoer.
+    const allesCompleet = _liveAllesCompleet(ritIdx);
+    rit.rijders.forEach(r => {
+        const rij = kaart.querySelector(`[data-entry="${r.entry_id}"]`);
+        const cel = rij?.querySelector('.live-col-finish');
+        if (!cel) return;
+        const validPosities = validPositiesVoorRijder(r);
+        if (r.finishpositie && validPosities.length > 1 && !_liveLeesOnly && allesCompleet) {
+            cel.innerHTML = `<select class="live-finish-sel">` +
+                validPosities.map(p =>
+                    `<option value="${p}"${p === r.finishpositie ? ' selected' : ''}>${p}</option>`
+                ).join('') + `</select>`;
+        } else {
+            // PK krijgt extra finish-pos-punten klasse zodat de badge dezelfde
+            // kleur heeft als die _liveUpdatePuntenBadges normaal toepast.
+            const extra  = isPuntenkoers ? ' finish-pos-punten' : '';
+            const klasse = r.finishpositie ? ' finish-pos' + extra : '';
+            const tekst  = r.finishpositie ? _ordinaal(r.finishpositie) : '—';
+            cel.innerHTML = `<span class="live-finish-badge${klasse}">${tekst}</span>`;
+        }
+    });
+}
+
+// Vervang de finish-cel van een gewisselde rijder door een vergrendeld badge
+// (klein slotje + huidige positie). Operator ziet dat de rijder al gewisseld
+// is en niet opnieuw kan worden geswapt. Re-import van de CSV wist het slot.
+function _liveLockGewisseldeCel(ritIdx, r) {
+    const kaart = document.querySelector(`.live-carousel-card[data-idx="${ritIdx}"]`);
+    const cel   = kaart?.querySelector(`[data-entry="${r.entry_id}"] .live-col-finish`);
+    if (!cel || !r.finishpositie) return;
+    cel.innerHTML = `<span class="live-finish-badge finish-pos finish-pos-gewisselt"
+        title="Deze rijder is al gewisseld. Importeer de CSV opnieuw om de wissel ongedaan te maken.">🔒 ${_ordinaal(r.finishpositie)}</span>`;
+}
+
 // Vervang finish-badges door wissel-dropdowns na opslaan
 function _liveActiveerWisselDropdowns(ritIdx) {
     const rit = _liveRitten[ritIdx];
@@ -3417,6 +3731,15 @@ function _liveActiveerWisselDropdowns(ritIdx) {
 
     rit.rijders.forEach(r => {
         if (!r.finishpositie) return;
+
+        // Reeds gewisselde rijders: lock-badge tonen (geen dropdown). Voorkomt
+        // dat de operator per ongeluk een tweede swap doet die de tijd-state
+        // versmelt. Re-import resetf via _liveResetFinishCellen.
+        if (r._wisselt) {
+            _liveLockGewisseldeCel(ritIdx, r);
+            return;
+        }
+
         const validPosities = validPositiesVoorRijder(r);
         if (validPosities.length < 2) return;
 
@@ -3452,8 +3775,10 @@ function _liveActiveerWisselDropdowns(ritIdx) {
 
 // Bouw een tabelrij voor een rijder (in het heat-card formaat)
 // validPosities = array van beschikbare finish-posities voor wissel-dropdown (leeg = badge tonen)
+// opts.allesCompleet = true → wissel-dropdowns mogen actief zijn (jury-fase)
+//                      false → alleen badges (rit nog niet volledig ingevoerd)
 function _liveRijRij(r, compact = false, validPosities = [], rangMap = new Map(), opts = {}) {
-    const { heeftRondes = false } = opts;
+    const { heeftRondes = false, allesCompleet = false, currentRit = null } = opts;
     const tijdVal = r.tijd_ms !== null ? _msTijdNaarDisplay(r.tijd_ms) : '';
 
     // DB = UI codes, geen mapping meer nodig
@@ -3470,10 +3795,15 @@ function _liveRijRij(r, compact = false, validPosities = [], rangMap = new Map()
 
     const transponder = escHtml(r.transponder_actief ?? '—');
 
+    // Photofinish-icoon naast de naam: alleen tonen als de rijder in zijn
+    // direct voorgaande ronde een jury-wissel had. Verdwijnt zodra hij
+    // normaal (zonder swap) een ronde verder gaat.
+    const pfIcon = _liveHeeftPhotofinishVorigeRonde(r, currentRit) ? _livePhotofinishIcon() : '';
+
     return `<tr class="live-rij ${statusKlasse}" data-entry="${r.entry_id}" data-rondes="${r.rondes ?? ''}" data-punten="${r.punten ?? ''}">` +
         `<td class="heat-pos">${r.startpositie}</td>` +
         (!compact ? `<td class="heat-snr">${r.startnummer ?? ''}</td>` : '') +
-        `<td class="heat-naam">${escHtml(r.full_name || '')}</td>` +
+        `<td class="heat-naam">${escHtml(r.full_name || '')}${pfIcon}</td>` +
         (!compact ? `<td class="heat-tp">${transponder}</td>` : '') +
         (heeftRondes ? `<td class="live-col-rondes"><input type="number" class="live-rondes-inp" value="${r.rondes ?? ''}" min="0" placeholder="—" ${disabled} inputmode="numeric"></td>` : '') +
         `<td class="live-col-tijd">` +
@@ -3495,7 +3825,10 @@ function _liveRijRij(r, compact = false, validPosities = [], rangMap = new Map()
         `</select>` +
         `</td>` +
         `<td class="live-col-finish">` +
-        (r.finishpositie && validPosities.length > 1 && !_liveLeesOnly
+        // Wissel-dropdown alleen als alles-compleet (jury-fase). Anders badge —
+        // posities kunnen nog verspringen tijdens invoer en dat zou verwarrend
+        // zijn als de operator al ergens een wissel-keuze heeft gemaakt.
+        (r.finishpositie && validPosities.length > 1 && !_liveLeesOnly && allesCompleet
             ? `<select class="live-finish-sel">` +
               validPosities.map(p =>
                   `<option value="${p}"${p === r.finishpositie ? ' selected' : ''}>${p}</option>`
@@ -3660,21 +3993,26 @@ async function _liveOpslaanRit(ritIdx) {
         const afval = afvalMap.get(r.entry_id);
         if (isAfvalkoers && afval) {
             return {
-                entry_id:   r.entry_id,
-                tijd_ms:    null,                    // afgevallen → geen valide finish-tijd
-                sanctie:    afval.sanctie || null,   // DQ-TF voor by-fault, anders null
+                entry_id:       r.entry_id,
+                tijd_ms:        null,                    // afgevallen → geen valide finish-tijd
+                sanctie:        afval.sanctie || null,   // DQ-TF voor by-fault, anders null
                 rondes,
-                afval_rang: afval.plek,
+                afval_rang:     afval.plek,
+                // Photofinish-vlag meesturen — wissel_posities zet deze al
+                // direct in DB op 1, maar bij re-import/save zonder _wisselt
+                // moet 'ie weer 0 worden zodat oude swaps opgeschoond raken.
+                is_photofinish: r._wisselt ? 1 : 0,
             };
         }
 
         const tijdOpslaan = _SANCTIE_WIST_TIJD.has(sanctieDom) ? null : (tijdMs ?? null);
         return {
-            entry_id:   r.entry_id,
-            tijd_ms:    tijdOpslaan,
-            sanctie:    sanctieDom || null,
+            entry_id:       r.entry_id,
+            tijd_ms:        tijdOpslaan,
+            sanctie:        sanctieDom || null,
             rondes,
-            afval_rang: null, // niet-afvalkoers OF afvalkoers-finishgroep
+            afval_rang:     null, // niet-afvalkoers OF afvalkoers-finishgroep
+            is_photofinish: r._wisselt ? 1 : 0,
         };
     });
 
@@ -3877,11 +4215,19 @@ async function _liveGenereerKetenStap(dcId, distanceId, van, naar, compleet = tr
 
     const r2 = await _liveGenereerVolgendeRonde(dcId, distanceId, van, 'runner_up', compleet, { silent: true });
 
+    // Beide no-op (ongewijzigd of door operator geannuleerd) → geen toast.
+    const isNoop = r => r?.ongewijzigd || r?.geannuleerd;
+    if (isNoop(r1) && isNoop(r2)) return;
+
     // Combined toast — toon ALTIJD beide regels, ook als één leeg is, zodat
     // de gebruiker direct ziet of de runner-up wel/niet ritten heeft gekregen.
-    const lijn = (res, label) => res
-        ? `${label}: ${res.aantal} rijders`
-        : `${label}: niet aangemaakt`;
+    const lijn = (res, label) => res?.geannuleerd
+        ? `${label}: niet bijgewerkt (geannuleerd)`
+        : res?.ongewijzigd
+            ? `${label}: ongewijzigd`
+            : res
+                ? `${label}: ${res.aantal} rijders`
+                : `${label}: niet aangemaakt`;
     const bericht = compleet
         ? `✓ Startlijsten klaar — ${lijn(r1, r1?.label || naar)}; ${lijn(r2, 'Runner-up')}`
         : `📋 Voorlopig bijgewerkt — ${lijn(r1, r1?.label || naar)}; ${lijn(r2, 'Runner-up')}`;
@@ -3890,10 +4236,13 @@ async function _liveGenereerKetenStap(dcId, distanceId, van, naar, compleet = tr
 
 // compleet = alle heats in de ronde zijn klaar (anders is het een voorlopige update)
 // opts.silent = true → geen success-toast (voor combined toast door keten-helper)
-// Returns: { aantal, label } op succes, null op fout/skip.
+// opts.force = true → server slaat de bevestigingsvraag over (dialog al ja gedrukt)
+// Returns: { aantal, label } op succes, null op fout/skip,
+//          { ongewijzigd: true } of { geannuleerd: true } bij no-op.
 async function _liveGenereerVolgendeRonde(dcId, distanceId, van, naar, compleet = true, opts = {}) {
     if (!huidigCompId || !dcId || !van || !naar) return null; // Guard: ontbrekende params
     const silent = !!opts.silent;
+    const force  = !!opts.force;
     const btn = el('live-btn-volgende-ronde');
     if (btn) { btn.disabled = true; btn.textContent = 'Bezig…'; }
 
@@ -3910,11 +4259,65 @@ async function _liveGenereerVolgendeRonde(dcId, distanceId, van, naar, compleet 
                 distance_id:     distanceId,
                 van_ronde_type:  van,
                 naar_ronde_type: naar,
+                force:           force,
             }),
         });
         if (!res.ok) throw new Error('HTTP ' + res.status);
         const data = await res.json();
         if (data.error) throw new Error(data.error);
+
+        // Server-side optimalisatie: als de qualifying-set onveranderd is,
+        // doet de server NIETS (geen DELETE/INSERT) — dan moeten wij ook
+        // geen reload triggeren, anders flikkert de UI alsnog onnodig en
+        // verlies je de huidige carousel-positie.
+        if (data.ongewijzigd) {
+            if (btn) {
+                btn.disabled    = false;
+                btn.textContent = `↻ Hergeneer ${label}`;
+            }
+            // Geen toast bij silent-mode (keten-helper bouwt zelf een combo).
+            return { aantal: 0, label, ongewijzigd: true };
+        }
+
+        // Server vraagt bevestiging — er staan al resultaten in de doel-ronde
+        // die zouden verdwijnen door de regenerate. Toon in-house dialog met
+        // de concrete impact ("KF: 12 resultaten") en laat de operator kiezen.
+        if (data.vraag_bevestiging) {
+            const ronLabel = (rt) => RONDE_LABEL[rt] || rt;
+            const lijst = (data.te_wissen || [])
+                .map(t => `<li><b>${escHtml(ronLabel(t.ronde_type))}</b>: ${t.aantal_results} resultaten</li>`)
+                .join('');
+            const bericht =
+                `<p>De qualifying-set is veranderd door je laatste wijziging.</p>` +
+                `<p>Bij hergenereren gaan deze reeds-ingevoerde resultaten verloren:</p>` +
+                `<ul>${lijst}</ul>` +
+                `<p>Doorgaan met hergenereren?</p>`;
+            const ok = await toonBevestigDialog(
+                bericht,
+                'Bestaande resultaten wissen?',
+                'Hergenereren',
+                'Behoud bestaande',
+                { bodyIsHtml: true }
+            );
+            if (!ok) {
+                // Operator kiest "annuleren" — bestaande downstream blijft staan
+                // (mogelijk inconsistent met heats, maar dat accepteert operator
+                // bewust). Knop terug naar normaal.
+                if (btn) {
+                    btn.disabled    = false;
+                    btn.textContent = `↻ Hergeneer ${label}`;
+                }
+                if (!silent) {
+                    _liveToast(`⚠ ${label} niet bijgewerkt — bestaande resultaten behouden`,
+                        'info', 4000);
+                }
+                return { aantal: 0, label, geannuleerd: true };
+            }
+            // Bevestigd → opnieuw aanroepen met force=true zodat server
+            // de pre-check overslaat en gewoon regenereert.
+            return await _liveGenereerVolgendeRonde(dcId, distanceId, van, naar, compleet,
+                { ...opts, force: true });
+        }
 
         const aantalRijders = (data.heats || []).reduce((s, h) => s + h.rijders.length, 0);
         // Voor full-final bevat data.heats zowel A- als B-finale heats;

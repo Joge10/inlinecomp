@@ -210,6 +210,10 @@ try {
 
             // Rijders ophalen + alle sancties uit ALLE vorige rondes (ronde < huidige)
             // GROUP_CONCAT geeft bijv. "Series: FS · KF: W1"
+            //
+            // vorige_photofinish: 1 als de rijder in een eerdere ronde van
+            // dezelfde dc+afstand een jury-wissel heeft gehad (is_photofinish=1).
+            // Verschijnt als 📷-icoon in de Opm.-kolom van de startlijst.
             $veStmt = $pdo->prepare("
                 SELECT he.heat_id, he.startpositie, he.startnummer, he.categorie,
                        p.license_key, p.full_name, p.short_name,
@@ -238,14 +242,34 @@ try {
                           AND (h_v.distance_id = ? OR (h_v.distance_id IS NULL AND ? = ''))
                           AND h_v.ronde < ?
                           AND res_v.sanctie IS NOT NULL
-                       ) AS vorige_sancties
+                       ) AS vorige_sancties,
+                       -- Photofinish-marker: alleen uit de DIRECT VOORAFGAANDE
+                       -- ronde waarin deze rijder zat. Zo verschijnt het 📷
+                       -- in de HF-startlijst als iemand via een KF-wissel
+                       -- doorging, maar NIET meer in de finale als hij daar
+                       -- vervolgens normaal (op tijd) belandde. ORDER BY ronde
+                       -- DESC LIMIT 1 → meest recente eerdere result voor deze
+                       -- person+dc+afstand-combinatie.
+                       (SELECT res_pf.is_photofinish
+                        FROM heat_entries he_pf
+                        JOIN heats h_pf ON h_pf.id = he_pf.heat_id
+                        JOIN results res_pf ON res_pf.heat_entry_id = he_pf.id
+                        WHERE he_pf.person_license         = he.person_license
+                          AND h_pf.competition_id          = ?
+                          AND h_pf.distance_combination_id = ?
+                          AND (h_pf.distance_id = ? OR (h_pf.distance_id IS NULL AND ? = ''))
+                          AND h_pf.ronde < ?
+                        ORDER BY h_pf.ronde DESC
+                        LIMIT 1
+                       ) AS vorige_photofinish
                 FROM heat_entries he
                 JOIN persons p ON p.license_key = he.person_license
                 WHERE he.heat_id IN ($phV)
                 ORDER BY he.heat_id, he.startpositie
             ");
             $veStmt->execute(array_merge(
-                [$compId, $primaryDcId, $distId, $distId, $rn],
+                [$compId, $primaryDcId, $distId, $distId, $rn,
+                 $compId, $primaryDcId, $distId, $distId, $rn],
                 $vHeatIds
             ));
             $vEntries = $veStmt->fetchAll(PDO::FETCH_ASSOC);
@@ -316,6 +340,10 @@ try {
                 $e['transponder_actief'] = $vTpMap[$lk][0] ?? null;
                 $e['transponder1']       = $vTpMap[$lk][1] ?? null;
                 $e['transponder2']       = $vTpMap[$lk][2] ?? null;
+                // Cast naar echte int — PDO returneert numerieke kolommen
+                // standaard als string, en in JS is "0" truthy → zou
+                // het 📷-icoontje voor IEDEREEN tonen. Expliciet casten.
+                $e['vorige_photofinish'] = (int)($e['vorige_photofinish'] ?? 0);
                 if (isset($vHeatMap[$e['heat_id']])) {
                     $vHeatMap[$e['heat_id']]['rijders'][] = $e;
                 }

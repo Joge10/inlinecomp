@@ -56,6 +56,43 @@ function printCenterResetVoorWedstrijd(compId) {
 // Maak globaal bereikbaar voor import.js
 window.printCenterResetVoorWedstrijd = printCenterResetVoorWedstrijd;
 
+// Granulaire invalidatie — aan te roepen vanuit andere modules zodra ze de
+// onderliggende data muteren. Voorkomt dat het Print-Center stale opties
+// blijft tonen tot de operator de pagina handmatig refresht.
+//
+// Roep deze aan na: uitslag vastleggen, klassement vastleggen, klassement
+// terugtrekken — alles wat de "wat is printbaar?"-set verandert.
+function printCenterInvalideerUitslagen() {
+    _pcState.uitslagenLaad = null;
+    try {
+        if (typeof _uPrintOpties !== 'undefined') _uPrintOpties = new Map();
+    } catch { /* uitslag.js niet geladen — geen probleem */ }
+    // Items die al getoond worden in een open modal moeten ook opnieuw — als
+    // de modal nu open is, herbouwen we 'm direct.
+    const modal = document.getElementById('pc-modal');
+    if (modal && modal.classList.contains('pc-open')) {
+        // Re-trigger het laad-pad door openPrintCenter opnieuw aan te roepen.
+        // openPrintCenter() ziet uitslagenLaad === null en doet de fetch +
+        // re-render. Modal blijft visueel zichtbaar, geen flikker.
+        if (typeof openPrintCenter === 'function') openPrintCenter();
+    }
+}
+window.printCenterInvalideerUitslagen = printCenterInvalideerUitslagen;
+
+// Spiegel-functie voor startlijsten — aanroepen na loting-genereren/wissen.
+function printCenterInvalideerStartlijsten() {
+    _pcState.startlijstenLaad = null;
+    try {
+        if (typeof _slPrintOpties !== 'undefined') _slPrintOpties = new Map();
+        if (typeof invalideerSlStatus === 'function') invalideerSlStatus();
+    } catch { /* startlist.js niet geladen */ }
+    const modal = document.getElementById('pc-modal');
+    if (modal && modal.classList.contains('pc-open')) {
+        if (typeof openPrintCenter === 'function') openPrintCenter();
+    }
+}
+window.printCenterInvalideerStartlijsten = printCenterInvalideerStartlijsten;
+
 // ── Modal openen ────────────────────────────────────────────────────────────
 async function openPrintCenter() {
     if (!_pcState.compId) return;
