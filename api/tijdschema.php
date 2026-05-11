@@ -1514,43 +1514,13 @@ try {
             "DELETE FROM tijdschema_ritten WHERE id = ? AND tijdschema_id = ?"
         )->execute([$ritId, $tsId]);
 
-        // Als dit de laatste rit van die (dc, dist, ronde_type) was, update
-        // cat_config zodat de uitslag-vastlegging niet blijft wachten.
-        $countStmt = $pdo->prepare("
-            SELECT COUNT(*) FROM tijdschema_ritten
-            WHERE tijdschema_id = ? AND dc_id = ?
-              AND (distance_id <=> ?) AND ronde_type = ?
-        ");
-        $countStmt->execute([$tsId, $rit['dc_id'], $rit['distance_id'], $rit['ronde_type']]);
-        $resterend = (int)$countStmt->fetchColumn();
-
-        if ($resterend === 0 && $rit['distance_id']) {
-            $rt = $rit['ronde_type'];
-            // Map ronde_type → cat_config kolom + waarde
-            $col = null; $waarde = 0;
-            if      ($rt === 'heats')        { $col = 'heeft_heats';        }
-            elseif  ($rt === 'kwartfinale')  { $col = 'heeft_kwartfinale';  }
-            elseif  ($rt === 'halve_finale') { $col = 'heeft_halve_finale'; }
-            elseif  ($rt === 'runner_up')    { $col = 'heeft_runner_up';    }
-            elseif  ($rt === 'finale_a')     { $col = 'finale_heats';       } // count = 0
-            elseif  ($rt === 'finale_b')     { $col = 'finale_b_heats';     } // count = 0
-            if ($col) {
-                $pdo->prepare("
-                    UPDATE tijdschema_cat_config
-                    SET `$col` = ?
-                    WHERE tijdschema_id = ? AND dc_id = ? AND distance_id = ?
-                ")->execute([$waarde, $tsId, $rit['dc_id'], $rit['distance_id']]);
-            }
-        } elseif (in_array($rit['ronde_type'], ['finale_a', 'finale_b'], true) && $rit['distance_id']) {
-            // Voor finales is het aantal het kolomgetal, niet 0/1. Update naar
-            // het werkelijke aantal resterende heats.
-            $col = $rit['ronde_type'] === 'finale_a' ? 'finale_heats' : 'finale_b_heats';
-            $pdo->prepare("
-                UPDATE tijdschema_cat_config
-                SET `$col` = ?
-                WHERE tijdschema_id = ? AND dc_id = ? AND distance_id = ?
-            ")->execute([$resterend, $tsId, $rit['dc_id'], $rit['distance_id']]);
-        }
+        // BEWUST GEEN cat_config-update hier: bouwEnabledRondes() leest
+        // cat_config om te bepalen welke ronde-blokken moeten bestaan.
+        // Als we hier heeft_runner_up/heeft_heats/etc. op 0 zetten zou een
+        // volgende save_afstand_config (via syncBlokken) het ronde-blok
+        // weggooien — en daarna zou genereer geen ritten van dat type meer
+        // maken. alleRondesCompleet() kijkt nu rechtstreeks naar de
+        // bestaande ritten i.p.v. naar cat_config.
 
         $pdo->prepare("UPDATE competitions SET tijdschema_version = tijdschema_version + 1 WHERE id = ?")
             ->execute([$compId]);
