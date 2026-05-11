@@ -1553,7 +1553,7 @@ Beide kleuren actief; de twee anderen (afgemeld bij org., niet getekend) maken d
             <li>Series (kwalificatie)</li>
             <li>Kwartfinale (optioneel)</li>
             <li>Halve finale (optioneel)</li>
-            <li>A-finale (+ optionele B/C-finales)</li>
+            <li>A-finale + optionele runner-up voor de afvallers van de eerste ronde</li>
         </ol>
         <em>Geschikt voor wedstrijden met veel deelnemers waar je een echte uitslag-piramide wilt.</em>
     </div>
@@ -1563,7 +1563,7 @@ Beide kleuren actief; de twee anderen (afgemeld bij org., niet getekend) maken d
 
 <table class="ref">
 <tr><th>Systeem</th><th>Wat houdt het in?</th><th>Wanneer kies je dit?</th></tr>
-<tr><td><b>Full-Final</b></td><td>Iedereen rijdt een serie. Op basis van de tijden worden A-, B-, eventueel C-finales gevuld. Geen knock-out.</td><td>Klubwedstrijden, kortere wedstrijddagen, weinig deelnemers per categorie.</td></tr>
+<tr><td><b>Full-Final</b></td><td>Iedereen rijdt een serie. Op basis van de tijden worden de A-finale + zo nodig genummerde B-finales gevuld (B1, B2, B3, …). Geen knock-out.</td><td>Klubwedstrijden, kortere wedstrijddagen, weinig deelnemers per categorie.</td></tr>
 <tr><td><b>Internationaal</b></td><td>Knock-out-piramide: series → (kwartfinale) → (halve finale) → A-finale. Per ronde stoten N rijders door.</td><td>NK / EK / WK-stijl wedstrijden, veel deelnemers per categorie, sportieve doorstroom gewenst.</td></tr>
 </table>
 
@@ -2174,15 +2174,22 @@ Dit is handig voor regio- en beginnerswedstrijden waar je elke serie een eerlijk
 
 <h3 id="sl-6-wis">Stap 6 — Loting wissen en opnieuw beginnen<sup class="ref-link" id="refsrc-24"><a href="#ref-24">[24]</a></sup></h3>
 
-<p>Niet tevreden met de loting? Boven de heat-tabel staat de knop <b>[🗑 Wis loting]</b>. Klik je die, dan verschijnt een bevestigings-dialoog: <em>"Loting verwijderen? Dit kan niet ongedaan worden gemaakt."</em></p>
+<p>Niet tevreden met de loting? Boven de heat-tabel staat de knop <b>[🗑 Wis loting]</b>. InlineComp doet eerst een <b>impact-check</b> (mode <code>check</code>): hoeveel results-rijen zijn al ingevoerd, en is de uitslag of het klassement van deze afstand al vastgelegd? Op basis daarvan verschijnt een <b>verrijkte dialog</b> met de cijfers en — alleen waar relevant — checkboxes om óók de uitslag en/of het klassement mee te wissen.</p>
 
-<p>Bevestig je, dan worden alle heats voor deze (categorie × afstand) verwijderd. Het werkblad keert terug naar de seeding-UI van Stap 3 — je kunt opnieuw genereren met andere instellingen.</p>
+<table class="ref">
+<tr><th>Situatie</th><th>Wat zie je in de dialog</th></tr>
+<tr><td>Geen results, geen vastgelegde uitslag</td><td>Simpele bevestiging: "Loting verwijderen?" — alleen heats + heat_entries gaan weg.</td></tr>
+<tr><td>Wel results, geen vastlegging</td><td>"X results gaan ook weg" — als waarschuwing. Geen extra checkboxes nodig (cascade verwijdert results vanzelf via FK).</td></tr>
+<tr><td>Vastgelegde afstand-uitslag aanwezig</td><td>Checkbox <b>"Ook de vastgelegde afstand-uitslag wissen"</b> (default uit). Aanvinken = <code>uitslag_afstand</code> wordt mee-verwijderd.</td></tr>
+<tr><td>Vastgelegd klassement aanwezig</td><td>Extra checkbox <b>"Ook het vastgelegde klassement wissen"</b> (default uit). Aanvinken = <code>uitslag_klassement</code> mee-verwijderd.</td></tr>
+</table>
 
 <div class="warn"><b>Wat blijft staan, en wat niet:</b>
 <ul style="margin-top:6px">
-    <li>Wist <b>alle rondes</b> voor deze categorie × afstand (series, kwartfinale, halve, finales).</li>
-    <li>Eerder ingevoerde <em>tijden/uitslagen</em> blijven in de database staan<sup class="ref-link" id="refsrc-52"><a href="#ref-48">[48]</a></sup> — die zijn historisch en worden bij opnieuw loten niet automatisch teruggezet in nieuwe heats. Dat is bedoeld als veiligheidsnet, maar betekent ook dat je bij een loting-reset midden in een wedstrijd voorzichtig moet zijn.</li>
-    <li>Andere afstanden / categorieën blijven onaangeraakt.</li>
+    <li><b>Altijd weg</b>: alle heats + heat_entries voor deze (categorie × afstand × split_group). Via FK-cascade verdwijnen ook automatisch de bijbehorende <code>results</code>-rijen.</li>
+    <li><b>Optioneel weg</b>: <code>uitslag_afstand</code> en <code>uitslag_klassement</code> — alleen als je de bijbehorende checkbox in de dialog aanvinkt.</li>
+    <li><b>Andere afstanden / categorieën</b> blijven onaangeraakt.</li>
+    <li><b>Print-Center cache</b> wordt automatisch ververst — geen pagina-refresh nodig om de dropdown weer up-to-date te krijgen<sup class="ref-link" id="refsrc-52"><a href="#ref-48">[48]</a></sup>.</li>
 </ul></div>
 
 <h3 id="sl-7-print">Stap 7 — Startlijsten printen<sup class="ref-link" id="refsrc-25"><a href="#ref-25">[25]</a></sup></h3>
