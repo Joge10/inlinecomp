@@ -898,6 +898,10 @@ if ($method === 'GET') {
         // lijst in de serie-wizard, zodat de operator alleen aanvinkt uit
         // wat daadwerkelijk in deze serie voorkomt — geen typefouten meer.
         // Param: comp_ids (komma-gescheiden lijst van competition_ids).
+        //
+        // entries.competition_id bestaat niet — entries hangt aan
+        // distance_combination_id, en dc heeft competition_id. Dus
+        // joinen via distance_combinations om competition-scope te krijgen.
         if ($action === 'categorieen_van_wedstrijden') {
             $idsRaw = trim($_GET['comp_ids'] ?? '');
             $compIds = array_values(array_filter(array_map('trim', explode(',', $idsRaw))));
@@ -906,8 +910,9 @@ if ($method === 'GET') {
             $st = $pdo->prepare("
                 SELECT DISTINCT UPPER(TRIM(p.category)) AS cat
                 FROM entries e
+                JOIN distance_combinations dc ON dc.id = e.distance_combination_id
                 JOIN persons p ON p.license_key = e.person_license
-                WHERE e.competition_id IN ($ph)
+                WHERE dc.competition_id IN ($ph)
                   AND p.category IS NOT NULL
                   AND TRIM(p.category) <> ''
                 ORDER BY cat
