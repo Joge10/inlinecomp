@@ -527,6 +527,7 @@ a.ref-back:hover { text-decoration: underline; }
 <tr><td><b>KNSB</b></td><td>Koninklijke Nederlandsche Schaatsenrijders Bond — sportbond die in Nederland onder andere inline-skatewedstrijden organiseert.</td></tr>
 <tr><td><b>Loting</b></td><td>De verdeling van rijders over heats voor een ronde. Vier seeding-methodes (Op startnummer / Alfabetisch / Tussenklassement / Klassement) plus een slangenpatroon voor de heat-toewijzing.</td></tr>
 <tr><td><b>MyLaps</b> / <b>Orbits</b></td><td>Elektronisch tijdwaarnemingssysteem (MyLaps is hardware, Orbits is de software). Exporteert CSV-bestanden met finishtijden die InlineComp via de CSV Upload Monitor automatisch oppikt.</td></tr>
+<tr><td><b>Photofinish</b> (📷-marker)</td><td>Visueel signaal naast de naam van een rijder die in zijn direct voorgaande ronde een jury-wissel had (zie Wissel). De gewisselde rijders dragen het 📷-icoon mee in de startlijst van de eerstvolgende ronde — heat-card, links-paneel én geprinte startlijst — zodat speaker en aankomst-jury weten dat hun transponder-tijd via een jury-beslissing is bijgesteld. Verdwijnt zodra de rijder normaal (zonder nieuwe wissel) een ronde verder gaat. Persistent in DB-kolom <code>results.is_photofinish</code>.</td></tr>
 <tr><td><b>Punten</b> (klassement)</td><td>Positie-gebaseerd: 1e plaats = 1 punt, 2e = 2 punten, enzovoort. <b>Lager totaal = beter</b>. Alleen bij <em>puntenkoers</em>-race-type betekent "punten" iets anders: punten worden tijdens de race verdiend per tussensprint en per finishpositie.</td></tr>
 <tr><td><b>Q</b> / <b>q</b></td><td><b>Q</b> = positie-kwalificatie (top-N per heat), <b>q</b> = tijd-kwalificatie (snelste tijden over alle heats heen). Werkt zowel in Internationaal (KF→HF→A) als in Full-Final (Series→A) als <em>Q per heat</em> in de afstand-config ≥ 1 staat. Verschijnen in het read-only paneel van Live verwerking als kwalificatie-markering per rijder.</td></tr>
 <tr><td><b>Race-type</b></td><td>Sport-type van een afstand: <em>sprint</em>, <em>inline</em>, <em>puntenkoers</em>, <em>afvalkoers</em>. Bepaalt de sortering in de heat-uitslag (sprint: alleen tijd; inline/afvalkoers: rondes → tijd; puntenkoers: punten → rondes → tijd).</td></tr>
@@ -545,6 +546,7 @@ a.ref-back:hover { text-decoration: underline; }
 <tr><td><b>Transponder</b></td><td>Elektronische tijdmeting-chip met enkelband. Reglementair verplicht. Wordt door MyLaps/Orbits uitgelezen. Eén rijder kan meerdere transponders hebben (T1, T2, extra, of organisatie-transponder).</td></tr>
 <tr><td><b>Tussenklassement</b></td><td>Klassement berekend op basis van de eerder gereden afstanden binnen <em>dezelfde</em> wedstrijddag. Kan worden gebruikt als seeding-methode voor latere afstanden.</td></tr>
 <tr><td><b>Vastleggen</b> (klassement)</td><td>Definitieve afsluiter in de Uitslag-module: het hele klassement van een categorie wordt opgeslagen als officiële uitslag. Pas mogelijk als alle afstanden zijn bevestigd.</td></tr>
+<tr><td><b>Wissel</b> (jury-wissel, swap)</td><td>Handmatige aanpassing van twee finishposities door de jury — bijvoorbeeld na een foto-finish-beslissing dat rijder A toch eerder over de finish was dan rijder B. Beschikbaar in Live verwerking zodra de rit "alles groen" is (alle rijders hebben tijd, sanctie of afval-rang). Open de Fin.-dropdown van rijder A en kies de positie van B → posities ruilen, tijden ruilen mee (bij verschillende rondes krijgt de "verliezer" de rondes+tijd+10ms van de winnaar). Beide rijders krijgen daarna een vergrendeld badge (slot-icoon) en kunnen niet opnieuw geswapt worden — re-import van de CSV reset alle wissels. De gewisselde rijders krijgen in de volgende ronde een Photofinish-marker (zie boven).</td></tr>
 </table>
 
 <h3>Voor wie is deze handleiding?</h3>
@@ -588,7 +590,7 @@ a.ref-back:hover { text-decoration: underline; }
 <ul>
     <li><b>Toetsenbord-shortcuts</b>: ←/→ navigeert tussen ritten in de carousel. Geen muis nodig.</li>
     <li><b>Tijden-formaat</b>: gebruik <b>punt</b> als decimaalscheider (geen komma): <code>42.531</code>, <code>1:42.531</code>. HH:MM:SS-formaat wordt niet ondersteund — komt bij inline ook niet voor in deze module.</li>
-    <li><b>Posities wisselen</b> kan na opslaan via de Fin.-dropdown: kies de positie van rijder B → InlineComp wisselt rijders A en B inclusief hun tijden (§1.6 stap 5).</li>
+    <li><b>Posities wisselen</b> kan zodra de rit "alles groen" is (alle rijders hebben tijd, sanctie of afval-rang) — opslaan vooraf is niet meer nodig. Open de Fin.-dropdown van rijder A, kies de positie van B → InlineComp wisselt posities + tijden, en blokkeert beide rijders voor verdere wissels (slot-icoon). Re-import van de CSV reset alle wissels (§1.6 stap 5).</li>
     <li><b>Volgende ronde laten opbouwen</b>: niet handmatig, niet via knop — InlineComp doet het automatisch zodra alle ritten van de huidige ronde compleet zijn (tijd of sanctie ingevuld).</li>
 </ul>
 
@@ -2195,6 +2197,8 @@ Dit is handig voor regio- en beginnerswedstrijden waar je elke serie een eerlijk
 
 <div class="tip"><b>Op de wedstrijddag:</b> druk de startlijsten af zodra de loting klopt en deel ze uit aan starten, de scheidsrechter, de aankomst-jury, de tijdwaarneming en de speaker. Rijders en coaches krijgen tegenwoordig geen papieren versie meer — die kijken via Sportity. (Toekomstwens: rijders en coaches zien hun startlijsten straks rechtstreeks in InlineComp.)</div>
 
+<div class="info"><b>Photofinish-marker (📷) op de print.</b> Een rijder die in zijn direct voorgaande ronde een jury-wissel had (zie §1.6 Stap 5) krijgt een 📷-icoontje in de Opm.-kolom van de startlijst. Bedoeld als signaal voor de aankomst-jury en speaker: "deze rijder heeft een door de jury bijgestelde tijd, let op bij q-kwalificatie". De marker verdwijnt zodra de rijder normaal (zonder nieuwe wissel) een ronde verder gaat — dus in de finale-startlijst staat 'ie alleen als er ook in de halve finale een wissel was. Werkt zowel voor de browse-weergave (heat-card) als de print-versie (Opm.-kolom).</div>
+
 <p>Daarmee staan alle heats van de eerste ronde klaar. In <b>Live verwerking</b> (§1.6) gaan we deze startlijsten gebruiken om tijden en posities in te voeren — en zodra die binnen zijn, vult het systeem zelf de halve finales en finales op basis van de ronde-doorstroom uit het tijdschema.</p>
 
 <h2 id="a-live">1.6 Module Live verwerking — van eerste tijd tot finale-uitslag</h2>
@@ -2361,7 +2365,7 @@ Dit is handig voor regio- en beginnerswedstrijden waar je elke serie een eerlijk
     </div>
   </div>
 </div>
-<p class="mock-caption">↑ Een sprint-rit met ingevoerde tijden. Kolommen: <b>#</b> (startpositie in de heat) · <b>Snr</b> · <b>Naam</b> · <b>Transp.</b> · <b>Tijd</b> · <b>Sanctie</b> · <b>Fin.</b> (finishpositie — verschijnt als badge "1e"/"2e"/… na opslaan; toont "—" zolang er geen tijd of geen sanctie is). Rijder L. Voorbeeld heeft een False Start: tijd-cel geel/leeg, geen finishpositie. De Fin.-cel wordt na opslaan een dropdown waarmee de jury de positie kan aanpassen (handmatige correctie).</p>
+<p class="mock-caption">↑ Een sprint-rit met ingevoerde tijden. Kolommen: <b>#</b> (startpositie in de heat) · <b>Snr</b> · <b>Naam</b> · <b>Transp.</b> · <b>Tijd</b> · <b>Sanctie</b> · <b>Fin.</b> (finishpositie — verschijnt als badge "1e"/"2e"/… zodra <em>_berekenPosities</em> een tijd heeft om mee te rekenen; toont "—" zolang er geen tijd of geen sanctie is). Rijder L. Voorbeeld heeft een False Start zonder tijd-invoer (tijd-cel geel-gekleurd, leeg) — daarom geen finishpositie; <em>met</em> ingevulde tijd zou hij een normale positie krijgen want FS is een waarschuwing, geen uitval. Zodra de rit <em>"alles groen"</em> is (alle rijders hebben status), worden de Fin.-badges automatisch dropdowns waarmee de jury posities kan aanpassen — opslaan vooraf is niet nodig (zie Stap 5).</p>
 
 <h4>Puntenkoers — extra invoer-paneel</h4>
 
@@ -2621,20 +2625,24 @@ Komt jouw timing-systeem met andere kolomnamen? Dan herkent de parser het bestan
 
 <div class="info"><b>Slimme correctie bij laden.</b> Bij het openen van de Live-pagina herberekent InlineComp finishposities voor puntenkoers-ritten op basis van punten → rondes → tijd, voor het geval er nog data uit een oudere versie in de database staat met andere sortering.</div>
 
-<h4>Posities handmatig wisselen na opslaan<sup class="ref-link" id="refsrc-37"><a href="#ref-37">[37]</a></sup></h4>
+<h4>Posities handmatig wisselen — "alles groen"-fase<sup class="ref-link" id="refsrc-37"><a href="#ref-37">[37]</a></sup></h4>
 
-<p>Na opslaan verandert de Fin.-cel van een passieve badge naar een <b>dropdown</b> met alle geldige posities. Daarmee kan de jury twee rijders <b>onderling van plek wisselen</b> — bijvoorbeeld als de scheidsrechter beslist dat rijder A toch eerder over de finish was dan rijder B.</p>
+<p>Zodra <b>alle rijders in de rit een status hebben</b> (een tijd, een sanctie, óf — bij afvalkoers — een afval-positie) wordt de Fin.-cel een <b>dropdown</b> met alle geldige posities. Dit is de "jury-fase": pas als de invoer compleet is mag je herorderen. Een save vooraf is niet meer nodig — dropdowns zijn meteen actief.</p>
 
-<p><b>Wat er gebeurt bij een wissel:</b> open de Fin.-dropdown van rijder A en kies de positie van rijder B. InlineComp ruilt vervolgens niet alleen de posities, maar ook de bijbehorende tijden:</p>
+<p><b>Wat er gebeurt bij een wissel:</b> open de Fin.-dropdown van rijder A en kies de positie van rijder B. InlineComp ruilt vervolgens niet alleen de posities, maar ook de bijbehorende tijden zodat de automatische sortering consistent blijft:</p>
 
 <ul>
     <li><b>Bij sprint</b> (gelijke rondes voor beide): de tijden van A en B worden onderling verwisseld.</li>
     <li><b>Bij langere afstand of puntenkoers</b> (mogelijk verschillende rondes): de "verliezer" van de wissel krijgt de rondes én de tijd van de "winnaar", plus 10 ms erbij. Zo blijft hij in de automatische sortering net achter de winnaar staan, ook als ze daarvoor verschillende rondes hadden.</li>
 </ul>
 
-<div class="info"><b>De dropdown verschijnt niet altijd.</b> Je ziet 'm alleen als de rijder al een finishpositie heeft (dus na opslaan), als er meer dan één positie te wisselen is, en als je schrijfrechten hebt. In leesmodus en bij een nog-niet-opgeslagen rit zie je gewoon de "—" of de berekende positie als badge.</div>
+<div class="info"><b>Eén wissel per rijder per sessie.</b> Direct na een wissel krijgen beide betrokken rijders een vergrendeld badge (🔒 + positie, zacht oranje) in plaats van een dropdown. Dat voorkomt cascading swaps (A↔B, dan B↔C) waarbij de tijd-state onleesbaar wordt. Wil je een wissel ongedaan maken of een andere swap doen, dan importeer je de CSV opnieuw — dat reset alle wissels en je kunt verse swaps maken.</div>
 
-<div class="warn"><b>Geen vrije positie-toewijzing.</b> Je kunt rijder A niet op een positie zetten die nog niet bestaat, en niet "tussenvoegen". Het is altijd een wissel met een bestaande andere rijder. Wil je een geheel andere ranking-volgorde, dan ga je in de praktijk via de <em>tijd</em>-cel werken (een andere tijd invoeren en opnieuw opslaan).</div>
+<div class="info"><b>Photofinish-icoon volgt mee naar de volgende ronde.</b> Een gewisselde rijder krijgt een 📷-icoontje naast z'n naam in de startlijst van zijn direct opvolgende ronde (KF, HF, finale — in heat-card, links-paneel en de geprinte startlijst). Zo ziet iedereen — speaker, jury, coach — direct dat z'n transponder-tijd via een jury-beslissing is bijgesteld. Het icoontje verdwijnt zodra de rijder normaal (zonder nieuwe wissel) een ronde verder gaat.</div>
+
+<div class="info"><b>Wanneer zie je géén dropdown?</b> In leesmodus (Viewer-rol). Of als de rit nog niet "alles groen" is — dan staan er nog rijders met lege tijd/sanctie en zou wisselen verwarrend zijn omdat de qualifying-volgorde nog wisselt door late invoer.</div>
+
+<div class="warn"><b>Geen vrije positie-toewijzing.</b> Je kunt rijder A niet op een positie zetten die nog niet bestaat, en niet "tussenvoegen". Het is altijd een wissel met een bestaande andere rijder. Wil je ex-aequo forceren (twee rijders op dezelfde positie), dan vul je in de praktijk dezelfde <em>tijd</em> in voor beide rijders en sla je op — _berekenPosities geeft ze dan automatisch dezelfde rang.</div>
 
 <h3 id="liv-6-volgende">Stap 6 — Vervolgrondes laten genereren<sup class="ref-link" id="refsrc-32"><a href="#ref-32">[32]</a></sup></h3>
 
@@ -2674,6 +2682,18 @@ Komt jouw timing-systeem met andere kolomnamen? Dan herkent de parser het bestan
 <div class="info"><b>Plek-labels in runner-up-rit-namen worden live herrekend.</b> Stel de jury heeft door RR/jury-correctie 17 rijders naar de kwartfinale doorgestuurd in plaats van de geplande 16. Dan past InlineComp automatisch de plek-ranges in de runner-up-ritnamen aan: heat 1 wordt "(plek 18-21)" in plaats van de oorspronkelijke "(plek 17-20)". Speakers en uitslag-titels lopen zo synchroon met de werkelijke doorstroom-aantallen.</div>
 
 <div class="info"><b>Combineerde A-finales</b> (alleen Full-Final, zie §1.4 stap 6) verschijnen in de carousel met een 🔗-badge en een nummer "1/2", "2/2" etc. — zo zie je in welke combi-groep de rit zit. Het invoer-proces blijft hetzelfde als bij een gewone rit.</div>
+
+<h4>Achteraf een sanctie of correctie in een eerdere ronde toevoegen</h4>
+
+<p>Het komt voor dat je tijdens uitslag-verwerking ontdekt dat je in een eerdere ronde iets vergeten bent — bijvoorbeeld een DQ-TF op een rijder die toch de KF niet gehaald heeft. Open de eerdere rit in de carousel, zet de sanctie en sla op. InlineComp checkt zelf of de wijziging gevolgen heeft voor de opvolgende ronde:</p>
+
+<ul>
+    <li><b>Geen impact op de qualifying-set</b> (bv. DQ-TF op een rijder die toch al niet doorging) → opvolgende rondes blijven volledig intact, geen toast, geen UI-flikker. De server doet niets — je wijziging staat erin, klaar.</li>
+    <li><b>Wel impact, maar opvolgende ronde heeft alleen startlijst (nog geen resultaten)</b> → startlijst wordt stilletjes opnieuw geloot, geen verlies van data.</li>
+    <li><b>Wel impact, en opvolgende ronde heeft al resultaten</b> → in-house bevestigingsdialog: <em>"De qualifying-set is veranderd. Bij hergenereren gaan deze reeds-ingevoerde resultaten verloren: KF: 12 resultaten. Doorgaan met hergenereren?"</em> Met twee knoppen: <b>Behoud bestaande</b> (laat KF staan, je wijziging blijft in de heats maar de KF-startlijst loopt nu wel uit-de-pas) of <b>Hergenereren</b> (KF wordt verwijderd en opnieuw geloot met de nieuwe qualifying-set).</li>
+</ul>
+
+<div class="info"><b>Wat de pre-check vergelijkt:</b> de set van qualifying-rijders (op person_license) van de huidige opvolgende ronde versus wat er na jouw wijziging in zou moeten. Identiek → niets doen. Verschillend → bevestiging vragen of stilletjes regenereren afhankelijk van of er al resultaten verloren zouden gaan.</div>
 
 <h3 id="liv-7-concurrency">Stap 7 — Multi-user gedrag en lees-modus<sup class="ref-link" id="refsrc-33"><a href="#ref-33">[33]</a></sup></h3>
 
@@ -3054,6 +3074,19 @@ Binnen elke groep gelden de bekende tiebreakers (gesorteerde individuele punten,
 
 <div class="info"><b>Bij Internationaal-systeem zijn de punten-velden niet bewerkbaar.</b> Daar volgt het klassement strict het reglement (zie ook §1.6 Stap 4 sancties-tabel) — de "Correcties opslaan"-knop verschijnt dan niet.</div>
 
+<h4>Tie-breaker bij gelijke punten (alleen Full-Final, ≥2 afstanden)</h4>
+
+<p>Bij Full-Final met twee of meer afstanden verschijnt boven de klassement-tabel een dropdown <b>Tie-breaker bij gelijke punten:</b> met twee modi:</p>
+
+<ul>
+    <li><b>Standaard (beste resultaten → laatste afstand)</b> — klassieke multi-stap-keten: bij gelijke totaal-punten worden eerst de gesorteerde individuele puntenrijen vergeleken (beste afstandsresultaat eerst), als allerlaatste vangnet de punten in de laatste afstand. Dit is wat de meeste reglementen voorschrijven.</li>
+    <li><b>Op basis van: [afstandsnaam]</b> — old-school regel "winnaar van die afstand wint bij gelijke stand". Bij gelijke totaal-punten kijkt het systeem direct naar de gekozen afstand, geen verdere fallback. Handig voor wedstrijden waar één afstand als "hoofdafstand" geldt.</li>
+</ul>
+
+<div class="info"><b>De keuze persisteert in de database</b> (tabel <code>klassement_config</code>) per (competition × DC). Zo zien álle operators op verschillende PC's dezelfde stand, en bij <b>Klassement vastleggen</b> (Stap 6) wordt dezelfde regel toegepast als wat op het scherm staat. Bij Internationaal verschijnt deze dropdown niet — daar volgt het klassement het reglement strict, zonder operator-keuze.</div>
+
+<div class="info"><b>Aantal afstanden gereden weegt altijd het zwaarst.</b> Vóór alle tie-breakers staat de regel: rijders die meer afstanden hebben gereden eindigen boven rijders die er minder hebben gereden. Pas binnen elke "aantal-gereden"-groep telt de tie-breaker. Een rijder die 4 van 4 afstanden reed eindigt dus altijd boven iemand die er 3 reed, ongeacht puntentotaal — zo wordt het klassement geen straf voor wie alle afstanden uitrijdt.</div>
+
 <h3 id="uit-6-vastleggen">Stap 6 — Klassement definitief vastleggen<sup class="ref-link" id="refsrc-43"><a href="#ref-43">[43]</a></sup></h3>
 
 <p>Zodra alle afstanden bevestigd zijn (groene tabs) en eventuele correcties zijn opgeslagen, wordt de <b>[🏆 Klassement vastleggen]</b>-knop oranje en klikbaar. Klikken slaat het hele klassement van deze categorie definitief op. De knop toont kort <b>"✓ Bevestigd"</b> in groen, daarna ververst de pagina met de definitieve stand.</p>
@@ -3080,6 +3113,10 @@ Binnen elke groep gelden de bekende tiebreakers (gesorteerde individuele punten,
 <div class="info"><b>Tussenklassement vs Eindklassement op de print.</b> De tabel-opbouw is identiek (kolom per afstand, totaal-kolom rechts). Verschil zit in de status: tussenklassement-print toont in de header dat het de stand <em>op dit moment</em> is en bevat alleen kolommen van afstanden die al data hebben (overige afstanden niet zichtbaar). Eindklassement is de definitieve versie ná vastlegging — alle afstanden zitten erbij, met de officiële stand zoals 'ie in de DB staat.</div>
 
 <div class="info"><b>Sancties als voetnoot onder de uitslag.</b> Bij elke print van een afstand-uitslag worden alle sancties van die afstand (W1, W2, FS, RR, DQ-TF, DQ-SF, DQ-DF, DNS, DNF) als genummerde voetnoten onder de tabel gezet — zo zien jurytafel en speaker direct in welke ronde wat is uitgedeeld zonder de Live-module te hoeven openen.</div>
+
+<div class="info"><b>Print-Center actualiseert direct na vastleggen.</b> Zodra je een afstand-uitslag bevestigt (Stap 4) of het klassement vastlegt (Stap 6), worden de Print-Center cache én de lokale dropdowns op de Uitslag-pagina meteen ververst. Geen pagina-refresh meer nodig — het zojuist vastgelegde klassement of de zojuist bevestigde afstand-uitslag is direct printbaar. Hetzelfde geldt na het genereren of wissen van een loting in §1.5.</div>
+
+<div class="info"><b>Cursief getoonde rijders op de print.</b> Alleen rijders <em>zonder rang</em> worden licht/cursief gedrukt — typisch DNS in de eerste ronde van de afstand, of DQ-SF / DQ-DF (volledig diskwalificerend). Rijders met sanctie maar wél een rang (DQ-TF, DNF, DNS in latere ronde, FS+tijd) worden gewoon normaal getoond — ze zijn immers gereden en horen in de uitslag, alleen met sanctie-label in de Sanctie-kolom.</div>
 
 <hr style="margin:40px 0;border:none;border-top:2px solid var(--oranje)">
 
@@ -3811,7 +3848,10 @@ Binnen elke groep gelden de bekende tiebreakers (gesorteerde individuele punten,
 <tr id="ref-34"><td>Sancties op klassement-niveau (DNS, DQ-*) <a class="ref-back" href="#refsrc-34" title="Terug naar tekst">↑[34]</a></td><td><code>api/_uitslag_helper.php</code></td><td>regel 297-316 (DNS-eerste-ronde-uitzondering, art. 144.4) · regel 318-352 (RANKED_LAST + NOT_RANKED toewijzing)</td></tr>
 <tr id="ref-35"><td>Bewerkbare punten Full-Final, niet bij Internationaal <a class="ref-back" href="#refsrc-35" title="Terug naar tekst">↑[35]</a></td><td><code>api/klassement_live.php</code> + <code>js/uitslag.js</code></td><td><code>$bewerkbaar = $isFullFinal &amp;&amp; $isSanctie</code> regel 232 · "Correcties opslaan"-knop in <code>js/uitslag.js</code> regel 825 (alleen rendered als <code>heeftBewerkbaar</code>)</td></tr>
 <tr id="ref-36"><td>Runner-up voor afvallers van de eerste ronde <a class="ref-back" href="#refsrc-36" title="Terug naar tekst">↑[36]</a></td><td><code>api/tijdschema.php</code></td><td>case <code>'runner_up'</code> (~regel 560-615): if/elseif-keten detecteert eerste ronde (heats / kwartfinale / halve_finale) en gebruikt bijbehorende doorstroom-waarde (<code>heats_q</code> / <code>kwart_door</code> / <code>half_door</code>) voor uitvallers-berekening. Plek-ranges in rit-naam, heat-verdeling via <code>verdeelRunnerUpHeats()</code>. Programma-volgorde: tussen halve finale en A-finale (canoniek <code>$volgorde</code> regel 111).</td></tr>
-<tr id="ref-37"><td>Fin.-dropdown — posities wisselen na opslaan <a class="ref-back" href="#refsrc-37" title="Terug naar tekst">↑[37]</a></td><td><code>js/live.js</code></td><td>Render: regel 2184-2194 (dropdown <code>.live-finish-sel</code> alleen bij <code>r.finishpositie</code> + meerdere posities + niet-leesmodus, anders <code>.live-finish-badge</code> met <code>_ordinaal()</code>). Swap-handler: regel 1178-1238 (event-delegation, optimistische update, tijdwissel + bij verschillende rondes <code>+10ms</code> voor de verliezer)</td></tr>
+<tr id="ref-37"><td>Fin.-dropdown — posities wisselen in jury-fase <a class="ref-back" href="#refsrc-37" title="Terug naar tekst">↑[37]</a></td><td><code>js/live.js</code> + <code>api/live.php</code></td><td><b>Alles-groen-gating</b>: dropdown verschijnt alleen als <code>_liveAllesCompleet(ritIdx)</code> (alle rijders hebben tijd, sanctie of afval-rang) — niet meer "na opslaan" maar "zodra de jury aan zet is". <code>_liveRijRij()</code> ontvangt <code>opts.allesCompleet</code> + <code>opts.currentRit</code>. Bij typing-event triggert <code>_liveHerbereken()</code> de activatie via <code>_liveActiveerWisselDropdowns()</code> zodra alles-compleet wordt. Render: dropdown <code>.live-finish-sel</code> bij <code>r.finishpositie &amp;&amp; validPosities.length &gt; 1 &amp;&amp; !_liveLeesOnly &amp;&amp; allesCompleet</code>, anders <code>.live-finish-badge</code> met <code>_ordinaal()</code>. <b>Swap-handler</b>: event-delegation op de kaart — bij swap krijgen beide rijders <code>r._wisselt = true</code> (lokaal) en een lock-badge (<code>_liveLockGewisseldeCel()</code>, klasse <code>finish-pos-gewisselt</code>). Server-API <code>wissel_posities</code> doet de DB-swap (incl. <code>is_photofinish=1</code>) en geeft 404 terug als de results-rij nog niet bestaat — JS valt dan terug op lokale swap + <code>_liveOngeslagen=true</code> zodat save 't alsnog wegschrijft. Bij CSV-re-import wist <code>_liveResetFinishCellen()</code> de <code>_wisselt</code>-flags. Tijd-aanpassing bij swap: gelijke rondes → tijden wisselen; verschillende rondes → verliezer krijgt rondes+tijd+10ms van winnaar.</td></tr>
+<tr><td>Photofinish-marker (📷) <a id="ref-pf"></a></td><td><code>api/live.php</code> · <code>api/startlijst_laden.php</code> · <code>js/live.js</code> · <code>js/startlist.js</code> · DB-kolom <code>results.is_photofinish</code></td><td>DB: TINYINT(1) NOT NULL DEFAULT 0 (migration <code>2026-05-10_results_photofinish.sql</code>). Set door <code>wissel_posities</code> in <code>api/live.php</code>; respected in <code>save_rit_results</code> payload (re-import-undo werkt over saves heen). Live-UI: <code>_liveHeeftPhotofinishVorigeRonde(rijder, currentRit)</code> in <code>js/live.js</code> — alleen direct voorgaande ronde in zelfde dc+afstand telt (via <code>_RONDE_RANK</code>-mapping heats=1, KF=2, HF=3, finale=4). Toont <code>.live-pf-badge</code> naast naam in heat-card én links-paneel. Startlist-UI: <code>vorige_photofinish</code>-veld via <code>api/startlijst_laden.php</code> sub-query (ORDER BY ronde DESC LIMIT 1, +cast naar int) → <code>.heat-pf-badge</code> in browse-view + <code>.pr-pf-icon</code> in print Opm.-kolom (incl. <code>print-color-adjust:exact</code>).</td></tr>
+<tr><td>Genereer-volgende-ronde — ongewijzigd-detectie + bevestigingsdialog</td><td><code>api/live.php</code> + <code>js/live.js</code></td><td>Server-side pre-check vóór de DELETE+INSERT in <code>genereer_volgende_ronde</code>: berekent <code>$nieuweLicenties</code> uit <code>$allSlots</code> (+ <code>$bSlots</code> bij full-final), vergelijkt met bestaande heat_entries van de doel-ronde(s). Identiek → return <code>{ok: true, ongewijzigd: true}</code> zonder DB-mutatie. Verschillend + bestaande results → return <code>{vraag_bevestiging: true, te_wissen: [{ronde_type, aantal_results}]}</code>. Client (<code>_liveGenereerVolgendeRonde</code>) toont <code>toonBevestigDialog()</code> met <code>bodyIsHtml: true</code> en <code>&lt;ul&gt;</code> van te-wissen rondes; bij confirm: retry met <code>force: true</code>; bij cancel: toast "X niet bijgewerkt — bestaande resultaten behouden". Keten-helper (<code>_liveGenereerKetenStap</code>) bouwt combined toast met "ongewijzigd"/"niet bijgewerkt" labels per ronde.</td></tr>
+<tr><td>FS panel-Q/q-bug fix</td><td><code>js/live.js</code></td><td>Constant <code>_SANCTIE_GEEN_FINISH = ['DNS','DNF','DQ-TF','DQ-SF','DQ-DF']</code> spiegelt PHP <code>$sanctiesUit</code>. Gebruikt in <code>_liveVerzamelPanelRijders()</code> Q-detectie + q-pool filter — voorkomt dat FS/RR/W1/W2-rijders ten onrechte hun Q/q-status verliezen in het links-paneel. Status-kleur in <code>_liveBouwPanelTbodyRijen()</code>: FS+tijd → groen (compleet), niet rood (sanctie).</td></tr>
 </table>
 
 <h3>Uitslag (§1.7)</h3>
@@ -4099,6 +4139,10 @@ Binnen elke groep gelden de bekende tiebreakers (gesorteerde individuele punten,
 <tr><td><code>_importCsvCache</code></td><td>Map<bestandsnaam, parsed-rows> — gecachte parse-resultaten van CSV-imports</td></tr>
 <tr><td><code>_importPollHandles</code></td><td>Map<ritIdx, intervalHandle> — handles voor auto-refresh van bestandenlijst in CSV-paneel</td></tr>
 <tr><td><code>RONDE_LABEL</code></td><td>Object: <code>ronde_type → label</code> (bv. <code>heats → 'Series'</code>, <code>finale_a → 'A-Finale'</code>)</td></tr>
+<tr><td><code>_RONDE_RANK</code></td><td>Object: <code>ronde_type → numeriek niveau</code> (heats=1, kwartfinale=2, halve_finale/runner_up=3, finale_*=4). Gebruikt door <code>_liveHeeftPhotofinishVorigeRonde()</code> om "direct voorgaande ronde" te bepalen voor de 📷-marker.</td></tr>
+<tr><td><code>_SANCTIE_RANKED_LAST</code> / <code>_SANCTIE_NOT_RANKED</code> / <code>_SANCTIE_WIST_TIJD</code> / <code>_SANCTIE_GEEN_FINISH</code></td><td>Sets met sanctie-codes per gedrag-categorie. <code>RANKED_LAST</code> = DNF/DQ-TF/DNS (krijgen laatste plek). <code>NOT_RANKED</code> = DQ-SF/DQ-DF (geen plek). <code>WIST_TIJD</code> = DNS/DNF/DQ-* (tijd → null bij save). <code>GEEN_FINISH</code> = DNS/DNF/DQ-* (spiegelt PHP <code>$sanctiesUit</code> — gebruikt in panel-Q/q-detectie zodat FS/RR/W1/W2 níet ten onrechte hun kwalificatie verliezen).</td></tr>
+<tr><td><code>r._wisselt</code> (per-rijder property)</td><td>Lokale boolean op een rijder-object — <code>true</code> wanneer die rijder in een swap betrokken is geweest in de huidige sessie. Triggert het lock-badge in plaats van een wissel-dropdown. Wordt geset bij swap, gewist bij CSV-re-import, en gepersisteerd via <code>is_photofinish</code>-kolom op DB-load (zodat een refresh de lock-state herstelt).</td></tr>
+<tr><td><code>r.is_photofinish</code> (per-rijder property)</td><td>0 of 1 uit <code>results.is_photofinish</code> in DB. Gezet door <code>wissel_posities</code>-API; geschreven via <code>save_rit_results</code>-payload (afgeleid van <code>r._wisselt</code>). Bron voor 📷-marker via <code>_liveHeeftPhotofinishVorigeRonde()</code>.</td></tr>
 </table>
 
 <h3>Uitslag (§1.7) — uit <code>js/uitslag.js</code></h3>
@@ -4191,11 +4235,11 @@ Binnen elke groep gelden de bekende tiebreakers (gesorteerde individuele punten,
 <h3>Live verwerking (§1.6)</h3>
 <table class="ref">
 <tr><th>Tabel</th><th>Wanneer geraakt</th></tr>
-<tr><td><code>results</code></td><td>UPSERT bij <em>rit opslaan</em>: <code>heat_entry_id, finishpositie, tijd_ms, rondes, punten, sanctie</code>. Geen DELETE — waarden worden steeds overschreven.</td></tr>
-<tr><td><code>heat_entries</code></td><td>INSERT bij <em>vervolgronde genereren</em> (regel 1028+): kwalificeerders worden in nieuwe heats geplaatst</td></tr>
-<tr><td><code>heats</code></td><td>DELETE bij her-genereren van een ronde (regel 953, 967, 976): oude vervolgronde-heats worden gewist voordat nieuwe komen</td></tr>
-<tr><td><code>tijdschema_ritten</code></td><td>INSERT/DELETE/UPDATE bij ex-aequo-correctie (regel 959, 986, 1122-1129): extra heats worden bijgemaakt, of volgorde-velden bijgewerkt</td></tr>
-<tr><td><code>distances</code></td><td>UPDATE <code>race_type</code> als de gebruiker tijdens de live-verwerking het race-type van een afstand wijzigt (regel 1700)</td></tr>
+<tr><td><code>results</code></td><td>UPSERT bij <em>rit opslaan</em>: <code>heat_entry_id, finishpositie, tijd_ms, rondes, punten, sanctie, afval_rang, is_photofinish</code>. UPDATE-only bij <em>jury-wissel</em> via <code>wissel_posities</code>: zet <code>finishpositie, tijd_ms, rondes, is_photofinish=1</code> voor beide rijders. Geen DELETE — waarden worden steeds overschreven. <b>Pre-check bij vervolgronde-generatie</b>: vergelijking van qualifying-set met bestaande heat_entries voorkomt onnodige DELETE+INSERT als de set niet is veranderd; bij verandering met bestaande results vraagt de server eerst bevestiging via <code>vraag_bevestiging</code>-vlag.</td></tr>
+<tr><td><code>heat_entries</code></td><td>INSERT bij <em>vervolgronde genereren</em>: kwalificeerders worden in nieuwe heats geplaatst — alleen als de qualifying-set anders is dan wat er al stond (anders no-op)</td></tr>
+<tr><td><code>heats</code></td><td>DELETE bij her-genereren van een ronde: oude vervolgronde-heats worden gewist voordat nieuwe komen — alleen na operator-bevestiging als er already results in de doel-ronde stonden</td></tr>
+<tr><td><code>tijdschema_ritten</code></td><td>INSERT/DELETE/UPDATE bij ex-aequo-correctie: extra heats worden bijgemaakt, of volgorde-velden bijgewerkt</td></tr>
+<tr><td><code>distances</code></td><td>UPDATE <code>race_type</code> als de gebruiker tijdens de live-verwerking het race-type van een afstand wijzigt</td></tr>
 </table>
 
 <h3>Uitslag (§1.7)</h3>
@@ -4204,6 +4248,7 @@ Binnen elke groep gelden de bekende tiebreakers (gesorteerde individuele punten,
 <tr><td><code>uitslag_afstand</code></td><td>UPSERT bij <em>uitslag bevestigen</em> (per afstand) en bij <em>klassement vastleggen</em> (alle afstanden in één keer): <code>competition_id, dc_id, distance_id, person_license, rang, punten, sanctie, vastgelegd_at</code>. UPDATE bij <em>jury-correcties</em> (alleen <code>punten</code> + <code>vastgelegd_at</code>). Geen DELETE — historische integriteit blijft bewaard.</td></tr>
 <tr><td><code>uitslag_klassement</code></td><td>Afgeleide tabel — wordt herberekend bij <em>klassement vastleggen</em> uit <code>uitslag_afstand</code>. Read-only voor de Uitslag-module zelf (alleen via <code>klassement_live.php</code> uitgelezen)</td></tr>
 <tr><td><code>tijdschema_cat_config</code></td><td>UPDATE bij <em>SAS-toggle</em>: <code>series_alleen_startvolgorde</code> wordt op 1 of 0 gezet voor alle categorieën in de gekozen groep. DB-default = <code>0</code> (uitgevinkt = serie telt mee voor het totaal)</td></tr>
+<tr><td><code>klassement_config</code></td><td>UPSERT (per <code>competition_id × dc_id</code>) bij wijziging van de tie-breaker-dropdown: <code>tiebreaker_dist</code> = NULL (standaard multi-stap-keten) of een specifieke <code>distance_id</code> ("op basis van die afstand"). Wordt zowel door <code>klassement_live.php</code> (live klassement) als door <code>uitslag_vastleggen.php</code> (definitieve archief-vastlegging) uitgelezen — zo gebruiken alle PC's dezelfde tie-breaker.</td></tr>
 <tr><td><code>uitslag_afstand</code> (gelezen)</td><td>Bron voor de klassement-berekening in <code>api/klassement_live.php</code> — alle bevestigde afstand-uitslagen worden opgeteld per rijder voor het totaal</td></tr>
 </table>
 
