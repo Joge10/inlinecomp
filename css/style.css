@@ -2707,7 +2707,16 @@ tr.ts-drop-below td  { border-bottom: 3px solid #2563eb !important; }
 .ts-rit-naam         { font-weight: 500; }
 .ts-type-badge       { display: inline-block; color: #fff; font-size: .75rem; font-weight: 600;
                        padding: 2px 9px; border-radius: 20px; white-space: nowrap; }
-.ts-rit-verwacht     { text-align: center; color: #555; width: 60px; }
+.ts-rit-verwacht     { text-align: center; color: #555; width: 80px; white-space: nowrap; }
+/* Verwijder-knop per rit (gegenereerd programma). Klein en grijs zodat hij
+   niet schreeuwt; hover = rood om duidelijk te maken dat het destructief is. */
+.ts-rit-verwijder {
+    background: none; border: none; cursor: pointer;
+    margin-left: 8px; padding: 2px 4px; font-size: .9rem;
+    color: #999; opacity: .55; vertical-align: middle;
+}
+.ts-rit-verwijder:hover { color: #b00020; opacity: 1; }
+.ts-rit-verwijder:disabled { cursor: wait; opacity: .3; }
 
 /* ── Combi-selectie + visueel gegroepeerde ritten ───────────────────────── */
 .ts-combi-toolbar {

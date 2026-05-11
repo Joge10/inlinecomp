@@ -1442,6 +1442,16 @@ function renderRittenLijst(ritten, blokken) {
                 nrCelInhoud = String(ritNr);
             }
 
+            // Prullenbakje: alleen in schrijf-modus. Dunne knop achter
+            // 'verwacht' zodat hij compact blijft in de tabel. Confirm-
+            // dialog komt in de event-handler.
+            const verwijderBtn = !_tsLeesOnly
+                ? `<button class="ts-rit-verwijder" data-rit-id="${rit.id}"
+                            data-rit-naam="${escHtml(rit.rit_naam)}"
+                            data-dc-naam="${escHtml(rit.dc_naam)}"
+                            data-ronde-label="${escHtml(label)}${escHtml(fin)}"
+                            title="Verwijder deze rit (heat + resultaten)">🗑</button>`
+                : '';
             html += `<tr class="ts-rit-rij ts-rit-sub ${combiCls}" data-rit-id="${rit.id}"
                         data-groep-key="${escHtml(groepKey)}"
                         data-combi-group="${combiGrp ?? ''}"
@@ -1450,7 +1460,7 @@ function renderRittenLijst(ritten, blokken) {
                 <td class="ts-rit-nr">${nrCelInhoud}</td>
                 <td class="ts-rit-naam">${escHtml(rit.rit_naam)}</td>
                 <td><span class="ts-type-badge ts-type-badge-sm" style="background:${kleur}">${escHtml(label)}${escHtml(fin)}</span></td>
-                <td class="ts-rit-verwacht">${rit.verwacht ?? '?'}</td>
+                <td class="ts-rit-verwacht">${rit.verwacht ?? '?'}${verwijderBtn}</td>
             </tr>`;
         }
     });
@@ -1990,6 +2000,37 @@ function bindTsEvents(afstandGroepen) {
             try {
                 await postTs({ action: 'delete_blok', tijdschema_id: tsId, blok_id: parseInt(btn.dataset.blokId) });
             } catch(e) { toonBevestigDialog(e.message, 'Fout'); }
+        });
+    });
+
+    // Eén rit verwijderen uit het gegenereerd programma. Bedoeld voor
+    // mid-wedstrijd-noodgevallen (bv. weer slaat tegen → runner-up
+    // skippen voor één cat). De backend gooit ook heat + entries +
+    // results weg en update cat_config indien dit de laatste rit van
+    // die ronde was.
+    container.querySelectorAll('.ts-rit-verwijder').forEach(btn => {
+        btn.addEventListener('click', async (ev) => {
+            ev.stopPropagation(); // niet de groep-header drag triggeren
+            const ritId    = parseInt(btn.dataset.ritId);
+            const ritNaam  = btn.dataset.ritNaam || '?';
+            const dcNaam   = btn.dataset.dcNaam || '';
+            const rondeLbl = btn.dataset.rondeLabel || '';
+            const melding =
+                `Verwijder rit "${ritNaam}" — ${rondeLbl} ${dcNaam}\n\n` +
+                `De heat, alle ingedeelde rijders en eventuele resultaten ` +
+                `worden gewist. Dit kan NIET ongedaan gemaakt worden.\n\n` +
+                `Doorgaan?`;
+            if (!await toonBevestigDialog(melding, 'Rit verwijderen')) return;
+            btn.disabled = true;
+            try {
+                await postTs({
+                    action:             'delete_rit',
+                    tijdschema_id:      tsId,
+                    rit_id:             ritId,
+                    tijdschema_version: tijdschemaVersion,
+                });
+                if (typeof invalideerSlTsCache === 'function') invalideerSlTsCache();
+            } catch(e) { toonBevestigDialog(e.message, 'Fout'); btn.disabled = false; }
         });
     });
 

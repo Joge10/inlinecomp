@@ -1454,6 +1454,111 @@ try {
         exit;
     }
 
+    // ── Eén rit verwijderen uit het gegenereerd programma ─────────────────────
+    // Use-case: wedstrijd loopt al, weer slaat tegen → operator skipt een
+    // ronde voor één cat (bv. runner-up HKA). Heat + heat_entries + results
+    // gaan via CASCADE mee; tijdschema_rit zelf gooien we ook weg zodat het
+    // programma geen lege regel houdt. Als het de LAATSTE rit is van die
+    // (dc, distance, ronde_type) wordt tijdschema_cat_config bijgewerkt
+    // zodat alleRondesCompleet() niet blijft wachten op een ronde die niet
+    // meer geloot wordt.
+    if ($action === 'delete_rit') {
+        $tsId  = (int)($body['tijdschema_id'] ?? 0);
+        $ritId = (int)($body['rit_id']        ?? 0);
+        if (!$tsId || !$ritId) {
+            http_response_code(400);
+            echo json_encode(['error' => 'Ongeldige invoer']);
+            exit;
+        }
+        $compId = $getCompId($tsId);
+        // Optimistic locking
+        $clientTsVer = isset($body['tijdschema_version']) ? (int)$body['tijdschema_version'] : null;
+        if ($clientTsVer !== null) {
+            $vStmt = $pdo->prepare("SELECT tijdschema_version FROM competitions WHERE id = ?");
+            $vStmt->execute([$compId]);
+            $dbTsVer = (int)($vStmt->fetchColumn() ?? 0);
+            if ($dbTsVer !== $clientTsVer) {
+                http_response_code(409);
+                echo json_encode([
+                    'error'      => 'conflict',
+                    'message'    => 'Het tijdschema is ondertussen gewijzigd door iemand anders. De pagina wordt ververst.',
+                    'db_version' => $dbTsVer,
+                ]);
+                exit;
+            }
+        }
+
+        // Lookup rit-context (dc, dist, ronde_type) vóór we 'm verwijderen.
+        $rStmt = $pdo->prepare("
+            SELECT dc_id, distance_id, ronde_type, rit_naam
+            FROM tijdschema_ritten
+            WHERE id = ? AND tijdschema_id = ?
+        ");
+        $rStmt->execute([$ritId, $tsId]);
+        $rit = $rStmt->fetch(PDO::FETCH_ASSOC);
+        if (!$rit) {
+            http_response_code(404);
+            echo json_encode(['error' => 'Rit niet gevonden']);
+            exit;
+        }
+
+        $pdo->beginTransaction();
+        // Heats verwijderen (CASCADE: heat_entries + results). Eén rit ↔ één
+        // heat (heats.tijdschema_rit_id), maar we doen DELETE op heats om
+        // ook de zeldzame "rit zonder heat" en "heat zonder rit" netjes af
+        // te handelen.
+        $pdo->prepare(
+            "DELETE FROM heats WHERE tijdschema_rit_id = ? AND competition_id = ?"
+        )->execute([$ritId, $compId]);
+        $pdo->prepare(
+            "DELETE FROM tijdschema_ritten WHERE id = ? AND tijdschema_id = ?"
+        )->execute([$ritId, $tsId]);
+
+        // Als dit de laatste rit van die (dc, dist, ronde_type) was, update
+        // cat_config zodat de uitslag-vastlegging niet blijft wachten.
+        $countStmt = $pdo->prepare("
+            SELECT COUNT(*) FROM tijdschema_ritten
+            WHERE tijdschema_id = ? AND dc_id = ?
+              AND (distance_id <=> ?) AND ronde_type = ?
+        ");
+        $countStmt->execute([$tsId, $rit['dc_id'], $rit['distance_id'], $rit['ronde_type']]);
+        $resterend = (int)$countStmt->fetchColumn();
+
+        if ($resterend === 0 && $rit['distance_id']) {
+            $rt = $rit['ronde_type'];
+            // Map ronde_type → cat_config kolom + waarde
+            $col = null; $waarde = 0;
+            if      ($rt === 'heats')        { $col = 'heeft_heats';        }
+            elseif  ($rt === 'kwartfinale')  { $col = 'heeft_kwartfinale';  }
+            elseif  ($rt === 'halve_finale') { $col = 'heeft_halve_finale'; }
+            elseif  ($rt === 'runner_up')    { $col = 'heeft_runner_up';    }
+            elseif  ($rt === 'finale_a')     { $col = 'finale_heats';       } // count = 0
+            elseif  ($rt === 'finale_b')     { $col = 'finale_b_heats';     } // count = 0
+            if ($col) {
+                $pdo->prepare("
+                    UPDATE tijdschema_cat_config
+                    SET `$col` = ?
+                    WHERE tijdschema_id = ? AND dc_id = ? AND distance_id = ?
+                ")->execute([$waarde, $tsId, $rit['dc_id'], $rit['distance_id']]);
+            }
+        } elseif (in_array($rit['ronde_type'], ['finale_a', 'finale_b'], true) && $rit['distance_id']) {
+            // Voor finales is het aantal het kolomgetal, niet 0/1. Update naar
+            // het werkelijke aantal resterende heats.
+            $col = $rit['ronde_type'] === 'finale_a' ? 'finale_heats' : 'finale_b_heats';
+            $pdo->prepare("
+                UPDATE tijdschema_cat_config
+                SET `$col` = ?
+                WHERE tijdschema_id = ? AND dc_id = ? AND distance_id = ?
+            ")->execute([$resterend, $tsId, $rit['dc_id'], $rit['distance_id']]);
+        }
+
+        $pdo->prepare("UPDATE competitions SET tijdschema_version = tijdschema_version + 1 WHERE id = ?")
+            ->execute([$compId]);
+        $pdo->commit();
+        echo json_encode(fetchSchema($pdo, $compId));
+        exit;
+    }
+
     // ── Programma wissen (ritten verwijderen, blokken+config behouden) ────────
     if ($action === 'wis_programma') {
         $tsId = (int)($body['tijdschema_id'] ?? 0);
