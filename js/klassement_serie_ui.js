@@ -325,16 +325,15 @@ function _renderStap3(state, body) {
         </div>
 
         <div class="ks-veld">
-            <label>Categorie-filter <span style="color:#666;font-weight:400;font-size:11.5px">(leeg = alle categorieën)</span></label>
-            <input type="text" class="inp" id="ks-cat-filter"
-                   value="${rkEsc((r.categorie_filter ?? []).join(', '))}"
-                   placeholder="bv. HKA, DKA, HKB, DKB, HJB, DJB">
+            <label>Categorie-filter <span style="color:#666;font-weight:400;font-size:11.5px">(niets aangevinkt = alle categorieën)</span></label>
+            <div id="ks-cat-filter-wrap" style="border:1px solid var(--border);background:#fafbfc;border-radius:4px;padding:6px;min-height:36px">
+                <em style="color:#888;font-size:11.5px">Categorieën laden uit geselecteerde wedstrijden…</em>
+            </div>
             <div style="font-size:11.5px;color:#666;margin:4px 0 0 2px">
-                Komma- of spatie-gescheiden KNSB-categoriecodes. Alleen rijders met
-                een van deze categorieën worden meegenomen in dit klassement.<br>
-                <b>Voorbeelden:</b> combi-klassement alleen voor Kadetten + Junioren B
-                → <code>HKA, DKA, HKB, DKB, HJB, DJB</code>; sprint/lang-klassement alleen voor
-                senioren → <code>HSA, DSA, HSB, DSB</code>.
+                Vink aan welke categorieën meedoen in dit klassement. Voorbeelden:<br>
+                <b>Combi-klassement</b> alleen voor Kadetten + Junioren B → kruis HKA, DKA, HKB, DKB, HJB, DJB aan.<br>
+                <b>Sprint/lang-klassement</b> alleen voor senioren → kruis HSA, DSA, HSB, DSB aan.<br>
+                Niets aangevinkt = geen filter, alle categorieën doen mee.
             </div>
         </div>
 
@@ -372,15 +371,66 @@ function _renderStap3(state, body) {
         r.punten_tabel = e.target.value.split(',').map(s => parseFloat(s.trim())).filter(n => !isNaN(n));
     });
     get('#ks-min-pnt').addEventListener('input', e => r.min_punten_bij_deelname = parseFloat(e.target.value) || 0);
-    get('#ks-cat-filter')?.addEventListener('input', e => {
-        // Split op komma OF spatie, trim, uppercase, dedupliceer. Lege invoer
-        // → lege array (= geen filter, alle cats meedoen).
-        const arr = (e.target.value || '')
-            .split(/[,\s]+/)
-            .map(s => s.trim().toUpperCase())
+
+    // ── Categorie-filter: ophalen + checkbox-grid bouwen ─────────────
+    // Cats komen uit de daadwerkelijk-aangevinkte wedstrijden zodat de
+    // operator alleen kan kiezen uit wat in deze serie voorkomt. Geen
+    // typefouten meer, geen vergeten cats.
+    (async () => {
+        const wrap = get('#ks-cat-filter-wrap');
+        if (!wrap) return;
+        const compIds = (state.wedstrijden || [])
+            .filter(w => w.telt_mee !== false)
+            .map(w => w.competition_id)
             .filter(Boolean);
-        r.categorie_filter = [...new Set(arr)];
-    });
+        if (!compIds.length) {
+            wrap.innerHTML = '<em style="color:#888;font-size:11.5px">Selecteer eerst wedstrijden in stap 2.</em>';
+            return;
+        }
+        try {
+            const res = await fetch(`api/klassement_serie.php?action=categorieen_van_wedstrijden&comp_ids=${encodeURIComponent(compIds.join(','))}`);
+            const cats = await res.json();
+            if (!Array.isArray(cats) || !cats.length) {
+                wrap.innerHTML = '<em style="color:#888;font-size:11.5px">Geen categorieën gevonden in de geselecteerde wedstrijden.</em>';
+                return;
+            }
+            const aangevinkt = new Set((r.categorie_filter ?? []).map(c => String(c).toUpperCase()));
+            // Render als grid van checkbox-knopjes — compact en aanklikbaar
+            wrap.innerHTML = `
+                <div style="display:flex;flex-wrap:wrap;gap:5px;margin-bottom:4px">
+                    ${cats.map(c => `
+                        <label style="display:inline-flex;align-items:center;gap:3px;padding:2px 7px;border:1px solid var(--border);border-radius:12px;background:${aangevinkt.has(c) ? '#dceaf5' : '#fff'};font-size:11.5px;cursor:pointer">
+                            <input type="checkbox" class="ks-cat-cb" data-cat="${rkEsc(c)}" ${aangevinkt.has(c) ? 'checked' : ''} style="margin:0">
+                            <span>${rkEsc(c)}</span>
+                        </label>`).join('')}
+                </div>
+                <div style="display:flex;gap:8px;font-size:11px">
+                    <button type="button" id="ks-cat-allemaal" class="btn-secondary" style="font-size:11px;padding:2px 8px">Alle aanvinken</button>
+                    <button type="button" id="ks-cat-geen"     class="btn-secondary" style="font-size:11px;padding:2px 8px">Niets aanvinken</button>
+                    <span id="ks-cat-aantal" style="margin-left:auto;color:#666;font-style:italic">${aangevinkt.size} van ${cats.length} aangevinkt</span>
+                </div>`;
+            const updateState = () => {
+                const aan = Array.from(wrap.querySelectorAll('.ks-cat-cb:checked')).map(cb => cb.dataset.cat);
+                r.categorie_filter = aan;
+                wrap.querySelectorAll('.ks-cat-cb').forEach(cb => {
+                    cb.closest('label').style.background = cb.checked ? '#dceaf5' : '#fff';
+                });
+                const teller = wrap.querySelector('#ks-cat-aantal');
+                if (teller) teller.textContent = `${aan.length} van ${cats.length} aangevinkt`;
+            };
+            wrap.querySelectorAll('.ks-cat-cb').forEach(cb => cb.addEventListener('change', updateState));
+            wrap.querySelector('#ks-cat-allemaal')?.addEventListener('click', () => {
+                wrap.querySelectorAll('.ks-cat-cb').forEach(cb => cb.checked = true);
+                updateState();
+            });
+            wrap.querySelector('#ks-cat-geen')?.addEventListener('click', () => {
+                wrap.querySelectorAll('.ks-cat-cb').forEach(cb => cb.checked = false);
+                updateState();
+            });
+        } catch (e) {
+            wrap.innerHTML = `<em style="color:#b71c1c;font-size:11.5px">⚠ Categorieën laden mislukt: ${rkEsc(e.message)}</em>`;
+        }
+    })();
     get('#ks-streep').addEventListener('input',  e => r.streepresultaten        = Math.max(0, parseInt(e.target.value) || 0));
     get('#ks-streep-direct').addEventListener('change', e => r.streep_direct    = e.target.checked);
     get('#ks-tie').addEventListener('change',    e => r.tie_break               = e.target.value);

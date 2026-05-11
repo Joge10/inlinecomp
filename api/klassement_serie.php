@@ -893,6 +893,34 @@ if ($method === 'GET') {
             exit;
         }
 
+        // Distinct KNSB-categorieën van rijders die in een set wedstrijden
+        // zijn ingeschreven. Bedoeld voor de "Categorie-filter"-checkbox-
+        // lijst in de serie-wizard, zodat de operator alleen aanvinkt uit
+        // wat daadwerkelijk in deze serie voorkomt — geen typefouten meer.
+        // Param: comp_ids (komma-gescheiden lijst van competition_ids).
+        if ($action === 'categorieen_van_wedstrijden') {
+            $idsRaw = trim($_GET['comp_ids'] ?? '');
+            $compIds = array_values(array_filter(array_map('trim', explode(',', $idsRaw))));
+            if (empty($compIds)) { echo json_encode([]); exit; }
+            $ph = implode(',', array_fill(0, count($compIds), '?'));
+            $st = $pdo->prepare("
+                SELECT DISTINCT UPPER(TRIM(p.category)) AS cat
+                FROM entries e
+                JOIN persons p ON p.license_key = e.person_license
+                WHERE e.competition_id IN ($ph)
+                  AND p.category IS NOT NULL
+                  AND TRIM(p.category) <> ''
+                ORDER BY cat
+            ");
+            $st->execute($compIds);
+            $cats = array_values(array_filter(
+                $st->fetchAll(PDO::FETCH_COLUMN),
+                fn($c) => $c !== null && $c !== ''
+            ));
+            echo json_encode($cats, JSON_UNESCAPED_UNICODE);
+            exit;
+        }
+
         if ($action === 'list') {
             $org = trim($_GET['org_id'] ?? '');
             $sql = "
