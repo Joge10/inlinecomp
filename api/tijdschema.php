@@ -73,8 +73,12 @@ function fetchSchema(PDO $pdo, string $compId): ?array {
     $vStmt->execute([$compId]);
     $schema['tijdschema_version'] = (int)($vStmt->fetchColumn() ?? 0);
 
-    // Check of er al startlijsten (heats) gegenereerd zijn voor deze wedstrijd
-    $hStmt = $pdo->prepare("SELECT COUNT(*) FROM heats WHERE competition_id = ? AND ronde = 1");
+    // Check of er al startlijsten (heats) gegenereerd zijn voor deze
+    // wedstrijd. Telt ALLE heats (niet alleen ronde=1), zodat een
+    // afstand die direct met een A-finale begint ook als geloot telt —
+    // anders zou genereer programma die finale-heats stilzwijgend
+    // weggooien (CASCADE op tijdschema_rit).
+    $hStmt = $pdo->prepare("SELECT COUNT(*) FROM heats WHERE competition_id = ?");
     $hStmt->execute([$compId]);
     $schema['heeft_loting'] = (int)$hStmt->fetchColumn() > 0;
 
@@ -1573,6 +1577,23 @@ try {
                 echo json_encode(['error' => 'conflict', 'message' => 'Het tijdschema is ondertussen gewijzigd door iemand anders. De pagina wordt ververst.', 'db_version' => $dbTsVer]);
                 exit;
             }
+        }
+        // Defensieve gate: zodra er heats bestaan zou genereerRitten via de
+        // CASCADE op tijdschema_ritten ALLE startlijsten + resultaten meeslopen.
+        // Frontend disabled de knop al, maar backend is bron-van-waarheid voor
+        // het geval iemand de API direct aanroept of een stale UI gebruikt.
+        $hCheck = $pdo->prepare("SELECT COUNT(*) FROM heats WHERE competition_id = ?");
+        $hCheck->execute([$compId]);
+        if ((int)$hCheck->fetchColumn() > 0) {
+            http_response_code(409);
+            echo json_encode([
+                'error'   => 'heeft_loting',
+                'message' => 'Programma kan niet opnieuw gegenereerd worden — '
+                          . 'er zijn al startlijsten geloot. Gebruik per-rit '
+                          . 'verwijderen voor mid-wedstrijd-skips, of "Wis '
+                          . 'programma" als je echt opnieuw wilt beginnen.',
+            ]);
+            exit;
         }
         genereerRitten($pdo, $tsId, $compId, $categorieen);
         $pdo->prepare("UPDATE competitions SET tijdschema_version = tijdschema_version + 1 WHERE id = ?")

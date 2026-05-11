@@ -1035,7 +1035,11 @@ function renderBlokken(schema, afstandGroepen) {
             <button class="ts-btn-herstart ts-btn-sm" id="ts-btn-add-herstart">🔄 Herstart toevoegen</button>
             <span class="ts-blokken-acties-sep"></span>
             <button class="btn-secondary ts-btn-sm" id="ts-btn-save-blokken">💾 Volgorde opslaan</button>
-            <button class="btn-primary ts-btn-sm" id="ts-btn-genereer">▶ Genereer programma</button>
+            <button class="btn-primary ts-btn-sm" id="ts-btn-genereer"
+                    ${huidigTijdschema?.heeft_loting ? 'disabled' : ''}
+                    title="${huidigTijdschema?.heeft_loting
+                        ? 'Programma kan niet opnieuw gegenereerd worden — er zijn al startlijsten geloot. Gebruik 🗑 per rit voor mid-wedstrijd-skips, of 🗑 Wis programma als je écht opnieuw wilt beginnen.'
+                        : 'Genereer alle ritten op basis van blokken + afstand-instellingen'}">▶ Genereer programma</button>
             <button class="btn-del ts-btn-sm" id="ts-btn-wis-programma" ${huidigTijdschema?.ritten?.length ? '' : 'disabled'} title="Verwijder alles: ritten, blokken en instellingen. Het tijdschema wordt volledig leeg.">🗑 Wis programma</button>
         </div>
     </div>`;
