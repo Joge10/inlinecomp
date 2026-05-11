@@ -109,6 +109,104 @@ function berekenExAequoRangs(array $finishers, int $offset): array {
     return $rangs;
 }
 
+// ── Mogen we de uitslag voor (DC, distance) vastleggen? ─────────────────────
+// Twee checks:
+//   1. Alle bestaande heats voor deze (DC, distance) hebben voor elke entry
+//      een resultaat (finishpositie OF eindsanctie DNS/DNF/DQ-*).
+//   2. Alle rondes die volgens tijdschema_cat_config zouden moeten bestaan
+//      zijn ook daadwerkelijk geloot (heats aanwezig). Anders: een
+//      operator zou kunnen vastleggen voordat de finale überhaupt geloot is.
+// Returns: ['compleet' => bool, 'reden' => string, 'incomplete' => string[]]
+function alleRondesCompleet(PDO $pdo, string $compId, array $dcIds, ?string $distId = null): array {
+    if (empty($dcIds)) return ['compleet' => true, 'reden' => '', 'incomplete' => []];
+    $dcPh = implode(',', array_fill(0, count($dcIds), '?'));
+    $distCond = $distId ? 'AND COALESCE(h.distance_id, tsr.distance_id) = ?' : '';
+    $params   = array_merge([$compId], $dcIds);
+    if ($distId) $params[] = $distId;
+
+    // Pas 1: open heat-entries (geen finish + geen eindsanctie).
+    $RANKED = "'DNS','DNF','DQ-TF','DQ-SF','DQ-DF'";
+    $sql = "
+        SELECT h.heat_naam,
+               SUM(CASE WHEN res.id IS NULL
+                          OR (res.finishpositie IS NULL
+                              AND (res.sanctie IS NULL OR res.sanctie NOT IN ($RANKED)))
+                        THEN 1 ELSE 0 END) AS open
+        FROM heats h
+        JOIN heat_entries he ON he.heat_id = h.id
+        LEFT JOIN tijdschema_ritten tsr ON tsr.id = h.tijdschema_rit_id
+        LEFT JOIN results res ON res.heat_entry_id = he.id
+        WHERE h.competition_id = ?
+          AND h.distance_combination_id IN ($dcPh)
+          $distCond
+        GROUP BY h.id
+        HAVING open > 0
+    ";
+    $st = $pdo->prepare($sql);
+    $st->execute($params);
+    $rows = $st->fetchAll(PDO::FETCH_ASSOC);
+    if (!empty($rows)) {
+        $namen = array_values(array_unique(array_map(fn($r) => $r['heat_naam'] ?: '?', $rows)));
+        return [
+            'compleet'   => false,
+            'reden'      => 'Nog open heats: ' . implode(', ', $namen),
+            'incomplete' => $namen,
+        ];
+    }
+
+    // Pas 2: alle verwachte rondes uit cat_config moeten heats hebben.
+    $ccSql = "
+        SELECT cc.dc_id, cc.distance_id, cc.heeft_heats, cc.heeft_kwartfinale,
+               cc.heeft_halve_finale, cc.heeft_runner_up,
+               cc.finale_heats, cc.finale_b_heats
+        FROM tijdschema_cat_config cc
+        JOIN competition_tijdschema ct ON ct.id = cc.tijdschema_id
+        WHERE ct.competition_id = ? AND cc.dc_id IN ($dcPh)
+    ";
+    $ccParams = array_merge([$compId], $dcIds);
+    if ($distId) { $ccSql .= " AND cc.distance_id = ?"; $ccParams[] = $distId; }
+    $ccStmt = $pdo->prepare($ccSql);
+    $ccStmt->execute($ccParams);
+
+    $rtLabel = ['heats'=>'Series','kwartfinale'=>'Kwartfinale','halve_finale'=>'Halve finale',
+                'runner_up'=>'Runner-up','finale_b'=>'B-finale','finale_a'=>'A-finale'];
+    $missend = [];
+    foreach ($ccStmt->fetchAll(PDO::FETCH_ASSOC) as $cc) {
+        $heeftEersteRonde = (int)$cc['heeft_heats'] || (int)$cc['heeft_kwartfinale'] || (int)$cc['heeft_halve_finale'];
+        $expected = [];
+        if ((int)$cc['heeft_heats'])         $expected[] = 'heats';
+        if ((int)$cc['heeft_kwartfinale'])   $expected[] = 'kwartfinale';
+        if ((int)$cc['heeft_halve_finale'])  $expected[] = 'halve_finale';
+        if ((int)$cc['heeft_runner_up'] && $heeftEersteRonde) $expected[] = 'runner_up';
+        if ((int)$cc['finale_b_heats'] > 0)  $expected[] = 'finale_b';
+        if ((int)$cc['finale_heats'] > 0)    $expected[] = 'finale_a';
+        if (empty($expected)) continue;
+
+        $rtPh = implode(',', array_fill(0, count($expected), '?'));
+        $rtStmt = $pdo->prepare("
+            SELECT DISTINCT COALESCE(tsr.ronde_type, 'heats') AS rt
+            FROM heats h
+            LEFT JOIN tijdschema_ritten tsr ON tsr.id = h.tijdschema_rit_id
+            WHERE h.competition_id = ? AND h.distance_combination_id = ?
+              AND COALESCE(h.distance_id, tsr.distance_id) = ?
+              AND COALESCE(tsr.ronde_type, 'heats') IN ($rtPh)
+        ");
+        $rtStmt->execute(array_merge([$compId, $cc['dc_id'], $cc['distance_id']], $expected));
+        $aanwezig = $rtStmt->fetchAll(PDO::FETCH_COLUMN);
+        foreach (array_diff($expected, $aanwezig) as $m) {
+            $missend[$rtLabel[$m] ?? $m] = true;
+        }
+    }
+    if (!empty($missend)) {
+        return [
+            'compleet'   => false,
+            'reden'      => 'Nog niet geloot: ' . implode(', ', array_keys($missend)),
+            'incomplete' => array_keys($missend),
+        ];
+    }
+    return ['compleet' => true, 'reden' => '', 'incomplete' => []];
+}
+
 // ── Compleetheid van een heat ─────────────────────────────────────────────────
 function isHeatCompleet(array $rows): bool {
     if (empty($rows)) return false;

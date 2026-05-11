@@ -1276,6 +1276,11 @@ header .badge {
 .u-vastleg-btn-already { background: #d4eed8 !important; color: #198754 !important;
                           border-color: #198754 !important; }
 .u-vastleg-btn-already:hover { background: #c3e3ca !important; }
+/* Geblokkeerd: wedstrijd nog niet compleet (open heats of ronde nog te loten).
+   Zacht-grijs met cursor:not-allowed zodat het echt voelt als 'kan niet nu'. */
+.u-vastleg-btn-blocked { background: #f0f0f0 !important; color: #888 !important;
+                          border-color: #ccc !important; cursor: not-allowed !important; }
+.u-vastleg-btn-blocked:hover { background: #f0f0f0 !important; }
 .u-vastleg-beschrijving { font-size: 11px; color: #777; margin-top: 3px; font-style: italic; }
 /* Klassement kolomheader kleuren */
 .u-klas-dist-vastgelegd  { color: #198754 !important; font-weight: 700; }

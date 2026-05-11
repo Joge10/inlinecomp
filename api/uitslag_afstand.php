@@ -246,6 +246,14 @@ try {
     $vlStmt->execute($vlParams);
     $afstandVastgelegd = (bool)$vlStmt->fetchColumn();
 
+    // Mag de operator nu vastleggen? (alle heats compleet + alle verwachte
+    // rondes geloot). Frontend gebruikt dit om de "Uitslag bevestigen"-
+    // knop disabled te tonen met heldere reden — backend (uitslag_vastleggen)
+    // weigert hetzelfde, dit is alleen voor UX.
+    $rondesCheck = alleRondesCompleet($pdo, $compId, $dcIds, $distId ?: null);
+    $rondesCompleet = $rondesCheck['compleet'];
+    $rondesReden    = $rondesCheck['reden'];
+
     if ($systeem !== 'full-final') {
         // ── Internationaal systeem: cascading elimination ranking ─────────
 
@@ -563,6 +571,8 @@ try {
             'resultaat'     => $resultaat,
             'has_results'   => $hasResults,
             'vastgelegd'    => $afstandVastgelegd,
+            'rondes_compleet' => $rondesCompleet,
+            'rondes_reden'  => $rondesReden,
             'afstand_naam'  => $afNaam ?? null,
             'rondes'        => $beschikbareRondes,
             'ranking'       => $rankingConfig,
@@ -891,6 +901,8 @@ try {
             'gecombineerd' => $gecombineerd,
             'has_results'  => $hasResults,
             'vastgelegd'   => $afstandVastgelegd,
+            'rondes_compleet' => $rondesCompleet,
+            'rondes_reden' => $rondesReden,
             'serie_alleen_startvolgorde' => $sasFlag,
         ], JSON_UNESCAPED_UNICODE);
         exit;
@@ -1040,6 +1052,8 @@ try {
         'finales'           => $finales,
         'has_results'       => $hasResults,
         'vastgelegd'        => $afstandVastgelegd,
+        'rondes_compleet'   => $rondesCompleet,
+        'rondes_reden'      => $rondesReden,
         'heeft_rondes'      => $heeftRondes,
         'heeft_pk_punten'   => $heeftPkPunten,
     ], JSON_UNESCAPED_UNICODE);

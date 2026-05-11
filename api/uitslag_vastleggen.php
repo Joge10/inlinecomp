@@ -93,6 +93,26 @@ try {
         exit;
     }
 
+    // Defensieve check: weiger vastlegging als de wedstrijd nog niet
+    // compleet is gereden voor deze (DC, afstand). Komt overeen met de
+    // disabled-status van de knop in de frontend; backend is hier de
+    // bron van waarheid zodat een directe API-call (of stale UI) er
+    // niet langs kan.
+    foreach ($distances as $dchk) {
+        $chk = alleRondesCompleet($pdo, $compId, $dcIds, $dchk['id']);
+        if (!$chk['compleet']) {
+            http_response_code(409);
+            echo json_encode([
+                'ok'       => false,
+                'melding'  => 'Uitslag kan nog niet vastgelegd worden voor '
+                              . $dchk['name'] . ': ' . $chk['reden'],
+                'reden'    => $chk['reden'],
+                'distance_id' => $dchk['id'],
+            ]);
+            exit;
+        }
+    }
+
     // ── Startnummers ──────────────────────────────────────────────────────────
     $snStmt = $pdo->prepare("SELECT person_license, startnummer FROM competition_startnummers WHERE competition_id = ?");
     $snStmt->execute([$compId]);

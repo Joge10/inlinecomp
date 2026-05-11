@@ -429,7 +429,7 @@ async function toonUitslagVoorAfstand(groep, afstand) {
             }
 
             if (data.has_results) {
-                content.prepend(_uMaakAfstandBevestigKnop(groep, afstand, !!data.vastgelegd));
+                content.prepend(_uMaakAfstandBevestigKnop(groep, afstand, !!data.vastgelegd, data.rondes_compleet !== false, data.rondes_reden || ''));
             }
 
             // ── Ranking select handlers ──────────────────────────────────────
@@ -563,7 +563,7 @@ async function toonUitslagVoorAfstand(groep, afstand) {
             }
 
             if (data.has_results) {
-                content.prepend(_uMaakAfstandBevestigKnop(groep, afstand, !!data.vastgelegd));
+                content.prepend(_uMaakAfstandBevestigKnop(groep, afstand, !!data.vastgelegd, data.rondes_compleet !== false, data.rondes_reden || ''));
             }
 
             // ── Serie-alleen-startvolgorde toggle ────────────────────────
@@ -649,7 +649,7 @@ async function toonUitslagVoorAfstand(groep, afstand) {
 
         // ── Vastleggen-knop (alleen als uitslag compleet is) ───────────────
         if (data.has_results) {
-            content.prepend(_uMaakAfstandBevestigKnop(groep, afstand, !!data.vastgelegd));
+            content.prepend(_uMaakAfstandBevestigKnop(groep, afstand, !!data.vastgelegd, data.rondes_compleet !== false, data.rondes_reden || ''));
         }
 
     } catch (e) {
@@ -663,22 +663,34 @@ async function toonUitslagVoorAfstand(groep, afstand) {
 // stijl/onderschrift afhankelijk van of de afstand al vastgelegd is. Wordt
 // gebruikt door alle 3 modi (internationaal / gecombineerd / full-final-B).
 // Returns een wrap-div die je met content.prepend() kunt neerzetten.
-function _uMaakAfstandBevestigKnop(groep, afstand, alVastgelegd) {
+function _uMaakAfstandBevestigKnop(groep, afstand, alVastgelegd, rondesCompleet = true, rondesReden = '') {
     const wrap = document.createElement('div');
     wrap.className = 'u-vastleg-wrap';
     const btn = document.createElement('button');
+    // Niet-compleet wint van vastgelegd: een al vastgelegde uitslag mag
+    // pas opnieuw bevestigd worden als ALLE rondes inmiddels compleet
+    // zijn (bv. na correctie in Live verwerking is dat altijd zo).
+    const blokkeer = !rondesCompleet;
     btn.className = 'btn-primary u-vastleg-btn'
-                  + (alVastgelegd ? ' u-vastleg-btn-already' : '');
-    btn.innerHTML = alVastgelegd ? '↻ Uitslag opnieuw bevestigen' : '✓ Uitslag bevestigen';
-    btn.title     = alVastgelegd
-        ? 'Uitslag is al bevestigd — opnieuw bevestigen na correctie in Live verwerking'
-        : 'Sla de officiële uitslag van deze afstand op';
-    btn.addEventListener('click', () => _uVastleggen(groep, afstand, btn));
+                  + (blokkeer ? ' u-vastleg-btn-blocked' : '')
+                  + (!blokkeer && alVastgelegd ? ' u-vastleg-btn-already' : '');
+    btn.disabled  = blokkeer;
+    btn.innerHTML = blokkeer
+        ? '⛔ Wedstrijd nog niet compleet'
+        : (alVastgelegd ? '↻ Uitslag opnieuw bevestigen' : '✓ Uitslag bevestigen');
+    btn.title     = blokkeer
+        ? rondesReden || 'Niet alle heats voor deze afstand zijn klaar'
+        : (alVastgelegd
+            ? 'Uitslag is al bevestigd — opnieuw bevestigen na correctie in Live verwerking'
+            : 'Sla de officiële uitslag van deze afstand op');
+    if (!blokkeer) btn.addEventListener('click', () => _uVastleggen(groep, afstand, btn));
     const desc = document.createElement('div');
     desc.className = 'u-vastleg-beschrijving';
-    desc.textContent = alVastgelegd
-        ? '✓ Uitslag is bevestigd — telt mee voor klassement + zichtbaar in Print-Center'
-        : 'Sla de officiële uitslag van deze afstand op';
+    desc.textContent = blokkeer
+        ? `⏳ ${rondesReden || 'Niet alle rondes zijn gereden'} — vastleggen kan zodra de wedstrijd compleet is.`
+        : (alVastgelegd
+            ? '✓ Uitslag is bevestigd — telt mee voor klassement + zichtbaar in Print-Center'
+            : 'Sla de officiële uitslag van deze afstand op');
     wrap.append(btn, desc);
     return wrap;
 }
