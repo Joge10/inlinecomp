@@ -720,6 +720,15 @@ async function _uVastleggen(groep, afstand, btnEl) {
                     btnEl.innerHTML = origTekst;
                     btnEl.classList.remove('u-vastleg-btn-ok');
                     btnEl.disabled = false;
+                    // Bij klassement-vastleggen (afstand === null): refresh de
+                    // klassement-tab zodat de knop nu "↻ Opnieuw vastleggen"
+                    // toont en de status-tekst correct is. Anders blijft de
+                    // operator denken dat er niets gebeurd is. We doen dit pas
+                    // ná de 3s feedback-toast om te voorkomen dat 'm meteen
+                    // wordt overschreven.
+                    if (afstand === null && typeof toonUitslagKlassement === 'function') {
+                        toonUitslagKlassement(groep);
+                    }
                 }, 3000);
             }
             // Print-Center cache invalideren + lokale uitslag-dropdown
@@ -871,9 +880,19 @@ async function toonUitslagKlassement(groep) {
         );
         const nietVastgelegd = afstanden.filter(a => !a.vastgelegd).map(a => a.name);
         const klasDisabled  = !alleVastgelegd;
+        const alVastgelegd  = !!data.klassement_vastgelegd;  // klassement is reeds officieel
         const klasTooltip   = klasDisabled
             ? `Nog niet bevestigd: ${nietVastgelegd.join(', ')}`
-            : 'Leg het definitieve klassement vast';
+            : alVastgelegd
+                ? 'Klassement is al vastgelegd — klik om opnieuw vast te leggen (bv. na correctie)'
+                : 'Leg het definitieve klassement vast';
+        const klasKnopLabel = alVastgelegd ? '↻ Klassement opnieuw vastleggen' : '🏆 Klassement vastleggen';
+        const klasKnopExtraCls = alVastgelegd ? ' u-vastleg-btn-already' : '';
+        const klasOnderschrift = klasDisabled
+            ? `Bevestig eerst: ${escHtml(nietVastgelegd.join(', '))}`
+            : alVastgelegd
+                ? '✓ Klassement is vastgelegd — zichtbaar in /Public, /Coach en Print-Center. Opnieuw vastleggen kan na correcties.'
+                : 'Alle afstanden zijn bevestigd — klaar om vast te leggen';
 
         const opslaanBalk = `<div class="u-klas-opslaan-balk">
             ${heeftBewerkbaar
@@ -884,13 +903,11 @@ async function toonUitslagKlassement(groep) {
                    </div>`
                 : ''}
             <div class="u-klas-vastleg-blok">
-                <button class="btn-primary u-vastleg-btn" id="u-klas-btn-vastleggen"
+                <button class="btn-primary u-vastleg-btn${klasKnopExtraCls}" id="u-klas-btn-vastleggen"
                         title="${escHtml(klasTooltip)}" ${klasDisabled ? 'disabled' : ''}>
-                    🏆 Klassement vastleggen
+                    ${klasKnopLabel}
                 </button>
-                <div class="u-vastleg-beschrijving">${klasDisabled
-                    ? `Bevestig eerst: ${escHtml(nietVastgelegd.join(', '))}`
-                    : 'Alle afstanden zijn bevestigd — klaar om vast te leggen'}</div>
+                <div class="u-vastleg-beschrijving">${klasOnderschrift}</div>
             </div>
         </div>`;
 

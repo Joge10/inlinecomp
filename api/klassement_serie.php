@@ -294,15 +294,24 @@ function berekenSerie(PDO $pdo, string $serieId): array {
                 return $t && $t !== 'leeg';
             };
 
-            // Welke rijders zijn UITGESLOTEN per (comp, dc)? De UI sluit
-            // rijders uit als admin `punten = 0` op een afstand heeft gezet
-            // (sanctie / DNS / bewust weggeklikt). In `uitslag_klassement`
-            // kunnen oude rijen met rang+punten nog blijven staan — daarom
-            // kruisen we hier tegen `uitslag_afstand`.
+            // Welke rijders zijn UITGESLOTEN per (comp, dc)? Bedoeld als
+            // safety-net: oude rijen in `uitslag_klassement` kunnen rang+
+            // punten houden voor rijders die admin later via punten=0 heeft
+            // weggeklikt (DQ-SF/DF, jury-correctie).
+            //
+            // BELANGRIJK: een rijder met punten=0 op ÉÉN afstand maar wél
+            // punten op een andere (typisch DNS in eerste ronde van afstand A
+            // maar gewoon gereden op afstand B) is NIET uitgesloten — die
+            // moet z'n punten-totaal gewoon mee naar de serie krijgen. Daarom
+            // checken we hier op SUM(punten) = 0 over alle afstanden van
+            // de rijder binnen deze comp+dc, in plaats van op een enkele
+            // afstand met punten=0.
             $uitgeslotenSql = "
-                SELECT DISTINCT competition_id, distance_combination_id, person_license
+                SELECT competition_id, distance_combination_id, person_license
                 FROM uitslag_afstand
-                WHERE competition_id IN ($ph) AND punten = 0
+                WHERE competition_id IN ($ph)
+                GROUP BY competition_id, distance_combination_id, person_license
+                HAVING SUM(COALESCE(punten, 0)) = 0
             ";
             $uStmt = $pdo->prepare($uitgeslotenSql);
             $uStmt->execute($compIds);

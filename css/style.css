@@ -1271,6 +1271,11 @@ header .badge {
 .u-vastleg-btn         { font-size: 13px; padding: 5px 12px; }
 .u-vastleg-btn-ok      { background: #198754 !important; color: #fff !important;
                           border-color: #198754 !important; }
+/* "Klassement is al vastgelegd" — subtiel groen ipv het felle blauwe accent
+   van de eerste-keer-knop. Operator ziet meteen dat het al officieel is. */
+.u-vastleg-btn-already { background: #d4eed8 !important; color: #198754 !important;
+                          border-color: #198754 !important; }
+.u-vastleg-btn-already:hover { background: #c3e3ca !important; }
 .u-vastleg-beschrijving { font-size: 11px; color: #777; margin-top: 3px; font-style: italic; }
 /* Klassement kolomheader kleuren */
 .u-klas-dist-vastgelegd  { color: #198754 !important; font-weight: 700; }
