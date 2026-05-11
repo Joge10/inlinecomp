@@ -10,6 +10,7 @@ const SERIE_DEFAULT_REGELS = {
     type: 'gecombineerd',
     afstand_filter: 'alle',
     afstand_namen: [],
+    categorie_filter: [],       // [] = alle cats. Bv. ['HKA','DKA','HJB','DJB']
     punten_tabel: [50.1,47,45,43,41,39,37,35,33,31,30,29,28,27,26,25,24,23,22,21,20,19,18,17,16,15,14,13,12,11,10,9,8,7,6,5,4,3,2,1],
     min_punten_bij_deelname: 1,
     tie_break: 'beste_resultaten_dan_laatste',
@@ -324,6 +325,20 @@ function _renderStap3(state, body) {
         </div>
 
         <div class="ks-veld">
+            <label>Categorie-filter <span style="color:#666;font-weight:400;font-size:11.5px">(leeg = alle categorieën)</span></label>
+            <input type="text" class="inp" id="ks-cat-filter"
+                   value="${rkEsc((r.categorie_filter ?? []).join(', '))}"
+                   placeholder="bv. HKA, DKA, HKB, DKB, HJB, DJB">
+            <div style="font-size:11.5px;color:#666;margin:4px 0 0 2px">
+                Komma- of spatie-gescheiden KNSB-categoriecodes. Alleen rijders met
+                een van deze categorieën worden meegenomen in dit klassement.<br>
+                <b>Voorbeelden:</b> combi-klassement alleen voor Kadetten + Junioren B
+                → <code>HKA, DKA, HKB, DKB, HJB, DJB</code>; sprint/lang-klassement alleen voor
+                senioren → <code>HSA, DSA, HSB, DSB</code>.
+            </div>
+        </div>
+
+        <div class="ks-veld">
             <label><input type="checkbox" id="ks-vereist-finale" ${r.vereist_finale?'checked':''}> Finale-aanwezigheid verplicht voor klassering</label>
         </div>
 
@@ -357,6 +372,15 @@ function _renderStap3(state, body) {
         r.punten_tabel = e.target.value.split(',').map(s => parseFloat(s.trim())).filter(n => !isNaN(n));
     });
     get('#ks-min-pnt').addEventListener('input', e => r.min_punten_bij_deelname = parseFloat(e.target.value) || 0);
+    get('#ks-cat-filter')?.addEventListener('input', e => {
+        // Split op komma OF spatie, trim, uppercase, dedupliceer. Lege invoer
+        // → lege array (= geen filter, alle cats meedoen).
+        const arr = (e.target.value || '')
+            .split(/[,\s]+/)
+            .map(s => s.trim().toUpperCase())
+            .filter(Boolean);
+        r.categorie_filter = [...new Set(arr)];
+    });
     get('#ks-streep').addEventListener('input',  e => r.streepresultaten        = Math.max(0, parseInt(e.target.value) || 0));
     get('#ks-streep-direct').addEventListener('change', e => r.streep_direct    = e.target.checked);
     get('#ks-tie').addEventListener('change',    e => r.tie_break               = e.target.value);
@@ -501,11 +525,14 @@ async function diagnoseSerieer(serieId) {
                     ? '<span style="color:#b71c1c">⏳ finale nog niet gereden — <b>min_deelnames en vereist_finale worden tijdelijk NIET toegepast</b> (streepresultaten staat op "direct toepassen" en is wél actief)</span>'
                     : '<span style="color:#b71c1c">⏳ finale nog niet gereden — <b>streepresultaten, min_deelnames en vereist_finale worden tijdelijk NIET toegepast</b></span>')
             : '';
+        const catFilterTxt = (regels.categorie_filter ?? []).length
+            ? ` · cats = <b>${rkEsc((regels.categorie_filter || []).join(', '))}</b>`
+            : '';
         const regelsSamenv = regels.type
             ? `<div class="ks-hint">
                 <b>Actieve regels:</b>
                 type = <b>${rkEsc(regels.type)}</b> ·
-                filter = <b>${rkEsc(regels.afstand_filter)}</b> ·
+                filter = <b>${rkEsc(regels.afstand_filter)}</b>${catFilterTxt} ·
                 min_deelnames = ${regels.min_deelnames ?? 0} ·
                 streep = ${regels.streepresultaten ?? 0} ·
                 vereist_finale = ${regels.vereist_finale ? 'ja' : 'nee'}

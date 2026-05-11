@@ -61,10 +61,25 @@ function normaliseerRegels(array $in): array {
     $tieBreaks = ['geen', 'laatste', 'beste_resultaten', 'beste_resultaten_dan_laatste'];
     $tieBreak  = in_array($in['tie_break'] ?? '', $tieBreaks, true)
                    ? $in['tie_break'] : 'beste_resultaten_dan_laatste';
+    // Categorie-filter: array van KNSB-cat-codes (HSA, DJB, HKA, …) die WEL
+    // meedoen in dit klassement. Lege array = geen filter = alle cats.
+    // Bedoeld voor: combi-klassement alleen voor Kadetten+Junioren B, of
+    // sprint/lang alleen voor senioren — zonder per wedstrijd handmatig
+    // rijders te moeten uitsluiten. Cats worden hoofdletter-genormaliseerd
+    // en getrimd om matching tegen persons.category robust te maken.
+    $catFilter = [];
+    if (is_array($in['categorie_filter'] ?? null)) {
+        foreach ($in['categorie_filter'] as $c) {
+            $s = strtoupper(trim((string)$c));
+            if ($s !== '') $catFilter[] = $s;
+        }
+        $catFilter = array_values(array_unique($catFilter));
+    }
     return [
         'type'                    => $type,
         'afstand_filter'          => $filter,
         'afstand_namen'           => $namen,
+        'categorie_filter'        => $catFilter,
         'punten_tabel'            => $tabel,
         'min_punten_bij_deelname' => (float)($in['min_punten_bij_deelname'] ?? 1),
         'streepresultaten'        => max(0, (int)($in['streepresultaten'] ?? 0)),
@@ -349,6 +364,21 @@ function berekenSerie(PDO $pdo, string $serieId): array {
                 $k = $r['competition_id'] . '|' . $r['dc_id'] . '|' . $r['person_license'];
                 if (isset($uitgeslotenSet[$k])) return false;
                 return true;
+            }));
+        }
+
+        // ── Categorie-filter (whitelist) ──────────────────────────────────────
+        // Beide paden (uitslag_afstand + uitslag_klassement) hebben $rijen
+        // gevuld. Als de operator een specifieke set categorieën heeft gekozen
+        // (bv. alleen Kadetten + Junioren B voor een combi-klassement, of
+        // alleen Senioren voor sprint/lang) filteren we hier de rest weg.
+        // Vergelijking: hoofdletter-genormaliseerd op persoon_cat (kolom
+        // persons.category) zodat HSA / hsa / Hsa allemaal matchen.
+        if (!empty($regels['categorie_filter'])) {
+            $catSet = array_flip($regels['categorie_filter']);
+            $rijen = array_values(array_filter($rijen, function($r) use ($catSet) {
+                $cat = strtoupper(trim((string)($r['persoon_cat'] ?? '')));
+                return $cat !== '' && isset($catSet[$cat]);
             }));
         }
 
