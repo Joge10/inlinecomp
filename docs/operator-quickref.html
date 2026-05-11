@@ -11,6 +11,7 @@
     --oranje: #E8630A;
     --groen: #2e7d32;
     --rood: #b71c1c;
+    --geel: #f9a825;
     --grijs: #f5f5f5;
     --tekst: #222;
     --border: #cdd8e3;
@@ -31,7 +32,9 @@ body {
     padding: 12mm 14mm;
     background: #fff;
     box-shadow: 0 0 12px rgba(0,0,0,.06);
+    page-break-after: always;
 }
+.page:last-child { page-break-after: auto; }
 .titel {
     background: var(--blauw); color: #fff;
     padding: 10px 14px;
@@ -56,7 +59,7 @@ body {
 .kolommen {
     display: grid;
     grid-template-columns: 1fr 1fr;
-    gap: 12px;
+    gap: 10px;
 }
 section {
     border: 1px solid var(--border);
@@ -68,7 +71,7 @@ section {
 section h2 {
     margin: 0 0 6px;
     color: var(--blauw);
-    font-size: 11.5pt;
+    font-size: 11pt;
     border-bottom: 2px solid var(--oranje);
     padding-bottom: 3px;
 }
@@ -80,6 +83,7 @@ section h2 .stap-nr {
     font-size: 10pt; font-weight: 700;
     margin-right: 6px;
 }
+section h2 .stap-nr.optioneel { background: var(--geel); color: #000; }
 section p  { margin: 3px 0; }
 section ol { margin: 3px 0; padding-left: 20px; }
 section ul { margin: 3px 0; padding-left: 18px; }
@@ -148,6 +152,67 @@ table.compact th {
     border-top: 1px solid var(--border);
     padding-top: 5px;
 }
+
+/* ── Mockup-stijlen — kleine inline weergave van wat operator ziet ── */
+.mock {
+    background: #f7f9fc;
+    border: 1px dashed var(--border);
+    border-radius: 4px;
+    padding: 6px 8px;
+    margin: 5px 0;
+    font-size: 8.5pt;
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+}
+.mock-rij {
+    display: flex; align-items: center; gap: 4px;
+    padding: 2px 4px;
+    border-bottom: 1px solid #e8edf2;
+}
+.mock-rij:last-child { border-bottom: none; }
+.mock-snr {
+    background: var(--blauw); color: #fff;
+    padding: 0 5px; border-radius: 3px;
+    font-size: 8.5pt; font-weight: 700;
+    min-width: 24px; text-align: center;
+}
+.mock-naam { flex: 1; }
+.mock-badge {
+    padding: 0 5px; border-radius: 3px;
+    font-size: 8pt; font-weight: 700;
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+}
+.mock-bevestigd { background: #d4eed8; color: var(--groen); }
+.mock-niet-bev   { background: #fff1cc; color: #8a5a00; }
+.mock-niet-getek { background: #ffe5e5; color: var(--rood); border: 1px solid var(--rood); }
+.mock-afgemeld   { background: #eee; color: #888; text-decoration: line-through; }
+
+.mock-fin-cel {
+    display: inline-block;
+    background: var(--lichtblauw); color: var(--blauw);
+    padding: 1px 6px; border-radius: 10px;
+    font-size: 8.5pt; font-weight: 700;
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+}
+.mock-fin-dropdown {
+    display: inline-block;
+    background: #fff; color: var(--blauw);
+    padding: 0 4px; border: 1px solid var(--blauw); border-radius: 3px;
+    font-size: 8.5pt; font-weight: 700;
+}
+.mock-fin-lock {
+    display: inline-block;
+    background: #fff1cc; color: #8a5a00;
+    padding: 0 5px; border: 1px dashed #d49a2c; border-radius: 3px;
+    font-size: 8.5pt; font-weight: 700;
+}
+.mock-pf {
+    margin-left: 3px;
+    font-size: 9pt;
+}
+
 @media print {
     body { background: #fff; }
     .page { box-shadow: none; padding: 6mm 10mm; }
@@ -162,17 +227,20 @@ table.compact th {
 </style>
 </head>
 <body>
+
+<!-- ──────────────────────────────────────────────────────────────────── -->
+<!-- PAGINA 1 — De complete flow (8 stappen, voorzijde)                  -->
+<!-- ──────────────────────────────────────────────────────────────────── -->
 <div class="page">
 
     <div class="pdf-tip">
-        💡 <b>Opslaan als PDF:</b> druk Ctrl+P (Cmd+P op Mac) → Bestemming "Opslaan als PDF" → Opslaan.
-        Dubbelzijdig printen aanbevolen voor lamineren.
+        💡 <b>Opslaan als PDF:</b> Ctrl+P (Cmd+P op Mac) → "Opslaan als PDF". Twee pagina's — dubbelzijdig printen + lamineren is handig.
     </div>
 
     <div class="titel">
         <div>
             <h1>InlineComp Operator</h1>
-            <div class="subtitle">Quick Reference — voor wie tijdens de wedstrijd Live + Uitslag bedient</div>
+            <div class="subtitle">Quick Reference — complete flow per DC, van tekentermijn tot vastgelegd klassement</div>
         </div>
         <div style="font-size:24pt">⏱</div>
     </div>
@@ -183,105 +251,206 @@ table.compact th {
 
     <div class="kolommen">
 
+        <!-- ── STAP 1 ────────────────────────────────────────────────── -->
         <section>
-            <h2><span class="stap-nr">1</span>Loting maken (tekensluiting voorbij!)</h2>
-            <p>Pas <b>nadat de tekentermijn voor een afstand is gesloten</b> mag je loten. Niet-getekende rijders mogen niet in de heats. Voor sommige DC's heeft Geert de loting al gedaan; voor andere doe jij dat tijdens de wedstrijd zodra de tekentermijn van die DC sluit.</p>
+            <h2><span class="stap-nr">1</span>Tekenen verwerken</h2>
+            <p>Vóórdat je kunt loten moeten alle balieformulieren in het systeem staan. Per rijder klik je door de status-cyclus tot 'ie correct staat.</p>
             <ol>
-                <li>Tab <span class="tab">Startlijst</span> → kies de juiste DC en afstand</li>
-                <li>Bij seeding-methode kiezen:
+                <li>Tab <span class="tab">Importeer</span> → kies categorie</li>
+                <li>Klik op de status-badge naast een rijder om de cyclus door te lopen</li>
+                <li>Klik <span class="knop oranje">💾 Opslaan</span> per categorie</li>
+            </ol>
+
+            <div class="mock">
+                <div class="mock-rij"><span class="mock-snr">101</span><span class="mock-naam">A. Voorbeeld</span><span class="mock-badge mock-bevestigd">Bevestigd</span></div>
+                <div class="mock-rij"><span class="mock-snr">102</span><span class="mock-naam">B. Voorbeeld</span><span class="mock-badge mock-niet-bev">Niet bevestigd</span></div>
+                <div class="mock-rij"><span class="mock-snr">103</span><span class="mock-naam">C. Voorbeeld</span><span class="mock-badge mock-afgemeld">Afgem. bij org.</span></div>
+                <div class="mock-rij"><span class="mock-snr">104</span><span class="mock-naam">D. Voorbeeld</span><span class="mock-badge mock-niet-getek">Niet getekend</span></div>
+            </div>
+
+            <div class="tip">💡 Cyclus per klik: <b>Bevestigd → Afgem. bij org. → Niet getekend → terug</b>. Een <em>Niet-bevestigd</em>-rijder klik je eerst naar <b>Bevestigd bij org.</b>, daarna verloopt 'ie de normale cyclus. <b>Afgemelden</b> en <b>niet-getekenden</b> doen NIET mee aan de loting.</div>
+        </section>
+
+        <!-- ── STAP 2 ────────────────────────────────────────────────── -->
+        <section>
+            <h2><span class="stap-nr optioneel">2</span>Programma aanpassen <span style="font-size:8.5pt;color:#666">(optioneel)</span></h2>
+            <p>Soms blijken er té weinig deelnemers voor een ronde — dan kwalificatie-rondes eruit halen. Bv. 7 rijders voor 8 finaleplekken → series overslaan, direct finale.</p>
+            <ol>
+                <li>Tab <span class="tab">Tijdschema</span> → afstand-kaart → <span class="knop">✏ Bewerken</span></li>
+                <li>Vink rondes uit (Series / Kwartfinale / Halve finale)</li>
+                <li><span class="knop oranje">💾 Opslaan</span> → onderaan <span class="knop">▶ Hergeneer programma</span></li>
+            </ol>
+            <div class="alert">⚠ <b>Hergenereren wist handmatige verfijningen</b> uit de programma-tabel (eigen tijden, opmerkingen, combi-finales). Doe dit dus vóór de wedstrijd of overleg met Geert.</div>
+        </section>
+
+        <!-- ── STAP 3 ────────────────────────────────────────────────── -->
+        <section>
+            <h2><span class="stap-nr">3</span>Loten</h2>
+            <p>Pas <b>nadat tekenen verwerkt is</b> (stap 1) — niet-getekenden mogen niet in de heats.</p>
+            <ol>
+                <li>Tab <span class="tab">Startlijst</span> → kies categorie + afstand</li>
+                <li>Seeding-methode kiezen:
                     <ul>
-                        <li><b>Eerste afstand van een DC</b> (of enkele afstand) → <b>serie-klassement</b></li>
-                        <li><b>Tweede afstand</b> (alleen 4 DC's) → <b>tussenklassement</b></li>
+                        <li><b>1e afstand van een DC</b> (of enkele afstand) → <b>serie-klassement</b></li>
+                        <li><b>2e afstand</b> binnen dezelfde DC → <b>tussenklassement</b> <em>(pas mogelijk nadat 1e afstand is bevestigd, zie stap 7)</em></li>
+                        <li>Geen klassement beschikbaar → <b>op startnummer</b> als veilige terugval</li>
                     </ul>
                 </li>
                 <li>Klik <span class="knop oranje">🎲 Genereer startlijst</span></li>
             </ol>
-            <div class="tip">💡 Status-badges naast namen: <b style="color:#2e7d32">Bevestigd</b> = doet mee · <b style="color:#e65100">Niet bevestigd</b> = nog niet door KNSB bevestigd · <b style="color:#b71c1c">Niet getekend</b> = NIET in de loting opnemen.</div>
+            <div class="tip">💡 Voor sommige DC's heeft Geert al voor de wedstrijd geloot — die staan al klaar in <span class="tab">Live</span>. Vraag bij twijfel.</div>
         </section>
 
+        <!-- ── STAP 4 ────────────────────────────────────────────────── -->
         <section>
-            <h2><span class="stap-nr">2</span>Per heat — tijden invoeren</h2>
-            <p>Tab <span class="tab">Live</span>. Heat-carrousel bovenin; bladeren met <b>← →</b> of pijl-knoppen.</p>
+            <h2><span class="stap-nr">4</span>Tijden invoeren per heat</h2>
+            <p>Tab <span class="tab">Live</span>. Carrousel bovenin; bladeren met <b>← →</b> of pijl-knoppen.</p>
             <ol>
-                <li>Klik <span class="knop">📥 Import</span> bovenaan de heat-kaart</li>
-                <li>Kies <b>Map</b> (filter via 🔍-veld) + <b>CSV-bestand</b> (sorteer op nieuwste 🆕)</li>
-                <li><b>Overnemen</b> → tijden vullen op startnummer</li>
-                <li>Check de tabel; bij sancties: dropdown achter naam (zie achterkant)</li>
-                <li>Klik <span class="knop oranje">💾 Opslaan</span></li>
+                <li><span class="knop">📥 Import</span> bovenaan de heat-kaart</li>
+                <li>Kies <b>Map</b> + <b>CSV-bestand</b> (sorteer op nieuwste 🆕)</li>
+                <li><span class="knop oranje">Overnemen</span> — tijden vullen op startnummer</li>
+                <li>Sancties via dropdown achter naam (zie achterkant)</li>
+                <li><span class="knop oranje">💾 Opslaan</span></li>
             </ol>
-            <div class="tip">💡 Volgende lege heat opent automatisch na opslaan.</div>
+            <div class="tip">💡 Volgende lege heat opent automatisch na opslaan. Status-iconen in dropdown: ○ leeg · 🚩 startlijst klaar · ◑ deels · 🏁 compleet.</div>
         </section>
 
+        <!-- ── STAP 5 ────────────────────────────────────────────────── -->
         <section>
-            <h2><span class="stap-nr">3</span>Hele ronde compleet</h2>
-            <p>Zodra alle heats van een ronde (Series/KF/HF) tijden hebben, verschijnt onderaan automatisch:</p>
-            <p style="text-align:center"><span class="knop">↻ Hergeneer KF</span> &middot; <span class="knop">↻ Hergeneer HF</span> &middot; <span class="knop">↻ Hergeneer Finale</span></p>
-            <p>Klikken zodra de ronde klaar is — volgende ronde wordt geseed op Q+q-doorstroom.</p>
-            <div class="tip">💡 Bij One Lap / 500m: bracket-pattern (heats {1+laatst}, {2+voorlaatst}, ...) gebeurt automatisch.</div>
+            <h2><span class="stap-nr">5</span>Wisselen na "alles groen" <span style="font-size:8.5pt;color:#666">(jury-fase)</span></h2>
+            <p>Zodra ALLE rijders in een heat een tijd of sanctie hebben, worden de Fin.-badges automatisch dropdowns. <b>Geen save vooraf nodig</b>.</p>
+
+            <div class="mock">
+                <div style="font-size:8pt;color:#666;margin-bottom:3px">Vóór alles-groen (badges):</div>
+                <div class="mock-rij"><span style="flex:1">A. Voorbeeld 42.531</span><span class="mock-fin-cel">1e</span></div>
+                <div class="mock-rij"><span style="flex:1">B. Voorbeeld 42.498</span><span class="mock-fin-cel">2e</span></div>
+                <div style="font-size:8pt;color:#666;margin:6px 0 3px">Bij alles-groen (dropdowns) — kies positie van andere rijder om te ruilen:</div>
+                <div class="mock-rij"><span style="flex:1">A. Voorbeeld 42.531</span><span class="mock-fin-dropdown">1 ▾</span></div>
+                <div class="mock-rij"><span style="flex:1">B. Voorbeeld 42.498</span><span class="mock-fin-dropdown">2 ▾</span></div>
+                <div style="font-size:8pt;color:#666;margin:6px 0 3px">Na wissel (lock-badge — beide rijders vergrendeld):</div>
+                <div class="mock-rij"><span style="flex:1">A. Voorbeeld 42.498</span><span class="mock-fin-lock">🔒 1e</span></div>
+                <div class="mock-rij"><span style="flex:1">B. Voorbeeld 42.531</span><span class="mock-fin-lock">🔒 2e</span></div>
+            </div>
+
+            <div class="alert">⚠ <b>Eén wissel per rijder</b>. Wil je een ander paar wisselen of een fout corrigeren? <b>Importeer de CSV opnieuw</b> — dat reset alle wissels in deze heat.</div>
+            <div class="tip">📷 Gewisselde rijders krijgen automatisch een <b>📷-icoon</b> naast hun naam in de startlijst van hun direct opvolgende ronde. Speaker en aankomst-jury zien zo dat hun tijd via een jury-beslissing is bijgesteld.</div>
         </section>
 
+        <!-- ── STAP 6 ────────────────────────────────────────────────── -->
         <section>
-            <h2><span class="stap-nr">4</span>Afstand klaar — uitslag vastleggen</h2>
-            <p>Wanneer alle ronden van een afstand verwerkt zijn:</p>
+            <h2><span class="stap-nr">6</span>Volgende ronde activeren</h2>
+            <p>Zodra alle heats van een ronde compleet zijn, verschijnt automatisch:</p>
+            <p style="text-align:center;margin:5px 0"><span class="knop">↻ Hergeneer Kwartfinale</span></p>
+            <p>Klikken zodra de ronde af is — KF wordt geseed op Q+q-doorstroom. Hetzelfde voor halve finale en finale.</p>
+            <div class="tip">💡 De seeding-methode (slangenpatroon of tijdkoppeling) staat per afstand vast in het tijdschema (§Tijdschema → afstand-bewerken). Geert heeft dit vóór de wedstrijd ingesteld — als operator hoef je hier niet aan te zitten.</div>
+            <div class="alert">⚠ <b>Achteraf een sanctie toevoegen aan eerdere ronde:</b> als de qualifying-set niet verandert (bv. DQ-TF op een rijder die toch niet kwalificeerde) → KF/HF/finale blijven intact. Verandert de set wél én staan er al resultaten? → in-house dialog vraagt: <b>Behoud bestaande</b> of <b>Hergenereren</b>.</div>
+        </section>
+
+        <!-- ── STAP 7 ────────────────────────────────────────────────── -->
+        <section>
+            <h2><span class="stap-nr">7</span>Afstand-uitslag bevestigen</h2>
+            <p>Zodra alle rondes van een afstand zijn ingevoerd:</p>
             <ol>
-                <li>Tab <span class="tab">Uitslag</span> openen</li>
-                <li>Kies categorie (rij 1) en afstand (rij 2)</li>
+                <li>Tab <span class="tab">Uitslag</span> → categorie (rij 1) → afstand (rij 2)</li>
                 <li>Controleer de tabel</li>
-                <li>Klik <span class="knop oranje">🏆 Vastleggen</span> onderaan</li>
+                <li>Klik <span class="knop oranje">✓ Uitslag bevestigen</span> onderaan</li>
             </ol>
-            <p>Tab-kleur: <b style="color:var(--groen)">groen</b> = bevestigd · <b style="color:#a06400">geel</b> = klaar maar niet bevestigd · <b style="color:#888">grijs</b> = onvolledig.</p>
-            <div class="alert">⚠ Pas <b>nadat</b> een afstand vastgelegd is kun je voor diezelfde DC de tweede afstand loten op tussenklassement.</div>
+            <p>Tab-kleur na bevestigen: <b style="color:var(--groen)">groen ✓</b>. Vóór bevestigen <b style="color:#a06400">geel</b> (klaar maar niet bevestigd) of <b style="color:#888">grijs</b> (onvolledig).</p>
+            <div class="alert">⚠ Pas <b>nadat de eerste afstand is bevestigd</b> kun je voor diezelfde DC de tweede afstand loten op tussenklassement (terug naar stap 3).</div>
         </section>
 
+        <!-- ── STAP 8 ────────────────────────────────────────────────── -->
         <section>
-            <h2><span class="stap-nr">5</span>Klassement vastleggen</h2>
-            <p>Wanneer <b>alle afstanden</b> van een DC zijn bevestigd:</p>
+            <h2><span class="stap-nr">8</span>Klassement vastleggen</h2>
+            <p>Wanneer <b>alle afstanden</b> van een DC bevestigd zijn (alle tabs groen):</p>
             <ol>
                 <li>Tab <span class="tab">Uitslag</span> → <span class="tab">🏆 Klassement</span></li>
-                <li>Tie-breaker bovenaan: laat staan tenzij Geert iets anders zegt</li>
+                <li>Bij Full-Final + ≥2 afstanden: Tie-breaker dropdown bovenaan — laat op <b>Standaard</b> tenzij Geert anders zegt</li>
                 <li>Klik <span class="knop oranje">🏆 Klassement vastleggen</span></li>
             </ol>
-            <p>Verschijnt direct in /Public, /Coach en de print-tab.</p>
+            <p>Verschijnt direct in <span class="tab">/Public</span>, <span class="tab">/Coach</span> en het Print-Center.</p>
+            <div class="tip">💡 Print-Center (rechtsboven) ververst zichzelf na bevestigen / vastleggen — geen pagina-refresh nodig.</div>
         </section>
 
-        <section>
+    </div>
+
+    <div class="voet">
+        InlineComp Operator &middot; Quick Reference (1/2 — flow) &middot;
+        Bij twijfel of paniek: <b>vraag Geert</b> (hij staat te speaken, je mag 'm even storen)
+    </div>
+</div>
+
+<!-- ──────────────────────────────────────────────────────────────────── -->
+<!-- PAGINA 2 — Achtergrond, sancties, troubleshoot                      -->
+<!-- ──────────────────────────────────────────────────────────────────── -->
+<div class="page">
+
+    <div class="titel">
+        <div>
+            <h1>InlineComp Operator</h1>
+            <div class="subtitle">Quick Reference — sancties, probleem-oplossen, vóór-de-wedstrijd-check</div>
+        </div>
+        <div style="font-size:24pt">📋</div>
+    </div>
+
+    <div class="kolommen">
+
+        <section class="span2">
             <h2>Volgorde-overzicht voor één DC</h2>
-            <ol style="margin-left:0;padding-left:18px">
-                <li><b>Tekensluiting afstand 1</b> — Geert (of jij) bevestigt sluiting</li>
-                <li>Loting afstand 1 (serie-klassement) — stap 1</li>
-                <li>Tijden afstand 1 — stap 2 + 3 (per ronde)</li>
-                <li>Vastleggen afstand 1 — stap 4</li>
-                <li><b>Alleen voor 4 DC's:</b> loting afstand 2 (tussenklassement) — stap 1</li>
-                <li>Tijden afstand 2 — stap 2 + 3</li>
-                <li>Vastleggen afstand 2 — stap 4</li>
-                <li>Klassement vastleggen — stap 5</li>
+            <ol style="margin-left:0;padding-left:18px;column-count:2;column-gap:24px">
+                <li><b>Tekentermijn afstand 1 sluit</b></li>
+                <li>Tekenen verwerken (stap 1) — Importeer-tab</li>
+                <li><em>Optioneel:</em> programma aanpassen (stap 2)</li>
+                <li>Loten afstand 1 — <b>serie-klassement</b> (stap 3)</li>
+                <li>Tijden afstand 1 per heat (stap 4 + evt. 5)</li>
+                <li>Vervolgrondes activeren (stap 6, herhaal per ronde)</li>
+                <li><b>Afstand 1 bevestigen</b> (stap 7)</li>
+                <li><em>Bij DC met 2+ afstanden:</em> tekensluiting + tekenen verwerken voor afstand 2</li>
+                <li>Loten afstand 2 — <b>tussenklassement</b> (stap 3)</li>
+                <li>Tijden + vastleggen afstand 2 (stap 4-7, herhaal)</li>
+                <li>Klassement vastleggen — DC compleet (stap 8)</li>
             </ol>
-        </section>
-
-        <section>
-            <h2>Speciale gevallen in Live</h2>
-            <ul>
-                <li><b>Rijder kwam niet opdagen</b> → tijd leeg laten + sanctie <b>DNS</b> (Did Not Start)</li>
-                <li><b>Rijder uitgevallen tijdens race</b> → sanctie <b>DNF</b></li>
-                <li><b>Rijder gediskwalificeerd</b> → <b>DQ-TF</b> (technisch), <b>DQ-SF</b> (sport-fault), <b>DQ-DF</b> (disciplinair)</li>
-                <li><b>Waarschuwing</b> → <b>W1</b> of <b>W2</b> (alleen lange afstand)</li>
-                <li><b>Valse start</b> → <b>FS</b> — straf-positie achteraan</li>
-                <li><b>Rank Reduction</b> → <b>RR</b> — handmatig de finishpositie aanpassen</li>
-            </ul>
+            <div class="tip" style="column-span:all">💡 Bij sommige DC's draait dit volledig parallel — als rijder X net is binnengekomen op afstand 2 terwijl jij afstand 1 aan het verwerken bent, eerst tekenen-verwerken voor afstand 2 doen.</div>
         </section>
 
         <section class="span2" style="background:#f8fbff">
-            <h2>Sanctie-codes — wat betekenen ze, hoe sorteren ze in de uitslag</h2>
+            <h2>Sanctie-codes — wat betekenen ze, hoe werken ze in de uitslag</h2>
             <table class="compact">
-                <tr><th>Code</th><th>Betekenis</th><th>Effect op uitslag</th></tr>
-                <tr><td><b>W1 / W2</b></td><td>1e / 2e waarschuwing</td><td>Geen automatisch effect (jury past handmatig aan)</td></tr>
-                <tr><td><b>FS</b></td><td>False Start</td><td>Tijd telt — meestal handmatig naar achteraan gezet</td></tr>
-                <tr><td><b>RR</b></td><td>Rank Reduction</td><td>Geen automatisch effect — jury past finishpositie aan</td></tr>
-                <tr><td><b>DQ-TF</b></td><td>Diskwalificatie technische fout</td><td>Ranked last (achter alle finishers)</td></tr>
-                <tr><td><b>DQ-SF</b></td><td>Diskwalificatie sport fault</td><td>Niet geklasseerd, geen punten</td></tr>
-                <tr><td><b>DQ-DF</b></td><td>Diskwalificatie disciplinair</td><td>Niet geklasseerd, geen punten</td></tr>
-                <tr><td><b>DNS</b></td><td>Did Not Start</td><td>Ranked last, geen tijd nodig</td></tr>
-                <tr><td><b>DNF</b></td><td>Did Not Finish</td><td>Ranked last, tijd wist automatisch</td></tr>
+                <tr><th>Code</th><th>Betekenis</th><th>Effect op tijd / positie / klassement</th></tr>
+                <tr><td><b>W1 / W2</b></td><td>1e / 2e waarschuwing</td><td>Geen automatisch effect — tijd blijft, normale positie</td></tr>
+                <tr><td><b>FS</b></td><td>False Start</td><td>Tijd blijft staan (uitzondering t.o.v. DQ-codes). Normale positie op basis van tijd. Tweede FS in dezelfde wedstrijd → jury kan handmatig DQ-TF maken.</td></tr>
+                <tr><td><b>RR</b></td><td>Rank Reduction</td><td>Geen automatisch effect — jury past finishpositie handmatig aan via Fin.-dropdown</td></tr>
+                <tr><td><b>DQ-TF</b></td><td>Diskwalificatie technical fault</td><td>Tijd gewist, gedeeld als laatste in deze ronde. <b>Klassement:</b> krijgt de laatste plek van de ronde, eerder behaalde resultaten blijven staan.</td></tr>
+                <tr><td><b>DQ-SF</b></td><td>Diskwalificatie sport fault</td><td>Tijd gewist, geen positie in deze ronde, geen klassement (uitgezonderd Full-Final jury-correctie).</td></tr>
+                <tr><td><b>DQ-DF</b></td><td>Diskwalificatie disciplinary fault</td><td>Idem DQ-SF — buiten klassement.</td></tr>
+                <tr><td><b>DNS</b></td><td>Did Not Start</td><td>Tijd gewist, gedeeld als laatste in deze ronde. <b>Klassement: in eerste ronde van afstand → géén positie</b> (rijder doet niet mee). In latere ronde → laatste plek van die ronde, eerder behaalde resultaten blijven.</td></tr>
+                <tr><td><b>DNF</b></td><td>Did Not Finish</td><td>Tijd gewist, gedeeld als laatste in deze ronde.</td></tr>
+            </table>
+        </section>
+
+        <section>
+            <h2>Speciale gevallen</h2>
+            <ul>
+                <li><b>Rijder kwam niet opdagen</b> → tijd leeg + sanctie <b>DNS</b></li>
+                <li><b>Rijder uitgevallen tijdens race</b> → sanctie <b>DNF</b></li>
+                <li><b>Afvalkoers</b> — gebruik het <b>afval-paneel</b> (knoppen onder de heat-tabel) om "by-decision" of "by-fault" te markeren. Zelfde-ronde-uitval = ex-aequo, gegarandeerd.</li>
+                <li><b>Puntenkoers</b> — punten ingeven via het apart paneel onder de heat-tabel: klik startnummer → klik <b>+1</b>, <b>+2</b> of <b>+3</b>. Eindtijd via gewone tijd-cel.</li>
+                <li><b>Combi-rit</b> (gecombineerde finale van meerdere cats) — toont 🔗-badge in carousel, invoer is verder identiek aan een gewone heat</li>
+            </ul>
+        </section>
+
+        <section>
+            <h2>Status-icoontjes en tab-kleuren</h2>
+            <table class="compact">
+                <tr><th colspan="2"><b>Heat-status</b> (in Live carousel-dropdown)</th></tr>
+                <tr><td>○</td><td>Geen startlijst (nog niet geloot)</td></tr>
+                <tr><td>🚩</td><td>Startlijst klaar, geen resultaten</td></tr>
+                <tr><td>◑</td><td>Deels ingevuld</td></tr>
+                <tr><td>🏁</td><td>Compleet (alles tijd of sanctie)</td></tr>
+                <tr><th colspan="2"><b>Afstand-tab</b> (in Uitslag)</th></tr>
+                <tr><td><b style="color:var(--groen)">groen ✓</b></td><td>Uitslag bevestigd</td></tr>
+                <tr><td><b style="color:#a06400">geel</b></td><td>Compleet maar niet bevestigd</td></tr>
+                <tr><td><b style="color:#888">grijs</b></td><td>Onvolledig</td></tr>
             </table>
         </section>
 
@@ -291,18 +460,24 @@ table.compact th {
                 <tr><th style="width:32%">Symptoom</th><th>Wat doen</th></tr>
                 <tr><td>Import-knop laat geen CSV-bestanden zien</td>
                     <td>Verkeerde map gekozen. Filter via 🔍-veld op wedstrijdnaam. Geert kan oude mappen vooraf "blokkeren" zodat ze verborgen blijven.</td></tr>
-                <tr><td>Tijden komen leeg binnen na overnemen</td>
+                <tr><td>Tijden komen leeg binnen na "Overnemen"</td>
                     <td>Startnummer in CSV matcht niet met startnummer in heat. Controleer of MyLaps de juiste sessie heeft (check rondes-aantal).</td></tr>
+                <tr><td>Fin.-dropdowns verschijnen niet</td>
+                    <td>Niet alle rijders hebben tijd of sanctie ("alles groen"-conditie nog niet behaald). Vul de ontbrekende tijden / sancties in — dropdowns verschijnen automatisch.</td></tr>
+                <tr><td>Wisselen lukt niet meer (lock-badges 🔒)</td>
+                    <td>Beide rijders zijn al gewisseld in deze sessie. Importeer de CSV opnieuw → dat reset alle wissels. Daarna nieuwe swap mogelijk.</td></tr>
                 <tr><td>"↻ Hergeneer"-knop verschijnt niet</td>
                     <td>Niet alle heats van de ronde zijn ingevoerd. Filter de heat-dropdown op icoontje 🚩 (klaar maar niet ingevoerd) om te zien wat er nog mist.</td></tr>
-                <tr><td>Verkeerde rijder in heat</td>
-                    <td>Tab <span class="tab">Startlijst</span> → kies afstand → 🗑 Wis loting → opnieuw loten. <b>Let op:</b> al ingevoerde tijden gaan verloren — check checkbox "Uitslag ook wissen" goed.</td></tr>
+                <tr><td>Verkeerde rijder in heat (vóór tijden ingevoerd)</td>
+                    <td>Tab <span class="tab">Startlijst</span> → kies afstand → <span class="knop">🗑 Wis loting</span> → de dialog vraagt of je ook bevestigde uitslag/klassement mee wilt wissen. <b>Goed lezen vóór bevestigen!</b></td></tr>
+                <tr><td>Sanctie achteraf toevoegen in eerdere ronde</td>
+                    <td>Open de eerdere rit in Live, sanctie zetten, opslaan. <b>Geen impact op qualifying-set</b> (DQ-TF op non-qualifier) → niets gebeurt downstream. <b>Wel impact + bestaande results</b> → bevestigingsdialog: "Behoud bestaande" houdt KF/HF intact.</td></tr>
                 <tr><td>Klassement-rangen kloppen niet bij gelijke punten</td>
-                    <td>Tie-breaker dropdown bovenaan klassement. <b>Standaard</b> = onze logica; <b>Op basis van afstand X</b> = oude club-conventie. Vraag Geert wat geldt.</td></tr>
-                <tr><td>Afgevallen rijder krijgt verkeerde rang</td>
-                    <td>Bij afvalkoers: gebruik het afval-paneel (knoppen rechts) om "by-decision" of "by-fault" te markeren met de juiste ronde. Zelfde ronde = ex-aequo, gegarandeerd.</td></tr>
+                    <td>Tie-breaker dropdown bovenaan klassement (alleen Full-Final + ≥2 afstanden). <b>Standaard</b> = klassieke regel; <b>Op basis van afstand X</b> = oude club-conventie. Vraag Geert.</td></tr>
+                <tr><td>Print-Center toont oude opties</td>
+                    <td>Pagina-refresh is sinds kort niet meer nodig — invalidatie gebeurt automatisch na vastleggen / loten / wissen. Lukt het toch niet? F5 / Ctrl+R.</td></tr>
                 <tr><td>Iets anders raars</td>
-                    <td><b>Vraag Geert (de speaker).</b> Bij echte paniek niet zelf gokken — beter even pauzeren dan verkeerd vastleggen.</td></tr>
+                    <td><b>Vraag Geert (de speaker).</b> Bij echte paniek niet zelf gokken — beter even pauzeren dan verkeerd vastleggen. <b>Alles is ongedaan te maken behalve "Vastleggen"</b>.</td></tr>
             </table>
         </section>
 
@@ -310,12 +485,12 @@ table.compact th {
             <h2>Vóór de wedstrijd — laatste check</h2>
             <ul style="column-count:2;column-gap:18px;margin:4px 0">
                 <li><b>✓ Inloggen werkt</b> op de PC die je gaat gebruiken</li>
-                <li><b>✓ Wedstrijd geselecteerd</b> in de dropdown rechtsboven</li>
-                <li><b>✓ Tijdschema + programma</b> staan klaar (heat-carrousel toont alle ritten)</li>
+                <li><b>✓ Wedstrijd geselecteerd</b> in dropdown rechtsboven</li>
+                <li><b>✓ Tijdschema + programma</b> staan klaar (heat-carousel toont alle ritten)</li>
                 <li><b>✓ Vraag Geert per DC:</b> wanneer sluit de tekentermijn? Welke heeft hij al geloot?</li>
-                <li><b>✓ Reken op extra werk:</b> niet-getekende rijders moet je voor het loten checken (status-badges in Startlijst)</li>
+                <li><b>✓ Reken op extra werk:</b> niet-getekende rijders moeten vóór het loten gecheckt zijn</li>
                 <li><b>✓ Test-loting + test-import van CSV</b> samen met Geert vóór de eerste echte heat</li>
-                <li><b>✓ Print-rapport "Heatlijsten"</b> achter de hand voor de jury</li>
+                <li><b>✓ Print-Center</b> bereikbaar (🖨 rechtsboven)</li>
                 <li><b>✓ Adem rustig</b> — alles is ongedaan te maken behalve "Vastleggen"</li>
             </ul>
         </section>
@@ -323,8 +498,8 @@ table.compact th {
     </div>
 
     <div class="voet">
-        InlineComp Operator &middot; Quick Reference &middot;
-        Bij twijfel of paniek: <b>vraag Geert</b> (hij staat te speaken, je mag 'm even storen)
+        InlineComp Operator &middot; Quick Reference (2/2 — referentie) &middot;
+        Bij twijfel: <b>vraag Geert</b>
     </div>
 
 </div>
