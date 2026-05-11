@@ -213,11 +213,132 @@ table.compact th {
     font-size: 9pt;
 }
 
+/* ── Schermlay-out mockups (pagina 3 + 4) ── */
+.scr-mock {
+    border: 1px solid #999;
+    border-radius: 5px;
+    overflow: hidden;
+    background: #f5f7fa;
+    margin: 6px 0 4px;
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+    font-size: 8pt;
+    line-height: 1.3;
+}
+.scr-header {
+    background: var(--blauw); color: #fff;
+    padding: 4px 10px;
+    display: flex; align-items: center; gap: 8px;
+    font-size: 9pt;
+}
+.scr-header .scr-h1 { font-weight: 700; font-size: 10pt; }
+.scr-header .scr-badge {
+    background: var(--oranje); color: #fff;
+    padding: 0 6px; border-radius: 3px;
+    font-size: 7.5pt; font-weight: 600;
+}
+.scr-header .scr-spacer { flex: 1; }
+.scr-header .scr-btn-h {
+    background: rgba(255,255,255,.18);
+    color: #fff;
+    padding: 1px 6px; border-radius: 3px;
+    font-size: 7.5pt;
+}
+.scr-body { display: flex; min-height: 100px; }
+.scr-side {
+    background: #1a3a5c; color: #fff;
+    width: 100px;
+    padding: 4px 0;
+    flex-shrink: 0;
+}
+.scr-side .scr-side-item {
+    padding: 4px 8px;
+    display: flex; align-items: center; gap: 5px;
+    font-size: 8pt;
+    border-left: 3px solid transparent;
+}
+.scr-side .scr-side-item.active {
+    background: rgba(255,255,255,.12);
+    border-left-color: var(--oranje);
+    font-weight: 700;
+}
+.scr-side-spacer { flex: 1; min-height: 8px; }
+.scr-main { flex: 1; padding: 6px 8px; background: #fff; min-width: 0; }
+
+.scr-tabs {
+    display: flex; gap: 2px;
+    border-bottom: 2px solid var(--oranje);
+    margin-bottom: 5px;
+    flex-wrap: wrap;
+}
+.scr-tab {
+    background: #eef2f7; color: #444;
+    padding: 2px 8px;
+    border-radius: 3px 3px 0 0;
+    font-size: 7.5pt;
+    border: 1px solid var(--border); border-bottom: none;
+}
+.scr-tab.active {
+    background: var(--blauw); color: #fff;
+    border-color: var(--blauw);
+    font-weight: 700;
+}
+.scr-tab.groen { background: #d4eed8; color: var(--groen); border-color: #a5d4ad; }
+.scr-tab.geel  { background: #fff1cc; color: #8a5a00; border-color: #d49a2c; }
+.scr-tab.dim   { opacity: .55; }
+.scr-tab.oranje { background: var(--oranje); color: #fff; font-weight: 700; }
+
+.scr-table {
+    width: 100%; border-collapse: collapse;
+    font-size: 7.5pt;
+}
+.scr-table th, .scr-table td {
+    padding: 1px 4px;
+    border-bottom: 1px solid #eee;
+    text-align: left;
+}
+.scr-table th {
+    background: var(--lichtblauw);
+    color: var(--blauw);
+    font-weight: 600;
+    font-size: 7pt;
+}
+
+.scr-callout-rij {
+    display: flex; gap: 10px;
+    margin-top: 2px;
+    align-items: flex-start;
+}
+.scr-callout-rij .scr-mock { flex: 1.4; margin: 0; }
+.scr-callouts {
+    flex: 1;
+    font-size: 8.5pt;
+}
+.scr-callouts ul { margin: 2px 0; padding-left: 16px; }
+.scr-callouts li { margin: 2px 0; }
+.scr-callouts .ic {
+    display: inline-block; width: 14px; text-align: center;
+    background: #1a3a5c; color: #fff;
+    border-radius: 3px; padding: 0 2px;
+    font-size: 8pt;
+}
+
+.scr-section { margin-bottom: 8px; }
+.scr-section h3 {
+    margin: 0 0 3px;
+    color: var(--blauw);
+    font-size: 10.5pt;
+    border-bottom: 1px solid var(--oranje);
+    padding-bottom: 2px;
+}
+
 @media print {
     body { background: #fff; }
     .page { box-shadow: none; padding: 6mm 10mm; }
     @page { margin: 7mm 10mm; size: A4 portrait; }
     .pdf-tip { display: none; }
+    .scr-mock { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+    .scr-header, .scr-side, .scr-tab.active, .scr-table th { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
 }
 .pdf-tip {
     background: #eef4fa; border-left: 3px solid var(--middenblauw);
@@ -234,7 +355,7 @@ table.compact th {
 <div class="page">
 
     <div class="pdf-tip">
-        💡 <b>Opslaan als PDF:</b> Ctrl+P (Cmd+P op Mac) → "Opslaan als PDF". Twee pagina's — dubbelzijdig printen + lamineren is handig.
+        💡 <b>Opslaan als PDF:</b> Ctrl+P (Cmd+P op Mac) → "Opslaan als PDF". Vijf pagina's: 1-2 = flow + referentie (dubbelzijdig printen + lamineren), 3-5 = schermlay-outs (los archiveren of A5 printen).
     </div>
 
     <div class="titel">
@@ -375,7 +496,7 @@ table.compact th {
     </div>
 
     <div class="voet">
-        InlineComp Operator &middot; Quick Reference (1/2 — flow) &middot;
+        InlineComp Operator &middot; Quick Reference (1/5 — flow) &middot;
         Bij twijfel of paniek: <b>vraag Geert</b> (hij staat te speaken, je mag 'm even storen)
     </div>
 </div>
@@ -498,10 +619,439 @@ table.compact th {
     </div>
 
     <div class="voet">
-        InlineComp Operator &middot; Quick Reference (2/2 — referentie) &middot;
+        InlineComp Operator &middot; Quick Reference (2/5 — referentie) &middot;
         Bij twijfel: <b>vraag Geert</b>
     </div>
 
+</div>
+
+<!-- ──────────────────────────────────────────────────────────────────── -->
+<!-- PAGINA 3 — Schermlay-out: Sidebar + Importeer + Tijdschema           -->
+<!-- ──────────────────────────────────────────────────────────────────── -->
+<div class="page">
+
+    <div class="titel">
+        <div>
+            <h1>InlineComp Operator</h1>
+            <div class="subtitle">Schermlay-outs (1/2) — sidebar, Importeer, Tijdschema</div>
+        </div>
+        <div style="font-size:24pt">🖥</div>
+    </div>
+
+    <!-- Sidebar callout-rij -->
+    <div class="scr-section">
+        <h3>De zijbalk — wat doet elk menu-item</h3>
+        <div class="scr-callout-rij">
+            <!-- Mini-mockup: header strip + sidebar -->
+            <div class="scr-mock" style="max-width:200px">
+                <div class="scr-header">
+                    <span class="scr-h1">InlineComp</span>
+                    <span class="scr-badge">KNSB</span>
+                </div>
+                <div class="scr-body" style="min-height:200px">
+                    <div class="scr-side" style="width:100%">
+                        <div class="scr-side-item active"><span>⇃</span><span>Importeer</span></div>
+                        <div class="scr-side-item"><span>📅</span><span>Tijdschema</span></div>
+                        <div class="scr-side-item"><span>📋</span><span>Startlijsten</span></div>
+                        <div class="scr-side-item"><span>▶</span><span>Live</span></div>
+                        <div class="scr-side-item"><span>🏆</span><span>Uitslag</span></div>
+                        <div class="scr-side-spacer" style="border-top:1px solid #345070;margin:8px 6px"></div>
+                        <div class="scr-side-item"><span>⚙</span><span>Beheer</span></div>
+                        <div class="scr-side-item"><span>🛠</span><span>Systeem</span></div>
+                        <div class="scr-side-item"><span>ℹ</span><span>Info</span></div>
+                    </div>
+                </div>
+            </div>
+            <!-- Callouts -->
+            <div class="scr-callouts">
+                <ul>
+                    <li><b>⇃ Importeer</b> — wedstrijdselectie + tekenen verwerken (stap 1)</li>
+                    <li><b>📅 Tijdschema</b> — programma-opzet (Geert doet dit vooraf; jij eventueel kwalificatie eruit halen — stap 2)</li>
+                    <li><b>📋 Startlijsten</b> — loting per afstand (stap 3)</li>
+                    <li><b>▶ Live verwerking</b> — tijden invoeren + sancties + wisselen (stap 4-6)</li>
+                    <li><b>🏆 Uitslag</b> — afstand-uitslag bevestigen + klassement vastleggen (stap 7-8)</li>
+                </ul>
+                <ul style="margin-top:5px">
+                    <li><b>⚙ Beheer</b> — organisaties, banen, transponders (zelden tijdens wedstrijd)</li>
+                    <li><b>🛠 Systeem</b> — alleen voor admin/owner (gebruikers, logboek, uploads)</li>
+                    <li><b>ℹ Info</b> — versie + ondersteuning</li>
+                </ul>
+                <div class="tip" style="margin-top:5px">💡 Klik op het <b>‹</b> bovenaan de sidebar om 'm in te klappen — meer ruimte voor het werkgebied. Klik nogmaals om uit te klappen.</div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Importeer mockup -->
+    <div class="scr-section">
+        <h3>Importeer — tekenen verwerken (stap 1)</h3>
+        <div class="scr-mock">
+            <div class="scr-header">
+                <span class="scr-h1">InlineComp</span><span class="scr-badge">KNSB</span>
+                <span class="scr-spacer"></span>
+                <span class="scr-btn-h">🖨 Print-Center</span>
+                <span class="scr-btn-h">📖 Handleiding</span>
+                <span style="font-size:7.5pt">geert · admin</span>
+                <span class="scr-btn-h">➤</span>
+            </div>
+            <div class="scr-body">
+                <div class="scr-side">
+                    <div class="scr-side-item active"><span>⇃</span><span>Importeer</span></div>
+                    <div class="scr-side-item"><span>📅</span><span>Tijdschema</span></div>
+                    <div class="scr-side-item"><span>📋</span><span>Startlijsten</span></div>
+                    <div class="scr-side-item"><span>▶</span><span>Live</span></div>
+                    <div class="scr-side-item"><span>🏆</span><span>Uitslag</span></div>
+                </div>
+                <div class="scr-main">
+                    <div style="display:flex;gap:8px">
+                        <!-- LINKS: wedstrijdenlijst -->
+                        <div style="flex:0.7;border:1px solid var(--border);padding:4px;background:#fafbfc">
+                            <div style="font-size:8.5pt;font-weight:700;color:var(--blauw);margin-bottom:3px">Wedstrijden</div>
+                            <div style="display:flex;gap:3px;font-size:7pt;color:#666;margin-bottom:3px">
+                                <span style="background:#fff;border:1px solid var(--border);padding:1px 4px">📅 van</span>
+                                <span style="background:#fff;border:1px solid var(--border);padding:1px 4px">📅 tot</span>
+                                <span style="background:#fff;border:1px solid var(--border);padding:1px 4px">↻</span>
+                            </div>
+                            <div style="background:var(--lichtblauw);padding:3px 5px;font-size:7.5pt;border-left:3px solid var(--oranje);margin-bottom:2px">
+                                <b>KNSB Baan/Weg 1</b><br>
+                                <span style="color:#666">za 14 mei · Heerenveen</span>
+                            </div>
+                            <div style="padding:3px 5px;font-size:7.5pt;color:#444;border-bottom:1px solid #eee">Inline Cup 2 — di 21 mei</div>
+                            <div style="padding:3px 5px;font-size:7.5pt;color:#444;border-bottom:1px solid #eee">NK Inline — za 4 jun</div>
+                        </div>
+                        <!-- RECHTS: vergelijk-tabel -->
+                        <div style="flex:1.3">
+                            <div style="background:#eef4fa;padding:3px 6px;font-weight:700;color:var(--blauw);font-size:8.5pt;margin-bottom:3px">
+                                KNSB Baan/Weg 1 — vergelijking met DB
+                            </div>
+                            <div class="scr-tabs">
+                                <span class="scr-tab active">HSA (22)</span>
+                                <span class="scr-tab">DSA+DSB (31)</span>
+                                <span class="scr-tab">HJA (18)</span>
+                                <span class="scr-tab">DJA (16)</span>
+                            </div>
+                            <table class="scr-table">
+                                <tr><th>Snr</th><th>Naam</th><th>Tp</th><th>Status</th></tr>
+                                <tr><td>101</td><td>A. Voorbeeld</td><td>KS-001</td><td><span class="mock-badge mock-bevestigd">Bevestigd</span></td></tr>
+                                <tr><td>102</td><td>B. Voorbeeld</td><td>KS-002</td><td><span class="mock-badge mock-niet-bev">Niet bevestigd</span></td></tr>
+                                <tr><td>103</td><td>C. Voorbeeld</td><td>—</td><td><span class="mock-badge mock-niet-getek">Niet getekend</span></td></tr>
+                                <tr><td>104</td><td>D. Voorbeeld</td><td>KS-004</td><td><span class="mock-badge mock-afgemeld">Afgem. bij org.</span></td></tr>
+                                <tr><td>105</td><td>E. Voorbeeld</td><td>KS-005</td><td><span class="mock-badge mock-bevestigd">Bevestigd</span></td></tr>
+                            </table>
+                            <div style="margin-top:4px;text-align:right">
+                                <span class="knop oranje" style="font-size:7.5pt">💾 Opslaan (3)</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div class="tip">💡 Klik op een status-badge om door de cyclus te gaan. Aantal naast Opslaan = aantal wijzigingen sinds laatste save. Tabbladen-tellers (HSA 22) tonen totaal aantal rijders per categorie.</div>
+    </div>
+
+    <div class="voet">
+        InlineComp Operator &middot; Quick Reference (3/5 — schermen) &middot; Bij twijfel: <b>vraag Geert</b>
+    </div>
+</div>
+
+<!-- ──────────────────────────────────────────────────────────────────── -->
+<!-- PAGINA 4 — Schermlay-out: Tijdschema + Startlijsten                  -->
+<!-- ──────────────────────────────────────────────────────────────────── -->
+<div class="page">
+
+    <div class="titel">
+        <div>
+            <h1>InlineComp Operator</h1>
+            <div class="subtitle">Schermlay-outs (2/3) — Tijdschema, Startlijsten</div>
+        </div>
+        <div style="font-size:24pt">🖥</div>
+    </div>
+
+    <!-- Tijdschema mockup -->
+    <div class="scr-section">
+        <h3>Tijdschema — programma-opzet (stap 2, optioneel)</h3>
+        <div class="scr-mock">
+            <div class="scr-header">
+                <span class="scr-h1">InlineComp</span><span class="scr-badge">KNSB Baan/Weg 1</span>
+                <span class="scr-spacer"></span>
+                <span class="scr-btn-h">🖨</span><span class="scr-btn-h">📖</span>
+            </div>
+            <div class="scr-body">
+                <div class="scr-side">
+                    <div class="scr-side-item"><span>⇃</span><span>Importeer</span></div>
+                    <div class="scr-side-item active"><span>📅</span><span>Tijdschema</span></div>
+                    <div class="scr-side-item"><span>📋</span><span>Startlijsten</span></div>
+                    <div class="scr-side-item"><span>▶</span><span>Live</span></div>
+                    <div class="scr-side-item"><span>🏆</span><span>Uitslag</span></div>
+                </div>
+                <div class="scr-main">
+                    <!-- Systeem-balk -->
+                    <div style="background:#eef4fa;border-left:3px solid var(--middenblauw);padding:4px 8px;margin-bottom:5px;font-size:8pt">
+                        <b>Systeem:</b> <span style="background:#fff;border:1px solid var(--border);padding:0 6px;font-size:7.5pt">Internationaal ▾</span>
+                        <span style="color:var(--groen);margin-left:6px">✓ actief</span>
+                    </div>
+                    <!-- Afstand-kaarten -->
+                    <div style="font-weight:700;color:var(--blauw);font-size:8.5pt;margin-bottom:3px">Afstandsinstellingen</div>
+                    <div style="border:1px solid var(--border);padding:4px 6px;background:#fafbfc;margin-bottom:3px;display:flex;justify-content:space-between;align-items:center">
+                        <div>
+                            <b style="color:var(--blauw);font-size:8.5pt">500m sprint</b><br>
+                            <span style="font-size:7pt;color:#666">HSA · DSA+DSB · HJA · DJA</span><br>
+                            <span style="font-size:7.5pt;color:#444">Series → Kwartfinale → A-finale</span>
+                        </div>
+                        <span class="knop" style="font-size:7pt">✏ Bewerken</span>
+                    </div>
+                    <div style="border:1px solid var(--border);padding:4px 6px;background:#fafbfc;margin-bottom:5px;display:flex;justify-content:space-between;align-items:center">
+                        <div>
+                            <b style="color:var(--blauw);font-size:8.5pt">3000m</b><br>
+                            <span style="font-size:7pt;color:#666">HSA · DSA+DSB · HJA · DJA</span><br>
+                            <span style="font-size:7.5pt;color:#444">Series → A-finale</span>
+                        </div>
+                        <span class="knop" style="font-size:7pt">✏ Bewerken</span>
+                    </div>
+                    <!-- Programma -->
+                    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:3px">
+                        <span style="font-weight:700;color:var(--blauw);font-size:8.5pt">Gegenereerd programma · 42 ritten</span>
+                        <span class="knop oranje" style="font-size:7pt">▶ Hergeneer</span>
+                    </div>
+                    <table class="scr-table">
+                        <tr><th>Tijd</th><th>#</th><th>Rit</th><th>Type</th></tr>
+                        <tr><td>14:00</td><td>1</td><td>Series 500m H1 — HSA</td><td>heats</td></tr>
+                        <tr><td>14:03</td><td>2</td><td>Series 500m H2 — HSA</td><td>heats</td></tr>
+                        <tr style="background:#fff5e6"><td colspan="4" style="font-style:italic;color:#666;font-size:7pt">⏸ Pauze 15 min — tot 14:24</td></tr>
+                        <tr><td>14:24</td><td>3</td><td>Halve finale — HSA</td><td>halve</td></tr>
+                    </table>
+                </div>
+            </div>
+        </div>
+        <div class="tip">💡 <b>Stap 2:</b> als een afstand te weinig deelnemers heeft (bv. 7 voor 8 finaleplekken) → klik <span class="knop" style="font-size:8pt">✏ Bewerken</span> bij die afstand → vink Series uit → Opslaan → onderaan <b>▶ Hergeneer</b>. Dit wist handmatige verfijningen — overleg eerst met Geert.</div>
+    </div>
+
+    <!-- Startlijsten mockup -->
+    <div class="scr-section">
+        <h3>Startlijsten — loting per afstand (stap 3)</h3>
+        <div class="scr-mock">
+            <div class="scr-header">
+                <span class="scr-h1">InlineComp</span><span class="scr-badge">KNSB Baan/Weg 1</span>
+                <span class="scr-spacer"></span>
+                <span class="scr-btn-h">🖨 Print-Center</span>
+            </div>
+            <div class="scr-body">
+                <div class="scr-side">
+                    <div class="scr-side-item"><span>⇃</span><span>Importeer</span></div>
+                    <div class="scr-side-item"><span>📅</span><span>Tijdschema</span></div>
+                    <div class="scr-side-item active"><span>📋</span><span>Startlijsten</span></div>
+                    <div class="scr-side-item"><span>▶</span><span>Live</span></div>
+                    <div class="scr-side-item"><span>🏆</span><span>Uitslag</span></div>
+                </div>
+                <div class="scr-main">
+                    <!-- Cat-tabs -->
+                    <div style="font-size:7pt;color:#666">Categorie:</div>
+                    <div class="scr-tabs">
+                        <span class="scr-tab active">HSA (22)</span>
+                        <span class="scr-tab">DSA+DSB (31)</span>
+                        <span class="scr-tab">HJA (18)</span>
+                        <span class="scr-tab">DJA (16)</span>
+                    </div>
+                    <!-- Dist-tabs -->
+                    <div style="font-size:7pt;color:#666;margin-top:3px">Afstand:</div>
+                    <div class="scr-tabs">
+                        <span class="scr-tab active">500m sprint</span>
+                        <span class="scr-tab">3000m</span>
+                        <span class="scr-tab">PK 5km</span>
+                    </div>
+                    <!-- Seeding-balk -->
+                    <div style="background:#eef4fa;padding:3px 6px;font-size:7.5pt;display:flex;gap:5px;align-items:center;margin-top:3px">
+                        <span><b>Seeding:</b></span>
+                        <span style="background:#fff;border:1px solid var(--border);padding:0 5px;font-size:7pt">Serie-klassement ▾</span>
+                        <span class="knop oranje" style="font-size:7pt">🎲 Genereer</span>
+                        <span style="margin-left:auto"><span class="knop rood" style="font-size:7pt">🗑 Wis loting</span></span>
+                    </div>
+                    <!-- Heat-grid -->
+                    <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:4px;margin-top:5px">
+                        <div style="border:1px solid var(--border);background:#fafbfc">
+                            <div style="background:var(--blauw);color:#fff;padding:1px 5px;font-size:7.5pt;font-weight:700">Heat 1</div>
+                            <div style="padding:2px 4px;font-size:7pt">1. 101 A. Voorbeeld</div>
+                            <div style="padding:2px 4px;font-size:7pt">2. 105 E. Voorbeeld</div>
+                            <div style="padding:2px 4px;font-size:7pt">3. 109 I. Voorbeeld</div>
+                        </div>
+                        <div style="border:1px solid var(--border);background:#fafbfc">
+                            <div style="background:var(--blauw);color:#fff;padding:1px 5px;font-size:7.5pt;font-weight:700">Heat 2</div>
+                            <div style="padding:2px 4px;font-size:7pt">1. 102 B. Voorbeeld</div>
+                            <div style="padding:2px 4px;font-size:7pt">2. 106 F. Voorbeeld</div>
+                            <div style="padding:2px 4px;font-size:7pt">3. 110 J. Voorbeeld</div>
+                        </div>
+                        <div style="border:1px solid var(--border);background:#fafbfc">
+                            <div style="background:var(--blauw);color:#fff;padding:1px 5px;font-size:7.5pt;font-weight:700">Heat 3</div>
+                            <div style="padding:2px 4px;font-size:7pt">1. 103 C. Voorbeeld</div>
+                            <div style="padding:2px 4px;font-size:7pt">2. 107 G. Voorbeeld</div>
+                            <div style="padding:2px 4px;font-size:7pt">3. 111 K. Voorbeeld</div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div class="tip">💡 <b>Eerste afstand</b> van een DC = serie-klassement. <b>Tweede afstand</b> = tussenklassement (alleen na vastleggen 1e afstand — anders is de optie disabled). Voorbeelden hierboven tonen 3 heats van 3 rijders na seeding via slangenpatroon.</div>
+    </div>
+
+    <div class="voet">
+        InlineComp Operator &middot; Quick Reference (4/5 — schermen) &middot; Bij twijfel: <b>vraag Geert</b>
+    </div>
+</div>
+
+<!-- ──────────────────────────────────────────────────────────────────── -->
+<!-- PAGINA 5 — Schermlay-out: Live + Uitslag                             -->
+<!-- ──────────────────────────────────────────────────────────────────── -->
+<div class="page">
+
+    <div class="titel">
+        <div>
+            <h1>InlineComp Operator</h1>
+            <div class="subtitle">Schermlay-outs (3/3) — Live verwerking, Uitslag</div>
+        </div>
+        <div style="font-size:24pt">🖥</div>
+    </div>
+
+    <!-- Live mockup -->
+    <div class="scr-section">
+        <h3>Live verwerking — tijden invoeren + wisselen (stappen 4-6)</h3>
+        <div class="scr-mock">
+            <div class="scr-header">
+                <span class="scr-h1">InlineComp</span><span class="scr-badge">KNSB Baan/Weg 1</span>
+                <span class="scr-spacer"></span>
+                <span class="scr-btn-h">🖨</span><span class="scr-btn-h">📖</span>
+            </div>
+            <div class="scr-body">
+                <div class="scr-side">
+                    <div class="scr-side-item"><span>⇃</span><span>Importeer</span></div>
+                    <div class="scr-side-item"><span>📅</span><span>Tijdschema</span></div>
+                    <div class="scr-side-item"><span>📋</span><span>Startlijsten</span></div>
+                    <div class="scr-side-item active"><span>▶</span><span>Live</span></div>
+                    <div class="scr-side-item"><span>🏆</span><span>Uitslag</span></div>
+                </div>
+                <div class="scr-main" style="display:flex;gap:5px;padding:5px">
+                    <!-- Links: read-only paneel -->
+                    <div style="width:130px;border:1px solid var(--border);background:#fafbfc;flex-shrink:0">
+                        <div style="background:#eef2f7;padding:2px 4px;font-weight:700;color:var(--blauw);font-size:7pt">Series · HSA · 500m</div>
+                        <table style="width:100%;font-size:6.5pt;border-collapse:collapse">
+                            <tr><td style="padding:1px 3px;color:var(--groen);font-weight:700">Q</td><td>1</td><td>A. Vb</td><td style="text-align:right">42.531</td></tr>
+                            <tr style="background:#f9fafc"><td style="color:var(--groen);font-weight:700;padding:1px 3px">Q</td><td>1</td><td>B. Vb</td><td style="text-align:right">42.498</td></tr>
+                            <tr><td style="color:var(--groen);font-weight:700;padding:1px 3px">Q</td><td>1</td><td>C. Vb</td><td style="text-align:right">42.612</td></tr>
+                            <tr style="background:#f9fafc"><td style="color:var(--oranje);font-weight:700;padding:1px 3px">q</td><td>2</td><td>F. Vb</td><td style="text-align:right">42.718</td></tr>
+                            <tr><td style="color:var(--oranje);font-weight:700;padding:1px 3px">q</td><td>2</td><td>E. Vb</td><td style="text-align:right">42.803</td></tr>
+                            <tr style="background:#f9fafc;color:#999"><td style="padding:1px 3px"></td><td>3</td><td>G. Vb</td><td style="text-align:right">43.102</td></tr>
+                        </table>
+                    </div>
+                    <!-- Rechts: nav + carousel -->
+                    <div style="flex:1;min-width:0">
+                        <!-- Nav-balk -->
+                        <div style="background:#eef2f7;border:1px solid var(--border);padding:2px 4px;display:flex;gap:3px;align-items:center;font-size:7pt;margin-bottom:3px">
+                            <span style="background:#fff;border:1px solid var(--border);padding:0 3px">○</span>
+                            <span style="background:#fff;border:1px solid var(--border);padding:0 3px">🚩</span>
+                            <span style="background:var(--oranje);color:#fff;border:1px solid var(--oranje);padding:0 3px">◑</span>
+                            <span style="background:#fff;border:1px solid var(--border);padding:0 3px">🏁</span>
+                            <span style="flex:1;background:#fff;border:1px solid var(--border);padding:0 4px;font-size:7pt">◑ Series Heat 2 — HSA ▾</span>
+                            <span style="font-size:6.5pt;color:#666">5 / 24</span>
+                        </div>
+                        <!-- Heat-card -->
+                        <div style="border:1px solid var(--border);background:#fafbfc">
+                            <div style="background:var(--blauw);color:#fff;padding:2px 5px;font-size:7.5pt;font-weight:700;display:flex;justify-content:space-between">
+                                <span>‹ Series Heat 2 — HSA</span><span>heats ›</span>
+                            </div>
+                            <table style="width:100%;font-size:7pt;border-collapse:collapse">
+                                <tr style="background:#fff;color:#666;font-size:6.5pt">
+                                    <th style="padding:1px 3px;text-align:left">#</th><th>Snr</th><th style="text-align:left">Naam</th><th>Tijd</th><th>Sanc.</th><th>Fin.</th>
+                                </tr>
+                                <tr><td style="padding:1px 3px">1</td><td>101</td><td>A. Voorbeeld</td><td style="background:#fff;border:1px solid #ddd;padding:0 3px">42.531</td><td>—</td><td><span class="mock-fin-dropdown">1 ▾</span></td></tr>
+                                <tr style="background:#f9fafc"><td style="padding:1px 3px">2</td><td>106</td><td>F. Voorbeeld</td><td style="background:#fff;border:1px solid #ddd;padding:0 3px">42.718</td><td>—</td><td><span class="mock-fin-lock">🔒 2e</span></td></tr>
+                                <tr><td style="padding:1px 3px">3</td><td>107</td><td>G. Voorbeeld</td><td style="background:#fff;border:1px solid #ddd;padding:0 3px">43.102</td><td>—</td><td><span class="mock-fin-dropdown">3 ▾</span></td></tr>
+                                <tr style="background:#f9fafc"><td style="padding:1px 3px">4</td><td>112</td><td>L. Voorbeeld</td><td style="background:#e8f5e8;border:1px solid #aac8aa;padding:0 3px">—</td><td><span style="background:var(--lichtblauw);color:var(--blauw);padding:0 3px;font-weight:700">FS</span></td><td>—</td></tr>
+                                <tr><td style="padding:1px 3px">5</td><td>113</td><td>M. Voorbeeld</td><td style="background:#fff;border:1px solid #ddd;padding:0 3px">43.540</td><td>—</td><td><span class="mock-fin-dropdown">4 ▾</span></td></tr>
+                            </table>
+                            <div style="background:#eef2f7;padding:2px 4px;display:flex;justify-content:flex-end;gap:3px">
+                                <span class="knop" style="font-size:7pt">📥 Import</span>
+                                <span class="knop oranje" style="font-size:7pt">💾 Opslaan</span>
+                            </div>
+                        </div>
+                        <!-- Hergeneer-balk -->
+                        <div style="margin-top:3px;background:#e8f5e8;border:1px solid #c5e0c5;padding:2px 5px;display:flex;justify-content:space-between;font-size:7pt;color:var(--groen)">
+                            <span>✓ Series compleet</span>
+                            <span class="knop" style="font-size:6.5pt">↻ Hergeneer KF</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div class="tip">💡 <b>Links</b> = read-only overzicht alle Series-rijders met Q (top-N per heat) en q (snelste tijden) markers. <b>Rechts</b> = de actieve heat met invoer-velden. In de mockup is L. Voorbeeld op FS gezet (geen tijd → geen positie); rijder 106 heeft een lock-badge 🔒 = al in een wissel betrokken (kan niet opnieuw geswapt). De groene balk onderaan verschijnt zodra alle Series-heats compleet zijn.</div>
+    </div>
+
+    <!-- Uitslag mockup -->
+    <div class="scr-section">
+        <h3>Uitslag — afstand bevestigen + klassement vastleggen (stappen 7-8)</h3>
+        <div class="scr-mock">
+            <div class="scr-header">
+                <span class="scr-h1">InlineComp</span><span class="scr-badge">KNSB Baan/Weg 1</span>
+                <span class="scr-spacer"></span>
+                <span class="scr-btn-h">🖨 Print-Center</span>
+            </div>
+            <div class="scr-body">
+                <div class="scr-side">
+                    <div class="scr-side-item"><span>⇃</span><span>Importeer</span></div>
+                    <div class="scr-side-item"><span>📅</span><span>Tijdschema</span></div>
+                    <div class="scr-side-item"><span>📋</span><span>Startlijsten</span></div>
+                    <div class="scr-side-item"><span>▶</span><span>Live</span></div>
+                    <div class="scr-side-item active"><span>🏆</span><span>Uitslag</span></div>
+                </div>
+                <div class="scr-main">
+                    <!-- Cat-tabs -->
+                    <div style="font-size:7pt;color:#666">Categorie:</div>
+                    <div class="scr-tabs">
+                        <span class="scr-tab active">HSA</span>
+                        <span class="scr-tab">DSA+DSB</span>
+                        <span class="scr-tab">HJA</span>
+                        <span class="scr-tab">DJA</span>
+                    </div>
+                    <!-- Dist-tabs + klassement -->
+                    <div style="font-size:7pt;color:#666;margin-top:3px">Afstand:</div>
+                    <div style="display:flex;justify-content:space-between;align-items:flex-start">
+                        <div class="scr-tabs" style="border-bottom:none;flex:1">
+                            <span class="scr-tab groen">500m sprint ✓</span>
+                            <span class="scr-tab geel">3000m</span>
+                            <span class="scr-tab dim">PK 5km</span>
+                        </div>
+                        <div class="scr-tabs" style="border-bottom:none">
+                            <span class="scr-tab oranje">🏆 Klassement</span>
+                        </div>
+                    </div>
+                    <!-- Tie-breaker balk + vastlegknop -->
+                    <div style="background:#eef4fa;padding:3px 6px;font-size:7pt;display:flex;gap:5px;align-items:center;margin-top:3px">
+                        <span><b>Tie-breaker:</b></span>
+                        <span style="background:#fff;border:1px solid var(--border);padding:0 4px;font-size:6.5pt">Standaard ▾</span>
+                        <span style="margin-left:auto"><span class="knop oranje" style="font-size:7pt" title="Klikbaar zodra alle afstanden bevestigd">🏆 Klassement vastleggen</span></span>
+                    </div>
+                    <!-- Klassement tabel -->
+                    <table class="scr-table" style="margin-top:3px">
+                        <tr>
+                            <th>#</th><th>Naam</th><th>Snr</th>
+                            <th style="color:var(--groen)">500m</th>
+                            <th style="color:#a06400">3000m</th>
+                            <th style="color:#888">PK 5km</th>
+                            <th>Tot</th>
+                        </tr>
+                        <tr><td><b>1</b></td><td>A. Voorbeeld</td><td>101</td><td style="text-align:center">1</td><td style="text-align:center">2</td><td style="text-align:center;color:#888">—</td><td><b>3</b></td></tr>
+                        <tr><td><b>2</b></td><td>B. Voorbeeld</td><td>102</td><td style="text-align:center">3</td><td style="text-align:center">1</td><td style="text-align:center;color:#888">—</td><td><b>4</b></td></tr>
+                        <tr><td><b>3</b></td><td>D. Voorbeeld</td><td>104</td><td style="text-align:center">2</td><td style="text-align:center">5</td><td style="text-align:center;color:#888">—</td><td><b>7</b></td></tr>
+                        <tr><td><b>4</b></td><td>C. Voorbeeld</td><td>103</td><td style="text-align:center">5</td><td style="text-align:center">3</td><td style="text-align:center;color:#888">—</td><td><b>8</b></td></tr>
+                        <tr style="background:#fbe9e9;color:#a00"><td colspan="7" style="font-size:6.5pt;font-style:italic">Uitgesloten (sanctie / 0 punten)</td></tr>
+                        <tr style="color:#999"><td>—</td><td>K. Voorbeeld</td><td>111</td><td style="text-align:center;background:#fbe9e9">DQ-DF</td><td colspan="3">—</td></tr>
+                    </table>
+                </div>
+            </div>
+        </div>
+        <div class="tip">💡 Tab-kleuren: <b style="color:var(--groen)">groen ✓</b> = bevestigd · <b style="color:#a06400">geel</b> = compleet, niet bevestigd · <b style="color:#888">grijs/dim</b> = onvolledig. <b>🏆 Klassement vastleggen</b> wordt pas oranje/klikbaar als ALLE relevante afstanden groen zijn. Tie-breaker dropdown: alleen zichtbaar bij Full-Final + ≥2 afstanden.</div>
+    </div>
+
+    <div class="voet">
+        InlineComp Operator &middot; Quick Reference (5/5 — schermen) &middot; Bij twijfel: <b>vraag Geert</b>
+    </div>
 </div>
 </body>
 </html>
