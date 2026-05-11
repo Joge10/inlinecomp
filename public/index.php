@@ -199,19 +199,34 @@ if ($action === 'programma') {
         // Bepaal per rit of de startlijst definitief is:
         // - Ronde 1 (series): definitief als er rijders in de heat zitten
         // - Ronde > 1: definitief als er rijders in zitten EN de vorige ronde compleet is
-        $rondeCheck = []; // "dc_id_ronde" => bool
-        $checkVorigeRonde = function($dcId, $ronde) use ($pdo, $compId, &$rondeCheck) {
+        // - Runner-up: bron-ronde is de EERSTE deelnemende ronde (heats / KF /
+        //   HF), niet de hoogste lagere — runner-up draait parallel uit
+        //   eerste-ronde-uitvallers.
+        $rondeCheck = []; // "dc_id_ronde_type" => bool
+        $checkVorigeRonde = function($dcId, $ronde, $rondeType) use ($pdo, $compId, &$rondeCheck) {
             if ($ronde <= 1) return true;
-            $ck = "{$dcId}_{$ronde}";
+            $ck = "{$dcId}_{$ronde}_{$rondeType}";
             if (isset($rondeCheck[$ck])) return $rondeCheck[$ck];
 
-            // Zoek de werkelijk vorige ronde (hoogste ronde < huidige die heats heeft)
-            $vrStmt = $pdo->prepare("
-                SELECT MAX(h.ronde) FROM heats h
-                JOIN heat_entries he ON he.heat_id = h.id
-                WHERE h.competition_id = ? AND h.distance_combination_id = ? AND h.ronde < ?
-            ");
-            $vrStmt->execute([$compId, $dcId, $ronde]);
+            if ($rondeType === 'runner_up') {
+                $vrStmt = $pdo->prepare("
+                    SELECT MIN(h.ronde) FROM heats h
+                    JOIN heat_entries he ON he.heat_id = h.id
+                    LEFT JOIN tijdschema_ritten r ON r.id = h.tijdschema_rit_id
+                    WHERE h.competition_id = ? AND h.distance_combination_id = ?
+                      AND (r.ronde_type IS NULL OR r.ronde_type <> 'runner_up')
+                      AND h.ronde < ?
+                ");
+                $vrStmt->execute([$compId, $dcId, $ronde]);
+            } else {
+                // Reguliere vervolgronde: hoogste ronde < huidige
+                $vrStmt = $pdo->prepare("
+                    SELECT MAX(h.ronde) FROM heats h
+                    JOIN heat_entries he ON he.heat_id = h.id
+                    WHERE h.competition_id = ? AND h.distance_combination_id = ? AND h.ronde < ?
+                ");
+                $vrStmt->execute([$compId, $dcId, $ronde]);
+            }
             $vr = $vrStmt->fetchColumn();
             if (!$vr) { $rondeCheck[$ck] = true; return true; } // geen vorige ronde = ok
 
@@ -233,10 +248,11 @@ if ($action === 'programma') {
         foreach ($rittenRaw as $r) {
             $ronde = (int)($r['heat_ronde'] ?? 0);
             $dcId  = $r['heat_dc_id'] ?? '';
+            $rondeType = $r['ronde_type'] ?? '';
             $heeftEntries = (int)($r['entries_count'] ?? 0) > 0;
 
             // Definitief = er zitten rijders in EN (ronde 1 OF vorige ronde compleet)
-            $r['definitief'] = $heeftEntries && ($ronde <= 1 || $checkVorigeRonde($dcId, $ronde));
+            $r['definitief'] = $heeftEntries && ($ronde <= 1 || $checkVorigeRonde($dcId, $ronde, $rondeType));
 
             $ritten[] = $r;
         }
@@ -288,19 +304,34 @@ if ($action === 'rit_detail') {
 
         if (!$heat) { echo json_encode(['heat' => null]); exit; }
 
-        // Heats pas tonen als vorige ronde compleet is
+        // Heats pas tonen als vorige ronde compleet is.
+        // Runner-up: bron-ronde is de EERSTE deelnemende ronde (heats / KF /
+        // HF), dus MIN() ipv MAX() — andere vervolgrondes (KF/HF/F): hoogste
+        // ronde < huidige.
         if ((int)$heat['ronde'] > 1) {
             $dcStmt = $pdo->prepare("SELECT distance_combination_id FROM heats WHERE id = ?");
             $dcStmt->execute([$heat['id']]);
             $dcId = $dcStmt->fetchColumn();
             if ($dcId) {
-                // Zoek werkelijk vorige ronde
-                $vrStmt = $pdo->prepare("
-                    SELECT MAX(h.ronde) FROM heats h
-                    JOIN heat_entries he ON he.heat_id = h.id
-                    WHERE h.competition_id = ? AND h.distance_combination_id = ? AND h.ronde < ?
-                ");
-                $vrStmt->execute([$compId, $dcId, (int)$heat['ronde']]);
+                $rondeType = $heat['ronde_type'] ?? '';
+                if ($rondeType === 'runner_up') {
+                    $vrStmt = $pdo->prepare("
+                        SELECT MIN(h.ronde) FROM heats h
+                        JOIN heat_entries he ON he.heat_id = h.id
+                        LEFT JOIN tijdschema_ritten r ON r.id = h.tijdschema_rit_id
+                        WHERE h.competition_id = ? AND h.distance_combination_id = ?
+                          AND (r.ronde_type IS NULL OR r.ronde_type <> 'runner_up')
+                          AND h.ronde < ?
+                    ");
+                    $vrStmt->execute([$compId, $dcId, (int)$heat['ronde']]);
+                } else {
+                    $vrStmt = $pdo->prepare("
+                        SELECT MAX(h.ronde) FROM heats h
+                        JOIN heat_entries he ON he.heat_id = h.id
+                        WHERE h.competition_id = ? AND h.distance_combination_id = ? AND h.ronde < ?
+                    ");
+                    $vrStmt->execute([$compId, $dcId, (int)$heat['ronde']]);
+                }
                 $vr = $vrStmt->fetchColumn();
                 if ($vr) {
                     $cStmt = $pdo->prepare("
@@ -535,21 +566,39 @@ if ($action === 'lookup') {
             $heatStmt->execute([$lic, $compId]);
             $heatsRaw = $heatStmt->fetchAll(PDO::FETCH_ASSOC);
 
-            // Check per ronde of de vorige ronde compleet is
-            // Finale-heats (ronde > 1) alleen tonen als alle heats van de vorige ronde resultaten hebben
-            $rondeCompleetCache = []; // ronde_nr => bool
-            $checkCompleet = function($ronde, $dcId, $distId) use ($pdo, $compId, &$rondeCompleetCache) {
+            // Check per ronde of de vorige ronde compleet is.
+            // Voor "gewone" vervolgrondes (KF/HF/Finale): vorige = hoogste
+            // ronde < huidige. Voor runner_up: vorige = de EERSTE ronde van
+            // die cat (heats / KF / HF, afhankelijk van wat de eerste is) —
+            // runner_up draait namelijk parallel uit de eerste-ronde-uitvallers,
+            // niet uit een opvolgende ronde. Bij ronde > 1 zonder vorige
+            // (= bv. cat zonder series, KF is dan de eerste): true.
+            $rondeCompleetCache = []; // cache per ronde+dc+dist+rondeType
+            $checkCompleet = function($ronde, $dcId, $distId, $rondeType) use ($pdo, $compId, &$rondeCompleetCache) {
                 if ($ronde <= 1) return true;
-                $ck = "{$ronde}_{$dcId}_{$distId}";
+                $ck = "{$ronde}_{$dcId}_{$distId}_{$rondeType}";
                 if (isset($rondeCompleetCache[$ck])) return $rondeCompleetCache[$ck];
 
-                // Zoek werkelijk vorige ronde (hoogste ronde < huidige)
-                $vrStmt = $pdo->prepare("
-                    SELECT MAX(h.ronde) FROM heats h
-                    JOIN heat_entries he ON he.heat_id = h.id
-                    WHERE h.competition_id = ? AND h.distance_combination_id = ? AND h.ronde < ?
-                ");
-                $vrStmt->execute([$compId, $dcId, $ronde]);
+                if ($rondeType === 'runner_up') {
+                    // Runner-up hangt aan de eerste deelnemende ronde
+                    $vrStmt = $pdo->prepare("
+                        SELECT MIN(h.ronde) FROM heats h
+                        JOIN heat_entries he ON he.heat_id = h.id
+                        LEFT JOIN tijdschema_ritten r ON r.id = h.tijdschema_rit_id
+                        WHERE h.competition_id = ? AND h.distance_combination_id = ?
+                          AND (r.ronde_type IS NULL OR r.ronde_type <> 'runner_up')
+                          AND h.ronde < ?
+                    ");
+                    $vrStmt->execute([$compId, $dcId, $ronde]);
+                } else {
+                    // Reguliere vervolgronde: hoogste ronde < huidige
+                    $vrStmt = $pdo->prepare("
+                        SELECT MAX(h.ronde) FROM heats h
+                        JOIN heat_entries he ON he.heat_id = h.id
+                        WHERE h.competition_id = ? AND h.distance_combination_id = ? AND h.ronde < ?
+                    ");
+                    $vrStmt->execute([$compId, $dcId, $ronde]);
+                }
                 $vorigeRonde = $vrStmt->fetchColumn();
                 if (!$vorigeRonde) { $rondeCompleetCache[$ck] = true; return true; }
 
@@ -572,14 +621,22 @@ if ($action === 'lookup') {
 
             $heats = [];
             foreach ($heatsRaw as $h) {
-                // Finale-heats pas tonen als vorige ronde compleet is
+                // Vervolgrondes: in lijst HOUDEN maar markeren met
+                // vorige_niet_compleet=true zodat de UI een placeholder kan
+                // tonen ("Vorige ronde nog niet compleet") in plaats van de
+                // heat helemaal te verbergen. Operator/coach/rijder ziet zo
+                // dat de heat bestaat maar nog niet door is.
+                $h['vorige_niet_compleet'] = false;
                 if ((int)$h['ronde'] > 1) {
-                    // Zoek dc_id van deze heat
-                    $dcStmt = $pdo->prepare("SELECT distance_combination_id, distance_id FROM heats WHERE id = ?");
-                    $dcStmt->execute([$h['heat_id']]);
-                    $heatInfo = $dcStmt->fetch(PDO::FETCH_ASSOC);
-                    if ($heatInfo && !$checkCompleet((int)$h['ronde'], $heatInfo['distance_combination_id'], $heatInfo['distance_id'])) {
-                        continue; // Vorige ronde niet compleet → verberg deze heat
+                    if (!$checkCompleet(
+                            (int)$h['ronde'],
+                            $h['distance_combination_id'] ?? '',
+                            $h['distance_id'] ?? '',
+                            $h['ronde_type'] ?? '')) {
+                        $h['vorige_niet_compleet'] = true;
+                        $h['rijders'] = [];   // geen rijders meesturen
+                        $heats[] = $h;
+                        continue;
                     }
                 }
 
@@ -2376,6 +2433,24 @@ function renderResultaat(data, snr, prog) {
                 for (const h of r.heats) {
                     const rt = h.ronde_type ?? 'heats';
                     const naam = h.rit_naam ?? h.heat_naam ?? '';
+
+                    // Vorige ronde nog niet compleet → placeholder ipv heat-card.
+                    // Backend zet deze flag voor KF/HF/Finale/Runner-up als de
+                    // bron-ronde nog niet helemaal verwerkt is.
+                    if (h.vorige_niet_compleet) {
+                        html += `<div class="heat-card heat-card-pending">
+                            <div class="heat-card-titel">
+                                <span class="heat-card-badge ${BADGE[rt]??'badge-serie'}">${esc(RLABEL[rt]??rt)}</span>
+                                <span style="flex:1">${esc(naam)}</span>
+                                <span style="font-size:1rem" title="Wachten op vorige ronde">⏳</span>
+                            </div>
+                            <div style="padding:.6rem .8rem;color:#666;font-style:italic;font-size:.85rem">
+                                Vorige ronde nog niet compleet — startlijst verschijnt zodra alle resultaten daar binnen zijn.
+                            </div>
+                        </div>`;
+                        continue;
+                    }
+
                     const mijnTijd = h.tijd_ms != null ? msTijd(h.tijd_ms) : '';
                     const mijnPos = h.finishpositie != null ? '#' + h.finishpositie : '';
                     const mijnSanctie = sl(h.sanctie);
