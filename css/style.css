@@ -4614,6 +4614,7 @@ col.live-col-rondes  { width: 40px; }
 .live-toast-ok    { background: #1b5e20; color: #fff; }
 .live-toast-bezig { background: #1565c0; color: #fff; }
 .live-toast-info  { background: #0d47a1; color: #fff; }
+.live-toast-warn  { background: #e65100; color: #fff; }
 .live-toast-error { background: #b71c1c; color: #fff; }
 @keyframes live-toast-in {
     from { opacity: 0; transform: translateY(.8rem); }

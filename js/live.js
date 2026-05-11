@@ -273,9 +273,21 @@ function _msTijdNaarDisplay(ms) {
     return `${minuten}:${String(seconden).padStart(2,'0')}.${String(msRest).padStart(3,'0')}`;
 }
 
-// Invoer parseren → ms (of null bij lege invoer)
-// Accepteert: "47.321" → 47321, "1:23.456" → 83456, "47" → 47000
-// Werkt ook met 2 decimalen: "47.32" → 47320
+// Invoer parseren → ms (of null bij ongeldig / leeg)
+// Accepteert:
+//   "47.321"   → 47321         (SS.mmm — met punt)
+//   "47.0"     → 47000         (1-2 decimalen worden recht aangevuld)
+//   "1:23.456" → 83456         (M:SS.mmm — met dubbele punt)
+//   "0:47.0"   → 47000         (idem)
+//   "9567"     → 9567          (4-7 cijfers zonder interpunctie → MMSSmmm:
+//                              laatste 3 = mmm, daarvoor 2 = SS, rest = MM)
+//   "45632"    → 45632         ("45.632")
+//   "1123452"  → 683452        ("11:23.452")
+// Bewust GEWEIGERD (return null):
+//   "47", "5", "123"           1-3 cijfers zonder interpunctie — dubbelzinnig
+//                              (zou 47 sec kunnen zijn of 0.047? Operator moet
+//                              expliciet zijn: "47.0", "47000" of "0:47.0").
+//   "12345678", "47x"          Te lang of niet-numerieke chars.
 function _parseTijdInvoer(str) {
     const s = str.trim();
     if (!s) return null;
@@ -290,8 +302,20 @@ function _parseTijdInvoer(str) {
         const [secStr, msStr] = s.split('.');
         seconden     = parseInt(secStr) || 0;
         milliseconden = parseInt((msStr || '').padEnd(3,'0').slice(0,3)) || 0;
+    } else if (/^\d{4,7}$/.test(s)) {
+        // 4-7 cijfers zonder interpunctie: snelle invoer-modus.
+        // Indeling: …MM SS mmm — laatste 3 cijfers = ms, daarvoor 2 = sec,
+        // rest = min. 4 digits → 1-digit sec, 0 min. 5 → 2-digit sec, 0 min.
+        // 6 → 1-digit min. 7 → 2-digit min.
+        milliseconden = parseInt(s.slice(-3)) || 0;
+        const ssStr   = s.slice(-5, -3);
+        seconden      = ssStr ? (parseInt(ssStr) || 0) : 0;
+        const mmStr   = s.slice(0, -5);
+        minuten       = mmStr ? (parseInt(mmStr) || 0) : 0;
     } else {
-        seconden = parseInt(s) || 0;
+        // 1-3 cijfers zonder interpunctie, 8+ cijfers, of rommel: ongeldig.
+        // Operator moet expliciet zijn met punt of dubbele punt.
+        return null;
     }
     const ms = (minuten * 60 + seconden) * 1000 + milliseconden;
     return ms > 0 ? ms : null;
@@ -1629,9 +1653,16 @@ function _liveBind(idx) {
         const sanctieSel = rij?.querySelector('.live-sanctie-sel');
 
         tijdInp?.addEventListener('blur', () => {
-            const ms      = _parseTijdInvoer(tijdInp.value);
-            const tijdVal = ms !== null ? _msTijdNaarDisplay(ms) : '';
-            tijdInp.value = tijdVal;
+            const rawInput = tijdInp.value.trim();
+            const ms       = _parseTijdInvoer(tijdInp.value);
+            const tijdVal  = ms !== null ? _msTijdNaarDisplay(ms) : '';
+            tijdInp.value  = tijdVal;
+            // Niet-lege ongeldige invoer → toast met uitleg zodat operator
+            // weet waarom z'n invoer verdween. Lege input = bewust leeg, geen
+            // toast nodig.
+            if (ms === null && rawInput) {
+                _liveToast(`⚠ Tijd "${rawInput}" niet herkend. Gebruik bv. 47.0, 47000 of 0:47.0`, 'warn', 4000);
+            }
             // Alleen sancties die fundamenteel geen tijd hebben (DNS/DNF/DQ-*)
             // worden gewist bij tijdinvoer. FS, RR, W1 en W2 blijven staan.
             if (ms !== null && sanctieSel?.value && _SANCTIE_WIST_TIJD.has(sanctieSel.value)) {
@@ -1643,6 +1674,27 @@ function _liveBind(idx) {
             _liveHerbereken(idx);
         });
         tijdInp?.addEventListener('input', () => { _liveOngeslagen = true; });
+
+        // Tab + Enter springen direct naar het volgende tijd-veld in de
+        // heat-card (slaan sanctie/Fin-cellen over). Shift+Tab gaat terug.
+        // Bij focus-change op de browser-natuurlijke manier triggert blur op
+        // het oude veld → bestaande blur-handler doet de parse + format.
+        tijdInp?.addEventListener('keydown', (e) => {
+            if (e.key !== 'Tab' && e.key !== 'Enter') return;
+            e.preventDefault();
+            const allInps = Array.from(kaart.querySelectorAll('.live-tijd-inp:not([disabled])'));
+            const i = allInps.indexOf(tijdInp);
+            if (i < 0) return;
+            const dir  = e.shiftKey ? -1 : 1;
+            const next = allInps[i + dir];
+            if (next) {
+                next.focus();
+                next.select(); // selecteer alles zodat operator direct kan typen
+            } else {
+                // Aan het eind: forceer blur zodat de parse op het laatste veld draait
+                tijdInp.blur();
+            }
+        });
 
         sanctieSel?.addEventListener('change', () => {
             const sanctie = sanctieSel.value;
