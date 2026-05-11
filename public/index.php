@@ -180,6 +180,7 @@ if ($action === 'programma') {
                    h.id AS heat_id,
                    h.ronde AS heat_ronde,
                    h.distance_combination_id AS heat_dc_id,
+                   COALESCE(h.distance_id, r.distance_id) AS heat_distance_id,
                    (SELECT COUNT(*) FROM heat_entries he2
                     WHERE he2.heat_id = h.id
                    ) AS entries_count,
@@ -202,11 +203,16 @@ if ($action === 'programma') {
         // - Runner-up: bron-ronde is de EERSTE deelnemende ronde (heats / KF /
         //   HF), niet de hoogste lagere — runner-up draait parallel uit
         //   eerste-ronde-uitvallers.
-        $rondeCheck = []; // "dc_id_ronde_type" => bool
-        $checkVorigeRonde = function($dcId, $ronde, $rondeType) use ($pdo, $compId, &$rondeCheck) {
+        $rondeCheck = []; // "dc_id_dist_id_ronde_type" => bool
+        $checkVorigeRonde = function($dcId, $distId, $ronde, $rondeType) use ($pdo, $compId, &$rondeCheck) {
             if ($ronde <= 1) return true;
-            $ck = "{$dcId}_{$ronde}_{$rondeType}";
+            $ck = "{$dcId}_{$distId}_{$ronde}_{$rondeType}";
             if (isset($rondeCheck[$ck])) return $rondeCheck[$ck];
+
+            $distCond = ($distId !== '' && $distId !== null)
+                ? 'AND (h.distance_id = ? OR h.distance_id IS NULL)' : '';
+            $vrParams = ($distId !== '' && $distId !== null)
+                ? [$compId, $dcId, $distId, $ronde] : [$compId, $dcId, $ronde];
 
             if ($rondeType === 'runner_up') {
                 $vrStmt = $pdo->prepare("
@@ -214,30 +220,36 @@ if ($action === 'programma') {
                     JOIN heat_entries he ON he.heat_id = h.id
                     LEFT JOIN tijdschema_ritten r ON r.id = h.tijdschema_rit_id
                     WHERE h.competition_id = ? AND h.distance_combination_id = ?
+                      $distCond
                       AND (r.ronde_type IS NULL OR r.ronde_type <> 'runner_up')
                       AND h.ronde < ?
                 ");
-                $vrStmt->execute([$compId, $dcId, $ronde]);
             } else {
                 // Reguliere vervolgronde: hoogste ronde < huidige
                 $vrStmt = $pdo->prepare("
                     SELECT MAX(h.ronde) FROM heats h
                     JOIN heat_entries he ON he.heat_id = h.id
-                    WHERE h.competition_id = ? AND h.distance_combination_id = ? AND h.ronde < ?
+                    WHERE h.competition_id = ? AND h.distance_combination_id = ?
+                      $distCond
+                      AND h.ronde < ?
                 ");
-                $vrStmt->execute([$compId, $dcId, $ronde]);
             }
+            $vrStmt->execute($vrParams);
             $vr = $vrStmt->fetchColumn();
             if (!$vr) { $rondeCheck[$ck] = true; return true; } // geen vorige ronde = ok
 
+            $cParams = ($distId !== '' && $distId !== null)
+                ? [$compId, $dcId, $distId, (int)$vr] : [$compId, $dcId, (int)$vr];
             $s = $pdo->prepare("
                 SELECT COUNT(he.id) AS totaal,
                        SUM(CASE WHEN res.id IS NOT NULL THEN 1 ELSE 0 END) AS klaar
                 FROM heats h JOIN heat_entries he ON he.heat_id = h.id
                 LEFT JOIN results res ON res.heat_entry_id = he.id
-                WHERE h.competition_id = ? AND h.distance_combination_id = ? AND h.ronde = ?
+                WHERE h.competition_id = ? AND h.distance_combination_id = ?
+                  $distCond
+                  AND h.ronde = ?
             ");
-            $s->execute([$compId, $dcId, (int)$vr]);
+            $s->execute($cParams);
             $r = $s->fetch(PDO::FETCH_ASSOC);
             $ok = $r && (int)$r['totaal'] > 0 && (int)$r['totaal'] === (int)$r['klaar'];
             $rondeCheck[$ck] = $ok;
@@ -248,11 +260,12 @@ if ($action === 'programma') {
         foreach ($rittenRaw as $r) {
             $ronde = (int)($r['heat_ronde'] ?? 0);
             $dcId  = $r['heat_dc_id'] ?? '';
+            $distId = $r['heat_distance_id'] ?? '';
             $rondeType = $r['ronde_type'] ?? '';
             $heeftEntries = (int)($r['entries_count'] ?? 0) > 0;
 
             // Definitief = er zitten rijders in EN (ronde 1 OF vorige ronde compleet)
-            $r['definitief'] = $heeftEntries && ($ronde <= 1 || $checkVorigeRonde($dcId, $ronde, $rondeType));
+            $r['definitief'] = $heeftEntries && ($ronde <= 1 || $checkVorigeRonde($dcId, $distId, $ronde, $rondeType));
 
             $ritten[] = $r;
         }
@@ -309,10 +322,14 @@ if ($action === 'rit_detail') {
         // HF), dus MIN() ipv MAX() — andere vervolgrondes (KF/HF/F): hoogste
         // ronde < huidige.
         if ((int)$heat['ronde'] > 1) {
-            $dcStmt = $pdo->prepare("SELECT distance_combination_id FROM heats WHERE id = ?");
-            $dcStmt->execute([$heat['id']]);
-            $dcId = $dcStmt->fetchColumn();
+            $dcId = $heat['distance_combination_id'] ?? null;
+            $distId = $heat['distance_id'] ?? null;
             if ($dcId) {
+                $distCond = ($distId !== '' && $distId !== null)
+                    ? 'AND (h.distance_id = ? OR h.distance_id IS NULL)' : '';
+                $vrParams = ($distId !== '' && $distId !== null)
+                    ? [$compId, $dcId, $distId, (int)$heat['ronde']]
+                    : [$compId, $dcId, (int)$heat['ronde']];
                 $rondeType = $heat['ronde_type'] ?? '';
                 if ($rondeType === 'runner_up') {
                     $vrStmt = $pdo->prepare("
@@ -320,28 +337,35 @@ if ($action === 'rit_detail') {
                         JOIN heat_entries he ON he.heat_id = h.id
                         LEFT JOIN tijdschema_ritten r ON r.id = h.tijdschema_rit_id
                         WHERE h.competition_id = ? AND h.distance_combination_id = ?
+                          $distCond
                           AND (r.ronde_type IS NULL OR r.ronde_type <> 'runner_up')
                           AND h.ronde < ?
                     ");
-                    $vrStmt->execute([$compId, $dcId, (int)$heat['ronde']]);
                 } else {
                     $vrStmt = $pdo->prepare("
                         SELECT MAX(h.ronde) FROM heats h
                         JOIN heat_entries he ON he.heat_id = h.id
-                        WHERE h.competition_id = ? AND h.distance_combination_id = ? AND h.ronde < ?
+                        WHERE h.competition_id = ? AND h.distance_combination_id = ?
+                          $distCond
+                          AND h.ronde < ?
                     ");
-                    $vrStmt->execute([$compId, $dcId, (int)$heat['ronde']]);
                 }
+                $vrStmt->execute($vrParams);
                 $vr = $vrStmt->fetchColumn();
                 if ($vr) {
+                    $cParams = ($distId !== '' && $distId !== null)
+                        ? [$compId, $dcId, $distId, (int)$vr]
+                        : [$compId, $dcId, (int)$vr];
                     $cStmt = $pdo->prepare("
                         SELECT COUNT(he.id) AS totaal,
                                SUM(CASE WHEN res.id IS NOT NULL THEN 1 ELSE 0 END) AS met_resultaat
                         FROM heats h JOIN heat_entries he ON he.heat_id = h.id
                         LEFT JOIN results res ON res.heat_entry_id = he.id
-                        WHERE h.competition_id = ? AND h.distance_combination_id = ? AND h.ronde = ?
+                        WHERE h.competition_id = ? AND h.distance_combination_id = ?
+                          $distCond
+                          AND h.ronde = ?
                     ");
-                    $cStmt->execute([$compId, $dcId, (int)$vr]);
+                    $cStmt->execute($cParams);
                     $r = $cStmt->fetch(PDO::FETCH_ASSOC);
                     if (!$r || (int)$r['totaal'] === 0 || (int)$r['totaal'] !== (int)$r['met_resultaat']) {
                         echo json_encode(['heat' => null, 'reden' => 'Vorige ronde nog niet compleet']);
@@ -579,6 +603,15 @@ if ($action === 'lookup') {
                 $ck = "{$ronde}_{$dcId}_{$distId}_{$rondeType}";
                 if (isset($rondeCompleetCache[$ck])) return $rondeCompleetCache[$ck];
 
+                // Filter ook op distance_id — anders kruist de check tussen
+                // afstanden binnen dezelfde DC. NULL distance_id matchen we
+                // ook (legacy heats voorafgaand aan per-distance-config).
+                $distCond = ($distId !== '' && $distId !== null)
+                    ? 'AND (h.distance_id = ? OR h.distance_id IS NULL)' : '';
+                $vrParams = ($distId !== '' && $distId !== null)
+                    ? [$compId, $dcId, $distId, $ronde]
+                    : [$compId, $dcId, $ronde];
+
                 if ($rondeType === 'runner_up') {
                     // Runner-up hangt aan de eerste deelnemende ronde
                     $vrStmt = $pdo->prepare("
@@ -586,22 +619,27 @@ if ($action === 'lookup') {
                         JOIN heat_entries he ON he.heat_id = h.id
                         LEFT JOIN tijdschema_ritten r ON r.id = h.tijdschema_rit_id
                         WHERE h.competition_id = ? AND h.distance_combination_id = ?
+                          $distCond
                           AND (r.ronde_type IS NULL OR r.ronde_type <> 'runner_up')
                           AND h.ronde < ?
                     ");
-                    $vrStmt->execute([$compId, $dcId, $ronde]);
                 } else {
                     // Reguliere vervolgronde: hoogste ronde < huidige
                     $vrStmt = $pdo->prepare("
                         SELECT MAX(h.ronde) FROM heats h
                         JOIN heat_entries he ON he.heat_id = h.id
-                        WHERE h.competition_id = ? AND h.distance_combination_id = ? AND h.ronde < ?
+                        WHERE h.competition_id = ? AND h.distance_combination_id = ?
+                          $distCond
+                          AND h.ronde < ?
                     ");
-                    $vrStmt->execute([$compId, $dcId, $ronde]);
                 }
+                $vrStmt->execute($vrParams);
                 $vorigeRonde = $vrStmt->fetchColumn();
                 if (!$vorigeRonde) { $rondeCompleetCache[$ck] = true; return true; }
 
+                $cParams = ($distId !== '' && $distId !== null)
+                    ? [$compId, $dcId, $distId, (int)$vorigeRonde]
+                    : [$compId, $dcId, (int)$vorigeRonde];
                 $stmt = $pdo->prepare("
                     SELECT COUNT(he.id) AS totaal,
                            SUM(CASE WHEN res.id IS NOT NULL THEN 1 ELSE 0 END) AS met_resultaat
@@ -610,9 +648,10 @@ if ($action === 'lookup') {
                     LEFT JOIN results res ON res.heat_entry_id = he.id
                     WHERE h.competition_id = ?
                       AND h.distance_combination_id = ?
+                      $distCond
                       AND h.ronde = ?
                 ");
-                $stmt->execute([$compId, $dcId, (int)$vorigeRonde]);
+                $stmt->execute($cParams);
                 $r = $stmt->fetch(PDO::FETCH_ASSOC);
                 $compleet = $r && (int)$r['totaal'] > 0 && (int)$r['totaal'] === (int)$r['met_resultaat'];
                 $rondeCompleetCache[$ck] = $compleet;
