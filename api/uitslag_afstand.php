@@ -226,6 +226,26 @@ try {
     $tsId    = $tsRow['id']      ?? null;
     $systeem = $tsRow['systeem'] ?? 'internationaal-nieuw';
 
+    // ── Vastlegging-status van deze (afstand × DC) ─────────────────────────
+    // Bedoeld om de "Uitslag bevestigen"-knop te kunnen renderen als
+    // "↻ Opnieuw bevestigen" wanneer er al rijen voor deze afstand in
+    // uitslag_afstand staan. Eén EXISTS-check is voldoende — hoeveel rijders
+    // er precies vastliggen maakt niet uit voor de UI.
+    $vlSql = "
+        SELECT 1 FROM uitslag_afstand
+        WHERE competition_id          = ?
+          AND distance_combination_id = ?
+    ";
+    $vlParams = [$compId, $primaryDcId];
+    if ($distId) {
+        $vlSql .= " AND distance_id = ?";
+        $vlParams[] = $distId;
+    }
+    $vlSql .= " LIMIT 1";
+    $vlStmt = $pdo->prepare($vlSql);
+    $vlStmt->execute($vlParams);
+    $afstandVastgelegd = (bool)$vlStmt->fetchColumn();
+
     if ($systeem !== 'full-final') {
         // ── Internationaal systeem: cascading elimination ranking ─────────
 
@@ -542,6 +562,7 @@ try {
             'modus'         => 'internationaal',
             'resultaat'     => $resultaat,
             'has_results'   => $hasResults,
+            'vastgelegd'    => $afstandVastgelegd,
             'afstand_naam'  => $afNaam ?? null,
             'rondes'        => $beschikbareRondes,
             'ranking'       => $rankingConfig,
@@ -869,6 +890,7 @@ try {
             'modus'        => 'gecombineerd',
             'gecombineerd' => $gecombineerd,
             'has_results'  => $hasResults,
+            'vastgelegd'   => $afstandVastgelegd,
             'serie_alleen_startvolgorde' => $sasFlag,
         ], JSON_UNESCAPED_UNICODE);
         exit;
@@ -1017,6 +1039,7 @@ try {
         'systeem'           => $systeem,
         'finales'           => $finales,
         'has_results'       => $hasResults,
+        'vastgelegd'        => $afstandVastgelegd,
         'heeft_rondes'      => $heeftRondes,
         'heeft_pk_punten'   => $heeftPkPunten,
     ], JSON_UNESCAPED_UNICODE);

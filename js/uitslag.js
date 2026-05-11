@@ -429,18 +429,7 @@ async function toonUitslagVoorAfstand(groep, afstand) {
             }
 
             if (data.has_results) {
-                const wrap = document.createElement('div');
-                wrap.className = 'u-vastleg-wrap';
-                const vastlegBtn = document.createElement('button');
-                vastlegBtn.className = 'btn-primary u-vastleg-btn';
-                vastlegBtn.innerHTML = '✓ Uitslag bevestigen';
-                vastlegBtn.addEventListener('click', () =>
-                    _uVastleggen(groep, afstand, vastlegBtn));
-                const desc = document.createElement('div');
-                desc.className = 'u-vastleg-beschrijving';
-                desc.textContent = 'Sla de officiële uitslag van deze afstand op';
-                wrap.append(vastlegBtn, desc);
-                content.prepend(wrap);
+                content.prepend(_uMaakAfstandBevestigKnop(groep, afstand, !!data.vastgelegd));
             }
 
             // ── Ranking select handlers ──────────────────────────────────────
@@ -574,18 +563,7 @@ async function toonUitslagVoorAfstand(groep, afstand) {
             }
 
             if (data.has_results) {
-                const wrap = document.createElement('div');
-                wrap.className = 'u-vastleg-wrap';
-                const vastlegBtn = document.createElement('button');
-                vastlegBtn.className = 'btn-primary u-vastleg-btn';
-                vastlegBtn.innerHTML = '✓ Uitslag bevestigen';
-                vastlegBtn.addEventListener('click', () =>
-                    _uVastleggen(groep, afstand, vastlegBtn));
-                const desc = document.createElement('div');
-                desc.className = 'u-vastleg-beschrijving';
-                desc.textContent = 'Sla de officiële uitslag van deze afstand op';
-                wrap.append(vastlegBtn, desc);
-                content.prepend(wrap);
+                content.prepend(_uMaakAfstandBevestigKnop(groep, afstand, !!data.vastgelegd));
             }
 
             // ── Serie-alleen-startvolgorde toggle ────────────────────────
@@ -671,18 +649,7 @@ async function toonUitslagVoorAfstand(groep, afstand) {
 
         // ── Vastleggen-knop (alleen als uitslag compleet is) ───────────────
         if (data.has_results) {
-            const wrap = document.createElement('div');
-            wrap.className = 'u-vastleg-wrap';
-            const vastlegBtn = document.createElement('button');
-            vastlegBtn.className = 'btn-primary u-vastleg-btn';
-            vastlegBtn.innerHTML = '✓ Uitslag bevestigen';
-            vastlegBtn.addEventListener('click', () =>
-                _uVastleggen(groep, afstand, vastlegBtn));
-            const desc = document.createElement('div');
-            desc.className = 'u-vastleg-beschrijving';
-            desc.textContent = 'Sla de officiële uitslag van deze afstand op';
-            wrap.append(vastlegBtn, desc);
-            content.prepend(wrap);
+            content.prepend(_uMaakAfstandBevestigKnop(groep, afstand, !!data.vastgelegd));
         }
 
     } catch (e) {
@@ -691,6 +658,30 @@ async function toonUitslagVoorAfstand(groep, afstand) {
 }
 
 // ── Vastleggen helper ─────────────────────────────────────────────────────────
+
+// Helper: bouw de DOM voor de "Uitslag bevestigen"-knop, met juiste text/
+// stijl/onderschrift afhankelijk van of de afstand al vastgelegd is. Wordt
+// gebruikt door alle 3 modi (internationaal / gecombineerd / full-final-B).
+// Returns een wrap-div die je met content.prepend() kunt neerzetten.
+function _uMaakAfstandBevestigKnop(groep, afstand, alVastgelegd) {
+    const wrap = document.createElement('div');
+    wrap.className = 'u-vastleg-wrap';
+    const btn = document.createElement('button');
+    btn.className = 'btn-primary u-vastleg-btn'
+                  + (alVastgelegd ? ' u-vastleg-btn-already' : '');
+    btn.innerHTML = alVastgelegd ? '↻ Uitslag opnieuw bevestigen' : '✓ Uitslag bevestigen';
+    btn.title     = alVastgelegd
+        ? 'Uitslag is al bevestigd — opnieuw bevestigen na correctie in Live verwerking'
+        : 'Sla de officiële uitslag van deze afstand op';
+    btn.addEventListener('click', () => _uVastleggen(groep, afstand, btn));
+    const desc = document.createElement('div');
+    desc.className = 'u-vastleg-beschrijving';
+    desc.textContent = alVastgelegd
+        ? '✓ Uitslag is bevestigd — telt mee voor klassement + zichtbaar in Print-Center'
+        : 'Sla de officiële uitslag van deze afstand op';
+    wrap.append(btn, desc);
+    return wrap;
+}
 
 async function _uVastleggen(groep, afstand, btnEl) {
     const origTekst = btnEl?.innerHTML ?? '';
@@ -720,14 +711,14 @@ async function _uVastleggen(groep, afstand, btnEl) {
                     btnEl.innerHTML = origTekst;
                     btnEl.classList.remove('u-vastleg-btn-ok');
                     btnEl.disabled = false;
-                    // Bij klassement-vastleggen (afstand === null): refresh de
-                    // klassement-tab zodat de knop nu "↻ Opnieuw vastleggen"
-                    // toont en de status-tekst correct is. Anders blijft de
-                    // operator denken dat er niets gebeurd is. We doen dit pas
-                    // ná de 3s feedback-toast om te voorkomen dat 'm meteen
-                    // wordt overschreven.
+                    // Refresh de juiste view zodat de knop "↻ Opnieuw …"
+                    // toont en de operator ziet dat het echt vastgelegd is.
+                    // We doen dit pas ná de 3s feedback om die niet meteen
+                    // te overschrijven.
                     if (afstand === null && typeof toonUitslagKlassement === 'function') {
                         toonUitslagKlassement(groep);
+                    } else if (afstand !== null && typeof toonUitslagVoorAfstand === 'function') {
+                        toonUitslagVoorAfstand(groep, afstand);
                     }
                 }, 3000);
             }
