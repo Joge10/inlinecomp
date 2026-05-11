@@ -32,3 +32,6 @@ Thumbs.db
 # Algemene tijdelijke bestanden en logs
 *.log
 *.tmp
+
+# Uploader-map: lokale test-CSVs / live MyLaps-output, niet committen
+uploader/
