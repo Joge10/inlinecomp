@@ -2171,15 +2171,24 @@ function renderHeats() {
                         <small style="color:#666">startpos ${esc(mijn.startpositie)}</small>
                     </div>`;
                 }
-                // 2) Niet geplaatst: is de startlijst definitief?
+                // 2) Niet geplaatst: drie sub-scenarios
                 const definitief = rittenVanRonde.some(r => r.definitief);
+                const heeftHeats = rittenVanRonde.some(r => r.heat_id);
                 if (definitief) {
                     return `<div class="heat-toon-rij heat-toon-niet-geplaatst">${badge}
                         <span>niet geplaatst</span>
                     </div>`;
                 }
+                if (heeftHeats) {
+                    // Heats bestaan maar zijn niet definitief → vorige ronde
+                    // is er wel maar nog niet kompleet ingevoerd.
+                    return `<div class="heat-toon-rij heat-toon-wacht-rij">${badge}
+                        <span>⏳ Vorige ronde nog niet compleet</span>
+                    </div>`;
+                }
+                // Geen heats voor deze ronde → loting moet nog plaatsvinden.
                 return `<div class="heat-toon-rij heat-toon-wacht-rij">${badge}
-                    <span>⏳ Vorige ronde nog niet compleet</span>
+                    <span>⏳ Nog niet geloot</span>
                 </div>`;
             }).join('');
             return `<div class="heat-toon-dc">
