@@ -501,12 +501,17 @@ try {
 
     // Klassement-publicatiestatus (per primary DC; merge-groepen volgen
     // hetzelfde gepubliceerd_at omdat publiceer-actie 'm op alle dc_ids zet).
+    // MySQL slaat TIMESTAMP in UTC op; we sturen ISO 8601 + Z marker zodat
+    // JS Date() het correct kan parsen en in lokale tijd kan weergeven.
     $klasPubStmt = $pdo->prepare("
         SELECT MAX(gepubliceerd_at) FROM klassement_config
         WHERE competition_id = ? AND dc_id IN ($dcPh)
     ");
     $klasPubStmt->execute(array_merge([$compId], $dcIds));
-    $klassementGepubliceerdAt = $klasPubStmt->fetchColumn() ?: null;
+    $rawPubAt = $klasPubStmt->fetchColumn();
+    $klassementGepubliceerdAt = $rawPubAt
+        ? str_replace(' ', 'T', $rawPubAt) . 'Z'
+        : null;
 
     echo json_encode([
         'systeem'               => $systeem,

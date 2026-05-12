@@ -944,7 +944,13 @@ async function toonUitslagKlassement(groep) {
         let publiceerBlok = '';
         if (alVastgelegd) {
             if (gepubliceerdAt) {
-                const dt = String(gepubliceerdAt).replace('T',' ').substring(0,16);
+                // Backend stuurt ISO 8601 met Z (UTC); Date() parseert
+                // dat correct, toLocaleString rendert in lokale tijd.
+                const _d = new Date(gepubliceerdAt);
+                const dt = !isNaN(_d.getTime())
+                    ? _d.toLocaleString('nl-NL', { day:'2-digit', month:'2-digit', year:'numeric',
+                                                    hour:'2-digit', minute:'2-digit' })
+                    : String(gepubliceerdAt).replace('T',' ').substring(0,16);
                 publiceerBlok = `<div class="u-klas-publiceer-blok">
                     <button class="btn-secondary u-vastleg-btn u-publiceer-ingetrokken"
                             id="u-klas-btn-publiceer-trek-in"
