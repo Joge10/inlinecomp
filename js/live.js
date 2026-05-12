@@ -2485,7 +2485,12 @@ function _afvalAfgeleidDubbel(cfg, teElimineren) {
     const dubbel       = Math.max(0, eersteTeElim - eersteAantal);
     const capaciteit   = 2 * eersteAantal + _AFVAL_LAATSTE_VAST;
     const afvalrondes  = eersteAantal + _AFVAL_LAATSTE_VAST;
-    const ok = teElimineren <= capaciteit && dubbel <= eersteAantal && ea > _AFVAL_LAATSTE_VAST && ea <= tr;
+    // ea >= _AFVAL_LAATSTE_VAST i.p.v. > : bord 3 is exact het eerste vaste
+    // bord van het schema. Bij weinig te elimineren rijders (zoals 3 op 13
+    // starters → eindsprint 10) past alles binnen de vaste fase 3,2,1 en is
+    // 'eerste afval = bord 3' een legitieme keuze. ea < 3 blijft fout
+    // omdat de vaste fase dan met bord 3 overlapt en voorrang neemt.
+    const ok = teElimineren <= capaciteit && dubbel <= eersteAantal && ea >= _AFVAL_LAATSTE_VAST && ea <= tr;
     return { dubbel, afvalrondes, teElimineren, ok, capaciteit, eersteAantal, vastAantal, eersteBorden };
 }
 
