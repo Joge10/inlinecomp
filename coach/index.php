@@ -2453,18 +2453,16 @@ function updateHeaderLogos(opt) {
     } else {
         baanEl.innerHTML = '';
     }
+    // Altijd marquee, ook bij 1 sponsor — anders 'hangt' de enige logo
+    // statisch. Min-duur 8s zodat 1 logo niet onhandig snel langs schiet.
     if (sponsors.length) {
         let imgs = '';
         for (const s of sponsors) {
             const img = `<img src="../${esc(s.logo)}${cb}" alt="${esc(s.naam)}" title="${esc(s.naam)}">`;
             imgs += s.url ? `<a href="${esc(s.url)}" target="_blank" rel="noopener">${img}</a>` : img;
         }
-        if (sponsors.length === 1) {
-            sponsEl.innerHTML = `<div style="display:flex;align-items:center;justify-content:flex-end;height:100%">${imgs}</div>`;
-        } else {
-            const duur = sponsors.length * 3;
-            sponsEl.innerHTML = `<div class="sponsor-marquee"><div class="sponsor-marquee-inner" style="animation-duration:${duur}s">${imgs}${imgs}</div></div>`;
-        }
+        const duur = Math.max(8, sponsors.length * 3);
+        sponsEl.innerHTML = `<div class="sponsor-marquee"><div class="sponsor-marquee-inner" style="animation-duration:${duur}s">${imgs}${imgs}</div></div>`;
     } else {
         sponsEl.innerHTML = '';
     }
