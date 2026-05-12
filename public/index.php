@@ -198,6 +198,7 @@ if ($action === 'programma') {
         $stmt = $pdo->prepare("
             SELECT r.volgorde AS rit_volgorde, r.rit_naam, r.ronde_type, r.heat_nr, r.dc_naam,
                    r.combi_group, r.blok_id,
+                   r.opmerking AS rit_opmerking,
                    b.volgorde AS blok_volgorde,
                    b.blok_type, b.tijdstip, b.duur, b.heat_duur, b.opmerking,
                    h.id AS heat_id,
@@ -1590,6 +1591,7 @@ select:focus, input:focus { border-color: var(--middenblauw); outline: none; }
 .prog-rij:last-child { border-bottom: none; }
 .prog-nr { color: #aaa; font-size: .8rem; min-width: 24px; text-align: center; }
 .prog-naam { flex: 1; }
+.prog-rit-opm { font-size: .78rem; color: #856404; font-style: italic; margin-top: 2px; font-weight: 400; }
 .prog-type { font-size: .75rem; }
 .prog-blok {
     padding: 6px 0; font-size: .85rem; color: #888;
@@ -2605,10 +2607,12 @@ function renderResultaat(data, snr, prog) {
                     const statusIcon = rit.resultaten_count > 0  ? '🏁'
                                      : rit.definitief          ? '🚩'
                                      :                           '';
+                    const opmHtml = rit.rit_opmerking
+                        ? `<div class="prog-rit-opm">📝 ${esc(rit.rit_opmerking)}</div>` : '';
                     html += `<div class="prog-rij${combi !== null ? ' prog-rij-combi' : ''}" style="${isInRit ? 'background:#fffbe6;font-weight:600;margin:0 -16px;padding:6px 16px;border-radius:4px' : ''};cursor:pointer"
                                  data-rit-naam="${esc(rit.rit_naam)}" data-dc-naam="${esc(rit.dc_naam)}" onclick="toonRitDetail(this)">
                         <span class="prog-nr">${statusIcon} ${nr}</span>
-                        <span class="prog-naam">${esc(rit.rit_naam)}</span>
+                        <span class="prog-naam">${esc(rit.rit_naam)}${opmHtml}</span>
                         <span class="prog-type heat-card-badge ${BADGE[rt]??'badge-serie'}">${esc(RLABEL[rt]??rt)}</span>
                     </div>`;
                 }

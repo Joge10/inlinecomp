@@ -339,6 +339,7 @@ if ($action === 'programma') {
                    b.volgorde AS blok_volgorde,
                    r.blok_id, r.rit_naam, r.ronde_type, r.heat_nr, r.dc_naam,
                    r.combi_group,
+                   r.opmerking AS rit_opmerking,
                    r.distance_id AS rit_distance_id, r.afstand_naam AS rit_afstand_naam,
                    b.blok_type, b.tijdstip, b.duur, b.heat_duur, b.opmerking,
                    h.id AS heat_id,
@@ -1294,6 +1295,7 @@ select.sel {
 .heat-info { flex:1; min-width:0; }
 .heat-naam { font-weight:600; }
 .heat-sub { font-size:.8rem; color:#666; margin-top:2px; }
+.heat-rit-opm { font-size:.78rem; color:#856404; font-style:italic; margin-top:2px; }
 /* Pills uitlijnen onder .heat-info (28px icon + 10px gap) zodat ze visueel
    bij het rit-naam-blok horen. flex-wrap zorgt dat veel pills netjes
    doorlopen op meerdere regels. */
@@ -1946,12 +1948,15 @@ function renderProgramma() {
             ` data-rit-naam="${esc(r.rit_naam)}" data-dc-naam="${esc(r.dc_naam ?? '')}" onclick="toonRitDetail(this)"`;
         // Pills komen op een aparte regel onder de naam, zodat ze bij coaches
         // met veel rijders niet in het rit-naam-blok worden geperst.
+        const opmHtml = r.rit_opmerking
+            ? `<div class="heat-rit-opm">📝 ${esc(r.rit_opmerking)}</div>` : '';
         return `<div class="${klasse}"${klik}>
             <div class="heat-rij-top">
                 <div class="heat-status">${statusIcon}</div>
                 <div class="heat-info">
                     <div class="heat-naam">${rondeBadge}${esc(r.rit_naam)}</div>
                     <div class="heat-sub">${esc(r.dc_naam ?? '')}${leeg ? ' · nog geen startlijst' : ''}</div>
+                    ${opmHtml}
                 </div>
             </div>
             ${mijnStrip}
