@@ -390,11 +390,18 @@ def genereer_poster(args):
     else:
         sportity_tekst = (u'Offici\u00eble startlijsten, uitslagen en mededelingen '
                           u'via Sportity.')
+    # Disclaimer-regel: secundair (klein, grijs)
     c.setFillColor(GRIJS)
-    c.setFont('Helvetica', 9.5)
+    c.setFont('Helvetica', 10)
     c.drawCentredString(width / 2, disc_top,
         'Aan de informatie in InlineComp kunnen geen rechten worden ontleend.')
-    c.drawCentredString(width / 2, disc_top - 4 * mm, sportity_tekst)
+    # Sportity-regel: BOLD + huisstijl-blauw + groter. Daar staan de
+    # officiele uitslagen, dus dat moet de voorbijganger echt meekrijgen.
+    # 12pt past binnen de disclaimer-zone (40-48mm) zonder sponsors of
+    # footer te raken; 13pt zou te krap worden.
+    c.setFillColor(BLAUW)
+    c.setFont('Helvetica-Bold', 12)
+    c.drawCentredString(width / 2, disc_top - 6 * mm, sportity_tekst)
 
     # ── Sponsors-strook (alleen sponsors mét een geldig logo) ─────────────
     # Ondersteunt zowel raster als SVG; SVG wordt als vector getekend via
