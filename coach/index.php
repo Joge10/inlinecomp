@@ -93,7 +93,10 @@ if ($action) {
 // ── API: wedstrijden ─────────────────────────────────────────────────────────
 if ($action === 'competitions') {
     header('Content-Type: application/json; charset=utf-8');
-    header('Cache-Control: public, max-age=60');
+    // Was 60s cache, maar publiek_zichtbaar kan tussentijds wijzigen
+    // (operator publiceert wedstrijd kort voor start). 30s is veilig
+    // genoeg en houdt server-belasting laag.
+    header('Cache-Control: public, max-age=30');
     try {
         // Baan-velden gebruiken cross-org-fallback: als deze org's baan-rij
         // geen logo of geen vereniging-naam heeft, pakken we die uit een
@@ -102,7 +105,7 @@ if ($action === 'competitions') {
         $stmt = $pdo->prepare("
             SELECT c.id, c.name, c.starts, c.ends,
                    c.organisatie_id, o.logo_path AS org_logo, o.naam AS org_naam,
-                   c.baan_id,
+                   c.baan_id, c.public_zichtbaar,
                    COALESCE(b.logo_path, (
                        SELECT b2.logo_path FROM banen b2
                        WHERE b2.naam = b.naam AND b2.id != b.id
@@ -119,7 +122,6 @@ if ($action === 'competitions') {
             JOIN competition_tijdschema ct ON ct.competition_id = c.id
             LEFT JOIN organisaties o ON o.id = c.organisatie_id
             LEFT JOIN banen b ON b.id = c.baan_id
-            WHERE c.public_zichtbaar = 1
             ORDER BY c.starts DESC
         ");
         $stmt->execute();
@@ -2611,9 +2613,14 @@ function filterComps() {
         const dtStr = startDag
             ? startDag.toLocaleDateString('nl-NL',{day:'numeric',month:'long',year:'numeric'})
             : '';
+        // Verborgen wedstrijden: tonen als disabled met "(binnenkort)"
+        // suffix — gebruiker ziet dat de wedstrijd er aankomt zonder
+        // erop te kunnen klikken. Operator publiceert via Beheer.
+        const verborgen = !Number(c.public_zichtbaar);
         const o = document.createElement('option');
         o.value = c.id;
-        o.textContent = `${c.name}${dtStr ? ' — ' + dtStr : ''}`;
+        o.textContent = `${c.name}${dtStr ? ' — ' + dtStr : ''}${verborgen ? '  (binnenkort)' : ''}`;
+        if (verborgen) o.disabled = true;
         o.dataset.orgLogo        = c.org_logo ?? '';
         o.dataset.orgNaam        = c.org_naam ?? '';
         o.dataset.baanLogo       = c.baan_logo ?? '';
