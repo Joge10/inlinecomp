@@ -581,7 +581,7 @@ table.compact th {
     </div>
 
     <div class="voet">
-        InlineComp Operator &middot; Quick Reference (1/6 — flow) &middot;
+        InlineComp Operator &middot; Quick Reference (1/7 — flow) &middot;
         Bij twijfel of paniek: <b>vraag Geert</b> (hij staat te speaken, je mag 'm even storen)
     </div>
 </div>
@@ -715,7 +715,7 @@ table.compact th {
     </div>
 
     <div class="voet">
-        InlineComp Operator &middot; Quick Reference (2/6 — referentie) &middot;
+        InlineComp Operator &middot; Quick Reference (2/7 — referentie) &middot;
         Bij twijfel: <b>vraag Geert</b>
     </div>
 
@@ -732,6 +732,32 @@ table.compact th {
             <div class="subtitle">Schermlay-outs — sidebar + Importeer</div>
         </div>
         <div style="font-size:24pt">🖥</div>
+    </div>
+
+    <!-- Header bar — bovenaan elk scherm -->
+    <div class="scr-section">
+        <h3>De headerbar — wat staat er bovenaan elk scherm</h3>
+        <div class="shot-vol">
+            <div class="shot-wrap">
+                <img src="quickref-images/mainbar.png" alt="Headerbar bovenaan elk scherm">
+                <span class="shot-callout" style="left:5%; top:48%">1</span>
+                <span class="shot-callout" style="left:13%; top:48%">2</span>
+                <span class="shot-callout" style="left:82.5%; top:48%">3</span>
+                <span class="shot-callout" style="left:88%; top:48%">4</span>
+                <span class="shot-callout" style="left:94%; top:48%">5</span>
+                <span class="shot-callout" style="left:99%; top:48%">6</span>
+            </div>
+            <div class="shot-legenda">
+                <ol>
+                    <li><b>InlineComp</b> — naar de start-pagina (handig om snel terug te gaan).</li>
+                    <li><b>KNSB INLINE</b>-badge — bevestigt welke instantie / tak je bekijkt.</li>
+                    <li><b>🖨 Print-Center</b> — opent het print-modaal (zie pag. 7) waar je startlijsten, uitslagen en klassementen kunt printen. Werkt onafhankelijk van wat actief is in de sidebar.</li>
+                    <li><b>📖 Handleiding</b> — opent de uitgebreide online handleiding in nieuw tabblad.</li>
+                    <li><b>Naam + rol</b> — toont wie ingelogd is + rol (owner / admin / operator). Klik = uitloggen.</li>
+                    <li><b>▼ dropdown</b> — wedstrijd-keuze (welke wedstrijd ben je aan het beheren). Heel belangrijk: <b>controleer voor je begint dat hier de juiste wedstrijd staat</b>.</li>
+                </ol>
+            </div>
+        </div>
     </div>
 
     <!-- Sidebar — echte screenshot met callouts -->
@@ -796,7 +822,7 @@ table.compact th {
     </div>
 
     <div class="voet">
-        InlineComp Operator &middot; Quick Reference (3/6 — schermen) &middot; Bij twijfel: <b>vraag Geert</b>
+        InlineComp Operator &middot; Quick Reference (3/7 — schermen) &middot; Bij twijfel: <b>vraag Geert</b>
     </div>
 </div>
 
@@ -893,8 +919,41 @@ table.compact th {
         <div class="tip">💡 <b>Eerste afstand</b> van een DC seedt op serie-klassement. <b>Tweede afstand</b> seedt op tussenklassement — alleen beschikbaar na vastleggen 1e afstand (anders is de optie disabled).</div>
     </div>
 
+    <!-- Loting-opties — detail-scherm vóór genereren -->
+    <div class="scr-section">
+        <h3>Loting-opties — vóór klikken op "Genereer Series"</h3>
+        <div class="shot-vol">
+            <div class="shot-wrap">
+                <img src="quickref-images/startlijsten met looting dialoog_opties.png" alt="Loting-opties dialog vóór genereren">
+                <span class="shot-callout" style="left:18%; top:18%">1</span>
+                <span class="shot-callout" style="left:18%; top:23%">2</span>
+                <span class="shot-callout" style="left:30%; top:28%">3</span>
+                <span class="shot-callout" style="left:24%; top:38%">4</span>
+                <span class="shot-callout" style="left:36%; top:38%">5</span>
+                <span class="shot-callout" style="left:54%; top:38%">6</span>
+                <span class="shot-callout" style="left:73%; top:38%">7</span>
+                <span class="shot-callout" style="left:33%; top:43%">8</span>
+                <span class="shot-callout" style="left:94%; top:48%">9</span>
+            </div>
+            <div class="shot-legenda">
+                <ol>
+                    <li><b>Categorie-tabs</b> — kies de cat-groep waarvoor je gaat loten.</li>
+                    <li><b>Afstand-tabs</b> — bij multi-afstand DC's wissel tussen afstanden (bv. 1000m / Afvalkoers 5000m).</li>
+                    <li><b>Programmaflow</b> — toont welke ronde-types er zijn voor deze cat (bv. Series → A-finale, of Series → Halve finale → Finale). De gekleurde badge = de ronde die je nu gaat loten.</li>
+                    <li><b>Op startnummer</b> — heat-volgorde op stijgend startnummer. Snelst, maar geen "eerlijke" verdeling van sterke rijders.</li>
+                    <li><b>Alfabetisch</b> — heats op naam. Zelden gebruikt — alleen bij DC's zonder klassement-historie.</li>
+                    <li><b>Tussenklassement (deze wedstrijd)</b> — slangenpatroon op basis van uitslagen-tot-nu in deze wedstrijd. Alleen actief bij ≥2e afstand <b>nadat 1e afstand bevestigd is</b>.</li>
+                    <li><b>Klassement (serie)</b> — slangenpatroon op basis van het serie-klassement (meerdere wedstrijden). <b>Default voor 1e afstand</b> als deze wedstrijd in een competitie zit.</li>
+                    <li><b>Aantal heats (tijdschema)</b> — bevestiging hoe veel heats er gegenereerd zullen worden + aantal deelnemers. Past niet? Tijdschema → Bewerken.</li>
+                    <li><b>Genereer Series</b> — klik om de heats te bouwen. Na genereren verschijnen de heat-cards onderaan; daarna kan je terug om een andere ronde of cat te loten.</li>
+                </ol>
+            </div>
+        </div>
+        <div class="tip">💡 <b>Welke seeding kiezen?</b> Eerste afstand → <b>Klassement (serie)</b>. Tweede afstand → <b>Tussenklassement</b> (verschijnt zodra 1e afstand bevestigd is). Bij twijfel: vraag Geert. Alfabetisch / Op startnummer is alleen voor uitzonderingen (bv. eerste wedstrijd van een nieuwe seizoen-serie).</div>
+    </div>
+
     <div class="voet">
-        InlineComp Operator &middot; Quick Reference (4/6 — schermen) &middot; Bij twijfel: <b>vraag Geert</b>
+        InlineComp Operator &middot; Quick Reference (4/7 — schermen) &middot; Bij twijfel: <b>vraag Geert</b>
     </div>
 </div>
 
@@ -996,7 +1055,7 @@ table.compact th {
     </div>
 
     <div class="voet">
-        InlineComp Operator &middot; Quick Reference (5/6 — schermen) &middot; Bij twijfel: <b>vraag Geert</b>
+        InlineComp Operator &middot; Quick Reference (5/7 — schermen) &middot; Bij twijfel: <b>vraag Geert</b>
     </div>
 </div>
 
@@ -1061,7 +1120,58 @@ table.compact th {
     </div>
 
     <div class="voet">
-        InlineComp Operator &middot; Quick Reference (6/6 — Beheer) &middot; Bij twijfel: <b>vraag Geert</b>
+        InlineComp Operator &middot; Quick Reference (6/7 — Beheer) &middot; Bij twijfel: <b>vraag Geert</b>
+    </div>
+</div>
+
+<!-- ──────────────────────────────────────────────────────────────────── -->
+<!-- PAGINA 7 — Print-Center                                             -->
+<!-- ──────────────────────────────────────────────────────────────────── -->
+<div class="page">
+
+    <div class="titel">
+        <div>
+            <h1>InlineComp Operator</h1>
+            <div class="subtitle">Print-Center — startlijsten, uitslagen, klassementen</div>
+        </div>
+        <div style="font-size:24pt">🖨</div>
+    </div>
+
+    <div class="scr-section">
+        <h3>Print-Center — wat staat er en wat doe je ermee</h3>
+        <div class="shot-vol">
+            <div class="shot-wrap" style="background:#fafbfc;border:2px dashed #c5d8f0;min-height:280px;display:flex;align-items:center;justify-content:center;flex-direction:column;color:#666;font-size:10pt;text-align:center;padding:30px">
+                <div style="font-size:36pt;margin-bottom:8px">🖨</div>
+                <div style="font-weight:600;color:var(--blauw);font-size:11pt;margin-bottom:6px">Print-Center screenshot</div>
+                <div style="max-width:400px">Wordt ingevuld zodra de screenshot in <code style="background:#fff;padding:1px 4px;border:1px solid var(--border)">docs/quickref-images/print-center.png</code> staat.</div>
+            </div>
+            <div class="shot-legenda">
+                <ol>
+                    <li><b>Startlijsten</b> — selecteer afstand + ronde → PDF met heat-cards (rijders + transponders + startnummers + cat). Eén PDF per ronde, klaar voor uitprinten en op de muur hangen.</li>
+                    <li><b>Afstand-uitslag</b> — verschijnt zodra je een afstand hebt bevestigd (stap 7). Bevat alle finishers + sancties + tijden, geordend op rang.</li>
+                    <li><b>Tussenklassement</b> — verschijnt na ≥1 afstand bevestigd, vóór alle afstanden klaar. Handig voor de speaker tussen rondes door.</li>
+                    <li><b>Eindklassement</b> — verschijnt na klassement vastleggen (stap 8a). <b>Werkt onafhankelijk van publicatie</b>: je kunt printen voor de prijsuitreiking terwijl /Coach + /Public nog niets zien.</li>
+                    <li><b>Categorie-keuze</b> — alleen geselecteerde cats verschijnen in de PDF. Standaard alle cats van de huidige wedstrijd.</li>
+                </ol>
+            </div>
+        </div>
+        <div class="tip">💡 <b>Belangrijkste use-case</b> voor donderdag: na <b>klassement vastleggen</b> (stap 8a) print je hier het Eindklassement voor de jury. Daarna prijsuitreiking doen, dán pas <b>📢 Publiceer</b> in /Uitslag → klassement zichtbaar in /Coach + /Public. De onderschriften in /Uitslag wijzen je op deze flow.</div>
+    </div>
+
+    <div class="scr-section">
+        <h3>Wanneer welke knop in Print-Center werkt</h3>
+        <table class="compact">
+            <tr><th style="width:30%">Wat wil je printen?</th><th>Wanneer beschikbaar?</th></tr>
+            <tr><td><b>Startlijsten</b> per ronde</td><td>Zodra de loting klaar is (stap 3). Per cat + per ronde apart.</td></tr>
+            <tr><td><b>Afstand-uitslag</b></td><td>Zodra de afstand bevestigd is (stap 7). Vóór bevestigen niet zichtbaar.</td></tr>
+            <tr><td><b>Tussenklassement</b></td><td>Na ≥1 afstand bevestigd, vóór klassement vastleggen.</td></tr>
+            <tr><td><b>Eindklassement</b></td><td>Zodra klassement vastgelegd is (stap 8a). <b>Geen publicatie nodig</b> — je kunt het meteen printen voor de prijsuitreiking.</td></tr>
+        </table>
+        <div class="tip">💡 De dropdown in Print-Center ververst zichzelf na bevestigen / vastleggen — geen pagina-refresh nodig. Lukt het toch niet? F5 / Ctrl+R.</div>
+    </div>
+
+    <div class="voet">
+        InlineComp Operator &middot; Quick Reference (7/7 — Print-Center) &middot; Bij twijfel: <b>vraag Geert</b>
     </div>
 </div>
 
