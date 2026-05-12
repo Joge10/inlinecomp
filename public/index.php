@@ -2017,12 +2017,18 @@ function filterComps() {
         selComp.appendChild(o);
     }
 
-    // Herstel selectie als die nog in de lijst zit
-    if (vorigeWaarde && selComp.querySelector(`option[value="${vorigeWaarde}"]`)) {
+    // Herstel selectie als die nog in de lijst zit en niet (inmiddels) disabled.
+    const vorigeOpt = vorigeWaarde
+        ? selComp.querySelector(`option[value="${vorigeWaarde}"]`)
+        : null;
+    if (vorigeOpt && !vorigeOpt.disabled) {
         selComp.value = vorigeWaarde;
     } else {
-        // Auto-selecteer als er maar 1 wedstrijd is
-        const opties = selComp.querySelectorAll('option[value]:not([value=""])');
+        // Auto-selecteer als er maar 1 selecteerbare wedstrijd is —
+        // disabled ('binnenkort') tellen niet mee, anders zou de
+        // gebruiker bij stappen verder pas een 'niet beschikbaar'
+        // foutmelding krijgen.
+        const opties = selComp.querySelectorAll('option[value]:not([value=""]):not([disabled])');
         if (opties.length === 1) { selComp.value = opties[0].value; selComp.dispatchEvent(new Event('change')); }
     }
 }
