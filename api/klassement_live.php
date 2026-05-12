@@ -499,12 +499,22 @@ try {
     $klasVastStmt->execute(array_merge([$compId], $dcIds));
     $klassementVastgelegd = $alleVastgelegd && (int)$klasVastStmt->fetchColumn() > 0;
 
+    // Klassement-publicatiestatus (per primary DC; merge-groepen volgen
+    // hetzelfde gepubliceerd_at omdat publiceer-actie 'm op alle dc_ids zet).
+    $klasPubStmt = $pdo->prepare("
+        SELECT MAX(gepubliceerd_at) FROM klassement_config
+        WHERE competition_id = ? AND dc_id IN ($dcPh)
+    ");
+    $klasPubStmt->execute(array_merge([$compId], $dcIds));
+    $klassementGepubliceerdAt = $klasPubStmt->fetchColumn() ?: null;
+
     echo json_encode([
         'systeem'               => $systeem,
         'afstanden'             => $afstandenInfo,
         'klassement'            => $klassement,
         'has_results'           => $hasResults,
         'klassement_vastgelegd' => $klassementVastgelegd,
+        'klassement_gepubliceerd_at' => $klassementGepubliceerdAt,
         // Echo terug welke tie-breaker uiteindelijk is toegepast (= 'standaard'
         // of de distance_id). Front-end gebruikt dit om de dropdown-status te
         // synchroniseren — bv. als de gebruikte distance_id niet meer in de

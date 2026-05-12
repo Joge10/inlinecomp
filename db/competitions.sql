@@ -14,5 +14,10 @@ CREATE TABLE IF NOT EXISTS `competitions` (
     `organisatie_id`     VARCHAR(36)  DEFAULT NULL,
     `entries_version`    INT          NOT NULL DEFAULT 0,
     `tijdschema_version` INT          NOT NULL DEFAULT 0,
+    -- Zichtbaarheid voor /coach + /public. Default 0 = nieuwe wedstrijden
+    -- zijn onzichtbaar tot operator expliciet publiceert vanuit Beheer.
+    -- Zie 2026-05-12_competitions_public_zichtbaar.sql voor de migratie
+    -- die bestaande wedstrijden op 1 zet.
+    `public_zichtbaar`   TINYINT(1)   NOT NULL DEFAULT 0,
     PRIMARY KEY (`id`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;

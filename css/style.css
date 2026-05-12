@@ -1290,6 +1290,17 @@ header .badge {
                           margin-bottom: 10px; }
 .u-klas-correctie-blok { flex-shrink: 0; }
 .u-klas-vastleg-blok   { flex-shrink: 0; }
+.u-klas-publiceer-blok { flex-shrink: 0; }
+/* Publiceer-knop = primaire actie ná vastleggen, krachtig groen-blauw
+   accent zodat ie opvalt naast de "opnieuw vastleggen" knop. */
+.u-publiceer-knop { background: #1565c0 !important; color: #fff !important;
+                    border-color: #1565c0 !important; }
+.u-publiceer-knop:hover { background: #0d47a1 !important; }
+/* Ingetrokken-knop = subtiele "ongedaan maken" actie, niet schreeuwerig
+   maar wel duidelijk dat het een terugdraai-actie is. */
+.u-publiceer-ingetrokken { background: #fff5f5 !important; color: #c62828 !important;
+                           border-color: #c62828 !important; }
+.u-publiceer-ingetrokken:hover { background: #ffe5e5 !important; }
 
 /* Info-label bovenaan gecombineerde startlijst */
 .sl-merge-label {
@@ -2155,6 +2166,15 @@ col.heat-tp   { width: 72px; }   /* XX-12345 = 8 monospace tekens */
 .beheer-wedstrijd-badge.badge-extern { background: #f0f0f0; color: #888; }
 .beheer-wedstrijd-badge.badge-alleen-db { background: #fff3cd; color: #856404; border: 1px solid #ffe69c; }
 .btn-sm                { padding: 4px 10px; font-size: .78rem; }
+/* Zichtbaarheids-toggle: groen = zichtbaar voor coach+public,
+   oranje = nog in voorbereidingsfase (verborgen). */
+.beheer-comp-zicht.beheer-zicht-aan { background: #e2f0d9; color: #2d6a2d;
+                                       border: 1px solid #95c97a; cursor: pointer; }
+.beheer-comp-zicht.beheer-zicht-aan:hover { background: #d3e7c4; }
+.beheer-comp-zicht.beheer-zicht-uit { background: #fff3cd; color: #856404;
+                                       border: 1px solid #ffe69c; cursor: pointer; }
+.beheer-comp-zicht.beheer-zicht-uit:hover { background: #ffe69c; }
+.beheer-comp-zicht:disabled { opacity: .6; cursor: wait; }
 
 /* Organisatie-kaart in lijst */
 .org-kaart {

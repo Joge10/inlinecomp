@@ -695,6 +695,45 @@ function _uMaakAfstandBevestigKnop(groep, afstand, alVastgelegd, rondesCompleet 
     return wrap;
 }
 
+// Publiceer/intrek klassement naar /coach + /public. Backend zet
+// klassement_config.gepubliceerd_at; coach + public klassement-endpoints
+// filteren daarop. Aparte stap zodat operator eerst kan controleren
+// voordat het naar de externe apps gaat.
+async function _uKlassementPubliceer(groep, btnEl, doPubliceer) {
+    const origTekst = btnEl?.innerHTML ?? '';
+    if (btnEl) { btnEl.disabled = true; btnEl.innerHTML = '⏳ Bezig…'; }
+    try {
+        const res = await fetch('api/klassement_publiceer.php', {
+            method:  'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body:    JSON.stringify({
+                action:         doPubliceer ? 'publiceer' : 'trek_in',
+                competition_id: huidigCompId,
+                dc_ids:         groep.dc_ids,
+            }),
+        });
+        const data = await res.json();
+        if (data.ok) {
+            if (btnEl) {
+                btnEl.innerHTML = doPubliceer ? '✓ Gepubliceerd' : '✓ Ingetrokken';
+                btnEl.classList.add('u-vastleg-btn-ok');
+                setTimeout(() => toonUitslagKlassement(groep), 1200);
+            }
+            // Print-Center invalideren (uitslag-dropdown filtert ook op gepubliceerd)
+            if (typeof vulUitslagPrintSelect === 'function') vulUitslagPrintSelect();
+            if (typeof window.printCenterInvalideerUitslagen === 'function') {
+                window.printCenterInvalideerUitslagen();
+            }
+        } else {
+            toonBevestigDialog(data.error ?? data.message ?? 'Fout bij publiceren', 'Fout');
+            if (btnEl) { btnEl.innerHTML = origTekst; btnEl.disabled = false; }
+        }
+    } catch (e) {
+        toonBevestigDialog(e.message, 'Fout');
+        if (btnEl) { btnEl.innerHTML = origTekst; btnEl.disabled = false; }
+    }
+}
+
 async function _uVastleggen(groep, afstand, btnEl) {
     const origTekst = btnEl?.innerHTML ?? '';
     if (btnEl) { btnEl.disabled = true; btnEl.innerHTML = '⏳ Bezig…'; }
@@ -894,8 +933,33 @@ async function toonUitslagKlassement(groep) {
         const klasOnderschrift = klasDisabled
             ? `Bevestig eerst: ${escHtml(nietVastgelegd.join(', '))}`
             : alVastgelegd
-                ? '✓ Klassement is vastgelegd — zichtbaar in /Public, /Coach en Print-Center. Opnieuw vastleggen kan na correcties.'
+                ? '✓ Klassement is vastgelegd. Publiceer expliciet om het naar /Coach + /Public te sturen.'
                 : 'Alle afstanden zijn bevestigd — klaar om vast te leggen';
+
+        // Publicatie-knop: aparte stap ná vastleggen. Pas zichtbaar
+        // wanneer er werkelijk iets te publiceren valt; bij niet-
+        // gepubliceerd staat is het de primaire actie (groen), bij
+        // gepubliceerd staat een subtiele "trek in" knop.
+        const gepubliceerdAt = data.klassement_gepubliceerd_at || null;
+        let publiceerBlok = '';
+        if (alVastgelegd) {
+            if (gepubliceerdAt) {
+                const dt = String(gepubliceerdAt).replace('T',' ').substring(0,16);
+                publiceerBlok = `<div class="u-klas-publiceer-blok">
+                    <button class="btn-secondary u-vastleg-btn u-publiceer-ingetrokken"
+                            id="u-klas-btn-publiceer-trek-in"
+                            title="Verberg het klassement weer voor /Coach en /Public (bv. om te corrigeren)">↻ Trek publicatie in</button>
+                    <div class="u-vastleg-beschrijving">📢 Gepubliceerd op ${escHtml(dt)} — zichtbaar in /Coach + /Public</div>
+                </div>`;
+            } else {
+                publiceerBlok = `<div class="u-klas-publiceer-blok">
+                    <button class="btn-primary u-vastleg-btn u-publiceer-knop"
+                            id="u-klas-btn-publiceer"
+                            title="Maak het klassement zichtbaar in /Coach en /Public">📢 Publiceer naar coach/public</button>
+                    <div class="u-vastleg-beschrijving">⚠ Nog niet gepubliceerd — klassement is alleen zichtbaar in deze admin-omgeving</div>
+                </div>`;
+            }
+        }
 
         const opslaanBalk = `<div class="u-klas-opslaan-balk">
             ${heeftBewerkbaar
@@ -912,6 +976,7 @@ async function toonUitslagKlassement(groep) {
                 </button>
                 <div class="u-vastleg-beschrijving">${klasOnderschrift}</div>
             </div>
+            ${publiceerBlok}
         </div>`;
 
         // ── Tie-breaker dropdown (alleen bij full-final + ≥2 afstanden) ────
@@ -1020,6 +1085,18 @@ async function toonUitslagKlassement(groep) {
         // ── Alles vastleggen knop ─────────────────────────────────────────────
         el('u-klas-btn-vastleggen')?.addEventListener('click', async (e) => {
             await _uVastleggen(groep, null, e.currentTarget);
+        });
+
+        // ── Publiceer naar /coach + /public ───────────────────────────────────
+        el('u-klas-btn-publiceer')?.addEventListener('click', async (e) => {
+            await _uKlassementPubliceer(groep, e.currentTarget, true);
+        });
+        el('u-klas-btn-publiceer-trek-in')?.addEventListener('click', async (e) => {
+            if (!await toonBevestigDialog(
+                'Klassement-publicatie intrekken? Het klassement verdwijnt uit /Coach en /Public tot je opnieuw publiceert.',
+                'Publicatie intrekken'
+            )) return;
+            await _uKlassementPubliceer(groep, e.currentTarget, false);
         });
 
         // ── Opslaan handler ───────────────────────────────────────────────────

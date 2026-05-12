@@ -437,6 +437,9 @@ async function laadOrgWedstrijden() {
         return;
     }
 
+    // dbComps map houden voor zichtbaarheids-status (komt alleen uit DB-kant)
+    const dbCompsMap = new Map(dbComps.map(c => [c.id, c]));
+
     lijst.innerHTML = alleItems.map(w => {
         const inDb   = dbIds.has(w.id);
         const datum  = w.starts ? new Date(w.starts).toLocaleDateString('nl-NL', {day:'2-digit',month:'long',year:'numeric'}) : '—';
@@ -445,6 +448,18 @@ async function laadOrgWedstrijden() {
             : inDb
                 ? '<span class="beheer-wedstrijd-badge">In database</span>'
                 : '<span class="beheer-wedstrijd-badge badge-extern">inschrijven.schaatsen.nl</span>';
+        const dbRow  = dbCompsMap.get(w.id);
+        const zicht  = inDb && !!Number(dbRow?.public_zichtbaar);
+        // Zichtbaar/verborgen-knop: groen als gepubliceerd voor coach+public,
+        // oranje (verborgen) als nog in voorbereidingsfase. Klik toggelt.
+        const zichtBtn = inDb
+            ? `<button class="btn-sm beheer-comp-zicht ${zicht ? 'beheer-zicht-aan' : 'beheer-zicht-uit'}"
+                       data-id="${escHtml(w.id)}"
+                       data-naam="${escHtml(w.name ?? w.id)}"
+                       data-zicht="${zicht ? '1' : '0'}"
+                       title="${zicht ? 'Klik om wedstrijd te VERBERGEN voor /coach + /public (terug naar voorbereidingsfase)' : 'Klik om wedstrijd ZICHTBAAR te maken voor /coach + /public'}"
+                >${zicht ? '👁 Zichtbaar' : '🔒 Verborgen'}</button>`
+            : '';
         return `<div class="beheer-wedstrijd-rij ${inDb ? 'in-db' : ''}">
             <div class="beheer-wedstrijd-info">
                 <span class="beheer-wedstrijd-naam">${escHtml(w.name ?? w.title ?? w.id)}</span>
@@ -452,6 +467,7 @@ async function laadOrgWedstrijden() {
                 ${badge}
             </div>
             <div class="beheer-wedstrijd-acties">
+                ${zichtBtn}
                 ${inDb ? `<button class="btn-secondary btn-sm beheer-comp-meld" data-id="${escHtml(w.id)}" data-naam="${escHtml(w.name ?? w.id)}" title="Mededelingen versturen naar publiek + coach apps">📢 Meldingen</button>` : ''}
                 ${inDb ? `<button class="btn-secondary btn-sm beheer-comp-poster" data-id="${escHtml(w.id)}" data-app="public" title="Download poster voor publiek (rijders/ouders)">📄 Public-poster</button>` : ''}
                 ${inDb ? `<button class="btn-secondary btn-sm beheer-comp-poster" data-id="${escHtml(w.id)}" data-app="coach" title="Download poster voor coaches">👥 Coach-poster</button>` : ''}
@@ -472,8 +488,56 @@ async function laadOrgWedstrijden() {
                 ? openMeldingenModal(btn.dataset.id, btn.dataset.naam)
                 : null);
     });
+    lijst.querySelectorAll('.beheer-comp-zicht').forEach(btn => {
+        btn.addEventListener('click', () => toggleWedstrijdZichtbaar(btn));
+    });
 
     if (_beheerLeesOnly) pasSchrijfLockToe(lijst.closest('.org-tab-content') ?? lijst);
+}
+
+// Toggle public_zichtbaar via api/wedstrijd_zichtbaar.php. Operator
+// gebruikt dit om in voorbereidingsfase een wedstrijd te verbergen
+// (default 0 voor nieuwe wedstrijden) en pas zichtbaar te maken
+// wanneer alles compleet is.
+async function toggleWedstrijdZichtbaar(btn) {
+    const id        = btn.dataset.id;
+    const naam      = btn.dataset.naam || '';
+    const huidig    = btn.dataset.zicht === '1';
+    const nieuwZicht = !huidig;
+
+    // Bevestiging bij ZICHTBAAR maken (publicatie naar buiten); verbergen
+    // mag direct — minder risico.
+    if (nieuwZicht) {
+        if (!await toonBevestigDialog(
+            `"${naam}" zichtbaar maken voor /coach + /public?\n\n` +
+            'Coaches en publiek kunnen dan de wedstrijd-info, programma en uitslagen bekijken.',
+            'Wedstrijd publiceren'
+        )) return;
+    }
+
+    const origTekst = btn.innerHTML;
+    btn.disabled = true;
+    btn.innerHTML = '⏳ Bezig…';
+    try {
+        const res = await fetch('api/wedstrijd_zichtbaar.php', {
+            method:  'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body:    JSON.stringify({ competition_id: id, zichtbaar: nieuwZicht }),
+        });
+        const data = await res.json();
+        if (!data.ok) {
+            toonBevestigDialog(data.error ?? 'Fout bij wijzigen zichtbaarheid', 'Fout');
+            btn.innerHTML = origTekst;
+            btn.disabled = false;
+            return;
+        }
+        // Refresh de lijst zodat ook de tooltip + class actueel zijn
+        await laadOrgWedstrijden();
+    } catch (e) {
+        toonBevestigDialog(e.message, 'Fout');
+        btn.innerHTML = origTekst;
+        btn.disabled = false;
+    }
 }
 
 async function verwijderCompetitie(id, naam) {

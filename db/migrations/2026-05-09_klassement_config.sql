@@ -16,6 +16,10 @@ CREATE TABLE IF NOT EXISTS `klassement_config` (
     `competition_id`  VARCHAR(36) NOT NULL,
     `dc_id`           VARCHAR(36) NOT NULL,
     `tiebreaker_dist` VARCHAR(36) DEFAULT NULL,
+    -- Klassement-publicatie: NULL = vastgelegd maar niet gepubliceerd
+    -- (zichtbaar in admin, niet in coach/public). Filled = gepubliceerd op
+    -- die timestamp. Zie 2026-05-12_klassement_publicatie.sql.
+    `gepubliceerd_at` TIMESTAMP   NULL DEFAULT NULL,
     `updated_at`      DATETIME    NOT NULL DEFAULT CURRENT_TIMESTAMP
                                   ON UPDATE CURRENT_TIMESTAMP,
     PRIMARY KEY (`competition_id`, `dc_id`),

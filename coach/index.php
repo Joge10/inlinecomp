@@ -46,6 +46,31 @@ if (empty($_GET['action'])) {
     }
 }
 
+// ── Wedstrijd-zichtbaarheidsgate ─────────────────────────────────────────────
+// Coach toont alleen wedstrijden waarvoor public_zichtbaar=1. De
+// competitions-list-action filtert zelf al; deze gate beschermt single-
+// comp endpoints (programma, lookup, uitslagen, etc.) tegen URL-pluk
+// van een wedstrijd in voorbereidingsfase.
+function _coachWedstrijdZichtbaar(PDO $pdo, string $compId): bool {
+    if (!$compId) return true;
+    $s = $pdo->prepare("SELECT public_zichtbaar FROM competitions WHERE id = ? LIMIT 1");
+    $s->execute([$compId]);
+    return (bool)$s->fetchColumn();
+}
+// Cache POST body: coach_info-action gebruikt 'm óók (file_get_contents
+// op php://input kan maar één keer gelezen worden).
+$_POST_BODY = null;
+if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+    $_POST_BODY = json_decode(file_get_contents('php://input'), true) ?: [];
+}
+$_zichtCompId = trim($_GET['competition_id'] ?? ($_POST_BODY['competition_id'] ?? ''));
+if ($_zichtCompId && !_coachWedstrijdZichtbaar($pdo, $_zichtCompId)) {
+    header('Content-Type: application/json; charset=utf-8');
+    http_response_code(404);
+    echo json_encode(['error' => 'Wedstrijd niet beschikbaar']);
+    exit;
+}
+
 // ── Rate limiting: max 10 requests per 5 seconden per IP ─────────────────────
 $action = $_GET['action'] ?? '';
 if ($action) {
@@ -94,6 +119,7 @@ if ($action === 'competitions') {
             JOIN competition_tijdschema ct ON ct.competition_id = c.id
             LEFT JOIN organisaties o ON o.id = c.organisatie_id
             LEFT JOIN banen b ON b.id = c.baan_id
+            WHERE c.public_zichtbaar = 1
             ORDER BY c.starts DESC
         ");
         $stmt->execute();
@@ -485,7 +511,18 @@ if ($action === 'categorieen') {
         ");
         $stmt->execute([$compId]);
         $rows = $stmt->fetchAll(PDO::FETCH_ASSOC);
-        $klasStmt = $pdo->prepare("SELECT DISTINCT distance_combination_id FROM uitslag_klassement WHERE competition_id = ?");
+        // Filter op gepubliceerde klassementen — operator publiceert
+        // expliciet via /Klassement na controle. Niet-gepubliceerde
+        // klassementen zijn alleen zichtbaar in admin.
+        $klasStmt = $pdo->prepare("
+            SELECT DISTINCT uk.distance_combination_id
+            FROM uitslag_klassement uk
+            INNER JOIN klassement_config kc
+                    ON kc.competition_id = uk.competition_id
+                   AND kc.dc_id = uk.distance_combination_id
+                   AND kc.gepubliceerd_at IS NOT NULL
+            WHERE uk.competition_id = ?
+        ");
         $klasStmt->execute([$compId]);
         $klasDcIds = $klasStmt->fetchAll(PDO::FETCH_COLUMN);
         $result = [];
@@ -521,6 +558,17 @@ if ($action === 'uitslagen') {
     if (!$compId || !$dcId) { echo json_encode(['error' => 'competition_id en dc_id verplicht']); exit; }
     try {
         if ($type === 'klassement') {
+            // Pre-check: alleen gepubliceerde klassementen tonen
+            $pubStmt = $pdo->prepare("
+                SELECT 1 FROM klassement_config
+                WHERE competition_id = ? AND dc_id = ? AND gepubliceerd_at IS NOT NULL
+                LIMIT 1
+            ");
+            $pubStmt->execute([$compId, $dcId]);
+            if (!$pubStmt->fetchColumn()) {
+                echo json_encode(['rijders' => [], 'afstanden' => [], 'niet_gepubliceerd' => true], JSON_UNESCAPED_UNICODE);
+                exit;
+            }
             $stmt = $pdo->prepare("
                 SELECT t.rang, t.punten_totaal, t.dc_naam, t.punten_detail,
                        p.full_name, p.category AS categorie,
@@ -603,7 +651,8 @@ if ($action === 'uitslagen') {
 //    POST {competition_id, licenses:[...]}  (POST vanwege mogelijke lengte)
 if ($action === 'coach_info') {
     header('Content-Type: application/json; charset=utf-8');
-    $body    = json_decode(file_get_contents('php://input'), true) ?: [];
+    // POST body is al gelezen door de zichtbaarheidsgate bovenaan
+    $body    = $_POST_BODY ?? [];
     $compId  = trim($body['competition_id'] ?? '');
     $licenses = is_array($body['licenses'] ?? null) ? $body['licenses'] : [];
     $licenses = array_values(array_filter(array_map('strval', $licenses)));
