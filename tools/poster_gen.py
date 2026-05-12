@@ -50,6 +50,8 @@ except ImportError:
 BLAUW       = HexColor('#1F4E79')
 ORANJE      = HexColor('#E8630A')
 LICHTBLAUW  = HexColor('#D6E4F0')
+LICHTORANJE = HexColor('#FFF1E0')   # warning-vak achtergrond
+DONKERORANJE= HexColor('#7A3500')   # warning-tekst (donker, leesbaar op lichtoranje)
 GRIJS       = HexColor('#999999')
 WIT         = white
 
@@ -374,34 +376,52 @@ def genereer_poster(args):
         c.drawString(40 * mm, y, tekst)
 
     # ── Layout van onder naar boven — vaste posities zodat niets overlapt:
-    #   0-32 mm    blauwe footer
-    #   32-35 mm   oranje streep
-    #   40-48 mm   disclaimer (2 regels)
+    #   0-24 mm    blauwe footer (compacter dan voorheen: 32mm)
+    #   24-27 mm   oranje streep
+    #   30-45 mm   disclaimer-warning-balk (testfase: opvallend)
+    #   46-50 mm   Sportity-verwijzing (klein, grijs)
     #   55-80 mm   sponsors (titel + logo's, alleen als er sponsors zijn)
     #   (boven)    stappen (zelf-plaatsend vanaf qr_y - 12 mm)
 
-    # ── Disclaimer (boven footer) ─────────────────────────────────────────
+    # ── Disclaimer-warning-balk + Sportity (boven footer) ─────────────────
     # Sportity-kanaal komt uit de organisatie-instelling. Leeg = algemene
     # formulering zonder kanaal-naam.
-    disc_top = 48 * mm
+    #
+    # Disclaimer is in TESTFASE het belangrijkste: aan de info in InlineComp
+    # kunnen nog geen rechten worden ontleend \u2014 daarom in een opvallende
+    # warning-balk (lichtoranje vlak + oranje rand + bold tekst). Sportity-
+    # regel daaronder klein/grijs, want daar staan alleen de offici\u00eble
+    # einduitslagen + klassementen na de wedstrijd.
     if args.sportity_kanaal:
-        sportity_tekst = (u'Offici\u00eble startlijsten, uitslagen en mededelingen '
+        sportity_tekst = (u'Offici\u00eble einduitslagen + klassementen '
                           u'via Sportity (kanaal: %s).' % args.sportity_kanaal)
     else:
-        sportity_tekst = (u'Offici\u00eble startlijsten, uitslagen en mededelingen '
-                          u'via Sportity.')
-    # Disclaimer-regel: secundair (klein, grijs)
-    c.setFillColor(GRIJS)
-    c.setFont('Helvetica', 10)
-    c.drawCentredString(width / 2, disc_top,
+        sportity_tekst = (u'Offici\u00eble einduitslagen + klassementen via Sportity.')
+
+    # Warning-balk: lichtoranje vulling + oranje rand
+    balk_y     = 30 * mm
+    balk_h     = 15 * mm
+    balk_marge = 12 * mm
+    c.setFillColor(LICHTORANJE)
+    c.setStrokeColor(ORANJE)
+    c.setLineWidth(1.5)
+    c.roundRect(balk_marge, balk_y,
+                width - 2 * balk_marge, balk_h,
+                2 * mm, fill=True, stroke=True)
+
+    # Twee regels in de balk: opvallend label + de feitelijke disclaimer
+    c.setFillColor(DONKERORANJE)
+    c.setFont('Helvetica-Bold', 14)
+    c.drawCentredString(width / 2, balk_y + balk_h - 6 * mm,
+        'LET OP \u2014 TESTFASE')
+    c.setFont('Helvetica-Bold', 11)
+    c.drawCentredString(width / 2, balk_y + 3.5 * mm,
         'Aan de informatie in InlineComp kunnen geen rechten worden ontleend.')
-    # Sportity-regel: BOLD + huisstijl-blauw + groter. Daar staan de
-    # officiele uitslagen, dus dat moet de voorbijganger echt meekrijgen.
-    # 12pt past binnen de disclaimer-zone (40-48mm) zonder sponsors of
-    # footer te raken; 13pt zou te krap worden.
-    c.setFillColor(BLAUW)
-    c.setFont('Helvetica-Bold', 12)
-    c.drawCentredString(width / 2, disc_top - 6 * mm, sportity_tekst)
+
+    # Sportity-regel onder de warning-balk (klein, grijs, secundair)
+    c.setFillColor(GRIJS)
+    c.setFont('Helvetica', 9)
+    c.drawCentredString(width / 2, balk_y + balk_h + 4 * mm, sportity_tekst)
 
     # ── Sponsors-strook (alleen sponsors mét een geldig logo) ─────────────
     # Ondersteunt zowel raster als SVG; SVG wordt als vector getekend via
@@ -439,7 +459,9 @@ def genereer_poster(args):
             cur_x += w_final + gap * schaal
 
     # ── Blauwe footer ─────────────────────────────────────────────────────
-    footer_h = 32 * mm
+    # Compacter dan voorheen (was 32mm) — extra ruimte naar boven voor de
+    # disclaimer-warning-balk.
+    footer_h = 24 * mm
     c.setFillColor(BLAUW)
     c.rect(0, 0, width, footer_h, fill=True, stroke=False)
     c.setFillColor(ORANJE)
@@ -453,14 +475,14 @@ def genereer_poster(args):
     if '?' in url_label:
         url_label = url_label.split('?', 1)[0]
     url_label = url_label.rstrip('/')
-    c.drawCentredString(width / 2, 20 * mm, url_label)
+    c.drawCentredString(width / 2, 15 * mm, url_label)
 
     c.setFillColor(LICHTBLAUW)
     c.setFont('Helvetica', 8)
     tip = ('Tip: voeg InlineComp Coach toe aan je startscherm voor snelle toegang!'
            if is_coach
            else 'Tip: voeg InlineComp toe aan je startscherm voor snelle toegang!')
-    c.drawCentredString(width / 2, 8 * mm, tip)
+    c.drawCentredString(width / 2, 6 * mm, tip)
 
     c.save()
 
