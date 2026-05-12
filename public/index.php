@@ -3486,7 +3486,11 @@ function toonMelding(m, compId) {
 let _huidigStempel = '';
 
 (function() {
-    const AUTO_REFRESH_MS = 60_000;
+    // 3 minuten — frequente publish/loting-updates komen toch via meldingen-
+    // push naar de gebruiker; de poll dient als vangnet voor "ik kijk al een
+    // tijdje". Lagere frequentie scheelt aanzienlijk in serverbelasting bij
+    // grote wedstrijden waar tientallen toestellen actief zijn.
+    const AUTO_REFRESH_MS = 180_000;
     let autoTick = null;
 
     const zetStempel = () => {
@@ -3661,16 +3665,30 @@ let _huidigStempel = '';
     // in een ptrEl-status-flow.
     const ptrEl = document.getElementById('ptr');
     const PTR_DREMPEL = 70;
+    const PTR_COOLDOWN_MS = 30_000;  // min tijd tussen 2 PTR-acties
     let ptrStartY = null, ptrDragY = 0, ptrActief = false, ptrBezig = false;
+    let ptrLaatste = 0;
 
     async function ptrHerlaad() {
         if (!selComp.value || ptrBezig) return;
+        // Cooldown: bij PTR < 30s na vorige tonen we kort een melding ipv
+        // de server opnieuw aanroepen. Voorkomt burst bij ongeduld of
+        // per-ongeluk-twee-keer-pullen.
+        const sindsLaatste = Date.now() - ptrLaatste;
+        if (ptrLaatste && sindsLaatste < PTR_COOLDOWN_MS) {
+            const wachten = Math.ceil((PTR_COOLDOWN_MS - sindsLaatste) / 1000);
+            ptrEl.classList.add('laadt');
+            ptrEl.textContent = `⏳ Even wachten (${wachten}s)`;
+            setTimeout(() => { ptrEl.classList.remove('zichtbaar', 'laadt'); }, 1200);
+            return;
+        }
         ptrBezig = true;
         ptrEl.classList.add('laadt');
         ptrEl.textContent = '⟳ Vernieuwen…';
         try {
             await stilleRefresh();
             zetStempel();
+            ptrLaatste = Date.now();
             ptrEl.textContent = '✓ Bijgewerkt';
             setTimeout(() => { ptrEl.classList.remove('zichtbaar', 'laadt'); }, 600);
         } catch {

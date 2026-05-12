@@ -3027,10 +3027,23 @@ function toonMelding(m, compId) {
 (() => {
     const ptrEl = $('ptr');
     const THRESHOLD = 70;   // px slepen voor trigger
+    const PTR_COOLDOWN_MS = 30_000;  // min tijd tussen 2 PTR-acties
     let startY = null, dragY = 0, actief = false, bezigLaden = false;
+    let ptrLaatste = 0;
 
     async function herlaadProgramma() {
         if (!selComp.value || bezigLaden) return;
+        // Cooldown: bij PTR < 30s na vorige tonen we kort een melding ipv
+        // de server opnieuw aanroepen. Voorkomt burst bij ongeduld of
+        // per-ongeluk-twee-keer-pullen.
+        const sindsLaatste = Date.now() - ptrLaatste;
+        if (ptrLaatste && sindsLaatste < PTR_COOLDOWN_MS) {
+            const wachten = Math.ceil((PTR_COOLDOWN_MS - sindsLaatste) / 1000);
+            ptrEl.classList.add('laadt');
+            ptrEl.textContent = `⏳ Even wachten (${wachten}s)`;
+            setTimeout(() => { ptrEl.classList.remove('zichtbaar','laadt'); }, 1200);
+            return;
+        }
         bezigLaden = true;
         ptrEl.classList.add('laadt');
         ptrEl.textContent = '⟳ Vernieuwen…';
@@ -3056,6 +3069,7 @@ function toonMelding(m, compId) {
                     if (huidigAf) { $('u-sel-afstand').value = huidigAf; opAfstandChange(); }
                 }
             }
+            ptrLaatste = Date.now();
             ptrEl.textContent = '✓ Bijgewerkt';
             setTimeout(() => { ptrEl.classList.remove('zichtbaar','laadt'); }, 600);
         } catch (e) {
@@ -3097,11 +3111,14 @@ function toonMelding(m, compId) {
     // Desktop-fallback: dubbelklik op de header refreshed ook het programma
     document.querySelector('header').addEventListener('dblclick', herlaadProgramma);
 
-    // ── Auto-refresh elke minuut ────────────────────────────────────────────
+    // ── Auto-refresh elke 3 minuten ─────────────────────────────────────────
     // Alleen actief als er een wedstrijd gekozen is én de tab zichtbaar is.
     // Pauzeren bij verborgen tab scheelt verkeer én batterij. Na terugkeer
     // pakt-ie meteen weer op om de user een verse staat te geven.
-    const AUTO_REFRESH_MS = 60_000;
+    // 3 min — frequente updates komen via meldingen-push; deze poll is
+    // alleen vangnet voor passieve weergave. Lagere frequentie scheelt
+    // serverbelasting bij grote wedstrijden.
+    const AUTO_REFRESH_MS = 180_000;
     let autoTick = null;
     const lastEl = document.createElement('div');
     lastEl.className = 'auto-refresh-stempel';
