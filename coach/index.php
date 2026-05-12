@@ -551,6 +551,8 @@ if ($action === 'categorieen') {
 // ── API: volledige uitslag per afstand of klassement (1-op-1 uit /public) ────
 if ($action === 'uitslagen') {
     header('Content-Type: application/json; charset=utf-8');
+    // Uitslag/klassement-publicatie kan per minuut wijzigen; geen cache.
+    header('Cache-Control: no-store, must-revalidate');
     $compId = trim($_GET['competition_id'] ?? '');
     $dcId   = trim($_GET['dc_id'] ?? '');
     $type   = trim($_GET['type'] ?? 'afstand');

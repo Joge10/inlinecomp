@@ -500,6 +500,11 @@ if ($action === 'search_person') {
 // ── API: lookup rijder ───────────────────────────────────────────────────────
 if ($action === 'lookup') {
     header('Content-Type: application/json; charset=utf-8');
+    // Lookup-data verandert tijdens de wedstrijd voortdurend (loting,
+    // resultaten, klassement-publicatie). Cache uitschakelen zodat
+    // browser/proxy nooit een stale snapshot serveert — auto-refresh
+    // elke 60 sec is dan altijd vers.
+    header('Cache-Control: no-store, must-revalidate');
     $compId  = trim($_GET['competition_id'] ?? '');
     $snr     = trim($_GET['startnummer'] ?? '');
     // Optioneel: lookup direct op license_key (stabiel over wedstrijden heen).
@@ -819,6 +824,8 @@ if ($action === 'categorieen') {
 // ── API: volledige uitslag per afstand of klassement ────────────────────────
 if ($action === 'uitslagen') {
     header('Content-Type: application/json; charset=utf-8');
+    // Uitslag/klassement-publicatie kan per minuut wijzigen; geen cache.
+    header('Cache-Control: no-store, must-revalidate');
     $compId = trim($_GET['competition_id'] ?? '');
     $dcId   = trim($_GET['dc_id'] ?? '');
     $type   = trim($_GET['type'] ?? 'afstand');
