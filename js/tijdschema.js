@@ -2804,13 +2804,20 @@ function _bouwProgrammaExternInternal() {
                 <span class="cat-details">${detail}</span>
             </div>`;
             cr.forEach((r, i) => {
-                if (!r.tijdstip_override) return;
-                const ovTijd = stMap.get(r.id) ?? r.tijdstip_override.substring(0, 5);
+                // Toon extra-rij voor ritten met EITHER een tijdstip-override
+                // OF een opmerking. Voorheen alleen bij override — opmerking-
+                // alleen ritten waren onzichtbaar in extern programma.
+                if (!r.tijdstip_override && !r.opmerking) return;
+                const heeftOv = !!r.tijdstip_override;
+                const ovTijd  = heeftOv
+                    ? (stMap.get(r.id) ?? r.tijdstip_override.substring(0, 5))
+                    : (stMap.get(r.id) ?? '');
                 const opmTxt  = r.opmerking ? ` — ${esc(r.opmerking)}` : '';
                 const heatDeel = nH > 1 ? ` - heat ${i + 1}` : '';
+                const icoon   = heeftOv ? '📌' : '📝';
                 inner += `<div class="cat-ovr-rij">
                     <span class="cat-ovr-tijd">${esc(ovTijd)}</span>
-                    <span class="cat-ovr-tekst">📌 ${esc(naam)}${esc(heatDeel)}${opmTxt}</span>
+                    <span class="cat-ovr-tekst">${icoon} ${esc(naam)}${esc(heatDeel)}${opmTxt}</span>
                 </div>`;
             });
             return inner;
