@@ -2446,9 +2446,17 @@ function _afvalSchema(cfg, teElimineren) {
 
     const arr = [];
     let dubbelLeft = dubbel;
+    // Eerste-fase: stop zodra eersteTeElim afvallers gepland zijn —
+    // anders krijgen we een extra bord erbij wanneer eersteTeElim=0
+    // (= alle afvallers passen in de vaste fase 3,2,1). Bug: bij
+    // bv. teElim=3 + vast=3 zou bord 5 anders ten onrechte alsnog
+    // worden toegevoegd, met een schema van [bord 5, 3, 2] ipv [3, 2, 1].
     for (const b of eersteBorden) {
+        if (arr.length >= eersteTeElim) break;
         const n = (dubbelLeft > 0) ? 2 : 1;
-        for (let i = 0; i < n; i++) arr.push(tr - b);
+        for (let i = 0; i < n && arr.length < eersteTeElim; i++) {
+            arr.push(tr - b);
+        }
         if (dubbelLeft > 0) dubbelLeft--;
     }
     for (const b of vastBorden) {
