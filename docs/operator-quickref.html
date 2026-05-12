@@ -749,12 +749,12 @@ table.compact th {
             </div>
             <div class="shot-legenda">
                 <ol>
-                    <li><b>InlineComp</b> — naar de start-pagina (handig om snel terug te gaan).</li>
-                    <li><b>KNSB INLINE</b>-badge — bevestigt welke instantie / tak je bekijkt.</li>
-                    <li><b>🖨 Print-Center</b> — opent het print-modaal (zie pag. 7) waar je startlijsten, uitslagen en klassementen kunt printen. Werkt onafhankelijk van wat actief is in de sidebar.</li>
-                    <li><b>📖 Handleiding</b> — opent de uitgebreide online handleiding in nieuw tabblad.</li>
-                    <li><b>Naam + rol</b> — toont wie ingelogd is + rol (owner / admin / operator). Klik = uitloggen.</li>
-                    <li><b>▼ dropdown</b> — wedstrijd-keuze (welke wedstrijd ben je aan het beheren). Heel belangrijk: <b>controleer voor je begint dat hier de juiste wedstrijd staat</b>.</li>
+                    <li><b>InlineComp</b> — applicatienaam (statische tekst).</li>
+                    <li><b>KNSB INLINE</b> — badge (statisch label).</li>
+                    <li><b>🖨 Print-Center</b> — opent het Print-Center-modaal (zie pag. 7). <b>Default uitgeschakeld</b> tot je een wedstrijd hebt geselecteerd in de Importeer-tab.</li>
+                    <li><b>📖 Handleiding</b> — opent <code>docs/handleiding.html</code> in een nieuw tabblad.</li>
+                    <li><b>Naam + rol</b> — wie er ingelogd is + rol (owner / admin / operator).</li>
+                    <li><b>➔ Uitloggen</b> — klik om de sessie te beëindigen.</li>
                 </ol>
             </div>
         </div>
@@ -1140,18 +1140,29 @@ table.compact th {
     <div class="scr-section">
         <h3>Print-Center — wat staat er en wat doe je ermee</h3>
         <div class="shot-vol">
-            <div class="shot-wrap" style="background:#fafbfc;border:2px dashed #c5d8f0;min-height:280px;display:flex;align-items:center;justify-content:center;flex-direction:column;color:#666;font-size:10pt;text-align:center;padding:30px">
-                <div style="font-size:36pt;margin-bottom:8px">🖨</div>
-                <div style="font-weight:600;color:var(--blauw);font-size:11pt;margin-bottom:6px">Print-Center screenshot</div>
-                <div style="max-width:400px">Wordt ingevuld zodra de screenshot in <code style="background:#fff;padding:1px 4px;border:1px solid var(--border)">docs/quickref-images/print-center.png</code> staat.</div>
+            <div class="shot-wrap">
+                <img src="quickref-images/print-center.png" alt="Print-Center modaal">
+                <span class="shot-callout" style="left:38%; top:9%">1</span>
+                <span class="shot-callout" style="left:71%; top:9%">2</span>
+                <span class="shot-callout" style="left:86%; top:9%">3</span>
+                <span class="shot-callout" style="left:14%; top:15%">4</span>
+                <span class="shot-callout" style="left:14%; top:24%">5</span>
+                <span class="shot-callout" style="left:14%; top:33%">6</span>
+                <span class="shot-callout" style="left:86%; top:33%">7</span>
+                <span class="shot-callout" style="left:14%; top:72%">8</span>
+                <span class="shot-callout" style="left:14%; top:91%">9</span>
             </div>
             <div class="shot-legenda">
                 <ol>
-                    <li><b>Startlijsten</b> — selecteer afstand + ronde → PDF met heat-cards (rijders + transponders + startnummers + cat). Eén PDF per ronde, klaar voor uitprinten en op de muur hangen.</li>
-                    <li><b>Afstand-uitslag</b> — verschijnt zodra je een afstand hebt bevestigd (stap 7). Bevat alle finishers + sancties + tijden, geordend op rang.</li>
-                    <li><b>Tussenklassement</b> — verschijnt na ≥1 afstand bevestigd, vóór alle afstanden klaar. Handig voor de speaker tussen rondes door.</li>
-                    <li><b>Eindklassement</b> — verschijnt na klassement vastleggen (stap 8a). <b>Werkt onafhankelijk van publicatie</b>: je kunt printen voor de prijsuitreiking terwijl /Coach + /Public nog niets zien.</li>
-                    <li><b>Categorie-keuze</b> — alleen geselecteerde cats verschijnen in de PDF. Standaard alle cats van de huidige wedstrijd.</li>
+                    <li><b>🌳 Boom-saver</b> — combineer meerdere prints op één pagina (bespaart papier; staat default uit).</li>
+                    <li><b>Alles uit</b> — wist alle vinkjes in het hele modaal in één klik.</li>
+                    <li><b>Print selectie</b> — print alles wat aangevinkt staat. Eén PDF met alle geselecteerde lijsten achter elkaar.</li>
+                    <li><b>Voorbereiding</b> — Tekenlijsten (per cat) en Deelnemerslijst (compleet overzicht). Voor vóór de wedstrijd / inschrijftafel.</li>
+                    <li><b>Planning</b> — Programma extern (publiekvriendelijk) en intern (organisatie/jury). Print één keer aan het begin van de dag.</li>
+                    <li><b>Startlijsten</b> — per afstand → per ronde-type (Series / Halve finale / A-finale) → per cat een vinkje. Print zodra geloot.</li>
+                    <li><b>alles aan/uit</b>-linkje rechts in elke sectie — selecteert/wist alle vinkjes in die sectie / sub-sectie.</li>
+                    <li><b>Uitslagen</b> — per afstand → per cat. Verschijnt zodra de afstand bevestigd is (stap 7).</li>
+                    <li><b>Klassementen</b> — Eindklassement per cat. Verschijnt zodra klassement vastgelegd is (stap 8a). <b>Werkt onafhankelijk van publicatie</b> — je kunt al printen vóór 8b.</li>
                 </ol>
             </div>
         </div>
