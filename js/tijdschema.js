@@ -1447,15 +1447,22 @@ function renderRittenLijst(ritten, blokken) {
                 nrCelInhoud = String(ritNr);
             }
 
-            // Prullenbakje: alleen in schrijf-modus. Dunne knop achter
-            // 'verwacht' zodat hij compact blijft in de tabel. Confirm-
-            // dialog komt in de event-handler.
+            // Prullenbakje + plus-knop: alleen in schrijf-modus. Plus-knop
+            // werkt niet voor series-heats (server weigert die ook — zie
+            // add_rit_kopie action).
             const verwijderBtn = !_tsLeesOnly
                 ? `<button class="ts-rit-verwijder" data-rit-id="${rit.id}"
                             data-rit-naam="${escHtml(rit.rit_naam)}"
                             data-dc-naam="${escHtml(rit.dc_naam)}"
                             data-ronde-label="${escHtml(label)}${escHtml(fin)}"
                             title="Verwijder deze rit (heat + resultaten)">🗑</button>`
+                : '';
+            const kopieerBtn = !_tsLeesOnly && rit.ronde_type !== 'heats'
+                ? `<button class="ts-rit-kopieer" data-rit-id="${rit.id}"
+                            data-rit-naam="${escHtml(rit.rit_naam)}"
+                            data-dc-naam="${escHtml(rit.dc_naam)}"
+                            data-ronde-label="${escHtml(label)}${escHtml(fin)}"
+                            title="Voeg een extra heat van dit type toe (cat_config wordt automatisch bijgewerkt)">+</button>`
                 : '';
             html += `<tr class="ts-rit-rij ts-rit-sub ${combiCls}" data-rit-id="${rit.id}"
                         data-groep-key="${escHtml(groepKey)}"
@@ -1465,7 +1472,7 @@ function renderRittenLijst(ritten, blokken) {
                 <td class="ts-rit-nr">${nrCelInhoud}</td>
                 <td class="ts-rit-naam">${escHtml(rit.rit_naam)}</td>
                 <td><span class="ts-type-badge ts-type-badge-sm" style="background:${kleur}">${escHtml(label)}${escHtml(fin)}</span></td>
-                <td class="ts-rit-verwacht">${rit.verwacht ?? '?'}${verwijderBtn}</td>
+                <td class="ts-rit-verwacht">${rit.verwacht ?? '?'}${kopieerBtn}${verwijderBtn}</td>
             </tr>`;
         }
     });
@@ -2030,6 +2037,36 @@ function bindTsEvents(afstandGroepen) {
             try {
                 await postTs({
                     action:             'delete_rit',
+                    tijdschema_id:      tsId,
+                    rit_id:             ritId,
+                    tijdschema_version: tijdschemaVersion,
+                });
+                if (typeof invalideerSlTsCache === 'function') invalideerSlTsCache();
+            } catch(e) { toonBevestigDialog(e.message, 'Fout'); btn.disabled = false; }
+        });
+    });
+
+    // Extra heat toevoegen aan een ronde-groep (zelfde dc/dist/ronde_type).
+    // cat_config wordt server-side bijgewerkt zodat doorstroom-regels en
+    // aantal-heats blijven kloppen. Niet beschikbaar voor series — daar staat
+    // de + knop helemaal niet in de markup.
+    container.querySelectorAll('.ts-rit-kopieer').forEach(btn => {
+        btn.addEventListener('click', async (ev) => {
+            ev.stopPropagation();
+            const ritId    = parseInt(btn.dataset.ritId);
+            const dcNaam   = btn.dataset.dcNaam || '';
+            const rondeLbl = btn.dataset.rondeLabel || '';
+            const melding =
+                `Voeg een extra ${rondeLbl}-heat toe voor "${dcNaam}".\n\n` +
+                `De nieuwe heat komt direct ná de huidige heats. Het aantal ` +
+                `heats in afstand-instellingen wordt automatisch met 1 verhoogd; ` +
+                `doorstroom-regels (Q per heat + q-tijden) blijven hetzelfde.\n\n` +
+                `Doorgaan?`;
+            if (!await toonBevestigDialog(melding, 'Heat toevoegen')) return;
+            btn.disabled = true;
+            try {
+                await postTs({
+                    action:             'add_rit_kopie',
                     tijdschema_id:      tsId,
                     rit_id:             ritId,
                     tijdschema_version: tijdschemaVersion,

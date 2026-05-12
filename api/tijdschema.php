@@ -1533,6 +1533,159 @@ try {
         exit;
     }
 
+    // ── Extra heat toevoegen aan een bestaande ronde-groep ────────────────────
+    // Use-case: vlak vóór loting blijkt het aantal rijders niet meer in het
+    // bestaande heat-aantal te passen (bv. 25 → 24 deelnemers betekent geen
+    // series meer maar 3 halve finales i.p.v. 2). Operator wist series via
+    // de prullenbak en voegt vervolgens via deze actie een extra HF-heat
+    // toe. cat_config wordt mee bijgewerkt zodat doorstroom-regels (Q per
+    // heat + q-tijden) blijven kloppen.
+    //
+    // Werkt voor: kwartfinale, halve_finale, finale_a, finale_b, runner_up.
+    // Series-heats (ronde_type='heats') zijn NIET ondersteund — die hangen
+    // aan max_per_heat-logica en zijn fragieler. Use 'Wis programma' als je
+    // het aantal series-heats wilt aanpassen.
+    if ($action === 'add_rit_kopie') {
+        $tsId  = (int)($body['tijdschema_id'] ?? 0);
+        $ritId = (int)($body['rit_id']        ?? 0);
+        if (!$tsId || !$ritId) {
+            http_response_code(400);
+            echo json_encode(['error' => 'Ongeldige invoer']);
+            exit;
+        }
+        $compId = $getCompId($tsId);
+        // Optimistic locking
+        $clientTsVer = isset($body['tijdschema_version']) ? (int)$body['tijdschema_version'] : null;
+        if ($clientTsVer !== null) {
+            $vStmt = $pdo->prepare("SELECT tijdschema_version FROM competitions WHERE id = ?");
+            $vStmt->execute([$compId]);
+            $dbTsVer = (int)($vStmt->fetchColumn() ?? 0);
+            if ($dbTsVer !== $clientTsVer) {
+                http_response_code(409);
+                echo json_encode([
+                    'error'      => 'conflict',
+                    'message'    => 'Het tijdschema is ondertussen gewijzigd door iemand anders. De pagina wordt ververst.',
+                    'db_version' => $dbTsVer,
+                ]);
+                exit;
+            }
+        }
+
+        // Bron-rit ophalen
+        $rStmt = $pdo->prepare("
+            SELECT blok_id, dc_id, distance_id, afstand_naam,
+                   ronde_type, dc_naam
+            FROM tijdschema_ritten
+            WHERE id = ? AND tijdschema_id = ?
+        ");
+        $rStmt->execute([$ritId, $tsId]);
+        $bron = $rStmt->fetch(PDO::FETCH_ASSOC);
+        if (!$bron) {
+            http_response_code(404);
+            echo json_encode(['error' => 'Rit niet gevonden']);
+            exit;
+        }
+
+        // Series-heats zijn niet ondersteund (zie comment hierboven)
+        if ($bron['ronde_type'] === 'heats') {
+            http_response_code(400);
+            echo json_encode([
+                'error' => 'Series-heat toevoegen wordt niet ondersteund. '
+                         . 'Gebruik "Wis programma" + opnieuw genereren als je het '
+                         . 'aantal series-heats wilt aanpassen.',
+            ]);
+            exit;
+        }
+
+        $pdo->beginTransaction();
+
+        // heat_nr = max bestaand + 1 voor (dc, dist, ronde_type)
+        $maxStmt = $pdo->prepare("
+            SELECT COALESCE(MAX(heat_nr), 0) FROM tijdschema_ritten
+            WHERE tijdschema_id = ? AND dc_id = ?
+              AND (distance_id <=> ?) AND ronde_type = ?
+        ");
+        $maxStmt->execute([$tsId, $bron['dc_id'], $bron['distance_id'], $bron['ronde_type']]);
+        $nieuwHeatNr = ((int)$maxStmt->fetchColumn()) + 1;
+
+        // Volgorde: direct ná de laatste rit van dezelfde (dc, dist, ronde_type).
+        // Schuif alle ritten met hogere volgorde 1 op om plek te maken.
+        $volStmt = $pdo->prepare("
+            SELECT MAX(volgorde) FROM tijdschema_ritten
+            WHERE tijdschema_id = ? AND dc_id = ?
+              AND (distance_id <=> ?) AND ronde_type = ?
+        ");
+        $volStmt->execute([$tsId, $bron['dc_id'], $bron['distance_id'], $bron['ronde_type']]);
+        $maxVolgorde = (int)$volStmt->fetchColumn();
+
+        $pdo->prepare("
+            UPDATE tijdschema_ritten SET volgorde = volgorde + 1
+            WHERE tijdschema_id = ? AND volgorde > ?
+        ")->execute([$tsId, $maxVolgorde]);
+
+        $nieuweVolgorde = $maxVolgorde + 1;
+
+        // Rit-naam genereren volgens conventie. Identiek aan genereerRitten.
+        $rondeLabels = [
+            'kwartfinale'  => 'Kwartfinale',
+            'halve_finale' => 'Halve finale',
+            'finale_a'     => 'Finale',
+            'finale_b'     => 'B-finale',
+            'runner_up'    => 'Runner-up',
+        ];
+        $rondeLabel    = $rondeLabels[$bron['ronde_type']] ?? $bron['ronde_type'];
+        $nieuwRitNaam  = $rondeLabel
+                       . ' ' . $bron['afstand_naam']
+                       . ' Heat ' . $nieuwHeatNr
+                       . ' – ' . $bron['dc_naam'];
+
+        // INSERT nieuwe rit (verwacht: NULL — wordt door loting bepaald).
+        // Geen combi_group meekopiëren — heeft alleen zin bij finales en
+        // zou per ongeluk een combi kunnen activeren.
+        $pdo->prepare("
+            INSERT INTO tijdschema_ritten
+                (tijdschema_id, blok_id, volgorde, dc_id, distance_id, afstand_naam,
+                 ronde_type, heat_nr, rit_naam, dc_naam, verwacht, combi_group)
+            VALUES (?,?,?,?,?,?,?,?,?,?,?,?)
+        ")->execute([
+            $tsId, $bron['blok_id'], $nieuweVolgorde,
+            $bron['dc_id'], $bron['distance_id'], $bron['afstand_naam'],
+            $bron['ronde_type'], $nieuwHeatNr, $nieuwRitNaam, $bron['dc_naam'],
+            null, null,
+        ]);
+
+        // cat_config bijwerken: aantal-veld +1 zodat loting + alleRondesCompleet
+        // weten dat er nu meer heats zijn. Doorstroom-regels (Q per heat,
+        // q-tijden) blijven ongewijzigd.
+        if ($bron['distance_id']) {
+            $colMap = [
+                'kwartfinale'  => 'kwart_heats',
+                'halve_finale' => 'half_heats',
+                'finale_a'     => 'finale_heats',
+                'finale_b'     => 'finale_b_heats',
+            ];
+            $col = $colMap[$bron['ronde_type']] ?? null;
+            if ($col) {
+                $cur = $pdo->prepare("
+                    SELECT `$col` FROM tijdschema_cat_config
+                    WHERE tijdschema_id = ? AND dc_id = ? AND distance_id = ?
+                ");
+                $cur->execute([$tsId, $bron['dc_id'], $bron['distance_id']]);
+                $oude = (int)($cur->fetchColumn() ?? 0);
+                $pdo->prepare("
+                    UPDATE tijdschema_cat_config SET `$col` = ?
+                    WHERE tijdschema_id = ? AND dc_id = ? AND distance_id = ?
+                ")->execute([$oude + 1, $tsId, $bron['dc_id'], $bron['distance_id']]);
+            }
+        }
+
+        $pdo->prepare("UPDATE competitions SET tijdschema_version = tijdschema_version + 1 WHERE id = ?")
+            ->execute([$compId]);
+        $pdo->commit();
+        echo json_encode(fetchSchema($pdo, $compId));
+        exit;
+    }
+
     // ── Programma wissen (ritten verwijderen, blokken+config behouden) ────────
     if ($action === 'wis_programma') {
         $tsId = (int)($body['tijdschema_id'] ?? 0);

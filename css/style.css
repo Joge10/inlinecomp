@@ -2737,6 +2737,16 @@ tr.ts-drop-below td  { border-bottom: 3px solid #2563eb !important; }
 }
 .ts-rit-verwijder:hover { color: #b00020; opacity: 1; }
 .ts-rit-verwijder:disabled { cursor: wait; opacity: .3; }
+/* + knop = extra heat van dit type toevoegen (niet bij series). Blauw zodat
+   het duidelijk een toevoeg-actie is i.t.t. de rode prullenbak. */
+.ts-rit-kopieer {
+    background: none; border: none; cursor: pointer;
+    margin-left: 4px; padding: 2px 6px; font-size: 1rem;
+    color: #1565c0; opacity: .6; vertical-align: middle;
+    font-weight: 700; line-height: 1;
+}
+.ts-rit-kopieer:hover { color: #0d47a1; opacity: 1; }
+.ts-rit-kopieer:disabled { cursor: wait; opacity: .3; }
 
 /* ── Combi-selectie + visueel gegroepeerde ritten ───────────────────────── */
 .ts-combi-toolbar {
