@@ -498,6 +498,8 @@ if ($action === 'programma') {
 // ── API: categorieen met uitslagen (1-op-1 uit /public) ─────────────────────
 if ($action === 'categorieen') {
     header('Content-Type: application/json; charset=utf-8');
+    // klassement_beschikbaar-vlag verandert bij publish/intrek; geen cache.
+    header('Cache-Control: no-store, must-revalidate');
     $compId = trim($_GET['competition_id'] ?? '');
     if (!$compId) { echo json_encode(['error' => 'competition_id verplicht']); exit; }
     try {
@@ -2855,8 +2857,10 @@ document.querySelectorAll('.tab-btn').forEach(btn => {
         const tab = btn.dataset.tab;
         document.querySelectorAll('.tab-pane').forEach(p =>
             p.classList.toggle('active', p.id === 'tab-' + tab));
-        // Lazy-load uitslagen-categorieën bij eerste klik op die tab
-        if (tab === 'uitslagen' && !uitslagenCats.length && selComp.value) {
+        // Categorieën altijd opnieuw laden bij switch naar uitslagen-tab —
+        // klassement_beschikbaar (publish/intrek-vlag) kan tussentijds
+        // gewijzigd zijn. Cache-busting via _t in laadUitslagenCategorieen.
+        if (tab === 'uitslagen' && selComp.value) {
             laadUitslagenCategorieen();
         }
     });

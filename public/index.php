@@ -769,6 +769,8 @@ if ($action === 'lookup') {
 // ── API: categorieën met uitslagen ──────────────────────────────────────────
 if ($action === 'categorieen') {
     header('Content-Type: application/json; charset=utf-8');
+    // klassement_beschikbaar-vlag verandert bij publish/intrek; geen cache.
+    header('Cache-Control: no-store, must-revalidate');
     $compId = trim($_GET['competition_id'] ?? '');
     if (!$compId) { echo json_encode(['error' => 'competition_id verplicht']); exit; }
     try {
@@ -2758,10 +2760,11 @@ async function initUitslagenTab(kaart) {
     // ── Serie-klassementen waar deze wedstrijd aan meedoet ──
     initSerieKlassementen(kaart, compId);
 
-    // Categorieën laden
+    // Categorieën laden — cache wordt gewist door stilleRefresh / PTR
+    // zodat publish/intrek-veranderingen vanzelf worden opgepikt.
     try {
         if (!_catCache || _catCache.compId !== compId) {
-            const res = await safeFetch(`?action=categorieen&competition_id=${encodeURIComponent(compId)}`);
+            const res = await safeFetch(`?action=categorieen&competition_id=${encodeURIComponent(compId)}&_t=${Date.now()}`);
             _catCache = { compId, data: await res.json() };
         }
         const cats = _catCache.data;
@@ -3516,6 +3519,10 @@ let _huidigStempel = '';
     // bijwerken — gebruiker ziet dat de tijd "blijft staan".
     const stilleRefresh = async () => {
         const compId = selComp.value;
+        // Categorieën-cache wissen: klassement_beschikbaar-vlag verandert
+        // bij publish/intrek; zonder reset zou dropdown stale blijven tot
+        // hard refresh.
+        _catCache = null;
 
         // Mededelingen-check loopt onafhankelijk van of er een wedstrijd is
         // gekozen of kinderen zijn toegevoegd. Zonder compId krijgen we de
