@@ -717,8 +717,11 @@ async function _uKlassementPubliceer(groep, btnEl, doPubliceer) {
             if (btnEl) {
                 btnEl.innerHTML = doPubliceer ? '✓ Gepubliceerd' : '✓ Ingetrokken';
                 btnEl.classList.add('u-vastleg-btn-ok');
-                setTimeout(() => toonUitslagKlassement(groep), 1200);
             }
+            // Refresh ALTIJD ook als de knop verdween — zo weet UI dat
+            // er een nieuwe staat is. Korte vertraging zodat de "✓"-feedback
+            // nog even leesbaar is.
+            setTimeout(() => toonUitslagKlassement(groep), 1200);
             // Print-Center invalideren (uitslag-dropdown filtert ook op gepubliceerd)
             if (typeof vulUitslagPrintSelect === 'function') vulUitslagPrintSelect();
             if (typeof window.printCenterInvalideerUitslagen === 'function') {
@@ -1094,15 +1097,17 @@ async function toonUitslagKlassement(groep) {
         });
 
         // ── Publiceer naar /coach + /public ───────────────────────────────────
-        el('u-klas-btn-publiceer')?.addEventListener('click', async (e) => {
-            await _uKlassementPubliceer(groep, e.currentTarget, true);
+        // BELANGRIJK: e.currentTarget is null ná een await in een async event
+        // handler — daarom de DOM-knop expliciet via id() ophalen.
+        el('u-klas-btn-publiceer')?.addEventListener('click', async () => {
+            await _uKlassementPubliceer(groep, el('u-klas-btn-publiceer'), true);
         });
-        el('u-klas-btn-publiceer-trek-in')?.addEventListener('click', async (e) => {
+        el('u-klas-btn-publiceer-trek-in')?.addEventListener('click', async () => {
             if (!await toonBevestigDialog(
                 'Klassement-publicatie intrekken? Het klassement verdwijnt uit /Coach en /Public tot je opnieuw publiceert.',
                 'Publicatie intrekken'
             )) return;
-            await _uKlassementPubliceer(groep, e.currentTarget, false);
+            await _uKlassementPubliceer(groep, el('u-klas-btn-publiceer-trek-in'), false);
         });
 
         // ── Opslaan handler ───────────────────────────────────────────────────
