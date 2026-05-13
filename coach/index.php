@@ -1273,8 +1273,6 @@ select.sel {
 }
 .sponsor-chip:hover { background: #ffe8e8; border-color: #d77; color: #a33; }
 .sponsor-chip::after { content: '×'; font-weight: 700; margin-left: 2px; }
-.sponsor-multi-zoek { padding: 10px; border-bottom: 1px solid #eee; }
-.sponsor-multi-zoek .inp { padding: 8px 12px; font-size: .9rem; }
 .sponsor-multi-acties {
     display: flex; gap: 8px; align-items: center;
     padding: 8px 10px; border-bottom: 1px solid #eee;
@@ -1637,9 +1635,6 @@ body.heeft-footer .auto-refresh-stempel { bottom:84px; }
             </button>
             <div id="club-chips" class="sponsor-chips"></div>
             <div id="club-multi-paneel" class="sponsor-multi-paneel" hidden>
-                <div class="sponsor-multi-zoek">
-                    <input type="search" id="club-multi-zoek" placeholder="🔍 Zoeken…" class="inp">
-                </div>
                 <div class="sponsor-multi-acties">
                     <button type="button" class="btn-klein" id="club-multi-alles">Alle aanvinken</button>
                     <button type="button" class="btn-klein" id="club-multi-niets">Niets aanvinken</button>
@@ -1661,9 +1656,6 @@ body.heeft-footer .auto-refresh-stempel { bottom:84px; }
             </button>
             <div id="sponsor-chips" class="sponsor-chips"></div>
             <div id="sponsor-multi-paneel" class="sponsor-multi-paneel" hidden>
-                <div class="sponsor-multi-zoek">
-                    <input type="search" id="sponsor-multi-zoek" placeholder="🔍 Zoeken…" class="inp">
-                </div>
                 <div class="sponsor-multi-acties">
                     <button type="button" class="btn-klein" id="sponsor-multi-alles">Alle aanvinken</button>
                     <button type="button" class="btn-klein" id="sponsor-multi-niets">Niets aanvinken</button>
@@ -3012,19 +3004,13 @@ inpSnr.addEventListener('keydown', e => { if (e.key === 'Enter') voegAllesToe();
 // ── Sponsor multi-select widget ──────────────────────────────────────────────
 // Knop opent/sluit het paneel met checkboxes. Search filter, alle/niets
 // helpers, klaar-knop sluit het paneel. State zit in _sponsorSel (Set).
-function renderSponsorMultiSelect(filterTerm) {
+function renderSponsorMultiSelect() {
     const lijst = $('sponsor-multi-lijst');
     if (!lijst) return;
-    const f = (filterTerm || '').trim().toLowerCase();
-    const gefilterd = f
-        ? _sponsorAlle.filter(s => s.toLowerCase().includes(f))
-        : _sponsorAlle;
-    if (!gefilterd.length) {
-        lijst.innerHTML = f
-            ? '<div class="leeg">Geen sponsors gevonden.</div>'
-            : '<div class="leeg">Geen sponsors in deze wedstrijd.</div>';
+    if (!_sponsorAlle.length) {
+        lijst.innerHTML = '<div class="leeg">Geen sponsors in deze wedstrijd.</div>';
     } else {
-        lijst.innerHTML = gefilterd.map(s => {
+        lijst.innerHTML = _sponsorAlle.map(s => {
             const checked = _sponsorSel.has(s) ? 'checked' : '';
             return `<label><input type="checkbox" data-sponsor="${esc(s)}" ${checked}> <span>${esc(s)}</span></label>`;
         }).join('');
@@ -3060,9 +3046,7 @@ $('btn-sponsor-open').addEventListener('click', () => {
     if (open) { paneel.hidden = true; return; }
     if (!_sponsorAlle.length) return;
     paneel.hidden = false;
-    $('sponsor-multi-zoek').value = '';
     renderSponsorMultiSelect();
-    setTimeout(() => $('sponsor-multi-zoek').focus(), 50);
 });
 
 // Klik buiten paneel = sluiten
@@ -3071,10 +3055,6 @@ document.addEventListener('click', (ev) => {
     if (!paneel || paneel.hidden) return;
     const wrap = paneel.parentElement; // .sponsor-multi-wrap
     if (wrap && !wrap.contains(ev.target)) paneel.hidden = true;
-});
-
-$('sponsor-multi-zoek').addEventListener('input', (ev) => {
-    renderSponsorMultiSelect(ev.target.value);
 });
 
 $('sponsor-multi-lijst').addEventListener('change', (ev) => {
@@ -3088,22 +3068,14 @@ $('sponsor-multi-lijst').addEventListener('change', (ev) => {
 });
 
 $('sponsor-multi-alles').addEventListener('click', () => {
-    // Alleen de momenteel zichtbare (gefilterde) sponsors aanvinken — anders
-    // verbergt een filter een hele groep die de operator misschien niet
-    // wilde meenemen.
-    const zoek = $('sponsor-multi-zoek').value || '';
-    const f = zoek.trim().toLowerCase();
-    const gefilterd = f
-        ? _sponsorAlle.filter(s => s.toLowerCase().includes(f))
-        : _sponsorAlle;
-    gefilterd.forEach(s => _sponsorSel.add(s));
-    renderSponsorMultiSelect(zoek);
+    _sponsorAlle.forEach(s => _sponsorSel.add(s));
+    renderSponsorMultiSelect();
     updateSponsorLabel();
     updateToevoegenKnop();
 });
 $('sponsor-multi-niets').addEventListener('click', () => {
     _sponsorSel.clear();
-    renderSponsorMultiSelect($('sponsor-multi-zoek').value || '');
+    renderSponsorMultiSelect();
     updateSponsorLabel();
     updateToevoegenKnop();
 });
@@ -3128,21 +3100,13 @@ $('sponsor-chips').addEventListener('click', (ev) => {
 // label toont "SHORT - Full" indien short bekend, anders alleen full.
 function _clubLabel(c) { return c.short ? `${c.short} - ${c.full}` : c.full; }
 
-function renderClubMultiSelect(filterTerm) {
+function renderClubMultiSelect() {
     const lijst = $('club-multi-lijst');
     if (!lijst) return;
-    const f = (filterTerm || '').trim().toLowerCase();
-    const gefilterd = f
-        ? _clubAlle.filter(c =>
-            c.full.toLowerCase().includes(f) ||
-            (c.short && c.short.toLowerCase().includes(f)))
-        : _clubAlle;
-    if (!gefilterd.length) {
-        lijst.innerHTML = f
-            ? '<div class="leeg">Geen clubs gevonden.</div>'
-            : '<div class="leeg">Geen clubs in deze wedstrijd.</div>';
+    if (!_clubAlle.length) {
+        lijst.innerHTML = '<div class="leeg">Geen clubs in deze wedstrijd.</div>';
     } else {
-        lijst.innerHTML = gefilterd.map(c => {
+        lijst.innerHTML = _clubAlle.map(c => {
             const checked = _clubSel.has(c.full) ? 'checked' : '';
             return `<label><input type="checkbox" data-club="${esc(c.full)}" ${checked}> <span>${esc(_clubLabel(c))}</span></label>`;
         }).join('');
@@ -3180,18 +3144,13 @@ $('btn-club-open').addEventListener('click', () => {
     if (open) { paneel.hidden = true; return; }
     if (!_clubAlle.length) return;
     paneel.hidden = false;
-    $('club-multi-zoek').value = '';
     renderClubMultiSelect();
-    setTimeout(() => $('club-multi-zoek').focus(), 50);
 });
 document.addEventListener('click', (ev) => {
     const paneel = $('club-multi-paneel');
     if (!paneel || paneel.hidden) return;
     const wrap = paneel.parentElement;
     if (wrap && !wrap.contains(ev.target)) paneel.hidden = true;
-});
-$('club-multi-zoek').addEventListener('input', (ev) => {
-    renderClubMultiSelect(ev.target.value);
 });
 $('club-multi-lijst').addEventListener('change', (ev) => {
     const inp = ev.target;
@@ -3203,21 +3162,14 @@ $('club-multi-lijst').addEventListener('change', (ev) => {
     updateToevoegenKnop();
 });
 $('club-multi-alles').addEventListener('click', () => {
-    const zoek = $('club-multi-zoek').value || '';
-    const f = zoek.trim().toLowerCase();
-    const gefilterd = f
-        ? _clubAlle.filter(c =>
-            c.full.toLowerCase().includes(f) ||
-            (c.short && c.short.toLowerCase().includes(f)))
-        : _clubAlle;
-    gefilterd.forEach(c => _clubSel.add(c.full));
-    renderClubMultiSelect(zoek);
+    _clubAlle.forEach(c => _clubSel.add(c.full));
+    renderClubMultiSelect();
     updateClubLabel();
     updateToevoegenKnop();
 });
 $('club-multi-niets').addEventListener('click', () => {
     _clubSel.clear();
-    renderClubMultiSelect($('club-multi-zoek').value || '');
+    renderClubMultiSelect();
     updateClubLabel();
     updateToevoegenKnop();
 });
