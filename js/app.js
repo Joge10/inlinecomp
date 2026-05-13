@@ -315,6 +315,15 @@ function vulPaginaHeader(naamId, metaId) {
         : '';
 }
 
+// Discreet label in de mainbar (naast KNSB-badge) met de huidige wedstrijd-
+// naam. Verschijnt vanaf het moment dat er een wedstrijd in Importeer is
+// gekozen; verdwijnt bij reset (lege textContent → :empty hide via CSS).
+function _setHeaderWedstrijd(comp) {
+    const el = document.getElementById('header-wedstrijd');
+    if (!el) return;
+    el.textContent = comp?.name || '';
+}
+
 // ── Wedstrijdenlijst laden ────────────────────────────────────────────────────
 
 async function laadWedstrijden() {
@@ -477,6 +486,10 @@ async function selectWedstrijd(card, comp) {
     activeCard   = card;
     huidigCompId = comp.id;
     huidigComp   = comp;
+
+    // Header-label bijwerken zodat operator zonder naar Importeer te wisselen
+    // ziet welke wedstrijd er nu actief is in elke module.
+    _setHeaderWedstrijd(comp);
 
     // Print-Center state resetten bij (andere) wedstrijd — header-knop enablen
     window.printCenterResetVoorWedstrijd?.(comp.id);
@@ -656,6 +669,7 @@ function resetImportModule(verwijderdId) {
     entryEdits        = {};
     manualTp          = new Set();
     window.printCenterResetVoorWedstrijd?.(null);
+    _setHeaderWedstrijd(null);
     heeftWijzigingen  = false;
     standDatum        = '';
     dbStandDatum      = '';

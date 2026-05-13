@@ -237,6 +237,22 @@ header .badge {
     letter-spacing: .5px;
     text-transform: uppercase;
 }
+/* Huidige wedstrijd in de header — discrete weergave naast KNSB-badge.
+   Wordt alleen getoond als er een wedstrijd geselecteerd is (JS clear
+   maakt de inhoud leeg → niet zichtbaar door :empty hide). */
+header .header-wedstrijd {
+    margin-left: 10px;
+    font-size: .85rem;
+    color: rgba(255,255,255,.85);
+    font-weight: 500;
+    max-width: 40vw;
+    overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+header .header-wedstrijd:empty { display: none; }
+header .header-wedstrijd::before {
+    content: '▸ ';
+    color: rgba(255,255,255,.5);
+}
 
 /* sidebar-toggle zit nu in het panel zelf, niet in de header */
 

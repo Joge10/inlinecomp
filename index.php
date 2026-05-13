@@ -23,6 +23,7 @@ if (!$gebruiker) {
 <header>
     <h1>InlineComp</h1>
     <span class="badge">KNSB Inline</span>
+    <span class="header-wedstrijd" id="header-wedstrijd" title="Huidige wedstrijd (selectie in Importeer)"></span>
     <div class="header-user">
         <button class="header-printcenter-btn" id="btn-printcenter" title="Print-Center openen" disabled>&#128424; Print-Center</button>
         <button class="header-handleiding-btn" id="btn-handleiding" title="Handleiding openen" onclick="window.open('docs/handleiding.html', '_blank', 'noopener')">&#128366; Handleiding</button>
