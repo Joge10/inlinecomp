@@ -187,6 +187,10 @@ if ($action === 'clubs') {
         // weergave in de dropdown: "ASV - Almeerse SchaatsVereniging".
         // Als er meerdere short-varianten zijn voor hetzelfde full-label,
         // nemen we MIN() (stabiel) — komt in de praktijk bijna niet voor.
+        //
+        // Sortering: eerst op club_short (alfabetisch op afkorting), met
+        // club_full als fallback wanneer er geen short is. Dat past beter
+        // bij hoe coaches scannen — ze zoeken meestal op afkorting.
         $stmt = $pdo->prepare("
             SELECT p.club_full AS full,
                    MIN(NULLIF(p.club_short, '')) AS short
@@ -196,7 +200,7 @@ if ($action === 'clubs') {
             WHERE dc.competition_id = ?
               AND p.club_full IS NOT NULL AND p.club_full != ''
             GROUP BY p.club_full
-            ORDER BY p.club_full
+            ORDER BY COALESCE(NULLIF(MIN(p.club_short), ''), p.club_full)
         ");
         $stmt->execute([$compId]);
         echo json_encode($stmt->fetchAll(PDO::FETCH_ASSOC), JSON_UNESCAPED_UNICODE);
