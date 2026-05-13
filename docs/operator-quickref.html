@@ -686,6 +686,8 @@ table.compact th {
                     <td>Tooltip / onderschrift toont wat er ontbreekt: open heat (heat zonder finishtijd) of niet-gelote ronde (bv. A-finale). Vul eerst die in/loot eerst, dan probeert de knop opnieuw.</td></tr>
                 <tr><td>Rit moet weg vanwege weer of blesure (mid-wedstrijd)</td>
                     <td>Tab <span class="tab">Tijdschema</span> → scroll naar <b>Gegenereerd programma</b> → klik 🗑 (prullenbakje rechts) bij die rit. Confirm-dialog noemt rit-naam + cat. Verwijdert heat + entries + resultaten van die ene rit; andere ritten blijven intact. Klassement berekent automatisch zonder die ronde.</td></tr>
+                <tr><td>Extra heat nodig (bv. 2 → 3 halve finales na series-skip)</td>
+                    <td>Tab <span class="tab">Tijdschema</span> → bij een bestaande rit van dezelfde ronde klik op <b style="color:#1565c0">+</b> (naast 🗑). Heat erbij, aantal-heats in afstand-instellingen schuift mee, doorstroom-regels (Q per heat + q-tijden) blijven gelijk. Niet beschikbaar voor series — gebruik daarvoor <b>Wis programma</b>.</td></tr>
                 <tr><td>"▶ Genereer programma"-knop is uitgeschakeld</td>
                     <td>Er zijn al heats geloot — opnieuw genereren zou alle startlijsten + resultaten wegvagen. Twee opties: 🗑 per rit voor één-voor-één skippen, óf 🗑 Wis programma als je echt opnieuw wilt beginnen (zware beslissing — vraag Geert).</td></tr>
                 <tr><td>Ouders zien klassement al voordat de prijsuitreiking is</td>
@@ -868,26 +870,29 @@ table.compact th {
         <div class="tip">💡 <b>Stap 2:</b> als een afstand te weinig deelnemers heeft → klik <b>✏ Bewerken</b> bij die afstand → vink Series uit → Opslaan → onderaan <b>▶ Genereer programma</b>. Lukt niet meer na loting? Gebruik 🗑 per rit (volgende close-up).</div>
     </div>
 
-    <!-- Tijdschema: gegenereerd programma met prullenbak per rit -->
+    <!-- Tijdschema: gegenereerd programma met prullenbak + plus per rit -->
     <div class="scr-section">
-        <h3>Gegenereerd programma — ritten + prullenbak per rit</h3>
+        <h3>Gegenereerd programma — ritten weggooien + toevoegen (mid-wedstrijd)</h3>
         <div class="shot-vol">
             <div class="shot-wrap">
-                <img src="quickref-images/tijdschema gegenereerd programma voorbeeld met meerdere ritten.png" alt="Gegenereerd programma met prullenbak-knop per rit">
+                <img src="quickref-images/tijdschema gegenereerd programma voorbeeld met meerdere ritten.png" alt="Gegenereerd programma met prullenbak- en plus-knop per rit">
                 <span class="shot-callout" style="left:8%; top:13%">1</span>
                 <span class="shot-callout" style="left:8%; top:24%">2</span>
                 <span class="shot-callout" style="left:55%; top:35%">3</span>
-                <span class="shot-callout" style="left:97%; top:30%">4</span>
+                <span class="shot-callout" style="left:95%; top:30%">4</span>
+                <span class="shot-callout" style="left:97%; top:30%">5</span>
             </div>
             <div class="shot-legenda">
                 <ol>
                     <li><b>Tijden / nummers</b> — automatisch berekend op basis van heat-duur (m:ss) en starttijd.</li>
                     <li><b>Niet-ronde blokken</b> — inrijden, pauze, wedstrijdstart (gemarkeerd met eigen kleur).</li>
                     <li><b>Categoriegroep-header</b> — alle heats van één cat-groep blijven bij elkaar; sleep de header om de hele groep te verplaatsen.</li>
-                    <li><b>🗑 Prullenbakje per rit</b> — verwijdert die ene rit (heat + entries + resultaten). Gebruik bij weer/blesure-noodgevallen om bv. één runner-up te skippen zonder de hele wedstrijd te raken. Bevestiging vereist.</li>
+                    <li><b>+ Heat toevoegen</b> (blauw) — voegt een extra heat van hetzelfde type toe (KF / HF / A-finale / B-finale / Runner-up). Aantal-heats in afstand-instellingen schuift automatisch mee; doorstroom-regels (Q per heat + q-tijden) blijven gelijk. Niet beschikbaar voor series — gebruik daarvoor "Wis programma".</li>
+                    <li><b>🗑 Prullenbakje per rit</b> — verwijdert die ene rit (heat + entries + resultaten). Gebruik bij weer/blesure-noodgevallen om bv. één runner-up te skippen. Andere ritten blijven intact. Bevestiging vereist.</li>
                 </ol>
             </div>
         </div>
+        <div class="tip">💡 <b>Voorbeeld scenario:</b> 25 ingeschreven → 4 series + 2 halve finales + A-finale. Vóór loting blijken het 24 — past beter in 3 halve finales zonder series. Verwijder de series met 🗑, klik op een bestaande HF-rit op + om de derde toe te voegen, daarna gewoon loten. Werkt ook als andere afstanden al gereden zijn (= "Wis programma" zou te grof zijn).</div>
     </div>
 
     <!-- Startlijsten — echte screenshot met callouts -->
