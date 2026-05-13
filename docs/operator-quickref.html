@@ -423,8 +423,19 @@ table.compact th {
 
 @media print {
     body { background: #fff; }
-    .page { box-shadow: none; padding: 6mm 10mm; }
+    /* Pagina-padding: top = 0 zodat de blauwe titelbalk direct tegen de
+       @page-marge zit. Onder + zijkanten houden we wel iets ruimte voor
+       het body-content. */
+    .page { box-shadow: none; padding: 0 10mm 6mm; }
+    /* @page-marge bepaalt de afstand tussen papier-rand en titelbalk. */
     @page { margin: 7mm 10mm; size: A4 portrait; }
+    /* Iedere .page begint op een nieuwe fysieke pagina (was alleen
+       page-break-after; nu ook break-before zodat header gegarandeerd
+       bovenaan staat). */
+    .page { break-before: page; }
+    .page:first-of-type { break-before: auto; }
+    /* Titelbalk: geen marge erboven — pagina-rand definieert de ruimte. */
+    .titel { margin-top: 0; }
     .pdf-tip { display: none; }
     .scr-mock { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
     .scr-header, .scr-side, .scr-tab.active, .scr-table th { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
