@@ -220,7 +220,7 @@ function _pcOpties() {
                 },
                 {
                     id:     'speakerlijsten',
-                    label:  'Speakerlijsten (per categorie, ruimte voor notities)',
+                    label:  'Speakerlijsten',
                     beschikbaar:          _pcImportKlaar(),
                     redenNietBeschikbaar: _pcImportReden(),
                     build: () => (typeof bouwSpeakerlijstenBody === 'function' ? bouwSpeakerlijstenBody() : null),

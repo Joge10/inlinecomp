@@ -2001,8 +2001,9 @@ tr     { page-break-inside:avoid; }
 // ── Speakerlijsten — minimalistisch, per DC op nieuwe pagina ──────────────────
 // Per Distance Combination één pagina, deelnemers gesorteerd op startnummer.
 // Kolommen: #, Naam, Club, Sponsor, ruime notitie-kolom rechts.
-// Bedoeld voor de speaker / aankondiger: snel doorlezen + handmatig notities
-// bijschrijven tijdens de wedstrijd.
+// Bedoeld voor de speaker / aankondiger: zoveel mogelijk rijders op één
+// pagina; sponsor truncate-t bij overflow. Sprint-DCs (alle afstanden
+// ≤ 500m) worden overgeslagen — die zijn voor de speaker niet relevant.
 
 function bouwSpeakerlijstenBody() {
     if (!vergelijkData?.length || !huidigComp) return null;
@@ -2011,11 +2012,9 @@ function bouwSpeakerlijstenBody() {
 
 function _bouwSpeakerlijstenInternal() {
     const compNaam = escHtml(huidigComp.name || huidigComp.title || '');
-    const compMeta = escHtml(formatDatum(huidigComp.starts) + ' · ' + getLocatie(huidigComp));
 
     // ── DC-groepen verzamelen (zelfde merge-logica als groepeerVoorPrint) ─────
-    // Maar: NIET splitsen op splits, NIET tellijst-filter — alleen actieve
-    // rijders (entry_status 1 of 5) krijgen we mee in de speakerlijst.
+    // Filter: alleen DCs met minimaal één afstand > 500m (geen pure sprint).
     const usedIds = new Set();
     const dcGroepen = [];
 
@@ -2032,6 +2031,16 @@ function _bouwSpeakerlijstenInternal() {
                 }
             });
         }
+
+        // Sprint-filter: skip DC als alle afstanden ≤ 500m. Voor de speaker
+        // zijn alleen lange-afstand-onderdelen relevant.
+        const heeftLangeAfstand = dcGroup.some(dc => {
+            const bron = dcDistances[dc.dc_id]?.length
+                ? dcDistances[dc.dc_id]
+                : (dc.knsb_distances || []);
+            return bron.some(d => Number(d.value_meters || 0) > 500);
+        });
+        if (!heeftLangeAfstand) return;
 
         const basisNaam = (dcGroup.find(d => d.merge_label) ?? {}).merge_label
                        || dcGroup.map(d => d.dc_name).filter(Boolean).join(' + ');
@@ -2088,11 +2097,11 @@ function _bouwSpeakerlijstenInternal() {
             </div>
             <table class="sp-table">
                 <colgroup>
-                    <col style="width:12mm">
+                    <col style="width:10mm">
                     <col style="width:auto">
-                    <col style="width:18mm">
-                    <col style="width:40mm">
-                    <col style="width:60mm">
+                    <col style="width:16mm">
+                    <col style="width:36mm">
+                    <col style="width:54mm">
                 </colgroup>
                 <thead><tr>
                     <th class="sn">#</th>
@@ -2106,10 +2115,10 @@ function _bouwSpeakerlijstenInternal() {
         </div>`;
     }).join('');
 
-    const bodyHtml = paginas || `<div class="sp-pagina"><p style="color:#888;font-style:italic">Geen actieve deelnemers gevonden.</p></div>`;
+    const bodyHtml = paginas || `<div class="sp-pagina"><p style="color:#888;font-style:italic">Geen lange-afstand DCs met actieve deelnemers gevonden (sprint-DCs worden overgeslagen).</p></div>`;
 
     const extraCss = `
-@page { size: A4 portrait; margin: 10mm 12mm; }
+@page { size: A4 portrait; margin: 8mm 10mm; }
 body  { font-family: Arial, sans-serif; font-size: 9pt; margin: 0; color: #111; }
 
 /* Iedere DC op een eigen pagina */
@@ -2118,38 +2127,50 @@ body  { font-family: Arial, sans-serif; font-size: 9pt; margin: 0; color: #111; 
 
 /* DC-titelbalk: compact, één regel */
 .sp-dc-titel {
-    font-size: 14pt; font-weight: bold; color: #1a3a5c;
-    border-bottom: 2px solid #1a3a5c;
-    padding-bottom: 1mm; margin-bottom: 3mm;
+    font-size: 12pt; font-weight: bold; color: #1a3a5c;
+    border-bottom: 1.5px solid #1a3a5c;
+    padding-bottom: 0.5mm; margin-bottom: 1.5mm;
 }
 .sp-dc-titel .sub {
-    font-size: 9pt; font-weight: normal; color: #555;
+    font-size: 8.5pt; font-weight: normal; color: #555;
     margin-left: 2mm;
 }
 
-/* Tabel: minimalistisch, ruime rij-hoogte voor handgeschreven notities */
-.sp-table { width: 100%; border-collapse: collapse; }
+/* Tabel: compact — zoveel mogelijk rijders op één pagina. */
+.sp-table {
+    width: 100%; border-collapse: collapse;
+    table-layout: fixed;  /* nodig voor ellipsis op sponsor-kol */
+}
 .sp-table thead { display: table-header-group; }
 .sp-table th {
     background: #dce6f0; color: #1a3a5c;
-    font-size: 8pt; font-weight: 600; text-align: left;
-    padding: 1mm 2mm;
+    font-size: 7.5pt; font-weight: 600; text-align: left;
+    padding: 0.7mm 1.5mm;
     border-bottom: 1.5px solid #1a3a5c;
 }
 .sp-table td {
-    padding: 3mm 2mm;
-    border-bottom: 1px solid #cfd8e3;
-    font-size: 10pt;
-    vertical-align: top;
+    padding: 1.1mm 1.5mm;
+    border-bottom: 1px solid #d8d8d8;
+    font-size: 9pt;
+    vertical-align: middle;
+    line-height: 1.15;
 }
 .sp-table tr { page-break-inside: avoid; }
 
 /* Kolom-stijlen */
 .sp-table .sn { text-align: center; font-weight: bold; }
-.sp-table .nm { /* naam = primaire kolom */ }
-.sp-table .cl { font-size: 8.5pt; color: #555; }
-.sp-table .sp { font-size: 8.5pt; color: #555; }
-.sp-table .nt { /* notitie-kolom: leeg gelaten voor handschrift */ }
+.sp-table .nm {
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.sp-table .cl {
+    font-size: 8pt; color: #555;
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.sp-table .sp {
+    font-size: 8pt; color: #555;
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.sp-table .nt { /* notitie-kolom: leeg, voor handschrift */ }
 `;
 
     return {
