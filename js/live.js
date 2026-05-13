@@ -23,10 +23,27 @@ let _afvalState = {};
 // Globale reset-hook: wordt aangeroepen door startlijst-wis zodat de afval-
 // state niet stale blijft hangen na het wissen van een loting (anders
 // blijven oude afvallers zichtbaar in het paneel tot een hard refresh).
-// Voor een gewist heat is _afvalState[ritIdx] niet meer relevant; bij
-// volgende module-wissel naar Live wordt 'ie opnieuw uit verse DB-data
-// opgebouwd via _afvalInitVoorRit.
-window.liveAfvalResetAll = function() { _afvalState = {}; };
+// Reset gericht op de (dc, distance) die gewist is — andere ritten houden
+// hun lokale state (operator kan in een andere heat bezig zijn met afvallers).
+// Bij volgende module-wissel naar Live wordt de gewiste state opnieuw uit
+// verse DB-data opgebouwd via _afvalInitVoorRit.
+window.liveAfvalResetVoorDC = function(dcIds, distanceId) {
+    if (!Array.isArray(_liveRitten) || !_liveRitten.length) return;
+    const dcSet = new Set(
+        Array.isArray(dcIds)
+            ? dcIds.map(String)
+            : String(dcIds || '').split(',').map(s => s.trim()).filter(Boolean)
+    );
+    const distStr = distanceId == null ? '' : String(distanceId);
+    _liveRitten.forEach((rit, idx) => {
+        if (!rit || !(idx in _afvalState)) return;
+        const ritDc   = String(rit.dc_id || '');
+        const ritDist = String(rit.distance_id || '');
+        if (!dcSet.has(ritDc)) return;
+        if (distStr && ritDist !== distStr) return;
+        delete _afvalState[idx];
+    });
+};
 
 // ── Entry point ───────────────────────────────────────────────────────────────
 
