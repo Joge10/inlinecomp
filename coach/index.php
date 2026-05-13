@@ -1227,6 +1227,54 @@ select.sel {
 .sel:focus, .inp:focus { border-color: var(--middenblauw); outline: none; }
 .sel:disabled { background-color:#f5f7fa; color:#999; cursor:not-allowed; }
 
+/* Multi-select dropdown voor sponsors. Knop ziet eruit als .sel, paneel
+   klapt eronder uit met checkbox-lijst + zoekveld + alle/niets-knoppen.
+   Past goed in beide layouts (desktop + mobiel). */
+.sponsor-multi-wrap { position: relative; }
+.sponsor-multi-knop {
+    display: flex; align-items: center; justify-content: space-between;
+    text-align: left; cursor: pointer; padding-right: 14px;
+}
+.sponsor-multi-knop:not(:disabled):hover { border-color: var(--middenblauw); }
+.sponsor-multi-knop .sponsor-multi-pijl { font-size: .8rem; color: #666; margin-left: 8px; }
+.sponsor-multi-paneel {
+    position: absolute; top: calc(100% + 4px); left: 0; right: 0;
+    background: var(--wit); border: 2px solid var(--middenblauw); border-radius: 8px;
+    box-shadow: 0 4px 12px rgba(0,0,0,.12);
+    z-index: 50; max-height: 70vh; display: flex; flex-direction: column;
+}
+.sponsor-multi-zoek { padding: 10px; border-bottom: 1px solid #eee; }
+.sponsor-multi-zoek .inp { padding: 8px 12px; font-size: .9rem; }
+.sponsor-multi-acties {
+    display: flex; gap: 8px; align-items: center;
+    padding: 8px 10px; border-bottom: 1px solid #eee;
+    font-size: .85rem;
+}
+.sponsor-multi-acties .btn-klein {
+    padding: 4px 10px; font-size: .8rem;
+    background: #eef4fa; color: var(--blauw); border: 1px solid #c5d8f0;
+    border-radius: 4px; cursor: pointer;
+}
+.sponsor-multi-acties .btn-klein:hover { background: #dde8f5; }
+.sponsor-multi-teller { margin-left: auto; color: #666; }
+.sponsor-multi-lijst { flex: 1; overflow-y: auto; padding: 4px 0; }
+.sponsor-multi-lijst label {
+    display: flex; align-items: center; gap: 8px;
+    padding: 6px 12px; cursor: pointer; font-size: .92rem;
+}
+.sponsor-multi-lijst label:hover { background: #f0f5fa; }
+.sponsor-multi-lijst input[type="checkbox"] { margin: 0; transform: scale(1.1); }
+.sponsor-multi-lijst .leeg { padding: 10px 12px; color: #999; font-style: italic; }
+.sponsor-multi-footer {
+    padding: 10px; border-top: 1px solid #eee; text-align: right;
+}
+.sponsor-multi-footer .btn-primair {
+    padding: 8px 18px; font-size: .9rem;
+    background: var(--blauw); color: var(--wit); border: none; border-radius: 4px;
+    cursor: pointer;
+}
+.sponsor-multi-footer .btn-primair:hover { background: var(--middenblauw); }
+
 /* Wedstrijd-info-kader (1-op-1 uit /public) */
 .comp-info {
     background: var(--lichtblauw); border-radius: 8px;
@@ -1554,9 +1602,28 @@ body.heeft-footer .auto-refresh-stempel { bottom:84px; }
     <div class="rij">
         <select id="sel-club" class="sel" disabled><option value="">— kies eerst een wedstrijd —</option></select>
     </div>
-    <div class="stap-sub">Op sponsor</div>
+    <div class="stap-sub">Op sponsor <small style="font-weight:400;color:#666">— meerdere tegelijk mogelijk</small></div>
     <div class="rij">
-        <select id="sel-sponsor" class="sel" disabled><option value="">— kies eerst een wedstrijd —</option></select>
+        <div class="sponsor-multi-wrap">
+            <button type="button" id="btn-sponsor-open" class="sel sponsor-multi-knop" disabled>
+                <span id="sponsor-multi-label">— kies eerst een wedstrijd —</span>
+                <span class="sponsor-multi-pijl">▾</span>
+            </button>
+            <div id="sponsor-multi-paneel" class="sponsor-multi-paneel" hidden>
+                <div class="sponsor-multi-zoek">
+                    <input type="search" id="sponsor-multi-zoek" placeholder="🔍 Zoeken…" class="inp">
+                </div>
+                <div class="sponsor-multi-acties">
+                    <button type="button" class="btn-klein" id="sponsor-multi-alles">Alle aanvinken</button>
+                    <button type="button" class="btn-klein" id="sponsor-multi-niets">Niets aanvinken</button>
+                    <span id="sponsor-multi-teller" class="sponsor-multi-teller">0 geselecteerd</span>
+                </div>
+                <div id="sponsor-multi-lijst" class="sponsor-multi-lijst"></div>
+                <div class="sponsor-multi-footer">
+                    <button type="button" id="sponsor-multi-klaar" class="btn-primair">Klaar</button>
+                </div>
+            </div>
+        </div>
     </div>
     <div class="stap-sub">Op startnummer</div>
     <div class="rij">
@@ -1604,7 +1671,11 @@ body.heeft-footer .auto-refresh-stempel { bottom:84px; }
 </div>
 <script>
 const $ = id => document.getElementById(id);
-const selComp = $('sel-comp'), selClub = $('sel-club'), selSponsor = $('sel-sponsor');
+const selComp = $('sel-comp'), selClub = $('sel-club');
+// Sponsor-multi-select state: Set met geselecteerde sponsor-namen.
+// _sponsorAlle = volledige lijst voor render + filter (search).
+let _sponsorAlle = [];
+const _sponsorSel = new Set();
 const inpSnr = $('inp-snr'), btnToevoegen = $('btn-toevoegen');
 const secSel = $('sectie-selectie'), secLijst = $('sectie-lijst'), secProg = $('sectie-programma');
 const chipsEl = $('coach-chips'), aantalEl = $('coach-aantal');
@@ -2705,12 +2776,15 @@ function zetStap2Enabled(enabled) {
     // op basis van of er een wedstrijd is gekozen. Zo ziet de user meteen
     // wat er na stap 1 mogelijk is.
     selClub.disabled     = !enabled;
-    selSponsor.disabled  = !enabled;
+    $('btn-sponsor-open').disabled = !enabled;
     inpSnr.disabled      = !enabled;
     btnToevoegen.disabled = !enabled;
     if (!enabled) {
         selClub.innerHTML    = '<option value="">— kies eerst een wedstrijd —</option>';
-        selSponsor.innerHTML = '<option value="">— kies eerst een wedstrijd —</option>';
+        _sponsorAlle = [];
+        _sponsorSel.clear();
+        $('sponsor-multi-label').textContent = '— kies eerst een wedstrijd —';
+        $('sponsor-multi-paneel').hidden = true;
     }
     updateToevoegenKnop();
 }
@@ -2720,7 +2794,7 @@ function zetStap2Enabled(enabled) {
 // iets zodat de user ziet dat er nog niks te doen valt.
 function updateToevoegenKnop() {
     if (!selComp.value) { btnToevoegen.disabled = true; return; }
-    const heeftInvoer = !!(selClub.value || selSponsor.value || inpSnr.value.trim());
+    const heeftInvoer = !!(selClub.value || _sponsorSel.size > 0 || inpSnr.value.trim());
     btnToevoegen.disabled = !heeftInvoer;
 }
 
@@ -2777,9 +2851,10 @@ async function opCompetitionChange() {
                 const label = c.short ? `${c.short} - ${c.full}` : c.full;
                 return `<option value="${esc(c.full)}">${esc(label)}</option>`;
             }).join('');
-        selSponsor.innerHTML = '<option value="">— kies sponsor —</option>' +
-            (Array.isArray(sponsors) ? sponsors : []).map(s =>
-                `<option value="${esc(s)}">${esc(s)}</option>`).join('');
+        _sponsorAlle = Array.isArray(sponsors) ? sponsors : [];
+        _sponsorSel.clear();
+        renderSponsorMultiSelect();
+        updateSponsorLabel();
         renderProgramma();
         // Status + sancties ophalen voor de al bestaande coach-lijst (uit localStorage)
         await laadCoachInfo();
@@ -2796,9 +2871,8 @@ async function opCompetitionChange() {
 async function voegAllesToe() {
     if (!selComp.value) return;
     const club    = selClub.value;
-    const sponsor = selSponsor.value;
     const snr     = parseInt(inpSnr.value);
-    if (!club && !sponsor && !snr) {
+    if (!club && _sponsorSel.size === 0 && !snr) {
         snrFb.textContent = 'Kies een club, sponsor of vul een startnummer in.';
         snrFb.style.color = '#b71c1c';
         return;
@@ -2816,13 +2890,22 @@ async function voegAllesToe() {
         selClub.value = '';
     }
 
-    if (sponsor) {
-        const res = await safeFetch(`?action=personen_by_sponsor&competition_id=${encodeURIComponent(selComp.value)}&sponsor=${encodeURIComponent(sponsor)}`);
-        const lijst = await res.json();
-        let aantal = 0;
-        (Array.isArray(lijst) ? lijst : []).forEach(p => { if (voegToeAanLijst(p)) aantal++; });
-        meldingen.push(aantal ? `${aantal} rijder(s) met sponsor "${sponsor}"` : `Sponsor "${sponsor}": geen nieuwe rijders`);
-        selSponsor.value = '';
+    // Multi-sponsor: doe per geselecteerde sponsor een API call. Bij 5
+    // sponsors zijn dat 5 calls — voor de coach-setup-fase prima.
+    if (_sponsorSel.size > 0) {
+        const sponsorList = [..._sponsorSel];
+        let aantalTotaal = 0;
+        for (const sp of sponsorList) {
+            const res = await safeFetch(`?action=personen_by_sponsor&competition_id=${encodeURIComponent(selComp.value)}&sponsor=${encodeURIComponent(sp)}`);
+            const lijst = await res.json();
+            (Array.isArray(lijst) ? lijst : []).forEach(p => { if (voegToeAanLijst(p)) aantalTotaal++; });
+        }
+        meldingen.push(aantalTotaal
+            ? `${aantalTotaal} rijder(s) van ${sponsorList.length} sponsor${sponsorList.length>1?'s':''}`
+            : `Geselecteerde sponsors: geen nieuwe rijders`);
+        _sponsorSel.clear();
+        renderSponsorMultiSelect();
+        updateSponsorLabel();
     }
 
     if (snr && snr >= 1) {
@@ -2859,10 +2942,102 @@ selComp.addEventListener('change', opCompetitionChange);
 // Club/sponsor/startnr: niet direct toevoegen — wacht op de Toevoegen-knop.
 // De knop wordt pas actief zodra er iets gekozen/ingevuld is.
 selClub.addEventListener('change', updateToevoegenKnop);
-selSponsor.addEventListener('change', updateToevoegenKnop);
 inpSnr.addEventListener('input', updateToevoegenKnop);
 btnToevoegen.addEventListener('click', voegAllesToe);
 inpSnr.addEventListener('keydown', e => { if (e.key === 'Enter') voegAllesToe(); });
+
+// ── Sponsor multi-select widget ──────────────────────────────────────────────
+// Knop opent/sluit het paneel met checkboxes. Search filter, alle/niets
+// helpers, klaar-knop sluit het paneel. State zit in _sponsorSel (Set).
+function renderSponsorMultiSelect(filterTerm) {
+    const lijst = $('sponsor-multi-lijst');
+    if (!lijst) return;
+    const f = (filterTerm || '').trim().toLowerCase();
+    const gefilterd = f
+        ? _sponsorAlle.filter(s => s.toLowerCase().includes(f))
+        : _sponsorAlle;
+    if (!gefilterd.length) {
+        lijst.innerHTML = f
+            ? '<div class="leeg">Geen sponsors gevonden.</div>'
+            : '<div class="leeg">Geen sponsors in deze wedstrijd.</div>';
+    } else {
+        lijst.innerHTML = gefilterd.map(s => {
+            const checked = _sponsorSel.has(s) ? 'checked' : '';
+            return `<label><input type="checkbox" data-sponsor="${esc(s)}" ${checked}> <span>${esc(s)}</span></label>`;
+        }).join('');
+    }
+    $('sponsor-multi-teller').textContent = `${_sponsorSel.size} geselecteerd`;
+}
+function updateSponsorLabel() {
+    const lbl = $('sponsor-multi-label');
+    if (!lbl) return;
+    if (_sponsorSel.size === 0) {
+        lbl.textContent = _sponsorAlle.length
+            ? '— kies sponsor(s) —'
+            : '— geen sponsors in deze wedstrijd —';
+    } else if (_sponsorSel.size === 1) {
+        lbl.textContent = [..._sponsorSel][0];
+    } else {
+        lbl.textContent = `${_sponsorSel.size} sponsors geselecteerd`;
+    }
+}
+
+$('btn-sponsor-open').addEventListener('click', () => {
+    const paneel = $('sponsor-multi-paneel');
+    const open = !paneel.hidden;
+    if (open) { paneel.hidden = true; return; }
+    if (!_sponsorAlle.length) return;
+    paneel.hidden = false;
+    $('sponsor-multi-zoek').value = '';
+    renderSponsorMultiSelect();
+    setTimeout(() => $('sponsor-multi-zoek').focus(), 50);
+});
+
+// Klik buiten paneel = sluiten
+document.addEventListener('click', (ev) => {
+    const paneel = $('sponsor-multi-paneel');
+    if (!paneel || paneel.hidden) return;
+    const wrap = paneel.parentElement; // .sponsor-multi-wrap
+    if (wrap && !wrap.contains(ev.target)) paneel.hidden = true;
+});
+
+$('sponsor-multi-zoek').addEventListener('input', (ev) => {
+    renderSponsorMultiSelect(ev.target.value);
+});
+
+$('sponsor-multi-lijst').addEventListener('change', (ev) => {
+    const inp = ev.target;
+    if (!inp.matches('input[type="checkbox"]')) return;
+    const sp = inp.dataset.sponsor;
+    if (inp.checked) _sponsorSel.add(sp); else _sponsorSel.delete(sp);
+    $('sponsor-multi-teller').textContent = `${_sponsorSel.size} geselecteerd`;
+    updateSponsorLabel();
+    updateToevoegenKnop();
+});
+
+$('sponsor-multi-alles').addEventListener('click', () => {
+    // Alleen de momenteel zichtbare (gefilterde) sponsors aanvinken — anders
+    // verbergt een filter een hele groep die de operator misschien niet
+    // wilde meenemen.
+    const zoek = $('sponsor-multi-zoek').value || '';
+    const f = zoek.trim().toLowerCase();
+    const gefilterd = f
+        ? _sponsorAlle.filter(s => s.toLowerCase().includes(f))
+        : _sponsorAlle;
+    gefilterd.forEach(s => _sponsorSel.add(s));
+    renderSponsorMultiSelect(zoek);
+    updateSponsorLabel();
+    updateToevoegenKnop();
+});
+$('sponsor-multi-niets').addEventListener('click', () => {
+    _sponsorSel.clear();
+    renderSponsorMultiSelect($('sponsor-multi-zoek').value || '');
+    updateSponsorLabel();
+    updateToevoegenKnop();
+});
+$('sponsor-multi-klaar').addEventListener('click', () => {
+    $('sponsor-multi-paneel').hidden = true;
+});
 $('btn-wis-alles').addEventListener('click', async () => {
     if (!coachLijst.length) return;
     const ok = await bevestig({
