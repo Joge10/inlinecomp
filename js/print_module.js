@@ -218,6 +218,13 @@ function _pcOpties() {
                     redenNietBeschikbaar: _pcImportReden(),
                     build: () => (typeof bouwDeelnemerslijstBody === 'function' ? bouwDeelnemerslijstBody() : null),
                 },
+                {
+                    id:     'speakerlijsten',
+                    label:  'Speakerlijsten (per categorie, ruimte voor notities)',
+                    beschikbaar:          _pcImportKlaar(),
+                    redenNietBeschikbaar: _pcImportReden(),
+                    build: () => (typeof bouwSpeakerlijstenBody === 'function' ? bouwSpeakerlijstenBody() : null),
+                },
             ],
         },
         {

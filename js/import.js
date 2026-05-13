@@ -1998,6 +1998,170 @@ tr     { page-break-inside:avoid; }
     };
 }
 
+// ── Speakerlijsten — minimalistisch, per DC op nieuwe pagina ──────────────────
+// Per Distance Combination één pagina, deelnemers gesorteerd op startnummer.
+// Kolommen: #, Naam, Club, Sponsor, ruime notitie-kolom rechts.
+// Bedoeld voor de speaker / aankondiger: snel doorlezen + handmatig notities
+// bijschrijven tijdens de wedstrijd.
+
+function bouwSpeakerlijstenBody() {
+    if (!vergelijkData?.length || !huidigComp) return null;
+    return _bouwSpeakerlijstenInternal();
+}
+
+function _bouwSpeakerlijstenInternal() {
+    const compNaam = escHtml(huidigComp.name || huidigComp.title || '');
+    const compMeta = escHtml(formatDatum(huidigComp.starts) + ' · ' + getLocatie(huidigComp));
+
+    // ── DC-groepen verzamelen (zelfde merge-logica als groepeerVoorPrint) ─────
+    // Maar: NIET splitsen op splits, NIET tellijst-filter — alleen actieve
+    // rijders (entry_status 1 of 5) krijgen we mee in de speakerlijst.
+    const usedIds = new Set();
+    const dcGroepen = [];
+
+    vergelijkData.forEach(cat => {
+        if (usedIds.has(cat.dc_id)) return;
+        usedIds.add(cat.dc_id);
+
+        let dcGroup = [cat];
+        if (cat.merge_group) {
+            vergelijkData.forEach(c => {
+                if (!usedIds.has(c.dc_id) && c.merge_group === cat.merge_group) {
+                    usedIds.add(c.dc_id);
+                    dcGroup.push(c);
+                }
+            });
+        }
+
+        const basisNaam = (dcGroup.find(d => d.merge_label) ?? {}).merge_label
+                       || dcGroup.map(d => d.dc_name).filter(Boolean).join(' + ');
+
+        // Verzamel actieve deelnemers (status 1 of 5)
+        const seenLk = new Set();
+        const deelnemers = [];
+        dcGroup.forEach(dc => {
+            dc.competitors.forEach((c, idx) => {
+                const lk = c.license_key || null;
+                const ek = lk ? (dc.dc_id + '_' + lk) : null;
+                const ee = (ek && entryEdits[ek]) || {};
+                const st = Number(ee.entry_status ?? c.entry_status ?? 1);
+                if (st !== 1 && st !== 5) return;
+
+                // Dedupe over merge-DCs (rijder kan in beide DCs staan)
+                const sleutel = lk ?? `${dc.dc_id}::${idx}`;
+                if (seenLk.has(sleutel)) return;
+                seenLk.add(sleutel);
+
+                const pe = lk ? (personEdits[lk] || {}) : {};
+                deelnemers.push({
+                    start_number: pe.start_number ?? c.knsb?.start_number ?? '',
+                    full_name:    pe.full_name    ?? c.knsb?.full_name    ?? '',
+                    club_short:   pe.club_short   ?? c.knsb?.club_short   ?? '',
+                    sponsor:      pe.sponsor      ?? c.knsb?.sponsor      ?? '',
+                });
+            });
+        });
+
+        // Sorteer op startnummer
+        deelnemers.sort((a, b) =>
+            (Number(a.start_number) || 9999) - (Number(b.start_number) || 9999));
+
+        if (deelnemers.length === 0) return; // skip lege DCs
+        dcGroepen.push({ naam: basisNaam, deelnemers });
+    });
+
+    // ── HTML opbouwen — één .sp-pagina per DC ────────────────────────────────
+    const paginas = dcGroepen.map(g => {
+        const rijen = g.deelnemers.map(d => `
+            <tr>
+                <td class="sn">${escHtml(String(d.start_number))}</td>
+                <td class="nm">${escHtml(d.full_name)}</td>
+                <td class="cl">${escHtml(d.club_short)}</td>
+                <td class="sp">${escHtml(d.sponsor)}</td>
+                <td class="nt"></td>
+            </tr>`).join('');
+
+        return `<div class="sp-pagina">
+            <div class="sp-dc-titel">
+                ${escHtml(g.naam)}
+                <span class="sub">— ${g.deelnemers.length} deelnemer${g.deelnemers.length !== 1 ? 's' : ''} · ${compNaam}</span>
+            </div>
+            <table class="sp-table">
+                <colgroup>
+                    <col style="width:12mm">
+                    <col style="width:auto">
+                    <col style="width:18mm">
+                    <col style="width:40mm">
+                    <col style="width:60mm">
+                </colgroup>
+                <thead><tr>
+                    <th class="sn">#</th>
+                    <th>Naam</th>
+                    <th>Club</th>
+                    <th>Sponsor</th>
+                    <th>Notities</th>
+                </tr></thead>
+                <tbody>${rijen}</tbody>
+            </table>
+        </div>`;
+    }).join('');
+
+    const bodyHtml = paginas || `<div class="sp-pagina"><p style="color:#888;font-style:italic">Geen actieve deelnemers gevonden.</p></div>`;
+
+    const extraCss = `
+@page { size: A4 portrait; margin: 10mm 12mm; }
+body  { font-family: Arial, sans-serif; font-size: 9pt; margin: 0; color: #111; }
+
+/* Iedere DC op een eigen pagina */
+.sp-pagina { page-break-after: always; }
+.sp-pagina:last-of-type { page-break-after: auto; }
+
+/* DC-titelbalk: compact, één regel */
+.sp-dc-titel {
+    font-size: 14pt; font-weight: bold; color: #1a3a5c;
+    border-bottom: 2px solid #1a3a5c;
+    padding-bottom: 1mm; margin-bottom: 3mm;
+}
+.sp-dc-titel .sub {
+    font-size: 9pt; font-weight: normal; color: #555;
+    margin-left: 2mm;
+}
+
+/* Tabel: minimalistisch, ruime rij-hoogte voor handgeschreven notities */
+.sp-table { width: 100%; border-collapse: collapse; }
+.sp-table thead { display: table-header-group; }
+.sp-table th {
+    background: #dce6f0; color: #1a3a5c;
+    font-size: 8pt; font-weight: 600; text-align: left;
+    padding: 1mm 2mm;
+    border-bottom: 1.5px solid #1a3a5c;
+}
+.sp-table td {
+    padding: 3mm 2mm;
+    border-bottom: 1px solid #cfd8e3;
+    font-size: 10pt;
+    vertical-align: top;
+}
+.sp-table tr { page-break-inside: avoid; }
+
+/* Kolom-stijlen */
+.sp-table .sn { text-align: center; font-weight: bold; }
+.sp-table .nm { /* naam = primaire kolom */ }
+.sp-table .cl { font-size: 8.5pt; color: #555; }
+.sp-table .sp { font-size: 8.5pt; color: #555; }
+.sp-table .nt { /* notitie-kolom: leeg gelaten voor handschrift */ }
+`;
+
+    return {
+        bodyHtml:        bodyHtml,
+        cssLinks:        [],
+        extraCss:        extraCss,
+        pageOrientation: 'portrait',
+        title:           'Speakerlijsten – ' + (huidigComp.name || huidigComp.title || ''),
+        subType:         'Speakerlijsten',
+    };
+}
+
 // ── Tijdstempel ───────────────────────────────────────────────────────────────
 
 function zetKnsbTimestamp() {
