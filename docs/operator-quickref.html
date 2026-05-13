@@ -424,9 +424,12 @@ table.compact th {
 .shot-vol .shot-legenda ol { columns: 2; column-gap: 18px; }
 
 /* Houd screenshot + legenda bij elkaar over een pagina-grens — anders
-   krijg je losse callouts op een nieuwe pagina zonder beeld erboven. */
+   krijg je losse callouts op een nieuwe pagina zonder beeld erboven.
+   Bewust GEEN break-inside: avoid op .scr-section zelf — anders
+   krijg je halve pagina's witruimte als een sectie net niet past. */
 .shot-rij, .shot-vol { break-inside: avoid; page-break-inside: avoid; }
-.scr-section { break-inside: avoid; page-break-inside: avoid; }
+/* Houd h3 van een scr-section bij het onmiddellijk volgende beeld. */
+.scr-section h3 { break-after: avoid; page-break-after: avoid; }
 /* Handmatige page-break vóór een sub-sectie (zonder hele .page-titelbalk). */
 .scr-section.pb { break-before: page; page-break-before: always; }
 
@@ -688,7 +691,7 @@ table.compact th {
     </div>
 
     <div class="voet">
-        InlineComp Operator &middot; Quick Reference (1/7 — flow) &middot;
+        InlineComp Operator &middot; Quick Reference (1/6 — flow) &middot;
         Bij twijfel: <b>raadpleeg de hoofdoperator</b>
     </div>
 </div>
@@ -806,20 +809,20 @@ table.compact th {
     </div>
 
     <div class="voet">
-        InlineComp Operator &middot; Quick Reference (2/7) &middot; Bij twijfel: <b>raadpleeg de hoofdoperator</b>
+        InlineComp Operator &middot; Quick Reference (2/6) &middot; Bij twijfel: <b>raadpleeg de hoofdoperator</b>
     </div>
 
 </div>
 
 <!-- ──────────────────────────────────────────────────────────────────── -->
-<!-- PAGINA 3 — Schermlay-out: Sidebar + Importeer + Tijdschema           -->
+<!-- PAGINA 3 — Schermlay-out: Headerbar + Sidebar                       -->
 <!-- ──────────────────────────────────────────────────────────────────── -->
 <div class="page">
 
     <div class="titel">
         <div>
             <h1>InlineComp Operator</h1>
-            <div class="subtitle">Schermlay-outs — sidebar + Importeer</div>
+            <div class="subtitle">Schermlay-outs — Headerbar + sidebar</div>
         </div>
         <div style="font-size:24pt">🖥</div>
     </div>
@@ -891,8 +894,26 @@ table.compact th {
         </div>
     </div>
 
-    <!-- Importeer — echte screenshot met callouts -->
-    <div class="scr-section pb">
+    <div class="voet">
+        InlineComp Operator &middot; Quick Reference (3/6 — schermen) &middot; Bij twijfel: <b>raadpleeg de hoofdoperator</b>
+    </div>
+</div>
+
+<!-- ──────────────────────────────────────────────────────────────────── -->
+<!-- PAGINA 4 — Schermlay-out: Importeer + Tijdschema + Startlijsten + Live + Uitslag -->
+<!-- ──────────────────────────────────────────────────────────────────── -->
+<div class="page">
+
+    <div class="titel">
+        <div>
+            <h1>InlineComp Operator</h1>
+            <div class="subtitle">Schermlay-outs — Importeer, Tijdschema, Startlijsten, Live verwerking en Uitslag</div>
+        </div>
+        <div style="font-size:24pt">🖥</div>
+    </div>
+
+    <!-- Importeer — echte screenshot met callouts (verplaatst van pag 3) -->
+    <div class="scr-section">
         <h3>Importeer — tekenen verwerken (stap 1)</h3>
         <div class="shot-vol">
             <div class="shot-wrap">
@@ -918,24 +939,6 @@ table.compact th {
             </div>
         </div>
         <div class="tip">💡 Getal in tab-label (bv. "(15)") = totaal aantal rijders in die categorie. Doorgekruiste regel = afgemeld bij organisatie.</div>
-    </div>
-
-    <div class="voet">
-        InlineComp Operator &middot; Quick Reference (3/7 — schermen) &middot; Bij twijfel: <b>raadpleeg de hoofdoperator</b>
-    </div>
-</div>
-
-<!-- ──────────────────────────────────────────────────────────────────── -->
-<!-- PAGINA 4 — Schermlay-out: Tijdschema + Startlijsten                  -->
-<!-- ──────────────────────────────────────────────────────────────────── -->
-<div class="page">
-
-    <div class="titel">
-        <div>
-            <h1>InlineComp Operator</h1>
-            <div class="subtitle">Schermlay-outs — Tijdschema, Startlijsten</div>
-        </div>
-        <div style="font-size:24pt">🖥</div>
     </div>
 
     <!-- Tijdschema overview — echte screenshot met callouts -->
@@ -1057,25 +1060,7 @@ table.compact th {
     <!-- Loting-opties is verplaatst vóór Startlijsten -->
 
 
-    <div class="voet">
-        InlineComp Operator &middot; Quick Reference (4/7 — schermen) &middot; Bij twijfel: <b>raadpleeg de hoofdoperator</b>
-    </div>
-</div>
-
-<!-- ──────────────────────────────────────────────────────────────────── -->
-<!-- PAGINA 5 — Schermlay-out: Live + Uitslag                             -->
-<!-- ──────────────────────────────────────────────────────────────────── -->
-<div class="page">
-
-    <div class="titel">
-        <div>
-            <h1>InlineComp Operator</h1>
-            <div class="subtitle">Schermlay-outs — Live verwerking, Uitslag</div>
-        </div>
-        <div style="font-size:24pt">🖥</div>
-    </div>
-
-    <!-- Live verwerking — echte screenshot met callouts -->
+    <!-- Live verwerking — echte screenshot met callouts (was pag 5) -->
     <div class="scr-section">
         <h3>Live verwerking — tijden invoeren + wisselen (stappen 4-6)</h3>
         <div class="shot-vol">
@@ -1160,12 +1145,12 @@ table.compact th {
     </div>
 
     <div class="voet">
-        InlineComp Operator &middot; Quick Reference (5/7 — schermen) &middot; Bij twijfel: <b>raadpleeg de hoofdoperator</b>
+        InlineComp Operator &middot; Quick Reference (4/6 — schermen) &middot; Bij twijfel: <b>raadpleeg de hoofdoperator</b>
     </div>
 </div>
 
 <!-- ──────────────────────────────────────────────────────────────────── -->
-<!-- PAGINA 6 — Beheer: wedstrijd-zichtbaarheid (voorbereidingsfase)     -->
+<!-- PAGINA 5 — Beheer: wedstrijd-zichtbaarheid (voorbereidingsfase)     -->
 <!-- ──────────────────────────────────────────────────────────────────── -->
 <div class="page">
 
@@ -1226,12 +1211,12 @@ table.compact th {
     </div>
 
     <div class="voet">
-        InlineComp Operator &middot; Quick Reference (6/7 — Beheer) &middot; Bij twijfel: <b>raadpleeg de hoofdoperator</b>
+        InlineComp Operator &middot; Quick Reference (5/6 — Beheer) &middot; Bij twijfel: <b>raadpleeg de hoofdoperator</b>
     </div>
 </div>
 
 <!-- ──────────────────────────────────────────────────────────────────── -->
-<!-- PAGINA 7 — Print-Center                                             -->
+<!-- PAGINA 6 — Print-Center                                             -->
 <!-- ──────────────────────────────────────────────────────────────────── -->
 <div class="page">
 
@@ -1288,7 +1273,7 @@ table.compact th {
     </div>
 
     <div class="voet">
-        InlineComp Operator &middot; Quick Reference (7/7 — Print-Center) &middot; Bij twijfel: <b>raadpleeg de hoofdoperator</b>
+        InlineComp Operator &middot; Quick Reference (6/6 — Print-Center) &middot; Bij twijfel: <b>raadpleeg de hoofdoperator</b>
     </div>
 </div>
 
