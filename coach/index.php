@@ -1628,9 +1628,29 @@ body.heeft-footer .auto-refresh-stempel { bottom:84px; }
 
 <div id="sectie-selectie" class="card">
     <div class="stap-label"><span class="stap-nr">2</span> Voeg rijders toe aan je coach-lijst</div>
-    <div class="stap-sub">Op club</div>
+    <div class="stap-sub">Op club <small style="font-weight:400;color:#666">— meerdere tegelijk mogelijk</small></div>
     <div class="rij">
-        <select id="sel-club" class="sel" disabled><option value="">— kies eerst een wedstrijd —</option></select>
+        <div class="sponsor-multi-wrap">
+            <button type="button" id="btn-club-open" class="sel sponsor-multi-knop" disabled>
+                <span id="club-multi-label">— kies eerst een wedstrijd —</span>
+                <span class="sponsor-multi-pijl">▾</span>
+            </button>
+            <div id="club-chips" class="sponsor-chips"></div>
+            <div id="club-multi-paneel" class="sponsor-multi-paneel" hidden>
+                <div class="sponsor-multi-zoek">
+                    <input type="search" id="club-multi-zoek" placeholder="🔍 Zoeken…" class="inp">
+                </div>
+                <div class="sponsor-multi-acties">
+                    <button type="button" class="btn-klein" id="club-multi-alles">Alle aanvinken</button>
+                    <button type="button" class="btn-klein" id="club-multi-niets">Niets aanvinken</button>
+                    <span id="club-multi-teller" class="sponsor-multi-teller">0 geselecteerd</span>
+                </div>
+                <div id="club-multi-lijst" class="sponsor-multi-lijst"></div>
+                <div class="sponsor-multi-footer">
+                    <button type="button" id="club-multi-klaar" class="btn-primair">Klaar</button>
+                </div>
+            </div>
+        </div>
     </div>
     <div class="stap-sub">Op sponsor <small style="font-weight:400;color:#666">— meerdere tegelijk mogelijk</small></div>
     <div class="rij">
@@ -1702,11 +1722,16 @@ body.heeft-footer .auto-refresh-stempel { bottom:84px; }
 </div>
 <script>
 const $ = id => document.getElementById(id);
-const selComp = $('sel-comp'), selClub = $('sel-club');
-// Sponsor-multi-select state: Set met geselecteerde sponsor-namen.
-// _sponsorAlle = volledige lijst voor render + filter (search).
+const selComp = $('sel-comp');
+// Multi-select state voor zowel sponsors als clubs.
+// _sponsorAlle  = Array<string>      met alle sponsor-namen
+// _sponsorSel   = Set<string>        met geselecteerde sponsor-namen
+// _clubAlle     = Array<{full,short}> met alle clubs
+// _clubSel      = Set<string>        met geselecteerde club_full's (voor backend)
 let _sponsorAlle = [];
 const _sponsorSel = new Set();
+let _clubAlle = [];
+const _clubSel = new Set();
 const inpSnr = $('inp-snr'), btnToevoegen = $('btn-toevoegen');
 const secSel = $('sectie-selectie'), secLijst = $('sectie-lijst'), secProg = $('sectie-programma');
 const chipsEl = $('coach-chips'), aantalEl = $('coach-aantal');
@@ -2806,16 +2831,21 @@ function zetStap2Enabled(enabled) {
     // Sectie 2 blijft altijd zichtbaar; de inputs schakelen we enable/disable
     // op basis van of er een wedstrijd is gekozen. Zo ziet de user meteen
     // wat er na stap 1 mogelijk is.
-    selClub.disabled     = !enabled;
+    $('btn-club-open').disabled    = !enabled;
     $('btn-sponsor-open').disabled = !enabled;
     inpSnr.disabled      = !enabled;
     btnToevoegen.disabled = !enabled;
     if (!enabled) {
-        selClub.innerHTML    = '<option value="">— kies eerst een wedstrijd —</option>';
+        _clubAlle = [];
+        _clubSel.clear();
         _sponsorAlle = [];
         _sponsorSel.clear();
+        $('club-multi-label').textContent    = '— kies eerst een wedstrijd —';
         $('sponsor-multi-label').textContent = '— kies eerst een wedstrijd —';
+        $('club-multi-paneel').hidden    = true;
         $('sponsor-multi-paneel').hidden = true;
+        $('club-chips').innerHTML    = '';
+        $('sponsor-chips').innerHTML = '';
     }
     updateToevoegenKnop();
 }
@@ -2825,7 +2855,7 @@ function zetStap2Enabled(enabled) {
 // iets zodat de user ziet dat er nog niks te doen valt.
 function updateToevoegenKnop() {
     if (!selComp.value) { btnToevoegen.disabled = true; return; }
-    const heeftInvoer = !!(selClub.value || _sponsorSel.size > 0 || inpSnr.value.trim());
+    const heeftInvoer = !!(_clubSel.size > 0 || _sponsorSel.size > 0 || inpSnr.value.trim());
     btnToevoegen.disabled = !heeftInvoer;
 }
 
@@ -2874,14 +2904,10 @@ async function opCompetitionChange() {
         const sponsors = await sponsorsRes.json();
         programmaCache = await progRes.json();
 
-        selClub.innerHTML = '<option value="">— kies club —</option>' +
-            (Array.isArray(clubs) ? clubs : []).map(c => {
-                // Label: "ASV - Almeerse SchaatsVereniging" indien short bekend,
-                // anders alleen full. Value blijft club_full (keys blijven kloppen
-                // voor de backend-filter).
-                const label = c.short ? `${c.short} - ${c.full}` : c.full;
-                return `<option value="${esc(c.full)}">${esc(label)}</option>`;
-            }).join('');
+        _clubAlle = Array.isArray(clubs) ? clubs : [];
+        _clubSel.clear();
+        renderClubMultiSelect();
+        updateClubLabel();
         _sponsorAlle = Array.isArray(sponsors) ? sponsors : [];
         _sponsorSel.clear();
         renderSponsorMultiSelect();
@@ -2901,9 +2927,8 @@ async function opCompetitionChange() {
 // (club, sponsor, startnummer) en voegt wat erin zit toe aan de coach-lijst.
 async function voegAllesToe() {
     if (!selComp.value) return;
-    const club    = selClub.value;
     const snr     = parseInt(inpSnr.value);
-    if (!club && _sponsorSel.size === 0 && !snr) {
+    if (_clubSel.size === 0 && _sponsorSel.size === 0 && !snr) {
         snrFb.textContent = 'Kies een club, sponsor of vul een startnummer in.';
         snrFb.style.color = '#b71c1c';
         return;
@@ -2912,13 +2937,21 @@ async function voegAllesToe() {
     const meldingen = [];
     const foutMeldingen = [];
 
-    if (club) {
-        const res = await safeFetch(`?action=personen_by_club&competition_id=${encodeURIComponent(selComp.value)}&club=${encodeURIComponent(club)}`);
-        const lijst = await res.json();
-        let aantal = 0;
-        (Array.isArray(lijst) ? lijst : []).forEach(p => { if (voegToeAanLijst(p)) aantal++; });
-        meldingen.push(aantal ? `${aantal} rijder(s) van club "${club}"` : `Club "${club}": geen nieuwe rijders`);
-        selClub.value = '';
+    // Multi-club: per geselecteerde club een API call.
+    if (_clubSel.size > 0) {
+        const clubList = [..._clubSel];
+        let aantalTotaal = 0;
+        for (const cl of clubList) {
+            const res = await safeFetch(`?action=personen_by_club&competition_id=${encodeURIComponent(selComp.value)}&club=${encodeURIComponent(cl)}`);
+            const lijst = await res.json();
+            (Array.isArray(lijst) ? lijst : []).forEach(p => { if (voegToeAanLijst(p)) aantalTotaal++; });
+        }
+        meldingen.push(aantalTotaal
+            ? `${aantalTotaal} rijder(s) van ${clubList.length} club${clubList.length>1?'s':''}`
+            : `Geselecteerde clubs: geen nieuwe rijders`);
+        _clubSel.clear();
+        renderClubMultiSelect();
+        updateClubLabel();
     }
 
     // Multi-sponsor: doe per geselecteerde sponsor een API call. Bij 5
@@ -2972,7 +3005,6 @@ $('chk-toekomst').addEventListener('change', filterComps);
 selComp.addEventListener('change', opCompetitionChange);
 // Club/sponsor/startnr: niet direct toevoegen — wacht op de Toevoegen-knop.
 // De knop wordt pas actief zodra er iets gekozen/ingevuld is.
-selClub.addEventListener('change', updateToevoegenKnop);
 inpSnr.addEventListener('input', updateToevoegenKnop);
 btnToevoegen.addEventListener('click', voegAllesToe);
 inpSnr.addEventListener('keydown', e => { if (e.key === 'Enter') voegAllesToe(); });
@@ -3087,6 +3119,118 @@ $('sponsor-chips').addEventListener('click', (ev) => {
     if (sp) {
         _sponsorSel.delete(sp);
         updateSponsorLabel();
+        updateToevoegenKnop();
+    }
+});
+
+// ── Club multi-select widget (zelfde patroon als sponsor) ────────────────────
+// Verschil: clubs zijn objects {full, short}, search matcht op beide;
+// label toont "SHORT - Full" indien short bekend, anders alleen full.
+function _clubLabel(c) { return c.short ? `${c.short} - ${c.full}` : c.full; }
+
+function renderClubMultiSelect(filterTerm) {
+    const lijst = $('club-multi-lijst');
+    if (!lijst) return;
+    const f = (filterTerm || '').trim().toLowerCase();
+    const gefilterd = f
+        ? _clubAlle.filter(c =>
+            c.full.toLowerCase().includes(f) ||
+            (c.short && c.short.toLowerCase().includes(f)))
+        : _clubAlle;
+    if (!gefilterd.length) {
+        lijst.innerHTML = f
+            ? '<div class="leeg">Geen clubs gevonden.</div>'
+            : '<div class="leeg">Geen clubs in deze wedstrijd.</div>';
+    } else {
+        lijst.innerHTML = gefilterd.map(c => {
+            const checked = _clubSel.has(c.full) ? 'checked' : '';
+            return `<label><input type="checkbox" data-club="${esc(c.full)}" ${checked}> <span>${esc(_clubLabel(c))}</span></label>`;
+        }).join('');
+    }
+    $('club-multi-teller').textContent = `${_clubSel.size} geselecteerd`;
+}
+
+function updateClubLabel() {
+    const lbl = $('club-multi-label');
+    const knop = $('btn-club-open');
+    const chipsWrap = $('club-chips');
+    if (!lbl || !knop || !chipsWrap) return;
+
+    if (_clubSel.size === 0) {
+        lbl.textContent = _clubAlle.length
+            ? '— kies club(s) —'
+            : '— geen clubs in deze wedstrijd —';
+        knop.classList.remove('heeft-selectie');
+        chipsWrap.innerHTML = '';
+    } else {
+        lbl.textContent = `${_clubSel.size} club${_clubSel.size === 1 ? '' : 's'} gekozen — klik op Toevoegen`;
+        knop.classList.add('heeft-selectie');
+        // Toon korte label voor chip (SHORT als bekend, anders FULL)
+        chipsWrap.innerHTML = [..._clubSel].map(full => {
+            const c = _clubAlle.find(x => x.full === full) || {full};
+            const labelText = c.short || c.full;
+            return `<span class="sponsor-chip" data-club="${esc(full)}" title="Klik om te verwijderen">${esc(labelText)}</span>`;
+        }).join('');
+    }
+}
+
+$('btn-club-open').addEventListener('click', () => {
+    const paneel = $('club-multi-paneel');
+    const open = !paneel.hidden;
+    if (open) { paneel.hidden = true; return; }
+    if (!_clubAlle.length) return;
+    paneel.hidden = false;
+    $('club-multi-zoek').value = '';
+    renderClubMultiSelect();
+    setTimeout(() => $('club-multi-zoek').focus(), 50);
+});
+document.addEventListener('click', (ev) => {
+    const paneel = $('club-multi-paneel');
+    if (!paneel || paneel.hidden) return;
+    const wrap = paneel.parentElement;
+    if (wrap && !wrap.contains(ev.target)) paneel.hidden = true;
+});
+$('club-multi-zoek').addEventListener('input', (ev) => {
+    renderClubMultiSelect(ev.target.value);
+});
+$('club-multi-lijst').addEventListener('change', (ev) => {
+    const inp = ev.target;
+    if (!inp.matches('input[type="checkbox"]')) return;
+    const cl = inp.dataset.club;
+    if (inp.checked) _clubSel.add(cl); else _clubSel.delete(cl);
+    $('club-multi-teller').textContent = `${_clubSel.size} geselecteerd`;
+    updateClubLabel();
+    updateToevoegenKnop();
+});
+$('club-multi-alles').addEventListener('click', () => {
+    const zoek = $('club-multi-zoek').value || '';
+    const f = zoek.trim().toLowerCase();
+    const gefilterd = f
+        ? _clubAlle.filter(c =>
+            c.full.toLowerCase().includes(f) ||
+            (c.short && c.short.toLowerCase().includes(f)))
+        : _clubAlle;
+    gefilterd.forEach(c => _clubSel.add(c.full));
+    renderClubMultiSelect(zoek);
+    updateClubLabel();
+    updateToevoegenKnop();
+});
+$('club-multi-niets').addEventListener('click', () => {
+    _clubSel.clear();
+    renderClubMultiSelect($('club-multi-zoek').value || '');
+    updateClubLabel();
+    updateToevoegenKnop();
+});
+$('club-multi-klaar').addEventListener('click', () => {
+    $('club-multi-paneel').hidden = true;
+});
+$('club-chips').addEventListener('click', (ev) => {
+    const chip = ev.target.closest('.sponsor-chip');
+    if (!chip) return;
+    const cl = chip.dataset.club;
+    if (cl) {
+        _clubSel.delete(cl);
+        updateClubLabel();
         updateToevoegenKnop();
     }
 });
