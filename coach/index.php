@@ -1241,7 +1241,7 @@ select.sel {
     position: absolute; top: calc(100% + 4px); left: 0; right: 0;
     background: var(--wit); border: 2px solid var(--middenblauw); border-radius: 8px;
     box-shadow: 0 4px 12px rgba(0,0,0,.12);
-    z-index: 50; max-height: 320px; display: flex; flex-direction: column;
+    z-index: 50; max-height: 70vh; display: flex; flex-direction: column;
 }
 /* hidden-attribuut moet display:none afdwingen — anders overrult de
    display:flex hierboven en blijft het paneel zichtbaar. */
