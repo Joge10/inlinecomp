@@ -430,6 +430,42 @@ table.compact th {
 /* Handmatige page-break vóór een sub-sectie (zonder hele .page-titelbalk). */
 .scr-section.pb { break-before: page; page-break-before: always; }
 
+/* "Geknipte" screenshot — leeg middenstuk eruit om verticale ruimte te
+   besparen. Aspect-ratios berekend op basis van sidebar.png (229x957);
+   top-portie = 0-40% van origineel, bottom-portie = 80-100%. */
+.shot-wrap.shot-cut {
+    display: inline-flex;
+    flex-direction: column;
+}
+.shot-cut .cut-part {
+    position: relative;
+    overflow: hidden;
+    width: 100%;
+    line-height: 0;
+}
+.shot-cut .cut-part img {
+    position: absolute;
+    left: 0;
+    width: 100%;
+    height: auto;
+    display: block;
+}
+.shot-cut .cut-top { aspect-ratio: 229 / 383; }
+.shot-cut .cut-top img { top: 0; }
+.shot-cut .cut-bot { aspect-ratio: 229 / 191; }
+.shot-cut .cut-bot img { bottom: 0; }
+.shot-cut .cut-knip {
+    background: #f0f0f0;
+    color: #777;
+    text-align: center;
+    font-size: 7.5pt;
+    padding: 3px 4px;
+    line-height: 1.1;
+    letter-spacing: 1px;
+    border-top: 1px dashed #999;
+    border-bottom: 1px dashed #999;
+}
+
 @media print {
     body { background: #fff; }
     /* Pagina-padding: top = 0 zodat de blauwe titelbalk direct tegen de
@@ -818,17 +854,26 @@ table.compact th {
     <div class="scr-section pb">
         <h3>De zijbalk — wat doet elk menu-item</h3>
         <div class="shot-rij">
-            <div class="shot-wrap" style="max-width:180px">
-                <img src="quickref-images/sidebar.png" alt="Sidebar van InlineComp">
-                <span class="shot-callout" style="left:82%; top:14%">1</span>
-                <span class="shot-callout" style="left:82%; top:19%">2</span>
-                <span class="shot-callout" style="left:82%; top:24%">3</span>
-                <span class="shot-callout" style="left:82%; top:29%">4</span>
-                <span class="shot-callout" style="left:82%; top:34%">5</span>
-                <span class="shot-callout" style="left:82%; top:86%">6</span>
-                <span class="shot-callout" style="left:82%; top:91%">7</span>
-                <span class="shot-callout" style="left:82%; top:96%">8</span>
-                <span class="shot-callout" style="left:82%; top:8%">9</span>
+            <div class="shot-wrap shot-cut" style="max-width:180px">
+                <!-- Bovenste deel: callouts 1-5 + 9 (0-40% van origineel). -->
+                <div class="cut-part cut-top">
+                    <img src="quickref-images/sidebar.png" alt="Sidebar van InlineComp — bovenkant">
+                    <span class="shot-callout" style="left:82%; top:20%">9</span>
+                    <span class="shot-callout" style="left:82%; top:35%">1</span>
+                    <span class="shot-callout" style="left:82%; top:47.5%">2</span>
+                    <span class="shot-callout" style="left:82%; top:60%">3</span>
+                    <span class="shot-callout" style="left:82%; top:72.5%">4</span>
+                    <span class="shot-callout" style="left:82%; top:85%">5</span>
+                </div>
+                <!-- Knip-indicator: zichtbaar dat een stuk is weggelaten. -->
+                <div class="cut-knip">— — ✂ — — &nbsp;leeg middenstuk weggelaten&nbsp; — — ✂ — —</div>
+                <!-- Onderste deel: callouts 6-8 (80-100% van origineel). -->
+                <div class="cut-part cut-bot">
+                    <img src="quickref-images/sidebar.png" alt="Sidebar van InlineComp — onderkant">
+                    <span class="shot-callout" style="left:82%; top:30%">6</span>
+                    <span class="shot-callout" style="left:82%; top:55%">7</span>
+                    <span class="shot-callout" style="left:82%; top:80%">8</span>
+                </div>
             </div>
             <div class="shot-legenda">
                 <ol>
