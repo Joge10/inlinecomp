@@ -1243,6 +1243,9 @@ select.sel {
     box-shadow: 0 4px 12px rgba(0,0,0,.12);
     z-index: 50; max-height: 320px; display: flex; flex-direction: column;
 }
+/* hidden-attribuut moet display:none afdwingen — anders overrult de
+   display:flex hierboven en blijft het paneel zichtbaar. */
+.sponsor-multi-paneel[hidden] { display: none !important; }
 /* Visueel accent op de knop zodra er iets is geselecteerd: groene rand +
    gevulde achtergrond zodat duidelijk is dat er een keuze openstaat die
    nog naar Toevoegen moet. */
