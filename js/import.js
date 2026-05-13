@@ -2002,8 +2002,9 @@ tr     { page-break-inside:avoid; }
 // Per Distance Combination één pagina, deelnemers gesorteerd op startnummer.
 // Kolommen: #, Naam, Club, Sponsor, ruime notitie-kolom rechts.
 // Bedoeld voor de speaker / aankondiger: zoveel mogelijk rijders op één
-// pagina; sponsor truncate-t bij overflow. Sprint-DCs (alle afstanden
-// ≤ 500m) worden overgeslagen — die zijn voor de speaker niet relevant.
+// pagina; sponsor truncate-t bij overflow. Sprint-DCs worden overgeslagen
+// op basis van race_type (alle afstanden van de DC zijn 'sprint') — een
+// speakerlijst wordt bij sprint niet gebruikt.
 
 function bouwSpeakerlijstenBody() {
     if (!vergelijkData?.length || !huidigComp) return null;
@@ -2014,7 +2015,8 @@ function _bouwSpeakerlijstenInternal() {
     const compNaam = escHtml(huidigComp.name || huidigComp.title || '');
 
     // ── DC-groepen verzamelen (zelfde merge-logica als groepeerVoorPrint) ─────
-    // Filter: alleen DCs met minimaal één afstand > 500m (geen pure sprint).
+    // Filter: skip DCs waarvan alle afstanden race_type 'sprint' hebben.
+    // Inline / afvalkoers / puntenkoers blijven.
     const usedIds = new Set();
     const dcGroepen = [];
 
@@ -2032,15 +2034,15 @@ function _bouwSpeakerlijstenInternal() {
             });
         }
 
-        // Sprint-filter: skip DC als alle afstanden ≤ 500m. Voor de speaker
-        // zijn alleen lange-afstand-onderdelen relevant.
-        const heeftLangeAfstand = dcGroup.some(dc => {
+        // Sprint-filter via race_type. Skip DC als ALLE afstanden 'sprint' zijn;
+        // inline, afvalkoers en puntenkoers blijven erin.
+        const heeftNietSprint = dcGroup.some(dc => {
             const bron = dcDistances[dc.dc_id]?.length
                 ? dcDistances[dc.dc_id]
                 : (dc.knsb_distances || []);
-            return bron.some(d => Number(d.value_meters || 0) > 500);
+            return bron.some(d => (d.race_type || 'sprint') !== 'sprint');
         });
-        if (!heeftLangeAfstand) return;
+        if (!heeftNietSprint) return;
 
         const basisNaam = (dcGroup.find(d => d.merge_label) ?? {}).merge_label
                        || dcGroup.map(d => d.dc_name).filter(Boolean).join(' + ');
@@ -2115,7 +2117,7 @@ function _bouwSpeakerlijstenInternal() {
         </div>`;
     }).join('');
 
-    const bodyHtml = paginas || `<div class="sp-pagina"><p style="color:#888;font-style:italic">Geen lange-afstand DCs met actieve deelnemers gevonden (sprint-DCs worden overgeslagen).</p></div>`;
+    const bodyHtml = paginas || `<div class="sp-pagina"><p style="color:#888;font-style:italic">Geen niet-sprint DCs met actieve deelnemers gevonden (sprint-DCs worden overgeslagen).</p></div>`;
 
     const extraCss = `
 @page { size: A4 portrait; margin: 8mm 10mm; }
