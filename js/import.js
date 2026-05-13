@@ -2101,7 +2101,7 @@ function _bouwSpeakerlijstenInternal() {
                 <colgroup>
                     <col style="width:10mm">
                     <col style="width:auto">
-                    <col style="width:16mm">
+                    <col style="width:26mm">
                     <col style="width:36mm">
                     <col style="width:54mm">
                 </colgroup>
@@ -2121,7 +2121,7 @@ function _bouwSpeakerlijstenInternal() {
 
     const extraCss = `
 @page { size: A4 portrait; margin: 8mm 10mm; }
-body  { font-family: Arial, sans-serif; font-size: 9pt; margin: 0; color: #111; }
+body  { font-family: Arial, sans-serif; font-size: 10pt; margin: 0; color: #111; }
 
 /* Iedere DC op een eigen pagina */
 .sp-pagina { page-break-after: always; }
@@ -2129,12 +2129,12 @@ body  { font-family: Arial, sans-serif; font-size: 9pt; margin: 0; color: #111; 
 
 /* DC-titelbalk: compact, één regel */
 .sp-dc-titel {
-    font-size: 12pt; font-weight: bold; color: #1a3a5c;
+    font-size: 13pt; font-weight: bold; color: #1a3a5c;
     border-bottom: 1.5px solid #1a3a5c;
     padding-bottom: 0.5mm; margin-bottom: 1.5mm;
 }
 .sp-dc-titel .sub {
-    font-size: 8.5pt; font-weight: normal; color: #555;
+    font-size: 9pt; font-weight: normal; color: #555;
     margin-left: 2mm;
 }
 
@@ -2146,14 +2146,14 @@ body  { font-family: Arial, sans-serif; font-size: 9pt; margin: 0; color: #111; 
 .sp-table thead { display: table-header-group; }
 .sp-table th {
     background: #dce6f0; color: #1a3a5c;
-    font-size: 7.5pt; font-weight: 600; text-align: left;
+    font-size: 8pt; font-weight: 600; text-align: left;
     padding: 0.7mm 1.5mm;
     border-bottom: 1.5px solid #1a3a5c;
 }
 .sp-table td {
     padding: 1.1mm 1.5mm;
     border-bottom: 1px solid #d8d8d8;
-    font-size: 9pt;
+    font-size: 10pt;
     vertical-align: middle;
     line-height: 1.15;
 }
@@ -2165,12 +2165,18 @@ body  { font-family: Arial, sans-serif; font-size: 9pt; margin: 0; color: #111; 
     white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
 }
 .sp-table .cl {
-    font-size: 8pt; color: #555;
+    font-size: 9pt; color: #555;
     white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
 }
 .sp-table .sp {
-    font-size: 8pt; color: #555;
+    font-size: 9pt; color: #555;
     white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+    /* Verticale lijn op grens sponsor → notities */
+    border-right: 1px solid #888;
+}
+.sp-table th:nth-child(4) {
+    /* Header-cell voor sponsor: zelfde grens-lijn doortrekken naar header */
+    border-right: 1px solid #888;
 }
 .sp-table .nt { /* notitie-kolom: leeg, voor handschrift */ }
 `;
