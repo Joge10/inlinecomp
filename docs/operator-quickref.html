@@ -138,6 +138,10 @@ table.compact th {
     font-size: 9.5pt;
     margin-top: 5px;
     border-radius: 0 4px 4px 0;
+    /* Houd het tip-blok bij elkaar zodat 'ie niet over een pagina-grens
+       splitst — verlies van leesbaarheid voor de callout. */
+    break-inside: avoid;
+    page-break-inside: avoid;
 }
 /* Pre-wedstrijd-checklist: opener bovenaan pag 1. Lichtblauwe omkadering
    zodat 't visueel apart staat van de genummerde stap-secties (die zijn
@@ -168,6 +172,8 @@ table.compact th {
     font-size: 9.5pt;
     margin-top: 5px;
     border-radius: 0 4px 4px 0;
+    break-inside: avoid;
+    page-break-inside: avoid;
 }
 .voet {
     margin-top: 10px;
