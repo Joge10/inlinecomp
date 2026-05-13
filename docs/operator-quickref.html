@@ -137,6 +137,29 @@ table.compact th {
     margin-top: 5px;
     border-radius: 0 4px 4px 0;
 }
+/* Pre-wedstrijd-checklist: opener bovenaan pag 1. Lichtblauwe omkadering
+   zodat 't visueel apart staat van de genummerde stap-secties (die zijn
+   wit met oranje-streep), maar niet schreeuwt zoals een alert. 2-koloms
+   lijst voor compactheid. */
+.precheck {
+    background: #eef4fa;
+    border: 1.5px solid #c5d8f0;
+    border-radius: 6px;
+    padding: 8px 12px 6px;
+    margin: 0 0 10px;
+    font-size: 9pt;
+}
+.precheck h3 {
+    margin: 0 0 4px;
+    color: var(--blauw);
+    font-size: 11pt;
+    font-weight: 700;
+}
+.precheck ul {
+    margin: 0; padding-left: 16px;
+    column-count: 2; column-gap: 18px;
+}
+.precheck li { margin: 2px 0; break-inside: avoid; }
 .alert {
     background: #fce4e4; border-left: 3px solid var(--rood);
     padding: 5px 9px;
@@ -436,6 +459,23 @@ table.compact th {
         <code>inlineresults.devriesen.com</code>
     </div>
 
+    <!-- ── Pre-wedstrijd: laatste check vóór je begint ──────────────── -->
+    <div class="precheck">
+        <h3>✅ Vóór je begint — laatste check</h3>
+        <ul>
+            <li><b>Inloggen werkt</b> op de PC die je gaat gebruiken — met je eigen account</li>
+            <li><b>Wedstrijd geselecteerd</b> in dropdown rechtsboven — controleer vóór elke loting / vastlegging</li>
+            <li><b>Tijdschema + programma</b> staan klaar — alle verwachte ritten zichtbaar in Tijdschema</li>
+            <li><b>Wedstrijd op 👁 Zichtbaar</b> in Beheer (toggle vlak vóór aanvang)</li>
+            <li><b>📢 Meldingen-knop</b> in Beheer — voor live pop-ups in /Coach + /Public</li>
+            <li><b>Tekentermijnen + lotings-status</b> per DC met Geert doorgesproken</li>
+            <li><b>Test-loting + test-import van CSV</b> vóór de eerste echte heat — check of MyLaps de juiste sessie schrijft</li>
+            <li><b>Print-Center</b> bereikbaar (🖨 rechtsboven) + posters geprint voor locatie</li>
+            <li><b>Sancties-tabel + probleem-oplossen</b> (pag 2) doorgelezen</li>
+            <li><b>Internet-verbinding</b> stabiel — auto-refresh in /Coach + /Public is 3 minuten</li>
+        </ul>
+    </div>
+
     <div class="kolommen">
 
         <!-- ── STAP 1 ────────────────────────────────────────────────── -->
@@ -705,22 +745,6 @@ table.compact th {
                 <tr><td>Iets anders raars</td>
                     <td><b>Vraag Geert.</b> Alles is ongedaan te maken behalve <b>Vastleggen</b>.</td></tr>
             </table>
-        </section>
-
-        <section class="span2">
-            <h2>Vóór de wedstrijd — laatste check</h2>
-            <ul style="column-count:2;column-gap:18px;margin:4px 0">
-                <li><b>✓ Inloggen werkt</b> op de PC die je gaat gebruiken — met je eigen account</li>
-                <li><b>✓ Wedstrijd geselecteerd</b> in dropdown rechtsboven — controleer dit vóór elke loting / vastlegging</li>
-                <li><b>✓ Tijdschema + programma</b> staan klaar — alle verwachte ritten zichtbaar in Tijdschema</li>
-                <li><b>✓ Wedstrijd op 👁 Zichtbaar</b> in Beheer (toggle vlak vóór aanvang)</li>
-                <li><b>✓ 📢 Meldingen-knop</b> in Beheer — voor live pop-ups in /Coach + /Public</li>
-                <li><b>✓ Tekentermijnen + lotings-status</b> per DC met Geert doorgesproken</li>
-                <li><b>✓ Test-loting + test-import van CSV</b> vóór de eerste echte heat — check of MyLaps de juiste sessie schrijft</li>
-                <li><b>✓ Print-Center</b> bereikbaar (🖨 rechtsboven) + posters geprint voor locatie</li>
-                <li><b>✓ Sancties-tabel + probleem-oplossen</b> (pag 2) doorgelezen</li>
-                <li><b>✓ Internet-verbinding</b> stabiel — auto-refresh in /Coach + /Public is 3 minuten</li>
-            </ul>
         </section>
 
     </div>
