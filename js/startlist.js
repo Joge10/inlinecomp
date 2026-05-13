@@ -1935,6 +1935,12 @@ function toonSlResultaten(cacheKey, vergrendeld = false) {
                 zetDistTabKleur(distId, false);
                 kleurAlleTabsAsync(_slGroepen, el('sl-cat-tabs'));
                 vulPrintSelect();
+                // Live-module afvalkoers-state resetten — anders blijven
+                // afgevallen-nummers zichtbaar in het afval-paneel tot een
+                // hard refresh, ook al zijn de heats inmiddels gewist.
+                if (typeof window.liveAfvalResetAll === 'function') {
+                    window.liveAfvalResetAll();
+                }
                 // Print-Center cache invalideren — wis kan ook uitslagen + klassement
                 // hebben opgeruimd (cascade-keuzes), dus beide invalideren.
                 if (typeof window.printCenterInvalideerStartlijsten === 'function') {

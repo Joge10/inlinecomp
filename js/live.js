@@ -20,6 +20,14 @@ let _liveFilter = { geen_lijst: true, geen_resultaat: true, deels: true, complee
 // Correcties: klik op een afgevallen-kaart zet rijder terug in koers.
 let _afvalState = {};
 
+// Globale reset-hook: wordt aangeroepen door startlijst-wis zodat de afval-
+// state niet stale blijft hangen na het wissen van een loting (anders
+// blijven oude afvallers zichtbaar in het paneel tot een hard refresh).
+// Voor een gewist heat is _afvalState[ritIdx] niet meer relevant; bij
+// volgende module-wissel naar Live wordt 'ie opnieuw uit verse DB-data
+// opgebouwd via _afvalInitVoorRit.
+window.liveAfvalResetAll = function() { _afvalState = {}; };
+
 // ── Entry point ───────────────────────────────────────────────────────────────
 
 async function toonLivePagina() {
