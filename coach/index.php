@@ -1241,8 +1241,35 @@ select.sel {
     position: absolute; top: calc(100% + 4px); left: 0; right: 0;
     background: var(--wit); border: 2px solid var(--middenblauw); border-radius: 8px;
     box-shadow: 0 4px 12px rgba(0,0,0,.12);
-    z-index: 50; max-height: 70vh; display: flex; flex-direction: column;
+    z-index: 50; max-height: 320px; display: flex; flex-direction: column;
 }
+/* Visueel accent op de knop zodra er iets is geselecteerd: groene rand +
+   gevulde achtergrond zodat duidelijk is dat er een keuze openstaat die
+   nog naar Toevoegen moet. */
+.sponsor-multi-knop.heeft-selectie {
+    border-color: #2e7d32 !important;
+    background: #f1f8f3;
+}
+.sponsor-multi-knop.heeft-selectie::before {
+    content: '✓ '; color: #2e7d32; font-weight: 700;
+}
+/* Chips onder de knop: meteen zichtbaar wat gekozen is, zonder paneel
+   weer te hoeven openen. Klik op een chip verwijdert die sponsor uit
+   de selectie. */
+.sponsor-chips {
+    display: flex; flex-wrap: wrap; gap: 4px;
+    margin-top: 6px;
+    min-height: 0;
+}
+.sponsor-chip {
+    display: inline-flex; align-items: center; gap: 4px;
+    padding: 3px 8px; font-size: .82rem;
+    background: #eef4fa; color: var(--blauw);
+    border: 1px solid #c5d8f0; border-radius: 12px;
+    cursor: pointer;
+}
+.sponsor-chip:hover { background: #ffe8e8; border-color: #d77; color: #a33; }
+.sponsor-chip::after { content: '×'; font-weight: 700; margin-left: 2px; }
 .sponsor-multi-zoek { padding: 10px; border-bottom: 1px solid #eee; }
 .sponsor-multi-zoek .inp { padding: 8px 12px; font-size: .9rem; }
 .sponsor-multi-acties {
@@ -1609,6 +1636,7 @@ body.heeft-footer .auto-refresh-stempel { bottom:84px; }
                 <span id="sponsor-multi-label">— kies eerst een wedstrijd —</span>
                 <span class="sponsor-multi-pijl">▾</span>
             </button>
+            <div id="sponsor-chips" class="sponsor-chips"></div>
             <div id="sponsor-multi-paneel" class="sponsor-multi-paneel" hidden>
                 <div class="sponsor-multi-zoek">
                     <input type="search" id="sponsor-multi-zoek" placeholder="🔍 Zoeken…" class="inp">
@@ -2970,15 +2998,24 @@ function renderSponsorMultiSelect(filterTerm) {
 }
 function updateSponsorLabel() {
     const lbl = $('sponsor-multi-label');
-    if (!lbl) return;
+    const knop = $('btn-sponsor-open');
+    const chipsWrap = $('sponsor-chips');
+    if (!lbl || !knop || !chipsWrap) return;
+
     if (_sponsorSel.size === 0) {
         lbl.textContent = _sponsorAlle.length
             ? '— kies sponsor(s) —'
             : '— geen sponsors in deze wedstrijd —';
-    } else if (_sponsorSel.size === 1) {
-        lbl.textContent = [..._sponsorSel][0];
+        knop.classList.remove('heeft-selectie');
+        chipsWrap.innerHTML = '';
     } else {
-        lbl.textContent = `${_sponsorSel.size} sponsors geselecteerd`;
+        lbl.textContent = `${_sponsorSel.size} sponsor${_sponsorSel.size === 1 ? '' : 's'} gekozen — klik op Toevoegen`;
+        knop.classList.add('heeft-selectie');
+        // Chips eronder zodat operator direct ziet wat hij gekozen heeft
+        // (en eentje kan weghalen zonder paneel weer te openen).
+        chipsWrap.innerHTML = [..._sponsorSel]
+            .map(s => `<span class="sponsor-chip" data-sponsor="${esc(s)}" title="Klik om te verwijderen">${esc(s)}</span>`)
+            .join('');
     }
 }
 
@@ -3037,6 +3074,18 @@ $('sponsor-multi-niets').addEventListener('click', () => {
 });
 $('sponsor-multi-klaar').addEventListener('click', () => {
     $('sponsor-multi-paneel').hidden = true;
+});
+
+// Chip-klik: sponsor uit de selectie halen, zonder paneel te openen.
+$('sponsor-chips').addEventListener('click', (ev) => {
+    const chip = ev.target.closest('.sponsor-chip');
+    if (!chip) return;
+    const sp = chip.dataset.sponsor;
+    if (sp) {
+        _sponsorSel.delete(sp);
+        updateSponsorLabel();
+        updateToevoegenKnop();
+    }
 });
 $('btn-wis-alles').addEventListener('click', async () => {
     if (!coachLijst.length) return;
