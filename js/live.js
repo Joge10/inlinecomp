@@ -370,7 +370,7 @@ const _SANCTIE_GEEN_FINISH = new Set(['DNS', 'DNF', 'DQ-TF', 'DQ-SF', 'DQ-DF']);
 // die de uitslag-laag gebruikt — beide systemen (full-final én internationaal)
 // horen reglementair ex-aequo te krijgen bij 100% gelijke tijden.
 // De parameter blijft staan voor terugcompat; aanroepers geven 'true' mee.
-function _berekenPosities(entries, gebruikGelijkspel = true) {
+function _berekenPosities(entries, gebruikGelijkspel = true, isAfvalkoers = false) {
     // Finishers: heeft tijd, niet ranked_last, niet not_ranked (FS wél meenemen op tijd)
     const finishers = entries
         .filter(e => e.tijd_ms > 0 && !_SANCTIE_RANKED_LAST.has(e.sanctie) && !_SANCTIE_NOT_RANKED.has(e.sanctie))
@@ -384,7 +384,13 @@ function _berekenPosities(entries, gebruikGelijkspel = true) {
             }
             return a.tijd_ms - b.tijd_ms;
         });
-    const rankedLast = entries.filter(e => _SANCTIE_RANKED_LAST.has(e.sanctie));
+    // RANKED_LAST = DNF / DQ-TF / DNS → positie N+1 (gedeeld laatste).
+    // Uitzondering: in afvalkoers krijgt DNS GEEN positie — niet gestart =
+    // niet in de uitslag. Backend doet hetzelfde (zie api/live.php).
+    const rankedLast = entries.filter(e =>
+        _SANCTIE_RANKED_LAST.has(e.sanctie)
+        && !(isAfvalkoers && e.sanctie === 'DNS')
+    );
     // DQ-SF en DQ-DF worden genegeerd (geen positie)
 
     const posMap = new Map();
@@ -551,6 +557,7 @@ function _liveHerbereken(ritIdx) {
 
     // Bij combi: posities PER LEDEN berekenen (cat A en cat B krijgen elk hun
     // eigen 1-N nummering), bij niet-combi alles in één pass.
+    const isAfvalkoers = rit.race_type === 'afvalkoers';
     const posMap = new Map();
     if (rit.is_combi) {
         for (const lid of rit.combi_leden) {
@@ -558,16 +565,12 @@ function _liveHerbereken(ritIdx) {
                 const rij = rit.rijders.find(rr => rr.entry_id === e.entry_id);
                 return rij && rij._combi_rit_id === lid.rit_id;
             });
-            _berekenPosities(subset, true).forEach((v, k) => posMap.set(k, v));
+            _berekenPosities(subset, true, isAfvalkoers).forEach((v, k) => posMap.set(k, v));
         }
     } else {
-        _berekenPosities(entries, true).forEach((v, k) => posMap.set(k, v));
+        _berekenPosities(entries, true, isAfvalkoers).forEach((v, k) => posMap.set(k, v));
     }
     const isPuntenkoers = rit.race_type === 'puntenkoers';
-
-    // Voor afvalkoers: ook rijders met afval_rang (via UI gemarkeerd) tellen
-    // als 'compleet' voor de rij-kleur, zelfs zonder tijd of sanctie.
-    const isAfvalkoers = rit.race_type === 'afvalkoers';
     const afvalIds = isAfvalkoers
         ? new Set((_afvalState[ritIdx]?.afgevallen || []).map(a => a.entry_id))
         : null;
