@@ -1987,28 +1987,28 @@ function renderProgramma() {
     const mijnSnrs = new Set(coachLijst.map(p => parseInt(p.snr)));
     const { ritten, blokken } = programmaCache;
 
-    // De canonieke volgorde in het programma is:
-    //   blok_volgorde (master) → binnen een ronde-blok rit_volgorde.
-    // Niet-ronde blokken (pauze/ceremonie/etc.) krijgen HUN eigen blok_volgorde.
-    // Ritten krijgen de blok_volgorde van hun parent-blok + hun eigen
-    // rit_volgorde als tie-breaker. Blokken die op dezelfde volgorde staan
-    // als een reeks ritten tonen we NA de ritten (tiebreak=999 — pauze komt
-    // meestal ná een rondeblok).
+    // De canonieke volgorde komt uit tijdschema_ritten.volgorde — die geeft
+    // de admin via drag-drop aan. Non-ronde blokken (pauze/inrijden/etc)
+    // worden tussen ritten geschoven op basis van hun blok_volgorde t.o.v.
+    // de blok_volgorde van de ronde-blok van iedere rit. Match exact het
+    // admin-render-algoritme in js/tijdschema.js (lines 1078-1095) zodat
+    // cross-blok drag-drops correct doorkomen — vroeger werd primair op
+    // r.blok_volgorde gesorteerd, en die verandert NIET bij een drag-drop.
     const allesGesorteerd = [];
-    (ritten || []).forEach(r => allesGesorteerd.push({
-        type:'rit', data:r,
-        bv: r.blok_volgorde ?? 9999,
-        rv: r.rit_volgorde  ?? 0,
-    }));
-    (blokken || []).forEach(b => allesGesorteerd.push({
-        type:'blok', data:b,
-        bv: b.volgorde ?? 9999,
-        rv: 9999, // blok staat ná de ritten met dezelfde blok_volgorde
-    }));
-    allesGesorteerd.sort((a,b) => {
-        if (a.bv !== b.bv) return a.bv - b.bv;
-        return a.rv - b.rv;
-    });
+    const sortedBlk = (blokken || []).slice()
+        .sort((a, b) => (a.volgorde ?? 0) - (b.volgorde ?? 0));
+    let blkIdx = 0;
+    for (const r of (ritten || [])) {
+        const rBV = r.blok_volgorde ?? 0;
+        while (blkIdx < sortedBlk.length
+               && (sortedBlk[blkIdx].volgorde ?? 0) <= rBV) {
+            allesGesorteerd.push({ type:'blok', data: sortedBlk[blkIdx++] });
+        }
+        allesGesorteerd.push({ type:'rit', data: r });
+    }
+    while (blkIdx < sortedBlk.length) {
+        allesGesorteerd.push({ type:'blok', data: sortedBlk[blkIdx++] });
+    }
 
     if (!allesGesorteerd.length) {
         progEl.innerHTML = '<div class="leeg-melding">Nog geen programma bekend.</div>';
