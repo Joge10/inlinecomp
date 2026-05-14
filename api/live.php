@@ -352,6 +352,14 @@ if ($action === 'save_rit_results') {
                 $afvalRang = (int)$r['afval_rang'];
                 if ($afvalRang < 1) $afvalRang = null;
             }
+            // DNS in afvalkoers: rijder is niet gestart en hoort GEEN positie te
+            // krijgen. Front-end zet automatisch een afval_rang (=laatste plek)
+            // wanneer DNS gekozen wordt — die negeren we hier dwingend, anders
+            // landt 'ie alsnog in $afgevallen met finpos = afval_rang.
+            $sanctieRaw = trim($r['sanctie'] ?? '');
+            if ($isAfvalkoers && $sanctieRaw === 'DNS') {
+                $afvalRang = null;
+            }
 
             // Forceer NULL als de afstand dit veld niet kent — ongeacht wat
             // de frontend per ongeluk stuurde (bv. residuals van toggelen
@@ -383,8 +391,16 @@ if ($action === 'save_rit_results') {
             }
 
             if ($sanctie && in_array($sanctie, $RANKED_LAST, true)) {
-                // DNF / DQ-TF / DNS: ranked last in round, tijd wissen
-                $gedeeldArr[] = $base + ['tijd_ms' => null, 'sanctie' => $sanctie];
+                // DNF / DQ-TF / DNS: ranked last in round, tijd wissen.
+                // Speciaal voor afvalkoers: een DNS-rijder is niet gestart en
+                // hoort dus geen positie te krijgen — anders landt 'ie op
+                // finpos = N+1 (= vóór de afgevallen rijders met afval_rang).
+                // Routeer naar zonderTijd zodat finpos = NULL.
+                if ($isAfvalkoers && $sanctie === 'DNS') {
+                    $zonderTijd[] = $base + ['tijd_ms' => null, 'sanctie' => $sanctie];
+                } else {
+                    $gedeeldArr[] = $base + ['tijd_ms' => null, 'sanctie' => $sanctie];
+                }
             } elseif ($sanctie && in_array($sanctie, $NOT_RANKED, true)) {
                 // DQ-SF / DQ-DF: not ranked, geen positie, geen tijd
                 $zonderTijd[] = $base + ['tijd_ms' => null, 'sanctie' => $sanctie];

@@ -2081,14 +2081,17 @@ function _afvalInitVoorRit(ritIdx) {
     // Bij init kunnen we niet onderscheiden tussen Set en By Decision uit DB-
     // data alleen (beide hebben sanctie=null). DQ-TF herkennen we wel als Fault.
     // Voor By Decision is dat helaas een verlies bij refresh — we beschouwen
-    // sanctie=null als Set, en alleen DQ-TF/DNS als buiten_schema.
+    // sanctie=null als Set, en alleen DQ-TF als buiten_schema.
+    // DNS-rijders worden expliciet GEFILTERD: ze horen niet in de afgevallen-
+    // stack thuis (= geen positie). Eventueel verouderde DB-rijen met
+    // afval_rang+DNS worden zo bij volgende save automatisch opgeschoond.
     const afgevallen = (rit.rijders || [])
-        .filter(r => r.afval_rang != null)
+        .filter(r => r.afval_rang != null && r.sanctie !== 'DNS')
         .map(r => ({
             entry_id: r.entry_id,
             plek:     r.afval_rang,
             sanctie:  r.sanctie || null,
-            buiten_schema: (r.sanctie === 'DQ-TF' || r.sanctie === 'DNS'),
+            buiten_schema: (r.sanctie === 'DQ-TF'),
         }))
         .sort((a, b) => b.plek - a.plek);
 
@@ -2377,37 +2380,28 @@ function _afvalToggleSelectie(ritIdx, entryId) {
     else          st.geselecteerd.push(entryId);
 }
 
-// Sync een sanctie-wijziging in de heat-tabel met de afval-state. Specifiek voor
-// DNS: rijder is niet gestart, wordt direct geklasseerd op de huidige laagste plek.
-// Andere wist-tijd-sancties (DNF, DQ-*) worden NIET automatisch verwerkt — die
-// horen via de By Fault-knop of via expliciete actie te lopen.
+// Sync een sanctie-wijziging in de heat-tabel met de afval-state.
+// DNS = niet gestart → geen positie in afvalkoers. Rijder wordt uit alle
+// afval-stacks (afgevallen / geselecteerd / voorlopig) verwijderd. De DNS-
+// sanctie zelf blijft zichtbaar in de heat-tabel; bij opslag krijgt 'ie
+// finpos=NULL via de back-end (zie api/live.php _berekenPosities).
+// Andere wist-tijd-sancties (DNF, DQ-*) worden NIET automatisch verwerkt —
+// die horen via de By Fault-knop of via expliciete actie te lopen.
 function _afvalSyncSanctie(ritIdx, entryId, nieuweSanctie) {
     const st = _afvalState[ritIdx];
     if (!st) return;
 
-    const reedsAfgevallen = st.afgevallen.find(a => a.entry_id === entryId);
-
     if (nieuweSanctie === 'DNS') {
-        if (reedsAfgevallen) {
-            // Al in stack — alleen sanctie bijwerken
-            reedsAfgevallen.sanctie = 'DNS';
-            return;
-        }
-        // Niet meer geselecteerd of voorlopig — opschonen
+        // Rijder helemaal uit alle afval-state halen — DNS = geen ranking
+        st.afgevallen     = st.afgevallen.filter(a => a.entry_id !== entryId);
         st.geselecteerd   = st.geselecteerd.filter(id => id !== entryId);
         st.voorlopig_2de  = st.voorlopig_2de.filter(id => id !== entryId);
         st.voorlopig_1ste = st.voorlopig_1ste.filter(id => id !== entryId);
-        // Toevoegen op huidige laagste plek
-        const plek = _afvalNogInKoersIds(ritIdx).length;
-        st.afgevallen.unshift({ entry_id: entryId, plek, sanctie: 'DNS', buiten_schema: true });
         return;
     }
 
-    // Sanctie weggehaald of gewijzigd weg van DNS → rijder uit afgevallen-stack
-    // halen ALLEEN als hij eerder via DNS-flow is toegevoegd (sanctie='DNS' in stack).
-    if (reedsAfgevallen && reedsAfgevallen.sanctie === 'DNS') {
-        st.afgevallen = st.afgevallen.filter(a => a.entry_id !== entryId);
-    }
+    // Sanctie weggehaald of gewijzigd weg van DNS: niets te herstellen —
+    // DNS-rijder zat sowieso niet meer in de afgevallen-stack.
 }
 
 // ── Afvalkoers-config (localStorage per heat-id) ─────────────────────────────
@@ -4082,12 +4076,16 @@ async function _liveOpslaanRit(ritIdx) {
         // intact zoals admin bedoeld heeft via de handmatige ronde-input.
         const afval = afvalMap.get(r.entry_id);
         if (isAfvalkoers && afval) {
+            // Defense-in-depth: DNS-rijders horen geen afval_rang te hebben
+            // (= geen positie). _afvalSyncSanctie filtert ze al uit de stack,
+            // maar voor stale state houden we hier ook nog een check.
+            const isDns = (afval.sanctie === 'DNS' || sanctieDom === 'DNS');
             return {
                 entry_id:       r.entry_id,
                 tijd_ms:        null,                    // afgevallen → geen valide finish-tijd
                 sanctie:        afval.sanctie || null,   // DQ-TF voor by-fault, anders null
                 rondes,
-                afval_rang:     afval.plek,
+                afval_rang:     isDns ? null : afval.plek,
                 // Photofinish-vlag meesturen — wissel_posities zet deze al
                 // direct in DB op 1, maar bij re-import/save zonder _wisselt
                 // moet 'ie weer 0 worden zodat oude swaps opgeschoond raken.
