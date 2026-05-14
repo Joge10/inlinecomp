@@ -251,11 +251,11 @@ function renderBezoekersBlok() {
             </div>
             <div class="gb-stat-kaart">
                 <div class="gb-stat-waarde" id="gb-stat-vandaag">—</div>
-                <div class="gb-stat-label">Unieke bezoekers vandaag</div>
+                <div class="gb-stat-label">Unieke bezoekers vandaag <span class="gb-stat-hint" id="gb-stat-vandaag-hint" style="display:none"></span></div>
             </div>
             <div class="gb-stat-kaart">
                 <div class="gb-stat-waarde" id="gb-stat-uniek">—</div>
-                <div class="gb-stat-label">Unieke bezoekers ooit</div>
+                <div class="gb-stat-label">Unieke bezoekers ooit <span class="gb-stat-hint" id="gb-stat-uniek-hint" style="display:none"></span></div>
             </div>
             <div class="gb-stat-kaart">
                 <div class="gb-stat-waarde" id="gb-stat-hits">—</div>
@@ -281,11 +281,11 @@ function renderBezoekersBlok() {
             </div>
             <div class="gb-stat-kaart">
                 <div class="gb-stat-waarde" id="gb-stat-coach-vandaag">—</div>
-                <div class="gb-stat-label">Unieke bezoekers vandaag</div>
+                <div class="gb-stat-label">Unieke bezoekers vandaag <span class="gb-stat-hint" id="gb-stat-coach-vandaag-hint" style="display:none"></span></div>
             </div>
             <div class="gb-stat-kaart">
                 <div class="gb-stat-waarde" id="gb-stat-coach-uniek">—</div>
-                <div class="gb-stat-label">Unieke bezoekers ooit</div>
+                <div class="gb-stat-label">Unieke bezoekers ooit <span class="gb-stat-hint" id="gb-stat-coach-uniek-hint" style="display:none"></span></div>
             </div>
             <div class="gb-stat-kaart">
                 <div class="gb-stat-waarde" id="gb-stat-coach-hits">—</div>
@@ -323,11 +323,31 @@ async function _laadStatsBlok(endpoint, idPrefix, voetId) {
         const data = await res.json();
         const set = (id, val) => { const e = el(id); if (e) e.textContent = val; };
         set(`${idPrefix}-actief`,      data.actief         ?? 0);
-        set(`${idPrefix}-vandaag`,     data.actief_vandaag ?? 0);
-        set(`${idPrefix}-uniek`,       data.totaal_uniek   ?? 0);
         set(`${idPrefix}-hits`,        data.totaal_hits    ?? 0);
         set(`${idPrefix}-peak-today`,  data.peak_today     ?? 0);
         set(`${idPrefix}-peak`,        data.peak_all_time  ?? 0);
+
+        // "Echte" (gefilterde) telling als primaire waarde tonen, en als
+        // de ruwe telling significant hoger is een hint met "(X incl. bot)"
+        // zodat duidelijk is dat bots/previews niet meegerekend zijn.
+        const setMet = (id, hintId, ruw, echt) => {
+            const v = echt ?? ruw ?? 0;
+            set(id, v);
+            const h = el(hintId);
+            if (h) {
+                if (ruw != null && echt != null && ruw > echt) {
+                    h.textContent = `(${ruw} incl. bot/preview)`;
+                    h.style.display = '';
+                } else {
+                    h.textContent = '';
+                    h.style.display = 'none';
+                }
+            }
+        };
+        setMet(`${idPrefix}-vandaag`, `${idPrefix}-vandaag-hint`,
+            data.actief_vandaag, data.actief_vandaag_echt);
+        setMet(`${idPrefix}-uniek`,   `${idPrefix}-uniek-hint`,
+            data.totaal_uniek, data.totaal_uniek_echt);
         // Timestamp van de all-time-piek in de hint van die card plaatsen
         const hintEl = el(`${idPrefix}-peak-at`);
         if (hintEl) {
