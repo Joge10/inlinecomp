@@ -360,7 +360,7 @@ if ($action === 'programma') {
             LEFT JOIN tijdschema_blokken b ON b.id = r.blok_id
             LEFT JOIN heats h ON h.tijdschema_rit_id = r.id AND h.competition_id = ?
             WHERE r.tijdschema_id = ?
-            ORDER BY b.volgorde, r.volgorde
+            ORDER BY r.volgorde
         ");
         $stmt->execute([$compId, $tsId]);
         $rittenRaw = $stmt->fetchAll(PDO::FETCH_ASSOC);
@@ -2209,19 +2209,20 @@ function renderHeats() {
         // (blok_volgorde, rit_volgorde) bepaalt de positie. Blokken zonder
         // geloot programma gaan achteraan maar onderling op dc_naam +
         // distance_naam zodat de volgorde stabiel en leesbaar is.
+        // Sort op MIN rit_volgorde over de ritten in het afstand-blok —
+        // pure rit_volgorde, geen blok_volgorde fallback want die verandert
+        // niet bij cross-blok drag-drop in admin (zie public/index.php).
         const sortKey = b => {
-            if (!b.ritten.length) return [Infinity, Infinity];
-            let bvMin = Infinity, rvMin = Infinity;
+            if (!b.ritten.length) return Infinity;
+            let rvMin = Infinity;
             for (const r of b.ritten) {
-                const bv = r.blok_volgorde ?? 9999;
-                const rv = r.rit_volgorde  ?? 9999;
-                if (bv < bvMin || (bv === bvMin && rv < rvMin)) { bvMin = bv; rvMin = rv; }
+                const rv = r.rit_volgorde ?? 9999;
+                if (rv < rvMin) rvMin = rv;
             }
-            return [bvMin, rvMin];
+            return rvMin;
         };
         afstandBlokken.sort((x, y) => {
-            const [xb, xr] = sortKey(x), [yb, yr] = sortKey(y);
-            if (xb !== yb) return xb - yb;
+            const xr = sortKey(x), yr = sortKey(y);
             if (xr !== yr) return xr - yr;
             // fallback voor blokken zonder ritten: alfabetisch stabiel
             const a = `${x.dc_naam} ${x.distance_naam || ''}`;

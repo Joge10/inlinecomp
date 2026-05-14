@@ -216,7 +216,7 @@ if ($action === 'programma') {
             LEFT JOIN tijdschema_blokken b ON b.id = r.blok_id
             LEFT JOIN heats h ON h.tijdschema_rit_id = r.id AND h.competition_id = ?
             WHERE r.tijdschema_id = ?
-            ORDER BY b.volgorde, r.volgorde
+            ORDER BY r.volgorde
         ");
         $stmt->execute([$compId, $tsId]);
         $rittenRaw = $stmt->fetchAll(PDO::FETCH_ASSOC);
@@ -2542,21 +2542,30 @@ function renderResultaat(data, snr, prog) {
             html += '<div class="kaart-sectie-titel">Wedstrijdprogramma</div>';
             if (prog.ritten?.length) {
                 // Interleave ritten en niet-ronde blokken (pauze, inrijden,
-                // wedstrijdstart, ceremonie, herstart) op blok_volgorde →
-                // rit_volgorde. Blokken krijgen rv=9999 zodat ze ná de ritten
-                // met dezelfde blok_volgorde komen — match coach + admin.
-                const items = [];
+                // Interleave-algoritme — match admin (js/tijdschema.js):
+                // Itereer ritten in hun globale r.volgorde-volgorde (al door
+                // de SQL geleverd) en schuif non-ronde blokken (pauze,
+                // inrijden, ceremonie, wedstrijdstart, herstart) tussen op
+                // basis van blok_volgorde t.o.v. de blok_volgorde van de
+                // ronde-blok van elke rit. Eerder werd er ook gesorteerd op
+                // r.blok_volgorde, maar die verandert NIET wanneer een groep
+                // over een blok-grens wordt versleept — daardoor leek de
+                // volgorde "creation order" te zijn ipv de admin-keuze.
+                const items     = [];
+                const sortedBlk = (prog.blokken || []).slice()
+                    .sort((a, b) => (a.volgorde ?? 0) - (b.volgorde ?? 0));
+                let blkIdx = 0;
                 for (const r of (prog.ritten || [])) {
-                    items.push({
-                        type:'rit', data:r,
-                        bv: r.blok_volgorde ?? 9999,
-                        rv: r.rit_volgorde  ?? 0,
-                    });
+                    const rBV = r.blok_volgorde ?? 0;
+                    while (blkIdx < sortedBlk.length
+                           && (sortedBlk[blkIdx].volgorde ?? 0) <= rBV) {
+                        items.push({ type:'blok', data: sortedBlk[blkIdx++] });
+                    }
+                    items.push({ type:'rit', data: r });
                 }
-                for (const b of (prog.blokken || [])) {
-                    items.push({ type:'blok', data:b, bv: b.volgorde ?? 9999, rv: 9999 });
+                while (blkIdx < sortedBlk.length) {
+                    items.push({ type:'blok', data: sortedBlk[blkIdx++] });
                 }
-                items.sort((a,b) => a.bv !== b.bv ? a.bv - b.bv : a.rv - b.rv);
 
                 const hhmm = v => { if (!v) return ''; const m = String(v).match(/(\d{1,2}:\d{2})/); return m ? m[1] : ''; };
                 const blokIcoon = t => ({pauze:'⏸',inrijden:'🛼',wedstrijdstart:'🏁',ceremonie:'🏆',herstart:'🔄'}[t] || '🕓');
