@@ -14,8 +14,16 @@
 //   }
 //
 // Definitie "echte" sessie (filter tegen bots / WhatsApp-/Telegram-/
-// Discord-/preview-fetches die vrijwel altijd 1 hit, < 1 sec doen):
-//     hits >= 2  OR  TIMESTAMPDIFF(SECOND, first_seen, last_seen) >= 10
+// Discord-/preview-fetches):
+//     hits >= 2  AND  TIMESTAMPDIFF(SECOND, first_seen, last_seen) >= 10
+//
+// Vereist BEIDE: minstens 2 page-loads én totale sessie ≥ 10 sec.
+// Reden voor AND ipv OR: bots doen vaak 2 hits in < 1 sec (initial fetch
+// + redirect/preview-fetch). Met alleen "hits >= 2" werden die nog steeds
+// meegeteld. Een echte coach-sessie heeft duration > 0 (er moet tijd
+// tussen de 2+ tracked pageloads zitten). De AND-rule is veilig omdat
+// duration sowieso 0 is bij hits=1 (last_seen wordt alleen op tracked
+// hits geüpdatet) — dus "duur >= 10s" impliceert al hits >= 2.
 
 header('Content-Type: application/json; charset=utf-8');
 header('Access-Control-Allow-Origin: *');
@@ -32,9 +40,10 @@ if (!in_array($user['role'] ?? '', ['owner', 'admin'], true)) {
 }
 
 try {
-    // "ECHT" = hits>=2 OF sessie duurde >=10 sec. Filtert het gros van de
-    // bot-/preview-traffic eruit zonder echte korte coach-bezoeken te missen.
-    $echtCond = "(hits >= 2 OR TIMESTAMPDIFF(SECOND, first_seen, last_seen) >= 10)";
+    // "ECHT" = hits>=2 EN sessie duurde >=10 sec. Bots doen vaak 2 hits
+    // in <1 sec (preview-fetch met redirect) — die filtert het AND-criterium
+    // er nog uit. Echte coaches hebben minstens 10 sec tussen hun pageloads.
+    $echtCond = "(hits >= 2 AND TIMESTAMPDIFF(SECOND, first_seen, last_seen) >= 10)";
 
     $stmt = $pdo->query("
         SELECT

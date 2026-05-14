@@ -14,8 +14,11 @@
 //   }
 //
 // Definitie "echte" sessie (filter tegen bots / WhatsApp-/Telegram-/
-// Discord-/preview-fetches die vrijwel altijd 1 hit, < 1 sec doen):
-//     hits >= 2  OR  TIMESTAMPDIFF(SECOND, first_seen, last_seen) >= 10
+// Discord-/preview-fetches):
+//     hits >= 2  AND  TIMESTAMPDIFF(SECOND, first_seen, last_seen) >= 10
+//
+// Vereist BEIDE: bots doen vaak 2 hits in < 1 sec (preview-fetch met
+// redirect). Echte bezoeken hebben minstens 10 sec tussen pageloads.
 
 header('Content-Type: application/json; charset=utf-8');
 header('Access-Control-Allow-Origin: *');
@@ -32,9 +35,10 @@ if (!in_array($user['role'] ?? '', ['owner', 'admin'], true)) {
 }
 
 try {
-    // "ECHT" = hits>=2 OF sessie duurde >=10 sec. Filtert het gros van de
-    // bot-/preview-traffic eruit zonder echte korte bezoeken te missen.
-    $echtCond = "(hits >= 2 OR TIMESTAMPDIFF(SECOND, first_seen, last_seen) >= 10)";
+    // "ECHT" = hits>=2 EN sessie duurde >=10 sec. Bots doen vaak 2 hits
+    // in <1 sec (preview-fetch met redirect) — die filtert AND-criterium
+    // er nog uit. Echte bezoeken hebben minstens 10 sec tussen pageloads.
+    $echtCond = "(hits >= 2 AND TIMESTAMPDIFF(SECOND, first_seen, last_seen) >= 10)";
 
     $stmt = $pdo->query("
         SELECT
