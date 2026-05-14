@@ -1679,6 +1679,7 @@ function _liveBind(idx) {
         const rij        = kaart.querySelector(`[data-entry="${r.entry_id}"]`);
         const tijdInp    = rij?.querySelector('.live-tijd-inp');
         const sanctieSel = rij?.querySelector('.live-sanctie-sel');
+        const rondesInp  = rij?.querySelector('.live-rondes-inp');
 
         tijdInp?.addEventListener('blur', () => {
             const rawInput = tijdInp.value.trim();
@@ -1699,9 +1700,23 @@ function _liveBind(idx) {
             const sanctie = sanctieSel?.value || '';
             _liveSyncInvoer(r.entry_id, tijdVal, sanctie);
             _liveOngeslagen = true;
+            // Handmatige tijd-correctie heft de eerdere wissel-lock op —
+            // operator overschrijft expliciet, dus dezelfde "undo" als CSV-
+            // herimport. Lock-badge wordt na _liveHerbereken weer een dropdown.
+            if (r._wisselt) delete r._wisselt;
             _liveHerbereken(idx);
         });
         tijdInp?.addEventListener('input', () => { _liveOngeslagen = true; });
+
+        // Rondes-input: bij handmatige correctie ook _liveOngeslagen + (indien
+        // aanwezig) de wissel-lock opheffen, analoog aan tijd-input.
+        rondesInp?.addEventListener('input', () => {
+            _liveOngeslagen = true;
+            if (r._wisselt) {
+                delete r._wisselt;
+                _liveHerbereken(idx);
+            }
+        });
 
         // Tab + Enter springen direct naar het volgende tijd-veld in de
         // heat-card (slaan sanctie/Fin-cellen over). Shift+Tab gaat terug.
