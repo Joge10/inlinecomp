@@ -579,12 +579,14 @@ if ($action === 'save_rit_results') {
             }
         }
 
-        // Geef berekende finishposities terug zodat JS de lokale state correct kan bijwerken
+        // Geef berekende finishposities terug zodat JS de lokale state correct kan bijwerken.
+        // OOK NULL-waarden meesturen — anders kan de front-end niet onderscheiden
+        // tussen "nog niet bekend" en "expliciet geen positie" (bv. DNS in
+        // afvalkoers). Front-end valt anders terug op een lokale berekening
+        // die N+1 zou geven.
         $finishPosMap = [];
         foreach ($alleResultaten as $r) {
-            if ($r['finishpositie'] !== null) {
-                $finishPosMap[$r['entry_id']] = $r['finishpositie'];
-            }
+            $finishPosMap[$r['entry_id']] = $r['finishpositie'] !== null ? (int)$r['finishpositie'] : null;
         }
 
         echo json_encode(['ok' => true, 'ronde_status' => $rondeStatus, 'finishposities' => $finishPosMap], JSON_UNESCAPED_UNICODE);

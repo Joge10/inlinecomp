@@ -4196,6 +4196,9 @@ async function _liveOpslaanRit(ritIdx) {
 
         // Lokale state bijwerken. Bij combi: bereken fallback PER LEDEN zodat
         // de Fin-getallen ook lokaal per categorie geteld worden, conform de UI.
+        // isAfvalkoers doorgeven zodat DNS in afvalkoers geen N+1 krijgt
+        // (matcht back-end gedrag).
+        const isAfvalkoers = rit.race_type === 'afvalkoers';
         const posMap = new Map();
         if (rit.is_combi) {
             for (const lid of rit.combi_leden) {
@@ -4203,10 +4206,10 @@ async function _liveOpslaanRit(ritIdx) {
                     const rij = rit.rijders.find(rr => rr.entry_id === rs.entry_id);
                     return rij && rij._combi_rit_id === lid.rit_id;
                 });
-                _berekenPosities(ledenResults, true).forEach((v, k) => posMap.set(k, v));
+                _berekenPosities(ledenResults, true, isAfvalkoers).forEach((v, k) => posMap.set(k, v));
             }
         } else {
-            _berekenPosities(results, true).forEach((v, k) => posMap.set(k, v));
+            _berekenPosities(results, true, isAfvalkoers).forEach((v, k) => posMap.set(k, v));
         }
         rit.rijders = rit.rijders.map(r => {
             const gesav = results.find(x => x.entry_id === r.entry_id);
