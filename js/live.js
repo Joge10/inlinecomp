@@ -2095,17 +2095,29 @@ function _afvalInitVoorRit(ritIdx) {
         }))
         .sort((a, b) => b.plek - a.plek);
 
+    // DNS-set: rijders die niet zijn gestart. Tellen niet als 'in koers' en
+    // krijgen geen positie. Bij DB-init uit r.sanctie; live updates via
+    // _afvalSyncSanctie zodat _afvalNogInKoersIds direct correct blijft —
+    // anders zou de rondes-teller pas na save+refresh kloppen.
+    const dns = (rit.rijders || [])
+        .filter(r => r.sanctie === 'DNS')
+        .map(r => r.entry_id);
+
     _afvalState[ritIdx] = {
         afgevallen,
         voorlopig_2de:  [],
         voorlopig_1ste: [],
         geselecteerd:   [],
+        dns,
     };
     return _afvalState[ritIdx];
 }
 
 // Geeft entry_ids terug van rijders die NOG IN KOERS zijn:
 // niet in afgevallen-stack en niet in voorlopig_2de/voorlopig_1ste.
+// DNS-rijders (st.dns) zijn niet gestart en tellen ook niet als 'in
+// koers' — zo klopt de Volgende-plek-berekening en de "Nog in koers: X"-
+// teller direct na een DNS-keuze, zonder save+refresh te hoeven wachten.
 function _afvalNogInKoersIds(ritIdx) {
     const rit = _liveRitten[ritIdx];
     const st  = _afvalState[ritIdx];
@@ -2114,6 +2126,7 @@ function _afvalNogInKoersIds(ritIdx) {
         ...st.afgevallen.map(a => a.entry_id),
         ...st.voorlopig_2de,
         ...st.voorlopig_1ste,
+        ...(st.dns || []),
     ]);
     return (rit.rijders || []).map(r => r.entry_id).filter(id => !uit.has(id));
 }
@@ -2381,27 +2394,32 @@ function _afvalToggleSelectie(ritIdx, entryId) {
 }
 
 // Sync een sanctie-wijziging in de heat-tabel met de afval-state.
-// DNS = niet gestart → geen positie in afvalkoers. Rijder wordt uit alle
-// afval-stacks (afgevallen / geselecteerd / voorlopig) verwijderd. De DNS-
-// sanctie zelf blijft zichtbaar in de heat-tabel; bij opslag krijgt 'ie
-// finpos=NULL via de back-end (zie api/live.php _berekenPosities).
+// DNS = niet gestart → geen positie in afvalkoers. Rijder gaat in st.dns
+// (telt niet als 'in koers') en wordt uit alle andere afval-stacks
+// verwijderd. De DNS-sanctie zelf blijft zichtbaar in de heat-tabel; bij
+// opslag krijgt 'ie finpos=NULL via de back-end (zie api/live.php
+// _berekenPosities).
 // Andere wist-tijd-sancties (DNF, DQ-*) worden NIET automatisch verwerkt —
 // die horen via de By Fault-knop of via expliciete actie te lopen.
 function _afvalSyncSanctie(ritIdx, entryId, nieuweSanctie) {
     const st = _afvalState[ritIdx];
     if (!st) return;
+    if (!st.dns) st.dns = [];
 
     if (nieuweSanctie === 'DNS') {
-        // Rijder helemaal uit alle afval-state halen — DNS = geen ranking
+        // Rijder uit alle ranking-stacks halen + in DNS-set zetten
         st.afgevallen     = st.afgevallen.filter(a => a.entry_id !== entryId);
         st.geselecteerd   = st.geselecteerd.filter(id => id !== entryId);
         st.voorlopig_2de  = st.voorlopig_2de.filter(id => id !== entryId);
         st.voorlopig_1ste = st.voorlopig_1ste.filter(id => id !== entryId);
+        if (!st.dns.includes(entryId)) st.dns.push(entryId);
         return;
     }
 
-    // Sanctie weggehaald of gewijzigd weg van DNS: niets te herstellen —
-    // DNS-rijder zat sowieso niet meer in de afgevallen-stack.
+    // Sanctie weggehaald of gewijzigd weg van DNS: rijder uit DNS-set halen
+    // zodat 'ie weer als 'in koers' meetelt. Niet automatisch terug naar
+    // geselecteerd/afgevallen plaatsen — operator kiest dat zelf.
+    st.dns = st.dns.filter(id => id !== entryId);
 }
 
 // ── Afvalkoers-config (localStorage per heat-id) ─────────────────────────────
@@ -4078,12 +4096,13 @@ async function _liveOpslaanRit(ritIdx) {
         if (isAfvalkoers && afval) {
             // Defense-in-depth: DNS-rijders horen geen afval_rang te hebben
             // (= geen positie). _afvalSyncSanctie filtert ze al uit de stack,
-            // maar voor stale state houden we hier ook nog een check.
+            // maar voor stale state houden we hier ook nog een check op de
+            // live DOM-sanctie.
             const isDns = (afval.sanctie === 'DNS' || sanctieDom === 'DNS');
             return {
                 entry_id:       r.entry_id,
                 tijd_ms:        null,                    // afgevallen → geen valide finish-tijd
-                sanctie:        afval.sanctie || null,   // DQ-TF voor by-fault, anders null
+                sanctie:        isDns ? 'DNS' : (afval.sanctie || null),
                 rondes,
                 afval_rang:     isDns ? null : afval.plek,
                 // Photofinish-vlag meesturen — wissel_posities zet deze al
