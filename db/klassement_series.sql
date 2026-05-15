@@ -25,6 +25,10 @@ CREATE TABLE IF NOT EXISTS `klassement_series` (
                                   CHECK (json_valid(`regels`)),
     `aangemaakt_op`  DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP,
     `herberekend_op` DATETIME     DEFAULT NULL,
+    -- Publicatie-status: NULL = niet gepubliceerd (onzichtbaar in /public),
+    -- NOT NULL = gepubliceerd op die datum/tijd. Operator publiceert
+    -- expliciet vanuit Beheer → Klassementen.
+    `gepubliceerd_at` DATETIME    DEFAULT NULL,
     PRIMARY KEY (`id`),
     UNIQUE KEY `uq_series_klassement` (`klassement_id`),
     KEY `idx_series_org` (`org_id`),

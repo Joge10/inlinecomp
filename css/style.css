@@ -2959,8 +2959,18 @@ tr.ts-drop-below td  { border-bottom: 3px solid #2563eb !important; }
 .rk-serie-btn:hover { background: #c7530a; }
 .rk-type-badge { display:inline-block; font-size:.9rem; margin-right:.3rem; }
 .rk-badge-serie, .rk-badge-pdf { cursor: help; }
-.rk-detail-acties { display:flex; gap:8px; align-items:flex-start; flex-shrink:0; }
+.rk-detail-acties { display:flex; gap:8px; align-items:flex-start; flex-shrink:0; flex-wrap:wrap; }
 .rk-detail-btn { padding:6px 12px; font-size:.85rem; border-radius:6px; cursor:pointer; border:none; }
+/* Publicatie-status badge in de meta-regel (kleurcodes match het wedstrijd-
+   klassement-publicatie-blok in /Uitslag voor herkenbaarheid). */
+.rk-publ-status { display:inline-block; padding:2px 8px; border-radius:10px;
+                  font-size:.78rem; font-weight:600; }
+.rk-publ-on  { background:#d4eed8; color:#2a7a2a; }
+.rk-publ-off { background:#fce4e4; color:#b71c1c; }
+/* "Trek publicatie in"-knop — minder prominent dan "Publiceer" omdat 't
+   een ondoeneen-actie is, niet de standaard-flow. */
+.rk-publ-trek { background:#fff; color:#b71c1c; border:1px solid #b71c1c; }
+.rk-publ-trek:hover { background:#fce4e4; }
 
 /* Wizard-overlay */
 .ks-overlay {

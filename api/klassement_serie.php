@@ -931,6 +931,7 @@ if ($method === 'GET') {
             $sql = "
                 SELECT s.id, s.naam, s.seizoen, s.org_id, s.regels,
                        s.klassement_id, s.aangemaakt_op, s.herberekend_op,
+                       s.gepubliceerd_at,
                        k.totaal_rijders, k.categorieen
                 FROM klassement_series s
                 JOIN klassementen k ON k.id = s.klassement_id
@@ -1158,6 +1159,32 @@ if ($method === 'GET') {
 $body = json_decode(file_get_contents('php://input'), true) ?: [];
 
 try {
+    // ── Publiceer / intrek publicatie ──────────────────────────────────────
+    // Publicatie-status (gepubliceerd_at) bepaalt of /public en /coach het
+    // serie-klassement zien. Niet-gepubliceerd = onzichtbaar voor publiek
+    // (handig voor test-/probeer-series). Operator klikt expliciet.
+    if (($action === 'publiceer' || $action === 'trek_in') && $id) {
+        $check = $pdo->prepare("SELECT id FROM klassement_series WHERE id = ?");
+        $check->execute([$id]);
+        if (!$check->fetchColumn()) {
+            http_response_code(404);
+            echo json_encode(['error' => 'Serie niet gevonden']);
+            exit;
+        }
+        if ($action === 'publiceer') {
+            $pdo->prepare("UPDATE klassement_series SET gepubliceerd_at = NOW() WHERE id = ?")
+                ->execute([$id]);
+        } else {
+            $pdo->prepare("UPDATE klassement_series SET gepubliceerd_at = NULL WHERE id = ?")
+                ->execute([$id]);
+        }
+        $st = $pdo->prepare("SELECT gepubliceerd_at FROM klassement_series WHERE id = ?");
+        $st->execute([$id]);
+        echo json_encode(['ok' => true, 'gepubliceerd_at' => $st->fetchColumn()],
+            JSON_UNESCAPED_UNICODE);
+        exit;
+    }
+
     if ($action === 'delete' && $id) {
         $stmt = $pdo->prepare("SELECT klassement_id FROM klassement_series WHERE id = ?");
         $stmt->execute([$id]);

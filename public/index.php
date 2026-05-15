@@ -962,6 +962,8 @@ if ($action === 'series_voor_comp') {
             ORDER BY s.naam
         ");
         // 'herberekend_op' kolomnaam alleen in klassement_series — kleine SQL-fix:
+        // Filter op s.gepubliceerd_at IS NOT NULL — niet-gepubliceerde series
+        // (test-/probeer-versies) blijven verborgen voor public/coach.
         $stmt = $pdo->prepare("
             SELECT s.id AS serie_id, s.naam, s.seizoen, s.klassement_id,
                    s.herberekend_op,
@@ -970,6 +972,7 @@ if ($action === 'series_voor_comp') {
             JOIN klassement_serie_wedstrijden w ON w.serie_id = s.id
             JOIN klassementen k ON k.id = s.klassement_id
             WHERE w.competition_id = ? AND w.telt_mee = 1 AND k.totaal_rijders > 0
+              AND s.gepubliceerd_at IS NOT NULL
             GROUP BY s.id
             ORDER BY s.naam
         ");
@@ -989,11 +992,16 @@ if ($action === 'serie_klassement') {
     $klId = trim($_GET['klassement_id'] ?? '');
     if (!$klId) { echo json_encode(['error' => 'klassement_id verplicht']); exit; }
     try {
+        // Filter via klassement_series.gepubliceerd_at — alleen gepubliceerde
+        // series mogen in /public worden opgehaald. Niet-gepubliceerd → 404.
         $kl = $pdo->prepare("
-            SELECT id, naam, seizoen, bron_bestand, totaal_rijders,
-                   categorieen, wedstrijden_meta, aangemaakt_op
-            FROM klassementen
-            WHERE id = ? AND bron_bestand = '(serie-berekening)'
+            SELECT k.id, k.naam, k.seizoen, k.bron_bestand, k.totaal_rijders,
+                   k.categorieen, k.wedstrijden_meta, k.aangemaakt_op
+            FROM   klassementen k
+            JOIN   klassement_series s ON s.klassement_id = k.id
+            WHERE  k.id = ?
+              AND  k.bron_bestand = '(serie-berekening)'
+              AND  s.gepubliceerd_at IS NOT NULL
         ");
         $kl->execute([$klId]);
         $k = $kl->fetch(PDO::FETCH_ASSOC);

@@ -387,9 +387,18 @@ function renderDetail(k) {
     }).join('');
 
     const isSerie = k.bron_bestand === '(serie-berekening)';
+    // Publicatie-status (alleen relevant voor serie-klassementen).
+    // serie_gepubliceerd_at NULL = niet zichtbaar in /public + /coach.
+    const isGepubliceerd = isSerie && !!k.serie_gepubliceerd_at;
+    const publBtn = isSerie
+        ? (isGepubliceerd
+            ? `<button class="rk-detail-btn rk-publ-trek" data-serie-act="trek_in" title="Maak deze serie weer onzichtbaar in /public + /coach">↻ Trek publicatie in</button>`
+            : `<button class="btn-primary rk-detail-btn" data-serie-act="publiceer" title="Maak deze serie zichtbaar in /public + /coach">📢 Publiceer</button>`)
+        : '';
     const serieActies = isSerie
         ? `<div class="rk-detail-acties">
              <button class="btn-primary rk-detail-btn" data-serie-act="herbereken">🔄 Herbereken</button>
+             ${publBtn}
              <button class="btn-secondary rk-detail-btn" data-serie-act="print">🖨 Print</button>
              <button class="btn-secondary rk-detail-btn" data-serie-act="bewerken">✏️ Bewerken</button>
              <button class="btn-secondary rk-detail-btn" data-serie-act="diag">🔍 Diagnose</button>
@@ -398,6 +407,13 @@ function renderDetail(k) {
     const bronLabel = isSerie
         ? '📊 Berekend uit wedstrijden'
         : (k.bron_bestand ? `📄 ${rkEsc(k.bron_bestand)}` : '');
+    // Publicatie-badge in de meta-regel zodat in 1 oogopslag duidelijk is
+    // of /public deze serie ziet of niet.
+    const publBadge = isSerie
+        ? (isGepubliceerd
+            ? `<span class="rk-publ-status rk-publ-on" title="Zichtbaar in /public + /coach sinds ${rkEsc(String(k.serie_gepubliceerd_at).replace('T',' '))}">📢 Gepubliceerd</span>`
+            : `<span class="rk-publ-status rk-publ-off" title="Onzichtbaar in /public + /coach — klik 📢 Publiceer om vrij te geven">🔒 Niet gepubliceerd</span>`)
+        : '';
 
     return `
 <div class="rk-detail-header">
@@ -409,6 +425,7 @@ function renderDetail(k) {
             ${k.org_id ? ` · <span class="rk-org-label">🏢 ${rkEsc(rkOrgs.find(o => o.id === k.org_id)?.naam ?? '…')}</span>` : ''}
             ${datum ? ` · <span>${isSerie ? 'berekend' : 'geïmporteerd'} ${datum}</span>` : ''}
             ${bronLabel ? ` · <span class="rk-bronbestand">${bronLabel}</span>` : ''}
+            ${publBadge ? ` · ${publBadge}` : ''}
         </div>
     </div>
     ${serieActies}
@@ -483,6 +500,28 @@ function bindDetailEvents(container) {
                 openSerieWizard({ orgId: rkActieveOrgId || rkHuidig.org_id || '', serieId });
             } else if (act === 'diag') {
                 await diagnoseSerieer(serieId);
+            } else if (act === 'publiceer' || act === 'trek_in') {
+                // Publiceer / trek-in: zelfde patroon als wedstrijd-klassement.
+                const verb = act === 'publiceer' ? 'publiceren' : 'intrekken';
+                if (act === 'trek_in' && !await toonBevestigDialog(
+                    `Publicatie intrekken? "${rkEsc(rkHuidig.naam)}" wordt onmiddellijk verborgen in /public + /coach.`,
+                    'Publicatie intrekken')) return;
+                btn.disabled = true; btn.textContent = 'Bezig…';
+                try {
+                    await rkPost(
+                        `api/klassement_serie.php?action=${act}&id=${encodeURIComponent(serieId)}`,
+                        new FormData()
+                    );
+                    // Detail opnieuw laden zodat badge + knop-label kloppen
+                    rkHuidig = await rkGet(
+                        `api/klassement_import.php?action=get&id=${encodeURIComponent(rkHuidig.id)}`
+                    );
+                    rkEl('rk-detail').innerHTML = renderDetail(rkHuidig);
+                    bindDetailEvents(rkEl('rk-detail'));
+                } catch (e) {
+                    toonBevestigDialog(`Fout bij ${verb}: ${e.message}`, 'Fout');
+                    btn.disabled = false;
+                }
             }
         });
     });

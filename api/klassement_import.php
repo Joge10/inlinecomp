@@ -107,10 +107,18 @@ if ($method === 'GET') {
         }
         echo json_encode($rows);
     } elseif ($action === 'get' && $id) {
+        // LEFT JOIN klassement_series — alleen bij serie-klassementen levert
+        // dat extra meta (serie_id + gepubliceerd_at). Bij PDF-imports zijn
+        // beide NULL. Front-end gebruikt gepubliceerd_at om de Publiceer/
+        // Trek-in-knop in /Beheer te tonen.
         $kl = $pdo->prepare(
-            "SELECT id, naam, seizoen, bron_bestand, categorieen, totaal_rijders,
-                    org_id, aangemaakt_op, wedstrijden_meta
-             FROM klassementen WHERE id = ?"
+            "SELECT k.id, k.naam, k.seizoen, k.bron_bestand, k.categorieen,
+                    k.totaal_rijders, k.org_id, k.aangemaakt_op, k.wedstrijden_meta,
+                    s.id              AS serie_id,
+                    s.gepubliceerd_at AS serie_gepubliceerd_at
+             FROM   klassementen k
+             LEFT   JOIN klassement_series s ON s.klassement_id = k.id
+             WHERE  k.id = ?"
         );
         $kl->execute([$id]);
         $k = $kl->fetch(PDO::FETCH_ASSOC);
