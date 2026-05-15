@@ -357,17 +357,21 @@ function renderDetail(k) {
 
     const rijen = gefilterd.map(p => {
         const detail = p.punten_detail ?? {};
-        // _gestreept = array van comp_ids die bij streepresultaten zijn
-        // weggehaald. Tonen we doorgehaald + gedimd, zodat de gebruiker ziet
-        // welke score wegvalt (en dus niet meetelt in het totaal).
+        // _gestreept = array van pwKeys (= comp_id of comp_id|distance_id)
+        // die bij streepresultaten zijn weggehaald. Tonen we doorgehaald +
+        // gedimd, zodat de gebruiker ziet welke score wegvalt.
         const gestreeptSet = new Set(detail._gestreept ?? []);
+        // Sleutel-helper: bij nieuwe data is w.key altijd gevuld; oude
+        // klassementen vóór de per-afstand-fix hebben alleen w.comp_id.
+        const colKey = w => w.key ?? w.comp_id;
         const wedstrijdCellen = toonWedstrijden
             ? wMeta.map(w => {
-                const waarde = detail[w.comp_id];
+                const k = colKey(w);
+                const waarde = detail[k];
                 if (waarde == null) {
                     return `<td class="tc rk-w"><span class="rk-nng">–</span></td>`;
                 }
-                if (gestreeptSet.has(w.comp_id)) {
+                if (gestreeptSet.has(k)) {
                     return `<td class="tc rk-w rk-w-streep" title="Weggestreept resultaat (telt niet mee in totaal)">${fmtP(waarde)}</td>`;
                 }
                 return `<td class="tc rk-w">${fmtP(waarde)}</td>`;
@@ -447,10 +451,15 @@ ${filterTabs}
             <th class="tc">Start#</th>
             <th>Naam</th>
             ${toonCatCol ? `<th class="tc">Cat.</th>` : ''}
-            ${toonWedstrijden ? wMeta.map((w, i) =>
-                `<th class="tc rk-w" title="${rkEsc(w.naam)}${w.datum ? ' · ' + String(w.datum).substring(0,10) : ''}${w.is_finale ? ' · FINALE' : ''}">
-                    ${w.is_finale ? 'F' : '#' + (i + 1)}
-                </th>`).join('') : ''}
+            ${toonWedstrijden ? wMeta.map((w, i) => {
+                // Bij per-afstand-mode tonen we de distance_naam onder het
+                // F/#-label zodat de operator direct ziet welke afstand
+                // welke kolom is. Volle wedstrijd-naam blijft in tooltip.
+                const titel = `${rkEsc(w.naam)}${w.distance_naam ? ' · ' + rkEsc(w.distance_naam) : ''}${w.datum ? ' · ' + String(w.datum).substring(0,10) : ''}${w.is_finale ? ' · FINALE' : ''}`;
+                const top = w.is_finale ? 'F' : '#' + (i + 1);
+                const sub = w.distance_naam ? `<div class="rk-w-sub">${rkEsc(w.distance_naam)}</div>` : '';
+                return `<th class="tc rk-w" title="${titel}">${top}${sub}</th>`;
+            }).join('') : ''}
             ${toonWedstrijden ? `<th class="tc rk-totaal">Totaal</th>` : ''}
         </tr>
     </thead>
@@ -623,10 +632,13 @@ async function printSerieKlassement(k) {
     const blokkenHtml = catLabels.map(cat => {
         const rijen = allePos.filter(p => p.categorie === cat);
         if (!rijen.length) return '';
+        const colKey = w => w.key ?? w.comp_id;  // back-compat
         const wedstrijdHdr = heeftWedstrijden
             ? wMeta.map((w, i) => {
-                const tip = esc(w.naam || '') + (w.datum ? ' · ' + String(w.datum).substring(0, 10) : '');
-                return `<th class="pk-w" title="${tip}">${w.is_finale ? 'F' : '#' + (i + 1)}</th>`;
+                const tip = esc(w.naam || '') + (w.distance_naam ? ' · ' + esc(w.distance_naam) : '') + (w.datum ? ' · ' + String(w.datum).substring(0, 10) : '');
+                const top = w.is_finale ? 'F' : '#' + (i + 1);
+                const sub = w.distance_naam ? `<div style="font-size:.62rem;font-weight:400;color:#666;line-height:1.1">${esc(w.distance_naam)}</div>` : '';
+                return `<th class="pk-w" title="${tip}">${top}${sub}</th>`;
             }).join('')
             : '';
         const rijenHtml = rijen.map(p => {
@@ -634,9 +646,10 @@ async function printSerieKlassement(k) {
             const gestreept = new Set(detail._gestreept ?? []);
             const wCellen = heeftWedstrijden
                 ? wMeta.map(w => {
-                    const v = detail[w.comp_id];
+                    const k = colKey(w);
+                    const v = detail[k];
                     if (v == null) return `<td class="pk-w pk-nng">–</td>`;
-                    const cls = gestreept.has(w.comp_id) ? ' pk-streep' : '';
+                    const cls = gestreept.has(k) ? ' pk-streep' : '';
                     return `<td class="pk-w${cls}">${fmtP(v)}</td>`;
                 }).join('')
                 : '';

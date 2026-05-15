@@ -2971,6 +2971,10 @@ tr.ts-drop-below td  { border-bottom: 3px solid #2563eb !important; }
    een ondoeneen-actie is, niet de standaard-flow. */
 .rk-publ-trek { background:#fff; color:#b71c1c; border:1px solid #b71c1c; }
 .rk-publ-trek:hover { background:#fce4e4; }
+/* Sub-label onder de wedstrijd-kolom-header (bv. "1000 meter" bij
+   per-afstand-mode). Iets kleiner + lichter, op aparte regel. */
+.rk-w-sub { font-size:.7rem; font-weight:400; color:#666;
+            line-height:1.1; margin-top:1px; white-space:nowrap; }
 
 /* Wizard-overlay */
 .ks-overlay {

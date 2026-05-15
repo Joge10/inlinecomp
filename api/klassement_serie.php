@@ -422,6 +422,29 @@ function berekenSerie(PDO $pdo, string $serieId): array {
             $dcGroepen[$dcKey][] = $r;
         }
 
+        // pwKey = "per-wedstrijd-key" — bij afstand-level apart per (comp,
+        // distance) zodat een wedstrijd met meerdere geselecteerde afstanden
+        // per afstand een eigen kolom krijgt in de uitslag (niet opgeteld
+        // tot één wedstrijd-totaal).
+        $mkPwKey = function($r) use ($isAfstandLevel) {
+            return $isAfstandLevel
+                ? $r['competition_id'] . '|' . ($r['distance_id'] ?? '0')
+                : $r['competition_id'];
+        };
+        // Bewaar per pwKey de meta-info die de UI nodig heeft (comp_id +
+        // distance_naam) — gebruikt straks om wedstrijden_meta op te bouwen.
+        $pwKeyMeta = []; // pwKey => ['comp_id', 'distance_id', 'distance_naam']
+        foreach ($rijen as $r) {
+            $k = $mkPwKey($r);
+            if (!isset($pwKeyMeta[$k])) {
+                $pwKeyMeta[$k] = [
+                    'comp_id'       => $r['competition_id'],
+                    'distance_id'   => $r['distance_id'] ?? null,
+                    'distance_naam' => $r['distance_naam'] ?? null,
+                ];
+            }
+        }
+
         foreach ($groepen as $groep) {
             // Sorteer binnen de (comp, DC, splitgroep, cat) op absolute rang ASC
             usort($groep, function($a, $b) {
@@ -429,12 +452,15 @@ function berekenSerie(PDO $pdo, string $serieId): array {
                 $rb = $b['rang'] !== null ? (int)$b['rang'] : PHP_INT_MAX;
                 return $ra <=> $rb;
             });
-            // Tellingen voor non-deelname-regel: aantal rijders in deze (comp, cat).
+            // Tellingen voor non-deelname-regel: aantal rijders in deze
+            // (pwKey, cat). Bij afstand-level is pwKey = comp+distance, dus
+            // de telling is per (comp, distance, cat) — anders per (comp, cat).
             if ($groep) {
                 $compId = $groep[0]['competition_id'];
                 $catKey = $groep[0]['persoon_cat'] ?? $groep[0]['categorie'] ?? '';
-                $aantalPerCompCat[$compId][$catKey] =
-                    ($aantalPerCompCat[$compId][$catKey] ?? 0) + count($groep);
+                $pwKey  = $mkPwKey($groep[0]);
+                $aantalPerCompCat[$pwKey][$catKey] =
+                    ($aantalPerCompCat[$pwKey][$catKey] ?? 0) + count($groep);
                 $compNaamMap[$compId] = $groep[0]['comp_naam'];
                 $catNaamPerComp[$compId][$catKey] = $groep[0]['dc_naam'] ?? '';
             }
@@ -469,8 +495,9 @@ function berekenSerie(PDO $pdo, string $serieId): array {
                 }
                 $acc[$lic][$cat]['detail'][$wNaam] =
                     ($acc[$lic][$cat]['detail'][$wNaam] ?? 0) + $punten;
-                $acc[$lic][$cat]['per_wedstrijd'][$r['competition_id']] =
-                    ($acc[$lic][$cat]['per_wedstrijd'][$r['competition_id']] ?? 0) + $punten;
+                $pwKey = $mkPwKey($r);
+                $acc[$lic][$cat]['per_wedstrijd'][$pwKey] =
+                    ($acc[$lic][$cat]['per_wedstrijd'][$pwKey] ?? 0) + $punten;
                 if (!empty($r['wedstrijd_snr'])) $acc[$lic][$cat]['startnr'] = $r['wedstrijd_snr'];
             }
         }
@@ -520,8 +547,9 @@ function berekenSerie(PDO $pdo, string $serieId): array {
                 }
                 $acc[$lic][$clusterLabel]['detail'][$wNaam] =
                     ($acc[$lic][$clusterLabel]['detail'][$wNaam] ?? 0) + $punten;
-                $acc[$lic][$clusterLabel]['per_wedstrijd'][$r['competition_id']] =
-                    ($acc[$lic][$clusterLabel]['per_wedstrijd'][$r['competition_id']] ?? 0) + $punten;
+                $pwKey = $mkPwKey($r);
+                $acc[$lic][$clusterLabel]['per_wedstrijd'][$pwKey] =
+                    ($acc[$lic][$clusterLabel]['per_wedstrijd'][$pwKey] ?? 0) + $punten;
                 if (!empty($r['wedstrijd_snr'])) $acc[$lic][$clusterLabel]['startnr'] = $r['wedstrijd_snr'];
             }
         }
@@ -538,22 +566,25 @@ function berekenSerie(PDO $pdo, string $serieId): array {
                 foreach ($perCatMap as $cat => &$row) {
                     // Skip cluster-rijen (cat-label bevat '/')
                     if (strpos($cat, '/') !== false) continue;
-                    foreach ($compIds as $cId) {
-                        // Heeft de rijder al punten in deze wedstrijd in deze cat?
-                        if (isset($row['per_wedstrijd'][$cId])) continue;
-                        // Hoeveel deelnemers waren er in (cId, cat)? Zonder rijders
-                        // is er ook geen "laatste rang" — sla over.
-                        $aantal = $aantalPerCompCat[$cId][$cat] ?? 0;
+                    // Loop over álle pwKeys (= unique (comp, [distance])-paren).
+                    // pwKeyMeta is gebouwd uit de rijen — dus alleen de
+                    // (comp, distance) combinaties die echt in deze serie
+                    // voorkomen worden gepenaliseerd bij non-deelname.
+                    foreach ($pwKeyMeta as $pwKey => $pwInfo) {
+                        if (isset($row['per_wedstrijd'][$pwKey])) continue;
+                        $aantal = $aantalPerCompCat[$pwKey][$cat] ?? 0;
                         if ($aantal === 0) continue;
-                        // Rang = laatste + 1; punten via tabel of fallback.
                         $rang   = $aantal + 1;
                         $punten = $regels['punten_tabel'][$rang - 1]
                                   ?? $regels['min_punten_bij_deelname'];
                         $row['totaal'] += (float)$punten;
-                        $row['per_wedstrijd'][$cId] = (float)$punten;
+                        $row['per_wedstrijd'][$pwKey] = (float)$punten;
+                        $cId = $pwInfo['comp_id'];
                         $compNaam = $compNaamMap[$cId] ?? $cId;
                         $dcNaam   = $catNaamPerComp[$cId][$cat] ?? '?';
-                        $wLabel   = $compNaam . ' · ' . $dcNaam . ' (afwezig)';
+                        $distSuffix = $pwInfo['distance_naam']
+                            ? ' · ' . $pwInfo['distance_naam'] : '';
+                        $wLabel   = $compNaam . ' · ' . $dcNaam . $distSuffix . ' (afwezig)';
                         $row['detail'][$wLabel] = (float)$punten;
                         // Geen $row['deelnames']++ — afwezigheid telt niet als deelname,
                         // anders zou je min_deelnames-drempel kunnen omzeilen.
@@ -628,9 +659,13 @@ function berekenSerie(PDO $pdo, string $serieId): array {
             if ($streep > 0) {
                 $constituents = explode('/', $cat);
                 $nGereden = 0;
-                foreach ($compIds as $cId) {
+                // Bij afstand-level loopt aantalPerCompCat op pwKey ipv comp_id
+                // — gebruik dan de pwKeys, anders de compIds. Zo blijft de
+                // streep-quota berekening kloppen in beide modes.
+                $keysToCheck = $isAfstandLevel ? array_keys($pwKeyMeta) : $compIds;
+                foreach ($keysToCheck as $kk) {
                     foreach ($constituents as $c) {
-                        if (($aantalPerCompCat[$cId][$c] ?? 0) > 0) {
+                        if (($aantalPerCompCat[$kk][$c] ?? 0) > 0) {
                             $nGereden++;
                             break;
                         }
@@ -652,7 +687,21 @@ function berekenSerie(PDO $pdo, string $serieId): array {
                 $row['_beste_resultaten'] = array_column($paren, 'punten');
             }
             $row['_gestreept'] = $gestreeptIds;
-            $row['_laatste_punten'] = $row['per_wedstrijd'][$laatsteComp] ?? 0;
+            // _laatste_punten = som over alle pwKeys van laatste comp.
+            // Bij niet-afstand-level is dit gewoon per_wedstrijd[laatsteComp].
+            // Bij afstand-level tellen we alle (laatsteComp, *)-keys op zodat
+            // de tie-break "laatste wedstrijd" alle distances van die comp
+            // samenvat (= meeste betekenis voor de operator).
+            $lp = 0;
+            if ($isAfstandLevel) {
+                $prefix = $laatsteComp . '|';
+                foreach ($row['per_wedstrijd'] as $kkey => $pp) {
+                    if (strpos($kkey, $prefix) === 0) $lp += (float)$pp;
+                }
+            } else {
+                $lp = (float)($row['per_wedstrijd'][$laatsteComp] ?? 0);
+            }
+            $row['_laatste_punten'] = $lp;
             $perCat[$cat][] = $row;
         }
     }
@@ -702,30 +751,83 @@ function berekenSerie(PDO $pdo, string $serieId): array {
     }
     unset($lijst);
 
-    // Meta over de wedstrijden (voor UI-kolommen). Naam-lookup eerst in
-    // competitions; als de wedstrijd nog niet is geïmporteerd, gebruik de
-    // opgeslagen comp_naam uit de koppelrij als fallback.
+    // Meta over de wedstrijden (voor UI-kolommen). Bij afstand-level krijgt
+    // ELKE (comp, distance) een eigen kolom — anders één kolom per wedstrijd.
+    // Naam-lookup eerst in competitions; als de wedstrijd nog niet is
+    // geïmporteerd, gebruik de opgeslagen comp_naam uit de koppelrij als
+    // fallback.
     $meta = [];
     $nStmt = $pdo->prepare("SELECT name FROM competitions WHERE id = ?");
     $fStmt = $pdo->prepare("SELECT comp_naam, comp_datum FROM klassement_serie_wedstrijden WHERE serie_id = ? AND competition_id = ?");
-    foreach ($wedstrijden as $i => $w) {
-        $nStmt->execute([$w['competition_id']]);
-        $naamDb = $nStmt->fetchColumn();          // false → niet in competitions
+    // Cache: comp_id → ['naam', 'datum', 'geimporteerd'] zodat we per pwKey
+    // niet steeds opnieuw de DB hoeven te raadplegen.
+    $compInfoCache = [];
+    foreach ($wedstrijden as $w) {
+        $cid = $w['competition_id'];
+        if (isset($compInfoCache[$cid])) continue;
+        $nStmt->execute([$cid]);
+        $naamDb = $nStmt->fetchColumn();
         $geimporteerd = (bool)$naamDb;
         $naam = $naamDb ?: null;
         if (!$naam) {
-            $fStmt->execute([$serieId, $w['competition_id']]);
+            $fStmt->execute([$serieId, $cid]);
             $fb = $fStmt->fetch(PDO::FETCH_ASSOC) ?: [];
-            $naam = $fb['comp_naam'] ?? $w['competition_id'];
+            $naam = $fb['comp_naam'] ?? $cid;
         }
-        $meta[] = [
-            'comp_id'       => $w['competition_id'],
-            'naam'          => $naam,
-            'datum'         => $w['starts'] ?? null,
-            'is_finale'     => !empty($w['is_finale']) || $w['competition_id'] === $laatsteComp,
-            'volgorde'      => (int)($w['volgorde'] ?? $i),
-            'geimporteerd'  => $geimporteerd,
+        $compInfoCache[$cid] = [
+            'naam'         => $naam,
+            'datum'        => $w['starts'] ?? null,
+            'is_finale'    => !empty($w['is_finale']) || $cid === $laatsteComp,
+            'volgorde'     => (int)($w['volgorde'] ?? 0),
+            'geimporteerd' => $geimporteerd,
         ];
+    }
+    if ($isAfstandLevel && !empty($pwKeyMeta)) {
+        // Eén meta-entry per (comp, distance) — sorteer op volgorde van de
+        // wedstrijd, daarna op distance-meters (kortste eerst). pwKeyMeta is
+        // gevuld in de berekening hierboven.
+        $entries = [];
+        foreach ($pwKeyMeta as $pwKey => $pwInfo) {
+            $cid = $pwInfo['comp_id'];
+            $ci  = $compInfoCache[$cid] ?? null;
+            if (!$ci) continue;
+            $entries[] = [
+                'key'           => $pwKey,
+                'comp_id'       => $cid,
+                'distance_id'   => $pwInfo['distance_id'],
+                'distance_naam' => $pwInfo['distance_naam'],
+                'naam'          => $ci['naam'],
+                'datum'         => $ci['datum'],
+                'is_finale'     => $ci['is_finale'],
+                'volgorde'      => $ci['volgorde'],
+                'geimporteerd'  => $ci['geimporteerd'],
+            ];
+        }
+        usort($entries, function($a, $b) {
+            if ($a['volgorde'] !== $b['volgorde']) return $a['volgorde'] <=> $b['volgorde'];
+            // Binnen comp: alfabetisch op distance_naam (meters niet voor
+            // handen hier; namen sorteren stabiel genoeg)
+            return strcmp((string)$a['distance_naam'], (string)$b['distance_naam']);
+        });
+        $meta = $entries;
+    } else {
+        // Klassieke modus: één entry per wedstrijd, key = comp_id (back-compat).
+        foreach ($wedstrijden as $i => $w) {
+            $cid = $w['competition_id'];
+            $ci  = $compInfoCache[$cid] ?? [
+                'naam' => $cid, 'datum' => null,
+                'is_finale' => false, 'volgorde' => $i, 'geimporteerd' => false,
+            ];
+            $meta[] = [
+                'key'          => $cid,        // = comp_id (back-compat)
+                'comp_id'      => $cid,
+                'naam'         => $ci['naam'],
+                'datum'        => $ci['datum'],
+                'is_finale'    => $ci['is_finale'],
+                'volgorde'     => (int)($w['volgorde'] ?? $i),
+                'geimporteerd' => $ci['geimporteerd'],
+            ];
+        }
     }
 
     return [
