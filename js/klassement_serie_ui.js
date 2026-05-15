@@ -278,15 +278,27 @@ function _renderStap3(state, body) {
 
         <div class="ks-veld">
             <label>Type klassement</label>
-            <select class="inp" id="ks-type">
-                <option value="gecombineerd" ${r.type==='gecombineerd'?'selected':''}>Gecombineerd</option>
-                <option value="sprint"       ${r.type==='sprint'?'selected':''}>Sprint</option>
-                <option value="lang"         ${r.type==='lang'?'selected':''}>Lange afstand</option>
-            </select>
-            <div class="ks-hint">
-                <b>Gecombineerd</b> — pakt het DC-eindklassement van categorieën met meerdere afstanden (standaard KNSB-opzet, bv. 500m + 1000m samen).<br>
-                <b>Sprint</b> — pakt het eindklassement van DC's met één sprint-afstand (≤ 1000m).<br>
-                <b>Lange afstand</b> — pakt het eindklassement van DC's met één lange afstand (> 1000m).
+            <div style="display:flex;flex-direction:column;gap:6px;font-size:12.5px">
+                <label><input type="radio" name="ks-type" value="custom"
+                    ${r.type !== 'gecombineerd' ? 'checked' : ''}>
+                    <b>Per afstand</b> — kies hieronder welke afstanden meedoen; punten per afstand worden opgeteld</label>
+                <label><input type="radio" name="ks-type" value="gecombineerd"
+                    ${r.type === 'gecombineerd' ? 'checked' : ''}>
+                    <b>Gecombineerd (DC-eindklassement)</b> — pakt het DC-eindklassement (combinatie van alle afstanden binnen een categorie, bv. 500m + 1000m samen) i.p.v. afzonderlijke afstanden</label>
+            </div>
+        </div>
+
+        <!-- Afstanden-multi-select: alleen zichtbaar bij type='custom' (per-afstand). -->
+        <div class="ks-veld" id="ks-afst-veld" style="${r.type === 'gecombineerd' ? 'display:none' : ''}">
+            <label>Afstanden voor dit klassement <span style="color:#666;font-weight:400;font-size:11.5px">(niets aangevinkt = niets telt mee)</span></label>
+            <div id="ks-afst-filter-wrap" style="border:1px solid var(--border);background:#fafbfc;border-radius:4px;padding:6px;min-height:36px">
+                <em style="color:#888;font-size:11.5px">Afstanden laden uit geselecteerde wedstrijden…</em>
+            </div>
+            <div style="font-size:11.5px;color:#666;margin:4px 0 0 2px">
+                Vink aan welke afstanden meetellen. De punten per geselecteerde afstand
+                worden per rijder opgeteld tot een serie-totaal.<br>
+                Voorbeeld <b>1000m-serie</b>: alleen "1000 meter" aankruisen.<br>
+                Voorbeeld <b>sprint-serie</b>: 100m / 200m / 300m / 500m aankruisen.
             </div>
         </div>
 
@@ -359,13 +371,24 @@ function _renderStap3(state, body) {
     // ── Event wiring ─────────
     const get = id => body.querySelector(id);
 
-    get('#ks-type').addEventListener('change', e => {
-        r.type = e.target.value;
-        // type bepaalt welke DCs meetellen (sprint / lang / gecombineerd=alle)
-        r.afstand_filter = r.type === 'sprint' ? 'sprint'
-                         : r.type === 'lang'   ? 'lang'
-                                               : 'alle';
-        r.afstand_namen = [];
+    // Type-radio's: schakelt tussen Per-afstand (custom + per_naam-filter)
+    // en Gecombineerd (= DC-eindklassement-pad). Toont/verbergt het
+    // afstanden-multi-select-veld.
+    body.querySelectorAll('input[name="ks-type"]').forEach(rb => {
+        rb.addEventListener('change', e => {
+            r.type = e.target.value;
+            if (r.type === 'gecombineerd') {
+                r.afstand_filter = 'alle';
+                r.afstand_namen = [];
+                body.querySelector('#ks-afst-veld').style.display = 'none';
+            } else {
+                r.type = 'custom';
+                r.afstand_filter = 'per_naam';
+                // afstand_namen blijft leeg tot operator iets aanvinkt;
+                // multi-select verschijnt direct.
+                body.querySelector('#ks-afst-veld').style.display = '';
+            }
+        });
     });
     get('#ks-tabel').addEventListener('input', e => {
         r.punten_tabel = e.target.value.split(',').map(s => parseFloat(s.trim())).filter(n => !isNaN(n));
@@ -431,6 +454,108 @@ function _renderStap3(state, body) {
             wrap.innerHTML = `<em style="color:#b71c1c;font-size:11.5px">⚠ Categorieën laden mislukt: ${rkEsc(e.message)}</em>`;
         }
     })();
+
+    // ── Afstanden-multi-select: zelfde patroon als categorie-filter ──
+    // Lijst komt uit de daadwerkelijk-geselecteerde wedstrijden zodat
+    // operator alleen kan kiezen uit wat in deze serie voorkomt. Past
+    // automatisch aan als de wedstrijd-set in stap 2 wijzigt (door bij
+    // open van stap 3 opnieuw op te halen).
+    (async () => {
+        const wrap = get('#ks-afst-filter-wrap');
+        if (!wrap) return;
+        const compIds = (state.wedstrijden || [])
+            .filter(w => w.telt_mee !== false)
+            .map(w => w.competition_id)
+            .filter(Boolean);
+        if (!compIds.length) {
+            wrap.innerHTML = '<em style="color:#888;font-size:11.5px">Selecteer eerst wedstrijden in stap 2.</em>';
+            return;
+        }
+        try {
+            const res = await fetch(`api/klassement_serie.php?action=afstanden_van_wedstrijden&comp_ids=${encodeURIComponent(compIds.join(','))}`);
+            const afstanden = await res.json();
+            if (!Array.isArray(afstanden) || !afstanden.length) {
+                wrap.innerHTML = '<em style="color:#888;font-size:11.5px">Geen afstanden gevonden in de geselecteerde wedstrijden.</em>';
+                return;
+            }
+            // Backwards-compat: oude series met type='sprint'/'lang' hebben
+            // geen afstand_namen — vink dan de juiste afstanden voor (sprint
+            // = race_type='sprint', lang = race_type<>'sprint'). Bij opslaan
+            // worden ze vanaf nu altijd als 'per_naam' opgeslagen.
+            let aangevinktSet;
+            if (r.afstand_filter === 'per_naam' && Array.isArray(r.afstand_namen)) {
+                aangevinktSet = new Set(r.afstand_namen);
+            } else if (r.afstand_filter === 'sprint') {
+                aangevinktSet = new Set(afstanden.filter(a => a.race_type === 'sprint').map(a => a.naam));
+            } else if (r.afstand_filter === 'lang') {
+                aangevinktSet = new Set(afstanden.filter(a => a.race_type !== 'sprint').map(a => a.naam));
+            } else {
+                aangevinktSet = new Set();
+            }
+            // Render checkbox-grid
+            wrap.innerHTML = `
+                <div style="display:flex;flex-wrap:wrap;gap:5px;margin-bottom:4px">
+                    ${afstanden.map(a => {
+                        const aan = aangevinktSet.has(a.naam);
+                        const rtBadge = a.race_type === 'sprint' ? ' <small style="color:#888">sprint</small>' : '';
+                        return `<label style="display:inline-flex;align-items:center;gap:3px;padding:2px 7px;border:1px solid var(--border);border-radius:12px;background:${aan ? '#dceaf5' : '#fff'};font-size:11.5px;cursor:pointer">
+                            <input type="checkbox" class="ks-afst-cb" data-naam="${rkEsc(a.naam)}" ${aan ? 'checked' : ''} style="margin:0">
+                            <span>${rkEsc(a.naam)}${rtBadge}</span>
+                        </label>`;
+                    }).join('')}
+                </div>
+                <div style="display:flex;gap:8px;font-size:11px">
+                    <button type="button" id="ks-afst-allemaal" class="btn-secondary" style="font-size:11px;padding:2px 8px">Alle aanvinken</button>
+                    <button type="button" id="ks-afst-sprint"   class="btn-secondary" style="font-size:11px;padding:2px 8px">Alleen sprint</button>
+                    <button type="button" id="ks-afst-lang"     class="btn-secondary" style="font-size:11px;padding:2px 8px">Alleen lange afstand</button>
+                    <button type="button" id="ks-afst-geen"     class="btn-secondary" style="font-size:11px;padding:2px 8px">Niets aanvinken</button>
+                    <span id="ks-afst-aantal" style="margin-left:auto;color:#666;font-style:italic">${aangevinktSet.size} van ${afstanden.length} aangevinkt</span>
+                </div>`;
+            const updateState = () => {
+                const aan = Array.from(wrap.querySelectorAll('.ks-afst-cb:checked')).map(cb => cb.dataset.naam);
+                r.afstand_namen = aan;
+                // Forceer per_naam-mode zodra operator hier dingen aanvinkt;
+                // overschrijft eventuele legacy 'sprint'/'lang' filter.
+                r.afstand_filter = 'per_naam';
+                r.type = 'custom';
+                wrap.querySelectorAll('.ks-afst-cb').forEach(cb => {
+                    cb.closest('label').style.background = cb.checked ? '#dceaf5' : '#fff';
+                });
+                const teller = wrap.querySelector('#ks-afst-aantal');
+                if (teller) teller.textContent = `${aan.length} van ${afstanden.length} aangevinkt`;
+            };
+            // Persist initial state (in case it kwam uit sprint/lang back-compat)
+            updateState();
+            wrap.querySelectorAll('.ks-afst-cb').forEach(cb => cb.addEventListener('change', updateState));
+            wrap.querySelector('#ks-afst-allemaal')?.addEventListener('click', () => {
+                wrap.querySelectorAll('.ks-afst-cb').forEach(cb => cb.checked = true);
+                updateState();
+            });
+            wrap.querySelector('#ks-afst-sprint')?.addEventListener('click', () => {
+                wrap.querySelectorAll('.ks-afst-cb').forEach(cb => {
+                    const naam = cb.dataset.naam;
+                    const isSprint = afstanden.find(a => a.naam === naam)?.race_type === 'sprint';
+                    cb.checked = !!isSprint;
+                });
+                updateState();
+            });
+            wrap.querySelector('#ks-afst-lang')?.addEventListener('click', () => {
+                wrap.querySelectorAll('.ks-afst-cb').forEach(cb => {
+                    const naam = cb.dataset.naam;
+                    const isSprint = afstanden.find(a => a.naam === naam)?.race_type === 'sprint';
+                    cb.checked = !isSprint;
+                });
+                updateState();
+            });
+            wrap.querySelector('#ks-afst-geen')?.addEventListener('click', () => {
+                wrap.querySelectorAll('.ks-afst-cb').forEach(cb => cb.checked = false);
+                updateState();
+            });
+        } catch (e) {
+            wrap.innerHTML = `<em style="color:#b71c1c;font-size:11.5px">⚠ Afstanden laden mislukt: ${rkEsc(e.message)}</em>`;
+        }
+    })();
+
     get('#ks-streep').addEventListener('input',  e => r.streepresultaten        = Math.max(0, parseInt(e.target.value) || 0));
     get('#ks-streep-direct').addEventListener('change', e => r.streep_direct    = e.target.checked);
     get('#ks-tie').addEventListener('change',    e => r.tie_break               = e.target.value);
@@ -578,11 +703,17 @@ async function diagnoseSerieer(serieId) {
         const catFilterTxt = (regels.categorie_filter ?? []).length
             ? ` · cats = <b>${rkEsc((regels.categorie_filter || []).join(', '))}</b>`
             : '';
+        // Filter-tekst: bij per_naam ook de geselecteerde afstanden tonen
+        // (vroeger 'sprint'/'lang' was rijk genoeg, per_naam is informatief
+        // alleen als je weet welke afstanden meegerekend zijn).
+        const afstFilterTxt = regels.afstand_filter === 'per_naam'
+            ? ` (${(regels.afstand_namen ?? []).join(', ') || 'geen afstanden geselecteerd'})`
+            : '';
         const regelsSamenv = regels.type
             ? `<div class="ks-hint">
                 <b>Actieve regels:</b>
                 type = <b>${rkEsc(regels.type)}</b> ·
-                filter = <b>${rkEsc(regels.afstand_filter)}</b>${catFilterTxt} ·
+                filter = <b>${rkEsc(regels.afstand_filter)}</b>${rkEsc(afstFilterTxt)}${catFilterTxt} ·
                 min_deelnames = ${regels.min_deelnames ?? 0} ·
                 streep = ${regels.streepresultaten ?? 0} ·
                 vereist_finale = ${regels.vereist_finale ? 'ja' : 'nee'}

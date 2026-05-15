@@ -902,6 +902,34 @@ if ($method === 'GET') {
         // entries.competition_id bestaat niet — entries hangt aan
         // distance_combination_id, en dc heeft competition_id. Dus
         // joinen via distance_combinations om competition-scope te krijgen.
+        // Distinct afstand-namen + race_type van een set wedstrijden. Bedoeld
+        // voor de "Afstanden voor dit klassement"-checkbox-lijst in de serie-
+        // wizard. Per afstand-naam pakken we min(race_type) zodat de UI per
+        // afstand kan tonen of 't sprint of lange afstand is. Param: comp_ids.
+        if ($action === 'afstanden_van_wedstrijden') {
+            $idsRaw = trim($_GET['comp_ids'] ?? '');
+            $compIds = array_values(array_filter(array_map('trim', explode(',', $idsRaw))));
+            if (empty($compIds)) { echo json_encode([]); exit; }
+            $ph = implode(',', array_fill(0, count($compIds), '?'));
+            $st = $pdo->prepare("
+                SELECT d.name AS naam,
+                       MIN(d.race_type) AS race_type,
+                       MIN(d.value_meters) AS meters
+                FROM distances d
+                JOIN distance_combinations dc ON dc.id = d.distance_combination_id
+                WHERE dc.competition_id IN ($ph)
+                  AND d.name IS NOT NULL
+                  AND TRIM(d.name) <> ''
+                GROUP BY d.name
+                ORDER BY meters, d.name
+            ");
+            $st->execute($compIds);
+            $rows = $st->fetchAll(PDO::FETCH_ASSOC);
+            echo json_encode(array_values(array_filter($rows, fn($r) => !empty($r['naam']))),
+                JSON_UNESCAPED_UNICODE);
+            exit;
+        }
+
         if ($action === 'categorieen_van_wedstrijden') {
             $idsRaw = trim($_GET['comp_ids'] ?? '');
             $compIds = array_values(array_filter(array_map('trim', explode(',', $idsRaw))));
