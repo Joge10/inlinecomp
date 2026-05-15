@@ -1901,9 +1901,11 @@ function heatTabelHeader(extra) {
 }
 function heatTabelRij(r, isIk, extra) {
     const rTijd = r.tijd_ms != null ? msTijd(r.tijd_ms) : '';
-    // uitslag_rang alleen tonen bij finales, bij series de ruwe finishpositie
-    const isFinale = extra.rondeType && extra.rondeType !== 'heats';
-    const rFin = (isFinale && r.uitslag_rang != null) ? r.uitslag_rang : (r.finishpositie != null ? r.finishpositie : '');
+    // Fin-kolom: ALTIJD heat-lokale finishpositie, voor élke ronde-type
+    // (Series, KF, HF, Runner-up, A-finale, B-finale). Wat er IN deze heat
+    // gebeurde, geen globale qualifying-rang. Voor cross-heat positionering
+    // is er de Uitslag-tab.
+    const rFin = r.finishpositie != null ? r.finishpositie : '';
     const rSanctie = sl(r.sanctie);
     return `<tr class="${isIk ? 'rij-ik' : ''}">
         <td class="col-pos">${r.startpositie}</td>
