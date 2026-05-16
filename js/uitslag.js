@@ -429,7 +429,17 @@ async function toonUitslagVoorAfstand(groep, afstand) {
             }
 
             if (data.has_results) {
-                content.prepend(_uMaakAfstandBevestigKnop(groep, afstand, !!data.vastgelegd, data.rondes_compleet !== false, data.rondes_reden || ''));
+                const rankingInfo = {
+                    rondes:         data.rondes,
+                    current:        data.ranking,
+                    defaults:       data.ranking_default,
+                    afstandMeters:  data.afstand_meters,
+                    afstandNaam:    data.afstand_naam ?? afstand?.name,
+                    raceSubtype:    data.race_subtype,
+                    isLongDistance: data.race_type === 'long_distance',
+                    modus:          data.modus,
+                };
+                content.prepend(_uMaakAfstandBevestigKnop(groep, afstand, !!data.vastgelegd, data.rondes_compleet !== false, data.rondes_reden || '', rankingInfo));
             }
 
             // ── Ranking select handlers ──────────────────────────────────────
@@ -663,7 +673,7 @@ async function toonUitslagVoorAfstand(groep, afstand) {
 // stijl/onderschrift afhankelijk van of de afstand al vastgelegd is. Wordt
 // gebruikt door alle 3 modi (internationaal / gecombineerd / full-final-B).
 // Returns een wrap-div die je met content.prepend() kunt neerzetten.
-function _uMaakAfstandBevestigKnop(groep, afstand, alVastgelegd, rondesCompleet = true, rondesReden = '') {
+function _uMaakAfstandBevestigKnop(groep, afstand, alVastgelegd, rondesCompleet = true, rondesReden = '', rankingInfo = null) {
     const wrap = document.createElement('div');
     wrap.className = 'u-vastleg-wrap';
     const btn = document.createElement('button');
@@ -683,7 +693,7 @@ function _uMaakAfstandBevestigKnop(groep, afstand, alVastgelegd, rondesCompleet 
         : (alVastgelegd
             ? 'Uitslag is al bevestigd — opnieuw bevestigen na correctie in Live verwerking'
             : 'Sla de officiële uitslag van deze afstand op');
-    if (!blokkeer) btn.addEventListener('click', () => _uVastleggen(groep, afstand, btn));
+    if (!blokkeer) btn.addEventListener('click', () => _uVastleggen(groep, afstand, btn, rankingInfo));
     const desc = document.createElement('div');
     desc.className = 'u-vastleg-beschrijving';
     desc.textContent = blokkeer
@@ -693,6 +703,73 @@ function _uMaakAfstandBevestigKnop(groep, afstand, alVastgelegd, rondesCompleet 
             : 'Sla de officiële uitslag van deze afstand op');
     wrap.append(btn, desc);
     return wrap;
+}
+
+// Bouwt de samenvattings-HTML voor de bevestig-dialog. Toont per ronde de
+// gekozen ranking-methode en markeert afwijkingen van de standaard-default
+// voor deze afstand. Returns null als er geen keuze-mogelijkheden zijn
+// (long-distance / afvalkoers / puntenkoers / full-final / runner_up) —
+// dan slaan we de dialog over en gaan we direct door.
+function _uBouwRankingSamenvatting(info) {
+    if (!info) return null;
+    // Geen keuze-mogelijkheden = geen dialog
+    if (info.modus === 'full-final') return null;
+    if (info.isLongDistance) return null;
+    if (['inline', 'puntenkoers', 'afvalkoers'].includes(info.raceSubtype)) return null;
+    if (!Array.isArray(info.rondes) || !info.rondes.length) return null;
+
+    const rondeLabels = { heats: 'Series', kwartfinale: 'Kwartfinale', halve_finale: 'Halve finale', finale_a: 'Finale' };
+    const rondeKeys   = { heats: 'heats', kwartfinale: 'kwart', halve_finale: 'half', finale_a: 'finale' };
+    const valLabel = v => v === 'time' ? 'Op tijd' : 'Positie + tijd';
+
+    let rijen = '';
+    let afwijkingen = 0;
+    let heeftKeuze = false;
+    for (const rt of info.rondes) {
+        // runner_up niet hier — heeft eigen vaste afloop (zelfde reden waarom
+        // het in de UI ook niet in de ranking-rij staat)
+        if (rt === 'runner_up') continue;
+        const k = rondeKeys[rt];
+        if (!k) continue;
+        heeftKeuze = true;
+        const cur = info.current?.[k] ?? 'time';
+        const def = info.defaults?.[k] ?? 'time';
+        const isAfwijking = cur !== def;
+        if (isAfwijking) afwijkingen++;
+        const markering = isAfwijking
+            ? `<span style="color:#b71c1c">⚠ standaard: ${escHtml(valLabel(def))}</span>`
+            : `<span style="color:#2a7a2a">✓ standaard</span>`;
+        rijen += `<tr>
+            <td style="padding:2px 8px"><b>${escHtml(rondeLabels[rt] ?? rt)}</b></td>
+            <td style="padding:2px 8px">${escHtml(valLabel(cur))}</td>
+            <td style="padding:2px 8px">${markering}</td>
+        </tr>`;
+    }
+    if (!heeftKeuze) return null;
+
+    const afstandTxt = escHtml(info.afstandNaam || '')
+        + (info.afstandMeters ? ` (${info.afstandMeters}m)` : '');
+    const titel = `Ranking-instellingen — ${afstandTxt}`;
+    const waarschuwing = afwijkingen > 0
+        ? `<div style="margin-top:10px;padding:8px 10px;background:#fce4e4;border-left:3px solid #b71c1c;border-radius:0 4px 4px 0">
+              <b>⚠ ${afwijkingen} afwijking${afwijkingen > 1 ? 'en' : ''}</b> van de standaard voor deze afstand.<br>
+              <small>Controleer of dat klopt voordat je bevestigt. Anders: klik Annuleren en pas de ranking-dropdowns aan.</small>
+           </div>`
+        : `<div style="margin-top:10px;padding:6px 10px;background:#eef7ee;border-left:3px solid #2a7a2a;border-radius:0 4px 4px 0;font-size:.9em;color:#2a7a2a">
+              ✓ Alle ranking-keuzes komen overeen met de standaard voor deze afstand.
+           </div>`;
+    const html = `
+        <p style="margin:0 0 8px 0">Controleer de ranking-instellingen voor <b>${afstandTxt}</b>:</p>
+        <table style="border-collapse:collapse;margin:6px 0;font-size:.92em">
+            <thead><tr style="border-bottom:1px solid #ccc">
+                <th style="padding:2px 8px;text-align:left">Ronde</th>
+                <th style="padding:2px 8px;text-align:left">Gekozen</th>
+                <th style="padding:2px 8px;text-align:left"></th>
+            </tr></thead>
+            <tbody>${rijen}</tbody>
+        </table>
+        ${waarschuwing}`;
+    return { titel, html, heeftAfwijking: afwijkingen > 0 };
 }
 
 // Publiceer/intrek klassement naar /coach + /public. Backend zet
@@ -737,7 +814,24 @@ async function _uKlassementPubliceer(groep, btnEl, doPubliceer) {
     }
 }
 
-async function _uVastleggen(groep, afstand, btnEl) {
+async function _uVastleggen(groep, afstand, btnEl, rankingInfo = null) {
+    // Samenvatting + waarschuwing tonen vóór vastleggen, zodat de operator
+    // expliciet ziet welke ranking-keuzes gemaakt zijn en eventuele
+    // afwijkingen t.o.v. de standaard-default herkent. Bij geen
+    // keuze-mogelijkheden (long-distance / full-final / etc.) is samenv null
+    // en gaan we direct door.
+    const samenv = _uBouwRankingSamenvatting(rankingInfo);
+    if (samenv) {
+        const ok = await toonBevestigDialog(
+            samenv.html,
+            samenv.titel,
+            'Bevestigen',
+            'Annuleren',
+            { bodyIsHtml: true }
+        );
+        if (!ok) return;
+    }
+
     const origTekst = btnEl?.innerHTML ?? '';
     if (btnEl) { btnEl.disabled = true; btnEl.innerHTML = '⏳ Bezig…'; }
 

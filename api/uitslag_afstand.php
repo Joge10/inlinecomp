@@ -264,14 +264,17 @@ try {
         // Wordt ook gebruikt voor de race-type-aware ranking-defaults hieronder.
         $raceType = 'sprint';
         $raceSubType = 'sprint';
+        $afstandMeters = null;
         if ($distId) {
             $drt = $pdo->prepare("
-                SELECT race_type FROM distances
+                SELECT race_type, value_meters FROM distances
                 WHERE distance_combination_id = ? AND id = ?
                 LIMIT 1
             ");
             $drt->execute([$primaryDcId, $distId]);
-            $distRt = $drt->fetchColumn();
+            $distRow = $drt->fetch(PDO::FETCH_ASSOC);
+            $distRt  = $distRow['race_type'] ?? null;
+            $afstandMeters = isset($distRow['value_meters']) ? (int)$distRow['value_meters'] : null;
             if ($distRt && $distRt !== 'sprint') $raceType = 'long_distance';
             // Specifiekere subcategorie voor frontend (bv. ranking-keuze
             // verbergen bij afvalkoers — die kent geen tijd-fallback).
@@ -312,7 +315,22 @@ try {
         //          maakt 'time' vs 'position_time' niet uit, we kiezen
         //          'time' als technische default.
         $isSprint = ($raceType === 'sprint');
-        if ($isSprint) {
+        // Sprint-afstanden splitsen op meters:
+        //  - < 600m   : klassieke sprint-flow (eerste ronde 'time',
+        //               tussenrondes 'position_time', finale 'time')
+        //  - ≥ 600m   : alle rondes 'time' (langere sprint waar tijd-meting
+        //               leidend is, niet positie + tijd in tussenrondes)
+        //  - long_distance : voorronden 'position_time', finale 'time'
+        //                    (technisch; A-finale wordt sowieso door
+        //                    race_type-regels gesorteerd)
+        if ($isSprint && $afstandMeters !== null && $afstandMeters >= 600) {
+            $rankingMethods = [
+                'heats'        => 'time',
+                'kwartfinale'  => 'time',
+                'halve_finale' => 'time',
+                'finale_a'     => 'time',
+            ];
+        } elseif ($isSprint) {
             $rankingMethods = [
                 'heats'        => $eersteRonde === 'heats'        ? 'time' : 'position_time',
                 'kwartfinale'  => $eersteRonde === 'kwartfinale'  ? 'time' : 'position_time',
@@ -327,6 +345,9 @@ try {
                 'finale_a'     => 'time',
             ];
         }
+        // Bewaar defaults apart zodat de frontend bij bevestigen kan
+        // vergelijken of de operator een afwijkende keuze heeft gemaakt.
+        $rankingDefaults = $rankingMethods;
 
         if ($tsId) {
             // Bepaal de afstandsnaam. Als de UI expliciet een `distance_naam`-
@@ -556,9 +577,11 @@ try {
                 if (isset($rondeKeys[$rt])) $beschikbareRondes[] = $rt;
             }
         }
-        $rankingConfig = [];
+        $rankingConfig  = [];
+        $rankingDefault = [];
         foreach ($rondeKeys as $rt => $key) {
-            $rankingConfig[$key] = $rankingMethods[$rt] ?? 'time';
+            $rankingConfig[$key]  = $rankingMethods[$rt]  ?? 'time';
+            $rankingDefault[$key] = $rankingDefaults[$rt] ?? 'time';
         }
 
         // Detecteer of rondes/pk_punten relevant zijn
@@ -576,6 +599,8 @@ try {
             'afstand_naam'  => $afNaam ?? null,
             'rondes'        => $beschikbareRondes,
             'ranking'       => $rankingConfig,
+            'ranking_default' => $rankingDefault,
+            'afstand_meters' => $afstandMeters,
             'race_type'     => $raceType ?? 'sprint',
             'race_subtype'  => $raceSubType ?? 'sprint',
             'heeft_rondes'  => $heeftRondes,
