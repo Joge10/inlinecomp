@@ -186,5 +186,126 @@ if ($action === 'cleanup_wees_uitslagen') {
     exit;
 }
 
+// ── CSV-export: lijst wedstrijden met vastgelegd klassement ─────────────────
+// Bedoeld voor de Helpers-CSV-export-tool: alleen wedstrijden die
+// daadwerkelijk klassement-data hebben tonen we (anders heeft de operator
+// niets om te exporteren).
+if ($action === 'csv_export_competitions') {
+    try {
+        $stmt = $pdo->query("
+            SELECT DISTINCT uk.competition_id,
+                            uk.competition_naam AS naam,
+                            uk.competition_datum AS datum
+            FROM   uitslag_klassement uk
+            ORDER  BY uk.competition_datum DESC, uk.competition_naam
+        ");
+        echo json_encode($stmt->fetchAll(PDO::FETCH_ASSOC), JSON_UNESCAPED_UNICODE);
+    } catch (Throwable $e) {
+        http_response_code(500);
+        echo json_encode(['error' => $e->getMessage()]);
+    }
+    exit;
+}
+
+// ── CSV-export: alle klassement-data voor één wedstrijd ─────────────────────
+// Levert per DC: dc_id, dc_naam, afstanden (lijst), rijders (met punten per
+// afstand + totaal + meta). Frontend bouwt hier de CSV uit, met
+// kolom-selectie per gebruiker.
+if ($action === 'csv_export_data') {
+    $compId = trim($body['competition_id'] ?? '');
+    if (!$compId) {
+        http_response_code(400);
+        echo json_encode(['error' => 'competition_id verplicht']);
+        exit;
+    }
+    try {
+        // DCs + afstanden voor deze wedstrijd
+        $dcStmt = $pdo->prepare("
+            SELECT DISTINCT uk.distance_combination_id AS dc_id,
+                            uk.dc_naam
+            FROM   uitslag_klassement uk
+            WHERE  uk.competition_id = ?
+            ORDER  BY uk.dc_naam
+        ");
+        $dcStmt->execute([$compId]);
+        $dcs = $dcStmt->fetchAll(PDO::FETCH_ASSOC);
+        if (empty($dcs)) { echo json_encode(['dcs' => []]); exit; }
+
+        // Afstand-namen per DC ophalen uit distances-tabel (canonieke bron).
+        $distStmt = $pdo->prepare("
+            SELECT d.name AS afstand_naam, d.value_meters
+            FROM   distances d
+            WHERE  d.distance_combination_id = ?
+            ORDER  BY d.value_meters, d.name
+        ");
+
+        // Klassement-rijen per DC (alleen voor déze wedstrijd) — uitslag_
+        // klassement bevat al per (comp, dc, persoon) één rij met
+        // punten_detail (JSON: afstandnaam → punten) en punten_totaal.
+        $rijStmt = $pdo->prepare("
+            SELECT uk.rang,
+                   uk.punten_totaal,
+                   uk.punten_detail,
+                   uk.person_license,
+                   uk.categorie                                          AS persoon_cat,
+                   uk.split_group,
+                   p.full_name                                           AS naam,
+                   COALESCE(NULLIF(p.club_short,''), p.club_full, '')    AS club,
+                   p.sponsor                                             AS sponsor,
+                   p.category                                            AS knsb_cat,
+                   COALESCE(cs.startnummer, p.start_number)              AS startnummer
+            FROM   uitslag_klassement uk
+            JOIN   persons p ON p.license_key = uk.person_license
+            LEFT JOIN competition_startnummers cs
+                   ON cs.competition_id = uk.competition_id
+                  AND cs.person_license = uk.person_license
+            WHERE  uk.competition_id          = ?
+              AND  uk.distance_combination_id = ?
+            ORDER  BY (uk.rang IS NULL), uk.rang
+        ");
+
+        $payloadDcs = [];
+        foreach ($dcs as $dc) {
+            $distStmt->execute([$dc['dc_id']]);
+            $afstanden = $distStmt->fetchAll(PDO::FETCH_ASSOC);
+
+            $rijStmt->execute([$compId, $dc['dc_id']]);
+            $rijen = [];
+            foreach ($rijStmt->fetchAll(PDO::FETCH_ASSOC) as $r) {
+                // punten_detail = JSON-object: { distance_naam: punten, ... }
+                $det = $r['punten_detail']
+                    ? (json_decode($r['punten_detail'], true) ?: [])
+                    : [];
+                $rijen[] = [
+                    'rang'           => $r['rang'] !== null ? (int)$r['rang'] : null,
+                    'startnummer'    => $r['startnummer'],
+                    'naam'           => $r['naam'],
+                    'club'           => $r['club'],
+                    'sponsor'        => $r['sponsor'] ?? '',
+                    'punten_per_afstand' => $det,
+                    'punten_totaal'  => $r['punten_totaal'] !== null
+                        ? (float)$r['punten_totaal'] : null,
+                    'persoon_cat'    => $r['persoon_cat'],
+                    'knsb_cat'       => $r['knsb_cat'],
+                    'split_group'    => $r['split_group'] ?? '',
+                    'licentie'       => $r['person_license'],
+                ];
+            }
+            $payloadDcs[] = [
+                'dc_id'     => $dc['dc_id'],
+                'dc_naam'   => $dc['dc_naam'],
+                'afstanden' => array_map(fn($a) => $a['afstand_naam'], $afstanden),
+                'rijders'   => $rijen,
+            ];
+        }
+
+        echo json_encode(['dcs' => $payloadDcs], JSON_UNESCAPED_UNICODE);
+    } catch (Throwable $e) {
+        http_response_code(500);
+        echo json_encode(['error' => $e->getMessage()]);
+    }
+    exit;
+}
+
 http_response_code(400);
 echo json_encode(['error' => 'Onbekende action']);

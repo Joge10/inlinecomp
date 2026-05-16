@@ -4824,6 +4824,26 @@ col.live-col-rondes  { width: 40px; }
     font-size: .88rem;
     line-height: 1.5;
 }
+/* CSV-export-tool: dropdowns + kolom-checkboxen */
+.hp-csv-veld { margin: .6rem 0; }
+.hp-csv-veld > label {
+    display: block; font-size: .85rem; font-weight: 600;
+    color: var(--blauw, #1F4E79); margin-bottom: .25rem;
+}
+.hp-csv-veld > .inp { max-width: 480px; }
+.hp-csv-cols {
+    border: 1px solid var(--border, #cdd8e3);
+    background: #fafbfc; border-radius: 4px;
+    padding: 8px 10px;
+}
+.hp-csv-cb {
+    display: inline-flex; align-items: center; gap: 4px;
+    padding: 2px 8px; border: 1px solid var(--border, #cdd8e3);
+    border-radius: 12px; background: #fff;
+    font-size: 12px; cursor: pointer;
+}
+.hp-csv-cb input[type=checkbox] { margin: 0; }
+.hp-csv-cb:has(input:checked) { background: #dceaf5; }
 .hp-card-acties {
     display: flex; align-items: center; gap: 1rem;
     margin-bottom: .5rem;
