@@ -320,10 +320,15 @@ try {
     // + finale_seeding van de afstand staat op 'tijdkoppeling'.
     // --------------------------------------------------------
     $rondeIsFinale = in_array($rondeType, ['finale', 'finale_a', 'finale_b'], true);
+    $rondeIsHeats  = ($rondeType === 'heats');
     $methodeOpKlassement = in_array($methode, ['klassement', 'tussenklassement'], true);
 
+    // finale_seeding-config is ook van toepassing op de series-ronde (heats)
+    // voor formats als 200m DTT (Dual Time-trial), waar zwak→sterk in de
+    // series exact zo werkt als in de finale: laatste rit = snelste paar.
+    // Default voor reguliere sprint blijft 'slang' = standaard snake.
     $finaleSeeding = 'slang';
-    if ($rondeIsFinale && $methodeOpKlassement) {
+    if (($rondeIsFinale || $rondeIsHeats) && $methodeOpKlassement) {
         $tsStmt = $pdo->prepare(
             "SELECT id FROM competition_tijdschema WHERE competition_id = ? LIMIT 1"
         );
@@ -347,7 +352,8 @@ try {
         }
     }
 
-    $isTijdkoppeling = $rondeIsFinale && $methodeOpKlassement
+    $isTijdkoppeling = ($rondeIsFinale || $rondeIsHeats)
+                       && $methodeOpKlassement
                        && $finaleSeeding === 'tijdkoppeling';
 
     $aantalHeats = min($heatsAantal, $n);  // nooit meer heats dan rijders

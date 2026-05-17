@@ -591,9 +591,9 @@ function renderAfstandPanel(afstand, cfg, catConfigMap) {
             </td>
             <td class="ts-td-c">
                 <select name="finale_seeding" class="ts-sel-sm ts-sel-finale-seeding"
-                        title="Slangenpatroon: gelijke sterkte per heat&#10;Tijdkoppeling: langzaamsten in heat 1, snelsten in laatste heat (200m DTT)">
-                    <option value="slang" ${(cfg?.finale_seeding ?? 'slang') === 'slang' ? 'selected' : ''}>Standaard</option>
-                    <option value="tijdkoppeling" ${cfg?.finale_seeding === 'tijdkoppeling' ? 'selected' : ''}>Tijdkoppeling</option>
+                        title="Standaard (slangenpatroon): gelijke sterkte per heat&#10;Tijdkoppeling: langzaamsten in heat 1, snelsten in laatste heat — ZOWEL in series ALS finale (= 200m DTT-format)">
+                    <option value="slang" ${(cfg?.finale_seeding ?? 'slang') === 'slang' ? 'selected' : ''}>Standaard (snake)</option>
+                    <option value="tijdkoppeling" ${cfg?.finale_seeding === 'tijdkoppeling' ? 'selected' : ''}>Tijdkoppeling (DTT)</option>
                 </select>
             </td>`;
         } else {

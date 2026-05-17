@@ -2241,6 +2241,17 @@ col.heat-tp   { width: 72px; }   /* XX-12345 = 8 monospace tekens */
 .bwl-item small { color: #777; }
 .bwl-sep   { color: #aaa; }
 
+/* Tijdkoppeling-banner in Startlijst-tab: maakt duidelijk dat seeding
+   van klassement/tussenklassement zwak→sterk verdeelt (DTT-format)
+   i.p.v. de standaard snake. Lichtgele info-balk, kleine font. */
+.sl-tk-banner {
+    background: #fff8e1; border-left: 3px solid #f5a623;
+    padding: 6px 10px; margin: 6px 0 10px;
+    font-size: .82rem; line-height: 1.4;
+    border-radius: 0 4px 4px 0;
+}
+.sl-tk-banner b { color: #8a5a00; }
+
 /* Organisatie-kaart in lijst */
 .org-kaart {
     background: var(--wit);

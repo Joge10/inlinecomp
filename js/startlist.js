@@ -1156,10 +1156,25 @@ async function toonAfstandConfig(groep, distId, distNaam) {
     }
 
     // ── Render ───────────────────────────────────────────────────────────────
+    // Tijdkoppeling-format actief? Banner-hint zodat operator weet dat
+    // klassement-seeding hier zwak→sterk verdeelt i.p.v. snake. Geldt
+    // voor zowel series-ronde als finale-ronde — instellen via Tijdschema
+    // → afstand-config (200m DTT-format).
+    const isTk = cache._afstandCfg?.finale_seeding === 'tijdkoppeling';
+    const tkHint = isTk
+        ? `<div class="sl-tk-banner" title="Instelbaar in Tijdschema → afstand-config → 'Finale-seeding'">
+               ⏱ <b>Tijdkoppeling-format</b> actief — bij seeding op
+               <b>Klassement</b> of <b>Tussenklassement</b> worden de heats
+               zwak → sterk verdeeld: langzaamste paar in heat 1, snelste
+               in de laatste heat. Geldt voor zowel series als finale.
+           </div>`
+        : '';
+
     slDist.innerHTML =
         flowHtml +
         `<div class="sl-vooraf">
             <div class="sl-seeding-lbl">Seeding <strong>${escHtml(eersteRonde.naam)}</strong></div>
+            ${tkHint}
             <div class="sl-meth-knoppen">
                 <button class="sl-meth-btn${methode === 'startnummer' ? ' actief' : ''}" data-methode="startnummer">
                     🔢 Op startnummer
