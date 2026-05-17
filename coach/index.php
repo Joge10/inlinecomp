@@ -122,6 +122,7 @@ if ($action === 'competitions') {
             JOIN competition_tijdschema ct ON ct.competition_id = c.id
             LEFT JOIN organisaties o ON o.id = c.organisatie_id
             LEFT JOIN banen b ON b.id = c.baan_id
+            WHERE c.public_zichtbaar = 1 OR c.public_aankondigen = 1
             ORDER BY c.starts DESC
         ");
         $stmt->execute();

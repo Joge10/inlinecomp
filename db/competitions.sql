@@ -19,5 +19,10 @@ CREATE TABLE IF NOT EXISTS `competitions` (
     -- Zie 2026-05-12_competitions_public_zichtbaar.sql voor de migratie
     -- die bestaande wedstrijden op 1 zet.
     `public_zichtbaar`   TINYINT(1)   NOT NULL DEFAULT 0,
+    -- "Aankondigen" werkt alleen als public_zichtbaar=0. 1 = toon als
+    -- disabled "(binnenkort)" in /coach + /public dropdowns; 0 = toon
+    -- helemaal niet (stille voorbereiding). Bij public_zichtbaar=1
+    -- niet relevant. Default 1 voor backwards-compat met huidig gedrag.
+    `public_aankondigen` TINYINT(1)   NOT NULL DEFAULT 1,
     PRIMARY KEY (`id`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;

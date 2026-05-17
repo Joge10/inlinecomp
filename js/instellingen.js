@@ -448,17 +448,26 @@ async function laadOrgWedstrijden() {
             : inDb
                 ? '<span class="beheer-wedstrijd-badge">In database</span>'
                 : '<span class="beheer-wedstrijd-badge badge-extern">inschrijven.schaatsen.nl</span>';
-        const dbRow  = dbCompsMap.get(w.id);
-        const zicht  = inDb && !!Number(dbRow?.public_zichtbaar);
-        // Zichtbaar/verborgen-knop: groen als gepubliceerd voor coach+public,
-        // oranje (verborgen) als nog in voorbereidingsfase. Klik toggelt.
+        const dbRow      = dbCompsMap.get(w.id);
+        const zicht      = inDb && !!Number(dbRow?.public_zichtbaar);
+        const aankondigen = inDb && !!Number(dbRow?.public_aankondigen ?? 1);
+        // 3-state zichtbaarheids-status:
+        //   verborgen  → niet in /coach + /public dropdowns (stille voorbereiding)
+        //   binnenkort → in dropdown als disabled "(binnenkort)"
+        //   live       → selecteerbaar in /coach + /public
+        const status = zicht ? 'live' : (aankondigen ? 'binnenkort' : 'verborgen');
         const zichtBtn = inDb
-            ? `<button class="btn-sm beheer-comp-zicht ${zicht ? 'beheer-zicht-aan' : 'beheer-zicht-uit'}"
-                       data-id="${escHtml(w.id)}"
-                       data-naam="${escHtml(w.name ?? w.id)}"
-                       data-zicht="${zicht ? '1' : '0'}"
-                       title="${zicht ? 'Klik om wedstrijd te VERBERGEN voor /coach + /public (terug naar voorbereidingsfase)' : 'Klik om wedstrijd ZICHTBAAR te maken voor /coach + /public'}"
-                >${zicht ? '👁 Zichtbaar' : '🔒 Verborgen'}</button>`
+            ? `<div class="beheer-zicht-group" role="group" aria-label="Zichtbaarheid">
+                 <button class="btn-sm beheer-zicht-knop ${status==='verborgen' ? 'is-actief beheer-zicht-uit' : ''}"
+                         data-id="${escHtml(w.id)}" data-naam="${escHtml(w.name ?? w.id)}" data-status="verborgen"
+                         title="Volledig verbergen — wedstrijd komt NIET in /coach + /public dropdowns. Voor stille voorbereiding.">🔒 Verborgen</button>
+                 <button class="btn-sm beheer-zicht-knop ${status==='binnenkort' ? 'is-actief beheer-zicht-soon' : ''}"
+                         data-id="${escHtml(w.id)}" data-naam="${escHtml(w.name ?? w.id)}" data-status="binnenkort"
+                         title="In voorbereiding tonen — verschijnt in dropdown als disabled '(binnenkort)'.">⏳ Binnenkort</button>
+                 <button class="btn-sm beheer-zicht-knop ${status==='live' ? 'is-actief beheer-zicht-aan' : ''}"
+                         data-id="${escHtml(w.id)}" data-naam="${escHtml(w.name ?? w.id)}" data-status="live"
+                         title="Live — selecteerbaar voor coach + publiek.">👁 Live</button>
+               </div>`
             : '';
         return `<div class="beheer-wedstrijd-rij ${inDb ? 'in-db' : ''}">
             <div class="beheer-wedstrijd-info">
@@ -488,26 +497,26 @@ async function laadOrgWedstrijden() {
                 ? openMeldingenModal(btn.dataset.id, btn.dataset.naam)
                 : null);
     });
-    lijst.querySelectorAll('.beheer-comp-zicht').forEach(btn => {
-        btn.addEventListener('click', () => toggleWedstrijdZichtbaar(btn));
+    lijst.querySelectorAll('.beheer-zicht-knop').forEach(btn => {
+        btn.addEventListener('click', () => zetWedstrijdStatus(btn));
     });
 
     if (_beheerLeesOnly) pasSchrijfLockToe(lijst.closest('.org-tab-content') ?? lijst);
 }
 
-// Toggle public_zichtbaar via api/wedstrijd_zichtbaar.php. Operator
-// gebruikt dit om in voorbereidingsfase een wedstrijd te verbergen
-// (default 0 voor nieuwe wedstrijden) en pas zichtbaar te maken
-// wanneer alles compleet is.
-async function toggleWedstrijdZichtbaar(btn) {
-    const id        = btn.dataset.id;
-    const naam      = btn.dataset.naam || '';
-    const huidig    = btn.dataset.zicht === '1';
-    const nieuwZicht = !huidig;
+// Zet de zichtbaarheids-status (3-state) van een wedstrijd via
+// api/wedstrijd_zichtbaar.php. States:
+//   verborgen  → komt NIET in /coach + /public dropdowns
+//   binnenkort → in dropdown als disabled "(binnenkort)"
+//   live       → selecteerbaar voor coach + publiek
+async function zetWedstrijdStatus(btn) {
+    const id     = btn.dataset.id;
+    const naam   = btn.dataset.naam || '';
+    const status = btn.dataset.status;
 
-    // Bevestiging bij ZICHTBAAR maken (publicatie naar buiten); verbergen
-    // mag direct — minder risico.
-    if (nieuwZicht) {
+    // Bevestiging alleen bij Live (= echte publicatie); verbergen of
+    // binnenkort-tonen zijn beide laag risico → direct doorvoeren.
+    if (status === 'live') {
         if (!await toonBevestigDialog(
             `"${naam}" zichtbaar maken voor /coach + /public?\n\n` +
             'Coaches en publiek kunnen dan de wedstrijd-info, programma en uitslagen bekijken.',
@@ -522,7 +531,7 @@ async function toggleWedstrijdZichtbaar(btn) {
         const res = await fetch('api/wedstrijd_zichtbaar.php', {
             method:  'POST',
             headers: { 'Content-Type': 'application/json' },
-            body:    JSON.stringify({ competition_id: id, zichtbaar: nieuwZicht }),
+            body:    JSON.stringify({ competition_id: id, status }),
         });
         const data = await res.json();
         if (!data.ok) {
@@ -531,7 +540,7 @@ async function toggleWedstrijdZichtbaar(btn) {
             btn.disabled = false;
             return;
         }
-        // Refresh de lijst zodat ook de tooltip + class actueel zijn
+        // Refresh de lijst zodat de active-states + tooltips kloppen
         await laadOrgWedstrijden();
     } catch (e) {
         toonBevestigDialog(e.message, 'Fout');

@@ -98,6 +98,11 @@ if ($action === 'competitions') {
         // Baan-velden gebruiken cross-org-fallback: als deze org's baan-rij
         // geen logo of geen vereniging-naam heeft, pakken we die uit een
         // andere org-rij met dezelfde baan-naam (zelfde fysieke locatie).
+        // 3-state zichtbaarheid: wedstrijden waar zichtbaar=0 EN
+        // aankondigen=0 worden volledig overgeslagen (= "stille
+        // voorbereiding" status — operator wil dat publiek niet eens
+        // ziet dat InlineComp eraan werkt). Bij zichtbaar=0 +
+        // aankondigen=1 verschijnt 'ie wel als disabled "(binnenkort)".
         $stmt = $pdo->prepare("
             SELECT c.id, c.name, c.starts, c.ends,
                    c.organisatie_id, o.logo_path AS org_logo, o.naam AS org_naam,
@@ -118,6 +123,7 @@ if ($action === 'competitions') {
             JOIN competition_tijdschema ct ON ct.competition_id = c.id
             LEFT JOIN organisaties o ON o.id = c.organisatie_id
             LEFT JOIN banen b ON b.id = c.baan_id
+            WHERE c.public_zichtbaar = 1 OR c.public_aankondigen = 1
             ORDER BY c.starts DESC
         ");
         $stmt->execute();

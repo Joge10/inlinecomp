@@ -538,7 +538,7 @@ table.compact th {
             <li><b>Inloggen werkt</b> op de PC die je gaat gebruiken — met je eigen account</li>
             <li><b>Wedstrijd geselecteerd</b> in dropdown rechtsboven — controleer vóór elke loting / vastlegging</li>
             <li><b>Tijdschema + programma</b> staan klaar — alle verwachte ritten zichtbaar in Tijdschema</li>
-            <li><b>Wedstrijd op 👁 Zichtbaar</b> in Beheer (toggle vlak vóór aanvang)</li>
+            <li><b>Wedstrijd op 👁 Live</b> in Beheer (3-state: Verborgen / Binnenkort / Live — vlak vóór aanvang naar Live)</li>
             <li><b>Tekentermijnen + lotings-status</b> per DC met de organisatie doorgesproken</li>
             <li><b>Test-loting + test-import van CSV</b> vóór de eerste echte heat — check of MyLaps de juiste sessie schrijft</li>
             <li><b>Print-Center</b> bereikbaar (🖨 rechtsboven) + posters geprint voor locatie</li>
@@ -1194,7 +1194,7 @@ table.compact th {
                     <li><b>Organisaties-lijst</b> — kies de organisatie die je beheert.</li>
                     <li><b>Wedstrijden-tab</b> — opent de lijst wedstrijden van deze organisatie.</li>
                     <li><b>Wedstrijd-rij</b> — naam + datum + status-badge ("In database" / "Alleen in database").</li>
-                    <li><b>🔒 Verborgen / 👁 Zichtbaar</b> — bepaalt of de wedstrijd zichtbaar is in /Coach + /Public. Verborgen → "(binnenkort)" in de dropdown, niet klikbaar. Default = verborgen voor nieuwe wedstrijden.</li>
+                    <li><b>🔒 Verborgen / ⏳ Binnenkort / 👁 Live</b> — 3-state zichtbaarheid voor /Coach + /Public. <b>Verborgen</b> = niet in dropdown (stille voorbereiding). <b>Binnenkort</b> = in dropdown maar disabled met "(binnenkort)". <b>Live</b> = selecteerbaar. Default = Verborgen voor nieuwe wedstrijden.</li>
                     <li><b>📢 Meldingen</b> — push-mededeling versturen; verschijnt als pop-up in /Coach + /Public.</li>
                     <li><b>📄 Public-poster / 👥 Coach-poster</b> — PDF-poster met QR-code downloaden.</li>
                     <li><b>Verwijderen</b> — wedstrijd permanent uit de database. Dialog vraagt of vastgelegde uitslag/klassement bewaard moet blijven.</li>
@@ -1210,11 +1210,15 @@ table.compact th {
         <table class="compact">
             <tr><th style="width:30%">Wedstrijd-status</th><th>Wat zien coaches + publiek</th></tr>
             <tr>
-                <td><b>🔒 Verborgen</b><br><span style="font-size:8pt;color:#666">(voorbereidingsfase)</span></td>
-                <td>In /coach + /public dropdown: <b>"(binnenkort)"</b> — niet klikbaar. Geen programma, geen heats, geen uitslagen leesbaar — ook niet met directe URL.</td>
+                <td><b>🔒 Verborgen</b><br><span style="font-size:8pt;color:#666">(stille voorbereiding)</span></td>
+                <td><b>Niets.</b> Wedstrijd verschijnt niet in dropdown — ook geen "(binnenkort)"-suggestie. Voor situaties waarin operator nog niet wil dat publiek weet dat InlineComp ingezet gaat worden.</td>
             </tr>
             <tr>
-                <td><b>👁 Zichtbaar</b><br><span style="font-size:8pt;color:#666">(wedstrijddag)</span></td>
+                <td><b>⏳ Binnenkort</b><br><span style="font-size:8pt;color:#666">(aankondigend)</span></td>
+                <td>In dropdown als disabled <b>"(binnenkort)"</b> — niet klikbaar. Geen programma / heats / uitslagen leesbaar. Wel signaal richting publiek dat de wedstrijd eraan komt.</td>
+            </tr>
+            <tr>
+                <td><b>👁 Live</b><br><span style="font-size:8pt;color:#666">(wedstrijddag)</span></td>
                 <td>Volledig selecteerbaar. Programma, heats, afstand-uitslagen (zodra bevestigd in stap 7) en klassement (zodra gepubliceerd in stap 8b) verschijnen.</td>
             </tr>
             <tr>

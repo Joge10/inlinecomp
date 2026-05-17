@@ -69,7 +69,7 @@ try {
         if (!empty($_GET['action']) && $_GET['action'] === 'wedstrijden' && !empty($_GET['id'])) {
             $stmt = $pdo->prepare(
                 "SELECT id, name, starts, ends, venue_city, venue_name, imported_at,
-                        public_zichtbaar
+                        public_zichtbaar, public_aankondigen
                  FROM competitions WHERE organisatie_id = ?
                  ORDER BY starts DESC"
             );
