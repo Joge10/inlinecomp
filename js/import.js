@@ -1820,18 +1820,30 @@ function _bouwDeelnemerslijstInternal() {
             const basisNaam = (dcGroup.find(d => d.merge_label) ?? {}).merge_label
                            || dcGroup.map(d => d.dc_name).filter(Boolean).join(' + ');
 
-            // Afstanden van deze cluster (uniek op naam, meegesleurd met meters)
-            const afsMap = new Map(); // name → meters
-            dcGroup.forEach(dc => {
-                const bron = dcDistances[dc.dc_id]?.length
-                    ? dcDistances[dc.dc_id]
-                    : (dc.knsb_distances || []);
-                bron.forEach(d => {
-                    if (!afsMap.has(d.name)) afsMap.set(d.name, d.value_meters ?? 0);
+            // Helper: bouw afstand-lijst voor een specifieke splitgroep (of
+            // null = basis/non-split). Lookup-volgorde:
+            //   1. dcDistances[dcId::splitgroep] — eigen afstanden voor split
+            //   2. dcDistances[dcId]              — cluster-default
+            //   3. dc.knsb_distances              — KNSB-feed fallback
+            // Voorheen werd alleen (2) en (3) gebruikt — dat verklaart waarom
+            // gesplitste DCs een lege afstand-kolom kregen wanneer afstanden
+            // alleen onder de split-specifieke sleutel waren opgeslagen.
+            const bouwAfstanden = (splitGroep) => {
+                const afsMap = new Map(); // name → meters
+                dcGroup.forEach(dc => {
+                    const splitKey = splitGroep ? `${dc.dc_id}::${splitGroep}` : null;
+                    let bron = (splitKey && dcDistances[splitKey]?.length)
+                        ? dcDistances[splitKey]
+                        : (dcDistances[dc.dc_id]?.length
+                            ? dcDistances[dc.dc_id]
+                            : (dc.knsb_distances || []));
+                    bron.forEach(d => {
+                        if (!afsMap.has(d.name)) afsMap.set(d.name, d.value_meters ?? 0);
+                    });
                 });
-            });
-            const afstanden = [...afsMap.entries()]
-                .sort((a, b) => (a[1] - b[1]) || a[0].localeCompare(b[0], 'nl'));
+                return [...afsMap.entries()]
+                    .sort((a, b) => (a[1] - b[1]) || a[0].localeCompare(b[0], 'nl'));
+            };
 
             // Actieve deelnemers per categorie (status 1 of 5 = aanwezig)
             const perCat = new Map(); // cat → aantal
@@ -1863,24 +1875,24 @@ function _bouwDeelnemerslijstInternal() {
                     if (sgPerCat.size === 0) return;
                     overzichtGroepen.push({
                         naam: `${basisNaam} — ${sg}`,
-                        afstanden,
+                        afstanden: bouwAfstanden(sg),   // per-splitgroep lookup
                         perCat: sgPerCat,
                     });
                 });
-                // Restcategorieën (niet in splits) als aparte groep
+                // Restcategorieën (niet in splits) als aparte groep — basis-afstanden
                 const restCats = [...perCat.keys()].filter(c => !Object.keys(allSplits).includes(c));
                 if (restCats.length) {
                     const restPerCat = new Map();
                     restCats.forEach(c => restPerCat.set(c, perCat.get(c)));
                     overzichtGroepen.push({
                         naam: `${basisNaam} — overig`,
-                        afstanden,
+                        afstanden: bouwAfstanden(null),
                         perCat: restPerCat,
                     });
                 }
             } else {
                 if (perCat.size > 0) {
-                    overzichtGroepen.push({ naam: basisNaam, afstanden, perCat });
+                    overzichtGroepen.push({ naam: basisNaam, afstanden: bouwAfstanden(null), perCat });
                 }
             }
         });
