@@ -1457,17 +1457,27 @@ function _bouwDeelnemerslijstInternal() {
 
     // ── 1. Alle unieke afstanden verzamelen als kolom-headers ─────────────────
     // Gebruik de globale dcDistances (gevuld door bouwBeheerTabel):
-    //   dcDistances[dc_id] = [{id, number, name, value_meters}]  (KNSB, zonder splits)
+    //   dcDistances[dc_id]               = basis-afstanden (KNSB, zonder splits)
+    //   dcDistances[dc_id::splitgroep]   = afstanden voor een specifieke splitgroep
     // Fallback: knsb_distances rechtstreeks van vergelijkData-object.
-    // Flexibele/lokale afstanden en splitgroepen worden NIET meegenomen —
-    // alleen de basiskoppeling op dc_id (geen split-sleutels zoals "dc_id::DP3/4").
+    // We verzamelen UNIEKE afstand-namen over alle keys + fallback zodat het
+    // kolom-overzicht volledig is bij gesplitste DCs.
     const afstandMap = new Map(); // name → value_meters
     vergelijkData.forEach(dc => {
-        const bronAfst = dcDistances[dc.dc_id]?.length
-            ? dcDistances[dc.dc_id]
-            : (dc.knsb_distances || []);
-        bronAfst.forEach(d => {
-            if (!afstandMap.has(d.name))
+        const prefix = dc.dc_id + '::';
+        // Verzamel: basis-key dc_id + alle split-keys dc_id::*
+        Object.keys(dcDistances).forEach(k => {
+            if (k === dc.dc_id || k.startsWith(prefix)) {
+                (dcDistances[k] || []).forEach(d => {
+                    if (d.name && !afstandMap.has(d.name)) {
+                        afstandMap.set(d.name, d.value_meters ?? 0);
+                    }
+                });
+            }
+        });
+        // KNSB-feed fallback (als er helemaal geen DB-afstanden zijn)
+        (dc.knsb_distances || []).forEach(d => {
+            if (d.name && !afstandMap.has(d.name))
                 afstandMap.set(d.name, d.value_meters ?? 0);
         });
     });
@@ -1482,12 +1492,6 @@ function _bouwDeelnemerslijstInternal() {
     const rijdersMap = new Map();
 
     vergelijkData.forEach(dc => {
-        // Zelfde bron als afstandMap: dc_id-entry uit dcDistances, geen split-sleutels
-        const bronAfst  = dcDistances[dc.dc_id]?.length
-            ? dcDistances[dc.dc_id]
-            : (dc.knsb_distances || []);
-        const dcAfstanden = bronAfst.map(d => d.name);
-
         dc.competitors.forEach((c, idx) => {
             // Status: gebruik entryEdits als die bijgewerkt zijn, anders direct van object
             const lk     = c.license_key || null;
@@ -1495,6 +1499,21 @@ function _bouwDeelnemerslijstInternal() {
             const ee     = (ek && entryEdits[ek]) || {};
             const status = Number(ee.entry_status ?? c.entry_status ?? 1);
             const pe     = lk ? (personEdits[lk] || {}) : {};
+
+            // Per rijder de juiste afstanden bepalen op basis van z'n cat-
+            // splitgroep. Lookup-volgorde:
+            //   1. dcDistances[dc_id::splitgroep_van_deze_cat]
+            //   2. dcDistances[dc_id]
+            //   3. dc.knsb_distances
+            const rijderCat   = pe.category ?? c.knsb?.category ?? '';
+            const splitGroep  = (dc.splits && rijderCat) ? dc.splits[rijderCat] : null;
+            const splitKey    = splitGroep ? `${dc.dc_id}::${splitGroep}` : null;
+            const bronAfst    = (splitKey && dcDistances[splitKey]?.length)
+                ? dcDistances[splitKey]
+                : (dcDistances[dc.dc_id]?.length
+                    ? dcDistances[dc.dc_id]
+                    : (dc.knsb_distances || []));
+            const dcAfstanden = bronAfst.map(d => d.name);
 
             // Kaartsleutel: license_key heeft voorkeur (rijder deelt naam over DCs),
             // anders uniek per DC-entry zodat rijder toch verschijnt
