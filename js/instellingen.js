@@ -456,17 +456,20 @@ async function laadOrgWedstrijden() {
         //   binnenkort → in dropdown als disabled "(binnenkort)"
         //   live       → selecteerbaar in /coach + /public
         const status = zicht ? 'live' : (aankondigen ? 'binnenkort' : 'verborgen');
+        // Icon-only segmented control voor zichtbaarheid (tooltip vertelt
+        // wat elke status doet). Bespaart horizontale ruimte want dit
+        // staat op een rij met 4+ andere actie-knoppen.
         const zichtBtn = inDb
             ? `<div class="beheer-zicht-group" role="group" aria-label="Zichtbaarheid">
                  <button class="btn-sm beheer-zicht-knop ${status==='verborgen' ? 'is-actief beheer-zicht-uit' : ''}"
                          data-id="${escHtml(w.id)}" data-naam="${escHtml(w.name ?? w.id)}" data-status="verborgen"
-                         title="Volledig verbergen — wedstrijd komt NIET in /coach + /public dropdowns. Voor stille voorbereiding.">🔒 Verborgen</button>
+                         title="Verborgen — wedstrijd verschijnt NIET in /coach + /public dropdowns (stille voorbereiding)">🔒</button>
                  <button class="btn-sm beheer-zicht-knop ${status==='binnenkort' ? 'is-actief beheer-zicht-soon' : ''}"
                          data-id="${escHtml(w.id)}" data-naam="${escHtml(w.name ?? w.id)}" data-status="binnenkort"
-                         title="In voorbereiding tonen — verschijnt in dropdown als disabled '(binnenkort)'.">⏳ Binnenkort</button>
+                         title="Binnenkort — in dropdown als disabled '(binnenkort)'">⏳</button>
                  <button class="btn-sm beheer-zicht-knop ${status==='live' ? 'is-actief beheer-zicht-aan' : ''}"
                          data-id="${escHtml(w.id)}" data-naam="${escHtml(w.name ?? w.id)}" data-status="live"
-                         title="Live — selecteerbaar voor coach + publiek.">👁 Live</button>
+                         title="Live — selecteerbaar voor coach + publiek">👁</button>
                </div>`
             : '';
         return `<div class="beheer-wedstrijd-rij ${inDb ? 'in-db' : ''}">
@@ -477,10 +480,10 @@ async function laadOrgWedstrijden() {
             </div>
             <div class="beheer-wedstrijd-acties">
                 ${zichtBtn}
-                ${inDb ? `<button class="btn-secondary btn-sm beheer-comp-meld" data-id="${escHtml(w.id)}" data-naam="${escHtml(w.name ?? w.id)}" title="Mededelingen versturen naar publiek + coach apps">📢 Meldingen</button>` : ''}
-                ${inDb ? `<button class="btn-secondary btn-sm beheer-comp-poster" data-id="${escHtml(w.id)}" data-app="public" title="Download poster voor publiek (rijders/ouders)">📄 Public-poster</button>` : ''}
-                ${inDb ? `<button class="btn-secondary btn-sm beheer-comp-poster" data-id="${escHtml(w.id)}" data-app="coach" title="Download poster voor coaches">👥 Coach-poster</button>` : ''}
-                ${inDb ? `<button class="btn-danger btn-sm beheer-comp-del" data-id="${escHtml(w.id)}" data-naam="${escHtml(w.name ?? w.id)}">Verwijderen</button>` : ''}
+                ${inDb ? `<button class="btn-secondary btn-sm beheer-comp-meld beheer-icon-btn" data-id="${escHtml(w.id)}" data-naam="${escHtml(w.name ?? w.id)}" title="Mededelingen — verstuur push-bericht naar /coach + /public">📢</button>` : ''}
+                ${inDb ? `<button class="btn-secondary btn-sm beheer-comp-poster beheer-icon-btn" data-id="${escHtml(w.id)}" data-app="public" title="Public-poster — download QR-poster voor rijders / ouders">📄</button>` : ''}
+                ${inDb ? `<button class="btn-secondary btn-sm beheer-comp-poster beheer-icon-btn" data-id="${escHtml(w.id)}" data-app="coach" title="Coach-poster — download QR-poster voor coaches">👥</button>` : ''}
+                ${inDb ? `<button class="btn-danger btn-sm beheer-comp-del beheer-icon-btn beheer-icon-del" data-id="${escHtml(w.id)}" data-naam="${escHtml(w.name ?? w.id)}" title="Wedstrijd verwijderen (vraagt om bevestiging)">🗑</button>` : ''}
             </div>
         </div>`;
     }).join('');
