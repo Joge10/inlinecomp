@@ -2209,16 +2209,15 @@ col.heat-tp   { width: 72px; }   /* XX-12345 = 8 monospace tekens */
 .beheer-zicht-knop.is-actief.beheer-zicht-aan {
     background: #e2f0d9; color: #2d6a2d; font-weight: 600;
 }
-/* Icon-only actie-knoppen (📢 meld, 📄 poster, 👥 coach-poster, 🗑 del)
-   Smal vierkant voor compacte rij in Beheer→Wedstrijden. Tooltip vertelt
+/* Icon-only actie-knoppen (📢 meld, 📄 poster, 👥 coach-poster) — smal
+   vierkant voor compacte rij in Beheer→Wedstrijden. Tooltip vertelt
    wat elke knop doet — text-label past niet meer naast de zicht-toggle
-   wanneer er 4+ wedstrijden in 1 rij staan. */
+   wanneer er 4+ wedstrijden in 1 rij staan.
+   De prullenbak-knop gebruikt de universele .btn-del-class, niet deze. */
 .beheer-icon-btn {
     width: 32px; padding: 4px 0; text-align: center; font-size: .95rem;
     line-height: 1.2;
 }
-.beheer-icon-del { color: #b71c1c; }
-.beheer-icon-del:hover { background: #fce4e4; }
 /* Iets meer spacing tussen de groep [🔒⏳👁] en de losse icon-knoppen
    zodat de zichtbaarheid visueel gescheiden blijft van de overige acties */
 .beheer-wedstrijd-acties .beheer-zicht-group + .beheer-icon-btn { margin-left: 6px; }

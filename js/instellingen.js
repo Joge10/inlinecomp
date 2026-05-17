@@ -501,7 +501,7 @@ async function laadOrgWedstrijden() {
                 ${inDb ? `<button class="btn-secondary btn-sm beheer-comp-meld beheer-icon-btn" data-id="${escHtml(w.id)}" data-naam="${escHtml(w.name ?? w.id)}" title="Mededelingen — verstuur push-bericht naar /coach + /public">📢</button>` : ''}
                 ${inDb ? `<button class="btn-secondary btn-sm beheer-comp-poster beheer-icon-btn" data-id="${escHtml(w.id)}" data-app="public" title="Public-poster — download QR-poster voor rijders / ouders">📄</button>` : ''}
                 ${inDb ? `<button class="btn-secondary btn-sm beheer-comp-poster beheer-icon-btn" data-id="${escHtml(w.id)}" data-app="coach" title="Coach-poster — download QR-poster voor coaches">👥</button>` : ''}
-                ${inDb ? `<button class="btn-danger btn-sm beheer-comp-del beheer-icon-btn beheer-icon-del" data-id="${escHtml(w.id)}" data-naam="${escHtml(w.name ?? w.id)}" title="Wedstrijd verwijderen (vraagt om bevestiging)">🗑</button>` : ''}
+                ${inDb ? `<button class="btn-del beheer-comp-del" data-id="${escHtml(w.id)}" data-naam="${escHtml(w.name ?? w.id)}" title="Wedstrijd verwijderen (vraagt om bevestiging)">🗑</button>` : ''}
             </div>
         </div>`;
     }).join('');
