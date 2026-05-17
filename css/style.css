@@ -2223,6 +2223,25 @@ col.heat-tp   { width: 72px; }   /* XX-12345 = 8 monospace tekens */
    zodat de zichtbaarheid visueel gescheiden blijft van de overige acties */
 .beheer-wedstrijd-acties .beheer-zicht-group + .beheer-icon-btn { margin-left: 6px; }
 
+/* Persistent legenda bovenaan de wedstrijden-lijst — discreet, kleine
+   font, neutrale achtergrond. Verklaart de icon-knoppen 1× zonder dat
+   de rijen zelf hun tekstlabels terug hoeven. */
+.beheer-wedstrijd-legenda {
+    display: flex; flex-wrap: wrap; align-items: baseline;
+    gap: 4px 10px;
+    padding: 6px 12px;
+    background: #f5f7fa;
+    border: 1px solid var(--border, #cdd8e3);
+    border-radius: 4px;
+    margin-bottom: 10px;
+    font-size: .78rem; color: #555;
+}
+.bwl-titel { font-weight: 600; color: #333; margin-right: 4px; }
+.bwl-item  { white-space: nowrap; }
+.bwl-item b { color: #1F4E79; font-size: .9rem; font-weight: 600; }
+.bwl-item small { color: #777; }
+.bwl-sep   { color: #aaa; }
+
 /* Organisatie-kaart in lijst */
 .org-kaart {
     background: var(--wit);

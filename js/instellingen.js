@@ -440,7 +440,25 @@ async function laadOrgWedstrijden() {
     // dbComps map houden voor zichtbaarheids-status (komt alleen uit DB-kant)
     const dbCompsMap = new Map(dbComps.map(c => [c.id, c]));
 
-    lijst.innerHTML = alleItems.map(w => {
+    // Persistent legenda boven de wedstrijden-rijen — iconen-only-knoppen
+    // zijn compact maar voor nieuwe gebruikers niet meteen leesbaar.
+    // Hover-tooltips blijven werken; deze regel maakt het direct duidelijk
+    // zonder dat de rij-knoppen weer breed worden.
+    const legenda = `
+        <div class="beheer-wedstrijd-legenda">
+            <span class="bwl-titel">Acties per wedstrijd:</span>
+            <span class="bwl-item"><b>🔒/⏳/👁</b> zichtbaarheid <small>(verborgen / binnenkort / live)</small></span>
+            <span class="bwl-sep">·</span>
+            <span class="bwl-item"><b>📢</b> mededeling versturen</span>
+            <span class="bwl-sep">·</span>
+            <span class="bwl-item"><b>📄</b> public-poster <small>(rijders/ouders)</small></span>
+            <span class="bwl-sep">·</span>
+            <span class="bwl-item"><b>👥</b> coach-poster</span>
+            <span class="bwl-sep">·</span>
+            <span class="bwl-item"><b>🗑</b> verwijderen</span>
+        </div>`;
+
+    lijst.innerHTML = legenda + alleItems.map(w => {
         const inDb   = dbIds.has(w.id);
         const datum  = w.starts ? new Date(w.starts).toLocaleDateString('nl-NL', {day:'2-digit',month:'long',year:'numeric'}) : '—';
         const badge  = inDb && w._alleenDb
