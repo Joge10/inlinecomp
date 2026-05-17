@@ -750,10 +750,12 @@ if ($action === 'genereer_volgende_ronde') {
                 exit;
             }
 
-            // Resultaten van de eerste ronde ophalen
+            // Resultaten van de eerste ronde ophalen — h.heat_nr meenemen
+            // voor de tie-break-regel bij ex-aequo doorstroming.
             $resStmt = $pdo->prepare("
                 SELECT he.person_license, he.categorie, he.startnummer,
                        p.full_name, p.club_short,
+                       h.heat_nr,
                        res.tijd_ms, res.rondes, res.sanctie
                 FROM tijdschema_ritten r
                 JOIN heats h ON h.tijdschema_rit_id = r.id AND h.competition_id = ?
@@ -777,14 +779,19 @@ if ($action === 'genereer_volgende_ronde') {
             }
 
             // Sorteer op tijd (rondes DESC voor lange afstand / puntenkoers,
-            // dan tijd ASC). Rijders zonder tijd achteraan.
+            // dan tijd ASC). Tie-break op heat_nr DESC (zelfde regel als in
+            // het hoofd-doorstroom-pad — relevant bij DTT-format en andere
+            // gevallen waar identieke tijden op doorstroom-grens kunnen
+            // voorkomen). Rijders zonder tijd achteraan.
             $metTijd    = array_values(array_filter($beschikbaar, fn($r) => $r['tijd_ms'] !== null));
             $zonderTijd = array_values(array_filter($beschikbaar, fn($r) => $r['tijd_ms'] === null));
             usort($metTijd, function($a, $b) {
                 $rA = $a['rondes'] !== null ? (int)$a['rondes'] : PHP_INT_MIN;
                 $rB = $b['rondes'] !== null ? (int)$b['rondes'] : PHP_INT_MIN;
                 if ($rA !== $rB) return $rB - $rA;
-                return (int)$a['tijd_ms'] - (int)$b['tijd_ms'];
+                $tijdDiff = (int)$a['tijd_ms'] - (int)$b['tijd_ms'];
+                if ($tijdDiff !== 0) return $tijdDiff;
+                return ((int)($b['heat_nr'] ?? 0)) - ((int)($a['heat_nr'] ?? 0));
             });
             $alleGesorteerd = array_merge($metTijd, $zonderTijd);
 
@@ -1201,8 +1208,11 @@ if ($action === 'genereer_volgende_ronde') {
                 usort($metTijdB, function($a, $b) {
                     $rA = $a['rondes'] !== null ? (int)$a['rondes'] : PHP_INT_MIN;
                     $rB = $b['rondes'] !== null ? (int)$b['rondes'] : PHP_INT_MIN;
-                    if ($rA !== $rB) return $rB - $rA; // DESC
-                    return (int)$a['tijd_ms'] - (int)$b['tijd_ms'];
+                    if ($rA !== $rB) return $rB - $rA; // rondes DESC
+                    $tijdDiff = (int)$a['tijd_ms'] - (int)$b['tijd_ms'];
+                    if ($tijdDiff !== 0) return $tijdDiff; // tijd ASC
+                    // Tie-break op heat_nr DESC — zelfde regel als hoofdpad
+                    return ((int)($b['heat_nr'] ?? 0)) - ((int)($a['heat_nr'] ?? 0));
                 });
                 $bSlots = array_merge($metTijdB, $zonderTijdB);
             }
@@ -1217,8 +1227,14 @@ if ($action === 'genereer_volgende_ronde') {
             usort($metTijd, function($a, $b) {
                 $rA = $a['rondes'] !== null ? (int)$a['rondes'] : PHP_INT_MIN;
                 $rB = $b['rondes'] !== null ? (int)$b['rondes'] : PHP_INT_MIN;
-                if ($rA !== $rB) return $rB - $rA; // DESC
-                return (int)$a['tijd_ms'] - (int)$b['tijd_ms'];
+                if ($rA !== $rB) return $rB - $rA; // rondes DESC
+                $tijdDiff = (int)$a['tijd_ms'] - (int)$b['tijd_ms'];
+                if ($tijdDiff !== 0) return $tijdDiff; // tijd ASC
+                // Tie-break: bij identieke tijd wint hoger heat_nr (= beter
+                // geseed in tijdkoppeling-mode, neutraal in andere modi).
+                // Belangrijk voor DTT-format waar ex-aequo op duizendsten
+                // op de qualifying-grens deterministisch moet worden opgelost.
+                return ((int)($b['heat_nr'] ?? 0)) - ((int)($a['heat_nr'] ?? 0));
             });
 
             // Ex-aequo: check grens bij $aantalDoor
