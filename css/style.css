@@ -2194,8 +2194,12 @@ col.heat-tp   { width: 72px; }   /* XX-12345 = 8 monospace tekens */
 }
 .beheer-zicht-knop {
     background: #f5f5f5; color: #555; border: none; cursor: pointer;
-    padding: 4px 9px; font-size: .78rem; line-height: 1.2;
+    padding: 0 9px; font-size: .95rem; line-height: 1;
     border-right: 1px solid #ccc;
+    /* Flex zodat emoji's verticaal gecentreerd worden ongeacht hun
+       bounding box (📢/⏳/👁/🖼 hebben verschillende glyph-hoogtes). */
+    display: inline-flex; align-items: center; justify-content: center;
+    height: 32px;
 }
 .beheer-zicht-knop:last-child { border-right: none; }
 .beheer-zicht-knop:hover:not(.is-actief) { background: #ececec; }
@@ -2209,16 +2213,18 @@ col.heat-tp   { width: 72px; }   /* XX-12345 = 8 monospace tekens */
 .beheer-zicht-knop.is-actief.beheer-zicht-aan {
     background: #e2f0d9; color: #2d6a2d; font-weight: 600;
 }
-/* Icon-only actie-knoppen (📢 meld, 📄 poster, 👥 coach-poster) — smal
-   vierkant voor compacte rij in Beheer→Wedstrijden. Tooltip vertelt
-   wat elke knop doet — text-label past niet meer naast de zicht-toggle
-   wanneer er 4+ wedstrijden in 1 rij staan.
-   De prullenbak-knop gebruikt de universele .btn-del-class, niet deze. */
+/* Icon-only actie-knoppen (📢 meld, 📄 public-poster, 🖼 coach-poster,
+   👥 jury-wachtwoord) — smal vierkant voor compacte rij in Beheer→
+   Wedstrijden. Tooltip vertelt wat elke knop doet.
+   De prullenbak-knop gebruikt de universele .btn-del-class, niet deze.
+   Flex + vaste hoogte: emoji's hebben verschillende glyph-hoogtes
+   (📢 hoger dan ⚜); zonder flex stond de inhoud niet gecentreerd. */
 .beheer-icon-btn {
-    width: 32px; padding: 4px 0; text-align: center; font-size: .95rem;
-    line-height: 1.2;
+    display: inline-flex; align-items: center; justify-content: center;
+    width: 32px; height: 32px; padding: 0;
+    font-size: 1rem; line-height: 1;
 }
-/* Jury-wachtwoord-knop ⚜: actief = wachtwoord ingesteld. Goud/oranje
+/* Jury-wachtwoord-knop: actief = wachtwoord ingesteld. Goud/oranje
    highlight zodat operator in één oogopslag ziet voor welke wedstrijden
    de jury-app toegang heeft. Inactief = grijze standaard-stijl. */
 .beheer-icon-btn.beheer-comp-jurypwd.is-actief {

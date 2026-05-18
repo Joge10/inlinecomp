@@ -453,9 +453,9 @@ async function laadOrgWedstrijden() {
             <span class="bwl-sep">·</span>
             <span class="bwl-item"><b>📄</b> public-poster <small>(rijders/ouders)</small></span>
             <span class="bwl-sep">·</span>
-            <span class="bwl-item"><b>👥</b> coach-poster</span>
+            <span class="bwl-item"><b>🖼</b> coach-poster</span>
             <span class="bwl-sep">·</span>
-            <span class="bwl-item"><b>⚜</b> jury-wachtwoord</span>
+            <span class="bwl-item"><b>👥</b> jury-wachtwoord</span>
             <span class="bwl-sep">·</span>
             <span class="bwl-item"><b>🗑</b> verwijderen</span>
         </div>`;
@@ -502,8 +502,8 @@ async function laadOrgWedstrijden() {
                 ${zichtBtn}
                 ${inDb ? `<button class="btn-secondary btn-sm beheer-comp-meld beheer-icon-btn" data-id="${escHtml(w.id)}" data-naam="${escHtml(w.name ?? w.id)}" title="Mededelingen — verstuur push-bericht naar /coach + /public">📢</button>` : ''}
                 ${inDb ? `<button class="btn-secondary btn-sm beheer-comp-poster beheer-icon-btn" data-id="${escHtml(w.id)}" data-app="public" title="Public-poster — download QR-poster voor rijders / ouders">📄</button>` : ''}
-                ${inDb ? `<button class="btn-secondary btn-sm beheer-comp-poster beheer-icon-btn" data-id="${escHtml(w.id)}" data-app="coach" title="Coach-poster — download QR-poster voor coaches">👥</button>` : ''}
-                ${inDb ? `<button class="btn-secondary btn-sm beheer-comp-jurypwd beheer-icon-btn ${Number(dbRow?.jury_password_set) ? 'is-actief' : ''}" data-id="${escHtml(w.id)}" data-naam="${escHtml(w.name ?? w.id)}" data-set="${Number(dbRow?.jury_password_set) ? '1' : '0'}" title="${Number(dbRow?.jury_password_set) ? 'Jury-wachtwoord INGESTELD — klik om te wijzigen of wissen' : 'Jury-wachtwoord NIET ingesteld — klik om in te stellen'}">⚜</button>` : ''}
+                ${inDb ? `<button class="btn-secondary btn-sm beheer-comp-poster beheer-icon-btn" data-id="${escHtml(w.id)}" data-app="coach" title="Coach-poster — download QR-poster voor coaches">🖼</button>` : ''}
+                ${inDb ? `<button class="btn-secondary btn-sm beheer-comp-jurypwd beheer-icon-btn ${Number(dbRow?.jury_password_set) ? 'is-actief' : ''}" data-id="${escHtml(w.id)}" data-naam="${escHtml(w.name ?? w.id)}" data-set="${Number(dbRow?.jury_password_set) ? '1' : '0'}" title="${Number(dbRow?.jury_password_set) ? 'Jury-wachtwoord INGESTELD — klik om te wijzigen of wissen' : 'Jury-wachtwoord NIET ingesteld — klik om in te stellen'}">👥</button>` : ''}
                 ${inDb ? `<button class="btn-del beheer-comp-del" data-id="${escHtml(w.id)}" data-naam="${escHtml(w.name ?? w.id)}" title="Wedstrijd verwijderen (vraagt om bevestiging)">🗑</button>` : ''}
             </div>
         </div>`;
@@ -554,7 +554,7 @@ async function juryWachtwoordDialog(btn) {
         `Het wachtwoord wordt versleuteld opgeslagen — je kunt het bestaande wachtwoord ` +
         `<em>niet</em> meer opvragen, alleen vervangen of wissen. Geef het zelf door aan de jury-leden.</p>`;
     const akkoord = await toonBevestigDialog(
-        html, '⚜ Jury-wachtwoord instellen', 'Opslaan', 'Annuleren', { bodyIsHtml: true }
+        html, '👥 Jury-wachtwoord instellen', 'Opslaan', 'Annuleren', { bodyIsHtml: true }
     );
     if (!akkoord) return;
     const inp = document.getElementById('jury-pwd-inp');
@@ -576,7 +576,7 @@ async function juryWachtwoordDialog(btn) {
             : 'Jury-wachtwoord NIET ingesteld — klik om in te stellen';
         // Korte feedback-toast als die functie bestaat
         if (typeof toonToast === 'function') {
-            toonToast(nuSet ? '⚜ Jury-wachtwoord ingesteld' : '⚜ Jury-wachtwoord gewist', 'ok');
+            toonToast(nuSet ? '👥 Jury-wachtwoord ingesteld' : '👥 Jury-wachtwoord gewist', 'ok');
         }
     } catch (e) {
         alert('Opslaan mislukt: ' + e.message);
