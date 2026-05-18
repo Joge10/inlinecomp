@@ -592,6 +592,15 @@ async function printSerieKlassement(k) {
     // uit het globale `huidigOrganisatie`, dat op de klassement-pagina niet
     // gevuld is — we zetten 'm hier tijdelijk en herstellen na de render.
     let _origOrg = (typeof huidigOrganisatie !== 'undefined') ? huidigOrganisatie : null;
+    // Een serie kan wedstrijden op meerdere banen omvatten — er is geen
+    // enkele "gastheer-baan". `huidigBaan` kan nog gevuld zijn van een eerder
+    // bekeken wedstrijd; dat zou een willekeurig baan-logo in de print zetten.
+    // Tijdelijk leegmaken en achteraf herstellen.
+    let _origBaan = (typeof huidigBaan !== 'undefined') ? huidigBaan : null;
+    if (typeof huidigBaan !== 'undefined') {
+        // eslint-disable-next-line no-global-assign
+        huidigBaan = null;
+    }
     if (k.org_id) {
         try {
             const r = await fetch('api/organisaties.php?id=' + encodeURIComponent(k.org_id));
@@ -797,5 +806,9 @@ window.addEventListener('afterprint', function(){
     if (typeof huidigOrganisatie !== 'undefined') {
         // eslint-disable-next-line no-global-assign
         huidigOrganisatie = _origOrg;
+    }
+    if (typeof huidigBaan !== 'undefined') {
+        // eslint-disable-next-line no-global-assign
+        huidigBaan = _origBaan;
     }
 }
