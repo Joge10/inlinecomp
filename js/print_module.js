@@ -839,9 +839,12 @@ async function _pcStartPrint() {
     // dezelfde size) — dat maakt boom-saver nutteloos. Door dezelfde naam te
     // hergebruiken voor alle landscape-secties (en idem voor portrait) mag
     // de browser bodies doorlopen zonder verplichte page-break.
+    // Geen eigen marges: de printer-driver bepaalt zijn eigen fysieke
+    // minimum-marges. Zo gebruikt elke printer maximaal beschikbare papier-
+    // oppervlak zonder dat we extra wit forceren.
     const pageRules = [
-        `@page pc-p-landscape { size: A4 landscape; }`,
-        `@page pc-p-portrait  { size: A4 portrait; }`,
+        `@page pc-p-landscape { size: A4 landscape; margin: 0; }`,
+        `@page pc-p-portrait  { size: A4 portrait;  margin: 0; }`,
     ];
 
     bodies.forEach(({ data }, i) => {

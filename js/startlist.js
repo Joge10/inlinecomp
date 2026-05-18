@@ -788,7 +788,11 @@ col.pr-col-fin-snr{width:50px}
 /* Photofinish-icoon in Opm.-kolom — puur sec het 📷-emoji. */
 .pr-pf-icon{margin-left:3px}
 @media print{
-  body{margin:.5cm .8cm}
+  /* Geen eigen marges: de printer-driver bepaalt de fysieke minimum-
+     marges. Zo gebruikt elke printer maximaal beschikbare papier-
+     oppervlak zonder dat we er extra wit omheen forceren. */
+  @page{margin:0}
+  body{margin:0;padding:0}
   .pr-card{break-inside:avoid}
   .pr-titel{background:#e8ecf0!important;color:#000!important;border-bottom:2px solid #000}
   .pr-ritnr{background:#000!important;color:#fff!important}
