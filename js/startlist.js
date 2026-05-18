@@ -788,10 +788,14 @@ col.pr-col-fin-snr{width:50px}
 /* Photofinish-icoon in Opm.-kolom — puur sec het 📷-emoji. */
 .pr-pf-icon{margin-left:3px}
 @media print{
-  /* Geen eigen marges: de printer-driver bepaalt de fysieke minimum-
-     marges. Zo gebruikt elke printer maximaal beschikbare papier-
-     oppervlak zonder dat we er extra wit omheen forceren. */
-  @page{margin:0}
+  /* Marge-strategie: 3mm als ondergrens. Randloze printers krijgen
+     dan exact 3mm wit (anders zou tekst aan de rand vastplakken).
+     Printers met grotere fysieke minimum-marge (typisch 5mm op
+     inktjets, ~4mm op laser) clippen of schalen het 3mm-5mm gebied
+     en gebruiken dus effectief hun eigen minimum. Op die manier krijg
+     je altijd het maximum aan papier-oppervlak, met een veilige 3mm
+     bodem voor randloze printers. */
+  @page{margin:3mm}
   body{margin:0;padding:0}
   .pr-card{break-inside:avoid}
   .pr-titel{background:#e8ecf0!important;color:#000!important;border-bottom:2px solid #000}
