@@ -2125,9 +2125,41 @@ function _bouwSpeakerlijstenInternal() {
             (Number(a.start_number) || 9999) - (Number(b.start_number) || 9999));
 
         if (heeftSplits) {
-            // Per splitgroep een eigen pagina. Sorteer alfabetisch op naam,
-            // '_geen' (cat zonder split-mapping) altijd onderaan.
-            const splitNamen = [...new Set(Object.values(allSplits))].sort();
+            // Per splitgroep een eigen pagina. Splits zijn altijd per
+            // categorie — volgorde moet de natuurlijke KNSB-cat-volgorde
+            // volgen: jongst → oud per leeftijdsgroep (P/A/J/S/M), dames vóór
+            // heren binnen dezelfde leeftijdsklasse.
+            //
+            // Sorteer-key per cat = [leeftijdsgroep, leeftijdsklasse, geslacht]
+            //   1e letter: D=0, H=1, N=2 → dames eerst
+            //   2e letter: P=0, A=1, J=2, S=3, M=4 → pupil eerst
+            //   3e letter: A=0, B=1, C=2 → A eerst binnen leeftijdsgroep
+            // Tussen leeftijdsklasse en geslacht zorgt de volgorde-prioriteit
+            // dat we eerst DPA → HPA → DPB → HPB krijgen (= "per cat dames
+            // vóór heren") in plaats van DPA → DPB → DPC → HPA → HPB → HPC.
+            const catKey = (cat) => {
+                if (!cat) return [99, 99, 99];
+                const c = String(cat).toUpperCase();
+                const geslacht = { D: 0, H: 1, N: 2 }[c[0]] ?? 9;
+                const leeftijd = { P: 0, A: 1, J: 2, S: 3, M: 4 }[c[1]] ?? 9;
+                const klasse   = c[2] ? c.charCodeAt(2) - 65 : 0;
+                return [leeftijd, klasse, geslacht];
+            };
+            // Voor elke splitgroep: pak de cat(s) die erin zitten, neem de
+            // sortKey van de eerste/jongste. Per splitgroep is dat meestal
+            // 1 cat; bij meerdere wint de jongste.
+            const catsPerSplit = new Map(); // sg -> [cat, cat, ...]
+            Object.entries(allSplits).forEach(([cat, sg]) => {
+                if (!catsPerSplit.has(sg)) catsPerSplit.set(sg, []);
+                catsPerSplit.get(sg).push(cat);
+            });
+            const sgVergelijk = (a, b) => {
+                const ka = (catsPerSplit.get(a) || ['']).map(catKey).sort()[0] || [99,99,99];
+                const kb = (catsPerSplit.get(b) || ['']).map(catKey).sort()[0] || [99,99,99];
+                return (ka[0] - kb[0]) || (ka[1] - kb[1]) || (ka[2] - kb[2])
+                    || String(a).localeCompare(String(b), 'nl');
+            };
+            const splitNamen = [...new Set(Object.values(allSplits))].sort(sgVergelijk);
             splitNamen.forEach(sg => {
                 const ds = sortSn(perSplit[sg] || []);
                 if (ds.length === 0) return;
