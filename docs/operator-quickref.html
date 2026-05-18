@@ -1291,6 +1291,38 @@ table.compact th {
         <div class="tip">💡 Dropdown ververst automatisch na bevestigen/vastleggen. Lukt het toch niet? F5.</div>
     </div>
 
+    <div class="scr-section">
+        <h3>Tekenlijst vs. Deelnemerslijst — wanneer welke printen?</h3>
+        <p>Beide lijsten lijken op elkaar maar hebben een ander doel. Status <b>0 (Niet bevestigd)</b> wordt in beide anders behandeld — dat is bewust.</p>
+
+        <div style="background:#f7fafc;border-left:3px solid #1a3a5c;padding:8px 12px;margin:8px 0;font-size:9.5pt">
+            <p style="margin-bottom:4px"><b>📋 Tekenlijst</b> — print vóór de wedstrijd (na <i>Importeer</i>, vóór deadline)</p>
+            <ul style="margin:2px 0 6px 22px;padding:0">
+                <li>Bevat: status <b>0, 1, 5</b> (iedereen die nog "in beeld" is)</li>
+                <li>Status 0 krijgt <b>"⚠ persoonlijk melden ⚠"</b> in de handtekening-kolom</li>
+                <li>Doel: vangnet voor rijders bij wie KNSB-betaling niet doorging — komen ze toch opdagen, dan zet operator status → <b>5 (Bevestigd bij org.)</b> na cash/Tikkie</li>
+            </ul>
+
+            <p style="margin:8px 0 4px"><b>📋 Deelnemerslijst</b> — print ná de teken-deadline (na <i>Importeer</i>, status-update door operator)</p>
+            <ul style="margin:2px 0 6px 22px;padding:0">
+                <li>"Actief" (X bij afstand): status <b>1, 5</b> — definitief meedoen</li>
+                <li>"Niet aanwezig / afgemeld": status <b>0, 2, 3, 4</b> — komen niet (meer)</li>
+                <li>Status 0 hier = rijder die niet opdaagde om te tekenen <em>en</em> niet alsnog door org bevestigd is</li>
+            </ul>
+        </div>
+
+        <p><b>Workflow-volgorde:</b></p>
+        <ol style="margin-top:2px">
+            <li>Importeer KNSB-CSV → statussen vullen (meestal 1 of 0)</li>
+            <li>Print <b>Tekenlijst</b> → leg op tafel bij wedstrijdsecretariaat</li>
+            <li>Rijders tekenen: operator update statussen via badge-klik (bv. 0 → 5 bij cash-betaling)</li>
+            <li>Ná teken-deadline: vergeten rijders → status 0 blijft of operator zet → 4</li>
+            <li>Print <b>Deelnemerslijst</b> → definitief overzicht voor speaker/jury</li>
+        </ol>
+
+        <div class="tip">💡 Iemand met status 0 op de teken-deadline is dus géén fout — het is een rijder die niet langs het secretariaat is gekomen. Niet alsnog op "Bevestigd bij org." zetten zonder dat 'ie betaald heeft.</div>
+    </div>
+
     <div class="voet">
         InlineComp Operator &middot; Quick Reference (6/6 — Print-Center) &middot; Bij twijfel: <b>raadpleeg de hoofdoperator</b>
     </div>
