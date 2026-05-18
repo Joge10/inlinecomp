@@ -2067,10 +2067,22 @@ function _bouwSpeakerlijstenInternal() {
 
         // Sprint-filter via race_type. Skip DC als ALLE afstanden 'sprint' zijn;
         // inline, afvalkoers en puntenkoers blijven erin.
+        //
+        // LET OP voor split-DCs: dcDistances[dc.dc_id] is leeg, de echte
+        // afstanden zitten onder dcDistances[dc.dc_id::splitgroep]. Dus we
+        // verzamelen alle keys die met dc.dc_id beginnen. KNSB-fallback heeft
+        // geen race_type en zou anders alles als 'sprint' tellen → DC ten
+        // onrechte geskipt.
         const heeftNietSprint = dcGroup.some(dc => {
+            const prefix = dc.dc_id + '::';
+            const splitAfs = Object.keys(dcDistances)
+                .filter(k => k.startsWith(prefix))
+                .flatMap(k => dcDistances[k] || []);
             const bron = dcDistances[dc.dc_id]?.length
                 ? dcDistances[dc.dc_id]
-                : (dc.knsb_distances || []);
+                : splitAfs.length
+                    ? splitAfs
+                    : (dc.knsb_distances || []);
             return bron.some(d => (d.race_type || 'sprint') !== 'sprint');
         });
         if (!heeftNietSprint) return;
