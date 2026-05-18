@@ -2425,11 +2425,18 @@ function renderSancties() {
     const gesorteerd = [...coachLijst].sort((a,b) => parseInt(a.snr) - parseInt(b.snr));
     el.innerHTML = gesorteerd.map(p => {
         const info = coachInfoCache[p.license_key];
+        // Multi-sanctie: s.sanctie kan bv. 'W1,W2,DQ-SF' zijn. Toon elke code
+        // als eigen badge met uitleg zodat coach precies ziet wat er speelde
+        // in die rit (en niet één samengeplakte string zonder verklaring).
         const sanctieRijen = (info?.sancties || []).map(s => {
-            const uitleg = SANCTIE_UITLEG[s.sanctie] ?? '';
+            const codes  = String(s.sanctie || '').split(',').map(c => c.trim()).filter(Boolean);
+            const badges = codes.map(c => {
+                const uitleg = SANCTIE_UITLEG[c] ?? '';
+                return `<span class="sanc-rij-code" title="${esc(uitleg)}">${esc(c)}</span>`
+                    + (uitleg ? ` <small>— ${esc(uitleg)}</small>` : '');
+            }).join(' &nbsp; ');
             return `<div class="sanc-rij">
-                <span class="sanc-rij-code">${esc(s.sanctie)}</span>
-                ${uitleg ? `<small>— ${esc(uitleg)}</small>` : ''}
+                ${badges}
                 · ${esc(s.rit_naam ?? '')}
                 ${s.afstand_naam ? ` · ${esc(s.afstand_naam)}` : ''}
             </div>`;

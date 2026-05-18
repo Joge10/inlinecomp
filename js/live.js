@@ -506,9 +506,9 @@ const _LIVE_SANCT_CODES = ['FS', 'W1', 'W2', 'RR', 'DQ-TF', 'DQ-SF', 'DQ-DF', 'D
 function _liveBouwSanctieMulti(huidig, disabled) {
     // huidig = string 'W1,W2,DQ-SF' (of leeg/null)
     const codes = (huidig || '').split(',').map(s => s.trim()).filter(Boolean);
-    const label = codes.length ? esc(codes.join(', ')) : '—';
+    const label = codes.length ? escHtml(codes.join(', ')) : '—';
     return `<div class="live-sanctie-wrap">` +
-        `<input type="hidden" class="live-sanctie-sel" value="${esc(codes.join(','))}">` +
+        `<input type="hidden" class="live-sanctie-sel" value="${escHtml(codes.join(','))}">` +
         `<button type="button" class="live-sanctie-btn ${codes.length ? 'heeft-sanctie' : ''}"` +
         ` ${disabled} title="Klik om sancties te kiezen (meerdere mogelijk)">${label}</button>` +
         `</div>`;
@@ -557,7 +557,7 @@ function _liveSanctiePopoverOpen(wrap) {
         `<div class="lsp-chips">` +
         _LIVE_SANCT_CODES.map(c =>
             `<button type="button" class="lsp-chip ${huidig.has(c) ? 'actief' : ''}"` +
-            ` data-code="${esc(c)}">${esc(c)}</button>`
+            ` data-code="${escHtml(c)}">${escHtml(c)}</button>`
         ).join('') +
         `</div>` +
         `<div class="lsp-voet">` +
