@@ -619,6 +619,8 @@ async function _bouwStartlijstDrukInternal(optData) {
                 <td class="pr-cat">${esc(r.categorie ?? r.category ?? '')}</td>
                 <td class="pr-naam">${esc(r.full_name ?? '')}</td>
                 <td class="pr-opm">${opmCel}</td>
+                <td class="pr-fin">${i + 1}</td>
+                <td class="pr-fin-snr"></td>
             </tr>`;
         });
         return `<div class="pr-card${extraCls ? ' ' + extraCls : ''}">
@@ -627,8 +629,9 @@ async function _bouwStartlijstDrukInternal(optData) {
                 <colgroup>
                     <col class="pr-col-pos"><col class="pr-col-snr"><col class="pr-col-cat">
                     <col class="pr-col-naam"><col class="pr-col-opm">
+                    <col class="pr-col-fin"><col class="pr-col-fin-snr">
                 </colgroup>
-                <thead><tr><th>#</th><th>Snr</th><th>Cat</th><th>Naam</th><th>Opm.</th></tr></thead>
+                <thead><tr><th>#</th><th>Snr</th><th>Cat</th><th>Naam</th><th>Opm.</th><th class="pr-fin-h">Fin</th><th class="pr-fin-h">Snr</th></tr></thead>
                 <tbody>${rows}</tbody>
             </table>
         </div>`;
@@ -657,6 +660,8 @@ async function _bouwStartlijstDrukInternal(optData) {
                     <td class="pr-cat">${esc(r.categorie ?? r.category ?? '')}</td>
                     <td class="pr-naam">${esc(r.full_name ?? '')}</td>
                     <td class="pr-opm">${opmCel}</td>
+                    <td class="pr-fin">${i + 1}</td>
+                    <td class="pr-fin-snr"></td>
                 </tr>`;
             });
             return `<div class="pr-combi-kolom">
@@ -664,8 +669,9 @@ async function _bouwStartlijstDrukInternal(optData) {
                 <table class="pr-tabel pr-combi-tabel">
                     <colgroup>
                         <col class="pr-col-pos"><col class="pr-col-snr"><col class="pr-col-cat"><col class="pr-col-naam"><col class="pr-col-opm">
+                        <col class="pr-col-fin"><col class="pr-col-fin-snr">
                     </colgroup>
-                    <thead><tr><th>#</th><th>Snr</th><th>Cat</th><th>Naam</th><th>Opm.</th></tr></thead>
+                    <thead><tr><th>#</th><th>Snr</th><th>Cat</th><th>Naam</th><th>Opm.</th><th class="pr-fin-h">Fin</th><th class="pr-fin-h">Snr</th></tr></thead>
                     <tbody>${rows}</tbody>
                 </table>
             </div>`;
@@ -724,7 +730,18 @@ col.pr-col-snr{width:36px}
 col.pr-col-cat{width:30px}
 col.pr-col-naam{}
 col.pr-col-opm{width:60px}
+col.pr-col-fin{width:22px}
+col.pr-col-fin-snr{width:50px}
 .pr-pos{color:#aaa;text-align:center;font-size:7.5pt}
+/* Aankomst-jury kolommen: Fin (vooraf 1..N) + Snr (leeg, jury vult in).
+   Dikke linker-rand markeert visueel het "invul-blok" en scheidt het van
+   de startgrid-info. Snr-cel is hoog genoeg om leesbaar handgeschreven
+   nummer toe te laten. */
+.pr-fin,.pr-fin-snr{border-left:2px solid #1a3a5c!important}
+.pr-fin{text-align:center;font-weight:600;color:#1a3a5c;background:#f4f7fb}
+.pr-fin-snr{background:#fafafa}
+.pr-tabel th.pr-fin-h{background:#1a3a5c;color:#fff!important;text-align:center;
+                      border-left:2px solid #1a3a5c!important}
 /* Hogere specificiteit (td.klasse) nodig om het shorthand
    .pr-tabel td{padding:3px 4px} te overrulen; zonder dit plakken
    het startnummer en de categorie tegen elkaar in smalle kolommen. */
@@ -787,6 +804,13 @@ col.pr-col-opm{width:60px}
   .pr-combi-tabel, .pr-combi-tabel *,
   .pr-sectie-kop{color:#000!important}
   .pr-sectie-kop{border-bottom-color:#000!important}
+  /* Aankomst-jury kolommen op print: consistente header-stijl, zwarte
+     scheidings-rand, witte achtergrond zodat de jury duidelijk in het
+     vakje kan schrijven. */
+  .pr-tabel th.pr-fin-h{background:#eee!important;color:#000!important;
+                        border-left:2px solid #000!important}
+  .pr-fin,.pr-fin-snr{border-left:2px solid #000!important;
+                      background:#fff!important}
 }
 /* Wrapper-tabel: thead herhaalt automatisch op elke pagina bij print */
 .pr-wrap{width:100%;border-collapse:collapse}
