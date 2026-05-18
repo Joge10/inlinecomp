@@ -952,14 +952,32 @@ async function _pcStartPrint() {
     const isSafari = /^((?!chrome|android|crios|fxios).)*safari/i.test(navigator.userAgent)
                      && /apple/i.test(navigator.vendor || '');
     if (heeftMixedOrient && isSafari && typeof toonBevestigDialog === 'function') {
-        const portraitN  = bodies.filter(({ data }) => data.pageOrientation !== 'landscape').length;
-        const landscapeN = bodies.filter(({ data }) => data.pageOrientation === 'landscape').length;
+        // Verzamel titels per orientation zodat operator direct ziet welke
+        // secties opgesplitst moeten worden. Fallback op subType of generieke
+        // label als title leeg is (zou niet mogen, maar defensief).
+        const labelVan = (data) => {
+            const t = (data.title || '').trim();
+            if (t) return t;
+            const s = (data.subType || '').trim();
+            return s || '(onbekende sectie)';
+        };
+        const escape = (s) => String(s)
+            .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+        const portraitTitels  = bodies.filter(({ data }) => data.pageOrientation !== 'landscape')
+                                      .map(({ data }) => escape(labelVan(data)));
+        const landscapeTitels = bodies.filter(({ data }) => data.pageOrientation === 'landscape')
+                                      .map(({ data }) => escape(labelVan(data)));
+        const lijstHtml = (titels) => titels.length
+            ? `<ul style="margin:2px 0 6px 22px;padding:0">${titels.map(t => `<li>${t}</li>`).join('')}</ul>`
+            : '<p style="margin:2px 0 6px 22px;color:#888"><i>geen</i></p>';
         const html =
             `<p><b>Safari op Mac/iOS</b> ondersteunt geen automatische orientation-wissel ` +
-            `binnen één print-job.</p>` +
-            `<p>Deze print bevat <b>${portraitN} portrait</b> + <b>${landscapeN} landscape</b> ` +
-            `sectie(s). Safari zal alles in dezelfde orientation printen — landscape-content ` +
+            `binnen één print-job. Alles wordt in één richting geprint — landscape-content ` +
             `wordt dan mogelijk afgekapt aan de rand.</p>` +
+            `<p style="margin-bottom:2px"><b>Portrait (${portraitTitels.length}):</b></p>` +
+            lijstHtml(portraitTitels) +
+            `<p style="margin-bottom:2px"><b>Landscape (${landscapeTitels.length}):</b></p>` +
+            lijstHtml(landscapeTitels) +
             `<p><b>Twee oplossingen:</b></p>` +
             `<ol style="margin:6px 0 10px 22px;padding:0">` +
             `<li>Open InlineComp in <b>Google Chrome</b> of <b>Firefox</b> op deze Mac — ` +
