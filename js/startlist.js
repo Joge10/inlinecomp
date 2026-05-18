@@ -729,7 +729,7 @@ col.pr-col-pos{width:16px}
 col.pr-col-snr{width:36px}
 col.pr-col-cat{width:30px}
 col.pr-col-naam{}
-col.pr-col-opm{width:60px}
+col.pr-col-opm{width:39px}
 col.pr-col-fin{width:22px}
 col.pr-col-fin-snr{width:50px}
 .pr-pos{color:#aaa;text-align:center;font-size:7.5pt}
