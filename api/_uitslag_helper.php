@@ -52,6 +52,36 @@ function sancties_normaliseer($input): ?string {
     return implode(',', $arr);
 }
 
+// Sancties die in volgende rondes (zelfde afstand) "doorwerken" en op de
+// startlijst getoond moeten worden zodat de jury weet dat een rijder op
+// scherp staat. Specifiek:
+//   - FS: bij weer FS in opvolgende heat = direct DQ
+//   - W1, W2: bij W2 staat rijder op scherp; 1 extra waarschuwing = DQ-SF
+// RR (race rule reminder) en alle DQ-/DNF/DNS hoeven niet getoond te worden
+// op vervolg-startlijsten (RR heeft geen consequenties; DQ/DNF/DNS = rijder
+// rijdt niet meer mee).
+const SANCTIE_DOORWERKEND_NAAR_VOLGENDE_HEAT = ['FS', 'W1', 'W2'];
+
+// Filter een 'vorige_sancties' GROUP_CONCAT-string ("S1:W1,W2,DQ-SF H1:FS")
+// naar alleen de doorwerkende codes. Output blijft hetzelfde formaat;
+// rondes zonder doorwerkende codes vallen volledig weg.
+// Voorbeeld: "S1:W1,W2,DQ-SF H1:FS,RR" → "S1:W1,W2 H1:FS"
+function vorigeSanctiesFilterDisplay(?string $raw): string {
+    if ($raw === null || trim($raw) === '') return '';
+    $delen = preg_split('/\s+/', trim($raw));
+    $clean = [];
+    foreach ($delen as $deel) {
+        if (!str_contains($deel, ':')) continue;
+        [$ronde, $codes] = explode(':', $deel, 2);
+        $codesArr = sancties_split($codes);
+        $relevant = array_values(array_intersect($codesArr, SANCTIE_DOORWERKEND_NAAR_VOLGENDE_HEAT));
+        if ($relevant) {
+            $clean[] = $ronde . ':' . implode(',', $relevant);
+        }
+    }
+    return implode(' ', $clean);
+}
+
 // ── Eindsanctie = rijder heeft geen geldige finish ──────────────────────────
 // DNS/DNF/DQ-* betekenen: géén geregistreerde finish, ongeacht of finishpositie
 // in de DB (per ongeluk of door eerdere invoer) gevuld is.

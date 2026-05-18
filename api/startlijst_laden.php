@@ -24,6 +24,7 @@ header('Access-Control-Allow-Origin: *');
 
 require_once __DIR__ . '/../../config_inlinecomp.php';
 require_once __DIR__ . '/../auth/session.php';
+require_once __DIR__ . '/_uitslag_helper.php';
 $_authUser = requireAuth($pdo);
 
 $compId       = trim($_GET['competition_id'] ?? '');
@@ -81,6 +82,14 @@ try {
     ");
     $stmt->execute($heatIds);
     $entries = $stmt->fetchAll(PDO::FETCH_ASSOC);
+
+    // Filter 'vorige_sancties' naar alleen doorwerkende codes (FS/W1/W2).
+    // Multi-sanctie kan ook DQ-*/RR/DNS bevatten — die zijn voor de
+    // startlijst van een opvolgende heat niet relevant. Zie helper.
+    foreach ($entries as &$_e) {
+        $_e['vorige_sancties'] = vorigeSanctiesFilterDisplay($_e['vorige_sancties'] ?? '');
+    }
+    unset($_e);
 
     // Transponders ophalen
     $licenseKeys = array_unique(array_column($entries, 'license_key'));
@@ -273,6 +282,12 @@ try {
                 $vHeatIds
             ));
             $vEntries = $veStmt->fetchAll(PDO::FETCH_ASSOC);
+
+            // Filter 'vorige_sancties' naar alleen doorwerkende codes (FS/W1/W2).
+            foreach ($vEntries as &$_ve) {
+                $_ve['vorige_sancties'] = vorigeSanctiesFilterDisplay($_ve['vorige_sancties'] ?? '');
+            }
+            unset($_ve);
 
             // Transponders voor deze rijders
             $vLicenses = array_unique(array_column($vEntries, 'license_key'));
