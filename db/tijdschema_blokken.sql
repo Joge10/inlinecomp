@@ -11,6 +11,9 @@ CREATE TABLE IF NOT EXISTS `tijdschema_blokken` (
     `duur`          SMALLINT UNSIGNED DEFAULT NULL,
     `inrijd_cats`   TEXT         DEFAULT NULL,
     `tijdstip`      TIME         DEFAULT NULL,
+    -- Datum voor wedstrijdstart-blokken bij meerdaagse evenementen (NK over
+    -- 3 dagen). NULL = meegerend met competitions.starts (default eerste dag).
+    `datum`         DATE         DEFAULT NULL,
     `opmerking`     VARCHAR(255) DEFAULT NULL,
     `heat_duur`     SMALLINT UNSIGNED DEFAULT NULL,
     PRIMARY KEY (`id`),

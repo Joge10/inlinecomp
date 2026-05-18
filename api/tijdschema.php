@@ -9,7 +9,10 @@
 //  POST action=save_blokken        → programma-volgorde opslaan
 //  POST action=add_pauze           → pauze toevoegen
 //  POST action=add_inrijden        → inrijd-blok toevoegen
-//  POST action=add_wedstrijdstart  → wedstrijdstart-blok toevoegen (max 1)
+//  POST action=add_wedstrijdstart  → wedstrijdstart-blok toevoegen (meerdere
+//                                    toegestaan voor multi-day events; elke
+//                                    extra wedstrijdstart = nieuwe dag,
+//                                    auto-gelabeld 'Dag N' in de UI)
 //  POST action=add_ceremonie       → ceremonie-blok toevoegen
 //  POST action=save_blok           → duur / inrijd-cats opslaan
 //  POST action=genereer            → ritten genereren
@@ -1266,7 +1269,7 @@ try {
         exit;
     }
 
-    // ── Wedstrijd start toevoegen (max 1) ─────────────────────────────────────
+    // ── Wedstrijd start toevoegen (meerdere toegestaan = multi-day) ──────────
     if ($action === 'add_wedstrijdstart') {
         $tsId = (int)($body['tijdschema_id'] ?? 0);
         if (!$tsId) {
@@ -1274,14 +1277,8 @@ try {
             echo json_encode(['error' => 'tijdschema_id ontbreekt']);
             exit;
         }
-        // Max 1 wedstrijdstart
-        $check = $pdo->prepare("SELECT COUNT(*) FROM tijdschema_blokken WHERE tijdschema_id = ? AND blok_type = 'wedstrijdstart'");
-        $check->execute([$tsId]);
-        if ((int)$check->fetchColumn() > 0) {
-            http_response_code(400);
-            echo json_encode(['error' => 'Er is al een wedstrijdstart-blok']);
-            exit;
-        }
+        // Multi-day: max-1 beperking opgeheven. Elke extra wedstrijdstart =
+        // nieuwe dag (auto-gelabeld 'Dag N' in de UI op basis van volgorde).
         $compId = $getCompId($tsId);
         // Optimistic locking
         $clientTsVer = isset($body['tijdschema_version']) ? (int)$body['tijdschema_version'] : null;
@@ -1392,8 +1389,12 @@ try {
                 $tijdstip = isset($body['tijdstip']) && $body['tijdstip'] !== ''
                             ? substr(preg_replace('/[^0-9:]/', '', $body['tijdstip']), 0, 5)
                             : null;
-                $pdo->prepare("UPDATE tijdschema_blokken SET tijdstip = ? WHERE id = ? AND tijdschema_id = ?")
-                    ->execute([$tijdstip ?: null, $blokId, $tsId]);
+                // Datum voor multi-day: YYYY-MM-DD; leeg/ongeldig → NULL.
+                $datumRaw = trim((string)($body['datum'] ?? ''));
+                $datum    = (preg_match('/^\d{4}-\d{2}-\d{2}$/', $datumRaw))
+                            ? $datumRaw : null;
+                $pdo->prepare("UPDATE tijdschema_blokken SET tijdstip = ?, datum = ? WHERE id = ? AND tijdschema_id = ?")
+                    ->execute([$tijdstip ?: null, $datum, $blokId, $tsId]);
                 break;
             case 'herstart':
                 $tijdstip = isset($body['tijdstip']) && $body['tijdstip'] !== ''

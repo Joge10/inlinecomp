@@ -909,6 +909,13 @@ function renderBlokken(schema, afstandGroepen) {
     const blokken = schema.blokken ?? [];
     const heeftWsStart = blokken.some(b => b.blok_type === 'wedstrijdstart');
     const wsIdx = blokken.findIndex(b => b.blok_type === 'wedstrijdstart');
+    // Multi-day: bepaal voor elk wedstrijdstart-blok het dag-nummer (1-indexed
+    // volgens volgorde van voorkomen) zodat de UI 'Dag 1 / Dag 2 / Dag N'
+    // kan tonen ipv generiek 'WEDSTRIJD START'.
+    const wsBlokkenInVolgorde = blokken.filter(b => b.blok_type === 'wedstrijdstart');
+    const wsTotaalDagen = wsBlokkenInVolgorde.length;
+    const dagNrMap = new Map();
+    wsBlokkenInVolgorde.forEach((b, i) => dagNrMap.set(b.id, i + 1));
 
     // Alle unieke categorieën (voor inrijd-selectie)
     const alleCatsUniek = [];
@@ -985,13 +992,25 @@ function renderBlokken(schema, afstandGroepen) {
             </div>`;
 
         } else if (blok.blok_type === 'wedstrijdstart') {
-            const tijdVal = blok.tijdstip ? blok.tijdstip.substring(0,5) : '';
+            const tijdVal  = blok.tijdstip ? blok.tijdstip.substring(0,5) : '';
+            const datumVal = blok.datum    ? blok.datum.substring(0,10)   : '';
+            // Multi-day support: tel wedstrijdstart-blokken in volgorde voor
+            // automatische 'Dag N'-label. Bij 1 wedstrijdstart toon klassieke
+            // label, bij meerdere expliciet Dag-nummer.
+            const wsDagNr = dagNrMap.get(blok.id) || 1;
+            const wsLbl   = wsTotaalDagen > 1
+                ? `── DAG ${wsDagNr} START ──`
+                : '── WEDSTRIJD START ──';
             html += `<div class="ts-blok-item ts-blok-wsstart" draggable="true" data-blok-id="${blok.id}">
                 ${dragHandle}${navBtns}
-                <span class="ts-blok-wsstart-lbl">── WEDSTRIJD START ──</span>
+                <span class="ts-blok-wsstart-lbl">${wsLbl}</span>
                 <label class="ts-blok-duur-lbl">
                     Aanvang:&nbsp;<input type="time" class="ts-inp-tijdstip" data-blok-id="${blok.id}"
                                         value="${tijdVal}">
+                </label>
+                <label class="ts-blok-duur-lbl" title="Datum van deze wedstrijddag (optioneel — alleen relevant bij meerdaagse evenementen)">
+                    Datum:&nbsp;<input type="date" class="ts-inp-datum" data-blok-id="${blok.id}"
+                                        value="${datumVal}">
                 </label>
                 ${delBtn}
             </div>`;
@@ -1037,7 +1056,10 @@ function renderBlokken(schema, afstandGroepen) {
             <button class="ts-btn-annuleer ts-btn-sm" id="ts-btn-add-pauze">+ Pauze toevoegen</button>
             <button class="ts-btn-annuleer ts-btn-sm" id="ts-btn-add-inrijden">+ Inrijden toevoegen</button>
             <button class="ts-btn-cerem ts-btn-sm" id="ts-btn-add-ceremonie">+ Ceremonie toevoegen</button>
-            <button class="ts-btn-wsstart ts-btn-sm" id="ts-btn-add-wsstart" ${heeftWsStart ? 'disabled' : ''}>+ Wedstrijd start</button>
+            <button class="ts-btn-wsstart ts-btn-sm" id="ts-btn-add-wsstart"
+                title="${heeftWsStart
+                    ? 'Voeg een extra wedstrijdstart toe voor een nieuwe wedstrijddag (multi-day NK e.d.)'
+                    : 'Plaats het startmoment van de wedstrijd op de tijdlijn'}">+ ${heeftWsStart ? 'Dag toevoegen' : 'Wedstrijd start'}</button>
             <button class="ts-btn-herstart ts-btn-sm" id="ts-btn-add-herstart">🔄 Herstart toevoegen</button>
             <span class="ts-blokken-acties-sep"></span>
             <button class="btn-secondary ts-btn-sm" id="ts-btn-save-blokken">💾 Volgorde opslaan</button>
@@ -1128,8 +1150,17 @@ function renderRittenLijst(ritten, blokken) {
         let prevRitCurSec = null;
         for (const rij of rijen) {
             if (rij.type === 'wedstrijdstart') {
+                // Multi-day: elk wedstrijdstart-blok reset de tijdrekening
+                // naar het ingestelde tijdstip. Eerste wedstrijdstart heeft
+                // wsSec al (zie hierboven); 2e+ pakken hun eigen tijdstip.
+                // Geen tijdstip → cur blijft staan (gedrag van vóór multi-day).
+                if (rij.blok.tijdstip) {
+                    const d = rij.blok.tijdstip.split(':').map(Number);
+                    cur = (d[0] || 0) * 3600 + (d[1] || 0) * 60;
+                }
                 blokTijdMap.set(rij.blok.id, secNaarTijd(cur));
                 started = true;
+                prevRitCombi = null;
             } else if (started) {
                 if (rij.type === 'pauze' || rij.type === 'inrijden' || rij.type === 'ceremonie') {
                     blokTijdMap.set(rij.blok.id, secNaarTijd(cur));
@@ -1982,6 +2013,8 @@ function bindTsEvents(afstandGroepen) {
             postBody.opmerking   = blokDiv.querySelector('.ts-inp-opmerking')?.value.trim() || null;
         } else if (blok.blok_type === 'wedstrijdstart') {
             postBody.tijdstip = blokDiv.querySelector('.ts-inp-tijdstip')?.value || null;
+            // Multi-day: datum-veld (YYYY-MM-DD). Leeg → server interpret als NULL.
+            postBody.datum    = blokDiv.querySelector('.ts-inp-datum')?.value     || null;
         } else if (blok.blok_type === 'herstart') {
             postBody.tijdstip  = blokDiv.querySelector('.ts-inp-tijdstip')?.value  || null;
             postBody.opmerking = blokDiv.querySelector('.ts-inp-opmerking')?.value.trim() || null;
@@ -2001,6 +2034,10 @@ function bindTsEvents(afstandGroepen) {
     });
 
     container.querySelectorAll('.ts-inp-tijdstip').forEach(inp => {
+        inp.addEventListener('change', () => slaBlokOp(inp.dataset.blokId));
+    });
+
+    container.querySelectorAll('.ts-inp-datum').forEach(inp => {
         inp.addEventListener('change', () => slaBlokOp(inp.dataset.blokId));
     });
 
