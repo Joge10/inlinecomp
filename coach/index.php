@@ -265,6 +265,53 @@ if ($action === 'personen_by_club') {
     exit;
 }
 
+// ── API: rijders op meerdere clubs/sponsors tegelijk ─────────────────────────
+// Bulk-variant: 1 call voor N clubs+sponsors. Voorkomt rate-limit als een
+// coach veel clubs/sponsors tegelijk selecteert (anders N sequentiële calls).
+// Body: { competition_id, clubs: [...], sponsors: [...] }
+if ($action === 'personen_bulk') {
+    header('Content-Type: application/json; charset=utf-8');
+    $raw = file_get_contents('php://input');
+    $body = json_decode($raw, true) ?: [];
+    $compId   = trim($body['competition_id'] ?? '');
+    $clubs    = array_values(array_filter(array_map('trim', $body['clubs']    ?? []), 'strlen'));
+    $sponsors = array_values(array_filter(array_map('trim', $body['sponsors'] ?? []), 'strlen'));
+    if (!$compId || (!$clubs && !$sponsors)) { echo json_encode([]); exit; }
+    try {
+        $where  = ['dc.competition_id = ?'];
+        $params = [$compId];
+        $sub    = [];
+        if ($clubs) {
+            $sub[]  = 'p.club_full IN (' . implode(',', array_fill(0, count($clubs), '?')) . ')';
+            $params = array_merge($params, $clubs);
+        }
+        if ($sponsors) {
+            $sub[]  = 'p.sponsor IN (' . implode(',', array_fill(0, count($sponsors), '?')) . ')';
+            $params = array_merge($params, $sponsors);
+        }
+        $where[] = '(' . implode(' OR ', $sub) . ')';
+        $sql = "
+            SELECT DISTINCT COALESCE(cs.startnummer, p.start_number) AS snr,
+                   p.license_key, p.full_name, p.category, p.club_full, p.sponsor
+            FROM entries e
+            JOIN distance_combinations dc ON dc.id = e.distance_combination_id
+            JOIN persons p ON p.license_key = e.person_license
+            LEFT JOIN competition_startnummers cs
+                   ON cs.person_license = e.person_license
+                  AND cs.competition_id = dc.competition_id
+            WHERE " . implode(' AND ', $where) . "
+            ORDER BY snr
+        ";
+        $stmt = $pdo->prepare($sql);
+        $stmt->execute($params);
+        echo json_encode($stmt->fetchAll(PDO::FETCH_ASSOC), JSON_UNESCAPED_UNICODE);
+    } catch (Throwable $e) {
+        http_response_code(500);
+        echo json_encode(['error' => $e->getMessage()]);
+    }
+    exit;
+}
+
 // ── API: rijders op sponsor ──────────────────────────────────────────────────
 if ($action === 'personen_by_sponsor') {
     header('Content-Type: application/json; charset=utf-8');
@@ -1067,9 +1114,14 @@ if ($action === 'rit_detail') {
 * { box-sizing:border-box; margin:0; padding:0; }
 /* Root op 20px zodat alle rem-maten ±25% groter worden — consistent met /public
    en veel leesbaarder op een telefoon aan de rand van de baan. */
-html { font-size:20px; }
+html { font-size:20px; overscroll-behavior-y: contain; }
+/* Native pull-to-refresh van de browser uitschakelen — moet op html
+   én body staan voor brede browser-compatibiliteit. Onze eigen PTR-handler
+   vangt de gesture in plaats. Zonder dit deed Chrome Android een full
+   page reload, waarbij de geselecteerde wedstrijd verloren ging. */
 body { font-family:'Segoe UI',Arial,sans-serif; color:var(--tekst);
-       background:var(--grijs); min-height:100vh; font-size:1rem; }
+       background:var(--grijs); min-height:100vh; font-size:1rem;
+       overscroll-behavior-y: contain; }
 /* ── Header (1-op-1 uit /public) ── */
 header {
     background: var(--blauw);
@@ -1871,24 +1923,34 @@ window.addEventListener('offline', () => {
     _connUpdateBanner();
 });
 
-async function safeFetch(url, maxRetries = 3) {
+// Retry-strategie: bij 429 (rate-limit) max 1× opnieuw proberen met
+// jitter (1.5-4.5 s) zodat 15 coaches niet synchroon weer aankloppen.
+// Te agressief retryen verergert de rate-limit alleen maar — daarom geen
+// retry-storm meer. Bij definitief 429 krijgt de UI de 429 gewoon terug.
+async function safeFetch(url, maxRetries = 1) {
     try {
-        for (let i=0; i<maxRetries; i++) {
+        for (let attempt = 0; attempt <= maxRetries; attempt++) {
             const res = await fetch(url);
-            if (res.status === 429) {
-                await new Promise(r => setTimeout(r, 2000 * (i+1)));
+            if (res.status === 429 && attempt < maxRetries) {
+                // Random wait 1.5-4.5 s — voorkomt synchrone retries
+                const wait = 1500 + Math.random() * 3000;
+                await new Promise(r => setTimeout(r, wait));
                 continue;
             }
             if (res.status >= 500) {
                 _connFail('server');
                 return res;
             }
+            if (res.status === 429) {
+                // Definitief opgegeven — server staat onder druk
+                _connFail('server');
+                return res;
+            }
             _connOk();
             return res;
         }
-        const res = await fetch(url);
-        if (res.status >= 500) _connFail('server'); else _connOk();
-        return res;
+        // Onbereikbaar, maar TypeScript-vrij defensief
+        return new Response(null, { status: 504 });
     } catch (e) {
         _connFail('network');
         throw e;
@@ -2931,39 +2993,50 @@ async function voegAllesToe() {
     const meldingen = [];
     const foutMeldingen = [];
 
-    // Multi-club: per geselecteerde club een API call.
-    if (_clubSel.size > 0) {
-        const clubList = [..._clubSel];
-        let aantalTotaal = 0;
-        for (const cl of clubList) {
-            const res = await safeFetch(`?action=personen_by_club&competition_id=${encodeURIComponent(selComp.value)}&club=${encodeURIComponent(cl)}`);
-            const lijst = await res.json();
-            (Array.isArray(lijst) ? lijst : []).forEach(p => { if (voegToeAanLijst(p)) aantalTotaal++; });
-        }
-        meldingen.push(aantalTotaal
-            ? `${aantalTotaal} rijder(s) van ${clubList.length} club${clubList.length>1?'s':''}`
-            : `Geselecteerde clubs: geen nieuwe rijders`);
-        _clubSel.clear();
-        renderClubMultiSelect();
-        updateClubLabel();
-    }
-
-    // Multi-sponsor: doe per geselecteerde sponsor een API call. Bij 5
-    // sponsors zijn dat 5 calls — voor de coach-setup-fase prima.
-    if (_sponsorSel.size > 0) {
+    // Bulk-call: alle geselecteerde clubs + sponsors in 1 server-request.
+    // Voorkomt rate-limit als coach veel selecteert ("alle clubs" = 40+
+    // sequentiële calls oude stijl, nu altijd 1 call).
+    if (_clubSel.size > 0 || _sponsorSel.size > 0) {
+        const clubList    = [..._clubSel];
         const sponsorList = [..._sponsorSel];
         let aantalTotaal = 0;
-        for (const sp of sponsorList) {
-            const res = await safeFetch(`?action=personen_by_sponsor&competition_id=${encodeURIComponent(selComp.value)}&sponsor=${encodeURIComponent(sp)}`);
-            const lijst = await res.json();
-            (Array.isArray(lijst) ? lijst : []).forEach(p => { if (voegToeAanLijst(p)) aantalTotaal++; });
+        try {
+            const res = await fetch('?action=personen_bulk', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    competition_id: selComp.value,
+                    clubs:    clubList,
+                    sponsors: sponsorList,
+                }),
+            });
+            if (res.status === 429) {
+                foutMeldingen.push('Server tijdelijk druk — probeer over 5 seconden');
+            } else if (!res.ok) {
+                foutMeldingen.push(`Server-fout (${res.status})`);
+            } else {
+                const lijst = await res.json();
+                (Array.isArray(lijst) ? lijst : []).forEach(p => { if (voegToeAanLijst(p)) aantalTotaal++; });
+                const stukken = [];
+                if (clubList.length)    stukken.push(`${clubList.length} club${clubList.length>1?'s':''}`);
+                if (sponsorList.length) stukken.push(`${sponsorList.length} sponsor${sponsorList.length>1?'s':''}`);
+                meldingen.push(aantalTotaal
+                    ? `${aantalTotaal} rijder(s) van ${stukken.join(' + ')}`
+                    : `${stukken.join(' + ')}: geen nieuwe rijders`);
+            }
+        } catch (e) {
+            foutMeldingen.push('Netwerkfout bij ophalen rijders');
         }
-        meldingen.push(aantalTotaal
-            ? `${aantalTotaal} rijder(s) van ${sponsorList.length} sponsor${sponsorList.length>1?'s':''}`
-            : `Geselecteerde sponsors: geen nieuwe rijders`);
-        _sponsorSel.clear();
-        renderSponsorMultiSelect();
-        updateSponsorLabel();
+        if (clubList.length) {
+            _clubSel.clear();
+            renderClubMultiSelect();
+            updateClubLabel();
+        }
+        if (sponsorList.length) {
+            _sponsorSel.clear();
+            renderSponsorMultiSelect();
+            updateSponsorLabel();
+        }
     }
 
     if (snr && snr >= 1) {

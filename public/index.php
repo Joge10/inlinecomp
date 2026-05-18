@@ -1869,24 +1869,30 @@ window.addEventListener('offline', () => {
 // Fetch met retry bij 429 + verbinding-status-tracking. Bij netwerkfout
 // (TypeError 'Failed to fetch') of 5xx: banner aan + niet retry'en
 // (auto-refresh-tick probeert vanzelf opnieuw met exponentiële backoff).
-async function safeFetch(url, maxRetries = 3) {
+// Retry-strategie: max 1× opnieuw bij 429 met random jitter (2-5 s) zodat
+// honderden publieke bezoekers niet synchroon weer aankloppen en de
+// rate-limit nog erger maken.
+async function safeFetch(url, maxRetries = 1) {
     try {
-        for (let i = 0; i < maxRetries; i++) {
+        for (let attempt = 0; attempt <= maxRetries; attempt++) {
             const res = await fetch(url);
-            if (res.status === 429) {
-                await new Promise(r => setTimeout(r, 3000 * (i + 1)));
+            if (res.status === 429 && attempt < maxRetries) {
+                const wait = 2000 + Math.random() * 3000;
+                await new Promise(r => setTimeout(r, wait));
                 continue;
             }
             if (res.status >= 500) {
                 _connFail('server');
                 return res;
             }
+            if (res.status === 429) {
+                _connFail('server');
+                return res;
+            }
             _connOk();
             return res;
         }
-        const res = await fetch(url);
-        if (res.status >= 500) _connFail('server'); else _connOk();
-        return res;
+        return new Response(null, { status: 504 });
     } catch (e) {
         // TypeError = netwerkfout (geen verbinding, DNS, etc.)
         _connFail('network');
