@@ -2078,9 +2078,18 @@ function _bouwSpeakerlijstenInternal() {
         const basisNaam = (dcGroup.find(d => d.merge_label) ?? {}).merge_label
                        || dcGroup.map(d => d.dc_name).filter(Boolean).join(' + ');
 
-        // Verzamel actieve deelnemers (status 1 of 5)
+        // Splits-mapping over hele merge-groep verzamelen: { categorie: split_group }
+        // Bij gesplitste DCs krijgt elke split-groep een eigen speakerlijst —
+        // anders heeft de speaker alle rijders van beide splits door elkaar.
+        const allSplits = {};
+        dcGroup.forEach(dc => {
+            Object.entries(dc.splits || {}).forEach(([k, v]) => { if (v) allSplits[k] = v; });
+        });
+        const heeftSplits = Object.keys(allSplits).length > 0;
+
+        // Per splitgroep een deelnemers-array. Bij geen splits: alles in '_alle'.
+        const perSplit = {};
         const seenLk = new Set();
-        const deelnemers = [];
         dcGroup.forEach(dc => {
             dc.competitors.forEach((c, idx) => {
                 const lk = c.license_key || null;
@@ -2095,7 +2104,15 @@ function _bouwSpeakerlijstenInternal() {
                 seenLk.add(sleutel);
 
                 const pe = lk ? (personEdits[lk] || {}) : {};
-                deelnemers.push({
+                const rijderCat = pe.category ?? c.knsb?.category ?? '';
+                // Bepaal splitgroep: lookup categorie in allSplits. Rijders
+                // waarvan de cat NIET in splits voorkomt → '_geen' (krijgen
+                // eigen sectie zodat ze niet onzichtbaar worden).
+                const sg = heeftSplits
+                    ? (allSplits[rijderCat] || '_geen')
+                    : '_alle';
+                if (!perSplit[sg]) perSplit[sg] = [];
+                perSplit[sg].push({
                     start_number: pe.start_number ?? c.knsb?.start_number ?? '',
                     full_name:    pe.full_name    ?? c.knsb?.full_name    ?? '',
                     club_short:   pe.club_short   ?? c.knsb?.club_short   ?? '',
@@ -2104,12 +2121,29 @@ function _bouwSpeakerlijstenInternal() {
             });
         });
 
-        // Sorteer op startnummer
-        deelnemers.sort((a, b) =>
+        const sortSn = arr => arr.sort((a, b) =>
             (Number(a.start_number) || 9999) - (Number(b.start_number) || 9999));
 
-        if (deelnemers.length === 0) return; // skip lege DCs
-        dcGroepen.push({ naam: basisNaam, deelnemers });
+        if (heeftSplits) {
+            // Per splitgroep een eigen pagina. Sorteer alfabetisch op naam,
+            // '_geen' (cat zonder split-mapping) altijd onderaan.
+            const splitNamen = [...new Set(Object.values(allSplits))].sort();
+            splitNamen.forEach(sg => {
+                const ds = sortSn(perSplit[sg] || []);
+                if (ds.length === 0) return;
+                dcGroepen.push({ naam: `${basisNaam} — ${sg}`, deelnemers: ds });
+            });
+            if (perSplit['_geen']?.length) {
+                dcGroepen.push({
+                    naam: `${basisNaam} — (geen split)`,
+                    deelnemers: sortSn(perSplit['_geen']),
+                });
+            }
+        } else {
+            const ds = sortSn(perSplit['_alle'] || []);
+            if (ds.length === 0) return;
+            dcGroepen.push({ naam: basisNaam, deelnemers: ds });
+        }
     });
 
     // ── HTML opbouwen — één .sp-pagina per DC ────────────────────────────────
