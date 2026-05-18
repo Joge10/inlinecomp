@@ -65,13 +65,22 @@ function initEdits() {
                     transponder_actief: defaultTp,
                     short_name:         item.knsb.short_name,
                     gender:             item.knsb.gender,
+                    // Categorie expliciet uit KNSB zodat de jaarlijkse
+                    // age-up cyclus automatisch doorkomt (zie ook
+                    // import.php). Dispensatie hoort op entry-niveau, niet op
+                    // persons.
                     category:           item.knsb.category,
                     nationality:        item.knsb.nationality,
-                    club_code:          item.knsb.club_code,
-                    club_short:         item.knsb.club_short,
-                    club_full:          item.knsb.club_full,
-                    sponsor:            item.knsb.sponsor,
-                    city:               item.knsb.city,
+                    // Club + sponsor: DB-correctie wint (operator heeft via
+                    // Systeem → Rijders mogelijk handmatig gecorrigeerd na
+                    // verkeerde KNSB-data). Als de DB-waarde leeg is, valt
+                    // het terug op KNSB. Bij Importeer wordt dit weer terug-
+                    // gestuurd zodat het via import.php in persons komt.
+                    club_code:          p?.club_code  ?? item.knsb.club_code,
+                    club_short:         p?.club_short ?? item.knsb.club_short,
+                    club_full:          p?.club_full  ?? item.knsb.club_full,
+                    sponsor:            p?.sponsor    ?? item.knsb.sponsor,
+                    city:               p?.city       ?? item.knsb.city,
                 };
             }
 
