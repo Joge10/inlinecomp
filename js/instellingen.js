@@ -455,6 +455,8 @@ async function laadOrgWedstrijden() {
             <span class="bwl-sep">·</span>
             <span class="bwl-item"><b>👥</b> coach-poster</span>
             <span class="bwl-sep">·</span>
+            <span class="bwl-item"><b>⚜</b> jury-wachtwoord</span>
+            <span class="bwl-sep">·</span>
             <span class="bwl-item"><b>🗑</b> verwijderen</span>
         </div>`;
 
@@ -501,6 +503,7 @@ async function laadOrgWedstrijden() {
                 ${inDb ? `<button class="btn-secondary btn-sm beheer-comp-meld beheer-icon-btn" data-id="${escHtml(w.id)}" data-naam="${escHtml(w.name ?? w.id)}" title="Mededelingen — verstuur push-bericht naar /coach + /public">📢</button>` : ''}
                 ${inDb ? `<button class="btn-secondary btn-sm beheer-comp-poster beheer-icon-btn" data-id="${escHtml(w.id)}" data-app="public" title="Public-poster — download QR-poster voor rijders / ouders">📄</button>` : ''}
                 ${inDb ? `<button class="btn-secondary btn-sm beheer-comp-poster beheer-icon-btn" data-id="${escHtml(w.id)}" data-app="coach" title="Coach-poster — download QR-poster voor coaches">👥</button>` : ''}
+                ${inDb ? `<button class="btn-secondary btn-sm beheer-comp-jurypwd beheer-icon-btn ${Number(dbRow?.jury_password_set) ? 'is-actief' : ''}" data-id="${escHtml(w.id)}" data-naam="${escHtml(w.name ?? w.id)}" data-set="${Number(dbRow?.jury_password_set) ? '1' : '0'}" title="${Number(dbRow?.jury_password_set) ? 'Jury-wachtwoord INGESTELD — klik om te wijzigen of wissen' : 'Jury-wachtwoord NIET ingesteld — klik om in te stellen'}">⚜</button>` : ''}
                 ${inDb ? `<button class="btn-del beheer-comp-del" data-id="${escHtml(w.id)}" data-naam="${escHtml(w.name ?? w.id)}" title="Wedstrijd verwijderen (vraagt om bevestiging)">🗑</button>` : ''}
             </div>
         </div>`;
@@ -521,8 +524,63 @@ async function laadOrgWedstrijden() {
     lijst.querySelectorAll('.beheer-zicht-knop').forEach(btn => {
         btn.addEventListener('click', () => zetWedstrijdStatus(btn));
     });
+    lijst.querySelectorAll('.beheer-comp-jurypwd').forEach(btn => {
+        btn.addEventListener('click', () => juryWachtwoordDialog(btn));
+    });
 
     if (_beheerLeesOnly) pasSchrijfLockToe(lijst.closest('.org-tab-content') ?? lijst);
+}
+
+// ── Jury-wachtwoord per wedstrijd ─────────────────────────────────────────
+// Klik op ⚜-knop → mini-dialog met nieuwe wachtwoord-invoer + status
+// (ingesteld/niet ingesteld) + Wis-knop indien al ingesteld.
+async function juryWachtwoordDialog(btn) {
+    const compId = btn.dataset.id;
+    const naam   = btn.dataset.naam;
+    const set    = btn.dataset.set === '1';
+
+    // Promptachtige dialoog op basis van toonBevestigDialog met HTML-body.
+    // Niet de mooiste UX (geen masked-input) maar wachtwoord is gedeeld en
+    // operator typt 'm zelf zonder schouder-mee-kijkers (= meeste gevallen).
+    const html =
+        `<p>Wedstrijd: <b>${escHtml(naam)}</b></p>` +
+        `<p>Status: ${set
+            ? '<b style="color:#2e7d32">✓ Wachtwoord ingesteld</b>'
+            : '<b style="color:#b71c1c">✗ Geen wachtwoord ingesteld</b>'}</p>` +
+        `<p style="margin-top:10px"><b>Nieuw jury-wachtwoord</b> (min. 6 tekens; leeg laten + Opslaan = wissen):</p>` +
+        `<input type="text" id="jury-pwd-inp" class="inp" style="width:100%;font-size:1.05rem;padding:6px 10px;letter-spacing:.02em" ` +
+        ` placeholder="${set ? '(typ nieuw wachtwoord, of laat leeg om te wissen)' : 'nieuw wachtwoord'}" autocomplete="off">` +
+        `<p style="margin-top:8px;font-size:.85em;color:#666">` +
+        `Het wachtwoord wordt versleuteld opgeslagen — je kunt het bestaande wachtwoord ` +
+        `<em>niet</em> meer opvragen, alleen vervangen of wissen. Geef het zelf door aan de jury-leden.</p>`;
+    const akkoord = await toonBevestigDialog(
+        html, '⚜ Jury-wachtwoord instellen', 'Opslaan', 'Annuleren', { bodyIsHtml: true }
+    );
+    if (!akkoord) return;
+    const inp = document.getElementById('jury-pwd-inp');
+    const pwd = inp ? inp.value : '';
+    try {
+        const res = await fetch('api/jury_wachtwoord.php', {
+            method:  'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body:    JSON.stringify({ competition_id: compId, password: pwd }),
+        });
+        const data = await res.json();
+        if (!res.ok || !data.ok) throw new Error(data.error || 'Fout bij opslaan');
+        // UI-bijwerking: data-set + tooltip + actief-class
+        const nuSet = !!data.jury_password_set;
+        btn.dataset.set = nuSet ? '1' : '0';
+        btn.classList.toggle('is-actief', nuSet);
+        btn.title = nuSet
+            ? 'Jury-wachtwoord INGESTELD — klik om te wijzigen of wissen'
+            : 'Jury-wachtwoord NIET ingesteld — klik om in te stellen';
+        // Korte feedback-toast als die functie bestaat
+        if (typeof toonToast === 'function') {
+            toonToast(nuSet ? '⚜ Jury-wachtwoord ingesteld' : '⚜ Jury-wachtwoord gewist', 'ok');
+        }
+    } catch (e) {
+        alert('Opslaan mislukt: ' + e.message);
+    }
 }
 
 // Zet de zichtbaarheids-status (3-state) van een wedstrijd via

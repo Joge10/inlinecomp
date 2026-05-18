@@ -69,7 +69,8 @@ try {
         if (!empty($_GET['action']) && $_GET['action'] === 'wedstrijden' && !empty($_GET['id'])) {
             $stmt = $pdo->prepare(
                 "SELECT id, name, starts, ends, venue_city, venue_name, imported_at,
-                        public_zichtbaar, public_aankondigen
+                        public_zichtbaar, public_aankondigen,
+                        (jury_password IS NOT NULL) AS jury_password_set
                  FROM competitions WHERE organisatie_id = ?
                  ORDER BY starts DESC"
             );
