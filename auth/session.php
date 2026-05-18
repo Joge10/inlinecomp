@@ -55,8 +55,12 @@ const ROL_SCHRIJF = [
     'startlijsten'=> ['owner','admin','planner'],
     'live'        => ['owner','admin','timer'],
     'uitslag'     => ['owner','admin','timer'],
-    'beheer'      => ['owner','admin'],
-    'gebruikers'  => ['owner','admin'],
+    // 'beheer'       = zware beheer-acties (jury-wachtwoord, delete, etc.)
+    // 'beheer_basic' = lichte beheer-acties (zichtbaarheid, mededelingen,
+    //                  posters) — planner mag dit ook
+    'beheer'       => ['owner','admin'],
+    'beheer_basic' => ['owner','admin','planner'],
+    'gebruikers'   => ['owner','admin'],
 ];
 
 function kanSchrijven(array $user, string $module): bool {

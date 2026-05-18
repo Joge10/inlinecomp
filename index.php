@@ -536,10 +536,12 @@ const SCHRIJF_ROLLEN = {
     live:         ['owner','admin','timer'],
     uitslag:      ['owner','admin','timer'],
     instellingen: ['owner','admin'],
-    // 'beheer' = Beheer→Wedstrijden + Banen + Sponsors + Klassement-series.
-    // Was historisch niet gedefinieerd → fallback naar ['owner'] alleen.
-    // Hersteld naar [owner,admin] consistent met instellingen-tab.
+    // 'beheer'       = zware beheer-acties (jury-wachtwoord, wedstrijd-
+    //                  verwijderen, rijder-data wijzigen)
+    // 'beheer_basic' = lichte beheer-acties (zichtbaarheid, mededelingen,
+    //                  posters) — planner mag dit ook doen
     beheer:       ['owner','admin'],
+    beheer_basic: ['owner','admin','planner'],
     gebruikers:   ['owner','admin'],
 };
 function magSchrijven(module) {

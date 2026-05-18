@@ -21,9 +21,9 @@ header('Access-Control-Allow-Origin: *');
 
 require_once __DIR__ . '/../../config_inlinecomp.php';
 require_once __DIR__ . '/../auth/session.php';
-// Zichtbaarheid wijzigen is een beheer-actie — gebruikt centrale
-// ROL_SCHRIJF-lijst uit session.php (= owner+admin).
-$_authUser = requireAuth($pdo, ROL_SCHRIJF['beheer']);
+// Zichtbaarheid wijzigen valt onder de 'lichte' beheer-acties —
+// planner mag dit ook doen (= owner+admin+planner via ROL_SCHRIJF).
+$_authUser = requireAuth($pdo, ROL_SCHRIJF['beheer_basic']);
 
 if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
     http_response_code(405);
