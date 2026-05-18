@@ -666,15 +666,18 @@ try {
         $allSancties[$row['person_license']][$row['distance_id']] = $row['sanctie'] ?? null;
     }
 
-    // Laatste afstand van deze DC (voor tiebreaker 3)
-    $lastDistStmt = $pdo->prepare("
+    // Afstanden van deze DC in volgorde laatste→eerste — voor tiebreaker 3
+    // met fallback: bij gelijk op laatste afstand kijken we naar voorlaatste,
+    // daarvoor, enz. tot een verschil gevonden of geen afstanden meer over.
+    $distChronoStmt = $pdo->prepare("
         SELECT id FROM distances
         WHERE distance_combination_id = ?
           AND (target_group IS NULL OR target_group = '')
-        ORDER BY number DESC LIMIT 1
+        ORDER BY number DESC
     ");
-    $lastDistStmt->execute([$primaryDcId]);
-    $lastDistId = $lastDistStmt->fetchColumn() ?: null;
+    $distChronoStmt->execute([$primaryDcId]);
+    $distChronoIds = $distChronoStmt->fetchAll(PDO::FETCH_COLUMN);
+    $lastDistId    = $distChronoIds[0] ?? null;
 
     // Naam-lookup voor alle bekende afstanden (incl. eerder vastgelegde)
     $allDistNaamStmt = $pdo->prepare("
@@ -730,14 +733,17 @@ try {
 
     // ── Vergelijkfunctie ────────────────────────────────────────────────
     // Standaard: aantal-gereden → totaal → beste resultaat → laatste afstand
+    //   (met fallback: bij gelijk laatste → voorlaatste → daarvoor → enz.)
     // Single-distance (operator-keuze): aantal-gereden → totaal → punten in
-    //   de gekozen afstand. Geen verdere fallback (oude club-conventie).
+    //   de gekozen afstand. Geen verdere fallback (oude club-conventie:
+    //   operator kiest expliciet één afstand, fallback zou die keuze
+    //   ondergraven).
     // Alleen toepassen als de gekozen afstand bestaat in deze DC (anders
     //   silentieel terugvallen op standaard).
     $tbDistIdValid = ($tiebreakerDist !== null && isset($distNaamMap[$tiebreakerDist]))
         ? $tiebreakerDist : null;
 
-    $vergelijkKlas = function (array $a, array $b) use ($lastDistId, $tbDistIdValid): int {
+    $vergelijkKlas = function (array $a, array $b) use ($distChronoIds, $tbDistIdValid): int {
         // 0. Aantal afstanden gereden DESC (meer = beter)
         if (($a['aantal_gereden'] ?? 0) !== ($b['aantal_gereden'] ?? 0)) {
             return ($b['aantal_gereden'] ?? 0) <=> ($a['aantal_gereden'] ?? 0);
@@ -765,10 +771,11 @@ try {
             if ($vA != $vB) return $vA <=> $vB;
         }
 
-        // 3. Laatste afstand ASC
-        if ($lastDistId !== null) {
-            $lA = $a['dist_punten'][$lastDistId] ?? PHP_INT_MAX;
-            $lB = $b['dist_punten'][$lastDistId] ?? PHP_INT_MAX;
+        // 3. Afstanden chronologisch (laatste eerst) — terugvallend:
+        //    laatste afstand; bij gelijk voorlaatste; daarvoor; enz.
+        foreach ($distChronoIds as $dId) {
+            $lA = $a['dist_punten'][$dId] ?? PHP_INT_MAX;
+            $lB = $b['dist_punten'][$dId] ?? PHP_INT_MAX;
             if ($lA != $lB) return $lA <=> $lB;
         }
 

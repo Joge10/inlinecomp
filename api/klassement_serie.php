@@ -166,6 +166,19 @@ function berekenSerie(PDO $pdo, string $serieId): array {
             $laatsteComp = $sorted[0]['competition_id'];
         }
     }
+    // Chronologische volgorde, nieuwste eerst — voor tie-break met fallback
+    // (laatste wedstrijd → bij gelijk: voorlaatste → daarvoor → …). De finale
+    // staat als eerste, daarna alle andere in omgekeerde startdatum-volgorde.
+    $compChrono = $wedstrijden;
+    usort($compChrono, fn($a,$b) =>
+        strcmp($b['starts'] ?? '', $a['starts'] ?? '')
+        ?: ($b['volgorde'] <=> $a['volgorde']));
+    $compChronoIds = array_column($compChrono, 'competition_id');
+    // Finale eerst als die expliciet is aangevinkt en niet al vooraan staat
+    if ($laatsteComp && ($compChronoIds[0] ?? null) !== $laatsteComp) {
+        $compChronoIds = array_values(array_filter($compChronoIds, fn($c) => $c !== $laatsteComp));
+        array_unshift($compChronoIds, $laatsteComp);
+    }
     // Heeft de finale-wedstrijd al resultaten? Dan pas mag streepresultaten
     // worden toegepast. Zolang finale nog niet is gereden: geen streep.
     // Tegelijk halen we alle licenties op die in de finale voorkwamen —
@@ -687,21 +700,26 @@ function berekenSerie(PDO $pdo, string $serieId): array {
                 $row['_beste_resultaten'] = array_column($paren, 'punten');
             }
             $row['_gestreept'] = $gestreeptIds;
-            // _laatste_punten = som over alle pwKeys van laatste comp.
-            // Bij niet-afstand-level is dit gewoon per_wedstrijd[laatsteComp].
-            // Bij afstand-level tellen we alle (laatsteComp, *)-keys op zodat
-            // de tie-break "laatste wedstrijd" alle distances van die comp
-            // samenvat (= meeste betekenis voor de operator).
-            $lp = 0;
-            if ($isAfstandLevel) {
-                $prefix = $laatsteComp . '|';
-                foreach ($row['per_wedstrijd'] as $kkey => $pp) {
-                    if (strpos($kkey, $prefix) === 0) $lp += (float)$pp;
+            // _chrono_punten = array van punten per wedstrijd, in chronologische
+            // volgorde nieuwste→oudste. Tie-break "laatste wedstrijd" loopt door
+            // deze array tot een verschil gevonden wordt (laatste → bij gelijk
+            // voorlaatste → daarvoor → enz.). Bij afstand-level tellen we per
+            // comp alle distances op zodat 1 comp = 1 vergelijkings-waarde.
+            $chronoPunten = [];
+            foreach ($compChronoIds as $cid) {
+                if ($isAfstandLevel) {
+                    $prefix = $cid . '|';
+                    $p = 0;
+                    foreach ($row['per_wedstrijd'] as $kkey => $pp) {
+                        if (strpos($kkey, $prefix) === 0) $p += (float)$pp;
+                    }
+                    $chronoPunten[] = $p;
+                } else {
+                    $chronoPunten[] = (float)($row['per_wedstrijd'][$cid] ?? 0);
                 }
-            } else {
-                $lp = (float)($row['per_wedstrijd'][$laatsteComp] ?? 0);
             }
-            $row['_laatste_punten'] = $lp;
+            $row['_chrono_punten']  = $chronoPunten;
+            $row['_laatste_punten'] = $chronoPunten[0] ?? 0;
             $perCat[$cat][] = $row;
         }
     }
@@ -721,9 +739,18 @@ function berekenSerie(PDO $pdo, string $serieId): array {
             return 0;
         };
         $cmpLaatste = function($a, $b) use ($oplopend) {
-            $av = $a['_laatste_punten'] ?? 0;
-            $bv = $b['_laatste_punten'] ?? 0;
-            return $oplopend ? ($av <=> $bv) : ($bv <=> $av);
+            // Loop door wedstrijden in chronologische volgorde (nieuwste eerst):
+            // laatste wedstrijd; bij gelijk voorlaatste; daarvoor; enz. tot
+            // verschil gevonden of array op is.
+            $arrA = $a['_chrono_punten'] ?? [];
+            $arrB = $b['_chrono_punten'] ?? [];
+            $n = max(count($arrA), count($arrB));
+            for ($i = 0; $i < $n; $i++) {
+                $av = $arrA[$i] ?? 0;
+                $bv = $arrB[$i] ?? 0;
+                if ($av != $bv) return $oplopend ? ($av <=> $bv) : ($bv <=> $av);
+            }
+            return 0;
         };
         switch ($tb) {
             case 'laatste':                       return $cmpLaatste($a, $b);
@@ -746,7 +773,7 @@ function berekenSerie(PDO $pdo, string $serieId): array {
             return $finaleGereden ? $cmpTB($a, $b) : 0;
         });
         foreach ($lijst as &$r) {
-            unset($r['_beste_resultaten'], $r['_laatste_punten']);
+            unset($r['_beste_resultaten'], $r['_laatste_punten'], $r['_chrono_punten']);
         }
     }
     unset($lijst);

@@ -422,13 +422,15 @@ try {
     //   2. Punten in de gekozen afstand ASC
     //   (geen verdere fallback — old-school regel: "winnaar van die afstand
     //    wint bij gelijke stand", verder geen interferentie van andere data)
-    $lastDistId = !empty($distances) ? end($distances)['id'] : null;
+    // Afstanden in volgorde laatste→eerste voor tiebreaker 3 met fallback:
+    // bij gelijk laatste → voorlaatste → daarvoor → enz.
+    $alleDistIds   = array_column($distances, 'id');
+    $distChronoIds = array_reverse($alleDistIds);
     // tiebreaker_dist alleen toepassen als het een geldige afstand is in deze DC
-    $alleDistIds = array_column($distances, 'id');
     $tbDistId = ($tiebreakerDist !== null && in_array($tiebreakerDist, $alleDistIds, true))
               ? $tiebreakerDist : null;
 
-    $vergelijkKlassement = function (array $a, array $b) use ($lastDistId, $tbDistId): int {
+    $vergelijkKlassement = function (array $a, array $b) use ($distChronoIds, $tbDistId): int {
         // 0. Aantal afstanden gereden DESC (meer gereden = hoger geklasseerd)
         if (($a['aantal_gereden'] ?? 0) !== ($b['aantal_gereden'] ?? 0)) {
             return ($b['aantal_gereden'] ?? 0) <=> ($a['aantal_gereden'] ?? 0);
@@ -457,10 +459,11 @@ try {
             if ($vA != $vB) return $vA <=> $vB;
         }
 
-        // 3. Laatste afstand ASC
-        if ($lastDistId !== null) {
-            $lA = $a['afstanden'][$lastDistId]['punten'] ?? PHP_INT_MAX;
-            $lB = $b['afstanden'][$lastDistId]['punten'] ?? PHP_INT_MAX;
+        // 3. Afstanden chronologisch (laatste eerst) — terugvallend:
+        //    laatste afstand; bij gelijk voorlaatste; daarvoor; enz.
+        foreach ($distChronoIds as $dId) {
+            $lA = $a['afstanden'][$dId]['punten'] ?? PHP_INT_MAX;
+            $lB = $b['afstanden'][$dId]['punten'] ?? PHP_INT_MAX;
             if ($lA != $lB) return $lA <=> $lB;
         }
 

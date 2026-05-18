@@ -322,13 +322,16 @@ function _renderStap3(state, body) {
 
         <div class="ks-rij2">
             <div class="ks-veld">
-                <label>Tie-break</label>
+                <label title="Bij gelijke totalen: hoe wordt de tie-break bepaald?&#10;'Laatste wedstrijd' valt terug: bij gelijk → voorlaatste → daarvoor → enz.">Tie-break</label>
                 <select class="inp" id="ks-tie">
-                    <option value="beste_resultaten_dan_laatste" ${r.tie_break==='beste_resultaten_dan_laatste'?'selected':''}>Beste resultaten → dan laatste wedstrijd</option>
+                    <option value="beste_resultaten_dan_laatste" ${r.tie_break==='beste_resultaten_dan_laatste'?'selected':''}>Beste resultaten → dan laatste wedstrijd (terugvallend)</option>
                     <option value="beste_resultaten"             ${r.tie_break==='beste_resultaten'?'selected':''}>Alleen beste resultaten</option>
-                    <option value="laatste"                      ${r.tie_break==='laatste'?'selected':''}>Alleen laatste wedstrijd</option>
+                    <option value="laatste"                      ${r.tie_break==='laatste'?'selected':''}>Alleen laatste wedstrijd (terugvallend)</option>
                     <option value="geen"                         ${r.tie_break==='geen'?'selected':''}>Geen (ex aequo toegestaan)</option>
                 </select>
+                <div class="ks-hint">
+                    "Laatste wedstrijd" valt bij gelijk terug op voorlaatste, daarvoor, enz.
+                </div>
             </div>
             <div class="ks-veld">
                 <label>Min. deelnames</label>

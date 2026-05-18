@@ -1095,11 +1095,11 @@ async function toonUitslagKlassement(groep) {
             tbBalk = `<div class="u-klas-tb-balk">
                 <label class="u-klas-tb-lbl">Tie-breaker bij gelijke punten:
                     <select id="u-klas-tb-sel" class="inp-sm">
-                        <option value="standaard"${stdSel}>Standaard (beste resultaten → laatste afstand)</option>
+                        <option value="standaard"${stdSel}>Standaard (beste resultaten → laatste afstand, terugvallend)</option>
                         ${opts}
                     </select>
                 </label>
-                <span class="u-klas-tb-hint" title="Standaard kijkt eerst naar het beste afzonderlijke resultaat en pas als laatste naar de allerlaatste afstand. Bij 'op basis van' wordt direct (na totaal-punten) alleen de gekozen afstand vergeleken.">ℹ</span>
+                <span class="u-klas-tb-hint" title="Standaard: kijkt eerst naar het beste afzonderlijke resultaat. Bij gelijk → laatste afstand (op planning-volgorde); bij gelijk → voorlaatste; daarvoor; enz. tot een verschil gevonden. Bij 'op basis van': alleen de gekozen afstand telt na totaal-punten — bij gelijk daarop blijven rijders ex-aequo (geen verzonnen uitslag). Kies dit als de planning-volgorde tijdens de wedstrijd is afgeweken van het schema.">ℹ</span>
             </div>`;
         }
 
