@@ -536,6 +536,10 @@ const SCHRIJF_ROLLEN = {
     live:         ['owner','admin','timer'],
     uitslag:      ['owner','admin','timer'],
     instellingen: ['owner','admin'],
+    // 'beheer' = Beheer→Wedstrijden + Banen + Sponsors + Klassement-series.
+    // Was historisch niet gedefinieerd → fallback naar ['owner'] alleen.
+    // Hersteld naar [owner,admin] consistent met instellingen-tab.
+    beheer:       ['owner','admin'],
     gebruikers:   ['owner','admin'],
 };
 function magSchrijven(module) {

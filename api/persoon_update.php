@@ -22,13 +22,8 @@ header('Content-Type: application/json; charset=utf-8');
 
 require_once __DIR__ . '/../../config_inlinecomp.php';
 require_once __DIR__ . '/../auth/session.php';
-$_authUser = requireAuth($pdo);
-
-if (!in_array($_authUser['role'] ?? '', ['owner', 'admin'], true)) {
-    http_response_code(403);
-    echo json_encode(['error' => 'Alleen beheerders mogen rijdergegevens wijzigen.']);
-    exit;
-}
+// Beheer-actie (persons-tabel wijzigen) — owner+admin via centrale lijst.
+$_authUser = requireAuth($pdo, ROL_SCHRIJF['beheer']);
 
 if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
     http_response_code(405);

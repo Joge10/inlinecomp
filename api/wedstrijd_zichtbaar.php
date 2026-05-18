@@ -21,7 +21,9 @@ header('Access-Control-Allow-Origin: *');
 
 require_once __DIR__ . '/../../config_inlinecomp.php';
 require_once __DIR__ . '/../auth/session.php';
-requireAuth($pdo);
+// Zichtbaarheid wijzigen is een beheer-actie — gebruikt centrale
+// ROL_SCHRIJF-lijst uit session.php (= owner+admin).
+$_authUser = requireAuth($pdo, ROL_SCHRIJF['beheer']);
 
 if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
     http_response_code(405);
