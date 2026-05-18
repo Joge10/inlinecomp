@@ -776,6 +776,17 @@ col.pr-col-opm{width:60px}
   .pr-titel{background:#e8ecf0!important;color:#000!important;border-bottom:2px solid #000}
   .pr-ritnr{background:#000!important;color:#fff!important}
   .pr-tabel th{background:#eee!important;color:#000!important}
+  /* Alle tabel-tekst pikzwart — Mac-printer-drivers (en sommige laser-
+     drivers) interpreteren lichte grijstinten als "te licht om te printen"
+     en laten de tekst weg. Bij de generale repetitie in Heerde (14 mei
+     2026) viel hierdoor de #-kolom (positie in heat) volledig weg op een
+     Mac. Geldt voor zowel reguliere als combi-startlijsten + sectie-
+     koppen. Headers (.pr-titel/.pr-ritnr) houden hun expliciete instelling
+     omdat die op gekleurde achtergrond staan. */
+  .pr-tabel, .pr-tabel *,
+  .pr-combi-tabel, .pr-combi-tabel *,
+  .pr-sectie-kop{color:#000!important}
+  .pr-sectie-kop{border-bottom-color:#000!important}
 }
 /* Wrapper-tabel: thead herhaalt automatisch op elke pagina bij print */
 .pr-wrap{width:100%;border-collapse:collapse}
