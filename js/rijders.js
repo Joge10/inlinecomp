@@ -114,6 +114,26 @@ function rijRenderDetail(data) {
             <div class="rij-detail-waarde">${waarde === null || waarde === undefined || waarde === '' ? '—' : escHtml(waarde)}</div>
         </div>`;
 
+    // Inline-bewerkbaar veld: click-to-edit. Bedoeld voor velden waar de
+    // KNSB-feed soms verkeerde/lege waardes geeft (club, sponsor). Edit
+    // overschrijft persons-tabel via api/persoon_update.php; KNSB-sync
+    // respecteert dit door COALESCE(NULLIF(...), ...) in import.php.
+    // Gebruik: <div ...><label> Sponsor <button data-edit-veld="sponsor">✎</button></label> <waarde>
+    const veldEdit = (label, waarde, naam) => {
+        const display = (waarde === null || waarde === undefined || waarde === '')
+            ? '—'
+            : escHtml(waarde);
+        return `
+            <div class="rij-detail-veld" data-rij-edit-rij="${escHtml(naam)}">
+                <label>
+                    ${escHtml(label)}
+                    <button class="rij-edit-btn" data-rij-edit-veld="${escHtml(naam)}"
+                            title="Wijzigen — overschrijft KNSB-waarde, blijft bewaard bij volgende import (mits KNSB leeg laat)">✎</button>
+                </label>
+                <div class="rij-detail-waarde" data-rij-edit-waarde="${escHtml(naam)}">${display}</div>
+            </div>`;
+    };
+
     // Anonimiseer-blok
     let anonBlok;
     if (anoniem) {
@@ -235,9 +255,9 @@ function rijRenderDetail(data) {
             ${veld('Nationaliteit', r.nationality)}
             ${veld('Startnummer', r.start_number)}
             ${veld('Woonplaats', r.city)}
-            ${veld('Sponsor', r.sponsor)}
-            ${veld('Vereniging', r.club_full)}
-            ${veld('Vereniging (kort)', r.club_short)}
+            ${veldEdit('Sponsor', r.sponsor, 'sponsor')}
+            ${veldEdit('Vereniging', r.club_full, 'club_full')}
+            ${veldEdit('Vereniging (kort)', r.club_short, 'club_short')}
             ${veld('KNSB-vereniging-code', r.club_code)}
             ${veld('Aangemaakt', r.created_at)}
             ${veld('Laatst gewijzigd', r.updated_at)}
@@ -258,6 +278,85 @@ function rijRenderDetail(data) {
     // Anonimiseer-knop
     document.getElementById('rij-anon-btn')?.addEventListener('click', () => rijAnonimiseer(r));
     document.getElementById('rij-anon-undo-btn')?.addEventListener('click', () => rijAnonUndo(r));
+
+    // Edit-knoppen voor sponsor / club_full / club_short. Click op ✎ →
+    // inline input verschijnt, Enter slaat op, Escape annuleert. Bij blur
+    // alleen opslaan als er gewijzigd is — voorkomt onbedoelde wijzigingen
+    // wanneer operator buiten het veld klikt.
+    document.querySelectorAll('.rij-edit-btn').forEach(btn => {
+        btn.addEventListener('click', () => rijVeldBewerken(r, btn.dataset.rijEditVeld));
+    });
+}
+
+// Inline edit van één veld op de persons-record. veldNaam = sponsor /
+// club_full / club_short.
+function rijVeldBewerken(rijder, veldNaam) {
+    const wrap = document.querySelector(`[data-rij-edit-rij="${CSS.escape(veldNaam)}"]`);
+    if (!wrap) return;
+    const waardeDiv = wrap.querySelector(`[data-rij-edit-waarde="${CSS.escape(veldNaam)}"]`);
+    const knop      = wrap.querySelector(`.rij-edit-btn[data-rij-edit-veld="${CSS.escape(veldNaam)}"]`);
+    if (!waardeDiv || !knop) return;
+
+    const huidig = rijder[veldNaam] ?? '';
+    // Maak input
+    const inp = document.createElement('input');
+    inp.type      = 'text';
+    inp.className = 'rij-edit-inp';
+    inp.value     = huidig;
+    inp.maxLength = 255;
+    // Vervang display
+    const origineelHtml = waardeDiv.innerHTML;
+    waardeDiv.innerHTML = '';
+    waardeDiv.appendChild(inp);
+    inp.focus();
+    inp.select();
+    knop.disabled = true;
+
+    let klaar = false;
+    const annuleer = () => {
+        if (klaar) return;
+        klaar = true;
+        waardeDiv.innerHTML = origineelHtml;
+        knop.disabled = false;
+    };
+    const opslaan = async () => {
+        if (klaar) return;
+        const nieuw = inp.value.trim();
+        const oudTrim = (huidig ?? '').toString().trim();
+        if (nieuw === oudTrim) { annuleer(); return; }
+        klaar = true;
+        inp.disabled = true;
+        try {
+            const res = await fetch('api/persoon_update.php', {
+                method:  'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body:    JSON.stringify({
+                    license_key: rijder.license_key,
+                    [veldNaam]:  nieuw, // lege string = wissen (NULL in DB)
+                }),
+            });
+            const data = await res.json();
+            if (!res.ok || !data.ok) throw new Error(data.error || 'Fout bij opslaan');
+            // Update local rijder + display
+            rijder[veldNaam] = data.persoon?.[veldNaam] ?? null;
+            const tonen = rijder[veldNaam] == null || rijder[veldNaam] === ''
+                ? '—' : escHtml(rijder[veldNaam]);
+            waardeDiv.innerHTML = tonen;
+            knop.disabled = false;
+            // Ververs de zoeklijst zodat club/sponsor-wijzigingen daar ook
+            // doorkomen — alleen als er een actieve zoekopdracht is.
+            if (typeof rijZoek === 'function') rijZoek();
+        } catch (e) {
+            alert('Opslaan mislukt: ' + e.message);
+            waardeDiv.innerHTML = origineelHtml;
+            knop.disabled = false;
+        }
+    };
+    inp.addEventListener('keydown', e => {
+        if (e.key === 'Enter')  { e.preventDefault(); opslaan(); }
+        if (e.key === 'Escape') { e.preventDefault(); annuleer(); }
+    });
+    inp.addEventListener('blur', opslaan);
 }
 
 async function rijAnonimiseer(rijder) {

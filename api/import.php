@@ -425,19 +425,26 @@ try {
         VALUES (:license_key, :full_name, :short_name, :gender, :category,
                 :nationality, :start_number, :club_code, :club_short, :club_full, :sponsor, :city)
         ON DUPLICATE KEY UPDATE
-               -- Behoud bestaande waarde als de nieuwe leeg/null is,
-               -- zodat een per ongeluk leeg ingestuurde naam geen goede naam wist.
+               -- Behoud bestaande waarde als de nieuwe leeg/null is, zodat een
+               -- per ongeluk leeg ingestuurde naam geen goede naam wist.
                full_name    = COALESCE(NULLIF(VALUES(full_name), ''), full_name),
                short_name   = COALESCE(NULLIF(VALUES(short_name), ''), short_name),
                gender       = VALUES(gender),
+               -- Categorie wél overschrijven met KNSB-waarde (mits niet leeg)
+               -- zodat de jaarlijkse age-up cyclus automatisch doorkomt.
                category     = COALESCE(NULLIF(VALUES(category), ''), category),
                nationality  = VALUES(nationality),
                start_number = COALESCE(VALUES(start_number), start_number),
-               club_code    = VALUES(club_code),
-               club_short   = VALUES(club_short),
-               club_full    = VALUES(club_full),
-               sponsor      = VALUES(sponsor),
-               city         = VALUES(city),
+               -- club_code/short/full + sponsor: behoud bestaande als KNSB leeg
+               -- stuurt. Operator kan deze via Systeem → Rijders corrigeren als
+               -- KNSB-feed verkeerde of incomplete data heeft. KNSB-update mét
+               -- ingevulde waarde overschrijft de correctie nog wel (= per-veld
+               -- manual-override-tracking is mogelijke uitbreiding).
+               club_code    = COALESCE(NULLIF(VALUES(club_code),  ''), club_code),
+               club_short   = COALESCE(NULLIF(VALUES(club_short), ''), club_short),
+               club_full    = COALESCE(NULLIF(VALUES(club_full),  ''), club_full),
+               sponsor      = COALESCE(NULLIF(VALUES(sponsor),    ''), sponsor),
+               city         = COALESCE(NULLIF(VALUES(city),       ''), city),
                updated_at   = CURRENT_TIMESTAMP
     ");
 
