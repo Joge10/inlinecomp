@@ -33,6 +33,7 @@ header('Access-Control-Allow-Origin: *');
 
 require_once __DIR__ . '/../../config_inlinecomp.php';
 require_once __DIR__ . '/../auth/session.php';
+require_once __DIR__ . '/_uitslag_helper.php';
 requireAuth($pdo);
 
 $compId      = trim($_GET['competition_id'] ?? $_POST['competition_id'] ?? '');
@@ -381,7 +382,7 @@ try {
             // (sanctie='DNS', punten=0) telt als "niet gereden". DNF/DQ-TF in
             // een latere ronde geeft wél een rang/punten en telt dus mee.
             if ($dp['punten'] > 0) $aantalGereden++;
-            if (in_array($dp['sanctie'] ?? '', $excluderendeSancties, true)) {
+            if (sancties_heeft_any($dp['sanctie'] ?? null, $excluderendeSancties)) {
                 $heeftDQExclusion = true;
             }
         }

@@ -4372,16 +4372,73 @@ col.live-col-rondes  { width: 40px; }
 }
 .live-tijd-inp:disabled { background: #f4f6f8; color: #999; cursor: default; }
 
-/* ── Sanctie-dropdown ── */
-.live-sanctie-sel {
-    width: 68px;
-    padding: 2px 2px;
-    border: 1px solid var(--border);
-    border-radius: 4px;
-    font-size: .82rem;
-    background: #fff;
+/* ── Sanctie-multi-knop + popover ── */
+/* De hidden input '.live-sanctie-sel' bewaart de comma-separated waarde
+   (= externe code die sel.value leest werkt nog). De knop ernaast toont de
+   actieve codes; click opent een popover met chips voor multi-select. */
+.live-sanctie-wrap { position: relative; }
+.live-sanctie-btn {
+    width: 100%; min-width: 60px;
+    padding: 3px 4px; font-size: .8rem;
+    border: 1px solid var(--border); border-radius: 4px;
+    background: #fff; color: #333;
+    cursor: pointer; text-align: center;
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
 }
-.live-sanctie-sel:disabled { background: #f4f6f8; color: #999; cursor: default; }
+.live-sanctie-btn:hover:not(:disabled) { border-color: var(--middenblauw); }
+.live-sanctie-btn:disabled { background: #f4f6f8; color: #999; cursor: default; }
+.live-sanctie-btn.heeft-sanctie {
+    background: #fef3c7; border-color: #d97706; color: #92400e; font-weight: 600;
+}
+
+.live-sanctie-popover {
+    background: #fff;
+    border: 1px solid var(--blauw, #1a3a5c);
+    border-radius: 6px;
+    box-shadow: 0 4px 16px rgba(0,0,0,.18);
+    padding: 8px 10px;
+    min-width: 240px;
+    font-size: .85rem;
+}
+.live-sanctie-popover .lsp-kop {
+    display: flex; justify-content: space-between; align-items: center;
+    font-weight: 600; color: var(--blauw, #1a3a5c); margin-bottom: 6px;
+    font-size: .82rem;
+}
+.live-sanctie-popover .lsp-sluit {
+    background: none; border: 0; font-size: 1.3rem; line-height: 1;
+    color: #888; cursor: pointer; padding: 0 4px;
+}
+.live-sanctie-popover .lsp-sluit:hover { color: #333; }
+.live-sanctie-popover .lsp-chips {
+    display: flex; flex-wrap: wrap; gap: 4px; margin-bottom: 8px;
+}
+.live-sanctie-popover .lsp-chip {
+    padding: 4px 10px; font-size: .85rem;
+    border: 1px solid var(--border); border-radius: 12px;
+    background: #f5f7fa; color: #555; cursor: pointer;
+    font-weight: 500;
+    transition: background .12s, color .12s, border-color .12s;
+}
+.live-sanctie-popover .lsp-chip:hover { background: #e9eef4; }
+.live-sanctie-popover .lsp-chip.actief {
+    background: var(--blauw, #1a3a5c); color: #fff; border-color: var(--blauw, #1a3a5c);
+}
+.live-sanctie-popover .lsp-voet {
+    display: flex; justify-content: space-between; gap: 6px;
+    border-top: 1px solid #eef; padding-top: 6px;
+}
+.live-sanctie-popover .lsp-wis,
+.live-sanctie-popover .lsp-ok {
+    padding: 4px 12px; font-size: .85rem;
+    border: 1px solid var(--border); border-radius: 4px;
+    background: #fff; color: #333; cursor: pointer;
+}
+.live-sanctie-popover .lsp-wis:hover { background: #fef2f2; border-color: #dc2626; color: #991b1b; }
+.live-sanctie-popover .lsp-ok {
+    background: var(--blauw, #1a3a5c); color: #fff; border-color: var(--blauw, #1a3a5c); font-weight: 600;
+}
+.live-sanctie-popover .lsp-ok:hover { background: var(--middenblauw, #2c5d8f); }
 
 /* ── Finish-badge ── */
 .live-finish-badge {

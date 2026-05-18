@@ -378,13 +378,11 @@ try {
 
             $resultaat = berekenInternationaalResultaat($rondeDataArr, $raceSubType);
 
-            $geldigeSancties = ['W1','W2','FS','RR','DQ-TF','DQ-SF','DQ-DF','DNS','DNF'];
             foreach ($resultaat as $r) {
                 $lic     = $r['person_license'];
                 $punten  = $r['rang'] !== null ? (float)$r['rang'] : 0;
-                $sanctie = $r['sanctie'] ?? null;
-                $sanctieDb = ($sanctie && in_array($sanctie, $geldigeSancties, true))
-                    ? $sanctie : null;
+                // Multi-sanctie: normaliseer string (kan al comma-separated zijn)
+                $sanctieDb = sancties_normaliseer($r['sanctie'] ?? null);
 
                 // Bestaande handmatige override alleen respecteren bij
                 // full-final én als deze rijder nog steeds een sanctie heeft.
@@ -565,12 +563,11 @@ try {
                 $lic    = $gc['person_license'];
                 $punten = (float)$gc['rang'];
                 $sanctieDb = null;
-                if ($gc['sanctie'] !== null) {
+                if ($gc['sanctie'] !== null && $gc['sanctie'] !== '') {
                     // Respecteer bestaande handmatige correctie
                     $punten = $bestaandeOverrides[$lic][$distId] ?? $punten;
-                    $geldigeSancties = ['W1','W2','FS','RR','DQ-TF','DQ-SF','DQ-DF','DNS','DNF'];
-                    $sanctieDb = in_array($gc['sanctie'], $geldigeSancties, true)
-                        ? $gc['sanctie'] : null;
+                    // Multi-sanctie: normaliseer (split, validate, dedupe, rejoin)
+                    $sanctieDb = sancties_normaliseer($gc['sanctie']);
                 }
                 $upsertAfstand->execute([
                     $compId, $compNaam, $compDatum,
@@ -630,9 +627,8 @@ try {
                 if (!$s) continue;
                 $lic    = $r['person_license'];
                 $punten = $bestaandeOverrides[$lic][$distId] ?? $defaultPunten;
-                // DB = UI codes, directe opslag
-                $geldigeSancties2 = ['W1','W2','FS','RR','DQ-TF','DQ-SF','DQ-DF','DNS','DNF'];
-                $sanctieDb = in_array($s, $geldigeSancties2, true) ? $s : null;
+                // Multi-sanctie: normaliseer (split, validate, dedupe, rejoin)
+                $sanctieDb = sancties_normaliseer($s);
                 $upsertAfstand->execute([
                     $compId, $compNaam, $compDatum,
                     $primaryDcId, $dcNaam, '',

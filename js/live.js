@@ -365,6 +365,22 @@ const _SANCTIE_WIST_TIJD   = new Set(['DNF', 'DQ-TF', 'DQ-SF', 'DQ-DF', 'DNS']);
 // als de daadwerkelijke next-round-generation.
 const _SANCTIE_GEEN_FINISH = new Set(['DNS', 'DNF', 'DQ-TF', 'DQ-SF', 'DQ-DF']);
 
+// ── Multi-sanctie helpers ────────────────────────────────────────────────────
+// Rijder kan meerdere codes hebben in 1 heat (comma-separated string als
+// W1,W2,DQ-SF). Set.has(string) werkt dan niet meer — gebruik deze helpers.
+function _liveSancties(s) {
+    if (!s) return [];
+    return String(s).split(',').map(x => x.trim()).filter(Boolean);
+}
+function _liveSanctieHeeft(s, code) {
+    if (!s) return false;
+    return _liveSancties(s).includes(code);
+}
+function _liveSanctieHeeftSet(s, set) {
+    if (!s || !set) return false;
+    return _liveSancties(s).some(c => set.has(c));
+}
+
 // Ex-aequo-ranking volgens reglement: gelijke tijden krijgen dezelfde positie
 // (1,2,3,3,5). Aansluitend op api/_uitslag_helper.php::berekenExAequoRangs(),
 // die de uitslag-laag gebruikt — beide systemen (full-final én internationaal)
@@ -373,7 +389,7 @@ const _SANCTIE_GEEN_FINISH = new Set(['DNS', 'DNF', 'DQ-TF', 'DQ-SF', 'DQ-DF']);
 function _berekenPosities(entries, gebruikGelijkspel = true, isAfvalkoers = false) {
     // Finishers: heeft tijd, niet ranked_last, niet not_ranked (FS wél meenemen op tijd)
     const finishers = entries
-        .filter(e => e.tijd_ms > 0 && !_SANCTIE_RANKED_LAST.has(e.sanctie) && !_SANCTIE_NOT_RANKED.has(e.sanctie))
+        .filter(e => e.tijd_ms > 0 && !_liveSanctieHeeftSet(e.sanctie, _SANCTIE_RANKED_LAST) && !_liveSanctieHeeftSet(e.sanctie, _SANCTIE_NOT_RANKED))
         .sort((a, b) => {
             // Lange-afstand: rondes DESC (meer ronden = betere positie), dan tijd ASC
             // null rondes = Infinity: rijder zonder geregistreerde rondes staat boven rijder met weinig rondes
@@ -388,8 +404,8 @@ function _berekenPosities(entries, gebruikGelijkspel = true, isAfvalkoers = fals
     // Uitzondering: in afvalkoers krijgt DNS GEEN positie — niet gestart =
     // niet in de uitslag. Backend doet hetzelfde (zie api/live.php).
     const rankedLast = entries.filter(e =>
-        _SANCTIE_RANKED_LAST.has(e.sanctie)
-        && !(isAfvalkoers && e.sanctie === 'DNS')
+        _liveSanctieHeeftSet(e.sanctie, _SANCTIE_RANKED_LAST)
+        && !(isAfvalkoers && _liveSanctieHeeft(e.sanctie, 'DNS'))
     );
     // DQ-SF en DQ-DF worden genegeerd (geen positie)
 
@@ -477,6 +493,153 @@ function _livePhotofinishIcon() {
     return ` <span class="live-pf-badge" title="Photofinish — tijd via jury-wissel aangepast in een eerdere of huidige rit">📷</span>`;
 }
 
+// ── Multi-sanctie chip-picker ──────────────────────────────────────────────
+// Een rijder kan meerdere sancties in 1 heat krijgen (W1 + W2 + DQ-SF + FS).
+// Hidden input `.live-sanctie-sel` bewaart de comma-separated string zodat
+// alle bestaande code die sel.value leest blijft werken. Knop ernaast toont
+// de actieve codes; click opent een popover met chips waar je toggle't.
+//
+// Codes in vaste UI-volgorde (= grouping voor jury):
+//   waarschuwingen (FS/W1/W2/RR) eerst, dan DQ's, dan DNF/DNS.
+const _LIVE_SANCT_CODES = ['FS', 'W1', 'W2', 'RR', 'DQ-TF', 'DQ-SF', 'DQ-DF', 'DNF', 'DNS'];
+
+function _liveBouwSanctieMulti(huidig, disabled) {
+    // huidig = string 'W1,W2,DQ-SF' (of leeg/null)
+    const codes = (huidig || '').split(',').map(s => s.trim()).filter(Boolean);
+    const label = codes.length ? esc(codes.join(', ')) : '—';
+    return `<div class="live-sanctie-wrap">` +
+        `<input type="hidden" class="live-sanctie-sel" value="${esc(codes.join(','))}">` +
+        `<button type="button" class="live-sanctie-btn ${codes.length ? 'heeft-sanctie' : ''}"` +
+        ` ${disabled} title="Klik om sancties te kiezen (meerdere mogelijk)">${label}</button>` +
+        `</div>`;
+}
+
+// Update de getoonde tekst op een sanctie-knop op basis van de hidden input.
+// Wordt aangeroepen na elke value-set (chip-toggle, externe assignment).
+function _liveSanctieBtnSync(wrap) {
+    const inp = wrap.querySelector('.live-sanctie-sel');
+    const btn = wrap.querySelector('.live-sanctie-btn');
+    if (!inp || !btn) return;
+    const codes = (inp.value || '').split(',').map(s => s.trim()).filter(Boolean);
+    btn.textContent = codes.length ? codes.join(', ') : '—';
+    btn.classList.toggle('heeft-sanctie', codes.length > 0);
+}
+
+// Helper voor externe code die `.live-sanctie-sel` waarde wil zetten + UI
+// updaten. Bestaande code die direct `inp.value = X` doet werkt nog steeds,
+// maar update de knop-tekst niet — gebruik deze helper voor consistentie.
+function _liveSanctieZet(wrapOrSel, nieuweWaarde) {
+    const wrap = wrapOrSel.classList?.contains('live-sanctie-wrap')
+        ? wrapOrSel
+        : wrapOrSel.closest('.live-sanctie-wrap');
+    if (!wrap) return;
+    const inp = wrap.querySelector('.live-sanctie-sel');
+    if (!inp) return;
+    inp.value = nieuweWaarde || '';
+    _liveSanctieBtnSync(wrap);
+}
+
+// Popover voor multi-sanctie-keuze. Eén globaal popover-element wordt
+// hergebruikt; click op een chip toggle't en update de hidden input direct.
+// Sluiten via Esc, click buiten, of de × in de header.
+let _liveSanctiePopover = null;
+function _liveSanctiePopoverOpen(wrap) {
+    _liveSanctiePopoverSluit();
+    const inp = wrap.querySelector('.live-sanctie-sel');
+    if (!inp) return;
+    const huidig = new Set((inp.value || '').split(',').map(s => s.trim()).filter(Boolean));
+
+    const pop = document.createElement('div');
+    pop.className = 'live-sanctie-popover';
+    pop.innerHTML =
+        `<div class="lsp-kop"><span>Sancties (klik om aan/uit te zetten)</span>` +
+        `<button type="button" class="lsp-sluit" title="Sluiten">×</button></div>` +
+        `<div class="lsp-chips">` +
+        _LIVE_SANCT_CODES.map(c =>
+            `<button type="button" class="lsp-chip ${huidig.has(c) ? 'actief' : ''}"` +
+            ` data-code="${esc(c)}">${esc(c)}</button>`
+        ).join('') +
+        `</div>` +
+        `<div class="lsp-voet">` +
+        `<button type="button" class="lsp-wis">Alles wissen</button>` +
+        `<button type="button" class="lsp-ok">Klaar</button>` +
+        `</div>`;
+    document.body.appendChild(pop);
+    _liveSanctiePopover = { el: pop, wrap };
+
+    // Positioneer onder de knop
+    const btn = wrap.querySelector('.live-sanctie-btn');
+    const r   = btn.getBoundingClientRect();
+    pop.style.position = 'absolute';
+    pop.style.top  = (window.scrollY + r.bottom + 4) + 'px';
+    pop.style.left = (window.scrollX + r.left)      + 'px';
+    pop.style.zIndex = '5000';
+
+    // Toggle chip → herbouw value direct
+    pop.querySelectorAll('.lsp-chip').forEach(chip => {
+        chip.addEventListener('click', () => {
+            const code = chip.dataset.code;
+            if (huidig.has(code)) huidig.delete(code); else huidig.add(code);
+            chip.classList.toggle('actief');
+            // Behoud canonieke volgorde voor consistente weergave
+            const geordend = _LIVE_SANCT_CODES.filter(c => huidig.has(c));
+            inp.value = geordend.join(',');
+            _liveSanctieBtnSync(wrap);
+            // 'change'-event zodat bestaande change-listeners triggeren
+            inp.dispatchEvent(new Event('change', { bubbles: true }));
+        });
+    });
+
+    pop.querySelector('.lsp-wis').addEventListener('click', () => {
+        huidig.clear();
+        pop.querySelectorAll('.lsp-chip').forEach(c => c.classList.remove('actief'));
+        inp.value = '';
+        _liveSanctieBtnSync(wrap);
+        inp.dispatchEvent(new Event('change', { bubbles: true }));
+    });
+    pop.querySelector('.lsp-ok').addEventListener('click', _liveSanctiePopoverSluit);
+    pop.querySelector('.lsp-sluit').addEventListener('click', _liveSanctiePopoverSluit);
+
+    // Click buiten sluit
+    setTimeout(() => {
+        document.addEventListener('click', _liveSanctiePopoverBuitenklik, true);
+        document.addEventListener('keydown', _liveSanctiePopoverEsc, true);
+    }, 0);
+}
+
+function _liveSanctiePopoverSluit() {
+    if (_liveSanctiePopover) {
+        _liveSanctiePopover.el.remove();
+        _liveSanctiePopover = null;
+    }
+    document.removeEventListener('click', _liveSanctiePopoverBuitenklik, true);
+    document.removeEventListener('keydown', _liveSanctiePopoverEsc, true);
+}
+function _liveSanctiePopoverBuitenklik(e) {
+    if (!_liveSanctiePopover) return;
+    if (_liveSanctiePopover.el.contains(e.target)) return;
+    if (_liveSanctiePopover.wrap.contains(e.target)) return;
+    _liveSanctiePopoverSluit();
+}
+function _liveSanctiePopoverEsc(e) {
+    if (e.key === 'Escape') _liveSanctiePopoverSluit();
+}
+
+// Globale delegated click-handler: open popover wanneer een sanctie-knop
+// wordt geklikt. Dit gebeurt onafhankelijk van wanneer/welke heat-tabel
+// gerendered is — werkt ook na re-render.
+document.addEventListener('click', e => {
+    const btn = e.target.closest('.live-sanctie-btn');
+    if (!btn || btn.disabled) return;
+    const wrap = btn.closest('.live-sanctie-wrap');
+    if (!wrap) return;
+    if (_liveSanctiePopover && _liveSanctiePopover.wrap === wrap) {
+        _liveSanctiePopoverSluit();
+    } else {
+        _liveSanctiePopoverOpen(wrap);
+    }
+});
+
 // Bepaalt of een rit "alles groen" is: elke rijder heeft tijd ÓF sanctie ÓF
 // (afvalkoers + afgevallen). Pas dán is de jury aan zet en mag de fin-kolom
 // dropdowns tonen — voor die tijd zijn de waarden nog onvolledig en kunnen
@@ -521,7 +684,10 @@ function _liveSyncInvoer(entryId, tijdVal, sanctieVal, rondesVal) {
         const s = rij.querySelector('.live-sanctie-sel');
         const rn = rij.querySelector('.live-rondes-inp');
         if (t && t !== document.activeElement && t.value !== tijdVal) t.value = tijdVal;
-        if (s && s !== document.activeElement && s.value !== sanctieVal) s.value = sanctieVal;
+        if (s && s !== document.activeElement && s.value !== sanctieVal) {
+            s.value = sanctieVal;
+            _liveSanctieBtnSync(s.closest('.live-sanctie-wrap'));
+        }
         if (rn && rn !== document.activeElement && rondesVal !== undefined) {
             const rv = rondesVal ?? '';
             if (rn.value !== String(rv)) rn.value = rv;
@@ -601,7 +767,7 @@ function _liveHerbereken(ritIdx) {
         const sanctieWaarde = sel?.value || '';
         const isAfgevallen  = afvalIds && afvalIds.has(r.entry_id);
         rij.classList.remove('live-rit-status-compleet', 'live-rit-status-sanctie', 'live-rit-status-leeg');
-        if (sanctieWaarde === 'FS')   rij.classList.add(ms > 0 ? 'live-rit-status-compleet' : 'live-rit-status-leeg');
+        if (_liveSanctieHeeft(sanctieWaarde, 'FS'))   rij.classList.add(ms > 0 ? 'live-rit-status-compleet' : 'live-rit-status-leeg');
         else if (heeftSanctie)        rij.classList.add('live-rit-status-sanctie');
         else if (ms > 0)              rij.classList.add('live-rit-status-compleet');
         else if (isAfgevallen)        rij.classList.add('live-rit-status-compleet');
@@ -1181,7 +1347,7 @@ function _liveVerzamelPanelRijders(dcId, distanceId, rondeType) {
                     // gewoon krijgen, anders verschuift hij ten onrechte
                     // omlaag in de panel-weergave.
                     const r = heatRijders[i];
-                    if (r.finishpositie != null && !_SANCTIE_GEEN_FINISH.has(r.sanctie ?? ''))
+                    if (r.finishpositie != null && !_liveSanctieHeeftSet(r.sanctie, _SANCTIE_GEEN_FINISH))
                         qRijders.add(r.entry_id);
                 }
             }
@@ -1192,7 +1358,7 @@ function _liveVerzamelPanelRijders(dcId, distanceId, rondeType) {
             // tellen voor de q-pool (tijdkwalificatie naar volgende ronde).
             .filter(r => r.tijd_ms != null
                        && !qRijders.has(r.entry_id)
-                       && !_SANCTIE_GEEN_FINISH.has(r.sanctie ?? ''))
+                       && !_liveSanctieHeeftSet(r.sanctie, _SANCTIE_GEEN_FINISH))
             .sort((a, b) => a.tijd_ms - b.tijd_ms);
         const aantalQ = qRijders.size;
         const aantalq = Math.max(0, totaalDoor - aantalQ);
@@ -1241,7 +1407,7 @@ function _liveBouwPanelTbodyRijen(rijders, heeftRondes, panelRit = null) {
         // Status — zelfde logica als heat-card: FS+tijd telt als compleet
         // (groen), niet als sanctie (rood). FS is een waarschuwing, geen
         // uitval. Andere sancties (DNS/DNF/DQ-*) blijven rood.
-        const statusKls = (r.sanctie === 'FS')
+        const statusKls = _liveSanctieHeeft(r.sanctie, 'FS')
                         ? (r.tijd_ms !== null ? 'live-rit-status-compleet' : 'live-rit-status-leeg')
                         : r.sanctie ? 'live-rit-status-sanctie'
                         : r.tijd_ms !== null ? 'live-rit-status-compleet'
@@ -1421,7 +1587,7 @@ function _livePanelHerbereken() {
             const ms   = inp ? _parseTijdInvoer(inp.value) : null;
             const sv   = sel?.value || '';
             rij.classList.remove('live-rit-status-compleet', 'live-rit-status-sanctie', 'live-rit-status-leeg');
-            if (sv === 'FS')  rij.classList.add(ms > 0 ? 'live-rit-status-compleet' : 'live-rit-status-leeg');
+            if (_liveSanctieHeeft(sv, 'FS'))  rij.classList.add(ms > 0 ? 'live-rit-status-compleet' : 'live-rit-status-leeg');
             else if (sv)      rij.classList.add('live-rit-status-sanctie');
             else if (ms > 0)  rij.classList.add('live-rit-status-compleet');
             else              rij.classList.add('live-rit-status-leeg');
@@ -1694,8 +1860,16 @@ function _liveBind(idx) {
             }
             // Alleen sancties die fundamenteel geen tijd hebben (DNS/DNF/DQ-*)
             // worden gewist bij tijdinvoer. FS, RR, W1 en W2 blijven staan.
-            if (ms !== null && sanctieSel?.value && _SANCTIE_WIST_TIJD.has(sanctieSel.value)) {
-                sanctieSel.value = '';
+            // Multi-sanctie: filter alleen de "wist-tijd"-codes weg, behoud de
+            // rest (een rijder met W1+W2+DQ-SF die toch een tijd krijgt verliest
+            // alleen DQ-SF, niet de W1/W2 — die staan los).
+            if (ms !== null && sanctieSel?.value) {
+                const codes  = sanctieSel.value.split(',').map(s => s.trim()).filter(Boolean);
+                const overig = codes.filter(c => !_SANCTIE_WIST_TIJD.has(c));
+                if (overig.length !== codes.length) {
+                    sanctieSel.value = overig.join(',');
+                    _liveSanctieBtnSync(sanctieSel.closest('.live-sanctie-wrap'));
+                }
             }
             const sanctie = sanctieSel?.value || '';
             _liveSyncInvoer(r.entry_id, tijdVal, sanctie);
@@ -1743,7 +1917,7 @@ function _liveBind(idx) {
             const sanctie = sanctieSel.value;
             // Alleen DNS/DNF/DQ-* wissen de tijd; FS, RR, W1 en W2 houden de
             // tijd (de jury past alleen handmatig de positie aan).
-            if (sanctie && _SANCTIE_WIST_TIJD.has(sanctie) && tijdInp?.value.trim()) {
+            if (sanctie && _liveSanctieHeeftSet(sanctie, _SANCTIE_WIST_TIJD) && tijdInp?.value.trim()) {
                 tijdInp.value = '';
             }
             _liveSyncInvoer(r.entry_id, tijdInp?.value || '', sanctie);
@@ -2109,7 +2283,7 @@ function _afvalInitVoorRit(ritIdx) {
             entry_id: r.entry_id,
             plek:     r.afval_rang,
             sanctie:  r.sanctie || null,
-            buiten_schema: (r.sanctie === 'DQ-TF'),
+            buiten_schema: _liveSanctieHeeft(r.sanctie, 'DQ-TF'),
         }))
         .sort((a, b) => b.plek - a.plek);
 
@@ -2118,7 +2292,7 @@ function _afvalInitVoorRit(ritIdx) {
     // _afvalSyncSanctie zodat _afvalNogInKoersIds direct correct blijft —
     // anders zou de rondes-teller pas na save+refresh kloppen.
     const dns = (rit.rijders || [])
-        .filter(r => r.sanctie === 'DNS')
+        .filter(r => _liveSanctieHeeft(r.sanctie, 'DNS'))
         .map(r => r.entry_id);
 
     _afvalState[ritIdx] = {
@@ -2648,7 +2822,7 @@ function _bouwAfvalPaneel(rit, idx, tonen) {
             const r = rijderMap.get(a.entry_id);
             const snr = r?.startnummer ?? '?';
             const rondes = r?.rondes;
-            const isFault    = a.sanctie === 'DQ-TF';
+            const isFault    = _liveSanctieHeeft(a.sanctie, 'DQ-TF');
             const isDecision = a.buiten_schema === true && !isFault;
             const cls = isFault    ? ' live-av-fault'
                       : isDecision ? ' live-av-decision'
@@ -3662,7 +3836,7 @@ async function _liveImportLaad(ritIdx) {
         // sanctie (DNF, DQ-TF, DQ-SF, DQ-DF, DNS — al gedefinieerd in
         // _SANCTIE_WIST_TIJD voor de save-flow).
         const isAfgevallen = (isAfvalkoers && r.afval_rang != null)
-                          || _SANCTIE_WIST_TIJD.has(r.sanctie ?? '');
+                          || _liveSanctieHeeftSet(r.sanctie, _SANCTIE_WIST_TIJD);
 
         const rondenVal = (!isAfgevallen && csvRij.ronden != null)
             ? String(csvRij.ronden) : null;
@@ -3907,7 +4081,11 @@ function _liveRijRij(r, compact = false, validPosities = [], rangMap = new Map()
     const disabled = _liveLeesOnly ? 'disabled' : '';
 
     // FS = waarschuwing, niet rood; DQ-DF/DNS/DNF/DQ-SF = rood
-    const statusKlasse = (r.sanctie === 'FS')
+    // Multi-sanctie: alleen-FS (zonder DQ/DNF/DNS in lijst) telt nog steeds als
+    // "compleet"-status. Met DQ/DNF/DNS naast FS = sanctie-status.
+    const heeftStopper = _liveSanctieHeeftSet(r.sanctie, _SANCTIE_WIST_TIJD);
+    const alleenFS = _liveSanctieHeeft(r.sanctie, 'FS') && !heeftStopper;
+    const statusKlasse = alleenFS
         ? (r.tijd_ms > 0 ? 'live-rit-status-compleet' : 'live-rit-status-leeg')
         : r.sanctie
             ? 'live-rit-status-sanctie'
@@ -3931,18 +4109,11 @@ function _liveRijRij(r, compact = false, validPosities = [], rangMap = new Map()
         ` placeholder="0:00.000" ${disabled} inputmode="decimal">` +
         `</td>` +
         `<td class="live-col-sanctie">` +
-        `<select class="live-sanctie-sel" ${disabled}>` +
-        `<option value="">—</option>` +
-        `<option value="DNS"   ${sanctieUi === 'DNS'   ? 'selected' : ''}>DNS</option>` +
-        `<option value="DNF"   ${sanctieUi === 'DNF'   ? 'selected' : ''}>DNF</option>` +
-        `<option value="FS"    ${sanctieUi === 'FS'    ? 'selected' : ''}>FS</option>` +
-        `<option value="DQ-TF" ${sanctieUi === 'DQ-TF' ? 'selected' : ''}>DQ-TF</option>` +
-        `<option value="DQ-SF" ${sanctieUi === 'DQ-SF' ? 'selected' : ''}>DQ-SF</option>` +
-        `<option value="DQ-DF" ${sanctieUi === 'DQ-DF' ? 'selected' : ''}>DQ-DF</option>` +
-        `<option value="W1"    ${sanctieUi === 'W1'    ? 'selected' : ''}>W1</option>` +
-        `<option value="W2"    ${sanctieUi === 'W2'    ? 'selected' : ''}>W2</option>` +
-        `<option value="RR"    ${sanctieUi === 'RR'    ? 'selected' : ''}>RR</option>` +
-        `</select>` +
+        // Multi-sanctie chip-picker. Hidden input bewaart de huidige
+        // comma-separated waarde (= bestaande .value-API blijft werken voor
+        // alle externe code). Knop ernaast toont de actieve codes en opent
+        // bij click een chip-popover waar de operator codes aan/uit klikt.
+        _liveBouwSanctieMulti(sanctieUi, disabled) +
         `</td>` +
         `<td class="live-col-finish">` +
         // Wissel-dropdown alleen als alles-compleet (jury-fase). Anders badge —
@@ -4116,7 +4287,7 @@ async function _liveOpslaanRit(ritIdx) {
             // (= geen positie). _afvalSyncSanctie filtert ze al uit de stack,
             // maar voor stale state houden we hier ook nog een check op de
             // live DOM-sanctie.
-            const isDns = (afval.sanctie === 'DNS' || sanctieDom === 'DNS');
+            const isDns = _liveSanctieHeeft(afval.sanctie, 'DNS') || _liveSanctieHeeft(sanctieDom, 'DNS');
             return {
                 entry_id:       r.entry_id,
                 tijd_ms:        null,                    // afgevallen → geen valide finish-tijd
@@ -4130,7 +4301,7 @@ async function _liveOpslaanRit(ritIdx) {
             };
         }
 
-        const tijdOpslaan = _SANCTIE_WIST_TIJD.has(sanctieDom) ? null : (tijdMs ?? null);
+        const tijdOpslaan = _liveSanctieHeeftSet(sanctieDom, _SANCTIE_WIST_TIJD) ? null : (tijdMs ?? null);
         return {
             entry_id:       r.entry_id,
             tijd_ms:        tijdOpslaan,

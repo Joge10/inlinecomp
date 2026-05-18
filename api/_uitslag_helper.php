@@ -5,13 +5,60 @@
 //  en uitslag_vastleggen.php.
 // ============================================================
 
+// ── Multi-sanctie helpers ───────────────────────────────────────────────────
+// Een rijder kan in dezelfde heat meerdere sancties krijgen (bv. W1 + W2 +
+// DQ-SF + FS allemaal in 1 rit). Opgeslagen als comma-separated string in
+// results.sanctie / uitslag_afstand.sanctie. Helpers hieronder maken de
+// rest van de code agnostisch voor 1 vs N sancties.
+
+// Geldige codes — synchroon met UI live.js dropdown en startlijst_laden.php
+// validatie. Volgorde = canonieke severity-ranking (gebruikt bij display-sort).
+const SANCTIE_CODES = ['DQ-DF', 'DQ-SF', 'DQ-TF', 'DNF', 'DNS', 'FS', 'W2', 'W1', 'RR'];
+
+// Splits "W1,W2,DQ-SF" → ['W1','W2','DQ-SF']. Lege/null input → []. Voor
+// backwards compat: oude enkele waarden ('DQ-TF') worden 1-item array.
+function sancties_split(?string $s): array {
+    if ($s === null) return [];
+    $s = trim($s);
+    if ($s === '') return [];
+    $parts = array_map('trim', explode(',', $s));
+    return array_values(array_filter($parts, fn($p) => $p !== ''));
+}
+
+// Bool: bevat de string ten minste 1 van de gegeven codes?
+function sancties_heeft_any(?string $s, array $codes): bool {
+    if ($s === null || $s === '') return false;
+    $have = sancties_split($s);
+    return (bool)array_intersect($have, $codes);
+}
+
+// Validatie + normalisatie: filter onbekende codes weg, dedupe, sort op
+// canonieke severity, herform tot comma-separated string. Lege array → null.
+// Gebruik bij ontvangst van user-input vóór persistentie.
+function sancties_normaliseer($input): ?string {
+    if (is_string($input)) {
+        $arr = sancties_split($input);
+    } elseif (is_array($input)) {
+        $arr = array_values(array_filter(array_map(fn($v) => trim((string)$v), $input), 'strlen'));
+    } else {
+        return null;
+    }
+    // Filter geldigheid + dedupe
+    $arr = array_values(array_unique(array_filter($arr,
+        fn($c) => in_array($c, SANCTIE_CODES, true))));
+    if (!$arr) return null;
+    // Sort op severity-volgorde (positie in SANCTIE_CODES)
+    usort($arr, fn($a, $b) => array_search($a, SANCTIE_CODES) - array_search($b, SANCTIE_CODES));
+    return implode(',', $arr);
+}
+
 // ── Eindsanctie = rijder heeft geen geldige finish ──────────────────────────
 // DNS/DNF/DQ-* betekenen: géén geregistreerde finish, ongeacht of finishpositie
 // in de DB (per ongeluk of door eerdere invoer) gevuld is.
 // FS/RR/W1/W2 zijn sancties die de finish-status NIET wegnemen.
+// Werkt nu op multi-sanctie string: één eind-code in de lijst = eindsanctie.
 function isEindSanctie(?string $s): bool {
-    if ($s === null || $s === '') return false;
-    return in_array($s, ['DNS', 'DNF', 'DQ-TF', 'DQ-SF', 'DQ-DF'], true);
+    return sancties_heeft_any($s, ['DNS', 'DNF', 'DQ-TF', 'DQ-SF', 'DQ-DF']);
 }
 
 // ── Splits rijders in finishers + overigen ──────────────────────────────────

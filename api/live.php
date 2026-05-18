@@ -15,6 +15,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') { exit; }
 
 require_once __DIR__ . '/../../config_inlinecomp.php';
 require_once __DIR__ . '/../auth/session.php';
+require_once __DIR__ . '/_uitslag_helper.php';
 $_authUser = requireAuth($pdo);
 
 // ── Full-Final B-finale verdeling ─────────────────────────────────────────────
@@ -309,7 +310,9 @@ if ($action === 'save_rit_results') {
         $accepteertRondes = in_array($distRaceType, ['inline','puntenkoers','afvalkoers'], true);
         $accepteertPunten = ($distRaceType === 'puntenkoers');
 
-        // Geldige sancties (DB = UI codes, geen mapping meer nodig)
+        // Geldige sancties — zie ook SANCTIE_CODES in _uitslag_helper.php.
+        // Hier blijft de lokale lijst voor 100% backwards compat met oude code-
+        // paden, maar nieuwe code gaat via sancties_normaliseer().
         $geldigeSancties = ['W1','W2','FS','RR','DQ-TF','DQ-SF','DQ-DF','DNS','DNF'];
 
         // Finishpositie berekenen (internationaal systeem):
@@ -317,6 +320,13 @@ if ($action === 'save_rit_results') {
         //   W1/W2/RR  → geen automatisch effect (jury past manueel aan)
         //   DNF/DQ-TF/DNS → ranked last in round (ex-aequo gedeeld laatste)
         //   DQ-SF/DQ-DF   → not ranked (geen positie, geen punten)
+        //
+        // MULTI-SANCTIE: een rijder kan meerdere codes hebben (bv. W1,W2,DQ-SF).
+        // Classificatie gebeurt nu op "any-match" basis via sancties_heeft_any():
+        //   - any DQ-SF/DQ-DF in lijst → not ranked  (ernstigste wint)
+        //   - any DNF/DQ-TF/DNS         → ranked last
+        //   - alleen FS in lijst         → normaal met tijd
+        //   - W1/W2/RR alleen            → registratie zonder positie-effect
         //
         // Speciaal voor afvalkoers (race_type='afvalkoers'):
         //   Rijders met afval_rang gevuld → finishpositie = afval_rang
@@ -337,8 +347,9 @@ if ($action === 'save_rit_results') {
         foreach ($results as $r) {
             $tijdMs    = isset($r['tijd_ms']) && $r['tijd_ms'] !== null && $r['tijd_ms'] !== ''
                          ? (int)$r['tijd_ms'] : null;
-            $sanctie = trim($r['sanctie'] ?? '');
-            $sanctie = in_array($sanctie, $geldigeSancties, true) ? $sanctie : null;
+            // Multi-sanctie: accepteer string (comma-separated) of array. Normaliseer
+            // naar canonieke string ('DQ-SF,W1,W2'), null als niets geldigs over is.
+            $sanctie = sancties_normaliseer($r['sanctie'] ?? null);
 
             $rondes = isset($r['rondes']) && $r['rondes'] !== '' && $r['rondes'] !== null
                       ? (int)$r['rondes'] : null;
@@ -356,8 +367,7 @@ if ($action === 'save_rit_results') {
             // krijgen. Front-end zet automatisch een afval_rang (=laatste plek)
             // wanneer DNS gekozen wordt — die negeren we hier dwingend, anders
             // landt 'ie alsnog in $afgevallen met finpos = afval_rang.
-            $sanctieRaw = trim($r['sanctie'] ?? '');
-            if ($isAfvalkoers && $sanctieRaw === 'DNS') {
+            if ($isAfvalkoers && sancties_heeft_any($sanctie, ['DNS'])) {
                 $afvalRang = null;
             }
 
@@ -383,40 +393,50 @@ if ($action === 'save_rit_results') {
 
             // Afvalkoers + afval_rang ingevuld → afgevallen rijder. Hier overslaan we de
             // normale tijd/sanctie-classificatie: positie wordt dwingend afval_rang.
-            // Sanctie blijft bewaard (bv. DQ-TF voor by-fault). Tijd uit CSV mag blijven
+            // Sancties blijven bewaard (bv. DQ-TF voor by-fault). Tijd uit CSV mag blijven
             // (bewaard voor uitslag-archief; bepaalt niet de positie).
             if ($isAfvalkoers && $afvalRang !== null) {
                 $afgevallen[] = $base + ['tijd_ms' => $tijdMs, 'sanctie' => $sanctie];
                 continue;
             }
 
-            if ($sanctie && in_array($sanctie, $RANKED_LAST, true)) {
+            // Multi-sanctie classificatie: kijk welk "type" sancties in de lijst
+            // zitten (NOT_RANKED ernstigste, dan RANKED_LAST, dan FS, dan normaal).
+            $heeftNotRanked  = sancties_heeft_any($sanctie, $NOT_RANKED);
+            $heeftRankedLast = sancties_heeft_any($sanctie, $RANKED_LAST);
+            $heeftFS         = sancties_heeft_any($sanctie, ['FS']);
+
+            if ($heeftNotRanked) {
+                // DQ-SF / DQ-DF in lijst: not ranked, geen positie, geen tijd
+                $zonderTijd[] = $base + ['tijd_ms' => null, 'sanctie' => $sanctie];
+            } elseif ($heeftRankedLast) {
                 // DNF / DQ-TF / DNS: ranked last in round, tijd wissen.
                 // Speciaal voor afvalkoers: een DNS-rijder is niet gestart en
                 // hoort dus geen positie te krijgen — anders landt 'ie op
                 // finpos = N+1 (= vóór de afgevallen rijders met afval_rang).
                 // Routeer naar zonderTijd zodat finpos = NULL.
-                if ($isAfvalkoers && $sanctie === 'DNS') {
+                if ($isAfvalkoers && sancties_heeft_any($sanctie, ['DNS'])) {
                     $zonderTijd[] = $base + ['tijd_ms' => null, 'sanctie' => $sanctie];
                 } else {
                     $gedeeldArr[] = $base + ['tijd_ms' => null, 'sanctie' => $sanctie];
                 }
-            } elseif ($sanctie && in_array($sanctie, $NOT_RANKED, true)) {
-                // DQ-SF / DQ-DF: not ranked, geen positie, geen tijd
-                $zonderTijd[] = $base + ['tijd_ms' => null, 'sanctie' => $sanctie];
-            } elseif ($sanctie === 'FS') {
-                // FS: waarschuwing; tijd bewaren en normale positie toekennen
+            } elseif ($heeftFS) {
+                // FS in lijst (zonder DQ/DNF/DNS): waarschuwing — tijd bewaren
+                // en normale positie toekennen. Eventuele W1/W2/RR in dezelfde
+                // lijst blijven gewoon mee opgeslagen.
                 if ($tijdMs !== null && $tijdMs > 0) {
-                    $metTijd[]    = $base + ['tijd_ms' => $tijdMs, 'sanctie' => 'FS'];
+                    $metTijd[]    = $base + ['tijd_ms' => $tijdMs, 'sanctie' => $sanctie];
                 } else {
-                    $zonderTijd[] = $base + ['tijd_ms' => null,    'sanctie' => 'FS'];
+                    $zonderTijd[] = $base + ['tijd_ms' => null,    'sanctie' => $sanctie];
                 }
             } elseif ($tijdMs !== null && $tijdMs > 0) {
-                // Normale finisher
+                // Normale finisher (mogelijk met W1/W2/RR sancties — geen effect)
                 $metTijd[]    = $base + ['tijd_ms' => $tijdMs, 'sanctie' => $sanctie];
             } else {
-                // Geen tijd, geen geldige sanctie: wis resultaat
-                $zonderTijd[] = $base + ['tijd_ms' => null, 'sanctie' => null];
+                // Geen tijd, geen positie-bepalende sanctie: registratie van
+                // W1/W2/RR mag wel opgeslagen blijven (=$sanctie), maar zonder
+                // tijd kan geen positie worden bepaald.
+                $zonderTijd[] = $base + ['tijd_ms' => null, 'sanctie' => $sanctie];
             }
         }
 
@@ -774,7 +794,7 @@ if ($action === 'genereer_volgende_ronde') {
             $sanctiesUit = ['DNS', 'DNF', 'DQ-TF', 'DQ-SF', 'DQ-DF'];
             $beschikbaar = [];
             foreach ($alleRijders as $r) {
-                if (in_array($r['sanctie'] ?? '', $sanctiesUit, true)) continue;
+                if (sancties_heeft_any($r['sanctie'] ?? null, $sanctiesUit)) continue;
                 $beschikbaar[] = $r;
             }
 
