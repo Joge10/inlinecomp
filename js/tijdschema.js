@@ -122,11 +122,15 @@ function toonTijdschemaPagina() {
 async function laadTijdschema() {
     try {
         const uniekeDcIds = [...new Set((vergelijkData ?? []).map(c => c.dc_id))];
-        const [schemaRes, ...distResArr] = await Promise.all([
+        // Bulk-call voor afstanden ipv N parallelle calls. iFastNet stuurt
+        // anders HTTP 508 ('loop detected') zodra er ~6 DCs zijn. Eén
+        // gecombineerd request scheelt zowel rate-limit als latency.
+        const distancesUrl = uniekeDcIds.length
+            ? `api/distances_db.php?dc_ids=${uniekeDcIds.map(encodeURIComponent).join(',')}`
+            : null;
+        const [schemaRes, distRes] = await Promise.all([
             fetch(`api/tijdschema.php?competition_id=${encodeURIComponent(huidigCompId)}`),
-            ...uniekeDcIds.map(dcId =>
-                fetch(`api/distances_db.php?dc_id=${encodeURIComponent(dcId)}`)
-            ),
+            distancesUrl ? fetch(distancesUrl) : Promise.resolve(null),
         ]);
 
         const data = await schemaRes.json();
@@ -134,10 +138,12 @@ async function laadTijdschema() {
         huidigTijdschema = data;
         tijdschemaVersion = data?.tijdschema_version ?? 0;
 
-
-        const distArrays = await Promise.all(distResArr.map(r => r.json()));
-        uniekeDcIds.forEach((dcId, i) => {
-            const alle = Array.isArray(distArrays[i]) ? distArrays[i] : [];
+        let distBulk = {};
+        if (distRes && distRes.ok) {
+            try { distBulk = await distRes.json() || {}; } catch { distBulk = {}; }
+        }
+        uniekeDcIds.forEach((dcId) => {
+            const alle = Array.isArray(distBulk[dcId]) ? distBulk[dcId] : [];
             // Sla ALLE afstanden op inclusief target_group zodat bouwAfstandGroepen()
             // per splitgroep kan filteren. Geen vroeg weggooien van target_group hier.
             const afst = alle.map(d => ({

@@ -126,33 +126,41 @@ async function bouwBeheerTabel() {
     panel._beheerAbort = beheerAbort;
     const { signal }   = beheerAbort;
 
-    // Laad DB-afstanden (gegroepeerd op target_group); fallback naar KNSB
-    // Globale dcDistances zodat printDeelnemerslijst er ook bij kan
+    // Laad DB-afstanden (gegroepeerd op target_group); fallback naar KNSB.
+    // Globale dcDistances zodat printDeelnemerslijst er ook bij kan.
+    // BULK-CALL: 1 request met alle DC-ids ipv N parallelle requests. Oude
+    // implementatie deed Promise.all over N DCs — bij 6+ DCs trekt iFastNet
+    // dat als 'loop' en stuurt HTTP 508 op één of meerdere requests, waarna
+    // de beheer-tabel halfvol bleef. Bulk-endpoint lost dat in 1 keer op.
     dcDistances = {};
-    await Promise.all(vergelijkData.map(async cat => {
+    const dcIds = vergelijkData.map(c => c.dc_id).filter(Boolean);
+    let bulk = {};
+    if (dcIds.length) {
         try {
-            const res  = await fetch(`api/distances_db.php?dc_id=${encodeURIComponent(cat.dc_id)}`);
-            const data = await res.json();
-            if (Array.isArray(data) && data.length) {
-                // Groepeer op target_group → aparte sleutels per splitgroep
-                data.forEach(d => {
-                    const k = distKey(cat.dc_id, d.target_group || null);
-                    if (!dcDistances[k]) dcDistances[k] = [];
-                    dcDistances[k].push({ id: d.id, number: d.number, name: d.name,
-                                          value_meters: d.value_meters, race_type: d.race_type });
-                });
-                if (!dcDistances[cat.dc_id]) dcDistances[cat.dc_id] = [];
-            } else {
-                dcDistances[cat.dc_id] =
-                    (cat.knsb_distances || []).map(d => ({ id: '', number: d.number, name: d.name,
-                                                           value_meters: d.value_meters, race_type: d.race_type }));
-            }
-        } catch {
+            const url = 'api/distances_db.php?dc_ids='
+                + dcIds.map(encodeURIComponent).join(',');
+            const res = await fetch(url);
+            if (res.ok) bulk = await res.json();
+        } catch { /* stil falen — fallback hieronder */ }
+    }
+    vergelijkData.forEach(cat => {
+        const data = Array.isArray(bulk[cat.dc_id]) ? bulk[cat.dc_id] : null;
+        if (data && data.length) {
+            // Groepeer op target_group → aparte sleutels per splitgroep
+            data.forEach(d => {
+                const k = distKey(cat.dc_id, d.target_group || null);
+                if (!dcDistances[k]) dcDistances[k] = [];
+                dcDistances[k].push({ id: d.id, number: d.number, name: d.name,
+                                      value_meters: d.value_meters, race_type: d.race_type });
+            });
+            if (!dcDistances[cat.dc_id]) dcDistances[cat.dc_id] = [];
+        } else {
+            // Geen DB-afstanden of bulk-call mislukt → KNSB-fallback
             dcDistances[cat.dc_id] =
                 (cat.knsb_distances || []).map(d => ({ id: '', number: d.number, name: d.name,
                                                        value_meters: d.value_meters, race_type: d.race_type }));
         }
-    }));
+    });
 
     // Standaard ingeklapt bij laden — gebruiker klapt open als aanpassing nodig is
     let beheerIngeklapt = true;
