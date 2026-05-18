@@ -937,6 +937,47 @@ async function _pcStartPrint() {
         ? (bodies[0].data.title || 'Print')
         : `Print-Center (${bodies.length} prints)`;
 
+    // 2b) Safari/WebKit detecteren bij mixed orientation. Safari ondersteunt
+    // named @page rules + per-element `page:` property heel slecht: alle
+    // pagina's krijgen dezelfde orientation (typisch portrait), waardoor
+    // landscape-secties rechts worden afgekapt. Werkt prima in Chrome,
+    // Firefox, Edge — alleen Safari Mac/iOS heeft dit probleem. Bij
+    // gedetecteerd mixed-orientation + Safari: waarschuw operator vóór
+    // het printen, zodat ze kunnen kiezen voor Chrome of de print
+    // handmatig in 2 jobs splitsen.
+    const orientUsed = new Set(bodies.map(({ data }) =>
+        data.pageOrientation === 'landscape' ? 'landscape' : 'portrait'
+    ));
+    const heeftMixedOrient = orientUsed.size > 1;
+    const isSafari = /^((?!chrome|android|crios|fxios).)*safari/i.test(navigator.userAgent)
+                     && /apple/i.test(navigator.vendor || '');
+    if (heeftMixedOrient && isSafari && typeof toonBevestigDialog === 'function') {
+        const portraitN  = bodies.filter(({ data }) => data.pageOrientation !== 'landscape').length;
+        const landscapeN = bodies.filter(({ data }) => data.pageOrientation === 'landscape').length;
+        const html =
+            `<p><b>Safari op Mac/iOS</b> ondersteunt geen automatische orientation-wissel ` +
+            `binnen één print-job.</p>` +
+            `<p>Deze print bevat <b>${portraitN} portrait</b> + <b>${landscapeN} landscape</b> ` +
+            `sectie(s). Safari zal alles in dezelfde orientation printen — landscape-content ` +
+            `wordt dan mogelijk afgekapt aan de rand.</p>` +
+            `<p><b>Twee oplossingen:</b></p>` +
+            `<ol style="margin:6px 0 10px 22px;padding:0">` +
+            `<li>Open InlineComp in <b>Google Chrome</b> of <b>Firefox</b> op deze Mac — ` +
+            `daar werkt het wel automatisch</li>` +
+            `<li>Print 2 keer apart: deselecteer eerst alle landscape-secties en print de ` +
+            `portrait-set, daarna omgekeerd</li>` +
+            `</ol>` +
+            `<p style="font-size:.92em;color:#666">Klik <b>Doorgaan</b> om toch te printen ` +
+            `(kan afgekapt resultaat geven), of <b>Annuleren</b> om terug te gaan en te splitsen.</p>`;
+        const doorgaan = await toonBevestigDialog(
+            html, 'Safari orientation-beperking', 'Doorgaan', 'Annuleren', { bodyIsHtml: true }
+        );
+        if (!doorgaan) {
+            openPrintCenter();
+            return;
+        }
+    }
+
     // 3) Open één venster — binnen user-gesture dus geen popup-blocker
     const w = window.open('', '_blank');
     if (!w) {
