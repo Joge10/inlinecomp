@@ -1164,17 +1164,45 @@ function renderRittenLijst(ritten, blokken) {
             actieveDag      = match ? match.nr : 1;
             _tsActieveDag   = actieveDag;
         }
-        // Tag elke rij met haar dagNr (laatste wsBlok waarvan volgorde <= rij-volgorde)
-        rijen.forEach(rij => {
-            let vol;
-            if (rij.type === 'rit') {
-                vol = rondeBlokVolgorde.get(parseInt(rij.rit.blok_id)) ?? 0;
-            } else {
-                vol = parseInt(rij.blok?.volgorde) || 0;
-            }
+        // Bepaal dag-nr per blok-id. Eerst standaard "laatste wsBlok-
+        // volgorde <= blok-volgorde", daarna een override-pas: inrijden +
+        // pauze direct vóór een wedstrijdstart horen bij de OPVOLGENDE dag
+        // (= warm-up voor die wedstrijdstart, niet napauze van vorige dag).
+        const blokDagMap = new Map();  // parseInt(blok.id) → dagNr
+        (blokken ?? []).forEach(b => {
+            const vol = parseInt(b.volgorde) || 0;
             let dagNr = 1;
             for (const d of dagLabels) {
                 if (d.volgorde <= vol) dagNr = d.nr;
+            }
+            blokDagMap.set(parseInt(b.id), dagNr);
+        });
+        // Override: voor elke wedstrijdstart, claim direct-voorafgaande
+        // inrijden/pauze-blokken (in omgekeerde volgorde, stop bij eerste
+        // ander blok-type — bv. ronde of ceremonie blijven bij vorige dag).
+        const blokkenSorted = (blokken ?? []).slice()
+            .sort((a, b) => (parseInt(a.volgorde) || 0) - (parseInt(b.volgorde) || 0));
+        for (let i = 0; i < blokkenSorted.length; i++) {
+            const b = blokkenSorted[i];
+            if (b.blok_type !== 'wedstrijdstart') continue;
+            const dagNr = blokDagMap.get(parseInt(b.id));
+            if (!dagNr) continue;
+            for (let j = i - 1; j >= 0; j--) {
+                const vb = blokkenSorted[j];
+                if (vb.blok_type === 'inrijden' || vb.blok_type === 'pauze') {
+                    blokDagMap.set(parseInt(vb.id), dagNr);
+                } else {
+                    break;
+                }
+            }
+        }
+        // Tag elke rij met haar dagNr via blokDagMap
+        rijen.forEach(rij => {
+            let dagNr;
+            if (rij.type === 'rit') {
+                dagNr = blokDagMap.get(parseInt(rij.rit.blok_id)) ?? 1;
+            } else {
+                dagNr = blokDagMap.get(parseInt(rij.blok?.id)) ?? 1;
             }
             dagPerRij.set(rij, dagNr);
         });
