@@ -1142,6 +1142,11 @@ function renderRittenLijst(ritten, blokken) {
     let dagLabels   = [];
     let actieveDag  = 1;
     const dagPerRij = new Map();
+    // Geclaimde inrijd/pauze-blokken vóór een wedstrijdstart (multi-day).
+    // Beschikbaar voor de tijdberekening verderop: achterwaarts plaatsen
+    // i.p.v. voorwaarts vanaf vorige dag.
+    const geclaimdVoorWs   = new Map(); // wsstart-blok-id (int) → [geclaimde blokken, chronologisch]
+    const geclaimdeBlokIds = new Set(); // parseInt(blok.id) van alle geclaimde
     if (isMultiDag) {
         dagLabels = wsBlokkenSorted.map((ws, i) => {
             const datum    = ws.datum ? new Date(ws.datum + 'T00:00:00') : null;
@@ -1180,21 +1185,29 @@ function renderRittenLijst(ritten, blokken) {
         // Override: voor elke wedstrijdstart, claim direct-voorafgaande
         // inrijden/pauze-blokken (in omgekeerde volgorde, stop bij eerste
         // ander blok-type — bv. ronde of ceremonie blijven bij vorige dag).
+        // Vul tegelijk geclaimdVoorWs + geclaimdeBlokIds voor de tijdbe-
+        // rekening: die plaatst geclaimde blokken achterwaarts vanaf hun
+        // wsstart i.p.v. voorwaarts vanaf de vorige dag.
         const blokkenSorted = (blokken ?? []).slice()
             .sort((a, b) => (parseInt(a.volgorde) || 0) - (parseInt(b.volgorde) || 0));
         for (let i = 0; i < blokkenSorted.length; i++) {
             const b = blokkenSorted[i];
             if (b.blok_type !== 'wedstrijdstart') continue;
-            const dagNr = blokDagMap.get(parseInt(b.id));
+            const wsId  = parseInt(b.id);
+            const dagNr = blokDagMap.get(wsId);
             if (!dagNr) continue;
+            const claimedList = [];
             for (let j = i - 1; j >= 0; j--) {
                 const vb = blokkenSorted[j];
                 if (vb.blok_type === 'inrijden' || vb.blok_type === 'pauze') {
                     blokDagMap.set(parseInt(vb.id), dagNr);
+                    claimedList.unshift(vb); // chronologische volgorde
+                    geclaimdeBlokIds.add(parseInt(vb.id));
                 } else {
                     break;
                 }
             }
+            if (claimedList.length) geclaimdVoorWs.set(wsId, claimedList);
         }
         // Tag elke rij met haar dagNr via blokDagMap
         rijen.forEach(rij => {
@@ -1244,11 +1257,33 @@ function renderRittenLijst(ritten, blokken) {
                     const d = rij.blok.tijdstip.split(':').map(Number);
                     cur = (d[0] || 0) * 3600 + (d[1] || 0) * 60;
                 }
+                // Multi-day: geclaimde inrijd/pauze direct vóór deze wsstart
+                // krijgen tijd ACHTERWAARTS vanaf cur (= wsstart-tijdstip)
+                // i.p.v. voorwaarts vanaf vorige dag. Resultaat: bv. 09:30
+                // inrijden, 09:50 pauze, 10:00 wsstart.
+                const wsId = parseInt(rij.blok.id);
+                if (geclaimdVoorWs.has(wsId)) {
+                    const claimed = geclaimdVoorWs.get(wsId);
+                    let backSec = cur;
+                    for (let k = claimed.length - 1; k >= 0; k--) {
+                        const cb = claimed[k];
+                        backSec -= (parseInt(cb.duur) || 0) * 60;
+                        blokTijdMap.set(cb.id, secNaarTijd(backSec));
+                    }
+                }
                 blokTijdMap.set(rij.blok.id, secNaarTijd(cur));
                 started = true;
                 prevRitCombi = null;
             } else if (started) {
                 if (rij.type === 'pauze' || rij.type === 'inrijden' || rij.type === 'ceremonie') {
+                    // Multi-day: geclaimde blokken hebben hun tijd al
+                    // achterwaarts gekregen bij hun wsstart. Sla over in
+                    // voorwaartse berekening (cur niet ophogen, tijd niet
+                    // overschrijven).
+                    if (geclaimdeBlokIds.has(parseInt(rij.blok.id))) {
+                        prevRitCombi = null;
+                        continue;
+                    }
                     blokTijdMap.set(rij.blok.id, secNaarTijd(cur));
                     cur += (parseInt(rij.blok.duur) || 0) * 60;
                     prevRitCombi = null;
