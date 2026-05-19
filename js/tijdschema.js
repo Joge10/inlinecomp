@@ -107,6 +107,88 @@ function berekenRunnerUpHeats(uitv, ruMax, ruMin) {
     return sizes;
 }
 
+// ── Multi-day helper ──────────────────────────────────────────────────────────
+// Analyseert de tijdschema-blokken en retourneert dag-informatie voor multi-
+// day evenementen (>1 wedstrijdstart-blok). Gebruikt door zowel print-
+// functies als renderRittenLijst-loop in de UI.
+//
+// Retourneert:
+//   isMultiDag        : bool
+//   dagLabels         : [{ nr, label, datum, volgorde, wsBlokId }, ...]
+//                       label format: 'Dag N — vrijdag 7 juni' (lang voor print),
+//                       roep call-site .label-truncate aan indien nodig.
+//   blokDagMap        : Map<parseInt(blok.id), dagNr>
+//   geclaimdVoorWs    : Map<wsBlokId, [blokken in chronologische volgorde]>
+//                       blokken die direct vóór een wsstart staan en van type
+//                       'inrijden' of 'pauze' zijn. Krijgen tijd ACHTERWAARTS
+//                       vanaf wsstart, niet voorwaarts vanaf vorige dag.
+//   geclaimdeBlokIds  : Set<parseInt(blok.id)>  voor snelle is-geclaimd-lookup
+function _tsBouwDagInfo(blokken) {
+    const wsBlokkenSorted = (blokken ?? [])
+        .filter(b => b.blok_type === 'wedstrijdstart')
+        .sort((a, b) => (parseInt(a.volgorde) || 0) - (parseInt(b.volgorde) || 0));
+    const isMultiDag       = wsBlokkenSorted.length > 1;
+    const blokDagMap       = new Map();
+    const geclaimdVoorWs   = new Map();
+    const geclaimdeBlokIds = new Set();
+
+    // dagLabels gebruiken 'long' weekday/month voor print-leesbaarheid
+    const dagLabels = wsBlokkenSorted.map((ws, i) => {
+        const datum    = ws.datum ? new Date(ws.datum + 'T00:00:00') : null;
+        const datumStr = datum
+            ? datum.toLocaleDateString('nl-NL', { weekday: 'long', day: 'numeric', month: 'long' })
+            : '';
+        return {
+            nr:       i + 1,
+            label:    `Dag ${i+1}${datumStr ? ' — ' + datumStr : ''}`,
+            datum:    ws.datum || null,
+            volgorde: parseInt(ws.volgorde) || 0,
+            wsBlokId: parseInt(ws.id),
+        };
+    });
+
+    if (!isMultiDag) {
+        return { isMultiDag, dagLabels, blokDagMap, geclaimdVoorWs, geclaimdeBlokIds };
+    }
+
+    // Standaard: dagNr = laatste wsBlok-volgorde <= blok-volgorde
+    (blokken ?? []).forEach(b => {
+        const vol = parseInt(b.volgorde) || 0;
+        let dagNr = 1;
+        for (const d of dagLabels) {
+            if (d.volgorde <= vol) dagNr = d.nr;
+        }
+        blokDagMap.set(parseInt(b.id), dagNr);
+    });
+
+    // Override: 'inrijden'/'pauze' direct vóór een wsstart horen bij die
+    // wsstart-dag (= warm-up). Loop achterwaarts vanaf elke wsstart, stop
+    // bij eerste ander blok-type. Verzamel claimed-list voor tijdberekening.
+    const blokkenSorted = (blokken ?? []).slice()
+        .sort((a, b) => (parseInt(a.volgorde) || 0) - (parseInt(b.volgorde) || 0));
+    for (let i = 0; i < blokkenSorted.length; i++) {
+        const b = blokkenSorted[i];
+        if (b.blok_type !== 'wedstrijdstart') continue;
+        const wsId  = parseInt(b.id);
+        const dagNr = blokDagMap.get(wsId);
+        if (!dagNr) continue;
+        const claimedList = [];
+        for (let j = i - 1; j >= 0; j--) {
+            const vb = blokkenSorted[j];
+            if (vb.blok_type === 'inrijden' || vb.blok_type === 'pauze') {
+                blokDagMap.set(parseInt(vb.id), dagNr);
+                claimedList.unshift(vb); // chronologische volgorde
+                geclaimdeBlokIds.add(parseInt(vb.id));
+            } else {
+                break;
+            }
+        }
+        if (claimedList.length) geclaimdVoorWs.set(wsId, claimedList);
+    }
+
+    return { isMultiDag, dagLabels, blokDagMap, geclaimdVoorWs, geclaimdeBlokIds };
+}
+
 // ── Startpunt ─────────────────────────────────────────────────────────────────
 
 function toonTijdschemaPagina() {
@@ -2850,6 +2932,11 @@ function _bouwProgrammaExternInternal() {
         rijdenP.push({ type: nonRondeBlokkenP[nrbIdxP].blok_type, blok: nonRondeBlokkenP[nrbIdxP++] });
     }
 
+    // ── Multi-day claim-info (warm-up vóór wsstart bij opvolgende dag) ───────
+    const _dagInfoExt = _tsBouwDagInfo(blokken);
+    const _geclaimdVoorWsExt   = _dagInfoExt.geclaimdVoorWs;
+    const _geclaimdeBlokIdsExt = _dagInfoExt.geclaimdeBlokIds;
+
     // ── Start-tijden berekenen via rijen ──────────────────────────────────────
     const stMap = new Map();  // rit.id  → 'HH:MM'
     const btMap = new Map();  // blok.id → 'HH:MM'
@@ -2863,9 +2950,31 @@ function _bouwProgrammaExternInternal() {
         let prevRitCurSec = null;
         for (const rij of rijdenP) {
             if (rij.type === 'wedstrijdstart') {
-                btMap.set(rij.blok.id, mNT(cur)); gestart = true;
+                // Multi-day: elke wsstart reset cur naar eigen tijdstip
+                if (rij.blok.tijdstip) {
+                    const dd = rij.blok.tijdstip.split(':').map(Number);
+                    cur = (dd[0] || 0) * 3600 + (dd[1] || 0) * 60;
+                }
+                // Multi-day: geclaimde voorgangers achterwaarts plaatsen
+                const _wsIdExt = parseInt(rij.blok.id);
+                if (_geclaimdVoorWsExt.has(_wsIdExt)) {
+                    const _cl = _geclaimdVoorWsExt.get(_wsIdExt);
+                    let _back = cur;
+                    for (let _k = _cl.length - 1; _k >= 0; _k--) {
+                        _back -= (parseInt(_cl[_k].duur) || 0) * 60;
+                        btMap.set(_cl[_k].id, mNT(_back));
+                    }
+                }
+                btMap.set(rij.blok.id, mNT(cur));
+                gestart = true;
+                prevRitCombi = null;
             } else if (gestart) {
                 if (rij.type === 'pauze' || rij.type === 'inrijden' || rij.type === 'ceremonie') {
+                    // Multi-day: sla geclaimde over (tijd al achterwaarts gezet)
+                    if (_geclaimdeBlokIdsExt.has(parseInt(rij.blok.id))) {
+                        prevRitCombi = null;
+                        continue;
+                    }
                     btMap.set(rij.blok.id, mNT(cur));
                     cur += (parseInt(rij.blok.duur) || 0) * 60;
                     prevRitCombi = null;
@@ -3125,8 +3234,30 @@ function _bouwProgrammaExternInternal() {
     // Itereer rijen; groepeer opeenvolgende ritten van hetzelfde ronde-blok
     let huidigeBlokId = null;
     let huidigeSectie = [];
+    // Multi-day: track gerendered dag om dag-headers + page-breaks te injecteren
+    let _laatstGerenderdeDagExt = 0;
 
     for (const rij of rijdenP) {
+        // Multi-day: dag-header invoegen bij dag-wissel (en page-break vanaf
+        // dag 2). Eerst lopende sectie flushen voor schone overgang.
+        if (_dagInfoExt.isMultiDag) {
+            let _dagNrRij;
+            if (rij.type === 'rit') {
+                _dagNrRij = _dagInfoExt.blokDagMap.get(parseInt(rij.rit.blok_id)) ?? 1;
+            } else {
+                _dagNrRij = _dagInfoExt.blokDagMap.get(parseInt(rij.blok?.id)) ?? 1;
+            }
+            if (_dagNrRij !== _laatstGerenderdeDagExt) {
+                flushSectie(huidigeSectie, blokById.get(huidigeBlokId));
+                huidigeBlokId = null;
+                huidigeSectie = [];
+                const _dl = _dagInfoExt.dagLabels.find(d => d.nr === _dagNrRij);
+                const _pbCls = _laatstGerenderdeDagExt > 0 ? ' prog-dag-pagebreak' : '';
+                bloHtml += `<h2 class="prog-dag-header${_pbCls}">${esc(_dl?.label ?? `Dag ${_dagNrRij}`)}</h2>`;
+                _laatstGerenderdeDagExt = _dagNrRij;
+            }
+        }
+
         if (rij.type === 'rit') {
             const bidInt = parseInt(rij.rit.blok_id);
             if (bidInt !== huidigeBlokId) {
@@ -3217,6 +3348,14 @@ body{font-family:Arial,Helvetica,sans-serif;font-size:10.5pt;margin:.6cm 1.2cm 1
 .hdr-lijn{border:none;border-top:2px solid #1a3a5c;margin:.4cm 0 .5cm 0}
 .disclaimer{background:#fffbee;border:1px solid #e6c800;border-left:4px solid #e6c800;
             padding:.3cm .5cm;font-size:9pt;color:#7a5800;margin-bottom:.7cm;border-radius:3px}
+/* Multi-day dag-header: alleen bij >1 wedstrijdstart. Dag 2+ krijgt
+   page-break-before via .prog-dag-pagebreak zodat elke dag op een eigen
+   pagina begint. Header is bewust groot/duidelijk om verwarring tussen
+   dagen te voorkomen. */
+.prog-dag-header{font-size:15pt;font-weight:700;color:#1a3a5c;
+                 margin:0 0 .35cm 0;padding-bottom:.15cm;
+                 border-bottom:3px solid #1a3a5c;page-break-after:avoid}
+.prog-dag-pagebreak{page-break-before:always}
 .blok{margin-bottom:.45cm;page-break-inside:avoid}
 .blok-kop{display:flex;align-items:baseline;gap:.5cm;border-bottom:1.5px solid #ddd;
           padding-bottom:.1cm;margin-bottom:.15cm}
@@ -3348,6 +3487,11 @@ function _bouwProgrammaInternInternal() {
         rijen.push({ type: nonRondeBlokken[nrbIdx].blok_type, blok: nonRondeBlokken[nrbIdx++] });
     }
 
+    // ── Multi-day claim-info (warm-up vóór wsstart bij opvolgende dag) ───────
+    const _dagInfoInt = _tsBouwDagInfo(blokken);
+    const _geclaimdVoorWsInt   = _dagInfoInt.geclaimdVoorWs;
+    const _geclaimdeBlokIdsInt = _dagInfoInt.geclaimdeBlokIds;
+
     // ── Starttijden berekenen ─────────────────────────────────────────────────
     const stMap = new Map();
     const btMap = new Map();
@@ -3362,9 +3506,31 @@ function _bouwProgrammaInternInternal() {
         let prevRitCurSec = null;
         for (const rij of rijen) {
             if (rij.type === 'wedstrijdstart') {
-                btMap.set(rij.blok.id, mNT(cur)); gestart = true;
+                // Multi-day: elke wsstart reset cur naar eigen tijdstip
+                if (rij.blok.tijdstip) {
+                    const dd = rij.blok.tijdstip.split(':').map(Number);
+                    cur = (dd[0] || 0) * 3600 + (dd[1] || 0) * 60;
+                }
+                // Multi-day: geclaimde voorgangers achterwaarts plaatsen
+                const _wsIdInt = parseInt(rij.blok.id);
+                if (_geclaimdVoorWsInt.has(_wsIdInt)) {
+                    const _cl = _geclaimdVoorWsInt.get(_wsIdInt);
+                    let _back = cur;
+                    for (let _k = _cl.length - 1; _k >= 0; _k--) {
+                        _back -= (parseInt(_cl[_k].duur) || 0) * 60;
+                        btMap.set(_cl[_k].id, mNT(_back));
+                    }
+                }
+                btMap.set(rij.blok.id, mNT(cur));
+                gestart = true;
+                prevRitCombi = null;
             } else if (gestart) {
                 if (rij.type === 'pauze' || rij.type === 'inrijden' || rij.type === 'ceremonie') {
+                    // Multi-day: sla geclaimde over (tijd al achterwaarts gezet)
+                    if (_geclaimdeBlokIdsInt.has(parseInt(rij.blok.id))) {
+                        prevRitCombi = null;
+                        continue;
+                    }
                     btMap.set(rij.blok.id, mNT(cur));
                     cur += (parseInt(rij.blok.duur) || 0) * 60;
                     prevRitCombi = null;
@@ -3486,9 +3652,30 @@ function _bouwProgrammaInternInternal() {
     let tBody = '';
     let ritNr = 0;
     let prevGroepKey = null;
+    // Multi-day: track gerendered dag om dag-header rows + page-breaks in te
+    // voegen. Eerste dag-rij krijgt geen page-break; vanaf dag 2 wel.
+    let _laatstGerenderdeDagInt = 0;
 
     rijen.forEach((rij, idx) => {
         const cols = heeftTijden ? restCols + 1 : restCols;
+        // Multi-day: dag-header-rij invoegen bij dag-wissel
+        if (_dagInfoInt.isMultiDag) {
+            let _dagNrRij;
+            if (rij.type === 'rit') {
+                _dagNrRij = _dagInfoInt.blokDagMap.get(parseInt(rij.rit.blok_id)) ?? 1;
+            } else {
+                _dagNrRij = _dagInfoInt.blokDagMap.get(parseInt(rij.blok?.id)) ?? 1;
+            }
+            if (_dagNrRij !== _laatstGerenderdeDagInt) {
+                const _dl = _dagInfoInt.dagLabels.find(d => d.nr === _dagNrRij);
+                const _pbCls = _laatstGerenderdeDagInt > 0 ? ' prog-dag-pagebreak' : '';
+                tBody += `<tr class="prog-dag-header-row${_pbCls}"><td colspan="${cols}">
+                    <h2 class="prog-dag-header">${esc(_dl?.label ?? `Dag ${_dagNrRij}`)}</h2>
+                </td></tr>`;
+                _laatstGerenderdeDagInt = _dagNrRij;
+                prevGroepKey = null; // schone start na dag-wissel
+            }
+        }
         if (rij.type === 'wedstrijdstart') {
             prevGroepKey = null;
             const ts = rij.blok?.tijdstip?.substring(0,5) ?? '—';
@@ -3621,6 +3808,13 @@ body{font-family:Arial,Helvetica,sans-serif;font-size:9.5pt;margin:.5cm 1cm 1cm;
 .hdr-versie{font-size:7.5pt;color:#999;margin-top:1mm}
 .hdr-baan{flex-shrink:0;display:flex;align-items:flex-start}
 .hdr-rechts{flex-shrink:0;display:flex;align-items:flex-start}
+/* Multi-day dag-header in tabel (intern programma): vlakke <tr> die over
+   alle kolommen spant. Dag 2+ krijgt page-break-before. */
+tr.prog-dag-header-row td{padding:0!important;background:#fff!important}
+tr.prog-dag-pagebreak{page-break-before:always}
+h2.prog-dag-header{font-size:14pt;font-weight:700;color:#1a3a5c;
+                   margin:.5cm 0 .25cm 0;padding-bottom:.12cm;
+                   border-bottom:3px solid #1a3a5c}
 .hdr-lijn{border:none;border-top:2px solid #1a3a5c;margin:.4cm 0 .4cm 0}
 table{border-collapse:collapse;width:100%;font-size:9.5pt}
 th{background:#1a3a5c;color:#fff;text-align:left;padding:3px 6px;font-size:8.5pt}
