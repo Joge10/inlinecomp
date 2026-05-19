@@ -1174,17 +1174,21 @@ function groepeerVoorPrint() {
         const splitGrps = [...new Set(Object.values(allSplits))].sort();
         const basisNaam = dcGroup.map(d => d.dc_name).filter(Boolean).join(' + ');
 
+        // dcIds: alle DC-ids in deze groep (1 voor losse DCs, meerdere bij
+        // merge-groups). Voor multi-day filtering: een groep is op een dag
+        // actief als minstens één van z'n dc_ids op die dag een rit heeft.
+        const dcIds = dcGroup.map(d => d.dc_id).filter(Boolean);
         if (splitGrps.length) {
             splitGrps.forEach(sg => {
                 const sgCats  = Object.keys(allSplits).filter(k => allSplits[k] === sg);
                 const sgComps = allComps.filter(c => sgCats.includes(c.category));
-                groepen.push({ naam: `${basisNaam} — ${sg}`, deelnemers: sorteer(sgComps) });
+                groepen.push({ naam: `${basisNaam} — ${sg}`, deelnemers: sorteer(sgComps), dcIds });
             });
             const restComps = allComps.filter(c => !Object.keys(allSplits).includes(c.category));
             if (restComps.length)
-                groepen.push({ naam: `${basisNaam} — overig`, deelnemers: sorteer(restComps) });
+                groepen.push({ naam: `${basisNaam} — overig`, deelnemers: sorteer(restComps), dcIds });
         } else {
-            groepen.push({ naam: basisNaam, deelnemers: sorteer(allComps) });
+            groepen.push({ naam: basisNaam, deelnemers: sorteer(allComps), dcIds });
         }
     });
     return groepen;
@@ -1210,7 +1214,17 @@ function bouwTekenlijstenBody(opts = {}) {
 // dezelfde chunk-logica als zonder boom-saver opgeknipt.
 function _bouwTekenlijstenInternal(opts = {}) {
     const boomSaver = !!opts.boomSaver;
-    const groepen   = groepeerVoorPrint();
+    // Multi-day filter: alleen DCs die op deze dag een rit hebben.
+    // 0 of niet-opgegeven = alle dagen (default-gedrag).
+    const dagFilter = parseInt(opts.dagFilter) || 0;
+    let groepen = groepeerVoorPrint();
+    if (dagFilter > 0 && typeof _tsBouwDcDagMap === 'function') {
+        const dcDagMap = _tsBouwDcDagMap(typeof huidigTijdschema !== 'undefined' ? huidigTijdschema : null);
+        groepen = groepen.filter(g =>
+            (g.dcIds || []).some(id => dcDagMap.get(id) === dagFilter)
+        );
+        if (!groepen.length) return null; // geen DCs op deze dag → niets te printen
+    }
     const compNaam  = escHtml(huidigComp.name || huidigComp.title || '');
     const compMeta  = escHtml(formatDatum(huidigComp.starts) + ' · ' + getLocatie(huidigComp));
     const standTxt  = standDatum   ? `Stand: ${standDatum}`
@@ -1458,14 +1472,36 @@ function _bouwTekenlijstenInternal(opts = {}) {
 
 // ── Definitieve deelnemerslijst ───────────────────────────────────────────────
 
-function bouwDeelnemerslijstBody() {
+function bouwDeelnemerslijstBody(opts = {}) {
     if (!vergelijkData?.length || !huidigComp) return null;
-    return _bouwDeelnemerslijstInternal();
+    return _bouwDeelnemerslijstInternal(opts);
 }
 
 // Interne body-bouwer — aangeroepen door `bouwDeelnemerslijstBody()` voor
 // Print-Center. Er is geen directe print-knop meer in de UI.
-function _bouwDeelnemerslijstInternal() {
+//
+// `opts.dagFilter` (default 0/alle): bij multi-day filter op DCs die op de
+// gegeven dag actief zijn. Werkt op dezelfde `vergelijkData` array maar
+// reduceert die naar alleen relevante DCs vóór de rest van de logica draait.
+function _bouwDeelnemerslijstInternal(opts = {}) {
+    // Multi-day filter: alleen DCs die op deze dag een rit hebben.
+    // Wijzigt LOKALE referentie naar vergelijkData (subset). Verderop wordt
+    // 'vergelijkData' direct gebruikt — we shadowen 'm in deze functie-scope
+    // via een let-binding zodat de filter consistent doorwerkt.
+    const dagFilter = parseInt(opts.dagFilter) || 0;
+    let _vergelijkData = vergelijkData;
+    if (dagFilter > 0 && typeof _tsBouwDcDagMap === 'function') {
+        const dcDagMap = _tsBouwDcDagMap(typeof huidigTijdschema !== 'undefined' ? huidigTijdschema : null);
+        _vergelijkData = vergelijkData.filter(c => dcDagMap.get(c.dc_id) === dagFilter);
+        if (!_vergelijkData.length) return null;
+        // Tijdelijk vergelijkData overschrijven (en aan einde herstellen) zodat
+        // de bestaande logica de filtered subset gebruikt. Geen mooie pattern
+        // maar minst invasief: anders moeten alle interne ref's geparameter-
+        // iseerd worden.
+        var _vdSave = vergelijkData;
+        vergelijkData  = _vergelijkData;
+    }
+    try {
     const compNaam = escHtml(huidigComp.name || huidigComp.title || '');
     const compMeta = escHtml(formatDatum(huidigComp.starts) + ' · ' + getLocatie(huidigComp));
     const standTxt = standDatum   ? `Stand: ${standDatum}`
@@ -2044,6 +2080,11 @@ tr     { page-break-inside:avoid; }
         title:           'Deelnemerslijst – ' + (huidigComp.name || huidigComp.title || ''),
         subType:         'Deelnemerslijst',
     };
+    } finally {
+        // Multi-day filter: vergelijkData herstellen als die tijdelijk was
+        // overschreven (zie begin van functie).
+        if (typeof _vdSave !== 'undefined') vergelijkData = _vdSave;
+    }
 }
 
 // ── Speakerlijsten — minimalistisch, per DC op nieuwe pagina ──────────────────

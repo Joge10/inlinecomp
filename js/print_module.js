@@ -198,26 +198,66 @@ function _pcBouwModal() {
 // In Fase 1 gebruiken we `direct` voor terugval; zodra body-builders klaar
 // zijn vervangen we dit door `builder`.
 function _pcOpties() {
+    // Multi-day detectie via tijdschema (als geladen). Bij >1 wedstrijdstart
+    // tonen we per dag een extra tekenlijst + deelnemerslijst item zodat
+    // operator op de wedstrijddag een gerichte print kan maken.
+    const _ts        = typeof huidigTijdschema !== 'undefined' ? huidigTijdschema : null;
+    const _dagInfo   = (_ts && typeof _tsBouwDagInfo === 'function') ? _tsBouwDagInfo(_ts.blokken ?? []) : null;
+    const _isMulti   = !!_dagInfo?.isMultiDag;
+    const _dagLabels = _dagInfo?.dagLabels ?? [];
+
+    // Tekenlijst- en deelnemerslijst-items per dag bij multi-day. Bij single-
+    // day wordt deze array leeg en blijven alleen de standaard 'alle dagen'-
+    // items zichtbaar.
+    const dagTekenItems = _isMulti
+        ? _dagLabels.map(d => ({
+              id:     `tekenlijsten-dag-${d.nr}`,
+              label:  `Tekenlijsten — ${d.label}`,
+              beschikbaar:          _pcImportKlaar(),
+              redenNietBeschikbaar: _pcImportReden(),
+              build: () => (typeof bouwTekenlijstenBody === 'function'
+                            ? bouwTekenlijstenBody({ boomSaver: !!_pcState.boomSaver, dagFilter: d.nr })
+                            : null),
+          }))
+        : [];
+    const dagDeelnItems = _isMulti
+        ? _dagLabels.map(d => ({
+              id:     `deelnemerslijst-dag-${d.nr}`,
+              label:  `Deelnemerslijst — ${d.label}`,
+              beschikbaar:          _pcImportKlaar(),
+              redenNietBeschikbaar: _pcImportReden(),
+              build: () => (typeof bouwDeelnemerslijstBody === 'function'
+                            ? bouwDeelnemerslijstBody({ dagFilter: d.nr })
+                            : null),
+          }))
+        : [];
+
     const opties = [
         {
             sectie: 'Voorbereiding',
             items: [
                 {
                     id:     'tekenlijsten',
-                    label:  'Tekenlijsten (per categorie)',
+                    label:  _isMulti
+                        ? 'Tekenlijsten — alle dagen'
+                        : 'Tekenlijsten (per categorie)',
                     beschikbaar:          _pcImportKlaar(),
                     redenNietBeschikbaar: _pcImportReden(),
                     build: () => (typeof bouwTekenlijstenBody === 'function'
                                   ? bouwTekenlijstenBody({ boomSaver: !!_pcState.boomSaver })
                                   : null),
                 },
+                ...dagTekenItems,
                 {
                     id:     'deelnemerslijst',
-                    label:  'Deelnemerslijst (compleet overzicht)',
+                    label:  _isMulti
+                        ? 'Deelnemerslijst — alle dagen'
+                        : 'Deelnemerslijst (compleet overzicht)',
                     beschikbaar:          _pcImportKlaar(),
                     redenNietBeschikbaar: _pcImportReden(),
                     build: () => (typeof bouwDeelnemerslijstBody === 'function' ? bouwDeelnemerslijstBody() : null),
                 },
+                ...dagDeelnItems,
                 {
                     id:     'speakerlijsten',
                     label:  'Speakerlijsten',

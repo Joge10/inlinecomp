@@ -189,6 +189,29 @@ function _tsBouwDagInfo(blokken) {
     return { isMultiDag, dagLabels, blokDagMap, geclaimdVoorWs, geclaimdeBlokIds };
 }
 
+// Mapping van DC-id naar dag-nummer (eerste dag waarop een rit van die DC
+// plaatsvindt). Voor multi-day filtering van teken/deelnemerslijsten.
+// Bij single-day krijgen alle DCs dag 1; bij geen tijdschema = lege map.
+function _tsBouwDcDagMap(tijdschema) {
+    if (!tijdschema) return new Map();
+    const blokken = tijdschema.blokken ?? [];
+    const ritten  = tijdschema.ritten  ?? [];
+    const dagInfo = _tsBouwDagInfo(blokken);
+    const dcDagMap = new Map();
+    ritten.forEach(r => {
+        const dcId = r.dc_id;
+        if (!dcId) return;
+        const dagNr = dagInfo.isMultiDag
+            ? (dagInfo.blokDagMap.get(parseInt(r.blok_id)) ?? 1)
+            : 1;
+        const huidig = dcDagMap.get(dcId);
+        if (huidig === undefined || dagNr < huidig) {
+            dcDagMap.set(dcId, dagNr);
+        }
+    });
+    return dcDagMap;
+}
+
 // ── Startpunt ─────────────────────────────────────────────────────────────────
 
 function toonTijdschemaPagina() {
