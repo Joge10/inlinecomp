@@ -1151,6 +1151,13 @@ function groepeerVoorPrint() {
                 const orgTp = _orgTransponders.find(ot => ot.transponder_code === tpActief);
                 const tpBetaald = orgTp ? (parseInt(orgTp.betaald) === 1) : null; // null=geen org-tp
                 const tpOrgNr   = orgTp ? String(orgTp.intern_nummer ?? '') : '';
+                // Reserve-nummer ophalen uit entryEdits (KNSB-feed levert dit
+                // mee bij rijders die als reserve op de deelnemerslijst staan).
+                // null/undefined = geen reserve = reguliere rijder.
+                const ek = c.license_key ? (dc.dc_id + '_' + c.license_key) : null;
+                const reserveNr = ek && entryEdits[ek]
+                    ? (entryEdits[ek].reserve ?? null)
+                    : null;
 
                 allComps.push({
                     start_number:  pe.start_number      ?? c.knsb?.start_number ?? '',
@@ -1160,12 +1167,22 @@ function groepeerVoorPrint() {
                     tp_org_nr:     tpOrgNr,
                     entry_status:  status,
                     tp_betaald:    tpBetaald,
+                    reserve:       reserveNr,
                 });
             });
         });
 
-        const sorteer = arr => arr.sort((a, b) =>
-            (Number(a.start_number) || 9999) - (Number(b.start_number) || 9999));
+        // Sortering: reguliere rijders eerst op startnummer, daarna reserves
+        // op reserve-nummer (R1, R2, ...). KNSB-PDF doet hetzelfde — voorkomt
+        // verwarring tussen vol-toegelaten en reserve-rijders op de tekenlijst.
+        const sorteer = arr => arr.sort((a, b) => {
+            const aR = a.reserve;
+            const bR = b.reserve;
+            if (aR && !bR)  return  1;  // a reserve, b niet → a achteraan
+            if (!aR && bR)  return -1;
+            if (aR && bR)   return aR - bR;
+            return (Number(a.start_number) || 9999) - (Number(b.start_number) || 9999);
+        });
 
         const allSplits = {};
         dcGroup.forEach(dc => {
@@ -1294,6 +1311,7 @@ function _bouwTekenlijstenInternal(opts = {}) {
     // ── Helper: render rijen voor één stuk-deelnemers ─────────────────────────
     const renderRijen = (chunk, chunkStart) => chunk.map((d, i) => {
         const sn        = Number(d.start_number);
+        const isReserve = d.reserve != null && d.reserve > 0;
         const meldingen = [];
         if (d.entry_status === 0) meldingen.push('melding');
         if (!d.transponder)                  meldingen.push('Geen transponder');
@@ -1312,8 +1330,15 @@ function _bouwTekenlijstenInternal(opts = {}) {
             ? `#${d.tp_org_nr} ${d.transponder ?? ''}`.trim()
             : String(d.transponder ?? '');
 
-        return `<tr>
-            <td class="td-nr">${chunkStart + i + 1}</td>
+        // Reserve-rijders: vervang volgnummer door 'R1' / 'R2' / etc.
+        // Klasse 'rij-reserve' voor lichte visuele afwijking. Startnummer-kolom
+        // blijft het echte startnummer tonen (jury moet rugnummer kunnen
+        // identificeren als reserve alsnog mee mag rijden).
+        const numCel  = isReserve ? `R${d.reserve}` : String(chunkStart + i + 1);
+        const rowCls  = isReserve ? ' rij-reserve' : '';
+
+        return `<tr class="${rowCls.trim()}">
+            <td class="td-nr">${escHtml(numCel)}</td>
             <td class="td-sn">${escHtml(String(d.start_number))}</td>
             <td class="td-naam">${escHtml(d.full_name)}</td>
             <td class="td-cat">${escHtml(d.category)}</td>

@@ -28,6 +28,12 @@ td { padding: 0.3mm 2mm; font-size: 8.5pt; border-bottom: 1px solid #ddd;
 
 tr:nth-child(even) td { background: #f7f9fc; }
 
+/* Reserve-rijen onderaan de tekenlijst: lichte tint + italic startnummer-/
+   #-cellen zodat de jury onmiddellijk ziet welke rijders alleen toegelaten
+   worden bij no-show van een regulier (R1, R2, ...). KNSB-PDF doet dit ook. */
+tr.rij-reserve td { background: #fffbeb !important; color: #7a6500; }
+tr.rij-reserve .td-nr { font-weight: 700; color: #b08000; }
+
 .td-nr     { width: 9mm;  text-align: center; }
 .td-sn     { width: 16mm; text-align: center; }
 .td-naam   { width: auto; }
