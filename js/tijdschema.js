@@ -6,6 +6,11 @@ let programmaVerouderd = false;  // true als afstand/import gewijzigd na laatste
 let tijdschemaVersion  = 0;      // voor optimistic locking bij tijdschema-writes
 let _tsPollingInterval = null;   // interval-handle voor auto-poll
 let _tsLeesOnly        = false;  // true als huidige gebruiker geen schrijfrechten heeft
+// Multi-day: actief dag-tabblad in 'Gegenereerd programma' (1-indexed).
+// 0 = nog niet ingesteld → bepaal default uit huidige datum (fallback dag 1).
+// Reset bij wissel van competitie/tijdschema; blijft anders staan tussen
+// re-renders zodat de operator z'n keuze niet verliest.
+let _tsActieveDag      = 0;
 
 // ── Heat-duur hulpfuncties (seconden ↔ "m:ss") ────────────────────────────────
 
@@ -120,6 +125,9 @@ function toonTijdschemaPagina() {
 // ── Laden ─────────────────────────────────────────────────────────────────────
 
 async function laadTijdschema() {
+    // Reset multi-day tab-state bij elke laad (= competitie-wissel of refresh).
+    // Default-dag wordt opnieuw bepaald op basis van vandaag-datum.
+    _tsActieveDag = 0;
     try {
         const uniekeDcIds = [...new Set((vergelijkData ?? []).map(c => c.dc_id))];
         // Bulk-call voor afstanden ipv N parallelle calls. iFastNet stuurt
@@ -1122,6 +1130,56 @@ function renderRittenLijst(ritten, blokken) {
         rijen.push({ type: nonRondeBlokken[nrbIdx].blok_type, blok: nonRondeBlokken[nrbIdx++] });
     }
 
+    // ── Multi-day: bepaal dag-tabs en filter rijen per dag ───────────────────
+    // Meerdere wedstrijdstart-blokken = meerdaags evenement. Elk rij krijgt
+    // een dagNr toegewezen op basis van de positie t.o.v. wedstrijdstart-
+    // blokken. Tabs verschijnen alleen bij multi-day; bij 1 wsstart blijft
+    // het gedrag identiek aan voorheen.
+    const wsBlokkenSorted = (blokken ?? [])
+        .filter(b => b.blok_type === 'wedstrijdstart')
+        .sort((a, b) => (parseInt(a.volgorde) || 0) - (parseInt(b.volgorde) || 0));
+    const isMultiDag = wsBlokkenSorted.length > 1;
+    let dagLabels   = [];
+    let actieveDag  = 1;
+    const dagPerRij = new Map();
+    if (isMultiDag) {
+        dagLabels = wsBlokkenSorted.map((ws, i) => {
+            const datum    = ws.datum ? new Date(ws.datum + 'T00:00:00') : null;
+            const datumStr = datum
+                ? datum.toLocaleDateString('nl-NL', { weekday: 'short', day: 'numeric', month: 'short' })
+                : '';
+            return {
+                nr:       i + 1,
+                label:    `Dag ${i+1}${datumStr ? ' — ' + datumStr : ''}`,
+                datum:    ws.datum || null,
+                volgorde: parseInt(ws.volgorde) || 0,
+            };
+        });
+        // Bepaal default actieveDag: cached → vandaag → dag 1
+        if (_tsActieveDag >= 1 && _tsActieveDag <= dagLabels.length) {
+            actieveDag = _tsActieveDag;
+        } else {
+            const vandaagStr = new Date().toISOString().substring(0, 10); // YYYY-MM-DD lokale-tijd-prox
+            const match = dagLabels.find(d => d.datum === vandaagStr);
+            actieveDag      = match ? match.nr : 1;
+            _tsActieveDag   = actieveDag;
+        }
+        // Tag elke rij met haar dagNr (laatste wsBlok waarvan volgorde <= rij-volgorde)
+        rijen.forEach(rij => {
+            let vol;
+            if (rij.type === 'rit') {
+                vol = rondeBlokVolgorde.get(parseInt(rij.rit.blok_id)) ?? 0;
+            } else {
+                vol = parseInt(rij.blok?.volgorde) || 0;
+            }
+            let dagNr = 1;
+            for (const d of dagLabels) {
+                if (d.volgorde <= vol) dagNr = d.nr;
+            }
+            dagPerRij.set(rij, dagNr);
+        });
+    }
+
     // ── Bereken fictieve starttijden ────────────────────────────────────────────
     // Tijdberekening in seconden; display afgerond op minuten (HH:MM)
     const secNaarTijd = (sec) => {
@@ -1309,7 +1367,21 @@ function renderRittenLijst(ritten, blokken) {
            </div>`
         : '';
 
+    // Multi-day tabs (alleen bij >1 wedstrijdstart). Click-handler wordt
+    // gebonden in bindTsEvents — bij click wordt _tsActieveDag bijgewerkt
+    // en het tijdschema opnieuw gerenderd.
+    const dagTabsHtml = isMultiDag
+        ? `<div class="ts-dag-tabs" role="tablist" aria-label="Wedstrijddag">${
+              dagLabels.map(d =>
+                  `<button class="org-tab-btn ts-dag-tab${d.nr === actieveDag ? ' active' : ''}"`
+                  + ` data-dag="${d.nr}" role="tab"`
+                  + ` aria-selected="${d.nr === actieveDag ? 'true' : 'false'}">${escHtml(d.label)}</button>`
+              ).join('')
+          }</div>`
+        : '';
+
     let html = `<div class="ts-ritten-wrap">
+        ${dagTabsHtml}
         <div class="ts-ritten-hint">Sleep <span class="ts-drag-handle" style="display:inline-block;vertical-align:middle">⠿</span> om een complete categoriegroep te verplaatsen.</div>
         ${combineerToolbar}
         <table class="ts-ritten-tabel">
@@ -1328,6 +1400,15 @@ function renderRittenLijst(ritten, blokken) {
     let prevGroepKey = null;
 
     rijen.forEach((rij, idx) => {
+        // Multi-day: alleen rijen van de actieve dag tonen. Rij-nummering
+        // (ritNr) wordt nog steeds globaal opgehoogd voor non-rit rijen, maar
+        // voor ritten alleen geteld als ze ge-renderd worden (zie verderop).
+        if (isMultiDag && dagPerRij.get(rij) !== actieveDag) {
+            // We slaan wel ritNr op: ritten op andere dagen tellen niet mee
+            // voor de nummering binnen de actieve dag. Operator-perceptie:
+            // 'Rit #1' op dag 2 is rit 1 van die dag, niet globaal-rit 25.
+            return;
+        }
         if (rij.type === 'wedstrijdstart') {
             prevGroepKey = null;
             const tijdstip = rij.blok?.tijdstip ? rij.blok.tijdstip.substring(0,5) : '—';
@@ -2577,6 +2658,18 @@ function bindTsEvents(afstandGroepen) {
             }
         });
     }
+
+    // ── Multi-day dag-tabs (Gegenereerd Programma) ────────────────────────
+    // Click op een dag-tab updatet de module-state en re-rendert. Bij re-
+    // render filtert renderRittenLijst de rijen op basis van _tsActieveDag.
+    container.querySelectorAll('.ts-dag-tab').forEach(btn => {
+        btn.addEventListener('click', () => {
+            const nieuw = parseInt(btn.dataset.dag) || 1;
+            if (nieuw === _tsActieveDag) return; // al actief
+            _tsActieveDag = nieuw;
+            renderTijdschema();
+        });
+    });
 }
 
 // ── Live update helpers ───────────────────────────────────────────────────────

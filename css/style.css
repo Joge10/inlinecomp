@@ -2781,6 +2781,15 @@ tr.ts-drop-below td  { border-bottom: 3px solid #2563eb !important; }
 
 /* ── Ritten-lijst ── */
 .ts-ritten-hint      { font-size: .82rem; color: #888; margin-bottom: .5rem; font-style: italic; }
+/* Multi-day dag-tabs in 'Gegenereerd programma'. Verschijnen alleen bij
+   meerdaagse evenementen (>1 wedstrijdstart-blok). Sluit aan op de
+   herbruikbare .org-tab-btn styling — alleen extra spacing/scheidslijn. */
+.ts-dag-tabs {
+    display: flex; flex-wrap: wrap; gap: 2px;
+    margin: 0 0 .6rem 0; padding: 0 0 .3rem 0;
+    border-bottom: 2px solid #e6e9ee;
+}
+.ts-dag-tabs .ts-dag-tab { margin-bottom: -2px; /* tab overlapt onderlijn */ }
 .ts-ritten-tabel     { width: 100%; border-collapse: collapse; font-size: .88rem; }
 .ts-ritten-tabel thead tr { background: #f0f4f8; }
 .ts-ritten-tabel th  { padding: 7px 10px; text-align: left; font-size: .8rem; font-weight: 700;
