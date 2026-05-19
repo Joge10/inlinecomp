@@ -1895,17 +1895,28 @@ function _bouwDeelnemerslijstInternal(opts = {}) {
     // categorieën er rijden, hoeveel deelnemers per categorie, en welke
     // afstanden de groep rijdt. Helpt jurytafel/speaker om in één oogopslag
     // de structuur van de wedstrijd te zien.
+    //
+    // Multi-day: respecteer dagFilter expliciet (extra safety net t.o.v.
+    // het globale vergelijkData-shadow — zo zien we alleen race-groepen
+    // van DCs die op de gekozen dag actief zijn).
+    const _vdRaceOverzicht = (dagFilter > 0 && typeof _tsBouwDcDagMap === 'function')
+        ? (() => {
+              const m = _tsBouwDcDagMap(typeof huidigTijdschema !== 'undefined' ? huidigTijdschema : null);
+              return vergelijkData.filter(c => m.get(c.dc_id) === dagFilter);
+          })()
+        : vergelijkData;
     const overzichtGroepen = [];
     {
         const usedIds = new Set();
-        vergelijkData.forEach(cat => {
+        _vdRaceOverzicht.forEach(cat => {
             if (usedIds.has(cat.dc_id)) return;
             usedIds.add(cat.dc_id);
 
-            // Verzamel alle DCs in dezelfde merge-cluster
+            // Verzamel alle DCs in dezelfde merge-cluster (alleen binnen
+            // dezelfde dag — wat ook altijd zo zou moeten zijn in praktijk)
             const dcGroup = [cat];
             if (cat.merge_group) {
-                vergelijkData.forEach(c => {
+                _vdRaceOverzicht.forEach(c => {
                     if (!usedIds.has(c.dc_id) && c.merge_group === cat.merge_group) {
                         usedIds.add(c.dc_id);
                         dcGroup.push(c);
@@ -2008,14 +2019,18 @@ function _bouwDeelnemerslijstInternal(opts = {}) {
                 <td class="sm">${afsTxt}</td>
             </tr>`;
         }).join('');
-        sectieOV = `<h2 class="sectie-titel">Race-groepen overzicht &nbsp;<span class="teller">${overzichtGroepen.length} groepen</span></h2>
+        // Wrap in een blok met page-break-inside: avoid zodat het overzicht
+        // niet halverwege over een pagina-grens breekt. Bij heel veel groepen
+        // (50+) kan het wel splitten — dan accepteren we de break liever dan
+        // dat het overzicht in een lege witruimte op de vorige pagina verdwijnt.
+        sectieOV = `<div class="sectie-overzicht-wrap"><h2 class="sectie-titel">Race-groepen overzicht &nbsp;<span class="teller">${overzichtGroepen.length} groepen</span></h2>
         <table><colgroup>
             <col style="width:auto"><col style="width:18mm"><col style="width:auto">
         </colgroup>
         <thead><tr>
             <th>Race-groep</th><th class="tc">Aantal</th><th>Afstanden</th>
         </tr></thead>
-        <tbody>${ovRijen}</tbody></table>`;
+        <tbody>${ovRijen}</tbody></table></div>`;
     }
 
     // --- Sectie 3: Volledige deelnemerslijst ---
@@ -2065,6 +2080,9 @@ body  { font-family: Arial, sans-serif; font-size: 8.5pt; margin: 0; color: #111
 /* Sectie-titels */
 .sectie-titel { font-size:10pt; font-weight:bold; margin:4mm 0 1mm 0;
                 page-break-after:avoid; border-bottom:1px solid #bbb; padding-bottom:0.5mm; }
+/* Race-groepen overzicht als één blok behandelen: bij voorkeur in z'n geheel
+   op één pagina. Bij heel grote lijsten breekt het toch maar dat is OK. */
+.sectie-overzicht-wrap { page-break-inside:avoid; break-inside:avoid; }
 .sectie-titel .teller { font-size:8.5pt; font-weight:normal; color:#555; }
 
 /* Tabellen: header herhaalt automatisch op elke nieuwe pagina */
