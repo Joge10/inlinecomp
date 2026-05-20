@@ -100,28 +100,41 @@ function zetDistTabKleur(distId, heeftLoting) {
     btn.classList.toggle('tab-gereed', !!heeftLoting);
 }
 
-// Kleur alle cat-tabs op basis van loting-status (achtergrond, niet-blokkerend)
+// Kleur alle cat-tabs op basis van loting-status (achtergrond, niet-blokkerend).
+// Match per data-dc-id i.p.v. via index. Reden: groepen kan een unfiltered
+// lijst zijn (bv. _slGroepen na refresh), terwijl catTabsEl alleen de tabs
+// van de actieve dag bevat. Index-mismatch leidde tot tab[0] (= eerste
+// zichtbare dag-3 DC) krijgt de status van groepen[0] (= dag-1 DC met loting)
+// → fout-groen op een DC die niets met die loting te maken heeft.
 async function kleurAlleTabsAsync(groepen, catTabsEl) {
     if (!huidigCompId || !groepen?.length) return;
     try {
-        // Bulk pre-fetch zodat de Promise.all-loop hieronder alleen cache-
-        // lookups doet i.p.v. N parallelle HTTP-calls.
         await _slBulkLaadAfstanden(groepen);
 
         const geloot  = await laadSlStatus();
         const tabBtns = Array.from(catTabsEl.querySelectorAll('.org-tab-btn'));
 
-        await Promise.all(groepen.map(async (groep, i) => {
-            const btn = tabBtns[i];
-            if (!btn) return;
+        // Map dc_id + dc_name → groep voor snelle lookup. Voor splits hebben
+        // meerdere groepen dezelfde dc_id; daarom ook dc_name als tiebreaker.
+        const groepIndex = new Map();
+        for (const g of groepen) {
+            const key = `${g.dc_id}||${g.dc_name ?? ''}`;
+            groepIndex.set(key, g);
+        }
 
-            const dcId       = groep.dc_id;
+        await Promise.all(tabBtns.map(async (btn) => {
+            const dcId   = btn.dataset.dcId   ?? '';
+            const dcName = btn.dataset.dcName ?? '';
+            const groep  = groepIndex.get(`${dcId}||${dcName}`);
+            // Als deze tab niet in de meegegeven groepen-lijst voorkomt
+            // (bv. unfiltered-list-aanroep met dag-filter actief, of een
+            // legacy tab), skip — geen kleur veranderen.
+            if (!groep) return;
+
             const splitGroup = groep.is_split ? groep.dc_name : '';
 
-            // Gebruik gecachede afstanden (voorkomt dubbele fetches)
             const afstanden = await laadGroepAfstanden(groep);
 
-            // Bouw sleutels: één per afstand (of één zonder afstand)
             const keys = afstanden.length > 0
                 ? afstanden.map(a => `${dcId}||${String(a.id ?? '')}||${splitGroup}`)
                 : [`${dcId}||||${splitGroup}`];
@@ -1011,6 +1024,13 @@ function toonStartlijstenPagina() {
             ? `${escHtml(groep.dc_name)} <span class="tab-badge-merged" title="Samengevoegde categorieën">${groep.dc_ids.length}</span>`
             : escHtml(groep.dc_name);
         btn.innerHTML = label + ` (${totaal})`;
+        // Tag de tab met dc_id + dc_name zodat kleurAlleTabsAsync de juiste
+        // groep kan vinden, ook als de aanroep met een unfiltered groepen-lijst
+        // gebeurt (bv. na een loting-generatie). Zonder deze tags loopt het
+        // op index → mismatch bij multi-day filter.
+        btn.dataset.dcId   = groep.dc_id;
+        btn.dataset.dcName = groep.dc_name;
+        if (groep.is_split && groep.dc_name) btn.dataset.splitName = groep.dc_name;
         btn.addEventListener('click', () => {
             catTabs.querySelectorAll('.org-tab-btn').forEach(b => b.classList.remove('active'));
             btn.classList.add('active');
@@ -1451,13 +1471,126 @@ async function toonAfstandConfig(groep, distId, distNaam) {
     // ── Klassement dropdown ───────────────────────────────────────────────────
     const klSelKl  = el('sl-kl-sel-kl');
     const klSelSec = el('sl-kl-sel-sec');
+    // Helper: normaliseer cat-codes uit een klassement (string | object) tot
+    // een platte lijst van strings (bv ["DKA", "HKA"]). Werkt voor zowel
+    // serie-klassementen (cat als string) als PDF-klassementen (object met
+    // label en eventueel cat_codes).
+    const _klCatCodes = (cats) => {
+        if (!Array.isArray(cats)) return [];
+        const out = [];
+        for (const c of cats) {
+            if (typeof c === 'string') out.push(c);
+            else if (c && typeof c === 'object') {
+                if (Array.isArray(c.cat_codes)) out.push(...c.cat_codes);
+                if (c.label) out.push(c.label);
+            }
+        }
+        return out;
+    };
+
+    // Helper: bron van waarheid voor categorieën van een groep. Drie paden:
+    //   1) splits-DC met category_filter   → gebruik die lijst
+    //   2) splits-DC zonder filter         → splitnaam (dc_name)
+    //   3) niet-split (normale DC)         → unique categories van competitors
+    // Pad 3 is cruciaal: normale DCs hebben geen category_filter en is_split=
+    // false, maar de cat staat per rijder in knsb.category. Zonder dit zou
+    // de bevestig-warning ten onrechte zeggen "DKA komt niet overeen met '?'".
+    const _catsVanGroep = (g) => {
+        if (Array.isArray(g.category_filter) && g.category_filter.length) {
+            return g.category_filter.map(String);
+        }
+        if (g.is_split && g.dc_name) return [String(g.dc_name)];
+        const set = new Set();
+        for (const c of g.competitors ?? []) {
+            const cat = c.knsb?.category;
+            if (cat) set.add(String(cat));
+        }
+        return [...set];
+    };
+
+    // Score-based matcher: kies het meest waarschijnlijke klassement op basis
+    // van categorie, afstand-naam, seizoen en org-id. Hogere score = betere
+    // match. Geeft null terug als geen enkel klassement boven minimumscore
+    // uitkomt — operator moet dan handmatig kiezen.
+    //
+    // Score-componenten:
+    //   +50  klassement.categorieen bevat een categorie uit groep.category_filter
+    //         (of de splitnaam / dc_name als fallback)
+    //   +30  klassement.naam bevat de afstand-naam (bv "500m" in
+    //         "NK Baan 2026 — 500m Seeding")
+    //   +10  klassement.seizoen matcht het jaar van de competitie
+    //   +5   klassement.org_id == huidige organisatie
+    // Minimum: 50 (= minimaal categorie-match). Zonder cat-match is auto-
+    // selectie te onbetrouwbaar.
+    const _matchKlassement = (lijst, groep, distNaam) => {
+        if (!lijst?.length) return null;
+        const orgId = huidigOrganisatie?.id ?? null;
+        const compJaar = huidigComp?.starts
+            ? String(new Date(huidigComp.starts).getFullYear())
+            : null;
+        const cats = _catsVanGroep(groep);
+        const distLower = String(distNaam ?? '').toLowerCase();
+
+        // Afstand-tokens voor naam-match: ruwe naam + "Nm" delen (bv "500m")
+        const distTokens = new Set();
+        if (distLower) {
+            distTokens.add(distLower);
+            const m = distLower.match(/(\d+)\s*m\b/);
+            if (m) distTokens.add(m[1] + 'm');
+        }
+
+        let beste = null;
+        let besteScore = 0;
+        for (const k of lijst) {
+            let s = 0;
+            const klCats = _klCatCodes(k.categorieen).map(c => c.toUpperCase());
+            const klNaam = String(k.naam ?? '').toLowerCase();
+
+            // Categorie-match (verplicht)
+            const catMatch = cats.some(c => klCats.includes(String(c).toUpperCase()));
+            if (catMatch) s += 50;
+
+            // Afstand in klassement-naam
+            for (const t of distTokens) {
+                if (t && klNaam.includes(t)) { s += 30; break; }
+            }
+
+            // Seizoen
+            if (compJaar && String(k.seizoen ?? '').includes(compJaar)) s += 10;
+
+            // Org
+            if (orgId && k.org_id === orgId) s += 5;
+
+            if (s > besteScore) { besteScore = s; beste = k; }
+        }
+        return besteScore >= 50 ? beste : null;
+    };
+
+    // Helper: best matchende sectie binnen een klassement op basis van de
+    // categorieën van de groep. Eerste hit telt.
+    const _matchSectie = (klassement, groep) => {
+        const cats = _catsVanGroep(groep).map(c => c.toUpperCase());
+        const sectieLabels = (klassement.categorieen ?? [])
+            .map(c => typeof c === 'string' ? c : (c?.label ?? ''))
+            .filter(Boolean);
+        for (const sec of sectieLabels) {
+            if (cats.includes(String(sec).toUpperCase())) return sec;
+        }
+        return sectieLabels[0] ?? null;
+    };
 
     laadSlKlassementen().then(lijst => {
-        const orgId = huidigOrganisatie?.id ?? null;
+        // Auto-pre-select: cached keuze wint; anders score-based match
         let geselecteerdId = cache.klassementId;
-        if (!geselecteerdId && orgId) {
-            const suggestie = lijst.find(k => k.org_id === orgId);
-            if (suggestie) geselecteerdId = suggestie.id;
+        if (!geselecteerdId) {
+            const matched = _matchKlassement(lijst, groep, distNaam);
+            if (matched) {
+                geselecteerdId = matched.id;
+                // Sectie pre-select alleen als operator nog niets had
+                if (!cache.klassementSectie) {
+                    cache.klassementSectie = _matchSectie(matched, groep);
+                }
+            }
         }
 
         klSelKl.innerHTML = '<option value="">— kies klassement —</option>'
@@ -1498,10 +1631,23 @@ async function toonAfstandConfig(groep, distId, distNaam) {
             laadSecties(geselecteerdId);
         }
 
+        // Cache klassementen-lijst zodat genereerRonde1 het kan opzoeken
+        // voor het bevestig-modal zonder een tweede fetch.
+        cache._klassementenLijst = lijst;
+
         klSelKl.addEventListener('change', () => {
             cache.klassementId     = klSelKl.value || null;
             cache.klassementSectie = null;
             laadSecties(klSelKl.value);
+            // Auto-suggest sectie binnen het nieuw gekozen klassement
+            const ges = lijst.find(k => k.id === cache.klassementId);
+            if (ges) {
+                const sug = _matchSectie(ges, groep);
+                if (sug) {
+                    cache.klassementSectie = sug;
+                    klSelSec.value = sug;
+                }
+            }
         });
         klSelSec.addEventListener('change', () => {
             cache.klassementSectie = klSelSec.value || null;
@@ -1530,10 +1676,84 @@ async function genereerRonde1(cacheKey) {
     const cache     = startlijstCache[cacheKey];
     const resultDiv = el('sl-resultaten');
     if (!resultDiv) return;
-    resultDiv.innerHTML = '<div class="status-msg loading"><span class="spinner"></span>Genereren…</div>';
 
     const groep  = cache._groep;
     const distId = cache._distId;
+
+    // ── Bevestig-dialog bij klassement / tussenklassement ─────────────────
+    // Grote klassementen met veel categorieën zijn foutgevoelig: makkelijk
+    // verkeerde sectie gekozen voor verkeerde cat/afstand. Vraag operator
+    // expliciet bevestiging vóór generatie zodat de match-keuze zichtbaar
+    // bovenkomt en verkeerde koppelingen eerder opvallen.
+    if (cache.methode === 'klassement' || cache.methode === 'tussenklassement') {
+        const distLabel = cache._distNaam || cache._distId || '—';
+        const catLabel  = groep.dc_name + (groep.is_split && Array.isArray(groep.category_filter) && groep.category_filter.length
+            ? ` (${groep.category_filter.join(', ')})` : '');
+        let bericht, titel;
+        if (cache.methode === 'tussenklassement') {
+            titel   = 'Tussenklassement-loting bevestigen';
+            bericht = `<p>Loting genereren voor:</p>
+                <ul style="margin:.4em 0 .6em 1.2em;line-height:1.55">
+                    <li><strong>Categorie:</strong> ${escHtml(catLabel)}</li>
+                    <li><strong>Afstand:</strong> ${escHtml(distLabel)}</li>
+                </ul>
+                <p style="font-size:.9em;color:#555">
+                    Heats worden gevuld op volgorde van het tussenklassement
+                    van deze wedstrijd (excl. ${escHtml(distLabel)} zelf).
+                </p>`;
+        } else {
+            // klassement-mode
+            const lijst = cache._klassementenLijst ?? [];
+            const ges   = lijst.find(k => k.id === cache.klassementId);
+            if (!ges) {
+                await toonBevestigDialog(
+                    'Geen klassement geselecteerd. Kies eerst een klassement boven de Genereer-knop.',
+                    'Geen keuze', 'OK', null
+                );
+                return;
+            }
+            const secLabel = cache.klassementSectie ?? '—';
+            // Cat-bron: split → category_filter / dc_name; non-split → unique
+            // categories van competitors (zoals _catsVanGroep in render-pad).
+            let catBron;
+            if (Array.isArray(groep.category_filter) && groep.category_filter.length) {
+                catBron = groep.category_filter.map(String);
+            } else if (groep.is_split && groep.dc_name) {
+                catBron = [String(groep.dc_name)];
+            } else {
+                const set = new Set();
+                for (const c of groep.competitors ?? []) {
+                    const cat = c.knsb?.category;
+                    if (cat) set.add(String(cat));
+                }
+                catBron = [...set];
+            }
+            const sectieMatchCat = catBron.some(c =>
+                String(c).toUpperCase() === String(secLabel).toUpperCase());
+            const warn = sectieMatchCat ? '' : `
+                <p style="margin:.5em 0;padding:.5em .75em;background:#fff4e6;border:1px solid #ffd9a3;border-radius:3px;color:#8a4a00">
+                    ⚠ Let op: gekozen sectie '<strong>${escHtml(secLabel)}</strong>' komt
+                    niet overeen met categorie '<strong>${escHtml(catBron.join(', ') || '?')}</strong>'.
+                </p>`;
+            titel   = 'Klassement-loting bevestigen';
+            bericht = `<p>Loting genereren voor:</p>
+                <ul style="margin:.4em 0 .6em 1.2em;line-height:1.55">
+                    <li><strong>Categorie:</strong> ${escHtml(catLabel)}</li>
+                    <li><strong>Afstand:</strong> ${escHtml(distLabel)}</li>
+                    <li><strong>Klassement:</strong> ${escHtml(ges.naam)}${ges.seizoen ? ` (${escHtml(ges.seizoen)})` : ''}</li>
+                    <li><strong>Sectie:</strong> ${escHtml(secLabel)}</li>
+                </ul>${warn}`;
+        }
+        const akkoord = await toonBevestigDialog(
+            bericht, titel, 'Genereren', 'Annuleren', { bodyIsHtml: true }
+        );
+        if (!akkoord) {
+            // Vorige status terug (geen loading-spinner laten staan)
+            return;
+        }
+    }
+
+    resultDiv.innerHTML = '<div class="status-msg loading"><span class="spinner"></span>Genereren…</div>';
 
     try {
         const dcIds = (groep.dc_ids || [groep.dc_id]).join(',');

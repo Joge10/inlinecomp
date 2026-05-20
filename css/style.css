@@ -1745,6 +1745,7 @@ header .header-wedstrijd::before {
    Seeding (2026)" — daarom breder dan de standaard 160px. */
 .sl-klassement-kiezer #sl-kl-sel-kl { min-width: 320px; }
 
+
 .sl-tussenkl-kiezer    { margin-top: .5rem; }
 .sl-tk-uitleg          { font-size: .82rem; color: #666; margin-bottom: .6rem;
                          background: #fef9e7; border-left: 3px solid #e0a800;
