@@ -593,6 +593,53 @@ try {
     $impStmt->execute([$compId]);
     $isImported = (bool)$impStmt->fetchColumn();
 
+    // ── Server-side reserve-sync voor ALLE DCs ───────────────────────────────
+    // Zonder deze stap zou entries.reserve alleen up-to-date zijn voor cats
+    // waar de operator de tab heeft geopend (de JS-zijdige sync werkt per cat).
+    // Bij genereer-loting voor een niet-geopende cat zou KNSB-reserves alsnog
+    // meekomen → BUG. Vergelijk.php heeft de KNSB-feed in hand, dus we syncen
+    // hier vlak vóór de response wordt gebouwd. Beschermt reserve_handmatig=1
+    // (operator-inzet) en doet cleanup zodra KNSB ook NULL meldt (doorschuif).
+    if ($isImported) {
+        try {
+            $stmtSetRes = $pdo->prepare("
+                UPDATE entries
+                   SET reserve = ?
+                 WHERE distance_combination_id = ?
+                   AND person_license          = ?
+                   AND reserve_handmatig_ingezet = 0
+            ");
+            $stmtClrRes = $pdo->prepare("
+                UPDATE entries
+                   SET reserve                   = NULL,
+                       reserve_handmatig_ingezet = 0
+                 WHERE distance_combination_id = ?
+                   AND person_license          = ?
+                   AND (
+                         (reserve_handmatig_ingezet = 0 AND reserve IS NOT NULL)
+                      OR (reserve_handmatig_ingezet = 1 AND reserve IS NULL)
+                       )
+            ");
+            foreach ($result as $groep) {
+                $dcId = $groep['dc_id'] ?? null;
+                if (!$dcId) continue;
+                foreach ($groep['competitors'] ?? [] as $row) {
+                    $lk = $row['license_key'] ?? null;
+                    if (!$lk) continue;
+                    $knsbRes = $row['knsb_reserve'] ?? null;
+                    if ($knsbRes !== null && (int)$knsbRes > 0) {
+                        $stmtSetRes->execute([(int)$knsbRes, $dcId, $lk]);
+                    } else {
+                        $stmtClrRes->execute([$dcId, $lk]);
+                    }
+                }
+            }
+        } catch (Throwable $sync_e) {
+            // Sync mag de vergelijk-response niet kelderen — log en ga door.
+            error_log('[vergelijk.php] reserve-sync fout: ' . $sync_e->getMessage());
+        }
+    }
+
     echo json_encode([
         'groepen'            => $result,
         'organisatie'        => $organisatie,
