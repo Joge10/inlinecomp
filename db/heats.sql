@@ -12,6 +12,10 @@ CREATE TABLE IF NOT EXISTS `heats` (
     `heat_naam`               VARCHAR(100)  NOT NULL,
     `heat_nr`                 TINYINT UNSIGNED NOT NULL,
     `methode`                 VARCHAR(20)   DEFAULT NULL,
+    -- Snapshot van de loting-methode-beschrijving op moment van generatie
+    -- (bv. "Op klassement: NK Baan 2026 — 500m Seeding (2026) · sectie DKA").
+    -- Persistent zodat info ook na refresh / vanuit andere browser zichtbaar.
+    `methode_label`           VARCHAR(255)  DEFAULT NULL,
     `dc_ids`                  TEXT          DEFAULT NULL,    -- JSON array van DC-IDs
     `gegenereerd_op`          DATETIME      DEFAULT CURRENT_TIMESTAMP,
     `geplande_starttijd`      DATETIME      DEFAULT NULL,

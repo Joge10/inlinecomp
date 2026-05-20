@@ -599,7 +599,21 @@ async function _bouwStartlijstDrukInternal(optData) {
     let methodeLabel = METHODE_LABEL[rondeMethode] ?? '';
     if (rondeMethode === 'kwalificatie') {
         methodeLabel = 'Op kwalificatievolgorde';
-    } else if (rondeMethode === 'klassement' && isSeries) {
+    }
+    // Persistente snapshot heeft voorrang — die is bij genereer in de DB
+    // opgeslagen en bevat de volledige klassement-naam + sectie of tussen-
+    // klassement-basis. Werkt ook na refresh / vanuit andere browser, ook
+    // als de JS-cache (cache.klassementId) leeg is.
+    if (isSeries && data.methode_label) {
+        methodeLabel = data.methode_label;
+    } else if (!isSeries && rondeSleutel) {
+        // Volgende rondes: zoek methode_label uit de bijbehorende ronde
+        const vr = (data.volgende_rondes ?? []).find(v => v.ronde_type === rondeSleutel);
+        if (vr?.methode_label) methodeLabel = vr.methode_label;
+    }
+    // Fallback voor klassement-mode zonder snapshot (legacy heats): bouw
+    // het uit cache-info zoals voorheen.
+    if (!data.methode_label && rondeMethode === 'klassement' && isSeries) {
         const cache = startlijstCache[cacheKey];
         if (cache?.klassementId) {
             const klLijst = await laadSlKlassementen();
@@ -2701,12 +2715,16 @@ function maakDeelnemersPaneel(container, cache, cacheKey, flow, groep, distId) {
 // ── Heat grid als DOM-element ──────────────────────────────────────────────────
 
 function maakHeatGrid(data, methode, ritLookup) {
-    const methodeLabel = {
+    // Persistent label (uit DB-snapshot) heeft voorrang op de korte UI-label.
+    // Bij refresh / vanuit andere PC is dit het enige dat we nog hebben — de
+    // JS-cache (cache.klassementId/Sectie) is dan leeg.
+    const kortLabel = {
         startnummer:     'Op startnummer',
         alfabetisch:     'Alfabetisch',
         tussenklassement:'Tussenklassement (deze wedstrijd)',
         klassement:      'Klassement (serie)',
     }[methode] || methode;
+    const methodeLabel = data.methode_label || kortLabel;
 
     const wrapper = document.createElement('div');
     wrapper.innerHTML =

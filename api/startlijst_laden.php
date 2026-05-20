@@ -45,7 +45,7 @@ try {
     // Zoek heats voor deze categorie/afstand (ronde 1), gesorteerd op tijdschema-volgorde
     // JOIN op tijdschema_ritten om ronde_type te achterhalen (bijv. 'finale_a' bij geen series)
     $stmt = $pdo->prepare("
-        SELECT h.id, h.heat_nr, h.heat_naam, h.methode, h.gegenereerd_op,
+        SELECT h.id, h.heat_nr, h.heat_naam, h.methode, h.methode_label, h.gegenereerd_op,
                COALESCE(h.rit_volgorde, h.heat_nr) AS rit_volgorde,
                tsr.ronde_type AS werkelijk_ronde_type
         FROM heats h
@@ -66,6 +66,7 @@ try {
     }
 
     $methode      = $heatRows[0]['methode'] ?? 'startnummer';
+    $methodeLabel = $heatRows[0]['methode_label'] ?? null;
     $gegenereerd  = $heatRows[0]['gegenereerd_op'] ?? null;
     $heatIds      = array_column($heatRows, 'id');
 
@@ -177,7 +178,7 @@ try {
 
     // ── Volgende rondes ophalen (ronde > 1) ────────────────────────────────
     $volgStmt = $pdo->prepare("
-        SELECT h.id, h.ronde, h.heat_nr, h.heat_naam, h.methode,
+        SELECT h.id, h.ronde, h.heat_nr, h.heat_naam, h.methode, h.methode_label,
                COALESCE(h.rit_volgorde, h.heat_nr) AS rit_volgorde,
                ts_r.ronde_type
         FROM heats h
@@ -203,10 +204,11 @@ try {
             $gKey = "{$rn}_{$rt}";
             if (!isset($rondeGroepen[$gKey])) {
                 $rondeGroepen[$gKey] = [
-                    'ronde_nr'   => $rn,
-                    'ronde_type' => $rt,
-                    'methode'    => $h['methode'] ?? 'kwalificatie',
-                    'heatRows'   => [],
+                    'ronde_nr'      => $rn,
+                    'ronde_type'    => $rt,
+                    'methode'       => $h['methode']       ?? 'kwalificatie',
+                    'methode_label' => $h['methode_label'] ?? null,
+                    'heatRows'      => [],
                 ];
             }
             $rondeGroepen[$gKey]['heatRows'][] = $h;
@@ -371,6 +373,7 @@ try {
                 'ronde_nr'              => $rn,
                 'ronde_type'            => $rondeData['ronde_type'],
                 'methode'               => $rondeData['methode'],
+                'methode_label'         => $rondeData['methode_label'],
                 'vorige_ronde_compleet' => $vorigeRondeCompleet,
                 'aantalHeats'           => count($vHeats),
                 'totaalRijders'         => $vTotaal,
@@ -385,6 +388,7 @@ try {
     echo json_encode([
         'exists'              => true,
         'methode'             => $methode,
+        'methode_label'       => $methodeLabel,
         'gegenereerd_op'      => $gegenereerd,
         'aantalHeats'         => count($heats),
         'totaalRijders'       => $totaalRijders,

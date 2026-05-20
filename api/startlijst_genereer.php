@@ -482,12 +482,66 @@ try {
         $rittenMap[(int)$r['heat_nr']] = $r;
     }
 
+    // ── Methode-label snapshot: mensleesbare beschrijving van de loting-
+    // bron, opgeslagen per heat zodat het na refresh / vanuit andere browser
+    // achterhaalbaar blijft (geen JOIN-lookups nodig in de leesweg). Wordt
+    // hieronder bij elke INSERT meegegeven en door startlijst_laden mee-
+    // gegeven naar de frontend voor info-balk + print-titel.
+    $methodeLabel = null;
+    if ($methode === 'startnummer') {
+        $methodeLabel = 'Op startnummer';
+    } elseif ($methode === 'alfabetisch') {
+        $methodeLabel = 'Alfabetisch';
+    } elseif ($methode === 'klassement') {
+        if ($klassementId) {
+            $klStmt = $pdo->prepare(
+                "SELECT naam, seizoen FROM klassementen WHERE id = ? LIMIT 1"
+            );
+            $klStmt->execute([$klassementId]);
+            $kl = $klStmt->fetch(PDO::FETCH_ASSOC);
+            if ($kl) {
+                $methodeLabel = 'Op klassement: ' . $kl['naam']
+                    . ($kl['seizoen'] ? ' (' . $kl['seizoen'] . ')' : '')
+                    . ($klassementSectie ? ' · sectie ' . $klassementSectie : '');
+            } else {
+                $methodeLabel = 'Op klassement (klassement niet gevonden)';
+            }
+        } else {
+            $methodeLabel = 'Op klassement (geen klassement gekozen)';
+        }
+    } elseif ($methode === 'tussenklassement') {
+        // Bouw label uit de afstanden die meetelden = uitslag_afstand-rijen
+        // voor deze comp+DC, excl. de afstand die nu geloot wordt.
+        $tkBasisSql = "
+            SELECT DISTINCT distance_naam
+              FROM uitslag_afstand
+             WHERE competition_id          = ?
+               AND distance_combination_id = ?
+        " . ($distId ? " AND distance_id <> ?" : "") . "
+             ORDER BY distance_naam
+        ";
+        $tkBasisStmt = $pdo->prepare($tkBasisSql);
+        $tkBasisStmt->execute(
+            $distId ? [$compId, $primaryDcId, $distId] : [$compId, $primaryDcId]
+        );
+        $tkBasis = $tkBasisStmt->fetchAll(PDO::FETCH_COLUMN);
+        $methodeLabel = 'Tussenklassement deze wedstrijd'
+            . ($tkBasis ? ' (basis: ' . implode(', ', $tkBasis) . ')'
+                        : ' (nog geen eerdere afstanden vastgelegd)');
+    } else {
+        $methodeLabel = $methode;
+    }
+    // Veiligheidsmaatregel: kap af op kolombreedte (varchar 255)
+    if ($methodeLabel !== null && strlen($methodeLabel) > 255) {
+        $methodeLabel = substr($methodeLabel, 0, 252) . '…';
+    }
+
     $insHeat = $pdo->prepare("
         INSERT INTO heats
             (competition_id, distance_combination_id, distance_id,
              split_group, ronde, tijdschema_rit_id, rit_volgorde,
-             heat_naam, heat_nr, methode, dc_ids)
-        VALUES (?,?,?,?,1,?,?,?,?,?,?)
+             heat_naam, heat_nr, methode, methode_label, dc_ids)
+        VALUES (?,?,?,?,1,?,?,?,?,?,?,?)
     ");
     $insEntry = $pdo->prepare("
         INSERT INTO heat_entries (heat_id, person_license, categorie, startpositie, startnummer)
@@ -506,7 +560,7 @@ try {
             $distId ?: null,
             $splitGroup,
             $ritId, $ritVolg,
-            $heatNaam, $hNr, $methode, $dcIdsJson,
+            $heatNaam, $hNr, $methode, $methodeLabel, $dcIdsJson,
         ]);
         $heatId = (int)$pdo->lastInsertId();
         foreach ($heat['rijders'] as $pos => $r) {
