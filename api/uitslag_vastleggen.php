@@ -75,16 +75,42 @@ try {
     $systeem = $sysStmt->fetchColumn() ?: 'internationaal-nieuw';
 
     // ── Afstanden ─────────────────────────────────────────────────────────────
+    // Split-aware: bij split-DC heeft $dcNaam de split-naam (bv. "HP1") en
+    // bestaan er distances met target_group = $dcNaam. Probeer eerst die set;
+    // als niet aanwezig (= niet-split DC) val terug op basis-afstanden
+    // (target_group NULL/leeg). Zelfde logica als api/distances_db.php.
     $distWhere = $filterDistId ? 'AND id = ?' : '';
-    $distStmt  = $pdo->prepare("
-        SELECT id, name, value_meters
-        FROM distances
-        WHERE distance_combination_id = ?
-          AND (target_group IS NULL OR target_group = '')
-          $distWhere
-        ORDER BY number
-    ");
-    $distParams = $filterDistId ? [$primaryDcId, $filterDistId] : [$primaryDcId];
+    $useSplit = false;
+    if ($dcNaam !== '') {
+        $splitCheck = $pdo->prepare(
+            "SELECT COUNT(*) FROM distances
+              WHERE distance_combination_id = ? AND target_group = ?"
+        );
+        $splitCheck->execute([$primaryDcId, $dcNaam]);
+        $useSplit = ((int)$splitCheck->fetchColumn() > 0);
+    }
+    if ($useSplit) {
+        $distStmt = $pdo->prepare("
+            SELECT id, name, value_meters
+            FROM distances
+            WHERE distance_combination_id = ? AND target_group = ?
+              $distWhere
+            ORDER BY number
+        ");
+        $distParams = $filterDistId
+            ? [$primaryDcId, $dcNaam, $filterDistId]
+            : [$primaryDcId, $dcNaam];
+    } else {
+        $distStmt = $pdo->prepare("
+            SELECT id, name, value_meters
+            FROM distances
+            WHERE distance_combination_id = ?
+              AND (target_group IS NULL OR target_group = '')
+              $distWhere
+            ORDER BY number
+        ");
+        $distParams = $filterDistId ? [$primaryDcId, $filterDistId] : [$primaryDcId];
+    }
     $distStmt->execute($distParams);
     $distances = $distStmt->fetchAll(PDO::FETCH_ASSOC);
 
@@ -99,7 +125,9 @@ try {
     // bron van waarheid zodat een directe API-call (of stale UI) er
     // niet langs kan.
     foreach ($distances as $dchk) {
-        $chk = alleRondesCompleet($pdo, $compId, $dcIds, $dchk['id']);
+        // Bij split: alleen DEZE split's ronden checken — anders blokkeert
+        // de status van een andere split de vastlegging.
+        $chk = alleRondesCompleet($pdo, $compId, $dcIds, $dchk['id'], $useSplit ? $dcNaam : null);
         if (!$chk['compleet']) {
             http_response_code(409);
             echo json_encode([

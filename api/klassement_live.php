@@ -40,6 +40,11 @@ $compId      = trim($_GET['competition_id'] ?? $_POST['competition_id'] ?? '');
 $dcIdsRaw    = trim($_GET['dc_ids'] ?? $_GET['dc_id'] ?? $_POST['dc_ids'] ?? $_POST['dc_id'] ?? '');
 $dcIds       = array_values(array_filter(array_map('trim', explode(',', $dcIdsRaw))));
 $primaryDcId = $dcIds[0] ?? '';
+// Split-aware: bij split-DC stuurt frontend split_group (= splitnaam) mee.
+// Wordt gebruikt om split-specifieke distances (target_group=splitnaam) op te
+// halen ipv basisafstanden, en om uitslag_afstand-rijen op split te filteren.
+// Niet-split: leeg → standaard basisafstanden + alle uitslag_afstand-rijen.
+$splitGroup  = trim($_GET['split_group'] ?? $_POST['split_group'] ?? '');
 
 // ── POST action=set_tiebreaker → DB-config bijwerken ──────────────────────
 // Body: {action: 'set_tiebreaker', competition_id, dc_id, tiebreaker_dist}
@@ -91,15 +96,33 @@ try {
     $systeem = $sysStmt->fetchColumn() ?: 'internationaal-nieuw';
 
     // ── Afstanden voor deze DC ────────────────────────────────────────────────
-    $distStmt = $pdo->prepare("
-        SELECT id, name, number, race_type
-        FROM distances
-        WHERE distance_combination_id = ?
-          AND (target_group IS NULL OR target_group = '')
-        ORDER BY number
-    ");
-    $distStmt->execute([$primaryDcId]);
-    $distances = $distStmt->fetchAll(PDO::FETCH_ASSOC);
+    // Bij split-DC: zoek eerst split-specifieke afstanden (target_group=splitnaam).
+    // Als die er zijn → alleen die. Anders → fallback basisafstanden (NULL/''),
+    // identieke logica als distances_db.php zodat het klassement matcht met de
+    // afstanden die de operator in de andere modules ziet.
+    $distances = [];
+    if ($splitGroup !== '') {
+        $distStmt = $pdo->prepare("
+            SELECT id, name, number, race_type
+            FROM distances
+            WHERE distance_combination_id = ?
+              AND target_group = ?
+            ORDER BY number
+        ");
+        $distStmt->execute([$primaryDcId, $splitGroup]);
+        $distances = $distStmt->fetchAll(PDO::FETCH_ASSOC);
+    }
+    if (empty($distances)) {
+        $distStmt = $pdo->prepare("
+            SELECT id, name, number, race_type
+            FROM distances
+            WHERE distance_combination_id = ?
+              AND (target_group IS NULL OR target_group = '')
+            ORDER BY number
+        ");
+        $distStmt->execute([$primaryDcId]);
+        $distances = $distStmt->fetchAll(PDO::FETCH_ASSOC);
+    }
 
     // ── Ranking methods per afstand (alleen internationaal) ──────────────────
     $rankingConfigs = []; // afstand_naam => {heats_ranking, kwart_ranking, ...}
@@ -171,14 +194,26 @@ try {
     //     de operator lokaal afwijkt van de default)
     //   - `sanctie` zodat we weten of de vastgelegde rij een sanctie-rijder
     //     betrof
+    // Bij split-DC: filter ook op de bij deze split horende distance_ids,
+    // anders pakken we uitslag-rijen van zustersplits (zelfde dc_id, andere
+    // distance_id) mee in dit klassement.
     $dcPh = implode(',', array_fill(0, count($dcIds), '?'));
+    $distIdsForSplit = array_column($distances, 'id');
+    $distFilterSql   = '';
+    $distFilterBind  = [];
+    if ($splitGroup !== '' && $distIdsForSplit) {
+        $distPh         = implode(',', array_fill(0, count($distIdsForSplit), '?'));
+        $distFilterSql  = " AND distance_id IN ($distPh)";
+        $distFilterBind = $distIdsForSplit;
+    }
     $ovStmt = $pdo->prepare("
         SELECT person_license, distance_id, rang, punten, sanctie
         FROM uitslag_afstand
         WHERE competition_id             = ?
           AND distance_combination_id IN ($dcPh)
+          {$distFilterSql}
     ");
-    $ovStmt->execute(array_merge([$compId], $dcIds));
+    $ovStmt->execute(array_merge([$compId], $dcIds, $distFilterBind));
     $vastgelegdeRijen = []; // [lic][distId] => { rang, punten, sanctie }
     foreach ($ovStmt->fetchAll(PDO::FETCH_ASSOC) as $ov) {
         $vastgelegdeRijen[$ov['person_license']][$ov['distance_id']] = [
@@ -194,9 +229,10 @@ try {
         FROM uitslag_afstand
         WHERE competition_id             = ?
           AND distance_combination_id IN ($dcPh)
+          {$distFilterSql}
         GROUP BY distance_id
     ");
-    $vastStmt->execute(array_merge([$compId], $dcIds));
+    $vastStmt->execute(array_merge([$compId], $dcIds, $distFilterBind));
     $vastgelegdMap = []; // distance_id → true
     foreach ($vastStmt->fetchAll(PDO::FETCH_ASSOC) as $v) {
         $vastgelegdMap[$v['distance_id']] = (int)$v['n'] > 0;

@@ -627,12 +627,22 @@ if ($action === 'genereer_volgende_ronde') {
     $distanceId   = trim($body['distance_id']    ?? '');
     $vanRondeType = trim($body['van_ronde_type'] ?? '');
     $naarRondeType= trim($body['naar_ronde_type']?? '');
+    // Split-bewustzijn: als deze DC is gesplitst (bv. P3/P4 binnen 1 DC),
+    // krijgt elke split een eigen dc_naam in tijdschema_ritten. Frontend stuurt
+    // dan per split apart een call met split_dc_naam, zodat we qualifiers,
+    // cleanups en doelritten beperken tot DIE split. Backwards-compat: leeg of
+    // afwezig = niet-split-gedrag (zoals altijd).
+    $splitDcNaam  = trim($body['split_dc_naam']  ?? '');
 
     if (!$compId || !$dcId || !$vanRondeType || !$naarRondeType) {
         http_response_code(400);
         echo json_encode(['error' => 'competition_id, dc_id, van_ronde_type en naar_ronde_type zijn verplicht']);
         exit;
     }
+
+    // SQL-fragment + bind-params voor split-filter. Leeg bij niet-split.
+    $splitSql    = $splitDcNaam !== '' ? ' AND r.dc_naam = ?' : '';
+    $splitBindR  = $splitDcNaam !== '' ? [$splitDcNaam]       : [];  // voor "r.dc_naam"-context
 
     try {
         // Tijdschema ophalen
@@ -658,14 +668,20 @@ if ($action === 'genereer_volgende_ronde') {
         $finaleSeeding  = 'slang';
         $bSlots         = [];
 
-        // Zoek afstand_naam via een bestaande tijdschema_rit voor deze cat
+        // Zoek afstand_naam via een bestaande tijdschema_rit voor deze cat.
+        // Bij split: alleen ritten van deze split (dc_naam-filter), zodat we
+        // de juiste afstand voor deze sub-doorstroom vinden.
         $afNaamStmt = $pdo->prepare("
-            SELECT afstand_naam FROM tijdschema_ritten
-            WHERE tijdschema_id = ? AND dc_id = ?
-              AND (distance_id = ? OR (distance_id IS NULL AND ? = ''))
+            SELECT afstand_naam FROM tijdschema_ritten r
+            WHERE r.tijdschema_id = ? AND r.dc_id = ?
+              AND (r.distance_id = ? OR (r.distance_id IS NULL AND ? = ''))
+              {$splitSql}
             LIMIT 1
         ");
-        $afNaamStmt->execute([$tsId, $dcId, $distanceId, $distanceId]);
+        $afNaamStmt->execute(array_merge(
+            [$tsId, $dcId, $distanceId, $distanceId],
+            $splitBindR
+        ));
         $afstandNaam = $afNaamStmt->fetchColumn();
 
         if ($afstandNaam) {
@@ -754,6 +770,10 @@ if ($action === 'genereer_volgende_ronde') {
 
             // Geplande RU-ritten ophalen (gesorteerd op heat_nr ASC: heat 1 =
             // hoogste plek-nummers net boven de afvallers, heat-laatste = grootst)
+            // Bij split: alleen DEZE split's RU-ritten (dc_naam-filter), anders
+            // pakken we ook RU-ritten van zustersplits mee.
+            $ruSplitSql  = $splitDcNaam !== '' ? ' AND dc_naam = ?' : '';
+            $ruSplitBind = $splitDcNaam !== '' ? [$splitDcNaam]      : [];
             $ruRittenStmt = $pdo->prepare("
                 SELECT id, heat_nr, volgorde, rit_naam,
                        COALESCE(verwacht, 0) AS verwacht
@@ -761,9 +781,13 @@ if ($action === 'genereer_volgende_ronde') {
                 WHERE tijdschema_id = ? AND dc_id = ?
                   AND (distance_id = ? OR (distance_id IS NULL AND ? = ''))
                   AND ronde_type = 'runner_up'
+                  {$ruSplitSql}
                 ORDER BY heat_nr
             ");
-            $ruRittenStmt->execute([$tsId, $dcId, $distanceId, $distanceId]);
+            $ruRittenStmt->execute(array_merge(
+                [$tsId, $dcId, $distanceId, $distanceId],
+                $ruSplitBind
+            ));
             $ruRitten = $ruRittenStmt->fetchAll(PDO::FETCH_ASSOC);
             if (empty($ruRitten)) {
                 echo json_encode(['ok' => false, 'geen_ritten' => true]);
@@ -772,6 +796,7 @@ if ($action === 'genereer_volgende_ronde') {
 
             // Resultaten van de eerste ronde ophalen — h.heat_nr meenemen
             // voor de tie-break-regel bij ex-aequo doorstroming.
+            // Bij split: alleen rijders uit DEZE split's bron-heats.
             $resStmt = $pdo->prepare("
                 SELECT he.person_license, he.categorie, he.startnummer,
                        p.full_name, p.club_short,
@@ -785,9 +810,12 @@ if ($action === 'genereer_volgende_ronde') {
                 WHERE r.tijdschema_id = ? AND r.dc_id = ?
                   AND (r.distance_id = ? OR (r.distance_id IS NULL AND ? = ''))
                   AND r.ronde_type = ?
+                  {$splitSql}
             ");
-            $resStmt->execute([$compId, $tsId, $dcId,
-                               $distanceId, $distanceId, $vanRondeType]);
+            $resStmt->execute(array_merge(
+                [$compId, $tsId, $dcId, $distanceId, $distanceId, $vanRondeType],
+                $splitBindR
+            ));
             $alleRijders = $resStmt->fetchAll(PDO::FETCH_ASSOC);
 
             // Filter uitvallers (DNS / DNF / DQ)
@@ -827,6 +855,10 @@ if ($action === 'genereer_volgende_ronde') {
                 'halve_finale' => ['finale','finale_a','finale_b'],
                 default        => ['finale','finale_a','finale_b'],
             };
+            // Bij split: tellen alleen rijders die in DEZE split's vervolg-
+            // rondes zitten — anders zou een rijder uit een zuster-split's
+            // KF/HF/finale ten onrechte uit de runner-up van DEZE split
+            // gefilterd worden.
             $naPh = implode(',', array_fill(0, count($naRondes), '?'));
             $alDoorStmt = $pdo->prepare("
                 SELECT DISTINCT he.person_license
@@ -836,10 +868,12 @@ if ($action === 'genereer_volgende_ronde') {
                 WHERE h.competition_id = ? AND h.distance_combination_id = ?
                   AND (r.distance_id = ? OR (r.distance_id IS NULL AND ? = ''))
                   AND r.ronde_type IN ($naPh)
+                  {$splitSql}
             ");
             $alDoorStmt->execute(array_merge(
                 [$compId, $dcId, $distanceId, $distanceId],
-                $naRondes
+                $naRondes,
+                $splitBindR
             ));
             $alDoor = array_fill_keys($alDoorStmt->fetchAll(PDO::FETCH_COLUMN), true);
 
@@ -854,6 +888,8 @@ if ($action === 'genereer_volgende_ronde') {
             }
 
             // ── Bestaande RU-heats opruimen + nieuwe insert ──────────────
+            // Bij split: alleen DEZE split's RU-heats wissen, anders sneuvelen
+            // zustersplits' RU-heats bij elke regeneratie.
             $pdo->beginTransaction();
 
             $delIds = $pdo->prepare("
@@ -862,20 +898,60 @@ if ($action === 'genereer_volgende_ronde') {
                 WHERE h.competition_id = ? AND h.distance_combination_id = ?
                   AND (r.distance_id = ? OR (r.distance_id IS NULL AND ? = ''))
                   AND r.ronde_type = 'runner_up'
+                  {$splitSql}
             ");
-            $delIds->execute([$compId, $dcId, $distanceId, $distanceId]);
+            $delIds->execute(array_merge(
+                [$compId, $dcId, $distanceId, $distanceId],
+                $splitBindR
+            ));
             $ids = $delIds->fetchAll(PDO::FETCH_COLUMN);
             if ($ids) {
                 $ph = implode(',', array_fill(0, count($ids), '?'));
                 $pdo->prepare("DELETE FROM heats WHERE id IN ($ph)")->execute($ids);
             }
 
+            // Split_group bepalen voor INSERT (zelfde aanpak als in hoofd-pad):
+            // dc_splits is autoritatieve bron; fallback naar bron-heat als die
+            // onverwacht leeg is. NULL bij niet-split → matcht startlijst-laden's
+            // "split_group IS NULL"-tak.
+            $ruSplitGroup = null;
+            if ($splitDcNaam !== '') {
+                $ruCatsStmt = $pdo->prepare("
+                    SELECT category FROM dc_splits
+                    WHERE competition_id = ? AND dc_id = ? AND split_group = ?
+                    ORDER BY category
+                ");
+                $ruCatsStmt->execute([$compId, $dcId, $splitDcNaam]);
+                $ruCats = $ruCatsStmt->fetchAll(PDO::FETCH_COLUMN);
+                if ($ruCats) {
+                    $ruSplitGroup = implode(',', $ruCats);
+                } else {
+                    $sgStmt = $pdo->prepare("
+                        SELECT h.split_group
+                        FROM heats h
+                        JOIN tijdschema_ritten r ON r.id = h.tijdschema_rit_id
+                        WHERE h.competition_id          = ?
+                          AND h.distance_combination_id = ?
+                          AND (h.distance_id = ? OR (h.distance_id IS NULL AND ? = ''))
+                          AND r.ronde_type = ?
+                          AND r.dc_naam = ?
+                          AND h.split_group IS NOT NULL
+                        LIMIT 1
+                    ");
+                    $sgStmt->execute([$compId, $dcId, $distanceId, $distanceId, $vanRondeType, $splitDcNaam]);
+                    $sgVal = $sgStmt->fetchColumn();
+                    if ($sgVal !== false && $sgVal !== null && $sgVal !== '') {
+                        $ruSplitGroup = $sgVal;
+                    }
+                }
+            }
+
             $insHeat = $pdo->prepare("
                 INSERT INTO heats
                     (competition_id, distance_combination_id, distance_id,
-                     ronde, tijdschema_rit_id, rit_volgorde,
+                     split_group, ronde, tijdschema_rit_id, rit_volgorde,
                      heat_naam, heat_nr, methode, dc_ids)
-                VALUES (?, ?, ?, 4, ?, ?, ?, ?, 'kwalificatie', ?)
+                VALUES (?, ?, ?, ?, 4, ?, ?, ?, ?, 'kwalificatie', ?)
             ");
             $insEntry = $pdo->prepare("
                 INSERT IGNORE INTO heat_entries
@@ -927,6 +1003,7 @@ if ($action === 'genereer_volgende_ronde') {
 
                 $insHeat->execute([
                     $compId, $dcId, $distanceId ?: null,
+                    $ruSplitGroup,
                     (int)$rit['id'], (int)$rit['volgorde'],
                     $nieuweRitNaam, (int)$rit['heat_nr'], $dcIdsJson,
                 ]);
@@ -1026,19 +1103,68 @@ if ($action === 'genereer_volgende_ronde') {
             $qPerHeat = (int)($cc['half_q_heat'] ?? 1);
         }
 
-        // Haal geconfigureerd aantal bron-heats op (niet alleen al gespeelde)
+        // Haal geconfigureerd aantal bron-heats op (niet alleen al gespeelde).
+        // Bij split: alleen DEZE split's bron-heats tellen. Anders zou de
+        // q-slot berekening hieronder uit twee samengetelde splits putten en
+        // verkeerde finale-aantallen produceren.
         $bronRittenStmt = $pdo->prepare("
-            SELECT heat_nr
-            FROM tijdschema_ritten
-            WHERE tijdschema_id = ?
-              AND dc_id = ?
-              AND (distance_id = ? OR (distance_id IS NULL AND ? = ''))
-              AND ronde_type = ?
-            ORDER BY heat_nr
+            SELECT r.heat_nr
+            FROM tijdschema_ritten r
+            WHERE r.tijdschema_id = ?
+              AND r.dc_id = ?
+              AND (r.distance_id = ? OR (r.distance_id IS NULL AND ? = ''))
+              AND r.ronde_type = ?
+              {$splitSql}
+            ORDER BY r.heat_nr
         ");
-        $bronRittenStmt->execute([$tsId, $dcId, $distanceId, $distanceId, $vanRondeType]);
+        $bronRittenStmt->execute(array_merge(
+            [$tsId, $dcId, $distanceId, $distanceId, $vanRondeType],
+            $splitBindR
+        ));
         $bronHeatNrs = $bronRittenStmt->fetchAll(PDO::FETCH_COLUMN);
         $nBronHeats  = max(1, count($bronHeatNrs));
+
+        // ── Split-group voor nieuw te insertien heats bepalen ────────────────
+        // startlijst_genereer.php slaat heats.split_group op als comma-joined
+        // categorie-codes (bijv. "HP1" of "DKA,DKB") — die waarde MOET matchen
+        // wat de startlijsten-module via category_filter doorgeeft, anders blijft
+        // de finale onzichtbaar (placeholders). Autoritatieve bron: dc_splits.
+        // $splitDcNaam = de split_group naam in dc_splits (= dc_naam in tijdschema).
+        // Bij niet-split: splitGroup blijft NULL → matcht startlijst-laden's
+        // "split_group IS NULL"-tak.
+        $splitGroup = null;
+        if ($splitDcNaam !== '') {
+            $catsStmt = $pdo->prepare("
+                SELECT category FROM dc_splits
+                WHERE competition_id = ? AND dc_id = ? AND split_group = ?
+                ORDER BY category
+            ");
+            $catsStmt->execute([$compId, $dcId, $splitDcNaam]);
+            $cats = $catsStmt->fetchAll(PDO::FETCH_COLUMN);
+            if ($cats) {
+                $splitGroup = implode(',', $cats);
+            } else {
+                // Fallback: lees split_group uit bestaande bron-heats voor het
+                // geval dc_splits onverwacht leeg is maar er WEL split-heats zijn.
+                $sgStmt = $pdo->prepare("
+                    SELECT h.split_group
+                    FROM heats h
+                    JOIN tijdschema_ritten r ON r.id = h.tijdschema_rit_id
+                    WHERE h.competition_id          = ?
+                      AND h.distance_combination_id = ?
+                      AND (h.distance_id = ? OR (h.distance_id IS NULL AND ? = ''))
+                      AND r.ronde_type = ?
+                      AND r.dc_naam = ?
+                      AND h.split_group IS NOT NULL
+                    LIMIT 1
+                ");
+                $sgStmt->execute([$compId, $dcId, $distanceId, $distanceId, $vanRondeType, $splitDcNaam]);
+                $sgVal = $sgStmt->fetchColumn();
+                if ($sgVal !== false && $sgVal !== null && $sgVal !== '') {
+                    $splitGroup = $sgVal;
+                }
+            }
+        }
 
         // ── Alle resultaten van de van_ronde_type ophalen (incl. heat_nr) ───────
         // Alleen rijders die daadwerkelijk een resultaat hebben (INNER JOIN):
@@ -1066,12 +1192,12 @@ if ($action === 'genereer_volgende_ronde') {
               AND r.dc_id = ?
               AND (r.distance_id = ? OR (r.distance_id IS NULL AND ? = ''))
               AND r.ronde_type = ?
+              {$splitSql}
         ");
-        $resStmt->execute([
-            $compId, $tsId, $dcId,
-            $distanceId, $distanceId,
-            $vanRondeType
-        ]);
+        $resStmt->execute(array_merge(
+            [$compId, $tsId, $dcId, $distanceId, $distanceId, $vanRondeType],
+            $splitBindR
+        ));
         $alleRijders = $resStmt->fetchAll(PDO::FETCH_ASSOC);
 
         // Filter uitgevallen rijders
@@ -1104,7 +1230,12 @@ if ($action === 'genereer_volgende_ronde') {
         if ($qPerHeat === 0 && $naarRondeType === 'finale_a'
             && $nBronHeats > 1 && $finaleSeeding !== 'tijdkoppeling'
             && $hasRondes) {
-            $qPerHeat = (int)ceil($aantalDoor / max(1, $nBronHeats));
+            // FLOOR (niet CEIL) zodat nQSlots = qPerHeat * nBronHeats NIET
+            // boven aantalDoor uitkomt. Voorbeeld: aantalDoor=4 met 3 heats →
+            // ceil(4/3)=2 → 6 Q-slots = TE VEEL; floor(4/3)=1 → 3 Q + 1 q = 4.
+            // Bij aantalDoor < nBronHeats wordt qPerHeat 0 → de tier-seeding
+            // wordt overgeslagen en de puur-tijd-sortering eronder wint.
+            $qPerHeat = (int)floor($aantalDoor / max(1, $nBronHeats));
         }
 
         if ($qPerHeat > 0) {
@@ -1168,8 +1299,12 @@ if ($action === 'genereer_volgende_ronde') {
             ));
             usort($qPool, fn($a, $b) => (int)$a['tijd_ms'] - (int)$b['tijd_ms']);
 
-            // Aantal q-slots (tijdkwalificaties) = totaal_door - Q-slots
-            $nQSlots = $qPerHeat * $nBronHeats;
+            // Aantal q-slots (tijdkwalificaties) = totaal_door - Q-slots.
+            // CAP: bij operator-ingestelde heats_q_heat kan qPerHeat * nBronHeats
+            // boven aantalDoor uitkomen (bv. qPerHeat=2 × 3 heats = 6, terwijl
+            // aantalDoor=4). In dat geval willen we niet meer Q-slots maken dan
+            // er finalisten zijn — surplus wordt afgekapt.
+            $nQSlots = min($qPerHeat * $nBronHeats, $aantalDoor);
             $nqSlots = max(0, $aantalDoor - $nQSlots);
 
             // Ex-aequo q: check grens tijdpool
@@ -1318,25 +1453,35 @@ if ($action === 'genereer_volgende_ronde') {
         // Dit voorkomt dat een correctie aan een eerdere ronde (bv. een
         // vergeten DQ-TF op een rijder die toch niet kwalificeerde) de al
         // ingevoerde resultaten van opvolgende rondes leeggooit.
-        $nieuweLicenties = [];
+        // Bouw nieuwe set PER RONDE-TYPE. Vroeger werden A+B-rijders samen-
+        // gehashed, waardoor bij full-final een verschuiving van rijder X tussen
+        // A en B niet als "wijziging" werd herkend (totaal-set bleef gelijk).
+        // Nu vergelijken we per ronde-type: A moet exact dezelfde rijders
+        // hebben EN B moet exact dezelfde rijders hebben.
+        $nieuwePerRonde = [$naarRondeType => []];
+        if ($isFullFinal) $nieuwePerRonde['finale_b'] = [];
         foreach ($allSlots as $r) {
-            if (!empty($r['person_license'])) $nieuweLicenties[] = $r['person_license'];
+            if (!empty($r['person_license'])) $nieuwePerRonde[$naarRondeType][] = $r['person_license'];
         }
         if ($isFullFinal) {
             foreach (($bSlots ?? []) as $r) {
-                if (!empty($r['person_license'])) $nieuweLicenties[] = $r['person_license'];
+                if (!empty($r['person_license'])) $nieuwePerRonde['finale_b'][] = $r['person_license'];
             }
         }
+        foreach ($nieuwePerRonde as &$lst) sort($lst);
+        unset($lst);
+        // Flatten ook voor downstream-gebruik (bv. count en algemene check)
+        $nieuweLicenties = [];
+        foreach ($nieuwePerRonde as $lst) foreach ($lst as $lic) $nieuweLicenties[] = $lic;
         sort($nieuweLicenties);
 
-        // Bestaande set: heat_entries van de doel-ronde(s). Bij full-final
-        // vergelijken we finale_a + finale_b samen (omdat regenerate beide
-        // wegblaast).
+        // Bestaande set per ronde-type ophalen. JOIN ook tijdschema_ritten zodat
+        // we per ronde_type kunnen groeperen (en split-filter kunnen toepassen).
         $cmpTypes = [$naarRondeType];
         if ($isFullFinal) $cmpTypes[] = 'finale_b';
         $cmpPh = implode(',', array_fill(0, count($cmpTypes), '?'));
         $bestStmt = $pdo->prepare("
-            SELECT he.person_license
+            SELECT r.ronde_type, he.person_license
             FROM heats h
             JOIN heat_entries he ON he.heat_id = h.id
             JOIN tijdschema_ritten r ON r.id = h.tijdschema_rit_id
@@ -1344,23 +1489,73 @@ if ($action === 'genereer_volgende_ronde') {
               AND h.distance_combination_id = ?
               AND (r.distance_id = ? OR (r.distance_id IS NULL AND ? = ''))
               AND r.ronde_type IN ($cmpPh)
+              {$splitSql}
         ");
         $bestStmt->execute(array_merge(
             [$compId, $dcId, $distanceId, $distanceId],
-            $cmpTypes
+            $cmpTypes,
+            $splitBindR
         ));
-        $bestaandeLicenties = $bestStmt->fetchAll(PDO::FETCH_COLUMN);
+        $bestaandePerRonde = [$naarRondeType => []];
+        if ($isFullFinal) $bestaandePerRonde['finale_b'] = [];
+        foreach ($bestStmt->fetchAll(PDO::FETCH_ASSOC) as $row) {
+            $bestaandePerRonde[$row['ronde_type']][] = $row['person_license'];
+        }
+        foreach ($bestaandePerRonde as &$lst) sort($lst);
+        unset($lst);
+        // Flatten voor downstream-gebruik
+        $bestaandeLicenties = [];
+        foreach ($bestaandePerRonde as $lst) foreach ($lst as $lic) $bestaandeLicenties[] = $lic;
         sort($bestaandeLicenties);
 
-        if (!empty($bestaandeLicenties) && $bestaandeLicenties === $nieuweLicenties) {
+        // Strikte gelijkheid PER RONDE: A én B moeten precies kloppen.
+        // Voorheen werd alleen totaal-set vergeleken — dan herkende de check
+        // niet wanneer iemand van A naar B (of vice versa) zou verschuiven.
+        $perRondeGelijk = true;
+        foreach ($nieuwePerRonde as $rt => $lst) {
+            if (($bestaandePerRonde[$rt] ?? []) !== $lst) {
+                $perRondeGelijk = false;
+                break;
+            }
+        }
+
+        if (!empty($bestaandeLicenties) && $perRondeGelijk) {
             // Volgende ronde bestaat al met EXACT dezelfde rijders — laat alle
             // resultaten staan, doe geen DELETE/INSERT. Client krijgt een vlag
             // mee zodat hij geen reload triggert (anders flakker je de UI
             // alsnog onnodig).
+            //
+            // HEAL legacy data: oudere genereer_volgende_ronde-runs hebben
+            // heats.split_group=NULL ingevuld bij split-DCs. Startlijsten-module
+            // ziet die niet (filter mismatcht). Werk de bestaande heats nu bij
+            // zodat ze alsnog vindbaar zijn — zonder DELETE/INSERT van heat_entries
+            // (resultaten blijven dus gewoon staan).
+            $aantalGeheeld = 0;
+            if ($splitGroup !== null && $splitDcNaam !== '') {
+                $healStmt = $pdo->prepare("
+                    UPDATE heats h
+                    JOIN tijdschema_ritten r ON r.id = h.tijdschema_rit_id
+                    SET h.split_group = ?
+                    WHERE h.competition_id          = ?
+                      AND h.distance_combination_id = ?
+                      AND (h.distance_id = ? OR (h.distance_id IS NULL AND ? = ''))
+                      AND r.ronde_type IN ($cmpPh)
+                      AND r.dc_naam = ?
+                      AND (h.split_group IS NULL OR h.split_group <> ?)
+                ");
+                $healParams = array_merge(
+                    [$splitGroup, $compId, $dcId, $distanceId, $distanceId],
+                    $cmpTypes,
+                    [$splitDcNaam, $splitGroup]
+                );
+                $healStmt->execute($healParams);
+                $aantalGeheeld = $healStmt->rowCount();
+            }
+
             echo json_encode([
                 'ok'          => true,
                 'ongewijzigd' => true,
-                'heats'       => [],   // client gebruikt deze niet bij ongewijzigd
+                'heats'       => [],
             ], JSON_UNESCAPED_UNICODE);
             exit;
         }
@@ -1381,11 +1576,13 @@ if ($action === 'genereer_volgende_ronde') {
                   AND h.distance_combination_id = ?
                   AND (r.distance_id = ? OR (r.distance_id IS NULL AND ? = ''))
                   AND r.ronde_type IN ($cmpPh)
+                  {$splitSql}
                 GROUP BY r.ronde_type
             ");
             $resCntStmt->execute(array_merge(
                 [$compId, $dcId, $distanceId, $distanceId],
-                $cmpTypes
+                $cmpTypes,
+                $splitBindR
             ));
             $teWissen = $resCntStmt->fetchAll(PDO::FETCH_ASSOC);
             if (!empty($teWissen)) {
@@ -1414,6 +1611,8 @@ if ($action === 'genereer_volgende_ronde') {
         $delTypes = [$naarRondeType];
         if ($naarRondeType === 'finale_a') $delTypes[] = 'finale_b'; // B-finales mee opruimen
         foreach ($delTypes as $delType) {
+            // Bij split: alleen heats van deze split wissen, zodat andere
+            // splits hun gegenereerde finales houden.
             $delIds = $pdo->prepare("
                 SELECT h.id, h.tijdschema_rit_id FROM heats h
                 JOIN tijdschema_ritten r ON r.id = h.tijdschema_rit_id
@@ -1421,8 +1620,12 @@ if ($action === 'genereer_volgende_ronde') {
                   AND h.distance_combination_id = ?
                   AND (r.distance_id = ? OR (r.distance_id IS NULL AND ? = ''))
                   AND r.ronde_type = ?
+                  {$splitSql}
             ");
-            $delIds->execute([$compId, $dcId, $distanceId, $distanceId, $delType]);
+            $delIds->execute(array_merge(
+                [$compId, $dcId, $distanceId, $distanceId, $delType],
+                $splitBindR
+            ));
             $rows = $delIds->fetchAll(PDO::FETCH_ASSOC);
             $ids    = array_column($rows, 'id');
             $ritIds = array_filter(array_column($rows, 'tijdschema_rit_id'));
@@ -1444,6 +1647,7 @@ if ($action === 'genereer_volgende_ronde') {
         // BELANGRIJK: runner_up heats delen ronde=4 met finale_a/finale_b. Bij het
         // genereren van de finale moeten runner_up heats blijven staan — daarom
         // sluiten we runner_up expliciet uit via een LEFT JOIN op de rit.
+        // Bij split: heats van ANDERE splits behouden — extra filter op r.dc_naam.
         $pdo->prepare("
             DELETE h FROM heats h
             LEFT JOIN tijdschema_ritten r ON r.id = h.tijdschema_rit_id
@@ -1452,14 +1656,29 @@ if ($action === 'genereer_volgende_ronde') {
               AND (h.distance_id = ? OR (h.distance_id IS NULL AND ? = ''))
               AND h.ronde = ?
               AND (r.ronde_type IS NULL OR r.ronde_type <> 'runner_up')
-        ")->execute([$compId, $dcId, $distanceId, $distanceId, $rondeNr]);
+              " . ($splitDcNaam !== '' ? " AND (r.dc_naam IS NULL OR r.dc_naam = ?)" : "") . "
+        ")->execute(array_merge(
+            [$compId, $dcId, $distanceId, $distanceId, $rondeNr],
+            $splitBindR
+        ));
 
-        // Brede cleanup: verwijder ALLE verweesd ex-aequo heats en ritten voor deze DC
-        $pdo->prepare("
-            DELETE FROM heats
-            WHERE competition_id = ? AND distance_combination_id = ?
-              AND (heat_naam LIKE '%ex-aequo%' OR heat_naam LIKE '%extra%' OR heat_nr <= 0)
-        ")->execute([$compId, $dcId]);
+        // Brede cleanup: verwijder ALLE verweesde ex-aequo heats en ritten voor deze DC.
+        // Bij split: alleen ex-aequo van deze split (via JOIN op r.dc_naam).
+        if ($splitDcNaam !== '') {
+            $pdo->prepare("
+                DELETE h FROM heats h
+                JOIN tijdschema_ritten r ON r.id = h.tijdschema_rit_id
+                WHERE h.competition_id = ? AND h.distance_combination_id = ?
+                  AND (h.heat_naam LIKE '%ex-aequo%' OR h.heat_naam LIKE '%extra%' OR h.heat_nr <= 0)
+                  AND r.dc_naam = ?
+            ")->execute([$compId, $dcId, $splitDcNaam]);
+        } else {
+            $pdo->prepare("
+                DELETE FROM heats
+                WHERE competition_id = ? AND distance_combination_id = ?
+                  AND (heat_naam LIKE '%ex-aequo%' OR heat_naam LIKE '%extra%' OR heat_nr <= 0)
+            ")->execute([$compId, $dcId]);
+        }
 
         $tsIdStmt = $pdo->prepare("SELECT id FROM competition_tijdschema WHERE competition_id = ?");
         $tsIdStmt->execute([$compId]);
@@ -1469,7 +1688,11 @@ if ($action === 'genereer_volgende_ronde') {
                 DELETE FROM tijdschema_ritten
                 WHERE tijdschema_id = ? AND dc_id = ?
                   AND (rit_naam LIKE '%ex-aequo%' OR rit_naam LIKE '%extra%' OR heat_nr <= 0)
-            ")->execute([$cleanTsId, $dcId]);
+                  " . ($splitDcNaam !== '' ? " AND dc_naam = ?" : "") . "
+            ")->execute(array_merge(
+                [$cleanTsId, $dcId],
+                $splitBindR
+            ));
         }
         // ── Hernummer volgorde: sluit gaten van verwijderde ex-aequo ritten ──
         // ORDER BY volgorde behoudt de bestaande relatieve volgorde exact.
@@ -1495,9 +1718,13 @@ if ($action === 'genereer_volgende_ronde') {
               AND r.dc_id = ?
               AND (r.distance_id = ? OR (r.distance_id IS NULL AND ? = ''))
               AND r.ronde_type = ?
+              {$splitSql}
             ORDER BY r.heat_nr, r.volgorde
         ");
-        $volgendeRittenStmt->execute([$tsId, $dcId, $distanceId, $distanceId, $naarRondeType]);
+        $volgendeRittenStmt->execute(array_merge(
+            [$tsId, $dcId, $distanceId, $distanceId, $naarRondeType],
+            $splitBindR
+        ));
         $volgendeRitten = $volgendeRittenStmt->fetchAll(PDO::FETCH_ASSOC);
 
         if (empty($volgendeRitten)) {
@@ -1507,12 +1734,14 @@ if ($action === 'genereer_volgende_ronde') {
         }
 
         // ── Maak nieuwe heats aan ─────────────────────────────────────────────
+        // split_group wordt overgeërfd van bron-heats (zie $splitGroup hierboven)
+        // zodat startlijsten-module deze finales ook kan vinden bij split-DCs.
         $insHeat = $pdo->prepare("
             INSERT INTO heats
                 (competition_id, distance_combination_id, distance_id,
-                 ronde, tijdschema_rit_id, rit_volgorde,
+                 split_group, ronde, tijdschema_rit_id, rit_volgorde,
                  heat_naam, heat_nr, methode, dc_ids)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'kwalificatie', ?)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'kwalificatie', ?)
         ");
         $insEntry = $pdo->prepare("
             INSERT IGNORE INTO heat_entries (heat_id, person_license, categorie, startpositie, startnummer)
@@ -1526,6 +1755,7 @@ if ($action === 'genereer_volgende_ronde') {
                 $compId,
                 $dcId,
                 $distanceId ?: null,
+                $splitGroup,
                 $rondeNr,
                 (int)$rit['id'],
                 (int)$rit['volgorde'],
@@ -1628,6 +1858,7 @@ if ($action === 'genereer_volgende_ronde') {
 
                 $insHeat->execute([
                     $compId, $dcId, $distanceId ?: null,
+                    $splitGroup,
                     $rondeNr, $extraRitId, $ritVolgorde,
                     $extraNaam, $extraHeatNr, $dcIdsJson,
                 ]);
@@ -1836,7 +2067,9 @@ if ($action === 'genereer_volgende_ronde') {
             }
         }
         if ($isFullFinal && !empty($bSlots)) {
-            // Haal finale_b ritten op uit tijdschema
+            // Haal finale_b ritten op uit tijdschema. Bij split: alleen B-ritten
+            // van DEZE split (dc_naam-filter) — anders pakken we B-finale ritten
+            // van zustersplits mee en insertien we heats in het verkeerde subblok.
             $bRittenStmt = $pdo->prepare("
                 SELECT r.id, r.heat_nr, r.volgorde, r.rit_naam, r.dc_naam, r.distance_id,
                        COALESCE(r.verwacht, 0) AS verwacht
@@ -1845,9 +2078,13 @@ if ($action === 'genereer_volgende_ronde') {
                   AND r.dc_id = ?
                   AND (r.distance_id = ? OR (r.distance_id IS NULL AND ? = ''))
                   AND r.ronde_type = 'finale_b'
+                  {$splitSql}
                 ORDER BY r.heat_nr ASC
             ");
-            $bRittenStmt->execute([$tsId, $dcId, $distanceId, $distanceId]);
+            $bRittenStmt->execute(array_merge(
+                [$tsId, $dcId, $distanceId, $distanceId],
+                $splitBindR
+            ));
             $bRitten = $bRittenStmt->fetchAll(PDO::FETCH_ASSOC);
 
             if (empty($bRitten)) {
@@ -1941,6 +2178,7 @@ if ($action === 'genereer_volgende_ronde') {
 
                 $insHeat->execute([
                     $compId, $dcId, $distanceId ?: null,
+                    $splitGroup,
                     $rondeNr, (int)$rit['id'], (int)$rit['volgorde'],
                     $rit['rit_naam'], $heatNr, $dcIdsJson,
                 ]);

@@ -145,6 +145,41 @@ header {
 .pc-sectie-vergrendeld .pc-sectie-kop {
     background: #6b7d8f;
 }
+
+/* Globale dag-filter bovenaan Print-Center. Verschijnt alleen bij multi-day. */
+.pc-dag-filter-balk {
+    display: flex; align-items: center; flex-wrap: wrap;
+    gap: .5rem;
+    margin: 0 0 .6rem 0;
+    padding: .35rem .6rem;
+    background: #f0f4f8;
+    border: 1px solid #d6e0ec;
+    border-radius: 6px;
+}
+.pc-dag-filter-label {
+    font-size: .78rem; font-weight: 600;
+    color: var(--blauw, #1a3a5c);
+}
+.pc-dag-chips {
+    display: flex; flex-wrap: wrap; gap: .25rem;
+}
+.pc-dag-chip {
+    background: #fff;
+    color: var(--blauw, #1a3a5c);
+    border: 1px solid #b9c8db;
+    border-radius: 12px;
+    padding: .15rem .7rem;
+    font-size: .75rem; font-weight: 600;
+    cursor: pointer;
+    transition: background .12s, color .12s, border-color .12s;
+}
+.pc-dag-chip:hover {
+    background: #dce6f0; border-color: #4d8ad0;
+}
+.pc-dag-chip.active {
+    background: var(--blauw, #1a3a5c); color: #fff;
+    border-color: var(--blauw, #1a3a5c);
+}
 .pc-alles-btn {
     background: none; border: 0;
     color: #4d8ad0; font-size: .75rem;
@@ -1571,6 +1606,9 @@ header .header-wedstrijd::before {
 .sl-disabled input     { cursor: not-allowed; }
 .sl-klassement-kiezer  { display: flex; gap: .5rem; flex-wrap: wrap; margin-top: .4rem; }
 .sl-klassement-kiezer select { flex: 1; min-width: 160px; font-size: .85rem; }
+/* Klassement-select bevat lange namen als "NK Baan 2026 — Afvalkoers
+   Seeding (2026)" — daarom breder dan de standaard 160px. */
+.sl-klassement-kiezer #sl-kl-sel-kl { min-width: 320px; }
 
 .sl-tussenkl-kiezer    { margin-top: .5rem; }
 .sl-tk-uitleg          { font-size: .82rem; color: #666; margin-bottom: .6rem;
@@ -3437,6 +3475,9 @@ th.rk-totaal, td.rk-totaal { width:55px; font-weight:700; color:var(--blauw); ba
 .gb-log-in          { background: #e8f5e9; color: #2e7d32; }
 .gb-log-out         { background: #f5f5f5; color: #555; }
 .gb-log-fout        { background: #fdecea; color: #b71c1c; }
+/* Jury-rol-keuze (jury-rol-area_of_call etc.): lichtblauw — neutrale
+   informational kleur, onderscheidt zich van login (groen) / fout (rood). */
+.gb-log-jury-rol    { background: #e3f2fd; color: #1565c0; }
 
 /* Readonly-modus: subtiele overlay-hint */
 .readonly-modus   { position: relative; pointer-events: none; opacity: .85; }
@@ -3584,6 +3625,10 @@ th.rk-totaal, td.rk-totaal { width:55px; font-weight:700; color:var(--blauw); ba
 
 /* ── Live verwerking ─────────────────────────────────────────────────────────── */
 
+/* Multi-day dag-tabs in live verwerking. Sluit aan op .ts-dag-tabs styling
+   maar krijgt iets meer ruimte onder zodat hij van de carousel-nav scheidt. */
+.live-dag-tabs { margin: 0 auto .5rem; justify-content: center; }
+
 /* ── Bovenste navigatiebalk: filter | dropdown | teller ── */
 .live-carousel-nav {
     display: flex;
@@ -3593,6 +3638,31 @@ th.rk-totaal, td.rk-totaal { width:55px; font-weight:700; color:var(--blauw); ba
     margin: 0 auto .8rem;
     flex-wrap: wrap;
 }
+/* Refresh-knop in nav: handmatig data verversen + visuele feedback (draait) */
+.live-nav-refresh {
+    background: #fff;
+    color: var(--blauw, #1a3a5c);
+    border: 1px solid rgba(205, 216, 227, .6);
+    border-radius: 999px;
+    width: 36px; height: 36px;
+    font-size: 1.05rem; font-weight: 700;
+    cursor: pointer;
+    display: inline-flex; align-items: center; justify-content: center;
+    transition: background .12s, color .12s, transform .25s;
+}
+.live-nav-refresh:hover {
+    background: #dce6f0;
+    border-color: #4d8ad0;
+}
+.live-nav-refresh:disabled { opacity: .6; cursor: not-allowed; }
+.live-nav-refresh.live-refresh-draait {
+    animation: live-refresh-spin .8s linear infinite;
+}
+@keyframes live-refresh-spin {
+    from { transform: rotate(0deg); }
+    to   { transform: rotate(360deg); }
+}
+
 /* ── Custom dropdown wrapper (vervangt native select) ── */
 .live-nav-dd {
     position: relative;

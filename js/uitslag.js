@@ -13,6 +13,14 @@ let _uActieveDist  = null;     // geselecteerde afstand { id, name }
 let _uDistCache    = {};       // dc_id → afstanden[]  (eigen cache naast startlijst)
 let _uPrintOpties  = new Map();// Map< catLabel, Map< distId, { distNaam, opties[] } > >
 
+// Multi-day filter state (0 = nog niet gezet). Default-dag bij elke render:
+// cache → vandaag-match → dag 1. Cache verloopt bij comp-wissel via
+// _uActieveDagCompId. _uTsFetched zorgt dat we het tijdschema (voor
+// dcDagMap) maar één keer per comp achter de schermen ophalen.
+let _uActieveDag       = 0;
+let _uActieveDagCompId = null;
+let _uTsFetched        = null;
+
 // DB = UI codes, geen mapping meer nodig
 function sanctieLabel(s) { return s ?? ''; }
 
@@ -29,6 +37,41 @@ async function uLaadAfstanden(groep) {
         _uDistCache[cKey] = afs;
         return afs;
     } catch { return []; }
+}
+
+// Bulk pre-fetch — vermindert N parallelle distances_db calls bij vulUitslag-
+// PrintSelect en kleurAlleTabsAsync tot 1 bulk-call met ?dc_ids=. Split-groep-
+// filter wordt client-side nagebootst (zelfde logica als _slBulkLaadAfstanden
+// in startlist.js).
+async function _uBulkLaadAfstanden(groepen) {
+    if (!groepen?.length) return;
+    const teLaden = new Set();
+    for (const g of groepen) {
+        if (!g.dc_id) continue;
+        const cKey = g.dc_id + (g.is_split ? '|' + g.dc_name : '');
+        if (_uDistCache[cKey]) continue;
+        teLaden.add(g.dc_id);
+    }
+    if (teLaden.size === 0) return;
+    try {
+        const url = `api/distances_db.php?dc_ids=${[...teLaden].map(encodeURIComponent).join(',')}`;
+        const res = await fetch(url);
+        if (!res.ok) return;
+        const data = await res.json();
+        if (!data || typeof data !== 'object' || data.error) return;
+        for (const g of groepen) {
+            if (!g.dc_id) continue;
+            const cKey = g.dc_id + (g.is_split ? '|' + g.dc_name : '');
+            if (_uDistCache[cKey]) continue;
+            const alle = Array.isArray(data[g.dc_id]) ? data[g.dc_id] : [];
+            let afs = alle;
+            if (g.is_split) {
+                const splitSpec = alle.filter(d => d.target_group === g.dc_name);
+                afs = splitSpec.length > 0 ? splitSpec : alle.filter(d => !d.target_group);
+            }
+            _uDistCache[cKey] = afs;
+        }
+    } catch { /* silent — fallback naar individuele calls via uLaadAfstanden */ }
 }
 
 function uBouwGroepen() {
@@ -55,6 +98,9 @@ async function vulUitslagPrintSelect() {
         _uGroepen = uBouwGroepen();
     }
 
+    // Bulk pre-fetch zodat de loop hieronder alleen cache-lookups doet.
+    await _uBulkLaadAfstanden(_uGroepen);
+
     for (const groep of _uGroepen) {
         const afstanden = await uLaadAfstanden(groep);
         const displayNaam = groep.merge_label || groep.dc_name;
@@ -64,7 +110,9 @@ async function vulUitslagPrintSelect() {
         let heeftKlassement = false;
         try {
             const dcParam = (groep.dc_ids || [groep.dc_id]).map(encodeURIComponent).join(',');
-            const res = await fetch(`api/klassement_live.php?competition_id=${encodeURIComponent(huidigCompId)}&dc_ids=${dcParam}`);
+            const splitParam = groep.is_split && groep.dc_name
+                ? `&split_group=${encodeURIComponent(groep.dc_name)}` : '';
+            const res = await fetch(`api/klassement_live.php?competition_id=${encodeURIComponent(huidigCompId)}&dc_ids=${dcParam}${splitParam}`);
             const kData = await res.json();
             if (kData.afstanden) {
                 for (const a of kData.afstanden) {
@@ -75,6 +123,9 @@ async function vulUitslagPrintSelect() {
         } catch { /* stil */ }
 
         const opties = [];
+        // Split-info doorgeven zodat _bouwAfstandPrint/_bouwKlassementInternal
+        // klassement_live/uitslag_afstand met split_group/dc_naam kunnen aanroepen.
+        const splitInfo = groep.is_split ? { isSplit: true, splitName: groep.dc_name } : {};
 
         // Per afstand: alleen tonen als er resultaten zijn (compleet of vastgelegd)
         for (const a of afstanden) {
@@ -82,18 +133,21 @@ async function vulUitslagPrintSelect() {
             if (!st || (!st.compleet && !st.vastgelegd)) continue;
             opties.push({ label: a.name, sleutel: 'afstand',
                           dcId: groep.dc_id, dcIds: groep.dc_ids,
-                          dcName: displayNaam, distId: a.id, distNaam: a.name });
+                          dcName: displayNaam, distId: a.id, distNaam: a.name,
+                          ...splitInfo });
         }
 
         // Tussenklassement: alleen als er ≥1 afstand met resultaten is en >1 afstand totaal
         if (opties.length >= 1 && afstanden.length > 1) {
             opties.push({ label: 'Tussenklassement', sleutel: 'tussenklassement',
-                          dcId: groep.dc_id, dcIds: groep.dc_ids, dcName: displayNaam });
+                          dcId: groep.dc_id, dcIds: groep.dc_ids, dcName: displayNaam,
+                          ...splitInfo });
         }
         // Eindklassement: alleen als er resultaten zijn
         if (heeftKlassement) {
             opties.push({ label: 'Eindklassement', sleutel: 'eindklassement',
-                          dcId: groep.dc_id, dcIds: groep.dc_ids, dcName: displayNaam });
+                          dcId: groep.dc_id, dcIds: groep.dc_ids, dcName: displayNaam,
+                          ...splitInfo });
         }
 
         if (opties.length && !_uPrintOpties.has(displayNaam))
@@ -127,6 +181,7 @@ function toonUitslagPagina() {
     if (!huidigCompId || !isGeimporteerd) {
         if (catTabs)  catTabs.innerHTML  = '';
         if (distTabs) { distTabs.innerHTML = ''; distTabs.style.display = 'none'; }
+        _uVerwijderDagTabs();
         if (content)  content.innerHTML  =
             '<div class="status-msg info">Selecteer en importeer eerst een wedstrijd via <strong>Importeer</strong>.</div>';
         if (header)   header.innerHTML   = '';
@@ -142,9 +197,49 @@ function toonUitslagPagina() {
             </div>
         </div>`;
 
+    // Reset multi-day state bij wedstrijd-wissel (zelfde patroon als
+    // startlijsten). Cached dag blijft binnen één wedstrijd geldig.
+    if (_uActieveDagCompId !== huidigCompId) {
+        _uActieveDag       = 0;
+        _uActieveDagCompId = huidigCompId;
+    }
+
+    // Tijdschema is nodig voor multi-day detectie. Als nog niet geladen
+    // (gebruiker ging direct naar Uitslag), trigger eenmalig een
+    // achtergrond-fetch en re-render zodra hij binnenkomt.
+    const tsKlaar = (typeof huidigTijdschema !== 'undefined')
+                    && huidigTijdschema?.competition_id === huidigCompId;
+    if (!tsKlaar) _uAchtergrondLaadTijdschema();
+
+    // Multi-day analyse via gedeelde tijdschema-helpers (zie tijdschema.js).
+    const dagInfo  = tsKlaar ? _tsBouwDagInfo(huidigTijdschema?.blokken ?? []) : null;
+    const dcDagMap = tsKlaar ? _tsBouwDcDagMap(huidigTijdschema)               : new Map();
+
+    // Bepaal actieveDag: gecached → vandaag-match → dag 1
+    let actieveDag = 1;
+    if (dagInfo?.isMultiDag) {
+        if (_uActieveDag >= 1 && _uActieveDag <= dagInfo.dagLabels.length) {
+            actieveDag = _uActieveDag;
+        } else {
+            const vandaagStr = new Date().toISOString().substring(0, 10);
+            const match      = dagInfo.dagLabels.find(d => d.datum === vandaagStr);
+            actieveDag       = match ? match.nr : 1;
+            _uActieveDag     = actieveDag;
+        }
+    }
+
     // ── Categorie-tabs (rij 1) ─────────────────────────────────────────────
-    const groepen = uBouwGroepen();
-    _uGroepen = groepen;
+    const groepenAll = uBouwGroepen();
+    _uGroepen = groepenAll;   // ongefilterd voor Print-Center (alle dagen)
+    const groepen = dagInfo?.isMultiDag
+        ? groepenAll.filter(g => {
+              const dcIds = g.dc_ids?.length ? g.dc_ids : [g.dc_id];
+              return dcIds.some(id => (dcDagMap.get(id) ?? 1) === actieveDag);
+          })
+        : groepenAll;
+
+    // Multi-day dag-tabs renderen / opruimen vóór de cat-tabs.
+    _uRenderDagTabs(dagInfo, actieveDag);
 
     catTabs.innerHTML = '';
     groepen.forEach((groep, i) => {
@@ -165,12 +260,79 @@ function toonUitslagPagina() {
         catTabs.appendChild(btn);
     });
 
-    _uActieveCat = groepen[0];
-    toonUitslagAfstandConfig(groepen[0]);
+    if (groepen.length) {
+        _uActieveCat = groepen[0];
+        toonUitslagAfstandConfig(groepen[0]);
+    } else {
+        // Geen categorieën op deze dag — vriendelijke melding
+        _uActieveCat = null;
+        distTabs.innerHTML = '';
+        distTabs.style.display = 'none';
+        content.innerHTML = `<div class="status-msg info">
+            Geen categorieën gepland op deze dag.
+        </div>`;
+    }
 
     // Vul `_uPrintOpties` op de achtergrond — die wordt gebruikt door
     // Print-Center om de beschikbare uitslagen/klassementen te tonen.
+    // Gebruikt _uGroepen (ongefilterd) zodat alle dagen in Print-Center
+    // beschikbaar blijven.
     vulUitslagPrintSelect();
+}
+
+// ── Multi-day helpers ─────────────────────────────────────────────────────────
+
+// Silent fetch van tijdschema indien nog niet geladen voor deze comp. Wordt
+// eenmalig per comp uitgevoerd; bij binnenkomst re-rendert de uitslag-pagina
+// zodat dag-tabs verschijnen.
+async function _uAchtergrondLaadTijdschema() {
+    if (!huidigCompId || _uTsFetched === huidigCompId) return;
+    _uTsFetched = huidigCompId;
+    try {
+        const res  = await fetch(`api/tijdschema.php?competition_id=${encodeURIComponent(huidigCompId)}`);
+        if (!res.ok) return;
+        const data = await res.json();
+        if (data?.error || !data) return;
+        if (typeof huidigTijdschema === 'undefined' || !huidigTijdschema
+            || huidigTijdschema.competition_id !== huidigCompId) {
+            huidigTijdschema  = data;
+            if (typeof tijdschemaVersion !== 'undefined') {
+                tijdschemaVersion = data?.tijdschema_version ?? 0;
+            }
+        }
+        const pg = document.getElementById('page-uitslag');
+        if (pg && pg.classList.contains('active')) toonUitslagPagina();
+    } catch { /* silent — multi-day filter is optioneel verbeterend */ }
+}
+
+function _uVerwijderDagTabs() {
+    document.getElementById('u-dag-tabs')?.remove();
+}
+
+function _uRenderDagTabs(dagInfo, actieveDag) {
+    _uVerwijderDagTabs();
+    if (!dagInfo?.isMultiDag) return;
+    const catTabs = el('u-cat-tabs');
+    if (!catTabs?.parentNode) return;
+    const wrap = document.createElement('div');
+    wrap.id        = 'u-dag-tabs';
+    wrap.className = 'ts-dag-tabs u-dag-tabs';
+    wrap.setAttribute('role', 'tablist');
+    wrap.setAttribute('aria-label', 'Wedstrijddag');
+    wrap.innerHTML = dagInfo.dagLabels.map(d =>
+        `<button class="org-tab-btn ts-dag-tab u-dag-tab${d.nr === actieveDag ? ' active' : ''}"`
+        + ` data-dag="${d.nr}" role="tab"`
+        + ` aria-selected="${d.nr === actieveDag ? 'true' : 'false'}">${escHtml(d.label)}</button>`
+    ).join('');
+    catTabs.parentNode.insertBefore(wrap, catTabs);
+    wrap.querySelectorAll('.u-dag-tab').forEach(btn => {
+        btn.addEventListener('click', () => {
+            const nieuw = parseInt(btn.dataset.dag) || 1;
+            if (nieuw === _uActieveDag) return;
+            _uActieveDag = nieuw;
+            toonUitslagPagina();
+        });
+    });
 }
 
 // ── Tab-kleuren op basis van status ──────────────────────────────────────────
@@ -178,8 +340,10 @@ function toonUitslagPagina() {
 async function _uKleurTabs(groep) {
     try {
         const dcParam = groep.dc_ids.map(encodeURIComponent).join(',');
+        const splitParam = groep.is_split && groep.dc_name
+            ? `&split_group=${encodeURIComponent(groep.dc_name)}` : '';
         const res = await fetch(
-            `api/klassement_live.php?competition_id=${encodeURIComponent(huidigCompId)}&dc_ids=${dcParam}&_t=${Date.now()}`
+            `api/klassement_live.php?competition_id=${encodeURIComponent(huidigCompId)}&dc_ids=${dcParam}${splitParam}&_t=${Date.now()}`
         );
         const data = await res.json();
         if (!data.afstanden) return;
@@ -323,8 +487,13 @@ async function toonUitslagVoorAfstand(groep, afstand) {
         const dcParam    = groep.dc_ids.map(encodeURIComponent).join(',');
         const distParam  = afstand.id   ? `&distance_id=${encodeURIComponent(afstand.id)}`     : '';
         const naamParam  = afstand.name ? `&distance_naam=${encodeURIComponent(afstand.name)}` : '';
+        // Bij split-DC: split-naam (= groep.dc_name) meesturen zodat backend
+        // alleRondesCompleet PER split kan checken (anders blokkeert een
+        // andere onafgeronde split deze bevestig-knop).
+        const splitParam = groep.is_split && groep.dc_name
+            ? `&dc_naam=${encodeURIComponent(groep.dc_name)}` : '';
         const res  = await fetch(
-            `api/uitslag_afstand.php?competition_id=${encodeURIComponent(huidigCompId)}&dc_ids=${dcParam}${distParam}${naamParam}`
+            `api/uitslag_afstand.php?competition_id=${encodeURIComponent(huidigCompId)}&dc_ids=${dcParam}${distParam}${naamParam}${splitParam}`
         );
         const data = await res.json();
 
@@ -931,8 +1100,10 @@ async function toonUitslagKlassement(groep) {
 
     try {
         const dcParam = groep.dc_ids.map(encodeURIComponent).join(',');
+        const splitParam = groep.is_split && groep.dc_name
+            ? `&split_group=${encodeURIComponent(groep.dc_name)}` : '';
         const res  = await fetch(
-            `api/klassement_live.php?competition_id=${encodeURIComponent(huidigCompId)}&dc_ids=${dcParam}`
+            `api/klassement_live.php?competition_id=${encodeURIComponent(huidigCompId)}&dc_ids=${dcParam}${splitParam}`
         );
         const data = await res.json();
 
@@ -1268,8 +1439,10 @@ async function _bouwKlassementInternal(optData) {
 
     let data;
     try {
+        const splitParam = optData.isSplit && optData.splitName
+            ? `&split_group=${encodeURIComponent(optData.splitName)}` : '';
         const res = await fetch(
-            `api/klassement_live.php?competition_id=${encodeURIComponent(huidigCompId)}&dc_ids=${dcIds.map(encodeURIComponent).join(',')}`
+            `api/klassement_live.php?competition_id=${encodeURIComponent(huidigCompId)}&dc_ids=${dcIds.map(encodeURIComponent).join(',')}${splitParam}`
         );
         data = await res.json();
     } catch (e) { console.warn('[Klassement] Laad-fout:', e); return null; }
@@ -1498,8 +1671,12 @@ async function _bouwUitslagAfstandInternal(optData) {
     try {
         const dcParam   = dcIds.map(encodeURIComponent).join(',');
         const distParam = optData.distId ? `&distance_id=${encodeURIComponent(optData.distId)}` : '';
+        // Bij split-DC dc_naam meesturen — uitslag_afstand.php gebruikt dit
+        // voor split-aware alleRondesCompleet en distances-fallback.
+        const splitParam = optData.isSplit && optData.splitName
+            ? `&dc_naam=${encodeURIComponent(optData.splitName)}` : '';
         const res = await fetch(
-            `api/uitslag_afstand.php?competition_id=${encodeURIComponent(huidigCompId)}&dc_ids=${dcParam}${distParam}`
+            `api/uitslag_afstand.php?competition_id=${encodeURIComponent(huidigCompId)}&dc_ids=${dcParam}${distParam}${splitParam}`
         );
         data = await res.json();
     } catch (e) { console.warn('[Uitslag] Laad-fout:', e); return null; }

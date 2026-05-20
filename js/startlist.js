@@ -1,7 +1,13 @@
 /* InlineComp – startlijsten */
 
-let _slLeesOnly = false;  // true als huidige gebruiker geen schrijfrechten heeft
-let _slGroepen  = [];     // alle opgebouwde groepen (voor tab-kleur refresh)
+let _slLeesOnly        = false;  // true als huidige gebruiker geen schrijfrechten heeft
+let _slGroepen         = [];     // alle opgebouwde groepen (voor tab-kleur refresh)
+let _slActieveDag      = 0;      // multi-day tab-state (0 = nog niet bepaald). Hetzelfde
+                                 // patroon als _tsActieveDag in tijdschema.js: cache de
+                                 // gekozen dag binnen één pagina-leven, reset bij comp-
+                                 // wissel via _slActieveDagCompId.
+let _slActieveDagCompId = null;  // waarvoor _slActieveDag bedoeld is — wist cache bij wissel
+let _slTsFetched       = null;   // comp-id waarvoor tijdschema al async opgehaald is
 
 // ── Loting-status cache (voor tab-kleuren) ────────────────────────────────────
 let _slStatusCache = null; // { competition_id, geloot: Set<string> }
@@ -44,6 +50,47 @@ async function laadGroepAfstanden(groep) {
     } catch { return []; }
 }
 
+// Bulk pre-fetch van afstanden voor álle groepen in 1 call (?dc_ids=).
+// Vult _slDistCache zodat opvolgende laadGroepAfstanden-aanroepen geen HTTP
+// meer doen. Zonder dit deed kleurAlleTabsAsync/vulPrintSelect tot ~30
+// parallelle GETs per render (bv. bij NK met veel categorieën), wat de
+// iFastNet entry-process-limit raakte. Split-groep-filter wordt client-side
+// nagebootst: target_group=splitNaam als die er is, anders basis (target=NULL).
+async function _slBulkLaadAfstanden(groepen) {
+    if (!groepen?.length) return;
+    // Verzamel unieke dc_ids waarvan minstens één groep nog geen cache heeft
+    const teLaden = new Set();
+    for (const g of groepen) {
+        if (!g.dc_id) continue;
+        const cKey = g.dc_id + (g.is_split ? '|' + g.dc_name : '');
+        if (_slDistCache[cKey]) continue;
+        teLaden.add(g.dc_id);
+    }
+    if (teLaden.size === 0) return;
+    try {
+        const url = `api/distances_db.php?dc_ids=${[...teLaden].map(encodeURIComponent).join(',')}`;
+        const res = await fetch(url);
+        if (!res.ok) return;
+        const data = await res.json();
+        if (!data || typeof data !== 'object' || data.error) return;
+        // Per groep cache vullen op basis van de bulk-respons
+        for (const g of groepen) {
+            if (!g.dc_id) continue;
+            const cKey = g.dc_id + (g.is_split ? '|' + g.dc_name : '');
+            if (_slDistCache[cKey]) continue;
+            const alle = Array.isArray(data[g.dc_id]) ? data[g.dc_id] : [];
+            let afs = alle;
+            if (g.is_split) {
+                // Server-logica: als split-specifieke afstanden bestaan → alleen die;
+                // anders fallback naar basis-afstanden (target_group NULL/leeg).
+                const splitSpec = alle.filter(d => d.target_group === g.dc_name);
+                afs = splitSpec.length > 0 ? splitSpec : alle.filter(d => !d.target_group);
+            }
+            _slDistCache[cKey] = afs;
+        }
+    } catch { /* silent — fallback naar individuele calls via laadGroepAfstanden */ }
+}
+
 // Kleur de dist-tab voor de actieve afstand (groen = geloot, default = niet)
 function zetDistTabKleur(distId, heeftLoting) {
     const distTabsEl = el('sl-dist-tabs');
@@ -57,6 +104,10 @@ function zetDistTabKleur(distId, heeftLoting) {
 async function kleurAlleTabsAsync(groepen, catTabsEl) {
     if (!huidigCompId || !groepen?.length) return;
     try {
+        // Bulk pre-fetch zodat de Promise.all-loop hieronder alleen cache-
+        // lookups doet i.p.v. N parallelle HTTP-calls.
+        await _slBulkLaadAfstanden(groepen);
+
         const geloot  = await laadSlStatus();
         const tabBtns = Array.from(catTabsEl.querySelectorAll('.org-tab-btn'));
 
@@ -289,6 +340,10 @@ async function vulPrintSelect() {
 
     const [geloot, schema] = await Promise.all([laadSlStatus(), laadSlTijdschema()]);
     if (!geloot.size) return;
+
+    // Bulk pre-fetch zodat de loop hieronder alleen cache-lookups doet
+    // i.p.v. N sequentiële HTTP-calls naar distances_db.php.
+    await _slBulkLaadAfstanden(_slGroepen);
 
     for (const groep of _slGroepen) {
         const afstanden    = await laadGroepAfstanden(groep);
@@ -885,6 +940,7 @@ function toonStartlijstenPagina() {
         catTabs.innerHTML  = '';
         distTabs.innerHTML = '';
         distTabs.style.display = 'none';
+        _slVerwijderDagTabs();
         content.innerHTML  = `<div class="status-msg info">
             Selecteer en importeer eerst een wedstrijd via <strong>Importeer</strong>.
         </div>`;
@@ -900,8 +956,51 @@ function toonStartlijstenPagina() {
             </div>
         </div>`;
 
-    const groepen = bouwStartlijstGroepen();
-    _slGroepen = groepen;
+    // Reset multi-day state bij wedstrijd-wissel. We onthouden de gekozen
+    // dag binnen één wedstrijd, maar laten hem vallen als de gebruiker een
+    // andere wedstrijd opent (bv. via Importeer).
+    if (_slActieveDagCompId !== huidigCompId) {
+        _slActieveDag       = 0;
+        _slActieveDagCompId = huidigCompId;
+    }
+
+    // Tijdschema is nodig voor multi-day detectie + dag-filter. Indien nog
+    // niet geladen (bv. gebruiker ging direct naar Startlijsten zonder
+    // Tijdschema te openen), trigger één keer een achtergrond-fetch en
+    // re-render zodra hij binnenkomt. Verdere renders gebruiken de cache.
+    const tsKlaar = huidigTijdschema?.competition_id === huidigCompId;
+    if (!tsKlaar) _slAchtergrondLaadTijdschema();
+
+    // Multi-day analyse via gedeelde tijdschema-helpers (zie tijdschema.js).
+    const dagInfo  = tsKlaar ? _tsBouwDagInfo(huidigTijdschema?.blokken ?? []) : null;
+    const dcDagMap = tsKlaar ? _tsBouwDcDagMap(huidigTijdschema)               : new Map();
+
+    // Bepaal actieveDag: gecached → vandaag-match → dag 1
+    let actieveDag = 1;
+    if (dagInfo?.isMultiDag) {
+        if (_slActieveDag >= 1 && _slActieveDag <= dagInfo.dagLabels.length) {
+            actieveDag = _slActieveDag;
+        } else {
+            const vandaagStr = new Date().toISOString().substring(0, 10);
+            const match      = dagInfo.dagLabels.find(d => d.datum === vandaagStr);
+            actieveDag       = match ? match.nr : 1;
+            _slActieveDag    = actieveDag;
+        }
+    }
+
+    // Bouw alle groepen, filter daarna op actieve dag bij multi-day.
+    const groepenAll = bouwStartlijstGroepen();
+    _slGroepen = groepenAll;
+    const groepen = dagInfo?.isMultiDag
+        ? groepenAll.filter(g => {
+              const dcIds = g.dc_ids?.length ? g.dc_ids : [g.dc_id];
+              return dcIds.some(id => (dcDagMap.get(id) ?? 1) === actieveDag);
+          })
+        : groepenAll;
+
+    // Multi-day dag-tabs renderen / opruimen vóór de cat-tabs. Klik-handler
+    // updatet _slActieveDag en re-rendert via toonStartlijstenPagina().
+    _slRenderDagTabs(dagInfo, actieveDag);
 
     catTabs.innerHTML = '';
     groepen.forEach((groep, i) => {
@@ -921,13 +1020,78 @@ function toonStartlijstenPagina() {
         catTabs.appendChild(btn);
     });
 
-    activeCat = groepen[0];
-    toonStartlijstConfig(groepen[0]);
+    if (groepen.length) {
+        activeCat = groepen[0];
+        toonStartlijstConfig(groepen[0]);
+    } else {
+        // Geen categorieën op deze dag — toon vriendelijke melding
+        activeCat = null;
+        distTabs.innerHTML = '';
+        distTabs.style.display = 'none';
+        content.innerHTML = `<div class="status-msg info">
+            Geen categorieën gepland op deze dag.
+        </div>`;
+    }
 
     // Tab-kleuren + print-opties in achtergrond opbouwen (niet-blokkerend).
     // `vulPrintSelect()` vult `_slPrintOpties` ten behoeve van Print-Center.
     kleurAlleTabsAsync(groepen, catTabs);
     vulPrintSelect();
+}
+
+// ── Multi-day helpers ─────────────────────────────────────────────────────────
+
+// Haalt het tijdschema achter de schermen op als dat nog niet voor de huidige
+// wedstrijd geladen is. Eenmalig per comp via _slTsFetched; zodra het binnen-
+// komt re-renderen we de startlijsten-pagina zodat de dag-tabs verschijnen.
+async function _slAchtergrondLaadTijdschema() {
+    if (!huidigCompId || _slTsFetched === huidigCompId) return;
+    _slTsFetched = huidigCompId;
+    try {
+        const res  = await fetch(`api/tijdschema.php?competition_id=${encodeURIComponent(huidigCompId)}`);
+        if (!res.ok) return;
+        const data = await res.json();
+        if (data?.error || !data) return;
+        // Alleen overschrijven als er nog niets staat of als het schema
+        // van een andere comp is. Wissel-race-conditie afvangen.
+        if (!huidigTijdschema || huidigTijdschema.competition_id !== huidigCompId) {
+            huidigTijdschema  = data;
+            tijdschemaVersion = data?.tijdschema_version ?? 0;
+        }
+        // Alleen re-renderen als gebruiker nog op startlijsten-pagina is.
+        const pg = document.getElementById('page-startlijsten');
+        if (pg && pg.classList.contains('active')) toonStartlijstenPagina();
+    } catch { /* silent — multi-day filter is optioneel verbeterend */ }
+}
+
+function _slVerwijderDagTabs() {
+    document.getElementById('sl-dag-tabs')?.remove();
+}
+
+function _slRenderDagTabs(dagInfo, actieveDag) {
+    _slVerwijderDagTabs();
+    if (!dagInfo?.isMultiDag) return;
+    const catTabs = el('sl-cat-tabs');
+    if (!catTabs?.parentNode) return;
+    const wrap = document.createElement('div');
+    wrap.id        = 'sl-dag-tabs';
+    wrap.className = 'ts-dag-tabs sl-dag-tabs';
+    wrap.setAttribute('role', 'tablist');
+    wrap.setAttribute('aria-label', 'Wedstrijddag');
+    wrap.innerHTML = dagInfo.dagLabels.map(d =>
+        `<button class="org-tab-btn ts-dag-tab sl-dag-tab${d.nr === actieveDag ? ' active' : ''}"`
+        + ` data-dag="${d.nr}" role="tab"`
+        + ` aria-selected="${d.nr === actieveDag ? 'true' : 'false'}">${escHtml(d.label)}</button>`
+    ).join('');
+    catTabs.parentNode.insertBefore(wrap, catTabs);
+    wrap.querySelectorAll('.sl-dag-tab').forEach(btn => {
+        btn.addEventListener('click', () => {
+            const nieuw = parseInt(btn.dataset.dag) || 1;
+            if (nieuw === _slActieveDag) return;
+            _slActieveDag = nieuw;
+            toonStartlijstenPagina();
+        });
+    });
 }
 
 // ── Startlijst – configuratie tonen (per afstand) ────────────────────────────

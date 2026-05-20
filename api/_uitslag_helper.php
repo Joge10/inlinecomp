@@ -203,9 +203,16 @@ function berekenExAequoRangs(array $finishers, int $offset): array {
 // bewust geskipt heeft.
 //
 // Returns: ['compleet' => bool, 'reden' => string, 'incomplete' => string[]]
-function alleRondesCompleet(PDO $pdo, string $compId, array $dcIds, ?string $distId = null): array {
+function alleRondesCompleet(PDO $pdo, string $compId, array $dcIds, ?string $distId = null, ?string $splitDcNaam = null): array {
     if (empty($dcIds)) return ['compleet' => true, 'reden' => '', 'incomplete' => []];
     $dcPh = implode(',', array_fill(0, count($dcIds), '?'));
+
+    // Split-filter: bij split-DC alleen ronden van DEZE split (dc_naam) checken.
+    // Anders kijkt de check naar ALLE splits samen en blijft hij "nog incompleet"
+    // zolang een andere split nog niet klaar is.
+    $splitCond   = ($splitDcNaam !== null && $splitDcNaam !== '') ? 'AND r.dc_naam = ?'   : '';
+    $splitParam  = ($splitDcNaam !== null && $splitDcNaam !== '') ? [$splitDcNaam]        : [];
+    $splitCondH  = ($splitDcNaam !== null && $splitDcNaam !== '') ? 'AND tsr.dc_naam = ?' : '';
 
     // Pas 1: ritten zonder heat = nog niet geloot.
     $rtLabel = ['heats'=>'Series','kwartfinale'=>'Kwartfinale','halve_finale'=>'Halve finale',
@@ -213,6 +220,7 @@ function alleRondesCompleet(PDO $pdo, string $compId, array $dcIds, ?string $dis
     $rDistCond = $distId ? 'AND (r.distance_id = ? OR r.distance_id IS NULL)' : '';
     $rParams   = array_merge([$compId], $dcIds);
     if ($distId) $rParams[] = $distId;
+    $rParams   = array_merge($rParams, $splitParam);
 
     $ritSql = "
         SELECT DISTINCT r.ronde_type
@@ -222,6 +230,7 @@ function alleRondesCompleet(PDO $pdo, string $compId, array $dcIds, ?string $dis
         WHERE ct.competition_id = ?
           AND r.dc_id IN ($dcPh)
           $rDistCond
+          $splitCond
           AND h.id IS NULL
     ";
     $rs = $pdo->prepare($ritSql);
@@ -243,6 +252,7 @@ function alleRondesCompleet(PDO $pdo, string $compId, array $dcIds, ?string $dis
     $hDistCond = $distId ? 'AND COALESCE(h.distance_id, tsr.distance_id) = ?' : '';
     $hParams   = array_merge([$compId], $dcIds);
     if ($distId) $hParams[] = $distId;
+    $hParams   = array_merge($hParams, $splitParam);
 
     $sql = "
         SELECT h.heat_naam,
@@ -257,6 +267,7 @@ function alleRondesCompleet(PDO $pdo, string $compId, array $dcIds, ?string $dis
         WHERE h.competition_id = ?
           AND h.distance_combination_id IN ($dcPh)
           $hDistCond
+          $splitCondH
         GROUP BY h.id
         HAVING open > 0
     ";

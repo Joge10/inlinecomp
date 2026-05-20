@@ -9,6 +9,15 @@ let _liveHuidigIdx   = -1;      // huidige carousel-index (-1 = nog niet gezet)
 let _liveOngeslagen  = false;   // onopgeslagen wijzigingen
 let _liveLeesOnly    = false;   // geen schrijfrechten
 
+// Multi-day filter state (0 = nog niet gezet). Default-dag wordt bij elke
+// laad bepaald: cache → vandaag-match → dag 1. Cache verloopt bij comp-wissel
+// via _liveActieveDagCompId. _liveTsFetched zorgt dat we het tijdschema (voor
+// dcDagMap) maar één keer per comp achter de schermen ophalen.
+let _liveActieveDag       = 0;
+let _liveActieveDagCompId = null;
+let _liveTsFetched        = null;
+let _liveDcDagMap         = new Map();   // dc_id → dagNr (gevuld na ts-load)
+
 // Filter voor de heat-dropdown (○ / ◑ / ✓). Standaard alles aan.
 let _liveFilter = { geen_lijst: true, geen_resultaat: true, deels: true, compleet: true };
 
@@ -44,6 +53,99 @@ window.liveAfvalResetVoorDC = function(dcIds, distanceId) {
         delete _afvalState[idx];
     });
 };
+
+// ── Multi-day helpers ─────────────────────────────────────────────────────────
+
+// Bouw dcDagMap uit huidigTijdschema; lege Map als ts niet (voor deze comp)
+// geladen is. Wordt aangeroepen na de fetch en wanneer de ts-data binnenkomt.
+function _liveBouwDcDagMap() {
+    if (typeof huidigTijdschema === 'undefined' || !huidigTijdschema) return new Map();
+    if (huidigTijdschema.competition_id !== huidigCompId)             return new Map();
+    if (typeof _tsBouwDcDagMap !== 'function')                        return new Map();
+    return _tsBouwDcDagMap(huidigTijdschema);
+}
+
+// Welke dag hoort bij deze rit? Combi-ritten: dag van eerste lid. Onbekende
+// dc_id → dag 1 (zelfde fallback als tekenlijsten/startlijsten).
+function _liveDagVanRit(rit) {
+    if (!rit) return 1;
+    if (rit.is_combi && rit.combi_leden?.length) {
+        return _liveDcDagMap.get(rit.combi_leden[0].dc_id) ?? 1;
+    }
+    return _liveDcDagMap.get(rit.dc_id) ?? 1;
+}
+
+// Achtergrond-fetch van tijdschema als nog niet geladen voor deze comp.
+// Eenmalig per comp; bij binnenkomst dcDagMap herbouwen en carousel re-renderen.
+async function _liveAchtergrondLaadTijdschema() {
+    if (!huidigCompId || _liveTsFetched === huidigCompId) return;
+    _liveTsFetched = huidigCompId;
+    try {
+        const res  = await fetch(`api/tijdschema.php?competition_id=${encodeURIComponent(huidigCompId)}`);
+        if (!res.ok) return;
+        const data = await res.json();
+        if (data?.error || !data) return;
+        if (typeof huidigTijdschema === 'undefined' || !huidigTijdschema
+            || huidigTijdschema.competition_id !== huidigCompId) {
+            huidigTijdschema  = data;
+            if (typeof tijdschemaVersion !== 'undefined') {
+                tijdschemaVersion = data?.tijdschema_version ?? 0;
+            }
+        }
+        _liveDcDagMap = _liveBouwDcDagMap();
+        // Re-render alleen als gebruiker nog op live-pagina is
+        const pg = document.getElementById('page-live');
+        if (pg && pg.classList.contains('active')) _liveRenderCarousel();
+    } catch { /* silent — multi-day is optioneel verbeterend */ }
+}
+
+// Heeft deze wedstrijd meerdere dagen? Op basis van het al-of-niet aanwezige
+// tijdschema. Bij niet-geladen ts: false (toont geen tabs tot ts binnenkomt).
+function _liveDagInfo() {
+    if (typeof huidigTijdschema === 'undefined' || !huidigTijdschema)  return null;
+    if (huidigTijdschema.competition_id !== huidigCompId)              return null;
+    if (typeof _tsBouwDagInfo !== 'function')                          return null;
+    return _tsBouwDagInfo(huidigTijdschema?.blokken ?? []);
+}
+
+// Zet _liveActieveDag op een zinvolle dag als hij nog 0 (= niet geïnitialiseerd)
+// is, of buiten bereik valt. Logica:
+//   • match op vandaag-datum → die dag
+//   • anders (voor of na het evenement) → dag 1
+// Wordt aangeroepen vanuit zowel toonLivePagina (eerste laad) als
+// _liveRenderCarousel (re-render na silent tijdschema-fetch).
+function _liveInitActieveDagAlsNodig(dagInfo) {
+    if (!dagInfo?.isMultiDag) return;
+    if (_liveActieveDag >= 1 && _liveActieveDag <= dagInfo.dagLabels.length) return;
+    const vandaagStr = new Date().toISOString().substring(0, 10);
+    const match      = dagInfo.dagLabels.find(d => d.datum === vandaagStr);
+    _liveActieveDag  = match ? match.nr : 1;
+}
+
+// Vind de index van de volgende/vorige rit IN DE ACTIEVE DAG. Skipt ritten
+// van andere dagen. dir = +1 (volgende) of -1 (vorige). Geeft -1 als geen
+// passende rit gevonden.
+function _liveZoekIdxOpDag(vanIdx, dir, dag) {
+    const n = _liveRitten.length;
+    if (n === 0) return -1;
+    let i = vanIdx + dir;
+    while (i >= 0 && i < n) {
+        if (_liveDagVanRit(_liveRitten[i]) === dag) return i;
+        i += dir;
+    }
+    return -1;
+}
+
+// Eerste niet-voltooide rit van dag X, of eerste rit van X, of -1.
+function _liveEersteIdxOpDag(dag) {
+    let eerste = -1;
+    for (let i = 0; i < _liveRitten.length; i++) {
+        if (_liveDagVanRit(_liveRitten[i]) !== dag) continue;
+        if (eerste === -1) eerste = i;
+        if (!_liveRitCompleet(_liveRitten[i])) return i;
+    }
+    return eerste;
+}
 
 // ── Entry point ───────────────────────────────────────────────────────────────
 
@@ -94,10 +196,30 @@ async function toonLivePagina() {
             return;
         }
 
+        // Multi-day: reset dag-cache bij wedstrijd-wissel. Bouw dcDagMap als
+        // tijdschema al beschikbaar is; anders silent background fetch en
+        // re-render zodra tijdschema binnenkomt.
+        if (_liveActieveDagCompId !== huidigCompId) {
+            _liveActieveDag       = 0;
+            _liveActieveDagCompId = huidigCompId;
+        }
+        _liveDcDagMap = _liveBouwDcDagMap();
+        const dagInfo = _liveDagInfo();
+        if (!dagInfo) _liveAchtergrondLaadTijdschema();
+
+        // Bepaal default actieveDag bij multi-day: cached → vandaag → 1
+        _liveInitActieveDagAlsNodig(dagInfo);
+
         // Bewaar huidige positie als die nog geldig is (terugkeer na module-wisseling),
-        // anders: eerste onvoltooide rit, of rit 0
-        const eersteOnvolledig = _liveRitten.findIndex(r => !_liveRitCompleet(r));
+        // anders: eerste onvoltooide rit van actieve dag (multi-day) of overall.
+        const eersteOnvolledig = dagInfo?.isMultiDag
+            ? _liveEersteIdxOpDag(_liveActieveDag)
+            : _liveRitten.findIndex(r => !_liveRitCompleet(r));
         if (_liveHuidigIdx < 0 || _liveHuidigIdx >= _liveRitten.length) {
+            _liveHuidigIdx = eersteOnvolledig >= 0 ? eersteOnvolledig : 0;
+        } else if (dagInfo?.isMultiDag
+                   && _liveDagVanRit(_liveRitten[_liveHuidigIdx]) !== _liveActieveDag) {
+            // Cached rit valt niet op actieve dag — spring naar eerste van dag
             _liveHuidigIdx = eersteOnvolledig >= 0 ? eersteOnvolledig : 0;
         }
 
@@ -106,7 +228,84 @@ async function toonLivePagina() {
 
     } catch(e) {
         container.innerHTML = `<div class="status-msg error">⚠ ${escHtml(e.message)}</div>`;
+        return;
     }
+}
+
+// ── Silent reload — geen spinner, behoudt scroll + actieve idx ──────────────
+// Wordt aangeroepen bij:
+//   • klik op refresh-knop (met visuele draaiende-knop-feedback)
+//   • na elke navigatie naar een andere rit (puur achter de schermen, zodat
+//     AoC-DNS en andere parallele updates onmiddellijk zichtbaar zijn)
+// Skipt onopgeslagen wijzigingen: als _liveOngeslagen=true → niets doen
+// (gebruiker is aan het typen; we mogen z'n input niet wegblazen).
+async function _liveHerlaadStil(forceerRender = false) {
+    if (!huidigCompId || _liveOngeslagen) return false;
+    try {
+        const res  = await fetch('api/live.php?competition_id=' + encodeURIComponent(huidigCompId));
+        if (!res.ok) throw new Error('HTTP ' + res.status);
+        const data = await res.json();
+        if (data.error) throw new Error(data.error);
+
+        const rittenRaw = data.ritten || [];
+        _liveRittenOrigCount = rittenRaw.length;
+        const nieuweRitten   = _liveMergeCombiritten(rittenRaw);
+        _liveCatConfigs      = data.catConfigs || {};
+        _liveSysteem         = data.systeem    || null;
+
+        nieuweRitten.forEach(_liveHerrekenPKFinishposities);
+        nieuweRitten.forEach(rit => {
+            if (!rit?.rijders) return;
+            rit.rijders.forEach(r => { if (r.is_photofinish) r._wisselt = true; });
+        });
+
+        // Detecteer of er iets gewijzigd is voor de huidige rit (= AoC heeft
+        // DNS toegevoegd of een andere jury heeft een tijd ingevuld). Als ja:
+        // re-render zodat operator de update meteen ziet.
+        const huidigOud = _liveRitten[_liveHuidigIdx];
+        const huidigNwId = huidigOud ? (huidigOud.rit_id ?? huidigOud.is_combi ? huidigOud.combi_leden?.[0]?.rit_id : null) : null;
+        const huidigNw  = huidigNwId != null
+            ? nieuweRitten.find(r => (r.rit_id ?? r.combi_leden?.[0]?.rit_id) === huidigNwId)
+            : null;
+
+        _liveRitten   = nieuweRitten;
+        _liveDcDagMap = _liveBouwDcDagMap();
+
+        // Bewaar idx als rit nog bestaat; anders val terug op 0
+        if (huidigNw) {
+            const nieuwIdx = _liveRitten.indexOf(huidigNw);
+            if (nieuwIdx >= 0) _liveHuidigIdx = nieuwIdx;
+        } else {
+            _liveHuidigIdx = Math.min(_liveHuidigIdx, _liveRitten.length - 1);
+            if (_liveHuidigIdx < 0) _liveHuidigIdx = 0;
+        }
+
+        // Wijziging gedetecteerd voor huidige rit (verschillende rijder-counts,
+        // sancties of finishposities) → re-render. forceerRender=true bij
+        // refresh-knop overrult de change-detectie.
+        const wijz = forceerRender || _liveRitDataGewijzigd(huidigOud, huidigNw);
+        if (wijz) _liveRenderCarousel();
+        return true;
+    } catch (e) {
+        console.warn('[live] herlaad stil mislukt:', e);
+        return false;
+    }
+}
+
+// Vergelijk twee rit-snapshots; true als er iets veranderd is dat een re-render
+// rechtvaardigt (sanctie of finishpositie). Bewust GEEN diepe vergelijking —
+// alleen velden die de UI raken.
+function _liveRitDataGewijzigd(oud, nieuw) {
+    if (!oud || !nieuw) return true;
+    const oudR = oud.rijders || [], nwR = nieuw.rijders || [];
+    if (oudR.length !== nwR.length) return true;
+    for (let i = 0; i < oudR.length; i++) {
+        const a = oudR[i], b = nwR[i];
+        if ((a?.sanctie || '') !== (b?.sanctie || ''))             return true;
+        if ((a?.finishpositie ?? null) !== (b?.finishpositie ?? null)) return true;
+        if ((a?.tijd_ms      ?? null) !== (b?.tijd_ms      ?? null)) return true;
+    }
+    return false;
 }
 
 // ── Hulpfuncties ──────────────────────────────────────────────────────────────
@@ -1175,7 +1374,23 @@ function _liveRenderCarousel() {
         return `<button type="button" class="live-nav-pil${act}" data-filter="${s}" title="${tip}">${icoon}</button>`;
     }).join('');
 
+    // Multi-day: dag-tabs boven nav-balk. Verschijnen alleen bij >1 dag.
+    // Init _liveActieveDag indien nodig — bij silent ts-fetch re-render kunnen
+    // we hier voor de eerste keer ontdekken dat het multi-day is.
+    const dagInfo = _liveDagInfo();
+    _liveInitActieveDagAlsNodig(dagInfo);
+    const dagTabsHtml = dagInfo?.isMultiDag
+        ? `<div class="ts-dag-tabs live-dag-tabs" role="tablist" aria-label="Wedstrijddag">` +
+              dagInfo.dagLabels.map(d =>
+                  `<button class="org-tab-btn ts-dag-tab live-dag-tab${d.nr === _liveActieveDag ? ' active' : ''}"`
+                  + ` data-dag="${d.nr}" role="tab"`
+                  + ` aria-selected="${d.nr === _liveActieveDag ? 'true' : 'false'}">${escHtml(d.label)}</button>`
+              ).join('') +
+          `</div>`
+        : '';
+
     const navHtml =
+        dagTabsHtml +
         `<div class="live-carousel-nav">` +
         `<div class="live-nav-filter" title="Filter op status">${pilHtml}</div>` +
         `<div class="live-nav-dd" id="live-nav-dd">` +
@@ -1183,6 +1398,8 @@ function _liveRenderCarousel() {
           `<div class="live-nav-dd-panel" id="live-nav-dd-panel" hidden>${dropdownOpts}</div>` +
         `</div>` +
         `<span class="live-nav-teller">${rit?.volgorde ?? (idx + 1)} / ${totaal}</span>` +
+        `<button type="button" class="live-nav-refresh" id="live-btn-refresh"`
+        + ` title="Ververs: haal nieuwste data op (bv. DNS-markeringen van AoC)">↻</button>` +
         `</div>`;
 
     const alleKaarten = _liveRitten.map((r, i) => _liveBouwKaart(r, i, false)).join('');
@@ -1233,9 +1450,66 @@ function _liveRenderCarousel() {
     _liveUpdateKaartActief(idx);
     requestAnimationFrame(() => { _livePositionTrack(false); });
 
-    el('live-btn-vorige')?.addEventListener('click',  () => _liveNavigeer(_liveHuidigIdx - 1));
-    el('live-btn-volgende')?.addEventListener('click', () => _liveNavigeer(_liveHuidigIdx + 1));
+    // Pijl-navigatie: bij multi-day skipt binnen actieve dag, anders ±1
+    const isMulti = !!dagInfo?.isMultiDag;
+    el('live-btn-vorige')?.addEventListener('click',  () => {
+        const tgt = isMulti
+            ? _liveZoekIdxOpDag(_liveHuidigIdx, -1, _liveActieveDag)
+            : _liveHuidigIdx - 1;
+        if (tgt >= 0) _liveNavigeer(tgt);
+    });
+    el('live-btn-volgende')?.addEventListener('click', () => {
+        const tgt = isMulti
+            ? _liveZoekIdxOpDag(_liveHuidigIdx, +1, _liveActieveDag)
+            : _liveHuidigIdx + 1;
+        if (tgt >= 0) _liveNavigeer(tgt);
+    });
     _liveBindDropdown();
+
+    // Refresh-knop: handmatig de DB opnieuw inlezen (bv. om DNS van AoC te
+    // zien). Visuele feedback via .live-refresh-drait class op de knop.
+    el('live-btn-refresh')?.addEventListener('click', async () => {
+        const btn = el('live-btn-refresh');
+        if (!btn || btn.disabled) return;
+        if (_liveOngeslagen) {
+            const ok = await toonBevestigDialog(
+                'Er zijn onopgeslagen tijden — refresh zou ze wissen.\n\nDoorgaan zonder op te slaan?',
+                'Onopgeslagen tijden'
+            );
+            if (!ok) return;
+            _liveOngeslagen = false;
+        }
+        btn.disabled = true;
+        btn.classList.add('live-refresh-draait');
+        try {
+            await _liveHerlaadStil(true);  // forceerRender=true
+        } finally {
+            btn.disabled = false;
+            btn.classList.remove('live-refresh-draait');
+        }
+    });
+
+    // Dag-tab click: switch dag + spring naar eerste niet-voltooide rit
+    // van die dag. Geen-actie als al actief.
+    if (isMulti) {
+        container.querySelectorAll('.live-dag-tab').forEach(btn => {
+            btn.addEventListener('click', async () => {
+                const nieuw = parseInt(btn.dataset.dag) || 1;
+                if (nieuw === _liveActieveDag) return;
+                if (_liveOngeslagen) {
+                    const ok = await toonBevestigDialog(
+                        'Er zijn onopgeslagen tijden.\nDoorgaan zonder op te slaan?',
+                        'Onopgeslagen tijden');
+                    if (!ok) return;
+                }
+                _liveOngeslagen = false;
+                _liveActieveDag = nieuw;
+                const tgt = _liveEersteIdxOpDag(nieuw);
+                if (tgt >= 0) _liveHuidigIdx = tgt;
+                _liveRenderCarousel();
+            });
+        });
+    }
 
     _liveBind(idx);
     _livePanelBind();
@@ -1257,16 +1531,22 @@ function _liveHergeneerKlik(btn) {
 
     const huidigeRit = _liveRitten[_liveHuidigIdx];
     if (huidigeRit?.is_combi) {
-        // Per leden: zelfde "van"-ronde en bereken passende "naar" via _volgendeRondeType
+        // Per leden: zelfde "van"-ronde en bereken passende "naar" via _volgendeRondeType.
+        // Geef ALTIJD lid.dc_naam mee als splitDcNaam zodat server qualifiers/cleanups
+        // op de juiste split focust (bij niet-split DC = no-op want één unieke dc_naam).
         for (const lid of huidigeRit.combi_leden) {
             const ledenNaar = _volgendeRondeType(lid.dc_id, lid.distance_id, van);
             if (!ledenNaar) continue;
-            _liveGenereerKetenStap(lid.dc_id, lid.distance_id, van, ledenNaar)
+            _liveGenereerKetenStap(lid.dc_id, lid.distance_id, van, ledenNaar, true,
+                { splitDcNaam: lid.dc_naam || '' })
                 .catch(() => {}); // fout op één leden mag niet de andere blokkeren
         }
         return;
     }
-    _liveGenereerKetenStap(dcId, distanceId, van, naar);
+    // Niet-combi: één call met dc_naam van de huidige rit. Dat is de juiste
+    // split (bij split-DC) of gewoon de DC-naam (bij niet-split — filter is no-op).
+    _liveGenereerKetenStap(dcId, distanceId, van, naar, true,
+        { splitDcNaam: huidigeRit?.dc_naam || '' });
 }
 
 // ── Links panel: alle rijders in categorie+ronde ──────────────────────────────
@@ -1684,8 +1964,13 @@ function _liveRitIcoon(r) {
 // verborgen moeten zijn. De huidige rit wordt altijd getoond zodat de
 // selected-indicator zichtbaar blijft.
 function _liveDdBouwOpties() {
-    const idx = _liveHuidigIdx;
+    const idx     = _liveHuidigIdx;
+    const dagInfo = _liveDagInfo();
+    const isMulti = !!dagInfo?.isMultiDag;
     const stukken = _liveRitten.map((r, i) => {
+        // Multi-day filter: alleen ritten van actieve dag in dropdown.
+        // Huidige rit altijd tonen (zodat label van trigger matched).
+        if (isMulti && _liveDagVanRit(r) !== _liveActieveDag && i !== idx) return null;
         const status = _liveRitStatus(r);
         if (!_liveFilter[status] && i !== idx) return null;
         const icoon = _liveRitIcoon(r);
@@ -4218,6 +4503,13 @@ async function _liveNavigeer(nieuweIdx) {
         // Fallback: volledig herschrijven (zou niet nodig moeten zijn)
         _liveRenderCarousel();
     }
+
+    // Auto silent refresh: zodra gebruiker een nieuwe heat opent, even DB
+    // checken op verse data (bv. DNS-markeringen door AoC). Async, non-
+    // blocking. Skipt zelf bij _liveOngeslagen. forceerRender=false → re-render
+    // alleen als er voor de huidige rit echt iets is veranderd, anders blijft
+    // de visuele wissel die we net hebben gedaan onverstoord.
+    _liveHerlaadStil(false);
 }
 
 // Toetsenbord navigatie
@@ -4239,8 +4531,21 @@ function _liveKeyHandler(e) {
     // Niet navigeren als de focus in een invoerveld zit
     const tag = document.activeElement?.tagName;
     if (tag === 'INPUT' || tag === 'SELECT' || tag === 'TEXTAREA') return;
-    if (e.key === 'ArrowLeft')  _liveNavigeer(_liveHuidigIdx - 1);
-    if (e.key === 'ArrowRight') _liveNavigeer(_liveHuidigIdx + 1);
+    // Multi-day: pijl-toetsen skippen ook naar dag-passende ritten
+    const dagInfo = _liveDagInfo();
+    const isMulti = !!dagInfo?.isMultiDag;
+    if (e.key === 'ArrowLeft') {
+        const tgt = isMulti
+            ? _liveZoekIdxOpDag(_liveHuidigIdx, -1, _liveActieveDag)
+            : _liveHuidigIdx - 1;
+        if (tgt >= 0) _liveNavigeer(tgt);
+    }
+    if (e.key === 'ArrowRight') {
+        const tgt = isMulti
+            ? _liveZoekIdxOpDag(_liveHuidigIdx, +1, _liveActieveDag)
+            : _liveHuidigIdx + 1;
+        if (tgt >= 0) _liveNavigeer(tgt);
+    }
 }
 
 // ── Opslaan ───────────────────────────────────────────────────────────────────
@@ -4466,8 +4771,8 @@ async function _liveOpslaanRit(ritIdx) {
     const rit2 = _liveRitten[ritIdx];
     if (rit2 && !_liveLeesOnly) {
         const ketenLeden = rit2.is_combi
-            ? rit2.combi_leden.map(l => ({ dc_id: l.dc_id, distance_id: l.distance_id, ronde_type: rit2.ronde_type }))
-            : [{ dc_id: rit2.dc_id, distance_id: rit2.distance_id, ronde_type: rit2.ronde_type }];
+            ? rit2.combi_leden.map(l => ({ dc_id: l.dc_id, distance_id: l.distance_id, ronde_type: rit2.ronde_type, dc_naam: l.dc_naam || rit2.dc_naam }))
+            : [{ dc_id: rit2.dc_id, distance_id: rit2.distance_id, ronde_type: rit2.ronde_type, dc_naam: rit2.dc_naam }];
 
         let enigVolgendGevonden = false;
         for (const lid of ketenLeden) {
@@ -4475,7 +4780,12 @@ async function _liveOpslaanRit(ritIdx) {
             if (volgende2) {
                 enigVolgendGevonden = true;
                 const compleet = _liveRondeCompleet(lid.dc_id, lid.distance_id, lid.ronde_type);
-                _liveGenereerKetenStap(lid.dc_id, lid.distance_id, lid.ronde_type, volgende2, compleet)
+                // Geef altijd lid.dc_naam mee als split_dc_naam zodat server
+                // qualifiers op deze specifieke split focust. Bij niet-split
+                // DC is filter no-op (dc_naam uniek per DC).
+                const lidSplitNaam = lid.dc_naam || rit2.dc_naam || '';
+                _liveGenereerKetenStap(lid.dc_id, lid.distance_id, lid.ronde_type, volgende2, compleet,
+                    { splitDcNaam: lidSplitNaam })
                     .catch(() => {}); // stil falen
             }
         }
@@ -4501,18 +4811,22 @@ async function _liveOpslaanRit(ritIdx) {
 // Genereert de volgende ronde én — indien van toepassing — de runner-up in
 // dezelfde stap. Runner-up moet ALTIJD ná de doorstroom-ronde draaien zodat
 // de backend ex-aequo doorstromers correct uit de afvallers-lijst kan filteren.
-async function _liveGenereerKetenStap(dcId, distanceId, van, naar, compleet = true) {
+async function _liveGenereerKetenStap(dcId, distanceId, van, naar, compleet = true, ketenOpts = {}) {
     // Zelfde key-conventie als _volgendeRondeType: dcId + '|' + distanceId
     const cc = _liveCatConfigs[dcId + '|' + distanceId];
     const ookRu = !!(cc?.heeft_runner_up && _isEersteRondeKeten(cc, van));
 
+    // splitDcNaam wordt doorgegeven aan _liveGenereerVolgendeRonde via opts —
+    // server filtert dan qualifiers/cleanups/doelritten op die ene split.
+    const splitDcNaam = ketenOpts.splitDcNaam || '';
+
     // Beide rondes met onderdrukte toast — de toast obliterates anders de
     // vorige en de gebruiker mist de eerste melding. We bouwen 1 gecombineerde
     // toast aan het einde.
-    const r1 = await _liveGenereerVolgendeRonde(dcId, distanceId, van, naar, compleet, { silent: ookRu });
+    const r1 = await _liveGenereerVolgendeRonde(dcId, distanceId, van, naar, compleet, { silent: ookRu, splitDcNaam });
     if (!ookRu) return;
 
-    const r2 = await _liveGenereerVolgendeRonde(dcId, distanceId, van, 'runner_up', compleet, { silent: true });
+    const r2 = await _liveGenereerVolgendeRonde(dcId, distanceId, van, 'runner_up', compleet, { silent: true, splitDcNaam });
 
     // Beide no-op (ongewijzigd of door operator geannuleerd) → geen toast.
     const isNoop = r => r?.ongewijzigd || r?.geannuleerd;
@@ -4536,12 +4850,15 @@ async function _liveGenereerKetenStap(dcId, distanceId, van, naar, compleet = tr
 // compleet = alle heats in de ronde zijn klaar (anders is het een voorlopige update)
 // opts.silent = true → geen success-toast (voor combined toast door keten-helper)
 // opts.force = true → server slaat de bevestigingsvraag over (dialog al ja gedrukt)
+// opts.splitDcNaam = ''/string → bij split-DCs filtert server qualifiers/cleanups
+//                                /doelritten op deze ene split. Leeg = niet-split.
 // Returns: { aantal, label } op succes, null op fout/skip,
 //          { ongewijzigd: true } of { geannuleerd: true } bij no-op.
 async function _liveGenereerVolgendeRonde(dcId, distanceId, van, naar, compleet = true, opts = {}) {
     if (!huidigCompId || !dcId || !van || !naar) return null; // Guard: ontbrekende params
-    const silent = !!opts.silent;
-    const force  = !!opts.force;
+    const silent       = !!opts.silent;
+    const force        = !!opts.force;
+    const splitDcNaam  = opts.splitDcNaam || '';
     const btn = el('live-btn-volgende-ronde');
     if (btn) { btn.disabled = true; btn.textContent = 'Bezig…'; }
 
@@ -4558,6 +4875,7 @@ async function _liveGenereerVolgendeRonde(dcId, distanceId, van, naar, compleet 
                 distance_id:     distanceId,
                 van_ronde_type:  van,
                 naar_ronde_type: naar,
+                split_dc_naam:   splitDcNaam,
                 force:           force,
             }),
         });

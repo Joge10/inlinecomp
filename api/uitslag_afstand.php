@@ -250,7 +250,28 @@ try {
     // rondes geloot). Frontend gebruikt dit om de "Uitslag bevestigen"-
     // knop disabled te tonen met heldere reden — backend (uitslag_vastleggen)
     // weigert hetzelfde, dit is alleen voor UX.
-    $rondesCheck = alleRondesCompleet($pdo, $compId, $dcIds, $distId ?: null);
+    // Split-aware: bij split-DC stuurt frontend dc_naam (= splitnaam) mee
+    // zodat alleen DEZE split's ronden meetellen voor de check. Anders zou
+    // een andere onafgeronde split de knop disabled houden.
+    $splitDcNaam = trim($_GET['dc_naam'] ?? '');
+    if ($splitDcNaam !== '') {
+        // Alleen activeren als deze naam ook werkelijk als split bestaat
+        // (target_group op één van de distances). Voorkomt false-filter bij
+        // niet-split DCs die toevallig dezelfde dc_naam meekrijgen.
+        $splitChk = $pdo->prepare(
+            "SELECT COUNT(*) FROM distances
+              WHERE distance_combination_id = ? AND target_group = ?"
+        );
+        $splitChk->execute([$dcIds[0], $splitDcNaam]);
+        if ((int)$splitChk->fetchColumn() === 0) {
+            $splitDcNaam = '';  // niet daadwerkelijk een split
+        }
+    }
+    $rondesCheck = alleRondesCompleet(
+        $pdo, $compId, $dcIds,
+        $distId ?: null,
+        $splitDcNaam !== '' ? $splitDcNaam : null
+    );
     $rondesCompleet = $rondesCheck['compleet'];
     $rondesReden    = $rondesCheck['reden'];
 
