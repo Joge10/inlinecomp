@@ -1,0 +1,552 @@
+/* InlineComp – Jury-app styling
+ *
+ * Tablet-georiënteerd (1024×768 portrait, 1280×800 landscape).
+ * Grote raakvlakken, dikke knoppen, weinig wit. Werkt ook op desktop
+ * (max-width op containers voorkomt strekken op breed scherm).
+ */
+
+* { box-sizing: border-box; }
+
+:root {
+    --jury-blauw:       #1a3a5c;
+    --jury-blauw-licht: #2d5a87;
+    --jury-blauw-bg:    #f0f4f8;
+    --jury-border:      #c4d2e2;
+    --jury-rood:        #c0392b;
+    --jury-groen:       #27ae60;
+    --jury-grijs:       #6b7d8f;
+}
+
+html, body {
+    margin: 0; padding: 0;
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Arial, sans-serif;
+    background: var(--jury-blauw-bg);
+    color: #222;
+    min-height: 100vh;
+    overscroll-behavior-y: contain;
+}
+
+/* ── Topbar ────────────────────────────────────────────────────────────── */
+.jury-topbar {
+    background: var(--jury-blauw);
+    color: #fff;
+    border-bottom: 3px solid var(--jury-blauw-licht);
+    position: sticky; top: 0; z-index: 10;
+    box-shadow: 0 2px 6px rgba(0,0,0,.15);
+}
+.jury-topbar-inner {
+    display: flex; align-items: center;
+    gap: 1rem;
+    padding: .6rem 1rem;
+    max-width: 1400px; margin: 0 auto;
+}
+.jury-brand {
+    display: flex; align-items: center; gap: .4rem;
+    font-weight: 700; font-size: 1.15rem;
+}
+.jury-brand-icon { font-size: 1.4rem; }
+
+.jury-comp-info {
+    flex: 1; min-width: 0;
+    padding-left: 1rem;
+    border-left: 1px solid rgba(255,255,255,.25);
+}
+.jury-comp-naam {
+    font-weight: 700; font-size: 1rem;
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.jury-comp-meta { font-size: .8rem; opacity: .85; }
+
+.jury-topbar-acties {
+    display: flex; gap: .4rem;
+}
+
+/* ── Main / schermen ───────────────────────────────────────────────────── */
+.jury-main {
+    max-width: 1200px; margin: 0 auto;
+    padding: 1.2rem 1rem 2rem;
+}
+.jury-laden {
+    text-align: center; padding: 3rem 1rem;
+    color: var(--jury-grijs); font-size: 1rem;
+}
+.jury-fout {
+    background: #fbeaea; border: 1px solid #e6b9b9;
+    color: var(--jury-rood);
+    padding: .8rem 1rem; border-radius: 6px;
+    margin: 1rem auto; max-width: 600px;
+}
+
+.jury-scherm-titel {
+    margin: 0 0 .3rem 0;
+    color: var(--jury-blauw);
+    font-size: 1.4rem;
+}
+.jury-scherm-hint {
+    margin: 0 0 1.2rem 0;
+    color: var(--jury-grijs);
+    font-size: .95rem;
+}
+
+/* ── Lege staat ─────────────────────────────────────────────────────────── */
+.jury-lege-staat {
+    text-align: center; padding: 3rem 1rem;
+    color: var(--jury-grijs);
+}
+.jury-lege-icoon { font-size: 3.5rem; margin-bottom: 1rem; }
+.jury-lege-staat h2 { color: var(--jury-blauw); margin: 0 0 .8rem; }
+.jury-lege-staat p  { max-width: 480px; margin: 0 auto; line-height: 1.5; }
+
+/* ── Organisatie-grid (scherm vóór wedstrijdkeuze) ─────────────────────── */
+.jury-org-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+    gap: 1rem;
+}
+.jury-org-kaart {
+    display: flex; flex-direction: column; align-items: center;
+    text-align: center;
+    background: #fff;
+    border: 2px solid var(--jury-border);
+    border-radius: 12px;
+    padding: 1.4rem 1rem 1.1rem;
+    cursor: pointer;
+    transition: border-color .15s, transform .1s, box-shadow .15s, background .15s;
+    font: inherit; color: inherit;
+}
+.jury-org-kaart:hover,
+.jury-org-kaart:focus-visible {
+    border-color: var(--jury-blauw);
+    background: var(--jury-blauw-bg);
+    box-shadow: 0 4px 14px rgba(26,58,92,.2);
+    outline: none;
+}
+.jury-org-kaart:active { transform: translateY(1px); }
+.jury-org-logo {
+    width: 90px; height: 90px;
+    display: flex; align-items: center; justify-content: center;
+    margin-bottom: .8rem;
+    background: #f0f4f8;
+    border-radius: 50%;
+    overflow: hidden;
+}
+.jury-org-logo img {
+    max-width: 100%; max-height: 100%;
+    object-fit: contain;
+}
+.jury-org-logo-leeg {
+    font-size: 2.6rem;
+    color: var(--jury-grijs);
+}
+.jury-org-naam {
+    font-weight: 700; font-size: 1.05rem;
+    color: var(--jury-blauw);
+    margin-bottom: .25rem;
+    line-height: 1.25;
+}
+.jury-org-aantal {
+    font-size: .82rem; color: var(--jury-grijs);
+}
+
+/* Terug-knop links boven de wedstrijdlijst (alleen bij >1 org) */
+.jury-terug {
+    margin-bottom: 1rem;
+}
+
+/* ── Wedstrijd-grid ─────────────────────────────────────────────────────── */
+.jury-comp-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+    gap: 1rem;
+}
+.jury-comp-kaart {
+    text-align: left;
+    background: #fff;
+    border: 2px solid var(--jury-border);
+    border-radius: 10px;
+    padding: 1rem;
+    cursor: pointer;
+    transition: border-color .15s, transform .1s, box-shadow .15s;
+    font: inherit; color: inherit;
+}
+.jury-comp-kaart:hover,
+.jury-comp-kaart:focus-visible {
+    border-color: var(--jury-blauw);
+    box-shadow: 0 3px 10px rgba(26,58,92,.18);
+    outline: none;
+}
+.jury-comp-kaart:active { transform: translateY(1px); }
+.jury-comp-kaart-naam { font-weight: 700; font-size: 1.05rem; color: var(--jury-blauw); margin-bottom: .25rem; }
+.jury-comp-kaart-meta { font-size: .85rem; color: var(--jury-grijs); margin-bottom: .35rem; }
+.jury-comp-kaart-baan { font-size: .82rem; color: #444; margin-bottom: .15rem; }
+.jury-comp-kaart-org  { font-size: .78rem; color: var(--jury-grijs); font-style: italic; }
+
+/* ── Rol-grid (na login) ────────────────────────────────────────────────── */
+.jury-rol-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+    gap: 1rem;
+    max-width: 900px;
+}
+.jury-rol-kaart {
+    text-align: center;
+    background: #fff;
+    border: 2px solid var(--jury-border);
+    border-radius: 12px;
+    padding: 1.4rem 1rem;
+    cursor: pointer;
+    transition: border-color .15s, transform .1s, box-shadow .15s, background .15s;
+    font: inherit; color: inherit;
+}
+.jury-rol-kaart:hover,
+.jury-rol-kaart:focus-visible {
+    border-color: var(--jury-blauw);
+    background: var(--jury-blauw-bg);
+    box-shadow: 0 4px 14px rgba(26,58,92,.2);
+    outline: none;
+}
+.jury-rol-kaart:active { transform: translateY(1px); }
+.jury-rol-icoon {
+    font-size: 2.6rem;
+    margin-bottom: .5rem;
+    line-height: 1;
+}
+.jury-rol-icoon-groot { font-size: 3.2rem; }
+.jury-rol-naam {
+    font-weight: 700; font-size: 1.05rem;
+    color: var(--jury-blauw);
+    margin-bottom: .35rem;
+}
+.jury-rol-omschr {
+    font-size: .85rem; color: var(--jury-grijs);
+    line-height: 1.35;
+}
+
+/* ── Rol-detail (skeleton) ──────────────────────────────────────────────── */
+.jury-rol-detail-kop {
+    display: flex; align-items: center; gap: 1rem;
+    margin-bottom: 1.5rem;
+}
+.jury-placeholder {
+    background: #fff;
+    border: 2px dashed var(--jury-border);
+    border-radius: 10px;
+    padding: 2rem 1.5rem;
+    text-align: center;
+    color: var(--jury-grijs);
+}
+.jury-placeholder p { margin: .4rem 0; font-size: 1rem; }
+.jury-placeholder-hint { font-size: .85rem; color: #888; }
+
+/* ── Knoppen ────────────────────────────────────────────────────────────── */
+.jury-btn {
+    border: 0; border-radius: 6px;
+    padding: .55rem 1rem;
+    font: inherit; font-weight: 600; font-size: .9rem;
+    cursor: pointer;
+    transition: background .12s, color .12s;
+}
+.jury-btn-primary {
+    background: var(--jury-blauw); color: #fff;
+}
+.jury-btn-primary:hover { background: var(--jury-blauw-licht); }
+.jury-btn-primary:disabled { opacity: .5; cursor: not-allowed; }
+
+.jury-btn-secondary {
+    background: #fff; color: var(--jury-blauw);
+    border: 1px solid var(--jury-border);
+}
+.jury-btn-secondary:hover { background: var(--jury-blauw-bg); }
+
+.jury-btn-link {
+    background: transparent; color: #fff;
+    padding: .35rem .7rem;
+    font-size: .85rem;
+    border: 1px solid rgba(255,255,255,.25);
+}
+.jury-btn-link:hover { background: rgba(255,255,255,.12); }
+
+/* ── Login modal ────────────────────────────────────────────────────────── */
+.jury-modal {
+    position: fixed; inset: 0;
+    background: rgba(0,0,0,.45);
+    display: flex; align-items: center; justify-content: center;
+    z-index: 100;
+    padding: 1rem;
+}
+.jury-modal[hidden] { display: none; }
+.jury-modal-inhoud {
+    background: #fff; border-radius: 10px;
+    padding: 1.4rem 1.4rem 1rem;
+    max-width: 420px; width: 100%;
+    box-shadow: 0 10px 40px rgba(0,0,0,.3);
+}
+.jury-modal-inhoud h2 {
+    margin: 0 0 1rem;
+    color: var(--jury-blauw);
+    font-size: 1.15rem;
+}
+.jury-login-comp {
+    background: var(--jury-blauw-bg);
+    border-radius: 6px;
+    padding: .6rem .8rem;
+    margin-bottom: 1rem;
+}
+.jury-login-comp-naam { font-weight: 700; color: var(--jury-blauw); }
+.jury-login-comp-meta { font-size: .82rem; color: var(--jury-grijs); }
+.jury-login-label {
+    display: block; margin-bottom: .35rem;
+    font-weight: 600; font-size: .9rem;
+    color: var(--jury-blauw);
+}
+.jury-login-pwd {
+    width: 100%; padding: .65rem .8rem;
+    font: inherit; font-size: 1.05rem;
+    border: 2px solid var(--jury-border);
+    border-radius: 6px;
+    background: #fff;
+}
+.jury-login-pwd:focus {
+    outline: none;
+    border-color: var(--jury-blauw);
+    box-shadow: 0 0 0 3px rgba(26,58,92,.15);
+}
+.jury-login-fout {
+    margin-top: .7rem;
+    color: var(--jury-rood);
+    font-size: .85rem;
+    font-weight: 600;
+}
+.jury-login-acties {
+    display: flex; justify-content: flex-end; gap: .5rem;
+    margin-top: 1rem;
+}
+
+/* ── Area of Call ─────────────────────────────────────────────────────────── */
+.aoc-scherm { max-width: 100%; }
+
+/* Sticky-head bundelt topbar + ribbon-overzicht: blijft als geheel onder de
+   jury-topbar hangen bij verticale scroll. Eén sticky-container is robuuster
+   dan twee losse sticky-elementen (die zou je handmatig moeten optellen). */
+.aoc-sticky-head {
+    position: sticky; top: 56px; z-index: 5;
+    background: var(--jury-blauw-bg);
+    padding-bottom: .25rem;
+    margin-bottom: 1rem;
+}
+
+.aoc-topbar {
+    display: flex; flex-wrap: wrap; align-items: center;
+    gap: .6rem;
+    padding: .5rem .7rem;
+    background: #fff;
+    border: 1px solid var(--jury-border);
+    border-radius: 8px;
+    margin-bottom: .5rem;
+}
+.aoc-huidig-label {
+    flex: 1; min-width: 0;
+    font-weight: 700; color: var(--jury-blauw);
+    overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+    text-align: center;
+}
+.aoc-nav { padding: .4rem .8rem; font-size: .85rem; }
+.aoc-nav:disabled { opacity: .35; cursor: not-allowed; }
+
+.aoc-aantal { display: flex; align-items: center; gap: .3rem; font-size: .8rem; color: var(--jury-grijs); }
+.aoc-aantal-btn {
+    background: #fff;
+    color: var(--jury-blauw);
+    border: 1px solid var(--jury-border);
+    border-radius: 6px;
+    padding: .25rem .55rem;
+    font: inherit; font-weight: 700;
+    cursor: pointer;
+}
+.aoc-aantal-btn:hover { background: var(--jury-blauw-bg); }
+.aoc-aantal-btn.active {
+    background: var(--jury-blauw); color: #fff; border-color: var(--jury-blauw);
+}
+
+/* Overzicht-ribbon: 1 vierkantje per heat, kleur = status (legenda eronder) */
+.aoc-overzicht-wrap {
+    background: #fff;
+    border: 1px solid var(--jury-border);
+    border-radius: 8px;
+    padding: .5rem .7rem;
+    display: flex; flex-direction: column; gap: .45rem;
+}
+.aoc-overzicht-groep {
+    display: flex; flex-direction: column; gap: .3rem;
+    padding-bottom: .35rem;
+    border-bottom: 1px dashed #e6ecf3;
+}
+.aoc-overzicht-groep:last-of-type {
+    padding-bottom: 0;
+    border-bottom: 0;
+}
+.aoc-overzicht-titel {
+    font-size: .92rem; font-weight: 700;
+    color: var(--jury-blauw);
+    letter-spacing: .02em;
+}
+.aoc-overzicht {
+    display: flex; flex-wrap: wrap; gap: 4px;
+}
+.aoc-tile {
+    width: 36px; height: 36px;
+    border: 1px solid #c4d2e2;
+    border-radius: 5px;
+    font: inherit; font-size: .9rem; font-weight: 700;
+    cursor: pointer;
+    display: inline-flex; align-items: center; justify-content: center;
+    color: #444;
+    transition: transform .08s, border-color .12s;
+    padding: 0;
+}
+.aoc-tile:hover { border-color: var(--jury-blauw); }
+.aoc-tile:active { transform: scale(.92); }
+.aoc-tile.active {
+    outline: 2px solid var(--jury-blauw);
+    outline-offset: 1px;
+}
+
+/* Status-kleuren — ook gebruikt voor de legenda-swatches */
+.aoc-tile-onbegonnen { background: #fff; }
+.aoc-tile-bezig      { background: #ffd699; color: #6e3a00; }
+.aoc-tile-klaar      { background: #b3edc1; color: #1f5a30; }
+.aoc-tile-verzonden  { background: #99c2ff; color: #0d3060; }
+.aoc-tile-locked     { background: #d8d8d8; color: #555; }
+
+.aoc-legenda {
+    display: flex; flex-wrap: wrap; gap: .8rem;
+    font-size: .85rem; color: var(--jury-grijs);
+}
+.aoc-legend-item {
+    display: inline-flex; align-items: center; gap: .3rem;
+}
+.aoc-legend-sw {
+    display: inline-block; width: 16px; height: 16px;
+    border: 1px solid #c4d2e2; border-radius: 3px;
+}
+
+/* Batch layout: 1/2/3 heats naast elkaar */
+.aoc-batch {
+    display: grid; gap: 1rem;
+}
+/* Alle batches: vol gebruik van beschikbare breedte. Bij Toon=1 dus één
+   brede kaart, even breed als de sticky-header erboven. */
+.aoc-batch-1 { grid-template-columns: 1fr; }
+.aoc-batch-2 { grid-template-columns: 1fr 1fr; }
+.aoc-batch-3 { grid-template-columns: 1fr 1fr 1fr; }
+@media (max-width: 900px) {
+    .aoc-batch-2, .aoc-batch-3 { grid-template-columns: 1fr; }
+}
+
+/* Heat-kaart */
+.aoc-heat-kaart {
+    background: #fff;
+    border: 2px solid var(--jury-border);
+    border-radius: 10px;
+    overflow: hidden;
+    display: flex; flex-direction: column;
+}
+.aoc-heat-kop {
+    display: flex; justify-content: space-between; align-items: flex-start;
+    gap: .6rem;
+    padding: .5rem .9rem;
+    background: var(--jury-blauw-bg);
+    border-bottom: 1px solid var(--jury-border);
+}
+.aoc-heat-titel { flex: 1; min-width: 0; }
+.aoc-heat-nr    { font-size: .85rem; color: var(--jury-grijs); font-weight: 700; }
+.aoc-heat-naam  { font-weight: 700; color: var(--jury-blauw); font-size: 1.15rem; line-height: 1.25; }
+.aoc-heat-meta  { font-size: .9rem; color: var(--jury-grijs); }
+
+.aoc-status {
+    flex-shrink: 0;
+    font-size: .88rem; font-weight: 700;
+    padding: .28rem .6rem;
+    border-radius: 12px;
+    white-space: nowrap;
+}
+.aoc-status-open      { background: #fff;   color: var(--jury-blauw); border: 1px solid var(--jury-border); }
+.aoc-status-verzonden { background: #d4f4dd; color: #1f7a3a;  border: 1px solid #8fd4a3; }
+.aoc-status-locked    { background: #f0f0f0; color: #555;     border: 1px solid #c4c4c4; }
+
+/* Tabel met rijders */
+.aoc-tabel { width: 100%; border-collapse: collapse; }
+.aoc-tabel th {
+    text-align: left; padding: .25rem .7rem;
+    background: #f8fafc; font-size: .88rem; color: var(--jury-grijs);
+    border-bottom: 1px solid var(--jury-border);
+}
+.aoc-tabel td {
+    padding: .3rem .7rem;
+    border-bottom: 1px solid #ecf1f6;
+    font-size: 1.05rem;
+}
+.aoc-tabel tr:last-child td { border-bottom: 0; }
+
+.aoc-td-sp   { width: 38px; text-align: center; font-weight: 700; color: var(--jury-grijs); }
+.aoc-td-sn   { width: 52px; text-align: center; font-weight: 700; color: var(--jury-blauw); }
+.aoc-td-naam { font-weight: 600; }
+.aoc-td-acties {
+    width: 110px; text-align: right;
+    white-space: nowrap;
+}
+
+/* Rij-achtergrond per status */
+.aoc-rij-aanwezig td { background: #ebfaf0; }
+.aoc-rij-afwezig  td { background: #fdecec; }
+
+/* Toggle-knoppen — groot genoeg voor touch (44×44 minimum) */
+.aoc-toggle {
+    width: 42px; height: 42px;
+    margin-left: 4px;
+    border-radius: 8px;
+    font: inherit; font-size: 1.3rem; font-weight: 800;
+    cursor: pointer;
+    transition: background .12s, border-color .12s, color .12s, transform .08s;
+    background: #fff;
+}
+.aoc-toggle:active { transform: scale(.95); }
+.aoc-toggle:disabled { opacity: .5; cursor: not-allowed; }
+.aoc-aan { border: 2px solid #8fd4a3; color: #1f7a3a; }
+.aoc-aan:hover:not(:disabled) { background: #ebfaf0; }
+.aoc-aan.active { background: #27ae60; color: #fff; border-color: #27ae60; }
+.aoc-afw { border: 2px solid #e6b9b9; color: var(--jury-rood); }
+.aoc-afw:hover:not(:disabled) { background: #fdecec; }
+.aoc-afw.active { background: var(--jury-rood); color: #fff; border-color: var(--jury-rood); }
+
+/* Voet: tellers + acties */
+.aoc-voet {
+    display: flex; justify-content: space-between; align-items: center;
+    gap: .6rem;
+    padding: .4rem .9rem;
+    background: #fafbfd;
+    border-top: 1px solid var(--jury-border);
+}
+.aoc-tellers { font-size: .98rem; color: var(--jury-grijs); }
+.aoc-getal-aan { color: #1f7a3a; }
+.aoc-getal-afw { color: var(--jury-rood); }
+.aoc-baanop, .aoc-heropen { padding: .5rem 1rem; font-size: .98rem; }
+
+/* ── Compacte tablet portrait + mobile ──────────────────────────────────── */
+@media (max-width: 600px) {
+    .jury-topbar-inner { gap: .5rem; padding: .5rem .7rem; }
+    .jury-brand-naam   { display: none; }
+    .jury-comp-info    { padding-left: .5rem; }
+    .jury-main         { padding: .8rem .6rem 2rem; }
+    .jury-scherm-titel { font-size: 1.2rem; }
+    .jury-comp-grid,
+    .jury-rol-grid     { grid-template-columns: 1fr; }
+    .jury-rol-kaart    { padding: 1rem; }
+    .jury-rol-icoon    { font-size: 2.2rem; }
+}
+
+/* ── Landscape tablet (1024+) – iets ruimer ────────────────────────────── */
+@media (min-width: 1024px) {
+    .jury-scherm-titel { font-size: 1.5rem; }
+    .jury-comp-grid    { grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)); }
+}

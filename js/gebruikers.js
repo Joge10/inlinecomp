@@ -43,14 +43,20 @@ async function herlaadGebruikers() {
 
 let gbLogboekOpen = false;
 
-async function laadLogboek(userId = '') {
+async function laadLogboek(filterValue = '') {
     const tbody   = el('gb-log-tbody');
     const statusEl = el('gb-log-status');
     if (!tbody) return;
     tbody.innerHTML = '<tr><td colspan="6" class="gb-log-laden">Laden…</td></tr>';
     if (statusEl) statusEl.textContent = '';
     try {
-        const url = `api/logboek.php${userId ? '?user_id=' + encodeURIComponent(userId) : ''}`;
+        // filterValue: '' (alles), '__jury__' (alleen jury-app), '__org__'
+        // (alleen organisator), of een gebruiker-ID (alleen die persoon).
+        let qs = '';
+        if (filterValue === '__jury__')        qs = '?type=jury';
+        else if (filterValue === '__org__')    qs = '?type=organisator';
+        else if (filterValue)                  qs = '?user_id=' + encodeURIComponent(filterValue);
+        const url = 'api/logboek.php' + qs;
         const res  = await fetch(url);
         const logs = await res.json();
         if (!Array.isArray(logs)) throw new Error(logs.error ?? 'Fout');
@@ -61,10 +67,26 @@ async function laadLogboek(userId = '') {
         }
 
         const ACTIE_BADGE = {
-            login:          '<span class="gb-log-badge gb-log-in">ingelogd</span>',
-            logout:         '<span class="gb-log-badge gb-log-out">uitgelogd</span>',
-            login_mislukt:  '<span class="gb-log-badge gb-log-fout">mislukt</span>',
+            login:                       '<span class="gb-log-badge gb-log-in">ingelogd</span>',
+            logout:                      '<span class="gb-log-badge gb-log-out">uitgelogd</span>',
+            login_mislukt:               '<span class="gb-log-badge gb-log-fout">mislukt</span>',
+            // Jury-app: hergebruik bestaande kleuren (groen/rood/grijs) zodat
+            // de badges meteen herkenbaar zijn met dezelfde semantiek.
+            'jury-login':                '<span class="gb-log-badge gb-log-in">jury-login</span>',
+            'jury-login-fail':           '<span class="gb-log-badge gb-log-fout">jury-login mislukt</span>',
+            'jury-login-fail-noaccess':  '<span class="gb-log-badge gb-log-fout">jury-login geweigerd</span>',
+            'jury-logout':               '<span class="gb-log-badge gb-log-out">jury-uitgelogd</span>',
         };
+        // Voor jury-rol-* (jury-rol-area_of_call, jury-rol-starter, ...) een
+        // lichtblauwe badge met de rol-naam zonder prefix.
+        function badgeVoorActie(actie) {
+            if (ACTIE_BADGE[actie]) return ACTIE_BADGE[actie];
+            if (typeof actie === 'string' && actie.startsWith('jury-rol-')) {
+                const rol = actie.slice('jury-rol-'.length);
+                return `<span class="gb-log-badge gb-log-jury-rol">rol: ${escHtml(rol)}</span>`;
+            }
+            return `<span class="gb-log-badge">${escHtml(actie)}</span>`;
+        }
 
         tbody.innerHTML = logs.map(r => {
             const dt  = new Date(r.tijdstip.replace(' ', 'T') + 'Z');
@@ -72,7 +94,7 @@ async function laadLogboek(userId = '') {
                 day:'2-digit', month:'2-digit', year:'numeric',
                 hour:'2-digit', minute:'2-digit', second:'2-digit'
             });
-            const badge   = ACTIE_BADGE[r.actie] ?? `<span class="gb-log-badge">${escHtml(r.actie)}</span>`;
+            const badge   = badgeVoorActie(r.actie);
             const browser = [r.browser, r.os].filter(Boolean).join(' / ');
             const locatie = r.land
                 ? escHtml(r.land) + (r.stad ? `<span class="gb-log-stad">, ${escHtml(r.stad)}</span>` : '')
@@ -118,7 +140,10 @@ function renderLogboekSectie() {
             <div class="section-title">Login-logboek</div>
             <div class="gb-log-acties">
                 <select id="gb-log-filter" class="inp gb-log-filter-sel">
-                    <option value="">— Alle gebruikers —</option>
+                    <option value="">— Alles —</option>
+                    <option value="__jury__">⚖ Alleen jury-app</option>
+                    <option value="__org__">👤 Alleen organisator-logins</option>
+                    <option disabled>──────────────</option>
                     ${gebruikerOpties}
                 </select>
                 <button class="btn-secondary" id="gb-log-vernieuwen">↻ Vernieuwen</button>

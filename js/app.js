@@ -740,6 +740,15 @@ function toonBevestigDialog(bericht, titel = 'Onopgeslagen wijzigingen', labelOk
         overlay.addEventListener('click', e => { if (e.target === overlay) sluit(false); });
         document.addEventListener('keydown', onKey);
         overlay.querySelector(toonAnnuleer ? '.modal-annuleer' : '.modal-doorgaan').focus();
+
+        // opts.onOpened(overlay) — hook voor dialogs met interactieve body
+        // (bv. input-velden waarvan we de waarde willen meelezen). Wordt
+        // aangeroepen na append zodat caller eigen listeners kan binden +
+        // values kan opslaan in eigen scope. De overlay wordt na resolve
+        // verwijderd; binnen onOpened blijft 'ie wel bereikbaar.
+        if (typeof opts.onOpened === 'function') {
+            try { opts.onOpened(overlay); } catch (e) { console.warn('[modal] onOpened-fout:', e); }
+        }
     });
 }
 

@@ -570,12 +570,24 @@ async function juryWachtwoordDialog(btn) {
         `<p style="margin-top:8px;font-size:.85em;color:#666">` +
         `Het wachtwoord wordt versleuteld opgeslagen — je kunt het bestaande wachtwoord ` +
         `<em>niet</em> meer opvragen, alleen vervangen of wissen. Geef het zelf door aan de jury-leden.</p>`;
+    // We slaan de waarde in een buiten-scope-variabele op via de onOpened-hook
+    // omdat toonBevestigDialog de overlay verwijdert vóór de promise resolved.
+    // Zonder dit zou de input al uit de DOM zijn als we 'm nadien zochten en
+    // bleef pwd altijd '' (= wissen — bug die hier het instellen blokkeerde).
+    let pwd = '';
     const akkoord = await toonBevestigDialog(
-        html, '🔑 Jury-wachtwoord instellen', 'Opslaan', 'Annuleren', { bodyIsHtml: true }
+        html, '🔑 Jury-wachtwoord instellen', 'Opslaan', 'Annuleren',
+        {
+            bodyIsHtml: true,
+            onOpened: (overlay) => {
+                const inp = overlay.querySelector('#jury-pwd-inp');
+                if (!inp) return;
+                inp.focus();
+                inp.addEventListener('input', () => { pwd = inp.value; });
+            },
+        }
     );
     if (!akkoord) return;
-    const inp = document.getElementById('jury-pwd-inp');
-    const pwd = inp ? inp.value : '';
     try {
         const res = await fetch('api/jury_wachtwoord.php', {
             method:  'POST',
