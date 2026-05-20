@@ -13,6 +13,11 @@ CREATE TABLE IF NOT EXISTS `entries` (
     `person_license`          VARCHAR(30)  NOT NULL,
     `knsb_entry_id`           VARCHAR(36)  DEFAULT NULL,
     `status`                  TINYINT UNSIGNED DEFAULT 1,
+    -- reserve: NULL = gewone rijder, 1..N = reserve-volgnummer.
+    -- reserve_handmatig_ingezet=1: operator heeft via reserve-beheer ingezet;
+    -- vanaf dat moment beschermt deze vlag entries.reserve tegen KNSB-resync.
+    `reserve`                 TINYINT UNSIGNED NULL DEFAULT NULL,
+    `reserve_handmatig_ingezet` TINYINT UNSIGNED NOT NULL DEFAULT 0,
     PRIMARY KEY (`id`),
     UNIQUE KEY `uq_entry` (`distance_combination_id`, `person_license`),
     KEY `idx_entry_person` (`person_license`),

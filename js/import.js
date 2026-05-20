@@ -86,10 +86,12 @@ function initEdits() {
 
             const ek = cat.dc_id + '_' + lk;
             entryEdits[ek] = {
-                entry_status:  item.entry_status,
-                knsb_status:   item.knsb_status ?? item.entry_status,  // altijd originele KNSB API-status (0/1/2)
-                reserve:       item.reserve,
-                knsb_entry_id: item.knsb_entry_id,
+                entry_status:    item.entry_status,
+                knsb_status:     item.knsb_status ?? item.entry_status,  // altijd originele KNSB API-status (0/1/2)
+                reserve:         item.reserve,
+                knsb_reserve:    item.knsb_reserve ?? null,   // origineel KNSB-volgnummer
+                reserve_ingezet: item.reserve_ingezet ?? 0,
+                knsb_entry_id:   item.knsb_entry_id,
             };
         }
     }
@@ -774,8 +776,52 @@ function bouwVergelijkTabbladen() {
 
 // ── Vergelijktabel tonen ──────────────────────────────────────────────────────
 
+// Eén-keer-per-cat-per-sessie: voorkomt dubbele sync-calls bij snel klikken.
+const _reservesSyncedDcs = new Set();
+
+// Bulk-sync entries.reserve naar de DB op basis van de huidige KNSB-feed
+// (item.reserve in vergelijkData). Beschermt operator-NULL (reserve_handmatig
+// _ingezet=1). Zonder deze sync zou startlijst_genereer reserves niet kunnen
+// filteren omdat entries.reserve op default-NULL blijft staan na de migratie.
+async function _syncReservesNaarDB(cat) {
+    if (_reservesSyncedDcs.has(cat.dc_id)) return;
+    _reservesSyncedDcs.add(cat.dc_id);
+
+    const reserves     = [];
+    const nietReserves = [];
+    for (const item of cat.competitors) {
+        const lk = item.license_key;
+        if (!lk) continue;
+        // item.reserve uit vergelijkData = effectieve waarde (DB met
+        // NULL-bescherming, anders KNSB-feed). Bij ingezette reserves =
+        // null (en reserve_handmatig_ingezet=1 in DB → endpoint laat 'm
+        // sowieso met rust).
+        if (item.reserve != null && item.reserve > 0) {
+            reserves.push({ person_license: lk, reserve_nr: item.reserve });
+        } else {
+            nietReserves.push(lk);
+        }
+    }
+    if (!reserves.length && !nietReserves.length) return;
+    try {
+        await fetch('api/reserves_sync.php', {
+            method: 'POST', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                competition_id: huidigCompId,
+                dc_id:          cat.dc_id,
+                reserves, niet_reserves: nietReserves,
+            }),
+        });
+    } catch { /* sync mag stilzwijgend falen — geen blocker voor UI */ }
+}
+
 function toonVergelijkTabel(cat) {
     const content = el('imp-cat-content');
+
+    // Sync entries.reserve met huidige KNSB-feed-state. Async, niet awaiten
+    // — het is een achtergrond-update die alleen impact heeft op latere
+    // startlijst_genereer-aanroepen, niet op de huidige render.
+    _syncReservesNaarDB(cat);
 
     if (!cat.competitors.length) {
         content.innerHTML =
@@ -788,8 +834,202 @@ function toonVergelijkTabel(cat) {
         return;
     }
 
+    // ── Reserve-beheer-paneel boven de vergelijk-tabel ───────────────────────
+    // Tellingen voor in de paneel-header. Belangrijk: "origineel reserve" =
+    // (reserve != null) OF (reserve_ingezet === 1). Een ingezette reserve was
+    // dus ooit reserve, telt NIET mee in "niet-reserves" — anders zou het
+    // niet-reserves-getal magisch oplopen bij elke inzet.
+    //
+    // Tellingen:
+    //   - nietReservesTotaal:    origineel geen reserve (ongeacht status)
+    //   - nietReservesBevestigd: idem, met status=1
+    //   - reservesTotaal:        origineel wel reserve (ingezet of niet)
+    //   - reservesBevestigd:     reserves die NIET ingezet zijn, met status=1
+    //                            (= kandidaten voor inzet-knop)
+    //   - reservesIngezetN:      reserves die nu ingezet zijn
+    //   - totaalInLoting:        rijders die in de startlijst-loting komen =
+    //                            server-filter: status IN (1,5) AND reserve IS NULL
+    let nietReservesTotaal      = 0;
+    let nietReservesBevestigd   = 0;
+    let reservesTotaal          = 0;
+    let reservesBevestigd       = 0;
+    let reservesIngezetN        = 0;
+    let totaalInLoting          = 0;
+    const reserveRows = [];   // niet-ingezet — krijgen "Inzetten"-knop
+    const ingezetRows = [];   // wel ingezet  — krijgen "Terug"-knop
+    for (const item of cat.competitors) {
+        const lk = item.license_key;
+        const ek = cat.dc_id + '_' + lk;
+        const ee = entryEdits[ek] || {};
+        const st = ee.entry_status ?? 1;
+        const heeftReserveNr = ee.reserve != null;
+        const isIngezet      = ee.reserve_ingezet === 1;
+        const wasOrigineelReserve = heeftReserveNr || isIngezet;
+
+        if (wasOrigineelReserve) {
+            reservesTotaal++;
+            const pe = personEdits[lk] || {};
+            const baseRow = {
+                lk, ek,
+                entry_status: st,
+                full_name:    pe.full_name    ?? '',
+                club_short:   pe.club_short   ?? '',
+                category:     pe.category     ?? '',
+            };
+            if (isIngezet) {
+                reservesIngezetN++;
+                ingezetRows.push({
+                    ...baseRow,
+                    // KNSB-volgnummer nodig om terug-actie te doen.
+                    // Fallback 1 als knsb_reserve niet bekend — voor anonieme
+                    // rijders of legacy-imports.
+                    knsb_reserve_nr: ee.knsb_reserve ?? 1,
+                });
+            } else {
+                if (st === 1) reservesBevestigd++;
+                reserveRows.push({
+                    ...baseRow,
+                    reserve_nr: ee.reserve,
+                });
+            }
+        } else {
+            nietReservesTotaal++;
+            if (st === 1) nietReservesBevestigd++;
+        }
+
+        // In-loting telt iedereen die straks in de startlijst belandt — dat
+        // zijn alle entries zonder reserve-nummer met status 1 of 5
+        // (inclusief ingezette ex-reserves).
+        if (!heeftReserveNr && (st === 1 || st === 5)) {
+            totaalInLoting++;
+        }
+    }
+    reserveRows.sort((a, b) => a.reserve_nr - b.reserve_nr);
+    ingezetRows.sort((a, b) => (a.knsb_reserve_nr ?? 99) - (b.knsb_reserve_nr ?? 99));
+
+    // Capaciteit-cap: het totaal-in-loting mag het oorspronkelijke aantal
+    // niet-reserves (= max-rijders volgens KNSB) nooit overstijgen. Reserves
+    // mogen alleen ingezet worden ter vervanging van iemand die afgemeld /
+    // niet-getekend / niet-bevestigd staat. "Vrij" = aantal lege slots dat
+    // nog ingevuld kan worden door een reserve.
+    const vrijeSlots = Math.max(0, nietReservesTotaal - totaalInLoting);
+
+    // Toon paneel ook als er geen reserves zijn maar wel ingezetten — operator
+    // wil zien dat de telling klopt. Maar dat is randgeval; voor nu: tonen
+    // zodra er reserves OF ingezette ex-reserves zijn.
+    const toonPaneel = reservesTotaal > 0 || reservesIngezetN > 0;
+    const reservePaneelHtml = toonPaneel ? `
+        <details class="reserve-paneel" data-dc-id="${escHtml(cat.dc_id)}" open>
+            <summary>
+                <span class="reserve-paneel-titel">Reserves &amp; deelnemers-telling</span>
+                <span class="reserve-paneel-stats">
+                    <span class="rp-stat" title="Niet-reserves totaal (alle statussen)">
+                        <span class="rp-lbl">Niet-reserves:</span>
+                        <strong>${nietReservesTotaal}</strong>
+                        <span class="rp-sub">waarvan bevestigd: <strong>${nietReservesBevestigd}</strong></span>
+                    </span>
+                    <span class="rp-stat" title="Reserves totaal (volgens KNSB-feed)">
+                        <span class="rp-lbl">Reserves:</span>
+                        <strong>${reservesTotaal}</strong>
+                        <span class="rp-sub">bevestigd: <strong>${reservesBevestigd}</strong></span>
+                        <span class="rp-sub">ingezet: <strong>${reservesIngezetN}</strong></span>
+                    </span>
+                    <span class="rp-stat rp-stat-totaal" title="Rijders die in de startlijst-loting komen (bevestigde niet-reserves + ingezette reserves). Max = oorspronkelijk aantal niet-reserves.">
+                        <span class="rp-lbl">In loting:</span>
+                        <strong>${totaalInLoting}</strong>
+                        <span class="rp-sub">van max <strong>${nietReservesTotaal}</strong></span>
+                        <span class="rp-sub rp-vrij ${vrijeSlots === 0 ? 'rp-vrij-vol' : ''}"
+                              title="Lege slots die nog door een reserve ingevuld kunnen worden">
+                            vrij: <strong>${vrijeSlots}</strong>
+                        </span>
+                    </span>
+                </span>
+            </summary>
+            ${reserveRows.length === 0 ? `
+            <div class="reserve-paneel-leeg">
+                Alle reserves zijn ingezet — geen acties beschikbaar.
+            </div>` : `
+            <table class="reserve-paneel-tabel">
+                <thead><tr>
+                    <th class="th-reserve-nr">#</th>
+                    <th class="th-reserve-naam">Naam</th>
+                    <th class="th-reserve-club">Club</th>
+                    <th class="th-reserve-cat">Cat.</th>
+                    <th class="th-reserve-status">Status</th>
+                    <th class="th-reserve-actie"></th>
+                </tr></thead>
+                <tbody>
+                ${reserveRows.map(r => {
+                    // Voorwaarden voor inzet:
+                    //   1. status = 1 (getekend aan de balie)
+                    //   2. er moet nog een vrije plek zijn (capaciteit-cap)
+                    const statusOk   = r.entry_status === 1;
+                    const slotOk     = vrijeSlots > 0;
+                    const kanInzet   = statusOk && slotOk;
+                    const titel      = !statusOk
+                        ? 'Inzetten kan alleen als status = Bevestigd (getekend aan de balie)'
+                        : !slotOk
+                            ? 'Geen vrije plekken meer — alle slots zijn al gevuld (max bereikt)'
+                            : 'Reserve inzetten: status → Bevestigd bij org., reserve-nummer vervalt';
+                    return `
+                    <tr data-lk="${escHtml(r.lk)}" data-reserve-nr="${r.reserve_nr}">
+                        <td class="td-reserve-nr">R${r.reserve_nr}</td>
+                        <td class="td-reserve-naam">${escHtml(r.full_name)}</td>
+                        <td class="td-reserve-club">${escHtml(r.club_short)}</td>
+                        <td class="td-reserve-cat">${escHtml(r.category)}</td>
+                        <td class="td-reserve-status">
+                            <span class="status-badge ${STATUS_CSS[r.entry_status]}">
+                                ${STATUS_LABELS[r.entry_status]}
+                            </span>
+                        </td>
+                        <td class="td-reserve-actie">
+                            <button class="btn-reserve-inzet"
+                                    data-lk="${escHtml(r.lk)}"
+                                    data-reserve-nr="${r.reserve_nr}"
+                                    ${kanInzet ? '' : 'disabled'}
+                                    title="${escHtml(titel)}">Inzetten</button>
+                        </td>
+                    </tr>`;
+                }).join('')}
+                </tbody>
+            </table>`}
+            ${ingezetRows.length ? `
+            <div class="reserve-paneel-subkop">Reeds ingezet</div>
+            <table class="reserve-paneel-tabel reserve-paneel-tabel-ingezet">
+                <thead><tr>
+                    <th class="th-reserve-nr">orig.</th>
+                    <th class="th-reserve-naam">Naam</th>
+                    <th class="th-reserve-club">Club</th>
+                    <th class="th-reserve-cat">Cat.</th>
+                    <th class="th-reserve-status">Status</th>
+                    <th class="th-reserve-actie"></th>
+                </tr></thead>
+                <tbody>
+                ${ingezetRows.map(r => `
+                    <tr data-lk="${escHtml(r.lk)}">
+                        <td class="td-reserve-nr">R${r.knsb_reserve_nr}</td>
+                        <td class="td-reserve-naam">${escHtml(r.full_name)}</td>
+                        <td class="td-reserve-club">${escHtml(r.club_short)}</td>
+                        <td class="td-reserve-cat">${escHtml(r.category)}</td>
+                        <td class="td-reserve-status">
+                            <span class="status-badge ${STATUS_CSS[r.entry_status]}">
+                                ${STATUS_LABELS[r.entry_status]}
+                            </span>
+                        </td>
+                        <td class="td-reserve-actie">
+                            <button class="btn-reserve-terug"
+                                    data-lk="${escHtml(r.lk)}"
+                                    data-reserve-nr="${r.knsb_reserve_nr}"
+                                    title="Inzet terugdraaien: rijder gaat weer terug naar reserve R${r.knsb_reserve_nr}">Terug</button>
+                        </td>
+                    </tr>`).join('')}
+                </tbody>
+            </table>` : ''}
+        </details>` : '';
+
     let html = `
     <div class="vergelijk-wrap">
+    ${reservePaneelHtml}
     <table class="vergelijk-tabel">
     <thead><tr>
         <th class="th-sn">Start#</th>
@@ -880,6 +1120,126 @@ function toonVergelijkTabel(cat) {
     content.innerHTML = html;
 
     // ── Event listeners ──
+
+    // Reserve-paneel: Inzetten-knop. Direct API-call (geen pending edit-state):
+    // operator klikt → DB-mutatie → lokale state updaten → herrender tabel zodat
+    // de rijder uit het reserve-paneel verdwijnt en in de reguliere tabel met
+    // status 'Bevestigd bij org.' verschijnt.
+    // Reserve-paneel: Terug-knop. Draait een inzet terug — rijder gaat weer
+    // in het reserves-overzicht staan met z'n originele KNSB-volgnummer.
+    // Status blijft staan zoals 'ie was (= 5 'Bevestigd bij org.'), tenzij
+    // operator handmatig naar lagere status zet. Reserves met status=5
+    // tellen niet als 'bevestigd' in de paneel-header (alleen status=1 telt).
+    content.querySelectorAll('.btn-reserve-terug').forEach(btn => {
+        btn.addEventListener('click', async () => {
+            if (btn.disabled) return;
+            const lk        = btn.dataset.lk;
+            const reserveNr = parseInt(btn.dataset.reserveNr, 10) || 1;
+            if (!lk) return;
+
+            const akkoord = await toonBevestigDialog(
+                `Inzet van deze rijder terugdraaien? Hij/zij wordt weer R${reserveNr} `
+                + `en valt uit de startlijst-loting.`,
+                'Inzet terugdraaien', 'Terugdraaien', 'Annuleren'
+            );
+            if (!akkoord) return;
+
+            btn.disabled = true;
+            btn.textContent = 'Bezig…';
+            try {
+                const res = await fetch('api/reserve_inzet.php', {
+                    method: 'POST', headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        competition_id: huidigCompId,
+                        dc_id:          cat.dc_id,
+                        person_license: lk,
+                        actie:          'terug',
+                        reserve_nr:     reserveNr,
+                    }),
+                });
+                const data = await res.json();
+                if (!res.ok || data.error) {
+                    throw new Error(data.error || `HTTP ${res.status}`);
+                }
+                // Lokale state: rijder is weer reserve.
+                const ek = cat.dc_id + '_' + lk;
+                if (entryEdits[ek]) {
+                    entryEdits[ek].reserve         = reserveNr;
+                    entryEdits[ek].reserve_ingezet = 0;
+                    // status blijft staan
+                }
+                const comp = cat.competitors.find(c => c.license_key === lk);
+                if (comp) {
+                    comp.reserve         = reserveNr;
+                    comp.reserve_ingezet = 0;
+                }
+                toonVergelijkTabel(cat);
+            } catch (e) {
+                btn.disabled = false;
+                btn.textContent = 'Terug';
+                await toonBevestigDialog(
+                    'Terugdraaien mislukt: ' + e.message, 'Fout', 'OK', null
+                );
+            }
+        });
+    });
+
+    content.querySelectorAll('.btn-reserve-inzet').forEach(btn => {
+        btn.addEventListener('click', async () => {
+            if (btn.disabled) return;
+            const lk        = btn.dataset.lk;
+            const reserveNr = parseInt(btn.dataset.reserveNr, 10);
+            if (!lk) return;
+
+            const akkoord = await toonBevestigDialog(
+                `Reserve R${reserveNr} inzetten voor ${escHtml(cat.dc_name)}? `
+                + `Status wordt 'Bevestigd bij org.' en de rijder doet vanaf nu mee in de loting.`,
+                'Reserve inzetten', 'Inzetten', 'Annuleren'
+            );
+            if (!akkoord) return;
+
+            btn.disabled = true;
+            btn.textContent = 'Bezig…';
+            try {
+                const res = await fetch('api/reserve_inzet.php', {
+                    method: 'POST', headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        competition_id: huidigCompId,
+                        dc_id:          cat.dc_id,
+                        person_license: lk,
+                        actie:          'inzet',
+                    }),
+                });
+                const data = await res.json();
+                if (!res.ok || data.error) {
+                    throw new Error(data.error || `HTTP ${res.status}`);
+                }
+                // Lokale state bijwerken zodat herrender direct klopt zonder
+                // volledige vergelijkData-refetch.
+                const ek = cat.dc_id + '_' + lk;
+                if (entryEdits[ek]) {
+                    entryEdits[ek].reserve         = null;
+                    entryEdits[ek].entry_status    = 5;
+                    entryEdits[ek].reserve_ingezet = 1;
+                }
+                // Ook vergelijkData.competitor's reserve-veld + entry_status updaten
+                // zodat herrender op basis van de cat-data correct werkt.
+                const comp = cat.competitors.find(c => c.license_key === lk);
+                if (comp) {
+                    comp.reserve         = null;
+                    comp.entry_status    = 5;
+                    comp.reserve_ingezet = 1;
+                }
+                toonVergelijkTabel(cat);
+            } catch (e) {
+                btn.disabled = false;
+                btn.textContent = 'Inzetten';
+                await toonBevestigDialog(
+                    'Inzetten mislukt: ' + e.message, 'Fout', 'OK', null, { toonAnnuleer: false }
+                );
+            }
+        });
+    });
 
     content.querySelectorAll('.inp[data-field]').forEach(inp => {
         inp.addEventListener('change', () => {

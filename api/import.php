@@ -448,13 +448,22 @@ try {
                updated_at   = CURRENT_TIMESTAMP
     ");
 
+    // Reserve-persist:
+    //  - Nieuwe entry: reserve uit KNSB-feed direct opslaan.
+    //  - Bestaande entry: reserve_handmatig_ingezet=1 → KNSB mag de reserve-
+    //    waarde NIET overschrijven (operator heeft ingezet, NULL blijft NULL).
+    //    Anders: KNSB-waarde overschrijft (resync is leidend).
     $stmtEntry = $pdo->prepare("
         INSERT INTO entries
-               (distance_combination_id, person_license, knsb_entry_id, status)
-        VALUES (:dc_id, :person_license, :knsb_entry_id, :status)
+               (distance_combination_id, person_license, knsb_entry_id, status, reserve)
+        VALUES (:dc_id, :person_license, :knsb_entry_id, :status, :reserve)
         ON DUPLICATE KEY UPDATE
                knsb_entry_id = VALUES(knsb_entry_id),
-               status        = VALUES(status)
+               status        = VALUES(status),
+               reserve       = CASE WHEN reserve_handmatig_ingezet = 1
+                                    THEN reserve
+                                    ELSE VALUES(reserve)
+                               END
     ");
 
     // Transponder: altijd overschrijven met de goedgekeurde waarde
@@ -564,11 +573,18 @@ try {
             ]);
 
             // Inschrijving aanmaken of bijwerken
+            // reserve uit KNSB-feed; NULL als geen reserve (1, 2, ... voor R1, R2, ...)
+            $reserveNr = $c['reserve'] ?? null;
+            if ($reserveNr !== null && !is_int($reserveNr)) {
+                $reserveNr = (int)$reserveNr;
+                if ($reserveNr <= 0) $reserveNr = null;
+            }
             $stmtEntry->execute([
                 ':dc_id'          => $dcId,
                 ':person_license' => $lk,
                 ':knsb_entry_id'  => $c['knsb_entry_id'] ?? null,
                 ':status'         => $c['entry_status']  ?? 1,
+                ':reserve'        => $reserveNr,
             ]);
 
             // Transponders slot 1 + 2 (KNSB — read-only in UI, opslaan zoals ontvangen)

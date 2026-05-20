@@ -1499,6 +1499,141 @@ header .header-wedstrijd::before {
     margin-left: 4px;
 }
 
+/* Reserve-beheer-paneel (boven de vergelijk-tabel). Collapsible <details>
+   met lijst van reserves + Inzetten-knop. Visueel rustig — geen onnodige
+   visuele ruis bij wedstrijden zonder reserves. */
+.reserve-paneel {
+    margin: .5rem 0 1rem;
+    border: 1px solid #d6e0ec;
+    border-radius: 6px;
+    background: #f6f9fc;
+    overflow: hidden;
+}
+.reserve-paneel > summary {
+    cursor: pointer;
+    padding: .45rem .7rem;
+    font-size: .85rem;
+    color: var(--blauw, #1a3a5c);
+    background: #eaf2fa;
+    user-select: none;
+    list-style: none;
+    display: flex; align-items: center; flex-wrap: wrap; gap: .8rem;
+}
+.reserve-paneel-stats {
+    display: flex; flex-wrap: wrap; gap: 1.2rem;
+    margin-left: auto;          /* push naar rechts; titel blijft links */
+    font-size: .8rem;
+    align-items: center;
+}
+.rp-stat        { display: inline-flex; align-items: baseline; gap: .35rem; }
+.rp-stat .rp-lbl{ color: #555; font-weight: 500; }
+.rp-stat strong { color: var(--blauw, #1a3a5c); font-weight: 700; }
+.rp-stat .rp-sub{ color: #666; margin-left: .25rem; font-weight: 400; }
+.rp-stat .rp-sub strong { color: #444; }
+.rp-stat-totaal {
+    border-left: 2px solid #b9c8db;
+    padding-left: 1rem;
+    font-weight: 600;
+}
+.rp-stat-totaal strong { font-size: 1.05em; color: #2e7d32; }
+.rp-vrij {
+    margin-left: .5rem;
+    padding: 0 .5rem;
+    border-radius: 10px;
+    background: #e8f5e9;
+    color: #2e7d32;
+    font-weight: 600;
+}
+.rp-vrij-vol {
+    background: #fdecea;
+    color: #b71c1c;
+}
+.reserve-paneel-leeg {
+    padding: .8rem 1rem;
+    font-size: .85rem;
+    color: #666;
+    text-align: center;
+    background: #fff;
+}
+.reserve-paneel > summary::-webkit-details-marker { display: none; }
+.reserve-paneel > summary::before {
+    content: '\25B8';                /* ▸ */
+    display: inline-block;
+    margin-right: .4em;
+    transition: transform .15s;
+}
+.reserve-paneel[open] > summary::before { transform: rotate(90deg); }
+.reserve-paneel-titel  { font-weight: 700; }
+.reserve-paneel-aantal { margin-left: .25rem; font-weight: 600; color: #4d8ad0; }
+.reserve-paneel-hint   { margin-left: .5rem; font-size: .78rem; color: #666; font-weight: 400; }
+.reserve-paneel-tabel {
+    width: 100%;
+    border-collapse: collapse;
+    background: #fff;
+}
+.reserve-paneel-tabel th,
+.reserve-paneel-tabel td {
+    padding: .35rem .6rem;
+    border-top: 1px solid #eef2f7;
+    font-size: .85rem;
+    text-align: left;
+    vertical-align: middle;
+}
+.reserve-paneel-tabel thead th {
+    background: #f0f4f8;
+    color: var(--blauw, #1a3a5c);
+    font-weight: 600;
+    border-bottom: 1px solid #d6e0ec;
+    border-top: 0;
+}
+.reserve-paneel-tabel .td-reserve-nr     { font-weight: 700; color: var(--blauw, #1a3a5c); white-space: nowrap; }
+.reserve-paneel-tabel .td-reserve-actie  { text-align: right; }
+.btn-reserve-inzet {
+    background: var(--blauw, #1a3a5c);
+    color: #fff;
+    border: 0;
+    border-radius: 4px;
+    padding: .25rem .75rem;
+    font-size: .8rem;
+    font-weight: 600;
+    cursor: pointer;
+    transition: background .12s, opacity .12s;
+}
+.btn-reserve-inzet:hover:not(:disabled) { background: #4d8ad0; }
+.btn-reserve-inzet:disabled {
+    background: #b9c8db;
+    color: #fff;
+    cursor: not-allowed;
+    opacity: .8;
+}
+.reserve-paneel-subkop {
+    padding: .6rem .8rem .25rem;
+    font-size: .78rem;
+    font-weight: 700;
+    color: #6a737d;
+    text-transform: uppercase;
+    letter-spacing: .03em;
+    background: #fff;
+    border-top: 1px solid #eef2f7;
+}
+.reserve-paneel-tabel-ingezet td { background: #fdfbf6; }
+.btn-reserve-terug {
+    background: #fff;
+    color: #b71c1c;
+    border: 1px solid #f5c6c6;
+    border-radius: 4px;
+    padding: .25rem .75rem;
+    font-size: .8rem;
+    font-weight: 600;
+    cursor: pointer;
+    transition: background .12s, border-color .12s;
+}
+.btn-reserve-terug:hover:not(:disabled) {
+    background: #fdecea;
+    border-color: #b71c1c;
+}
+.btn-reserve-terug:disabled { opacity: .6; cursor: not-allowed; }
+
 /* NIEUW / ! badges in laatste kolom */
 .badge-nieuw {
     display: inline-block;

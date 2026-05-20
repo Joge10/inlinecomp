@@ -74,6 +74,12 @@ try {
         $params   = array_merge($params, $catFilter);
     }
 
+    // Reserves (e.reserve IS NOT NULL) NIET automatisch meenemen — alleen
+    // expliciet ingezette reserves (operator zet reserve op NULL via het
+    // Reserve-beheer-paneel in de import-module). Voorheen verschenen
+    // KNSB-reserves automatisch in de startlijst als ze toevallig op
+    // status getekend/bevestigd stonden — dat is fout: een reserve moet
+    // pas in de loting na expliciete inzet.
     $stmt = $pdo->prepare("
         SELECT p.license_key, p.full_name, p.short_name,
                p.start_number, p.club_short, p.club_full, p.city, p.category
@@ -81,6 +87,7 @@ try {
         JOIN persons p ON e.person_license = p.license_key
         WHERE e.distance_combination_id IN ($ph)
           AND e.status IN (1, 5)
+          AND e.reserve IS NULL
           $catWhere
     ");
     $stmt->execute($params);
@@ -101,13 +108,21 @@ try {
             $extraParams  = array_merge($extraParams, $catFilter);
         }
         $alBekend = array_fill_keys(array_column($rijders, 'license_key'), true);
+        // Reserves uitsluiten: ook in het vangnet — LEFT JOIN met entries
+        // zodat we entries.reserve kunnen checken. e.reserve IS NULL = niet
+        // reserve (of geen entry-rij = legacy/cross-comp rijder); reserve=N
+        // betekent expliciet reserve en moet uitgesloten worden.
         $extraStmt = $pdo->prepare("
             SELECT DISTINCT p.license_key, p.full_name, p.short_name,
                             p.start_number, p.club_short, p.club_full, p.city, p.category
             FROM uitslag_afstand ua
             JOIN persons p ON p.license_key = ua.person_license
+            LEFT JOIN entries e
+                   ON e.person_license          = ua.person_license
+                  AND e.distance_combination_id = ua.distance_combination_id
             WHERE ua.competition_id = ?
               AND ua.distance_combination_id IN ($extraPh)
+              AND e.reserve IS NULL
               $extraWhere
         ");
         $extraStmt->execute($extraParams);

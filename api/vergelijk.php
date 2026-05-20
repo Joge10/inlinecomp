@@ -250,7 +250,8 @@ try {
     // 4. Entries voor déze competitie
     $dbEntries = [];
     $stmt = $pdo->prepare("
-        SELECT e.person_license, e.distance_combination_id, e.knsb_entry_id, e.status
+        SELECT e.person_license, e.distance_combination_id, e.knsb_entry_id, e.status,
+               e.reserve, e.reserve_handmatig_ingezet
         FROM entries e
         JOIN distance_combinations dc ON e.distance_combination_id = dc.id
         WHERE dc.competition_id = ?
@@ -344,7 +345,17 @@ try {
             }
 
             // reserve: null of volgnummer (1=1e reserve, 2=2e reserve …)
-            $reserve = $item['reserve'];
+            // Bron-volgorde:
+            //  - reserve_handmatig_ingezet=1 → operator heeft ingezet, NULL is
+            //    beschermd; DB-waarde gebruiken (= NULL of teruggeplaatst nummer).
+            //  - anders: KNSB-feed is leidend (live waarde, ook als DB nog niet
+            //    gesynchroniseerd is — bv. direct na een schema-migratie zonder
+            //    fresh Importeer-actie).
+            if ($dbEntry !== null && (int)($dbEntry['reserve_handmatig_ingezet'] ?? 0) === 1) {
+                $reserve = $dbEntry['reserve'] !== null ? (int)$dbEntry['reserve'] : null;
+            } else {
+                $reserve = $item['reserve'];
+            }
 
             $rows[] = [
                 'license_key'   => $lk,
@@ -365,7 +376,18 @@ try {
                     }
                     return $knsbSt;
                 })(),
-                'reserve'       => $reserve,
+                'reserve'         => $reserve,
+                // Originele KNSB-waarde — los van DB-status. Nodig voor de
+                // "Terug naar reserve"-actie in het reserve-paneel: we moeten
+                // het reserve-volgnummer kennen om de rijder terug op te
+                // nemen in het reserves-overzicht.
+                'knsb_reserve'    => $item['reserve'] !== null ? (int)$item['reserve'] : null,
+                // Vlag voor de UI: 1 = operator heeft via Reserve-beheer ingezet,
+                // 0 = nooit ingezet (of teruggeplaatst). Wordt o.a. gebruikt voor
+                // de tellingen in het reserve-paneel-header.
+                'reserve_ingezet' => $dbEntry !== null
+                    ? (int)($dbEntry['reserve_handmatig_ingezet'] ?? 0)
+                    : 0,
                 'is_new'        => $dbPerson === null,
                 'diffs'         => $diffs,
                 'knsb' => [
