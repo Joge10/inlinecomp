@@ -166,6 +166,39 @@ try {
             return $a;
         }, $afstandenRaw);
 
+        // 4b. PDF-klassementen waar deze rijder in voorkomt.
+        // klassement_posities heeft geen license_key — gematched op naam
+        // (case-insensitive, getrimmed). Pakt zowel full_name als short_name
+        // van de rijder zodat naamvariaties (achternaam-only PDFs vs
+        // volledige naam) beide gevonden worden.
+        // Bron = geïmporteerde PDF-klassementen + handmatig ingevoerde
+        // serie-klassementen — alles wat operator ooit via Beheer →
+        // Klassementen heeft toegevoegd.
+        $namen = array_values(array_unique(array_filter([
+            $rijder['full_name'] ?? null,
+            $rijder['short_name'] ?? null,
+        ], fn($n) => $n !== null && trim($n) !== '')));
+        $pdfKlassementen = [];
+        if ($namen) {
+            $naamPh = implode(',', array_fill(0, count($namen), 'LOWER(TRIM(?))'));
+            $pkStmt = $pdo->prepare("
+                SELECT k.id          AS klassement_id,
+                       k.naam        AS klassement_naam,
+                       k.seizoen,
+                       k.bron_bestand,
+                       kp.positie,
+                       kp.start_number,
+                       kp.naam       AS rijder_naam,
+                       kp.categorie
+                FROM klassement_posities kp
+                JOIN klassementen k ON k.id = kp.klassement_id
+                WHERE LOWER(TRIM(kp.naam)) IN ($naamPh)
+                ORDER BY k.seizoen DESC, k.naam, kp.positie
+            ");
+            $pkStmt->execute($namen);
+            $pdfKlassementen = $pkStmt->fetchAll(PDO::FETCH_ASSOC);
+        }
+
         // 5. Bekende transponders voor deze rijder — alle codes die ooit
         // ergens voor de rijder geregistreerd zijn (KNSB-feed of handmatig
         // toegewezen aan de balie). Per code: in welke slots gebruikt
@@ -193,6 +226,7 @@ try {
             'bekende_transponders' => $bekendeTransponders,
             'wedstrijden'          => $wedstrijden,
             'afstanden'            => $afstanden,
+            'pdf_klassementen'     => $pdfKlassementen,
         ]);
         exit;
     }

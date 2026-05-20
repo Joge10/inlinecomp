@@ -101,6 +101,7 @@ function rijRenderDetail(data) {
     const bekendeTps = data.bekende_transponders || [];
     const weds = data.wedstrijden || [];
     const afstanden = data.afstanden || [];
+    const pdfKls = data.pdf_klassementen || [];
     const anoniem = !!r.anonymized_at;
 
     // Geslacht: 0=man, 1=vrouw, null=onbekend
@@ -237,6 +238,48 @@ function rijRenderDetail(data) {
         afHtml += '</tbody></table></details>';
     }
 
+    // Geïmporteerde klassementen (PDF + serie). Bron = klassement_posities
+    // gematched op naam. Sneller bereikbaar voor speaker-info: NK-stand
+    // van vorig jaar, regionale series, etc. Gegroepeerd per klassement
+    // zodat lange lijsten leesbaar blijven.
+    let klHtml = '';
+    if (pdfKls.length) {
+        // Groepeer per klassement_id
+        const groepen = new Map();
+        for (const k of pdfKls) {
+            const key = k.klassement_id;
+            if (!groepen.has(key)) {
+                groepen.set(key, {
+                    naam:    k.klassement_naam,
+                    seizoen: k.seizoen,
+                    bron:    k.bron_bestand,
+                    items:   [],
+                });
+            }
+            groepen.get(key).items.push(k);
+        }
+        klHtml = '<h3>Geïmporteerde klassementen (PDF/serie)</h3>';
+        for (const g of groepen.values()) {
+            const titel = escHtml(g.naam) + (g.seizoen ? ` <span class="rij-loc">(${escHtml(g.seizoen)})</span>` : '');
+            const bron  = g.bron ? `<div class="rij-leeg" style="margin:.15rem 0 .35rem;font-size:.78rem">Bron: ${escHtml(g.bron)}</div>` : '';
+            klHtml += `<details class="rij-detail-details" open>
+                <summary>${titel} <span class="rij-loc">· ${g.items.length} positie${g.items.length === 1 ? '' : 's'}</span></summary>
+                ${bron}
+                <table class="rij-detail-tabel">
+                    <thead><tr><th>Categorie</th><th>Positie</th><th>Startnr</th><th>Naam (zoals in klassement)</th></tr></thead>
+                    <tbody>`;
+            for (const it of g.items) {
+                klHtml += `<tr>
+                    <td>${escHtml(it.categorie ?? '')}</td>
+                    <td>${escHtml(it.positie ?? '')}</td>
+                    <td>${escHtml(it.start_number ?? '')}</td>
+                    <td>${escHtml(it.rijder_naam ?? '')}</td>
+                </tr>`;
+            }
+            klHtml += '</tbody></table></details>';
+        }
+    }
+
     document.getElementById('rij-detail').innerHTML = `
         <div class="rij-detail-header">
             <h2>${escHtml(r.full_name)}${anoniem ? ' <span class="rij-anoniem-badge">geanonimiseerd</span>' : ''}</h2>
@@ -273,6 +316,8 @@ function rijRenderDetail(data) {
         ${wedHtml}
 
         ${afHtml}
+
+        ${klHtml}
     `;
 
     // Anonimiseer-knop
