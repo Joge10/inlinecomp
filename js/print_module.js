@@ -16,6 +16,11 @@ let _pcState = {
     tijdschemaBeschikbaar: null,  // null=onbekend, true/false na check
     startlijstenLaad: null,       // null=onbekend, true tijdens laden, false=klaar
     uitslagenLaad:    null,
+    // Globale multi-day filter ('alles' | dagNr) die op ALLE secties tegelijk
+    // werkt. Default 'alles'. Een gekozen dag toont items met dag===N +
+    // cross-day items (dag==='all' of dag===undefined). Verschijnt alleen bij
+    // multi-day events (>1 wedstrijdstart-blok).
+    dagFilter: 'alles',
 };
 
 // Cache: ontkoppelde optData die we moeten kunnen terugvinden bij print-tijd.
@@ -32,6 +37,7 @@ function printCenterResetVoorWedstrijd(compId) {
         tijdschemaBeschikbaar: null,
         startlijstenLaad:      null,
         uitslagenLaad:         null,
+        dagFilter:             'alles',
     };
     _pcItemData.clear();
     _pcCatCodeMap = null;
@@ -213,6 +219,7 @@ function _pcOpties() {
         ? _dagLabels.map(d => ({
               id:     `tekenlijsten-dag-${d.nr}`,
               label:  `Tekenlijsten — ${d.label}`,
+              dag:    d.nr,
               beschikbaar:          _pcImportKlaar(),
               redenNietBeschikbaar: _pcImportReden(),
               build: () => (typeof bouwTekenlijstenBody === 'function'
@@ -224,6 +231,7 @@ function _pcOpties() {
         ? _dagLabels.map(d => ({
               id:     `deelnemerslijst-dag-${d.nr}`,
               label:  `Deelnemerslijst — ${d.label}`,
+              dag:    d.nr,
               beschikbaar:          _pcImportKlaar(),
               redenNietBeschikbaar: _pcImportReden(),
               build: () => (typeof bouwDeelnemerslijstBody === 'function'
@@ -241,6 +249,7 @@ function _pcOpties() {
                     label:  _isMulti
                         ? 'Tekenlijsten — alle dagen'
                         : 'Tekenlijsten (per categorie)',
+                    dag:    _isMulti ? 'all' : undefined,
                     beschikbaar:          _pcImportKlaar(),
                     redenNietBeschikbaar: _pcImportReden(),
                     build: () => (typeof bouwTekenlijstenBody === 'function'
@@ -253,6 +262,7 @@ function _pcOpties() {
                     label:  _isMulti
                         ? 'Deelnemerslijst — alle dagen'
                         : 'Deelnemerslijst (compleet overzicht)',
+                    dag:    _isMulti ? 'all' : undefined,
                     beschikbaar:          _pcImportKlaar(),
                     redenNietBeschikbaar: _pcImportReden(),
                     build: () => (typeof bouwDeelnemerslijstBody === 'function' ? bouwDeelnemerslijstBody() : null),
@@ -261,6 +271,9 @@ function _pcOpties() {
                 {
                     id:     'speakerlijsten',
                     label:  'Speakerlijsten',
+                    // Speakerlijsten zijn cross-day (alle DCs in één document).
+                    // Blijven bij dag-filter zichtbaar als 'all'.
+                    dag:    _isMulti ? 'all' : undefined,
                     beschikbaar:          _pcImportKlaar(),
                     redenNietBeschikbaar: _pcImportReden(),
                     build: () => (typeof bouwSpeakerlijstenBody === 'function' ? bouwSpeakerlijstenBody() : null),
@@ -273,6 +286,9 @@ function _pcOpties() {
                 {
                     id:     'programma-extern',
                     label:  'Programma extern (deelnemers/publiek)',
+                    // Programma's bevatten alle dagen in één document met
+                    // page-break per dag — cross-day item.
+                    dag:    _isMulti ? 'all' : undefined,
                     beschikbaar: _pcState.tijdschemaBeschikbaar,
                     redenNietBeschikbaar: 'Nog geen tijdschema gemaakt',
                     build: async () => {
@@ -284,6 +300,7 @@ function _pcOpties() {
                 {
                     id:     'programma-intern',
                     label:  'Programma intern (organisatie)',
+                    dag:    _isMulti ? 'all' : undefined,
                     beschikbaar: _pcState.tijdschemaBeschikbaar,
                     redenNietBeschikbaar: 'Nog geen tijdschema gemaakt',
                     build: async () => {
@@ -423,6 +440,30 @@ function _pcCatCmp(a, b) {
     return _pcNatCmp(a, b);
 }
 
+// Helper: DC-id → dag-nummer via shared tijdschema-helper. Lege Map als
+// tijdschema niet geladen is — items krijgen dan dag=undefined (= altijd
+// zichtbaar in mijn filter, wat OK is want zonder ts ook geen dag-filter).
+function _pcDcDagMap() {
+    if (typeof huidigTijdschema === 'undefined' || !huidigTijdschema) return new Map();
+    if (typeof _tsBouwDcDagMap !== 'function')                        return new Map();
+    return _tsBouwDcDagMap(huidigTijdschema);
+}
+
+// Bepaal dag voor een item uit één of meer dc_ids. Eerste match in dcDagMap.
+// Geeft undefined als geen match (mag — filter behandelt undefined als altijd-
+// zichtbaar). Bij multi-day moet dcDagMap een match hebben (anders heeft
+// genereer-programma geen rit voor die DC gemaakt, en zou er ook geen sl/uitslag
+// voor zijn). Defensieve fallback: 1.
+function _pcDagVoorDcIds(dcDagMap, dcIds, isMulti) {
+    if (!isMulti) return undefined;
+    if (!Array.isArray(dcIds)) dcIds = [dcIds];
+    for (const id of dcIds) {
+        const d = dcDagMap.get(id);
+        if (d !== undefined) return d;
+    }
+    return 1;
+}
+
 // ── Startlijsten sectie dynamisch opbouwen ──────────────────────────────────
 // Geneste structuur:  Afstand → Ronde → [Categorieën als items]
 function _pcBouwStartlijstenSectie() {
@@ -469,6 +510,15 @@ function _pcBouwStartlijstenSectie() {
         }
     }
 
+    // Multi-day tagging: items krijgen .dag = dagNr van hun DC (eerste lid bij combi).
+    // Bij single-day blijft dag=undefined → filter heeft toch geen effect.
+    const dcDagMap   = _pcDcDagMap();
+    const _dagInfoSL = (typeof huidigTijdschema !== 'undefined' && huidigTijdschema
+                        && typeof _tsBouwDagInfo === 'function')
+                       ? _tsBouwDagInfo(huidigTijdschema?.blokken ?? [])
+                       : null;
+    const isMultiSL  = !!_dagInfoSL?.isMultiDag;
+
     // `distNaamVolgorde` bewaart de volgorde waarin afstanden voor het eerst
     // verschijnen = KNSB-programma-volgorde (distances_db op `number`).
     const perAfst = new Map();  // distNaam → Map(rondeLabel → {sleutel, items[]})
@@ -513,9 +563,17 @@ function _pcBouwStartlijstenSectie() {
                     rondeMap.set(key, { sleutel: ronde.sleutel, label: key, items: [] });
                 }
                 _pcItemData.set(itemId, ronde.optData);
+                // Multi-day tag: dag uit dcIds via dcDagMap. Bij combi-finale
+                // bevat optData.dcIds al alle deelnemende DCs; eerste match wint.
+                const _itemDag = _pcDagVoorDcIds(
+                    dcDagMap,
+                    ronde.optData.dcIds ?? [ronde.optData.dcId],
+                    isMultiSL,
+                );
                 rondeMap.get(key).items.push({
                     id:          itemId,
                     label:       itemLabel,
+                    dag:         _itemDag,
                     beschikbaar: true,
                     build: async () => {
                         const od = _pcItemData.get(itemId);
@@ -565,6 +623,16 @@ function _pcBouwUitslagenSectie() {
         return sec;
     }
 
+    // Multi-day tagging: zelfde aanpak als startlijsten — items krijgen
+    // .dag = dagNr van hun DC. Klassementen (tussen/eind) zijn cross-day
+    // omdat ze over alle afstanden gaan → 'all' (altijd zichtbaar).
+    const dcDagMap   = _pcDcDagMap();
+    const _dagInfoU  = (typeof huidigTijdschema !== 'undefined' && huidigTijdschema
+                        && typeof _tsBouwDagInfo === 'function')
+                       ? _tsBouwDagInfo(huidigTijdschema?.blokken ?? [])
+                       : null;
+    const isMultiU   = !!_dagInfoU?.isMultiDag;
+
     // _uPrintOpties: Map<catNaam, [{label, sleutel, dcId, dcIds, dcName, distId?, distNaam?}]>
     const perAfst = new Map();
     const distNaamVolgorde = new Map();  // programma-volgorde voor afstanden
@@ -574,9 +642,15 @@ function _pcBouwUitslagenSectie() {
         for (const opt of opties) {
             const id = `u|${opt.sleutel}|${opt.distId ?? ''}|${catNaam}`;
             _pcItemData.set(id, opt);
+            // Afstand-uitslag: dag uit dcIds via dcDagMap.
+            // Klassementen: cross-day → 'all'.
+            const _itemDag = opt.sleutel === 'afstand'
+                ? _pcDagVoorDcIds(dcDagMap, opt.dcIds ?? [opt.dcId], isMultiU)
+                : (isMultiU ? 'all' : undefined);
             const item = {
                 id,
                 label:       catNaam,
+                dag:         _itemDag,
                 beschikbaar: true,
                 build: async () => {
                     const od = _pcItemData.get(id);
@@ -719,14 +793,99 @@ function _pcItemsVoorGroepKey(sec, groupKey) {
     return (group.subgroups ?? [])[sgIdx]?.items ?? [];
 }
 
+// ── Multi-day filter helpers ────────────────────────────────────────────────
+// Itereert over alle (flat + geneste) items in een sectie. Gebruikt om te
+// detecteren of een sectie chip-filters nodig heeft, of om items te filteren.
+function _pcSectieAlleItemsRaw(sec) {
+    const out = [...(sec.items ?? [])];
+    for (const grp of sec.groups ?? []) {
+        out.push(...(grp.items ?? []));
+        for (const sg of grp.subgroups ?? []) out.push(...(sg.items ?? []));
+    }
+    return out;
+}
+
+// Welke unieke dag-nummers staan in deze sectie? (Negeert 'all' en undefined.)
+function _pcSectieDagen(sec) {
+    const dagen = new Set();
+    for (const it of _pcSectieAlleItemsRaw(sec)) {
+        if (typeof it.dag === 'number') dagen.add(it.dag);
+    }
+    return [...dagen].sort((a, b) => a - b);
+}
+
+// Filterregel:
+//   'alles'           → alle items zichtbaar
+//   N (1, 2, ...)     → items met dag===N OF dag==='all' OF dag===undefined
+// Cross-day items ('all'/undefined) blijven bij specifieke-dag-filter altijd
+// zichtbaar zodat de operator ze niet kwijt is bij het filteren.
+function _pcItemPasstFilter(item, filter) {
+    if (filter === 'alles' || filter == null) return true;
+    if (item.dag === filter) return true;
+    if (item.dag === 'all') return true;
+    if (item.dag === undefined) return true;
+    return false;
+}
+
+// Filter een sectie-structuur: maakt een ondiepe kopie met alleen passende
+// items. Behoudt groups/subgroups (kunnen leeg worden — in dat geval skip
+// in render).
+function _pcSectieFilteren(sec, filter) {
+    if (filter === 'alles' || filter == null) return sec;
+    const items = (sec.items ?? []).filter(it => _pcItemPasstFilter(it, filter));
+    const groups = (sec.groups ?? []).map(grp => ({
+        ...grp,
+        items:     (grp.items ?? []).filter(it => _pcItemPasstFilter(it, filter)),
+        subgroups: (grp.subgroups ?? []).map(sg => ({
+            ...sg,
+            items: (sg.items ?? []).filter(it => _pcItemPasstFilter(it, filter)),
+        })).filter(sg => (sg.items ?? []).length > 0),
+    })).filter(grp => (grp.items?.length ?? 0) > 0 || (grp.subgroups?.length ?? 0) > 0);
+    return { ...sec, items, groups };
+}
+
 function _pcRenderInhoud() {
     const wrap = document.getElementById('pc-inhoud');
     if (!wrap) return;
 
-    const opties      = _pcOpties();
+    const optiesRaw   = _pcOpties();
     const actieveSec  = _pcActieveSectie();
+
+    // Globale dag-filter: één filter die op ALLE secties tegelijk werkt.
+    // Verschijnt alleen als ten minste één sectie items met een dag-nummer
+    // heeft (= multi-day event met dag-specifieke items). Default 'alles'.
+    const alleDagen = new Set();
+    for (const s of optiesRaw) {
+        for (const n of _pcSectieDagen(s)) alleDagen.add(n);
+    }
+    const dagenSorted = [...alleDagen].sort((a, b) => a - b);
+    const heeftDagFilter = dagenSorted.length > 0;
+    if (!heeftDagFilter) _pcState.dagFilter = 'alles';
+    const huidigeF = _pcState.dagFilter;
+
+    // Globale chip-rij bovenaan. Niet per sectie meer.
     let html = '';
-    for (const sec of opties) {
+    if (heeftDagFilter) {
+        const chipBtn = (val, label) => {
+            const actief = (huidigeF === val);
+            return `<button class="pc-dag-chip${actief ? ' active' : ''}"`
+                + ` data-pc-dag-val="${val}"`
+                + ` aria-pressed="${actief ? 'true' : 'false'}">${_escHtml(label)}</button>`;
+        };
+        html += `<div class="pc-dag-filter-balk" role="group" aria-label="Dag-filter">
+            <span class="pc-dag-filter-label">Toon:</span>
+            <div class="pc-dag-chips">
+                ${chipBtn('alles', 'alles')}
+                ${dagenSorted.map(n => chipBtn(n, `dag ${n}`)).join('')}
+            </div>
+        </div>`;
+    }
+
+    for (const secRaw of optiesRaw) {
+        // Pas globale filter toe op items (alleen voor render — onderliggende
+        // _pcOpties()-data blijft compleet).
+        const sec       = _pcSectieFilteren(secRaw, huidigeF);
+
         const isVergrendeld = actieveSec !== null && sec.sectie !== actieveSec;
         const flatItems = sec.items ?? [];
         const groups    = sec.groups ?? [];
@@ -734,7 +893,12 @@ function _pcRenderInhoud() {
 
         let inhoudHtml = '';
         if (!hasContent) {
-            inhoudHtml = `<div class="pc-placeholder">${_escHtml(sec.placeholder ?? 'Nog niet beschikbaar')}</div>`;
+            // Bij actief dag-filter en lege sectie: melding "Geen items op dag N"
+            // i.p.v. de generieke placeholder.
+            const leegMsg = huidigeF !== 'alles'
+                ? `Geen items voor deze dag in '${_escHtml(sec.sectie)}'.`
+                : _escHtml(sec.placeholder ?? 'Nog niet beschikbaar');
+            inhoudHtml = `<div class="pc-placeholder">${leegMsg}</div>`;
         } else {
             if (flatItems.length) {
                 inhoudHtml += `<div class="pc-items-rij">${flatItems.map(it => _pcRenderItem(it, isVergrendeld)).join('')}</div>`;
@@ -772,12 +936,14 @@ function _pcRenderInhoud() {
         });
     });
 
-    // "Alles aan/uit" voor hele sectie
+    // "Alles aan/uit" voor hele sectie. Respecteert actief globaal dag-filter:
+    // selecteert alleen items die nu daadwerkelijk zichtbaar zijn.
     wrap.querySelectorAll('button[data-pc-sectie]').forEach(btn => {
         btn.addEventListener('click', () => {
             const sectieNaam = btn.dataset.pcSectie;
-            const sec = opties.find(s => s.sectie === sectieNaam);
-            if (!sec) return;
+            const secRaw = optiesRaw.find(s => s.sectie === sectieNaam);
+            if (!secRaw) return;
+            const sec      = _pcSectieFilteren(secRaw, _pcState.dagFilter);
             const alleItems = _pcSectieItems(sec).filter(it => it.beschikbaar !== false);
             const allesAan = alleItems.length > 0
                 && alleItems.every(it => _pcState.geselecteerd.has(it.id));
@@ -797,8 +963,9 @@ function _pcRenderInhoud() {
             // Zoek de sectie waarin deze groep-knop zit
             const secWrap = btn.closest('[data-pc-sectie-wrap]');
             const secNaam = secWrap?.dataset.pcSectieWrap;
-            const sec = opties.find(s => s.sectie === secNaam);
-            if (!sec) return;
+            const secRaw = optiesRaw.find(s => s.sectie === secNaam);
+            if (!secRaw) return;
+            const sec      = _pcSectieFilteren(secRaw, _pcState.dagFilter);
             const items = _pcItemsVoorGroepKey(sec, key).filter(it => it.beschikbaar !== false);
             const allesAan = items.length > 0
                 && items.every(it => _pcState.geselecteerd.has(it.id));
@@ -806,6 +973,17 @@ function _pcRenderInhoud() {
                 if (allesAan) _pcState.geselecteerd.delete(it.id);
                 else          _pcState.geselecteerd.add(it.id);
             }
+            _pcRenderInhoud();
+        });
+    });
+
+    // Globale dag-filter chips: één click switcht alle secties tegelijk.
+    wrap.querySelectorAll('button[data-pc-dag-val]').forEach(btn => {
+        btn.addEventListener('click', () => {
+            const val   = btn.dataset.pcDagVal;
+            const nieuw = val === 'alles' ? 'alles' : (parseInt(val) || 'alles');
+            if (_pcState.dagFilter === nieuw) return;
+            _pcState.dagFilter = nieuw;
             _pcRenderInhoud();
         });
     });

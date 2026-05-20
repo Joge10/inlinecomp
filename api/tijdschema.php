@@ -381,7 +381,10 @@ function genereerRitten(PDO $pdo, int $tsId, string $compId, ?array $catVanJS = 
 
         foreach ($catVanJS as $ce) {
             $n = (int)($ce['n'] ?? 0);
-            if ($n <= 0) continue;
+            // n=0 toestaan: placeholder-categorie zonder vooraf-bevestigde
+            // deelnemers (planner stelt heats/finales alvast in op verwacht
+            // aantal). verdeel(0, k) geeft veilig [0,…,0] terug.
+            if ($n < 0) continue;
             $afstandNaam = trim((string)($ce['afstand_naam'] ?? ''));
             if ($afstandNaam === '') continue;
             $dcId = (string)($ce['dc_id'] ?? '');
@@ -412,7 +415,8 @@ function genereerRitten(PDO $pdo, int $tsId, string $compId, ?array $catVanJS = 
         $s->execute([$compId]);
         foreach ($s->fetchAll(PDO::FETCH_ASSOC) as $r) {
             $n = $tellingen[$r['dc_id']] ?? 0;
-            if ($n === 0) continue;
+            // Ook n=0 toestaan: placeholder-categorie zonder bevestigde
+            // deelnemers (zie hierboven). Negatieve waardes zijn onmogelijk.
             $catsPerAfstand[$r['distance_naam']][] = [
                 'dc_id'          => $r['dc_id'],
                 'dc_naam'        => $r['dc_naam'],

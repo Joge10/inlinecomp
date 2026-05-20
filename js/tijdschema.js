@@ -719,12 +719,21 @@ function renderAfstandPanel(afstand, cfg, catConfigMap) {
             // Full-final: zichtbare finale-kolommen per categorie + hidden placeholders
             // voor de internationaal-velden zodat de save-handler complete rijen ontvangt.
             const afg = parseInt(cc?.finale_a_grootte);
-            const aDef = Number.isFinite(afg) && afg > 0 ? afg : Math.min(cat.n, fHg);
+            // Bij cat.n=0 (placeholder-categorie) gebruiken we fHg als default —
+            // anders zou aDef = Math.min(0, fHg) = 0 en kan de planner niets invoeren.
+            const aDef = Number.isFinite(afg) && afg > 0
+                ? afg
+                : (cat.n > 0 ? Math.min(cat.n, fHg) : fHg);
             const bhCfg = parseInt(cc?.finale_b_heats);
             // Default B-heats: als cat.n > A-finale, één B-heat; anders 0 (geen B nodig)
             const bhDef = Number.isFinite(bhCfg) && bhCfg >= 0
                 ? bhCfg
                 : (cat.n > aDef ? 1 : 0);
+            // Bij placeholder (n=0) hogere max op finale-inputs zodat de planner
+            // op verwacht aantal kan plannen. Bij echte deelnemerstelling blijft
+            // de max gewoon cat.n (= klassieke validatie).
+            const aMax = cat.n > 0 ? cat.n               : 100;
+            const bMax = cat.n > 0 ? Math.max(0, cat.n-1): 100;
             // PDO geeft TINYINT terug als string ("0"/"1") — pure truthy-check
             // op "0" is true → checkbox zou ten onrechte aangevinkt staan.
             // parseInt() nodig om de string-waarde correct te vergelijken.
@@ -752,14 +761,17 @@ function renderAfstandPanel(afstand, cfg, catConfigMap) {
             </td>
             <td class="ts-td-c ts-sectie-start">
                 <input type="number" name="finale_a_grootte" value="${aDef}"
-                       min="1" max="${cat.n}" class="ts-inp-sm ts-inp-finale-a"
+                       min="1" max="${aMax}" class="ts-inp-sm ts-inp-finale-a"
                        data-n="${cat.n}"
-                       title="Aantal rijders in de A-finale (max ${cat.n} = aantal deelnemers)">
+                       title="${cat.n > 0
+                           ? `Aantal rijders in de A-finale (max ${cat.n} = aantal deelnemers)`
+                           : 'Aantal rijders in de A-finale (placeholder: nog geen deelnemers bekend)'
+                       }">
                 <span class="ts-per-heat-cel ts-per-heat-finale-a">${berekenFinaleAPreview(cat.n, aDef, bhDef)}</span>
             </td>
             <td class="ts-td-c">
                 <input type="number" name="finale_b_heats" value="${bhDef}"
-                       min="0" max="${Math.max(0, cat.n - 1)}" class="ts-inp-sm ts-inp-finale-bh"
+                       min="0" max="${bMax}" class="ts-inp-sm ts-inp-finale-bh"
                        title="Aantal B-finale heats (0 = geen B-finale, alle niet-A-finalisten bij A)">
                 <span class="ts-per-heat-cel ts-per-heat-finale-b">${berekenFinaleBPreview(cat.n, aDef, bhDef)}</span>
             </td>
@@ -3935,9 +3947,14 @@ function publiceerTijdschemaIntern() {
 function bouwAfstandGroepen() {
     const afstandMap = new Map(); // naam → [{dc_id, dc_naam, distance_id, n, merged_dc_ids?}]
 
-    // Helper: voeg één entry toe aan afstandMap
+    // Helper: voeg één entry toe aan afstandMap.
+    // Ook n=0 wordt toegevoegd: dat is een placeholder-categorie (bv. een
+    // afstand zonder vooraf-bevestigde deelnemers; jury stelt op de dag zelf
+    // vast wie meedoet). De planner kan het verwachte aantal heats/finales
+    // alvast configureren; ritten weggooien is achteraf simpeler dan ritten
+    // bijbouwen. Alleen n<0 (onmogelijk in praktijk) blijft uitgesloten.
     const voegToe = (dc_id, dc_naam, distance_id, distNaam, n, merged_dc_ids, category_filter) => {
-        if (n <= 0) return;
+        if (n < 0) return;
         if (!afstandMap.has(distNaam)) afstandMap.set(distNaam, []);
         const entry = { dc_id, dc_naam, distance_id, n, category_filter: category_filter ?? '' };
         if (merged_dc_ids) entry.merged_dc_ids = merged_dc_ids;
@@ -3968,7 +3985,8 @@ function bouwAfstandGroepen() {
                 const splitN = cat.competitors?.filter(
                     c => codes.includes(c.knsb?.category) && isAanwezig(c)
                 ).length ?? 0;
-                if (splitN <= 0) return;
+                // splitN=0 is een placeholder-splitgroep — laten we ook toe (zie voegToe).
+                if (splitN < 0) return;
 
                 // Afstanden specifiek voor deze splitgroep, anders basisafstanden
                 const specifiek = alleAfstand.filter(d => d.target_group === sn);
@@ -3988,7 +4006,10 @@ function bouwAfstandGroepen() {
             const perAfstand = basis.length        ? basis
                              : alleAfstand.length  ? alleAfstand
                              : [{ id: null, name: '—', target_group: null }];
-            if (n > 0) perAfstand.forEach(dist =>
+            // Ook n=0 doorgeven: placeholder-categorieën zonder bevestigde
+            // deelnemers moeten alsnog in Afstandinstellingen verschijnen
+            // (voegToe accepteert n=0).
+            perAfstand.forEach(dist =>
                 voegToe(cat.dc_id, cat.dc_name, dist.id, dist.name, n)
             );
         }
@@ -4011,7 +4032,7 @@ function bouwAfstandGroepen() {
         const totaalN = cats.reduce(
             (s, c) => s + (c.competitors?.filter(isAanwezig).length ?? 0), 0
         );
-        if (totaalN === 0) continue;
+        // totaalN=0 is een placeholder-mergegroep — laten we ook toe.
 
         // Sorteer op dc_number dan naam; eerste = primaire dc
         const sorted  = cats.slice().sort(
