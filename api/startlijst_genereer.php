@@ -577,6 +577,7 @@ try {
     // capaciteit is intern; stuur het mee voor info maar rijders is leidend
     echo json_encode([
         'methode'       => $methode,
+        'methode_label' => $methodeLabel,
         'aantalHeats'   => $aantalHeats,
         'totaalRijders' => $n,
         'heats'         => $heats,
