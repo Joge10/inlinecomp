@@ -1162,6 +1162,20 @@ header .sub { font-size: .95rem; opacity: .8; margin-top: 6px; text-align: cente
     flex-shrink: 0;          /* nooit ovaal worden in flex-container */
 }
 .btn-help:active { background: rgba(255,255,255,.35); }
+/* Vlag-knop: emoji ~50% groter dan andere btn-help's, en overflow:hidden
+   zodat de vlag netjes binnen de ronde cirkel afgesneden wordt (anders
+   stak hij uit aan de zijkanten). font-style: normal voorkomt italic
+   wat de erfgenaam-style van .btn-help zou opleggen. */
+.btn-lang {
+    font-size: 1.85rem;
+    line-height: 1;
+    overflow: hidden;
+    padding: 0;
+    font-style: normal;
+}
+@media (max-width: 480px) {
+    .btn-lang { font-size: 1.55rem; }
+}
 .btn-meldingen   { font-style: normal; font-size: 1.1rem; position: relative; }
 .meld-badge      { position: absolute; top: -4px; right: -4px; background: #d22;
                    color: #fff; font-size: .65rem; font-weight: 700;
