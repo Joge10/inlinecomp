@@ -1760,7 +1760,17 @@ select:focus, input:focus { border-color: var(--middenblauw); outline: none; }
 // ── i18n: NL / EN ─────────────────────────────────────────────────────────
 // Shared i18n-helpers — herbruikt straks door coach-, jury- en admin-app.
 // PHP-include (geen extra HTTP-request) zodat één bron van waarheid is.
-<?php readfile(__DIR__ . '/../js/i18n.js'); ?>
+<?php
+$i18nPath = __DIR__ . '/../js/i18n.js';
+if (is_readable($i18nPath)) {
+    readfile($i18nPath);
+} else {
+    // Duidelijke melding in console + browser ipv silent fail (=
+    // "initI18n is not defined" zonder context).
+    echo "console.error('i18n.js niet gevonden op server (verwacht: ' + " . json_encode($i18nPath) . " + ') — upload het bestand via SFTP');\n";
+    echo "alert('Taal-systeem niet geladen — i18n.js ontbreekt op de server. Upload js/i18n.js naar de juiste map.');\n";
+}
+?>
 
 // ── App-specifiek vertaal-woordenboek (NL + EN) ──────────────────────────
 // Toggle via vlag-knop in header. Persisteert in localStorage onder 'ic_lang'.
