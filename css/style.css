@@ -3363,6 +3363,19 @@ th.rk-totaal, td.rk-totaal { width:55px; font-weight:700; color:var(--blauw); ba
 .mld-veld textarea, .mld-veld input, .mld-veld select { width: 100%; box-sizing: border-box; }
 .mld-rij-veld     { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: .8rem; }
 .mld-form-acties  { display: flex; gap: 8px; justify-content: flex-end; margin-top: .8rem; }
+/* Vertaal-acties tussen NL- en EN-veldgroepen — laat de twee Claude-knoppen
+   visueel groeperen + dunne tussen-scheidingslijn voor rust. */
+.mld-vertaal-acties {
+    display: flex; align-items: center; gap: .5rem;
+    margin: .4rem 0 .6rem;
+    padding: .35rem 0;
+    border-top: 1px dashed #d6e0ec;
+    border-bottom: 1px dashed #d6e0ec;
+    flex-wrap: wrap;
+}
+.mld-vertaal-acties button { font-size: .78rem; padding: .25rem .6rem; }
+.mld-vertaal-acties button:disabled { opacity: .6; cursor: not-allowed; }
+.mld-vertaal-hint { font-size: .72rem; color: #888; font-style: italic; margin-left: auto; }
 
 /* ── Info-pagina ─────────────────────────────────────────────────────────── */
 .info-blok       { background: #fff; border: 1px solid var(--border); border-radius: 6px;

@@ -64,7 +64,7 @@ try {
         if ($alleenGlobal) {
             // Landing-page van public/coach — alleen globale meldingen.
             $stmt = $pdo->prepare("
-                SELECT id, titel, bericht, prio, geldig_van, geldig_tot,
+                SELECT id, titel, bericht, titel_en, bericht_en, prio, geldig_van, geldig_tot,
                        NULL AS competition_id
                 FROM public_meldingen
                 WHERE competition_id IS NULL
@@ -76,7 +76,7 @@ try {
         } elseif ($compId !== '') {
             // Wedstrijd-pagina — wedstrijd-specifiek + globaal samen.
             $stmt = $pdo->prepare("
-                SELECT id, titel, bericht, prio, geldig_van, geldig_tot,
+                SELECT id, titel, bericht, titel_en, bericht_en, prio, geldig_van, geldig_tot,
                        competition_id
                 FROM public_meldingen
                 WHERE (competition_id = ? OR competition_id IS NULL)
@@ -100,7 +100,7 @@ try {
         $isGlobal = !empty($_GET['global']);
         if ($isGlobal) {
             $stmt = $pdo->prepare("
-                SELECT id, titel, bericht, prio, geldig_van, geldig_tot,
+                SELECT id, titel, bericht, titel_en, bericht_en, prio, geldig_van, geldig_tot,
                        aangemaakt_door, aangemaakt_op,
                        NULL AS competition_id
                 FROM public_meldingen
@@ -113,7 +113,7 @@ try {
             // zodat een admin globale meldingen vanuit elke wedstrijd-context
             // kan zien én snel verwijderen als ze tegenstrijdig zijn.
             $stmt = $pdo->prepare("
-                SELECT id, titel, bericht, prio, geldig_van, geldig_tot,
+                SELECT id, titel, bericht, titel_en, bericht_en, prio, geldig_van, geldig_tot,
                        aangemaakt_door, aangemaakt_op, competition_id
                 FROM public_meldingen
                 WHERE competition_id = ? OR competition_id IS NULL
@@ -140,11 +140,16 @@ try {
         $mid      = trim($_POST['id']         ?? '');
         $compId   = trim($_POST['comp_id']    ?? '');
         $isGlobal = !empty($_POST['global']);
-        $titel    = trim($_POST['titel']      ?? '');
-        $bericht  = trim($_POST['bericht']    ?? '');
-        $prio     = trim($_POST['prio']       ?? 'info');
-        $vanRaw   = trim($_POST['geldig_van'] ?? '');
-        $totRaw   = trim($_POST['geldig_tot'] ?? '') ?: null;
+        $titel     = trim($_POST['titel']      ?? '');
+        $bericht   = trim($_POST['bericht']    ?? '');
+        // EN-velden zijn optioneel — leeg = fallback naar NL bij publieke render
+        $titelEn   = trim($_POST['titel_en']   ?? '');
+        $berichtEn = trim($_POST['bericht_en'] ?? '');
+        $titelEn   = $titelEn   === '' ? null : $titelEn;
+        $berichtEn = $berichtEn === '' ? null : $berichtEn;
+        $prio      = trim($_POST['prio']       ?? 'info');
+        $vanRaw    = trim($_POST['geldig_van'] ?? '');
+        $totRaw    = trim($_POST['geldig_tot'] ?? '') ?: null;
 
         // Globale meldingen alleen voor owner/admin (niet voor timer/planner —
         // die kunnen impact op alle organisaties hebben).
@@ -176,12 +181,12 @@ try {
             $mid = uuid4_m();
             $pdo->prepare("
                 INSERT INTO public_meldingen
-                       (id, competition_id, titel, bericht, prio,
-                        geldig_van, geldig_tot, aangemaakt_door)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                       (id, competition_id, titel, bericht, titel_en, bericht_en,
+                        prio, geldig_van, geldig_tot, aangemaakt_door)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             ")->execute([
-                $mid, $compIdDb, $titel, $bericht, $prio, $van, $tot,
-                $_authUser['id'] ?? null,
+                $mid, $compIdDb, $titel, $bericht, $titelEn, $berichtEn,
+                $prio, $van, $tot, $_authUser['id'] ?? null,
             ]);
         } else {
             // UPDATE met scope-check: globale melding alleen via global=1,
@@ -189,17 +194,17 @@ try {
             if ($isGlobal) {
                 $pdo->prepare("
                     UPDATE public_meldingen
-                    SET titel = ?, bericht = ?, prio = ?,
-                        geldig_van = ?, geldig_tot = ?
+                    SET titel = ?, bericht = ?, titel_en = ?, bericht_en = ?,
+                        prio = ?, geldig_van = ?, geldig_tot = ?
                     WHERE id = ? AND competition_id IS NULL
-                ")->execute([$titel, $bericht, $prio, $van, $tot, $mid]);
+                ")->execute([$titel, $bericht, $titelEn, $berichtEn, $prio, $van, $tot, $mid]);
             } else {
                 $pdo->prepare("
                     UPDATE public_meldingen
-                    SET titel = ?, bericht = ?, prio = ?,
-                        geldig_van = ?, geldig_tot = ?
+                    SET titel = ?, bericht = ?, titel_en = ?, bericht_en = ?,
+                        prio = ?, geldig_van = ?, geldig_tot = ?
                     WHERE id = ? AND competition_id = ?
-                ")->execute([$titel, $bericht, $prio, $van, $tot, $mid, $compId]);
+                ")->execute([$titel, $bericht, $titelEn, $berichtEn, $prio, $van, $tot, $mid, $compId]);
             }
         }
         echo json_encode(['ok' => true, 'id' => $mid]);

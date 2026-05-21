@@ -158,14 +158,35 @@ function mldOpenForm(compId, id, alleMeldingen = []) {
             <h4>${id ? 'Mededeling bewerken' : 'Nieuwe mededeling'}</h4>
             <input type="hidden" id="mld-id" value="${escHtml(m?.id ?? '')}">
             <label class="mld-veld">
-                <span>Titel <span class="vereist">*</span></span>
+                <span>🇳🇱 Titel <span class="vereist">*</span></span>
                 <input type="text" id="mld-titel" class="inp" maxlength="255" required
                        value="${escHtml(m?.titel ?? '')}" placeholder="bv. Programma loopt 15 min uit">
             </label>
             <label class="mld-veld">
-                <span>Bericht <span class="vereist">*</span></span>
+                <span>🇳🇱 Bericht <span class="vereist">*</span></span>
                 <textarea id="mld-bericht" class="inp" rows="3" required
                           placeholder="Korte uitleg — wordt in een pop-up getoond">${escHtml(m?.bericht ?? '')}</textarea>
+            </label>
+            <div class="mld-vertaal-acties">
+                <button type="button" class="btn-secondary" id="mld-vertaal-nl-en"
+                        title="Vertaal NL → EN met Claude AI">
+                    🤖 NL → EN
+                </button>
+                <button type="button" class="btn-secondary" id="mld-vertaal-en-nl"
+                        title="Vertaal EN → NL met Claude AI">
+                    🤖 EN → NL
+                </button>
+                <span class="mld-vertaal-hint">vertaling is daarna handmatig aanpasbaar</span>
+            </div>
+            <label class="mld-veld">
+                <span>🇬🇧 Title <span class="label-hint">(leeg = fallback naar NL)</span></span>
+                <input type="text" id="mld-titel-en" class="inp" maxlength="255"
+                       value="${escHtml(m?.titel_en ?? '')}" placeholder="e.g. Schedule running 15 min late">
+            </label>
+            <label class="mld-veld">
+                <span>🇬🇧 Message</span>
+                <textarea id="mld-bericht-en" class="inp" rows="3"
+                          placeholder="Short explanation — shown in pop-up">${escHtml(m?.bericht_en ?? '')}</textarea>
             </label>
             <div class="mld-rij-veld">
                 <label class="mld-veld">
@@ -197,18 +218,67 @@ function mldOpenForm(compId, id, alleMeldingen = []) {
         wrap.style.display = 'none'; wrap.innerHTML = '';
     });
     document.getElementById('mld-form-opslaan').addEventListener('click', () => mldOpslaan(compId));
+    document.getElementById('mld-vertaal-nl-en')?.addEventListener('click', () => mldVertaal('nl', 'en'));
+    document.getElementById('mld-vertaal-en-nl')?.addEventListener('click', () => mldVertaal('en', 'nl'));
+}
+
+// Vertaal NL ↔ EN via Claude (api/vertaal_melding.php). Vult de doel-velden;
+// operator kan vertaling daarna nog handmatig bijwerken. Knop toont een
+// 'Bezig…'-status zodat duidelijk is dat de API-call loopt (typisch 1-3s).
+async function mldVertaal(from, to) {
+    const srcTitelEl   = document.getElementById(from === 'nl' ? 'mld-titel'   : 'mld-titel-en');
+    const srcBerichtEl = document.getElementById(from === 'nl' ? 'mld-bericht' : 'mld-bericht-en');
+    const dstTitelEl   = document.getElementById(to   === 'nl' ? 'mld-titel'   : 'mld-titel-en');
+    const dstBerichtEl = document.getElementById(to   === 'nl' ? 'mld-bericht' : 'mld-bericht-en');
+    if (!srcTitelEl || !srcBerichtEl || !dstTitelEl || !dstBerichtEl) return;
+
+    const titel   = srcTitelEl.value.trim();
+    const bericht = srcBerichtEl.value.trim();
+    if (!titel && !bericht) {
+        alert(`Vul eerst de ${from === 'nl' ? 'NL' : 'EN'} velden in voor je laat vertalen.`);
+        return;
+    }
+    // Bestaande doel-content: bevestiging vragen om niet per ongeluk over te schrijven
+    if ((dstTitelEl.value.trim() || dstBerichtEl.value.trim())) {
+        if (!confirm(`De ${to === 'nl' ? 'NL' : 'EN'} velden bevatten al tekst. Overschrijven met automatische vertaling?`)) return;
+    }
+
+    const knoppen = document.querySelectorAll('#mld-vertaal-nl-en, #mld-vertaal-en-nl');
+    knoppen.forEach(b => b.disabled = true);
+    const klikKnop = document.getElementById(`mld-vertaal-${from}-${to}`);
+    const originalText = klikKnop?.textContent;
+    if (klikKnop) klikKnop.textContent = '⏳ Bezig…';
+
+    try {
+        const res = await fetch('api/vertaal_melding.php', {
+            method:  'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body:    JSON.stringify({ titel, bericht, from, to }),
+        });
+        const data = await res.json();
+        if (!res.ok || data.error) throw new Error(data.error || `HTTP ${res.status}`);
+        dstTitelEl.value   = data.titel   ?? '';
+        dstBerichtEl.value = data.bericht ?? '';
+    } catch (e) {
+        alert('Vertaal-fout: ' + e.message);
+    } finally {
+        knoppen.forEach(b => b.disabled = false);
+        if (klikKnop && originalText) klikKnop.textContent = originalText;
+    }
 }
 
 async function mldOpslaan(compId) {
-    const id      = document.getElementById('mld-id').value;
-    const titel   = document.getElementById('mld-titel').value.trim();
-    const bericht = document.getElementById('mld-bericht').value.trim();
-    const prio    = document.getElementById('mld-prio').value;
-    const van     = document.getElementById('mld-van').value;
-    const tot     = document.getElementById('mld-tot').value;
+    const id        = document.getElementById('mld-id').value;
+    const titel     = document.getElementById('mld-titel').value.trim();
+    const bericht   = document.getElementById('mld-bericht').value.trim();
+    const titelEn   = document.getElementById('mld-titel-en')?.value.trim()   ?? '';
+    const berichtEn = document.getElementById('mld-bericht-en')?.value.trim() ?? '';
+    const prio      = document.getElementById('mld-prio').value;
+    const van       = document.getElementById('mld-van').value;
+    const tot       = document.getElementById('mld-tot').value;
 
     if (!titel || !bericht) {
-        alert('Titel en bericht zijn verplicht.');
+        alert('Titel en bericht zijn verplicht (NL is brontaal).');
         return;
     }
     // 'globaal' is geen DB-prio (enum kent 'm niet) maar een scope-keuze:
@@ -225,6 +295,8 @@ async function mldOpslaan(compId) {
     }
     fd.append('titel', titel);
     fd.append('bericht', bericht);
+    if (titelEn)   fd.append('titel_en', titelEn);
+    if (berichtEn) fd.append('bericht_en', berichtEn);
     fd.append('prio', dbPrio);
     if (van) fd.append('geldig_van', van.replace('T', ' '));
     if (tot) fd.append('geldig_tot', tot.replace('T', ' '));

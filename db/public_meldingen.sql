@@ -17,6 +17,9 @@ CREATE TABLE IF NOT EXISTS `public_meldingen` (
     `competition_id`   VARCHAR(36)  NULL DEFAULT NULL,
     `titel`            VARCHAR(255) NOT NULL,
     `bericht`          TEXT         NOT NULL,
+    -- Engelse vertaling (optioneel; fallback naar NL als NULL)
+    `titel_en`         VARCHAR(255) NULL DEFAULT NULL,
+    `bericht_en`       TEXT         NULL DEFAULT NULL,
     `prio`             ENUM('info','warn','urgent') NOT NULL DEFAULT 'info',
     `geldig_van`       DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP,
     `geldig_tot`       DATETIME     NULL DEFAULT NULL,

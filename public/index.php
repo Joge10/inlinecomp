@@ -3857,13 +3857,17 @@ function toonMeldingenOverzicht() {
             ? t('meld_tot') + new Date(m.geldig_tot.replace(' ', 'T')).toLocaleString(_loc,
                 {day:'2-digit',month:'short',hour:'2-digit',minute:'2-digit'})
             : '';
+        // Toon EN-variant als app op EN staat én operator heeft 'm ingevuld;
+        // anders fallback naar NL (= origineel).
+        const titelToon   = (getCurLang() === 'en' && m.titel_en)   ? m.titel_en   : m.titel;
+        const berichtToon = (getCurLang() === 'en' && m.bericht_en) ? m.bericht_en : m.bericht;
         return `<div style="background:${stijl.bg};border-left:4px solid ${stijl.kleur};
                             padding:.7rem .9rem;margin-bottom:.6rem;border-radius:5px;">
             <div style="display:flex;align-items:center;gap:.4rem;margin-bottom:.3rem;">
                 <span style="font-size:1.2rem">${stijl.icoon}</span>
-                <strong style="color:${stijl.kleur};flex:1;">${esc(m.titel)}</strong>
+                <strong style="color:${stijl.kleur};flex:1;">${esc(titelToon)}</strong>
             </div>
-            <div style="color:#222;line-height:1.4;font-size:.9rem;white-space:pre-wrap;">${esc(m.bericht)}</div>
+            <div style="color:#222;line-height:1.4;font-size:.9rem;white-space:pre-wrap;">${esc(berichtToon)}</div>
             <div style="font-size:.75rem;color:#888;margin-top:.3rem;">${esc(tijd)}${esc(tot)}</div>
         </div>`;
     }).join('');
@@ -3910,6 +3914,8 @@ function toonMelding(m, compId) {
     // Inner-box als flex-column: header + scrollable bericht + knop. Bericht-
     // div krijgt overflow-y:auto + min-height:0 (cruciaal voor flex-children),
     // knop heeft flex-shrink:0 zodat 'ie altijd onderaan zichtbaar blijft.
+    const titelToon   = (getCurLang() === 'en' && m.titel_en)   ? m.titel_en   : m.titel;
+    const berichtToon = (getCurLang() === 'en' && m.bericht_en) ? m.bericht_en : m.bericht;
     overlay.innerHTML = `
         <div style="background:${stijl.bg};border:3px solid ${stijl.kleur};border-radius:10px;
                     max-width:400px;width:100%;max-height:calc(100vh - 2rem);
@@ -3917,11 +3923,11 @@ function toonMelding(m, compId) {
                     box-shadow:0 10px 40px rgba(0,0,0,.4);animation:meldingPop .3s ease-out;">
             <div style="display:flex;align-items:center;gap:.6rem;padding:1.5rem 1.5rem 0;flex-shrink:0;">
                 <span style="font-size:1.8rem">${stijl.icoon}</span>
-                <h2 style="margin:0;color:${stijl.kleur};font-size:1.1rem;flex:1;">${esc(m.titel)}</h2>
+                <h2 style="margin:0;color:${stijl.kleur};font-size:1.1rem;flex:1;">${esc(titelToon)}</h2>
             </div>
             <div style="color:#222;line-height:1.5;font-size:.95rem;
                         white-space:pre-wrap;padding:.6rem 1.5rem 1rem;
-                        overflow-y:auto;flex:1 1 auto;min-height:0;">${esc(m.bericht)}</div>
+                        overflow-y:auto;flex:1 1 auto;min-height:0;">${esc(berichtToon)}</div>
             <div style="padding:0 1.5rem 1.5rem;flex-shrink:0;">
                 <button class="meld-ok" style="background:${stijl.kleur};color:#fff;border:none;
                                                 padding:.6rem 1.4rem;border-radius:6px;font-size:1rem;
