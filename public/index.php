@@ -1049,7 +1049,7 @@ if ($action === 'serie_klassement') {
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-<title>InlineComp – Mijn wedstrijd</title>
+<title data-i18n="page_title">InlineComp – Mijn wedstrijd</title>
 <link rel="icon" type="image/svg+xml" href="../favicon.svg">
 <link rel="manifest" href="manifest.json">
 <link rel="apple-touch-icon" href="icon-192.svg">
@@ -1697,23 +1697,24 @@ select:focus, input:focus { border-color: var(--middenblauw); outline: none; }
 </head>
 <body>
 
-<div id="ptr">↓ Trek verder om te vernieuwen</div>
+<div id="ptr" data-i18n="ptr_trek">↓ Trek verder om te vernieuwen</div>
 
 <header>
     <div class="hdr-row-top">
         <div class="hdr-btns hdr-btns-left">
-            <button class="btn-help btn-meldingen" id="btn-meldingen-overzicht" title="Mededelingen voor deze wedstrijd">📢<span id="meldingen-badge" class="meld-badge" style="display:none">0</span></button>
+            <button class="btn-help btn-meldingen" id="btn-meldingen-overzicht" data-i18n-title="hdr_meldingen_title" title="Mededelingen voor deze wedstrijd">📢<span id="meldingen-badge" class="meld-badge" style="display:none">0</span></button>
             <span class="hdr-spacer" aria-hidden="true"></span>
         </div>
         <div class="hdr-center">
             <h1>InlineComp – Public</h1>
         </div>
         <div class="hdr-btns hdr-btns-right">
-            <button class="btn-help" onclick="toonInfo()" title="Over InlineComp">i</button>
-            <button class="btn-help" onclick="toonHelp()" title="Hoe werkt het?">?</button>
+            <button class="btn-help" id="btn-lang" title="Language / Taal">🇬🇧</button>
+            <button class="btn-help" onclick="toonInfo()" data-i18n-title="hdr_info_title" title="Over InlineComp">i</button>
+            <button class="btn-help" onclick="toonHelp()" data-i18n-title="hdr_help_title" title="Hoe werkt het?">?</button>
         </div>
     </div>
-    <div class="sub">Zoek je heats, starttijden en resultaten</div>
+    <div class="sub" data-i18n="hdr_sub">Zoek je heats, starttijden en resultaten</div>
 </header>
 
 <div id="org-footer" class="org-footer">
@@ -1728,34 +1729,452 @@ select:focus, input:focus { border-color: var(--middenblauw); outline: none; }
 <div class="container">
     <div id="pwa-banner" class="pwa-banner" style="display:none">
         <div class="pwa-banner-tekst">
-            <b>Installeer InlineComp</b>
-            Voeg toe aan je startscherm voor snelle toegang
+            <b data-i18n="pwa_installeer_titel">Installeer InlineComp</b>
+            <span data-i18n="pwa_installeer_uitleg">Voeg toe aan je startscherm voor snelle toegang</span>
         </div>
-        <button class="btn-install" id="pwa-install">Installeer</button>
-        <button class="btn-sluit" id="pwa-sluit" title="Sluiten">&times;</button>
+        <button class="btn-install" id="pwa-install" data-i18n="pwa_btn_install">Installeer</button>
+        <button class="btn-sluit" id="pwa-sluit" data-i18n-title="pwa_btn_sluit" title="Sluiten">&times;</button>
     </div>
     <div class="stap">
         <div class="stap-label">
-            <span class="stap-nr">1</span> Kies je wedstrijd
+            <span class="stap-nr">1</span> <span data-i18n="stap1_label">Kies je wedstrijd</span>
             <span class="auto-stempel"></span>
         </div>
         <div class="filter-rij">
-            <input type="checkbox" id="chk-oud"><label for="chk-oud" class="filter-chip" title="Eerdere wedstrijden">Eerder</label>
-            <input type="checkbox" id="chk-vandaag" checked><label for="chk-vandaag" class="filter-chip">Vandaag</label>
-            <input type="checkbox" id="chk-toekomst"><label for="chk-toekomst" class="filter-chip" title="Toekomstige wedstrijden">Later</label>
+            <input type="checkbox" id="chk-oud"><label for="chk-oud" class="filter-chip" data-i18n="filter_eerder" data-i18n-title="filter_eerder_title" title="Eerdere wedstrijden">Eerder</label>
+            <input type="checkbox" id="chk-vandaag" checked><label for="chk-vandaag" class="filter-chip" data-i18n="filter_vandaag">Vandaag</label>
+            <input type="checkbox" id="chk-toekomst"><label for="chk-toekomst" class="filter-chip" data-i18n="filter_later" data-i18n-title="filter_later_title" title="Toekomstige wedstrijden">Later</label>
         </div>
-        <select id="sel-comp"><option value="">Laden…</option></select>
+        <select id="sel-comp"><option value="" data-i18n="opt_laden">Laden…</option></select>
     </div>
     <div id="comp-info" class="comp-info" style="display:none"></div>
     <div class="stap">
-        <div class="stap-label"><span class="stap-nr">2</span> Startnummer, licentie of achternaam</div>
-        <input type="text" id="inp-snr" placeholder="Startnummer, licentienr of achternaam…" autocomplete="off" inputmode="search">
+        <div class="stap-label"><span class="stap-nr">2</span> <span data-i18n="stap2_label">Startnummer, licentie of achternaam</span></div>
+        <input type="text" id="inp-snr" data-i18n-placeholder="zoek_placeholder" placeholder="Startnummer, licentienr of achternaam…" autocomplete="off" inputmode="search">
     </div>
-    <button class="btn-zoek" id="btn-zoek" disabled>Zoeken</button>
+    <button class="btn-zoek" id="btn-zoek" data-i18n="btn_zoeken" disabled>Zoeken</button>
     <div id="resultaat"></div>
 </div>
 
 <script>
+// ── i18n: NL / EN ─────────────────────────────────────────────────────────
+// Toggle via vlag-knop in header. Persisteert in localStorage onder 'ic_lang'.
+// Dynamische content (rendered via JS) gebruikt t('key'); statische HTML
+// gebruikt data-i18n* attributen die applyI18n() bij init en bij toggle leest.
+const T = {
+    nl: {
+        // ── Document ──
+        page_title: 'InlineComp – Mijn wedstrijd',
+        // ── Header / static ──
+        ptr_trek: '↓ Trek verder om te vernieuwen',
+        hdr_meldingen_title: 'Mededelingen voor deze wedstrijd',
+        hdr_info_title: 'Over InlineComp',
+        hdr_help_title: 'Hoe werkt het?',
+        hdr_sub: 'Zoek je heats, starttijden en resultaten',
+        pwa_installeer_titel: 'Installeer InlineComp',
+        pwa_installeer_uitleg: 'Voeg toe aan je startscherm voor snelle toegang',
+        pwa_btn_install: 'Installeer',
+        pwa_btn_sluit: 'Sluiten',
+        stap1_label: 'Kies je wedstrijd',
+        stap2_label: 'Startnummer, licentie of achternaam',
+        filter_eerder: 'Eerder',
+        filter_eerder_title: 'Eerdere wedstrijden',
+        filter_vandaag: 'Vandaag',
+        filter_later: 'Later',
+        filter_later_title: 'Toekomstige wedstrijden',
+        opt_laden: 'Laden…',
+        zoek_placeholder: 'Startnummer, licentienr of achternaam…',
+        btn_zoeken: 'Zoeken',
+        // ── Connection banner ──
+        conn_geen_internet: '📡 Geen internet — ververst zodra de verbinding terug is',
+        conn_server_down: '⚠ Server niet bereikbaar — opnieuw proberen…',
+        conn_laatste_update: 'laatste update {tijd}',
+        // ── Comps select ──
+        opt_kies_filter: '— Kies tenminste één filter hierboven —',
+        opt_kies_wedstrijd: '— Kies een wedstrijd —',
+        opt_binnenkort: '(binnenkort)',
+        opt_fout_laden: 'Fout bij laden',
+        // ── Disclaimer ──
+        disc_welkom: 'Welkom bij InlineComp!',
+        disc_p1: 'We testen InlineComp voor het eerst tijdens deze wedstrijd — feedback is welkom!',
+        disc_p2_html: 'De officiële startlijsten, uitslagen, klassementen en mededelingen vind je zoals altijd op <strong>Sportity</strong> (kanaal: <em>ISKREGIO</em>).',
+        disc_p3: 'Aan de informatie in InlineComp kunnen geen rechten worden ontleend.',
+        disc_ok: 'OK, begrepen',
+        // ── Zoek / chooser ──
+        msg_laden: 'Laden…',
+        msg_zoeken: 'Zoeken…',
+        msg_zoeken_op: 'Zoeken op "{term}"…',
+        msg_rijders_ophalen: 'Rijders ophalen…',
+        msg_je_rijders_ophalen: 'Je rijders ophalen…',
+        msg_geen_resultaten: 'Geen resultaten gevonden.',
+        msg_geen_rijders: 'Geen rijders gevonden.',
+        msg_geen_startlijst: 'Geen startlijst beschikbaar voor deze rit.',
+        msg_geen_klassement: 'Geen klassement beschikbaar.',
+        msg_geen_uitslagen: 'Geen uitslagen beschikbaar.',
+        msg_geen_posities: 'Geen posities in deze categorie.',
+        msg_kies_categorie_klassement: 'Kies een categorie om het klassement te zien.',
+        msg_programma_nb: 'Programma niet beschikbaar.',
+        msg_nog_geen_heats: 'Nog geen heats beschikbaar.',
+        msg_nog_geen_resultaten: 'Nog geen resultaten beschikbaar.',
+        msg_vorige_ronde_nb: 'Vorige ronde nog niet compleet — startlijst verschijnt zodra alle resultaten daar binnen zijn.',
+        chooser_titel: 'Zoekresultaten voor "{term}"',
+        chooser_sluit: 'Sluiten',
+        chooser_al_in_lijst: 'al in lijst',
+        chooser_doet_niet_mee: 'doet niet mee in deze wedstrijd',
+        chooser_max: 'Max {max} rijders · {vrij} plek(ken) vrij',
+        chooser_toevoegen: 'Toevoegen',
+        alert_max_bereikt: 'Maximum van {max} rijders bereikt. Verwijder eerst iemand om een nieuwe toe te voegen.',
+        alert_max_select: 'Maximum {max} — er is nog plek voor {vrij}. Je hebt er {n} aangevinkt.',
+        // ── Kind-tabs ──
+        kind_rijder_placeholder: '(rijder)',
+        kind_tab_verwijder: 'Verwijder deze rijder',
+        kind_plus_title: 'Voeg broertje/zusje toe',
+        kind_plus_max: 'Maximum {max} rijders',
+        // ── Persoon / status ──
+        status_niet_ingeschreven: 'Niet ingeschreven',
+        status_0: 'Niet bevestigd',
+        status_1: 'Bevestigd',
+        status_2: 'Afgemeld',
+        status_3: 'Afgem. bij org.',
+        status_4: 'Niet getekend',
+        status_5: 'Bev. bij org.',
+        status_onbekend: '?',
+        snr_label: 'Snr',
+        auto_stempel_title: 'Tijdstip laatste auto-refresh',
+        // ── Tabs ──
+        tab_programma: '📅 Programma',
+        tab_heats: '🏃 Heats',
+        tab_resultaten: '🏆 Resultaten',
+        tab_uitslagen: '📊 Uitslagen',
+        // ── Programma ──
+        prog_titel: 'Wedstrijdprogramma',
+        prog_combi_kop: '🔗 Gecombineerde rit — rijden tegelijk',
+        prog_blok_pauze: 'Pauze',
+        prog_blok_inrijden: 'Inrijden',
+        prog_blok_wedstrijdstart: 'Wedstrijd start',
+        prog_blok_ceremonie: 'Ceremonie',
+        prog_blok_herstart: 'Herstart',
+        prog_blok_min: 'min',
+        // ── Heats ──
+        heat_wachten_vorige: 'Wachten op vorige ronde',
+        heat_jouw_resultaat: 'Jouw resultaat:',
+        // ── Heat tabel headers ──
+        col_pos: '#',
+        col_snr: 'Snr',
+        col_naam: 'Naam',
+        col_rnd: 'Rnd',
+        col_pnt: 'Pnt',
+        col_tijd: 'Tijd',
+        col_fin: 'Fin',
+        col_rang: '#',
+        col_cat: 'Cat',
+        col_tot: 'Tot',
+        // ── Rondes ──
+        ronde_serie: 'Serie',
+        ronde_kf: 'KF',
+        ronde_hf: 'HF',
+        ronde_finale: 'Finale',
+        ronde_b_finale: 'B-Finale',
+        ronde_runner_up: 'Runner-up',
+        // ── Resultaten ──
+        res_uitslagen_titel: 'Uitslagen per afstand',
+        res_pt: 'pt',
+        res_klassement: 'Klassement {dc}',
+        res_punten: '{n} punten',
+        // ── Uitslagen tab ──
+        uitsl_titel: 'Volledige uitslagen van deze wedstrijd',
+        uitsl_opt_kies_cat: '— Kies categorie —',
+        uitsl_opt_kies_afstand: '— Kies afstand —',
+        uitsl_klassement_opt: '🏆 Klassement',
+        // ── Serie-klassement ──
+        serie_titel: '🏆 Serie-klassement',
+        serie_opt_kies: '— Kies een serie-klassement —',
+        serie_opt_alle_cats: '— Alle categorieën —',
+        serie_aantal_rijders: '{n} rijders',
+        serie_seizoen_sep: ' — ',
+        // ── Errors ──
+        err_prefix: 'Fout: {msg}',
+        err_zoeken: 'Fout bij zoeken: {msg}',
+        // ── PTR ──
+        ptr_laat_los: '↑ Laat los om te vernieuwen',
+        ptr_vernieuwen: '⟳ Vernieuwen…',
+        ptr_bijgewerkt: '✓ Bijgewerkt',
+        ptr_fout: '⚠ Fout bij vernieuwen',
+        ptr_wachten: '⏳ Even wachten ({s}s)',
+        // ── Mededelingen ──
+        meld_kop: '📢 Mededelingen',
+        meld_tot: ' tot ',
+        meld_begrepen: '✓ Begrepen',
+        // ── Info modal ──
+        info_titel: 'Over InlineComp',
+        info_h1: 'Wat is InlineComp?',
+        info_p1: 'InlineComp is een wedstrijdbeheersysteem voor inline skaten, ontwikkeld om wedstrijdorganisaties te ondersteunen bij het beheren van startlijsten, live tijdwaarneming en het publiceren van uitslagen.',
+        info_p2_html: 'Deze publieke pagina is bedoeld voor <b>rijders en toeschouwers</b>: zoek je startnummer op en bekijk direct je heats, starttijden en resultaten.',
+        info_h2: 'In ontwikkeling',
+        info_p3: 'InlineComp wordt actief doorontwikkeld. Functies kunnen veranderen en er kunnen nog fouten in zitten. Feedback is zeer welkom!',
+        info_h3_html: 'Contact &amp; feedback',
+        info_p4: 'Heb je een vraag, suggestie of bug gevonden? Laat het weten:',
+        info_h4: 'Anonieme bezoek-statistieken',
+        info_p5_html: 'We tellen anoniem aantal bezoekers, actieve sessies en piek gelijktijdig online — puur om te zien hoe veel de app wordt gebruikt en om de hosting stabiel te houden. Er worden <b>geen IP-adressen of persoonsgegevens</b> opgeslagen en er zijn <b>geen derde partijen</b> betrokken.',
+        info_h5_html: 'Privacy &amp; persoonsgegevens',
+        info_p6: 'Deze app toont wedstrijdgegevens die door de KNSB aan ons worden geleverd (o.a. namen, startnummers, vereniging). In de privacyverklaring lees je welke gegevens wij verwerken, op welke grondslag en hoe je een verwijderverzoek kunt indienen.',
+        info_btn_privacy: '📄 Bekijk privacyverklaring',
+        info_copyright: 'InlineComp &copy; {jaar} Geert de Vries',
+        // ── Help modal ──
+        help_titel: 'Hoe werkt InlineComp?',
+        help_h1: 'Aan de slag',
+        help_stap1_html: 'Kies je <b>wedstrijd</b> uit de lijst. Met de drie filter-knoppen — <i>Eerder</i>, <i>Vandaag</i> en <i>Later</i> — bepaal je welke wedstrijden je ziet. Standaard staat alleen <i>Vandaag</i> aan; klik een knop aan/uit om het bereik aan te passen.',
+        help_stap2_html: 'Vul je <b>startnummer</b> in en klik op <b>Zoeken</b> — je persoonlijke overzicht verschijnt.',
+        help_stap3_html: 'Wil je meerdere rijders volgen (bv. broer, zus of een teamgenoot)? Klik op de <b>+</b>-knop bovenin. Je kunt tot <b>4 rijders</b> tegelijk volgen — switch via de tabs bovenaan met hun startnummers.',
+        help_mock_kies_w: 'Kies je wedstrijd',
+        help_mock_voorbeeld: 'Voorbeeldwedstrijd — 19 april 2026',
+        help_mock_snr_lic: 'Startnummer, licentie of achternaam',
+        help_mock_snr: 'Startnummer: 86',
+        help_h_tabs: 'Tabs',
+        help_p_tabs_html: 'Na het zoeken zie je <b>4 tabs</b>:',
+        help_p_prog_html: '<b>Programma</b> — alle ritten van de wedstrijd. Jouw ritten zijn gemarkeerd. Tik op een rit om de startlijst te bekijken.',
+        help_p_heats_html: '<b>Heats</b> — jouw heats met alle rijders. Je eigen rij is gemarkeerd. Na de finish zie je tijden en posities.',
+        help_p_res_html: '<b>Resultaten</b> — jouw persoonlijke uitslagen per afstand en je klassement.',
+        help_p_uitsl_html: '<b>Uitslagen</b> — de volledige uitslag van alle rijders. Kies een categorie en afstand, of bekijk het klassement.',
+        help_mock_jouw_naam: 'Jouw naam',
+        help_h_auto: 'Automatisch bijgewerkt',
+        help_p_auto_html: 'De pagina ververst zichzelf elke minuut zolang het tabblad zichtbaar is. Naast de wedstrijdnaam zie je <b>🔄 HH:MM</b> — dat is het tijdstip van de laatste verversing.',
+        help_h_meld: 'Mededelingen',
+        help_p_meld_html: 'Bovenaan staat een <b>📢-knop</b> (zichtbaar zodra er een mededeling actief is). Belangrijke aankondigingen van de organisatie verschijnen automatisch als pop-up en blijven daarna onder deze knop bereikbaar — bv. "Programma loopt 15 min uit".',
+        help_h_tip: 'Tip',
+        help_p_tip: 'Geen resultaten? De uitslag verschijnt zodra de jury de resultaten heeft bevestigd.',
+    },
+    en: {
+        // ── Document ──
+        page_title: 'InlineComp – My race',
+        // ── Header / static ──
+        ptr_trek: '↓ Pull further to refresh',
+        hdr_meldingen_title: 'Announcements for this race',
+        hdr_info_title: 'About InlineComp',
+        hdr_help_title: 'How does it work?',
+        hdr_sub: 'Find your heats, start times and results',
+        pwa_installeer_titel: 'Install InlineComp',
+        pwa_installeer_uitleg: 'Add to your home screen for quick access',
+        pwa_btn_install: 'Install',
+        pwa_btn_sluit: 'Close',
+        stap1_label: 'Choose your race',
+        stap2_label: 'Start number, license or last name',
+        filter_eerder: 'Earlier',
+        filter_eerder_title: 'Earlier races',
+        filter_vandaag: 'Today',
+        filter_later: 'Later',
+        filter_later_title: 'Upcoming races',
+        opt_laden: 'Loading…',
+        zoek_placeholder: 'Start number, license nr or last name…',
+        btn_zoeken: 'Search',
+        // ── Connection banner ──
+        conn_geen_internet: '📡 No internet — will refresh when the connection returns',
+        conn_server_down: '⚠ Server unreachable — retrying…',
+        conn_laatste_update: 'last update {tijd}',
+        // ── Comps select ──
+        opt_kies_filter: '— Select at least one filter above —',
+        opt_kies_wedstrijd: '— Choose a race —',
+        opt_binnenkort: '(coming soon)',
+        opt_fout_laden: 'Loading failed',
+        // ── Disclaimer ──
+        disc_welkom: 'Welcome to InlineComp!',
+        disc_p1: 'We are testing InlineComp for the first time at this race — feedback is welcome!',
+        disc_p2_html: 'The official start lists, results, standings and announcements can be found as always on <strong>Sportity</strong> (channel: <em>ISKREGIO</em>).',
+        disc_p3: 'No rights can be derived from the information in InlineComp.',
+        disc_ok: 'OK, understood',
+        // ── Zoek / chooser ──
+        msg_laden: 'Loading…',
+        msg_zoeken: 'Searching…',
+        msg_zoeken_op: 'Searching for "{term}"…',
+        msg_rijders_ophalen: 'Fetching skaters…',
+        msg_je_rijders_ophalen: 'Fetching your skaters…',
+        msg_geen_resultaten: 'No results found.',
+        msg_geen_rijders: 'No skaters found.',
+        msg_geen_startlijst: 'No start list available for this race.',
+        msg_geen_klassement: 'No standings available.',
+        msg_geen_uitslagen: 'No results available.',
+        msg_geen_posities: 'No positions in this category.',
+        msg_kies_categorie_klassement: 'Choose a category to view the standings.',
+        msg_programma_nb: 'Program not available.',
+        msg_nog_geen_heats: 'No heats available yet.',
+        msg_nog_geen_resultaten: 'No results available yet.',
+        msg_vorige_ronde_nb: 'Previous round not complete yet — start list appears as soon as all results have been entered.',
+        chooser_titel: 'Search results for "{term}"',
+        chooser_sluit: 'Close',
+        chooser_al_in_lijst: 'already in list',
+        chooser_doet_niet_mee: 'not participating in this race',
+        chooser_max: 'Max {max} skaters · {vrij} spot(s) free',
+        chooser_toevoegen: 'Add',
+        alert_max_bereikt: 'Maximum of {max} skaters reached. Remove someone first to add a new one.',
+        alert_max_select: 'Maximum {max} — there is room for {vrij}. You selected {n}.',
+        // ── Kind-tabs ──
+        kind_rijder_placeholder: '(skater)',
+        kind_tab_verwijder: 'Remove this skater',
+        kind_plus_title: 'Add brother/sister',
+        kind_plus_max: 'Maximum {max} skaters',
+        // ── Persoon / status ──
+        status_niet_ingeschreven: 'Not registered',
+        status_0: 'Not confirmed',
+        status_1: 'Confirmed',
+        status_2: 'Withdrawn',
+        status_3: 'Withdrawn at registration',
+        status_4: 'Not signed in',
+        status_5: 'Confirmed at registration',
+        status_onbekend: '?',
+        snr_label: 'Nr',
+        auto_stempel_title: 'Time of last auto-refresh',
+        // ── Tabs ──
+        tab_programma: '📅 Program',
+        tab_heats: '🏃 Heats',
+        tab_resultaten: '🏆 Results',
+        tab_uitslagen: '📊 All results',
+        // ── Programma ──
+        prog_titel: 'Race program',
+        prog_combi_kop: '🔗 Combined race — skating together',
+        prog_blok_pauze: 'Break',
+        prog_blok_inrijden: 'Warm-up',
+        prog_blok_wedstrijdstart: 'Race start',
+        prog_blok_ceremonie: 'Ceremony',
+        prog_blok_herstart: 'Restart',
+        prog_blok_min: 'min',
+        // ── Heats ──
+        heat_wachten_vorige: 'Waiting for previous round',
+        heat_jouw_resultaat: 'Your result:',
+        // ── Heat tabel headers ──
+        col_pos: '#',
+        col_snr: 'Nr',
+        col_naam: 'Name',
+        col_rnd: 'Lap',
+        col_pnt: 'Pts',
+        col_tijd: 'Time',
+        col_fin: 'Fin',
+        col_rang: '#',
+        col_cat: 'Cat',
+        col_tot: 'Tot',
+        // ── Rondes ──
+        ronde_serie: 'Series',
+        ronde_kf: 'QF',
+        ronde_hf: 'SF',
+        ronde_finale: 'Final',
+        ronde_b_finale: 'B-Final',
+        ronde_runner_up: 'Runner-up',
+        // ── Resultaten ──
+        res_uitslagen_titel: 'Results per distance',
+        res_pt: 'pt',
+        res_klassement: 'Standings {dc}',
+        res_punten: '{n} points',
+        // ── Uitslagen tab ──
+        uitsl_titel: 'Full results of this race',
+        uitsl_opt_kies_cat: '— Choose category —',
+        uitsl_opt_kies_afstand: '— Choose distance —',
+        uitsl_klassement_opt: '🏆 Standings',
+        // ── Serie-klassement ──
+        serie_titel: '🏆 Series standings',
+        serie_opt_kies: '— Choose a series standings —',
+        serie_opt_alle_cats: '— All categories —',
+        serie_aantal_rijders: '{n} skaters',
+        serie_seizoen_sep: ' — ',
+        // ── Errors ──
+        err_prefix: 'Error: {msg}',
+        err_zoeken: 'Search error: {msg}',
+        // ── PTR ──
+        ptr_laat_los: '↑ Release to refresh',
+        ptr_vernieuwen: '⟳ Refreshing…',
+        ptr_bijgewerkt: '✓ Updated',
+        ptr_fout: '⚠ Refresh error',
+        ptr_wachten: '⏳ Please wait ({s}s)',
+        // ── Mededelingen ──
+        meld_kop: '📢 Announcements',
+        meld_tot: ' until ',
+        meld_begrepen: '✓ Understood',
+        // ── Info modal ──
+        info_titel: 'About InlineComp',
+        info_h1: 'What is InlineComp?',
+        info_p1: 'InlineComp is a race management system for inline speed skating, developed to support race organizations in managing start lists, live timekeeping and publishing results.',
+        info_p2_html: 'This public page is intended for <b>skaters and spectators</b>: look up your start number and view your heats, start times and results directly.',
+        info_h2: 'In development',
+        info_p3: 'InlineComp is actively being developed. Features may change and bugs may still occur. Feedback is most welcome!',
+        info_h3_html: 'Contact &amp; feedback',
+        info_p4: 'Have a question, suggestion or found a bug? Let us know:',
+        info_h4: 'Anonymous visit statistics',
+        info_p5_html: 'We anonymously count visitor numbers, active sessions and peak concurrent users — purely to see how much the app is used and to keep hosting stable. <b>No IP addresses or personal data</b> are stored and <b>no third parties</b> are involved.',
+        info_h5_html: 'Privacy &amp; personal data',
+        info_p6: 'This app shows race data provided by the KNSB (incl. names, start numbers, club). The privacy statement details which data we process, on what basis and how to submit a removal request.',
+        info_btn_privacy: '📄 View privacy statement',
+        info_copyright: 'InlineComp &copy; {jaar} Geert de Vries',
+        // ── Help modal ──
+        help_titel: 'How does InlineComp work?',
+        help_h1: 'Getting started',
+        help_stap1_html: 'Choose your <b>race</b> from the list. With the three filter buttons — <i>Earlier</i>, <i>Today</i> and <i>Later</i> — you decide which races you see. By default only <i>Today</i> is on; click a button on/off to adjust the range.',
+        help_stap2_html: 'Enter your <b>start number</b> and click <b>Search</b> — your personal overview appears.',
+        help_stap3_html: 'Want to follow multiple skaters (e.g. brother, sister or a teammate)? Click the <b>+</b> button at the top. You can follow up to <b>4 skaters</b> at once — switch via the tabs at the top with their start numbers.',
+        help_mock_kies_w: 'Choose your race',
+        help_mock_voorbeeld: 'Sample race — 19 April 2026',
+        help_mock_snr_lic: 'Start number, license or last name',
+        help_mock_snr: 'Start number: 86',
+        help_h_tabs: 'Tabs',
+        help_p_tabs_html: 'After searching you see <b>4 tabs</b>:',
+        help_p_prog_html: '<b>Program</b> — all races of the meet. Your races are highlighted. Tap a race to view the start list.',
+        help_p_heats_html: '<b>Heats</b> — your heats with all skaters. Your own row is highlighted. After the finish you see times and positions.',
+        help_p_res_html: '<b>Results</b> — your personal results per distance and your standings.',
+        help_p_uitsl_html: '<b>All results</b> — the full results of all skaters. Choose a category and distance, or view the standings.',
+        help_mock_jouw_naam: 'Your name',
+        help_h_auto: 'Automatically updated',
+        help_p_auto_html: 'The page refreshes itself every minute as long as the tab is visible. Next to the race name you see <b>🔄 HH:MM</b> — that is the time of the last refresh.',
+        help_h_meld: 'Announcements',
+        help_p_meld_html: 'At the top is a <b>📢 button</b> (visible as soon as there is an active announcement). Important announcements from the organization appear automatically as a pop-up and remain accessible under this button afterwards — e.g. "Program is running 15 min behind".',
+        help_h_tip: 'Tip',
+        help_p_tip: 'No results yet? The result appears as soon as the jury has confirmed it.',
+    }
+};
+let curLang = (() => {
+    try { return localStorage.getItem('ic_lang') || 'nl'; } catch { return 'nl'; }
+})();
+function t(key, params={}) {
+    const dict = T[curLang] || T.nl;
+    let s = dict[key] ?? T.nl[key] ?? key;
+    for (const [k,v] of Object.entries(params)) s = s.replaceAll(`{${k}}`, v);
+    return s;
+}
+function getStatusLabel(i) {
+    return t('status_' + i);
+}
+function applyI18n(root=document) {
+    root.querySelectorAll('[data-i18n]').forEach(el => { el.textContent = t(el.dataset.i18n); });
+    root.querySelectorAll('[data-i18n-html]').forEach(el => { el.innerHTML = t(el.dataset.i18nHtml); });
+    root.querySelectorAll('[data-i18n-title]').forEach(el => { el.title = t(el.dataset.i18nTitle); });
+    root.querySelectorAll('[data-i18n-placeholder]').forEach(el => { el.placeholder = t(el.dataset.i18nPlaceholder); });
+    document.documentElement.lang = curLang;
+    const btn = document.getElementById('btn-lang');
+    if (btn) btn.textContent = curLang === 'nl' ? '🇬🇧' : '🇳🇱';
+}
+function toggleLang() {
+    curLang = curLang === 'nl' ? 'en' : 'nl';
+    try { localStorage.setItem('ic_lang', curLang); } catch {}
+    applyI18n();
+    _rerenderActiveTab();
+}
+function _rerenderActiveTab() {
+    // Comps-dropdown opnieuw vullen (textContent gebruikt vertaalde labels)
+    if (typeof filterComps === 'function' && alleComps?.length) filterComps();
+    // Multi-rijder view opnieuw renderen
+    if (typeof renderKinderen === 'function' && _kinderen?.length) {
+        _bewaarKindUistate?.();
+        renderKinderen();
+    }
+    // Connection banner updaten
+    if (typeof _connUpdateBanner === 'function') _connUpdateBanner();
+    // Stempel-tekst opnieuw zetten (title-attribute)
+    document.querySelectorAll('.auto-stempel').forEach(el => {
+        el.title = t('auto_stempel_title');
+    });
+    // Meldingen-badge / overzicht: badge zelf is alleen een getal, geen vertaling
+}
+document.addEventListener('DOMContentLoaded', () => {
+    applyI18n();
+    document.getElementById('btn-lang')?.addEventListener('click', toggleLang);
+});
+
 const selComp = document.getElementById('sel-comp');
 const inpSnr  = document.getElementById('inp-snr');
 const btnZoek = document.getElementById('btn-zoek');
@@ -1766,13 +2185,22 @@ const chkVandaag = document.getElementById('chk-vandaag');
 const chkToekomst = document.getElementById('chk-toekomst');
 let alleComps = [];
 
-const STATUS_LABEL = ['Niet bevestigd','Bevestigd','Afgemeld','Afgem. bij org.','Niet getekend','Bev. bij org.'];
 const STATUS_KLEUR = ['#e65100','#2e7d32','#b71c1c','#6a1b9a','#283593','#006064'];
 const STATUS_BG    = ['#fff3e0','#e8f5e9','#fce4e4','#f3e5f5','#e8eaf6','#e0f7fa'];
 const BADGE = { heats:'badge-serie', kwartfinale:'badge-kf', halve_finale:'badge-hf',
                 finale_a:'badge-finale', finale_b:'badge-finale', runner_up:'badge-ru' };
-const RLABEL = { heats:'Serie', kwartfinale:'KF', halve_finale:'HF',
-                 finale_a:'Finale', finale_b:'B-Finale', runner_up:'Runner-up' };
+// Ronde-labels worden runtime vertaald via getRondeLabel(rt).
+function getRondeLabel(rt) {
+    const map = {
+        heats: 'ronde_serie',
+        kwartfinale: 'ronde_kf',
+        halve_finale: 'ronde_hf',
+        finale_a: 'ronde_finale',
+        finale_b: 'ronde_b_finale',
+        runner_up: 'ronde_runner_up',
+    };
+    return map[rt] ? t(map[rt]) : (rt || '');
+}
 
 function esc(s) { return String(s??'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
 // Safari kan geen "2026-04-19 10:00:00" parsen, wel "2026-04-19T10:00:00"
@@ -1805,13 +2233,13 @@ function _connUpdateBanner() {
     const el = _connBannerEl();
     let bericht = '';
     if (!_conn.online) {
-        bericht = '📡 Geen internet — ververst zodra de verbinding terug is';
+        bericht = t('conn_geen_internet');
     } else if (!_conn.serverOk) {
-        bericht = '⚠ Server niet bereikbaar — opnieuw proberen…';
+        bericht = t('conn_server_down');
     }
     if (bericht) {
         const tijd = _conn.lastSuccess
-            ? ` <small style="opacity:.85">(laatste update ${_conn.lastSuccess.toLocaleTimeString('nl-NL', {hour:'2-digit', minute:'2-digit'})})</small>`
+            ? ` <small style="opacity:.85">(${t('conn_laatste_update', {tijd: _conn.lastSuccess.toLocaleTimeString(curLang === 'nl' ? 'nl-NL' : 'en-GB', {hour:'2-digit', minute:'2-digit'})})})</small>`
             : '';
         el.innerHTML = bericht + tijd;
         el.style.display = '';
@@ -1906,10 +2334,10 @@ function heatExtraKolommen(rijders, rondeType) {
     return { heeftRnd, heeftPK, rondeType: rondeType ?? null };
 }
 function heatTabelHeader(extra) {
-    return `<tr><th class="col-pos">#</th><th class="col-snr">Snr</th><th class="col-naam">Naam</th>`
-        + (extra.heeftRnd ? '<th class="col-rnd">Rnd</th>' : '')
-        + (extra.heeftPK  ? '<th class="col-pk">Pnt</th>' : '')
-        + '<th class="col-tijd">Tijd</th><th class="col-fin">Fin</th></tr>';
+    return `<tr><th class="col-pos">${t('col_pos')}</th><th class="col-snr">${t('col_snr')}</th><th class="col-naam">${t('col_naam')}</th>`
+        + (extra.heeftRnd ? `<th class="col-rnd">${t('col_rnd')}</th>` : '')
+        + (extra.heeftPK  ? `<th class="col-pk">${t('col_pnt')}</th>` : '')
+        + `<th class="col-tijd">${t('col_tijd')}</th><th class="col-fin">${t('col_fin')}</th></tr>`;
 }
 function heatTabelRij(r, isIk, extra) {
     const rTijd = r.tijd_ms != null ? msTijd(r.tijd_ms) : '';
@@ -1948,7 +2376,7 @@ async function toonRitDetail(el) {
     // Overlay aanmaken
     const overlay = document.createElement('div');
     overlay.className = 'overlay';
-    overlay.innerHTML = '<div class="overlay-box"><div style="padding:24px;text-align:center"><span class="spinner"></span> Laden…</div></div>';
+    overlay.innerHTML = `<div class="overlay-box"><div style="padding:24px;text-align:center"><span class="spinner"></span> ${t('msg_laden')}</div></div>`;
     overlay.addEventListener('click', e => { if (e.target === overlay) overlay.remove(); });
     document.body.appendChild(overlay);
 
@@ -1959,7 +2387,7 @@ async function toonRitDetail(el) {
         if (!data.heat || !data.heat.rijders?.length) {
             overlay.querySelector('.overlay-box').innerHTML = `
                 <div class="heat-card-titel"><button class="overlay-sluit" onclick="this.closest('.overlay').remove()">&times;</button>${esc(ritNaam)}</div>
-                <div style="padding:20px;text-align:center;color:#888">Geen startlijst beschikbaar voor deze rit.</div>`;
+                <div style="padding:20px;text-align:center;color:#888">${t('msg_geen_startlijst')}</div>`;
             return;
         }
 
@@ -1975,7 +2403,7 @@ async function toonRitDetail(el) {
             <div class="heat-card" style="border:none;border-radius:12px">
                 <div class="heat-card-titel" style="border-radius:12px 12px 0 0">
                     <button class="overlay-sluit" onclick="this.closest('.overlay').remove()">&times;</button>
-                    <span class="heat-card-badge ${BADGE[rt]??'badge-serie'}">${esc(RLABEL[rt]??rt)}</span>
+                    <span class="heat-card-badge ${BADGE[rt]??'badge-serie'}">${esc(getRondeLabel(rt))}</span>
                     ${esc(h.rit_naam ?? h.heat_naam)}
                 </div>
                 <table class="heat-card-tabel">
@@ -1984,7 +2412,7 @@ async function toonRitDetail(el) {
                 </table>
             </div>`;
     } catch (e) {
-        overlay.querySelector('.overlay-box').innerHTML = `<div style="padding:20px;color:#c00">Fout: ${esc(e.message)}</div>`;
+        overlay.querySelector('.overlay-box').innerHTML = `<div style="padding:20px;color:#c00">${esc(t('err_prefix', {msg: e.message}))}</div>`;
     }
 }
 
@@ -2003,11 +2431,11 @@ function filterComps() {
     const vorigeWaarde = selComp.value;
 
     if (!toonOud && !toonVandaag && !toonToekomst) {
-        selComp.innerHTML = '<option value="">— Kies tenminste één filter hierboven —</option>';
+        selComp.innerHTML = `<option value="">${esc(t('opt_kies_filter'))}</option>`;
         return;
     }
 
-    selComp.innerHTML = '<option value="">— Kies een wedstrijd —</option>';
+    selComp.innerHTML = `<option value="">${esc(t('opt_kies_wedstrijd'))}</option>`;
     for (const c of alleComps) {
         const startDag = safeDatum(c.starts);
         const eindDag  = safeDatum(c.ends) ?? startDag;
@@ -2023,14 +2451,14 @@ function filterComps() {
         if (isOud      && !toonOud)      continue;
         if (isToekomst && !toonToekomst) continue;
 
-        const d = startDag ? startDag.toLocaleDateString('nl-NL',{day:'numeric',month:'long',year:'numeric'}) : '';
+        const d = startDag ? startDag.toLocaleDateString(curLang === 'nl' ? 'nl-NL' : 'en-GB',{day:'numeric',month:'long',year:'numeric'}) : '';
         // Verborgen wedstrijden: tonen als disabled met "(binnenkort)"
         // suffix — bezoeker ziet dat de wedstrijd er aankomt zonder
         // erop te kunnen klikken. Operator publiceert via Beheer.
         const verborgen = !Number(c.public_zichtbaar);
         const o = document.createElement('option');
         o.value = c.id;
-        o.textContent = `${c.name} — ${d}${verborgen ? '  (binnenkort)' : ''}`;
+        o.textContent = `${c.name} — ${d}${verborgen ? '  ' + t('opt_binnenkort') : ''}`;
         if (verborgen) o.disabled = true;
         o.dataset.datum = d; o.dataset.naam = c.name;
         o.dataset.orgLogo = c.org_logo ?? '';
@@ -2088,7 +2516,7 @@ safeFetch('?action=competitions').then(r=>r.json()).then(comps => {
         selComp.value = wantedComp;
         selComp.dispatchEvent(new Event('change'));
     }
-}).catch(() => { selComp.innerHTML = '<option value="">Fout bij laden</option>'; });
+}).catch(() => { selComp.innerHTML = `<option value="">${esc(t('opt_fout_laden'))}</option>`; });
 
 // ── Disclaimer bij eerste bezoek (zelfde tekst als op de poster) ─────────
 function toonDisclaimerEenmalig() {
@@ -2100,15 +2528,14 @@ function toonDisclaimerEenmalig() {
     overlay.className = 'disc-overlay';
     overlay.innerHTML = `
         <div class="disc-box">
-            <div class="disc-header">Welkom bij InlineComp!</div>
+            <div class="disc-header">${esc(t('disc_welkom'))}</div>
             <div class="disc-body">
-                <p>We testen InlineComp voor het eerst tijdens deze wedstrijd — feedback is welkom!</p>
-                <p>De officiële startlijsten, uitslagen, klassementen en mededelingen vind je
-                   zoals altijd op <strong>Sportity</strong> (kanaal: <em>ISKREGIO</em>).</p>
-                <p>Aan de informatie in InlineComp kunnen geen rechten worden ontleend.</p>
+                <p>${esc(t('disc_p1'))}</p>
+                <p>${t('disc_p2_html')}</p>
+                <p>${esc(t('disc_p3'))}</p>
             </div>
             <div class="disc-footer">
-                <button class="disc-btn" id="disc-ok">OK, begrepen</button>
+                <button class="disc-btn" id="disc-ok">${esc(t('disc_ok'))}</button>
             </div>
         </div>`;
     overlay.addEventListener('click', e => {
@@ -2145,7 +2572,7 @@ selComp.addEventListener('change', async () => {
     if (!selComp.value) return;
     const opgeslagen = _loadKidsUitStorage();
     if (!opgeslagen.length) return;
-    divResult.innerHTML = '<div class="melding"><span class="spinner"></span> Je rijders ophalen…</div>';
+    divResult.innerHTML = `<div class="melding"><span class="spinner"></span> ${t('msg_je_rijders_ophalen')}</div>`;
     let gedeeldeProg = null;
     try {
         const pr = await safeFetch(`?action=programma&competition_id=${encodeURIComponent(selComp.value)}`);
@@ -2188,7 +2615,7 @@ btnZoek.addEventListener('click', async () => {
         return;
     }
 
-    divResult.innerHTML = '<div class="melding"><span class="spinner"></span> Zoeken…</div>';
+    divResult.innerHTML = `<div class="melding"><span class="spinner"></span> ${t('msg_zoeken')}</div>`;
     btnZoek.disabled = true;
     try {
         const param = modus === 'license'
@@ -2202,7 +2629,7 @@ btnZoek.addEventListener('click', async () => {
         const prog = await progRes.json();
 
         if (data.error) { divResult.innerHTML = `<div class="melding melding-fout">${esc(data.error)}</div>`; return; }
-        if (!data.length) { divResult.innerHTML = '<div class="melding">Geen resultaten gevonden.</div>'; return; }
+        if (!data.length) { divResult.innerHTML = `<div class="melding">${esc(t('msg_geen_resultaten'))}</div>`; return; }
 
         // Meerdere personen met zelfde startnummer (of license) → chooser-modal
         // met checkboxes zodat de user er meerdere tegelijk kan toevoegen.
@@ -2225,7 +2652,7 @@ btnZoek.addEventListener('click', async () => {
         inpSnr.value = '';
         btnZoek.disabled = true;
     } catch (e) {
-        divResult.innerHTML = `<div class="melding melding-fout">Fout: ${esc(e.message)}</div>`;
+        divResult.innerHTML = `<div class="melding melding-fout">${esc(t('err_prefix', {msg: e.message}))}</div>`;
     } finally { btnZoek.disabled = false; }
 });
 
@@ -2244,12 +2671,12 @@ function toonChooserModal(rijen, term, compId) {
     modal.innerHTML = `
         <div class="naamzoek-box">
             <div class="naamzoek-hdr">
-                <span>Zoekresultaten voor "${esc(term)}"</span>
-                <button class="naamzoek-sluit" title="Sluiten">&times;</button>
+                <span>${esc(t('chooser_titel', {term}))}</span>
+                <button class="naamzoek-sluit" title="${esc(t('chooser_sluit'))}">&times;</button>
             </div>
             <div class="naamzoek-body">
                 ${rijen.length === 0
-                    ? '<div class="naamzoek-leeg">Geen rijders gevonden.</div>'
+                    ? `<div class="naamzoek-leeg">${esc(t('msg_geen_rijders'))}</div>`
                     : rijen.map(r => {
                         const uit = al.has(r.license_key);
                         // search_person geeft `in_wedstrijd` (1/0); snr-pad niet,
@@ -2258,8 +2685,8 @@ function toonChooserModal(rijen, term, compId) {
                         const meta = [
                             r.category || '',
                             r.club_short ? esc(r.club_short) : '',
-                            uit ? '<span style="color:#999">al in lijst</span>' : '',
-                            !doetMee ? '<span style="color:#b71c1c">doet niet mee in deze wedstrijd</span>' : '',
+                            uit ? `<span style="color:#999">${esc(t('chooser_al_in_lijst'))}</span>` : '',
+                            !doetMee ? `<span style="color:#b71c1c">${esc(t('chooser_doet_niet_mee'))}</span>` : '',
                         ].filter(Boolean).join(' · ');
                         return `<label class="naamzoek-rij" style="${uit ? 'opacity:.55' : ''}">
                             <input type="checkbox" data-lic="${esc(r.license_key)}" ${uit ? 'checked disabled' : ''}>
@@ -2272,9 +2699,9 @@ function toonChooserModal(rijen, term, compId) {
                     }).join('')}
             </div>
             <div class="naamzoek-voet">
-                <span class="aantal">Max ${MAX_KINDEREN} rijders · ${plaatsVrij} plek(ken) vrij</span>
+                <span class="aantal">${esc(t('chooser_max', {max: MAX_KINDEREN, vrij: plaatsVrij}))}</span>
                 <div>
-                    <button class="btn-zoek" style="padding:8px 18px;margin:0" id="naamzoek-ok">Toevoegen</button>
+                    <button class="btn-zoek" style="padding:8px 18px;margin:0" id="naamzoek-ok">${esc(t('chooser_toevoegen'))}</button>
                 </div>
             </div>
         </div>`;
@@ -2289,11 +2716,11 @@ function toonChooserModal(rijen, term, compId) {
         const vinkjes = [...modal.querySelectorAll('input[type=checkbox]:checked:not(:disabled)')];
         if (!vinkjes.length) { sluit(); return; }
         if (vinkjes.length > plaatsVrij) {
-            alert(`Maximum ${MAX_KINDEREN} — er is nog plek voor ${plaatsVrij}. Je hebt er ${vinkjes.length} aangevinkt.`);
+            alert(t('alert_max_select', {max: MAX_KINDEREN, vrij: plaatsVrij, n: vinkjes.length}));
             return;
         }
         sluit();
-        divResult.innerHTML = '<div class="melding"><span class="spinner"></span> Rijders ophalen…</div>';
+        divResult.innerHTML = `<div class="melding"><span class="spinner"></span> ${t('msg_rijders_ophalen')}</div>`;
         let prog = null;
         try {
             const pr = await safeFetch(`?action=programma&competition_id=${encodeURIComponent(compId)}`);
@@ -2318,7 +2745,7 @@ function toonChooserModal(rijen, term, compId) {
 
 // ── Naam-zoek: zoek via backend, toon chooser ────────────────────────────────
 async function zoekOpNaam(compId, term) {
-    divResult.innerHTML = '<div class="melding"><span class="spinner"></span> Zoeken op "' + esc(term) + '"…</div>';
+    divResult.innerHTML = `<div class="melding"><span class="spinner"></span> ${esc(t('msg_zoeken_op', {term: esc(term)}))}</div>`;
     btnZoek.disabled = true;
     let rijen = [];
     try {
@@ -2326,7 +2753,7 @@ async function zoekOpNaam(compId, term) {
         rijen = await res.json();
         if (!Array.isArray(rijen)) rijen = [];
     } catch (e) {
-        divResult.innerHTML = `<div class="melding melding-fout">Fout bij zoeken: ${esc(e.message)}</div>`;
+        divResult.innerHTML = `<div class="melding melding-fout">${esc(t('err_zoeken', {msg: e.message}))}</div>`;
         btnZoek.disabled = false;
         return;
     } finally { btnZoek.disabled = false; }
@@ -2406,7 +2833,7 @@ function toonRijderData(data, startIdx, snr, prog) {
         _kinderen[bestaande].snr = String(snr);
     } else {
         if (_kinderen.length >= MAX_KINDEREN) {
-            alert(`Maximum van ${MAX_KINDEREN} rijders bereikt. Verwijder eerst iemand om een nieuwe toe te voegen.`);
+            alert(t('alert_max_bereikt', {max: MAX_KINDEREN}));
             return;
         }
         _kinderen.push({ snr: String(snr), data, prog, sub_tab: 'programma', kozen_idx: startIdx });
@@ -2429,10 +2856,10 @@ function renderKinderen() {
         // ×-knop altijd beschikbaar — ook bij 1 kind handig (je hebt misschien
         // per ongeluk de verkeerde rijder geselecteerd). verwijderKind()
         // ruimt bij laatste-kind de view netjes op.
-        const closeBtn = `<span class="kind-tab-close" data-kind-close="${idx}" title="Verwijder deze rijder">×</span>`;
+        const closeBtn = `<span class="kind-tab-close" data-kind-close="${idx}" title="${esc(t('kind_tab_verwijder'))}">×</span>`;
         return `<button class="kind-tab${actief}" data-kind-idx="${idx}">
             <span class="kind-tab-snr">${esc(k.snr)}</span>
-            <span>${esc(naam || '(rijder)')}</span>
+            <span>${esc(naam || t('kind_rijder_placeholder'))}</span>
             ${closeBtn}
         </button>`;
     }).join('');
@@ -2440,8 +2867,8 @@ function renderKinderen() {
     // gebruikt data-count om dan compactere stijl toe te passen (voornaam
     // weg, kleinere padding) — de × moet altijd zichtbaar blijven.
     const plusKnop = _kinderen.length < MAX_KINDEREN
-        ? `<button class="kind-tab-plus" id="kind-tab-plus" title="Voeg broertje/zusje toe">+</button>`
-        : `<button class="kind-tab-plus" disabled title="Maximum ${MAX_KINDEREN} rijders">+</button>`;
+        ? `<button class="kind-tab-plus" id="kind-tab-plus" title="${esc(t('kind_plus_title'))}">+</button>`
+        : `<button class="kind-tab-plus" disabled title="${esc(t('kind_plus_max', {max: MAX_KINDEREN}))}">+</button>`;
 
     divResult.innerHTML = `
         <div class="kind-tabs" data-count="${_kinderen.length}">${tabsHtml}${plusKnop}</div>
@@ -2536,7 +2963,7 @@ function renderResultaat(data, snr, prog) {
             // ingeschreven is voor deze wedstrijd (via naam/license toegevoegd).
             const nietIngeschreven = p.entry_status === null || p.entry_status === undefined;
             const st = nietIngeschreven ? -1 : parseInt(p.entry_status);
-            const stLabel = nietIngeschreven ? 'Niet ingeschreven' : (STATUS_LABEL[st] ?? '?');
+            const stLabel = nietIngeschreven ? t('status_niet_ingeschreven') : (st >= 0 && st <= 5 ? getStatusLabel(st) : t('status_onbekend'));
             const stKleur = nietIngeschreven ? '#b71c1c' : (STATUS_KLEUR[st] ?? '#555');
             const stBg    = nietIngeschreven ? '#fce4e4' : (STATUS_BG[st] ?? '#eee');
 
@@ -2544,24 +2971,24 @@ function renderResultaat(data, snr, prog) {
             <div style="margin-top:16px">
                 <div class="persoon-header">
                     <div><div class="persoon-naam">${esc(p.full_name)}</div>
-                         <span class="persoon-snr">Snr ${esc(p.wedstrijd_snr??p.start_number)}</span>
+                         <span class="persoon-snr">${esc(t('snr_label'))} ${esc(p.wedstrijd_snr??p.start_number)}</span>
                          <span style="font-size:.75rem;background:${stBg};color:${stKleur};border-radius:10px;padding:1px 8px;margin-left:6px">${esc(stLabel)}</span></div>
                     <div style="display:flex;align-items:center;gap:8px">
                         <span class="persoon-cat">${esc(p.category)}</span>
-                        <span class="auto-stempel" title="Tijdstip laatste auto-refresh">${_huidigStempel}</span>
+                        <span class="auto-stempel" title="${esc(t('auto_stempel_title'))}">${_huidigStempel}</span>
                     </div>
                 </div>
                 <div class="tabs">
-                    <button class="tab-btn active" data-tab="programma">📅 Programma</button>
-                    <button class="tab-btn" data-tab="heats">🏃 Heats</button>
-                    <button class="tab-btn" data-tab="resultaten">🏆 Resultaten</button>
-                    <button class="tab-btn" data-tab="uitslagen">📊 Uitslagen</button>
+                    <button class="tab-btn active" data-tab="programma">${esc(t('tab_programma'))}</button>
+                    <button class="tab-btn" data-tab="heats">${esc(t('tab_heats'))}</button>
+                    <button class="tab-btn" data-tab="resultaten">${esc(t('tab_resultaten'))}</button>
+                    <button class="tab-btn" data-tab="uitslagen">${esc(t('tab_uitslagen'))}</button>
                 </div>
                 <div class="kaart">`;
 
             // ── TAB: Programma ────────────────────────────────────────
             html += '<div class="tab-content active" data-tab="programma"><div class="kaart-sectie">';
-            html += '<div class="kaart-sectie-titel">Wedstrijdprogramma</div>';
+            html += `<div class="kaart-sectie-titel">${esc(t('prog_titel'))}</div>`;
             if (prog.ritten?.length) {
                 // Interleave ritten en niet-ronde blokken (pauze, inrijden,
                 // Interleave-algoritme — match admin (js/tijdschema.js):
@@ -2590,8 +3017,11 @@ function renderResultaat(data, snr, prog) {
                 }
 
                 const hhmm = v => { if (!v) return ''; const m = String(v).match(/(\d{1,2}:\d{2})/); return m ? m[1] : ''; };
-                const blokIcoon = t => ({pauze:'⏸',inrijden:'🛼',wedstrijdstart:'🏁',ceremonie:'🏆',herstart:'🔄'}[t] || '🕓');
-                const blokLabel = t => ({pauze:'Pauze',inrijden:'Inrijden',wedstrijdstart:'Wedstrijd start',ceremonie:'Ceremonie',herstart:'Herstart'}[t] || (t || '').toUpperCase());
+                const blokIcoon = bt => ({pauze:'⏸',inrijden:'🛼',wedstrijdstart:'🏁',ceremonie:'🏆',herstart:'🔄'}[bt] || '🕓');
+                const blokLabel = bt => {
+                    const keyMap = {pauze:'prog_blok_pauze', inrijden:'prog_blok_inrijden', wedstrijdstart:'prog_blok_wedstrijdstart', ceremonie:'prog_blok_ceremonie', herstart:'prog_blok_herstart'};
+                    return keyMap[bt] ? t(keyMap[bt]) : (bt || '').toUpperCase();
+                };
 
                 let nr = 0;
                 // Combi-state: ritten met dezelfde combi_group worden samen
@@ -2602,16 +3032,16 @@ function renderResultaat(data, snr, prog) {
                     if (it.type === 'blok') {
                         if (vorigeCombi !== null) { html += `</div></div>`; vorigeCombi = null; }
                         const b = it.data;
-                        const t = (b.blok_type || '').toLowerCase();
+                        const bt = (b.blok_type || '').toLowerCase();
                         const tijd = hhmm(b.tijdstip);
                         const tijdHtml = tijd ? `<span class="prog-blok-tijd">🕓 ${esc(tijd)}</span>` : '';
-                        const duurHtml = b.duur ? `<span class="prog-blok-duur">${b.duur} min</span>` : '';
+                        const duurHtml = b.duur ? `<span class="prog-blok-duur">${b.duur} ${t('prog_blok_min')}</span>` : '';
                         const opmHtml  = b.opmerking ? `<span class="prog-blok-opm"> — ${esc(b.opmerking)}</span>` : '';
                         const catsHtml = b.inrijd_cat_namen ? `<div class="prog-blok-cats">${esc(b.inrijd_cat_namen)}</div>` : '';
-                        html += `<div class="prog-blok-rij prog-blok-${esc(t)}">
+                        html += `<div class="prog-blok-rij prog-blok-${esc(bt)}">
                             <div class="prog-blok-top">
                                 ${tijdHtml}
-                                <span class="prog-blok-titel">${blokIcoon(t)} ${esc(blokLabel(t))}</span>
+                                <span class="prog-blok-titel">${blokIcoon(bt)} ${esc(blokLabel(bt))}</span>
                                 ${duurHtml}
                                 ${opmHtml}
                             </div>
@@ -2626,7 +3056,7 @@ function renderResultaat(data, snr, prog) {
                         if (vorigeCombi !== null) html += `</div></div>`; // sluit vorige combi-box
                         if (combi !== null) {
                             html += `<div class="prog-combi-box">
-                                <div class="prog-combi-kop">🔗 Gecombineerde rit — rijden tegelijk</div>
+                                <div class="prog-combi-kop">${esc(t('prog_combi_kop'))}</div>
                                 <div class="prog-combi-leden">`;
                         }
                     }
@@ -2644,13 +3074,13 @@ function renderResultaat(data, snr, prog) {
                                  data-rit-naam="${esc(rit.rit_naam)}" data-dc-naam="${esc(rit.dc_naam)}" onclick="toonRitDetail(this)">
                         <span class="prog-nr">${statusIcon} ${nr}</span>
                         <span class="prog-naam">${esc(rit.rit_naam)}${opmHtml}</span>
-                        <span class="prog-type heat-card-badge ${BADGE[rt]??'badge-serie'}">${esc(RLABEL[rt]??rt)}</span>
+                        <span class="prog-type heat-card-badge ${BADGE[rt]??'badge-serie'}">${esc(getRondeLabel(rt))}</span>
                     </div>`;
                 }
                 // Sluit eventuele laatste open combi-box
                 if (vorigeCombi !== null) html += `</div></div>`;
             } else {
-                html += '<div class="melding">Programma niet beschikbaar.</div>';
+                html += `<div class="melding">${esc(t('msg_programma_nb'))}</div>`;
             }
             html += '</div></div>';
 
@@ -2667,12 +3097,12 @@ function renderResultaat(data, snr, prog) {
                     if (h.vorige_niet_compleet) {
                         html += `<div class="heat-card heat-card-pending">
                             <div class="heat-card-titel">
-                                <span class="heat-card-badge ${BADGE[rt]??'badge-serie'}">${esc(RLABEL[rt]??rt)}</span>
+                                <span class="heat-card-badge ${BADGE[rt]??'badge-serie'}">${esc(getRondeLabel(rt))}</span>
                                 <span style="flex:1">${esc(naam)}</span>
-                                <span style="font-size:1rem" title="Wachten op vorige ronde">⏳</span>
+                                <span style="font-size:1rem" title="${esc(t('heat_wachten_vorige'))}">⏳</span>
                             </div>
                             <div style="padding:.6rem .8rem;color:#666;font-style:italic;font-size:.85rem">
-                                Vorige ronde nog niet compleet — startlijst verschijnt zodra alle resultaten daar binnen zijn.
+                                ${esc(t('msg_vorige_ronde_nb'))}
                             </div>
                         </div>`;
                         continue;
@@ -2689,7 +3119,7 @@ function renderResultaat(data, snr, prog) {
                     const heatIcon = heeftResultaten ? '🏁' : heeftRijders ? '🚩' : '';
                     html += `<div class="heat-card">
                         <div class="heat-card-titel">
-                            <span class="heat-card-badge ${BADGE[rt]??'badge-serie'}">${esc(RLABEL[rt]??rt)}</span>
+                            <span class="heat-card-badge ${BADGE[rt]??'badge-serie'}">${esc(getRondeLabel(rt))}</span>
                             <span style="flex:1">${esc(naam)}</span>
                             ${heatIcon ? `<span style="font-size:1rem">${heatIcon}</span>` : ''}
                         </div>
@@ -2704,14 +3134,14 @@ function renderResultaat(data, snr, prog) {
                     html += '</tbody></table>';
                     if (mijnTijd || mijnPos || mijnSanctie) {
                         html += `<div class="heat-card-mijn-result">
-                            <span>Jouw resultaat:</span>
+                            <span>${esc(t('heat_jouw_resultaat'))}</span>
                             <span>${mijnTijd ? esc(mijnTijd) : ''} ${mijnPos ? esc(mijnPos) : ''} ${mijnSanctie ? `<span class="heat-sanctie">${esc(mijnSanctie)}</span>` : ''}</span>
                         </div>`;
                     }
                     html += '</div>';
                 }
             } else {
-                html += '<div class="kaart-sectie"><div class="melding">Nog geen heats beschikbaar.</div></div>';
+                html += `<div class="kaart-sectie"><div class="melding">${esc(t('msg_nog_geen_heats'))}</div></div>`;
             }
             html += '</div>';
 
@@ -2719,13 +3149,13 @@ function renderResultaat(data, snr, prog) {
             html += '<div class="tab-content" data-tab="resultaten"><div class="kaart-sectie">';
 
             if (r.uitslagen.length) {
-                html += '<div class="kaart-sectie-titel">Uitslagen per afstand</div>';
+                html += `<div class="kaart-sectie-titel">${esc(t('res_uitslagen_titel'))}</div>`;
                 for (const u of r.uitslagen) {
                     const sanctie = sl(u.sanctie);
                     html += `<div class="uitslag-rij">
                         <span class="uitslag-rang">${u.rang ?? '—'}</span>
                         <span class="uitslag-afstand">${esc(u.distance_naam)} ${u.finale_naam ? '('+esc(u.finale_naam)+')' : ''}</span>
-                        ${u.punten != null ? `<span class="uitslag-punten">${parseFloat(u.punten)} pt</span>` : ''}
+                        ${u.punten != null ? `<span class="uitslag-punten">${parseFloat(u.punten)} ${esc(t('res_pt'))}</span>` : ''}
                         ${sanctie ? `<span class="heat-sanctie">${esc(sanctie)}</span>` : ''}
                     </div>`;
                 }
@@ -2734,15 +3164,15 @@ function renderResultaat(data, snr, prog) {
             if (r.klassementen.length) {
                 for (const k of r.klassementen) {
                     html += `<div style="display:flex;align-items:center;gap:14px;padding:10px 0;border-top:1px solid #eee;margin-top:8px">
-                        <div><div class="kaart-sectie-titel" style="margin:0">Klassement ${esc(k.dc_naam)}</div>
+                        <div><div class="kaart-sectie-titel" style="margin:0">${esc(t('res_klassement', {dc: k.dc_naam}))}</div>
                              <span class="klas-rang">#${k.rang}</span></div>
-                        <div class="klas-totaal">${parseFloat(k.punten_totaal)} punten</div>
+                        <div class="klas-totaal">${esc(t('res_punten', {n: parseFloat(k.punten_totaal)}))}</div>
                     </div>`;
                 }
             }
 
             if (!r.uitslagen.length && !r.klassementen.length) {
-                html += '<div class="melding">Nog geen resultaten beschikbaar.</div>';
+                html += `<div class="melding">${esc(t('msg_nog_geen_resultaten'))}</div>`;
             }
 
             html += '</div></div>';
@@ -2750,15 +3180,15 @@ function renderResultaat(data, snr, prog) {
             // ── TAB: Uitslagen (volledig overzicht) ──────────────────
             html += `<div class="tab-content" data-tab="uitslagen">
                 <div class="kaart-sectie">
-                <div class="kaart-sectie-titel">Volledige uitslagen van deze wedstrijd</div>
+                <div class="kaart-sectie-titel">${esc(t('uitsl_titel'))}</div>
                 <div class="uitsl-selects">
-                    <select class="uitsl-cat-sel"><option value="">Laden…</option></select>
-                    <select class="uitsl-dist-sel" disabled><option value="">— Kies afstand —</option></select>
+                    <select class="uitsl-cat-sel"><option value="">${esc(t('msg_laden'))}</option></select>
+                    <select class="uitsl-dist-sel" disabled><option value="">${esc(t('uitsl_opt_kies_afstand'))}</option></select>
                 </div>
                 <div class="uitsl-tabel-wrap"></div>
             </div>
             <div class="kaart-sectie" data-serie-lijst style="display:none">
-                <div class="kaart-sectie-titel">🏆 Serie-klassement</div>
+                <div class="kaart-sectie-titel">${esc(t('serie_titel'))}</div>
                 <div data-serie-selector class="uitsl-selects"></div>
                 <div class="serie-klas-tabel-wrap"></div>
             </div></div>`;
@@ -2819,7 +3249,7 @@ async function initUitslagenTab(kaart) {
         const cats = _catCache.data;
         if (cats.error) { wrap.innerHTML = `<div class="melding melding-fout">${esc(cats.error)}</div>`; return; }
 
-        catSel.innerHTML = '<option value="">— Kies categorie —</option>';
+        catSel.innerHTML = `<option value="">${esc(t('uitsl_opt_kies_cat'))}</option>`;
         for (const c of cats) {
             const o = document.createElement('option');
             o.value = c.dc_id;
@@ -2828,16 +3258,16 @@ async function initUitslagenTab(kaart) {
             catSel.appendChild(o);
         }
     } catch (e) {
-        wrap.innerHTML = `<div class="melding melding-fout">Fout: ${esc(e.message)}</div>`;
+        wrap.innerHTML = `<div class="melding melding-fout">${esc(t('err_prefix', {msg: e.message}))}</div>`;
     }
 
     // Categorie-change → vul afstand-dropdown (bind EERST, dan auto-select)
     catSel.addEventListener('change', () => {
         wrap.innerHTML = '';
         const opt = catSel.selectedOptions[0];
-        if (!opt?.value) { distSel.innerHTML = '<option value="">— Kies afstand —</option>'; distSel.disabled = true; return; }
+        if (!opt?.value) { distSel.innerHTML = `<option value="">${esc(t('uitsl_opt_kies_afstand'))}</option>`; distSel.disabled = true; return; }
         const cat = JSON.parse(opt.dataset.json);
-        distSel.innerHTML = '<option value="">— Kies afstand —</option>';
+        distSel.innerHTML = `<option value="">${esc(t('uitsl_opt_kies_afstand'))}</option>`;
         for (const a of cat.afstanden) {
             const o = document.createElement('option');
             o.value = a.distance_id; o.textContent = a.distance_naam;
@@ -2845,7 +3275,7 @@ async function initUitslagenTab(kaart) {
         }
         if (cat.klassement_beschikbaar) {
             const o = document.createElement('option');
-            o.value = '__klassement__'; o.textContent = '🏆 Klassement';
+            o.value = '__klassement__'; o.textContent = t('uitsl_klassement_opt');
             distSel.appendChild(o);
         }
         distSel.disabled = false;
@@ -2862,7 +3292,7 @@ async function initUitslagenTab(kaart) {
         const distVal = distSel.value;
         if (!dcId || !distVal) { wrap.innerHTML = ''; return; }
 
-        wrap.innerHTML = '<div class="melding"><span class="spinner"></span> Laden…</div>';
+        wrap.innerHTML = `<div class="melding"><span class="spinner"></span> ${t('msg_laden')}</div>`;
 
         try {
             let url;
@@ -2881,7 +3311,7 @@ async function initUitslagenTab(kaart) {
                 wrap.innerHTML = renderAfstandTabel(data);
             }
         } catch (e) {
-            wrap.innerHTML = `<div class="melding melding-fout">Fout: ${esc(e.message)}</div>`;
+            wrap.innerHTML = `<div class="melding melding-fout">${esc(t('err_prefix', {msg: e.message}))}</div>`;
         }
     });
 
@@ -2925,14 +3355,14 @@ async function initSerieKlassementen(kaart, compId) {
         // Eén select met alle series + categorieën combineert netjes
         selector.innerHTML = `
             <select class="serie-sel">
-                <option value="">— Kies een serie-klassement —</option>
+                <option value="">${esc(t('serie_opt_kies'))}</option>
                 ${series.map(s => `
                     <option value="${esc(s.klassement_id)}">
-                        ${esc(s.naam)}${s.seizoen ? ' — ' + esc(s.seizoen) : ''}
-                        (${s.totaal_rijders} rijders)
+                        ${esc(s.naam)}${s.seizoen ? t('serie_seizoen_sep') + esc(s.seizoen) : ''}
+                        (${esc(t('serie_aantal_rijders', {n: s.totaal_rijders}))})
                     </option>`).join('')}
             </select>
-            <select class="serie-cat-sel" disabled><option value="">— Kies categorie —</option></select>`;
+            <select class="serie-cat-sel" disabled><option value="">${esc(t('uitsl_opt_kies_cat'))}</option></select>`;
 
         const serieSel = selector.querySelector('.serie-sel');
         const catSel   = selector.querySelector('.serie-cat-sel');
@@ -2940,10 +3370,10 @@ async function initSerieKlassementen(kaart, compId) {
 
         serieSel.addEventListener('change', async () => {
             wrap.innerHTML = '';
-            catSel.innerHTML = '<option value="">— Kies categorie —</option>';
+            catSel.innerHTML = `<option value="">${esc(t('uitsl_opt_kies_cat'))}</option>`;
             catSel.disabled = true;
             if (!serieSel.value) return;
-            wrap.innerHTML = '<div class="melding"><span class="spinner"></span> Laden…</div>';
+            wrap.innerHTML = `<div class="melding"><span class="spinner"></span> ${t('msg_laden')}</div>`;
             try {
                 const r = await safeFetch(`?action=serie_klassement&klassement_id=${encodeURIComponent(serieSel.value)}`);
                 const data = await r.json();
@@ -2954,7 +3384,7 @@ async function initSerieKlassementen(kaart, compId) {
                     wrap.innerHTML = renderSerieKlassementTabel(data, null);
                     return;
                 }
-                catSel.innerHTML = '<option value="">— Alle categorieën —</option>' +
+                catSel.innerHTML = `<option value="">${esc(t('serie_opt_alle_cats'))}</option>` +
                     cats.map(c => `<option value="${esc(c)}">${esc(c)}</option>`).join('');
                 catSel.disabled = false;
                 // Auto-eerste categorie: als er maar 1 is, selecteer die
@@ -2962,10 +3392,10 @@ async function initSerieKlassementen(kaart, compId) {
                     catSel.value = cats[0];
                     catSel.dispatchEvent(new Event('change'));
                 } else {
-                    wrap.innerHTML = '<div class="melding">Kies een categorie om het klassement te zien.</div>';
+                    wrap.innerHTML = `<div class="melding">${esc(t('msg_kies_categorie_klassement'))}</div>`;
                 }
             } catch (e) {
-                wrap.innerHTML = `<div class="melding melding-fout">Fout: ${esc(e.message)}</div>`;
+                wrap.innerHTML = `<div class="melding melding-fout">${esc(t('err_prefix', {msg: e.message}))}</div>`;
             }
         });
 
@@ -3006,7 +3436,7 @@ async function initSerieKlassementen(kaart, compId) {
 function renderSerieKlassementTabel(k, cat) {
     const alle  = k.posities ?? [];
     const rijen = cat ? alle.filter(p => p.categorie === cat) : alle;
-    if (!rijen.length) return '<div class="melding">Geen posities in deze categorie.</div>';
+    if (!rijen.length) return `<div class="melding">${esc(t('msg_geen_posities'))}</div>`;
     const wMeta = Array.isArray(k.wedstrijden_meta) ? k.wedstrijden_meta : [];
     const toonW = wMeta.length > 0 && rijen.some(p => p.punten_detail && Object.keys(p.punten_detail).length);
 
@@ -3023,14 +3453,14 @@ function renderSerieKlassementTabel(k, cat) {
         (_kinderen?.[_activeKindIdx]?.snr) ?? inpSnr.value.trim() ?? ''
     ).trim();
 
-    let hdr = '<tr><th class="col-rang">#</th><th class="col-snr">Snr</th><th>Naam</th>';
-    if (!cat) hdr += '<th class="col-cat">Cat</th>';
+    let hdr = `<tr><th class="col-rang">${t('col_rang')}</th><th class="col-snr">${t('col_snr')}</th><th>${t('col_naam')}</th>`;
+    if (!cat) hdr += `<th class="col-cat">${t('col_cat')}</th>`;
     if (toonW) {
         hdr += wMeta.map((w, i) =>
             `<th class="col-w" title="${esc(w.naam)}${w.datum ? ' · ' + String(w.datum).substring(0,10) : ''}${w.is_finale ? ' · FINALE' : ''}">
                 ${w.is_finale ? 'F' : '#' + (i + 1)}
             </th>`).join('');
-        hdr += '<th class="col-tot">Tot</th>';
+        hdr += `<th class="col-tot">${t('col_tot')}</th>`;
     }
     hdr += '</tr>';
 
@@ -3058,14 +3488,14 @@ function renderSerieKlassementTabel(k, cat) {
 }
 
 function renderAfstandTabel(data) {
-    if (!data.rijders?.length) return '<div class="melding">Geen uitslagen beschikbaar.</div>';
+    if (!data.rijders?.length) return `<div class="melding">${esc(t('msg_geen_uitslagen'))}</div>`;
     const heeftRnd = data.heeft_rondes;
     const heeftPK  = data.heeft_pk_punten;
 
-    let hdr = '<th class="col-rang">#</th><th class="col-snr">Snr</th><th class="col-naam">Naam</th>';
-    if (heeftRnd) hdr += '<th class="col-rnd">Rnd</th>';
-    if (heeftPK)  hdr += '<th class="col-pk">Pnt</th>';
-    hdr += '<th class="col-tijd">Tijd</th>';
+    let hdr = `<th class="col-rang">${t('col_rang')}</th><th class="col-snr">${t('col_snr')}</th><th class="col-naam">${t('col_naam')}</th>`;
+    if (heeftRnd) hdr += `<th class="col-rnd">${t('col_rnd')}</th>`;
+    if (heeftPK)  hdr += `<th class="col-pk">${t('col_pnt')}</th>`;
+    hdr += `<th class="col-tijd">${t('col_tijd')}</th>`;
 
     let rows = '';
     for (const r of data.rijders) {
@@ -3083,16 +3513,16 @@ function renderAfstandTabel(data) {
 }
 
 function renderKlassementTabel(data) {
-    if (!data.rijders?.length) return '<div class="melding">Geen klassement beschikbaar.</div>';
+    if (!data.rijders?.length) return `<div class="melding">${esc(t('msg_geen_klassement'))}</div>`;
     const afstanden = data.afstanden ?? [];
 
-    let hdr = '<th class="col-rang">#</th><th class="col-snr">Snr</th><th class="col-naam">Naam</th>';
+    let hdr = `<th class="col-rang">${t('col_rang')}</th><th class="col-snr">${t('col_snr')}</th><th class="col-naam">${t('col_naam')}</th>`;
     for (const a of afstanden) {
         // Afkorten voor mobiel: eerste 3 letters + eventueel getal
         const kort = a.length > 6 ? a.substring(0, 5) + '.' : a;
         hdr += `<th class="col-punten" title="${esc(a)}">${esc(kort)}</th>`;
     }
-    hdr += '<th class="col-totaal">Tot</th>';
+    hdr += `<th class="col-totaal">${t('col_tot')}</th>`;
 
     let rows = '';
     for (const r of data.rijders) {
@@ -3181,33 +3611,33 @@ function toonInfo() {
     overlay.innerHTML = `
     <div class="help-box">
         <div class="help-header">
-            <span>Over InlineComp</span>
+            <span>${esc(t('info_titel'))}</span>
             <button class="help-sluit" onclick="this.closest('.help-overlay').remove()">&times;</button>
         </div>
         <div class="help-body">
-            <h3>Wat is InlineComp?</h3>
-            <p>InlineComp is een wedstrijdbeheersysteem voor inline skaten, ontwikkeld om wedstrijdorganisaties te ondersteunen bij het beheren van startlijsten, live tijdwaarneming en het publiceren van uitslagen.</p>
-            <p>Deze publieke pagina is bedoeld voor <b>rijders en toeschouwers</b>: zoek je startnummer op en bekijk direct je heats, starttijden en resultaten.</p>
+            <h3>${esc(t('info_h1'))}</h3>
+            <p>${esc(t('info_p1'))}</p>
+            <p>${t('info_p2_html')}</p>
 
-            <h3>In ontwikkeling</h3>
-            <p>InlineComp wordt actief doorontwikkeld. Functies kunnen veranderen en er kunnen nog fouten in zitten. Feedback is zeer welkom!</p>
+            <h3>${esc(t('info_h2'))}</h3>
+            <p>${esc(t('info_p3'))}</p>
 
-            <h3>Contact &amp; feedback</h3>
-            <p>Heb je een vraag, suggestie of bug gevonden? Laat het weten:</p>
+            <h3>${t('info_h3_html')}</h3>
+            <p>${esc(t('info_p4'))}</p>
             <p style="text-align:center;margin:12px 0">
                 <a href="mailto:inlinecomp@devriesen.com" style="display:inline-block;background:var(--oranje);color:#fff;padding:10px 20px;border-radius:8px;text-decoration:none;font-weight:700;font-size:.95rem">inlinecomp@devriesen.com</a>
             </p>
 
-            <h3>Anonieme bezoek-statistieken</h3>
-            <p style="font-size:.85rem;color:#555">We tellen anoniem aantal bezoekers, actieve sessies en piek gelijktijdig online — puur om te zien hoe veel de app wordt gebruikt en om de hosting stabiel te houden. Er worden <b>geen IP-adressen of persoonsgegevens</b> opgeslagen en er zijn <b>geen derde partijen</b> betrokken.</p>
+            <h3>${esc(t('info_h4'))}</h3>
+            <p style="font-size:.85rem;color:#555">${t('info_p5_html')}</p>
 
-            <h3>Privacy &amp; persoonsgegevens</h3>
-            <p>Deze app toont wedstrijdgegevens die door de KNSB aan ons worden geleverd (o.a. namen, startnummers, vereniging). In de privacyverklaring lees je welke gegevens wij verwerken, op welke grondslag en hoe je een verwijderverzoek kunt indienen.</p>
+            <h3>${t('info_h5_html')}</h3>
+            <p>${esc(t('info_p6'))}</p>
             <p style="text-align:center;margin:12px 0">
-                <a href="../privacyverklaring.php" style="display:inline-block;background:var(--blauw,#1a3a5c);color:#fff;padding:10px 20px;border-radius:8px;text-decoration:none;font-weight:700;font-size:.95rem">📄 Bekijk privacyverklaring</a>
+                <a href="../privacyverklaring.php" style="display:inline-block;background:var(--blauw,#1a3a5c);color:#fff;padding:10px 20px;border-radius:8px;text-decoration:none;font-weight:700;font-size:.95rem">${esc(t('info_btn_privacy'))}</a>
             </p>
 
-            <p style="font-size:.8rem;color:#999;text-align:center;margin-top:16px">InlineComp &copy; ${new Date().getFullYear()} Geert de Vries</p>
+            <p style="font-size:.8rem;color:#999;text-align:center;margin-top:16px">${t('info_copyright', {jaar: new Date().getFullYear()})}</p>
         </div>
     </div>`;
     document.body.appendChild(overlay);
@@ -3220,23 +3650,23 @@ function toonHelp() {
     overlay.innerHTML = `
     <div class="help-box">
         <div class="help-header">
-            <span>Hoe werkt InlineComp?</span>
+            <span>${esc(t('help_titel'))}</span>
             <button class="help-sluit" onclick="this.closest('.help-overlay').remove()">&times;</button>
         </div>
         <div class="help-body">
 
-            <h3>Aan de slag</h3>
+            <h3>${esc(t('help_h1'))}</h3>
             <div class="help-stap">
                 <span class="help-stap-nr">1</span>
-                <span>Kies je <b>wedstrijd</b> uit de lijst. Met de drie filter-knoppen — <i>Eerder</i>, <i>Vandaag</i> en <i>Later</i> — bepaal je welke wedstrijden je ziet. Standaard staat alleen <i>Vandaag</i> aan; klik een knop aan/uit om het bereik aan te passen.</span>
+                <span>${t('help_stap1_html')}</span>
             </div>
             <div class="help-stap">
                 <span class="help-stap-nr">2</span>
-                <span>Vul je <b>startnummer</b> in en klik op <b>Zoeken</b> — je persoonlijke overzicht verschijnt.</span>
+                <span>${t('help_stap2_html')}</span>
             </div>
             <div class="help-stap">
                 <span class="help-stap-nr">3</span>
-                <span>Wil je meerdere rijders volgen (bv. broer, zus of een teamgenoot)? Klik op de <b>+</b>-knop bovenin. Je kunt tot <b>4 rijders</b> tegelijk volgen — switch via de tabs bovenaan met hun startnummers.</span>
+                <span>${t('help_stap3_html')}</span>
             </div>
 
             <!-- Mockup: zoekscherm — toont actuele filter-chips + 3-knoppen-rij -->
@@ -3245,100 +3675,96 @@ function toonHelp() {
                 <div class="mock-body">
                     <div style="display:flex;align-items:center;gap:5px;font-size:.75rem;font-weight:700;color:var(--blauw);margin:0 0 4px">
                         <span style="background:var(--blauw);color:#fff;width:16px;height:16px;border-radius:50%;display:inline-flex;align-items:center;justify-content:center;font-size:.65rem">1</span>
-                        Kies je wedstrijd
+                        ${esc(t('help_mock_kies_w'))}
                     </div>
                     <div style="display:flex;gap:4px;margin:0 0 6px">
-                        <span style="flex:1;text-align:center;font-size:.7rem;font-weight:600;padding:4px 0;border-radius:12px;border:1.5px solid #cdd8e3;color:#888;background:#fff">Eerder</span>
-                        <span style="flex:1;text-align:center;font-size:.7rem;font-weight:600;padding:4px 0;border-radius:12px;border:1.5px solid var(--middenblauw);color:var(--blauw);background:var(--lichtblauw)">Vandaag</span>
-                        <span style="flex:1;text-align:center;font-size:.7rem;font-weight:600;padding:4px 0;border-radius:12px;border:1.5px solid #cdd8e3;color:#888;background:#fff">Later</span>
+                        <span style="flex:1;text-align:center;font-size:.7rem;font-weight:600;padding:4px 0;border-radius:12px;border:1.5px solid #cdd8e3;color:#888;background:#fff">${esc(t('filter_eerder'))}</span>
+                        <span style="flex:1;text-align:center;font-size:.7rem;font-weight:600;padding:4px 0;border-radius:12px;border:1.5px solid var(--middenblauw);color:var(--blauw);background:var(--lichtblauw)">${esc(t('filter_vandaag'))}</span>
+                        <span style="flex:1;text-align:center;font-size:.7rem;font-weight:600;padding:4px 0;border-radius:12px;border:1.5px solid #cdd8e3;color:#888;background:#fff">${esc(t('filter_later'))}</span>
                     </div>
-                    <div class="mock-select">Voorbeeldwedstrijd — 19 april 2026</div>
+                    <div class="mock-select">${esc(t('help_mock_voorbeeld'))}</div>
                     <div style="display:flex;align-items:center;gap:5px;font-size:.75rem;font-weight:700;color:var(--blauw);margin:8px 0 4px">
                         <span style="background:var(--blauw);color:#fff;width:16px;height:16px;border-radius:50%;display:inline-flex;align-items:center;justify-content:center;font-size:.65rem">2</span>
-                        Startnummer, licentie of achternaam
+                        ${esc(t('help_mock_snr_lic'))}
                     </div>
-                    <div class="mock-select">Startnummer: 86</div>
-                    <div style="background:var(--oranje);color:#fff;text-align:center;padding:6px;border-radius:6px;font-weight:700;font-size:.75rem;margin-top:4px">Zoeken</div>
+                    <div class="mock-select">${esc(t('help_mock_snr'))}</div>
+                    <div style="background:var(--oranje);color:#fff;text-align:center;padding:6px;border-radius:6px;font-weight:700;font-size:.75rem;margin-top:4px">${esc(t('btn_zoeken'))}</div>
                 </div>
             </div>
 
-            <h3>Tabs</h3>
-            <p>Na het zoeken zie je <b>4 tabs</b>:</p>
+            <h3>${esc(t('help_h_tabs'))}</h3>
+            <p>${t('help_p_tabs_html')}</p>
 
-            <p><b>Programma</b> — alle ritten van de wedstrijd. Jouw ritten zijn gemarkeerd. Tik op een rit om de startlijst te bekijken.</p>
+            <p>${t('help_p_prog_html')}</p>
 
             <!-- Mockup: programma -->
             <div class="mock">
                 <div class="mock-tabs">
-                    <div class="mock-tab active">Programma</div>
-                    <div class="mock-tab">Heats</div>
-                    <div class="mock-tab">Resultaten</div>
-                    <div class="mock-tab">Uitslagen</div>
+                    <div class="mock-tab active">${esc(t('tab_programma').replace(/^[^\s]+\s*/, ''))}</div>
+                    <div class="mock-tab">${esc(t('tab_heats').replace(/^[^\s]+\s*/, ''))}</div>
+                    <div class="mock-tab">${esc(t('tab_resultaten').replace(/^[^\s]+\s*/, ''))}</div>
+                    <div class="mock-tab">${esc(t('tab_uitslagen').replace(/^[^\s]+\s*/, ''))}</div>
                 </div>
                 <div class="mock-body" style="padding:4px 10px">
-                    <div class="mock-row"><span style="color:#aaa">1</span> <span class="mock-naam">500m Serie Heat 1</span> <span style="font-size:.6rem;background:#0d6efd;color:#fff;border-radius:3px;padding:0 4px">Serie</span></div>
-                    <div class="mock-row mock-hl"><span style="color:#aaa">2</span> <span class="mock-naam">500m Serie Heat 2</span> <span style="font-size:.6rem;background:#0d6efd;color:#fff;border-radius:3px;padding:0 4px">Serie</span></div>
-                    <div class="mock-row"><span style="color:#aaa">3</span> <span class="mock-naam">500m A-Finale</span> <span style="font-size:.6rem;background:#198754;color:#fff;border-radius:3px;padding:0 4px">Finale</span></div>
+                    <div class="mock-row"><span style="color:#aaa">1</span> <span class="mock-naam">500m ${esc(t('ronde_serie'))} Heat 1</span> <span style="font-size:.6rem;background:#0d6efd;color:#fff;border-radius:3px;padding:0 4px">${esc(t('ronde_serie'))}</span></div>
+                    <div class="mock-row mock-hl"><span style="color:#aaa">2</span> <span class="mock-naam">500m ${esc(t('ronde_serie'))} Heat 2</span> <span style="font-size:.6rem;background:#0d6efd;color:#fff;border-radius:3px;padding:0 4px">${esc(t('ronde_serie'))}</span></div>
+                    <div class="mock-row"><span style="color:#aaa">3</span> <span class="mock-naam">500m A-${esc(t('ronde_finale'))}</span> <span style="font-size:.6rem;background:#198754;color:#fff;border-radius:3px;padding:0 4px">${esc(t('ronde_finale'))}</span></div>
                 </div>
             </div>
 
-            <p><b>Heats</b> — jouw heats met alle rijders. Je eigen rij is gemarkeerd. Na de finish zie je tijden en posities.</p>
+            <p>${t('help_p_heats_html')}</p>
 
             <!-- Mockup: heat -->
             <div class="mock">
                 <div class="mock-tabs">
-                    <div class="mock-tab">Programma</div>
-                    <div class="mock-tab active">Heats</div>
-                    <div class="mock-tab">Resultaten</div>
-                    <div class="mock-tab">Uitslagen</div>
+                    <div class="mock-tab">${esc(t('tab_programma').replace(/^[^\s]+\s*/, ''))}</div>
+                    <div class="mock-tab active">${esc(t('tab_heats').replace(/^[^\s]+\s*/, ''))}</div>
+                    <div class="mock-tab">${esc(t('tab_resultaten').replace(/^[^\s]+\s*/, ''))}</div>
+                    <div class="mock-tab">${esc(t('tab_uitslagen').replace(/^[^\s]+\s*/, ''))}</div>
                 </div>
                 <div style="background:var(--blauw);color:#fff;padding:5px 10px;font-size:.7rem;font-weight:700">
-                    <span style="background:#198754;border-radius:3px;padding:0 5px;font-size:.6rem">Finale</span> 500m A-Finale
+                    <span style="background:#198754;border-radius:3px;padding:0 5px;font-size:.6rem">${esc(t('ronde_finale'))}</span> 500m A-${esc(t('ronde_finale'))}
                 </div>
                 <div class="mock-body" style="padding:4px 10px">
-                    <div class="mock-row" style="font-size:.6rem;color:#888;font-weight:600"><span style="width:18px">#</span><span style="width:24px">Snr</span><span class="mock-naam">Naam</span><span class="mock-tijd">Tijd</span><span style="width:20px;text-align:center">Fin</span></div>
+                    <div class="mock-row" style="font-size:.6rem;color:#888;font-weight:600"><span style="width:18px">${esc(t('col_pos'))}</span><span style="width:24px">${esc(t('col_snr'))}</span><span class="mock-naam">${esc(t('col_naam'))}</span><span class="mock-tijd">${esc(t('col_tijd'))}</span><span style="width:20px;text-align:center">${esc(t('col_fin'))}</span></div>
                     <div class="mock-row"><span class="mock-rang">1</span><span class="mock-snr">12</span><span class="mock-naam">Emma V.</span><span class="mock-tijd">45.30</span><span style="width:20px;text-align:center;font-weight:600">2</span></div>
-                    <div class="mock-row mock-hl"><span class="mock-rang">2</span><span class="mock-snr">86</span><span class="mock-naam">Jouw naam</span><span class="mock-tijd">45.12</span><span style="width:20px;text-align:center;font-weight:600;color:var(--blauw)">1</span></div>
+                    <div class="mock-row mock-hl"><span class="mock-rang">2</span><span class="mock-snr">86</span><span class="mock-naam">${esc(t('help_mock_jouw_naam'))}</span><span class="mock-tijd">45.12</span><span style="width:20px;text-align:center;font-weight:600;color:var(--blauw)">1</span></div>
                     <div class="mock-row"><span class="mock-rang">3</span><span class="mock-snr">34</span><span class="mock-naam">Tim B.</span><span class="mock-tijd">46.01</span><span style="width:20px;text-align:center;font-weight:600">3</span></div>
                 </div>
             </div>
 
-            <p><b>Resultaten</b> — jouw persoonlijke uitslagen per afstand en je klassement.</p>
+            <p>${t('help_p_res_html')}</p>
 
-            <p><b>Uitslagen</b> — de volledige uitslag van alle rijders. Kies een categorie en afstand, of bekijk het klassement.</p>
+            <p>${t('help_p_uitsl_html')}</p>
 
             <!-- Mockup: uitslagen -->
             <div class="mock">
                 <div class="mock-tabs">
-                    <div class="mock-tab">Programma</div>
-                    <div class="mock-tab">Heats</div>
-                    <div class="mock-tab">Resultaten</div>
-                    <div class="mock-tab active">Uitslagen</div>
+                    <div class="mock-tab">${esc(t('tab_programma').replace(/^[^\s]+\s*/, ''))}</div>
+                    <div class="mock-tab">${esc(t('tab_heats').replace(/^[^\s]+\s*/, ''))}</div>
+                    <div class="mock-tab">${esc(t('tab_resultaten').replace(/^[^\s]+\s*/, ''))}</div>
+                    <div class="mock-tab active">${esc(t('tab_uitslagen').replace(/^[^\s]+\s*/, ''))}</div>
                 </div>
                 <div class="mock-body" style="padding:6px 10px">
                     <div class="mock-select">DJB/A + HJB/A</div>
-                    <div class="mock-select">Klassement</div>
+                    <div class="mock-select">${esc(t('uitsl_klassement_opt').replace(/^[^\s]+\s*/, ''))}</div>
                     <div style="margin-top:6px">
-                        <div class="mock-row" style="font-size:.6rem;color:#fff;background:var(--blauw);margin:0 -10px;padding:3px 10px;font-weight:600"><span style="width:18px">#</span><span style="width:24px">Snr</span><span class="mock-naam">Naam</span><span style="width:30px;text-align:center">Spr</span><span style="width:30px;text-align:center">L.A.</span><span style="width:30px;text-align:center;color:var(--oranje)">Tot</span></div>
-                        <div class="mock-row"><span class="mock-rang">1</span><span class="mock-snr">86</span><span class="mock-naam">Jouw naam</span><span style="width:30px;text-align:center">4</span><span style="width:30px;text-align:center">1</span><span style="width:30px;text-align:center;font-weight:700;color:var(--oranje)">8</span></div>
+                        <div class="mock-row" style="font-size:.6rem;color:#fff;background:var(--blauw);margin:0 -10px;padding:3px 10px;font-weight:600"><span style="width:18px">${esc(t('col_rang'))}</span><span style="width:24px">${esc(t('col_snr'))}</span><span class="mock-naam">${esc(t('col_naam'))}</span><span style="width:30px;text-align:center">Spr</span><span style="width:30px;text-align:center">L.A.</span><span style="width:30px;text-align:center;color:var(--oranje)">${esc(t('col_tot'))}</span></div>
+                        <div class="mock-row"><span class="mock-rang">1</span><span class="mock-snr">86</span><span class="mock-naam">${esc(t('help_mock_jouw_naam'))}</span><span style="width:30px;text-align:center">4</span><span style="width:30px;text-align:center">1</span><span style="width:30px;text-align:center;font-weight:700;color:var(--oranje)">8</span></div>
                         <div class="mock-row"><span class="mock-rang">2</span><span class="mock-snr">12</span><span class="mock-naam">Emma V.</span><span style="width:30px;text-align:center">5</span><span style="width:30px;text-align:center">3</span><span style="width:30px;text-align:center;font-weight:700;color:var(--oranje)">11</span></div>
                         <div class="mock-row"><span class="mock-rang">3</span><span class="mock-snr">34</span><span class="mock-naam">Tim B.</span><span style="width:30px;text-align:center">5</span><span style="width:30px;text-align:center">6</span><span style="width:30px;text-align:center;font-weight:700;color:var(--oranje)">12</span></div>
                     </div>
                 </div>
             </div>
 
-            <h3>Automatisch bijgewerkt</h3>
-            <p>De pagina ververst zichzelf elke minuut zolang het tabblad zichtbaar is.
-               Naast de wedstrijdnaam zie je <b>🔄 HH:MM</b> — dat is het tijdstip van
-               de laatste verversing.</p>
+            <h3>${esc(t('help_h_auto'))}</h3>
+            <p>${t('help_p_auto_html')}</p>
 
-            <h3>Mededelingen</h3>
-            <p>Bovenaan staat een <b>📢-knop</b> (zichtbaar zodra er een mededeling actief is).
-               Belangrijke aankondigingen van de organisatie verschijnen automatisch als pop-up
-               en blijven daarna onder deze knop bereikbaar — bv. "Programma loopt 15 min uit".</p>
+            <h3>${esc(t('help_h_meld'))}</h3>
+            <p>${t('help_p_meld_html')}</p>
 
-            <h3>Tip</h3>
-            <p>Geen resultaten? De uitslag verschijnt zodra de jury de resultaten heeft bevestigd.</p>
+            <h3>${esc(t('help_h_tip'))}</h3>
+            <p>${esc(t('help_p_tip'))}</p>
 
         </div>
     </div>`;
@@ -3421,14 +3847,15 @@ function toonMeldingenOverzicht() {
     if (!_meldingLijst.length) return;
     const overlay = document.createElement('div');
     overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.55);z-index:9400;display:flex;align-items:flex-start;justify-content:center;padding:4vh 1rem;overflow-y:auto;';
+    const _loc = curLang === 'nl' ? 'nl-NL' : 'en-GB';
     const items = _meldingLijst.map(m => {
         const stijl = _MELDING_PRIO[m.prio] ?? _MELDING_PRIO.info;
         const tijd = m.geldig_van
-            ? new Date(m.geldig_van.replace(' ', 'T')).toLocaleString('nl-NL',
+            ? new Date(m.geldig_van.replace(' ', 'T')).toLocaleString(_loc,
                 {day:'2-digit',month:'short',hour:'2-digit',minute:'2-digit'})
             : '';
         const tot = m.geldig_tot
-            ? ' tot ' + new Date(m.geldig_tot.replace(' ', 'T')).toLocaleString('nl-NL',
+            ? t('meld_tot') + new Date(m.geldig_tot.replace(' ', 'T')).toLocaleString(_loc,
                 {day:'2-digit',month:'short',hour:'2-digit',minute:'2-digit'})
             : '';
         return `<div style="background:${stijl.bg};border-left:4px solid ${stijl.kleur};
@@ -3446,7 +3873,7 @@ function toonMeldingenOverzicht() {
                     box-shadow:0 10px 30px rgba(0,0,0,.3);">
             <div style="display:flex;align-items:center;justify-content:space-between;
                         padding:.8rem 1rem;border-bottom:1px solid #e0e0e0;">
-                <h3 style="margin:0;color:var(--blauw);font-size:1.05rem;">📢 Mededelingen</h3>
+                <h3 style="margin:0;color:var(--blauw);font-size:1.05rem;">${esc(t('meld_kop'))}</h3>
                 <button class="meld-overz-sluit" style="background:none;border:none;
                         font-size:1.6rem;cursor:pointer;color:#666;padding:0;line-height:1;">&times;</button>
             </div>
@@ -3500,7 +3927,7 @@ function toonMelding(m, compId) {
                 <button class="meld-ok" style="background:${stijl.kleur};color:#fff;border:none;
                                                 padding:.6rem 1.4rem;border-radius:6px;font-size:1rem;
                                                 font-weight:600;cursor:pointer;width:100%;">
-                    ✓ Begrepen
+                    ${esc(t('meld_begrepen'))}
                 </button>
             </div>
         </div>`;
@@ -3732,21 +4159,21 @@ let _huidigStempel = '';
         if (ptrLaatste && sindsLaatste < PTR_COOLDOWN_MS) {
             const wachten = Math.ceil((PTR_COOLDOWN_MS - sindsLaatste) / 1000);
             ptrEl.classList.add('laadt');
-            ptrEl.textContent = `⏳ Even wachten (${wachten}s)`;
+            ptrEl.textContent = t('ptr_wachten', {s: wachten});
             setTimeout(() => { ptrEl.classList.remove('zichtbaar', 'laadt'); }, 1200);
             return;
         }
         ptrBezig = true;
         ptrEl.classList.add('laadt');
-        ptrEl.textContent = '⟳ Vernieuwen…';
+        ptrEl.textContent = t('ptr_vernieuwen');
         try {
             await stilleRefresh();
             zetStempel();
             ptrLaatste = Date.now();
-            ptrEl.textContent = '✓ Bijgewerkt';
+            ptrEl.textContent = t('ptr_bijgewerkt');
             setTimeout(() => { ptrEl.classList.remove('zichtbaar', 'laadt'); }, 600);
         } catch {
-            ptrEl.textContent = '⚠ Fout bij vernieuwen';
+            ptrEl.textContent = t('ptr_fout');
             setTimeout(() => { ptrEl.classList.remove('zichtbaar', 'laadt'); }, 1200);
         } finally {
             ptrBezig = false;
@@ -3773,7 +4200,7 @@ let _huidigStempel = '';
         if (e.cancelable) e.preventDefault();
         if (ptrDragY > 30 && !ptrActief) { ptrEl.classList.add('zichtbaar'); ptrActief = true; }
         ptrEl.textContent = ptrDragY >= PTR_DREMPEL
-            ? '↑ Laat los om te vernieuwen' : '↓ Trek verder om te vernieuwen';
+            ? t('ptr_laat_los') : t('ptr_trek');
     }, { passive: false });
 
     document.addEventListener('touchend', () => {
