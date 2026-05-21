@@ -1,44 +1,34 @@
 // ============================================================
 //  InlineComp – shared i18n helpers
 //
-//  Eén centraal bestand met de vertaal-infrastructuur, herbruikt door
+//  Een centraal bestand met de vertaal-infrastructuur, herbruikt door
 //  alle apps: public (rijder), coach (toekomst), jury (toekomst) en
-//  uiteindelijk ook het admin-deel.
+//  uiteindelijk het admin-deel.
 //
-//  Gebruik in een app:
-//      <!-- PHP-side include zodat geen extra HTTP-request nodig is: -->
-//      <script>
-//      <?php readfile(__DIR__ . '/../js/i18n.js'); ?>
+//  Inhoud:
+//    - initI18n({ dict, onChange })  app-init bij DOMReady
+//    - t(key, params)                vertaal sleutel met optionele {param}-substituties
+//    - applyI18n(root)               doorloopt data-i18n* attributen in DOM
+//    - toggleLang() / setLang(l)     wissel taal (NL/EN)
+//    - getCurLang() / getLocale()    leesfuncties
 //
-//      // App-specifiek T-object (eigen woordenboek per app):
-//      const T_APP = {
-//          nl: { titel: 'Mijn App', knop_opslaan: 'Opslaan', ... },
-//          en: { titel: 'My App',   knop_opslaan: 'Save',     ... },
-//      };
+//  Gebruik per app (vereenvoudigd voorbeeld; geen HTML-tags hier
+//  vanwege HTML-parser-conflicten als deze comment via readfile in
+//  een script-blok komt):
 //
-//      // Init bij DOM-ready. onChange is optioneel — gebruik als de app
-//      // dynamische content rendert die opnieuw moet bij taal-wissel
-//      // (bv. herrendering van een actieve tab of lijst).
-//      document.addEventListener('DOMContentLoaded', () => {
-//          initI18n({
-//              dict:     T_APP,
-//              onChange: () => myAppRerender(),  // optioneel
-//          });
-//      });
-//      </script>
+//    1) Laad dit bestand inline via PHP readfile in een SCRIPT-blok.
+//    2) Definieer je app-T-object: const T_APP = { nl:{}, en:{} }
+//    3) Bij DOMReady: initI18n({ dict: T_APP, onChange: myRerender })
+//    4) Zet ergens in je header een knop met id "btn-lang" — vlag-icoon
+//       wordt automatisch ingevuld + toggle-handler gekoppeld.
 //
-//      <!-- In de header van de app: vlag-knop met dit ID -->
-//      <button class="btn-help" id="btn-lang" title="Language / Taal">🇬🇧</button>
+//  Marker-attributen voor static HTML (worden bij applyI18n vervangen):
+//      data-i18n             -> element.textContent
+//      data-i18n-html        -> element.innerHTML
+//      data-i18n-title       -> element.title
+//      data-i18n-placeholder -> element.placeholder
 //
-//  Marker-attributen in HTML (vervangen automatisch bij applyI18n):
-//      <span data-i18n="key">                     → element.textContent
-//      <div  data-i18n-html="key">                → element.innerHTML
-//      <button data-i18n-title="key">             → element.title
-//      <input  data-i18n-placeholder="key">       → element.placeholder
-//
-//  In JS-template-literals:
-//      `<button>${esc(t('knop_opslaan'))}</button>`
-//      `${t('aantal_rijders', { n: 5 })}`         // {n} → 5
+//  In dynamische JS-templates: gebruik t('key') in je template-literals.
 //
 //  Persisteert in localStorage onder key 'ic_lang' (shared tussen apps).
 //  Default-taal = nl als nooit gekozen.
