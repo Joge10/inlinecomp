@@ -2132,10 +2132,9 @@ const T = {
         help_p_tip: 'No results yet? The result appears as soon as the jury has confirmed it.',
     }
 };
-// Shared i18n-helpers worden via PHP-include hierboven al ingeladen
-// (zie <script><?php readfile('../js/i18n.js') ?></script>). Daardoor zijn
-// t(), applyI18n(), toggleLang(), getCurLang(), getLocale() beschikbaar.
-// Hier alleen app-specifieke wrappers + init.
+// Shared i18n-helpers (t, applyI18n, toggleLang, getCurLang, getLocale)
+// zijn hierboven al ingeladen via readfile(js/i18n.js). Hier alleen
+// app-specifieke wrappers + init.
 function getStatusLabel(i) { return t('status_' + i); }
 
 function _rerenderActiveTab() {
