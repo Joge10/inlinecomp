@@ -113,10 +113,41 @@ function applyI18n(root = document) {
         el.placeholder = t(el.dataset.i18nPlaceholder);
     });
     document.documentElement.lang = _i18nCurLang;
-    // Vlag-knop label: toon de TARGET taal (= 🇬🇧 als app NL is, omdat
-    // klik = wissel naar EN). Self-explanatory voor gebruiker.
+    // Vlag-knop: toon de TARGET taal (= klik om naar die taal te gaan)
+    // met inline SVG ipv emoji. Reden: Windows-browsers tonen flag-emojis
+    // (🇳🇱/🇬🇧) als "NL"/"GB" letter-paren omdat Windows geen regional-
+    // indicator-emojis ondersteunt. Inline SVG werkt overal hetzelfde.
     const btn = document.getElementById('btn-lang');
-    if (btn) btn.textContent = _i18nCurLang === 'nl' ? '🇬🇧' : '🇳🇱';
+    if (btn) {
+        const targetLang = _i18nCurLang === 'nl' ? 'en' : 'nl';
+        btn.innerHTML = _langFlagSvg(targetLang);
+        btn.title = targetLang === 'en'
+            ? 'Switch to English'
+            : 'Wissel naar Nederlands';
+    }
+}
+
+// Inline-SVG vlaggen — werken op elk OS/browser, geen extra HTTP-call.
+// Klein formaat (22×15 px) voor in header-knop-vakje van ~36×36.
+function _langFlagSvg(lang) {
+    const style = 'vertical-align:middle;border-radius:2px;display:block;margin:auto;box-shadow:0 0 0 1px rgba(0,0,0,.15)';
+    if (lang === 'nl') {
+        // NL: drie horizontale strepen
+        return '<svg viewBox="0 0 9 6" width="22" height="15" style="' + style + '" aria-label="Nederlands">'
+             + '<rect width="9" height="2" fill="#AE1C28"/>'
+             + '<rect y="2" width="9" height="2" fill="#FFFFFF"/>'
+             + '<rect y="4" width="9" height="2" fill="#21468B"/>'
+             + '</svg>';
+    }
+    // Union Jack — vereenvoudigd maar herkenbaar
+    return '<svg viewBox="0 0 60 30" width="22" height="15" style="' + style + '" aria-label="English">'
+         + '<clipPath id="ujclip"><path d="M30,15 L60,30 v-15 z L60,0 v15 z L0,0 v15 z L0,30 v-15 z"/></clipPath>'
+         + '<rect width="60" height="30" fill="#012169"/>'
+         + '<path d="M0,0 L60,30 M60,0 L0,30" stroke="#FFFFFF" stroke-width="6"/>'
+         + '<path d="M0,0 L60,30 M60,0 L0,30" clip-path="url(#ujclip)" stroke="#C8102E" stroke-width="4"/>'
+         + '<path d="M30,0 v30 M0,15 h60" stroke="#FFFFFF" stroke-width="10"/>'
+         + '<path d="M30,0 v30 M0,15 h60" stroke="#C8102E" stroke-width="6"/>'
+         + '</svg>';
 }
 
 // Locale-string voor Intl-API's (toLocaleDateString, toLocaleTimeString):

@@ -1709,7 +1709,7 @@ select:focus, input:focus { border-color: var(--middenblauw); outline: none; }
             <h1>InlineComp – Public</h1>
         </div>
         <div class="hdr-btns hdr-btns-right">
-            <button class="btn-help" id="btn-lang" title="Language / Taal">🇬🇧</button>
+            <button class="btn-help btn-lang" id="btn-lang" title="Language / Taal" aria-label="Switch language"></button>
             <button class="btn-help" onclick="toonInfo()" data-i18n-title="hdr_info_title" title="Over InlineComp">i</button>
             <button class="btn-help" onclick="toonHelp()" data-i18n-title="hdr_help_title" title="Hoe werkt het?">?</button>
         </div>
