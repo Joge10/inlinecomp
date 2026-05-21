@@ -1758,6 +1758,11 @@ select:focus, input:focus { border-color: var(--middenblauw); outline: none; }
 
 <script>
 // ── i18n: NL / EN ─────────────────────────────────────────────────────────
+// Shared i18n-helpers — herbruikt straks door coach-, jury- en admin-app.
+// PHP-include (geen extra HTTP-request) zodat één bron van waarheid is.
+<?php readfile(__DIR__ . '/../js/i18n.js'); ?>
+
+// ── App-specifiek vertaal-woordenboek (NL + EN) ──────────────────────────
 // Toggle via vlag-knop in header. Persisteert in localStorage onder 'ic_lang'.
 // Dynamische content (rendered via JS) gebruikt t('key'); statische HTML
 // gebruikt data-i18n* attributen die applyI18n() bij init en bij toggle leest.
@@ -2127,33 +2132,12 @@ const T = {
         help_p_tip: 'No results yet? The result appears as soon as the jury has confirmed it.',
     }
 };
-let curLang = (() => {
-    try { return localStorage.getItem('ic_lang') || 'nl'; } catch { return 'nl'; }
-})();
-function t(key, params={}) {
-    const dict = T[curLang] || T.nl;
-    let s = dict[key] ?? T.nl[key] ?? key;
-    for (const [k,v] of Object.entries(params)) s = s.replaceAll(`{${k}}`, v);
-    return s;
-}
-function getStatusLabel(i) {
-    return t('status_' + i);
-}
-function applyI18n(root=document) {
-    root.querySelectorAll('[data-i18n]').forEach(el => { el.textContent = t(el.dataset.i18n); });
-    root.querySelectorAll('[data-i18n-html]').forEach(el => { el.innerHTML = t(el.dataset.i18nHtml); });
-    root.querySelectorAll('[data-i18n-title]').forEach(el => { el.title = t(el.dataset.i18nTitle); });
-    root.querySelectorAll('[data-i18n-placeholder]').forEach(el => { el.placeholder = t(el.dataset.i18nPlaceholder); });
-    document.documentElement.lang = curLang;
-    const btn = document.getElementById('btn-lang');
-    if (btn) btn.textContent = curLang === 'nl' ? '🇬🇧' : '🇳🇱';
-}
-function toggleLang() {
-    curLang = curLang === 'nl' ? 'en' : 'nl';
-    try { localStorage.setItem('ic_lang', curLang); } catch {}
-    applyI18n();
-    _rerenderActiveTab();
-}
+// Shared i18n-helpers worden via PHP-include hierboven al ingeladen
+// (zie <script><?php readfile('../js/i18n.js') ?></script>). Daardoor zijn
+// t(), applyI18n(), toggleLang(), getCurLang(), getLocale() beschikbaar.
+// Hier alleen app-specifieke wrappers + init.
+function getStatusLabel(i) { return t('status_' + i); }
+
 function _rerenderActiveTab() {
     // Comps-dropdown opnieuw vullen (textContent gebruikt vertaalde labels)
     if (typeof filterComps === 'function' && alleComps?.length) filterComps();
@@ -2170,9 +2154,9 @@ function _rerenderActiveTab() {
     });
     // Meldingen-badge / overzicht: badge zelf is alleen een getal, geen vertaling
 }
+
 document.addEventListener('DOMContentLoaded', () => {
-    applyI18n();
-    document.getElementById('btn-lang')?.addEventListener('click', toggleLang);
+    initI18n({ dict: T, onChange: _rerenderActiveTab });
 });
 
 const selComp = document.getElementById('sel-comp');
@@ -2239,7 +2223,7 @@ function _connUpdateBanner() {
     }
     if (bericht) {
         const tijd = _conn.lastSuccess
-            ? ` <small style="opacity:.85">(${t('conn_laatste_update', {tijd: _conn.lastSuccess.toLocaleTimeString(curLang === 'nl' ? 'nl-NL' : 'en-GB', {hour:'2-digit', minute:'2-digit'})})})</small>`
+            ? ` <small style="opacity:.85">(${t('conn_laatste_update', {tijd: _conn.lastSuccess.toLocaleTimeString(getLocale(), {hour:'2-digit', minute:'2-digit'})})})</small>`
             : '';
         el.innerHTML = bericht + tijd;
         el.style.display = '';
@@ -2451,7 +2435,7 @@ function filterComps() {
         if (isOud      && !toonOud)      continue;
         if (isToekomst && !toonToekomst) continue;
 
-        const d = startDag ? startDag.toLocaleDateString(curLang === 'nl' ? 'nl-NL' : 'en-GB',{day:'numeric',month:'long',year:'numeric'}) : '';
+        const d = startDag ? startDag.toLocaleDateString(getLocale(),{day:'numeric',month:'long',year:'numeric'}) : '';
         // Verborgen wedstrijden: tonen als disabled met "(binnenkort)"
         // suffix — bezoeker ziet dat de wedstrijd er aankomt zonder
         // erop te kunnen klikken. Operator publiceert via Beheer.
@@ -3847,7 +3831,7 @@ function toonMeldingenOverzicht() {
     if (!_meldingLijst.length) return;
     const overlay = document.createElement('div');
     overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.55);z-index:9400;display:flex;align-items:flex-start;justify-content:center;padding:4vh 1rem;overflow-y:auto;';
-    const _loc = curLang === 'nl' ? 'nl-NL' : 'en-GB';
+    const _loc = getLocale();
     const items = _meldingLijst.map(m => {
         const stijl = _MELDING_PRIO[m.prio] ?? _MELDING_PRIO.info;
         const tijd = m.geldig_van
