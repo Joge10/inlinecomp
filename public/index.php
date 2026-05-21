@@ -1090,13 +1090,6 @@ header {
 .hdr-row-top { display: flex; align-items: center; gap: 8px; }
 .hdr-btns       { display: flex; gap: 6px; flex-shrink: 0; align-items: center; }
 .hdr-btns-right { justify-content: flex-end; }
-/* Spacer naast 📢 (links) is even breed als 1 knop, zodat de linkerzijde
-   even veel ruimte inneemt als de twee knoppen rechts. Hierdoor staat de
-   titel visueel exact in het midden. */
-.hdr-spacer     { width: 36px; visibility: hidden; flex-shrink: 0; }
-@media (max-width: 480px) {
-    .hdr-spacer { width: 30px; }
-}
 /* Verbinding-banner: rood strookje boven aan zodra netwerk of server eruit ligt */
 .conn-banner {
     background: linear-gradient(135deg, #c62828, #b71c1c);
@@ -1717,13 +1710,12 @@ select:focus, input:focus { border-color: var(--middenblauw); outline: none; }
     <div class="hdr-row-top">
         <div class="hdr-btns hdr-btns-left">
             <button class="btn-help btn-meldingen" id="btn-meldingen-overzicht" data-i18n-title="hdr_meldingen_title" title="Mededelingen voor deze wedstrijd">📢<span id="meldingen-badge" class="meld-badge" style="display:none">0</span></button>
-            <span class="hdr-spacer" aria-hidden="true"></span>
+            <button class="btn-help btn-lang" id="btn-lang" title="Language / Taal" aria-label="Switch language"></button>
         </div>
         <div class="hdr-center">
             <h1>InlineComp – Public</h1>
         </div>
         <div class="hdr-btns hdr-btns-right">
-            <button class="btn-help btn-lang" id="btn-lang" title="Language / Taal" aria-label="Switch language"></button>
             <button class="btn-help" onclick="toonInfo()" data-i18n-title="hdr_info_title" title="Over InlineComp">i</button>
             <button class="btn-help" onclick="toonHelp()" data-i18n-title="hdr_help_title" title="Hoe werkt het?">?</button>
         </div>
