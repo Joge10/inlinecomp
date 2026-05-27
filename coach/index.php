@@ -5,6 +5,14 @@
 //  startnummer, en ziet per heat welke van zijn rijders erin zitten.
 // ============================================================
 header('Content-Type: text/html; charset=utf-8');
+// No-cache: telefoon-browsers (Safari iOS, Chrome Android) cachen HTML
+// agressief. Sinds 2026-05-27 expliciet uitschakelen zodat app-updates
+// (nieuwe knoppen, fixes) direct doorkomen bij refresh ipv pas na 'oude
+// versie weghalen + opnieuw installeren'. Service Worker (sw.js) doet
+// hetzelfde voor PWA-geïnstalleerde apps.
+header('Cache-Control: no-store, no-cache, must-revalidate, max-age=0');
+header('Pragma: no-cache');
+header('Expires: 0');
 require_once __DIR__ . '/../../config_inlinecomp.php';
 
 // ── Bezoektracking: upsert session-hit in coach_visits ──────────────────────
@@ -341,6 +349,9 @@ if ($action === 'personen_by_sponsor') {
 }
 
 // ── API: rijder op startnummer ───────────────────────────────────────────────
+// LEGACY — gaf 'LIMIT 1' op startnummer, bug bij dubbele nummers (pakte
+// blind de eerste). Vervangen door person_lookup hieronder. Endpoint blijft
+// werken voor oudere cached clients, maar nieuwe code gebruikt person_lookup.
 if ($action === 'person_by_startnummer') {
     header('Content-Type: application/json; charset=utf-8');
     $compId = trim($_GET['competition_id'] ?? '');
@@ -362,6 +373,70 @@ if ($action === 'person_by_startnummer') {
         ");
         $stmt->execute([$compId, $snr]);
         echo json_encode($stmt->fetch(PDO::FETCH_ASSOC) ?: null, JSON_UNESCAPED_UNICODE);
+    } catch (Throwable $e) {
+        http_response_code(500);
+        echo json_encode(['error' => $e->getMessage()]);
+    }
+    exit;
+}
+
+// ── API: rijder zoeken op startnummer, naam OF licentie ──────────────────────
+// Vervangt person_by_startnummer. Geeft ALTIJD een array terug (ook bij 1
+// match) zodat de frontend uniform multi-match kan afhandelen. Bij dubbele
+// startnummers (verschillende rijders met zelfde snr in dezelfde wedstrijd)
+// krijgt de coach een keuze-modal, ipv blind de eerste te pakken.
+//
+// Parameters (competition_id + één van de drie):
+//   snr         → exact startnummer (incl. csn-override)
+//   license_key → exact licentie (uniek, geeft altijd max 1 hit)
+//   naam        → LIKE %naam% op full_name, alleen ingeschreven rijders
+if ($action === 'person_lookup') {
+    header('Content-Type: application/json; charset=utf-8');
+    $compId  = trim($_GET['competition_id'] ?? '');
+    $snr     = trim($_GET['snr'] ?? '');
+    $license = trim($_GET['license_key'] ?? '');
+    $naam    = trim($_GET['naam'] ?? '');
+    if (!$compId || (!$snr && !$license && !$naam)) {
+        echo json_encode(['error' => 'competition_id + snr/license_key/naam verplicht']);
+        exit;
+    }
+    try {
+        // Base: alleen rijders die in deze wedstrijd zijn ingeschreven
+        // (via een entry op een DC van deze comp). DISTINCT zodat rijders
+        // met meerdere entries (verschillende DCs) niet 3× verschijnen.
+        $base = "
+            SELECT DISTINCT
+                   COALESCE(cs.startnummer, p.start_number) AS snr,
+                   p.license_key, p.full_name, p.category, p.club_full,
+                   p.club_short, p.sponsor
+            FROM entries e
+            JOIN distance_combinations dc ON dc.id = e.distance_combination_id
+            JOIN persons p ON p.license_key = e.person_license
+            LEFT JOIN competition_startnummers cs
+                   ON cs.person_license = e.person_license
+                  AND cs.competition_id = dc.competition_id
+            WHERE dc.competition_id = ?
+        ";
+        if ($license !== '') {
+            $stmt = $pdo->prepare($base . " AND p.license_key = ? ORDER BY p.full_name");
+            $stmt->execute([$compId, $license]);
+        } elseif ($snr !== '') {
+            $stmt = $pdo->prepare(
+                $base . " AND COALESCE(cs.startnummer, p.start_number) = ? ORDER BY p.full_name"
+            );
+            $stmt->execute([$compId, (int)$snr]);
+        } else {
+            // Naam: case-insensitive LIKE, min 2 tekens om totaal-scan te voorkomen
+            if (mb_strlen($naam) < 2) {
+                echo json_encode(['error' => 'Naam-zoek vereist minimaal 2 tekens']);
+                exit;
+            }
+            $stmt = $pdo->prepare(
+                $base . " AND LOWER(p.full_name) LIKE LOWER(?) ORDER BY p.full_name LIMIT 50"
+            );
+            $stmt->execute([$compId, '%' . $naam . '%']);
+        }
+        echo json_encode($stmt->fetchAll(PDO::FETCH_ASSOC), JSON_UNESCAPED_UNICODE);
     } catch (Throwable $e) {
         http_response_code(500);
         echo json_encode(['error' => $e->getMessage()]);
@@ -477,9 +552,14 @@ if ($action === 'programma') {
             $ritten[] = $r;
         }
 
-        // Startnummers per heat in één query voor alle heats van deze wedstrijd
+        // Startnummers + license_keys per heat in één query voor alle heats van
+        // deze wedstrijd. License_key meenemen is nodig voor de coach-lijst-
+        // highlight: twee rijders kunnen hetzelfde startnummer hebben, dus
+        // matchen op snr-alleen zou heats valselijk highlighten waar wel snr=N
+        // in zit maar niet JOUW rijder met dat nummer.
         $snrStmt = $pdo->prepare("
             SELECT he.heat_id,
+                   he.person_license AS lic,
                    COALESCE(cs.startnummer, p.start_number) AS snr
             FROM heat_entries he
             JOIN heats h ON h.id = he.heat_id
@@ -490,14 +570,20 @@ if ($action === 'programma') {
             WHERE h.competition_id = ?
         ");
         $snrStmt->execute([$compId]);
-        $snrPerHeat = [];
+        $rijdersPerHeat = [];
         foreach ($snrStmt->fetchAll(PDO::FETCH_ASSOC) as $row) {
             $hid = (int)$row['heat_id'];
-            $snrPerHeat[$hid][] = (int)$row['snr'];
+            $rijdersPerHeat[$hid][] = [
+                'snr' => (int)$row['snr'],
+                'lic' => $row['lic'],
+            ];
         }
         foreach ($ritten as &$r) {
             $hid = $r['heat_id'] !== null ? (int)$r['heat_id'] : null;
-            $r['heat_snrs'] = $hid !== null ? ($snrPerHeat[$hid] ?? []) : [];
+            $r['heat_rijders'] = $hid !== null ? ($rijdersPerHeat[$hid] ?? []) : [];
+            // Behoud heat_snrs voor backwards-compat (cached oude clients).
+            // Nieuwe code gebruikt heat_rijders met snr+lic pair.
+            $r['heat_snrs'] = array_column($r['heat_rijders'], 'snr');
         }
         unset($r);
 
@@ -630,6 +716,7 @@ if ($action === 'uitslagen') {
             }
             $stmt = $pdo->prepare("
                 SELECT t.rang, t.punten_totaal, t.dc_naam, t.punten_detail,
+                       t.person_license AS lic,
                        p.full_name, p.category AS categorie,
                        COALESCE(cs.startnummer, p.start_number) AS snr
                 FROM uitslag_klassement t
@@ -661,6 +748,7 @@ if ($action === 'uitslagen') {
             if (!$distId) { echo json_encode(['error' => 'distance_id verplicht']); exit; }
             $stmt = $pdo->prepare("
                 SELECT t.rang, t.finale_naam, t.tijd_ms, t.sanctie, t.distance_naam,
+                       t.person_license AS lic,
                        p.full_name, p.category AS categorie,
                        COALESCE(cs.startnummer, p.start_number) AS snr,
                        res_agg.rondes, res_agg.pk_punten
@@ -1104,7 +1192,7 @@ if ($action === 'rit_detail') {
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-<title>InlineComp – Coach</title>
+<title data-i18n="page_title">InlineComp – Coach</title>
 <link rel="icon" type="image/svg+xml" href="../favicon.svg">
 <link rel="manifest" href="manifest.json">
 <style>
@@ -1168,6 +1256,61 @@ header .sub { font-size: .95rem; opacity: .8; margin-top: 6px; text-align: cente
     flex-shrink: 0;          /* nooit ovaal worden in flex-container */
 }
 .btn-help:active { background: rgba(255,255,255,.35); }
+/* Vlag-knop: toont emoji-vlag van actieve taal. Klik = expand panel met
+   4 talen (gemount door js/i18n.js → _i18nMountDropdown). Op Windows zonder
+   emoji-flag-glyph valt 'ie terug op letterparen (NL/GB/DE/FR). Vorm blijft
+   ronde knop, font-style normal voorkomt italic-erfgenaam van .btn-help. */
+.btn-lang {
+    padding: 0;
+    font-style: normal;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    /* manipulation: schakel double-tap-to-zoom uit op touch → eerste tap
+     * vuurt onmiddellijk (geen 300ms delay) → paneel opent direct. */
+    touch-action: manipulation;
+}
+.btn-lang .i18n-flag {
+    font-size: 1.4rem;
+    line-height: 1;
+}
+@media (max-width: 480px) {
+    .btn-lang .i18n-flag { font-size: 1.2rem; }
+}
+
+/* Uitgevouwen taal-panel: compact horizontaal rijtje van 4 vlag-knoppen.
+   Geen tekstnamen — vlag-emoji + title-tooltip is voldoende.
+   Positionering wordt via JS gezet (top/right/left vanuit getBoundingClientRect). */
+.i18n-dropdown-panel {
+    background: #fff;
+    border: 1px solid #ccc;
+    border-radius: 6px;
+    box-shadow: 0 4px 14px rgba(0,0,0,.2);
+    padding: 4px;
+    display: flex;
+    flex-direction: row;
+    gap: 2px;
+}
+.i18n-dropdown-opt {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 6px 8px;
+    background: none;
+    border: none;
+    border-radius: 4px;
+    cursor: pointer;
+    font-family: inherit;
+    touch-action: manipulation;
+}
+.i18n-dropdown-opt:hover { background: #f0f6ff; }
+.i18n-dropdown-opt.is-active {
+    background: #1F4E79;
+}
+.i18n-dropdown-opt .i18n-flag {
+    font-size: 1.4rem;
+    line-height: 1;
+}
 .btn-meldingen   { font-style: normal; font-size: 1.1rem; position: relative; }
 .meld-badge      { position: absolute; top: -4px; right: -4px; background: #d22;
                    color: #fff; font-size: .65rem; font-weight: 700;
@@ -1576,6 +1719,9 @@ table.heat-tabel tr.mijn td { background:var(--accent); font-weight:600; }
 .col-pos { width:30px; text-align:center; }
 .col-snr { width:44px; text-align:right; font-weight:700; color:var(--blauw); }
 .col-fin { width:40px; text-align:center; }
+/* Fin-cijfers ROOD + bold (header-label blijft normale kleur). Staat
+ * sinds 2026-05-26 direct na Snr ipv helemaal rechts — viel anders weg. */
+table.heat-tabel td.col-fin { font-weight:700; color:#d32f2f; }
 
 .spinner { display:inline-block; width:16px; height:16px;
            border:2px solid #ccc; border-top-color:var(--blauw);
@@ -1605,6 +1751,39 @@ table.heat-tabel tr.mijn td { background:var(--accent); font-weight:600; }
 }
 body.heeft-footer .auto-refresh-stempel { bottom:84px; }
 
+/* ── Naamzoek-modal (1-op-1 uit /public) — multi-keuze bij dubbele
+   startnummers of meerdere matches op naam-zoek. ── */
+.naamzoek-modal {
+    position:fixed; inset:0; background:rgba(0,0,0,.5); z-index:2500;
+    display:flex; align-items:center; justify-content:center; padding:16px;
+}
+.naamzoek-box {
+    background:var(--wit); border-radius:12px; max-width:480px; width:100%;
+    max-height:80vh; display:flex; flex-direction:column;
+    box-shadow:0 12px 40px rgba(0,0,0,.3); overflow:hidden;
+}
+.naamzoek-hdr {
+    background:var(--blauw); color:var(--wit); padding:12px 16px;
+    font-weight:700; display:flex; justify-content:space-between; align-items:center;
+}
+.naamzoek-body { overflow-y:auto; padding:8px 0; }
+.naamzoek-rij {
+    display:flex; align-items:center; gap:10px; padding:10px 14px;
+    border-bottom:1px solid #eee; cursor:pointer; user-select:none;
+}
+.naamzoek-rij:hover { background:#f0f5fa; }
+.naamzoek-rij input[type=checkbox] { width:18px; height:18px; flex-shrink:0; }
+.naamzoek-rij-snr { font-weight:700; color:var(--blauw); min-width:34px; text-align:right; }
+.naamzoek-rij-naam { flex:1; }
+.naamzoek-rij-meta { font-size:.75rem; color:#888; }
+.naamzoek-voet {
+    border-top:1px solid #eee; padding:12px 14px;
+    display:flex; gap:10px; justify-content:space-between; align-items:center;
+}
+.naamzoek-voet .aantal { font-size:.85rem; color:#666; }
+.naamzoek-sluit { background:none; border:none; color:rgba(255,255,255,.85);
+                  font-size:1.4rem; cursor:pointer; line-height:1; }
+
 /* ── PWA install banner (1-op-1 uit /public) ── */
 .pwa-banner {
     background: linear-gradient(135deg, var(--blauw), var(--middenblauw));
@@ -1627,32 +1806,32 @@ body.heeft-footer .auto-refresh-stempel { bottom:84px; }
 </style>
 </head>
 <body>
-<div id="ptr">↓ Trek verder om te vernieuwen</div>
+<div id="ptr" data-i18n="ptr_trek">↓ Trek verder om te vernieuwen</div>
 
 <header>
     <div class="hdr-row-top">
         <div class="hdr-btns hdr-btns-left">
-            <button class="btn-help btn-meldingen" id="btn-meldingen-overzicht" title="Mededelingen voor deze wedstrijd">📢<span id="meldingen-badge" class="meld-badge" style="display:none">0</span></button>
-            <span class="hdr-spacer" aria-hidden="true"></span>
+            <button class="btn-help btn-meldingen" id="btn-meldingen-overzicht" data-i18n-title="hdr_meldingen_title" title="Mededelingen voor deze wedstrijd">📢<span id="meldingen-badge" class="meld-badge" style="display:none">0</span></button>
+            <button class="btn-help btn-lang" id="btn-lang" title="Language / Taal" aria-label="Switch language"></button>
         </div>
         <div class="hdr-center">
-            <h1>InlineComp – Coach</h1>
+            <h1 data-i18n="hdr_titel">InlineComp – Coach</h1>
         </div>
         <div class="hdr-btns hdr-btns-right">
-            <button class="btn-help" onclick="toonInfo()" title="Over InlineComp">i</button>
-            <button class="btn-help" onclick="toonHelp()" title="Hoe werkt het?">?</button>
+            <button class="btn-help" onclick="toonInfo()" data-i18n-title="hdr_info_title" title="Over InlineComp">i</button>
+            <button class="btn-help" onclick="toonHelp()" data-i18n-title="hdr_help_title" title="Hoe werkt het?">?</button>
         </div>
     </div>
-    <div class="sub">Volg jouw rijders: programma, sancties en uitslagen</div>
+    <div class="sub" data-i18n="hdr_sub">Volg jouw rijders: programma, sancties en uitslagen</div>
 </header>
 
 <div id="pwa-banner" class="pwa-banner" style="display:none">
     <div class="pwa-banner-tekst">
-        <b>Installeer InlineComp Coach</b>
-        Voeg toe aan je startscherm voor snelle toegang
+        <b data-i18n="pwa_installeer_titel">Installeer InlineComp Coach</b>
+        <span data-i18n="pwa_installeer_uitleg">Voeg toe aan je startscherm voor snelle toegang</span>
     </div>
-    <button class="btn-install" id="pwa-install">Installeer</button>
-    <button class="btn-sluit" id="pwa-sluit" title="Sluiten">&times;</button>
+    <button class="btn-install" id="pwa-install" data-i18n="pwa_btn_install">Installeer</button>
+    <button class="btn-sluit" id="pwa-sluit" data-i18n-title="pwa_btn_sluit" title="Sluiten">&times;</button>
 </div>
 
 <div id="org-footer" class="org-footer">
@@ -1667,82 +1846,85 @@ body.heeft-footer .auto-refresh-stempel { bottom:84px; }
 <div class="container">
 
 <div class="card">
-    <div class="stap-label"><span class="stap-nr">1</span> Kies je wedstrijd</div>
+    <div class="stap-label"><span class="stap-nr">1</span> <span data-i18n="stap1_label">Kies je wedstrijd</span></div>
     <div class="filter-rij">
-        <input type="checkbox" id="chk-oud"><label for="chk-oud" class="filter-chip" title="Eerdere wedstrijden">Eerder</label>
-        <input type="checkbox" id="chk-vandaag" checked><label for="chk-vandaag" class="filter-chip">Vandaag</label>
-        <input type="checkbox" id="chk-toekomst"><label for="chk-toekomst" class="filter-chip" title="Toekomstige wedstrijden">Later</label>
+        <input type="checkbox" id="chk-oud"><label for="chk-oud" class="filter-chip" data-i18n="filter_eerder" data-i18n-title="filter_eerder_title" title="Eerdere wedstrijden">Eerder</label>
+        <input type="checkbox" id="chk-vandaag" checked><label for="chk-vandaag" class="filter-chip" data-i18n="filter_vandaag">Vandaag</label>
+        <input type="checkbox" id="chk-toekomst"><label for="chk-toekomst" class="filter-chip" data-i18n="filter_later" data-i18n-title="filter_later_title" title="Toekomstige wedstrijden">Later</label>
     </div>
-    <select id="sel-comp" class="sel"><option value="">— kies een wedstrijd —</option></select>
+    <select id="sel-comp" class="sel"><option value="" data-i18n="opt_kies_wedstrijd">— kies een wedstrijd —</option></select>
     <div id="comp-info" class="comp-info" style="display:none"></div>
 </div>
 
 <div id="sectie-selectie" class="card">
-    <div class="stap-label"><span class="stap-nr">2</span> Voeg rijders toe aan je coach-lijst</div>
-    <div class="stap-sub">Op club <small style="font-weight:400;color:#666">— meerdere tegelijk mogelijk</small></div>
+    <div class="stap-label"><span class="stap-nr">2</span> <span data-i18n="stap2_label">Voeg rijders toe aan je coach-lijst</span></div>
+    <div class="stap-sub"><span data-i18n="sub_op_club">Op club</span> <small style="font-weight:400;color:#666" data-i18n="sub_meerdere">— meerdere tegelijk mogelijk</small></div>
     <div class="rij">
         <div class="sponsor-multi-wrap">
             <button type="button" id="btn-club-open" class="sel sponsor-multi-knop" disabled>
-                <span id="club-multi-label">— kies eerst een wedstrijd —</span>
+                <span id="club-multi-label" data-i18n="multi_kies_wedstrijd_eerst">— kies eerst een wedstrijd —</span>
                 <span class="sponsor-multi-pijl">▾</span>
             </button>
             <div id="club-chips" class="sponsor-chips"></div>
             <div id="club-multi-paneel" class="sponsor-multi-paneel" hidden>
                 <div class="sponsor-multi-acties">
-                    <button type="button" class="btn-klein" id="club-multi-alles">Alle aanvinken</button>
-                    <button type="button" class="btn-klein" id="club-multi-niets">Niets aanvinken</button>
+                    <button type="button" class="btn-klein" id="club-multi-alles" data-i18n="btn_alle_aan">Alle aanvinken</button>
+                    <button type="button" class="btn-klein" id="club-multi-niets" data-i18n="btn_niets_aan">Niets aanvinken</button>
                     <span id="club-multi-teller" class="sponsor-multi-teller">0 geselecteerd</span>
                 </div>
                 <div id="club-multi-lijst" class="sponsor-multi-lijst"></div>
                 <div class="sponsor-multi-footer">
-                    <button type="button" id="club-multi-klaar" class="btn-primair">Klaar</button>
+                    <button type="button" id="club-multi-klaar" class="btn-primair" data-i18n="btn_klaar">Klaar</button>
                 </div>
             </div>
         </div>
     </div>
-    <div class="stap-sub">Op sponsor <small style="font-weight:400;color:#666">— meerdere tegelijk mogelijk</small></div>
+    <div class="stap-sub"><span data-i18n="sub_op_sponsor">Op sponsor</span> <small style="font-weight:400;color:#666" data-i18n="sub_meerdere">— meerdere tegelijk mogelijk</small></div>
     <div class="rij">
         <div class="sponsor-multi-wrap">
             <button type="button" id="btn-sponsor-open" class="sel sponsor-multi-knop" disabled>
-                <span id="sponsor-multi-label">— kies eerst een wedstrijd —</span>
+                <span id="sponsor-multi-label" data-i18n="multi_kies_wedstrijd_eerst">— kies eerst een wedstrijd —</span>
                 <span class="sponsor-multi-pijl">▾</span>
             </button>
             <div id="sponsor-chips" class="sponsor-chips"></div>
             <div id="sponsor-multi-paneel" class="sponsor-multi-paneel" hidden>
                 <div class="sponsor-multi-acties">
-                    <button type="button" class="btn-klein" id="sponsor-multi-alles">Alle aanvinken</button>
-                    <button type="button" class="btn-klein" id="sponsor-multi-niets">Niets aanvinken</button>
+                    <button type="button" class="btn-klein" id="sponsor-multi-alles" data-i18n="btn_alle_aan">Alle aanvinken</button>
+                    <button type="button" class="btn-klein" id="sponsor-multi-niets" data-i18n="btn_niets_aan">Niets aanvinken</button>
                     <span id="sponsor-multi-teller" class="sponsor-multi-teller">0 geselecteerd</span>
                 </div>
                 <div id="sponsor-multi-lijst" class="sponsor-multi-lijst"></div>
                 <div class="sponsor-multi-footer">
-                    <button type="button" id="sponsor-multi-klaar" class="btn-primair">Klaar</button>
+                    <button type="button" id="sponsor-multi-klaar" class="btn-primair" data-i18n="btn_klaar">Klaar</button>
                 </div>
             </div>
         </div>
     </div>
-    <div class="stap-sub">Op startnummer</div>
+    <div class="stap-sub" data-i18n="sub_op_snr_naam">Op startnummer, naam of licentie</div>
     <div class="rij">
-        <input id="inp-snr" class="inp" type="number" min="1" placeholder="Startnummer…" inputmode="numeric" disabled>
+        <input id="inp-snr" class="inp" type="text"
+               data-i18n-placeholder="ph_snr_naam_lic"
+               placeholder="Startnummer, naam (≥2 letters) of licentienr…"
+               autocomplete="off" inputmode="text" disabled>
     </div>
-    <button id="btn-toevoegen" class="btn-primair" disabled>Toevoegen</button>
+    <button id="btn-toevoegen" class="btn-primair" disabled data-i18n="btn_toevoegen">Toevoegen</button>
     <div id="snr-feedback" style="font-size:.85rem;color:#b71c1c;min-height:18px;margin-top:6px"></div>
 </div>
 
 <div id="sectie-lijst" class="card" style="display:none">
     <div class="coach-hdr">
         <span id="coach-aantal">0 rijders</span>
-        <button id="btn-wis-alles" class="btn btn-klein btn-wis">Wis alles</button>
+        <button id="btn-wis-alles" class="btn btn-klein btn-wis" data-i18n="btn_wis_alles">Wis alles</button>
     </div>
     <div id="coach-chips" class="chips"></div>
 </div>
 
 <div id="sectie-programma" class="card" style="display:none">
     <div class="tabs">
-        <button class="tab-btn active" data-tab="programma">📋 Programma</button>
-        <button class="tab-btn" data-tab="heats">🏃 Heats</button>
-        <button class="tab-btn" data-tab="sancties">⚠️ Sancties</button>
-        <button class="tab-btn" data-tab="uitslagen">📊 Uitslagen</button>
+        <button class="tab-btn active" data-tab="programma" data-i18n="tab_programma">📋 Programma</button>
+        <button class="tab-btn" data-tab="heats" data-i18n="tab_heats">🏃 Heats</button>
+        <button class="tab-btn" data-tab="sancties" data-i18n="tab_sancties">⚠️ Sancties</button>
+        <button class="tab-btn" data-tab="uitslagen" data-i18n="tab_uitslagen">📊 Uitslagen</button>
     </div>
     <div id="tab-programma" class="tab-pane active">
         <div id="programma"></div>
@@ -1755,10 +1937,10 @@ body.heeft-footer .auto-refresh-stempel { bottom:84px; }
     </div>
     <div id="tab-uitslagen" class="tab-pane">
         <div class="rij">
-            <select id="u-sel-cat" class="sel"><option value="">— kies categorie —</option></select>
+            <select id="u-sel-cat" class="sel"><option value="" data-i18n="uitsl_opt_kies_cat">— kies categorie —</option></select>
         </div>
         <div class="rij" id="u-afstand-rij" style="display:none">
-            <select id="u-sel-afstand" class="sel"><option value="">— kies afstand —</option></select>
+            <select id="u-sel-afstand" class="sel"><option value="" data-i18n="uitsl_opt_kies_afstand">— kies afstand —</option></select>
         </div>
         <div id="uitslagen"></div>
     </div>
@@ -1766,6 +1948,988 @@ body.heeft-footer .auto-refresh-stempel { bottom:84px; }
 
 </div>
 <script>
+// ── i18n: NL / EN ─────────────────────────────────────────────────────────
+// Shared i18n-helpers — herbruikt door public, coach (deze), jury, admin.
+// PHP-include (geen extra HTTP-request) zodat één bron van waarheid is.
+<?php
+$i18nPath = __DIR__ . '/../js/i18n.js';
+if (is_readable($i18nPath)) {
+    readfile($i18nPath);
+} else {
+    echo "console.error('i18n.js niet gevonden op server (verwacht: ' + " . json_encode($i18nPath) . " + ') — upload het bestand via SFTP');\n";
+    echo "alert('Taal-systeem niet geladen — i18n.js ontbreekt op de server. Upload js/i18n.js naar de juiste map.');\n";
+}
+?>
+
+// ── App-specifiek vertaal-woordenboek (NL + EN) ──────────────────────────
+// Toggle via vlag-knop in header. Persisteert in localStorage onder 'ic_lang'
+// (gedeeld met /public — als rijder NL kiest in public ziet hij coach óók in NL).
+// Dynamische content (rendered via JS) gebruikt t('key'); statische HTML
+// gebruikt data-i18n* attributen die applyI18n() bij init en bij toggle leest.
+const T = {
+    nl: {
+        // ── Document ──
+        page_title: 'InlineComp – Coach',
+        // ── Header / static ──
+        ptr_trek: '↓ Trek verder om te vernieuwen',
+        hdr_meldingen_title: 'Mededelingen voor deze wedstrijd',
+        hdr_info_title: 'Over InlineComp',
+        hdr_help_title: 'Hoe werkt het?',
+        hdr_titel: 'InlineComp – Coach',
+        hdr_sub: 'Volg jouw rijders: programma, sancties en uitslagen',
+        pwa_installeer_titel: 'Installeer InlineComp Coach',
+        pwa_installeer_uitleg: 'Voeg toe aan je startscherm voor snelle toegang',
+        pwa_btn_install: 'Installeer',
+        pwa_btn_sluit: 'Sluiten',
+        // ── Stap-labels en sub-koppen ──
+        stap1_label: 'Kies je wedstrijd',
+        stap2_label: 'Voeg rijders toe aan je coach-lijst',
+        sub_op_club: 'Op club',
+        sub_op_sponsor: 'Op sponsor',
+        sub_op_snr_naam: 'Op startnummer, naam of licentie',
+        sub_meerdere: '— meerdere tegelijk mogelijk',
+        ph_snr_naam_lic: 'Startnummer, naam (≥2 letters) of licentienr…',
+        // ── Filters ──
+        filter_eerder: 'Eerder',
+        filter_eerder_title: 'Eerdere wedstrijden',
+        filter_vandaag: 'Vandaag',
+        filter_later: 'Later',
+        filter_later_title: 'Toekomstige wedstrijden',
+        // ── Comps select ──
+        opt_kies_filter: '— Kies tenminste één filter hierboven —',
+        opt_kies_wedstrijd: '— kies een wedstrijd —',
+        opt_binnenkort: '(binnenkort)',
+        opt_fout_laden: 'Fout bij laden',
+        // ── Multi-select (club + sponsor) ──
+        multi_kies_wedstrijd_eerst: '— kies eerst een wedstrijd —',
+        multi_kies_club: '— kies club(s) —',
+        multi_kies_sponsor: '— kies sponsor(s) —',
+        multi_geen_clubs: '— geen clubs in deze wedstrijd —',
+        multi_geen_sponsors: '— geen sponsors in deze wedstrijd —',
+        multi_geen_clubs_panel: 'Geen clubs in deze wedstrijd.',
+        multi_geen_sponsors_panel: 'Geen sponsors in deze wedstrijd.',
+        multi_club_gekozen_single: '{n} club gekozen — klik op Toevoegen',
+        multi_club_gekozen_plural: '{n} clubs gekozen — klik op Toevoegen',
+        multi_sponsor_gekozen_single: '{n} sponsor gekozen — klik op Toevoegen',
+        multi_sponsor_gekozen_plural: '{n} sponsors gekozen — klik op Toevoegen',
+        multi_geselecteerd: '{n} geselecteerd',
+        multi_chip_klik_verwijder: 'Klik om te verwijderen',
+        btn_alle_aan: 'Alle aanvinken',
+        btn_niets_aan: 'Niets aanvinken',
+        btn_klaar: 'Klaar',
+        btn_toevoegen: 'Toevoegen',
+        btn_wis_alles: 'Wis alles',
+        // ── Coach-lijst ──
+        coach_aantal_single: '{n} rijder geselecteerd',
+        coach_aantal_plural: '{n} rijders geselecteerd',
+        coach_leeg: 'Nog niemand geselecteerd — gebruik de selectors hierboven.',
+        // ── Tabs ──
+        tab_programma: '📋 Programma',
+        tab_heats: '🏃 Heats',
+        tab_sancties: '⚠️ Sancties',
+        tab_uitslagen: '📊 Uitslagen',
+        // ── Uitslagen-tab dropdowns ──
+        uitsl_opt_kies_cat: '— kies categorie —',
+        uitsl_opt_kies_afstand: '— kies afstand —',
+        uitsl_opt_kies_afstand_of_klassement: '— kies afstand of klassement —',
+        uitsl_opt_geen_uitslagen: '(nog geen uitslagen beschikbaar)',
+        uitsl_klassement_opt: '🏆 Klassement',
+        uitsl_opt_laden: 'Laden…',
+        uitsl_opt_afstand_fallback: 'Afstand',
+        // ── Status-labels (idx 0-5) ──
+        status_0: 'Niet bevestigd',
+        status_1: 'Bevestigd',
+        status_2: 'Afgemeld',
+        status_3: 'Afgem. bij org.',
+        status_4: 'Niet getekend',
+        status_5: 'Bev. bij org.',
+        status_label: 'Status',
+        // ── Sanctie-codes uitleg ──
+        sanc_W1: '1e waarschuwing',
+        sanc_W2: '2e waarschuwing',
+        sanc_FS: 'Valse start',
+        sanc_RR: 'Rank reduction',
+        sanc_DQ_TF: 'Diskwalificatie technische fout',
+        sanc_DQ_SF: 'Diskwalificatie sport fout',
+        sanc_DQ_DF: 'Diskwalificatie disciplinaire fout',
+        sanc_DNS: 'Niet gestart',
+        sanc_DNF: 'Niet gefinisht',
+        // ── Rondes (badges) ──
+        ronde_serie: 'Serie',
+        ronde_kf: 'KF',
+        ronde_hf: 'HF',
+        ronde_finale: 'Finale',
+        ronde_b_finale: 'B-Finale',
+        ronde_runner_up: 'Runner-up',
+        // ── Programma-blok labels ──
+        prog_blok_pauze: 'Pauze',
+        prog_blok_inrijden: 'Inrijden',
+        prog_blok_wedstrijdstart: 'Wedstrijd start',
+        prog_blok_ceremonie: 'Ceremonie',
+        prog_blok_herstart: 'Herstart',
+        prog_blok_min: 'min',
+        prog_combi_kop: '🔗 Gecombineerde rit — rijden tegelijk',
+        prog_laden: 'Programma wordt geladen…',
+        prog_geen: 'Nog geen programma bekend.',
+        prog_geen_startlijst: 'nog geen startlijst',
+        prog_startlijst_nb: 'Startlijst is nog niet beschikbaar.',
+        // ── Heats-tab ──
+        heats_geen_rijders: 'Nog geen rijders in je lijst.',
+        heats_geen_inschrijvingen: 'Rijder heeft geen inschrijvingen in deze wedstrijd.',
+        heats_cat_fallback: '(categorie)',
+        heats_afstand_fallback: '(afstand)',
+        heats_niet_geloot_geen_heats: '⏳ Nog niet geloot — geen heats beschikbaar',
+        heats_geen_programma: '⏳ Nog geen programma voor deze categorie',
+        heats_vorige_niet_compleet: '⏳ Vorige ronde nog niet compleet',
+        heats_niet_geplaatst: 'niet geplaatst',
+        heats_niet_geloot: '⏳ Nog niet geloot',
+        heats_heat: 'Heat',
+        heats_startpos: 'startpos {pos}',
+        // ── Sancties-tab ──
+        sanc_geen_rijders: 'Nog geen rijders in je lijst.',
+        sanc_geen: 'Geen sancties.',
+        // ── Uitslagen ──
+        uit_leeg: 'Er zijn nog geen uitslagen bevestigd voor deze wedstrijd.',
+        uit_geen_uitslagen: 'Geen uitslagen beschikbaar.',
+        uit_geen_klassement: 'Geen klassement beschikbaar.',
+        uit_laden: 'Laden…',
+        uit_fout: 'Fout: {msg}',
+        // ── Tabel-headers ──
+        col_pos: '#',
+        col_snr: 'Snr',
+        col_naam: 'Naam',
+        col_rnd: 'Rnd',
+        col_pnt: 'Pnt',
+        col_tijd: 'Tijd',
+        col_fin: 'Fin',
+        col_rang: '#',
+        col_tot: 'Tot',
+        // ── Bevestig-modal ──
+        bev_titel: 'Bevestigen',
+        bev_ok: 'OK',
+        bev_annuleer: 'Annuleren',
+        // Rijder verwijderen
+        bev_verwijder_titel: 'Rijder verwijderen?',
+        bev_verwijder_tekst: 'Wil je <b>{naam}</b> ({snr}) uit je coach-lijst verwijderen?',
+        bev_verwijder_ok: 'Ja, verwijder',
+        bev_verwijder_snr_fallback: 'Startnr {snr}',
+        // Wis alles
+        bev_wis_titel: 'Coach-lijst wissen?',
+        bev_wis_tekst_single: 'Je staat op het punt <b>alle {n} rijder</b> uit je coach-lijst te verwijderen.<br><br>Dit kan niet ongedaan gemaakt worden.',
+        bev_wis_tekst_plural: 'Je staat op het punt <b>alle {n} rijders</b> uit je coach-lijst te verwijderen.<br><br>Dit kan niet ongedaan gemaakt worden.',
+        bev_wis_ok: 'Ja, wis alles',
+        // ── Naam-zoek modal ──
+        nz_matches_voor: '{n} matches voor {label}',
+        nz_sluit: 'Sluiten',
+        nz_al_in_lijst: 'al in lijst',
+        nz_vink_aan: 'Vink aan wie je wilt toevoegen',
+        nz_toevoegen: 'Toevoegen',
+        // ── Toevoeg-flow feedback ──
+        fb_kies_iets: 'Kies een club, sponsor, of vul een startnummer / naam / licentie in.',
+        fb_server_druk: 'Server tijdelijk druk — probeer over 5 seconden',
+        fb_server_fout: 'Server-fout ({status})',
+        fb_netwerk_fout: 'Netwerkfout bij ophalen rijders',
+        fb_rijders_van_single: '{aantal} rijder(s) van {stukken}',
+        fb_rijders_van_geen: '{stukken}: geen nieuwe rijders',
+        fb_clubs_single: '{n} club',
+        fb_clubs_plural: '{n} clubs',
+        fb_sponsors_single: '{n} sponsor',
+        fb_sponsors_plural: '{n} sponsors',
+        fb_toegevoegd: 'Toegevoegd: {lijst}',
+        fb_label_snr: 'Startnummer {term}',
+        fb_label_licentie: 'Licentie {term}',
+        fb_label_naam: 'Naam "{term}"',
+        fb_lookup_mislukt: '{label}: lookup mislukt ({msg})',
+        fb_label_error: '{label}: {error}',
+        fb_label_niet_gevonden: '{label} niet gevonden in deze wedstrijd',
+        fb_stond_al_in_lijst: '{naam}: stond al in lijst',
+        fb_naam_snr: '{naam} (snr {snr})',
+        // ── Connection banner ──
+        conn_geen_internet: '📡 Geen internet — ververst zodra de verbinding terug is',
+        conn_server_down: '⚠ Server niet bereikbaar — opnieuw proberen…',
+        conn_laatste_update: 'laatste update {tijd}',
+        // ── PTR ──
+        ptr_laat_los: '↑ Laat los om te vernieuwen',
+        ptr_vernieuwen: '⟳ Vernieuwen…',
+        ptr_bijgewerkt: '✓ Bijgewerkt',
+        ptr_fout: '⚠ Fout bij vernieuwen',
+        ptr_wachten: '⏳ Even wachten ({s}s)',
+        // ── Auto-refresh ──
+        auto_refresh_title: 'Laatste automatische verversing',
+        // ── Mededelingen ──
+        meld_kop: '📢 Mededelingen',
+        meld_tot: ' tot ',
+        meld_begrepen: '✓ Begrepen',
+        // ── Info modal ──
+        info_titel: 'Over InlineComp Coach',
+        info_h_wat: 'Wat is dit?',
+        info_p_wat1_html: 'De <b>Coach-view</b> is een dashboard voor coaches: je bouwt per wedstrijd een eigen lijst met rijders en ziet vervolgens hun programma, status, sancties en uitslagen in één oogopslag.',
+        info_p_wat2: 'Je kunt een heel clubteam in één keer toevoegen, rijders op sponsor selecteren, of losse startnummers toevoegen. Je lijst wordt lokaal op je telefoon bewaard (per wedstrijd) — dus een refresh of een terugkeer naar de pagina laat \'m intact.',
+        info_h_login: 'Geen login nodig',
+        info_p_login_html: 'Alle data die je hier ziet is publiek (zelfde als op <a href="../public/">/public</a>). Je gebruikt gewoon je browser — niets te installeren.',
+        info_h_tip: 'Tip: toevoegen aan startscherm',
+        info_p_tip: 'Op je telefoon: open deze pagina in Safari/Chrome → menu → "Zet op startscherm". Dan opent-ie als een app en heb je \'m direct bij de hand aan de rand van de baan.',
+        info_h_dev: 'In ontwikkeling',
+        info_p_dev: 'Deze coach-view wordt actief doorontwikkeld. Feedback is zeer welkom!',
+        info_h_contact_html: 'Contact &amp; feedback',
+        info_p_contact: 'Heb je een vraag, suggestie of bug gevonden? Laat het weten:',
+        info_h_stats: 'Anonieme bezoek-statistieken',
+        info_p_stats_html: 'We tellen anoniem aantal bezoekers, actieve sessies en piek gelijktijdig online — puur om te zien hoe veel de app wordt gebruikt en om de hosting stabiel te houden. Er worden <b>geen IP-adressen of persoonsgegevens</b> opgeslagen en er zijn <b>geen derde partijen</b> betrokken.',
+        info_copyright: 'InlineComp &copy; {jaar} Geert de Vries',
+        // ── Help modal ──
+        help_titel: 'Hoe werkt de Coach-view?',
+        help_h_start: 'Aan de slag',
+        help_stap1_html: 'Kies je <b>wedstrijd</b> bovenaan.',
+        help_stap2_html: 'Voeg rijders toe aan je coach-lijst op drie manieren: <ul style="margin:4px 0 0 18px"><li><b>Op club</b> — selecteer een club en alle rijders daarvan komen in je lijst.</li><li><b>Op sponsor</b> — idem op sponsor-naam.</li><li><b>Op startnummer</b> — typ een getal en druk op Toevoegen (of Enter).</li></ul>',
+        help_stap3_html: 'Bekijk de tabs: <b>📋 Programma</b>, <b>🏃 Heats</b>, <b>⚠️ Sancties</b>, <b>📊 Uitslagen</b>.',
+        help_h_prog: 'Programma',
+        help_p_prog_html: 'Toont alle ritten van de wedstrijd. Ritten waar minstens één van jouw rijders in zit zijn <b>geel gemarkeerd</b> met een strip van hun startnummers aan de rechterkant. Tik een rit aan om de volledige startlijst te zien — jouw rijders zijn opnieuw geel gemarkeerd.',
+        help_h_sanc: 'Sancties',
+        help_p_sanc1: 'Per rijder uit jouw lijst een kaartje met:',
+        help_p_sanc_lijst_html: '<li><b>Status-badge</b> (Bevestigd / Niet getekend / Afgemeld / …)</li><li>Alle <b>sancties</b> die in heats zijn geregistreerd (W1, W2, FS, DQ-SF, DNF, …)</li>',
+        help_p_sanc2_html: 'Let op <b>🚨 Niet getekend</b> — dan moet de rijder zélf snel even naar de jury-tafel om te tekenen (niet jij als coach, niet de ouders, alleen de rijder zelf).',
+        help_h_uitsl: 'Uitslagen',
+        help_p_uitsl: 'Kies een categorie + afstand om de volledige uitslag te zien, of bekijk het klassement. Ook hier worden jouw eigen rijders geel gemarkeerd.',
+        help_h_auto: 'Automatisch bijgewerkt',
+        help_p_auto_html: 'De pagina ververst zichzelf elke minuut zolang het tabblad zichtbaar is. Het tijdstip van de laatste verversing zie je rechtsboven (<b>🔄 HH:MM</b>). Direct verversen kan ook: trek de pagina <b>naar beneden</b> (pull-to-refresh) of dubbelklik op de blauwe kop.',
+        help_h_meld: 'Mededelingen',
+        help_p_meld_html: 'Bovenaan verschijnt een <b>📢-knop</b> zodra er een mededeling van de organisatie actief is. Belangrijke aankondigingen verschijnen automatisch als pop-up en blijven daarna onder die knop bereikbaar.',
+        help_h_priv: 'Privacy',
+        help_p_priv: 'Je coach-lijst wordt alleen lokaal op je telefoon bewaard (localStorage). Niemand anders ziet wie je op je lijst hebt staan.',
+    },
+    en: {
+        // ── Document ──
+        page_title: 'InlineComp – Coach',
+        // ── Header / static ──
+        ptr_trek: '↓ Pull further to refresh',
+        hdr_meldingen_title: 'Announcements for this race',
+        hdr_info_title: 'About InlineComp',
+        hdr_help_title: 'How does it work?',
+        hdr_titel: 'InlineComp – Coach',
+        hdr_sub: 'Track your skaters: program, sanctions and results',
+        pwa_installeer_titel: 'Install InlineComp Coach',
+        pwa_installeer_uitleg: 'Add to your home screen for quick access',
+        pwa_btn_install: 'Install',
+        pwa_btn_sluit: 'Close',
+        // ── Stap-labels en sub-koppen ──
+        stap1_label: 'Choose your race',
+        stap2_label: 'Add skaters to your coach list',
+        sub_op_club: 'By club',
+        sub_op_sponsor: 'By sponsor',
+        sub_op_snr_naam: 'By start number, name or license',
+        sub_meerdere: '— multiple at once possible',
+        ph_snr_naam_lic: 'Start number, name (≥2 letters) or license nr…',
+        // ── Filters ──
+        filter_eerder: 'Earlier',
+        filter_eerder_title: 'Earlier races',
+        filter_vandaag: 'Today',
+        filter_later: 'Later',
+        filter_later_title: 'Upcoming races',
+        // ── Comps select ──
+        opt_kies_filter: '— Select at least one filter above —',
+        opt_kies_wedstrijd: '— choose a race —',
+        opt_binnenkort: '(coming soon)',
+        opt_fout_laden: 'Loading failed',
+        // ── Multi-select (club + sponsor) ──
+        multi_kies_wedstrijd_eerst: '— choose a race first —',
+        multi_kies_club: '— choose club(s) —',
+        multi_kies_sponsor: '— choose sponsor(s) —',
+        multi_geen_clubs: '— no clubs in this race —',
+        multi_geen_sponsors: '— no sponsors in this race —',
+        multi_geen_clubs_panel: 'No clubs in this race.',
+        multi_geen_sponsors_panel: 'No sponsors in this race.',
+        multi_club_gekozen_single: '{n} club selected — click Add',
+        multi_club_gekozen_plural: '{n} clubs selected — click Add',
+        multi_sponsor_gekozen_single: '{n} sponsor selected — click Add',
+        multi_sponsor_gekozen_plural: '{n} sponsors selected — click Add',
+        multi_geselecteerd: '{n} selected',
+        multi_chip_klik_verwijder: 'Click to remove',
+        btn_alle_aan: 'Check all',
+        btn_niets_aan: 'Uncheck all',
+        btn_klaar: 'Done',
+        btn_toevoegen: 'Add',
+        btn_wis_alles: 'Clear all',
+        // ── Coach-lijst ──
+        coach_aantal_single: '{n} skater selected',
+        coach_aantal_plural: '{n} skaters selected',
+        coach_leeg: 'No one selected yet — use the selectors above.',
+        // ── Tabs ──
+        tab_programma: '📋 Program',
+        tab_heats: '🏃 Heats',
+        tab_sancties: '⚠️ Sanctions',
+        tab_uitslagen: '📊 Results',
+        // ── Uitslagen-tab dropdowns ──
+        uitsl_opt_kies_cat: '— choose category —',
+        uitsl_opt_kies_afstand: '— choose distance —',
+        uitsl_opt_kies_afstand_of_klassement: '— choose distance or standings —',
+        uitsl_opt_geen_uitslagen: '(no results available yet)',
+        uitsl_klassement_opt: '🏆 Standings',
+        uitsl_opt_laden: 'Loading…',
+        uitsl_opt_afstand_fallback: 'Distance',
+        // ── Status-labels (idx 0-5) ──
+        status_0: 'Not confirmed',
+        status_1: 'Confirmed',
+        status_2: 'Withdrawn',
+        status_3: 'Withdrawn at registration',
+        status_4: 'Not signed in',
+        status_5: 'Confirmed at registration',
+        status_label: 'Status',
+        // ── Sanctie-codes uitleg ──
+        sanc_W1: '1st warning',
+        sanc_W2: '2nd warning',
+        sanc_FS: 'False start',
+        sanc_RR: 'Rank reduction',
+        sanc_DQ_TF: 'Disqualification — technical fault',
+        sanc_DQ_SF: 'Disqualification — sport fault',
+        sanc_DQ_DF: 'Disqualification — disciplinary fault',
+        sanc_DNS: 'Did not start',
+        sanc_DNF: 'Did not finish',
+        // ── Rondes (badges) ──
+        ronde_serie: 'Series',
+        ronde_kf: 'QF',
+        ronde_hf: 'SF',
+        ronde_finale: 'Final',
+        ronde_b_finale: 'B-Final',
+        ronde_runner_up: 'Runner-up',
+        // ── Programma-blok labels ──
+        prog_blok_pauze: 'Break',
+        prog_blok_inrijden: 'Warm-up',
+        prog_blok_wedstrijdstart: 'Race start',
+        prog_blok_ceremonie: 'Ceremony',
+        prog_blok_herstart: 'Restart',
+        prog_blok_min: 'min',
+        prog_combi_kop: '🔗 Combined race — skating together',
+        prog_laden: 'Loading program…',
+        prog_geen: 'No program known yet.',
+        prog_geen_startlijst: 'no start list yet',
+        prog_startlijst_nb: 'Start list is not available yet.',
+        // ── Heats-tab ──
+        heats_geen_rijders: 'No skaters in your list yet.',
+        heats_geen_inschrijvingen: 'Skater has no entries in this race.',
+        heats_cat_fallback: '(category)',
+        heats_afstand_fallback: '(distance)',
+        heats_niet_geloot_geen_heats: '⏳ Draw not done yet — no heats available',
+        heats_geen_programma: '⏳ No program for this category yet',
+        heats_vorige_niet_compleet: '⏳ Previous round not yet complete',
+        heats_niet_geplaatst: 'not placed',
+        heats_niet_geloot: '⏳ Draw not done yet',
+        heats_heat: 'Heat',
+        heats_startpos: 'start pos {pos}',
+        // ── Sancties-tab ──
+        sanc_geen_rijders: 'No skaters in your list yet.',
+        sanc_geen: 'No sanctions.',
+        // ── Uitslagen ──
+        uit_leeg: 'No results have been confirmed for this race yet.',
+        uit_geen_uitslagen: 'No results available.',
+        uit_geen_klassement: 'No standings available.',
+        uit_laden: 'Loading…',
+        uit_fout: 'Error: {msg}',
+        // ── Tabel-headers ──
+        col_pos: '#',
+        col_snr: 'Nr',
+        col_naam: 'Name',
+        col_rnd: 'Lap',
+        col_pnt: 'Pts',
+        col_tijd: 'Time',
+        col_fin: 'Fin',
+        col_rang: '#',
+        col_tot: 'Tot',
+        // ── Bevestig-modal ──
+        bev_titel: 'Confirm',
+        bev_ok: 'OK',
+        bev_annuleer: 'Cancel',
+        // Rijder verwijderen
+        bev_verwijder_titel: 'Remove skater?',
+        bev_verwijder_tekst: 'Do you want to remove <b>{naam}</b> ({snr}) from your coach list?',
+        bev_verwijder_ok: 'Yes, remove',
+        bev_verwijder_snr_fallback: 'Start nr {snr}',
+        // Wis alles
+        bev_wis_titel: 'Clear coach list?',
+        bev_wis_tekst_single: 'You are about to remove <b>all {n} skater</b> from your coach list.<br><br>This cannot be undone.',
+        bev_wis_tekst_plural: 'You are about to remove <b>all {n} skaters</b> from your coach list.<br><br>This cannot be undone.',
+        bev_wis_ok: 'Yes, clear all',
+        // ── Naam-zoek modal ──
+        nz_matches_voor: '{n} matches for {label}',
+        nz_sluit: 'Close',
+        nz_al_in_lijst: 'already in list',
+        nz_vink_aan: 'Check who you want to add',
+        nz_toevoegen: 'Add',
+        // ── Toevoeg-flow feedback ──
+        fb_kies_iets: 'Choose a club, sponsor, or enter a start number / name / license.',
+        fb_server_druk: 'Server temporarily busy — try again in 5 seconds',
+        fb_server_fout: 'Server error ({status})',
+        fb_netwerk_fout: 'Network error fetching skaters',
+        fb_rijders_van_single: '{aantal} skater(s) from {stukken}',
+        fb_rijders_van_geen: '{stukken}: no new skaters',
+        fb_clubs_single: '{n} club',
+        fb_clubs_plural: '{n} clubs',
+        fb_sponsors_single: '{n} sponsor',
+        fb_sponsors_plural: '{n} sponsors',
+        fb_toegevoegd: 'Added: {lijst}',
+        fb_label_snr: 'Start number {term}',
+        fb_label_licentie: 'License {term}',
+        fb_label_naam: 'Name "{term}"',
+        fb_lookup_mislukt: '{label}: lookup failed ({msg})',
+        fb_label_error: '{label}: {error}',
+        fb_label_niet_gevonden: '{label} not found in this race',
+        fb_stond_al_in_lijst: '{naam}: already in list',
+        fb_naam_snr: '{naam} (nr {snr})',
+        // ── Connection banner ──
+        conn_geen_internet: '📡 No internet — will refresh when the connection returns',
+        conn_server_down: '⚠ Server unreachable — retrying…',
+        conn_laatste_update: 'last update {tijd}',
+        // ── PTR ──
+        ptr_laat_los: '↑ Release to refresh',
+        ptr_vernieuwen: '⟳ Refreshing…',
+        ptr_bijgewerkt: '✓ Updated',
+        ptr_fout: '⚠ Refresh error',
+        ptr_wachten: '⏳ Please wait ({s}s)',
+        // ── Auto-refresh ──
+        auto_refresh_title: 'Time of last auto-refresh',
+        // ── Mededelingen ──
+        meld_kop: '📢 Announcements',
+        meld_tot: ' until ',
+        meld_begrepen: '✓ Understood',
+        // ── Info modal ──
+        info_titel: 'About InlineComp Coach',
+        info_h_wat: 'What is this?',
+        info_p_wat1_html: 'The <b>Coach view</b> is a dashboard for coaches: you build a personal list of skaters per race and then see their program, status, sanctions and results at a glance.',
+        info_p_wat2: 'You can add a whole club team at once, select skaters by sponsor, or add individual start numbers. Your list is stored locally on your phone (per race) — so a refresh or returning to the page keeps it intact.',
+        info_h_login: 'No login needed',
+        info_p_login_html: 'All data shown here is public (same as on <a href="../public/">/public</a>). You simply use your browser — nothing to install.',
+        info_h_tip: 'Tip: add to home screen',
+        info_p_tip: 'On your phone: open this page in Safari/Chrome → menu → "Add to Home Screen". It then opens like an app and you have it at hand right at the side of the track.',
+        info_h_dev: 'In development',
+        info_p_dev: 'This coach view is actively being developed. Feedback is most welcome!',
+        info_h_contact_html: 'Contact &amp; feedback',
+        info_p_contact: 'Have a question, suggestion or found a bug? Let us know:',
+        info_h_stats: 'Anonymous visit statistics',
+        info_p_stats_html: 'We anonymously count visitor numbers, active sessions and peak concurrent users — purely to see how much the app is used and to keep hosting stable. <b>No IP addresses or personal data</b> are stored and <b>no third parties</b> are involved.',
+        info_copyright: 'InlineComp &copy; {jaar} Geert de Vries',
+        // ── Help modal ──
+        help_titel: 'How does the Coach view work?',
+        help_h_start: 'Getting started',
+        help_stap1_html: 'Choose your <b>race</b> at the top.',
+        help_stap2_html: 'Add skaters to your coach list in three ways: <ul style="margin:4px 0 0 18px"><li><b>By club</b> — select a club and all its skaters appear in your list.</li><li><b>By sponsor</b> — same by sponsor name.</li><li><b>By start number</b> — type a number and press Add (or Enter).</li></ul>',
+        help_stap3_html: 'Browse the tabs: <b>📋 Program</b>, <b>🏃 Heats</b>, <b>⚠️ Sanctions</b>, <b>📊 Results</b>.',
+        help_h_prog: 'Program',
+        help_p_prog_html: 'Shows all races of the meet. Races containing at least one of your skaters are <b>highlighted in yellow</b> with a strip of their start numbers on the right. Tap a race to view the full start list — your skaters are again highlighted in yellow.',
+        help_h_sanc: 'Sanctions',
+        help_p_sanc1: 'For each skater in your list a card with:',
+        help_p_sanc_lijst_html: '<li><b>Status badge</b> (Confirmed / Not signed in / Withdrawn / …)</li><li>All <b>sanctions</b> registered in heats (W1, W2, FS, DQ-SF, DNF, …)</li>',
+        help_p_sanc2_html: 'Watch out for <b>🚨 Not signed in</b> — then the skater has to quickly go to the jury desk themselves to sign in (not you as coach, not the parents, only the skater).',
+        help_h_uitsl: 'Results',
+        help_p_uitsl: 'Choose a category + distance to see the full result, or view the standings. Here too your own skaters are highlighted in yellow.',
+        help_h_auto: 'Automatically updated',
+        help_p_auto_html: 'The page refreshes itself every minute as long as the tab is visible. The time of the last refresh is shown in the top right (<b>🔄 HH:MM</b>). Refresh immediately also works: pull the page <b>downwards</b> (pull-to-refresh) or double-click the blue header.',
+        help_h_meld: 'Announcements',
+        help_p_meld_html: 'At the top a <b>📢 button</b> appears as soon as there is an active announcement from the organization. Important announcements pop up automatically and remain accessible afterwards via that button.',
+        help_h_priv: 'Privacy',
+        help_p_priv: 'Your coach list is only stored locally on your phone (localStorage). Nobody else sees who is on your list.',
+    },
+    de: {
+        // ── Document ──
+        page_title: 'InlineComp – Coach',
+        // ── Header / static ──
+        ptr_trek: '↓ Weiter ziehen zum Aktualisieren',
+        hdr_meldingen_title: 'Mitteilungen zu diesem Rennen',
+        hdr_info_title: 'Über InlineComp',
+        hdr_help_title: 'Wie funktioniert es?',
+        hdr_titel: 'InlineComp – Coach',
+        hdr_sub: 'Verfolge deine Skater: Programm, Strafen und Ergebnisse',
+        pwa_installeer_titel: 'InlineComp Coach installieren',
+        pwa_installeer_uitleg: 'Zum Startbildschirm hinzufügen für schnellen Zugriff',
+        pwa_btn_install: 'Installieren',
+        pwa_btn_sluit: 'Schließen',
+        // ── Stap-labels en sub-koppen ──
+        stap1_label: 'Wähle dein Rennen',
+        stap2_label: 'Skater zur Coach-Liste hinzufügen',
+        sub_op_club: 'Nach Verein',
+        sub_op_sponsor: 'Nach Sponsor',
+        sub_op_snr_naam: 'Nach Startnummer, Name oder Lizenz',
+        sub_meerdere: '— mehrere gleichzeitig möglich',
+        ph_snr_naam_lic: 'Startnummer, Name (≥2 Buchstaben) oder Lizenznr…',
+        // ── Filters ──
+        filter_eerder: 'Früher',
+        filter_eerder_title: 'Frühere Rennen',
+        filter_vandaag: 'Heute',
+        filter_later: 'Später',
+        filter_later_title: 'Kommende Rennen',
+        // ── Comps select ──
+        opt_kies_filter: '— Wähle oben mindestens einen Filter —',
+        opt_kies_wedstrijd: '— Rennen wählen —',
+        opt_binnenkort: '(demnächst)',
+        opt_fout_laden: 'Laden fehlgeschlagen',
+        // ── Multi-select (club + sponsor) ──
+        multi_kies_wedstrijd_eerst: '— erst Rennen wählen —',
+        multi_kies_club: '— Verein(e) wählen —',
+        multi_kies_sponsor: '— Sponsor(en) wählen —',
+        multi_geen_clubs: '— keine Vereine in diesem Rennen —',
+        multi_geen_sponsors: '— keine Sponsoren in diesem Rennen —',
+        multi_geen_clubs_panel: 'Keine Vereine in diesem Rennen.',
+        multi_geen_sponsors_panel: 'Keine Sponsoren in diesem Rennen.',
+        multi_club_gekozen_single: '{n} Verein ausgewählt — klick Hinzufügen',
+        multi_club_gekozen_plural: '{n} Vereine ausgewählt — klick Hinzufügen',
+        multi_sponsor_gekozen_single: '{n} Sponsor ausgewählt — klick Hinzufügen',
+        multi_sponsor_gekozen_plural: '{n} Sponsoren ausgewählt — klick Hinzufügen',
+        multi_geselecteerd: '{n} ausgewählt',
+        multi_chip_klik_verwijder: 'Klick zum Entfernen',
+        btn_alle_aan: 'Alle auswählen',
+        btn_niets_aan: 'Auswahl aufheben',
+        btn_klaar: 'Fertig',
+        btn_toevoegen: 'Hinzufügen',
+        btn_wis_alles: 'Alles löschen',
+        // ── Coach-lijst ──
+        coach_aantal_single: '{n} Skater ausgewählt',
+        coach_aantal_plural: '{n} Skater ausgewählt',
+        coach_leeg: 'Noch niemand ausgewählt — verwende die Auswahl oben.',
+        // ── Tabs ──
+        tab_programma: '📋 Programm',
+        tab_heats: '🏃 Heats',
+        tab_sancties: '⚠️ Strafen',
+        tab_uitslagen: '📊 Ergebnisse',
+        // ── Uitslagen-tab dropdowns ──
+        uitsl_opt_kies_cat: '— Kategorie wählen —',
+        uitsl_opt_kies_afstand: '— Distanz wählen —',
+        uitsl_opt_kies_afstand_of_klassement: '— Distanz oder Klassement wählen —',
+        uitsl_opt_geen_uitslagen: '(noch keine Ergebnisse verfügbar)',
+        uitsl_klassement_opt: '🏆 Klassement',
+        uitsl_opt_laden: 'Laden…',
+        uitsl_opt_afstand_fallback: 'Distanz',
+        // ── Status-labels ──
+        status_0: 'Nicht bestätigt',
+        status_1: 'Bestätigt',
+        status_2: 'Zurückgezogen',
+        status_3: 'Bei Anmeldung zurückgezogen',
+        status_4: 'Nicht angemeldet',
+        status_5: 'Bei Anmeldung bestätigt',
+        status_label: 'Status',
+        // ── Sanctie-codes uitleg ──
+        sanc_W1: '1. Verwarnung',
+        sanc_W2: '2. Verwarnung',
+        sanc_FS: 'Fehlstart',
+        sanc_RR: 'Rangrückstufung',
+        sanc_DQ_TF: 'Disqualifikation — technischer Fehler',
+        sanc_DQ_SF: 'Disqualifikation — sportlicher Fehler',
+        sanc_DQ_DF: 'Disqualifikation — disziplinarischer Fehler',
+        sanc_DNS: 'Nicht gestartet',
+        sanc_DNF: 'Nicht beendet',
+        // ── Rondes (badges) ──
+        ronde_serie: 'Serie',
+        ronde_kf: 'VF',
+        ronde_hf: 'HF',
+        ronde_finale: 'Finale',
+        ronde_b_finale: 'B-Finale',
+        ronde_runner_up: 'Hoffnungslauf',
+        // ── Programma-blok labels ──
+        prog_blok_pauze: 'Pause',
+        prog_blok_inrijden: 'Aufwärmen',
+        prog_blok_wedstrijdstart: 'Rennstart',
+        prog_blok_ceremonie: 'Siegerehrung',
+        prog_blok_herstart: 'Neustart',
+        prog_blok_min: 'Min',
+        prog_combi_kop: '🔗 Kombiniertes Rennen — gemeinsam',
+        prog_laden: 'Programm wird geladen…',
+        prog_geen: 'Noch kein Programm bekannt.',
+        prog_geen_startlijst: 'noch keine Startliste',
+        prog_startlijst_nb: 'Startliste ist noch nicht verfügbar.',
+        // ── Heats-tab ──
+        heats_geen_rijders: 'Noch keine Skater in deiner Liste.',
+        heats_geen_inschrijvingen: 'Skater hat keine Anmeldungen in diesem Rennen.',
+        heats_cat_fallback: '(Kategorie)',
+        heats_afstand_fallback: '(Distanz)',
+        heats_niet_geloot_geen_heats: '⏳ Auslosung noch nicht erfolgt — keine Heats verfügbar',
+        heats_geen_programma: '⏳ Noch kein Programm für diese Kategorie',
+        heats_vorige_niet_compleet: '⏳ Vorherige Runde noch nicht abgeschlossen',
+        heats_niet_geplaatst: 'nicht platziert',
+        heats_niet_geloot: '⏳ Auslosung noch nicht erfolgt',
+        heats_heat: 'Heat',
+        heats_startpos: 'Startposition {pos}',
+        // ── Sancties-tab ──
+        sanc_geen_rijders: 'Noch keine Skater in deiner Liste.',
+        sanc_geen: 'Keine Strafen.',
+        // ── Uitslagen ──
+        uit_leeg: 'Für dieses Rennen wurden noch keine Ergebnisse bestätigt.',
+        uit_geen_uitslagen: 'Keine Ergebnisse verfügbar.',
+        uit_geen_klassement: 'Kein Klassement verfügbar.',
+        uit_laden: 'Laden…',
+        uit_fout: 'Fehler: {msg}',
+        // ── Tabel-headers ──
+        col_pos: '#',
+        col_snr: 'Nr',
+        col_naam: 'Name',
+        col_rnd: 'Rd',
+        col_pnt: 'Pkt',
+        col_tijd: 'Zeit',
+        col_fin: 'Fin',
+        col_rang: '#',
+        col_tot: 'Ges',
+        // ── Bevestig-modal ──
+        bev_titel: 'Bestätigen',
+        bev_ok: 'OK',
+        bev_annuleer: 'Abbrechen',
+        // Rijder verwijderen
+        bev_verwijder_titel: 'Skater entfernen?',
+        bev_verwijder_tekst: 'Möchtest du <b>{naam}</b> ({snr}) aus deiner Coach-Liste entfernen?',
+        bev_verwijder_ok: 'Ja, entfernen',
+        bev_verwijder_snr_fallback: 'Startnr {snr}',
+        // Wis alles
+        bev_wis_titel: 'Coach-Liste löschen?',
+        bev_wis_tekst_single: 'Du bist dabei, <b>alle {n} Skater</b> aus deiner Coach-Liste zu entfernen.<br><br>Dies kann nicht rückgängig gemacht werden.',
+        bev_wis_tekst_plural: 'Du bist dabei, <b>alle {n} Skater</b> aus deiner Coach-Liste zu entfernen.<br><br>Dies kann nicht rückgängig gemacht werden.',
+        bev_wis_ok: 'Ja, alles löschen',
+        // ── Naam-zoek modal ──
+        nz_matches_voor: '{n} Treffer für {label}',
+        nz_sluit: 'Schließen',
+        nz_al_in_lijst: 'bereits in Liste',
+        nz_vink_aan: 'Wähle aus, wen du hinzufügen möchtest',
+        nz_toevoegen: 'Hinzufügen',
+        // ── Toevoeg-flow feedback ──
+        fb_kies_iets: 'Wähle einen Verein, Sponsor, oder gib eine Startnummer / Name / Lizenz ein.',
+        fb_server_druk: 'Server vorübergehend ausgelastet — bitte in 5 Sekunden erneut versuchen',
+        fb_server_fout: 'Serverfehler ({status})',
+        fb_netwerk_fout: 'Netzwerkfehler beim Laden der Skater',
+        fb_rijders_van_single: '{aantal} Skater von {stukken}',
+        fb_rijders_van_geen: '{stukken}: keine neuen Skater',
+        fb_clubs_single: '{n} Verein',
+        fb_clubs_plural: '{n} Vereine',
+        fb_sponsors_single: '{n} Sponsor',
+        fb_sponsors_plural: '{n} Sponsoren',
+        fb_toegevoegd: 'Hinzugefügt: {lijst}',
+        fb_label_snr: 'Startnummer {term}',
+        fb_label_licentie: 'Lizenz {term}',
+        fb_label_naam: 'Name „{term}"',
+        fb_lookup_mislukt: '{label}: Suche fehlgeschlagen ({msg})',
+        fb_label_error: '{label}: {error}',
+        fb_label_niet_gevonden: '{label} nicht in diesem Rennen gefunden',
+        fb_stond_al_in_lijst: '{naam}: bereits in Liste',
+        fb_naam_snr: '{naam} (Nr {snr})',
+        // ── Connection banner ──
+        conn_geen_internet: '📡 Kein Internet — wird aktualisiert sobald wieder online',
+        conn_server_down: '⚠ Server nicht erreichbar — neuer Versuch…',
+        conn_laatste_update: 'letzte Aktualisierung {tijd}',
+        // ── PTR ──
+        ptr_laat_los: '↑ Loslassen zum Aktualisieren',
+        ptr_vernieuwen: '⟳ Aktualisieren…',
+        ptr_bijgewerkt: '✓ Aktualisiert',
+        ptr_fout: '⚠ Aktualisierungsfehler',
+        ptr_wachten: '⏳ Bitte warten ({s}s)',
+        // ── Auto-refresh ──
+        auto_refresh_title: 'Zeitpunkt der letzten automatischen Aktualisierung',
+        // ── Mededelingen ──
+        meld_kop: '📢 Mitteilungen',
+        meld_tot: ' bis ',
+        meld_begrepen: '✓ Verstanden',
+        // ── Info modal ──
+        info_titel: 'Über InlineComp Coach',
+        info_h_wat: 'Was ist das?',
+        info_p_wat1_html: 'Die <b>Coach-Ansicht</b> ist ein Dashboard für Trainer: du erstellst eine persönliche Liste von Skatern pro Rennen und siehst auf einen Blick deren Programm, Status, Strafen und Ergebnisse.',
+        info_p_wat2: 'Du kannst ein ganzes Vereinsteam auf einmal hinzufügen, Skater nach Sponsor auswählen oder einzelne Startnummern hinzufügen. Deine Liste wird lokal auf deinem Telefon gespeichert (pro Rennen) — ein Refresh oder Rückkehr zur Seite behält sie bei.',
+        info_h_login: 'Kein Login nötig',
+        info_p_login_html: 'Alle hier gezeigten Daten sind öffentlich (wie auf <a href="../public/">/public</a>). Du verwendest einfach deinen Browser — nichts zu installieren.',
+        info_h_tip: 'Tipp: zum Startbildschirm hinzufügen',
+        info_p_tip: 'Auf deinem Telefon: öffne diese Seite in Safari/Chrome → Menü → „Zum Startbildschirm". Sie öffnet sich dann wie eine App und du hast sie direkt an der Strecke griffbereit.',
+        info_h_dev: 'In Entwicklung',
+        info_p_dev: 'Diese Coach-Ansicht wird aktiv weiterentwickelt. Feedback ist sehr willkommen!',
+        info_h_contact_html: 'Kontakt &amp; Feedback',
+        info_p_contact: 'Frage, Vorschlag oder einen Fehler entdeckt? Lass es uns wissen:',
+        info_h_stats: 'Anonyme Besuchsstatistiken',
+        info_p_stats_html: 'Wir zählen anonym Besucherzahlen, aktive Sessions und Peak-Nutzer — nur um zu sehen, wie viel die App genutzt wird und um das Hosting stabil zu halten. <b>Keine IP-Adressen oder persönliche Daten</b> werden gespeichert und <b>keine Drittanbieter</b> sind beteiligt.',
+        info_copyright: 'InlineComp &copy; {jaar} Geert de Vries',
+        // ── Help modal ──
+        help_titel: 'Wie funktioniert die Coach-Ansicht?',
+        help_h_start: 'Erste Schritte',
+        help_stap1_html: 'Wähle dein <b>Rennen</b> oben.',
+        help_stap2_html: 'Skater auf drei Arten zu deiner Coach-Liste hinzufügen: <ul style="margin:4px 0 0 18px"><li><b>Nach Verein</b> — wähle einen Verein und alle dessen Skater erscheinen in deiner Liste.</li><li><b>Nach Sponsor</b> — gleiches nach Sponsorname.</li><li><b>Nach Startnummer</b> — gib eine Nummer ein und drücke Hinzufügen (oder Enter).</li></ul>',
+        help_stap3_html: 'Durchstöbere die Tabs: <b>📋 Programm</b>, <b>🏃 Heats</b>, <b>⚠️ Strafen</b>, <b>📊 Ergebnisse</b>.',
+        help_h_prog: 'Programm',
+        help_p_prog_html: 'Zeigt alle Rennen der Veranstaltung. Rennen mit mindestens einem deiner Skater sind <b>gelb markiert</b> mit einem Streifen ihrer Startnummern rechts. Tippe auf ein Rennen für die vollständige Startliste — deine Skater sind dort wieder gelb markiert.',
+        help_h_sanc: 'Strafen',
+        help_p_sanc1: 'Für jeden Skater in deiner Liste eine Karte mit:',
+        help_p_sanc_lijst_html: '<li><b>Status-Badge</b> (Bestätigt / Nicht angemeldet / Zurückgezogen / …)</li><li>Alle <b>Strafen</b> registriert in Heats (W1, W2, FS, DQ-SF, DNF, …)</li>',
+        help_p_sanc2_html: 'Achte auf <b>🚨 Nicht angemeldet</b> — dann muss der Skater schnell selbst zum Juryschalter (nicht du als Coach, nicht die Eltern, nur der Skater).',
+        help_h_uitsl: 'Ergebnisse',
+        help_p_uitsl: 'Wähle eine Kategorie + Distanz für das vollständige Ergebnis, oder schau dir das Klassement an. Auch hier sind deine eigenen Skater gelb markiert.',
+        help_h_auto: 'Automatisch aktualisiert',
+        help_p_auto_html: 'Die Seite aktualisiert sich jede Minute, solange der Tab sichtbar ist. Die Zeit der letzten Aktualisierung wird oben rechts angezeigt (<b>🔄 HH:MM</b>). Sofort aktualisieren funktioniert auch: ziehe die Seite <b>nach unten</b> (pull-to-refresh) oder doppelklicke auf den blauen Header.',
+        help_h_meld: 'Mitteilungen',
+        help_p_meld_html: 'Oben erscheint ein <b>📢-Button</b> sobald eine aktive Mitteilung der Organisation vorliegt. Wichtige Mitteilungen erscheinen automatisch und bleiben danach über diesen Button zugänglich.',
+        help_h_priv: 'Datenschutz',
+        help_p_priv: 'Deine Coach-Liste wird nur lokal auf deinem Telefon gespeichert (localStorage). Niemand sonst sieht, wer auf deiner Liste steht.',
+    },
+    fr: {
+        // ── Document ──
+        page_title: 'InlineComp – Coach',
+        // ── Header / static ──
+        ptr_trek: '↓ Tirer plus pour actualiser',
+        hdr_meldingen_title: 'Annonces pour cette course',
+        hdr_info_title: 'À propos d\'InlineComp',
+        hdr_help_title: 'Comment ça marche?',
+        hdr_titel: 'InlineComp – Coach',
+        hdr_sub: 'Suivez vos skateurs: programme, sanctions et résultats',
+        pwa_installeer_titel: 'Installer InlineComp Coach',
+        pwa_installeer_uitleg: 'Ajouter à l\'écran d\'accueil pour un accès rapide',
+        pwa_btn_install: 'Installer',
+        pwa_btn_sluit: 'Fermer',
+        // ── Stap-labels en sub-koppen ──
+        stap1_label: 'Choisissez votre course',
+        stap2_label: 'Ajoutez des skateurs à votre liste de coach',
+        sub_op_club: 'Par club',
+        sub_op_sponsor: 'Par sponsor',
+        sub_op_snr_naam: 'Par numéro de départ, nom ou licence',
+        sub_meerdere: '— plusieurs à la fois possible',
+        ph_snr_naam_lic: 'Numéro de départ, nom (≥2 lettres) ou n° licence…',
+        // ── Filters ──
+        filter_eerder: 'Avant',
+        filter_eerder_title: 'Courses précédentes',
+        filter_vandaag: 'Aujourd\'hui',
+        filter_later: 'Plus tard',
+        filter_later_title: 'Courses à venir',
+        // ── Comps select ──
+        opt_kies_filter: '— Sélectionnez au moins un filtre ci-dessus —',
+        opt_kies_wedstrijd: '— choisir une course —',
+        opt_binnenkort: '(bientôt)',
+        opt_fout_laden: 'Échec du chargement',
+        // ── Multi-select (club + sponsor) ──
+        multi_kies_wedstrijd_eerst: '— choisir d\'abord une course —',
+        multi_kies_club: '— choisir club(s) —',
+        multi_kies_sponsor: '— choisir sponsor(s) —',
+        multi_geen_clubs: '— pas de clubs dans cette course —',
+        multi_geen_sponsors: '— pas de sponsors dans cette course —',
+        multi_geen_clubs_panel: 'Pas de clubs dans cette course.',
+        multi_geen_sponsors_panel: 'Pas de sponsors dans cette course.',
+        multi_club_gekozen_single: '{n} club sélectionné — cliquez Ajouter',
+        multi_club_gekozen_plural: '{n} clubs sélectionnés — cliquez Ajouter',
+        multi_sponsor_gekozen_single: '{n} sponsor sélectionné — cliquez Ajouter',
+        multi_sponsor_gekozen_plural: '{n} sponsors sélectionnés — cliquez Ajouter',
+        multi_geselecteerd: '{n} sélectionné(s)',
+        multi_chip_klik_verwijder: 'Cliquer pour supprimer',
+        btn_alle_aan: 'Tout cocher',
+        btn_niets_aan: 'Tout décocher',
+        btn_klaar: 'Terminé',
+        btn_toevoegen: 'Ajouter',
+        btn_wis_alles: 'Tout effacer',
+        // ── Coach-lijst ──
+        coach_aantal_single: '{n} skateur sélectionné',
+        coach_aantal_plural: '{n} skateurs sélectionnés',
+        coach_leeg: 'Personne sélectionné pour l\'instant — utilisez les sélecteurs ci-dessus.',
+        // ── Tabs ──
+        tab_programma: '📋 Programme',
+        tab_heats: '🏃 Heats',
+        tab_sancties: '⚠️ Sanctions',
+        tab_uitslagen: '📊 Résultats',
+        // ── Uitslagen-tab dropdowns ──
+        uitsl_opt_kies_cat: '— choisir catégorie —',
+        uitsl_opt_kies_afstand: '— choisir distance —',
+        uitsl_opt_kies_afstand_of_klassement: '— choisir distance ou classement —',
+        uitsl_opt_geen_uitslagen: '(pas encore de résultats)',
+        uitsl_klassement_opt: '🏆 Classement',
+        uitsl_opt_laden: 'Chargement…',
+        uitsl_opt_afstand_fallback: 'Distance',
+        // ── Status-labels ──
+        status_0: 'Non confirmé',
+        status_1: 'Confirmé',
+        status_2: 'Retiré',
+        status_3: 'Retiré à l\'inscription',
+        status_4: 'Non enregistré',
+        status_5: 'Confirmé à l\'inscription',
+        status_label: 'Statut',
+        // ── Sanctie-codes uitleg ──
+        sanc_W1: '1er avertissement',
+        sanc_W2: '2e avertissement',
+        sanc_FS: 'Faux départ',
+        sanc_RR: 'Rétrogradation',
+        sanc_DQ_TF: 'Disqualification — faute technique',
+        sanc_DQ_SF: 'Disqualification — faute sportive',
+        sanc_DQ_DF: 'Disqualification — faute disciplinaire',
+        sanc_DNS: 'N\'a pas pris le départ',
+        sanc_DNF: 'N\'a pas terminé',
+        // ── Rondes (badges) ──
+        ronde_serie: 'Série',
+        ronde_kf: 'QF',
+        ronde_hf: 'DF',
+        ronde_finale: 'Finale',
+        ronde_b_finale: 'Finale B',
+        ronde_runner_up: 'Repêchage',
+        // ── Programma-blok labels ──
+        prog_blok_pauze: 'Pause',
+        prog_blok_inrijden: 'Échauffement',
+        prog_blok_wedstrijdstart: 'Début de course',
+        prog_blok_ceremonie: 'Cérémonie',
+        prog_blok_herstart: 'Redémarrage',
+        prog_blok_min: 'min',
+        prog_combi_kop: '🔗 Course combinée — ensemble',
+        prog_laden: 'Chargement du programme…',
+        prog_geen: 'Pas encore de programme connu.',
+        prog_geen_startlijst: 'pas encore de liste de départ',
+        prog_startlijst_nb: 'La liste de départ n\'est pas encore disponible.',
+        // ── Heats-tab ──
+        heats_geen_rijders: 'Pas encore de skateurs dans votre liste.',
+        heats_geen_inschrijvingen: 'Le skateur n\'a pas d\'inscriptions à cette course.',
+        heats_cat_fallback: '(catégorie)',
+        heats_afstand_fallback: '(distance)',
+        heats_niet_geloot_geen_heats: '⏳ Tirage pas encore effectué — pas de heats disponibles',
+        heats_geen_programma: '⏳ Pas encore de programme pour cette catégorie',
+        heats_vorige_niet_compleet: '⏳ Tour précédent pas encore complet',
+        heats_niet_geplaatst: 'non classé',
+        heats_niet_geloot: '⏳ Tirage pas encore effectué',
+        heats_heat: 'Heat',
+        heats_startpos: 'pos départ {pos}',
+        // ── Sancties-tab ──
+        sanc_geen_rijders: 'Pas encore de skateurs dans votre liste.',
+        sanc_geen: 'Aucune sanction.',
+        // ── Uitslagen ──
+        uit_leeg: 'Aucun résultat confirmé pour cette course.',
+        uit_geen_uitslagen: 'Aucun résultat disponible.',
+        uit_geen_klassement: 'Aucun classement disponible.',
+        uit_laden: 'Chargement…',
+        uit_fout: 'Erreur: {msg}',
+        // ── Tabel-headers ──
+        col_pos: '#',
+        col_snr: 'N°',
+        col_naam: 'Nom',
+        col_rnd: 'T',
+        col_pnt: 'Pts',
+        col_tijd: 'Temps',
+        col_fin: 'Fin',
+        col_rang: '#',
+        col_tot: 'Tot',
+        // ── Bevestig-modal ──
+        bev_titel: 'Confirmer',
+        bev_ok: 'OK',
+        bev_annuleer: 'Annuler',
+        // Rijder verwijderen
+        bev_verwijder_titel: 'Supprimer le skateur?',
+        bev_verwijder_tekst: 'Voulez-vous supprimer <b>{naam}</b> ({snr}) de votre liste de coach?',
+        bev_verwijder_ok: 'Oui, supprimer',
+        bev_verwijder_snr_fallback: 'N° départ {snr}',
+        // Wis alles
+        bev_wis_titel: 'Effacer la liste de coach?',
+        bev_wis_tekst_single: 'Vous allez supprimer <b>tous les {n} skateurs</b> de votre liste de coach.<br><br>Ceci ne peut pas être annulé.',
+        bev_wis_tekst_plural: 'Vous allez supprimer <b>tous les {n} skateurs</b> de votre liste de coach.<br><br>Ceci ne peut pas être annulé.',
+        bev_wis_ok: 'Oui, tout effacer',
+        // ── Naam-zoek modal ──
+        nz_matches_voor: '{n} résultats pour {label}',
+        nz_sluit: 'Fermer',
+        nz_al_in_lijst: 'déjà dans la liste',
+        nz_vink_aan: 'Cochez qui vous voulez ajouter',
+        nz_toevoegen: 'Ajouter',
+        // ── Toevoeg-flow feedback ──
+        fb_kies_iets: 'Choisissez un club, sponsor, ou entrez un numéro de départ / nom / licence.',
+        fb_server_druk: 'Serveur temporairement occupé — réessayez dans 5 secondes',
+        fb_server_fout: 'Erreur serveur ({status})',
+        fb_netwerk_fout: 'Erreur réseau lors du chargement des skateurs',
+        fb_rijders_van_single: '{aantal} skateur(s) de {stukken}',
+        fb_rijders_van_geen: '{stukken}: pas de nouveaux skateurs',
+        fb_clubs_single: '{n} club',
+        fb_clubs_plural: '{n} clubs',
+        fb_sponsors_single: '{n} sponsor',
+        fb_sponsors_plural: '{n} sponsors',
+        fb_toegevoegd: 'Ajouté: {lijst}',
+        fb_label_snr: 'Numéro de départ {term}',
+        fb_label_licentie: 'Licence {term}',
+        fb_label_naam: 'Nom « {term} »',
+        fb_lookup_mislukt: '{label}: recherche échouée ({msg})',
+        fb_label_error: '{label}: {error}',
+        fb_label_niet_gevonden: '{label} non trouvé dans cette course',
+        fb_stond_al_in_lijst: '{naam}: déjà dans la liste',
+        fb_naam_snr: '{naam} (n° {snr})',
+        // ── Connection banner ──
+        conn_geen_internet: '📡 Pas d\'internet — rafraîchira au retour de la connexion',
+        conn_server_down: '⚠ Serveur injoignable — nouvelle tentative…',
+        conn_laatste_update: 'dernière mise à jour {tijd}',
+        // ── PTR ──
+        ptr_laat_los: '↑ Relâcher pour actualiser',
+        ptr_vernieuwen: '⟳ Actualisation…',
+        ptr_bijgewerkt: '✓ Actualisé',
+        ptr_fout: '⚠ Erreur d\'actualisation',
+        ptr_wachten: '⏳ Veuillez patienter ({s}s)',
+        // ── Auto-refresh ──
+        auto_refresh_title: 'Heure de la dernière actualisation automatique',
+        // ── Mededelingen ──
+        meld_kop: '📢 Annonces',
+        meld_tot: ' jusqu\'à ',
+        meld_begrepen: '✓ Compris',
+        // ── Info modal ──
+        info_titel: 'À propos d\'InlineComp Coach',
+        info_h_wat: 'Qu\'est-ce que c\'est?',
+        info_p_wat1_html: 'La <b>vue Coach</b> est un tableau de bord pour entraîneurs: vous créez une liste personnelle de skateurs par course et voyez d\'un coup d\'œil leur programme, statut, sanctions et résultats.',
+        info_p_wat2: 'Vous pouvez ajouter toute une équipe de club à la fois, sélectionner des skateurs par sponsor, ou ajouter des numéros de départ individuels. Votre liste est stockée localement sur votre téléphone (par course) — un rafraîchissement ou retour à la page la conserve.',
+        info_h_login: 'Pas de connexion nécessaire',
+        info_p_login_html: 'Toutes les données affichées ici sont publiques (comme sur <a href="../public/">/public</a>). Vous utilisez simplement votre navigateur — rien à installer.',
+        info_h_tip: 'Astuce: ajouter à l\'écran d\'accueil',
+        info_p_tip: 'Sur votre téléphone: ouvrez cette page dans Safari/Chrome → menu → « Ajouter à l\'écran d\'accueil ». Elle s\'ouvre alors comme une app et vous l\'avez à portée de main au bord de la piste.',
+        info_h_dev: 'En développement',
+        info_p_dev: 'Cette vue Coach est en développement actif. Vos retours sont les bienvenus!',
+        info_h_contact_html: 'Contact &amp; retour',
+        info_p_contact: 'Une question, suggestion ou bug trouvé? Faites-le nous savoir:',
+        info_h_stats: 'Statistiques de visite anonymes',
+        info_p_stats_html: 'Nous comptons anonymement les visiteurs, sessions actives et pics d\'utilisateurs simultanés — uniquement pour voir combien l\'app est utilisée et pour maintenir l\'hébergement stable. <b>Aucune adresse IP ni donnée personnelle</b> n\'est stockée et <b>aucun tiers</b> n\'est impliqué.',
+        info_copyright: 'InlineComp &copy; {jaar} Geert de Vries',
+        // ── Help modal ──
+        help_titel: 'Comment fonctionne la vue Coach?',
+        help_h_start: 'Pour commencer',
+        help_stap1_html: 'Choisissez votre <b>course</b> en haut.',
+        help_stap2_html: 'Ajoutez des skateurs à votre liste de coach de trois manières: <ul style="margin:4px 0 0 18px"><li><b>Par club</b> — sélectionnez un club et tous ses skateurs apparaissent dans votre liste.</li><li><b>Par sponsor</b> — pareil par nom de sponsor.</li><li><b>Par numéro de départ</b> — tapez un numéro et appuyez sur Ajouter (ou Entrée).</li></ul>',
+        help_stap3_html: 'Parcourez les onglets: <b>📋 Programme</b>, <b>🏃 Heats</b>, <b>⚠️ Sanctions</b>, <b>📊 Résultats</b>.',
+        help_h_prog: 'Programme',
+        help_p_prog_html: 'Affiche toutes les courses de l\'événement. Les courses contenant au moins un de vos skateurs sont <b>surlignées en jaune</b> avec une bande de leurs numéros de départ à droite. Appuyez sur une course pour voir la liste de départ complète — vos skateurs y sont à nouveau surlignés en jaune.',
+        help_h_sanc: 'Sanctions',
+        help_p_sanc1: 'Pour chaque skateur de votre liste une carte avec:',
+        help_p_sanc_lijst_html: '<li><b>Badge de statut</b> (Confirmé / Non enregistré / Retiré / …)</li><li>Toutes les <b>sanctions</b> enregistrées en heats (W1, W2, FS, DQ-SF, DNF, …)</li>',
+        help_p_sanc2_html: 'Attention à <b>🚨 Non enregistré</b> — alors le skateur doit vite aller lui-même au bureau du jury (pas vous comme coach, pas les parents, seulement le skateur).',
+        help_h_uitsl: 'Résultats',
+        help_p_uitsl: 'Choisissez une catégorie + distance pour voir le résultat complet, ou consultez le classement. Là aussi vos propres skateurs sont surlignés en jaune.',
+        help_h_auto: 'Mis à jour automatiquement',
+        help_p_auto_html: 'La page se rafraîchit chaque minute tant que l\'onglet est visible. L\'heure de la dernière actualisation est affichée en haut à droite (<b>🔄 HH:MM</b>). Actualiser immédiatement fonctionne aussi: tirez la page <b>vers le bas</b> (pull-to-refresh) ou double-cliquez sur l\'en-tête bleu.',
+        help_h_meld: 'Annonces',
+        help_p_meld_html: 'En haut un <b>bouton 📢</b> apparaît dès qu\'il y a une annonce active de l\'organisation. Les annonces importantes apparaissent automatiquement et restent ensuite accessibles via ce bouton.',
+        help_h_priv: 'Confidentialité',
+        help_p_priv: 'Votre liste de coach est uniquement stockée localement sur votre téléphone (localStorage). Personne d\'autre ne voit qui est sur votre liste.',
+    }
+};
+
+// Shared i18n-helpers (t, applyI18n, toggleLang, getCurLang, getLocale)
+// zijn hierboven al ingeladen via readfile(js/i18n.js). Hier alleen
+// app-specifieke init + rerender-hook.
+function _rerenderCoach() {
+    // Comp-dropdown opnieuw vullen (textContent met "(binnenkort)" suffix etc.)
+    if (typeof filterComps === 'function' && alleComps?.length) filterComps();
+    // Connection banner updaten met vertaalde tekst
+    if (typeof _connUpdateBanner === 'function') _connUpdateBanner();
+    // Multi-select labels en chips opnieuw renderen met vertaalde teksten
+    if (typeof updateClubLabel === 'function')    updateClubLabel();
+    if (typeof updateSponsorLabel === 'function') updateSponsorLabel();
+    if (typeof renderSponsorMultiSelect === 'function') renderSponsorMultiSelect();
+    if (typeof renderClubMultiSelect === 'function')    renderClubMultiSelect();
+    // Coach-lijst chips + alle 3 tabs opnieuw
+    if (typeof renderChips === 'function')      renderChips();
+    if (typeof renderProgramma === 'function')  renderProgramma();
+    if (typeof renderSancties === 'function')   renderSancties();
+    if (typeof renderHeats === 'function')      renderHeats();
+    // Uitslagen-tab: cats + actieve afstand
+    if (typeof opCatChange === 'function' && document.getElementById('u-sel-cat')?.value) {
+        opCatChange();
+        if (document.getElementById('u-sel-afstand')?.value && typeof opAfstandChange === 'function') {
+            opAfstandChange();
+        }
+    } else {
+        // Lege cat-dropdown placeholder herstellen
+        const c = document.getElementById('u-sel-cat');
+        if (c && !c.value && c.options.length === 1) {
+            c.options[0].textContent = t('uitsl_opt_kies_cat');
+        }
+    }
+    // Auto-refresh stempel title
+    document.querySelectorAll('.auto-refresh-stempel').forEach(el => {
+        el.title = t('auto_refresh_title');
+    });
+}
+
+document.addEventListener('DOMContentLoaded', () => {
+    initI18n({ dict: T, onChange: _rerenderCoach });
+});
+
 const $ = id => document.getElementById(id);
 const selComp = $('sel-comp');
 // Multi-select state voor zowel sponsors als clubs.
@@ -1778,6 +2942,18 @@ const _sponsorSel = new Set();
 let _clubAlle = [];
 const _clubSel = new Set();
 const inpSnr = $('inp-snr'), btnToevoegen = $('btn-toevoegen');
+
+// Bepaal welke search-modus we gebruiken op basis van de input-string.
+// 1-op-1 overgenomen uit /public/_zoekModus zodat coach + public hetzelfde
+// gedrag hebben:
+//   - alleen cijfers, ≤4 tekens  → startnummer
+//   - alleen cijfers, ≥5 tekens  → licentienummer (KNSB ~7-8 cijfers)
+//   - bevat letters              → naam-zoek
+function _coachZoekModus(tekst) {
+    const t = tekst.trim();
+    if (/^\d+$/.test(t)) return t.length <= 4 ? 'snr' : 'license';
+    return 'naam';
+}
 const secSel = $('sectie-selectie'), secLijst = $('sectie-lijst'), secProg = $('sectie-programma');
 const chipsEl = $('coach-chips'), aantalEl = $('coach-aantal');
 const progEl = $('programma'), snrFb = $('snr-feedback');
@@ -1787,20 +2963,33 @@ let programmaCache = null; // {ritten, blokken}
 let coachInfoCache = {}; // license_key → {entry_status, sancties:[]}
 let alleComps = []; // ruwe lijst uit /?action=competitions — gebruikt door filterComps()
 
-const STATUS_LABEL = ['Niet bevestigd','Bevestigd','Afgemeld','Afgem. bij org.','Niet getekend','Bev. bij org.'];
-const STATUS_ICON  = ['⚠',          '✓',        '✗',       '✗',              '🚨',         '✓'];
+// Status-label: idx 0-5 → vertaalde tekst. Helper functie zodat de label
+// dynamisch volgt op een taal-wissel zonder dat we de constanten herbouwen.
+const STATUS_ICON  = ['⚠','✓','✗','✗','🚨','✓'];
 // Status die voor een coach direct actie vereist (rood-alarm in de UI):
 const STATUS_ALARM = new Set([0, 4]); // niet bevestigd + niet getekend
-const SANCTIE_UITLEG = {
-    'W1':'1e waarschuwing','W2':'2e waarschuwing','FS':'Valse start','RR':'Rank reduction',
-    'DQ-TF':'Diskwalificatie technische fout','DQ-SF':'Diskwalificatie sport fout',
-    'DQ-DF':'Diskwalificatie disciplinaire fout','DNS':'Niet gestart','DNF':'Niet gefinisht',
-};
+function getStatusLabel(i) {
+    const idx = Number(i);
+    return (idx >= 0 && idx <= 5) ? t('status_' + idx) : '';
+}
+// Sanctie-uitleg: codes met '-' worden in T met '_' opgeslagen (DQ-TF →
+// sanc_DQ_TF) zodat JS-keys geldig blijven en consistent gegroepeerd zijn.
+const SANCTIE_CODES = ['W1','W2','FS','RR','DQ-TF','DQ-SF','DQ-DF','DNS','DNF'];
+function getSanctieUitleg(code) {
+    if (!SANCTIE_CODES.includes(code)) return '';
+    return t('sanc_' + code.replace(/-/g, '_'));
+}
 
 const BADGE = { heats:'badge-serie', kwartfinale:'badge-kf', halve_finale:'badge-hf',
                 finale_a:'badge-finale', finale_b:'badge-finale', runner_up:'badge-ru' };
-const RLABEL = { heats:'Serie', kwartfinale:'KF', halve_finale:'HF',
-                 finale_a:'Finale', finale_b:'B-Finale', runner_up:'Runner-up' };
+// Ronde-labels worden runtime vertaald via getRondeLabel(rt) (idem als /public).
+function getRondeLabel(rt) {
+    const map = {
+        heats: 'ronde_serie', kwartfinale: 'ronde_kf', halve_finale: 'ronde_hf',
+        finale_a: 'ronde_finale', finale_b: 'ronde_b_finale', runner_up: 'ronde_runner_up',
+    };
+    return map[rt] ? t(map[rt]) : (rt || '');
+}
 
 function esc(s) { return String(s??'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
 function safeDatum(s) { return s ? new Date(String(s).replace(' ','T')) : null; }
@@ -1812,7 +3001,10 @@ function msTijd(ms) {
 }
 // ── In-app bevestiging (vervangt native confirm) ─────────────────────────────
 // Gebruik: const ok = await bevestig({ titel, tekst, bevestigLabel, annuleerLabel });
-function bevestig({ titel = 'Bevestigen', tekst = '', bevestigLabel = 'OK', annuleerLabel = 'Annuleren' } = {}) {
+function bevestig({ titel, tekst = '', bevestigLabel, annuleerLabel } = {}) {
+    titel         = titel         ?? t('bev_titel');
+    bevestigLabel = bevestigLabel ?? t('bev_ok');
+    annuleerLabel = annuleerLabel ?? t('bev_annuleer');
     return new Promise(resolve => {
         const overlay = document.createElement('div');
         overlay.className = 'help-overlay';
@@ -1869,14 +3061,17 @@ function _connUpdateBanner() {
     const el = _connBannerEl();
     let bericht = '';
     if (!_conn.online) {
-        bericht = '📡 Geen internet — ververst zodra de verbinding terug is';
+        bericht = t('conn_geen_internet');
     } else if (!_conn.serverOk) {
-        bericht = '⚠ Server niet bereikbaar — opnieuw proberen…';
+        bericht = t('conn_server_down');
     }
     if (bericht) {
-        const tijd = _conn.lastSuccess
-            ? ` <small>(laatste update ${_conn.lastSuccess.toLocaleTimeString('nl-NL', {hour:'2-digit', minute:'2-digit'})})</small>`
+        const tijdStr = _conn.lastSuccess
+            ? _conn.lastSuccess.toLocaleTimeString(
+                  (typeof getLocale === 'function' ? getLocale() : 'nl-NL'),
+                  {hour:'2-digit', minute:'2-digit'})
             : '';
+        const tijd = tijdStr ? ` <small>(${t('conn_laatste_update', {tijd: tijdStr})})</small>` : '';
         el.innerHTML = bericht + tijd;
         el.style.display = '';
     } else {
@@ -1971,11 +3166,12 @@ function loadCoachLijst() {
 }
 
 function voegToeAanLijst(persoon) {
-    if (!persoon || !persoon.snr) return false;
-    const snr = parseInt(persoon.snr);
-    if (coachLijst.some(p => parseInt(p.snr) === snr)) return false; // al aanwezig
+    if (!persoon || !persoon.license_key) return false;
+    // Dedup op license_key (uniek per persoon). Eerder op snr → bug bij
+    // twee rijders met hetzelfde startnummer: de tweede werd geweigerd.
+    if (coachLijst.some(p => p.license_key === persoon.license_key)) return false;
     coachLijst.push({
-        snr: snr,
+        snr: persoon.snr != null ? parseInt(persoon.snr) : null,
         license_key: persoon.license_key,
         full_name: persoon.full_name,
         category: persoon.category || '',
@@ -1985,16 +3181,17 @@ function voegToeAanLijst(persoon) {
     return true;
 }
 
-function verwijderUitLijst(snr) {
-    snr = parseInt(snr);
-    coachLijst = coachLijst.filter(p => parseInt(p.snr) !== snr);
+function verwijderUitLijst(licenseKey) {
+    // Filter op license_key (uniek). Eerder op snr → bug bij twee
+    // rijders met hetzelfde nummer (beiden tegelijk verwijderd).
+    coachLijst = coachLijst.filter(p => p.license_key !== licenseKey);
 }
 
 // ── UI-render ────────────────────────────────────────────────────────────────
 function renderChips() {
-    aantalEl.textContent = `${coachLijst.length} ${coachLijst.length === 1 ? 'rijder' : 'rijders'} geselecteerd`;
+    aantalEl.textContent = t(coachLijst.length === 1 ? 'coach_aantal_single' : 'coach_aantal_plural', {n: coachLijst.length});
     if (coachLijst.length === 0) {
-        chipsEl.innerHTML = '<span style="color:#888;font-size:.85rem">Nog niemand geselecteerd — gebruik de selectors hierboven.</span>';
+        chipsEl.innerHTML = `<span style="color:#888;font-size:.85rem">${t('coach_leeg')}</span>`;
         secLijst.style.display = 'block';
         return;
     }
@@ -2005,26 +3202,29 @@ function renderChips() {
         const st = info ? parseInt(info.entry_status) : 1;
         const alarm = STATUS_ALARM.has(st);
         const icon = alarm ? (STATUS_ICON[st] + ' ') : '';
-        const stLabel = STATUS_LABEL[st] ?? '';
-        return `<span class="chip${alarm ? ' chip-waarschuw' : ''}" title="${esc(p.full_name)} — ${esc(p.club_full)}${p.sponsor ? ' / ' + esc(p.sponsor) : ''}\nStatus: ${esc(stLabel)}">
+        const stLabel = getStatusLabel(st);
+        return `<span class="chip${alarm ? ' chip-waarschuw' : ''}" title="${esc(p.full_name)} — ${esc(p.club_full)}${p.sponsor ? ' / ' + esc(p.sponsor) : ''}\n${t('status_label')}: ${esc(stLabel)}">
             <span class="chip-snr">${esc(p.snr)}</span>
             <span>${icon}${esc(p.full_name)}</span>
-            <span class="x" data-snr="${esc(p.snr)}">×</span>
+            <span class="x" data-lic="${esc(p.license_key)}">×</span>
          </span>`;
     }).join('');
     chipsEl.querySelectorAll('.x').forEach(x => {
         x.onclick = async () => {
-            const snr = parseInt(x.dataset.snr);
-            const persoon = coachLijst.find(p => parseInt(p.snr) === snr);
-            const naam = persoon?.full_name || `Startnr ${snr}`;
+            // Verwijder per persoon (license_key), niet per snr — twee
+            // rijders kunnen hetzelfde startnummer hebben.
+            const lic = x.dataset.lic;
+            const persoon = coachLijst.find(p => p.license_key === lic);
+            if (!persoon) return;
+            const naam = persoon.full_name || t('bev_verwijder_snr_fallback', {snr: persoon.snr});
             const ok = await bevestig({
-                titel: 'Rijder verwijderen?',
-                tekst: `Wil je <b>${esc(naam)}</b> (${esc(snr)}) uit je coach-lijst verwijderen?`,
-                bevestigLabel: 'Ja, verwijder',
-                annuleerLabel: 'Annuleren',
+                titel: t('bev_verwijder_titel'),
+                tekst: t('bev_verwijder_tekst', { naam: esc(naam), snr: esc(persoon.snr) }),
+                bevestigLabel: t('bev_verwijder_ok'),
+                annuleerLabel: t('bev_annuleer'),
             });
             if (!ok) return;
-            verwijderUitLijst(snr);
+            verwijderUitLijst(lic);
             saveCoachLijst();
             renderChips();
             renderProgramma();
@@ -2046,7 +3246,12 @@ async function verversCoachLijstUI() {
 }
 
 function renderProgramma() {
-    if (!programmaCache) { progEl.innerHTML = '<div class="leeg-melding">Programma wordt geladen…</div>'; return; }
+    if (!programmaCache) { progEl.innerHTML = `<div class="leeg-melding">${t('prog_laden')}</div>`; return; }
+    // Match op license_key (uniek per persoon), niet op snr — twee rijders
+    // kunnen hetzelfde startnummer hebben en dan zou snr-only beide heats
+    // valselijk highlighten. mijnSnrs blijft beschikbaar voor wat al snr
+    // gebruikt, maar primaire match is via lic.
+    const mijnLics = new Set(coachLijst.map(p => p.license_key));
     const mijnSnrs = new Set(coachLijst.map(p => parseInt(p.snr)));
     const { ritten, blokken } = programmaCache;
 
@@ -2074,7 +3279,7 @@ function renderProgramma() {
     }
 
     if (!allesGesorteerd.length) {
-        progEl.innerHTML = '<div class="leeg-melding">Nog geen programma bekend.</div>';
+        progEl.innerHTML = `<div class="leeg-melding">${t('prog_geen')}</div>`;
         return;
     }
 
@@ -2091,20 +3296,21 @@ function renderProgramma() {
     // de admin-tijdschema rendering zodat coach hetzelfde ziet als wat in
     // het programma is geconfigureerd.
     const blokHtml = b => {
-        const t = (b.blok_type || '').toLowerCase();
+        // Lokaal bt (block type) ipv t om global t() niet te shadowen.
+        const bt = (b.blok_type || '').toLowerCase();
         const tijd = hhmm(b.tijdstip);
         const tijdPrefix = tijd ? `<span class="blok-tijd">🕓 ${esc(tijd)}</span>` : '';
-        const duur = b.duur ? `<span class="blok-duur">${b.duur} min</span>` : '';
+        const duur = b.duur ? `<span class="blok-duur">${b.duur} ${t('prog_blok_min')}</span>` : '';
         const opm  = b.opmerking ? `<span class="blok-opm"> — ${esc(b.opmerking)}</span>` : '';
         const cats = b.inrijd_cat_namen ? `<div class="blok-cats">${esc(b.inrijd_cat_namen)}</div>` : '';
         let icoon, lbl;
-        if      (t === 'pauze')          { icoon = '⏸'; lbl = 'Pauze'; }
-        else if (t === 'inrijden')       { icoon = '🛼'; lbl = 'Inrijden'; }
-        else if (t === 'wedstrijdstart') { icoon = '🏁'; lbl = 'Wedstrijd start'; }
-        else if (t === 'ceremonie')      { icoon = '🏆'; lbl = 'Ceremonie'; }
-        else if (t === 'herstart')       { icoon = '🔄'; lbl = 'Herstart'; }
-        else                              { icoon = '🕓'; lbl = (b.blok_type || '').toUpperCase(); }
-        return `<div class="blok-rij blok-${esc(t)}">
+        if      (bt === 'pauze')          { icoon = '⏸'; lbl = t('prog_blok_pauze'); }
+        else if (bt === 'inrijden')       { icoon = '🛼'; lbl = t('prog_blok_inrijden'); }
+        else if (bt === 'wedstrijdstart') { icoon = '🏁'; lbl = t('prog_blok_wedstrijdstart'); }
+        else if (bt === 'ceremonie')      { icoon = '🏆'; lbl = t('prog_blok_ceremonie'); }
+        else if (bt === 'herstart')       { icoon = '🔄'; lbl = t('prog_blok_herstart'); }
+        else                               { icoon = '🕓'; lbl = (b.blok_type || '').toUpperCase(); }
+        return `<div class="blok-rij blok-${esc(bt)}">
             <div class="blok-rij-top">
                 ${tijdPrefix}
                 <span class="blok-titel">${icoon} ${esc(lbl)}</span>
@@ -2116,11 +3322,18 @@ function renderProgramma() {
     };
 
     const ritHtml = r => {
-        const heatSnrs = (r.heat_snrs || []).map(n => parseInt(n));
-        const mijnInHeat = heatSnrs.filter(n => mijnSnrs.has(n)).sort((a,b) => a-b);
+        // Per heat-rijder paar {snr, lic} — match op license zodat we niet
+        // valselijk een heat met "snr=166 (andere persoon)" highlighten.
+        // Fallback op heat_snrs-only voor oude cached payloads.
+        const heatRijders = Array.isArray(r.heat_rijders) ? r.heat_rijders
+                          : (r.heat_snrs || []).map(n => ({snr: parseInt(n), lic: null}));
+        const mijnInHeat = heatRijders
+            .filter(hr => hr.lic ? mijnLics.has(hr.lic) : mijnSnrs.has(hr.snr))
+            .map(hr => hr.snr)
+            .sort((a,b) => a-b);
         const leeg = !r.heat_id || (r.entries_count ?? 0) === 0;
         const rondeBadge = r.ronde_type && BADGE[r.ronde_type]
-            ? `<span class="badge ${BADGE[r.ronde_type]}">${RLABEL[r.ronde_type] || r.ronde_type}</span>` : '';
+            ? `<span class="badge ${BADGE[r.ronde_type]}">${getRondeLabel(r.ronde_type)}</span>` : '';
         const mijnStrip = mijnInHeat.length
             ? `<div class="heat-mijn-snrs">${mijnInHeat.map(n => `<span class="m-snr">${n}</span>`).join('')}</div>`
             : '';
@@ -2141,7 +3354,7 @@ function renderProgramma() {
                 <div class="heat-status">${statusIcon}</div>
                 <div class="heat-info">
                     <div class="heat-naam">${rondeBadge}${esc(r.rit_naam)}</div>
-                    <div class="heat-sub">${esc(r.dc_naam ?? '')}${leeg ? ' · nog geen startlijst' : ''}</div>
+                    <div class="heat-sub">${esc(r.dc_naam ?? '')}${leeg ? ' · ' + t('prog_geen_startlijst') : ''}</div>
                     ${opmHtml}
                 </div>
             </div>
@@ -2165,7 +3378,7 @@ function renderProgramma() {
             if (vorigeCombi !== null) html += `</div></div>`; // sluit vorige combi-box
             if (combi !== null) {
                 html += `<div class="prog-combi-box">
-                    <div class="prog-combi-kop">🔗 Gecombineerde rit — rijden tegelijk</div>
+                    <div class="prog-combi-kop">${t('prog_combi_kop')}</div>
                     <div class="prog-combi-leden">`;
             }
             vorigeCombi = combi;
@@ -2199,7 +3412,7 @@ const RONDE_VOLGORDE = ['heats','kwartfinale','halve_finale','runner_up','finale
 function renderHeats() {
     const el = $('heats');
     if (!coachLijst.length) {
-        el.innerHTML = '<div class="leeg-melding">Nog geen rijders in je lijst.</div>';
+        el.innerHTML = `<div class="leeg-melding">${t('heats_geen_rijders')}</div>`;
         return;
     }
     // Groepeer alle programma-ritten per DC om per DC te weten welke rondes er
@@ -2224,7 +3437,7 @@ function renderHeats() {
                 <span style="flex:1">${esc(p.full_name)}</span>
                 <span style="color:#888;font-size:.8rem">${esc(p.category || '')}</span>
             </div>
-            <div class="sanc-leeg">Laden…</div>
+            <div class="sanc-leeg">${t('uit_laden')}</div>
         </div>`;
 
         if (!entries.length) return `<div class="sanc-persoon">
@@ -2233,7 +3446,7 @@ function renderHeats() {
                 <span style="flex:1">${esc(p.full_name)}</span>
                 <span style="color:#888;font-size:.8rem">${esc(p.category || '')}</span>
             </div>
-            <div class="sanc-leeg">Rijder heeft geen inschrijvingen in deze wedstrijd.</div>
+            <div class="sanc-leeg">${t('heats_geen_inschrijvingen')}</div>
         </div>`;
 
         // Bouw een lijst met één blok per (DC × afstand). De afstanden komen
@@ -2296,8 +3509,8 @@ function renderHeats() {
         const dcBlokken = afstandBlokken.map(blok => {
             // Kop-tekst: "DJB — 500m" als er een afstand-naam is, anders alleen DC-naam
             const kop = blok.distance_naam
-                ? `${esc(blok.dc_naam || '(categorie)')} — ${esc(blok.distance_naam)}`
-                : esc(blok.dc_naam || '(categorie)');
+                ? `${esc(blok.dc_naam || t('heats_cat_fallback'))} — ${esc(blok.distance_naam)}`
+                : esc(blok.dc_naam || t('heats_cat_fallback'));
 
             // Groepeer ritten per ronde_type binnen deze afstand
             const rondes = {};
@@ -2320,8 +3533,8 @@ function renderHeats() {
                 // Afstand bestaat wel maar cat_config heeft géén rondes én er zijn
                 // geen ritten — dan tonen we één wacht-regel.
                 const tekst = blok.distance_naam
-                    ? '⏳ Nog niet geloot — geen heats beschikbaar'
-                    : '⏳ Nog geen programma voor deze categorie';
+                    ? t('heats_niet_geloot_geen_heats')
+                    : t('heats_geen_programma');
                 return `<div class="heat-toon-dc heat-toon-wachten">
                     <div class="heat-toon-dc-kop">${kop}</div>
                     <div class="heat-toon-rij heat-toon-wacht-rij">${tekst}</div>
@@ -2330,7 +3543,7 @@ function renderHeats() {
             const rijen = sortedRt.map(rt => {
                 const rittenVanRonde = rondes[rt];
                 const badge = BADGE[rt]
-                    ? `<span class="badge ${BADGE[rt]}">${RLABEL[rt] || rt}</span>`
+                    ? `<span class="badge ${BADGE[rt]}">${getRondeLabel(rt)}</span>`
                     : '';
                 // 1) Zit de rijder in een heat van deze ronde ÉN deze afstand?
                 //    We matchen op dc_id (elke rit van deze ronde-groep heeft
@@ -2348,14 +3561,14 @@ function renderHeats() {
                     // terwijl de series nog niet definitief klaar zijn.
                     if (mijn.vorige_niet_compleet) {
                         return `<div class="heat-toon-rij heat-toon-wacht-rij">${badge}
-                            <span>⏳ Vorige ronde nog niet compleet</span>
+                            <span>${t('heats_vorige_niet_compleet')}</span>
                         </div>`;
                     }
                     const rit = rittenVanRonde.find(r => String(r.heat_id) === String(mijn.heat_id));
                     const heatNr = rit?.heat_nr ?? mijn.ronde;
                     return `<div class="heat-toon-rij">${badge}
-                        <span><b>Heat ${esc(heatNr ?? '?')}</b></span>
-                        <small style="color:#666">startpos ${esc(mijn.startpositie)}</small>
+                        <span><b>${t('heats_heat')} ${esc(heatNr ?? '?')}</b></span>
+                        <small style="color:#666">${t('heats_startpos', {pos: esc(mijn.startpositie)})}</small>
                     </div>`;
                 }
                 // 2) Niet geplaatst: drie sub-scenarios
@@ -2363,19 +3576,19 @@ function renderHeats() {
                 const heeftHeats = rittenVanRonde.some(r => r.heat_id);
                 if (definitief) {
                     return `<div class="heat-toon-rij heat-toon-niet-geplaatst">${badge}
-                        <span>niet geplaatst</span>
+                        <span>${t('heats_niet_geplaatst')}</span>
                     </div>`;
                 }
                 if (heeftHeats) {
                     // Heats bestaan maar zijn niet definitief → vorige ronde
                     // is er wel maar nog niet kompleet ingevoerd.
                     return `<div class="heat-toon-rij heat-toon-wacht-rij">${badge}
-                        <span>⏳ Vorige ronde nog niet compleet</span>
+                        <span>${t('heats_vorige_niet_compleet')}</span>
                     </div>`;
                 }
                 // Geen heats voor deze ronde → loting moet nog plaatsvinden.
                 return `<div class="heat-toon-rij heat-toon-wacht-rij">${badge}
-                    <span>⏳ Nog niet geloot</span>
+                    <span>${t('heats_niet_geloot')}</span>
                 </div>`;
             }).join('');
             return `<div class="heat-toon-dc">
@@ -2391,12 +3604,12 @@ function renderHeats() {
         // wat erbij hoort, zonder dat de badge dubbel lijkt.
         const samenvatRijen = entries.map(e => {
             const st      = parseInt(e.entry_status ?? 1);
-            const stLabel = STATUS_LABEL[st] ?? '?';
+            const stLabel = getStatusLabel(st) || '?';
             const stIco   = STATUS_ICON[st] ?? '';
             const afstanden = e.afstanden || [];
             const naam = afstanden.length
-                ? afstanden.map(a => a.distance_naam || '(afstand)').join(' · ')
-                : (e.dc_naam || '(categorie)');
+                ? afstanden.map(a => a.distance_naam || t('heats_afstand_fallback')).join(' · ')
+                : (e.dc_naam || t('heats_cat_fallback'));
             return `
                 <div class="sanc-samenvat-rij">
                     <span class="sanc-samenvat-naam">${esc(naam)}</span>
@@ -2419,7 +3632,7 @@ function renderHeats() {
 function renderSancties() {
     const el = $('sancties');
     if (!coachLijst.length) {
-        el.innerHTML = '<div class="leeg-melding">Nog geen rijders in je lijst.</div>';
+        el.innerHTML = `<div class="leeg-melding">${t('sanc_geen_rijders')}</div>`;
         return;
     }
     const gesorteerd = [...coachLijst].sort((a,b) => parseInt(a.snr) - parseInt(b.snr));
@@ -2431,7 +3644,7 @@ function renderSancties() {
         const sanctieRijen = (info?.sancties || []).map(s => {
             const codes  = String(s.sanctie || '').split(',').map(c => c.trim()).filter(Boolean);
             const badges = codes.map(c => {
-                const uitleg = SANCTIE_UITLEG[c] ?? '';
+                const uitleg = getSanctieUitleg(c);
                 return `<span class="sanc-rij-code" title="${esc(uitleg)}">${esc(c)}</span>`
                     + (uitleg ? ` <small>— ${esc(uitleg)}</small>` : '');
             }).join(' &nbsp; ');
@@ -2447,7 +3660,7 @@ function renderSancties() {
                 <span style="flex:1">${esc(p.full_name)}</span>
                 <span style="color:#888;font-size:.8rem">${esc(p.category || '')}</span>
             </div>
-            ${sanctieRijen || '<div class="sanc-leeg">Geen sancties.</div>'}
+            ${sanctieRijen || `<div class="sanc-leeg">${t('sanc_geen')}</div>`}
         </div>`;
     }).join('');
 }
@@ -2457,21 +3670,21 @@ let uitslagenCats = []; // [{dc_id, dc_naam, afstanden:[{distance_id, distance_n
 
 async function laadUitslagenCategorieen() {
     const sel = $('u-sel-cat');
-    sel.innerHTML = '<option value="">Laden…</option>';
+    sel.innerHTML = `<option value="">${t('uitsl_opt_laden')}</option>`;
     try {
         const res = await safeFetch(`?action=categorieen&competition_id=${encodeURIComponent(selComp.value)}&_t=${Date.now()}`);
         const cats = await res.json();
         uitslagenCats = Array.isArray(cats) ? cats : [];
         if (!uitslagenCats.length) {
-            sel.innerHTML = '<option value="">(nog geen uitslagen beschikbaar)</option>';
-            $('uitslagen').innerHTML = '<div class="leeg-melding">Er zijn nog geen uitslagen bevestigd voor deze wedstrijd.</div>';
+            sel.innerHTML = `<option value="">${t('uitsl_opt_geen_uitslagen')}</option>`;
+            $('uitslagen').innerHTML = `<div class="leeg-melding">${t('uit_leeg')}</div>`;
             $('u-afstand-rij').style.display = 'none';
             return;
         }
-        sel.innerHTML = '<option value="">— kies categorie —</option>' +
+        sel.innerHTML = `<option value="">${t('uitsl_opt_kies_cat')}</option>` +
             uitslagenCats.map(c => `<option value="${esc(c.dc_id)}">${esc(c.dc_naam)}</option>`).join('');
     } catch (e) {
-        sel.innerHTML = `<option value="">Fout: ${esc(e.message)}</option>`;
+        sel.innerHTML = `<option value="">${t('uit_fout', {msg: esc(e.message)})}</option>`;
     }
 }
 
@@ -2485,9 +3698,9 @@ function opCatChange() {
     const cat = uitslagenCats.find(c => c.dc_id === dcId);
     if (!cat) return;
     const opts = [
-        `<option value="">— kies afstand of klassement —</option>`,
-        ...cat.afstanden.map(a => `<option value="afstand|${esc(a.distance_id)}">${esc(a.distance_naam || 'Afstand')}</option>`),
-        cat.klassement_beschikbaar ? `<option value="klassement|">🏆 Klassement</option>` : ''
+        `<option value="">${t('uitsl_opt_kies_afstand_of_klassement')}</option>`,
+        ...cat.afstanden.map(a => `<option value="afstand|${esc(a.distance_id)}">${esc(a.distance_naam || t('uitsl_opt_afstand_fallback'))}</option>`),
+        cat.klassement_beschikbaar ? `<option value="klassement|">${t('uitsl_klassement_opt')}</option>` : ''
     ].filter(Boolean);
     selAf.innerHTML = opts.join('');
     afstRij.style.display = 'flex';
@@ -2499,7 +3712,7 @@ async function opAfstandChange() {
     const uit = $('uitslagen');
     if (!dcId || !afVal) { uit.innerHTML = ''; return; }
     const [type, distId] = afVal.split('|');
-    uit.innerHTML = '<div class="leeg-melding"><span class="spinner"></span> Laden…</div>';
+    uit.innerHTML = `<div class="leeg-melding"><span class="spinner"></span> ${t('uit_laden')}</div>`;
     try {
         const url = `?action=uitslagen&competition_id=${encodeURIComponent(selComp.value)}&dc_id=${encodeURIComponent(dcId)}&type=${encodeURIComponent(type)}${distId ? '&distance_id=' + encodeURIComponent(distId) : ''}&_t=${Date.now()}`;
         const res = await safeFetch(url);
@@ -2507,23 +3720,27 @@ async function opAfstandChange() {
         if (data.error) { uit.innerHTML = `<div class="leeg-melding">⚠ ${esc(data.error)}</div>`; return; }
         uit.innerHTML = (type === 'klassement') ? renderKlassementTabel(data) : renderAfstandTabel(data);
     } catch (e) {
-        uit.innerHTML = `<div class="leeg-melding">Fout: ${esc(e.message)}</div>`;
+        uit.innerHTML = `<div class="leeg-melding">${t('uit_fout', {msg: esc(e.message)})}</div>`;
     }
 }
 
 function sl(s) { return s ?? ''; }
 
 function renderAfstandTabel(data) {
-    if (!data.rijders?.length) return '<div class="leeg-melding">Geen uitslagen beschikbaar.</div>';
-    const mijn = new Set(coachLijst.map(p => parseInt(p.snr)));
+    if (!data.rijders?.length) return `<div class="leeg-melding">${t('uit_geen_uitslagen')}</div>`;
+    // Match per persoon (license_key uniek) ipv per snr — twee rijders met
+    // hetzelfde startnummer worden anders allebei gehighlight.
+    const mijnLics = new Set(coachLijst.map(p => p.license_key));
+    const mijnSnrs = new Set(coachLijst.map(p => parseInt(p.snr)));
     const heeftRnd = data.heeft_rondes, heeftPK = data.heeft_pk_punten;
-    let hdr = '<th class="col-rang">#</th><th class="col-snr">Snr</th><th>Naam</th>';
-    if (heeftRnd) hdr += '<th class="col-rnd">Rnd</th>';
-    if (heeftPK)  hdr += '<th class="col-pk">Pnt</th>';
-    hdr += '<th class="col-tijd">Tijd</th>';
+    let hdr = `<th class="col-rang">${t('col_rang')}</th><th class="col-snr">${t('col_snr')}</th><th>${t('col_naam')}</th>`;
+    if (heeftRnd) hdr += `<th class="col-rnd">${t('col_rnd')}</th>`;
+    if (heeftPK)  hdr += `<th class="col-pk">${t('col_pnt')}</th>`;
+    hdr += `<th class="col-tijd">${t('col_tijd')}</th>`;
     let rows = '';
     for (const r of data.rijders) {
-        const isMij = mijn.has(parseInt(r.snr));
+        // Primair op lic, fallback op snr voor oude cached payloads
+        const isMij = r.lic ? mijnLics.has(r.lic) : mijnSnrs.has(parseInt(r.snr));
         const sanctie = sl(r.sanctie);
         rows += `<tr class="${isMij ? 'mijn' : ''}">
             <td class="col-rang">${r.rang ?? '—'}</td>
@@ -2538,18 +3755,21 @@ function renderAfstandTabel(data) {
 }
 
 function renderKlassementTabel(data) {
-    if (!data.rijders?.length) return '<div class="leeg-melding">Geen klassement beschikbaar.</div>';
-    const mijn = new Set(coachLijst.map(p => parseInt(p.snr)));
+    if (!data.rijders?.length) return `<div class="leeg-melding">${t('uit_geen_klassement')}</div>`;
+    // Match op license_key (uniek), fallback op snr. Zo voorkomen we dat
+    // twee rijders met zelfde startnummer beiden gehighlight worden.
+    const mijnLics = new Set(coachLijst.map(p => p.license_key));
+    const mijnSnrs = new Set(coachLijst.map(p => parseInt(p.snr)));
     const afstanden = data.afstanden ?? [];
-    let hdr = '<th class="col-rang">#</th><th class="col-snr">Snr</th><th>Naam</th>';
+    let hdr = `<th class="col-rang">${t('col_rang')}</th><th class="col-snr">${t('col_snr')}</th><th>${t('col_naam')}</th>`;
     for (const a of afstanden) {
         const kort = a.length > 6 ? a.substring(0,5) + '.' : a;
         hdr += `<th class="col-punten" title="${esc(a)}">${esc(kort)}</th>`;
     }
-    hdr += '<th class="col-totaal">Tot</th>';
+    hdr += `<th class="col-totaal">${t('col_tot')}</th>`;
     let rows = '';
     for (const r of data.rijders) {
-        const isMij = mijn.has(parseInt(r.snr));
+        const isMij = r.lic ? mijnLics.has(r.lic) : mijnSnrs.has(parseInt(r.snr));
         const detail = r.punten_detail ?? {};
         rows += `<tr class="${isMij ? 'mijn' : ''}">
             <td class="col-rang">${r.rang ?? '—'}</td>
@@ -2573,7 +3793,7 @@ async function toonRitDetail(el) {
 
     const overlay = document.createElement('div');
     overlay.className = 'overlay';
-    overlay.innerHTML = '<div class="overlay-box"><div style="text-align:center;padding:24px"><span class="spinner"></span> Laden…</div></div>';
+    overlay.innerHTML = `<div class="overlay-box"><div style="text-align:center;padding:24px"><span class="spinner"></span> ${t('uit_laden')}</div></div>`;
     overlay.onclick = e => { if (e.target === overlay) overlay.remove(); };
     document.body.appendChild(overlay);
 
@@ -2584,35 +3804,42 @@ async function toonRitDetail(el) {
         if (!heat || !heat.rijders?.length) {
             overlay.querySelector('.overlay-box').innerHTML =
                 `<div class="heat-card-titel">
-                    <button class="overlay-sluit" onclick="this.closest('.overlay').remove()" title="Sluiten">&times;</button>
+                    <button class="overlay-sluit" onclick="this.closest('.overlay').remove()" title="${t('pwa_btn_sluit')}">&times;</button>
                     ${esc(ritNaam)}
                  </div>
-                 <div class="leeg-melding" style="padding:24px;text-align:center;color:#888">Startlijst is nog niet beschikbaar.</div>`;
+                 <div class="leeg-melding" style="padding:24px;text-align:center;color:#888">${t('prog_startlijst_nb')}</div>`;
             return;
         }
+        // Match op license_key (uniek), fallback op snr. Bij twee rijders
+        // met zelfde nummer worden anders beide gehighlight.
+        const mijnLics = new Set(coachLijst.map(p => p.license_key));
         const mijnSnrs = new Set(coachLijst.map(p => parseInt(p.snr)));
         const heeftRnd = heat.rijders.some(r => r.rondes != null);
         const heeftPK  = heat.rijders.some(r => r.pk_punten != null);
         const rijen = heat.rijders.map(r => {
-            const isMij = mijnSnrs.has(parseInt(r.snr));
+            const isMij = r.license_key
+                ? mijnLics.has(r.license_key)
+                : mijnSnrs.has(parseInt(r.snr));
             const sanctie = r.sanctie ? ` <span style="color:#c00;font-weight:600;font-size:.85rem">${esc(r.sanctie)}</span>` : '';
             return `<tr class="${isMij ? 'mijn' : ''}">
                 <td class="col-pos">${esc(r.startpositie)}</td>
                 <td class="col-snr">${esc(r.snr)}</td>
+                <td class="col-fin">${esc(r.finishpositie ?? '')}</td>
                 <td>${esc(r.full_name)}${sanctie}</td>
                 ${heeftRnd ? `<td class="col-rnd">${r.rondes ?? ''}</td>` : ''}
                 ${heeftPK  ? `<td class="col-pk">${r.pk_punten != null ? parseFloat(r.pk_punten) : ''}</td>` : ''}
                 <td class="col-tijd">${r.tijd_ms != null ? msTijd(r.tijd_ms) : ''}</td>
-                <td class="col-fin">${esc(r.finishpositie ?? '')}</td>
             </tr>`;
         }).join('');
-        const hdr = `<tr><th class="col-pos">#</th><th class="col-snr">Snr</th><th>Naam</th>
-                    ${heeftRnd ? '<th class="col-rnd">Rnd</th>' : ''}
-                    ${heeftPK  ? '<th class="col-pk">Pnt</th>' : ''}
-                    <th class="col-tijd">Tijd</th><th class="col-fin">Fin</th></tr>`;
+        // Fin-kolom direct na Snr (was helemaal rechts, viel weg in oog).
+        // CSS kleurt de cijfers rood — label "Fin" blijft normale kleur.
+        const hdr = `<tr><th class="col-pos">${t('col_pos')}</th><th class="col-snr">${t('col_snr')}</th><th class="col-fin">${t('col_fin')}</th><th>${t('col_naam')}</th>
+                    ${heeftRnd ? `<th class="col-rnd">${t('col_rnd')}</th>` : ''}
+                    ${heeftPK  ? `<th class="col-pk">${t('col_pnt')}</th>` : ''}
+                    <th class="col-tijd">${t('col_tijd')}</th></tr>`;
         overlay.querySelector('.overlay-box').innerHTML =
             `<div class="heat-card-titel">
-                <button class="overlay-sluit" onclick="this.closest('.overlay').remove()" title="Sluiten">&times;</button>
+                <button class="overlay-sluit" onclick="this.closest('.overlay').remove()" title="${t('pwa_btn_sluit')}">&times;</button>
                 ${esc(ritNaam)}
              </div>
              <div class="overlay-body">
@@ -2620,8 +3847,8 @@ async function toonRitDetail(el) {
              </div>`;
     } catch (e) {
         overlay.querySelector('.overlay-box').innerHTML =
-            `<button class="overlay-sluit" onclick="this.closest('.overlay').remove()" title="Sluiten">&times;</button>
-             <div class="leeg-melding" style="padding:24px">Fout bij laden: ${esc(e.message)}</div>`;
+            `<button class="overlay-sluit" onclick="this.closest('.overlay').remove()" title="${t('pwa_btn_sluit')}">&times;</button>
+             <div class="leeg-melding" style="padding:24px">${t('uit_fout', {msg: esc(e.message)})}</div>`;
     }
 }
 
@@ -2686,39 +3913,33 @@ function toonInfo() {
     overlay.innerHTML = `
     <div class="help-box">
         <div class="help-header">
-            <span>Over InlineComp Coach</span>
+            <span>${t('info_titel')}</span>
             <button class="help-sluit" onclick="this.closest('.help-overlay').remove()">&times;</button>
         </div>
         <div class="help-body">
-            <h3>Wat is dit?</h3>
-            <p>De <b>Coach-view</b> is een dashboard voor coaches: je bouwt per wedstrijd een
-               eigen lijst met rijders en ziet vervolgens hun programma, status, sancties en
-               uitslagen in één oogopslag.</p>
-            <p>Je kunt een heel clubteam in één keer toevoegen, rijders op sponsor selecteren,
-               of losse startnummers toevoegen. Je lijst wordt lokaal op je telefoon bewaard
-               (per wedstrijd) — dus een refresh of een terugkeer naar de pagina laat 'm intact.</p>
+            <h3>${t('info_h_wat')}</h3>
+            <p>${t('info_p_wat1_html')}</p>
+            <p>${t('info_p_wat2')}</p>
 
-            <h3>Geen login nodig</h3>
-            <p>Alle data die je hier ziet is publiek (zelfde als op <a href="../public/">/public</a>).
-               Je gebruikt gewoon je browser — niets te installeren.</p>
+            <h3>${t('info_h_login')}</h3>
+            <p>${t('info_p_login_html')}</p>
 
-            <h3>Tip: toevoegen aan startscherm</h3>
-            <p>Op je telefoon: open deze pagina in Safari/Chrome → menu → "Zet op startscherm".
-               Dan opent-ie als een app en heb je 'm direct bij de hand aan de rand van de baan.</p>
+            <h3>${t('info_h_tip')}</h3>
+            <p>${t('info_p_tip')}</p>
 
-            <h3>In ontwikkeling</h3>
-            <p>Deze coach-view wordt actief doorontwikkeld. Feedback is zeer welkom!</p>
+            <h3>${t('info_h_dev')}</h3>
+            <p>${t('info_p_dev')}</p>
 
-            <h3>Contact &amp; feedback</h3>
-            <p>Heb je een vraag, suggestie of bug gevonden? Laat het weten:</p>
+            <h3>${t('info_h_contact_html')}</h3>
+            <p>${t('info_p_contact')}</p>
             <p style="text-align:center;margin:12px 0">
                 <a href="mailto:inlinecomp@devriesen.com" style="display:inline-block;background:var(--oranje);color:#fff;padding:10px 20px;border-radius:8px;text-decoration:none;font-weight:700;font-size:.95rem">inlinecomp@devriesen.com</a>
             </p>
 
-            <h3>Anonieme bezoek-statistieken</h3>
-            <p style="font-size:.85rem;color:#555">We tellen anoniem aantal bezoekers, actieve sessies en piek gelijktijdig online — puur om te zien hoe veel de app wordt gebruikt en om de hosting stabiel te houden. Er worden <b>geen IP-adressen of persoonsgegevens</b> opgeslagen en er zijn <b>geen derde partijen</b> betrokken.</p>
+            <h3>${t('info_h_stats')}</h3>
+            <p style="font-size:.85rem;color:#555">${t('info_p_stats_html')}</p>
 
-            <p style="font-size:.8rem;color:#999;text-align:center;margin-top:16px">InlineComp &copy; ${new Date().getFullYear()} Geert de Vries</p>
+            <p style="font-size:.8rem;color:#999;text-align:center;margin-top:16px">${t('info_copyright', {jaar: new Date().getFullYear()})}</p>
         </div>
     </div>`;
     document.body.appendChild(overlay);
@@ -2731,55 +3952,37 @@ function toonHelp() {
     overlay.innerHTML = `
     <div class="help-box">
         <div class="help-header">
-            <span>Hoe werkt de Coach-view?</span>
+            <span>${t('help_titel')}</span>
             <button class="help-sluit" onclick="this.closest('.help-overlay').remove()">&times;</button>
         </div>
         <div class="help-body">
-            <h3>Aan de slag</h3>
+            <h3>${t('help_h_start')}</h3>
             <div class="help-stap"><span class="help-stap-nr">1</span>
-                <span>Kies je <b>wedstrijd</b> bovenaan.</span></div>
+                <span>${t('help_stap1_html')}</span></div>
             <div class="help-stap"><span class="help-stap-nr">2</span>
-                <span>Voeg rijders toe aan je coach-lijst op drie manieren:
-                <ul style="margin:4px 0 0 18px">
-                    <li><b>Op club</b> — selecteer een club en alle rijders daarvan komen in je lijst.</li>
-                    <li><b>Op sponsor</b> — idem op sponsor-naam.</li>
-                    <li><b>Op startnummer</b> — typ een getal en druk op Toevoegen (of Enter).</li>
-                </ul></span></div>
+                <span>${t('help_stap2_html')}</span></div>
             <div class="help-stap"><span class="help-stap-nr">3</span>
-                <span>Bekijk de tabs: <b>📋 Programma</b>, <b>🏃 Heats</b>, <b>⚠️ Sancties</b>, <b>📊 Uitslagen</b>.</span></div>
+                <span>${t('help_stap3_html')}</span></div>
 
-            <h3>Programma</h3>
-            <p>Toont alle ritten van de wedstrijd. Ritten waar minstens één van jouw rijders in zit zijn
-               <b>geel gemarkeerd</b> met een strip van hun startnummers aan de rechterkant.
-               Tik een rit aan om de volledige startlijst te zien — jouw rijders zijn opnieuw geel gemarkeerd.</p>
+            <h3>${t('help_h_prog')}</h3>
+            <p>${t('help_p_prog_html')}</p>
 
-            <h3>Sancties</h3>
-            <p>Per rijder uit jouw lijst een kaartje met:</p>
-            <ul style="margin:4px 0 8px 18px">
-                <li><b>Status-badge</b> (Bevestigd / Niet getekend / Afgemeld / …)</li>
-                <li>Alle <b>sancties</b> die in heats zijn geregistreerd (W1, W2, FS, DQ-SF, DNF, …)</li>
-            </ul>
-            <p>Let op <b>🚨 Niet getekend</b> — dan moet de rijder zélf snel even naar de jury-tafel
-               om te tekenen (niet jij als coach, niet de ouders, alleen de rijder zelf).</p>
+            <h3>${t('help_h_sanc')}</h3>
+            <p>${t('help_p_sanc1')}</p>
+            <ul style="margin:4px 0 8px 18px">${t('help_p_sanc_lijst_html')}</ul>
+            <p>${t('help_p_sanc2_html')}</p>
 
-            <h3>Uitslagen</h3>
-            <p>Kies een categorie + afstand om de volledige uitslag te zien, of bekijk het klassement.
-               Ook hier worden jouw eigen rijders geel gemarkeerd.</p>
+            <h3>${t('help_h_uitsl')}</h3>
+            <p>${t('help_p_uitsl')}</p>
 
-            <h3>Automatisch bijgewerkt</h3>
-            <p>De pagina ververst zichzelf elke minuut zolang het tabblad zichtbaar is.
-               Het tijdstip van de laatste verversing zie je rechtsboven (<b>🔄 HH:MM</b>).
-               Direct verversen kan ook: trek de pagina <b>naar beneden</b> (pull-to-refresh)
-               of dubbelklik op de blauwe kop.</p>
+            <h3>${t('help_h_auto')}</h3>
+            <p>${t('help_p_auto_html')}</p>
 
-            <h3>Mededelingen</h3>
-            <p>Bovenaan verschijnt een <b>📢-knop</b> zodra er een mededeling van de organisatie
-               actief is. Belangrijke aankondigingen verschijnen automatisch als pop-up en blijven
-               daarna onder die knop bereikbaar.</p>
+            <h3>${t('help_h_meld')}</h3>
+            <p>${t('help_p_meld_html')}</p>
 
-            <h3>Privacy</h3>
-            <p>Je coach-lijst wordt alleen lokaal op je telefoon bewaard (localStorage). Niemand
-               anders ziet wie je op je lijst hebt staan.</p>
+            <h3>${t('help_h_priv')}</h3>
+            <p>${t('help_p_priv')}</p>
         </div>
     </div>`;
     document.body.appendChild(overlay);
@@ -2801,11 +4004,11 @@ function filterComps() {
     const vorigeWaarde = selComp.value;
 
     if (!toonOud && !toonVandaag && !toonToekomst) {
-        selComp.innerHTML = '<option value="">— Kies tenminste één filter hierboven —</option>';
+        selComp.innerHTML = `<option value="">${t('opt_kies_filter')}</option>`;
         return;
     }
 
-    selComp.innerHTML = '<option value="">— kies een wedstrijd —</option>';
+    selComp.innerHTML = `<option value="">${t('opt_kies_wedstrijd')}</option>`;
     for (const c of alleComps) {
         const startDag = safeDatum(c.starts);
         const eindDag  = safeDatum(c.ends) ?? startDag;
@@ -2816,8 +4019,9 @@ function filterComps() {
         if (isOud      && !toonOud)      continue;
         if (isToekomst && !toonToekomst) continue;
 
+        const loc = (typeof getLocale === 'function') ? getLocale() : 'nl-NL';
         const dtStr = startDag
-            ? startDag.toLocaleDateString('nl-NL',{day:'numeric',month:'long',year:'numeric'})
+            ? startDag.toLocaleDateString(loc,{day:'numeric',month:'long',year:'numeric'})
             : '';
         // Verborgen wedstrijden: tonen als disabled met "(binnenkort)"
         // suffix — gebruiker ziet dat de wedstrijd er aankomt zonder
@@ -2825,7 +4029,7 @@ function filterComps() {
         const verborgen = !Number(c.public_zichtbaar);
         const o = document.createElement('option');
         o.value = c.id;
-        o.textContent = `${c.name}${dtStr ? ' — ' + dtStr : ''}${verborgen ? '  (binnenkort)' : ''}`;
+        o.textContent = `${c.name}${dtStr ? ' — ' + dtStr : ''}${verborgen ? '  ' + t('opt_binnenkort') : ''}`;
         if (verborgen) o.disabled = true;
         o.dataset.orgLogo        = c.org_logo ?? '';
         o.dataset.orgNaam        = c.org_naam ?? '';
@@ -2886,7 +4090,7 @@ async function laadCompetitions() {
             selComp.dispatchEvent(new Event('change'));
         }
     } catch (e) {
-        selComp.innerHTML = '<option value="">Fout bij laden</option>';
+        selComp.innerHTML = `<option value="">${t('opt_fout_laden')}</option>`;
     }
 }
 
@@ -2903,8 +4107,8 @@ function zetStap2Enabled(enabled) {
         _clubSel.clear();
         _sponsorAlle = [];
         _sponsorSel.clear();
-        $('club-multi-label').textContent    = '— kies eerst een wedstrijd —';
-        $('sponsor-multi-label').textContent = '— kies eerst een wedstrijd —';
+        $('club-multi-label').textContent    = t('multi_kies_wedstrijd_eerst');
+        $('sponsor-multi-label').textContent = t('multi_kies_wedstrijd_eerst');
         $('club-multi-paneel').hidden    = true;
         $('sponsor-multi-paneel').hidden = true;
         $('club-chips').innerHTML    = '';
@@ -2918,7 +4122,8 @@ function zetStap2Enabled(enabled) {
 // iets zodat de user ziet dat er nog niks te doen valt.
 function updateToevoegenKnop() {
     if (!selComp.value) { btnToevoegen.disabled = true; return; }
-    const heeftInvoer = !!(_clubSel.size > 0 || _sponsorSel.size > 0 || inpSnr.value.trim());
+    const heeftInvoer = !!(_clubSel.size > 0 || _sponsorSel.size > 0
+                        || inpSnr.value.trim());
     btnToevoegen.disabled = !heeftInvoer;
 }
 
@@ -2939,7 +4144,8 @@ async function opCompetitionChange() {
     const c = alleComps.find(x => x.id === compId);
     if (c) {
         const dt = safeDatum(c.starts);
-        const dtStr = dt ? dt.toLocaleDateString('nl-NL', {weekday:'long', day:'numeric', month:'long', year:'numeric'}) : '';
+        const loc = (typeof getLocale === 'function') ? getLocale() : 'nl-NL';
+        const dtStr = dt ? dt.toLocaleDateString(loc, {weekday:'long', day:'numeric', month:'long', year:'numeric'}) : '';
         compInfoEl.innerHTML = `<strong>${esc(c.name)}</strong>${dtStr ? `<small>${esc(dtStr)}</small>` : ''}`;
         compInfoEl.style.display = 'block';
     }
@@ -2948,14 +4154,14 @@ async function opCompetitionChange() {
     loadCoachLijst();
     coachInfoCache = {};
     uitslagenCats = [];
-    $('u-sel-cat').innerHTML = '<option value="">— kies categorie —</option>';
+    $('u-sel-cat').innerHTML = `<option value="">${t('uitsl_opt_kies_cat')}</option>`;
     $('u-afstand-rij').style.display = 'none';
     $('uitslagen').innerHTML = '';
     renderChips();
     renderSancties();
     renderHeats();
     // Clubs + sponsors + programma parallel laden
-    progEl.innerHTML = '<div class="leeg-melding"><span class="spinner"></span> Laden…</div>';
+    progEl.innerHTML = `<div class="leeg-melding"><span class="spinner"></span> ${t('uit_laden')}</div>`;
     programmaCache = null;
     try {
         const [clubsRes, sponsorsRes, progRes] = await Promise.all([
@@ -2982,17 +4188,106 @@ async function opCompetitionChange() {
         renderSancties();
         renderHeats();
     } catch (e) {
-        progEl.innerHTML = `<div class="leeg-melding">Fout: ${esc(e.message)}</div>`;
+        progEl.innerHTML = `<div class="leeg-melding">${t('uit_fout', {msg: esc(e.message)})}</div>`;
     }
 }
 
+// Lookup-helper: roept person_lookup aan met snr/license_key/naam, en
+// handelt resultaat-aantal af:
+//   0 matches  → foutmelding
+//   1 match    → direct toevoegen aan coach-lijst
+//   ≥2 matches → keuze-modal zodat user beslist welke(n)
+async function _coachLookupEnToevoegen(param, meldingen, foutMeldingen, label) {
+    const qs = new URLSearchParams({ competition_id: selComp.value, ...param });
+    let lijst;
+    try {
+        const res = await safeFetch('?action=person_lookup&' + qs.toString());
+        lijst = await res.json();
+    } catch (e) {
+        foutMeldingen.push(t('fb_lookup_mislukt', {label, msg: e.message}));
+        return;
+    }
+    if (lijst?.error) { foutMeldingen.push(t('fb_label_error', {label, error: lijst.error})); return; }
+    if (!Array.isArray(lijst) || !lijst.length) {
+        foutMeldingen.push(t('fb_label_niet_gevonden', {label}));
+        return;
+    }
+    if (lijst.length === 1) {
+        const p = lijst[0];
+        if (voegToeAanLijst(p)) {
+            meldingen.push(p.snr ? t('fb_naam_snr', {naam: p.full_name, snr: p.snr}) : p.full_name);
+        } else {
+            meldingen.push(t('fb_stond_al_in_lijst', {naam: p.full_name}));
+        }
+        return;
+    }
+    // ≥2 matches: laat user kiezen via modal. Modal voegt zelf toe + update
+    // meldingen-array zodra user op OK klikt. Await Promise zodat de
+    // omhullende voegAllesToe wacht voor save+render.
+    await _coachKiesPersoonModal(lijst, label, meldingen);
+}
+
+// Multi-keuze modal: lijst van rijders met checkboxes. User kan er meer
+// dan één tegelijk aanvinken (handig bij naam-zoek met meerdere
+// naamgenoten). Rijders die al in coach-lijst staan worden voor-aangevinkt
+// en disabled getoond ("al toegevoegd").
+function _coachKiesPersoonModal(rijders, label, meldingen) {
+    return new Promise(resolve => {
+        const al = new Set(coachLijst.map(p => p.license_key));
+        const modal = document.createElement('div');
+        modal.className = 'naamzoek-modal';
+        modal.innerHTML = `
+            <div class="naamzoek-box">
+                <div class="naamzoek-hdr">
+                    <span>${t('nz_matches_voor', {n: esc(rijders.length), label: esc(label)})}</span>
+                    <button class="naamzoek-sluit" title="${t('nz_sluit')}">&times;</button>
+                </div>
+                <div class="naamzoek-body">
+                    ${rijders.map(r => {
+                        const uit = al.has(r.license_key);
+                        const meta = [r.category || '', r.club_short || r.club_full || '',
+                                      uit ? `<span style="color:#999">${t('nz_al_in_lijst')}</span>` : '']
+                                     .filter(Boolean).join(' · ');
+                        return `<label class="naamzoek-rij" style="${uit ? 'opacity:.55' : ''}">
+                            <input type="checkbox" data-lic="${esc(r.license_key)}" ${uit ? 'checked disabled' : ''}>
+                            <span class="naamzoek-rij-snr">${esc(r.snr ?? '—')}</span>
+                            <div class="naamzoek-rij-naam">
+                                ${esc(r.full_name)}
+                                <div class="naamzoek-rij-meta">${meta}</div>
+                            </div>
+                        </label>`;
+                    }).join('')}
+                </div>
+                <div class="naamzoek-voet">
+                    <span class="aantal">${t('nz_vink_aan')}</span>
+                    <button class="btn-primair" id="coach-modal-ok" style="padding:8px 18px">${t('nz_toevoegen')}</button>
+                </div>
+            </div>`;
+        document.body.appendChild(modal);
+        const sluit = () => { modal.remove(); resolve(); };
+        modal.querySelector('.naamzoek-sluit').addEventListener('click', sluit);
+        modal.addEventListener('click', e => { if (e.target === modal) sluit(); });
+        modal.querySelector('#coach-modal-ok').addEventListener('click', () => {
+            const vinkjes = [...modal.querySelectorAll('input[type=checkbox]:checked:not(:disabled)')];
+            for (const cb of vinkjes) {
+                const r = rijders.find(x => x.license_key === cb.dataset.lic);
+                if (r && voegToeAanLijst(r)) {
+                    meldingen.push(r.snr ? t('fb_naam_snr', {naam: r.full_name, snr: r.snr}) : r.full_name);
+                }
+            }
+            sluit();
+        });
+    });
+}
+
 // Eén gedeelde toevoeg-handler: pakt alle niet-lege bronnen tegelijk op
-// (club, sponsor, startnummer) en voegt wat erin zit toe aan de coach-lijst.
+// (club, sponsor, startnummer, naam/licentie) en voegt wat erin zit toe
+// aan de coach-lijst.
 async function voegAllesToe() {
     if (!selComp.value) return;
-    const snr     = parseInt(inpSnr.value);
-    if (_clubSel.size === 0 && _sponsorSel.size === 0 && !snr) {
-        snrFb.textContent = 'Kies een club, sponsor of vul een startnummer in.';
+    const zoekTerm = inpSnr.value.trim();
+    if (_clubSel.size === 0 && _sponsorSel.size === 0 && !zoekTerm) {
+        snrFb.textContent = t('fb_kies_iets');
         snrFb.style.color = '#b71c1c';
         return;
     }
@@ -3018,21 +4313,21 @@ async function voegAllesToe() {
                 }),
             });
             if (res.status === 429) {
-                foutMeldingen.push('Server tijdelijk druk — probeer over 5 seconden');
+                foutMeldingen.push(t('fb_server_druk'));
             } else if (!res.ok) {
-                foutMeldingen.push(`Server-fout (${res.status})`);
+                foutMeldingen.push(t('fb_server_fout', {status: res.status}));
             } else {
                 const lijst = await res.json();
                 (Array.isArray(lijst) ? lijst : []).forEach(p => { if (voegToeAanLijst(p)) aantalTotaal++; });
                 const stukken = [];
-                if (clubList.length)    stukken.push(`${clubList.length} club${clubList.length>1?'s':''}`);
-                if (sponsorList.length) stukken.push(`${sponsorList.length} sponsor${sponsorList.length>1?'s':''}`);
+                if (clubList.length)    stukken.push(t(clubList.length === 1 ? 'fb_clubs_single' : 'fb_clubs_plural', {n: clubList.length}));
+                if (sponsorList.length) stukken.push(t(sponsorList.length === 1 ? 'fb_sponsors_single' : 'fb_sponsors_plural', {n: sponsorList.length}));
                 meldingen.push(aantalTotaal
-                    ? `${aantalTotaal} rijder(s) van ${stukken.join(' + ')}`
-                    : `${stukken.join(' + ')}: geen nieuwe rijders`);
+                    ? t('fb_rijders_van_single', {aantal: aantalTotaal, stukken: stukken.join(' + ')})
+                    : t('fb_rijders_van_geen', {stukken: stukken.join(' + ')}));
             }
         } catch (e) {
-            foutMeldingen.push('Netwerkfout bij ophalen rijders');
+            foutMeldingen.push(t('fb_netwerk_fout'));
         }
         if (clubList.length) {
             _clubSel.clear();
@@ -3046,16 +4341,20 @@ async function voegAllesToe() {
         }
     }
 
-    if (snr && snr >= 1) {
-        const res = await safeFetch(`?action=person_by_startnummer&competition_id=${encodeURIComponent(selComp.value)}&snr=${snr}`);
-        const p = await res.json();
-        if (!p) {
-            foutMeldingen.push(`Startnummer ${snr} niet gevonden`);
-        } else if (voegToeAanLijst(p)) {
-            meldingen.push(`${p.full_name} (snr ${snr})`);
-        } else {
-            meldingen.push(`Startnr ${snr}: stond al in lijst`);
-        }
+    // Eén gecombineerd zoek-veld. _coachZoekModus bepaalt of het een
+    // startnummer / licentie / naam is op basis van de input:
+    //   alleen cijfers ≤4 = startnummer (bv. "42")
+    //   alleen cijfers ≥5 = licentienr  (KNSB ~7-8 cijfers)
+    //   bevat letters     = naam-zoek   (LIKE, min 2 tekens)
+    if (zoekTerm) {
+        const modus = _coachZoekModus(zoekTerm);
+        const param = modus === 'snr'     ? { snr: zoekTerm }
+                    : modus === 'license' ? { license_key: zoekTerm }
+                    :                       { naam: zoekTerm };
+        const label = modus === 'snr'     ? t('fb_label_snr',      {term: zoekTerm})
+                    : modus === 'license' ? t('fb_label_licentie', {term: zoekTerm})
+                    :                       t('fb_label_naam',     {term: zoekTerm});
+        await _coachLookupEnToevoegen(param, meldingen, foutMeldingen, label);
         inpSnr.value = '';
     }
 
@@ -3067,7 +4366,7 @@ async function voegAllesToe() {
         snrFb.textContent = foutMeldingen.join(' · ');
         snrFb.style.color = '#b71c1c';
     } else if (meldingen.length) {
-        snrFb.textContent = 'Toegevoegd: ' + meldingen.join(' · ');
+        snrFb.textContent = t('fb_toegevoegd', {lijst: meldingen.join(' · ')});
         snrFb.style.color = '#2e7d32';
     }
 }
@@ -3090,14 +4389,14 @@ function renderSponsorMultiSelect() {
     const lijst = $('sponsor-multi-lijst');
     if (!lijst) return;
     if (!_sponsorAlle.length) {
-        lijst.innerHTML = '<div class="leeg">Geen sponsors in deze wedstrijd.</div>';
+        lijst.innerHTML = `<div class="leeg">${t('multi_geen_sponsors_panel')}</div>`;
     } else {
         lijst.innerHTML = _sponsorAlle.map(s => {
             const checked = _sponsorSel.has(s) ? 'checked' : '';
             return `<label><input type="checkbox" data-sponsor="${esc(s)}" ${checked}> <span>${esc(s)}</span></label>`;
         }).join('');
     }
-    $('sponsor-multi-teller').textContent = `${_sponsorSel.size} geselecteerd`;
+    $('sponsor-multi-teller').textContent = t('multi_geselecteerd', {n: _sponsorSel.size});
 }
 function updateSponsorLabel() {
     const lbl = $('sponsor-multi-label');
@@ -3107,17 +4406,17 @@ function updateSponsorLabel() {
 
     if (_sponsorSel.size === 0) {
         lbl.textContent = _sponsorAlle.length
-            ? '— kies sponsor(s) —'
-            : '— geen sponsors in deze wedstrijd —';
+            ? t('multi_kies_sponsor')
+            : t('multi_geen_sponsors');
         knop.classList.remove('heeft-selectie');
         chipsWrap.innerHTML = '';
     } else {
-        lbl.textContent = `${_sponsorSel.size} sponsor${_sponsorSel.size === 1 ? '' : 's'} gekozen — klik op Toevoegen`;
+        lbl.textContent = t(_sponsorSel.size === 1 ? 'multi_sponsor_gekozen_single' : 'multi_sponsor_gekozen_plural', {n: _sponsorSel.size});
         knop.classList.add('heeft-selectie');
         // Chips eronder zodat operator direct ziet wat hij gekozen heeft
         // (en eentje kan weghalen zonder paneel weer te openen).
         chipsWrap.innerHTML = [..._sponsorSel]
-            .map(s => `<span class="sponsor-chip" data-sponsor="${esc(s)}" title="Klik om te verwijderen">${esc(s)}</span>`)
+            .map(s => `<span class="sponsor-chip" data-sponsor="${esc(s)}" title="${t('multi_chip_klik_verwijder')}">${esc(s)}</span>`)
             .join('');
     }
 }
@@ -3144,7 +4443,7 @@ $('sponsor-multi-lijst').addEventListener('change', (ev) => {
     if (!inp.matches('input[type="checkbox"]')) return;
     const sp = inp.dataset.sponsor;
     if (inp.checked) _sponsorSel.add(sp); else _sponsorSel.delete(sp);
-    $('sponsor-multi-teller').textContent = `${_sponsorSel.size} geselecteerd`;
+    $('sponsor-multi-teller').textContent = t('multi_geselecteerd', {n: _sponsorSel.size});
     updateSponsorLabel();
     updateToevoegenKnop();
 });
@@ -3186,14 +4485,14 @@ function renderClubMultiSelect() {
     const lijst = $('club-multi-lijst');
     if (!lijst) return;
     if (!_clubAlle.length) {
-        lijst.innerHTML = '<div class="leeg">Geen clubs in deze wedstrijd.</div>';
+        lijst.innerHTML = `<div class="leeg">${t('multi_geen_clubs_panel')}</div>`;
     } else {
         lijst.innerHTML = _clubAlle.map(c => {
             const checked = _clubSel.has(c.full) ? 'checked' : '';
             return `<label><input type="checkbox" data-club="${esc(c.full)}" ${checked}> <span>${esc(_clubLabel(c))}</span></label>`;
         }).join('');
     }
-    $('club-multi-teller').textContent = `${_clubSel.size} geselecteerd`;
+    $('club-multi-teller').textContent = t('multi_geselecteerd', {n: _clubSel.size});
 }
 
 function updateClubLabel() {
@@ -3204,18 +4503,18 @@ function updateClubLabel() {
 
     if (_clubSel.size === 0) {
         lbl.textContent = _clubAlle.length
-            ? '— kies club(s) —'
-            : '— geen clubs in deze wedstrijd —';
+            ? t('multi_kies_club')
+            : t('multi_geen_clubs');
         knop.classList.remove('heeft-selectie');
         chipsWrap.innerHTML = '';
     } else {
-        lbl.textContent = `${_clubSel.size} club${_clubSel.size === 1 ? '' : 's'} gekozen — klik op Toevoegen`;
+        lbl.textContent = t(_clubSel.size === 1 ? 'multi_club_gekozen_single' : 'multi_club_gekozen_plural', {n: _clubSel.size});
         knop.classList.add('heeft-selectie');
         // Toon korte label voor chip (SHORT als bekend, anders FULL)
         chipsWrap.innerHTML = [..._clubSel].map(full => {
             const c = _clubAlle.find(x => x.full === full) || {full};
             const labelText = c.short || c.full;
-            return `<span class="sponsor-chip" data-club="${esc(full)}" title="Klik om te verwijderen">${esc(labelText)}</span>`;
+            return `<span class="sponsor-chip" data-club="${esc(full)}" title="${t('multi_chip_klik_verwijder')}">${esc(labelText)}</span>`;
         }).join('');
     }
 }
@@ -3239,7 +4538,7 @@ $('club-multi-lijst').addEventListener('change', (ev) => {
     if (!inp.matches('input[type="checkbox"]')) return;
     const cl = inp.dataset.club;
     if (inp.checked) _clubSel.add(cl); else _clubSel.delete(cl);
-    $('club-multi-teller').textContent = `${_clubSel.size} geselecteerd`;
+    $('club-multi-teller').textContent = t('multi_geselecteerd', {n: _clubSel.size});
     updateClubLabel();
     updateToevoegenKnop();
 });
@@ -3271,10 +4570,10 @@ $('club-chips').addEventListener('click', (ev) => {
 $('btn-wis-alles').addEventListener('click', async () => {
     if (!coachLijst.length) return;
     const ok = await bevestig({
-        titel: 'Coach-lijst wissen?',
-        tekst: `Je staat op het punt <b>alle ${coachLijst.length} rijder${coachLijst.length === 1 ? '' : 's'}</b> uit je coach-lijst te verwijderen.<br><br>Dit kan niet ongedaan gemaakt worden.`,
-        bevestigLabel: 'Ja, wis alles',
-        annuleerLabel: 'Annuleren',
+        titel: t('bev_wis_titel'),
+        tekst: t(coachLijst.length === 1 ? 'bev_wis_tekst_single' : 'bev_wis_tekst_plural', {n: coachLijst.length}),
+        bevestigLabel: t('bev_wis_ok'),
+        annuleerLabel: t('bev_annuleer'),
     });
     if (!ok) return;
     coachLijst = [];
@@ -3308,6 +4607,16 @@ const _MELDING_PRIO = {
     warn:   { kleur: '#7a5800', bg: '#fff8d6', icoon: '⚠️' },
     urgent: { kleur: '#a00',    bg: '#ffe5e5', icoon: '🚨' },
 };
+// Multi-lang helper: kies de juiste vertaling met fallback-keten
+// huidige taal → EN → NL. NL is altijd verplicht (DB-kolom NOT NULL);
+// EN/DE/FR komen via Claude bulk-vertaling bij save in beheer.
+// Zelfde patroon als in /public.
+function _meldingTekst(m, veld) {
+    const lang = getCurLang();
+    if (lang !== 'nl' && m[veld + '_' + lang]) return m[veld + '_' + lang];
+    if (lang !== 'nl' && m[veld + '_en'])      return m[veld + '_en'];
+    return m[veld] || '';
+}
 // Sleutel per melding-scope: globaal (geen competition_id) krijgt eigen
 // localStorage-bucket zodat 'gezien' niet wisselt als je van wedstrijd switcht.
 const _meldingScope = (m) => m?.competition_id ? m.competition_id : 'global';
@@ -3366,23 +4675,29 @@ function toonMeldingenOverzicht() {
     const escFn = (typeof esc === 'function') ? esc : (s => String(s).replace(/[&<>]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;'}[c])));
     const overlay = document.createElement('div');
     overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.55);z-index:9400;display:flex;align-items:flex-start;justify-content:center;padding:4vh 1rem;overflow-y:auto;';
+    const loc = (typeof getLocale === 'function') ? getLocale() : 'nl-NL';
     const items = _meldingLijst.map(m => {
         const stijl = _MELDING_PRIO[m.prio] ?? _MELDING_PRIO.info;
         const tijd = m.geldig_van
-            ? new Date(m.geldig_van.replace(' ', 'T')).toLocaleString('nl-NL',
+            ? new Date(m.geldig_van.replace(' ', 'T')).toLocaleString(loc,
                 {day:'2-digit',month:'short',hour:'2-digit',minute:'2-digit'})
             : '';
         const tot = m.geldig_tot
-            ? ' tot ' + new Date(m.geldig_tot.replace(' ', 'T')).toLocaleString('nl-NL',
+            ? t('meld_tot') + new Date(m.geldig_tot.replace(' ', 'T')).toLocaleString(loc,
                 {day:'2-digit',month:'short',hour:'2-digit',minute:'2-digit'})
             : '';
+        // Twee-taal-meldingen: bij EN gekozen + EN-versie aanwezig (uit Claude
+        // auto-vertaling) → toon EN. Anders NL als fallback. Zelfde patroon
+        // als /public.
+        const titelToon   = _meldingTekst(m, 'titel');
+        const berichtToon = _meldingTekst(m, 'bericht');
         return `<div style="background:${stijl.bg};border-left:4px solid ${stijl.kleur};
                             padding:.7rem .9rem;margin-bottom:.6rem;border-radius:5px;">
             <div style="display:flex;align-items:center;gap:.4rem;margin-bottom:.3rem;">
                 <span style="font-size:1.2rem">${stijl.icoon}</span>
-                <strong style="color:${stijl.kleur};flex:1;">${escFn(m.titel)}</strong>
+                <strong style="color:${stijl.kleur};flex:1;">${escFn(titelToon)}</strong>
             </div>
-            <div style="color:#222;line-height:1.4;font-size:.9rem;white-space:pre-wrap;">${escFn(m.bericht)}</div>
+            <div style="color:#222;line-height:1.4;font-size:.9rem;white-space:pre-wrap;">${escFn(berichtToon)}</div>
             <div style="font-size:.75rem;color:#888;margin-top:.3rem;">${escFn(tijd)}${escFn(tot)}</div>
         </div>`;
     }).join('');
@@ -3391,7 +4706,7 @@ function toonMeldingenOverzicht() {
                     box-shadow:0 10px 30px rgba(0,0,0,.3);">
             <div style="display:flex;align-items:center;justify-content:space-between;
                         padding:.8rem 1rem;border-bottom:1px solid #e0e0e0;">
-                <h3 style="margin:0;color:var(--blauw);font-size:1.05rem;">📢 Mededelingen</h3>
+                <h3 style="margin:0;color:var(--blauw);font-size:1.05rem;">${t('meld_kop')}</h3>
                 <button class="meld-overz-sluit" style="background:none;border:none;
                         font-size:1.6rem;cursor:pointer;color:#666;padding:0;line-height:1;">&times;</button>
             </div>
@@ -3419,6 +4734,9 @@ function toonMelding(m, compId) {
     // schermen waar zelfs de inner-box met max-height: 90vh nog te hoog is.
     overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:9500;display:flex;align-items:center;justify-content:center;padding:1rem;overflow-y:auto;';
     const escFn = (typeof esc === 'function') ? esc : (s => String(s).replace(/[&<>]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;'}[c])));
+    // Twee-taal: pak EN-versie als gekozen + beschikbaar, anders NL fallback.
+    const titelToon   = _meldingTekst(m, 'titel');
+    const berichtToon = _meldingTekst(m, 'bericht');
     // Inner-box als flex-column: header + scrollable bericht + knop. Bericht-
     // div krijgt overflow-y:auto + min-height:0 (cruciaal voor flex-children),
     // knop heeft flex-shrink:0 zodat 'ie altijd onderaan zichtbaar blijft.
@@ -3429,16 +4747,16 @@ function toonMelding(m, compId) {
                     box-shadow:0 10px 40px rgba(0,0,0,.4);animation:meldingPop .3s ease-out;">
             <div style="display:flex;align-items:center;gap:.6rem;padding:1.5rem 1.5rem 0;flex-shrink:0;">
                 <span style="font-size:1.8rem">${stijl.icoon}</span>
-                <h2 style="margin:0;color:${stijl.kleur};font-size:1.1rem;flex:1;">${escFn(m.titel)}</h2>
+                <h2 style="margin:0;color:${stijl.kleur};font-size:1.1rem;flex:1;">${escFn(titelToon)}</h2>
             </div>
             <div style="color:#222;line-height:1.5;font-size:.95rem;
                         white-space:pre-wrap;padding:.6rem 1.5rem 1rem;
-                        overflow-y:auto;flex:1 1 auto;min-height:0;">${escFn(m.bericht)}</div>
+                        overflow-y:auto;flex:1 1 auto;min-height:0;">${escFn(berichtToon)}</div>
             <div style="padding:0 1.5rem 1.5rem;flex-shrink:0;">
                 <button class="meld-ok" style="background:${stijl.kleur};color:#fff;border:none;
                                                 padding:.6rem 1.4rem;border-radius:6px;font-size:1rem;
                                                 font-weight:600;cursor:pointer;width:100%;">
-                    ✓ Begrepen
+                    ${t('meld_begrepen')}
                 </button>
             </div>
         </div>`;
@@ -3477,13 +4795,13 @@ function toonMelding(m, compId) {
         if (ptrLaatste && sindsLaatste < PTR_COOLDOWN_MS) {
             const wachten = Math.ceil((PTR_COOLDOWN_MS - sindsLaatste) / 1000);
             ptrEl.classList.add('laadt');
-            ptrEl.textContent = `⏳ Even wachten (${wachten}s)`;
+            ptrEl.textContent = t('ptr_wachten', {s: wachten});
             setTimeout(() => { ptrEl.classList.remove('zichtbaar','laadt'); }, 1200);
             return;
         }
         bezigLaden = true;
         ptrEl.classList.add('laadt');
-        ptrEl.textContent = '⟳ Vernieuwen…';
+        ptrEl.textContent = t('ptr_vernieuwen');
         // Mededelingen-check parallel — pop-up zodra een nieuwe binnenkomt
         if (typeof checkMeldingen === 'function') checkMeldingen(selComp.value);
         try {
@@ -3507,10 +4825,10 @@ function toonMelding(m, compId) {
                 }
             }
             ptrLaatste = Date.now();
-            ptrEl.textContent = '✓ Bijgewerkt';
+            ptrEl.textContent = t('ptr_bijgewerkt');
             setTimeout(() => { ptrEl.classList.remove('zichtbaar','laadt'); }, 600);
         } catch (e) {
-            ptrEl.textContent = '⚠ Fout bij vernieuwen';
+            ptrEl.textContent = t('ptr_fout');
             setTimeout(() => { ptrEl.classList.remove('zichtbaar','laadt'); }, 1200);
         } finally {
             bezigLaden = false;
@@ -3530,8 +4848,7 @@ function toonMelding(m, compId) {
         dragY = e.touches[0].clientY - startY;
         if (dragY <= 0) { if (actief) { ptrEl.classList.remove('zichtbaar'); actief = false; } return; }
         if (dragY > 30 && !actief) { ptrEl.classList.add('zichtbaar'); actief = true; }
-        ptrEl.textContent = dragY >= THRESHOLD
-            ? '↑ Laat los om te vernieuwen' : '↓ Trek verder om te vernieuwen';
+        ptrEl.textContent = dragY >= THRESHOLD ? t('ptr_laat_los') : t('ptr_trek');
     }, { passive:true });
 
     document.addEventListener('touchend', () => {
@@ -3559,7 +4876,7 @@ function toonMelding(m, compId) {
     let autoTick = null;
     const lastEl = document.createElement('div');
     lastEl.className = 'auto-refresh-stempel';
-    lastEl.title = 'Laatste automatische verversing';
+    lastEl.title = t('auto_refresh_title');
     document.body.appendChild(lastEl);
     const zetStempel = () => {
         const d = new Date();
@@ -3623,8 +4940,24 @@ function toonMelding(m, compId) {
 laadCompetitions();
 
 // ── PWA: service worker + install prompt ─────────────────────────────────
+// Update-flow sinds 2026-05-27:
+//  - SW is network-only met cache-cleanup (zie sw.js)
+//  - Periodieke + visibility-driven update-check zodat geinstalleerde
+//    PWA's binnen seconden weten dat er een nieuwe versie is
+//  - GEEN automatische window.reload() bij controllerchange — dat wiste
+//    input-velden tijdens typen (regressie: zoeken-knop bleef disabled
+//    nadat startnummer mid-typen was gewist door een reload). Nieuwe
+//    versie verschijnt nu pas bij volgende natuurlijke navigatie/refresh.
+//    Voor browser-users: PHP no-cache headers zorgen sowieso voor vers
+//    HTML. Voor PWA-users: tab sluiten/openen of app herstart.
 if ('serviceWorker' in navigator) {
-    navigator.serviceWorker.register('sw.js').catch(() => {});
+    navigator.serviceWorker.register('sw.js').then(reg => {
+        const checkUpdate = () => { try { reg.update(); } catch {} };
+        document.addEventListener('visibilitychange', () => {
+            if (document.visibilityState === 'visible') checkUpdate();
+        });
+        setInterval(checkUpdate, 5 * 60 * 1000);
+    }).catch(() => {});
 }
 
 let _deferredPrompt = null;

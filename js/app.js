@@ -214,8 +214,35 @@ function switchSysteemTab(tab) {
         c.style.display = (c.id === 'sys-tab-' + tab) ? '' : 'none';
     });
 
-    // Lazy init per tab — pas bij eerste keer openen de data laden
-    if (!_sysTabGeladen.has(tab)) {
+    // Polling-cleanup: als we Bezoekers verlaten, stop de stats-refresh
+    // (anders blijft die elke 30s public_stats + coach_stats fetchen,
+    // vervuilt de network-tab en verbruikt onnodig server-cycles).
+    if (tab !== 'bezoekers' && typeof stopPublicStatsRefresh === 'function') {
+        stopPublicStatsRefresh();
+    }
+
+    // Lazy init per tab. Belangrijke veiligheidsklep: ook re-rendere als
+    // de cache zegt "al geladen" maar de container in werkelijkheid leeg
+    // of nog op de Laden…-placeholder staat. Dat kon eerder gebeuren bij
+    // een silent fout in een loader, of als een eerdere navigatie de DOM
+    // had hersteld zonder de cache te invalideren → tab bleef dan
+    // visueel leeg ondanks klikken.
+    const containerMap = {
+        gebruikers: 'gb-container',
+        bezoekers:  'gb-bezoekers-container',
+        logboek:    'gb-logboek-container',
+        rijders:    'rij-detail',
+        uploads:    'up-container',
+        helpers:    'hp-container',
+    };
+    const cont = document.getElementById(containerMap[tab]);
+    // "Echt geladen" = container bestaat én heeft content die niet meer
+    // de initiële .loading-placeholder is.
+    const echtGeladen = cont
+        && cont.children.length > 0
+        && !cont.querySelector(':scope > .status-msg.loading');
+
+    if (!_sysTabGeladen.has(tab) || !echtGeladen) {
         _sysTabGeladen.add(tab);
         if (tab === 'gebruikers' || tab === 'bezoekers' || tab === 'logboek') toonGebruikersPagina();
         if (tab === 'rijders')  toonRijdersPagina();
@@ -319,9 +346,13 @@ function vulPaginaHeader(naamId, metaId) {
 // naam. Verschijnt vanaf het moment dat er een wedstrijd in Importeer is
 // gekozen; verdwijnt bij reset (lege textContent → :empty hide via CSS).
 function _setHeaderWedstrijd(comp) {
-    const el = document.getElementById('header-wedstrijd');
-    if (!el) return;
-    el.textContent = comp?.name || '';
+    // LET OP: niet 'el' noemen — shadowt de file-scope `function el(id)`
+    // (DOM-helper op regel 36). Werkt nu OK omdat er geen el()-aanroep
+    // vóór deze const staat, maar future-proof: als iemand boven deze
+    // regel iets als `el('iets')?` toevoegt, krijg je een TDZ-crash.
+    const target = document.getElementById('header-wedstrijd');
+    if (!target) return;
+    target.textContent = comp?.name || '';
 }
 
 // ── Wedstrijdenlijst laden ────────────────────────────────────────────────────
@@ -697,14 +728,71 @@ function resetImportModule(verwijderdId) {
     if (typeof updateImportBtn === 'function') updateImportBtn();
 }
 
+// ── Input-dialog (vervanging voor browser-prompt) ────────────────────────
+// Standaard modal-styling, met een input-veld in de body. Returns een
+// Promise die resolved met de ingetypte string, of null bij annuleren /
+// Escape / klik buiten de modal.
+//
+// Voorbeeld:
+//   const naam = await toonInputDialog({
+//       titel:    'Categorie hernoemen',
+//       bericht:  'Nieuwe naam:',
+//       defaultValue: oudeNaam,
+//       labelOk:  'Hernoemen',
+//   });
+//   if (naam === null) return;        // geannuleerd
+//   if (naam.trim() === '') ...       // leeg ingevuld
+//
+// opts: {
+//   titel, bericht, labelOk, labelAnnuleer,
+//   inputType = 'text', placeholder, defaultValue,
+//   min, max,                         // alleen relevant voor type=number
+//   monospace = false,                // monospace font in input (bv. licenties)
+// }
+async function toonInputDialog(opts = {}) {
+    let inputEl    = null;
+    const inputId  = 'mdl-inp-' + Math.random().toString(36).slice(2, 9);
+    const attrs = [
+        `id="${inputId}"`,
+        `type="${opts.inputType || 'text'}"`,
+        `class="modal-input${opts.monospace ? ' modal-input-mono' : ''}"`,
+        opts.placeholder ? `placeholder="${escHtml(opts.placeholder)}"` : '',
+        opts.min !== undefined && opts.min !== null ? `min="${escHtml(String(opts.min))}"` : '',
+        opts.max !== undefined && opts.max !== null ? `max="${escHtml(String(opts.max))}"` : '',
+        `value="${escHtml(opts.defaultValue ?? '')}"`,
+    ].filter(Boolean).join(' ');
+    const bodyHtml = (opts.bericht ? `<p>${escHtml(opts.bericht)}</p>` : '')
+                   + `<input ${attrs}>`;
+    const ok = await toonBevestigDialog(
+        bodyHtml,
+        opts.titel || 'Invoer',
+        opts.labelOk || 'OK',
+        opts.labelAnnuleer ?? 'Annuleren',
+        {
+            bodyIsHtml: true,
+            onOpened: (overlay) => {
+                inputEl = overlay.querySelector('#' + inputId);
+                if (inputEl) { inputEl.focus(); inputEl.select(); }
+            },
+        }
+    );
+    if (!ok) return null;
+    return inputEl ? inputEl.value : null;
+}
+
 function toonBevestigDialog(bericht, titel = 'Onopgeslagen wijzigingen', labelOk = 'Doorgaan', labelAnnuleer = 'Annuleren', opts = {}) {
     return new Promise(resolve => {
         // Als labelAnnuleer leeg is, tonen we alleen de OK-knop (= pure melding,
         // geen keuze). Klikken buiten of Escape = gewoon sluiten.
         const toonAnnuleer = !!labelAnnuleer;
         // opts.bodyIsHtml=true → bericht wordt als raw HTML ingevoegd (voor lijsten,
-        // formatting). Default false = string wordt geëscaped (huidige gedrag).
-        const bodyHtml = opts.bodyIsHtml ? bericht : escHtml(bericht);
+        // formatting). Default false = string wordt geëscaped + newlines worden
+        // omgezet naar <br>. Dat laatste zorgt dat alert-style multi-line teksten
+        // (bv. "Toewijzing vrijgeven?\n\nTransponder X aan Y") netjes worden
+        // weergegeven zonder dat elke caller bodyIsHtml hoeft te gebruiken.
+        const bodyHtml = opts.bodyIsHtml
+            ? bericht
+            : escHtml(bericht).replace(/\n/g, '<br>');
         const overlay = document.createElement('div');
         overlay.className = 'modal-overlay';
         overlay.innerHTML = `
@@ -800,6 +888,11 @@ function initNav() {
                 _liveOngeslagen = false;
             }
             if (typeof stopTsPolling === 'function') stopTsPolling();
+            // Stats-polling stoppen zodra we weg-navigeren van Systeem.
+            // De Bezoekers-tab start hem opnieuw als je daar weer terugkomt.
+            if (page !== 'systeem' && typeof stopPublicStatsRefresh === 'function') {
+                stopPublicStatsRefresh();
+            }
             if (page === 'importeer') {
                 document.querySelector('.nav-update-dot')?.remove();
                 // Herlaad vergelijkdata (transponders kunnen gewijzigd zijn in beheer)

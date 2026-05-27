@@ -1548,6 +1548,44 @@ header .header-wedstrijd::before {
     background: #fdecea;
     color: #b71c1c;
 }
+/* Max-waarde overschrijving: blauwe accent bij handmatig ingestelde waarde,
+   plus klein potlood-knopje om aan te passen. */
+.rp-max-override { color: #1565c0; text-decoration: underline dotted; }
+.rp-max-edit {
+    background: none;
+    border: none;
+    padding: 0 .15rem;
+    margin-left: .15rem;
+    cursor: pointer;
+    color: #888;
+    font-size: .85em;
+    line-height: 1;
+}
+.rp-max-edit:hover { color: #1565c0; }
+/* Inline edit-veld dat in-place verschijnt waar het max-getal stond.
+   Smal, blauwe rand om duidelijk te maken dat 't editbaar is. Geen
+   spinner-buttons (te druk in een tekst-strook). */
+.rp-max-input {
+    width: 4.5em;
+    padding: 1px 4px;
+    border: 1px solid #1565c0;
+    border-radius: 4px;
+    font: inherit;
+    font-weight: 700;
+    font-size: 1.05em;
+    color: #1565c0;
+    background: #fff;
+    text-align: center;
+    outline: none;
+    -moz-appearance: textfield;
+}
+.rp-max-input::-webkit-outer-spin-button,
+.rp-max-input::-webkit-inner-spin-button {
+    -webkit-appearance: none;
+    margin: 0;
+}
+.rp-max-input:focus { box-shadow: 0 0 0 2px rgba(21,101,192,.2); }
+.rp-max-input::placeholder { color: #888; font-weight: 400; }
 .reserve-paneel-leeg {
     padding: .8rem 1rem;
     font-size: .85rem;
@@ -1709,6 +1747,7 @@ header .header-wedstrijd::before {
 }
 .tab-badge.afgemeld { background: #fce4e4; color: #b71c1c; }
 .tab-badge.nieuw    { background: #c8e6c9; color: #1b5e20; }
+.tab-badge.diff     { background: #ffe8b3; color: #8a5a00; }
 
 /* ── Startlijst config ── */
 .sl-config {
@@ -2217,6 +2256,10 @@ col.heat-tp   { width: 72px; }   /* XX-12345 = 8 monospace tekens */
 .tp-toevoegen:hover { background: #c9530a; }
 
 /* ── Bevestigingsdialoog ── */
+/* z-index 10000: hoger dan élke andere modal (mld-overlay=9000, app-modals=
+ * 9999, print=1500, gallery=2500) zodat een bevestigingsvraag áltijd boven
+ * de modal staat die 'm opriep. Anders verdwijnt 'ie eronder en zit de
+ * gebruiker vast (kan niet klikken op Ja/Nee/Annuleren). */
 .modal-overlay {
     position: fixed;
     inset: 0;
@@ -2224,7 +2267,7 @@ col.heat-tp   { width: 72px; }   /* XX-12345 = 8 monospace tekens */
     display: flex;
     align-items: center;
     justify-content: center;
-    z-index: 2000;
+    z-index: 10000;
     animation: modal-fade .15s ease;
 }
 @keyframes modal-fade {
@@ -2261,6 +2304,24 @@ col.heat-tp   { width: 72px; }   /* XX-12345 = 8 monospace tekens */
     line-height: 1.55;
     font-size: .9rem;
 }
+/* Input-veld binnen modal-body (toonInputDialog) — full-width onder de
+   prompt-tekst, met blauwe focus-ring passend bij de overige modal-styling. */
+.modal-input {
+    display: block;
+    width: 100%;
+    margin: 6px 0 0;
+    padding: 8px 10px;
+    font: inherit;
+    font-size: .95rem;
+    color: var(--tekst);
+    background: #fff;
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    outline: none;
+    box-sizing: border-box;
+}
+.modal-input:focus { border-color: var(--blauw); box-shadow: 0 0 0 2px rgba(26,58,92,.15); }
+.modal-input-mono  { font-family: 'Consolas','Courier New',monospace; letter-spacing: .03em; }
 .modal-knoppen {
     display: flex;
     gap: 10px;
@@ -3408,11 +3469,16 @@ th.rk-totaal, td.rk-totaal { width:55px; font-weight:700; color:var(--blauw); ba
 .btn-secondary:hover { background: var(--lichtblauw); border-color: var(--middenblauw); color: var(--blauw); }
 
 /* ── Deelnemer toevoegen – modal ─────────────────────────────────────────────── */
+/* LET OP: deze .modal-overlay declaratie hergebruikt dezelfde class als de
+ * bevestigingsdialoog (regel ~2263). Geen eigen z-index meer — erft de
+ * 10000 van de eerste declaratie, anders zou de bevestig-dialog die vanuit
+ * een andere modal opent eronder verdwijnen. Position/background/display
+ * zijn identiek aan de eerste declaratie en zouden eigenlijk leeg kunnen,
+ * maar staan hier voor leesbaarheid (sectie-grenzen). */
 .modal-overlay {
     position: fixed; inset: 0;
     background: rgba(0,0,0,.45);
     display: flex; align-items: center; justify-content: center;
-    z-index: 1000;
 }
 .modal-box {
     background: var(--wit);
@@ -5228,6 +5294,336 @@ col.live-col-rondes  { width: 40px; }
 }
 .hp-status-ok   { color: #2e7d32; font-weight: 600; }
 .hp-status-fout { color: #b71c1c; font-weight: 600; }
+
+/* Vervang-bestaand-checkbox naast Importeer-knop in historie-import */
+.hp-hist-vervang-lbl {
+    display: inline-flex; align-items: center; gap: .35rem;
+    font-size: .9rem; color: #555; cursor: pointer;
+    user-select: none;
+}
+.hp-hist-vervang-lbl input[type="checkbox"] { cursor: pointer; }
+
+/* Cat-cel in preview-tabel: compacte dropdown met cats uit deze wedstrijd's
+   DCs. Editable zodat operator bij combo-PDF's de cat per rij kan over-
+   schrijven (AI ziet vaak alleen de eerste cat uit een combo-header). */
+.hp-hist-cat-sel {
+    width: 5em;
+    font-weight: 600;
+    padding: 2px 4px;
+}
+
+/* Live rang-preview in de Rang-kolom: toont "5 → 1" als de DC-keuze
+   straks een subset-recalc gaat doen. Origineel klein/grijs, nieuwe rang
+   vet/blauw. Schreeuwt visueel zodat operator vóór import al ziet of de
+   subset-rang klopt. */
+.hp-hist-rang-orig {
+    font-size: .75em;
+    color: #888;
+}
+.hp-hist-rang-nieuw {
+    color: #1F4E79;
+}
+
+/* Bulk-acties boven import-preview-tabel: cat + DC ineens toepassen op
+   alle aangevinkte rijen. Bespaart enorm bij combo-PDF's met veel rijders. */
+.hp-hist-bulk {
+    display: flex; flex-wrap: wrap; align-items: center; gap: .6rem;
+    margin: 8px 0 6px;
+    padding: 6px 10px;
+    background: #f0f6ff;
+    border: 1px solid #c8d8eb;
+    border-radius: 5px;
+    font-size: .85rem;
+}
+.hp-hist-bulk-lbl { font-weight: 600; color: #1F4E79; margin-right: .25rem; }
+.hp-hist-bulk-groep {
+    display: inline-flex; align-items: center; gap: .3rem;
+}
+.hp-hist-bulk-groep .inp {
+    padding: 2px 6px;
+    font-size: .85rem;
+    min-width: 6em;
+}
+.hp-hist-bulk-knop {
+    padding: 2px 8px;
+    font-size: .82rem;
+}
+
+/* ── Pending-koppelen tab ─────────────────────────────────────────────── */
+.hp-pending-wrap {
+    display: flex; flex-direction: column; gap: .75rem;
+    margin-top: .5rem;
+}
+.hp-pending-rij {
+    border: 1px solid #ddd; border-radius: 6px;
+    background: #fafafa; padding: .6rem .8rem;
+}
+.hp-pending-hoofd {
+    display: flex; justify-content: space-between; align-items: center;
+    gap: .8rem; flex-wrap: wrap;
+}
+.hp-pending-naam { display: flex; align-items: center; gap: .5rem; flex-wrap: wrap; }
+.hp-pending-cat {
+    background: #1F4E79; color: #fff;
+    padding: 1px 7px; border-radius: 9px;
+    font-size: .8rem; font-weight: 600;
+    /* Cat-evolutie kan langer zijn dan single tag — wrap-friendly */
+    white-space: nowrap;
+}
+.hp-pending-born {
+    background: #f5e6d3; color: #5e4a00;
+    padding: 1px 7px; border-radius: 9px;
+    font-size: .8rem; font-weight: 600;
+}
+.hp-pending-uit {
+    background: #ffd966; color: #5e4a00;
+    padding: 1px 7px; border-radius: 9px;
+    font-size: .8rem; font-weight: 600;
+}
+.hp-pending-acties {
+    display: flex; gap: .4rem; align-items: center;
+    flex: 1 1 320px; max-width: 480px;
+}
+.hp-pending-zoek { flex: 1; min-width: 180px; font-size: .85rem; }
+.hp-pending-sugg {
+    margin-top: .55rem; padding-top: .5rem;
+    border-top: 1px dashed #e0e0e0;
+    display: flex; flex-wrap: wrap; gap: .35rem; align-items: center;
+}
+.hp-pending-sugg-titel { font-size: .8rem; color: #666; margin-right: .25rem; }
+.hp-pending-sugg-leeg {
+    margin-top: .55rem; padding-top: .5rem;
+    border-top: 1px dashed #e0e0e0;
+    font-size: .82rem; color: #999; font-style: italic;
+}
+.hp-pending-sugg-btn {
+    background: #e8f0ff; border: 1px solid #b8d0f0;
+    color: #1F4E79; padding: .25rem .55rem;
+    border-radius: 5px; font-size: .85rem; cursor: pointer;
+    display: inline-flex; flex-direction: column; align-items: flex-start;
+    line-height: 1.25;
+}
+.hp-pending-sugg-btn:hover { background: #d0e2ff; border-color: #6f9bd6; }
+.hp-pending-sugg-meta { font-size: .72rem; color: #557; font-weight: normal; }
+/* Match-reden label op suggestie-button: '✓ leeftijd matcht' (groen) of
+   '? leeftijd onbekend' (grijs). Helpt de operator inschatten of een
+   suggestie te vertrouwen is zonder elk profiel handmatig te checken. */
+.hp-pending-reden {
+    display: block;
+    font-size: .68rem;
+    margin-top: 1px;
+    font-style: italic;
+    color: #888;
+}
+.hp-pending-reden-ok      { color: #2e7d32; }
+.hp-pending-reden-onbekend { color: #b8860b; }
+
+/* Cross-jaar pending-duplicaten: paarse accent zodat het opvalt boven de
+   normale suggestie-knoppen (blauw). Klik = samenvoegen, niet koppelen. */
+.hp-pending-dup {
+    margin-top: .5rem; padding: .45rem .6rem;
+    border: 1px dashed #b18cd0;
+    background: #f7f0ff;
+    border-radius: 6px;
+    display: flex; flex-wrap: wrap; gap: .35rem; align-items: center;
+}
+.hp-pending-dup-titel { font-size: .82rem; color: #5b3a85; margin-right: .25rem; }
+.hp-pending-dup-btn {
+    background: #ece1f5; border: 1px solid #b18cd0;
+    color: #4a2e6c; padding: .25rem .55rem;
+    border-radius: 5px; font-size: .85rem; cursor: pointer;
+    display: inline-flex; flex-direction: column; align-items: flex-start;
+    line-height: 1.25;
+}
+.hp-pending-dup-btn:hover { background: #d8c4ec; border-color: #8857b8; }
+.hp-pending-dup-meta { font-size: .72rem; color: #6a4a8a; font-weight: normal; }
+/* Fuzzy-match-indicator: ≈ teken voor pendings waar naam licht afwijkt
+   (bv 'Nine Brecht' vs 'Nine Brecht Oosterhof'). Helpt operator om die
+   match wat kritischer te bekijken voor 't samenvoegen. */
+.hp-pending-dup-fuzzy {
+    color: #b8860b;
+    font-weight: 700;
+    margin-right: 2px;
+}
+.hp-pending-zoekres {
+    margin-top: .5rem; padding-top: .5rem;
+    border-top: 1px dashed #e0e0e0;
+    display: flex; flex-wrap: wrap; gap: .35rem;
+}
+.btn-danger {
+    background: #c0392b; color: #fff;
+    border: 1px solid #962d22; padding: .25rem .55rem;
+    border-radius: 5px; font-size: .85rem; cursor: pointer;
+}
+.btn-danger:hover { background: #a93226; }
+
+/* ── Historie-import (📚) ─────────────────────────────────────────────── */
+.hp-hist-veld { margin: .6rem 0; }
+.hp-hist-veld > label {
+    display: block; font-size: .85rem; font-weight: 600;
+    color: var(--blauw, #1F4E79); margin-bottom: .25rem;
+}
+.hp-hist-veld > .inp { width: 100%; max-width: 700px; }
+#hp-hist-tekst { font-family: ui-monospace, Menlo, Consolas, monospace;
+                 font-size: 12.5px; resize: vertical; }
+.hp-hist-preview-kop {
+    margin: 12px 0 6px;
+    font-size: .95rem;
+    color: var(--blauw, #1F4E79);
+}
+/* Mini-help boven de import-preview-tabel: legt uit wat de 3 keuzes per
+   rij betekenen (aanvinken+kiezen / aanvinken+pending / uitvinken). Verschijnt
+   nadat de AI geanalyseerd heeft, dus alleen relevant in actieve flow. */
+.hp-hist-uitleg {
+    margin: 0 0 8px;
+    padding: 6px 10px;
+    background: #f0f6ff;
+    border-left: 3px solid #6f9bd6;
+    border-radius: 0 4px 4px 0;
+    font-size: .82rem;
+    color: #345;
+    line-height: 1.5;
+}
+.hp-hist-uitleg b { color: #1F4E79; }
+.hp-hist-tabel {
+    width: 100%; border-collapse: collapse; font-size: 12.5px;
+    background: #fff; border: 1px solid var(--border, #cdd8e3);
+}
+.hp-hist-tabel th, .hp-hist-tabel td {
+    padding: 4px 8px; border-bottom: 1px solid #ecf1f6;
+    text-align: left; vertical-align: middle;
+}
+.hp-hist-tabel th {
+    background: #f0f4f8; font-weight: 700; color: var(--blauw, #1F4E79);
+    position: sticky; top: 0;
+}
+.hp-hist-tabel select.inp { padding: 2px 4px; font-size: 12px; min-width: 180px; }
+.hp-hist-rij-uit { opacity: .35; }
+.hp-hist-st-ok   { color: #2e7d32; font-weight: 600; }
+.hp-hist-st-warn { color: #b86e00; font-weight: 600; }
+.hp-hist-st-err  { color: #b71c1c; font-weight: 600; }
+/* Status-cel: extra info (jaar, cat) klein onder hoofdtekst */
+.hp-hist-tabel td small {
+    display: block;
+    font-size: 11px;
+    font-weight: 400;
+    color: #666;
+    margin-top: 1px;
+}
+.hp-hist-warn-txt { color: #b86e00 !important; font-style: italic; }
+/* Persoon-picker in match-kolom (bij ambigu / warning rijen) */
+.hp-hist-pers-sel { font-size: 12px; padding: 2px 4px; max-width: 260px; }
+
+/* Comp-dropdown + "Nieuwe wedstrijd"-knop op één regel */
+.hp-hist-comp-rij {
+    display: flex; gap: 8px; align-items: center;
+    max-width: 700px; flex-wrap: wrap;
+}
+.hp-hist-comp-rij .inp { flex: 1 1 380px; min-width: 200px; }
+
+/* Banner bovenin preview als er DCs missen voor gedetecteerde cats */
+.hp-hist-banner-missing {
+    display: flex; align-items: center; justify-content: space-between;
+    gap: 12px; flex-wrap: wrap;
+    margin: 10px 0;
+    padding: 10px 14px;
+    background: #fff4d6; border: 1px solid #f0c674; border-radius: 6px;
+    color: #6e4d00; font-size: 13px;
+}
+/* Variant: alle cats zijn al gedekt, maar operator wil eventueel toch een
+   extra DC handmatig toevoegen. Geen waarschuwings-geel, neutraal grijs. */
+.hp-hist-banner-missing.hp-hist-banner-optioneel {
+    background: #f5f5f5; border-color: #ddd; color: #555;
+}
+.hp-hist-banner-knop { white-space: nowrap; }
+.hp-hist-banner-knoppen {
+    display: flex; gap: 6px; flex-wrap: wrap;
+    justify-content: flex-end;
+}
+
+/* Aanvul-banner: AI kon afstand/race-type niet bepalen, operator moet
+   handmatig aanvullen voor de Importeer-knop enabled wordt. */
+.hp-hist-banner-aanvul {
+    margin: 10px 0;
+    padding: 10px 14px;
+    background: #fdecec; border: 1px solid #e6b9b9; border-radius: 6px;
+    color: #6e2020; font-size: 13px;
+}
+.hp-hist-banner-titel { font-weight: 600; margin-bottom: 8px; }
+.hp-hist-banner-rij {
+    display: flex; flex-wrap: wrap; gap: 10px 14px; align-items: flex-end;
+}
+.hp-hist-banner-rij label {
+    display: flex; flex-direction: column; gap: 2px;
+    font-size: 12px; font-weight: 600; color: var(--blauw, #1F4E79);
+}
+.hp-hist-banner-rij .inp {
+    font-weight: 400; color: var(--tekst, #1a1a1a);
+    padding: 4px 6px; font-size: 13px;
+    min-width: 80px;
+}
+.hp-hist-banner-rij input[type="text"] { min-width: 160px; }
+.hp-hist-banner-rij input[type="number"] { width: 90px; }
+.hp-hist-banner-rij select { min-width: 130px; }
+
+/* Modal voor 'Nieuwe historie-wedstrijd' — gebruikt de standaard app-modal
+   structuur (.modal-overlay > .modal-dialog > .modal-header / .modal-body /
+   .modal-knoppen). .modal-input erft full-width + border. Alleen breedte +
+   labels eigen styling. */
+.hp-hist-modal { max-width: 500px; }
+.hp-hist-modal-uitleg {
+    font-size: 12.5px; color: #555;
+    margin: 0 0 12px;
+}
+.hp-hist-modal-label {
+    display: block;
+    font-size: 12.5px; font-weight: 600;
+    color: var(--blauw, #1F4E79);
+    margin: 10px 0 3px;
+}
+.hp-hist-modal-label:first-of-type { margin-top: 0; }
+.hp-hist-modal-label small {
+    color: #888; font-weight: 400;
+    margin-left: 4px;
+}
+.hp-hist-modal-fout {
+    margin-top: 10px; padding: 7px 10px;
+    background: #fdecec; border: 1px solid #e6b9b9; border-radius: 4px;
+    color: #b71c1c; font-size: 12.5px;
+}
+
+/* Aangepaste DC-groepering modal: per cat een groepsnummer-veld */
+.hp-hist-groep-lijst {
+    display: flex; flex-direction: column; gap: 6px;
+    margin: 10px 0;
+    padding: 10px;
+    background: #f6f8fa; border: 1px solid var(--border, #cdd8e3);
+    border-radius: 6px;
+}
+.hp-hist-groep-rij {
+    display: flex; align-items: center; gap: 10px;
+}
+.hp-hist-groep-cat {
+    font-weight: 700; color: var(--blauw, #1F4E79);
+    min-width: 60px;
+}
+.hp-hist-groep-label {
+    color: #666; font-size: 12.5px;
+}
+.hp-hist-groep-nr {
+    width: 70px !important; font-weight: 700; text-align: center;
+}
+.hp-hist-groep-preview {
+    margin-top: 10px; padding: 8px 10px;
+    background: #e8f4e8; border: 1px solid #b8d8b8; border-radius: 6px;
+    font-size: 12.5px; color: #2e5a2e;
+}
+.hp-hist-groep-chip {
+    display: inline-block;
+    background: #fff; border: 1px solid #b8d8b8; border-radius: 12px;
+    padding: 2px 10px; margin: 2px;
+    font-weight: 600; color: #2e5a2e;
+}
 
 .hp-rapport {
     margin-top: .8rem;

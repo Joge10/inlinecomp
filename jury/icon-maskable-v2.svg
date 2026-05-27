@@ -1,0 +1,11 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
+  <!-- Maskable: content in safe zone (80% center = 40px inset bij 512) -->
+  <rect width="512" height="512" fill="#1a3a5c"/>
+  <text x="256" y="310" font-family="Segoe UI, Arial, sans-serif" font-size="200"
+        font-weight="700" fill="#ffffff" text-anchor="middle" letter-spacing="-7">IC</text>
+  <rect x="116" y="355" width="280" height="36" rx="18" fill="#E8630A"/>
+  <!-- J-badge: ruim binnen safe zone (40-472), centrum (385, 385) -->
+  <circle cx="385" cy="385" r="55" fill="#E8630A" stroke="#ffffff" stroke-width="9"/>
+  <text x="385" y="410" font-family="Segoe UI, Arial, sans-serif" font-size="68"
+        font-weight="700" fill="#ffffff" text-anchor="middle">J</text>
+</svg>

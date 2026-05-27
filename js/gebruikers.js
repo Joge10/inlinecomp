@@ -174,13 +174,29 @@ function bindLogboekEvents() {
     el('gb-log-vernieuwen')?.addEventListener('click', () =>
         laadLogboek(el('gb-log-filter')?.value ?? ''));
 
-    el('gb-log-opschonen')?.addEventListener('click', () => {
-        const dagen = prompt('Verwijder vermeldingen ouder dan hoeveel dagen?', '30');
-        if (dagen === null) return;
-        const d = parseInt(dagen);
-        if (!d || d < 1) { toonBevestigDialog('Voer een geldig aantal dagen in.', 'Logboek'); return; }
-        toonBevestigDialog(`Alle vermeldingen ouder dan ${d} dagen verwijderen?`, 'Logboek opschonen')
-            .then(ok => { if (ok) opschonenLogboek(d); });
+    el('gb-log-opschonen')?.addEventListener('click', async () => {
+        // Step 1: vraag aantal dagen via standaard modal-input (geen browser-prompt)
+        const dagen = await toonInputDialog({
+            titel:        'Logboek opschonen',
+            bericht:      'Verwijder vermeldingen ouder dan hoeveel dagen?',
+            inputType:    'number',
+            defaultValue: '30',
+            min:          1,
+            max:          3650,
+            labelOk:      'Volgende',
+        });
+        if (dagen === null) return;   // geannuleerd
+        const d = parseInt(dagen, 10);
+        if (!d || d < 1) {
+            toonBevestigDialog('Voer een geldig aantal dagen in.', 'Logboek', 'OK', '');
+            return;
+        }
+        // Step 2: bevestigen dat operator dit echt wil
+        const ok = await toonBevestigDialog(
+            `Alle vermeldingen ouder dan ${d} dagen verwijderen?`,
+            'Logboek opschonen'
+        );
+        if (ok) opschonenLogboek(d);
     });
 }
 
@@ -404,12 +420,25 @@ function startPublicStatsRefresh() {
     _gbStatsTimer = setInterval(laadPublicStats, 30_000);
 }
 
-// Stop het interval als de gebruiker weg navigeert
-document.addEventListener('visibilitychange', () => {
-    if (document.hidden && _gbStatsTimer) {
+// Stop de polling expliciet — geroepen door switchSysteemTab() zodra de
+// gebruiker een ANDERE Systeem-tab kiest (Helpers/Rijders/etc). Anders
+// blijft de timer doortikken en zie je elke 30s public_stats + coach_stats
+// requests in de network-tab terwijl je daar niets mee doet.
+function stopPublicStatsRefresh() {
+    if (_gbStatsTimer) {
         clearInterval(_gbStatsTimer);
         _gbStatsTimer = null;
-    } else if (!document.hidden && !_gbStatsTimer && el('gb-stats')) {
+    }
+}
+
+// Stop het interval als de gebruiker weg navigeert (browser-tab in achtergrond)
+document.addEventListener('visibilitychange', () => {
+    if (document.hidden) {
+        stopPublicStatsRefresh();
+    } else if (!_gbStatsTimer && el('gb-stats')
+               && el('sys-tab-bezoekers')?.style.display !== 'none') {
+        // Alleen herstarten als browser zichtbaar is ÉN we daadwerkelijk
+        // nog op de Bezoekers-tab zijn (anders zou je 'm onnodig restarten).
         startPublicStatsRefresh();
     }
 });

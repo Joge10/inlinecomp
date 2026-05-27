@@ -1,0 +1,52 @@
+{
+  "_uitleg": [
+    "Kopieer dit bestand naar config.json en vul de echte waarden in.",
+    "competition_id + dc_id moeten BESTAAN in de database (handmatig aangemaakt zoals NK 2025).",
+    "Voor ELKE categorie die voorkomt in de PDFs van dat jaar moet je een dc_id opgeven.",
+    "De script leest config.json, NIET dit voorbeeldbestand."
+  ],
+
+  "db": {
+    "host": "localhost",
+    "port": 3306,
+    "user": "inlinecomp",
+    "password": "VERANDER_DIT",
+    "database": "inlinecomp"
+  },
+
+  "wedstrijden": {
+    "2024": {
+      "competition_id": "00000000-2024-0000-0000-000000000000",
+      "competition_naam": "NK Inlineskaten Baan 2024",
+      "competition_datum": "2024-06-15",
+      "dcs": {
+        "DSA": { "dc_id": "...uuid-DSA-2024...", "dc_naam": "Dames Senioren A" },
+        "HSA": { "dc_id": "...uuid-HSA-2024...", "dc_naam": "Heren Senioren A" },
+        "DJA": { "dc_id": "...uuid-DJA-2024...", "dc_naam": "Dames Junioren A" },
+        "HJA": { "dc_id": "...uuid-HJA-2024...", "dc_naam": "Heren Junioren A" },
+        "DJB": { "dc_id": "...uuid-DJB-2024...", "dc_naam": "Dames Junioren B" },
+        "HJB": { "dc_id": "...uuid-HJB-2024...", "dc_naam": "Heren Junioren B" },
+        "DKA": { "dc_id": "...uuid-DKA-2024...", "dc_naam": "Dames Kadetten"   },
+        "HKA": { "dc_id": "...uuid-HKA-2024...", "dc_naam": "Heren Kadetten"   }
+      }
+    },
+
+    "2023": {
+      "competition_id": "00000000-2023-0000-0000-000000000000",
+      "competition_naam": "NK Inlineskaten Baan 2023",
+      "competition_datum": "2023-06-17",
+      "dcs": {
+        "DSA": { "dc_id": "...", "dc_naam": "Dames Senioren A" }
+      }
+    },
+
+    "2022": {
+      "competition_id": "00000000-2022-0000-0000-000000000000",
+      "competition_naam": "NK Inlineskaten Baan 2022",
+      "competition_datum": "2022-06-18",
+      "dcs": {
+        "DSA": { "dc_id": "...", "dc_naam": "Dames Senioren A" }
+      }
+    }
+  }
+}

@@ -8,6 +8,10 @@ CREATE TABLE IF NOT EXISTS `distance_combinations` (
     `category_filter` VARCHAR(20)  DEFAULT NULL,
     `merge_group`     VARCHAR(50)  DEFAULT NULL,
     `merge_label`     VARCHAR(80)  DEFAULT NULL,
+    -- Handmatige override voor max rijders in loting. NULL = auto
+    -- (= aantal niet-reserves uit KNSB-feed). Gezet = die waarde wint
+    -- voor de capaciteit-cap in het reserve-paneel.
+    `max_in_loting`   INT UNSIGNED DEFAULT NULL,
     PRIMARY KEY (`id`),
     KEY `idx_dc_competition` (`competition_id`),
     CONSTRAINT `fk_dc_competition`

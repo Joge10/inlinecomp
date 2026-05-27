@@ -374,9 +374,14 @@ async function schakelTab(tab) {
         markTpClean();
     }
     actiefTab = tab;
-    document.querySelectorAll('.org-tab-btn').forEach(b =>
+    // SCOPED queries — alleen tabs binnen #page-instellingen aanraken.
+    // Eerder ongescooped: zette ook #sys-tab-helpers / #sys-tab-uploads
+    // (dezelfde .org-tab-content class) op display:none, waardoor die
+    // tabs leeg leken na een instellingen-actie. Symptoom: blanco
+    // Systeem→Helpers-tab.
+    document.querySelectorAll('#page-instellingen .org-tab-btn').forEach(b =>
         b.classList.toggle('active', b.dataset.tab === tab));
-    document.querySelectorAll('.org-tab-content').forEach(c =>
+    document.querySelectorAll('#page-instellingen .org-tab-content').forEach(c =>
         c.style.display = c.id === `org-tab-${tab}` ? '' : 'none');
 
     if (tab === 'wedstrijden') laadOrgWedstrijden();
@@ -450,7 +455,7 @@ async function laadOrgWedstrijden() {
     // zonder dat de rij-knoppen weer breed worden.
     const legenda = `
         <div class="beheer-wedstrijd-legenda">
-            <span class="bwl-titel">Acties per wedstrijd:</span>
+            <span class="bwl-titel">Acties:</span>
             <span class="bwl-item"><b>🔒/⏳/👁</b> zichtbaarheid <small>(verborgen / binnenkort / live)</small></span>
             <span class="bwl-sep">·</span>
             <span class="bwl-item"><b>📢</b> mededeling versturen</span>
@@ -458,6 +463,8 @@ async function laadOrgWedstrijden() {
             <span class="bwl-item"><b>📄</b> public-poster <small>(rijders/ouders)</small></span>
             <span class="bwl-sep">·</span>
             <span class="bwl-item"><b>🖼</b> coach-poster</span>
+            <span class="bwl-sep">·</span>
+            <span class="bwl-item"><b>🖨</b> wedstrijdrapport <small>(print / PDF)</small></span>
             <span class="bwl-sep">·</span>
             <span class="bwl-item"><b>🔑</b> jury-wachtwoord</span>
             <span class="bwl-sep">·</span>
@@ -507,6 +514,7 @@ async function laadOrgWedstrijden() {
                 ${inDb ? `<button class="btn-secondary btn-sm beheer-comp-meld beheer-icon-btn" data-id="${escHtml(w.id)}" data-naam="${escHtml(w.name ?? w.id)}" title="Mededelingen — verstuur push-bericht naar /coach + /public">📢</button>` : ''}
                 ${inDb ? `<button class="btn-secondary btn-sm beheer-comp-poster beheer-icon-btn" data-id="${escHtml(w.id)}" data-app="public" title="Public-poster — download QR-poster voor rijders / ouders">📄</button>` : ''}
                 ${inDb ? `<button class="btn-secondary btn-sm beheer-comp-poster beheer-icon-btn" data-id="${escHtml(w.id)}" data-app="coach" title="Coach-poster — download QR-poster voor coaches">🖼</button>` : ''}
+                ${inDb ? `<button class="btn-secondary btn-sm beheer-comp-print beheer-icon-btn" data-id="${escHtml(w.id)}" data-naam="${escHtml(w.name ?? w.id)}" title="Wedstrijdrapport — print of opslaan als PDF (via browser-print)">🖨</button>` : ''}
                 ${inDb ? `<button class="btn-secondary btn-sm beheer-comp-jurypwd beheer-icon-btn ${Number(dbRow?.jury_password_set) ? 'is-actief' : ''}"
                     data-id="${escHtml(w.id)}" data-naam="${escHtml(w.name ?? w.id)}"
                     data-set="${Number(dbRow?.jury_password_set) ? '1' : '0'}"
@@ -543,6 +551,9 @@ async function laadOrgWedstrijden() {
     });
     lijst.querySelectorAll('.beheer-comp-jurypwd').forEach(btn => {
         btn.addEventListener('click', () => juryWachtwoordDialog(btn));
+    });
+    lijst.querySelectorAll('.beheer-comp-print').forEach(btn => {
+        btn.addEventListener('click', () => printWedstrijdrapport(btn.dataset.id, btn.dataset.naam));
     });
 
     if (_beheerLeesOnly) pasSchrijfLockToe(lijst.closest('.org-tab-content') ?? lijst);
@@ -608,7 +619,7 @@ async function juryWachtwoordDialog(btn) {
             toonToast(nuSet ? '🔑 Jury-wachtwoord ingesteld' : '🔑 Jury-wachtwoord gewist', 'ok');
         }
     } catch (e) {
-        alert('Opslaan mislukt: ' + e.message);
+        toonBevestigDialog('Opslaan mislukt: ' + e.message, 'Jury-wachtwoord', 'OK', '');
     }
 }
 
@@ -1170,12 +1181,17 @@ function _tpToonPagina() {
         // Vrijgeven: laat de transponder in de lijst maar wis de toewijzing.
         // Gebruikt als een rijder zijn transponder fysiek heeft ingeleverd en
         // de transponder weer beschikbaar is voor uitgifte aan iemand anders.
-        tr.querySelector('.tp-vrijgeven')?.addEventListener('click', () => {
+        tr.querySelector('.tp-vrijgeven')?.addEventListener('click', async () => {
             const idx = parseInt(tr.dataset.idx);
             if (isNaN(idx) || !_tpAlleData[idx]) return;
             const huidig = _tpAlleData[idx];
             const info = [huidig.toegewezen_snr, huidig.toegewezen_naam, huidig.categorie].filter(Boolean).join(' ');
-            if (!confirm(`Toewijzing vrijgeven?\n\nTransponder ${huidig.transponder_code || ''} is nu toegewezen aan ${info || '(onbekend)'}.\nNa vrijgeven komt hij weer beschikbaar; de transponder zelf blijft in de lijst.`)) return;
+            const ok = await toonBevestigDialog(
+                `Transponder ${huidig.transponder_code || ''} is nu toegewezen aan ${info || '(onbekend)'}.\n\n` +
+                `Na vrijgeven komt hij weer beschikbaar; de transponder zelf blijft in de lijst.`,
+                'Toewijzing vrijgeven', 'Vrijgeven', 'Annuleren'
+            );
+            if (!ok) return;
             _tpAlleData[idx] = {
                 ...huidig,
                 toegewezen_snr:  null,
@@ -1331,6 +1347,298 @@ footer{margin-top:5mm;border-top:1px solid #ccc;padding-top:2mm;font-size:7.5pt;
 
     const win = window.open('', '_blank');
     if (!win) { toonBevestigDialog('Pop-up geblokkeerd — sta pop-ups toe.', 'Afdrukken'); return; }
+    win.document.write(htmlDoc);
+    win.document.close();
+}
+
+// ── Wedstrijdrapport: print of opslaan als PDF ────────────────────────────
+// Triggered vanuit Beheer → Organisaties → tab Wedstrijden, 🖨-knop per rij.
+// Haalt alle DC's + distances + uitslagen op via api/wedstrijdrapport.php,
+// bouwt een geformatteerde HTML met alle uitslagen onder elkaar en opent
+// die in een nieuw venster. Het venster roept automatisch window.print()
+// aan zodat de operator direct naar printer of "Opslaan als PDF" kan.
+//
+// Bewust geen externe lib (html2pdf etc.) — browser-print + @page-CSS
+// geeft consistente A4-output en respecteert printer-instellingen van
+// de operator (kleur/zwart-wit, marges, paginabereik).
+async function printWedstrijdrapport(compId, compNaam) {
+    if (!compId) return;
+    const esc = s => String(s ?? '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+
+    let data;
+    try {
+        const res = await fetch('api/wedstrijdrapport.php?id=' + encodeURIComponent(compId));
+        data = await res.json();
+        if (data.error) throw new Error(data.error);
+    } catch (e) {
+        toonBevestigDialog('Kon wedstrijdrapport niet ophalen: ' + (e.message || e), 'Afdrukken');
+        return;
+    }
+
+    const comp = data.competition || {};
+    const dcs  = Array.isArray(data.dcs) ? data.dcs : [];
+    if (!dcs.length) {
+        toonBevestigDialog('Deze wedstrijd heeft geen distance combinations om af te drukken.', 'Afdrukken');
+        return;
+    }
+
+    // ── Helpers ─────────────────────────────────────────────────────────
+    // Datum-bereik formatteren: één dag → "29 mei 2025", meerdere dagen →
+    // "29 — 31 mei 2025". Compact want het staat in de header naast naam.
+    const _fmtDatum = (iso) => {
+        if (!iso) return '';
+        const d = new Date(iso.replace(' ', 'T'));
+        return d.toLocaleDateString('nl-NL', { day: '2-digit', month: 'long', year: 'numeric' });
+    };
+    const _fmtKortDatum = (iso) => {
+        if (!iso) return '';
+        const d = new Date(iso.replace(' ', 'T'));
+        return d.toLocaleDateString('nl-NL', { day: '2-digit', month: 'short' });
+    };
+    const datumBereik = (() => {
+        const s = comp.starts ? new Date(comp.starts.replace(' ', 'T')) : null;
+        const e = comp.ends   ? new Date(comp.ends.replace(' ', 'T'))   : null;
+        if (!s) return '';
+        if (!e || s.toDateString() === e.toDateString()) return _fmtDatum(comp.starts);
+        // Zelfde maand+jaar → "29 — 31 mei 2025", anders volledig per kant
+        if (s.getMonth() === e.getMonth() && s.getFullYear() === e.getFullYear()) {
+            return `${s.getDate()} — ${e.getDate()} ${s.toLocaleDateString('nl-NL', { month: 'long', year: 'numeric' })}`;
+        }
+        return `${_fmtDatum(comp.starts)} — ${_fmtDatum(comp.ends)}`;
+    })();
+
+    // tijd_ms → leesbare string. < 60s → "19.727 s", anders "1:23.456"
+    const _fmtTijd = (ms) => {
+        if (ms === null || ms === undefined) return '—';
+        if (ms < 60000) return (ms / 1000).toFixed(3) + ' s';
+        const min = Math.floor(ms / 60000);
+        const sec = ((ms % 60000) / 1000).toFixed(3).padStart(6, '0');
+        return `${min}:${sec}`;
+    };
+
+    const _raceTypeLabel = (rt) => ({
+        sprint:      'Sprint / DTT',
+        inline:      'Inline (head-to-head)',
+        afvalkoers:  'Afvalkoers',
+        puntenkoers: 'Puntenkoers',
+    }[rt] || rt || '');
+
+    // ── Tabel-builder voor één set rijen (uitslag of klassement) ────────
+    // Kolommen dynamisch op basis van data, voorkomt lege "—" kolommen.
+    // Bij split_group: rijen per split apart groeperen met een tussenkop.
+    const _bouwTabel = (rijen, opts = {}) => {
+        if (!rijen?.length) return '';
+        const isKlassement = opts.isKlassement === true;
+        const heeftTijd    = !isKlassement && rijen.some(r => r.tijd_ms !== null);
+        const heeftPunten  = rijen.some(r => (isKlassement ? r.punten_totaal : r.punten) !== null);
+        const heeftSanctie = !isKlassement && rijen.some(r => r.sanctie);
+
+        // Splits detecteren — als er meerdere unieke split_groups zijn,
+        // tonen we per split een aparte sub-tabel met cat-naam als kop.
+        const splits = [...new Set(rijen.map(r => r.split_group || ''))];
+        const meerdereSplits = splits.length > 1;
+
+        const headCols = [
+            '<th class="c">Pl</th>',
+            '<th>Naam</th>',
+            '<th class="c">Cat</th>',
+            '<th>Club</th>',
+            heeftTijd    ? '<th class="c">Tijd</th>'    : '',
+            heeftPunten  ? '<th class="c">Punten</th>'  : '',
+            heeftSanctie ? '<th class="c">Opm</th>'     : '',
+        ].filter(Boolean).join('');
+
+        const _bouwRijen = (subset) => subset.map((r, i) => {
+            const punten = isKlassement ? r.punten_totaal : r.punten;
+            const cells = [
+                // NULL-rang (DQ/DNS-rijders zonder positie) → '—' ipv lege
+                // cel of de letterlijke string 'null'. Consistent met de
+                // punten-kolom hieronder.
+                `<td class="c">${r.rang !== null ? esc(r.rang) : '—'}</td>`,
+                `<td>${esc(r.full_name)}</td>`,
+                `<td class="c">${esc(r.categorie ?? '')}</td>`,
+                `<td>${esc(r.club_full ?? '')}</td>`,
+                heeftTijd    ? `<td class="c mono">${esc(_fmtTijd(r.tijd_ms))}</td>` : '',
+                heeftPunten  ? `<td class="c">${punten !== null ? esc(punten) : '—'}</td>` : '',
+                heeftSanctie ? `<td class="c sanctie">${esc(r.sanctie ?? '')}</td>` : '',
+            ].filter(Boolean).join('');
+            return `<tr class="${i % 2 === 1 ? 'z' : ''}">${cells}</tr>`;
+        }).join('');
+
+        if (!meerdereSplits) {
+            return `<table>
+                <thead><tr>${headCols}</tr></thead>
+                <tbody>${_bouwRijen(rijen)}</tbody>
+            </table>`;
+        }
+
+        // Per split-group een eigen tabel — voorkomt dat HSA-rang-9
+        // boven HJA-rang-1 staat bij split-DCs (beide hebben hun eigen
+        // ranking 1..N maar dezelfde DC).
+        return splits.map(sg => {
+            const subset = rijen.filter(r => (r.split_group || '') === sg);
+            if (!subset.length) return '';
+            const splitTitel = sg
+                ? `<div class="split-titel">Sectie: ${esc(sg)}</div>`
+                : '';
+            return splitTitel + `<table>
+                <thead><tr>${headCols}</tr></thead>
+                <tbody>${_bouwRijen(subset)}</tbody>
+            </table>`;
+        }).join('');
+    };
+
+    // ── Per DC blokken bouwen ───────────────────────────────────────────
+    // Hulpfunctie: render één "logische DC" (kan een echte DC zijn, of een
+    // virtuele DC voor één split-group binnen een gesplitste DC). De caller
+    // bepaalt wat de titel (label) is en welke distances + klassement-rijen
+    // bij deze logische DC horen.
+    const _bouwDcSectie = (label, distances, klassement) => {
+        const blocks = [];
+
+        // Multi-distance: eindklassement-blok bovenaan met totaal-punten
+        if (klassement?.length) {
+            blocks.push(`<section class="dc-block">
+                <h2 class="dc-titel">${esc(label)} — Eindklassement</h2>
+                <div class="dc-sub">${esc(distances.length)} afstanden · totaal-puntenklassement</div>
+                ${_bouwTabel(klassement, { isKlassement: true })}
+            </section>`);
+        }
+
+        if (!distances.length) {
+            blocks.push(`<section class="dc-block">
+                <h2 class="dc-titel">${esc(label)}</h2>
+                <div class="dc-leeg">Geen afstanden gedefinieerd.</div>
+            </section>`);
+            return blocks.join('');
+        }
+
+        // Per distance één blok
+        for (const dist of distances) {
+            const datumKort = dist.starts ? _fmtKortDatum(dist.starts) : '';
+            const rtLabel   = _raceTypeLabel(dist.race_type);
+            const subMeta   = [datumKort, dist.name, rtLabel].filter(Boolean).join(' · ');
+            // Bij multi-distance binnen deze logische DC: ook de afstand-
+            // naam in titel om de blokken te onderscheiden. Bij single-
+            // distance is label alleen genoeg.
+            const titel = distances.length > 1 ? `${label} — ${dist.name}` : label;
+
+            if (!dist.uitslag?.length) {
+                blocks.push(`<section class="dc-block">
+                    <h2 class="dc-titel">${esc(titel)}</h2>
+                    <div class="dc-sub">${esc(subMeta)}</div>
+                    <div class="dc-leeg">Geen uitslag vastgelegd.</div>
+                </section>`);
+            } else {
+                blocks.push(`<section class="dc-block">
+                    <h2 class="dc-titel">${esc(titel)}</h2>
+                    <div class="dc-sub">${esc(subMeta)}</div>
+                    ${_bouwTabel(dist.uitslag)}
+                </section>`);
+            }
+        }
+        return blocks.join('');
+    };
+
+    // Top-level loop: voor elke DC bepalen of 'ie gesplitst is.
+    //   - Geen split  → één sectie met DC-naam als label (zoals voorheen)
+    //   - Wel splits  → N secties, één per split. Parent-DC-naam wordt NIET
+    //     getoond (operator's keuze: na splitsen is parent verleden tijd,
+    //     alleen de split-labels DP1/HP1/DP2/HP2 etc. zijn relevant).
+    const dcBlocks = dcs.flatMap(dc => {
+        const distances = dc.distances || [];
+        const klassement = dc.klassement || [];
+        // Unieke non-empty target_groups in distances = de splits van deze DC
+        const splits = [...new Set(distances.map(d => d.target_group).filter(Boolean))];
+
+        if (splits.length === 0) {
+            // Niet-gesplitste DC: render zoals voorheen
+            return [_bouwDcSectie(dc.name, distances, klassement)];
+        }
+
+        // Gesplitste DC: per split-label een eigen sectie met eigen
+        // distances en eigen klassement-subset
+        return splits.map(splitLabel => {
+            const splitDists = distances.filter(d => d.target_group === splitLabel);
+            const splitKlas  = klassement.filter(k => (k.split_group || '') === splitLabel);
+            return _bouwDcSectie(splitLabel, splitDists, splitKlas);
+        });
+    }).join('');
+
+    // ── Header (org-logo rechts, titel+datum links) ─────────────────────
+    // Geen bouwOrgHeaderFooter() call — die werkt vanuit `actieveOrg` state,
+    // wij hebben hier wedstrijd-specifieke org-info uit de API zelf.
+    const orgLogoHtml = comp.organisatie_logo
+        ? `<img src="${esc(comp.organisatie_logo)}" alt="logo" style="max-height:55px;max-width:180px;object-fit:contain">`
+        : '';
+    const orgNaam   = comp.organisatie_naam ?? '';
+    const locatie   = [comp.venue_name, comp.venue_city].filter(Boolean).join(', ') || comp.location || '';
+    const afgedrukt = new Date().toLocaleString('nl-NL',
+        { day: '2-digit', month: 'long', year: 'numeric', hour: '2-digit', minute: '2-digit' });
+
+    const htmlDoc = `<!DOCTYPE html><html lang="nl">
+<head><meta charset="UTF-8">
+<title>${esc(comp.name || compNaam || 'Wedstrijdrapport')}</title>
+<style>
+*{box-sizing:border-box}
+body{font-family:Arial,Helvetica,sans-serif;font-size:9.5pt;margin:.8cm 1.2cm 1.2cm;color:#111}
+header{display:flex;justify-content:space-between;align-items:flex-start;gap:4mm;margin-bottom:3mm}
+.hdr-links{flex:1;min-width:0}
+.hdr-titel{font-size:14pt;font-weight:700;margin-bottom:1mm}
+.hdr-meta{font-size:9pt;color:#555}
+.hdr-rechts{flex-shrink:0}
+hr.top-rule{border:none;border-top:2px solid #1a3a5c;margin:2mm 0 5mm}
+.dc-block{margin-bottom:6mm;page-break-inside:avoid}
+.dc-titel{font-size:11pt;font-weight:700;color:#1a3a5c;margin:0 0 1mm;padding-bottom:1mm;border-bottom:1px solid #1a3a5c}
+.dc-sub{font-size:8.5pt;color:#666;margin-bottom:2mm;font-style:italic}
+.dc-leeg{font-size:9pt;color:#888;font-style:italic;padding:2mm 0}
+.split-titel{font-size:9pt;font-weight:600;color:#1a3a5c;margin:3mm 0 1mm;padding-left:1mm;border-left:3px solid #1a3a5c}
+.split-titel:first-child{margin-top:0}
+table + table{margin-top:2mm}
+table{width:100%;border-collapse:collapse;font-size:9pt}
+thead tr{background:#1a3a5c;color:#fff}
+th{padding:3px 6px;text-align:left;font-size:8.5pt;font-weight:600;letter-spacing:.02em}
+td{padding:3px 6px;border-bottom:1px solid #eee;vertical-align:middle}
+.c{text-align:center}
+.mono{font-family:'Consolas','Courier New',monospace;font-size:8.8pt}
+.sanctie{color:#c00;font-weight:700;font-size:8.5pt}
+tr.z td{background:#f9f9f9}
+footer{margin-top:6mm;border-top:1px solid #ccc;padding-top:2mm;font-size:7.5pt;color:#888;
+       display:flex;justify-content:space-between}
+@page{size:A4 portrait;margin:1cm}
+@media print{
+  tr{page-break-inside:avoid}
+  thead{display:table-header-group}
+  .dc-block{page-break-inside:avoid}
+}
+</style></head>
+<body>
+<header>
+  <div class="hdr-links">
+    <div class="hdr-titel">${esc(comp.name)}</div>
+    <div class="hdr-meta">
+        ${esc([datumBereik, locatie, orgNaam].filter(Boolean).join(' · '))}
+    </div>
+  </div>
+  <div class="hdr-rechts">${orgLogoHtml}</div>
+</header>
+<hr class="top-rule">
+${dcBlocks}
+<footer>
+  <span>Afgedrukt: ${esc(afgedrukt)}</span>
+  <span>${dcs.length} categorie${dcs.length !== 1 ? 'ën' : ''} · InlineComp</span>
+</footer>
+<script>window.addEventListener('load', () => { window.focus(); window.print(); });<\/script>
+</body></html>`;
+
+    // Geen window.close() in print-script — operator wil mogelijk
+    // tussendoor de uitslag controleren of opnieuw printen vanuit
+    // hetzelfde venster. Sluiten doet 'ie zelf wel.
+    const win = window.open('', '_blank');
+    if (!win) {
+        toonBevestigDialog('Pop-up geblokkeerd — sta pop-ups toe voor deze site.', 'Afdrukken');
+        return;
+    }
     win.document.write(htmlDoc);
     win.document.close();
 }
@@ -1518,7 +1826,7 @@ async function downloadPoster(compId = null, appType = 'public') {
         a.remove();
         URL.revokeObjectURL(url);
     } catch (e) {
-        alert('Kon poster niet downloaden:\n\n' + e.message);
+        toonBevestigDialog('Kon poster niet downloaden:\n\n' + e.message, 'Poster', 'OK', '');
     } finally {
         if (btn) { btn.disabled = false; btn.textContent = origLabel; }
     }

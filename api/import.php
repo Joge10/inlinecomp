@@ -54,7 +54,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'DELETE') {
     require_once __DIR__ . '/../auth/session.php';
     $_authUser = requireAuth($pdo, ['owner', 'admin']);
     $delId = trim($_GET['id'] ?? '');
-    if (!preg_match('/^[a-f0-9\-]{36}$/i', $delId)) {
+    // 8-36 chars, alfanumeriek + dashes. Range ipv exact 36 zodat handmatig-
+    // geseede IDs (bv. historie-import 'hist-2024-nk-baan-aabbcc' = 24 chars)
+    // ook delete toelaten.
+    if (!preg_match('/^[a-z0-9\-]{8,36}$/i', $delId)) {
         http_response_code(400);
         echo json_encode(['error' => 'Ongeldig competition ID']);
         exit;
@@ -93,7 +96,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'GET' && ($_GET['action'] ?? '') === 'export_
     $_authUser = requireAuth($pdo);
 
     $expCompId = trim($_GET['competition_id'] ?? '');
-    if (!preg_match('/^[a-f0-9\-]{36}$/i', $expCompId)) {
+    // 8-36 chars, alfanumeriek + dashes — versoepeld voor handmatig-geseede IDs.
+    if (!preg_match('/^[a-z0-9\-]{8,36}$/i', $expCompId)) {
         http_response_code(400);
         header('Content-Type: text/plain; charset=utf-8');
         echo 'Ongeldig of ontbrekend competition_id';

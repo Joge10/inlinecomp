@@ -2569,8 +2569,23 @@ function _afvalInitVoorRit(ritIdx) {
             plek:     r.afval_rang,
             sanctie:  r.sanctie || null,
             buiten_schema: _liveSanctieHeeft(r.sanctie, 'DQ-TF'),
+            batch:    null,
         }))
         .sort((a, b) => b.plek - a.plek);
+    // Ex-aequo herstel uit DB: items met identieke plek-waarde krijgen
+    // gegenereerde batch-id zodat _afvalHercomputeSetRondes ze als groep
+    // ziet en bij plek-herberekening hun gedeelde plek behoudt. Solo items
+    // (unieke plek) blijven batch=null.
+    const plekToBatch = new Map();
+    afgevallen.forEach(a => {
+        const groep = afgevallen.filter(x => x.plek === a.plek);
+        if (groep.length > 1) {
+            if (!plekToBatch.has(a.plek)) {
+                plekToBatch.set(a.plek, _afvalNieuweBatchId());
+            }
+            a.batch = plekToBatch.get(a.plek);
+        }
+    });
 
     // DNS-set: rijders die niet zijn gestart. Tellen niet als 'in koers' en
     // krijgen geen positie. Bij DB-init uit r.sanctie; live updates via
@@ -2639,19 +2654,25 @@ function _afvalSet(ritIdx) {
 
     const nogVrij = _afvalNogInKoersIds(ritIdx).length
                   + st.voorlopig_2de.length + st.voorlopig_1ste.length;
-    // 2de-groep: K rijders, gedeelde plek = nogVrij - K + 1
-    const k2 = st.voorlopig_2de.length;
-    const plek2 = nogVrij - k2 + 1;
     const ronde = [];
-    st.voorlopig_2de.forEach(eid => {
-        ronde.push({ entry_id: eid, plek: plek2, sanctie: null });
-    });
-    // 1ste-groep: K1 rijders, gedeelde plek = (nogVrij - k2) - K1 + 1
+    // 2de-groep: K rijders, gedeelde plek (ex-aequo). batch=null voor solo.
+    const k2 = st.voorlopig_2de.length;
+    if (k2 > 0) {
+        const plek2 = nogVrij - k2 + 1;
+        const batch2 = k2 > 1 ? _afvalNieuweBatchId() : null;
+        st.voorlopig_2de.forEach(eid => {
+            ronde.push({ entry_id: eid, plek: plek2, sanctie: null, batch: batch2 });
+        });
+    }
+    // 1ste-groep: K1 rijders, gedeelde plek (eigen batch, aparte van 2de-groep)
     const k1 = st.voorlopig_1ste.length;
-    const plek1 = (nogVrij - k2) - k1 + 1;
-    st.voorlopig_1ste.forEach(eid => {
-        ronde.push({ entry_id: eid, plek: plek1, sanctie: null });
-    });
+    if (k1 > 0) {
+        const plek1 = (nogVrij - k2) - k1 + 1;
+        const batch1 = k1 > 1 ? _afvalNieuweBatchId() : null;
+        st.voorlopig_1ste.forEach(eid => {
+            ronde.push({ entry_id: eid, plek: plek1, sanctie: null, batch: batch1 });
+        });
+    }
     // Voeg toe aan afgevallen-stack
     ronde.forEach(item => st.afgevallen.unshift(item));
     st.voorlopig_2de  = [];
@@ -2660,6 +2681,13 @@ function _afvalSet(ritIdx) {
 
     // Auto-rondes toekennen op basis van heat-config (indien ingevuld).
     _afvalAssignRondes(ritIdx, ronde);
+}
+
+// Unieke batch-id voor ex-aequo groep (multiple rijders tegelijk uit).
+// Items in zelfde batch delen dezelfde 'plek' (= ex-aequo classering).
+// Solo afvallers (k=1) krijgen batch=null — geen groepering nodig.
+function _afvalNieuweBatchId() {
+    return 'b' + Date.now() + '-' + Math.random().toString(36).slice(2, 6);
 }
 
 // By-fault: jury wijst rijder(s) aan voor afvalling met DQ-TF (overtreding),
@@ -2671,8 +2699,9 @@ function _afvalByFault(ritIdx) {
     const nogVrij = _afvalNogInKoersIds(ritIdx).length;
     const k = st.geselecteerd.length;
     const plek = nogVrij - k + 1;
+    const batch = k > 1 ? _afvalNieuweBatchId() : null;
     const ronde = st.geselecteerd.map(eid => ({
-        entry_id: eid, plek, sanctie: 'DQ-TF', buiten_schema: true,
+        entry_id: eid, plek, sanctie: 'DQ-TF', buiten_schema: true, batch,
     }));
     ronde.forEach(item => st.afgevallen.unshift(item));
     st.geselecteerd = [];
@@ -2689,8 +2718,9 @@ function _afvalByDecision(ritIdx) {
     const nogVrij = _afvalNogInKoersIds(ritIdx).length;
     const k = st.geselecteerd.length;
     const plek = nogVrij - k + 1;
+    const batch = k > 1 ? _afvalNieuweBatchId() : null;
     const ronde = st.geselecteerd.map(eid => ({
-        entry_id: eid, plek, sanctie: null, buiten_schema: true,
+        entry_id: eid, plek, sanctie: null, buiten_schema: true, batch,
     }));
     ronde.forEach(item => st.afgevallen.unshift(item));
     st.geselecteerd = [];
@@ -2726,27 +2756,87 @@ function _afvalHercomputeSetRondes(ritIdx) {
     const cfg = _afvalCfgGet(rit.heat_id);
     if (!cfg || !cfg.eerste_afval || !cfg.totaal_ronden || !cfg.eindsprint) return;
 
-    // Aantal Set-afvallers TOTAAL die het schema moet leveren =
-    // totaal te elimineren = (starters - eindsprint) - aantal_byfaults.
-    // Van die N pakt het schema de eerste N posities (afvalpos 1..N).
+    // Schema-grootte = VAST (starters - eindsprint). Sinds 2026-05-27:
+    // ByFault/ByDecision tellen niet meer af van setCount — ze
+    // consumeren een schema-positie op de plek waar ze in de stack
+    // zitten. Op dat moment in de race is dat schema-bord 'gepasseerd'.
     const totaal = (rit.rijders || []).length;
-    const buiten = st.afgevallen.filter(a => a.buiten_schema === true).length;
-    const setCount = Math.max(0, totaal - parseInt(cfg.eindsprint) - buiten);
+    const setCount = Math.max(0, totaal - parseInt(cfg.eindsprint));
     if (setCount === 0) return;
 
-    // Set-items in volgorde van toevoeging (oudste = afvalpos 1).
-    // Stack heeft newest at index 0, dus we lopen van eind naar begin.
-    const setItems = [];
+    // ALLE items in volgorde van toevoeging (oudste eerst) krijgen een
+    // schema-positie. Stack heeft newest at index 0, dus we lopen van
+    // eind naar begin. Items consumeren een schema-positie (= dat moment
+    // in de race is gepasseerd), maar krijgen verschillende borden:
+    //  - Regulier + ByFault: schema-bord uit hun stack-positie (auto)
+    //  - ByDecision: BEHOUDT z'n handmatig opgegeven bord (uit prompt).
+    //    Decision-rijder is op een willekeurig moment uit de koers gehaald
+    //    (val, opgegeven), niet op een schema-afvalmoment. Z'n 'rondes
+    //    gereden' is een eigen getal dat niet uit schema is af te leiden.
+    // Detectie ByDecision = a.buiten_schema === true && a.sanctie !== 'DQ-TF'.
+    // (Edge case: na DB-refresh wordt buiten_schema niet hersteld voor
+    // decisions → die worden als regulier behandeld; acceptable voor MVP).
+    //
+    // PLEK-herberekening op basis van RONDES GEREDEN. Sinds 2026-05-27:
+    // niet meer op stack-positie (= toevoegings-volgorde in admin), want
+    // operator kan post-hoc een decision toevoegen voor een eerdere ronde
+    // — dan klopt stack-volgorde niet meer met chronologie. Op rondes-
+    // sorteren is robuuster: wie langer reed = LATER eruit = BETERE plek
+    // (lager cijfer). Items met identieke rondes = ex-aequo, krijgen
+    // samen LAAGSTE plek van de groep (best-conventie).
+    const totaalStarters = (rit.rijders || []).length;
+    const allItems = [];
     for (let i = st.afgevallen.length - 1; i >= 0; i--) {
-        const a = st.afgevallen[i];
-        if (a.buiten_schema === true) continue;
-        setItems.push(a); // oudste eerst
+        allItems.push(st.afgevallen[i]);
     }
-    setItems.forEach((a, idx) => {
+    // Pass 1: rondes-toekenning. Schema-bord voor reg + ByFault op basis
+    // van stack-positie. ByDecision behoudt handmatig bord uit prompt.
+    allItems.forEach((a, idx) => {
+        const isDecision = a.buiten_schema === true && a.sanctie !== 'DQ-TF';
+        if (isDecision) return;
         const ronde = _afvalRondeVoorPositie(idx + 1, cfg, setCount);
-        if (ronde == null) return;
-        _afvalSchrijfRondes(rit, a.entry_id, ronde);
+        if (ronde != null) _afvalSchrijfRondes(rit, a.entry_id, ronde);
     });
+    // Pass 2: plek-toekenning op basis van rondes gereden.
+    // Sorteer items op rondes ASC (laagste = eerst eruit = slechtste plek).
+    // Items met null rondes (geen bord toegekend) naar einde, zodat ze
+    // beste plekken krijgen — operator merkt het en vult bord in.
+    // Ex-aequo: items met identieke rondes krijgen samen de LAAGSTE plek
+    // van die groep (best-conventie).
+    const itemsMetRondes = allItems.map(a => {
+        const r = rit.rijders.find(x => x.entry_id === a.entry_id);
+        return { a, rondes: (r && r.rondes != null) ? r.rondes : null };
+    });
+    itemsMetRondes.sort((x, y) => {
+        // null rondes naar einde (= beste plek)
+        if (x.rondes == null && y.rondes == null) return 0;
+        if (x.rondes == null) return 1;
+        if (y.rondes == null) return -1;
+        return x.rondes - y.rondes;  // laag → vooraan = slechtste plek
+    });
+    // Ex-aequo groeperen op rondes-waarde. Conventie: ex-aequo groep krijgt
+    // samen de HOOGSTE positie (= LAAGSTE plek-cijfer = best van de groep).
+    // Voor 40,29 sorted op idx 0,1 met natural plekken 16,15: ex-aequo
+    // wijst BEIDEN plek 15 toe (laagste cijfer = best van die 2). Volgende
+    // groep (76 op idx 2) krijgt dan plek 14 = totaal - 2 (volgende idx).
+    // Algoritme: vind eind van groep (laatste idx met zelfde rondes), plek
+    // voor hele groep = totaalStarters - eind_idx.
+    let i = 0;
+    while (i < itemsMetRondes.length) {
+        let j = i;
+        while (j + 1 < itemsMetRondes.length
+               && itemsMetRondes[j + 1].rondes === itemsMetRondes[i].rondes) {
+            j++;
+        }
+        const groepPlek = totaalStarters - j;
+        for (let k = i; k <= j; k++) {
+            const item = itemsMetRondes[k];
+            item.a.plek = groepPlek;
+            const r = rit.rijders.find(x => x.entry_id === item.a.entry_id);
+            if (r) r.afval_rang = groepPlek;
+        }
+        i = j + 1;
+    }
 }
 
 // Wordt aangeroepen na _afvalSet — alleen het schema hercomputen.
@@ -2754,8 +2844,13 @@ function _afvalAssignRondes(ritIdx, _items) {
     _afvalHercomputeSetRondes(ritIdx);
 }
 
-// Vraagt rondebord van de buiten-schema uitval (in-house pop-up, async),
-// schrijft ronde-getal voor de items, en hercomputeert het schema.
+// Bord-prompt voor ByDecision: jury moet handmatig opgeven hoeveel rondes
+// de rijder al had gereden bij de decision (val/dubbel/opgeven). Die info
+// is essentieel voor de uitslag-DB — anders weet niemand hoeveel rondes
+// de rijder daadwerkelijk reed.
+// ByFault: GEEN prompt. Die viel op een reguliere afvalmoment uit (alleen
+// werd 'ie eruit gehaald door de jury wegens overtreding), dus z'n bord
+// is gewoon het schema-bord van z'n stack-positie. Hercompute regelt dat.
 async function _afvalAssignRondesBuitenSchema(ritIdx, items, oorzaak) {
     const rit = _liveRitten[ritIdx];
     const st  = _afvalState[ritIdx];
@@ -2763,22 +2858,25 @@ async function _afvalAssignRondesBuitenSchema(ritIdx, items, oorzaak) {
     const cfg = _afvalCfgGet(rit.heat_id) || {};
     const tr  = parseInt(cfg.totaal_ronden) || 0;
 
-    let bord = null;
-    if (tr) {
+    if (oorzaak === 'decision' && tr) {
+        // Default-bord: positie in schema waar deze decision zit (= waar
+        // 'ie het schema verbruikt). Operator kan handmatig wijzigen.
         const setCount = _afvalSetTeElimineren(ritIdx);
-        const setGedaan = st.afgevallen.filter(a =>
-            a.buiten_schema !== true && !items.includes(a)).length;
-        const next = _afvalRondeVoorPositie(setGedaan + 1, cfg, setCount);
-        const defaultBord = next ? (tr - next + 1) : '';
-        const titel = oorzaak === 'fault'
-            ? 'By Fault — overtreding (DQ-TF)'
-            : 'By Decision — val / dubbel / opgeven';
-        bord = await _afvalBordPrompt(titel, tr, defaultBord);
+        // Items zijn net unshifted; hun positie = stack-index + 1 (oudste = end)
+        const oudsteItem = items[0];   // alle items in deze batch zelfde positie
+        const positie = st.afgevallen.findIndex(a => a === oudsteItem) >= 0
+            ? (st.afgevallen.length - st.afgevallen.indexOf(oudsteItem))
+            : st.afgevallen.length;
+        const schemaRonde = _afvalRondeVoorPositie(positie, cfg, setCount);
+        const defaultBord = schemaRonde != null ? (tr - schemaRonde) : '';
+        const bord = await _afvalBordPrompt(
+            'By Decision — val / dubbel / opgeven', tr, defaultBord);
+        if (bord != null) {
+            const ronde = tr - bord;
+            items.forEach(item => _afvalSchrijfRondes(rit, item.entry_id, ronde));
+        }
     }
-    if (bord != null) {
-        const ronde = tr - bord;
-        items.forEach(item => _afvalSchrijfRondes(rit, item.entry_id, ronde));
-    }
+    // ByFault valt door naar hercompute → krijgt schema-bord automatisch.
     _afvalHercomputeSetRondes(ritIdx);
     _afvalRerenderPaneel(ritIdx);
 }
@@ -3016,20 +3114,20 @@ function _afvalRondeVoorPositie(afvalPositie, cfg, teElimineren) {
     return arr[afvalPositie - 1];
 }
 
-// Helper: aantal scheduled-Set afvallers nog te plannen, gegeven de
-// huidige stack. ByFaults (sanctie='DQ-TF') én DNS tellen NIET als
-// scheduled — die zijn al "gratis" uit de koers en verkorten het schema.
+// Schema-grootte = VAST aantal afvallers (starters - eindsprint).
+// Sinds 2026-05-27: ByFault/ByDecision verkorten het schema NIET meer —
+// ze nemen een schema-positie in op het moment in de stack waar ze
+// staan. Wijziging tov vorige versie waar buiten_schema werd afgetrokken
+// (= incorrect, bord 21 bleef voorspeld voor eerste positie ook na
+// decisions die feitelijk al meerdere bord-momenten 'verbruikten').
 function _afvalSetTeElimineren(ritIdx) {
     const rit = _liveRitten[ritIdx];
-    const st  = _afvalState[ritIdx];
     if (!rit) return 0;
     const cfg = _afvalCfgGet(rit.heat_id) || {};
     const es  = parseInt(cfg.eindsprint) || 0;
     if (!es) return 0;
     const totaal = (rit.rijders || []).length;
-    const buitenSchema = (st?.afgevallen || [])
-        .filter(a => a.buiten_schema === true).length;
-    return Math.max(0, totaal - es - buitenSchema);
+    return Math.max(0, totaal - es);
 }
 
 // Bouwt de HTML voor het afvalkoers-paneel. Wordt aangeroepen vanuit _liveBouwKaart.
@@ -3070,18 +3168,20 @@ function _bouwAfvalPaneel(rit, idx, tonen) {
         <button class="live-av-cfg-edit" data-act="cfg" type="button" title="Heat-config wijzigen">✎</button>
     </div>`;
 
-    // Header met tellers
+    // Header met tellers. Volgende afval-positie = totaal stack-length + 1
+    // (sinds 2026-05-27: incl. ByFault/ByDecision — die consumeren ook
+    // een schema-positie, schema schuift dus mee). Voorheen werd alleen
+    // buiten_schema !== true geteld wat fout bleek (volgende bord bleef
+    // hetzelfde ook na decisions die schema-momenten verbruikten).
     const totaalDeelnemers = (rit.rijders || []).length;
-    // Volgende geplande Set-positie = aantal Set-items reeds afgevallen + 1
-    const setGedaan = st.afgevallen.filter(a => a.buiten_schema !== true).length;
+    const setGedaan = st.afgevallen.length;
     const setTeElim = _afvalSetTeElimineren(idx);
     const autoRonde = _afvalRondeVoorPositie(setGedaan + 1, cfg, setTeElim);
     const trCfg = parseInt(cfg.totaal_ronden) || 0;
     const autoBord = (autoRonde != null && trCfg) ? (trCfg - autoRonde) : null;
 
-    // Dubbel-resterend: hoeveel borden nog 2-tegelijk vallen (op basis van
-    // huidige schema). Eerste 2*dubbel posities zijn dubbel; resterend bord
-    // = ceil((2*dubbel - setGedaan) / 2).
+    // Dubbel-resterend: hoeveel borden nog 2-tegelijk vallen. Eerste
+    // 2*dubbel posities zijn dubbel; resterend bord = ceil((2*dubbel - setGedaan) / 2).
     let dubbelOver = null;
     if (cfgIngevuld && _afInfo) {
         const dubbelPos = 2 * _afInfo.dubbel;
@@ -3323,13 +3423,17 @@ function _afvalOpenCfgModal(ritIdx) {
 
     overlay.addEventListener('click', e => { if (e.target === overlay) overlay.remove(); });
     overlay.querySelector('#avcfg-annuleer').addEventListener('click', () => overlay.remove());
-    overlay.querySelector('#avcfg-wis').addEventListener('click', () => {
-        if (!confirm('Heat-configuratie wissen?')) return;
+    overlay.querySelector('#avcfg-wis').addEventListener('click', async () => {
+        const ok = await toonBevestigDialog(
+            'Heat-configuratie wissen?',
+            'Afvalkoers-config', 'Wissen', 'Annuleren'
+        );
+        if (!ok) return;
         _afvalCfgSet(rit.heat_id, null);
         overlay.remove();
         _afvalRerenderPaneel(ritIdx);
     });
-    overlay.querySelector('#avcfg-opslaan').addEventListener('click', () => {
+    overlay.querySelector('#avcfg-opslaan').addEventListener('click', async () => {
         const nieuw = {
             totaal_ronden: parseInt(overlay.querySelector('#avcfg-totaal').value)     || null,
             eerste_afval:  parseInt(overlay.querySelector('#avcfg-eerste').value)     || null,
@@ -3337,7 +3441,10 @@ function _afvalOpenCfgModal(ritIdx) {
             eindsprint:    parseInt(overlay.querySelector('#avcfg-eindsprint').value) || null,
         };
         if (!nieuw.totaal_ronden || !nieuw.eerste_afval || !nieuw.eindsprint) {
-            alert('Totaal aantal ronden, eerste afval-ronde en eindsprint zijn verplicht.');
+            toonBevestigDialog(
+                'Totaal aantal ronden, eerste afval-ronde en eindsprint zijn verplicht.',
+                'Afvalkoers-config', 'OK', ''
+            );
             return;
         }
         // aantal_dubbel afleiden + opslaan (als hulpgetal voor de formule).
@@ -3349,7 +3456,11 @@ function _afvalOpenCfgModal(ritIdx) {
             const door = af.dubbel < 0
                 ? `Te weinig afvalrondes: ${af.afvalrondes} beschikbaar, maar ${af.teElimineren} rijders te elimineren.`
                 : `Te veel dubbele rondes nodig (${af.dubbel}) voor ${af.afvalrondes} afvalrondes.`;
-            if (!confirm(`Let op: cfg klopt niet helemaal.\n${door}\nToch opslaan?`)) return;
+            const ok = await toonBevestigDialog(
+                `Let op: cfg klopt niet helemaal.\n${door}\n\nToch opslaan?`,
+                'Afvalkoers-config', 'Toch opslaan', 'Annuleren'
+            );
+            if (!ok) return;
         }
         _afvalCfgSet(rit.heat_id, nieuw);
         overlay.remove();

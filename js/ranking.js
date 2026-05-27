@@ -161,7 +161,8 @@ function bindEvents() {
     // Nieuw serie-klassement
     rkEl('rk-btn-serie-nieuw')?.addEventListener('click', () => {
         if (typeof openSerieWizard !== 'function') {
-            alert('Serie-wizard module is niet geladen.'); return;
+            toonBevestigDialog('Serie-wizard module is niet geladen.', 'Klassement-serie', 'OK', '');
+            return;
         }
         openSerieWizard({ orgId: rkActieveOrgId || '' });
     });
@@ -500,7 +501,10 @@ function bindDetailEvents(container) {
                 );
                 serieId = rows.find(r => r.klassement_id === rkHuidig.id)?.id ?? null;
             } catch {}
-            if (!serieId) { alert('Serie-definitie niet gevonden.'); return; }
+            if (!serieId) {
+                toonBevestigDialog('Serie-definitie niet gevonden.', 'Klassement', 'OK', '');
+                return;
+            }
 
             if (act === 'herbereken') {
                 btn.disabled = true; btn.textContent = 'Bezig…';
@@ -616,7 +620,7 @@ async function printSerieKlassement(k) {
     const wMeta = Array.isArray(k.wedstrijden_meta) ? k.wedstrijden_meta : [];
     const allePos = k.posities ?? [];
     if (!allePos.length) {
-        alert('Geen posities om te printen.');
+        toonBevestigDialog('Geen posities om te printen.', 'Klassement printen', 'OK', '');
         return;
     }
     // Categorieën in dezelfde volgorde als de tabbladen op de detail-pagina.
@@ -722,7 +726,7 @@ async function printSerieKlassement(k) {
 
     const w = window.open('', '_blank');
     if (!w) {
-        alert('Pop-up geblokkeerd. Sta pop-ups toe voor deze site.');
+        toonBevestigDialog('Pop-up geblokkeerd. Sta pop-ups toe voor deze site.', 'Afdrukken', 'OK', '');
         return;
     }
     w.document.write(`<!DOCTYPE html>

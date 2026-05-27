@@ -7,7 +7,10 @@ require_once __DIR__ . '/../auth/session.php';
 requireAuth($pdo);
 
 $id = isset($_GET['id']) ? trim($_GET['id']) : '';
-if (!preg_match('/^[a-f0-9\-]{36}$/i', $id)) {
+// 8-36 chars, alfanumeriek + dashes. Range ipv exact 36 zodat ook kortere
+// handmatig-geseede IDs (historie-import: 'hist-2024-nk-baan-aabbcc')
+// toegelaten worden. DB-FK's beschermen alsnog tegen onzin-IDs.
+if (!preg_match('/^[a-z0-9\-]{8,36}$/i', $id)) {
     http_response_code(400);
     echo json_encode(['error' => 'Ongeldig of ontbrekend competition ID']);
     exit;

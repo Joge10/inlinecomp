@@ -1,0 +1,31 @@
+{
+  "name": "InlineComp – Jury",
+  "short_name": "InlineComp J",
+  "description": "Jury-functies: Area of Call, Aankomst, Scheidsrechter, Starter en Speaker",
+  "start_url": "./index.php",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "any",
+  "background_color": "#f0f4f8",
+  "theme_color": "#1a3a5c",
+  "icons": [
+    {
+      "src": "icon-192-v2.svg",
+      "sizes": "192x192",
+      "type": "image/svg+xml",
+      "purpose": "any"
+    },
+    {
+      "src": "icon-512-v2.svg",
+      "sizes": "512x512",
+      "type": "image/svg+xml",
+      "purpose": "any"
+    },
+    {
+      "src": "icon-maskable-v2.svg",
+      "sizes": "512x512",
+      "type": "image/svg+xml",
+      "purpose": "maskable"
+    }
+  ]
+}

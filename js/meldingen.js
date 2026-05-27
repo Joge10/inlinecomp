@@ -168,15 +168,15 @@ function mldOpenForm(compId, id, alleMeldingen = []) {
                           placeholder="Korte uitleg — wordt in een pop-up getoond">${escHtml(m?.bericht ?? '')}</textarea>
             </label>
             <div class="mld-vertaal-acties">
-                <button type="button" class="btn-secondary" id="mld-vertaal-nl-en"
-                        title="Vertaal NL → EN met Claude AI">
-                    🤖 NL → EN
+                <button type="button" class="btn-primary" id="mld-vertaal-nl-all"
+                        title="Vertaal NL → EN, DE en FR met Claude AI (één call)">
+                    🤖 NL → EN/DE/FR
                 </button>
-                <button type="button" class="btn-secondary" id="mld-vertaal-en-nl"
-                        title="Vertaal EN → NL met Claude AI">
-                    🤖 EN → NL
+                <button type="button" class="btn-secondary" id="mld-vertaal-en-all"
+                        title="Vertaal EN → NL, DE en FR met Claude AI (één call)">
+                    🤖 EN → NL/DE/FR
                 </button>
-                <span class="mld-vertaal-hint">vertaling is daarna handmatig aanpasbaar</span>
+                <span class="mld-vertaal-hint">vertaling is daarna handmatig aanpasbaar · public-app is 4-talig (NL/EN/DE/FR)</span>
             </div>
             <label class="mld-veld">
                 <span>🇬🇧 Title <span class="label-hint">(leeg = fallback naar NL)</span></span>
@@ -187,6 +187,26 @@ function mldOpenForm(compId, id, alleMeldingen = []) {
                 <span>🇬🇧 Message</span>
                 <textarea id="mld-bericht-en" class="inp" rows="3"
                           placeholder="Short explanation — shown in pop-up">${escHtml(m?.bericht_en ?? '')}</textarea>
+            </label>
+            <label class="mld-veld">
+                <span>🇩🇪 Titel <span class="label-hint">(leer = Fallback auf EN/NL)</span></span>
+                <input type="text" id="mld-titel-de" class="inp" maxlength="255"
+                       value="${escHtml(m?.titel_de ?? '')}" placeholder="z.B. Zeitplan 15 Min verspätet">
+            </label>
+            <label class="mld-veld">
+                <span>🇩🇪 Nachricht</span>
+                <textarea id="mld-bericht-de" class="inp" rows="3"
+                          placeholder="Kurze Erläuterung — wird im Pop-up angezeigt">${escHtml(m?.bericht_de ?? '')}</textarea>
+            </label>
+            <label class="mld-veld">
+                <span>🇫🇷 Titre <span class="label-hint">(vide = repli sur EN/NL)</span></span>
+                <input type="text" id="mld-titel-fr" class="inp" maxlength="255"
+                       value="${escHtml(m?.titel_fr ?? '')}" placeholder="ex. Programme retardé de 15 min">
+            </label>
+            <label class="mld-veld">
+                <span>🇫🇷 Message</span>
+                <textarea id="mld-bericht-fr" class="inp" rows="3"
+                          placeholder="Courte explication — affichée en pop-up">${escHtml(m?.bericht_fr ?? '')}</textarea>
             </label>
             <div class="mld-rij-veld">
                 <label class="mld-veld">
@@ -218,34 +238,60 @@ function mldOpenForm(compId, id, alleMeldingen = []) {
         wrap.style.display = 'none'; wrap.innerHTML = '';
     });
     document.getElementById('mld-form-opslaan').addEventListener('click', () => mldOpslaan(compId));
-    document.getElementById('mld-vertaal-nl-en')?.addEventListener('click', () => mldVertaal('nl', 'en'));
-    document.getElementById('mld-vertaal-en-nl')?.addEventListener('click', () => mldVertaal('en', 'nl'));
+    document.getElementById('mld-vertaal-nl-all')?.addEventListener('click', () => mldVertaalBulk('nl'));
+    document.getElementById('mld-vertaal-en-all')?.addEventListener('click', () => mldVertaalBulk('en'));
 }
 
-// Vertaal NL ↔ EN via Claude (api/vertaal_melding.php). Vult de doel-velden;
-// operator kan vertaling daarna nog handmatig bijwerken. Knop toont een
-// 'Bezig…'-status zodat duidelijk is dat de API-call loopt (typisch 1-3s).
-async function mldVertaal(from, to) {
-    const srcTitelEl   = document.getElementById(from === 'nl' ? 'mld-titel'   : 'mld-titel-en');
-    const srcBerichtEl = document.getElementById(from === 'nl' ? 'mld-bericht' : 'mld-bericht-en');
-    const dstTitelEl   = document.getElementById(to   === 'nl' ? 'mld-titel'   : 'mld-titel-en');
-    const dstBerichtEl = document.getElementById(to   === 'nl' ? 'mld-bericht' : 'mld-bericht-en');
-    if (!srcTitelEl || !srcBerichtEl || !dstTitelEl || !dstBerichtEl) return;
+// Helper — geeft input-elements voor (titel, bericht) per taal terug.
+function _mldVeldenVoor(taal) {
+    const suf = taal === 'nl' ? '' : '-' + taal;
+    return {
+        titel:   document.getElementById('mld-titel'   + suf),
+        bericht: document.getElementById('mld-bericht' + suf),
+    };
+}
 
-    const titel   = srcTitelEl.value.trim();
-    const bericht = srcBerichtEl.value.trim();
+// Bulk-vertaling via api/vertaal_melding.php — 1 call vertaalt naar alle 3
+// andere talen tegelijk. Vult de doel-velden; operator kan vertaling daarna
+// nog handmatig bijwerken. Knop toont een 'Bezig…'-status zodat duidelijk
+// is dat de API-call loopt (typisch 2-4s voor 3 talen).
+//
+// `from`: brontaal ('nl' of 'en'); rest van I18N_LANGS wordt doel.
+async function mldVertaalBulk(from) {
+    const TALEN     = ['nl', 'en', 'de', 'fr'];
+    const TAAL_NAAM = { nl: 'NL', en: 'EN', de: 'DE', fr: 'FR' };
+    const doelen    = TALEN.filter(t => t !== from);
+
+    const src = _mldVeldenVoor(from);
+    if (!src.titel || !src.bericht) return;
+    const titel   = src.titel.value.trim();
+    const bericht = src.bericht.value.trim();
     if (!titel && !bericht) {
-        alert(`Vul eerst de ${from === 'nl' ? 'NL' : 'EN'} velden in voor je laat vertalen.`);
+        toonBevestigDialog(
+            `Vul eerst de ${TAAL_NAAM[from]}-velden in voor je laat vertalen.`,
+            'Vertalen', 'OK', ''
+        );
         return;
     }
-    // Bestaande doel-content: bevestiging vragen om niet per ongeluk over te schrijven
-    if ((dstTitelEl.value.trim() || dstBerichtEl.value.trim())) {
-        if (!confirm(`De ${to === 'nl' ? 'NL' : 'EN'} velden bevatten al tekst. Overschrijven met automatische vertaling?`)) return;
+
+    // Welke doel-velden bevatten al tekst? Vraag bevestiging als minstens
+    // één doel al gevuld is — voorkomt per ongeluk overschrijven.
+    const gevuld = doelen.filter(l => {
+        const v = _mldVeldenVoor(l);
+        return (v.titel?.value.trim() || v.bericht?.value.trim());
+    });
+    if (gevuld.length) {
+        const lijst = gevuld.map(l => TAAL_NAAM[l]).join(', ');
+        const ok = await toonBevestigDialog(
+            `Doel-velden bevatten al tekst voor: ${lijst}. Overschrijven met automatische vertaling?`,
+            'Vertalen', 'Overschrijven', 'Annuleren'
+        );
+        if (!ok) return;
     }
 
-    const knoppen = document.querySelectorAll('#mld-vertaal-nl-en, #mld-vertaal-en-nl');
+    const knoppen = document.querySelectorAll('#mld-vertaal-nl-all, #mld-vertaal-en-all');
     knoppen.forEach(b => b.disabled = true);
-    const klikKnop = document.getElementById(`mld-vertaal-${from}-${to}`);
+    const klikKnop = document.getElementById(`mld-vertaal-${from}-all`);
     const originalText = klikKnop?.textContent;
     if (klikKnop) klikKnop.textContent = '⏳ Bezig…';
 
@@ -253,14 +299,23 @@ async function mldVertaal(from, to) {
         const res = await fetch('api/vertaal_melding.php', {
             method:  'POST',
             headers: { 'Content-Type': 'application/json' },
-            body:    JSON.stringify({ titel, bericht, from, to }),
+            // `to` als array → backend gaat in bulk-mode en returnt
+            // { translations: { en:{...}, de:{...}, fr:{...} } }
+            body:    JSON.stringify({ titel, bericht, from, to: doelen }),
         });
         const data = await res.json();
         if (!res.ok || data.error) throw new Error(data.error || `HTTP ${res.status}`);
-        dstTitelEl.value   = data.titel   ?? '';
-        dstBerichtEl.value = data.bericht ?? '';
+        if (!data.translations) throw new Error('Geen translations in response');
+
+        for (const l of doelen) {
+            const tr = data.translations[l];
+            if (!tr) continue;
+            const dst = _mldVeldenVoor(l);
+            if (dst.titel)   dst.titel.value   = tr.titel   ?? '';
+            if (dst.bericht) dst.bericht.value = tr.bericht ?? '';
+        }
     } catch (e) {
-        alert('Vertaal-fout: ' + e.message);
+        toonBevestigDialog('Vertaal-fout: ' + e.message, 'Vertalen', 'OK', '');
     } finally {
         knoppen.forEach(b => b.disabled = false);
         if (klikKnop && originalText) klikKnop.textContent = originalText;
@@ -273,12 +328,19 @@ async function mldOpslaan(compId) {
     const bericht   = document.getElementById('mld-bericht').value.trim();
     const titelEn   = document.getElementById('mld-titel-en')?.value.trim()   ?? '';
     const berichtEn = document.getElementById('mld-bericht-en')?.value.trim() ?? '';
+    const titelDe   = document.getElementById('mld-titel-de')?.value.trim()   ?? '';
+    const berichtDe = document.getElementById('mld-bericht-de')?.value.trim() ?? '';
+    const titelFr   = document.getElementById('mld-titel-fr')?.value.trim()   ?? '';
+    const berichtFr = document.getElementById('mld-bericht-fr')?.value.trim() ?? '';
     const prio      = document.getElementById('mld-prio').value;
     const van       = document.getElementById('mld-van').value;
     const tot       = document.getElementById('mld-tot').value;
 
     if (!titel || !bericht) {
-        alert('Titel en bericht zijn verplicht (NL is brontaal).');
+        toonBevestigDialog(
+            'Titel en bericht zijn verplicht (NL is brontaal).',
+            'Mededeling opslaan', 'OK', ''
+        );
         return;
     }
     // 'globaal' is geen DB-prio (enum kent 'm niet) maar een scope-keuze:
@@ -295,8 +357,12 @@ async function mldOpslaan(compId) {
     }
     fd.append('titel', titel);
     fd.append('bericht', bericht);
-    if (titelEn)   fd.append('titel_en', titelEn);
+    if (titelEn)   fd.append('titel_en',   titelEn);
     if (berichtEn) fd.append('bericht_en', berichtEn);
+    if (titelDe)   fd.append('titel_de',   titelDe);
+    if (berichtDe) fd.append('bericht_de', berichtDe);
+    if (titelFr)   fd.append('titel_fr',   titelFr);
+    if (berichtFr) fd.append('bericht_fr', berichtFr);
     fd.append('prio', dbPrio);
     if (van) fd.append('geldig_van', van.replace('T', ' '));
     if (tot) fd.append('geldig_tot', tot.replace('T', ' '));
@@ -304,24 +370,36 @@ async function mldOpslaan(compId) {
     try {
         const res = await fetch('api/meldingen.php', { method: 'POST', body: fd });
         const data = await res.json();
-        if (!res.ok) { alert(data.error || 'Fout bij opslaan'); return; }
+        if (!res.ok) {
+            toonBevestigDialog(data.error || 'Fout bij opslaan', 'Mededeling opslaan', 'OK', '');
+            return;
+        }
         document.getElementById('mld-form-wrap').style.display = 'none';
         document.getElementById('mld-form-wrap').innerHTML = '';
         mldRefreshLijst(compId);
     } catch (e) {
-        alert('Fout: ' + e.message);
+        toonBevestigDialog('Fout: ' + e.message, 'Mededeling opslaan', 'OK', '');
     }
 }
 
 async function mldVerwijder(id, compId) {
-    if (!confirm('Mededeling verwijderen?')) return;
+    const ok = await toonBevestigDialog(
+        'Mededeling verwijderen?',
+        'Mededeling verwijderen', 'Verwijderen', 'Annuleren'
+    );
+    if (!ok) return;
     const fd = new FormData();
     fd.append('action', 'delete');
     fd.append('id', id);
     try {
         const res = await fetch('api/meldingen.php', { method: 'POST', body: fd });
         const data = await res.json();
-        if (!res.ok) { alert(data.error || 'Fout'); return; }
+        if (!res.ok) {
+            toonBevestigDialog(data.error || 'Fout', 'Mededeling verwijderen', 'OK', '');
+            return;
+        }
         mldRefreshLijst(compId);
-    } catch (e) { alert('Fout: ' + e.message); }
+    } catch (e) {
+        toonBevestigDialog('Fout: ' + e.message, 'Mededeling verwijderen', 'OK', '');
+    }
 }

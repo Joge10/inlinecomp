@@ -4,6 +4,23 @@ let _importLeesOnly = false;  // true als huidige gebruiker geen schrijfrechten 
 let _heeftProgramma = false;  // true als er een tijdschema/programma is → DC-beheer readonly
 let _orgTransponders = [];    // [{intern_nummer, transponder_code, toegewezen_snr, betaald}]
 
+// ── Diff-classificatie ────────────────────────────────────────────────────
+// Twee soorten diffs uit vergelijk.php:
+//  - ACTIE-diffs (status, reserve) → vragen een Importeer-klik. KNSB heeft
+//    iets gepushed dat de DB moet overnemen.
+//  - INFO-diffs (naam, startnummer) → meestal BEWUSTE DB-correcties op
+//    KNSB-feed-fouten die niet meer in de feed te corrigeren zijn. Operator
+//    wil de visuele indicator (badge, geel rijtje, KNSB-hint per cel)
+//    behouden om in oogopslag te zien dat er verschil is, maar wil NIET
+//    eeuwig om een import gevraagd worden.
+//
+// Concreet:
+//  - heeftWijzigingen / Importeer-knop → alleen actie-diffs
+//  - cat-tab '!'-teller / per-rij '!'-badge / row-diff styling → alle diffs
+const IMPORT_DIFF_VELDEN = new Set(['status', 'reserve']);
+const _telImportDiffs = (c) =>
+    Array.isArray(c?.diffs) ? c.diffs.filter(d => IMPORT_DIFF_VELDEN.has(d)).length : 0;
+
 // ── Edit-staat initialiseren ──────────────────────────────────────────────────
 // Effectieve startwaarden: DB heeft voorrang, KNSB is fallback
 
@@ -11,11 +28,22 @@ function initEdits() {
     personEdits      = {};
     entryEdits       = {};
     manualTp         = new Set();
-    heeftWijzigingen = false;
     gewijzigdeRijen  = new Set();
 
     isGeimporteerd = vergelijkData.some(cat =>
         cat.competitors.some(c => c.db_entry !== null)
+    );
+
+    // Server-side diffs splitsen we in twee soorten:
+    //  - actie-diffs (status, reserve): KNSB-feed-wijzigingen die om
+    //    een Importeer-klik vragen — DB loopt achter op feed.
+    //  - info-diffs (naam, startnummer): meestal BEWUSTE DB-correcties
+    //    op een KNSB-feed-spelfout, geen actie nodig. Worden alleen
+    //    visueel getoond als 'KNSB: ...' hint per cel.
+    // Alleen actie-diffs triggeren de Importeer-knop, cat-tab-teller
+    // en de per-rij '!'-badge.
+    heeftWijzigingen = vergelijkData.some(cat =>
+        cat.competitors.some(c => _telImportDiffs(c) > 0)
     );
 
     for (const cat of vergelijkData) {
@@ -753,10 +781,18 @@ function bouwVergelijkTabbladen() {
         const totaal    = cat.competitors.length;
         const afgemeld  = cat.competitors.filter(c => c.entry_status >= 2 && c.entry_status !== 5).length;
         const nieuw     = cat.competitors.filter(c => c.is_new).length;
+        // Diff-teller: hoeveel rijders hebben ÉÉN of meer KNSB-feed-
+        // verschillen (status/reserve/naam/startnummer). Visuele info
+        // voor de operator zodat 'ie de juiste cat vindt — de Importeer-
+        // knop wordt apart bepaald (alleen status/reserve telt daar).
+        const diff = cat.competitors.filter(
+            c => Array.isArray(c.diffs) && c.diffs.length > 0
+        ).length;
 
         let badge = '';
         if (afgemeld) badge += ` <span class="tab-badge afgemeld">${afgemeld}✗</span>`;
         if (nieuw)    badge += ` <span class="tab-badge nieuw">${nieuw}N</span>`;
+        if (diff)     badge += ` <span class="tab-badge diff" title="${diff} rijder${diff>1?'s':''} met feed-wijziging">${diff}!</span>`;
 
         const btn = document.createElement('button');
         btn.className = 'tab-btn' + (i === 0 ? ' active' : '');
@@ -907,12 +943,19 @@ function toonVergelijkTabel(cat) {
     reserveRows.sort((a, b) => a.reserve_nr - b.reserve_nr);
     ingezetRows.sort((a, b) => (a.knsb_reserve_nr ?? 99) - (b.knsb_reserve_nr ?? 99));
 
-    // Capaciteit-cap: het totaal-in-loting mag het oorspronkelijke aantal
-    // niet-reserves (= max-rijders volgens KNSB) nooit overstijgen. Reserves
-    // mogen alleen ingezet worden ter vervanging van iemand die afgemeld /
-    // niet-getekend / niet-bevestigd staat. "Vrij" = aantal lege slots dat
-    // nog ingevuld kan worden door een reserve.
-    const vrijeSlots = Math.max(0, nietReservesTotaal - totaalInLoting);
+    // Capaciteit-cap: het totaal-in-loting mag het max-aantal niet overstijgen.
+    // Bron-volgorde:
+    //   - cat.max_in_loting (DB-override) → handmatig gezet door operator
+    //   - anders: nietReservesTotaal (= aantal niet-reserves uit KNSB-feed,
+    //     de auto-berekening die in de meeste gevallen klopt).
+    // Reserves mogen alleen ingezet worden ter vervanging van iemand die
+    // afgemeld / niet-getekend / niet-bevestigd staat. "Vrij" = aantal lege
+    // slots dat nog ingevuld kan worden door een reserve.
+    const maxOverride  = cat.max_in_loting;   // null of int
+    const maxInLoting  = maxOverride !== null && maxOverride !== undefined
+        ? maxOverride : nietReservesTotaal;
+    const isOverride   = maxOverride !== null && maxOverride !== undefined;
+    const vrijeSlots   = Math.max(0, maxInLoting - totaalInLoting);
 
     // Toon paneel ook als er geen reserves zijn maar wel ingezetten — operator
     // wil zien dat de telling klopt. Maar dat is randgeval; voor nu: tonen
@@ -934,10 +977,21 @@ function toonVergelijkTabel(cat) {
                         <span class="rp-sub">bevestigd: <strong>${reservesBevestigd}</strong></span>
                         <span class="rp-sub">ingezet: <strong>${reservesIngezetN}</strong></span>
                     </span>
-                    <span class="rp-stat rp-stat-totaal" title="Rijders die in de startlijst-loting komen (bevestigde niet-reserves + ingezette reserves). Max = oorspronkelijk aantal niet-reserves.">
+                    <span class="rp-stat rp-stat-totaal" title="Rijders die in de startlijst-loting komen (bevestigde niet-reserves + ingezette reserves).">
                         <span class="rp-lbl">In loting:</span>
                         <strong>${totaalInLoting}</strong>
-                        <span class="rp-sub">van max <strong>${nietReservesTotaal}</strong></span>
+                        <span class="rp-sub">van max
+                            <strong class="rp-max ${isOverride ? 'rp-max-override' : ''}"
+                                    title="${isOverride
+                                        ? 'Handmatig ingesteld (afwijkend van KNSB-feed: ' + nietReservesTotaal + '). Klik op ✏ om aan te passen.'
+                                        : 'Auto-berekend uit KNSB-feed. Klik op ✏ om handmatig te overschrijven.'}">${maxInLoting}</strong>
+                            <button type="button" class="rp-max-edit"
+                                    data-dc-id="${escHtml(cat.dc_id)}"
+                                    data-cur-max="${escHtml(String(maxInLoting))}"
+                                    data-auto-max="${escHtml(String(nietReservesTotaal))}"
+                                    data-is-override="${isOverride ? '1' : '0'}"
+                                    title="Max-in-loting aanpassen">✏</button>
+                        </span>
                         <span class="rp-sub rp-vrij ${vrijeSlots === 0 ? 'rp-vrij-vol' : ''}"
                               title="Lege slots die nog door een reserve ingevuld kunnen worden">
                             vrij: <strong>${vrijeSlots}</strong>
@@ -1075,7 +1129,22 @@ function toonVergelijkTabel(cat) {
         let badgesHtml = '';
         if (isNew)         badgesHtml += '<span class="badge-nieuw">NIEUW</span>';
         if (isAnoniem)     badgesHtml += '<span class="badge-anoniem" title="Anonieme rijder — licentienummer onbekend">ANON</span>';
-        if (diffs.length)  badgesHtml += '<span class="badge-diff" title="Afwijking t.o.v. database">!</span>';
+        if (diffs.length) {
+            // Tooltip toont alle verschillen, maar maakt onderscheid tussen
+            // actie-diffs (importeer-actie nodig) en info-diffs (bewuste
+            // DB-correctie — operator hoeft niets te doen).
+            const labels = { start_number: 'startnummer', full_name: 'naam',
+                             status: 'status', reserve: 'reserve-volgnummer' };
+            const actie = diffs.filter(d => IMPORT_DIFF_VELDEN.has(d))
+                               .map(d => labels[d] || d);
+            const info  = diffs.filter(d => !IMPORT_DIFF_VELDEN.has(d))
+                               .map(d => labels[d] || d);
+            const parts = [];
+            if (actie.length) parts.push(`Importeren overneemt: ${actie.join(', ')}`);
+            if (info.length)  parts.push(`Alleen ter info (DB blijft): ${info.join(', ')}`);
+            const tooltip = `KNSB-feed wijkt af van database.\n${parts.join('\n')}`;
+            badgesHtml += `<span class="badge-diff" title="${escHtml(tooltip)}">!</span>`;
+        }
 
         // Persoonlijk-melden info-badge: zelfde redenen als op de tekenlijst,
         // zodat de persoon achter de tekenbalie in 1 oogopslag ziet waarom
@@ -1088,7 +1157,7 @@ function toonVergelijkTabel(cat) {
 
         html += `
         <tr class="${rowClass}" data-lk="${escHtml(lk)}" data-dc="${escHtml(cat.dc_id)}">
-            <td class="td-sn ${isGuest ? 'guest-nr' : ''}">
+            <td class="td-sn ${isGuest ? 'guest-nr' : ''} ${snDiff ? 'cell-diff' : ''}">
                 <input type="number" class="inp inp-sn" value="${escHtml(String(sn))}"
                        data-field="start_number" data-lk="${escHtml(lk)}">
                 ${snDiff ? `<div class="knsb-hint">KNSB: ${escHtml(String(knsbSn))}</div>` : ''}
@@ -1130,6 +1199,108 @@ function toonVergelijkTabel(cat) {
     // Status blijft staan zoals 'ie was (= 5 'Bevestigd bij org.'), tenzij
     // operator handmatig naar lagere status zet. Reserves met status=5
     // tellen niet als 'bevestigd' in de paneel-header (alleen status=1 telt).
+    // ── Max-in-loting handmatig aanpassen (inline edit) ──────────────────────
+    // Klik op ✏-knop → de '<strong>'-waarde wordt vervangen door een input
+    // die ter plekke editbaar is. Enter / blur slaat op. Escape annuleert.
+    // Leeg laten = terug naar auto-berekening (NULL in DB).
+    // Geen browser-prompt — past beter bij de rest van de UI.
+    content.querySelectorAll('.rp-max-edit').forEach(btn => {
+        btn.addEventListener('click', () => {
+            if (btn.disabled) return;
+            const dcId       = btn.dataset.dcId;
+            const autoMax    = btn.dataset.autoMax;
+            const isOverride = btn.dataset.isOverride === '1';
+            const wrap       = btn.parentElement;
+            const strong     = wrap.querySelector('.rp-max');
+            if (!strong) return;
+
+            const huidig = strong.textContent.trim();
+            const inp    = document.createElement('input');
+            inp.type        = 'number';
+            inp.className   = 'rp-max-input';
+            inp.min         = '0';
+            inp.max         = '200';
+            // Leeg laten als huidige waarde = auto (geen override). Operator
+            // ziet de placeholder met het auto-getal en kan ofwel een nieuwe
+            // waarde intypen, ofwel leeg-laten om bij auto te blijven.
+            inp.value       = isOverride ? huidig : '';
+            inp.placeholder = `auto (${autoMax})`;
+            inp.title       = 'Enter = opslaan · Esc = annuleren · leeg = terug naar auto';
+
+            // Replace strong + btn met de input. Bewaar refs zodat we ze
+            // kunnen herstellen bij Escape of bij een API-fout.
+            strong.style.display = 'none';
+            btn.style.display    = 'none';
+            wrap.insertBefore(inp, strong);
+            inp.focus();
+            inp.select();
+
+            let _bezig = false;   // guard tegen dubbel-fire (blur na Enter)
+
+            const annuleer = () => {
+                if (_bezig) return;
+                _bezig = true;
+                inp.remove();
+                strong.style.display = '';
+                btn.style.display    = '';
+            };
+
+            const opslaan = async () => {
+                if (_bezig) return;
+                _bezig = true;
+
+                // Normaliseer invoer
+                let payload;
+                const trimmed = inp.value.trim();
+                if (trimmed === '') {
+                    payload = null;   // terug naar auto
+                } else {
+                    const n = parseInt(trimmed, 10);
+                    if (isNaN(n) || n < 0 || n > 200) {
+                        toonBevestigDialog(
+                            'Vul een geheel getal tussen 0 en 200 in, of laat leeg voor auto.',
+                            'Ongeldige waarde'
+                        );
+                        // Niet annuleren — laat de operator opnieuw typen.
+                        // Reset _bezig zodat hij gewoon door kan.
+                        _bezig = false;
+                        inp.focus();
+                        inp.select();
+                        return;
+                    }
+                    payload = n;
+                }
+
+                try {
+                    const res = await fetch('api/dc_max_loting.php', {
+                        method:  'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body:    JSON.stringify({ dc_id: dcId, max_in_loting: payload }),
+                    });
+                    const data = await res.json();
+                    if (data.error) throw new Error(data.error);
+
+                    // Lokale state updaten + hertekenen
+                    const cat = vergelijkData.find(c => c.dc_id === dcId);
+                    if (cat) cat.max_in_loting = data.max_in_loting;
+                    if (activeCat?.dc_id === dcId) toonVergelijkTabel(cat);
+                } catch (e) {
+                    toonBevestigDialog('Kon max niet opslaan: ' + (e.message || e), 'Fout');
+                    _bezig = false;
+                    annuleer();
+                }
+            };
+
+            inp.addEventListener('keydown', (e) => {
+                if (e.key === 'Enter')  { e.preventDefault(); opslaan(); }
+                if (e.key === 'Escape') { e.preventDefault(); annuleer(); }
+            });
+            // Blur slaat ook op (klikken buiten input = bevestigen). De
+            // _bezig-guard voorkomt dat blur-na-Enter twee keer fires.
+            inp.addEventListener('blur', () => opslaan());
+        });
+    });
+
     content.querySelectorAll('.btn-reserve-terug').forEach(btn => {
         btn.addEventListener('click', async () => {
             if (btn.disabled) return;

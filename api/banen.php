@@ -61,6 +61,24 @@ try {
         exit;
     }
 
+    // ── GET: ALLE banen-rijen met org-info — voor cross-org dropdowns ─────
+    // Geen deduplicatie: elke (org × baan) rij apart, met org_id + org_naam
+    // erbij zodat de UI client-side kan groeperen ("eigen org eerst, andere
+    // erna"). Gebruikt o.a. door de historie-import-tool zodat ook banen
+    // van andere organisaties gekozen kunnen worden (bv. NK gereden op een
+    // baan die niet bij de eigen vereniging hoort).
+    if ($method === 'GET' && $action === 'lijst_alle_met_org') {
+        $stmt = $pdo->query("
+            SELECT b.id, b.organisatie_id, b.naam, b.stad, b.vereniging_naam,
+                   b.logo_path, o.naam AS org_naam
+            FROM   banen b
+            LEFT JOIN organisaties o ON o.id = b.organisatie_id
+            ORDER  BY o.naam, b.naam
+        ");
+        echo json_encode($stmt->fetchAll(PDO::FETCH_ASSOC), JSON_UNESCAPED_UNICODE);
+        exit;
+    }
+
     // ── GET: alle unieke banen (cross-org) — voor handmatige toewijzing ────
     // Deduplicatie op naam: één rij per fysieke baan, met gegevens van de
     // 'meest complete' rij (logo + vereniging-naam + stad). Bedoeld voor de

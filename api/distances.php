@@ -7,7 +7,8 @@ require_once __DIR__ . '/../auth/session.php';
 requireAuth($pdo);
 
 $id = isset($_GET['id']) ? trim($_GET['id']) : '';
-if (!preg_match('/^[a-f0-9\-]{36}$/i', $id)) {
+// 8-36 chars, alfanumeriek + dashes (range voor handmatig-geseede IDs).
+if (!preg_match('/^[a-z0-9\-]{8,36}$/i', $id)) {
     http_response_code(400);
     echo json_encode(['error' => 'Ongeldig of ontbrekend competition ID']);
     exit;

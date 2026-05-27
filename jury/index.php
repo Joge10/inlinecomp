@@ -17,6 +17,11 @@
 //  Wachtwoord-check via password_verify tegen competitions.jury_password.
 // ============================================================
 header('Content-Type: text/html; charset=utf-8');
+// No-cache: zie coach/index.php voor uitleg — voor jury extra belangrijk,
+// stale jury.js of stale heat-data kan tot foute beslissingen leiden.
+header('Cache-Control: no-store, no-cache, must-revalidate, max-age=0');
+header('Pragma: no-cache');
+header('Expires: 0');
 require_once __DIR__ . '/../../config_inlinecomp.php';
 require_once __DIR__ . '/../auth/jury_session.php';
 
@@ -227,6 +232,44 @@ if ($action === 'session') {
         'comp_starts' => $comp['starts'],
         'role'        => $role,
     ]);
+    exit;
+}
+
+// ── API: list_pdfs — lijst PDF's uit /wedstrijdData/ ───────────────────────
+// V1: één platte map, geen wedstrijd-filter. Toekomst (zie MEMORY): per-comp
+// submappen + doelgroep-filter (jury/coach/public) via beheer-upload.
+// Auth: alleen ingelogde jury-sessie ziet de lijst — voorkomt dat random
+// bezoekers de map indexen via dit endpoint (de bestanden zelf zijn wel
+// public via HTTP omdat /wedstrijdData/ in webroot staat — een gerichte
+// directory-listing-protectie hoort op webserver-niveau, dit endpoint
+// voegt alleen een extra UI-gate toe).
+if ($action === 'list_pdfs') {
+    header('Content-Type: application/json; charset=utf-8');
+    if (empty($_SESSION['jury_comp_id'])) {
+        http_response_code(401);
+        echo json_encode(['error' => 'niet ingelogd']);
+        exit;
+    }
+    $dir = realpath(__DIR__ . '/../wedstrijdData');
+    if (!$dir || !is_dir($dir)) {
+        echo json_encode(['pdfs' => [], 'map_aanwezig' => false]);
+        exit;
+    }
+    $pdfs = [];
+    foreach (glob($dir . '/*.pdf') ?: [] as $pad) {
+        // Hidden files (._foo, .DS_Store) overslaan — komt voor bij Mac-uploads
+        $naam = basename($pad);
+        if ($naam === '' || $naam[0] === '.') continue;
+        $pdfs[] = [
+            'naam'      => $naam,
+            'url'       => '../wedstrijdData/' . rawurlencode($naam),
+            'size_kb'   => (int) round(filesize($pad) / 1024),
+            'gewijzigd' => date('Y-m-d H:i', filemtime($pad)),
+        ];
+    }
+    // Naam-sortering, case-insensitive, NL-locale (à/é etc. natuurlijk)
+    usort($pdfs, fn($a, $b) => strnatcasecmp($a['naam'], $b['naam']));
+    echo json_encode(['pdfs' => $pdfs, 'map_aanwezig' => true]);
     exit;
 }
 
@@ -621,6 +664,782 @@ if ($action === 'aoc_heropen' && $_SERVER['REQUEST_METHOD'] === 'POST') {
     exit;
 }
 
+// ════════════════════════════════════════════════════════════════════════════
+//   SPEAKER-ROL (omroepen vanuit speakers-cabine)
+// ════════════════════════════════════════════════════════════════════════════
+//
+// Helper: zelfde structuur als _aocRequire, maar checkt op 'speaker'-rol.
+// Eerder probeerde ik _aocRequire te hergebruiken — die eist specifiek de
+// area_of_call-rol, dus speaker-requests kregen 403 met 'Verkeerde rol'.
+function _speakerRequire(): string {
+    if (empty($_SESSION['jury_comp_id'])) {
+        header('Content-Type: application/json; charset=utf-8');
+        http_response_code(401);
+        echo json_encode(['error' => 'Niet ingelogd als jury']);
+        exit;
+    }
+    if (($_SESSION['jury_role'] ?? '') !== 'speaker') {
+        header('Content-Type: application/json; charset=utf-8');
+        http_response_code(403);
+        echo json_encode(['error' => 'Verkeerde rol — kies Speaker']);
+        exit;
+    }
+    return (string)$_SESSION['jury_comp_id'];
+}
+
+// ── API: cats + DCs structuur voor de tab-balk ─────────────────────────────
+// Niveau 1 = persons.category (DSA, HSA, DKA, etc.) uit entries van deze
+// wedstrijd. Niveau 2 = lijst van DCs waar rijders in die cat in zitten.
+// Aantal-veld per DC = aantal "meedoende" entries (status IN 1, 5; geen
+// reserves). Speaker kan dan in één oogopslag zien welke cats/DCs leeg
+// zijn en welke vol zitten.
+if ($action === 'speaker_struktuur') {
+    header('Content-Type: application/json; charset=utf-8');
+    $compId = _speakerRequire();
+    try {
+        $stmt = $pdo->prepare("
+            SELECT
+                p.category                       AS cat,
+                dc.id                            AS dc_id,
+                dc.name                          AS dc_naam,
+                dc.number                        AS dc_number,
+                COUNT(*)                         AS aantal
+            FROM entries e
+            JOIN persons p              ON p.license_key = e.person_license
+            JOIN distance_combinations dc ON dc.id = e.distance_combination_id
+            WHERE dc.competition_id = ?
+              AND e.status IN (1, 5)
+              AND e.reserve IS NULL
+              AND p.category IS NOT NULL
+              AND p.category <> ''
+            GROUP BY p.category, dc.id, dc.name, dc.number
+            ORDER BY p.category, dc.number, dc.name
+        ");
+        $stmt->execute([$compId]);
+        $rows = $stmt->fetchAll(PDO::FETCH_ASSOC);
+
+        // Groepeer naar { cats: [ {cat, dcs: [{dc_id, dc_naam, aantal}]} ] }
+        $catMap = [];
+        foreach ($rows as $r) {
+            $c = $r['cat'];
+            if (!isset($catMap[$c])) $catMap[$c] = [];
+            $catMap[$c][] = [
+                'dc_id'   => $r['dc_id'],
+                'dc_naam' => $r['dc_naam'],
+                'aantal'  => (int)$r['aantal'],
+            ];
+        }
+        $cats = [];
+        foreach ($catMap as $c => $dcs) {
+            $cats[] = ['cat' => $c, 'dcs' => $dcs];
+        }
+
+        // Sorteren op KNSB-categorie-volgorde (jongste → oudste), niet alfabetisch.
+        // Volgorde: per leeftijd eerst Dames, dan Heren, dan volgende leeftijd.
+        // Bv: DP4, HP4, DP3, HP3 … DKA, HKA, DJB, HJB, DJA, HJA, DSJ, HSJ, DSA,
+        // HSA, DSB, HSB, DM40, HM40, DM45, HM45 … HM95.
+        // Sort-key: age_rank * 10 + gender_rank → leeftijd is primary, geslacht
+        // alleen tiebreaker (D=0 zodat dames vóór heren binnen elke leeftijd).
+        //
+        // Master-cats (M40 t/m M95+) komen na DSA/HSA/DSB/HSB. De KNSB-feed
+        // schrijft soms 'HM40', soms 'M40' — beide tolerant gepakt via regex.
+        // 'M40' zonder prefix wordt als heren behandeld (in praktijk zijn
+        // masters meestal heren; expliciete DM40 voor dames-masters werkt
+        // gewoon en wordt vóór HM40 gesorteerd zoals bij alle andere cats).
+        $catSortKey = function(string $cat): int {
+            $cat = strtoupper(trim($cat));
+
+            // Master-cat patroon: optioneel H/D-prefix + M + 2-3 cijfers
+            // (M40..M99, ook M100+ tolereren mocht 't ooit voorkomen).
+            if (preg_match('/^([HD]?)M(\d{2,3})$/', $cat, $m)) {
+                $genderRank = match($m[1]) {
+                    'D' => 0, 'H' => 1, default => 1,  // geen prefix = heren-default
+                };
+                $leeftijd = (int)$m[2];
+                if ($leeftijd >= 40) {
+                    // M40 → age_rank 10, M45 → 11, M50 → 12 … M95 → 21
+                    $ageRank = 10 + intdiv($leeftijd - 40, 5);
+                    return $ageRank * 10 + $genderRank;
+                }
+                // M-leeftijd < 40: ongeldig, val terug op default-positie achteraan
+            }
+
+            // Standaard cats met H/D-prefix
+            $genderRank = match(substr($cat, 0, 1)) {
+                'D' => 0, 'H' => 1, default => 9,
+            };
+            $sub = substr($cat, 1);  // 'P4', 'KA', 'JB', 'SA', 'SB', etc.
+            $ageRank = match($sub) {
+                'P4' => 0, 'P3' => 1, 'P2' => 2, 'P1' => 3,
+                'KA' => 4, 'JB' => 5, 'JA' => 6,
+                'SJ' => 7, 'SA' => 8, 'SB' => 9,
+                default => 99,
+            };
+            return $ageRank * 10 + $genderRank;
+        };
+        usort($cats, fn($a, $b) => $catSortKey($a['cat']) <=> $catSortKey($b['cat']));
+
+        echo json_encode(['cats' => $cats], JSON_UNESCAPED_UNICODE);
+    } catch (Throwable $e) {
+        http_response_code(500);
+        echo json_encode(['error' => $e->getMessage()]);
+    }
+    exit;
+}
+
+// ── API: deelnemers voor gekozen (DC, cat) ─────────────────────────────────
+// Stuurt alle "meedoende" entries (status 1 of 5, geen reserve) voor de
+// gegeven DC, gefilterd op rijders met persons.category = ?cat. Alle persons-
+// velden meesturen zodat het detail-popup geen extra request hoeft te doen.
+// Sortering: startnummer ASC zodat tegels in de gangbare omroep-volgorde
+// staan; rijders zonder startnummer achteraan op naam.
+if ($action === 'speaker_deelnemers') {
+    header('Content-Type: application/json; charset=utf-8');
+    $compId = _speakerRequire();
+    $dcId   = trim($_GET['dc_id'] ?? '');
+    $cat    = trim($_GET['cat']   ?? '');
+    if ($dcId === '' || $cat === '') {
+        http_response_code(400);
+        echo json_encode(['error' => 'dc_id en cat zijn verplicht']);
+        exit;
+    }
+    try {
+        // Bevestig dat DC bij deze wedstrijd hoort (anders kan iemand
+        // via brute force DC-IDs van andere wedstrijden uitlezen).
+        $check = $pdo->prepare("SELECT 1 FROM distance_combinations WHERE id = ? AND competition_id = ?");
+        $check->execute([$dcId, $compId]);
+        if (!$check->fetchColumn()) {
+            http_response_code(403);
+            echo json_encode(['error' => 'DC hoort niet bij deze wedstrijd']);
+            exit;
+        }
+
+        // Startnummer kan lokale override hebben (competition_startnummers).
+        // COALESCE prefereert de override boven persons.start_number.
+        $stmt = $pdo->prepare("
+            SELECT
+                COALESCE(csn.startnummer, p.start_number) AS startnummer,
+                p.license_key,
+                p.full_name,
+                p.short_name,
+                p.category,
+                p.birth_year,
+                p.gender,
+                p.nationality,
+                p.club_full,
+                p.club_short,
+                p.sponsor,
+                p.city,
+                e.status AS entry_status
+            FROM entries e
+            JOIN persons p ON p.license_key = e.person_license
+            LEFT JOIN competition_startnummers csn
+                   ON csn.competition_id = ? AND csn.person_license = p.license_key
+            WHERE e.distance_combination_id = ?
+              AND e.status IN (1, 5)
+              AND e.reserve IS NULL
+              AND p.category = ?
+            ORDER BY
+                CASE WHEN COALESCE(csn.startnummer, p.start_number) IS NULL THEN 1 ELSE 0 END,
+                COALESCE(csn.startnummer, p.start_number),
+                p.full_name
+        ");
+        $stmt->execute([$compId, $dcId, $cat]);
+        $rows = $stmt->fetchAll(PDO::FETCH_ASSOC);
+
+        // Type-cleanup
+        foreach ($rows as &$r) {
+            if ($r['startnummer'] !== null) $r['startnummer'] = (int)$r['startnummer'];
+            if ($r['birth_year']  !== null) $r['birth_year']  = (int)$r['birth_year'];
+            if ($r['gender']      !== null) $r['gender']      = (int)$r['gender'];
+            $r['entry_status']                  = (int)$r['entry_status'];
+        }
+        unset($r);
+
+        echo json_encode(['deelnemers' => $rows], JSON_UNESCAPED_UNICODE);
+    } catch (Throwable $e) {
+        http_response_code(500);
+        echo json_encode(['error' => $e->getMessage()]);
+    }
+    exit;
+}
+
+// ── API: speaker kans-score (1-10) per rijder in DC ─────────────────────
+// Speaker wil per rijder zien hoe waarschijnlijk podium is, gebaseerd op
+// historische prestaties op vergelijkbare afstand-groep.
+//
+// Afstand-groep van huidige DC:
+//   - 'ultra_sprint': value_meters < 500 EN race_type='sprint' (200m, 300m)
+//   - 'sprint':       race_type='sprint' EN (value_meters>=500 of NULL) (500m, 1000m)
+//   - 'lang':         race_type IN inline/afvalkoers/puntenkoers
+//
+// Algoritme:
+//   1. Verzamel uitslag_afstand-rijen per deelnemer voor dezelfde groep
+//      (NIET klassement — vervuilt, mengt korte+lange afstanden)
+//   2. Per rij: rang_punten × recentheid_gewicht
+//        rang_punten: 1→10, 2→7, 3→5, 4-6→3, 7-10→1, else→0
+//        gewicht: 0-6m→1.0, 6-12m→0.5, 1-2j→0.4, 2-3j→0.3, 3-4j→0.2, >4j→0.1
+//   3. Sommeer per rijder = ruwe_score
+//   4. Normaliseer RELATIEF in DC: maxRuw→10, minRuw→1, lineair daartussen
+//   5. Rijders zonder historie krijgen score=null (= onbekend, badge ❔)
+//
+// Categorie-context: ALLE cats meegerekend (inline-historie is veelzeggend
+// ook over cat-grenzen — kwaliteit komt naar boven). Geen cat-penalty in V1.
+//
+// Multi-distance DC (KA/JB combi 200m+500m): groep wordt bepaald op
+// kleinste value_meters distance — meest specifiek. Voor multi-distance
+// fine-tuning komt later. V1: één score per rijder per DC.
+if ($action === 'speaker_kans') {
+    header('Content-Type: application/json; charset=utf-8');
+    $compId = _speakerRequire();
+    $dcId = trim($_GET['dc_id'] ?? '');
+    $cat  = trim($_GET['cat']   ?? '');
+    if ($dcId === '' || $cat === '') {
+        http_response_code(400);
+        echo json_encode(['error' => 'dc_id en cat zijn verplicht']);
+        exit;
+    }
+    try {
+        // DC-veiligheidscheck (zelfde als speaker_deelnemers)
+        $check = $pdo->prepare("SELECT 1 FROM distance_combinations WHERE id = ? AND competition_id = ?");
+        $check->execute([$dcId, $compId]);
+        if (!$check->fetchColumn()) {
+            http_response_code(403);
+            echo json_encode(['error' => 'DC hoort niet bij deze wedstrijd']);
+            exit;
+        }
+
+        // Bepaal organisatie van huidige wedstrijd. Filter straks historie
+        // op zelfde organisatie zodat regio-wedstrijden niet vervuilen bij
+        // landelijke wedstrijden (NK krijgt alleen KNSB-historie, geen
+        // club-uitslagen tussendoor). Als comp geen organisatie heeft (NULL):
+        // geen filter — meet alle historie mee (geen onderscheid mogelijk).
+        $orgStmt = $pdo->prepare("SELECT organisatie_id FROM competitions WHERE id = ?");
+        $orgStmt->execute([$compId]);
+        $orgId = $orgStmt->fetchColumn();
+        $orgId = ($orgId !== false && $orgId !== null && $orgId !== '') ? $orgId : null;
+
+        // 1. Bepaal afstand-groepen voor ALLE distances in DC (sinds 2026-05-27).
+        // Combo-DCs (KA/JB landelijke wedstrijd met 200m+500m) hebben beide
+        // afstanden — vroeger pakten we alleen de eerste, waardoor de tweede
+        // groep niet meetelde in historie-lookup. Nu nemen we alle unieke
+        // groepen mee zodat alle relevante prestaties bijdragen aan de score.
+        $ds = $pdo->prepare("
+            SELECT value_meters, race_type
+            FROM distances
+            WHERE distance_combination_id = ?
+        ");
+        $ds->execute([$dcId]);
+        $dcDists = $ds->fetchAll(PDO::FETCH_ASSOC);
+        $groepenSet = [];   // set van unieke groep-strings
+        foreach ($dcDists as $d) {
+            $vm = ($d['value_meters'] !== null) ? (int)$d['value_meters'] : null;
+            $rt = $d['race_type'] ?? '';
+            $g = null;
+            if ($rt === 'sprint' && $vm !== null && $vm < 500) {
+                $g = 'ultra_sprint';
+            } elseif ($rt === 'sprint') {
+                $g = 'sprint';
+            } elseif (in_array($rt, ['inline', 'afvalkoers', 'puntenkoers'], true)) {
+                $g = 'lang';
+            }
+            if ($g) $groepenSet[$g] = true;
+        }
+        $groepen = array_keys($groepenSet);
+        if (empty($groepen)) {
+            echo json_encode(['rijders' => [], 'groepen' => [], 'reden' => 'onbekende afstand-groep']);
+            exit;
+        }
+
+        // 2. Get deelnemers in DC+cat
+        $stmt = $pdo->prepare("
+            SELECT DISTINCT p.license_key
+            FROM entries e
+            JOIN persons p ON p.license_key = e.person_license
+            WHERE e.distance_combination_id = ?
+              AND p.category = ?
+              AND e.status IN (1, 5)
+              AND e.reserve IS NULL
+        ");
+        $stmt->execute([$dcId, $cat]);
+        $deelnemers = array_column($stmt->fetchAll(PDO::FETCH_ASSOC), 'license_key');
+        if (empty($deelnemers)) {
+            echo json_encode(['rijders' => [], 'groep' => $groep]);
+            exit;
+        }
+
+        // 3. Get historische uitslag_afstand voor deze rijders binnen alle
+        // relevante groepen (OR-conditie over alle DC's groepen). JOIN
+        // distances om race_type/value_meters per (DC, distance_id) op te halen.
+        $condities = [];
+        foreach ($groepen as $g) {
+            $condities[] = match ($g) {
+                'ultra_sprint' => "(d.race_type = 'sprint' AND d.value_meters IS NOT NULL AND d.value_meters < 500)",
+                'sprint'       => "(d.race_type = 'sprint' AND (d.value_meters IS NULL OR d.value_meters >= 500))",
+                'lang'         => "(d.race_type IN ('inline', 'afvalkoers', 'puntenkoers'))",
+            };
+        }
+        $groepConditie = '(' . implode(' OR ', $condities) . ')';
+        $ph = implode(',', array_fill(0, count($deelnemers), '?'));
+        // Organisatie-filter: JOIN met competitions, beperk tot dezelfde org
+        // als huidige wedstrijd. Voorkomt vervuiling door regio/club-uitslagen
+        // bij landelijke wedstrijden (NK telt alleen KNSB-historie mee).
+        // Bij comp zonder organisatie (NULL): geen filter — alles meenemen.
+        $orgJoin   = $orgId !== null ? 'JOIN competitions c ON c.id = ua.competition_id' : '';
+        $orgFilter = $orgId !== null ? 'AND c.organisatie_id = ?' : '';
+        $stmt = $pdo->prepare("
+            SELECT ua.person_license, ua.competition_datum, ua.rang
+            FROM uitslag_afstand ua
+            JOIN distances d
+                 ON d.id = ua.distance_id
+                AND d.distance_combination_id = ua.distance_combination_id
+            {$orgJoin}
+            WHERE ua.person_license IN ($ph)
+              AND ua.rang IS NOT NULL
+              AND ({$groepConditie})
+              {$orgFilter}
+        ");
+        $params = $deelnemers;
+        if ($orgId !== null) $params[] = $orgId;
+        $stmt->execute($params);
+        $rows = $stmt->fetchAll(PDO::FETCH_ASSOC);
+
+        // 4. Bereken ruwe_score per rijder + aantal historie-rijen
+        $nu = new DateTimeImmutable();
+        $ruwScores   = array_fill_keys($deelnemers, 0.0);
+        $aantalRijen = array_fill_keys($deelnemers, 0);
+        foreach ($rows as $r) {
+            $rang = (int)$r['rang'];
+            $rangPunten = match (true) {
+                $rang === 1 => 10,
+                $rang === 2 => 7,
+                $rang === 3 => 5,
+                $rang <= 6  => 3,
+                $rang <= 10 => 1,
+                default     => 0,
+            };
+            $maanden = null;
+            if (!empty($r['competition_datum'])) {
+                try {
+                    $dt = new DateTimeImmutable($r['competition_datum']);
+                    $diff = $nu->diff($dt);
+                    $maanden = $diff->y * 12 + $diff->m;
+                } catch (Throwable $e) {}
+            }
+            // Recentheid-gewicht: steile afval na 6 maanden. Recente uitslagen
+            // zeggen veel meer over actuele vorm dan oude — vooral bij junioren
+            // die snel in cat-niveau stijgen en in vorm fluctueren. Curve:
+            //   <6m    → 1.0  (huidig seizoen, volle weging)
+            //   6-12m  → 0.5  (vorig seizoen, halveert)
+            //   1-2j   → 0.4
+            //   2-3j   → 0.3
+            //   3-4j   → 0.2
+            //   >4j    → 0.1  (historisch, marginale invloed)
+            //   null   → 0.1  (datum onbekend → conservatief als 'oud')
+            $gewicht = match (true) {
+                $maanden === null => 0.1,
+                $maanden < 6      => 1.0,
+                $maanden < 12     => 0.5,
+                $maanden < 24     => 0.4,
+                $maanden < 36     => 0.3,
+                $maanden < 48     => 0.2,
+                default           => 0.1,
+            };
+            $lk = $r['person_license'];
+            $ruwScores[$lk]   += $rangPunten * $gewicht;
+            $aantalRijen[$lk] += 1;
+        }
+
+        // 5. Normaliseer RELATIEF in DC. Alleen rijders MET historie krijgen
+        // een score; rijders zonder historie blijven null (badge ❔).
+        $metHist = array_filter($deelnemers, fn($lk) => $aantalRijen[$lk] > 0);
+        $maxRuw = !empty($metHist)
+            ? max(array_map(fn($lk) => $ruwScores[$lk], $metHist))
+            : 0;
+        $minRuw = !empty($metHist)
+            ? min(array_map(fn($lk) => $ruwScores[$lk], $metHist))
+            : 0;
+        $range = $maxRuw - $minRuw;
+
+        $result = [];
+        foreach ($deelnemers as $lk) {
+            $ruw = $ruwScores[$lk];
+            $aantal = $aantalRijen[$lk];
+            $score = null;
+            $reden = '';
+            if ($aantal === 0) {
+                $reden = 'geen historie op deze afstand-groep';
+            } elseif ($range == 0) {
+                // Alle scores gelijk → iedereen middenmoot
+                $score = 5;
+                $reden = sprintf('%d wedstrijden, allen gelijke ruwe score %.1f', $aantal, $ruw);
+            } else {
+                $score = (int)round((($ruw - $minRuw) / $range) * 9) + 1;
+                $reden = sprintf('%d wedstrijden · ruwe score %.1f', $aantal, $ruw);
+            }
+            $result[] = [
+                'license_key' => $lk,
+                'score'       => $score,
+                'reden'       => $reden,
+            ];
+        }
+
+        echo json_encode([
+            'rijders'        => $result,
+            'groepen'        => $groepen,
+            'organisatie_id' => $orgId,
+        ], JSON_UNESCAPED_UNICODE);
+    } catch (Throwable $e) {
+        http_response_code(500);
+        echo json_encode(['error' => $e->getMessage()]);
+    }
+    exit;
+}
+
+// ── API: rijder-historie voor speaker-detail-modal ─────────────────────────
+// Levert alle uitslag_klassement-rijen voor een rijder (alle DCs / alle
+// wedstrijden), gesorteerd nieuw → oud. Speaker toont daarmee podium-
+// finishes (rang 1-3) als hoogtepunt, daarna de rest voor context.
+//
+// Vereist alleen een geldige speaker-sessie + license_key. De rijder hoeft
+// niet per se in de huidige wedstrijd te zitten (speaker mag elke rijder
+// die ooit gereden heeft opzoeken — uitslagen zijn publieke historie).
+if ($action === 'speaker_historie') {
+    header('Content-Type: application/json; charset=utf-8');
+    _speakerRequire();  // alleen toegang voor ingelogde jury
+    $lk = trim($_GET['license_key'] ?? '');
+    if ($lk === '') {
+        http_response_code(400);
+        echo json_encode(['error' => 'license_key is verplicht']);
+        exit;
+    }
+    try {
+        // Historie = uitsluitend per-afstand uitslagen (uitslag_afstand).
+        // Speaker vergelijkt met de afstand die nu wordt gereden, dus
+        // dag-eindklassement is irrelevant (kan niet vergeleken worden met
+        // één-afstand-prestatie) en alleen verwarrende noise. Sinds
+        // 2026-05-27 dus klassement-fallback verwijderd — als er voor een
+        // wedstrijd alleen klassement-data bestaat zonder per-afstand
+        // uitslagen, dan komt die wedstrijd niet voor in de speaker-modal.
+        // Punten_totaal kolom blijft in de output (altijd NULL) zodat de
+        // frontend-render-code ongewijzigd kan blijven.
+        $stmt = $pdo->prepare("
+            SELECT
+                ua.competition_naam,
+                ua.competition_datum,
+                ua.dc_naam,
+                ua.distance_naam,
+                ua.categorie,
+                ua.split_group,
+                ua.rang,
+                NULL          AS punten_totaal
+            FROM uitslag_afstand ua
+            WHERE ua.person_license = ?
+            -- Sorteren op uitslag-positie (laag = beter). Binnen podium-sectie:
+            -- eerst alle goud, dan zilver, dan brons. Binnen Overige-sectie:
+            -- rang 4, 5, 6, ... oplopend. NULL-rangen (DQ/DNS zonder positie)
+            -- achteraan. Bij gelijke rang: chronologisch oud → recent.
+            ORDER BY rang IS NULL, rang ASC, competition_datum ASC, competition_naam, dc_naam, distance_naam
+        ");
+        $stmt->execute([$lk]);
+        $rows = $stmt->fetchAll(PDO::FETCH_ASSOC);
+
+        // Type-cleanup + leesbare datum
+        foreach ($rows as &$r) {
+            $r['rang']          = $r['rang']          !== null ? (int)$r['rang']           : null;
+            $r['punten_totaal'] = $r['punten_totaal'] !== null ? (float)$r['punten_totaal'] : null;
+        }
+        unset($r);
+
+        echo json_encode(['historie' => $rows], JSON_UNESCAPED_UNICODE);
+    } catch (Throwable $e) {
+        http_response_code(500);
+        echo json_encode(['error' => $e->getMessage()]);
+    }
+    exit;
+}
+
+// ── API: volledig overzicht van alle eerdere wedstrijden ──────────────────
+// Voor de bottom-bar cascade-dropdowns. Eén call levert per eerdere
+// wedstrijd alle (DC × distance) combinaties met de cats die erin
+// voorkomen. Niet gefilterd op huidige cat — speaker wil juist kunnen
+// vergelijken tussen cats (bv. NK-junioren-uitslag boven senioren-tegels).
+//
+// Excludeert de huidige wedstrijd (= speaker's sessie). Bron =
+// uitslag_afstand zodat speaker per specifieke afstand binnen een DC
+// kan kiezen (multi-distance DCs).
+if ($action === 'speaker_eerdere_overzicht') {
+    header('Content-Type: application/json; charset=utf-8');
+    $compId = _speakerRequire();
+    try {
+        $stmt = $pdo->prepare("
+            SELECT DISTINCT
+                c.id                       AS comp_id,
+                c.name                     AS comp_naam,
+                c.starts                   AS comp_starts,
+                ua.distance_combination_id AS dc_id,
+                ua.dc_naam,
+                ua.distance_id,
+                ua.distance_naam,
+                ua.categorie               AS cat
+            FROM uitslag_afstand ua
+            JOIN competitions c ON c.id = ua.competition_id
+            WHERE ua.competition_id <> ?
+              AND ua.categorie IS NOT NULL
+              AND ua.categorie <> ''
+            ORDER BY c.starts DESC, c.name, ua.dc_naam, ua.distance_naam, ua.categorie
+        ");
+        $stmt->execute([$compId]);
+        $rows = $stmt->fetchAll(PDO::FETCH_ASSOC);
+
+        // Groepeer naar { wedstrijden: [ {comp, afstanden: [ {dc/dist, cats:[..]} ]} ] }
+        $wMap = []; // comp_id → { comp..., afstanden: [dc_id|distance_id → {dc/dist, cats}] }
+        foreach ($rows as $r) {
+            $cid = $r['comp_id'];
+            if (!isset($wMap[$cid])) {
+                $wMap[$cid] = [
+                    'comp_id'     => $cid,
+                    'comp_naam'   => $r['comp_naam'],
+                    'comp_starts' => $r['comp_starts'],
+                    '_afst'       => [],
+                ];
+            }
+            // Afstand-key: dc_id + distance_id zodat we per fysieke afstand
+            // binnen een DC kunnen onderscheiden (multi-distance DCs).
+            $aKey = $r['dc_id'] . '|' . ($r['distance_id'] ?? '');
+            if (!isset($wMap[$cid]['_afst'][$aKey])) {
+                $wMap[$cid]['_afst'][$aKey] = [
+                    'dc_id'         => $r['dc_id'],
+                    'dc_naam'       => $r['dc_naam'],
+                    'distance_id'   => $r['distance_id'],
+                    'distance_naam' => $r['distance_naam'],
+                    'cats'          => [],
+                ];
+            }
+            if (!in_array($r['cat'], $wMap[$cid]['_afst'][$aKey]['cats'], true)) {
+                $wMap[$cid]['_afst'][$aKey]['cats'][] = $r['cat'];
+            }
+        }
+        // Flatten — _afst → afstanden (numeric array)
+        $wedstrijden = [];
+        foreach ($wMap as $w) {
+            $w['afstanden'] = array_values($w['_afst']);
+            unset($w['_afst']);
+            $wedstrijden[] = $w;
+        }
+        echo json_encode(['wedstrijden' => $wedstrijden], JSON_UNESCAPED_UNICODE);
+    } catch (Throwable $e) {
+        http_response_code(500);
+        echo json_encode(['error' => $e->getMessage()]);
+    }
+    exit;
+}
+
+// ── API: top-3 uitslag voor (wedstrijd × DC × distance) ────────────────────
+// Voor de bottom-bar onderste regel: podium-finishers van de gekozen
+// historische afstand. Bron = uitslag_afstand voor per-afstand-rang.
+// GEEN cat-filter: rang is per-DC (= per race), dus top-3 is de daad-
+// werkelijke race-podium ongeacht welke cats meereden. Als DSA+DSJ samen
+// in één DC racen, geeft rang=1 de echte winnaar (welke cat dan ook).
+// De cat-dropdown in de frontend is alleen UI-filter om relevante
+// afstanden te tonen, niet om uitslag te filteren.
+if ($action === 'speaker_eerdere_top3') {
+    header('Content-Type: application/json; charset=utf-8');
+    _speakerRequire();
+    $compId = trim($_GET['comp_id']     ?? '');
+    $dcId   = trim($_GET['dc_id']       ?? '');
+    $distId = trim($_GET['distance_id'] ?? '');
+    if ($compId === '' || $dcId === '') {
+        http_response_code(400);
+        echo json_encode(['error' => 'comp_id en dc_id zijn verplicht']);
+        exit;
+    }
+    try {
+        // distance_id kan leeg zijn (single-distance DC met distance_id='').
+        // Startnummer = competition-specifieke override (csn) → fallback op
+        // persons.start_number. Voor speaker is dit het nummer dat de
+        // rijder destijds droeg in die wedstrijd.
+        $sql = "
+            SELECT
+                ua.rang,
+                COALESCE(csn.startnummer, p.start_number) AS startnummer,
+                COALESCE(p.full_name, ua.person_license) AS naam,
+                ua.person_license,
+                ua.categorie,
+                ua.tijd_ms,
+                ua.sanctie,
+                -- pending_source: 'historie' bij placeholder uit PDF-import die
+                -- nog niet aan een echte KNSB-account gekoppeld is. NULL = echte
+                -- KNSB-rijder. Frontend toont ⚡ badge bij pending.
+                p.pending_source
+            FROM uitslag_afstand ua
+            LEFT JOIN persons p ON p.license_key = ua.person_license
+            LEFT JOIN competition_startnummers csn
+                   ON csn.competition_id = ua.competition_id
+                  AND csn.person_license = ua.person_license
+            WHERE ua.competition_id          = ?
+              AND ua.distance_combination_id = ?
+              AND ua.distance_id             = ?
+              AND ua.rang BETWEEN 1 AND 3
+            ORDER BY ua.rang, p.full_name
+        ";
+        $stmt = $pdo->prepare($sql);
+        $stmt->execute([$compId, $dcId, $distId]);
+        $rows = $stmt->fetchAll(PDO::FETCH_ASSOC);
+        foreach ($rows as &$r) {
+            $r['rang']        = (int)$r['rang'];
+            $r['startnummer'] = $r['startnummer'] !== null ? (int)$r['startnummer'] : null;
+            $r['tijd_ms']     = $r['tijd_ms']     !== null ? (int)$r['tijd_ms']     : null;
+        }
+        unset($r);
+        echo json_encode(['top3' => $rows], JSON_UNESCAPED_UNICODE);
+    } catch (Throwable $e) {
+        http_response_code(500);
+        echo json_encode(['error' => $e->getMessage()]);
+    }
+    exit;
+}
+
+// ── API: één rijder ophalen op license_key (voor speaker-detail-modal) ──────
+// Gebruikt door klik op podium-pill in bottom-bar. Rijder kan in een
+// eerdere wedstrijd hebben gezeten en niet in de huidige meedoen — dus
+// alle data komt uit persons. Startnummer-override probeert ÉÉRST de
+// huidige speaker-comp (= actionable info: "welk nummer rijdt hij vandaag"),
+// valt anders terug op persons.start_number.
+if ($action === 'speaker_persoon') {
+    header('Content-Type: application/json; charset=utf-8');
+    $compId = _speakerRequire();
+    $lk     = trim($_GET['license_key'] ?? '');
+    if ($lk === '') {
+        http_response_code(400);
+        echo json_encode(['error' => 'license_key is verplicht']);
+        exit;
+    }
+    try {
+        $stmt = $pdo->prepare("
+            SELECT
+                COALESCE(csn.startnummer, p.start_number) AS startnummer,
+                p.license_key,
+                p.full_name,
+                p.short_name,
+                p.category,
+                p.birth_year,
+                p.gender,
+                p.nationality,
+                p.club_full,
+                p.club_short,
+                p.sponsor,
+                p.city,
+                -- pending_source: 'historie' bij PDF-placeholder. Detail-modal
+                -- toont dan een label 'nog niet gekoppeld' en mist club/jaar/etc.
+                p.pending_source
+            FROM persons p
+            LEFT JOIN competition_startnummers csn
+                   ON csn.competition_id = ? AND csn.person_license = p.license_key
+            WHERE p.license_key = ?
+            LIMIT 1
+        ");
+        $stmt->execute([$compId, $lk]);
+        $row = $stmt->fetch(PDO::FETCH_ASSOC);
+        if (!$row) {
+            http_response_code(404);
+            echo json_encode(['error' => 'Rijder niet gevonden']);
+            exit;
+        }
+        if ($row['startnummer'] !== null) $row['startnummer'] = (int)$row['startnummer'];
+        if ($row['birth_year']  !== null) $row['birth_year']  = (int)$row['birth_year'];
+        if ($row['gender']      !== null) $row['gender']      = (int)$row['gender'];
+        echo json_encode(['rijder' => $row], JSON_UNESCAPED_UNICODE);
+    } catch (Throwable $e) {
+        http_response_code(500);
+        echo json_encode(['error' => $e->getMessage()]);
+    }
+    exit;
+}
+
+// ── API: nationaal record(s) voor cat + afstand ──────────────────────────
+// Returns 1-of-4 records uit nationale_records tabel:
+//   - cat_groep: 'junioren' (Pupillen t/m JA) | 'senioren' (vanaf SJ/SA)
+//   - gender:    0 (heren) | 1 (dames)
+//   - afstand_key: '200m','500m','1000m','marathon', etc. (zelfde format als
+//                  _spkAfstandKey in jury.js)
+//   - mode='matching' (default) → alleen exacte cat-groep+gender match
+//     mode='all'                → alle 4 (jun/sen × M/V) varianten, klikbaar
+//                                 in speaker-banner voor expanded view
+//
+// Type (baan/weg) wordt gefilterd via optionele URL-param `&type=baan|weg`.
+// Frontend speaker UI heeft een toggle-pill rechts in de banner waarmee de
+// gebruiker per afstand kiest welk type record relevant is; keuze blijft in
+// localStorage per afstand_key. Zonder param: beide types (backwards-compat).
+if ($action === 'speaker_record') {
+    header('Content-Type: application/json; charset=utf-8');
+    _speakerRequire();
+    $afstandKey = trim($_GET['afstand_key'] ?? '');
+    $catGroep   = trim($_GET['cat_groep']   ?? '');
+    $gender     = $_GET['gender'] ?? '';
+    $mode       = trim($_GET['mode'] ?? 'matching');
+    $typeParam  = trim($_GET['type']    ?? '');
+    $typeFilter = in_array($typeParam, ['baan', 'weg'], true) ? $typeParam : null;
+    // afstand_key is verplicht voor 'matching' (single-cat tijd-record),
+    // maar OPTIONEEL voor 'mode=all': zonder key krijg je ALLE records
+    // (alle afstanden) — handig om te zien of een recordhouder ook nog
+    // op andere afstanden bovenaan staat.
+    if ($mode !== 'all' && $afstandKey === '') {
+        http_response_code(400);
+        echo json_encode(['error' => 'afstand_key verplicht']);
+        exit;
+    }
+    try {
+        if ($mode === 'all') {
+            // mode=all: alle records (gefilterd op afstand_key indien gegeven,
+            // anders ALLE afstanden). Type-filter (baan/weg) wordt altijd
+            // gerespecteerd zodat banner-keuze doorwerkt in modal.
+            $sql = "
+                SELECT cat_groep, gender, type, tijd_ms,
+                       afstand_key, afstand_naam,
+                       rijder_naam, locatie, record_datum, wedstrijd, extra_info
+                FROM nationale_records
+                WHERE 1=1";
+            $params = [];
+            if ($afstandKey !== '') { $sql .= " AND afstand_key = ?"; $params[] = $afstandKey; }
+            if ($typeFilter !== null) { $sql .= " AND type = ?"; $params[] = $typeFilter; }
+            $sql .= "
+                ORDER BY
+                    CASE cat_groep WHEN 'junioren' THEN 0 ELSE 1 END,
+                    gender,
+                    afstand_key,
+                    type";
+            $stmt = $pdo->prepare($sql);
+            $stmt->execute($params);
+        } else {
+            // Matching: alleen voor gegeven cat_groep + gender
+            $sql = "
+                SELECT cat_groep, gender, type, tijd_ms, afstand_naam,
+                       rijder_naam, locatie, record_datum, wedstrijd, extra_info
+                FROM nationale_records
+                WHERE afstand_key = ?
+                  AND cat_groep   = ?
+                  AND gender      = ?";
+            $params = [$afstandKey, $catGroep, (int)$gender];
+            if ($typeFilter !== null) { $sql .= " AND type = ?"; $params[] = $typeFilter; }
+            $sql .= " ORDER BY type";
+            $stmt = $pdo->prepare($sql);
+            $stmt->execute($params);
+        }
+        $rows = $stmt->fetchAll(PDO::FETCH_ASSOC);
+        foreach ($rows as &$r) {
+            $r['gender']  = (int)$r['gender'];
+            $r['tijd_ms'] = $r['tijd_ms'] !== null ? (int)$r['tijd_ms'] : null;
+        }
+        unset($r);
+        echo json_encode(['records' => $rows], JSON_UNESCAPED_UNICODE);
+    } catch (Throwable $e) {
+        http_response_code(500);
+        echo json_encode(['error' => $e->getMessage()]);
+    }
+    exit;
+}
+
 // ── Geen action → HTML pagina ───────────────────────────────────────────────
 ?><!DOCTYPE html>
 <html lang="nl">
@@ -628,9 +1447,15 @@ if ($action === 'aoc_heropen' && $_SERVER['REQUEST_METHOD'] === 'POST') {
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1, user-scalable=no">
     <meta name="theme-color" content="#1a3a5c">
+    <meta name="mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="apple-mobile-web-app-title" content="InlineComp J">
     <title>InlineComp — Jury</title>
     <link rel="icon" type="image/svg+xml" href="../favicon.svg">
-    <link rel="stylesheet" href="jury.css">
+    <link rel="apple-touch-icon" href="icon-192-v2.svg">
+    <link rel="manifest" href="manifest.json">
+    <link rel="stylesheet" href="jury.css?v=<?= filemtime(__DIR__ . '/jury.css') ?>">
 </head>
 <body>
 
@@ -647,6 +1472,18 @@ if ($action === 'aoc_heropen' && $_SERVER['REQUEST_METHOD'] === 'POST') {
         <div class="jury-topbar-acties" id="jury-topbar-acties"></div>
     </div>
 </header>
+
+<!-- PWA install banner — verschijnt alleen als browser beforeinstallprompt
+     vuurt (Chrome/Edge desktop+Android). iOS toont het niet, gebruiker moet
+     daar via "Voeg toe aan beginscherm" in Safari handmatig installeren. -->
+<div id="pwa-banner" class="jury-pwa-banner" hidden>
+    <div class="jury-pwa-tekst">
+        <b>Installeer InlineComp Jury</b>
+        <span>Voeg toe aan je startscherm voor snelle toegang aan de baan</span>
+    </div>
+    <button class="jury-btn jury-btn-primary" id="pwa-install">Installeer</button>
+    <button class="jury-pwa-sluit" id="pwa-sluit" title="Sluiten" aria-label="Sluiten">&times;</button>
+</div>
 
 <main class="jury-main" id="jury-main">
     <div class="jury-laden">Laden…</div>
@@ -670,6 +1507,54 @@ if ($action === 'aoc_heropen' && $_SERVER['REQUEST_METHOD'] === 'POST') {
     </div>
 </div>
 
-<script src="jury.js"></script>
+<!-- ?v=filemtime → auto cache-bust bij elke upload zonder handmatige versie-bump.
+     filemtime() leest mtime van het bestand op disk; bij SFTP-upload krijgt 'ie
+     een nieuwe timestamp → nieuwe URL → browser haalt vers ipv uit cache. -->
+<script src="jury.js?v=<?= filemtime(__DIR__ . '/jury.js') ?>"></script>
+
+<!-- ── PWA: service worker + install prompt ──────────────────────────────── -->
+<script>
+// Update-flow sinds 2026-05-27: zie coach/index.php voor uitleg.
+// GEEN auto-reload — wiste input tijdens typen. Vertrouw op no-cache
+// headers + cache cleanup bij SW-activate; updates komen bij next nav.
+if ('serviceWorker' in navigator) {
+    navigator.serviceWorker.register('sw.js').then(reg => {
+        const checkUpdate = () => { try { reg.update(); } catch {} };
+        document.addEventListener('visibilitychange', () => {
+            if (document.visibilityState === 'visible') checkUpdate();
+        });
+        setInterval(checkUpdate, 5 * 60 * 1000);
+    }).catch(() => {});
+}
+
+let _juryDeferredPrompt = null;
+window.addEventListener('beforeinstallprompt', e => {
+    e.preventDefault();
+    _juryDeferredPrompt = e;
+    // Niet meer tonen als gebruiker eerder weggeklikt heeft
+    if (!localStorage.getItem('pwa-jury-dismissed')) {
+        document.getElementById('pwa-banner').hidden = false;
+    }
+});
+
+document.getElementById('pwa-install')?.addEventListener('click', async () => {
+    if (!_juryDeferredPrompt) return;
+    _juryDeferredPrompt.prompt();
+    const result = await _juryDeferredPrompt.userChoice;
+    if (result.outcome === 'accepted') {
+        document.getElementById('pwa-banner').hidden = true;
+    }
+    _juryDeferredPrompt = null;
+});
+
+document.getElementById('pwa-sluit')?.addEventListener('click', () => {
+    document.getElementById('pwa-banner').hidden = true;
+    localStorage.setItem('pwa-jury-dismissed', '1');
+});
+
+window.addEventListener('appinstalled', () => {
+    document.getElementById('pwa-banner').hidden = true;
+});
+</script>
 </body>
 </html>

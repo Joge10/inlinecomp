@@ -66,6 +66,34 @@ html, body {
     max-width: 1200px; margin: 0 auto;
     padding: 1.2rem 1rem 2rem;
 }
+
+/* ── PWA install banner (analoog aan /coach en /public) ─────────────────── */
+.jury-pwa-banner {
+    max-width: 1200px;
+    margin: 12px auto 0;
+    background: linear-gradient(135deg, var(--jury-blauw), var(--jury-blauw-licht));
+    color: #fff;
+    padding: 10px 14px;
+    display: flex; align-items: center; gap: 12px;
+    font-size: .85rem;
+    border-radius: 10px;
+    box-shadow: 0 2px 8px rgba(0,0,0,.15);
+}
+.jury-pwa-banner[hidden] { display: none; }
+.jury-pwa-tekst { flex: 1; line-height: 1.3; }
+.jury-pwa-tekst b { display: block; font-size: .95rem; margin-bottom: 2px; }
+.jury-pwa-banner .jury-btn-primary {
+    background: #E8630A; border-color: #E8630A;
+    white-space: nowrap;
+}
+.jury-pwa-banner .jury-btn-primary:hover {
+    background: #ce5408; border-color: #ce5408;
+}
+.jury-pwa-sluit {
+    background: none; border: none; color: rgba(255,255,255,.65);
+    font-size: 1.4rem; line-height: 1; cursor: pointer; padding: 0 4px;
+}
+.jury-pwa-sluit:hover { color: #fff; }
 .jury-laden {
     text-align: center; padding: 3rem 1rem;
     color: var(--jury-grijs); font-size: 1rem;
@@ -549,4 +577,1283 @@ html, body {
 @media (min-width: 1024px) {
     .jury-scherm-titel { font-size: 1.5rem; }
     .jury-comp-grid    { grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)); }
+}
+
+/* ════════════════════════════════════════════════════════════════════════
+   SPEAKER-rol — 2-laagse tab-balk + tegelgrid
+   ════════════════════════════════════════════════════════════════════════ */
+
+.spk-scherm {
+    padding: 12px;
+    max-width: 100%;
+    /* Ruimte onderin voor de sticky bottom-bar zodat de laatste tegels niet
+       onder de bar verdwijnen. Na de 150% tekst-bump groeit de bar mee →
+       dropdown-regel ~55px + top3-regel ~75px + marge ≈ 170px. */
+    padding-bottom: 170px;
+}
+
+/* Sticky bottom-bar — dropdown + top-3 podium voor speaker.
+   position: fixed zodat de bar blijft staan ongeacht hoe ver de tegels
+   gescrold zijn. z-index hoog genoeg om boven content te blijven, maar
+   onder de modal-overlay (z-index 9000). */
+.spk-bottombar {
+    position: fixed;
+    left: 0; right: 0; bottom: 0;
+    background: #fff;
+    border-top: 2px solid var(--jury-blauw);
+    box-shadow: 0 -4px 12px rgba(0,0,0,.08);
+    z-index: 100;
+    padding: 8px 12px 10px;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+}
+
+/* Nationaal-record banner boven 'Eerdere uitslag'-cascade.
+   1-2 regels (baan/weg) per cat-groep + gender. Klikbaar voor expand-modal
+   met alle 4 varianten (jun/sen × M/V). Goud-tint zodat 't visueel onder-
+   scheidt van de blauwe cascade-dropdowns eronder. */
+.spk-bb-nr { padding: 0; }
+.spk-bb-nr-leeg {
+    padding: 6px 10px;
+    color: #888;
+    font-style: italic;
+    font-size: .95em;
+}
+/* 1-regel layout sinds 2026-05-27: compact horizontaal blok met toggle
+ * helemaal rechts. Body (titel/tijd/naam/meta) is klikbaar voor de
+ * 4-varianten-modal, de toggle wisselt baan/weg-state per afstand. */
+.spk-bb-nr-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    width: 100%;
+    padding: 6px 10px;
+    background: linear-gradient(180deg, #fffbe6 0%, #fff5cc 100%);
+    border: 1px solid #e8d490;
+    border-radius: 6px;
+    cursor: pointer;
+    transition: background .12s, border-color .12s;
+    /* prevent line-wrap; overflow ellipsis via .spk-bb-nr-naam */
+    white-space: nowrap;
+    overflow: hidden;
+}
+.spk-bb-nr-row:hover  { background: #fff5cc; border-color: #c9a93b; }
+.spk-bb-nr-row:active { transform: scale(.995); }
+.spk-bb-nr-titel {
+    font-weight: 700;
+    color: #6e4d00;
+    font-size: .92em;
+    text-transform: uppercase;
+    letter-spacing: .3px;
+    flex-shrink: 0;
+}
+.spk-bb-nr-tijd {
+    font-weight: 700;
+    font-variant-numeric: tabular-nums;
+    color: #5e4a00;
+    font-size: 1.05em;
+    flex-shrink: 0;
+}
+.spk-bb-nr-naam {
+    font-weight: 600;
+    color: #1F4E79;
+    /* mag krimpen + afkappen als de regel te smal wordt op mobile */
+    overflow: hidden;
+    text-overflow: ellipsis;
+    min-width: 0;
+    flex: 1 1 auto;
+}
+.spk-bb-nr-meta {
+    color: #888;
+    font-size: .82em;
+    flex-shrink: 0;
+}
+.spk-bb-nr-leeginline {
+    color: #888;
+    font-style: italic;
+    font-size: .9em;
+    flex: 1 1 auto;
+}
+/* Toggle baan/weg helemaal rechts — schuif-stijl pill, klein maar tappable. */
+.spk-bb-nr-toggle {
+    margin-left: auto;
+    flex-shrink: 0;
+    padding: 3px 9px;
+    background: #fff;
+    color: #6e4d00;
+    border: 1px solid #c9a93b;
+    border-radius: 12px;
+    font-size: .8em;
+    font-weight: 700;
+    font-family: inherit;
+    letter-spacing: .5px;
+    cursor: pointer;
+    touch-action: manipulation;
+    transition: background .12s, color .12s;
+}
+.spk-bb-nr-toggle:hover  { background: #b8860b; color: #fff; }
+.spk-bb-nr-toggle:active { transform: scale(.95); }
+
+/* Expand-modal: tabel met alle 4 varianten.
+ * Tekst expliciet ~50% groter dan standaard (~1.5em base) zodat de
+ * speaker zonder leesbril vanaf armlengte kan lezen tijdens commentaar.
+ * Modal breder mogen worden om langere namen + meta te accommoderen. */
+.spk-nr-modal { max-width: min(960px, 96vw); }
+.spk-nr-modal .spk-detail-naam { font-size: 1.4rem; }
+.spk-nr-tabel {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 1.25rem;
+}
+.spk-nr-tabel th {
+    text-align: left;
+    padding: 10px 10px;
+    background: #fff5cc;
+    border-bottom: 2px solid #e8d490;
+    color: #6e4d00;
+    font-size: .95rem;
+    text-transform: uppercase;
+    letter-spacing: .3px;
+}
+.spk-nr-tabel td {
+    padding: 10px 10px;
+    border-bottom: 1px solid #f0f0f0;
+}
+.spk-nr-tabel tr:hover td { background: #fafafa; }
+
+/* Filter-toggle in modal-header: pill-knoppen, actieve = goud-vol. */
+.spk-nr-filter {
+    display: flex;
+    gap: 6px;
+    margin: 4px 0 12px;
+    flex-wrap: wrap;
+}
+.spk-nr-filter-btn {
+    padding: 6px 14px;
+    border: 1px solid #c9a93b;
+    background: #fff;
+    color: #6e4d00;
+    border-radius: 14px;
+    font-size: 1rem;
+    font-weight: 600;
+    font-family: inherit;
+    cursor: pointer;
+    touch-action: manipulation;
+    transition: background .12s, color .12s;
+}
+.spk-nr-filter-btn:hover { background: #fff5cc; }
+.spk-nr-filter-btn.is-active {
+    background: #b8860b;
+    color: #fff;
+    border-color: #8a6608;
+}
+.spk-bb-dropdown-rij {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex-wrap: wrap;
+}
+.spk-bb-lbl {
+    /* .85 × 1.5 = 1.275rem */
+    font-size: 1.275rem;
+    font-weight: 600;
+    color: var(--jury-blauw);
+    flex-shrink: 0;
+}
+.spk-bb-select {
+    flex: 1 1 140px;
+    min-width: 100px;
+    padding: 6px 8px;
+    font: inherit;
+    /* .9 × 1.5 = 1.35rem */
+    font-size: 1.35rem;
+    border: 1px solid var(--jury-border);
+    border-radius: 6px;
+    background: #fff;
+    color: #222;
+}
+.spk-bb-select:disabled { background: var(--jury-blauw-bg); color: var(--jury-grijs); cursor: not-allowed; }
+/* Wedstrijd-dropdown krijgt meeste ruimte (langste labels), afstand
+   middenmaat, cat smal (DSA/HSA = 3-4 letters). Order in HTML is
+   wedstrijd → cat → afstand. */
+.spk-bb-sel-wedstrijd { flex: 2 1 220px; }
+.spk-bb-sel-cat       { flex: 0 1 90px; }
+.spk-bb-sel-afstand   { flex: 1.5 1 180px; }
+
+.spk-bb-top3 {
+    display: grid;
+    /* Flexibel: minstens 200px per pill, vul zoveel mogelijk kolommen.
+       Bij 3 normale podium-rijders krijg je 3 kolommen (zoals voorheen).
+       Bij ex-aequo (bv 4× rang 2) wrappen de pillen naar een tweede rij
+       zonder layout te breken. Op breed scherm passen er 4-5 op één rij. */
+    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+    gap: 8px;
+    min-height: 36px;
+    align-items: center;
+    /* .9 × 1.5 = 1.35rem */
+    font-size: 1.35rem;
+}
+/* Hints / placeholders / foutmeldingen vullen de hele rij — anders krimpen
+   ze in 1/3 grid-cel en zien lege rest eruit als een bug. */
+.spk-bb-hint,
+.spk-bb-top3 > .jury-fout { grid-column: 1 / -1; }
+.spk-bb-hint {
+    color: var(--jury-grijs);
+    font-style: italic;
+    /* .85 × 1.5 = 1.275rem */
+    font-size: 1.275rem;
+}
+.spk-bb-podium {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 4px 10px;
+    background: var(--jury-blauw-bg);
+    border-radius: 16px;
+    border: 1px solid var(--jury-border);
+    font-weight: 600;
+    color: var(--jury-blauw);
+    min-width: 0;  /* nodig voor ellipsis op kind */
+    /* button-reset zodat <button> en <span> visueel identiek zijn */
+    font-family: inherit;
+    font-size: inherit;
+    line-height: 1.3;
+    text-align: left;
+}
+/* Klikbare pill: cursor + lichte hover/active feedback */
+.spk-bb-podium-klikbaar {
+    cursor: pointer;
+    transition: background .12s, border-color .12s, transform .05s;
+}
+.spk-bb-podium-klikbaar:hover {
+    background: #fff;
+    border-color: var(--jury-blauw);
+}
+.spk-bb-podium-klikbaar:active { transform: scale(.98); }
+.spk-bb-podium-klikbaar:focus-visible {
+    outline: 2px solid var(--jury-blauw);
+    outline-offset: 2px;
+}
+.spk-bb-medaille { font-size: 1.65rem; line-height: 1; }   /* 1.1 × 1.5 */
+
+/* Pending-rijders: ⚡-badge in de pill. Subtiel gele tint via -pending modifier
+   zodat speaker meteen ziet dat detail-modal beperkt is (geen club/jaar/etc.). */
+.spk-bb-pending {
+    font-size: 1.1rem; line-height: 1;
+    color: #b8860b;
+    text-shadow: 0 0 2px #fff;
+    margin-right: 1px;
+}
+.spk-bb-podium-pending {
+    background: #fffbe6;
+    border-color: #e8d490;
+}
+.spk-bb-podium-pending.spk-bb-podium-klikbaar:hover {
+    background: #fff5cc;
+    border-color: #c9a93b;
+}
+
+/* Detail-modal: pending-banner + accent-rand */
+.spk-detail-modal-pending { border-top: 4px solid #f0c674; }
+.spk-detail-pending-banner {
+    background: #fffbe6;
+    border: 1px solid #e8d490;
+    border-radius: 6px;
+    padding: 10px 12px;
+    margin-bottom: 10px;
+    color: #6e4d00;
+    font-size: 1.1em;
+    line-height: 1.4;
+}
+.spk-detail-pending-sub {
+    display: inline-block;
+    margin-top: 4px;
+    font-size: .85em;
+    color: #856404;
+}
+.spk-bb-snr {
+    background: #fff;
+    border: 1px solid var(--jury-border);
+    border-radius: 4px;
+    padding: 1px 6px;
+    font-weight: 700;
+    color: var(--jury-blauw);
+    /* .85 × 1.5 = 1.275rem */
+    font-size: 1.275rem;
+    min-width: 32px;
+    text-align: center;
+}
+.spk-bb-naam {
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    flex: 1 1 auto;
+    min-width: 0;
+}
+/* Cat-badge na de naam — alleen relevant bij gemixte cat-races
+   (DSA+DSJ samen), maakt zichtbaar welke cat de podium-finisher reed. */
+.spk-bb-cat {
+    flex: 0 0 auto;
+    /* .7 × 1.5 = 1.05rem */
+    font-size: 1.05rem;
+    font-weight: 700;
+    background: #fff;
+    color: var(--jury-grijs);
+    border: 1px solid var(--jury-border);
+    border-radius: 4px;
+    padding: 1px 5px;
+    letter-spacing: .02em;
+}
+
+/* Landscape tablet — bar mag iets ruimer */
+@media (min-width: 1024px) {
+    .spk-scherm  { padding-bottom: 180px; }
+    .spk-bottombar { padding: 10px 16px 12px; }
+    /* .95 × 1.5 = 1.425rem (was 0.95rem in landscape override) */
+    .spk-bb-select { font-size: 1.425rem; }
+}
+.spk-tab-balk {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    padding: 6px 0;
+}
+.spk-tab-cats { border-bottom: 2px solid var(--jury-border); margin-bottom: 4px; }
+.spk-tab-dcs  { border-bottom: 1px solid var(--jury-border); margin-bottom: 12px; }
+
+.spk-tab {
+    background: #fff;
+    border: 1px solid var(--jury-border);
+    color: var(--jury-blauw);
+    padding: 8px 14px;
+    border-radius: 6px;
+    font: inherit;
+    /* Speaker-tekst overal 50% groter — speaker leest dit vanaf grotere
+       afstand bij de microfoon. Was .95rem → 1.425rem. */
+    font-size: 1.425rem;
+    font-weight: 600;
+    cursor: pointer;
+    line-height: 1;
+    transition: background .1s, color .1s, border-color .1s;
+}
+.spk-tab:hover { border-color: var(--jury-blauw-licht); }
+.spk-tab.is-active {
+    background: var(--jury-blauw);
+    color: #fff;
+    border-color: var(--jury-blauw);
+}
+.spk-tab-dc { font-size: 1.35rem; font-weight: 500; }
+.spk-tab-aantal {
+    display: inline-block;
+    background: rgba(0,0,0,.08);
+    color: inherit;
+    border-radius: 10px;
+    padding: 1px 8px;
+    margin-left: 6px;
+    font-size: .8em;
+    font-weight: 700;
+}
+.spk-tab.is-active .spk-tab-aantal { background: rgba(255,255,255,.25); }
+
+/* Tegelgrid — even-grote vierkanten (auto-fill); op tablet 4-5 per rij.
+   Na de 150% tekst-bump groeien tegels mee — bewust grotere min-width
+   (180px) zodat de naam-tekst (clamp op 2 regels) niet te smal wordt. */
+.spk-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+    gap: 10px;
+    padding-bottom: 24px;
+}
+.spk-tegel {
+    background: #fff;
+    border: 1px solid var(--jury-border);
+    border-radius: 8px;
+    padding: 14px 10px;
+    cursor: pointer;
+    text-align: center;
+    font: inherit;
+    color: var(--jury-blauw);
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+    /* Min-height bumped van 110→140: startnummer is nu 1.8rem * 150% =
+       ~43px en naam 2 regels * ~24px = ~48px → moet samen ruim passen. */
+    min-height: 140px;
+    transition: transform .08s, border-color .1s, box-shadow .1s;
+}
+.spk-tegel:hover {
+    border-color: var(--jury-blauw-licht);
+    box-shadow: 0 2px 8px rgba(26,58,92,.15);
+}
+.spk-tegel:active { transform: scale(.97); }
+/* Speaker-tegel needs position:relative voor absolute kans-badge */
+.spk-tegel { position: relative; }
+
+/* ── Kans-score badge (1-10) op speaker-tegels ──────────────────────────
+ * Ster-emoji + cijfer rechtsboven op tegel. Vier varianten:
+ *   🌟 favoriet (7-10) — goud-gele tint
+ *   ⭐ middenmoot (4-6) — standaard
+ *   ✨ outsider (1-3) — lichtgrijs
+ *   ❔ onbekend (geen historie) — neutraal
+ * Cijfer staat naast emoji voor exacte info. Tooltip toont volledige reden. */
+.spk-kans {
+    position: absolute;
+    top: 4px;
+    right: 6px;
+    font-size: 1rem;
+    font-weight: 700;
+    padding: 2px 6px;
+    border-radius: 10px;
+    line-height: 1.1;
+    user-select: none;
+    background: rgba(255,255,255,.85);
+}
+.spk-kans-favoriet   { background: #fff5cc; color: #6e4d00; border: 1px solid #e8c440; }
+.spk-kans-middenmoot { background: #e8f0f7; color: #1F4E79; border: 1px solid #b8d4e8; }
+.spk-kans-outsider   { background: #f4f4f4; color: #888;    border: 1px solid #d0d0d0; }
+.spk-kans-onbekend   { background: #f9f9f9; color: #aaa;    border: 1px solid #e0e0e0; }
+/* Klikbaar maken — title-tooltip werkt niet op touch dus tap → popover.
+ * cursor: help geeft visuele hint dat erop te klikken valt voor info. */
+.spk-kans { cursor: help; }
+@media (max-width: 480px) {
+    .spk-kans { font-size: .85rem; padding: 1px 5px; }
+}
+
+/* Popover voor kans-badge: dark bubble met label + reden-tekst.
+ * Verschijnt onder de badge bij tap (of klik op desktop). z-index hoog
+ * zodat hij over modals heen komt. Top-strip-pijltje weggelaten — zou
+ * de positionering complex maken voor weinig win. */
+.spk-kans-popover {
+    position: fixed;
+    z-index: 10001;
+    background: rgba(20, 54, 88, .96);   /* jury-blauw, bijna opaque */
+    color: #fff;
+    padding: 10px 14px;
+    border-radius: 8px;
+    font-size: 0.95rem;
+    line-height: 1.45;
+    max-width: 280px;
+    box-shadow: 0 6px 20px rgba(0,0,0,.35);
+    pointer-events: none;   /* klik gaat naar document → sluit popover */
+    animation: spkKansFadeIn .12s ease-out;
+}
+.spk-kans-popover-label {
+    font-weight: 700;
+    margin-bottom: 4px;
+    font-size: 1.05rem;
+}
+.spk-kans-popover-favoriet   .spk-kans-popover-label { color: #ffd766; }
+.spk-kans-popover-middenmoot .spk-kans-popover-label { color: #b8d4e8; }
+.spk-kans-popover-outsider   .spk-kans-popover-label { color: #d0d0d0; }
+.spk-kans-popover-onbekend   .spk-kans-popover-label { color: #e0e0e0; }
+.spk-kans-popover-reden {
+    color: rgba(255,255,255,.9);
+    font-size: 0.9rem;
+}
+@keyframes spkKansFadeIn {
+    from { opacity: 0; transform: translateY(-4px); }
+    to   { opacity: 1; transform: translateY(0); }
+}
+
+/* ── Puntenkoers scratchpad — speaker-only, lokaal opgeslagen ──────── */
+/* spk-pk-wrap ligt binnen #spk-grid (zelf een 180px-min auto-fill grid).
+ * Zonder grid-column: 1 / -1 zou de wrap in één smalle grid-cel zitten
+ * (~200px op tablet) waardoor de interne .spk-pk-grid maar 1 kolom kan
+ * tonen. Met full-span pakt 'ie de volle breedte, en daarbinnen passen
+ * meerdere PK-tegels netjes naast elkaar. */
+.spk-pk-wrap {
+    grid-column: 1 / -1;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    padding-bottom: 24px;
+}
+/* Header-rij: titel links, reset-knop helemaal rechts. */
+.spk-pk-kop {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 0 4px;
+}
+.spk-pk-titel {
+    font-size: 1rem;
+    color: var(--jury-grijs, #666);
+    font-style: italic;
+    flex: 1;
+    min-width: 0;
+}
+/* Top-strip met scorers (gesorteerd op punten DESC). Wikkelen tot full-width. */
+.spk-pk-top {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    padding: 6px 0;
+    border-bottom: 1px solid #eee;
+}
+.spk-pk-leeg {
+    color: #888;
+    font-style: italic;
+    padding: 8px 4px;
+}
+/* Actie-strip: +3 / +2 / +1 pills + reset rechts */
+.spk-pk-acties {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 6px 0;
+}
+.spk-pk-spacer { flex: 1; }
+.spk-pk-actie {
+    background: linear-gradient(180deg, #d3e4f5 0%, #bcd5ea 100%);
+    color: var(--jury-blauw);
+    border: 1px solid var(--jury-blauw-licht, #1F4E79);
+    border-radius: 8px;
+    padding: 8px 18px;
+    font-size: 1.15rem;
+    font-weight: 700;
+    cursor: pointer;
+    font-family: inherit;
+    touch-action: manipulation;
+    min-width: 56px;
+}
+.spk-pk-actie:hover:not(:disabled) { background: #bcd5ea; }
+.spk-pk-actie:disabled {
+    background: #ececec;
+    color: #999;
+    cursor: not-allowed;
+    border-color: #ccc;
+}
+.spk-pk-reset {
+    background: #fff;
+    color: #c0392b;
+    border: 1px solid #d8a297;
+    border-radius: 8px;
+    padding: 5px 12px;
+    font-size: .9rem;
+    cursor: pointer;
+    font-family: inherit;
+    touch-action: manipulation;
+}
+.spk-pk-reset:hover { background: #fbe9e7; }
+
+/* Grid van speaker-tegels: groot genoeg om naam te lezen vanaf armlengte.
+ * Speaker zegt namen op, dus volledige info per tegel — alleen iets
+ * kleiner dan de normale .spk-tegel (180px / 140px) zodat er meer in
+ * beeld passen tijdens een lange puntenkoers met ~40 deelnemers. */
+.spk-pk-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+    gap: 8px;
+}
+.spk-pk-tegel {
+    position: relative;   /* voor hoek-icoon absolute positionering */
+    background: #fff;
+    border: 2px solid var(--jury-border);
+    border-radius: 8px;
+    padding: 10px 8px 8px;
+    cursor: pointer;
+    text-align: center;
+    font: inherit;
+    color: var(--jury-blauw);
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 3px;
+    min-height: 95px;
+    transition: transform .08s, border-color .1s, background .1s;
+    touch-action: manipulation;
+}
+.spk-pk-tegel:hover { border-color: var(--jury-blauw-licht, #2E75B6); }
+.spk-pk-tegel:active { transform: scale(.97); }
+.spk-pk-tegel-snr {
+    font-size: 1.7rem;
+    font-weight: 700;
+    line-height: 1;
+}
+.spk-pk-tegel-naam {
+    font-size: .95rem;
+    font-weight: 500;
+    color: #1F4E79;
+    line-height: 1.15;
+    /* 2 regels max, anders ellipsis — laat 'Marit van Beijnum' netjes
+     * doorlopen maar 'Annemarie van der Wilden-Bruinsma' wordt afgekapt. */
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    line-clamp: 2;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+    word-break: break-word;
+}
+.spk-pk-tegel-pt {
+    font-size: .85rem;
+    color: #6e4d00;
+    font-weight: 700;
+    margin-top: 2px;
+    background: #fff5cc;
+    padding: 1px 7px;
+    border-radius: 10px;
+}
+.spk-pk-tegel.heeft-punten {
+    background: #fff8e1;
+    border-color: #e8d490;
+}
+.spk-pk-tegel.is-actief {
+    background: #1F4E79;
+    color: #fff;
+    border-color: #143658;
+    box-shadow: 0 0 0 3px rgba(31, 78, 121, .25);
+}
+.spk-pk-tegel.is-actief .spk-pk-tegel-naam { color: #d9e8f7; }
+.spk-pk-tegel.is-actief .spk-pk-tegel-pt   { color: #6e4d00; background: #fff5cc; }
+/* Hoek-icoontje LINKSboven — opent detail-modal zonder selectie te triggeren.
+ * Stond eerst rechts, maar de kans-badge (voorspelling) wil rechtsboven zitten
+ * — daar is hij het meest opvallend en consistent met de standaard tegel-grid.
+ * ⓘ is functioneel maar minder visueel belangrijk dan de voorspel-emoji.
+ * Groot + duidelijk jury-blauw contrast zodat het ook leesbaar is als de
+ * zon op het tablet-scherm valt (was te licht-grijs voor outdoor speakeren). */
+.spk-pk-tegel-hoek {
+    position: absolute;
+    top: 3px;
+    left: 5px;
+    font-size: 1.5rem;
+    color: var(--jury-blauw);
+    line-height: 1;
+    padding: 4px 7px;
+    border-radius: 50%;
+    font-weight: 600;
+}
+.spk-pk-tegel:hover .spk-pk-tegel-hoek { color: #143658; }
+.spk-pk-tegel-hoek:hover { background: rgba(0,0,0,.08); }
+.spk-pk-tegel.is-actief .spk-pk-tegel-hoek { color: #fff; }
+.spk-pk-tegel.is-actief .spk-pk-tegel-hoek:hover { background: rgba(255,255,255,.2); }
+
+/* Top-strip tegels: iets opvallender (bredere min-width voor meer naam-ruimte). */
+.spk-pk-top .spk-pk-tegel {
+    min-width: 150px;
+    min-height: 105px;
+    padding: 12px 10px 10px;
+    border-width: 3px;
+}
+.spk-pk-top .spk-pk-tegel-snr { font-size: 2rem; }
+.spk-pk-top .spk-pk-tegel-pt  { font-size: 1rem; padding: 2px 10px; }
+
+/* ── Afvalkoers scratchpad — speaker-only, hergebruikt PK-styling ──── */
+/* Settings-strip: korte tekst-info + ✎ knop rechts om modal te openen. */
+.spk-av-cfg {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    background: #fff5e6;
+    border: 1px solid #f0c68a;
+    border-radius: 6px;
+    padding: 8px 12px;
+    font-size: .95rem;
+    color: #6e4d00;
+}
+.spk-av-cfg-info { flex: 1; min-width: 0; }
+.spk-av-cfg-info i { color: #b07020; }
+.spk-av-cfg-btn {
+    background: #fff;
+    color: #6e4d00;
+    border: 1px solid #d9a85f;
+    border-radius: 6px;
+    padding: 4px 12px;
+    font-size: 1.1rem;
+    cursor: pointer;
+    font-family: inherit;
+    touch-action: manipulation;
+}
+.spk-av-cfg-btn:hover { background: #ffe7c4; }
+
+/* Stats-strip met ❌ Eruit knop rechts. */
+.spk-av-stats {
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    padding: 8px 4px;
+    font-size: 1rem;
+    color: #444;
+}
+.spk-av-stats span:not(.spk-pk-spacer) { white-space: nowrap; }
+.spk-av-eruit {
+    background: linear-gradient(180deg, #f3b8b8 0%, #e89090 100%);
+    color: #6a1212;
+    border: 1px solid #c25555;
+    border-radius: 8px;
+    padding: 9px 22px;
+    font-size: 1.15rem;
+    font-weight: 700;
+    cursor: pointer;
+    font-family: inherit;
+    touch-action: manipulation;
+}
+.spk-av-eruit:hover:not(:disabled) { background: #e89090; }
+.spk-av-eruit:disabled {
+    background: #ececec;
+    color: #999;
+    cursor: not-allowed;
+    border-color: #ccc;
+}
+
+/* Afgevallen-strip: horizontaal scrollbaar rijtje van afgevallen rijders.
+ * Rechts = recent uitgevallen, zodat speaker meteen ziet wie net uit ging. */
+.spk-av-uit-strip {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    padding: 8px 0;
+    border-bottom: 1px solid #eee;
+}
+
+/* Afval-tegel: rood-grijs tint, met rang-label (= eindrang). */
+.spk-av-tegel.spk-av-tegel-uit {
+    background: #fcecec;
+    border-color: #d8a297;
+    color: #6a1212;
+    opacity: .92;
+    position: relative;
+}
+.spk-av-tegel.spk-av-tegel-uit:hover {
+    background: #f8d8d4;
+    border-color: #c25555;
+}
+.spk-av-tegel.spk-av-tegel-uit .spk-pk-tegel-naam { color: #8a3a3a; }
+.spk-av-tegel-rang {
+    position: absolute;
+    top: 4px;
+    left: 6px;
+    background: #c25555;
+    color: #fff;
+    font-size: .9rem;
+    font-weight: 700;
+    padding: 2px 7px;
+    border-radius: 10px;
+    line-height: 1.1;
+}
+.spk-av-tegel-rang sup { font-size: .65em; }
+.spk-av-tegel-eq {
+    font-size: .8em;
+    margin-left: 2px;
+    color: #ffe69a;
+    font-weight: 900;
+}
+
+/* Settings-modal — hergebruikt spk-detail-modal styling, eigen velden. */
+.spk-av-cfg-modal { max-width: 500px; }
+.spk-av-cfg-uitleg {
+    color: #555;
+    font-size: 1rem;
+    margin: 0 0 16px;
+    line-height: 1.4;
+}
+.spk-av-cfg-veld {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    margin-bottom: 14px;
+}
+.spk-av-cfg-veld > span {
+    font-weight: 600;
+    color: var(--jury-blauw);
+    font-size: 1rem;
+}
+.spk-av-cfg-veld input,
+.spk-av-cfg-veld select {
+    padding: 8px 10px;
+    border: 1px solid #ccc;
+    border-radius: 5px;
+    font-size: 1.05rem;
+    font-family: inherit;
+}
+.spk-av-cfg-veld small {
+    color: #888;
+    font-size: .85rem;
+    font-style: italic;
+}
+.spk-av-cfg-acties {
+    display: flex;
+    justify-content: flex-end;
+    gap: 8px;
+    margin-top: 18px;
+    padding-top: 14px;
+    border-top: 1px solid #eee;
+}
+.spk-av-cfg-acties button {
+    padding: 8px 18px;
+    font-size: 1rem;
+    border-radius: 6px;
+    cursor: pointer;
+    font-family: inherit;
+    touch-action: manipulation;
+}
+
+/* Capaciteit-warning in cfg-strip (compact) */
+.spk-av-cfg-warn {
+    color: #c0392b;
+    font-weight: 700;
+    margin-left: 8px;
+}
+
+/* Volgende-bord indicator (linker stats-strip). Bewust geen achtergrond
+ * of gekleurde pill — voor zonlicht-leesbaarheid donkere tekst op witte
+ * stats-rij is beter dan een lichte pill. */
+.spk-av-volgend {
+    color: #1F4E79;
+    font-weight: 600;
+}
+.spk-av-volgend em { color: #c25555; font-style: normal; font-weight: 700; }
+
+/* Multi-select indicator in stats-strip */
+.spk-av-sel {
+    background: #fff5cc;
+    color: #6e4d00;
+    padding: 3px 10px;
+    border-radius: 12px;
+    font-weight: 700;
+    font-size: .9rem;
+    border: 1px solid #e8d490;
+}
+
+/* Decision-knop: gele waarschuwingstint (apart van rode Eruit) */
+.spk-av-decision {
+    background: linear-gradient(180deg, #ffe9a3 0%, #f0c878 100%);
+    color: #6e4d00;
+    border: 1px solid #c9a93b;
+    border-radius: 8px;
+    padding: 9px 18px;
+    font-size: 1.05rem;
+    font-weight: 700;
+    cursor: pointer;
+    font-family: inherit;
+    touch-action: manipulation;
+}
+.spk-av-decision:hover:not(:disabled) { background: #f0c878; }
+.spk-av-decision:disabled {
+    background: #ececec;
+    color: #999;
+    cursor: not-allowed;
+    border-color: #ccc;
+}
+
+/* Bord-badge op afgevallen-tegel (rondebord-nummer) */
+.spk-av-tegel-bord {
+    position: absolute;
+    top: 4px;
+    right: 26px;
+    background: #1F4E79;
+    color: #fff;
+    font-size: .85rem;
+    font-weight: 700;
+    padding: 2px 6px;
+    border-radius: 8px;
+    line-height: 1.1;
+    font-family: monospace;
+}
+/* DEC-badge — by-decision afvallers krijgen gele tint ipv rood */
+.spk-av-tegel.is-decision {
+    background: #fff5e1;
+    border-color: #d9a85f;
+}
+.spk-av-tegel.is-decision .spk-pk-tegel-naam { color: #6e4d00; }
+.spk-av-tegel.is-decision .spk-av-tegel-rang { background: #c9a93b; }
+.spk-av-tegel-dec {
+    position: absolute;
+    bottom: 4px;
+    right: 6px;
+    background: #c9a93b;
+    color: #fff;
+    font-size: .7rem;
+    font-weight: 800;
+    padding: 1px 5px;
+    border-radius: 3px;
+    letter-spacing: .5px;
+}
+
+/* Live afgeleid-overzicht in settings-modal */
+.spk-av-cfg-afgeleid {
+    background: #f6f9fc;
+    border: 1px solid #dfe7ef;
+    border-radius: 6px;
+    padding: 10px 12px;
+    margin: 12px 0;
+    font-size: .95rem;
+    color: #444;
+    line-height: 1.5;
+}
+.spk-av-cfg-afgeleid.av-ok   { background: #eff8f1; border-color: #b7dcc1; }
+.spk-av-cfg-afgeleid.av-fout { background: #fcecec; border-color: #d8a297; }
+.spk-av-cfg-afgeleid i { color: #888; }
+.spk-av-cfg-afgeleid .av-fout-tekst { color: #c0392b; font-weight: 700; }
+.spk-av-cfg-borden {
+    margin-top: 6px;
+    font-family: monospace;
+    font-size: .85rem;
+    color: #555;
+    word-break: break-all;
+}
+
+/* Bord-prompt modal input fout-styling */
+.spk-av-bord-prompt {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+}
+.spk-av-bord-prompt input {
+    padding: 8px 12px;
+    border: 1px solid #ccc;
+    border-radius: 5px;
+    font-size: 1.4rem;
+    font-family: inherit;
+    text-align: center;
+}
+.spk-av-bord-prompt input.inp-fout {
+    border-color: #c0392b;
+    background: #fcecec;
+}
+.spk-av-bord-prompt small { color: #888; }
+.spk-tegel-snr {
+    /* 1.8 × 1.5 = 2.7rem */
+    font-size: 2.7rem;
+    font-weight: 700;
+    color: var(--jury-blauw);
+    line-height: 1;
+}
+.spk-tegel-naam {
+    /* .9 × 1.5 = 1.35rem */
+    font-size: 1.35rem;
+    font-weight: 500;
+    color: #333;
+    line-height: 1.2;
+    word-break: break-word;
+    /* clamp naam op 2 regels — anders verschuift tegelhoogte */
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+/* Detail-modal (rijderkaart) */
+.spk-detail-overlay {
+    position: fixed; inset: 0;
+    background: rgba(0,0,0,.6);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 9000;
+    padding: 16px;
+}
+.spk-detail-modal {
+    background: #fff;
+    border-radius: 10px;
+    /* Breder dan voorheen (480→680) zodat een wedstrijd-rij in de historie
+       op max. 2 regels past: naam op regel 1, datum+afstand op regel 2 — met
+       ellipsis ipv extra wrap. */
+    max-width: 680px;
+    width: 100%;
+    max-height: 90vh;
+    overflow-y: auto;
+    box-shadow: 0 10px 40px rgba(0,0,0,.3);
+    animation: spk-modal-pop .25s ease-out;
+}
+@keyframes spk-modal-pop {
+    from { opacity: 0; transform: scale(.9); }
+    to   { opacity: 1; transform: scale(1); }
+}
+.spk-detail-kop {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 14px 16px;
+    background: var(--jury-blauw);
+    color: #fff;
+    border-radius: 10px 10px 0 0;
+}
+.spk-detail-snr {
+    /* 2 × 1.5 = 3rem */
+    font-size: 3rem;
+    font-weight: 700;
+    background: rgba(255,255,255,.15);
+    border-radius: 8px;
+    padding: 4px 14px;
+    min-width: 90px;
+    text-align: center;
+}
+.spk-detail-naam {
+    margin: 0;
+    /* 1.2 × 1.5 = 1.8rem */
+    font-size: 1.8rem;
+    font-weight: 600;
+    flex: 1;
+}
+.spk-detail-sluit {
+    background: none;
+    border: none;
+    color: #fff;
+    font-size: 3rem;       /* 2 × 1.5 */
+    cursor: pointer;
+    line-height: 1;
+    padding: 0 4px;
+}
+.spk-detail-body { padding: 14px 16px; }
+.spk-detail-rij {
+    display: flex;
+    justify-content: space-between;
+    padding: 6px 0;
+    border-bottom: 1px solid var(--jury-blauw-bg);
+    /* .95 × 1.5 = 1.425rem */
+    font-size: 1.425rem;
+}
+.spk-detail-rij:last-child { border-bottom: none; }
+.spk-detail-lbl { color: var(--jury-grijs); font-weight: 500; }
+.spk-detail-val { color: #222; font-weight: 600; text-align: right; }
+
+/* Historie-sectie in detail-modal */
+.spk-historie-wrap {
+    margin-top: 14px;
+    padding-top: 14px;
+    border-top: 2px solid var(--jury-blauw-bg);
+}
+.spk-historie-titel {
+    /* 1 × 1.5 = 1.5rem */
+    font-size: 1.5rem;
+    font-weight: 700;
+    color: var(--jury-blauw);
+    margin-bottom: 8px;
+}
+.spk-historie-content { font-size: 1.275rem; }  /* .85 × 1.5 */
+/* Filter-toggle boven historie-lijst in speaker detail-modal.
+   Checkbox die snel aan/uit gezet kan worden — default AAN als de
+   speaker-deelnemers-tab een DC met herkenbare afstand getoond heeft,
+   anders niet aanwezig. Klik wisselt tussen 'alleen huidige afstand'
+   en 'alles tonen'. */
+.spk-historie-filter {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-bottom: 10px;
+    padding: 8px 12px;
+    background: #f5f5f5;
+    border-radius: 5px;
+    font-size: 1.05em;
+    cursor: pointer;
+    user-select: none;
+}
+.spk-historie-filter input[type="checkbox"] {
+    width: 18px; height: 18px;
+    cursor: pointer;
+    accent-color: var(--jury-blauw);
+}
+.spk-historie-filter b { color: var(--jury-blauw); }
+
+.spk-historie-leeg {
+    color: var(--jury-grijs);
+    font-style: italic;
+    padding: 6px 0;
+}
+.spk-historie-sectie-titel {
+    /* .85 × 1.5 = 1.275rem */
+    font-size: 1.275rem;
+    font-weight: 700;
+    color: var(--jury-grijs);
+    text-transform: uppercase;
+    letter-spacing: .04em;
+    margin: 10px 0 4px;
+}
+.spk-historie-sectie-titel:first-child { margin-top: 0; }
+.spk-historie-lijst {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+.spk-hist-rij {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 6px 8px;
+    background: #f8fafc;
+    border-radius: 6px;
+    border-left: 3px solid var(--jury-border);
+}
+.spk-hist-rang {
+    flex-shrink: 0;
+    min-width: 56px;
+    text-align: center;
+    font-weight: 700;
+    /* .9 × 1.5 = 1.35rem */
+    font-size: 1.35rem;
+    padding: 2px 6px;
+    background: #fff;
+    border: 1px solid var(--jury-border);
+    border-radius: 4px;
+    color: var(--jury-blauw);
+}
+.spk-hist-goud   { background: #fff7d6; border-color: #f4c430; color: #8a6d00; }
+.spk-hist-zilver { background: #f1f2f4; border-color: #b0b5bb; color: #4a5562; }
+.spk-hist-brons  { background: #fbe9d6; border-color: #c98a3f; color: #7e4810; }
+.spk-hist-leeg   { color: var(--jury-grijs); font-weight: 400; }
+.spk-hist-info { flex: 1; min-width: 0; }
+.spk-hist-wedstrijd {
+    font-weight: 600;
+    color: #222;
+    /* Erft .spk-historie-content font-size (1.275rem) — geen eigen override. */
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+.spk-hist-meta {
+    /* .78 × 1.5 = 1.17rem */
+    font-size: 1.17rem;
+    color: var(--jury-grijs);
+    margin-top: 1px;
+    /* Forceer één regel met ellipsis — combined met de 1-regel wedstrijd-
+       naam erboven blijft elke historie-rij maximaal 2 regels hoog. */
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+/* Landscape tablet — wat ruimere tegels */
+@media (min-width: 1024px) {
+    .spk-grid { grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); }
+    .spk-tegel-snr { font-size: 3rem; }  /* 2 × 1.5 */
+}
+
+/* ── Documenten-lade (PDF's uit /wedstrijdData) ───────────────────────────
+ * V1: knop in topbar → modal met lijst → tap = inline iframe-viewer.
+ * Stylistisch consistent met spk-detail-overlay (zelfde z-index-laag) maar
+ * iets compactere modal-breedte. Viewer-modal heeft hogere z-index zodat
+ * sluiten een laag terugvalt op de lijst. */
+.jury-docs-overlay {
+    position: fixed; inset: 0;
+    background: rgba(0,0,0,.55);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 9100;
+    padding: 16px;
+}
+.jury-docs-modal {
+    background: #fff;
+    border-radius: 10px;
+    width: 100%;
+    max-width: 560px;
+    max-height: 85vh;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    box-shadow: 0 10px 30px rgba(0,0,0,.4);
+}
+.jury-docs-kop {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 12px 16px;
+    background: var(--jury-blauw);
+    color: #fff;
+}
+.jury-docs-titel { font-size: 1.1rem; font-weight: 600; }
+.jury-docs-sluit {
+    background: transparent; border: 0; color: #fff;
+    font-size: 1.8rem; line-height: 1; cursor: pointer; padding: 0 6px;
+}
+.jury-docs-sluit:hover { opacity: .8; }
+.jury-docs-body {
+    padding: 0;
+    overflow-y: auto;
+    flex: 1 1 auto;
+}
+.jury-docs-laden, .jury-docs-leeg {
+    padding: 28px 20px;
+    text-align: center;
+    color: var(--jury-grijs);
+    font-size: 1rem;
+    line-height: 1.5;
+}
+.jury-docs-leeg b { color: var(--jury-blauw); display: block; margin-bottom: 4px; }
+.jury-docs-leeg code {
+    background: var(--jury-blauw-bg);
+    padding: 1px 6px; border-radius: 4px;
+    font-size: .9em;
+}
+.jury-docs-lijst { list-style: none; padding: 0; margin: 0; }
+.jury-docs-item {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 14px 16px;
+    border-bottom: 1px solid var(--jury-border);
+    cursor: pointer;
+    transition: background .12s;
+}
+.jury-docs-item:last-child { border-bottom: 0; }
+.jury-docs-item:hover     { background: var(--jury-blauw-bg); }
+.jury-docs-item:active    { background: #dde6f0; }
+.jury-docs-icon  { font-size: 1.4rem; flex: 0 0 auto; }
+.jury-docs-naam  {
+    flex: 1 1 auto;
+    color: var(--jury-blauw);
+    font-weight: 600;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+.jury-docs-meta  {
+    flex: 0 0 auto;
+    color: var(--jury-grijs);
+    font-size: .8rem;
+    text-align: right;
+}
+
+/* PDF-viewer modal — iframe-based, stacks bovenop docs-lijst */
+.jury-pdfviewer-overlay {
+    position: fixed; inset: 0;
+    background: rgba(0,0,0,.75);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 9200;          /* boven docs-lijst (9100) */
+    padding: 8px;
+}
+.jury-pdfviewer-modal {
+    background: #fff;
+    border-radius: 8px;
+    width: 100%;
+    height: 100%;
+    max-width: 1200px;
+    max-height: 95vh;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    box-shadow: 0 12px 40px rgba(0,0,0,.5);
+}
+.jury-pdfviewer-kop {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 8px 14px;
+    background: var(--jury-blauw);
+    color: #fff;
+    flex: 0 0 auto;
+}
+.jury-pdfviewer-titel {
+    font-size: 1rem; font-weight: 600;
+    overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+    flex: 1 1 auto; margin-right: 12px;
+}
+.jury-pdfviewer-acties { display: flex; gap: 6px; align-items: center; flex: 0 0 auto; }
+.jury-pdfviewer-acties .jury-btn-link { color: #fff; }
+.jury-pdfviewer-sluit {
+    background: transparent; border: 0; color: #fff;
+    font-size: 1.8rem; line-height: 1; cursor: pointer; padding: 0 6px;
+}
+.jury-pdfviewer-sluit:hover { opacity: .8; }
+.jury-pdfviewer-iframe {
+    flex: 1 1 auto;
+    width: 100%;
+    border: 0;
+    background: #525659;   /* matched native browser-PDF-bg */
 }

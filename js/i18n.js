@@ -2,33 +2,19 @@
 //  InlineComp – shared i18n helpers
 //
 //  Een centraal bestand met de vertaal-infrastructuur, herbruikt door
-//  alle apps: public (rijder), coach (toekomst), jury (toekomst) en
-//  uiteindelijk het admin-deel.
+//  alle apps: public (rijder), coach, jury en uiteindelijk het admin-deel.
 //
 //  Inhoud:
 //    - initI18n({ dict, onChange })  app-init bij DOMReady
 //    - t(key, params)                vertaal sleutel met optionele {param}-substituties
 //    - applyI18n(root)               doorloopt data-i18n* attributen in DOM
-//    - toggleLang() / setLang(l)     wissel taal (NL/EN)
+//    - setLang(l)                    activeer een taal ('nl','en','de','fr')
+//    - toggleLang()                  cycle naar volgende beschikbare taal (legacy)
 //    - getCurLang() / getLocale()    leesfuncties
+//    - I18N_LANGS                    lijst van ondersteunde talen + vlag-SVG
 //
-//  Gebruik per app (vereenvoudigd voorbeeld; geen HTML-tags hier
-//  vanwege HTML-parser-conflicten als deze comment via readfile in
-//  een script-blok komt):
-//
-//    1) Laad dit bestand inline via PHP readfile in een SCRIPT-blok.
-//    2) Definieer je app-T-object: const T_APP = { nl:{}, en:{} }
-//    3) Bij DOMReady: initI18n({ dict: T_APP, onChange: myRerender })
-//    4) Zet ergens in je header een knop met id "btn-lang" — vlag-icoon
-//       wordt automatisch ingevuld + toggle-handler gekoppeld.
-//
-//  Marker-attributen voor static HTML (worden bij applyI18n vervangen):
-//      data-i18n             -> element.textContent
-//      data-i18n-html        -> element.innerHTML
-//      data-i18n-title       -> element.title
-//      data-i18n-placeholder -> element.placeholder
-//
-//  In dynamische JS-templates: gebruik t('key') in je template-literals.
+//  Multi-lang setup: dict heeft een sub-object per taal-code (nl/en/de/fr).
+//  NL is altijd fallback voor ontbrekende keys.
 //
 //  Persisteert in localStorage onder key 'ic_lang' (shared tussen apps).
 //  Default-taal = nl als nooit gekozen.
@@ -36,59 +22,74 @@
 
 const I18N_STORAGE_KEY = 'ic_lang';
 
-let _i18nDict     = { nl: {}, en: {} };
+// Ondersteunde talen + emoji-vlaggen. Op macOS/iOS/Android/Linux verschijnen
+// kleurvlaggen; Windows toont fallback letter-paren (NL/GB/DE/FR) — bewust
+// geaccepteerd want letterpaar = ook duidelijk genoeg.
+// Volgorde = volgorde in dropdown. NL eerst (default), dan EN/DE/FR alfa-volgorde.
+const I18N_LANGS = [
+    { code: 'nl', naam: 'Nederlands', vlag: '🇳🇱' },
+    { code: 'en', naam: 'English',    vlag: '🇬🇧' },
+    { code: 'de', naam: 'Deutsch',    vlag: '🇩🇪' },
+    { code: 'fr', naam: 'Français',   vlag: '🇫🇷' },
+];
+const I18N_CODES = I18N_LANGS.map(l => l.code);
+
+let _i18nDict     = {};   // { nl:{...}, en:{...}, de:{...}, fr:{...} }
 let _i18nOnChange = null;
 let _i18nCurLang  = (() => {
-    try { return localStorage.getItem(I18N_STORAGE_KEY) || 'nl'; }
-    catch { return 'nl'; }
+    try {
+        const stored = localStorage.getItem(I18N_STORAGE_KEY);
+        return I18N_CODES.includes(stored) ? stored : 'nl';
+    } catch { return 'nl'; }
 })();
 
-// Initialiseer het i18n-systeem voor deze app.
-//   opts.dict:     { nl: {key: 'NL-tekst', ...}, en: {key: 'EN-text', ...} }
-//   opts.onChange: optionele callback die wordt aangeroepen NA elke taal-
-//                  wissel (na applyI18n). Gebruik dit om dynamische content
-//                  opnieuw te renderen (bv. herrendering van een actieve
-//                  lijst, dropdown, of widget).
 function initI18n(opts = {}) {
-    _i18nDict     = opts.dict || { nl: {}, en: {} };
+    _i18nDict     = opts.dict || {};
     _i18nOnChange = typeof opts.onChange === 'function' ? opts.onChange : null;
     applyI18n();
-    document.getElementById('btn-lang')?.addEventListener('click', toggleLang);
+    // Custom dropdown wordt gemount via _i18nMountDropdown — als de knop
+    // bestaat, transformeer 'em in een dropdown.
+    _i18nMountDropdown();
 }
 
 function getCurLang() { return _i18nCurLang; }
 
+// Activeer een taal. Onbekende codes → no-op (defensief).
 function setLang(lang) {
-    const nieuw = (lang === 'en') ? 'en' : 'nl';
-    if (nieuw === _i18nCurLang) return;
-    _i18nCurLang = nieuw;
+    if (!I18N_CODES.includes(lang) || lang === _i18nCurLang) return;
+    _i18nCurLang = lang;
     try { localStorage.setItem(I18N_STORAGE_KEY, _i18nCurLang); } catch {}
     applyI18n();
     if (_i18nOnChange) _i18nOnChange();
 }
 
+// Legacy: cycle door beschikbare talen. Behouden voor backwards-compat
+// (oude apps die alleen .toggleLang() kennen).
 function toggleLang() {
-    setLang(_i18nCurLang === 'nl' ? 'en' : 'nl');
+    const idx = I18N_CODES.indexOf(_i18nCurLang);
+    const next = I18N_CODES[(idx + 1) % I18N_CODES.length];
+    setLang(next);
 }
 
-// Vertaal een sleutel. NL is fallback als de actuele taal de key niet kent
-// (handig tijdens uitrol: nieuwe keys werken meteen in NL, EN volgt later).
-// {param}-placeholders worden vervangen met values uit `params`.
+// Vertaal een sleutel. Fallback-keten: huidige taal → EN → NL → key.
+// EN is een betere fallback dan NL voor internationale gebruikers:
+// een DE/FR-coach met onvertaalde key krijgt liever EN dan NL.
+// Voor public (volledig 4-talig) verandert er niks — die heeft per key
+// gewoon de exacte taal. {param}-placeholders worden vervangen.
 function t(key, params = {}) {
-    const dict = _i18nDict[_i18nCurLang] || _i18nDict.nl || {};
-    let txt = dict[key] != null ? dict[key]
-            : (_i18nDict.nl && _i18nDict.nl[key] != null) ? _i18nDict.nl[key]
+    const dict   = _i18nDict[_i18nCurLang] || {};
+    const enDict = _i18nDict.en || {};
+    const nlDict = _i18nDict.nl || {};
+    let txt = dict[key]   != null ? dict[key]
+            : enDict[key] != null ? enDict[key]
+            : nlDict[key] != null ? nlDict[key]
             : key;
     for (const [k, v] of Object.entries(params || {})) {
-        txt = txt.replace(`{${k}}`, v);
+        txt = String(txt).replace(`{${k}}`, v);
     }
     return txt;
 }
 
-// Doorloop DOM (of subtree) en vervang vertaal-attributen door huidige
-// taal. Roep aan na elke render van nieuwe HTML die data-i18n-attributen
-// bevat. applyI18n() wordt automatisch aangeroepen bij init en elke
-// taal-wissel — voor dynamische content moet de app het zelf doen.
 function applyI18n(root = document) {
     root.querySelectorAll('[data-i18n]').forEach(el => {
         el.textContent = t(el.dataset.i18n);
@@ -103,23 +104,95 @@ function applyI18n(root = document) {
         el.placeholder = t(el.dataset.i18nPlaceholder);
     });
     document.documentElement.lang = _i18nCurLang;
-    // Vlag-knop: toon de TARGET taal (= klik om naar die taal te gaan).
-    // Regional-indicator-emojis (🇳🇱/🇬🇧) renderen netjes op iOS, Android,
-    // macOS — exact de doelgroep. Op Windows-browsers tonen ze als "NL"/
-    // "GB" letter-paren (Windows mist de glyph), maar dat is voor de
-    // public-app geen relevante use-case.
-    const btn = document.getElementById('btn-lang');
-    if (btn) {
-        const targetLang = _i18nCurLang === 'nl' ? 'en' : 'nl';
-        btn.textContent = targetLang === 'en' ? '🇬🇧' : '🇳🇱';
-        btn.title = targetLang === 'en'
-            ? 'Switch to English'
-            : 'Wissel naar Nederlands';
-    }
+    _i18nUpdateDropdownLabel();
 }
 
-// Locale-string voor Intl-API's (toLocaleDateString, toLocaleTimeString):
-//   getLocale()  →  'nl-NL' of 'en-GB'
 function getLocale() {
-    return _i18nCurLang === 'nl' ? 'nl-NL' : 'en-GB';
+    return { nl: 'nl-NL', en: 'en-GB', de: 'de-DE', fr: 'fr-FR' }[_i18nCurLang] || 'nl-NL';
+}
+
+// ── Custom dropdown UI ─────────────────────────────────────────────────────
+// Vervangt de #btn-lang knop door een dropdown: huidige vlag + ▼ → klik
+// expandt panel met alle talen. Geen native <select> zodat de SVG-vlaggen
+// netjes overal renderen.
+
+function _i18nMountDropdown() {
+    const btn = document.getElementById('btn-lang');
+    if (!btn || btn.dataset.i18nMounted === '1') return;
+    btn.dataset.i18nMounted = '1';
+    btn.classList.add('i18n-dropdown');
+    // Click → toggle panel. stopPropagation voorkomt dat de buiten-klik
+    // handler 'm meteen weer dichtdoet.
+    btn.addEventListener('click', e => {
+        e.stopPropagation();
+        _i18nToggleDropdownPanel();
+    });
+    // Buiten panel klikken/tikken → sluit. Gebruik mousedown (vuurt vóór
+    // click, ook op touch via emulated mouseevents) zodat het paneel altijd
+    // wegvalt zodra de gebruiker ergens anders aanraakt — inclusief als
+    // de target zelf opnieuw een interactief element is.
+    // contains() check voorkomt dat clicks ÍN het paneel het sluiten;
+    // de optie-buttons hebben verder eigen click-handlers die de keuze
+    // afhandelen + paneel zelf opruimen.
+    const buitenDicht = e => {
+        const panel = document.getElementById('i18n-dropdown-panel');
+        if (panel && !panel.contains(e.target) && !btn.contains(e.target)) {
+            panel.remove();
+        }
+    };
+    document.addEventListener('mousedown', buitenDicht);
+    document.addEventListener('touchstart', buitenDicht, { passive: true });
+    _i18nUpdateDropdownLabel();
+}
+
+function _i18nUpdateDropdownLabel() {
+    const btn = document.getElementById('btn-lang');
+    if (!btn) return;
+    const cur = I18N_LANGS.find(l => l.code === _i18nCurLang) || I18N_LANGS[0];
+    // Geen pijltje — vlag-emoji is op zich duidelijk genoeg als "klikbaar".
+    btn.innerHTML = `<span class="i18n-flag">${cur.vlag}</span>`;
+    btn.title = cur.naam;
+}
+
+function _i18nToggleDropdownPanel() {
+    const bestaand = document.getElementById('i18n-dropdown-panel');
+    if (bestaand) { bestaand.remove(); return; }
+    const btn = document.getElementById('btn-lang');
+    if (!btn) return;
+    const panel = document.createElement('div');
+    panel.id = 'i18n-dropdown-panel';
+    panel.className = 'i18n-dropdown-panel';
+    // Compact horizontaal: alleen vlaggen, geen tekstnamen. Naam blijft
+    // beschikbaar via title-attribuut (hover-tooltip).
+    panel.innerHTML = I18N_LANGS.map(l => `
+        <button type="button" class="i18n-dropdown-opt ${l.code === _i18nCurLang ? 'is-active' : ''}"
+                data-lang="${l.code}" title="${l.naam}" aria-label="${l.naam}">
+            <span class="i18n-flag">${l.vlag}</span>
+        </button>
+    `).join('');
+    // Positioneer onder de knop, rechts uitgelijnd. Daarna corrigeer als
+    // het paneel buiten het scherm valt (links < 4px of rechts > vw-4px).
+    const r = btn.getBoundingClientRect();
+    panel.style.position = 'fixed';
+    panel.style.top   = (r.bottom + 4) + 'px';
+    panel.style.right = Math.max(4, window.innerWidth - r.right) + 'px';
+    panel.style.zIndex = '10000';
+    document.body.appendChild(panel);
+    // Na append: meet werkelijke breedte en clamp binnen viewport.
+    const panelR = panel.getBoundingClientRect();
+    if (panelR.left < 4) {
+        panel.style.right = 'auto';
+        panel.style.left  = '4px';
+    }
+    panel.querySelectorAll('.i18n-dropdown-opt').forEach(b => {
+        b.addEventListener('click', e => {
+            e.stopPropagation();
+            // EERST paneel weg, DAN setLang. setLang triggert applyI18n +
+            // onChange (in coach: _rerenderCoach) wat de DOM kan
+            // vernieuwen. Als het paneel daar nog in staat raakt 'ie
+            // verwees of blijft visueel hangen. Andersom is altijd veilig.
+            panel.remove();
+            setLang(b.dataset.lang);
+        });
+    });
 }

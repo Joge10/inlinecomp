@@ -148,20 +148,16 @@ async function _upBlokkeerToggle(naam, isGeblokkeerd) {
         // uit de DB komen (incl. current user-naam via JOIN).
         await toonUploadsPagina();
     } catch (e) {
-        alert('Fout bij blokkade-actie: ' + e.message);
+        toonBevestigDialog('Fout bij blokkade-actie: ' + e.message, 'Uploads', 'OK', '');
     }
 }
 
 async function _upVerwijder(naam) {
     if (!naam) return;
-    let ok;
-    if (typeof toonBevestigDialog === 'function') {
-        ok = await toonBevestigDialog(
-            `Weet je zeker dat je map "${naam}" definitief wilt verwijderen? Dit is onomkeerbaar.`,
-            'Map verwijderen', 'Verwijder', 'Annuleer');
-    } else {
-        ok = confirm(`Weet je zeker dat je map "${naam}" definitief wilt verwijderen?`);
-    }
+    const ok = await toonBevestigDialog(
+        `Weet je zeker dat je map "${naam}" definitief wilt verwijderen? Dit is onomkeerbaar.`,
+        'Map verwijderen', 'Verwijder', 'Annuleer'
+    );
     if (!ok) return;
 
     try {
@@ -176,7 +172,7 @@ async function _upVerwijder(naam) {
         _upMappen = _upMappen.filter(m => m.name !== naam);
         _upRender();
     } catch (e) {
-        alert('Fout bij verwijderen: ' + e.message);
+        toonBevestigDialog('Fout bij verwijderen: ' + e.message, 'Map verwijderen', 'OK', '');
     }
 }
 

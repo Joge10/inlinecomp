@@ -35,3 +35,6 @@ Thumbs.db
 
 # Uploader-map: lokale test-CSVs / live MyLaps-output, niet committen
 uploader/
+
+# Werkmap voor ad-hoc gegenereerde files (PDF-rapporten, debug-scripts)
+tmp/

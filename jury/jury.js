@@ -64,16 +64,112 @@ function zetTopbarComp(s) {
 
     const acties = elJ('jury-topbar-acties');
     acties.innerHTML = `
-        <button class="jury-btn jury-btn-link" id="jury-btn-wissel" title="Andere wedstrijd of rol">↻ Wissel</button>
+        <button class="jury-btn jury-btn-link" id="jury-btn-docs"     title="Wedstrijddocumenten (PDF's)">📄 Docs</button>
+        <button class="jury-btn jury-btn-link" id="jury-btn-wissel"   title="Andere wedstrijd of rol">↻ Wissel</button>
         <button class="jury-btn jury-btn-link" id="jury-btn-uitloggen">⎋ Uitloggen</button>
     `;
     elJ('jury-btn-uitloggen').addEventListener('click', juryUitloggen);
     elJ('jury-btn-wissel').addEventListener('click', toonRolkeuze);
+    elJ('jury-btn-docs').addEventListener('click', toonDocumentenLijst);
 }
 
 function wisTopbarComp() {
     elJ('jury-comp-info').hidden = true;
     elJ('jury-topbar-acties').innerHTML = '';
+}
+
+// ── Documenten-lade (PDF's uit /wedstrijdData) ─────────────────────────────
+// V1: flat lijst, klik = inline iframe-viewer. Tweede modal stacks bovenop.
+// Auth wordt server-side gecheckt op session — knop staat alleen in topbar
+// na login, dus normaal pad is altijd geauthenticeerd.
+async function toonDocumentenLijst() {
+    // Voorkom dubbel-openen
+    if (document.querySelector('.jury-docs-overlay')) return;
+
+    const overlay = document.createElement('div');
+    overlay.className = 'jury-docs-overlay';
+    overlay.innerHTML = `
+        <div class="jury-docs-modal">
+            <div class="jury-docs-kop">
+                <span class="jury-docs-titel">📄 Wedstrijddocumenten</span>
+                <button class="jury-docs-sluit" type="button" aria-label="Sluiten">&times;</button>
+            </div>
+            <div class="jury-docs-body" id="jury-docs-body">
+                <div class="jury-docs-laden">Laden…</div>
+            </div>
+        </div>`;
+    document.body.appendChild(overlay);
+
+    const sluit = () => overlay.remove();
+    overlay.querySelector('.jury-docs-sluit').addEventListener('click', sluit);
+    overlay.addEventListener('click', e => { if (e.target === overlay) sluit(); });
+
+    try {
+        const res  = await fetch('?action=list_pdfs', { credentials: 'same-origin' });
+        const data = await res.json();
+        if (!res.ok || data?.error) {
+            elJ('jury-docs-body').innerHTML =
+                `<div class="jury-docs-leeg">Kon lijst niet ophalen: ${escHtml(data?.error ?? res.status)}</div>`;
+            return;
+        }
+        const body = elJ('jury-docs-body');
+        if (!data.map_aanwezig) {
+            body.innerHTML = `<div class="jury-docs-leeg">
+                <b>Geen documenten-map gevonden</b><br>
+                <span>De map <code>/wedstrijdData</code> bestaat nog niet op de server.</span>
+            </div>`;
+            return;
+        }
+        if (!data.pdfs?.length) {
+            body.innerHTML = `<div class="jury-docs-leeg">
+                <b>Geen documenten beschikbaar</b><br>
+                <span>Upload PDF's naar <code>/wedstrijdData/</code> op je hosting.</span>
+            </div>`;
+            return;
+        }
+        body.innerHTML = `<ul class="jury-docs-lijst">${
+            data.pdfs.map(p => `
+                <li class="jury-docs-item" data-url="${escHtml(p.url)}" data-naam="${escHtml(p.naam)}">
+                    <span class="jury-docs-icon">📄</span>
+                    <span class="jury-docs-naam">${escHtml(p.naam.replace(/\.pdf$/i, ''))}</span>
+                    <span class="jury-docs-meta">${p.size_kb} kB · ${escHtml(p.gewijzigd)}</span>
+                </li>`).join('')
+        }</ul>`;
+
+        body.querySelectorAll('.jury-docs-item').forEach(li => {
+            li.addEventListener('click', () => {
+                toonPdfViewer(li.dataset.url, li.dataset.naam);
+            });
+        });
+    } catch (e) {
+        elJ('jury-docs-body').innerHTML =
+            `<div class="jury-docs-leeg">Fout: ${escHtml(e.message)}</div>`;
+    }
+}
+
+// Inline PDF-viewer via iframe. Stacks bovenop de documenten-lijst (hogere
+// z-index) zodat sluiten van viewer terug naar de lijst gaat.
+function toonPdfViewer(url, naam) {
+    const overlay = document.createElement('div');
+    overlay.className = 'jury-pdfviewer-overlay';
+    overlay.innerHTML = `
+        <div class="jury-pdfviewer-modal">
+            <div class="jury-pdfviewer-kop">
+                <span class="jury-pdfviewer-titel">📄 ${escHtml(naam)}</span>
+                <div class="jury-pdfviewer-acties">
+                    <a class="jury-btn jury-btn-link" href="${escHtml(url)}" target="_blank"
+                       rel="noopener" title="Open in nieuwe tab">↗ Tab</a>
+                    <button class="jury-pdfviewer-sluit" type="button" aria-label="Sluiten">&times;</button>
+                </div>
+            </div>
+            <iframe class="jury-pdfviewer-iframe" src="${escHtml(url)}"
+                    title="${escHtml(naam)}"></iframe>
+        </div>`;
+    document.body.appendChild(overlay);
+
+    const sluit = () => overlay.remove();
+    overlay.querySelector('.jury-pdfviewer-sluit').addEventListener('click', sluit);
+    overlay.addEventListener('click', e => { if (e.target === overlay) sluit(); });
 }
 
 function toonFout(boodschap) {
@@ -283,6 +379,7 @@ function toonRol(roleId) {
     const r = ROLLEN.find(x => x.id === roleId);
     if (!r) { toonFout('Onbekende rol: ' + roleId); return; }
     if (roleId === 'area_of_call') { toonAreaOfCall(r); return; }
+    if (roleId === 'speaker')      { toonSpeaker(r);    return; }
     // Andere rollen nog skeleton
     elJ('jury-main').innerHTML = `
         <div class="jury-scherm jury-rol-detail">
@@ -772,5 +869,1793 @@ elJ('jury-login-modal').addEventListener('click', e => {
 document.addEventListener('keydown', e => {
     if (e.key === 'Escape' && !elJ('jury-login-modal').hidden) sluitLoginModal();
 });
+
+// ════════════════════════════════════════════════════════════════════════════
+//   SPEAKER-ROL
+// ════════════════════════════════════════════════════════════════════════════
+// Speaker werkflow:
+//   1. Tab-balk niveau 1 = categorieën (DSA/HSA/DKA/etc.) — afgeleid uit
+//      de entries van deze wedstrijd. Sorted, click = wisselen.
+//   2. Tab-balk niveau 2 = DCs binnen gekozen cat. Click = laad deelnemers.
+//   3. Tegelgrid: per deelnemer een even-grote tegel met startnummer +
+//      naam. Klik op tegel → modal met alle persoonsgegevens (sponsor,
+//      woonplaats, club, geboortejaar, etc.) voor speaker-commentaar.
+
+const _spk = {
+    struktuur:  null,  // { cats: [{cat, dcs:[{dc_id, dc_naam, aantal}]}] }
+    cat:        null,  // huidige cat-string
+    dcId:       null,  // huidige dc_id-string
+    deelnemers: [],    // lijst voor huidige dc+cat
+    laden:      false,
+};
+
+async function toonSpeaker(rolDef) {
+    elJ('jury-main').innerHTML = `<div class="jury-laden">Deelnemers-structuur laden…</div>`;
+    try {
+        const res  = await fetch('?action=speaker_struktuur', { credentials: 'same-origin' });
+        const data = await res.json();
+        if (!res.ok || data?.error) throw new Error(data?.error || ('HTTP ' + res.status));
+        _spk.struktuur = data;
+    } catch (e) {
+        toonFout('Kan deelnemers-structuur niet laden: ' + e.message);
+        return;
+    }
+    if (!_spk.struktuur.cats?.length) {
+        elJ('jury-main').innerHTML = `
+            <div class="jury-scherm jury-rol-detail">
+                <div class="jury-rol-detail-kop">
+                    <div class="jury-rol-icoon jury-rol-icoon-groot">${rolDef.icoon}</div>
+                    <div>
+                        <h2 class="jury-scherm-titel">${escHtml(rolDef.naam)}</h2>
+                        <p class="jury-scherm-hint">${escHtml(rolDef.omschrijving)}</p>
+                    </div>
+                </div>
+                <div class="jury-placeholder">
+                    <p>Nog geen deelnemers voor deze wedstrijd.</p>
+                    <p class="jury-placeholder-hint">
+                        Vraag de organisator om de wedstrijd te importeren via <em>Importeer</em>.
+                    </p>
+                </div>
+            </div>`;
+        return;
+    }
+    // Eerste cat + eerste DC als default
+    _spk.cat  = _spk.struktuur.cats[0].cat;
+    _spk.dcId = _spk.struktuur.cats[0].dcs[0]?.dc_id ?? null;
+    _spkRender(rolDef);
+}
+
+function _spkRender(rolDef) {
+    const main = elJ('jury-main');
+    main.innerHTML = `
+        <div class="jury-scherm spk-scherm">
+            <div class="spk-tab-balk spk-tab-cats" id="spk-tab-cats"></div>
+            <div class="spk-tab-balk spk-tab-dcs"  id="spk-tab-dcs"></div>
+            <div class="spk-grid" id="spk-grid"></div>
+        </div>
+        <div class="spk-bottombar" id="spk-bottombar">
+            <!-- Nationaal record voor de actueel geselecteerde DC.
+                 Verschijnt boven de "Eerdere uitslag"-cascade als context
+                 voor de speaker. Klikbaar → toont alle 4 varianten (jun/sen
+                 × M/V) voor diezelfde afstand. Default tonen we matching
+                 cat-groep + gender. Backend = speaker_record endpoint. -->
+            <div class="spk-bb-nr" id="spk-bb-nr"></div>
+            <div class="spk-bb-dropdown-rij">
+                <span class="spk-bb-lbl">📚 Eerdere uitslag</span>
+                <select class="spk-bb-select spk-bb-sel-wedstrijd" id="spk-bb-sel-wedstrijd" disabled>
+                    <option value="">— Laden…</option>
+                </select>
+                <select class="spk-bb-select spk-bb-sel-cat" id="spk-bb-sel-cat" disabled>
+                    <option value="">— Cat —</option>
+                </select>
+                <select class="spk-bb-select spk-bb-sel-afstand" id="spk-bb-sel-afstand" disabled>
+                    <option value="">— Afstand —</option>
+                </select>
+            </div>
+            <div class="spk-bb-top3" id="spk-bb-top3">
+                <span class="spk-bb-hint">Kies wedstrijd · cat · afstand om de top-3 te zien.</span>
+            </div>
+        </div>`;
+    _spkRenderCatTabs();
+    _spkRenderDcTabs();
+    _spkLaadEnRenderDeelnemers();
+    _spkLaadEerdereOverzicht();
+
+    // Cascade-handlers — order is nu Wedstrijd → Cat → Afstand
+    elJ('spk-bb-sel-wedstrijd').addEventListener('change', _spkOnWedstrijdChange);
+    elJ('spk-bb-sel-cat').addEventListener('change',      _spkOnCatChange);
+    elJ('spk-bb-sel-afstand').addEventListener('change',  _spkOnAfstandChange);
+}
+
+function _spkRenderCatTabs() {
+    const wrap = elJ('spk-tab-cats');
+    // Geen aantal-pill: speaker hoeft niet het aantal te zien — alleen de
+    // beschikbare cats. Houdt de tab-balk strak en leesbaar.
+    wrap.innerHTML = _spk.struktuur.cats.map(c => {
+        const act = c.cat === _spk.cat ? 'is-active' : '';
+        return `<button class="spk-tab ${act}" data-cat="${escHtml(c.cat)}">${escHtml(c.cat)}</button>`;
+    }).join('');
+    wrap.querySelectorAll('.spk-tab').forEach(btn => {
+        btn.addEventListener('click', () => {
+            if (btn.dataset.cat === _spk.cat) return;
+            _spk.cat  = btn.dataset.cat;
+            // Eerste DC binnen de nieuwe cat selecteren
+            const newCat = _spk.struktuur.cats.find(c => c.cat === _spk.cat);
+            _spk.dcId = newCat?.dcs[0]?.dc_id ?? null;
+            _spkRenderCatTabs();
+            _spkRenderDcTabs();
+            _spkLaadEnRenderDeelnemers();
+            // Bottom-bar overzicht is cat-onafhankelijk (3 cascade-dropdowns
+            // zonder pre-filter) — geen herlaad nodig bij cat-wissel.
+        });
+    });
+}
+
+function _spkRenderDcTabs() {
+    const wrap   = elJ('spk-tab-dcs');
+    const catObj = _spk.struktuur.cats.find(c => c.cat === _spk.cat);
+    if (!catObj || !catObj.dcs.length) {
+        wrap.innerHTML = '';
+        return;
+    }
+    wrap.innerHTML = catObj.dcs.map(d => {
+        const act = d.dc_id === _spk.dcId ? 'is-active' : '';
+        return `<button class="spk-tab spk-tab-dc ${act}" data-dc-id="${escHtml(d.dc_id)}">${escHtml(d.dc_naam)}</button>`;
+    }).join('');
+    wrap.querySelectorAll('.spk-tab-dc').forEach(btn => {
+        btn.addEventListener('click', () => {
+            if (btn.dataset.dcId === _spk.dcId) return;
+            _spk.dcId = btn.dataset.dcId;
+            _spkRenderDcTabs();
+            _spkLaadEnRenderDeelnemers();
+        });
+    });
+}
+
+async function _spkLaadEnRenderDeelnemers() {
+    // Trigger NR-banner update naast de deelnemers-load — beide reageren op
+    // dezelfde DC/cat-wijziging dus is dit het natuurlijke moment.
+    _spkLaadNationaalRecord();
+    const grid = elJ('spk-grid');
+    if (!_spk.dcId || !_spk.cat) {
+        grid.innerHTML = '<div class="jury-placeholder">Geen DC geselecteerd.</div>';
+        return;
+    }
+    grid.innerHTML = '<div class="jury-laden">Deelnemers laden…</div>';
+    _spk.laden = true;
+    try {
+        const url = '?action=speaker_deelnemers'
+                  + '&dc_id=' + encodeURIComponent(_spk.dcId)
+                  + '&cat='   + encodeURIComponent(_spk.cat);
+        const res  = await fetch(url, { credentials: 'same-origin' });
+        const data = await res.json();
+        if (!res.ok || data?.error) throw new Error(data?.error || ('HTTP ' + res.status));
+        _spk.deelnemers = Array.isArray(data.deelnemers) ? data.deelnemers : [];
+    } catch (e) {
+        grid.innerHTML = `<div class="jury-fout">⚠ ${escHtml(e.message)}</div>`;
+        _spk.laden = false;
+        return;
+    }
+    _spk.laden = false;
+
+    if (!_spk.deelnemers.length) {
+        grid.innerHTML = '<div class="jury-placeholder">Geen deelnemers in deze cat + DC.</div>';
+        return;
+    }
+    // Kans-score laden in parallel (non-blocking) — tegels worden meteen
+    // gerendered, kans-badges verschijnen zodra fetch klaar is.
+    _spkLaadKans();
+
+    // PK/afval: aparte compact-grid met punten-bijhouden scratchpad.
+    // Wordt lokaal opgeslagen (geen DB-impact) — speaker-only nota's.
+    const catObj = _spk.struktuur?.cats?.find(c => c.cat === _spk.cat);
+    const dc = catObj?.dcs?.find(d => d.dc_id === _spk.dcId);
+    const afstandKey = _spkAfstandKey(dc?.dc_naam || '');
+    if (afstandKey === 'puntenkoers') {
+        _spkRenderPK(grid, afstandKey);
+        return;
+    }
+    if (afstandKey === 'afvalkoers') {
+        _spkRenderAV(grid);
+        return;
+    }
+    grid.innerHTML = _spk.deelnemers.map(d => `
+        <button class="spk-tegel" data-license="${escHtml(d.license_key)}">
+            ${_spkKansBadge(d.license_key)}
+            <span class="spk-tegel-snr">${d.startnummer ?? '—'}</span>
+            <span class="spk-tegel-naam">${escHtml(d.full_name ?? '(onbekend)')}</span>
+        </button>
+    `).join('');
+    grid.querySelectorAll('.spk-tegel').forEach(btn => {
+        btn.addEventListener('click', () => {
+            const lk = btn.dataset.license;
+            const rijder = _spk.deelnemers.find(x => x.license_key === lk);
+            if (rijder) _spkToonDetail(rijder);
+        });
+    });
+}
+
+// ── Puntenkoers scratchpad ──────────────────────────────────────────────
+// Speaker-only bijhoud-UI voor puntenkoers (en straks afvalkoers): de
+// speaker noteert per ronde wie hoeveel punten kreeg, ZONDER deze naar de
+// DB te schrijven (jury doet de officiële invoer in 'live verwerking').
+//
+// Flow (zoals jury live-verwerking):
+//   1. Klik op nummer-tegel → wordt 'actief' (visueel highlight)
+//   2. Klik op +3 / +2 / +1 in actie-strip → punten optellen bij actieve
+//      rijder, actief verspringt naar geen-selectie (klaar voor volgende)
+//   3. Rechter-bovenhoek van tegel (klein i-knopje) → opent oude detail-modal
+//      met historie + NR (zonder selectie-flow te triggeren)
+//
+// State per (compId, dcId) in localStorage zodat het na refresh / tab-wissel
+// blijft staan. Map<license_key, totaal_punten>. Actief = license_key string.
+function _spkPKKey() {
+    // dc_id is een UUID/PK uit distance_combinations en uniek over alle
+    // wedstrijden — comp_id is dus overbodig in de key. Per-cat scope niet
+    // nodig want één PK-DC = één gezamenlijke koers (combi-cats racen
+    // samen, zelfde puntenoptelling).
+    return `spk_pk_${_spk.dcId || ''}`;
+}
+function _spkPKLoad() {
+    try {
+        const raw = localStorage.getItem(_spkPKKey());
+        if (!raw) return { punten: {}, actief: null };
+        const obj = JSON.parse(raw);
+        return {
+            punten: (obj && typeof obj.punten === 'object') ? obj.punten : {},
+            actief: obj?.actief || null,
+        };
+    } catch { return { punten: {}, actief: null }; }
+}
+function _spkPKSave(state) {
+    try { localStorage.setItem(_spkPKKey(), JSON.stringify(state)); } catch {}
+}
+
+function _spkRenderPK(grid, afstandKey) {
+    const state = _spkPKLoad();
+    // Sorteer deelnemers op startnummer voor het grid; top-strip is op punten.
+    const deelnemers = [..._spk.deelnemers].sort(
+        (a, b) => (a.startnummer ?? 9999) - (b.startnummer ?? 9999)
+    );
+    const tegelHtml = (d, klein) => {
+        const punten = state.punten[d.license_key] || 0;
+        const isActief = state.actief === d.license_key;
+        // Naam in de tegel — speaker zegt 'm op, jury hoort 'm niet nodig
+        // (zij zien snr) maar voor speaker is naam-recall essentieel.
+        return `<button class="spk-pk-tegel ${klein ? 'spk-pk-tegel-klein' : ''} ${isActief ? 'is-actief' : ''} ${punten ? 'heeft-punten' : ''}"
+                        data-license="${escHtml(d.license_key)}"
+                        title="${escHtml(d.full_name ?? '')}">
+                    ${_spkKansBadge(d.license_key)}
+                    <span class="spk-pk-tegel-snr">${d.startnummer ?? '—'}</span>
+                    <span class="spk-pk-tegel-naam">${escHtml(d.full_name ?? '')}</span>
+                    ${punten ? `<span class="spk-pk-tegel-pt">${punten} pt</span>` : ''}
+                    <span class="spk-pk-tegel-hoek" data-rol="detail" title="Toon detail / historie">ⓘ</span>
+                </button>`;
+    };
+
+    // Top-strip: alle deelnemers MET punten, gesorteerd punten DESC → snr ASC.
+    const top = deelnemers
+        .filter(d => (state.punten[d.license_key] || 0) > 0)
+        .sort((a, b) => {
+            const pA = state.punten[a.license_key] || 0;
+            const pB = state.punten[b.license_key] || 0;
+            if (pA !== pB) return pB - pA;
+            return (a.startnummer ?? 9999) - (b.startnummer ?? 9999);
+        });
+    const topHtml = top.length
+        ? top.map(d => tegelHtml(d, false)).join('')
+        : '<div class="spk-pk-leeg">Nog geen punten toegekend.</div>';
+
+    // Actie-strip: +3 links, +2/+1 rechts met spacer ertussen. Pas
+    // klikbaar zodra er een actieve rijder is geselecteerd.
+    const heeftActief = !!state.actief;
+    const actieBtn = n => `<button class="spk-pk-actie" data-punten="${n}" ${heeftActief ? '' : 'disabled'}>+${n}</button>`;
+
+    // Reset-knop staat sinds 2026-05-27 in de header (rechts) ipv in de
+    // actie-strip — minder kans op accidentele klik tijdens snelle
+    // punten-toekenning, en houdt de actie-strip schoon voor de +N pills.
+    const resetHtml = `<button class="spk-pk-reset" type="button" title="Alle punten wissen (lokaal)">⟲ reset</button>`;
+
+    grid.innerHTML = `
+        <div class="spk-pk-wrap">
+            <div class="spk-pk-kop">
+                <div class="spk-pk-titel">📍 Puntenkoers — scratchpad (alleen lokaal)</div>
+                ${resetHtml}
+            </div>
+            <div class="spk-pk-top">${topHtml}</div>
+            <div class="spk-pk-acties">
+                ${actieBtn(3)}
+                <span class="spk-pk-spacer"></span>
+                ${actieBtn(2)}
+                ${actieBtn(1)}
+            </div>
+            <div class="spk-pk-grid">
+                ${deelnemers.map(d => tegelHtml(d, true)).join('')}
+            </div>
+        </div>`;
+
+    // Tegel-click: rechterhoek-ⓘ = detail-modal; rest = selecteer als actief.
+    grid.querySelectorAll('.spk-pk-tegel').forEach(btn => {
+        btn.addEventListener('click', e => {
+            const lk = btn.dataset.license;
+            const rijder = _spk.deelnemers.find(x => x.license_key === lk);
+            if (!rijder) return;
+            // Klik op hoek → detail-modal (oude gedrag)
+            if (e.target.closest('.spk-pk-tegel-hoek')) {
+                _spkToonDetail(rijder);
+                return;
+            }
+            // Klik elders op tegel → toggle actief
+            const s = _spkPKLoad();
+            s.actief = (s.actief === lk) ? null : lk;
+            _spkPKSave(s);
+            _spkRenderPK(grid, afstandKey);
+        });
+    });
+
+    // +N actie: voeg punten toe aan actieve rijder, deselecteer
+    grid.querySelectorAll('.spk-pk-actie').forEach(btn => {
+        btn.addEventListener('click', () => {
+            const n = parseInt(btn.dataset.punten, 10) || 0;
+            const s = _spkPKLoad();
+            if (!s.actief || !n) return;
+            s.punten[s.actief] = (s.punten[s.actief] || 0) + n;
+            s.actief = null;   // klaar voor volgende rijder
+            _spkPKSave(s);
+            _spkRenderPK(grid, afstandKey);
+        });
+    });
+
+    // Reset-knop
+    grid.querySelector('.spk-pk-reset')?.addEventListener('click', async () => {
+        const ok = await (typeof toonBevestigDialog === 'function'
+            ? toonBevestigDialog('Alle lokale punten wissen?', 'Reset puntenkoers', 'Wissen', 'Annuleren')
+            : confirm('Alle lokale punten wissen?'));
+        if (!ok) return;
+        _spkPKSave({ punten: {}, actief: null });
+        _spkRenderPK(grid, afstandKey);
+    });
+}
+
+// ── Afvalkoers scratchpad ───────────────────────────────────────────────
+// Speaker-only bijhoud-UI voor afvalkoers, lokaal opgeslagen (geen DB).
+// Veel simpeler dan admin live-verwerking (geen by-fault/by-decision/Set
+// flow — die zijn voor de échte jury die rondes-getallen moet vastleggen).
+// Speaker wil alleen weten: wie ligt er nog in, wie viel er uit en op
+// welke positie (= eindrang voor afvallers, hoog = vroeg uit).
+//
+// Flow:
+//   1. Klik op tegel in "nog in koers" → wordt actief (highlight)
+//   2. Klik ❌ Eruit → rijder verhuist naar "afgevallen" met eindrang
+//      = (aantal_starters - aantal_afgevallen + 1).
+//      Bv. 30 starters → 1e afvaller krijgt rang 30, 2e rang 29 etc.
+//      Laatste 3 die nog in koers zijn = eindsprint (rang 1-3, speaker
+//      doet dat zelf mentaal).
+//   3. Klik op afgevallen-tegel → ⏪ undo (terug naar 'nog in koers').
+//      Resterende rangen worden automatisch herberekend.
+//
+// Settings (⚙): heat-config voor context (totaal_ronden, eerste_afval,
+// interval, eindsprint). Geen schema-berekening hier — speaker hoeft niet
+// exact te weten welk rondebord, alleen de high-level info ("18 ronden,
+// vanaf bord 21, eindsprint met 4 rijders"). Validatie minimaal.
+function _spkAVKey()    { return `spk_av_${_spk.dcId || ''}`; }
+function _spkAVCfgKey() { return `spk_avcfg_${_spk.dcId || ''}`; }
+function _spkAVLoad() {
+    try {
+        const raw = localStorage.getItem(_spkAVKey());
+        const obj = raw ? JSON.parse(raw) : null;
+        const ruw = Array.isArray(obj?.afgevallen) ? obj.afgevallen : [];
+        // Backwards-compat: oude state had array van plain license_keys
+        // (strings). Migreer naar {lk, ronde, oorzaak, batch} object-vorm.
+        // oorzaak: null = reguliere afval (auto-ronde via schema),
+        //          'decision' = jury-beslissing (handmatig opgegeven bord)
+        // batch:   null = solo, anders ID voor ex-aequo groep (multi-select
+        //          decisions delen zelfde batch → krijgen zelfde plek).
+        // LET OP: 'batch' MOET hier worden meegenomen anders gaat ex-aequo
+        // info verloren na save+load cycle — alle items lijken dan solo.
+        const afgevallen = ruw.map(x => typeof x === 'string'
+            ? { lk: x, ronde: null, oorzaak: null, batch: null }
+            : { lk: x.lk, ronde: x.ronde ?? null, oorzaak: x.oorzaak ?? null, batch: x.batch ?? null });
+        // actief: was string|null, nu array (multi-select voor Decision-knop).
+        // Migreer oude vorm naar array.
+        let actief;
+        if (Array.isArray(obj?.actief))   actief = obj.actief;
+        else if (typeof obj?.actief === 'string') actief = [obj.actief];
+        else                              actief = [];
+        return { afgevallen, actief };
+    } catch { return { afgevallen: [], actief: [] }; }
+}
+function _spkAVSave(state) {
+    try { localStorage.setItem(_spkAVKey(), JSON.stringify(state)); } catch {}
+}
+function _spkAVCfgLoad() {
+    try {
+        const raw = localStorage.getItem(_spkAVCfgKey());
+        return raw ? JSON.parse(raw) : null;
+    } catch { return null; }
+}
+function _spkAVCfgSave(cfg) {
+    try {
+        if (cfg) localStorage.setItem(_spkAVCfgKey(), JSON.stringify(cfg));
+        else     localStorage.removeItem(_spkAVCfgKey());
+    } catch {}
+}
+
+// ── Schema-helpers — geport van js/live.js (_afvalSchema, _afvalAfgeleidDubbel,
+// _afvalRondeVoorPositie). LET OP: bij wijziging aan dit schema in admin
+// (live.js) MOET deze copy ook bijgewerkt worden. Pure-functie duplicatie
+// is bewust gekozen omdat speaker (jury/jury.js) geen toegang heeft tot
+// live.js, en de logica is dependency-vrij. ───────────────────────────
+const _SPK_AFVAL_LAATSTE_VAST = 3;   // borden 3, 2, 1 zijn altijd enkele afvallers
+
+// Schema-array voor een gegeven cfg + aantal afvallers te plannen.
+// Returns array van rondebord-nummers (rondes-te-gaan), één per
+// afvalpositie (1..N). LET OP — verschilt van admin (_afvalSchema in
+// live.js) doordat admin ronde-GEREDEN nummers teruggeeft (tr - bord),
+// niet bord-nummers; speaker omroept altijd "bord X" dus we tonen bord.
+// Verder logica-identiek aan admin: stopt eerste-fase bij eersteTeElim
+// en valt dan terug op vaste fase 3,2,1. Bij weinig te elim past alles
+// in de vaste fase en wordt eerste-fase overgeslagen — cruciaal anders
+// zou positie 1 altijd 'bord eerste_afval' zijn ook als alle rijders
+// al uit decisions zijn.
+function _spkAVSchema(cfg, teElimineren) {
+    if (!cfg) return [];
+    const tot = parseInt(cfg.totaal_ronden) || 0;
+    const ea  = parseInt(cfg.eerste_afval)  || 0;
+    const iv  = parseInt(cfg.interval)      || 1;
+    if (!tot || !ea) return [];
+    teElimineren = Math.max(0, teElimineren);
+    if (teElimineren === 0) return [];
+
+    const eersteBorden = [];
+    for (let b = ea; b > _SPK_AFVAL_LAATSTE_VAST; b -= iv) eersteBorden.push(b);
+    const vastBorden = [];
+    for (let b = _SPK_AFVAL_LAATSTE_VAST; b >= 1; b--) vastBorden.push(b);
+
+    const vastAantal   = Math.min(vastBorden.length, teElimineren);
+    const eersteTeElim = teElimineren - vastAantal;
+    const dubbel       = Math.max(0, eersteTeElim - eersteBorden.length);
+
+    const arr = [];
+    let dubbelLeft = dubbel;
+    // Eerste-fase: stop zodra eersteTeElim afvallers gepland zijn — als
+    // alle afvallers in de vaste fase 3,2,1 passen wordt eerste-fase
+    // overgeslagen (eersteTeElim=0). Voorkomt dat positie 1 = bord 21
+    // toont als er door veel decisions nog maar 1 reguliere afvaller is.
+    for (const b of eersteBorden) {
+        if (arr.length >= eersteTeElim) break;
+        const n = (dubbelLeft > 0) ? 2 : 1;
+        for (let i = 0; i < n && arr.length < eersteTeElim; i++) {
+            arr.push(b);
+        }
+        if (dubbelLeft > 0) dubbelLeft--;
+    }
+    for (const b of vastBorden) {
+        if (arr.length >= teElimineren) break;
+        arr.push(b);
+    }
+    return arr;
+}
+
+// Afgeleid: dubbel, capaciteit, ok-flag. Voor validatie in settings-modal
+// en voor stats-strip ("eerste 5 borden dubbel"). Geport van admin
+// _afvalAfgeleidDubbel met identieke formule.
+function _spkAVAfgeleidDubbel(cfg, teElimineren) {
+    const leeg = { dubbel: 0, afvalrondes: 0, teElimineren: 0, ok: false,
+                   capaciteit: 0, eersteAantal: 0, vastAantal: 0, eersteBorden: [] };
+    if (!cfg) return leeg;
+    const tot = parseInt(cfg.totaal_ronden) || 0;
+    const ea  = parseInt(cfg.eerste_afval)  || 0;
+    const iv  = parseInt(cfg.interval)      || 1;
+    if (!tot || !ea) return leeg;
+    teElimineren = Math.max(0, teElimineren);
+
+    const eersteBorden = [];
+    for (let b = ea; b > _SPK_AFVAL_LAATSTE_VAST; b -= iv) eersteBorden.push(b);
+    const eersteAantal = eersteBorden.length;
+    const vastAantal   = Math.min(_SPK_AFVAL_LAATSTE_VAST, teElimineren);
+    const eersteTeElim = teElimineren - vastAantal;
+    const dubbel       = Math.max(0, eersteTeElim - eersteAantal);
+    const capaciteit   = 2 * eersteAantal + _SPK_AFVAL_LAATSTE_VAST;
+    const afvalrondes  = eersteAantal + _SPK_AFVAL_LAATSTE_VAST;
+    const ok = teElimineren <= capaciteit
+            && dubbel <= eersteAantal
+            && ea >= _SPK_AFVAL_LAATSTE_VAST
+            && ea <= tot;
+    return { dubbel, afvalrondes, teElimineren, ok, capaciteit, eersteAantal, vastAantal, eersteBorden };
+}
+
+function _spkAVRondeVoorPositie(afvalPositie, cfg, teElimineren) {
+    const arr = _spkAVSchema(cfg, teElimineren);
+    if (afvalPositie < 1 || afvalPositie > arr.length) return null;
+    return arr[afvalPositie - 1];
+}
+
+// Hercomputeer rondebord-nummers voor alle REGULIERE afvallers (oorzaak=null).
+// Decisions HOUDEN geen bord-getal maar verbruiken WEL een schema-positie:
+// de jury haalt ze namelijk op DAT moment uit de koers, dus die positie in
+// het schema is voorbij. Speaker-model:
+//   - Schema-grootte = totaal - eindsprint (VAST, hangt niet af van decisions)
+//   - Positie van een afvaller = z'n index in de stack + 1 (incl decisions)
+//   - Reguliere krijgt bord uit schema[positie-1]
+//   - Decision krijgt geen bord (was niet op een schema-moment)
+// Dit verschilt van admin's _afvalSchema (die krimpt schema bij decisions)
+// — bewuste afwijking, gebruiker-geverifieerd. Admin moet nog gefixt
+// worden maar dat doet de operator zelf na eigen test.
+function _spkAVRecomputeRondes(state, cfg, totaal) {
+    if (!cfg || !cfg.eindsprint) {
+        state.afgevallen.forEach(a => { if (!a.oorzaak) a.ronde = null; });
+        return;
+    }
+    const setCount = Math.max(0, totaal - parseInt(cfg.eindsprint));
+    state.afgevallen.forEach((a, idx) => {
+        if (a.oorzaak === 'decision') { a.ronde = null; return; }
+        a.ronde = _spkAVRondeVoorPositie(idx + 1, cfg, setCount);
+    });
+}
+
+// (Bord-prompt helper bewust verwijderd 2026-05-27: Decision-rijders krijgen
+// geen rondebord-getal meer — decisions vallen niet op een afvalmoment dus
+// het ronde-nummer was zonder waarde. Schema-herberekening voor reguliere
+// afvallers gebeurt nog wel automatisch via _spkAVRecomputeRondes.)
+
+function _spkRenderAV(grid) {
+    const state = _spkAVLoad();
+    const cfg   = _spkAVCfgLoad();
+    const totaal = _spk.deelnemers.length;
+
+    // Recompute rondes op basis van huidige cfg + state. Modifies in-place,
+    // dus elke render heeft up-to-date ronde-getallen (handig na cfg-edit).
+    _spkAVRecomputeRondes(state, cfg, totaal);
+    _spkAVSave(state);
+
+    const afgeIds = new Set(state.afgevallen.map(a => a.lk));
+    // Filter actief: alleen license_keys die nog in koers zitten
+    state.actief = state.actief.filter(lk => !afgeIds.has(lk));
+    const actiefSet = new Set(state.actief);
+    const nogIn = _spk.deelnemers
+        .filter(d => !afgeIds.has(d.license_key))
+        .sort((a, b) => (a.startnummer ?? 9999) - (b.startnummer ?? 9999));
+    // Afgevallen-objecten met eindrang. Eerste afvaller = hoogste rang (= 'totaal').
+    // Ex-aequo: items in zelfde batch (= zelfde Decision-call) krijgen samen
+    // de LAAGSTE rang van de groep (best-conventie: ex-aequo deelt 'beste'
+    // plek). Bv. 3 dec ex-aequo op stack-posities 1,2,3 met totaal 24:
+    // normaal rangen 24,23,22 → ex-aequo allen rang 22 (=laagste cijfer).
+    // Solo items (batch=null) krijgen gewoon hun stack-positie rang.
+    const batchMinRang = new Map();   // batchId → laagste rang van groep
+    state.afgevallen.forEach((a, idx) => {
+        if (!a.batch) return;
+        const r = totaal - idx;
+        const huidig = batchMinRang.get(a.batch);
+        if (huidig == null || r < huidig) batchMinRang.set(a.batch, r);
+    });
+    const afgevallen = state.afgevallen.map((a, idx) => {
+        const d = _spk.deelnemers.find(x => x.license_key === a.lk);
+        const rang = a.batch ? batchMinRang.get(a.batch) : (totaal - idx);
+        return { d, rang, ronde: a.ronde, oorzaak: a.oorzaak, isExAequo: !!a.batch };
+    }).filter(a => a.d);
+
+    // Knop-enable logica:
+    //   Eruit:    precies 1 geselecteerd (reguliere afval, schema vult ronde)
+    //   Decision: ≥ 1 geselecteerd (jury haalt 1 of meerdere rijders eruit
+    //             tegelijk, allen krijgen hetzelfde bord)
+    const aantalActief = state.actief.length;
+    const eruitEnabled    = aantalActief === 1;
+    const decisionEnabled = aantalActief >= 1;
+    const cfgIngevuld = !!(cfg && cfg.totaal_ronden && cfg.eerste_afval && cfg.eindsprint);
+
+    // Schema-afgeleid voor stats-strip ("volgende bord, dubbel/enkel").
+    // Schema-grootte = vast (totaal - eindsprint). Positie van volgende
+    // afvaller = aantal totaal afgevallen + 1 (decisions consumeren ook).
+    let volgendeBord = null;
+    let volgendeIsDubbel = false;
+    let af = null;
+    if (cfgIngevuld) {
+        const setCount = Math.max(0, totaal - cfg.eindsprint);
+        af = _spkAVAfgeleidDubbel(cfg, setCount);
+        const totaalGedaan = state.afgevallen.length;
+        volgendeBord = _spkAVRondeVoorPositie(totaalGedaan + 1, cfg, setCount);
+        if (volgendeBord != null && totaalGedaan + 1 <= af.dubbel * 2) {
+            volgendeIsDubbel = true;
+        }
+    }
+
+    // Tegel voor "nog in koers" — klikbaar = toggle actief (multi-select)
+    const tegelInKoersHtml = d => {
+        const isActief = actiefSet.has(d.license_key);
+        return `<button class="spk-pk-tegel spk-av-tegel ${isActief ? 'is-actief' : ''}"
+                        data-license="${escHtml(d.license_key)}"
+                        data-rol="koers"
+                        title="${escHtml(d.full_name ?? '')}">
+                    ${_spkKansBadge(d.license_key)}
+                    <span class="spk-pk-tegel-snr">${d.startnummer ?? '—'}</span>
+                    <span class="spk-pk-tegel-naam">${escHtml(d.full_name ?? '')}</span>
+                    <span class="spk-pk-tegel-hoek" data-rol="detail" title="Toon detail / historie">ⓘ</span>
+                </button>`;
+    };
+    // Tegel voor afgevallen — klik = undo, toont rang + (bord) + DEC-badge bij decision.
+    // Ex-aequo (= meerdere dec in zelfde batch) toont '=' suffix bij de rang.
+    const tegelAfgevallenHtml = ({ d, rang, ronde, oorzaak, isExAequo }) => {
+        const rondeBadge = ronde != null
+            ? `<span class="spk-av-tegel-bord" title="Rondebord bij afvalling">b${ronde}</span>`
+            : '';
+        const decBadge = oorzaak === 'decision'
+            ? `<span class="spk-av-tegel-dec" title="By Decision — uit koers gehaald">DEC</span>`
+            : '';
+        const exAequoSuffix = isExAequo ? '<sup class="spk-av-tegel-eq" title="ex aequo">=</sup>' : '';
+        return `<button class="spk-pk-tegel spk-av-tegel spk-av-tegel-uit ${oorzaak === 'decision' ? 'is-decision' : ''}"
+                data-license="${escHtml(d.license_key)}"
+                data-rol="undo"
+                title="Klik om terug te zetten: ${escHtml(d.full_name ?? '')}${isExAequo ? ' (ex aequo met andere decision-rijders)' : ''}">
+            <span class="spk-pk-tegel-snr">${d.startnummer ?? '—'}</span>
+            <span class="spk-pk-tegel-naam">${escHtml(d.full_name ?? '')}</span>
+            <span class="spk-av-tegel-rang">${rang}<sup>e</sup>${exAequoSuffix}</span>
+            ${rondeBadge}
+            ${decBadge}
+            <span class="spk-pk-tegel-hoek" data-rol="detail" title="Toon detail / historie">ⓘ</span>
+        </button>`;
+    };
+
+    // Settings-strip: korte samenvatting + ✎ knop
+    const ivLabel = cfg && cfg.interval === 2 ? 'om-de-ronde' : 'elke ronde';
+    let cfgSamenvatting;
+    if (!cfgIngevuld) {
+        cfgSamenvatting = '<i>niet ingesteld — rondes worden niet automatisch toegekend</i>';
+    } else if (af && !af.ok) {
+        cfgSamenvatting = `${cfg.totaal_ronden} ronden · vanaf bord ${cfg.eerste_afval} (${ivLabel}) · eindsprint ${cfg.eindsprint} `
+                        + `<span class="spk-av-cfg-warn">⚠ instellingen kloppen niet</span>`;
+    } else {
+        const dubbelTxt = af.dubbel > 0
+            ? ` · eerste ${af.dubbel} bord${af.dubbel > 1 ? 'en' : ''} dubbel`
+            : '';
+        cfgSamenvatting = `${cfg.totaal_ronden} ronden · vanaf bord ${cfg.eerste_afval} (${ivLabel}) · eindsprint ${cfg.eindsprint}${dubbelTxt}`;
+    }
+    const settingsStrip = `
+        <div class="spk-av-cfg">
+            <span class="spk-av-cfg-info">⚙ ${cfgSamenvatting}</span>
+            <button class="spk-av-cfg-btn" type="button" title="Heat-instellingen">✎</button>
+        </div>`;
+
+    // Stats + actie-knoppen
+    const nogTeElim = cfgIngevuld
+        ? Math.max(0, nogIn.length - cfg.eindsprint)
+        : null;
+    // Volgende-bord + diagnose-tooltip. Schema-grootte = vast (totaal -
+    // eindsprint), decisions consumeren posities maar krimpen schema niet.
+    let volgendeBordTxt = '';
+    if (volgendeBord != null && cfgIngevuld) {
+        const setCount = Math.max(0, totaal - cfg.eindsprint);
+        const schemaArr = _spkAVSchema(cfg, setCount);
+        const totaalGedaan = state.afgevallen.length;
+        const komende = schemaArr.slice(totaalGedaan, totaalGedaan + 6);
+        const decisions = state.afgevallen.filter(a => a.oorzaak === 'decision').length;
+        const tip = `Schema vanaf nu: ${komende.join(' → ') || '(klaar)'}\n`
+                  + `Totaal schema (${schemaArr.length}): ${schemaArr.join(',')}\n`
+                  + `totaal afgevallen=${totaalGedaan} (waarvan ${decisions} dec) · setCount=${setCount}`;
+        volgendeBordTxt = `<span class="spk-av-volgend" title="${escHtml(tip)}"><b>Volgende:</b> bord ${volgendeBord}${volgendeIsDubbel ? ' <em>(dubbel)</em>' : ''}</span>`;
+    }
+    const statsHtml = `
+        <div class="spk-av-stats">
+            <span><b>Nog in koers:</b> ${nogIn.length}</span>
+            ${cfgIngevuld
+                ? `<span><b>Eindsprint:</b> ${cfg.eindsprint}</span>
+                   <span><b>Te elim:</b> ${nogTeElim}</span>
+                   ${volgendeBordTxt}`
+                : ''}
+            <span class="spk-pk-spacer"></span>
+            <button class="spk-av-decision" type="button" ${decisionEnabled ? '' : 'disabled'}
+                    title="By Decision — ${aantalActief > 1 ? aantalActief + ' rijders' : 'rijder'} uit koers (schema wordt herberekend)">⚠ Decision${aantalActief > 1 ? ' (' + aantalActief + ')' : ''}</button>
+            <button class="spk-av-eruit" type="button" ${eruitEnabled ? '' : 'disabled'}
+                    title="${aantalActief > 1 ? 'Eruit werkt alleen voor één rijder per keer' : 'Reguliere afval volgens schema'}">❌ Eruit</button>
+        </div>`;
+
+    grid.innerHTML = `
+        <div class="spk-pk-wrap">
+            <div class="spk-pk-kop">
+                <div class="spk-pk-titel">❌ Afvalkoers — scratchpad (alleen lokaal)</div>
+                <button class="spk-pk-reset" type="button" title="Alle afvalmarkeringen wissen (lokaal)">⟲ reset</button>
+            </div>
+            ${settingsStrip}
+            ${afgevallen.length
+                ? `<div class="spk-av-uit-strip">${afgevallen.map(tegelAfgevallenHtml).join('')}</div>`
+                : '<div class="spk-pk-leeg">Nog niemand afgevallen.</div>'}
+            ${statsHtml}
+            <div class="spk-pk-grid">
+                ${nogIn.map(tegelInKoersHtml).join('')}
+            </div>
+        </div>`;
+
+    // Click op tegel: hoek = detail, anders rol-afhankelijk.
+    // Multi-select: koers-tegel toggle voegt toe/verwijdert uit actief-array.
+    grid.querySelectorAll('.spk-av-tegel').forEach(btn => {
+        btn.addEventListener('click', e => {
+            const lk = btn.dataset.license;
+            const rijder = _spk.deelnemers.find(x => x.license_key === lk);
+            if (!rijder) return;
+            if (e.target.closest('.spk-pk-tegel-hoek')) {
+                _spkToonDetail(rijder);
+                return;
+            }
+            const s = _spkAVLoad();
+            const rol = btn.dataset.rol;
+            if (rol === 'koers') {
+                // Toggle in array
+                const i = s.actief.indexOf(lk);
+                if (i >= 0) s.actief.splice(i, 1);
+                else        s.actief.push(lk);
+            } else if (rol === 'undo') {
+                s.afgevallen = s.afgevallen.filter(x => x.lk !== lk);
+            }
+            _spkAVSave(s);
+            _spkRenderAV(grid);
+        });
+    });
+
+    // ❌ Eruit — reguliere afval, krijgt auto-ronde via schema.
+    // Alleen bij PRECIES 1 geselecteerd (anders disabled in render).
+    // batch=null → solo (geen ex-aequo); rang = stack-positie zelf.
+    grid.querySelector('.spk-av-eruit')?.addEventListener('click', () => {
+        const s = _spkAVLoad();
+        if (s.actief.length !== 1) return;
+        const lk = s.actief[0];
+        if (!s.afgevallen.some(a => a.lk === lk)) {
+            s.afgevallen.push({ lk, ronde: null, oorzaak: null, batch: null });
+        }
+        s.actief = [];
+        _spkAVSave(s);
+        _spkRenderAV(grid);
+    });
+
+    // ⚠ Decision — 1 of meer rijders uit koers gehaald door jury-beslissing.
+    // Multi-select: alle in zelfde call krijgen zelfde batch-id zodat ze
+    // EX-AEQUO geklasseerd worden bij rang-toekenning (zelfde plek-getal
+    // omdat ze op het zelfde moment uit de koers gehaald zijn). Decisions
+    // consumeren samen N posities in het schema en delen de LAAGSTE plek
+    // van die groep (best-conventie). Geen bord-getal want decisions
+    // vallen niet op een afvalmoment.
+    grid.querySelector('.spk-av-decision')?.addEventListener('click', () => {
+        const s = _spkAVLoad();
+        if (s.actief.length < 1) return;
+        const batchId = 'b' + Date.now();   // unieke marker per batch
+        for (const lk of s.actief) {
+            if (!s.afgevallen.some(a => a.lk === lk)) {
+                s.afgevallen.push({ lk, ronde: null, oorzaak: 'decision', batch: batchId });
+            }
+        }
+        s.actief = [];
+        _spkAVSave(s);
+        _spkRenderAV(grid);
+    });
+
+    // Reset-knop — wist ÉN de afvalmarkeringen ÉN de heat-instellingen.
+    // Hele scratchpad terug naar nul, klaar voor volgende heat-DC.
+    grid.querySelector('.spk-pk-reset')?.addEventListener('click', async () => {
+        const ok = await (typeof toonBevestigDialog === 'function'
+            ? toonBevestigDialog(
+                'Alle afvalmarkeringen ÉN heat-instellingen wissen?',
+                'Reset afvalkoers', 'Wissen', 'Annuleren')
+            : confirm('Alle afvalmarkeringen én heat-instellingen wissen?'));
+        if (!ok) return;
+        _spkAVSave({ afgevallen: [], actief: [] });
+        _spkAVCfgSave(null);
+        _spkRenderAV(grid);
+    });
+
+    // Settings-modal
+    grid.querySelector('.spk-av-cfg-btn')?.addEventListener('click',
+        () => _spkAVOpenCfgModal(grid));
+}
+
+// Settings-modal voor heat-config. Lokaal opgeslagen per dc_id.
+// Vereenvoudigde versie van admin: alleen velden + simpele validatie,
+// geen schema-berekening (speaker hoeft niet exact ronde-getallen te
+// weten, alleen context).
+function _spkAVOpenCfgModal(grid) {
+    const cfg = _spkAVCfgLoad() || {};
+    const totDeeln = _spk.deelnemers.length;
+
+    const overlay = document.createElement('div');
+    overlay.className = 'spk-detail-overlay';
+    overlay.innerHTML = `
+        <div class="spk-detail-modal spk-av-cfg-modal" role="dialog">
+            <div class="spk-detail-kop">
+                <div class="spk-detail-snr">⚙</div>
+                <h2 class="spk-detail-naam">Afvalkoers-instellingen</h2>
+                <button class="spk-detail-sluit" aria-label="Sluiten">&times;</button>
+            </div>
+            <div class="spk-detail-body">
+                <p class="spk-av-cfg-uitleg">
+                    ${totDeeln} starters in deze heat. Vul in voor context-info
+                    bovenaan het scratchpad. (Niet verplicht — alleen visueel.)
+                </p>
+                <label class="spk-av-cfg-veld">
+                    <span>Totaal aantal ronden</span>
+                    <input type="number" id="avcfg-totaal" min="1" value="${cfg.totaal_ronden ?? ''}" placeholder="bv. 18">
+                </label>
+                <label class="spk-av-cfg-veld">
+                    <span>Eerste afval-rondebord</span>
+                    <input type="number" id="avcfg-eerste" min="4" value="${cfg.eerste_afval ?? ''}" placeholder="bv. 21">
+                    <small>rondes-te-gaan bij eerste afvalling</small>
+                </label>
+                <label class="spk-av-cfg-veld">
+                    <span>Afval-interval</span>
+                    <select id="avcfg-interval">
+                        <option value="1" ${parseInt(cfg.interval) !== 2 ? 'selected' : ''}>Elke ronde</option>
+                        <option value="2" ${parseInt(cfg.interval) === 2 ? 'selected' : ''}>Om de ronde</option>
+                    </select>
+                </label>
+                <label class="spk-av-cfg-veld">
+                    <span>Eindsprint (aantal rijders)</span>
+                    <input type="number" id="avcfg-eindsprint" min="0" value="${cfg.eindsprint ?? ''}" placeholder="bv. 4">
+                    <small>aantal rijders dat niet meer afvalt</small>
+                </label>
+                <div class="spk-av-cfg-afgeleid" id="avcfg-afgeleid">
+                    <!-- live berekend overzicht (capaciteit / dubbel) -->
+                </div>
+                <div class="spk-av-cfg-acties">
+                    <button class="btn-secondary" id="avcfg-annuleer">Annuleren</button>
+                    <button class="btn-danger"    id="avcfg-wis">Wissen</button>
+                    <button class="btn-primary"   id="avcfg-opslaan">Opslaan</button>
+                </div>
+            </div>
+        </div>`;
+    document.body.appendChild(overlay);
+
+    const sluit = () => overlay.remove();
+    overlay.addEventListener('click', e => { if (e.target === overlay) sluit(); });
+    overlay.querySelector('.spk-detail-sluit').addEventListener('click', sluit);
+    overlay.querySelector('#avcfg-annuleer').addEventListener('click', sluit);
+
+    overlay.querySelector('#avcfg-wis').addEventListener('click', async () => {
+        const ok = await (typeof toonBevestigDialog === 'function'
+            ? toonBevestigDialog('Heat-instellingen wissen?', 'Afvalkoers-config', 'Wissen', 'Annuleren')
+            : confirm('Heat-instellingen wissen?'));
+        if (!ok) return;
+        _spkAVCfgSave(null);
+        sluit();
+        _spkRenderAV(grid);
+    });
+
+    overlay.querySelector('#avcfg-opslaan').addEventListener('click', async () => {
+        const nieuw = {
+            totaal_ronden: parseInt(overlay.querySelector('#avcfg-totaal').value)     || null,
+            eerste_afval:  parseInt(overlay.querySelector('#avcfg-eerste').value)     || null,
+            interval:      parseInt(overlay.querySelector('#avcfg-interval').value)   || 1,
+            eindsprint:    parseInt(overlay.querySelector('#avcfg-eindsprint').value) || null,
+        };
+        // Hard fouten (verhinderen save)
+        const fouten = [];
+        if (!nieuw.totaal_ronden) fouten.push('Totaal aantal ronden is verplicht');
+        if (!nieuw.eerste_afval)  fouten.push('Eerste afval-rondebord is verplicht');
+        if (!nieuw.eindsprint)    fouten.push('Eindsprint is verplicht');
+        if (nieuw.eerste_afval && nieuw.eerste_afval < 4) {
+            fouten.push('Eerste afval-rondebord moet ≥ 4 zijn (3-2-1 zijn vaste laatste rondes)');
+        }
+        if (nieuw.eindsprint && nieuw.eindsprint >= totDeeln) {
+            fouten.push(`Eindsprint (${nieuw.eindsprint}) moet kleiner zijn dan starters (${totDeeln})`);
+        }
+        if (nieuw.totaal_ronden && nieuw.eerste_afval && nieuw.eerste_afval > nieuw.totaal_ronden) {
+            fouten.push(`Eerste afval-bord (${nieuw.eerste_afval}) kan niet groter zijn dan totaal-ronden (${nieuw.totaal_ronden})`);
+        }
+        if (fouten.length) {
+            await (typeof toonBevestigDialog === 'function'
+                ? toonBevestigDialog(fouten.join('\n'), 'Instellingen kloppen niet', 'OK', '')
+                : alert(fouten.join('\n')));
+            return;
+        }
+        // Soft waarschuwing: capaciteit-check. Bij mismatch (te veel dubbel
+        // nodig of negatieve capaciteit) toch laten opslaan na bevestiging.
+        const teElim = Math.max(0, totDeeln - nieuw.eindsprint);
+        const af = _spkAVAfgeleidDubbel(nieuw, teElim);
+        if (!af.ok) {
+            const door = af.dubbel > af.eersteAantal
+                ? `Te weinig afvalrondes: ${af.afvalrondes} beschikbaar, maar ${af.teElimineren} rijders te elimineren `
+                  + `(zou ${af.dubbel} dubbele borden nodig hebben, maximum is ${af.eersteAantal}).`
+                : `Schema-validatie faalt voor ${af.teElimineren} te elimineren in ${af.afvalrondes} rondes.`;
+            const okMsg = await toonBevestigDialog(
+                `Let op: ${door}\n\nToch opslaan?`,
+                'Afvalkoers-config', 'Toch opslaan', 'Annuleren'
+            );
+            if (!okMsg) return;
+        }
+        _spkAVCfgSave(nieuw);
+        sluit();
+        _spkRenderAV(grid);
+    });
+
+    // Live-update van afgeleid overzicht (capaciteit / dubbel / borden)
+    const updateAfgeleid = () => {
+        const tmp = {
+            totaal_ronden: parseInt(overlay.querySelector('#avcfg-totaal').value)     || 0,
+            eerste_afval:  parseInt(overlay.querySelector('#avcfg-eerste').value)     || 0,
+            interval:      parseInt(overlay.querySelector('#avcfg-interval').value)   || 1,
+            eindsprint:    parseInt(overlay.querySelector('#avcfg-eindsprint').value) || 0,
+        };
+        const teElim = Math.max(0, totDeeln - tmp.eindsprint);
+        const af = _spkAVAfgeleidDubbel(tmp, teElim);
+        const wrap = overlay.querySelector('#avcfg-afgeleid');
+        if (!tmp.totaal_ronden || !tmp.eerste_afval || !tmp.eindsprint) {
+            wrap.innerHTML = '<i>Vul de velden in voor een berekening.</i>';
+            wrap.classList.remove('av-fout', 'av-ok');
+            return;
+        }
+        const ivLabel = tmp.interval === 2 ? 'om-de-ronde' : 'elke ronde';
+        const teveelAfval = !af.ok && af.dubbel > af.eersteAantal;
+        const dubbelTxt = teveelAfval
+            ? `<span class="av-fout-tekst">capaciteit ${af.capaciteit}, tekort van ${af.teElimineren - af.capaciteit}</span>`
+            : af.dubbel > 0
+                ? `eerste <b>${af.dubbel}</b> bord${af.dubbel > 1 ? 'en' : ''} dubbel (2 afvallers)`
+                : 'geen dubbele rondes nodig';
+        const allBorden = [...af.eersteBorden, 3, 2, 1];
+        wrap.innerHTML =
+            `<b>${totDeeln}</b> starters → <b>${af.teElimineren}</b> elimineren · `
+            + `${af.eersteAantal} bord${af.eersteAantal !== 1 ? 'en' : ''} (${ivLabel}) `
+            + `+ vast 3,2,1 = <b>${af.afvalrondes}</b> afvalrondes · ${dubbelTxt}`
+            + `<div class="spk-av-cfg-borden">Borden: ${allBorden.join(' · ')}</div>`;
+        wrap.classList.toggle('av-fout', teveelAfval);
+        wrap.classList.toggle('av-ok',  !teveelAfval && af.ok);
+    };
+    overlay.querySelectorAll('#avcfg-totaal, #avcfg-eerste, #avcfg-interval, #avcfg-eindsprint')
+        .forEach(el => el.addEventListener('input', updateAfgeleid));
+    updateAfgeleid();
+}
+
+// ── Kans-score (1-10) per rijder in huidige DC ─────────────────────────
+// Backend speaker_kans berekent op basis van historie in vergelijkbare
+// afstand-groep (ultra_sprint/sprint/lang). Score is RELATIEF in DC:
+// 10 = top-favoriet binnen deze cat+DC, 1 = outsider. Geen historie → null.
+//
+// Cache per (dc_id+cat) zodat tab-switch snel is. Async non-blocking:
+// tegels worden eerst zonder badge gerendered, badges verschijnen zodra
+// data binnen is via re-render-call.
+async function _spkLaadKans() {
+    if (!_spk.dcId || !_spk.cat) return;
+    const cacheKey = _spk.dcId + ':' + _spk.cat;
+    if (_spk.kansCache?.key === cacheKey) return;   // hit, geen reload
+    try {
+        const url = '?action=speaker_kans'
+                  + '&dc_id=' + encodeURIComponent(_spk.dcId)
+                  + '&cat='   + encodeURIComponent(_spk.cat);
+        const res = await fetch(url, { credentials: 'same-origin' });
+        const data = await res.json();
+        if (!res.ok || data?.error) return;   // silent fail — badges blijven leeg
+        const map = new Map((data.rijders || []).map(r => [r.license_key, r]));
+        _spk.kansCache = { key: cacheKey, map, groepen: data.groepen || [] };
+        // Re-render alleen als deze data nog actueel is (gebruiker kan tussentijds
+        // van DC gewisseld zijn). Check via cacheKey vs huidig _spk.dcId/cat.
+        if (cacheKey === (_spk.dcId + ':' + _spk.cat)) {
+            // Re-render standaard tegel-grid (PK/AV hebben eigen render-paden;
+            // die zou je apart kunnen voorzien — V1 alleen standaard tegels)
+            _spkUpdateKansBadges();
+        }
+    } catch {}
+}
+
+// Update kans-badges in alle tegels zonder hele grid te herrenderen.
+// Zoekt elke tegel op data-license en injecteert badge-html. Werkt voor:
+//   • standaard tegel-grid (.spk-tegel)
+//   • PK scratchpad (.spk-pk-tegel)
+//   • AV scratchpad nog-in-koers (.spk-pk-tegel.spk-av-tegel)
+// NIET voor AV afgevallen-tegels (.spk-av-tegel-uit) — rijder is uit
+// koers, voorspelling niet meer relevant en de tegel is al druk met
+// rang-cijfer + bord-badge + eventueel DEC-badge.
+function _spkUpdateKansBadges() {
+    const grid = elJ('spk-grid');
+    if (!grid) return;
+    const sel = '.spk-tegel, .spk-pk-tegel:not(.spk-av-tegel-uit)';
+    grid.querySelectorAll(sel).forEach(btn => {
+        const lk = btn.dataset.license;
+        // Bestaande badge weghalen (re-render bij data-update)
+        btn.querySelectorAll('.spk-kans').forEach(el => el.remove());
+        const badgeHtml = _spkKansBadge(lk);
+        if (badgeHtml) {
+            btn.insertAdjacentHTML('afterbegin', badgeHtml);
+        }
+    });
+}
+
+// Render HTML voor één badge. Geeft '' als geen cache of geen entry.
+// Stiermenstadia:
+//   🌟 favoriet (7-10) · ⭐ middenmoot (4-6) · ✨ outsider (1-3) · ❔ onbekend
+function _spkKansBadge(licenseKey) {
+    if (!_spk.kansCache?.map) return '';
+    const k = _spk.kansCache.map.get(licenseKey);
+    if (!k) return '';
+    const s = k.score;
+    let emoji, klasse, lbl;
+    if (s == null)      { emoji = '❔'; klasse = 'onbekend';   lbl = 'onbekend'; }
+    else if (s >= 7)    { emoji = '🌟'; klasse = 'favoriet';   lbl = 'favoriet'; }
+    else if (s >= 4)    { emoji = '⭐'; klasse = 'middenmoot'; lbl = 'middenmoot'; }
+    else                { emoji = '✨'; klasse = 'outsider';   lbl = 'outsider'; }
+    // title-attr blijft als desktop-hover-fallback. Op tablet (geen hover)
+    // wordt de popover via tap geactiveerd — zie _spkToggleKansPopover.
+    // data-license is ondub van de tegel-license-attr; gebruikt door de
+    // popover-handler om de juiste reden uit kansCache op te halen.
+    const tip = `${lbl}${s != null ? ' (' + s + '/10)' : ''}\n${k.reden || ''}`;
+    return `<span class="spk-kans spk-kans-${klasse}"
+                  data-license="${escHtml(licenseKey)}"
+                  title="${escHtml(tip)}">${emoji}${s != null ? s : ''}</span>`;
+}
+
+// ── Kans-badge popover (tap-to-show, voor tablet) ──────────────────────
+// Native HTML title-tooltips werken niet op touch — daarom een custom
+// popover: tap badge → toont dark bubble met label + reden-tekst.
+// Tweede tap op zelfde badge of klik elders sluit. Werkt op alle tegel-
+// types (standaard + PK/AV) via document-level event delegation.
+let _spkKansPopover = null;
+
+function _spkToggleKansPopover(badgeEl) {
+    // Bestaande popover wegnemen — toggle-gedrag als zelfde badge
+    const wasZelfde = _spkKansPopover && _spkKansPopover._badge === badgeEl;
+    if (_spkKansPopover) {
+        _spkKansPopover.remove();
+        _spkKansPopover = null;
+        if (wasZelfde) return;   // tweede tap = sluiten, niet heropenen
+    }
+    const lk = badgeEl.dataset.license;
+    if (!lk || !_spk.kansCache?.map) return;
+    const k = _spk.kansCache.map.get(lk);
+    if (!k) return;
+
+    const s = k.score;
+    let lbl, klasse;
+    if (s == null)    { lbl = 'Onbekend';   klasse = 'onbekend'; }
+    else if (s >= 7)  { lbl = 'Favoriet';   klasse = 'favoriet'; }
+    else if (s >= 4)  { lbl = 'Middenmoot'; klasse = 'middenmoot'; }
+    else              { lbl = 'Outsider';   klasse = 'outsider'; }
+
+    const pop = document.createElement('div');
+    pop.className = `spk-kans-popover spk-kans-popover-${klasse}`;
+    pop.innerHTML = `
+        <div class="spk-kans-popover-label">${escHtml(lbl)}${s != null ? ' &middot; ' + s + '/10' : ''}</div>
+        <div class="spk-kans-popover-reden">${escHtml(k.reden || 'Geen historie beschikbaar.')}</div>
+    `;
+    document.body.appendChild(pop);
+
+    // Positioneer: vlak onder de badge, clamp binnen viewport
+    const r  = badgeEl.getBoundingClientRect();
+    const pr = pop.getBoundingClientRect();
+    let top  = r.bottom + 6;
+    let left = r.left + (r.width / 2) - (pr.width / 2);
+    if (left + pr.width > window.innerWidth  - 8) left = window.innerWidth  - pr.width - 8;
+    if (left < 8) left = 8;
+    if (top  + pr.height > window.innerHeight - 8) top = r.top - pr.height - 6;
+    pop.style.top  = top  + 'px';
+    pop.style.left = left + 'px';
+    pop._badge = badgeEl;
+    _spkKansPopover = pop;
+}
+
+// 1× registreren: capture-phase document handler. Capture zodat we kunnen
+// stopPropagation VOORDAT de tegel-click handler vuurt (anders zou tap op
+// badge ook tegel-selectie / detail-modal triggeren).
+(function _spkInitKansPopoverHandlers() {
+    if (window._spkKansHandlerInit) return;
+    window._spkKansHandlerInit = true;
+    document.addEventListener('click', e => {
+        const badge = e.target.closest('.spk-kans');
+        if (badge) {
+            e.stopPropagation();
+            e.preventDefault();
+            _spkToggleKansPopover(badge);
+            return;
+        }
+        // Klik elders → sluit popover als er één open is
+        if (_spkKansPopover && !e.target.closest('.spk-kans-popover')) {
+            _spkKansPopover.remove();
+            _spkKansPopover = null;
+        }
+    }, true);
+    // Scroll/resize → popover meebewegen of (eenvoudiger) sluiten
+    window.addEventListener('scroll', () => {
+        if (_spkKansPopover) { _spkKansPopover.remove(); _spkKansPopover = null; }
+    }, true);
+})();
+
+// ── Detail-modal voor één rijder ───────────────────────────────────────────
+function _spkToonDetail(r) {
+    const overlay = document.createElement('div');
+    overlay.className = 'spk-detail-overlay';
+    const veld = (label, waarde) => waarde !== null && waarde !== '' && waarde !== undefined
+        ? `<div class="spk-detail-rij"><span class="spk-detail-lbl">${escHtml(label)}</span><span class="spk-detail-val">${escHtml(waarde)}</span></div>`
+        : '';
+    const geslacht = r.gender === 0 ? 'M' : r.gender === 1 ? 'V' : '';
+    const leeftijd = r.birth_year ? (new Date().getFullYear() - r.birth_year) : '';
+
+    // Pending-rijders: placeholder uit historische PDF-import zonder echte
+    // KNSB-licentie. Mist club/jaar/etc. — toon dat expliciet zodat speaker
+    // niet denkt dat de data 'leeg' is door een bug.
+    const isPending = r.pending_source === 'historie';
+    const pendingBanner = isPending
+        ? `<div class="spk-detail-pending-banner">
+               ⚡ <b>Nog niet gekoppeld aan KNSB-account</b><br>
+               <span class="spk-detail-pending-sub">Deze naam komt uit een
+               geïmporteerde historie-PDF. Zodra de rijder een KNSB-licentie
+               heeft, kan een beheerder hem in Helpers → Pending koppelen.</span>
+           </div>`
+        : '';
+
+    overlay.innerHTML = `
+        <div class="spk-detail-modal${isPending ? ' spk-detail-modal-pending' : ''}" role="dialog" aria-labelledby="spk-detail-titel">
+            <div class="spk-detail-kop">
+                <div class="spk-detail-snr">${isPending ? '⚡' : (r.startnummer ?? '—')}</div>
+                <h2 class="spk-detail-naam" id="spk-detail-titel">${escHtml(r.full_name ?? '')}</h2>
+                <button class="spk-detail-sluit" aria-label="Sluiten">&times;</button>
+            </div>
+            <div class="spk-detail-body">
+                ${pendingBanner}
+                ${veld('Categorie',     r.category)}
+                ${veld('Geslacht',      geslacht)}
+                ${veld('Geboortejaar',  r.birth_year)}
+                ${veld('Leeftijd',      leeftijd ? leeftijd + ' jaar' : '')}
+                ${veld('Nationaliteit', r.nationality)}
+                ${veld('Woonplaats',    r.city)}
+                ${veld('Club',          r.club_full)}
+                ${veld('Sponsor',       r.sponsor)}
+                ${veld('Licentie',      r.license_key)}
+                <div class="spk-historie-wrap" id="spk-historie-wrap">
+                    <div class="spk-historie-titel">📜 Wedstrijd-historie</div>
+                    <div class="spk-historie-content jury-laden">Laden…</div>
+                </div>
+            </div>
+        </div>`;
+    document.body.appendChild(overlay);
+    const sluit = () => overlay.remove();
+    overlay.querySelector('.spk-detail-sluit').addEventListener('click', sluit);
+    overlay.addEventListener('click', e => { if (e.target === overlay) sluit(); });
+    const onKey = e => {
+        if (e.key === 'Escape') { sluit(); document.removeEventListener('keydown', onKey); }
+    };
+    document.addEventListener('keydown', onKey);
+
+    // Historie asynchroon ophalen + invullen — modal opent direct met basis-
+    // info, historie verschijnt zodra de fetch klaar is.
+    _spkVulHistorie(overlay, r.license_key);
+}
+
+// ── Historie ophalen + renderen in modal ───────────────────────────────────
+// Fuzzy-key voor afstand: groepeert varianten zoals "200m" / "200 meter" /
+// "Puntenkoers 5km" / "5000m punten" naar één gemeen key. Special types
+// (punten/afval/marathon/estafette) winnen van pure-distance — anders zou
+// 5000m-puntenkoers tellen als generic "5000m". Voor sprint/inline distances
+// wordt de afstand-getal in meters de key. Onbekende strings vallen terug
+// op de hele tekst (lowercase trimmed).
+function _spkAfstandKey(naam) {
+    if (!naam) return '';
+    const s = String(naam).toLowerCase();
+    if (s.includes('punten'))    return 'puntenkoers';
+    if (s.includes('afval'))     return 'afvalkoers';
+    if (s.includes('marathon'))  return 'marathon';
+    if (s.includes('estafette') || s.includes('relay')) return 'estafette';
+    // Eerste getal in de string → "{n}m"
+    const m = s.match(/(\d+)\s*(m|km|meter|kilometer)?/i);
+    if (m) {
+        let n = parseInt(m[1], 10);
+        if (m[2] && /^k/i.test(m[2])) n *= 1000;  // km → m
+        if (n > 0) return n + 'm';
+    }
+    return s.trim();
+}
+// Human-leesbaar label voor de filter-dropdown
+function _spkAfstandLabel(key) {
+    if (key === 'puntenkoers') return 'Puntenkoers (alle)';
+    if (key === 'afvalkoers')  return 'Afvalkoers (alle)';
+    if (key === 'marathon')    return 'Marathon';
+    if (key === 'estafette')   return 'Estafette';
+    return key;
+}
+
+// Bepaalt de afstand-key van de momenteel geselecteerde DC in de speaker-
+// deelnemers-tab. Gebruikt om de modal-historie te filteren op alleen die
+// afstand. Bij combo-DC (meerdere afstanden onder 1 DC, zoals NK 2024 HJB
+// = 500m + 1000m) → de afstand uit dc_naam (vaak de eerste die genoemd
+// wordt). Komt geen DC-context → leeg → geen filter mogelijk.
+function _spkHuidigeAfstandKey() {
+    const cat = _spk.struktuur?.cats?.find(c => c.cat === _spk.cat);
+    if (!cat) return '';
+    const dc = cat.dcs?.find(d => d.dc_id === _spk.dcId);
+    if (!dc) return '';
+    return _spkAfstandKey(dc.dc_naam);
+}
+
+async function _spkVulHistorie(overlay, licenseKey) {
+    const container = overlay.querySelector('.spk-historie-content');
+    if (!container || !licenseKey) return;
+    try {
+        const res  = await fetch('?action=speaker_historie&license_key=' + encodeURIComponent(licenseKey),
+                                 { credentials: 'same-origin' });
+        const data = await res.json();
+        if (!res.ok || data?.error) throw new Error(data?.error || ('HTTP ' + res.status));
+        const rijen = Array.isArray(data.historie) ? data.historie : [];
+
+        if (!rijen.length) {
+            container.classList.remove('jury-laden');
+            container.innerHTML = '<div class="spk-historie-leeg">Geen vorige wedstrijden gevonden.</div>';
+            return;
+        }
+
+        // Bepaal of er een DC-context is (= een geselecteerde DC met een
+        // herkenbare afstand). Zo ja, toggle-checkbox 'Alleen [afstand]':
+        // default AAN, want speaker bekijkt rijder typisch omdat hij die
+        // afstand zo gaat aankondigen.
+        const hintKey = _spkHuidigeAfstandKey();
+        const heeftMatchInHistorie = hintKey
+            && rijen.some(r => _spkAfstandKey(r.distance_naam) === hintKey);
+        const toonToggle = hintKey && heeftMatchInHistorie;
+
+        container.classList.remove('jury-laden');
+        const filterBar = toonToggle
+            ? `<label class="spk-historie-filter">
+                  <input type="checkbox" id="spk-historie-filter-check" checked>
+                  Alleen <b>${escHtml(_spkAfstandLabel(hintKey))}</b> tonen
+               </label>`
+            : '';
+        container.innerHTML = filterBar + '<div class="spk-historie-wrap-inner"></div>';
+        const innerWrap = container.querySelector('.spk-historie-wrap-inner');
+
+        const renderLijst = (filterAan) => {
+            const gefilterd = filterAan && hintKey
+                ? rijen.filter(r => _spkAfstandKey(r.distance_naam) === hintKey)
+                : rijen;
+            if (!gefilterd.length) {
+                innerWrap.innerHTML = '<div class="spk-historie-leeg">Geen uitslagen voor deze afstand.</div>';
+                return;
+            }
+            const podium  = gefilterd.filter(r => r.rang !== null && r.rang >= 1 && r.rang <= 3);
+            const overige = gefilterd.filter(r => !(r.rang !== null && r.rang >= 1 && r.rang <= 3));
+
+            const html = [];
+            if (podium.length) {
+                html.push('<div class="spk-historie-sectie-titel">🏅 Podium-finishes</div>');
+                html.push('<div class="spk-historie-lijst">');
+                html.push(podium.map(_spkRenderHistorieRij).join(''));
+                html.push('</div>');
+            }
+            if (overige.length) {
+                html.push('<div class="spk-historie-sectie-titel">Overige uitslagen</div>');
+                html.push('<div class="spk-historie-lijst">');
+                html.push(overige.map(_spkRenderHistorieRij).join(''));
+                html.push('</div>');
+            }
+            innerWrap.innerHTML = html.join('');
+        };
+
+        // Default: filter AAN als context beschikbaar én er matches zijn
+        renderLijst(toonToggle);
+
+        const cb = container.querySelector('#spk-historie-filter-check');
+        if (cb) cb.addEventListener('change', () => renderLijst(cb.checked));
+    } catch (e) {
+        container.classList.remove('jury-laden');
+        container.innerHTML = `<div class="jury-fout">⚠ Historie laden mislukt: ${escHtml(e.message)}</div>`;
+    }
+}
+
+// ── Bottom-bar: 3 cascade-dropdowns (wedstrijd > afstand > cat) + top-3 ──
+// _spk.eerdere = volledig overzicht uit speaker_eerdere_overzicht; eenmalig
+// geladen bij scherm-init. Cascade verandert client-side (geen fetch per
+// dropdown-keuze) — alleen de top-3-fetch gebeurt server-side.
+async function _spkLaadEerdereOverzicht() {
+    const wSel = elJ('spk-bb-sel-wedstrijd');
+    try {
+        const res  = await fetch('?action=speaker_eerdere_overzicht', { credentials: 'same-origin' });
+        const data = await res.json();
+        if (!res.ok || data?.error) throw new Error(data?.error || ('HTTP ' + res.status));
+        _spk.eerdere = Array.isArray(data.wedstrijden) ? data.wedstrijden : [];
+    } catch (e) {
+        wSel.innerHTML = `<option value="">Fout: ${escHtml(e.message)}</option>`;
+        wSel.disabled = true;
+        return;
+    }
+    if (!_spk.eerdere.length) {
+        wSel.innerHTML = '<option value="">Geen eerdere uitslagen in database</option>';
+        wSel.disabled = true;
+        return;
+    }
+    // Vul wedstrijd-dropdown — datum prefix voor leesbaarheid
+    const opts = ['<option value="">— Kies wedstrijd —</option>'];
+    for (const w of _spk.eerdere) {
+        let datum = '';
+        if (w.comp_starts) {
+            const d = new Date(String(w.comp_starts).replace(' ', 'T'));
+            if (!isNaN(d.getTime())) {
+                datum = d.toLocaleDateString('nl-NL',
+                    { day: '2-digit', month: 'short', year: '2-digit' }) + ' · ';
+            }
+        }
+        opts.push(`<option value="${escHtml(w.comp_id)}">${escHtml(datum + (w.comp_naam ?? ''))}</option>`);
+    }
+    wSel.innerHTML = opts.join('');
+    wSel.disabled = false;
+}
+
+// Pretty-label voor afstand-dropdown — voorkom dubbele afstand-naam bij
+// single-distance DCs ("Dames Senioren 500m" + "500m" → alleen DC-naam).
+function _spkAfstandLabel(dcNaam, distNaam) {
+    const d = (dcNaam ?? '').trim();
+    const a = (distNaam ?? '').trim();
+    if (!a) return d;
+    if (d.toLowerCase().endsWith(a.toLowerCase())) return d;
+    return `${d} — ${a}`;
+}
+
+// Helpers voor cat-set groepering. Cats die in dezelfde DC samen racen
+// (bv. DSA+DSJ in één heat) horen als één optie in de dropdown te staan —
+// anders zou je per cat hetzelfde race-podium krijgen.
+//   key   = stabiele identificatie van een cat-set (sorted, pipe-joined)
+//   label = leesbare weergave voor de dropdown ("DSA + DSJ")
+function _spkCatSetKey(cats) {
+    return [...(cats || [])].sort().join('|');
+}
+function _spkCatSetLabel(cats) {
+    return [...(cats || [])].sort().join(' + ');
+}
+
+// 1) Wedstrijd gekozen → cat-dropdown vullen (unieke cat-sets, niet losse cats)
+function _spkOnWedstrijdChange(ev) {
+    const compId = ev.target.value;
+    const cSel = elJ('spk-bb-sel-cat');
+    const aSel = elJ('spk-bb-sel-afstand');
+    const top3 = elJ('spk-bb-top3');
+    top3.innerHTML = '<span class="spk-bb-hint">Kies cat en afstand om de top-3 te zien.</span>';
+    aSel.innerHTML = '<option value="">— Afstand —</option>';
+    aSel.disabled  = true;
+
+    if (!compId) {
+        cSel.innerHTML = '<option value="">— Cat —</option>';
+        cSel.disabled  = true;
+        return;
+    }
+    const w = _spk.eerdere.find(x => x.comp_id === compId);
+    if (!w) return;
+
+    // Verzamel alle unieke cat-SETs in deze wedstrijd (cats die samen in
+    // dezelfde DC zitten = één keuze). Map key→label voor stabiele sortering.
+    const sets = new Map();   // key → { label, cats:[] }
+    for (const a of w.afstanden) {
+        const key = _spkCatSetKey(a.cats);
+        if (!key) continue;
+        if (!sets.has(key)) sets.set(key, { label: _spkCatSetLabel(a.cats), cats: [...a.cats].sort() });
+    }
+    const setLijst = [...sets.entries()]
+        .map(([key, v]) => ({ key, ...v }))
+        .sort((x, y) => x.label.localeCompare(y.label, 'nl', { sensitivity: 'base' }));
+
+    const opts = ['<option value="">— Kies cat —</option>'];
+    for (const s of setLijst) {
+        opts.push(`<option value="${escHtml(s.key)}">${escHtml(s.label)}</option>`);
+    }
+    cSel.innerHTML = opts.join('');
+    cSel.disabled  = false;
+
+    // Smart preselect — kies de cat-set die de huidige speaker-cat bevat
+    if (_spk.cat) {
+        const match = setLijst.find(s => s.cats.includes(_spk.cat));
+        if (match) {
+            cSel.value = match.key;
+            _spkOnCatChange({ target: cSel });
+        }
+    }
+}
+
+// 2) Cat-set gekozen → afstand-dropdown vullen (afstanden met exact deze set)
+function _spkOnCatChange(ev) {
+    const setKey = ev.target.value;
+    const aSel = elJ('spk-bb-sel-afstand');
+    const top3 = elJ('spk-bb-top3');
+    top3.innerHTML = '<span class="spk-bb-hint">Kies afstand om de top-3 te zien.</span>';
+
+    if (!setKey) {
+        aSel.innerHTML = '<option value="">— Afstand —</option>';
+        aSel.disabled  = true;
+        return;
+    }
+    const compId = elJ('spk-bb-sel-wedstrijd').value;
+    const w = _spk.eerdere.find(x => x.comp_id === compId);
+    if (!w) return;
+
+    // Alleen afstanden waarvan de cat-set exact matcht (dus DSA-alleen is een
+    // andere keuze dan DSA+DSJ samen — verschillende races).
+    const relevant = w.afstanden.filter(a => _spkCatSetKey(a.cats) === setKey);
+    const opts = ['<option value="">— Kies afstand —</option>'];
+    for (const a of relevant) {
+        const label = _spkAfstandLabel(a.dc_naam, a.distance_naam);
+        // value = dc_id|distance_id
+        opts.push(`<option value="${escHtml(a.dc_id)}|${escHtml(a.distance_id ?? '')}">${escHtml(label)}</option>`);
+    }
+    aSel.innerHTML = opts.join('');
+    aSel.disabled  = false;
+
+    // Smart preselect — match op huidige speaker DC-naam (last-word-trick)
+    const huidigeDcNaam = (_spk.struktuur?.cats
+        ?.find(c => c.cat === _spk.cat)?.dcs
+        ?.find(d => d.dc_id === _spk.dcId)?.dc_naam) || '';
+    if (huidigeDcNaam) {
+        const matched = relevant.find(a => {
+            const lbl = _spkAfstandLabel(a.dc_naam, a.distance_naam).toLowerCase();
+            const tail = huidigeDcNaam.toLowerCase().split(/\s+/).pop();
+            return tail && lbl.includes(tail);
+        });
+        if (matched) {
+            aSel.value = matched.dc_id + '|' + (matched.distance_id ?? '');
+            _spkOnAfstandChange({ target: aSel });
+        }
+    }
+}
+
+// 3) Afstand gekozen → top-3 ophalen + tonen (cat-set-onafhankelijk: het is
+//    altijd het podium van die ÉNE race, ongeacht welke cats erin meededen)
+async function _spkOnAfstandChange(ev) {
+    const val  = ev.target.value;
+    const top3 = elJ('spk-bb-top3');
+    if (!val) {
+        top3.innerHTML = '<span class="spk-bb-hint">Kies afstand om de top-3 te zien.</span>';
+        return;
+    }
+    const compId = elJ('spk-bb-sel-wedstrijd').value;
+    if (!compId) return;
+    const [dcId, distId] = val.split('|');
+    const setLabel = elJ('spk-bb-sel-cat').selectedOptions[0]?.textContent || '';
+
+    top3.innerHTML = '<span class="spk-bb-hint">Top-3 laden…</span>';
+    try {
+        // Geen cat-param meer — backend levert het echte race-podium (mix van
+        // alle cats die in deze DC samen reden).
+        const url = '?action=speaker_eerdere_top3'
+                  + '&comp_id='     + encodeURIComponent(compId)
+                  + '&dc_id='       + encodeURIComponent(dcId)
+                  + '&distance_id=' + encodeURIComponent(distId);
+        const res  = await fetch(url, { credentials: 'same-origin' });
+        const data = await res.json();
+        if (!res.ok || data?.error) throw new Error(data?.error || ('HTTP ' + res.status));
+        const lijst = Array.isArray(data.top3) ? data.top3 : [];
+        if (!lijst.length) {
+            top3.innerHTML = `<span class="spk-bb-hint">Geen podium-uitslag voor ${escHtml(setLabel)} in deze afstand.</span>`;
+            return;
+        }
+        const medailles = { 1: '🥇', 2: '🥈', 3: '🥉' };
+        top3.innerHTML = lijst.map(p => {
+            const snr = p.startnummer !== null && p.startnummer !== undefined
+                ? `<span class="spk-bb-snr">${escHtml(p.startnummer)}</span>` : '';
+            // Bij gemixte cat-races (DSA+DSJ) is het nuttig om naast de naam
+            // de cat van die rijder te tonen — anders weet de speaker niet of
+            // de winnaar een A of J was.
+            const cat = p.categorie
+                ? `<span class="spk-bb-cat">${escHtml(p.categorie)}</span>` : '';
+            // ⚡-badge bij pending: rijder uit historische PDF die nog niet aan
+            // een echte KNSB-account gekoppeld is. Detail-modal toont in dat
+            // geval minder info (geen club/jaar/etc.) — vandaar zichtbare hint.
+            const pendingBadge = p.pending_source
+                ? `<span class="spk-bb-pending" title="Nog niet gekoppeld aan KNSB-account">⚡</span>`
+                : '';
+            // Klikbaar als we een license_key hebben — opent dezelfde detail-
+            // modal als een tegel-klik in de deelnemerslijst.
+            const lk  = p.person_license || '';
+            const tag = lk ? 'button' : 'span';
+            const klikbaar = lk ? ' spk-bb-podium-klikbaar' : '';
+            const pendingCls = p.pending_source ? ' spk-bb-podium-pending' : '';
+            const cls = `spk-bb-podium${klikbaar}${pendingCls}`;
+            const dataAttr = lk ? ` data-license="${escHtml(lk)}"` : '';
+            return `<${tag} class="${cls}"${dataAttr} type="button">
+                        <span class="spk-bb-medaille">${medailles[p.rang] || p.rang}</span>
+                        ${snr}
+                        ${pendingBadge}
+                        <span class="spk-bb-naam">${escHtml(p.naam)}</span>
+                        ${cat}
+                    </${tag}>`;
+        }).join('');
+        // Click-handlers koppelen — niet via event-delegation om consistentie
+        // met de rest van speaker-handlers te houden.
+        top3.querySelectorAll('[data-license]').forEach(btn => {
+            btn.addEventListener('click', () => _spkLaadPersoonEnToon(btn.dataset.license));
+        });
+    } catch (e) {
+        top3.innerHTML = `<span class="jury-fout">⚠ ${escHtml(e.message)}</span>`;
+    }
+}
+
+// Klik op een podium-pill in de bottom-bar → fetch volledige persoonsdata
+// en open dezelfde detail-modal als bij tegel-klik in de deelnemerslijst.
+// Loaders zijn licht: een korte status in de pill volstaat, modal opent
+// pas na succesvolle fetch zodat we geen halflege modal tonen bij fouten.
+async function _spkLaadPersoonEnToon(licenseKey) {
+    if (!licenseKey) return;
+    try {
+        const res  = await fetch('?action=speaker_persoon&license_key=' + encodeURIComponent(licenseKey),
+                                 { credentials: 'same-origin' });
+        const data = await res.json();
+        if (!res.ok || data?.error) throw new Error(data?.error || ('HTTP ' + res.status));
+        if (data.rijder) _spkToonDetail(data.rijder);
+    } catch (e) {
+        const top3 = elJ('spk-bb-top3');
+        if (top3) top3.insertAdjacentHTML('beforeend',
+            `<span class="jury-fout">⚠ Rijder laden mislukt: ${escHtml(e.message)}</span>`);
+    }
+}
+
+function _spkRenderHistorieRij(r) {
+    // Datum compact (bv. "23 mei '26"). Bij ontbrekende datum → leeg
+    let datumKort = '';
+    if (r.competition_datum) {
+        const d = new Date(String(r.competition_datum).replace(' ', 'T'));
+        if (!isNaN(d.getTime())) {
+            datumKort = d.toLocaleDateString('nl-NL',
+                { day: '2-digit', month: 'short', year: '2-digit' });
+        }
+    }
+    // Rang-label — speciaal voor podium een medaille
+    let rangLbl;
+    if (r.rang === 1)       rangLbl = '<span class="spk-hist-rang spk-hist-goud">🥇 1</span>';
+    else if (r.rang === 2)  rangLbl = '<span class="spk-hist-rang spk-hist-zilver">🥈 2</span>';
+    else if (r.rang === 3)  rangLbl = '<span class="spk-hist-rang spk-hist-brons">🥉 3</span>';
+    else if (r.rang !== null) rangLbl = `<span class="spk-hist-rang">${r.rang}</span>`;
+    else                    rangLbl = `<span class="spk-hist-rang spk-hist-leeg">—</span>`;
+
+    // Punten bewust weggelaten — speaker leest dit in de overlay aan de baan
+    // en heeft niets aan de klassement-punten; alleen rang + wedstrijd-context
+    // is relevant voor commentaar.
+
+    // Distance-naam alleen tonen als die er is (historie-import schrijft die
+    // wel, klassement-rijen niet — voor klassement zit afstand vaak al in
+    // dc_naam zelf bv. "Mannen 1000m"). Voorkomt dubbele info.
+    const distSuffix = r.distance_naam
+        ? ` · ${escHtml(r.distance_naam)}`
+        : '';
+
+    return `<div class="spk-hist-rij">
+        ${rangLbl}
+        <div class="spk-hist-info">
+            <div class="spk-hist-wedstrijd">${escHtml(r.competition_naam ?? '')}</div>
+            <div class="spk-hist-meta">${escHtml(datumKort)} · ${escHtml(r.dc_naam ?? '')}${distSuffix}</div>
+        </div>
+    </div>`;
+}
+
+// ════════════════════════════════════════════════════════════════════════════
+//   Nationale records — sticky banner boven 'Eerdere uitslag' cascade
+// ════════════════════════════════════════════════════════════════════════════
+
+// cat → cat_groep. KNSB: alles t/m JA = junioren, vanaf SJ/SA en master = senioren.
+function _spkCatNaarGroep(cat) {
+    const c = String(cat || '').toUpperCase();
+    const sub = c.slice(1);   // strip H/D-prefix
+    if (['P4','P3','P2','P1','KA','JB','JA'].includes(sub)) return 'junioren';
+    if (['SJ','SA','SB'].includes(sub)) return 'senioren';
+    if (/^[HD]M\d+$/i.test(c)) return 'senioren';   // HM40, DM45 (masters)
+    if (/^M\d+$/i.test(c))     return 'senioren';   // M40 (zonder prefix)
+    return null;
+}
+function _spkCatNaarGender(cat) {
+    const g = String(cat || '').toUpperCase().charAt(0);
+    if (g === 'H' || g === 'M') return 0;   // heren / master (default M)
+    if (g === 'D')              return 1;   // dames
+    return null;
+}
+
+// Tijd-ms → leesbare string (zelfde patroon als historie-rij)
+function _spkFmtTijd(ms) {
+    if (ms == null) return '—';
+    const totSec = Math.floor(ms / 1000);
+    const milli  = ms % 1000;
+    const h = Math.floor(totSec / 3600);
+    const m = Math.floor((totSec % 3600) / 60);
+    const s = totSec % 60;
+    const ms3 = String(milli).padStart(3, '0');
+    if (h > 0) return `${h}:${String(m).padStart(2,'0')}:${String(s).padStart(2,'0')}.${ms3}`;
+    if (m > 0) return `${m}:${String(s).padStart(2,'0')}.${ms3}`;
+    return `${s}.${ms3}`;
+}
+
+// Datumformatter voor NR-meta: 'D mmm YYYY' (bv "15 jul 2022"). Korter
+// dan formatDatum() (die ook weekday geeft) — past in de 1-regel banner.
+function _spkFmtRecordDatum(iso) {
+    if (!iso) return '';
+    const d = new Date(iso);
+    if (isNaN(d.getTime())) return iso;
+    return d.toLocaleDateString('nl-NL',
+        { day: 'numeric', month: 'short', year: 'numeric' });
+}
+
+// Per-afstand type-keuze (baan/weg) — blijft bewaard in localStorage zodat
+// een gebruiker bij dezelfde afstand niet steeds opnieuw hoeft te kiezen,
+// ook niet als 'ie van cat wisselt. Default 'baan' (meest voorkomend).
+function _spkNrType(afstandKey) {
+    try { return localStorage.getItem('spk_nr_type_' + afstandKey) || 'baan'; }
+    catch { return 'baan'; }
+}
+function _spkNrTypeZet(afstandKey, type) {
+    try { localStorage.setItem('spk_nr_type_' + afstandKey, type); } catch {}
+}
+
+async function _spkLaadNationaalRecord() {
+    const wrap = elJ('spk-bb-nr');
+    if (!wrap) return;
+    const catObj = _spk.struktuur?.cats?.find(c => c.cat === _spk.cat);
+    const dc = catObj?.dcs?.find(d => d.dc_id === _spk.dcId);
+    if (!dc) { wrap.innerHTML = ''; return; }
+
+    const afstandKey = _spkAfstandKey(dc.dc_naam);
+    const catGroep   = _spkCatNaarGroep(_spk.cat);
+    const gender     = _spkCatNaarGender(_spk.cat);
+    if (!afstandKey || !catGroep || gender === null) {
+        wrap.innerHTML = '';
+        return;
+    }
+    // Punten/afval hebben geen individuele tijd-records in NL
+    if (afstandKey === 'puntenkoers' || afstandKey === 'afvalkoers') {
+        wrap.innerHTML = `<div class="spk-bb-nr-leeg">🏅 Geen NR voor ${escHtml(afstandKey)}</div>`;
+        return;
+    }
+
+    const huidType = _spkNrType(afstandKey);
+    const altType  = huidType === 'baan' ? 'weg' : 'baan';
+
+    try {
+        const url = '?action=speaker_record'
+                  + '&afstand_key=' + encodeURIComponent(afstandKey)
+                  + '&cat_groep='   + encodeURIComponent(catGroep)
+                  + '&gender='      + encodeURIComponent(gender)
+                  + '&type='        + encodeURIComponent(huidType);
+        const res = await fetch(url, { credentials: 'same-origin' });
+        const data = await res.json();
+        if (!res.ok || data?.error) throw new Error(data?.error || ('HTTP ' + res.status));
+        const records = Array.isArray(data.records) ? data.records : [];
+
+        // Toggle-pill rechts: klik = wissel type voor deze afstand + re-render
+        const toggleHtml = `<button type="button" class="spk-bb-nr-toggle"
+                                    data-alt="${escHtml(altType)}"
+                                    title="Wissel naar ${escHtml(altType)}-record">
+                                ${escHtml(huidType.toUpperCase())} ⇄
+                            </button>`;
+        // Eén-regel layout: titel · tijd · naam · meta (rechts gepushed) · toggle
+        let bodyHtml;
+        if (!records.length) {
+            bodyHtml = `<span class="spk-bb-nr-titel">🏅 NR ${escHtml(catGroep)} ${gender === 0 ? '♂' : '♀'}</span>
+                        <span class="spk-bb-nr-leeginline">geen ${escHtml(huidType)}-record bekend</span>`;
+        } else {
+            // Pak eerste (meestal enige) record voor 1-regel-render.
+            const r = records[0];
+            const datum = _spkFmtRecordDatum(r.record_datum);
+            const meta  = [r.locatie, datum, r.wedstrijd].filter(Boolean).join(' · ');
+            bodyHtml = `<span class="spk-bb-nr-titel">🏅 NR ${escHtml(catGroep)} ${gender === 0 ? '♂' : '♀'}</span>
+                        <span class="spk-bb-nr-tijd">${escHtml(_spkFmtTijd(r.tijd_ms))}</span>
+                        <span class="spk-bb-nr-naam">${escHtml(r.rijder_naam || '')}</span>
+                        <span class="spk-bb-nr-meta">${escHtml(meta)}</span>`;
+        }
+        wrap.innerHTML = `
+            <div class="spk-bb-nr-row" title="Klik voor alle 4 varianten">
+                ${bodyHtml}
+                ${toggleHtml}
+            </div>`;
+
+        // Click op de body opent de modal; click op toggle wisselt type.
+        // stopPropagation op toggle voorkomt dat 'ie ook de modal opent.
+        wrap.querySelector('.spk-bb-nr-row')?.addEventListener('click',
+            () => _spkToonNrAlleVarianten(afstandKey, huidType));
+        wrap.querySelector('.spk-bb-nr-toggle')?.addEventListener('click', e => {
+            e.stopPropagation();
+            _spkNrTypeZet(afstandKey, altType);
+            _spkLaadNationaalRecord();   // re-render met nieuwe type-keuze
+        });
+    } catch (e) {
+        wrap.innerHTML = `<div class="spk-bb-nr-leeg jury-fout">⚠ ${escHtml(e.message)}</div>`;
+    }
+}
+
+// Expand-modal: NR-overzicht. Twee filter-modi:
+//   - 'afstand' (default): alle 4 varianten (jun/sen × M/V) voor diezelfde
+//     afstand als de banner toont — primary use-case van de modal.
+//   - 'all': alle records voor de gekozen type (baan/weg). Handig om te zien
+//     of de recordhouder van deze afstand ook nog op andere afstanden
+//     bovenaan staat — speaker kan dat dan benoemen tijdens commentaar.
+// Type (baan/weg) komt mee uit banner-keuze en werkt door in beide filter-modi.
+async function _spkToonNrAlleVarianten(afstandKey, type) {
+    // Overlay bouwen, daarna fetch/render via _spkNrModalRender. Filter-state
+    // op de overlay-DOM zelf opslaan zodat we 'm bij toggle kunnen lezen
+    // zonder externe variabele.
+    const overlay = document.createElement('div');
+    overlay.className = 'spk-detail-overlay';
+    overlay.dataset.afstandKey = afstandKey || '';
+    overlay.dataset.type       = type       || '';
+    overlay.dataset.filter     = 'afstand';   // default: deze afstand
+    document.body.appendChild(overlay);
+
+    const sluit = () => overlay.remove();
+    overlay.addEventListener('click', e => { if (e.target === overlay) sluit(); });
+    const onKey = e => { if (e.key === 'Escape') { sluit(); document.removeEventListener('keydown', onKey); } };
+    document.addEventListener('keydown', onKey);
+
+    // Initial render — als afstandKey leeg is, val terug op 'all' direct.
+    if (!afstandKey) overlay.dataset.filter = 'all';
+    await _spkNrModalRender(overlay, sluit);
+}
+
+// Re-render de inhoud van de open NR-modal (overlay-element). Wordt
+// aangeroepen bij eerste open + bij click op de "Afstand/Alle"-toggle.
+async function _spkNrModalRender(overlay, sluit) {
+    const afstandKey = overlay.dataset.afstandKey;
+    const type       = overlay.dataset.type;
+    const filter     = overlay.dataset.filter;   // 'afstand' | 'all'
+
+    try {
+        const url = '?action=speaker_record'
+                  + '&mode=all'
+                  + (type ? '&type=' + encodeURIComponent(type) : '')
+                  + (filter === 'afstand' && afstandKey
+                        ? '&afstand_key=' + encodeURIComponent(afstandKey) : '');
+        const res = await fetch(url, { credentials: 'same-origin' });
+        const data = await res.json();
+        if (!res.ok || data?.error) throw new Error(data?.error || ('HTTP ' + res.status));
+        const records = Array.isArray(data.records) ? data.records : [];
+
+        const lblGender = g => g === 0 ? '♂ Heren' : '♀ Dames';
+        const lblGroep  = g => g === 'junioren' ? 'Junioren' : 'Senioren';
+        // Bij 'all'-mode tonen we extra kolom 'Afstand' zodat duidelijk is
+        // welk record bij welke afstand hoort. Bij 'afstand'-mode is dat
+        // overbodig (overal dezelfde afstand).
+        const toonAfstand = filter === 'all';
+        const cols = toonAfstand ? 7 : 6;
+        const rijenHtml = records.length
+            ? records.map(r => {
+                const datum = _spkFmtRecordDatum(r.record_datum);
+                const meta  = [r.locatie, datum, r.wedstrijd].filter(Boolean).join(' · ');
+                return `<tr>
+                    <td>${escHtml(lblGroep(r.cat_groep))}</td>
+                    <td>${escHtml(lblGender(r.gender))}</td>
+                    ${toonAfstand ? `<td><b>${escHtml(r.afstand_key || '')}</b></td>` : ''}
+                    <td>${escHtml(r.type)}</td>
+                    <td><b>${escHtml(_spkFmtTijd(r.tijd_ms))}</b></td>
+                    <td>${escHtml(r.rijder_naam || '')}</td>
+                    <td><small>${escHtml(meta)}</small></td>
+                </tr>`;
+            }).join('')
+            : `<tr><td colspan="${cols}" style="text-align:center;color:#888">Geen records bekend.</td></tr>`;
+
+        // Header: filter-toggle + sluit. Knop label toggelt: bij 'afstand'
+        // gefilterd is "Alle afstanden" de actie; bij 'all' is "Deze afstand"
+        // de actie (alleen zinvol als we een afstandKey hebben).
+        const filterKnopHtml = afstandKey ? `
+            <div class="spk-nr-filter">
+                <button type="button" class="spk-nr-filter-btn ${filter === 'afstand' ? 'is-active' : ''}"
+                        data-filter="afstand">Deze afstand</button>
+                <button type="button" class="spk-nr-filter-btn ${filter === 'all' ? 'is-active' : ''}"
+                        data-filter="all">Alle afstanden</button>
+            </div>` : '';
+
+        const titel = filter === 'all'
+            ? `Nationale records ${type ? '(' + escHtml(type) + ')' : ''}`
+            : `Nationale records — ${escHtml(afstandKey)}`;
+
+        overlay.innerHTML = `
+            <div class="spk-detail-modal spk-nr-modal" role="dialog">
+                <div class="spk-detail-kop">
+                    <div class="spk-detail-snr">🏅</div>
+                    <h2 class="spk-detail-naam">${titel}</h2>
+                    <button class="spk-detail-sluit" aria-label="Sluiten">&times;</button>
+                </div>
+                <div class="spk-detail-body">
+                    ${filterKnopHtml}
+                    <table class="spk-nr-tabel">
+                        <thead><tr>
+                            <th>Cat</th><th>Gender</th>
+                            ${toonAfstand ? '<th>Afstand</th>' : ''}
+                            <th>Type</th><th>Tijd</th><th>Naam</th><th>Locatie / Datum</th>
+                        </tr></thead>
+                        <tbody>${rijenHtml}</tbody>
+                    </table>
+                </div>
+            </div>`;
+        overlay.querySelector('.spk-detail-sluit').addEventListener('click', sluit);
+        overlay.querySelectorAll('.spk-nr-filter-btn').forEach(b => {
+            b.addEventListener('click', () => {
+                overlay.dataset.filter = b.dataset.filter;
+                _spkNrModalRender(overlay, sluit);
+            });
+        });
+    } catch (e) {
+        overlay.innerHTML = `<div class="spk-detail-modal"><div class="spk-detail-body jury-fout">⚠ ${escHtml(e.message)}</div></div>`;
+        console.error('[NR-modal]', e);
+    }
+}
 
 juryInit();

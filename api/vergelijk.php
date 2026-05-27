@@ -269,16 +269,19 @@ try {
         $dbTp[$t['person_license']][$t['slot']] = $t;
     }
 
-    // 5b. Merge-groepen + category_filter voor déze competitie
+    // 5b. Merge-groepen + category_filter + max-in-loting override voor déze competitie
     $mergeGroups  = [];
     $mergeLabels  = [];
     $catFilters   = [];
-    $stmt = $pdo->prepare("SELECT id, merge_group, merge_label, category_filter FROM distance_combinations WHERE competition_id = ?");
+    $maxInLoting  = [];   // handmatige override; NULL = auto-berekening
+    $stmt = $pdo->prepare("SELECT id, merge_group, merge_label, category_filter, max_in_loting FROM distance_combinations WHERE competition_id = ?");
     $stmt->execute([$compId]);
     foreach ($stmt->fetchAll() as $row) {
         $mergeGroups[$row['id']] = $row['merge_group'];
         $mergeLabels[$row['id']] = $row['merge_label'];
         $catFilters[$row['id']]  = $row['category_filter'] ?? null;
+        $maxInLoting[$row['id']] = $row['max_in_loting'] !== null
+            ? (int)$row['max_in_loting'] : null;
     }
 
     // 5d. Extra license-keys laden: org-toegevoegde rijders (in DB maar niet in KNSB API)
@@ -335,16 +338,22 @@ try {
                 }
             }
 
-            // Diff-detectie: KNSB vs DB
-            $diffs = [];
-            if ($dbPerson) {
-                if ((string)($c['startNumber'] ?? '') !== (string)($dbPerson['start_number'] ?? ''))
-                    $diffs[] = 'start_number';
-                if (($c['fullName'] ?? '') !== ($dbPerson['full_name'] ?? ''))
-                    $diffs[] = 'full_name';
+            // ── Effectieve status berekenen (KNSB vs DB-overrides) ──────
+            // Eerder als IIFE binnen 'entry_status' opgesteld; nu als
+            // variabele zodat we 'm ook voor diff-detectie kunnen gebruiken.
+            //   knsbSt = altijd de status zoals KNSB API hem geeft (0/1/2)
+            //   dbSt   = effectieve status in DB; eigen org-statussen (3/4/5)
+            //            bewaren bij resync; KNSB-afgemeld (2) heeft altijd voorrang.
+            //   status 5 (bevestigd bij org.) vervalt als KNSB nu bevestigt.
+            $knsbSt = (int)($item['status'] ?? 1);
+            $dbSt   = $dbEntry ? (int)$dbEntry['status'] : null;
+            if ($dbSt !== null && $dbSt >= 3 && $knsbSt !== 2) {
+                $effectiefStatus = ($dbSt === 5 && $knsbSt !== 0) ? $knsbSt : $dbSt;
+            } else {
+                $effectiefStatus = $knsbSt;
             }
 
-            // reserve: null of volgnummer (1=1e reserve, 2=2e reserve …)
+            // ── Effectieve reserve berekenen ────────────────────────────
             // Bron-volgorde:
             //  - reserve_handmatig_ingezet=1 → operator heeft ingezet, NULL is
             //    beschermd; DB-waarde gebruiken (= NULL of teruggeplaatst nummer).
@@ -354,7 +363,43 @@ try {
             if ($dbEntry !== null && (int)($dbEntry['reserve_handmatig_ingezet'] ?? 0) === 1) {
                 $reserve = $dbEntry['reserve'] !== null ? (int)$dbEntry['reserve'] : null;
             } else {
-                $reserve = $item['reserve'];
+                $reserve = $item['reserve'] !== null ? (int)$item['reserve'] : null;
+            }
+
+            // ── Diff-detectie: KNSB vs DB ───────────────────────────────
+            // Verzamel alle velden waarin de effectieve waarde (= wat een
+            // Importeer-klik in de DB zou zetten) afwijkt van wat er nu
+            // werkelijk in de DB staat. Op basis hiervan enabled de UI de
+            // Importeer-knop (zie js/import.js → updateImportBtn).
+            //
+            // Namen worden case-insensitive en whitespace-tolerant
+            // vergeleken: de KNSB-feed schrijft Nederlandse tussenvoegsels
+            // soms inconsistent ("Van Liere" / "De Vries"), wat anders
+            // continu valse diffs zou geven. Bij echte verschillen in
+            // spelling ("Tijs" vs "Ties") triggert de diff wél.
+            $diffs = [];
+            if ($dbPerson) {
+                if ((string)($c['startNumber'] ?? '') !== (string)($dbPerson['start_number'] ?? ''))
+                    $diffs[] = 'start_number';
+                $knsbNaam = mb_strtolower(trim((string)($c['fullName']         ?? '')));
+                $dbNaam   = mb_strtolower(trim((string)($dbPerson['full_name'] ?? '')));
+                if ($knsbNaam !== $dbNaam) $diffs[] = 'full_name';
+            }
+            if ($dbEntry) {
+                // Status-wijziging (bv. KNSB-feed gaat van 0 'niet bevestigd'
+                // naar 1 'bevestigd'). Tot deze diff bestond, bleef de
+                // Importeer-knop disabled en wist niemand dat de DB nog
+                // achterliep op de feed.
+                if ($effectiefStatus !== (int)$dbEntry['status']) {
+                    $diffs[] = 'status';
+                }
+                // Reserve-wijziging (R1/Rn wissel in KNSB-feed). Alleen
+                // relevant als operator de reserve niet handmatig heeft
+                // ingezet — anders wint juist de DB-waarde (bescherming).
+                if ((int)($dbEntry['reserve_handmatig_ingezet'] ?? 0) !== 1) {
+                    $dbReserve = $dbEntry['reserve'] !== null ? (int)$dbEntry['reserve'] : null;
+                    if ($reserve !== $dbReserve) $diffs[] = 'reserve';
+                }
             }
 
             $rows[] = [
@@ -362,20 +407,9 @@ try {
                 'is_anoniem'    => $isAnoniem,
                 'knsb_entry_id' => $c['id'] ?? null,
                 // knsb_status = altijd de status zoals de KNSB API hem geeft (0/1/2); nooit overschreven.
-                // entry_status = effectieve status: eigen org-statussen (3/4/5) bewaren bij resync;
-                //   KNSB-afgemeld (2) heeft altijd voorrang.
-                //   Status 5 (Bevestigd bij org.) vervalt als KNSB de rijder alsnog bevestigt (→ status 1).
-                'knsb_status'   => (int)($item['status'] ?? 1),
-                'entry_status'  => (function() use ($item, $dbEntry) {
-                    $knsbSt = (int)($item['status'] ?? 1);
-                    $dbSt   = $dbEntry ? (int)$dbEntry['status'] : null;
-                    if ($dbSt !== null && $dbSt >= 3 && $knsbSt !== 2) {
-                        // Status 5 (bevestigd bij org.) vervalt als KNSB nu bevestigt
-                        if ($dbSt === 5 && $knsbSt !== 0) return $knsbSt;
-                        return $dbSt;
-                    }
-                    return $knsbSt;
-                })(),
+                // entry_status = effectieve status (zie berekening hierboven).
+                'knsb_status'   => $knsbSt,
+                'entry_status'  => $effectiefStatus,
                 'reserve'         => $reserve,
                 // Originele KNSB-waarde — los van DB-status. Nodig voor de
                 // "Terug naar reserve"-actie in het reserve-paneel: we moeten
@@ -481,6 +515,10 @@ try {
             'merge_label'     => $mergeLabels[$dcId]        ?? null,
             'splits'          => $splitConfig[$dcId]        ?? [],
             'category_filter' => $catFilters[$dcId]         ?? null,
+            // Handmatige max-in-loting override (NULL = auto = aantal
+            // niet-reserves uit KNSB-feed). Reserve-paneel toont deze
+            // waarde als 'van max XX' en gebruikt 'm in de capaciteit-cap.
+            'max_in_loting'   => $maxInLoting[$dcId]        ?? null,
             'has_distances'   => !empty($groep['distances']),
             'knsb_distances'  => array_map(fn($d) => [
                 'id'           => null,

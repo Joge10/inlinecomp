@@ -1,0 +1,99 @@
+══════════════════════════════════════════════════════════════════
+  InlineComp — NK historie import
+  Snel-start voor 2024, 2023, 2022
+══════════════════════════════════════════════════════════════════
+
+WAT
+---
+Verandert PDF-uitslagen → SQL INSERTs voor uitslag_afstand.
+Eén SQL-bestand per jaar, te plakken in phpMyAdmin.
+
+
+EENMALIGE SETUP
+---------------
+1. Python deps installeren (in deze map):
+      pip install -r requirements.txt
+
+2. API key in environment zetten — éénmalig per terminal-sessie:
+      Windows CMD:   set ANTHROPIC_API_KEY=sk-ant-...
+      PowerShell:    $env:ANTHROPIC_API_KEY = "sk-ant-..."
+
+   (Dit is dezelfde key als die in config_inlinecomp.php voor de
+   vertaling-feature. Pak hem daaruit als je hem niet meer weet.)
+
+3. Config aanmaken:
+      copy config.example.json config.json
+
+   Open config.json en vul in:
+      - db.password = je MySQL wachtwoord
+      - per jaar: competition_id + datum + alle dc_ids per cat
+
+   Tip: dc_ids vind je in de database:
+      SELECT id, name FROM distance_combinations
+       WHERE competition_id = '<jouw NK 2024 comp_id>';
+
+
+PER JAAR DAT JE WIL IMPORTEREN
+------------------------------
+1. Maak handmatig een competitions-row + alle DCs (zoals NK 2025).
+   Gebruik UUIDs of zelfgekozen IDs (versoepelde validatie staat aan).
+
+2. Vul die IDs in config.json onder "wedstrijden.<jaar>".
+
+3. Per afstand-PDF op skating.nl:
+   a) Open in browser
+   b) Ctrl+A, Ctrl+C (alle tekst selecteren + kopiëren)
+   c) Open Notepad, Ctrl+V, opslaan als
+        inputs/2024/<naam>.txt
+      (Naam mag je vrij kiezen: 200m.txt, 500m.txt, etc.)
+
+4. Draai:
+      python nk_import.py
+   Of alleen één jaar:
+      python nk_import.py --jaar 2024
+
+5. Open output/nk_2024.sql, scan op "-- TODO" voor unmatched rijders.
+   Plak rest in phpMyAdmin → SQL → uitvoeren.
+
+
+VEEL VOORKOMENDE VRAGEN
+-----------------------
+Q: Een rijder zit niet in persons (oude/buitenlandse skater)?
+A: Het script zet 'em als SQL-comment "-- TODO ..." en slaat 'em over.
+   Optie 1: voeg de persoon handmatig toe aan persons + draai opnieuw.
+   Optie 2: laat de rij weg — geen probleem voor de overige uitslagen.
+
+Q: Ik krijg "ambigu (3 matches)" — wat nu?
+A: Drie personen heten exact hetzelfde. Als de PDF een geboortejaar
+   noemt vult Claude die in en wint die tiebreaker. Anders: voeg de
+   licentie in persons toe en draai opnieuw (script matcht op licentie
+   eerst).
+
+Q: Mag ik herhaaldelijk runnen?
+A: Ja. Het script gebruikt INSERT IGNORE — UNIQUE-key op
+   (comp, dc, distance, split, person) voorkomt duplicaten.
+
+Q: Eén PDF heeft DSA + HSA samen — werkt dat?
+A: Ja, Claude detecteert per rijder de juiste cat. Beide gaan naar
+   de juiste DC zoals in config.json gemapt.
+
+Q: Hoeveel kost een import?
+A: Met claude-haiku-4-5 (default): ~$0.01 per PDF.
+   3 jaar × ~10 PDFs = ruim onder $1 totaal.
+
+Q: Werkt het ook voor 5000m punten / 10000m afval?
+A: Ja. tijd kan dan null zijn (puntenkoers heeft geen tijd-vergelijk).
+   Rang is wat telt. Race_type wordt door Claude bepaald op basis van
+   PDF-titel.
+
+
+DEBUGGING
+---------
+Als output ontbreekt of vreemd is:
+  - Check console: welke regels zijn geskipped?
+  - Open de SQL met een editor, bekijk alle "-- TODO" regels
+  - Test 1 file met:  python nk_import.py --jaar 2024
+    en zet alleen die ene .txt in inputs/2024/
+  - Voor extra robuustheid op slechte PDFs:
+      python nk_import.py --model claude-opus-4-7
+    (5× duurder, beter bij rare layouts)

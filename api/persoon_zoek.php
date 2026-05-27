@@ -70,12 +70,19 @@ function voegTranspondersToe(PDO $pdo, array $rows): array {
 try {
     $action = trim($_GET['action'] ?? '');
 
+    // Alle zoek-endpoints hieronder zijn 'actieve' context (jury-scanner,
+    // coach toevoegen, club-dropdowns voor entries). Pending-rijders
+    // (pending_source='historie') zijn placeholders uit historische PDF-imports
+    // en moeten daar NOOIT verschijnen — anders kan iemand een placeholder
+    // selecteren voor een actieve wedstrijd. Filter overal expliciet.
+
     // ── Clubs lijst ──────────────────────────────────────────────────────────
     if ($action === 'clubs') {
         $rows = $pdo->query(
             "SELECT DISTINCT club_full, club_short
              FROM persons
              WHERE club_full IS NOT NULL AND club_full != ''
+               AND pending_source IS NULL
              ORDER BY club_full"
         )->fetchAll(PDO::FETCH_ASSOC);
         echo json_encode($rows, JSON_UNESCAPED_UNICODE);
@@ -85,7 +92,12 @@ try {
     // ── Zoek op relatienummer ────────────────────────────────────────────────
     if (isset($_GET['license_key']) && $_GET['license_key'] !== '') {
         $lk   = trim($_GET['license_key']);
-        $stmt = $pdo->prepare("SELECT * FROM persons WHERE license_key = :lk LIMIT 1");
+        $stmt = $pdo->prepare(
+            "SELECT * FROM persons
+             WHERE license_key = :lk
+               AND pending_source IS NULL
+             LIMIT 1"
+        );
         $stmt->execute([':lk' => $lk]);
         $row  = $stmt->fetch(PDO::FETCH_ASSOC);
         if ($row) {
@@ -104,6 +116,7 @@ try {
             $stmt = $pdo->prepare(
                 "SELECT * FROM persons
                  WHERE start_number = :sn AND category = :cat
+                   AND pending_source IS NULL
                  ORDER BY updated_at DESC LIMIT 10"
             );
             $stmt->execute([':sn' => $sn, ':cat' => $cat]);
@@ -111,6 +124,7 @@ try {
             $stmt = $pdo->prepare(
                 "SELECT * FROM persons
                  WHERE start_number = :sn
+                   AND pending_source IS NULL
                  ORDER BY updated_at DESC LIMIT 10"
             );
             $stmt->execute([':sn' => $sn]);

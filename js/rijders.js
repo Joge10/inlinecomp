@@ -392,7 +392,7 @@ function rijVeldBewerken(rijder, veldNaam) {
             // doorkomen — alleen als er een actieve zoekopdracht is.
             if (typeof rijZoek === 'function') rijZoek();
         } catch (e) {
-            alert('Opslaan mislukt: ' + e.message);
+            toonBevestigDialog('Opslaan mislukt: ' + e.message, 'Rijder bewerken', 'OK', '');
             waardeDiv.innerHTML = origineelHtml;
             knop.disabled = false;
         }
@@ -405,13 +405,29 @@ function rijVeldBewerken(rijder, veldNaam) {
 }
 
 async function rijAnonimiseer(rijder) {
-    const bevestig = prompt(
-        `Je staat op het punt om onomkeerbaar de persoonsgegevens van\n\n    ${rijder.full_name}\n    licentie: ${rijder.license_key}\n\nte anonimiseren.\n\nTyp het licentienummer ter bevestiging:`);
-    if (bevestig === null) return;
-    if (bevestig.trim() !== rijder.license_key) {
-        alert('Bevestiging klopt niet. Geen actie ondernomen.');
+    // Stap 1: bevestiging via input-modal — operator moet expliciet het
+    // licentienummer typen om per-ongeluk-klikken te voorkomen.
+    const bericht =
+        `Je staat op het punt om ONOMKEERBAAR de persoonsgegevens van\n` +
+        `${rijder.full_name} (licentie ${rijder.license_key}) te anonimiseren.\n\n` +
+        `Typ het licentienummer ter bevestiging:`;
+    const ingetypt = await toonInputDialog({
+        titel:        'Rijder anonimiseren',
+        bericht:      bericht,
+        inputType:    'text',
+        placeholder:  rijder.license_key,
+        monospace:    true,           // licentienummers in monospace voor leesbaarheid
+        labelOk:      'Anonimiseren',
+    });
+    if (ingetypt === null) return;     // geannuleerd
+    if (ingetypt.trim() !== rijder.license_key) {
+        toonBevestigDialog(
+            'Bevestiging klopt niet — geen actie ondernomen.',
+            'Anonimiseren', 'OK', ''
+        );
         return;
     }
+    // Stap 2: API-call met nette feedback in modal-stijl (geen alert).
     try {
         const res = await fetch('api/persoon_anonimiseer.php', {
             method:  'POST',
@@ -420,16 +436,24 @@ async function rijAnonimiseer(rijder) {
         });
         const data = await res.json();
         if (!res.ok) throw new Error(data.error || 'Fout bij anonimiseren');
-        alert(data.message || 'Rijder geanonimiseerd.');
+        toonBevestigDialog(
+            data.message || 'Rijder geanonimiseerd.',
+            'Anonimiseren', 'OK', ''
+        );
         rijToonDetail(rijder.license_key);   // herlaad het paneel
         rijZoek();                            // ververs de lijst
     } catch (e) {
-        alert('Fout: ' + e.message);
+        toonBevestigDialog('Fout: ' + e.message, 'Anonimiseren', 'OK', '');
     }
 }
 
 async function rijAnonUndo(rijder) {
-    if (!confirm(`Anonimisatie-vlag opheffen voor licentie ${rijder.license_key}?\n\nDe gegevens zelf blijven leeg; alleen via een nieuwe KNSB-import komen ze terug.`)) return;
+    const ok = await toonBevestigDialog(
+        `Anonimisatie-vlag opheffen voor licentie ${rijder.license_key}? ` +
+        `De gegevens zelf blijven leeg; alleen via een nieuwe KNSB-import komen ze terug.`,
+        'Anonimisatie opheffen'
+    );
+    if (!ok) return;
     try {
         const res = await fetch('api/persoon_anonimiseer.php', {
             method:  'POST',
@@ -438,10 +462,13 @@ async function rijAnonUndo(rijder) {
         });
         const data = await res.json();
         if (!res.ok) throw new Error(data.error || 'Fout bij opheffen');
-        alert(data.message || 'Anonimisatie-vlag opgeheven.');
+        toonBevestigDialog(
+            data.message || 'Anonimisatie-vlag opgeheven.',
+            'Anonimisatie opheffen', 'OK', ''
+        );
         rijToonDetail(rijder.license_key);
         rijZoek();
     } catch (e) {
-        alert('Fout: ' + e.message);
+        toonBevestigDialog('Fout: ' + e.message, 'Anonimisatie opheffen', 'OK', '');
     }
 }

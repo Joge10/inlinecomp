@@ -6,9 +6,11 @@
 //  Body: {
 //    "titel":    "Programma loopt 15 min uit",
 //    "bericht":  "De 200m start om 14:15 ipv 14:00.",
-//    "from":     "nl",   // brontaal: 'nl' of 'en'
-//    "to":       "en"    // doeltaal: 'en' of 'nl'
+//    "from":     "nl",          // brontaal: 'nl' of 'en'
+//    "to":       "en"            // doeltaal: 'en','nl','de','fr'
 //  }
+//  Of bulk-mode voor alle 4 talen in 1 call:
+//    "to": ["en","de","fr"]      // doeltalen-array; returnt {translations: {en:{...}, de:{...}, fr:{...}}}
 //
 //  Response:
 //    { ok: true, titel: "...", bericht: "..." }
@@ -61,37 +63,69 @@ $body    = json_decode(file_get_contents('php://input'), true) ?? [];
 $titel   = trim($body['titel']   ?? '');
 $bericht = trim($body['bericht'] ?? '');
 $from    = trim($body['from']    ?? 'nl');
-$to      = trim($body['to']      ?? 'en');
+$toRaw   = $body['to']           ?? 'en';
 
 if ($titel === '' && $bericht === '') {
     http_response_code(400);
     echo json_encode(['error' => 'titel of bericht is verplicht']);
     exit;
 }
-if (!in_array($from, ['nl', 'en'], true) || !in_array($to, ['nl', 'en'], true) || $from === $to) {
+
+// from is altijd 1 taal; to mag string OF array zijn (bulk-mode).
+$geldigeTalen = ['nl', 'en', 'de', 'fr'];
+if (!in_array($from, $geldigeTalen, true)) {
     http_response_code(400);
-    echo json_encode(['error' => 'from/to moet "nl" of "en" zijn, en verschillend']);
+    echo json_encode(['error' => 'from moet nl/en/de/fr zijn']);
     exit;
 }
+// Normaliseer to → altijd array.
+$toLijst = is_array($toRaw) ? $toRaw : [$toRaw];
+$toLijst = array_filter($toLijst, fn($x) => in_array($x, $geldigeTalen, true) && $x !== $from);
+$toLijst = array_values(array_unique($toLijst));
+if (empty($toLijst)) {
+    http_response_code(400);
+    echo json_encode(['error' => 'to moet 1+ geldige doeltaal hebben, anders dan from']);
+    exit;
+}
+$bulkMode = is_array($toRaw);
 
-$fromNaam = $from === 'nl' ? 'Dutch'  : 'English';
-$toNaam   = $to   === 'en' ? 'English' : 'Dutch';
+$taalNamen = ['nl' => 'Dutch', 'en' => 'English', 'de' => 'German', 'fr' => 'French'];
+$fromNaam = $taalNamen[$from];
 
-// Prompt-engineering: vraag JSON-output zodat we titel + bericht
-// betrouwbaar uit elkaar kunnen halen. Geen narratieve tekst eromheen.
-// Context "inline skating race announcement" helpt Claude juiste
-// terminologie kiezen (heat, final, semifinal, time trial, etc.).
-$prompt = "You are translating a short race announcement for an inline-skating "
-        . "competition app from {$fromNaam} to {$toNaam}.\n\n"
-        . "Keep it concise and clear. Use natural skating-event terminology "
-        . "(heat, series, quarterfinal, semifinal, final, runner-up, time trial). "
-        . "Preserve any numbers, times, and proper names exactly. Do not add "
-        . "explanations or commentary.\n\n"
-        . "Respond ONLY with this JSON, no other text:\n"
-        . '{"titel": "...translated title...", "bericht": "...translated body..."}'
-        . "\n\nInput:\n"
-        . "Title: " . ($titel ?: '(empty)') . "\n"
-        . "Body: "  . ($bericht ?: '(empty)');
+// Prompt-engineering: vraag JSON-output. Bij meerdere doeltalen:
+// {translations:{en:{titel,bericht}, de:{...}, fr:{...}}}.
+// Bij 1 doeltaal (back-compat): {titel, bericht}.
+if (count($toLijst) === 1) {
+    $to     = $toLijst[0];
+    $toNaam = $taalNamen[$to];
+    $prompt = "You are translating a short race announcement for an inline-skating "
+            . "competition app from {$fromNaam} to {$toNaam}.\n\n"
+            . "Keep it concise and clear. Use natural skating-event terminology "
+            . "(heat, series, quarterfinal, semifinal, final, runner-up, time trial). "
+            . "Preserve any numbers, times, and proper names exactly. Do not add "
+            . "explanations or commentary.\n\n"
+            . "Respond ONLY with this JSON, no other text:\n"
+            . '{"titel": "...translated title...", "bericht": "...translated body..."}'
+            . "\n\nInput:\n"
+            . "Title: " . ($titel ?: '(empty)') . "\n"
+            . "Body: "  . ($bericht ?: '(empty)');
+} else {
+    // Bulk: vraag alle doeltalen in 1 JSON-blok zodat we 1 API-call doen
+    // ipv N. Scheelt latency en kosten.
+    $taalKeys = array_map(fn($l) => "\"{$l}\": {\"titel\":\"...\",\"bericht\":\"...\"}", $toLijst);
+    $taalNamenStr = implode(', ', array_map(fn($l) => $taalNamen[$l], $toLijst));
+    $prompt = "You are translating a short race announcement for an inline-skating "
+            . "competition app from {$fromNaam} to multiple target languages: {$taalNamenStr}.\n\n"
+            . "Keep each translation concise and clear. Use natural skating-event terminology "
+            . "(heat, series, quarterfinal, semifinal, final, runner-up, time trial). "
+            . "Preserve any numbers, times, and proper names exactly. Do not add "
+            . "explanations or commentary.\n\n"
+            . "Respond ONLY with this JSON, no other text. Use the ISO language codes as keys:\n"
+            . '{"translations": {' . implode(', ', $taalKeys) . '}}'
+            . "\n\nInput:\n"
+            . "Title: " . ($titel ?: '(empty)') . "\n"
+            . "Body: "  . ($bericht ?: '(empty)');
+}
 
 $ch = curl_init('https://api.anthropic.com/v1/messages');
 curl_setopt_array($ch, [
@@ -104,7 +138,7 @@ curl_setopt_array($ch, [
         'content-type: application/json',
     ],
     CURLOPT_POSTFIELDS => json_encode([
-        'model'      => 'claude-3-5-haiku-20241022',
+        'model'      => 'claude-haiku-4-5',
         'max_tokens' => 1024,
         'messages'   => [
             ['role' => 'user', 'content' => $prompt],
@@ -139,7 +173,7 @@ $content = trim($content);
 $content = preg_replace('/^```(?:json)?\s*|\s*```$/m', '', $content);
 $parsed  = json_decode($content, true);
 
-if (!is_array($parsed) || (!isset($parsed['titel']) && !isset($parsed['bericht']))) {
+if (!is_array($parsed)) {
     http_response_code(502);
     echo json_encode([
         'error' => 'Vertaal-response niet parseerbaar als JSON',
@@ -148,10 +182,44 @@ if (!is_array($parsed) || (!isset($parsed['titel']) && !isset($parsed['bericht']
     exit;
 }
 
-echo json_encode([
-    'ok'      => true,
-    'titel'   => (string)($parsed['titel']   ?? ''),
-    'bericht' => (string)($parsed['bericht'] ?? ''),
-    'from'    => $from,
-    'to'      => $to,
-], JSON_UNESCAPED_UNICODE);
+if ($bulkMode) {
+    // Bulk: {translations:{en:{...}, de:{...}, fr:{...}}}
+    if (!isset($parsed['translations']) || !is_array($parsed['translations'])) {
+        http_response_code(502);
+        echo json_encode([
+            'error' => 'Bulk vertaal-response mist translations-object',
+            'raw'   => $content,
+        ]);
+        exit;
+    }
+    $out = [];
+    foreach ($toLijst as $l) {
+        $tr = $parsed['translations'][$l] ?? null;
+        $out[$l] = [
+            'titel'   => is_array($tr) ? (string)($tr['titel']   ?? '') : '',
+            'bericht' => is_array($tr) ? (string)($tr['bericht'] ?? '') : '',
+        ];
+    }
+    echo json_encode([
+        'ok'           => true,
+        'translations' => $out,
+        'from'         => $from,
+        'to'           => $toLijst,
+    ], JSON_UNESCAPED_UNICODE);
+} else {
+    if (!isset($parsed['titel']) && !isset($parsed['bericht'])) {
+        http_response_code(502);
+        echo json_encode([
+            'error' => 'Vertaal-response mist titel/bericht',
+            'raw'   => $content,
+        ]);
+        exit;
+    }
+    echo json_encode([
+        'ok'      => true,
+        'titel'   => (string)($parsed['titel']   ?? ''),
+        'bericht' => (string)($parsed['bericht'] ?? ''),
+        'from'    => $from,
+        'to'      => $toLijst[0],
+    ], JSON_UNESCAPED_UNICODE);
+}

@@ -2661,18 +2661,43 @@ function bindTsEvents(afstandGroepen) {
                 savedRows.forEach(r => { anker.after(r); anker = r; });
             }
 
-            // ── In-memory update: nieuwe volgorde ────────────────────────────
+            // ── In-memory update: nieuwe volgorde (multi-dag safe) ───────────
+            // BELANGRIJK: de DOM bevat alleen ritten van de ACTIEVE dag
+            // (renderRittenLijst filtert andere dagen weg). Als we
+            // huidigTijdschema.ritten zouden overschrijven met enkel de
+            // DOM-set, zouden andere dagen uit client-state verdwijnen — en
+            // sturen we de server een 'volgorde 1..N' die de globale
+            // nummering breekt waardoor blok-grenzen (CEREMONIE/HERSTART)
+            // op verkeerde posities terechtkomen. Symptoom: dag 1 wordt
+            // door elkaar geschud na een drag op dag 3.
+            //
+            // Aanpak: vervang elke actieve-dag-positie in de globale lijst
+            // (in oude volgorde) door de volgende rit-ID uit de nieuwe
+            // DOM-volgorde (FIFO). Andere dagen blijven exact op hun plek
+            // staan, alleen actieve-dag-ritten worden onderling herordend.
             const ritById = new Map((huidigTijdschema.ritten ?? []).map(r => [parseInt(r.id), r]));
-            const nieuweRitIds = [...rittenTbody.querySelectorAll('tr.ts-rit-rij')]
+            const nieuweActiefIds = [...rittenTbody.querySelectorAll('tr.ts-rit-rij')]
                 .map(row => parseInt(row.dataset.ritId));
+            const actiefSet = new Set(nieuweActiefIds);
+            const queue     = [...nieuweActiefIds];   // FIFO actieve-dag in nieuwe volgorde
 
-            huidigTijdschema.ritten = nieuweRitIds.map(id => ritById.get(id)).filter(r => r?.id);
+            const nieuweGlobaal = (huidigTijdschema.ritten ?? []).map(r => {
+                if (actiefSet.has(parseInt(r.id))) {
+                    const id = queue.shift();
+                    return ritById.get(id);
+                }
+                return r;
+            }).filter(r => r?.id);
+
+            huidigTijdschema.ritten = nieuweGlobaal;
 
             // ── Render UITSTELLEN tot na dragend (voorkomt browser snap-back) ─
             setTimeout(renderTijdschema, 0);
 
-            // ── Achtergrond-save: volgorde opslaan ───────────────────────────
-            const volgorde = nieuweRitIds.map((id, i) => ({ id, volgorde: i + 1 }));
+            // ── Achtergrond-save: stuur de COMPLETE globale lijst, niet alleen
+            // de actieve dag. Anders raken volgorde-nummers van andere dagen
+            // out-of-sync met de nieuwe 1..N nummering van de actieve dag.
+            const volgorde = nieuweGlobaal.map((r, i) => ({ id: parseInt(r.id), volgorde: i + 1 }));
             fetch('api/tijdschema.php', {
                 method:  'POST',
                 headers: { 'Content-Type': 'application/json' },

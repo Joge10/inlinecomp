@@ -17,9 +17,14 @@ CREATE TABLE IF NOT EXISTS `public_meldingen` (
     `competition_id`   VARCHAR(36)  NULL DEFAULT NULL,
     `titel`            VARCHAR(255) NOT NULL,
     `bericht`          TEXT         NOT NULL,
-    -- Engelse vertaling (optioneel; fallback naar NL als NULL)
+    -- Vertalingen (optioneel; fallback EN→NL bij ontbrekend). Public-app
+    -- is 4-talig NL/EN/DE/FR; vertaling gebeurt via Claude AI bij save.
     `titel_en`         VARCHAR(255) NULL DEFAULT NULL,
     `bericht_en`       TEXT         NULL DEFAULT NULL,
+    `titel_de`         VARCHAR(255) NULL DEFAULT NULL,
+    `bericht_de`       TEXT         NULL DEFAULT NULL,
+    `titel_fr`         VARCHAR(255) NULL DEFAULT NULL,
+    `bericht_fr`       TEXT         NULL DEFAULT NULL,
     `prio`             ENUM('info','warn','urgent') NOT NULL DEFAULT 'info',
     `geldig_van`       DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP,
     `geldig_tot`       DATETIME     NULL DEFAULT NULL,
@@ -30,3 +35,10 @@ CREATE TABLE IF NOT EXISTS `public_meldingen` (
     CONSTRAINT `fk_meld_comp`
         FOREIGN KEY (`competition_id`) REFERENCES `competitions` (`id`) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+-- Migratie voor bestaande installaties (fout negeren bij bestaande kolommen):
+-- ALTER TABLE public_meldingen
+--     ADD COLUMN titel_de   VARCHAR(255) NULL DEFAULT NULL AFTER bericht_en,
+--     ADD COLUMN bericht_de TEXT         NULL DEFAULT NULL AFTER titel_de,
+--     ADD COLUMN titel_fr   VARCHAR(255) NULL DEFAULT NULL AFTER bericht_de,
+--     ADD COLUMN bericht_fr TEXT         NULL DEFAULT NULL AFTER titel_fr;

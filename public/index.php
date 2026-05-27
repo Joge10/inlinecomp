@@ -4,6 +4,11 @@
 //  Geen login vereist. Drie tabs: Programma / Heats / Resultaten
 // ============================================================
 header('Content-Type: text/html; charset=utf-8');
+// No-cache: zie coach/index.php voor uitleg — telefoon-browsers cachen
+// HTML agressief, expliciet uit zodat app-updates direct doorkomen.
+header('Cache-Control: no-store, no-cache, must-revalidate, max-age=0');
+header('Pragma: no-cache');
+header('Expires: 0');
 require_once __DIR__ . '/../../config_inlinecomp.php';
 
 // ── Bezoektracking: upsert session-hit in public_visits ─────────────────────
@@ -440,6 +445,7 @@ if ($action === 'rit_detail') {
         $rStmt = $pdo->prepare("
             SELECT he.startpositie,
                    COALESCE(cs.startnummer, p.start_number) AS snr,
+                   p.license_key,
                    p.full_name, p.category,
                    res.finishpositie, res.tijd_ms, res.sanctie,
                    res.rondes, res.punten AS pk_punten,
@@ -601,6 +607,7 @@ if ($action === 'lookup') {
         $rijdersStmt = $pdo->prepare("
             SELECT he.startpositie,
                    COALESCE(cs.startnummer, p.start_number) AS snr,
+                   p.license_key,
                    p.full_name, p.category,
                    res.finishpositie, res.tijd_ms, res.sanctie,
                    res.rondes, res.punten AS pk_punten,
@@ -1155,19 +1162,57 @@ header .sub { font-size: .95rem; opacity: .8; margin-top: 6px; text-align: cente
     flex-shrink: 0;          /* nooit ovaal worden in flex-container */
 }
 .btn-help:active { background: rgba(255,255,255,.35); }
-/* Vlag-knop: emoji ~50% groter dan andere btn-help's, en overflow:hidden
-   zodat de vlag netjes binnen de ronde cirkel afgesneden wordt (anders
-   stak hij uit aan de zijkanten). font-style: normal voorkomt italic
-   wat de erfgenaam-style van .btn-help zou opleggen. */
+/* Taal-dropdown: toont emoji-vlag van actieve taal. Klik = expand panel
+   met 4 talen. Op Windows zonder emoji-flag-glyph valt 'ie terug op
+   letterparen (NL/GB/DE/FR) — bewust geaccepteerd. Vorm blijft ronde
+   knop, font-style normal voorkomt italic-erfgenaam van .btn-help. */
 .btn-lang {
-    font-size: 1.85rem;
-    line-height: 1;
-    overflow: hidden;
     padding: 0;
     font-style: normal;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    /* manipulation: schakel double-tap-to-zoom uit op touch → eerste tap
+     * vuurt onmiddellijk (geen 300ms delay) → paneel opent direct. */
+    touch-action: manipulation;
 }
-@media (max-width: 480px) {
-    .btn-lang { font-size: 1.55rem; }
+.btn-lang .i18n-flag {
+    font-size: 1.05rem;
+    line-height: 1;
+}
+
+/* Uitgevouwen taal-panel: compact horizontaal rijtje van 4 vlag-knoppen.
+   Geen tekstnamen — vlag-emoji + title-tooltip is voldoende.
+   Positionering wordt via JS gezet (top/right/left vanuit getBoundingClientRect). */
+.i18n-dropdown-panel {
+    background: #fff;
+    border: 1px solid #ccc;
+    border-radius: 6px;
+    box-shadow: 0 4px 14px rgba(0,0,0,.2);
+    padding: 4px;
+    display: flex;
+    flex-direction: row;
+    gap: 2px;
+}
+.i18n-dropdown-opt {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 6px 8px;
+    background: none;
+    border: none;
+    border-radius: 4px;
+    cursor: pointer;
+    font-family: inherit;
+    touch-action: manipulation;
+}
+.i18n-dropdown-opt:hover { background: #f0f6ff; }
+.i18n-dropdown-opt.is-active {
+    background: #1F4E79;
+}
+.i18n-dropdown-opt .i18n-flag {
+    font-size: 1.4rem;
+    line-height: 1;
 }
 .btn-meldingen   { font-style: normal; font-size: 1.1rem; position: relative; }
 .meld-badge      { position: absolute; top: -4px; right: -4px; background: #d22;
@@ -1220,8 +1265,14 @@ header .sub { font-size: .95rem; opacity: .8; margin-top: 6px; text-align: cente
     background: var(--blauw); color: var(--wit); border: none; border-radius: 6px;
     padding: 9px 22px; font-size: .92rem; font-weight: 600; cursor: pointer;
     transition: background .15s;
+    /* touch-action: manipulation = geen double-tap-zoom delay op mobile —
+     * Opera Android had soms 300ms vertraging waardoor 'OK' niet leek te
+     * werken (gebruiker tikt, niets zichtbaar, geeft op). */
+    touch-action: manipulation;
 }
 .disc-btn:hover { background: #153658; }
+/* Overlay zelf ook tappable (klik-buiten = sluit) — geen tap-delay. */
+.disc-overlay { touch-action: manipulation; }
 .help-body { padding: 16px; font-size: .9rem; line-height: 1.5; color: var(--tekst); }
 .help-body h3 { font-size: .95rem; color: var(--blauw); margin: 16px 0 6px; }
 .help-body h3:first-child { margin-top: 0; }
@@ -1504,7 +1555,10 @@ select:focus, input:focus { border-color: var(--middenblauw); outline: none; }
 .heat-card-tabel .col-snr { width: 40px; font-weight: 600; color: var(--blauw); }
 .heat-card-tabel .col-naam { }
 .heat-card-tabel .col-tijd { font-family: monospace; color: #555; text-align: right; }
-.heat-card-tabel .col-fin { font-weight: 600; color: var(--blauw); text-align: center; width: 32px; }
+/* Fin-kolom: header normale kleur (label), data-cijfers ROOD + bold zodat
+ * de finishpositie meteen opvalt. Stond vroeger helemaal rechts, viel weg. */
+.heat-card-tabel .col-fin    { text-align: center; width: 32px; }
+.heat-card-tabel td.col-fin  { font-weight: 700; color: #d32f2f; }
 .heat-card-tabel .col-rnd { text-align: center; width: 32px; color: #666; }
 .heat-card-tabel .col-pk { text-align: center; width: 32px; font-weight: 600; color: var(--oranje); }
 
@@ -2146,12 +2200,391 @@ const T = {
         help_p_meld_html: 'At the top is a <b>📢 button</b> (visible as soon as there is an active announcement). Important announcements from the organization appear automatically as a pop-up and remain accessible under this button afterwards — e.g. "Program is running 15 min behind".',
         help_h_tip: 'Tip',
         help_p_tip: 'No results yet? The result appears as soon as the jury has confirmed it.',
+    },
+    de: {
+        // ── Document ──
+        page_title: 'InlineComp – Mein Rennen',
+        // ── Header / static ──
+        ptr_trek: '↓ Weiter ziehen zum Aktualisieren',
+        hdr_meldingen_title: 'Bekanntmachungen zu diesem Rennen',
+        hdr_info_title: 'Über InlineComp',
+        hdr_help_title: 'Wie funktioniert es?',
+        hdr_sub: 'Finde deine Heats, Startzeiten und Ergebnisse',
+        pwa_installeer_titel: 'InlineComp installieren',
+        pwa_installeer_uitleg: 'Zum Startbildschirm hinzufügen für schnellen Zugriff',
+        pwa_btn_install: 'Installieren',
+        pwa_btn_sluit: 'Schließen',
+        stap1_label: 'Wähle dein Rennen',
+        stap2_label: 'Startnummer, Lizenz oder Nachname',
+        filter_eerder: 'Früher',
+        filter_eerder_title: 'Frühere Rennen',
+        filter_vandaag: 'Heute',
+        filter_later: 'Später',
+        filter_later_title: 'Kommende Rennen',
+        opt_laden: 'Lädt…',
+        zoek_placeholder: 'Startnummer, Lizenznr. oder Nachname…',
+        btn_zoeken: 'Suchen',
+        // ── Connection banner ──
+        conn_geen_internet: '📡 Kein Internet — wird bei wiederhergestellter Verbindung aktualisiert',
+        conn_server_down: '⚠ Server nicht erreichbar — Neuversuch…',
+        conn_laatste_update: 'letzte Aktualisierung {tijd}',
+        // ── Comps select ──
+        opt_kies_filter: '— Wähle mindestens einen Filter oben —',
+        opt_kies_wedstrijd: '— Rennen wählen —',
+        opt_binnenkort: '(in Kürze)',
+        opt_fout_laden: 'Laden fehlgeschlagen',
+        // ── Disclaimer ──
+        disc_welkom: 'Willkommen bei InlineComp!',
+        disc_p1: 'Wir testen InlineComp zum ersten Mal bei diesem Rennen — Feedback ist willkommen!',
+        disc_p2_html: 'Die offiziellen Startlisten, Ergebnisse, Wertungen und Bekanntmachungen findest du wie gewohnt auf <strong>Sportity</strong> (Kanal: <em>ISKREGIO</em>).',
+        disc_p3: 'Aus den Informationen in InlineComp können keine Rechte abgeleitet werden.',
+        disc_ok: 'OK, verstanden',
+        // ── Zoek / chooser ──
+        msg_laden: 'Lädt…',
+        msg_zoeken: 'Suche…',
+        msg_zoeken_op: 'Suche nach "{term}"…',
+        msg_rijders_ophalen: 'Skater abrufen…',
+        msg_je_rijders_ophalen: 'Deine Skater abrufen…',
+        msg_geen_resultaten: 'Keine Ergebnisse gefunden.',
+        msg_geen_rijders: 'Keine Skater gefunden.',
+        msg_geen_startlijst: 'Keine Startliste für dieses Rennen verfügbar.',
+        msg_geen_klassement: 'Keine Wertung verfügbar.',
+        msg_geen_uitslagen: 'Keine Ergebnisse verfügbar.',
+        msg_geen_posities: 'Keine Positionen in dieser Kategorie.',
+        msg_kies_categorie_klassement: 'Wähle eine Kategorie, um die Wertung anzuzeigen.',
+        msg_programma_nb: 'Programm nicht verfügbar.',
+        msg_nog_geen_heats: 'Noch keine Heats verfügbar.',
+        msg_nog_geen_resultaten: 'Noch keine Ergebnisse verfügbar.',
+        msg_vorige_ronde_nb: 'Vorherige Runde noch nicht abgeschlossen — Startliste erscheint, sobald alle Ergebnisse eingetragen sind.',
+        chooser_titel: 'Suchergebnisse für "{term}"',
+        chooser_sluit: 'Schließen',
+        chooser_al_in_lijst: 'bereits in Liste',
+        chooser_doet_niet_mee: 'nimmt nicht an diesem Rennen teil',
+        chooser_max: 'Max. {max} Skater · {vrij} Platz(e) frei',
+        chooser_toevoegen: 'Hinzufügen',
+        alert_max_bereikt: 'Maximum von {max} Skatern erreicht. Entferne zuerst jemanden, um einen neuen hinzuzufügen.',
+        alert_max_select: 'Maximum {max} — es ist Platz für {vrij}. Du hast {n} ausgewählt.',
+        // ── Kind-tabs ──
+        kind_rijder_placeholder: '(Skater)',
+        kind_tab_verwijder: 'Diesen Skater entfernen',
+        kind_plus_title: 'Bruder/Schwester hinzufügen',
+        kind_plus_max: 'Maximum {max} Skater',
+        // ── Persoon / status ──
+        status_niet_ingeschreven: 'Nicht angemeldet',
+        status_0: 'Nicht bestätigt',
+        status_1: 'Bestätigt',
+        status_2: 'Abgemeldet',
+        status_3: 'Abgem. bei Org.',
+        status_4: 'Nicht unterschrieben',
+        status_5: 'Best. bei Org.',
+        status_onbekend: '?',
+        snr_label: 'Nr.',
+        auto_stempel_title: 'Zeitpunkt der letzten automatischen Aktualisierung',
+        // ── Tabs ──
+        tab_programma: '📅 Programm',
+        tab_heats: '🏃 Heats',
+        tab_resultaten: '🏆 Resultate',
+        tab_uitslagen: '📊 Ergebnisse',
+        // ── Programma ──
+        prog_titel: 'Rennprogramm',
+        prog_combi_kop: '🔗 Kombiniertes Rennen — gleichzeitig laufen',
+        prog_blok_pauze: 'Pause',
+        prog_blok_inrijden: 'Einlaufen',
+        prog_blok_wedstrijdstart: 'Rennbeginn',
+        prog_blok_ceremonie: 'Zeremonie',
+        prog_blok_herstart: 'Neustart',
+        prog_blok_min: 'Min.',
+        // ── Heats ──
+        heat_wachten_vorige: 'Warte auf vorherige Runde',
+        heat_jouw_resultaat: 'Dein Ergebnis:',
+        // ── Heat tabel headers ──
+        col_pos: '#',
+        col_snr: 'Nr.',
+        col_naam: 'Name',
+        col_rnd: 'Runde',
+        col_pnt: 'Pkt.',
+        col_tijd: 'Zeit',
+        col_fin: 'Fin',
+        col_rang: '#',
+        col_cat: 'Kat',
+        col_tot: 'Ges.',
+        // ── Rondes ──
+        ronde_serie: 'Serie',
+        ronde_kf: 'VF',
+        ronde_hf: 'HF',
+        ronde_finale: 'Finale',
+        ronde_b_finale: 'B-Finale',
+        ronde_runner_up: 'Runner-up',
+        // ── Resultaten ──
+        res_uitslagen_titel: 'Ergebnisse pro Distanz',
+        res_pt: 'Pkt',
+        res_klassement: 'Wertung {dc}',
+        res_punten: '{n} Punkte',
+        // ── Uitslagen tab ──
+        uitsl_titel: 'Vollständige Ergebnisse dieses Rennens',
+        uitsl_opt_kies_cat: '— Kategorie wählen —',
+        uitsl_opt_kies_afstand: '— Distanz wählen —',
+        uitsl_klassement_opt: '🏆 Wertung',
+        // ── Serie-klassement ──
+        serie_titel: '🏆 Serien-Wertung',
+        serie_opt_kies: '— Serien-Wertung wählen —',
+        serie_opt_alle_cats: '— Alle Kategorien —',
+        serie_aantal_rijders: '{n} Skater',
+        serie_seizoen_sep: ' — ',
+        // ── Errors ──
+        err_prefix: 'Fehler: {msg}',
+        err_zoeken: 'Suchfehler: {msg}',
+        // ── PTR ──
+        ptr_laat_los: '↑ Loslassen zum Aktualisieren',
+        ptr_vernieuwen: '⟳ Aktualisiere…',
+        ptr_bijgewerkt: '✓ Aktualisiert',
+        ptr_fout: '⚠ Aktualisierungsfehler',
+        ptr_wachten: '⏳ Bitte warten ({s}s)',
+        // ── Mededelingen ──
+        meld_kop: '📢 Bekanntmachungen',
+        meld_tot: ' bis ',
+        meld_begrepen: '✓ Verstanden',
+        // ── Info modal ──
+        info_titel: 'Über InlineComp',
+        info_h1: 'Was ist InlineComp?',
+        info_p1: 'InlineComp ist ein Wettkampfverwaltungssystem für Inline-Speedskating, entwickelt um Rennorganisationen bei Startlisten, Live-Zeitmessung und Ergebnisveröffentlichung zu unterstützen.',
+        info_p2_html: 'Diese öffentliche Seite ist für <b>Skater und Zuschauer</b> gedacht: suche deine Startnummer und sieh direkt deine Heats, Startzeiten und Ergebnisse.',
+        info_h2: 'In Entwicklung',
+        info_p3: 'InlineComp wird aktiv weiterentwickelt. Funktionen können sich ändern und es können noch Fehler vorkommen. Feedback ist sehr willkommen!',
+        info_h3_html: 'Kontakt &amp; Feedback',
+        info_p4: 'Hast du eine Frage, einen Vorschlag oder einen Bug gefunden? Lass es uns wissen:',
+        info_h4: 'Anonyme Besuchsstatistiken',
+        info_p5_html: 'Wir zählen anonym Besucherzahlen, aktive Sitzungen und Spitzenwerte gleichzeitiger Nutzer — nur um zu sehen wie viel die App genutzt wird und das Hosting stabil zu halten. Es werden <b>keine IP-Adressen oder persönlichen Daten</b> gespeichert und <b>keine Dritten</b> sind beteiligt.',
+        info_h5_html: 'Privatsphäre &amp; persönliche Daten',
+        info_p6: 'Diese App zeigt Wettkampfdaten, die uns vom KNSB geliefert werden (u.a. Namen, Startnummern, Verein). In der Datenschutzerklärung steht welche Daten wir verarbeiten, auf welcher Grundlage und wie du einen Löschantrag einreichen kannst.',
+        info_btn_privacy: '📄 Datenschutzerklärung ansehen',
+        info_copyright: 'InlineComp &copy; {jaar} Geert de Vries',
+        // ── Help modal ──
+        help_titel: 'Wie funktioniert InlineComp?',
+        help_h1: 'Loslegen',
+        help_stap1_html: 'Wähle dein <b>Rennen</b> aus der Liste. Mit den drei Filter-Buttons — <i>Früher</i>, <i>Heute</i> und <i>Später</i> — entscheidest du welche Rennen du siehst. Standardmäßig ist nur <i>Heute</i> aktiv; klicke einen Button an/aus, um den Bereich anzupassen.',
+        help_stap2_html: 'Gib deine <b>Startnummer</b> ein und klicke auf <b>Suchen</b> — deine persönliche Übersicht erscheint.',
+        help_stap3_html: 'Möchtest du mehrere Skater verfolgen (z.B. Bruder, Schwester oder Teamkollege)? Klicke auf den <b>+</b>-Button oben. Du kannst bis zu <b>4 Skater</b> gleichzeitig verfolgen — wechsle über die Tabs oben mit ihren Startnummern.',
+        help_mock_kies_w: 'Wähle dein Rennen',
+        help_mock_voorbeeld: 'Beispielrennen — 19. April 2026',
+        help_mock_snr_lic: 'Startnummer, Lizenz oder Nachname',
+        help_mock_snr: 'Startnummer: 86',
+        help_h_tabs: 'Tabs',
+        help_p_tabs_html: 'Nach dem Suchen siehst du <b>4 Tabs</b>:',
+        help_p_prog_html: '<b>Programm</b> — alle Rennen der Veranstaltung. Deine Rennen sind markiert. Tippe auf ein Rennen für die Startliste.',
+        help_p_heats_html: '<b>Heats</b> — deine Heats mit allen Skatern. Deine eigene Zeile ist markiert. Nach dem Finish siehst du Zeiten und Positionen.',
+        help_p_res_html: '<b>Resultate</b> — deine persönlichen Ergebnisse pro Distanz und deine Wertung.',
+        help_p_uitsl_html: '<b>Ergebnisse</b> — die vollständigen Ergebnisse aller Skater. Wähle eine Kategorie und Distanz, oder sieh die Wertung.',
+        help_mock_jouw_naam: 'Dein Name',
+        help_h_auto: 'Automatisch aktualisiert',
+        help_p_auto_html: 'Die Seite aktualisiert sich jede Minute solange der Tab sichtbar ist. Neben dem Rennnamen siehst du <b>🔄 HH:MM</b> — das ist der Zeitpunkt der letzten Aktualisierung.',
+        help_h_meld: 'Bekanntmachungen',
+        help_p_meld_html: 'Oben befindet sich ein <b>📢-Button</b> (sichtbar sobald eine aktive Bekanntmachung vorhanden ist). Wichtige Ankündigungen der Organisation erscheinen automatisch als Pop-up und bleiben danach unter diesem Button erreichbar — z.B. "Programm läuft 15 Min hinterher".',
+        help_h_tip: 'Tipp',
+        help_p_tip: 'Noch keine Ergebnisse? Das Ergebnis erscheint, sobald die Jury es bestätigt hat.',
+    },
+    fr: {
+        // ── Document ──
+        page_title: 'InlineComp – Ma course',
+        // ── Header / static ──
+        ptr_trek: '↓ Tirer plus loin pour actualiser',
+        hdr_meldingen_title: 'Annonces pour cette course',
+        hdr_info_title: 'À propos d\'InlineComp',
+        hdr_help_title: 'Comment ça marche ?',
+        hdr_sub: 'Trouve tes séries, horaires et résultats',
+        pwa_installeer_titel: 'Installer InlineComp',
+        pwa_installeer_uitleg: 'Ajoute à ton écran d\'accueil pour un accès rapide',
+        pwa_btn_install: 'Installer',
+        pwa_btn_sluit: 'Fermer',
+        stap1_label: 'Choisis ta course',
+        stap2_label: 'Numéro de dossard, licence ou nom de famille',
+        filter_eerder: 'Avant',
+        filter_eerder_title: 'Courses précédentes',
+        filter_vandaag: 'Aujourd\'hui',
+        filter_later: 'Plus tard',
+        filter_later_title: 'Courses à venir',
+        opt_laden: 'Chargement…',
+        zoek_placeholder: 'Numéro de dossard, nº de licence ou nom…',
+        btn_zoeken: 'Rechercher',
+        // ── Connection banner ──
+        conn_geen_internet: '📡 Pas d\'internet — actualisation dès le retour de la connexion',
+        conn_server_down: '⚠ Serveur inaccessible — nouvel essai…',
+        conn_laatste_update: 'dernière mise à jour {tijd}',
+        // ── Comps select ──
+        opt_kies_filter: '— Sélectionne au moins un filtre ci-dessus —',
+        opt_kies_wedstrijd: '— Choisis une course —',
+        opt_binnenkort: '(bientôt)',
+        opt_fout_laden: 'Échec du chargement',
+        // ── Disclaimer ──
+        disc_welkom: 'Bienvenue sur InlineComp !',
+        disc_p1: 'Nous testons InlineComp pour la première fois lors de cette course — les commentaires sont les bienvenus !',
+        disc_p2_html: 'Les listes de départ officielles, résultats, classements et annonces sont disponibles comme toujours sur <strong>Sportity</strong> (canal : <em>ISKREGIO</em>).',
+        disc_p3: 'Aucun droit ne peut être tiré des informations dans InlineComp.',
+        disc_ok: 'OK, compris',
+        // ── Zoek / chooser ──
+        msg_laden: 'Chargement…',
+        msg_zoeken: 'Recherche…',
+        msg_zoeken_op: 'Recherche pour "{term}"…',
+        msg_rijders_ophalen: 'Récupération des skateurs…',
+        msg_je_rijders_ophalen: 'Récupération de tes skateurs…',
+        msg_geen_resultaten: 'Aucun résultat trouvé.',
+        msg_geen_rijders: 'Aucun skateur trouvé.',
+        msg_geen_startlijst: 'Aucune liste de départ disponible pour cette course.',
+        msg_geen_klassement: 'Aucun classement disponible.',
+        msg_geen_uitslagen: 'Aucun résultat disponible.',
+        msg_geen_posities: 'Aucune position dans cette catégorie.',
+        msg_kies_categorie_klassement: 'Choisis une catégorie pour voir le classement.',
+        msg_programma_nb: 'Programme non disponible.',
+        msg_nog_geen_heats: 'Aucune série disponible pour le moment.',
+        msg_nog_geen_resultaten: 'Aucun résultat disponible pour le moment.',
+        msg_vorige_ronde_nb: 'Tour précédent pas encore terminé — la liste de départ apparaît dès que tous les résultats sont entrés.',
+        chooser_titel: 'Résultats de recherche pour "{term}"',
+        chooser_sluit: 'Fermer',
+        chooser_al_in_lijst: 'déjà dans la liste',
+        chooser_doet_niet_mee: 'ne participe pas à cette course',
+        chooser_max: 'Max. {max} skateurs · {vrij} place(s) libre(s)',
+        chooser_toevoegen: 'Ajouter',
+        alert_max_bereikt: 'Maximum de {max} skateurs atteint. Retire d\'abord quelqu\'un pour en ajouter un nouveau.',
+        alert_max_select: 'Maximum {max} — il reste de la place pour {vrij}. Tu en as sélectionné {n}.',
+        // ── Kind-tabs ──
+        kind_rijder_placeholder: '(skateur)',
+        kind_tab_verwijder: 'Retirer ce skateur',
+        kind_plus_title: 'Ajouter frère/sœur',
+        kind_plus_max: 'Maximum {max} skateurs',
+        // ── Persoon / status ──
+        status_niet_ingeschreven: 'Non inscrit',
+        status_0: 'Non confirmé',
+        status_1: 'Confirmé',
+        status_2: 'Désinscrit',
+        status_3: 'Désinsc. à l\'org.',
+        status_4: 'Non signé',
+        status_5: 'Conf. à l\'org.',
+        status_onbekend: '?',
+        snr_label: 'Nº',
+        auto_stempel_title: 'Heure de la dernière actualisation automatique',
+        // ── Tabs ──
+        tab_programma: '📅 Programme',
+        tab_heats: '🏃 Séries',
+        tab_resultaten: '🏆 Résultats',
+        tab_uitslagen: '📊 Tous résultats',
+        // ── Programma ──
+        prog_titel: 'Programme de course',
+        prog_combi_kop: '🔗 Course combinée — patinage simultané',
+        prog_blok_pauze: 'Pause',
+        prog_blok_inrijden: 'Échauffement',
+        prog_blok_wedstrijdstart: 'Départ de course',
+        prog_blok_ceremonie: 'Cérémonie',
+        prog_blok_herstart: 'Redémarrage',
+        prog_blok_min: 'min',
+        // ── Heats ──
+        heat_wachten_vorige: 'En attente du tour précédent',
+        heat_jouw_resultaat: 'Ton résultat :',
+        // ── Heat tabel headers ──
+        col_pos: '#',
+        col_snr: 'Nº',
+        col_naam: 'Nom',
+        col_rnd: 'Tour',
+        col_pnt: 'Pts',
+        col_tijd: 'Temps',
+        col_fin: 'Fin',
+        col_rang: '#',
+        col_cat: 'Cat',
+        col_tot: 'Tot',
+        // ── Rondes ──
+        ronde_serie: 'Série',
+        ronde_kf: 'QF',
+        ronde_hf: 'DF',
+        ronde_finale: 'Finale',
+        ronde_b_finale: 'B-Finale',
+        ronde_runner_up: 'Repêchage',
+        // ── Resultaten ──
+        res_uitslagen_titel: 'Résultats par distance',
+        res_pt: 'pt',
+        res_klassement: 'Classement {dc}',
+        res_punten: '{n} points',
+        // ── Uitslagen tab ──
+        uitsl_titel: 'Résultats complets de cette course',
+        uitsl_opt_kies_cat: '— Choisir catégorie —',
+        uitsl_opt_kies_afstand: '— Choisir distance —',
+        uitsl_klassement_opt: '🏆 Classement',
+        // ── Serie-klassement ──
+        serie_titel: '🏆 Classement de série',
+        serie_opt_kies: '— Choisir un classement de série —',
+        serie_opt_alle_cats: '— Toutes catégories —',
+        serie_aantal_rijders: '{n} skateurs',
+        serie_seizoen_sep: ' — ',
+        // ── Errors ──
+        err_prefix: 'Erreur : {msg}',
+        err_zoeken: 'Erreur de recherche : {msg}',
+        // ── PTR ──
+        ptr_laat_los: '↑ Relâche pour actualiser',
+        ptr_vernieuwen: '⟳ Actualisation…',
+        ptr_bijgewerkt: '✓ Mis à jour',
+        ptr_fout: '⚠ Erreur d\'actualisation',
+        ptr_wachten: '⏳ Patiente ({s}s)',
+        // ── Mededelingen ──
+        meld_kop: '📢 Annonces',
+        meld_tot: ' jusqu\'à ',
+        meld_begrepen: '✓ Compris',
+        // ── Info modal ──
+        info_titel: 'À propos d\'InlineComp',
+        info_h1: 'Qu\'est-ce qu\'InlineComp ?',
+        info_p1: 'InlineComp est un système de gestion de course pour le patinage de vitesse en ligne, développé pour aider les organisations à gérer les listes de départ, le chronométrage en direct et la publication des résultats.',
+        info_p2_html: 'Cette page publique est destinée aux <b>skateurs et spectateurs</b> : cherche ton numéro de dossard et consulte directement tes séries, horaires et résultats.',
+        info_h2: 'En développement',
+        info_p3: 'InlineComp est en développement actif. Les fonctions peuvent changer et des bugs peuvent encore exister. Les commentaires sont les bienvenus !',
+        info_h3_html: 'Contact &amp; commentaires',
+        info_p4: 'Une question, suggestion ou bug trouvé ? Fais-le nous savoir :',
+        info_h4: 'Statistiques de visite anonymes',
+        info_p5_html: 'Nous comptons anonymement le nombre de visiteurs, sessions actives et pics simultanés — uniquement pour voir l\'utilisation de l\'app et garder l\'hébergement stable. <b>Aucune adresse IP ni donnée personnelle</b> n\'est stockée et <b>aucun tiers</b> n\'est impliqué.',
+        info_h5_html: 'Vie privée &amp; données personnelles',
+        info_p6: 'Cette app affiche des données de course fournies par la KNSB (noms, dossards, club). La déclaration de confidentialité détaille quelles données nous traitons, sur quelle base et comment soumettre une demande de suppression.',
+        info_btn_privacy: '📄 Voir la déclaration de confidentialité',
+        info_copyright: 'InlineComp &copy; {jaar} Geert de Vries',
+        // ── Help modal ──
+        help_titel: 'Comment fonctionne InlineComp ?',
+        help_h1: 'Démarrer',
+        help_stap1_html: 'Choisis ta <b>course</b> dans la liste. Avec les trois boutons de filtre — <i>Avant</i>, <i>Aujourd\'hui</i> et <i>Plus tard</i> — tu décides quelles courses voir. Par défaut seul <i>Aujourd\'hui</i> est actif ; clique un bouton pour ajuster la plage.',
+        help_stap2_html: 'Entre ton <b>numéro de dossard</b> et clique sur <b>Rechercher</b> — ton aperçu personnel apparaît.',
+        help_stap3_html: 'Tu veux suivre plusieurs skateurs (par ex. frère, sœur ou coéquipier) ? Clique sur le bouton <b>+</b> en haut. Tu peux suivre jusqu\'à <b>4 skateurs</b> en même temps — change via les onglets en haut avec leurs dossards.',
+        help_mock_kies_w: 'Choisis ta course',
+        help_mock_voorbeeld: 'Course exemple — 19 avril 2026',
+        help_mock_snr_lic: 'Numéro de dossard, licence ou nom',
+        help_mock_snr: 'Dossard : 86',
+        help_h_tabs: 'Onglets',
+        help_p_tabs_html: 'Après la recherche tu vois <b>4 onglets</b> :',
+        help_p_prog_html: '<b>Programme</b> — toutes les courses de la rencontre. Tes courses sont surlignées. Tape sur une course pour voir la liste de départ.',
+        help_p_heats_html: '<b>Séries</b> — tes séries avec tous les skateurs. Ta propre ligne est surlignée. Après l\'arrivée tu vois les temps et positions.',
+        help_p_res_html: '<b>Résultats</b> — tes résultats personnels par distance et ton classement.',
+        help_p_uitsl_html: '<b>Tous résultats</b> — les résultats complets de tous les skateurs. Choisis une catégorie et distance, ou consulte le classement.',
+        help_mock_jouw_naam: 'Ton nom',
+        help_h_auto: 'Mis à jour automatiquement',
+        help_p_auto_html: 'La page s\'actualise toutes les minutes tant que l\'onglet est visible. À côté du nom de la course tu vois <b>🔄 HH:MM</b> — c\'est l\'heure de la dernière actualisation.',
+        help_h_meld: 'Annonces',
+        help_p_meld_html: 'En haut se trouve un <b>bouton 📢</b> (visible dès qu\'une annonce est active). Les annonces importantes de l\'organisation apparaissent automatiquement en pop-up et restent accessibles sous ce bouton — par ex. "Programme avec 15 min de retard".',
+        help_h_tip: 'Astuce',
+        help_p_tip: 'Pas encore de résultats ? Le résultat apparaît dès que le jury l\'a confirmé.',
     }
 };
 // Shared i18n-helpers (t, applyI18n, toggleLang, getCurLang, getLocale)
 // zijn hierboven al ingeladen via readfile(js/i18n.js). Hier alleen
 // app-specifieke wrappers + init.
 function getStatusLabel(i) { return t('status_' + i); }
+
+// Helper voor meldingen: pak veld (titel/bericht) in huidige taal, met
+// fallback-keten: huidige taal → EN → NL (= origineel). Vertaalde velden
+// (titel_en, titel_de, titel_fr) worden door backend gevuld via Claude AI
+// bij save. NL-veld (titel, bericht) is altijd verplicht; vertalingen
+// optioneel. Voor talen waar de vertaling ontbreekt → val terug op EN
+// (de meest universele) en uiteindelijk op NL.
+function _meldingTekst(m, veld) {
+    const lang = getCurLang();
+    const sufLang = veld + '_' + lang;
+    const sufEn   = veld + '_en';
+    if (lang !== 'nl' && m[sufLang]) return m[sufLang];
+    if (lang !== 'nl' && m[sufEn])   return m[sufEn];
+    return m[veld] || '';
+}
 
 function _rerenderActiveTab() {
     // Comps-dropdown opnieuw vullen (textContent gebruikt vertaalde labels)
@@ -2167,11 +2600,32 @@ function _rerenderActiveTab() {
     document.querySelectorAll('.auto-stempel').forEach(el => {
         el.title = t('auto_stempel_title');
     });
-    // Meldingen-badge / overzicht: badge zelf is alleen een getal, geen vertaling
+    // Meldingen-badge: alleen een getal, geen vertaling nodig.
+    // Maar openstaande melding-overlays bevatten al-gerenderde titel/bericht
+    // in de oude taal — die moeten we opnieuw bouwen, anders zie je na
+    // NL→EN nog steeds de Nederlandse tekst staan (vooral merkbaar bij
+    // globale meldingen die direct bij landing openstaan).
+    const popup = document.querySelector('[data-meld-overlay="popup"]');
+    if (popup && _huidigeMelding) {
+        const m = _huidigeMelding;
+        popup.remove();
+        _meldingActief = false;
+        _huidigeMelding = null;
+        toonMelding(m, selComp?.value || '');
+    }
+    const overz = document.querySelector('[data-meld-overlay="overzicht"]');
+    if (overz) {
+        overz.remove();
+        toonMeldingenOverzicht();
+    }
 }
 
 document.addEventListener('DOMContentLoaded', () => {
     initI18n({ dict: T, onChange: _rerenderActiveTab });
+    // Disclaimer NA initI18n — anders zien gebruikers ruwe vertaal-keys
+    // (disc_welkom etc.) ipv de gerenderde tekst. Eerder werd 'ie
+    // standalone op file-scope aangeroepen, voor initI18n vuurde.
+    toonDisclaimerEenmalig();
 });
 
 const selComp = document.getElementById('sel-comp');
@@ -2333,10 +2787,14 @@ function heatExtraKolommen(rijders, rondeType) {
     return { heeftRnd, heeftPK, rondeType: rondeType ?? null };
 }
 function heatTabelHeader(extra) {
-    return `<tr><th class="col-pos">${t('col_pos')}</th><th class="col-snr">${t('col_snr')}</th><th class="col-naam">${t('col_naam')}</th>`
+    // Volgorde: pos, snr, FIN (direct na snr, rood weergegeven in CSS),
+    // naam, ... De finishpositie was vroeger helemaal rechts en viel
+    // weg in het oog; door 'm naast snr te zetten + rood te kleuren is
+    // het meteen duidelijk hoe een rijder eindigde in deze heat.
+    return `<tr><th class="col-pos">${t('col_pos')}</th><th class="col-snr">${t('col_snr')}</th><th class="col-fin">${t('col_fin')}</th><th class="col-naam">${t('col_naam')}</th>`
         + (extra.heeftRnd ? `<th class="col-rnd">${t('col_rnd')}</th>` : '')
         + (extra.heeftPK  ? `<th class="col-pk">${t('col_pnt')}</th>` : '')
-        + `<th class="col-tijd">${t('col_tijd')}</th><th class="col-fin">${t('col_fin')}</th></tr>`;
+        + `<th class="col-tijd">${t('col_tijd')}</th></tr>`;
 }
 function heatTabelRij(r, isIk, extra) {
     const rTijd = r.tijd_ms != null ? msTijd(r.tijd_ms) : '';
@@ -2349,11 +2807,11 @@ function heatTabelRij(r, isIk, extra) {
     return `<tr class="${isIk ? 'rij-ik' : ''}">
         <td class="col-pos">${r.startpositie}</td>
         <td class="col-snr">${esc(r.snr)}</td>
+        <td class="col-fin">${esc(rFin)}</td>
         <td class="col-naam">${esc(r.full_name)}${rSanctie ? ` <span class="col-sanctie">${esc(rSanctie)}</span>` : ''}</td>`
         + (extra.heeftRnd ? `<td class="col-rnd">${r.rondes ?? ''}</td>` : '')
         + (extra.heeftPK  ? `<td class="col-pk">${r.pk_punten != null ? parseFloat(r.pk_punten) : ''}</td>` : '')
         + `<td class="col-tijd">${esc(rTijd)}</td>
-        <td class="col-fin">${esc(rFin)}</td>
     </tr>`;
 }
 function msTijd(ms) {
@@ -2370,6 +2828,10 @@ async function toonRitDetail(el) {
     const dcNaam = el.dataset.dcNaam;
     const compId = selComp.value;
     const snr = inpSnr.value.trim();
+    // License_key van het actieve kind/rijder voor row-highlight in heat-tabel.
+    // snr alleen zou bij twee rijders met zelfde nr beide rijen highlighten.
+    const actiefKind = (typeof _kinderen !== 'undefined') ? _kinderen[_activeKindIdx] : null;
+    const actiefLic = actiefKind?.data?.[actiefKind?.kozen_idx ?? 0]?.persoon?.license_key || null;
     if (!ritNaam || !compId) return;
 
     // Overlay aanmaken
@@ -2395,7 +2857,12 @@ async function toonRitDetail(el) {
         const extra = heatExtraKolommen(h.rijders ?? [], rt);
         let rows = '';
         for (const r of h.rijders) {
-            rows += heatTabelRij(r, String(r.snr) === snr, extra);
+            // Match op license_key (uniek), fallback op snr voor backwards-
+            // compat met oude cached payloads die nog geen license meegeven.
+            const isHuidig = (actiefLic && r.license_key)
+                ? r.license_key === actiefLic
+                : String(r.snr) === snr;
+            rows += heatTabelRij(r, isHuidig, extra);
         }
 
         overlay.querySelector('.overlay-box').innerHTML = `
@@ -2547,13 +3014,20 @@ function toonDisclaimerEenmalig() {
     };
     document.body.appendChild(overlay);
     document.getElementById('disc-ok').addEventListener('click', sluit);
-    // ESC sluit ook
-    const esc = ev => {
-        if (ev.key === 'Escape') { sluit(); document.removeEventListener('keydown', esc); }
+    // ESC sluit ook. LET OP: niet 'esc' noemen — dat shadowt de file-scope
+    // function esc() (escape-HTML helper) en zorgt voor een TDZ-error op
+    // de esc()-aanroepen hierboven (regel 2987-2994). Bug was onzichtbaar
+    // zolang localStorage 'ic_disclaimer_seen'=1 had en de functie vroeg
+    // returnde; in incognito (leeg storage) crashte de hele inline JS,
+    // waardoor click-handlers + checkMeldingen() niet meer gehecht werden.
+    const onEscKey = ev => {
+        if (ev.key === 'Escape') { sluit(); document.removeEventListener('keydown', onEscKey); }
     };
-    document.addEventListener('keydown', esc);
+    document.addEventListener('keydown', onEscKey);
 }
-toonDisclaimerEenmalig();
+// toonDisclaimerEenmalig() wordt aangeroepen in de DOMContentLoaded-
+// handler (regel ~2617), NA initI18n — niet hier direct, anders zien
+// gebruikers ruwe vertaal-keys ipv tekst.
 
 selComp.addEventListener('change', async () => {
     const o = selComp.selectedOptions[0];
@@ -3127,7 +3601,12 @@ function renderResultaat(data, snr, prog) {
                         <tbody>`;
 
                     for (const rr of (h.rijders ?? [])) {
-                        html += heatTabelRij(rr, String(rr.snr) === snr, extra);
+                        // Match op license_key (uniek) — fallback op snr voor
+                        // backwards-compat met oude payloads.
+                        const isIk = (p.license_key && rr.license_key)
+                            ? rr.license_key === p.license_key
+                            : String(rr.snr) === snr;
+                        html += heatTabelRij(rr, isIk, extra);
                     }
 
                     html += '</tbody></table>';
@@ -3794,6 +4273,10 @@ const _markGezien = (scope, id) => {
 // zonder op de volgende poll-tick te wachten.
 let _meldingLijst = [];
 let _meldingActief = false;     // staat er al een pop-up open?
+// Welke melding staat op dit moment in de interrupt-popup? Nodig zodat we
+// 'm opnieuw kunnen renderen (in de nieuwe taal) als de gebruiker
+// midden-popup naar EN/NL switcht. null = geen popup open.
+let _huidigeMelding = null;
 
 async function checkMeldingen(compId) {
     // compId leeg → fetch alleen globale meldingen (landing-pagina).
@@ -3845,6 +4328,8 @@ function updateMeldingenBadge() {
 function toonMeldingenOverzicht() {
     if (!_meldingLijst.length) return;
     const overlay = document.createElement('div');
+    // data-attribute zodat _rerenderActiveTab 'm kan vinden bij taalwissel
+    overlay.dataset.meldOverlay = 'overzicht';
     overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.55);z-index:9400;display:flex;align-items:flex-start;justify-content:center;padding:4vh 1rem;overflow-y:auto;';
     const _loc = getLocale();
     const items = _meldingLijst.map(m => {
@@ -3857,10 +4342,11 @@ function toonMeldingenOverzicht() {
             ? t('meld_tot') + new Date(m.geldig_tot.replace(' ', 'T')).toLocaleString(_loc,
                 {day:'2-digit',month:'short',hour:'2-digit',minute:'2-digit'})
             : '';
-        // Toon EN-variant als app op EN staat én operator heeft 'm ingevuld;
-        // anders fallback naar NL (= origineel).
-        const titelToon   = (getCurLang() === 'en' && m.titel_en)   ? m.titel_en   : m.titel;
-        const berichtToon = (getCurLang() === 'en' && m.bericht_en) ? m.bericht_en : m.bericht;
+        // Pak de vertaling voor de huidige taal als beschikbaar. Fallback-keten:
+        // huidige taal → EN → NL (= origineel). Geldt voor alle ondersteunde
+        // talen (NL/EN/DE/FR).
+        const titelToon   = _meldingTekst(m, 'titel');
+        const berichtToon = _meldingTekst(m, 'bericht');
         return `<div style="background:${stijl.bg};border-left:4px solid ${stijl.kleur};
                             padding:.7rem .9rem;margin-bottom:.6rem;border-radius:5px;">
             <div style="display:flex;align-items:center;gap:.4rem;margin-bottom:.3rem;">
@@ -3906,16 +4392,19 @@ function toonVolgendeMelding(compId) {
 function toonMelding(m, compId) {
     if (_meldingActief) return;     // double-click guard
     _meldingActief = true;
+    _huidigeMelding = m;            // onthouden voor taalwissel-rerender
     const stijl = _MELDING_PRIO[m.prio] ?? _MELDING_PRIO.info;
     const overlay = document.createElement('div');
+    // data-attribute zodat _rerenderActiveTab 'm kan vinden bij taalwissel
+    overlay.dataset.meldOverlay = 'popup';
     // Overlay scrolt zelf óók (overflow-y:auto) als achterval voor heel kleine
     // schermen waar zelfs de inner-box met max-height: 90vh nog te hoog is.
     overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:9500;display:flex;align-items:center;justify-content:center;padding:1rem;overflow-y:auto;';
     // Inner-box als flex-column: header + scrollable bericht + knop. Bericht-
     // div krijgt overflow-y:auto + min-height:0 (cruciaal voor flex-children),
     // knop heeft flex-shrink:0 zodat 'ie altijd onderaan zichtbaar blijft.
-    const titelToon   = (getCurLang() === 'en' && m.titel_en)   ? m.titel_en   : m.titel;
-    const berichtToon = (getCurLang() === 'en' && m.bericht_en) ? m.bericht_en : m.bericht;
+    const titelToon   = _meldingTekst(m, 'titel');
+    const berichtToon = _meldingTekst(m, 'bericht');
     overlay.innerHTML = `
         <div style="background:${stijl.bg};border:3px solid ${stijl.kleur};border-radius:10px;
                     max-width:400px;width:100%;max-height:calc(100vh - 2rem);
@@ -3941,6 +4430,7 @@ function toonMelding(m, compId) {
         _markGezien(_meldingScope(m), m.id);
         overlay.remove();
         _meldingActief = false;
+        _huidigeMelding = null;
         // Direct doorrollen naar volgende ongeziene melding (geen poll-wait).
         // Werkt ook zonder geselecteerde wedstrijd — globale melding-keten
         // mag altijd doorscrollen.
@@ -4223,9 +4713,23 @@ let _huidigStempel = '';
     document.querySelector('header')?.addEventListener('dblclick', ptrHerlaad);
 })();
 
-// ── PWA: service worker + install prompt ─────────────────────────────────
+// ── PWA: service worker ───────────────────────────────────────────────────
+// Update-flow: SW is network-only met cache-cleanup bij activate (zie sw.js).
+// reg.update() bij visibility-change zorgt dat browsers nieuwe SW oppikken,
+// maar GEEN automatische window.reload() — die wiste input-velden tijdens
+// typen (regressie 2026-05-27: gebruikers konden niet meer op zoeken
+// klikken doordat hun startnummer-input mid-typen werd gewist).
+// Gevolg: nieuwe versie verschijnt pas bij volgende natuurlijke refresh
+// of nav. Voor browser-users zorgen PHP no-cache headers dat dat altijd
+// vers is. Voor PWA-users: tab sluiten/openen.
 if ('serviceWorker' in navigator) {
-    navigator.serviceWorker.register('sw.js').catch(() => {});
+    navigator.serviceWorker.register('sw.js').then(reg => {
+        const checkUpdate = () => { try { reg.update(); } catch {} };
+        document.addEventListener('visibilitychange', () => {
+            if (document.visibilityState === 'visible') checkUpdate();
+        });
+        setInterval(checkUpdate, 5 * 60 * 1000);
+    }).catch(() => {});
 }
 
 let _deferredPrompt = null;

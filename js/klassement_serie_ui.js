@@ -53,7 +53,7 @@ async function openSerieWizard({ orgId = '', serieId = null } = {}) {
                 _geimporteerd:  !!+w.geimporteerd,
             }));
         } catch (e) {
-            alert('Fout bij laden: ' + e.message);
+            toonBevestigDialog('Fout bij laden: ' + e.message, 'Klassement-serie', 'OK', '');
             return;
         }
     }
@@ -143,14 +143,25 @@ function _renderWizard(state) {
 }
 
 function _validateStap(state) {
+    // fire-and-forget toonBevestigDialog — caller gebruikt return-bool sync.
+    // De modal blijft staan tot user klikt; functie geeft direct false terug.
     if (state.stap === 1) {
-        if (!state.naam?.trim()) { alert('Geef het klassement een naam.'); return false; }
+        if (!state.naam?.trim()) {
+            toonBevestigDialog('Geef het klassement een naam.', 'Validatie', 'OK', '');
+            return false;
+        }
     }
     if (state.stap === 2) {
         const gekozen = state.wedstrijden.filter(w => w._checked);
-        if (!gekozen.length) { alert('Selecteer minstens één wedstrijd.'); return false; }
+        if (!gekozen.length) {
+            toonBevestigDialog('Selecteer minstens één wedstrijd.', 'Validatie', 'OK', '');
+            return false;
+        }
         const finales = gekozen.filter(w => w.is_finale);
-        if (finales.length > 1) { alert('Er kan slechts één wedstrijd als finale aangevinkt zijn.'); return false; }
+        if (finales.length > 1) {
+            toonBevestigDialog('Er kan slechts één wedstrijd als finale aangevinkt zijn.', 'Validatie', 'OK', '');
+            return false;
+        }
     }
     return true;
 }
@@ -628,7 +639,7 @@ async function _opslaan(state) {
         )).klassement_id;
         if (klId) await openKlassement(klId);
     } catch (e) {
-        alert('Fout bij opslaan: ' + e.message);
+        toonBevestigDialog('Fout bij opslaan: ' + e.message, 'Klassement-serie', 'OK', '');
         if (btn) { btn.disabled = false; btn.textContent = state.serieId ? 'Opslaan & herberekenen' : 'Aanmaken & berekenen'; }
     }
 }
@@ -641,7 +652,9 @@ async function herbereken(serieId) {
         // Huidig klassement opnieuw laden
         if (rkHuidig?.id) await openKlassement(rkHuidig.id);
         await laadLijst();
-    } catch (e) { alert('Fout: ' + e.message); }
+    } catch (e) {
+        toonBevestigDialog('Fout: ' + e.message, 'Herberekenen', 'OK', '');
+    }
 }
 
 // ── Diagnose (knop in detail-view) ──────────────────────────────────────────
@@ -772,7 +785,9 @@ async function diagnoseSerieer(serieId) {
         document.getElementById('ks-diag').addEventListener('click', e => {
             if (e.target.id === 'ks-diag') e.currentTarget.remove();
         });
-    } catch (e) { alert('Fout bij diagnose: ' + e.message); }
+    } catch (e) {
+        toonBevestigDialog('Fout bij diagnose: ' + e.message, 'Diagnose', 'OK', '');
+    }
 }
 
 // rkPost in ranking.js is uitgebreid om zowel FormData als JSON te slikken —

@@ -23,11 +23,24 @@ CREATE TABLE IF NOT EXISTS `persons` (
     -- pseudonieme FK; naam/geboortejaar/woonplaats worden op 'Verwijderd'/NULL gezet.
     -- Bij een niet-null `anonymized_at` toont de UI "Verwijderd" i.p.v. de naam.
     `anonymized_at` DATETIME     DEFAULT NULL,
+    -- Pending-rijders: aangemaakt vanuit historie-import (PDF) als de echte
+    -- KNSB-licentie nog niet bekend is. license_key heeft dan het formaat
+    -- 'p-{12-char-random}'. Zodra de rijder gekoppeld wordt aan een echte
+    -- KNSB-account: alle uitslag_afstand-rijen worden ge-UPDATE naar de
+    -- echte license_key en de pending-rij wordt verwijderd.
+    -- Mogelijke waarden: NULL (echte persoon, default) | 'historie' (PDF-import)
+    `pending_source` VARCHAR(20)  DEFAULT NULL,
     PRIMARY KEY (`license_key`),
-    KEY `idx_persons_anon` (`anonymized_at`)
+    KEY `idx_persons_anon`    (`anonymized_at`),
+    KEY `idx_persons_pending` (`pending_source`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
 -- Migratie voor bestaande installaties (fout negeren als kolom al bestaat):
 -- ALTER TABLE persons
 --     ADD COLUMN anonymized_at DATETIME DEFAULT NULL AFTER updated_at,
 --     ADD KEY idx_persons_anon (anonymized_at);
+--
+-- Pending-source migratie (later toegevoegd):
+-- ALTER TABLE persons
+--     ADD COLUMN pending_source VARCHAR(20) DEFAULT NULL AFTER anonymized_at,
+--     ADD KEY idx_persons_pending (pending_source);

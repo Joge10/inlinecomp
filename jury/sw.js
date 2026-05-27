@@ -1,14 +1,14 @@
 // ============================================================
-//  InlineComp Public — Service Worker (PWA)
+//  InlineComp Jury — Service Worker (PWA)
 //
 //  Strategie sinds 2026-05-27: PURE NETWORK-ONLY.
 //  Zie coach/sw.js voor uitgebreide uitleg — dezelfde rationale.
-//  Korte versie: eerdere network-first+cache.put gaf cached oude HTML
-//  na app-updates; voor een real-time wedstrijd-app is offline-modus
-//  toch waardeloos.
+//  Voor jury extra belangrijk: stale heat-data of stale jury.js
+//  kan tot foute beslissingen leiden ('baan op gestuurd' uit oude
+//  cache komt). Altijd vers.
 // ============================================================
 
-const SW_VERSIE = 'public-2026.05.27.001';
+const SW_VERSIE = 'jury-2026.05.27.001';
 
 self.addEventListener('install', () => {
     self.skipWaiting();
