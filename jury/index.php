@@ -1630,11 +1630,49 @@ if ($action === 'scheids_dc') {
         $stmt->execute($params);
         $rows = $stmt->fetchAll(PDO::FETCH_ASSOC);
 
+        // ── Heat-lidmaatschap per rijder ophalen (voor "reserve op plek") ──
+        // Per persoon: in welke heat(s) van deze DC zit hij, en is die heat al
+        // gereden (heeft results)? Een reserve kan alleen op de plek van een
+        // afgemelde rijder in een NIET-gereden heat invallen.
+        $heatStmt = $pdo->prepare("
+            SELECT
+                he.person_license,
+                h.id        AS heat_id,
+                h.heat_naam,
+                h.heat_nr,
+                he.startpositie,
+                (SELECT COUNT(*) FROM results r WHERE r.heat_entry_id = he.id) AS heeft_result
+            FROM heats h
+            JOIN heat_entries he ON he.heat_id = h.id
+            WHERE h.distance_combination_id = ?
+        ");
+        $heatStmt->execute([$dcId]);
+        $heatMap = [];   // license → ['heats' => [{heat_id, label, startpositie}], 'locked' => bool]
+        foreach ($heatStmt->fetchAll(PDO::FETCH_ASSOC) as $h) {
+            $lic = $h['person_license'];
+            if (!isset($heatMap[$lic])) $heatMap[$lic] = ['heats' => [], 'locked' => false];
+            $label = $h['heat_naam'] !== '' && $h['heat_naam'] !== null
+                ? $h['heat_naam'] : ('Heat ' . (int)$h['heat_nr']);
+            $heatMap[$lic]['heats'][] = [
+                'heat_id'      => (int)$h['heat_id'],
+                'label'        => $label,
+                'startpositie' => (int)$h['startpositie'],
+            ];
+            if ((int)$h['heeft_result'] > 0) $heatMap[$lic]['locked'] = true;
+        }
+        $heatsBestaan = !empty($heatMap) || (function() use ($pdo, $dcId) {
+            $c = $pdo->prepare("SELECT COUNT(*) FROM heats WHERE distance_combination_id = ?");
+            $c->execute([$dcId]);
+            return (int)$c->fetchColumn() > 0;
+        })();
+
         $reserves   = [];
         $deelnemers = [];
         foreach ($rows as $r) {
+            $lic  = $r['license_key'];
+            $hm   = $heatMap[$lic] ?? null;
             $rij = [
-                'license_key' => $r['license_key'],
+                'license_key' => $lic,
                 'naam'        => $r['full_name'] ?? $r['short_name'] ?? '(onbekend)',
                 'startnummer' => $r['startnummer'] !== null ? (int)$r['startnummer'] : null,
                 'categorie'   => $r['category'] ?? '',
@@ -1642,6 +1680,11 @@ if ($action === 'scheids_dc') {
                 'entry_status'=> (int)$r['entry_status'],
                 'reserve_nr'  => $r['reserve_nr'] !== null ? (int)$r['reserve_nr'] : null,
                 'ingezet'     => (int)$r['ingezet'] === 1,
+                'in_heat'     => $hm !== null && !empty($hm['heats']),
+                'heat_locked' => $hm !== null && $hm['locked'],
+                'heat_label'  => $hm !== null
+                    ? implode(', ', array_map(fn($x) => $x['label'], $hm['heats']))
+                    : '',
             ];
             if ($rij['reserve_nr'] !== null) {
                 $reserves[] = $rij;
@@ -1653,9 +1696,10 @@ if ($action === 'scheids_dc') {
         usort($reserves, fn($a, $b) => $a['reserve_nr'] <=> $b['reserve_nr']);
 
         echo json_encode([
-            'teller'     => _scheidsTeller($pdo, $dcId),
-            'reserves'   => $reserves,
-            'deelnemers' => $deelnemers,
+            'teller'        => _scheidsTeller($pdo, $dcId),
+            'heats_bestaan' => $heatsBestaan,
+            'reserves'      => $reserves,
+            'deelnemers'    => $deelnemers,
         ], JSON_UNESCAPED_UNICODE);
     } catch (Throwable $e) {
         http_response_code(500);
@@ -1797,6 +1841,165 @@ if ($action === 'scheids_status' && $_SERVER['REQUEST_METHOD'] === 'POST') {
             'teller' => _scheidsTeller($pdo, $dcId),
         ], JSON_UNESCAPED_UNICODE);
     } catch (Throwable $e) {
+        http_response_code(500);
+        echo json_encode(['error' => $e->getMessage()]);
+    }
+    exit;
+}
+
+// ── API: reserve vervangt afgemelde op diens HEAT-plek ──────────────────────
+// POST { dc_id, uit_license (afgemelde), in_license (reserve) }
+// Scenario: loting is al gedaan (heats bestaan), iemand meldt zich vlak vóór
+// de start af. De reserve neemt LETTERLIJK de startpositie van de afgemelde
+// over in diens heat(s) — geen herloting. Eén transactie:
+//   1. heat_entries: person_license afgemelde → reserve (startpositie blijft),
+//      startnummer + categorie meegeüpdatet. Alleen in NIET-gereden heats.
+//   2. entries: afgemelde → status 3 (afgem. bij org., tenzij al 3/4),
+//      reserve → status 5 + reserve_handmatig_ingezet=1 + reserve=NULL.
+// Harde grens: een heat met resultaten (al gereden) wordt nooit gewijzigd.
+if ($action === 'scheids_vervang_in_heat' && $_SERVER['REQUEST_METHOD'] === 'POST') {
+    header('Content-Type: application/json; charset=utf-8');
+    $compId = _scheidsRequire();
+    $body   = json_decode(file_get_contents('php://input'), true) ?: [];
+    $dcId   = trim($body['dc_id']       ?? '');
+    $uitLic = trim($body['uit_license'] ?? '');
+    $inLic  = trim($body['in_license']  ?? '');
+    if ($dcId === '' || $uitLic === '' || $inLic === '' || $uitLic === $inLic) {
+        http_response_code(400);
+        echo json_encode(['error' => 'dc_id, uit_license en in_license (verschillend) verplicht']);
+        exit;
+    }
+    try {
+        if (!_scheidsCheckDc($pdo, $dcId, $compId)) {
+            http_response_code(403);
+            echo json_encode(['error' => 'DC hoort niet bij deze wedstrijd']);
+            exit;
+        }
+        // Reserve-entry valideren: moet entry in deze DC zijn, reserve én getekend.
+        $resStmt = $pdo->prepare("
+            SELECT status, reserve FROM entries
+            WHERE distance_combination_id = ? AND person_license = ?
+        ");
+        $resStmt->execute([$dcId, $inLic]);
+        $resEnt = $resStmt->fetch(PDO::FETCH_ASSOC);
+        if (!$resEnt) {
+            http_response_code(404);
+            echo json_encode(['error' => 'Reserve-entry niet gevonden in deze DC']);
+            exit;
+        }
+        if ($resEnt['reserve'] === null) {
+            http_response_code(409);
+            echo json_encode(['error' => 'Invaller is geen reserve', 'reden' => 'geen_reserve']);
+            exit;
+        }
+        if ((int)$resEnt['status'] !== 1) {
+            http_response_code(409);
+            echo json_encode([
+                'error' => 'Reserve moet getekend (status bevestigd) zijn om in te vallen',
+                'reden' => 'status_niet_getekend',
+            ]);
+            exit;
+        }
+
+        // Heats van de afgemelde rijder in deze DC ophalen, met result-check.
+        $hStmt = $pdo->prepare("
+            SELECT he.id AS he_id, he.heat_id, he.startpositie,
+                   (SELECT COUNT(*) FROM results r WHERE r.heat_entry_id = he.id) AS heeft_result
+            FROM heat_entries he
+            JOIN heats h ON h.id = he.heat_id
+            WHERE h.distance_combination_id = ?
+              AND he.person_license = ?
+        ");
+        $hStmt->execute([$dcId, $uitLic]);
+        $heats = $hStmt->fetchAll(PDO::FETCH_ASSOC);
+        if (!$heats) {
+            http_response_code(409);
+            echo json_encode([
+                'error' => 'Afgemelde rijder zit niet in een heat — gebruik gewone reserve-inzet',
+                'reden' => 'geen_heat',
+            ]);
+            exit;
+        }
+        // Als één van de heats al gereden is → weigeren (niet meer te wijzigen).
+        foreach ($heats as $h) {
+            if ((int)$h['heeft_result'] > 0) {
+                http_response_code(409);
+                echo json_encode([
+                    'error' => 'Een heat van deze rijder is al gereden — vervangen kan niet meer',
+                    'reden' => 'heat_gereden',
+                ]);
+                exit;
+            }
+        }
+        // Voorkom dubbele rijder: reserve mag nog niet in dezelfde heat staan.
+        $heatIds = array_map(fn($h) => (int)$h['heat_id'], $heats);
+        $hidPh   = implode(',', array_fill(0, count($heatIds), '?'));
+        $dupStmt = $pdo->prepare("
+            SELECT COUNT(*) FROM heat_entries
+            WHERE person_license = ? AND heat_id IN ($hidPh)
+        ");
+        $dupStmt->execute(array_merge([$inLic], $heatIds));
+        if ((int)$dupStmt->fetchColumn() > 0) {
+            http_response_code(409);
+            echo json_encode([
+                'error' => 'Reserve staat al in (één van) deze heat(s)',
+                'reden' => 'reserve_al_in_heat',
+            ]);
+            exit;
+        }
+
+        // Reserve-persoonsvelden (startnummer-override + categorie) ophalen voor
+        // de gedenormaliseerde snapshot in heat_entries.
+        $pStmt = $pdo->prepare("
+            SELECT COALESCE(csn.startnummer, p.start_number) AS startnummer, p.category
+            FROM persons p
+            LEFT JOIN competition_startnummers csn
+                   ON csn.competition_id = ? AND csn.person_license = p.license_key
+            WHERE p.license_key = ?
+        ");
+        $pStmt->execute([$compId, $inLic]);
+        $pInfo = $pStmt->fetch(PDO::FETCH_ASSOC) ?: [];
+        $inSnr = $pInfo['startnummer'] !== null ? (int)$pInfo['startnummer'] : null;
+        $inCat = $pInfo['category'] ?? null;
+
+        $pdo->beginTransaction();
+        // 1. Heat-slot(s) overzetten — startpositie blijft ongemoeid.
+        $swap = $pdo->prepare("
+            UPDATE heat_entries
+               SET person_license = ?, startnummer = ?, categorie = ?
+             WHERE heat_id = ? AND person_license = ?
+        ");
+        foreach ($heats as $h) {
+            $swap->execute([$inLic, $inSnr, $inCat, (int)$h['heat_id'], $uitLic]);
+        }
+        // 2a. Afgemelde → status 3 (afgem. bij org.), tenzij al 3/4 gezet.
+        $uitCur = $pdo->prepare("
+            SELECT status FROM entries WHERE distance_combination_id = ? AND person_license = ?
+        ");
+        $uitCur->execute([$dcId, $uitLic]);
+        $uitStatus = (int)($uitCur->fetchColumn() ?: 1);
+        if (!in_array($uitStatus, [3, 4], true)) {
+            $pdo->prepare("
+                UPDATE entries SET status = 3
+                 WHERE distance_combination_id = ? AND person_license = ?
+            ")->execute([$dcId, $uitLic]);
+        }
+        // 2b. Reserve → in de loting (status 5, geen reserve-nr, handmatig ingezet).
+        $pdo->prepare("
+            UPDATE entries
+               SET reserve = NULL, reserve_handmatig_ingezet = 1, status = 5
+             WHERE distance_combination_id = ? AND person_license = ?
+        ")->execute([$dcId, $inLic]);
+        $pdo->commit();
+
+        _juryLog($pdo, 'scheids-vervang-in-heat', null, $compId);
+        echo json_encode([
+            'ok'           => true,
+            'heats_gewijzigd' => count($heats),
+            'teller'       => _scheidsTeller($pdo, $dcId),
+        ], JSON_UNESCAPED_UNICODE);
+    } catch (Throwable $e) {
+        if ($pdo->inTransaction()) $pdo->rollBack();
         http_response_code(500);
         echo json_encode(['error' => $e->getMessage()]);
     }
