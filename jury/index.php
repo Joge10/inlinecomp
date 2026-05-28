@@ -1172,6 +1172,11 @@ if ($action === 'speaker_eerdere_overzicht') {
     header('Content-Type: application/json; charset=utf-8');
     $compId = _speakerRequire();
     try {
+        // De HUIDIGE wedstrijd wordt NIET meer uitgesloten: een afstand die al
+        // verreden (en vastgelegd/geïmporteerd) is binnen deze wedstrijd is voor
+        // de speaker waardevolle context (bv. 200m-uitslag bij het omroepen van
+        // de 500m). De huidige wedstrijd komt bovenaan en wordt gemarkeerd
+        // (is_huidige) zodat de frontend 'm kan labelen.
         $stmt = $pdo->prepare("
             SELECT DISTINCT
                 c.id                       AS comp_id,
@@ -1184,10 +1189,9 @@ if ($action === 'speaker_eerdere_overzicht') {
                 ua.categorie               AS cat
             FROM uitslag_afstand ua
             JOIN competitions c ON c.id = ua.competition_id
-            WHERE ua.competition_id <> ?
-              AND ua.categorie IS NOT NULL
+            WHERE ua.categorie IS NOT NULL
               AND ua.categorie <> ''
-            ORDER BY c.starts DESC, c.name, ua.dc_naam, ua.distance_naam, ua.categorie
+            ORDER BY (c.id = ?) DESC, c.starts DESC, c.name, ua.dc_naam, ua.distance_naam, ua.categorie
         ");
         $stmt->execute([$compId]);
         $rows = $stmt->fetchAll(PDO::FETCH_ASSOC);
@@ -1201,6 +1205,7 @@ if ($action === 'speaker_eerdere_overzicht') {
                     'comp_id'     => $cid,
                     'comp_naam'   => $r['comp_naam'],
                     'comp_starts' => $r['comp_starts'],
+                    'is_huidige'  => ($cid === $compId),
                     '_afst'       => [],
                 ];
             }

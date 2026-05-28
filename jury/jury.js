@@ -2624,7 +2624,9 @@ async function _spkLaadEerdereOverzicht() {
         wSel.disabled = true;
         return;
     }
-    // Vul wedstrijd-dropdown — datum prefix voor leesbaarheid
+    // Vul wedstrijd-dropdown — datum prefix voor leesbaarheid. De huidige
+    // wedstrijd (is_huidige) staat bovenaan en wordt gemarkeerd met ★ zodat
+    // de speaker de al-verreden afstanden van vandaag makkelijk vindt.
     const opts = ['<option value="">— Kies wedstrijd —</option>'];
     for (const w of _spk.eerdere) {
         let datum = '';
@@ -2635,7 +2637,10 @@ async function _spkLaadEerdereOverzicht() {
                     { day: '2-digit', month: 'short', year: '2-digit' }) + ' · ';
             }
         }
-        opts.push(`<option value="${escHtml(w.comp_id)}">${escHtml(datum + (w.comp_naam ?? ''))}</option>`);
+        const label = w.is_huidige
+            ? `★ ${datum}${w.comp_naam ?? ''} (deze wedstrijd)`
+            : `${datum}${w.comp_naam ?? ''}`;
+        opts.push(`<option value="${escHtml(w.comp_id)}">${escHtml(label)}</option>`);
     }
     wSel.innerHTML = opts.join('');
     wSel.disabled = false;
