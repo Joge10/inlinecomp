@@ -1745,14 +1745,14 @@ if ($action === 'scheids_inzet' && $_SERVER['REQUEST_METHOD'] === 'POST') {
             echo json_encode(['error' => 'Deze rijder is geen reserve', 'reden' => 'geen_reserve']);
             exit;
         }
-        // Reserve mag niet zelf afgemeld zijn (KNSB 2 / org 3 / niet getekend 4).
-        // Status 0 (niet bevestigd) en 1 (getekend) mogen wel — de scheidsrechter
-        // is aan de baan de autoriteit dat de reserve aanwezig is.
-        if (in_array((int)$ent['status'], [2, 3, 4], true)) {
+        // Alleen een GETEKENDE reserve (status 1) mag worden ingezet. Reserves
+        // die zich niet bevestigd hebben in de KNSB-feed (status 0) of afgemeld
+        // zijn (2/3/4) zijn niet inzetbaar.
+        if ((int)$ent['status'] !== 1) {
             http_response_code(409);
             echo json_encode([
-                'error' => 'Deze reserve is zelf afgemeld en kan niet worden ingezet',
-                'reden' => 'reserve_afgemeld',
+                'error' => 'Reserve moet status "getekend" (bevestigd) hebben om in te zetten',
+                'reden' => 'status_niet_getekend',
             ]);
             exit;
         }
@@ -1895,12 +1895,13 @@ if ($action === 'scheids_vervang_in_heat' && $_SERVER['REQUEST_METHOD'] === 'POS
             echo json_encode(['error' => 'Invaller is geen reserve', 'reden' => 'geen_reserve']);
             exit;
         }
-        // Reserve mag niet zelf afgemeld zijn (2/3/4). Status 0/1 mag wel.
-        if (in_array((int)$resEnt['status'], [2, 3, 4], true)) {
+        // Alleen een GETEKENDE reserve (status 1) mag invallen. Niet-bevestigde
+        // (0) of afgemelde (2/3/4) reserves zijn niet inzetbaar.
+        if ((int)$resEnt['status'] !== 1) {
             http_response_code(409);
             echo json_encode([
-                'error' => 'Deze reserve is zelf afgemeld en kan niet invallen',
-                'reden' => 'reserve_afgemeld',
+                'error' => 'Reserve moet status "getekend" (bevestigd) zijn om in te vallen',
+                'reden' => 'status_niet_getekend',
             ]);
             exit;
         }

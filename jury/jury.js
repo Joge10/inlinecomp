@@ -567,8 +567,10 @@ function _scheidsRenderDc() {
     // Loting al gedaan? Dan komt een reserve er niet meer via gewone inzet bij,
     // maar neemt 'ie de startplek van een afgemelde over (→ "Reserve invallen").
     const lotingDone = !!_scheids.data.heats_bestaan;
-    // Een reserve is "inzetbaar" zolang 'ie niet zelf afgemeld is (status 2/3/4).
-    const reserveInzetbaar = r => ![2, 3, 4].includes(r.entry_status);
+    // Een reserve is alleen inzetbaar als 'ie GETEKEND is (status 1). Reserves
+    // die niet bevestigd (0) of afgemeld (2/3/4) zijn in de KNSB-feed, mogen
+    // niet ingezet worden.
+    const reserveInzetbaar = r => r.entry_status === 1;
     const heeftVrijeReserve = reserves.some(reserveInzetbaar);
 
     // Teller-strip (+ loting-indicator)
@@ -597,7 +599,10 @@ function _scheidsRenderDc() {
         const inzetbaar = reserveInzetbaar(r);
         let knop;
         if (!inzetbaar) {
-            knop = `<span class="sr-tegel-reservehint">zelf afgemeld</span>`;
+            // Niet-getekend / afgemeld → toon de werkelijke status, niet inzetbaar.
+            const lbl = (_SCHEIDS_STATUS[r.entry_status] || {}).lbl || 'niet inzetbaar';
+            knop = `<span class="sr-tegel-reservehint"
+                          title="Alleen getekende reserves kunnen worden ingezet">${escHtml(lbl)}</span>`;
         } else if (!lotingDone) {
             const kanInzet = vrij > 0;
             const reden = vrij <= 0 ? 'Geen vrije plek (niemand afgemeld)' : 'Zet deze reserve in de loting';
@@ -703,8 +708,9 @@ function _scheidsRenderDc() {
 }
 
 // Modal: kies welke reserve invalt op de startplek van de afgemelde rijder.
+// Alleen GETEKENDE reserves (status 1) zijn inzetbaar.
 function _scheidsVervangPicker(uitLic, uitNaam) {
-    const reserves = (_scheids.data?.reserves || []).filter(r => ![2, 3, 4].includes(r.entry_status));
+    const reserves = (_scheids.data?.reserves || []).filter(r => r.entry_status === 1);
     if (!reserves.length) return;
 
     const overlay = document.createElement('div');
