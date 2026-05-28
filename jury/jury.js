@@ -567,7 +567,9 @@ function _scheidsRenderDc() {
     // Loting al gedaan? Dan komt een reserve er niet meer via gewone inzet bij,
     // maar neemt 'ie de startplek van een afgemelde over (→ "Reserve invallen").
     const lotingDone = !!_scheids.data.heats_bestaan;
-    const heeftVrijeReserve = reserves.some(r => r.entry_status === 1);
+    // Een reserve is "inzetbaar" zolang 'ie niet zelf afgemeld is (status 2/3/4).
+    const reserveInzetbaar = r => ![2, 3, 4].includes(r.entry_status);
+    const heeftVrijeReserve = reserves.some(reserveInzetbaar);
 
     // Teller-strip (+ loting-indicator)
     const tellerHtml = `
@@ -585,23 +587,26 @@ function _scheidsRenderDc() {
             </span>
         </div>`;
 
-    // Reserve-tegel. Vóór loting: gewone "Inzet". Na loting: hint dat invallen
-    // via de afgemelde rijder gaat (want zonder vrije plek kan een reserve er
-    // alleen bij als iemand zich afmeldt).
+    // Reserve-tegel met klikbare knop in BEIDE modi:
+    //  - Vóór loting: "Inzet ➜" (zet in de loting, krijgt plek bij seeding)
+    //  - Na loting:   "Invallen ➜" (kies wie deze reserve vervangt; reserve
+    //                 neemt diens startplek over). Klik opent de omgekeerde
+    //                 picker (afgemelde rijders in een niet-gereden heat).
+    // Afgemelde reserve (status 2/3/4) → niet inzetbaar, toon reden.
     const reserveTegel = r => {
+        const inzetbaar = reserveInzetbaar(r);
         let knop;
-        if (!lotingDone) {
-            const kanInzet = r.entry_status === 1 && vrij > 0;
-            const reden = r.entry_status !== 1
-                ? 'Reserve moet getekend zijn'
-                : (vrij <= 0 ? 'Geen vrije plek' : 'Zet deze reserve in de loting');
+        if (!inzetbaar) {
+            knop = `<span class="sr-tegel-reservehint">zelf afgemeld</span>`;
+        } else if (!lotingDone) {
+            const kanInzet = vrij > 0;
+            const reden = vrij <= 0 ? 'Geen vrije plek (niemand afgemeld)' : 'Zet deze reserve in de loting';
             knop = `<button class="sr-tegel-btn sr-btn-inzet" data-lic="${escHtml(r.license_key)}"
                         ${kanInzet ? '' : 'disabled'} title="${escHtml(reden)}">Inzet ➜</button>`;
         } else {
-            const klaar = r.entry_status === 1;
-            knop = `<span class="sr-tegel-reservehint" title="${klaar
-                ? 'Gebruik ↪ Reserve invallen bij de afgemelde rijder hieronder'
-                : 'Reserve is nog niet getekend'}">${klaar ? '↪ via afgemelde plek' : 'niet getekend'}</span>`;
+            knop = `<button class="sr-tegel-btn sr-btn-resinval"
+                        data-lic="${escHtml(r.license_key)}" data-naam="${escHtml(r.naam)}"
+                        title="Kies welke afgemelde rijder deze reserve vervangt">Invallen ➜</button>`;
         }
         return `<div class="sr-tegel sr-tegel-reserve" data-lic="${escHtml(r.license_key)}">
             <span class="sr-tegel-resnr" title="Reserve-volgnummer">R${r.reserve_nr}</span>
@@ -685,15 +690,21 @@ function _scheidsRenderDc() {
         btn.addEventListener('click', () =>
             _scheidsZetStatus(btn.dataset.lic, parseInt(btn.dataset.status, 10)));
     });
+    // Vanaf afgemelde-tegel: kies een reserve.
     det.querySelectorAll('.sr-btn-inval').forEach(btn => {
         btn.addEventListener('click', () =>
             _scheidsVervangPicker(btn.dataset.lic, btn.dataset.naam));
+    });
+    // Vanaf reserve-tegel (loting gedaan): kies een afgemelde rijder.
+    det.querySelectorAll('.sr-btn-resinval').forEach(btn => {
+        btn.addEventListener('click', () =>
+            _scheidsInvalReversePicker(btn.dataset.lic, btn.dataset.naam));
     });
 }
 
 // Modal: kies welke reserve invalt op de startplek van de afgemelde rijder.
 function _scheidsVervangPicker(uitLic, uitNaam) {
-    const reserves = (_scheids.data?.reserves || []).filter(r => r.entry_status === 1);
+    const reserves = (_scheids.data?.reserves || []).filter(r => ![2, 3, 4].includes(r.entry_status));
     if (!reserves.length) return;
 
     const overlay = document.createElement('div');
@@ -724,6 +735,53 @@ function _scheidsVervangPicker(uitLic, uitNaam) {
         li.addEventListener('click', async () => {
             sluit();
             await _scheidsVervangInHeat(uitLic, li.dataset.lic);
+        });
+    });
+}
+
+// Omgekeerde modal: vanaf een reserve → kies WELKE afgemelde rijder (in een
+// niet-gereden heat) deze reserve vervangt. Geen afgemelde-in-heat → uitleg.
+function _scheidsInvalReversePicker(inLic, inNaam) {
+    const kandidaten = (_scheids.data?.deelnemers || []).filter(d =>
+        (d.entry_status === 3 || d.entry_status === 4) && d.in_heat && !d.heat_locked);
+    if (!kandidaten.length) {
+        const msg = 'Er is nog geen afgemelde rijder met een startplek.\n\n'
+                  + 'Markeer eerst de rijder die zich afmeldt als "Afgemeld" of '
+                  + '"Niet getekend" bij Deelnemers. Daarna neemt deze reserve diens startplek over.';
+        (typeof toonBevestigDialog === 'function'
+            ? toonBevestigDialog(msg, 'Eerst afmelden', 'OK', null)
+            : alert(msg));
+        return;
+    }
+
+    const overlay = document.createElement('div');
+    overlay.className = 'sr-inval-overlay';
+    overlay.innerHTML = `
+        <div class="sr-inval-modal">
+            <div class="sr-inval-kop">
+                <span>↪ <b>${escHtml(inNaam)}</b> valt in voor…</span>
+                <button class="sr-inval-sluit" aria-label="Sluiten">&times;</button>
+            </div>
+            <p class="sr-inval-hint">Kies de afgemelde rijder wiens startplek (heat + baan)
+               ${escHtml(inNaam)} overneemt. Er wordt niet opnieuw geloot.</p>
+            <ul class="sr-inval-lijst">
+                ${kandidaten.map(d => `
+                    <li class="sr-inval-item" data-lic="${escHtml(d.license_key)}">
+                        <span class="sr-inval-snr">${d.startnummer ?? '—'}</span>
+                        <span class="sr-inval-naam">${escHtml(d.naam)}
+                            <span class="sr-tegel-heat">🎯 ${escHtml(d.heat_label)}</span></span>
+                        <span class="sr-inval-pijl">➜</span>
+                    </li>`).join('')}
+            </ul>
+        </div>`;
+    document.body.appendChild(overlay);
+    const sluit = () => overlay.remove();
+    overlay.querySelector('.sr-inval-sluit').addEventListener('click', sluit);
+    overlay.addEventListener('click', e => { if (e.target === overlay) sluit(); });
+    overlay.querySelectorAll('.sr-inval-item').forEach(li => {
+        li.addEventListener('click', async () => {
+            sluit();
+            await _scheidsVervangInHeat(li.dataset.lic, inLic);
         });
     });
 }

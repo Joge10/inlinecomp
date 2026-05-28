@@ -1745,11 +1745,14 @@ if ($action === 'scheids_inzet' && $_SERVER['REQUEST_METHOD'] === 'POST') {
             echo json_encode(['error' => 'Deze rijder is geen reserve', 'reden' => 'geen_reserve']);
             exit;
         }
-        if ((int)$ent['status'] !== 1) {
+        // Reserve mag niet zelf afgemeld zijn (KNSB 2 / org 3 / niet getekend 4).
+        // Status 0 (niet bevestigd) en 1 (getekend) mogen wel — de scheidsrechter
+        // is aan de baan de autoriteit dat de reserve aanwezig is.
+        if (in_array((int)$ent['status'], [2, 3, 4], true)) {
             http_response_code(409);
             echo json_encode([
-                'error' => 'Reserve moet status "bevestigd" (getekend) hebben om in te zetten',
-                'reden' => 'status_niet_getekend',
+                'error' => 'Deze reserve is zelf afgemeld en kan niet worden ingezet',
+                'reden' => 'reserve_afgemeld',
             ]);
             exit;
         }
@@ -1892,11 +1895,12 @@ if ($action === 'scheids_vervang_in_heat' && $_SERVER['REQUEST_METHOD'] === 'POS
             echo json_encode(['error' => 'Invaller is geen reserve', 'reden' => 'geen_reserve']);
             exit;
         }
-        if ((int)$resEnt['status'] !== 1) {
+        // Reserve mag niet zelf afgemeld zijn (2/3/4). Status 0/1 mag wel.
+        if (in_array((int)$resEnt['status'], [2, 3, 4], true)) {
             http_response_code(409);
             echo json_encode([
-                'error' => 'Reserve moet getekend (status bevestigd) zijn om in te vallen',
-                'reden' => 'status_niet_getekend',
+                'error' => 'Deze reserve is zelf afgemeld en kan niet invallen',
+                'reden' => 'reserve_afgemeld',
             ]);
             exit;
         }
