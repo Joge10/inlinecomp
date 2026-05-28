@@ -127,49 +127,30 @@ async function toonDocumentenLijst() {
             </div>`;
             return;
         }
+        // PDF's openen in NIEUWE TAB ipv inline iframe-viewer.
+        // Reden: Chrome strips zoom-controls in iframe-PDFs (alleen scroll werkt).
+        // In een eigen tab krijgt de speaker de volledige Chrome PDF-toolbar
+        // met zoom in/uit, fit-to-width, paginanummer, zoeken en print.
+        // Een <a target="_blank"> geeft daarnaast gratis: keyboard-nav, middle-
+        // click, right-click "open in nieuwe tab" — alles wat een gewone link
+        // kan. rel="noopener noreferrer" voorkomt window.opener-leakage.
         body.innerHTML = `<ul class="jury-docs-lijst">${
             data.pdfs.map(p => `
-                <li class="jury-docs-item" data-url="${escHtml(p.url)}" data-naam="${escHtml(p.naam)}">
-                    <span class="jury-docs-icon">📄</span>
-                    <span class="jury-docs-naam">${escHtml(p.naam.replace(/\.pdf$/i, ''))}</span>
-                    <span class="jury-docs-meta">${p.size_kb} kB · ${escHtml(p.gewijzigd)}</span>
+                <li class="jury-docs-item-wrap">
+                    <a class="jury-docs-item" href="${escHtml(p.url)}"
+                       target="_blank" rel="noopener noreferrer"
+                       title="Open ${escHtml(p.naam)} in nieuwe tab">
+                        <span class="jury-docs-icon">📄</span>
+                        <span class="jury-docs-naam">${escHtml(p.naam.replace(/\.pdf$/i, ''))}</span>
+                        <span class="jury-docs-meta">${p.size_kb} kB · ${escHtml(p.gewijzigd)}</span>
+                        <span class="jury-docs-tab-hint" aria-hidden="true">↗</span>
+                    </a>
                 </li>`).join('')
         }</ul>`;
-
-        body.querySelectorAll('.jury-docs-item').forEach(li => {
-            li.addEventListener('click', () => {
-                toonPdfViewer(li.dataset.url, li.dataset.naam);
-            });
-        });
     } catch (e) {
         elJ('jury-docs-body').innerHTML =
             `<div class="jury-docs-leeg">Fout: ${escHtml(e.message)}</div>`;
     }
-}
-
-// Inline PDF-viewer via iframe. Stacks bovenop de documenten-lijst (hogere
-// z-index) zodat sluiten van viewer terug naar de lijst gaat.
-function toonPdfViewer(url, naam) {
-    const overlay = document.createElement('div');
-    overlay.className = 'jury-pdfviewer-overlay';
-    overlay.innerHTML = `
-        <div class="jury-pdfviewer-modal">
-            <div class="jury-pdfviewer-kop">
-                <span class="jury-pdfviewer-titel">📄 ${escHtml(naam)}</span>
-                <div class="jury-pdfviewer-acties">
-                    <a class="jury-btn jury-btn-link" href="${escHtml(url)}" target="_blank"
-                       rel="noopener" title="Open in nieuwe tab">↗ Tab</a>
-                    <button class="jury-pdfviewer-sluit" type="button" aria-label="Sluiten">&times;</button>
-                </div>
-            </div>
-            <iframe class="jury-pdfviewer-iframe" src="${escHtml(url)}"
-                    title="${escHtml(naam)}"></iframe>
-        </div>`;
-    document.body.appendChild(overlay);
-
-    const sluit = () => overlay.remove();
-    overlay.querySelector('.jury-pdfviewer-sluit').addEventListener('click', sluit);
-    overlay.addEventListener('click', e => { if (e.target === overlay) sluit(); });
 }
 
 function toonFout(boodschap) {
@@ -378,8 +359,9 @@ function toonRolkeuze() {
 function toonRol(roleId) {
     const r = ROLLEN.find(x => x.id === roleId);
     if (!r) { toonFout('Onbekende rol: ' + roleId); return; }
-    if (roleId === 'area_of_call') { toonAreaOfCall(r); return; }
-    if (roleId === 'speaker')      { toonSpeaker(r);    return; }
+    if (roleId === 'area_of_call')  { toonAreaOfCall(r);     return; }
+    if (roleId === 'speaker')       { toonSpeaker(r);        return; }
+    if (roleId === 'scheidsrechter'){ toonScheidsrechter(r); return; }
     // Andere rollen nog skeleton
     elJ('jury-main').innerHTML = `
         <div class="jury-scherm jury-rol-detail">
@@ -398,6 +380,330 @@ function toonRol(roleId) {
                 </p>
             </div>
         </div>`;
+}
+
+// ════════════════════════════════════════════════════════════════════════════
+//  SCHEIDSRECHTER — reserve-inzet + afmeld-beheer
+// ════════════════════════════════════════════════════════════════════════════
+// Twee hoofdtabs: "Inzetten reserves" (functioneel) en "Sancties" (proforma).
+// Reserves-tab gebruikt de speaker-tab-structuur: cat-tabs (niveau 1) →
+// DC-tabs (niveau 2) → teller + reserve-tegels + deelnemer-tegels.
+// Deelnemer-tegels hebben hoek-knoppen (Afgemeld / Niet getekend / Terug).
+// Alle acties schrijven direct naar de DB via scheids_* endpoints.
+const _scheids = {
+    struktuur: null,  // { cats: [{cat, dcs:[{dc_id, dc_naam, aantal_deelnemers, aantal_reserves}]}] }
+    cat:       null,  // actieve cat
+    dcId:      null,  // actieve DC
+    tab:       'reserves',  // 'reserves' | 'sancties'
+    data:      null,  // laatst geladen scheids_dc payload
+};
+
+// Status-labels (subset van app.js STATUS_LABELS, voor de jury-context)
+const _SCHEIDS_STATUS = {
+    0: { lbl: 'Niet bevestigd', css: 'neutraal' },
+    1: { lbl: 'Getekend',       css: 'actief'   },
+    2: { lbl: 'Afgemeld (KNSB)',css: 'knsb'     },
+    3: { lbl: 'Afgem. bij org.',css: 'afgemeld' },
+    4: { lbl: 'Niet getekend',  css: 'afgemeld' },
+    5: { lbl: 'Getekend (org.)',css: 'actief'   },
+};
+
+function toonScheidsrechter(rolDef) {
+    elJ('jury-main').innerHTML = `
+        <div class="jury-scherm sr-scherm">
+            <div class="sr-tabbalk">
+                <button class="sr-tab is-actief" data-tab="reserves">↩ Inzetten reserves</button>
+                <button class="sr-tab" data-tab="sancties">🟨 Sancties</button>
+            </div>
+            <div class="sr-body" id="sr-body"></div>
+        </div>`;
+
+    elJ('jury-main').querySelectorAll('.sr-tab').forEach(btn => {
+        btn.addEventListener('click', () => {
+            _scheids.tab = btn.dataset.tab;
+            elJ('jury-main').querySelectorAll('.sr-tab').forEach(b =>
+                b.classList.toggle('is-actief', b === btn));
+            _scheidsRenderTab();
+        });
+    });
+
+    _scheidsRenderTab();
+}
+
+function _scheidsRenderTab() {
+    const body = elJ('sr-body');
+    if (!body) return;
+    if (_scheids.tab === 'sancties') {
+        body.innerHTML = `
+            <div class="jury-placeholder sr-placeholder">
+                <p>🟨 <strong>Sancties</strong></p>
+                <p class="jury-placeholder-hint">
+                    Deze functie (W1 · W2 · FS · DQ uitdelen per heat) wordt
+                    binnenkort ingebouwd.
+                </p>
+            </div>`;
+        return;
+    }
+    // Reserves-tab — cat-tabs + dc-tabs + grid (hergebruikt speaker-CSS)
+    body.innerHTML = `
+        <div class="sr-reserves spk-scherm">
+            <div class="spk-tab-balk spk-tab-cats" id="sr-tab-cats"></div>
+            <div class="spk-tab-balk spk-tab-dcs"  id="sr-tab-dcs"></div>
+            <div class="sr-dc-detail" id="sr-dc-detail"></div>
+        </div>`;
+    _scheidsLaadStruktuur();
+}
+
+async function _scheidsLaadStruktuur() {
+    try {
+        const res  = await fetch('?action=scheids_struktuur', { credentials: 'same-origin' });
+        const data = await res.json();
+        if (!res.ok || data?.error) {
+            elJ('sr-dc-detail').innerHTML = `<div class="jury-fout">⚠ ${escHtml(data?.error ?? 'Kon afstanden niet laden')}</div>`;
+            return;
+        }
+        _scheids.struktuur = data;
+        if (!data.cats?.length) {
+            elJ('sr-dc-detail').innerHTML = `<div class="sr-leeg">Geen afstanden met deelnemers of reserves gevonden.</div>`;
+            return;
+        }
+        // Default: behoud huidige cat/dc indien nog geldig, anders eerste cat
+        // + eerste DC mét reserves (handig: scheidsrechter wil meestal reserves).
+        if (!_scheids.cat || !data.cats.some(c => c.cat === _scheids.cat)) {
+            // Eerste cat die ergens reserves heeft, anders gewoon eerste cat
+            const catMetRes = data.cats.find(c => c.dcs.some(d => d.aantal_reserves > 0));
+            _scheids.cat  = (catMetRes || data.cats[0]).cat;
+            _scheids.dcId = null;
+        }
+        const catObj = data.cats.find(c => c.cat === _scheids.cat);
+        if (!_scheids.dcId || !catObj?.dcs.some(d => d.dc_id === _scheids.dcId)) {
+            const dcMetRes = catObj?.dcs.find(d => d.aantal_reserves > 0);
+            _scheids.dcId = (dcMetRes || catObj?.dcs[0])?.dc_id ?? null;
+        }
+        _scheidsRenderCatTabs();
+        _scheidsRenderDcTabs();
+        _scheidsLaadDc();
+    } catch (e) {
+        elJ('sr-dc-detail').innerHTML = `<div class="jury-fout">⚠ ${escHtml(e.message)}</div>`;
+    }
+}
+
+function _scheidsRenderCatTabs() {
+    const wrap = elJ('sr-tab-cats');
+    if (!wrap || !_scheids.struktuur) return;
+    wrap.innerHTML = _scheids.struktuur.cats.map(c => {
+        const act = c.cat === _scheids.cat ? 'is-active' : '';
+        // Reserve-badge op cat-niveau: som over alle DCs in die cat
+        const resTot = c.dcs.reduce((s, d) => s + d.aantal_reserves, 0);
+        const resBadge = resTot > 0 ? `<span class="sr-cat-resbadge">R${resTot}</span>` : '';
+        return `<button class="spk-tab ${act}" data-cat="${escHtml(c.cat)}">${escHtml(c.cat)}${resBadge}</button>`;
+    }).join('');
+    wrap.querySelectorAll('.spk-tab').forEach(btn => {
+        btn.addEventListener('click', () => {
+            if (btn.dataset.cat === _scheids.cat) return;
+            _scheids.cat = btn.dataset.cat;
+            const catObj = _scheids.struktuur.cats.find(c => c.cat === _scheids.cat);
+            const dcMetRes = catObj?.dcs.find(d => d.aantal_reserves > 0);
+            _scheids.dcId = (dcMetRes || catObj?.dcs[0])?.dc_id ?? null;
+            _scheidsRenderCatTabs();
+            _scheidsRenderDcTabs();
+            _scheidsLaadDc();
+        });
+    });
+}
+
+function _scheidsRenderDcTabs() {
+    const wrap   = elJ('sr-tab-dcs');
+    if (!wrap || !_scheids.struktuur) return;
+    const catObj = _scheids.struktuur.cats.find(c => c.cat === _scheids.cat);
+    if (!catObj || !catObj.dcs.length) { wrap.innerHTML = ''; return; }
+    wrap.innerHTML = catObj.dcs.map(d => {
+        const act = d.dc_id === _scheids.dcId ? 'is-active' : '';
+        const resBadge = d.aantal_reserves > 0
+            ? `<span class="sr-dc-resbadge" title="${d.aantal_reserves} reserve(s)">R${d.aantal_reserves}</span>`
+            : '';
+        return `<button class="spk-tab spk-tab-dc ${act}" data-dc-id="${escHtml(d.dc_id)}">${escHtml(d.dc_naam)}${resBadge}</button>`;
+    }).join('');
+    wrap.querySelectorAll('.spk-tab-dc').forEach(btn => {
+        btn.addEventListener('click', () => {
+            if (btn.dataset.dcId === _scheids.dcId) return;
+            _scheids.dcId = btn.dataset.dcId;
+            _scheidsRenderDcTabs();
+            _scheidsLaadDc();
+        });
+    });
+}
+
+async function _scheidsLaadDc() {
+    const det = elJ('sr-dc-detail');
+    if (!det) return;
+    if (!_scheids.dcId || !_scheids.cat) {
+        det.innerHTML = `<div class="sr-leeg">Geen afstand geselecteerd.</div>`;
+        return;
+    }
+    det.innerHTML = `<div class="jury-laden">Laden…</div>`;
+    try {
+        const url = '?action=scheids_dc'
+                  + '&dc_id=' + encodeURIComponent(_scheids.dcId)
+                  + '&cat='   + encodeURIComponent(_scheids.cat);
+        const res  = await fetch(url, { credentials: 'same-origin' });
+        const data = await res.json();
+        if (!res.ok || data?.error) {
+            det.innerHTML = `<div class="jury-fout">⚠ ${escHtml(data?.error ?? 'Kon data niet laden')}</div>`;
+            return;
+        }
+        _scheids.data = data;
+        _scheidsRenderDc();
+    } catch (e) {
+        det.innerHTML = `<div class="jury-fout">⚠ ${escHtml(e.message)}</div>`;
+    }
+}
+
+function _scheidsRenderDc() {
+    const det = elJ('sr-dc-detail');
+    if (!det || !_scheids.data) return;
+    const { teller, reserves, deelnemers } = _scheids.data;
+    const vrij = teller.vrij;
+
+    // Teller-strip
+    const tellerHtml = `
+        <div class="sr-teller">
+            <span class="sr-teller-item"><b>${teller.geloot}</b> geloot</span>
+            <span class="sr-teller-sep">/</span>
+            <span class="sr-teller-item"><b>${teller.max}</b> max</span>
+            <span class="sr-teller-vrij ${vrij > 0 ? 'is-vrij' : 'is-vol'}">
+                ${vrij > 0 ? `${vrij} vrij` : 'vol'}
+            </span>
+        </div>`;
+
+    // Reserve-tegel: R-nummer + startnr + naam + Inzet-knop (volle breedte onder)
+    const reserveTegel = r => {
+        const kanInzet = r.entry_status === 1 && vrij > 0;
+        const reden = r.entry_status !== 1
+            ? 'Reserve moet getekend zijn'
+            : (vrij <= 0 ? 'Geen vrije plek' : 'Zet deze reserve in de loting');
+        return `<div class="sr-tegel sr-tegel-reserve" data-lic="${escHtml(r.license_key)}">
+            <span class="sr-tegel-resnr" title="Reserve-volgnummer">R${r.reserve_nr}</span>
+            <span class="sr-tegel-snr">${r.startnummer ?? '—'}</span>
+            <span class="sr-tegel-naam">${escHtml(r.naam)}</span>
+            ${r.club ? `<span class="sr-tegel-club">${escHtml(r.club)}</span>` : ''}
+            <button class="sr-tegel-btn sr-btn-inzet" data-lic="${escHtml(r.license_key)}"
+                    ${kanInzet ? '' : 'disabled'} title="${escHtml(reden)}">Inzet ➜</button>
+        </div>`;
+    };
+
+    // Deelnemer-tegel: startnr + naam + status-badge, met hoek-knoppen onder
+    // (links: Afgemeld bij org. / rechts: Niet getekend). Afgemeld → Terug-knop.
+    const deelTegel = d => {
+        const st = _SCHEIDS_STATUS[d.entry_status] || _SCHEIDS_STATUS[0];
+        const isActief   = d.entry_status === 1 || d.entry_status === 5;
+        const isAfgemeld = d.entry_status === 3 || d.entry_status === 4;
+        const isKnsb     = d.entry_status === 2;
+        let acties = '';
+        if (isKnsb) {
+            acties = `<div class="sr-tegel-acties"><span class="sr-tegel-knsb">KNSB-afmelding</span></div>`;
+        } else if (isActief) {
+            acties = `<div class="sr-tegel-acties">
+                <button class="sr-tegel-btn sr-btn-afm"  data-lic="${escHtml(d.license_key)}" data-status="3"
+                        title="Afgemeld bij organisatie — doet niet mee">Afgemeld</button>
+                <button class="sr-tegel-btn sr-btn-niet" data-lic="${escHtml(d.license_key)}" data-status="4"
+                        title="Niet getekend — doet niet mee">Niet getek.</button>
+            </div>`;
+        } else if (isAfgemeld) {
+            acties = `<div class="sr-tegel-acties">
+                <button class="sr-tegel-btn sr-btn-terug" data-lic="${escHtml(d.license_key)}" data-status="1"
+                        title="Terug in de loting">↺ Terug in loting</button>
+            </div>`;
+        }
+        return `<div class="sr-tegel sr-tegel-deel sr-status-${st.css}" data-lic="${escHtml(d.license_key)}">
+            <span class="sr-tegel-badge sr-status-${st.css}">${escHtml(st.lbl)}</span>
+            <span class="sr-tegel-snr">${d.startnummer ?? '—'}</span>
+            <span class="sr-tegel-naam">${escHtml(d.naam)}</span>
+            ${d.club ? `<span class="sr-tegel-club">${escHtml(d.club)}</span>` : ''}
+            ${acties}
+        </div>`;
+    };
+
+    const reservesHtml = reserves.length
+        ? reserves.map(reserveTegel).join('')
+        : `<div class="sr-leeg">Geen reserves voor deze afstand.</div>`;
+
+    det.innerHTML = `
+        ${tellerHtml}
+        <div class="sr-sectie">
+            <h3 class="sr-sectie-titel">Reserves <span class="sr-sectie-n">(${reserves.length})</span></h3>
+            <div class="sr-tegel-grid">${reservesHtml}</div>
+        </div>
+        <div class="sr-sectie">
+            <h3 class="sr-sectie-titel">Deelnemers <span class="sr-sectie-n">(${deelnemers.length})</span></h3>
+            <div class="sr-tegel-grid">${deelnemers.map(deelTegel).join('')}</div>
+        </div>`;
+
+    det.querySelectorAll('.sr-btn-inzet').forEach(btn => {
+        btn.addEventListener('click', () => _scheidsInzet(btn.dataset.lic));
+    });
+    det.querySelectorAll('.sr-btn-afm, .sr-btn-niet, .sr-btn-terug').forEach(btn => {
+        btn.addEventListener('click', () =>
+            _scheidsZetStatus(btn.dataset.lic, parseInt(btn.dataset.status, 10)));
+    });
+}
+
+async function _scheidsInzet(lic) {
+    try {
+        const res = await fetch('?action=scheids_inzet', {
+            method:  'POST',
+            headers: { 'Content-Type': 'application/json' },
+            credentials: 'same-origin',
+            body:    JSON.stringify({ dc_id: _scheids.dcId, person_license: lic }),
+        });
+        const data = await res.json();
+        if (!res.ok || data?.error) {
+            await (typeof toonBevestigDialog === 'function'
+                ? toonBevestigDialog(data?.error ?? 'Inzetten mislukt', 'Inzetten mislukt', 'OK', null)
+                : alert(data?.error ?? 'Inzetten mislukt'));
+            return;
+        }
+        await _scheidsLaadDc();
+        _scheidsHerlaadTellingen();
+    } catch (e) {
+        alert('Fout: ' + e.message);
+    }
+}
+
+async function _scheidsZetStatus(lic, status) {
+    try {
+        const res = await fetch('?action=scheids_status', {
+            method:  'POST',
+            headers: { 'Content-Type': 'application/json' },
+            credentials: 'same-origin',
+            body:    JSON.stringify({ dc_id: _scheids.dcId, person_license: lic, status }),
+        });
+        const data = await res.json();
+        if (!res.ok || data?.error) {
+            await (typeof toonBevestigDialog === 'function'
+                ? toonBevestigDialog(data?.error ?? 'Wijzigen mislukt', 'Mislukt', 'OK', null)
+                : alert(data?.error ?? 'Wijzigen mislukt'));
+            return;
+        }
+        await _scheidsLaadDc();
+        _scheidsHerlaadTellingen();
+    } catch (e) {
+        alert('Fout: ' + e.message);
+    }
+}
+
+// Herlaad de struktuur (cat/dc reserve-badges) na inzet/afmeld zonder de
+// detail-weergave te resetten — alleen de badge-tellingen worden ververst.
+async function _scheidsHerlaadTellingen() {
+    try {
+        const res  = await fetch('?action=scheids_struktuur', { credentials: 'same-origin' });
+        const data = await res.json();
+        if (res.ok && !data?.error && data.cats) {
+            _scheids.struktuur = data;
+            _scheidsRenderCatTabs();
+            _scheidsRenderDcTabs();
+        }
+    } catch { /* stil */ }
 }
 
 // ── Area of Call ────────────────────────────────────────────────────────────

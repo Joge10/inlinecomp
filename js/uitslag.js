@@ -101,26 +101,42 @@ async function vulUitslagPrintSelect() {
     // Bulk pre-fetch zodat de loop hieronder alleen cache-lookups doet.
     await _uBulkLaadAfstanden(_uGroepen);
 
+    // ── Bulk klassement-status (V2) ─────────────────────────────────────
+    // V1 deed in de loop hieronder per groep een fetch naar klassement_live.php.
+    // Bij grote wedstrijden (NK met 48 groepen) gaf dat 48 PHP-processen tegelijk
+    // → iFastNet entry-process-limit. V2: één call naar klassement_status_bulk.php
+    // die alleen de status-velden (compleet/vastgelegd per afstand + klassement_
+    // vastgelegd per groep) retourneert. Map key = displayNaam (= dc_name of
+    // merge_label) zodat we 'm met O(1) kunnen lookupen in de loop.
+    let _statusMap = {};
+    try {
+        const groepenPayload = _uGroepen.map(g => ({
+            key:         g.merge_label || g.dc_name,
+            dc_ids:      g.dc_ids || [g.dc_id],
+            split_group: g.is_split && g.dc_name ? g.dc_name : '',
+        }));
+        const sRes = await fetch('api/klassement_status_bulk.php', {
+            method:  'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body:    JSON.stringify({ competition_id: huidigCompId, groepen: groepenPayload }),
+        });
+        if (sRes.ok) _statusMap = await sRes.json() || {};
+    } catch { /* stil — loop hieronder valt terug op lege status */ }
+
     for (const groep of _uGroepen) {
         const afstanden = await uLaadAfstanden(groep);
         const displayNaam = groep.merge_label || groep.dc_name;
 
-        // Klassement-status ophalen om te weten welke afstanden data hebben
+        // Status uit bulk-map ophalen (was: per-groep fetch).
         let afstandStatus = {};  // distId → { compleet, vastgelegd }
         let heeftKlassement = false;
-        try {
-            const dcParam = (groep.dc_ids || [groep.dc_id]).map(encodeURIComponent).join(',');
-            const splitParam = groep.is_split && groep.dc_name
-                ? `&split_group=${encodeURIComponent(groep.dc_name)}` : '';
-            const res = await fetch(`api/klassement_live.php?competition_id=${encodeURIComponent(huidigCompId)}&dc_ids=${dcParam}${splitParam}`);
-            const kData = await res.json();
-            if (kData.afstanden) {
-                for (const a of kData.afstanden) {
-                    afstandStatus[a.id] = { compleet: a.compleet, vastgelegd: a.vastgelegd };
-                }
+        const gStat = _statusMap[displayNaam];
+        if (gStat) {
+            for (const a of (gStat.afstanden || [])) {
+                afstandStatus[a.id] = { compleet: a.compleet, vastgelegd: a.vastgelegd };
             }
-            heeftKlassement = !!kData.klassement_vastgelegd;
-        } catch { /* stil */ }
+            heeftKlassement = !!gStat.klassement_vastgelegd;
+        }
 
         const opties = [];
         // Split-info doorgeven zodat _bouwAfstandPrint/_bouwKlassementInternal

@@ -1440,6 +1440,369 @@ if ($action === 'speaker_record') {
     exit;
 }
 
+// ════════════════════════════════════════════════════════════════════════════
+//   SCHEIDSRECHTER-ROL — reserve-inzet + afmeld-beheer
+// ════════════════════════════════════════════════════════════════════════════
+//
+// De scheidsrechter beheert aan de baan de loting: reserves inzetten als er
+// plek vrijkomt, en deelnemers op 'afgemeld bij org.' (status 3) of 'niet
+// getekend' (status 4) zetten. Beide tellen niet mee (status IN (1,5) = mee).
+//
+// Verschil met admin reserve_inzet.php: geen KNSB-feed, puur op entries.
+// Dezelfde cap-logica (max_slots vs in_loting), aangevuld met de optionele
+// distance_combinations.max_in_loting override.
+function _scheidsRequire(): string {
+    if (empty($_SESSION['jury_comp_id'])) {
+        header('Content-Type: application/json; charset=utf-8');
+        http_response_code(401);
+        echo json_encode(['error' => 'Niet ingelogd als jury']);
+        exit;
+    }
+    if (($_SESSION['jury_role'] ?? '') !== 'scheidsrechter') {
+        header('Content-Type: application/json; charset=utf-8');
+        http_response_code(403);
+        echo json_encode(['error' => 'Verkeerde rol — kies Scheidsrechter']);
+        exit;
+    }
+    return (string)$_SESSION['jury_comp_id'];
+}
+
+// Bevestig dat een DC bij de ingelogde wedstrijd hoort (anti-injectie).
+function _scheidsCheckDc(PDO $pdo, string $dcId, string $compId): bool {
+    $st = $pdo->prepare("SELECT 1 FROM distance_combinations WHERE id = ? AND competition_id = ?");
+    $st->execute([$dcId, $compId]);
+    return (bool)$st->fetchColumn();
+}
+
+// KNSB-categorie-sorteersleutel (jongste → oudste, dames vóór heren per
+// leeftijd). Identiek aan de closure in speaker_struktuur — hier als
+// herbruikbare functie zodat de scheidsrechter-tabs dezelfde volgorde tonen.
+function _juryCatSortKey(string $cat): int {
+    $cat = strtoupper(trim($cat));
+    if (preg_match('/^([HD]?)M(\d{2,3})$/', $cat, $m)) {
+        $genderRank = match($m[1]) { 'D' => 0, 'H' => 1, default => 1 };
+        $leeftijd = (int)$m[2];
+        if ($leeftijd >= 40) {
+            $ageRank = 10 + intdiv($leeftijd - 40, 5);
+            return $ageRank * 10 + $genderRank;
+        }
+    }
+    $genderRank = match(substr($cat, 0, 1)) { 'D' => 0, 'H' => 1, default => 9 };
+    $sub = substr($cat, 1);
+    $ageRank = match($sub) {
+        'P4' => 0, 'P3' => 1, 'P2' => 2, 'P1' => 3,
+        'KA' => 4, 'JB' => 5, 'JA' => 6,
+        'SJ' => 7, 'SA' => 8, 'SB' => 9,
+        default => 99,
+    };
+    return $ageRank * 10 + $genderRank;
+}
+
+// Bereken teller {geloot, max, vrij} voor één DC. max = override (max_in_loting)
+// of auto (aantal niet-reserves). geloot = entries in loting (status 1/5, geen
+// reserve). Identiek aan reserve_inzet.php-cap + max_in_loting-override.
+function _scheidsTeller(PDO $pdo, string $dcId): array {
+    $st = $pdo->prepare("
+        SELECT
+            dc.max_in_loting AS override_max,
+            SUM(CASE WHEN e.reserve IS NULL AND e.reserve_handmatig_ingezet = 0
+                     THEN 1 ELSE 0 END) AS auto_max,
+            SUM(CASE WHEN e.reserve IS NULL AND e.status IN (1, 5)
+                     THEN 1 ELSE 0 END) AS in_loting
+        FROM distance_combinations dc
+        LEFT JOIN entries e ON e.distance_combination_id = dc.id
+        WHERE dc.id = ?
+        GROUP BY dc.id, dc.max_in_loting
+    ");
+    $st->execute([$dcId]);
+    $r = $st->fetch(PDO::FETCH_ASSOC) ?: [];
+    $autoMax  = (int)($r['auto_max']  ?? 0);
+    $override = $r['override_max'] !== null ? (int)$r['override_max'] : null;
+    $max      = $override !== null ? $override : $autoMax;
+    $inLoting = (int)($r['in_loting'] ?? 0);
+    return [
+        'geloot' => $inLoting,
+        'max'    => $max,
+        'vrij'   => max(0, $max - $inLoting),
+    ];
+}
+
+// ── API: cat→DC-structuur voor de scheidsrechter (zoals speaker) ────────────
+// Niveau 1 = persons.category, niveau 2 = DCs waar die cat in zit, met
+// deelnemer- én reserve-tellingen per (cat, dc).
+if ($action === 'scheids_struktuur') {
+    header('Content-Type: application/json; charset=utf-8');
+    $compId = _scheidsRequire();
+    try {
+        $stmt = $pdo->prepare("
+            SELECT
+                p.category AS cat,
+                dc.id      AS dc_id,
+                dc.name    AS dc_naam,
+                dc.number  AS dc_number,
+                SUM(CASE WHEN e.reserve IS NULL AND e.status IN (1, 5)
+                         THEN 1 ELSE 0 END) AS aantal_deelnemers,
+                SUM(CASE WHEN e.reserve IS NOT NULL
+                         THEN 1 ELSE 0 END) AS aantal_reserves
+            FROM entries e
+            JOIN persons p                ON p.license_key = e.person_license
+            JOIN distance_combinations dc ON dc.id = e.distance_combination_id
+            WHERE dc.competition_id = ?
+              AND p.category IS NOT NULL AND p.category <> ''
+            GROUP BY p.category, dc.id, dc.name, dc.number
+            HAVING aantal_deelnemers > 0 OR aantal_reserves > 0
+            ORDER BY p.category, dc.number, dc.name
+        ");
+        $stmt->execute([$compId]);
+        $rows = $stmt->fetchAll(PDO::FETCH_ASSOC);
+
+        // Groepeer → { cats: [ {cat, dcs:[{dc_id, dc_naam, aantal_deelnemers, aantal_reserves}]} ] }
+        $catMap = [];
+        foreach ($rows as $r) {
+            $c = $r['cat'];
+            if (!isset($catMap[$c])) $catMap[$c] = [];
+            $catMap[$c][] = [
+                'dc_id'             => $r['dc_id'],
+                'dc_naam'           => $r['dc_naam'],
+                'aantal_deelnemers' => (int)$r['aantal_deelnemers'],
+                'aantal_reserves'   => (int)$r['aantal_reserves'],
+            ];
+        }
+        $cats = [];
+        foreach ($catMap as $c => $dcs) {
+            $cats[] = ['cat' => $c, 'dcs' => $dcs];
+        }
+        usort($cats, fn($a, $b) => _juryCatSortKey($a['cat']) <=> _juryCatSortKey($b['cat']));
+
+        echo json_encode(['cats' => $cats], JSON_UNESCAPED_UNICODE);
+    } catch (Throwable $e) {
+        http_response_code(500);
+        echo json_encode(['error' => $e->getMessage()]);
+    }
+    exit;
+}
+
+// ── API: detail voor één DC (+ optioneel cat-filter) ────────────────────────
+// teller = altijd per-DC (capaciteit hoort bij de DC, niet bij de cat).
+// reserves + deelnemers = gefilterd op cat indien meegegeven (combo-DC's
+// zoals DSA+DSJ tonen dan alleen de gekozen cat).
+if ($action === 'scheids_dc') {
+    header('Content-Type: application/json; charset=utf-8');
+    $compId = _scheidsRequire();
+    $dcId   = trim($_GET['dc_id'] ?? '');
+    $cat    = trim($_GET['cat']   ?? '');
+    if ($dcId === '') {
+        http_response_code(400);
+        echo json_encode(['error' => 'dc_id verplicht']);
+        exit;
+    }
+    try {
+        if (!_scheidsCheckDc($pdo, $dcId, $compId)) {
+            http_response_code(403);
+            echo json_encode(['error' => 'DC hoort niet bij deze wedstrijd']);
+            exit;
+        }
+        $catFilterSql = $cat !== '' ? ' AND p.category = ?' : '';
+        $params = [$compId, $dcId];
+        if ($cat !== '') $params[] = $cat;
+        $stmt = $pdo->prepare("
+            SELECT
+                COALESCE(csn.startnummer, p.start_number) AS startnummer,
+                p.license_key,
+                p.full_name,
+                p.short_name,
+                p.category,
+                p.club_short,
+                e.status                    AS entry_status,
+                e.reserve                   AS reserve_nr,
+                e.reserve_handmatig_ingezet AS ingezet
+            FROM entries e
+            JOIN persons p ON p.license_key = e.person_license
+            LEFT JOIN competition_startnummers csn
+                   ON csn.competition_id = ? AND csn.person_license = p.license_key
+            WHERE e.distance_combination_id = ?
+              {$catFilterSql}
+            ORDER BY
+                CASE WHEN COALESCE(csn.startnummer, p.start_number) IS NULL THEN 1 ELSE 0 END,
+                COALESCE(csn.startnummer, p.start_number),
+                p.full_name
+        ");
+        $stmt->execute($params);
+        $rows = $stmt->fetchAll(PDO::FETCH_ASSOC);
+
+        $reserves   = [];
+        $deelnemers = [];
+        foreach ($rows as $r) {
+            $rij = [
+                'license_key' => $r['license_key'],
+                'naam'        => $r['full_name'] ?? $r['short_name'] ?? '(onbekend)',
+                'startnummer' => $r['startnummer'] !== null ? (int)$r['startnummer'] : null,
+                'categorie'   => $r['category'] ?? '',
+                'club'        => $r['club_short'] ?? '',
+                'entry_status'=> (int)$r['entry_status'],
+                'reserve_nr'  => $r['reserve_nr'] !== null ? (int)$r['reserve_nr'] : null,
+                'ingezet'     => (int)$r['ingezet'] === 1,
+            ];
+            if ($rij['reserve_nr'] !== null) {
+                $reserves[] = $rij;
+            } else {
+                $deelnemers[] = $rij;
+            }
+        }
+        // Reserves sorteren op reserve-volgnummer (1 eerst = eerste in lijn)
+        usort($reserves, fn($a, $b) => $a['reserve_nr'] <=> $b['reserve_nr']);
+
+        echo json_encode([
+            'teller'     => _scheidsTeller($pdo, $dcId),
+            'reserves'   => $reserves,
+            'deelnemers' => $deelnemers,
+        ], JSON_UNESCAPED_UNICODE);
+    } catch (Throwable $e) {
+        http_response_code(500);
+        echo json_encode(['error' => $e->getMessage()]);
+    }
+    exit;
+}
+
+// ── API: reserve inzetten ───────────────────────────────────────────────────
+// POST { dc_id, person_license }. Spiegelt api/reserve_inzet.php (actie=inzet):
+// cap-check, status moet 1 zijn, daarna reserve=NULL + handmatig=1 + status=5.
+if ($action === 'scheids_inzet' && $_SERVER['REQUEST_METHOD'] === 'POST') {
+    header('Content-Type: application/json; charset=utf-8');
+    $compId = _scheidsRequire();
+    $body   = json_decode(file_get_contents('php://input'), true) ?: [];
+    $dcId   = trim($body['dc_id'] ?? '');
+    $lic    = trim($body['person_license'] ?? '');
+    if ($dcId === '' || $lic === '') {
+        http_response_code(400);
+        echo json_encode(['error' => 'dc_id en person_license verplicht']);
+        exit;
+    }
+    try {
+        if (!_scheidsCheckDc($pdo, $dcId, $compId)) {
+            http_response_code(403);
+            echo json_encode(['error' => 'DC hoort niet bij deze wedstrijd']);
+            exit;
+        }
+        // Huidige entry-status ophalen
+        $eStmt = $pdo->prepare("
+            SELECT status, reserve FROM entries
+            WHERE distance_combination_id = ? AND person_license = ?
+        ");
+        $eStmt->execute([$dcId, $lic]);
+        $ent = $eStmt->fetch(PDO::FETCH_ASSOC);
+        if (!$ent) {
+            http_response_code(404);
+            echo json_encode(['error' => 'Entry niet gevonden']);
+            exit;
+        }
+        if ($ent['reserve'] === null) {
+            http_response_code(409);
+            echo json_encode(['error' => 'Deze rijder is geen reserve', 'reden' => 'geen_reserve']);
+            exit;
+        }
+        if ((int)$ent['status'] !== 1) {
+            http_response_code(409);
+            echo json_encode([
+                'error' => 'Reserve moet status "bevestigd" (getekend) hebben om in te zetten',
+                'reden' => 'status_niet_getekend',
+            ]);
+            exit;
+        }
+        // Capaciteit-cap (identiek aan reserve_inzet.php + max_in_loting-override)
+        $teller = _scheidsTeller($pdo, $dcId);
+        if ($teller['vrij'] <= 0) {
+            http_response_code(409);
+            echo json_encode([
+                'error'  => "Geen vrije plekken meer — alle {$teller['max']} slots zijn gevuld",
+                'reden'  => 'geen_vrije_slots',
+                'teller' => $teller,
+            ]);
+            exit;
+        }
+        $pdo->prepare("
+            UPDATE entries
+               SET reserve                   = NULL,
+                   reserve_handmatig_ingezet = 1,
+                   status                    = 5
+             WHERE distance_combination_id = ? AND person_license = ?
+        ")->execute([$dcId, $lic]);
+
+        _juryLog($pdo, 'scheids-reserve-inzet', null, $compId);
+        echo json_encode(['ok' => true, 'teller' => _scheidsTeller($pdo, $dcId)], JSON_UNESCAPED_UNICODE);
+    } catch (Throwable $e) {
+        http_response_code(500);
+        echo json_encode(['error' => $e->getMessage()]);
+    }
+    exit;
+}
+
+// ── API: status zetten (afmelden / niet getekend / terug naar actief) ───────
+// POST { dc_id, person_license, status }  status ∈ {1, 3, 4}
+//   3 = afgemeld bij org., 4 = niet getekend, 1 = terug naar actief.
+// KNSB-afmelding (status 2) is geblokkeerd. Bij 'terug' (1) wordt een eerder
+// ingezette reserve (reserve_handmatig_ingezet=1) hersteld naar status 5 zodat
+// de 'bevestigd bij org.'-semantiek behouden blijft.
+if ($action === 'scheids_status' && $_SERVER['REQUEST_METHOD'] === 'POST') {
+    header('Content-Type: application/json; charset=utf-8');
+    $compId = _scheidsRequire();
+    $body   = json_decode(file_get_contents('php://input'), true) ?: [];
+    $dcId   = trim($body['dc_id'] ?? '');
+    $lic    = trim($body['person_license'] ?? '');
+    $target = (int)($body['status'] ?? -1);
+    if ($dcId === '' || $lic === '' || !in_array($target, [1, 3, 4], true)) {
+        http_response_code(400);
+        echo json_encode(['error' => 'dc_id, person_license en status (1/3/4) verplicht']);
+        exit;
+    }
+    try {
+        if (!_scheidsCheckDc($pdo, $dcId, $compId)) {
+            http_response_code(403);
+            echo json_encode(['error' => 'DC hoort niet bij deze wedstrijd']);
+            exit;
+        }
+        $eStmt = $pdo->prepare("
+            SELECT status, reserve, reserve_handmatig_ingezet FROM entries
+            WHERE distance_combination_id = ? AND person_license = ?
+        ");
+        $eStmt->execute([$dcId, $lic]);
+        $ent = $eStmt->fetch(PDO::FETCH_ASSOC);
+        if (!$ent) {
+            http_response_code(404);
+            echo json_encode(['error' => 'Entry niet gevonden']);
+            exit;
+        }
+        if ((int)$ent['status'] === 2) {
+            http_response_code(409);
+            echo json_encode([
+                'error' => 'Deze rijder is door de KNSB afgemeld — niet te wijzigen',
+                'reden' => 'knsb_afgemeld',
+            ]);
+            exit;
+        }
+        // 'terug naar actief': ingezette reserve → 5, anders → 1
+        $nieuweStatus = $target;
+        if ($target === 1 && (int)$ent['reserve_handmatig_ingezet'] === 1) {
+            $nieuweStatus = 5;
+        }
+        $pdo->prepare("
+            UPDATE entries SET status = ?
+             WHERE distance_combination_id = ? AND person_license = ?
+        ")->execute([$nieuweStatus, $dcId, $lic]);
+
+        _juryLog($pdo, 'scheids-status-' . $target, null, $compId);
+        echo json_encode([
+            'ok'     => true,
+            'status' => $nieuweStatus,
+            'teller' => _scheidsTeller($pdo, $dcId),
+        ], JSON_UNESCAPED_UNICODE);
+    } catch (Throwable $e) {
+        http_response_code(500);
+        echo json_encode(['error' => $e->getMessage()]);
+    }
+    exit;
+}
+
 // ── Geen action → HTML pagina ───────────────────────────────────────────────
 ?><!DOCTYPE html>
 <html lang="nl">

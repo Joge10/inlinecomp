@@ -1328,16 +1328,24 @@ async function _pcZorgTijdschemaGeladen() {
         }
 
         // publiceerTijdschema() heeft óók afstanden-per-DC nodig voor volledige
-        // naam-labels. Die hangen bij vergelijkData[].afstanden. Vul die even
-        // parallel aan, precies zoals laadTijdschema() dat doet.
+        // naam-labels. Die hangen bij vergelijkData[].afstanden. Vul ze aan
+        // via ÉÉN bulk-call (?dc_ids=...) ipv N parallelle single-calls —
+        // anders schiet 1 Print-Center-load 50+ PHP-processen tegelijk af
+        // op iFastNet shared hosting, wat de entry-process-limiet raakt.
+        // Bulk-response shape: { dcId: [distances, ...] }
         const uniekeDcIds = [...new Set((vergelijkData ?? []).map(c => c.dc_id))];
-        const distArrays = await Promise.all(uniekeDcIds.map(dcId =>
-            fetch('api/distances_db.php?dc_id=' + encodeURIComponent(dcId))
-                .then(r => r.json())
-                .catch(() => [])
-        ));
-        uniekeDcIds.forEach((dcId, i) => {
-            const alle = Array.isArray(distArrays[i]) ? distArrays[i] : [];
+        let distMap = {};
+        if (uniekeDcIds.length > 0) {
+            try {
+                const r = await fetch(
+                    'api/distances_db.php?dc_ids=' +
+                    uniekeDcIds.map(encodeURIComponent).join(',')
+                );
+                distMap = await r.json() || {};
+            } catch { distMap = {}; }
+        }
+        uniekeDcIds.forEach(dcId => {
+            const alle = Array.isArray(distMap[dcId]) ? distMap[dcId] : [];
             const afst = alle.map(d => ({
                 id:           d.id,
                 name:         d.name,

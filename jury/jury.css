@@ -1780,6 +1780,7 @@ html, body {
     font-size: .9em;
 }
 .jury-docs-lijst { list-style: none; padding: 0; margin: 0; }
+.jury-docs-item-wrap { padding: 0; margin: 0; }
 .jury-docs-item {
     display: flex;
     align-items: center;
@@ -1787,9 +1788,11 @@ html, body {
     padding: 14px 16px;
     border-bottom: 1px solid var(--jury-border);
     cursor: pointer;
+    text-decoration: none;        /* <a>-element, geen onderstreping */
+    color: inherit;
     transition: background .12s;
 }
-.jury-docs-item:last-child { border-bottom: 0; }
+.jury-docs-item-wrap:last-child .jury-docs-item { border-bottom: 0; }
 .jury-docs-item:hover     { background: var(--jury-blauw-bg); }
 .jury-docs-item:active    { background: #dde6f0; }
 .jury-docs-icon  { font-size: 1.4rem; flex: 0 0 auto; }
@@ -1807,53 +1810,198 @@ html, body {
     font-size: .8rem;
     text-align: right;
 }
+/* Pijl-hint dat dit een nieuwe-tab-link is. Subtiel grijs, fade-in on hover. */
+.jury-docs-tab-hint {
+    flex: 0 0 auto;
+    color: var(--jury-grijs);
+    font-size: 1.1rem;
+    opacity: .5;
+    margin-left: 4px;
+}
+.jury-docs-item:hover .jury-docs-tab-hint { opacity: 1; color: var(--jury-blauw); }
 
-/* PDF-viewer modal — iframe-based, stacks bovenop docs-lijst */
-.jury-pdfviewer-overlay {
-    position: fixed; inset: 0;
-    background: rgba(0,0,0,.75);
+/* ════════════════════════════════════════════════════════════════════════
+   SCHEIDSRECHTER — reserve-inzet + afmeld-beheer
+   ════════════════════════════════════════════════════════════════════════ */
+.sr-scherm { padding: 0; }
+
+/* Hoofd-tabbalk: Inzetten reserves | Sancties */
+.sr-tabbalk {
+    display: flex;
+    gap: 4px;
+    border-bottom: 2px solid var(--jury-border);
+    margin-bottom: 12px;
+}
+.sr-tab {
+    flex: 1 1 auto;
+    padding: 14px 12px;
+    font-size: 1.1rem;
+    font-weight: 600;
+    background: var(--jury-blauw-bg);
+    color: var(--jury-blauw);
+    border: 0;
+    border-bottom: 3px solid transparent;
+    cursor: pointer;
+    border-radius: 8px 8px 0 0;
+}
+.sr-tab.is-actief {
+    background: #fff;
+    border-bottom-color: var(--jury-blauw);
+}
+
+.sr-body { padding: 0 4px 24px; }
+.sr-placeholder { margin-top: 32px; }
+.sr-leeg {
+    padding: 18px;
+    text-align: center;
+    color: var(--jury-grijs);
+    font-style: italic;
+}
+
+/* Reserve-badge op de (hergebruikte) speaker cat-/dc-tabs */
+.sr-cat-resbadge, .sr-dc-resbadge {
+    display: inline-block;
+    margin-left: 6px;
+    font-size: .75rem;
+    font-weight: 700;
+    background: #f0a800;
+    color: #fff;
+    border-radius: 10px;
+    padding: 1px 6px;
+    vertical-align: middle;
+}
+
+/* Teller-strip (geloot / max / vrij) */
+.sr-teller {
     display: flex;
     align-items: center;
-    justify-content: center;
-    z-index: 9200;          /* boven docs-lijst (9100) */
-    padding: 8px;
+    gap: 10px;
+    padding: 12px 16px;
+    background: var(--jury-blauw-bg);
+    border-radius: 10px;
+    margin: 10px 0 16px;
+    font-size: 1.15rem;
 }
-.jury-pdfviewer-modal {
-    background: #fff;
-    border-radius: 8px;
-    width: 100%;
-    height: 100%;
-    max-width: 1200px;
-    max-height: 95vh;
+.sr-teller-item b { font-size: 1.4rem; color: var(--jury-blauw); }
+.sr-teller-sep    { color: var(--jury-grijs); }
+.sr-teller-vrij {
+    margin-left: auto;
+    font-weight: 700;
+    padding: 4px 14px;
+    border-radius: 20px;
+}
+.sr-teller-vrij.is-vrij { background: #d6f0dd; color: #1a7a35; }
+.sr-teller-vrij.is-vol  { background: #fbe0dd; color: var(--jury-rood); }
+
+/* Secties (Reserves / Deelnemers) */
+.sr-sectie { margin-bottom: 22px; }
+.sr-sectie-titel {
+    font-size: 1.15rem;
+    color: var(--jury-blauw);
+    margin: 0 0 10px;
+    padding-bottom: 4px;
+    border-bottom: 1px solid var(--jury-border);
+}
+.sr-sectie-n { color: var(--jury-grijs); font-weight: 400; font-size: .95rem; }
+
+/* ── Tegel-grid (tablet-vriendelijk) ─────────────────────────────────── */
+.sr-tegel-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(170px, 1fr));
+    gap: 10px;
+}
+.sr-tegel {
+    position: relative;
     display: flex;
     flex-direction: column;
-    overflow: hidden;
-    box-shadow: 0 12px 40px rgba(0,0,0,.5);
-}
-.jury-pdfviewer-kop {
-    display: flex;
     align-items: center;
-    justify-content: space-between;
-    padding: 8px 14px;
-    background: var(--jury-blauw);
-    color: #fff;
-    flex: 0 0 auto;
+    gap: 2px;
+    padding: 12px 10px 10px;
+    background: #fff;
+    border: 2px solid var(--jury-border);
+    border-radius: 10px;
+    min-height: 120px;
 }
-.jury-pdfviewer-titel {
-    font-size: 1rem; font-weight: 600;
-    overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
-    flex: 1 1 auto; margin-right: 12px;
+.sr-tegel-reserve { border-color: #f0a800; }
+.sr-tegel-snr {
+    font-size: 2rem;
+    font-weight: 700;
+    color: var(--jury-blauw);
+    line-height: 1;
 }
-.jury-pdfviewer-acties { display: flex; gap: 6px; align-items: center; flex: 0 0 auto; }
-.jury-pdfviewer-acties .jury-btn-link { color: #fff; }
-.jury-pdfviewer-sluit {
-    background: transparent; border: 0; color: #fff;
-    font-size: 1.8rem; line-height: 1; cursor: pointer; padding: 0 6px;
+.sr-tegel-naam {
+    font-size: 1.05rem;
+    font-weight: 600;
+    text-align: center;
+    line-height: 1.15;
+    color: var(--jury-blauw);
 }
-.jury-pdfviewer-sluit:hover { opacity: .8; }
-.jury-pdfviewer-iframe {
-    flex: 1 1 auto;
+.sr-tegel-club { font-size: .8rem; color: var(--jury-grijs); }
+
+/* Reserve-volgnummer linksboven */
+.sr-tegel-resnr {
+    position: absolute;
+    top: 4px;
+    left: 6px;
+    font-size: .85rem;
+    font-weight: 700;
+    color: #b07800;
+    background: #fff5e0;
+    border-radius: 6px;
+    padding: 1px 7px;
+}
+/* Status-badge rechtsboven */
+.sr-tegel-badge {
+    position: absolute;
+    top: 4px;
+    right: 6px;
+    font-size: .72rem;
+    font-weight: 600;
+    padding: 2px 7px;
+    border-radius: 10px;
+    white-space: nowrap;
+}
+.sr-tegel-badge.sr-status-actief   { background: #d6f0dd; color: #1a7a35; }
+.sr-tegel-badge.sr-status-afgemeld { background: #fbe0dd; color: var(--jury-rood); }
+.sr-tegel-badge.sr-status-knsb     { background: #e3e3e3; color: #666; }
+.sr-tegel-badge.sr-status-neutraal { background: #f0f0f0; color: #888; }
+
+/* Afgemelde deelnemers dimmen (maar knop blijft goed leesbaar) */
+.sr-tegel-deel.sr-status-afgemeld { opacity: .7; }
+
+/* Actie-rij onderaan de tegel — twee hoek-knoppen of één volle-breedte */
+.sr-tegel-acties {
+    display: flex;
+    gap: 6px;
     width: 100%;
+    margin-top: auto;
+    padding-top: 8px;
+}
+.sr-tegel-btn {
+    flex: 1 1 0;
     border: 0;
-    background: #525659;   /* matched native browser-PDF-bg */
+    border-radius: 7px;
+    padding: 10px 6px;
+    font-size: .9rem;
+    font-weight: 700;
+    cursor: pointer;
+    white-space: nowrap;
+    touch-action: manipulation;   /* geen 300ms tap-delay op tablet */
+}
+.sr-tegel-btn:disabled { opacity: .4; cursor: not-allowed; }
+.sr-btn-inzet { background: #1a7a35; color: #fff; }
+.sr-btn-afm   { background: #fbe0dd; color: var(--jury-rood); }   /* links-onder */
+.sr-btn-niet  { background: #fff0d0; color: #b07800; }            /* rechts-onder */
+.sr-btn-terug { background: var(--jury-blauw); color: #fff; }
+.sr-tegel-knsb {
+    flex: 1 1 auto;
+    text-align: center;
+    color: #888;
+    font-size: .82rem;
+    font-style: italic;
+    padding: 8px 0;
+}
+
+@media (min-width: 1024px) {
+    .sr-tegel-grid { grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); }
 }
