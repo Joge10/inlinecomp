@@ -35,6 +35,10 @@ $heatsAantal = max(1, intval($_GET['heats_aantal'] ?? 1));
 $methode         = trim($_GET['methode']           ?? 'startnummer');
 $klassementId    = trim($_GET['klassement_id']    ?? '');
 $klassementSectie= trim($_GET['klassement_sectie']?? '');
+// Voor methode 'afstand_uitslag': seed op de uitslag van een ANDERE afstand-DC
+// binnen deze wedstrijd (bv. 500m op de geïmporteerde 200m-uitslag).
+$bronDcId        = trim($_GET['bron_dc_id']       ?? '');
+$bronDistId      = trim($_GET['bron_distance_id'] ?? '');
 
 // Welke ronde wordt gegenereerd (default: series)
 $geldigeRondeTypes = ['heats','kwartfinale','halve_finale','finale','finale_a','finale_b','runner_up'];
@@ -289,6 +293,58 @@ try {
                 ($a['start_number'] ?: PHP_INT_MAX) - ($b['start_number'] ?: PHP_INT_MAX));
             break;
 
+        case 'afstand_uitslag':
+            // Seed op de uitslag van een ANDERE afstand-DC binnen dezelfde
+            // wedstrijd — bv. 500m seeden op de (geïmporteerde) 200m-uitslag.
+            // Leest uitslag_afstand voor de gekozen bron (DC + optioneel
+            // distance), rangschikt op rang (punten is bij PDF-import meestal
+            // NULL), matcht op person_license. Rijders zonder uitslag (of met
+            // uitsluitende sanctie) gaan achteraan op startnummer.
+            if ($bronDcId === '') {
+                $methode = 'startnummer';
+                foreach ($rijders as $r) {
+                    if ($r['start_number']) $heeftPositie[] = $r;
+                    else                   $zonderPositie[] = $r;
+                }
+                usort($heeftPositie, fn($a,$b) => $a['start_number'] - $b['start_number']);
+                break;
+            }
+            $auWhere  = $bronDistId !== '' ? 'AND distance_id = ?' : '';
+            $auParams = $bronDistId !== ''
+                ? [$compId, $bronDcId, $bronDistId]
+                : [$compId, $bronDcId];
+            $auSql = "
+                SELECT   person_license,
+                         MIN(COALESCE(rang, 9999)) AS beste_rang,
+                         MAX(CASE WHEN sanctie IN ('DQ-SF','DQ-DF') THEN 1 ELSE 0 END) AS uitgesloten
+                FROM     uitslag_afstand
+                WHERE    competition_id          = ?
+                  AND    distance_combination_id = ?
+                  {$auWhere}
+                GROUP BY person_license
+                ORDER BY uitgesloten ASC, beste_rang ASC
+            ";
+            $auStmt = $pdo->prepare($auSql);
+            $auStmt->execute($auParams);
+            $auMap  = [];  // person_license => positie
+            $auRank = 1;
+            foreach ($auStmt->fetchAll(PDO::FETCH_ASSOC) as $row) {
+                if ((int)$row['uitgesloten']) continue;  // uitgesloten → achteraan
+                $auMap[$row['person_license']] = $auRank++;
+            }
+            foreach ($rijders as $r) {
+                $lk = $r['license_key'];
+                if (isset($auMap[$lk])) {
+                    $heeftPositie[] = $r + ['_auPos' => $auMap[$lk]];
+                } else {
+                    $zonderPositie[] = $r;
+                }
+            }
+            usort($heeftPositie, fn($a, $b) => $a['_auPos'] - $b['_auPos']);
+            usort($zonderPositie, fn($a, $b) =>
+                ($a['start_number'] ?: PHP_INT_MAX) - ($b['start_number'] ?: PHP_INT_MAX));
+            break;
+
         default:
             // Onbekende methode → val terug op startnummer (deterministisch, voorspelbaar)
             $methode = 'startnummer';
@@ -303,7 +359,7 @@ try {
     // Rijders zonder positie:
     //   klassement/tussenklassement-methode → al gesorteerd, niet opnieuw sorteren
     //   overige methoden   → alfabetisch op achternaam (rijders zonder startnummer)
-    if ($methode !== 'klassement' && $methode !== 'tussenklassement') {
+    if (!in_array($methode, ['klassement', 'tussenklassement', 'afstand_uitslag'], true)) {
         usort($zonderPositie, fn($a,$b) =>
             strcasecmp(
                 $a['short_name'] ?? (preg_match('/\S+$/', $a['full_name'], $m) ? $m[0] : $a['full_name']),
@@ -336,7 +392,7 @@ try {
     // --------------------------------------------------------
     $rondeIsFinale = in_array($rondeType, ['finale', 'finale_a', 'finale_b'], true);
     $rondeIsHeats  = ($rondeType === 'heats');
-    $methodeOpKlassement = in_array($methode, ['klassement', 'tussenklassement'], true);
+    $methodeOpKlassement = in_array($methode, ['klassement', 'tussenklassement', 'afstand_uitslag'], true);
 
     // finale_seeding-config is ook van toepassing op de series-ronde (heats)
     // voor formats als 200m DTT (Dual Time-trial), waar zwak→sterk in de

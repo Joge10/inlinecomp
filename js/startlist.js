@@ -1233,6 +1233,33 @@ function slangenpatroon(rijders, maxPerHeat) {
 // Als er al uitslag-data is worden echte namen getoond; anders generieke slots.
 
 // Retourneert true als er echte data is, false als niet
+// Vul de bron-afstand-dropdown voor seeding-methode 'afstand_uitslag'.
+// Toont alle afstanden van DEZE wedstrijd waarvoor uitslag (met rang) bestaat —
+// inclusief via de helper geïmporteerde PDF-uitslagen. De DC die nu geloot
+// wordt zelf wordt overgeslagen (je seedt niet op je eigen nog-te-rijden DC).
+async function vulAfstandBronnen(selEl, cache, groep) {
+    if (!selEl) return;
+    const huidigeDcs = new Set(groep?.dc_ids || [groep?.dc_id]);
+    try {
+        const res  = await fetch('api/uitslag_bronnen.php?competition_id=' + encodeURIComponent(huidigCompId));
+        const data = await res.json();
+        const bronnen = (data?.bronnen || []).filter(b => !huidigeDcs.has(b.dc_id));
+        if (!bronnen.length) {
+            selEl.innerHTML = '<option value="">— geen uitslagen beschikbaar —</option>';
+            return;
+        }
+        selEl.innerHTML = '<option value="">— kies bron-afstand —</option>' +
+            bronnen.map(b => {
+                const sel = (b.dc_id === cache.bronDcId && b.distance_id === cache.bronDistId) ? ' selected' : '';
+                const lbl = `${b.dc_naam} · ${b.distance_naam} (${b.met_rang})`;
+                return `<option value="${escHtml(b.dc_id + '|' + b.distance_id)}"
+                                data-dc="${escHtml(b.dc_id)}" data-dist="${escHtml(b.distance_id)}"${sel}>${escHtml(lbl)}</option>`;
+            }).join('');
+    } catch (e) {
+        selEl.innerHTML = `<option value="">— laden mislukt —</option>`;
+    }
+}
+
 async function vulTussenklPreview(container, nRijders, nHeats, schema, groep, distId, flow) {
     container.innerHTML = '<span class="sl-tk-laden">⏳ Tussenstand laden…</span>';
     if (!nRijders || !nHeats) { container.innerHTML = ''; return false; }
@@ -1429,6 +1456,20 @@ async function toonAfstandConfig(groep, distId, distNaam) {
                 <button class="sl-meth-btn${methode === 'klassement' ? ' actief' : ''}" data-methode="klassement">
                     🏆 Klassement (serie)
                 </button>
+                <button class="sl-meth-btn${methode === 'afstand_uitslag' ? ' actief' : ''}" data-methode="afstand_uitslag">
+                    📥 Op afstand-uitslag
+                </button>
+            </div>
+            <div class="sl-afstanduit-kiezer" id="sl-au-kiezer"
+                 style="${methode === 'afstand_uitslag' ? '' : 'display:none'}">
+                <div class="sl-au-uitleg">
+                    Seed op de uitslag van een eerder verreden afstand (ook
+                    geïmporteerde PDF-uitslagen). Rijders worden gerangschikt op
+                    hun plek in die afstand; wie er niet in voorkomt gaat achteraan.
+                </div>
+                <select class="inp sl-inp" id="sl-au-sel">
+                    <option value="">— kies bron-afstand —</option>
+                </select>
             </div>
             <div class="sl-klassement-kiezer" id="sl-kl-kiezer"
                  style="${methode === 'klassement' ? '' : 'display:none'}">
@@ -1471,16 +1512,37 @@ async function toonAfstandConfig(groep, distId, distNaam) {
             btn.classList.add('actief');
             el('sl-kl-kiezer').style.display = cache.methode === 'klassement'       ? '' : 'none';
             el('sl-tk-kiezer').style.display  = cache.methode === 'tussenklassement' ? '' : 'none';
+            const auKiezer = el('sl-au-kiezer');
+            if (auKiezer) auKiezer.style.display = cache.methode === 'afstand_uitslag' ? '' : 'none';
             const genBtn = el('sl-genereer');
             if (cache.methode === 'tussenklassement') {
                 if (genBtn) genBtn.disabled = true; // disabled totdat preview geladen is
                 const heeftData = await vulTussenklPreview(el('sl-tk-preview'), groep.competitors.length, cache.heatsAantal, schema, groep, distId, flow);
                 if (genBtn) genBtn.disabled = !heeftData;
+            } else if (cache.methode === 'afstand_uitslag') {
+                // Bron-afstanden laden; genereer pas mogelijk na keuze
+                if (genBtn) genBtn.disabled = !cache.bronDcId;
+                await vulAfstandBronnen(el('sl-au-sel'), cache, groep);
+                if (genBtn) genBtn.disabled = !cache.bronDcId;
             } else {
                 if (genBtn) genBtn.disabled = false;
             }
         });
     });
+
+    // ── Bron-afstand dropdown (methode 'afstand_uitslag') ─────────────────────
+    const auSel = el('sl-au-sel');
+    if (auSel) {
+        // Bij init al gevuld als methode al op afstand_uitslag stond
+        if (methode === 'afstand_uitslag') vulAfstandBronnen(auSel, cache, groep);
+        auSel.addEventListener('change', () => {
+            const opt = auSel.selectedOptions[0];
+            cache.bronDcId   = opt?.dataset.dc   || '';
+            cache.bronDistId = opt?.dataset.dist || '';
+            const genBtn = el('sl-genereer');
+            if (genBtn) genBtn.disabled = !cache.bronDcId;
+        });
+    }
 
     // ── Klassement dropdown ───────────────────────────────────────────────────
     const klSelKl  = el('sl-kl-sel-kl');
@@ -1785,6 +1847,9 @@ async function genereerRonde1(cacheKey) {
         if (cache.methode === 'klassement' && cache.klassementId && cache.klassementSectie)
             url += `&klassement_id=${encodeURIComponent(cache.klassementId)}`
                  + `&klassement_sectie=${encodeURIComponent(cache.klassementSectie)}`;
+        if (cache.methode === 'afstand_uitslag' && cache.bronDcId)
+            url += `&bron_dc_id=${encodeURIComponent(cache.bronDcId)}`
+                 + `&bron_distance_id=${encodeURIComponent(cache.bronDistId ?? '')}`;
 
         // Stuur rit_namen mee vanuit tijdschema (voor heat_naam in DB)
         const schema     = _slTsCache?.competition_id === huidigCompId ? _slTsCache.schema : null;
