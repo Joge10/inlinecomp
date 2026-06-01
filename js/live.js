@@ -1534,6 +1534,12 @@ function _liveRenderCarousel() {
 // Hergeneer-klik: bij combi-rit eerst checken of ALLE leden compleet zijn,
 // daarna ketenstap voor elke leden draaien (zodat beide categorieën hun
 // volgende ronde krijgen). Bij niet-combi: gewoon één ketenstap.
+//
+// force=true: dit is een EXPLICIETE operator-actie ("Hergeneer X"). De server
+// 'ongewijzigd'-optimalisatie (= set qualifiers identiek → geen DELETE/INSERT)
+// is bedoeld voor auto-keten na save, niet voor een handmatige klik. Als de
+// operator op de knop drukt, wil 'ie écht een verse seeding — bv. omdat een
+// wisseling de seeding-VOLGORDE heeft gewijzigd terwijl de SET gelijk bleef.
 function _liveHergeneerKlik(btn) {
     const dcId       = btn.dataset.dcId;
     const distanceId = btn.dataset.distanceId;
@@ -1542,22 +1548,17 @@ function _liveHergeneerKlik(btn) {
 
     const huidigeRit = _liveRitten[_liveHuidigIdx];
     if (huidigeRit?.is_combi) {
-        // Per leden: zelfde "van"-ronde en bereken passende "naar" via _volgendeRondeType.
-        // Geef ALTIJD lid.dc_naam mee als splitDcNaam zodat server qualifiers/cleanups
-        // op de juiste split focust (bij niet-split DC = no-op want één unieke dc_naam).
         for (const lid of huidigeRit.combi_leden) {
             const ledenNaar = _volgendeRondeType(lid.dc_id, lid.distance_id, van);
             if (!ledenNaar) continue;
             _liveGenereerKetenStap(lid.dc_id, lid.distance_id, van, ledenNaar, true,
-                { splitDcNaam: lid.dc_naam || '' })
+                { splitDcNaam: lid.dc_naam || '', force: true })
                 .catch(() => {}); // fout op één leden mag niet de andere blokkeren
         }
         return;
     }
-    // Niet-combi: één call met dc_naam van de huidige rit. Dat is de juiste
-    // split (bij split-DC) of gewoon de DC-naam (bij niet-split — filter is no-op).
     _liveGenereerKetenStap(dcId, distanceId, van, naar, true,
-        { splitDcNaam: huidigeRit?.dc_naam || '' });
+        { splitDcNaam: huidigeRit?.dc_naam || '', force: true });
 }
 
 // ── Links panel: alle rijders in categorie+ronde ──────────────────────────────
