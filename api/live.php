@@ -1526,11 +1526,16 @@ if ($action === 'genereer_volgende_ronde') {
             }
         }
 
-        if (!empty($bestaandeLicenties) && $perRondeGelijk) {
+        if (!empty($bestaandeLicenties) && $perRondeGelijk && empty($body['force'])) {
             // Volgende ronde bestaat al met EXACT dezelfde rijders — laat alle
             // resultaten staan, doe geen DELETE/INSERT. Client krijgt een vlag
             // mee zodat hij geen reload triggert (anders flakker je de UI
             // alsnog onnodig).
+            //
+            // force=true overslaat deze check: dat is bedoeld voor situaties
+            // waar de SET gelijk is maar de seeding-VOLGORDE is gewijzigd (bv.
+            // door een wisseling in de huidige ronde). Dan moet de volgende
+            // ronde toch opnieuw geseed worden.
             //
             // HEAL legacy data: oudere genereer_volgende_ronde-runs hebben
             // heats.split_group=NULL ingevuld bij split-DCs. Startlijsten-module
@@ -2606,7 +2611,101 @@ if ($action === 'wissel_posities') {
             $upd->execute([$ron2, $r1['tijd_ms'], $r1['finishpositie'], $r2['id']]);
         }
 
-        echo json_encode(['ok' => true], JSON_UNESCAPED_UNICODE);
+        // ── Detecteer of de volgende ronde her-geseed moet worden ───────────
+        // De wisseling heeft de finishposities van de huidige ronde gewijzigd.
+        // Als er al een volgende ronde gegenereerd is voor deze (dc, distance,
+        // split), dan klopt de seeding daar mogelijk niet meer. We sturen de
+        // benodigde info terug zodat de frontend automatisch een regen kan
+        // triggeren (of een waarschuwing kan tonen als er al results zijn).
+        $nextInfo = null;
+        try {
+            // 1. Context van de huidige heat (via één van de gewisselde entries)
+            $ctxStmt = $pdo->prepare("
+                SELECT
+                    h.distance_combination_id AS dc_id,
+                    h.distance_id,
+                    h.ronde,
+                    h.split_group,
+                    r.ronde_type   AS van_ronde_type,
+                    r.dc_naam      AS split_dc_naam
+                FROM heat_entries he
+                JOIN heats h                  ON h.id = he.heat_id
+                LEFT JOIN tijdschema_ritten r ON r.id = h.tijdschema_rit_id
+                WHERE he.id = ?
+                LIMIT 1
+            ");
+            $ctxStmt->execute([$entryId1]);
+            $ctx = $ctxStmt->fetch(PDO::FETCH_ASSOC);
+            if ($ctx) {
+                $distId  = $ctx['distance_id'] ?? '';
+                $sgrp    = $ctx['split_group'];
+                $dcNaam  = $ctx['split_dc_naam'];
+                // 2. Volgende ronde voor zelfde DC+distance+split zoeken
+                $nxtSql = "
+                    SELECT
+                        MIN(h2.ronde)        AS next_ronde,
+                        r2.ronde_type        AS naar_ronde_type
+                    FROM heats h2
+                    LEFT JOIN tijdschema_ritten r2 ON r2.id = h2.tijdschema_rit_id
+                    WHERE h2.competition_id          = ?
+                      AND h2.distance_combination_id = ?
+                      AND (h2.distance_id <=> ?)
+                      AND (h2.split_group <=> ?)
+                      AND h2.ronde > ?
+                    GROUP BY r2.ronde_type
+                    ORDER BY MIN(h2.ronde) ASC
+                    LIMIT 1
+                ";
+                $nxtStmt = $pdo->prepare($nxtSql);
+                $nxtStmt->execute([
+                    $compId,
+                    $ctx['dc_id'],
+                    $distId !== '' ? $distId : null,
+                    $sgrp,
+                    (int)$ctx['ronde'],
+                ]);
+                $nxt = $nxtStmt->fetch(PDO::FETCH_ASSOC);
+                if ($nxt) {
+                    // 3. Heeft de volgende ronde al resultaten?
+                    $resCntStmt = $pdo->prepare("
+                        SELECT COUNT(*) FROM results res
+                        JOIN heat_entries he2 ON he2.id = res.heat_entry_id
+                        JOIN heats h3         ON h3.id  = he2.heat_id
+                        WHERE h3.competition_id          = ?
+                          AND h3.distance_combination_id = ?
+                          AND (h3.distance_id <=> ?)
+                          AND (h3.split_group <=> ?)
+                          AND h3.ronde                   = ?
+                    ");
+                    $resCntStmt->execute([
+                        $compId,
+                        $ctx['dc_id'],
+                        $distId !== '' ? $distId : null,
+                        $sgrp,
+                        (int)$nxt['next_ronde'],
+                    ]);
+                    $hasResults = ((int)$resCntStmt->fetchColumn()) > 0;
+                    $nextInfo = [
+                        'exists'          => true,
+                        'has_results'     => $hasResults,
+                        'dc_id'           => $ctx['dc_id'],
+                        'distance_id'     => $distId,
+                        'split_dc_naam'   => $dcNaam,
+                        'van_ronde_type'  => $ctx['van_ronde_type'],
+                        'naar_ronde_type' => $nxt['naar_ronde_type'],
+                    ];
+                }
+            }
+        } catch (Throwable $eNext) {
+            // Detectie faalt → geen blocker voor de wisseling zelf. Stuur
+            // null mee en log; de operator kan altijd handmatig regenereren.
+            $nextInfo = null;
+        }
+
+        echo json_encode([
+            'ok'         => true,
+            'next_ronde' => $nextInfo,
+        ], JSON_UNESCAPED_UNICODE);
 
     } catch (Throwable $e) {
         http_response_code(500);

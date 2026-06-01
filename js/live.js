@@ -2361,6 +2361,7 @@ function _liveBind(idx) {
                     heat_entry_id_2: riderB.entry_id,
                 }),
             });
+            let wisselData = null;
             if (res.status === 404) {
                 // Pre-save wissel: er staan nog geen results-rijen in DB voor
                 // (één van) beide rijders. Lokaal is de swap al doorgevoerd
@@ -2372,8 +2373,49 @@ function _liveBind(idx) {
             } else if (!res.ok) {
                 throw new Error('HTTP ' + res.status);
             } else {
-                const data = await res.json();
-                if (data.error) throw new Error(data.error);
+                wisselData = await res.json();
+                if (wisselData.error) throw new Error(wisselData.error);
+            }
+
+            // ── Volgende ronde auto-her-seed (na wisseling-in-DB) ─────────
+            // De wisseling wijzigt de finishposities → eventueel al gegenereerde
+            // volgende ronde (bv. A-finale na halve) is geseed op de oude
+            // volgorde. wissel_posities geeft info terug over de volgende
+            // ronde; als die geen resultaten heeft, regenereren we 'm met
+            // force=true (skip ongewijzigd-check, want set is identiek maar
+            // volgorde is nieuw). Als er wél resultaten staan: waarschuwen.
+            const nextRonde = wisselData?.next_ronde;
+            if (nextRonde?.exists) {
+                if (nextRonde.has_results) {
+                    _liveToast(
+                        '⚠ Volgende ronde heeft al resultaten — handmatig nakijken na wisseling',
+                        'info', 6000
+                    );
+                } else {
+                    try {
+                        await _liveGenereerVolgendeRonde(
+                            nextRonde.dc_id,
+                            nextRonde.distance_id || '',
+                            nextRonde.van_ronde_type,
+                            nextRonde.naar_ronde_type,
+                            true,   // compleet — definitieve regen na wisseling
+                            {
+                                silent:       true,
+                                force:        true,
+                                splitDcNaam:  nextRonde.split_dc_naam || '',
+                            }
+                        );
+                        _liveToast(
+                            `✓ Volgende ronde opnieuw geseed na wisseling`,
+                            'ok', 3500
+                        );
+                    } catch (eRegen) {
+                        _liveToast(
+                            `⚠ Auto-reseed mislukt: ${eRegen.message} — controleer handmatig`,
+                            'fout', 6000
+                        );
+                    }
+                }
             }
 
             // Markeer beide rijders als "in een wissel betrokken" — voorkomt
