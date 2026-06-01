@@ -602,10 +602,21 @@ function _berekenPosities(entries, gebruikGelijkspel = true, isAfvalkoers = fals
     // RANKED_LAST = DNF / DQ-TF / DNS → positie N+1 (gedeeld laatste).
     // Uitzondering: in afvalkoers krijgt DNS GEEN positie — niet gestart =
     // niet in de uitslag. Backend doet hetzelfde (zie api/live.php).
-    const rankedLast = entries.filter(e =>
-        _liveSanctieHeeftSet(e.sanctie, _SANCTIE_RANKED_LAST)
-        && !(isAfvalkoers && _liveSanctieHeeft(e.sanctie, 'DNS'))
-    );
+    // OOK ranked-last: rijders met een NIET-NOT_RANKED sanctie (RR/W1/W2/FS/
+    // etc.) zonder geldige tijd. Die zaten in de race en horen een positie
+    // te krijgen; de jury kan altijd handmatig wisselen. Anders valt zo'n
+    // rijder uit alle categorieën en blijft de heat "niet compleet".
+    const rankedLast = entries.filter(e => {
+        if (_liveSanctieHeeftSet(e.sanctie, _SANCTIE_NOT_RANKED)) return false;
+        const heeftValideTijd = e.tijd_ms > 0;
+        // DNS / DNF / DQ-TF altijd ranked-last (behalve afval+DNS)
+        if (_liveSanctieHeeftSet(e.sanctie, _SANCTIE_RANKED_LAST)) {
+            return !(isAfvalkoers && _liveSanctieHeeft(e.sanctie, 'DNS'));
+        }
+        // Sanctie zonder geldige tijd (RR/W1/W2/FS/...) → ranked-last opvulling
+        if (e.sanctie && !heeftValideTijd) return true;
+        return false;
+    });
     // DQ-SF en DQ-DF worden genegeerd (geen positie)
 
     const posMap = new Map();

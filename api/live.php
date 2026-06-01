@@ -423,19 +423,26 @@ if ($action === 'save_rit_results') {
             } elseif ($heeftFS) {
                 // FS in lijst (zonder DQ/DNF/DNS): waarschuwing — tijd bewaren
                 // en normale positie toekennen. Eventuele W1/W2/RR in dezelfde
-                // lijst blijven gewoon mee opgeslagen.
+                // lijst blijven gewoon mee opgeslagen. Zonder tijd → ranked-last
+                // (gedeeldArr) zodat de heat compleet blijft; jury kan wisselen.
                 if ($tijdMs !== null && $tijdMs > 0) {
                     $metTijd[]    = $base + ['tijd_ms' => $tijdMs, 'sanctie' => $sanctie];
                 } else {
-                    $zonderTijd[] = $base + ['tijd_ms' => null,    'sanctie' => $sanctie];
+                    $gedeeldArr[] = $base + ['tijd_ms' => null,    'sanctie' => $sanctie];
                 }
             } elseif ($tijdMs !== null && $tijdMs > 0) {
                 // Normale finisher (mogelijk met W1/W2/RR sancties — geen effect)
                 $metTijd[]    = $base + ['tijd_ms' => $tijdMs, 'sanctie' => $sanctie];
+            } elseif ($sanctie !== null && $sanctie !== '') {
+                // Geen tijd, wél een sanctie (RR/W1/W2/etc., geen DQ/DNF/DNS):
+                // de rijder zat in de race en moet een positie krijgen, anders
+                // is de heat "niet compleet". Ranked-last (N+1); jury kan
+                // handmatig wisselen naar de daadwerkelijke plek.
+                $gedeeldArr[] = $base + ['tijd_ms' => null, 'sanctie' => $sanctie];
             } else {
-                // Geen tijd, geen positie-bepalende sanctie: registratie van
-                // W1/W2/RR mag wel opgeslagen blijven (=$sanctie), maar zonder
-                // tijd kan geen positie worden bepaald.
+                // Geen tijd en geen sanctie → echt niets ingevuld voor deze
+                // rijder. Pas op de juiste plek meenemen als rijder later
+                // alsnog een uitslag krijgt (geen positie nu).
                 $zonderTijd[] = $base + ['tijd_ms' => null, 'sanctie' => $sanctie];
             }
         }
