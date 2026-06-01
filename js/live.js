@@ -2361,7 +2361,7 @@ function _liveBind(idx) {
                     heat_entry_id_2: riderB.entry_id,
                 }),
             });
-            let wisselData = null;
+            let isPostSave = true;
             if (res.status === 404) {
                 // Pre-save wissel: er staan nog geen results-rijen in DB voor
                 // (één van) beide rijders. Lokaal is de swap al doorgevoerd
@@ -2369,52 +2369,37 @@ function _liveBind(idx) {
                 // als ongesaved zodat de operator op Opslaan klikt — dan
                 // schrijft save_rit_results de gewisselde state in één keer
                 // naar DB, inclusief is_photofinish=1 (via r._wisselt).
+                // Geen cascade nodig — die loopt vanzelf na save_rit_results.
                 _liveOngeslagen = true;
+                isPostSave = false;
             } else if (!res.ok) {
                 throw new Error('HTTP ' + res.status);
             } else {
-                wisselData = await res.json();
+                const wisselData = await res.json();
                 if (wisselData.error) throw new Error(wisselData.error);
             }
 
-            // ── Volgende ronde auto-her-seed (na wisseling-in-DB) ─────────
-            // De wisseling wijzigt de finishposities → eventueel al gegenereerde
-            // volgende ronde (bv. A-finale na halve) is geseed op de oude
-            // volgorde. wissel_posities geeft info terug over de volgende
-            // ronde; als die geen resultaten heeft, regenereren we 'm met
-            // force=true (skip ongewijzigd-check, want set is identiek maar
-            // volgorde is nieuw). Als er wél resultaten staan: waarschuwen.
-            const nextRonde = wisselData?.next_ronde;
-            if (nextRonde?.exists) {
-                if (nextRonde.has_results) {
-                    _liveToast(
-                        '⚠ Volgende ronde heeft al resultaten — handmatig nakijken na wisseling',
-                        'info', 6000
-                    );
-                } else {
-                    try {
-                        await _liveGenereerVolgendeRonde(
-                            nextRonde.dc_id,
-                            nextRonde.distance_id || '',
-                            nextRonde.van_ronde_type,
-                            nextRonde.naar_ronde_type,
-                            true,   // compleet — definitieve regen na wisseling
-                            {
-                                silent:       true,
-                                force:        true,
-                                splitDcNaam:  nextRonde.split_dc_naam || '',
-                            }
-                        );
-                        _liveToast(
-                            `✓ Volgende ronde opnieuw geseed na wisseling`,
-                            'ok', 3500
-                        );
-                    } catch (eRegen) {
-                        _liveToast(
-                            `⚠ Auto-reseed mislukt: ${eRegen.message} — controleer handmatig`,
-                            'fout', 6000
-                        );
-                    }
+            // ── Cascade naar volgende ronde (alleen bij post-save wisseling) ─
+            // Dezelfde keten-stap als _liveOpslaanRit: voor het rit zelf én
+            // eventuele combi-leden. force=true: de qualifier-SET kan identiek
+            // zijn (zelfde rijders kwalificeren), maar de seeding-VOLGORDE is
+            // door de wisseling veranderd — anders zou de server denken dat
+            // er niks gewijzigd is en de oude seeding behouden.
+            if (isPostSave) {
+                const ketenLeden = rit.is_combi ? rit.combi_leden : [{
+                    dc_id:       rit.dc_id,
+                    distance_id: rit.distance_id,
+                    ronde_type:  rit.ronde_type,
+                    dc_naam:     rit.dc_naam,
+                }];
+                for (const lid of ketenLeden) {
+                    const volgende = _volgendeRondeType(lid.dc_id, lid.distance_id, lid.ronde_type);
+                    if (!volgende) continue;
+                    const compleet = _liveRondeCompleet(lid.dc_id, lid.distance_id, lid.ronde_type);
+                    _liveGenereerKetenStap(
+                        lid.dc_id, lid.distance_id, lid.ronde_type, volgende, compleet,
+                        { splitDcNaam: lid.dc_naam || rit.dc_naam || '', force: true }
+                    ).catch(() => {});  // stil falen — toast komt uit ketenStap zelf
                 }
             }
 
@@ -4982,15 +4967,18 @@ async function _liveGenereerKetenStap(dcId, distanceId, van, naar, compleet = tr
 
     // splitDcNaam wordt doorgegeven aan _liveGenereerVolgendeRonde via opts —
     // server filtert dan qualifiers/cleanups/doelritten op die ene split.
+    // force=true wordt door wisseling-flow doorgegeven: SET kan identiek
+    // zijn maar VOLGORDE veranderd → moet alsnog regenereren.
     const splitDcNaam = ketenOpts.splitDcNaam || '';
+    const force       = !!ketenOpts.force;
 
     // Beide rondes met onderdrukte toast — de toast obliterates anders de
     // vorige en de gebruiker mist de eerste melding. We bouwen 1 gecombineerde
     // toast aan het einde.
-    const r1 = await _liveGenereerVolgendeRonde(dcId, distanceId, van, naar, compleet, { silent: ookRu, splitDcNaam });
+    const r1 = await _liveGenereerVolgendeRonde(dcId, distanceId, van, naar, compleet, { silent: ookRu, splitDcNaam, force });
     if (!ookRu) return;
 
-    const r2 = await _liveGenereerVolgendeRonde(dcId, distanceId, van, 'runner_up', compleet, { silent: true, splitDcNaam });
+    const r2 = await _liveGenereerVolgendeRonde(dcId, distanceId, van, 'runner_up', compleet, { silent: true, splitDcNaam, force });
 
     // Beide no-op (ongewijzigd of door operator geannuleerd) → geen toast.
     const isNoop = r => r?.ongewijzigd || r?.geannuleerd;
