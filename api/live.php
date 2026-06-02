@@ -165,7 +165,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'GET') {
                 tp.code         AS transponder_actief,
                 res.finishpositie,
                 res.tijd_ms,
+                res.bruto_tijd_ms,
                 res.rondes,
+                res.bruto_rondes,
                 res.punten,
                 res.sanctie,
                 res.afval_rang,
@@ -199,7 +201,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'GET') {
                         'transponder_actief'=> $r['transponder_actief'],
                         'finishpositie'     => $r['finishpositie'] !== null ? (int)$r['finishpositie'] : null,
                         'tijd_ms'           => $r['tijd_ms'] !== null ? (int)$r['tijd_ms'] : null,
+                        'bruto_tijd_ms'     => $r['bruto_tijd_ms'] !== null ? (int)$r['bruto_tijd_ms'] : null,
                         'rondes'            => $r['rondes'] !== null ? (int)$r['rondes'] : null,
+                        'bruto_rondes'      => $r['bruto_rondes'] !== null ? (int)$r['bruto_rondes'] : null,
                         'punten'            => $r['punten'] !== null ? (float)$r['punten'] : null,
                         'sanctie'           => $r['sanctie'],
                         'afval_rang'        => $r['afval_rang'] !== null ? (int)$r['afval_rang'] : null,
@@ -513,13 +517,23 @@ if ($action === 'save_rit_results') {
         // Opslaan in DB
         $pdo->beginTransaction();
 
+        // bruto_tijd_ms / bruto_rondes worden bij de EERSTE save voor deze
+        // heat_entry gezet (= INSERT-pad). Bij latere updates blijft de bruto-
+        // waarde via COALESCE behouden, ongeacht of de tijd handmatig wordt
+        // gewijzigd of via wisseling wordt gewisseld. Zo blijft de oorspronke-
+        // lijk gemeten transponder/MyLaps-tijd altijd opvraagbaar als audit-
+        // spoor. Display-logica (live + uitslag-print) toont een indicator
+        // wanneer bruto != tijd_ms.
         $upsert = $pdo->prepare("
-            INSERT INTO results (heat_entry_id, finishpositie, tijd_ms, rondes, punten, sanctie, afval_rang, is_photofinish)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+            INSERT INTO results (heat_entry_id, finishpositie, tijd_ms, bruto_tijd_ms,
+                                 rondes, bruto_rondes, punten, sanctie, afval_rang, is_photofinish)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             ON DUPLICATE KEY UPDATE
                 finishpositie  = VALUES(finishpositie),
                 tijd_ms        = VALUES(tijd_ms),
+                bruto_tijd_ms  = COALESCE(bruto_tijd_ms, VALUES(tijd_ms)),
                 rondes         = VALUES(rondes),
+                bruto_rondes   = COALESCE(bruto_rondes, VALUES(rondes)),
                 punten         = VALUES(punten),
                 sanctie        = VALUES(sanctie),
                 afval_rang     = VALUES(afval_rang),
@@ -531,7 +545,9 @@ if ($action === 'save_rit_results') {
                 $r['entry_id'],
                 $r['finishpositie'],
                 $r['tijd_ms'],
+                $r['tijd_ms'],   // bruto = tijd_ms bij INSERT; bij UPDATE wint COALESCE
                 $r['rondes'],
+                $r['rondes'],    // bruto_rondes idem
                 $r['punten'] ?? null,
                 $r['sanctie'],
                 $r['afval_rang'] ?? null,

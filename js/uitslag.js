@@ -1719,6 +1719,8 @@ async function _bouwUitslagAfstandInternal(optData) {
         if (data.heeft_pk_punten) thExtra += '<th class="pr-col-pkpunten">Pnt</th>';
         if (toonTijd)  thExtra += '<th class="pr-col-tijd">Tijd</th>';
 
+        // Footnotes voor jury-aanpassingen (zie verderop in de loop).
+        const fnItems = [];
         let tbody = '';
         for (const r of data.resultaat) {
             const alleSancties = (r.alle_sancties ?? [])
@@ -1747,6 +1749,24 @@ async function _bouwUitslagAfstandInternal(optData) {
             if (data.heeft_rondes)    tdExtra += `<td class="pr-col-rondes">${r.rondes ?? '\u2014'}</td>`;
             if (data.heeft_pk_punten) tdExtra += `<td class="pr-col-pkpunten">${r.pk_punten ?? '\u2014'}</td>`;
             if (toonTijd)  tdExtra += `<td class="pr-col-tijd">${r.tijd_ms != null ? msTijd(r.tijd_ms) : '\u2014'}</td>`;
+
+            // Bruto-tijd-indicator: alleen als bruto bekend is \u00e9n verschilt van netto.
+            // \ud83d\udcf7 = fotofinish-wisseling (is_photofinish=1), \u270b = handmatige correctie
+            // (bv. RR-sanctie waarbij de operator de tijd wijzigt). Footnote-nummer
+            // verschijnt in de Sanctie-kolom; lijst onderaan de uitslag-tabel.
+            let fnSup = '';
+            if (r.bruto_tijd_ms != null && r.bruto_tijd_ms !== r.tijd_ms) {
+                const icon = r.is_photofinish ? '\u{1F4F7}' : '\u270b';
+                fnItems.push({
+                    icon,
+                    isPhotofinish: !!r.is_photofinish,
+                    naam:      r.full_name ?? '',
+                    bruto:     msTijd(r.bruto_tijd_ms),
+                    officieel: r.tijd_ms != null ? msTijd(r.tijd_ms) : '\u2014',
+                });
+                fnSup = ` ${icon}<sup>${fnItems.length}</sup>`;
+            }
+
             tbody += `<tr${rowCls}>
                 <td class="pr-col-rang">${r.rang ?? '\u2014'}</td>
                 ${catCellen}
@@ -1754,8 +1774,22 @@ async function _bouwUitslagAfstandInternal(optData) {
                 <td class="pr-col-snr">${esc(String(r.start_number ?? ''))}</td>
                 <td class="pr-col-cat">${esc(r.categorie ?? '')}</td>
                 ${tdExtra}
-                <td class="pr-col-sanctie">${alleSancties || ''}</td>
+                <td class="pr-col-sanctie">${alleSancties || ''}${fnSup}</td>
             </tr>`;
+        }
+
+        // Footnotes onder de uitslag-tabel \u2014 alleen renderen als er aanpassingen waren.
+        if (fnItems.length) {
+            tbody += `<tr class="pr-fn-row"><td colspan="99" class="pr-fn-cell">
+                <div class="pr-fn-titel">Aanpassingen door jury</div>
+                ${fnItems.map((f, i) => `
+                    <div class="pr-fn">
+                        <sup>${i + 1}</sup> ${f.icon}
+                        ${f.isPhotofinish ? 'fotofinish' : 'handmatig'} \u2014
+                        <b>${esc(f.naam)}</b>:
+                        gemeten ${esc(f.bruto)}, officieel ${esc(f.officieel)}
+                    </div>`).join('')}
+            </td></tr>`;
         }
 
         const catRangHeaders = toonCatRang
@@ -1899,6 +1933,8 @@ async function _bouwUitslagAfstandInternal(optData) {
     if (data.heeft_pk_punten) thExtra += '<th class="pr-col-pkpunten">Pnt</th>';
     if (toonTijd)  thExtra += '<th class="pr-col-tijd">Tijd</th>';
 
+    // Footnotes voor jury-aanpassingen (zie verderop in de loop).
+    const fnItems = [];
     let tbody = '';
     for (const finale of data.finales) {
         for (const r of finale.rijders) {
@@ -1924,6 +1960,21 @@ async function _bouwUitslagAfstandInternal(optData) {
             if (data.heeft_rondes)    tdExtra += `<td class="pr-col-rondes">${r.rondes ?? '\u2014'}</td>`;
             if (data.heeft_pk_punten) tdExtra += `<td class="pr-col-pkpunten">${r.pk_punten ?? '\u2014'}</td>`;
             if (toonTijd)  tdExtra += `<td class="pr-col-tijd">${r.tijd_ms != null ? msTijd(r.tijd_ms) : '\u2014'}</td>`;
+
+            // Bruto-tijd-indicator + footnote (identiek aan internationaal-pad).
+            let fnSup = '';
+            if (r.bruto_tijd_ms != null && r.bruto_tijd_ms !== r.tijd_ms) {
+                const icon = r.is_photofinish ? '\u{1F4F7}' : '\u270b';
+                fnItems.push({
+                    icon,
+                    isPhotofinish: !!r.is_photofinish,
+                    naam:      r.full_name ?? '',
+                    bruto:     msTijd(r.bruto_tijd_ms),
+                    officieel: r.tijd_ms != null ? msTijd(r.tijd_ms) : '\u2014',
+                });
+                fnSup = ` ${icon}<sup>${fnItems.length}</sup>`;
+            }
+
             tbody += `<tr${rowCls}>
                 <td class="pr-col-rang">${r.rang ?? '\u2014'}</td>
                 ${catCellen}
@@ -1931,9 +1982,21 @@ async function _bouwUitslagAfstandInternal(optData) {
                 <td class="pr-col-snr">${esc(String(r.start_number ?? ''))}</td>
                 <td class="pr-col-cat">${esc(r.categorie ?? '')}</td>
                 ${tdExtra}
-                <td class="pr-col-sanctie">${alleSancties || ''}</td>
+                <td class="pr-col-sanctie">${alleSancties || ''}${fnSup}</td>
             </tr>`;
         }
+    }
+    if (fnItems.length) {
+        tbody += `<tr class="pr-fn-row"><td colspan="99" class="pr-fn-cell">
+            <div class="pr-fn-titel">Aanpassingen door jury</div>
+            ${fnItems.map((f, i) => `
+                <div class="pr-fn">
+                    <sup>${i + 1}</sup> ${f.icon}
+                    ${f.isPhotofinish ? 'fotofinish' : 'handmatig'} \u2014
+                    <b>${esc(f.naam)}</b>:
+                    gemeten ${esc(f.bruto)}, officieel ${esc(f.officieel)}
+                </div>`).join('')}
+        </td></tr>`;
     }
 
     const pageOrient = (toonRonde && toonTijd) ? 'landscape' : 'portrait';
@@ -2020,6 +2083,12 @@ tr:nth-child(even) td{background:#f8fafc}
 .pr-col-totaal{text-align:center;font-weight:700}
 .pr-col-sanctie{font-size:7.5pt;color:#b00}
 .pr-rij-sanctie td{color:#888}
+.pr-col-sanctie sup{color:#1a3a5c;font-weight:700;margin-left:1px}
+.pr-fn-row td{background:#f4f7fa;border-bottom:0;padding:6px 6px 4px}
+.pr-fn-row tr:nth-child(even) td{background:#f4f7fa}
+.pr-fn-titel{font-size:7.5pt;font-weight:700;color:#1a3a5c;margin-bottom:2px}
+.pr-fn{font-size:7.5pt;color:#333;line-height:1.3;margin:1px 0}
+.pr-fn sup{color:#1a3a5c;font-weight:700}
 @media print{body{margin:.5cm .8cm}}
 `;
 }

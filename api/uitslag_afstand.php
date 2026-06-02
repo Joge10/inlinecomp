@@ -690,8 +690,11 @@ try {
                p.category         AS categorie,
                res.finishpositie,
                res.tijd_ms,
+               res.bruto_tijd_ms,
+               res.is_photofinish,
                res.sanctie,
                res.rondes,
+               res.bruto_rondes,
                res.punten AS pk_punten
         FROM heat_entries he
         JOIN persons p ON p.license_key = he.person_license
@@ -988,6 +991,8 @@ try {
                 'categorie'     => $r['categorie'],
                 'finishpositie' => (int)$r['finishpositie'],
                 'tijd_ms'       => $r['tijd_ms'] !== null ? (int)$r['tijd_ms'] : null,
+                'bruto_tijd_ms' => isset($r['bruto_tijd_ms']) && $r['bruto_tijd_ms'] !== null ? (int)$r['bruto_tijd_ms'] : null,
+                'is_photofinish'=> !empty($r['is_photofinish']) ? 1 : 0,
                 'sanctie'       => $r['sanctie'],
                 'rondes'        => isset($r['rondes']) && $r['rondes'] !== null ? (int)$r['rondes'] : null,
                 'pk_punten'     => isset($r['pk_punten']) && $r['pk_punten'] !== null ? (float)$r['pk_punten'] : null,
@@ -1003,6 +1008,8 @@ try {
                 'categorie'     => $r['categorie'],
                 'finishpositie' => null,
                 'tijd_ms'       => $r['tijd_ms'] !== null ? (int)$r['tijd_ms'] : null,
+                'bruto_tijd_ms' => isset($r['bruto_tijd_ms']) && $r['bruto_tijd_ms'] !== null ? (int)$r['bruto_tijd_ms'] : null,
+                'is_photofinish'=> !empty($r['is_photofinish']) ? 1 : 0,
                 'sanctie'       => $r['sanctie'],
                 'rondes'        => isset($r['rondes']) && $r['rondes'] !== null ? (int)$r['rondes'] : null,
                 'pk_punten'     => isset($r['pk_punten']) && $r['pk_punten'] !== null ? (float)$r['pk_punten'] : null,
