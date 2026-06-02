@@ -517,13 +517,23 @@ if ($action === 'save_rit_results') {
         // Opslaan in DB
         $pdo->beginTransaction();
 
-        // bruto_tijd_ms / bruto_rondes worden bij de EERSTE save voor deze
-        // heat_entry gezet (= INSERT-pad). Bij latere updates blijft de bruto-
-        // waarde via COALESCE behouden, ongeacht of de tijd handmatig wordt
-        // gewijzigd of via wisseling wordt gewisseld. Zo blijft de oorspronke-
-        // lijk gemeten transponder/MyLaps-tijd altijd opvraagbaar als audit-
-        // spoor. Display-logica (live + uitslag-print) toont een indicator
-        // wanneer bruto != tijd_ms.
+        // bruto_tijd_ms / bruto_rondes: oorspronkelijke (transponder / MyLaps /
+        // eerst-ingevoerde) tijd als audit-spoor. Drie scenario's:
+        //
+        // 1. INSERT (eerste save voor deze heat_entry):
+        //    - bruto = client-hint indien meegestuurd (pre-save wisseling: frontend
+        //      bewaart pre-swap tijden in r._bruto_hint_*); anders = tijd_ms.
+        //
+        // 2. UPDATE met jury-actie (sanctie != NULL OF is_photofinish=1):
+        //    - bruto bevriezen (COALESCE: alleen vullen als nog NULL).
+        //
+        // 3. UPDATE zonder jury-actie ("clean" save, bv. typo-correctie):
+        //    - bruto = tijd_ms (sync). Zo blijft de typo niet eeuwig staan als
+        //      "gemeten tijd" wanneer de operator 'm corrigeert.
+        //
+        // Voor INSERT geldt scenario 1 automatisch via de COALESCE (bestaande
+        // bruto IS NULL → VALUES(bruto_tijd_ms) wint = de hint of de tijd zelf).
+        // De CASE-uitdrukking dekt scenario 2 vs 3 voor UPDATE.
         $upsert = $pdo->prepare("
             INSERT INTO results (heat_entry_id, finishpositie, tijd_ms, bruto_tijd_ms,
                                  rondes, bruto_rondes, punten, sanctie, afval_rang, is_photofinish)
@@ -531,9 +541,17 @@ if ($action === 'save_rit_results') {
             ON DUPLICATE KEY UPDATE
                 finishpositie  = VALUES(finishpositie),
                 tijd_ms        = VALUES(tijd_ms),
-                bruto_tijd_ms  = COALESCE(bruto_tijd_ms, VALUES(tijd_ms)),
+                bruto_tijd_ms  = CASE
+                    WHEN VALUES(is_photofinish) = 1 OR VALUES(sanctie) IS NOT NULL
+                        THEN COALESCE(bruto_tijd_ms, VALUES(bruto_tijd_ms))
+                    ELSE VALUES(tijd_ms)
+                END,
                 rondes         = VALUES(rondes),
-                bruto_rondes   = COALESCE(bruto_rondes, VALUES(rondes)),
+                bruto_rondes   = CASE
+                    WHEN VALUES(is_photofinish) = 1 OR VALUES(sanctie) IS NOT NULL
+                        THEN COALESCE(bruto_rondes, VALUES(bruto_rondes))
+                    ELSE VALUES(rondes)
+                END,
                 punten         = VALUES(punten),
                 sanctie        = VALUES(sanctie),
                 afval_rang     = VALUES(afval_rang),
@@ -541,13 +559,20 @@ if ($action === 'save_rit_results') {
         ");
 
         foreach ($alleResultaten as $r) {
+            // Bruto-hint van client (pre-save wisseling) heeft voorrang bij INSERT.
+            // Geen hint → fallback op huidige tijd_ms/rondes (eerste-save-zonder-
+            // wisseling = bruto = tijd_ms, semantisch correct).
+            $brutoTijdHint  = array_key_exists('bruto_tijd_ms', $r) && $r['bruto_tijd_ms'] !== null
+                ? (int)$r['bruto_tijd_ms'] : $r['tijd_ms'];
+            $brutoRondesHint = array_key_exists('bruto_rondes', $r) && $r['bruto_rondes'] !== null
+                ? (int)$r['bruto_rondes'] : $r['rondes'];
             $upsert->execute([
                 $r['entry_id'],
                 $r['finishpositie'],
                 $r['tijd_ms'],
-                $r['tijd_ms'],   // bruto = tijd_ms bij INSERT; bij UPDATE wint COALESCE
+                $brutoTijdHint,
                 $r['rondes'],
-                $r['rondes'],    // bruto_rondes idem
+                $brutoRondesHint,
                 $r['punten'] ?? null,
                 $r['sanctie'],
                 $r['afval_rang'] ?? null,

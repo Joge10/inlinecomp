@@ -2292,6 +2292,24 @@ function _liveBind(idx) {
         const oudeTijdA   = riderA.tijd_ms;
         const oudeTijdB   = riderB.tijd_ms;
 
+        // Bewaar pre-swap tijd + rondes als bruto-hint op beide rijders. De
+        // eerstvolgende save_rit_results stuurt deze hint mee zodat de backend
+        // bruto_tijd_ms initialiseert op de oorspronkelijke (transponder/manual)
+        // meting — niet op de geswapte waarde. Cruciaal voor het pre-save-
+        // wisselscenario: CSV import → wisselen → opslaan (eerste DB-rij) zou
+        // anders bruto = swap-waarde krijgen, en de audit-pill kloppen niet.
+        // Guard ` === undefined`: tweede swap wordt sowieso geblokkeerd door
+        // de swap-lock (lijn 2253-2256), maar defensief opnieuw checken is
+        // gratis en voorkomt corruptie als de lock ooit verandert.
+        if (riderA._bruto_hint_tijd_ms === undefined) {
+            riderA._bruto_hint_tijd_ms = oudeTijdA;
+            riderA._bruto_hint_rondes  = oudeRondesA;
+        }
+        if (riderB._bruto_hint_tijd_ms === undefined) {
+            riderB._bruto_hint_tijd_ms = oudeTijdB;
+            riderB._bruto_hint_rondes  = oudeRondesB;
+        }
+
         // Bepaal wie wordt gepromoveerd (betere finishpositie = kleiner getal)
         const promotingA = nieuwePosA < oudePosA;
 
@@ -4753,6 +4771,12 @@ async function _liveOpslaanRit(ritIdx) {
                 // direct in DB op 1, maar bij re-import/save zonder _wisselt
                 // moet 'ie weer 0 worden zodat oude swaps opgeschoond raken.
                 is_photofinish: r._wisselt ? 1 : 0,
+                // Bruto-hint: bij pre-save wisseling wil de backend de
+                // oorspronkelijke meting als bruto vastleggen (niet de
+                // swap-waarde). Geen wisseling → null = backend valt terug
+                // op huidige tijd_ms via COALESCE.
+                bruto_tijd_ms:  r._bruto_hint_tijd_ms ?? null,
+                bruto_rondes:   r._bruto_hint_rondes ?? rondes,
             };
         }
 
@@ -4764,6 +4788,12 @@ async function _liveOpslaanRit(ritIdx) {
             rondes,
             afval_rang:     null, // niet-afvalkoers OF afvalkoers-finishgroep
             is_photofinish: r._wisselt ? 1 : 0,
+            // Bruto-hint: bij pre-save wisseling vlak vóór swap opgeslagen
+            // (zie wisseling-handler ~2294). Geen wisseling → undefined →
+            // null in payload, backend valt terug op huidige tijd_ms/rondes
+            // bij INSERT via COALESCE.
+            bruto_tijd_ms:  r._bruto_hint_tijd_ms ?? tijdOpslaan,
+            bruto_rondes:   r._bruto_hint_rondes ?? rondes,
         };
     });
 
