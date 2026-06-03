@@ -69,6 +69,12 @@ WITH current_results AS (
     WHERE COALESCE(res.bruto_tijd_ms, res.tijd_ms) > 0
       AND res.sanctie IS NULL
       AND h.competition_id = ?
+      -- Alleen sprint-afstanden: 1000m en korter. Punten-/afvalkoersen
+      -- (afgaande op race_type) sluiten we expliciet uit — die tijden zijn
+      -- inhoudelijk niet vergelijkbaar (tactisch, vaak DNF, totaaltijd vs
+      -- rondetijd-mix). distances.race_type ENUM is hier de bron-van-waarheid.
+      AND d.value_meters <= 1000
+      AND COALESCE(d.race_type, 'sprint') NOT IN ('puntenkoers', 'afvalkoers')
 ),
 best_per_rider AS (
     SELECT * FROM current_results WHERE rider_rn = 1
@@ -111,6 +117,9 @@ pr_source_results AS (
       AND res.sanctie IS NULL
       AND h.competition_id != ?
       AND c.starts < ?
+      -- Sprint-filter spiegel: alleen 1000m en korter, geen punten/afval.
+      AND d.value_meters <= 1000
+      AND COALESCE(d.race_type, 'sprint') NOT IN ('puntenkoers', 'afvalkoers')
 ),
 pr_source_uitslag AS (
     -- Bron 2: uitslag_afstand. Voor historie-import-wedstrijden zonder
@@ -137,6 +146,15 @@ pr_source_uitslag AS (
       AND ua.tijd_ms IS NOT NULL
       AND ua.tijd_ms > 0
       AND ua.sanctie IS NULL
+      -- Sprint-filter (geen race_type in uitslag_afstand → meters + naam-pattern).
+      -- Strict: distance_meters MOET bekend zijn (NULL = niet als sprint te valideren).
+      AND ua.distance_meters IS NOT NULL
+      AND ua.distance_meters <= 1000
+      AND LOWER(ua.distance_naam) NOT LIKE '%punten%'
+      AND LOWER(ua.distance_naam) NOT LIKE '%points%'
+      AND LOWER(ua.distance_naam) NOT LIKE '%afval%'
+      AND LOWER(ua.distance_naam) NOT LIKE '%elimination%'
+      AND LOWER(ua.distance_naam) NOT LIKE '%eliminatie%'
 ),
 pr_combined AS (
     SELECT
@@ -289,15 +307,30 @@ body{font-family:Arial,Helvetica,sans-serif;font-size:9pt;margin:.6cm 1cm;color:
                 display:flex;justify-content:space-between;align-items:baseline;
                 gap:1rem;flex-wrap:wrap}
 .pr-groep-context{font-size:7.5pt;font-weight:400;color:#5a7491;font-style:italic}
-table{width:100%;border-collapse:collapse;font-size:8.5pt;table-layout:auto;margin-bottom:.2cm}
+/* Vaste tabel-layout zodat de naam-kolom niet meer verspringt tussen
+   groepen (auto-layout past breedte aan per inhoud → bij elke nieuwe
+   tabel andere kolom-breedtes). Kolom-breedtes als percentages: # 4%,
+   Rijder 20%, Ronde 13%, Tijd 8%, PR-tijd 8%, PR-bron 38%, Δ 9% = 100%. */
+table{width:100%;border-collapse:collapse;font-size:8.5pt;
+      table-layout:fixed;margin-bottom:.2cm}
+table col.c-rang   {width:4%}
+table col.c-rijder {width:20%}
+table col.c-ronde  {width:13%}
+table col.c-tijd-w {width:8%}
+table col.c-pr-w   {width:8%}
+table col.c-bron-w {width:38%}
+table col.c-dlt-w  {width:9%}
 thead{display:table-header-group}
 th{background:#dce6f0;color:#1a3a5c;padding:4px 6px;font-size:7.5pt;
    text-align:left;font-weight:600;border-bottom:1px solid #bbb;white-space:nowrap;
    vertical-align:bottom}
 th small{display:block;font-size:6.5pt;font-weight:400;color:#5a7491;margin-top:1px;text-transform:none}
-td{padding:3px 6px;border-bottom:1px solid #eee;white-space:nowrap;vertical-align:top}
+td{padding:3px 6px;border-bottom:1px solid #eee;white-space:nowrap;vertical-align:top;
+   overflow:hidden;text-overflow:ellipsis}
 tr:nth-child(even) td{background:#f8fafc}
-.c-naam{font-weight:500}
+/* Naam-kolom mag wrappen bij lange namen (Janna Wietske van der Ende) ipv
+   harde ellipsis — leesbaarheid > strakke regelhoogte. */
+.c-naam{font-weight:500;white-space:normal}
 .c-heat{font-size:7.5pt;color:#444}
 .c-tijd{text-align:right;font-family:monospace;font-size:8.5pt}
 .c-pr-bron{font-size:7.5pt;color:#666;font-style:italic;white-space:normal}
@@ -360,17 +393,54 @@ tr:nth-child(even) td{background:#f8fafc}
   <b>Δ-PR</b>: positief = langzamer dan PR, negatief + 🏆 = nieuwe PR.
   "Geen historie" = rijder heeft nog geen tijd op deze afstand in het systeem.
   <br><br>
+  <b>Alleen sprint-afstanden</b> (1000m en korter). Punten- en afvalkoersen
+  doen niet mee — die tijden zijn onderling niet vergelijkbaar (tactisch,
+  vaak DNF, totaaltijd vs rondetijd-mix).
+  <br><br>
   <b>PR-bron</b>: snelste rondetijd over wedstrijden <b>vóór deze wedstrijd</b>
-  (datum-filter — latere wedstrijden tellen niet mee, ook niet bij retro-PR-check
-  op oude wedstrijden). Bronnen: <code>results</code> (heat-data: serie + KF +
-  HF + finale) plus <code>uitslag_afstand</code> (historie-import PDF-tijden).
-  De serie-tijd is vaak sneller dan de finale-tijd (finales zijn tactisch),
-  dus we pakken letterlijk de snelste rondetijd uit de historie.
+  (de huidige wedstrijd wordt expliciet uitgesloten + datum-filter voor retro-
+  PR-checks). Bronnen: <code>results</code> (heat-data: serie + KF + HF + finale)
+  plus <code>uitslag_afstand</code> (historie-import PDF-tijden). De serie-tijd
+  is vaak sneller dan de finale-tijd (finales zijn tactisch), dus we pakken
+  letterlijk de snelste rondetijd uit de historie.
 </div>
 
 <?php if (empty($groepen)): ?>
     <div class="pr-leeg">Geen resultaten gevonden in deze wedstrijd.</div>
-<?php else: foreach ($groepen as $g): ?>
+<?php else: ?>
+
+<!-- Samenvatting bovenaan (boven de groepen) zodat de hoofdcijfers
+     direct in beeld komen — gebruiker hoeft niet door alle tabellen
+     te scrollen om totaal-aantal nieuwe PRs te zien. -->
+<div class="pr-samenvatting">
+    <div class="pr-samenvatting-titel">📊 Samenvatting</div>
+    <div class="pr-samenvatting-grid">
+        <div class="pr-stat">
+            <div class="pr-stat-waarde pr-stat-pr"><?= (int)$totaal['nieuwe_prs'] ?></div>
+            <div class="pr-stat-label">🏆 Nieuwe PR<?= $totaal['nieuwe_prs'] === 1 ? '' : 's' ?> totaal</div>
+        </div>
+        <div class="pr-stat">
+            <div class="pr-stat-waarde"><?= (int)$totaal['met_pr'] ?></div>
+            <div class="pr-stat-label">Rijders met PR-historie</div>
+        </div>
+        <div class="pr-stat">
+            <div class="pr-stat-waarde"><?= (int)$totaal['geen_historie'] ?></div>
+            <div class="pr-stat-label">Rijders zonder historie</div>
+        </div>
+        <div class="pr-stat">
+            <div class="pr-stat-waarde"><?= count($groepen) ?></div>
+            <div class="pr-stat-label">Afstand × cat-groepen</div>
+        </div>
+    </div>
+    <?php if ($totaal['met_pr'] > 0): ?>
+        <div class="pr-samenvatting-percentage">
+            <?= number_format(100 * $totaal['nieuwe_prs'] / $totaal['met_pr'], 1) ?>%
+            van de rijders met historie zette een nieuwe PR in deze wedstrijd.
+        </div>
+    <?php endif; ?>
+</div>
+
+<?php foreach ($groepen as $g): ?>
     <?php
         // Teller-snippet voor de groep-titel: aantal nieuwe PRs + context.
         $st = $g['stats'];
@@ -391,6 +461,15 @@ tr:nth-child(even) td{background:#f8fafc}
         <span class="pr-groep-context"><?= esc($context) ?></span>
     </div>
     <table>
+        <colgroup>
+            <col class="c-rang">
+            <col class="c-rijder">
+            <col class="c-ronde">
+            <col class="c-tijd-w">
+            <col class="c-pr-w">
+            <col class="c-bron-w">
+            <col class="c-dlt-w">
+        </colgroup>
         <thead>
             <tr>
                 <th>#<small>rang binnen<br>afstand+cat</small></th>
@@ -445,34 +524,6 @@ tr:nth-child(even) td{background:#f8fafc}
         </tbody>
     </table>
 <?php endforeach; ?>
-
-<div class="pr-samenvatting">
-    <div class="pr-samenvatting-titel">📊 Samenvatting</div>
-    <div class="pr-samenvatting-grid">
-        <div class="pr-stat">
-            <div class="pr-stat-waarde pr-stat-pr"><?= (int)$totaal['nieuwe_prs'] ?></div>
-            <div class="pr-stat-label">🏆 Nieuwe PR<?= $totaal['nieuwe_prs'] === 1 ? '' : 's' ?> totaal</div>
-        </div>
-        <div class="pr-stat">
-            <div class="pr-stat-waarde"><?= (int)$totaal['met_pr'] ?></div>
-            <div class="pr-stat-label">Rijders met PR-historie</div>
-        </div>
-        <div class="pr-stat">
-            <div class="pr-stat-waarde"><?= (int)$totaal['geen_historie'] ?></div>
-            <div class="pr-stat-label">Rijders zonder historie</div>
-        </div>
-        <div class="pr-stat">
-            <div class="pr-stat-waarde"><?= count($groepen) ?></div>
-            <div class="pr-stat-label">Afstand × cat-groepen</div>
-        </div>
-    </div>
-    <?php if ($totaal['met_pr'] > 0): ?>
-        <div class="pr-samenvatting-percentage">
-            <?= number_format(100 * $totaal['nieuwe_prs'] / $totaal['met_pr'], 1) ?>%
-            van de rijders met historie zette een nieuwe PR in deze wedstrijd.
-        </div>
-    <?php endif; ?>
-</div>
 
 <?php endif; ?>
 
