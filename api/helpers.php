@@ -229,13 +229,21 @@ if ($action === 'cleanup_wees_uitslagen') {
 // niets om te exporteren).
 if ($action === 'csv_export_competitions') {
     try {
-        $stmt = $pdo->query("
+        // Multi-tenant scoping: gebruiker zonder org-scope ziet alle
+        // wedstrijden (default). Met scope: alleen wedstrijden van diens
+        // org(s). Geforceerd JOIN naar competitions zodat we organisatie_id
+        // kunnen filteren (uitslag_klassement heeft 'm niet).
+        $scope = gebruikerCompScopeWhere($pdo, $_authUser, 'c');
+        $stmt  = $pdo->prepare("
             SELECT DISTINCT uk.competition_id,
                             uk.competition_naam AS naam,
                             uk.competition_datum AS datum
             FROM   uitslag_klassement uk
+            JOIN   competitions c ON c.id = uk.competition_id
+            WHERE  1=1 " . $scope['where'] . "
             ORDER  BY uk.competition_datum DESC, uk.competition_naam
         ");
+        $stmt->execute($scope['params']);
         echo json_encode($stmt->fetchAll(PDO::FETCH_ASSOC), JSON_UNESCAPED_UNICODE);
     } catch (Throwable $e) {
         http_response_code(500);
@@ -362,11 +370,15 @@ if ($action === 'historie_competitions') {
     try {
         // Alle wedstrijden tonen (ook toekomstige) zodat de operator vrij is
         // wat te kiezen. Default sortering: nieuwste eerst.
-        $stmt = $pdo->query("
+        // Multi-tenant: scoped admin ziet alleen zijn org-wedstrijden.
+        $scope = gebruikerCompScopeWhere($pdo, $_authUser);
+        $stmt  = $pdo->prepare("
             SELECT id, name, starts
             FROM   competitions
+            WHERE  1=1 " . $scope['where'] . "
             ORDER  BY starts DESC, name
         ");
+        $stmt->execute($scope['params']);
         $comps = $stmt->fetchAll(PDO::FETCH_ASSOC);
 
         // Bulk-fetch DCs in één query, server-side groeperen — voorkomt N+1.

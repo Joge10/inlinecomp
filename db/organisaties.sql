@@ -14,4 +14,7 @@ CREATE TABLE IF NOT EXISTS `organisaties` (
     `sportity_kanaal`  VARCHAR(50)  DEFAULT NULL,   -- bv. 'ISKREGIO' — verschilt per KNSB-regio
     PRIMARY KEY (`id`),
     UNIQUE KEY `uq_naam` (`naam`)
+    -- Email is bewust NIET uniek: één Vantage-beheerder kan voor meerdere
+    -- KNSB-verenigingen tegelijk werken, dus dezelfde organizer-email
+    -- verschijnt legitiem bij verschillende orgs.
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;

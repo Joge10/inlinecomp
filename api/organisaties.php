@@ -65,8 +65,17 @@ function fetchOrg(PDO $pdo, string $id): ?array {
 try {
     // ── GET ──────────────────────────────────────────────────────────────────
     if ($_SERVER['REQUEST_METHOD'] === 'GET') {
+        // Multi-tenant: scope-helper voor scoped admins.
+        $orgScope = gebruikerOrgScope($pdo, $_authUser);
+
         // Wedstrijden van een org ophalen
         if (!empty($_GET['action']) && $_GET['action'] === 'wedstrijden' && !empty($_GET['id'])) {
+            // Scoped admin mag alleen wedstrijden van zijn eigen orgs zien.
+            if ($orgScope !== null && !in_array($_GET['id'], $orgScope, true)) {
+                http_response_code(403);
+                echo json_encode(['error' => 'Organisatie buiten jouw scope']);
+                exit;
+            }
             $stmt = $pdo->prepare(
                 "SELECT id, name, starts, ends, venue_city, venue_name, imported_at,
                         public_zichtbaar, public_aankondigen,
@@ -79,17 +88,39 @@ try {
             exit;
         }
         if (!empty($_GET['id'])) {
+            // Scoped admin: alleen eigen orgs.
+            if ($orgScope !== null && !in_array($_GET['id'], $orgScope, true)) {
+                http_response_code(403);
+                echo json_encode(['error' => 'Organisatie buiten jouw scope']);
+                exit;
+            }
             echo json_encode(fetchOrg($pdo, $_GET['id']));
         } else {
-            $stmt = $pdo->query("
-                SELECT o.*,
-                    (SELECT COUNT(*) FROM organisatie_sponsors s
-                     WHERE s.organisatie_id = o.id) AS sponsor_count,
-                    (SELECT COUNT(*) FROM competitions c
-                     WHERE c.organisatie_id = o.id) AS comp_count
-                FROM organisaties o
-                ORDER BY o.naam
-            ");
+            // Multi-tenant: scoped admin ziet alleen eigen orgs.
+            if ($orgScope === null) {
+                $stmt = $pdo->query("
+                    SELECT o.*,
+                        (SELECT COUNT(*) FROM organisatie_sponsors s
+                         WHERE s.organisatie_id = o.id) AS sponsor_count,
+                        (SELECT COUNT(*) FROM competitions c
+                         WHERE c.organisatie_id = o.id) AS comp_count
+                    FROM organisaties o
+                    ORDER BY o.naam
+                ");
+            } else {
+                $ph = implode(',', array_fill(0, count($orgScope), '?'));
+                $stmt = $pdo->prepare("
+                    SELECT o.*,
+                        (SELECT COUNT(*) FROM organisatie_sponsors s
+                         WHERE s.organisatie_id = o.id) AS sponsor_count,
+                        (SELECT COUNT(*) FROM competitions c
+                         WHERE c.organisatie_id = o.id) AS comp_count
+                    FROM organisaties o
+                    WHERE o.id IN ($ph)
+                    ORDER BY o.naam
+                ");
+                $stmt->execute($orgScope);
+            }
             $orgs = $stmt->fetchAll();
 
             // Aliassen per org ophalen
@@ -117,16 +148,39 @@ try {
 
         // ── Sponsor verwijderen ──
         if ($action === 'delete_sponsor') {
+            $spnId = $body['id'] ?? '';
+            // Scope-check: scoped admin mag alleen sponsors van orgs in scope wissen.
+            $scopeSpn = gebruikerOrgScope($pdo, $_authUser);
+            if ($scopeSpn !== null) {
+                $orgStmt = $pdo->prepare(
+                    "SELECT organisatie_id FROM organisatie_sponsors WHERE id = ?"
+                );
+                $orgStmt->execute([$spnId]);
+                $spnOrg = $orgStmt->fetchColumn();
+                if ($spnOrg && !in_array($spnOrg, $scopeSpn, true)) {
+                    http_response_code(403);
+                    echo json_encode(['error' => 'Organisatie buiten jouw scope']);
+                    exit;
+                }
+            }
             $pdo->prepare("DELETE FROM organisatie_sponsors WHERE id = ?")
-                ->execute([$body['id'] ?? '']);
+                ->execute([$spnId]);
             echo json_encode(['ok' => true]);
             exit;
         }
 
         // ── Organisatie verwijderen ──
         if ($action === 'delete') {
+            $delId = $body['id'] ?? '';
+            // Scope-check: scoped admin mag alleen orgs in eigen scope wissen.
+            $scopeDel = gebruikerOrgScope($pdo, $_authUser);
+            if ($scopeDel !== null && !in_array($delId, $scopeDel, true)) {
+                http_response_code(403);
+                echo json_encode(['error' => 'Organisatie buiten jouw scope']);
+                exit;
+            }
             $pdo->prepare("DELETE FROM organisaties WHERE id = ?")
-                ->execute([$body['id'] ?? '']);
+                ->execute([$delId]);
             echo json_encode(['ok' => true]);
             exit;
         }
@@ -138,6 +192,13 @@ try {
             if (!$orgId || !$naam) {
                 http_response_code(400);
                 echo json_encode(['error' => 'org_id en naam zijn verplicht']);
+                exit;
+            }
+            // Scope-check: scoped admin mag alleen aliassen aan orgs in scope toevoegen.
+            $scopeAlias = gebruikerOrgScope($pdo, $_authUser);
+            if ($scopeAlias !== null && !in_array($orgId, $scopeAlias, true)) {
+                http_response_code(403);
+                echo json_encode(['error' => 'Organisatie buiten jouw scope']);
                 exit;
             }
             try {
@@ -165,6 +226,20 @@ try {
                 echo json_encode(['error' => 'id is verplicht']);
                 exit;
             }
+            // Scope-check: alias verwijderen alleen voor orgs in scope.
+            $scopeAlias = gebruikerOrgScope($pdo, $_authUser);
+            if ($scopeAlias !== null) {
+                $ownerStmt = $pdo->prepare(
+                    "SELECT organisatie_id FROM organisatie_aliassen WHERE id = ?"
+                );
+                $ownerStmt->execute([$aliasId]);
+                $aliasOrg = $ownerStmt->fetchColumn();
+                if ($aliasOrg && !in_array($aliasOrg, $scopeAlias, true)) {
+                    http_response_code(403);
+                    echo json_encode(['error' => 'Organisatie buiten jouw scope']);
+                    exit;
+                }
+            }
             $pdo->prepare("DELETE FROM organisatie_aliassen WHERE id = ?")
                 ->execute([$aliasId]);
             echo json_encode($orgId ? fetchOrg($pdo, $orgId) : ['ok' => true]);
@@ -179,6 +254,20 @@ try {
                 http_response_code(400);
                 echo json_encode(['error' => 'Ongeldige organisatie-ids']);
                 exit;
+            }
+            // Scope-check: scoped admin mag alleen samenvoegen tussen orgs
+            // die BEIDE in zijn scope zitten. Voorkomt cascade-effecten naar
+            // wedstrijden van orgs waar hij niets mee te maken heeft.
+            $scopeMerge = gebruikerOrgScope($pdo, $_authUser);
+            if ($scopeMerge !== null) {
+                if (!in_array($vanId, $scopeMerge, true) ||
+                    !in_array($naarId, $scopeMerge, true)) {
+                    http_response_code(403);
+                    echo json_encode([
+                        'error' => 'Beide organisaties moeten in jouw scope zitten om te kunnen samenvoegen',
+                    ]);
+                    exit;
+                }
             }
 
             $pdo->beginTransaction();
@@ -245,6 +334,13 @@ try {
             if (!$orgId) {
                 http_response_code(400);
                 echo json_encode(['error' => 'organisatie_id is verplicht']);
+                exit;
+            }
+            // Scope-check: alleen transponders van orgs in scope wijzigen.
+            $scopeTp = gebruikerOrgScope($pdo, $_authUser);
+            if ($scopeTp !== null && !in_array($orgId, $scopeTp, true)) {
+                http_response_code(403);
+                echo json_encode(['error' => 'Organisatie buiten jouw scope']);
                 exit;
             }
             $transponders = $body['transponders'] ?? [];
@@ -332,15 +428,57 @@ try {
                 exit;
             }
 
+            // Multi-tenant scope-checks.
+            $eigenScopeSave = gebruikerOrgScope($pdo, $_authUser);
+
             if ($id) {
+                // Bewerken: scoped admin mag alleen orgs in eigen scope.
+                if ($eigenScopeSave !== null && !in_array($id, $eigenScopeSave, true)) {
+                    http_response_code(403);
+                    echo json_encode(['error' => 'Organisatie buiten jouw scope']);
+                    exit;
+                }
                 $pdo->prepare(
                     "UPDATE organisaties SET naam = ?, email = ?, sportity_kanaal = ?, updated_at = NOW() WHERE id = ?"
                 )->execute([$naam, $email, $sportity, $id]);
             } else {
+                // Aanmaken: duplicaat-check (anti-back-door) op naam + alias.
+                // Email is bewust NIET in de check — meerdere orgs kunnen
+                // dezelfde Vantage-beheerder-email hebben en dat is legitiem.
+                // Het volstaat om naam/alias uniek te houden: een nieuwe org
+                // met dezelfde email is een NIEUWE rij, dus geen toegang tot
+                // de bestaande org buiten scope.
+                $dupStmt = $pdo->prepare("
+                    SELECT id, naam, 'naam' AS bron FROM organisaties
+                    WHERE LOWER(TRIM(naam)) = LOWER(TRIM(?))
+                    UNION
+                    SELECT organisatie_id AS id, naam, 'alias' AS bron
+                    FROM organisatie_aliassen
+                    WHERE LOWER(TRIM(naam)) = LOWER(TRIM(?))
+                    LIMIT 1
+                ");
+                $dupStmt->execute([$naam, $naam]);
+                $dup = $dupStmt->fetch(PDO::FETCH_ASSOC);
+                if ($dup) {
+                    http_response_code(409);
+                    $melding = $dup['bron'] === 'alias'
+                        ? "Naam '{$naam}' is al een alias van een bestaande organisatie. Vraag de owner om jouw account aan die organisatie te koppelen."
+                        : "Organisatie '{$naam}' bestaat al. Vraag de owner om jouw account aan die organisatie te koppelen.";
+                    echo json_encode(['error' => $melding]);
+                    exit;
+                }
                 $id = newUuid();
                 $pdo->prepare(
                     "INSERT INTO organisaties (id, naam, email, sportity_kanaal) VALUES (?, ?, ?, ?)"
                 )->execute([$id, $naam, $email, $sportity]);
+                // Scoped admin: voeg de nieuwe org automatisch toe aan zijn
+                // junction-rijen zodat hij 'm meteen ziet in z'n lijst.
+                if ($eigenScopeSave !== null) {
+                    $pdo->prepare(
+                        "INSERT INTO user_organisaties (user_id, organisatie_id, toegevoegd_door)
+                         VALUES (?, ?, ?)"
+                    )->execute([(int)$_authUser['id'], $id, (int)$_authUser['id']]);
+                }
             }
 
             // Sponsors opslaan

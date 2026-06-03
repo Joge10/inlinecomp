@@ -164,6 +164,20 @@ function getOrganisatieNaam(comp) {
          ?? '').trim();
 }
 
+// Multi-tenant: filtert de KNSB-feed op naam-match met user's scope.
+// currentUser.organisatie_namen = lowercased canonieke + alias-namen. Leeg
+// (unscoped) → return alle wedstrijden ongewijzigd. Een wedstrijd matcht als
+// haar organizer-naam (lowercased) voorkomt in de scope-set.
+function filterWedstrijdenOpScope(comps) {
+    const scope = (currentUser?.organisatie_namen) || [];
+    if (scope.length === 0) return comps;   // unscoped → geen filter
+    const set = new Set(scope);
+    return comps.filter(c => {
+        const naam = getOrganisatieNaam(c).toLowerCase().trim();
+        return naam !== '' && set.has(naam);
+    });
+}
+
 function formatDatum(str) {
     if (!str) return '';
     const d = new Date(str);
@@ -376,7 +390,13 @@ async function laadWedstrijden() {
             return;
         }
 
-        allWedstrijden = data;
+        // Multi-tenant: scope-filter op de KNSB-feed (naam-match). Bij
+        // unscoped (owner of geen koppeling) blijft alles.
+        allWedstrijden = filterWedstrijdenOpScope(data);
+        if (!allWedstrijden.length) {
+            statusMsg(list, 'info', 'Geen wedstrijden van jouw organisatie(s) gevonden in de KNSB-feed.');
+            return;
+        }
         vulLocatieDropdown();
         vulOrganisatieDropdown();
         renderWedstrijdLijst();

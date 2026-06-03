@@ -27,12 +27,19 @@ async function toonGebruikersPagina() {
     await herlaadGebruikers();
 }
 
+let gbOrgs = [];  // alle organisaties die de huidige user mag tellen
+
 async function herlaadGebruikers() {
     const container = el('gb-container');
     try {
-        const res = await fetch('api/gebruikers.php');
-        if (!res.ok) return; // 401 wordt afgevangen door globale interceptor
-        gbGebruikers = await res.json();
+        // Parallel: gebruikers + organisaties (voor de scope-multi-select).
+        const [resU, resO] = await Promise.all([
+            fetch('api/gebruikers.php'),
+            fetch('api/gebruikers.php?action=orgs_list'),
+        ]);
+        if (!resU.ok) return; // 401 wordt afgevangen door globale interceptor
+        gbGebruikers = await resU.json();
+        gbOrgs       = resO.ok ? await resO.json() : [];
         renderGebruikers();
     } catch(e) {
         container.innerHTML = `<div class="status-msg error">⚠ ${e.message}</div>`;
@@ -222,9 +229,27 @@ function renderGebruikersTabel() {
                        && (currentUser.role === 'owner' || (currentUser.role === 'admin' && u.role !== 'admin'));
         const actief    = u.actief == 1;
 
+        // Org-scope-indicator. Owner-rol heeft altijd "alle" scope, ongeacht
+        // junction-rijen — hier expliciet zo tonen. Andere rollen: 0 koppelingen
+        // = "alle" (backward-compat); ≥1 = "N org(s)" met tooltip-lijst.
+        const orgIds = Array.isArray(u.organisatie_ids) ? u.organisatie_ids : [];
+        let orgBadge;
+        if (u.role === 'owner') {
+            orgBadge = `<span class="gb-org-badge gb-org-alle" title="Owner ziet alle wedstrijden">alle</span>`;
+        } else if (orgIds.length === 0) {
+            orgBadge = `<span class="gb-org-badge gb-org-alle" title="Geen scope ingesteld → ziet alle wedstrijden">alle</span>`;
+        } else {
+            const namen = orgIds.map(id => {
+                const o = gbOrgs.find(x => x.id === id);
+                return o ? o.naam : '(onbekend)';
+            }).join(', ');
+            orgBadge = `<span class="gb-org-badge gb-org-scoped" title="${escHtml(namen)}">${orgIds.length} org${orgIds.length === 1 ? '' : "'s"}</span>`;
+        }
+
         return `<tr class="gb-rij${actief ? '' : ' gb-inactief'}" data-id="${u.id}">
             <td class="gb-naam">${escHtml(u.naam)}<span class="gb-username">@${escHtml(u.username)}</span></td>
             <td><span class="gb-rol-badge gb-rol-${u.role}">${ROL_LABELS[u.role] ?? u.role}</span></td>
+            <td>${orgBadge}</td>
             <td>${escHtml(u.email ?? '—')}</td>
             <td class="gb-acties">
                 ${magWijzig
@@ -255,6 +280,7 @@ function renderGebruikersTabel() {
                 <tr>
                     <th>Naam / gebruikersnaam</th>
                     <th>Rol</th>
+                    <th title="Welke organisaties ziet deze user? 'alle' = ongelimiteerd (owner of geen scope ingesteld)">Scope</th>
                     <th>E-mail</th>
                     <th></th>
                 </tr>
@@ -457,6 +483,79 @@ function openGbForm(id) {
         `<option value="${r}"${user?.role === r ? ' selected' : ''}>${ROL_LABELS[r]}</option>`
     ).join('');
 
+    // Org-scope-veld. Vier scenario's:
+    //   1. Target is OWNER: niet relevant (owner ziet altijd alles).
+    //   2. Huidige user is SCOPED + NIEUWE user: auto-inherit eigen scope.
+    //   3. Huidige user is SCOPED + EXISTING user: alleen z'n eigen orgs
+    //      tonen, vinkjes = target's huidige scope-overlap. Bij target "alle":
+    //      alles standaard gevinkt (admin kan deselect om scope te beperken).
+    //      Orgs buiten admin's scope worden niet getoond maar wel preserved.
+    //   4. Huidige user is OWNER/unscoped: alle orgs tonen, vrij kiezen.
+    const huidigeOrgIds   = new Set(user?.organisatie_ids ?? []);
+    const huidigUserScoped = currentUser.role !== 'owner'
+        && Array.isArray(currentUser.organisatie_ids)
+        && currentUser.organisatie_ids.length > 0;
+    const targetIsOwner   = user?.role === 'owner';
+    const targetIsAlle    = !!user && huidigeOrgIds.size === 0;
+
+    let orgVeldHtml = '';
+    if (targetIsOwner) {
+        orgVeldHtml = `
+            <div class="mf-rij">
+                <div class="gb-org-uitleg">
+                    Owner-accounts zien altijd alle organisaties — scope is niet van toepassing.
+                </div>
+            </div>`;
+    } else if (gbOrgs.length === 0) {
+        orgVeldHtml = `
+            <div class="mf-rij">
+                <div class="gb-org-uitleg">
+                    Geen organisaties beschikbaar in de database. Voeg ze toe via Beheer → Organisaties.
+                </div>
+            </div>`;
+    } else {
+        // Bepaal default-checked per org-checkbox:
+        //   - Scoped admin + nieuwe user: alles gevinkt + disabled (auto-inherit).
+        //   - Scoped admin + existing "alle" user: alles gevinkt, ENABLED.
+        //     Admin kan uitvinken → orgs worden van target's "alle"-scope afgenomen.
+        //   - Scoped admin + existing scoped user: vinkjes = huidige overlap.
+        //   - Owner/unscoped admin: vinkjes = target's huidige scope.
+        const items = gbOrgs.map(o => {
+            let checked, disabled = '';
+            if (huidigUserScoped && !user) {
+                checked = true; disabled = ' disabled';   // nieuwe user, auto-inherit
+            } else if (huidigUserScoped && targetIsAlle) {
+                checked = true;                            // alle user, admin kan uitvinken
+            } else {
+                checked = huidigeOrgIds.has(o.id);         // anders: target's huidige scope
+            }
+            return `
+                <label class="gb-org-checkbox">
+                    <input type="checkbox" value="${escHtml(o.id)}" ${checked ? 'checked' : ''}${disabled}>
+                    <span>${escHtml(o.naam)}</span>
+                </label>`;
+        }).join('');
+
+        let uitleg;
+        if (huidigUserScoped && !user) {
+            uitleg = `<div class="gb-org-uitleg">⚠ Je bent zelf gescoped — nieuwe gebruiker krijgt automatisch jouw scope (${currentUser.organisatie_ids.length} org${currentUser.organisatie_ids.length === 1 ? '' : "'s"}).</div>`;
+        } else if (huidigUserScoped && targetIsAlle) {
+            uitleg = `<div class="gb-org-uitleg">⚠ Deze gebruiker heeft geen scope (ziet <b>alle</b> organisaties). Vink uit om jouw organisatie(s) bij hem/haar weg te nemen — andere organisaties blijven behouden. Vinkjes laten staan = niets veranderen.</div>`;
+        } else if (huidigUserScoped) {
+            const buitenScopeAantal = (user?.organisatie_ids ?? []).filter(id => !currentUser.organisatie_ids.includes(id)).length;
+            uitleg = `<div class="gb-org-uitleg">Je bent gescoped — je kunt alleen jouw eigen ${currentUser.organisatie_ids.length} org${currentUser.organisatie_ids.length === 1 ? '' : "'s"} toevoegen/weghalen.${buitenScopeAantal > 0 ? ` Deze gebruiker heeft daarnaast ${buitenScopeAantal} org${buitenScopeAantal === 1 ? '' : "'s"} buiten jouw scope; die blijven onaangeraakt.` : ''}</div>`;
+        } else {
+            uitleg = `<div class="gb-org-uitleg">Selecteer welke organisaties deze gebruiker mag zien. <b>Geen vinkjes</b> = alle organisaties (geen scope).</div>`;
+        }
+
+        orgVeldHtml = `
+            <div class="mf-rij">
+                <label class="mf-lbl"><span>Scope — toegestane organisaties</span></label>
+                ${uitleg}
+                <div id="gbf-orgs" class="gb-orgs-lijst">${items}</div>
+            </div>`;
+    }
+
     wrap.style.display = '';
     wrap.innerHTML = `
         <div class="gb-form">
@@ -486,6 +585,7 @@ function openGbForm(id) {
                     <input type="password" id="gbf-pw2" class="inp" required>
                 </label>
             </div>` : ''}
+            ${orgVeldHtml}
             <div id="gbf-fout" class="status-msg error" style="display:none;margin:.5rem 0"></div>
             <div class="gb-form-acties">
                 <button class="btn-secondary" id="gbf-annuleer">Annuleren</button>
@@ -513,7 +613,21 @@ async function slaGebruikerOp(id) {
     if (!id && (!pw || pw.length < 8)) { toonGbFout('Wachtwoord min. 8 tekens.'); return; }
     if (!id && pw !== pw2) { toonGbFout('Wachtwoorden komen niet overeen.'); return; }
 
-    const payload = { action: 'save', naam, username, email, role: rol, ...(id ? { id } : { password: pw }) };
+    // Org-koppelingen verzamelen uit de checkbox-lijst.
+    // - Target = owner: orgs niet meesturen (backend negeert sowieso).
+    // - Huidige user is scoped: backend forceert eigen scope, frontend stuurt
+    //   leeg of niet — beide werken.
+    // - Anders: stuur de selectie (lege array = "geen scope" = ziet alle).
+    const orgInputs = document.querySelectorAll('#gbf-orgs input[type=checkbox]:not(:disabled)');
+    const orgIds = Array.from(orgInputs)
+        .filter(c => c.checked)
+        .map(c => c.value);
+
+    const payload = {
+        action: 'save', naam, username, email, role: rol,
+        organisatie_ids: orgIds,
+        ...(id ? { id } : { password: pw })
+    };
     const res  = await fetch('api/gebruikers.php', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload),

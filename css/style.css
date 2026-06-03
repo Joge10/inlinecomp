@@ -47,6 +47,14 @@ header {
 .header-user-rol   { font-size: .72rem; color: rgba(255,255,255,.65);
                      background: rgba(255,255,255,.15); border-radius: 10px;
                      padding: 2px 8px; }
+/* Multi-tenant scope-badge — alleen zichtbaar bij gescopte users. Iets
+   warmer-gekleurd dan de rol-badge zodat 't visueel duidelijk is dat 't om
+   een beperking gaat. cursor:help → tooltip met volledige org-lijst. */
+.header-user-scope { font-size: .72rem; color: #fff5d6;
+                     background: rgba(255,180,40,.30); border-radius: 10px;
+                     padding: 2px 8px; cursor: help;
+                     max-width: 200px; overflow: hidden; text-overflow: ellipsis;
+                     white-space: nowrap; }
 .header-uitlog-btn {
     background: none; border: 1px solid rgba(255,255,255,.35);
     color: #fff; border-radius: 5px; padding: 3px 8px;
@@ -3631,6 +3639,20 @@ th.rk-totaal, td.rk-totaal { width:55px; font-weight:700; color:var(--blauw); ba
 .gb-rol-importer  { background: #E8A838; color: #fff; }
 .gb-rol-planner   { background: #4CAF50; color: #fff; }
 
+/* Multi-tenant scope: badge in users-tabel + checkbox-lijst in edit-form. */
+.gb-org-badge     { display: inline-block; border-radius: 10px; padding: 2px 9px;
+                    font-size: .75rem; font-weight: 700; cursor: help; }
+.gb-org-alle      { background: #e5edf5; color: #1F4E79; }
+.gb-org-scoped    { background: #ffe9c4; color: #8a5a00; }
+.gb-org-uitleg    { font-size: .82rem; color: #555; margin: .2rem 0 .5rem 0; line-height: 1.4; }
+.gb-orgs-lijst    { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+                    gap: 4px 12px; max-height: 180px; overflow-y: auto;
+                    padding: 8px 10px; background: #f8fafc;
+                    border: 1px solid var(--border); border-radius: 4px; }
+.gb-org-checkbox  { display: flex; align-items: center; gap: 6px; padding: 3px 0;
+                    font-size: .88rem; cursor: pointer; }
+.gb-org-checkbox input:disabled + span { color: #888; font-style: italic; }
+
 /* Publieke-pagina statistiek-kaarten */
 .gb-stats {
     display: grid;
@@ -5288,7 +5310,11 @@ col.live-col-rondes  { width: 40px; }
 .hp-card-acties {
     display: flex; align-items: center; gap: 1rem;
     margin-bottom: .5rem;
+    flex-wrap: wrap;
 }
+/* <a> als knop binnen helpers-acties: zelfde uitstraling als <button> */
+.hp-card-acties a.btn-primary,
+.hp-card-acties a.btn-secondary { text-decoration: none; display: inline-block; }
 .hp-status {
     font-size: .9rem; color: #666;
 }

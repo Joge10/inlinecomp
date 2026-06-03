@@ -51,10 +51,14 @@ try {
         $aStmt->execute([$id]);
         $b['aliassen'] = $aStmt->fetchAll(PDO::FETCH_ASSOC);
 
+        // Multi-tenant: scoped admin ziet alleen wedstrijden binnen zijn scope.
+        $scope = gebruikerCompScopeWhere($pdo, $_authUser);
         $cStmt = $pdo->prepare(
-            "SELECT id, name, starts FROM competitions WHERE baan_id = ? ORDER BY starts DESC LIMIT 50"
+            "SELECT id, name, starts FROM competitions
+             WHERE baan_id = ? " . $scope['where'] . "
+             ORDER BY starts DESC LIMIT 50"
         );
-        $cStmt->execute([$id]);
+        $cStmt->execute(array_merge([$id], $scope['params']));
         $b['wedstrijden'] = $cStmt->fetchAll(PDO::FETCH_ASSOC);
 
         echo json_encode($b, JSON_UNESCAPED_UNICODE);

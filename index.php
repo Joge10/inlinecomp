@@ -7,6 +7,18 @@ if (!$gebruiker) {
     header('Location: login.php');
     exit;
 }
+
+// Multi-tenant: scope-info ophalen voor (a) injectie in currentUser-object
+// (zie verderop) en (b) badge in header. Lege array = unscoped (owner of
+// geen koppeling) → badge wordt niet getoond.
+$eigenScope = gebruikerOrgScope($pdo, $gebruiker);
+$scopeNamen = [];
+if (is_array($eigenScope) && !empty($eigenScope)) {
+    $ph = implode(',', array_fill(0, count($eigenScope), '?'));
+    $st = $pdo->prepare("SELECT naam FROM organisaties WHERE id IN ($ph) ORDER BY naam");
+    $st->execute($eigenScope);
+    $scopeNamen = $st->fetchAll(PDO::FETCH_COLUMN);
+}
 ?><!DOCTYPE html>
 <html lang="nl">
 <head>
@@ -29,6 +41,19 @@ if (!$gebruiker) {
         <button class="header-handleiding-btn" id="btn-handleiding" title="Handleiding openen" onclick="window.open('docs/handleiding.html', '_blank', 'noopener')">&#128366; Handleiding</button>
         <span class="header-user-naam"><?= htmlspecialchars($gebruiker['naam']) ?></span>
         <span class="header-user-rol"><?= htmlspecialchars($gebruiker['role']) ?></span>
+        <?php if (!empty($scopeNamen)): ?>
+            <?php
+                // Korte label: bij 1 org de naam, bij meerdere "N org's".
+                // Tooltip toont altijd de volledige lijst.
+                $korteLabel = count($scopeNamen) === 1
+                    ? $scopeNamen[0]
+                    : (count($scopeNamen) . " org's");
+                $tooltip = "Scope: " . implode(' · ', $scopeNamen);
+            ?>
+            <span class="header-user-scope" title="<?= htmlspecialchars($tooltip) ?>">
+                🔒 <?= htmlspecialchars($korteLabel) ?>
+            </span>
+        <?php endif; ?>
         <button class="header-uitlog-btn" id="btn-uitloggen" title="Uitloggen">&#10148;</button>
     </div>
 </header>
@@ -521,11 +546,36 @@ if (!$gebruiker) {
 
 <script>
 // Huidige gebruiker (server-side ingespoten)
+<?php
+    // $eigenScope is al eerder opgehaald voor de badge in de header. Hier
+    // alleen de KNSB-naam-set bouwen voor de Import-tab-filter (lowercased
+    // canonieke + alias-namen). Leeg = unscoped → frontend slaat filter over.
+    $eigenScopeNamen = [];
+    if (is_array($eigenScope) && !empty($eigenScope)) {
+        $ph = implode(',', array_fill(0, count($eigenScope), '?'));
+        $st = $pdo->prepare(
+            "SELECT naam FROM organisaties WHERE id IN ($ph)
+             UNION
+             SELECT naam FROM organisatie_aliassen WHERE organisatie_id IN ($ph)"
+        );
+        $st->execute(array_merge($eigenScope, $eigenScope));
+        $eigenScopeNamen = array_map(
+            fn($n) => mb_strtolower(trim($n)),
+            $st->fetchAll(PDO::FETCH_COLUMN)
+        );
+    }
+?>
 const currentUser = <?= json_encode([
-    'id'       => (int)$gebruiker['id'],
-    'username' => $gebruiker['username'],
-    'naam'     => $gebruiker['naam'],
-    'role'     => $gebruiker['role'],
+    'id'                => (int)$gebruiker['id'],
+    'username'          => $gebruiker['username'],
+    'naam'              => $gebruiker['naam'],
+    'role'              => $gebruiker['role'],
+    // Array van org-UUIDs die deze user mag zien (leeg = unscoped = alle).
+    'organisatie_ids'   => $eigenScope ?? [],
+    // Lowercased canonieke + alias-namen voor naam-matching op de KNSB-feed
+    // in de Import-tab. Leeg = unscoped (frontend gebruikt deze niet als
+    // de array leeg is).
+    'organisatie_namen' => $eigenScopeNamen,
 ]) ?>;
 
 // Schrijfrechten per module
