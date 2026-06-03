@@ -91,6 +91,25 @@ async function toonHelpersPagina() {
             <div id="hp-pending-lijst" style="display:none"></div>
         </div>
 
+        <div class="hp-card" id="hp-rec-card">
+            <h3 class="hp-card-titel">🏆 Records-check rapport</h3>
+            <p class="hp-card-uitleg">
+                Per <em>(afstand × categorie)</em> de snelste gereden tijd binnen
+                een wedstrijd vergeleken met het huidige Nederlands baan- of
+                weg-record. Toont per groep recordhouder, record-tijd, snelste
+                rijder in de wedstrijd + ronde/heat waar geklokt, en Δ-tijd
+                (langzamer in rood, sneller-dan-record in groen + 🏆).
+                Rijen met audit-mismatch (bruto-tijd ≠ officiële tijd, bv. door
+                fotofinish-wisseling of handmatige RR-correctie) krijgen een
+                voetnoot met beide tijden. Open in nieuw tabblad, daarna
+                Ctrl+P → opslaan als PDF.
+            </p>
+            <div class="hp-card-acties">
+                <a class="btn-primary" href="rapport_records_kies.php"
+                   target="_blank" rel="noopener">📊 Kies wedstrijd</a>
+            </div>
+        </div>
+
         <div class="hp-card" id="hp-csv-card">
             <h3 class="hp-card-titel">📥 CSV-export — eindklassement per DC</h3>
             <p class="hp-card-uitleg">
