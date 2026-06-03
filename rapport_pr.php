@@ -393,16 +393,12 @@ tr:nth-child(even) td{background:#f8fafc}
   <b>Δ-PR</b>: positief = langzamer dan PR, negatief + 🏆 = nieuwe PR.
   "Geen historie" = rijder heeft nog geen tijd op deze afstand in het systeem.
   <br><br>
-  <b>Alleen sprint-afstanden</b> (1000m en korter). Punten- en afvalkoersen
-  doen niet mee — die tijden zijn onderling niet vergelijkbaar (tactisch,
-  vaak DNF, totaaltijd vs rondetijd-mix).
+  <b>Alleen sprint-afstanden</b> (1000m en korter). Lange afstanden als
+  punten- en afvalkoersen hebben geen PR-vermelding.
   <br><br>
-  <b>PR-bron</b>: snelste rondetijd over wedstrijden <b>vóór deze wedstrijd</b>
-  (de huidige wedstrijd wordt expliciet uitgesloten + datum-filter voor retro-
-  PR-checks). Bronnen: <code>results</code> (heat-data: serie + KF + HF + finale)
-  plus <code>uitslag_afstand</code> (historie-import PDF-tijden). De serie-tijd
-  is vaak sneller dan de finale-tijd (finales zijn tactisch), dus we pakken
-  letterlijk de snelste rondetijd uit de historie.
+  <b>PR-bron</b>: snelste heat-tijd uit alle wedstrijden vóór deze wedstrijd.
+  Bronnen: <code>results</code> (heat-data) plus <code>uitslag_afstand</code>
+  (historie-import PDF-tijden).
 </div>
 
 <?php if (empty($groepen)): ?>
