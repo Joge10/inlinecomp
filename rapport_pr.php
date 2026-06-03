@@ -77,7 +77,9 @@ pr_source_results AS (
     -- Bron 1: results-tabel. MIN over alle rondes per wedstrijd ipv alleen
     -- de officiële uitslag-tijd uit uitslag_afstand. Reden: finale-tijd is
     -- vaak tactisch (langzamer dan serie-PR). bruto_tijd_ms heeft voorrang
-    -- voor accuratesse. Exclusief huidige comp. Ronde-label uit
+    -- voor accuratesse. Alleen wedstrijden VÓÓR de gekozen huidige wedstrijd
+    -- (datum-filter): bij een retro-PR-check op een oude wedstrijd mogen
+    -- latere wedstrijden niet meetellen als 'historie'. Ronde-label uit
     -- tijdschema_ritten.ronde_type + heat_nr (fallback bij ontbrekende tsr-
     -- link: heat_naam-pattern).
     SELECT
@@ -106,12 +108,13 @@ pr_source_results AS (
     JOIN competitions c   ON c.id  = h.competition_id
     WHERE COALESCE(res.bruto_tijd_ms, res.tijd_ms) > 0
       AND res.sanctie IS NULL
-      AND h.competition_id != ?
+      AND c.starts < ?
 ),
 pr_source_uitslag AS (
     -- Bron 2: uitslag_afstand. Voor historie-import-wedstrijden zonder
     -- heat-data (PDF-imports). Ronde-label uit finale_naam (vaak "A-finale"
-    -- of leeg); heat_nr is hier niet bekend.
+    -- of leeg); heat_nr is hier niet bekend. Datum-filter analoog aan
+    -- results-bron.
     SELECT
         ua.person_license,
         ua.distance_naam,
@@ -120,7 +123,7 @@ pr_source_uitslag AS (
         ua.competition_datum                     AS comp_datum,
         COALESCE(NULLIF(ua.finale_naam, ''), '')  AS ronde_label
     FROM uitslag_afstand ua
-    WHERE ua.competition_id != ?
+    WHERE ua.competition_datum < ?
       AND ua.tijd_ms IS NOT NULL
       AND ua.tijd_ms > 0
       AND ua.sanctie IS NULL
@@ -181,10 +184,15 @@ SELECT * FROM ranked
 ORDER BY afstand_meters ASC, kat ASC, rn ASC
 ";
 
-// Drie placeholders nu: current_results + pr_source_results + pr_source_uitslag
-// (alle drie excluderen de huidige wedstrijd op verschillende manieren).
+// Drie placeholders: current_results (h.competition_id = ?), pr_source_results
+// (c.starts < ?), pr_source_uitslag (ua.competition_datum < ?). De twee datum-
+// filters gebruiken de startdatum van de huidige wedstrijd — alleen tijden
+// uit EERDERE wedstrijden tellen als PR-historie. NULL-starts (zou niet mogen
+// voorkomen) → NULL-vergelijking is false → geen rijen → alle rijders "geen
+// historie" (veilige fail-state).
+$compStarts = $compMeta['starts'];
 $stmt = $pdo->prepare($sql);
-$stmt->execute([$compId, $compId, $compId]);
+$stmt->execute([$compId, $compStarts, $compStarts]);
 $rows = $stmt->fetchAll(PDO::FETCH_ASSOC);
 
 // Helpers
@@ -337,11 +345,12 @@ tr:nth-child(even) td{background:#f8fafc}
   <b>Δ-PR</b>: positief = langzamer dan PR, negatief + 🏆 = nieuwe PR.
   "Geen historie" = rijder heeft nog geen tijd op deze afstand in het systeem.
   <br><br>
-  <b>PR-bron</b>: snelste rondetijd over <b>alle eerdere wedstrijden</b> — uit
-  <code>results</code> (heat-data: serie + KF + HF + finale) plus
-  <code>uitslag_afstand</code> (historie-import PDF-tijden). De serie-tijd is
-  vaak sneller dan de finale-tijd (finales zijn tactisch), dus we pakken
-  letterlijk de snelste rondetijd uit de hele historie.
+  <b>PR-bron</b>: snelste rondetijd over wedstrijden <b>vóór deze wedstrijd</b>
+  (datum-filter — latere wedstrijden tellen niet mee, ook niet bij retro-PR-check
+  op oude wedstrijden). Bronnen: <code>results</code> (heat-data: serie + KF +
+  HF + finale) plus <code>uitslag_afstand</code> (historie-import PDF-tijden).
+  De serie-tijd is vaak sneller dan de finale-tijd (finales zijn tactisch),
+  dus we pakken letterlijk de snelste rondetijd uit de historie.
 </div>
 
 <?php if (empty($groepen)): ?>
