@@ -251,12 +251,12 @@ function fmtRondeHeat(string $rt, ?int $hn, string $fb): string {
 }
 
 // KNSB-categorie-volgorde (jong → oud, per cat eerst Dames dan Heren).
-// Bron: api/helpers.php prompt-doc bij _catNaarJaarBereik. Volgorde:
-// Pupillen 1→4, Kadetten, Junioren B→A, Senioren-Jongeren, Senioren A.
-// Onbekende cats (bv. Masters, of legacy codes) vallen achteraan via
-// PHP_INT_MAX in catRank-lookup.
+// LET OP pupillen-nummering is OMGEKEERD: P4 = jongst (≤8 jaar), P1 = oudst.
+// Vandaar de aflopende P-volgorde hieronder. Verder: Kadetten, dan Junioren
+// B vóór A (B is jonger), dan Senioren-Jongeren, dan Senioren A.
+// Onbekende cats (bv. Masters, legacy codes) vallen achteraan via PHP_INT_MAX.
 const KNSB_CAT_VOLGORDE = [
-    'DP1','HP1', 'DP2','HP2', 'DP3','HP3', 'DP4','HP4',
+    'DP4','HP4', 'DP3','HP3', 'DP2','HP2', 'DP1','HP1',
     'DKA','HKA',
     'DJB','HJB', 'DJA','HJA',
     'DSJ','HSJ', 'DSA','HSA',
