@@ -105,6 +105,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'GET') {
         echo json_encode(['error' => 'competition_id is verplicht']);
         exit;
     }
+    checkCompetitieToegang($pdo, $_authUser, $compId);
 
     try {
         // Tijdschema ophalen
@@ -293,6 +294,7 @@ if ($action === 'save_rit_results') {
         echo json_encode(['error' => 'competition_id en rit_id zijn verplicht']);
         exit;
     }
+    checkCompetitieToegang($pdo, $_authUser, $compId);
 
     try {
         // ── Race-type van de bijbehorende afstand ophalen ────────────────
@@ -387,12 +389,27 @@ if ($action === 'save_rit_results') {
             // re-imports + nieuwe saves de marker correct opschonen.
             $isPhotofinish = !empty($r['is_photofinish']) ? 1 : 0;
 
+            // Bruto-hint uit payload behouden (CSV-import: gemeten transponder-
+            // tijd; pre-save wisseling: pre-swap tijd). Moet door de classificatie
+            // heen gepropageerd worden — anders valt de upsert-loop terug op
+            // $r['tijd_ms'] (= eventueel post-edit waarde) en verdwijnt het audit-
+            // spoor. NULL toegestaan (geen hint) → upsert valt dan op tijd_ms terug.
+            $brutoTijdMs  = array_key_exists('bruto_tijd_ms', $r) && $r['bruto_tijd_ms'] !== null
+                ? (int)$r['bruto_tijd_ms'] : null;
+            $brutoRondes  = array_key_exists('bruto_rondes', $r) && $r['bruto_rondes'] !== null
+                ? (int)$r['bruto_rondes']  : null;
+            // Bruto_rondes ook NULL'en wanneer afstand geen rondes kent — anders
+            // krijg je rondes=NULL met bruto_rondes=X (inconsistent).
+            if (!$accepteertRondes) $brutoRondes = null;
+
             $base = [
                 'entry_id'       => (int)$r['entry_id'],
                 'rondes'         => $rondes,
                 'punten'         => $punten,
                 'afval_rang'     => $afvalRang,
                 'is_photofinish' => $isPhotofinish,
+                'bruto_tijd_ms'  => $brutoTijdMs,
+                'bruto_rondes'   => $brutoRondes,
             ];
 
             // Afvalkoers + afval_rang ingevuld → afgevallen rijder. Hier overslaan we de
@@ -518,22 +535,29 @@ if ($action === 'save_rit_results') {
         $pdo->beginTransaction();
 
         // bruto_tijd_ms / bruto_rondes: oorspronkelijke (transponder / MyLaps /
-        // eerst-ingevoerde) tijd als audit-spoor. Drie scenario's:
+        // eerst-ingevoerde) tijd als audit-spoor. Vier scenario's:
         //
         // 1. INSERT (eerste save voor deze heat_entry):
-        //    - bruto = client-hint indien meegestuurd (pre-save wisseling: frontend
-        //      bewaart pre-swap tijden in r._bruto_hint_*); anders = tijd_ms.
+        //    - bruto = client-hint indien meegestuurd (CSV-import of pre-save
+        //      wisseling: frontend zet r._bruto_hint_*); anders = tijd_ms.
         //
         // 2. UPDATE met jury-actie (sanctie != NULL OF is_photofinish=1):
         //    - bruto bevriezen (COALESCE: alleen vullen als nog NULL).
         //
-        // 3. UPDATE zonder jury-actie ("clean" save, bv. typo-correctie):
+        // 3. UPDATE met expliciete hint (VALUES(bruto) ≠ VALUES(tijd)):
+        //    - hint wint: bruto bevriezen op de hint-waarde via COALESCE.
+        //    - Triggert bij: CSV-import + handmatige typo-fix daarna (DOM-tijd
+        //      ≠ CSV-tijd → payload bruto ≠ tijd → CASE behoudt CSV-bruto).
+        //
+        // 4. UPDATE zonder jury-actie en zonder hint-mismatch (VALUES(bruto) =
+        //    VALUES(tijd)): "clean" save, bv. handmatige typo-correctie zonder
+        //    voorafgaande CSV-import:
         //    - bruto = tijd_ms (sync). Zo blijft de typo niet eeuwig staan als
         //      "gemeten tijd" wanneer de operator 'm corrigeert.
         //
         // Voor INSERT geldt scenario 1 automatisch via de COALESCE (bestaande
         // bruto IS NULL → VALUES(bruto_tijd_ms) wint = de hint of de tijd zelf).
-        // De CASE-uitdrukking dekt scenario 2 vs 3 voor UPDATE.
+        // De CASE-uitdrukking dekt scenario's 2/3/4 voor UPDATE.
         $upsert = $pdo->prepare("
             INSERT INTO results (heat_entry_id, finishpositie, tijd_ms, bruto_tijd_ms,
                                  rondes, bruto_rondes, punten, sanctie, afval_rang, is_photofinish)
@@ -542,13 +566,17 @@ if ($action === 'save_rit_results') {
                 finishpositie  = VALUES(finishpositie),
                 tijd_ms        = VALUES(tijd_ms),
                 bruto_tijd_ms  = CASE
-                    WHEN VALUES(is_photofinish) = 1 OR VALUES(sanctie) IS NOT NULL
+                    WHEN VALUES(is_photofinish) = 1
+                      OR VALUES(sanctie) IS NOT NULL
+                      OR NOT (VALUES(bruto_tijd_ms) <=> VALUES(tijd_ms))
                         THEN COALESCE(bruto_tijd_ms, VALUES(bruto_tijd_ms))
                     ELSE VALUES(tijd_ms)
                 END,
                 rondes         = VALUES(rondes),
                 bruto_rondes   = CASE
-                    WHEN VALUES(is_photofinish) = 1 OR VALUES(sanctie) IS NOT NULL
+                    WHEN VALUES(is_photofinish) = 1
+                      OR VALUES(sanctie) IS NOT NULL
+                      OR NOT (VALUES(bruto_rondes) <=> VALUES(rondes))
                         THEN COALESCE(bruto_rondes, VALUES(bruto_rondes))
                     ELSE VALUES(rondes)
                 END,
@@ -687,6 +715,7 @@ if ($action === 'genereer_volgende_ronde') {
         echo json_encode(['error' => 'competition_id, dc_id, van_ronde_type en naar_ronde_type zijn verplicht']);
         exit;
     }
+    checkCompetitieToegang($pdo, $_authUser, $compId);
 
     // SQL-fragment + bind-params voor split-filter. Leeg bij niet-split.
     $splitSql    = $splitDcNaam !== '' ? ' AND r.dc_naam = ?' : '';
@@ -2573,12 +2602,18 @@ if ($action === 'wissel_posities') {
     $compId   = trim($body['competition_id']   ?? '');
     $entryId1 = (int)($body['heat_entry_id_1'] ?? 0);
     $entryId2 = (int)($body['heat_entry_id_2'] ?? 0);
+    // Ex-aequo break (gelijke CSV-tijden, jury kiest één rijder voor de
+    // volgende slot): r1 = mover (A), r2 = partner (blijft staan). Alleen
+    // r1 wordt geüpdate met +N ms en nieuwe finishpositie. Partner ongemoeid.
+    $isExAequoBreak = !empty($body['ex_aequo_break']);
+    $nieuwePosA     = (int)($body['nieuwe_pos_a'] ?? 0);
 
     if (!$compId || !$entryId1 || !$entryId2 || $entryId1 === $entryId2) {
         http_response_code(400);
         echo json_encode(['error' => 'Ongeldige parameters voor wissel_posities']);
         exit;
     }
+    checkCompetitieToegang($pdo, $_authUser, $compId);
 
     try {
         // Haal beide results op, inclusief security-check op competition_id
@@ -2629,7 +2664,27 @@ if ($action === 'wissel_posities') {
             UPDATE results SET rondes = ?, tijd_ms = ?, finishpositie = ?, is_photofinish = 1 WHERE id = ?
         ");
 
-        if ($ron1 !== null && $ron2 !== null && $ron1 != $ron2) {
+        if ($isExAequoBreak) {
+            // r1 = mover (A), r2 = partner (blijft staan, geen update).
+            // Tijd-delta = nieuwePosA - oudePosA (= aantal slots dat A demoteert);
+            // typisch 1 voor 2-way ex-aequo break. Garandeert dat _berekenPosities
+            // na rebuild A op nieuwePosA krijgt (partner blijft uniek op oudePos).
+            $oudePosA = (int)$r1['finishpositie'];
+            $delta    = $nieuwePosA - $oudePosA;
+            if ($delta < 1) {
+                http_response_code(400);
+                echo json_encode(['error' => 'ex_aequo_break vereist demotion (nieuwe positie > huidige)']);
+                exit;
+            }
+            $upd->execute([
+                $r1['rondes'],
+                (int)$r1['tijd_ms'] + $delta,
+                $nieuwePosA,
+                $r1['id'],
+            ]);
+            // Partner: 100% ongemoeid. Geen is_photofinish-marker — alleen de
+            // mover wordt gemarkeerd als jury-aangepast.
+        } elseif ($ron1 !== null && $ron2 !== null && $ron1 != $ron2) {
             // Ongelijke rondes (ook PK): winnaar behoudt eigen data, verliezer
             // krijgt winnaar's rondes + winnaar's tijd + 10ms.
             // Zo klopt de data (verliezer krijgt gecorrigeerde rondes) én blijft de

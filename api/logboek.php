@@ -28,16 +28,20 @@ try {
     if ($method === 'GET') {
         $userId = isset($_GET['user_id']) && $_GET['user_id'] !== ''
             ? (int)$_GET['user_id'] : 0;
-        // Speciale filter-types: 'jury' = alle jury-app activiteit (user_id NULL
-        // + actie begint met 'jury-'); 'organisator' = alle non-jury entries
-        // (= reguliere logins met user_id).
+        // Speciale filter-types:
+        //   'jury'        = alle jury-app activiteit. De jury-app logt onder
+        //                   twee prefixen: 'jury-' (login/logout/rol-keuze) en
+        //                   'scheids-' (scheidsrechter-acties zoals
+        //                   status-wissels en reserve-inzet).
+        //   'organisator' = alle non-jury entries (reguliere logins van owner/
+        //                   admin/operator/coach-accounts met user_id).
         $type   = trim((string)($_GET['type'] ?? ''));
 
         if ($type === 'jury') {
             $stmt = $pdo->prepare("
                 SELECT id, user_id, naam, username, actie, ip_adres, land, stad, browser, os, tijdstip
                 FROM login_logs
-                WHERE actie LIKE 'jury-%'
+                WHERE actie LIKE 'jury-%' OR actie LIKE 'scheids-%'
                 ORDER BY tijdstip DESC LIMIT 500
             ");
             $stmt->execute();
@@ -45,7 +49,7 @@ try {
             $stmt = $pdo->prepare("
                 SELECT id, user_id, naam, username, actie, ip_adres, land, stad, browser, os, tijdstip
                 FROM login_logs
-                WHERE actie NOT LIKE 'jury-%'
+                WHERE actie NOT LIKE 'jury-%' AND actie NOT LIKE 'scheids-%'
                 ORDER BY tijdstip DESC LIMIT 500
             ");
             $stmt->execute();

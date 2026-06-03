@@ -1780,7 +1780,8 @@ if ($action === 'scheids_inzet' && $_SERVER['REQUEST_METHOD'] === 'POST') {
              WHERE distance_combination_id = ? AND person_license = ?
         ")->execute([$dcId, $lic]);
 
-        _juryLog($pdo, 'scheids-reserve-inzet', null, $compId);
+        // Geen audit-log meer: scheids-* acties zonder leesbare context (wie,
+        // welke DC) zijn niet zinvol; IP/tijdstip via jury-login/-rol blijft.
         echo json_encode(['ok' => true, 'teller' => _scheidsTeller($pdo, $dcId)], JSON_UNESCAPED_UNICODE);
     } catch (Throwable $e) {
         http_response_code(500);
@@ -1842,7 +1843,7 @@ if ($action === 'scheids_status' && $_SERVER['REQUEST_METHOD'] === 'POST') {
              WHERE distance_combination_id = ? AND person_license = ?
         ")->execute([$nieuweStatus, $dcId, $lic]);
 
-        _juryLog($pdo, 'scheids-status-' . $target, null, $compId);
+        // scheids-* audit-log verwijderd — zonder leesbare context niet zinvol.
         echo json_encode([
             'ok'     => true,
             'status' => $nieuweStatus,
@@ -2002,7 +2003,7 @@ if ($action === 'scheids_vervang_in_heat' && $_SERVER['REQUEST_METHOD'] === 'POS
         ")->execute([$dcId, $inLic]);
         $pdo->commit();
 
-        _juryLog($pdo, 'scheids-vervang-in-heat', null, $compId);
+        // scheids-* audit-log verwijderd — zonder leesbare context niet zinvol.
         echo json_encode([
             'ok'           => true,
             'heats_gewijzigd' => count($heats),

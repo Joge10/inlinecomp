@@ -2244,14 +2244,36 @@ function _liveBind(idx) {
         if (nieuwePosA === oudePosA) return;
 
         // Zoek rijder B (huidig houder van de gewenste positie)
-        const riderB = rit.rijders.find(r => r.finishpositie === nieuwePosA && r.entry_id !== entryIdA);
-        if (!riderB) { finSel.value = oudePosA; return; }
+        let riderB = rit.rijders.find(r => r.finishpositie === nieuwePosA && r.entry_id !== entryIdA);
+        let isExAequoBreak = false;
+
+        if (!riderB) {
+            // Geen rijder op gewenste positie → mogelijk ex-aequo break:
+            // twee rijders op A's huidige positie (gelijke tijd uit CSV), en A
+            // wil zich laten demoten naar de eerstvolgende lege slot (foto-finish
+            // beslissing). Alleen demotion met +1 ondersteund (multi-step voor
+            // n-way ex-aequo). Partner blijft 100% ongemoeid — geen swap, alleen
+            // A schuift een plek op met +1ms tijd-delta.
+            const partner = rit.rijders.find(r => r.finishpositie === oudePosA && r.entry_id !== entryIdA);
+            if (partner && nieuwePosA === oudePosA + 1) {
+                isExAequoBreak = true;
+                riderB = partner;  // gebruikt voor lock-check + backend-call
+            } else {
+                finSel.value = oudePosA;
+                return;
+            }
+        }
 
         // Swap-lock: elke rijder mag in deze sessie maar in 1 wissel betrokken
         // zijn. Cascading swaps (A↔B, dan B↔C) maken de tijd-state onleesbaar
         // (B's "tijd" is dan A's faked tijd, etc.). Operator moet bij twijfel
         // de CSV opnieuw importeren — dat reset alle wissels.
-        if (riderA._wisselt || riderB._wisselt) {
+        // Bij ex-aequo break: partner zit niet vast (alleen A muteert), dus
+        // sta toe als alleen partner._wisselt true is.
+        const ridersGeblokkeerd = isExAequoBreak
+            ? riderA._wisselt
+            : (riderA._wisselt || riderB._wisselt);
+        if (ridersGeblokkeerd) {
             finSel.value = oudePosA;
             _liveToast('⚠ Deze rijder is al gewisseld. Importeer de CSV opnieuw om wissels te resetten.', 'info');
             return;
@@ -2301,54 +2323,66 @@ function _liveBind(idx) {
         // Guard ` === undefined`: tweede swap wordt sowieso geblokkeerd door
         // de swap-lock (lijn 2253-2256), maar defensief opnieuw checken is
         // gratis en voorkomt corruptie als de lock ooit verandert.
+        // Bruto-hint: A altijd; B alleen bij echte swap (partner bij ex-aequo
+        // break muteert niet, dus geen audit-hint nodig).
         if (riderA._bruto_hint_tijd_ms === undefined) {
             riderA._bruto_hint_tijd_ms = oudeTijdA;
             riderA._bruto_hint_rondes  = oudeRondesA;
         }
-        if (riderB._bruto_hint_tijd_ms === undefined) {
+        if (!isExAequoBreak && riderB._bruto_hint_tijd_ms === undefined) {
             riderB._bruto_hint_tijd_ms = oudeTijdB;
             riderB._bruto_hint_rondes  = oudeRondesB;
         }
 
         // Bepaal wie wordt gepromoveerd (betere finishpositie = kleiner getal)
         const promotingA = nieuwePosA < oudePosA;
-
-        // Optimistische update finishpositie (altijd)
-        riderA.finishpositie = nieuwePosA;
-        riderB.finishpositie = oudePosA;
-
-        // Rondes-correctie bij ongelijke rondes (ook voor PK): geef de VERLIEZER
-        // de rondes van de verliezer én diens tijd +10ms, zodat _berekenPosities
-        // (en de PK-sort punten→rondes→tijd) na een rebuild de juiste volgorde geeft.
         const isPuntenkoers = rit.race_type === 'puntenkoers';
         const heeftVerschillendeRondes = oudeRondesA != null && oudeRondesB != null
                                       && oudeRondesA !== oudeRondesB;
 
-        if (heeftVerschillendeRondes) {
-            if (promotingA) {
-                // A = winnaar: ongewijzigd. B = verliezer: krijgt A's rondes + A's tijd + 10ms
-                // (verliezer klopt zo qua rondes, winnaar behoudt eigen correcte data)
-                riderB.rondes  = oudeRondesA;
-                riderB.tijd_ms = (oudeTijdA ?? 0) + 10;
-            } else {
-                // B = winnaar: ongewijzigd. A = verliezer: krijgt B's rondes + B's tijd + 10ms
-                riderA.rondes  = oudeRondesB;
-                riderA.tijd_ms = (oudeTijdB ?? 0) + 10;
-            }
+        if (isExAequoBreak) {
+            // Ex-aequo break: alleen A muteert. Tijd +1ms voor sort-tiebreak
+            // (oudeTijdA == oudeTijdB, dus zonder delta zou _berekenPosities
+            // ze opnieuw als ex-aequo behandelen na een rerender).
+            riderA.finishpositie = nieuwePosA;
+            riderA.tijd_ms       = (oudeTijdA ?? 0) + 1;
         } else {
-            // Zelfde rondes (sprint of ontbreekt): wissel alleen tijden
-            riderA.tijd_ms = oudeTijdB;
-            riderB.tijd_ms = oudeTijdA;
+            // Klassieke swap: beide finishposities wisselen.
+            riderA.finishpositie = nieuwePosA;
+            riderB.finishpositie = oudePosA;
+
+            // Rondes-correctie bij ongelijke rondes (ook voor PK): geef de VERLIEZER
+            // de rondes van de verliezer én diens tijd +10ms, zodat _berekenPosities
+            // (en de PK-sort punten→rondes→tijd) na een rebuild de juiste volgorde geeft.
+            if (heeftVerschillendeRondes) {
+                if (promotingA) {
+                    riderB.rondes  = oudeRondesA;
+                    riderB.tijd_ms = (oudeTijdA ?? 0) + 10;
+                } else {
+                    riderA.rondes  = oudeRondesB;
+                    riderA.tijd_ms = (oudeTijdB ?? 0) + 10;
+                }
+            } else {
+                // Zelfde rondes (sprint of ontbreekt): wissel alleen tijden
+                riderA.tijd_ms = oudeTijdB;
+                riderB.tijd_ms = oudeTijdA;
+            }
         }
 
         const rijB   = kaart.querySelector(`[data-entry="${riderB.entry_id}"]`);
-        const selB   = rijB?.querySelector('.live-finish-sel');
-        if (selB) selB.value = oudePosA;
+        // Bij echte swap: B's finish-dropdown verschuiven naar oudePosA.
+        // Bij ex-aequo break: B's positie ongewijzigd, dropdown niet aanraken.
+        if (!isExAequoBreak) {
+            const selB = rijB?.querySelector('.live-finish-sel');
+            if (selB) selB.value = oudePosA;
+        }
 
         const tijdInpA = rij?.querySelector('.live-tijd-inp');
-        const tijdInpB = rijB?.querySelector('.live-tijd-inp');
         if (tijdInpA) tijdInpA.value = riderA.tijd_ms ? _msTijdNaarDisplay(riderA.tijd_ms) : '';
-        if (tijdInpB) tijdInpB.value = riderB.tijd_ms ? _msTijdNaarDisplay(riderB.tijd_ms) : '';
+        if (!isExAequoBreak) {
+            const tijdInpB = rijB?.querySelector('.live-tijd-inp');
+            if (tijdInpB) tijdInpB.value = riderB.tijd_ms ? _msTijdNaarDisplay(riderB.tijd_ms) : '';
+        }
 
         // Helper: update rondes-cel + data-rondes in heat card én linker panel
         const _updateRondesDOM = (rijEl, entryId, nieuweRondes) => {
@@ -2378,6 +2412,10 @@ function _liveBind(idx) {
                     competition_id:  huidigCompId,
                     heat_entry_id_1: entryIdA,
                     heat_entry_id_2: riderB.entry_id,
+                    // Flag + nieuwe pos zodat backend weet of het 'n echte
+                    // swap is of een ex-aequo break (alleen A muteren).
+                    ex_aequo_break:  isExAequoBreak,
+                    nieuwe_pos_a:    nieuwePosA,
                 }),
             });
             let isPostSave = true;
@@ -2422,18 +2460,17 @@ function _liveBind(idx) {
                 }
             }
 
-            // Markeer beide rijders als "in een wissel betrokken" — voorkomt
-            // cascading swaps waarbij de tijd-state verworden tot een soep.
-            // Reset gebeurt automatisch bij volgende CSV-import (via
-            // _liveResetFinishCellen → cel-rebuild met nieuwe data).
+            // Markeer als "in een wissel betrokken" — voorkomt cascading swaps
+            // waarbij de tijd-state verworden tot een soep. Reset gebeurt
+            // automatisch bij volgende CSV-import (via _liveResetFinishCellen).
+            // Ex-aequo break: alleen A locken — partner muteerde niet en mag
+            // nog vrij swappen (bv. multi-step 3-way ex-aequo break).
             riderA._wisselt = true;
-            riderB._wisselt = true;
+            if (!isExAequoBreak) riderB._wisselt = true;
 
-            // Beide cellen converteren van dropdown naar badge zodat operator
-            // visueel ziet dat ze "vergrendeld" zijn. Reëel: hun finpos staat
-            // vast tot een re-import.
+            // Lock-badge ipv dropdown voor de gemuteerde rijder(s).
             _liveLockGewisseldeCel(idx, riderA);
-            _liveLockGewisseldeCel(idx, riderB);
+            if (!isExAequoBreak) _liveLockGewisseldeCel(idx, riderB);
 
             // Herbereken heat card + linker panel
             _liveSyncInvoer(entryIdA,        tijdInpA?.value || '', rij?.querySelector('.live-sanctie-sel')?.value || '');
@@ -4297,6 +4334,17 @@ async function _liveImportLaad(ritIdx) {
         // Lokale state bijwerken (zodat linker panel herbouwt met juiste rondes)
         if (!isAfgevallen && csvRij.ronden != null) r.rondes = csvRij.ronden;
 
+        // Bruto-hint vastleggen op CSV-meting. Dit is HET audit-moment: de
+        // gemeten transponder-waarde bewaren ongeacht of de operator daarna
+        // nog handmatig de tijd aanpast (typo-fix). Verse CSV wint altijd
+        // van eerdere hints — re-import = re-baseline (anders dan de
+        // wisseling-handler die "set once" semantiek heeft).
+        // Afgevallen rijders overslaan: hun manuele rondes/tijd is leidend.
+        if (!isAfgevallen) {
+            if (csvRij.tijd_ms != null) r._bruto_hint_tijd_ms = csvRij.tijd_ms;
+            if (csvRij.ronden  != null) r._bruto_hint_rondes  = csvRij.ronden;
+        }
+
         // Tijd + rondes invullen; sanctie ongemoeid laten.
         // Bij afgevallen rijder: zowel tijd als rondes overslaan.
         [`[data-entry="${r.entry_id}"]`, `[data-panel-entry="${r.entry_id}"]`].forEach(cssSelStr => {
@@ -4415,8 +4463,22 @@ function _liveResetFinishCellen(ritIdx) {
         const peers = rit.is_combi
             ? rit.rijders.filter(rij => rij._combi_rit_id === r._combi_rit_id)
             : rit.rijders;
-        return [...new Set(peers.map(rr => rr.finishpositie).filter(Boolean))]
-            .sort((a, b) => a - b);
+        const used = peers.map(rr => rr.finishpositie).filter(Boolean);
+        const result = new Set(used);
+        // Ex-aequo break: voor elke positie die meer dan 1x voorkomt (gelijke
+        // tijden uit CSV-import), expose de overgeslagen slot(s) zodat de jury
+        // via foto-finish één rijder kan demoten naar de eerstvolgende plek.
+        // bijv. [2, 2, 4] → [2, 3, 4]. 3-way [2,2,2,5] → [2,3,4,5]: meerdere
+        // breaks na elkaar mogelijk.
+        const counts = {};
+        used.forEach(p => { counts[p] = (counts[p] || 0) + 1; });
+        Object.entries(counts).forEach(([pos, n]) => {
+            if (n > 1) {
+                const p = Number(pos);
+                for (let i = 1; i < n; i++) result.add(p + i);
+            }
+        });
+        return [...result].sort((a, b) => a - b);
     };
 
     // 4) Vervang elke .live-col-finish-cel door de juiste markup.
@@ -4472,8 +4534,22 @@ function _liveActiveerWisselDropdowns(ritIdx) {
         const peers = rit.is_combi
             ? rit.rijders.filter(rij => rij._combi_rit_id === r._combi_rit_id)
             : rit.rijders;
-        return [...new Set(peers.map(rr => rr.finishpositie).filter(Boolean))]
-            .sort((a, b) => a - b);
+        const used = peers.map(rr => rr.finishpositie).filter(Boolean);
+        const result = new Set(used);
+        // Ex-aequo break: voor elke positie die meer dan 1x voorkomt (gelijke
+        // tijden uit CSV-import), expose de overgeslagen slot(s) zodat de jury
+        // via foto-finish één rijder kan demoten naar de eerstvolgende plek.
+        // bijv. [2, 2, 4] → [2, 3, 4]. 3-way [2,2,2,5] → [2,3,4,5]: meerdere
+        // breaks na elkaar mogelijk.
+        const counts = {};
+        used.forEach(p => { counts[p] = (counts[p] || 0) + 1; });
+        Object.entries(counts).forEach(([pos, n]) => {
+            if (n > 1) {
+                const p = Number(pos);
+                for (let i = 1; i < n; i++) result.add(p + i);
+            }
+        });
+        return [...result].sort((a, b) => a - b);
     };
 
     rit.rijders.forEach(r => {
