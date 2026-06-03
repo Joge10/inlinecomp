@@ -112,7 +112,7 @@ pr_source_results AS (
 ),
 pr_source_uitslag AS (
     -- Bron 2: uitslag_afstand. Voor historie-import-wedstrijden zonder
-    -- heat-data (PDF-imports). Ronde-label uit finale_naam (vaak "A-finale"
+    -- heat-data (PDF-imports). Ronde-label uit finale_naam (vaak 'A-finale'
     -- of leeg); heat_nr is hier niet bekend. Datum-filter analoog aan
     -- results-bron.
     SELECT
