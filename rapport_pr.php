@@ -77,16 +77,30 @@ pr_source_results AS (
     -- Bron 1: results-tabel. MIN over alle rondes per wedstrijd ipv alleen
     -- de officiële uitslag-tijd uit uitslag_afstand. Reden: finale-tijd is
     -- vaak tactisch (langzamer dan serie-PR). bruto_tijd_ms heeft voorrang
-    -- voor accuratesse. Exclusief huidige comp.
+    -- voor accuratesse. Exclusief huidige comp. Ronde-label uit
+    -- tijdschema_ritten.ronde_type + heat_nr (fallback bij ontbrekende tsr-
+    -- link: heat_naam-pattern).
     SELECT
         he.person_license,
         d.name                                   AS distance_naam,
         COALESCE(res.bruto_tijd_ms, res.tijd_ms) AS tijd_ms,
         c.name                                   AS comp_naam,
-        c.starts                                 AS comp_datum
+        c.starts                                 AS comp_datum,
+        CASE COALESCE(tsr.ronde_type,
+                      CASE WHEN h.heat_naam LIKE '%finale%' THEN 'finale_a'
+                           ELSE 'heats' END)
+            WHEN 'heats'        THEN CONCAT('Serie heat ',     COALESCE(h.heat_nr, 1))
+            WHEN 'kwartfinale'  THEN CONCAT('KF heat ',        COALESCE(h.heat_nr, 1))
+            WHEN 'halve_finale' THEN CONCAT('HF heat ',        COALESCE(h.heat_nr, 1))
+            WHEN 'finale_a'     THEN CONCAT('A-finale heat ',  COALESCE(h.heat_nr, 1))
+            WHEN 'finale_b'     THEN CONCAT('B-finale heat ',  COALESCE(h.heat_nr, 1))
+            WHEN 'runner_up'    THEN CONCAT('Runner-up heat ', COALESCE(h.heat_nr, 1))
+            ELSE CONCAT('R', h.ronde, ' heat ', COALESCE(h.heat_nr, 1))
+        END                                      AS ronde_label
     FROM results res
     JOIN heat_entries he  ON he.id = res.heat_entry_id
     JOIN heats        h   ON h.id  = he.heat_id
+    LEFT JOIN tijdschema_ritten tsr ON tsr.id = h.tijdschema_rit_id
     JOIN distances    d   ON d.id  = h.distance_id
                          AND d.distance_combination_id = h.distance_combination_id
     JOIN competitions c   ON c.id  = h.competition_id
@@ -96,15 +110,15 @@ pr_source_results AS (
 ),
 pr_source_uitslag AS (
     -- Bron 2: uitslag_afstand. Voor historie-import-wedstrijden zonder
-    -- heat-data (PDF-imports). Tijd hier kan tactisch zijn maar 't is wat
-    -- we hebben. UNION-ALL combineert beide; MIN/ROW_NUMBER pakt de
-    -- werkelijk snelste over alle bronnen.
+    -- heat-data (PDF-imports). Ronde-label uit finale_naam (vaak "A-finale"
+    -- of leeg); heat_nr is hier niet bekend.
     SELECT
         ua.person_license,
         ua.distance_naam,
         ua.tijd_ms,
         ua.competition_naam                      AS comp_naam,
-        ua.competition_datum                     AS comp_datum
+        ua.competition_datum                     AS comp_datum,
+        COALESCE(NULLIF(ua.finale_naam, ''), '')  AS ronde_label
     FROM uitslag_afstand ua
     WHERE ua.competition_id != ?
       AND ua.tijd_ms IS NOT NULL
@@ -122,7 +136,8 @@ pr_combined AS (
         END                                      AS afstand_key,
         tijd_ms,
         comp_naam,
-        comp_datum
+        comp_datum,
+        ronde_label
     FROM (
         SELECT * FROM pr_source_results
         UNION ALL
@@ -136,6 +151,7 @@ pr_history AS (
         tijd_ms                                  AS pr_ms,
         comp_naam                                AS pr_wedstrijd,
         comp_datum                               AS pr_datum,
+        ronde_label                              AS pr_ronde,
         ROW_NUMBER() OVER (
             PARTITION BY person_license, afstand_key
             ORDER BY tijd_ms ASC, comp_datum ASC
@@ -143,7 +159,7 @@ pr_history AS (
     FROM pr_combined
 ),
 pr_best AS (
-    SELECT person_license, afstand_key, pr_ms, pr_wedstrijd, pr_datum
+    SELECT person_license, afstand_key, pr_ms, pr_wedstrijd, pr_datum, pr_ronde
     FROM pr_history
     WHERE pr_rn = 1
 ),
@@ -153,6 +169,7 @@ ranked AS (
         pr.pr_ms,
         pr.pr_wedstrijd,
         pr.pr_datum,
+        pr.pr_ronde,
         ROW_NUMBER() OVER (PARTITION BY b.afstand, b.kat ORDER BY b.gereden_ms) AS rn
     FROM best_per_rider b
     LEFT JOIN pr_best pr
@@ -304,7 +321,7 @@ tr:nth-child(even) td{background:#f8fafc}
                 <th>Ronde / heat<small>waar geklokt</small></th>
                 <th style="text-align:right">Tijd<small>in deze wedstrijd</small></th>
                 <th style="text-align:right">PR-tijd<small>snelste rondetijd<br>over alle eerdere<br>wedstrijden</small></th>
-                <th>PR-bron<small>wedstrijd · datum</small></th>
+                <th>PR-bron<small>wedstrijd · datum · ronde</small></th>
                 <th style="text-align:right">Δ-PR<small>+ = langzamer<br>− = nieuwe PR 🏆</small></th>
             </tr>
         </thead>
@@ -332,7 +349,8 @@ tr:nth-child(even) td{background:#f8fafc}
                 $datStr = $r['pr_datum']
                     ? date('j-n-Y', strtotime($r['pr_datum']))
                     : '?';
-                $prBron = $r['pr_wedstrijd'] . ' · ' . $datStr;
+                $rondeStr = !empty($r['pr_ronde']) ? ' · ' . $r['pr_ronde'] : '';
+                $prBron = $r['pr_wedstrijd'] . ' · ' . $datStr . $rondeStr;
             }
         ?>
             <tr>
