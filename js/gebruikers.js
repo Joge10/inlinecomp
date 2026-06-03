@@ -648,7 +648,9 @@ function toonGbFout(tekst) {
 
 function openWwForm(id) {
     const wrap = el('gb-form-wrap');
-    const user = gbGebruikers.find(u => u.id === id);
+    // Number() coercion: PDO geeft u.id als string terug, id is een number
+    // uit parseInt(dataset.id) — zonder coercion failt === en wordt user undef.
+    const user = gbGebruikers.find(u => Number(u.id) === id);
     wrap.style.display = '';
     wrap.innerHTML = `
         <div class="gb-form">
@@ -702,8 +704,10 @@ async function toggleActief(id) {
 }
 
 async function verwijderGebruiker(id) {
-    const user = gbGebruikers.find(u => u.id === id);
-    if (!await toonBevestigDialog(`Gebruiker "${user?.naam}" verwijderen?`, 'Gebruiker verwijderen')) return;
+    // Number() coercion: zie openGbForm / openWwForm — anders krijg je
+    // "Gebruiker 'undefined' verwijderen?" in de bevestig-dialog.
+    const user = gbGebruikers.find(u => Number(u.id) === id);
+    if (!await toonBevestigDialog(`Gebruiker "${user?.naam ?? '?'}" verwijderen?`, 'Gebruiker verwijderen')) return;
     const res  = await fetch('api/gebruikers.php', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ action: 'delete', id }),
