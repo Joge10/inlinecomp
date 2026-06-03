@@ -250,15 +250,46 @@ function fmtRondeHeat(string $rt, ?int $hn, string $fb): string {
     }
 }
 
-// Groeperen per (afstand × cat) voor render
+// KNSB-categorie-volgorde (jong → oud, per cat eerst Dames dan Heren).
+// Bron: api/helpers.php prompt-doc bij _catNaarJaarBereik. Volgorde:
+// Pupillen 1→4, Kadetten, Junioren B→A, Senioren-Jongeren, Senioren A.
+// Onbekende cats (bv. Masters, of legacy codes) vallen achteraan via
+// PHP_INT_MAX in catRank-lookup.
+const KNSB_CAT_VOLGORDE = [
+    'DP1','HP1', 'DP2','HP2', 'DP3','HP3', 'DP4','HP4',
+    'DKA','HKA',
+    'DJB','HJB', 'DJA','HJA',
+    'DSJ','HSJ', 'DSA','HSA',
+];
+
+// Groeperen per (afstand × cat) voor render. afstand_meters wordt in de
+// groep opgenomen voor de sortering hieronder (was alleen in $r-rijen
+// aanwezig; nu ook op groep-niveau zodat uasort werkt).
 $groepen = [];
 foreach ($rows as $r) {
     $k = $r['afstand'] . '|' . $r['kat'];
     if (!isset($groepen[$k])) {
-        $groepen[$k] = ['afstand' => $r['afstand'], 'kat' => $r['kat'], 'rijen' => []];
+        $groepen[$k] = [
+            'afstand'        => $r['afstand'],
+            'afstand_meters' => (int)$r['afstand_meters'],
+            'kat'            => $r['kat'],
+            'rijen'          => [],
+        ];
     }
     $groepen[$k]['rijen'][] = $r;
 }
+
+// Sort: afstand_meters ASC, dan KNSB-cat-volgorde ASC (D vóór H per cat).
+$catRank = array_flip(KNSB_CAT_VOLGORDE);
+uasort($groepen, function($a, $b) use ($catRank) {
+    if ($a['afstand_meters'] !== $b['afstand_meters']) {
+        return $a['afstand_meters'] <=> $b['afstand_meters'];
+    }
+    $ra = $catRank[$a['kat']] ?? PHP_INT_MAX;
+    $rb = $catRank[$b['kat']] ?? PHP_INT_MAX;
+    if ($ra !== $rb) return $ra <=> $rb;
+    return strcmp($a['kat'], $b['kat']);  // stabiele fallback voor onbekende cats
+});
 
 // Pre-bereken per groep + totaal: hoeveel nieuwe PRs, hoeveel met-pr-historie,
 // hoeveel zonder historie. Wordt gebruikt in groep-titel + samenvatting onderaan.
