@@ -91,6 +91,21 @@ async function toonHelpersPagina() {
             <div id="hp-pending-lijst" style="display:none"></div>
         </div>
 
+        <div class="hp-card" id="hp-pr-card">
+            <h3 class="hp-card-titel">🏃 PR-check rapport</h3>
+            <p class="hp-card-uitleg">
+                Per rijder vergelijking met diens <b>persoonlijk record</b> (PR)
+                op dezelfde afstand. PR-bron: vastgelegde uitslagen van eerdere
+                wedstrijden (uitslag_afstand). Δ &lt; 0 = <b>nieuwe PR 🏆</b>;
+                Δ &gt; 0 = langzamer dan PR. Rijders zonder eerdere vastgelegde
+                tijd krijgen "geen historie". Open in nieuw tabblad, Ctrl+P → PDF.
+            </p>
+            <div class="hp-card-acties">
+                <a class="btn-primary" href="rapport_pr_kies.php"
+                   target="_blank" rel="noopener">🏃 Kies wedstrijd</a>
+            </div>
+        </div>
+
         <div class="hp-card" id="hp-rec-card">
             <h3 class="hp-card-titel">🏆 Records-check rapport</h3>
             <p class="hp-card-uitleg">
