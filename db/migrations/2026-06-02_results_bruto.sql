@@ -48,18 +48,33 @@ UPDATE `results`
 -- her-importeren (voor correct bruto-spoor) of accepteren (geen audit-pill,
 -- maar officiële tijden blijven correct).
 -- ─────────────────────────────────────────────────────────────────────────
--- SELECT DISTINCT
---     h.id                            AS heat_id,
---     h.heat_naam,
---     h.ronde,
---     h.heat_nr,
---     dc.name                          AS dc_naam,
---     COUNT(DISTINCT CASE WHEN res.is_photofinish = 1 THEN res.id END)
---                                     AS aantal_wisselingen
+-- Per-rijder detail (handig om te zien of bruto al klopt of moet worden
+-- bijgewerkt voor specifieke heats):
+--
+-- SELECT
+--     c.name                                              AS wedstrijd,
+--     dc.name                                             AS dc_naam,
+--     h.heat_naam, h.ronde, h.heat_nr,
+--     he.startpositie                                     AS pos,
+--     p.full_name                                         AS rijder,
+--     res.finishpositie                                   AS fin,
+--     res.tijd_ms, res.bruto_tijd_ms,
+--     CASE WHEN res.tijd_ms IS NULL THEN NULL
+--          ELSE CONCAT(FLOOR(res.tijd_ms/60000), ':',
+--                      LPAD(FLOOR(MOD(res.tijd_ms,60000)/1000), 2, '0'), '.',
+--                      LPAD(MOD(res.tijd_ms,1000), 3, '0'))
+--     END                                                 AS tijd_str,
+--     CASE WHEN res.bruto_tijd_ms IS NULL THEN NULL
+--          ELSE CONCAT(FLOOR(res.bruto_tijd_ms/60000), ':',
+--                      LPAD(FLOOR(MOD(res.bruto_tijd_ms,60000)/1000), 2, '0'), '.',
+--                      LPAD(MOD(res.bruto_tijd_ms,1000), 3, '0'))
+--     END                                                 AS bruto_str,
+--     res.sanctie
 -- FROM heats h
--- JOIN heat_entries he             ON he.heat_id        = h.id
--- JOIN results res                 ON res.heat_entry_id = he.id
--- JOIN distance_combinations dc    ON dc.id             = h.distance_combination_id
+-- JOIN heat_entries he              ON he.heat_id        = h.id
+-- JOIN results res                  ON res.heat_entry_id = he.id
+-- JOIN persons p                    ON p.license_key     = he.person_license
+-- JOIN distance_combinations dc     ON dc.id             = h.distance_combination_id
+-- JOIN competitions c               ON c.id              = h.competition_id
 -- WHERE res.is_photofinish = 1
--- GROUP BY h.id, h.heat_naam, h.ronde, h.heat_nr, dc.name
--- ORDER BY dc.name, h.ronde, h.heat_nr;
+-- ORDER BY c.starts DESC, c.name, dc.name, h.ronde, h.heat_nr, he.startpositie;

@@ -159,6 +159,39 @@ Tabel toont voor 8 deelnemers: *"4 x 6-8, 16 best times"*. 8 rijders kunnen onmo
 ### 5.5 Points-Elimination interactie — Art. 120 + 200
 Art. 120 zegt simpel "combinatie eliminate + punten". Art. 200 (track 10km PE) specificeert. Maar wat met road points-elimination? Geen apart artikel; alleen Art. 120 generic.
 
+### 5.6 500m+D race-lengte is baan-afhankelijk — Art. 115.b
+Art. 115.b: *"On track, the distance of race is 2.5 laps (500m) plus the Distance resulting in the middle of the straight, thus the start line will be in the middle of the straight."*
+
+**Issue**: de "+D" is geometrisch bepaald: het is de afstand die nodig is om de startlijn in het midden van het rechte stuk te krijgen. Op een 200m baan met perimeter `2S + 2πR = 200` geldt `D = S/2 = 50 − πR/2`. **D hangt direct af van de bocht-straal R**, en het rulebook stelt GEEN expliciete minimum/maximum waarden voor R.
+
+Het rulebook (Art. 88, 90, 91) geeft alleen:
+- Baanlengte 175–200 m, tolerantie ±5 cm (Art. 90.1)
+- Breedte 5.5–6 m (Art. 91)
+- Symmetrische bochten met gelijke straal (Art. 87.6)
+- Banking ≥ 100 cm langs buitenrand bij 200m baan (Art. 92.3)
+
+Praktische bouw-range op een 200m baan: R ≈ 13–22 m (kleinere R = onuitvoerbare banking, grotere R = bijna geen rechte stukken). Dat resulteert in:
+
+| R (m) | S = 100−πR | D = S/2 | Race-totaal |
+|---|---|---|---|
+| 13  | 59.16 m | 29.58 m | 529.58 m |
+| 15  | 52.88 m | 26.44 m | 526.44 m |
+| 18  | 43.45 m | 21.72 m | 521.72 m |
+| 22  | 30.88 m | 15.44 m | 515.44 m |
+
+**Worst-case spread** binnen reglementair acceptabele bouw: **~14 m verschil** in race-totaal tussen krapste en ruimste baan. Bij sprint-snelheid (~12-13 m/s gemiddeld) komt dat neer op **~1.0 à 1.1 seconde** verschil — significant voor sprint-records, en groter dan de marges waarbinnen records normaal gesproken sneuvelen.
+
+**Implicaties**:
+1. **Records-vergelijking is niet apples-to-apples**: een 500m+D-tijd in Lagos (R onbekend, mogelijk ruim) is niet 1-op-1 vergelijkbaar met dezelfde race op Heerde of Geisingen.
+2. Het rulebook normaliseert NIET voor baan-geometrie bij record-erkenning of multi-wedstrijd-ranking.
+3. World Skate baan-certificering (Art. 87.7, "may be certified") publiceert R niet als verplicht meta-veld — er is geen openbaar baan-register met R per locatie.
+4. **Wereldrecord-procedure (Art. 61-65) bevestigt dit gat expliciet**: Art. 63 stelt slechts "all items of this Rulebook respected" + "electronic timekeeping". GEEN clausule over baan-certificering vooraf, GEEN R-publicatie verplicht in de documentatie (Art. 64.3.a vraagt enkel "plan of the competition course… indicating the course length, starting point, finish line and the exact number of laps") — bocht-straal wordt niet als verplicht gegeven gevraagd. Dus een WR op 500m+D in een baan met R=22m kan formeel gelden tegenover een WR-poging in R=15m-baan, ondanks ~10m verschil in feitelijke race-afstand.
+
+**Suggestie**:
+- Optie A: bij baan-certificering verplichten dat R wordt gepubliceerd en records voor 500m+D voorzien van baan-tag.
+- Optie B: een **harmonisatie-tabel** met race-totalen per R-bracket (bv. R 13-16 / 16-19 / 19-22) zodat de operator weet of records inderdaad vergelijkbaar zijn.
+- Optie C: minimum/maximum R expliciet stipuleren in Art. 90/91 zodat de race-spread beperkt blijft tot bv. ±3 m (≈ ±0.25 s).
+
 ---
 
 ## 6. Definities & terminologie
