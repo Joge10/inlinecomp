@@ -219,6 +219,27 @@ foreach ($rows as $r) {
     $groepen[$k]['rijen'][] = $r;
 }
 
+// Pre-bereken per groep + totaal: hoeveel nieuwe PRs, hoeveel met-pr-historie,
+// hoeveel zonder historie. Wordt gebruikt in groep-titel + samenvatting onderaan.
+$totaal = ['nieuwe_prs' => 0, 'met_pr' => 0, 'geen_historie' => 0];
+foreach ($groepen as $k => &$g) {
+    $g['stats'] = ['nieuwe_prs' => 0, 'met_pr' => 0, 'geen_historie' => 0];
+    foreach ($g['rijen'] as $r) {
+        if ($r['pr_ms'] === null) {
+            $g['stats']['geen_historie']++;
+        } else {
+            $g['stats']['met_pr']++;
+            if ((int)$r['gereden_ms'] < (int)$r['pr_ms']) {
+                $g['stats']['nieuwe_prs']++;
+            }
+        }
+    }
+    $totaal['nieuwe_prs']    += $g['stats']['nieuwe_prs'];
+    $totaal['met_pr']        += $g['stats']['met_pr'];
+    $totaal['geen_historie'] += $g['stats']['geen_historie'];
+}
+unset($g);
+
 $titel   = 'PR-check: ' . $compMeta['name'];
 $metaTxt = trim(($compMeta['starts'] ? date('j F Y', strtotime($compMeta['starts'])) : '')
               . ($compMeta['location'] ? ' · ' . $compMeta['location'] : ''));
@@ -241,7 +262,10 @@ body{font-family:Arial,Helvetica,sans-serif;font-size:9pt;margin:.6cm 1cm;color:
 .pr-groep-titel{font-size:10pt;font-weight:700;color:#1a3a5c;
                 background:linear-gradient(to right,#dce6f0,transparent);
                 padding:.12cm .25cm;margin:.4cm 0 .12cm 0;
-                border-left:4px solid #1a3a5c;break-after:avoid}
+                border-left:4px solid #1a3a5c;break-after:avoid;
+                display:flex;justify-content:space-between;align-items:baseline;
+                gap:1rem;flex-wrap:wrap}
+.pr-groep-context{font-size:7.5pt;font-weight:400;color:#5a7491;font-style:italic}
 table{width:100%;border-collapse:collapse;font-size:8.5pt;table-layout:auto;margin-bottom:.2cm}
 thead{display:table-header-group}
 th{background:#dce6f0;color:#1a3a5c;padding:4px 6px;font-size:7.5pt;
@@ -258,6 +282,19 @@ tr:nth-child(even) td{background:#f8fafc}
 .c-delta-pr{text-align:right;font-family:monospace;font-size:8.5pt;color:#0a7d2a;font-weight:700}
 .c-geen-historie{font-size:7.5pt;color:#888;font-style:italic;text-align:right}
 .pr-leeg{font-size:8.5pt;color:#888;font-style:italic;padding:.3cm}
+/* Samenvatting-blok onderaan: grand-total + PR-percentage. */
+.pr-samenvatting{margin:.6cm 0 .3cm 0;padding:.3cm .4cm;background:#f4f7fa;
+                 border:1px solid #d8e1eb;border-left:4px solid #1a3a5c;
+                 border-radius:4px;break-inside:avoid;page-break-inside:avoid}
+.pr-samenvatting-titel{font-size:10pt;font-weight:700;color:#1a3a5c;margin-bottom:.2cm}
+.pr-samenvatting-grid{display:flex;gap:.8cm;flex-wrap:wrap;justify-content:space-between}
+.pr-stat{flex:1;min-width:80px;text-align:center;padding:.15cm 0}
+.pr-stat-waarde{font-size:18pt;font-weight:700;color:#1a3a5c;line-height:1.1}
+.pr-stat-pr{color:#0a7d2a}
+.pr-stat-label{font-size:7.5pt;color:#555;margin-top:1mm}
+.pr-samenvatting-percentage{margin-top:.25cm;font-size:8.5pt;color:#444;
+                            font-style:italic;text-align:center;
+                            border-top:1px dashed #c4d0db;padding-top:.2cm}
 .pr-footer{margin-top:.5cm;font-size:7pt;color:#888;text-align:right;
            border-top:1px solid #ddd;padding-top:2mm}
 @page{size:A4 landscape;margin:.8cm 1cm}
@@ -310,8 +347,24 @@ tr:nth-child(even) td{background:#f8fafc}
 <?php if (empty($groepen)): ?>
     <div class="pr-leeg">Geen resultaten gevonden in deze wedstrijd.</div>
 <?php else: foreach ($groepen as $g): ?>
+    <?php
+        // Teller-snippet voor de groep-titel: aantal nieuwe PRs + context.
+        $st = $g['stats'];
+        $prTxt = '';
+        if ($st['nieuwe_prs'] > 0) {
+            $prTxt = sprintf(' — 🏆 %d nieuwe PR%s', $st['nieuwe_prs'], $st['nieuwe_prs'] === 1 ? '' : 's');
+        }
+        $context = sprintf(
+            '%d rijder%s · %d met PR-historie · %d zonder',
+            count($g['rijen']),
+            count($g['rijen']) === 1 ? '' : 's',
+            $st['met_pr'],
+            $st['geen_historie']
+        );
+    ?>
     <div class="pr-groep-titel">
-        <?= esc($g['afstand']) ?> — <?= esc($g['kat']) ?>
+        <?= esc($g['afstand']) ?> — <?= esc($g['kat']) ?><?= esc($prTxt) ?>
+        <span class="pr-groep-context"><?= esc($context) ?></span>
     </div>
     <table>
         <thead>
@@ -367,7 +420,37 @@ tr:nth-child(even) td{background:#f8fafc}
         <?php endforeach; ?>
         </tbody>
     </table>
-<?php endforeach; endif; ?>
+<?php endforeach; ?>
+
+<div class="pr-samenvatting">
+    <div class="pr-samenvatting-titel">📊 Samenvatting</div>
+    <div class="pr-samenvatting-grid">
+        <div class="pr-stat">
+            <div class="pr-stat-waarde pr-stat-pr"><?= (int)$totaal['nieuwe_prs'] ?></div>
+            <div class="pr-stat-label">🏆 Nieuwe PR<?= $totaal['nieuwe_prs'] === 1 ? '' : 's' ?> totaal</div>
+        </div>
+        <div class="pr-stat">
+            <div class="pr-stat-waarde"><?= (int)$totaal['met_pr'] ?></div>
+            <div class="pr-stat-label">Rijders met PR-historie</div>
+        </div>
+        <div class="pr-stat">
+            <div class="pr-stat-waarde"><?= (int)$totaal['geen_historie'] ?></div>
+            <div class="pr-stat-label">Rijders zonder historie</div>
+        </div>
+        <div class="pr-stat">
+            <div class="pr-stat-waarde"><?= count($groepen) ?></div>
+            <div class="pr-stat-label">Afstand × cat-groepen</div>
+        </div>
+    </div>
+    <?php if ($totaal['met_pr'] > 0): ?>
+        <div class="pr-samenvatting-percentage">
+            <?= number_format(100 * $totaal['nieuwe_prs'] / $totaal['met_pr'], 1) ?>%
+            van de rijders met historie zette een nieuwe PR in deze wedstrijd.
+        </div>
+    <?php endif; ?>
+</div>
+
+<?php endif; ?>
 
 <div class="pr-footer">
     InlineComp · gegenereerd <?= date('j-m-Y H:i') ?> ·
