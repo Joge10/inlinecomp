@@ -77,11 +77,12 @@ pr_source_results AS (
     -- Bron 1: results-tabel. MIN over alle rondes per wedstrijd ipv alleen
     -- de officiële uitslag-tijd uit uitslag_afstand. Reden: finale-tijd is
     -- vaak tactisch (langzamer dan serie-PR). bruto_tijd_ms heeft voorrang
-    -- voor accuratesse. Alleen wedstrijden VÓÓR de gekozen huidige wedstrijd
-    -- (datum-filter): bij een retro-PR-check op een oude wedstrijd mogen
-    -- latere wedstrijden niet meetellen als 'historie'. Ronde-label uit
-    -- tijdschema_ritten.ronde_type + heat_nr (fallback bij ontbrekende tsr-
-    -- link: heat_naam-pattern).
+    -- voor accuratesse. Filters: (a) competition_id != huidige — sluit de
+    -- wedstrijd zelf hard uit, ook bij meerdaagse events waar c.starts maar
+    -- 1 DATETIME-waarde heeft. (b) c.starts < huidige starts — sluit ook
+    -- LATERE wedstrijden uit (voor retro-PR-checks op oude wedstrijden).
+    -- Ronde-label uit tijdschema_ritten.ronde_type + heat_nr (fallback bij
+    -- ontbrekende tsr-link: heat_naam-pattern).
     SELECT
         he.person_license,
         d.name                                   AS distance_naam,
@@ -108,13 +109,21 @@ pr_source_results AS (
     JOIN competitions c   ON c.id  = h.competition_id
     WHERE COALESCE(res.bruto_tijd_ms, res.tijd_ms) > 0
       AND res.sanctie IS NULL
+      AND h.competition_id != ?
       AND c.starts < ?
 ),
 pr_source_uitslag AS (
     -- Bron 2: uitslag_afstand. Voor historie-import-wedstrijden zonder
     -- heat-data (PDF-imports). Ronde-label uit finale_naam (vaak 'A-finale'
-    -- of leeg); heat_nr is hier niet bekend. Datum-filter analoog aan
-    -- results-bron.
+    -- of leeg); heat_nr is hier niet bekend. Filters: (a) competition_id !=
+    -- huidige (cruciaal — als de huidige wedstrijd al is vastgelegd staat
+    -- die ook in uitslag_afstand en zou anders zichzelf als PR opleveren).
+    -- (b) competition_datum < huidige c.starts — extra safety voor latere
+    -- wedstrijden. LET OP: c.starts is DATETIME, competition_datum is DATE
+    -- — MySQL cast DATE naar 00:00:00 dus same-day uitslag van een ander
+    -- competition_id zou hier kunnen lekken; filter (a) dekt dat voor
+    -- DEZELFDE wedstrijd, maar same-day verschillende wedstrijden zijn
+    -- bewust toegestaan (zou een echte historische tijd kunnen zijn).
     SELECT
         ua.person_license,
         ua.distance_naam,
@@ -123,7 +132,8 @@ pr_source_uitslag AS (
         ua.competition_datum                     AS comp_datum,
         COALESCE(NULLIF(ua.finale_naam, ''), '')  AS ronde_label
     FROM uitslag_afstand ua
-    WHERE ua.competition_datum < ?
+    WHERE ua.competition_id != ?
+      AND ua.competition_datum < ?
       AND ua.tijd_ms IS NOT NULL
       AND ua.tijd_ms > 0
       AND ua.sanctie IS NULL
@@ -184,15 +194,20 @@ SELECT * FROM ranked
 ORDER BY afstand_meters ASC, kat ASC, rn ASC
 ";
 
-// Drie placeholders: current_results (h.competition_id = ?), pr_source_results
-// (c.starts < ?), pr_source_uitslag (ua.competition_datum < ?). De twee datum-
-// filters gebruiken de startdatum van de huidige wedstrijd — alleen tijden
-// uit EERDERE wedstrijden tellen als PR-historie. NULL-starts (zou niet mogen
-// voorkomen) → NULL-vergelijking is false → geen rijen → alle rijders "geen
-// historie" (veilige fail-state).
+// Vijf placeholders, in CTE-volgorde:
+//   1. current_results       — h.competition_id = ?   ($compId)
+//   2. pr_source_results     — h.competition_id != ?  ($compId)
+//   3. pr_source_results     — c.starts < ?           ($compStarts)
+//   4. pr_source_uitslag     — ua.competition_id != ? ($compId)
+//   5. pr_source_uitslag     — ua.competition_datum < ? ($compStarts)
+// Twee filters per bron: competition_id (sluit ZICHZELF hard uit, ook bij
+// meerdaagse events / DATE-vs-DATETIME cast-issues) en datum (sluit LATERE
+// wedstrijden uit, voor retro-PR-checks op oude wedstrijden). NULL-starts
+// (zou niet mogen voorkomen) → NULL-vergelijking is false → geen rijen →
+// alle rijders "geen historie" (veilige fail-state).
 $compStarts = $compMeta['starts'];
 $stmt = $pdo->prepare($sql);
-$stmt->execute([$compId, $compStarts, $compStarts]);
+$stmt->execute([$compId, $compId, $compStarts, $compId, $compStarts]);
 $rows = $stmt->fetchAll(PDO::FETCH_ASSOC);
 
 // Helpers
