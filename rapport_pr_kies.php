@@ -97,10 +97,11 @@ body{font-family:Arial,Helvetica,sans-serif;font-size:10pt;
   </div>
 
   <div class="toelichting">
-    <b>PR-bron</b>: alleen tijden uit <b>vastgelegde uitslagen</b> (eerdere wedstrijden
-    waar "Uitslag bevestigen" is gedaan). De huidige wedstrijd zelf hoeft niet
-    vastgelegd te zijn — de tijden komen uit de live-resultaten. Rijders zonder
-    eerdere PR krijgen "geen historie" in de rapportage.
+    <b>PR-bron</b>: de <b>snelste rondetijd</b> van elke rijder over <b>alle eerdere
+    wedstrijden</b> — uit zowel de heat-data (serie + KF + HF + finale) als
+    de vastgelegde uitslag-data (voor historie-imports). Finales zijn vaak tactisch
+    (langzamer dan de serie-tijd), dus pakken we letterlijk de allersnelste
+    rondetijd. Rijders zonder historie krijgen "geen historie" in het rapport.
   </div>
 
   <div class="opties">

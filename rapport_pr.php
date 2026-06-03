@@ -73,33 +73,74 @@ WITH current_results AS (
 best_per_rider AS (
     SELECT * FROM current_results WHERE rider_rn = 1
 ),
-pr_history AS (
+pr_source_results AS (
+    -- Bron 1: results-tabel. MIN over alle rondes per wedstrijd ipv alleen
+    -- de officiële uitslag-tijd uit uitslag_afstand. Reden: finale-tijd is
+    -- vaak tactisch (langzamer dan serie-PR). bruto_tijd_ms heeft voorrang
+    -- voor accuratesse. Exclusief huidige comp.
+    SELECT
+        he.person_license,
+        d.name                                   AS distance_naam,
+        COALESCE(res.bruto_tijd_ms, res.tijd_ms) AS tijd_ms,
+        c.name                                   AS comp_naam,
+        c.starts                                 AS comp_datum
+    FROM results res
+    JOIN heat_entries he  ON he.id = res.heat_entry_id
+    JOIN heats        h   ON h.id  = he.heat_id
+    JOIN distances    d   ON d.id  = h.distance_id
+                         AND d.distance_combination_id = h.distance_combination_id
+    JOIN competitions c   ON c.id  = h.competition_id
+    WHERE COALESCE(res.bruto_tijd_ms, res.tijd_ms) > 0
+      AND res.sanctie IS NULL
+      AND h.competition_id != ?
+),
+pr_source_uitslag AS (
+    -- Bron 2: uitslag_afstand. Voor historie-import-wedstrijden zonder
+    -- heat-data (PDF-imports). Tijd hier kan tactisch zijn maar 't is wat
+    -- we hebben. UNION-ALL combineert beide; MIN/ROW_NUMBER pakt de
+    -- werkelijk snelste over alle bronnen.
     SELECT
         ua.person_license,
-        CASE
-            WHEN LOWER(ua.distance_naam) LIKE '%marathon%' THEN 'marathon'
-            WHEN LOWER(ua.distance_naam) LIKE '%relay%' OR LOWER(ua.distance_naam) LIKE '%estafette%'
-                THEN LOWER(CONCAT(REGEXP_SUBSTR(ua.distance_naam, '[0-9]+'), 'm-relay'))
-            ELSE LOWER(CONCAT(REGEXP_SUBSTR(ua.distance_naam, '[0-9]+'), 'm'))
-        END                                      AS afstand_key,
-        ua.tijd_ms                               AS pr_ms,
-        ua.competition_naam                      AS pr_wedstrijd,
-        ua.competition_datum                     AS pr_datum,
-        ROW_NUMBER() OVER (
-            PARTITION BY ua.person_license,
-                CASE
-                    WHEN LOWER(ua.distance_naam) LIKE '%marathon%' THEN 'marathon'
-                    WHEN LOWER(ua.distance_naam) LIKE '%relay%' OR LOWER(ua.distance_naam) LIKE '%estafette%'
-                        THEN LOWER(CONCAT(REGEXP_SUBSTR(ua.distance_naam, '[0-9]+'), 'm-relay'))
-                    ELSE LOWER(CONCAT(REGEXP_SUBSTR(ua.distance_naam, '[0-9]+'), 'm'))
-                END
-            ORDER BY ua.tijd_ms ASC, ua.competition_datum ASC
-        )                                        AS pr_rn
+        ua.distance_naam,
+        ua.tijd_ms,
+        ua.competition_naam                      AS comp_naam,
+        ua.competition_datum                     AS comp_datum
     FROM uitslag_afstand ua
     WHERE ua.competition_id != ?
       AND ua.tijd_ms IS NOT NULL
       AND ua.tijd_ms > 0
       AND ua.sanctie IS NULL
+),
+pr_combined AS (
+    SELECT
+        person_license,
+        CASE
+            WHEN LOWER(distance_naam) LIKE '%marathon%' THEN 'marathon'
+            WHEN LOWER(distance_naam) LIKE '%relay%' OR LOWER(distance_naam) LIKE '%estafette%'
+                THEN LOWER(CONCAT(REGEXP_SUBSTR(distance_naam, '[0-9]+'), 'm-relay'))
+            ELSE LOWER(CONCAT(REGEXP_SUBSTR(distance_naam, '[0-9]+'), 'm'))
+        END                                      AS afstand_key,
+        tijd_ms,
+        comp_naam,
+        comp_datum
+    FROM (
+        SELECT * FROM pr_source_results
+        UNION ALL
+        SELECT * FROM pr_source_uitslag
+    ) x
+),
+pr_history AS (
+    SELECT
+        person_license,
+        afstand_key,
+        tijd_ms                                  AS pr_ms,
+        comp_naam                                AS pr_wedstrijd,
+        comp_datum                               AS pr_datum,
+        ROW_NUMBER() OVER (
+            PARTITION BY person_license, afstand_key
+            ORDER BY tijd_ms ASC, comp_datum ASC
+        )                                        AS pr_rn
+    FROM pr_combined
 ),
 pr_best AS (
     SELECT person_license, afstand_key, pr_ms, pr_wedstrijd, pr_datum
@@ -123,8 +164,10 @@ SELECT * FROM ranked
 ORDER BY afstand_meters ASC, kat ASC, rn ASC
 ";
 
+// Drie placeholders nu: current_results + pr_source_results + pr_source_uitslag
+// (alle drie excluderen de huidige wedstrijd op verschillende manieren).
 $stmt = $pdo->prepare($sql);
-$stmt->execute([$compId, $compId]);
+$stmt->execute([$compId, $compId, $compId]);
 $rows = $stmt->fetchAll(PDO::FETCH_ASSOC);
 
 // Helpers
@@ -238,9 +281,13 @@ tr:nth-child(even) td{background:#f8fafc}
       vastgelegde uitslagen van eerdere wedstrijden.
   <?php endif; ?>
   <b>Δ-PR</b>: positief = langzamer dan PR, negatief + 🏆 = nieuwe PR.
-  "Geen historie" = rijder heeft nog geen vastgelegde tijd op deze afstand
-  in het systeem (eerste keer of vorige wedstrijden zijn niet vastgelegd via
-  "Uitslag bevestigen").
+  "Geen historie" = rijder heeft nog geen tijd op deze afstand in het systeem.
+  <br><br>
+  <b>PR-bron</b>: snelste rondetijd over <b>alle eerdere wedstrijden</b> — uit
+  <code>results</code> (heat-data: serie + KF + HF + finale) plus
+  <code>uitslag_afstand</code> (historie-import PDF-tijden). De serie-tijd is
+  vaak sneller dan de finale-tijd (finales zijn tactisch), dus we pakken
+  letterlijk de snelste rondetijd uit de hele historie.
 </div>
 
 <?php if (empty($groepen)): ?>
@@ -256,7 +303,7 @@ tr:nth-child(even) td{background:#f8fafc}
                 <th>Rijder</th>
                 <th>Ronde / heat<small>waar geklokt</small></th>
                 <th style="text-align:right">Tijd<small>in deze wedstrijd</small></th>
-                <th style="text-align:right">PR-tijd<small>snelste ooit<br>(vastgelegd)</small></th>
+                <th style="text-align:right">PR-tijd<small>snelste rondetijd<br>over alle eerdere<br>wedstrijden</small></th>
                 <th>PR-bron<small>wedstrijd · datum</small></th>
                 <th style="text-align:right">Δ-PR<small>+ = langzamer<br>− = nieuwe PR 🏆</small></th>
             </tr>
@@ -306,7 +353,7 @@ tr:nth-child(even) td{background:#f8fafc}
 
 <div class="pr-footer">
     InlineComp · gegenereerd <?= date('j-m-Y H:i') ?> ·
-    PR-bron: uitslag_afstand (alleen vastgelegde wedstrijden)
+    PR-bron: snelste rondetijd uit alle eerdere wedstrijden (results + uitslag_afstand)
 </div>
 
 </body>
