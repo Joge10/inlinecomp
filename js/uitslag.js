@@ -1756,10 +1756,14 @@ async function _bouwUitslagAfstandInternal(optData) {
             // verschijnt in de Sanctie-kolom; lijst onderaan de uitslag-tabel.
             let fnSup = '';
             if (r.bruto_tijd_ms != null && r.bruto_tijd_ms !== r.tijd_ms) {
-                const icon = r.is_photofinish ? '\u{1F4F7}' : '\u270b';
+                // == 1 (niet truthy): PDO kan is_photofinish als string "0"/"1"
+                // sturen \u2014 "0" is truthy in JS, dus zonder strikte check zou
+                // RR-tijden ook \ud83d\udcf7 krijgen ipv \u270b (alleen swap is photofinish).
+                const isPF = r.is_photofinish == 1;
+                const icon = isPF ? '\u{1F4F7}' : '\u270b';
                 fnItems.push({
                     icon,
-                    isPhotofinish: !!r.is_photofinish,
+                    isPhotofinish: isPF,
                     naam:      r.full_name ?? '',
                     bruto:     msTijd(r.bruto_tijd_ms),
                     officieel: r.tijd_ms != null ? msTijd(r.tijd_ms) : '\u2014',
@@ -1964,10 +1968,14 @@ async function _bouwUitslagAfstandInternal(optData) {
             // Bruto-tijd-indicator + footnote (identiek aan internationaal-pad).
             let fnSup = '';
             if (r.bruto_tijd_ms != null && r.bruto_tijd_ms !== r.tijd_ms) {
-                const icon = r.is_photofinish ? '\u{1F4F7}' : '\u270b';
+                // == 1 (niet truthy): PDO kan is_photofinish als string "0"/"1"
+                // sturen \u2014 "0" is truthy in JS, dus zonder strikte check zou
+                // RR-tijden ook \ud83d\udcf7 krijgen ipv \u270b (alleen swap is photofinish).
+                const isPF = r.is_photofinish == 1;
+                const icon = isPF ? '\u{1F4F7}' : '\u270b';
                 fnItems.push({
                     icon,
-                    isPhotofinish: !!r.is_photofinish,
+                    isPhotofinish: isPF,
                     naam:      r.full_name ?? '',
                     bruto:     msTijd(r.bruto_tijd_ms),
                     officieel: r.tijd_ms != null ? msTijd(r.tijd_ms) : '\u2014',

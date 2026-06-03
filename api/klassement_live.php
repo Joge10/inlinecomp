@@ -367,12 +367,12 @@ try {
             SELECT DISTINCT he.person_license,
                    d.name AS afstand_naam,
                    CASE COALESCE(ts_r.ronde_type, CONCAT('ronde_', h.ronde))
-                       WHEN 'heats'        THEN 'Serie'
+                       WHEN 'heats'        THEN 'S'
                        WHEN 'kwartfinale'   THEN 'KF'
                        WHEN 'halve_finale'  THEN 'HF'
-                       WHEN 'runner_up'     THEN 'Runner-up'
-                       WHEN 'finale_a'      THEN 'Finale'
-                       WHEN 'finale_b'      THEN CONCAT('B', h.heat_nr, '-Finale')
+                       WHEN 'runner_up'     THEN 'RU'
+                       WHEN 'finale_a'      THEN 'A-F'
+                       WHEN 'finale_b'      THEN CONCAT('B', h.heat_nr, '-F')
                        ELSE CONCAT('R', h.ronde)
                    END AS ronde_label,
                    res.sanctie

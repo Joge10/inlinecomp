@@ -508,6 +508,13 @@ function berekenInternationaalResultaat(array $rondeData, string $raceSubType = 
             // DNS in eerste ronde = 0 punten (art. 144.4)
             $rondeNiv = $rondeNiveau[$rondeType] ?? 0;
             $isEersteRonde = ($eersteRonde[$lic] ?? 0) === $rondeNiv;
+            // Bruto-audit-velden: optioneel meegestuurd door upstream-query.
+            // Niet alle callers (klassement_live, uitslag_vastleggen) selecteren
+            // ze nog; isset-guard houdt die paden achterwaarts-compatibel.
+            $brutoTijdMs = isset($r['bruto_tijd_ms']) && $r['bruto_tijd_ms'] !== null
+                ? (int)$r['bruto_tijd_ms'] : null;
+            $isPhotofinish = !empty($r['is_photofinish']) ? 1 : 0;
+
             if ($sanctie === 'DNS' && $isEersteRonde) {
                 $nietGerankt[] = [
                     'person_license' => $lic,
@@ -517,6 +524,8 @@ function berekenInternationaalResultaat(array $rondeData, string $raceSubType = 
                     'categorie'      => $r['categorie'] ?? '',
                     'finishpositie'  => null,
                     'tijd_ms'        => null,
+                    'bruto_tijd_ms'  => $brutoTijdMs,
+                    'is_photofinish' => $isPhotofinish,
                     'sanctie'        => 'DNS',
                     'ronde_label'    => $rondeLabel,
                     'rang'           => null,
@@ -536,6 +545,8 @@ function berekenInternationaalResultaat(array $rondeData, string $raceSubType = 
                     'categorie'      => $r['categorie'] ?? '',
                     'finishpositie'  => null,
                     'tijd_ms'        => null,
+                    'bruto_tijd_ms'  => $brutoTijdMs,
+                    'is_photofinish' => $isPhotofinish,
                     'sanctie'        => $sanctie,
                     'ronde_label'    => $rondeLabel,
                     'rang'           => null,
@@ -555,6 +566,8 @@ function berekenInternationaalResultaat(array $rondeData, string $raceSubType = 
                 'categorie'      => $r['categorie'] ?? '',
                 'finishpositie'  => $r['finishpositie'] !== null ? (int)$r['finishpositie'] : null,
                 'tijd_ms'        => $r['tijd_ms'] !== null ? (int)$r['tijd_ms'] : null,
+                'bruto_tijd_ms'  => $brutoTijdMs,
+                'is_photofinish' => $isPhotofinish,
                 'sanctie'        => $sanctie,
                 'ronde_label'    => $rondeLabel,
                 '_ranked_last'   => $isRankedLast,

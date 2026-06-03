@@ -579,6 +579,8 @@ if ($action === 'lookup') {
         }
 
         // Heats + alle rijders per heat
+        // bruto_tijd_ms + is_photofinish meesturen zodat "Jouw resultaat" een
+        // gemeten/officieel-paar kan tonen wanneer jury de tijd gewijzigd heeft.
         $heatStmt = $pdo->prepare("
             SELECT DISTINCT h.id AS heat_id, h.heat_naam, h.ronde,
                    h.distance_combination_id, COALESCE(h.distance_id, tsr.distance_id) AS distance_id,
@@ -588,7 +590,8 @@ if ($action === 'lookup') {
                             ELSE 'heats' END
                    ) AS ronde_type,
                    tsr.rit_naam,
-                   res.finishpositie, res.tijd_ms, res.sanctie,
+                   res.finishpositie, res.tijd_ms,
+                   res.bruto_tijd_ms, res.is_photofinish, res.sanctie,
                    res.rondes, res.punten AS pk_punten,
                    tsr.volgorde AS rit_volgorde
             FROM heat_entries he
@@ -609,7 +612,8 @@ if ($action === 'lookup') {
                    COALESCE(cs.startnummer, p.start_number) AS snr,
                    p.license_key,
                    p.full_name, p.category,
-                   res.finishpositie, res.tijd_ms, res.sanctie,
+                   res.finishpositie, res.tijd_ms,
+                   res.bruto_tijd_ms, res.is_photofinish, res.sanctie,
                    res.rondes, res.punten AS pk_punten,
                    ua.rang AS uitslag_rang
             FROM heat_entries he
@@ -1555,6 +1559,8 @@ select:focus, input:focus { border-color: var(--middenblauw); outline: none; }
 .heat-card-tabel .col-snr { width: 40px; font-weight: 600; color: var(--blauw); }
 .heat-card-tabel .col-naam { }
 .heat-card-tabel .col-tijd { font-family: monospace; color: #555; text-align: right; }
+/* Audit-icoon links van de tijd; tijd zelf blijft rechts-uitgelijnd */
+.heat-card-tabel .col-tijd-audit { float: left; font-family: sans-serif; opacity: .85; cursor: help; }
 /* Fin-kolom: header normale kleur (label), data-cijfers ROOD + bold zodat
  * de finishpositie meteen opvalt. Stond vroeger helemaal rechts, viel weg. */
 .heat-card-tabel .col-fin    { text-align: center; width: 32px; }
@@ -1635,7 +1641,9 @@ select:focus, input:focus { border-color: var(--middenblauw); outline: none; }
     .heat-card-tabel .col-rnd  { width: 26px; padding-left: 2px; padding-right: 2px; }
     .heat-card-tabel .col-pk   { width: 26px; padding-left: 2px; padding-right: 2px; }
     .heat-card-tabel .col-fin  { width: 26px; padding-left: 4px; padding-right: 2px; }
-    .heat-card-tabel .col-tijd { font-size: .66rem; width: 70px; padding-left: 4px; padding-right: 4px; }
+    /* Iets ruimer (was 70px) zodat audit-icoon ✋/📷 + tijd op één regel passen
+       op smalle telefoons. Voorkomt dat 1:00.000 onder het icoon springt. */
+    .heat-card-tabel .col-tijd { font-size: .66rem; width: 88px; padding-left: 4px; padding-right: 4px; white-space: nowrap; }
 }
 .heat-card-tabel .col-sanctie { color: #c00; font-weight: 600; font-size: .85rem; }
 .heat-card-mijn-result {
@@ -1932,7 +1940,9 @@ const T = {
         prog_blok_min: 'min',
         // ── Heats ──
         heat_wachten_vorige: 'Wachten op vorige ronde',
-        heat_jouw_resultaat: 'Jouw resultaat:',
+        heat_jouw_resultaat: 'Jij:',
+        heat_bruto_gemeten: 'gemeten',
+        heat_bruto_officieel: 'officieel',
         // ── Heat tabel headers ──
         col_pos: '#',
         col_snr: 'Snr',
@@ -2114,7 +2124,9 @@ const T = {
         prog_blok_min: 'min',
         // ── Heats ──
         heat_wachten_vorige: 'Waiting for previous round',
-        heat_jouw_resultaat: 'Your result:',
+        heat_jouw_resultaat: 'You:',
+        heat_bruto_gemeten: 'measured',
+        heat_bruto_officieel: 'official',
         // ── Heat tabel headers ──
         col_pos: '#',
         col_snr: 'Nr',
@@ -2296,7 +2308,9 @@ const T = {
         prog_blok_min: 'Min.',
         // ── Heats ──
         heat_wachten_vorige: 'Warte auf vorherige Runde',
-        heat_jouw_resultaat: 'Dein Ergebnis:',
+        heat_jouw_resultaat: 'Du:',
+        heat_bruto_gemeten: 'gemessen',
+        heat_bruto_officieel: 'offiziell',
         // ── Heat tabel headers ──
         col_pos: '#',
         col_snr: 'Nr.',
@@ -2478,7 +2492,9 @@ const T = {
         prog_blok_min: 'min',
         // ── Heats ──
         heat_wachten_vorige: 'En attente du tour précédent',
-        heat_jouw_resultaat: 'Ton résultat :',
+        heat_jouw_resultaat: 'Toi :',
+        heat_bruto_gemeten: 'mesuré',
+        heat_bruto_officieel: 'officiel',
         // ── Heat tabel headers ──
         col_pos: '#',
         col_snr: 'Nº',
@@ -2804,6 +2820,19 @@ function heatTabelRij(r, isIk, extra) {
     // is er de Uitslag-tab.
     const rFin = r.finishpositie != null ? r.finishpositie : '';
     const rSanctie = sl(r.sanctie);
+    // Bruto-audit-icoon (📷 fotofinish-wisseling, ✋ handmatige correctie):
+    // toon vóór de tijd zodat de cijfers rechts-uitgelijnd blijven staan.
+    // Tooltip bevat de gemeten tijd zodat coach/publiek 'm kan opvragen
+    // zonder dat de tabel breder wordt.
+    const heeftAudit = r.bruto_tijd_ms != null
+                    && r.tijd_ms      != null
+                    && r.bruto_tijd_ms !== r.tijd_ms;
+    // == 1 noodzakelijk: PDO levert is_photofinish soms als string "0"/"1",
+    // en "0" is truthy in JS → ternary zou altijd 📷 kiezen voor handmatige
+    // RR-tijden. Loose-equality werkt cross-type ("1"==1 ✓, "0"==1 ✗).
+    const auditIcon = heeftAudit
+        ? `<span class="col-tijd-audit" title="${esc(t('heat_bruto_gemeten'))} ${esc(msTijd(r.bruto_tijd_ms))}">${r.is_photofinish == 1 ? '📷' : '✋'}</span>`
+        : '';
     return `<tr class="${isIk ? 'rij-ik' : ''}">
         <td class="col-pos">${r.startpositie}</td>
         <td class="col-snr">${esc(r.snr)}</td>
@@ -2811,7 +2840,7 @@ function heatTabelRij(r, isIk, extra) {
         <td class="col-naam">${esc(r.full_name)}${rSanctie ? ` <span class="col-sanctie">${esc(rSanctie)}</span>` : ''}</td>`
         + (extra.heeftRnd ? `<td class="col-rnd">${r.rondes ?? ''}</td>` : '')
         + (extra.heeftPK  ? `<td class="col-pk">${r.pk_punten != null ? parseFloat(r.pk_punten) : ''}</td>` : '')
-        + `<td class="col-tijd">${esc(rTijd)}</td>
+        + `<td class="col-tijd">${auditIcon}${esc(rTijd)}</td>
     </tr>`;
 }
 function msTijd(ms) {
@@ -3584,6 +3613,17 @@ function renderResultaat(data, snr, prog) {
                     const mijnTijd = h.tijd_ms != null ? msTijd(h.tijd_ms) : '';
                     const mijnPos = h.finishpositie != null ? '#' + h.finishpositie : '';
                     const mijnSanctie = sl(h.sanctie);
+                    // Audit-spoor: bruto verschilt van officieel → toon
+                    // beide (gemeten + officieel) met 📷 (fotofinish-
+                    // wisseling) of ✋ (handmatige correctie door jury).
+                    const heeftBrutoAudit = h.bruto_tijd_ms != null
+                                         && h.tijd_ms != null
+                                         && h.bruto_tijd_ms !== h.tijd_ms;
+                    // == 1 (niet truthy-check): PDO/JSON kan is_photofinish als
+                    // string "0"/"1" sturen — in JS is "0" truthy, dus de oude
+                    // r.is_photofinish ? ... gaf altijd 📷 ipv ✋ voor RR-tijden.
+                    const brutoIcon  = h.is_photofinish == 1 ? '📷' : '✋';
+                    const brutoTijd  = heeftBrutoAudit ? msTijd(h.bruto_tijd_ms) : '';
 
                     const extra = heatExtraKolommen(h.rijders ?? [], rt);
                     const rijders = h.rijders ?? [];
@@ -3611,9 +3651,14 @@ function renderResultaat(data, snr, prog) {
 
                     html += '</tbody></table>';
                     if (mijnTijd || mijnPos || mijnSanctie) {
+                        // Format tijd-deel: bij audit-mismatch compact "✋ bruto → officieel",
+                        // anders gewoon de officiële tijd. Pijl past op één regel.
+                        const tijdHtml = heeftBrutoAudit
+                            ? `${brutoIcon} ${esc(brutoTijd)} → ${esc(mijnTijd)}`
+                            : (mijnTijd ? esc(mijnTijd) : '');
                         html += `<div class="heat-card-mijn-result">
                             <span>${esc(t('heat_jouw_resultaat'))}</span>
-                            <span>${mijnTijd ? esc(mijnTijd) : ''} ${mijnPos ? esc(mijnPos) : ''} ${mijnSanctie ? `<span class="heat-sanctie">${esc(mijnSanctie)}</span>` : ''}</span>
+                            <span>${tijdHtml} ${mijnPos ? esc(mijnPos) : ''} ${mijnSanctie ? `<span class="heat-sanctie">${esc(mijnSanctie)}</span>` : ''}</span>
                         </div>`;
                     }
                     html += '</div>';

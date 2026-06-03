@@ -446,10 +446,13 @@ try {
             $snMap[$row['person_license']] = $row['startnummer'];
         }
 
-        // Rijders per heat laden
+        // Rijders per heat laden — bruto_tijd_ms + is_photofinish meenemen
+        // zodat berekenInternationaalResultaat() ze kan propageren naar de
+        // resultaat-output (basis voor de jury-aanpassings-footnote in print).
         $rijderStmt = $pdo->prepare("
             SELECT he.person_license, p.full_name, p.short_name, p.start_number,
-                   p.category AS categorie, res.finishpositie, res.tijd_ms, res.sanctie,
+                   p.category AS categorie, res.finishpositie, res.tijd_ms,
+                   res.bruto_tijd_ms, res.is_photofinish, res.sanctie,
                    res.rondes, res.punten AS pk_punten, res.afval_rang
             FROM heat_entries he
             JOIN persons p ON p.license_key = he.person_license
@@ -537,12 +540,12 @@ try {
             $sanctieStmt = $pdo->prepare("
                 SELECT DISTINCT he.person_license,
                        CASE COALESCE(ts_r.ronde_type, CONCAT('ronde_', h.ronde))
-                           WHEN 'heats'        THEN 'Serie'
+                           WHEN 'heats'        THEN 'S'
                            WHEN 'kwartfinale'   THEN 'KF'
                            WHEN 'halve_finale'  THEN 'HF'
-                           WHEN 'runner_up'     THEN 'Runner-up'
-                           WHEN 'finale_a'      THEN 'Finale'
-                           WHEN 'finale_b'      THEN CONCAT('B', h.heat_nr, '-Finale')
+                           WHEN 'runner_up'     THEN 'RU'
+                           WHEN 'finale_a'      THEN 'A-F'
+                           WHEN 'finale_b'      THEN CONCAT('B', h.heat_nr, '-F')
                            ELSE CONCAT('R', h.ronde)
                        END AS ronde_label,
                        res.sanctie
@@ -911,12 +914,12 @@ try {
             $sanctieStmt = $pdo->prepare("
                 SELECT DISTINCT he.person_license,
                        CASE COALESCE(ts_r.ronde_type, CONCAT('ronde_', h.ronde))
-                           WHEN 'heats'        THEN 'Serie'
+                           WHEN 'heats'        THEN 'S'
                            WHEN 'kwartfinale'   THEN 'KF'
                            WHEN 'halve_finale'  THEN 'HF'
-                           WHEN 'runner_up'     THEN 'Runner-up'
-                           WHEN 'finale_a'      THEN 'Finale'
-                           WHEN 'finale_b'      THEN CONCAT('B', h.heat_nr, '-Finale')
+                           WHEN 'runner_up'     THEN 'RU'
+                           WHEN 'finale_a'      THEN 'A-F'
+                           WHEN 'finale_b'      THEN CONCAT('B', h.heat_nr, '-F')
                            ELSE CONCAT('R', h.ronde)
                        END AS ronde_label,
                        res.sanctie

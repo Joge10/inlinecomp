@@ -1162,7 +1162,8 @@ if ($action === 'rit_detail') {
             SELECT he.startpositie,
                    COALESCE(cs.startnummer, p.start_number) AS snr,
                    p.license_key, p.full_name, p.category, p.club_full, p.sponsor,
-                   res.finishpositie, res.tijd_ms, res.sanctie,
+                   res.finishpositie, res.tijd_ms,
+                   res.bruto_tijd_ms, res.is_photofinish, res.sanctie,
                    res.rondes, res.punten AS pk_punten
             FROM heat_entries he
             JOIN persons p ON p.license_key = he.person_license
@@ -1661,7 +1662,10 @@ table.uitsl-tabel td { padding:6px 4px; border-bottom:1px solid #eee; }
 table.uitsl-tabel tr.mijn td { background:var(--accent); font-weight:600; }
 .col-rang { width:32px; text-align:center; font-weight:700; }
 .col-rnd, .col-pk { width:40px; text-align:right; }
-.col-tijd { width:80px; text-align:right; font-variant-numeric:tabular-nums; }
+.col-tijd { width:96px; text-align:right; font-variant-numeric:tabular-nums; white-space:nowrap; }
+/* Audit-icoon ✋/📷 links van de tijd; cijfers blijven rechts-uitgelijnd.
+   nowrap voorkomt dat icoon + tijd op aparte regels eindigen op smal scherm. */
+.col-tijd-audit { float:left; font-family:sans-serif; opacity:.85; cursor:help; }
 .col-punten { width:44px; text-align:right; }
 .col-totaal { width:50px; text-align:right; font-weight:700; color:var(--blauw); }
 .col-sanctie { color:#b71c1c; font-weight:700; font-size:.8em; }
@@ -2104,6 +2108,7 @@ const T = {
         col_fin: 'Fin',
         col_rang: '#',
         col_tot: 'Tot',
+        heat_bruto_gemeten: 'gemeten',
         // ── Bevestig-modal ──
         bev_titel: 'Bevestigen',
         bev_ok: 'OK',
@@ -2331,6 +2336,7 @@ const T = {
         col_rnd: 'Lap',
         col_pnt: 'Pts',
         col_tijd: 'Time',
+        heat_bruto_gemeten: 'measured',
         col_fin: 'Fin',
         col_rang: '#',
         col_tot: 'Tot',
@@ -2561,6 +2567,7 @@ const T = {
         col_rnd: 'Rd',
         col_pnt: 'Pkt',
         col_tijd: 'Zeit',
+        heat_bruto_gemeten: 'gemessen',
         col_fin: 'Fin',
         col_rang: '#',
         col_tot: 'Ges',
@@ -2791,6 +2798,7 @@ const T = {
         col_rnd: 'T',
         col_pnt: 'Pts',
         col_tijd: 'Temps',
+        heat_bruto_gemeten: 'mesuré',
         col_fin: 'Fin',
         col_rang: '#',
         col_tot: 'Tot',
@@ -3821,6 +3829,17 @@ async function toonRitDetail(el) {
                 ? mijnLics.has(r.license_key)
                 : mijnSnrs.has(parseInt(r.snr));
             const sanctie = r.sanctie ? ` <span style="color:#c00;font-weight:600;font-size:.85rem">${esc(r.sanctie)}</span>` : '';
+            // Bruto-audit-icoon vóór de tijd (📷 fotofinish / ✋ handmatig).
+            // Tooltip toont de gemeten transponder-tijd; tabel-uitlijning blijft.
+            const heeftAudit = r.bruto_tijd_ms != null
+                            && r.tijd_ms      != null
+                            && r.bruto_tijd_ms !== r.tijd_ms;
+            // == 1: PDO levert is_photofinish soms als string "0"/"1", en
+            // "0" is truthy in JS → ternary zou altijd 📷 kiezen voor
+            // handmatige RR-tijden. Loose-equality werkt cross-type.
+            const auditIcon = heeftAudit
+                ? `<span class="col-tijd-audit" title="${esc(t('heat_bruto_gemeten'))} ${esc(msTijd(r.bruto_tijd_ms))}">${r.is_photofinish == 1 ? '📷' : '✋'}</span>`
+                : '';
             return `<tr class="${isMij ? 'mijn' : ''}">
                 <td class="col-pos">${esc(r.startpositie)}</td>
                 <td class="col-snr">${esc(r.snr)}</td>
@@ -3828,7 +3847,7 @@ async function toonRitDetail(el) {
                 <td>${esc(r.full_name)}${sanctie}</td>
                 ${heeftRnd ? `<td class="col-rnd">${r.rondes ?? ''}</td>` : ''}
                 ${heeftPK  ? `<td class="col-pk">${r.pk_punten != null ? parseFloat(r.pk_punten) : ''}</td>` : ''}
-                <td class="col-tijd">${r.tijd_ms != null ? msTijd(r.tijd_ms) : ''}</td>
+                <td class="col-tijd">${auditIcon}${r.tijd_ms != null ? msTijd(r.tijd_ms) : ''}</td>
             </tr>`;
         }).join('');
         // Fin-kolom direct na Snr (was helemaal rechts, viel weg in oog).
