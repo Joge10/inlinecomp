@@ -122,6 +122,9 @@ header {
 .pc-lang {
     display: inline-flex; align-items: center; gap: .5rem;
     font-size: .85rem; user-select: none;
+    /* margin-left:auto duwt de toggle naar rechts naast de knoppen.
+       Boom-saver blijft links, taal + knoppen vormen samen het rechter-cluster. */
+    margin-left: auto;
 }
 .pc-lang label {
     display: inline-flex; align-items: center; gap: .25rem;

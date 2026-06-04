@@ -2976,6 +2976,12 @@ function _bouwProgrammaExternInternal() {
     const comp   = huidigComp;
     if (!schema) return null;
 
+    // i18n-helper: leest live de actieve Print-Center taal (NL/EN).
+    // Fallback: identity-functie zodat builder ook losstaand werkt (tests).
+    const T    = window._pcT    || (k => k);
+    const LANG = (window._pcLang && window._pcLang()) || 'nl';
+    const LOC  = LANG === 'en' ? 'en-GB' : 'nl-NL';
+
     const ritten  = schema.ritten  ?? [];
     const blokken = schema.blokken ?? [];
 
@@ -3111,14 +3117,14 @@ function _bouwProgrammaExternInternal() {
     const volgendeRonde = (rondeType, cc) => {
         if (!cc) return '';
         if (rondeType === 'heats') {
-            if (cc.heeft_kwartfinale)  return 'Kwartfinale';
-            if (cc.heeft_halve_finale) return 'Halve finale';
-            return 'Finale';
+            if (cc.heeft_kwartfinale)  return T('algemeen.kwart_finale');
+            if (cc.heeft_halve_finale) return T('algemeen.halve_finale');
+            return T('algemeen.finale');
         }
         if (rondeType === 'kwartfinale') {
-            return cc.heeft_halve_finale ? 'Halve finale' : 'Finale';
+            return cc.heeft_halve_finale ? T('algemeen.halve_finale') : T('algemeen.finale');
         }
-        if (rondeType === 'halve_finale') return 'Finale';
+        if (rondeType === 'halve_finale') return T('algemeen.finale');
         return '';
     };
 
@@ -3145,30 +3151,36 @@ function _bouwProgrammaExternInternal() {
                     const aq   = Math.max(0, aFin - aQ);
                     const bH   = parseInt(cc.finale_b_heats) || 0;
                     const restNaarB = (totRj || 0) > aFin && bH > 0;
+                    const aFinaleLabel = T('algemeen.a_finale');
                     const finaleDeel = (Qph > 0)
-                        ? `A-finale (${aQ}Q + ${aq}q)`
-                        : `A-finale (${aFin})`;
-                    const bDeel = restNaarB ? ` + B-finale${bH > 1 ? 's' : ''}` : '';
+                        ? T('prog_extern.ff_a_finale_q', { a_finale: aFinaleLabel, aQ, aq })
+                        : T('prog_extern.ff_a_finale_n', { a_finale: aFinaleLabel, aFin });
+                    const bDeel = restNaarB
+                        ? T(bH > 1 ? 'prog_extern.b_finales_suffix' : 'prog_extern.b_finale_suffix',
+                            { b_finale: T('algemeen.b_finale') })
+                        : '';
                     return (Qph > 0)
-                        ? `${Qph}Q/heat + ${Math.max(0, aFin - totQ)}q${QM} → ${finaleDeel}${bDeel}`
-                        : `top ${aFin} op tijd → ${finaleDeel}${bDeel}`;
+                        ? T('prog_extern.ff_q_naar_a', {
+                              Qph, extra: Math.max(0, aFin - totQ),
+                              m: QM, finaleDeel, bDeel })
+                        : T('prog_extern.ff_tijd_naar_a', { aFin, finaleDeel, bDeel });
                 }
                 const q = parseInt(cc.heats_q) || 0;
-                return `top ${q} op tijd${naar}`;
+                return T('prog_extern.top_n_op_tijd', { n: q }) + naar;
             }
             case 'kwartfinale': {
                 const kD = parseInt(cc.kwart_door)   || 0;
                 const kQ = parseInt(cc.kwart_q_heat) || 0;
                 const kq = Math.max(0, kD - kQ * nHeats);
                 const m  = (kQ >= 1) ? QM : '';
-                return `${kQ}Q/heat + ${kq}q${m} → ${kD} rijders${naar}`;
+                return T('prog_extern.qheat_q_door', { Q: kQ, q: kq, m, d: kD }) + naar;
             }
             case 'halve_finale': {
                 const hD = parseInt(cc.half_door)    || 0;
                 const hQ = parseInt(cc.half_q_heat)  || 0;
                 const hq = Math.max(0, hD - hQ * nHeats);
                 const m  = (hQ >= 1) ? QM : '';
-                return `${hQ}Q/heat + ${hq}q${m} → ${hD} rijders${naar}`;
+                return T('prog_extern.qheat_q_door', { Q: hQ, q: hq, m, d: hD }) + naar;
             }
             default: return '';
         }
@@ -3187,16 +3199,26 @@ function _bouwProgrammaExternInternal() {
     // Helper: flush een verzamelde sectie (ritten van één ronde-blok) naar HTML
     const flushSectie = (sectieRitten, blok) => {
         if (!sectieRitten.length || !blok) return;
-        const rondeLabel = blok.ronde_type === 'heats' ? 'Series'
-                         : (TS_RONDE_LABEL[blok.ronde_type] ?? blok.ronde_type);
+        // i18n: rondelabel-mapping (Series/Kwart/Halve/Finale/A-F/B-F/RU)
+        const _rondeLabelMap = {
+            heats:        T('algemeen.serie'),
+            kwartfinale:  T('algemeen.kwart_finale'),
+            halve_finale: T('algemeen.halve_finale'),
+            runner_up:    T('algemeen.runner_up'),
+            finale:       T('algemeen.finale'),
+            finale_a:     T('algemeen.a_finale'),
+            finale_b:     T('algemeen.b_finale'),
+        };
+        const rondeLabel = _rondeLabelMap[blok.ronde_type] ?? blok.ronde_type;
         const eersteTijd = stMap.get(sectieRitten[0].id) ?? '';
         const nHeats     = sectieRitten.length;
         const hd         = parseInt(blok.heat_duur) || 0;   // seconden
         const hdTxt      = hd ? secNaarMmSs(hd) : '';
         const totaalMin  = hd ? Math.round(nHeats * hd / 60) : 0;
+        const heatsWoord = T(nHeats > 1 ? 'algemeen.heats_n' : 'algemeen.heat_n', { n: nHeats });
         const duurInfo   = hd
-            ? `${nHeats} heat${nHeats > 1 ? 's' : ''} × ${hdTxt} ≈ ${totaalMin} min`
-            : `${nHeats} heat${nHeats > 1 ? 's' : ''}`;
+            ? T('prog_extern.heats_x_dur', { heats: heatsWoord, dur: hdTxt, tot: totaalMin })
+            : heatsWoord;
 
         // Groepeer per categorie (dc_id + distance_id), volgorde bewaren
         const catMap = new Map();
@@ -3221,10 +3243,14 @@ function _bouwProgrammaExternInternal() {
                     const fl = r.finale_label ?? (r.ronde_type === 'finale_a' ? 'A' : '?');
                     seen.set(fl, (seen.get(fl) ?? 0) + (parseInt(r.verwacht) || 0));
                 });
-                detail = [...seen].map(([lbl, n]) => `${esc(lbl)}-finale (${n} rijders)`).join(' · ');
+                detail = [...seen].map(([lbl, n]) =>
+                    T('prog_extern.finale_label_n', { lbl: esc(lbl), finale: T('algemeen.finale'), n })
+                ).join(' · ');
             } else {
                 const dt = doorTxt(blok.ronde_type, cc, nH, totRj);
-                detail = `${totRj} rijders, ${nH} heat${nH > 1 ? 's' : ''}${dt ? ' · ' + esc(dt) : ''}`;
+                const heatsStr = T(nH > 1 ? 'algemeen.heats_n' : 'algemeen.heat_n', { n: nH });
+                const rijdersStr = T('algemeen.rijders_n', { n: totRj });
+                detail = `${rijdersStr}, ${heatsStr}${dt ? ' · ' + esc(dt) : ''}`;
             }
             let inner = `<div class="cat-rij">
                 <span class="cat-tijd">${esc(catTijd)}</span>
@@ -3270,7 +3296,7 @@ function _bouwProgrammaExternInternal() {
                 const binnen = catList.slice(i, j).map(renderCatRij).join('');
                 const aantal = j - i;
                 catHtml += `<div class="combi-box">
-                    <div class="combi-box-kop">🔗 Gecombineerde rit — ${aantal} categorieën rijden samen</div>
+                    <div class="combi-box-kop">${esc(T('prog_extern.combi_kop', { n: aantal }))}</div>
                     ${binnen}
                 </div>`;
                 i = j;
@@ -3306,7 +3332,7 @@ function _bouwProgrammaExternInternal() {
                     // over pagina-einde, blijft dicht bij de ¹-markeringen.
                     // page-break-inside:avoid als vangnet voor wrap.
                     bloHtml += `<div class="qq-voetnoot" style="margin:4px 0 12px 18px;padding:4px 8px;font-size:9pt;color:#555;page-break-inside:avoid;break-inside:avoid">
-  <b>¹</b> <b>Q</b> = directe kwalificatie via heat-positie · <b>q</b> = aanvulling op tijd (snelste tijden over alle heats)
+  ${T('prog_extern.qq_voetnoot')}
 </div>`;
                     _qqLegendaGetoond = true;
                 }
@@ -3336,7 +3362,7 @@ function _bouwProgrammaExternInternal() {
                 huidigeSectie = [];
                 const _dl = _dagInfoExt.dagLabels.find(d => d.nr === _dagNrRij);
                 const _pbCls = _laatstGerenderdeDagExt > 0 ? ' prog-dag-pagebreak' : '';
-                bloHtml += `<h2 class="prog-dag-header${_pbCls}">${esc(_dl?.label ?? `Dag ${_dagNrRij}`)}</h2>`;
+                bloHtml += `<h2 class="prog-dag-header${_pbCls}">${esc(_dl?.label ?? T('algemeen.dag_n', { nr: _dagNrRij }))}</h2>`;
                 _laatstGerenderdeDagExt = _dagNrRij;
             }
         }
@@ -3364,38 +3390,38 @@ function _bouwProgrammaExternInternal() {
                 bloHtml += `<div class="blok wsstart">
                     <div class="blok-kop">
                         <span class="blok-tijd">${esc(bTijd || ts)}</span>
-                        <span class="blok-titel">🏁 WEDSTRIJD START</span>
+                        <span class="blok-titel">${T('prog_extern.wsstart')}</span>
                     </div></div>`;
 
             } else if (rij.type === 'pauze') {
-                const duur = blok.duur ? `${blok.duur} min` : '';
+                const duur = blok.duur ? T('algemeen.min_unit', { n: blok.duur }) : '';
                 const opm  = blok.opmerking ? ` — ${esc(blok.opmerking)}` : '';
                 bloHtml += `<div class="blok pauze">
                     <div class="blok-kop">
                         <span class="blok-tijd">${esc(bTijd)}</span>
-                        <span class="blok-titel">⏸ Pauze${opm}</span>
+                        <span class="blok-titel">⏸ ${esc(T('algemeen.pauze'))}${opm}</span>
                         ${duur ? `<span class="blok-info">${esc(duur)}</span>` : ''}
                     </div></div>`;
 
             } else if (rij.type === 'inrijden') {
-                const duur    = blok.duur ? `${blok.duur} min` : '';
+                const duur    = blok.duur ? T('algemeen.min_unit', { n: blok.duur }) : '';
                 const catIds  = (() => { try { return JSON.parse(blok.inrijd_cats || '[]'); } catch(e) { return []; } })();
                 const catNamen = catIds.map(id => esc(dcNaam.get(id) ?? id)).join(', ');
                 bloHtml += `<div class="blok inrijd">
                     <div class="blok-kop">
                         <span class="blok-tijd">${esc(bTijd)}</span>
-                        <span class="blok-titel">🛼 Inrijden</span>
+                        <span class="blok-titel">🛼 ${esc(T('algemeen.inrijden'))}</span>
                         ${duur ? `<span class="blok-info">${esc(duur)}</span>` : ''}
                     </div>
                     ${catNamen ? `<div class="blok-cats">${catNamen}</div>` : ''}
                 </div>`;
 
             } else if (rij.type === 'ceremonie') {
-                const duur = blok.duur ? `${blok.duur} min` : '';
+                const duur = blok.duur ? T('algemeen.min_unit', { n: blok.duur }) : '';
                 bloHtml += `<div class="blok cerem">
                     <div class="blok-kop">
                         <span class="blok-tijd">${esc(bTijd)}</span>
-                        <span class="blok-titel">🏆 Ceremonie</span>
+                        <span class="blok-titel">🏆 ${esc(T('algemeen.ceremonie'))}</span>
                         ${duur ? `<span class="blok-info">${esc(duur)}</span>` : ''}
                     </div></div>`;
 
@@ -3405,7 +3431,7 @@ function _bouwProgrammaExternInternal() {
                 bloHtml += `<div class="blok herstart">
                     <div class="blok-kop">
                         <span class="blok-tijd">${esc(bTijd || ts)}</span>
-                        <span class="blok-titel">🔄 HERSTART${opm}</span>
+                        <span class="blok-titel">${T('prog_extern.herstart')}${opm}</span>
                     </div></div>`;
             }
         }
@@ -3485,19 +3511,23 @@ body{font-family:Arial,Helvetica,sans-serif;font-size:10.5pt;margin:.6cm 1.2cm 1
   }
 }
 `;
+    const _genDatumStr = schema.gegenereerd_op
+        ? new Date(schema.gegenereerd_op.replace(' ','T')+'Z').toLocaleString(LOC,
+            { day:'2-digit', month:'long', year:'numeric', hour:'2-digit', minute:'2-digit' })
+        : '';
     const bodyHtml = `
 <div class="pagina-header">
   <div class="hdr-links">
-    <div class="hdr-comp">${esc(comp?.name ?? 'Wedstrijdprogramma')}</div>
+    <div class="hdr-comp">${esc(comp?.name ?? T('prog_extern.titel_default'))}</div>
     ${metaTxt ? `<div class="hdr-meta">${metaTxt}</div>` : ''}
-    ${schema.gegenereerd_op ? `<div class="hdr-versie">Programma gegenereerd op: ${esc(new Date(schema.gegenereerd_op.replace(' ','T')+'Z').toLocaleString('nl-NL',{day:'2-digit',month:'long',year:'numeric',hour:'2-digit',minute:'2-digit'}))}</div>` : ''}
+    ${_genDatumStr ? `<div class="hdr-versie">${esc(T('prog_extern.gegen_op_label', { datum: _genDatumStr }))}</div>` : ''}
   </div>
   ${baanLogoHtml ? `<div class="hdr-baan">${baanLogoHtml}</div>` : ''}
   <div class="hdr-rechts">${orgLogoHtml}</div>
 </div>
 <hr class="hdr-lijn">
 <div class="disclaimer">
-  ⚠ De vermelde starttijden zijn <strong>indicatieve richtijden</strong>. De werkelijke uitvoering kan afwijken van dit programma. Houd zelf het verloop van het programma in de gaten — je bent zelf verantwoordelijk voor het op tijd aan de start verschijnen.
+  ${T('prog_extern.disclaimer')}
 </div>
 ${bloHtml}
 ${footerHtml}
@@ -3508,8 +3538,8 @@ ${footerHtml}
         cssLinks:        [],
         extraCss:        extraCss,
         pageOrientation: 'portrait',
-        title:           'Wedstrijdprogramma' + (comp?.name ? ' — ' + comp.name : ''),
-        subType:         'Wedstrijdprogramma',
+        title:           T('prog_extern.titel_default') + (comp?.name ? ' — ' + comp.name : ''),
+        subType:         T('prog_extern.subtype'),
     };
 }
 
