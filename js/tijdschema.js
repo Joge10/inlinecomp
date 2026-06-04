@@ -1212,7 +1212,7 @@ function renderBlokken(schema, afstandGroepen) {
                 ><button class="btn-primary ts-btn-sm" id="ts-btn-genereer"
                     ${huidigTijdschema?.heeft_loting ? 'disabled' : ''}
                 >▶ Genereer programma</button></span>
-            <button class="btn-del ts-btn-sm" id="ts-btn-wis-programma" ${huidigTijdschema?.ritten?.length ? '' : 'disabled'} title="Verwijder gegenereerde ritten + startlijsten — blokken en instellingen blijven behouden zodat je opnieuw kunt loten">🗑 Wis programma</button>
+            <button class="btn-del ts-btn-sm" id="ts-btn-wis-programma" ${huidigTijdschema?.ritten?.length ? '' : 'disabled'} title="Verwijder ritten, blokken en cat-config — afstandinstellingen blijven behouden. Daarna Opslaan in Afstandinstellingen genereert de blokken opnieuw">🗑 Wis programma</button>
         </div>
     </div>`;
 
@@ -2478,10 +2478,13 @@ function bindTsEvents(afstandGroepen) {
 
     el('ts-btn-wis-programma')?.addEventListener('click', async () => {
         if (!await toonBevestigDialog(
-            'De gegenereerde ritten + startlijsten worden verwijderd.\n\n'
-            + 'Behouden blijven: blokken (wedstrijdstart/pauze/ceremonie),'
-            + ' afstandsinstellingen en categorie-configuratie.\n\n'
-            + 'Klik daarna op "Genereer programma" om opnieuw te loten.',
+            'Alles wordt verwijderd behalve de afstandsinstellingen:\n'
+            + '• Ritten + startlijsten\n'
+            + '• Blokken (wedstrijdstart/pauze/ceremonie/herstart)\n'
+            + '• Categorie-configuratie\n\n'
+            + 'Behouden blijft: per-afstand heat-aantallen + duur per ronde.\n\n'
+            + 'Klik daarna op Opslaan in Afstandinstellingen om de blokken '
+            + 'opnieuw te genereren.',
             'Programma wissen'
         )) return;
 
