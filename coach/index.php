@@ -1593,6 +1593,23 @@ select.sel {
 .badge-hf      { background:#5e35b1; }
 .badge-finale  { background:#d32f2f; }
 .badge-ru      { background:#00897b; }
+/* Multi-day filter-balk bovenaan (Alle / Dag 1 / Dag 2 / …) */
+.prog-dag-filter {
+    display: flex; flex-wrap: wrap; gap: 6px;
+    margin: 0 0 10px 0; padding: 6px 0;
+    position: sticky; top: 0; z-index: 5;
+    background: #fff;
+}
+.prog-dag-btn {
+    border: 1px solid #b3cae6; background: #fff; color: #1a3a5c;
+    padding: 6px 12px; border-radius: 16px; font-size: .82rem;
+    font-weight: 600; cursor: pointer; transition: background .12s;
+}
+.prog-dag-btn:hover { background: #eaf2fb; }
+.prog-dag-btn.actief {
+    background: #1a3a5c; color: #fff; border-color: #1a3a5c;
+}
+.verborgen { display: none !important; }
 /* Dag-header bij meerdaags evenement: prominente scheiding tussen dagen */
 .prog-dag-header {
     background: linear-gradient(to right, #1a3a5c, #2E75B6);
@@ -3310,13 +3327,15 @@ function renderProgramma() {
     }
 
     // Multi-day dag-header info: bij meerdere wedstrijdstart-blokken één
-    // header per dag vóór de wedstrijdstart-blok. wsDagInfo: blok-id (string)
-    // → {nr, datumLbl}.
+    // header per dag-cluster. Inrijden/pauze direct vóór een wedstrijdstart
+    // horen BIJ die nieuwe dag (warm-up), niet bij de vorige — twee passes:
+    //   1. FORWARD: wedstrijdstart-items zetten huidige dag; ritten erven die.
+    //   2. BACKWARD: niet-ronde blokken vóór een latere dag claimen die dag.
     const wsBlokken = (blokken || [])
         .filter(b => (b.blok_type || '').toLowerCase() === 'wedstrijdstart')
         .sort((a, b) => num(a.volgorde) - num(b.volgorde));
     const isMultiDag = wsBlokken.length > 1;
-    const wsDagInfo  = new Map();
+    const dagInfoPerNr = new Map();
     wsBlokken.forEach((ws, i) => {
         let datumLbl = '';
         if (ws.datum) {
@@ -3326,8 +3345,31 @@ function renderProgramma() {
                     {weekday:'long', day:'numeric', month:'long'});
             }
         }
-        wsDagInfo.set(String(ws.id), { nr: i + 1, datumLbl });
+        dagInfoPerNr.set(i + 1, { datumLbl });
     });
+    // Dag-per-item berekenen
+    const dagPerItem = new Array(allesGesorteerd.length);
+    let _huidigeDag = 0;
+    allesGesorteerd.forEach((it, idx) => {
+        if (it.type === 'blok'
+            && (it.data.blok_type || '').toLowerCase() === 'wedstrijdstart') {
+            const wsIdx = wsBlokken.findIndex(w => String(w.id) === String(it.data.id));
+            if (wsIdx >= 0) _huidigeDag = wsIdx + 1;
+        }
+        dagPerItem[idx] = _huidigeDag || 1;
+    });
+    let _komendeDag = null;
+    for (let idx = allesGesorteerd.length - 1; idx >= 0; idx--) {
+        const it = allesGesorteerd[idx];
+        const isWs = it.type === 'blok'
+            && (it.data.blok_type || '').toLowerCase() === 'wedstrijdstart';
+        if (it.type === 'rit' || isWs) {
+            _komendeDag = dagPerItem[idx];
+        } else if (it.type === 'blok' && _komendeDag
+                   && dagPerItem[idx] < _komendeDag) {
+            dagPerItem[idx] = _komendeDag;
+        }
+    }
 
     // Haal HH:MM uit "HH:MM:SS" (TIME) óf "YYYY-MM-DD HH:MM:SS" (DATETIME).
     const hhmm = v => {
@@ -3411,40 +3453,85 @@ function renderProgramma() {
     // Render items. Consecutieve ritten met dezelfde combi_group worden in
     // één kader gegroepeerd (gecombineerde rit — categorieën rijden tegelijk).
     let html = '';
+
+    // Filter-balk bovenaan bij multi-day: "Alle / Dag 1 / Dag 2 / …".
+    if (isMultiDag) {
+        html += `<div class="prog-dag-filter" id="prog-dag-filter" data-actieve-dag="alle">
+            <button class="prog-dag-btn actief" data-dag="alle"
+                    onclick="filterDag(this,'alle')">Alle</button>`;
+        for (let dn = 1; dn <= wsBlokken.length; dn++) {
+            const info = dagInfoPerNr.get(dn);
+            const korteDatum = info?.datumLbl
+                ? info.datumLbl.split(' ').slice(0, 2).join(' ')
+                : '';
+            html += `<button class="prog-dag-btn" data-dag="${dn}"
+                             onclick="filterDag(this,'${dn}')"
+                             title="${esc(info?.datumLbl || '')}">Dag ${dn}${korteDatum ? ' ('+esc(korteDatum)+')' : ''}</button>`;
+        }
+        html += `</div>`;
+    }
+
     let vorigeCombi = null; // combi_group van het vorige item (of null)
-    for (const item of allesGesorteerd) {
+    let vorigeDag   = null;
+    allesGesorteerd.forEach((item, idx) => {
+        const dag = dagPerItem[idx];
+        // Dag-header bij dag-wisseling (multi-day). Sluit combi-box eerst.
+        if (isMultiDag && dag !== vorigeDag) {
+            if (vorigeCombi !== null) { html += `</div></div>`; vorigeCombi = null; }
+            const info = dagInfoPerNr.get(dag);
+            const lbl = info?.datumLbl
+                ? `Dag ${dag} — ${info.datumLbl}`
+                : `Dag ${dag}`;
+            html += `<div class="prog-dag-header" data-dag-nr="${dag}">${esc(lbl)}</div>`;
+            vorigeDag = dag;
+        }
         if (item.type === 'blok') {
             if (vorigeCombi !== null) { html += `</div></div>`; vorigeCombi = null; }
-            const b  = item.data;
-            const bt = (b.blok_type || '').toLowerCase();
-            // Dag-header bij multi-day vóór elke wedstrijdstart.
-            if (isMultiDag && bt === 'wedstrijdstart') {
-                const info = wsDagInfo.get(String(b.id));
-                if (info) {
-                    const lbl = info.datumLbl
-                        ? `Dag ${info.nr} — ${info.datumLbl}`
-                        : `Dag ${info.nr}`;
-                    html += `<div class="prog-dag-header">${esc(lbl)}</div>`;
-                }
-            }
-            html += blokHtml(b);
-            continue;
+            // Wrap blokHtml uitvoer in een dag-nr-aware wrapper via post-fix.
+            // blokHtml() returnt al een div met class — we voegen data-dag-nr
+            // toe door de eerste <div> te patchen. Eenvoudig: vervang eerste '>'.
+            const raw = blokHtml(item.data);
+            html += raw.replace(/^<div /, `<div data-dag-nr="${dag}" `);
+            return;
         }
         const r = item.data;
         const combi = r.combi_group ? parseInt(r.combi_group) : null;
         if (combi !== vorigeCombi) {
             if (vorigeCombi !== null) html += `</div></div>`; // sluit vorige combi-box
             if (combi !== null) {
-                html += `<div class="prog-combi-box">
+                html += `<div class="prog-combi-box" data-dag-nr="${dag}">
                     <div class="prog-combi-kop">${t('prog_combi_kop')}</div>
                     <div class="prog-combi-leden">`;
             }
             vorigeCombi = combi;
         }
-        html += ritHtml(r);
-    }
+        const ritRaw = ritHtml(r);
+        html += ritRaw.replace(/^<div /, `<div data-dag-nr="${dag}" `);
+    });
     if (vorigeCombi !== null) html += `</div></div>`; // sluit laatste open combi-box
     progEl.innerHTML = html;
+}
+
+// Multi-day filter (Alle / Dag 1 / Dag 2 / …): toggle .verborgen op items
+// met andere dag-nr. Geen re-render nodig — pure DOM-class toggle.
+function filterDag(btn, dag) {
+    const balk = btn.closest('.prog-dag-filter');
+    if (!balk) return;
+    balk.setAttribute('data-actieve-dag', String(dag));
+    balk.querySelectorAll('.prog-dag-btn').forEach(b =>
+        b.classList.toggle('actief', b.dataset.dag === String(dag))
+    );
+    const container = balk.parentElement;
+    if (!container) return;
+    container.querySelectorAll('[data-dag-nr]').forEach(el => {
+        if (el === balk || el.classList.contains('prog-dag-filter')) return;
+        if (dag === 'alle') {
+            el.classList.remove('verborgen');
+        } else {
+            el.classList.toggle('verborgen',
+                el.getAttribute('data-dag-nr') !== String(dag));
+        }
+    });
 }
 
 // ── Coach-info (status + sancties) ───────────────────────────────────────────

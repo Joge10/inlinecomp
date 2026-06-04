@@ -1685,6 +1685,26 @@ select:focus, input:focus { border-color: var(--middenblauw); outline: none; }
     border-bottom: 1px solid #f0f2f5; font-style: italic;
 }
 /* ── Programma-blokken (pauze, inrijden, ceremonie, herstart, start) ── */
+/* Dag-filter-balk bovenaan bij multi-day. Sticky zodat hij meegaat als je
+   scrollt — anders moet je bij dag-3 terugscrollen om opnieuw te kiezen. */
+.prog-dag-filter {
+    display: flex; flex-wrap: wrap; gap: 6px;
+    margin: 0 0 10px 0; padding: 6px 0;
+    position: sticky; top: 0; z-index: 5;
+    background: #fff;
+}
+.prog-dag-btn {
+    border: 1px solid #b3cae6; background: #fff; color: #1a3a5c;
+    padding: 6px 12px; border-radius: 16px; font-size: .82rem;
+    font-weight: 600; cursor: pointer; transition: background .12s;
+}
+.prog-dag-btn:hover { background: #eaf2fb; }
+.prog-dag-btn.actief {
+    background: #1a3a5c; color: #fff; border-color: #1a3a5c;
+}
+/* Verbergen-class voor de filter: data-dag-nr items krijgen .verborgen
+   als de actieve dag-filter ze niet matcht. */
+.verborgen { display: none !important; }
 /* Dag-header bij meerdaags evenement: prominente scheiding tussen dagen */
 .prog-dag-header {
     background: linear-gradient(to right, #1a3a5c, #2E75B6);
@@ -2864,6 +2884,30 @@ function msTijd(ms) {
 }
 function sl(s) { return s ?? ''; }
 
+// ── Multi-day programma-filter (Alle / Dag 1 / Dag 2 / …) ─────────────────
+// Elk programma-item heeft data-dag-nr; we togglen .verborgen op items met
+// een andere dag dan de geselecteerde. CSS verbergt die. Bij "Alle" alle
+// .verborgen weghalen. Geen re-render nodig.
+function filterDag(btn, dag) {
+    const balk = btn.closest('.prog-dag-filter');
+    if (!balk) return;
+    balk.setAttribute('data-actieve-dag', String(dag));
+    balk.querySelectorAll('.prog-dag-btn').forEach(b =>
+        b.classList.toggle('actief', b.dataset.dag === String(dag))
+    );
+    // Filter alle items in dezelfde programma-tab (zelfde parent als de balk).
+    const container = balk.parentElement;
+    if (!container) return;
+    container.querySelectorAll('[data-dag-nr]').forEach(el => {
+        if (el === balk || el.classList.contains('prog-dag-filter')) return;
+        if (dag === 'alle') {
+            el.classList.remove('verborgen');
+        } else {
+            el.classList.toggle('verborgen', el.getAttribute('data-dag-nr') !== String(dag));
+        }
+    });
+}
+
 // ── Rit-detail overlay ────────────────────────────────────────────────────────
 async function toonRitDetail(el) {
     const ritNaam = el.dataset.ritNaam;
@@ -3531,14 +3575,16 @@ function renderResultaat(data, snr, prog) {
                     items.push({ type:'blok', data: sortedBlk[blkIdx++] });
                 }
 
-                // Multi-day detectie: meerdere wedstrijdstart-blokken → toon
-                // "Dag N — Zaterdag 28 mei"-header vóór elke wedstrijdstart.
-                // wsDagInfo: wedstrijdstart-blok-id (string) → {nr, datumLbl}.
+                // Multi-day setup: meerdere wedstrijdstart-blokken → toon één
+                // header per dag (Dag N — Zaterdag 28 mei) op de plek waar de
+                // dag-cluster begint, niet alleen vóór de wedstrijdstart zelf.
+                // Reden: inrijden+pauze direct vóór een wedstrijdstart horen
+                // BIJ die nieuwe dag (warm-up voor de dag), niet bij de vorige.
                 const wsBlokken = (prog.blokken || [])
                     .filter(b => (b.blok_type || '').toLowerCase() === 'wedstrijdstart')
                     .sort((a, b) => num(a.volgorde) - num(b.volgorde));
                 const isMultiDag = wsBlokken.length > 1;
-                const wsDagInfo  = new Map();
+                const dagInfoPerNr = new Map();   // dagNr → {datumLbl}
                 wsBlokken.forEach((ws, i) => {
                     let datumLbl = '';
                     if (ws.datum) {
@@ -3548,8 +3594,38 @@ function renderResultaat(data, snr, prog) {
                                 {weekday:'long', day:'numeric', month:'long'});
                         }
                     }
-                    wsDagInfo.set(String(ws.id), { nr: i + 1, datumLbl });
+                    dagInfoPerNr.set(i + 1, { datumLbl });
                 });
+
+                // Dag-toewijzing per item via twee passes:
+                //   1. FORWARD: wedstrijdstart-items zetten huidige dag; ritten
+                //      erven die. Andere blokken krijgen tentative natural-dag.
+                //   2. BACKWARD: inrijd/pauze/etc. die NA hun natural-dag een
+                //      opvolgende wedstrijdstart/rit met hogere dag hebben,
+                //      claimen die hogere dag (= warm-up voor volgende dag).
+                const dagPerItem = new Array(items.length);
+                let huidigeDag = 0;
+                items.forEach((it, idx) => {
+                    if (it.type === 'blok'
+                        && (it.data.blok_type || '').toLowerCase() === 'wedstrijdstart') {
+                        const wsIdx = wsBlokken.findIndex(w => String(w.id) === String(it.data.id));
+                        if (wsIdx >= 0) huidigeDag = wsIdx + 1;
+                    }
+                    dagPerItem[idx] = huidigeDag || 1; // pre-dag-1 items → tentative 1
+                });
+                let komendeDag = null;
+                for (let idx = items.length - 1; idx >= 0; idx--) {
+                    const it = items[idx];
+                    const isWs = it.type === 'blok'
+                        && (it.data.blok_type || '').toLowerCase() === 'wedstrijdstart';
+                    if (it.type === 'rit' || isWs) {
+                        komendeDag = dagPerItem[idx];
+                    } else if (it.type === 'blok' && komendeDag
+                               && dagPerItem[idx] < komendeDag) {
+                        // Niet-ronde blok vóór een latere dag → claim die dag.
+                        dagPerItem[idx] = komendeDag;
+                    }
+                }
 
                 const hhmm = v => { if (!v) return ''; const m = String(v).match(/(\d{1,2}:\d{2})/); return m ? m[1] : ''; };
                 const blokIcoon = bt => ({pauze:'⏸',inrijden:'🛼',wedstrijdstart:'🏁',ceremonie:'🏆',herstart:'🔄'}[bt] || '🕓');
@@ -3558,35 +3634,56 @@ function renderResultaat(data, snr, prog) {
                     return keyMap[bt] ? t(keyMap[bt]) : (bt || '').toUpperCase();
                 };
 
+                // Filter-balk bovenaan bij multi-day: "Alle / Dag 1 / Dag 2 / …".
+                // Bij dag-3+ wedstrijden wil je niet eindeloos scrollen om dag 3
+                // te vinden. JS togglet .verborgen via data-dag-nr (zie onClick).
+                if (isMultiDag) {
+                    html += `<div class="prog-dag-filter" id="prog-dag-filter" data-actieve-dag="alle">
+                        <button class="prog-dag-btn actief" data-dag="alle"
+                                onclick="filterDag(this,'alle')">Alle</button>`;
+                    for (let dn = 1; dn <= wsBlokken.length; dn++) {
+                        const info = dagInfoPerNr.get(dn);
+                        const korteDatum = info?.datumLbl
+                            ? info.datumLbl.split(' ').slice(0, 2).join(' ')  // "vrijdag 28" ipv "vrijdag 28 mei"
+                            : '';
+                        html += `<button class="prog-dag-btn" data-dag="${dn}"
+                                         onclick="filterDag(this,'${dn}')"
+                                         title="${esc(info?.datumLbl || '')}">Dag ${dn}${korteDatum ? ' ('+esc(korteDatum)+')' : ''}</button>`;
+                    }
+                    html += `</div>`;
+                }
+
                 let nr = 0;
+                let vorigeDag = null;
                 // Combi-state: ritten met dezelfde combi_group worden samen
                 // in één kader getoond. Bij wissel van groep sluiten we de
                 // oude box af en openen eventueel een nieuwe.
                 let vorigeCombi = null;
-                for (const it of items) {
+                items.forEach((it, idx) => {
+                    const dag = dagPerItem[idx];
+                    // Dag-header bij wisseling (multi-day). Sluit eerst open
+                    // combi-box als die er was — een combi mag niet over een
+                    // dag-grens lopen in de render.
+                    if (isMultiDag && dag !== vorigeDag) {
+                        if (vorigeCombi !== null) { html += `</div></div>`; vorigeCombi = null; }
+                        const info = dagInfoPerNr.get(dag);
+                        const lbl = info?.datumLbl
+                            ? `Dag ${dag} — ${info.datumLbl}`
+                            : `Dag ${dag}`;
+                        html += `<div class="prog-dag-header" data-dag-nr="${dag}">${esc(lbl)}</div>`;
+                        vorigeDag = dag;
+                    }
+
                     if (it.type === 'blok') {
                         if (vorigeCombi !== null) { html += `</div></div>`; vorigeCombi = null; }
                         const b = it.data;
                         const bt = (b.blok_type || '').toLowerCase();
-
-                        // Dag-header vóór elke wedstrijdstart-blok in multi-day.
-                        // Eendaags: geen header (zou alleen ruis toevoegen).
-                        if (isMultiDag && bt === 'wedstrijdstart') {
-                            const info = wsDagInfo.get(String(b.id));
-                            if (info) {
-                                const lbl = info.datumLbl
-                                    ? `Dag ${info.nr} — ${info.datumLbl}`
-                                    : `Dag ${info.nr}`;
-                                html += `<div class="prog-dag-header">${esc(lbl)}</div>`;
-                            }
-                        }
-
                         const tijd = hhmm(b.tijdstip);
                         const tijdHtml = tijd ? `<span class="prog-blok-tijd">🕓 ${esc(tijd)}</span>` : '';
                         const duurHtml = b.duur ? `<span class="prog-blok-duur">${b.duur} ${t('prog_blok_min')}</span>` : '';
                         const opmHtml  = b.opmerking ? `<span class="prog-blok-opm"> — ${esc(b.opmerking)}</span>` : '';
                         const catsHtml = b.inrijd_cat_namen ? `<div class="prog-blok-cats">${esc(b.inrijd_cat_namen)}</div>` : '';
-                        html += `<div class="prog-blok-rij prog-blok-${esc(bt)}">
+                        html += `<div class="prog-blok-rij prog-blok-${esc(bt)}" data-dag-nr="${dag}">
                             <div class="prog-blok-top">
                                 ${tijdHtml}
                                 <span class="prog-blok-titel">${blokIcoon(bt)} ${esc(blokLabel(bt))}</span>
@@ -3595,7 +3692,7 @@ function renderResultaat(data, snr, prog) {
                             </div>
                             ${catsHtml}
                         </div>`;
-                        continue;
+                        return;
                     }
                     const rit = it.data;
                     nr++;
@@ -3603,7 +3700,7 @@ function renderResultaat(data, snr, prog) {
                     if (combi !== vorigeCombi) {
                         if (vorigeCombi !== null) html += `</div></div>`; // sluit vorige combi-box
                         if (combi !== null) {
-                            html += `<div class="prog-combi-box">
+                            html += `<div class="prog-combi-box" data-dag-nr="${dag}">
                                 <div class="prog-combi-kop">${esc(t('prog_combi_kop'))}</div>
                                 <div class="prog-combi-leden">`;
                         }
@@ -3619,12 +3716,13 @@ function renderResultaat(data, snr, prog) {
                     const opmHtml = rit.rit_opmerking
                         ? `<div class="prog-rit-opm">📝 ${esc(rit.rit_opmerking)}</div>` : '';
                     html += `<div class="prog-rij${combi !== null ? ' prog-rij-combi' : ''}" style="${isInRit ? 'background:#fffbe6;font-weight:600;margin:0 -16px;padding:6px 16px;border-radius:4px' : ''};cursor:pointer"
-                                 data-rit-naam="${esc(rit.rit_naam)}" data-dc-naam="${esc(rit.dc_naam)}" onclick="toonRitDetail(this)">
+                                 data-rit-naam="${esc(rit.rit_naam)}" data-dc-naam="${esc(rit.dc_naam)}"
+                                 data-dag-nr="${dag}" onclick="toonRitDetail(this)">
                         <span class="prog-nr">${statusIcon} ${nr}</span>
                         <span class="prog-naam">${esc(rit.rit_naam)}${opmHtml}</span>
                         <span class="prog-type heat-card-badge ${BADGE[rt]??'badge-serie'}">${esc(getRondeLabel(rt))}</span>
                     </div>`;
-                }
+                });
                 // Sluit eventuele laatste open combi-box
                 if (vorigeCombi !== null) html += `</div></div>`;
             } else {
