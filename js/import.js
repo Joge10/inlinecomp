@@ -259,6 +259,11 @@ async function bouwBeheerTabel() {
             }
 
             // Gecombineerde categorieën (met bijhouden welke DC elke cat bezit)
+            // Bron 1: rijders (KNSB-flow) — cats die in inschrijvingen voorkomen.
+            // Bron 2: category_filter (handmatige flow + KNSB-fallback) — de
+            // operator-aangewezen cats. Count blijft op rijder-aantal zodat
+            // de UI niet "0 rijder" toont voor KNSB-flow met data, maar zonder
+            // rijders (handmatig) zijn de cats wél zichtbaar als chips.
             const catInfo = {};   // { catNaam: { dcId, count } }
             dcGroup.forEach(dc => {
                 dc.competitors.forEach(c => {
@@ -267,6 +272,15 @@ async function bouwBeheerTabel() {
                     if (!catInfo[k]) catInfo[k] = { dcId: dc.dc_id, count: 0 };
                     catInfo[k].count++;
                 });
+                // category_filter is "HSA,HSJ" CSV — voeg cats toe die nog
+                // niet uit rijders kwamen (count blijft 0 voor die).
+                if (dc.category_filter) {
+                    dc.category_filter.split(',').forEach(raw => {
+                        const k = raw.trim();
+                        if (!k) return;
+                        if (!catInfo[k]) catInfo[k] = { dcId: dc.dc_id, count: 0 };
+                    });
+                }
             });
 
             // Gecombineerde split-configuratie
