@@ -73,8 +73,6 @@
         document.getElementById('wh-naam').value = '';
         document.getElementById('wh-start').value = '';
         document.getElementById('wh-eind').value = '';
-        document.getElementById('wh-locatie').value = '';
-        document.getElementById('wh-venue').value = '';
         document.getElementById('wh-fout').style.display = 'none';
 
         // DC-lijst resetten — start met 1 lege rij zodat operator meteen kan typen
@@ -131,8 +129,6 @@
         const naam     = document.getElementById('wh-naam').value.trim();
         const starts   = document.getElementById('wh-start').value;
         const ends     = document.getElementById('wh-eind').value;
-        const locatie  = document.getElementById('wh-locatie').value.trim();
-        const venue    = document.getElementById('wh-venue').value.trim();
 
         if (!orgId)  return showFout('Kies een organisatie.');
         if (!naam)   return showFout('Wedstrijdnaam is verplicht.');
@@ -160,8 +156,6 @@
                     organisatie_id: orgId,
                     naam, starts,
                     ends: ends || '',
-                    location: locatie,
-                    venue_name: venue,
                     dcs,
                 }),
             });

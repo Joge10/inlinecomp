@@ -214,13 +214,8 @@ if (is_array($eigenScope) && !empty($eigenScope)) {
                             </div>
                         </div>
 
-                        <label class="wh-label" for="wh-locatie">Locatie <small>(plaatsnaam)</small></label>
-                        <input type="text" id="wh-locatie" class="modal-input"
-                               placeholder="bv. Heerde" maxlength="100">
-
-                        <label class="wh-label" for="wh-venue">Baan / locatienaam <small>(optioneel)</small></label>
-                        <input type="text" id="wh-venue" class="modal-input"
-                               placeholder="bv. Skate- en Skeelercentrum Hoornscheveen" maxlength="200">
+                        <!-- Locatie + Baan/venue zijn weggelaten: die stel je
+                             daarna in via Beheer, net als bij KNSB-imports. -->
 
                         <label class="wh-label">Categorieën (DC's) *</label>
                         <p class="wh-uitleg-klein">
