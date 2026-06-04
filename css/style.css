@@ -5798,3 +5798,101 @@ col.live-col-rondes  { width: 40px; }
 }
 .up-rij-geblokkeerd .up-blok-info b { color: #8a3f00; }
 
+/* ── Handmatige wedstrijd-aanmaak (wh-*) ────────────────────────────────
+   Modal voor het toevoegen van een wedstrijd buiten de KNSB-feed om.
+   Bouwt op de bestaande .modal-overlay/.modal-dialog/.modal-knoppen.
+   Knop bovenaan de Importeer-lijst, modal voor de invoer. */
+.wh-knop-wrap {
+    margin: 8px 0 12px 0;
+}
+.wh-btn-open {
+    background: linear-gradient(to bottom, #2E75B6, #1F4E79);
+    color: #fff; border: 1px solid #1F4E79;
+    padding: 8px 14px; border-radius: 4px;
+    font-size: 13px; font-weight: 600; cursor: pointer;
+    transition: filter .12s;
+}
+.wh-btn-open:hover { filter: brightness(1.08); }
+
+.wh-modal { max-width: 600px; }
+.wh-uitleg {
+    font-size: 13px; color: #444; line-height: 1.45;
+    margin: 0 0 14px;
+}
+.wh-uitleg-klein {
+    font-size: 12px; color: #666; line-height: 1.4;
+    margin: 4px 0 8px;
+}
+.wh-uitleg code, .wh-uitleg-klein code {
+    background: #eef2f7; padding: 1px 5px; border-radius: 3px;
+    font-size: 11.5px;
+}
+.wh-label {
+    display: block;
+    font-size: 12.5px; font-weight: 600;
+    color: var(--blauw, #1F4E79);
+    margin: 12px 0 4px;
+}
+.wh-label small { color: #888; font-weight: 400; margin-left: 4px; }
+.wh-2col {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 12px;
+}
+/* DC-lijst: elke rij heeft een naam-input + verwijder-knop bovenaan,
+   en daaronder een grid van category-chips. Compact zodat 18 chips er
+   passen zonder veel verticale ruimte. */
+.wh-dc-lijst {
+    display: flex; flex-direction: column; gap: 10px;
+    margin: 6px 0 10px;
+}
+.wh-dc-rij {
+    background: #f6f8fa;
+    border: 1px solid var(--border, #cdd8e3);
+    border-radius: 6px;
+    padding: 10px;
+}
+.wh-dc-rij-top {
+    display: flex; gap: 8px; align-items: center;
+    margin-bottom: 6px;
+}
+.wh-dc-rij-top .wh-dc-naam {
+    flex: 1; margin: 0;
+}
+.wh-btn-del-dc {
+    background: #fff; color: #b71c1c;
+    border: 1px solid #e6b9b9; border-radius: 4px;
+    width: 28px; height: 28px;
+    font-size: 16px; font-weight: 700; line-height: 1;
+    cursor: pointer; padding: 0;
+}
+.wh-btn-del-dc:hover { background: #fdecec; }
+.wh-dc-cats {
+    display: flex; flex-wrap: wrap; gap: 4px;
+    padding: 4px 0 0;
+}
+.wh-cat-chip {
+    display: inline-flex; align-items: center;
+    background: #fff; border: 1px solid #cdd8e3;
+    border-radius: 12px; padding: 2px 8px;
+    font-size: 11.5px; font-weight: 600;
+    cursor: pointer; color: #333;
+    transition: background .12s, border-color .12s;
+}
+.wh-cat-chip input { margin: 0 4px 0 0; vertical-align: middle; }
+.wh-cat-chip:has(input:checked) {
+    background: #d9e6f4; border-color: #2E75B6; color: #1F4E79;
+}
+.wh-btn-add-dc {
+    background: #fff; border: 1px dashed #2E75B6;
+    color: #1F4E79; padding: 6px 12px;
+    border-radius: 4px; font-size: 12.5px; font-weight: 600;
+    cursor: pointer;
+}
+.wh-btn-add-dc:hover { background: #eaf2fb; }
+.wh-fout {
+    margin-top: 12px; padding: 8px 10px;
+    background: #fdecec; border: 1px solid #e6b9b9; border-radius: 4px;
+    color: #b71c1c; font-size: 12.5px;
+}
+

@@ -113,6 +113,16 @@ if (is_array($eigenScope) && !empty($eigenScope)) {
                 <div class="voorb-left">
                     <div class="section-title">Wedstrijden</div>
 
+                    <!-- Handmatige wedstrijd-aanmaak: voor organisaties die NIET
+                         via de KNSB-feed werken (intern toernooi, internationaal
+                         event, etc.). Knop alleen zichtbaar voor admin/owner. -->
+                    <div class="wh-knop-wrap" id="wh-knop-wrap" style="display:none;">
+                        <button id="wh-btn-open" class="wh-btn-open"
+                                title="Maak handmatig een wedstrijd aan (zonder KNSB-import)">
+                            + Wedstrijd handmatig toevoegen
+                        </button>
+                    </div>
+
                     <div class="date-filter">
                         <label>Van <input type="date" id="filter-van"></label>
                         <label>Tot <input type="date" id="filter-tot"></label>
@@ -168,6 +178,71 @@ if (is_array($eigenScope) && !empty($eigenScope)) {
                 </div>
 
             </div>
+
+            <!-- Modal: handmatige wedstrijd-aanmaak. Volgt het standaard modal-
+                 pattern (.modal-overlay > .modal-dialog > .modal-header / .modal-body
+                 / .modal-knoppen). Wordt geopend door js/wedstrijd_handmatig.js. -->
+            <div class="modal-overlay" id="wh-modal-overlay" style="display:none;">
+                <div class="modal-dialog wh-modal">
+                    <div class="modal-header">
+                        <span class="modal-titel">Nieuwe wedstrijd handmatig toevoegen</span>
+                        <button class="modal-sluit" id="wh-btn-sluit" title="Sluiten">×</button>
+                    </div>
+                    <div class="modal-body">
+                        <p class="wh-uitleg">
+                            Voor wedstrijden die <b>niet</b> via de KNSB-feed (Vantage)
+                            binnenkomen. Vul de basisgegevens in. Afstanden per categorie
+                            voeg je daarna toe via <b>Beheer → Afstanden</b>.
+                        </p>
+
+                        <label class="wh-label" for="wh-org">Organisatie *</label>
+                        <select id="wh-org" class="modal-input">
+                            <option value="">— kies organisatie —</option>
+                        </select>
+
+                        <label class="wh-label" for="wh-naam">Wedstrijdnaam *</label>
+                        <input type="text" id="wh-naam" class="modal-input"
+                               placeholder="bv. Holland Cup Heerde 2026" maxlength="200">
+
+                        <div class="wh-2col">
+                            <div>
+                                <label class="wh-label" for="wh-start">Startdatum *</label>
+                                <input type="date" id="wh-start" class="modal-input">
+                            </div>
+                            <div>
+                                <label class="wh-label" for="wh-eind">Einddatum <small>(optioneel)</small></label>
+                                <input type="date" id="wh-eind" class="modal-input">
+                            </div>
+                        </div>
+
+                        <label class="wh-label" for="wh-locatie">Locatie <small>(plaatsnaam)</small></label>
+                        <input type="text" id="wh-locatie" class="modal-input"
+                               placeholder="bv. Heerde" maxlength="100">
+
+                        <label class="wh-label" for="wh-venue">Baan / locatienaam <small>(optioneel)</small></label>
+                        <input type="text" id="wh-venue" class="modal-input"
+                               placeholder="bv. Skate- en Skeelercentrum Hoornscheveen" maxlength="200">
+
+                        <label class="wh-label">Categorieën (DC's) *</label>
+                        <p class="wh-uitleg-klein">
+                            Per categorie: vrij in te vullen naam (bv. "Senioren Mannen")
+                            + welke KNSB-categorie-codes erin uitkomen
+                            (bv. <code>HSA, HSJ</code> = mannen senioren + senioren-jongeren).
+                        </p>
+                        <div class="wh-dc-lijst" id="wh-dc-lijst"></div>
+                        <button class="wh-btn-add-dc" id="wh-btn-add-dc">
+                            + Categorie toevoegen
+                        </button>
+
+                        <div class="wh-fout" id="wh-fout" style="display:none;"></div>
+                    </div>
+                    <div class="modal-knoppen">
+                        <button class="modal-btn-annuleer" id="wh-btn-annuleer">Annuleer</button>
+                        <button class="modal-btn-bevestig" id="wh-btn-create">Wedstrijd aanmaken</button>
+                    </div>
+                </div>
+            </div>
+
         </div>
 
         <!-- Pagina: Startlijsten -->
@@ -600,6 +675,7 @@ function magSchrijven(module) {
 </script>
 <script src="js/app.js"></script>
 <script src="js/import.js"></script>
+<script src="js/wedstrijd_handmatig.js"></script>
 <script src="js/startlist.js"></script>
 <script src="js/tijdschema.js"></script>
 <script src="js/live.js"></script>
