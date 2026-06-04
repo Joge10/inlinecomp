@@ -1728,12 +1728,14 @@ try {
         exit;
     }
 
-    // ── Programma wissen (behoudt alléén afstand-instellingen) ────────────────
-    // Wist: heats, ritten, blokken (wedstrijdstart/pauze/ceremonie/herstart)
-    // en cat-config. Behoudt UITSLUITEND tijdschema_afstand_config zodat de
-    // per-afstand instellingen (heat-aantallen + duur per ronde) bewaard
-    // blijven. Operator klikt na het wissen op "Opslaan" in Afstandinstellingen
-    // → blokken worden opnieuw gegenereerd vanuit die config.
+    // ── Programma wissen (behoudt afstand-instellingen + cat-koppeling) ──────
+    // Wist: heats, ritten, blokken (wedstrijdstart/pauze/ceremonie/herstart).
+    // Behoudt: tijdschema_afstand_config (heat-aantallen + duur per ronde)
+    // EN tijdschema_cat_config (welke cats meedoen per afstand) — beide zijn
+    // nodig: zonder cat-config toont de UI "Nog niet ingesteld" omdat de
+    // koppeling tussen afstand en cat verloren is.
+    // Operator klikt na wissen op Opslaan in Afstandinstellingen → blokken
+    // worden opnieuw gegenereerd vanuit de behouden config.
     if ($action === 'wis_programma') {
         $tsId = (int)($body['tijdschema_id'] ?? 0);
         if (!$tsId) {
@@ -1746,9 +1748,7 @@ try {
         $pdo->prepare("DELETE FROM heats WHERE competition_id = ?")->execute([$compId]);
         $pdo->prepare("DELETE FROM tijdschema_ritten WHERE tijdschema_id = ?")->execute([$tsId]);
         $pdo->prepare("DELETE FROM tijdschema_blokken WHERE tijdschema_id = ?")->execute([$tsId]);
-        $pdo->prepare("DELETE FROM tijdschema_cat_config WHERE tijdschema_id = ?")->execute([$tsId]);
-        // tijdschema_afstand_config BEWUST behouden — operator wil z'n
-        // heat-tuning niet kwijt bij elke herloting.
+        // tijdschema_cat_config + tijdschema_afstand_config BEWUST behouden.
         $pdo->prepare("UPDATE competition_tijdschema SET gegenereerd_op = NULL WHERE id = ?")->execute([$tsId]);
         $pdo->commit();
 

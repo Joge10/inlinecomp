@@ -2478,11 +2478,10 @@ function bindTsEvents(afstandGroepen) {
 
     el('ts-btn-wis-programma')?.addEventListener('click', async () => {
         if (!await toonBevestigDialog(
-            'Alles wordt verwijderd behalve de afstandsinstellingen:\n'
+            'De volgende worden verwijderd:\n'
             + '• Ritten + startlijsten\n'
-            + '• Blokken (wedstrijdstart/pauze/ceremonie/herstart)\n'
-            + '• Categorie-configuratie\n\n'
-            + 'Behouden blijft: per-afstand heat-aantallen + duur per ronde.\n\n'
+            + '• Blokken (wedstrijdstart/pauze/ceremonie/herstart)\n\n'
+            + 'De afstandinstellingen blijven behouden.\n\n'
             + 'Klik daarna op Opslaan in Afstandinstellingen om de blokken '
             + 'opnieuw te genereren.',
             'Programma wissen'
