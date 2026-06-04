@@ -226,6 +226,7 @@ def genereer_poster(args):
             'sponsors_titel':      u'Mede mogelijk gemaakt door:',
             'tip_coach':           u'Tip: voeg InlineComp Coach toe aan je startscherm voor snelle toegang!',
             'tip_public':          u'Tip: voeg InlineComp toe aan je startscherm voor snelle toegang!',
+            'coach_pw_label':      u'Coach-wachtwoord:',
         },
         'en': {
             'sub_coach_org':       u'For coaches at {org}',
@@ -246,6 +247,7 @@ def genereer_poster(args):
             'sponsors_titel':      u'Made possible by:',
             'tip_coach':           u'Tip: add InlineComp Coach to your home screen for quick access!',
             'tip_public':          u'Tip: add InlineComp to your home screen for quick access!',
+            'coach_pw_label':      u'Coach password:',
         },
     }
     lang = args.lang if args.lang in I18N else 'nl'
@@ -432,6 +434,28 @@ def genereer_poster(args):
     #   55-80 mm   sponsors (titel + logo's, alleen als er sponsors zijn)
     #   (boven)    stappen (zelf-plaatsend vanaf qr_y - 12 mm)
 
+    # ── Coach-wachtwoord-balk (alleen coach-poster, alleen als ingesteld) ─
+    # Plaats: net boven de disclaimer-balk. Compacte regel met label + grote
+    # mono-tekst voor het wachtwoord zodat coaches het direct kunnen typen.
+    if is_coach and args.coach_password:
+        cw_y      = 47 * mm
+        cw_h      = 9 * mm
+        cw_marge  = 12 * mm
+        c.setFillColor(HexColor('#e8eaf6'))   # lichtblauwe achtergrond
+        c.setStrokeColor(BLAUW)
+        c.setLineWidth(1.0)
+        c.roundRect(cw_marge, cw_y,
+                    width - 2 * cw_marge, cw_h,
+                    1.5 * mm, fill=True, stroke=True)
+        c.setFillColor(BLAUW)
+        c.setFont('Helvetica-Bold', 10)
+        c.drawString(cw_marge + 4 * mm, cw_y + 3 * mm, T('coach_pw_label'))
+        c.setFont('Courier-Bold', 13)
+        c.setFillColor(DONKERORANJE)
+        # Wachtwoord rechts uitgelijnd zodat lange wachtwoorden netjes blijven
+        c.drawRightString(width - cw_marge - 4 * mm, cw_y + 3 * mm,
+                          args.coach_password)
+
     # ── Disclaimer-warning-balk + Sportity (boven footer) ─────────────────
     # Sportity-kanaal komt uit de organisatie-instelling. Leeg = algemene
     # formulering zonder kanaal-naam.
@@ -551,6 +575,10 @@ def main():
     p.add_argument('--lang', default='nl', choices=['nl', 'en'],
                    help="Taal van de poster-teksten. nl=Nederlands (default), "
                         "en=English (voor internationale wedstrijden).")
+    p.add_argument('--coach-password', default='',
+                   help="Coach-app toegangswachtwoord. Alleen relevant voor "
+                        "coach-poster. Verschijnt als prominente regel zodat "
+                        "coaches het bij hand hebben bij eerste login.")
     p.add_argument('--app-type', default='public', choices=['public', 'coach'],
                    help="Doelgroep van de poster: 'public' (rijders/ouders, default) "
                         "of 'coach' (coaches die meerdere rijders tegelijk volgen)")

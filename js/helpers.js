@@ -74,6 +74,34 @@ async function toonHelpersPagina() {
             <div id="hp-hist-preview" style="display:none"></div>
         </div>
 
+        ${currentUser?.role === 'owner' ? `
+        <div class="hp-card" id="hp-coach-auth-card">
+            <h3 class="hp-card-titel">🔐 Coach-app toegangswachtwoord</h3>
+            <p class="hp-card-uitleg">
+                Eén globaal wachtwoord voor de hele Coach-app (cross-organisatie).
+                Voorkomt dat publiek massaal Coach gebruikt om hele clubs te
+                monitoren (DB-load). <b>Geen security</b> — de data is openbaar —
+                maar wel een drempel. Wordt automatisch op de Coach-poster gezet
+                zodat coaches het bij hand hebben.
+                <br><br>
+                Leeg laten = Coach-app open voor iedereen (default).
+                Wijziging dwingt alle bestaande coach-sessies om opnieuw in te
+                voeren bij hun volgende API-call.
+            </p>
+            <div id="hp-ca-status" class="hp-status" style="margin-bottom:8px">Laden…</div>
+            <div class="hp-ca-rij" style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+                <label style="display:flex;align-items:center;gap:6px">
+                    Wachtwoord:
+                    <input type="text" id="hp-ca-input" class="inp"
+                           placeholder="bv. coach2026" maxlength="100"
+                           style="width:200px;font-family:monospace">
+                </label>
+                <button class="btn-primary" id="hp-ca-btn-save">Opslaan</button>
+                <button class="btn-secondary" id="hp-ca-btn-clear">🗑 Wissen (open)</button>
+            </div>
+            <div id="hp-ca-melding" style="margin-top:8px"></div>
+        </div>` : ''}
+
         <div class="hp-card" id="hp-pending-card">
             <h3 class="hp-card-titel">🔗 Pending rijders koppelen aan KNSB-accounts</h3>
             <p class="hp-card-uitleg">
@@ -162,6 +190,7 @@ async function toonHelpersPagina() {
         _hpCsvInit();
         _hpHistInit();
         _hpPendingInit();
+        if (currentUser?.role === 'owner') _hpCoachAuthInit();
     } catch (e) {
         // Vangnet: render-fout mag geen lege witte tab opleveren — toon
         // expliciete foutboodschap zodat user iets ziet ipv blanco doos.
@@ -2213,4 +2242,91 @@ async function _hpPendingVerwijder(lic) {
         stat.textContent = '⚠ ' + e.message;
         stat.className = 'hp-status hp-status-fout';
     }
+}
+
+// ── Coach-app wachtwoord (owner-only sectie in Helpers) ──────────────────────
+async function _hpCoachAuthInit() {
+    const stat   = el('hp-ca-status');
+    const input  = el('hp-ca-input');
+    const btnSet = el('hp-ca-btn-save');
+    const btnClr = el('hp-ca-btn-clear');
+    const meld   = el('hp-ca-melding');
+
+    const laad = async () => {
+        stat.textContent = 'Laden…';
+        stat.className = 'hp-status';
+        try {
+            const r = await fetch('api/coach_auth.php?action=get');
+            const d = await r.json();
+            if (!r.ok || d.error) throw new Error(d.error || 'HTTP ' + r.status);
+            if (d.password) {
+                input.value = d.password;
+                const datum = d.set_at ? new Date(d.set_at).toLocaleString('nl-NL') : '?';
+                const door  = d.set_by_naam ? ` door ${escHtml(d.set_by_naam)}` : '';
+                stat.innerHTML = `✓ Wachtwoord ingesteld${door} op ${escHtml(datum)}`;
+                stat.className = 'hp-status hp-status-ok';
+            } else {
+                input.value = '';
+                stat.innerHTML = '⚠ Geen wachtwoord — Coach-app is voor iedereen open';
+                stat.className = 'hp-status hp-status-warn';
+            }
+        } catch (e) {
+            stat.textContent = '⚠ Kon status niet ophalen: ' + e.message;
+            stat.className = 'hp-status hp-status-fout';
+        }
+    };
+
+    const tonen = (msg, soort) => {
+        meld.innerHTML = `<div class="hp-status hp-status-${soort}">${escHtml(msg)}</div>`;
+        setTimeout(() => { meld.innerHTML = ''; }, 4000);
+    };
+
+    btnSet.addEventListener('click', async () => {
+        const pw = input.value.trim();
+        if (!pw) {
+            tonen('Wachtwoord is leeg — klik "Wissen" als je dat bedoelt', 'fout');
+            return;
+        }
+        btnSet.disabled = true;
+        try {
+            const r = await fetch('api/coach_auth.php?action=set', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ password: pw }),
+            });
+            const d = await r.json();
+            if (!r.ok || d.error) throw new Error(d.error || 'HTTP ' + r.status);
+            tonen('✓ Wachtwoord opgeslagen', 'ok');
+            await laad();
+        } catch (e) {
+            tonen('⚠ ' + e.message, 'fout');
+        } finally {
+            btnSet.disabled = false;
+        }
+    });
+
+    btnClr.addEventListener('click', async () => {
+        if (!await toonBevestigDialog(
+            'Coach-wachtwoord wissen?\n\nDe Coach-app wordt dan weer open voor iedereen.',
+            'Wachtwoord wissen', 'Wis', 'Annuleer'
+        )) return;
+        btnClr.disabled = true;
+        try {
+            const r = await fetch('api/coach_auth.php?action=set', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ password: null }),
+            });
+            const d = await r.json();
+            if (!r.ok || d.error) throw new Error(d.error || 'HTTP ' + r.status);
+            tonen('✓ Wachtwoord gewist — Coach-app is nu open', 'ok');
+            await laad();
+        } catch (e) {
+            tonen('⚠ ' + e.message, 'fout');
+        } finally {
+            btnClr.disabled = false;
+        }
+    });
+
+    await laad();
 }

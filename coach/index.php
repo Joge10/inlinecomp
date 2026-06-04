@@ -79,8 +79,46 @@ if ($_zichtCompId && !_coachWedstrijdZichtbaar($pdo, $_zichtCompId)) {
     exit;
 }
 
-// ── Rate limiting: max 10 requests per 5 seconden per IP ─────────────────────
 $action = $_GET['action'] ?? '';
+
+// ── Coach-app wachtwoord-gate ────────────────────────────────────────────────
+// Voorkomt dat publiek massaal coach gebruikt om hele clubs te monitoren
+// (DB-load op iFastNet). Drempel-mechanisme, geen security. Bewust voor
+// elke API-action — alleen 'auth_status' (gebruikt door frontend om te
+// checken of er überhaupt een wachtwoord IS) ontsnapt eraan.
+// Bij leeg/onjuist wachtwoord: 401 → frontend prompt opnieuw.
+function _coachAuthGate(PDO $pdo, string $action): void {
+    if ($action === '' || $action === 'auth_status') return;
+    $st = $pdo->prepare("SELECT password FROM coach_app_settings WHERE id = 1 LIMIT 1");
+    $st->execute();
+    $stored = $st->fetchColumn();
+    if (!$stored || $stored === '') return;  // geen wachtwoord ingesteld = open
+    // X-Coach-PW header (Apache strip dashes naar underscores in $_SERVER)
+    $hdr = $_SERVER['HTTP_X_COACH_PW']
+        ?? $_SERVER['HTTP_X_COACH-PW']
+        ?? '';
+    if (!hash_equals($stored, $hdr)) {
+        header('Content-Type: application/json; charset=utf-8');
+        http_response_code(401);
+        echo json_encode(['error' => 'coach_password_required']);
+        exit;
+    }
+}
+_coachAuthGate($pdo, $action);
+
+// ── auth_status: returnt alleen of er een wachtwoord IS ────────────────────
+// Vóór de rate-limit zodat frontend deze zonder 429-risico bij elke load
+// kan aanroepen. Antwoord caching aan client-side.
+if ($action === 'auth_status') {
+    header('Content-Type: application/json; charset=utf-8');
+    $st = $pdo->prepare("SELECT password FROM coach_app_settings WHERE id = 1 LIMIT 1");
+    $st->execute();
+    $stored = $st->fetchColumn();
+    echo json_encode(['has_password' => !empty($stored)]);
+    exit;
+}
+
+// ── Rate limiting: max 10 requests per 5 seconden per IP ─────────────────────
 if ($action) {
     $ip = $_SERVER['REMOTE_ADDR'] ?? 'unknown';
     $rlFile = sys_get_temp_dir() . '/rlcoach_' . md5($ip);
@@ -1628,6 +1666,43 @@ select.sel {
     box-shadow: 0 2px 4px rgba(26,58,92,.15);
 }
 .prog-dag-header:first-child { margin-top: 4px; }
+
+/* Coach-wachtwoord prompt — eenvoudige modal, geen styling-conflict met
+   bestaande modals (.cw- prefix). Bedoeld als drempel: schermvullend
+   blauw blok zodat coach niet per ongeluk wegklikt naar 'open' state. */
+.cw-overlay {
+    position: fixed; inset: 0; z-index: 99999;
+    background: rgba(26,58,92,.92);
+    display: flex; align-items: center; justify-content: center;
+    padding: 16px;
+}
+.cw-dialog {
+    background: #fff; border-radius: 10px; padding: 24px;
+    max-width: 380px; width: 100%;
+    box-shadow: 0 8px 32px rgba(0,0,0,.3);
+}
+.cw-dialog h2 { margin: 0 0 12px; color: #1a3a5c; font-size: 1.2rem; }
+.cw-dialog p { margin: 0 0 16px; color: #444; font-size: .92rem; line-height: 1.45; }
+.cw-input {
+    width: 100%; padding: 12px 14px; font-size: 1.1rem;
+    border: 2px solid #b3cae6; border-radius: 6px;
+    box-sizing: border-box; font-family: inherit;
+}
+.cw-input:focus { outline: none; border-color: #2E75B6; }
+.cw-knoppen { display: flex; gap: 8px; margin-top: 14px; }
+.cw-btn {
+    flex: 1; padding: 12px 16px;
+    border: none; border-radius: 6px; font-size: 1rem; font-weight: 600;
+    cursor: pointer;
+}
+.cw-btn-ok { background: #2E75B6; color: #fff; }
+.cw-btn-ok:hover { background: #1F4E79; }
+.cw-fout {
+    margin-top: 12px; padding: 8px 12px;
+    background: #fdecec; border: 1px solid #e6b9b9; border-radius: 4px;
+    color: #b71c1c; font-size: .88rem;
+}
+
 .blok-rij { background:#e8eaf6; border-radius:6px; padding:6px 10px;
             margin-bottom:6px; font-size:.85rem; color:#333; }
 .blok-rij-top { display:flex; flex-wrap:wrap; align-items:baseline; gap:.5rem; }
@@ -2113,6 +2188,11 @@ const T = {
         prog_blok_min: 'min',
         prog_dag_alle: 'Alle',
         prog_dag: 'Dag',
+        coach_pw_titel: 'Coach-toegang',
+        coach_pw_uitleg: 'De Coach-app vereist een wachtwoord. Vraag het bij je organisatie of kijk op de Coach-poster.',
+        coach_pw_ok: 'OK',
+        coach_pw_fout: 'Onjuist wachtwoord',
+        coach_pw_neterr: 'Geen verbinding — probeer opnieuw',
         prog_combi_kop: '🔗 Gecombineerde rit — rijden tegelijk',
         prog_laden: 'Programma wordt geladen…',
         prog_geen: 'Nog geen programma bekend.',
@@ -2346,6 +2426,11 @@ const T = {
         prog_blok_min: 'min',
         prog_dag_alle: 'All',
         prog_dag: 'Day',
+        coach_pw_titel: 'Coach access',
+        coach_pw_uitleg: 'The Coach app requires a password. Ask your organisation or check the Coach poster.',
+        coach_pw_ok: 'OK',
+        coach_pw_fout: 'Incorrect password',
+        coach_pw_neterr: 'No connection — please try again',
         prog_combi_kop: '🔗 Combined race — skating together',
         prog_laden: 'Loading program…',
         prog_geen: 'No program known yet.',
@@ -2579,6 +2664,11 @@ const T = {
         prog_blok_min: 'Min',
         prog_dag_alle: 'Alle',
         prog_dag: 'Tag',
+        coach_pw_titel: 'Coach-Zugang',
+        coach_pw_uitleg: 'Die Coach-App benötigt ein Passwort. Frage bei deinem Verein oder schaue auf das Coach-Poster.',
+        coach_pw_ok: 'OK',
+        coach_pw_fout: 'Falsches Passwort',
+        coach_pw_neterr: 'Keine Verbindung — bitte erneut versuchen',
         prog_combi_kop: '🔗 Kombiniertes Rennen — gemeinsam',
         prog_laden: 'Programm wird geladen…',
         prog_geen: 'Noch kein Programm bekannt.',
@@ -2812,6 +2902,11 @@ const T = {
         prog_blok_min: 'min',
         prog_dag_alle: 'Tous',
         prog_dag: 'Jour',
+        coach_pw_titel: 'Accès Coach',
+        coach_pw_uitleg: 'L\'application Coach nécessite un mot de passe. Demandez-le à votre organisation ou consultez l\'affiche Coach.',
+        coach_pw_ok: 'OK',
+        coach_pw_fout: 'Mot de passe incorrect',
+        coach_pw_neterr: 'Pas de connexion — réessayez',
         prog_combi_kop: '🔗 Course combinée — ensemble',
         prog_laden: 'Chargement du programme…',
         prog_geen: 'Pas encore de programme connu.',
@@ -3177,10 +3272,77 @@ window.addEventListener('offline', () => {
 // jitter (1.5-4.5 s) zodat 15 coaches niet synchroon weer aankloppen.
 // Te agressief retryen verergert de rate-limit alleen maar — daarom geen
 // retry-storm meer. Bij definitief 429 krijgt de UI de 429 gewoon terug.
+// Coach-app wachtwoord-gate: bij elke fetch sturen we localStorage 'coach_pw'
+// als header X-Coach-PW. Bij 401 (= ongeldig of ontbrekend) prompt voor
+// nieuw wachtwoord, retry. Geen wachtwoord ingesteld op server → backend
+// returnt nooit 401, geen prompt nodig.
+function _coachFetchOpts() {
+    const pw = localStorage.getItem('coach_pw') || '';
+    return pw ? { headers: { 'X-Coach-PW': pw } } : {};
+}
+async function _vraagCoachWachtwoord() {
+    return new Promise(resolve => {
+        const overlay = document.createElement('div');
+        overlay.className = 'cw-overlay';
+        overlay.innerHTML = `
+            <div class="cw-dialog">
+                <h2>🔐 ${esc(t('coach_pw_titel'))}</h2>
+                <p>${esc(t('coach_pw_uitleg'))}</p>
+                <input type="text" id="cw-input" class="cw-input" autocomplete="off" autocapitalize="none">
+                <div class="cw-knoppen">
+                    <button class="cw-btn cw-btn-ok" id="cw-ok">${esc(t('coach_pw_ok'))}</button>
+                </div>
+                <div class="cw-fout" id="cw-fout" style="display:none"></div>
+            </div>`;
+        document.body.appendChild(overlay);
+        const input = overlay.querySelector('#cw-input');
+        const ok    = overlay.querySelector('#cw-ok');
+        const fout  = overlay.querySelector('#cw-fout');
+        setTimeout(() => input.focus(), 50);
+        const probeer = async () => {
+            const pw = input.value.trim();
+            if (!pw) return;
+            ok.disabled = true; ok.textContent = '…';
+            try {
+                const r = await fetch('../api/coach_auth.php?action=verify', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ password: pw }),
+                });
+                const d = await r.json();
+                if (r.ok && d.ok) {
+                    localStorage.setItem('coach_pw', pw);
+                    overlay.remove();
+                    resolve(true);
+                } else {
+                    fout.textContent = d.error || t('coach_pw_fout');
+                    fout.style.display = '';
+                    input.select();
+                }
+            } catch {
+                fout.textContent = t('coach_pw_neterr');
+                fout.style.display = '';
+            } finally {
+                ok.disabled = false; ok.textContent = t('coach_pw_ok');
+            }
+        };
+        ok.addEventListener('click', probeer);
+        input.addEventListener('keydown', e => { if (e.key === 'Enter') probeer(); });
+    });
+}
+
 async function safeFetch(url, maxRetries = 1) {
     try {
         for (let attempt = 0; attempt <= maxRetries; attempt++) {
-            const res = await fetch(url);
+            let res = await fetch(url, _coachFetchOpts());
+            // Coach-wachtwoord-gate: 401 betekent geen of foutief X-Coach-PW.
+            // Prompt opnieuw, retry zodra ingevuld. Niet retry-tellen — dit
+            // is een interactieve user-action, geen "auto-storm".
+            if (res.status === 401) {
+                const ok = await _vraagCoachWachtwoord();
+                if (!ok) return res;
+                res = await fetch(url, _coachFetchOpts());
+            }
             if (res.status === 429 && attempt < maxRetries) {
                 // Random wait 1.5-4.5 s — voorkomt synchrone retries
                 const wait = 1500 + Math.random() * 3000;

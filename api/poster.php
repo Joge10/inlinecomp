@@ -268,6 +268,18 @@ if (!empty($org['sportity_kanaal'])) {
 $parts[] = '--app-type'; $parts[] = escapeshellarg($appType);
 $parts[] = '--lang';     $parts[] = escapeshellarg($lang);
 
+// Coach-poster bevat het coach-app wachtwoord (drempel-mechanisme). Geen
+// security want het staat geprint op de poster én iedereen die met de
+// coach werkt heeft het toch nodig. Public-poster krijgt 'm niet.
+if ($appType === 'coach') {
+    $caStmt = $pdo->prepare("SELECT password FROM coach_app_settings WHERE id = 1 LIMIT 1");
+    $caStmt->execute();
+    $caPw = (string)($caStmt->fetchColumn() ?: '');
+    if ($caPw !== '') {
+        $parts[] = '--coach-password'; $parts[] = escapeshellarg($caPw);
+    }
+}
+
 $cmd    = implode(' ', $parts) . ' 2>&1';
 $output = shell_exec($cmd);
 
