@@ -280,11 +280,22 @@ if ($appType === 'coach') {
     }
 }
 
-$cmd    = implode(' ', $parts) . ' 2>&1';
+// `timeout 25` (Linux coreutils): kill het Python-proces na 25 seconden
+// als het hangt. Zonder dit kan een crashende Python (slow stderr, hangende
+// import) een PHP-proces ENORM lang bezetten — telt mee voor de iFastNet
+// EP-limit en kan bij snelle herhaal-klikken een cascade veroorzaken
+// (vermoedelijke oorzaak van de spike op 2026-06-04 17:26).
+// 25s ruim onder PHP's max_execution_time van 30s. Bij timeout exit-code 124.
+$cmd    = 'timeout 25 ' . implode(' ', $parts) . ' 2>&1';
 $output = shell_exec($cmd);
 
 if (!is_file($tmpPdf) || filesize($tmpPdf) < 500) {
     @unlink($tmpPdf);
+    // Log naar PHP error_log zodat we bij volgende 500's de Python-error
+    // kunnen terugvinden zonder dat de gebruiker hoeft te debuggen.
+    @error_log('[poster.php] gen failed for ' . $appType . '/' . $lang
+        . ' org=' . $orgId . ' comp=' . $compId
+        . ' output=' . substr((string)$output, 0, 500));
     http_response_code(500);
     header('Content-Type: application/json; charset=utf-8');
     echo json_encode([
