@@ -306,14 +306,14 @@ function _pcBouwModal() {
                 <button class="pc-sluit" id="pc-btn-sluit" title="Sluiten">×</button>
             </div>
             <div class="pc-toolbar">
-                <label class="pc-check">
+                <label class="pc-check" title="Prints combineren op minder papier">
                     <input type="checkbox" id="pc-boomsaver">
-                    <span>🌳 Boom-saver: prints combineren op minder papier</span>
+                    <span>🌳 Boom-saver</span>
                 </label>
                 <div class="pc-lang" title="Taal van de geprinte rapporten — keuze blijft bewaard ook na hard refresh">
                     <span>Taal:</span>
-                    <label><input type="radio" name="pc-lang" value="nl" id="pc-lang-nl"> NL</label>
-                    <label><input type="radio" name="pc-lang" value="en" id="pc-lang-en"> GB</label>
+                    <label><input type="checkbox" data-pc-lang="nl" id="pc-lang-nl"> NL</label>
+                    <label><input type="checkbox" data-pc-lang="en" id="pc-lang-en"> GB</label>
                 </div>
                 <div class="pc-toolbar-rechts">
                     <button class="btn-secondary" id="pc-btn-reset">Alles uit</button>
@@ -330,14 +330,26 @@ function _pcBouwModal() {
     d.querySelector('#pc-boomsaver').addEventListener('change', e => {
         _pcState.boomSaver = e.target.checked;
     });
-    // Initialiseer radio-buttons op huidige _pcState.lang (uit localStorage).
+    // Initialiseer checkboxes op huidige _pcState.lang (uit localStorage).
+    // Twee checkboxes met mutual-exclusion-JS — visueel vierkant (zoals
+    // boom-saver) ipv ronde radio-buttons. Eén kan altijd actief; klikken
+    // op de andere wisselt.
     d.querySelector(`#pc-lang-${_pcState.lang}`).checked = true;
-    d.querySelectorAll('input[name="pc-lang"]').forEach(r => {
-        r.addEventListener('change', e => {
-            _pcState.lang = e.target.value;
-            // Persistent — overleeft hard refresh + page close.
-            try { localStorage.setItem('printcenter_lang', _pcState.lang); }
-            catch (err) { /* private browsing → stil falen */ }
+    d.querySelectorAll('input[data-pc-lang]').forEach(cb => {
+        cb.addEventListener('change', e => {
+            const gekozen = e.target.dataset.pcLang;
+            if (e.target.checked) {
+                // Andere uitvinken
+                d.querySelectorAll('input[data-pc-lang]').forEach(other => {
+                    if (other !== e.target) other.checked = false;
+                });
+                _pcState.lang = gekozen;
+                try { localStorage.setItem('printcenter_lang', _pcState.lang); }
+                catch (err) { /* private browsing → stil falen */ }
+            } else {
+                // Niet uitvinken — minimaal één moet aan staan
+                e.target.checked = true;
+            }
         });
     });
     d.querySelector('#pc-btn-reset').addEventListener('click', () => {
