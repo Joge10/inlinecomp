@@ -1788,8 +1788,49 @@ async function uploadLogo(type, id, file, sponsorRij = null) {
 // wedstrijd met juiste QR-url en wedstrijd-info. appType bepaalt of de QR
 // naar /public/ of /coach/ wijst en de tekst-variant ('public' default,
 // 'coach' voor de coach-app-poster). Endpoint is api/poster.php.
+// Kleine taal-keuze modal. Returnt 'nl' | 'en' | null (geannuleerd).
+// localStorage onthoudt de laatste keuze als default-pre-focus, zodat
+// een operator die meerdere EN-posters print niet steeds opnieuw kiest.
+function kiesPosterTaal() {
+    const laatste = localStorage.getItem('poster_lang') || 'nl';
+    return new Promise(resolve => {
+        const overlay = document.createElement('div');
+        overlay.className = 'modal-overlay';
+        overlay.innerHTML = `
+            <div class="modal-dialog" style="max-width:360px">
+                <div class="modal-header">
+                    <span>Poster-taal</span>
+                </div>
+                <div class="modal-body" style="text-align:center;padding:18px">
+                    Welke taal voor de poster?
+                </div>
+                <div class="modal-knoppen" style="justify-content:center">
+                    <button class="modal-btn modal-annuleer" data-act="cancel">Annuleer</button>
+                    <button class="modal-btn modal-doorgaan" data-act="nl">🇳🇱 Nederlands</button>
+                    <button class="modal-btn modal-doorgaan" data-act="en">🇬🇧 English</button>
+                </div>
+            </div>`;
+        document.body.appendChild(overlay);
+        const sluit = lang => { overlay.remove(); resolve(lang); };
+        overlay.querySelectorAll('[data-act]').forEach(b => {
+            b.addEventListener('click', () => {
+                const act = b.dataset.act;
+                if (act === 'cancel') return sluit(null);
+                localStorage.setItem('poster_lang', act);
+                sluit(act);
+            });
+        });
+        overlay.addEventListener('click', e => { if (e.target === overlay) sluit(null); });
+        // Focus op laatst gekozen taal voor snelle Enter-flow
+        overlay.querySelector(`[data-act="${laatste}"]`)?.focus();
+    });
+}
+
 async function downloadPoster(compId = null, appType = 'public') {
     if (!actieveOrg?.id) return;
+
+    const lang = await kiesPosterTaal();
+    if (!lang) return;
 
     // Visuele feedback op de knop die is geklikt
     const btn = compId
@@ -1799,7 +1840,7 @@ async function downloadPoster(compId = null, appType = 'public') {
     if (btn) { btn.disabled = true; btn.textContent = '⏳ Bezig…'; }
 
     try {
-        const params = new URLSearchParams({ org_id: actieveOrg.id, app: appType });
+        const params = new URLSearchParams({ org_id: actieveOrg.id, app: appType, lang });
         if (compId) params.set('competition_id', compId);
 
         const res = await fetch('api/poster.php?' + params.toString());

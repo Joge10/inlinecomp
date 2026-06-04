@@ -29,6 +29,9 @@ if (!in_array($_authUser['role'] ?? '', ['owner', 'admin', 'planner'], true)) {
 $orgId  = trim($_GET['org_id'] ?? '');
 $compId = trim($_GET['competition_id'] ?? '');
 $appType = ($_GET['app'] ?? 'public') === 'coach' ? 'coach' : 'public';
+// Taal van de poster-teksten. nl=Nederlands (default), en=English. Datum-
+// strings worden hieronder ook locale-aware geformatteerd.
+$lang   = in_array($_GET['lang'] ?? 'nl', ['nl', 'en'], true) ? $_GET['lang'] : 'nl';
 
 if (!$orgId) {
     http_response_code(400);
@@ -180,12 +183,18 @@ $baseUrl = $appType === 'coach'
     : 'https://inlineresults.devriesen.com/public/';
 $qrUrl   = $comp ? ($baseUrl . '?comp=' . $comp['id']) : $baseUrl;
 
-// ── Datum-string ───────────────────────────────────────────────────────
+// ── Datum-string (locale-aware) ────────────────────────────────────────
 $compDatum = '';
 if ($comp && !empty($comp['starts'])) {
-    $maanden = ['01'=>'januari','02'=>'februari','03'=>'maart','04'=>'april',
-                '05'=>'mei','06'=>'juni','07'=>'juli','08'=>'augustus',
-                '09'=>'september','10'=>'oktober','11'=>'november','12'=>'december'];
+    $maandenPerLang = [
+        'nl' => ['01'=>'januari','02'=>'februari','03'=>'maart','04'=>'april',
+                 '05'=>'mei','06'=>'juni','07'=>'juli','08'=>'augustus',
+                 '09'=>'september','10'=>'oktober','11'=>'november','12'=>'december'],
+        'en' => ['01'=>'January','02'=>'February','03'=>'March','04'=>'April',
+                 '05'=>'May','06'=>'June','07'=>'July','08'=>'August',
+                 '09'=>'September','10'=>'October','11'=>'November','12'=>'December'],
+    ];
+    $maanden = $maandenPerLang[$lang] ?? $maandenPerLang['nl'];
     if (preg_match('/^(\d{4})-(\d{2})-(\d{2})/', $comp['starts'], $m)) {
         $compDatum = ltrim($m[3], '0') . ' ' . ($maanden[$m[2]] ?? $m[2]) . ' ' . $m[1];
     }
@@ -257,6 +266,7 @@ if (!empty($org['sportity_kanaal'])) {
     $parts[] = '--sportity-kanaal'; $parts[] = escapeshellarg($org['sportity_kanaal']);
 }
 $parts[] = '--app-type'; $parts[] = escapeshellarg($appType);
+$parts[] = '--lang';     $parts[] = escapeshellarg($lang);
 
 $cmd    = implode(' ', $parts) . ' 2>&1';
 $output = shell_exec($cmd);

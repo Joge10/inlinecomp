@@ -204,6 +204,55 @@ def genereer_poster(args):
     sponsors   = parse_sponsors(args.sponsors)
     is_coach   = args.app_type == 'coach'
 
+    # i18n: alle tekst-strings per taal. Gebruik T(key, **fmt) hieronder om
+    # de juiste taal te kiezen. Nieuwe taal toevoegen = nieuwe dict + cli-keuze.
+    I18N = {
+        'nl': {
+            'sub_coach_org':       u'Voor coaches bij {org}',
+            'sub_coach_geen':      u'Voor coaches: volg al je rijders live',
+            'sub_public_org':      u'Wedstrijden bij {org}',
+            'sub_public_geen':     u'Volg je wedstrijd live!',
+            'scan':                u'Scan de QR-code met je telefoon',
+            'stap1_kies_naam':     u'Kies "{naam}"',
+            'stap1_kies_alg':      u'Kies je wedstrijd',
+            'stap_coach_2':        u'Voeg rijders toe via club, sponsor of startnummer',
+            'stap_coach_3':        u'Volg programma, heats, sancties en uitslagen',
+            'stap_public_2':       u'Vul je startnummer in',
+            'stap_public_3':       u'Bekijk je heats, tijden en resultaten',
+            'sportity_kanaal':     u'Officiële einduitslagen + klassementen via Sportity (kanaal: {kanaal}).',
+            'sportity_geen':       u'Officiële einduitslagen + klassementen via Sportity.',
+            'disclaimer_label':    u'LET OP — TESTFASE',
+            'disclaimer_tekst':    u'Aan de informatie in InlineComp kunnen geen rechten worden ontleend.',
+            'sponsors_titel':      u'Mede mogelijk gemaakt door:',
+            'tip_coach':           u'Tip: voeg InlineComp Coach toe aan je startscherm voor snelle toegang!',
+            'tip_public':          u'Tip: voeg InlineComp toe aan je startscherm voor snelle toegang!',
+        },
+        'en': {
+            'sub_coach_org':       u'For coaches at {org}',
+            'sub_coach_geen':      u'For coaches: follow all your skaters live',
+            'sub_public_org':      u'Races at {org}',
+            'sub_public_geen':     u'Follow your race live!',
+            'scan':                u'Scan the QR code with your phone',
+            'stap1_kies_naam':     u'Choose "{naam}"',
+            'stap1_kies_alg':      u'Choose your race',
+            'stap_coach_2':        u'Add skaters by club, sponsor or bib number',
+            'stap_coach_3':        u'Follow program, heats, penalties and results',
+            'stap_public_2':       u'Enter your bib number',
+            'stap_public_3':       u'View your heats, times and results',
+            'sportity_kanaal':     u'Official final results + standings via Sportity (channel: {kanaal}).',
+            'sportity_geen':       u'Official final results + standings via Sportity.',
+            'disclaimer_label':    u'NOTE — TEST PHASE',
+            'disclaimer_tekst':    u'No rights can be derived from the information in InlineComp.',
+            'sponsors_titel':      u'Made possible by:',
+            'tip_coach':           u'Tip: add InlineComp Coach to your home screen for quick access!',
+            'tip_public':          u'Tip: add InlineComp to your home screen for quick access!',
+        },
+    }
+    lang = args.lang if args.lang in I18N else 'nl'
+    def T(key, **fmt):
+        s = I18N[lang].get(key, I18N['nl'].get(key, key))
+        return s.format(**fmt) if fmt else s
+
     # ── Blauwe header ─────────────────────────────────────────────────────
     header_h = 82 * mm if heeft_comp else 80 * mm
     c.setFillColor(BLAUW)
@@ -219,9 +268,9 @@ def genereer_poster(args):
     c.drawCentredString(width / 2, height - 30 * mm, 'InlineComp')
 
     if is_coach:
-        sub = f'Voor coaches bij {args.org_naam}' if heeft_org else 'Voor coaches: volg al je rijders live'
+        sub = T('sub_coach_org', org=args.org_naam) if heeft_org else T('sub_coach_geen')
     else:
-        sub = f'Wedstrijden bij {args.org_naam}' if heeft_org else 'Volg je wedstrijd live!'
+        sub = T('sub_public_org', org=args.org_naam) if heeft_org else T('sub_public_geen')
     c.setFont('Helvetica', 18)
     c.setFillColor(LICHTBLAUW)
     c.drawCentredString(width / 2, height - 44 * mm, sub)
@@ -253,7 +302,7 @@ def genereer_poster(args):
     c.setFillColor(WIT)
     c.setFont('Helvetica', 15)
     instr_y = height - (70 if heeft_comp else 61) * mm
-    c.drawCentredString(width / 2, instr_y, 'Scan de QR-code met je telefoon')
+    c.drawCentredString(width / 2, instr_y, T('scan'))
 
     c.setFont('Helvetica-Bold', 24)
     c.setFillColor(ORANJE)
@@ -349,18 +398,18 @@ def genereer_poster(args):
 
     # ── 3 stappen ─────────────────────────────────────────────────────────
     step_top = qr_y - 12 * mm
-    stap1 = f'Kies "{args.comp_naam}"' if heeft_comp else 'Kies je wedstrijd'
+    stap1 = T('stap1_kies_naam', naam=args.comp_naam) if heeft_comp else T('stap1_kies_alg')
     if is_coach:
         steps = [
             ('1', stap1),
-            ('2', 'Voeg rijders toe via club, sponsor of startnummer'),
-            ('3', 'Volg programma, heats, sancties en uitslagen'),
+            ('2', T('stap_coach_2')),
+            ('3', T('stap_coach_3')),
         ]
     else:
         steps = [
             ('1', stap1),
-            ('2', 'Vul je startnummer in'),
-            ('3', 'Bekijk je heats, tijden en resultaten'),
+            ('2', T('stap_public_2')),
+            ('3', T('stap_public_3')),
         ]
     step_gap = 13 * mm     # tune: compacter = 11, ruimer = 15
     for i, (nr, tekst) in enumerate(steps):
@@ -393,10 +442,9 @@ def genereer_poster(args):
     # regel daaronder klein/grijs, want daar staan alleen de offici\u00eble
     # einduitslagen + klassementen na de wedstrijd.
     if args.sportity_kanaal:
-        sportity_tekst = (u'Offici\u00eble einduitslagen + klassementen '
-                          u'via Sportity (kanaal: %s).' % args.sportity_kanaal)
+        sportity_tekst = T('sportity_kanaal', kanaal=args.sportity_kanaal)
     else:
-        sportity_tekst = (u'Offici\u00eble einduitslagen + klassementen via Sportity.')
+        sportity_tekst = T('sportity_geen')
 
     # Warning-balk: lichtoranje vulling + oranje rand
     balk_y     = 30 * mm
@@ -412,11 +460,9 @@ def genereer_poster(args):
     # Twee regels in de balk: opvallend label + de feitelijke disclaimer
     c.setFillColor(DONKERORANJE)
     c.setFont('Helvetica-Bold', 14)
-    c.drawCentredString(width / 2, balk_y + balk_h - 6 * mm,
-        'LET OP \u2014 TESTFASE')
+    c.drawCentredString(width / 2, balk_y + balk_h - 6 * mm, T('disclaimer_label'))
     c.setFont('Helvetica-Bold', 11)
-    c.drawCentredString(width / 2, balk_y + 3.5 * mm,
-        'Aan de informatie in InlineComp kunnen geen rechten worden ontleend.')
+    c.drawCentredString(width / 2, balk_y + 3.5 * mm, T('disclaimer_tekst'))
 
     # Sportity-regel onder de warning-balk (klein, grijs, secundair)
     c.setFillColor(GRIJS)
@@ -449,7 +495,7 @@ def genereer_poster(args):
 
         c.setFillColor(BLAUW)
         c.setFont('Helvetica-Bold', 10)
-        c.drawCentredString(width / 2, sponsor_title_y, 'Mede mogelijk gemaakt door:')
+        c.drawCentredString(width / 2, sponsor_title_y, T('sponsors_titel'))
 
         cur_x = (width - totaal_breedte * schaal) / 2
         for naam, kind, data, w in sponsor_renderables:
@@ -479,9 +525,7 @@ def genereer_poster(args):
 
     c.setFillColor(LICHTBLAUW)
     c.setFont('Helvetica', 8)
-    tip = ('Tip: voeg InlineComp Coach toe aan je startscherm voor snelle toegang!'
-           if is_coach
-           else 'Tip: voeg InlineComp toe aan je startscherm voor snelle toegang!')
+    tip = T('tip_coach') if is_coach else T('tip_public')
     c.drawCentredString(width / 2, 6 * mm, tip)
 
     c.save()
@@ -504,6 +548,9 @@ def main():
     p.add_argument('--sportity-kanaal', default='',
                    help='Naam van het Sportity-kanaal (bv. ISKREGIO); '
                         'leeg = algemene verwijzing naar Sportity')
+    p.add_argument('--lang', default='nl', choices=['nl', 'en'],
+                   help="Taal van de poster-teksten. nl=Nederlands (default), "
+                        "en=English (voor internationale wedstrijden).")
     p.add_argument('--app-type', default='public', choices=['public', 'coach'],
                    help="Doelgroep van de poster: 'public' (rijders/ouders, default) "
                         "of 'coach' (coaches die meerdere rijders tegelijk volgen)")
