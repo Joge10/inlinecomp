@@ -40,6 +40,64 @@ function uuid4_w(): string {
 
 $action = $_GET['action'] ?? '';
 
+// ── ACTION: lijst ──────────────────────────────────────────────────────────
+// Geeft scope-gefilterde handmatige wedstrijden terug in een formaat dat
+// compatibel is met de KNSB-feed (api/competitions.php). De frontend kan ze
+// daardoor 1:1 mergen in allWedstrijden zonder aparte renderer. Het `bron`
+// veld + `is_handmatig` markering laat de frontend wel een badge tonen.
+//
+// Filter: alleen bron='handmatig' (KNSB-imports zitten al in de KNSB-feed-
+// proxy, geen dubbeling). Scope: alleen orgs waar deze user rechten op heeft.
+if ($action === 'lijst') {
+    $scope = gebruikerOrgScope($pdo, $_authUser);
+
+    $sql = "
+        SELECT c.id, c.name, c.starts, c.ends, c.location, c.venue_name, c.venue_city,
+               c.discipline, c.bron, c.organisatie_id,
+               o.naam AS org_naam
+        FROM competitions c
+        LEFT JOIN organisaties o ON o.id = c.organisatie_id
+        WHERE c.bron = 'handmatig'
+    ";
+    $params = [];
+    if ($scope !== null) {
+        if (empty($scope)) {
+            echo json_encode([]); exit;
+        }
+        $ph = implode(',', array_fill(0, count($scope), '?'));
+        $sql   .= " AND c.organisatie_id IN ($ph)";
+        $params = $scope;
+    }
+    $sql .= " ORDER BY c.starts DESC";
+
+    $stmt = $pdo->prepare($sql);
+    $stmt->execute($params);
+    $rijen = $stmt->fetchAll(PDO::FETCH_ASSOC);
+
+    // Vorm om naar KNSB-feed-compatibel formaat: organizer.name voor
+    // getOrganisatieNaam(), venue.address.city voor getLocatie(),
+    // discipline-string die op 'SpeedSkating.Inline' matcht.
+    $out = array_map(function($r) {
+        return [
+            'id'         => $r['id'],
+            'name'       => $r['name'],
+            'starts'     => $r['starts'],
+            'ends'       => $r['ends'],
+            'discipline' => 'SpeedSkating.Inline',
+            'venue'      => [
+                'name'    => $r['venue_name'] ?? null,
+                'address' => ['city' => $r['venue_city'] ?? null],
+            ],
+            'organizer'    => ['name' => $r['org_naam'] ?? ''],
+            'is_handmatig' => true,
+            'bron'         => $r['bron'],
+        ];
+    }, $rijen);
+
+    echo json_encode($out);
+    exit;
+}
+
 // ── ACTION: orgs_voor_create ───────────────────────────────────────────────
 // Lijst van organisaties waar deze user een nieuwe wedstrijd voor mag
 // aanmaken. Owners zien alles, gescopte admins alleen hun eigen orgs.
@@ -151,8 +209,9 @@ if ($action === 'create') {
         $stmt = $pdo->prepare("
             INSERT INTO competitions
                    (id, name, starts, ends, location, venue_name, venue_city,
-                    discipline, organisatie_id, public_zichtbaar, public_aankondigen)
-            VALUES (?, ?, ?, ?, ?, ?, ?, 'inline-skating', ?, 0, 0)
+                    discipline, bron, organisatie_id,
+                    public_zichtbaar, public_aankondigen)
+            VALUES (?, ?, ?, ?, ?, ?, ?, 'inline-skating', 'handmatig', ?, 0, 0)
         ");
         $stmt->execute([
             $compId, $naam, $startsDt, $endsDt,

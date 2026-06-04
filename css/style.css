@@ -5798,6 +5798,21 @@ col.live-col-rondes  { width: 40px; }
 }
 .up-rij-geblokkeerd .up-blok-info b { color: #8a3f00; }
 
+/* Badge voor handmatig aangemaakte wedstrijden in de Importeer-lijst.
+   Onderscheid van KNSB-feed-imports (geen badge). */
+.comp-bron-badge {
+    display: inline-block;
+    background: #fff3e0;
+    color: #8a5a00;
+    border: 1px solid #f0c896;
+    border-radius: 10px;
+    padding: 1px 7px;
+    font-size: .72rem;
+    font-weight: 600;
+    vertical-align: middle;
+    margin-left: 6px;
+}
+
 /* ── Handmatige wedstrijd-aanmaak (wh-*) ────────────────────────────────
    Modal voor het toevoegen van een wedstrijd buiten de KNSB-feed om.
    Bouwt op de bestaande .modal-overlay/.modal-dialog/.modal-knoppen.

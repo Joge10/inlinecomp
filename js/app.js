@@ -380,21 +380,40 @@ async function laadWedstrijden() {
     try {
         const vanDatum = el('filter-van')?.value || '';
         const vanParam = vanDatum ? `?van=${encodeURIComponent(vanDatum)}` : '';
-        const res  = await fetch(BASE + 'api/competitions.php' + vanParam);
-        if (!res.ok) throw new Error('HTTP ' + res.status);
-        const data = await res.json();
+        // Parallel: KNSB-feed + eigen handmatige wedstrijden uit DB. Mergen
+        // in één lijst zodat operator beide vanuit hetzelfde scherm kan
+        // selecteren. Handmatige wedstrijden zijn al server-side scope-gefilterd
+        // (via wedstrijd_handmatig.php?action=lijst).
+        const [resKnsb, resHand] = await Promise.all([
+            fetch(BASE + 'api/competitions.php' + vanParam),
+            fetch(BASE + 'api/wedstrijd_handmatig.php?action=lijst'),
+        ]);
+        if (!resKnsb.ok) throw new Error('KNSB-feed HTTP ' + resKnsb.status);
+        const dataKnsb = await resKnsb.json();
+        // Handmatige wedstrijden mogen falen zonder de hele lijst te breken
+        // (bv. nog niet gemigreerd). Logging blijft, lijst blijft bruikbaar.
+        let dataHand = [];
+        if (resHand.ok) {
+            try { dataHand = await resHand.json(); }
+            catch (e) { console.warn('Handmatige wedstrijden parse-fout', e); }
+        } else {
+            console.warn('Handmatige wedstrijden HTTP ' + resHand.status);
+        }
 
-        if (data.error) throw new Error(data.error);
-        if (!data.length) {
+        if (dataKnsb.error) throw new Error(dataKnsb.error);
+        if (!dataKnsb.length && !dataHand.length) {
             statusMsg(list, 'info', 'Geen aankomende inline wedstrijden gevonden.');
             return;
         }
 
-        // Multi-tenant: scope-filter op de KNSB-feed (naam-match). Bij
-        // unscoped (owner of geen koppeling) blijft alles.
-        allWedstrijden = filterWedstrijdenOpScope(data);
+        // Multi-tenant: KNSB-feed wedstrijden krijgen scope-filter op naam-match.
+        // Handmatige wedstrijden zijn al server-side scope-gefilterd en
+        // worden hier ONGEFILTERD toegevoegd (naam-match zou ze ten onrechte
+        // wegfilteren als de canonieke org-naam in de DB iets afwijkt).
+        const gescoptKnsb = filterWedstrijdenOpScope(dataKnsb);
+        allWedstrijden = [...dataHand, ...gescoptKnsb];
         if (!allWedstrijden.length) {
-            statusMsg(list, 'info', 'Geen wedstrijden van jouw organisatie(s) gevonden in de KNSB-feed.');
+            statusMsg(list, 'info', 'Geen wedstrijden van jouw organisatie(s) gevonden.');
             return;
         }
         vulLocatieDropdown();
@@ -505,8 +524,13 @@ function renderWedstrijdLijst() {
 
         const loc  = getLocatie(comp);
         const datum = formatDatum(comp.starts);
+        // Badge voor handmatig aangemaakte wedstrijden (niet uit KNSB-feed).
+        // Helpt operator direct te zien welke flow erbij hoort (geen KNSB-sync).
+        const handBadge = comp.is_handmatig
+            ? ' <span class="comp-bron-badge" title="Handmatig aangemaakt — geen KNSB-feed-koppeling">🔧 handmatig</span>'
+            : '';
         card.innerHTML =
-            `<div class="comp-naam">${escHtml(comp.name || comp.title || '')}</div>` +
+            `<div class="comp-naam">${escHtml(comp.name || comp.title || '')}${handBadge}</div>` +
             `<div class="comp-meta">${escHtml(datum)}${loc ? ' · ' + escHtml(loc) : ''}</div>`;
 
         card.addEventListener('click', () => selectWedstrijd(card, comp));
