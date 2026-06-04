@@ -136,8 +136,14 @@ try {
             exit;
         }
         $json = json_encode($stmt->fetchAll(PDO::FETCH_ASSOC), JSON_UNESCAPED_UNICODE);
-        // Cache schrijven (best-effort, faalt stil bij rechten-issues).
-        @file_put_contents($cacheFile, $json, LOCK_EX);
+        // Cache schrijven via atomic rename: voorkomt cache-lock-cascade
+        // waar meerdere processen op LOCK_EX wachten (zou EP-build-up geven).
+        // Race-condities zijn ongevaarlijk: laatste schrijver wint, files
+        // zijn altijd volledig (rename is atomic op POSIX).
+        $tmpCacheFile = $cacheFile . '.tmp.' . getmypid();
+        if (@file_put_contents($tmpCacheFile, $json) !== false) {
+            @rename($tmpCacheFile, $cacheFile);
+        }
         // Override no-store voor de poll — opvolgende polls binnen 30s
         // mogen vanuit browser-cache (geen server-roundtrip).
         header_remove('Cache-Control');

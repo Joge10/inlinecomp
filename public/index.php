@@ -116,7 +116,12 @@ if ($_cacheable) {
         global $_cacheFile;
         $out = ob_get_contents();
         if ($out !== false && $out !== '' && $_cacheFile) {
-            @file_put_contents($_cacheFile, $out, LOCK_EX);
+            // Atomic rename ipv LOCK_EX — geen wachtende processen bij
+            // concurrent writes (zou EP-cascade kunnen veroorzaken).
+            $tmp = $_cacheFile . '.tmp.' . getmypid();
+            if (@file_put_contents($tmp, $out) !== false) {
+                @rename($tmp, $_cacheFile);
+            }
         }
         ob_end_flush();
     });
