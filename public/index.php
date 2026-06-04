@@ -3642,13 +3642,12 @@ function renderResultaat(data, snr, prog) {
                         <button class="prog-dag-btn actief" data-dag="alle"
                                 onclick="filterDag(this,'alle')">Alle</button>`;
                     for (let dn = 1; dn <= wsBlokken.length; dn++) {
+                        // Compact: alleen "Dag N". Volledige datum (incl. weekdag)
+                        // zit in de tooltip bij hover én in de dag-header zelf.
                         const info = dagInfoPerNr.get(dn);
-                        const korteDatum = info?.datumLbl
-                            ? info.datumLbl.split(' ').slice(0, 2).join(' ')  // "vrijdag 28" ipv "vrijdag 28 mei"
-                            : '';
                         html += `<button class="prog-dag-btn" data-dag="${dn}"
                                          onclick="filterDag(this,'${dn}')"
-                                         title="${esc(info?.datumLbl || '')}">Dag ${dn}${korteDatum ? ' ('+esc(korteDatum)+')' : ''}</button>`;
+                                         title="${esc(info?.datumLbl || '')}">Dag ${dn}</button>`;
                     }
                     html += `</div>`;
                 }
