@@ -185,8 +185,7 @@ if (is_array($eigenScope) && !empty($eigenScope)) {
             <div class="modal-overlay" id="wh-modal-overlay" style="display:none;">
                 <div class="modal-dialog wh-modal">
                     <div class="modal-header">
-                        <span class="modal-titel">Nieuwe wedstrijd handmatig toevoegen</span>
-                        <button class="modal-sluit" id="wh-btn-sluit" title="Sluiten">×</button>
+                        <span>Nieuwe wedstrijd handmatig toevoegen</span>
                     </div>
                     <div class="modal-body">
                         <p class="wh-uitleg">

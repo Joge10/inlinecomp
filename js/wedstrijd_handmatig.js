@@ -39,8 +39,8 @@
         if (wrap) wrap.style.display = '';
         document.getElementById('wh-btn-open')?.addEventListener('click', openModal);
 
-        // Modal close listeners
-        document.getElementById('wh-btn-sluit')?.addEventListener('click', closeModal);
+        // Modal close: Annuleer-knop + klik buiten dialog. Geen × in header
+        // (huisstijl-modals hebben er geen — consistente UX).
         document.getElementById('wh-btn-annuleer')?.addEventListener('click', closeModal);
         document.getElementById('wh-modal-overlay')?.addEventListener('click', e => {
             if (e.target.id === 'wh-modal-overlay') closeModal();
