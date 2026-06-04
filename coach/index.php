@@ -1602,13 +1602,21 @@ select.sel {
 }
 .prog-dag-btn {
     border: 1px solid #b3cae6; background: #fff; color: #1a3a5c;
-    padding: 6px 12px; border-radius: 16px; font-size: .82rem;
+    padding: 5px 12px; border-radius: 14px; font-size: .82rem;
     font-weight: 600; cursor: pointer; transition: background .12s;
+    display: inline-flex; flex-direction: column; align-items: center;
+    justify-content: center; line-height: 1.15; min-height: 38px;
 }
 .prog-dag-btn:hover { background: #eaf2fb; }
 .prog-dag-btn.actief {
     background: #1a3a5c; color: #fff; border-color: #1a3a5c;
 }
+/* Korte datum onder "Dag N" — mobiel-vriendelijk, geen hover nodig */
+.prog-dag-btn-datum {
+    display: block; font-size: .65rem; font-weight: 400;
+    opacity: .8; margin-top: 1px; letter-spacing: 0;
+}
+.prog-dag-btn.actief .prog-dag-btn-datum { opacity: .95; }
 .verborgen { display: none !important; }
 /* Dag-header bij meerdaags evenement: prominente scheiding tussen dagen */
 .prog-dag-header {
@@ -2102,6 +2110,8 @@ const T = {
         prog_blok_ceremonie: 'Ceremonie',
         prog_blok_herstart: 'Herstart',
         prog_blok_min: 'min',
+        prog_dag_alle: 'Alle',
+        prog_dag: 'Dag',
         prog_combi_kop: '🔗 Gecombineerde rit — rijden tegelijk',
         prog_laden: 'Programma wordt geladen…',
         prog_geen: 'Nog geen programma bekend.',
@@ -2333,6 +2343,8 @@ const T = {
         prog_blok_ceremonie: 'Ceremony',
         prog_blok_herstart: 'Restart',
         prog_blok_min: 'min',
+        prog_dag_alle: 'All',
+        prog_dag: 'Day',
         prog_combi_kop: '🔗 Combined race — skating together',
         prog_laden: 'Loading program…',
         prog_geen: 'No program known yet.',
@@ -2564,6 +2576,8 @@ const T = {
         prog_blok_ceremonie: 'Siegerehrung',
         prog_blok_herstart: 'Neustart',
         prog_blok_min: 'Min',
+        prog_dag_alle: 'Alle',
+        prog_dag: 'Tag',
         prog_combi_kop: '🔗 Kombiniertes Rennen — gemeinsam',
         prog_laden: 'Programm wird geladen…',
         prog_geen: 'Noch kein Programm bekannt.',
@@ -2795,6 +2809,8 @@ const T = {
         prog_blok_ceremonie: 'Cérémonie',
         prog_blok_herstart: 'Redémarrage',
         prog_blok_min: 'min',
+        prog_dag_alle: 'Tous',
+        prog_dag: 'Jour',
         prog_combi_kop: '🔗 Course combinée — ensemble',
         prog_laden: 'Chargement du programme…',
         prog_geen: 'Pas encore de programme connu.',
@@ -3335,17 +3351,22 @@ function renderProgramma() {
         .filter(b => (b.blok_type || '').toLowerCase() === 'wedstrijdstart')
         .sort((a, b) => num(a.volgorde) - num(b.volgorde));
     const isMultiDag = wsBlokken.length > 1;
+    // datumLbl = lange vorm voor de header (vrijdag 28 mei),
+    // kortLbl  = korte vorm voor de filter-knop (vr 28-5). Beide locale-aware.
     const dagInfoPerNr = new Map();
+    const _locale = (typeof getLocale === 'function') ? getLocale() : 'nl-NL';
     wsBlokken.forEach((ws, i) => {
-        let datumLbl = '';
+        let datumLbl = '', kortLbl = '';
         if (ws.datum) {
             const d = new Date(ws.datum + 'T00:00:00');
             if (!isNaN(d)) {
-                datumLbl = d.toLocaleDateString('nl-NL',
+                datumLbl = d.toLocaleDateString(_locale,
                     {weekday:'long', day:'numeric', month:'long'});
+                kortLbl  = d.toLocaleDateString(_locale,
+                    {weekday:'short', day:'numeric', month:'numeric'});
             }
         }
-        dagInfoPerNr.set(i + 1, { datumLbl });
+        dagInfoPerNr.set(i + 1, { datumLbl, kortLbl });
     });
     // Dag-per-item berekenen
     const dagPerItem = new Array(allesGesorteerd.length);
@@ -3458,13 +3479,17 @@ function renderProgramma() {
     if (isMultiDag) {
         html += `<div class="prog-dag-filter" id="prog-dag-filter" data-actieve-dag="alle">
             <button class="prog-dag-btn actief" data-dag="alle"
-                    onclick="filterDag(this,'alle')">Alle</button>`;
+                    onclick="filterDag(this,'alle')">${esc(t('prog_dag_alle'))}</button>`;
         for (let dn = 1; dn <= wsBlokken.length; dn++) {
-            // Compact: alleen "Dag N". Volledige datum staat in tooltip + header.
+            // Knop: "Dag N" + korte datum onder (mobiel-vriendelijk).
             const info = dagInfoPerNr.get(dn);
+            const subDatum = info?.kortLbl
+                ? `<span class="prog-dag-btn-datum">${esc(info.kortLbl)}</span>`
+                : '';
             html += `<button class="prog-dag-btn" data-dag="${dn}"
                              onclick="filterDag(this,'${dn}')"
-                             title="${esc(info?.datumLbl || '')}">Dag ${dn}</button>`;
+                             title="${esc(info?.datumLbl || '')}"
+                >${esc(t('prog_dag'))} ${dn}${subDatum}</button>`;
         }
         html += `</div>`;
     }

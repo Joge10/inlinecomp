@@ -1695,13 +1695,21 @@ select:focus, input:focus { border-color: var(--middenblauw); outline: none; }
 }
 .prog-dag-btn {
     border: 1px solid #b3cae6; background: #fff; color: #1a3a5c;
-    padding: 6px 12px; border-radius: 16px; font-size: .82rem;
+    padding: 5px 12px; border-radius: 14px; font-size: .82rem;
     font-weight: 600; cursor: pointer; transition: background .12s;
+    display: inline-flex; flex-direction: column; align-items: center;
+    justify-content: center; line-height: 1.15; min-height: 38px;
 }
 .prog-dag-btn:hover { background: #eaf2fb; }
 .prog-dag-btn.actief {
     background: #1a3a5c; color: #fff; border-color: #1a3a5c;
 }
+/* Korte datum onder "Dag N" — mobiel-vriendelijk, geen hover nodig */
+.prog-dag-btn-datum {
+    display: block; font-size: .65rem; font-weight: 400;
+    opacity: .8; margin-top: 1px; letter-spacing: 0;
+}
+.prog-dag-btn.actief .prog-dag-btn-datum { opacity: .95; }
 /* Verbergen-class voor de filter: data-dag-nr items krijgen .verborgen
    als de actieve dag-filter ze niet matcht. */
 .verborgen { display: none !important; }
@@ -1971,6 +1979,9 @@ const T = {
         prog_blok_ceremonie: 'Ceremonie',
         prog_blok_herstart: 'Herstart',
         prog_blok_min: 'min',
+        // Multi-day filter
+        prog_dag_alle: 'Alle',
+        prog_dag: 'Dag',
         // ── Heats ──
         heat_wachten_vorige: 'Wachten op vorige ronde',
         heat_jouw_resultaat: 'Jij:',
@@ -2155,6 +2166,9 @@ const T = {
         prog_blok_ceremonie: 'Ceremony',
         prog_blok_herstart: 'Restart',
         prog_blok_min: 'min',
+        // Multi-day filter
+        prog_dag_alle: 'All',
+        prog_dag: 'Day',
         // ── Heats ──
         heat_wachten_vorige: 'Waiting for previous round',
         heat_jouw_resultaat: 'You:',
@@ -2339,6 +2353,9 @@ const T = {
         prog_blok_ceremonie: 'Zeremonie',
         prog_blok_herstart: 'Neustart',
         prog_blok_min: 'Min.',
+        // Multi-day filter
+        prog_dag_alle: 'Alle',
+        prog_dag: 'Tag',
         // ── Heats ──
         heat_wachten_vorige: 'Warte auf vorherige Runde',
         heat_jouw_resultaat: 'Du:',
@@ -2523,6 +2540,9 @@ const T = {
         prog_blok_ceremonie: 'Cérémonie',
         prog_blok_herstart: 'Redémarrage',
         prog_blok_min: 'min',
+        // Multi-day filter
+        prog_dag_alle: 'Tous',
+        prog_dag: 'Jour',
         // ── Heats ──
         heat_wachten_vorige: 'En attente du tour précédent',
         heat_jouw_resultaat: 'Toi :',
@@ -3584,17 +3604,23 @@ function renderResultaat(data, snr, prog) {
                     .filter(b => (b.blok_type || '').toLowerCase() === 'wedstrijdstart')
                     .sort((a, b) => num(a.volgorde) - num(b.volgorde));
                 const isMultiDag = wsBlokken.length > 1;
-                const dagInfoPerNr = new Map();   // dagNr → {datumLbl}
+                // dagInfoPerNr: dagNr → { datumLbl (lang, voor header), kortLbl (knop) }
+                // Beide locale-aware via getLocale() — Engels op een EN-instelling
+                // gebruikt "Fri 28/5", Duits "Fr. 28.5.", Frans "ven. 28/5", etc.
+                const dagInfoPerNr = new Map();
+                const _locale = (typeof getLocale === 'function') ? getLocale() : 'nl-NL';
                 wsBlokken.forEach((ws, i) => {
-                    let datumLbl = '';
+                    let datumLbl = '', kortLbl = '';
                     if (ws.datum) {
                         const d = new Date(ws.datum + 'T00:00:00');
                         if (!isNaN(d)) {
-                            datumLbl = d.toLocaleDateString('nl-NL',
+                            datumLbl = d.toLocaleDateString(_locale,
                                 {weekday:'long', day:'numeric', month:'long'});
+                            kortLbl  = d.toLocaleDateString(_locale,
+                                {weekday:'short', day:'numeric', month:'numeric'});
                         }
                     }
-                    dagInfoPerNr.set(i + 1, { datumLbl });
+                    dagInfoPerNr.set(i + 1, { datumLbl, kortLbl });
                 });
 
                 // Dag-toewijzing per item via twee passes:
@@ -3640,14 +3666,18 @@ function renderResultaat(data, snr, prog) {
                 if (isMultiDag) {
                     html += `<div class="prog-dag-filter" id="prog-dag-filter" data-actieve-dag="alle">
                         <button class="prog-dag-btn actief" data-dag="alle"
-                                onclick="filterDag(this,'alle')">Alle</button>`;
+                                onclick="filterDag(this,'alle')">${esc(t('prog_dag_alle'))}</button>`;
                     for (let dn = 1; dn <= wsBlokken.length; dn++) {
-                        // Compact: alleen "Dag N". Volledige datum (incl. weekdag)
-                        // zit in de tooltip bij hover én in de dag-header zelf.
-                        const info = dagInfoPerNr.get(dn);
+                        // Knop: "Dag N" + korte datum onder (sub-label) zodat
+                        // mobiel-gebruikers ook zonder hover de datum zien.
+                        const info     = dagInfoPerNr.get(dn);
+                        const subDatum = info?.kortLbl
+                            ? `<span class="prog-dag-btn-datum">${esc(info.kortLbl)}</span>`
+                            : '';
                         html += `<button class="prog-dag-btn" data-dag="${dn}"
                                          onclick="filterDag(this,'${dn}')"
-                                         title="${esc(info?.datumLbl || '')}">Dag ${dn}</button>`;
+                                         title="${esc(info?.datumLbl || '')}"
+                            >${esc(t('prog_dag'))} ${dn}${subDatum}</button>`;
                     }
                     html += `</div>`;
                 }
