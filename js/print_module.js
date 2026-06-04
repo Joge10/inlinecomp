@@ -310,16 +310,10 @@ function _pcBouwModal() {
                     <input type="checkbox" id="pc-boomsaver">
                     <span>🌳 Boom-saver: prints combineren op minder papier</span>
                 </label>
-                <div class="pc-lang-toggle" title="Taal van de geprinte rapporten — keuze blijft bewaard ook na hard refresh">
-                    <span class="pc-lang-label">Taal:</span>
-                    <label class="pc-lang-opt">
-                        <input type="radio" name="pc-lang" value="nl" id="pc-lang-nl">
-                        <span>🇳🇱 NL</span>
-                    </label>
-                    <label class="pc-lang-opt">
-                        <input type="radio" name="pc-lang" value="en" id="pc-lang-en">
-                        <span>🇬🇧 EN</span>
-                    </label>
+                <div class="pc-lang" title="Taal van de geprinte rapporten — keuze blijft bewaard ook na hard refresh">
+                    <span>Taal:</span>
+                    <label><input type="radio" name="pc-lang" value="nl" id="pc-lang-nl"> NL</label>
+                    <label><input type="radio" name="pc-lang" value="en" id="pc-lang-en"> GB</label>
                 </div>
                 <div class="pc-toolbar-rechts">
                     <button class="btn-secondary" id="pc-btn-reset">Alles uit</button>
