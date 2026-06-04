@@ -592,8 +592,12 @@ if ($action === 'programma') {
         // blok_volgorde-positie kan tussenvoegen tussen de ritten.
         // inrijd_cats is JSON-array van dc_id-strings; we resolven die
         // server-side naar dc-namen.
+        // datum meegestuurd voor multi-day NK: wedstrijdstart-blokken hebben
+        // een datum per dag. Frontend gebruikt 'm voor de "Dag N — Zaterdag
+        // 28 mei"-header bij meerdaagse evenementen.
         $blStmt = $pdo->prepare("
-            SELECT id, volgorde, blok_type, duur, heat_duur, inrijd_cats, tijdstip, opmerking
+            SELECT id, volgorde, blok_type, duur, heat_duur, inrijd_cats,
+                   tijdstip, datum, opmerking
             FROM tijdschema_blokken
             WHERE tijdschema_id = ? AND blok_type != 'ronde'
             ORDER BY volgorde
@@ -1589,6 +1593,15 @@ select.sel {
 .badge-hf      { background:#5e35b1; }
 .badge-finale  { background:#d32f2f; }
 .badge-ru      { background:#00897b; }
+/* Dag-header bij meerdaags evenement: prominente scheiding tussen dagen */
+.prog-dag-header {
+    background: linear-gradient(to right, #1a3a5c, #2E75B6);
+    color: #fff; padding: 10px 14px; border-radius: 6px;
+    font-size: 1rem; font-weight: 700; margin: 14px 0 8px 0;
+    text-transform: capitalize; letter-spacing: .02em;
+    box-shadow: 0 2px 4px rgba(26,58,92,.15);
+}
+.prog-dag-header:first-child { margin-top: 4px; }
 .blok-rij { background:#e8eaf6; border-radius:6px; padding:6px 10px;
             margin-bottom:6px; font-size:.85rem; color:#333; }
 .blok-rij-top { display:flex; flex-wrap:wrap; align-items:baseline; gap:.5rem; }
@@ -3270,14 +3283,19 @@ function renderProgramma() {
     // admin-render-algoritme in js/tijdschema.js (lines 1078-1095) zodat
     // cross-blok drag-drops correct doorkomen — vroeger werd primair op
     // r.blok_volgorde gesorteerd, en die verandert NIET bij een drag-drop.
+    //
+    // KRITIEKE FIX: parseInt op volgorde-vergelijkingen — PDO levert SMALLINT
+    // als JS-string ("10", "100"), zonder coercion ging "100" <= "20"
+    // lexicaal (true!) en kwam wedstrijdstart-dag-2 verkeerd terecht.
+    const num = v => parseInt(v) || 0;
     const allesGesorteerd = [];
     const sortedBlk = (blokken || []).slice()
-        .sort((a, b) => (a.volgorde ?? 0) - (b.volgorde ?? 0));
+        .sort((a, b) => num(a.volgorde) - num(b.volgorde));
     let blkIdx = 0;
     for (const r of (ritten || [])) {
-        const rBV = r.blok_volgorde ?? 0;
+        const rBV = num(r.blok_volgorde);
         while (blkIdx < sortedBlk.length
-               && (sortedBlk[blkIdx].volgorde ?? 0) <= rBV) {
+               && num(sortedBlk[blkIdx].volgorde) <= rBV) {
             allesGesorteerd.push({ type:'blok', data: sortedBlk[blkIdx++] });
         }
         allesGesorteerd.push({ type:'rit', data: r });
@@ -3290,6 +3308,26 @@ function renderProgramma() {
         progEl.innerHTML = `<div class="leeg-melding">${t('prog_geen')}</div>`;
         return;
     }
+
+    // Multi-day dag-header info: bij meerdere wedstrijdstart-blokken één
+    // header per dag vóór de wedstrijdstart-blok. wsDagInfo: blok-id (string)
+    // → {nr, datumLbl}.
+    const wsBlokken = (blokken || [])
+        .filter(b => (b.blok_type || '').toLowerCase() === 'wedstrijdstart')
+        .sort((a, b) => num(a.volgorde) - num(b.volgorde));
+    const isMultiDag = wsBlokken.length > 1;
+    const wsDagInfo  = new Map();
+    wsBlokken.forEach((ws, i) => {
+        let datumLbl = '';
+        if (ws.datum) {
+            const d = new Date(ws.datum + 'T00:00:00');
+            if (!isNaN(d)) {
+                datumLbl = d.toLocaleDateString('nl-NL',
+                    {weekday:'long', day:'numeric', month:'long'});
+            }
+        }
+        wsDagInfo.set(String(ws.id), { nr: i + 1, datumLbl });
+    });
 
     // Haal HH:MM uit "HH:MM:SS" (TIME) óf "YYYY-MM-DD HH:MM:SS" (DATETIME).
     const hhmm = v => {
@@ -3377,7 +3415,19 @@ function renderProgramma() {
     for (const item of allesGesorteerd) {
         if (item.type === 'blok') {
             if (vorigeCombi !== null) { html += `</div></div>`; vorigeCombi = null; }
-            html += blokHtml(item.data);
+            const b  = item.data;
+            const bt = (b.blok_type || '').toLowerCase();
+            // Dag-header bij multi-day vóór elke wedstrijdstart.
+            if (isMultiDag && bt === 'wedstrijdstart') {
+                const info = wsDagInfo.get(String(b.id));
+                if (info) {
+                    const lbl = info.datumLbl
+                        ? `Dag ${info.nr} — ${info.datumLbl}`
+                        : `Dag ${info.nr}`;
+                    html += `<div class="prog-dag-header">${esc(lbl)}</div>`;
+                }
+            }
+            html += blokHtml(b);
             continue;
         }
         const r = item.data;

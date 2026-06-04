@@ -308,8 +308,12 @@ if ($action === 'programma') {
         // Blokken (pauze, inrijden, etc.). inrijd_cats is JSON-array van
         // dc_id-strings; we resolven die naar leesbare dc-namen zodat de
         // frontend geen extra lookup hoeft te doen.
+        // datum meegestuurd voor multi-day NK: wedstrijdstart-blokken hebben
+        // een datum per dag, herstart-blokken kunnen ook een eigen datum hebben.
+        // Frontend gebruikt 'm voor de "Dag N — Zaterdag 28 mei"-header.
         $blStmt = $pdo->prepare("
-            SELECT id, volgorde, blok_type, duur, heat_duur, inrijd_cats, tijdstip, opmerking
+            SELECT id, volgorde, blok_type, duur, heat_duur, inrijd_cats,
+                   tijdstip, datum, opmerking
             FROM tijdschema_blokken
             WHERE tijdschema_id = ? AND blok_type != 'ronde'
             ORDER BY volgorde
@@ -1681,6 +1685,15 @@ select:focus, input:focus { border-color: var(--middenblauw); outline: none; }
     border-bottom: 1px solid #f0f2f5; font-style: italic;
 }
 /* ── Programma-blokken (pauze, inrijden, ceremonie, herstart, start) ── */
+/* Dag-header bij meerdaags evenement: prominente scheiding tussen dagen */
+.prog-dag-header {
+    background: linear-gradient(to right, #1a3a5c, #2E75B6);
+    color: #fff; padding: 10px 14px; border-radius: 6px;
+    font-size: 1rem; font-weight: 700; margin: 14px 0 8px 0;
+    text-transform: capitalize; letter-spacing: .02em;
+    box-shadow: 0 2px 4px rgba(26,58,92,.15);
+}
+.prog-dag-header:first-child { margin-top: 4px; }
 .prog-blok-rij { background:#e8eaf6; border-radius:6px; padding:6px 10px;
                  margin:6px 0; font-size:.85rem; color:#333; }
 .prog-blok-top { display:flex; flex-wrap:wrap; align-items:baseline; gap:.5rem; }
@@ -3493,23 +3506,23 @@ function renderResultaat(data, snr, prog) {
             html += `<div class="kaart-sectie-titel">${esc(t('prog_titel'))}</div>`;
             if (prog.ritten?.length) {
                 // Interleave ritten en niet-ronde blokken (pauze, inrijden,
-                // Interleave-algoritme — match admin (js/tijdschema.js):
-                // Itereer ritten in hun globale r.volgorde-volgorde (al door
-                // de SQL geleverd) en schuif non-ronde blokken (pauze,
-                // inrijden, ceremonie, wedstrijdstart, herstart) tussen op
-                // basis van blok_volgorde t.o.v. de blok_volgorde van de
-                // ronde-blok van elke rit. Eerder werd er ook gesorteerd op
-                // r.blok_volgorde, maar die verandert NIET wanneer een groep
-                // over een blok-grens wordt versleept — daardoor leek de
-                // volgorde "creation order" te zijn ipv de admin-keuze.
+                // wedstrijdstart, ceremonie, herstart).
+                //
+                // KRITIEKE FIX (was: lexicale sort-bug): PDO returnt SMALLINT
+                // velden als JS-strings ("10", "100", "20"). Zonder parseInt
+                // werd `"100" <= "20"` lexicaal vergeleken (true!) waardoor
+                // wedstrijdstart-dag-2 (volgorde="100") op verkeerde plek
+                // tussen dag-1-ritten verscheen. Admin (tijdschema.js) doet
+                // overal parseInt — public/coach hadden die niet.
+                const num       = v => parseInt(v) || 0;
                 const items     = [];
                 const sortedBlk = (prog.blokken || []).slice()
-                    .sort((a, b) => (a.volgorde ?? 0) - (b.volgorde ?? 0));
+                    .sort((a, b) => num(a.volgorde) - num(b.volgorde));
                 let blkIdx = 0;
                 for (const r of (prog.ritten || [])) {
-                    const rBV = r.blok_volgorde ?? 0;
+                    const rBV = num(r.blok_volgorde);
                     while (blkIdx < sortedBlk.length
-                           && (sortedBlk[blkIdx].volgorde ?? 0) <= rBV) {
+                           && num(sortedBlk[blkIdx].volgorde) <= rBV) {
                         items.push({ type:'blok', data: sortedBlk[blkIdx++] });
                     }
                     items.push({ type:'rit', data: r });
@@ -3517,6 +3530,26 @@ function renderResultaat(data, snr, prog) {
                 while (blkIdx < sortedBlk.length) {
                     items.push({ type:'blok', data: sortedBlk[blkIdx++] });
                 }
+
+                // Multi-day detectie: meerdere wedstrijdstart-blokken → toon
+                // "Dag N — Zaterdag 28 mei"-header vóór elke wedstrijdstart.
+                // wsDagInfo: wedstrijdstart-blok-id (string) → {nr, datumLbl}.
+                const wsBlokken = (prog.blokken || [])
+                    .filter(b => (b.blok_type || '').toLowerCase() === 'wedstrijdstart')
+                    .sort((a, b) => num(a.volgorde) - num(b.volgorde));
+                const isMultiDag = wsBlokken.length > 1;
+                const wsDagInfo  = new Map();
+                wsBlokken.forEach((ws, i) => {
+                    let datumLbl = '';
+                    if (ws.datum) {
+                        const d = new Date(ws.datum + 'T00:00:00');
+                        if (!isNaN(d)) {
+                            datumLbl = d.toLocaleDateString('nl-NL',
+                                {weekday:'long', day:'numeric', month:'long'});
+                        }
+                    }
+                    wsDagInfo.set(String(ws.id), { nr: i + 1, datumLbl });
+                });
 
                 const hhmm = v => { if (!v) return ''; const m = String(v).match(/(\d{1,2}:\d{2})/); return m ? m[1] : ''; };
                 const blokIcoon = bt => ({pauze:'⏸',inrijden:'🛼',wedstrijdstart:'🏁',ceremonie:'🏆',herstart:'🔄'}[bt] || '🕓');
@@ -3535,6 +3568,19 @@ function renderResultaat(data, snr, prog) {
                         if (vorigeCombi !== null) { html += `</div></div>`; vorigeCombi = null; }
                         const b = it.data;
                         const bt = (b.blok_type || '').toLowerCase();
+
+                        // Dag-header vóór elke wedstrijdstart-blok in multi-day.
+                        // Eendaags: geen header (zou alleen ruis toevoegen).
+                        if (isMultiDag && bt === 'wedstrijdstart') {
+                            const info = wsDagInfo.get(String(b.id));
+                            if (info) {
+                                const lbl = info.datumLbl
+                                    ? `Dag ${info.nr} — ${info.datumLbl}`
+                                    : `Dag ${info.nr}`;
+                                html += `<div class="prog-dag-header">${esc(lbl)}</div>`;
+                            }
+                        }
+
                         const tijd = hhmm(b.tijdstip);
                         const tijdHtml = tijd ? `<span class="prog-blok-tijd">🕓 ${esc(tijd)}</span>` : '';
                         const duurHtml = b.duur ? `<span class="prog-blok-duur">${b.duur} ${t('prog_blok_min')}</span>` : '';
