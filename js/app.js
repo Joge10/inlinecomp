@@ -586,48 +586,24 @@ async function selectWedstrijd(card, comp) {
 
     panel.scrollIntoView({ behavior: 'smooth', block: 'start' });
 
-    // Handmatige wedstrijd: geen KNSB-feed, dus vergelijk.php is niet zinvol.
-    // Toon info-paneel met volgende stappen, verberg Import/Export-knoppen
-    // (KNSB-CSV is leeg, KNSB-import bestaat niet voor deze bron).
+    // Handmatige wedstrijd: vergelijk.php fetched KNSB-data en faalt voor deze
+    // bron. We gebruiken het detail-endpoint dat een vergelijk-compatibele
+    // shape geeft uit eigen DB (lege competitors per cat, DC's, organisatie).
+    // Importeer/Export-knoppen worden verborgen — geen KNSB-roundtrip mogelijk.
     if (comp.is_handmatig) {
         el('btn-import').style.display = 'none';
         el('btn-export').style.display = 'none';
-        setHTML('imp-cat-content', `
-            <div class="status-msg info" style="line-height:1.7">
-                <b>🔧 Handmatig aangemaakte wedstrijd</b><br>
-                Geen KNSB-feed-koppeling — vergelijken/importeren niet van toepassing.
-                <br><br>
-                <b>Volgende stappen</b>:
-                <ol style="margin:8px 0 0 18px;padding:0">
-                    <li>Voeg afstanden toe per categorie via <b>Beheer → Afstanden</b></li>
-                    <li>Kies systeem + genereer programma in <b>Tijdschema</b></li>
-                    <li>Schakel zichtbaar via <b>Beheer</b> zodat Coach + Public 'm zien</li>
-                </ol>
-                <div style="margin-top:10px;font-size:.85rem;color:#666">
-                    <i>Rijders toevoegen (Excel-import + handmatige + externe rijders) volgt in een latere update.</i>
-                </div>
-            </div>
-        `);
-        // State setten voor andere modules (Tijdschema/Beheer): they read huidigComp.
-        huidigOrganisatie = comp.organizer ? { naam: comp.organizer.name } : null;
-        huidigBaan        = null;
-        huidigImported    = true;  // staat al in DB
-        vergelijkData     = [];
-        _heeftProgramma   = false;
-        _orgTransponders  = [];
-        updateImportBtn?.();
-        renderBaanRij?.();
-        return;
+    } else {
+        el('btn-import').style.display = '';
+        el('btn-export').style.display = '';
     }
-    // KNSB-wedstrijd: zorg dat knoppen weer zichtbaar zijn (na een eerdere
-    // selectie van een handmatige wedstrijd)
-    el('btn-import').style.display = '';
-    el('btn-export').style.display = '';
 
     const myAbort = vergelijkAbort;
+    const endpoint = comp.is_handmatig
+        ? 'api/wedstrijd_handmatig.php?action=detail&id=' + encodeURIComponent(comp.id)
+        : 'api/vergelijk.php?id=' + encodeURIComponent(comp.id);
     try {
-        const res = await fetch('api/vergelijk.php?id=' + encodeURIComponent(comp.id),
-                                { signal: myAbort.signal });
+        const res = await fetch(endpoint, { signal: myAbort.signal });
         if (!res.ok) throw new Error('HTTP ' + res.status);
         const vData = await res.json();
         if (vData.error) throw new Error(vData.error);

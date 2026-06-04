@@ -40,6 +40,106 @@ function uuid4_w(): string {
 
 $action = $_GET['action'] ?? '';
 
+// ── ACTION: detail ─────────────────────────────────────────────────────────
+// Vergelijk.php-compatibele response voor handmatige wedstrijden — vergelijk.php
+// zelf fetched KNSB-data en faalt voor handmatige (geen feed-data). Hier
+// bouwen we de response uit eigen DB: DCs als 'groepen' met lege competitors,
+// organisatie + sponsors, baan, en de meta-velden die de frontend verwacht.
+//
+// Rijders komen pas in Fase 2 (Excel-import + handmatige + extern=true). Voor
+// nu: lege competitors-arrays. Het beheer-panel werkt wel: DC's tonen,
+// splitsen/combineren, afstanden toevoegen — alles uit DB.
+if ($action === 'detail') {
+    $compId = trim($_GET['id'] ?? '');
+    if ($compId === '') {
+        http_response_code(400);
+        echo json_encode(['error' => 'id ontbreekt']);
+        exit;
+    }
+    checkCompetitieToegang($pdo, $_authUser, $compId);
+
+    // Wedstrijd ophalen + scope-check via wedstrijd-detail
+    $stmt = $pdo->prepare("
+        SELECT c.id, c.name, c.starts, c.ends, c.bron, c.organisatie_id, c.baan_id,
+               c.entries_version, c.tijdschema_version
+        FROM competitions c
+        WHERE c.id = ? AND c.bron = 'handmatig'
+        LIMIT 1
+    ");
+    $stmt->execute([$compId]);
+    $comp = $stmt->fetch(PDO::FETCH_ASSOC);
+    if (!$comp) {
+        http_response_code(404);
+        echo json_encode(['error' => 'Handmatige wedstrijd niet gevonden']);
+        exit;
+    }
+
+    // Organisatie + sponsors (kopie van vergelijk.php-shape)
+    $organisatie = null;
+    if (!empty($comp['organisatie_id'])) {
+        $stmt = $pdo->prepare("SELECT * FROM organisaties WHERE id = ?");
+        $stmt->execute([$comp['organisatie_id']]);
+        $organisatie = $stmt->fetch(PDO::FETCH_ASSOC) ?: null;
+        if ($organisatie) {
+            $stmt = $pdo->prepare(
+                "SELECT * FROM organisatie_sponsors WHERE organisatie_id = ? ORDER BY volgorde, naam"
+            );
+            $stmt->execute([$organisatie['id']]);
+            $organisatie['sponsors'] = $stmt->fetchAll(PDO::FETCH_ASSOC);
+        }
+    }
+
+    // Baan (optional)
+    $baan = null;
+    if (!empty($comp['baan_id'])) {
+        $stmt = $pdo->prepare("SELECT * FROM banen WHERE id = ?");
+        $stmt->execute([$comp['baan_id']]);
+        $baan = $stmt->fetch(PDO::FETCH_ASSOC) ?: null;
+    }
+
+    // DC's (vergelijk-shape: dc_id / dc_name / dc_number / knsb_distances / competitors)
+    $stmt = $pdo->prepare("
+        SELECT id, name, number, category_filter, merge_group, merge_label
+        FROM distance_combinations
+        WHERE competition_id = ?
+        ORDER BY number, name
+    ");
+    $stmt->execute([$compId]);
+    $dcs = $stmt->fetchAll(PDO::FETCH_ASSOC);
+
+    $groepen = array_map(function($dc) {
+        return [
+            'dc_id'           => $dc['id'],
+            'dc_name'         => $dc['name'],
+            'dc_number'       => (int)($dc['number'] ?? 0),
+            'category_filter' => $dc['category_filter'],
+            'merge_group'     => $dc['merge_group'],
+            'merge_label'     => $dc['merge_label'],
+            'knsb_distances'  => [],   // geen KNSB-bron, afstanden komen uit afstanden-beheer
+            'competitors'     => [],   // rijder-import komt in Fase 2
+        ];
+    }, $dcs);
+
+    // Heeft de wedstrijd al een tijdschema (= programma gegenereerd)?
+    $stmt = $pdo->prepare("SELECT COUNT(*) FROM heats WHERE competition_id = ?");
+    $stmt->execute([$compId]);
+    $heeftProgramma = ((int)$stmt->fetchColumn() > 0);
+
+    echo json_encode([
+        'groepen'           => $groepen,
+        'organisatie'       => $organisatie,
+        'baan'              => $baan,
+        'imported'          => true,            // handmatige wedstrijd staat in DB → beheer-panel werkt
+        'is_handmatig'      => true,
+        'heeft_programma'   => $heeftProgramma,
+        'org_transponders'  => [],              // pas relevant als er rijders zijn
+        'entries_version'   => (int)$comp['entries_version'],
+        'knsb_stand'        => null,            // geen KNSB-feed
+        'db_stand'          => null,
+    ]);
+    exit;
+}
+
 // ── ACTION: lijst ──────────────────────────────────────────────────────────
 // Geeft scope-gefilterde handmatige wedstrijden terug in een formaat dat
 // compatibel is met de KNSB-feed (api/competitions.php). De frontend kan ze

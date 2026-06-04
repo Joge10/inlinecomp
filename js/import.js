@@ -144,8 +144,12 @@ async function bouwBeheerTabel() {
     const panel = el('beheer-panel');
     if (!panel || !vergelijkData.length) return;
 
-    // Niet tonen als de wedstrijd nog niet geïmporteerd is
-    if (!isGeimporteerd) {
+    // Niet tonen als de wedstrijd nog niet geïmporteerd is. Voor handmatige
+    // wedstrijden zijn er nog geen competitors (rijder-import komt in Fase 2)
+    // maar de wedstrijd staat wel in DB — huidigImported is dan ook true,
+    // zodat het beheer-panel (DC's splitsen/combineren + afstanden) gewoon
+    // bruikbaar is.
+    if (!isGeimporteerd && !huidigImported) {
         panel.innerHTML = '';
         return;
     }
