@@ -1695,7 +1695,7 @@ select:focus, input:focus { border-color: var(--middenblauw); outline: none; }
 }
 .prog-dag-btn {
     border: 1px solid #b3cae6; background: #fff; color: #1a3a5c;
-    padding: 5px 12px; border-radius: 14px; font-size: .82rem;
+    padding: 4px 9px; border-radius: 14px; font-size: .82rem;
     font-weight: 600; cursor: pointer; transition: background .12s;
     display: inline-flex; flex-direction: column; align-items: center;
     justify-content: center; line-height: 1.15; min-height: 38px;
@@ -1704,10 +1704,12 @@ select:focus, input:focus { border-color: var(--middenblauw); outline: none; }
 .prog-dag-btn.actief {
     background: #1a3a5c; color: #fff; border-color: #1a3a5c;
 }
-/* Korte datum onder "Dag N" — mobiel-vriendelijk, geen hover nodig */
+/* Korte datum onder "Dag N" — klein zodat 3+ dagen op 1 regel passen
+   op een telefoon, ook in talen met langer woord ("Jour", "Day"). */
 .prog-dag-btn-datum {
-    display: block; font-size: .65rem; font-weight: 400;
+    display: block; font-size: .55rem; font-weight: 400;
     opacity: .8; margin-top: 1px; letter-spacing: 0;
+    white-space: nowrap;
 }
 .prog-dag-btn.actief .prog-dag-btn-datum { opacity: .95; }
 /* Verbergen-class voor de filter: data-dag-nr items krijgen .verborgen
@@ -3639,17 +3641,28 @@ function renderResultaat(data, snr, prog) {
                     }
                     dagPerItem[idx] = huidigeDag || 1; // pre-dag-1 items → tentative 1
                 });
+                // Alleen inrijden + pauze "horen bij de volgende dag" als ze
+                // vóór een wedstrijdstart liggen — warm-up + baan-voorbereiding
+                // zijn altijd vóór de start. Ceremonie (= afsluiting) blijft bij
+                // de vorige dag, en blokkeert dan ook de claim-keten zodat
+                // eerder-gelegen pauzes niet langs de ceremonie heen claimen.
                 let komendeDag = null;
                 for (let idx = items.length - 1; idx >= 0; idx--) {
                     const it = items[idx];
-                    const isWs = it.type === 'blok'
-                        && (it.data.blok_type || '').toLowerCase() === 'wedstrijdstart';
+                    const bt = it.type === 'blok'
+                        ? (it.data.blok_type || '').toLowerCase() : '';
+                    const isWs = bt === 'wedstrijdstart';
                     if (it.type === 'rit' || isWs) {
                         komendeDag = dagPerItem[idx];
-                    } else if (it.type === 'blok' && komendeDag
-                               && dagPerItem[idx] < komendeDag) {
-                        // Niet-ronde blok vóór een latere dag → claim die dag.
-                        dagPerItem[idx] = komendeDag;
+                    } else if (it.type === 'blok') {
+                        const isWarmUp = (bt === 'inrijden' || bt === 'pauze');
+                        if (isWarmUp && komendeDag
+                            && dagPerItem[idx] < komendeDag) {
+                            dagPerItem[idx] = komendeDag;
+                        } else if (!isWarmUp) {
+                            // ceremonie / herstart: keten breken
+                            komendeDag = dagPerItem[idx];
+                        }
                     }
                 }
 

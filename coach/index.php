@@ -1602,7 +1602,7 @@ select.sel {
 }
 .prog-dag-btn {
     border: 1px solid #b3cae6; background: #fff; color: #1a3a5c;
-    padding: 5px 12px; border-radius: 14px; font-size: .82rem;
+    padding: 4px 9px; border-radius: 14px; font-size: .82rem;
     font-weight: 600; cursor: pointer; transition: background .12s;
     display: inline-flex; flex-direction: column; align-items: center;
     justify-content: center; line-height: 1.15; min-height: 38px;
@@ -1611,10 +1611,11 @@ select.sel {
 .prog-dag-btn.actief {
     background: #1a3a5c; color: #fff; border-color: #1a3a5c;
 }
-/* Korte datum onder "Dag N" — mobiel-vriendelijk, geen hover nodig */
+/* Korte datum onder "Dag N" — klein zodat 3+ dagen op 1 regel passen */
 .prog-dag-btn-datum {
-    display: block; font-size: .65rem; font-weight: 400;
+    display: block; font-size: .55rem; font-weight: 400;
     opacity: .8; margin-top: 1px; letter-spacing: 0;
+    white-space: nowrap;
 }
 .prog-dag-btn.actief .prog-dag-btn-datum { opacity: .95; }
 .verborgen { display: none !important; }
@@ -3379,16 +3380,24 @@ function renderProgramma() {
         }
         dagPerItem[idx] = _huidigeDag || 1;
     });
+    // Alleen inrijden + pauze claimen de opvolgende dag — ceremonie blijft
+    // bij de voorgaande dag (afsluiting/prijsuitreiking) en breekt de claim-
+    // keten zodat eerder gelegen pauzes ook niet onterecht claimen.
     let _komendeDag = null;
     for (let idx = allesGesorteerd.length - 1; idx >= 0; idx--) {
         const it = allesGesorteerd[idx];
-        const isWs = it.type === 'blok'
-            && (it.data.blok_type || '').toLowerCase() === 'wedstrijdstart';
+        const bt = it.type === 'blok'
+            ? (it.data.blok_type || '').toLowerCase() : '';
+        const isWs = bt === 'wedstrijdstart';
         if (it.type === 'rit' || isWs) {
             _komendeDag = dagPerItem[idx];
-        } else if (it.type === 'blok' && _komendeDag
-                   && dagPerItem[idx] < _komendeDag) {
-            dagPerItem[idx] = _komendeDag;
+        } else if (it.type === 'blok') {
+            const isWarmUp = (bt === 'inrijden' || bt === 'pauze');
+            if (isWarmUp && _komendeDag && dagPerItem[idx] < _komendeDag) {
+                dagPerItem[idx] = _komendeDag;
+            } else if (!isWarmUp) {
+                _komendeDag = dagPerItem[idx];
+            }
         }
     }
 
