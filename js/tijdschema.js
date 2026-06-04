@@ -1212,7 +1212,7 @@ function renderBlokken(schema, afstandGroepen) {
                 ><button class="btn-primary ts-btn-sm" id="ts-btn-genereer"
                     ${huidigTijdschema?.heeft_loting ? 'disabled' : ''}
                 >▶ Genereer programma</button></span>
-            <button class="btn-del ts-btn-sm" id="ts-btn-wis-programma" ${huidigTijdschema?.ritten?.length ? '' : 'disabled'} title="Verwijder alles: ritten, blokken en instellingen. Het tijdschema wordt volledig leeg.">🗑 Wis programma</button>
+            <button class="btn-del ts-btn-sm" id="ts-btn-wis-programma" ${huidigTijdschema?.ritten?.length ? '' : 'disabled'} title="Verwijder gegenereerde ritten + startlijsten — blokken en instellingen blijven behouden zodat je opnieuw kunt loten">🗑 Wis programma</button>
         </div>
     </div>`;
 
@@ -2478,7 +2478,10 @@ function bindTsEvents(afstandGroepen) {
 
     el('ts-btn-wis-programma')?.addEventListener('click', async () => {
         if (!await toonBevestigDialog(
-            'Weet je het zeker? Alles wordt verwijderd: ritten, blokken, afstandsinstellingen en categorie-configuratie.\nHet tijdschema wordt volledig leeg.',
+            'De gegenereerde ritten + startlijsten worden verwijderd.\n\n'
+            + 'Behouden blijven: blokken (wedstrijdstart/pauze/ceremonie),'
+            + ' afstandsinstellingen en categorie-configuratie.\n\n'
+            + 'Klik daarna op "Genereer programma" om opnieuw te loten.',
             'Programma wissen'
         )) return;
 

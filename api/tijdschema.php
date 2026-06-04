@@ -1728,7 +1728,13 @@ try {
         exit;
     }
 
-    // ── Programma wissen (ritten verwijderen, blokken+config behouden) ────────
+    // ── Programma wissen (alleen gegenereerde ritten + heats) ────────────────
+    // Behoudt: blokken (wedstrijdstart/pauze/ceremonie/herstart), cat-config
+    // (welke cats meedoen + hun split) en afstand-config (heat-aantallen +
+    // duur per ronde). Reden: de instellingen die de operator handmatig
+    // tunet zijn waardevol — bij een herloting verlies je die anders.
+    // Wis alleen wat door 'Genereer programma' wordt geproduceerd:
+    // gegenereerde ritten + uit-loting voortgekomen heats.
     if ($action === 'wis_programma') {
         $tsId = (int)($body['tijdschema_id'] ?? 0);
         if (!$tsId) {
@@ -1738,12 +1744,8 @@ try {
         }
         $compId = $getCompId($tsId);
         $pdo->beginTransaction();
-        // Verwijder alles: heats, ritten, blokken, configuratie (volledig schone lei)
         $pdo->prepare("DELETE FROM heats WHERE competition_id = ?")->execute([$compId]);
         $pdo->prepare("DELETE FROM tijdschema_ritten WHERE tijdschema_id = ?")->execute([$tsId]);
-        $pdo->prepare("DELETE FROM tijdschema_blokken WHERE tijdschema_id = ?")->execute([$tsId]);
-        $pdo->prepare("DELETE FROM tijdschema_cat_config WHERE tijdschema_id = ?")->execute([$tsId]);
-        $pdo->prepare("DELETE FROM tijdschema_afstand_config WHERE tijdschema_id = ?")->execute([$tsId]);
         $pdo->prepare("UPDATE competition_tijdschema SET gegenereerd_op = NULL WHERE id = ?")->execute([$tsId]);
         $pdo->commit();
 
