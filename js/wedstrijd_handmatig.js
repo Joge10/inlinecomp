@@ -174,11 +174,16 @@
                 }
                 window.renderWedstrijdLijst();
             }
-            // Toast / status-melding (gebruik bestaande als die er is)
-            if (typeof window.toast === 'function') {
-                window.toast(`✓ Wedstrijd "${naam}" aangemaakt (${data.aantal_dcs} cat.)`);
-            } else {
-                alert(`Wedstrijd "${naam}" aangemaakt met ${data.aantal_dcs} categorieën.\n\nVoeg nu afstanden toe via Beheer → Afstanden.`);
+            // Huisstijl-melding via toonBevestigDialog (lege labelAnnuleer = pure OK).
+            // Geen browser-alert: die past niet in de stijl en blokkeert lelijk.
+            if (typeof toonBevestigDialog === 'function') {
+                toonBevestigDialog(
+                    `Wedstrijd "${naam}" aangemaakt met ${data.aantal_dcs} categorieën.\n\n`
+                    + `Voeg nu afstanden toe via Beheer → Afstanden.`,
+                    '✓ Wedstrijd aangemaakt',
+                    'OK',
+                    ''  // geen Annuleer-knop = pure melding
+                );
             }
         } catch (e) {
             showFout('Netwerkfout: ' + e.message);
