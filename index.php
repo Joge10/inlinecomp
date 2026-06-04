@@ -231,8 +231,8 @@ if (is_array($eigenScope) && !empty($eigenScope)) {
                         <div class="wh-fout" id="wh-fout" style="display:none;"></div>
                     </div>
                     <div class="modal-knoppen">
-                        <button class="modal-btn-annuleer" id="wh-btn-annuleer">Annuleer</button>
-                        <button class="modal-btn-bevestig" id="wh-btn-create">Wedstrijd aanmaken</button>
+                        <button class="modal-btn modal-annuleer" id="wh-btn-annuleer">Annuleer</button>
+                        <button class="modal-btn modal-doorgaan" id="wh-btn-create">Wedstrijd aanmaken</button>
                     </div>
                 </div>
             </div>
