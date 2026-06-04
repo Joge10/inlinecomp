@@ -531,7 +531,8 @@ function genereerRitten(PDO $pdo, int $tsId, string $compId, ?array $catVanJS = 
                         ? $cat['n']
                         : max(0, (int)($cc['heats_q'] ?? 0));
                     $nHeats    = max(1, (int)($cc['kwart_heats'] ?? 1));
-                    if ($rijders === 0) continue;
+                    // n=0 toegelaten: proforma-programma (geen deelnemers nog).
+                    // Heat wordt aangemaakt met verwacht=0, operator vult later.
                     $aantallen = verdeel($rijders, $nHeats);
                     for ($h = 1; $h <= $nHeats; $h++) {
                         $ritten[] = [
@@ -564,7 +565,7 @@ function genereerRitten(PDO $pdo, int $tsId, string $compId, ?array $catVanJS = 
                         $rijders = $cat['n']; // geen series, geen kwart → alle rijders
                     }
                     $nHeats = max(1, (int)($cc['half_heats'] ?? 1));
-                    if ($rijders === 0) continue;
+                    // n=0 toegelaten: proforma-programma (zie kwartfinale-comment).
                     $aantallen = verdeel($rijders, $nHeats);
                     for ($h = 1; $h <= $nHeats; $h++) {
                         $ritten[] = [
@@ -667,7 +668,9 @@ function genereerRitten(PDO $pdo, int $tsId, string $compId, ?array $catVanJS = 
                     } else {
                         $rijders = max(0, (int)($cc['heats_q'] ?? $cat['n']));
                     }
-                    if ($rijders <= 0) continue;
+                    // rijders=0 toegelaten voor proforma-programma. Finale-code
+                    // hieronder is veilig met rijders=0 (min/max-guards + lege
+                    // B-heats-loop bij full-final, 1 placeholder-rit bij Inter).
 
                     if ($systeem === 'full-final') {
                         // Per-cat instellingen (wint) met fallback naar afstand-defaults.
