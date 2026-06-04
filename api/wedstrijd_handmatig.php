@@ -19,7 +19,7 @@
 header('Content-Type: application/json; charset=utf-8');
 
 require_once __DIR__ . '/../../config_inlinecomp.php';
-require_once __DIR__ . '/auth/session.php';
+require_once __DIR__ . '/../auth/session.php';
 $_authUser = requireAuth($pdo);
 
 // Owner / admin / importer — zelfde rollen als SCHRIJF_ROLLEN['importeer']
