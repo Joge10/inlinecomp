@@ -1,0 +1,28 @@
+# Logo's + sponsor-images + baan-images veranderen zelden — agressief browser-
+# cachen scheelt enorm veel requests per app-open.
+#
+# Voor: bij elke /public/ of /coach/ app-open haalt elke browser 6-8 logo-
+# bestanden op (org + sponsors + baan + baan-sponsors). Bij 5 mensen die
+# tegelijk de app openen × 6 logos = 30 parallel requests in 1 seconde.
+# Met EP-limit 45 op iFastNet shared hosting wordt dat snel kritiek.
+#
+# Na: eerste app-open laadt logos 1x, browser cached ze 30 dagen. Volgende
+# bezoeken in die periode komen nooit meer bij de server. Ook bij hard-refresh
+# binnen 30 dagen serveert de browser 'm uit cache (conditional request
+# slechts If-Modified-Since, levert 304 op zonder PHP-cycle).
+
+<IfModule mod_headers.c>
+    <FilesMatch "\.(png|jpg|jpeg|gif|svg|webp|ico)$">
+        Header set Cache-Control "public, max-age=2592000, immutable"
+    </FilesMatch>
+</IfModule>
+
+<IfModule mod_expires.c>
+    ExpiresActive On
+    ExpiresByType image/png  "access plus 30 days"
+    ExpiresByType image/jpeg "access plus 30 days"
+    ExpiresByType image/gif  "access plus 30 days"
+    ExpiresByType image/svg+xml "access plus 30 days"
+    ExpiresByType image/webp "access plus 30 days"
+    ExpiresByType image/x-icon "access plus 30 days"
+</IfModule>

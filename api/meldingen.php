@@ -23,10 +23,10 @@
 
 header('Content-Type: application/json; charset=utf-8');
 header('Access-Control-Allow-Origin: *');
-// No-cache: meldingen moeten direct doorkomen — Opera/Chrome op Android
-// cachen GET-JSON soms zelfs zonder cache-headers (heuristic caching).
-// Bestaande JS plakt al een ?_t=<timestamp> bust, maar headers maken het
-// dubbel zeker en helpen ook andere clients die zonder timestamp opvragen.
+// Default: no-cache (admin-acties + POST/DELETE moeten altijd door).
+// De publieke GET-poll (regel ~67) krijgt EXPLICIET een korte cache + server-
+// side mini-cache om EP-bursts op te vangen wanneer veel apps tegelijk open
+// gaan op iFastNet shared hosting.
 header('Cache-Control: no-store, no-cache, must-revalidate, max-age=0');
 header('Pragma: no-cache');
 header('Expires: 0');
@@ -55,6 +55,22 @@ function uuid4_m(): string {
     return vsprintf('%s%s-%s-%s-%s-%s%s%s', str_split(bin2hex($b), 4));
 }
 
+// Wist alle 30s-cache-files na save/delete zodat operator-wijzigingen
+// direct doorkomen ipv tot 30s wachten. Globale meldingen raken alle
+// caches (we weten niet welke wedstrijden de melding ziet zonder query),
+// wedstrijd-specifieke wist alleen die wedstrijds eigen cache + globaal.
+// Best-effort: faalt stil als de cache-dir restrict is.
+function _wisMeldingCache(?string $compId = null): void {
+    $dir = sys_get_temp_dir();
+    if ($compId === null) {
+        // Onbekende impact → alle melding-caches weg (prefix m_)
+        foreach (glob($dir . '/m_*') ?: [] as $f) @unlink($f);
+        return;
+    }
+    @unlink($dir . '/m_' . md5('G'));         // globale-only cache
+    @unlink($dir . '/m_' . md5('C:' . $compId)); // wedstrijd-specifieke
+}
+
 $action = trim($_POST['action'] ?? $_GET['action'] ?? '');
 
 try {
@@ -67,6 +83,28 @@ try {
     if ($method === 'GET' && $action === '') {
         $compId   = trim($_GET['comp_id'] ?? '');
         $alleenGlobal = !empty($_GET['global']);
+
+        // ── Server-cache 30s ──────────────────────────────────────────────
+        // Bij parallel app-opens (5+ telefoons binnen 1 seconde) krijgt elke
+        // poll dezelfde data — geen reden om 5× de DB te raken. Kleine
+        // file-cache met 30s TTL deduplikeert dat. Meldingen mogen 30s oud
+        // zijn (niet realtime kritisch). EP-burst gemitigeerd zonder hash-
+        // berekeningen of complexe locking.
+        $cacheTtl  = 30;
+        $cacheKey  = 'm_' . md5(($alleenGlobal ? 'G' : 'C:' . $compId));
+        $cacheFile = sys_get_temp_dir() . '/' . $cacheKey;
+        if (is_file($cacheFile) && (time() - filemtime($cacheFile)) < $cacheTtl) {
+            $cached = @file_get_contents($cacheFile);
+            if ($cached !== false && $cached !== '') {
+                // Override no-store met korte public-cache (browser + CDN).
+                header_remove('Cache-Control');
+                header_remove('Pragma');
+                header_remove('Expires');
+                header('Cache-Control: public, max-age=' . $cacheTtl);
+                echo $cached;
+                exit;
+            }
+        }
 
         if ($alleenGlobal) {
             // Landing-page van public/coach — alleen globale meldingen.
@@ -97,7 +135,16 @@ try {
             echo json_encode(['error' => 'comp_id of global=1 verplicht']);
             exit;
         }
-        echo json_encode($stmt->fetchAll(PDO::FETCH_ASSOC), JSON_UNESCAPED_UNICODE);
+        $json = json_encode($stmt->fetchAll(PDO::FETCH_ASSOC), JSON_UNESCAPED_UNICODE);
+        // Cache schrijven (best-effort, faalt stil bij rechten-issues).
+        @file_put_contents($cacheFile, $json, LOCK_EX);
+        // Override no-store voor de poll — opvolgende polls binnen 30s
+        // mogen vanuit browser-cache (geen server-roundtrip).
+        header_remove('Cache-Control');
+        header_remove('Pragma');
+        header_remove('Expires');
+        header('Cache-Control: public, max-age=' . $cacheTtl);
+        echo $json;
         exit;
     }
 
@@ -234,6 +281,11 @@ try {
                     $prio, $van, $tot, $mid, $compId]);
             }
         }
+        // Cache-wissen na save: alle melding-caches (we weten niet zeker
+        // welke comp_id het was bij update zonder extra query — simpeler om
+        // ALLE 30s-caches te verversen, kostprijs is 1 DB-call extra bij
+        // de volgende poll van elke wedstrijd).
+        _wisMeldingCache(null);
         echo json_encode(['ok' => true, 'id' => $mid]);
         exit;
     }
@@ -246,6 +298,7 @@ try {
             exit;
         }
         $pdo->prepare("DELETE FROM public_meldingen WHERE id = ?")->execute([$mid]);
+        _wisMeldingCache(null);
         echo json_encode(['ok' => true]);
         exit;
     }
