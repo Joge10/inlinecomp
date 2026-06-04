@@ -3321,6 +3321,27 @@ function _coachFetchOpts() {
     const pw = localStorage.getItem('coach_pw') || '';
     return pw ? { headers: { 'X-Coach-PW': pw } } : {};
 }
+
+// Wrapper voor POST/GET met X-Coach-PW header + 401-retry-prompt.
+// safeFetch is GET-only — voor POST (toevoegen, coach_info, etc.) heb je
+// deze helper nodig zodat de auth-gate niet wegvalt.
+async function coachFetch(url, opts = {}) {
+    const pw = localStorage.getItem('coach_pw') || '';
+    const headers = { ...(opts.headers || {}) };
+    if (pw) headers['X-Coach-PW'] = pw;
+    const finalOpts = { ...opts, headers };
+    let res = await fetch(url, finalOpts);
+    if (res.status === 401) {
+        const ok = await _vraagCoachWachtwoord();
+        if (ok) {
+            // Retry met nieuw ingevoerd wachtwoord
+            const newPw = localStorage.getItem('coach_pw') || '';
+            if (newPw) finalOpts.headers['X-Coach-PW'] = newPw;
+            res = await fetch(url, finalOpts);
+        }
+    }
+    return res;
+}
 async function _vraagCoachWachtwoord() {
     return new Promise(resolve => {
         const overlay = document.createElement('div');
@@ -3775,7 +3796,7 @@ async function laadCoachInfo() {
     const licenses = coachLijst.map(p => p.license_key).filter(Boolean);
     if (!licenses.length) { coachInfoCache = {}; return; }
     try {
-        const res = await fetch(`?action=coach_info`, {
+        const res = await coachFetch(`?action=coach_info`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ competition_id: selComp.value, licenses }),
@@ -4694,7 +4715,7 @@ async function voegAllesToe() {
         const sponsorList = [..._sponsorSel];
         let aantalTotaal = 0;
         try {
-            const res = await fetch('?action=personen_bulk', {
+            const res = await coachFetch('?action=personen_bulk', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
