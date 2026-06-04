@@ -75,6 +75,11 @@ const _PC_I18N = {
         'algemeen.heat_n':               '{n} heat',
         'algemeen.heats_n':              '{n} heats',
         'algemeen.min_unit':             '{n} min',
+        'algemeen.deelnemer_1':          '{n} deelnemer',
+        'algemeen.deelnemers_n':         '{n} deelnemers',
+        'algemeen.stand_op':             'Stand: {datum}',
+        'algemeen.pagina_x_van_y':       'pagina {x} van {y}',
+        'algemeen.vervolg':              'vervolg',
         // ── Programma extern (deelnemers/publiek) ─────────────────────────
         'prog_extern.titel':             'Wedstrijdprogramma',
         'prog_extern.gegen_op':          'Gegenereerd op {datum}',
@@ -100,6 +105,14 @@ const _PC_I18N = {
         'prog_intern.titel':             'Intern programma',
         // ── Tekenlijsten ──────────────────────────────────────────────────
         'tekenlijst.titel':              'Tekenlijst',
+        'tekenlijst.titel_meervoud':     'Tekenlijsten',
+        'tekenlijst.col_startnr':        'Start#',
+        'tekenlijst.col_correctie':      'Correctie',
+        'tekenlijst.geen_tp':            'Geen transponder',
+        'tekenlijst.startnr_n':          'Startnr. {nr}',
+        'tekenlijst.tp_niet_betaald':    'Transponder niet betaald',
+        'tekenlijst.melding':            'melding',
+        'tekenlijst.persoonlijk_melden': 'persoonlijk melden',
         // ── Deelnemerslijsten ─────────────────────────────────────────────
         'deelnemers.titel':              'Deelnemerslijst',
         // ── Speakerlijsten ────────────────────────────────────────────────
@@ -151,6 +164,11 @@ const _PC_I18N = {
         'algemeen.heat_n':               '{n} heat',
         'algemeen.heats_n':              '{n} heats',
         'algemeen.min_unit':             '{n} min',
+        'algemeen.deelnemer_1':          '{n} skater',
+        'algemeen.deelnemers_n':         '{n} skaters',
+        'algemeen.stand_op':             'As of: {datum}',
+        'algemeen.pagina_x_van_y':       'page {x} of {y}',
+        'algemeen.vervolg':              'continued',
         'prog_extern.titel':             'Race programme',
         'prog_extern.gegen_op':          'Generated on {datum}',
         'prog_extern.subtype':           'Race programme',
@@ -174,6 +192,14 @@ const _PC_I18N = {
         'prog_extern.herstart':          '🔄 RESTART',
         'prog_intern.titel':             'Internal programme',
         'tekenlijst.titel':              'Sign-in list',
+        'tekenlijst.titel_meervoud':     'Sign-in lists',
+        'tekenlijst.col_startnr':        'Bib',
+        'tekenlijst.col_correctie':      'Correction',
+        'tekenlijst.geen_tp':            'No transponder',
+        'tekenlijst.startnr_n':          'Bib {nr}',
+        'tekenlijst.tp_niet_betaald':    'Transponder unpaid',
+        'tekenlijst.melding':            'report',
+        'tekenlijst.persoonlijk_melden': 'report in person',
         'deelnemers.titel':              'Skater list',
         'speaker.titel':                 'Speaker list',
         'uitslag.titel':                 'Results',
@@ -1319,10 +1345,14 @@ async function _pcStartPrint() {
     if (boomSaver) {
         let compHeaderHtml = '';
         try {
+            // Locale-aware datum + standTxt: shared header volgt nu de
+            // Print-Center taalkeuze (NL/EN).
+            const _LOC = (_pcState?.lang === 'en') ? 'en-GB' : 'nl-NL';
             const compNaam = (typeof huidigComp !== 'undefined' && huidigComp?.name) || '';
-            const datum    = (typeof huidigComp !== 'undefined' && huidigComp?.starts
-                              && typeof formatDatum === 'function')
-                ? formatDatum(huidigComp.starts) : '';
+            const datum    = (typeof huidigComp !== 'undefined' && huidigComp?.starts)
+                ? new Date(huidigComp.starts).toLocaleDateString(_LOC,
+                    { weekday:'long', year:'numeric', month:'long', day:'numeric' })
+                : '';
             const locatie  = (typeof huidigComp !== 'undefined' && huidigComp
                               && typeof getLocatie === 'function')
                 ? getLocatie(huidigComp) : '';
@@ -1333,7 +1363,7 @@ async function _pcStartPrint() {
             const stand    = (typeof standDatum   !== 'undefined' && standDatum)   ? standDatum
                            : (typeof dbStandDatum !== 'undefined' && dbStandDatum) ? dbStandDatum
                            : '';
-            const standTxt = stand ? `Stand: ${stand}` : '';
+            const standTxt = stand ? _pcT('algemeen.stand_op', { datum: stand }) : '';
             let orgLogoHtml = '';
             let baanLogoHtml = '';
             if (typeof bouwOrgHeaderFooter === 'function') {

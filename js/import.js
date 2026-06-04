@@ -1780,6 +1780,10 @@ function bouwTekenlijstenBody(opts = {}) {
 // dezelfde chunk-logica als zonder boom-saver opgeknipt.
 function _bouwTekenlijstenInternal(opts = {}) {
     const boomSaver = !!opts.boomSaver;
+    // i18n-helper voor Print-Center taalkeuze (NL/EN). Fallback = identity.
+    const T    = window._pcT    || (k => k);
+    const LANG = (window._pcLang && window._pcLang()) || 'nl';
+    const LOC  = LANG === 'en' ? 'en-GB' : 'nl-NL';
     // Multi-day filter: alleen DCs die op deze dag een rit hebben.
     // 0 of niet-opgegeven = alle dagen (default-gedrag).
     const dagFilter = parseInt(opts.dagFilter) || 0;
@@ -1791,11 +1795,15 @@ function _bouwTekenlijstenInternal(opts = {}) {
         );
         if (!groepen.length) return null; // geen DCs op deze dag → niets te printen
     }
-    const compNaam  = escHtml(huidigComp.name || huidigComp.title || '');
-    const compMeta  = escHtml(formatDatum(huidigComp.starts) + ' · ' + getLocatie(huidigComp));
-    const standTxt  = standDatum   ? `Stand: ${standDatum}`
-                    : dbStandDatum ? `Stand: ${dbStandDatum}`
-                    : '';
+    const compNaam = escHtml(huidigComp.name || huidigComp.title || '');
+    // Locale-aware wedstrijddatum (formatDatum is hardcoded nl-NL).
+    const _datumStr = huidigComp.starts
+        ? new Date(huidigComp.starts).toLocaleDateString(LOC,
+            { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })
+        : '';
+    const compMeta = escHtml([_datumStr, getLocatie(huidigComp)].filter(Boolean).join(' · '));
+    const _stand   = standDatum || dbStandDatum || '';
+    const standTxt = _stand ? T('algemeen.stand_op', { datum: _stand }) : '';
 
     // ── Paginaberekening ──────────────────────────────────────────────────────
     // A4 landscape, 8mm marge boven/onder → 194mm bruikbare hoogte
@@ -1849,12 +1857,12 @@ function _bouwTekenlijstenInternal(opts = {}) {
 
     const thead = `<thead><tr>
                     <th class="td-nr">#</th>
-                    <th class="td-sn">Start#</th>
-                    <th class="td-naam">Naam</th>
-                    <th class="td-cat">Categorie</th>
-                    <th class="td-tp">Transponder</th>
-                    <th class="td-tp-cor">Correctie</th>
-                    <th class="td-hand">Handtekening</th>
+                    <th class="td-sn">${escHtml(T('tekenlijst.col_startnr'))}</th>
+                    <th class="td-naam">${escHtml(T('algemeen.naam'))}</th>
+                    <th class="td-cat">${escHtml(T('algemeen.categorie'))}</th>
+                    <th class="td-tp">${escHtml(T('algemeen.transponder'))}</th>
+                    <th class="td-tp-cor">${escHtml(T('tekenlijst.col_correctie'))}</th>
+                    <th class="td-hand">${escHtml(T('algemeen.handtekening'))}</th>
                 </tr></thead>`;
 
     // ── Helper: render rijen voor één stuk-deelnemers ─────────────────────────
@@ -1862,15 +1870,15 @@ function _bouwTekenlijstenInternal(opts = {}) {
         const sn        = Number(d.start_number);
         const isReserve = d.reserve != null && d.reserve > 0;
         const meldingen = [];
-        if (d.entry_status === 0) meldingen.push('melding');
-        if (!d.transponder)                  meldingen.push('Geen transponder');
-        if (sn >= 1000)                      meldingen.push(`Startnr. ${sn}`);
-        if (d.tp_betaald === false)           meldingen.push('Transponder niet betaald');
+        if (d.entry_status === 0)   meldingen.push(T('tekenlijst.melding'));
+        if (!d.transponder)         meldingen.push(T('tekenlijst.geen_tp'));
+        if (sn >= 1000)             meldingen.push(T('tekenlijst.startnr_n', { nr: sn }));
+        if (d.tp_betaald === false) meldingen.push(T('tekenlijst.tp_niet_betaald'));
 
         const handCel = meldingen.length
             ? `<div class="meld-attentie">
                    <span class="meld-uitroep">⚠️</span>
-                   <span class="meld-tekst">persoonlijk melden</span>
+                   <span class="meld-tekst">${escHtml(T('tekenlijst.persoonlijk_melden'))}</span>
                    <span class="meld-uitroep">⚠️</span>
                </div>`
             : '';
@@ -1929,7 +1937,7 @@ function _bouwTekenlijstenInternal(opts = {}) {
                 aantalRijen: aantal,
                 isVervolg:   idx > 0,
                 isLaatste:   idx === totaalPag - 1,
-                pLabel:      totaalPag > 1 ? ` — pagina ${idx + 1} van ${totaalPag}` : '',
+                pLabel:      totaalPag > 1 ? ' — ' + T('algemeen.pagina_x_van_y', { x: idx + 1, y: totaalPag }) : '',
                 totaal,
             };
             offset += aantal;
@@ -1946,14 +1954,15 @@ function _bouwTekenlijstenInternal(opts = {}) {
         paginaHtml = stukken.map(st => {
             const g = st.groep;
             const isEerstePag = !st.isVervolg;
+            const _deelnTxt = T(st.totaal === 1 ? 'algemeen.deelnemer_1' : 'algemeen.deelnemers_n', { n: st.totaal });
             const groepRegel = `<div style="font-size:10pt;font-weight:bold;line-height:1.2;">${escHtml(g.naam)}
-                <span style="font-size:8pt;font-weight:normal;color:#555;">(${st.totaal} deelnemer${st.totaal !== 1 ? 's' : ''}${st.pLabel})</span>
+                <span style="font-size:8pt;font-weight:normal;color:#555;">(${escHtml(_deelnTxt + st.pLabel)})</span>
             </div>`;
             const paginaHeader = isEerstePag
                 ? compHeaderBlok(groepRegel)
                 : `<div style="font-size:10pt;font-weight:bold;line-height:1.2;padding-bottom:1mm;">
                        ${escHtml(g.naam)}
-                       <span style="font-size:8pt;font-weight:normal;color:#555;">(vervolg${st.pLabel})</span>
+                       <span style="font-size:8pt;font-weight:normal;color:#555;">(${escHtml(T('algemeen.vervolg') + st.pLabel)})</span>
                    </div>`;
             return `<div class="pagina">
                 ${paginaHeader}
@@ -2020,14 +2029,17 @@ function _bouwTekenlijstenInternal(opts = {}) {
         // te tonen — geen logo of comp-info per pagina. Pagina 1 begint dus
         // ook gewoon met een compacte categorie-titel.
         paginaHtml = paginas.map(p => {
-            const inhoud = p.stukken.map((st, i) => `<div style="font-size:10pt;font-weight:bold;line-height:1.2;${i > 0 ? 'margin-top:' + SPACER_H + 'mm;' : ''}padding-bottom:1mm;">
+            const inhoud = p.stukken.map((st, i) => {
+                const _deelnTxt = T(st.totaal === 1 ? 'algemeen.deelnemer_1' : 'algemeen.deelnemers_n', { n: st.totaal });
+                const _spanTxt  = st.isVervolg
+                    ? '(' + T('algemeen.vervolg') + st.pLabel + ')'
+                    : '(' + _deelnTxt + st.pLabel + ')';
+                return `<div style="font-size:10pt;font-weight:bold;line-height:1.2;${i > 0 ? 'margin-top:' + SPACER_H + 'mm;' : ''}padding-bottom:1mm;">
                     ${escHtml(st.groep.naam)}
-                    <span style="font-size:8pt;font-weight:normal;color:#555;">${
-                        st.isVervolg ? '(vervolg' + st.pLabel + ')'
-                                     : `(${st.totaal} deelnemer${st.totaal !== 1 ? 's' : ''}${st.pLabel})`
-                    }</span>
+                    <span style="font-size:8pt;font-weight:normal;color:#555;">${escHtml(_spanTxt)}</span>
                 </div>
-                <table>${thead}<tbody>${renderRijen(st.slice, st.chunkStart)}</tbody></table>`).join('');
+                <table>${thead}<tbody>${renderRijen(st.slice, st.chunkStart)}</tbody></table>`;
+            }).join('');
             return `<div class="pagina">
                 ${inhoud}
                 ${p.heeftFooter ? footerHtml : ''}
@@ -2039,8 +2051,8 @@ function _bouwTekenlijstenInternal(opts = {}) {
         bodyHtml:        paginaHtml,
         cssLinks:        ['css/tekenlijst.css'],
         pageOrientation: 'landscape',
-        title:           'Tekenlijsten – ' + (huidigComp.name || huidigComp.title || ''),
-        subType:         'Tekenlijsten',
+        title:           T('tekenlijst.titel_meervoud') + ' – ' + (huidigComp.name || huidigComp.title || ''),
+        subType:         T('tekenlijst.titel_meervoud'),
     };
 }
 
