@@ -442,8 +442,12 @@ async function laadPublicStats() {
 function startPublicStatsRefresh() {
     if (_gbStatsTimer) clearInterval(_gbStatsTimer);
     laadPublicStats();
-    // Elke 30 sec refreshen zodat "nu actief" up-to-date blijft
-    _gbStatsTimer = setInterval(laadPublicStats, 30_000);
+    // 6 minuten refresh-interval. Was 30s — die snelheid heeft geen praktische
+    // waarde (bezoekers-aantal is geen realtime-kritisch nummer) en genereerde
+    // anders ~120 extra requests per uur per admin met de tab open. Combineert
+    // met visibilitychange-listener hieronder die polling al pauzeert bij
+    // verborgen tab. iFastNet EP-budget bedankt je.
+    _gbStatsTimer = setInterval(laadPublicStats, 360_000);
 }
 
 // Stop de polling expliciet — geroepen door switchSysteemTab() zodra de
