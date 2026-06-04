@@ -26,11 +26,13 @@
     // tellen we DOM-rijen, bij submit lezen we per DOM-rij naam + checked cats.
     // Cleaner dan closure-tracked idx (die schuift na delete en breekt).
 
-    // ── Init: knop tonen alleen voor admin/owner, orgs prefetchen ─────────
+    // ── Init: knop tonen alleen voor importeer-rollen, orgs prefetchen ────
+    // currentUser is een globale const uit index.php (NIET window.currentUser).
+    // magSchrijven('importeer') geeft true voor owner/admin/importer — zelfde
+    // gate als de bestaande Import-knop.
     async function initWh() {
-        if (!window.currentUser) return;
-        const rol = window.currentUser.role || '';
-        if (!['owner', 'admin'].includes(rol)) return;
+        if (typeof currentUser === 'undefined') return;
+        if (typeof magSchrijven === 'function' && !magSchrijven('importeer')) return;
 
         // Knop tonen + listener
         const wrap = document.getElementById('wh-knop-wrap');

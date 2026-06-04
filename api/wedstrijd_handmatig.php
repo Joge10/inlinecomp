@@ -22,9 +22,10 @@ require_once __DIR__ . '/../../config_inlinecomp.php';
 require_once __DIR__ . '/auth/session.php';
 $_authUser = requireAuth($pdo);
 
-// Alleen owner + admin mogen wedstrijden aanmaken.
+// Owner / admin / importer — zelfde rollen als SCHRIJF_ROLLEN['importeer']
+// in index.php (consistente gate met de Import-knop).
 $rol = $_authUser['role'] ?? '';
-if (!in_array($rol, ['owner', 'admin'], true)) {
+if (!in_array($rol, ['owner', 'admin', 'importer'], true)) {
     http_response_code(403);
     echo json_encode(['error' => 'Geen rechten om wedstrijden aan te maken']);
     exit;
