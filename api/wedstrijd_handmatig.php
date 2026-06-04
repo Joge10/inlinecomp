@@ -68,7 +68,7 @@ if ($action === 'lijst') {
         $sql   .= " AND c.organisatie_id IN ($ph)";
         $params = $scope;
     }
-    $sql .= " ORDER BY c.starts DESC";
+    $sql .= " ORDER BY c.starts ASC";
 
     $stmt = $pdo->prepare($sql);
     $stmt->execute($params);

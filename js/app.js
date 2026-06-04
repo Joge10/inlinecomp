@@ -410,8 +410,11 @@ async function laadWedstrijden() {
         // Handmatige wedstrijden zijn al server-side scope-gefilterd en
         // worden hier ONGEFILTERD toegevoegd (naam-match zou ze ten onrechte
         // wegfilteren als de canonieke org-naam in de DB iets afwijkt).
+        // Mergen en sorteren op startdatum ASC — zelfde volgorde als de
+        // KNSB-feed voorheen (oudste eerst, "eerstkomende" bovenaan).
         const gescoptKnsb = filterWedstrijdenOpScope(dataKnsb);
-        allWedstrijden = [...dataHand, ...gescoptKnsb];
+        allWedstrijden = [...gescoptKnsb, ...dataHand]
+            .sort((a, b) => (a.starts || '').localeCompare(b.starts || ''));
         if (!allWedstrijden.length) {
             statusMsg(list, 'info', 'Geen wedstrijden van jouw organisatie(s) gevonden.');
             return;
