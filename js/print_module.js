@@ -9,10 +9,15 @@
 
 // ── Sessie-state ────────────────────────────────────────────────────────────
 // Reset bij nieuwe wedstrijd-selectie (via import-module).
+// `lang` wordt NIET gereset bij wedstrijd-wissel — operator's keuze blijft
+// voor de hele sessie staan (en wordt persistent opgeslagen in localStorage
+// zodat-ie ook na hard-refresh terugkomt).
 let _pcState = {
     compId:     null,   // competition_id waar de huidige state bij hoort
     geselecteerd: new Set(),  // string-IDs van aangevinkte opties
     boomSaver:  false,
+    lang:       (typeof localStorage !== 'undefined'
+                 && localStorage.getItem('printcenter_lang') === 'en') ? 'en' : 'nl',
     tijdschemaBeschikbaar: null,  // null=onbekend, true/false na check
     startlijstenLaad: null,       // null=onbekend, true tijdens laden, false=klaar
     uitslagenLaad:    null,
@@ -23,6 +28,136 @@ let _pcState = {
     dagFilter: 'alles',
 };
 
+// ── i18n voor print-templates ───────────────────────────────────────────────
+// Centrale dict van alle strings die in print-rapporten verschijnen. Per
+// template-categorie een sub-key zodat het overzichtelijk blijft. Vertalingen
+// per taal — EN voor internationale wedstrijden.
+//
+// Gebruik in template-bouwers:
+//   const T = window._pcT || (k => k);
+//   const titel = T('prog_extern.titel', { naam: comp.name });
+//
+// Placeholder-substitutie: {key} in de string wordt vervangen door vars[key].
+const _PC_I18N = {
+    nl: {
+        // ── Algemene labels (kop, voetnoten) ──────────────────────────────
+        'algemeen.wedstrijd':            'Wedstrijd',
+        'algemeen.datum':                'Datum',
+        'algemeen.locatie':              'Locatie',
+        'algemeen.organisatie':          'Organisatie',
+        'algemeen.afstand':              'Afstand',
+        'algemeen.categorie':            'Categorie',
+        'algemeen.aantal_deelnemers':    'Aantal deelnemers',
+        'algemeen.heat':                 'Heat',
+        'algemeen.heat_nr':              'Heat {nr}',
+        'algemeen.serie':                'Serie',
+        'algemeen.kwart_finale':         'Kwartfinale',
+        'algemeen.halve_finale':         'Halve finale',
+        'algemeen.a_finale':             'A-finale',
+        'algemeen.b_finale':             'B-finale',
+        'algemeen.runner_up':            'Runner-up',
+        'algemeen.pauze':                'Pauze',
+        'algemeen.inrijden':             'Inrijden',
+        'algemeen.ceremonie':            'Ceremonie',
+        'algemeen.wedstrijdstart':       'Wedstrijd start',
+        'algemeen.herstart':             'Herstart',
+        'algemeen.start':                'Start',
+        'algemeen.tijd':                 'Tijd',
+        'algemeen.startnummer':          'Startnummer',
+        'algemeen.naam':                 'Naam',
+        'algemeen.club':                 'Club',
+        'algemeen.transponder':          'Transponder',
+        'algemeen.handtekening':         'Handtekening',
+        'algemeen.dag':                  'Dag',
+        'algemeen.dag_n':                'Dag {nr}',
+        // ── Programma extern (deelnemers/publiek) ─────────────────────────
+        'prog_extern.titel':             'Wedstrijdprogramma',
+        'prog_extern.gegen_op':          'Gegenereerd op {datum}',
+        // ── Programma intern (organisatie) ────────────────────────────────
+        'prog_intern.titel':             'Intern programma',
+        // ── Tekenlijsten ──────────────────────────────────────────────────
+        'tekenlijst.titel':              'Tekenlijst',
+        // ── Deelnemerslijsten ─────────────────────────────────────────────
+        'deelnemers.titel':              'Deelnemerslijst',
+        // ── Speakerlijsten ────────────────────────────────────────────────
+        'speaker.titel':                 'Speakerlijst',
+        // ── Uitslagen ─────────────────────────────────────────────────────
+        'uitslag.titel':                 'Uitslag',
+        'uitslag.rang':                  'Rang',
+        'uitslag.positie':               'Positie',
+        'uitslag.eindtijd':              'Eindtijd',
+        'uitslag.punten':                'Punten',
+        'uitslag.sanctie':               'Sanctie',
+        // ── Klassementen ──────────────────────────────────────────────────
+        'klassement.titel':              'Klassement',
+        'klassement.tussen':             'Tussenklassement',
+        'klassement.eind':               'Eindklassement',
+    },
+    en: {
+        'algemeen.wedstrijd':            'Race',
+        'algemeen.datum':                'Date',
+        'algemeen.locatie':              'Venue',
+        'algemeen.organisatie':          'Organisation',
+        'algemeen.afstand':              'Distance',
+        'algemeen.categorie':            'Category',
+        'algemeen.aantal_deelnemers':    'Number of skaters',
+        'algemeen.heat':                 'Heat',
+        'algemeen.heat_nr':              'Heat {nr}',
+        'algemeen.serie':                'Series',
+        'algemeen.kwart_finale':         'Quarter-final',
+        'algemeen.halve_finale':         'Semi-final',
+        'algemeen.a_finale':             'A-final',
+        'algemeen.b_finale':             'B-final',
+        'algemeen.runner_up':            'Runner-up',
+        'algemeen.pauze':                'Break',
+        'algemeen.inrijden':             'Warm-up',
+        'algemeen.ceremonie':            'Ceremony',
+        'algemeen.wedstrijdstart':       'Race start',
+        'algemeen.herstart':             'Restart',
+        'algemeen.start':                'Start',
+        'algemeen.tijd':                 'Time',
+        'algemeen.startnummer':          'Bib',
+        'algemeen.naam':                 'Name',
+        'algemeen.club':                 'Club',
+        'algemeen.transponder':          'Transponder',
+        'algemeen.handtekening':         'Signature',
+        'algemeen.dag':                  'Day',
+        'algemeen.dag_n':                'Day {nr}',
+        'prog_extern.titel':             'Race programme',
+        'prog_extern.gegen_op':          'Generated on {datum}',
+        'prog_intern.titel':             'Internal programme',
+        'tekenlijst.titel':              'Sign-in list',
+        'deelnemers.titel':              'Skater list',
+        'speaker.titel':                 'Speaker list',
+        'uitslag.titel':                 'Results',
+        'uitslag.rang':                  'Rank',
+        'uitslag.positie':               'Position',
+        'uitslag.eindtijd':              'Final time',
+        'uitslag.punten':                'Points',
+        'uitslag.sanctie':               'Penalty',
+        'klassement.titel':              'Standings',
+        'klassement.tussen':             'Intermediate standings',
+        'klassement.eind':               'Final standings',
+    },
+};
+
+// I18n-helper voor print-templates. Gebruik via window._pcT zodat templates
+// in andere modules (tijdschema.js, uitslag.js, startlist.js) erbij kunnen.
+// Fallback naar NL als sleutel ontbreekt in EN, of naar de sleutel zelf als
+// die ook in NL ontbreekt (developer-fout maar geen crash).
+function _pcT(key, vars = null) {
+    const lang = _pcState?.lang || 'nl';
+    let s = _PC_I18N[lang]?.[key] ?? _PC_I18N.nl[key] ?? key;
+    if (vars) {
+        for (const [k, v] of Object.entries(vars)) {
+            s = s.replace(new RegExp(`\\{${k}\\}`, 'g'), v);
+        }
+    }
+    return s;
+}
+window._pcT = _pcT;
+window._pcLang = () => _pcState?.lang || 'nl';
+
 // Cache: ontkoppelde optData die we moeten kunnen terugvinden bij print-tijd.
 // Key = item.id (stable string), value = optData-object dat naar de body-builder
 // gaat. Nieuw opgebouwd bij elke re-populatie.
@@ -30,10 +165,16 @@ const _pcItemData = new Map();
 
 // Wordt door import.js aangeroepen bij selectie van (andere) wedstrijd.
 function printCenterResetVoorWedstrijd(compId) {
+    // Behoud lang-voorkeur over wedstrijd-wissel heen — fallback naar
+    // localStorage als _pcState nog niet bestaat (eerste sessie).
+    const _bewaardeLang = (_pcState && _pcState.lang)
+        || (typeof localStorage !== 'undefined'
+            && localStorage.getItem('printcenter_lang') === 'en' ? 'en' : 'nl');
     _pcState = {
         compId:        compId ?? null,
         geselecteerd:  new Set(),
         boomSaver:     false,
+        lang:          _bewaardeLang,
         tijdschemaBeschikbaar: null,
         startlijstenLaad:      null,
         uitslagenLaad:         null,
@@ -169,6 +310,17 @@ function _pcBouwModal() {
                     <input type="checkbox" id="pc-boomsaver">
                     <span>🌳 Boom-saver: prints combineren op minder papier</span>
                 </label>
+                <div class="pc-lang-toggle" title="Taal van de geprinte rapporten — keuze blijft bewaard ook na hard refresh">
+                    <span class="pc-lang-label">Taal:</span>
+                    <label class="pc-lang-opt">
+                        <input type="radio" name="pc-lang" value="nl" id="pc-lang-nl">
+                        <span>🇳🇱 NL</span>
+                    </label>
+                    <label class="pc-lang-opt">
+                        <input type="radio" name="pc-lang" value="en" id="pc-lang-en">
+                        <span>🇬🇧 EN</span>
+                    </label>
+                </div>
                 <div class="pc-toolbar-rechts">
                     <button class="btn-secondary" id="pc-btn-reset">Alles uit</button>
                     <button class="btn-primary"   id="pc-btn-print" disabled>🖨 Print selectie</button>
@@ -183,6 +335,16 @@ function _pcBouwModal() {
     d.addEventListener('click', e => { if (e.target === d) sluitPrintCenter(); });
     d.querySelector('#pc-boomsaver').addEventListener('change', e => {
         _pcState.boomSaver = e.target.checked;
+    });
+    // Initialiseer radio-buttons op huidige _pcState.lang (uit localStorage).
+    d.querySelector(`#pc-lang-${_pcState.lang}`).checked = true;
+    d.querySelectorAll('input[name="pc-lang"]').forEach(r => {
+        r.addEventListener('change', e => {
+            _pcState.lang = e.target.value;
+            // Persistent — overleeft hard refresh + page close.
+            try { localStorage.setItem('printcenter_lang', _pcState.lang); }
+            catch (err) { /* private browsing → stil falen */ }
+        });
     });
     d.querySelector('#pc-btn-reset').addEventListener('click', () => {
         _pcState.geselecteerd.clear();

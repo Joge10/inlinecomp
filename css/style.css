@@ -117,6 +117,24 @@ header {
     user-select: none;
 }
 .pc-check input { cursor: pointer; }
+/* Taal-toggle in print-toolbar: NL / EN radio-buttons als pill-style chips */
+.pc-lang-toggle {
+    display: inline-flex; align-items: center; gap: .35rem;
+    font-size: .82rem;
+}
+.pc-lang-label { color: #555; margin-right: .2rem; }
+.pc-lang-opt {
+    display: inline-flex; align-items: center; gap: .25rem;
+    padding: 2px 8px; border-radius: 12px;
+    border: 1px solid #cdd8e3; background: #fff;
+    cursor: pointer; user-select: none;
+    transition: background .12s, border-color .12s;
+}
+.pc-lang-opt:hover { background: #eaf2fb; }
+.pc-lang-opt input { margin: 0; cursor: pointer; }
+.pc-lang-opt:has(input:checked) {
+    background: #d9e6f4; border-color: #1F4E79; font-weight: 600;
+}
 .pc-inhoud {
     padding: .8rem 1.2rem 1rem;
     overflow-y: auto;
