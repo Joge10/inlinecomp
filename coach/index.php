@@ -81,6 +81,47 @@ if ($_zichtCompId && !_coachWedstrijdZichtbaar($pdo, $_zichtCompId)) {
 
 $action = $_GET['action'] ?? '';
 
+// ── Page-render server-cache (15s) ──────────────────────────────────────────
+// Identiek patroon als public/index.php: cached de HTML+JS-bundle voor
+// gebruikers die /coach/ openen (action=''). Live data + auth-gate komen
+// via aparte ?action= calls die NIET worden gecached.
+//
+// Coach-wachtwoord-gate (hieronder) zit OP acties, niet op page-load.
+// Iedereen mag de HTML zien — pas bij eerste API-call wordt het wachtwoord
+// gevraagd. Daarom is page-cache veilig zelfs met de auth-gate.
+$_cacheable = ($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'GET' && $action === '';
+$_cacheFile = null;
+if ($_cacheable) {
+    $_compId    = trim($_GET['comp'] ?? '');
+    $_lang      = trim($_COOKIE['ICCOACHLANG'] ?? $_COOKIE['ICLANG'] ?? 'nl');
+    $_cacheFile = sys_get_temp_dir() . '/coa_' . md5($_compId . '|' . $_lang);
+    if (is_file($_cacheFile) && (time() - filemtime($_cacheFile)) < 15) {
+        $cached = @file_get_contents($_cacheFile);
+        if ($cached !== false && $cached !== '') {
+            header_remove('Cache-Control');
+            header_remove('Pragma');
+            header_remove('Expires');
+            header('Cache-Control: public, max-age=15');
+            header('Content-Type: text/html; charset=utf-8');
+            echo $cached;
+            exit;
+        }
+    }
+    ob_start();
+    header_remove('Cache-Control');
+    header_remove('Pragma');
+    header_remove('Expires');
+    header('Cache-Control: public, max-age=15');
+    register_shutdown_function(function() {
+        global $_cacheFile;
+        $out = ob_get_contents();
+        if ($out !== false && $out !== '' && $_cacheFile) {
+            @file_put_contents($_cacheFile, $out, LOCK_EX);
+        }
+        ob_end_flush();
+    });
+}
+
 // ── Coach-app wachtwoord-gate ────────────────────────────────────────────────
 // Voorkomt dat publiek massaal coach gebruikt om hele clubs te monitoren
 // (DB-load op iFastNet). Drempel-mechanisme, geen security. Bewust voor

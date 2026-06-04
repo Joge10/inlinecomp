@@ -72,8 +72,57 @@ if ($_zichtCompId && !_publicWedstrijdZichtbaar($pdo, $_zichtCompId)) {
     exit;
 }
 
-// ── Rate limiting: max 10 requests per 5 seconden per IP ────────────────────
 $action = $_GET['action'] ?? '';
+
+// ── Page-render server-cache (15s) ──────────────────────────────────────────
+// Alleen voor de pagina-laad zelf (action=''). Cached de hele HTML+JS-bundle
+// die voor 200+ gebruikers tijdens een wedstrijd identiek is. Live data komt
+// via aparte ?action=programma / ?action=lookup-calls die NIET cached worden.
+// Sessie + bezoekstracking is hierboven al gebeurd, dus stats blijven kloppen.
+//
+// Cache-key: comp-id + taal. Per-comp/per-taal eigen cache zodat NL-FR
+// switchers en verschillende wedstrijden niet door elkaar lopen.
+//
+// Bij wijzigingen (operator publiceert wedstrijd, nieuwe melding-tekst, etc.)
+// duurt het max 15s voordat publiek het ziet. Live-data (heats, uitslagen)
+// komt via aparte API-calls en wordt ongemoeid gelaten.
+$_cacheable = ($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'GET' && $action === '';
+$_cacheFile = null;
+if ($_cacheable) {
+    $_compId    = trim($_GET['comp'] ?? '');
+    $_lang      = trim($_COOKIE['ICLANG'] ?? 'nl');
+    $_cacheFile = sys_get_temp_dir() . '/pub_' . md5($_compId . '|' . $_lang);
+    if (is_file($_cacheFile) && (time() - filemtime($_cacheFile)) < 15) {
+        $cached = @file_get_contents($_cacheFile);
+        if ($cached !== false && $cached !== '') {
+            // Override no-cache headers van regel 13
+            header_remove('Cache-Control');
+            header_remove('Pragma');
+            header_remove('Expires');
+            header('Cache-Control: public, max-age=15');
+            header('Content-Type: text/html; charset=utf-8');
+            echo $cached;
+            exit;
+        }
+    }
+    ob_start();
+    // Browser krijgt zelfde 15s cache zodat herhaal-laden binnen die tijd
+    // helemaal geen server-hit doet (304 / from-cache).
+    header_remove('Cache-Control');
+    header_remove('Pragma');
+    header_remove('Expires');
+    header('Cache-Control: public, max-age=15');
+    register_shutdown_function(function() {
+        global $_cacheFile;
+        $out = ob_get_contents();
+        if ($out !== false && $out !== '' && $_cacheFile) {
+            @file_put_contents($_cacheFile, $out, LOCK_EX);
+        }
+        ob_end_flush();
+    });
+}
+
+// ── Rate limiting: max 10 requests per 5 seconden per IP ────────────────────
 if ($action) {
     $ip = $_SERVER['REMOTE_ADDR'] ?? 'unknown';
     $rlFile = sys_get_temp_dir() . '/rl_' . md5($ip);
