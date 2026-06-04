@@ -159,7 +159,7 @@ const _PC_I18N = {
         'prog_extern.disclaimer':        '⚠ The published start times are <strong>indicative only</strong>. Actual execution may differ from this programme. Follow the running of the programme yourself — you are responsible for being at the start on time.',
         'prog_extern.combi_kop':         '🔗 Combined race — {n} categories racing together',
         'prog_extern.qq_voetnoot':       '<b>¹</b> <b>Q</b> = direct qualification via heat position · <b>q</b> = additional on time (fastest times across all heats)',
-        'prog_extern.heats_x_dur':       '{n} {heats} × {dur} ≈ {tot} min',
+        'prog_extern.heats_x_dur':       '{heats} × {dur} ≈ {tot} min',
         'prog_extern.heats_simpel':      '{n} {heats}',
         'prog_extern.top_n_op_tijd':     'top {n} on time',
         'prog_extern.qheat_q_door':      '{Q}Q/heat + {q}q{m} → {d} skaters',

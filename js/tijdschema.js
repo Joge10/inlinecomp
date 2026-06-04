@@ -3362,7 +3362,15 @@ function _bouwProgrammaExternInternal() {
                 huidigeSectie = [];
                 const _dl = _dagInfoExt.dagLabels.find(d => d.nr === _dagNrRij);
                 const _pbCls = _laatstGerenderdeDagExt > 0 ? ' prog-dag-pagebreak' : '';
-                bloHtml += `<h2 class="prog-dag-header${_pbCls}">${esc(_dl?.label ?? T('algemeen.dag_n', { nr: _dagNrRij }))}</h2>`;
+                // Niet _dl.label gebruiken — die is vooraf NL-geformatteerd.
+                // Herbouw uit nr + datum zodat hij de print-taal volgt.
+                const _dagWoord = T('algemeen.dag_n', { nr: _dagNrRij });
+                const _dagDatum = _dl?.datum
+                    ? new Date(_dl.datum).toLocaleDateString(LOC,
+                        { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })
+                    : '';
+                const _dagHeader = _dagDatum ? `${_dagWoord} — ${_dagDatum}` : _dagWoord;
+                bloHtml += `<h2 class="prog-dag-header${_pbCls}">${esc(_dagHeader)}</h2>`;
                 _laatstGerenderdeDagExt = _dagNrRij;
             }
         }
@@ -3439,7 +3447,11 @@ function _bouwProgrammaExternInternal() {
     // Flush laatste sectie
     flushSectie(huidigeSectie, blokById.get(huidigeBlokId));
 
-    const datum   = comp?.starts ? formatDatum(comp.starts) : '';
+    // Locale-aware wedstrijddatum (formatDatum() is hardcoded nl-NL).
+    const datum = comp?.starts
+        ? new Date(comp.starts).toLocaleDateString(LOC,
+            { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })
+        : '';
     const locatie = comp ? getLocatie(comp) : '';
     const metaTxt = [datum, locatie].filter(Boolean).map(esc).join(' &nbsp;·&nbsp; ');
 
