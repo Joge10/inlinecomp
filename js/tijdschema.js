@@ -234,6 +234,24 @@ async function laadTijdschema() {
     // Default-dag wordt opnieuw bepaald op basis van vandaag-datum.
     _tsActieveDag = 0;
     try {
+        // Lazy-load vergelijkData als die leeg is — kan voorkomen als operator
+        // direct naar Tijdschema-tab navigeert zonder eerst Importeer te bezoeken
+        // (bv. na een handmatige aanmaak, of na pagina-refresh).
+        if ((!vergelijkData || !vergelijkData.length) && huidigCompId) {
+            const isHandmatig = !!(typeof huidigComp !== 'undefined' && huidigComp?.is_handmatig);
+            const detailUrl = isHandmatig
+                ? 'api/wedstrijd_handmatig.php?action=detail&id=' + encodeURIComponent(huidigCompId)
+                : 'api/vergelijk.php?id=' + encodeURIComponent(huidigCompId);
+            try {
+                const detailRes = await fetch(detailUrl);
+                if (detailRes.ok) {
+                    const detailData = await detailRes.json();
+                    if (!detailData.error) {
+                        vergelijkData = detailData.groepen ?? detailData ?? [];
+                    }
+                }
+            } catch (e) { console.warn('vergelijkData lazy-load mislukt', e); }
+        }
         const uniekeDcIds = [...new Set((vergelijkData ?? []).map(c => c.dc_id))];
         // Bulk-call voor afstanden ipv N parallelle calls. iFastNet stuurt
         // anders HTTP 508 ('loop detected') zodra er ~6 DCs zijn. Eén

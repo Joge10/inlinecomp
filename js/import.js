@@ -2961,11 +2961,19 @@ function markeerGewijzigd(row) {
 // ── Herlaad vergelijking na import ───────────────────────────────────────────
 
 async function herlaadVergelijking() {
+    // Handmatige wedstrijden: gebruik detail-endpoint (geen KNSB-feed).
+    // huidigComp.is_handmatig wordt in app.js gezet bij selectie.
+    const isHandmatig = !!(typeof huidigComp !== 'undefined' && huidigComp?.is_handmatig);
     setHTML('imp-cat-content',
-        '<div class="status-msg loading"><span class="spinner"></span>Synchroniseren met KNSB…</div>'
+        `<div class="status-msg loading"><span class="spinner"></span>${
+            isHandmatig ? 'Categorieën laden…' : 'Synchroniseren met KNSB…'
+        }</div>`
     );
     try {
-        const res   = await fetch('api/vergelijk.php?id=' + encodeURIComponent(huidigCompId));
+        const endpoint = isHandmatig
+            ? 'api/wedstrijd_handmatig.php?action=detail&id=' + encodeURIComponent(huidigCompId)
+            : 'api/vergelijk.php?id=' + encodeURIComponent(huidigCompId);
+        const res   = await fetch(endpoint);
         if (!res.ok) throw new Error('HTTP ' + res.status);
         const vData = await res.json();
         if (vData.error) throw new Error(vData.error);
