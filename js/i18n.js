@@ -17,7 +17,12 @@
 //  NL is altijd fallback voor ontbrekende keys.
 //
 //  Persisteert in localStorage onder key 'ic_lang' (shared tussen apps).
-//  Default-taal = nl als nooit gekozen.
+//  Eerste bezoek (geen stored value): detecteer via navigator.languages,
+//  match op 2-letter code tegen onze ondersteunde codes (nl/en/de/fr),
+//  fallback EN als geen match. Zodra de gebruiker zelf een taal kiest via
+//  de dropdown wordt die in localStorage opgeslagen — die wint dan voor-
+//  taan over de browser-detectie (ook handig als ze hun device-taal
+//  later wijzigen maar de InlineComp-taal willen behouden).
 // ============================================================
 
 const I18N_STORAGE_KEY = 'ic_lang';
@@ -36,11 +41,30 @@ const I18N_CODES = I18N_LANGS.map(l => l.code);
 
 let _i18nDict     = {};   // { nl:{...}, en:{...}, de:{...}, fr:{...} }
 let _i18nOnChange = null;
+
+// Browser-taal detectie. navigator.languages bevat de voorkeur-volgorde
+// (bv. ['en-US','en','nl']); pak de eerste 2-letter code die we onder-
+// steunen. Fallback EN — niet NL — zodat een buitenlandse bezoeker met
+// een onbekende taal in elk geval iets leesbaars krijgt.
+function _i18nDetectDeviceLang() {
+    try {
+        const langs = (navigator.languages && navigator.languages.length)
+            ? navigator.languages
+            : (navigator.language ? [navigator.language] : []);
+        for (const l of langs) {
+            const code = String(l).toLowerCase().slice(0, 2);
+            if (I18N_CODES.includes(code)) return code;
+        }
+    } catch { /* navigator niet beschikbaar (oude browser/SSR) */ }
+    return 'en';
+}
+
 let _i18nCurLang  = (() => {
     try {
         const stored = localStorage.getItem(I18N_STORAGE_KEY);
-        return I18N_CODES.includes(stored) ? stored : 'nl';
-    } catch { return 'nl'; }
+        if (I18N_CODES.includes(stored)) return stored;
+    } catch { /* localStorage geblokkeerd (incognito + restricted) */ }
+    return _i18nDetectDeviceLang();
 })();
 
 function initI18n(opts = {}) {
