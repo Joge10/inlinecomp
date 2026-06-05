@@ -2088,11 +2088,35 @@ function _bouwDeelnemerslijstInternal(opts = {}) {
         vergelijkData  = _vergelijkData;
     }
     try {
+    // i18n-helper voor Print-Center taalkeuze (NL/EN). Fallback = identity.
+    const T    = window._pcT    || (k => k);
+    const LANG = (window._pcLang && window._pcLang()) || 'nl';
+    const LOC  = LANG === 'en' ? 'en-GB' : 'nl-NL';
+
     const compNaam = escHtml(huidigComp.name || huidigComp.title || '');
-    const compMeta = escHtml(formatDatum(huidigComp.starts) + ' · ' + getLocatie(huidigComp));
-    const standTxt = standDatum   ? `Stand: ${standDatum}`
-                   : dbStandDatum ? `Stand: ${dbStandDatum}` : '';
+    // Locale-aware wedstrijddatum (formatDatum is hardcoded nl-NL).
+    const _datumStr = huidigComp.starts
+        ? new Date(huidigComp.starts).toLocaleDateString(LOC,
+            { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })
+        : '';
+    const compMeta = escHtml([_datumStr, getLocatie(huidigComp)].filter(Boolean).join(' · '));
+    const _stand   = standDatum || dbStandDatum || '';
+    const standTxt = _stand ? T('algemeen.stand_op', { datum: _stand }) : '';
     const baseUrl  = new URL('.', window.location.href).href;
+
+    // Locale-aware status-label (STATUS_LABELS is hardcoded NL).
+    // Status 0 wordt visueel als 'Niet getekend' (4) getoond — zelfde
+    // afspraak als de oorspronkelijke code.
+    const statusLabel = (s) => {
+        const idx = s === 0 ? 4 : s;
+        switch (idx) {
+            case 0: return T('deelnemers.status_niet_bev');
+            case 2: return T('deelnemers.status_afgemeld');
+            case 3: return T('deelnemers.status_afg_org');
+            case 4: return T('deelnemers.status_niet_get');
+            default: return `status ${s}`;
+        }
+    };
 
     // ── 1. Alle unieke afstanden verzamelen als kolom-headers ─────────────────
     // Gebruik de globale dcDistances (gevuld door bouwBeheerTabel):
@@ -2246,7 +2270,7 @@ function _bouwDeelnemerslijstInternal(opts = {}) {
     // ── 4. Org-logo + baan-logo (alleen header, geen footer — intern document) ─
     const { orgLogoHtml, baanLogoHtml } = bouwOrgHeaderFooter(escHtml);
 
-    const printDatum = new Date().toLocaleString('nl-NL',
+    const printDatum = new Date().toLocaleString(LOC,
         { day: '2-digit', month: 'long', year: 'numeric', hour: '2-digit', minute: '2-digit' });
 
     // ── 5. Tabel-helpers ──────────────────────────────────────────────────────
@@ -2262,9 +2286,9 @@ function _bouwDeelnemerslijstInternal(opts = {}) {
 
     const theadDl = `<thead><tr>
         <th class="tc">#</th>
-        <th>Naam</th>
-        <th>Cat</th>
-        <th>Transp</th>
+        <th>${escHtml(T('algemeen.naam'))}</th>
+        <th>${escHtml(T('deelnemers.col_cat_kort'))}</th>
+        <th>${escHtml(T('deelnemers.col_transp_kort'))}</th>
         ${afstandKols.map(n => `<th class="tc">${escHtml(n)}</th>`).join('')}
     </tr></thead>`;
 
@@ -2303,14 +2327,14 @@ function _bouwDeelnemerslijstInternal(opts = {}) {
                 <td class="tp-invul"></td>
             </tr>`
         ).join('');
-        sectieGT = `<h2 class="sectie-titel sectie-oranje">Geen transponder geregistreerd &nbsp;<span class="teller">${geenTpRijders.length}</span></h2>
+        sectieGT = `<h2 class="sectie-titel sectie-oranje">${escHtml(T('deelnemers.sec_geen_tp'))} &nbsp;<span class="teller">${geenTpRijders.length}</span></h2>
         <table><colgroup>
             <col style="width:12mm"><col style="width:auto"><col style="width:16mm">
             <col style="width:55mm">
         </colgroup>
         <thead><tr>
-            <th class="tc">#</th><th>Naam</th><th>Cat</th>
-            <th>Transponder (invullen)</th>
+            <th class="tc">#</th><th>${escHtml(T('algemeen.naam'))}</th><th>${escHtml(T('deelnemers.col_cat_kort'))}</th>
+            <th>${escHtml(T('deelnemers.col_transp_invul'))}</th>
         </tr></thead>
         <tbody>${rijen}</tbody></table>`;
     }
@@ -2331,14 +2355,14 @@ function _bouwDeelnemerslijstInternal(opts = {}) {
                 <td class="tc sm ${betaaldCls} vet">${betaaldTxt}</td>
             </tr>`;
         }).join('');
-        sectieOT = `<h2 class="sectie-titel sectie-groen">Met organisatie-transponder &nbsp;<span class="teller">${orgTpRijders.length}</span></h2>
+        sectieOT = `<h2 class="sectie-titel sectie-groen">${escHtml(T('deelnemers.sec_org_tp'))} &nbsp;<span class="teller">${orgTpRijders.length}</span></h2>
         <table><colgroup>
             <col style="width:12mm"><col style="width:auto"><col style="width:16mm">
             <col style="width:14mm"><col style="width:36mm"><col style="width:20mm">
         </colgroup>
         <thead><tr>
-            <th class="tc">#</th><th>Naam</th><th>Cat</th>
-            <th class="tc">Org #</th><th>Transponder</th><th class="tc">Betaald</th>
+            <th class="tc">#</th><th>${escHtml(T('algemeen.naam'))}</th><th>${escHtml(T('deelnemers.col_cat_kort'))}</th>
+            <th class="tc">${escHtml(T('deelnemers.col_org_nr'))}</th><th>${escHtml(T('algemeen.transponder'))}</th><th class="tc">${escHtml(T('deelnemers.col_betaald'))}</th>
         </tr></thead>
         <tbody>${rijen}</tbody></table>`;
     }
@@ -2360,14 +2384,14 @@ function _bouwDeelnemerslijstInternal(opts = {}) {
                 <td class="sm blauw">${escHtml(dcNamen)}</td>
             </tr>`;
         }).join('');
-        sectie0 = `<h2 class="sectie-titel sectie-blauw">Door organisatie toegevoegd &nbsp;<span class="teller">${orgRijders.length}</span></h2>
+        sectie0 = `<h2 class="sectie-titel sectie-blauw">${escHtml(T('deelnemers.sec_org_added'))} &nbsp;<span class="teller">${orgRijders.length}</span></h2>
         <table><colgroup>
             <col style="width:12mm"><col style="width:auto"><col style="width:16mm">
             <col style="width:36mm"><col style="width:auto">
         </colgroup>
         <thead><tr>
-            <th class="tc">#</th><th>Naam</th><th>Cat</th>
-            <th>Transponder</th><th>Groep</th>
+            <th class="tc">#</th><th>${escHtml(T('algemeen.naam'))}</th><th>${escHtml(T('deelnemers.col_cat_kort'))}</th>
+            <th>${escHtml(T('algemeen.transponder'))}</th><th>${escHtml(T('deelnemers.col_groep'))}</th>
         </tr></thead>
         <tbody>${rijen}</tbody></table>`;
     }
@@ -2379,7 +2403,7 @@ function _bouwDeelnemerslijstInternal(opts = {}) {
             // Status 0 (niet bevestigd) telt als niet-aanwezig, zelfde label als status 4
             const statusTxt = r.statussen
                 .filter(s => s.status !== 1)
-                .map(s => s.status === 0 ? STATUS_LABELS[4] : (STATUS_LABELS[s.status] ?? `status ${s.status}`))
+                .map(s => statusLabel(s.status))
                 .filter((v, j, a) => a.indexOf(v) === j)
                 .join(', ');
             const afstTxt = [...r.afstanden_afwezig].join(', ');
@@ -2391,14 +2415,14 @@ function _bouwDeelnemerslijstInternal(opts = {}) {
                 <td class="sm rood">${escHtml(statusTxt)}</td>
             </tr>`;
         }).join('');
-        sectie1 = `<h2 class="sectie-titel">Niet aanwezig / afgemeld &nbsp;<span class="teller">${afwezigRijders.length}</span></h2>
+        sectie1 = `<h2 class="sectie-titel">${escHtml(T('deelnemers.sec_afwezig'))} &nbsp;<span class="teller">${afwezigRijders.length}</span></h2>
         <table><colgroup>
             <col style="width:12mm"><col style="width:auto"><col style="width:16mm">
             <col style="width:auto"><col style="width:32mm">
         </colgroup>
         <thead><tr>
-            <th class="tc">#</th><th>Naam</th><th>Cat</th>
-            <th>Afstanden</th><th>Status</th>
+            <th class="tc">#</th><th>${escHtml(T('algemeen.naam'))}</th><th>${escHtml(T('deelnemers.col_cat_kort'))}</th>
+            <th>${escHtml(T('deelnemers.col_afstanden'))}</th><th>${escHtml(T('deelnemers.col_status'))}</th>
         </tr></thead>
         <tbody>${rijen}</tbody></table>`;
     }
@@ -2418,14 +2442,14 @@ function _bouwDeelnemerslijstInternal(opts = {}) {
                 <td class="sm vet">${escHtml(String(r.transponder_actief))}</td>
             </tr>`;
         }).join('');
-        sectie2 = `<h2 class="sectie-titel">Transponder aanpassingen tov KNSB &nbsp;<span class="teller">${tpWijzigingen.length}</span></h2>
+        sectie2 = `<h2 class="sectie-titel">${escHtml(T('deelnemers.sec_tp_wijz'))} &nbsp;<span class="teller">${tpWijzigingen.length}</span></h2>
         <table><colgroup>
             <col style="width:12mm"><col style="width:auto"><col style="width:16mm">
             <col style="width:42mm"><col style="width:42mm">
         </colgroup>
         <thead><tr>
-            <th class="tc">#</th><th>Naam</th><th>Cat</th>
-            <th>Transponder KNSB</th><th>Transponder gebruikt</th>
+            <th class="tc">#</th><th>${escHtml(T('algemeen.naam'))}</th><th>${escHtml(T('deelnemers.col_cat_kort'))}</th>
+            <th>${escHtml(T('deelnemers.col_tp_knsb'))}</th><th>${escHtml(T('deelnemers.col_tp_gebruikt'))}</th>
         </tr></thead>
         <tbody>${rijen}</tbody></table>`;
     }
@@ -2441,12 +2465,12 @@ function _bouwDeelnemerslijstInternal(opts = {}) {
                 <td class="sm">${escHtml(r.category)}</td>
             </tr>`
         ).join('');
-        sectieSN = `<h2 class="sectie-titel">Startnummer aanpassingen tov KNSB &nbsp;<span class="teller">${snWijzigingen.length}</span></h2>
+        sectieSN = `<h2 class="sectie-titel">${escHtml(T('deelnemers.sec_sn_wijz'))} &nbsp;<span class="teller">${snWijzigingen.length}</span></h2>
         <table><colgroup>
             <col style="width:18mm"><col style="width:18mm"><col style="width:auto"><col style="width:16mm">
         </colgroup>
         <thead><tr>
-            <th class="tc">KNSB</th><th class="tc">Gebruikt</th><th>Naam</th><th>Cat</th>
+            <th class="tc">${escHtml(T('deelnemers.col_knsb'))}</th><th class="tc">${escHtml(T('deelnemers.col_gebruikt'))}</th><th>${escHtml(T('algemeen.naam'))}</th><th>${escHtml(T('deelnemers.col_cat_kort'))}</th>
         </tr></thead>
         <tbody>${rijen}</tbody></table>`;
     }
@@ -2554,7 +2578,7 @@ function _bouwDeelnemerslijstInternal(opts = {}) {
                     const restPerCat = new Map();
                     restCats.forEach(c => restPerCat.set(c, perCat.get(c)));
                     overzichtGroepen.push({
-                        naam: `${basisNaam} — overig`,
+                        naam: `${basisNaam} — ${T('algemeen.overig')}`,
                         afstanden: bouwAfstanden(null),
                         perCat: restPerCat,
                     });
@@ -2584,18 +2608,19 @@ function _bouwDeelnemerslijstInternal(opts = {}) {
         // niet halverwege over een pagina-grens breekt. Bij heel veel groepen
         // (50+) kan het wel splitten — dan accepteren we de break liever dan
         // dat het overzicht in een lege witruimte op de vorige pagina verdwijnt.
-        sectieOV = `<div class="sectie-overzicht-wrap"><h2 class="sectie-titel">Race-groepen overzicht &nbsp;<span class="teller">${overzichtGroepen.length} groepen</span></h2>
+        sectieOV = `<div class="sectie-overzicht-wrap"><h2 class="sectie-titel">${escHtml(T('deelnemers.sec_overzicht'))} &nbsp;<span class="teller">${escHtml(T('deelnemers.teller_groepen', { n: overzichtGroepen.length }))}</span></h2>
         <table><colgroup>
             <col style="width:auto"><col style="width:18mm"><col style="width:auto">
         </colgroup>
         <thead><tr>
-            <th>Race-groep</th><th class="tc">Aantal</th><th>Afstanden</th>
+            <th>${escHtml(T('deelnemers.col_race_groep'))}</th><th class="tc">${escHtml(T('deelnemers.col_aantal'))}</th><th>${escHtml(T('deelnemers.col_afstanden'))}</th>
         </tr></thead>
         <tbody>${ovRijen}</tbody></table></div>`;
     }
 
     // --- Sectie 3: Volledige deelnemerslijst ---
-    const sectie3 = `<h2 class="sectie-titel">Deelnemerslijst &nbsp;<span class="teller">${actieveRijders.length} deelnemers</span></h2>
+    const _deelnAantalTxt = T(actieveRijders.length === 1 ? 'algemeen.deelnemer_1' : 'algemeen.deelnemers_n', { n: actieveRijders.length });
+    const sectie3 = `<h2 class="sectie-titel">${escHtml(T('deelnemers.titel_meervoud'))} &nbsp;<span class="teller">${escHtml(_deelnAantalTxt)}</span></h2>
     <table>${colgrpDl}${theadDl}
     <tbody>${actieveRijders.map((r, i) => rijDl(r, i)).join('')}</tbody></table>`;
 
@@ -2621,7 +2646,7 @@ function _bouwDeelnemerslijstInternal(opts = {}) {
     ${sectieOT}
     ${sectieOV}
     ${sectie3}
-    <footer class="doc-footer">afgedrukt: ${escHtml(printDatum)}</footer>`;
+    <footer class="doc-footer">${escHtml(T('algemeen.afgedrukt', { datum: printDatum }))}</footer>`;
 
     const extraCss = `
 @page { size: A4 portrait; margin: 10mm 12mm 12mm 12mm; }
@@ -2681,8 +2706,8 @@ tr     { page-break-inside:avoid; }
         cssLinks:        ['css/tekenlijst.css'],
         extraCss:        extraCss,
         pageOrientation: 'portrait',
-        title:           'Deelnemerslijst – ' + (huidigComp.name || huidigComp.title || ''),
-        subType:         'Deelnemerslijst',
+        title:           T('deelnemers.titel_meervoud') + ' – ' + (huidigComp.name || huidigComp.title || ''),
+        subType:         T('deelnemers.titel_meervoud'),
     };
     } finally {
         // Multi-day filter: vergelijkData herstellen als die tijdelijk was
@@ -2705,6 +2730,8 @@ function bouwSpeakerlijstenBody() {
 }
 
 function _bouwSpeakerlijstenInternal() {
+    // i18n-helper voor Print-Center taalkeuze (NL/EN).
+    const T = window._pcT || (k => k);
     const compNaam = escHtml(huidigComp.name || huidigComp.title || '');
 
     // ── DC-groepen verzamelen (zelfde merge-logica als groepeerVoorPrint) ─────
@@ -2841,7 +2868,7 @@ function _bouwSpeakerlijstenInternal() {
             });
             if (perSplit['_geen']?.length) {
                 dcGroepen.push({
-                    naam: `${basisNaam} — (geen split)`,
+                    naam: `${basisNaam} — ${T('algemeen.geen_split')}`,
                     deelnemers: sortSn(perSplit['_geen']),
                 });
             }
@@ -2863,10 +2890,11 @@ function _bouwSpeakerlijstenInternal() {
                 <td class="nt"></td>
             </tr>`).join('');
 
+        const _aantalTxt = T(g.deelnemers.length === 1 ? 'algemeen.deelnemer_1' : 'algemeen.deelnemers_n', { n: g.deelnemers.length });
         return `<div class="sp-pagina">
             <div class="sp-dc-titel">
                 ${escHtml(g.naam)}
-                <span class="sub">— ${g.deelnemers.length} deelnemer${g.deelnemers.length !== 1 ? 's' : ''} · ${compNaam}</span>
+                <span class="sub">— ${escHtml(_aantalTxt)} · ${compNaam}</span>
             </div>
             <table class="sp-table">
                 <colgroup>
@@ -2878,17 +2906,17 @@ function _bouwSpeakerlijstenInternal() {
                 </colgroup>
                 <thead><tr>
                     <th class="sn">#</th>
-                    <th>Naam</th>
-                    <th>Club</th>
-                    <th>Sponsor</th>
-                    <th>Notities</th>
+                    <th>${escHtml(T('algemeen.naam'))}</th>
+                    <th>${escHtml(T('algemeen.club'))}</th>
+                    <th>${escHtml(T('speaker.col_sponsor'))}</th>
+                    <th>${escHtml(T('speaker.col_notities'))}</th>
                 </tr></thead>
                 <tbody>${rijen}</tbody>
             </table>
         </div>`;
     }).join('');
 
-    const bodyHtml = paginas || `<div class="sp-pagina"><p style="color:#888;font-style:italic">Geen niet-sprint DCs met actieve deelnemers gevonden (sprint-DCs worden overgeslagen).</p></div>`;
+    const bodyHtml = paginas || `<div class="sp-pagina"><p style="color:#888;font-style:italic">${escHtml(T('speaker.geen_dcs'))}</p></div>`;
 
     const extraCss = `
 @page { size: A4 portrait; margin: 8mm 10mm; }
@@ -2957,8 +2985,8 @@ body  { font-family: Arial, sans-serif; font-size: 11pt; margin: 0; color: #111;
         cssLinks:        [],
         extraCss:        extraCss,
         pageOrientation: 'portrait',
-        title:           'Speakerlijsten – ' + (huidigComp.name || huidigComp.title || ''),
-        subType:         'Speakerlijsten',
+        title:           T('speaker.titel_meervoud') + ' – ' + (huidigComp.name || huidigComp.title || ''),
+        subType:         T('speaker.titel_meervoud'),
     };
 }
 
