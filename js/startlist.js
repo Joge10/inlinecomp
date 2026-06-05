@@ -879,15 +879,22 @@ col.pr-col-fin-snr{width:50px}
 .pr-combi-kolom-titel{background:#1a3a5c;color:#fff;padding:4px 7px;font-size:9pt;
                       display:flex;align-items:center;gap:.25cm}
 .pr-combi-naam{overflow:hidden;white-space:nowrap;text-overflow:ellipsis}
-/* Ruimere tabel-lay-out: naam-kolom pakt alle resterende ruimte */
-.pr-combi-tabel{font-size:9.5pt;width:100%;table-layout:auto}
+/* Ruimere tabel-lay-out: naam-kolom pakt alle resterende ruimte, maar
+   de Fin + Snr (jury-invul) kolommen rechts respecteren hun expliciete
+   breedte zodat er ruimte blijft om met de hand een startnummer in te
+   vullen — ook in combi-mode waar 2/3 heats naast elkaar staan. Was
+   eerder table-layout:auto wat de Snr-kolom plat duwde. */
+.pr-combi-tabel{font-size:9.5pt;width:100%;table-layout:fixed}
 .pr-combi-tabel td{padding:3px 5px}
 .pr-combi-tabel th{font-size:7.5pt;padding:2px 5px}
-.pr-combi-tabel .pr-naam{white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:0;width:100%}
+.pr-combi-tabel .pr-naam{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .pr-combi-tabel col.pr-col-pos{width:22px}
 .pr-combi-tabel col.pr-col-snr{width:36px}
 .pr-combi-tabel col.pr-col-cat{width:34px}
 .pr-combi-tabel col.pr-col-naam{width:auto}
+.pr-combi-tabel col.pr-col-opm{width:30px}
+.pr-combi-tabel col.pr-col-fin{width:22px}
+.pr-combi-tabel col.pr-col-fin-snr{width:45px}
 /* A-finale altijd aan de linkerkantlijn (grid-kolom 1) */
 .pr-card-links{grid-column-start:1}
 /* Photofinish-icoon in Opm.-kolom — puur sec het 📷-emoji. */
