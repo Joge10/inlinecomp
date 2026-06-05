@@ -3574,6 +3574,22 @@ function _bouwProgrammaInternInternal() {
     const comp   = huidigComp;
     if (!schema) return null;
 
+    // i18n-helper voor Print-Center taalkeuze (NL/EN).
+    const T    = window._pcT    || (k => k);
+    const LANG = (window._pcLang && window._pcLang()) || 'nl';
+    const LOC  = LANG === 'en' ? 'en-GB' : 'nl-NL';
+
+    // Ronde-label-map (TS_RONDE_LABEL is hardcoded NL — alleen voor UI elders).
+    const _rondeLabelMap = {
+        heats:        T('algemeen.serie'),
+        kwartfinale:  T('algemeen.kwart_finale'),
+        halve_finale: T('algemeen.halve_finale'),
+        runner_up:    T('algemeen.runner_up'),
+        finale:       T('algemeen.finale'),
+        finale_a:     T('algemeen.a_finale'),
+        finale_b:     T('algemeen.b_finale'),
+    };
+
     const ritten  = schema.ritten  ?? [];
     const blokken = schema.blokken ?? [];
 
@@ -3772,7 +3788,7 @@ function _bouwProgrammaInternInternal() {
     );
 
     // ── Tabel-rijen genereren ─────────────────────────────────────────────────
-    const tijdTh = heeftTijden ? '<th class="ti">Tijd</th>' : '';
+    const tijdTh = heeftTijden ? `<th class="ti">${esc(T('algemeen.tijd'))}</th>` : '';
     const restCols = 4;
     let tBody = '';
     let ritNr = 0;
@@ -3794,8 +3810,17 @@ function _bouwProgrammaInternInternal() {
             if (_dagNrRij !== _laatstGerenderdeDagInt) {
                 const _dl = _dagInfoInt.dagLabels.find(d => d.nr === _dagNrRij);
                 const _pbCls = _laatstGerenderdeDagInt > 0 ? ' prog-dag-pagebreak' : '';
+                // Niet _dl.label gebruiken — die is NL-geformatteerd in
+                // _tsBouwDagInfo. Herbouw uit nr + datum zodat 'ie de
+                // print-taal volgt.
+                const _dagWoord = T('algemeen.dag_n', { nr: _dagNrRij });
+                const _dagDatum = _dl?.datum
+                    ? new Date(_dl.datum).toLocaleDateString(LOC,
+                        { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })
+                    : '';
+                const _dagHeader = _dagDatum ? `${_dagWoord} — ${_dagDatum}` : _dagWoord;
                 tBody += `<tr class="prog-dag-header-row${_pbCls}"><td colspan="${cols}">
-                    <h2 class="prog-dag-header">${esc(_dl?.label ?? `Dag ${_dagNrRij}`)}</h2>
+                    <h2 class="prog-dag-header">${esc(_dagHeader)}</h2>
                 </td></tr>`;
                 _laatstGerenderdeDagInt = _dagNrRij;
                 prevGroepKey = null; // schone start na dag-wissel
@@ -3807,34 +3832,34 @@ function _bouwProgrammaInternInternal() {
             const bTijd = btMap.get(rij.blok.id) ?? '';
             tBody += `<tr class="wsstart">
                 ${heeftTijden ? `<td class="ti">${esc(bTijd || ts)}</td>` : ''}
-                <td colspan="${restCols}" class="special">🏁 Wedstrijd start — <strong>${esc(ts)}</strong></td>
+                <td colspan="${restCols}" class="special">🏁 ${esc(T('algemeen.wedstrijdstart'))} — <strong>${esc(ts)}</strong></td>
             </tr>`;
         } else if (rij.type === 'pauze') {
             prevGroepKey = null;
             const bTijd = btMap.get(rij.blok.id) ?? '';
-            const duurTxt = rij.blok?.duur ? ` – ${rij.blok.duur} min` : '';
+            const duurTxt = rij.blok?.duur ? ` – ${T('algemeen.min_unit', { n: rij.blok.duur })}` : '';
             const opmTxt  = rij.blok?.opmerking ? ` — ${esc(rij.blok.opmerking)}` : '';
             tBody += `<tr class="pauze">
                 ${heeftTijden ? `<td class="ti">${esc(bTijd)}</td>` : ''}
-                <td colspan="${restCols}" class="special">⏸ Pauze${esc(duurTxt)}${opmTxt}</td>
+                <td colspan="${restCols}" class="special">⏸ ${esc(T('algemeen.pauze'))}${esc(duurTxt)}${opmTxt}</td>
             </tr>`;
         } else if (rij.type === 'inrijden') {
             prevGroepKey = null;
             const bTijd = btMap.get(rij.blok.id) ?? '';
-            const duurTxt = rij.blok?.duur ? ` – ${rij.blok.duur} min` : '';
+            const duurTxt = rij.blok?.duur ? ` – ${T('algemeen.min_unit', { n: rij.blok.duur })}` : '';
             const cats = (() => { try { return JSON.parse(rij.blok?.inrijd_cats || '[]'); } catch(e) { return []; } })();
             const catNamen = cats.map(id => esc(dcNaamMap.get(id) ?? id)).join(', ');
             tBody += `<tr class="inrijd">
                 ${heeftTijden ? `<td class="ti">${esc(bTijd)}</td>` : ''}
-                <td colspan="${restCols}" class="special">🛼 Inrijden${esc(duurTxt)}${catNamen ? ' — ' + catNamen : ''}</td>
+                <td colspan="${restCols}" class="special">🛼 ${esc(T('algemeen.inrijden'))}${esc(duurTxt)}${catNamen ? ' — ' + catNamen : ''}</td>
             </tr>`;
         } else if (rij.type === 'ceremonie') {
             prevGroepKey = null;
             const bTijd = btMap.get(rij.blok.id) ?? '';
-            const duurTxt = rij.blok?.duur ? ` – ${rij.blok.duur} min` : '';
+            const duurTxt = rij.blok?.duur ? ` – ${T('algemeen.min_unit', { n: rij.blok.duur })}` : '';
             tBody += `<tr class="cerem">
                 ${heeftTijden ? `<td class="ti">${esc(bTijd)}</td>` : ''}
-                <td colspan="${restCols}" class="special">🏆 Ceremonie${esc(duurTxt)}</td>
+                <td colspan="${restCols}" class="special">🏆 ${esc(T('algemeen.ceremonie'))}${esc(duurTxt)}</td>
             </tr>`;
         } else if (rij.type === 'herstart') {
             prevGroepKey = null;
@@ -3843,28 +3868,32 @@ function _bouwProgrammaInternInternal() {
             const opmTxt  = rij.blok?.opmerking ? ` — ${esc(rij.blok.opmerking)}` : '';
             tBody += `<tr class="herstart">
                 ${heeftTijden ? `<td class="ti">${esc(bTijd || ts)}</td>` : ''}
-                <td colspan="${restCols}" class="special">🔄 Herstart — <strong>${esc(ts)}</strong>${opmTxt}</td>
+                <td colspan="${restCols}" class="special">🔄 ${esc(T('algemeen.herstart'))} — <strong>${esc(ts)}</strong>${opmTxt}</td>
             </tr>`;
         } else {
             const rit      = rij.rit;
             const groepKey = `${rit.blok_id ?? ''}:${rit.dc_id}:${rit.dc_naam ?? ''}:${rit.ronde_type}`;
             const kleur    = TS_RONDE_KLEUR[rit.ronde_type] ?? '#adb5bd';
+            // i18n-bewuste label: TS_RONDE_LABEL is NL voor UI elders;
+            // hier vertalen we via _rondeLabelMap (sleutel → T()).
             const label    = (rit.ronde_type === 'finale_b' && rit.finale_label)
-                ? rit.finale_label + '-finale'
-                : (TS_RONDE_LABEL[rit.ronde_type] ?? rit.ronde_type);
+                ? T('prog_intern.finale_label', { lbl: rit.finale_label, finale: T('algemeen.finale') })
+                : (_rondeLabelMap[rit.ronde_type] ?? rit.ronde_type);
             const fin = (rit.ronde_type === 'finale_b') ? '' : (rit.finale_label ? ` ${rit.finale_label}` : '');
 
             if (groepKey !== prevGroepKey) {
                 prevGroepKey = groepKey;
                 const n    = groepGrootte[groepKey] ?? 1;
-                const nTxt = n === 1 ? '1 rit' : `${n} heats`;
+                const nTxt = n === 1
+                    ? T('prog_intern.rit_1')
+                    : T('algemeen.heats_n', { n });
                 const gTijd = heeftTijden ? `<span class="gt">${stMap.get(rit.id) ?? '—'}</span>` : '';
                 let rustHtml = '';
                 if (rustTijdMap.has(groepKey)) {
                     const rustSec = rustTijdMap.get(groepKey);
                     const rustMin = Math.round(rustSec / 60);
                     const isWarn  = rustSec < RUST_WARN_SEC;
-                    rustHtml = `<span class="rust${isWarn ? ' rust-warn' : ''}">${isWarn ? '⚠' : '✓'} rust ${rustMin} min</span>`;
+                    rustHtml = `<span class="rust${isWarn ? ' rust-warn' : ''}">${isWarn ? '⚠' : '✓'} ${esc(T('prog_intern.rust_min', { n: rustMin }))}</span>`;
                 }
                 tBody += `<tr class="groep-hdr">
                     <td colspan="${cols}">
@@ -3919,7 +3948,11 @@ function _bouwProgrammaInternInternal() {
         }
     });
 
-    const datum   = comp?.starts ? formatDatum(comp.starts) : '';
+    // Locale-aware wedstrijddatum (formatDatum is hardcoded nl-NL).
+    const datum = comp?.starts
+        ? new Date(comp.starts).toLocaleDateString(LOC,
+            { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })
+        : '';
     const locatie = comp ? getLocatie(comp) : '';
     const metaTxt = [datum, locatie].filter(Boolean).map(esc).join(' &nbsp;·&nbsp; ');
 
@@ -3978,20 +4011,24 @@ td.opm{font-size:8pt;color:#7a4200;font-style:italic;padding-left:12px;padding-t
   @page{margin:1cm 1.2cm;size:A4 portrait}
 }
 `;
+    const _genDatumStr = schema.gegenereerd_op
+        ? new Date(schema.gegenereerd_op.replace(' ','T')+'Z').toLocaleString(LOC,
+            { day:'2-digit', month:'long', year:'numeric', hour:'2-digit', minute:'2-digit' })
+        : '';
     const bodyHtml = `
 <div class="pagina-header">
   <div class="hdr-links">
-    <div class="hdr-comp">${esc(comp?.name ?? 'Wedstrijdprogramma')}</div>
+    <div class="hdr-comp">${esc(comp?.name ?? T('prog_extern.titel_default'))}</div>
     ${metaTxt ? `<div class="hdr-meta">${metaTxt}</div>` : ''}
-    ${schema.gegenereerd_op ? `<div class="hdr-versie">Programma gegenereerd op: ${esc(new Date(schema.gegenereerd_op.replace(' ','T')+'Z').toLocaleString('nl-NL',{day:'2-digit',month:'long',year:'numeric',hour:'2-digit',minute:'2-digit'}))}</div>` : ''}
-    <div class="hdr-versie" style="color:#b00">Intern gebruik — niet publiceren</div>
+    ${_genDatumStr ? `<div class="hdr-versie">${esc(T('prog_extern.gegen_op_label', { datum: _genDatumStr }))}</div>` : ''}
+    <div class="hdr-versie" style="color:#b00">${esc(T('prog_intern.intern_warning'))}</div>
   </div>
   ${baanLogoHtml ? `<div class="hdr-baan">${baanLogoHtml}</div>` : ''}
   <div class="hdr-rechts">${orgLogoHtml}</div>
 </div>
 <hr class="hdr-lijn">
 <table>
-  <thead><tr>${tijdTh}<th class="nr">#</th><th>Rit</th><th>Type</th><th class="vw">Verwacht</th></tr></thead>
+  <thead><tr>${tijdTh}<th class="nr">#</th><th>${esc(T('prog_intern.col_rit'))}</th><th>${esc(T('prog_intern.col_type'))}</th><th class="vw">${esc(T('prog_intern.col_verwacht'))}</th></tr></thead>
   <tbody>${tBody}</tbody>
 </table>
 ${footerHtml}
@@ -4002,8 +4039,8 @@ ${footerHtml}
         cssLinks:        [],
         extraCss:        extraCss,
         pageOrientation: 'portrait',
-        title:           'Intern programma' + (comp?.name ? ' — ' + comp.name : ''),
-        subType:         'Intern programma',
+        title:           T('prog_intern.titel') + (comp?.name ? ' — ' + comp.name : ''),
+        subType:         T('prog_intern.titel'),
     };
 }
 
