@@ -488,18 +488,19 @@ async function bouwBeheerTabel() {
             wrap.querySelectorAll('input, select, button').forEach(e => { e.disabled = true; });
             wrap.querySelectorAll('.dc-ontkoppel, .dc-split-wis, .dc-afd-del, .afd-plus-btn').forEach(e => { e.style.display = 'none'; });
         }
-        // Structuur-lock: structurele controls disablen, labels bewerkbaar houden.
-        // De melding ('alleen namen/labels zijn bewerkbaar') beloofde al dat
-        // namen wél te wijzigen zijn, maar .dc-afd-naam stond ten onrechte in
-        // de disabled-lijst — was niet consistent met de melding.
+        // Structuur-lock: ALLE afstand-velden + structurele controls disablen.
+        // Afstand-naam/meters/race-type vormen een triple die samen klopt;
+        // een naam-only edit ná genereren maakt rit_naam inconsistent met
+        // de werkelijke meters/race-type (records-rapport + klassementen
+        // rekenen op de cijfers, niet op de label). Operator gebruikt
+        // 'Wis programma' om consistent te wijzigen.
+        // Alleen DC-naam + merge-label (puur display-labels zonder rekening-
+        // houden) blijven bewerkbaar bij lock — die zijn losgekoppeld van
+        // alle berekeningen.
         if (sl && !ro) {
             const wrap = el('beheer-tabel-wrap');
-            // Structurele controls disablen/verbergen — meters + merge-select
-            // + split-input. Afstand-NAAM en race-type blijven bewerkbaar
-            // (typo-fixes / label-aanpassingen op poster + speakerlijst).
-            wrap.querySelectorAll('.dc-merge-sel, .dc-split-inp, .dc-afd-m').forEach(e => { e.disabled = true; });
+            wrap.querySelectorAll('.dc-merge-sel, .dc-split-inp, .dc-afd-naam, .dc-afd-m, .dc-afd-race-type').forEach(e => { e.disabled = true; });
             wrap.querySelectorAll('.dc-ontkoppel, .dc-split-wis, .dc-afd-del, .afd-plus-btn').forEach(e => { e.style.display = 'none'; });
-            // .dc-afd-naam (afstand-naam) en .dc-afd-race-type blijven enabled.
         }
     }
 
