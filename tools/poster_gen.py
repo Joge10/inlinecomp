@@ -387,7 +387,10 @@ def genereer_poster(args):
     # wachtwoord visueel dicht bij de QR — perfecte plek want coaches die
     # met hun telefoon scannen zien het wachtwoord op dezelfde aandachts-
     # plek waar ze net hebben gescand.
-    card_extra_bottom = 11 * mm if (is_coach and args.coach_password) else 0
+    # Card-extensie compacter (was 11mm) — zonder scheidingslijn en met de
+    # wachtwoord-regel dichter onder de QR. Wint ~5mm voor de stappen +
+    # ruimte tussen stap 3 en de LET OP-balk daaronder.
+    card_extra_bottom = 6 * mm if (is_coach and args.coach_password) else 0
     c.setFillColor(WIT)
     c.setStrokeColor(HexColor('#dde3ea'))
     c.setLineWidth(1)
@@ -397,13 +400,9 @@ def genereer_poster(args):
     c.drawImage(ImageReader(buf), qr_x, qr_y, qr_print_size, qr_print_size)
 
     # Coach-wachtwoord ingelijst in de QR-card (alleen coach-poster) ──────
+    # Geen scheidingslijn — text staat direct onder de QR.
     if is_coach and args.coach_password:
-        # Subtiele scheidingslijn tussen QR en het wachtwoord
-        sep_y = qr_y - 4 * mm
-        c.setStrokeColor(HexColor('#dde3ea'))
-        c.setLineWidth(0.5)
-        c.line(qr_x + 2 * mm, sep_y, qr_x + qr_print_size - 2 * mm, sep_y)
-        cw_text_y = qr_y - 11 * mm
+        cw_text_y = qr_y - 6 * mm
         c.setFillColor(BLAUW)
         c.setFont('Helvetica-Bold', 10)
         c.drawString(qr_x - 1 * mm, cw_text_y, T('coach_pw_label'))
@@ -420,7 +419,7 @@ def genereer_poster(args):
                   ic_size)
 
     # ── 3 stappen ─────────────────────────────────────────────────────────
-    # Bij coach-poster met wachtwoord schuift de QR-card-bodem 11mm naar
+    # Bij coach-poster met wachtwoord schuift de QR-card-bodem 6mm naar
     # beneden — step_top schuift dan automatisch mee om overlap te voorkomen.
     step_top = qr_y - 12 * mm - card_extra_bottom
     stap1 = T('stap1_kies_naam', naam=args.comp_naam) if heeft_comp else T('stap1_kies_alg')
