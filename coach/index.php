@@ -3317,6 +3317,27 @@ window.addEventListener('offline', () => {
 // jitter (1.5-4.5 s) zodat 15 coaches niet synchroon weer aankloppen.
 // Te agressief retryen verergert de rate-limit alleen maar — daarom geen
 // retry-storm meer. Bij definitief 429 krijgt de UI de 429 gewoon terug.
+// Auto-login via QR-scan: als ?pw=... in de URL staat (gestopt in de QR
+// door api/poster.php voor coach-posters met wachtwoord), sla 'm direct
+// op in localStorage en strip de query-param uit de URL — zo blijft het
+// wachtwoord niet in browser-history/bookmarks hangen en is de coach na
+// scannen meteen ingelogd zonder te hoeven typen. Bij fout wachtwoord
+// volgt de normale 401-prompt-flow van coachFetch.
+(function _coachAutoLogin() {
+    try {
+        const params = new URLSearchParams(window.location.search);
+        const pw = params.get('pw');
+        if (!pw) return;
+        localStorage.setItem('coach_pw', pw);
+        params.delete('pw');
+        const newSearch = params.toString();
+        const newUrl = window.location.pathname
+                     + (newSearch ? '?' + newSearch : '')
+                     + window.location.hash;
+        history.replaceState(null, '', newUrl);
+    } catch (e) { console.warn('[coach] auto-login fout:', e); }
+})();
+
 // Coach-app wachtwoord-gate: bij elke fetch sturen we localStorage 'coach_pw'
 // als header X-Coach-PW. Bij 401 (= ongeldig of ontbrekend) prompt voor
 // nieuw wachtwoord, retry. Geen wachtwoord ingesteld op server → backend

@@ -271,12 +271,31 @@ $parts[] = '--lang';     $parts[] = escapeshellarg($lang);
 // Coach-poster bevat het coach-app wachtwoord (drempel-mechanisme). Geen
 // security want het staat geprint op de poster én iedereen die met de
 // coach werkt heeft het toch nodig. Public-poster krijgt 'm niet.
+//
+// Bonus: het wachtwoord wordt ook in de QR-data verstopt als ?pw=...,
+// zodat coaches die met de telefoon scannen direct ingelogd zijn en niet
+// hoeven te typen. De zichtbare URL-label op de poster blijft schoon
+// (poster_gen.py strippt alles vanaf '?'). Coach-frontend detecteert
+// ?pw= bij eerste laad → verify call → opslaan in localStorage.
 if ($appType === 'coach') {
     $caStmt = $pdo->prepare("SELECT password FROM coach_app_settings WHERE id = 1 LIMIT 1");
     $caStmt->execute();
     $caPw = (string)($caStmt->fetchColumn() ?: '');
     if ($caPw !== '') {
         $parts[] = '--coach-password'; $parts[] = escapeshellarg($caPw);
+        // Append &pw=... aan QR-url. Vervang in de $parts-array de eerder
+        // bepaalde --qr-url-waarde door de uitgebreide versie.
+        $sep = (strpos($qrUrl, '?') !== false) ? '&' : '?';
+        $qrUrlMetPw = $qrUrl . $sep . 'pw=' . rawurlencode($caPw);
+        // Zoek terug welke index in $parts de --qr-url-waarde is en
+        // overschrijf. Veiliger dan rebuild — we weten dat --qr-url
+        // direct na de --output-paar staat.
+        for ($i = 0; $i < count($parts); $i++) {
+            if ($parts[$i] === '--qr-url' && isset($parts[$i + 1])) {
+                $parts[$i + 1] = escapeshellarg($qrUrlMetPw);
+                break;
+            }
+        }
     }
 }
 
