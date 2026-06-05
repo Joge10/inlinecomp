@@ -1445,9 +1445,18 @@ async function toonUitslagKlassement(groep) {
 // Print-Center gebruikt deze via `bouwKlassementBody()`; de bestaande
 // "Druk af"-knop op de uitslag-pagina via `_drukKlassement()`.
 async function _bouwKlassementInternal(optData) {
+    // i18n-helper voor Print-Center taalkeuze (NL/EN).
+    const T    = window._pcT    || (k => k);
+    const LANG = (window._pcLang && window._pcLang()) || 'nl';
+    const LOC  = LANG === 'en' ? 'en-GB' : 'nl-NL';
+
     const esc  = s => String(s ?? '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
     const comp = huidigComp;
-    const datum   = comp?.starts ? formatDatum(comp.starts) : '';
+    // Locale-aware wedstrijddatum (formatDatum is hardcoded nl-NL).
+    const datum = comp?.starts
+        ? new Date(comp.starts).toLocaleDateString(LOC,
+            { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })
+        : '';
     const locatie = comp ? getLocatie(comp) : '';
     const metaTxt = [datum, locatie].filter(Boolean).join(' \u00b7 ');
     const dcIds   = optData.dcIds ?? [optData.dcId];
@@ -1470,7 +1479,9 @@ async function _bouwKlassementInternal(optData) {
     const afstanden  = data.afstanden ?? [];
     const klassement = data.klassement;
     const heeftOnvolledige = afstanden.some(a => !a.compleet);
-    const typeLabel  = optData.sleutel === 'tussenklassement' ? 'Tussenklassement' : 'Eindklassement';
+    const typeLabel  = optData.sleutel === 'tussenklassement'
+        ? T('klassement.tussen')
+        : T('klassement.eind');
 
     // Kolomheaders voor afstanden
     let thAfst = '';
@@ -1558,7 +1569,7 @@ async function _bouwKlassementInternal(optData) {
     }
 
     const voetnoot = (heeftOnvolledige
-        ? `<div class="pr-voetnoot">* ${esc(typeLabel)} \u2013 niet alle afstanden zijn voltooid</div>` : '')
+        ? `<div class="pr-voetnoot">${esc(T('klassement.voetnoot_onvolledig', { type: typeLabel }))}</div>` : '')
         + voetnotenHtml;
 
     const extraCss = `
@@ -1609,13 +1620,13 @@ tr:nth-child(even) td{background:#f8fafc}
   <thead><tr>
     <th class="pr-col-rang">#</th>
     ${toonCatRang ? uniekeCats.map(c => `<th class="pr-col-catrang">#${esc(c)}</th>`).join('') : ''}
-    <th class="pr-col-naam">Naam</th>
-    <th class="pr-col-snr">Snr</th>
-    <th class="pr-col-cat">Cat</th>
-    <th class="pr-col-club">Club</th>
-    <th class="pr-col-sponsor">Sponsor</th>
+    <th class="pr-col-naam">${esc(T('algemeen.naam'))}</th>
+    <th class="pr-col-snr">${esc(T('startlijst.col_snr'))}</th>
+    <th class="pr-col-cat">${esc(T('deelnemers.col_cat_kort'))}</th>
+    <th class="pr-col-club">${esc(T('algemeen.club'))}</th>
+    <th class="pr-col-sponsor">${esc(T('speaker.col_sponsor'))}</th>
     ${thAfst}
-    <th class="pr-col-totaal">Totaal</th>
+    <th class="pr-col-totaal">${esc(T('uitslag.col_totaal'))}</th>
   </tr></thead>
   <tbody>${tbody}</tbody>
 </table>
@@ -1629,7 +1640,7 @@ ${footerHtml}
         extraCss,
         pageOrientation: 'landscape',
         title:           typeLabel + ' – ' + (optData.dcName ?? ''),
-        subType:         typeLabel,   // "Tussenklassement" of "Eindklassement"
+        subType:         typeLabel,   // "Tussenklassement"/"Intermediate standings" etc.
     };
 }
 
@@ -1671,9 +1682,17 @@ ${data.extraCss}</style></head>
 // internationaal, gecombineerd, en normaal (met finales).
 // Returns { bodyHtml, cssLinks, extraCss, pageOrientation, title } of null.
 async function _bouwUitslagAfstandInternal(optData) {
+    // i18n-helper voor Print-Center taalkeuze (NL/EN).
+    const T    = window._pcT    || (k => k);
+    const LANG = (window._pcLang && window._pcLang()) || 'nl';
+    const LOC  = LANG === 'en' ? 'en-GB' : 'nl-NL';
+
     const esc  = s => String(s ?? '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
     const comp = huidigComp;
-    const datum   = comp?.starts ? formatDatum(comp.starts) : '';
+    const datum = comp?.starts
+        ? new Date(comp.starts).toLocaleDateString(LOC,
+            { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })
+        : '';
     const locatie = comp ? getLocatie(comp) : '';
     const metaTxt = [datum, locatie].filter(Boolean).join(' \u00b7 ');
     const dcIds   = optData.dcIds ?? [optData.dcId];
@@ -1699,7 +1718,7 @@ async function _bouwUitslagAfstandInternal(optData) {
 
     if (data.error) { console.warn('[Uitslag] API-error:', data.error); return null; }
 
-    const baseTitle = 'Uitslag – ' + [optData.dcName, optData.distNaam].filter(Boolean).join(' – ');
+    const baseTitle = T('uitslag.titel_prefix') + [optData.dcName, optData.distNaam].filter(Boolean).join(' – ');
     // Vastleggen/klassement ondersteunt alle systemen
 
     // ── Internationaal systeem ──────────────────────────────────────────────
@@ -1714,10 +1733,10 @@ async function _bouwUitslagAfstandInternal(optData) {
         const catTeller = {};
 
         let thExtra = '';
-        if (toonRonde) thExtra += '<th class="pr-col-ronde">Ronde</th>';
-        if (data.heeft_rondes)    thExtra += '<th class="pr-col-rondes">Rnd</th>';
-        if (data.heeft_pk_punten) thExtra += '<th class="pr-col-pkpunten">Pnt</th>';
-        if (toonTijd)  thExtra += '<th class="pr-col-tijd">Tijd</th>';
+        if (toonRonde) thExtra += `<th class="pr-col-ronde">${esc(T('uitslag.col_ronde'))}</th>`;
+        if (data.heeft_rondes)    thExtra += `<th class="pr-col-rondes">${esc(T('uitslag.col_rondes_kort'))}</th>`;
+        if (data.heeft_pk_punten) thExtra += `<th class="pr-col-pkpunten">${esc(T('uitslag.col_pnt'))}</th>`;
+        if (toonTijd)  thExtra += `<th class="pr-col-tijd">${esc(T('uitslag.col_tijd'))}</th>`;
 
         // Footnotes voor jury-aanpassingen (zie verderop in de loop).
         const fnItems = [];
@@ -1785,13 +1804,13 @@ async function _bouwUitslagAfstandInternal(optData) {
         // Footnotes onder de uitslag-tabel \u2014 alleen renderen als er aanpassingen waren.
         if (fnItems.length) {
             tbody += `<tr class="pr-fn-row"><td colspan="99" class="pr-fn-cell">
-                <div class="pr-fn-titel">Aanpassingen door jury</div>
+                <div class="pr-fn-titel">${esc(T('uitslag.fn_titel'))}</div>
                 ${fnItems.map((f, i) => `
                     <div class="pr-fn">
                         <sup>${i + 1}</sup> ${f.icon}
-                        ${f.isPhotofinish ? 'fotofinish' : 'handmatig'} \u2014
+                        ${esc(T(f.isPhotofinish ? 'uitslag.fn_pf' : 'uitslag.fn_handmatig'))} \u2014
                         <b>${esc(f.naam)}</b>:
-                        gemeten ${esc(f.bruto)}, officieel ${esc(f.officieel)}
+                        ${esc(T('uitslag.fn_gemeten', { bruto: f.bruto, off: f.officieel }))}
                     </div>`).join('')}
             </td></tr>`;
         }
@@ -1803,19 +1822,19 @@ async function _bouwUitslagAfstandInternal(optData) {
         const bodyHtml = _bouwAfstandBody(esc, comp, metaTxt, optData,
             `<th class="pr-col-rang">#</th>
              ${catRangHeaders}
-             <th class="pr-col-naam">Naam</th>
-             <th class="pr-col-snr">Snr</th>
-             <th class="pr-col-cat">Cat</th>
+             <th class="pr-col-naam">${esc(T('algemeen.naam'))}</th>
+             <th class="pr-col-snr">${esc(T('startlijst.col_snr'))}</th>
+             <th class="pr-col-cat">${esc(T('deelnemers.col_cat_kort'))}</th>
              ${thExtra}
-             <th class="pr-col-sanctie">Sanctie</th>`,
-            tbody, 'Uitslag', orgLogoHtml, footerHtml, baanLogoHtml);
+             <th class="pr-col-sanctie">${esc(T('uitslag.sanctie'))}</th>`,
+            tbody, T('uitslag.titel'), orgLogoHtml, footerHtml, baanLogoHtml);
         return {
             bodyHtml,
             cssLinks:        [],
             extraCss:        _bouwAfstandExtraCss(),
             pageOrientation: 'portrait',
             title:           baseTitle,
-            subType:         'Uitslag ' + (optData.distNaam ?? ''),
+            subType:         T('uitslag.titel') + ' ' + (optData.distNaam ?? ''),
         };
     }
 
@@ -1833,12 +1852,12 @@ async function _bouwUitslagAfstandInternal(optData) {
         let thExtra = '', thTotaal = '';
         if (sasActief) {
             // Serie alleen startvolgorde: geen punten, alleen tijden (serie + finale)
-            thExtra = '<th class="pr-col-tijd">Serie-tijd</th><th class="pr-col-tijd">Finale-tijd</th>';
+            thExtra = `<th class="pr-col-tijd">${esc(T('uitslag.col_serie_tijd'))}</th><th class="pr-col-tijd">${esc(T('uitslag.col_finale_tijd'))}</th>`;
             thTotaal = ''; // Geen totaal-kolom
         } else {
-            if (toonRonde) thExtra += '<th class="pr-col-serie">Serie</th><th class="pr-col-finale">Finale</th>';
-            if (toonTijd)  thExtra += '<th class="pr-col-tijd">Tijd serie</th><th class="pr-col-tijd">Tijd finale</th>';
-            thTotaal = '<th class="pr-col-totaal">Totaal</th>';
+            if (toonRonde) thExtra += `<th class="pr-col-serie">${esc(T('uitslag.col_serie'))}</th><th class="pr-col-finale">${esc(T('uitslag.col_finale'))}</th>`;
+            if (toonTijd)  thExtra += `<th class="pr-col-tijd">${esc(T('uitslag.col_tijd_serie'))}</th><th class="pr-col-tijd">${esc(T('uitslag.col_tijd_finale'))}</th>`;
+            thTotaal = `<th class="pr-col-totaal">${esc(T('uitslag.col_totaal'))}</th>`;
         }
 
         let tbody = '';
@@ -1897,20 +1916,20 @@ async function _bouwUitslagAfstandInternal(optData) {
 
         const pageOrient = (!sasActief && toonRonde && toonTijd) ? 'landscape' : 'portrait';
         const titel = sasActief
-            ? 'Uitslag (A-finale bepalend, serie = startvolgorde)'
-            : 'Gecombineerd (serie + finale)';
+            ? T('uitslag.titel_sas')
+            : T('uitslag.titel_gecomb');
         const catRangHeaders = toonCatRang
             ? uniekeCats.map(c => `<th class="pr-col-catrang">#${esc(c)}</th>`).join('')
             : '';
         const bodyHtml = _bouwAfstandBody(esc, comp, metaTxt, optData,
             `<th class="pr-col-rang">#</th>
              ${catRangHeaders}
-             <th class="pr-col-naam">Naam</th>
-             <th class="pr-col-snr">Snr</th>
-             <th class="pr-col-cat">Cat</th>
+             <th class="pr-col-naam">${esc(T('algemeen.naam'))}</th>
+             <th class="pr-col-snr">${esc(T('startlijst.col_snr'))}</th>
+             <th class="pr-col-cat">${esc(T('deelnemers.col_cat_kort'))}</th>
              ${thExtra}
              ${thTotaal}
-             <th class="pr-col-sanctie">Sanctie</th>`,
+             <th class="pr-col-sanctie">${esc(T('uitslag.sanctie'))}</th>`,
             tbody, titel, orgLogoHtml, footerHtml, baanLogoHtml);
         return {
             bodyHtml,
@@ -1918,7 +1937,7 @@ async function _bouwUitslagAfstandInternal(optData) {
             extraCss:        _bouwAfstandExtraCss(),
             pageOrientation: pageOrient,
             title:           baseTitle,
-            subType:         'Uitslag ' + (optData.distNaam ?? ''),
+            subType:         T('uitslag.titel') + ' ' + (optData.distNaam ?? ''),
         };
     }
 
@@ -1932,10 +1951,10 @@ async function _bouwUitslagAfstandInternal(optData) {
     const catTeller = {};
 
     let thExtra = '';
-    if (toonRonde) thExtra += '<th class="pr-col-finale">Finale</th>';
-    if (data.heeft_rondes)    thExtra += '<th class="pr-col-rondes">Rnd</th>';
-    if (data.heeft_pk_punten) thExtra += '<th class="pr-col-pkpunten">Pnt</th>';
-    if (toonTijd)  thExtra += '<th class="pr-col-tijd">Tijd</th>';
+    if (toonRonde) thExtra += `<th class="pr-col-finale">${esc(T('uitslag.col_finale'))}</th>`;
+    if (data.heeft_rondes)    thExtra += `<th class="pr-col-rondes">${esc(T('uitslag.col_rondes_kort'))}</th>`;
+    if (data.heeft_pk_punten) thExtra += `<th class="pr-col-pkpunten">${esc(T('uitslag.col_pnt'))}</th>`;
+    if (toonTijd)  thExtra += `<th class="pr-col-tijd">${esc(T('uitslag.col_tijd'))}</th>`;
 
     // Footnotes voor jury-aanpassingen (zie verderop in de loop).
     const fnItems = [];
@@ -1996,13 +2015,13 @@ async function _bouwUitslagAfstandInternal(optData) {
     }
     if (fnItems.length) {
         tbody += `<tr class="pr-fn-row"><td colspan="99" class="pr-fn-cell">
-            <div class="pr-fn-titel">Aanpassingen door jury</div>
+            <div class="pr-fn-titel">${esc(T('uitslag.fn_titel'))}</div>
             ${fnItems.map((f, i) => `
                 <div class="pr-fn">
                     <sup>${i + 1}</sup> ${f.icon}
-                    ${f.isPhotofinish ? 'fotofinish' : 'handmatig'} \u2014
+                    ${esc(T(f.isPhotofinish ? 'uitslag.fn_pf' : 'uitslag.fn_handmatig'))} \u2014
                     <b>${esc(f.naam)}</b>:
-                    gemeten ${esc(f.bruto)}, officieel ${esc(f.officieel)}
+                    ${esc(T('uitslag.fn_gemeten', { bruto: f.bruto, off: f.officieel }))}
                 </div>`).join('')}
         </td></tr>`;
     }
@@ -2014,11 +2033,11 @@ async function _bouwUitslagAfstandInternal(optData) {
     const bodyHtml = _bouwAfstandBody(esc, comp, metaTxt, optData,
         `<th class="pr-col-rang">#</th>
          ${catRangHeaders}
-         <th class="pr-col-naam">Naam</th>
-         <th class="pr-col-snr">Snr</th>
-         <th class="pr-col-cat">Cat</th>
+         <th class="pr-col-naam">${esc(T('algemeen.naam'))}</th>
+         <th class="pr-col-snr">${esc(T('startlijst.col_snr'))}</th>
+         <th class="pr-col-cat">${esc(T('deelnemers.col_cat_kort'))}</th>
          ${thExtra}
-         <th class="pr-col-sanctie">Sanctie</th>`,
+         <th class="pr-col-sanctie">${esc(T('uitslag.sanctie'))}</th>`,
         tbody, '', orgLogoHtml, footerHtml, baanLogoHtml);
     return {
         bodyHtml,
@@ -2026,7 +2045,7 @@ async function _bouwUitslagAfstandInternal(optData) {
         extraCss:        _bouwAfstandExtraCss(),
         pageOrientation: pageOrient,
         title:           baseTitle,
-        subType:         'Uitslag ' + (optData.distNaam ?? ''),
+        subType:         T('uitslag.titel') + ' ' + (optData.distNaam ?? ''),
     };
 }
 
