@@ -488,13 +488,18 @@ async function bouwBeheerTabel() {
             wrap.querySelectorAll('input, select, button').forEach(e => { e.disabled = true; });
             wrap.querySelectorAll('.dc-ontkoppel, .dc-split-wis, .dc-afd-del, .afd-plus-btn').forEach(e => { e.style.display = 'none'; });
         }
-        // Structuur-lock: structurele controls disablen, labels bewerkbaar houden
+        // Structuur-lock: structurele controls disablen, labels bewerkbaar houden.
+        // De melding ('alleen namen/labels zijn bewerkbaar') beloofde al dat
+        // namen wél te wijzigen zijn, maar .dc-afd-naam stond ten onrechte in
+        // de disabled-lijst — was niet consistent met de melding.
         if (sl && !ro) {
             const wrap = el('beheer-tabel-wrap');
-            // Structurele controls disablen/verbergen
-            wrap.querySelectorAll('.dc-merge-sel, .dc-split-inp, .dc-afd-naam, .dc-afd-m').forEach(e => { e.disabled = true; });
+            // Structurele controls disablen/verbergen — meters + merge-select
+            // + split-input. Afstand-NAAM en race-type blijven bewerkbaar
+            // (typo-fixes / label-aanpassingen op poster + speakerlijst).
+            wrap.querySelectorAll('.dc-merge-sel, .dc-split-inp, .dc-afd-m').forEach(e => { e.disabled = true; });
             wrap.querySelectorAll('.dc-ontkoppel, .dc-split-wis, .dc-afd-del, .afd-plus-btn').forEach(e => { e.style.display = 'none'; });
-            // Labels NIET disablen — die blijven bewerkbaar
+            // .dc-afd-naam (afstand-naam) en .dc-afd-race-type blijven enabled.
         }
     }
 
