@@ -1300,41 +1300,6 @@ header .sub { font-size: .95rem; opacity: .8; margin-top: 6px; text-align: cente
 }
 .help-sluit { background: none; border: none; color: rgba(255,255,255,.7); font-size: 1.5rem; cursor: pointer; line-height: 1; }
 
-/* ── Disclaimer-popup bij eerste bezoek ── */
-.disc-overlay {
-    position: fixed; inset: 0; background: rgba(0,0,0,.55);
-    z-index: 3000; display: flex; align-items: center; justify-content: center;
-    padding: 16px;
-}
-.disc-box {
-    background: var(--wit); border-radius: 14px; width: 100%; max-width: 460px;
-    box-shadow: 0 12px 40px rgba(0,0,0,.35); overflow: hidden;
-    animation: disc-in .2s ease-out;
-}
-@keyframes disc-in { from { transform: translateY(10px); opacity: 0; } to { transform: none; opacity: 1; } }
-.disc-header {
-    background: var(--blauw); color: var(--wit); padding: 14px 16px;
-    font-size: 1.05rem; font-weight: 700;
-}
-.disc-body {
-    padding: 18px 18px 10px; font-size: .92rem; line-height: 1.55; color: var(--tekst);
-}
-.disc-body p { margin: 0 0 12px; }
-.disc-body p:last-child { margin-bottom: 0; font-style: italic; color: #666; font-size: .85rem; }
-.disc-footer { padding: 10px 14px 14px; text-align: right; }
-
-.disc-btn {
-    background: var(--blauw); color: var(--wit); border: none; border-radius: 6px;
-    padding: 9px 22px; font-size: .92rem; font-weight: 600; cursor: pointer;
-    transition: background .15s;
-    /* touch-action: manipulation = geen double-tap-zoom delay op mobile —
-     * Opera Android had soms 300ms vertraging waardoor 'OK' niet leek te
-     * werken (gebruiker tikt, niets zichtbaar, geeft op). */
-    touch-action: manipulation;
-}
-.disc-btn:hover { background: #153658; }
-/* Overlay zelf ook tappable (klik-buiten = sluit) — geen tap-delay. */
-.disc-overlay { touch-action: manipulation; }
 .help-body { padding: 16px; font-size: .9rem; line-height: 1.5; color: var(--tekst); }
 .help-body h3 { font-size: .95rem; color: var(--blauw); margin: 16px 0 6px; }
 .help-body h3:first-child { margin-top: 0; }
@@ -1975,11 +1940,6 @@ const T = {
         opt_binnenkort: '(binnenkort)',
         opt_fout_laden: 'Fout bij laden',
         // ── Disclaimer ──
-        disc_welkom: 'Welkom bij InlineComp!',
-        disc_p1: 'We testen InlineComp voor het eerst tijdens deze wedstrijd — feedback is welkom!',
-        disc_p2_html: 'De officiële startlijsten, uitslagen, klassementen en mededelingen vind je zoals altijd op <strong>Sportity</strong> (kanaal: <em>ISKREGIO</em>).',
-        disc_p3: 'Aan de informatie in InlineComp kunnen geen rechten worden ontleend.',
-        disc_ok: 'OK, begrepen',
         // ── Zoek / chooser ──
         msg_laden: 'Laden…',
         msg_zoeken: 'Zoeken…',
@@ -2162,11 +2122,6 @@ const T = {
         opt_binnenkort: '(coming soon)',
         opt_fout_laden: 'Loading failed',
         // ── Disclaimer ──
-        disc_welkom: 'Welcome to InlineComp!',
-        disc_p1: 'We are testing InlineComp for the first time at this race — feedback is welcome!',
-        disc_p2_html: 'The official start lists, results, standings and announcements can be found as always on <strong>Sportity</strong> (channel: <em>ISKREGIO</em>).',
-        disc_p3: 'No rights can be derived from the information in InlineComp.',
-        disc_ok: 'OK, understood',
         // ── Zoek / chooser ──
         msg_laden: 'Loading…',
         msg_zoeken: 'Searching…',
@@ -2349,11 +2304,6 @@ const T = {
         opt_binnenkort: '(in Kürze)',
         opt_fout_laden: 'Laden fehlgeschlagen',
         // ── Disclaimer ──
-        disc_welkom: 'Willkommen bei InlineComp!',
-        disc_p1: 'Wir testen InlineComp zum ersten Mal bei diesem Rennen — Feedback ist willkommen!',
-        disc_p2_html: 'Die offiziellen Startlisten, Ergebnisse, Wertungen und Bekanntmachungen findest du wie gewohnt auf <strong>Sportity</strong> (Kanal: <em>ISKREGIO</em>).',
-        disc_p3: 'Aus den Informationen in InlineComp können keine Rechte abgeleitet werden.',
-        disc_ok: 'OK, verstanden',
         // ── Zoek / chooser ──
         msg_laden: 'Lädt…',
         msg_zoeken: 'Suche…',
@@ -2536,11 +2486,6 @@ const T = {
         opt_binnenkort: '(bientôt)',
         opt_fout_laden: 'Échec du chargement',
         // ── Disclaimer ──
-        disc_welkom: 'Bienvenue sur InlineComp !',
-        disc_p1: 'Nous testons InlineComp pour la première fois lors de cette course — les commentaires sont les bienvenus !',
-        disc_p2_html: 'Les listes de départ officielles, résultats, classements et annonces sont disponibles comme toujours sur <strong>Sportity</strong> (canal : <em>ISKREGIO</em>).',
-        disc_p3: 'Aucun droit ne peut être tiré des informations dans InlineComp.',
-        disc_ok: 'OK, compris',
         // ── Zoek / chooser ──
         msg_laden: 'Chargement…',
         msg_zoeken: 'Recherche…',
@@ -2747,10 +2692,6 @@ function _rerenderActiveTab() {
 
 document.addEventListener('DOMContentLoaded', () => {
     initI18n({ dict: T, onChange: _rerenderActiveTab });
-    // Disclaimer NA initI18n — anders zien gebruikers ruwe vertaal-keys
-    // (disc_welkom etc.) ipv de gerenderde tekst. Eerder werd 'ie
-    // standalone op file-scope aangeroepen, voor initI18n vuurde.
-    toonDisclaimerEenmalig();
 });
 
 const selComp = document.getElementById('sel-comp');
@@ -3145,51 +3086,6 @@ safeFetch('?action=competitions').then(r=>r.json()).then(comps => {
         selComp.dispatchEvent(new Event('change'));
     }
 }).catch(() => { selComp.innerHTML = `<option value="">${esc(t('opt_fout_laden'))}</option>`; });
-
-// ── Disclaimer bij eerste bezoek (zelfde tekst als op de poster) ─────────
-function toonDisclaimerEenmalig() {
-    try {
-        if (localStorage.getItem('ic_disclaimer_seen') === '1') return;
-    } catch { /* storage geblokkeerd: toon toch een keer per sessie */ }
-
-    const overlay = document.createElement('div');
-    overlay.className = 'disc-overlay';
-    overlay.innerHTML = `
-        <div class="disc-box">
-            <div class="disc-header">${esc(t('disc_welkom'))}</div>
-            <div class="disc-body">
-                <p>${esc(t('disc_p1'))}</p>
-                <p>${t('disc_p2_html')}</p>
-                <p>${esc(t('disc_p3'))}</p>
-            </div>
-            <div class="disc-footer">
-                <button class="disc-btn" id="disc-ok">${esc(t('disc_ok'))}</button>
-            </div>
-        </div>`;
-    overlay.addEventListener('click', e => {
-        if (e.target === overlay) sluit();  // klik buiten box → sluiten
-    });
-    const sluit = () => {
-        try { localStorage.setItem('ic_disclaimer_seen', '1'); }
-        catch { /* negeer */ }
-        overlay.remove();
-    };
-    document.body.appendChild(overlay);
-    document.getElementById('disc-ok').addEventListener('click', sluit);
-    // ESC sluit ook. LET OP: niet 'esc' noemen — dat shadowt de file-scope
-    // function esc() (escape-HTML helper) en zorgt voor een TDZ-error op
-    // de esc()-aanroepen hierboven (regel 2987-2994). Bug was onzichtbaar
-    // zolang localStorage 'ic_disclaimer_seen'=1 had en de functie vroeg
-    // returnde; in incognito (leeg storage) crashte de hele inline JS,
-    // waardoor click-handlers + checkMeldingen() niet meer gehecht werden.
-    const onEscKey = ev => {
-        if (ev.key === 'Escape') { sluit(); document.removeEventListener('keydown', onEscKey); }
-    };
-    document.addEventListener('keydown', onEscKey);
-}
-// toonDisclaimerEenmalig() wordt aangeroepen in de DOMContentLoaded-
-// handler (regel ~2617), NA initI18n — niet hier direct, anders zien
-// gebruikers ruwe vertaal-keys ipv tekst.
 
 selComp.addEventListener('change', async () => {
     const o = selComp.selectedOptions[0];
