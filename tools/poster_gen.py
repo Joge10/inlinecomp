@@ -381,13 +381,36 @@ def genereer_poster(args):
     qr_x = (width - qr_print_size) / 2
     qr_y = qr_top - qr_print_size
 
+    # QR-card: bij coach-poster met wachtwoord wordt de witte kader naar
+    # beneden uitgerekt zodat het coach-wachtwoord er netjes ingelijst in
+    # past (in plaats van als losse balk verderop). Schoner en houdt het
+    # wachtwoord visueel dicht bij de QR — perfecte plek want coaches die
+    # met hun telefoon scannen zien het wachtwoord op dezelfde aandachts-
+    # plek waar ze net hebben gescand.
+    card_extra_bottom = 11 * mm if (is_coach and args.coach_password) else 0
     c.setFillColor(WIT)
     c.setStrokeColor(HexColor('#dde3ea'))
     c.setLineWidth(1)
-    c.roundRect(qr_x - 5 * mm, qr_y - 5 * mm,
-                qr_print_size + 10 * mm, qr_print_size + 10 * mm,
+    c.roundRect(qr_x - 5 * mm, qr_y - 5 * mm - card_extra_bottom,
+                qr_print_size + 10 * mm, qr_print_size + 10 * mm + card_extra_bottom,
                 5 * mm, fill=True, stroke=True)
     c.drawImage(ImageReader(buf), qr_x, qr_y, qr_print_size, qr_print_size)
+
+    # Coach-wachtwoord ingelijst in de QR-card (alleen coach-poster) ──────
+    if is_coach and args.coach_password:
+        # Subtiele scheidingslijn tussen QR en het wachtwoord
+        sep_y = qr_y - 4 * mm
+        c.setStrokeColor(HexColor('#dde3ea'))
+        c.setLineWidth(0.5)
+        c.line(qr_x + 2 * mm, sep_y, qr_x + qr_print_size - 2 * mm, sep_y)
+        cw_text_y = qr_y - 11 * mm
+        c.setFillColor(BLAUW)
+        c.setFont('Helvetica-Bold', 10)
+        c.drawString(qr_x - 1 * mm, cw_text_y, T('coach_pw_label'))
+        c.setFillColor(DONKERORANJE)
+        c.setFont('Courier-Bold', 13)
+        c.drawRightString(qr_x + qr_print_size + 1 * mm, cw_text_y,
+                          args.coach_password)
 
     # InlineComp-logo in het midden (favicon-stijl, als vector op de canvas)
     ic_size = qr_print_size * 0.22
@@ -397,7 +420,9 @@ def genereer_poster(args):
                   ic_size)
 
     # ── 3 stappen ─────────────────────────────────────────────────────────
-    step_top = qr_y - 12 * mm
+    # Bij coach-poster met wachtwoord schuift de QR-card-bodem 11mm naar
+    # beneden — step_top schuift dan automatisch mee om overlap te voorkomen.
+    step_top = qr_y - 12 * mm - card_extra_bottom
     stap1 = T('stap1_kies_naam', naam=args.comp_naam) if heeft_comp else T('stap1_kies_alg')
     if is_coach:
         steps = [
@@ -430,31 +455,14 @@ def genereer_poster(args):
     #   22-25 mm   oranje streep
     #   28-45 mm   sponsors (logo's + 'mede mogelijk gemaakt door:' boven
     #              de logo's, alleen als er sponsors zijn)
-    #   47-62 mm   disclaimer-warning-balk LET OP (testfase: opvallend)
-    #   64-73 mm   coach-wachtwoord (alleen coach-poster, als ingesteld)
-    #   (boven)    stappen (zelf-plaatsend vanaf qr_y - 12 mm)
+    #   53-68 mm   disclaimer-warning-balk LET OP (testfase: opvallend)
+    #   (boven)    stappen (zelf-plaatsend vanaf qr_y - 12 mm; -23 mm bij
+    #              coach-poster met wachtwoord, want de QR-card rekt uit
+    #              om het wachtwoord erin te tonen)
 
-    # ── Coach-wachtwoord-balk (alleen coach-poster, alleen als ingesteld) ─
-    # Plaats: net boven de disclaimer-balk. Compacte regel met label + grote
-    # mono-tekst voor het wachtwoord zodat coaches het direct kunnen typen.
-    if is_coach and args.coach_password:
-        cw_y      = 64 * mm
-        cw_h      = 9 * mm
-        cw_marge  = 12 * mm
-        c.setFillColor(HexColor('#e8eaf6'))   # lichtblauwe achtergrond
-        c.setStrokeColor(BLAUW)
-        c.setLineWidth(1.0)
-        c.roundRect(cw_marge, cw_y,
-                    width - 2 * cw_marge, cw_h,
-                    1.5 * mm, fill=True, stroke=True)
-        c.setFillColor(BLAUW)
-        c.setFont('Helvetica-Bold', 10)
-        c.drawString(cw_marge + 4 * mm, cw_y + 3 * mm, T('coach_pw_label'))
-        c.setFont('Courier-Bold', 13)
-        c.setFillColor(DONKERORANJE)
-        # Wachtwoord rechts uitgelijnd zodat lange wachtwoorden netjes blijven
-        c.drawRightString(width - cw_marge - 4 * mm, cw_y + 3 * mm,
-                          args.coach_password)
+    # Coach-wachtwoord-balk is verplaatst naar binnen de QR-card (zie
+    # boven). Geen aparte balk meer hier — was visueel te krap tussen de
+    # stappen en de LET OP-balk.
 
     # ── Disclaimer-warning-balk + Sportity (boven footer) ─────────────────
     # Sportity-kanaal komt uit de organisatie-instelling. Leeg = algemene
@@ -469,7 +477,7 @@ def genereer_poster(args):
     # Als er geen Sportity-kanaal is ingesteld wordt 'ie helemaal niet getoond.
 
     # Warning-balk: lichtoranje vulling + oranje rand
-    balk_y     = 47 * mm
+    balk_y     = 53 * mm
     balk_h     = 15 * mm
     balk_marge = 12 * mm
     c.setFillColor(LICHTORANJE)
