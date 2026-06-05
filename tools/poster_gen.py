@@ -220,7 +220,6 @@ def genereer_poster(args):
             'stap_public_2':       u'Vul je startnummer in',
             'stap_public_3':       u'Bekijk je heats, tijden en resultaten',
             'sportity_kanaal':     u'Officiële einduitslagen + klassementen via Sportity (kanaal: {kanaal}).',
-            'sportity_geen':       u'Officiële einduitslagen + klassementen via Sportity.',
             'disclaimer_label':    u'LET OP — TESTFASE',
             'disclaimer_tekst':    u'Aan de informatie in InlineComp kunnen geen rechten worden ontleend.',
             'sponsors_titel':      u'Mede mogelijk gemaakt door:',
@@ -241,7 +240,6 @@ def genereer_poster(args):
             'stap_public_2':       u'Enter your bib number',
             'stap_public_3':       u'View your heats, times and results',
             'sportity_kanaal':     u'Official final results + standings via Sportity (channel: {kanaal}).',
-            'sportity_geen':       u'Official final results + standings via Sportity.',
             'disclaimer_label':    u'NOTE — TEST PHASE',
             'disclaimer_tekst':    u'No rights can be derived from the information in InlineComp.',
             'sponsors_titel':      u'Made possible by:',
@@ -427,18 +425,20 @@ def genereer_poster(args):
         c.drawString(40 * mm, y, tekst)
 
     # ── Layout van onder naar boven — vaste posities zodat niets overlapt:
-    #   0-24 mm    blauwe footer (compacter dan voorheen: 32mm)
-    #   24-27 mm   oranje streep
-    #   30-45 mm   disclaimer-warning-balk (testfase: opvallend)
-    #   46-50 mm   Sportity-verwijzing (klein, grijs)
-    #   55-80 mm   sponsors (titel + logo's, alleen als er sponsors zijn)
+    #   0-22 mm    blauwe footer (Sportity onderaan als kanaal gezet,
+    #              dan tip, dan URL bovenaan)
+    #   22-25 mm   oranje streep
+    #   28-45 mm   sponsors (logo's + 'mede mogelijk gemaakt door:' boven
+    #              de logo's, alleen als er sponsors zijn)
+    #   47-62 mm   disclaimer-warning-balk LET OP (testfase: opvallend)
+    #   64-73 mm   coach-wachtwoord (alleen coach-poster, als ingesteld)
     #   (boven)    stappen (zelf-plaatsend vanaf qr_y - 12 mm)
 
     # ── Coach-wachtwoord-balk (alleen coach-poster, alleen als ingesteld) ─
     # Plaats: net boven de disclaimer-balk. Compacte regel met label + grote
     # mono-tekst voor het wachtwoord zodat coaches het direct kunnen typen.
     if is_coach and args.coach_password:
-        cw_y      = 47 * mm
+        cw_y      = 64 * mm
         cw_h      = 9 * mm
         cw_marge  = 12 * mm
         c.setFillColor(HexColor('#e8eaf6'))   # lichtblauwe achtergrond
@@ -465,13 +465,11 @@ def genereer_poster(args):
     # warning-balk (lichtoranje vlak + oranje rand + bold tekst). Sportity-
     # regel daaronder klein/grijs, want daar staan alleen de offici\u00eble
     # einduitslagen + klassementen na de wedstrijd.
-    if args.sportity_kanaal:
-        sportity_tekst = T('sportity_kanaal', kanaal=args.sportity_kanaal)
-    else:
-        sportity_tekst = T('sportity_geen')
+    # Sportity-verwijzing is verplaatst naar de blauwe footer (zie verderop).
+    # Als er geen Sportity-kanaal is ingesteld wordt 'ie helemaal niet getoond.
 
     # Warning-balk: lichtoranje vulling + oranje rand
-    balk_y     = 30 * mm
+    balk_y     = 47 * mm
     balk_h     = 15 * mm
     balk_marge = 12 * mm
     c.setFillColor(LICHTORANJE)
@@ -488,10 +486,7 @@ def genereer_poster(args):
     c.setFont('Helvetica-Bold', 11)
     c.drawCentredString(width / 2, balk_y + 3.5 * mm, T('disclaimer_tekst'))
 
-    # Sportity-regel onder de warning-balk (klein, grijs, secundair)
-    c.setFillColor(GRIJS)
-    c.setFont('Helvetica', 9)
-    c.drawCentredString(width / 2, balk_y + balk_h + 4 * mm, sportity_tekst)
+    # (Sportity-regel: zie de blauwe footer-sectie onderaan deze functie.)
 
     # ── Sponsors-strook (alleen sponsors mét een geldig logo) ─────────────
     # Ondersteunt zowel raster als SVG; SVG wordt als vector getekend via
@@ -514,7 +509,7 @@ def genereer_poster(args):
         max_breedte = width - 30 * mm
         schaal = min(1.0, max_breedte / totaal_breedte) if totaal_breedte else 1.0
 
-        sponsor_logo_y  = 58 * mm
+        sponsor_logo_y  = 28 * mm
         sponsor_title_y = sponsor_logo_y + logo_h * schaal + 3 * mm
 
         c.setFillColor(BLAUW)
@@ -529,9 +524,10 @@ def genereer_poster(args):
             cur_x += w_final + gap * schaal
 
     # ── Blauwe footer ─────────────────────────────────────────────────────
-    # Compacter dan voorheen (was 32mm) — extra ruimte naar boven voor de
-    # disclaimer-warning-balk.
-    footer_h = 24 * mm
+    # Bevat van boven naar beneden: URL (vet wit), tip (lichtblauw, dichter
+    # onder URL), en — alleen als er een Sportity-kanaal is ingesteld — de
+    # Sportity-verwijzing onderaan in lichtblauw.
+    footer_h = 22 * mm
     c.setFillColor(BLAUW)
     c.rect(0, 0, width, footer_h, fill=True, stroke=False)
     c.setFillColor(ORANJE)
@@ -547,10 +543,21 @@ def genereer_poster(args):
     url_label = url_label.rstrip('/')
     c.drawCentredString(width / 2, 15 * mm, url_label)
 
+    # Tip-regel — dichter onder URL dan voorheen (was 6mm).
     c.setFillColor(LICHTBLAUW)
     c.setFont('Helvetica', 8)
     tip = T('tip_coach') if is_coach else T('tip_public')
-    c.drawCentredString(width / 2, 6 * mm, tip)
+    c.drawCentredString(width / 2, 10 * mm, tip)
+
+    # Sportity-verwijzing onderaan in de footer — alleen als er een kanaal
+    # is gezet via beheer → org. Zonder kanaal blijft de regel weg
+    # (anders zou er een algemene "via Sportity" tekst staan zonder dat
+    # de operator dat heeft geconfigureerd).
+    if args.sportity_kanaal:
+        c.setFillColor(LICHTBLAUW)
+        c.setFont('Helvetica', 7.5)
+        c.drawCentredString(width / 2, 4 * mm,
+                            T('sportity_kanaal', kanaal=args.sportity_kanaal))
 
     c.save()
 
