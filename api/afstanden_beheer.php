@@ -66,6 +66,22 @@ function uuid4(): string {
 try {
     $pdo->beginTransaction();
 
+    // Vóór INSERT/DELETE: lees huidige (oude) namen op per id zodat we ná
+    // het schrijven een gerichte UPDATE op tijdschema_ritten.rit_naam en
+    // heats.heat_naam kunnen doen voor afstanden die hernoemd zijn. Zonder
+    // deze propagatie blijft het gegenereerde programma 'Lange afstand'
+    // tonen ook nadat de operator de afstand-naam heeft gewijzigd.
+    $oudeNamen = [];   // id => oude naam
+    $idsInPayload = array_values(array_filter(array_column($dists, 'id')));
+    if ($idsInPayload) {
+        $ph = implode(',', array_fill(0, count($idsInPayload), '?'));
+        $q = $pdo->prepare("SELECT id, name FROM distances WHERE distance_combination_id = ? AND id IN ($ph)");
+        $q->execute(array_merge([$dcId], $idsInPayload));
+        while ($r = $q->fetch(PDO::FETCH_ASSOC)) {
+            $oudeNamen[$r['id']] = $r['name'];
+        }
+    }
+
     // Verwijder afstanden die niet meer in de lijst staan, gescoopt op target_group
     $nieuweIds = array_values(array_filter(array_column($dists, 'id')));
 
@@ -151,6 +167,33 @@ try {
             'value_meters' => $meters,
             'race_type'    => $raceType,
         ];
+    }
+
+    // ── Propageer naam-wijzigingen naar tijdschema_ritten + heats ──────────
+    // Zelfde patroon als samenvoeg.php voor dc_naam: REPLACE op de oude
+    // naam binnen rit_naam/heat_naam, gescoopt op distance_id zodat we
+    // alleen ritten van déze afstand raken. Hiermee zien programma-volgorde,
+    // gegenereerd programma, startlijsten en uitslagen direct de nieuwe
+    // afstand-naam, zonder dat het programma opnieuw gegenereerd hoeft.
+    $updRit = $pdo->prepare("
+        UPDATE tijdschema_ritten
+        SET rit_naam = REPLACE(rit_naam, ?, ?)
+        WHERE distance_id = ?
+    ");
+    $updHeat = $pdo->prepare("
+        UPDATE heats
+        SET heat_naam = REPLACE(heat_naam, ?, ?)
+        WHERE distance_id = ?
+    ");
+    foreach ($dists as $d) {
+        $id      = trim($d['id'] ?? '');
+        $newName = trim($d['name'] ?? '');
+        if ($id === '' || $newName === '') continue;
+        if (!isset($oudeNamen[$id])) continue;        // nieuwe rij — niets te REPLACEN
+        $oldName = $oudeNamen[$id];
+        if ($oldName === '' || $oldName === $newName) continue;
+        $updRit ->execute([$oldName, $newName, $id]);
+        $updHeat->execute([$oldName, $newName, $id]);
     }
 
     $pdo->commit();
