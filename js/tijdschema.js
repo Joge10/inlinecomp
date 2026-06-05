@@ -3211,7 +3211,20 @@ function _bouwProgrammaExternInternal() {
         };
         const rondeLabel = _rondeLabelMap[blok.ronde_type] ?? blok.ronde_type;
         const eersteTijd = stMap.get(sectieRitten[0].id) ?? '';
-        const nHeats     = sectieRitten.length;
+        // Effectief heat-aantal: combi-groepen rijden tegelijk en tellen
+        // dus als 1 heat voor totaal-duurberekening. Rij-telling sectie-
+        // Ritten.length zou anders bij full-final met meerdere combi's de
+        // duur 2x of 3x overdrijven.
+        const _combiSeen = new Set();
+        let nHeats = 0;
+        for (const r of sectieRitten) {
+            const cg = r.combi_group ? parseInt(r.combi_group) : null;
+            if (cg !== null) {
+                if (_combiSeen.has(cg)) continue;
+                _combiSeen.add(cg);
+            }
+            nHeats++;
+        }
         const hd         = parseInt(blok.heat_duur) || 0;   // seconden
         const hdTxt      = hd ? secNaarMmSs(hd) : '';
         const totaalMin  = hd ? Math.round(nHeats * hd / 60) : 0;
