@@ -471,6 +471,25 @@ async function _bouwStartlijstDrukInternal(optData) {
     const { cacheKey, dcIds, dcName, distId, distNaam, categoryFilter,
             rondeSleutel = 'heats', rondeLabel = 'Series' } = optData;
 
+    // i18n-helper voor Print-Center taalkeuze (NL/EN).
+    const T    = window._pcT    || (k => k);
+    const LANG = (window._pcLang && window._pcLang()) || 'nl';
+    const LOC  = LANG === 'en' ? 'en-GB' : 'nl-NL';
+
+    // Ronde-label lokaal vertalen via sleutel — overrides de NL-string
+    // die door Print-Center wordt doorgegeven (UI is NL, print is taal-bewust).
+    const _RONDE_LABEL_T = {
+        heats:               () => T('algemeen.serie'),
+        kwartfinale:         () => T('algemeen.kwart_finale'),
+        halve_finale:        () => T('algemeen.halve_finale'),
+        runner_up:           () => T('algemeen.runner_up'),
+        finale:              () => T('algemeen.finale'),
+        finale_a:            () => T('algemeen.a_finale'),
+        finale_b:            () => T('algemeen.b_finale'),
+        full_final_finales:  () => T('algemeen.finales'),
+    };
+    const rondeLabelT = _RONDE_LABEL_T[rondeSleutel] ? _RONDE_LABEL_T[rondeSleutel]() : rondeLabel;
+
     // ── Combi-detectie ─────────────────────────────────────────────────────
     // Als de geselecteerde rit(ten) een combi_group hebben, print ALLE heats
     // van de hele combi (over dc's heen) op één landscape-pagina.
@@ -577,17 +596,21 @@ async function _bouwStartlijstDrukInternal(optData) {
 
     const esc = s => String(s ?? '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
     const comp = huidigComp;
-    const datum   = comp?.starts ? formatDatum(comp.starts) : '';
+    // Locale-aware wedstrijddatum (formatDatum is hardcoded nl-NL).
+    const datum = comp?.starts
+        ? new Date(comp.starts).toLocaleDateString(LOC,
+            { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })
+        : '';
     const locatie = comp ? getLocatie(comp) : '';
     const metaTxt = [datum, locatie].filter(Boolean).join(' · ');
     const distLabel = distNaam ? ` – ${distNaam}` : '';
 
-    // Seeding-methode label
+    // Seeding-methode label (i18n via T()).
     const METHODE_LABEL = {
-        startnummer:     'Op startnummer',
-        alfabetisch:     'Alfabetisch',
-        tussenklassement:'Tussenklassement (deze wedstrijd)',
-        klassement:      'Klassement (serie)',
+        startnummer:     T('startlijst.methode_startnr'),
+        alfabetisch:     T('startlijst.methode_alfa'),
+        tussenklassement:T('startlijst.methode_tussen'),
+        klassement:      T('startlijst.methode_klassement'),
     };
     // Bepaal de methode van de af te drukken ronde zelf
     // (niet van de series, want bijv. KF kan alfabetisch geloot zijn)
@@ -598,7 +621,7 @@ async function _bouwStartlijstDrukInternal(optData) {
 
     let methodeLabel = METHODE_LABEL[rondeMethode] ?? '';
     if (rondeMethode === 'kwalificatie') {
-        methodeLabel = 'Op kwalificatievolgorde';
+        methodeLabel = T('startlijst.methode_kwal');
     }
     // Persistente snapshot heeft voorrang — die is bij genereer in de DB
     // opgeslagen en bevat de volledige klassement-naam + sectie of tussen-
@@ -624,7 +647,7 @@ async function _bouwStartlijstDrukInternal(optData) {
                     : '';
                 const klNaam   = kl.naam + (kl.seizoen ? ` (${kl.seizoen})` : '');
                 const delen    = [orgNaam, klNaam, cache.klassementSectie].filter(Boolean);
-                methodeLabel   = 'Op klassement: ' + delen.join(' · ');
+                methodeLabel   = T('startlijst.methode_klass_prefix') + delen.join(' · ');
             } else if (cache.klassementSectie) {
                 methodeLabel += ': ' + cache.klassementSectie;
             }
@@ -713,7 +736,7 @@ async function _bouwStartlijstDrukInternal(optData) {
                     <col class="pr-col-naam"><col class="pr-col-opm">
                     <col class="pr-col-fin"><col class="pr-col-fin-snr">
                 </colgroup>
-                <thead><tr><th>#</th><th>Snr</th><th>Cat</th><th>Naam</th><th>Opm.</th><th class="pr-fin-h">Fin</th><th class="pr-fin-h">Snr</th></tr></thead>
+                <thead><tr><th>#</th><th>${esc(T('startlijst.col_snr'))}</th><th>${esc(T('startlijst.col_cat_kort'))}</th><th>${esc(T('algemeen.naam'))}</th><th>${esc(T('startlijst.col_opm'))}</th><th class="pr-fin-h">${esc(T('startlijst.col_fin'))}</th><th class="pr-fin-h">${esc(T('startlijst.col_fin_snr'))}</th></tr></thead>
                 <tbody>${rows}</tbody>
             </table>
         </div>`;
@@ -753,13 +776,13 @@ async function _bouwStartlijstDrukInternal(optData) {
                         <col class="pr-col-pos"><col class="pr-col-snr"><col class="pr-col-cat"><col class="pr-col-naam"><col class="pr-col-opm">
                         <col class="pr-col-fin"><col class="pr-col-fin-snr">
                     </colgroup>
-                    <thead><tr><th>#</th><th>Snr</th><th>Cat</th><th>Naam</th><th>Opm.</th><th class="pr-fin-h">Fin</th><th class="pr-fin-h">Snr</th></tr></thead>
+                    <thead><tr><th>#</th><th>${esc(T('startlijst.col_snr'))}</th><th>${esc(T('startlijst.col_cat_kort'))}</th><th>${esc(T('algemeen.naam'))}</th><th>${esc(T('startlijst.col_opm'))}</th><th class="pr-fin-h">${esc(T('startlijst.col_fin'))}</th><th class="pr-fin-h">${esc(T('startlijst.col_fin_snr'))}</th></tr></thead>
                     <tbody>${rows}</tbody>
                 </table>
             </div>`;
         }).join('');
         cardsHtml = `<div class="pr-combi-frame">
-            <div class="pr-combi-header">🔗 Gecombineerde startlijst — ${combiHeatsSamengevoegd.length} ritten</div>
+            <div class="pr-combi-header">${esc(T('startlijst.combi_header', { n: combiHeatsSamengevoegd.length }))}</div>
             <div class="pr-combi-kolommen">${kolommen}</div>
         </div>`;
     } else if (isFullFinalPrint) {
@@ -767,12 +790,12 @@ async function _bouwStartlijstDrukInternal(optData) {
         const bHeats = afdrukHeats.filter(h => h._finaleType === 'b');
         const aHeats = afdrukHeats.filter(h => h._finaleType === 'a');
         if (bHeats.length) {
-            cardsHtml += `<div class="pr-sectie-kop pr-sectie-b">B-Finales</div>`;
+            cardsHtml += `<div class="pr-sectie-kop pr-sectie-b">${esc(T('startlijst.sec_b_finales'))}</div>`;
             for (const heat of bHeats)
                 cardsHtml += maakCard(heat, rlB, '', bHeats.length);
         }
         if (aHeats.length) {
-            cardsHtml += `<div class="pr-sectie-kop pr-sectie-a">A-Finale</div>`;
+            cardsHtml += `<div class="pr-sectie-kop pr-sectie-a">${esc(T('startlijst.sec_a_finale'))}</div>`;
             let first = true;
             for (const heat of aHeats) {
                 cardsHtml += maakCard(heat, rlA, first ? 'pr-card-links' : '', aHeats.length);
@@ -784,7 +807,7 @@ async function _bouwStartlijstDrukInternal(optData) {
             cardsHtml += maakCard(heat, rl, '', afdrukHeats.length);
     }
 
-    const titleStr = `Startlijst – ${dcName}${distLabel}`;
+    const titleStr = `${T('startlijst.titel')} – ${dcName}${distLabel}`;
     const extraCss = `
 *{box-sizing:border-box}
 body{font-family:Arial,Helvetica,sans-serif;font-size:9pt;margin:.6cm 1cm;color:#111;line-height:1.35}
@@ -921,8 +944,8 @@ col.pr-col-fin-snr{width:50px}
         </div>
         <div style="text-align:right">
           <div class="pr-ronde">${isCombiPrint
-              ? '🔗 Gecombineerde startlijst – ' + combiHeatsSamengevoegd.map(x => esc(x.dc_name || '')).filter(Boolean).join(' · ') + esc(distLabel) + '&nbsp;–&nbsp;' + esc(rondeLabel)
-              : esc(dcName) + esc(distLabel) + '&nbsp;–&nbsp;' + esc(rondeLabel)
+              ? esc(T('startlijst.combi_titel_prefix')) + combiHeatsSamengevoegd.map(x => esc(x.dc_name || '')).filter(Boolean).join(' · ') + esc(distLabel) + '&nbsp;–&nbsp;' + esc(rondeLabelT)
+              : esc(dcName) + esc(distLabel) + '&nbsp;–&nbsp;' + esc(rondeLabelT)
           }</div>
           ${methodeLabel ? `<div class="pr-methode">${esc(methodeLabel)}</div>` : ''}
         </div>
@@ -942,7 +965,7 @@ col.pr-col-fin-snr{width:50px}
         extraCss,
         pageOrientation: isPortrait ? 'portrait' : 'landscape',
         title:           titleStr,
-        subType:         'Startlijst ' + [distNaam, rondeLabel].filter(Boolean).join(' — '),
+        subType:         T('startlijst.titel') + ' ' + [distNaam, rondeLabelT].filter(Boolean).join(' — '),
     };
 }
 
