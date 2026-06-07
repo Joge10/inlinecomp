@@ -2404,61 +2404,21 @@ function _liveBind(idx) {
         }
 
         try {
-            const res = await fetch('api/live.php', {
-                method:  'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body:    JSON.stringify({
-                    action:          'wissel_posities',
-                    competition_id:  huidigCompId,
-                    heat_entry_id_1: entryIdA,
-                    heat_entry_id_2: riderB.entry_id,
-                    // Flag + nieuwe pos zodat backend weet of het 'n echte
-                    // swap is of een ex-aequo break (alleen A muteren).
-                    ex_aequo_break:  isExAequoBreak,
-                    nieuwe_pos_a:    nieuwePosA,
-                }),
-            });
-            let isPostSave = true;
-            if (res.status === 404) {
-                // Pre-save wissel: er staan nog geen results-rijen in DB voor
-                // (één van) beide rijders. Lokaal is de swap al doorgevoerd
-                // (finishpositie/tijd_ms hierboven), dus we markeren de rit
-                // als ongesaved zodat de operator op Opslaan klikt — dan
-                // schrijft save_rit_results de gewisselde state in één keer
-                // naar DB, inclusief is_photofinish=1 (via r._wisselt).
-                // Geen cascade nodig — die loopt vanzelf na save_rit_results.
-                _liveOngeslagen = true;
-                isPostSave = false;
-            } else if (!res.ok) {
-                throw new Error('HTTP ' + res.status);
-            } else {
-                const wisselData = await res.json();
-                if (wisselData.error) throw new Error(wisselData.error);
-            }
-
-            // ── Cascade naar volgende ronde (alleen bij post-save wisseling) ─
-            // Dezelfde keten-stap als _liveOpslaanRit: voor het rit zelf én
-            // eventuele combi-leden. force=true: de qualifier-SET kan identiek
-            // zijn (zelfde rijders kwalificeren), maar de seeding-VOLGORDE is
-            // door de wisseling veranderd — anders zou de server denken dat
-            // er niks gewijzigd is en de oude seeding behouden.
-            if (isPostSave) {
-                const ketenLeden = rit.is_combi ? rit.combi_leden : [{
-                    dc_id:       rit.dc_id,
-                    distance_id: rit.distance_id,
-                    ronde_type:  rit.ronde_type,
-                    dc_naam:     rit.dc_naam,
-                }];
-                for (const lid of ketenLeden) {
-                    const volgende = _volgendeRondeType(lid.dc_id, lid.distance_id, lid.ronde_type);
-                    if (!volgende) continue;
-                    const compleet = _liveRondeCompleet(lid.dc_id, lid.distance_id, lid.ronde_type);
-                    _liveGenereerKetenStap(
-                        lid.dc_id, lid.distance_id, lid.ronde_type, volgende, compleet,
-                        { splitDcNaam: lid.dc_naam || rit.dc_naam || '', force: true }
-                    ).catch(() => {});  // stil falen — toast komt uit ketenStap zelf
-                }
-            }
+            // ── Pure-lokale swap (geen silent save naar DB!) ─────────────────
+            // Voorheen werd hier direct `wissel_posities` op de server gepost en
+            // daarna de cascade (`genereer_volgende_ronde`) afgevuurd. Dat had
+            // twee vervelende neveneffecten:
+            //   1. Handmatig ingevoerde tijden van NIET-betrokken rijders die
+            //      nog niet gesaved waren (DOM-only), gingen verloren zodra de
+            //      cascade een reload van de heat-data triggerde.
+            //   2. De UI sprong ongewenst door naar de volgende ronde voordat
+            //      de operator zelf op Opslaan had geklikt.
+            // Nieuwe model: wisseling = pure lokale edit. Eindigt in
+            // _liveOngeslagen=true zodat de operator zelf op Opslaan klikt.
+            // save_rit_results stuurt finishposities + is_photofinish (op basis
+            // van `r._wisselt`) + bruto-hints in één keer mee — bestaat al.
+            // De cascade loopt daarna automatisch vanuit _liveOpslaanRit.
+            _liveOngeslagen = true;
 
             // Markeer als "in een wissel betrokken" — voorkomt cascading swaps
             // waarbij de tijd-state verworden tot een soep. Reset gebeurt
@@ -5030,6 +4990,13 @@ async function _liveOpslaanRit(ritIdx) {
             ? rit2.combi_leden.map(l => ({ dc_id: l.dc_id, distance_id: l.distance_id, ronde_type: rit2.ronde_type, dc_naam: l.dc_naam || rit2.dc_naam }))
             : [{ dc_id: rit2.dc_id, distance_id: rit2.distance_id, ronde_type: rit2.ronde_type, dc_naam: rit2.dc_naam }];
 
+        // Force=true als er een wisseling in deze rit is gedaan vóór de save —
+        // de qualifying-SET kan identiek zijn, maar de seeding-VOLGORDE is
+        // gewijzigd. Zonder force zou de server denken dat er niks veranderd
+        // is en de oude seeding behouden. Voorheen zat dit signaal in de
+        // wissel_posities-call die nu weg is — de force-detectie verhuist mee.
+        const heeftWisseling = (rit2.rijders || []).some(r => r._wisselt);
+
         let enigVolgendGevonden = false;
         for (const lid of ketenLeden) {
             const volgende2 = _volgendeRondeType(lid.dc_id, lid.distance_id, lid.ronde_type);
@@ -5041,7 +5008,7 @@ async function _liveOpslaanRit(ritIdx) {
                 // DC is filter no-op (dc_naam uniek per DC).
                 const lidSplitNaam = lid.dc_naam || rit2.dc_naam || '';
                 _liveGenereerKetenStap(lid.dc_id, lid.distance_id, lid.ronde_type, volgende2, compleet,
-                    { splitDcNaam: lidSplitNaam })
+                    { splitDcNaam: lidSplitNaam, force: heeftWisseling })
                     .catch(() => {}); // stil falen
             }
         }
