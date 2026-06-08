@@ -5403,6 +5403,17 @@ col.live-col-rondes  { width: 40px; }
     gap: .8rem; flex-wrap: wrap;
 }
 .hp-pending-naam { display: flex; align-items: center; gap: .5rem; flex-wrap: wrap; }
+/* Type-badge: pending (📜 historie) of extern (🌍 CSV-import). Visueel
+   onderscheid op één oogopslag, vooral handig wanneer beide types in
+   dezelfde lijst staan en operator dubbelen wil opsporen. */
+.hp-pending-type {
+    padding: 1px 7px; border-radius: 9px;
+    font-size: .78rem; font-weight: 600;
+    white-space: nowrap;
+}
+.hp-pending-type-pending { background: #e3e9f0; color: #1F4E79; }
+.hp-pending-type-extern  { background: #fde7d6; color: #8a4500; }
+.hp-pending-sugg-icoon   { margin-right: .25rem; font-size: .9em; }
 .hp-pending-cat {
     background: #1F4E79; color: #fff;
     padding: 1px 7px; border-radius: 9px;
@@ -5444,6 +5455,19 @@ col.live-col-rondes  { width: 40px; }
     line-height: 1.25;
 }
 .hp-pending-sugg-btn:hover { background: #d0e2ff; border-color: #6f9bd6; }
+/* Modifier: target is pending/extern → onderling samenvoegen ipv koppelen
+   aan vertrouwde KNSB-data. Visueel onderscheid (paars i.p.v. blauw) zodat
+   operator direct weet of de bron 'goed' is (KNSB-feed) of 'dubieus' (pending
+   of CSV-import). Zelfde paarse tinten als hp-pending-dup-btn voor consistentie. */
+.hp-pending-sugg-btn.hp-pending-sugg-btn-onderling {
+    background: #ece1f5; border-color: #b18cd0; color: #4a2e6c;
+}
+.hp-pending-sugg-btn.hp-pending-sugg-btn-onderling:hover {
+    background: #d8c4ec; border-color: #8857b8;
+}
+.hp-pending-sugg-btn.hp-pending-sugg-btn-onderling .hp-pending-sugg-meta {
+    color: #6a4a8a;
+}
 .hp-pending-sugg-meta { font-size: .72rem; color: #557; font-weight: normal; }
 /* Match-reden label op suggestie-button: '✓ leeftijd matcht' (groen) of
    '? leeftijd onbekend' (grijs). Helpt de operator inschatten of een

@@ -103,14 +103,16 @@ async function toonHelpersPagina() {
         </div>` : ''}
 
         <div class="hp-card" id="hp-pending-card">
-            <h3 class="hp-card-titel">🔗 Pending rijders koppelen aan KNSB-accounts</h3>
+            <h3 class="hp-card-titel">🔗 Wacht-op-KNSB rijders koppelen</h3>
             <p class="hp-card-uitleg">
-                Rijders die je tijdens historie-import niet kon matchen aan een
-                bestaande KNSB-account zijn als <em>pending</em> opgeslagen.
-                Zodra ze (later) wèl in de DB komen — bijvoorbeeld omdat ze
-                opnieuw mee gaan doen aan een wedstrijd — kun je ze hier
-                koppelen. Alle historische uitslagen van de pending-rij
-                worden dan overgenomen door het echte account.
+                Rijders zonder echte KNSB-licentie in je DB staan hier — twee soorten:
+                <b>📜 pending</b> (uit historie-import) en <b>🌍 extern</b> (uit CSV-import).
+                Beide wachten op de KNSB-feed om gekoppeld te worden aan hun echte
+                licentie. Tot die tijd kun je hier:
+                <br>•&nbsp;duplicaten <em>tussen</em> de twee categorieën samenvoegen
+                (bv. een externe Noa die al als pending bestond)
+                <br>•&nbsp;ze koppelen aan een bestaand KNSB-account als die ondertussen
+                via de feed is binnengekomen
             </p>
             <div class="hp-card-acties">
                 <button class="btn-secondary" id="hp-pending-btn-laad">🔍 Laad pending rijders</button>
@@ -1963,10 +1965,19 @@ function _hpPendingRender() {
     if (!_hpPendingData || !_hpPendingData.length) {
         lijst.innerHTML = `<p style="color:#666;font-style:italic">
             Geen pending rijders — alle historische uitslagen zijn gekoppeld
-            aan een echte KNSB-account. 🎉</p>`;
+            aan een bestaand account. 🎉</p>`;
         return;
     }
     const rij = (p) => {
+        // Type-badge: pending (📜 uit historie-import) of extern (🌍 uit
+        // CSV-import). Beide soorten staan in dezelfde lijst zodat operator
+        // duplicaten tussen de twee categorieën kan opmerken — bv. een CSV-
+        // import die per ongeluk een nieuwe externe maakte terwijl er al een
+        // pending bestond met dezelfde naam.
+        const typeBadge = p.is_extern
+            ? '<span class="hp-pending-type hp-pending-type-extern" title="Externe rijder uit CSV-import">🌍 extern</span>'
+            : '<span class="hp-pending-type hp-pending-type-pending" title="Pending uit uitslag-historie">📜 pending</span>';
+
         // Cat-evolutie label: "DJB-20 → DJB-21 → DJA-23" — toont werkelijke
         // cat-progressie uit uitslag-rijen, niet de (mogelijk verouderde)
         // pending.category. Plus afgeleid geboortejaar (intersect van alle
@@ -1980,15 +1991,36 @@ function _hpPendingRender() {
         const bornTag = p.birth_label && p.birth_label !== '?'
             ? `<span class="hp-pending-born" title="Afgeleid geboortejaar uit (cat × jaar)-intersectie">born ${escHtml(p.birth_label)}</span>`
             : '';
-        // Dubbele-pending banner: andere pending-rijen met dezelfde naam +
-        // compatibele cat-evolutie. Operator kan met één klik samenvoegen.
-        // Reden van bestaan: voor de auto-dedupe-fix konden meerdere pending-
-        // rijen voor dezelfde persoon ontstaan (DJA 2022 + DSJ 2024 = 2 rijen
-        // ondanks zelfde persoon).
-        const dupBlok = (p.dubbele_pendings && p.dubbele_pendings.length)
+        // Counts: pendings hebben alleen uitslagen, externen vooral entries
+        // en eventueel transponders. Toon alleen wat > 0 is.
+        const countTags = [];
+        if (p.aantal_uitslagen > 0) {
+            countTags.push(`<span class="hp-pending-uit">${p.aantal_uitslagen}× uitslag</span>`);
+        }
+        if (p.aantal_entries > 0) {
+            countTags.push(`<span class="hp-pending-uit">${p.aantal_entries}× entry</span>`);
+        }
+        if (p.aantal_transponders > 0) {
+            countTags.push(`<span class="hp-pending-uit">${p.aantal_transponders}× transponder</span>`);
+        }
+        const countsBlok = countTags.join(' ');
+        // Dubbele-pending banner: andere pending/externe rijen met dezelfde
+        // naam + compatibele cat-evolutie. Operator kan met één klik samen-
+        // voegen. Reden van bestaan: voor de auto-dedupe-fix konden meerdere
+        // pending-rijen voor dezelfde persoon ontstaan (DJA 2022 + DSJ 2024 =
+        // 2 rijen ondanks zelfde persoon); sinds externen in dezelfde lijst
+        // staan vangt deze sectie ook pending↔extern duplicaten.
+        //
+        // Dedupe: als een dup-kandidaat ÓÓK al in 'suggesties' staat met een
+        // expliciete leeftijds-reden, verberg 'em hier — anders krijg je 2
+        // knoppen die exact dezelfde actie uitvoeren.
+        const suggLicenses = new Set((p.suggesties || []).map(s => s.license_key));
+        const dubbeleFiltered = (p.dubbele_pendings || [])
+            .filter(d => !suggLicenses.has(d.license_key));
+        const dupBlok = dubbeleFiltered.length
             ? `<div class="hp-pending-dup">
                   <span class="hp-pending-dup-titel">↪ Mogelijk dezelfde rijder als:</span>
-                  ${p.dubbele_pendings.map(d => {
+                  ${dubbeleFiltered.map(d => {
                       const naamLabel = d.full_name
                           ? `<b>${escHtml(d.full_name)}</b>`
                           : '<b>?</b>';
@@ -2004,14 +2036,18 @@ function _hpPendingRender() {
                       const bornInfo = d.birth_label && d.birth_label !== '?'
                           ? ` · born ${escHtml(d.birth_label)}`
                           : '';
+                      // Type-icoon: dup-suggestie kan een andere pending OF
+                      // externe rij zijn (sinds beide in dezelfde lijst staan).
+                      const dupIcoon = d.is_extern ? '🌍' : '📜';
                       return `
                           <button class="hp-pending-dup-btn"
                                   data-source="${escHtml(d.license_key)}"
                                   data-target="${escHtml(p.license_key)}"
-                                  title="Samenvoegen: ${d.aantal_uitslagen} uitslag-rijen worden verplaatst naar ${escHtml(p.full_name)}">
+                                  title="Samenvoegen met ${escHtml(p.full_name)}">
+                              <span class="hp-pending-sugg-icoon">${dupIcoon}</span>
                               ${fuzzyTag}${naamLabel}
                               <span class="hp-pending-dup-meta">
-                                  ${catInfo}${bornInfo} · ${d.aantal_uitslagen}× uitslag · samenvoegen ↪
+                                  ${catInfo}${bornInfo} · samenvoegen ↪
                               </span>
                           </button>`;
                   }).join('')}
@@ -2031,11 +2067,25 @@ function _hpPendingRender() {
                       const redenBlok = s.reden
                           ? `<span class="hp-pending-reden ${redenCls}">${escHtml(s.reden)}</span>`
                           : '';
+                      // Doel-type-icoon: 📜 pending, 🌍 extern, 🏆 KNSB-account.
+                      // Maakt direct duidelijk wat voor account je koppelt aan.
+                      const tgtIcoon = s.is_pending ? '📜' : (s.is_extern ? '🌍' : '🏆');
+                      const tgtTitel = s.is_pending ? 'Andere pending uit historie'
+                                     : s.is_extern ? 'Externe rijder uit CSV-import'
+                                     : 'Bestaand KNSB-account';
+                      // Kleur-modifier: paars wanneer target ook pending/extern is
+                      // (onderling samenvoegen — bron-data 'dubieus'). Blauw blijft
+                      // voor KNSB-feed (vertrouwde data).
+                      const isOnderling = s.is_pending || s.is_extern;
+                      const btnCls = isOnderling
+                          ? 'hp-pending-sugg-btn hp-pending-sugg-btn-onderling'
+                          : 'hp-pending-sugg-btn';
                       return `
-                          <button class="hp-pending-sugg-btn"
+                          <button class="${btnCls}"
                                   data-pending="${escHtml(p.license_key)}"
                                   data-target="${escHtml(s.license_key)}"
-                                  title="Score: ${s.score}">
+                                  title="Score: ${s.score} — ${tgtTitel}">
+                              <span class="hp-pending-sugg-icoon">${tgtIcoon}</span>
                               ${escHtml(s.full_name)}
                               <span class="hp-pending-sugg-meta">${escHtml(meta)}</span>
                               ${redenBlok}
@@ -2047,17 +2097,18 @@ function _hpPendingRender() {
                   Gebruik handmatig zoeken hieronder.
               </div>`;
         return `
-            <div class="hp-pending-rij" data-lic="${escHtml(p.license_key)}">
+            <div class="hp-pending-rij" data-lic="${escHtml(p.license_key)}" data-type="${p.is_extern ? 'extern' : 'pending'}">
                 <div class="hp-pending-hoofd">
                     <div class="hp-pending-naam">
+                        ${typeBadge}
                         <b>${escHtml(p.full_name)}</b>
                         ${catTag}
                         ${bornTag}
-                        <span class="hp-pending-uit">${p.aantal_uitslagen}× uitslag</span>
+                        ${countsBlok}
                     </div>
                     <div class="hp-pending-acties">
                         <input type="text" class="inp hp-pending-zoek"
-                               placeholder="Zoek echte rijder op naam of licentie…">
+                               placeholder="Zoek rijder op naam of licentie…">
                         <button class="btn-danger hp-pending-del">🗑 Verwijder</button>
                     </div>
                 </div>
@@ -2096,36 +2147,62 @@ async function _hpPendingMerge(sourceLic, targetLic) {
     const source = _hpPendingData.find(p => p.license_key === sourceLic);
     const target = _hpPendingData.find(p => p.license_key === targetLic);
     if (!source || !target) return;
+    // Type-labels en icons — source/target kunnen pending of extern zijn.
+    const srcIcoon = source.is_extern ? '🌍' : '📜';
+    const tgtIcoon = target.is_extern ? '🌍' : '📜';
+    const srcType  = source.is_extern ? 'externe' : 'pending';
+    const tgtType  = target.is_extern ? 'externe' : 'pending';
+    // Target wint — zijn type blijft staan. Operator kiest welke rij hij
+    // wil behouden door welke richting hij kiest.
+    const eindType = target.is_extern ? 'externe rij' : 'pending-rij (wacht op KNSB-feed)';
+    // Beschrijf wat er verhuist: uitslagen + entries + transponders, alleen
+    // wat > 0 is — netter dan harde "X uitslagen" als het feitelijk om
+    // entries gaat (typisch geval bij externe rij).
+    const onderdelen = [];
+    if (source.aantal_uitslagen > 0)    onderdelen.push(`<b>${source.aantal_uitslagen}</b> uitslag${source.aantal_uitslagen === 1 ? '' : 'en'}`);
+    if (source.aantal_entries > 0)      onderdelen.push(`<b>${source.aantal_entries}</b> inschrijving${source.aantal_entries === 1 ? '' : 'en'}`);
+    if (source.aantal_transponders > 0) onderdelen.push(`<b>${source.aantal_transponders}</b> transponder${source.aantal_transponders === 1 ? '' : 's'}`);
+    const verhuistTxt = onderdelen.length ? onderdelen.join(' + ') : '<i>(geen gekoppelde data)</i>';
     const ok = await _hpBevestigModal({
-        titel: 'Pending rijders samenvoegen?',
-        bericht: `<p>De <b>${source.aantal_uitslagen}</b> historische uitslagen
-                  van <b>${escHtml(source.full_name)}</b>
-                  <span style="color:#888">(${escHtml(source.category || '?')}${source.pdf_jaar ? ' ' + source.pdf_jaar : ''})</span>
-                  worden overgenomen door <b>${escHtml(target.full_name)}</b>
+        titel: 'Samenvoegen — dezelfde persoon?',
+        bericht: `<p>${verhuistTxt} van <b>${escHtml(source.full_name)}</b>
+                  verhuizen naar de ${tgtIcoon} ${tgtType}-rij
+                  <b>${escHtml(target.full_name)}</b>
                   <span style="color:#888">(${escHtml(target.category || '?')}${target.pdf_jaar ? ' ' + target.pdf_jaar : ''})</span>.</p>
-                  <p>Daarna blijft <b>één</b> pending-rij over, die je in een
-                  volgende stap aan een echte KNSB-account kunt koppelen.
-                  Deze actie kan niet ongedaan gemaakt worden.</p>`,
+                  <p style="margin:.4em 0">▸ De ${srcIcoon} ${srcType}-rij
+                  <b>${escHtml(source.full_name)}</b>
+                  <span style="color:#888">(${escHtml(source.category || '?')}${source.pdf_jaar ? ' ' + source.pdf_jaar : ''})</span>
+                  wordt <b>verwijderd</b>.</p>
+                  <p style="margin-top:.6em"><b>Eindresultaat:</b> één ${tgtIcoon} ${eindType}.</p>
+                  <p style="color:#888;font-size:.85em">Deze actie kan niet ongedaan gemaakt worden.</p>`,
         bevestigLabel: 'Ja, samenvoegen',
         annuleerLabel: 'Annuleer',
     });
     if (!ok) return;
     try {
+        // Gebruik pending_link i.p.v. de oude pending_merge — werkt voor álle
+        // combinaties (pending→pending, pending→extern, extern→pending,
+        // extern→extern, en met KNSB-accounts).
         const res = await fetch('api/helpers.php', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
-                action: 'pending_merge',
-                source_license: sourceLic,
-                target_license: targetLic,
+                action: 'pending_link',
+                pending_license: sourceLic,
+                target_license:  targetLic,
             }),
         });
         const data = await res.json();
         if (data.error) throw new Error(data.error);
+        // Status-feedback: combineer counts uit pending_link-response
+        const verhuisdParts = [];
+        if (data.verhuisd > 0)         verhuisdParts.push(`${data.verhuisd} uitslagen`);
+        if (data.entries_verhuisd > 0) verhuisdParts.push(`${data.entries_verhuisd} entries`);
+        if (data.tp_verhuisd > 0)      verhuisdParts.push(`${data.tp_verhuisd} transponders`);
+        const conflictTotal = (data.conflict_skip || 0) + (data.entries_conflict || 0) + (data.tp_conflict || 0);
+        const conflictTxt = conflictTotal > 0 ? ` (${conflictTotal} dubbel-conflict overgeslagen)` : '';
         const stat = el('hp-pending-status');
-        const conflictTxt = data.conflict_skip > 0
-            ? ` (${data.conflict_skip} dubbel-conflict overgeslagen)` : '';
-        stat.textContent = `✓ ${data.verhuisd} uitslagen samengevoegd${conflictTxt}`;
+        stat.textContent = `✓ Samengevoegd: ${verhuisdParts.join(' + ') || 'geen data'}${conflictTxt}`;
         stat.className = 'hp-status hp-status-ok';
         await _hpPendingLaad();
     } catch (e) {
@@ -2145,19 +2222,34 @@ async function _hpPendingZoek(inp) {
         const r = await fetch(`api/helpers.php?action=pending_zoek_echte&q=${encodeURIComponent(q)}`);
         const data = await r.json();
         if (data.error) throw new Error(data.error);
-        if (!data.results.length) {
+        // Zelf eruit filteren — server geeft alles inclusief de huidige rij
+        const treffers = (data.results || []).filter(p => p.license_key !== lic);
+        if (!treffers.length) {
             resEl.innerHTML = '<em style="color:#888">Geen treffers</em>';
         } else {
-            resEl.innerHTML = data.results.map(p => `
-                <button class="hp-pending-sugg-btn"
+            resEl.innerHTML = treffers.map(p => {
+                // Type-icoon zoals bij auto-suggesties
+                const tgtIcoon = p.is_pending ? '📜' : (p.is_extern ? '🌍' : '🏆');
+                const tgtTitel = p.is_pending ? 'Andere pending uit historie'
+                               : p.is_extern ? 'Externe rijder uit CSV-import'
+                               : 'Bestaand KNSB-account';
+                // Paarse modifier voor onderling samenvoegen (target is pending/extern)
+                const isOnderling = p.is_pending || p.is_extern;
+                const btnCls = isOnderling
+                    ? 'hp-pending-sugg-btn hp-pending-sugg-btn-onderling'
+                    : 'hp-pending-sugg-btn';
+                return `
+                <button class="${btnCls}"
                         data-pending="${escHtml(lic)}"
-                        data-target="${escHtml(p.license_key)}">
+                        data-target="${escHtml(p.license_key)}"
+                        title="${tgtTitel}">
+                    <span class="hp-pending-sugg-icoon">${tgtIcoon}</span>
                     ${escHtml(p.full_name)}
                     <span class="hp-pending-sugg-meta">
                         ${[p.birth_year, p.category, p.club_short, p.license_key].filter(Boolean).join(' · ')}
                     </span>
-                </button>
-            `).join('');
+                </button>`;
+            }).join('');
             resEl.querySelectorAll('.hp-pending-sugg-btn').forEach(b => {
                 b.addEventListener('click', () => _hpPendingKoppel(b.dataset.pending, b.dataset.target));
             });
@@ -2171,16 +2263,45 @@ async function _hpPendingZoek(inp) {
 
 async function _hpPendingKoppel(pendingLic, targetLic) {
     // Vraag bevestiging
-    const pending = _hpPendingData.find(p => p.license_key === pendingLic);
-    if (!pending) return;
+    const source = _hpPendingData.find(p => p.license_key === pendingLic);
+    if (!source) return;
+    // Bron- en doeltype bepalen — beide kunnen pending OF extern zijn sinds
+    // de helper-uitbreiding. KNSB-target = noch p-… noch x-….
+    const tStr = String(targetLic || '');
+    const targetIsPending = tStr.startsWith('p-');
+    const targetIsExtern  = tStr.startsWith('x-');
+    const targetIsKnsb    = !targetIsPending && !targetIsExtern;
+    const sourceIsExtern  =  source.is_extern;
+    const sourceTypeLabel = sourceIsExtern ? 'externe' : 'pending';
+    const sourceIcoon     = sourceIsExtern ? '🌍' : '📜';
+    const targetIcoon     = targetIsKnsb ? '🏆' : (targetIsExtern ? '🌍' : '📜');
+    const targetTypeLabel = targetIsKnsb ? 'KNSB-rij'
+                          : targetIsExtern ? 'externe rij'
+                          : 'pending-rij';
+    // Target's type blijft zoals 't is — operator's klik bepaalt de richting.
+    // Vanuit pending → extern? Dan blijft de externe. Andersom blijft de pending.
+    const eindStatusLabel = targetIsKnsb  ? 'KNSB-account'
+                          : targetIsExtern ? 'externe rij'
+                          : 'pending-rij (wacht op KNSB-feed)';
+    // Beschrijf wat er verhuist — combinatie van uitslagen, entries en transponders
+    const onderdelen = [];
+    if (source.aantal_uitslagen > 0) onderdelen.push(`<b>${source.aantal_uitslagen}</b> historische uitslag${source.aantal_uitslagen === 1 ? '' : 'en'}`);
+    if (source.aantal_entries > 0)   onderdelen.push(`<b>${source.aantal_entries}</b> inschrijving${source.aantal_entries === 1 ? '' : 'en'}`);
+    if (source.aantal_transponders > 0) onderdelen.push(`<b>${source.aantal_transponders}</b> transponder-registratie${source.aantal_transponders === 1 ? '' : 's'}`);
+    const verhuistBeschrijving = onderdelen.length
+        ? onderdelen.join(' + ')
+        : '<i>(geen gekoppelde data)</i>';
     const ok = await _hpBevestigModal({
-        titel: 'Pending koppelen?',
-        bericht: `<p>Alle <b>${pending.aantal_uitslagen}</b> historische uitslagen van
-                  <b>${escHtml(pending.full_name)}</b> verhuizen naar het echte
-                  KNSB-account <code>${escHtml(targetLic)}</code>.</p>
-                  <p>Daarna wordt de pending-rij verwijderd. Deze actie kan niet
+        titel: 'Samenvoegen — dezelfde persoon?',
+        bericht: `<p>${verhuistBeschrijving} van <b>${escHtml(source.full_name)}</b>
+                  verhuizen naar de ${targetIcoon} ${targetTypeLabel}
+                  <code>${escHtml(targetLic)}</code>.</p>
+                  <p style="margin:.4em 0">▸ De ${sourceIcoon} ${sourceTypeLabel}-rij
+                  <code>${escHtml(pendingLic)}</code> wordt <b>verwijderd</b>.</p>
+                  <p style="margin-top:.6em"><b>Eindresultaat:</b> één ${targetIcoon} ${eindStatusLabel}.</p>
+                  <p style="color:#888;font-size:.85em">Deze actie kan niet
                   ongedaan gemaakt worden (alleen via her-import).</p>`,
-        bevestigLabel: 'Ja, koppelen',
+        bevestigLabel: 'Ja, samenvoegen',
         annuleerLabel: 'Annuleer',
     });
     if (!ok) return;
@@ -2212,15 +2333,28 @@ async function _hpPendingKoppel(pendingLic, targetLic) {
 }
 
 async function _hpPendingVerwijder(lic) {
-    const pending = _hpPendingData.find(p => p.license_key === lic);
-    if (!pending) return;
+    const source = _hpPendingData.find(p => p.license_key === lic);
+    if (!source) return;
+    // Wat wordt er allemaal verwijderd? — afhankelijk van het type. Pendings
+    // hebben typisch alleen uitslagen, externen vooral entries + transponders.
+    const onderdelen = [];
+    if (source.aantal_uitslagen > 0)    onderdelen.push(`<b>${source.aantal_uitslagen}</b> historische uitslag${source.aantal_uitslagen === 1 ? '' : 'en'}`);
+    if (source.aantal_entries > 0)      onderdelen.push(`<b>${source.aantal_entries}</b> inschrijving${source.aantal_entries === 1 ? '' : 'en'}`);
+    if (source.aantal_transponders > 0) onderdelen.push(`<b>${source.aantal_transponders}</b> transponder-registratie${source.aantal_transponders === 1 ? '' : 's'}`);
+    const wegBeschrijving = onderdelen.length ? onderdelen.join(' + ') : 'de rij';
+    const typeLabel = source.is_extern ? 'externe' : 'pending';
+    // Externen kunnen entries in een lopende wedstrijd hebben → extra waarschuwing
+    const extraWaarschuwing = source.is_extern && source.aantal_entries > 0
+        ? `<p style="color:#b71c1c;font-size:.9em">⚠ Deze rijder staat ingeschreven voor een wedstrijd.
+           Bij verwijderen verdwijnt de inschrijving inclusief eventuele transponders.</p>`
+        : '';
     const ok = await _hpBevestigModal({
-        titel: 'Pending verwijderen?',
-        bericht: `<p><b>Let op</b>: dit verwijdert <b>${pending.aantal_uitslagen}</b>
-                  historische uitslag-rijen van <b>${escHtml(pending.full_name)}</b>
-                  permanent.</p>
-                  <p>Doe dit alleen als deze pending-rij per ongeluk is
-                  aangemaakt. Anders: koppel hem aan een echte rijder.</p>`,
+        titel: `${source.is_extern ? 'Externe' : 'Pending'} verwijderen?`,
+        bericht: `<p><b>Let op</b>: dit verwijdert ${wegBeschrijving}
+                  van <b>${escHtml(source.full_name)}</b> permanent.</p>
+                  ${extraWaarschuwing}
+                  <p>Doe dit alleen als deze ${typeLabel}-rij per ongeluk is
+                  aangemaakt. Anders: koppel hem aan een andere rij.</p>`,
         bevestigLabel: 'Ja, verwijder',
         annuleerLabel: 'Annuleer',
     });
@@ -2233,8 +2367,13 @@ async function _hpPendingVerwijder(lic) {
         });
         const data = await res.json();
         if (data.error) throw new Error(data.error);
+        // Status-bericht samenstellen uit wat er werkelijk weg ging
+        const wegParts = [];
+        if (data.uitslagen_verwijderd > 0)    wegParts.push(`${data.uitslagen_verwijderd} uitslagen`);
+        if (data.entries_verwijderd > 0)      wegParts.push(`${data.entries_verwijderd} entries`);
+        if (data.transponders_verwijderd > 0) wegParts.push(`${data.transponders_verwijderd} transponders`);
         const stat = el('hp-pending-status');
-        stat.textContent = `✓ ${data.uitslagen_verwijderd} uitslagen + pending-rij verwijderd`;
+        stat.textContent = `✓ ${typeLabel}-rij verwijderd${wegParts.length ? ' (incl. ' + wegParts.join(' + ') + ')' : ''}`;
         stat.className = 'hp-status hp-status-ok';
         await _hpPendingLaad();
     } catch (e) {

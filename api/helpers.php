@@ -1319,7 +1319,13 @@ if ($action === 'historie_insert') {
 if ($action === 'pending_lijst') {
     header('Content-Type: application/json; charset=utf-8');
     try {
-        // 1) Alle pending-rijders + counts + oudste-comp-jaar
+        // 1) Alle "wacht-op-KNSB"-rijders ophalen: pendings (uit uitslag-historie)
+        // én externen (uit CSV-import). Voor de operator zijn beide functioneel
+        // hetzelfde — een rijder waarvan we het echte KNSB-license nog niet
+        // kennen. Ze worden samen in één lijst getoond zodat operator dubbelen
+        // tussen pending↔extern kan opmerken en samenvoegen (typisch geval:
+        // CSV-import maakte extern aan terwijl er al een pending bestond).
+        //
         // Het PDF-jaar = jaar van de OUDSTE wedstrijd waar deze pending in
         // staat (de eerste historie-import). Latere imports horen meestal
         // bij dezelfde periode; voor cat→birth-bereik bepaling is het
@@ -1329,23 +1335,74 @@ if ($action === 'pending_lijst') {
                 p.license_key,
                 p.full_name,
                 p.category,
+                p.birth_year,
+                p.club_short,
+                p.pending_source,
+                p.extern,
                 p.created_at,
                 (SELECT COUNT(*) FROM uitslag_afstand ua
                  WHERE ua.person_license = p.license_key) AS aantal_uitslagen,
                 (SELECT YEAR(MIN(ua.competition_datum)) FROM uitslag_afstand ua
                  WHERE ua.person_license = p.license_key
-                   AND ua.competition_datum IS NOT NULL) AS pdf_jaar
+                   AND ua.competition_datum IS NOT NULL) AS pdf_jaar,
+                (SELECT COUNT(*) FROM entries e
+                 WHERE e.person_license = p.license_key) AS aantal_entries,
+                (SELECT COUNT(*) FROM transponders t
+                 WHERE t.person_license = p.license_key) AS aantal_transponders
             FROM persons p
-            WHERE p.pending_source = 'historie'
+            WHERE (p.pending_source = 'historie' OR p.extern = 1)
+              AND p.anonymized_at IS NULL
             ORDER BY p.full_name
         ");
         $pendings = $stmt->fetchAll(PDO::FETCH_ASSOC);
 
-        // 2) Echte persons-pool voor suggesties
+        // ── Bereken per pending: birth-year-intersectie uit ALLE (jaar × cat)-
+        // combinaties van haar uitslagen. Voorheen werd in de suggestie-loop
+        // alleen ($p['category'] × $p['pdf_jaar']) gebruikt — dat ging fout
+        // voor rijders die in meerdere jaren met VERSCHILLENDE cats stonden.
+        // Voorbeeld: Noa Petitjean stond als DKA in 2022 (born 2008-09) én
+        // als DJB in 2025 (born 2009-10). Huidige persons.category = DJB,
+        // pdf_jaar = 2022 → fout bereik [2006-07]. Echte intersectie = [2009].
+        // Suggestie voor matching een nieuwe DJA-2026 [2008-09] werd hierdoor
+        // ten onrechte uitgesloten.
+        $birthSets = [];     // license_key => intersection set of birth_years (or null)
+        $perPersoon = [];    // license_key => array of {jr, cat} — hergebruikt voor cat-evol-label
+        if (count($pendings)) {
+            $licenses = array_column($pendings, 'license_key');
+            $ph = implode(',', array_fill(0, count($licenses), '?'));
+            $combosStmt = $pdo->prepare("
+                SELECT DISTINCT person_license, YEAR(competition_datum) AS jr, categorie
+                FROM uitslag_afstand
+                WHERE person_license IN ($ph)
+                  AND competition_datum IS NOT NULL
+                  AND categorie IS NOT NULL
+            ");
+            $combosStmt->execute($licenses);
+            foreach ($combosStmt->fetchAll(PDO::FETCH_ASSOC) as $c) {
+                $perPersoon[$c['person_license']][] = ['jr' => (int)$c['jr'], 'cat' => $c['categorie']];
+            }
+            foreach ($licenses as $lic) {
+                $combos = $perPersoon[$lic] ?? [];
+                $set = null;
+                foreach ($combos as $c) {
+                    $bereik = _catNaarJaarBereik($c['cat'], $c['jr']);
+                    if (!$bereik) continue;
+                    $jaren = range($bereik[0], $bereik[1]);
+                    $set = ($set === null) ? $jaren : array_values(array_intersect($set, $jaren));
+                    if (empty($set)) break;
+                }
+                $birthSets[$lic] = $set;
+            }
+        }
+
+        // 2) Persons-pool voor suggesties — ALLE rijen (KNSB + extern + pending)
+        // zodat een pending óók een externe als suggestie kan krijgen (en
+        // omgekeerd). Self-match wordt later in de loop voorkomen.
         $allRealStmt = $pdo->query("
-            SELECT license_key, full_name, birth_year, category, club_short
+            SELECT license_key, full_name, birth_year, category, club_short,
+                   pending_source, extern
             FROM persons
-            WHERE pending_source IS NULL AND anonymized_at IS NULL
+            WHERE anonymized_at IS NULL
         ");
         $allReal = $allRealStmt->fetchAll(PDO::FETCH_ASSOC);
 
@@ -1366,20 +1423,45 @@ if ($action === 'pending_lijst') {
         };
 
         foreach ($pendings as &$p) {
-            $p['aantal_uitslagen'] = (int)$p['aantal_uitslagen'];
-            $p['pdf_jaar']         = $p['pdf_jaar'] !== null ? (int)$p['pdf_jaar'] : null;
+            $p['aantal_uitslagen']     = (int)$p['aantal_uitslagen'];
+            $p['aantal_entries']       = (int)($p['aantal_entries'] ?? 0);
+            $p['aantal_transponders']  = (int)($p['aantal_transponders'] ?? 0);
+            $p['pdf_jaar']             = $p['pdf_jaar'] !== null ? (int)$p['pdf_jaar'] : null;
+            $p['is_pending']           = $p['pending_source'] !== null;
+            $p['is_extern']            = ((int)($p['extern'] ?? 0)) === 1;
 
-            // PDF-cat × PDF-jaar → geboortejaar-bereik [van, tot]
-            // Bv. DJA in 2022 → [2003, 2004]
-            $pdfBirthBereik = ($p['category'] && $p['pdf_jaar'])
-                ? _catNaarJaarBereik($p['category'], $p['pdf_jaar'])
-                : null;
+            // Geboortejaar-bereik uit ALLE uitslagen (intersectie van elke
+            // jaar × cat-combinatie) — geeft de smalste set jaartallen die
+            // past op de hele uitslag-historie van deze pending. Veel beter
+            // dan ($p['category'] × $p['pdf_jaar']) want dat mixt huidige
+            // persons-cat met OUDSTE wedstrijd-jaar → fout bij multi-cat-rijders.
+            // Voor externen: meestal geen uitslagen → val terug op birth_year
+            // of (category × huidigJaar).
+            $birthSet = $birthSets[$p['license_key']] ?? null;
+            if ($birthSet && count($birthSet) > 0) {
+                $pdfBirthBereik = [min($birthSet), max($birthSet)];
+            } elseif (!empty($p['birth_year'])) {
+                $by = (int)$p['birth_year'];
+                $pdfBirthBereik = [$by, $by];
+            } elseif ($p['category'] && $p['pdf_jaar']) {
+                $pdfBirthBereik = _catNaarJaarBereik($p['category'], $p['pdf_jaar']);
+            } elseif ($p['category']) {
+                // Externe zonder uitslagen — gebruik huidig jaar als referentie
+                $pdfBirthBereik = _catNaarJaarBereik($p['category'], $huidigJaar);
+            } else {
+                $pdfBirthBereik = null;
+            }
             $pdfGender = $genderUitCat($p['category'] ?? '');
 
             $pendingWoorden = $normaliseer($p['full_name']);
             $scores = [];
 
             foreach ($allReal as $r) {
+                // Self-match voorkomen — incomplete rijen staan ook in $allReal
+                // zodat pendings↔externen elkaar als suggestie kunnen krijgen,
+                // maar een rij mag zichzelf niet voorstellen.
+                if ($r['license_key'] === $p['license_key']) continue;
+
                 // STAP A: naam-overlap — eerste hard filter
                 $realWoorden = $normaliseer($r['full_name']);
                 if (!$pendingWoorden || !$realWoorden) continue;
@@ -1396,7 +1478,18 @@ if ($action === 'pending_lijst') {
                 // STAP C: leeftijd-/cat-evolutie check
                 // realBirthBereik = persons.birth_year (1 jaar) of afgeleid
                 // uit huidige cat × huidig jaar.
-                $realBirthBereik = _persoonNaarJaarBereik($r, $huidigJaar);
+                //
+                // BELANGRIJK: als de kandidaat ook een pending/extern is met
+                // uitslag-historie, gebruik dan zijn birthSet-intersectie
+                // (precies zoals voor de bron-rij). Anders zou de match
+                // asymmetrisch zijn: A→B matcht wel maar B→A niet, omdat
+                // B's persons.category het smalle bereik niet vangt.
+                $realBirthSet = $birthSets[$r['license_key']] ?? null;
+                if ($realBirthSet && count($realBirthSet) > 0) {
+                    $realBirthBereik = [min($realBirthSet), max($realBirthSet)];
+                } else {
+                    $realBirthBereik = _persoonNaarJaarBereik($r, $huidigJaar);
+                }
                 $leeftijdReden = '';   // voor debug/uitleg in UI
                 if ($pdfBirthBereik && $realBirthBereik) {
                     if (!_bereikenOverlappen($pdfBirthBereik, $realBirthBereik)) {
@@ -1444,6 +1537,11 @@ if ($action === 'pending_lijst') {
                 'club_short'  => $x['r']['club_short'],
                 'score'       => round($x['s'], 2),
                 'reden'       => $x['reden'],
+                // Type-flags zodat UI per suggestie kan tonen of doel een
+                // bestaand KNSB-account, een externe rijder, of een andere
+                // pending is — affecteert iconografie en bevestigingstekst.
+                'is_pending'  => $x['r']['pending_source'] !== null,
+                'is_extern'   => ((int)($x['r']['extern'] ?? 0)) === 1,
             ], array_slice($scores, 0, 5));
         }
         unset($p);
@@ -1451,50 +1549,14 @@ if ($action === 'pending_lijst') {
         // 4) Cross-pending duplicaten detecteren: pendings die mogelijk
         //    dezelfde persoon zijn als een andere pending.
         //
-        //    Belangrijke nuance: een pending kan uitslag-rijen uit MEERDERE
-        //    jaren/cats hebben (bv DJB-2024 + DJA-2025 = zelfde meisje, een
-        //    jaar ouder). Het pdf_jaar-label is alleen het OUDSTE jaar, maar
-        //    voor de identiteitscheck willen we elk paar (jaar × cat) gebruiken.
-        //
-        //    Per pending bouwen we een geboortejaar-INTERSECTIE: het smalst
-        //    mogelijke birth_year-bereik dat past op ALLE (jaar × cat)-
-        //    combinaties van die persoon. Twee pendings zijn mogelijk dezelfde
-        //    iff hun birth-sets overlappen.
+        //    Gebruikt $birthSets dat al hierboven (vóór de suggestie-loop)
+        //    is berekend — intersectie van birth_year-bereiken over alle
+        //    (jaar × cat)-combinaties per pending. Twee pendings zijn
+        //    mogelijk dezelfde iff hun birth-sets overlappen.
         //
         //    Naam-vergelijking via _naamNormalize (UTF-8 safe, geen leestekens,
         //    collapsed whitespace) — anders missen we "Loes  van der Meer" vs
         //    "Loes van der Meer" of "Renée" vs "Renee".
-
-        // Eenmalig: alle (license × jaar × cat)-combinaties ophalen voor pendings
-        $birthSets = [];   // license_key => array(birth_years) of null (onbekend)
-        if (count($pendings)) {
-            $licenses = array_column($pendings, 'license_key');
-            $ph = implode(',', array_fill(0, count($licenses), '?'));
-            $combosStmt = $pdo->prepare("
-                SELECT DISTINCT person_license, YEAR(competition_datum) AS jr, categorie
-                FROM uitslag_afstand
-                WHERE person_license IN ($ph)
-                  AND competition_datum IS NOT NULL
-                  AND categorie IS NOT NULL
-            ");
-            $combosStmt->execute($licenses);
-            $perPersoon = [];
-            foreach ($combosStmt->fetchAll(PDO::FETCH_ASSOC) as $c) {
-                $perPersoon[$c['person_license']][] = ['jr' => (int)$c['jr'], 'cat' => $c['categorie']];
-            }
-            foreach ($licenses as $lic) {
-                $combos = $perPersoon[$lic] ?? [];
-                $set = null;  // null = nog onbekend → eerste iteratie zet 'em
-                foreach ($combos as $c) {
-                    $bereik = _catNaarJaarBereik($c['cat'], $c['jr']);
-                    if (!$bereik) continue;
-                    $jaren = range($bereik[0], $bereik[1]);
-                    $set = ($set === null) ? $jaren : array_values(array_intersect($set, $jaren));
-                    if (empty($set)) break;  // lege intersectie → niet meer reddend
-                }
-                $birthSets[$lic] = $set;  // array of birth_years, lege array, of null
-            }
-        }
 
         // Cat-evolutie en geboortejaar-label per pending. Helpt operator om
         // dezelfde-persoon-judgement te maken zonder de DB te hoeven openen:
@@ -1658,6 +1720,9 @@ if ($action === 'pending_lijst') {
                     'naam_score'       => round($overlapScore, 2),
                     'cat_evolutie'     => $catEvolPerLic[$ander['license_key']] ?? '',
                     'birth_label'      => $birthLabelPerLic[$ander['license_key']] ?? '?',
+                    // Type-flags zodat UI het juiste icoon (📜 vs 🌍) kan tonen
+                    'is_pending'       => $ander['pending_source'] !== null,
+                    'is_extern'        => ((int)($ander['extern'] ?? 0)) === 1,
                 ];
             }
         }
@@ -1681,7 +1746,11 @@ if ($action === 'pending_lijst') {
     exit;
 }
 
-// ── 3c) Pending-persoon zoeken (autocomplete bij handmatig koppelen) ───────
+// ── 3c) Persoon zoeken voor handmatig koppelen (autocomplete) ──────────────
+// Geeft ALLE persons-rijen terug (KNSB + pending + extern) zodat operator
+// vanuit een pending óók een externe als target kan vinden (en omgekeerd) —
+// per result is_pending/is_extern erbij zodat UI het juiste icoon toont.
+// Source-license wordt niet uitgesloten in DB: client filtert zichzelf.
 if ($action === 'pending_zoek_echte') {
     header('Content-Type: application/json; charset=utf-8');
     $q = trim($_GET['q'] ?? '');
@@ -1690,12 +1759,11 @@ if ($action === 'pending_zoek_echte') {
         exit;
     }
     try {
-        // Zoek op naam OR license_key in echte persons (geen pending zelf!)
         $stmt = $pdo->prepare("
-            SELECT license_key, full_name, birth_year, category, club_short
+            SELECT license_key, full_name, birth_year, category, club_short,
+                   pending_source, extern
             FROM persons
-            WHERE pending_source IS NULL
-              AND anonymized_at IS NULL
+            WHERE anonymized_at IS NULL
               AND (full_name LIKE ? OR license_key LIKE ?)
             ORDER BY full_name
             LIMIT 20
@@ -1705,6 +1773,8 @@ if ($action === 'pending_zoek_echte') {
         $rows = $stmt->fetchAll(PDO::FETCH_ASSOC);
         foreach ($rows as &$r) {
             if ($r['birth_year'] !== null) $r['birth_year'] = (int)$r['birth_year'];
+            $r['is_pending'] = $r['pending_source'] !== null;
+            $r['is_extern']  = ((int)($r['extern'] ?? 0)) === 1;
         }
         unset($r);
         echo json_encode(['results' => $rows], JSON_UNESCAPED_UNICODE);
@@ -1715,15 +1785,24 @@ if ($action === 'pending_zoek_echte') {
     exit;
 }
 
-// ── 3d) Pending-persoon koppelen aan echte KNSB-account ────────────────────
-// Verhuist alle uitslag_afstand-rijen van pending_license naar target_license,
-// en verwijdert de pending-rij uit persons. Doet dit transactioneel om geen
-// ghost-rijen achter te laten bij een FK-violation.
+// ── 3d) Incomplete persoon koppelen aan een ander account ──────────────────
+// Verhuist uitslag_afstand + entries + transponders van source_license naar
+// target_license, en verwijdert de source-rij uit persons. Doet dit transac-
+// tioneel om geen ghost-rijen achter te laten bij een FK-violation.
 //
-// Belangrijke check: als target_license al uitslag-rijen heeft voor dezelfde
+// Source mag pending (p-…) of extern (extern=1) zijn — beide zijn "wacht-
+// op-KNSB"-rijen. Target mag elk bestaand persons-record zijn (echt KNSB,
+// pending of extern), zolang het niet de source zelf is. Zo kun je:
+//   • pending → KNSB-account (oorspronkelijke flow)
+//   • pending → extern (handmatige inschrijving herkennen als pending)
+//   • extern  → pending (CSV-import maakte ten onrechte een nieuwe externe)
+//   • extern  → KNSB-account (externe matched alsnog een KNSB-licentiehouder)
+//
+// Belangrijke check: als target_license al rijen heeft voor dezelfde
 // (comp, dc, dist, split) — wat NIET zou moeten gebeuren maar kan als de
 // rijder ondertussen al apart geïmporteerd is — dan zou de UNIQUE-key
-// breken. In dat geval geven we een duidelijke foutmelding.
+// breken. We DELETEn dan de source-versie en houden de doel-versie.
+// Hetzelfde patroon voor entries (per comp) en transponders (per comp+slot).
 if ($action === 'pending_link') {
     header('Content-Type: application/json; charset=utf-8');
     $pendingLic = trim($body['pending_license'] ?? '');
@@ -1733,29 +1812,29 @@ if ($action === 'pending_link') {
         echo json_encode(['error' => 'pending_license en target_license verplicht']);
         exit;
     }
-    if (strpos($pendingLic, 'p-') !== 0) {
+    if ($pendingLic === $targetLic) {
         http_response_code(400);
-        echo json_encode(['error' => 'pending_license moet beginnen met "p-"']);
-        exit;
-    }
-    if (strpos($targetLic, 'p-') === 0) {
-        http_response_code(400);
-        echo json_encode(['error' => 'target_license mag geen pending-key zijn']);
+        echo json_encode(['error' => 'Bron en doel zijn dezelfde rij']);
         exit;
     }
     try {
-        // Verifieer beide bestaan
-        $checkStmt = $pdo->prepare("SELECT license_key, pending_source, full_name FROM persons WHERE license_key = ?");
+        // Verifieer beide bestaan + bepaal types
+        $checkStmt = $pdo->prepare("SELECT license_key, pending_source, extern, full_name FROM persons WHERE license_key = ?");
         $checkStmt->execute([$pendingLic]);
         $pending = $checkStmt->fetch(PDO::FETCH_ASSOC);
         if (!$pending) {
             http_response_code(404);
-            echo json_encode(['error' => "Pending-persoon $pendingLic niet gevonden"]);
+            echo json_encode(['error' => "Bron-persoon $pendingLic niet gevonden"]);
             exit;
         }
-        if ($pending['pending_source'] === null) {
+        // Source moet incompleet zijn (pending OR extern). Een echte KNSB-rij
+        // verwijderen via deze flow zou onbedoeld zijn — voor merging tussen
+        // echte accounts is een aparte admin-flow nodig.
+        $sourceIsPending = $pending['pending_source'] !== null;
+        $sourceIsExtern  = ((int)($pending['extern'] ?? 0)) === 1;
+        if (!$sourceIsPending && !$sourceIsExtern) {
             http_response_code(400);
-            echo json_encode(['error' => 'Bron-persoon is geen pending-rij']);
+            echo json_encode(['error' => 'Bron-persoon is geen pending of externe rij']);
             exit;
         }
         $checkStmt->execute([$targetLic]);
@@ -1765,18 +1844,13 @@ if ($action === 'pending_link') {
             echo json_encode(['error' => "Doel-persoon $targetLic niet gevonden"]);
             exit;
         }
-        if ($target['pending_source'] !== null) {
-            http_response_code(400);
-            echo json_encode(['error' => 'Doel-persoon is zelf nog een pending-rij']);
-            exit;
-        }
 
         $pdo->beginTransaction();
 
+        // ── uitslag_afstand ──
         // Conflict-check: rijen die al bestaan voor het doel met dezelfde
-        // (comp, dc, dist, split) → die kunnen we niet zomaar verplaatsen
-        // (UNIQUE violation). We DELETEn de pending-versie en houden de
-        // doel-versie (die is officieel/recenter).
+        // (comp, dc, dist, split) → kunnen we niet zomaar verplaatsen
+        // (UNIQUE violation). DELETE de source-versie, houd de doel-versie.
         $delConflict = $pdo->prepare("
             DELETE pend
             FROM uitslag_afstand pend
@@ -1791,7 +1865,6 @@ if ($action === 'pending_link') {
         $delConflict->execute([$targetLic, $pendingLic]);
         $conflictDeleted = $delConflict->rowCount();
 
-        // Hoofdverhuizing
         $moveStmt = $pdo->prepare("
             UPDATE uitslag_afstand
             SET    person_license = ?
@@ -1800,18 +1873,77 @@ if ($action === 'pending_link') {
         $moveStmt->execute([$targetLic, $pendingLic]);
         $verhuisd = $moveStmt->rowCount();
 
-        // Verwijder de pending-rij
-        $delPending = $pdo->prepare("DELETE FROM persons WHERE license_key = ? AND pending_source IS NOT NULL");
+        // ── entries (alleen relevant als source extern is — pendings hebben
+        // ze nooit). UNIQUE-key is (distance_combination_id, person_license)
+        // — entries heeft NIET direct een competition_id kolom, alleen via
+        // de DC. Dus dedupe op distance_combination_id.
+        $delEntriesConflict = $pdo->prepare("
+            DELETE src
+            FROM entries src
+            JOIN entries tgt
+              ON tgt.distance_combination_id = src.distance_combination_id
+             AND tgt.person_license = ?
+            WHERE src.person_license = ?
+        ");
+        $delEntriesConflict->execute([$targetLic, $pendingLic]);
+        $entriesConflictDeleted = $delEntriesConflict->rowCount();
+
+        $moveEntries = $pdo->prepare("
+            UPDATE entries
+            SET    person_license = ?
+            WHERE  person_license = ?
+        ");
+        $moveEntries->execute([$targetLic, $pendingLic]);
+        $entriesVerhuisd = $moveEntries->rowCount();
+
+        // ── transponders. UNIQUE-key is (competition_id, person_license, slot).
+        $delTpConflict = $pdo->prepare("
+            DELETE src
+            FROM transponders src
+            JOIN transponders tgt
+              ON tgt.competition_id = src.competition_id
+             AND tgt.slot           = src.slot
+             AND tgt.person_license = ?
+            WHERE src.person_license = ?
+        ");
+        $delTpConflict->execute([$targetLic, $pendingLic]);
+        $tpConflictDeleted = $delTpConflict->rowCount();
+
+        $moveTp = $pdo->prepare("
+            UPDATE transponders
+            SET    person_license = ?
+            WHERE  person_license = ?
+        ");
+        $moveTp->execute([$targetLic, $pendingLic]);
+        $tpVerhuisd = $moveTp->rowCount();
+
+        // ── Target's type blijft zoals 't is — geen "smart promotion".
+        // Operator's intentie respecteren: als hij vanuit pending naar extern
+        // klikt → eindresultaat is extern. Andersom: extern naar pending →
+        // eindresultaat pending. Dat is de duidelijkste mental model — wat
+        // je kiest, krijg je. Een KNSB-target blijft ook altijd KNSB (bron
+        // moet pending OF extern zijn, dus dat is automatisch consistent).
+
+        // ── Verwijder de source-rij (zowel pending als extern toegestaan)
+        $delPending = $pdo->prepare("
+            DELETE FROM persons
+            WHERE license_key = ?
+              AND (pending_source IS NOT NULL OR extern = 1)
+        ");
         $delPending->execute([$pendingLic]);
 
         $pdo->commit();
 
         echo json_encode([
-            'ok'              => true,
-            'verhuisd'        => $verhuisd,
-            'conflict_skip'   => $conflictDeleted,
-            'pending_naam'    => $pending['full_name'],
-            'target_naam'     => $target['full_name'],
+            'ok'                  => true,
+            'verhuisd'            => $verhuisd,
+            'conflict_skip'       => $conflictDeleted,
+            'entries_verhuisd'    => $entriesVerhuisd,
+            'entries_conflict'    => $entriesConflictDeleted,
+            'tp_verhuisd'         => $tpVerhuisd,
+            'tp_conflict'         => $tpConflictDeleted,
+            'pending_naam'        => $pending['full_name'],
+            'target_naam'         => $target['full_name'],
         ], JSON_UNESCAPED_UNICODE);
     } catch (Throwable $e) {
         if ($pdo->inTransaction()) $pdo->rollBack();
@@ -1897,31 +2029,68 @@ if ($action === 'pending_merge') {
     exit;
 }
 
-// ── 3e) Pending-persoon verwijderen (zonder koppelen) ──────────────────────
-// Voor het geval een pending-rij ten onrechte is aangemaakt en je 'em
-// gewoon weg wilt. Verwijdert ook alle uitslag_afstand-rijen die ervan
-// afhangen — FK cascade.
+// ── 3e) Pending- of externe rij verwijderen (zonder koppelen) ──────────────
+// Voor het geval een wacht-op-KNSB-rij ten onrechte is aangemaakt en je 'em
+// gewoon weg wilt. Verwijdert ook alle uitslag_afstand-, entries- en
+// transponder-rijen die ervan afhangen. Source moet pending (pending_source
+// IS NOT NULL) OF extern (extern = 1) zijn — echte KNSB-accounts kunnen
+// niet via deze flow verwijderd worden (zou onbedoeld gevoelig zijn).
 if ($action === 'pending_delete') {
     header('Content-Type: application/json; charset=utf-8');
     $lic = trim($body['license_key'] ?? '');
-    if ($lic === '' || strpos($lic, 'p-') !== 0) {
+    if ($lic === '') {
         http_response_code(400);
-        echo json_encode(['error' => 'Geldige pending license_key vereist (begint met "p-")']);
+        echo json_encode(['error' => 'license_key verplicht']);
         exit;
     }
     try {
+        // Verifieer dat 't een pending of extern is — geen KNSB-account
+        $chk = $pdo->prepare("SELECT pending_source, extern, full_name FROM persons WHERE license_key = ?");
+        $chk->execute([$lic]);
+        $persoon = $chk->fetch(PDO::FETCH_ASSOC);
+        if (!$persoon) {
+            http_response_code(404);
+            echo json_encode(['error' => "Persoon $lic niet gevonden"]);
+            exit;
+        }
+        $isPending = $persoon['pending_source'] !== null;
+        $isExtern  = ((int)($persoon['extern'] ?? 0)) === 1;
+        if (!$isPending && !$isExtern) {
+            http_response_code(400);
+            echo json_encode(['error' => 'Alleen pending- of externe rijen kunnen via deze knop verwijderd worden']);
+            exit;
+        }
+
         $pdo->beginTransaction();
+        // Volgorde: kindrijen → ouder. uitslag_afstand + entries + transponders
+        // hangen allemaal aan person_license, niet aan elkaar — onafhankelijk.
         $delUa = $pdo->prepare("DELETE FROM uitslag_afstand WHERE person_license = ?");
         $delUa->execute([$lic]);
         $uaWeg = $delUa->rowCount();
-        $delP = $pdo->prepare("DELETE FROM persons WHERE license_key = ? AND pending_source IS NOT NULL");
+
+        $delEnt = $pdo->prepare("DELETE FROM entries WHERE person_license = ?");
+        $delEnt->execute([$lic]);
+        $entriesWeg = $delEnt->rowCount();
+
+        $delTp = $pdo->prepare("DELETE FROM transponders WHERE person_license = ?");
+        $delTp->execute([$lic]);
+        $tpWeg = $delTp->rowCount();
+
+        $delP = $pdo->prepare("
+            DELETE FROM persons
+            WHERE license_key = ?
+              AND (pending_source IS NOT NULL OR extern = 1)
+        ");
         $delP->execute([$lic]);
         $personWeg = $delP->rowCount();
+
         $pdo->commit();
         echo json_encode([
             'ok' => true,
-            'uitslagen_verwijderd' => $uaWeg,
-            'person_verwijderd' => $personWeg,
+            'uitslagen_verwijderd'    => $uaWeg,
+            'entries_verwijderd'      => $entriesWeg,
+            'transponders_verwijderd' => $tpWeg,
+            'person_verwijderd'       => $personWeg,
         ]);
     } catch (Throwable $e) {
         if ($pdo->inTransaction()) $pdo->rollBack();
