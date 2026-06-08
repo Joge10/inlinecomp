@@ -480,7 +480,167 @@ async function _csvNaarStap4() {
         );
         if (!ok) return;
     }
-    alert('Stap 4 (Persoon-match review) komt in de volgende implementatie-ronde.');
+
+    // Match-preview ophalen
+    if (foutEl) foutEl.style.display = 'none';
+    try {
+        const res = await fetch('api/csv_import.php?action=match_preview', {
+            method:  'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body:    JSON.stringify({
+                competition_id: _csvImportState.compId,
+                mapping:        _csvImportState.mapping,
+                rows:           _csvImportState.rows,
+                cat_mapping:    _csvImportState.catMapping,
+            }),
+        });
+        const data = await res.json();
+        if (!res.ok || data.error) throw new Error(data.error || 'HTTP ' + res.status);
+        _csvImportState.matches      = data.matches;
+        // Per rij: opslaan welke actie de operator kiest (= recommended default).
+        // 'link' + license_key, '__new__', of '__skip__'.
+        _csvImportState.matchActies  = {};
+        data.matches.forEach(m => {
+            _csvImportState.matchActies[m.row_idx] = m.recommended;
+        });
+    } catch (err) {
+        if (foutEl) {
+            foutEl.textContent   = 'Fout bij match-preview: ' + err.message;
+            foutEl.style.display = '';
+        }
+        return;
+    }
+
+    _csvOpenStap4();
+}
+
+// ── Stap 4: Persoon-match review ────────────────────────────────────────────
+
+function _csvOpenStap4() {
+    const matches = _csvImportState.matches || [];
+    const stats   = _csvMatchStats(matches);
+
+    const rijenHtml = matches.map(m => _csvMatchRijHtml(m)).join('');
+
+    const html = `
+        <div class="modal-overlay" id="csv-modal" data-stap="4">
+            <div class="modal-dialog csv-modal-dialog csv-modal-dialog-wide">
+                <div class="modal-header">
+                    <h3>📥 CSV Importeren — Stap 4 van 4: Persoon-match review</h3>
+                    <button class="modal-sluit" id="csv-sluit" title="Sluiten">&times;</button>
+                </div>
+                <div class="modal-body csv-modal-body-scroll">
+                    <p class="csv-uitleg">
+                        Per CSV-rij is gezocht naar een bestaande persoon in de database.
+                        Controleer de match-status en pas indien nodig aan via de dropdown.
+                    </p>
+                    <div class="csv-match-stats">
+                        <span class="csv-stat csv-stat-link">🟢 Auto-link: <strong>${stats.tier12}</strong></span>
+                        <span class="csv-stat csv-stat-kies">🟡 Meerdere kandidaten: <strong>${stats.tier3}</strong></span>
+                        <span class="csv-stat csv-stat-nieuw">🔴 Nieuw extern: <strong>${stats.tier4}</strong></span>
+                        <span class="csv-stat">Totaal: <strong>${matches.length}</strong></span>
+                    </div>
+                    <table class="csv-match-tabel">
+                        <thead>
+                            <tr>
+                                <th>#</th>
+                                <th>Naam uit CSV</th>
+                                <th>Club</th>
+                                <th>Startnr</th>
+                                <th>Status</th>
+                                <th>Actie</th>
+                            </tr>
+                        </thead>
+                        <tbody id="csv-match-tbody">${rijenHtml}</tbody>
+                    </table>
+                    <div id="csv-commit-fout" class="csv-fout" style="display:none;"></div>
+                </div>
+                <div class="modal-knoppen">
+                    <button class="btn-secondary" id="csv-terug">← Vorige</button>
+                    <button class="btn-secondary" id="csv-annuleer">Annuleren</button>
+                    <button class="btn-primary" id="csv-importeer">✓ Importeer</button>
+                </div>
+            </div>
+        </div>`;
+
+    document.getElementById('csv-modal')?.remove();
+    document.body.insertAdjacentHTML('beforeend', html);
+
+    document.getElementById('csv-sluit').addEventListener('click', _csvSluit);
+    document.getElementById('csv-annuleer').addEventListener('click', _csvSluit);
+    document.getElementById('csv-terug').addEventListener('click', _csvOpenStap3);
+    document.getElementById('csv-importeer').addEventListener('click', _csvDoeImport);
+
+    // Bind dropdown-listeners per rij
+    document.querySelectorAll('.csv-match-actie').forEach(sel => {
+        sel.addEventListener('change', () => {
+            _csvImportState.matchActies[parseInt(sel.dataset.rowIdx)] = sel.value;
+        });
+    });
+}
+
+function _csvMatchStats(matches) {
+    const stats = { tier12: 0, tier3: 0, tier4: 0 };
+    matches.forEach(m => {
+        if (m.tier <= 2)       stats.tier12++;
+        else if (m.tier === 3) stats.tier3++;
+        else                   stats.tier4++;
+    });
+    return stats;
+}
+
+function _csvMatchRijHtml(m) {
+    const tierLabel = {
+        1: '🟢 KNSB-nr match',
+        2: '🟢 Naam+club match',
+        3: '🟡 Meerdere kandidaten',
+        4: '🔴 Geen match → nieuw',
+    }[m.tier];
+    const rijKlasse = m.tier <= 2 ? 'csv-match-rij-ok'
+                    : m.tier === 3 ? 'csv-match-rij-keuze'
+                    : 'csv-match-rij-nieuw';
+    const huidigeKeuze = _csvImportState.matchActies[m.row_idx] || m.recommended;
+    // Bouw dropdown-opties
+    const opts = [
+        ...m.candidates.map(c => {
+            const sel  = c.license_key === huidigeKeuze ? ' selected' : '';
+            const meta = [
+                c.birth_year ? `geb. ${c.birth_year}` : null,
+                c.club || null,
+                c.extern ? 'extern' : null,
+            ].filter(Boolean).join(', ');
+            return `<option value="${_csvEsc(c.license_key)}"${sel}>` +
+                   `Koppel: ${_csvEsc(c.full_name)} (${_csvEsc(meta || '—')})` +
+                   `</option>`;
+        }),
+        `<option value="__new__"${huidigeKeuze === '__new__' ? ' selected' : ''}>` +
+        `Nieuw extern persoon aanmaken</option>`,
+        `<option value="__skip__"${huidigeKeuze === '__skip__' ? ' selected' : ''}>` +
+        `⊘ Skip deze rij</option>`,
+    ].join('');
+    return `<tr class="${rijKlasse}">
+        <td>${m.row_idx + 1}</td>
+        <td>${_csvEsc(m.naam)}</td>
+        <td>${_csvEsc(m.club)}</td>
+        <td>${_csvEsc(m.startnr)}</td>
+        <td>${tierLabel}</td>
+        <td>
+            <select class="csv-match-actie" data-row-idx="${m.row_idx}">
+                ${opts}
+            </select>
+        </td>
+    </tr>`;
+}
+
+async function _csvDoeImport() {
+    const foutEl = document.getElementById('csv-commit-fout');
+    foutEl.style.display = 'none';
+    alert('Commit-endpoint volgt in de volgende implementatie-ronde.\n\n' +
+          'Voorbereid voor import:\n' +
+          `- ${_csvImportState.matches.length} rijen totaal\n` +
+          `- ${Object.values(_csvImportState.matchActies).filter(v => v !== '__skip__' && v !== '__new__').length} koppelingen aan bestaande personen\n` +
+          `- ${Object.values(_csvImportState.matchActies).filter(v => v === '__new__').length} nieuwe externe personen\n` +
+          `- ${Object.values(_csvImportState.matchActies).filter(v => v === '__skip__').length} overgeslagen`);
 }
 
 // ── Helpers voor stap 3 ─────────────────────────────────────────────────────

@@ -6087,3 +6087,40 @@ col.live-col-rondes  { width: 40px; }
 }
 .csv-dc-tabel td:first-child small { color: #889; }
 
+/* Stap 4: Match-review */
+.csv-match-stats {
+    display: flex; gap: 14px; flex-wrap: wrap;
+    background: #f4f7fb; padding: 8px 12px; border-radius: 4px;
+    margin-bottom: 12px; font-size: 12.5px; color: #345;
+}
+.csv-stat strong { color: #2E75B6; }
+.csv-stat-link strong   { color: #2a7a2a; }
+.csv-stat-kies strong   { color: #c47200; }
+.csv-stat-nieuw strong  { color: #b71c1c; }
+.csv-match-tabel {
+    width: 100%; border-collapse: collapse; font-size: 12.5px;
+    background: #fff; border: 1px solid #dde3ea;
+}
+.csv-match-tabel th {
+    background: #2E75B6; color: #fff; padding: 6px 8px;
+    text-align: left; font-weight: 600; font-size: 12px;
+    position: sticky; top: 0; z-index: 1;
+}
+.csv-match-tabel td {
+    padding: 4px 8px; border-bottom: 1px solid #eef2f6; vertical-align: middle;
+}
+.csv-match-tabel td:first-child {
+    color: #889; text-align: center; width: 32px;
+    font-variant-numeric: tabular-nums;
+}
+.csv-match-tabel .csv-match-actie {
+    width: 100%; padding: 3px 6px; font-size: 12px;
+    border: 1px solid #b9c5d4; border-radius: 3px; background: #fff;
+}
+.csv-match-rij-ok    td { background: #f0f8f0; }
+.csv-match-rij-keuze td { background: #fff8e6; }
+.csv-match-rij-nieuw td { background: #fdf0f0; }
+.csv-match-rij-ok:hover td    { background: #e1f0e1; }
+.csv-match-rij-keuze:hover td { background: #ffefcc; }
+.csv-match-rij-nieuw:hover td { background: #fce0e0; }
+

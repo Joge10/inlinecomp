@@ -276,7 +276,198 @@ if ($action === 'dcs') {
     exit;
 }
 
-// match_preview en commit komen in volgende stappen.
+// ── Actie: match_preview ───────────────────────────────────────────────────
+//   Per CSV-rij een match-cascade tegen persons-tabel uitvoeren en
+//   kandidaten teruggeven. Geen DB-schrijven.
+//
+//   POST body (JSON): { competition_id, mapping, rows, cat_mapping }
+//     - mapping: { kolIdx: targetType } uit stap 2
+//     - rows:    array van data-rijen (string-arrays)
+//     - cat_mapping: { 'Pupil|M': 'HP1', ... } uit stap 3
+//
+//   Returns: { ok, matches: [...] }
+//     matches: per rij { row_idx, tier, candidates, recommended }
+//       - tier: 1 (startnr exact), 2 (naam+club), 3 (alleen naam, meerdere),
+//               4 (geen match → nieuw)
+//       - candidates: [{ license_key, full_name, club, birth_year }]
+//       - recommended: license_key of '__new__' (te accepteren op default)
+if ($action === 'match_preview') {
+    if ($method !== 'POST') {
+        http_response_code(405);
+        echo json_encode(['error' => 'match_preview vereist POST']);
+        exit;
+    }
+    $body       = json_decode(file_get_contents('php://input'), true);
+    $compId     = trim($body['competition_id'] ?? '');
+    $mapping    = $body['mapping']    ?? [];
+    $rows       = $body['rows']       ?? [];
+    if (!$compId) {
+        http_response_code(400);
+        echo json_encode(['error' => 'competition_id ontbreekt']);
+        exit;
+    }
+    if (!is_array($rows) || !$rows) {
+        http_response_code(400);
+        echo json_encode(['error' => 'rows ontbreekt']);
+        exit;
+    }
+    checkCompetitieToegang($pdo, $_authUser, $compId);
+
+    // Helper: zoek de kolom-index voor een target-type uit de mapping
+    $kolVoor = function(string $target) use ($mapping) {
+        foreach ($mapping as $kol => $t) {
+            if ($t === $target) return (int)$kol;
+        }
+        return null;
+    };
+    $kolNaamFull   = $kolVoor('name_full');
+    $kolNaamFirst  = $kolVoor('name_first');
+    $kolNaamTussen = $kolVoor('name_tussen');
+    $kolNaamLast   = $kolVoor('name_last');
+    $kolStartnr    = $kolVoor('start_number');
+    $kolClub       = $kolVoor('club_short') ?? $kolVoor('club_full') ?? $kolVoor('club_of_sponsor');
+
+    // Bouw per rij de gerealiseerde naam + club + startnr
+    $rijData = [];
+    foreach ($rows as $i => $r) {
+        $naam = '';
+        if ($kolNaamFull !== null && !empty($r[$kolNaamFull])) {
+            $naam = trim($r[$kolNaamFull]);
+        } elseif ($kolNaamFirst !== null && $kolNaamLast !== null) {
+            $delen = [
+                trim($r[$kolNaamFirst] ?? ''),
+                $kolNaamTussen !== null ? trim($r[$kolNaamTussen] ?? '') : '',
+                trim($r[$kolNaamLast] ?? ''),
+            ];
+            $naam = implode(' ', array_filter($delen, fn($x) => $x !== ''));
+        }
+        $club    = $kolClub    !== null ? trim($r[$kolClub]    ?? '') : '';
+        $startnr = $kolStartnr !== null ? trim($r[$kolStartnr] ?? '') : '';
+        $rijData[$i] = [
+            'naam'    => $naam,
+            'club'    => $club,
+            'startnr' => $startnr,
+        ];
+    }
+
+    // Verzamel alle unieke namen + startnummers + clubs voor bulk-queries.
+    $alleNamen    = array_unique(array_filter(array_column($rijData, 'naam')));
+    $alleStartnrs = array_filter(array_column($rijData, 'startnr'),
+                                 fn($s) => $s !== '' && ctype_digit($s));
+
+    // Bulk-fetch potentiële matches per categorie
+    $byStartnr = [];   // start_number → [person row]
+    if ($alleStartnrs) {
+        $ph = implode(',', array_fill(0, count($alleStartnrs), '?'));
+        $stmt = $pdo->prepare("
+            SELECT license_key, full_name, short_name, birth_year, gender,
+                   start_number, club_short, club_full, extern
+            FROM persons
+            WHERE start_number IN ($ph)
+              AND anonymized_at IS NULL
+              AND pending_source IS NULL
+        ");
+        $stmt->execute(array_values($alleStartnrs));
+        foreach ($stmt->fetchAll(PDO::FETCH_ASSOC) as $p) {
+            $byStartnr[(int)$p['start_number']][] = $p;
+        }
+    }
+
+    $byNaam = [];      // genormaliseerde-naam → [person row]
+    if ($alleNamen) {
+        // Voor naam-match: case-insensitive vergelijking, met short_name als
+        // tweede kans. Geen LIKE wildcards — alleen exact-match.
+        $ph = implode(',', array_fill(0, count($alleNamen), '?'));
+        $stmt = $pdo->prepare("
+            SELECT license_key, full_name, short_name, birth_year, gender,
+                   start_number, club_short, club_full, extern
+            FROM persons
+            WHERE (LOWER(full_name) IN ($ph) OR LOWER(short_name) IN ($ph))
+              AND anonymized_at IS NULL
+              AND pending_source IS NULL
+        ");
+        $lowerNamen = array_map('mb_strtolower', $alleNamen);
+        $stmt->execute(array_merge($lowerNamen, $lowerNamen));
+        foreach ($stmt->fetchAll(PDO::FETCH_ASSOC) as $p) {
+            $sleutel = mb_strtolower($p['full_name']);
+            $byNaam[$sleutel][] = $p;
+            if ($p['short_name']) {
+                $sleutel2 = mb_strtolower($p['short_name']);
+                if ($sleutel2 !== $sleutel) $byNaam[$sleutel2][] = $p;
+            }
+        }
+    }
+
+    // Match-cascade per rij
+    $matches = [];
+    foreach ($rijData as $i => $rd) {
+        $kandidaten = [];
+        $tier       = 4;   // default: geen match
+
+        // Tier 1: KNSB-startnummer exact
+        if ($rd['startnr'] !== '' && isset($byStartnr[(int)$rd['startnr']])) {
+            $kandidaten = $byStartnr[(int)$rd['startnr']];
+            $tier       = 1;
+        }
+        // Tier 2/3: naam-match
+        if (!$kandidaten && $rd['naam']) {
+            $sleutel = mb_strtolower($rd['naam']);
+            $potentieel = $byNaam[$sleutel] ?? [];
+            if ($potentieel) {
+                // Tier 2 als één van de matches dezelfde club heeft
+                $clubLow = mb_strtolower($rd['club']);
+                if ($clubLow !== '') {
+                    foreach ($potentieel as $p) {
+                        if (mb_strtolower($p['club_short'] ?? '') === $clubLow
+                         || mb_strtolower($p['club_full'] ?? '')  === $clubLow) {
+                            $kandidaten = [$p];
+                            $tier       = 2;
+                            break;
+                        }
+                    }
+                }
+                if (!$kandidaten) {
+                    $kandidaten = $potentieel;
+                    $tier       = count($potentieel) === 1 ? 2 : 3;
+                }
+            }
+        }
+
+        // Format kandidaten voor frontend
+        $candFmt = array_map(fn($p) => [
+            'license_key' => $p['license_key'],
+            'full_name'   => $p['full_name'],
+            'club'        => $p['club_short'] ?: $p['club_full'] ?: '',
+            'birth_year'  => $p['birth_year'] !== null ? (int)$p['birth_year'] : null,
+            'start_number'=> $p['start_number'] !== null ? (int)$p['start_number'] : null,
+            'extern'      => (int)($p['extern'] ?? 0) === 1,
+        ], $kandidaten);
+
+        // Aanbevolen actie:
+        //   tier 1 / 2 → link aan de eerste (sterke match)
+        //   tier 3 → operator moet kiezen, default eerste
+        //   tier 4 → '__new__' (nieuwe externe persoon)
+        $aanbevolen = $tier <= 3 && $candFmt ? $candFmt[0]['license_key'] : '__new__';
+
+        $matches[] = [
+            'row_idx'      => $i,
+            'naam'         => $rd['naam'],
+            'club'         => $rd['club'],
+            'startnr'      => $rd['startnr'],
+            'tier'         => $tier,
+            'candidates'   => $candFmt,
+            'recommended'  => $aanbevolen,
+        ];
+    }
+
+    echo json_encode([
+        'ok'      => true,
+        'matches' => $matches,
+    ], JSON_UNESCAPED_UNICODE);
+    exit;
+}
+
+// commit komt in volgende stap.
 
 http_response_code(400);
 echo json_encode(['error' => "Onbekende action: " . htmlspecialchars($action)]);
