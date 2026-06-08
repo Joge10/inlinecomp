@@ -107,7 +107,115 @@ if ($action === 'detail') {
     $stmt->execute([$compId]);
     $dcs = $stmt->fetchAll(PDO::FETCH_ASSOC);
 
-    $groepen = array_map(function($dc) {
+    // Entries + persons + transponders per DC ophalen
+    $dcIds = array_column($dcs, 'id');
+    $entriesPerDc = [];
+    $personRijen  = [];
+    if ($dcIds) {
+        $ph = implode(',', array_fill(0, count($dcIds), '?'));
+        $stmt = $pdo->prepare("
+            SELECT e.distance_combination_id AS dc_id,
+                   e.person_license, e.status, e.reserve, e.knsb_entry_id,
+                   p.full_name, p.short_name, p.birth_year, p.gender,
+                   p.category, p.nationality, p.start_number,
+                   p.club_code, p.club_short, p.club_full, p.sponsor, p.city,
+                   p.extern, p.extern_federatie
+            FROM entries e
+            JOIN persons p ON p.license_key = e.person_license
+            WHERE e.distance_combination_id IN ($ph)
+              AND p.anonymized_at IS NULL
+            ORDER BY p.start_number, p.full_name
+        ");
+        $stmt->execute($dcIds);
+        foreach ($stmt->fetchAll(PDO::FETCH_ASSOC) as $row) {
+            $entriesPerDc[$row['dc_id']][] = $row;
+            $personRijen[$row['person_license']] = $row;
+        }
+    }
+
+    // Transponders (slot 0 = actief, 1-2 = KNSB, 3+ = extra)
+    $dbTp = [];
+    if ($personRijen) {
+        $ph = implode(',', array_fill(0, count($personRijen), '?'));
+        $stmt = $pdo->prepare("
+            SELECT * FROM transponders
+            WHERE competition_id = ? AND person_license IN ($ph)
+        ");
+        $stmt->execute(array_merge([$compId], array_keys($personRijen)));
+        foreach ($stmt->fetchAll(PDO::FETCH_ASSOC) as $t) {
+            $dbTp[$t['person_license']][(int)$t['slot']] = $t;
+        }
+    }
+
+    // Bouw competitors per DC in vergelijk.php-compatibele shape (org-
+    // toegevoegde-stijl: alle data uit eigen DB, geen KNSB-feed-diff).
+    $bouwCompetitor = function(array $row) use ($dbTp) {
+        $lk  = $row['person_license'];
+        $tps = $dbTp[$lk] ?? [];
+        $tp0 = $tps[0] ?? null;
+        $tp1 = $tps[1] ?? null;
+        $tp2 = $tps[2] ?? null;
+        $tpExtra = [];
+        foreach ($tps as $slot => $tp) {
+            if ($slot >= 3) $tpExtra[] = $tp['code'];
+        }
+        // db_person = volledige rij voor frontend (gebruikt o.a. start_number)
+        $dbPerson = [
+            'license_key'  => $lk,
+            'full_name'    => $row['full_name'],
+            'short_name'   => $row['short_name'],
+            'birth_year'   => $row['birth_year'] !== null ? (int)$row['birth_year'] : null,
+            'gender'       => $row['gender'] !== null ? (int)$row['gender'] : null,
+            'category'     => $row['category'],
+            'nationality'  => $row['nationality'] ?: 'NED',
+            'start_number' => $row['start_number'] !== null ? (int)$row['start_number'] : null,
+            'club_code'    => $row['club_code'],
+            'club_short'   => $row['club_short'],
+            'club_full'    => $row['club_full'],
+            'sponsor'      => $row['sponsor'],
+            'city'         => $row['city'],
+            'extern'       => (int)($row['extern'] ?? 0) === 1,
+        ];
+        return [
+            'license_key'        => $lk,
+            'is_anoniem'         => false,
+            'knsb_entry_id'      => $row['knsb_entry_id'] ?? null,
+            'knsb_status'        => (int)$row['status'],
+            'entry_status'       => (int)$row['status'],
+            'reserve'            => $row['reserve'] !== null ? (int)$row['reserve'] : null,
+            'is_new'             => false,
+            'diffs'              => [],
+            // 'knsb'-blok bevat voor handmatig dezelfde data als db_person
+            // (geen aparte KNSB-bron om mee te vergelijken).
+            'knsb' => [
+                'start_number' => $dbPerson['start_number'],
+                'full_name'    => $dbPerson['full_name'],
+                'short_name'   => $dbPerson['short_name'],
+                'gender'       => $dbPerson['gender'],
+                'category'     => $dbPerson['category'],
+                'nationality'  => $dbPerson['nationality'],
+                'club_code'    => $dbPerson['club_code'],
+                'club_short'   => $dbPerson['club_short'],
+                'club_full'    => $dbPerson['club_full'],
+                'city'         => $dbPerson['city'],
+                'transponder1' => $tp1 ? $tp1['code'] : null,
+                'transponder2' => $tp2 ? $tp2['code'] : null,
+            ],
+            'db_person'          => $dbPerson,
+            'db_entry'           => [
+                'status'  => (int)$row['status'],
+                'reserve' => $row['reserve'],
+            ],
+            'db_tp1'             => $tp1,
+            'db_tp2'             => $tp2,
+            'db_tp_extra'        => $tpExtra,
+            'db_tp_actief'       => $tp0 ? $tp0['code'] : null,
+            'db_tp_actief_isset' => $tp0 !== null,
+        ];
+    };
+
+    $groepen = array_map(function($dc) use ($entriesPerDc, $bouwCompetitor) {
+        $competitors = array_map($bouwCompetitor, $entriesPerDc[$dc['id']] ?? []);
         return [
             'dc_id'           => $dc['id'],
             'dc_name'         => $dc['name'],
@@ -116,7 +224,7 @@ if ($action === 'detail') {
             'merge_group'     => $dc['merge_group'],
             'merge_label'     => $dc['merge_label'],
             'knsb_distances'  => [],   // geen KNSB-bron, afstanden komen uit afstanden-beheer
-            'competitors'     => [],   // rijder-import komt in Fase 2
+            'competitors'     => $competitors,
         ];
     }, $dcs);
 

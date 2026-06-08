@@ -881,7 +881,11 @@ function toonVergelijkTabel(cat) {
     // Sync entries.reserve met huidige KNSB-feed-state. Async, niet awaiten
     // — het is een achtergrond-update die alleen impact heeft op latere
     // startlijst_genereer-aanroepen, niet op de huidige render.
-    _syncReservesNaarDB(cat);
+    // Skip voor handmatige wedstrijden: er IS geen KNSB-feed om mee te
+    // syncen + reserves_sync.php is alleen relevant voor KNSB-flow.
+    if (!(typeof huidigComp !== 'undefined' && huidigComp?.is_handmatig)) {
+        _syncReservesNaarDB(cat);
+    }
 
     if (!cat.competitors.length) {
         content.innerHTML =
