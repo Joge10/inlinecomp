@@ -2626,6 +2626,17 @@ function _liveBind(idx) {
     el('live-import-map-'     + idx)?.addEventListener('change', () => _liveImportMapGekozen(idx));
     el('live-import-mapfilter-'+ idx)?.addEventListener('input',  () => _liveImportMapFilter(idx));
     el('live-import-sel-'     + idx)?.addEventListener('change', () => _liveImportPreview(idx));
+    // Bestand-dropdown: poll alleen actief terwijl de operator daadwerkelijk
+    // naar de bestandenlijst kijkt (focus). Geen onnodige verzoeken tussen
+    // heats of als 'ie al een bestand heeft gekozen. Op focus: één directe
+    // fetch + interval. Op blur: interval stoppen.
+    el('live-import-sel-'     + idx)?.addEventListener('focus', () => {
+        const mapSel = el('live-import-map-' + idx);
+        if (!mapSel?.value) return;   // geen map gekozen → niets te pollen
+        _liveImportPollTick(idx);     // directe refresh zodat lijst meteen klopt
+        _liveImportStartPoll(idx);    // blijven verversen tijdens hover/scroll
+    });
+    el('live-import-sel-'     + idx)?.addEventListener('blur',  () => _liveImportStopPoll(idx));
     el('live-import-sort-naam-' + idx)?.addEventListener('click', () => _liveImportFileSort(idx, 'naam'));
     el('live-import-sort-nieuw-'+ idx)?.addEventListener('click', () => _liveImportFileSort(idx, 'nieuw'));
     el('live-import-laad-'    + idx)?.addEventListener('click',  () => _liveImportLaad(idx));
@@ -3833,8 +3844,8 @@ async function _liveImportToggle(ritIdx) {
         return;
     }
     if (mapSel.dataset.geladen) {
-        // Al eerder geladen → poll (opnieuw) starten als er een map actief is
-        if (mapSel.value) _liveImportStartPoll(ritIdx);
+        // Al eerder geladen → niets meer te doen. Polling start vanzelf
+        // zodra de operator de file-dropdown opent (focus-handler).
         return;
     }
 
@@ -4100,10 +4111,10 @@ async function _liveImportMapGekozen(ritIdx) {
             if (fileSel.value) _liveImportPreview(ritIdx);
         }
 
-        // Start auto-refresh: tijdens een wedstrijd wil je dat nieuwe CSV's
-        // die in de upload-map verschijnen direct zichtbaar worden zonder
-        // handmatig de map te moeten her-selecteren.
-        _liveImportStartPoll(ritIdx);
+        // Polling start vanzelf zodra de operator de file-dropdown opent
+        // (focus-handler in _liveBind). Hierdoor geen onnodige requests
+        // tussen heats — alleen op het moment dat de operator actief naar
+        // de bestandenlijst kijkt wordt 'ie ververst.
     } catch(e) {
         fileSel.innerHTML = `<option value="">⚠ ${escHtml(e.message)}</option>`;
     }
