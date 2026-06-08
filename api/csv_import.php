@@ -192,6 +192,81 @@ if ($action === 'parse') {
     exit;
 }
 
+// ── Actie: dcs ─────────────────────────────────────────────────────────────
+//   Geeft alle DCs + hun afstanden van de geselecteerde wedstrijd terug
+//   zodat de wizard in stap 3 (DC-toewijzing) de dropdowns kan vullen.
+//   GET parameter: competition_id
+if ($action === 'dcs') {
+    $compId = trim($_GET['competition_id'] ?? '');
+    if ($compId === '') {
+        http_response_code(400);
+        echo json_encode(['error' => 'competition_id ontbreekt']);
+        exit;
+    }
+    checkCompetitieToegang($pdo, $_authUser, $compId);
+
+    // DCs ophalen (inclusief merge_label voor leesbaarheid)
+    $stmt = $pdo->prepare("
+        SELECT id, name, number, merge_label
+        FROM distance_combinations
+        WHERE competition_id = ?
+        ORDER BY number, name
+    ");
+    $stmt->execute([$compId]);
+    $dcs = $stmt->fetchAll(PDO::FETCH_ASSOC);
+
+    if (!$dcs) {
+        echo json_encode(['ok' => true, 'dcs' => [], 'unieke_afstanden' => []]);
+        exit;
+    }
+
+    // Afstanden per DC
+    $dcIds = array_column($dcs, 'id');
+    $ph    = implode(',', array_fill(0, count($dcIds), '?'));
+    $stmt  = $pdo->prepare("
+        SELECT distance_combination_id AS dc_id, id, name, value_meters, race_type
+        FROM distances
+        WHERE distance_combination_id IN ($ph)
+        ORDER BY number, name
+    ");
+    $stmt->execute($dcIds);
+    $distancesPerDc = [];
+    $unieke         = [];
+    foreach ($stmt->fetchAll(PDO::FETCH_ASSOC) as $d) {
+        $distancesPerDc[$d['dc_id']][] = [
+            'id'           => $d['id'],
+            'name'         => $d['name'],
+            'value_meters' => $d['value_meters'] !== null ? (int)$d['value_meters'] : null,
+            'race_type'    => $d['race_type'],
+        ];
+        $key = $d['name'];
+        if (!isset($unieke[$key])) {
+            $unieke[$key] = [
+                'name'         => $d['name'],
+                'value_meters' => $d['value_meters'] !== null ? (int)$d['value_meters'] : null,
+                'race_type'    => $d['race_type'],
+            ];
+        }
+    }
+
+    $result = array_map(function($dc) use ($distancesPerDc) {
+        return [
+            'id'           => $dc['id'],
+            'name'         => $dc['name'],
+            'merge_label'  => $dc['merge_label'],
+            'display_name' => $dc['merge_label'] ?: $dc['name'],
+            'distances'    => $distancesPerDc[$dc['id']] ?? [],
+        ];
+    }, $dcs);
+
+    echo json_encode([
+        'ok'               => true,
+        'dcs'              => $result,
+        'unieke_afstanden' => array_values($unieke),
+    ], JSON_UNESCAPED_UNICODE);
+    exit;
+}
+
 // match_preview en commit komen in volgende stappen.
 
 http_response_code(400);

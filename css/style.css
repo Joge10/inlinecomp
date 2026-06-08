@@ -6039,3 +6039,51 @@ col.live-col-rondes  { width: 40px; }
     outline: 2px solid #2E75B6; outline-offset: -1px;
 }
 
+/* Stap 3: DC-toewijzing */
+.csv-modal-dialog-wide { max-width: 1080px; }
+.csv-modal-body-scroll { max-height: 70vh; overflow-y: auto; }
+.csv-sectie {
+    margin-bottom: 22px; padding-bottom: 18px;
+    border-bottom: 1px solid #dde3ea;
+}
+.csv-sectie:last-of-type { border-bottom: none; margin-bottom: 0; padding-bottom: 0; }
+.csv-sectie h4 {
+    margin: 0 0 6px; font-size: 14px; color: #1a3a5c;
+}
+.csv-uitleg-klein {
+    margin: 0 0 10px; font-size: 12.5px; color: #555;
+}
+.csv-uitleg-klein code {
+    background: #f4f7fb; padding: 1px 6px; border-radius: 3px;
+    font-family: 'Courier New', monospace; font-size: 12px; color: #2E75B6;
+}
+.csv-afst-tabel, .csv-cat-tabel, .csv-dc-tabel {
+    width: 100%; border-collapse: collapse; font-size: 13px;
+    background: #fff; border: 1px solid #dde3ea;
+}
+.csv-afst-tabel th, .csv-cat-tabel th, .csv-dc-tabel th {
+    background: #f4f7fb; padding: 5px 10px; text-align: left;
+    border-bottom: 1px solid #dde3ea; font-weight: 600; color: #2E75B6;
+    font-size: 12.5px;
+}
+.csv-afst-tabel td, .csv-cat-tabel td, .csv-dc-tabel td {
+    padding: 5px 10px; border-bottom: 1px solid #eef2f6; vertical-align: middle;
+}
+.csv-afst-tabel tr:last-child td,
+.csv-cat-tabel tr:last-child td,
+.csv-dc-tabel tr:last-child td { border-bottom: none; }
+.csv-afst-tabel select,
+.csv-dc-tabel select {
+    width: 100%; padding: 3px 6px; font-size: 13px;
+    border: 1px solid #b9c5d4; border-radius: 3px; background: #fff;
+}
+.csv-afst-header { font-weight: 600; color: #2E75B6; }
+.csv-cat-tabel input[type="text"] {
+    padding: 3px 6px; font-size: 13px;
+    border: 1px solid #b9c5d4; border-radius: 3px;
+}
+.csv-dc-tabel td:first-child {
+    background: #f4f7fb; font-size: 12px; min-width: 80px;
+}
+.csv-dc-tabel td:first-child small { color: #889; }
+

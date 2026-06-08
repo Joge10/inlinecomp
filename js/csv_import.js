@@ -192,7 +192,7 @@ function _csvOpenStap2() {
     });
 }
 
-function _csvNaarStap3() {
+async function _csvNaarStap3() {
     const fout = _csvValideerMapping();
     const foutEl = document.getElementById('csv-map-fout');
     if (fout) {
@@ -200,11 +200,337 @@ function _csvNaarStap3() {
         foutEl.style.display = '';
         return;
     }
-    // Stap 3 komt in volgende implementatie-ronde
-    alert('Stap 3 (DC-toewijzing) komt in de volgende implementatie-ronde.\n\n' +
-          'Huidige mapping ziet er goed uit — ' +
-          Object.values(_csvImportState.mapping).filter(v => v).length +
-          ' kolommen gekoppeld.');
+    foutEl.style.display = 'none';
+
+    // DCs ophalen van de wedstrijd (laad ze elke keer vers — wedstrijd-data
+    // kan tussentijds gewijzigd zijn door een andere operator)
+    try {
+        const res = await fetch('api/csv_import.php?action=dcs&competition_id=' +
+                                encodeURIComponent(_csvImportState.compId));
+        const data = await res.json();
+        if (!res.ok || data.error) throw new Error(data.error || 'HTTP ' + res.status);
+        _csvImportState.dcs            = data.dcs;
+        _csvImportState.uniekAfstanden = data.unieke_afstanden;
+    } catch (err) {
+        foutEl.textContent   = 'Fout bij ophalen DCs: ' + err.message;
+        foutEl.style.display = '';
+        return;
+    }
+
+    if (!_csvImportState.dcs.length) {
+        foutEl.textContent   = '⚠ Geen DCs gevonden voor deze wedstrijd. ' +
+            'Voeg eerst categorieën + afstanden toe via de "+ Wedstrijd"-modal.';
+        foutEl.style.display = '';
+        return;
+    }
+
+    _csvOpenStap3();
+}
+
+// ── Stap 3: DC-toewijzing ───────────────────────────────────────────────────
+// Drie secties:
+//   A. Afstand-naming: per DC-marker-kolom kiest operator welke afstand
+//      dat is (bv. CSV-kolom "200" → "Flying lap" of "Sprint 500m" uit DC)
+//   B. Cat-mapping: cat-groep (Pupil/Cadet/...) × geslacht → KNSB-code
+//      (HP1/DP1/HKA/...) — defaults op basis van standaard-mapping
+//   C. DC-toewijzing: matrix [cat-code × afstand-naam] → DC
+
+function _csvOpenStap3() {
+    // Default afstand-mapping per DC-marker-kolom (slim raden uit header)
+    const dcMarkerKols = Object.entries(_csvImportState.mapping)
+        .filter(([, t]) => t === 'dc_marker')
+        .map(([k]) => parseInt(k));
+    if (!_csvImportState.afstandPerKol) _csvImportState.afstandPerKol = {};
+    dcMarkerKols.forEach(k => {
+        if (_csvImportState.afstandPerKol[k] === undefined) {
+            _csvImportState.afstandPerKol[k] =
+                _csvRaadAfstand(_csvImportState.headers[k]) || '';
+        }
+    });
+
+    // Default cat-mapping (Pupil M → HP1 etc.). Operator kan overrullen.
+    if (!_csvImportState.catMapping) {
+        _csvImportState.catMapping = _csvDefaultCatMapping();
+    }
+
+    // Welke cat-groepen komen voor in de data (uniek, gefilterd)
+    const catKol = _csvKolIndex('cat_groep');
+    const gKol   = _csvKolIndex('gender');
+    const cats   = new Set();
+    if (catKol != null && gKol != null) {
+        _csvImportState.rows.forEach(r => {
+            const c = _csvNormCat(r[catKol]);
+            const g = _csvNormGender(r[gKol]);
+            if (c && g) cats.add(c + '|' + g);
+        });
+    }
+    _csvImportState.aanwezigeCats = [...cats].sort();
+
+    // Default DC-toewijzing leeg (operator kiest)
+    if (!_csvImportState.dcToewijzing) _csvImportState.dcToewijzing = {};
+
+    const html = `
+        <div class="modal-overlay" id="csv-modal" data-stap="3">
+            <div class="modal-dialog csv-modal-dialog csv-modal-dialog-wide">
+                <div class="modal-header">
+                    <h3>📥 CSV Importeren — Stap 3 van 4: DC-toewijzing</h3>
+                    <button class="modal-sluit" id="csv-sluit" title="Sluiten">&times;</button>
+                </div>
+                <div class="modal-body csv-modal-body-scroll">
+                    ${_csvSectieA(dcMarkerKols)}
+                    ${_csvSectieB()}
+                    ${_csvSectieC()}
+                    <div id="csv-dc-fout" class="csv-fout" style="display:none;"></div>
+                </div>
+                <div class="modal-knoppen">
+                    <button class="btn-secondary" id="csv-terug">← Vorige</button>
+                    <button class="btn-secondary" id="csv-annuleer">Annuleren</button>
+                    <button class="btn-primary" id="csv-volgende">Volgende →</button>
+                </div>
+            </div>
+        </div>`;
+
+    document.getElementById('csv-modal')?.remove();
+    document.body.insertAdjacentHTML('beforeend', html);
+
+    document.getElementById('csv-sluit').addEventListener('click', _csvSluit);
+    document.getElementById('csv-annuleer').addEventListener('click', _csvSluit);
+    document.getElementById('csv-terug').addEventListener('click', _csvOpenStap2);
+    document.getElementById('csv-volgende').addEventListener('click', _csvNaarStap4);
+
+    // Event listeners voor de drie secties
+    document.querySelectorAll('.csv-afstand-sel').forEach(sel => {
+        sel.addEventListener('change', () => {
+            _csvImportState.afstandPerKol[parseInt(sel.dataset.kol)] = sel.value;
+            _csvRerenderSectieC();
+        });
+    });
+    document.querySelectorAll('.csv-cat-map-sel').forEach(sel => {
+        sel.addEventListener('change', () => {
+            _csvImportState.catMapping[sel.dataset.key] = sel.value;
+            _csvRerenderSectieC();
+        });
+    });
+    _csvBindSectieCListeners();
+}
+
+// Sectie A: per dc_marker-kolom → welke afstand?
+function _csvSectieA(dcMarkerKols) {
+    const opts = _csvImportState.uniekAfstanden.map(a =>
+        `<option value="${_csvEsc(a.name)}">${_csvEsc(a.name)}${a.value_meters ? ` (${a.value_meters}m)` : ''}</option>`
+    ).join('');
+    const rijenHtml = dcMarkerKols.map(k => {
+        const huidig = _csvImportState.afstandPerKol[k] || '';
+        return `
+            <tr>
+                <td class="csv-afst-header">${_csvEsc(_csvImportState.headers[k])}</td>
+                <td>
+                    <select class="csv-afstand-sel" data-kol="${k}">
+                        <option value="">— Kies afstand —</option>
+                        ${opts.replace(`value="${_csvEsc(huidig)}"`, `value="${_csvEsc(huidig)}" selected`)}
+                    </select>
+                </td>
+            </tr>`;
+    }).join('');
+    return `
+        <div class="csv-sectie">
+            <h4>A. Welke afstand hoort bij elke DC-markering-kolom?</h4>
+            <p class="csv-uitleg-klein">
+                In de CSV staan kolommen als <code>200</code>, <code>1000</code> of <code>afvalkoers</code>.
+                Koppel ze aan de afstanden die in deze wedstrijd bestaan.
+            </p>
+            <table class="csv-afst-tabel">
+                <thead><tr><th>CSV-kolom</th><th>Afstand in wedstrijd</th></tr></thead>
+                <tbody>${rijenHtml}</tbody>
+            </table>
+        </div>`;
+}
+
+// Sectie B: cat-groep × geslacht → KNSB-code
+function _csvSectieB() {
+    const groepen  = ['Pupil', 'Cadet', 'Junior', 'Youth', 'Senior'];
+    const geslachten = [['M', 'Heren'], ['W', 'Dames']];
+    const rijenHtml = groepen.flatMap(g =>
+        geslachten.map(([gCode, gLabel]) => {
+            const key    = g + '|' + gCode;
+            const huidig = _csvImportState.catMapping[key] || '';
+            return `
+                <tr>
+                    <td>${_csvEsc(g)}</td>
+                    <td>${_csvEsc(gLabel)} (${_csvEsc(gCode)})</td>
+                    <td>
+                        <input type="text" class="csv-cat-map-sel" data-key="${_csvEsc(key)}"
+                               value="${_csvEsc(huidig)}" maxlength="10" placeholder="bv. HP1"
+                               style="width:80px;text-transform:uppercase;">
+                    </td>
+                </tr>`;
+        })
+    ).join('');
+    return `
+        <div class="csv-sectie">
+            <h4>B. Categorie-mapping: groep + geslacht → KNSB-code</h4>
+            <p class="csv-uitleg-klein">
+                Pas aan als je organisatie een afwijkende code gebruikt. Default voor
+                deze wedstrijd: Pupil→P1, Cadet→KA, Junior→JA, Youth→JB, Senior→SA.
+            </p>
+            <table class="csv-cat-tabel">
+                <thead><tr><th>Groep</th><th>Geslacht</th><th>KNSB-code</th></tr></thead>
+                <tbody>${rijenHtml}</tbody>
+            </table>
+        </div>`;
+}
+
+// Sectie C: matrix [cat-code × afstand-naam] → DC dropdown
+function _csvSectieC() {
+    return `<div class="csv-sectie" id="csv-sectie-c">
+        <h4>C. Welke DC voor welke combinatie?</h4>
+        <p class="csv-uitleg-klein">
+            Voor elke gevonden categorie × afstand: kies de DC in deze wedstrijd.
+            Bij "Negeren" wordt die combinatie overgeslagen (rijders ervan komen
+            in een waarschuwingslijst).
+        </p>
+        ${_csvSectieCBody()}
+    </div>`;
+}
+
+function _csvSectieCBody() {
+    const aanwezig = _csvImportState.aanwezigeCats || [];
+    if (!aanwezig.length) {
+        return `<div class="csv-uitleg-klein"><i>(Geen cat × geslacht combinaties gevonden — controleer kolom-mapping in stap 2.)</i></div>`;
+    }
+    // Lijst van unieke afstand-namen die operator heeft toegewezen aan dc_marker-kolommen
+    const gebruiktAfst = [...new Set(Object.values(_csvImportState.afstandPerKol || {}).filter(Boolean))];
+    if (!gebruiktAfst.length) {
+        return `<div class="csv-uitleg-klein"><i>(Eerst afstanden kiezen in sectie A.)</i></div>`;
+    }
+    const dcOpts = _csvImportState.dcs.map(dc =>
+        `<option value="${_csvEsc(dc.id)}">${_csvEsc(dc.display_name)}</option>`
+    ).join('');
+    const headerHtml = `<tr>
+        <th>Cat-code</th>
+        ${gebruiktAfst.map(a => `<th>${_csvEsc(a)}</th>`).join('')}
+    </tr>`;
+    const rijenHtml = aanwezig.map(catGeslacht => {
+        const [cat, geslacht] = catGeslacht.split('|');
+        const code = _csvImportState.catMapping[cat + '|' + geslacht] || '?';
+        const cels = gebruiktAfst.map(afst => {
+            const key    = code + '|' + afst;
+            const huidig = _csvImportState.dcToewijzing[key] || '';
+            return `<td>
+                <select class="csv-dc-sel" data-key="${_csvEsc(key)}">
+                    <option value="">— Negeren —</option>
+                    ${dcOpts.replace(`value="${_csvEsc(huidig)}"`, `value="${_csvEsc(huidig)}" selected`)}
+                </select>
+            </td>`;
+        }).join('');
+        return `<tr>
+            <td><strong>${_csvEsc(code)}</strong><br><small>${_csvEsc(cat)} ${_csvEsc(geslacht)}</small></td>
+            ${cels}
+        </tr>`;
+    }).join('');
+    return `<table class="csv-dc-tabel">
+        <thead>${headerHtml}</thead>
+        <tbody>${rijenHtml}</tbody>
+    </table>`;
+}
+
+// Sectie C herrenderen (bij wijziging in A of B die het matrix raakt)
+function _csvRerenderSectieC() {
+    const sectie = document.getElementById('csv-sectie-c');
+    if (!sectie) return;
+    // Re-build inhoud onder de h4
+    const h4 = sectie.querySelector('h4');
+    const uitleg = sectie.querySelector('.csv-uitleg-klein');
+    sectie.innerHTML = h4.outerHTML + uitleg.outerHTML + _csvSectieCBody();
+    _csvBindSectieCListeners();
+}
+
+function _csvBindSectieCListeners() {
+    document.querySelectorAll('.csv-dc-sel').forEach(sel => {
+        sel.addEventListener('change', () => {
+            _csvImportState.dcToewijzing[sel.dataset.key] = sel.value;
+        });
+    });
+}
+
+async function _csvNaarStap4() {
+    // Validatie: alle aanwezigeCats × gebruiktAfst combinaties moeten een DC
+    // hebben (of expliciet op Negeren staan). Voor nu: warning als er nog
+    // lege cellen zijn, maar geen harde block — operator beslist.
+    const foutEl = document.getElementById('csv-dc-fout');
+    const aanwezig = _csvImportState.aanwezigeCats || [];
+    const gebruiktAfst = [...new Set(Object.values(_csvImportState.afstandPerKol || {}).filter(Boolean))];
+    const ontbreekt = [];
+    for (const cg of aanwezig) {
+        const [cat, gesl] = cg.split('|');
+        const code = _csvImportState.catMapping[cat + '|' + gesl] || '?';
+        for (const a of gebruiktAfst) {
+            const key = code + '|' + a;
+            if (!_csvImportState.dcToewijzing[key]) {
+                ontbreekt.push(`${code} × ${a}`);
+            }
+        }
+    }
+    if (ontbreekt.length) {
+        const lijst = ontbreekt.slice(0, 5).join(', ') + (ontbreekt.length > 5 ? ` (+${ontbreekt.length - 5} meer)` : '');
+        const ok = confirm(
+            `Er zijn ${ontbreekt.length} cat × afstand-combinaties zonder DC: ${lijst}\n\n` +
+            `Rijders met die combinaties worden overgeslagen tijdens import.\n\n` +
+            `Doorgaan?`
+        );
+        if (!ok) return;
+    }
+    alert('Stap 4 (Persoon-match review) komt in de volgende implementatie-ronde.');
+}
+
+// ── Helpers voor stap 3 ─────────────────────────────────────────────────────
+
+function _csvDefaultCatMapping() {
+    return {
+        'Pupil|M':  'HP1', 'Pupil|W':  'DP1',
+        'Cadet|M':  'HKA', 'Cadet|W':  'DKA',
+        'Junior|M': 'HJA', 'Junior|W': 'DJA',
+        'Youth|M':  'HJB', 'Youth|W':  'DJB',
+        'Senior|M': 'HSA', 'Senior|W': 'DSA',
+    };
+}
+
+function _csvKolIndex(targetType) {
+    for (const [k, t] of Object.entries(_csvImportState.mapping)) {
+        if (t === targetType) return parseInt(k);
+    }
+    return null;
+}
+
+function _csvNormCat(v) {
+    const s = String(v || '').trim().toLowerCase();
+    if (s.startsWith('pupil'))  return 'Pupil';
+    if (s.startsWith('cadet'))  return 'Cadet';
+    if (s.startsWith('junior')) return 'Junior';
+    if (s.startsWith('youth'))  return 'Youth';
+    if (s.startsWith('senior')) return 'Senior';
+    return null;
+}
+
+function _csvNormGender(v) {
+    const s = String(v || '').trim().toUpperCase();
+    if (s === 'M' || s === 'H') return 'M';
+    if (s === 'W' || s === 'V' || s === 'F') return 'W';
+    return null;
+}
+
+function _csvRaadAfstand(header) {
+    const h = String(header || '').toLowerCase().trim();
+    if (!h) return '';
+    // Zoek in unieke_afstanden naar een match op naam of meters
+    for (const a of (_csvImportState.uniekAfstanden || [])) {
+        const an = a.name.toLowerCase();
+        if (an === h)                   return a.name;
+        if (h.includes(an))             return a.name;
+        if (an.includes(h))             return a.name;
+        if (a.value_meters && h.match(new RegExp('\\b' + a.value_meters + '\\b'))) return a.name;
+    }
+    return '';
 }
 
 // Valideer dat de mapping minimaal genoeg info bevat om verder te gaan.
