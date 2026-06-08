@@ -29,9 +29,13 @@ header('Access-Control-Allow-Methods: POST, OPTIONS');
 header('Access-Control-Allow-Headers: Content-Type');
 
 if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') { exit; }
-if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
+// Read-only acties zijn GET (dcs); schrijvende acties zijn POST
+// (parse / match_preview / commit). Method-validatie gebeurt verderop
+// per actie zelf.
+$method = $_SERVER['REQUEST_METHOD'];
+if ($method !== 'POST' && $method !== 'GET') {
     http_response_code(405);
-    echo json_encode(['error' => 'Gebruik POST']);
+    echo json_encode(['error' => 'Gebruik POST of GET']);
     exit;
 }
 
@@ -123,6 +127,11 @@ function _csvParseRows(string $csvUtf8, string $delimiter): array {
 //   Ontvang multipart upload met 'csv' file, detecteer encoding + delimiter,
 //   parse en stuur structuur + preview terug. Geen DB-bewerkingen.
 if ($action === 'parse') {
+    if ($method !== 'POST') {
+        http_response_code(405);
+        echo json_encode(['error' => 'parse vereist POST']);
+        exit;
+    }
     if (!isset($_FILES['csv']) || $_FILES['csv']['error'] !== UPLOAD_ERR_OK) {
         http_response_code(400);
         $errCode = $_FILES['csv']['error'] ?? -1;
