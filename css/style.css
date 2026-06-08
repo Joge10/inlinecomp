@@ -6124,3 +6124,49 @@ col.live-col-rondes  { width: 40px; }
 .csv-match-rij-keuze:hover td { background: #ffefcc; }
 .csv-match-rij-nieuw:hover td { background: #fce0e0; }
 
+/* 🔍 Zoek-knop + paneel per rij */
+.csv-match-actie-row {
+    display: flex; gap: 4px; align-items: center;
+}
+.csv-match-actie-row .csv-match-actie { flex: 1; min-width: 0; }
+.csv-match-zoek-btn {
+    flex-shrink: 0; padding: 3px 8px; font-size: 13px;
+    background: #fff; border: 1px solid #b9c5d4; border-radius: 3px;
+    cursor: pointer; transition: background .15s;
+}
+.csv-match-zoek-btn:hover { background: #eef4fb; border-color: #2E75B6; }
+
+.csv-match-zoek-panel {
+    margin-top: 6px; padding: 8px; background: #f4f7fb;
+    border: 1px solid #dde3ea; border-radius: 4px;
+}
+.csv-match-zoek-input {
+    width: 100%; padding: 5px 8px; font-size: 13px;
+    border: 1px solid #b9c5d4; border-radius: 3px; box-sizing: border-box;
+}
+.csv-match-zoek-input:focus {
+    outline: 2px solid #2E75B6; outline-offset: -1px;
+}
+.csv-match-zoek-resultaten {
+    margin-top: 6px; max-height: 200px; overflow-y: auto;
+}
+.csv-match-zoek-resultaten:empty { display: none; }
+.csv-zoek-leeg, .csv-zoek-fout {
+    padding: 6px 8px; font-size: 12px; color: #889; font-style: italic;
+}
+.csv-zoek-fout { color: #b71c1c; font-style: normal; }
+.csv-zoek-resultaat {
+    display: block; width: 100%; text-align: left;
+    padding: 5px 8px; margin-bottom: 2px;
+    background: #fff; border: 1px solid #dde3ea; border-radius: 3px;
+    cursor: pointer; transition: background .12s;
+    font-size: 12.5px;
+}
+.csv-zoek-resultaat:hover { background: #eef4fb; border-color: #2E75B6; }
+.csv-zoek-resultaat strong { display: block; color: #2E75B6; font-size: 13px; }
+.csv-zoek-resultaat small { color: #678; font-size: 11.5px; }
+.csv-zoek-extern {
+    background: #fff3e0; color: #c47200; padding: 1px 5px;
+    border-radius: 2px; font-size: 10.5px; font-weight: 600;
+}
+

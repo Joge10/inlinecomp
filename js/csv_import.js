@@ -577,6 +577,123 @@ function _csvOpenStap4() {
             _csvImportState.matchActies[parseInt(sel.dataset.rowIdx)] = sel.value;
         });
     });
+
+    // 🔍 zoek-knop per rij: paneel toggelen
+    document.querySelectorAll('.csv-match-zoek-btn').forEach(btn => {
+        btn.addEventListener('click', () => {
+            const rowIdx = parseInt(btn.dataset.rowIdx);
+            const panel  = document.getElementById('csv-zoek-panel-' + rowIdx);
+            const open   = panel.style.display !== 'none';
+            panel.style.display = open ? 'none' : '';
+            if (!open) {
+                // Open: focus input + reset
+                const inp = panel.querySelector('.csv-match-zoek-input');
+                inp.value = '';
+                document.getElementById('csv-zoek-resultaten-' + rowIdx).innerHTML = '';
+                // Pre-fill met naam uit de rij voor sneller zoeken
+                const m = _csvImportState.matches.find(x => x.row_idx === rowIdx);
+                if (m?.naam) {
+                    inp.value = m.naam;
+                    _csvDoeZoek(rowIdx, m.naam);
+                }
+                setTimeout(() => { inp.focus(); inp.select(); }, 50);
+            }
+        });
+    });
+
+    // Zoek-input per rij: debounced search
+    document.querySelectorAll('.csv-match-zoek-input').forEach(inp => {
+        let timer = null;
+        inp.addEventListener('input', () => {
+            const rowIdx = parseInt(inp.dataset.rowIdx);
+            const q      = inp.value.trim();
+            clearTimeout(timer);
+            timer = setTimeout(() => _csvDoeZoek(rowIdx, q), 300);
+        });
+    });
+}
+
+// Voer zoekopdracht uit en render resultaten in het zoek-paneel van een rij.
+async function _csvDoeZoek(rowIdx, query) {
+    const resEl = document.getElementById('csv-zoek-resultaten-' + rowIdx);
+    if (!resEl) return;
+    if (query.length < 2) {
+        resEl.innerHTML = '<div class="csv-zoek-leeg">Typ minstens 2 tekens…</div>';
+        return;
+    }
+    resEl.innerHTML = '<div class="csv-zoek-leeg">Zoeken…</div>';
+    try {
+        const r = await fetch('api/csv_import.php?action=zoek_personen&q=' +
+                              encodeURIComponent(query));
+        const d = await r.json();
+        if (!r.ok || d.error) throw new Error(d.error || 'HTTP ' + r.status);
+        if (!d.results.length) {
+            resEl.innerHTML = '<div class="csv-zoek-leeg">Geen resultaten gevonden.</div>';
+            return;
+        }
+        resEl.innerHTML = d.results.map(p => {
+            const meta = [
+                p.birth_year ? `geb. ${p.birth_year}` : null,
+                p.club || null,
+                p.start_number ? `snr ${p.start_number}` : null,
+                p.extern ? '<span class="csv-zoek-extern">extern</span>' : null,
+            ].filter(Boolean).join(' · ');
+            return `<button class="csv-zoek-resultaat" data-row-idx="${rowIdx}" data-license="${_csvEsc(p.license_key)}" data-fullname="${_csvEsc(p.full_name)}" data-meta="${_csvEsc(meta.replace(/<[^>]+>/g, ''))}">
+                <strong>${_csvEsc(p.full_name)}</strong>
+                <small>${meta}</small>
+            </button>`;
+        }).join('');
+        // Bind click op resultaten
+        resEl.querySelectorAll('.csv-zoek-resultaat').forEach(btn => {
+            btn.addEventListener('click', () => {
+                _csvKoppelHandmatig(
+                    parseInt(btn.dataset.rowIdx),
+                    btn.dataset.license,
+                    btn.dataset.fullname,
+                    btn.dataset.meta,
+                );
+            });
+        });
+    } catch (err) {
+        resEl.innerHTML = '<div class="csv-zoek-fout">⚠ ' + _csvEsc(err.message) + '</div>';
+    }
+}
+
+// Een gekozen zoek-resultaat aan een rij koppelen. We voegen 'em toe als
+// expliciete optie in de dropdown (zodat hij geselecteerd blijft) en
+// updaten de state.
+function _csvKoppelHandmatig(rowIdx, licenseKey, fullName, meta) {
+    _csvImportState.matchActies[rowIdx] = licenseKey;
+
+    // Update de dropdown: voeg de nieuwe optie toe (of update bestaande) en
+    // selecteer 'em. Verwijder eerst eventueel een vroegere handmatige optie.
+    const sel = document.querySelector(`select.csv-match-actie[data-row-idx="${rowIdx}"]`);
+    if (sel) {
+        // Bestaat de license al als optie? Selecteer 'em.
+        let opt = sel.querySelector(`option[value="${CSS.escape(licenseKey)}"]`);
+        if (!opt) {
+            opt = document.createElement('option');
+            opt.value = licenseKey;
+            opt.textContent = `Koppel: ${fullName}${meta ? ' (' + meta + ')' : ''}`;
+            // Plaats vooraan
+            sel.insertBefore(opt, sel.firstChild);
+        }
+        sel.value = licenseKey;
+    }
+
+    // Rij-status visueel updaten naar 'ok'
+    const tr = document.querySelector(`tr[data-row-idx="${rowIdx}"]`);
+    if (tr) {
+        tr.classList.remove('csv-match-rij-keuze', 'csv-match-rij-nieuw');
+        tr.classList.add('csv-match-rij-ok');
+        // Status-cel updaten
+        const statusCel = tr.querySelectorAll('td')[4];
+        if (statusCel) statusCel.innerHTML = '🟢 Handmatig gekoppeld';
+    }
+
+    // Zoek-paneel sluiten
+    const panel = document.getElementById('csv-zoek-panel-' + rowIdx);
+    if (panel) panel.style.display = 'none';
 }
 
 function _csvMatchStats(matches) {
@@ -618,16 +735,23 @@ function _csvMatchRijHtml(m) {
         `<option value="__skip__"${huidigeKeuze === '__skip__' ? ' selected' : ''}>` +
         `⊘ Skip deze rij</option>`,
     ].join('');
-    return `<tr class="${rijKlasse}">
+    return `<tr class="${rijKlasse}" data-row-idx="${m.row_idx}">
         <td>${m.row_idx + 1}</td>
         <td>${_csvEsc(m.naam)}</td>
         <td>${_csvEsc(m.club)}</td>
         <td>${_csvEsc(m.startnr)}</td>
         <td>${tierLabel}</td>
-        <td>
-            <select class="csv-match-actie" data-row-idx="${m.row_idx}">
-                ${opts}
-            </select>
+        <td class="csv-match-actie-cel">
+            <div class="csv-match-actie-row">
+                <select class="csv-match-actie" data-row-idx="${m.row_idx}">
+                    ${opts}
+                </select>
+                <button class="csv-match-zoek-btn" data-row-idx="${m.row_idx}" title="Zoek bestaand persoon">🔍</button>
+            </div>
+            <div class="csv-match-zoek-panel" id="csv-zoek-panel-${m.row_idx}" style="display:none;">
+                <input type="text" class="csv-match-zoek-input" placeholder="Zoek op naam (min. 2 tekens)…" data-row-idx="${m.row_idx}">
+                <div class="csv-match-zoek-resultaten" id="csv-zoek-resultaten-${m.row_idx}"></div>
+            </div>
         </td>
     </tr>`;
 }

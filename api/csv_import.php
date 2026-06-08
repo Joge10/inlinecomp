@@ -467,6 +467,46 @@ if ($action === 'match_preview') {
     exit;
 }
 
+// ── Actie: zoek_personen ───────────────────────────────────────────────────
+//   Vrije zoektocht in persons-tabel voor handmatige koppeling bij twijfel-
+//   gevallen. Operator gebruikt dit als de auto-match faalt (rood) of de
+//   match-cascade niet de juiste persoon vindt.
+//
+//   GET parameter: q (zoekterm, min. 2 chars)
+//   Returns: { results: [{ license_key, full_name, club, birth_year, ... }] }
+if ($action === 'zoek_personen') {
+    $q = trim($_GET['q'] ?? '');
+    if (mb_strlen($q) < 2) {
+        echo json_encode(['ok' => true, 'results' => []]);
+        exit;
+    }
+    // LIKE-match op full_name en short_name, met % aan beide kanten.
+    // Geen scope-filter — operator mag zoeken in de hele rijders-pool (anders
+    // mis je rijders die in andere wedstrijden zaten).
+    $pat = '%' . str_replace(['%', '_'], ['\\%', '\\_'], mb_strtolower($q)) . '%';
+    $stmt = $pdo->prepare("
+        SELECT license_key, full_name, short_name, birth_year, gender,
+               start_number, club_short, club_full, extern
+        FROM persons
+        WHERE (LOWER(full_name) LIKE ? OR LOWER(short_name) LIKE ?)
+          AND anonymized_at IS NULL
+          AND pending_source IS NULL
+        ORDER BY full_name
+        LIMIT 20
+    ");
+    $stmt->execute([$pat, $pat]);
+    $results = array_map(fn($p) => [
+        'license_key'  => $p['license_key'],
+        'full_name'    => $p['full_name'],
+        'club'         => $p['club_short'] ?: $p['club_full'] ?: '',
+        'birth_year'   => $p['birth_year']   !== null ? (int)$p['birth_year']   : null,
+        'start_number' => $p['start_number'] !== null ? (int)$p['start_number'] : null,
+        'extern'       => (int)($p['extern'] ?? 0) === 1,
+    ], $stmt->fetchAll(PDO::FETCH_ASSOC));
+    echo json_encode(['ok' => true, 'results' => $results], JSON_UNESCAPED_UNICODE);
+    exit;
+}
+
 // commit komt in volgende stap.
 
 http_response_code(400);
