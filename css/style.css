@@ -6001,3 +6001,41 @@ col.live-col-rondes  { width: 40px; }
     color: #b71c1c; font-size: 12.5px;
 }
 
+/* Mapping-tabel (stap 2) */
+.csv-map-tabel {
+    width: 100%; border-collapse: collapse; font-size: 13px;
+    background: #fff; border: 1px solid #dde3ea;
+}
+.csv-map-tabel th {
+    background: #2E75B6; color: #fff; padding: 6px 10px;
+    text-align: left; font-weight: 600; font-size: 12.5px;
+    position: sticky; top: 0;
+}
+.csv-map-tabel td {
+    padding: 5px 10px; border-bottom: 1px solid #eef2f6;
+    vertical-align: middle;
+}
+.csv-map-tabel tbody tr:nth-child(even) td { background: #fafbfd; }
+.csv-map-tabel tbody tr:hover td { background: #eef4fb; }
+.csv-map-tabel .csv-map-nr {
+    width: 32px; text-align: center; color: #889;
+    font-variant-numeric: tabular-nums;
+}
+.csv-map-tabel .csv-map-header {
+    font-weight: 600; color: #2E75B6; width: 220px;
+    overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.csv-map-tabel .csv-map-header i { color: #999; font-weight: 400; }
+.csv-map-tabel .csv-map-sample {
+    color: #456; font-style: italic; max-width: 280px;
+    overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.csv-map-tabel .csv-map-target { width: 280px; }
+.csv-map-tabel .csv-map-sel {
+    width: 100%; padding: 4px 8px; font-size: 13px;
+    border: 1px solid #b9c5d4; border-radius: 3px; background: #fff;
+}
+.csv-map-tabel .csv-map-sel:focus {
+    outline: 2px solid #2E75B6; outline-offset: -1px;
+}
+

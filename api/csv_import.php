@@ -175,13 +175,16 @@ if ($action === 'parse') {
         return array_map(fn($v) => trim((string)$v), $r);
     }, $rows);
 
-    // Preview = eerste 5 data-rijen
+    // Preview = eerste 5 data-rijen voor de UI; alle rijen worden ook
+    // teruggegeven zodat de frontend ze in state kan houden voor stap 2-4
+    // (mapping → DC → match) zonder telkens opnieuw te parsen.
     $preview = array_slice($dataRijen, 0, 5);
 
     echo json_encode([
         'ok'        => true,
         'headers'   => $headers,
         'preview'   => $preview,
+        'rows'      => $dataRijen,
         'total'     => count($dataRijen),
         'delimiter' => $delimiter === "\t" ? 'tab' : $delimiter,
         'encoding'  => $sourceEncoding,

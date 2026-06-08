@@ -87,10 +87,196 @@ function _csvOpenStap1() {
     document.getElementById('csv-sluit').addEventListener('click', _csvSluit);
     document.getElementById('csv-annuleer').addEventListener('click', _csvSluit);
     document.getElementById('csv-file-input').addEventListener('change', _csvBestandGekozen);
-    document.getElementById('csv-volgende').addEventListener('click', () => {
-        // Stap 2 komt later — voor nu placeholder
-        alert('Stap 2 (kolom-mapping) komt in de volgende implementatie-ronde.');
+    document.getElementById('csv-volgende').addEventListener('click', _csvOpenStap2);
+}
+
+// ── Stap 2: Kolom-mapping ───────────────────────────────────────────────────
+// Per CSV-kolom kiest operator een target. Bij speciale targets (DC-marker
+// of cat-groep) verschijnt extra config in stap 3.
+
+// Beschikbare targets in de dropdown per CSV-kolom.
+const _CSV_TARGETS = [
+    { val: '',                label: '— Negeren —',                  groep: '' },
+    { val: 'name_full',       label: 'Volledige naam',               groep: 'Naam' },
+    { val: 'name_first',      label: 'Voornaam-deel',                groep: 'Naam' },
+    { val: 'name_tussen',     label: 'Tussenvoegsel-deel',           groep: 'Naam' },
+    { val: 'name_last',       label: 'Achternaam-deel',              groep: 'Naam' },
+    { val: 'gender',          label: 'Geslacht (M/W of M/V)',        groep: 'Persoonlijk' },
+    { val: 'nationality',     label: 'Nationaliteit (NLD, GER, …)',  groep: 'Persoonlijk' },
+    { val: 'birth_year',      label: 'Geboortejaar',                 groep: 'Persoonlijk' },
+    { val: 'start_number',    label: 'Startnummer (KNSB)',           groep: 'Persoonlijk' },
+    { val: 'cat_groep',       label: 'Categorie-groep (Pupil/Cadet/…)', groep: 'Categorie' },
+    { val: 'club_short',      label: 'Club (kort)',                  groep: 'Club' },
+    { val: 'club_full',       label: 'Club (volledig)',              groep: 'Club' },
+    { val: 'sponsor',         label: 'Sponsor',                      groep: 'Club' },
+    { val: 'club_of_sponsor', label: 'Club ÉN sponsor (mixed-kolom)', groep: 'Club' },
+    { val: 'dc_marker',       label: 'DC-markering (x = doet mee)',  groep: 'Afstand' },
+];
+
+function _csvOpenStap2() {
+    if (!_csvImportState?.headers?.length) return;
+
+    // Initialize mapping als nog leeg + slim default raden op header-naam
+    if (Object.keys(_csvImportState.mapping).length === 0) {
+        _csvImportState.headers.forEach((h, i) => {
+            _csvImportState.mapping[i] = _csvRaadTarget(h);
+        });
+    }
+
+    const rijenHtml = _csvImportState.headers.map((header, i) => {
+        const sample = _csvBesteSample(i);
+        const huidigeTarget = _csvImportState.mapping[i] || '';
+        return `
+            <tr>
+                <td class="csv-map-nr">${i + 1}</td>
+                <td class="csv-map-header">${_csvEsc(header || '<i>(geen kop)</i>')}</td>
+                <td class="csv-map-sample" title="${_csvEsc(sample)}">${_csvEsc(sample)}</td>
+                <td class="csv-map-target">
+                    <select class="csv-map-sel" data-kol="${i}">
+                        ${_csvTargetsAsOptions(huidigeTarget)}
+                    </select>
+                </td>
+            </tr>`;
+    }).join('');
+
+    const html = `
+        <div class="modal-overlay" id="csv-modal" data-stap="2">
+            <div class="modal-dialog csv-modal-dialog">
+                <div class="modal-header">
+                    <h3>📥 CSV Importeren — Stap 2 van 4: Kolom-mapping</h3>
+                    <button class="modal-sluit" id="csv-sluit" title="Sluiten">&times;</button>
+                </div>
+                <div class="modal-body">
+                    <p class="csv-uitleg">
+                        Koppel elke CSV-kolom aan een veld in de database. Wat je niet
+                        nodig hebt zet je op <strong>Negeren</strong>. Voor de naam kun je
+                        ofwel één 'Volledige naam'-kolom kiezen, ofwel voornaam +
+                        tussenvoegsel + achternaam apart — die worden dan automatisch
+                        samengevoegd.
+                    </p>
+                    <table class="csv-map-tabel">
+                        <thead>
+                            <tr>
+                                <th class="csv-map-nr">#</th>
+                                <th class="csv-map-header">CSV-kolom</th>
+                                <th class="csv-map-sample">Voorbeeldwaarde</th>
+                                <th class="csv-map-target">Koppel aan</th>
+                            </tr>
+                        </thead>
+                        <tbody>${rijenHtml}</tbody>
+                    </table>
+                    <div id="csv-map-fout" class="csv-fout" style="display:none;"></div>
+                </div>
+                <div class="modal-knoppen">
+                    <button class="btn-secondary" id="csv-terug">← Vorige</button>
+                    <button class="btn-secondary" id="csv-annuleer">Annuleren</button>
+                    <button class="btn-primary" id="csv-volgende">Volgende →</button>
+                </div>
+            </div>
+        </div>`;
+
+    document.getElementById('csv-modal')?.remove();
+    document.body.insertAdjacentHTML('beforeend', html);
+
+    document.getElementById('csv-sluit').addEventListener('click', _csvSluit);
+    document.getElementById('csv-annuleer').addEventListener('click', _csvSluit);
+    document.getElementById('csv-terug').addEventListener('click', _csvOpenStap1);
+    document.getElementById('csv-volgende').addEventListener('click', _csvNaarStap3);
+
+    // Mapping bijwerken bij elke wijziging
+    document.querySelectorAll('.csv-map-sel').forEach(sel => {
+        sel.addEventListener('change', () => {
+            const kol = parseInt(sel.dataset.kol);
+            _csvImportState.mapping[kol] = sel.value;
+        });
     });
+}
+
+function _csvNaarStap3() {
+    const fout = _csvValideerMapping();
+    const foutEl = document.getElementById('csv-map-fout');
+    if (fout) {
+        foutEl.textContent = fout;
+        foutEl.style.display = '';
+        return;
+    }
+    // Stap 3 komt in volgende implementatie-ronde
+    alert('Stap 3 (DC-toewijzing) komt in de volgende implementatie-ronde.\n\n' +
+          'Huidige mapping ziet er goed uit — ' +
+          Object.values(_csvImportState.mapping).filter(v => v).length +
+          ' kolommen gekoppeld.');
+}
+
+// Valideer dat de mapping minimaal genoeg info bevat om verder te gaan.
+// Returns null bij OK, of een foutmelding-string anders.
+function _csvValideerMapping() {
+    const targets = Object.values(_csvImportState.mapping);
+    const heeftNaam = targets.includes('name_full') ||
+                      (targets.includes('name_first') && targets.includes('name_last'));
+    if (!heeftNaam) {
+        return '⚠ Kies ofwel een "Volledige naam"-kolom, of zowel "Voornaam-deel" als "Achternaam-deel".';
+    }
+    if (!targets.includes('gender')) {
+        return '⚠ Geen geslacht-kolom gekozen. Vereist voor categorie-bepaling (HP1 vs DP1, etc.).';
+    }
+    if (!targets.includes('cat_groep')) {
+        return '⚠ Geen categorie-groep kolom gekozen (Pupil/Cadet/Junior/Youth/Senior).';
+    }
+    const dcCount = targets.filter(t => t === 'dc_marker').length;
+    if (dcCount === 0) {
+        return '⚠ Tenminste 1 DC-markering kolom nodig (x = doet mee aan deze afstand).';
+    }
+    return null;
+}
+
+// Slim raden welke target bij een CSV-header hoort op basis van keywords.
+// De operator kan altijd handmatig overrulen. Geen match → leeg (Negeren).
+function _csvRaadTarget(header) {
+    const h = String(header || '').toLowerCase().trim();
+    if (!h) return '';
+    if (/^voornaam|^first|^given/.test(h))                  return 'name_first';
+    if (/^tussenvoegsel|^infix|^middle/.test(h))            return 'name_tussen';
+    if (/^achternaam|^last|^family|^sur/.test(h))           return 'name_last';
+    if (/^(volledige.?naam|naam$|full.?name|name)$/.test(h))return 'name_full';
+    if (/geslacht|sex|gender/.test(h))                      return 'gender';
+    if (/land|nation|country/.test(h))                      return 'nationality';
+    if (/geboorte|birth/.test(h))                           return 'birth_year';
+    if (/(start.?(nr|nummer|number)|^nr$|^bib|rugnummer)/.test(h)) return 'start_number';
+    if (/^cat$|categorie|category/.test(h))                 return 'cat_groep';
+    if (/sponsor/.test(h))                                  return 'sponsor';
+    if (/club|team|vereniging/.test(h))                     return 'club_short';
+    // Korte numerieke headers (200, 1000) of bekende race-types als DC-marker
+    if (/^\d{2,4}(m|m?)?$/.test(h) ||
+        /punten|afval|sprint|flying|tijdrit|lange/.test(h)) return 'dc_marker';
+    return '';
+}
+
+// Bouw <option>-tags voor de target-dropdown, met selectie op huidige waarde.
+function _csvTargetsAsOptions(huidig) {
+    let html = '';
+    let huidigeGroep = '';
+    _CSV_TARGETS.forEach(t => {
+        if (t.groep !== huidigeGroep) {
+            if (huidigeGroep) html += '</optgroup>';
+            if (t.groep) html += `<optgroup label="${_csvEsc(t.groep)}">`;
+            huidigeGroep = t.groep;
+        }
+        const sel = t.val === huidig ? ' selected' : '';
+        html += `<option value="${_csvEsc(t.val)}"${sel}>${_csvEsc(t.label)}</option>`;
+    });
+    if (huidigeGroep) html += '</optgroup>';
+    return html;
+}
+
+// Pak een sample-waarde uit de preview voor deze kolom. Eerste niet-lege
+// waarde uit de eerste 5 rijen, of leeg als geen enkele rij waarde heeft.
+function _csvBesteSample(kolIdx) {
+    const preview = _csvImportState.preview || [];
+    for (const rij of preview) {
+        const v = rij[kolIdx];
+        if (v != null && String(v).trim() !== '') return String(v);
+    }
+    return '';
 }
 
 // File-input handler — upload bestand naar parse-endpoint
@@ -123,6 +309,7 @@ async function _csvBestandGekozen(ev) {
         _csvImportState.bestand   = file;
         _csvImportState.headers   = data.headers;
         _csvImportState.preview   = data.preview;
+        _csvImportState.rows      = data.rows || [];
         _csvImportState.total     = data.total;
         _csvImportState.delimiter = data.delimiter;
         _csvImportState.encoding  = data.encoding;
