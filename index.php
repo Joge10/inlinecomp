@@ -165,6 +165,13 @@ if (is_array($eigenScope) && !empty($eigenScope)) {
                                 <button id="btn-export" class="btn-export" title="Deelnemers exporteren als KNSB-CSV">
                                     &#8657; Exporteer
                                 </button>
+                                <!-- CSV-import: alleen zichtbaar bij handmatige wedstrijden.
+                                     Opent de 4-staps wizard (upload → mapping → DC →
+                                     match) voor het invoeren van deelnemers vanuit een
+                                     CSV-bestand (club-wedstrijden, geen KNSB-feed). -->
+                                <button id="btn-csv-import" class="btn-secondary" title="Deelnemers importeren uit CSV-bestand" style="display:none;">
+                                    &#128229; CSV Importeren
+                                </button>
                                 <button id="btn-import" class="btn-import" title="Wedstrijd importeren in database">
                                     &#8659; Importeer
                                 </button>
@@ -670,6 +677,7 @@ function magSchrijven(module) {
 <script src="js/app.js"></script>
 <script src="js/import.js"></script>
 <script src="js/wedstrijd_handmatig.js"></script>
+<script src="js/csv_import.js"></script>
 <script src="js/startlist.js"></script>
 <script src="js/tijdschema.js"></script>
 <script src="js/live.js"></script>

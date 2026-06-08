@@ -5940,3 +5940,64 @@ col.live-col-rondes  { width: 40px; }
     color: #b71c1c; font-size: 12.5px;
 }
 
+/* ── CSV-import wizard ─────────────────────────────────────────────── */
+.csv-modal-dialog { max-width: 880px; width: 92vw; }
+.csv-uitleg {
+    background: #f4f7fb; border-left: 3px solid #2E75B6;
+    padding: 10px 12px; margin: 0 0 16px; font-size: 13px; color: #345;
+}
+.csv-upload-zone {
+    border: 2px dashed #b9c5d4; border-radius: 6px;
+    padding: 20px; text-align: center; background: #fafbfd;
+}
+.csv-upload-zone input[type="file"] { display: none; }
+.csv-upload-label {
+    display: inline-flex; align-items: center; gap: 8px;
+    padding: 10px 20px; background: #2E75B6; color: #fff;
+    border-radius: 4px; cursor: pointer; font-weight: 600;
+    transition: background .15s;
+}
+.csv-upload-label:hover { background: #1f5a8f; }
+.csv-upload-icon { font-size: 18px; }
+.csv-bestand-info {
+    margin-top: 12px; display: flex; gap: 16px; justify-content: center;
+    font-size: 12.5px; color: #456; align-items: center;
+}
+.csv-bestand-info:empty { display: none; }
+.csv-bestand-naam { font-weight: 600; color: #2E75B6; }
+.csv-bestand-grootte { color: #889; }
+.csv-status-ok { color: #2a7a2a; font-weight: 600; }
+.csv-status-fout { color: #b71c1c; font-weight: 600; }
+
+.csv-preview-blok { margin-top: 18px; }
+.csv-preview-blok h4 {
+    margin: 0 0 8px; font-size: 13px; color: #345;
+    border-bottom: 1px solid #dde3ea; padding-bottom: 4px;
+}
+.csv-preview-tabel {
+    width: 100%; border-collapse: collapse; font-size: 12px;
+    background: #fff; border: 1px solid #dde3ea;
+}
+.csv-preview-tabel th {
+    background: #f4f7fb; padding: 5px 8px; text-align: left;
+    border-bottom: 1px solid #dde3ea; font-weight: 600; color: #2E75B6;
+    white-space: nowrap;
+}
+.csv-preview-tabel td {
+    padding: 4px 8px; border-bottom: 1px solid #eef2f6;
+    color: #345; max-width: 200px; overflow: hidden; text-overflow: ellipsis;
+    white-space: nowrap;
+}
+.csv-preview-tabel tr:last-child td { border-bottom: none; }
+.csv-meta-info {
+    margin-top: 10px; display: flex; gap: 18px; flex-wrap: wrap;
+    font-size: 12px; color: #456;
+    background: #f4f7fb; padding: 8px 12px; border-radius: 4px;
+}
+.csv-meta-info strong { color: #2E75B6; }
+.csv-fout {
+    margin-top: 12px; padding: 8px 10px;
+    background: #fdecec; border: 1px solid #e6b9b9; border-radius: 4px;
+    color: #b71c1c; font-size: 12.5px;
+}
+

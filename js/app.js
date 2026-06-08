@@ -583,6 +583,9 @@ async function selectWedstrijd(card, comp) {
 
     el('btn-import').onclick = () => importeerWedstrijd(comp.id, comp.name || '');
     el('btn-export').onclick = () => exporteerWedstrijdCsv(comp.id, comp.name || '');
+    el('btn-csv-import').onclick = () => {
+        if (typeof csvImportOpenWizard === 'function') csvImportOpenWizard();
+    };
 
     panel.scrollIntoView({ behavior: 'smooth', block: 'start' });
 
@@ -590,12 +593,16 @@ async function selectWedstrijd(card, comp) {
     // bron. We gebruiken het detail-endpoint dat een vergelijk-compatibele
     // shape geeft uit eigen DB (lege competitors per cat, DC's, organisatie).
     // Importeer/Export-knoppen worden verborgen — geen KNSB-roundtrip mogelijk.
+    // Andersom: CSV-Importeer is juist alléén voor handmatige wedstrijden
+    // (alternatief voor de KNSB-feed-flow).
     if (comp.is_handmatig) {
-        el('btn-import').style.display = 'none';
-        el('btn-export').style.display = 'none';
+        el('btn-import').style.display     = 'none';
+        el('btn-export').style.display     = 'none';
+        el('btn-csv-import').style.display = '';
     } else {
-        el('btn-import').style.display = '';
-        el('btn-export').style.display = '';
+        el('btn-import').style.display     = '';
+        el('btn-export').style.display     = '';
+        el('btn-csv-import').style.display = 'none';
     }
 
     const myAbort = vergelijkAbort;
