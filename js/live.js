@@ -993,14 +993,16 @@ function _liveHerbereken(ritIdx) {
     // Voor PK skippen we (PK krijgt dropdowns na save zoals voorheen — punten-
     // gebaseerde finpos vereist een save-roundtrip om correct gesynct te zijn).
     if (!isPuntenkoers && _liveAllesCompleet(ritIdx)) {
-        // Eerst r.finishpositie syncen voor rijders die nog geen positie hebben
-        // (eerste-keer activatie). Reeds gewisselde rijders niet aanraken — hun
-        // r.finishpositie reflecteert de operator-keuze.
+        // Sync r.finishpositie uit posMap (= correct gerangschikt op DOM-
+        // tijden). Bewust ALLE niet-gewisselde rijders overschrijven, niet
+        // alleen de null-rijders: stale finishposities (bv. uit een eerdere
+        // CSV-import-snapshot toen niet alle rijders nog een tijd hadden)
+        // worden zo bijgewerkt. Operator-wisselingen (r._wisselt=true)
+        // blijven onaangeroerd — die reflecteren een expliciete keuze.
         rit.rijders.forEach(r => {
-            if (r.finishpositie == null) {
-                const p = posMap.get(r.entry_id);
-                if (p != null) r.finishpositie = p;
-            }
+            if (r._wisselt) return;
+            const p = posMap.get(r.entry_id);
+            r.finishpositie = (p != null) ? p : null;
         });
         // Nu kunnen we badges → dropdowns omzetten waar van toepassing.
         // _liveActiveerWisselDropdowns laat bestaande dropdowns staan en
@@ -2369,20 +2371,22 @@ function _liveBind(idx) {
             }
         }
 
-        const rijB   = kaart.querySelector(`[data-entry="${riderB.entry_id}"]`);
+        const rijB     = kaart.querySelector(`[data-entry="${riderB.entry_id}"]`);
+        const tijdInpA = rij?.querySelector('.live-tijd-inp');
+        // selB + tijdInpB op functie-scope declareren (let null + assign in
+        // if-blok) zodat de catch-handler verderop ze ook kan refereren.
+        // Eerder waren ze block-scoped binnen 'if (!isExAequoBreak)' → catch
+        // gaf ReferenceError en de revert kon de DOM niet meer terugdraaien.
+        let selB = null, tijdInpB = null;
         // Bij echte swap: B's finish-dropdown verschuiven naar oudePosA.
         // Bij ex-aequo break: B's positie ongewijzigd, dropdown niet aanraken.
         if (!isExAequoBreak) {
-            const selB = rijB?.querySelector('.live-finish-sel');
+            selB = rijB?.querySelector('.live-finish-sel');
             if (selB) selB.value = oudePosA;
+            tijdInpB = rijB?.querySelector('.live-tijd-inp');
         }
-
-        const tijdInpA = rij?.querySelector('.live-tijd-inp');
         if (tijdInpA) tijdInpA.value = riderA.tijd_ms ? _msTijdNaarDisplay(riderA.tijd_ms) : '';
-        if (!isExAequoBreak) {
-            const tijdInpB = rijB?.querySelector('.live-tijd-inp');
-            if (tijdInpB) tijdInpB.value = riderB.tijd_ms ? _msTijdNaarDisplay(riderB.tijd_ms) : '';
-        }
+        if (tijdInpB) tijdInpB.value = riderB.tijd_ms ? _msTijdNaarDisplay(riderB.tijd_ms) : '';
 
         // Helper: update rondes-cel + data-rondes in heat card én linker panel
         const _updateRondesDOM = (rijEl, entryId, nieuweRondes) => {
