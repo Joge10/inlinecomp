@@ -30,9 +30,16 @@ CREATE TABLE IF NOT EXISTS `persons` (
     -- echte license_key en de pending-rij wordt verwijderd.
     -- Mogelijke waarden: NULL (echte persoon, default) | 'historie' (PDF-import)
     `pending_source` VARCHAR(20)  DEFAULT NULL,
+    -- Externe rijders: niet uit KNSB-feed maar via handmatige CSV-import voor
+    -- club-wedstrijden / buitenlandse gasten. Worden gefilterd uit
+    -- vergelijk.php + import.php zodat de KNSB-feed-vergelijking ze niet
+    -- als "verdwenen" markeert. license_key formaat 'x-{12-char-random}'.
+    `extern`           BOOLEAN     NOT NULL DEFAULT 0,
+    `extern_federatie` VARCHAR(50) DEFAULT NULL,           -- 'FFRS', 'DRIV', ...
     PRIMARY KEY (`license_key`),
     KEY `idx_persons_anon`    (`anonymized_at`),
-    KEY `idx_persons_pending` (`pending_source`)
+    KEY `idx_persons_pending` (`pending_source`),
+    KEY `idx_persons_extern`  (`extern`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
 -- Migratie voor bestaande installaties (fout negeren als kolom al bestaat):
@@ -44,3 +51,9 @@ CREATE TABLE IF NOT EXISTS `persons` (
 -- ALTER TABLE persons
 --     ADD COLUMN pending_source VARCHAR(20) DEFAULT NULL AFTER anonymized_at,
 --     ADD KEY idx_persons_pending (pending_source);
+--
+-- Extern-flag migratie (juni 2026):
+-- ALTER TABLE persons
+--     ADD COLUMN extern BOOLEAN NOT NULL DEFAULT 0 AFTER pending_source,
+--     ADD COLUMN extern_federatie VARCHAR(50) DEFAULT NULL AFTER extern,
+--     ADD KEY idx_persons_extern (extern);
