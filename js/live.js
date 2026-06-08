@@ -921,13 +921,21 @@ function _liveHerbereken(ritIdx) {
     const rit = _liveRitten[ritIdx];
     if (!rit || !rit.rijders) return;
 
-    // Verzamel entries vanuit DOM (inclusief rondes voor lange-afstand heats)
+    // Verzamel entries vanuit DOM (inclusief rondes voor lange-afstand heats).
+    // Bij sprint: rondes negeren — operator kan ze niet invoeren, transponder-
+    // CSV bevat soms wel rondes-data, en _berekenPosities zou die per ongeluk
+    // gebruiken (null=Infinity wint van een getal) → rare volgorde. Bij sprint
+    // gaan we ervan uit dat iedereen alle rondes heeft gereden; ontbrekende
+    // ronden komen via DNF-sanctie van de aankomstjury.
+    const isSprintRit = rit.race_type === 'sprint';
     const entries = rit.rijders.map(r => {
         const rij    = document.querySelector(`[data-entry="${r.entry_id}"]`);
         const inp    = rij?.querySelector('.live-tijd-inp');
         const sel    = rij?.querySelector('.live-sanctie-sel');
         const rnInp  = rij?.querySelector('.live-rondes-inp');
-        const rondes = rnInp ? (rnInp.value !== '' ? (parseInt(rnInp.value) || null) : null) : (r.rondes ?? null);
+        const rondes = isSprintRit
+            ? null
+            : (rnInp ? (rnInp.value !== '' ? (parseInt(rnInp.value) || null) : null) : (r.rondes ?? null));
         return { entry_id: r.entry_id, tijd_ms: inp ? _parseTijdInvoer(inp.value) : null, sanctie: sel?.value || null, rondes };
     });
 
@@ -4429,11 +4437,14 @@ function _liveResetFinishCellen(ritIdx) {
         // Werkt rechtstreeks op rit.rijders, schrijft r.finishpositie
         _liveHerrekenPKFinishposities(rit);
     } else {
+        // Sprint: rondes negeren (zelfde reden als in _liveHerbereken — anders
+        // verstoort een vroege CSV-import met transponder-rondes de sort).
+        const isSprintReset = rit.race_type === 'sprint';
         const entries = rit.rijders.map(r => ({
             entry_id: r.entry_id,
             tijd_ms:  r.tijd_ms,
             sanctie:  r.sanctie,
-            rondes:   r.rondes,
+            rondes:   isSprintReset ? null : r.rondes,
         }));
         const posMap = new Map();
         if (rit.is_combi) {
