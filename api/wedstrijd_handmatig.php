@@ -147,6 +147,38 @@ if ($action === 'detail') {
         }
     }
 
+    // Fallback voor handmatige wedstrijden: rijders die NIET (of slechts
+    // gedeeltelijk) een transponder voor deze wedstrijd hebben, krijgen hun
+    // laatste-bekende transponders uit eerdere wedstrijden ingeladen. Zo zien
+    // operator + speakerlijst meteen de transponders die de rijder gewoonlijk
+    // gebruikt — operator kan ze in Beheer overschrijven indien nodig.
+    // Geen DB-write hier: puur read-only fallback. De CSV-import-commit
+    // (api/csv_import.php) zou ze idealiter direct kopiëren voor persistentie;
+    // deze fallback dekt bestaande imports + de tussentijd.
+    if ($personRijen) {
+        $ph = implode(',', array_fill(0, count($personRijen), '?'));
+        $stmt = $pdo->prepare("
+            SELECT t1.person_license, t1.slot, t1.code, t1.source, t1.updated_at
+            FROM transponders t1
+            WHERE t1.person_license IN ($ph)
+              AND t1.id = (
+                  SELECT MAX(t2.id) FROM transponders t2
+                  WHERE t2.person_license = t1.person_license
+                    AND t2.slot           = t1.slot
+              )
+        ");
+        $stmt->execute(array_keys($personRijen));
+        foreach ($stmt->fetchAll(PDO::FETCH_ASSOC) as $t) {
+            $lk   = $t['person_license'];
+            $slot = (int)$t['slot'];
+            // Alleen toevoegen als deze (person, slot) NIET al voor deze
+            // wedstrijd specifiek is gezet — eigen TPs winnen altijd.
+            if (!isset($dbTp[$lk][$slot])) {
+                $dbTp[$lk][$slot] = $t;
+            }
+        }
+    }
+
     // Bouw competitors per DC in vergelijk.php-compatibele shape (org-
     // toegevoegde-stijl: alle data uit eigen DB, geen KNSB-feed-diff).
     $bouwCompetitor = function(array $row) use ($dbTp) {

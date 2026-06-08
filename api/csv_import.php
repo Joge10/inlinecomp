@@ -626,6 +626,35 @@ if ($action === 'commit') {
     try {
         $pdo->beginTransaction();
 
+        // Helper: kopieer laatste-bekende transponders van een bestaande
+        // rijder naar deze wedstrijd. Idempotent via ON DUPLICATE KEY UPDATE.
+        // Alleen voor gelinked (bestaand) rijders — nieuwe extern hebben nog
+        // geen TPs. Operator kan in Beheer overschrijven indien nodig.
+        $tpFetch = $pdo->prepare("
+            SELECT t1.slot, t1.code, t1.source
+            FROM transponders t1
+            WHERE t1.person_license = ?
+              AND t1.id = (
+                  SELECT MAX(t2.id) FROM transponders t2
+                  WHERE t2.person_license = t1.person_license
+                    AND t2.slot           = t1.slot
+              )
+        ");
+        $tpInsert = $pdo->prepare("
+            INSERT INTO transponders (person_license, competition_id, slot, code, source)
+            VALUES (?, ?, ?, ?, ?)
+            ON DUPLICATE KEY UPDATE code = VALUES(code)
+        ");
+        $kopieerTpsVoorRijder = function($licenseKey) use ($tpFetch, $tpInsert, $compId) {
+            $tpFetch->execute([$licenseKey]);
+            foreach ($tpFetch->fetchAll(PDO::FETCH_ASSOC) as $tp) {
+                if (!$tp['code']) continue;
+                $tpInsert->execute([
+                    $licenseKey, $compId, (int)$tp['slot'], $tp['code'], $tp['source'],
+                ]);
+            }
+        };
+
         // Prepared statements (eenmalig opbouwen voor performance)
         $insPerson = $pdo->prepare("
             INSERT INTO persons
@@ -712,6 +741,9 @@ if ($action === 'commit') {
                 // Bestaande persoon: license_key is de actie-waarde
                 $licenseKey = $actie;
                 $stats['gelinked']++;
+                // Kopieer laatste-bekende transponders → persistent voor deze comp
+                try { $kopieerTpsVoorRijder($licenseKey); }
+                catch (Throwable $e) { /* niet kritiek, fallback in detail werkt ook */ }
             }
 
             // Entries per dc_marker-kolom met "x"
