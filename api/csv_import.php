@@ -507,7 +507,253 @@ if ($action === 'zoek_personen') {
     exit;
 }
 
-// commit komt in volgende stap.
+// ── Actie: commit ──────────────────────────────────────────────────────────
+//   Definitieve import: persons aanmaken/koppelen + entries inserten in
+//   één atomaire transactie. ON DUPLICATE KEY UPDATE op entries maakt
+//   herimport veilig (geen duplicaat-errors voor al bestaande inschrijvingen).
+//
+//   POST body (JSON):
+//     competition_id, mapping, rows, cat_mapping, afstand_per_kol,
+//     dc_toewijzing, match_acties
+//
+//   Returns: { ok, stats: { nieuw, gelinked, skipped, entries_nieuw,
+//                          entries_upgedate, rijen_zonder_dc, errors } }
+if ($action === 'commit') {
+    if ($method !== 'POST') {
+        http_response_code(405);
+        echo json_encode(['error' => 'commit vereist POST']);
+        exit;
+    }
+    $body         = json_decode(file_get_contents('php://input'), true);
+    $compId       = trim($body['competition_id'] ?? '');
+    $mapping      = $body['mapping']         ?? [];
+    $rows         = $body['rows']            ?? [];
+    $catMapping   = $body['cat_mapping']     ?? [];
+    $afstandPerKol= $body['afstand_per_kol'] ?? [];
+    $dcToewijzing = $body['dc_toewijzing']   ?? [];
+    $matchActies  = $body['match_acties']    ?? [];
+
+    if (!$compId || !$rows) {
+        http_response_code(400);
+        echo json_encode(['error' => 'competition_id of rows ontbreekt']);
+        exit;
+    }
+    checkCompetitieToegang($pdo, $_authUser, $compId);
+
+    // Kolom-indices uit mapping
+    $kolVoor = function(string $target) use ($mapping) {
+        foreach ($mapping as $kol => $t) {
+            if ($t === $target) return (int)$kol;
+        }
+        return null;
+    };
+    $kIs = [
+        'name_full'    => $kolVoor('name_full'),
+        'name_first'   => $kolVoor('name_first'),
+        'name_tussen'  => $kolVoor('name_tussen'),
+        'name_last'    => $kolVoor('name_last'),
+        'gender'       => $kolVoor('gender'),
+        'nationality'  => $kolVoor('nationality'),
+        'birth_year'   => $kolVoor('birth_year'),
+        'start_number' => $kolVoor('start_number'),
+        'cat_groep'    => $kolVoor('cat_groep'),
+        'club_short'   => $kolVoor('club_short'),
+        'club_full'    => $kolVoor('club_full'),
+        'club_sponsor' => $kolVoor('club_of_sponsor'),
+        'sponsor'      => $kolVoor('sponsor'),
+    ];
+
+    // Helper: is een dc-marker waarde "true"? (x, X, 1, ja, yes)
+    $isTrueMarker = function($v): bool {
+        $s = trim((string)$v);
+        if ($s === '') return false;
+        $low = strtolower($s);
+        return in_array($low, ['x', '1', 'ja', 'yes', 'true', 'y'], true);
+    };
+
+    // Helper: cat-groep normaliseren
+    $normCat = function($v): ?string {
+        $s = strtolower(trim((string)$v));
+        if ($s === '') return null;
+        if (str_starts_with($s, 'pupil'))  return 'Pupil';
+        if (str_starts_with($s, 'cadet'))  return 'Cadet';
+        if (str_starts_with($s, 'junior')) return 'Junior';
+        if (str_starts_with($s, 'youth'))  return 'Youth';
+        if (str_starts_with($s, 'senior')) return 'Senior';
+        return null;
+    };
+    $normGender = function($v): ?string {
+        $s = strtoupper(trim((string)$v));
+        if ($s === 'M' || $s === 'H')                return 'M';
+        if ($s === 'W' || $s === 'V' || $s === 'F') return 'W';
+        return null;
+    };
+
+    // Helper: bouw naam-velden uit kolommen
+    $bouwNamen = function(array $r) use ($kIs): array {
+        $voornaam    = $kIs['name_first']  !== null ? trim($r[$kIs['name_first']]  ?? '') : '';
+        $tussen      = $kIs['name_tussen'] !== null ? trim($r[$kIs['name_tussen']] ?? '') : '';
+        $achternaam  = $kIs['name_last']   !== null ? trim($r[$kIs['name_last']]   ?? '') : '';
+        $volledig    = $kIs['name_full']   !== null ? trim($r[$kIs['name_full']]   ?? '') : '';
+        if ($volledig === '') {
+            $delen = array_filter([$voornaam, $tussen, $achternaam], fn($x) => $x !== '');
+            $volledig = implode(' ', $delen);
+        }
+        // short_name = voornaam + achternaam (zonder tussenvoegsel)
+        $short = trim($voornaam . ' ' . $achternaam);
+        if ($short === '' || $short === ' ') $short = $volledig;
+        return ['full' => $volledig, 'short' => $short];
+    };
+
+    // Volgende auto-startnummer (1000+) bij MAX(start_number) ophalen
+    $stmt = $pdo->prepare(
+        "SELECT GREATEST(IFNULL(MAX(start_number), 999), 999) + 1 AS next_nr FROM persons"
+    );
+    $stmt->execute();
+    $nextStartNr = (int)$stmt->fetchColumn();
+    if ($nextStartNr < 1000) $nextStartNr = 1000;
+
+    $stats = [
+        'nieuw'           => 0,
+        'gelinked'        => 0,
+        'skipped'         => 0,
+        'entries_nieuw'   => 0,
+        'entries_upgedate'=> 0,
+        'rijen_zonder_dc' => [],
+        'errors'          => [],
+    ];
+
+    try {
+        $pdo->beginTransaction();
+
+        // Prepared statements (eenmalig opbouwen voor performance)
+        $insPerson = $pdo->prepare("
+            INSERT INTO persons
+                (license_key, full_name, short_name, birth_year, gender,
+                 category, nationality, start_number,
+                 club_short, club_full, sponsor,
+                 extern, extern_federatie)
+            VALUES (:lk, :fn, :sn, :by, :gd,
+                    :cat, :nat, :snr,
+                    :cls, :clf, :spn,
+                    1, :fed)
+        ");
+        $insEntry = $pdo->prepare("
+            INSERT INTO entries (distance_combination_id, person_license, status)
+            VALUES (?, ?, 1)
+            ON DUPLICATE KEY UPDATE status = 1
+        ");
+
+        foreach ($rows as $i => $r) {
+            $actie = $matchActies[$i] ?? '__skip__';
+            if ($actie === '__skip__') {
+                $stats['skipped']++;
+                continue;
+            }
+
+            $cat    = $kIs['cat_groep'] !== null ? $normCat($r[$kIs['cat_groep']]) : null;
+            $gender = $kIs['gender']    !== null ? $normGender($r[$kIs['gender']])  : null;
+            if (!$cat || !$gender) {
+                $stats['errors'][] = "Rij " . ($i + 1) . ": cat of geslacht onbekend";
+                continue;
+            }
+            $catCode = $catMapping[$cat . '|' . $gender] ?? null;
+            if (!$catCode) {
+                $stats['errors'][] = "Rij " . ($i + 1) . ": geen cat-code voor $cat|$gender";
+                continue;
+            }
+
+            // Persoon bepalen
+            if ($actie === '__new__') {
+                $namen   = $bouwNamen($r);
+                $birthY  = $kIs['birth_year']   !== null ? (int)($r[$kIs['birth_year']] ?? 0) : 0;
+                $nation  = $kIs['nationality']  !== null ? strtoupper(substr(trim($r[$kIs['nationality']] ?? ''), 0, 3)) : '';
+                // Club: club_of_sponsor vult zowel club als sponsor met dezelfde waarde
+                $club    = '';
+                $sponsor = '';
+                if ($kIs['club_sponsor'] !== null) {
+                    $val     = trim($r[$kIs['club_sponsor']] ?? '');
+                    $club    = $val;
+                    $sponsor = $val;
+                } else {
+                    if ($kIs['club_short'] !== null) $club = trim($r[$kIs['club_short']] ?? '');
+                    if ($kIs['sponsor']    !== null) $sponsor = trim($r[$kIs['sponsor']]    ?? '');
+                }
+                $clubFull = $kIs['club_full'] !== null ? trim($r[$kIs['club_full']] ?? '') : $club;
+
+                // Startnummer: CSV-waarde indien aanwezig (en numeriek), anders auto
+                $csvSnr = $kIs['start_number'] !== null ? trim($r[$kIs['start_number']] ?? '') : '';
+                $snr = ctype_digit($csvSnr) ? (int)$csvSnr : $nextStartNr++;
+
+                $licenseKey = 'x-' . bin2hex(random_bytes(6));
+                $fed = ($nation && $nation !== 'NED' && $nation !== 'NLD') ? $nation : null;
+
+                try {
+                    $insPerson->execute([
+                        ':lk'  => $licenseKey,
+                        ':fn'  => $namen['full'],
+                        ':sn'  => $namen['short'],
+                        ':by'  => $birthY ?: null,
+                        ':gd'  => $gender === 'M' ? 0 : 1,
+                        ':cat' => $catCode,
+                        ':nat' => $nation ?: 'NED',
+                        ':snr' => $snr,
+                        ':cls' => substr($club, 0, 20),
+                        ':clf' => $clubFull ?: $club,
+                        ':spn' => $sponsor ?: null,
+                        ':fed' => $fed,
+                    ]);
+                    $stats['nieuw']++;
+                } catch (Throwable $e) {
+                    $stats['errors'][] = "Rij " . ($i + 1) . " (" . $namen['full'] . "): " . $e->getMessage();
+                    continue;
+                }
+            } else {
+                // Bestaande persoon: license_key is de actie-waarde
+                $licenseKey = $actie;
+                $stats['gelinked']++;
+            }
+
+            // Entries per dc_marker-kolom met "x"
+            foreach ($afstandPerKol as $kol => $afstandNaam) {
+                $kolIdx = (int)$kol;
+                $val    = $r[$kolIdx] ?? '';
+                if (!$isTrueMarker($val)) continue;
+
+                $dcKey = $catCode . '|' . $afstandNaam;
+                $dcId  = $dcToewijzing[$dcKey] ?? null;
+                if (!$dcId) {
+                    if (!in_array($i, $stats['rijen_zonder_dc'], true)) {
+                        $stats['rijen_zonder_dc'][] = $i;
+                    }
+                    continue;
+                }
+
+                try {
+                    $insEntry->execute([$dcId, $licenseKey]);
+                    // rowCount = 1 bij INSERT, 2 bij UPDATE (MySQL ON DUPLICATE KEY UPDATE)
+                    if ($insEntry->rowCount() === 1) $stats['entries_nieuw']++;
+                    else                              $stats['entries_upgedate']++;
+                } catch (Throwable $e) {
+                    $stats['errors'][] = "Rij " . ($i + 1) . " DC $catCode|$afstandNaam: " . $e->getMessage();
+                }
+            }
+        }
+
+        $pdo->commit();
+
+        echo json_encode([
+            'ok'    => true,
+            'stats' => $stats,
+        ], JSON_UNESCAPED_UNICODE);
+        exit;
+    } catch (Throwable $e) {
+        $pdo->rollBack();
+        http_response_code(500);
+        echo json_encode(['error' => 'Import mislukt: ' . $e->getMessage()]);
+        exit;
+    }
+}
 
 http_response_code(400);
 echo json_encode(['error' => "Onbekende action: " . htmlspecialchars($action)]);

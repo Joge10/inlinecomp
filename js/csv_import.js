@@ -758,13 +758,109 @@ function _csvMatchRijHtml(m) {
 
 async function _csvDoeImport() {
     const foutEl = document.getElementById('csv-commit-fout');
+    const importBtn = document.getElementById('csv-importeer');
     foutEl.style.display = 'none';
-    alert('Commit-endpoint volgt in de volgende implementatie-ronde.\n\n' +
-          'Voorbereid voor import:\n' +
-          `- ${_csvImportState.matches.length} rijen totaal\n` +
-          `- ${Object.values(_csvImportState.matchActies).filter(v => v !== '__skip__' && v !== '__new__').length} koppelingen aan bestaande personen\n` +
-          `- ${Object.values(_csvImportState.matchActies).filter(v => v === '__new__').length} nieuwe externe personen\n` +
-          `- ${Object.values(_csvImportState.matchActies).filter(v => v === '__skip__').length} overgeslagen`);
+    importBtn.disabled  = true;
+    importBtn.textContent = '⏳ Bezig met importeren…';
+
+    try {
+        const res = await fetch('api/csv_import.php?action=commit', {
+            method:  'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body:    JSON.stringify({
+                competition_id:  _csvImportState.compId,
+                mapping:         _csvImportState.mapping,
+                rows:            _csvImportState.rows,
+                cat_mapping:     _csvImportState.catMapping,
+                afstand_per_kol: _csvImportState.afstandPerKol,
+                dc_toewijzing:   _csvImportState.dcToewijzing,
+                match_acties:    _csvImportState.matchActies,
+            }),
+        });
+        const data = await res.json();
+        if (!res.ok || data.error) throw new Error(data.error || 'HTTP ' + res.status);
+
+        _csvToonResultaat(data.stats);
+    } catch (err) {
+        foutEl.textContent   = '⚠ Import mislukt: ' + err.message;
+        foutEl.style.display = '';
+        importBtn.disabled   = false;
+        importBtn.textContent = '✓ Importeer';
+    }
+}
+
+// Resultaat-scherm na succesvolle import. Operator klikt op "Klaar" en de
+// wizard sluit + de Importeer-tab wordt vers geladen zodat de nieuwe rijders
+// zichtbaar zijn.
+function _csvToonResultaat(stats) {
+    const errs = stats.errors || [];
+    const zonderDc = stats.rijen_zonder_dc || [];
+
+    const errBlokHtml = errs.length
+        ? `<div class="csv-result-errs">
+              <h4>⚠ ${errs.length} foutmelding${errs.length !== 1 ? 'en' : ''}:</h4>
+              <ul>${errs.slice(0, 10).map(e => `<li>${_csvEsc(e)}</li>`).join('')}</ul>
+              ${errs.length > 10 ? `<p><em>(+ ${errs.length - 10} meer in serverlog)</em></p>` : ''}
+          </div>`
+        : '';
+
+    const zonderDcHtml = zonderDc.length
+        ? `<div class="csv-result-warn">
+              ⚠ ${zonderDc.length} rij${zonderDc.length !== 1 ? 'en' : ''} hadden combinaties (cat × afstand)
+              waar geen DC aan was toegewezen — die entries zijn overgeslagen.
+              Rijders zijn wel aangemaakt/gelinked voor combinaties die wél een DC hadden.
+          </div>`
+        : '';
+
+    const html = `
+        <div class="modal-overlay" id="csv-modal" data-stap="klaar">
+            <div class="modal-dialog csv-modal-dialog">
+                <div class="modal-header">
+                    <h3>${errs.length ? '⚠' : '✅'} Import voltooid</h3>
+                    <button class="modal-sluit" id="csv-sluit" title="Sluiten">&times;</button>
+                </div>
+                <div class="modal-body">
+                    <div class="csv-result-stats">
+                        <div class="csv-result-row">
+                            <span class="csv-result-label">🆕 Nieuwe personen aangemaakt:</span>
+                            <span class="csv-result-val">${stats.nieuw}</span>
+                        </div>
+                        <div class="csv-result-row">
+                            <span class="csv-result-label">🔗 Gekoppeld aan bestaande:</span>
+                            <span class="csv-result-val">${stats.gelinked}</span>
+                        </div>
+                        <div class="csv-result-row">
+                            <span class="csv-result-label">⊘ Overgeslagen:</span>
+                            <span class="csv-result-val">${stats.skipped}</span>
+                        </div>
+                        <div class="csv-result-row csv-result-divider">
+                            <span class="csv-result-label">➕ Nieuwe entries:</span>
+                            <span class="csv-result-val">${stats.entries_nieuw}</span>
+                        </div>
+                        <div class="csv-result-row">
+                            <span class="csv-result-label">↻ Bijgewerkte entries:</span>
+                            <span class="csv-result-val">${stats.entries_upgedate}</span>
+                        </div>
+                    </div>
+                    ${zonderDcHtml}
+                    ${errBlokHtml}
+                </div>
+                <div class="modal-knoppen">
+                    <button class="btn-primary" id="csv-klaar">Klaar — vernieuw lijst</button>
+                </div>
+            </div>
+        </div>`;
+
+    document.getElementById('csv-modal')?.remove();
+    document.body.insertAdjacentHTML('beforeend', html);
+    document.getElementById('csv-sluit').addEventListener('click', _csvSluit);
+    document.getElementById('csv-klaar').addEventListener('click', () => {
+        _csvSluit();
+        // Importeer-tab vers laden — nieuwe rijders verschijnen in beheer
+        if (typeof herlaadVergelijking === 'function') {
+            herlaadVergelijking();
+        }
+    });
 }
 
 // ── Helpers voor stap 3 ─────────────────────────────────────────────────────
