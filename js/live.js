@@ -2311,6 +2311,23 @@ function _liveBind(idx) {
             }
         }
 
+        // Belangrijk: sync r.tijd_ms + r.rondes uit DOM vóór we de swap doen.
+        // CSV-import-rijders hebben hun tijd alléén in DOM staan — r.tijd_ms
+        // is nog null. Zonder deze sync zou de swap die null naar de partner
+        // kopiëren en de echte tijd weggooien (bug zaterdag-test: na wisseling
+        // kreeg één rijder 0:00.000 i.p.v. de tijd van de tegenpartij).
+        // _syncRiderUitDOM updaten alleen de relevante velden — sanctie blijft
+        // bewust over (die zit al goed in memory via de change-handler).
+        const _syncRiderUitDOM = (rider, rijEl) => {
+            const inp   = rijEl?.querySelector('.live-tijd-inp');
+            const rnInp = rijEl?.querySelector('.live-rondes-inp');
+            if (inp)   rider.tijd_ms = _parseTijdInvoer(inp.value);
+            if (rnInp) rider.rondes  = rnInp.value !== '' ? (parseInt(rnInp.value) || null) : null;
+        };
+        _syncRiderUitDOM(riderA, rij);
+        const _rijBVoorSync = kaart.querySelector(`[data-entry="${riderB.entry_id}"]`);
+        _syncRiderUitDOM(riderB, _rijBVoorSync);
+
         const oudeRondesA = riderA.rondes;
         const oudeRondesB = riderB.rondes;
         const oudeTijdA   = riderA.tijd_ms;
