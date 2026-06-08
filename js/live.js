@@ -2171,6 +2171,17 @@ function _liveBind(idx) {
                 }
             }
             const sanctie = sanctieSel?.value || '';
+            // BELANGRIJK: r.tijd_ms en r.sanctie syncen vanuit DOM. Zonder
+            // deze sync blijft r.tijd_ms null in geheugen voor handmatig
+            // ingevoerde tijden — _liveSyncInvoer en _liveHerbereken werken
+            // dan met inconsistent state (DOM toont 2:06.123, geheugen
+            // toont null), wat dwingt tot een rare positie-bug bij wissel:
+            // de partner krijgt 'null' als swap-tijd ipv de echte waarde,
+            // en _berekenPosities slaat deze rijder over → fp-rangschikking
+            // klopt niet. _liveResetFinishCellen synct dit voor CSV-import
+            // (regel 4406-4410); de blur-handler moest hetzelfde doen.
+            r.tijd_ms = ms;
+            r.sanctie = sanctie || null;
             _liveSyncInvoer(r.entry_id, tijdVal, sanctie);
             _liveOngeslagen = true;
             // Handmatige tijd-correctie heft de eerdere wissel-lock op —
@@ -2182,8 +2193,11 @@ function _liveBind(idx) {
         tijdInp?.addEventListener('input', () => { _liveOngeslagen = true; });
 
         // Rondes-input: bij handmatige correctie ook _liveOngeslagen + (indien
-        // aanwezig) de wissel-lock opheffen, analoog aan tijd-input.
+        // aanwezig) de wissel-lock opheffen, analoog aan tijd-input. Ook hier
+        // r.rondes uit DOM syncen voor consistentie (zelfde reden als tijd).
         rondesInp?.addEventListener('input', () => {
+            const raw = rondesInp.value;
+            r.rondes = raw !== '' ? (parseInt(raw) || null) : null;
             _liveOngeslagen = true;
             if (r._wisselt) {
                 delete r._wisselt;
