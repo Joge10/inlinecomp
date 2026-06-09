@@ -8,33 +8,121 @@ let _slActieveDag      = 0;      // multi-day tab-state (0 = nog niet bepaald). 
                                  // wissel via _slActieveDagCompId.
 let _slActieveDagCompId = null;  // waarvoor _slActieveDag bedoeld is — wist cache bij wissel
 let _slTsFetched       = null;   // comp-id waarvoor tijdschema al async opgehaald is
+let _slAfstandFilter   = '';     // '' = alle afstanden, anders exacte afstand-naam zoals "200m DTT"
+
+// Bepaal welke afstanden in een groep (DC) zitten. Gebruikt _slDistCache
+// (echte distance-rijen uit DB, met velden name + value_meters) wanneer
+// beschikbaar — dat is de WAARHEID en kan meerdere afstanden per DC bevatten.
+//
+// Cache wordt asynchroon gevuld door _slBulkLaadAfstanden (zie kleurAll-
+// TabsAsync flow). Bij eerste render kan cache leeg zijn → dc_name fallback.
+// Daarna is cache gevuld en krijgt het filter de echte afstand-lijst.
+function getAfstandenVoorGroep(groep) {
+    const cKey = groep.dc_id + (groep.is_split ? '|' + groep.dc_name : '');
+    const cached = _slDistCache[cKey];
+    if (cached && cached.length) {
+        // Echte afstanden uit DB. Een DC heeft typisch 1 distance (200m DTT),
+        // maar combo-DCs kunnen meerdere afstanden hebben — die willen we
+        // allemaal als filter-treffer beschouwen.
+        return [...new Set(cached.map(d => d.name).filter(Boolean))];
+    }
+    // Fallback wanneer DB-data nog niet binnen is: regex op dc_name.
+    return [extraheerAfstand(groep.dc_name)];
+}
+
+// Fallback voor groepen zonder gecachte distances: trek de afstand uit dc_name
+// via KNSB-conventie (afstand achteraan, bv "Pupils Girls 200m DTT" → "200m
+// DTT"). Wordt alleen gebruikt wanneer _slDistCache nog leeg is.
+function extraheerAfstand(dcName) {
+    if (!dcName) return 'Overig';
+    const patronen = [
+        /(\d+\s*m\s+DTT)$/i,
+        /(\d+\s*m\s+Sprint)$/i,
+        /(\d+\s*m\s+TT)$/i,
+        /(Pointsrace)$/i,
+        /(Eliminatiekoers)$/i,
+        /(Tijdrit)$/i,
+        /(Marathon)$/i,
+        /(\d+\s*m)$/i,
+    ];
+    for (const p of patronen) {
+        const m = dcName.match(p);
+        if (m) return m[1].replace(/\s+/g, ' ').trim();
+    }
+    const woorden = dcName.trim().split(/\s+/);
+    return woorden[woorden.length - 1] || 'Overig';
+}
 
 // ── Loting-status cache (voor tab-kleuren) ────────────────────────────────────
 let _slStatusCache = null; // { competition_id, geloot: Set<string> }
 let _slDistCache   = {};   // 'dc_id|splitKey' → [afstanden]  (afstandencache per groep)
 
+// In-flight tracking — als meerdere callers parallel binnen komen (typisch
+// kleurAlleTabsAsync + vulPrintSelect + _slAchtergrondLaadTijdschema), delen
+// ze 1 HTTP-call ipv elk eigen fetch. Cache-hit-shortcut alleen werkte niet
+// bij parallel: alle callers zagen de cache leeg vóór de eerste klaar was.
+let _slStatusInFlight = null;
+
 async function laadSlStatus() {
     if (_slStatusCache?.competition_id === huidigCompId) return _slStatusCache.geloot;
+    if (_slStatusInFlight) return _slStatusInFlight;
     _slStatusCache = null;
     if (!huidigCompId) return new Set();
-    try {
-        const res  = await fetch(`api/startlijst_status.php?competition_id=${encodeURIComponent(huidigCompId)}`);
-        const data = await res.json();
-        const geloot   = new Set();
-        const rondeMap = new Map();   // statusKey → max_ronde
-        if (Array.isArray(data)) {
-            for (const r of data) {
-                const key = `${r.distance_combination_id}||${r.distance_id}||${r.split_group}`;
-                geloot.add(key);
-                rondeMap.set(key, parseInt(r.max_ronde) || 1);
+    _slStatusInFlight = (async () => {
+        try {
+            const res  = await fetch(`api/startlijst_status.php?competition_id=${encodeURIComponent(huidigCompId)}`);
+            const data = await res.json();
+            const geloot   = new Set();
+            const rondeMap = new Map();   // statusKey → max_ronde
+            if (Array.isArray(data)) {
+                for (const r of data) {
+                    const key = `${r.distance_combination_id}||${r.distance_id}||${r.split_group}`;
+                    geloot.add(key);
+                    rondeMap.set(key, parseInt(r.max_ronde) || 1);
+                }
             }
-        }
-        _slStatusCache = { competition_id: huidigCompId, geloot, rondeMap };
-        return geloot;
-    } catch { return new Set(); }
+            _slStatusCache = { competition_id: huidigCompId, geloot, rondeMap };
+            return geloot;
+        } catch { return new Set(); }
+        finally { _slStatusInFlight = null; }
+    })();
+    return _slStatusInFlight;
 }
 
-function invalideerSlStatus() { _slStatusCache = null; _slDistCache = {}; }
+// Invalideer alleen de loting-status — _slDistCache (afstanden per DC)
+// blijft staan want die verandert alleen via beheer-tab, niet via loting.
+// Vóór deze split veroorzaakte invalideerSlStatus() onnodige cache-wipe
+// in vulPrintSelect → 30 individuele dc_id-calls bij iedere render van
+// een wedstrijd met veel DCs (= EP-limit-risico op shared hosting).
+function invalideerSlStatus() { _slStatusCache = null; }
+
+// Aparte invalidatie van de afstandencache — gebruik dit alleen wanneer
+// afstanden in een DC ook werkelijk gewijzigd kunnen zijn (beheer-tab save,
+// import-fix, etc.). NIET bij loting-status changes.
+function invalideerSlDistCache() { _slDistCache = {}; }
+
+// ── Tijdelijke debug-counter voor distances_db.php fetches ────────────────
+// Open Network-tab + console. Doe een actie. Type: __distDbg() in console
+// om te zien hoeveel bulk- vs individuele HTTPs werden afgevuurd + welke
+// dc_ids. Helpt N+1-bugs te lokaliseren zonder access-log-jacht.
+// Verwijderen mag later, zit niet in productie-pad als ie niet wordt aangeroepen.
+if (typeof window !== 'undefined' && !window.__distDbg) {
+    window.__distDbgState = { bulk: 0, individual: 0, individualDcIds: [], callers: [] };
+    window.__distDbg = () => {
+        const s = window.__distDbgState;
+        console.log('Bulk calls:', s.bulk);
+        console.log('Individuele calls:', s.individual);
+        if (s.individual > 0) {
+            console.log('Individuele dc_ids:', s.individualDcIds);
+            console.log('Stack-trace per individuele call (eerste 3):');
+            s.callers.slice(0, 3).forEach((c, i) => console.log(`  [${i}]`, c));
+        }
+    };
+    window.__distDbgReset = () => {
+        window.__distDbgState = { bulk: 0, individual: 0, individualDcIds: [], callers: [] };
+        console.log('Counter gereset. Doe nu de actie, type __distDbg() om te zien.');
+    };
+}
 
 // In-flight tracking voor laadGroepAfstanden — als meerdere callers tegelijk
 // dezelfde groep opvragen vóór de cache gevuld is, delen ze 1 HTTP-call ipv
@@ -49,6 +137,16 @@ async function laadGroepAfstanden(groep) {
     if (_slDistInFlight[cKey]) return _slDistInFlight[cKey];
     const splitParam = groep.is_split ? `&split_group=${encodeURIComponent(groep.dc_name)}` : '';
     const promise = (async () => {
+        // Debug-instrument: tel individuele calls + bewaar stack
+        try {
+            if (typeof window !== 'undefined' && window.__distDbgState) {
+                window.__distDbgState.individual++;
+                window.__distDbgState.individualDcIds.push(groep.dc_id);
+                if (window.__distDbgState.callers.length < 3) {
+                    window.__distDbgState.callers.push(new Error('individual-call').stack);
+                }
+            }
+        } catch { /* silent */ }
         try {
             const res = await fetch(`api/distances_db.php?dc_id=${encodeURIComponent(groep.dc_id)}${splitParam}`);
             const d   = await res.json();
@@ -88,6 +186,11 @@ async function _slBulkLaadAfstanden(groepen) {
     if (_slBulkInFlight) return _slBulkInFlight;
     _slBulkInFlight = (async () => {
         try {
+            if (typeof window !== 'undefined' && window.__distDbgState) {
+                window.__distDbgState.bulk++;
+            }
+        } catch { /* silent */ }
+        try {
             const url = `api/distances_db.php?dc_ids=${[...teLaden].map(encodeURIComponent).join(',')}`;
             const res = await fetch(url);
             if (!res.ok) return;
@@ -112,6 +215,79 @@ async function _slBulkLaadAfstanden(groepen) {
         finally { _slBulkInFlight = null; }
     })();
     return _slBulkInFlight;
+}
+
+// Afstand-filter render: pillen boven de cat-tabs zoals "Alle (30)",
+// "200m DTT (7)", "1000m (7)", "Pointsrace (7)", etc. Verschijnt alleen
+// wanneer een wedstrijd ≥ 8 DCs heeft EN minstens 2 unieke afstanden,
+// anders blijft de balk verborgen (geen meerwaarde).
+//
+// Filter werkt 100% client-side: cat-tabs die niet bij de gekozen afstand
+// horen worden gewoon niet gerenderd. Geen extra HTTP-calls.
+//
+// Async omdat we eerst _slBulkLaadAfstanden awaiten — die vult _slDistCache
+// met echte distance-rijen, zodat het filter de WAARHEID toont (en niet een
+// regex-gok op dc_name). Bulk wordt sowieso door kleurAlleTabsAsync gedraaid,
+// dus dankzij de in-flight dedup uit een eerdere commit kost dit 0 extra
+// HTTP-calls. De filter-balk verschijnt ~200ms na page-render, niet-blokkerend.
+async function _slRenderAfstandFilter(groepen) {
+    const container = el('sl-afstand-filter');
+    if (!container) return;
+
+    // Wacht op de bulk zodat _slDistCache de echte afstand-namen heeft.
+    // Bulk-promise wordt gedeeld via _slBulkInFlight — geen dubbele HTTP.
+    await _slBulkLaadAfstanden(groepen);
+
+    const afstandTeller = new Map();
+    for (const g of groepen) {
+        const afstanden = getAfstandenVoorGroep(g);
+        // Een DC kan meerdere afstanden hebben (combo-DC): elke afstand
+        // krijgt zijn eigen telling, zodat de filter-knop het juiste aantal
+        // matchende DCs toont.
+        for (const a of afstanden) {
+            afstandTeller.set(a, (afstandTeller.get(a) ?? 0) + 1);
+        }
+    }
+
+    // Drempel: filter is alleen zinvol bij ≥ 2 unieke afstanden — anders
+    // is er niets te kiezen. Verder altijd tonen (ook bij weinig DCs) zodat
+    // de UI consistent is en operator weet dat de filter beschikbaar is.
+    const tooFew = afstandTeller.size <= 1;
+    if (tooFew) {
+        container.style.display = 'none';
+        container.innerHTML = '';
+        // Reset filter zodat een eerdere filter niet blijft hangen na wedstrijd-wissel
+        _slAfstandFilter = '';
+        return;
+    }
+
+    // Sorteer afstanden natuurlijk ("200m" < "500m" < "1000m" via lokale compare)
+    const afstandenGesort = [...afstandTeller.entries()].sort((a, b) =>
+        a[0].localeCompare(b[0], undefined, { numeric: true, sensitivity: 'base' })
+    );
+
+    let html = '<span class="afstand-filter-label">Afstand:</span>';
+    html += `<button class="afstand-filter-btn${_slAfstandFilter === '' ? ' actief' : ''}" data-afstand="">Alle (${groepen.length})</button>`;
+    for (const [afstand, n] of afstandenGesort) {
+        const act = _slAfstandFilter === afstand ? ' actief' : '';
+        html += `<button class="afstand-filter-btn${act}" data-afstand="${escHtml(afstand)}">${escHtml(afstand)} (${n})</button>`;
+    }
+    container.innerHTML = html;
+    container.style.display = '';
+
+    container.querySelectorAll('.afstand-filter-btn').forEach(btn => {
+        btn.addEventListener('click', async () => {
+            _slAfstandFilter = btn.dataset.afstand ?? '';
+            // Zeker dat _slDistCache gevuld is vóór de re-render, anders valt
+            // getAfstandenVoorGroep terug op regex-fallback over dc_name. Bij
+            // wedstrijden zoals "Pupil 1 meisjes" staat de afstand-naam niet
+            // in dc_name → regex matcht "Flying lap" nooit → 0 resultaten.
+            // Bulk is normaal al uitgevoerd, dus dit is meestal een no-op
+            // (cache hit) en kost geen extra HTTP.
+            await _slBulkLaadAfstanden(_slGroepen);
+            toonStartlijstenPagina();
+        });
+    });
 }
 
 // Kleur de dist-tab voor de actieve afstand (groen = geloot, default = niet)
@@ -199,17 +375,25 @@ let _slTsCache = null;   // { competition_id, schema }
 
 function invalideerSlTsCache() { _slTsCache = null; }
 
+// In-flight tracking — voorkomt N parallel HTTP-calls bij first page load.
+let _slTsInFlight = null;
+
 async function laadSlTijdschema() {
     if (_slTsCache?.competition_id === huidigCompId) return _slTsCache.schema;
+    if (_slTsInFlight) return _slTsInFlight;
     _slTsCache = null;
     if (!huidigCompId) return null;
-    try {
-        const res  = await fetch(`api/tijdschema.php?competition_id=${encodeURIComponent(huidigCompId)}`);
-        const data = await res.json();
-        if (data?.error || !data?.id) return null;
-        _slTsCache = { competition_id: huidigCompId, schema: data };
-        return data;
-    } catch { return null; }
+    _slTsInFlight = (async () => {
+        try {
+            const res  = await fetch(`api/tijdschema.php?competition_id=${encodeURIComponent(huidigCompId)}`);
+            const data = await res.json();
+            if (data?.error || !data?.id) return null;
+            _slTsCache = { competition_id: huidigCompId, schema: data };
+            return data;
+        } catch { return null; }
+        finally { _slTsInFlight = null; }
+    })();
+    return _slTsInFlight;
 }
 
 // Zoek cat_config voor dc_id + distance_id (distance_id kan null/leeg zijn)
@@ -1029,12 +1213,14 @@ function toonStartlijstenPagina() {
             </div>
         </div>`;
 
-    // Reset multi-day state bij wedstrijd-wissel. We onthouden de gekozen
-    // dag binnen één wedstrijd, maar laten hem vallen als de gebruiker een
-    // andere wedstrijd opent (bv. via Importeer).
+    // Reset multi-day state + afstand-filter bij wedstrijd-wissel. We
+    // onthouden de gekozen dag en afstand-filter binnen één wedstrijd, maar
+    // laten ze vallen bij wissel — anders zou een filter "200m DTT" blijven
+    // hangen op een wedstrijd waar die afstand niet bestaat.
     if (_slActieveDagCompId !== huidigCompId) {
         _slActieveDag       = 0;
         _slActieveDagCompId = huidigCompId;
+        _slAfstandFilter    = '';
     }
 
     // Tijdschema is nodig voor multi-day detectie + dag-filter. Indien nog
@@ -1075,8 +1261,18 @@ function toonStartlijstenPagina() {
     // updatet _slActieveDag en re-rendert via toonStartlijstenPagina().
     _slRenderDagTabs(dagInfo, actieveDag);
 
+    // Afstand-filter (verschijnt bij veel DCs met verschillende afstanden).
+    // Filtert puur client-side: tabs die niet bij de gekozen afstand horen
+    // worden weggelaten uit de hieronder gerenderde lijst. Render is async
+    // (wacht op bulk-fetch om _slDistCache te vullen) maar wordt niet awaited
+    // — page-render gaat door, filter-balk verschijnt zodra data binnen is.
+    _slRenderAfstandFilter(groepen);
+    const groepenZichtbaar = _slAfstandFilter
+        ? groepen.filter(g => getAfstandenVoorGroep(g).includes(_slAfstandFilter))
+        : groepen;
+
     catTabs.innerHTML = '';
-    groepen.forEach((groep, i) => {
+    groepenZichtbaar.forEach((groep, i) => {
         const btn = document.createElement('button');
         btn.className = 'org-tab-btn' + (i === 0 ? ' active' : '');
         const totaal  = groep.competitors.length;
@@ -1100,9 +1296,19 @@ function toonStartlijstenPagina() {
         catTabs.appendChild(btn);
     });
 
-    if (groepen.length) {
-        activeCat = groepen[0];
-        toonStartlijstConfig(groepen[0]);
+    if (groepenZichtbaar.length) {
+        activeCat = groepenZichtbaar[0];
+        toonStartlijstConfig(groepenZichtbaar[0]);
+    } else if (groepen.length && _slAfstandFilter) {
+        // Filter staat aan maar geen DCs matchen — vriendelijke melding
+        // i.p.v. een lege pagina, en hint om filter te wijzigen.
+        activeCat = null;
+        distTabs.innerHTML = '';
+        distTabs.style.display = 'none';
+        content.innerHTML = `<div class="status-msg info">
+            Geen categorieën met afstand "${escHtml(_slAfstandFilter)}" op deze dag.
+            Pas de filter aan om andere categorieën te zien.
+        </div>`;
     } else {
         // Geen categorieën op deze dag — toon vriendelijke melding
         activeCat = null;
@@ -1225,9 +1431,17 @@ async function toonStartlijstConfig(groep) {
     }
 
     // ── Rij 2: afstand-tabs in de vaste sl-dist-tabs balk ────────────────────
+    // Initiële afstand: matcht het afstand-filter wanneer actief, anders de
+    // eerste afstand. Maakt doorklikken tussen cats met actieve filter
+    // wrijvingloos — operator hoeft niet steeds de afstand opnieuw te kiezen.
+    let initieleIdx = 0;
+    if (_slAfstandFilter) {
+        const matchIdx = afstanden.findIndex(a => a.name === _slAfstandFilter);
+        if (matchIdx >= 0) initieleIdx = matchIdx;
+    }
     afstanden.forEach((a, i) => {
         const btn = document.createElement('button');
-        btn.className = 'org-tab-btn sl-dist-tab' + (i === 0 ? ' active' : '');
+        btn.className = 'org-tab-btn sl-dist-tab' + (i === initieleIdx ? ' active' : '');
         btn.dataset.distId   = a.id;
         btn.dataset.distNaam = a.name;
         btn.textContent      = a.name;
@@ -1255,7 +1469,9 @@ async function toonStartlijstConfig(groep) {
     // ── Inhoud: only sl-dist-content placeholder + optionele info-label ──────
     content.innerHTML = `${infoLabelHtml}<div id="sl-dist-content"></div>`;
 
-    toonAfstandConfig(groep, afstanden[0].id, afstanden[0].name);
+    // Toon de geselecteerde afstand (zelfde idx als gebruikt voor active-tab).
+    const initieelGekozen = afstanden[initieleIdx];
+    toonAfstandConfig(groep, initieelGekozen.id, initieelGekozen.name);
 }
 
 // ── Startlijst – client-side slangenpatroon ──────────────────────────────────

@@ -977,6 +977,12 @@ function initNav() {
             if (page === 'live')         { vulPaginaHeader('live-comp-naam', 'live-comp-meta'); toonLivePagina(); }
             if (page === 'systeem')      toonSysteemPagina();
             if (page === 'info')         toonInfoPagina();
+            // Body + html class voor page-level scroll-uitschakeling op Live
+            // (vaste viewport-hoogte). :has()-CSS werkt niet in alle browser-
+            // versies, JS toggle is overal robuust. Op html zetten omdat in
+            // sommige browsers de root-scrollbar daar zit, niet op body.
+            document.body.classList.toggle('live-pagina-actief', page === 'live');
+            document.documentElement.classList.toggle('live-pagina-actief', page === 'live');
         });
     });
 

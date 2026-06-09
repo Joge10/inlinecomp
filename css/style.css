@@ -411,6 +411,21 @@ header .header-wedstrijd::before {
     background: var(--grijs);
 }
 
+/* Op de Live-pagina: main-content wordt flex column zodat #page-live exact
+   de beschikbare ruimte vult (na padding). overflow-y: auto geeft scroll
+   alleen wanneer écht nodig (bv. klein scherm) — op normaal/groot scherm
+   verschijnt er geen #main-content scrollbar. Andere pagina's (Startlijsten,
+   Tijdschema, etc.) blijven onaangetast.
+   Padding-bottom gehalveerd: anders blijft er onnodige witte ruimte onder de
+   groene "Series compleet"-balk. De vrijkomende 12px gaat boven de balk
+   zodat de dropdown 12px langer kan zijn. */
+body.live-pagina-actief #main-content {
+    overflow-y: auto;          /* scroll alleen indien nodig */
+    display: flex;
+    flex-direction: column;
+    padding-bottom: 12px;      /* was 24px (algemene #main-content regel) */
+}
+
 /* ── Pagina's ── */
 .page { display: none; }
 .page.active { display: block; }
@@ -2409,6 +2424,34 @@ col.heat-tp   { width: 72px; }   /* XX-12345 = 8 monospace tekens */
                         gap: 1rem; border-bottom: 2px solid var(--border); margin-bottom: 1.25rem; padding-bottom: .5rem; }
 .org-tabs-header h2   { margin: 0; font-size: 1.15rem; color: var(--blauw); flex-shrink: 0; }
 .org-tabs-nav         { display: flex; gap: .25rem; }
+
+/* Afstand-filter boven de cat-tabs (Startlijsten + Uitslagen).
+   Verschijnt alleen wanneer een wedstrijd > 8 DCs heeft EN > 1 unieke
+   afstand. Filter werkt puur client-side (geen extra HTTP-calls):
+   verbergt cat-tabs die niet bij de gekozen afstand horen. */
+.afstand-filter {
+    display: flex; flex-wrap: wrap; gap: .35rem; align-items: center;
+    padding: .35rem .5rem; margin-bottom: .6rem;
+    background: #f7fafc; border: 1px solid #e2e8f0; border-radius: 6px;
+    font-size: .85rem;
+}
+.afstand-filter-label {
+    color: #666; margin-right: .25rem; font-weight: 600;
+}
+.afstand-filter-btn {
+    background: #fff; border: 1px solid #cfd8dc;
+    color: #37474f; padding: .2rem .65rem;
+    border-radius: 14px; cursor: pointer; font-size: .82rem;
+    transition: background .12s, border-color .12s;
+}
+.afstand-filter-btn:hover {
+    background: #e8f0ff; border-color: #b8d0f0;
+}
+.afstand-filter-btn.actief {
+    background: #1F4E79; color: #fff; border-color: #1F4E79;
+    font-weight: 600;
+}
+
 .org-tab-btn          { background: none; border: none; border-bottom: 3px solid transparent;
                         padding: .4rem .9rem; font-size: .9rem; font-weight: 600; cursor: pointer;
                         color: #666; transition: color .15s, border-color .15s, background .15s; border-radius: 4px 4px 0 0; }
@@ -3918,6 +3961,13 @@ th.rk-totaal, td.rk-totaal { width:55px; font-weight:700; color:var(--blauw); ba
 .live-nav-dd {
     position: relative;
     display: inline-block;
+    /* z-index hoog zodat de dropdown bovenop andere elementen komt, met
+       name de "Series compleet"-balk die onder de carousel zit. Zonder
+       dit overlapte die groene balk de onderste dropdown-items. */
+    z-index: 50;
+}
+.live-nav-dd-panel {
+    z-index: 100;  /* expliciet boven .live-nav-dd's eigen niveau */
 }
 /* Trigger: behoudt de pill "Jump to…" look */
 .live-nav-dropdown {
@@ -3975,7 +4025,23 @@ th.rk-totaal, td.rk-totaal { width:55px; font-weight:700; color:var(--blauw); ba
     left: 0;
     right: 0;
     min-width: 280px;
-    max-height: 340px;
+    /* Dropdown eindigt áltijd vóór de ronde-compleet balk, ook op kleine
+       schermen. Berekening van de 298px die we reserveren:
+         •  56px  app-header
+         •  36px  #main-content padding (24 top + 12 bottom — bottom gehalveerd)
+         •  70px  wedstrijd-header (titel + datum/locatie)
+         •  55px  carousel-nav (waar de trigger zit)
+         •  60px  ronde-compleet balk (groen)
+         •  20px  visuele marge
+       Op 1080p geeft dat ~782px = ~21 items zichtbaar.
+       Op 768p (laptop) ~470px = ~13 items zichtbaar, rest via scrollbar.
+       Op extreem klein scherm (<500px hoog) wordt dropdown krap maar
+       blijft scrollbaar — voorkomt dat 'em buiten viewport gaat. */
+    max-height: calc(100vh - 298px);
+    /* Hoge z-index zodat de dropdown over de carousel-cards en sticky
+       heat-titels komt; tegen ronde-compleet wint nu sowieso de layout
+       z-index trick (zie .live-layout). */
+    z-index: 1000;
     overflow-y: auto;
     overflow-x: hidden;
     padding: 6px;
@@ -3988,7 +4054,8 @@ th.rk-totaal, td.rk-totaal { width:55px; font-weight:700; color:var(--blauw); ba
         0 8px 28px rgba(31, 78, 121, .18),
         0 2px 6px rgba(0, 0, 0, .06),
         inset 0 0 0 1px rgba(255, 255, 255, .4);
-    z-index: 100;
+    /* z-index: 100 was hier eerder gedupliceerd → overschreef de 1000 hierboven.
+       Verwijderd; de 1000 op regel hierboven wint nu. */
     animation: live-nav-dd-in .14s ease-out;
 }
 .live-nav-dd-panel[hidden] { display: none; }
@@ -4138,6 +4205,27 @@ th.rk-totaal, td.rk-totaal { width:55px; font-weight:700; color:var(--blauw); ba
         filter    0.35s ease,
         box-shadow 0.35s ease;
     /* .heat-card supplies background, border, border-radius, overflow:hidden */
+
+    /* Vaste maximale hoogte zodat de carousel niet meegroeit met grote heats.
+       Voorheen werd de hele rij hoger bij heats met veel rijders, wat de
+       overige UI naar beneden duwde en scroll-lijsten onvoorspelbaar maakte.
+       Zelfde formule als .live-panel-links voor visuele consistentie. */
+    max-height: calc(100vh - 180px);
+    /* Override .heat-card's overflow:hidden — interne scroll i.p.v. clipping.
+       NB: bij actieve live-pagina overschrijft #page-live.active deze regel
+       met height:100% + max-height:none. */
+    overflow-y: auto;
+    overflow-x: hidden;
+}
+/* Heat-card behoudt z'n interne scroll voor wanneer een heat met veel
+   rijders niet in de card-hoogte past — alleen ZICHTBAAR wanneer écht
+   nodig (overflow:auto toont scrollbar pas bij overflow, niet onnodig). */
+/* Heat-titel blijft zichtbaar tijdens interne scroll — anders weet operator
+   niet meer welke rit hij bekijkt zodra hij naar beneden scrollt. */
+.live-carousel-card .heat-titel {
+    position: sticky;
+    top: 0;
+    z-index: 5;
 }
 
 /* Niet-actieve kaarten: 40% kleiner, op gelijke hoogte met actieve kaart */
@@ -4221,6 +4309,115 @@ th.rk-totaal, td.rk-totaal { width:55px; font-weight:700; color:var(--blauw); ba
     display: flex;
     flex-direction: column;
     max-height: calc(100vh - 180px);
+}
+
+/* ── Live-pagina vaste viewport-hoogte ─────────────────────────────────────
+   Voorkomt dat de pagina meeschuift met de inhoud — de carousel + linker-
+   panel vullen de beschikbare ruimte, en het "Series compleet"-bericht
+   blijft altijd in beeld onder de cards. Resultaat: voorspelbare UX, geen
+   ongebruikte ruimte beneden, geen page-level scroll. Horizontale scroll
+   alleen wanneer de carousel niet past. */
+
+/* Body- + html-scroll uitschakelen wanneer Live-pagina actief is — anders
+   krijg je een 3e scrollbar op page-niveau bovenop carousel + dropdown.
+   Class wordt door app.js gezet op zowel html als body bij page-switch.
+   Beide nodig omdat sommige browsers de scrollbar op html, andere op body
+   plaatsen. */
+html.live-pagina-actief,
+body.live-pagina-actief {
+    overflow: hidden !important;
+    height: 100vh;
+}
+#page-live.page.active {
+    display: flex;
+    flex-direction: column;
+    /* Vroeger was dit height: calc(100vh - 56px), maar dat was 48px te hoog
+       (= padding van #main-content), waardoor de ronde-compleet balk net
+       buiten viewport viel. Flex layout regelt het nu automatisch: page-live
+       vult exact de inner content area van #main-content (na padding). */
+    flex: 1 1 auto;
+    min-height: 0;
+    overflow: hidden;
+}
+#page-live.active .pagina-inhoud {
+    flex: 1 1 auto;
+    min-height: 0;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+}
+#page-live.active #live-inhoud {
+    flex: 1 1 auto;
+    min-height: 0;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+}
+#page-live.active .live-layout {
+    flex: 1 1 auto;
+    min-height: 0;
+    overflow-x: auto;
+    /* overflow-y: visible — anders wordt de heat-select dropdown afgeknepen
+       door de layout-grenzen. De content binnenin (panel-links + carousel-
+       cards) clipt al via z'n eigen overflow regels, dus geen risico op
+       echte content-overflow op layout-niveau. */
+    overflow-y: visible;
+    /* z-index trick — .live-ronde-compleet is een DOM-sibling die LATER
+       komt, dus zonder z-index zou die altijd over de dropdown heen geverfd
+       worden, ongeacht de z-index van de dropdown zelf. Door de layout
+       z-index te geven creëren we een stacking context die hoger zit dan
+       de ronde-compleet balk (z-index: 1, zie hieronder). */
+    position: relative;
+    z-index: 10;
+}
+/* Carousel-card vult de hoogte van de flex-parent met interne scroll voor
+   grote heats (eerdere max-height regels overschrijven). */
+#page-live.active .live-carousel-card {
+    max-height: none;
+    height: 100%;
+}
+/* Linker panel: GEEN interne scrollbar meer — panel groeit naar natuurlijke
+   hoogte en de page-level scroll (op #main-content) pakt de overflow over.
+   Anders zou de operator twee verschillende verticale scrollbars zien (één
+   voor de Series-tabel, één voor de hele pagina) wat verwarrend is.
+   !important nodig omdat de basis-regels (overflow:hidden, max-height calc)
+   met dezelfde of hogere specificity verschijnen in cascade-volgorde, en we
+   hier de browser hard willen overrulen voor de live-pagina. */
+#page-live.active .live-panel-links {
+    max-height: none !important;
+    height: auto !important;
+    overflow: visible !important;
+    align-self: flex-start;    /* niet stretchen tot hoogte van zustertje */
+}
+#page-live.active .live-panel-links .live-panel-scroll {
+    overflow-y: visible !important;  /* override de interne overflow:auto */
+    flex: 0 0 auto;                  /* niet meer groeien — pakt natuurlijke hoogte */
+}
+/* Linker panel mag niet meer krimpen onder zijn min-breedte (450px). Bij
+   smaller viewports neemt .live-layout (overflow-x: auto) de horizontale
+   scroll over — zo behouden zowel panel-links als carousel-sectie hun volle
+   horizontale grootte, en krijg je maar één scrollbar op layout-niveau
+   i.p.v. drie afzonderlijke. */
+#page-live.active .live-panel-links {
+    min-width: 450px;
+    flex-shrink: 0;            /* niet meekrimpen met de flex-parent */
+    order: 2;                  /* visueel rechts (panel-links stond eerst in DOM) */
+}
+/* Carousel-sectie visueel LINKS i.p.v. rechts. We gebruiken `order` i.p.v.
+   row-reverse omdat row-reverse in LTR-context scrollLeft-semantiek omkeert
+   (default scrollLeft = 0 toonde dan paradoxaal het RECHTER panel). Met
+   `order` blijft scrollLeft normaal LTR: 0 = leftmost = carousel zichtbaar. */
+#page-live.active .live-carousel-sectie {
+    order: 1;                  /* visueel links */
+}
+/* Series-compleet bericht: natuurlijke hoogte, blijft onderaan zichtbaar
+   zonder mee te schuiven met card-content. Lage z-index zodat de dropdown
+   uit de layout erbovenop kan komen (zie .live-layout z-index uitleg). */
+#page-live.active .live-ronde-compleet {
+    flex: 0 0 auto;
+    margin-top: .5rem;
+    position: relative;
+    z-index: 1;
 }
 .live-panel-header {
     padding: 8px 12px;

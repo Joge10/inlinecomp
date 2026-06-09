@@ -250,6 +250,7 @@ if (is_array($eigenScope) && !empty($eigenScope)) {
         <div id="page-startlijsten" class="page">
             <div class="pagina-inhoud">
                 <div id="sl-page-header"></div>
+                <div id="sl-afstand-filter" class="afstand-filter" style="display:none"></div>
                 <nav class="org-tabs-nav sl-cat-tabs-nav" id="sl-cat-tabs"></nav>
                 <nav class="org-tabs-nav sl-dist-tabs-nav" id="sl-dist-tabs" style="display:none;"></nav>
                 <div id="sl-cat-content">
@@ -278,6 +279,7 @@ if (is_array($eigenScope) && !empty($eigenScope)) {
         <div id="page-klassementen" class="page">
             <div class="pagina-inhoud">
                 <div id="u-page-header"></div>
+                <div id="u-afstand-filter" class="afstand-filter" style="display:none"></div>
                 <nav class="org-tabs-nav sl-cat-tabs-nav" id="u-cat-tabs"></nav>
                 <nav class="org-tabs-nav sl-dist-tabs-nav u-dist-tabs-nav" id="u-dist-tabs" style="display:none;"></nav>
                 <div id="u-cat-content">

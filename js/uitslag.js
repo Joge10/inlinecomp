@@ -20,6 +20,73 @@ let _uPrintOpties  = new Map();// Map< catLabel, Map< distId, { distNaam, opties
 let _uActieveDag       = 0;
 let _uActieveDagCompId = null;
 let _uTsFetched        = null;
+let _uAfstandFilter    = '';   // '' = alle, anders exacte afstand-naam (zie extraheerAfstand in startlist.js)
+
+// Spiegelt getAfstandenVoorGroep in startlist.js, maar leest uit _uDistCache.
+// Echte afstanden uit DB (kan meerdere zijn per combo-DC); fallback regex
+// op dc_name (via globale extraheerAfstand uit startlist.js) bij cache-miss.
+function uGetAfstandenVoorGroep(groep) {
+    const cKey = groep.dc_id + (groep.is_split ? '|' + groep.dc_name : '');
+    const cached = _uDistCache[cKey];
+    if (cached && cached.length) {
+        return [...new Set(cached.map(d => d.name).filter(Boolean))];
+    }
+    return [extraheerAfstand(groep.dc_name)];
+}
+
+// Afstand-filter render: pillen boven de cat-tabs. Spiegelt _slRenderAfstand-
+// Filter in startlist.js. Async — wacht op bulk-fetch zodat _uDistCache gevuld
+// is voor echte afstand-data. Filter-balk verschijnt zodra data binnen is
+// (~200ms), niet-blokkerend.
+async function _uRenderAfstandFilter(groepen) {
+    const container = el('u-afstand-filter');
+    if (!container) return;
+
+    await _uBulkLaadAfstanden(groepen);
+
+    const afstandTeller = new Map();
+    for (const g of groepen) {
+        const afstanden = uGetAfstandenVoorGroep(g);
+        for (const a of afstanden) {
+            afstandTeller.set(a, (afstandTeller.get(a) ?? 0) + 1);
+        }
+    }
+
+    // Filter alleen zinvol bij ≥ 2 unieke afstanden. Verder altijd tonen
+    // voor consistente UI (spiegelt startlist.js).
+    const tooFew = afstandTeller.size <= 1;
+    if (tooFew) {
+        container.style.display = 'none';
+        container.innerHTML = '';
+        _uAfstandFilter = '';
+        return;
+    }
+
+    const afstandenGesort = [...afstandTeller.entries()].sort((a, b) =>
+        a[0].localeCompare(b[0], undefined, { numeric: true, sensitivity: 'base' })
+    );
+
+    let html = '<span class="afstand-filter-label">Afstand:</span>';
+    html += `<button class="afstand-filter-btn${_uAfstandFilter === '' ? ' actief' : ''}" data-afstand="">Alle (${groepen.length})</button>`;
+    for (const [afstand, n] of afstandenGesort) {
+        const act = _uAfstandFilter === afstand ? ' actief' : '';
+        html += `<button class="afstand-filter-btn${act}" data-afstand="${escHtml(afstand)}">${escHtml(afstand)} (${n})</button>`;
+    }
+    container.innerHTML = html;
+    container.style.display = '';
+
+    container.querySelectorAll('.afstand-filter-btn').forEach(btn => {
+        btn.addEventListener('click', async () => {
+            _uAfstandFilter = btn.dataset.afstand ?? '';
+            // Zeker dat _uDistCache gevuld is vóór de re-render (anders valt
+            // uGetAfstandenVoorGroep terug op regex). Zie startlist.js
+            // voor uitleg waarom dat niet werkt bij DCs zonder afstand-naam
+            // in dc_name.
+            await _uBulkLaadAfstanden(_uGroepen);
+            toonUitslagPagina();
+        });
+    });
+}
 
 // DB = UI codes, geen mapping meer nodig
 function sanctieLabel(s) { return s ?? ''; }
@@ -208,7 +275,11 @@ async function vulUitslagPrintSelect() {
 // ── Hoofd pagina ──────────────────────────────────────────────────────────────
 
 function toonUitslagPagina() {
-    _uDistCache = {};   // cache resetten bij nieuwe pagina-activering
+    // _uDistCache (afstanden per DC) NIET resetten bij elke render — die
+    // verandert alleen via beheer/import, niet bij navigatie. Voorheen werd
+    // hier `_uDistCache = {}` gedaan, waardoor elke render N+1 individuele
+    // distances_db calls afvuurde (cache-miss op elke groep tot bulk klaar
+    // was) → EP-limit op shared hosting werd makkelijk geraakt.
 
     const header   = el('u-page-header');
     const catTabs  = el('u-cat-tabs');
@@ -234,11 +305,13 @@ function toonUitslagPagina() {
             </div>
         </div>`;
 
-    // Reset multi-day state bij wedstrijd-wissel (zelfde patroon als
-    // startlijsten). Cached dag blijft binnen één wedstrijd geldig.
+    // Reset multi-day state + afstand-filter bij wedstrijd-wissel (zelfde
+    // patroon als startlijsten). Cached state blijft binnen één wedstrijd
+    // geldig.
     if (_uActieveDagCompId !== huidigCompId) {
         _uActieveDag       = 0;
         _uActieveDagCompId = huidigCompId;
+        _uAfstandFilter    = '';
     }
 
     // Tijdschema is nodig voor multi-day detectie. Als nog niet geladen
@@ -278,8 +351,16 @@ function toonUitslagPagina() {
     // Multi-day dag-tabs renderen / opruimen vóór de cat-tabs.
     _uRenderDagTabs(dagInfo, actieveDag);
 
+    // Afstand-filter (verschijnt bij veel DCs met verschillende afstanden).
+    // Filtert puur client-side op echte afstand-data uit _uDistCache.
+    // Spiegelt startlist-implementatie.
+    _uRenderAfstandFilter(groepen);
+    const groepenZichtbaar = _uAfstandFilter
+        ? groepen.filter(g => uGetAfstandenVoorGroep(g).includes(_uAfstandFilter))
+        : groepen;
+
     catTabs.innerHTML = '';
-    groepen.forEach((groep, i) => {
+    groepenZichtbaar.forEach((groep, i) => {
         const btn = document.createElement('button');
         btn.className = 'org-tab-btn' + (i === 0 ? ' active' : '');
         const displayNaam = groep.merge_label || groep.dc_name;
@@ -297,9 +378,18 @@ function toonUitslagPagina() {
         catTabs.appendChild(btn);
     });
 
-    if (groepen.length) {
-        _uActieveCat = groepen[0];
-        toonUitslagAfstandConfig(groepen[0]);
+    if (groepenZichtbaar.length) {
+        _uActieveCat = groepenZichtbaar[0];
+        toonUitslagAfstandConfig(groepenZichtbaar[0]);
+    } else if (groepen.length && _uAfstandFilter) {
+        // Filter staat aan maar geen DCs matchen — vriendelijke melding
+        _uActieveCat = null;
+        distTabs.innerHTML = '';
+        distTabs.style.display = 'none';
+        content.innerHTML = `<div class="status-msg info">
+            Geen categorieën met afstand "${escHtml(_uAfstandFilter)}" op deze dag.
+            Pas de filter aan om andere categorieën te zien.
+        </div>`;
     } else {
         // Geen categorieën op deze dag — vriendelijke melding
         _uActieveCat = null;
@@ -436,9 +526,17 @@ async function toonUitslagAfstandConfig(groep) {
             : '';
 
     // ── Afstand-tabs ──────────────────────────────────────────────────────────
+    // Initiële afstand: matcht het afstand-filter wanneer actief, anders de
+    // eerste. Zelfde patroon als in startlist.js — geeft betere UX bij
+    // doorklikken tussen cats met actief filter.
+    let initieleIdx = 0;
+    if (_uAfstandFilter) {
+        const matchIdx = afstanden.findIndex(a => a.name === _uAfstandFilter);
+        if (matchIdx >= 0) initieleIdx = matchIdx;
+    }
     afstanden.forEach((a, i) => {
         const btn = document.createElement('button');
-        btn.className = 'org-tab-btn u-dist-tab' + (i === 0 ? ' active' : '');
+        btn.className = 'org-tab-btn u-dist-tab' + (i === initieleIdx ? ' active' : '');
         btn.dataset.distId   = a.id ?? '';
         btn.dataset.distNaam = a.name ?? '';
         btn.textContent      = a.name ?? '—';
@@ -472,8 +570,9 @@ async function toonUitslagAfstandConfig(groep) {
     content.innerHTML = `${infoLabelHtml}<div id="u-dist-content"></div>`;
 
     if (afstanden.length) {
-        _uActieveDist = afstanden[0];
-        toonUitslagVoorAfstand(groep, afstanden[0]);
+        // Initiële afstand zelfde idx als gebruikt voor active-tab.
+        _uActieveDist = afstanden[initieleIdx];
+        toonUitslagVoorAfstand(groep, afstanden[initieleIdx]);
     } else {
         // Geen afstanden → direct naar klassement
         distTabs.querySelectorAll('.u-klas-tab').forEach(b => b.classList.add('active'));
