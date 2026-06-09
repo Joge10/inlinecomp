@@ -358,10 +358,27 @@ a.ref-back:hover { text-decoration: underline; }
 <div class="cover">
     <h1>InlineComp</h1>
     <p class="sub">Handleiding — admin, publiek, coach</p>
-    <p class="versie">versie april 2026 — <a href="https://inlineresults.devriesen.com" style="color:#999;text-decoration:none">inlineresults.devriesen.com</a></p>
+    <p class="versie">versie juni 2026 — <a href="https://inlineresults.devriesen.com" style="color:#999;text-decoration:none">inlineresults.devriesen.com</a></p>
 </div>
 
 <div class="wip"><b>In opbouw:</b> deze handleiding is bijna compleet. Alle admin-modules (Login &amp; layout, Importeer, Tijdschema, Startlijsten, Live verwerking, Uitslag, Beheer, Gebruikers, Rijders, Uploads), de Publieke applicatie en de Coach-applicatie zijn beschreven. Alleen Deel 4 (de InlineComp Client / CSV Upload Monitor op de timing-PC) volgt nog in een aparte sessie. Voor de techneuten staat helemaal achterin een appendix met verwijzingen naar de broncode.</div>
+
+<!-- ═══════════════════════════════════════════════════════════════════════ -->
+<!-- Wat is nieuw — sinds juni 2026                                            -->
+<!-- ═══════════════════════════════════════════════════════════════════════ -->
+<div class="info" style="border-left-color:var(--oranje); background:#fff5e8; padding:14px 18px; margin:14px 0 24px;">
+    <h3 style="margin-top:0; color:var(--blauw);">🆕 Wat is nieuw sinds juni 2026</h3>
+    <p style="margin-bottom:8px;">De handleiding-tekst hieronder beschrijft de modules in detail; de hoogtepunten van deze update:</p>
+    <ul style="margin:0 0 0 22px;">
+        <li><b>Live-pagina UX-overhaul</b> — vaste viewport-layout zonder verwarrende scrollbars. Carousel met heat-kaarten staat nu links, deelnemerslijst rechts. Bij smal scherm: één horizontale scrollbar i.p.v. drie aparte. Dropdown van heat-select is groter en blijft altijd boven de "Series compleet"-balk. <em>📸 Screenshots in §Live verwerking bijwerken.</em></li>
+        <li><b>Afstand-filter in Startlijsten + Uitslag</b> — bij wedstrijden met &gt; 1 unieke afstand verschijnt boven de cat-tabs een filter-balk ("Alle (30)", "200m DTT (10)", "1000m (10)", "Pointsrace (10)", etc.). Filtert puur lokaal, geen extra HTTP. Handig bij NK's met 30+ categorieën. <em>📸 Nieuwe screenshot per module.</em></li>
+        <li><b>CSV-import wizard voor externe wedstrijden</b> — voor wedstrijden buiten de KNSB-feed om (buitenlandse gasten, club-events). 4-staps wizard: upload → mapping → DC-toewijzing → match-review. Match-cascade tegen bestaande personen + handmatige zoekfunctie per rij. Idempotent (herimport-safe). <em>📷 Nieuwe sectie "CSV-import wizard" toevoegen in Deel 1.</em></li>
+        <li><b>Pending-helper toont nu ook externe rijders</b> — beide "wacht-op-KNSB"-categorieën (📜 pending uit historie + 🌍 extern uit CSV) staan samen in de lijst. Onderling samenvoegen werkt beide kanten op. Knop-kleur: blauw = koppel naar KNSB-account, paars = onderling samenvoegen. <em>📷 Sectie Helpers bijwerken.</em></li>
+        <li><b>Tijdkoppeling-format uitgebreid</b> — "laatste rit altijd compleet"-regel geldt nu voor élke seeding-methode (startnummer, alfabetisch, klassement, tussenklassement, afstand-uitslag), niet alleen klassement-achtige. Banner-tekst in seeding-keuze is uitgebreid.</li>
+        <li><b>Programma-extern (PDF)</b> — runner-up voetnoot verschijnt automatisch bij wedstrijden met runner-up finales. Ceremonie-blok blijft samen met afstand-blok bij print (geen pagina-break ertussen).</li>
+        <li><b>Achter de schermen</b> — EP-faults op shared hosting drastisch verminderd. Bij eerste open van een NK-wedstrijd: ~46 requests → ~5-6. Per render: 3-4. Resultaat: snellere page-loads en geen "Site geblokkeerd"-meldingen bij meerdere gelijktijdige gebruikers.</li>
+    </ul>
+</div>
 
 <div class="toc">
     <h2>Inhoudsopgave</h2>
