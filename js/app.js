@@ -286,6 +286,134 @@ function toonInfoPagina() {
     if (onEl) onEl.textContent = navigator.onLine ? 'online' : 'offline';
 }
 
+// ── Mijn-account modal (self-service profiel + wachtwoord) ────────────────────
+
+function toonMijnAccountDialog() {
+    if (!currentUser) return;
+    const overlay = document.createElement('div');
+    overlay.className = 'modal-overlay';
+    overlay.innerHTML = `
+        <div class="modal-dialog" role="dialog" aria-modal="true" style="max-width:480px">
+            <div class="modal-header">
+                <span class="modal-icon">✎</span>
+                <span>Mijn account</span>
+            </div>
+            <div class="modal-body">
+                <p style="margin:.2em 0 .8em;color:#555;font-size:.9em">
+                    Werk je eigen profiel bij. Ter bevestiging vul je je huidige
+                    wachtwoord in — zo voorkomen we wijzigingen via een gestolen sessie.
+                </p>
+                <div class="mf-rij">
+                    <label class="mf-lbl"><span>Naam <span class="vereist">*</span></span>
+                        <input type="text" id="ma-naam" class="inp" value="${escHtml(currentUser.naam || '')}" required>
+                    </label>
+                </div>
+                <div class="mf-rij">
+                    <label class="mf-lbl"><span>Gebruikersnaam <span class="vereist">*</span></span>
+                        <input type="text" id="ma-username" class="inp" value="${escHtml(currentUser.username || '')}" required>
+                    </label>
+                </div>
+                <hr style="margin:1em 0;border:none;border-top:1px solid #e0e0e0">
+                <div class="mf-rij">
+                    <label class="mf-lbl"><span>Huidig wachtwoord <span class="vereist">*</span></span>
+                        <input type="password" id="ma-pw-huidig" class="inp" autocomplete="current-password" required>
+                    </label>
+                </div>
+                <details style="margin:.5em 0 0">
+                    <summary style="cursor:pointer;color:#555;font-size:.9em">Wachtwoord wijzigen</summary>
+                    <div style="margin-top:.6em">
+                        <div class="mf-rij">
+                            <label class="mf-lbl"><span>Nieuw wachtwoord (min. 8 tekens)</span>
+                                <input type="password" id="ma-pw-nieuw" class="inp" autocomplete="new-password" minlength="8">
+                            </label>
+                        </div>
+                        <div class="mf-rij">
+                            <label class="mf-lbl"><span>Nieuw wachtwoord herhalen</span>
+                                <input type="password" id="ma-pw-nieuw2" class="inp" autocomplete="new-password">
+                            </label>
+                        </div>
+                    </div>
+                </details>
+                <div id="ma-fout" class="status-msg error" style="display:none;margin:.6rem 0 0"></div>
+            </div>
+            <div class="modal-knoppen">
+                <button class="modal-btn modal-annuleer">Annuleren</button>
+                <button class="modal-btn modal-doorgaan" id="ma-opslaan">Opslaan</button>
+            </div>
+        </div>`;
+    document.body.appendChild(overlay);
+
+    const sluit = () => { overlay.remove(); document.removeEventListener('keydown', onKey); };
+    const onKey = e => { if (e.key === 'Escape') sluit(); };
+    const toonFout = t => {
+        const f = el('ma-fout');
+        if (f) { f.textContent = t; f.style.display = ''; }
+    };
+
+    overlay.querySelector('.modal-annuleer').addEventListener('click', sluit);
+    overlay.addEventListener('click', e => { if (e.target === overlay) sluit(); });
+    document.addEventListener('keydown', onKey);
+    el('ma-naam').focus();
+
+    el('ma-opslaan').addEventListener('click', async () => {
+        const naam     = el('ma-naam').value.trim();
+        const username = el('ma-username').value.trim();
+        const huidigPw = el('ma-pw-huidig').value;
+        const nieuwPw  = el('ma-pw-nieuw').value;
+        const nieuwPw2 = el('ma-pw-nieuw2').value;
+        el('ma-fout').style.display = 'none';
+
+        if (!naam || !username) { toonFout('Naam en gebruikersnaam zijn verplicht.'); return; }
+        if (!huidigPw)          { toonFout('Huidig wachtwoord is verplicht ter bevestiging.'); return; }
+        if (nieuwPw || nieuwPw2) {
+            if (nieuwPw.length < 8)   { toonFout('Nieuw wachtwoord moet minimaal 8 tekens zijn.'); return; }
+            if (nieuwPw !== nieuwPw2) { toonFout('Nieuwe wachtwoorden komen niet overeen.'); return; }
+        }
+
+        const opslaanBtn = el('ma-opslaan');
+        opslaanBtn.disabled = true;
+        try {
+            // Stap 1: profiel-update (naam + username) — alleen als iets gewijzigd is
+            const naamGewijzigd = naam !== (currentUser.naam || '');
+            const userGewijzigd = username !== (currentUser.username || '');
+            if (naamGewijzigd || userGewijzigd) {
+                const r1 = await fetch('api/auth.php?action=update_profiel', {
+                    method: 'POST', headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        action: 'update_profiel', naam, username,
+                        huidig_wachtwoord: huidigPw,
+                    }),
+                });
+                const d1 = await r1.json();
+                if (!r1.ok) { toonFout(d1.error || 'Fout bij opslaan profiel.'); return; }
+                currentUser.naam     = d1.naam;
+                currentUser.username = d1.username;
+            }
+            // Stap 2: wachtwoord-wijziging — alleen als nieuw wachtwoord ingevuld
+            if (nieuwPw) {
+                const r2 = await fetch('api/auth.php?action=change_password', {
+                    method: 'POST', headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        action: 'change_password',
+                        huidig_wachtwoord: huidigPw, nieuw_wachtwoord: nieuwPw,
+                    }),
+                });
+                const d2 = await r2.json();
+                if (!r2.ok) { toonFout(d2.error || 'Fout bij wijzigen wachtwoord.'); return; }
+            }
+            // UI bijwerken: info-pagina labels + eventuele header-elementen
+            const userEl = el('info-user');
+            if (userEl) userEl.textContent = currentUser.naam || currentUser.username || '—';
+            sluit();
+            await toonBevestigDialog('Je account is bijgewerkt.', 'Opgeslagen', 'OK', null);
+        } catch (e) {
+            toonFout('Onverwachte fout: ' + e.message);
+        } finally {
+            opslaanBtn.disabled = false;
+        }
+    });
+}
+
 function bouwOrgHeaderFooter(esc) {
     const baseUrl = new URL('.', window.location.href).href;
     const org = huidigOrganisatie;
@@ -996,14 +1124,59 @@ function initNav() {
 
 // ── Uitloggen ─────────────────────────────────────────────────────────────────
 
-el('btn-uitloggen')?.addEventListener('click', async () => {
+async function uitloggen() {
     await fetch('api/auth.php', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ action: 'logout' }),
     });
     window.location.href = 'login.php';
-});
+}
+
+// ── Account-menu (hamburger rechtsboven) ──────────────────────────────────────
+// Conventionele plek voor self-service acties: Mijn account, Uitloggen.
+// Hover-to-open via pure CSS (.header-menu-wrap:hover); .is-open class is
+// voor klik-state en outside-click-close zodat een korte hover niet het menu
+// onbedoeld permanent open zet.
+(function initHeaderMenu() {
+    const btn  = el('btn-header-menu');
+    const wrap = btn?.closest('.header-menu-wrap');
+    if (!btn || !wrap) return;
+
+    const sluit = () => {
+        wrap.classList.remove('is-open');
+        btn.setAttribute('aria-expanded', 'false');
+    };
+    const open = () => {
+        wrap.classList.add('is-open');
+        btn.setAttribute('aria-expanded', 'true');
+    };
+
+    btn.addEventListener('click', e => {
+        e.stopPropagation();
+        wrap.classList.contains('is-open') ? sluit() : open();
+    });
+    // Klik buiten de wrap → sluit klik-state (hover-state regelt CSS zelf)
+    document.addEventListener('click', e => {
+        if (!wrap.classList.contains('is-open')) return;
+        if (!wrap.contains(e.target)) sluit();
+    });
+    // Escape sluit het menu en geeft focus terug aan de knop
+    document.addEventListener('keydown', e => {
+        if (e.key === 'Escape' && wrap.classList.contains('is-open')) {
+            sluit(); btn.focus();
+        }
+    });
+
+    el('menu-mijn-account')?.addEventListener('click', () => {
+        sluit();
+        toonMijnAccountDialog();
+    });
+    el('menu-uitloggen')?.addEventListener('click', () => {
+        sluit();
+        uitloggen();
+    });
+})();
 
 // ── Rol-gebaseerde toegang ─────────────────────────────────────────────────────
 

@@ -818,6 +818,7 @@ async function _bouwStartlijstDrukInternal(optData) {
         alfabetisch:     T('startlijst.methode_alfa'),
         tussenklassement:T('startlijst.methode_tussen'),
         klassement:      T('startlijst.methode_klassement'),
+        afstand_uitslag: T('startlijst.methode_afstand'),
     };
     // Bepaal de methode van de af te drukken ronde zelf
     // (niet van de series, want bijv. KF kan alfabetisch geloot zijn)
@@ -1522,8 +1523,12 @@ async function vulAfstandBronnen(selEl, cache, groep) {
             bronnen.map(b => {
                 const sel = (b.dc_id === cache.bronDcId && b.distance_id === cache.bronDistId) ? ' selected' : '';
                 const lbl = `${b.dc_naam} · ${b.distance_naam} (${b.met_rang})`;
+                // Cats meegeven als CSV-string in data-cats — confirm-modal
+                // vergelijkt deze met de te-loten cats voor mismatch-check.
+                const catsCsv = Array.isArray(b.cats) ? b.cats.join(',') : '';
                 return `<option value="${escHtml(b.dc_id + '|' + b.distance_id)}"
-                                data-dc="${escHtml(b.dc_id)}" data-dist="${escHtml(b.distance_id)}"${sel}>${escHtml(lbl)}</option>`;
+                                data-dc="${escHtml(b.dc_id)}" data-dist="${escHtml(b.distance_id)}"
+                                data-cats="${escHtml(catsCsv)}"${sel}>${escHtml(lbl)}</option>`;
             }).join('');
     } catch (e) {
         selEl.innerHTML = `<option value="">— laden mislukt —</option>`;
@@ -1704,6 +1709,11 @@ async function toonAfstandConfig(groep, distId, distNaam) {
     // achtige methodes (waar rang-info beschikbaar is); bij startnr en
     // alfabet wordt de bestaande sortering sequentieel verdeeld.
     const isTk = cache._afstandCfg?.finale_seeding === 'tijdkoppeling';
+    // Detecteer of er na deze ronde nog (kwart/halve/finale) komt — dan wordt
+    // de volgende ronde automatisch op serie-tijden ingedeeld, ongeacht de
+    // seeding-keuze hieronder. Voor de operator wel duidelijk maken.
+    const heeftVolgendeRonde = (cache.flow?.length ?? 0) > 1;
+    const eersteRondeIsSeries = eersteRonde.sleutel === 'heats';
     const tkHint = isTk
         ? `<div class="sl-tk-banner" title="Instelbaar in Tijdschema → afstand-config → 'Finale-seeding'">
                ⏱ <b>Tijdkoppeling-format</b> actief —
@@ -1714,7 +1724,13 @@ async function toonAfstandConfig(groep, distId, distNaam) {
                Bij <b>Startnummer</b> of <b>Alfabetisch</b> volgt de
                heat-vulling de gekozen volgorde (laagste startnr / A vooraan
                in heat 1, hoogste / Z in de laatste heat).
-               Geldt voor zowel series als finale.
+               ${eersteRondeIsSeries && heeftVolgendeRonde
+                   ? `<br><br><b>NB</b>: dit geldt voor de <b>${escHtml(eersteRonde.naam)}</b>.
+                      De volgende ronde(s) (${cache.flow.slice(1).map(r => escHtml(r.naam)).join(', ')})
+                      worden automatisch op <b>serie-tijden</b> ingedeeld
+                      (zwak → sterk), dus daar heeft de seeding-keuze hierboven
+                      geen invloed op.`
+                   : ''}
            </div>`
         : '';
 
@@ -2041,7 +2057,7 @@ async function genereerRonde1(cacheKey) {
     // verkeerde sectie gekozen voor verkeerde cat/afstand. Vraag operator
     // expliciet bevestiging vóór generatie zodat de match-keuze zichtbaar
     // bovenkomt en verkeerde koppelingen eerder opvallen.
-    if (cache.methode === 'klassement' || cache.methode === 'tussenklassement') {
+    if (cache.methode === 'klassement' || cache.methode === 'tussenklassement' || cache.methode === 'afstand_uitslag') {
         const distLabel = cache._distNaam || cache._distId || '—';
         const catLabel  = groep.dc_name + (groep.is_split && Array.isArray(groep.category_filter) && groep.category_filter.length
             ? ` (${groep.category_filter.join(', ')})` : '');
@@ -2056,6 +2072,52 @@ async function genereerRonde1(cacheKey) {
                 <p style="font-size:.9em;color:#555">
                     Heats worden gevuld op volgorde van het tussenklassement
                     van deze wedstrijd (excl. ${escHtml(distLabel)} zelf).
+                </p>`;
+        } else if (cache.methode === 'afstand_uitslag') {
+            // Bron-label + KNSB-cats uit huidig geselecteerde dropdown-optie halen
+            const auSel    = el('sl-au-sel');
+            const auOpt    = auSel?.selectedOptions?.[0];
+            const bronLbl  = auOpt?.textContent?.trim() || '—';
+            const bronCats = (auOpt?.dataset?.cats || '')
+                .split(',').map(s => s.trim().toUpperCase()).filter(Boolean);
+            // Huidige (te-loten) cats — zelfde bron-keten als bij klassement-
+            // modal: split → category_filter / dc_name; non-split → unique
+            // categories van competitors.
+            let huidigeCats;
+            if (Array.isArray(groep.category_filter) && groep.category_filter.length) {
+                huidigeCats = groep.category_filter.map(c => String(c).toUpperCase());
+            } else if (groep.is_split && groep.dc_name) {
+                huidigeCats = [String(groep.dc_name).toUpperCase()];
+            } else {
+                const set = new Set();
+                for (const c of groep.competitors ?? []) {
+                    const cat = c.knsb?.category ?? c.category;
+                    if (cat) set.add(String(cat).toUpperCase());
+                }
+                huidigeCats = [...set];
+            }
+            // Mismatch: KNSB-codes die in beide kanten bekend zijn maar niet
+            // overlappen. We vergelijken op set-niveau — als de bron óók de
+            // huidige cat bevat (bv. een gemengde DC) is het oké.
+            const bronSet  = new Set(bronCats);
+            const overlap  = huidigeCats.some(c => bronSet.has(c));
+            const beideBekend = huidigeCats.length > 0 && bronCats.length > 0;
+            const warnAu = (beideBekend && !overlap) ? `
+                <p style="margin:.5em 0;padding:.5em .75em;background:#fff4e6;border:1px solid #ffd9a3;border-radius:3px;color:#8a4a00">
+                    ⚠ Let op: bron-afstand bevat categorie<!-- -->${bronCats.length === 1 ? '' : 'ën'}
+                    '<strong>${escHtml(bronCats.join(', '))}</strong>',
+                    maar je loot voor '<strong>${escHtml(huidigeCats.join(', '))}</strong>'.
+                </p>` : '';
+            titel   = 'Loting op afstand-uitslag bevestigen';
+            bericht = `<p>Loting genereren voor:</p>
+                <ul style="margin:.4em 0 .6em 1.2em;line-height:1.55">
+                    <li><strong>Categorie:</strong> ${escHtml(catLabel)}</li>
+                    <li><strong>Afstand:</strong> ${escHtml(distLabel)}</li>
+                    <li><strong>Bron-afstand:</strong> ${escHtml(bronLbl)}</li>
+                </ul>${warnAu}
+                <p style="font-size:.9em;color:#555">
+                    Rijders worden gerangschikt op hun plek in de bron-afstand;
+                    wie er niet in voorkomt gaat achteraan op startnummer.
                 </p>`;
         } else {
             // klassement-mode
@@ -3068,6 +3130,7 @@ function maakHeatGrid(data, methode, ritLookup) {
         alfabetisch:     'Alfabetisch',
         tussenklassement:'Tussenklassement (deze wedstrijd)',
         klassement:      'Klassement (serie)',
+        afstand_uitslag: 'Op afstand-uitslag',
     }[methode] || methode;
     const methodeLabel = data.methode_label || kortLabel;
 

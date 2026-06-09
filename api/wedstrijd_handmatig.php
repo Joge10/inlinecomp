@@ -22,14 +22,14 @@ require_once __DIR__ . '/../../config_inlinecomp.php';
 require_once __DIR__ . '/../auth/session.php';
 $_authUser = requireAuth($pdo);
 
-// Owner / admin / importer — zelfde rollen als SCHRIJF_ROLLEN['importeer']
-// in index.php (consistente gate met de Import-knop).
-$rol = $_authUser['role'] ?? '';
-if (!in_array($rol, ['owner', 'admin', 'importer'], true)) {
-    http_response_code(403);
-    echo json_encode(['error' => 'Geen rechten om wedstrijden aan te maken']);
-    exit;
-}
+// Schrijver-rollen voor create / orgs_voor_create — zelfde set als
+// SCHRIJF_ROLLEN['importeer'] in index.php (consistente gate met de
+// Import-knop). Read-acties (lijst, detail) blijven open voor elke
+// ingelogde gebruiker zodat o.a. viewers handmatige wedstrijden in de
+// lijst zien en kunnen selecteren — anders mist hun organisatie-dropdown
+// alle orgs zonder KNSB-feed-wedstrijd.
+$_handmatigSchrijfRollen = ['owner', 'admin', 'importer'];
+$_isSchrijver = in_array($_authUser['role'] ?? '', $_handmatigSchrijfRollen, true);
 
 function uuid4_w(): string {
     $data = random_bytes(16);
@@ -343,6 +343,11 @@ if ($action === 'lijst') {
 // aanmaken. Owners zien alles, gescopte admins alleen hun eigen orgs.
 // Wordt in de modal-dropdown getoond als verplicht eerste keuze.
 if ($action === 'orgs_voor_create') {
+    if (!$_isSchrijver) {
+        http_response_code(403);
+        echo json_encode(['error' => 'Geen rechten om wedstrijden aan te maken']);
+        exit;
+    }
     $scope = gebruikerOrgScope($pdo, $_authUser);
     if ($scope === null) {
         // owner of unscoped admin → alle orgs
@@ -365,6 +370,11 @@ if ($action === 'orgs_voor_create') {
 // Maak nieuwe wedstrijd + categorieën aan. Geen afstanden — die voegt de
 // operator daarna toe via Afstanden-beheer.
 if ($action === 'create') {
+    if (!$_isSchrijver) {
+        http_response_code(403);
+        echo json_encode(['error' => 'Geen rechten om wedstrijden aan te maken']);
+        exit;
+    }
     $body = json_decode(file_get_contents('php://input'), true);
     if (!is_array($body)) {
         http_response_code(400);

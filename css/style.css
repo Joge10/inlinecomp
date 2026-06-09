@@ -55,13 +55,61 @@ header {
                      padding: 2px 8px; cursor: help;
                      max-width: 200px; overflow: hidden; text-overflow: ellipsis;
                      white-space: nowrap; }
-.header-uitlog-btn {
+/* Account-menu: hamburger-knop met dropdown. Vervangt de oude ➤-uitlog-knop
+   zodat alle account-acties (Mijn account, Uitloggen) op één conventionele
+   plek staan. Wrap zorgt voor relative-positionering t.b.v. de absoluut
+   gepositioneerde dropdown. */
+.header-menu-wrap { position: relative; display: inline-block; margin-left: 6px; }
+/* Knop-styling identiek aan .header-handleiding-btn / .header-printcenter-btn
+   zodat de header visueel rustig blijft (zelfde padding, font-size, border).
+   Het ☰ Unicode-glyph (U+2630) staat van nature wat aan de kleine kant —
+   1.05rem geeft 'm dezelfde optische hoogte als de tekst-knoppen ernaast. */
+.header-menu-btn {
     background: none; border: 1px solid rgba(255,255,255,.35);
-    color: #fff; border-radius: 5px; padding: 3px 8px;
-    cursor: pointer; font-size: .8rem; transition: background .12s;
-    transform: rotate(90deg);
+    color: #fff; border-radius: 5px; padding: 3px 10px;
+    cursor: pointer; font-size: 1.05rem; line-height: 1;
+    transition: background .12s;
+    display: inline-flex; align-items: center; justify-content: center;
 }
-.header-uitlog-btn:hover { background: rgba(255,255,255,.2); }
+.header-menu-btn:hover,
+.header-menu-wrap:hover .header-menu-btn,
+.header-menu-btn[aria-expanded="true"] { background: rgba(255,255,255,.2); }
+
+/* Dropdown — default verborgen. Toon bij hover op de wrap, focus-within
+   (keyboard), of expliciete .is-open class (door JS gezet bij klik).
+   GEEN gap tussen knop en menu: zo verliest de muis 't menu niet wanneer
+   je vanaf de knop omlaag beweegt. Een transparante padding-top in de wrap
+   zou ook werken, maar 0px gap is simpeler. */
+.header-menu-dropdown {
+    position: absolute; top: 100%; right: 0;
+    background: #fff; color: #222;
+    border: 1px solid #d0d0d0; border-radius: 6px;
+    box-shadow: 0 4px 14px rgba(0,0,0,.18);
+    list-style: none; margin: 0; padding: 4px 0;
+    min-width: 180px; z-index: 1000;
+    display: none;
+}
+/* Onzichtbare hover-brug — vult de visuele lucht tussen knop en menu zodat
+   :hover op .header-menu-wrap actief blijft terwijl de muis oversteekt.
+   Zonder dit verdwijnt het menu zodra de muis 1px buiten de knop is. */
+.header-menu-dropdown::before {
+    content: ''; position: absolute;
+    top: -8px; left: 0; right: 0; height: 8px;
+}
+.header-menu-wrap:hover .header-menu-dropdown,
+.header-menu-wrap:focus-within .header-menu-dropdown,
+.header-menu-wrap.is-open .header-menu-dropdown { display: block; }
+.header-menu-dropdown li { margin: 0; }
+.header-menu-dropdown button {
+    width: 100%; text-align: left; background: none; border: none;
+    padding: 8px 14px; font-size: .9rem; color: inherit;
+    cursor: pointer; font-family: inherit;
+    display: flex; align-items: center; gap: 8px;
+}
+.header-menu-dropdown button:hover,
+.header-menu-dropdown button:focus-visible {
+    background: #f0f3f7; outline: none;
+}
 .header-handleiding-btn,
 .header-printcenter-btn {
     background: none; border: 1px solid rgba(255,255,255,.35);
@@ -1823,13 +1871,23 @@ body.live-pagina-actief #main-content {
 
 
 .sl-tussenkl-kiezer    { margin-top: .5rem; }
-.sl-tk-uitleg          { font-size: .82rem; color: #666; margin-bottom: .6rem;
+.sl-tk-uitleg,
+.sl-au-uitleg          { font-size: .82rem; color: #666; margin-bottom: .6rem;
                          background: #fef9e7; border-left: 3px solid #e0a800;
                          padding: .35rem .6rem; border-radius: 0 4px 4px 0; }
 .sl-tk-laden           { font-size: .82rem; color: #666; font-style: italic; }
 .sl-tk-afstanden       { font-size: .8rem; color: #198754; font-weight: 600;
                          margin-bottom: .5rem; }
 .sl-tk-geen-data       { color: #888; font-weight: normal; font-style: italic; }
+
+/* Afstand-uitslag-kiezer: zelfde flex-layout en select-breedte als bij
+   klassement-kiezer, zodat de bron-dropdown niet wordt afgekapt door
+   .sl-inp { width:70px }. Single column (uitleg boven, dropdown midden,
+   preview onder). */
+.sl-afstanduit-kiezer  { display: flex; flex-direction: column; gap: .4rem;
+                         margin-top: .4rem; }
+.sl-afstanduit-kiezer select { min-width: 320px; max-width: 600px;
+                               font-size: .85rem; }
 
 .btn-genereer {
     background: var(--middenblauw);
@@ -5531,6 +5589,20 @@ col.live-col-rondes  { width: 40px; }
 }
 .hp-status-ok   { color: #2e7d32; font-weight: 600; }
 .hp-status-fout { color: #b71c1c; font-weight: 600; }
+.hp-status-warn { color: #b85a00; font-weight: 600; }
+
+/* Cluster-check helper — tabel + kandidaten-blok */
+.hp-cc-tabel { width: 100%; border-collapse: collapse; font-size: .88rem; }
+.hp-cc-tabel th, .hp-cc-tabel td {
+    border-bottom: 1px solid #e0e0e0;
+    padding: .5rem .6rem; vertical-align: top; text-align: left;
+}
+.hp-cc-tabel th { background: #f4f7fa; font-weight: 600; }
+.hp-cc-kand {
+    display: flex; justify-content: space-between; align-items: center;
+    gap: .8rem; padding: .35rem 0; border-top: 1px solid #e6ebf0;
+}
+.hp-cc-kand:first-child { border-top: none; }
 
 /* Vervang-bestaand-checkbox naast Importeer-knop in historie-import */
 .hp-hist-vervang-lbl {

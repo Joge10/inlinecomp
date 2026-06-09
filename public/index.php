@@ -2062,7 +2062,7 @@ const T = {
         info_h4: 'Anonieme bezoek-statistieken',
         info_p5_html: 'We tellen anoniem aantal bezoekers, actieve sessies en piek gelijktijdig online — puur om te zien hoe veel de app wordt gebruikt en om de hosting stabiel te houden. Er worden <b>geen IP-adressen of persoonsgegevens</b> opgeslagen en er zijn <b>geen derde partijen</b> betrokken.',
         info_h5_html: 'Privacy &amp; persoonsgegevens',
-        info_p6: 'Deze app toont wedstrijdgegevens die door de KNSB aan ons worden geleverd (o.a. namen, startnummers, vereniging). In de privacyverklaring lees je welke gegevens wij verwerken, op welke grondslag en hoe je een verwijderverzoek kunt indienen.',
+        info_p6: 'Deze app toont wedstrijdgegevens die door de KNSB of andere wedstrijdorganisaties aan ons worden geleverd (o.a. namen, startnummers, vereniging). In de privacyverklaring lees je welke gegevens wij verwerken, op welke grondslag en hoe je een verwijderverzoek kunt indienen.',
         info_btn_privacy: '📄 Bekijk privacyverklaring',
         info_copyright: 'InlineComp &copy; {jaar} Geert de Vries',
         // ── Help modal ──
@@ -2244,7 +2244,7 @@ const T = {
         info_h4: 'Anonymous visit statistics',
         info_p5_html: 'We anonymously count visitor numbers, active sessions and peak concurrent users — purely to see how much the app is used and to keep hosting stable. <b>No IP addresses or personal data</b> are stored and <b>no third parties</b> are involved.',
         info_h5_html: 'Privacy &amp; personal data',
-        info_p6: 'This app shows race data provided by the KNSB (incl. names, start numbers, club). The privacy statement details which data we process, on what basis and how to submit a removal request.',
+        info_p6: 'This app shows race data provided by the KNSB or other race organisations (incl. names, start numbers, club). The privacy statement details which data we process, on what basis and how to submit a removal request.',
         info_btn_privacy: '📄 View privacy statement',
         info_copyright: 'InlineComp &copy; {jaar} Geert de Vries',
         // ── Help modal ──
@@ -2426,7 +2426,7 @@ const T = {
         info_h4: 'Anonyme Besuchsstatistiken',
         info_p5_html: 'Wir zählen anonym Besucherzahlen, aktive Sitzungen und Spitzenwerte gleichzeitiger Nutzer — nur um zu sehen wie viel die App genutzt wird und das Hosting stabil zu halten. Es werden <b>keine IP-Adressen oder persönlichen Daten</b> gespeichert und <b>keine Dritten</b> sind beteiligt.',
         info_h5_html: 'Privatsphäre &amp; persönliche Daten',
-        info_p6: 'Diese App zeigt Wettkampfdaten, die uns vom KNSB geliefert werden (u.a. Namen, Startnummern, Verein). In der Datenschutzerklärung steht welche Daten wir verarbeiten, auf welcher Grundlage und wie du einen Löschantrag einreichen kannst.',
+        info_p6: 'Diese App zeigt Wettkampfdaten, die uns vom KNSB oder anderen Wettkampforganisationen geliefert werden (u.a. Namen, Startnummern, Verein). In der Datenschutzerklärung steht welche Daten wir verarbeiten, auf welcher Grundlage und wie du einen Löschantrag einreichen kannst.',
         info_btn_privacy: '📄 Datenschutzerklärung ansehen',
         info_copyright: 'InlineComp &copy; {jaar} Geert de Vries',
         // ── Help modal ──
@@ -2608,7 +2608,7 @@ const T = {
         info_h4: 'Statistiques de visite anonymes',
         info_p5_html: 'Nous comptons anonymement le nombre de visiteurs, sessions actives et pics simultanés — uniquement pour voir l\'utilisation de l\'app et garder l\'hébergement stable. <b>Aucune adresse IP ni donnée personnelle</b> n\'est stockée et <b>aucun tiers</b> n\'est impliqué.',
         info_h5_html: 'Vie privée &amp; données personnelles',
-        info_p6: 'Cette app affiche des données de course fournies par la KNSB (noms, dossards, club). La déclaration de confidentialité détaille quelles données nous traitons, sur quelle base et comment soumettre une demande de suppression.',
+        info_p6: 'Cette app affiche des données de course fournies par la KNSB ou d\'autres organisations de course (noms, dossards, club). La déclaration de confidentialité détaille quelles données nous traitons, sur quelle base et comment soumettre une demande de suppression.',
         info_btn_privacy: '📄 Voir la déclaration de confidentialité',
         info_copyright: 'InlineComp &copy; {jaar} Geert de Vries',
         // ── Help modal ──

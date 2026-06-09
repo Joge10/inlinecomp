@@ -34,7 +34,9 @@ try {
             ua.distance_id,
             ua.distance_naam,
             COUNT(*)                 AS aantal,
-            SUM(ua.rang IS NOT NULL) AS met_rang
+            SUM(ua.rang IS NOT NULL) AS met_rang,
+            GROUP_CONCAT(DISTINCT ua.categorie
+                         ORDER BY ua.categorie SEPARATOR ',') AS cats_csv
         FROM uitslag_afstand ua
         WHERE ua.competition_id = ?
         GROUP BY ua.distance_combination_id, ua.dc_naam, ua.distance_id, ua.distance_naam
@@ -44,6 +46,13 @@ try {
     $stmt->execute([$compId]);
     $bronnen = [];
     foreach ($stmt->fetchAll(PDO::FETCH_ASSOC) as $r) {
+        // KNSB-categorie-codes (bv DKA, HP1) zodat de frontend een exacte
+        // mismatch-check kan doen vóór de operator de loting genereert.
+        // Filtert lege strings uit het GROUP_CONCAT-resultaat.
+        $cats = array_values(array_filter(
+            array_map('trim', explode(',', $r['cats_csv'] ?? '')),
+            fn($c) => $c !== ''
+        ));
         $bronnen[] = [
             'dc_id'         => $r['dc_id'],
             'dc_naam'       => $r['dc_naam'],
@@ -51,6 +60,7 @@ try {
             'distance_naam' => $r['distance_naam'],
             'aantal'        => (int)$r['aantal'],
             'met_rang'      => (int)$r['met_rang'],
+            'cats'          => $cats,
         ];
     }
     echo json_encode(['bronnen' => $bronnen], JSON_UNESCAPED_UNICODE);

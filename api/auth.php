@@ -2,7 +2,11 @@
 // ============================================================
 //  InlineComp – authenticatie
 //
-//  POST action=login   { username, password }  → zet cookie
+//  POST action=login              { username, password } → zet cookie
+//  POST action=logout                                    → wis cookie
+//  GET  action=me                                        → ingelogde user info
+//  POST action=update_profiel     { naam, username, huidig_wachtwoord }
+//  POST action=change_password    { huidig_wachtwoord, nieuw_wachtwoord }
 //  POST action=logout                           → wist cookie
 //  GET  action=me                               → huidige gebruiker
 // ============================================================
@@ -183,6 +187,95 @@ try {
             'httponly' => true,
             'samesite' => 'Strict',
         ]);
+        echo json_encode(['ok' => true]);
+        exit;
+    }
+
+    // ── POST update_profiel ──────────────────────────────────────────────────
+    // Self-service: ingelogde gebruiker werkt EIGEN naam + gebruikersnaam bij.
+    // Vereist huidig wachtwoord ter bevestiging — voorkomt dat een gestolen
+    // sessie de username vervangt waardoor de echte eigenaar niet meer kan
+    // inloggen. Username moet uniek blijven binnen users-tabel.
+    if ($method === 'POST' && $action === 'update_profiel') {
+        $user = getSession($pdo);
+        if (!$user) {
+            http_response_code(401);
+            echo json_encode(['error' => 'Niet ingelogd']);
+            exit;
+        }
+        $naam       = trim($body['naam']     ?? '');
+        $username   = trim($body['username'] ?? '');
+        $huidigPw   = $body['huidig_wachtwoord'] ?? '';
+        if ($naam === '' || $username === '') {
+            http_response_code(400);
+            echo json_encode(['error' => 'Naam en gebruikersnaam zijn verplicht']);
+            exit;
+        }
+        if ($huidigPw === '') {
+            http_response_code(400);
+            echo json_encode(['error' => 'Huidig wachtwoord is verplicht ter bevestiging']);
+            exit;
+        }
+        // Hash op DB ophalen — getSession() geeft die niet noodzakelijk terug
+        $vStmt = $pdo->prepare("SELECT id, password_hash, naam, username FROM users WHERE id = ? LIMIT 1");
+        $vStmt->execute([$user['id']]);
+        $vRow  = $vStmt->fetch(PDO::FETCH_ASSOC);
+        if (!$vRow || !password_verify($huidigPw, $vRow['password_hash'])) {
+            http_response_code(403);
+            echo json_encode(['error' => 'Huidig wachtwoord onjuist']);
+            exit;
+        }
+        // Uniek-check op username (alleen als hij veranderd is)
+        if (strcasecmp($vRow['username'], $username) !== 0) {
+            $cStmt = $pdo->prepare("SELECT 1 FROM users WHERE username = ? AND id <> ? LIMIT 1");
+            $cStmt->execute([$username, $user['id']]);
+            if ($cStmt->fetchColumn()) {
+                http_response_code(409);
+                echo json_encode(['error' => 'Gebruikersnaam is al in gebruik']);
+                exit;
+            }
+        }
+        $pdo->prepare("UPDATE users SET naam = ?, username = ?, updated_at = NOW() WHERE id = ?")
+            ->execute([$naam, $username, $user['id']]);
+        schrijfLog($pdo, (int)$user['id'], $naam, $username, 'profiel_aangepast');
+        echo json_encode(['ok' => true, 'naam' => $naam, 'username' => $username]);
+        exit;
+    }
+
+    // ── POST change_password ─────────────────────────────────────────────────
+    // Self-service: ingelogde gebruiker wijzigt EIGEN wachtwoord. Vereist
+    // huidig wachtwoord ter bevestiging (anti-misbruik bij gestolen sessie).
+    if ($method === 'POST' && $action === 'change_password') {
+        $user = getSession($pdo);
+        if (!$user) {
+            http_response_code(401);
+            echo json_encode(['error' => 'Niet ingelogd']);
+            exit;
+        }
+        $huidigPw = $body['huidig_wachtwoord'] ?? '';
+        $nieuwPw  = $body['nieuw_wachtwoord']  ?? '';
+        if ($huidigPw === '' || $nieuwPw === '') {
+            http_response_code(400);
+            echo json_encode(['error' => 'Huidig en nieuw wachtwoord zijn verplicht']);
+            exit;
+        }
+        if (strlen($nieuwPw) < 8) {
+            http_response_code(400);
+            echo json_encode(['error' => 'Nieuw wachtwoord moet minimaal 8 tekens zijn']);
+            exit;
+        }
+        $vStmt = $pdo->prepare("SELECT id, password_hash, naam, username FROM users WHERE id = ? LIMIT 1");
+        $vStmt->execute([$user['id']]);
+        $vRow  = $vStmt->fetch(PDO::FETCH_ASSOC);
+        if (!$vRow || !password_verify($huidigPw, $vRow['password_hash'])) {
+            http_response_code(403);
+            echo json_encode(['error' => 'Huidig wachtwoord onjuist']);
+            exit;
+        }
+        $hash = password_hash($nieuwPw, PASSWORD_DEFAULT);
+        $pdo->prepare("UPDATE users SET password_hash = ?, updated_at = NOW() WHERE id = ?")
+            ->execute([$hash, $user['id']]);
+        schrijfLog($pdo, (int)$user['id'], $vRow['naam'], $vRow['username'], 'wachtwoord_aangepast');
         echo json_encode(['ok' => true]);
         exit;
     }

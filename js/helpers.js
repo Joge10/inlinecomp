@@ -121,6 +121,55 @@ async function toonHelpersPagina() {
             <div id="hp-pending-lijst" style="display:none"></div>
         </div>
 
+        <div class="hp-card" id="hp-cc-card">
+            <h3 class="hp-card-titel">🔍 Koppel-controle (cluster-check)</h3>
+            <p class="hp-card-uitleg">
+                Scant <b>inschrijvingen</b> (entries) per DC en detecteert
+                rijders waarvan het cluster (gender + jeugd/oud) niet matcht
+                met de meerderheid in die DC — symptoom van de oude
+                CSV-import-bug waar startnummer 26 in cluster Dames-jeugd
+                gekoppeld werd aan een persoon met nummer 26 uit een ander
+                cluster. Per probleem: zoek de juiste persoon (dominante cat
+                + startnummer = uniek per KNSB-belofte) en vervang in één klik.
+                Bestaande heat_entries (loting) bewegen automatisch mee.
+            </p>
+            <div class="hp-card-acties">
+                <select class="inp" id="hp-cc-comp" style="min-width:280px">
+                    <option value="">— laden… —</option>
+                </select>
+                <button class="btn-secondary" id="hp-cc-scan-btn" disabled>🔍 Scan</button>
+                <label style="font-size:.85em;color:#555;display:inline-flex;align-items:center;gap:.3rem">
+                    <input type="checkbox" id="hp-cc-debug"> 🔬 debug
+                </label>
+                <span class="hp-status" id="hp-cc-status"></span>
+            </div>
+            <div id="hp-cc-lijst" style="display:none;margin-top:.8rem"></div>
+        </div>
+
+        <div class="hp-card" id="hp-rc-card">
+            <h3 class="hp-card-titel">🛠 Handmatige rijder-correctie</h3>
+            <p class="hp-card-uitleg">
+                Voor situaties waar een rijder zich meldt en zegt "ik sta
+                verkeerd": pas in één scherm de persoon-gegevens aan (gender /
+                categorie / startnummer in <code>persons</code>) <b>én</b>
+                verplaats inschrijving(en) naar de juiste DC binnen deze
+                wedstrijd. Auto-scan vindt dit soort fouten niet — daar zit
+                de fout in zowel <code>persons</code> als de DC (consistent
+                maar wel verkeerd).
+            </p>
+            <div class="hp-card-acties">
+                <select class="inp" id="hp-rc-comp" style="min-width:260px">
+                    <option value="">— laden… —</option>
+                </select>
+                <input type="text" id="hp-rc-zoek" class="inp"
+                       placeholder="🔍 zoek op naam of startnummer…"
+                       style="min-width:240px" disabled>
+                <span class="hp-status" id="hp-rc-status"></span>
+            </div>
+            <div id="hp-rc-resultaten" style="margin-top:.5rem"></div>
+            <div id="hp-rc-detail" style="margin-top:.6rem;display:none"></div>
+        </div>
+
         <div class="hp-card" id="hp-pr-card">
             <h3 class="hp-card-titel">🏃 PR-check rapport</h3>
             <p class="hp-card-uitleg">
@@ -192,6 +241,8 @@ async function toonHelpersPagina() {
         _hpCsvInit();
         _hpHistInit();
         _hpPendingInit();
+        _hpClusterCheckInit();
+        _hpRijderCorrectieInit();
         if (currentUser?.role === 'owner') _hpCoachAuthInit();
     } catch (e) {
         // Vangnet: render-fout mag geen lege witte tab opleveren — toon
@@ -1934,6 +1985,653 @@ let _hpPendingData = null;
 
 function _hpPendingInit() {
     el('hp-pending-btn-laad').addEventListener('click', _hpPendingLaad);
+}
+
+// ── Cluster-check helper (foute KNSB-koppelingen opsporen + fixen) ────────────
+//
+// Detecteert heat_entries waar de gekoppelde persons-rij in het verkeerde
+// KNSB-cluster zit voor de bedoelde categorie (gevolg van de oude tier-1
+// startnr-only match in csv_import.php). Per probleem-persoon: knop om
+// kandidaten op te zoeken (cat + startnr = uniek volgens KNSB) en in één
+// klik te vervangen voor ALLE entries van die persoon in deze wedstrijd.
+
+async function _hpClusterCheckInit() {
+    const sel = el('hp-cc-comp');
+    const btn = el('hp-cc-scan-btn');
+    sel.innerHTML = '<option value="">— laden… —</option>';
+    try {
+        const res  = await fetch('api/cluster_check.php?action=competities');
+        const lijst = await res.json();
+        if (lijst.error) throw new Error(lijst.error);
+        if (!Array.isArray(lijst) || !lijst.length) {
+            sel.innerHTML = '<option value="">— geen wedstrijden met deelnemers —</option>';
+            return;
+        }
+        sel.innerHTML = '<option value="">— kies wedstrijd —</option>' +
+            lijst.map(c => {
+                const dat = c.datum ? new Date(c.datum).toLocaleDateString('nl-NL',
+                    {day:'2-digit', month:'2-digit', year:'numeric'}) : '?';
+                return `<option value="${escHtml(c.competition_id)}">${escHtml(c.naam)} (${escHtml(dat)})</option>`;
+            }).join('');
+    } catch (e) {
+        sel.innerHTML = `<option value="">⚠ Fout: ${escHtml(e.message)}</option>`;
+        return;
+    }
+    sel.addEventListener('change', () => { btn.disabled = !sel.value; });
+    btn.addEventListener('click', _hpClusterCheckScan);
+}
+
+async function _hpClusterCheckScan() {
+    const sel  = el('hp-cc-comp');
+    const btn  = el('hp-cc-scan-btn');
+    const stat = el('hp-cc-status');
+    const lijst = el('hp-cc-lijst');
+    const compId = sel.value;
+    if (!compId) return;
+    btn.disabled = true;
+    stat.textContent = 'Bezig…';
+    stat.className = 'hp-status';
+    lijst.style.display = 'none';
+    lijst.innerHTML = '';
+    const debug = el('hp-cc-debug')?.checked ? '&debug=1' : '';
+    try {
+        const res  = await fetch('api/cluster_check.php?action=scan&competition_id='
+                                 + encodeURIComponent(compId) + debug);
+        const data = await res.json();
+        if (data.error) throw new Error(data.error);
+        if (data.leeg) {
+            stat.textContent = 'ℹ ' + data.leeg_reden;
+            stat.className = 'hp-status';
+        } else {
+            stat.textContent = data.totaal === 0
+                ? '✓ Geen mismatches gevonden.'
+                : `${data.totaal} persoon${data.totaal === 1 ? '' : 'en'} met mogelijke fout.`;
+            stat.className = 'hp-status' + (data.totaal === 0 ? ' hp-status-ok' : ' hp-status-warn');
+        }
+        let html = '';
+        if (data.totaal > 0) {
+            html += _hpClusterCheckRender(data.problemen, compId);
+        }
+        if (data.debug) {
+            html += _hpClusterCheckRenderDebug(data.debug, data.debug_meta);
+        }
+        if (html) {
+            lijst.style.display = '';
+            lijst.innerHTML = html;
+            // Re-bind fix-knoppen na concat
+            document.querySelectorAll('#hp-cc-lijst .hp-cc-fix-btn').forEach(btn => {
+                btn.addEventListener('click', () => _hpClusterCheckZoekFix(
+                    data.problemen[+btn.dataset.ccIdx], +btn.dataset.ccIdx, compId
+                ));
+            });
+        }
+    } catch (e) {
+        stat.textContent = '⚠ ' + e.message;
+        stat.className = 'hp-status hp-status-fout';
+    } finally {
+        btn.disabled = !sel.value;
+    }
+}
+
+function _hpClusterCheckRender(problemen, compId) {
+    const rows = problemen.map((p, idx) => {
+        const persG = p.persoon.gender || '?';
+        const persC = p.persoon.category || '?';
+        const wantG = p.verwacht_gender || '?';
+        const wantJ = p.verwacht_jong === true ? 't/m JB'
+                    : p.verwacht_jong === false ? 'vanaf JA' : '?';
+        const mismatches = [];
+        if (p.mismatch_gender)  mismatches.push(`gender (heeft ${escHtml(persG)}, verwacht ${escHtml(wantG)})`);
+        if (p.mismatch_cluster) mismatches.push(`cluster (heeft ${escHtml(persC)}, verwacht ${escHtml(wantJ)})`);
+        return `
+            <tr data-cc-idx="${idx}">
+                <td><b>${escHtml(p.persoon.full_name)}</b><br>
+                    <span style="font-size:.85em;color:#555">
+                        ${escHtml(persC)} · #${p.persoon.start_number ?? '?'} ·
+                        ${escHtml(p.persoon.club || '—')}
+                    </span></td>
+                <td>${escHtml(p.dc_naam || '?')}<br>
+                    <span style="font-size:.85em;color:#555">${escHtml(p.verwacht_label || '?')} · #${p.entry_snr ?? '?'}</span></td>
+                <td style="color:#b85a00">${mismatches.join('<br>')}</td>
+                <td><button class="btn-secondary hp-cc-fix-btn"
+                            data-cc-idx="${idx}">🔍 Zoek juiste</button></td>
+            </tr>
+            <tr data-cc-fix="${idx}" style="display:none">
+                <td colspan="4" style="background:#f7f9fc;padding:.6rem .8rem">
+                    <span class="hp-cc-fix-status">⏳ Laden…</span>
+                </td>
+            </tr>`;
+    }).join('');
+    const html = `
+        <table class="hp-cc-tabel">
+            <thead><tr>
+                <th>Gekoppelde persoon (fout?)</th>
+                <th>DC verwacht</th>
+                <th>Mismatch</th>
+                <th></th>
+            </tr></thead>
+            <tbody>${rows}</tbody>
+        </table>`;
+    // Bindings worden gezet door _hpClusterCheckScan na innerHTML
+    return html;
+}
+
+function _hpClusterCheckRenderDebug(debugInfo, meta) {
+    const metaBlok = meta ? `
+        <div style="font-size:.82em;color:#555;margin-bottom:.5rem;padding:.4rem .6rem;background:#fff;border-radius:3px">
+            <b>${meta.totaal_dcs_in_wedstrijd}</b> DC${meta.totaal_dcs_in_wedstrijd === 1 ? '' : '\'s'} in wedstrijd ·
+            <b>${meta.dcs_met_heat_entries}</b> met heat_entries (gescand).
+            <br>${escHtml(meta.verschil_uitleg || '')}
+        </div>` : '';
+    if (!Array.isArray(debugInfo) || !debugInfo.length) {
+        return `<div style="margin-top:.8rem;padding:.6rem;background:#fef9e7;border:1px solid #e0a800;border-radius:4px">
+            🔬 Debug: geen DC-data ontvangen.
+            ${metaBlok}
+        </div>`;
+    }
+    const fmtMap = obj => {
+        if (!obj || typeof obj !== 'object') return '—';
+        return Object.entries(obj).map(([k, v]) =>
+            `<code>${escHtml(k)}</code>=${v}`).join(' · ');
+    };
+    const rows = debugInfo.map(d => {
+        let dom;
+        if (typeof d.dominant === 'object' && d.dominant !== null) {
+            dom = `<b style="color:#0a7a3a">${escHtml(d.dominant.category)}</b>
+                   · cluster ${escHtml(d.dominant.cluster)}
+                   · ${d.dominant.top_pct}% van ${d.dominant.aantal}`;
+        } else {
+            dom = `<span style="color:#b85a00">${escHtml(String(d.dominant))}</span>`;
+        }
+        return `<tr>
+            <td><b>${escHtml(d.dc_naam || '?')}</b></td>
+            <td>${d.totaal} (+${d.extern_pending_geskipt} extern/pending)</td>
+            <td>${fmtMap(d.gender_telling)}</td>
+            <td>${fmtMap(d.cat_telling)}</td>
+            <td>${fmtMap(d.cluster_telling)}</td>
+            <td>${dom}</td>
+        </tr>`;
+    }).join('');
+    return `
+        <div style="margin-top:1rem;padding:.6rem .8rem;background:#f5f9fc;border:1px solid #c0d8ec;border-radius:4px">
+            <div style="font-weight:600;color:#1565c0;margin-bottom:.4rem">🔬 Debug per DC</div>
+            ${metaBlok}
+            <div style="font-size:.82em;color:#555;margin-bottom:.4rem">
+                Per DC: hoe wordt de dominante cluster bepaald. Drempel = 60%.
+                Cluster <code>V_J</code> = vrouw t/m JB · <code>M_O</code> = man vanaf JA.
+            </div>
+            <table class="hp-cc-tabel" style="font-size:.78rem">
+                <thead><tr>
+                    <th>DC</th><th>Totaal</th><th>Gender</th>
+                    <th>Categorie</th><th>Cluster</th><th>Dominant</th>
+                </tr></thead>
+                <tbody>${rows}</tbody>
+            </table>
+        </div>`;
+}
+
+async function _hpClusterCheckZoekFix(prob, idx, compId) {
+    const fixRow = document.querySelector(`#hp-cc-lijst tr[data-cc-fix="${idx}"]`);
+    if (!fixRow) return;
+    fixRow.style.display = '';
+    const cell = fixRow.querySelector('td');
+    cell.innerHTML = '<span>⏳ Kandidaten zoeken…</span>';
+    try {
+        // Pak eerste entry voor de zoek-actie — alle entries hebben dezelfde
+        // categorie+startnummer (van dezelfde foute persoon).
+        const entryId = prob.entries[0].entry_id;
+        const res = await fetch('api/cluster_check.php', {
+            method: 'POST', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ action: 'zoek_kandidaten', entry_id: entryId }),
+        });
+        const data = await res.json();
+        if (data.error) throw new Error(data.error);
+
+        // Drie soorten oplossingen die we tonen wanneer relevant:
+        //
+        // A) Vervang persoon — voor "Sophie/Lars": foute persoon hangt aan
+        //    Sophie's inschrijving. Toon kandidaten (dominante cat + snr).
+        //
+        // B) Verplaats naar passende DC — voor "Roan Vos": persoon klopt,
+        //    DC niet. Toon DC's in deze comp waar diens cluster dominant is.
+        //
+        // C) Verwijder uit deze DC — fallback. Operator regelt zelf de rest.
+        const entryIds = prob.entries.map(e => e.entry_id);
+
+        // ── A) Kandidaten voor vervang
+        let html = '';
+        if (data.kandidaten?.length) {
+            const opties = data.kandidaten.map(k => `
+                <div class="hp-cc-kand">
+                    <span>
+                        <b>${escHtml(k.full_name)}</b>
+                        ${k.birth_year ? `(${k.birth_year})` : ''}
+                        <span style="font-size:.85em;color:#555">
+                            · ${escHtml(k.category ?? '?')} · #${k.start_number ?? '?'}
+                            · ${escHtml(k.club || '—')}
+                        </span>
+                    </span>
+                    <button class="btn-primary hp-cc-verv-btn"
+                            data-lic="${escHtml(k.license_key)}"
+                            data-naam="${escHtml(k.full_name)}">
+                        ↪ Vervang persoon (${entryIds.length})
+                    </button>
+                </div>`).join('');
+            html += `
+                <div style="margin-bottom:.3rem;font-size:.9em;color:#1565c0">
+                    💡 Andere persoon met <b>${escHtml(data.gezocht_cat)}</b> #${data.gezocht_snr}:
+                </div>
+                ${opties}`;
+        }
+
+        // ── B) Verplaats naar passende DC
+        if (data.doel_dcs?.length) {
+            const dcOpties = data.doel_dcs.map(dc => `
+                <div class="hp-cc-kand">
+                    <span>
+                        <b>${escHtml(dc.dc_naam)}</b>
+                        ${dc.exact_match
+                            ? `<span style="color:#0a7a3a;font-size:.85em">· exacte cat-match ${escHtml(dc.dominant_cat)}</span>`
+                            : `<span style="font-size:.85em;color:#555">· dominant ${escHtml(dc.dominant_cat)} (${dc.aantal})</span>`}
+                    </span>
+                    <button class="btn-primary hp-cc-verpl-btn"
+                            data-dc="${escHtml(dc.dc_id)}"
+                            data-naam="${escHtml(dc.dc_naam)}">
+                        ↪ Verplaats hierheen
+                    </button>
+                </div>`).join('');
+            html += `
+                <div style="margin-top:.5rem;margin-bottom:.3rem;font-size:.9em;color:#1565c0">
+                    💡 Persoon (<b>${escHtml(data.persoon_cat ?? '?')}</b>) past beter in:
+                </div>
+                ${dcOpties}`;
+        }
+
+        // ── C) Verwijder fallback (altijd)
+        html += `
+            <div class="hp-cc-kand" style="margin-top:.5rem;border-top:1px dashed #c0c0c0;padding-top:.5rem">
+                <span style="font-size:.85em;color:#555">
+                    Geen passende oplossing? Verwijder alleen — schrijf zelf in via Importeer → beheer.
+                </span>
+                <button class="btn-secondary hp-cc-del-btn">
+                    🗑 Alleen verwijderen
+                </button>
+            </div>`;
+
+        // Helemaal niets bruikbaars? Extra uitleg bovenaan.
+        if (!data.kandidaten?.length && !data.doel_dcs?.length) {
+            html = `
+                <div style="margin-bottom:.4rem">
+                    <span style="color:#b71c1c">
+                        Geen kandidaat-persoon én geen passende doel-DC gevonden.
+                    </span>
+                    <br><span style="font-size:.85em;color:#555">
+                        Mogelijk staat de juiste rijder nog niet in de DB
+                        (importeer eerst diens KNSB-licentie) of bestaat de
+                        juiste DC niet in deze wedstrijd.
+                    </span>
+                </div>` + html;
+        }
+        cell.innerHTML = html;
+
+        cell.querySelectorAll('.hp-cc-verv-btn').forEach(b => {
+            b.addEventListener('click', () => _hpClusterCheckVervang(
+                entryIds, b.dataset.lic, b.dataset.naam, idx
+            ));
+        });
+        cell.querySelectorAll('.hp-cc-verpl-btn').forEach(b => {
+            b.addEventListener('click', () => _hpClusterCheckVerplaats(
+                entryIds, b.dataset.dc, b.dataset.naam, prob.persoon.full_name, idx
+            ));
+        });
+        cell.querySelector('.hp-cc-del-btn')?.addEventListener('click', () => {
+            _hpClusterCheckVerwijder(entryIds, prob.persoon.full_name, idx);
+        });
+    } catch (e) {
+        cell.innerHTML = `<span style="color:#b71c1c">⚠ ${escHtml(e.message)}</span>`;
+    }
+}
+
+async function _hpClusterCheckVerplaats(entryIds, doelDcId, doelDcNaam, persoonNaam, idx) {
+    const row = document.querySelector(`#hp-cc-lijst tr[data-cc-idx="${idx}"]`);
+    const fixRow = document.querySelector(`#hp-cc-lijst tr[data-cc-fix="${idx}"]`);
+    if (!await toonBevestigDialog(
+        `<b>${escHtml(persoonNaam)}</b> verplaatsen naar <b>${escHtml(doelDcNaam)}</b>?<br>` +
+        `Inschrijving in huidige DC wordt verwijderd, nieuwe inschrijving in doel-DC aangemaakt. ` +
+        `Bijbehorende heat_entries (loting van huidige DC) worden opgeschoond — ` +
+        `loting voor doel-DC moet opnieuw gegenereerd worden.`,
+        'Verplaatsen', 'Verplaatsen', 'Annuleren', { bodyIsHtml: true }
+    )) return;
+    try {
+        const res = await fetch('api/cluster_check.php', {
+            method: 'POST', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                action: 'verplaats', entry_ids: entryIds, doel_dc_id: doelDcId,
+            }),
+        });
+        const data = await res.json();
+        if (data.error) throw new Error(data.error);
+        row.style.opacity = '.5';
+        row.style.textDecoration = 'line-through';
+        fixRow.style.display = '';
+        const delen = [];
+        if (data.verplaatst)   delen.push(`${data.verplaatst} inschrijving${data.verplaatst === 1 ? '' : 'en'} verplaatst naar <b>${escHtml(data.doel_dc_naam)}</b>`);
+        if (data.al_aanwezig)  delen.push(`${data.al_aanwezig} stond al in doel-DC (huidige weggehaald)`);
+        if (data.he_verwijderd) delen.push(`${data.he_verwijderd} heat-entr${data.he_verwijderd === 1 ? 'y' : 'ies'} opgeschoond`);
+        fixRow.querySelector('td').innerHTML =
+            `<span style="color:#0a7a3a">✓ ${delen.join(', ') || 'niets te doen'}.</span>`;
+    } catch (e) {
+        await toonBevestigDialog('Fout: ' + e.message, 'Fout', 'OK', null);
+    }
+}
+
+// ── Rijder-correctie (handmatig, race-day fix) ────────────────────────────────
+
+let _hpRcGeselecteerd = null;     // {persoon, entries, alle_dcs}
+let _hpRcZoekTimer    = null;
+
+async function _hpRijderCorrectieInit() {
+    // Hergebruik dezelfde competities-endpoint als cluster-check
+    const sel = el('hp-rc-comp');
+    const zoek = el('hp-rc-zoek');
+    sel.innerHTML = '<option value="">— laden… —</option>';
+    try {
+        const res  = await fetch('api/cluster_check.php?action=competities');
+        const lijst = await res.json();
+        if (lijst.error) throw new Error(lijst.error);
+        if (!Array.isArray(lijst) || !lijst.length) {
+            sel.innerHTML = '<option value="">— geen wedstrijden —</option>';
+            return;
+        }
+        sel.innerHTML = '<option value="">— kies wedstrijd —</option>' +
+            lijst.map(c => {
+                const dat = c.datum ? new Date(c.datum).toLocaleDateString('nl-NL',
+                    {day:'2-digit', month:'2-digit', year:'numeric'}) : '?';
+                return `<option value="${escHtml(c.competition_id)}">${escHtml(c.naam)} (${escHtml(dat)})</option>`;
+            }).join('');
+    } catch (e) {
+        sel.innerHTML = `<option value="">⚠ ${escHtml(e.message)}</option>`;
+        return;
+    }
+    sel.addEventListener('change', () => {
+        zoek.disabled = !sel.value;
+        zoek.value = '';
+        el('hp-rc-resultaten').innerHTML = '';
+        el('hp-rc-detail').style.display = 'none';
+        el('hp-rc-detail').innerHTML = '';
+    });
+    zoek.addEventListener('input', () => {
+        clearTimeout(_hpRcZoekTimer);
+        _hpRcZoekTimer = setTimeout(_hpRcDoeZoek, 250);
+    });
+}
+
+async function _hpRcDoeZoek() {
+    const q = el('hp-rc-zoek').value.trim();
+    const resBlok = el('hp-rc-resultaten');
+    if (q.length < 2) { resBlok.innerHTML = ''; return; }
+    try {
+        const res  = await fetch('api/cluster_check.php?action=zoek_persoon&q=' + encodeURIComponent(q));
+        const data = await res.json();
+        if (data.error) throw new Error(data.error);
+        if (!Array.isArray(data) || !data.length) {
+            resBlok.innerHTML = '<div style="font-size:.85em;color:#888">Geen rijders gevonden.</div>';
+            return;
+        }
+        resBlok.innerHTML = `
+            <div style="max-height:260px;overflow-y:auto;border:1px solid #d0d0d0;border-radius:4px">
+                ${data.map(p => `
+                    <div class="hp-rc-rij" data-lic="${escHtml(p.license_key)}"
+                         style="padding:.4rem .6rem;cursor:pointer;border-bottom:1px solid #eee;font-size:.88em">
+                        <b>${escHtml(p.full_name)}</b>
+                        <span style="color:#555">
+                            · ${escHtml(p.category ?? '?')}
+                            · #${p.start_number ?? '?'}
+                            · ${escHtml(p.club_short || p.club_full || '—')}
+                        </span>
+                        ${p.extern ? ' <span style="color:#0a7a3a;font-size:.85em">🌍 extern</span>' : ''}
+                        ${p.pending_source ? ' <span style="color:#b85a00;font-size:.85em">📜 pending</span>' : ''}
+                    </div>`).join('')}
+            </div>`;
+        resBlok.querySelectorAll('.hp-rc-rij').forEach(r => {
+            r.addEventListener('click', () => _hpRcOpenDetail(r.dataset.lic));
+            r.addEventListener('mouseenter', () => r.style.background = '#f0f3f7');
+            r.addEventListener('mouseleave', () => r.style.background = '');
+        });
+    } catch (e) {
+        resBlok.innerHTML = `<span class="hp-status hp-status-fout">⚠ ${escHtml(e.message)}</span>`;
+    }
+}
+
+async function _hpRcOpenDetail(licenseKey) {
+    const compId = el('hp-rc-comp').value;
+    const detail = el('hp-rc-detail');
+    detail.style.display = '';
+    detail.innerHTML = '<div style="padding:.6rem">⏳ Laden…</div>';
+    try {
+        const url = 'api/cluster_check.php?action=persoon_detail'
+                  + '&license_key=' + encodeURIComponent(licenseKey)
+                  + '&competition_id=' + encodeURIComponent(compId);
+        const res  = await fetch(url);
+        const data = await res.json();
+        if (data.error) throw new Error(data.error);
+        _hpRcGeselecteerd = data;
+        _hpRcRenderDetail();
+    } catch (e) {
+        detail.innerHTML = `<span class="hp-status hp-status-fout">⚠ ${escHtml(e.message)}</span>`;
+    }
+}
+
+function _hpRcRenderDetail() {
+    const data = _hpRcGeselecteerd;
+    if (!data) return;
+    const p = data.persoon;
+    const huidigGenderTxt = (p.gender == 0 || p.gender === '0') ? 'M (man)'
+                          : (p.gender == 1 || p.gender === '1') ? 'V (vrouw)'
+                          : '(onbekend: ' + p.gender + ')';
+
+    const dcOpties = (entryId, huidigDcId) => `
+        <option value="">— houden in huidige DC —</option>
+        ${(data.alle_dcs || []).filter(d => d.dc_id !== huidigDcId).map(d => `
+            <option value="${escHtml(d.dc_id)}">${escHtml(d.dc_naam)}${d.category_filter ? ` (${escHtml(d.category_filter)})` : ''}</option>
+        `).join('')}`;
+
+    const entriesHtml = data.entries.length === 0
+        ? `<div style="font-size:.85em;color:#888;padding:.3rem 0">
+              Geen inschrijvingen in deze wedstrijd.
+           </div>`
+        : data.entries.map(e => `
+            <div class="hp-cc-kand" style="border-top:1px solid #eee;padding-top:.4rem">
+                <span style="font-size:.88em">
+                    <b>${escHtml(e.dc_naam)}</b>
+                </span>
+                <select class="inp hp-rc-verpl-sel" data-entry="${e.entry_id}" data-huidig="${escHtml(e.dc_id)}" style="min-width:240px">
+                    ${dcOpties(e.entry_id, e.dc_id)}
+                </select>
+            </div>`).join('');
+
+    el('hp-rc-detail').innerHTML = `
+        <div style="border:1px solid #c0d8ec;border-radius:6px;padding:.7rem .9rem;background:#f8fbfd">
+            <div style="font-weight:600;font-size:.95em;margin-bottom:.4rem">
+                ${escHtml(p.full_name)}
+                ${p.extern ? ' <span style="color:#0a7a3a;font-size:.85em">🌍 extern</span>' : ''}
+                ${p.pending_source ? ' <span style="color:#b85a00;font-size:.85em">📜 pending</span>' : ''}
+            </div>
+            <div style="font-size:.82em;color:#555;margin-bottom:.6rem">
+                Huidig in DB: gender <b>${escHtml(huidigGenderTxt)}</b> ·
+                categorie <b>${escHtml(p.category ?? '?')}</b> ·
+                startnummer <b>#${p.start_number ?? '?'}</b>
+                ${p.birth_year ? ` · geb. ${p.birth_year}` : ''}
+                ${p.club_short || p.club_full ? ` · ${escHtml(p.club_short || p.club_full)}` : ''}
+            </div>
+
+            <div style="font-weight:600;font-size:.88em;color:#1565c0;margin-bottom:.3rem">
+                1. Persons-velden bijwerken (leeg laten = niet wijzigen)
+            </div>
+            <div style="display:flex;gap:.6rem;flex-wrap:wrap;margin-bottom:.7rem;font-size:.88em">
+                <label>Gender:
+                    <select class="inp" id="hp-rc-gender">
+                        <option value="">— niet wijzigen —</option>
+                        <option value="0">M (man)</option>
+                        <option value="1">V (vrouw)</option>
+                    </select>
+                </label>
+                <label>Categorie:
+                    <select class="inp" id="hp-rc-cat">
+                        <option value="">— niet wijzigen —</option>
+                        ${(data.wedstrijd_cats || []).map(c =>
+                            `<option value="${escHtml(c)}"${c === (p.category || '').toUpperCase() ? ' disabled' : ''}>${escHtml(c)}${c === (p.category || '').toUpperCase() ? ' (huidig)' : ''}</option>`
+                        ).join('')}
+                    </select>
+                </label>
+                <label>Startnummer:
+                    <input type="number" class="inp" id="hp-rc-snr"
+                           placeholder="bv. 87"
+                           style="width:90px">
+                </label>
+            </div>
+
+            <div style="font-weight:600;font-size:.88em;color:#1565c0;margin-bottom:.3rem">
+                2. Inschrijvingen in deze wedstrijd
+            </div>
+            ${entriesHtml}
+
+            <div style="margin-top:.7rem;text-align:right">
+                <button class="btn-secondary" id="hp-rc-annuleer">Annuleren</button>
+                <button class="btn-primary" id="hp-rc-opslaan">Opslaan</button>
+            </div>
+            <div id="hp-rc-melding" class="hp-status" style="margin-top:.5rem"></div>
+        </div>`;
+
+    el('hp-rc-annuleer').addEventListener('click', () => {
+        el('hp-rc-detail').style.display = 'none';
+        el('hp-rc-detail').innerHTML = '';
+        _hpRcGeselecteerd = null;
+    });
+    el('hp-rc-opslaan').addEventListener('click', _hpRcOpslaan);
+}
+
+async function _hpRcOpslaan() {
+    const data = _hpRcGeselecteerd;
+    if (!data) return;
+    const compId = el('hp-rc-comp').value;
+    const lic    = data.persoon.license_key;
+    const gender = el('hp-rc-gender').value;
+    const cat    = el('hp-rc-cat').value.trim();
+    const snr    = el('hp-rc-snr').value.trim();
+    const verplaatsingen = [];
+    document.querySelectorAll('.hp-rc-verpl-sel').forEach(s => {
+        if (s.value) {
+            verplaatsingen.push({
+                entry_id: parseInt(s.dataset.entry),
+                doel_dc_id: s.value,
+            });
+        }
+    });
+
+    if (!gender && !cat && !snr && !verplaatsingen.length) {
+        el('hp-rc-melding').textContent = 'Niets te wijzigen.';
+        el('hp-rc-melding').className = 'hp-status';
+        return;
+    }
+    const btn = el('hp-rc-opslaan');
+    btn.disabled = true;
+    el('hp-rc-melding').textContent = 'Bezig…';
+    el('hp-rc-melding').className = 'hp-status';
+    try {
+        const res  = await fetch('api/cluster_check.php', {
+            method: 'POST', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                action: 'corrigeer_persoon',
+                license_key: lic,
+                competition_id: compId,
+                nieuwe_gender: gender || null,
+                nieuwe_category: cat || null,
+                nieuwe_start_number: snr || null,
+                verplaatsingen,
+            }),
+        });
+        const d = await res.json();
+        if (d.error) throw new Error(d.error);
+        const delen = [];
+        if (d.persons_bijgewerkt) delen.push('persons-velden bijgewerkt');
+        if (d.verplaatst)        delen.push(`${d.verplaatst} inschrijving${d.verplaatst === 1 ? '' : 'en'} verplaatst`);
+        if (d.he_verwijderd)     delen.push(`${d.he_verwijderd} heat-entr${d.he_verwijderd === 1 ? 'y' : 'ies'} opgeschoond`);
+        el('hp-rc-melding').textContent = '✓ ' + (delen.join(', ') || 'niets veranderd') + '.';
+        el('hp-rc-melding').className = 'hp-status hp-status-ok';
+        // Detail opnieuw inladen om actuele state te tonen
+        await _hpRcOpenDetail(lic);
+    } catch (e) {
+        el('hp-rc-melding').textContent = '⚠ ' + e.message;
+        el('hp-rc-melding').className = 'hp-status hp-status-fout';
+    } finally {
+        btn.disabled = false;
+    }
+}
+
+async function _hpClusterCheckVerwijder(entryIds, persoonNaam, idx) {
+    const row = document.querySelector(`#hp-cc-lijst tr[data-cc-idx="${idx}"]`);
+    const fixRow = document.querySelector(`#hp-cc-lijst tr[data-cc-fix="${idx}"]`);
+    if (!await toonBevestigDialog(
+        `<b>${escHtml(persoonNaam)}</b> verwijderen uit deze DC ` +
+        `(${entryIds.length} inschrijving${entryIds.length === 1 ? '' : 'en'})? ` +
+        `De persoon zelf en zijn inschrijvingen in andere DCs blijven staan. ` +
+        `Bijbehorende heat_entries (loting) worden ook opgeschoond.`,
+        'Verwijderen uit DC', 'Verwijderen', 'Annuleren', { bodyIsHtml: true }
+    )) return;
+    try {
+        const res = await fetch('api/cluster_check.php', {
+            method: 'POST', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ action: 'verwijder', entry_ids: entryIds }),
+        });
+        const data = await res.json();
+        if (data.error) throw new Error(data.error);
+        row.style.opacity = '.5';
+        row.style.textDecoration = 'line-through';
+        fixRow.style.display = '';
+        const delen = [`${data.verwijderd} inschrijving${data.verwijderd === 1 ? '' : 'en'} verwijderd`];
+        if (data.he_verwijderd) delen.push(`${data.he_verwijderd} heat-entr${data.he_verwijderd === 1 ? 'y' : 'ies'} opgeschoond`);
+        fixRow.querySelector('td').innerHTML =
+            `<span style="color:#0a7a3a">✓ ${delen.join(', ')}.</span>`;
+    } catch (e) {
+        await toonBevestigDialog('Fout: ' + e.message, 'Fout', 'OK', null);
+    }
+}
+
+async function _hpClusterCheckVervang(entryIds, nieuweLic, nieuwNaam, idx) {
+    const row = document.querySelector(`#hp-cc-lijst tr[data-cc-idx="${idx}"]`);
+    const fixRow = document.querySelector(`#hp-cc-lijst tr[data-cc-fix="${idx}"]`);
+    if (!await toonBevestigDialog(
+        `${entryIds.length} fout-gekoppelde entr${entryIds.length === 1 ? 'y' : 'ies'} vervangen door <b>${escHtml(nieuwNaam)}</b>?`,
+        'Persoon vervangen', 'Vervangen', 'Annuleren', { bodyIsHtml: true }
+    )) return;
+    try {
+        const res = await fetch('api/cluster_check.php', {
+            method: 'POST', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                action: 'vervang', entry_ids: entryIds, nieuwe_license: nieuweLic,
+            }),
+        });
+        const data = await res.json();
+        if (data.error) throw new Error(data.error);
+        // Visueel "afgehandeld" markeren — strikethrough + uitleg in fix-rij
+        row.style.opacity = '.5';
+        row.style.textDecoration = 'line-through';
+        fixRow.style.display = '';
+        const delen = [];
+        if (data.bijgewerkt)   delen.push(`${data.bijgewerkt} inschrijving${data.bijgewerkt === 1 ? '' : 'en'} gewijzigd`);
+        if (data.verwijderd)   delen.push(`${data.verwijderd} verwijderd (juiste persoon stond al ingeschreven)`);
+        if (data.he_bijgewerkt) delen.push(`${data.he_bijgewerkt} heat-entr${data.he_bijgewerkt === 1 ? 'y' : 'ies'} mee-bijgewerkt`);
+        if (data.he_verwijderd) delen.push(`${data.he_verwijderd} heat-entr${data.he_verwijderd === 1 ? 'y' : 'ies'} verwijderd`);
+        let msg = `✓ Naar <b>${escHtml(data.nieuw_naam)}</b>: ` + (delen.length ? delen.join(', ') + '.' : 'niets te doen.');
+        if (data.geskipped?.length) {
+            msg += ` ${data.geskipped.length} overgeslagen (was al goed).`;
+        }
+        fixRow.querySelector('td').innerHTML =
+            `<span style="color:#0a7a3a">${msg}</span>`;
+    } catch (e) {
+        await toonBevestigDialog('Fout: ' + e.message, 'Fout', 'OK', null);
+    }
 }
 
 async function _hpPendingLaad() {

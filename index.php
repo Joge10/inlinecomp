@@ -54,7 +54,24 @@ if (is_array($eigenScope) && !empty($eigenScope)) {
                 🔒 <?= htmlspecialchars($korteLabel) ?>
             </span>
         <?php endif; ?>
-        <button class="header-uitlog-btn" id="btn-uitloggen" title="Uitloggen">&#10148;</button>
+        <div class="header-menu-wrap">
+            <button class="header-menu-btn" id="btn-header-menu" type="button"
+                    title="Account-menu" aria-haspopup="true" aria-expanded="false">
+                &#9776;
+            </button>
+            <ul class="header-menu-dropdown" id="header-menu-dropdown" role="menu">
+                <li role="none">
+                    <button type="button" role="menuitem" id="menu-mijn-account">
+                        &#9998; Mijn account
+                    </button>
+                </li>
+                <li role="none">
+                    <button type="button" role="menuitem" id="menu-uitloggen">
+                        &#10138; Uitloggen
+                    </button>
+                </li>
+            </ul>
+        </div>
     </div>
 </header>
 

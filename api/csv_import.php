@@ -326,8 +326,10 @@ if ($action === 'match_preview') {
     $kolNaamLast   = $kolVoor('name_last');
     $kolStartnr    = $kolVoor('start_number');
     $kolClub       = $kolVoor('club_short') ?? $kolVoor('club_full') ?? $kolVoor('club_of_sponsor');
+    $kolGender     = $kolVoor('gender');
+    $kolCatGroep   = $kolVoor('cat_groep');
 
-    // Bouw per rij de gerealiseerde naam + club + startnr
+    // Bouw per rij de gerealiseerde naam + club + startnr + gender + cat
     $rijData = [];
     foreach ($rows as $i => $r) {
         $naam = '';
@@ -343,10 +345,14 @@ if ($action === 'match_preview') {
         }
         $club    = $kolClub    !== null ? trim($r[$kolClub]    ?? '') : '';
         $startnr = $kolStartnr !== null ? trim($r[$kolStartnr] ?? '') : '';
+        $gender  = $kolGender   !== null ? trim($r[$kolGender]   ?? '') : '';
+        $cat     = $kolCatGroep !== null ? trim($r[$kolCatGroep] ?? '') : '';
         $rijData[$i] = [
             'naam'    => $naam,
             'club'    => $club,
             'startnr' => $startnr,
+            'gender'  => $gender,
+            'cat'     => $cat,
         ];
     }
 
@@ -360,7 +366,7 @@ if ($action === 'match_preview') {
     if ($alleStartnrs) {
         $ph = implode(',', array_fill(0, count($alleStartnrs), '?'));
         $stmt = $pdo->prepare("
-            SELECT license_key, full_name, short_name, birth_year, gender,
+            SELECT license_key, full_name, short_name, birth_year, gender, category,
                    start_number, club_short, club_full, extern
             FROM persons
             WHERE start_number IN ($ph)
@@ -398,16 +404,89 @@ if ($action === 'match_preview') {
         }
     }
 
+    // ── KNSB-cluster helpers ──────────────────────────────────────────────────
+    // KNSB-startnummers zijn alleen uniek BINNEN een cluster — er zijn er vier:
+    //   1. Dames t/m JB
+    //   2. Heren t/m JB
+    //   3. Dames vanaf JA
+    //   4. Heren vanaf JA
+    // De "breuk" zit bij JA: KNSB geeft daar een nieuw nummer uit omdat JA-
+    // rijders vaak samen met senioren in één wedstrijd rijden (handig zonder
+    // overlap). Idem voor pupillen/kadetten/JB die vaak samen rijden.
+    // Theoretisch kunnen er dus 4 × 999 unieke nummers landelijk leven —
+    // ruimte die nodig is omdat nummers na stoppen nog even gereserveerd
+    // blijven om verwarring te voorkomen.
+    //
+    // Cluster-flag in code: TRUE = "t/m JB" (jong cluster), FALSE = "vanaf JA"
+    // (ouder cluster, incl. JA junioren). De namen "jong/oud" verwijzen naar
+    // het NUMMER-cluster, NIET naar de leeftijdsklasse zelf (DJA is nog
+    // junior, geen senior — maar zit wel in het ouder-cluster qua nummer).
+    //
+    // Gender = harde gate (verschillend → nooit dezelfde persoon).
+    // Cluster = zachte gate (alleen filteren als beide kanten een duidelijke
+    // klasse hebben — "Junior" zonder A/B is ambigu en wordt overgeslagen).
+    $clusterGender = function($v): ?string {
+        $s = strtoupper(trim((string)$v));
+        if ($s === 'M' || $s === 'H') return 'M';
+        if ($s === 'W' || $s === 'V' || $s === 'F') return 'V';
+        return null;
+    };
+    // CSV-categorie ("Cadet", "Pupil", "Junior B", "Senior", ...) → jeugd?
+    $isJeugdCSV = function($cat): ?bool {
+        $c = strtolower(trim((string)$cat));
+        if ($c === '') return null;
+        if (str_contains($c, 'pupil') || str_contains($c, 'cadet')) return true;
+        if (preg_match('/junior\s*b/i', (string)$cat)) return true;
+        if (preg_match('/junior\s*a/i', (string)$cat)) return false;
+        if (str_contains($c, 'youth') || str_contains($c, 'senior') || str_contains($c, 'master'))
+            return false;
+        return null;   // bv. "Junior" zonder suffix → ambigu
+    };
+    // KNSB-categoriecode (DKA, DP1, HJA, ...) → jeugd?
+    // KNSB inline-codes zijn: geslacht-prefix (D/H) + leeftijdscategorie.
+    // Volgorde van jong → oud:
+    //   P4 → P3 → P2 → P1 → KA (kadetten) → JB │ JA → SJ → SA → SB → 40 → 45 → 50
+    //         ── JEUGD (t/m JB) ──            ── SENIOR (vanaf JA) ──
+    // Jeugd-suffixen:  P1-P4 (pupillen), KA (kadetten), JB (junior B).
+    // Senior-suffixen: JA (junior A), SJ/SA/SB (senior-klassen),
+    //                  twee cijfers voor masters (40, 45, 50, ...).
+    $isJeugdKnsb = function($cat): ?bool {
+        $c = strtoupper(trim((string)$cat));
+        if ($c === '') return null;
+        if (preg_match('/(P[1-4]|KA|JB)$/', $c)) return true;
+        if (preg_match('/(JA|S[JAB]|\d{2})$/', $c)) return false;
+        return null;
+    };
+
     // Match-cascade per rij
     $matches = [];
     foreach ($rijData as $i => $rd) {
         $kandidaten = [];
         $tier       = 4;   // default: geen match
 
-        // Tier 1: KNSB-startnummer exact
+        // Tier 1: KNSB-startnummer exact BINNEN het juiste cluster.
+        // Zonder cluster-check koppelt startnummer 26 (Sophie / V Cadet) aan
+        // de eerste persoon met startnummer 26 — kan een man uit een ander
+        // cluster zijn. Filter daarom op gender (hard) + jeugd-flag (zacht).
         if ($rd['startnr'] !== '' && isset($byStartnr[(int)$rd['startnr']])) {
-            $kandidaten = $byStartnr[(int)$rd['startnr']];
-            $tier       = 1;
+            $csvG = $clusterGender($rd['gender']);
+            $csvJ = $isJeugdCSV($rd['cat']);
+            $alle = $byStartnr[(int)$rd['startnr']];
+            $kand = array_values(array_filter($alle, function($p) use ($csvG, $csvJ, $clusterGender, $isJeugdKnsb) {
+                $pG = $clusterGender($p['gender'] ?? '');
+                // Gender: harde gate — als beide kanten bekend en niet gelijk
+                // is dit nooit dezelfde persoon.
+                if ($csvG !== null && $pG !== null && $csvG !== $pG) return false;
+                // Jeugd/senior: zachte gate — alleen filteren als beide kanten
+                // een duidelijke leeftijdsklasse hebben.
+                $pJ = $isJeugdKnsb($p['category'] ?? null);
+                if ($csvJ !== null && $pJ !== null && $csvJ !== $pJ) return false;
+                return true;
+            }));
+            if (!empty($kand)) {
+                $kandidaten = $kand;
+                $tier       = 1;
+            }
         }
         // Tier 2/3: naam-match
         if (!$kandidaten && $rd['naam']) {

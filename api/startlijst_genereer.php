@@ -619,6 +619,32 @@ try {
         $methodeLabel = 'Tussenklassement deze wedstrijd'
             . ($tkBasis ? ' (basis: ' . implode(', ', $tkBasis) . ')'
                         : ' (nog geen eerdere afstanden vastgelegd)');
+    } elseif ($methode === 'afstand_uitslag') {
+        // Bron-naam ophalen uit uitslag_afstand zodat operator achteraf
+        // optisch kan controleren waarop de loting gebaseerd is.
+        // Format: "Op afstand-uitslag: <distance_naam> (<dc_naam>)"
+        $auBronSql = "
+            SELECT DISTINCT dc_naam, distance_naam
+              FROM uitslag_afstand
+             WHERE competition_id          = ?
+               AND distance_combination_id = ?
+        " . ($bronDistId ? " AND distance_id = ?" : "") . "
+             LIMIT 1
+        ";
+        $auBronStmt = $pdo->prepare($auBronSql);
+        $auBronStmt->execute(
+            $bronDistId ? [$compId, $bronDcId, $bronDistId] : [$compId, $bronDcId]
+        );
+        $auBron = $auBronStmt->fetch(PDO::FETCH_ASSOC);
+        if ($auBron) {
+            $dn  = trim($auBron['distance_naam'] ?? '');
+            $dcn = trim($auBron['dc_naam'] ?? '');
+            $methodeLabel = 'Op afstand-uitslag'
+                . ($dn  ? ': ' . $dn : '')
+                . ($dcn ? ' (' . $dcn . ')' : '');
+        } else {
+            $methodeLabel = 'Op afstand-uitslag (bron niet gevonden)';
+        }
     } else {
         $methodeLabel = $methode;
     }
