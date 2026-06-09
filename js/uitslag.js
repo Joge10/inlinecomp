@@ -26,23 +26,39 @@ function sanctieLabel(s) { return s ?? ''; }
 
 // ── Hulpfuncties ──────────────────────────────────────────────────────────────
 
+// In-flight tracking voor uLaadAfstanden — als meerdere callers tegelijk
+// dezelfde groep opvragen vóór de cache gevuld is, delen ze 1 HTTP-call.
+// Zie startlist.js _slDistInFlight voor de reden (EP-limit op shared hosting).
+const _uDistInFlight = {};
+
 async function uLaadAfstanden(groep) {
     const cKey = groep.dc_id + (groep.is_split ? '|' + groep.dc_name : '');
     if (_uDistCache[cKey]) return _uDistCache[cKey];
-    try {
-        const splitParam = groep.is_split ? `&split_group=${encodeURIComponent(groep.dc_name)}` : '';
-        const res  = await fetch(`api/distances_db.php?dc_id=${encodeURIComponent(groep.dc_id)}${splitParam}`);
-        const data = await res.json();
-        const afs  = Array.isArray(data) ? data.filter(a => !a.error) : [];
-        _uDistCache[cKey] = afs;
-        return afs;
-    } catch { return []; }
+    if (_uDistInFlight[cKey]) return _uDistInFlight[cKey];
+    const splitParam = groep.is_split ? `&split_group=${encodeURIComponent(groep.dc_name)}` : '';
+    const promise = (async () => {
+        try {
+            const res  = await fetch(`api/distances_db.php?dc_id=${encodeURIComponent(groep.dc_id)}${splitParam}`);
+            const data = await res.json();
+            const afs  = Array.isArray(data) ? data.filter(a => !a.error) : [];
+            _uDistCache[cKey] = afs;
+            return afs;
+        } catch { return []; }
+        finally { delete _uDistInFlight[cKey]; }
+    })();
+    _uDistInFlight[cKey] = promise;
+    return promise;
 }
 
 // Bulk pre-fetch — vermindert N parallelle distances_db calls bij vulUitslag-
 // PrintSelect en kleurAlleTabsAsync tot 1 bulk-call met ?dc_ids=. Split-groep-
 // filter wordt client-side nagebootst (zelfde logica als _slBulkLaadAfstanden
 // in startlist.js).
+//
+// In-flight tracking: als twee parallel-callers tegelijk binnenkomen, doen
+// ze samen 1 batch-call ipv 2.
+let _uBulkInFlight = null;
+
 async function _uBulkLaadAfstanden(groepen) {
     if (!groepen?.length) return;
     const teLaden = new Set();
@@ -53,25 +69,30 @@ async function _uBulkLaadAfstanden(groepen) {
         teLaden.add(g.dc_id);
     }
     if (teLaden.size === 0) return;
-    try {
-        const url = `api/distances_db.php?dc_ids=${[...teLaden].map(encodeURIComponent).join(',')}`;
-        const res = await fetch(url);
-        if (!res.ok) return;
-        const data = await res.json();
-        if (!data || typeof data !== 'object' || data.error) return;
-        for (const g of groepen) {
-            if (!g.dc_id) continue;
-            const cKey = g.dc_id + (g.is_split ? '|' + g.dc_name : '');
-            if (_uDistCache[cKey]) continue;
-            const alle = Array.isArray(data[g.dc_id]) ? data[g.dc_id] : [];
-            let afs = alle;
-            if (g.is_split) {
-                const splitSpec = alle.filter(d => d.target_group === g.dc_name);
-                afs = splitSpec.length > 0 ? splitSpec : alle.filter(d => !d.target_group);
+    if (_uBulkInFlight) return _uBulkInFlight;
+    _uBulkInFlight = (async () => {
+        try {
+            const url = `api/distances_db.php?dc_ids=${[...teLaden].map(encodeURIComponent).join(',')}`;
+            const res = await fetch(url);
+            if (!res.ok) return;
+            const data = await res.json();
+            if (!data || typeof data !== 'object' || data.error) return;
+            for (const g of groepen) {
+                if (!g.dc_id) continue;
+                const cKey = g.dc_id + (g.is_split ? '|' + g.dc_name : '');
+                if (_uDistCache[cKey]) continue;
+                const alle = Array.isArray(data[g.dc_id]) ? data[g.dc_id] : [];
+                let afs = alle;
+                if (g.is_split) {
+                    const splitSpec = alle.filter(d => d.target_group === g.dc_name);
+                    afs = splitSpec.length > 0 ? splitSpec : alle.filter(d => !d.target_group);
+                }
+                _uDistCache[cKey] = afs;
             }
-            _uDistCache[cKey] = afs;
-        }
-    } catch { /* silent — fallback naar individuele calls via uLaadAfstanden */ }
+        } catch { /* silent — fallback naar individuele calls via uLaadAfstanden */ }
+        finally { _uBulkInFlight = null; }
+    })();
+    return _uBulkInFlight;
 }
 
 function uBouwGroepen() {

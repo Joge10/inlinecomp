@@ -36,18 +36,30 @@ async function laadSlStatus() {
 
 function invalideerSlStatus() { _slStatusCache = null; _slDistCache = {}; }
 
-// Haal afstanden op voor een groep, met cache
+// In-flight tracking voor laadGroepAfstanden — als meerdere callers tegelijk
+// dezelfde groep opvragen vóór de cache gevuld is, delen ze 1 HTTP-call ipv
+// elk hun eigen fetch te starten. Voorheen waren tot 28 parallelle dc_id-calls
+// gezien in access logs (= EP-limit op shared hosting raken).
+const _slDistInFlight = {};
+
+// Haal afstanden op voor een groep, met cache + in-flight dedup
 async function laadGroepAfstanden(groep) {
     const cKey = groep.dc_id + (groep.is_split ? '|' + groep.dc_name : '');
     if (_slDistCache[cKey]) return _slDistCache[cKey];
-    try {
-        const splitParam = groep.is_split ? `&split_group=${encodeURIComponent(groep.dc_name)}` : '';
-        const res = await fetch(`api/distances_db.php?dc_id=${encodeURIComponent(groep.dc_id)}${splitParam}`);
-        const d   = await res.json();
-        const afs = Array.isArray(d) ? d.filter(a => !a.error) : [];
-        _slDistCache[cKey] = afs;
-        return afs;
-    } catch { return []; }
+    if (_slDistInFlight[cKey]) return _slDistInFlight[cKey];
+    const splitParam = groep.is_split ? `&split_group=${encodeURIComponent(groep.dc_name)}` : '';
+    const promise = (async () => {
+        try {
+            const res = await fetch(`api/distances_db.php?dc_id=${encodeURIComponent(groep.dc_id)}${splitParam}`);
+            const d   = await res.json();
+            const afs = Array.isArray(d) ? d.filter(a => !a.error) : [];
+            _slDistCache[cKey] = afs;
+            return afs;
+        } catch { return []; }
+        finally { delete _slDistInFlight[cKey]; }
+    })();
+    _slDistInFlight[cKey] = promise;
+    return promise;
 }
 
 // Bulk pre-fetch van afstanden voor álle groepen in 1 call (?dc_ids=).
@@ -56,6 +68,11 @@ async function laadGroepAfstanden(groep) {
 // parallelle GETs per render (bv. bij NK met veel categorieën), wat de
 // iFastNet entry-process-limit raakte. Split-groep-filter wordt client-side
 // nagebootst: target_group=splitNaam als die er is, anders basis (target=NULL).
+//
+// In-flight tracking: als twee parallelle callers (typisch kleurAlleTabsAsync
+// + vulPrintSelect) tegelijk binnenkomen, doen ze samen 1 batch-call ipv 2.
+let _slBulkInFlight = null;
+
 async function _slBulkLaadAfstanden(groepen) {
     if (!groepen?.length) return;
     // Verzamel unieke dc_ids waarvan minstens één groep nog geen cache heeft
@@ -67,28 +84,34 @@ async function _slBulkLaadAfstanden(groepen) {
         teLaden.add(g.dc_id);
     }
     if (teLaden.size === 0) return;
-    try {
-        const url = `api/distances_db.php?dc_ids=${[...teLaden].map(encodeURIComponent).join(',')}`;
-        const res = await fetch(url);
-        if (!res.ok) return;
-        const data = await res.json();
-        if (!data || typeof data !== 'object' || data.error) return;
-        // Per groep cache vullen op basis van de bulk-respons
-        for (const g of groepen) {
-            if (!g.dc_id) continue;
-            const cKey = g.dc_id + (g.is_split ? '|' + g.dc_name : '');
-            if (_slDistCache[cKey]) continue;
-            const alle = Array.isArray(data[g.dc_id]) ? data[g.dc_id] : [];
-            let afs = alle;
-            if (g.is_split) {
-                // Server-logica: als split-specifieke afstanden bestaan → alleen die;
-                // anders fallback naar basis-afstanden (target_group NULL/leeg).
-                const splitSpec = alle.filter(d => d.target_group === g.dc_name);
-                afs = splitSpec.length > 0 ? splitSpec : alle.filter(d => !d.target_group);
+    // Lopende fetch herbruiken zodat parallel-callers één HTTP delen
+    if (_slBulkInFlight) return _slBulkInFlight;
+    _slBulkInFlight = (async () => {
+        try {
+            const url = `api/distances_db.php?dc_ids=${[...teLaden].map(encodeURIComponent).join(',')}`;
+            const res = await fetch(url);
+            if (!res.ok) return;
+            const data = await res.json();
+            if (!data || typeof data !== 'object' || data.error) return;
+            // Per groep cache vullen op basis van de bulk-respons
+            for (const g of groepen) {
+                if (!g.dc_id) continue;
+                const cKey = g.dc_id + (g.is_split ? '|' + g.dc_name : '');
+                if (_slDistCache[cKey]) continue;
+                const alle = Array.isArray(data[g.dc_id]) ? data[g.dc_id] : [];
+                let afs = alle;
+                if (g.is_split) {
+                    // Server-logica: als split-specifieke afstanden bestaan → alleen die;
+                    // anders fallback naar basis-afstanden (target_group NULL/leeg).
+                    const splitSpec = alle.filter(d => d.target_group === g.dc_name);
+                    afs = splitSpec.length > 0 ? splitSpec : alle.filter(d => !d.target_group);
+                }
+                _slDistCache[cKey] = afs;
             }
-            _slDistCache[cKey] = afs;
-        }
-    } catch { /* silent — fallback naar individuele calls via laadGroepAfstanden */ }
+        } catch { /* silent — fallback naar individuele calls via laadGroepAfstanden */ }
+        finally { _slBulkInFlight = null; }
+    })();
+    return _slBulkInFlight;
 }
 
 // Kleur de dist-tab voor de actieve afstand (groen = geloot, default = niet)
@@ -1092,8 +1115,16 @@ function toonStartlijstenPagina() {
 
     // Tab-kleuren + print-opties in achtergrond opbouwen (niet-blokkerend).
     // `vulPrintSelect()` vult `_slPrintOpties` ten behoeve van Print-Center.
-    kleurAlleTabsAsync(groepen, catTabs);
-    vulPrintSelect();
+    //
+    // Sequentieel ipv parallel: beide doen intern _slBulkLaadAfstanden, en
+    // parallel afvuren betekende 2× dezelfde batch-call + nul cache-hit op
+    // de tweede. Sinds de in-flight dedup is dat geen ramp meer, maar
+    // sequentieel is sowieso schoner (en 0 extra latency wanneer de tweede
+    // alleen cache-lookup hoeft te doen).
+    (async () => {
+        await kleurAlleTabsAsync(groepen, catTabs);
+        await vulPrintSelect();
+    })();
 }
 
 // ── Multi-day helpers ─────────────────────────────────────────────────────────
@@ -1448,16 +1479,26 @@ async function toonAfstandConfig(groep, distId, distNaam) {
 
     // ── Render ───────────────────────────────────────────────────────────────
     // Tijdkoppeling-format actief? Banner-hint zodat operator weet dat
-    // klassement-seeding hier zwak→sterk verdeelt i.p.v. snake. Geldt
-    // voor zowel series-ronde als finale-ronde — instellen via Tijdschema
-    // → afstand-config (200m DTT-format).
+    // de heat-vulling hier afwijkt van snake. Geldt voor zowel series-
+    // als finale-ronde — instellen via Tijdschema → afstand-config
+    // (200m DTT-format).
+    //
+    // Regel "laatste rit altijd compleet" geldt voor ELKE seeding-methode.
+    // De zwak→sterk-orderening wordt alleen toegepast bij klassement-
+    // achtige methodes (waar rang-info beschikbaar is); bij startnr en
+    // alfabet wordt de bestaande sortering sequentieel verdeeld.
     const isTk = cache._afstandCfg?.finale_seeding === 'tijdkoppeling';
     const tkHint = isTk
         ? `<div class="sl-tk-banner" title="Instelbaar in Tijdschema → afstand-config → 'Finale-seeding'">
-               ⏱ <b>Tijdkoppeling-format</b> actief — bij seeding op
-               <b>Klassement</b> of <b>Tussenklassement</b> worden de heats
-               zwak → sterk verdeeld: langzaamste paar in heat 1, snelste
-               in de laatste heat. Geldt voor zowel series als finale.
+               ⏱ <b>Tijdkoppeling-format</b> actief —
+               <b>laatste rit is altijd compleet</b>, ongeacht de seeding-methode.
+               Bij seeding op <b>Klassement</b>, <b>Tussenklassement</b> of
+               <b>Afstand-uitslag</b> worden de heats zwak → sterk verdeeld:
+               langzaamste paar in heat 1, snelste in de laatste heat.
+               Bij <b>Startnummer</b> of <b>Alfabetisch</b> volgt de
+               heat-vulling de gekozen volgorde (laagste startnr / A vooraan
+               in heat 1, hoogste / Z in de laatste heat).
+               Geldt voor zowel series als finale.
            </div>`
         : '';
 

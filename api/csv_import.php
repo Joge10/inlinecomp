@@ -599,9 +599,18 @@ if ($action === 'commit') {
             $delen = array_filter([$voornaam, $tussen, $achternaam], fn($x) => $x !== '');
             $volledig = implode(' ', $delen);
         }
-        // short_name = voornaam + achternaam (zonder tussenvoegsel)
-        $short = trim($voornaam . ' ' . $achternaam);
-        if ($short === '' || $short === ' ') $short = $volledig;
+        // short_name = tussenvoegsel + achternaam (KNSB-conventie). Wordt
+        // gebruikt voor alfabetische sortering — sorteer-key begint dus met
+        // het tussenvoegsel ("de Blois", "van Deursen") of de pure achter-
+        // naam wanneer geen tussenvoegsel is ("Vacas").
+        //
+        // Voorbeelden:
+        //   voornaam="Junior" tussen="de"  achternaam="Blois"   → "de Blois"
+        //   voornaam="Joes"   tussen="van" achternaam="Deursen" → "van Deursen"
+        //   voornaam="Aitor"  tussen=""    achternaam="Vacas"   → "Vacas"
+        $shortDelen = array_filter([$tussen, $achternaam], fn($x) => $x !== '');
+        $short = trim(implode(' ', $shortDelen));
+        if ($short === '') $short = $volledig;
         return ['full' => $volledig, 'short' => $short];
     };
 

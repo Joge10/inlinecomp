@@ -3195,6 +3195,13 @@ function _bouwProgrammaExternInternal() {
     // Q-kwalificatie gebruikt. Daarna verwijst elke ¹ in de tabel naar deze
     // uitleg zonder herhaling.
     let _qqLegendaGetoond = false;
+    // Runner-up legenda — apart van qq. Toont één regel uitleg over het
+    // RU-concept wanneer minstens één cat 'heeft_runner_up' aan heeft staan.
+    // Plaatsing: bij eerste blok dat een afval-ronde is (heats/kwart/halve),
+    // zo verschijnt 'em vlak voor de cat-rij waar de runner-up daadwerkelijk
+    // relevant wordt — meestal direct na de qq-voetnoot, samen in dezelfde
+    // visuele blok.
+    let _ruLegendaGetoond = false;
 
     // Helper: flush een verzamelde sectie (ritten van één ronde-blok) naar HTML
     const flushSectie = (sectieRitten, blok) => {
@@ -3348,6 +3355,28 @@ function _bouwProgrammaExternInternal() {
   ${T('prog_extern.qq_voetnoot')}
 </div>`;
                     _qqLegendaGetoond = true;
+                }
+            }
+        }
+        // Runner-up voetnoot — separaat van Q/q. Verschijnt eenmalig, bij het
+        // eerste afval-ronde-blok (heats/kwart/halve) wanneer minstens één
+        // cat 'heeft_runner_up' aan heeft. Reden voor scheiding: een wedstrijd
+        // kan wel runner-ups hebben maar geen Q-systeem (bv. zuiver knock-out
+        // tussen heats en finale via runner-up). Andersom kan ook.
+        if (!_ruLegendaGetoond) {
+            const isAfvalRonde = blok.ronde_type === 'heats'
+                              || blok.ronde_type === 'kwartfinale'
+                              || blok.ronde_type === 'halve_finale';
+            if (isAfvalRonde) {
+                const heeftRUHier = [...catMap.keys()].some(k => {
+                    const cc = catCfgMap[k];
+                    return cc && !!cc.heeft_runner_up;
+                });
+                if (heeftRUHier) {
+                    bloHtml += `<div class="qq-voetnoot" style="margin:4px 0 12px 18px;padding:4px 8px;font-size:9pt;color:#555;page-break-inside:avoid;break-inside:avoid">
+  ${T('prog_extern.ru_voetnoot')}
+</div>`;
+                    _ruLegendaGetoond = true;
                 }
             }
         }
@@ -3533,6 +3562,13 @@ body{font-family:Arial,Helvetica,sans-serif;font-size:10.5pt;margin:.6cm 1.2cm 1
   .org-sponsor-footer{
     page-break-before:avoid; break-before:avoid;
     page-break-inside:avoid; break-inside:avoid;
+  }
+  /* Ceremonie-blok aan de afstand ervoor plakken — voorkomt dat een
+     Ceremony als enige item bovenaan een nieuwe pagina belandt terwijl
+     het bovenliggende afstand-blok onderaan de vorige zit. Bij conflict
+     pakt browser de afstand óók mee naar de nieuwe pagina. */
+  .blok.cerem{
+    page-break-before:avoid; break-before:avoid;
   }
 }
 `;

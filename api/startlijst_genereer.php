@@ -232,7 +232,9 @@ try {
             break;
 
         case 'alfabetisch':
-            // Sorteren op achternaam (short_name) of laatste woord van full_name
+            // Sorteren op short_name (= tussenvoegsel + achternaam, bv
+            // "de Blois", "van Deursen", "Vacas"). Fallback: laatste woord
+            // van full_name wanneer short_name ontbreekt.
             $heeftPositie = $rijders;
             usort($heeftPositie, fn($a, $b) =>
                 strcasecmp(
@@ -358,7 +360,8 @@ try {
 
     // Rijders zonder positie:
     //   klassement/tussenklassement-methode → al gesorteerd, niet opnieuw sorteren
-    //   overige methoden   → alfabetisch op achternaam (rijders zonder startnummer)
+    //   overige methoden   → alfabetisch op short_name (tussenvoegsel +
+    //   achternaam), met fallback laatste woord van full_name.
     if (!in_array($methode, ['klassement', 'tussenklassement', 'afstand_uitslag'], true)) {
         usort($zonderPositie, fn($a,$b) =>
             strcasecmp(
@@ -394,12 +397,16 @@ try {
     $rondeIsHeats  = ($rondeType === 'heats');
     $methodeOpKlassement = in_array($methode, ['klassement', 'tussenklassement', 'afstand_uitslag'], true);
 
-    // finale_seeding-config is ook van toepassing op de series-ronde (heats)
-    // voor formats als 200m DTT (Dual Time-trial), waar zwak→sterk in de
-    // series exact zo werkt als in de finale: laatste rit = snelste paar.
-    // Default voor reguliere sprint blijft 'slang' = standaard snake.
+    // finale_seeding-config is van toepassing op finale- én series-ronde voor
+    // formats als 200m DTT (Dual Time-trial), waar de "laatste rit altijd
+    // compleet"-regel ongeacht de seeding-methode geldt. Default voor
+    // reguliere sprint blijft 'slang' = standaard snake.
+    //
+    // BELANGRIJK: deze config NIET koppelen aan $methodeOpKlassement — anders
+    // valt 'em terug op 'slang' bij methode = startnummer/alfabet en krijg
+    // je weer de oude snake-distributie met heat 1 vol en laatste heat krap.
     $finaleSeeding = 'slang';
-    if (($rondeIsFinale || $rondeIsHeats) && $methodeOpKlassement) {
+    if ($rondeIsFinale || $rondeIsHeats) {
         $tsStmt = $pdo->prepare(
             "SELECT id FROM competition_tijdschema WHERE competition_id = ? LIMIT 1"
         );
@@ -423,8 +430,17 @@ try {
         }
     }
 
+    // Tijdkoppeling-cap-regel (laatste heat altijd compleet) geldt voor
+    // ELKE seeding-methode zolang de afstand op 'tijdkoppeling' staat. De
+    // ZWAK→STERK-orderering hangt af van de methode:
+    //   • klassement / tussenklassement / afstand_uitslag → reverse op rang
+    //     (zwakste rang eerst → heat 1, beste rang → laatste heat)
+    //   • startnummer → bestaande volgorde (laagste startnr → heat 1,
+    //     hoogste → laatste heat) zodat de cap-regel een duidelijk
+    //     deterministisch resultaat geeft
+    //   • alfabetisch → bestaande alfabetische volgorde, sequentieel
+    //     verdeeld met cap-regel (geen zinvolle sterkte-ordening)
     $isTijdkoppeling = ($rondeIsFinale || $rondeIsHeats)
-                       && $methodeOpKlassement
                        && $finaleSeeding === 'tijdkoppeling';
 
     $aantalHeats = min($heatsAantal, $n);  // nooit meer heats dan rijders
@@ -449,14 +465,27 @@ try {
 
     if ($isTijdkoppeling) {
         // ── Tijdkoppeling-blokverdeling ──────────────────────────────────
-        // "Zwak naar sterk"-rij: niet-geklasseerden vooraan op startnr ASC,
-        // daarna geklasseerden in rang DESC (zwakste rang eerst). Sequentieel
-        // verdelen: heat 1 krijgt de eerste cap rijders (zwakste), de laatste
-        // heat de laatste cap (sterkste).
-        $zwakNaarSterk = array_merge(
-            $zonderPositie,                  // al gesorteerd op startnr ASC
-            array_reverse($heeftPositie)     // omgekeerd: rang DESC
-        );
+        // Distributie-orde hangt af van de seeding-methode:
+        //   • klassement/tussenklassement/afstand_uitslag: niet-geklasseerd
+        //     vooraan op startnr ASC + geklasseerd in rang DESC (zwakste
+        //     rang eerst) — heat 1 krijgt de zwakste, laatste heat de
+        //     beste rijders.
+        //   • startnummer/alfabet/anders: gebruik gewoon de gesorteerde
+        //     volgorde ($gesorteerd) — laagste startnr/A komt in heat 1,
+        //     hoogste/Z in de laatste heat. Geen sterkte-omkering omdat
+        //     er geen rang-informatie is.
+        //
+        // Caps zijn al berekend met "laatste heat altijd vol" (extras in de
+        // LAATSTE heats) — die regel geldt voor ALLE methodes.
+        if ($methodeOpKlassement) {
+            $zwakNaarSterk = array_merge(
+                $zonderPositie,                  // al gesorteerd op startnr ASC
+                array_reverse($heeftPositie)     // omgekeerd: rang DESC
+            );
+        } else {
+            // Bestaande sortering (startnr ASC, alfabetisch, …) sequentieel
+            $zwakNaarSterk = $gesorteerd;
+        }
         $idx = 0;
         foreach ($heats as &$heat) {
             for ($k = 0; $k < $heat['capaciteit'] && $idx < $n; $k++) {
@@ -465,22 +494,28 @@ try {
         }
         unset($heat);
 
-        // Reorder binnen elke heat: niet-geklasseerden eerst (op startnr ASC),
-        // daarna geklasseerden op rang ASC (= beste eerst → mag baan kiezen).
-        $rangKey = ($methode === 'tussenklassement') ? '_tkPos' : '_klPos';
-        foreach ($heats as &$heat) {
-            $ngekl = [];
-            $gekl  = [];
-            foreach ($heat['rijders'] as $r) {
-                if (isset($r[$rangKey])) $gekl[] = $r;
-                else                     $ngekl[] = $r;
+        // Reorder binnen elke heat — alleen relevant bij klassement-methodes,
+        // dan zetten we niet-geklasseerden vooraan (op startnr ASC), daarna
+        // geklasseerden op rang ASC (beste rang vooraan → mag baan kiezen).
+        // Voor startnr/alfabet/anders heeft binnen-heat-reorder geen zin:
+        // input is al de gewenste volgorde.
+        if ($methodeOpKlassement) {
+            $rangKey = ($methode === 'tussenklassement') ? '_tkPos'
+                     : (($methode === 'afstand_uitslag') ? '_auPos' : '_klPos');
+            foreach ($heats as &$heat) {
+                $ngekl = [];
+                $gekl  = [];
+                foreach ($heat['rijders'] as $r) {
+                    if (isset($r[$rangKey])) $gekl[] = $r;
+                    else                     $ngekl[] = $r;
+                }
+                usort($ngekl, fn($a, $b) =>
+                    ($a['start_number'] ?: PHP_INT_MAX) - ($b['start_number'] ?: PHP_INT_MAX));
+                usort($gekl, fn($a, $b) => $a[$rangKey] - $b[$rangKey]);
+                $heat['rijders'] = array_merge($ngekl, $gekl);
             }
-            usort($ngekl, fn($a, $b) =>
-                ($a['start_number'] ?: PHP_INT_MAX) - ($b['start_number'] ?: PHP_INT_MAX));
-            usort($gekl, fn($a, $b) => $a[$rangKey] - $b[$rangKey]);
-            $heat['rijders'] = array_merge($ngekl, $gekl);
+            unset($heat);
         }
-        unset($heat);
     } else {
         // ── Slangenpatroon (default) ─────────────────────────────────────
         // Vooruit H1→Hn, achteruit Hn→H1, herhalen. Volle heats overgeslagen.
