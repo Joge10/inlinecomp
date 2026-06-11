@@ -314,6 +314,26 @@ try {
     $log = [];
 
     // --------------------------------------------------------
+    // 0. Bron-detectie: handmatige wedstrijden skippen de KNSB-API
+    // --------------------------------------------------------
+    // Handmatige wedstrijden (bron='handmatig') zijn via wedstrijd_handmatig.php
+    // aangemaakt en hebben geen KNSB-feed-koppeling. Metadata + DC's zijn al
+    // in de DB gezet bij creatie; we hoeven hier alleen de deelnemers-stap te
+    // draaien. Voor KNSB-wedstrijden blijft de flow ongewijzigd.
+    $bronStmt = $pdo->prepare("SELECT bron FROM competitions WHERE id = ?");
+    $bronStmt->execute([$compId]);
+    $isHandmatig = ($bronStmt->fetchColumn() === 'handmatig');
+
+    // $comp wordt bij KNSB in stap 1 gevuld; bij handmatig blijft 'em leeg.
+    // De enige downstream-referentie (orgId-fallback rond regel 511) wordt
+    // alleen geraakt als organisatie_id nog NULL is — voor handmatige
+    // wedstrijden is die altijd gevuld via wedstrijd_handmatig.php.
+    $comp = [];
+
+    if ($isHandmatig) {
+        $log[] = 'Handmatige wedstrijd — KNSB-sync overgeslagen';
+    } else {
+    // --------------------------------------------------------
     // 1. Wedstrijd-metadata ophalen en opslaan
     // --------------------------------------------------------
     $comp = apiGet("$base/competitions/$compId");
@@ -418,6 +438,7 @@ try {
         }
     }
     $log[] = count($dcs) . ' categorieën opgeslagen';
+    } // einde if (!$isHandmatig) — stappen 1+2 KNSB-only
 
     // --------------------------------------------------------
     // 3. Deelnemers verwerken vanuit beoordeelde POST-data

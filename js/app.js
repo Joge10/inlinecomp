@@ -720,12 +720,15 @@ async function selectWedstrijd(card, comp) {
     // Handmatige wedstrijd: vergelijk.php fetched KNSB-data en faalt voor deze
     // bron. We gebruiken het detail-endpoint dat een vergelijk-compatibele
     // shape geeft uit eigen DB (lege competitors per cat, DC's, organisatie).
-    // Importeer/Export-knoppen worden verborgen — geen KNSB-roundtrip mogelijk.
-    // Andersom: CSV-Importeer is juist alléén voor handmatige wedstrijden
-    // (alternatief voor de KNSB-feed-flow).
+    // CSV-Importeer is alléén voor handmatige wedstrijden (alternatief voor
+    // de KNSB-feed-flow voor bulk-vulling).
+    // Importeer ÉN Export zijn voor handmatig ook beschikbaar: import.php
+    // detecteert bron='handmatig' en skipt de KNSB-API-roundtrip, zodat
+    // handmatige toevoegingen / wijzigingen na de CSV-bulk via dezelfde
+    // knop opgeslagen kunnen worden.
     if (comp.is_handmatig) {
-        el('btn-import').style.display     = 'none';
-        el('btn-export').style.display     = 'none';
+        el('btn-import').style.display     = '';
+        el('btn-export').style.display     = '';
         el('btn-csv-import').style.display = '';
     } else {
         el('btn-import').style.display     = '';

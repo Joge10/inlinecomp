@@ -24,5 +24,13 @@ CREATE TABLE IF NOT EXISTS `competitions` (
     -- helemaal niet (stille voorbereiding). Bij public_zichtbaar=1
     -- niet relevant. Default 1 voor backwards-compat met huidig gedrag.
     `public_aankondigen` TINYINT(1)   NOT NULL DEFAULT 1,
+    -- Bron van de wedstrijd: NULL/'knsb' = uit KNSB-feed (vergelijk.php + import.php
+    -- met KNSB-API-sync), 'handmatig' = via wedstrijd_handmatig.php aangemaakt
+    -- (geen KNSB-koppeling; vergelijk.php + import.php skippen dan de KNSB-stappen).
+    `bron`               VARCHAR(20)  DEFAULT NULL,
     PRIMARY KEY (`id`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+-- Migratie voor bestaande installaties (fout negeren als kolom al bestaat):
+-- ALTER TABLE competitions
+--     ADD COLUMN bron VARCHAR(20) DEFAULT NULL AFTER public_aankondigen;
