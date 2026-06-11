@@ -2694,6 +2694,12 @@ col.heat-tp   { width: 72px; }   /* XX-12345 = 8 monospace tekens */
                       border-radius: 4px; box-sizing: border-box; }
 .tp-inp:focus       { outline: none; border-color: var(--middenblauw);
                       box-shadow: 0 0 0 2px rgba(46,117,182,.15); }
+/* Min-breedtes voor Nr en Eigendom — anders klipt de inhoud (bv. "KNSB-58169"
+   wordt "KNSE" en "Geleend van KNSB" wordt "Geleend \"). Tabel-wrap heeft
+   overflow-x:auto, dus bij krappe schermen verschijnt automatisch een
+   horizontale scrollbar zonder dat de layout breekt. */
+.org-tp-tabel .tp-nr        { min-width: 95px; }
+.org-tp-tabel .tp-eigendom  { min-width: 220px; }
 .tp-sortable        { cursor: pointer; user-select: none; }
 .tp-sortable:hover  { background: rgba(0,0,0,.05); }
 .tp-sort-ico        { margin-left: 4px; font-size: .85em; opacity: .45; }

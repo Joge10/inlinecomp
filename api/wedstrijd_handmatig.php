@@ -265,6 +265,24 @@ if ($action === 'detail') {
     $stmt->execute([$compId]);
     $heeftProgramma = ((int)$stmt->fetchColumn() > 0);
 
+    // Org-transponders ophalen (zelfde query-shape als vergelijk.php voor
+    // KNSB-feed-wedstrijden). Geblokkeerde transponders uitfilteren — die
+    // zitten fysiek nog wel in inventaris (kapot/zoek) maar mogen niet meer
+    // worden toegewezen. Beheerder ziet ze nog in de Beheer-tabel; in de
+    // import-dropdown niet.
+    $orgTransponders = [];
+    if ($organisatie && !empty($organisatie['id'])) {
+        $otStmt = $pdo->prepare("
+            SELECT intern_nummer, transponder_code, toegewezen_snr, toegewezen_naam,
+                   person_license, categorie, betaald
+            FROM organisatie_transponders
+            WHERE organisatie_id = ? AND COALESCE(geblokkeerd, 0) = 0
+            ORDER BY CAST(intern_nummer AS UNSIGNED), intern_nummer
+        ");
+        $otStmt->execute([$organisatie['id']]);
+        $orgTransponders = $otStmt->fetchAll(PDO::FETCH_ASSOC);
+    }
+
     echo json_encode([
         'groepen'           => $groepen,
         'organisatie'       => $organisatie,
@@ -272,7 +290,7 @@ if ($action === 'detail') {
         'imported'          => true,            // handmatige wedstrijd staat in DB → beheer-panel werkt
         'is_handmatig'      => true,
         'heeft_programma'   => $heeftProgramma,
-        'org_transponders'  => [],              // pas relevant als er rijders zijn
+        'org_transponders'  => $orgTransponders,
         'entries_version'   => (int)$comp['entries_version'],
         'knsb_stand'        => null,            // geen KNSB-feed
         'db_stand'          => null,

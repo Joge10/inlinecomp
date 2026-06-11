@@ -1,0 +1,355 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>OH850 — InlineComp promo</title>
+<!--
+    Open Heerde 850 — InlineComp promo poster
+    For social media (1080×1350 portrait, fits Instagram/Facebook/WhatsApp).
+    English text — international event.
+
+    Dual jubilee theme:
+      850 years of municipality Heerde + 40 years Skeelerclub Heerde
+
+    USAGE:
+    1. Save the action photo (by @neekeanna) as `skater.jpg` next to this
+       HTML file. Without it the hero falls back to a dark gradient.
+    2. Adjust the URLs below if your domain differs.
+    3. Open this file in Chrome/Edge (Firefox renders QR slightly differently)
+    4. Wait for QR codes to load (1-2 sec)
+    5. Screenshot via Windows Snip-and-Sketch, or Ctrl+P → save as PDF
+       (size is already set to 1080×1350)
+-->
+<style>
+:root {
+    --blauw: #1F4E79;
+    --middenblauw: #2E75B6;
+    --lichtblauw: #D6E4F0;
+    --oranje: #E8630A;
+    --neon-paars: #6e3aff;
+    --neon-blauw: #1ec3ff;
+}
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body {
+    /* 1080×1527 = A4-verhouding (1:√2). Past zonder lege ruimte op A4-PDF
+       én blijft gebruiksvriendelijk op Instagram/Facebook portrait. */
+    width: 1080px; height: 1527px;
+    padding-top: 40px;                     /* echte bovenrand i.p.v. margin
+                                              op top-band — voorkomt
+                                              margin-collapse waardoor de
+                                              spatie alsnog 0 werd. */
+    font-family: 'Segoe UI', Arial, sans-serif;
+    color: #fff; overflow: hidden;
+    background: #0a1428;
+    position: relative;
+}
+/* Alle content-divs boven de bg-gradient/bg-spotlight stacken — anders
+   konden absolute background-layers de tekst onzichtbaar maken. */
+.top-band, .hero, .powered-strip, .section-titel, .qr-grid, .powered {
+    position: relative; z-index: 2;
+}
+/* Achtergrond — OH850 gradient sfeer */
+.bg-gradient {
+    position: absolute; inset: 0;
+    background:
+      radial-gradient(circle at 20% 15%, rgba(110,58,255,.55) 0%, transparent 45%),
+      radial-gradient(circle at 80% 85%, rgba(30,195,255,.4) 0%, transparent 50%),
+      linear-gradient(160deg, #0a1428 0%, #1a1750 50%, #0a1428 100%);
+}
+.bg-spotlight {
+    position: absolute; inset: 0;
+    background: radial-gradient(ellipse at 50% 30%, rgba(255,255,255,.08) 0%, transparent 60%);
+}
+
+/* Top: dual jubileum-banner — 850 jaar Heerde + 40 jaar SCH */
+.top-band {
+    position: relative;
+    margin: 0 50px 0;                      /* top-margin nu op body als
+                                              padding-top — zie body-rule */
+    padding: 18px 24px;
+    background: rgba(255,255,255,.08);
+    backdrop-filter: blur(8px);
+    border: 1px solid rgba(255,255,255,.15);
+    border-radius: 12px;
+    display: flex; justify-content: space-around; align-items: center;
+    gap: 16px;
+}
+.jubilee {
+    text-align: center;
+    flex: 1;
+}
+.jubilee .nr {
+    font-size: 2.4rem; font-weight: 900;
+    background: linear-gradient(90deg, #ff4dff, #1ec3ff, #1eff8c);
+    -webkit-background-clip: text; background-clip: text;
+    -webkit-text-fill-color: transparent;
+    line-height: 1; letter-spacing: 1px;
+}
+.jubilee .lbl {
+    font-size: .82rem; opacity: .9; font-weight: 700;
+    margin-top: 4px; letter-spacing: 1px;
+    text-transform: uppercase;
+}
+.jubilee-sep {
+    width: 1px; height: 50px;
+    background: rgba(255,255,255,.2);
+    flex-shrink: 0;
+}
+
+/* Hoofdtitel met action-foto als achtergrond.
+   Layout-truc: `.pre` (Follow the race online) is absoluut bovenaan
+   vastgepind op top:60px, en padding-top duwt h1+pills naar onderen.
+   Hero hoogte = 200 + ~200 content + 40 padding-bottom = ~440px. */
+.hero {
+    text-align: center; margin: 15px 50px 40px;
+    padding: 200px 30px 40px;
+    position: relative;
+    position: relative;
+    border-radius: 22px;
+    overflow: hidden;
+    background:
+        /* Gradient overlay zodat de tekst leesbaar blijft op de foto */
+        linear-gradient(
+            180deg,
+            rgba(10,20,40,.45) 0%,
+            rgba(10,20,40,.65) 50%,
+            rgba(10,20,40,.85) 100%
+        ),
+        /* Action-foto van neekeanna (Instagram). Plaats als skater.jpg
+           naast dit HTML-bestand. Geen foto? Dan valt het terug op de
+           gradient — geen broken-image-icoontje. */
+        url('skater.jpg') center 30% / cover no-repeat,
+        /* Fallback wanneer foto ontbreekt: extra donker blauw */
+        #1a1750;
+    border: 1px solid rgba(255,255,255,.12);
+    box-shadow:
+        0 20px 60px rgba(0,0,0,.35),
+        0 0 30px rgba(110,58,255,.2) inset;
+}
+.hero .pre {
+    position: absolute; top: 60px; left: 0; right: 0;
+    font-size: 1.4rem; font-weight: 600; opacity: .85;
+    letter-spacing: 4px; text-transform: uppercase;
+}
+.hero h1 {
+    font-size: 4.6rem; font-weight: 900;
+    line-height: .95; letter-spacing: -2px;
+    text-shadow: 0 0 40px rgba(110,58,255,.6);
+    background: linear-gradient(180deg, #fff 0%, #d4e3ff 100%);
+    -webkit-background-clip: text; background-clip: text;
+    -webkit-text-fill-color: transparent;
+}
+.hero .meta {
+    margin-top: 18px;
+    display: flex; justify-content: center; gap: 16px;
+    font-size: 1.25rem; font-weight: 700;
+}
+.hero .meta span {
+    background: rgba(255,255,255,.1);
+    padding: 12px 22px; border-radius: 999px;
+    border: 1px solid rgba(255,255,255,.2);
+    backdrop-filter: blur(6px);
+}
+.hero .meta .accent { background: var(--oranje); border-color: var(--oranje); }
+/* Photo-credit rechts-onder over de foto, 1.5× grootte */
+.hero .hero-credit {
+    position: absolute; right: 16px; bottom: 12px;
+    font-size: 1.05rem; color: rgba(255,255,255,.7);
+    text-shadow: 0 1px 3px rgba(0,0,0,.8);
+}
+.hero .hero-credit a {
+    color: rgba(255,255,255,.85); font-weight: 600;
+    text-decoration: none;
+}
+.hero .hero-credit a:hover { text-decoration: underline; }
+
+/* Sectie-titel */
+.section-titel {
+    text-align: center; margin: 22px 0 16px;
+    font-size: 1.5rem; font-weight: 700; letter-spacing: 1px;
+    text-transform: uppercase;
+    color: #b9d1ff;
+}
+.section-titel span {
+    background: linear-gradient(90deg, transparent, rgba(110,58,255,.3), transparent);
+    padding: 8px 30px; border-radius: 4px;
+}
+
+/* Twee QR-kaarten */
+.qr-grid {
+    display: grid; grid-template-columns: 1fr 1fr; gap: 30px;
+    margin: 0 50px;
+}
+.qr-kaart {
+    background: linear-gradient(160deg, #fff 0%, #f4f9ff 100%);
+    color: var(--blauw);
+    border-radius: 22px; padding: 28px 22px;
+    box-shadow:
+        0 20px 60px rgba(0,0,0,.4),
+        0 0 0 1px rgba(255,255,255,.1) inset,
+        0 0 30px rgba(30,195,255,.15);
+    position: relative;
+}
+.qr-kaart::before {
+    content: ''; position: absolute; inset: -2px;
+    border-radius: 24px;
+    background: linear-gradient(135deg, var(--neon-paars), var(--neon-blauw));
+    z-index: -1; opacity: .8;
+}
+.qr-kaart .ikoon {
+    font-size: 3rem; line-height: 1;
+    background: var(--oranje);
+    width: 70px; height: 70px;
+    border-radius: 50%; display: flex;
+    align-items: center; justify-content: center;
+    color: #fff; margin: 0 auto 14px;
+    box-shadow: 0 6px 18px rgba(232,99,10,.5);
+}
+.qr-kaart h2 {
+    font-size: 1.6rem; font-weight: 800;
+    text-align: center; margin-bottom: 6px;
+    color: var(--blauw);
+}
+.qr-kaart .voor-wie {
+    text-align: center; font-size: .95rem;
+    color: var(--middenblauw); font-weight: 600;
+    margin-bottom: 14px;
+}
+.qr-kaart .qr-wrap {
+    background: #fff; padding: 10px;
+    border-radius: 12px; margin: 8px auto;
+    width: fit-content;
+    box-shadow: 0 4px 14px rgba(31,78,121,.18);
+}
+.qr-kaart .qr-wrap img { display: block; }
+.qr-kaart .url {
+    text-align: center; margin-top: 12px;
+    font-family: 'Consolas', monospace; font-size: .8rem;
+    color: var(--blauw); word-break: break-all;
+    opacity: .85;
+}
+.qr-kaart ul {
+    list-style: none; margin-top: 14px;
+    font-size: .9rem; color: #333;
+}
+.qr-kaart li {
+    padding: 4px 0; display: flex; gap: 8px;
+}
+.qr-kaart li::before {
+    content: '✓'; color: var(--oranje); font-weight: 700;
+}
+
+/* Powered-by strip — staat BOVEN de QR-codes zodat de tekst niet wegvalt
+   achter de cards onderaan. Visueel een lichte hairline-divider met de
+   merk-mededeling. */
+.powered-strip {
+    text-align: center; margin: 50px 50px 0;       /* extra 30px om powered-by
+                                                      slechts ~halverwege mee
+                                                      omhoog te laten gaan */
+    font-size: 1rem; color: rgba(255,255,255,.85);
+    padding: 12px 0;
+    border-top: 1px solid rgba(255,255,255,.12);
+    border-bottom: 1px solid rgba(255,255,255,.12);
+}
+.powered-strip .ic-naam {
+    color: var(--neon-blauw); font-weight: 800;
+    letter-spacing: 1px;
+}
+/* Onderaan: alleen domeinen (dubbele tekstgrootte) */
+.powered {
+    position: absolute; bottom: 28px; left: 50px; right: 50px;
+    text-align: center; font-size: 1.7rem;
+    color: rgba(255,255,255,.75);
+    font-weight: 600;
+}
+.powered .photo-credit {
+    color: rgba(255,255,255,.5); font-size: .75rem;
+    margin-top: 6px;
+}
+.powered .photo-credit a {
+    color: var(--neon-blauw); text-decoration: none; font-weight: 600;
+}
+.powered .photo-credit a:hover { text-decoration: underline; }
+</style>
+</head>
+<body>
+
+<div class="bg-gradient"></div>
+<div class="bg-spotlight"></div>
+
+<div class="top-band">
+    <div class="jubilee">
+        <div class="nr">850</div>
+        <div class="lbl">Years municipality<br>Heerde</div>
+    </div>
+    <div class="jubilee-sep"></div>
+    <div class="jubilee">
+        <div class="nr">40</div>
+        <div class="lbl">Years Skeelerclub<br>Heerde</div>
+    </div>
+</div>
+
+<div class="hero">
+    <div class="pre">Follow the race online</div>
+    <h1>OPEN<br>HEERDE 850</h1>
+    <div class="meta">
+        <span>📅 SAT 20 JUNE</span>
+        <span class="accent">⏰ 10:00 AM</span>
+        <span>📍 HEERDE · NL</span>
+    </div>
+    <div class="hero-credit">
+        📸 <a href="https://www.instagram.com/neekeanna/" target="_blank" rel="noopener">@neekeanna</a>
+    </div>
+</div>
+
+<div class="powered-strip">
+    Powered by <span class="ic-naam">InlineComp</span>
+    · race management for inline skating
+</div>
+
+<div class="section-titel"><span>★ EVERYTHING ABOUT THE RACE ★</span></div>
+
+<div class="qr-grid">
+
+    <!-- CARD 1: /public — for everyone -->
+    <div class="qr-kaart">
+        <div class="ikoon">📡</div>
+        <h2>LIVE TRACKING</h2>
+        <div class="qr-wrap">
+            <img src="https://api.qrserver.com/v1/create-qr-code/?size=240x240&margin=0&data=https%3A%2F%2Finlineresults.devriesen.com%2Fpublic%2F"
+                 width="240" height="240" alt="QR /public">
+        </div>
+        <div class="url">inlineresults.devriesen.com/public/</div>
+        <ul>
+            <li>Schedule &amp; start times</li>
+            <li>Live heats with times</li>
+            <li>Results per distance</li>
+            <li>Standings &amp; rankings</li>
+        </ul>
+    </div>
+
+    <!-- CARD 2: /check — for everyone -->
+    <div class="qr-kaart">
+        <div class="ikoon">📋</div>
+        <h2>CHECK YOUR DETAILS</h2>
+        <div class="qr-wrap">
+            <img src="https://api.qrserver.com/v1/create-qr-code/?size=240x240&margin=0&data=https%3A%2F%2Finlineresults.devriesen.com%2Fcheck%2F"
+                 width="240" height="240" alt="QR /check">
+        </div>
+        <div class="url">inlineresults.devriesen.com/check/</div>
+        <ul>
+            <li>Category correct?</li>
+            <li>Right bib number?</li>
+            <li>Transponder registered?</li>
+            <li>Mistake? One-click report</li>
+        </ul>
+    </div>
+
+</div>
+
+<div class="powered">
+    skeelerclubheerde.nl · inlineresults.devriesen.com
+</div>
+
+</body>
+</html>

@@ -606,7 +606,14 @@ if ($action === 'zoek_persoon') {
     if ($isNr) $params[] = (int)$q;
     $stmt = $pdo->prepare($sql);
     $stmt->execute($params);
-    echo json_encode($stmt->fetchAll(PDO::FETCH_ASSOC), JSON_UNESCAPED_UNICODE);
+    // PDO retourneert TINYINT als string ("0"/"1"). In JS is "0" truthy →
+    // dat liet álle KNSB-rijders verkeerd als 🌍 extern tonen. Cast naar bool.
+    $rijen = array_map(function($r) {
+        $r['extern']   = (int)($r['extern'] ?? 0) === 1;
+        $r['start_number'] = $r['start_number'] !== null ? (int)$r['start_number'] : null;
+        return $r;
+    }, $stmt->fetchAll(PDO::FETCH_ASSOC));
+    echo json_encode($rijen, JSON_UNESCAPED_UNICODE);
     exit;
 }
 
@@ -633,6 +640,12 @@ if ($action === 'persoon_detail') {
         echo json_encode(['error' => 'Persoon niet gevonden']);
         exit;
     }
+    // PDO retourneert TINYINT als string — cast naar bool/int voor consistente
+    // truthy-check in frontend. Anders krijgen alle KNSB-rijders een 🌍 extern
+    // badge omdat "0" truthy is in JS.
+    $persoon['extern']       = (int)($persoon['extern'] ?? 0) === 1;
+    $persoon['start_number'] = $persoon['start_number'] !== null ? (int)$persoon['start_number'] : null;
+    $persoon['birth_year']   = $persoon['birth_year']   !== null ? (int)$persoon['birth_year']   : null;
     $entries = [];
     $alleDcs = [];
     $wedstrijdCats = [];

@@ -98,11 +98,27 @@ if ($action !== '') {
             $stmt = $pdo->prepare("
                 SELECT
                     c.id, c.name, c.starts,
+                    c.organisatie_id, c.baan_id,
+                    o.logo_path AS org_logo, o.naam AS org_naam,
+                    COALESCE(b.logo_path, (
+                        SELECT b2.logo_path FROM banen b2
+                        WHERE b2.naam = b.naam AND b2.id != b.id
+                          AND b2.logo_path IS NOT NULL AND b2.logo_path != ''
+                        LIMIT 1
+                    )) AS baan_logo,
+                    COALESCE(b.vereniging_naam, (
+                        SELECT b2.vereniging_naam FROM banen b2
+                        WHERE b2.naam = b.naam AND b2.id != b.id
+                          AND b2.vereniging_naam IS NOT NULL AND b2.vereniging_naam != ''
+                        LIMIT 1
+                    )) AS baan_vereniging,
                     CASE
                         WHEN c.public_zichtbaar = 1 THEN 'live'
                         ELSE 'binnenkort'
                     END AS status
                 FROM competitions c
+                LEFT JOIN organisaties o ON o.id = c.organisatie_id
+                LEFT JOIN banen b ON b.id = c.baan_id
                 WHERE EXISTS (
                         SELECT 1 FROM entries e
                         JOIN distance_combinations dc ON dc.id = e.distance_combination_id
@@ -117,7 +133,58 @@ if ($action !== '') {
                 ORDER BY c.starts ASC, c.name
             ");
             $stmt->execute();
-            echo json_encode($stmt->fetchAll(PDO::FETCH_ASSOC), JSON_UNESCAPED_UNICODE);
+            $comps = $stmt->fetchAll(PDO::FETCH_ASSOC);
+
+            // Sponsors per organisatie + per baan ophalen (zelfde pad als
+            // /public — operator kan org-sponsors EN baan-sponsors instellen,
+            // die mergen tot één lichtkrant onderaan de pagina).
+            $orgIds = array_unique(array_filter(array_column($comps, 'organisatie_id')));
+            $baanIds = array_unique(array_filter(array_column($comps, 'baan_id')));
+            $sponsorMap = [];
+            $baanSponsorMap = [];
+            if ($orgIds) {
+                $ph = implode(',', array_fill(0, count($orgIds), '?'));
+                $spStmt = $pdo->prepare("
+                    SELECT organisatie_id, naam, logo_path, url
+                    FROM organisatie_sponsors
+                    WHERE organisatie_id IN ($ph)
+                      AND logo_path IS NOT NULL AND logo_path != ''
+                    ORDER BY volgorde, naam
+                ");
+                $spStmt->execute(array_values($orgIds));
+                foreach ($spStmt->fetchAll(PDO::FETCH_ASSOC) as $sp) {
+                    $sponsorMap[$sp['organisatie_id']][] = [
+                        'naam' => $sp['naam'],
+                        'logo' => $sp['logo_path'],
+                        'url'  => $sp['url'],
+                    ];
+                }
+            }
+            if ($baanIds) {
+                $ph = implode(',', array_fill(0, count($baanIds), '?'));
+                $bsStmt = $pdo->prepare("
+                    SELECT baan_id, naam, logo_path, url
+                    FROM baan_sponsors
+                    WHERE baan_id IN ($ph)
+                      AND logo_path IS NOT NULL AND logo_path != ''
+                    ORDER BY volgorde, naam
+                ");
+                $bsStmt->execute(array_values($baanIds));
+                foreach ($bsStmt->fetchAll(PDO::FETCH_ASSOC) as $sp) {
+                    $baanSponsorMap[$sp['baan_id']][] = [
+                        'naam' => $sp['naam'],
+                        'logo' => $sp['logo_path'],
+                        'url'  => $sp['url'],
+                    ];
+                }
+            }
+            foreach ($comps as &$c) {
+                $org  = $sponsorMap[$c['organisatie_id']      ?? ''] ?? [];
+                $baan = $baanSponsorMap[$c['baan_id']         ?? ''] ?? [];
+                $c['sponsors'] = array_merge($org, $baan);
+            }
+            unset($c);
+            echo json_encode($comps, JSON_UNESCAPED_UNICODE);
             exit;
         }
         if ($action === 'deelnemers') {
@@ -264,7 +331,7 @@ if ($action !== '') {
             $cStmt->execute([$compId]);
             $comp = $cStmt->fetch(PDO::FETCH_ASSOC);
             $eStmt = $pdo->prepare("
-                SELECT dc.name AS dc_naam
+                SELECT dc.name AS dc_naam, e.status
                 FROM entries e
                 JOIN distance_combinations dc ON dc.id = e.distance_combination_id
                 WHERE e.person_license = ? AND dc.competition_id = ?
@@ -307,6 +374,7 @@ if ($action !== '') {
             $body = json_decode(file_get_contents('php://input'), true) ?? [];
             $type        = $body['type']            ?? '';
             $wedstrijd   = trim($body['wedstrijd']  ?? '');
+            $compId      = trim($body['comp_id']    ?? '');
             $email       = trim($body['email']      ?? '');
             $opmerking   = trim($body['opmerking']  ?? '');
             $velden      = $body['velden']          ?? [];
@@ -325,6 +393,22 @@ if ($action !== '') {
             }
             if (!is_array($velden)) $velden = [];
 
+            // NL-labels per veld-key. De client stuurt het label in de taal
+            // van de rijder mee (Engels/Duits/Frans), maar de operator-mail
+            // moet altijd Nederlandstalig zijn. Mapt op `key`; valt terug op
+            // het meegestuurde label als de key onbekend is.
+            $nlLabels = [
+                'naam'        => 'Volledige naam',
+                'gender'      => 'Gender (M/V)',
+                'cat'         => 'Categorie',
+                'snr'         => 'Startnummer',
+                'club'        => 'Club',
+                'sponsor'     => 'Sponsor / team',
+                'transponder' => 'Transponder-nummer',
+                'gebjaar'     => 'Geboortejaar',
+                'knsb'        => 'KNSB-nummer',
+            ];
+
             // Mail-body opbouwen — plain text. Aangepaste velden krijgen
             // duidelijke ← AANGEPAST-tag zodat operator in één blik ziet
             // wat de rijder heeft gewijzigd t.o.v. wat al in InlineComp stond.
@@ -341,7 +425,8 @@ if ($action !== '') {
             $r[] = 'Gegevens:';
             foreach ($velden as $v) {
                 if (!is_array($v)) continue;
-                $lbl   = trim((string)($v['label'] ?? ''));
+                $key   = trim((string)($v['key']   ?? ''));
+                $lbl   = $nlLabels[$key] ?? trim((string)($v['label'] ?? ''));
                 $oud   = trim((string)($v['oud']   ?? ''));
                 $nieuw = trim((string)($v['nieuw'] ?? ''));
                 if ($lbl === '') continue;
@@ -373,21 +458,57 @@ if ($action !== '') {
             $subject = ($type === 'fout' ? '[InlineComp] Foutieve gegevens' : '[InlineComp] Niet gevonden')
                      . ' — ' . $wedstrijd;
             $to = 'inlinecomp@devriesen.com';
+
+            // Cc naar wedstrijd-organisatie-email indien bekend. Zo krijgt de
+            // organisator de melding direct mee zonder dat InlineComp moet
+            // doorsturen. Lookup via competitions → organisaties.email.
+            $ccEmail = null;
+            if ($compId !== '') {
+                try {
+                    $ccStmt = $pdo->prepare("
+                        SELECT o.email FROM competitions c
+                        LEFT JOIN organisaties o ON o.id = c.organisatie_id
+                        WHERE c.id = ?
+                    ");
+                    $ccStmt->execute([$compId]);
+                    $cand = trim((string)$ccStmt->fetchColumn());
+                    if ($cand !== '' && filter_var($cand, FILTER_VALIDATE_EMAIL)) {
+                        $ccEmail = $cand;
+                    }
+                } catch (Throwable $e) { /* CC-lookup mag de mail niet blokkeren */ }
+            }
+
             // From moet match'en met server-domein om SPF/DMARC te voldoen
             // bij byethost. Reply-To zet de daadwerkelijke afzender — een
             // antwoord komt zo direct bij de rijder terecht.
-            $headers = implode("\r\n", [
+            //
+            // BELANGRIJK over Cc bij PHP mail(): de `Cc:` header alléén
+            // garandeert GEEN aflevering. PHP gebruikt alleen $to als
+            // envelope-recipient (RCPT TO). Het Cc-adres moet daarom ÓÓK in
+            // $to (komma-gescheiden) — dan ontvangen beide écht een kopie,
+            // en de Cc-header zorgt dat de ontvanger visueel ziet wie er
+            // mee in CC stond.
+            $hdrLijst = [
                 'From: InlineComp Check <inlinecomp@devriesen.com>',
                 'Reply-To: ' . $email,
-                'Content-Type: text/plain; charset=utf-8',
-                'X-Mailer: InlineComp Check',
-            ]);
-            $ok = @mail($to, $subject, $bodyTxt, $headers);
+            ];
+            $rcpts = $to;
+            if ($ccEmail) {
+                $hdrLijst[] = 'Cc: ' . $ccEmail;
+                $rcpts     .= ', ' . $ccEmail;
+            }
+            $hdrLijst[] = 'Content-Type: text/plain; charset=utf-8';
+            $hdrLijst[] = 'X-Mailer: InlineComp Check';
+            $headers = implode("\r\n", $hdrLijst);
+            $ok = @mail($rcpts, $subject, $bodyTxt, $headers);
             if (!$ok) {
                 http_response_code(500);
                 echo json_encode(['error' => 'mail_send_failed']); exit;
             }
-            echo json_encode(['ok' => true]);
+            echo json_encode([
+                'ok'      => true,
+                'cc_sent' => $ccEmail !== null,
+            ]);
             exit;
         }
         http_response_code(400);
@@ -415,6 +536,16 @@ if ($action !== '') {
     --tekst: #1a1a1a;
     --grijs: #f4f6f8;
 }
+/* Status-badges: identiek aan /coach (coach/index.php:1791-1797) voor
+   consistente terminologie + visuele taal tussen publieke check-pagina
+   en coach-portal. */
+.status-badge { font-size:.75rem; padding:2px 8px; border-radius:10px; font-weight:600; }
+.status-0 { background:#fff3e0; color:#e65100; }
+.status-1 { background:#e8f5e9; color:#2e7d32; }
+.status-2 { background:#fce4e4; color:#b71c1c; }
+.status-3 { background:#f3e5f5; color:#6a1b9a; }
+.status-4 { background:#ffcdd2; color:#b71c1c; border:2px solid #b71c1c; }
+.status-5 { background:#e0f7fa; color:#006064; }
 * { box-sizing: border-box; margin: 0; padding: 0; }
 html { font-size: 20px; }
 body {
@@ -516,6 +647,41 @@ select:focus, input:focus { outline: 2px solid var(--middenblauw); outline-offse
     .detail-rij .lbl { width: auto; margin-bottom: 2px; font-size: .82rem; }
 }
 
+/* Org-footer + sponsor-marquee — gekopieerd van /public voor consistentie */
+.org-footer {
+    display: none; /* verborgen tot wedstrijd geselecteerd */
+    background: var(--wit); border-top: 1px solid #dde3ea;
+    padding: 12px 16px;
+    position: fixed; bottom: 0; left: 0; right: 0; z-index: 100;
+    box-shadow: 0 -2px 8px rgba(0,0,0,.08);
+}
+.org-footer-inner {
+    max-width: 720px; margin: 0 auto;
+    display: flex; align-items: center; justify-content: space-between; gap: 12px;
+}
+.org-footer-logo { height: 50px; width: auto; object-fit: contain; flex-shrink: 0; }
+.org-footer-naam { font-size: .85rem; color: var(--blauw); font-weight: 600; flex-shrink: 0; }
+.org-footer-sponsors {
+    flex: 1; overflow: hidden; display: flex; align-items: center; justify-content: flex-end;
+}
+.sponsor-marquee {
+    display: flex; overflow: hidden; height: 50px; align-items: center;
+}
+.sponsor-marquee-inner {
+    display: flex; align-items: center; gap: 40px; flex-shrink: 0;
+    animation: marquee linear infinite;
+}
+.sponsor-marquee-inner img {
+    height: 40px; width: auto; object-fit: contain; flex-shrink: 0;
+}
+@keyframes marquee {
+    0%   { transform: translateX(0); }
+    100% { transform: translateX(calc(-50% - 20px)); }
+}
+/* Onderaan ruimte voor de footer zodat detail-paneel content niet onder de
+   fixed footer schuift. 90px = 12+50+12 padding/logo + marge. */
+body.met-footer { padding-bottom: 90px; }
+
 /* Info/Help-overlay — gekopieerd van /public voor consistentie */
 .help-overlay {
     position: fixed; inset: 0; background: rgba(0,0,0,.6);
@@ -589,6 +755,15 @@ select:focus, input:focus { outline: 2px solid var(--middenblauw); outline-offse
     <div id="detail-wrap"></div>
 </div>
 
+<div id="org-footer" class="org-footer">
+    <div class="org-footer-inner">
+        <span id="footer-org-logo"></span>
+        <span id="footer-org-naam" class="org-footer-naam"></span>
+        <div id="footer-sponsors" class="org-footer-sponsors"></div>
+        <span id="footer-baan-logo"></span>
+    </div>
+</div>
+
 <script>
 // Shared i18n-helpers via PHP include
 <?php
@@ -656,6 +831,13 @@ const T = {
         lbl_inschrijvingen: 'Inschrijvingen',
         lbl_transponder: 'Transponder',
         geen_inschr: 'geen inschrijvingen',
+        // Status-labels: identiek aan /coach voor consistente terminologie.
+        status_0: 'Niet bevestigd',
+        status_1: 'Bevestigd',
+        status_2: 'Afgemeld',
+        status_3: 'Afgem. bij org.',
+        status_4: 'Niet getekend',
+        status_5: 'Bev. bij org.',
         geen_tp: 'geen transponder geregistreerd',
         tp_handmatig: '(handmatig)',
         mail_titel: 'Klopt iets niet?',
@@ -672,6 +854,7 @@ const T = {
         mf_lbl_snr: 'Startnummer',
         mf_lbl_club: 'Club',
         mf_lbl_sponsor: 'Sponsor / team',
+        mf_lbl_transponder: 'Transponder-nummer',
         mf_lbl_gebjaar: 'Geboortejaar',
         mf_lbl_knsb: 'KNSB-nummer (indien bekend)',
         mf_lbl_opmerking: 'Opmerking (optioneel)',
@@ -683,6 +866,7 @@ const T = {
         mf_bezig: '⏳ Bezig…',
         mf_sluit: 'Sluiten',
         mf_succes: '✓ Melding verstuurd! Bedankt — wij nemen contact op via je opgegeven e-mail.',
+        mf_succes_cc: '(ook in Cc naar de wedstrijdorganisator)',
         mf_err_email: 'Vul een geldig e-mailadres in.',
         mf_err_leeg: 'Vul minstens één veld in of voeg een opmerking toe.',
         mf_err_send: '⚠ Versturen mislukt. Probeer het later opnieuw.',
@@ -759,6 +943,12 @@ const T = {
         lbl_inschrijvingen: 'Entries',
         lbl_transponder: 'Transponder',
         geen_inschr: 'no entries',
+        status_0: 'Not confirmed',
+        status_1: 'Confirmed',
+        status_2: 'Withdrawn',
+        status_3: 'Withdrawn at registration',
+        status_4: 'Not signed in',
+        status_5: 'Confirmed at registration',
         geen_tp: 'no transponder registered',
         tp_handmatig: '(manual)',
         mail_titel: 'Something incorrect?',
@@ -775,6 +965,7 @@ const T = {
         mf_lbl_snr: 'Bib number',
         mf_lbl_club: 'Club',
         mf_lbl_sponsor: 'Sponsor / team',
+        mf_lbl_transponder: 'Transponder number',
         mf_lbl_gebjaar: 'Year of birth',
         mf_lbl_knsb: 'KNSB number (if known)',
         mf_lbl_opmerking: 'Comment (optional)',
@@ -786,6 +977,7 @@ const T = {
         mf_bezig: '⏳ Sending…',
         mf_sluit: 'Close',
         mf_succes: '✓ Report sent! Thanks — we\'ll contact you via your email.',
+        mf_succes_cc: '(Cc\'d to the race organiser)',
         mf_err_email: 'Please enter a valid email address.',
         mf_err_leeg: 'Please fill at least one field or add a comment.',
         mf_err_send: '⚠ Sending failed. Please try again later.',
@@ -862,6 +1054,12 @@ const T = {
         lbl_inschrijvingen: 'Anmeldungen',
         lbl_transponder: 'Transponder',
         geen_inschr: 'keine Anmeldungen',
+        status_0: 'Nicht bestätigt',
+        status_1: 'Bestätigt',
+        status_2: 'Zurückgezogen',
+        status_3: 'Bei Anmeldung zurückgezogen',
+        status_4: 'Nicht angemeldet',
+        status_5: 'Bei Anmeldung bestätigt',
         geen_tp: 'kein Transponder registriert',
         tp_handmatig: '(manuell)',
         mail_titel: 'Stimmt etwas nicht?',
@@ -878,6 +1076,7 @@ const T = {
         mf_lbl_snr: 'Startnummer',
         mf_lbl_club: 'Verein',
         mf_lbl_sponsor: 'Sponsor / Team',
+        mf_lbl_transponder: 'Transpondernummer',
         mf_lbl_gebjaar: 'Geburtsjahr',
         mf_lbl_knsb: 'KNSB-Nummer (falls bekannt)',
         mf_lbl_opmerking: 'Anmerkung (optional)',
@@ -889,6 +1088,7 @@ const T = {
         mf_bezig: '⏳ Wird gesendet…',
         mf_sluit: 'Schließen',
         mf_succes: '✓ Meldung gesendet! Danke — wir melden uns per E-Mail.',
+        mf_succes_cc: '(auch in Cc an den Veranstalter)',
         mf_err_email: 'Bitte eine gültige E-Mail-Adresse eingeben.',
         mf_err_leeg: 'Bitte mindestens ein Feld ausfüllen oder eine Anmerkung hinzufügen.',
         mf_err_send: '⚠ Senden fehlgeschlagen. Bitte später erneut versuchen.',
@@ -965,6 +1165,12 @@ const T = {
         lbl_inschrijvingen: 'Inscriptions',
         lbl_transponder: 'Transpondeur',
         geen_inschr: 'aucune inscription',
+        status_0: 'Non confirmé',
+        status_1: 'Confirmé',
+        status_2: 'Retiré',
+        status_3: 'Retiré à l\'inscription',
+        status_4: 'Non enregistré',
+        status_5: 'Confirmé à l\'inscription',
         geen_tp: 'aucun transpondeur enregistré',
         tp_handmatig: '(manuel)',
         mail_titel: 'Une erreur ?',
@@ -981,6 +1187,7 @@ const T = {
         mf_lbl_snr: 'Dossard',
         mf_lbl_club: 'Club',
         mf_lbl_sponsor: 'Sponsor / équipe',
+        mf_lbl_transponder: 'Numéro de transpondeur',
         mf_lbl_gebjaar: 'Année de naissance',
         mf_lbl_knsb: 'Numéro KNSB (si connu)',
         mf_lbl_opmerking: 'Remarque (optionnel)',
@@ -992,6 +1199,7 @@ const T = {
         mf_bezig: '⏳ Envoi…',
         mf_sluit: 'Fermer',
         mf_succes: '✓ Signalement envoyé ! Merci — nous vous contacterons par e-mail.',
+        mf_succes_cc: '(également en Cc à l\'organisateur de la course)',
         mf_err_email: 'Veuillez saisir une adresse e-mail valide.',
         mf_err_leeg: 'Veuillez remplir au moins un champ ou ajouter une remarque.',
         mf_err_send: '⚠ Échec de l\'envoi. Veuillez réessayer plus tard.',
@@ -1072,23 +1280,91 @@ function vulCompDropdown() {
         return;
     }
     const huidig = sel.value;
-    sel.innerHTML = `<option value="">${esc(t('opt_kies'))}</option>` +
-        _alleComps.map(c => {
-            // Status-tag: 🔴 live (publiek-zichtbaar, binnen ±10 dagen) vs
-            // 📅 binnenkort (al ingeschreven maar nog niet officieel live).
-            const tag = c.status === 'live'
-                ? '🔴 ' + t('status_live')
-                : '📅 ' + t('status_binnenkort');
-            return `<option value="${esc(c.id)}"${c.id === huidig ? ' selected' : ''}>` +
-                   `${esc(c.name)} — ${esc(datumNl(c.starts))} [${esc(tag)}]</option>`;
-        }).join('');
+    sel.innerHTML = `<option value="">${esc(t('opt_kies'))}</option>`;
+    for (const c of _alleComps) {
+        const tag = c.status === 'live'
+            ? '🔴 ' + t('status_live')
+            : '📅 ' + t('status_binnenkort');
+        const opt = document.createElement('option');
+        opt.value = c.id;
+        opt.textContent = `${c.name} — ${datumNl(c.starts)} [${tag}]`;
+        if (c.id === huidig) opt.selected = true;
+        // Footer-data per optie meedragen — zelfde patroon als /public
+        opt.dataset.orgLogo        = c.org_logo        ?? '';
+        opt.dataset.orgNaam        = c.org_naam        ?? '';
+        opt.dataset.baanLogo       = c.baan_logo       ?? '';
+        opt.dataset.baanVereniging = c.baan_vereniging ?? '';
+        opt.dataset.sponsors       = JSON.stringify(c.sponsors ?? []);
+        sel.appendChild(opt);
+    }
+}
+
+// ── Org/sponsor-footer (zelfde patroon als /public) ──────────────────────
+function updateFooter(opt) {
+    const footer  = $('org-footer');
+    const logoEl  = $('footer-org-logo');
+    const naamEl  = $('footer-org-naam');
+    const sponsEl = $('footer-sponsors');
+    const baanEl  = $('footer-baan-logo');
+    if (!opt?.value) {
+        footer.style.display = 'none';
+        document.body.classList.remove('met-footer');
+        return;
+    }
+    const orgLogo  = opt.dataset.orgLogo;
+    const orgNaam  = opt.dataset.orgNaam ?? '';
+    const baanLogo = opt.dataset.baanLogo ?? '';
+    const baanVer  = opt.dataset.baanVereniging ?? '';
+    let sponsors = [];
+    try { sponsors = JSON.parse(opt.dataset.sponsors || '[]'); } catch {}
+
+    if (!orgLogo && !sponsors.length && !baanLogo && !baanVer) {
+        footer.style.display = 'none';
+        document.body.classList.remove('met-footer');
+        return;
+    }
+    // Cache-buster per uur — vers upload na max 1 uur zichtbaar
+    const cb = `?v=${Math.floor(Date.now() / 3600000)}`;
+
+    logoEl.innerHTML = orgLogo
+        ? `<img class="org-footer-logo" src="../${esc(orgLogo)}${cb}" alt="">`
+        : '';
+    naamEl.textContent = orgLogo ? '' : orgNaam;
+
+    if (baanLogo) {
+        baanEl.innerHTML = `<img class="org-footer-logo" src="../${esc(baanLogo)}${cb}" alt="">`;
+    } else if (baanVer) {
+        baanEl.innerHTML = `<span class="org-footer-naam">${esc(baanVer)}</span>`;
+    } else {
+        baanEl.innerHTML = '';
+    }
+
+    if (sponsors.length) {
+        let imgs = '';
+        for (const s of sponsors) {
+            const img = `<img src="../${esc(s.logo)}${cb}" alt="${esc(s.naam)}" title="${esc(s.naam)}">`;
+            imgs += s.url
+                ? `<a href="${esc(s.url)}" target="_blank" rel="noopener">${img}</a>`
+                : img;
+        }
+        // Verdubbel imgs voor seamless loop. Duur schaalt met aantal sponsors,
+        // minimum 8s zodat één logo niet onhandig snel langs schiet.
+        const duur = Math.max(8, sponsors.length * 3);
+        sponsEl.innerHTML = `<div class="sponsor-marquee"><div class="sponsor-marquee-inner" style="animation-duration:${duur}s">${imgs}${imgs}</div></div>`;
+    } else {
+        sponsEl.innerHTML = '';
+    }
+    footer.style.display = 'block';
+    document.body.classList.add('met-footer');
 }
 
 async function onCompChange() {
-    const compId = $('comp-sel').value;
+    const sel = $('comp-sel');
+    const compId = sel.value;
     $('detail-wrap').innerHTML = '';
     delete $('detail-wrap').dataset.lic;
     $('zoek').value = '';
+    updateFooter(sel.selectedOptions[0]);
     if (!compId) {
         $('zoek-rij').style.display = 'none';
         $('lijst-wrap').innerHTML = '';
@@ -1160,19 +1436,21 @@ function openMeldFormulier(type, voorinvulling) {
     const wedstrijdNaam = $('comp-sel').selectedOptions[0]?.textContent || '';
     // Configuratie per type — welke velden, hun labels
     const veldenConfig = type === 'fout' ? [
-        {key: 'naam',     label: t('mf_lbl_naam'),     val: voorinvulling.full_name    || ''},
-        {key: 'gender',   label: t('mf_lbl_gender'),   val: voorinvulling.gender       || '', opts: ['M','V']},
-        {key: 'cat',      label: t('mf_lbl_cat'),      val: voorinvulling.category     || ''},
-        {key: 'snr',      label: t('mf_lbl_snr'),      val: voorinvulling.start_number ?? ''},
-        {key: 'club',     label: t('mf_lbl_club'),     val: voorinvulling.club         || ''},
-        {key: 'sponsor',  label: t('mf_lbl_sponsor'),  val: voorinvulling.sponsor      || ''},
+        {key: 'naam',       label: t('mf_lbl_naam'),       val: voorinvulling.full_name    || ''},
+        {key: 'gender',     label: t('mf_lbl_gender'),     val: voorinvulling.gender       || '', opts: ['M','V']},
+        {key: 'cat',        label: t('mf_lbl_cat'),        val: voorinvulling.category     || ''},
+        {key: 'snr',        label: t('mf_lbl_snr'),        val: voorinvulling.start_number ?? ''},
+        {key: 'club',       label: t('mf_lbl_club'),       val: voorinvulling.club         || ''},
+        {key: 'sponsor',    label: t('mf_lbl_sponsor'),    val: voorinvulling.sponsor      || ''},
+        {key: 'transponder',label: t('mf_lbl_transponder'),val: voorinvulling.transponder  || ''},
     ] : [
-        {key: 'naam',     label: t('mf_lbl_naam'),     val: ''},
-        {key: 'gender',   label: t('mf_lbl_gender'),   val: '', opts: ['M','V']},
-        {key: 'gebjaar',  label: t('mf_lbl_gebjaar'),  val: ''},
-        {key: 'cat',      label: t('mf_lbl_cat'),      val: ''},
-        {key: 'club',     label: t('mf_lbl_club'),     val: ''},
-        {key: 'knsb',     label: t('mf_lbl_knsb'),     val: ''},
+        {key: 'naam',       label: t('mf_lbl_naam'),       val: ''},
+        {key: 'gender',     label: t('mf_lbl_gender'),     val: '', opts: ['M','V']},
+        {key: 'gebjaar',    label: t('mf_lbl_gebjaar'),    val: ''},
+        {key: 'cat',        label: t('mf_lbl_cat'),        val: ''},
+        {key: 'club',       label: t('mf_lbl_club'),       val: ''},
+        {key: 'knsb',       label: t('mf_lbl_knsb'),       val: ''},
+        {key: 'transponder',label: t('mf_lbl_transponder'),val: ''},
     ];
 
     const overlay = document.createElement('div');
@@ -1262,7 +1540,8 @@ function openMeldFormulier(type, voorinvulling) {
         const velden = [];
         overlay.querySelectorAll('[data-key]').forEach(el => {
             velden.push({
-                label: el.dataset.label,
+                key:   el.dataset.key,
+                label: el.dataset.label,    // fallback bij onbekende key
                 oud:   el.dataset.orig,
                 nieuw: el.value.trim(),
             });
@@ -1284,12 +1563,13 @@ function openMeldFormulier(type, voorinvulling) {
                 body: JSON.stringify({
                     type, email, opmerking: opm,
                     wedstrijd: wedstrijdNaam,
+                    comp_id: $('comp-sel').value,
                     velden,
                 }),
             });
             const data = await res.json();
             if (!res.ok || data.error) throw new Error(data.error || 'send_failed');
-            okEl.textContent = t('mf_succes');
+            okEl.textContent = t('mf_succes') + (data.cc_sent ? ' ' + t('mf_succes_cc') : '');
             okEl.style.display = '';
             btn.style.display = 'none';
             overlay.querySelector('#mf-annul').textContent = t('mf_sluit');
@@ -1461,8 +1741,18 @@ async function toonDetail(shortName, voornaam) {
         const p = data.persoon;
         const wedstrijdNaam = data.wedstrijd?.name || '';
 
+        // Status-badge per inschrijving — zelfde stijl + icons als /coach
+        // (coach/index.php:3163 STATUS_ICON + .status-badge.status-N CSS).
+        // Defensieve fallback op status=1 als de waarde ontbreekt (oude data).
+        const STATUS_ICON = ['⚠','✓','✗','✗','🚨','✓'];
         const inschr = (data.inschrijvingen || []).length
-            ? (data.inschrijvingen || []).map(e => `<div>${esc(e.dc_naam)}</div>`).join('')
+            ? (data.inschrijvingen || []).map(e => {
+                const st  = parseInt(e.status ?? 1);
+                const lbl = t('status_' + st) || '';
+                const ico = STATUS_ICON[st] ?? '';
+                return `<div style="margin-bottom:.3rem">${esc(e.dc_naam)}` +
+                       ` <span class="status-badge status-${st}" style="margin-left:.3rem">${ico} ${esc(lbl)}</span></div>`;
+            }).join('')
             : `<i style="color:#888">${esc(t('geen_inschr'))}</i>`;
         const tp = (data.transponders || []);
         const tpHtml = tp.length === 0
@@ -1473,10 +1763,13 @@ async function toonDetail(shortName, voornaam) {
 
         const genderLeesb = p.gender === 'M' ? `M (${esc(t('lbl_gender'))[0] === 'G' ? 'm' : 'm'})` : (p.gender === 'V' ? 'V' : p.gender);
 
-        // Snapshot van huidige persons-data voor de meld-form (om "aangepast"
-        // te kunnen detecteren). Stash op detail-wrap zodat de openMeldFormulier
-        // call dat kan ophalen zonder dat we p in de closure houden.
-        $('detail-wrap')._persoon = p;
+        // Snapshot van huidige persons-data + eerste transponder voor de
+        // meld-form (om "aangepast" te kunnen detecteren). Stash op detail-
+        // wrap zodat openMeldFormulier dat kan ophalen.
+        $('detail-wrap')._persoon = {
+            ...p,
+            transponder: (data.transponders || [])[0]?.code || '',
+        };
 
         $('detail-wrap').innerHTML = `
             <button class="terug" id="terug-btn">${esc(t('terug'))}</button>
