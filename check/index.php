@@ -376,6 +376,7 @@ if ($action !== '') {
             $wedstrijd   = trim($body['wedstrijd']  ?? '');
             $compId      = trim($body['comp_id']    ?? '');
             $email       = trim($body['email']      ?? '');
+            $relatie     = trim($body['relatie']    ?? '');
             $opmerking   = trim($body['opmerking']  ?? '');
             $velden      = $body['velden']          ?? [];
 
@@ -387,11 +388,22 @@ if ($action !== '') {
                 http_response_code(400);
                 echo json_encode(['error' => 'invalid_email']); exit;
             }
+            if (!in_array($relatie, ['rijder', 'coach', 'anders'], true)) {
+                http_response_code(400);
+                echo json_encode(['error' => 'invalid_relatie']); exit;
+            }
             if ($wedstrijd === '') {
                 http_response_code(400);
                 echo json_encode(['error' => 'wedstrijd_verplicht']); exit;
             }
             if (!is_array($velden)) $velden = [];
+
+            // Relatie → NL-tekst voor de operator-mail (UI-keuze is taal van rijder)
+            $relatieLabels = [
+                'rijder' => 'De rijder/rijdster zelf',
+                'coach'  => 'Coach, teamleider of ouder/verzorger',
+                'anders' => 'Iemand anders',
+            ];
 
             // NL-labels per veld-key. De client stuurt het label in de taal
             // van de rijder mee (Engels/Duits/Frans), maar de operator-mail
@@ -420,6 +432,7 @@ if ($action !== '') {
                                     : 'Rijder niet gevonden in deelnemerslijst');
             $r[] = 'Wedstrijd:  ' . $wedstrijd;
             $r[] = 'Afzender:   ' . $email;
+            $r[] = 'Relatie:    ' . $relatieLabels[$relatie];
             $r[] = 'Verstuurd:  ' . date('Y-m-d H:i:s');
             $r[] = '';
             $r[] = 'Gegevens:';
@@ -843,6 +856,12 @@ const T = {
         mail_titel: 'Klopt iets niet?',
         mail_uitleg_form: 'Pas de gegevens aan, vul je e-mail in en klik op verzenden — wij krijgen je melding direct binnen.',
         mail_btn_open: '✏ Meld foutieve gegevens',
+        mf_lbl_relatie: 'Je bent…',
+        mf_relatie_rijder: 'De rijder/rijdster zelf',
+        mf_relatie_coach: 'Coach, teamleider of ouder/verzorger',
+        mf_relatie_anders: 'Iemand anders',
+        mf_err_relatie: 'Geef aan wat je relatie tot de rijder is.',
+        mf_confirm_email: 'Wij sturen ons antwoord naar:\n\n{email}\n\nKlopt dit adres?',
         mf_titel_fout: '✏ Foutieve gegevens melden',
         mf_uitleg_fout: 'Pas de velden aan die niet kloppen. Wij zien in de mail wat je hebt gewijzigd.',
         mf_titel_onbekend: '❓ Ik vind mezelf niet',
@@ -954,6 +973,12 @@ const T = {
         mail_titel: 'Something incorrect?',
         mail_uitleg_form: 'Adjust the fields, enter your email and click send — your report reaches us directly.',
         mail_btn_open: '✏ Report incorrect data',
+        mf_lbl_relatie: 'You are…',
+        mf_relatie_rijder: 'The skater',
+        mf_relatie_coach: 'Coach, team leader or parent/guardian',
+        mf_relatie_anders: 'Someone else',
+        mf_err_relatie: 'Please indicate your relation to the skater.',
+        mf_confirm_email: 'We will send our reply to:\n\n{email}\n\nIs this address correct?',
         mf_titel_fout: '✏ Report incorrect data',
         mf_uitleg_fout: 'Adjust the fields that are wrong. The email will show what you changed.',
         mf_titel_onbekend: '❓ I can\'t find myself',
@@ -1065,6 +1090,12 @@ const T = {
         mail_titel: 'Stimmt etwas nicht?',
         mail_uitleg_form: 'Felder anpassen, E-Mail eingeben, abschicken — deine Meldung erreicht uns direkt.',
         mail_btn_open: '✏ Falsche Daten melden',
+        mf_lbl_relatie: 'Du bist…',
+        mf_relatie_rijder: 'Der/die Sportler(in) selbst',
+        mf_relatie_coach: 'Trainer, Teamleiter oder Eltern/Erziehungsberechtigte',
+        mf_relatie_anders: 'Jemand anders',
+        mf_err_relatie: 'Bitte gib an, in welcher Beziehung du zum Sportler stehst.',
+        mf_confirm_email: 'Wir senden unsere Antwort an:\n\n{email}\n\nIst diese Adresse korrekt?',
         mf_titel_fout: '✏ Falsche Daten melden',
         mf_uitleg_fout: 'Passe die Felder an, die nicht stimmen. In der Mail sehen wir, was du geändert hast.',
         mf_titel_onbekend: '❓ Ich finde mich nicht',
@@ -1176,6 +1207,12 @@ const T = {
         mail_titel: 'Une erreur ?',
         mail_uitleg_form: 'Ajustez les champs, entrez votre e-mail et envoyez — votre signalement nous parvient directement.',
         mail_btn_open: '✏ Signaler des données incorrectes',
+        mf_lbl_relatie: 'Vous êtes…',
+        mf_relatie_rijder: 'Le/la patineur(se)',
+        mf_relatie_coach: 'Coach, chef d\'équipe ou parent/tuteur',
+        mf_relatie_anders: 'Quelqu\'un d\'autre',
+        mf_err_relatie: 'Veuillez indiquer votre relation avec le/la patineur(se).',
+        mf_confirm_email: 'Nous enverrons notre réponse à :\n\n{email}\n\nCette adresse est-elle correcte ?',
         mf_titel_fout: '✏ Signaler des données incorrectes',
         mf_uitleg_fout: 'Ajustez les champs incorrects. L\'e-mail montrera ce que vous avez changé.',
         mf_titel_onbekend: '❓ Je ne me trouve pas',
@@ -1490,7 +1527,26 @@ function openMeldFormulier(type, voorinvulling) {
                 ${esc(t('mf_wedstrijd'))}: <b>${esc(wedstrijdNaam)}</b>
             </div>
             ${veldHtml}
-            <div style="margin-top:.4rem">
+            <div style="margin-top:.6rem">
+                <label style="display:block;font-size:.82rem;color:#555;font-weight:600;margin-bottom:.3rem">
+                    ${esc(t('mf_lbl_relatie'))} *
+                </label>
+                <div style="display:flex;flex-direction:column;gap:.25rem;font-size:.9rem">
+                    <label style="display:flex;align-items:center;gap:.4rem;cursor:pointer">
+                        <input type="radio" name="mf-rel" value="rijder" style="cursor:pointer">
+                        <span>${esc(t('mf_relatie_rijder'))}</span>
+                    </label>
+                    <label style="display:flex;align-items:center;gap:.4rem;cursor:pointer">
+                        <input type="radio" name="mf-rel" value="coach" style="cursor:pointer">
+                        <span>${esc(t('mf_relatie_coach'))}</span>
+                    </label>
+                    <label style="display:flex;align-items:center;gap:.4rem;cursor:pointer">
+                        <input type="radio" name="mf-rel" value="anders" style="cursor:pointer">
+                        <span>${esc(t('mf_relatie_anders'))}</span>
+                    </label>
+                </div>
+            </div>
+            <div style="margin-top:.5rem">
                 <label for="mf-opm" style="display:block;font-size:.82rem;color:#555;font-weight:600;margin-bottom:.2rem">
                     ${esc(t('mf_lbl_opmerking'))}
                 </label>
@@ -1536,6 +1592,13 @@ function openMeldFormulier(type, voorinvulling) {
             foutEl.textContent = t('mf_err_email'); foutEl.style.display = '';
             return;
         }
+        // Relatie tot de rijder (verplicht — operator weet anders niet of de
+        // melding van de rijder zelf, coach/ouder, of een derde komt)
+        const relatie = overlay.querySelector('input[name="mf-rel"]:checked')?.value;
+        if (!relatie) {
+            foutEl.textContent = t('mf_err_relatie'); foutEl.style.display = '';
+            return;
+        }
         // Verzamel velden + check op aanpassingen
         const velden = [];
         overlay.querySelectorAll('[data-key]').forEach(el => {
@@ -1553,6 +1616,13 @@ function openMeldFormulier(type, voorinvulling) {
             return;
         }
 
+        // Laatste vangnet voor e-mail-typos: laat de afzender het adres
+        // expliciet bevestigen. Syntax/MX-check vangt geen user-part typos
+        // zoals 'bdahah' ipv 'bdshah' — alleen de gebruiker zelf wel.
+        if (!confirm(t('mf_confirm_email').replace('{email}', email))) {
+            return;
+        }
+
         const btn = overlay.querySelector('#mf-send');
         btn.disabled = true;
         btn.textContent = t('mf_bezig');
@@ -1561,7 +1631,7 @@ function openMeldFormulier(type, voorinvulling) {
                 method: 'POST',
                 headers: {'Content-Type': 'application/json'},
                 body: JSON.stringify({
-                    type, email, opmerking: opm,
+                    type, email, relatie, opmerking: opm,
                     wedstrijd: wedstrijdNaam,
                     comp_id: $('comp-sel').value,
                     velden,
