@@ -2157,9 +2157,9 @@ const T = {
         status_0: 'Not confirmed',
         status_1: 'Confirmed',
         status_2: 'Withdrawn',
-        status_3: 'Withdrawn at registration',
+        status_3: 'Withdrawn by org.',
         status_4: 'Not signed in',
-        status_5: 'Confirmed at registration',
+        status_5: 'Confirmed by org.',
         status_onbekend: '?',
         snr_label: 'Nr',
         auto_stempel_title: 'Time of last auto-refresh',
@@ -4202,6 +4202,24 @@ function renderKlassementTabel(data) {
 
 // ── Help overlay ──────────────────────────────────────────────────────────
 // ── Footer: org logo + sponsor-ticker ─────────────────────────────────────
+
+// 🥚 Easter egg: 3× snel klikken op org-logo opent blobart.devriesen.com.
+// Counter + timer op module-niveau zodat ze tussen renderings behouden blijven.
+let _eggCount = 0;
+let _eggTimer = null;
+function _eggHandler() {
+    _eggCount++;
+    clearTimeout(_eggTimer);
+    if (_eggCount >= 3) {
+        _eggCount = 0;
+        // Fire-and-forget naar de teller; geen await zodat de tab direct opent.
+        fetch('../api/easter_egg.php', { method: 'POST' }).catch(() => {});
+        window.open('https://blobart.devriesen.com', '_blank', 'noopener');
+    } else {
+        _eggTimer = setTimeout(() => { _eggCount = 0; }, 2000);
+    }
+}
+
 function updateHeaderLogos(opt) {
     const footer   = document.getElementById('org-footer');
     const logoEl   = document.getElementById('footer-org-logo');
@@ -4234,6 +4252,10 @@ function updateHeaderLogos(opt) {
     // Organisatie-logo + naam (links in footer)
     logoEl.innerHTML = orgLogo ? `<img class="org-footer-logo" src="../${esc(orgLogo)}${cb}" alt="">` : '';
     naamEl.textContent = orgLogo ? '' : orgNaam; // naam alleen als fallback zonder logo
+    // Easter egg: 3× klikken op het org-logo binnen 2 sec opent blobart.
+    // Geheim — cursor blijft default zodat het niet verraadt klikbaar te zijn.
+    const _eggImg = logoEl.querySelector('img');
+    if (_eggImg) _eggImg.addEventListener('click', _eggHandler);
 
     // Gastheer-vereniging-logo (rechts in footer). Heeft de baan geen logo
     // maar wel een vereniging-naam? Dan tonen we die als compacte tekst.

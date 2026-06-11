@@ -1705,7 +1705,13 @@ function groepeerVoorPrint() {
                 const status = c.entry_status ?? 1;
                 if (status === 2 || status === 3 || status === 4) return;  // niet op tekenlijst (5=Bevestigd bij org. wél)
                 const pe = personEdits[c.license_key] || {};
-                const tpActief = pe.transponder_actief ?? pe.transponder1 ?? c.knsb?.transponder1 ?? '';
+                // pe.transponder_actief = null betekent EXPLICIET "geen actieve"
+                // (operator heeft op "— geen —" gezet of DB zegt slot 0 = null).
+                // ?? zou daar door-vallen op de KNSB-default; gebruik 'in' om
+                // alleen te fallback'en als de key nog nooit gezet is.
+                const tpActief = ('transponder_actief' in pe)
+                    ? (pe.transponder_actief ?? '')
+                    : (pe.transponder1 ?? c.knsb?.transponder1 ?? '');
                 // Check of deze transponder in de org-lijst staat en niet betaald is
                 const orgTp = _orgTransponders.find(ot => ot.transponder_code === tpActief);
                 const tpBetaald = orgTp ? (parseInt(orgTp.betaald) === 1) : null; // null=geen org-tp
@@ -2198,7 +2204,13 @@ function _bouwDeelnemerslijstInternal(opts = {}) {
                     knsb_start_number:  c.knsb?.start_number  ?? '',
                     full_name:          pe.full_name          ?? c.knsb?.full_name    ?? '',
                     category:           pe.category           ?? c.knsb?.category     ?? '',
-                    transponder_actief: pe.transponder_actief ?? pe.transponder1       ?? c.knsb?.transponder1 ?? '',
+                    // pe.transponder_actief = null → operator-bevestigde "geen
+                    // actieve" → niet door-vallen naar KNSB-default (anders zou
+                    // de deelnemerslijst een transponder tonen die niet wordt
+                    // gebruikt; zie ook groepeerVoorPrint()).
+                    transponder_actief: ('transponder_actief' in pe)
+                        ? (pe.transponder_actief ?? '')
+                        : (pe.transponder1 ?? c.knsb?.transponder1 ?? ''),
                     knsb_transponder:   c.knsb?.transponder1  ?? '',
                     knsb_transponder2:  c.knsb?.transponder2  ?? '',
                     is_actief:          false,

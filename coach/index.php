@@ -1040,13 +1040,13 @@ if ($action === 'coach_info') {
         // categorie betreft, badge-2 dezelfde, etc.
         $entStmt = $pdo->prepare("
             SELECT e.person_license,
-                   dc.id AS dc_id, dc.name AS dc_naam,
+                   dc.id AS dc_id, dc.name AS dc_naam, dc.number AS dc_number,
                    e.status AS entry_status
             FROM entries e
             JOIN distance_combinations dc ON dc.id = e.distance_combination_id
             WHERE dc.competition_id = ?
               AND e.person_license IN ($ph)
-            ORDER BY dc.name
+            ORDER BY dc.number, dc.name
         ");
         $entStmt->execute(array_merge([$compId], $licenses));
         foreach ($entStmt->fetchAll(PDO::FETCH_ASSOC) as $e) {
@@ -2441,9 +2441,9 @@ const T = {
         status_0: 'Not confirmed',
         status_1: 'Confirmed',
         status_2: 'Withdrawn',
-        status_3: 'Withdrawn at registration',
+        status_3: 'Withdrawn by org.',
         status_4: 'Not signed in',
-        status_5: 'Confirmed at registration',
+        status_5: 'Confirmed by org.',
         status_label: 'Status',
         // ── Sanctie-codes uitleg ──
         sanc_W1: '1st warning',
@@ -2679,9 +2679,9 @@ const T = {
         status_0: 'Nicht bestätigt',
         status_1: 'Bestätigt',
         status_2: 'Zurückgezogen',
-        status_3: 'Bei Anmeldung zurückgezogen',
+        status_3: 'Abgem. bei Org.',
         status_4: 'Nicht angemeldet',
-        status_5: 'Bei Anmeldung bestätigt',
+        status_5: 'Best. bei Org.',
         status_label: 'Status',
         // ── Sanctie-codes uitleg ──
         sanc_W1: '1. Verwarnung',
@@ -2917,9 +2917,9 @@ const T = {
         status_0: 'Non confirmé',
         status_1: 'Confirmé',
         status_2: 'Retiré',
-        status_3: 'Retiré à l\'inscription',
+        status_3: 'Désinsc. à l\'org.',
         status_4: 'Non enregistré',
-        status_5: 'Confirmé à l\'inscription',
+        status_5: 'Conf. à l\'org.',
         status_label: 'Statut',
         // ── Sanctie-codes uitleg ──
         sanc_W1: '1er avertissement',
@@ -3884,11 +3884,16 @@ function renderHeats() {
             const dcRitten = rittenPerDc[e.dc_id] || [];
             const afstanden = e.afstanden || [];
             const dcStatus  = parseInt(e.entry_status ?? 1);
+            // Status 3 = afgemeld bij organisatie → rijder rijdt deze afstand
+            // niet, heat-detail toont alleen ruis. De status-badge boven in
+            // de samenvatting zegt al "Withdrawn by org.", dat is voldoende.
+            if (dcStatus === 3) continue;
             if (!afstanden.length) {
                 // Fallback: DC zonder distances — toon 1 wachtrij-blok
                 afstandBlokken.push({
                     dc_id: e.dc_id, dc_naam: e.dc_naam, dc_status: dcStatus,
-                    distance_id: null, distance_naam: null, ritten: [],
+                    dc_number: e.dc_number ?? null,
+                    distance_id: null, distance_naam: null, distance_number: null, ritten: [],
                 });
                 continue;
             }
@@ -3899,8 +3904,10 @@ function renderHeats() {
                     dc_id: e.dc_id,
                     dc_naam: e.dc_naam,
                     dc_status: dcStatus,
+                    dc_number: e.dc_number ?? null,
                     distance_id: a.distance_id,
                     distance_naam: a.distance_naam,
+                    distance_number: a.number ?? null,
                     ritten,
                     expected_rondes: a.expected_rondes || [],
                 });
@@ -3926,7 +3933,17 @@ function renderHeats() {
         afstandBlokken.sort((x, y) => {
             const xr = sortKey(x), yr = sortKey(y);
             if (xr !== yr) return xr - yr;
-            // fallback voor blokken zonder ritten: alfabetisch stabiel
+            // Fallback voor blokken zonder ritten: gebruik DC- en distance-
+            // number uit de KNSB-data — die volgorde benadert de typische
+            // programma-volgorde (sprint vóór 1000m vóór puntenkoers, etc.)
+            // veel beter dan alfabetisch sorteren op "1000m" / "200m DTT".
+            const xdn = x.dc_number ?? 9999;
+            const ydn = y.dc_number ?? 9999;
+            if (xdn !== ydn) return xdn - ydn;
+            const xa  = x.distance_number ?? 9999;
+            const ya  = y.distance_number ?? 9999;
+            if (xa !== ya) return xa - ya;
+            // Allerlaatste fallback: alfabetisch op naam zodat sort stabiel is
             const a = `${x.dc_naam} ${x.distance_naam || ''}`;
             const b = `${y.dc_naam} ${y.distance_naam || ''}`;
             return a.localeCompare(b);
