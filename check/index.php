@@ -861,7 +861,9 @@ const T = {
         mf_relatie_coach: 'Coach, teamleider of ouder/verzorger',
         mf_relatie_anders: 'Iemand anders',
         mf_err_relatie: 'Geef aan wat je relatie tot de rijder is.',
-        mf_confirm_email: 'Wij sturen ons antwoord naar:\n\n{email}\n\nKlopt dit adres?',
+        mf_confirm_uitleg: 'Wij sturen ons antwoord naar het onderstaande e-mailadres. Klopt het?',
+        mf_confirm_ja: 'Verzenden',
+        mf_confirm_nee: 'Bewerken',
         mf_titel_fout: '✏ Foutieve gegevens melden',
         mf_uitleg_fout: 'Pas de velden aan die niet kloppen. Wij zien in de mail wat je hebt gewijzigd.',
         mf_titel_onbekend: '❓ Ik vind mezelf niet',
@@ -978,7 +980,9 @@ const T = {
         mf_relatie_coach: 'Coach, team leader or parent/guardian',
         mf_relatie_anders: 'Someone else',
         mf_err_relatie: 'Please indicate your relation to the skater.',
-        mf_confirm_email: 'We will send our reply to:\n\n{email}\n\nIs this address correct?',
+        mf_confirm_uitleg: 'We will send our reply to the email address below. Is it correct?',
+        mf_confirm_ja: 'Send',
+        mf_confirm_nee: 'Edit',
         mf_titel_fout: '✏ Report incorrect data',
         mf_uitleg_fout: 'Adjust the fields that are wrong. The email will show what you changed.',
         mf_titel_onbekend: '❓ I can\'t find myself',
@@ -1095,7 +1099,9 @@ const T = {
         mf_relatie_coach: 'Trainer, Teamleiter oder Eltern/Erziehungsberechtigte',
         mf_relatie_anders: 'Jemand anders',
         mf_err_relatie: 'Bitte gib an, in welcher Beziehung du zum Sportler stehst.',
-        mf_confirm_email: 'Wir senden unsere Antwort an:\n\n{email}\n\nIst diese Adresse korrekt?',
+        mf_confirm_uitleg: 'Wir senden unsere Antwort an die untenstehende E-Mail-Adresse. Stimmt sie?',
+        mf_confirm_ja: 'Senden',
+        mf_confirm_nee: 'Bearbeiten',
         mf_titel_fout: '✏ Falsche Daten melden',
         mf_uitleg_fout: 'Passe die Felder an, die nicht stimmen. In der Mail sehen wir, was du geändert hast.',
         mf_titel_onbekend: '❓ Ich finde mich nicht',
@@ -1212,7 +1218,9 @@ const T = {
         mf_relatie_coach: 'Coach, chef d\'équipe ou parent/tuteur',
         mf_relatie_anders: 'Quelqu\'un d\'autre',
         mf_err_relatie: 'Veuillez indiquer votre relation avec le/la patineur(se).',
-        mf_confirm_email: 'Nous enverrons notre réponse à :\n\n{email}\n\nCette adresse est-elle correcte ?',
+        mf_confirm_uitleg: 'Nous enverrons notre réponse à l\'adresse e-mail ci-dessous. Est-elle correcte ?',
+        mf_confirm_ja: 'Envoyer',
+        mf_confirm_nee: 'Modifier',
         mf_titel_fout: '✏ Signaler des données incorrectes',
         mf_uitleg_fout: 'Ajustez les champs incorrects. L\'e-mail montrera ce que vous avez changé.',
         mf_titel_onbekend: '❓ Je ne me trouve pas',
@@ -1619,7 +1627,7 @@ function openMeldFormulier(type, voorinvulling) {
         // Laatste vangnet voor e-mail-typos: laat de afzender het adres
         // expliciet bevestigen. Syntax/MX-check vangt geen user-part typos
         // zoals 'bdahah' ipv 'bdshah' — alleen de gebruiker zelf wel.
-        if (!confirm(t('mf_confirm_email').replace('{email}', email))) {
+        if (!(await _bevestigEmailDialog(email))) {
             return;
         }
 
@@ -1653,6 +1661,48 @@ function openMeldFormulier(type, voorinvulling) {
     });
 }
 function openNietGevondenMail() { openMeldFormulier('onbekend', {}); }
+
+// Bevestig-dialog voor het e-mailadres vlak vóór verzenden. Eigen InlineComp-
+// stijl modal (geen native browser-confirm). Returns Promise<true|false>.
+function _bevestigEmailDialog(email) {
+    return new Promise((resolve) => {
+        const overlay = document.createElement('div');
+        overlay.style.cssText =
+            'position:fixed;inset:0;background:rgba(0,0,0,.55);' +
+            'display:flex;align-items:center;justify-content:center;' +
+            'z-index:10001;padding:1rem';
+        overlay.innerHTML = `
+            <div style="background:#fff;border-radius:10px;padding:1rem 1.2rem;max-width:420px;width:100%;
+                        box-shadow:0 8px 32px rgba(0,0,0,.3);margin:auto">
+                <div style="font-size:.92rem;color:#333;margin-bottom:.7rem">
+                    ${esc(t('mf_confirm_uitleg'))}
+                </div>
+                <div style="font-size:1.05rem;color:#000;font-weight:600;text-align:center;
+                            padding:.7rem .5rem;background:#f4f6f8;border-radius:6px;margin-bottom:.9rem;
+                            word-break:break-all">
+                    ${esc(email)}
+                </div>
+                <div style="display:flex;gap:.5rem;justify-content:flex-end">
+                    <button id="_mc-nee" style="padding:8px 14px;border:1px solid #c0c8d0;
+                            background:#fff;border-radius:6px;cursor:pointer;font:inherit">
+                        ${esc(t('mf_confirm_nee'))}
+                    </button>
+                    <button id="_mc-ja" style="padding:8px 16px;background:var(--blauw);color:#fff;
+                            border:none;border-radius:6px;cursor:pointer;font:inherit;font-weight:600">
+                        ${esc(t('mf_confirm_ja'))}
+                    </button>
+                </div>
+            </div>`;
+        document.body.appendChild(overlay);
+        const close = (v) => { overlay.remove(); resolve(v); };
+        overlay.querySelector('#_mc-ja').onclick = () => close(true);
+        overlay.querySelector('#_mc-nee').onclick = () => close(false);
+        overlay.addEventListener('click', e => { if (e.target === overlay) close(false); });
+        // Default focus op 'Bewerken' — voorkomt dat per ongeluk Enter direct
+        // verzendt zonder dat de afzender het e-mailadres echt heeft gelezen.
+        overlay.querySelector('#_mc-nee').focus();
+    });
+}
 
 // ── Info / Help modals (zelfde patroon als /public) ──────────────────────
 function _bouwOverlay(titel, bodyHtml) {
