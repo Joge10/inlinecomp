@@ -318,11 +318,11 @@ function renderBezoekersBlok() {
             </div>
             <div class="gb-stat-kaart">
                 <div class="gb-stat-waarde" id="gb-stat-vandaag">—</div>
-                <div class="gb-stat-label">Unieke bezoekers vandaag <span class="gb-stat-hint" id="gb-stat-vandaag-hint" style="display:none"></span></div>
+                <div class="gb-stat-label">Unieke bezoekers vandaag <span class="gb-stat-hint gb-stat-hint--toggle" id="gb-stat-vandaag-hint"></span></div>
             </div>
             <div class="gb-stat-kaart">
                 <div class="gb-stat-waarde" id="gb-stat-uniek">—</div>
-                <div class="gb-stat-label">Unieke bezoekers ooit <span class="gb-stat-hint" id="gb-stat-uniek-hint" style="display:none"></span></div>
+                <div class="gb-stat-label">Unieke bezoekers ooit <span class="gb-stat-hint gb-stat-hint--toggle" id="gb-stat-uniek-hint"></span></div>
             </div>
             <div class="gb-stat-kaart">
                 <div class="gb-stat-waarde" id="gb-stat-hits">—</div>
@@ -340,7 +340,7 @@ function renderBezoekersBlok() {
         <div class="gb-stat-voetnoot" id="gb-stat-voet">Laatst bijgewerkt: —</div>
 
         <!-- Coach-pagina statistieken -->
-        <div class="section-title" style="margin-top:1.5rem">Coach-pagina — bezoekers</div>
+        <div class="section-title gb-stats-blok-volgend">Coach-pagina — bezoekers</div>
         <div class="gb-stats" id="gb-stats-coach">
             <div class="gb-stat-kaart">
                 <div class="gb-stat-waarde" id="gb-stat-coach-actief">—</div>
@@ -348,11 +348,11 @@ function renderBezoekersBlok() {
             </div>
             <div class="gb-stat-kaart">
                 <div class="gb-stat-waarde" id="gb-stat-coach-vandaag">—</div>
-                <div class="gb-stat-label">Unieke bezoekers vandaag <span class="gb-stat-hint" id="gb-stat-coach-vandaag-hint" style="display:none"></span></div>
+                <div class="gb-stat-label">Unieke bezoekers vandaag <span class="gb-stat-hint gb-stat-hint--toggle" id="gb-stat-coach-vandaag-hint"></span></div>
             </div>
             <div class="gb-stat-kaart">
                 <div class="gb-stat-waarde" id="gb-stat-coach-uniek">—</div>
-                <div class="gb-stat-label">Unieke bezoekers ooit <span class="gb-stat-hint" id="gb-stat-coach-uniek-hint" style="display:none"></span></div>
+                <div class="gb-stat-label">Unieke bezoekers ooit <span class="gb-stat-hint gb-stat-hint--toggle" id="gb-stat-coach-uniek-hint"></span></div>
             </div>
             <div class="gb-stat-kaart">
                 <div class="gb-stat-waarde" id="gb-stat-coach-hits">—</div>
@@ -367,7 +367,37 @@ function renderBezoekersBlok() {
                 <div class="gb-stat-label">Piek gelijktijdig <span class="gb-stat-hint" id="gb-stat-coach-peak-at">(ooit)</span></div>
             </div>
         </div>
-        <div class="gb-stat-voetnoot" id="gb-stat-coach-voet">Laatst bijgewerkt: —</div>`;
+        <div class="gb-stat-voetnoot" id="gb-stat-coach-voet">Laatst bijgewerkt: —</div>
+
+        <!-- Check-pagina statistieken -->
+        <div class="section-title gb-stats-blok-volgend">Check-pagina — bezoekers</div>
+        <div class="gb-stats" id="gb-stats-check">
+            <div class="gb-stat-kaart">
+                <div class="gb-stat-waarde" id="gb-stat-check-actief">—</div>
+                <div class="gb-stat-label">Nu actief <span class="gb-stat-hint">(laatste 5 min)</span></div>
+            </div>
+            <div class="gb-stat-kaart">
+                <div class="gb-stat-waarde" id="gb-stat-check-vandaag">—</div>
+                <div class="gb-stat-label">Unieke bezoekers vandaag <span class="gb-stat-hint gb-stat-hint--toggle" id="gb-stat-check-vandaag-hint"></span></div>
+            </div>
+            <div class="gb-stat-kaart">
+                <div class="gb-stat-waarde" id="gb-stat-check-uniek">—</div>
+                <div class="gb-stat-label">Unieke bezoekers ooit <span class="gb-stat-hint gb-stat-hint--toggle" id="gb-stat-check-uniek-hint"></span></div>
+            </div>
+            <div class="gb-stat-kaart">
+                <div class="gb-stat-waarde" id="gb-stat-check-hits">—</div>
+                <div class="gb-stat-label">Totaal page-views</div>
+            </div>
+            <div class="gb-stat-kaart">
+                <div class="gb-stat-waarde" id="gb-stat-check-peak-today">—</div>
+                <div class="gb-stat-label">Piek gelijktijdig <span class="gb-stat-hint">(vandaag)</span></div>
+            </div>
+            <div class="gb-stat-kaart">
+                <div class="gb-stat-waarde" id="gb-stat-check-peak">—</div>
+                <div class="gb-stat-label">Piek gelijktijdig <span class="gb-stat-hint" id="gb-stat-check-peak-at">(ooit)</span></div>
+            </div>
+        </div>
+        <div class="gb-stat-voetnoot" id="gb-stat-check-voet">Laatst bijgewerkt: —</div>`;
 
     startPublicStatsRefresh();
 }
@@ -402,13 +432,9 @@ async function _laadStatsBlok(endpoint, idPrefix, voetId) {
             set(id, v);
             const h = el(hintId);
             if (h) {
-                if (ruw != null && echt != null && ruw > echt) {
-                    h.textContent = `(${ruw} incl. bot/preview)`;
-                    h.style.display = '';
-                } else {
-                    h.textContent = '';
-                    h.style.display = 'none';
-                }
+                const toon = ruw != null && echt != null && ruw > echt;
+                h.textContent = toon ? `(${ruw} incl. bot/preview)` : '';
+                h.classList.toggle('is-zichtbaar', toon);
             }
         };
         setMet(`${idPrefix}-vandaag`, `${idPrefix}-vandaag-hint`,
@@ -437,6 +463,7 @@ async function _laadStatsBlok(endpoint, idPrefix, voetId) {
 async function laadPublicStats() {
     await _laadStatsBlok('api/public_stats.php', 'gb-stat',       'gb-stat-voet');
     await _laadStatsBlok('api/coach_stats.php',  'gb-stat-coach', 'gb-stat-coach-voet');
+    await _laadStatsBlok('api/check_stats.php',  'gb-stat-check', 'gb-stat-check-voet');
 }
 
 function startPublicStatsRefresh() {

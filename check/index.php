@@ -22,6 +22,45 @@ require_once __DIR__ . '/../../config_inlinecomp.php';
 
 $action = $_GET['action'] ?? '';
 
+// ── Bezoektracking: upsert session-hit in check_visits ──────────────────────
+// Alleen op de echte HTML pageload (geen action=...) om AJAX-calls niet
+// dubbel te tellen. Aparte session-cookie (ICCHECK) zodat /check-, /coach-
+// en /public-sessies los getracked worden.
+if ($action === '') {
+    if (session_status() === PHP_SESSION_NONE) {
+        session_name('ICCHECK');
+        session_set_cookie_params([
+            'lifetime' => 0, 'path' => '/', 'httponly' => true, 'samesite' => 'Lax',
+        ]);
+        @session_start();
+    }
+    $sid = session_id();
+    if ($sid) {
+        try {
+            $pdo->prepare(
+                "INSERT INTO check_visits (session_id) VALUES (?)
+                 ON DUPLICATE KEY UPDATE last_seen = NOW(), hits = hits + 1"
+            )->execute([$sid]);
+            // Piek-tracking (vandaag + all-time) — zelfde patroon als /public en /coach
+            $pdo->prepare("
+                UPDATE peak_stats SET
+                    peak_today = CASE
+                        WHEN peak_today_date = CURDATE()
+                            THEN GREATEST(peak_today, (SELECT COUNT(*) FROM check_visits WHERE last_seen > NOW() - INTERVAL 5 MINUTE))
+                        ELSE (SELECT COUNT(*) FROM check_visits WHERE last_seen > NOW() - INTERVAL 5 MINUTE)
+                    END,
+                    peak_today_date = CURDATE(),
+                    peak_all_time_at = IF(
+                        (SELECT COUNT(*) FROM check_visits WHERE last_seen > NOW() - INTERVAL 5 MINUTE) > peak_all_time,
+                        NOW(), peak_all_time_at),
+                    peak_all_time = GREATEST(peak_all_time,
+                        (SELECT COUNT(*) FROM check_visits WHERE last_seen > NOW() - INTERVAL 5 MINUTE))
+                WHERE scope = 'check'
+            ")->execute();
+        } catch (Throwable $e) { /* tracking mag nooit de pagina breken */ }
+    }
+}
+
 // ── Fuzzy voornaam-check ────────────────────────────────────────────────────
 // Privacy-laag: de lijst toont alleen short_name (achternaam + tussenvoegsel).
 // Detail-data wordt pas vrijgegeven als de vrager ook de voornaam correct

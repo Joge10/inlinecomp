@@ -1,6 +1,6 @@
 -- InlineComp – peak_stats
 --
--- Houdt per scope ('public' / 'coach') bij hoeveel sessies er tegelijk
+-- Houdt per scope ('public' / 'coach' / 'check') bij hoeveel sessies er tegelijk
 -- actief zijn (piek-meting). Wordt bij iedere HTML-pageload bijgewerkt:
 --   * peak_today wordt gereset bij een nieuwe dag en opgehoogd als de
 --     huidige actieve sessies hoger zijn dan de piek van vandaag
@@ -17,4 +17,4 @@ CREATE TABLE IF NOT EXISTS `peak_stats` (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
 -- Rijen aanmaken als ze nog niet bestaan
-INSERT IGNORE INTO `peak_stats` (`scope`) VALUES ('public'), ('coach');
+INSERT IGNORE INTO `peak_stats` (`scope`) VALUES ('public'), ('coach'), ('check');
