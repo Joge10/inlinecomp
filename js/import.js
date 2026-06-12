@@ -2835,10 +2835,15 @@ function _bouwSpeakerlijstenInternal() {
                     ? (allSplits[rijderCat] || '_geen')
                     : '_alle';
                 if (!perSplit[sg]) perSplit[sg] = [];
+                // Club: gebruik club_full voor de speaker (uitspreken!), val
+                // terug op club_short als full leeg is.
+                const clubFull  = pe.club_full  ?? c.knsb?.club_full  ?? '';
+                const clubShort = pe.club_short ?? c.knsb?.club_short ?? '';
                 perSplit[sg].push({
                     start_number: pe.start_number ?? c.knsb?.start_number ?? '',
                     full_name:    pe.full_name    ?? c.knsb?.full_name    ?? '',
-                    club_short:   pe.club_short   ?? c.knsb?.club_short   ?? '',
+                    nationality:  pe.nationality  ?? c.knsb?.nationality  ?? '',
+                    club:         clubFull || clubShort,
                     sponsor:      pe.sponsor      ?? c.knsb?.sponsor      ?? '',
                 });
             });
@@ -2907,7 +2912,8 @@ function _bouwSpeakerlijstenInternal() {
             <tr>
                 <td class="sn">${escHtml(String(d.start_number))}</td>
                 <td class="nm">${escHtml(d.full_name)}</td>
-                <td class="cl">${escHtml(d.club_short)}</td>
+                <td class="nt-l">${escHtml(d.nationality)}</td>
+                <td class="cl">${escHtml(d.club)}</td>
                 <td class="sp">${escHtml(d.sponsor)}</td>
                 <td class="nt"></td>
             </tr>`).join('');
@@ -2921,14 +2927,16 @@ function _bouwSpeakerlijstenInternal() {
             <table class="sp-table">
                 <colgroup>
                     <col style="width:10mm">
+                    <col style="width:60mm">
+                    <col style="width:12mm">
+                    <col style="width:65mm">
+                    <col style="width:65mm">
                     <col style="width:auto">
-                    <col style="width:26mm">
-                    <col style="width:36mm">
-                    <col style="width:64mm">
                 </colgroup>
                 <thead><tr>
                     <th class="sn">#</th>
                     <th>${escHtml(T('algemeen.naam'))}</th>
+                    <th>${escHtml(T('algemeen.nationaliteit'))}</th>
                     <th>${escHtml(T('algemeen.club'))}</th>
                     <th>${escHtml(T('speaker.col_sponsor'))}</th>
                     <th>${escHtml(T('speaker.col_notities'))}</th>
@@ -2941,21 +2949,21 @@ function _bouwSpeakerlijstenInternal() {
     const bodyHtml = paginas || `<div class="sp-pagina"><p style="color:#888;font-style:italic">${escHtml(T('speaker.geen_dcs'))}</p></div>`;
 
     const extraCss = `
-@page { size: A4 portrait; margin: 8mm 10mm; }
+@page { size: A4 landscape; margin: 6mm 8mm; }
 body  { font-family: Arial, sans-serif; font-size: 11pt; margin: 0; color: #111; }
 
 /* Iedere DC op een eigen pagina */
 .sp-pagina { page-break-after: always; }
 .sp-pagina:last-of-type { page-break-after: auto; }
 
-/* DC-titelbalk: compact, één regel */
+/* DC-titelbalk: zo compact mogelijk om hoogte vrij te spelen voor rijen */
 .sp-dc-titel {
-    font-size: 14pt; font-weight: bold; color: #1a3a5c;
-    border-bottom: 1.5px solid #1a3a5c;
-    padding-bottom: 0.5mm; margin-bottom: 1.5mm;
+    font-size: 12pt; font-weight: bold; color: #1a3a5c;
+    border-bottom: 1.2px solid #1a3a5c;
+    padding-bottom: 0.3mm; margin-bottom: 1mm;
 }
 .sp-dc-titel .sub {
-    font-size: 10pt; font-weight: normal; color: #555;
+    font-size: 9pt; font-weight: normal; color: #555;
     margin-left: 2mm;
 }
 
@@ -2967,16 +2975,16 @@ body  { font-family: Arial, sans-serif; font-size: 11pt; margin: 0; color: #111;
 .sp-table thead { display: table-header-group; }
 .sp-table th {
     background: #dce6f0; color: #1a3a5c;
-    font-size: 9pt; font-weight: 600; text-align: left;
-    padding: 0.7mm 1.5mm;
-    border-bottom: 1.5px solid #1a3a5c;
+    font-size: 8.5pt; font-weight: 600; text-align: left;
+    padding: 0.4mm 1.5mm;
+    border-bottom: 1.2px solid #1a3a5c;
 }
 .sp-table td {
-    padding: 1.1mm 1.5mm;
+    padding: 0.9mm 1.5mm;
     border-bottom: 1px solid #d8d8d8;
     font-size: 11pt;
     vertical-align: middle;
-    line-height: 1.15;
+    line-height: 1.1;
 }
 .sp-table tr { page-break-inside: avoid; }
 
@@ -2984,6 +2992,10 @@ body  { font-family: Arial, sans-serif; font-size: 11pt; margin: 0; color: #111;
 .sp-table .sn { text-align: center; font-weight: bold; }
 .sp-table .nm {
     white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.sp-table .nt-l {
+    text-align: center; font-size: 10pt; color: #555;
+    font-variant-numeric: tabular-nums;
 }
 .sp-table .cl {
     font-size: 10pt; color: #555;
@@ -2995,7 +3007,7 @@ body  { font-family: Arial, sans-serif; font-size: 11pt; margin: 0; color: #111;
     /* Verticale lijn op grens sponsor → notities */
     border-right: 1px solid #888;
 }
-.sp-table th:nth-child(4) {
+.sp-table th:nth-child(5) {
     /* Header-cell voor sponsor: zelfde grens-lijn doortrekken naar header */
     border-right: 1px solid #888;
 }
@@ -3006,7 +3018,7 @@ body  { font-family: Arial, sans-serif; font-size: 11pt; margin: 0; color: #111;
         bodyHtml:        bodyHtml,
         cssLinks:        [],
         extraCss:        extraCss,
-        pageOrientation: 'portrait',
+        pageOrientation: 'landscape',
         title:           T('speaker.titel_meervoud') + ' – ' + (huidigComp.name || huidigComp.title || ''),
         subType:         T('speaker.titel_meervoud'),
     };
