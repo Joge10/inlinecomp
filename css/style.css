@@ -5502,24 +5502,6 @@ col.live-col-rondes  { width: 40px; }
                               text-transform: uppercase; letter-spacing: .03em; }
 .rij-detail-waarde    { padding: .2rem 0; color: #222; word-break: break-word; }
 
-/* Edit-knop voor bewerkbare velden (sponsor, club). Klein potlood naast
-   de label; click → input verschijnt in de waarde-div. */
-.rij-edit-btn {
-    background: none; border: 0; color: var(--middenblauw, #4d8ad0);
-    cursor: pointer; padding: 0 4px; margin-left: 4px;
-    font-size: .85em; text-transform: none; letter-spacing: 0;
-    opacity: .55; transition: opacity .12s;
-}
-.rij-edit-btn:hover    { opacity: 1; }
-.rij-edit-btn:disabled { opacity: .25; cursor: default; }
-.rij-edit-inp {
-    width: 100%; padding: 3px 6px; font-size: .92rem; color: #111;
-    border: 1px solid var(--middenblauw, #4d8ad0); border-radius: 3px;
-    background: #fffbe6; /* zachtgele highlight = "actief bewerken" */
-    outline: none;
-}
-.rij-edit-inp:focus { border-color: var(--blauw, #1a3a5c); }
-
 .rij-detail-tabel     { width: 100%; border-collapse: collapse;
                         font-size: .88rem; margin-bottom: 1.2rem; }
 .rij-detail-tabel th  { text-align: left; background: #1a3a5c; color: #fff;
@@ -5609,6 +5591,85 @@ col.live-col-rondes  { width: 40px; }
     gap: .8rem; padding: .35rem 0; border-top: 1px solid #e6ebf0;
 }
 .hp-cc-kand:first-child { border-top: none; }
+
+/* ── Rijder-edit (Systeem → Rijders: ✎ Bewerken / 📋 Verplaatsen) ────────── */
+/* Eerder als "Handmatige rijder-correctie" in Systeem → Helpers; verhuisd
+   2026-06-12 om dubbele functionaliteit te vermijden. */
+.rij-acties-blok {
+    display: flex; gap: .5rem; align-items: center; flex-wrap: wrap;
+    margin: .8rem 0 .4rem;
+}
+.rij-edit-card {
+    border: 1px solid #c0d8ec; border-radius: 6px;
+    padding: .7rem .9rem; background: #f8fbfd;
+    margin: .6rem 0;
+}
+.rij-edit-section-titel {
+    font-weight: 600; font-size: .92em; color: #1565c0;
+    margin-bottom: .6rem;
+}
+.rij-edit-section-titel small { font-weight: 400; color: #888; }
+.rij-edit-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+    gap: .5rem .8rem; margin-bottom: .7rem; font-size: .88em;
+}
+.rij-edit-veld {
+    display: flex; flex-direction: column; gap: .15rem;
+}
+.rij-edit-veld > span { color: #555; }
+.rij-edit-veld-wide { grid-column: span 2; }
+.rij-edit-club-row {
+    display: flex; gap: .4rem; align-items: stretch;
+}
+.rij-edit-club-row > select { flex: 1; min-width: 0; }
+.rij-edit-club-row > button { white-space: nowrap; }
+.rij-edit-comp-row { margin: .3rem 0 .5rem; }
+.rij-edit-comp-row > select { width: 100%; }
+.rij-edit-acties { margin-top: .7rem; text-align: right; }
+.rij-edit-acties .btn-secondary { margin-right: .3rem; }
+.rij-edit-code-inp { text-transform: uppercase; }
+
+/* "+ Nieuwe club"-modal binnen rij-edit */
+.rij-edit-nc-overlay {
+    position: fixed; inset: 0;
+    background: rgba(0, 0, 0, .5);
+    display: flex; align-items: center; justify-content: center;
+    z-index: 10001; padding: 1rem;
+}
+.rij-edit-nc-box {
+    background: #fff; border-radius: 10px;
+    padding: 1rem 1.2rem; max-width: 420px; width: 100%;
+    box-shadow: 0 8px 32px rgba(0, 0, 0, .3);
+}
+.rij-edit-nc-titel {
+    font-weight: 700; color: #1565c0; margin-bottom: .5rem;
+}
+.rij-edit-nc-uitleg {
+    font-size: .85em; color: #666; margin-bottom: .7rem;
+}
+.rij-edit-nc-veld { display: block; margin-bottom: .5rem; font-size: .88em; }
+.rij-edit-nc-veld:last-of-type { margin-bottom: .7rem; }
+.rij-edit-nc-veld > input { width: 100%; }
+.rij-edit-nc-preview {
+    font-size: .78em; color: #888;
+}
+.rij-edit-nc-preview > span { font-family: monospace; }
+.rij-edit-nc-melding {
+    color: #b71c1c; font-size: .85em; margin-bottom: .4rem;
+}
+.rij-edit-nc-knoppen {
+    display: flex; gap: .5rem; justify-content: flex-end;
+}
+
+/* Inschrijving-rij in verplaats-modus (DC + verplaats-dropdown) */
+.rij-edit-entry {
+    border-top: 1px solid #eee; padding-top: .4rem;
+    display: flex; gap: .8rem; align-items: center;
+}
+.rij-edit-entry-naam { font-size: .88em; min-width: 140px; }
+.rij-edit-entry-naam b { font-weight: 600; }
+.rij-edit-entry-sel { min-width: 240px; }
 
 /* Vervang-bestaand-checkbox naast Importeer-knop in historie-import */
 .hp-hist-vervang-lbl {

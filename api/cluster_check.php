@@ -629,7 +629,8 @@ if ($action === 'persoon_detail') {
     }
     $pStmt = $pdo->prepare("
         SELECT license_key, full_name, short_name, gender, category,
-               start_number, club_short, club_full, birth_year,
+               start_number, nationality, club_short, club_full,
+               sponsor, city, birth_year,
                extern, pending_source
         FROM persons WHERE license_key = ?
     ");
@@ -699,12 +700,55 @@ if ($action === 'persoon_detail') {
         }
         $wedstrijdCats = array_keys($cats);
         sort($wedstrijdCats);
+    } else {
+        // Geen wedstrijd-context → fallback: alle distinct categories uit
+        // persons-tabel. Zo blijft de categorie-dropdown bruikbaar in de
+        // wedstrijd-onafhankelijke modus.
+        $cats = [];
+        foreach ($pdo->query(
+            "SELECT DISTINCT category FROM persons
+              WHERE category IS NOT NULL AND TRIM(category) <> ''
+                AND anonymized_at IS NULL"
+        )->fetchAll(PDO::FETCH_COLUMN) as $c) {
+            $c = strtoupper(trim($c));
+            if ($c !== '') $cats[$c] = true;
+        }
+        $wedstrijdCats = array_keys($cats);
+        sort($wedstrijdCats);
     }
+    // Unieke clubs: 1 rij per club_short. Voor de full-name + club_code nemen
+    // we de meest-voorkomende variant per club_short (per code kan vroeger
+    // drift zijn ontstaan met spelling-varianten — laat de dominante winnen).
+    // Excludeer lege codes en geanonimiseerde rijders.
+    $clubStmt = $pdo->query("
+        SELECT club_short, club_full, club_code
+        FROM (
+            SELECT club_short,
+                   club_full,
+                   club_code,
+                   COUNT(*) AS n,
+                   ROW_NUMBER() OVER (PARTITION BY club_short ORDER BY COUNT(*) DESC) AS rn
+            FROM persons
+            WHERE club_short IS NOT NULL AND TRIM(club_short) <> ''
+              AND anonymized_at IS NULL
+            GROUP BY club_short, club_full, club_code
+        ) t
+        WHERE rn = 1
+        ORDER BY club_short
+    ");
+    $clubs = $clubStmt->fetchAll(PDO::FETCH_ASSOC);
+    // PDO geeft INT UNSIGNED als string terug; cast voor consistente client-side check.
+    foreach ($clubs as &$c) {
+        $c['club_code'] = $c['club_code'] !== null ? (int)$c['club_code'] : null;
+    }
+    unset($c);
+
     echo json_encode([
         'persoon'         => $persoon,
         'entries'         => $entries,
         'alle_dcs'        => $alleDcs,
         'wedstrijd_cats'  => $wedstrijdCats,
+        'clubs'           => $clubs,
     ], JSON_UNESCAPED_UNICODE);
     exit;
 }
@@ -725,26 +769,76 @@ if ($action === 'corrigeer_persoon') {
         echo json_encode(['error' => 'license_key verplicht']);
         exit;
     }
-    // ── persons-update
+    // ── persons-update — semantiek:
+    //   key niet aanwezig in body  → niet wijzigen
+    //   key aanwezig met ''        → SET NULL (= veld leegmaken)
+    //   key aanwezig met waarde    → SET waarde
+    // Frontend stuurt alleen velden mee die daadwerkelijk gewijzigd zijn.
     $updates = [];
     $upParams = [];
-    if (isset($body['nieuwe_gender']) && $body['nieuwe_gender'] !== '' && $body['nieuwe_gender'] !== null) {
+    if (isset($body['nieuwe_gender'])) {
         $g  = $body['nieuwe_gender'];
-        $gi = null;
-        if ($g === 'M' || $g === '0' || $g === 0) $gi = 0;
-        elseif ($g === 'V' || $g === 'W' || $g === '1' || $g === 1) $gi = 1;
-        if ($gi !== null) {
+        if ($g === 'M' || $g === '0' || $g === 0) {
             $updates[]  = 'gender = ?';
-            $upParams[] = $gi;
+            $upParams[] = 0;
+        } elseif ($g === 'V' || $g === 'W' || $g === '1' || $g === 1) {
+            $updates[]  = 'gender = ?';
+            $upParams[] = 1;
+        }
+        // Ongeldige/lege gender-waarde: skip (geen leegmaak — gender is essentieel)
+    }
+    if (isset($body['nieuwe_category'])) {
+        $v = trim((string)$body['nieuwe_category']);
+        if ($v === '') {
+            $updates[] = 'category = NULL';
+        } else {
+            $updates[]  = 'category = ?';
+            $upParams[] = strtoupper($v);
         }
     }
-    if (isset($body['nieuwe_category']) && trim($body['nieuwe_category']) !== '') {
-        $updates[]  = 'category = ?';
-        $upParams[] = strtoupper(trim($body['nieuwe_category']));
+    if (isset($body['nieuwe_start_number'])) {
+        $v = trim((string)$body['nieuwe_start_number']);
+        if ($v === '') {
+            $updates[] = 'start_number = NULL';
+        } else {
+            $updates[]  = 'start_number = ?';
+            $upParams[] = (int)$v;
+        }
     }
-    if (isset($body['nieuwe_start_number']) && $body['nieuwe_start_number'] !== '' && $body['nieuwe_start_number'] !== null) {
-        $updates[]  = 'start_number = ?';
-        $upParams[] = (int)$body['nieuwe_start_number'];
+    foreach (['full_name', 'short_name', 'nationality', 'club_short', 'club_full', 'sponsor', 'city'] as $f) {
+        $key = 'nieuwe_' . $f;
+        if (!isset($body[$key])) continue;
+        $v = trim((string)$body[$key]);
+        if ($v === '') {
+            $updates[] = $f . ' = NULL';
+        } else {
+            $updates[]  = $f . ' = ?';
+            $upParams[] = $v;
+        }
+    }
+    if (isset($body['nieuwe_birth_year'])) {
+        $v = trim((string)$body['nieuwe_birth_year']);
+        if ($v === '') {
+            $updates[] = 'birth_year = NULL';
+        } else {
+            $by = (int)$v;
+            if ($by >= 1900 && $by <= (int)date('Y')) {
+                $updates[]  = 'birth_year = ?';
+                $upParams[] = $by;
+            }
+        }
+    }
+    if (isset($body['nieuwe_club_code'])) {
+        $v = trim((string)$body['nieuwe_club_code']);
+        if ($v === '') {
+            $updates[] = 'club_code = NULL';
+        } else {
+            $cc = (int)$v;
+            if ($cc > 0) {
+                $updates[]  = 'club_code = ?';
+                $upParams[] = $cc;
+            }
+        }
     }
     $personsUpdated = false;
     if ($updates) {

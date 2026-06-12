@@ -115,25 +115,9 @@ function rijRenderDetail(data) {
             <div class="rij-detail-waarde">${waarde === null || waarde === undefined || waarde === '' ? '—' : escHtml(waarde)}</div>
         </div>`;
 
-    // Inline-bewerkbaar veld: click-to-edit. Bedoeld voor velden waar de
-    // KNSB-feed soms verkeerde/lege waardes geeft (club, sponsor). Edit
-    // overschrijft persons-tabel via api/persoon_update.php; KNSB-sync
-    // respecteert dit door COALESCE(NULLIF(...), ...) in import.php.
-    // Gebruik: <div ...><label> Sponsor <button data-edit-veld="sponsor">✎</button></label> <waarde>
-    const veldEdit = (label, waarde, naam) => {
-        const display = (waarde === null || waarde === undefined || waarde === '')
-            ? '—'
-            : escHtml(waarde);
-        return `
-            <div class="rij-detail-veld" data-rij-edit-rij="${escHtml(naam)}">
-                <label>
-                    ${escHtml(label)}
-                    <button class="rij-edit-btn" data-rij-edit-veld="${escHtml(naam)}"
-                            title="Wijzigen — overschrijft KNSB-waarde, blijft bewaard bij volgende import (mits KNSB leeg laat)">✎</button>
-                </label>
-                <div class="rij-detail-waarde" data-rij-edit-waarde="${escHtml(naam)}">${display}</div>
-            </div>`;
-    };
+    // Sinds 2026-06-12: per-veld inline-edit vervangen door één "✎ Bewerken"-
+    // modus die alle velden bewerkt (incl. club-dropdown om spelling-drift
+    // te voorkomen) en optioneel een DC-verplaats-modus. Zie rijEditOpen* below.
 
     // Anonimiseer-blok
     let anonBlok;
@@ -288,8 +272,14 @@ function rijRenderDetail(data) {
 
         ${anonBlok}
 
+        ${anoniem ? '' : `
+        <div class="rij-acties-blok" id="rij-acties-blok">
+            <button class="btn-secondary" id="rij-btn-bewerk">✎ Bewerken</button>
+            <button class="btn-secondary" id="rij-btn-verplaats">📋 Inschrijvingen verplaatsen</button>
+        </div>`}
+
         <h3>Persoonsgegevens</h3>
-        <div class="rij-detail-grid">
+        <div class="rij-detail-grid" id="rij-pers-grid">
             ${veld('Volledige naam', r.full_name)}
             ${veld('Achternaam (short_name)', r.short_name)}
             ${veld('Geslacht', geslacht)}
@@ -298,13 +288,14 @@ function rijRenderDetail(data) {
             ${veld('Nationaliteit', r.nationality)}
             ${veld('Startnummer', r.start_number)}
             ${veld('Woonplaats', r.city)}
-            ${veldEdit('Sponsor', r.sponsor, 'sponsor')}
-            ${veldEdit('Vereniging', r.club_full, 'club_full')}
-            ${veldEdit('Vereniging (kort)', r.club_short, 'club_short')}
+            ${veld('Sponsor', r.sponsor)}
+            ${veld('Vereniging', r.club_full)}
+            ${veld('Vereniging (kort)', r.club_short)}
             ${veld('KNSB-vereniging-code', r.club_code)}
             ${veld('Aangemaakt', r.created_at)}
             ${veld('Laatst gewijzigd', r.updated_at)}
         </div>
+        <div id="rij-edit-container"></div>
 
         <h3>Bekende transponders</h3>
         ${bktHtml}
@@ -324,84 +315,486 @@ function rijRenderDetail(data) {
     document.getElementById('rij-anon-btn')?.addEventListener('click', () => rijAnonimiseer(r));
     document.getElementById('rij-anon-undo-btn')?.addEventListener('click', () => rijAnonUndo(r));
 
-    // Edit-knoppen voor sponsor / club_full / club_short. Click op ✎ →
-    // inline input verschijnt, Enter slaat op, Escape annuleert. Bij blur
-    // alleen opslaan als er gewijzigd is — voorkomt onbedoelde wijzigingen
-    // wanneer operator buiten het veld klikt.
-    document.querySelectorAll('.rij-edit-btn').forEach(btn => {
-        btn.addEventListener('click', () => rijVeldBewerken(r, btn.dataset.rijEditVeld));
-    });
+    // Bewerken-knoppen (alleen voor niet-geanonimiseerde rijders)
+    document.getElementById('rij-btn-bewerk')?.addEventListener('click',
+        () => rijEditOpenBewerkmodus(r.license_key));
+    document.getElementById('rij-btn-verplaats')?.addEventListener('click',
+        () => rijEditOpenVerplaatsmodus(r.license_key));
 }
 
-// Inline edit van één veld op de persons-record. veldNaam = sponsor /
-// club_full / club_short.
-function rijVeldBewerken(rijder, veldNaam) {
-    const wrap = document.querySelector(`[data-rij-edit-rij="${CSS.escape(veldNaam)}"]`);
-    if (!wrap) return;
-    const waardeDiv = wrap.querySelector(`[data-rij-edit-waarde="${CSS.escape(veldNaam)}"]`);
-    const knop      = wrap.querySelector(`.rij-edit-btn[data-rij-edit-veld="${CSS.escape(veldNaam)}"]`);
-    if (!waardeDiv || !knop) return;
+// ── Edit-modi (persoonsdata bewerken / DC-verplaatsen) ────────────────
+// Eén centraal edit-formulier met alle persons-velden + club-dropdown
+// (anti-spelling-drift). DC-verplaats is een aparte modus met wedstrijd-
+// keuze + entries-tabel. Beide gebruiken cluster_check.php endpoints.
+//
+// Eerder zat dit als "Handmatige rijder-correctie" helper-card in helpers.js;
+// verhuisd naar deze pagina (2026-06-12) om dubbele functionaliteit te
+// vermijden en omdat persons-edit thuishoort waar persoonsbeheer ook zit.
 
-    const huidig = rijder[veldNaam] ?? '';
-    // Maak input
-    const inp = document.createElement('input');
-    inp.type      = 'text';
-    inp.className = 'rij-edit-inp';
-    inp.value     = huidig;
-    inp.maxLength = 255;
-    // Vervang display
-    const origineelHtml = waardeDiv.innerHTML;
-    waardeDiv.innerHTML = '';
-    waardeDiv.appendChild(inp);
-    inp.focus();
-    inp.select();
-    knop.disabled = true;
+let _rijEditData  = null;   // {persoon, entries, alle_dcs, clubs, wedstrijd_cats}
+let _rijEditComps = [];     // [{competition_id, naam, datum}] — gecached voor verplaats-modus
 
-    let klaar = false;
-    const annuleer = () => {
-        if (klaar) return;
-        klaar = true;
-        waardeDiv.innerHTML = origineelHtml;
-        knop.disabled = false;
-    };
-    const opslaan = async () => {
-        if (klaar) return;
-        const nieuw = inp.value.trim();
-        const oudTrim = (huidig ?? '').toString().trim();
-        if (nieuw === oudTrim) { annuleer(); return; }
-        klaar = true;
-        inp.disabled = true;
-        try {
-            const res = await fetch('api/persoon_update.php', {
-                method:  'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body:    JSON.stringify({
-                    license_key: rijder.license_key,
-                    [veldNaam]:  nieuw, // lege string = wissen (NULL in DB)
-                }),
-            });
-            const data = await res.json();
-            if (!res.ok || !data.ok) throw new Error(data.error || 'Fout bij opslaan');
-            // Update local rijder + display
-            rijder[veldNaam] = data.persoon?.[veldNaam] ?? null;
-            const tonen = rijder[veldNaam] == null || rijder[veldNaam] === ''
-                ? '—' : escHtml(rijder[veldNaam]);
-            waardeDiv.innerHTML = tonen;
-            knop.disabled = false;
-            // Ververs de zoeklijst zodat club/sponsor-wijzigingen daar ook
-            // doorkomen — alleen als er een actieve zoekopdracht is.
-            if (typeof rijZoek === 'function') rijZoek();
-        } catch (e) {
-            toonBevestigDialog('Opslaan mislukt: ' + e.message, 'Rijder bewerken', 'OK', '');
-            waardeDiv.innerHTML = origineelHtml;
-            knop.disabled = false;
-        }
-    };
-    inp.addEventListener('keydown', e => {
-        if (e.key === 'Enter')  { e.preventDefault(); opslaan(); }
-        if (e.key === 'Escape') { e.preventDefault(); annuleer(); }
+// Verberg de "Persoonsgegevens"-grid + actie-knoppen tijdens edit/verplaats.
+// Zet ze weer aan bij Opslaan/Annuleren.
+function _rijEditTogglePers(verberg) {
+    const grid = document.getElementById('rij-pers-grid');
+    const act  = document.getElementById('rij-acties-blok');
+    if (grid) grid.style.display = verberg ? 'none' : '';
+    if (act)  act.style.display  = verberg ? 'none' : '';
+}
+
+function _rijEditSluit() {
+    const cont = document.getElementById('rij-edit-container');
+    if (cont) cont.innerHTML = '';
+    _rijEditTogglePers(false);
+    _rijEditData = null;
+}
+
+async function rijEditOpenBewerkmodus(licenseKey) {
+    const cont = document.getElementById('rij-edit-container');
+    if (!cont) return;
+    _rijEditTogglePers(true);
+    cont.innerHTML = '<div class="status-msg loading"><span class="spinner"></span>Laden…</div>';
+    try {
+        const url = 'api/cluster_check.php?action=persoon_detail&license_key='
+                  + encodeURIComponent(licenseKey);
+        const res  = await fetch(url);
+        const data = await res.json();
+        if (data.error) throw new Error(data.error);
+        data.competition_id = '';
+        _rijEditData = data;
+        _rijEditRenderBewerkmodus();
+    } catch (e) {
+        cont.innerHTML = `<div class="status-msg error">⚠ ${escHtml(e.message)}</div>`;
+    }
+}
+
+async function rijEditOpenVerplaatsmodus(licenseKey) {
+    const cont = document.getElementById('rij-edit-container');
+    if (!cont) return;
+    _rijEditTogglePers(true);
+    cont.innerHTML = '<div class="status-msg loading"><span class="spinner"></span>Wedstrijden laden…</div>';
+    try {
+        const [pRes, cRes] = await Promise.all([
+            fetch('api/cluster_check.php?action=persoon_detail&license_key='
+                + encodeURIComponent(licenseKey)),
+            (_rijEditComps.length
+                ? Promise.resolve({json: async () => _rijEditComps})
+                : fetch('api/cluster_check.php?action=competities')),
+        ]);
+        const pData = await pRes.json();
+        if (pData.error) throw new Error(pData.error);
+        const cData = await cRes.json();
+        if (Array.isArray(cData)) _rijEditComps = cData;
+        pData.competition_id = '';
+        _rijEditData = pData;
+        _rijEditRenderVerplaatsmodus();
+    } catch (e) {
+        cont.innerHTML = `<div class="status-msg error">⚠ ${escHtml(e.message)}</div>`;
+    }
+}
+
+// Edit-formulier: alle persons-velden vooringevuld + club-dropdown
+function _rijEditRenderBewerkmodus() {
+    const data = _rijEditData;
+    if (!data) return;
+    const p = data.persoon;
+    const huidigCatUpper = (p.category || '').toUpperCase();
+    const clubsLijst = data.clubs || [];
+    if (p.club_short && !clubsLijst.some(c => c.club_short === p.club_short)) {
+        clubsLijst.unshift({
+            club_short: p.club_short,
+            club_full:  p.club_full,
+            club_code:  p.club_code,
+        });
+    }
+    document.getElementById('rij-edit-container').innerHTML = `
+        <div class="rij-edit-card">
+            <div class="rij-edit-section-titel">
+                ✎ Bewerken — persoonsgegevens
+                <small>— huidige waarden zijn ingevuld; aanpassen waar nodig</small>
+            </div>
+            <div class="rij-edit-grid">
+                <label class="rij-edit-veld">
+                    <span>Volledige naam</span>
+                    <input type="text" class="inp" id="rij-edit-fullname"
+                           value="${escHtml(p.full_name || '')}">
+                </label>
+                <label class="rij-edit-veld">
+                    <span>Achternaam (kort)</span>
+                    <input type="text" class="inp" id="rij-edit-shortname"
+                           value="${escHtml(p.short_name || '')}">
+                </label>
+                <label class="rij-edit-veld">
+                    <span>Geboortejaar</span>
+                    <input type="number" class="inp" id="rij-edit-birth"
+                           value="${p.birth_year ?? ''}"
+                           min="1900" max="${new Date().getFullYear()}">
+                </label>
+                <label class="rij-edit-veld">
+                    <span>Nationaliteit</span>
+                    <input type="text" class="inp rij-edit-code-inp" id="rij-edit-nat"
+                           value="${escHtml(p.nationality || '')}"
+                           maxlength="3">
+                </label>
+                <label class="rij-edit-veld">
+                    <span>Gender</span>
+                    <select class="inp" id="rij-edit-gender">
+                        <option value="0"${(p.gender == 0 || p.gender === '0') ? ' selected' : ''}>M (man)</option>
+                        <option value="1"${(p.gender == 1 || p.gender === '1') ? ' selected' : ''}>V (vrouw)</option>
+                    </select>
+                </label>
+                <label class="rij-edit-veld">
+                    <span>Categorie</span>
+                    <select class="inp" id="rij-edit-cat">
+                        ${huidigCatUpper && !(data.wedstrijd_cats || []).includes(huidigCatUpper)
+                            ? `<option value="${escHtml(huidigCatUpper)}" selected>${escHtml(huidigCatUpper)}</option>`
+                            : ''}
+                        ${(data.wedstrijd_cats || []).map(c =>
+                            `<option value="${escHtml(c)}"${c === huidigCatUpper ? ' selected' : ''}>${escHtml(c)}</option>`
+                        ).join('')}
+                    </select>
+                </label>
+                <label class="rij-edit-veld">
+                    <span>Startnummer</span>
+                    <input type="number" class="inp" id="rij-edit-snr"
+                           value="${p.start_number ?? ''}">
+                </label>
+                <label class="rij-edit-veld rij-edit-veld-wide">
+                    <span>Club</span>
+                    <div class="rij-edit-club-row">
+                        <select class="inp" id="rij-edit-club">
+                            <option value="">— geen club —</option>
+                            ${clubsLijst.map(c => {
+                                const label = (c.club_full && c.club_full !== c.club_short)
+                                    ? `${c.club_short} — ${c.club_full}`
+                                    : c.club_short;
+                                const val = `${c.club_short}|||${c.club_full || ''}|||${c.club_code ?? ''}`;
+                                const sel = c.club_short === (p.club_short || '');
+                                return `<option value="${escHtml(val)}"${sel ? ' selected' : ''}>${escHtml(label)}</option>`;
+                            }).join('')}
+                        </select>
+                        <button class="btn-secondary" id="rij-edit-club-nieuw" type="button">+ Nieuwe…</button>
+                    </div>
+                </label>
+                <label class="rij-edit-veld">
+                    <span>Sponsor / team</span>
+                    <input type="text" class="inp" id="rij-edit-sponsor"
+                           value="${escHtml(p.sponsor || '')}">
+                </label>
+                <label class="rij-edit-veld">
+                    <span>Woonplaats</span>
+                    <input type="text" class="inp" id="rij-edit-city"
+                           value="${escHtml(p.city || '')}">
+                </label>
+            </div>
+            <div class="rij-edit-acties">
+                <button class="btn-secondary" id="rij-edit-annuleer">Annuleren</button>
+                <button class="btn-primary" id="rij-edit-opslaan">Opslaan</button>
+            </div>
+            <div id="rij-edit-melding" class="status-msg"></div>
+        </div>`;
+    document.getElementById('rij-edit-annuleer').addEventListener('click', _rijEditSluit);
+    document.getElementById('rij-edit-opslaan').addEventListener('click', _rijEditOpslaanPersons);
+    document.getElementById('rij-edit-club-nieuw').addEventListener('click', _rijEditOpenNieuweClub);
+}
+
+// Verplaats-formulier: wedstrijd-dropdown + per-entry DC-selecties
+function _rijEditRenderVerplaatsmodus() {
+    const data = _rijEditData;
+    if (!data) return;
+    const huidigComp = data.competition_id || '';
+    const compOpties = `
+        <option value="">— kies wedstrijd —</option>
+        ${(_rijEditComps || []).map(c => {
+            const dat = c.datum ? new Date(c.datum).toLocaleDateString('nl-NL',
+                {day:'2-digit', month:'2-digit', year:'numeric'}) : '?';
+            const sel = String(c.competition_id) === String(huidigComp);
+            return `<option value="${escHtml(c.competition_id)}"${sel ? ' selected' : ''}>${escHtml(c.naam)} (${escHtml(dat)})</option>`;
+        }).join('')}`;
+    document.getElementById('rij-edit-container').innerHTML = `
+        <div class="rij-edit-card">
+            <div class="rij-edit-section-titel">
+                📋 Inschrijvingen verplaatsen
+                <small>— kies een wedstrijd; daarna kun je per inschrijving een andere DC selecteren</small>
+            </div>
+            <div class="rij-edit-comp-row">
+                <select class="inp" id="rij-edit-comp">${compOpties}</select>
+            </div>
+            <div id="rij-edit-entries"></div>
+            <div class="rij-edit-acties">
+                <button class="btn-secondary" id="rij-edit-annuleer">Annuleren</button>
+                <button class="btn-primary" id="rij-edit-opslaan">Opslaan</button>
+            </div>
+            <div id="rij-edit-melding" class="status-msg"></div>
+        </div>`;
+    document.getElementById('rij-edit-annuleer').addEventListener('click', _rijEditSluit);
+    document.getElementById('rij-edit-opslaan').addEventListener('click', _rijEditOpslaanVerplaats);
+    document.getElementById('rij-edit-comp').addEventListener('change',
+        e => _rijEditLaadWedstrijd(e.target.value));
+    _rijEditLaadWedstrijd('');
+}
+
+async function _rijEditLaadWedstrijd(compId) {
+    const data = _rijEditData;
+    if (!data) return;
+    const blok = document.getElementById('rij-edit-entries');
+    if (!blok) return;
+    if (!compId) {
+        data.competition_id = '';
+        data.entries  = [];
+        data.alle_dcs = [];
+        blok.innerHTML = `<div class="rij-leeg">Kies eerst een wedstrijd om inschrijvingen te zien.</div>`;
+        return;
+    }
+    blok.innerHTML = '<div class="status-msg loading"><span class="spinner"></span>Wedstrijd-data laden…</div>';
+    try {
+        const url = 'api/cluster_check.php?action=persoon_detail'
+                  + '&license_key=' + encodeURIComponent(data.persoon.license_key)
+                  + '&competition_id=' + encodeURIComponent(compId);
+        const res  = await fetch(url);
+        const d    = await res.json();
+        if (d.error) throw new Error(d.error);
+        data.entries        = d.entries  || [];
+        data.alle_dcs       = d.alle_dcs || [];
+        data.competition_id = compId;
+        _rijEditRenderEntries();
+    } catch (e) {
+        blok.innerHTML = `<div class="status-msg error">⚠ ${escHtml(e.message)}</div>`;
+    }
+}
+
+function _rijEditRenderEntries() {
+    const data = _rijEditData;
+    const blok = document.getElementById('rij-edit-entries');
+    if (!data || !blok) return;
+    const dcOpties = (huidigDcId) => `
+        <option value="">— houden in huidige DC —</option>
+        ${(data.alle_dcs || []).filter(d => d.dc_id !== huidigDcId).map(d => `
+            <option value="${escHtml(d.dc_id)}">${escHtml(d.dc_naam)}${d.category_filter ? ` (${escHtml(d.category_filter)})` : ''}</option>
+        `).join('')}`;
+    blok.innerHTML = data.entries.length === 0
+        ? `<div class="rij-leeg">Geen inschrijvingen in deze wedstrijd.</div>`
+        : data.entries.map(e => `
+            <div class="rij-edit-entry">
+                <span class="rij-edit-entry-naam"><b>${escHtml(e.dc_naam)}</b></span>
+                <select class="inp rij-edit-verpl-sel rij-edit-entry-sel"
+                        data-entry="${e.entry_id}" data-huidig="${escHtml(e.dc_id)}">
+                    ${dcOpties(e.dc_id)}
+                </select>
+            </div>`).join('');
+}
+
+// "+ Nieuwe club"-modal. Code krijgt automatisch -IC suffix zodat operator
+// weet welke clubs niet uit de KNSB-feed komen. Code moet uniek zijn in de
+// bestaande club-lijst.
+function _rijEditOpenNieuweClub() {
+    const data = _rijEditData;
+    if (!data) return;
+    const bestaand = new Set((data.clubs || []).map(c => (c.club_short || '').toUpperCase()));
+    const overlay = document.createElement('div');
+    overlay.className = 'rij-edit-nc-overlay';
+    overlay.innerHTML = `
+        <div class="rij-edit-nc-box">
+            <div class="rij-edit-nc-titel">+ Nieuwe club toevoegen</div>
+            <div class="rij-edit-nc-uitleg">
+                Code krijgt automatisch het achtervoegsel <code>-IC</code> zodat je weet
+                dat de club handmatig is toegevoegd (en niet uit de KNSB-feed komt).
+            </div>
+            <label class="rij-edit-nc-veld">
+                Code (kort)
+                <input type="text" id="rij-edit-nc-code" class="inp rij-edit-code-inp"
+                       placeholder="bv. SVD" maxlength="17">
+                <span class="rij-edit-nc-preview">Wordt opgeslagen als <span id="rij-edit-nc-preview">…-IC</span></span>
+            </label>
+            <label class="rij-edit-nc-veld">
+                Volledige naam
+                <input type="text" id="rij-edit-nc-naam" class="inp"
+                       placeholder="bv. Sport Vereniging Dronten">
+            </label>
+            <div id="rij-edit-nc-melding" class="rij-edit-nc-melding" hidden></div>
+            <div class="rij-edit-nc-knoppen">
+                <button class="btn-secondary" id="rij-edit-nc-annul" type="button">Annuleren</button>
+                <button class="btn-primary" id="rij-edit-nc-ok" type="button">Toevoegen</button>
+            </div>
+        </div>`;
+    document.body.appendChild(overlay);
+    const codeInp   = overlay.querySelector('#rij-edit-nc-code');
+    const naamInp   = overlay.querySelector('#rij-edit-nc-naam');
+    const previewEl = overlay.querySelector('#rij-edit-nc-preview');
+    const meldingEl = overlay.querySelector('#rij-edit-nc-melding');
+    codeInp.addEventListener('input', () => {
+        const v = codeInp.value.trim().toUpperCase().replace(/\s+/g, '');
+        previewEl.textContent = (v || '…') + '-IC';
     });
-    inp.addEventListener('blur', opslaan);
+    const sluit = () => overlay.remove();
+    overlay.querySelector('#rij-edit-nc-annul').onclick = sluit;
+    overlay.addEventListener('click', e => { if (e.target === overlay) sluit(); });
+    overlay.querySelector('#rij-edit-nc-ok').onclick = () => {
+        const codeRaw = codeInp.value.trim().toUpperCase().replace(/\s+/g, '');
+        const naam = naamInp.value.trim();
+        meldingEl.hidden = true;
+        if (!codeRaw) {
+            meldingEl.textContent = 'Vul een code in.'; meldingEl.hidden = false; return;
+        }
+        if (!naam) {
+            meldingEl.textContent = 'Vul de volledige clubnaam in.'; meldingEl.hidden = false; return;
+        }
+        const codeFinal = codeRaw + '-IC';
+        if (bestaand.has(codeFinal.toUpperCase())) {
+            meldingEl.textContent = `Code "${codeFinal}" bestaat al — kies een andere afkorting.`;
+            meldingEl.hidden = false; return;
+        }
+        _rijEditData.clubs = (_rijEditData.clubs || []).concat([{
+            club_short: codeFinal, club_full: naam, club_code: null,
+        }]);
+        const sel = document.getElementById('rij-edit-club');
+        const opt = document.createElement('option');
+        opt.value = codeFinal + '|||' + naam + '|||';
+        opt.textContent = `${codeFinal} — ${naam}`;
+        sel.appendChild(opt);
+        sel.value = opt.value;
+        sluit();
+    };
+    codeInp.focus();
+}
+
+// Opslaan: persoons-velden alleen. Stuurt alleen gewijzigde velden;
+// '' = SET NULL. Backend: cluster_check.php#corrigeer_persoon.
+async function _rijEditOpslaanPersons() {
+    const data = _rijEditData;
+    if (!data) return;
+    const p   = data.persoon;
+    const lic = p.license_key;
+    const h = {
+        gender:       (p.gender === null || p.gender === undefined) ? '' : String(p.gender),
+        category:     (p.category   || '').toUpperCase(),
+        start_number: p.start_number == null ? '' : String(p.start_number),
+        full_name:    p.full_name   || '',
+        short_name:   p.short_name  || '',
+        birth_year:   p.birth_year  == null ? '' : String(p.birth_year),
+        nationality: (p.nationality || '').toUpperCase(),
+        club_short:   p.club_short  || '',
+        club_full:    p.club_full   || '',
+        club_code:    p.club_code   == null ? '' : String(p.club_code),
+        sponsor:      p.sponsor     || '',
+        city:         p.city        || '',
+    };
+    const clubSel = document.getElementById('rij-edit-club').value;
+    let clubShort = '', clubFull = '', clubCode = '';
+    if (clubSel) [clubShort, clubFull, clubCode] = clubSel.split('|||');
+    const n = {
+        gender:       document.getElementById('rij-edit-gender').value,
+        category:     document.getElementById('rij-edit-cat').value.trim().toUpperCase(),
+        start_number: document.getElementById('rij-edit-snr').value.trim(),
+        full_name:    document.getElementById('rij-edit-fullname').value.trim(),
+        short_name:   document.getElementById('rij-edit-shortname').value.trim(),
+        birth_year:   document.getElementById('rij-edit-birth').value.trim(),
+        nationality:  document.getElementById('rij-edit-nat').value.trim().toUpperCase(),
+        club_short:   clubShort,
+        club_full:    clubFull,
+        club_code:    clubCode,
+        sponsor:      document.getElementById('rij-edit-sponsor').value.trim(),
+        city:         document.getElementById('rij-edit-city').value.trim(),
+    };
+    const payload = {
+        action:      'corrigeer_persoon',
+        license_key: lic,
+        verplaatsingen: [],
+    };
+    const veldNaarPayload = {
+        gender:       'nieuwe_gender',
+        category:     'nieuwe_category',
+        start_number: 'nieuwe_start_number',
+        full_name:    'nieuwe_full_name',
+        short_name:   'nieuwe_short_name',
+        birth_year:   'nieuwe_birth_year',
+        nationality:  'nieuwe_nationality',
+        club_short:   'nieuwe_club_short',
+        club_full:    'nieuwe_club_full',
+        club_code:    'nieuwe_club_code',
+        sponsor:      'nieuwe_sponsor',
+        city:         'nieuwe_city',
+    };
+    let anyChange = false;
+    for (const k of Object.keys(veldNaarPayload)) {
+        if (n[k] !== h[k]) {
+            payload[veldNaarPayload[k]] = n[k];
+            anyChange = true;
+        }
+    }
+    const meld = document.getElementById('rij-edit-melding');
+    if (!anyChange) {
+        meld.textContent = 'Geen wijzigingen gedetecteerd.';
+        meld.className = 'status-msg';
+        return;
+    }
+    await _rijEditPostEnHerlaad(payload, lic, /*verplaatsmodus*/false);
+}
+
+// Opslaan: alleen DC-verplaatsingen. Persoons-velden blijven onaangeraakt.
+async function _rijEditOpslaanVerplaats() {
+    const data = _rijEditData;
+    if (!data) return;
+    const compEl = document.getElementById('rij-edit-comp');
+    const compId = compEl ? compEl.value : '';
+    const lic = data.persoon.license_key;
+    const meld = document.getElementById('rij-edit-melding');
+    if (!compId) {
+        meld.textContent = 'Kies eerst een wedstrijd.';
+        meld.className = 'status-msg';
+        return;
+    }
+    const verplaatsingen = [];
+    document.querySelectorAll('.rij-edit-verpl-sel').forEach(s => {
+        if (s.value) {
+            verplaatsingen.push({
+                entry_id:    parseInt(s.dataset.entry),
+                doel_dc_id:  s.value,
+            });
+        }
+    });
+    if (!verplaatsingen.length) {
+        meld.textContent = 'Geen verplaatsingen geselecteerd.';
+        meld.className = 'status-msg';
+        return;
+    }
+    await _rijEditPostEnHerlaad({
+        action: 'corrigeer_persoon',
+        license_key: lic,
+        competition_id: compId,
+        verplaatsingen,
+    }, lic, /*verplaatsmodus*/true);
+}
+
+async function _rijEditPostEnHerlaad(payload, lic, isVerplaats) {
+    const meld = document.getElementById('rij-edit-melding');
+    const btn  = document.getElementById('rij-edit-opslaan');
+    btn.disabled = true;
+    meld.textContent = 'Bezig…';
+    meld.className = 'status-msg loading';
+    try {
+        const res = await fetch('api/cluster_check.php', {
+            method: 'POST', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload),
+        });
+        const d = await res.json();
+        if (d.error) throw new Error(d.error);
+        const delen = [];
+        if (d.persons_bijgewerkt) delen.push('persons-velden bijgewerkt');
+        if (d.verplaatst)        delen.push(`${d.verplaatst} inschrijving${d.verplaatst === 1 ? '' : 'en'} verplaatst`);
+        if (d.he_verwijderd)     delen.push(`${d.he_verwijderd} heat-entr${d.he_verwijderd === 1 ? 'y' : 'ies'} opgeschoond`);
+        meld.textContent = '✓ ' + (delen.join(', ') || 'niets veranderd') + '.';
+        meld.className = 'status-msg success';
+        // Refresh detail-paneel: trekt verse persons-data uit DB.
+        await rijToonDetail(lic);
+        if (typeof rijZoek === 'function') rijZoek();
+    } catch (e) {
+        meld.textContent = '⚠ ' + e.message;
+        meld.className = 'status-msg error';
+    } finally {
+        if (btn) btn.disabled = false;
+    }
 }
 
 async function rijAnonimiseer(rijder) {
