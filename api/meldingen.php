@@ -110,6 +110,7 @@ try {
             // Landing-page van public/coach — alleen globale meldingen.
             $stmt = $pdo->prepare("
                 SELECT id, titel, bericht, titel_en, bericht_en, titel_de, bericht_de, titel_fr, bericht_fr, prio, geldig_van, geldig_tot,
+                       bijlage_path, bijlage_naam, bijlage_mime,
                        NULL AS competition_id
                 FROM public_meldingen
                 WHERE competition_id IS NULL
@@ -122,6 +123,7 @@ try {
             // Wedstrijd-pagina — wedstrijd-specifiek + globaal samen.
             $stmt = $pdo->prepare("
                 SELECT id, titel, bericht, titel_en, bericht_en, titel_de, bericht_de, titel_fr, bericht_fr, prio, geldig_van, geldig_tot,
+                       bijlage_path, bijlage_naam, bijlage_mime,
                        competition_id
                 FROM public_meldingen
                 WHERE (competition_id = ? OR competition_id IS NULL)
@@ -161,6 +163,7 @@ try {
         if ($isGlobal) {
             $stmt = $pdo->prepare("
                 SELECT id, titel, bericht, titel_en, bericht_en, titel_de, bericht_de, titel_fr, bericht_fr, prio, geldig_van, geldig_tot,
+                       bijlage_path, bijlage_naam, bijlage_mime,
                        aangemaakt_door, aangemaakt_op,
                        NULL AS competition_id
                 FROM public_meldingen
@@ -174,6 +177,7 @@ try {
             // kan zien én snel verwijderen als ze tegenstrijdig zijn.
             $stmt = $pdo->prepare("
                 SELECT id, titel, bericht, titel_en, bericht_en, titel_de, bericht_de, titel_fr, bericht_fr, prio, geldig_van, geldig_tot,
+                       bijlage_path, bijlage_naam, bijlage_mime,
                        aangemaakt_door, aangemaakt_op, competition_id
                 FROM public_meldingen
                 WHERE competition_id = ? OR competition_id IS NULL
@@ -303,7 +307,39 @@ try {
             echo json_encode(['error' => 'id ontbreekt']);
             exit;
         }
+        // Bijlage-map mee opruimen vóór de DB-rij weg is (anders verlies je
+        // het pad). preg_replace voorkomt path-traversal via een rare id.
+        $safeId  = preg_replace('/[^a-z0-9\-]/', '', strtolower($mid));
+        $bijlMap = __DIR__ . '/../uploads/meldingen/' . $safeId;
+        if (is_dir($bijlMap)) {
+            foreach (glob($bijlMap . '/*') as $f) { @unlink($f); }
+            @rmdir($bijlMap);
+        }
         $pdo->prepare("DELETE FROM public_meldingen WHERE id = ?")->execute([$mid]);
+        _wisMeldingCache(null);
+        echo json_encode(['ok' => true]);
+        exit;
+    }
+
+    if ($action === 'verwijder_bijlage') {
+        $mid = trim($_POST['id'] ?? '');
+        if ($mid === '') {
+            http_response_code(400);
+            echo json_encode(['error' => 'id ontbreekt']);
+            exit;
+        }
+        $oudStmt = $pdo->prepare("SELECT bijlage_path FROM public_meldingen WHERE id = ?");
+        $oudStmt->execute([$mid]);
+        $oudPad = $oudStmt->fetchColumn();
+        $pdo->prepare("
+            UPDATE public_meldingen
+               SET bijlage_path = NULL, bijlage_naam = NULL, bijlage_mime = NULL
+             WHERE id = ?
+        ")->execute([$mid]);
+        if ($oudPad) {
+            $oudFs = __DIR__ . '/../' . $oudPad;
+            if (is_file($oudFs)) @unlink($oudFs);
+        }
         _wisMeldingCache(null);
         echo json_encode(['ok' => true]);
         exit;

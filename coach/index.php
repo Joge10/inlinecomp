@@ -5145,6 +5145,18 @@ function toonMeldingenOverzicht() {
         // als /public.
         const titelToon   = _meldingTekst(m, 'titel');
         const berichtToon = _meldingTekst(m, 'bericht');
+        const bijlHtml = m.bijlage_path
+            ? `<a href="../${escFn(m.bijlage_path)}" target="_blank" rel="noopener"
+                   download="${escFn(m.bijlage_naam || 'bijlage')}"
+                   style="display:inline-flex;align-items:center;gap:.3rem;
+                          margin-top:.4rem;background:#fff;
+                          border:1px solid ${stijl.kleur};color:${stijl.kleur};
+                          text-decoration:none;padding:.3rem .55rem;
+                          border-radius:4px;font-size:.8rem;font-weight:600;
+                          max-width:100%;">
+                   📎 <span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${escFn(m.bijlage_naam || 'bijlage')}</span>
+                </a>`
+            : '';
         return `<div style="background:${stijl.bg};border-left:4px solid ${stijl.kleur};
                             padding:.7rem .9rem;margin-bottom:.6rem;border-radius:5px;">
             <div style="display:flex;align-items:center;gap:.4rem;margin-bottom:.3rem;">
@@ -5152,6 +5164,7 @@ function toonMeldingenOverzicht() {
                 <strong style="color:${stijl.kleur};flex:1;">${escFn(titelToon)}</strong>
             </div>
             <div style="color:#222;line-height:1.4;font-size:.9rem;white-space:pre-wrap;">${escFn(berichtToon)}</div>
+            ${bijlHtml}
             <div style="font-size:.75rem;color:#888;margin-top:.3rem;">${escFn(tijd)}${escFn(tot)}</div>
         </div>`;
     }).join('');
@@ -5206,6 +5219,20 @@ function toonMelding(m, compId) {
             <div style="color:#222;line-height:1.5;font-size:.95rem;
                         white-space:pre-wrap;padding:.6rem 1.5rem 1rem;
                         overflow-y:auto;flex:1 1 auto;min-height:0;">${escFn(berichtToon)}</div>
+            ${m.bijlage_path ? `
+            <div style="padding:0 1.5rem .8rem;flex-shrink:0;">
+                <a href="../${escFn(m.bijlage_path)}" target="_blank" rel="noopener"
+                   download="${escFn(m.bijlage_naam || 'bijlage')}"
+                   style="display:flex;align-items:center;gap:.5rem;
+                          background:#fff;border:1.5px solid ${stijl.kleur};
+                          color:${stijl.kleur};text-decoration:none;
+                          padding:.5rem .8rem;border-radius:6px;font-size:.9rem;
+                          font-weight:600;">
+                    <span style="font-size:1.1rem">📎</span>
+                    <span style="flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${escFn(m.bijlage_naam || 'Download bijlage')}</span>
+                    <span style="font-size:.8rem;opacity:.7">⬇</span>
+                </a>
+            </div>` : ''}
             <div style="padding:0 1.5rem 1.5rem;flex-shrink:0;">
                 <button class="meld-ok" style="background:${stijl.kleur};color:#fff;border:none;
                                                 padding:.6rem 1.4rem;border-radius:6px;font-size:1rem;

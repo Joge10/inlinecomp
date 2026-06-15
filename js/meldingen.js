@@ -208,6 +208,22 @@ function mldOpenForm(compId, id, alleMeldingen = []) {
                 <textarea id="mld-bericht-fr" class="inp" rows="3"
                           placeholder="Courte explication — affichée en pop-up">${escHtml(m?.bericht_fr ?? '')}</textarea>
             </label>
+            <div class="mld-veld mld-bijlage-blok" id="mld-bijlage-blok">
+                <span>📎 Bijlage <span class="label-hint">— optioneel, PDF/Word/Excel/afbeelding; één bestand per melding</span></span>
+                <div class="mld-bijlage-huidig" id="mld-bijlage-huidig">
+                    ${m?.bijlage_path
+                        ? `<a href="${escHtml(m.bijlage_path)}" target="_blank" rel="noopener" class="mld-bijlage-link">📄 ${escHtml(m.bijlage_naam || 'bijlage')}</a>
+                           <button type="button" class="btn-danger btn-sm" id="mld-bijlage-verwijder">🗑 Bijlage verwijderen</button>`
+                        : `<span class="mld-bijlage-leeg">Nog geen bijlage</span>`}
+                </div>
+                <div class="mld-bijlage-nieuw">
+                    <label class="btn-secondary mld-bijlage-upload-lbl">
+                        <input type="file" id="mld-bijlage-input" accept=".pdf,.doc,.docx,.xls,.xlsx,.txt,image/*" hidden>
+                        📎 Bestand kiezen…
+                    </label>
+                    <span class="mld-bijlage-naam" id="mld-bijlage-naam-preview"></span>
+                </div>
+            </div>
             <div class="mld-rij-veld">
                 <label class="mld-veld">
                     <span>Prioriteit</span>
@@ -240,6 +256,35 @@ function mldOpenForm(compId, id, alleMeldingen = []) {
     document.getElementById('mld-form-opslaan').addEventListener('click', () => mldOpslaan(compId));
     document.getElementById('mld-vertaal-nl-all')?.addEventListener('click', () => mldVertaalBulk('nl'));
     document.getElementById('mld-vertaal-en-all')?.addEventListener('click', () => mldVertaalBulk('en'));
+
+    // ── Bijlage: bestand kiezen + bestaande verwijderen ─────────────────
+    // De daadwerkelijke upload gebeurt PAS bij Opslaan (we hebben dan een
+    // melding-id; voor nieuwe meldingen bestaat die nog niet). Hier alleen
+    // preview van de gekozen bestandsnaam.
+    document.getElementById('mld-bijlage-input').addEventListener('change', e => {
+        const f = e.target.files?.[0];
+        document.getElementById('mld-bijlage-naam-preview').textContent =
+            f ? `📎 ${f.name}` : '';
+    });
+    document.getElementById('mld-bijlage-verwijder')?.addEventListener('click', async () => {
+        if (!id) return; // alleen op bestaande melding
+        const ok = await toonBevestigDialog(
+            'Bijlage verwijderen?', 'Bijlage', 'Verwijderen', 'Annuleren'
+        );
+        if (!ok) return;
+        try {
+            const fd = new FormData();
+            fd.append('action', 'verwijder_bijlage');
+            fd.append('id', id);
+            const res  = await fetch('api/meldingen.php', { method: 'POST', body: fd });
+            const data = await res.json();
+            if (!res.ok || data.error) throw new Error(data.error || 'Verwijderen mislukt');
+            document.getElementById('mld-bijlage-huidig').innerHTML =
+                `<span class="mld-bijlage-leeg">Nog geen bijlage</span>`;
+        } catch (err) {
+            toonBevestigDialog('Fout: ' + err.message, 'Bijlage', 'OK', '');
+        }
+    });
 }
 
 // Helper — geeft input-elements voor (titel, bericht) per taal terug.
@@ -373,6 +418,29 @@ async function mldOpslaan(compId) {
         if (!res.ok) {
             toonBevestigDialog(data.error || 'Fout bij opslaan', 'Mededeling opslaan', 'OK', '');
             return;
+        }
+        // Bijlage uploaden (indien gekozen). Pas hier mogelijk omdat we voor
+        // een nieuwe melding pas na save 'n id hebben. data.id is de
+        // canonieke id uit de backend (zowel bij insert als update).
+        const meldId   = data.id || id;
+        const bijlInp  = document.getElementById('mld-bijlage-input');
+        const bijlFile = bijlInp?.files?.[0];
+        if (meldId && bijlFile) {
+            try {
+                const upFd = new FormData();
+                upFd.append('type', 'melding');
+                upFd.append('id',   meldId);
+                upFd.append('logo', bijlFile);
+                const upRes = await fetch('api/upload.php', { method: 'POST', body: upFd });
+                const upDat = await upRes.json();
+                if (upDat.error) throw new Error(upDat.error);
+            } catch (e2) {
+                toonBevestigDialog(
+                    'Mededeling opgeslagen, maar bijlage uploaden mislukt: ' + e2.message,
+                    'Bijlage', 'OK', ''
+                );
+                // Niet returnen — melding zelf is wél opgeslagen.
+            }
         }
         document.getElementById('mld-form-wrap').style.display = 'none';
         document.getElementById('mld-form-wrap').innerHTML = '';
