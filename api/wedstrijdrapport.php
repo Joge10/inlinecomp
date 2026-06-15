@@ -65,11 +65,19 @@ try {
     $compStmt = $pdo->prepare("
         SELECT c.id, c.name, c.starts, c.ends, c.location,
                c.venue_name, c.venue_city, c.discipline,
-               c.organisatie_id,
+               c.organisatie_id, c.baan_id,
+               c.protokol_nawoord, c.protokol_nawoord_en,
+               c.protokol_voorblad_foto,
+               c.protokol_nawoord_foto,
+               c.protokol_nawoord_foto_caption,
                o.naam      AS organisatie_naam,
-               o.logo_path AS organisatie_logo
+               o.logo_path AS organisatie_logo,
+               b.naam            AS baan_naam,
+               b.vereniging_naam AS baan_vereniging,
+               b.logo_path       AS baan_logo
         FROM competitions c
         LEFT JOIN organisaties o ON o.id = c.organisatie_id
+        LEFT JOIN banen        b ON b.id = c.baan_id
         WHERE c.id = ?
     ");
     $compStmt->execute([$compId]);
@@ -81,23 +89,52 @@ try {
     }
 
     // ── 2) Distance combinations ────────────────────────────────
+    // DC's krijgen z'n programma-volgorde mee uit tijdschema_ritten (MIN
+    // van alle ritten voor die DC). Frontend gebruikt dit als secundaire
+    // sort-sleutel binnen één cat-groep — bij wedstrijden waar elke
+    // afstand een eigen DC heeft (zoals het NK) staan de afstanden zo in
+    // programma-volgorde ipv alfabetisch.
     $dcStmt = $pdo->prepare("
-        SELECT id, name, number, category_filter
-        FROM distance_combinations
-        WHERE competition_id = ?
-        ORDER BY number, name
+        SELECT dc.id, dc.name, dc.number, dc.category_filter,
+               v.prog_volgorde
+        FROM distance_combinations dc
+        LEFT JOIN (
+            SELECT tr.dc_id, MIN(tr.volgorde) AS prog_volgorde
+            FROM tijdschema_ritten tr
+            JOIN competition_tijdschema ct ON ct.id = tr.tijdschema_id
+            WHERE ct.competition_id = ?
+            GROUP BY tr.dc_id
+        ) v ON v.dc_id = dc.id
+        WHERE dc.competition_id = ?
+        ORDER BY v.prog_volgorde IS NULL, v.prog_volgorde, dc.number, dc.name
     ");
-    $dcStmt->execute([$compId]);
+    $dcStmt->execute([$compId, $compId]);
     $dcs = $dcStmt->fetchAll(PDO::FETCH_ASSOC);
 
     // Statements één keer prepareren — worden hieronder per DC hergebruikt
     // (PDO cached deze server-side; N+1 queries zijn voor een eenmalige
     // print-actie alle geen probleem en houden de PHP-kant leesbaar)
+    // Volgorde van afstanden binnen een DC: programma-volgorde uit het
+    // tijdschema (tijdschema_ritten.volgorde). Eerste twee parameters zijn
+    // competition_id (voor de JOIN naar het juiste tijdschema), derde is
+    // distance_combination_id. distances.starts en .number als fallbacks
+    // voor afstanden die nog niet in het tijdschema zitten.
     $distStmt = $pdo->prepare("
-        SELECT id, name, value_meters, race_type, starts, target_group
-        FROM distances
-        WHERE distance_combination_id = ?
-        ORDER BY target_group, number, name
+        SELECT d.id, d.name, d.value_meters, d.race_type, d.starts, d.target_group,
+               v.prog_volgorde
+        FROM distances d
+        LEFT JOIN (
+            SELECT tr.dc_id, tr.distance_id, MIN(tr.volgorde) AS prog_volgorde
+            FROM tijdschema_ritten tr
+            JOIN competition_tijdschema ct ON ct.id = tr.tijdschema_id
+            WHERE ct.competition_id = ?
+            GROUP BY tr.dc_id, tr.distance_id
+        ) v ON v.dc_id = d.distance_combination_id AND v.distance_id = d.id
+        WHERE d.distance_combination_id = ?
+        ORDER BY d.target_group,
+                 v.prog_volgorde IS NULL, v.prog_volgorde,
+                 d.starts IS NULL, d.starts,
+                 d.number, d.name
     ");
     $uitslagStmt = $pdo->prepare("
         SELECT ua.rang, ua.categorie, ua.split_group,
@@ -135,7 +172,7 @@ try {
 
     foreach ($dcs as &$dc) {
         // 2a) Distances voor deze DC ophalen
-        $distStmt->execute([$dc['id']]);
+        $distStmt->execute([$compId, $dc['id']]);
         $distances = $distStmt->fetchAll(PDO::FETCH_ASSOC);
 
         // 2b) Per distance: uitslag_afstand-rijen ophalen
@@ -197,6 +234,109 @@ try {
     }
     unset($dc);
 
+    // ── Protokol-extras: jury_leden + sponsoren ─────────────────
+    // Officials voor de Officials-pagina (lege array = pagina wordt
+    // overgeslagen in de print-output).
+    $juryStmt = $pdo->prepare("
+        SELECT categorie, functie, naam
+        FROM jury_leden
+        WHERE competition_id = ?
+        ORDER BY FIELD(categorie, 'OC', 'jury', 'vrijwilliger'), volgorde, naam
+    ");
+    $juryStmt->execute([$compId]);
+    $jury = $juryStmt->fetchAll(PDO::FETCH_ASSOC);
+
+    // Sponsoren: zowel organisatie- als baan-sponsoren mengen (zelfde
+    // bron als de publieke footer-marquee). Voor het protokol tonen we
+    // ze als grid op een eigen pagina. Lege lijst = pagina wordt
+    // overgeslagen. `bron` kolom is voor debugging / eventueel filteren
+    // in de frontend.
+    $sponsors = [];
+    if ($comp['organisatie_id']) {
+        $spStmt = $pdo->prepare("
+            SELECT naam, logo_path, url, 'organisatie' AS bron
+            FROM organisatie_sponsors
+            WHERE organisatie_id = ?
+            ORDER BY volgorde, naam
+        ");
+        $spStmt->execute([$comp['organisatie_id']]);
+        $sponsors = array_merge($sponsors, $spStmt->fetchAll(PDO::FETCH_ASSOC));
+    }
+    if ($comp['baan_id']) {
+        $bsStmt = $pdo->prepare("
+            SELECT naam, logo_path, url, 'baan' AS bron
+            FROM baan_sponsors
+            WHERE baan_id = ?
+            ORDER BY volgorde, naam
+        ");
+        $bsStmt->execute([$comp['baan_id']]);
+        $sponsors = array_merge($sponsors, $bsStmt->fetchAll(PDO::FETCH_ASSOC));
+    }
+
+    // ── Deelnemerslijst-data ─────────────────────────────────────
+    // Afstanden gegroepeerd op NAAM (zoals "200m DTT", "500m+D") — niet
+    // per DC. Een wedstrijd met DPA/HPA/DPB/... 200m-DTT heeft dus één
+    // kolom "200m DTT" gedeeld door alle cats. Afvalkoers eruit gefilterd
+    // omdat InlineComp die nog niet ondersteunt. Zelfde logica als de
+    // Print Center deelnemerslijst.
+    $afstStmt = $pdo->prepare("
+        SELECT d.name AS naam,
+               MIN(d.value_meters) AS meters,
+               MIN(d.race_type) AS race_type
+        FROM distances d
+        JOIN distance_combinations dc ON dc.id = d.distance_combination_id
+        WHERE dc.competition_id = ?
+          AND (d.race_type IS NULL OR d.race_type <> 'afvalkoers')
+        GROUP BY d.name
+        ORDER BY meters, naam
+    ");
+    $afstStmt->execute([$compId]);
+    $afstandenLijst = $afstStmt->fetchAll(PDO::FETCH_ASSOC);
+
+    // Per deelnemer: persoonsdata + lijst van afstand-NAMEN. Twee bronnen
+    // via UNION zodat de lijst ook werkt vóór de wedstrijd is gereden:
+    //   1) uitslag_afstand → echte deelname (na de wedstrijd)
+    //   2) entries → geplande deelname (vóór, of voor DNS-rijders die
+    //      geen uitslag-rij hebben). Status NOT IN (3) sluit afgemelde
+    //      inschrijvingen uit; status 1/2/5 = bevestigd/aangemeld/org-toegevoegd.
+    // Dedup op license_key zodat iedereen 1x in de lijst staat.
+    // Sortering: startnummer dan achternaam.
+    $delnStmt = $pdo->prepare("
+        SELECT p.license_key, p.full_name, p.short_name, p.category,
+               p.nationality, p.start_number, p.club_full, p.sponsor,
+               GROUP_CONCAT(DISTINCT src.distance_naam ORDER BY src.meters SEPARATOR '|||') AS gereden
+        FROM (
+            SELECT ua.person_license AS license_key,
+                   d.name AS distance_naam,
+                   d.value_meters AS meters
+            FROM uitslag_afstand ua
+            JOIN distances d              ON d.id = ua.distance_id
+            JOIN distance_combinations dc ON dc.id = ua.distance_combination_id
+            WHERE dc.competition_id = ?
+              AND (d.race_type IS NULL OR d.race_type <> 'afvalkoers')
+            UNION
+            SELECT e.person_license AS license_key,
+                   d.name AS distance_naam,
+                   d.value_meters AS meters
+            FROM entries e
+            JOIN distances d              ON d.distance_combination_id = e.distance_combination_id
+            JOIN distance_combinations dc ON dc.id = e.distance_combination_id
+            WHERE dc.competition_id = ?
+              AND (d.race_type IS NULL OR d.race_type <> 'afvalkoers')
+              AND (e.status IS NULL OR e.status <> 3)
+        ) src
+        JOIN persons p ON p.license_key = src.license_key
+        GROUP BY p.license_key
+        ORDER BY p.start_number IS NULL, p.start_number, p.short_name, p.full_name
+    ");
+    $delnStmt->execute([$compId, $compId]);
+    $deelnemers = [];
+    foreach ($delnStmt->fetchAll(PDO::FETCH_ASSOC) as $d) {
+        $d['start_number'] = $d['start_number'] !== null ? (int)$d['start_number'] : null;
+        $d['gereden']      = $d['gereden'] ? explode('|||', $d['gereden']) : [];
+        $deelnemers[] = $d;
+    }
+
     echo json_encode([
         'competition' => [
             'id'                => $comp['id'],
@@ -209,8 +349,20 @@ try {
             'discipline'        => $comp['discipline'],
             'organisatie_naam'  => $comp['organisatie_naam'],
             'organisatie_logo'  => $comp['organisatie_logo'],
+            'baan_naam'         => $comp['baan_naam'],
+            'baan_vereniging'   => $comp['baan_vereniging'],
+            'baan_logo'         => $comp['baan_logo'],
+            'protokol_nawoord'              => $comp['protokol_nawoord'],
+            'protokol_nawoord_en'           => $comp['protokol_nawoord_en'],
+            'protokol_voorblad_foto'        => $comp['protokol_voorblad_foto'],
+            'protokol_nawoord_foto'         => $comp['protokol_nawoord_foto'],
+            'protokol_nawoord_foto_caption' => $comp['protokol_nawoord_foto_caption'],
         ],
-        'dcs' => $dcs,
+        'jury'            => $jury,
+        'sponsors'        => $sponsors,
+        'afstanden_lijst' => $afstandenLijst,
+        'deelnemers'      => $deelnemers,
+        'dcs'             => $dcs,
     ], JSON_UNESCAPED_UNICODE);
 
 } catch (Throwable $e) {

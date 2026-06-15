@@ -514,6 +514,7 @@ async function laadOrgWedstrijden() {
                 ${inDb ? `<button class="btn-secondary btn-sm beheer-comp-meld beheer-icon-btn" data-id="${escHtml(w.id)}" data-naam="${escHtml(w.name ?? w.id)}" title="Mededelingen — verstuur push-bericht naar /coach + /public">📢</button>` : ''}
                 ${inDb ? `<button class="btn-secondary btn-sm beheer-comp-poster beheer-icon-btn" data-id="${escHtml(w.id)}" data-app="public" title="Public-poster — download QR-poster voor rijders / ouders">📄</button>` : ''}
                 ${inDb ? `<button class="btn-secondary btn-sm beheer-comp-poster beheer-icon-btn" data-id="${escHtml(w.id)}" data-app="coach" title="Coach-poster — download QR-poster voor coaches">🖼</button>` : ''}
+                ${inDb ? `<button class="btn-secondary btn-sm beheer-comp-protokol beheer-icon-btn" data-id="${escHtml(w.id)}" data-naam="${escHtml(w.name ?? w.id)}" title="Protokol-data — officials + nawoord voor het wedstrijdrapport">⚖</button>` : ''}
                 ${inDb ? `<button class="btn-secondary btn-sm beheer-comp-print beheer-icon-btn" data-id="${escHtml(w.id)}" data-naam="${escHtml(w.name ?? w.id)}" title="Wedstrijdrapport — print of opslaan als PDF (via browser-print)">🖨</button>` : ''}
                 ${inDb ? `<button class="btn-secondary btn-sm beheer-comp-jurypwd beheer-icon-btn ${Number(dbRow?.jury_password_set) ? 'is-actief' : ''}"
                     data-id="${escHtml(w.id)}" data-naam="${escHtml(w.name ?? w.id)}"
@@ -554,6 +555,9 @@ async function laadOrgWedstrijden() {
     });
     lijst.querySelectorAll('.beheer-comp-print').forEach(btn => {
         btn.addEventListener('click', () => printWedstrijdrapport(btn.dataset.id, btn.dataset.naam));
+    });
+    lijst.querySelectorAll('.beheer-comp-protokol').forEach(btn => {
+        btn.addEventListener('click', () => protokolDataDialog(btn.dataset.id, btn.dataset.naam));
     });
 
     if (_beheerLeesOnly) pasSchrijfLockToe(lijst.closest('.org-tab-content') ?? lijst);
@@ -1351,6 +1355,320 @@ footer{margin-top:5mm;border-top:1px solid #ccc;padding-top:2mm;font-size:7.5pt;
     win.document.close();
 }
 
+// ── Protokol-data: officials (3 categorieën) + nawoord ───────────────────
+// OC + Vrijwilligers: alleen namen (textarea, één per regel).
+// Jury: dropdown van 7 vaste rollen + naam, +Rij voor extra entries.
+// Nawoord: vrije tekst-textarea.
+const _JURY_FUNCTIES = [
+    'hoofdscheidsrechter',
+    'scheidsrechter',
+    'tijdwaarneming',
+    'video',
+    'uitslagverwerking',
+    'speaker',
+    'algemeen jury lid',
+    'stagiair',
+];
+// Volgorde op de Officials-pagina van het Wedstrijdprotokol. Per kolom
+// alfabetisch binnen elke functie. Onbekende functies (legacy / vrije
+// invoer) sluiten zich aan onderaan de linkerkolom.
+const _JURY_KOLOM_LINKS = [
+    'hoofdscheidsrechter', 'scheidsrechter', 'tijdwaarneming',
+    'video', 'uitslagverwerking', 'speaker',
+];
+const _JURY_KOLOM_RECHTS = [
+    'algemeen jury lid', 'stagiair',
+];
+
+async function protokolDataDialog(compId, compNaam) {
+    if (!compId) return;
+    let huidig = { leden: [], nawoord: '', voorblad_foto: null, nawoord_foto: null, nawoord_foto_caption: '' };
+    try {
+        const res = await fetch('api/jury_leden.php?competition_id=' + encodeURIComponent(compId));
+        const d = await res.json();
+        if (d.error) throw new Error(d.error);
+        huidig = {
+            leden:                d.leden || [],
+            nawoord:              d.nawoord || '',
+            voorblad_foto:        d.voorblad_foto || null,
+            nawoord_foto:         d.nawoord_foto || null,
+            nawoord_foto_caption: d.nawoord_foto_caption || '',
+        };
+    } catch (e) {
+        toonBevestigDialog('Kon protokol-data niet ophalen: ' + (e.message || e), 'Protokol');
+        return;
+    }
+
+    // Splits huidige data per categorie
+    const ocNamen   = huidig.leden.filter(l => l.categorie === 'OC').map(l => l.naam);
+    const vrijNamen = huidig.leden.filter(l => l.categorie === 'vrijwilliger').map(l => l.naam);
+    // Jury: groepeer per persoon (case-insensitive naam) zodat één rij in de
+    // modal alle rollen van die persoon bevat. Volgorde: rollen op de
+    // gewenste kolom-volgorde (Hoofdscheidsrechter eerst, Stagiair laatst).
+    const juryPerPersoon = new Map();
+    for (const l of huidig.leden.filter(l => l.categorie === 'jury')) {
+        const naam = String(l.naam || '').trim();
+        const fn   = String(l.functie || '').toLowerCase().trim();
+        if (!naam) continue;
+        const key = naam.toLowerCase();
+        const e = juryPerPersoon.get(key) || { naam, rollen: [] };
+        if (fn && !e.rollen.includes(fn)) e.rollen.push(fn);
+        juryPerPersoon.set(key, e);
+    }
+    const juryPersonen = [...juryPerPersoon.values()];
+
+    const overlay = document.createElement('div');
+    overlay.className = 'modal-overlay';
+    // Hergebruikt de bestaande modal-dialog/header/body hierarchie (zoals
+    // kiesPosterTaal); .pd-* classes in style.css regelen de protokol-
+    // specifieke layout (textareas, jury-grid).
+    overlay.innerHTML = `
+        <div class="modal-dialog pd-dialog">
+            <div class="modal-header">
+                <span>⚖ Protokol-data — ${escHtml(compNaam || '')}</span>
+            </div>
+            <div class="modal-body pd-body">
+                <div class="pd-uitleg">
+                    Drie categorieën officials komen op de Officials-pagina van het
+                    wedstrijdrapport. Lege categorieën worden weggelaten.
+                </div>
+
+                <div class="pd-sec-titel">
+                    Voorblad-foto <small>— grote foto bovenste helft van de titelpagina (optioneel)</small>
+                </div>
+                <div class="pd-foto-blok" id="pd-foto-voorblad">
+                    <div class="pd-foto-preview ${huidig.voorblad_foto ? '' : 'is-leeg'}">
+                        ${huidig.voorblad_foto
+                            ? `<img src="${escHtml(huidig.voorblad_foto)}" alt="voorblad">`
+                            : `<span class="pd-foto-leeg-tekst">Geen foto</span>`}
+                    </div>
+                    <div class="pd-foto-acties">
+                        <label class="btn-secondary pd-foto-upload-lbl">
+                            <input type="file" accept="image/*" class="pd-foto-upload" data-field="voorblad" hidden>
+                            📷 Foto kiezen…
+                        </label>
+                        <button class="btn-secondary pd-foto-verwijder" type="button" data-field="voorblad" ${huidig.voorblad_foto ? '' : 'disabled'}>🗑 Verwijderen</button>
+                    </div>
+                </div>
+
+                <div class="pd-sec-titel pd-sec-titel-na">
+                    Organisatie Comité <small>— één naam per regel</small>
+                </div>
+                <textarea id="pd-oc" class="inp pd-namen-inp" rows="3"
+                          placeholder="Bv.&#10;Cor Elsinga&#10;Moniek Holtrop&#10;Marielle Oostra">${escHtml(ocNamen.join('\n'))}</textarea>
+
+                <div class="pd-sec-titel pd-sec-titel-na">
+                    Jury <small>— klik op rollen om aan/uit te zetten; meerdere rollen per persoon kan</small>
+                </div>
+                <div id="pd-jury-lijst"></div>
+                <button class="btn-secondary pd-add-rij" id="pd-add-rij" type="button">+ Persoon</button>
+
+                <div class="pd-sec-titel pd-sec-titel-na">
+                    Vrijwilligers <small>— één naam per regel</small>
+                </div>
+                <textarea id="pd-vrij" class="inp pd-namen-inp" rows="3"
+                          placeholder="Bv.&#10;Anna Jansen&#10;Piet Klaassen">${escHtml(vrijNamen.join('\n'))}</textarea>
+
+                <div class="pd-sec-titel pd-sec-titel-na">
+                    Nawoord <small>— optioneel, verschijnt als pagina 2</small>
+                </div>
+                <textarea id="pd-nawoord" class="inp pd-nawoord-inp" rows="4">${escHtml(huidig.nawoord)}</textarea>
+
+                <div class="pd-foto-blok" id="pd-foto-nawoord">
+                    <div class="pd-foto-preview pd-foto-preview-klein ${huidig.nawoord_foto ? '' : 'is-leeg'}">
+                        ${huidig.nawoord_foto
+                            ? `<img src="${escHtml(huidig.nawoord_foto)}" alt="nawoord-foto">`
+                            : `<span class="pd-foto-leeg-tekst">Geen foto</span>`}
+                    </div>
+                    <div class="pd-foto-rechts">
+                        <div class="pd-foto-acties">
+                            <label class="btn-secondary pd-foto-upload-lbl">
+                                <input type="file" accept="image/*" class="pd-foto-upload" data-field="nawoord" hidden>
+                                📷 Foto kiezen…
+                            </label>
+                            <button class="btn-secondary pd-foto-verwijder" type="button" data-field="nawoord" ${huidig.nawoord_foto ? '' : 'disabled'}>🗑 Verwijderen</button>
+                        </div>
+                        <label class="pd-foto-caption-lbl">
+                            Onderschrift <small>— bv. naam + functie van de schrijver, of vrije omschrijving</small>
+                            <input type="text" id="pd-nawoord-caption" class="inp pd-foto-caption" maxlength="200"
+                                   value="${escHtml(huidig.nawoord_foto_caption)}"
+                                   placeholder="Bv. Jan de Vries — voorzitter">
+                        </label>
+                    </div>
+                </div>
+
+                <div id="pd-melding" class="status-msg pd-melding"></div>
+            </div>
+            <div class="modal-knoppen pd-knoppen">
+                <button class="modal-btn modal-annuleer" id="pd-annul" type="button">Annuleren</button>
+                <button class="modal-btn modal-doorgaan" id="pd-opslaan" type="button">Opslaan</button>
+            </div>
+        </div>`;
+    document.body.appendChild(overlay);
+
+    const lijstDiv = overlay.querySelector('#pd-jury-lijst');
+    const voegJuryRijToe = (naam = '', rollen = []) => {
+        const rij = document.createElement('div');
+        rij.className = 'pd-jury-rij';
+        const chips = _JURY_FUNCTIES.map(f =>
+            `<span class="pd-rol-chip${rollen.includes(f) ? ' is-actief' : ''}" data-rol="${escHtml(f)}">${escHtml(f)}</span>`
+        ).join('');
+        rij.innerHTML = `
+            <input type="text" class="inp pd-naam" maxlength="150" value="${escHtml(naam)}" placeholder="Naam">
+            <div class="pd-rollen-chips">${chips}</div>
+            <button class="pd-del" type="button" title="Verwijderen">×</button>`;
+        rij.querySelector('.pd-del').addEventListener('click', () => rij.remove());
+        rij.querySelectorAll('.pd-rol-chip').forEach(chip => {
+            chip.addEventListener('click', () => chip.classList.toggle('is-actief'));
+        });
+        lijstDiv.appendChild(rij);
+        return rij;
+    };
+    if (juryPersonen.length) {
+        juryPersonen.forEach(p => voegJuryRijToe(p.naam, p.rollen));
+    } else {
+        voegJuryRijToe('', []);
+    }
+    overlay.querySelector('#pd-add-rij').addEventListener('click', () => voegJuryRijToe('', []));
+
+    const sluit = () => overlay.remove();
+    overlay.querySelector('#pd-annul').addEventListener('click', sluit);
+    overlay.addEventListener('click', e => { if (e.target === overlay) sluit(); });
+
+    // ── Protokol-foto's: upload + verwijder ─────────────────────────
+    // Beide foto-blokken (voorblad + nawoord) gebruiken dezelfde upload-
+    // flow via api/upload.php. Bij succes wordt de preview live ververst.
+    const _updateFotoPreview = (field, url) => {
+        const blok = overlay.querySelector(`#pd-foto-${field}`);
+        if (!blok) return;
+        const prev = blok.querySelector('.pd-foto-preview');
+        const del  = blok.querySelector('.pd-foto-verwijder');
+        if (url) {
+            // Cache-buster ?t=… zodat browser direct nieuwe foto laat zien
+            const src = url + (url.includes('?') ? '&' : '?') + 't=' + Date.now();
+            prev.innerHTML = `<img src="${escHtml(src)}" alt="${escHtml(field)}">`;
+            prev.classList.remove('is-leeg');
+            del.disabled = false;
+        } else {
+            prev.innerHTML = `<span class="pd-foto-leeg-tekst">Geen foto</span>`;
+            prev.classList.add('is-leeg');
+            del.disabled = true;
+        }
+    };
+
+    overlay.querySelectorAll('.pd-foto-upload').forEach(inp => {
+        inp.addEventListener('change', async () => {
+            const file = inp.files?.[0];
+            if (!file) return;
+            const field = inp.dataset.field;     // 'voorblad' of 'nawoord'
+            const meld  = overlay.querySelector('#pd-melding');
+            meld.textContent = `Foto uploaden…`;
+            meld.className   = 'status-msg loading';
+            try {
+                const fd = new FormData();
+                fd.append('type', 'protokol_' + field);
+                fd.append('id',   compId);
+                fd.append('logo', file);
+                const r = await fetch('api/upload.php', { method: 'POST', body: fd });
+                const d = await r.json();
+                if (d.error) throw new Error(d.error);
+                _updateFotoPreview(field, d.path);
+                meld.textContent = 'Foto opgeslagen.';
+                meld.className   = 'status-msg ok';
+            } catch (e) {
+                meld.textContent = '⚠ ' + (e.message || e);
+                meld.className   = 'status-msg error';
+            } finally {
+                inp.value = '';   // reset zodat zelfde bestand opnieuw kan worden gekozen
+            }
+        });
+    });
+
+    overlay.querySelectorAll('.pd-foto-verwijder').forEach(btn => {
+        btn.addEventListener('click', async () => {
+            const field = btn.dataset.field;
+            if (!await toonBevestigDialog(
+                `Foto verwijderen?`, 'Protokol-foto', 'Verwijderen', 'Annuleren')) return;
+            const meld = overlay.querySelector('#pd-melding');
+            meld.textContent = 'Verwijderen…';
+            meld.className   = 'status-msg loading';
+            try {
+                const r = await fetch('api/jury_leden.php', {
+                    method: 'POST', headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        action: 'verwijder_foto', competition_id: compId, field,
+                    }),
+                });
+                const d = await r.json();
+                if (d.error) throw new Error(d.error);
+                _updateFotoPreview(field, null);
+                meld.textContent = 'Foto verwijderd.';
+                meld.className   = 'status-msg ok';
+            } catch (e) {
+                meld.textContent = '⚠ ' + (e.message || e);
+                meld.className   = 'status-msg error';
+            }
+        });
+    });
+
+    overlay.querySelector('#pd-opslaan').addEventListener('click', async () => {
+        const meld = overlay.querySelector('#pd-melding');
+        const btn  = overlay.querySelector('#pd-opslaan');
+
+        // OC + Vrijwilligers uit textarea (per regel)
+        const _parseLines = (s) => s.split('\n').map(x => x.trim()).filter(Boolean);
+        const ocLijst   = _parseLines(overlay.querySelector('#pd-oc').value)
+            .map(naam => ({ categorie: 'OC', naam }));
+        const vrijLijst = _parseLines(overlay.querySelector('#pd-vrij').value)
+            .map(naam => ({ categorie: 'vrijwilliger', naam }));
+
+        // Jury uit rijen: één rij = één persoon met N rollen.
+        // Naar backend ontvouwen tot 1 jury_leden-entry per (naam, functie).
+        // Rijen zonder rollen of zonder naam worden overgeslagen.
+        const juryLijst = [];
+        for (const r of lijstDiv.querySelectorAll('.pd-jury-rij')) {
+            const naam   = r.querySelector('.pd-naam').value.trim();
+            if (!naam) continue;
+            const rollen = [...r.querySelectorAll('.pd-rol-chip.is-actief')]
+                .map(c => c.dataset.rol);
+            if (!rollen.length) continue;
+            for (const rol of rollen) {
+                juryLijst.push({ categorie: 'jury', functie: rol, naam });
+            }
+        }
+
+        const leden = [...ocLijst, ...juryLijst, ...vrijLijst];
+        const tekst = overlay.querySelector('#pd-nawoord').value;
+        btn.disabled = true;
+        meld.textContent = 'Bezig…';
+        meld.className = 'status-msg loading';
+        try {
+            const r1 = await fetch('api/jury_leden.php', {
+                method: 'POST', headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ action: 'bulk', competition_id: compId, leden }),
+            });
+            const d1 = await r1.json();
+            if (d1.error) throw new Error(d1.error);
+            const captionEl = overlay.querySelector('#pd-nawoord-caption');
+            const caption   = captionEl ? captionEl.value : '';
+            const r2 = await fetch('api/jury_leden.php', {
+                method: 'POST', headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    action: 'nawoord', competition_id: compId,
+                    tekst, nawoord_foto_caption: caption,
+                }),
+            });
+            const d2 = await r2.json();
+            if (d2.error) throw new Error(d2.error);
+            sluit();
+        } catch (e) {
+            meld.textContent = '⚠ ' + (e.message || e);
+            meld.className = 'status-msg error';
+            btn.disabled = false;
+        }
+    });
+}
+
 // ── Wedstrijdrapport: print of opslaan als PDF ────────────────────────────
 // Triggered vanuit Beheer → Organisaties → tab Wedstrijden, 🖨-knop per rij.
 // Haalt alle DC's + distances + uitslagen op via api/wedstrijdrapport.php,
@@ -1365,6 +1683,10 @@ async function printWedstrijdrapport(compId, compNaam) {
     if (!compId) return;
     const esc = s => String(s ?? '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
 
+    // Taalkeuze (hergebruikt poster-modal — zelfde NL/EN-flow).
+    const lang = await kiesPosterTaal();
+    if (!lang) return;
+
     let data;
     try {
         const res = await fetch('api/wedstrijdrapport.php?id=' + encodeURIComponent(compId));
@@ -1375,8 +1697,117 @@ async function printWedstrijdrapport(compId, compNaam) {
         return;
     }
 
-    const comp = data.competition || {};
-    const dcs  = Array.isArray(data.dcs) ? data.dcs : [];
+    // Bij EN-keuze: nawoord lazy vertalen als cache nog leeg is.
+    if (lang === 'en'
+        && (data.competition?.protokol_nawoord || '').trim()
+        && !(data.competition?.protokol_nawoord_en || '').trim()) {
+        try {
+            const tres = await fetch('api/jury_leden.php', {
+                method: 'POST', headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ action: 'vertaal_nawoord', competition_id: compId }),
+            });
+            const td = await tres.json();
+            if (!td.error && td.tekst) data.competition.protokol_nawoord_en = td.tekst;
+            // Bij vertaal-fout: doorgaan met lege EN-tekst (nawoord-sectie skipt
+            // dan vanzelf), en operator een hint geven dat 't niet lukte.
+            if (td.error) {
+                toonBevestigDialog('Vertaal-API gaf een fout: ' + td.error
+                    + '\n\nHet PDF wordt zonder nawoord gegenereerd.', 'Afdrukken — vertaling');
+            }
+        } catch (e) {
+            console.warn('[wedstrijdrapport] vertaal-call faalde:', e);
+        }
+    }
+
+    // ── i18n strings — overal in deze functie via T(key) ───────────────
+    const i18nDicts = {
+        nl: {
+            doc_titel:        'Wedstrijdrapport',
+            sub_protokol:     'Wedstrijdprotokol',
+            nawoord:          'Nawoord',
+            officials:        'Officials',
+            oc:               'Organisatie Comité',
+            jury:             'Jury',
+            vrijwilligers:    'Vrijwilligers',
+            sponsoren:        'Sponsoren',
+            deelnemers:       'Deelnemerslijst',
+            uitslagen:        'Uitslagen',
+            kol_snr:          'Snr',
+            kol_nat:          'Nat',
+            kol_sponsor:      'Sponsor',
+            bedankt:          'Bedankt!',
+            tot_volgende:     'Tot een volgende wedstrijd.',
+            tagline_footer:   'InlineComp · Van startlijn tot uitslag — live.',
+            pagina_label:     'pagina',
+            kol_pl:           'Pl', kol_naam: 'Naam', kol_cat: 'Cat', kol_club: 'Club',
+            kol_tijd:         'Tijd', kol_punten: 'Punten', kol_opm: 'Opm',
+            eindklassement:   'Eindklassement',
+            afstanden_n:      n => `${n} afstanden · totaal-puntenklassement`,
+            geen_afstanden:   'Geen afstanden gedefinieerd.',
+            geen_uitslag:     'Geen uitslag vastgelegd.',
+            sectie:           'Sectie',
+            afgedrukt:        'Afgedrukt',
+            categorien_n:     n => `${n} categorie${n !== 1 ? 'ën' : ''} · InlineComp`,
+            jury_functies: {  // exacte NL-rollen (key = lower)
+                'hoofdscheidsrechter': 'Hoofdscheidsrechter',
+                'scheidsrechter':      'Scheidsrechter',
+                'tijdwaarneming':      'Tijdwaarneming',
+                'video':               'Video',
+                'uitslagverwerking':   'Uitslagverwerking',
+                'speaker':             'Speaker',
+                'algemeen jury lid':   'Algemeen jurylid',
+                'stagiair':            'Stagiair',
+            },
+        },
+        en: {
+            doc_titel:        'Race Report',
+            sub_protokol:     'Race Protocol',
+            nawoord:          'Closing Remarks',
+            officials:        'Officials',
+            oc:               'Organizing Committee',
+            jury:             'Jury',
+            vrijwilligers:    'Volunteers',
+            sponsoren:        'Sponsors',
+            deelnemers:       'Participants',
+            uitslagen:        'Results',
+            kol_snr:          'Bib',
+            kol_nat:          'Nat',
+            kol_sponsor:      'Sponsor',
+            bedankt:          'Thank you!',
+            tot_volgende:     'See you at the next race.',
+            tagline_footer:   'InlineComp · From start line to results — live.',
+            pagina_label:     'page',
+            kol_pl:           'Pos', kol_naam: 'Name', kol_cat: 'Cat', kol_club: 'Club',
+            kol_tijd:         'Time', kol_punten: 'Points', kol_opm: 'Note',
+            eindklassement:   'Overall Classification',
+            afstanden_n:      n => `${n} distances · total points classification`,
+            geen_afstanden:   'No distances defined.',
+            geen_uitslag:     'No results recorded.',
+            sectie:           'Section',
+            afgedrukt:        'Printed',
+            categorien_n:     n => `${n} categor${n !== 1 ? 'ies' : 'y'} · InlineComp`,
+            jury_functies: {
+                'hoofdscheidsrechter': 'Chief Referee',
+                'scheidsrechter':      'Referee',
+                'tijdwaarneming':      'Timekeeping',
+                'video':               'Video Referee',
+                'uitslagverwerking':   'Results Processing',
+                'speaker':             'Announcer',
+                'algemeen jury lid':   'General Jury Member',
+                'stagiair':            'Trainee',
+            },
+        },
+    };
+    const D = i18nDicts[lang] || i18nDicts.nl;
+    const T = (key) => D[key] ?? key;
+    const Tfn = (key, n) => (typeof D[key] === 'function' ? D[key](n) : D[key]);
+
+    const comp           = data.competition || {};
+    const dcs            = Array.isArray(data.dcs)             ? data.dcs             : [];
+    const jury           = Array.isArray(data.jury)            ? data.jury            : [];
+    const sponsors       = Array.isArray(data.sponsors)        ? data.sponsors        : [];
+    const afstandenLijst = Array.isArray(data.afstanden_lijst) ? data.afstanden_lijst : [];
+    const deelnemers     = Array.isArray(data.deelnemers)      ? data.deelnemers      : [];
     if (!dcs.length) {
         toonBevestigDialog('Deze wedstrijd heeft geen distance combinations om af te drukken.', 'Afdrukken');
         return;
@@ -1439,13 +1870,13 @@ async function printWedstrijdrapport(compId, compNaam) {
         const meerdereSplits = splits.length > 1;
 
         const headCols = [
-            '<th class="c">Pl</th>',
-            '<th>Naam</th>',
-            '<th class="c">Cat</th>',
-            '<th>Club</th>',
-            heeftTijd    ? '<th class="c">Tijd</th>'    : '',
-            heeftPunten  ? '<th class="c">Punten</th>'  : '',
-            heeftSanctie ? '<th class="c">Opm</th>'     : '',
+            `<th class="c">${esc(T('kol_pl'))}</th>`,
+            `<th>${esc(T('kol_naam'))}</th>`,
+            `<th class="c">${esc(T('kol_cat'))}</th>`,
+            `<th>${esc(T('kol_club'))}</th>`,
+            heeftTijd    ? `<th class="c">${esc(T('kol_tijd'))}</th>`   : '',
+            heeftPunten  ? `<th class="c">${esc(T('kol_punten'))}</th>` : '',
+            heeftSanctie ? `<th class="c">${esc(T('kol_opm'))}</th>`    : '',
         ].filter(Boolean).join('');
 
         const _bouwRijen = (subset) => subset.map((r, i) => {
@@ -1479,7 +1910,7 @@ async function printWedstrijdrapport(compId, compNaam) {
             const subset = rijen.filter(r => (r.split_group || '') === sg);
             if (!subset.length) return '';
             const splitTitel = sg
-                ? `<div class="split-titel">Sectie: ${esc(sg)}</div>`
+                ? `<div class="split-titel">${esc(T('sectie'))}: ${esc(sg)}</div>`
                 : '';
             return splitTitel + `<table>
                 <thead><tr>${headCols}</tr></thead>
@@ -1490,44 +1921,36 @@ async function printWedstrijdrapport(compId, compNaam) {
 
     // ── Per DC blokken bouwen ───────────────────────────────────────────
     // Hulpfunctie: render één "logische DC" (kan een echte DC zijn, of een
-    // virtuele DC voor één split-group binnen een gesplitste DC). De caller
-    // bepaalt wat de titel (label) is en welke distances + klassement-rijen
-    // bij deze logische DC horen.
+    // virtuele DC voor één split-group binnen een gesplitste DC).
+    //
+    // Volgorde binnen sectie:
+    //   1) Per afstand één uitslag-blok
+    //   2) Bij multi-distance: eindklassement-blok eronder
+    //      Bij single-distance: GEEN klassement (identiek aan de uitslag)
     const _bouwDcSectie = (label, distances, klassement) => {
+        if (!distances.length) {
+            return `<section class="dc-block">
+                <h2 class="dc-titel">${esc(label)}</h2>
+                <div class="dc-leeg">${esc(T('geen_afstanden'))}</div>
+            </section>`;
+        }
+
         const blocks = [];
 
-        // Multi-distance: eindklassement-blok bovenaan met totaal-punten
-        if (klassement?.length) {
-            blocks.push(`<section class="dc-block">
-                <h2 class="dc-titel">${esc(label)} — Eindklassement</h2>
-                <div class="dc-sub">${esc(distances.length)} afstanden · totaal-puntenklassement</div>
-                ${_bouwTabel(klassement, { isKlassement: true })}
-            </section>`);
-        }
-
-        if (!distances.length) {
-            blocks.push(`<section class="dc-block">
-                <h2 class="dc-titel">${esc(label)}</h2>
-                <div class="dc-leeg">Geen afstanden gedefinieerd.</div>
-            </section>`);
-            return blocks.join('');
-        }
-
-        // Per distance één blok
+        // 1) Per distance één blok
         for (const dist of distances) {
             const datumKort = dist.starts ? _fmtKortDatum(dist.starts) : '';
             const rtLabel   = _raceTypeLabel(dist.race_type);
             const subMeta   = [datumKort, dist.name, rtLabel].filter(Boolean).join(' · ');
-            // Bij multi-distance binnen deze logische DC: ook de afstand-
-            // naam in titel om de blokken te onderscheiden. Bij single-
-            // distance is label alleen genoeg.
+            // Bij multi-distance: afstand-naam in titel om blokken te
+            // onderscheiden. Bij single-distance is label alleen genoeg.
             const titel = distances.length > 1 ? `${label} — ${dist.name}` : label;
 
             if (!dist.uitslag?.length) {
                 blocks.push(`<section class="dc-block">
                     <h2 class="dc-titel">${esc(titel)}</h2>
                     <div class="dc-sub">${esc(subMeta)}</div>
-                    <div class="dc-leeg">Geen uitslag vastgelegd.</div>
+                    <div class="dc-leeg">${esc(T('geen_uitslag'))}</div>
                 </section>`);
             } else {
                 blocks.push(`<section class="dc-block">
@@ -1537,28 +1960,121 @@ async function printWedstrijdrapport(compId, compNaam) {
                 </section>`);
             }
         }
+
+        // 2) Eindklassement onderaan, alleen bij multi-distance DC.
+        if (distances.length > 1 && klassement?.length) {
+            blocks.push(`<section class="dc-block">
+                <h2 class="dc-titel">${esc(label)} — ${esc(T('eindklassement'))}</h2>
+                <div class="dc-sub">${esc(Tfn('afstanden_n', distances.length))}</div>
+                ${_bouwTabel(klassement, { isKlassement: true })}
+            </section>`);
+        }
+
         return blocks.join('');
     };
 
-    // Top-level loop: voor elke DC bepalen of 'ie gesplitst is.
-    //   - Geen split  → één sectie met DC-naam als label (zoals voorheen)
-    //   - Wel splits  → N secties, één per split. Parent-DC-naam wordt NIET
-    //     getoond (operator's keuze: na splitsen is parent verleden tijd,
-    //     alleen de split-labels DP1/HP1/DP2/HP2 etc. zijn relevant).
-    const dcBlocks = dcs.flatMap(dc => {
+    // ── Cat-parser voor inline-skating ───────────────────────────────
+    // Altijd 3 karakters:
+    //   [0] D = Dames, H = Heren
+    //   [1] groep:
+    //         P = Pupillen        — 3e karakter cijfer; GROOT cijfer = JONGER
+    //                                P4 (jongst) → P1 (oudst)
+    //         K = Kadetten        — 3e karakter = klasse (vrijwel altijd 'A')
+    //         J = Junioren        — 3e karakter letter; LATER alfabet = JONGER
+    //                                JB (jonger) → JA (ouder)
+    //         S = Senioren        — gek-volgorde: SJ (obsoleet maar jongst) → SA → SB (oudst)
+    //         cijfer = Masters    — héél 2-3 is getal 40/45/50/55/60/…
+    //                                KLEIN getal = JONGER
+    // Sortering: groep × 10000 + sub × 100 + geslacht (D=0, H=1).
+    //
+    // TODO post-OH850: verhuizen naar js/cat_volgorde.js zodat uitslag.js,
+    // live.js en ranking dezelfde parser gebruiken.
+    const _catRank = (cat) => {
+        const c = String(cat || '').toUpperCase().trim();
+        if (!c) return 99999;
+        // Fallback voor uitgeschreven varianten ("Dsenioren", "Hsenioren")
+        if (/^DSENIOR/.test(c)) return 4 * 10000 + 100;       // = DSA-positie
+        if (/^HSENIOR/.test(c)) return 4 * 10000 + 100 + 1;   // = HSA-positie
+        if (c.length < 2) return 99999;
+
+        const geslacht = c[0] === 'D' ? 0 : c[0] === 'H' ? 1 : 9;
+        const groep    = c[1];
+        const sub      = c.slice(2);
+        let groepRank, subRank;
+
+        if (groep === 'P') {
+            groepRank = 1;
+            const n = parseInt(sub, 10);
+            subRank = isNaN(n) ? 99 : (10 - n);   // P4→6, P3→7, P2→8, P1→9
+        } else if (groep === 'K') {
+            groepRank = 2;
+            subRank = 0;
+        } else if (groep === 'J') {
+            groepRank = 3;
+            // 'B' (66) is jonger dan 'A' (65) → omgekeerd op de char-code
+            subRank = sub[0] ? (90 - sub[0].charCodeAt(0)) : 99;  // B→24, A→25
+        } else if (groep === 'S') {
+            groepRank = 4;
+            // SJ < SA < SB (jong → oud)
+            if      (sub[0] === 'J') subRank = 0;
+            else if (sub[0] === 'A') subRank = 1;
+            else if (sub[0] === 'B') subRank = 2;
+            else                     subRank = 99;
+        } else if (/^[0-9]/.test(groep)) {
+            // Masters: hele suffix is leeftijdsgroep-getal
+            groepRank = 5;
+            const n = parseInt(c.slice(1), 10);
+            subRank = isNaN(n) ? 99 : Math.floor((n - 40) / 5);  // 40→0, 45→1, 50→2…
+        } else {
+            return 99999;
+        }
+        return groepRank * 10000 + subRank * 100 + geslacht;
+    };
+    // DC kan komma-lijst van cats hebben (merge) + split-target_groups.
+    // Sort-key = kleinste cat-rank → DC met DP4 erin komt vóór DC met HP1.
+    const _dcCats = (dc) => {
+        const cats = new Set();
+        (dc.category_filter || '').split(',').map(s => s.trim()).filter(Boolean)
+            .forEach(c => cats.add(c.toUpperCase()));
+        (dc.distances || []).forEach(d => {
+            if (d.target_group) cats.add(String(d.target_group).toUpperCase());
+        });
+        return [...cats];
+    };
+    const _dcSortKey = (dc) => {
+        const cats = _dcCats(dc);
+        if (!cats.length) return 999;
+        return Math.min(...cats.map(_catRank));
+    };
+
+    // Top-level loop: DCs op cat-volgorde (jong → oud, D vóór H).
+    // Binnen elke DC blijven de afstanden in programma-volgorde
+    // (backend ORDER BY d.number, d.name).
+    const dcsGesorteerd = [...dcs].sort((a, b) => {
+        const ka = _dcSortKey(a);
+        const kb = _dcSortKey(b);
+        if (ka !== kb) return ka - kb;
+        // Binnen dezelfde cat: programma-volgorde uit tijdschema_ritten
+        // (door de backend meegeleverd als prog_volgorde). NULL = nooit
+        // in tijdschema — achteraan, alfabetisch onderling.
+        const pa = a.prog_volgorde != null ? Number(a.prog_volgorde) : 99999;
+        const pb = b.prog_volgorde != null ? Number(b.prog_volgorde) : 99999;
+        if (pa !== pb) return pa - pb;
+        return String(a.name || '').localeCompare(String(b.name || ''), 'nl');
+    });
+    const dcBlocks = dcsGesorteerd.flatMap(dc => {
         const distances = dc.distances || [];
         const klassement = dc.klassement || [];
         // Unieke non-empty target_groups in distances = de splits van deze DC
         const splits = [...new Set(distances.map(d => d.target_group).filter(Boolean))];
 
         if (splits.length === 0) {
-            // Niet-gesplitste DC: render zoals voorheen
             return [_bouwDcSectie(dc.name, distances, klassement)];
         }
 
-        // Gesplitste DC: per split-label een eigen sectie met eigen
-        // distances en eigen klassement-subset
-        return splits.map(splitLabel => {
+        // Splits ook op cat-volgorde (zelfde inline-cat-rangorde als DCs).
+        const splitsGesorteerd = [...splits].sort((a, b) => _catRank(a) - _catRank(b));
+        return splitsGesorteerd.map(splitLabel => {
             const splitDists = distances.filter(d => d.target_group === splitLabel);
             const splitKlas  = klassement.filter(k => (k.split_group || '') === splitLabel);
             return _bouwDcSectie(splitLabel, splitDists, splitKlas);
@@ -1569,16 +2085,330 @@ async function printWedstrijdrapport(compId, compNaam) {
     // Geen bouwOrgHeaderFooter() call — die werkt vanuit `actieveOrg` state,
     // wij hebben hier wedstrijd-specifieke org-info uit de API zelf.
     const orgLogoHtml = comp.organisatie_logo
-        ? `<img src="${esc(comp.organisatie_logo)}" alt="logo" style="max-height:55px;max-width:180px;object-fit:contain">`
+        ? `<img src="${esc(comp.organisatie_logo)}" alt="logo" class="pr-org-logo">`
         : '';
+    // Voorblad: grote logo's. Toon zowel het organisatie-logo als het
+    // baan-logo (vereniging die de wedstrijd op de baan draait). Naast
+    // elkaar als beide bestaan, anders één gecentreerd.
+    const _logoXL = (src, alt) => src
+        ? `<img src="${esc(src)}" alt="${esc(alt)}" class="pr-logo-xl">` : '';
+    const orgLogoXL  = _logoXL(comp.organisatie_logo, comp.organisatie_naam || 'organisatie');
+    const baanLogoXL = _logoXL(comp.baan_logo,        comp.baan_naam        || 'baan');
     const orgNaam   = comp.organisatie_naam ?? '';
     const locatie   = [comp.venue_name, comp.venue_city].filter(Boolean).join(', ') || comp.location || '';
     const afgedrukt = new Date().toLocaleString('nl-NL',
         { day: '2-digit', month: 'long', year: 'numeric', hour: '2-digit', minute: '2-digit' });
 
-    const htmlDoc = `<!DOCTYPE html><html lang="nl">
+    // ── Protokol-secties: voorblad, nawoord, officials, sponsoren, afsluiting ──
+    // Iedere sectie krijgt een eigen page-break. Lege secties worden
+    // overgeslagen (geen officials → geen officials-pagina).
+    //
+    // Voorblad-layout met foto:
+    //   - Bovenste helft: grote foto edge-to-edge. Org-logo linksboven,
+    //     baan-logo rechtsboven, beide met witte achtergrond zodat ze
+    //     leesbaar zijn op elke achtergrond.
+    //   - Onderste helft: titel + datum + locatie + voetnoot.
+    //
+    // Zonder foto: oude layout (logo's bovenaan in flexbox, titel midden).
+    const _voorbladFoto = comp.protokol_voorblad_foto || '';
+    const _voorbladHtml = _voorbladFoto
+        ? `
+<section class="protokol-voorblad pv-met-foto">
+    <div class="pv-foto-wrap">
+        <img src="${esc(_voorbladFoto)}" alt="${esc(comp.name || '')}" class="pv-foto">
+        ${orgLogoXL  ? `<div class="pv-logo-hoek pv-logo-links">${orgLogoXL}</div>`  : ''}
+        ${baanLogoXL ? `<div class="pv-logo-hoek pv-logo-rechts">${baanLogoXL}</div>` : ''}
+    </div>
+    <div class="vb-mid">
+        <div class="vb-titel">${esc(comp.name || compNaam || '')}</div>
+        <div class="vb-sub">${esc(T('sub_protokol'))}</div>
+        <div class="vb-meta">${esc(datumBereik)}</div>
+        ${locatie ? `<div class="vb-meta">${esc(locatie)}</div>` : ''}
+    </div>
+    <div class="vb-bot">
+        ${esc(T('afgedrukt'))}: ${esc(afgedrukt)} · ${esc(Tfn('categorien_n', dcs.length))}
+    </div>
+</section>`
+        : `
+<section class="protokol-voorblad">
+    <div class="vb-logos">
+        ${orgLogoXL  ? `<div class="vb-logo">${orgLogoXL}</div>`  : ''}
+        ${baanLogoXL ? `<div class="vb-logo">${baanLogoXL}</div>` : ''}
+    </div>
+    <div class="vb-mid">
+        <div class="vb-titel">${esc(comp.name || compNaam || '')}</div>
+        <div class="vb-sub">${esc(T('sub_protokol'))}</div>
+        <div class="vb-meta">${esc(datumBereik)}</div>
+        ${locatie ? `<div class="vb-meta">${esc(locatie)}</div>` : ''}
+    </div>
+    <div class="vb-bot">
+        ${esc(T('afgedrukt'))}: ${esc(afgedrukt)} · ${esc(Tfn('categorien_n', dcs.length))}
+    </div>
+</section>`;
+
+    // Nawoord-tekst: bij EN proberen we eerst de cache, anders de NL-tekst
+    // (als de Claude-call faalde laten we 'm gewoon in NL staan ipv lege pagina).
+    const _nawoordTekst = lang === 'en'
+        ? (comp.protokol_nawoord_en || comp.protokol_nawoord || '').trim()
+        : (comp.protokol_nawoord || '').trim();
+    // Nawoord-foto (optioneel) + caption (vrij in te vullen, bv. naam +
+    // functie schrijver, of omschrijving als 't geen pasfoto is). Foto
+    // wordt rechts naast de tekst gefloat zodat de tekst er omheen valt;
+    // bij print + lange nawoord-teksten loopt 'm netjes door.
+    const _nawoordFoto    = comp.protokol_nawoord_foto || '';
+    const _nawoordCaption = (comp.protokol_nawoord_foto_caption || '').trim();
+    const _nawoordFotoHtml = _nawoordFoto
+        ? `<figure class="pr-nawoord-foto">
+                <img src="${esc(_nawoordFoto)}" alt="${esc(_nawoordCaption || 'foto')}">
+                ${_nawoordCaption ? `<figcaption>${esc(_nawoordCaption)}</figcaption>` : ''}
+            </figure>`
+        : '';
+    const _nawoordHtml = (_nawoordTekst || _nawoordFoto)
+        ? `<section class="protokol-blad">
+            <h1 class="pr-blad-titel">${esc(T('nawoord'))}</h1>
+            ${_nawoordFotoHtml}
+            <div class="pr-nawoord">${esc(_nawoordTekst).replace(/\n/g, '<br>')}</div>
+        </section>`
+        : '';
+
+    // Officials in drie sub-secties: OC + Jury (functie+naam) + Vrijwilligers.
+    // Lege sub-secties worden weggelaten; als alle drie leeg zijn, hele
+    // pagina overslaan.
+    const _ocLeden    = jury.filter(j => j.categorie === 'OC');
+    const _juryLeden  = jury.filter(j => j.categorie === 'jury');
+    const _vrijLeden  = jury.filter(j => j.categorie === 'vrijwilliger');
+
+    const _renderNamen = (lijst) => lijst.map(j =>
+        `<li>${esc(j.naam || '')}</li>`).join('');
+    // Jury-functie via i18n-dict (NL-key → vertaalde label). Onbekende
+    // functies (legacy / handmatig) blijven raw zichtbaar.
+    const _juryFnLabel = (fn) => {
+        const k = String(fn || '').toLowerCase();
+        return D.jury_functies[k] || fn || '';
+    };
+    // Dubbelrol-aanpak: persoon staat onder z'n hoofdrol (primaire functie
+    // volgens kolom-volgorde). Eventuele extra rollen krijgen een
+    // voetnoot-marker (1), (2)... met onderschrift "(1) tevens algemeen
+    // jurylid". Personen met dezelfde extra-rol-combinatie delen één noot
+    // → geen herhaling.
+    const ALLE_JURY_FUNC = [..._JURY_KOLOM_LINKS, ..._JURY_KOLOM_RECHTS];
+    const _funcRank = (fn) => {
+        const i = ALLE_JURY_FUNC.indexOf(fn);
+        return i === -1 ? 999 : i;
+    };
+    // "A en B" / "A en B en C" als losse rij, "A, B en C" als 3+ items.
+    const _joinAnd = (arr, conj) => {
+        if (arr.length <= 1) return arr.join('');
+        if (arr.length === 2) return `${arr[0]} ${conj} ${arr[1]}`;
+        return `${arr.slice(0, -1).join(', ')} ${conj} ${arr.at(-1)}`;
+    };
+    const _renderJury = (lijst) => {
+        // Groepeer op naam (case-insensitive). Per persoon de set rollen.
+        const perPersoon = new Map();
+        for (const j of lijst) {
+            const naam = String(j.naam || '').trim();
+            const fn   = String(j.functie || '').toLowerCase().trim();
+            if (!naam || !fn) continue;
+            const key = naam.toLowerCase();
+            const e = perPersoon.get(key) || { naam, functies: [] };
+            if (!e.functies.includes(fn)) e.functies.push(fn);
+            perPersoon.set(key, e);
+        }
+        const personen = [...perPersoon.values()].map(p => {
+            p.functies.sort((a, b) => _funcRank(a) - _funcRank(b));
+            p.primair = p.functies[0];
+            p.extra   = p.functies.slice(1);   // alles behalve hoofdrol
+            return p;
+        });
+
+        // Voetnoten dedupliceren: zelfde extra-rol-combinatie → één noot.
+        const notenMap = new Map();   // joined-key → {idx, tekst}
+        const notenLijst = [];
+        const _conj = lang === 'en' ? 'and' : 'en';
+        const _tevens = lang === 'en' ? 'also' : 'tevens';
+        let notenIdx = 0;
+        for (const p of personen) {
+            if (!p.extra.length) { p.notenIdx = null; continue; }
+            const key = p.extra.join('|');
+            if (!notenMap.has(key)) {
+                notenIdx++;
+                const labels = p.extra.map(_juryFnLabel);
+                const tekst = `${_tevens} ${_joinAnd(labels, _conj)}`;
+                notenMap.set(key, { idx: notenIdx, tekst });
+                notenLijst.push({ idx: notenIdx, tekst });
+            }
+            p.notenIdx = notenMap.get(key).idx;
+        }
+
+        // Onbekende functies (legacy): primaire functie niet in lijst.
+        // Plaats onderaan linkerkolom.
+        const onbekendeFn = [...new Set(personen
+            .filter(p => !ALLE_JURY_FUNC.includes(p.primair))
+            .map(p => p.primair)
+        )];
+        const linksFunc = [..._JURY_KOLOM_LINKS, ...onbekendeFn];
+
+        const _kolomRijen = (functies) => {
+            let html = '';
+            for (const fn of functies) {
+                const inFn = personen.filter(p => p.primair === fn)
+                    .sort((a, b) => a.naam.localeCompare(b.naam, 'nl'));
+                for (const p of inFn) {
+                    const noot = p.notenIdx
+                        ? ` <sup class="pr-noot-marker">(${p.notenIdx})</sup>`
+                        : '';
+                    html += `<tr>
+                        <th>${esc(_juryFnLabel(p.primair))}</th>
+                        <td>${esc(p.naam)}${noot}</td>
+                    </tr>`;
+                }
+            }
+            return html;
+        };
+
+        const linksRijen  = _kolomRijen(linksFunc);
+        const rechtsRijen = _kolomRijen(_JURY_KOLOM_RECHTS);
+        const notenHtml = notenLijst.length
+            ? `<div class="pr-jury-noten">${notenLijst.map(n =>
+                `<div>(${n.idx}) ${esc(n.tekst)}</div>`).join('')}</div>`
+            : '';
+        return `<div class="pr-jury-2kol">
+            ${linksRijen  ? `<table class="pr-officials"><tbody>${linksRijen}</tbody></table>`  : '<div></div>'}
+            ${rechtsRijen ? `<table class="pr-officials"><tbody>${rechtsRijen}</tbody></table>` : '<div></div>'}
+        </div>${notenHtml}`;
+    };
+
+    const _officialsHtml = (_ocLeden.length || _juryLeden.length || _vrijLeden.length)
+        ? `<section class="protokol-blad">
+            <h1 class="pr-blad-titel">${esc(T('officials'))}</h1>
+            ${_ocLeden.length ? `
+                <h2 class="pr-sub-titel">${esc(T('oc'))}</h2>
+                <ul class="pr-namen-lijst">${_renderNamen(_ocLeden)}</ul>` : ''}
+            ${_juryLeden.length ? `
+                <h2 class="pr-sub-titel">${esc(T('jury'))}</h2>
+                ${_renderJury(_juryLeden)}` : ''}
+            ${_vrijLeden.length ? `
+                <h2 class="pr-sub-titel">${esc(T('vrijwilligers'))}</h2>
+                <ul class="pr-namen-lijst pr-namen-2kol">${_renderNamen(_vrijLeden)}</ul>` : ''}
+        </section>`
+        : '';
+
+    // Sponsoren in een grid van logo's. URL als optionele href.
+    const _sponsorenHtml = sponsors.length
+        ? `<section class="protokol-blad">
+            <h1 class="pr-blad-titel">${esc(T('sponsoren'))}</h1>
+            <div class="pr-sponsors-grid">${sponsors.map(s => {
+                const img = s.logo_path
+                    ? `<img src="${esc(s.logo_path)}" alt="${esc(s.naam || '')}">`
+                    : `<div class="pr-sp-no-logo">${esc(s.naam || '')}</div>`;
+                const block = `<div class="pr-sp-card">${img}<div class="pr-sp-naam">${esc(s.naam || '')}</div></div>`;
+                return s.url
+                    ? `<a class="pr-sp-link" href="${esc(s.url)}" target="_blank" rel="noopener">${block}</a>`
+                    : block;
+            }).join('')}</div>
+        </section>`
+        : '';
+
+    // ── Deelnemerslijst ─────────────────────────────────────────
+    // Per rijder twee regels: 1) snr, naam, cat, nat + per afstand
+    // X (deelgenomen) of - (niet); 2) club lang onder de naam +
+    // sponsor onder cat+nat (colspan=2 voor meer ruimte).
+    // Snr en afstand-cellen rowspannen over beide regels. Afstand-
+    // headers zijn verticaal geroteerd zodat lange namen smal passen.
+    const _deelnemersHtml = deelnemers.length
+        ? `<section class="protokol-blad">
+            <h1 class="pr-blad-titel">${esc(T('deelnemers'))}</h1>
+            <table class="pr-deelnemers">
+                <colgroup>
+                    <col class="dl-c-snr">
+                    <col class="dl-c-naam"><col class="dl-c-naam"><col class="dl-c-naam"><col class="dl-c-naam">
+                    <col class="dl-c-cat">
+                    <col class="dl-c-nat">
+                    ${afstandenLijst.map(() => '<col class="dl-c-afst">').join('')}
+                </colgroup>
+                <thead>
+                    <tr>
+                        <th rowspan="2" class="dl-snr">${esc(T('kol_snr'))}</th>
+                        <th colspan="4" class="dl-naam">${esc(T('kol_naam'))}</th>
+                        <th class="dl-cat">${esc(T('kol_cat'))}</th>
+                        <th class="dl-nat">${esc(T('kol_nat'))}</th>
+                        ${afstandenLijst.map(a =>
+                            `<th rowspan="2" class="dl-afst-h">${esc(a.naam)}</th>`
+                        ).join('')}
+                    </tr>
+                    <tr>
+                        <th colspan="3" class="dl-club-h">${esc(T('kol_club'))}</th>
+                        <th colspan="3" class="dl-sponsor-h">${esc(T('kol_sponsor'))}</th>
+                    </tr>
+                </thead>
+                <tbody>${deelnemers.map(d => {
+                    const gereden = new Set(d.gereden || []);
+                    const afstCellen = afstandenLijst.map(a =>
+                        `<td rowspan="2" class="dl-afst-c">${gereden.has(a.naam) ? 'X' : '·'}</td>`
+                    ).join('');
+                    return `
+                        <tr class="dl-r1">
+                            <td rowspan="2" class="dl-snr">${esc(d.start_number ?? '')}</td>
+                            <td colspan="4" class="dl-naam">${esc(d.full_name || '')}</td>
+                            <td class="dl-cat">${esc(d.category || '')}</td>
+                            <td class="dl-nat">${esc(d.nationality || '')}</td>
+                            ${afstCellen}
+                        </tr>
+                        <tr class="dl-r2">
+                            <td colspan="3" class="dl-club">${esc(d.club_full || '')}</td>
+                            <td colspan="3" class="dl-sponsor">${esc(d.sponsor || '')}</td>
+                        </tr>`;
+                }).join('')}</tbody>
+            </table>
+        </section>`
+        : '';
+
+    // Tussen-titel boven uitslagen-secties — geen page-break vooraf
+    // (de laatste protokol-blad heeft die al; bij geen voorafgaande
+    // secties begint uitslagen vanaf het voorblad).
+    const _uitslagenIntroHtml = `<section class="pr-uitslagen-intro">
+        <h1 class="pr-blad-titel">${esc(T('uitslagen'))}</h1>
+    </section>`;
+
+    // Afsluitend blad — kort dankblok + org-logo onderaan.
+    // Afsluitings-blok: drie InlineComp-logos naast elkaar (algemeen / P
+    // public-app / C coach-app) met webadressen eronder + contact-email.
+    // Eigen "trots" — organisatie heeft op voorblad al genoeg eer.
+    // Absolute URLs omdat de print-window relatieve paden niet altijd
+    // correct resolveert.
+    const _origin   = window.location.origin;
+    const _hostnaam = _origin.replace(/^https?:\/\//, '');
+    const _afsluitingHtml = `
+<section class="protokol-afsluiting">
+    <div class="af-mid">
+        <div class="af-titel">${esc(T('bedankt'))}</div>
+        <div class="af-sub">${esc(T('tot_volgende'))}</div>
+    </div>
+    <div class="af-logos">
+        <div class="af-logo-blok">
+            <img src="${esc(_origin)}/favicon.svg" alt="InlineComp" class="pr-ic-logo">
+            <div class="af-logo-naam">InlineComp</div>
+            <div class="af-logo-url">${esc(_hostnaam)}</div>
+        </div>
+        <div class="af-logo-blok">
+            <img src="${esc(_origin)}/public/icon-192-v2.svg" alt="InlineComp Public" class="pr-ic-logo">
+            <div class="af-logo-naam">InlineComp P</div>
+            <div class="af-logo-url">${esc(_hostnaam)}/public</div>
+        </div>
+        <div class="af-logo-blok">
+            <img src="${esc(_origin)}/coach/icon-192-v2.svg" alt="InlineComp Coach" class="pr-ic-logo">
+            <div class="af-logo-naam">InlineComp C</div>
+            <div class="af-logo-url">${esc(_hostnaam)}/coach</div>
+        </div>
+    </div>
+    <div class="af-contact">
+        Contact: <a href="mailto:inlinecomp@devriesen.com">inlinecomp@devriesen.com</a>
+    </div>
+</section>`;
+
+    const htmlDoc = `<!DOCTYPE html><html lang="${esc(lang)}">
 <head><meta charset="UTF-8">
-<title>${esc(comp.name || compNaam || 'Wedstrijdrapport')}</title>
+<title>${esc(comp.name || compNaam || T('doc_titel'))}</title>
 <style>
 *{box-sizing:border-box}
 body{font-family:Arial,Helvetica,sans-serif;font-size:9.5pt;margin:.8cm 1.2cm 1.2cm;color:#111}
@@ -1605,14 +2435,279 @@ td{padding:3px 6px;border-bottom:1px solid #eee;vertical-align:middle}
 tr.z td{background:#f9f9f9}
 footer{margin-top:6mm;border-top:1px solid #ccc;padding-top:2mm;font-size:7.5pt;color:#888;
        display:flex;justify-content:space-between}
-@page{size:A4 portrait;margin:1cm}
+/* Standaard-pagina's: footer met tagline + paginanummer via @page
+   margin-boxes (Chrome's print engine supports). 1.6cm bottom-margin
+   reserveert ruimte voor de footer-content; 1cm aan de zijden + top. */
+@page{
+    size:A4 portrait;
+    margin:1cm 1cm 1.6cm;
+    @bottom-left{
+        content:"${esc(T('tagline_footer'))}";
+        font:8pt Arial,sans-serif;
+        color:#1a3a5c;
+        padding-top:5mm;
+    }
+    @bottom-right{
+        content:"${esc(T('pagina_label'))} " counter(page) "/" counter(pages);
+        font:8pt Arial,sans-serif;
+        color:#888;
+        padding-top:5mm;
+    }
+}
+/* Voorblad krijgt eigen @page zonder footer-margins en zonder content
+   in de margin-boxes — de titelpagina hoort schoon te blijven. */
+@page voorblad{
+    size:A4 portrait;
+    margin:1cm;
+    @bottom-left{content:""}
+    @bottom-right{content:""}
+}
+.protokol-voorblad{page:voorblad}
 @media print{
   tr{page-break-inside:avoid}
   thead{display:table-header-group}
   .dc-block{page-break-inside:avoid}
 }
+
+/* ── Protokol: voorblad ───────────────────────────────────────── */
+.protokol-voorblad{
+    page-break-after:always;
+    height:25cm;
+    display:flex;flex-direction:column;
+    justify-content:space-between;align-items:center;
+    text-align:center;padding:1cm 0;
+}
+.protokol-voorblad .vb-logos{
+    display:flex;gap:2cm;align-items:flex-end;justify-content:center;
+    flex-wrap:wrap;min-height:6cm;
+}
+.protokol-voorblad .vb-logo-blok{
+    display:flex;flex-direction:column;align-items:center;gap:5mm;
+    max-width:8cm;
+}
+.protokol-voorblad .vb-logo{display:flex;align-items:center;justify-content:center}
+.protokol-voorblad .vb-logo img.pr-logo-xl{
+    max-height:6cm;max-width:8cm;object-fit:contain;
+}
+.protokol-voorblad .vb-logo-naam{font-size:10pt;color:#444;line-height:1.2}
+.protokol-voorblad .vb-mid{display:flex;flex-direction:column;align-items:center;gap:4mm}
+.protokol-voorblad .vb-titel{font-size:28pt;font-weight:700;color:#1a3a5c;line-height:1.1}
+.protokol-voorblad .vb-sub{font-size:14pt;color:#555;letter-spacing:.05em;text-transform:uppercase}
+.protokol-voorblad .vb-meta{font-size:12pt;color:#333;margin-top:1mm}
+.protokol-voorblad .vb-bot{min-height:1cm;font-size:9pt;color:#888}
+
+/* Voorblad MET foto: foto vult de bovenste helft van de pagina edge-
+   to-edge, met daarop de twee logo's in de hoeken met witte achtergrond
+   zodat ze leesbaar blijven op elke foto-achtergrond. Onder de foto
+   komt de standaard vb-mid + vb-bot structuur. */
+.protokol-voorblad.pv-met-foto{justify-content:flex-start;padding-top:0}
+.pv-foto-wrap{
+    position:relative;width:100%;height:12.5cm;
+    margin:0 0 1cm;overflow:hidden;
+}
+.pv-foto{width:100%;height:100%;object-fit:cover;display:block}
+.pv-logo-hoek{
+    position:absolute;top:5mm;
+    background:#fff;padding:4mm 6mm;border-radius:3px;
+    box-shadow:0 1px 4px rgba(0,0,0,.15);
+    display:flex;align-items:center;justify-content:center;
+}
+.pv-logo-links{left:5mm}
+.pv-logo-rechts{right:5mm}
+.pv-logo-hoek img.pr-logo-xl{max-height:2.4cm;max-width:5cm;object-fit:contain}
+
+/* ── Protokol: midden-bladen (officials, sponsoren, nawoord) ─── */
+.protokol-blad{page-break-after:always;min-height:24cm}
+.pr-blad-titel{
+    font-size:18pt;font-weight:700;color:#1a3a5c;
+    border-bottom:1.5px solid #1a3a5c;padding-bottom:2mm;margin:0 0 6mm;
+}
+.pr-nawoord{font-size:10pt;line-height:1.5;color:#222;white-space:normal;max-width:18cm}
+/* Nawoord-foto: gefloat rechts zodat de tekst er omheen valt. Caption
+   onder de foto, klein en gedimd. */
+.pr-nawoord-foto{
+    float:right;margin:0 0 4mm 6mm;
+    max-width:5cm;text-align:center;
+}
+.pr-nawoord-foto img{
+    width:100%;height:auto;max-height:7cm;object-fit:cover;
+    border-radius:3px;border:1px solid #ddd;
+}
+.pr-nawoord-foto figcaption{
+    font-size:8.5pt;color:#555;margin-top:1.5mm;line-height:1.3;
+}
+.pr-sub-titel{
+    font-size:12pt;font-weight:600;color:#1a3a5c;
+    margin:5mm 0 2mm;padding-bottom:1mm;border-bottom:1px solid #ccc;
+}
+.pr-sub-titel:first-of-type{margin-top:0}
+.pr-namen-lijst{
+    list-style:none;padding:0;margin:0 0 3mm;font-size:10.5pt;color:#222;
+}
+.pr-namen-lijst li{padding:1mm 0;border-bottom:1px dotted #eee}
+.pr-namen-2kol{
+    column-count:2;column-gap:8mm;
+}
+.pr-namen-2kol li{break-inside:avoid}
+/* Jury-sectie in 2 kolommen: links hoofdscheidsrechter t/m speaker,
+   rechts algemeen jurylid + stagiair. align-items:start + align-self
+   op de kinderen voorkomt dat de kortere kolom wordt uitgerekt of
+   verticaal gecentreerd — beide kolommen beginnen bovenaan. */
+.pr-jury-2kol{display:grid;grid-template-columns:1fr 1fr;gap:4mm 6mm;align-items:start}
+.pr-jury-2kol > *{align-self:start}
+/* !important forceert top-align tegen browser-default (middle) op print-
+   cellen in. Anders zit "Dionne van Eig" verticaal gecentreerd in een
+   cell die hoger is door label-wrap (bv. "General Jury Member"). */
+.pr-officials th,.pr-officials td{vertical-align:top!important}
+/* Voetnoot-systeem voor dubbelrollen: superschrift naast de naam +
+   verklaring onder de tabel. Personen met dezelfde extra-rollen delen
+   één noot. */
+.pr-noot-marker{font-size:.7em;color:#1565c0;vertical-align:super;margin-left:1px}
+.pr-jury-noten{margin-top:4mm;font-size:8.5pt;color:#555;line-height:1.4}
+.pr-jury-noten div{margin-bottom:1mm}
+.pr-officials{width:100%;border-collapse:collapse;font-size:10.5pt;margin:0 0 3mm}
+.pr-officials th{
+    background:none;color:#1a3a5c;text-align:right;
+    padding:1.5mm 6mm 1.5mm 0;font-weight:600;width:40%;
+    border-bottom:1px dotted #ccc;text-transform:capitalize;
+}
+.pr-officials td{padding:1.5mm 0;border-bottom:1px dotted #ccc;color:#222}
+
+/* Sponsoren-grid: 2 kolommen voor extra ademruimte per sponsor. Logo's
+   mogen flink groot. Bij heel veel sponsors wrapt 'ie naar meerdere
+   pagina's (.protokol-blad heeft page-break-after). */
+.pr-sponsors-grid{
+    display:grid;grid-template-columns:repeat(2, 1fr);gap:12mm 10mm;
+}
+.pr-sp-link{text-decoration:none;color:inherit}
+.pr-sp-card{
+    border:1px solid #eee;border-radius:4px;padding:8mm 6mm;
+    display:flex;flex-direction:column;align-items:center;justify-content:center;
+    min-height:60mm;
+}
+.pr-sp-card img{max-width:100%;max-height:45mm;object-fit:contain;margin-bottom:5mm}
+.pr-sp-naam{font-size:11pt;color:#444;text-align:center;line-height:1.3}
+.pr-sp-no-logo{
+    font-size:16pt;color:#1a3a5c;font-weight:600;text-align:center;
+    padding:12mm 0;
+}
+
+/* Deelnemerslijst: header zonder background-fill (gelijk aan de jury-
+   tabel-stijl, geen donkerblauwe balk die de tekst onleesbaar maakt),
+   afstand-headers geroteerd zodat lange namen smal kunnen passen.
+   7 sub-kolommen voor het non-afstand-gedeelte (Snr + 4×Naam + Cat
+   + Nat) → op rij 2 spant Club 3 en Sponsor 3, beide ruim. */
+.pr-deelnemers{
+    width:100%;border-collapse:collapse;font-size:9pt;margin-top:2mm;
+    table-layout:fixed;
+}
+/* Overschrijft globale thead tr-styling (donkerblauwe balk voor uitslagen). */
+.pr-deelnemers thead tr{background:transparent;color:inherit}
+.pr-deelnemers th{
+    text-align:left;padding:2mm 1.5mm;
+    font-size:8.5pt;font-weight:600;color:#1a3a5c;
+    background:transparent;
+    border-bottom:2px solid #1a3a5c;
+}
+.pr-deelnemers .dl-snr,.pr-deelnemers .dl-cat,
+.pr-deelnemers .dl-nat,.pr-deelnemers .dl-afst-h{text-align:center}
+.pr-deelnemers td{padding:1mm 1.5mm;vertical-align:middle}
+.pr-deelnemers tr.dl-r1 td{padding-top:1.8mm}
+.pr-deelnemers tr.dl-r2 td{padding-bottom:1.8mm;font-size:8.5pt;color:#555}
+.pr-deelnemers tbody tr.dl-r2{border-bottom:1px dotted #c0c0c0}
+/* Verticale kolomscheidingen — lichte grijze lijntjes voor alle
+   kolommen, plus twee dikke blauwe lijnen na Snr en na Nat (= einde
+   van het persoons-blok) die doorlopen tot onderaan de tabel. */
+.pr-deelnemers .dl-snr,.pr-deelnemers .dl-naam,.pr-deelnemers .dl-club,
+.pr-deelnemers .dl-cat,.pr-deelnemers .dl-nat,.pr-deelnemers .dl-sponsor,
+.pr-deelnemers .dl-afst-h,.pr-deelnemers .dl-afst-c{
+    border-right:1px solid #e0e0e0;
+}
+.pr-deelnemers .dl-afst-c:last-child,
+.pr-deelnemers .dl-afst-h:last-child{border-right:none}
+/* Dikke lijnen: na Snr en na Nat (rij 1) + na Sponsor (rij 2, ligt op
+   dezelfde positie als Nat door colspan-layout). Door rowspan resp.
+   colspan loopt elke lijn keurig van header tot laatste rij. */
+.pr-deelnemers .dl-snr,
+.pr-deelnemers .dl-nat,
+.pr-deelnemers .dl-sponsor,
+.pr-deelnemers .dl-sponsor-h{border-right:2px solid #1a3a5c}
+
+/* Header buitenrand — boven/links/rechts in 2px blauw zelfde kleur als
+   onderkant. Onder is al 2px via .pr-deelnemers th border-bottom.
+   Tussen rij 1 (Naam/Cat/Nat) en rij 2 (Club/Sponsor) → dunne grijze
+   tussenlijn, niet de dikke header-onderkant-lijn (die is alleen onder
+   de echte header-bottom, niet tussen header-rijen). */
+.pr-deelnemers thead tr:first-child th{border-top:2px solid #1a3a5c}
+.pr-deelnemers thead tr:first-child th:not([rowspan]){
+    border-bottom:1px solid #e0e0e0;
+}
+
+/* Verticale buitenranden doorvoeren over ALLE rijen (header + body).
+   dl-snr (rowspan=2 in header, rowspan=2 in body) krijgt left 2px;
+   laatste afstand-cel idem rechts. */
+.pr-deelnemers .dl-snr{border-left:2px solid #1a3a5c}
+.pr-deelnemers .dl-afst-h:last-child,
+.pr-deelnemers .dl-afst-c:last-child{border-right:2px solid #1a3a5c}
+.pr-deelnemers .dl-snr{font-weight:600;font-variant-numeric:tabular-nums}
+.pr-deelnemers .dl-naam{font-weight:500;color:#111}
+.pr-deelnemers .dl-club{font-style:italic}
+.pr-deelnemers .dl-afst-h{
+    font-size:7.5pt;writing-mode:vertical-rl;transform:rotate(180deg);
+    padding:2mm 0;line-height:1.1;
+}
+.pr-deelnemers .dl-afst-c{
+    text-align:center;font-family:Arial,sans-serif;font-weight:600;
+    color:#1a3a5c;font-size:10pt;
+}
+.pr-deelnemers .dl-c-snr {width:10mm}
+.pr-deelnemers .dl-c-naam{width:auto}
+.pr-deelnemers .dl-c-cat {width:14mm}
+.pr-deelnemers .dl-c-nat {width:12mm}
+.pr-deelnemers .dl-c-afst{width:10mm}
+
+/* Tussen-titel voor uitslagen-secties (begin van het uitslagen-deel) */
+.pr-uitslagen-intro{page-break-after:auto;margin:0 0 6mm}
+
+/* Afsluitend blad */
+.protokol-afsluiting{
+    height:25cm;
+    display:flex;flex-direction:column;justify-content:center;align-items:center;
+    text-align:center;gap:1cm;page-break-before:always;
+}
+.protokol-afsluiting .af-titel{font-size:24pt;font-weight:700;color:#1a3a5c}
+.protokol-afsluiting .af-sub{font-size:13pt;color:#555;margin-top:2mm}
+.protokol-afsluiting .af-logos{
+    display:grid;grid-template-columns:repeat(3, 1fr);gap:1.5cm;
+    width:100%;max-width:18cm;align-items:start;
+}
+.protokol-afsluiting .af-logo-blok{
+    display:flex;flex-direction:column;align-items:center;gap:3mm;
+}
+.protokol-afsluiting .af-logo-naam{
+    font-size:12pt;font-weight:600;color:#1a3a5c;
+}
+.protokol-afsluiting .af-logo-url{
+    font-size:8.5pt;color:#666;font-family:'Consolas','Courier New',monospace;
+    overflow-wrap:anywhere;text-align:center;
+}
+.protokol-afsluiting .af-contact{
+    font-size:10.5pt;color:#555;margin-top:4mm;
+}
+.protokol-afsluiting .af-contact a{color:#1565c0;text-decoration:none}
+.pr-ic-logo{width:30mm;height:30mm;object-fit:contain}
+
+/* Organisatie-logo formaten: klein (header, afsluiting) + groot (voorblad) */
+.pr-org-logo{max-height:55px;max-width:180px;object-fit:contain}
+.pr-org-logo-groot{max-height:90px;max-width:280px;object-fit:contain}
 </style></head>
 <body>
+${_voorbladHtml}
+${_nawoordHtml}
+${_officialsHtml}
+${_sponsorenHtml}
+${_deelnemersHtml}
+${_uitslagenIntroHtml}
 <header>
   <div class="hdr-links">
     <div class="hdr-titel">${esc(comp.name)}</div>
@@ -1624,10 +2719,7 @@ footer{margin-top:6mm;border-top:1px solid #ccc;padding-top:2mm;font-size:7.5pt;
 </header>
 <hr class="top-rule">
 ${dcBlocks}
-<footer>
-  <span>Afgedrukt: ${esc(afgedrukt)}</span>
-  <span>${dcs.length} categorie${dcs.length !== 1 ? 'ën' : ''} · InlineComp</span>
-</footer>
+${_afsluitingHtml}
 <script>window.addEventListener('load', () => { window.focus(); window.print(); });<\/script>
 </body></html>`;
 
@@ -1797,14 +2889,14 @@ function kiesPosterTaal() {
         const overlay = document.createElement('div');
         overlay.className = 'modal-overlay';
         overlay.innerHTML = `
-            <div class="modal-dialog" style="max-width:360px">
+            <div class="modal-dialog modal-dialog--smal">
                 <div class="modal-header">
                     <span>Poster-taal</span>
                 </div>
-                <div class="modal-body" style="text-align:center;padding:18px">
+                <div class="modal-body modal-body--gecentreerd">
                     Welke taal voor de poster?
                 </div>
-                <div class="modal-knoppen" style="justify-content:center">
+                <div class="modal-knoppen modal-knoppen--gecentreerd">
                     <button class="modal-btn modal-annuleer" data-act="cancel">Annuleer</button>
                     <button class="modal-btn modal-doorgaan" data-act="nl">🇳🇱 Nederlands</button>
                     <button class="modal-btn modal-doorgaan" data-act="en">🇬🇧 English</button>
