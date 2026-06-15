@@ -3138,13 +3138,23 @@ tr.ts-drop-below td  { border-bottom: 3px solid #2563eb !important; }
 .ts-inrijd-cat-lbl   { display: flex; align-items: center; gap: .25rem; font-size: .82rem;
                        white-space: nowrap; cursor: pointer; }
 .ts-blok-duur-lbl    { display: flex; align-items: center; gap: .25rem; flex-shrink: 0; }
+/* Opmerking-input in blok-rij: standaard 14em, breed-variant 16em (herstart). */
+.ts-inp-opmerking         { width: 14em; }
+.ts-inp-opmerking-breed   { width: 16em; }
 .ts-duur-suffix      { font-size: .82rem; color: #888; }
 .ts-btn-blok-del     { /* stijl via .btn-del */ }
 .ts-blokken-acties   { display: flex; align-items: center; gap: .6rem; flex-wrap: wrap; margin-top: .6rem; }
 .ts-blokken-acties-sep { flex: 1; }   /* duwt volgorde-opslaan + genereer naar rechts */
 
 /* ── Ritten-lijst ── */
-.ts-ritten-hint      { font-size: .82rem; color: #888; margin-bottom: .5rem; font-style: italic; }
+.ts-ritten-hint      { font-size: .82rem; color: #888; margin-bottom: .5rem; font-style: italic;
+                       display: flex; align-items: center; gap: .75rem; flex-wrap: wrap; }
+.ts-drag-handle-inline { display: inline-block; vertical-align: middle; }
+/* Klap-toggle-knoppen ("Alles in/uitklappen") in de ritten-hint-balk. */
+.ts-klap-toggle-all  { font-style: normal; padding: 3px 9px; font-size: .78rem;
+                       border: 1px solid var(--border); background: #fff;
+                       color: var(--blauw); border-radius: 4px; cursor: pointer; }
+.ts-klap-toggle-all:hover { background: #eaf2fb; }
 /* Multi-day dag-tabs in 'Gegenereerd programma'. Verschijnen alleen bij
    meerdaagse evenementen (>1 wedstrijdstart-blok). Sluit aan op de
    herbruikbare .org-tab-btn styling — alleen extra spacing/scheidslijn. */
@@ -3179,6 +3189,18 @@ tr.ts-drop-below td  { border-bottom: 3px solid #2563eb !important; }
 .ts-rit-sub:hover    { background: #f7faff; }
 .ts-rit-sub .ts-rit-nr   { padding-left: 24px; }   /* lichte inspringing */
 .ts-rit-sub .ts-rit-naam { color: #444; font-weight: 400; font-size: .85rem; }
+/* Chevron-knop in de groep-header om de heats in-/uit te klappen. Compact +
+   monospace zodat ▶/▼ niet verspringen tijdens toggle. Drag op de header
+   blijft werken; stopPropagation in JS voorkomt dat klikken op de chevron
+   een drag-start in gang zet. */
+.ts-groep-toggle     { background: none; border: 1px solid transparent; padding: 1px 5px;
+                       font-size: .7rem; color: #4a6585; cursor: pointer; border-radius: 3px;
+                       line-height: 1; font-family: monospace; }
+.ts-groep-toggle:hover { background: #fff; border-color: #c8d3e3; color: var(--blauw); }
+/* Ingeklapte groep: heats + opmerking-rijen verbergen. Header zelf blijft
+   zichtbaar (en draggable) — daar zit het verschuif-handvat. */
+.ts-groep-verborgen  { display: none !important; }
+.ts-rit-groep-hdr.ts-groep-ingeklapt { border-bottom: 2px solid #d0ddf0; }
 .ts-type-badge-sm    { font-size: .68rem !important; padding: 1px 7px !important; opacity: .85; }
 
 .ts-rit-rij          { border-bottom: 1px solid #eef1f5; transition: background .1s; }
@@ -3421,6 +3443,11 @@ tr.ts-drop-below td  { border-bottom: 3px solid #2563eb !important; }
 .rk-w-sub { font-size:.7rem; font-weight:400; color:#666;
             line-height:1.1; margin-top:1px; white-space:nowrap; }
 
+/* Print-modal: cat-keuze. Bouwt op .modal-overlay/.modal-dialog/.wh-cat-chip. */
+.rk-print-uitleg     { margin:0 0 10px; font-size:13px; color:#444; }
+.rk-print-quick      { display:flex; gap:8px; font-size:11.5px; margin-top:8px; }
+.rk-print-quick-btn  { padding:4px 10px; }
+
 /* Wizard-overlay */
 .ks-overlay {
     position: fixed; inset: 0; background: rgba(0,0,0,.5);
@@ -3553,6 +3580,21 @@ th.rk-totaal, td.rk-totaal { width:55px; font-weight:700; color:var(--blauw); ba
 .mld-veld textarea, .mld-veld input, .mld-veld select { width: 100%; box-sizing: border-box; }
 .mld-rij-veld     { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: .8rem; }
 .mld-form-acties  { display: flex; gap: 8px; justify-content: flex-end; margin-top: .8rem; }
+
+/* Bijlage-blok in de melding-edit-modal: huidige bijlage (download-link
+   + verwijder-knop) + bestand-kiezer voor een nieuwe upload. */
+.mld-bijlage-blok    { padding: 8px 10px; border: 1px solid #e0e6ec;
+                       border-radius: 5px; background: #fafbfc; }
+.mld-bijlage-huidig  { display: flex; align-items: center; gap: 8px;
+                       flex-wrap: wrap; margin: 6px 0; }
+.mld-bijlage-link    { color: var(--blauw); text-decoration: none;
+                       font-weight: 600; font-size: .9rem; }
+.mld-bijlage-link:hover { text-decoration: underline; }
+.mld-bijlage-leeg    { color: #888; font-style: italic; font-size: .85rem; }
+.mld-bijlage-nieuw   { display: flex; align-items: center; gap: 8px;
+                       flex-wrap: wrap; margin-top: 4px; }
+.mld-bijlage-upload-lbl { cursor: pointer; }
+.mld-bijlage-naam    { font-size: .82rem; color: #555; font-style: italic; }
 /* Vertaal-acties tussen NL- en EN-veldgroepen — laat de twee Claude-knoppen
    visueel groeperen + dunne tussen-scheidingslijn voor rust. */
 .mld-vertaal-acties {
@@ -6568,3 +6610,103 @@ col.live-col-rondes  { width: 40px; }
 .csv-result-errs ul { margin: 0 0 0 18px; padding: 0; }
 .csv-result-errs li { margin-bottom: 3px; }
 
+
+/* ── Protokol-data modal (officials + nawoord per wedstrijd) ────────── */
+/* Bouwt op de bestaande .modal-overlay / .modal-dialog / .modal-header /
+   .modal-body / .modal-knoppen hierarchie. Alleen de protokol-specifieke
+   maten en grid-indeling staan hier. */
+.pd-dialog {
+    max-width: 640px; width: 90%;
+    max-height: 92vh; overflow: hidden;
+    display: flex; flex-direction: column;
+}
+.pd-body { padding: 18px; overflow-y: auto; }
+.pd-uitleg { font-size: .85em; color: #666; margin-bottom: .8rem; line-height: 1.4; }
+.pd-sec-titel { font-weight: 600; color: #1a3a5c; font-size: .92em; margin-bottom: .35rem; }
+.pd-sec-titel-na { margin-top: .8rem; }
+.pd-sec-titel small {
+    font-weight: 400; color: #888; font-size: .85em; margin-left: .3rem;
+}
+/* Jury-rij: naam links, multi-select rol-chips midden, delete-knop rechts.
+   Chip-toggles laten één persoon meerdere rollen tegelijk krijgen zonder
+   per-rol een eigen rij in te voeren. */
+.pd-jury-rij {
+    display: grid;
+    grid-template-columns: minmax(140px, 1fr) 2fr 32px;
+    gap: .5rem;
+    align-items: center;
+    margin-bottom: .4rem;
+    padding-bottom: .4rem;
+    border-bottom: 1px dotted #eee;
+}
+.pd-jury-rij:last-child { border-bottom: none; }
+.pd-rollen-chips {
+    display: flex; flex-wrap: wrap; gap: .25rem;
+}
+.pd-rol-chip {
+    padding: 2px 9px;
+    border: 1px solid #c0c0c0;
+    border-radius: 12px;
+    font-size: .78em;
+    cursor: pointer;
+    user-select: none;
+    background: #fff;
+    color: #555;
+    transition: background .12s, border-color .12s, color .12s;
+}
+.pd-rol-chip:hover { border-color: #888; }
+.pd-rol-chip.is-actief {
+    background: #1565c0;
+    color: #fff;
+    border-color: #1565c0;
+}
+.pd-jury-rij .pd-del {
+    background: none; border: 1px solid #ccc; border-radius: 4px;
+    color: #b71c1c; font-size: 1.1em; line-height: 1;
+    padding: 2px 8px; cursor: pointer;
+    align-self: start;
+}
+.pd-jury-rij .pd-del:hover { background: #ffebee; }
+.pd-add-rij { margin-top: .3rem; }
+.pd-namen-inp,
+.pd-nawoord-inp {
+    width: 100%; resize: vertical;
+    font-family: inherit; font-size: .92em;
+}
+.pd-nawoord-inp { min-height: 110px; }
+.pd-melding { margin-top: .5rem; }
+
+/* Protokol-foto blokken (voorblad + nawoord). Preview links, acties rechts. */
+.pd-foto-blok {
+    display: flex; gap: 12px; align-items: flex-start;
+    padding: 8px; border: 1px solid #e0e6ec; border-radius: 5px;
+    background: #fafbfc; margin-bottom: .6rem;
+}
+.pd-foto-preview {
+    width: 140px; height: 90px; flex-shrink: 0;
+    border: 1px solid #cdd8e3; border-radius: 4px;
+    background: #fff; overflow: hidden;
+    display: flex; align-items: center; justify-content: center;
+}
+.pd-foto-preview-klein { width: 80px; height: 100px; }
+.pd-foto-preview img { max-width: 100%; max-height: 100%; object-fit: cover; }
+.pd-foto-preview.is-leeg { background: #f0f3f7; border-style: dashed; }
+.pd-foto-leeg-tekst { font-size: 11px; color: #888; font-style: italic; }
+.pd-foto-acties { display: flex; gap: 6px; flex-wrap: wrap; }
+.pd-foto-upload-lbl { cursor: pointer; }
+.pd-foto-rechts { flex: 1; display: flex; flex-direction: column; gap: 8px; }
+.pd-foto-caption-lbl {
+    font-size: .82em; color: #555; font-weight: 600; display: block;
+}
+.pd-foto-caption-lbl small { font-weight: 400; color: #888; margin-left: 4px; }
+.pd-foto-caption { width: 100%; margin-top: 3px; }
+.pd-knoppen {
+    padding: 12px 18px; border-top: 1px solid #eee;
+    display: flex; justify-content: flex-end; gap: .4rem;
+}
+
+/* Generieke modal-modifiers voor compacte keuze-dialogen (poster-taal,
+   protokol-taal, etc.). Hergebruikbaar zodat ze niet meer inline staan. */
+.modal-dialog--smal { max-width: 360px; }
+.modal-body--gecentreerd { text-align: center; padding: 18px; }
+.modal-knoppen--gecentreerd { justify-content: center; }

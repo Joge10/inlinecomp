@@ -11,6 +11,10 @@ let _tsLeesOnly        = false;  // true als huidige gebruiker geen schrijfrecht
 // Reset bij wissel van competitie/tijdschema; blijft anders staan tussen
 // re-renders zodat de operator z'n keuze niet verliest.
 let _tsActieveDag      = 0;
+// Ingeklapte cat-groepen in de rittenlijst (data-groep-key). Beperkt de UI
+// tot kopjes-only zodat groep-verschuiven overzichtelijker is. Blijft tussen
+// re-renders staan; reset bij wissel van competitie/tijdschema.
+let _tsIngeklapteGroepen = new Set();
 
 // ── Heat-duur hulpfuncties (seconden ↔ "m:ss") ────────────────────────────────
 
@@ -233,6 +237,8 @@ async function laadTijdschema() {
     // Reset multi-day tab-state bij elke laad (= competitie-wissel of refresh).
     // Default-dag wordt opnieuw bepaald op basis van vandaag-datum.
     _tsActieveDag = 0;
+    // Ingeklapt-state per groep ook leeg: andere competitie heeft andere groepen.
+    _tsIngeklapteGroepen.clear();
     try {
         // Lazy-load vergelijkData als die leeg is — kan voorkomen als operator
         // direct naar Tijdschema-tab navigeert zonder eerst Importeer te bezoeken
@@ -1103,8 +1109,7 @@ function renderBlokken(schema, afstandGroepen) {
                 ${duurInp(blok)}
                 <label class="ts-blok-duur-lbl ts-blok-opm-lbl">
                     Opmerking:&nbsp;<input type="text" class="ts-inp-opmerking" data-blok-id="${blok.id}"
-                                          value="${opmVal}" placeholder="bijv. lunch, uitloop…" maxlength="120"
-                                          style="width:14em">
+                                          value="${opmVal}" placeholder="bijv. lunch, uitloop…" maxlength="120">
                 </label>
                 ${delBtn}
             </div>`;
@@ -1127,10 +1132,15 @@ function renderBlokken(schema, afstandGroepen) {
             </div>`;
 
         } else if (blok.blok_type === 'ceremonie') {
+            const opmVal = escHtml(blok.opmerking ?? '');
             html += `<div class="ts-blok-item ts-blok-cerem" draggable="true" data-blok-id="${blok.id}">
                 ${dragHandle}${navBtns}
                 <span class="ts-blok-cerem-lbl">── CEREMONIE ──</span>
                 ${duurInp(blok)}
+                <label class="ts-blok-duur-lbl ts-blok-opm-lbl">
+                    Opmerking:&nbsp;<input type="text" class="ts-inp-opmerking" data-blok-id="${blok.id}"
+                                          value="${opmVal}" placeholder="bijv. prijsuitreiking, jeugd…" maxlength="120">
+                </label>
                 ${delBtn}
             </div>`;
 
@@ -1169,9 +1179,8 @@ function renderBlokken(schema, afstandGroepen) {
                                      value="${tijdVal}">
                 </label>
                 <label class="ts-blok-duur-lbl ts-blok-opm-lbl">
-                    Opmerking:&nbsp;<input type="text" class="ts-inp-opmerking" data-blok-id="${blok.id}"
-                                          value="${opmVal}" placeholder="bijv. vertraging door…" maxlength="120"
-                                          style="width:16em">
+                    Opmerking:&nbsp;<input type="text" class="ts-inp-opmerking ts-inp-opmerking-breed" data-blok-id="${blok.id}"
+                                          value="${opmVal}" placeholder="bijv. vertraging door…" maxlength="120">
                 </label>
                 ${delBtn}
             </div>`;
@@ -1580,7 +1589,11 @@ function renderRittenLijst(ritten, blokken) {
 
     let html = `<div class="ts-ritten-wrap">
         ${dagTabsHtml}
-        <div class="ts-ritten-hint">Sleep <span class="ts-drag-handle" style="display:inline-block;vertical-align:middle">⠿</span> om een complete categoriegroep te verplaatsen.</div>
+        <div class="ts-ritten-hint">
+            <span>Sleep <span class="ts-drag-handle ts-drag-handle-inline">⠿</span> om een complete categoriegroep te verplaatsen.</span>
+            <button type="button" class="ts-btn-sm ts-klap-toggle-all" data-actie="alles-in"  title="Klap alle cat-groepen in (alleen kopjes)">▶ Alles inklappen</button>
+            <button type="button" class="ts-btn-sm ts-klap-toggle-all" data-actie="alles-uit" title="Klap alle cat-groepen uit">▼ Alles uitklappen</button>
+        </div>
         ${combineerToolbar}
         <table class="ts-ritten-tabel">
             <thead><tr>${heeftStartTijden ? '<th>Tijd</th>' : ''}<th>#</th><th>Rit</th><th>Type</th><th>Verwacht</th></tr></thead>
@@ -1635,9 +1648,10 @@ function renderRittenLijst(ritten, blokken) {
         } else if (rij.type === 'ceremonie') {
             prevGroepKey = null;
             const duurTxt = rij.blok?.duur ? ` – ${rij.blok.duur} min` : '';
+            const opmTxt  = rij.blok?.opmerking ? ` — ${escHtml(rij.blok.opmerking)}` : '';
             html += `<tr class="ts-cerem-rij">
                 ${tijdCel(rij.blok.id)}
-                <td colspan="${restCols}" class="ts-cerem-cel">🏆 Ceremonie${escHtml(duurTxt)}</td>
+                <td colspan="${restCols}" class="ts-cerem-cel">🏆 Ceremonie${escHtml(duurTxt)}${opmTxt}</td>
             </tr>`;
         } else if (rij.type === 'herstart') {
             prevGroepKey = null;
@@ -1681,12 +1695,14 @@ function renderRittenLijst(ritten, blokken) {
                                 >${icon} rust ${rustMin} min</span>`;
                 }
 
-                html += `<tr class="ts-rit-groep-hdr" draggable="true"
+                const isInge = _tsIngeklapteGroepen.has(groepKey);
+                html += `<tr class="ts-rit-groep-hdr${isInge ? ' ts-groep-ingeklapt' : ''}" draggable="true"
                             data-groep-key="${escHtml(groepKey)}">
                     <td colspan="${aantalCols}" class="ts-groep-hdr-td">
                         <div class="ts-groep-hdr-cel">
                             ${tijdInhoud}
                             <span class="ts-drag-handle">⠿</span>
+                            <button type="button" class="ts-groep-toggle" title="Klap heats in/uit" aria-expanded="${isInge ? 'false' : 'true'}">${isInge ? '▶' : '▼'}</button>
                             <span class="ts-type-badge" style="background:${kleur}">${escHtml(label)}${escHtml(fin)}</span>
                             ${escHtml(rit.dc_naam)}
                             <span class="ts-groep-count">(${nTxt})</span>
@@ -1734,8 +1750,9 @@ function renderRittenLijst(ritten, blokken) {
                     tijdCelHtml = `<td class="ts-rit-startijd${hasOverride ? ' ts-rit-startijd-override' : ''}">${startTijdTxt}${hasOverride ? '&nbsp;📌' : ''}</td>`;
                 }
             }
+            const verbergCls = _tsIngeklapteGroepen.has(groepKey) ? ' ts-groep-verborgen' : '';
             if (ovOpmVal) {
-                html += `<tr class="ts-rit-opm-rij" data-groep-key="${escHtml(groepKey)}">
+                html += `<tr class="ts-rit-opm-rij${verbergCls}" data-groep-key="${escHtml(groepKey)}">
                     ${heeftStartTijden ? '<td></td>' : ''}
                     <td></td>
                     <td colspan="3" class="ts-rit-opm-cel">📝 ${ovOpmVal}</td>
@@ -1780,7 +1797,7 @@ function renderRittenLijst(ritten, blokken) {
                             data-ronde-label="${escHtml(label)}${escHtml(fin)}"
                             title="Voeg een extra heat van dit type toe (cat_config wordt automatisch bijgewerkt)">+</button>`
                 : '';
-            html += `<tr class="ts-rit-rij ts-rit-sub ${combiCls}" data-rit-id="${rit.id}"
+            html += `<tr class="ts-rit-rij ts-rit-sub${verbergCls} ${combiCls}" data-rit-id="${rit.id}"
                         data-groep-key="${escHtml(groepKey)}"
                         data-combi-group="${combiGrp ?? ''}"
                         data-ronde-type="${escHtml(rit.ronde_type)}">
@@ -2736,6 +2753,44 @@ function bindTsEvents(afstandGroepen) {
                 huidigTijdschema = data;
             })
             .catch(err => { toonBevestigDialog('Opslaan mislukt: ' + err.message, 'Fout'); renderTijdschema(); });
+        });
+
+        // ── Cat-groep in-/uitklappen ──────────────────────────────────────────
+        // Houdt _tsIngeklapteGroepen in sync + past CSS-classes lokaal aan.
+        // Geen re-render: behoudt scroll-positie en drag-state.
+        const klapZet = (key, inklappen) => {
+            if (!key) return;
+            if (inklappen) _tsIngeklapteGroepen.add(key);
+            else           _tsIngeklapteGroepen.delete(key);
+            const sel = `[data-groep-key="${CSS.escape(key)}"]`;
+            const hdr = rittenTbody.querySelector(`tr.ts-rit-groep-hdr${sel}`);
+            if (hdr) {
+                hdr.classList.toggle('ts-groep-ingeklapt', inklappen);
+                const btn = hdr.querySelector('.ts-groep-toggle');
+                if (btn) {
+                    btn.textContent = inklappen ? '▶' : '▼';
+                    btn.setAttribute('aria-expanded', inklappen ? 'false' : 'true');
+                }
+            }
+            rittenTbody.querySelectorAll(`tr.ts-rit-sub${sel}, tr.ts-rit-opm-rij${sel}`)
+                .forEach(r => r.classList.toggle('ts-groep-verborgen', inklappen));
+        };
+
+        rittenTbody.addEventListener('click', e => {
+            const btn = e.target.closest('.ts-groep-toggle');
+            if (!btn) return;
+            e.stopPropagation();
+            const hdr = btn.closest('tr.ts-rit-groep-hdr');
+            const key = hdr?.dataset.groepKey;
+            klapZet(key, !_tsIngeklapteGroepen.has(key));
+        });
+
+        container.querySelectorAll('.ts-klap-toggle-all').forEach(btn => {
+            btn.addEventListener('click', () => {
+                const inklappen = btn.dataset.actie === 'alles-in';
+                rittenTbody.querySelectorAll('tr.ts-rit-groep-hdr')
+                    .forEach(hdr => klapZet(hdr.dataset.groepKey, inklappen));
+            });
         });
 
         // ── Starttijd-override per heat (klik op tijdcel) ─────────────────────

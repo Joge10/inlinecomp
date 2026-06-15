@@ -2422,9 +2422,12 @@ function _bouwDeelnemerslijstInternal(opts = {}) {
     let sectie1 = '';
     if (heeftAfwezig) {
         const rijen = afwezigRijders.map((r, i) => {
-            // Status 0 (niet bevestigd) telt als niet-aanwezig, zelfde label als status 4
+            // Alleen echte afwezig-statussen meenemen: 0=niet bevestigd,
+            // 2=afgemeld via KNSB, 3=afgemeld bij org, 4=niet getekend.
+            // Status 5 (bevestigd bij org = wél aanwezig) hoort hier niet
+            // bij — die lekte voorheen door als rauwe "status 5"-tekst.
             const statusTxt = r.statussen
-                .filter(s => s.status !== 1)
+                .filter(s => [0, 2, 3, 4].includes(s.status))
                 .map(s => statusLabel(s.status))
                 .filter((v, j, a) => a.indexOf(v) === j)
                 .join(', ');

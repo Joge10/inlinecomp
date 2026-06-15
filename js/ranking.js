@@ -584,6 +584,107 @@ async function getKlassementen() {
     return rkGet('api/klassement_import.php?action=list');
 }
 
+// Cat-volgorde voor print + keuze-modal: jong → oud, D vóór H.
+// Kopie van _catRank uit js/instellingen.js — verhuizen naar gedeelde helper
+// staat op de post-OH850-lijst, voor nu lokaal om scope-creep te vermijden.
+function _rkCatRank(cat) {
+    const c = String(cat || '').toUpperCase().trim();
+    if (!c) return 99999;
+    if (/^DSENIOR/.test(c)) return 4 * 10000 + 100;
+    if (/^HSENIOR/.test(c)) return 4 * 10000 + 100 + 1;
+    if (c.length < 2) return 99999;
+    const geslacht = c[0] === 'D' ? 0 : c[0] === 'H' ? 1 : 9;
+    const groep    = c[1];
+    const sub      = c.slice(2);
+    let groepRank, subRank;
+    if (groep === 'P') {
+        groepRank = 1;
+        const n = parseInt(sub, 10);
+        subRank = isNaN(n) ? 99 : (10 - n);
+    } else if (groep === 'K') {
+        groepRank = 2; subRank = 0;
+    } else if (groep === 'J') {
+        groepRank = 3;
+        subRank = sub[0] ? (90 - sub[0].charCodeAt(0)) : 99;
+    } else if (groep === 'S') {
+        groepRank = 4;
+        if      (sub[0] === 'J') subRank = 0;
+        else if (sub[0] === 'A') subRank = 1;
+        else if (sub[0] === 'B') subRank = 2;
+        else                     subRank = 99;
+    } else if (/^[0-9]/.test(groep)) {
+        groepRank = 5;
+        const n = parseInt(c.slice(1), 10);
+        subRank = isNaN(n) ? 99 : Math.floor((n - 40) / 5);
+    } else {
+        return 99999;
+    }
+    return groepRank * 10000 + subRank * 100 + geslacht;
+}
+
+// ── Print: cat-keuze-modal ────────────────────────────────────────────────────
+//
+// Toont een modal met een chip per categorie. Operator kan kiezen welke cats
+// hij wil printen. Resolved met Set van gekozen cats, of null bij annuleren.
+function _kiesCatsVoorPrint(catLabels) {
+    return new Promise(resolve => {
+        const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({
+            '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'
+        }[c]));
+        const chips = catLabels.map(c => `
+            <label class="wh-cat-chip">
+                <input type="checkbox" class="rk-print-cat" data-cat="${esc(c)}" checked>
+                <span>${esc(c)}</span>
+            </label>`).join('');
+        const overlay = document.createElement('div');
+        overlay.className = 'modal-overlay';
+        overlay.innerHTML = `
+            <div class="modal-dialog" role="dialog" aria-modal="true">
+                <div class="modal-header">
+                    <span class="modal-icon">🖨</span>
+                    <span>Welke categorieën printen?</span>
+                </div>
+                <div class="modal-body">
+                    <p class="rk-print-uitleg">Vink aan welke categorieën in de print moeten verschijnen.</p>
+                    <div class="wh-dc-cats" id="rk-print-cats">${chips}</div>
+                    <div class="rk-print-quick">
+                        <button type="button" class="modal-btn modal-annuleer rk-print-quick-btn" id="rk-print-allemaal">Alle aanvinken</button>
+                        <button type="button" class="modal-btn modal-annuleer rk-print-quick-btn" id="rk-print-geen">Niets aanvinken</button>
+                    </div>
+                </div>
+                <div class="modal-knoppen">
+                    <button class="modal-btn modal-annuleer" id="rk-print-cancel">Annuleren</button>
+                    <button class="modal-btn modal-doorgaan" id="rk-print-ok">Printen</button>
+                </div>
+            </div>`;
+        document.body.appendChild(overlay);
+
+        const sluit = res => {
+            overlay.remove();
+            document.removeEventListener('keydown', onKey);
+            resolve(res);
+        };
+        const onKey = e => {
+            if (e.key === 'Escape') sluit(null);
+            if (e.key === 'Enter')  sluit(geselecteerd());
+        };
+        const geselecteerd = () => new Set(
+            Array.from(overlay.querySelectorAll('.rk-print-cat:checked')).map(cb => cb.dataset.cat)
+        );
+
+        overlay.querySelector('#rk-print-allemaal').addEventListener('click', () => {
+            overlay.querySelectorAll('.rk-print-cat').forEach(cb => cb.checked = true);
+        });
+        overlay.querySelector('#rk-print-geen').addEventListener('click', () => {
+            overlay.querySelectorAll('.rk-print-cat').forEach(cb => cb.checked = false);
+        });
+        overlay.querySelector('#rk-print-cancel').addEventListener('click', () => sluit(null));
+        overlay.querySelector('#rk-print-ok').addEventListener('click', () => sluit(geselecteerd()));
+        overlay.addEventListener('click', e => { if (e.target === overlay) sluit(null); });
+        document.addEventListener('keydown', onKey);
+    });
+}
+
 // ── Print: serie-klassement (alle categorieën) ────────────────────────────────
 //
 // Opent een nieuw venster met een schoon HTML-document — per categorie een
@@ -592,6 +693,27 @@ async function getKlassementen() {
 // voetnoot eronder. De window-print() wordt automatisch getriggerd.
 async function printSerieKlassement(k) {
     if (!k) return;
+
+    // Vroege validatie + cat-keuze: doe dit vóór we globals (huidigBaan /
+    // huidigOrganisatie) aanraken, zodat een annulering geen restore vraagt.
+    const _allePosVoor = k.posities ?? [];
+    if (!_allePosVoor.length) {
+        toonBevestigDialog('Geen posities om te printen.', 'Klassement printen', 'OK', '');
+        return;
+    }
+    const _catsVoor = k.categorieen ?? [];
+    const _catLabelsAlle = (_catsVoor.length
+        ? _catsVoor.map(c => c.label ?? c)
+        : [...new Set(_allePosVoor.map(p => p.categorie))])
+        .slice()
+        .sort((a, b) => _rkCatRank(a) - _rkCatRank(b));
+    const gekozenCats = await _kiesCatsVoorPrint(_catLabelsAlle);
+    if (!gekozenCats) return;
+    if (!gekozenCats.size) {
+        toonBevestigDialog('Geen categorieën geselecteerd.', 'Klassement printen', 'OK', '');
+        return;
+    }
+
     // Org-data ophalen voor logo + sponsors. `bouwOrgHeaderFooter()` leest
     // uit het globale `huidigOrganisatie`, dat op de klassement-pagina niet
     // gevuld is — we zetten 'm hier tijdelijk en herstellen na de render.
@@ -618,16 +740,10 @@ async function printSerieKlassement(k) {
         } catch (e) { /* stil — print gaat door zonder logo */ }
     }
     const wMeta = Array.isArray(k.wedstrijden_meta) ? k.wedstrijden_meta : [];
-    const allePos = k.posities ?? [];
-    if (!allePos.length) {
-        toonBevestigDialog('Geen posities om te printen.', 'Klassement printen', 'OK', '');
-        return;
-    }
-    // Categorieën in dezelfde volgorde als de tabbladen op de detail-pagina.
-    const cats = k.categorieen ?? [];
-    const catLabels = cats.length
-        ? cats.map(c => c.label ?? c)
-        : [...new Set(allePos.map(p => p.categorie))];
+    const allePos = _allePosVoor;
+    // Behoud dezelfde volgorde als de tabbladen op de detail-pagina, maar
+    // filter op de operator-keuze uit de print-modal hierboven.
+    const catLabels = _catLabelsAlle.filter(c => gekozenCats.has(c));
 
     const fmtP = n => {
         if (n == null) return '–';
@@ -749,11 +865,12 @@ body { font-family: Arial, sans-serif; font-size: 9pt; color: #000; margin: 0; p
 .pk-orglogo  { flex-shrink: 0; }
 .pk-baan     { flex-shrink: 0; }
 
-/* Categorie-blokken: GEEN page-break-inside-avoid (anders worden grote
-   tabellen naar nieuwe pagina geduwd, met holle ruimte op de vorige).
-   Wel page-break-after-avoid op de categorie-titel zodat de titel niet
-   wees-onderaan een pagina blijft staan. */
-.pk-cat-blok    { margin-bottom: 6mm; }
+/* Categorie-blokken: probeer ze bij elkaar te houden. Past het blok niet op
+   één pagina (echt grote cats), dan negeren browsers break-inside: avoid en
+   breekt het blok alsnog — precies wat we willen. Page-break-after-avoid op
+   de categorie-titel houdt de titel bij de eerste rij. */
+.pk-cat-blok    { margin-bottom: 6mm;
+                  page-break-inside: avoid; break-inside: avoid; }
 .pk-cat-titel   { font-size: 11pt; font-weight: 700; color: #1a3a5c;
                   margin: 0 0 1.5mm 0; line-height: 1.2;
                   page-break-after: avoid; break-after: avoid; }
