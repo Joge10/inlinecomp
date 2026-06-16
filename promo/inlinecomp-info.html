@@ -1,0 +1,519 @@
+<!DOCTYPE html>
+<html lang="nl">
+<head>
+<meta charset="UTF-8">
+<title>InlineComp — wedstrijdbeheer voor inline-skating</title>
+<style>
+/* ── Huisstijl InlineComp ────────────────────────────────────────
+   Kleuren overgenomen uit favicon + css/style.css:
+     --blauw       primair donkerblauw, gebruikt in logo + koppen
+     --middenblauw lichter blauw voor accenten
+     --oranje      accent-kleur, ook in het logo
+     --lichtblauw  pastel-blauw voor zachte achtergronden
+*/
+:root {
+    --blauw:       #1F4E79;
+    --middenblauw: #2E75B6;
+    --lichtblauw:  #D6E4F0;
+    --oranje:      #E8630A;
+    --lichtgrijs:  #f5f7fa;
+    --border:      #d6dce5;
+    --groen:       #2a7a2a;
+    --rood:        #c62828;
+}
+*, *::before, *::after { box-sizing: border-box; }
+html, body { margin: 0; padding: 0; background: #fff; color: #222;
+             font-family: 'Segoe UI', 'Helvetica Neue', Arial, sans-serif;
+             font-size: 9.5pt; line-height: 1.35; }
+
+/* ── A4 pagina-structuur ──
+   A4 297mm hoog – 11mm boven – 11mm onder = 275mm bruikbaar per pagina.
+   .pagina krijgt vaste hoogte 274mm zodat de footer altijd op exact
+   dezelfde plek onderaan komt. Content groter dan dat veroorzaakt overflow
+   (nieuwe pagina) — dus alle content moet binnen deze 274mm passen.
+   Footer staat absolute zodat ie ook bij minder content vast onderaan blijft. */
+@page { size: A4 portrait; margin: 11mm 13mm; }
+.pagina {
+    page-break-after: always;
+    height: 274mm;
+    overflow: hidden;
+    position: relative;
+    padding-bottom: 14mm;        /* ruimte voor de absolute footer */
+}
+.pagina:last-child { page-break-after: auto; }
+
+/* ── Logo (inline SVG-component) ── */
+.ic-logo { display: inline-block; vertical-align: middle; }
+.ic-logo-groot   { width: 22mm; height: 22mm; }
+.ic-logo-koprand { width: 10mm; height: 10mm; }
+.ic-logo-footer  { width:  6mm; height:  6mm; }
+
+/* ── Cover ── */
+.cover {
+    background: linear-gradient(135deg, var(--blauw) 0%, #163d62 100%);
+    color: #fff;
+    padding: 14mm 14mm 10mm;
+    margin: -11mm -13mm 5mm;
+    text-align: center;
+    position: relative;
+}
+.cover::after {
+    content: '';
+    position: absolute; left: 0; right: 0; bottom: 0;
+    height: 3mm; background: var(--oranje);
+}
+.cover .merk {
+    font-size: 30pt; font-weight: 700; letter-spacing: -.02em;
+    margin: 2mm 0 1mm; color: #fff;
+}
+.cover .slogan {
+    font-size: 14pt; font-weight: 600; font-style: italic;
+    color: #ffe4cf; margin: 1mm 0 3mm;
+    letter-spacing: .01em;
+}
+.cover .tagline {
+    font-size: 11pt; opacity: .85; font-weight: 400; max-width: 130mm;
+    margin: 0 auto;
+}
+.cover .voor {
+    display: inline-block; margin-top: 4mm;
+    padding: 1.5mm 6mm; background: rgba(255,255,255,.12);
+    border: 1px solid rgba(255,255,255,.3);
+    border-radius: 999px; font-size: 9.5pt; font-weight: 500;
+    color: #fff;
+}
+
+/* ── Page-header op pagina 2 en 3 ── */
+.page-hdr {
+    display: flex; align-items: center; gap: 3mm;
+    margin: 0 -13mm 4mm; padding: 3mm 13mm;
+    border-bottom: 2px solid var(--oranje);
+    background: var(--lichtgrijs);
+}
+.page-hdr .titel { font-size: 12pt; font-weight: 700; color: var(--blauw); flex: 1; }
+.page-hdr .nr    { font-size: 8.5pt; color: #888; font-weight: 600; letter-spacing: .05em; }
+
+/* ── Koppen ── */
+h2 { font-size: 12pt; color: var(--blauw); margin: 3mm 0 1.5mm;
+     padding-left: 2.5mm; border-left: 3px solid var(--oranje); }
+h2:first-of-type { margin-top: 0; }
+h3 { font-size: 10pt; color: #333; margin: 2mm 0 1mm; }
+p  { margin: 0 0 1.5mm; }
+ul { margin: 1mm 0 1.5mm 4mm; padding: 0; }
+li { margin-bottom: .5mm; }
+b  { color: var(--blauw); }
+
+/* ── 4-module-grid op de cover-pagina ── */
+.modules-grid {
+    display: grid; grid-template-columns: 1fr 1fr; gap: 4mm;
+    margin: 3mm 0 4mm;
+}
+.module-kaart {
+    border: 1px solid var(--border); border-radius: 6px;
+    padding: 3mm 4mm; background: #fcfcfd;
+    border-top: 3px solid var(--middenblauw);
+}
+.module-kaart h3 { margin: 0 0 1.5mm; color: var(--blauw);
+                   font-size: 11.5pt; display: flex; align-items: center; gap: 2mm; }
+.module-kaart .ico { font-size: 14pt; }
+.module-kaart p { font-size: 9.5pt; color: #444; margin: 0; }
+
+/* ── Hint-blok in lichtblauw ── */
+.hint {
+    background: var(--lichtblauw);
+    border-left: 3px solid var(--middenblauw);
+    padding: 3mm 4mm; margin: 3mm 0; font-size: 10pt;
+    color: #1a3a5c; border-radius: 0 3px 3px 0;
+}
+.hint b { color: var(--blauw); }
+
+/* ── Beperkingen-blok ── */
+.beperking {
+    background: #fff8e1; border-left: 3px solid var(--oranje);
+    padding: 3mm 4mm; margin: 3mm 0; border-radius: 0 3px 3px 0;
+}
+.beperking h3 { margin-top: 0; color: #8a4a00; }
+
+/* ── Systeem-blokken op pagina 2 ── */
+.systeem {
+    border: 1px solid var(--border); border-radius: 5px;
+    padding: 3mm 4mm; margin: 2mm 0;
+    background: #fcfcfd;
+}
+.systeem h3 { margin: 0 0 1.5mm; color: var(--blauw); }
+.systeem .badge {
+    display: inline-block; padding: .5mm 2mm; margin-left: 2mm;
+    background: var(--oranje); color: #fff; border-radius: 3px;
+    font-size: 8.5pt; font-weight: 600; vertical-align: middle;
+}
+
+/* ── In-opbouw badge voor /jury module ── */
+.badge-opbouw {
+    display: inline-block; padding: .5mm 2mm; margin-left: 3mm;
+    background: #fff8e1; color: #8a4a00;
+    border: 1px solid #ffd47a; border-radius: 3px;
+    font-size: 8.5pt; font-weight: 600; vertical-align: middle;
+}
+/* /jury-kaart spant beide kolommen — solo onder de 2x2-grid. */
+.module-kaart-vol { grid-column: 1 / -1; }
+
+/* ── Contact-blok pagina 3 ── */
+.contact {
+    background: var(--blauw); color: #fff;
+    padding: 5mm 6mm; border-radius: 5px;
+    margin: 4mm 0 0;
+}
+.contact h3 { margin: 0 0 2mm; color: #fff; }
+.contact a { color: var(--lichtblauw); font-weight: 600; text-decoration: none; }
+.contact .mail { font-size: 11pt; font-weight: 600; color: #fff; }
+
+/* ── Footer ── absoluut onderaan elke pagina, vast op dezelfde hoogte. */
+.footer {
+    position: absolute; left: 0; right: 0; bottom: 0;
+    padding-top: 3mm;
+    border-top: 1px solid var(--border);
+    color: #888; font-size: 8.5pt;
+    display: flex; justify-content: space-between; align-items: center; gap: 3mm;
+}
+.footer .merk { color: var(--blauw); font-weight: 700; }
+
+/* ── Print-break-regels: voorkom dat een kop los van z'n content op
+   een aparte pagina blijft staan (kop-weduwe). break-after: avoid op
+   alle koppen + page-break-inside: avoid op kop + direct opvolgend
+   blok via :has() voor moderne browsers. */
+h2, h3 { page-break-after: avoid; break-after: avoid; }
+.systeem, .module-kaart { page-break-inside: avoid; break-inside: avoid; }
+
+@media print {
+    body { font-size: 10pt; }
+    .pagina { min-height: auto; }
+}
+</style>
+</head>
+<body>
+
+<!-- ════════════════════════ Logo-component (her-bruikbaar) ════════════════════════ -->
+<!-- SVG wordt op meerdere plekken gebruikt; we definiëren 'm als template
+     en kopiëren via inline-include. Geen externe afhankelijkheid. -->
+
+<!-- ════════════════════════ PAGINA 1 — COVER + INTRO ════════════════════════ -->
+<section class="pagina">
+
+<div class="cover">
+    <!-- Logo groot — afgeronde donkerblauwe rechthoek met witte "IC" +
+         oranje accentbalk onder; afgeleid van de favicon.svg -->
+    <svg class="ic-logo ic-logo-groot" viewBox="0 0 32 32" xmlns="http://www.w3.org/2000/svg">
+        <rect width="32" height="32" rx="6" fill="#ffffff"/>
+        <text x="16" y="22" font-family="Segoe UI, Arial, sans-serif" font-size="15"
+              font-weight="700" fill="#1F4E79" text-anchor="middle" letter-spacing="-0.5">IC</text>
+        <rect x="6" y="25" width="20" height="3" rx="1.5" fill="#E8630A"/>
+    </svg>
+    <div class="merk">InlineComp</div>
+    <div class="slogan">Van startlijn tot uitslag — live.</div>
+    <div class="tagline">
+        Wedstrijdbeheer voor inline-skating —
+        van regio-races tot internationale events.
+    </div>
+    <div class="voor">Verkenning voor verenigingen, regio's &amp; organisaties</div>
+</div>
+
+<h2>Wat is InlineComp?</h2>
+<p>
+    InlineComp is een complete webapplicatie waarmee een organisator een
+    inline-skate-wedstrijd van begin tot eind kan runnen — van import van
+    de deelnemers­lijst tot een gepubliceerd serie­klassement aan het eind
+    van het seizoen. Het draait in een gewone browser, op een eigen server;
+    geen installatie nodig bij de operator of de bezoeker.
+</p>
+<p>
+    Vier samenwerkende delen, elk met een eigen doelgroep:
+</p>
+
+<div class="modules-grid">
+    <div class="module-kaart">
+        <h3><span class="ico">⚙️</span>Beheer-app</h3>
+        <p>Voor de wedstrijd­leider: organisaties, wedstrijden,
+        deelnemers­import, tijdschema, loting, uitslag­verwerking,
+        klassementen en het wedstrijd­protokol-PDF.</p>
+    </div>
+    <div class="module-kaart">
+        <h3><span class="ico">📱</span>/public</h3>
+        <p>Voor rijders, familie en publiek: live programma,
+        je eigen heats en tijden, uitslagen per categorie,
+        meldingen met PDF-bijlages.</p>
+    </div>
+    <div class="module-kaart">
+        <h3><span class="ico">🏃</span>/coach</h3>
+        <p>Voor (jeugd­-)coaches: alle ploeg­leden in één scherm,
+        hun aankomende heats, live tijden en posities.</p>
+    </div>
+    <div class="module-kaart">
+        <h3><span class="ico">✅</span>/check</h3>
+        <p>Vooraf-controle van de inschrijving door rijder of coach:
+        klopt categorie, transponder, en de afstanden? Helpt om de
+        wedstrijddag zelf vlot te laten verlopen.</p>
+    </div>
+</div>
+
+<div class="hint">
+    <b>Multi-tenant.</b> Eén InlineComp-installatie kan meerdere
+    organisaties (verenigingen, regio's, federatie­takken) tegelijk
+    bedienen. Elke organisatie ziet alleen haar eigen wedstrijden;
+    de rijder-pool is gedeeld zodat een rijder die meerdere regio's
+    skeelert nooit dubbel hoeft ingevoerd.
+</div>
+
+<div class="footer">
+    <svg class="ic-logo ic-logo-footer" viewBox="0 0 32 32" xmlns="http://www.w3.org/2000/svg">
+        <rect width="32" height="32" rx="6" fill="#1F4E79"/>
+        <text x="16" y="22" font-family="Segoe UI, Arial, sans-serif" font-size="15"
+              font-weight="700" fill="#ffffff" text-anchor="middle" letter-spacing="-0.5">IC</text>
+        <rect x="6" y="25" width="20" height="3" rx="1.5" fill="#E8630A"/>
+    </svg>
+    <span><span class="merk">InlineComp</span> — informatie­leaflet · juni 2026</span>
+    <span>1 / 3</span>
+</div>
+
+</section>
+
+<!-- ════════════════════════ PAGINA 2 — WEDSTRIJD-FLOW ════════════════════════ -->
+<section class="pagina">
+
+<div class="page-hdr">
+    <svg class="ic-logo ic-logo-koprand" viewBox="0 0 32 32" xmlns="http://www.w3.org/2000/svg">
+        <rect width="32" height="32" rx="6" fill="#1F4E79"/>
+        <text x="16" y="22" font-family="Segoe UI, Arial, sans-serif" font-size="15"
+              font-weight="700" fill="#ffffff" text-anchor="middle" letter-spacing="-0.5">IC</text>
+        <rect x="6" y="25" width="20" height="3" rx="1.5" fill="#E8630A"/>
+    </svg>
+    <span class="titel">Wedstrijd-flow van A tot Z</span>
+    <span class="nr">2 / 3</span>
+</div>
+
+<h2>Deelnemers importeren</h2>
+<p style="margin:0 0 2mm">
+    Drie wegen: <b>KNSB-feed</b> (automatisch via de KNSB-API,
+    inclusief vergelijking met bestaande data en afmeld-afvang),
+    <b>CSV-import</b> (voor wedstrijden buiten de feed — clubevent,
+    oefenwedstrijd, internationale gasten) of <b>handmatig</b> per rijder.
+</p>
+
+<h2>Tijdschema &amp; wedstrijd­systeem</h2>
+<p>InlineComp ondersteunt twee wedstrijd­systemen — beide overgenomen uit
+   de KNSB-spelregels:</p>
+
+<div class="systeem">
+    <h3>Full-Final <span class="badge">voorkeur regio</span></h3>
+    <p style="font-size:9.5pt;margin:0">
+        Iedere rijder rijdt series; op basis van de serietijd volgt indeling
+        in A-finale, B1-, B2-, …, Bn-finale. <i>Geen uitvalronden</i> —
+        iedere rijder rijdt altijd mee in een finale. Voorkeurssysteem voor
+        regionale wedstrijden waar elke deelnemer een gegarandeerde
+        finalestart verdient.
+    </p>
+</div>
+
+<div class="systeem">
+    <h3>Internationaal <span class="badge">KNSB landelijk + NK</span></h3>
+    <p style="font-size:9.5pt;margin:0">
+        Modern knock-out: series → optionele kwartfinale → optionele halve
+        finale → A-finale. Per ronde een x aantal heat-winnaars (Q) en
+        x tijdsnelsten (q) door. <b>Geen B-finales.</b> Optioneel een
+        <b>runner-up race</b> voor rijders die in de eerste ronde afvallen.
+        KNSB-format voor landelijke wedstrijden (met runner-up) en
+        nationale kampioenschappen (zonder).
+    </p>
+</div>
+
+<ul>
+    <li><b>Meerdere afstanden in één wedstrijd</b> — een evenement bevat
+        één of meer distance-combinations (DC's), bv. 200m DTT + 500m +
+        1000m + puntenkoers in één wedstrijddag, elk met eigen heats/finales
+        en eigen klassement.</li>
+    <li><b>Per categorie</b> instelbaar: voorrondes → finales of direct
+        naar finale (handig voor kleine deelnemersvelden); doorstroming
+        per ronde; Q/q-verdeling; runner-up aan/uit.</li>
+    <li><b>Vier race-types</b> met elk eigen invoer en sortering:
+        <i>sprint</i> (alleen tijd) · <i>inline</i> (rondes + tijd, lange
+        afstand) · <i>puntenkoers</i> (pk-punten + rondes + tijd) ·
+        <i>afvalkoers</i> (eliminatie: rondes + tijd).</li>
+    <li><b>Multi-day</b>: meerdaagse evenementen met aparte dag-tabs.</li>
+    <li>Pauze, ceremonie, inrijden, herstart en wedstrijdstart als
+        tussen­blokken; rusttijd per categorie wordt automatisch berekend
+        en gewaarschuwd als 'm te kort is.</li>
+</ul>
+
+<h2>Loting, seeding &amp; reserves</h2>
+<p style="margin:0 0 1mm">Vijf seeding-methoden voor de eerste ronde:
+    <b>op startnummer</b> · <b>alfabetisch</b> ·
+    <b>tussenklassement</b> (actuele stand in deze wedstrijd) ·
+    <b>klassement (serie)</b> (PDF-import of berekend serie­klassement) ·
+    <b>op afstand-uitslag</b> (uitslag van een eerder verreden afstand, ook
+    PDF). Volgende rondes (kwartfinale → finale) seedt InlineComp automatisch
+    op serie-tijden. Tijdkoppeling-format ("200m DTT") optioneel: laatste rit
+    blijft altijd compleet, heats zwak → sterk verdeeld.
+</p>
+<p style="margin:1mm 0 2mm">
+    <b>Reserves</b> komen uit de KNSB-feed met volgnummer. De operator zet
+    een reserve <b>in</b> als iemand afmeldt of <b>terug</b> op de wachtlijst;
+    handmatige inzet wordt beschermd tegen overschrijving bij KNSB-sync.
+</p>
+
+<h2>Uitslagen &amp; klassementen</h2>
+<ul>
+    <li>Uitslag-import via <b>CSV uit MyLaps/Orbits</b> of <b>handmatige
+        invoer</b> per heat; foto-finish-correctie + sancties (W1/W2, FS, RR,
+        DNS, DNF en diskwalificaties DQ-TF/DQ-SF/DQ-DF) met audit-spoor.</li>
+    <li>Per categorie publicabel/intrekkbaar — operator beslist wanneer
+        rijders en publiek de uitslag te zien krijgen.</li>
+    <li><b>Serie­klassementen</b> met configureerbare puntentabel,
+        streep­resultaten, tie-break (laatste-wedstrijd-fallback) en
+        finale-vereist-vlag — past op een seizoen-serie. Ook geïmporteerde
+        PDF-klassementen ondersteund.</li>
+</ul>
+
+<div class="footer">
+    <svg class="ic-logo ic-logo-footer" viewBox="0 0 32 32" xmlns="http://www.w3.org/2000/svg">
+        <rect width="32" height="32" rx="6" fill="#1F4E79"/>
+        <text x="16" y="22" font-family="Segoe UI, Arial, sans-serif" font-size="15"
+              font-weight="700" fill="#ffffff" text-anchor="middle" letter-spacing="-0.5">IC</text>
+        <rect x="6" y="25" width="20" height="3" rx="1.5" fill="#E8630A"/>
+    </svg>
+    <span><span class="merk">InlineComp</span> — informatie­leaflet · juni 2026</span>
+    <span>2 / 3</span>
+</div>
+
+</section>
+
+<!-- ════════════════════════ PAGINA 3 — MODULES + BEPERKINGEN + CONTACT ════════════════════════ -->
+<section class="pagina">
+
+<div class="page-hdr">
+    <svg class="ic-logo ic-logo-koprand" viewBox="0 0 32 32" xmlns="http://www.w3.org/2000/svg">
+        <rect width="32" height="32" rx="6" fill="#1F4E79"/>
+        <text x="16" y="22" font-family="Segoe UI, Arial, sans-serif" font-size="15"
+              font-weight="700" fill="#ffffff" text-anchor="middle" letter-spacing="-0.5">IC</text>
+        <rect x="6" y="25" width="20" height="3" rx="1.5" fill="#E8630A"/>
+    </svg>
+    <span class="titel">Modules, beperkingen &amp; contact</span>
+    <span class="nr">3 / 3</span>
+</div>
+
+<h2>Detail per module</h2>
+
+<div class="modules-grid">
+    <div class="module-kaart">
+        <h3><span class="ico">📱</span>/public</h3>
+        <p style="font-size:9.5pt;margin:0">
+            Rijder zoekt zichzelf op (startnr of naam) en krijgt vier tabs:
+            <b>📋 Programma</b> (alle ritten, eigen gemarkeerd),
+            <b>🏃 Heats</b> (heat-cards met tijd, positie, sanctie),
+            <b>🏆 Resultaten</b> (eigen uitslag per afstand + eigen
+            klassement-stand), <b>📊 Uitslagen</b> (alle per categorie).
+            Meldingen-popup voor wedstrijddag-info. <b>4-talig</b>
+            NL/EN/DE/FR met AI-auto-vertaling.
+        </p>
+    </div>
+    <div class="module-kaart">
+        <h3><span class="ico">🏃</span>/coach</h3>
+        <p style="font-size:9.5pt;margin:0">
+            Coach voert club-naam of lijst startnummers in; per ploeg­lid
+            vier tabs: <b>📋 Programma</b>, <b>🏃 Heats</b>,
+            <b>⚠️ Sancties</b> (alle W1/W2/FS/RR/DQ-codes met uitleg
+            bij elkaar), <b>📊 Uitslagen</b>. Ideaal om bij
+            jeugdwedstrijden meerdere rijders tegelijk vanaf de zijlijn
+            te volgen.
+        </p>
+    </div>
+    <div class="module-kaart">
+        <h3><span class="ico">✅</span>/check</h3>
+        <p style="font-size:9.5pt;margin:0">
+            Vooraf-controle van inschrijvingen door rijder of coach:
+            klopt categorie, transponder en afstand-keuze? Onbekende
+            rijders melden via formulier; cluster-check voor dubbele
+            inschrijvingen; bezoekers-dashboard voor de operator.
+        </p>
+    </div>
+    <div class="module-kaart">
+        <h3><span class="ico">⚙️</span>Beheer-extra's</h3>
+        <p style="font-size:9.5pt;margin:0">
+            Meldingen met bijlage (PDF/Word/Excel) en AI-auto-vertaling
+            (1 klik NL→EN/DE/FR); audit-log per actie + optimistic locking;
+            transponder-administratie met uitleenrapport; officials &amp;
+            vrijwilligers per wedstrijd; wedstrijd­protokol-PDF, speakerlijsten
+            en records-rapport.
+        </p>
+    </div>
+    <div class="module-kaart module-kaart-vol">
+        <h3><span class="ico">🧑‍⚖️</span>/jury <span class="badge-opbouw">in opbouw</span></h3>
+        <p style="font-size:9.5pt;margin:0">
+            Tablet-app voor de jury aan de baan, vijf rollen:
+            <b>area of call</b> (rijders oproepen), <b>aankomst</b>
+            (finish-volgorde / foto-finish), <b>starter</b> (valse start),
+            <b>scheidsrechter</b> (sancties, reserve-inzet, afmeld-beheer),
+            <b>speaker</b>-ondersteuning. Pilot voorzien voor seizoen 2026/27.
+        </p>
+    </div>
+</div>
+
+<h2>Print-Center</h2>
+<p style="margin:0 0 1.5mm">
+    Eén centraal modaal vanuit de actieve wedstrijd waarin de operator
+    al het papierwerk genereert — geen versnipperde knoppen over
+    verschillende tabs. Voor elke output kan worden gekozen: één categorie,
+    een groep (bv. alle pupillen, alle jeugd) of de hele wedstrijd in één PDF.
+</p>
+<ul style="margin-bottom:2mm">
+    <li><b>Tekenlijsten</b>, <b>deelnemerslijsten</b> (totaal of per cat-groep)</li>
+    <li><b>Programma's</b> (compleet tijdschema, met of zonder starttijden)</li>
+    <li><b>Startlijsten</b> per heat (incl. transponder, club, startnummer)</li>
+    <li><b>Uitslagen</b> (per heat of per categorie) + <b>klassementen</b>
+        (wedstrijd­klassement en serie­klassementen)</li>
+</ul>
+
+<h2>Eerlijk over wat (nog) níet kan</h2>
+<div class="beperking">
+    <ul style="margin:0 0 0 4mm">
+        <li><b>Geen eigen inschrijvings­module</b> — inschrijven loopt via
+            de KNSB-website of een eigen formulier/email; InlineComp leest
+            ze daarna in.</li>
+        <li><b>Geen live-tijdwaarneming-koppeling</b> — tijden komen uit
+            MyLaps/Orbits via CSV-import na elke heat (geen real-time
+            socket-koppeling). MyLaps Connect transponder-check-in idem
+            niet ondersteund (propriëtair protocol).</li>
+        <li><b>Externe rijders met eigen federatie­licentie</b> (FFRS/DRIV/…)
+            via CSV werkbaar, een volwaardige flow staat op de roadmap.</li>
+        <li><b>Pauze midden in een ronde-groep</b> kan (nog) niet —
+            datamodel-limitatie; pauzes vallen tussen categorie-blokken.</li>
+        <li><b>Eigen domein</b> nog niet actief — verhuizen naar
+            <b>www.inlinecomp.com</b> staat op de planning.</li>
+    </ul>
+</div>
+
+<div class="contact">
+    <h3>Geïnteresseerd?</h3>
+    <p style="margin:0 0 2mm">
+        InlineComp draait al productie voor Open Heerde 850 (juni 2026,
+        150+ deelnemers) en op meerdere regio-wedstrijden in 2025/26.
+        Voor een vereniging, regio of organisatie zijn verschillende
+        constructies bespreekbaar — gedeelde installatie, eigen kopie,
+        of een test-wedstrijd. Neem gerust contact op:
+    </p>
+    <p class="mail" style="margin:0">Geert de Vries · inlinecomp@devriesen.com</p>
+</div>
+
+<div class="footer">
+    <svg class="ic-logo ic-logo-footer" viewBox="0 0 32 32" xmlns="http://www.w3.org/2000/svg">
+        <rect width="32" height="32" rx="6" fill="#1F4E79"/>
+        <text x="16" y="22" font-family="Segoe UI, Arial, sans-serif" font-size="15"
+              font-weight="700" fill="#ffffff" text-anchor="middle" letter-spacing="-0.5">IC</text>
+        <rect x="6" y="25" width="20" height="3" rx="1.5" fill="#E8630A"/>
+    </svg>
+    <span><span class="merk">InlineComp</span> — informatie­leaflet · juni 2026</span>
+    <span>3 / 3</span>
+</div>
+
+</section>
+
+</body>
+</html>

@@ -1,0 +1,344 @@
+<!DOCTYPE html>
+<html lang="nl">
+<head>
+<meta charset="UTF-8">
+<title>InlineComp — info voor de Regio Competitie Noord</title>
+<style>
+:root {
+    --blauw:       #1a3a5c;
+    --middenblauw: #2e75b6;
+    --oranje:      #e86c1b;
+    --licht:       #f5f7fa;
+    --border:      #d6dce5;
+    --groen:       #2a7a2a;
+    --rood:        #c62828;
+}
+*, *::before, *::after { box-sizing: border-box; }
+html, body { margin: 0; padding: 0; background: #fff; color: #222;
+             font-family: 'Segoe UI', 'Helvetica Neue', Arial, sans-serif;
+             font-size: 10.5pt; line-height: 1.45; }
+
+/* ── A4 pagina-structuur ── */
+@page { size: A4 portrait; margin: 14mm 16mm; }
+.pagina {
+    page-break-after: always;
+    min-height: 25cm;
+    display: flex; flex-direction: column;
+}
+.pagina:last-child { page-break-after: auto; }
+
+/* ── Cover ── */
+.cover { text-align: center; padding: 0 0 6mm; border-bottom: 3px solid var(--oranje); margin-bottom: 6mm; }
+.cover h1 { font-size: 28pt; margin: 0 0 2mm; color: var(--blauw); letter-spacing: -.02em; }
+.cover .sub { color: #555; font-size: 12pt; }
+.cover .voor { display: inline-block; margin-top: 4mm; padding: 3mm 8mm;
+               background: var(--licht); border: 1px solid var(--border);
+               border-radius: 4px; font-weight: 600; color: var(--blauw);
+               font-size: 11pt; }
+
+/* ── Koppen ── */
+h2 { font-size: 14pt; color: var(--blauw); margin: 6mm 0 2mm; padding-left: 3mm;
+     border-left: 3px solid var(--oranje); }
+h2:first-of-type { margin-top: 0; }
+h3 { font-size: 11pt; color: #333; margin: 4mm 0 1.5mm; }
+p  { margin: 0 0 2mm; }
+ul { margin: 1mm 0 2mm 5mm; padding: 0; }
+li { margin-bottom: 1mm; }
+
+/* ── Tabel met "✓ kan / ✗ kan niet" ── */
+.kan-tabel { width: 100%; border-collapse: collapse; margin: 2mm 0 3mm; font-size: 10pt; }
+.kan-tabel th { background: var(--licht); text-align: left; padding: 2mm 3mm;
+                color: var(--blauw); font-size: 9.5pt; font-weight: 700;
+                border-bottom: 2px solid var(--blauw); }
+.kan-tabel td { padding: 1.8mm 3mm; border-bottom: 1px solid #eaecf0; vertical-align: top; }
+.kan-tabel .ind { width: 7mm; text-align: center; font-weight: 700; font-size: 11pt; }
+.kan-tabel .kan  { color: var(--groen); }
+.kan-tabel .nee  { color: var(--rood); }
+.kan-tabel .deel { color: var(--oranje); }
+
+/* ── 2-koloms grids voor modules / features ── */
+.grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 4mm; margin: 2mm 0; }
+.kaart { border: 1px solid var(--border); border-radius: 4px; padding: 3mm 4mm;
+         background: #fcfcfd; }
+.kaart h3 { margin-top: 0; color: var(--blauw); }
+.kaart .ico { font-size: 14pt; margin-right: 2mm; vertical-align: middle; }
+
+/* ── Hint-blok ── */
+.hint { background: #eef4fa; border-left: 3px solid var(--middenblauw);
+        padding: 2.5mm 4mm; margin: 3mm 0; font-size: 9.5pt; color: #2c4a6b;
+        border-radius: 0 3px 3px 0; }
+
+/* ── Footer ── */
+.footer { margin-top: auto; padding-top: 4mm; border-top: 1px solid var(--border);
+          color: #888; font-size: 8.5pt; display: flex; justify-content: space-between; }
+.footer .auteur { color: var(--blauw); font-weight: 600; }
+
+/* ── Beperkingen-blok rood ── */
+.beperking-blok { background: #fdf3f3; border-left: 3px solid var(--rood);
+                  padding: 3mm 4mm; margin: 3mm 0 4mm; border-radius: 0 3px 3px 0; }
+.beperking-blok h3 { margin-top: 0; color: var(--rood); }
+.beperking-blok ul { margin-left: 4mm; }
+
+@media print {
+    body { font-size: 10pt; }
+    .pagina { min-height: auto; }
+}
+</style>
+</head>
+<body>
+
+<!-- ════════════════════════ PAGINA 1 ════════════════════════ -->
+<section class="pagina">
+
+<div class="cover">
+    <h1>InlineComp</h1>
+    <div class="sub">Wedstrijdbeheer voor inline-skating</div>
+    <div class="voor">Verkenning voor de Regio Competitie Noord — seizoen 2027</div>
+</div>
+
+<h2>Wat is InlineComp?</h2>
+<p>
+    InlineComp is een webgebaseerd wedstrijd­beheersysteem dat speciaal voor
+    inline-skate-wedstrijden is gebouwd: van regio-races tot Open Heerde 850
+    (150+ deelnemers, juni 2026, internationaal). Het draait op een eigen server
+    en is toegankelijk via een gewone browser — geen installatie bij de operator
+    of de bezoeker.
+</p>
+<p>
+    Het systeem heeft vier samen­werkende delen die elk hun eigen doelgroep
+    bedienen:
+</p>
+
+<div class="grid-2">
+    <div class="kaart">
+        <h3><span class="ico">⚙️</span>Beheer-app</h3>
+        <p style="font-size:9.5pt">Voor de wedstrijd­leider/operator:
+        organisaties, wedstrijden, deelnemers, tijdschema, loting,
+        uitslagen, klassementen, protokol-PDF.</p>
+    </div>
+    <div class="kaart">
+        <h3><span class="ico">📱</span>/public</h3>
+        <p style="font-size:9.5pt">Voor rijders, familie en publiek:
+        live programma, jouw eigen heats + tijden, uitslagen per categorie,
+        meldingen met PDF-bijlages.</p>
+    </div>
+    <div class="kaart">
+        <h3><span class="ico">🏃</span>/coach</h3>
+        <p style="font-size:9.5pt">Voor jeugd­coaches: alle rijders van je club in
+        één overzicht, hun heats, tijden en posities — handig om vanaf
+        de zijlijn meerdere rijders tegelijk te volgen.</p>
+    </div>
+    <div class="kaart">
+        <h3><span class="ico">✅</span>/check</h3>
+        <p style="font-size:9.5pt">Voor de inschrijving-controle:
+        rijders of coaches kunnen vooraf bevestigen dat de gegevens
+        (categorie, transponder, club) kloppen. Helpt om de wedstrijddag
+        zelf vlot te laten verlopen.</p>
+    </div>
+</div>
+
+<h2>Voor wie past InlineComp?</h2>
+<p>
+    Het systeem is geschikt voor organisatoren die regelmatig wedstrijden draaien
+    en de hele cyclus willen beheren: van import van de deelnemerslijst tot een
+    gepubliceerd serie­klassement. Geen specifieke IT-kennis nodig — de operator
+    werkt in een browser met een Excel-achtige interface.
+</p>
+
+<div class="hint">
+    <b>Multi-tenant.</b> Eén InlineComp-installatie kan meerdere organisaties
+    (clubs / regio's / KNSB-tak) tegelijk bedienen. Elke organisatie ziet alleen
+    haar eigen wedstrijden en deelnemers. Voor de RCN betekent dat: één
+    gedeelde installatie, eigen toegang per club-bestuurder, één gemeen­schappelijke
+    rijder-pool.
+</p>
+
+<div class="footer">
+    <span>InlineComp — info voor RCN (1/3)</span>
+    <span class="auteur">Geert de Vries · juni 2026</span>
+</div>
+
+</section>
+
+<!-- ════════════════════════ PAGINA 2 ════════════════════════ -->
+<section class="pagina">
+
+<h2>Wedstrijd-flow van A tot Z</h2>
+
+<h3>Deelnemers importeren</h3>
+<ul>
+    <li><b>KNSB-feed</b> — automatisch ophalen via de KNSB-API (de standaard­weg
+        voor erkende KNSB-wedstrijden). Inschrijvingen worden vergeleken met
+        wat al in InlineComp staat; afgemelde rijders worden afgevangen.</li>
+    <li><b>CSV-import</b> — bij wedstrijden buiten de KNSB-feed kan via een
+        Excel/CSV met startnummer, naam, club, categorie, afstanden.</li>
+    <li><b>Handmatig</b> — losse rijders toevoegen / corrigeren via de operator-UI.</li>
+</ul>
+
+<h3>Tijdschema &amp; programma</h3>
+<p>InlineComp ondersteunt twee wedstrijd­systemen:</p>
+<ul>
+    <li><b>Full-Final</b> — iedere rijder rijdt series; op basis van de
+        serietijden volgt indeling in A-finale, B1-, B2-, …, Bn-finale.
+        <i>Geen uitvalronden</i>: iedere rijder rijdt altijd in een finale.
+        Dit is het <b>voorkeurssysteem voor regionale wedstrijden</b> — voor
+        de RCN dus de meest waarschijnlijke keuze.</li>
+    <li><b>Internationaal</b> — modern knock-out: series → optionele
+        kwartfinale → optionele halve finale → A-finale, met doorstroming op
+        x heat-winnaars (Q) en x tijdsnelsten (q) per ronde. Geen B-finales.
+        Optioneel een <b>runner-up race</b> voor de rijders die in de eerste
+        ronde afvallen. Dit is het KNSB-format voor landelijke wedstrijden
+        en nationale kampioenschappen.</li>
+</ul>
+<ul>
+    <li>Per categorie/afstand instelbaar: heeft heats ja/nee, doorstroming
+        per ronde, Q/q-verdeling, runner-up aan/uit.</li>
+    <li><b>Multi-day</b>: meerdaagse evenementen met dag-tabs in het programma.</li>
+    <li>Pauze-, ceremonie-, inrijd-, herstart- en wedstrijdstart-blokken
+        tussenvoegbaar; rust­tijd per categorie tussen rondes wordt automatisch
+        berekend en gewaarschuwd als 'm te kort is.</li>
+</ul>
+
+<h3>Loting &amp; seeding</h3>
+<ul>
+    <li><b>Random</b> of <b>seeded</b> loting per heat.</li>
+    <li>Klassement-seeding: gebruik een geïmporteerd PDF-klassement of een
+        in-systeem berekend serie­klassement als seed voor nieuwe startlijsten.</li>
+    <li>Reserve-systeem: rijders met reserve-volgnummer staan klaar; operator
+        kan tijdens de wedstrijd inzetten als iemand niet komt opdagen.</li>
+</ul>
+
+<h3>Uitslagen &amp; klassementen</h3>
+<ul>
+    <li>Uitslag-import via <b>CSV uit MyLaps</b> of <b>handmatige invoer</b>
+        per heat. Foto-finish corrigeerbaar; jury kan tijden/sancties aanpassen
+        met audit-spoor.</li>
+    <li>Per categorie publicabel of intrekkbaar — operator beslist wanneer
+        rijders + publiek de uitslag zien.</li>
+    <li><b>Serie­klassementen</b>: configureerbare puntentabellen,
+        streep­resultaten, tie-break-regels (laatste-wedstrijd-fallback),
+        finale-vereist-vlag. Sluit aan op een serie wedstrijden van één
+        organisatie — exact wat een regio­competitie nodig heeft.</li>
+    <li>Geïmporteerde PDF-klassementen ondersteund (voor klassementen die
+        elders gerekend worden).</li>
+</ul>
+
+<h3>Beheer-onderdelen</h3>
+<ul>
+    <li><b>Organisaties</b>, <b>banen</b>, <b>sponsors</b> (org + baan).</li>
+    <li><b>Transponder-administratie</b> incl. uitgeleverde transponders aan
+        rijders, kapotte-vlag, uitleenrapport.</li>
+    <li><b>Jury-leden</b> + <b>vrijwilligers</b> per wedstrijd voor het protokol.</li>
+    <li><b>Wedstrijd­protokol-PDF</b>: voorblad met foto, officials­pagina,
+        sponsoren­grid, deelnemers­lijst, uitslagen, nawoord. Volledig
+        gegenereerd uit de data — operator hoeft niets in Word te knippen.</li>
+    <li><b>Speakerlijsten</b> en <b>NK-records-rapport</b> ook gegenereerd.</li>
+</ul>
+
+<div class="footer">
+    <span>InlineComp — info voor RCN (2/3)</span>
+    <span class="auteur">Geert de Vries · juni 2026</span>
+</div>
+
+</section>
+
+<!-- ════════════════════════ PAGINA 3 ════════════════════════ -->
+<section class="pagina">
+
+<h2>Modules voor rijder, coach en bezoeker</h2>
+
+<div class="grid-2">
+    <div class="kaart">
+        <h3><span class="ico">📱</span>/public</h3>
+        <ul style="font-size:9.5pt;margin-left:4mm">
+            <li>Programma met starttijden + categorie-badges</li>
+            <li>Persoonlijke heat-cards met je eigen tijd, positie, sanctie</li>
+            <li>Uitslagen-tab + klassementen-tab per wedstrijd</li>
+            <li>Foto-finish-icoon (📷) en handmatige correctie (✋) zichtbaar</li>
+            <li>Meldingen-popup voor wedstrijddag-info (bv. uitloop, herstart)</li>
+            <li><b>4-talig</b>: NL, EN, DE, FR — meldingen + UI</li>
+        </ul>
+    </div>
+    <div class="kaart">
+        <h3><span class="ico">🏃</span>/coach</h3>
+        <ul style="font-size:9.5pt;margin-left:4mm">
+            <li>Voer je club-naam of een lijst met startnummers in</li>
+            <li>Alle ploegleden in één scherm + hun aankomende heats</li>
+            <li>Live tijden + posities zodra de uitslag erop staat</li>
+            <li>Tijdens jeugdwedstrijden: ideaal om 5-10 rijders tegelijk
+                te coachen vanaf één scherm</li>
+        </ul>
+    </div>
+    <div class="kaart">
+        <h3><span class="ico">✅</span>/check</h3>
+        <ul style="font-size:9.5pt;margin-left:4mm">
+            <li>Vooraf-controle van inschrijving door rijder/coach/anders</li>
+            <li>Vraagt: klopt categorie? Transponder? Afstanden?</li>
+            <li>Onbekende rijders → melden bij de organisatie via formulier</li>
+            <li>Cluster-check helper om dubbele inschrijvingen te vinden</li>
+            <li>Bezoekers-tracking (operator-dashboard)</li>
+        </ul>
+    </div>
+    <div class="kaart">
+        <h3><span class="ico">⚙️</span>Beheer extra's</h3>
+        <ul style="font-size:9.5pt;margin-left:4mm">
+            <li>Meldingen met bijlage (PDF, Word, Excel) — handig voor
+                programma, briefing, sponsor-folder</li>
+            <li>Auto-vertaling van meldingen via AI (1 klik NL→EN/DE/FR)</li>
+            <li>Audit-log per wedstrijd-actie</li>
+            <li>Optimistic locking — twee operators kunnen niet per ongeluk
+                elkaars werk overschrijven</li>
+        </ul>
+    </div>
+</div>
+
+<h2>Wat kan op dit moment níet</h2>
+<div class="beperking-blok">
+    <h3>Eerlijk over de huidige beperkingen</h3>
+    <ul>
+        <li><b>Geen eigen inschrijvings­module.</b> Inschrijven loopt via de
+            KNSB-website (KNSB-feed) of via een eigen formulier/email naar
+            de organisatie. InlineComp leest de inschrijvingen daarna in.</li>
+        <li><b>Geen live-tijdwaarneming-koppeling.</b> Tijden komen uit
+            MyLaps/Orbits via CSV-import na elke heat — geen real-time
+            websocket-koppeling met de tijdwaarnemer.</li>
+        <li><b>Geen koppeling met MyLaps Connect</b> voor transponder-check-in
+            (concept besproken, maar protokol is propriëtair).</li>
+        <li><b>Externe (niet-KNSB) rijders</b> worden ondersteund via CSV,
+            maar een volwaardige "buitenlandse rijder met eigen federatie­licentie"-
+            flow is nog in concept.</li>
+        <li><b>Pauze tussen ritten van dezelfde ronde-groep</b> kan
+            (nog) niet — datamodel staat 't niet toe. Pauzes vallen tussen
+            categorie-blokken, niet midden in een categorie.</li>
+    </ul>
+</div>
+
+<h2>Volgende stap voor de RCN</h2>
+<p>
+    Wat zou een verkenning kunnen opleveren?
+</p>
+<ul>
+    <li><b>Test-wedstrijd</b> — één regio-wedstrijd najaar 2026 of vroege
+        seizoen 2027 op een eigen RCN-omgeving draaien. Geert begeleidt
+        de operator-instructie.</li>
+    <li><b>Serie­klassement</b> — vanaf het begin de RCN-serie configureren
+        zodat aan het eind van het seizoen automatisch een eindstand uitrolt.</li>
+    <li><b>Vragen of opmerkingen</b> — neem contact op via:
+        <b>geert.marije@gmail.com</b></li>
+</ul>
+
+<div class="hint">
+    <b>Open-source overweging.</b> InlineComp draait op een eigen server,
+    de code is van Geert. Voor een regio­competitie kan een gedeelde
+    installatie of een eigen kopie — afspraken te maken.
+</div>
+
+<div class="footer">
+    <span>InlineComp — info voor RCN (3/3)</span>
+    <span class="auteur">Geert de Vries · juni 2026</span>
+</div>
+
+</section>
+
+</body>
+</html>
