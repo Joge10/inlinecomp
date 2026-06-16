@@ -3687,6 +3687,20 @@ th.rk-totaal, td.rk-totaal { width:55px; font-weight:700; color:var(--blauw); ba
 .mz-invoer        { display: flex; gap: 6px; align-items: center; flex-wrap: wrap; }
 .mz-invoer .inp   { flex: 1; min-width: 80px; }
 .mz-status        { font-size: .8rem; color: #555; margin-top: 4px; min-height: 1.2em; }
+/* Keuze-lijst voor "meerdere rijders gevonden" — operator klikt de
+   juiste rijder aan. Verschijnt binnen .mz-status. */
+.mz-keuze-kop     { font-weight: 600; color: var(--blauw); margin-bottom: 4px; }
+.mz-keuze-lijst   { display: flex; flex-direction: column; gap: 3px; max-height: 180px; overflow-y: auto; }
+.mz-keuze-knop {
+    display: flex; flex-direction: column; align-items: flex-start; gap: 1px;
+    text-align: left; padding: 5px 8px;
+    background: #fff; border: 1px solid var(--border);
+    border-radius: 4px; cursor: pointer; color: #222;
+    font-size: .82rem;
+}
+.mz-keuze-knop:hover { background: var(--lichtblauw); border-color: var(--middenblauw); }
+.mz-keuze-naam    { font-weight: 600; color: var(--blauw); }
+.mz-keuze-meta    { font-size: .72rem; color: #666; }
 
 /* Formulier */
 .modal-form-sectie {

@@ -3769,10 +3769,29 @@ async function zoekPersoon(type) {
             statusEl.textContent = 'Geen rijder gevonden — vul gegevens handmatig in.';
             return;
         }
-        vulModalFormulier(personen[0]);
-        statusEl.innerHTML = personen.length > 1
-            ? `<span style="color:green">✓ ${personen.length} rijders gevonden, eerste ingevuld.</span>`
-            : `<span style="color:green">✓ Gevonden: ${escHtml(personen[0].full_name ?? '')}</span>`;
+        if (personen.length === 1) {
+            vulModalFormulier(personen[0]);
+            statusEl.innerHTML = `<span style="color:green">✓ Gevonden: ${escHtml(personen[0].full_name ?? '')}</span>`;
+            return;
+        }
+        // Meerdere matches → laat operator zelf kiezen. Niets automatisch
+        // invullen want de "eerste" is willekeurig (server-sorteer-volgorde).
+        statusEl.innerHTML = `
+            <div class="mz-keuze-kop">${personen.length} rijders gevonden — kies welke:</div>
+            <div class="mz-keuze-lijst">
+                ${personen.map((p, i) => `
+                    <button type="button" class="mz-keuze-knop" data-idx="${i}">
+                        <span class="mz-keuze-naam">${escHtml(p.full_name || '?')}</span>
+                        <span class="mz-keuze-meta">${escHtml(p.category || '')}${p.club_full || p.club_short ? ' · ' + escHtml(p.club_full || p.club_short) : ''}${p.start_number != null ? ' · #' + escHtml(String(p.start_number)) : ''}</span>
+                    </button>`).join('')}
+            </div>`;
+        statusEl.querySelectorAll('.mz-keuze-knop').forEach(btn => {
+            btn.addEventListener('click', () => {
+                const p = personen[parseInt(btn.dataset.idx)];
+                vulModalFormulier(p);
+                statusEl.innerHTML = `<span style="color:green">✓ Gekozen: ${escHtml(p.full_name ?? '')}</span>`;
+            });
+        });
     } catch(e) {
         statusEl.textContent = '⚠ Fout bij zoeken: ' + e.message;
     }
