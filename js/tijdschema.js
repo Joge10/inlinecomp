@@ -3327,11 +3327,11 @@ function _bouwProgrammaExternInternal() {
                 const rijdersStr = T('algemeen.rijders_n', { n: totRj });
                 detail = `${rijdersStr}, ${heatsStr}${dt ? ' · ' + esc(dt) : ''}`;
             }
-            let inner = `<div class="cat-rij">
-                <span class="cat-tijd">${esc(catTijd)}</span>
-                <span class="cat-naam">${esc(naam)}</span>
-                <span class="cat-details">${detail}</span>
-            </div>`;
+            // Bouw de override-/opmerking-rijen apart en plaats ze BOVEN de
+            // cat-rij — voor extern publiek leest dat natuurlijker: eerst
+            // de uitzondering ("Category change for warm-up"), dan de
+            // normale cat-regel. Voorheen stonden ze onder de cat-rij.
+            let ovrHtml = '';
             cr.forEach((r, i) => {
                 // Toon extra-rij voor ritten met EITHER een tijdstip-override
                 // OF een opmerking. Voorheen alleen bij override — opmerking-
@@ -3344,12 +3344,16 @@ function _bouwProgrammaExternInternal() {
                 const opmTxt  = r.opmerking ? ` — ${esc(r.opmerking)}` : '';
                 const heatDeel = nH > 1 ? ` - heat ${i + 1}` : '';
                 const icoon   = heeftOv ? '📌' : '📝';
-                inner += `<div class="cat-ovr-rij">
+                ovrHtml += `<div class="cat-ovr-rij">
                     <span class="cat-ovr-tijd">${esc(ovTijd)}</span>
                     <span class="cat-ovr-tekst">${icoon} ${esc(naam)}${esc(heatDeel)}${opmTxt}</span>
                 </div>`;
             });
-            return inner;
+            return ovrHtml + `<div class="cat-rij">
+                <span class="cat-tijd">${esc(catTijd)}</span>
+                <span class="cat-naam">${esc(naam)}</span>
+                <span class="cat-details">${detail}</span>
+            </div>`;
         };
 
         // Verzamel cats met combi-info; groepeer consecutieve cats met dezelfde
@@ -3523,10 +3527,11 @@ function _bouwProgrammaExternInternal() {
 
             } else if (rij.type === 'ceremonie') {
                 const duur = blok.duur ? T('algemeen.min_unit', { n: blok.duur }) : '';
+                const opm  = blok.opmerking ? ` — ${esc(blok.opmerking)}` : '';
                 bloHtml += `<div class="blok cerem">
                     <div class="blok-kop">
                         <span class="blok-tijd">${esc(bTijd)}</span>
-                        <span class="blok-titel">🏆 ${esc(T('algemeen.ceremonie'))}</span>
+                        <span class="blok-titel">🏆 ${esc(T('algemeen.ceremonie'))}${opm}</span>
                         ${duur ? `<span class="blok-info">${esc(duur)}</span>` : ''}
                     </div></div>`;
 
@@ -3961,9 +3966,10 @@ function _bouwProgrammaInternInternal() {
             prevGroepKey = null;
             const bTijd = btMap.get(rij.blok.id) ?? '';
             const duurTxt = rij.blok?.duur ? ` – ${T('algemeen.min_unit', { n: rij.blok.duur })}` : '';
+            const opmTxt  = rij.blok?.opmerking ? ` — ${esc(rij.blok.opmerking)}` : '';
             tBody += `<tr class="cerem">
                 ${heeftTijden ? `<td class="ti">${esc(bTijd)}</td>` : ''}
-                <td colspan="${restCols}" class="special">🏆 ${esc(T('algemeen.ceremonie'))}${esc(duurTxt)}</td>
+                <td colspan="${restCols}" class="special">🏆 ${esc(T('algemeen.ceremonie'))}${esc(duurTxt)}${opmTxt}</td>
             </tr>`;
         } else if (rij.type === 'herstart') {
             prevGroepKey = null;
