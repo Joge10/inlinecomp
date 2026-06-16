@@ -2431,7 +2431,6 @@ function _spkToonDetail(r) {
     const veld = (label, waarde) => waarde !== null && waarde !== '' && waarde !== undefined
         ? `<div class="spk-detail-rij"><span class="spk-detail-lbl">${escHtml(label)}</span><span class="spk-detail-val">${escHtml(waarde)}</span></div>`
         : '';
-    const geslacht = r.gender === 0 ? 'M' : r.gender === 1 ? 'V' : '';
     const leeftijd = r.birth_year ? (new Date().getFullYear() - r.birth_year) : '';
 
     // Pending-rijders: placeholder uit historische PDF-import zonder echte
@@ -2457,14 +2456,15 @@ function _spkToonDetail(r) {
             <div class="spk-detail-body">
                 ${pendingBanner}
                 ${veld('Categorie',     r.category)}
-                ${veld('Geslacht',      geslacht)}
                 ${veld('Geboortejaar',  r.birth_year)}
                 ${veld('Leeftijd',      leeftijd ? leeftijd + ' jaar' : '')}
                 ${veld('Nationaliteit', r.nationality)}
                 ${veld('Woonplaats',    r.city)}
                 ${veld('Club',          r.club_full)}
                 ${veld('Sponsor',       r.sponsor)}
-                ${veld('Licentie',      r.license_key)}
+                <!-- Snelste tijd op de geselecteerde afstand — asynchroon
+                     gevuld door _spkVulHistorie zodra de historie binnen is. -->
+                <div id="spk-pr-rij"></div>
                 <div class="spk-historie-wrap" id="spk-historie-wrap">
                     <div class="spk-historie-titel">📜 Wedstrijd-historie</div>
                     <div class="spk-historie-content jury-laden">Laden…</div>
@@ -2553,6 +2553,40 @@ async function _spkVulHistorie(overlay, licenseKey) {
         const hintKey = _spkHuidigeAfstandKey();
         const heeftMatchInHistorie = hintKey
             && rijen.some(r => _spkAfstandKey(r.distance_naam) === hintKey);
+
+        // ── Snelste tijd ooit op de geselecteerde afstand ────────────────
+        // Toon één regel boven de historie: wedstrijdnaam als label,
+        // tijd als waarde. Alleen voor afstand-types waar 'snelste tijd'
+        // betekenis heeft (sprint/inline distances; voor puntenkoers/
+        // afvalkoers/marathon valt 't ook prima — wordt gewoon de snelste
+        // klok-tijd). Verbergt zichzelf als geen DC-context of geen tijden.
+        if (hintKey) {
+            // PDO geeft INT-kolommen vaak als JS-string terug — Number()
+            // forceren zodat zowel filter als min-vergelijking numeriek
+            // werken (anders zou "100" < "16" true zijn lexicaal).
+            const opAfstand = rijen
+                .map(r => ({ ...r, _tijdNum: r.tijd_ms != null ? Number(r.tijd_ms) : null }))
+                .filter(r => _spkAfstandKey(r.distance_naam) === hintKey
+                             && r._tijdNum != null && r._tijdNum > 0);
+            if (opAfstand.length) {
+                const snelste = opAfstand.reduce((a, b) => (a._tijdNum < b._tijdNum ? a : b));
+                const prRij = overlay.querySelector('#spk-pr-rij');
+                if (prRij) {
+                    // Jaar achter de wedstrijdnaam zodat duidelijk is wanneer
+                    // 't PR gereden is — wedstrijdnamen herhalen vaak per jaar.
+                    const dStr  = snelste.competition_datum;
+                    const jaar  = dStr
+                        ? new Date(String(dStr).replace(' ', 'T')).getFullYear()
+                        : null;
+                    const compLbl = snelste.competition_naam || 'PR';
+                    const lbl = jaar && !isNaN(jaar) ? `${compLbl} (${jaar})` : compLbl;
+                    prRij.innerHTML = `<div class="spk-detail-rij spk-detail-rij-pr">
+                        <span class="spk-detail-lbl">⏱ ${escHtml(lbl)}</span>
+                        <span class="spk-detail-val"><b>${escHtml(_spkFmtTijd(snelste._tijdNum))}</b></span>
+                    </div>`;
+                }
+            }
+        }
         const toonToggle = hintKey && heeftMatchInHistorie;
 
         container.classList.remove('jury-laden');

@@ -1132,6 +1132,7 @@ if ($action === 'speaker_historie') {
                 ua.categorie,
                 ua.split_group,
                 ua.rang,
+                ua.tijd_ms,
                 NULL          AS punten_totaal
             FROM uitslag_afstand ua
             WHERE ua.person_license = ?
