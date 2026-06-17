@@ -38,3 +38,7 @@ uploader/
 
 # Werkmap voor ad-hoc gegenereerde files (PDF-rapporten, debug-scripts)
 tmp/
+
+# Diagnostic-script: lokaal werkbestand voor server-debug, bevat soms
+# test-secrets. Geert houdt zelf bij dat 'ie niet op de server komt.
+_diag.php
