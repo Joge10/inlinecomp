@@ -851,34 +851,57 @@ body.live-pagina-actief #main-content {
     flex-shrink: 0;
     background: var(--oranje);
     color: var(--wit);
-    border: none;
+    /* Transparante border van 1px zodat de hoogte exact gelijk is aan
+       btn-export (die wel een border heeft). Zonder dit valt btn-import 2px
+       korter uit door het border-box-verschil. */
+    border: 1px solid transparent;
     border-radius: 6px;
-    padding: 8px 16px;
+    /* Vaste hoogte + flex-centering zodat emoji-iconen (📥 📤) niet de
+       button-hoogte oprekken: een emoji-glyph is groter dan een Unicode-
+       pijl en zou anders de line-box uitrekken. Padding alleen horizontaal. */
+    height: 36px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+    padding: 0 16px;
     font-size: .9rem;
     font-weight: 600;
     cursor: pointer;
     white-space: nowrap;
+    line-height: 1;
     transition: background .15s;
 }
 .btn-import:hover           { background: #c9530a; }
 .btn-import:disabled        { background: #bbb; color: #fff; cursor: not-allowed; opacity: .7; }
 .btn-import:disabled:hover  { background: #bbb; }
 .btn-export {
+    /* Stijl analoog aan .btn-secondary (grijs met grijze rand, lichtblauwe
+       hover) — niet de oude wit-met-blauwe-rand. Behoudt sterkere visuele
+       lijn met andere toolbars in de app. */
     flex-shrink: 0;
-    background: var(--wit);
-    color: var(--blauw);
-    border: 1px solid var(--blauw);
+    background: var(--grijs);
+    color: var(--tekst);
+    border: 1px solid var(--border);
     border-radius: 6px;
-    padding: 8px 16px;
+    /* Zelfde vaste-hoogte-flex als .btn-import zodat emoji's de hoogte
+       niet oprekken en alle toolbar-knoppen exact gelijk vallen. */
+    height: 36px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+    padding: 0 16px;
     font-size: .9rem;
     font-weight: 600;
     cursor: pointer;
     white-space: nowrap;
-    transition: background .15s, color .15s;
+    line-height: 1;
+    transition: background .15s, border-color .15s, color .15s;
 }
-.btn-export:hover           { background: var(--blauw); color: var(--wit); }
+.btn-export:hover           { background: #d8e4f0; border-color: var(--middenblauw); color: var(--blauw); }
 .btn-export:disabled        { background: #f0f0f0; color: #aaa; border-color: #ccc; cursor: not-allowed; opacity: .7; }
-.btn-export:disabled:hover  { background: #f0f0f0; color: #aaa; }
+.btn-export:disabled:hover  { background: #f0f0f0; color: #aaa; border-color: #ccc; }
 .btn-print-tekenlijst {
     flex-shrink: 0;
     background: #1a3a5c;
@@ -2591,6 +2614,21 @@ col.heat-tp   { width: 72px; }   /* XX-12345 = 8 monospace tekens */
 /* Iets meer spacing tussen de groep [🔒⏳👁] en de losse icon-knoppen
    zodat de zichtbaarheid visueel gescheiden blijft van de overige acties */
 .beheer-wedstrijd-acties .beheer-zicht-group + .beheer-icon-btn { margin-left: 6px; }
+
+/* Rapport-groep [⚖🖨] — protokol-data + wedstrijdrapport horen bij elkaar
+   (protokol-data wordt gebruikt om het rapport te genereren). Zelfde
+   visuele behandeling als de zichtbaarheids-groep: één kader rond de twee
+   knoppen met dunne separator ertussen. */
+.beheer-rapport-group {
+    display: inline-flex; border: 1px solid #ccc; border-radius: 6px;
+    overflow: hidden;
+}
+.beheer-rapport-group .beheer-icon-btn {
+    border: none; border-right: 1px solid #ccc; border-radius: 0;
+}
+.beheer-rapport-group .beheer-icon-btn:last-child { border-right: none; }
+.beheer-wedstrijd-acties .beheer-icon-btn + .beheer-rapport-group,
+.beheer-wedstrijd-acties .beheer-rapport-group + .beheer-icon-btn { margin-left: 6px; }
 
 /* Persistent legenda bovenaan de wedstrijden-lijst — discreet, kleine
    font, neutrale achtergrond. Verklaart de icon-knoppen 1× zonder dat

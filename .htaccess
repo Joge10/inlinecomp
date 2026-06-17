@@ -1,0 +1,116 @@
+RewriteEngine on
+RewriteCond %{HTTPS} off
+RewriteCond %{HTTP:X-Forwarded-SSL} !on
+RewriteCond %{HTTP_HOST} ^inlineresults\.devriesen\.com$ [OR]
+RewriteCond %{HTTP_HOST} ^www\.inlineresults\.devriesen\.com$
+RewriteRule ^/?$ "https\:\/\/inlineresults\.devriesen\.com\/" [R=301,L]
+
+# BEGIN cPanel-generated php ini directives, do not edit
+# Manual editing of this file may result in unexpected behavior.
+# To make changes to this file, use the cPanel MultiPHP INI Editor (Home >> Software >> MultiPHP INI Editor)
+# For more information, read our documentation (https://go.cpanel.net/EA4ModifyINI)
+<IfModule php7_module>
+   php_value error_log "/home/jorndev1/logs/php.error.log"
+   php_flag log_errors On
+</IfModule>
+<IfModule lsapi_module>
+   php_value error_log "/home/jorndev1/logs/php.error.log"
+   php_flag log_errors On
+</IfModule>
+# END cPanel-generated php ini directives, do not edit
+
+# ════════════════════════════════════════════════════════════════════════
+#  InlineComp — handmatige security-aanvullingen
+#
+#  Twee groepen:
+#   A. Directory-access (Options + FilesMatch) — sluit info-disclosure
+#      via directory-listing en plain-text serveren van .bak/.sql/etc.
+#   B. PHP-runtime-instellingen (php_flag/php_value binnen lsapi_module)
+#      — moeten via .htaccess want byethost leest .user.ini niet voor
+#      PHP-config. Zelfde mechanisme dat cPanel gebruikt voor error_log.
+#
+#  LET OP: als cPanel ooit deze .htaccess regenereert (bv. bij PHP-versie-
+#  wissel), wordt dit block overschreven. Bewaar de code-repo-versie als
+#  je-zelf-backup zodat je 'm opnieuw kunt plakken.
+# ════════════════════════════════════════════════════════════════════════
+
+# ──────────────────────────────────────────────────────────────────────
+#  A. DIRECTORY- EN FILE-ACCESS
+# ──────────────────────────────────────────────────────────────────────
+
+# Geen directory-listings (cPanel Index Manager doet dit ook al, dit is
+# een second-line-of-defense voor 't geval die ooit op 'Inherit' belandt).
+Options -Indexes
+
+# Dotfiles (.git, .env, .htaccess zelf, .user.ini, .DS_Store, etc.)
+<FilesMatch "^\.">
+    <IfModule mod_authz_core.c>
+        Require all denied
+    </IfModule>
+    <IfModule !mod_authz_core.c>
+        Order allow,deny
+        Deny from all
+    </IfModule>
+</FilesMatch>
+
+# Backup-/editor-files en interne source/docs die plain-text geserveerd
+# zouden worden (auth.php.bak zou DB-creds lekken).
+<FilesMatch "\.(bak|old|orig|save|swp|swo|sql|ini|conf|ya?ml|log|md|py|sh|bash)$|~$">
+    <IfModule mod_authz_core.c>
+        Require all denied
+    </IfModule>
+    <IfModule !mod_authz_core.c>
+        Order allow,deny
+        Deny from all
+    </IfModule>
+</FilesMatch>
+
+# composer/node/env artefacten (toekomst-proof)
+<FilesMatch "^(composer\.(json|lock)|package(-lock)?\.json|\.env|\.env\..+)$">
+    <IfModule mod_authz_core.c>
+        Require all denied
+    </IfModule>
+    <IfModule !mod_authz_core.c>
+        Order allow,deny
+        Deny from all
+    </IfModule>
+</FilesMatch>
+
+# ──────────────────────────────────────────────────────────────────────
+#  B. PHP-RUNTIME-INSTELLINGEN
+#
+#  Werkt bewezen via .htaccess op byethost (test met max_input_time = 999
+#  gaf 999, dus LSAPI leest deze block). .user.ini wordt NIET gelezen
+#  op deze hosting (free-tier-restrictie).
+# ──────────────────────────────────────────────────────────────────────
+
+<IfModule lsapi_module>
+    # Verberg "X-Powered-By: PHP/8.3.31" header (versie-fingerprinting weg).
+    php_flag expose_php Off
+
+    # Geen stacktraces naar de eindgebruiker. log_errors blijft On (door
+    # cPanel hierboven gezet), dus errors gaan nog steeds naar
+    # /home/jorndev1/logs/php.error.log voor jouw eigen debugging.
+    php_flag display_errors Off
+    php_flag display_startup_errors Off
+
+    # Sessie-cookie-hardening voor PHPSESSID (mocht 't ergens gebruikt
+    # worden). InlineComp's eigen ic_session-cookie zet deze flags al
+    # expliciet bij setcookie() in api/auth.php — dubbele bescherming.
+    php_flag  session.cookie_secure    On
+    php_flag  session.cookie_httponly  On
+    php_value session.cookie_samesite  Strict
+    php_flag  session.use_strict_mode  On
+
+    # Defense-in-depth: ongebruikte OS-commands uitschakelen.
+    # GEVERIFIEERD dat geen enkele PHP-file in InlineComp deze functies
+    # gebruikt (122 files gescand, geen composer-dependencies).
+    # shell_exec blijft beschikbaar — gebruikt door api/poster.php +
+    # api/klassement_import.php voor Python-aanroepen met escapeshellarg().
+    #
+    # LET OP: disable_functions is PHP_INI_SYSTEM-classified — werkt
+    # mogelijk niet via .htaccess (afhankelijk van hosting-config). Als
+    # _diag.php na deploy nog steeds toont dat 'exec' beschikbaar is,
+    # haal deze regel weg en accepteer dat het via byethost-support moet.
+    php_admin_value disable_functions "exec,system,passthru,proc_open,popen,pcntl_exec"
+</IfModule>

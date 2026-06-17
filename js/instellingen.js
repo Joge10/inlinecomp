@@ -460,11 +460,9 @@ async function laadOrgWedstrijden() {
             <span class="bwl-sep">·</span>
             <span class="bwl-item"><b>📢</b> mededeling versturen</span>
             <span class="bwl-sep">·</span>
-            <span class="bwl-item"><b>📄</b> public-poster <small>(rijders/ouders)</small></span>
+            <span class="bwl-item"><b>📄</b> posters <small>(public/coach/check)</small></span>
             <span class="bwl-sep">·</span>
-            <span class="bwl-item"><b>🖼</b> coach-poster</span>
-            <span class="bwl-sep">·</span>
-            <span class="bwl-item"><b>🖨</b> wedstrijdrapport <small>(print / PDF)</small></span>
+            <span class="bwl-item"><b>⚖/🖨</b> protokol <small>(data / genereren)</small></span>
             <span class="bwl-sep">·</span>
             <span class="bwl-item"><b>🔑</b> jury-wachtwoord</span>
             <span class="bwl-sep">·</span>
@@ -512,10 +510,11 @@ async function laadOrgWedstrijden() {
             <div class="beheer-wedstrijd-acties">
                 ${zichtBtn}
                 ${inDb ? `<button class="btn-secondary btn-sm beheer-comp-meld beheer-icon-btn" data-id="${escHtml(w.id)}" data-naam="${escHtml(w.name ?? w.id)}" title="Mededelingen — verstuur push-bericht naar /coach + /public">📢</button>` : ''}
-                ${inDb ? `<button class="btn-secondary btn-sm beheer-comp-poster beheer-icon-btn" data-id="${escHtml(w.id)}" data-app="public" title="Public-poster — download QR-poster voor rijders / ouders">📄</button>` : ''}
-                ${inDb ? `<button class="btn-secondary btn-sm beheer-comp-poster beheer-icon-btn" data-id="${escHtml(w.id)}" data-app="coach" title="Coach-poster — download QR-poster voor coaches">🖼</button>` : ''}
-                ${inDb ? `<button class="btn-secondary btn-sm beheer-comp-protokol beheer-icon-btn" data-id="${escHtml(w.id)}" data-naam="${escHtml(w.name ?? w.id)}" title="Protokol-data — officials + nawoord voor het wedstrijdrapport">⚖</button>` : ''}
-                ${inDb ? `<button class="btn-secondary btn-sm beheer-comp-print beheer-icon-btn" data-id="${escHtml(w.id)}" data-naam="${escHtml(w.name ?? w.id)}" title="Wedstrijdrapport — print of opslaan als PDF (via browser-print)">🖨</button>` : ''}
+                ${inDb ? `<button class="btn-secondary btn-sm beheer-comp-poster beheer-icon-btn" data-id="${escHtml(w.id)}" title="Posters — download QR-poster voor public, coach of check (kies type + taal in dialog)">📄</button>` : ''}
+                ${inDb ? `<div class="beheer-rapport-group" role="group" aria-label="Protokol">
+                    <button class="btn-secondary btn-sm beheer-comp-protokol beheer-icon-btn" data-id="${escHtml(w.id)}" data-naam="${escHtml(w.name ?? w.id)}" title="Protokol-data — officials + nawoord voor het protokol">⚖</button>
+                    <button class="btn-secondary btn-sm beheer-comp-print beheer-icon-btn" data-id="${escHtml(w.id)}" data-naam="${escHtml(w.name ?? w.id)}" title="Protokol genereren — print of opslaan als PDF (via browser-print)">🖨</button>
+                </div>` : ''}
                 ${inDb ? `<button class="btn-secondary btn-sm beheer-comp-jurypwd beheer-icon-btn ${Number(dbRow?.jury_password_set) ? 'is-actief' : ''}"
                     data-id="${escHtml(w.id)}" data-naam="${escHtml(w.name ?? w.id)}"
                     data-set="${Number(dbRow?.jury_password_set) ? '1' : '0'}"
@@ -539,7 +538,7 @@ async function laadOrgWedstrijden() {
         btn.addEventListener('click', () => verwijderCompetitie(btn.dataset.id, btn.dataset.naam));
     });
     lijst.querySelectorAll('.beheer-comp-poster').forEach(btn => {
-        btn.addEventListener('click', () => downloadPoster(btn.dataset.id, btn.dataset.app || 'public'));
+        btn.addEventListener('click', () => downloadPoster(btn.dataset.id));
     });
     lijst.querySelectorAll('.beheer-comp-meld').forEach(btn => {
         btn.addEventListener('click', () =>
@@ -2880,21 +2879,29 @@ async function uploadLogo(type, id, file, sponsorRij = null) {
 // wedstrijd met juiste QR-url en wedstrijd-info. appType bepaalt of de QR
 // naar /public/ of /coach/ wijst en de tekst-variant ('public' default,
 // 'coach' voor de coach-app-poster). Endpoint is api/poster.php.
-// Kleine taal-keuze modal. Returnt 'nl' | 'en' | null (geannuleerd).
-// localStorage onthoudt de laatste keuze als default-pre-focus, zodat
-// een operator die meerdere EN-posters print niet steeds opnieuw kiest.
-function kiesPosterTaal() {
-    const laatste = localStorage.getItem('poster_lang') || 'nl';
+// Modal voor poster-type + taalkeuze. Returnt { lang, type } | null.
+// localStorage onthoudt zowel laatste type als laatste taal — zodat een
+// operator die series posters print niet steeds opnieuw moet kiezen.
+function kiesPosterOpties() {
+    const laatsteLang = localStorage.getItem('poster_lang') || 'nl';
+    const laatsteType = localStorage.getItem('poster_type') || 'public';
     return new Promise(resolve => {
         const overlay = document.createElement('div');
         overlay.className = 'modal-overlay';
         overlay.innerHTML = `
             <div class="modal-dialog modal-dialog--smal">
                 <div class="modal-header">
-                    <span>Poster-taal</span>
+                    <span>Poster genereren</span>
                 </div>
-                <div class="modal-body modal-body--gecentreerd">
-                    Welke taal voor de poster?
+                <div class="modal-body">
+                    <label for="poster-type-sel" style="display:block;font-weight:bold;margin-bottom:4px;">Welke poster?</label>
+                    <select id="poster-type-sel" style="width:100%;padding:6px 8px;font-size:1em;margin-bottom:14px;">
+                        <option value="public">Public — voor rijders / ouders</option>
+                        <option value="coach">Coach — voor coaches</option>
+                        <option value="check">Check — controleer inschrijving</option>
+                        <option value="alle">Alle drie (sequentieel)</option>
+                    </select>
+                    <div style="font-weight:bold;margin-bottom:2px;">Taal:</div>
                 </div>
                 <div class="modal-knoppen modal-knoppen--gecentreerd">
                     <button class="modal-btn modal-annuleer" data-act="cancel">Annuleer</button>
@@ -2903,61 +2910,72 @@ function kiesPosterTaal() {
                 </div>
             </div>`;
         document.body.appendChild(overlay);
-        const sluit = lang => { overlay.remove(); resolve(lang); };
+        const typeSel = overlay.querySelector('#poster-type-sel');
+        typeSel.value = laatsteType;
+        const sluit = res => { overlay.remove(); resolve(res); };
         overlay.querySelectorAll('[data-act]').forEach(b => {
             b.addEventListener('click', () => {
                 const act = b.dataset.act;
                 if (act === 'cancel') return sluit(null);
+                const type = typeSel.value;
                 localStorage.setItem('poster_lang', act);
-                sluit(act);
+                localStorage.setItem('poster_type', type);
+                sluit({ lang: act, type });
             });
         });
         overlay.addEventListener('click', e => { if (e.target === overlay) sluit(null); });
         // Focus op laatst gekozen taal voor snelle Enter-flow
-        overlay.querySelector(`[data-act="${laatste}"]`)?.focus();
+        overlay.querySelector(`[data-act="${laatsteLang}"]`)?.focus();
     });
 }
 
-async function downloadPoster(compId = null, appType = 'public') {
+// Download één of meerdere posters voor een wedstrijd (of generiek voor de
+// org als compId leeg is). Opties komen uit de kiesPosterOpties-dialog:
+// `type` = 'public' | 'coach' | 'check' | 'alle' (download alle drie).
+async function downloadPoster(compId = null) {
     if (!actieveOrg?.id) return;
 
-    const lang = await kiesPosterTaal();
-    if (!lang) return;
+    const opties = await kiesPosterOpties();
+    if (!opties) return;
+    const { lang, type } = opties;
+    const types = type === 'alle' ? ['public', 'coach', 'check'] : [type];
 
     // Visuele feedback op de knop die is geklikt
     const btn = compId
-        ? document.querySelector(`.beheer-comp-poster[data-id="${compId}"][data-app="${appType}"]`)
+        ? document.querySelector(`.beheer-comp-poster[data-id="${compId}"]`)
         : el('btn-org-poster');
     const origLabel = btn?.textContent;
     if (btn) { btn.disabled = true; btn.textContent = '⏳ Bezig…'; }
 
     try {
-        const params = new URLSearchParams({ org_id: actieveOrg.id, app: appType, lang });
-        if (compId) params.set('competition_id', compId);
+        for (const appType of types) {
+            const params = new URLSearchParams({ org_id: actieveOrg.id, app: appType, lang });
+            if (compId) params.set('competition_id', compId);
 
-        const res = await fetch('api/poster.php?' + params.toString());
+            const res = await fetch('api/poster.php?' + params.toString());
 
-        // Fout-responses komen als JSON, PDF's als application/pdf
-        const ct = res.headers.get('content-type') ?? '';
-        if (!res.ok || !ct.startsWith('application/pdf')) {
-            const txt = await res.text();
-            let msg = 'Poster genereren mislukt.';
-            try { msg = (JSON.parse(txt).error) ?? msg; } catch { /* raw text */ }
-            throw new Error(msg);
+            // Fout-responses komen als JSON, PDF's als application/pdf
+            const ct = res.headers.get('content-type') ?? '';
+            if (!res.ok || !ct.startsWith('application/pdf')) {
+                const txt = await res.text();
+                let msg = 'Poster genereren mislukt.';
+                try { msg = (JSON.parse(txt).error) ?? msg; } catch { /* raw text */ }
+                throw new Error(`${appType}: ${msg}`);
+            }
+
+            const blob = await res.blob();
+            const naam = (res.headers.get('content-disposition') ?? '')
+                .match(/filename="([^"]+)"/)?.[1] ?? `${appType}-poster.pdf`;
+
+            const url = URL.createObjectURL(blob);
+            const a   = document.createElement('a');
+            a.href    = url;
+            a.download = naam;
+            document.body.appendChild(a);
+            a.click();
+            a.remove();
+            URL.revokeObjectURL(url);
         }
-
-        const blob = await res.blob();
-        const naam = (res.headers.get('content-disposition') ?? '')
-            .match(/filename="([^"]+)"/)?.[1] ?? 'poster.pdf';
-
-        const url = URL.createObjectURL(blob);
-        const a   = document.createElement('a');
-        a.href    = url;
-        a.download = naam;
-        document.body.appendChild(a);
-        a.click();
-        a.remove();
-        URL.revokeObjectURL(url);
     } catch (e) {
         toonBevestigDialog('Kon poster niet downloaden:\n\n' + e.message, 'Poster', 'OK', '');
     } finally {

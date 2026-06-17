@@ -203,6 +203,7 @@ def genereer_poster(args):
     heeft_comp = bool(args.comp_naam)
     sponsors   = parse_sponsors(args.sponsors)
     is_coach   = args.app_type == 'coach'
+    is_check   = args.app_type == 'check'
 
     # i18n: alle tekst-strings per taal. Gebruik T(key, **fmt) hieronder om
     # de juiste taal te kiezen. Nieuwe taal toevoegen = nieuwe dict + cli-keuze.
@@ -212,6 +213,8 @@ def genereer_poster(args):
             'sub_coach_geen':      u'Voor coaches: volg al je rijders live',
             'sub_public_org':      u'Wedstrijden bij {org}',
             'sub_public_geen':     u'Volg je wedstrijd live!',
+            'sub_check_org':       u'Controleer je inschrijving bij {org}',
+            'sub_check_geen':      u'Controleer je inschrijving vóór de wedstrijd',
             'scan':                u'Scan de QR-code met je telefoon',
             'stap1_kies_naam':     u'Kies "{naam}"',
             'stap1_kies_alg':      u'Kies je wedstrijd',
@@ -219,12 +222,15 @@ def genereer_poster(args):
             'stap_coach_3':        u'Volg programma, heats, sancties en uitslagen',
             'stap_public_2':       u'Vul je startnummer in',
             'stap_public_3':       u'Bekijk je heats, tijden en resultaten',
+            'stap_check_2':        u'Zoek je achternaam en vul je voornaam in',
+            'stap_check_3':        u'Controleer je gegevens en meld wijzigingen',
             'sportity_kanaal':     u'Officiële einduitslagen + klassementen via Sportity (kanaal: {kanaal}).',
             'disclaimer_label':    u'LET OP — TESTFASE',
             'disclaimer_tekst':    u'Aan de informatie in InlineComp kunnen geen rechten worden ontleend.',
             'sponsors_titel':      u'Mede mogelijk gemaakt door:',
             'tip_coach':           u'Tip: voeg InlineComp Coach toe aan je startscherm voor snelle toegang!',
             'tip_public':          u'Tip: voeg InlineComp toe aan je startscherm voor snelle toegang!',
+            'tip_check':           u'Tip: doe dit vóór wedstrijddag om gedoe bij de inschrijving te voorkomen!',
             'coach_pw_label':      u'Coach-wachtwoord:',
         },
         'en': {
@@ -232,6 +238,8 @@ def genereer_poster(args):
             'sub_coach_geen':      u'For coaches: follow all your skaters live',
             'sub_public_org':      u'Races at {org}',
             'sub_public_geen':     u'Follow your race live!',
+            'sub_check_org':       u'Check your registration at {org}',
+            'sub_check_geen':      u'Check your registration before the race',
             'scan':                u'Scan the QR code with your phone',
             'stap1_kies_naam':     u'Choose "{naam}"',
             'stap1_kies_alg':      u'Choose your race',
@@ -239,12 +247,15 @@ def genereer_poster(args):
             'stap_coach_3':        u'Follow program, heats, penalties and results',
             'stap_public_2':       u'Enter your bib number',
             'stap_public_3':       u'View your heats, times and results',
+            'stap_check_2':        u'Find your surname and enter your first name',
+            'stap_check_3':        u'Check your details and report any changes',
             'sportity_kanaal':     u'Official final results + standings via Sportity (channel: {kanaal}).',
             'disclaimer_label':    u'NOTE — TEST PHASE',
             'disclaimer_tekst':    u'No rights can be derived from the information in InlineComp.',
             'sponsors_titel':      u'Made possible by:',
             'tip_coach':           u'Tip: add InlineComp Coach to your home screen for quick access!',
             'tip_public':          u'Tip: add InlineComp to your home screen for quick access!',
+            'tip_check':           u'Tip: do this before race day to avoid issues at registration!',
             'coach_pw_label':      u'Coach password:',
         },
     }
@@ -269,6 +280,8 @@ def genereer_poster(args):
 
     if is_coach:
         sub = T('sub_coach_org', org=args.org_naam) if heeft_org else T('sub_coach_geen')
+    elif is_check:
+        sub = T('sub_check_org', org=args.org_naam) if heeft_org else T('sub_check_geen')
     else:
         sub = T('sub_public_org', org=args.org_naam) if heeft_org else T('sub_public_geen')
     c.setFont('Helvetica', 18)
@@ -429,6 +442,12 @@ def genereer_poster(args):
             ('2', T('stap_coach_2')),
             ('3', T('stap_coach_3')),
         ]
+    elif is_check:
+        steps = [
+            ('1', stap1),
+            ('2', T('stap_check_2')),
+            ('3', T('stap_check_3')),
+        ]
     else:
         steps = [
             ('1', stap1),
@@ -553,7 +572,12 @@ def genereer_poster(args):
     # Tip-regel — dichter onder URL dan voorheen (was 6mm).
     c.setFillColor(LICHTBLAUW)
     c.setFont('Helvetica', 8)
-    tip = T('tip_coach') if is_coach else T('tip_public')
+    if is_coach:
+        tip = T('tip_coach')
+    elif is_check:
+        tip = T('tip_check')
+    else:
+        tip = T('tip_public')
     c.drawCentredString(width / 2, 10 * mm, tip)
 
     # Sportity-verwijzing onderaan in de footer — alleen als er een kanaal
@@ -593,7 +617,7 @@ def main():
                    help="Coach-app toegangswachtwoord. Alleen relevant voor "
                         "coach-poster. Verschijnt als prominente regel zodat "
                         "coaches het bij hand hebben bij eerste login.")
-    p.add_argument('--app-type', default='public', choices=['public', 'coach'],
+    p.add_argument('--app-type', default='public', choices=['public', 'coach', 'check'],
                    help="Doelgroep van de poster: 'public' (rijders/ouders, default) "
                         "of 'coach' (coaches die meerdere rijders tegelijk volgen)")
     args = p.parse_args()

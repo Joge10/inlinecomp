@@ -1776,6 +1776,142 @@ function groepeerVoorPrint() {
     return groepen;
 }
 
+// ── Compacte cat-groepering voor de boomSaver-tekenlijst ─────────────────────
+// Groepeert rijders PER CATEGORIE (HSA, DJB, etc.) ipv per DC. Levert per cat:
+//   - Volgorde van DC's (op tijdschema-volgorde — eerst gereden = afstand 1)
+//   - Subgroepen op afstand-combinatie:
+//       1. Alle afstanden (meest voorkomend, eerst)
+//       2. 2-combinaties (1+2, 2+3, 1+3 enz.)
+//       3. Solo's (alleen 1, alleen 2, alleen 3)
+//     Lege subgroepen worden weggelaten.
+// Output: [{ cat, dcs: [{dcId, naam}], subgroepen: [{ label, idxs, rijders }] }]
+function _bouwCompactCatClusters() {
+    // 1. Per cat: verzamel DC-volgorde + map rijder → set van dcIds waarin ie zit.
+    const catMap = new Map();
+    for (const dc of vergelijkData) {
+        const dcId   = dc.dc_id;
+        const dcNaam = dc.distance_naam || dc.dc_name || '';
+        for (const c of (dc.competitors || [])) {
+            const status = c.entry_status ?? 1;
+            if (status === 2 || status === 3 || status === 4) continue; // niet op tekenlijst
+            const pe  = personEdits[c.license_key] || {};
+            const cat = pe.category ?? c.knsb?.category;
+            if (!cat) continue;
+            // Sleutel: bij KNSB-rijder = license_key; bij handmatig zonder licentie = start_number
+            const lic = c.license_key || ('snr_' + (pe.start_number ?? c.knsb?.start_number ?? ''));
+            if (!catMap.has(cat)) catMap.set(cat, { dcOrder: [], rijders: new Map() });
+            const ce = catMap.get(cat);
+            if (!ce.dcOrder.find(d => d.dcId === dcId)) ce.dcOrder.push({ dcId, naam: dcNaam });
+            if (!ce.rijders.has(lic)) {
+                // Bouw rijder-record (analoog aan groepeerVoorPrint).
+                const tpActief = ('transponder_actief' in pe)
+                    ? (pe.transponder_actief ?? '')
+                    : (pe.transponder1 ?? c.knsb?.transponder1 ?? '');
+                const orgTp    = _orgTransponders.find(ot => ot.transponder_code === tpActief);
+                const tpBetaald = orgTp ? (parseInt(orgTp.betaald) === 1) : null;
+                const tpOrgNr   = orgTp ? String(orgTp.intern_nummer ?? '') : '';
+                const ek = c.license_key ? (dcId + '_' + c.license_key) : null;
+                const reserveNr = ek && entryEdits[ek] ? (entryEdits[ek].reserve ?? null) : null;
+                ce.rijders.set(lic, {
+                    rijderData: {
+                        start_number: pe.start_number ?? c.knsb?.start_number ?? '',
+                        full_name:    pe.full_name    ?? c.knsb?.full_name    ?? '',
+                        category:     cat,
+                        transponder:  tpActief,
+                        tp_org_nr:    tpOrgNr,
+                        entry_status: status,
+                        tp_betaald:   tpBetaald,
+                        reserve:      reserveNr,
+                    },
+                    inDcIds: new Set(),
+                });
+            }
+            ce.rijders.get(lic).inDcIds.add(dcId);
+        }
+    }
+
+    // 2. Sorteer DC's binnen elke cat op tijdschema-volgorde (eerst gereden = 1).
+    const ritten = (typeof huidigTijdschema !== 'undefined' && huidigTijdschema?.ritten) || [];
+    const dcEersteVolg = new Map();
+    for (const r of ritten) {
+        const v = parseInt(r.volgorde) || 0;
+        if (!dcEersteVolg.has(r.dc_id) || v < dcEersteVolg.get(r.dc_id)) {
+            dcEersteVolg.set(r.dc_id, v);
+        }
+    }
+    for (const ce of catMap.values()) {
+        ce.dcOrder.sort((a, b) =>
+            (dcEersteVolg.get(a.dcId) ?? 9999) - (dcEersteVolg.get(b.dcId) ?? 9999));
+    }
+
+    // 3. Per cat → groepeer op mask (welke dc-indexen) en sorteer subgroepen.
+    const clusters = [];
+    for (const [cat, ce] of catMap) {
+        const dcIdToIdx = new Map(ce.dcOrder.map((d, i) => [d.dcId, i]));
+        const subMap   = new Map(); // mask-string → [rijders]
+        for (const r of ce.rijders.values()) {
+            const idxs = [...r.inDcIds].map(id => dcIdToIdx.get(id))
+                .filter(i => i !== undefined).sort((a, b) => a - b);
+            const mask = idxs.join(',');
+            if (!subMap.has(mask)) subMap.set(mask, []);
+            subMap.get(mask).push({ ...r.rijderData, _idxs: idxs });
+        }
+        // Sort masks: grootste eerst (alle-3 bovenaan), dan lexicografisch op idx.
+        const masks = [...subMap.keys()].sort((a, b) => {
+            const aa = a.split(',').map(Number);
+            const bb = b.split(',').map(Number);
+            if (aa.length !== bb.length) return bb.length - aa.length;
+            for (let i = 0; i < aa.length; i++) {
+                if (aa[i] !== bb[i]) return aa[i] - bb[i];
+            }
+            return 0;
+        });
+        const subgroepen = masks.map(mask => {
+            const idxs    = mask.split(',').map(Number);
+            const rijders = subMap.get(mask);
+            // Sortering binnen subgroep: reguliere op startnr, reserves achteraan.
+            rijders.sort((a, b) => {
+                const aR = a.reserve, bR = b.reserve;
+                if (aR && !bR) return  1;
+                if (!aR && bR) return -1;
+                if (aR && bR)  return aR - bR;
+                return (Number(a.start_number) || 9999) - (Number(b.start_number) || 9999);
+            });
+            // Label wordt in de render-fase opgebouwd via T() — daar weten we
+            // de taal en het korte afstand-label.
+            return { idxs, rijders };
+        });
+        clusters.push({ cat, dcs: ce.dcOrder, subgroepen });
+    }
+
+    // Sorteer clusters op logische cat-volgorde:
+    //   leeftijdsgroep (pupillen → kinderen → jeugd → senioren → masters)
+    //   ↳ binnen leeftijd: dames vóór heren
+    //   ↳ binnen geslacht: jongste sub-code eerst (DP4 > DP3 > DP1, DJB > DJA).
+    // Cat-codes hebben vorm "DP4", "DJB", "HJA", "Dsenioren" etc.
+    //   pos 0 = D/H (geslacht), pos 1 = P/K/J/S/M (leeftijdsgroep),
+    //   pos 2+ = subcode. Onbekende leeftijdsgroepen sorteren achteraan.
+    const _catSortKey = cat => {
+        const c = String(cat || '').toUpperCase();
+        const lgMap = { P: 0, K: 1, J: 2, S: 3, M: 4 };
+        return {
+            lg:   lgMap[c.charAt(1)] ?? 9,
+            gesl: c.charAt(0) === 'D' ? 0 : 1,
+            sub:  c.slice(2),
+        };
+    };
+    clusters.sort((a, b) => {
+        const ka = _catSortKey(a.cat), kb = _catSortKey(b.cat);
+        if (ka.lg   !== kb.lg)   return ka.lg   - kb.lg;
+        if (ka.gesl !== kb.gesl) return ka.gesl - kb.gesl;
+        // Sub-code descending: 4 vóór 3, B vóór A (jongste eerst).
+        if (ka.sub < kb.sub) return  1;
+        if (ka.sub > kb.sub) return -1;
+        return 0;
+    });
+    return clusters;
+}
+
 // Body-builder: levert alleen de HTML-inhoud + css-links zonder een eigen
 // window te openen. Gebruikt door Print-Center om meerdere prints in één
 // venster te combineren. Returns: { bodyHtml, cssLinks, title } of null.
@@ -1899,9 +2035,12 @@ function _bouwTekenlijstenInternal(opts = {}) {
                </div>`
             : '';
 
-        const tpTxt = d.tp_org_nr
-            ? `#${d.tp_org_nr} ${d.transponder ?? ''}`.trim()
-            : String(d.transponder ?? '');
+        // Org-internummer (#EJ43) vet rood zodat de jury direct ziet dat
+        // dit een transponder van de organisatie is (in-/uit-name). De
+        // transponder-code zelf in normale tekst ernaast.
+        const tpHtml = d.tp_org_nr
+            ? `<span class="tp-orgnr">#${escHtml(String(d.tp_org_nr))}</span> ${escHtml(d.transponder ?? '')}`
+            : escHtml(String(d.transponder ?? ''));
 
         // Reserve-rijders: vervang volgnummer door 'R1' / 'R2' / etc.
         // Klasse 'rij-reserve' voor lichte visuele afwijking. Startnummer-kolom
@@ -1915,7 +2054,7 @@ function _bouwTekenlijstenInternal(opts = {}) {
             <td class="td-sn">${escHtml(String(d.start_number))}</td>
             <td class="td-naam">${escHtml(d.full_name)}</td>
             <td class="td-cat">${escHtml(d.category)}</td>
-            <td class="td-tp">${escHtml(tpTxt)}</td>
+            <td class="td-tp">${tpHtml}</td>
             <td class="td-tp-cor"><div class="tp-boxes"><span class="tp-box"></span><span class="tp-box"></span><span class="tp-sep">-</span><span class="tp-box"></span><span class="tp-box"></span><span class="tp-box"></span><span class="tp-box"></span><span class="tp-box"></span></div></td>
             <td class="td-hand">${handCel}</td>
         </tr>`;
@@ -1988,79 +2127,122 @@ function _bouwTekenlijstenInternal(opts = {}) {
             </div>`;
         }).join('');
     } else {
-        // Boom-saver: pak meerdere stukken op één pagina (greedy first-fit).
-        // Maatvoering (mm):
-        //   PAG_H        = 194 (bruikbaar bij A4 landscape, marges 8mm)
-        //   HEADER_H     = 25 (logo + comp-info + scheidingslijn op pagina 1)
-        //   STUK_OVERHEAD = 12 (groep-titel + thead + kleine padding)
-        //   RIJ_H        = 8
-        //   SPACER_H     = 4 (ruimte tussen twee stukken op dezelfde pagina)
-        //   FOOTER_H     = 18 (sponsorbalk, alleen op laatste pagina)
-        const PAG_H = 194, HEADER_H = 25, STUK_OVERHEAD = 12,
-              RIJ_H = 8, SPACER_H = 4, FOOTER_H = 18;
+        // Compact tekenlijst: één tabel per categorie. Rijders die meerdere
+        // afstanden in dezelfde cat rijden komen 1× voor in plaats van 3×.
+        // Subgroepen gegroepeerd op afstand-combinatie (alle-3 → 2-combos →
+        // solos), met per-rijder vinkjes per afstand. Vervangt de oude
+        // greedy-fit boom-saver — die spaarde papier per kleine cat, maar deze
+        // mode spaart radicaler: 3 lijsten → 1 lijst per cat.
+        const clusters = _bouwCompactCatClusters();
+        const _deelnTxt = n => T(n === 1 ? 'algemeen.deelnemer_1' : 'algemeen.deelnemers_n', { n });
+        // Korte afstand-naam voor de vertikale kolom-header: strip de
+        // cat-prefix uit distance_naam zodat "Junior Ladies 200m DTT" →
+        // "200m DTT". Match vanaf eerste afstand-kenmerk. Werkt voor
+        // EN/NL/DE/FR distance_namen mits ze eindigen op een meting of
+        // bekend race-type.
+        const _kortAfstand = naam => {
+            const s = String(naam || '');
+            const m = s.match(/(\d+\s*m\b.*|Points?rac.*|Punten.*|Afval.*|Knock.*|Marathon.*|Sprint.*|DTT.*|Mass.*)$/i);
+            return (m ? m[1] : s).trim();
+        };
 
-        const paginas = []; // [{ stukken:[], heeftCompHeader, heeftFooter, gebruiktMm }]
-        let isFirstPage = true;
-        for (const st of stukken) {
-            const stukH = STUK_OVERHEAD + st.aantalRijen * RIJ_H;
-            const huidig = paginas[paginas.length - 1];
-            const budget = isFirstPage ? PAG_H - HEADER_H : PAG_H;
-            const candidate = huidig
-                ? huidig.gebruiktMm + SPACER_H + stukH
-                : stukH;
-            if (huidig && candidate <= budget) {
-                huidig.stukken.push(st);
-                huidig.gebruiktMm = candidate;
-            } else {
-                paginas.push({
-                    stukken:        [st],
-                    heeftCompHeader: isFirstPage,
-                    heeftFooter:    false,
-                    gebruiktMm:     stukH,
-                });
-                isFirstPage = false;
-            }
-        }
-        // Footer alleen op de allerlaatste pagina; als 'ie niet meer past, push
-        // het laatste stuk naar een nieuwe pagina.
-        if (paginas.length > 0 && footerHtml) {
-            const lp = paginas[paginas.length - 1];
-            const budget = lp.heeftCompHeader ? PAG_H - HEADER_H : PAG_H;
-            if (lp.gebruiktMm + FOOTER_H > budget && lp.stukken.length > 1) {
-                const laatste = lp.stukken.pop();
-                lp.gebruiktMm -= (SPACER_H + STUK_OVERHEAD + laatste.aantalRijen * RIJ_H);
-                paginas.push({
-                    stukken:         [laatste],
-                    heeftCompHeader: false,
-                    heeftFooter:     true,
-                    gebruiktMm:      STUK_OVERHEAD + laatste.aantalRijen * RIJ_H,
-                });
-            } else {
-                lp.heeftFooter = true;
-            }
-        }
-
-        // In boom-saver mode rendert Print-Center zelf één gedeelde comp-header
-        // bovenaan het document. We hoeven hier alleen de gepakte categorieën
-        // te tonen — geen logo of comp-info per pagina. Pagina 1 begint dus
-        // ook gewoon met een compacte categorie-titel.
-        paginaHtml = paginas.map(p => {
-            const inhoud = p.stukken.map((st, i) => {
-                const _deelnTxt = T(st.totaal === 1 ? 'algemeen.deelnemer_1' : 'algemeen.deelnemers_n', { n: st.totaal });
-                const _spanTxt  = st.isVervolg
-                    ? '(' + T('algemeen.vervolg') + st.pLabel + ')'
-                    : '(' + _deelnTxt + st.pLabel + ')';
-                return `<div style="font-size:10pt;font-weight:bold;line-height:1.2;${i > 0 ? 'margin-top:' + SPACER_H + 'mm;' : ''}padding-bottom:1mm;">
-                    ${escHtml(st.groep.naam)}
-                    <span style="font-size:8pt;font-weight:normal;color:#555;">${escHtml(_spanTxt)}</span>
-                </div>
-                <table>${thead}<tbody>${renderRijen(st.slice, st.chunkStart)}</tbody></table>`;
+        const blokken = clusters.map(cluster => {
+            const { cat, dcs, subgroepen } = cluster;
+            const aantalRijders = subgroepen.reduce((s, sg) => s + sg.rijders.length, 0);
+            // Cat-titel = NL-cat-code (kort) + volledige distance-namen onder
+            // (universeel begrijpelijk). Dat dekt zowel de operator (kent DJA)
+            // als de buitenlandse rijder (leest "Junior Ladies 200m DTT").
+            const volledigeNamen = dcs.map(d => d.naam).filter(Boolean).join(' · ');
+            const distHeads = dcs.map(d =>
+                `<th class="td-dist">${escHtml(_kortAfstand(d.naam))}</th>`).join('');
+            const ncols = 6 + dcs.length;
+            const compactThead = `<thead><tr>
+                <th class="td-nr">#</th>
+                <th class="td-sn">${escHtml(T('tekenlijst.col_startnr'))}</th>
+                <th class="td-naam">${escHtml(T('algemeen.naam'))}</th>
+                <th class="td-tp">${escHtml(T('algemeen.transponder'))}</th>
+                <th class="td-tp-cor">${escHtml(T('tekenlijst.col_correctie'))}</th>
+                ${distHeads}
+                <th class="td-hand">${escHtml(T('algemeen.handtekening'))}</th>
+            </tr></thead>`;
+            let rowNum = 0;
+            const tbodyHtml = subgroepen.map(sg => {
+                // Label opbouwen — i18n via T(). Mogelijk:
+                //   • "Alle N afstanden" / "All N distances" — als alle DC's
+                //   • "200m DTT only" — solo (1 idx)
+                //   • "200m DTT + 1000m" — 2-combinatie (idxs > 1, < alle)
+                const korteAfstanden = dcs.map(d => _kortAfstand(d.naam));
+                let sgLabel;
+                if (sg.idxs.length === dcs.length && dcs.length > 1) {
+                    sgLabel = T('tekenlijst.sub_alle_n', { n: dcs.length });
+                } else if (sg.idxs.length === 1) {
+                    sgLabel = T('tekenlijst.sub_alleen', { naam: korteAfstanden[sg.idxs[0]] });
+                } else {
+                    sgLabel = sg.idxs.map(i => korteAfstanden[i]).join(' + ');
+                }
+                const sgHead = `<tr class="sub-head"><td colspan="${ncols}">
+                    <strong>${escHtml(sgLabel)}</strong>
+                    <span class="sub-tel">— ${escHtml(_deelnTxt(sg.rijders.length))}</span>
+                </td></tr>`;
+                const rijenHtml = sg.rijders.map(d => {
+                    rowNum++;
+                    const sn        = Number(d.start_number);
+                    const isReserve = d.reserve != null && d.reserve > 0;
+                    const meldingen = [];
+                    if (d.entry_status === 0)   meldingen.push(T('tekenlijst.melding'));
+                    if (!d.transponder)         meldingen.push(T('tekenlijst.geen_tp'));
+                    if (sn >= 1000)             meldingen.push(T('tekenlijst.startnr_n', { nr: sn }));
+                    if (d.tp_betaald === false) meldingen.push(T('tekenlijst.tp_niet_betaald'));
+                    const handCel = meldingen.length
+                        ? `<div class="meld-attentie">
+                               <span class="meld-uitroep">⚠️</span>
+                               <span class="meld-tekst">${escHtml(T('tekenlijst.persoonlijk_melden'))}</span>
+                               <span class="meld-uitroep">⚠️</span>
+                           </div>`
+                        : '';
+                    const tpHtml = d.tp_org_nr
+                        ? `<span class="tp-orgnr">#${escHtml(String(d.tp_org_nr))}</span> ${escHtml(d.transponder ?? '')}`
+                        : escHtml(String(d.transponder ?? ''));
+                    const numCel = isReserve ? `R${d.reserve}` : String(rowNum);
+                    const rowCls = isReserve ? 'rij-reserve' : '';
+                    const idxSet = new Set(d._idxs || []);
+                    const distCellen = dcs.map((_, i) =>
+                        idxSet.has(i)
+                            ? `<td class="td-dist td-dist-aan">✓</td>`
+                            : `<td class="td-dist td-dist-uit"></td>`
+                    ).join('');
+                    return `<tr class="${rowCls}">
+                        <td class="td-nr">${escHtml(numCel)}</td>
+                        <td class="td-sn">${escHtml(String(d.start_number))}</td>
+                        <td class="td-naam">${escHtml(d.full_name)}</td>
+                        <td class="td-tp">${tpHtml}</td>
+                        <td class="td-tp-cor"><div class="tp-boxes"><span class="tp-box"></span><span class="tp-box"></span><span class="tp-sep">-</span><span class="tp-box"></span><span class="tp-box"></span><span class="tp-box"></span><span class="tp-box"></span><span class="tp-box"></span></div></td>
+                        ${distCellen}
+                        <td class="td-hand">${handCel}</td>
+                    </tr>`;
+                }).join('');
+                return sgHead + rijenHtml;
             }).join('');
+            // Cat-titel-regel voor de comp-header: NL-cat-code groot, daaronder
+            // de volledige distance-namen (universeel begrijpelijk).
+            const groepRegel = `<div style="font-size:11pt;font-weight:bold;line-height:1.2;">
+                ${escHtml(cat)}
+                <span style="font-size:8pt;font-weight:normal;color:#555;">(${escHtml(_deelnTxt(aantalRijders))})</span>
+                ${volledigeNamen ? `<div style="font-size:9pt;font-weight:normal;color:#1a3a5c;line-height:1.2;margin-top:0.5mm;">${escHtml(volledigeNamen)}</div>` : ''}
+            </div>`;
+            // Elke cat = eigen pagina met volledige comp-header (logos +
+            // wedstrijdnaam + datum + cat-titel) en eigen sponsor-footer.
+            // Eenduidiger dan een gedeelde header op alleen pagina 1.
+            // De Print-Center shared header wordt door tekenlijst.css verborgen
+            // (zie `body.pc-boomsaver .pc-shared-header` regel).
             return `<div class="pagina">
-                ${inhoud}
-                ${p.heeftFooter ? footerHtml : ''}
+                ${compHeaderBlok(groepRegel)}
+                <div style="border-bottom:2px solid #1a3a5c;margin:0 0 1.5mm 0;"></div>
+                <table class="tekenlijst-compact">${compactThead}<tbody>${tbodyHtml}</tbody></table>
+                ${footerHtml || ''}
             </div>`;
         }).join('');
+        paginaHtml = blokken;
     }
 
     return {

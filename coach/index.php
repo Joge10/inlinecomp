@@ -1400,6 +1400,9 @@ header .sub { font-size: .95rem; opacity: .8; margin-top: 6px; text-align: cente
     line-height: 1;
 }
 .btn-meldingen   { font-style: normal; font-size: 1.1rem; position: relative; }
+/* Allemaal gelezen → grijs ipv rood. Geeft passief signaal "ze zijn er,
+   geen actie nodig" terwijl rood + uitroepteken = "kijk even". */
+.meld-badge.gezien { background: #888 !important; }
 .meld-badge      { position: absolute; top: -4px; right: -4px; background: #d22;
                    color: #fff; font-size: .65rem; font-weight: 700;
                    min-width: 17px; height: 17px; padding: 0 4px; border-radius: 9px;
@@ -1420,6 +1423,8 @@ header .sub { font-size: .95rem; opacity: .8; margin-top: 6px; text-align: cente
 }
 .org-footer-logo { height: 50px; width: auto; object-fit: contain; flex-shrink: 0; }
 .org-footer-naam { font-size: .85rem; color: var(--blauw); font-weight: 600; flex-shrink: 0; }
+/* Lege footer-cellen inklappen zodat de marquee tot de rand kan doorlopen. */
+.org-footer-inner > :empty { display: none !important; }
 .org-footer-sponsors { flex: 1; overflow: hidden; display: flex; align-items: center; justify-content: flex-end; }
 .sponsor-marquee { display: flex; overflow: hidden; height: 50px; align-items: center; }
 .sponsor-marquee-inner {
@@ -1702,6 +1707,39 @@ select.sel {
 }
 .prog-dag-btn.actief .prog-dag-btn-datum { opacity: .95; }
 .verborgen { display: none !important; }
+
+/* Programma-rit-filter: pills onder de dag-balk om "Alleen mijn rijders"
+   en "Alleen nog te rijden" toggelen. Identiek patroon als /public. */
+.prog-rit-filter {
+    display: flex; flex-wrap: nowrap; gap: 6px;
+    margin: 0 0 8px 0; padding: 4px 0;
+}
+.prog-rit-btn {
+    flex: 1 1 0;            /* beide pills delen breedte 50/50 */
+    min-width: 0;           /* laat krimpen toe op smalle schermen */
+    text-align: center;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    border: 1px solid #b3cae6; background: #fff; color: #1a3a5c;
+    padding: 4px 10px; border-radius: 14px; font-size: .66rem;
+    font-weight: 600; cursor: pointer; transition: background .12s;
+}
+/* Hover alleen op apparaten met echte hover (muis) — op touch blijft
+   :hover anders plakken na een tap totdat je elders tikt. */
+@media (hover: hover) {
+    .prog-rit-btn:hover { background: #eaf2fb; }
+}
+.prog-rit-btn.actief {
+    background: #1a3a5c; color: #fff; border-color: #1a3a5c;
+}
+#programma[data-filter-mijn="1"] .heat-rij:not(.mijn),
+#programma[data-filter-mijn="1"] .prog-combi-box:not(:has(.heat-rij.mijn)) {
+    display: none !important;
+}
+#programma[data-filter-gereden-uit="1"] .heat-rij.gereden {
+    display: none !important;
+}
 /* Dag-header bij meerdaags evenement: prominente scheiding tussen dagen */
 .prog-dag-header {
     background: linear-gradient(to right, #1a3a5c, #2E75B6);
@@ -2233,6 +2271,8 @@ const T = {
         prog_blok_min: 'min',
         prog_dag_alle: 'Alle',
         prog_dag: 'Dag',
+        prog_filter_mijn: '👥 Mijn rijders',
+        prog_filter_te_rijden: '⏳ Nog te rijden',
         coach_pw_titel: 'Coach-toegang',
         coach_pw_uitleg: 'De Coach-app is afgeschermd. Vraag het wachtwoord bij de wedstrijdorganisator of kijk op de Coach-poster.',
         coach_pw_ok: 'OK',
@@ -2471,6 +2511,8 @@ const T = {
         prog_blok_min: 'min',
         prog_dag_alle: 'All',
         prog_dag: 'Day',
+        prog_filter_mijn: '👥 My skaters',
+        prog_filter_te_rijden: '⏳ Upcoming',
         coach_pw_titel: 'Coach access',
         coach_pw_uitleg: 'The Coach app is restricted. Ask the race organiser for the password or check the Coach poster.',
         coach_pw_ok: 'OK',
@@ -2709,6 +2751,8 @@ const T = {
         prog_blok_min: 'Min',
         prog_dag_alle: 'Alle',
         prog_dag: 'Tag',
+        prog_filter_mijn: '👥 Meine Sportler',
+        prog_filter_te_rijden: '⏳ Kommende',
         coach_pw_titel: 'Coach-Zugang',
         coach_pw_uitleg: 'Die Coach-App ist geschützt. Frage den Wettkampf-Organisator nach dem Passwort oder schaue auf das Coach-Poster.',
         coach_pw_ok: 'OK',
@@ -2947,6 +2991,8 @@ const T = {
         prog_blok_min: 'min',
         prog_dag_alle: 'Tous',
         prog_dag: 'Jour',
+        prog_filter_mijn: '👥 Mes coureurs',
+        prog_filter_te_rijden: '⏳ À venir',
         coach_pw_titel: 'Accès Coach',
         coach_pw_uitleg: 'L\'application Coach est protégée. Demandez le mot de passe à l\'organisateur de la course ou consultez l\'affiche Coach.',
         coach_pw_ok: 'OK',
@@ -3709,7 +3755,10 @@ function renderProgramma() {
         const statusIcon = (r.resultaten_count ?? 0) > 0 ? '🏁'
                         : r.definitief                    ? '🚩'
                         :                                   '<span class="heat-status-leeg">○</span>';
-        const klasse = 'heat-rij' + (mijnInHeat.length ? ' mijn' : '') + (leeg ? ' leeg' : '');
+        const klasse = 'heat-rij'
+            + (mijnInHeat.length ? ' mijn' : '')
+            + (leeg ? ' leeg' : '')
+            + ((r.resultaten_count ?? 0) > 0 ? ' gereden' : '');
         const klik = leeg ? '' :
             ` data-rit-naam="${esc(r.rit_naam)}" data-dc-naam="${esc(r.dc_naam ?? '')}" onclick="toonRitDetail(this)"`;
         // Pills komen op een aparte regel onder de naam, zodat ze bij coaches
@@ -3751,6 +3800,15 @@ function renderProgramma() {
         }
         html += `</div>`;
     }
+
+    // Filter-pills: "Alleen mijn rijders" + "Alleen nog te rijden". Toggle
+    // gebeurt via data-attributes op #prog; CSS verbergt non-matchende rijen.
+    html += `<div class="prog-rit-filter">
+        <button type="button" class="prog-rit-btn" data-filter="mijn"
+                onclick="filterProgRit(this,'mijn')">${esc(t('prog_filter_mijn'))}</button>
+        <button type="button" class="prog-rit-btn" data-filter="te-rijden"
+                onclick="filterProgRit(this,'te-rijden')">${esc(t('prog_filter_te_rijden'))}</button>
+    </div>`;
 
     let vorigeCombi = null; // combi_group van het vorige item (of null)
     let vorigeDag   = null;
@@ -3795,6 +3853,21 @@ function renderProgramma() {
 
 // Multi-day filter (Alle / Dag 1 / Dag 2 / …): toggle .verborgen op items
 // met andere dag-nr. Geen re-render nodig — pure DOM-class toggle.
+// Programma-rit-filter: toggle "alleen mijn rijders" of "alleen nog te
+// rijden" via data-attributen op #programma. Onafhankelijk te combineren.
+function filterProgRit(btn, filter) {
+    const prog = document.getElementById('programma');
+    if (!prog) return;
+    const attr = filter === 'mijn' ? 'data-filter-mijn' : 'data-filter-gereden-uit';
+    const actief = prog.getAttribute(attr) !== '1';
+    prog.setAttribute(attr, actief ? '1' : '0');
+    btn.classList.toggle('actief', actief);
+    // Touch-fix: na een tap blijft :hover op mobiel hangen tot je ergens
+    // anders tikt. Blur direct zodat de knop in z'n juiste rust- of
+    // actief-state komt zonder lingering lichtblauwe hover.
+    btn.blur();
+}
+
 function filterDag(btn, dag) {
     const balk = btn.closest('.prog-dag-filter');
     if (!balk) return;
@@ -4307,7 +4380,18 @@ async function toonRitDetail(el) {
 }
 
 // ── Footer: org logo + sponsor-marquee (afgeleid van /public) ────────────────
-function updateHeaderLogos(opt) {
+// Te brede logos (ratio > 3.6:1) passen niet in de vaste footer-positie en
+// gaan naar de sponsor-marquee zodat ze op volle hoogte leesbaar langs rollen.
+const _FOOTER_LOGO_MAX_RATIO = 150 / 50;   // = 3.0 : 1
+function _logoRatio(src) {
+    return new Promise(resolve => {
+        const img = new Image();
+        img.onload  = () => resolve(img.naturalHeight ? img.naturalWidth / img.naturalHeight : 1);
+        img.onerror = () => resolve(1);
+        img.src = src;
+    });
+}
+async function updateHeaderLogos(opt) {
     const footer  = $('org-footer');
     const logoEl  = $('footer-org-logo');
     const naamEl  = $('footer-org-naam');
@@ -4330,27 +4414,41 @@ function updateHeaderLogos(opt) {
         return;
     }
     const cb = `?v=${Math.floor(Date.now() / 3600000)}`;
-    logoEl.innerHTML = orgLogo ? `<img class="org-footer-logo" src="../${esc(orgLogo)}${cb}" alt="">` : '';
-    naamEl.textContent = orgLogo ? '' : orgNaam;
 
-    // Gastheer-vereniging-logo (rechts in footer). Heeft de baan geen logo
-    // maar wel een vereniging-naam? Dan tonen we die als compacte tekst.
-    if (baanLogo) {
+    // Detecteer welke logos te breed zijn voor de vaste positie
+    const orgRatio  = orgLogo  ? await _logoRatio(`../${esc(orgLogo)}${cb}`)  : 0;
+    const baanRatio = baanLogo ? await _logoRatio(`../${esc(baanLogo)}${cb}`) : 0;
+    const orgInFooter  = orgLogo  && orgRatio  <= _FOOTER_LOGO_MAX_RATIO;
+    const baanInFooter = baanLogo && baanRatio <= _FOOTER_LOGO_MAX_RATIO;
+
+    logoEl.innerHTML = orgInFooter ? `<img class="org-footer-logo" src="../${esc(orgLogo)}${cb}" alt="">` : '';
+    // Naam-fallback alleen als er ECHT geen logo is.
+    naamEl.textContent = !orgLogo ? orgNaam : '';
+
+    if (baanInFooter) {
         baanEl.innerHTML = `<img class="org-footer-logo" src="../${esc(baanLogo)}${cb}" alt="">`;
-    } else if (baanVer) {
+    } else if (baanVer && !baanLogo) {
         baanEl.innerHTML = `<span class="org-footer-naam">${esc(baanVer)}</span>`;
     } else {
         baanEl.innerHTML = '';
     }
-    // Altijd marquee, ook bij 1 sponsor — anders 'hangt' de enige logo
-    // statisch. Min-duur 8s zodat 1 logo niet onhandig snel langs schiet.
-    if (sponsors.length) {
-        let imgs = '';
-        for (const s of sponsors) {
-            const img = `<img src="../${esc(s.logo)}${cb}" alt="${esc(s.naam)}" title="${esc(s.naam)}">`;
-            imgs += s.url ? `<a href="${esc(s.url)}" target="_blank" rel="noopener">${img}</a>` : img;
-        }
-        const duur = Math.max(8, sponsors.length * 3);
+    baanEl.style.display = baanEl.innerHTML ? '' : 'none';
+
+    // Marquee: te-brede logos + sponsors. Altijd marquee, min-duur 8s.
+    let imgs = '';
+    const _liggendImg = (src, naam) =>
+        `<img src="../${esc(src)}${cb}" alt="${esc(naam)}" title="${esc(naam)}" style="height:50px;width:auto;object-fit:contain">`;
+    if (orgLogo  && !orgInFooter)  imgs += _liggendImg(orgLogo,  orgNaam);
+    if (baanLogo && !baanInFooter) imgs += _liggendImg(baanLogo, baanVer || '');
+    for (const s of sponsors) {
+        const img = _liggendImg(s.logo, s.naam);
+        imgs += s.url ? `<a href="${esc(s.url)}" target="_blank" rel="noopener">${img}</a>` : img;
+    }
+    if (imgs) {
+        const aantal = sponsors.length
+                     + (orgLogo  && !orgInFooter  ? 1 : 0)
+                     + (baanLogo && !baanInFooter ? 1 : 0);
+        const duur = Math.max(8, aantal * 3);
         sponsEl.innerHTML = `<div class="sponsor-marquee"><div class="sponsor-marquee-inner" style="animation-duration:${duur}s">${imgs}${imgs}</div></div>`;
     } else {
         sponsEl.innerHTML = '';
@@ -5114,14 +5212,25 @@ function updateMeldingenBadge() {
     const btn = document.getElementById('btn-meldingen-overzicht');
     const badge = document.getElementById('meldingen-badge');
     if (!btn || !badge) return;
-    if (_meldingLijst.length > 0) {
-        btn.style.display = '';
-        badge.textContent = _meldingLijst.length;
-        badge.style.display = '';
-    } else {
+    if (_meldingLijst.length === 0) {
         btn.style.display = 'none';
         badge.style.display = 'none';
+        return;
     }
+    // Badge toont ALTIJD het totaal aantal meldingen zodat je ziet dat ze er
+    // zijn. Als er nog ONGELEZEN zijn: rood + uitroepteken (= "kijk even");
+    // als alles is gezien: grijs zonder uitroepteken (= "alleen FYI"). Een
+    // melding telt als gelezen zodra de fullscreen-pop-up met OK is wegge-
+    // klikt (zie _markGezien in de OK-handler hieronder).
+    btn.style.display = '';
+    const aantalOngelezen = _meldingLijst.filter(m =>
+        !_gezienSet(_meldingScope(m)).has(m.id)
+    ).length;
+    badge.textContent = aantalOngelezen > 0
+        ? `${_meldingLijst.length}!`
+        : String(_meldingLijst.length);
+    badge.classList.toggle('gezien', aantalOngelezen === 0);
+    badge.style.display = '';
 }
 
 function toonMeldingenOverzicht() {
@@ -5244,6 +5353,7 @@ function toonMelding(m, compId) {
     document.body.appendChild(overlay);
     overlay.querySelector('.meld-ok').addEventListener('click', () => {
         _markGezien(_meldingScope(m), m.id);
+        updateMeldingenBadge();
         overlay.remove();
         _meldingActief = false;
         // Direct doorrollen — werkt ook zonder geselecteerde wedstrijd

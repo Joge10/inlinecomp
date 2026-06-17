@@ -1198,6 +1198,11 @@ header .sub { font-size: .95rem; opacity: .8; margin-top: 6px; text-align: cente
 }
 .org-footer-logo { height: 50px; width: auto; object-fit: contain; flex-shrink: 0; }
 .org-footer-naam { font-size: .85rem; color: var(--blauw); font-weight: 600; flex-shrink: 0; }
+/* Lege footer-cellen (bv. baan-logo bij wedstrijd zonder baan, of org-logo
+   dat te breed was en naar de marquee verhuisd is) volledig inklappen,
+   anders blijft de cell layout-ruimte innemen en eindigt de marquee net
+   vóór de rand. */
+.org-footer-inner > :empty { display: none !important; }
 .org-footer-sponsors {
     flex: 1; overflow: hidden; display: flex; align-items: center; justify-content: flex-end;
 }
@@ -1282,6 +1287,9 @@ header .sub { font-size: .95rem; opacity: .8; margin-top: 6px; text-align: cente
                    min-width: 17px; height: 17px; padding: 0 4px; border-radius: 9px;
                    display: flex; align-items: center; justify-content: center;
                    border: 2px solid #fff; line-height: 1; }
+/* Allemaal gelezen → grijs ipv rood. Geeft passief signaal "ze zijn er,
+   geen actie nodig" terwijl rood + uitroepteken = "kijk even". */
+.meld-badge.gezien { background: #888; }
 
 /* ── Help overlay ── */
 .help-overlay {
@@ -1734,6 +1742,46 @@ select:focus, input:focus { border-color: var(--middenblauw); outline: none; }
 /* Verbergen-class voor de filter: data-dag-nr items krijgen .verborgen
    als de actieve dag-filter ze niet matcht. */
 .verborgen { display: none !important; }
+
+/* Programma-rit-filter: pills onder de dag-balk om "Alleen mijn ritten"
+   en "Alleen nog te rijden" toggelen. Toggle gebeurt via data-attributen
+   op de tab-content container; CSS hier verbergt non-matchende ritten. */
+.prog-rit-filter {
+    display: flex; flex-wrap: nowrap; gap: 6px;
+    margin: 0 0 8px 0; padding: 4px 0;
+}
+.prog-rit-btn {
+    flex: 1 1 0;            /* beide pills delen breedte 50/50 */
+    min-width: 0;           /* laat krimpen toe op smalle schermen */
+    text-align: center;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    border: 1px solid #b3cae6; background: #fff; color: #1a3a5c;
+    padding: 4px 10px; border-radius: 14px; font-size: .66rem;
+    font-weight: 600; cursor: pointer; transition: background .12s;
+}
+/* Hover alleen op apparaten met echte hover (muis) — op touch blijft
+   :hover anders plakken na een tap totdat je elders tikt. */
+@media (hover: hover) {
+    .prog-rit-btn:hover { background: #eaf2fb; }
+}
+.prog-rit-btn.actief {
+    background: #1a3a5c; color: #fff; border-color: #1a3a5c;
+}
+/* "Alleen mijn ritten" actief → verberg alleen ritten zonder .prog-rij-mijn
+   class, plus combi-boxen zonder mijn-rit erin. Blokken (pauze, inrijden,
+   wedstrijdstart, ceremonie) blijven staan als context-anker. :has() heeft
+   moderne browser support — voor edge-cases zonder :has() blijven combi-
+   boxen wel zichtbaar (acceptabel). */
+.tab-content[data-filter-mijn="1"] .prog-rij:not(.prog-rij-mijn),
+.tab-content[data-filter-mijn="1"] .prog-combi-box:not(:has(.prog-rij-mijn)) {
+    display: none !important;
+}
+/* "Alleen nog te rijden" actief → verberg ritten met uitslagen (🏁). */
+.tab-content[data-filter-gereden-uit="1"] .prog-rij-gereden {
+    display: none !important;
+}
 /* Dag-header bij meerdaags evenement: prominente scheiding tussen dagen */
 .prog-dag-header {
     background: linear-gradient(to right, #1a3a5c, #2E75B6);
@@ -1998,6 +2046,9 @@ const T = {
         // Multi-day filter
         prog_dag_alle: 'Alle',
         prog_dag: 'Dag',
+        // Programma-filter pills (alleen-mijn / alleen-nog-te-rijden)
+        prog_filter_mijn: '👤 Mijn ritten',
+        prog_filter_te_rijden: '⏳ Nog te rijden',
         // ── Heats ──
         heat_wachten_vorige: 'Wachten op vorige ronde',
         heat_jouw_resultaat: 'Jij:',
@@ -2177,6 +2228,9 @@ const T = {
         prog_blok_ceremonie: 'Ceremony',
         prog_blok_herstart: 'Restart',
         prog_blok_min: 'min',
+        // Programma-filter pills (alleen-mijn / alleen-nog-te-rijden)
+        prog_filter_mijn: '👤 My races',
+        prog_filter_te_rijden: '⏳ Upcoming',
         // Multi-day filter
         prog_dag_alle: 'All',
         prog_dag: 'Day',
@@ -2362,6 +2416,9 @@ const T = {
         // Multi-day filter
         prog_dag_alle: 'Alle',
         prog_dag: 'Tag',
+        // Programma-filter pills
+        prog_filter_mijn: '👤 Meine Rennen',
+        prog_filter_te_rijden: '⏳ Kommende',
         // ── Heats ──
         heat_wachten_vorige: 'Warte auf vorherige Runde',
         heat_jouw_resultaat: 'Du:',
@@ -2544,6 +2601,9 @@ const T = {
         // Multi-day filter
         prog_dag_alle: 'Tous',
         prog_dag: 'Jour',
+        // Programma-filter pills
+        prog_filter_mijn: '👤 Mes courses',
+        prog_filter_te_rijden: '⏳ À venir',
         // ── Heats ──
         heat_wachten_vorige: 'En attente du tour précédent',
         heat_jouw_resultaat: 'Toi :',
@@ -2905,6 +2965,22 @@ function sl(s) { return s ?? ''; }
 // Elk programma-item heeft data-dag-nr; we togglen .verborgen op items met
 // een andere dag dan de geselecteerde. CSS verbergt die. Bij "Alle" alle
 // .verborgen weghalen. Geen re-render nodig.
+// Programma-rit-filter: toggle "alleen mijn ritten" of "alleen nog te
+// rijden" via data-attributen op de tab-content. Onafhankelijk van elkaar
+// te combineren (beide aan = alleen mijn nog-te-rijden ritten).
+function filterProgRit(btn, filter) {
+    const tab = btn.closest('.tab-content');
+    if (!tab) return;
+    const attr = filter === 'mijn' ? 'data-filter-mijn' : 'data-filter-gereden-uit';
+    const actief = tab.getAttribute(attr) !== '1';
+    tab.setAttribute(attr, actief ? '1' : '0');
+    btn.classList.toggle('actief', actief);
+    // Touch-fix: na een tap blijft :hover op mobiel hangen tot je ergens
+    // anders tikt. Blur direct zodat de knop in z'n juiste rust- of
+    // actief-state komt zonder lingering lichtblauwe hover.
+    btn.blur();
+}
+
 function filterDag(btn, dag) {
     const balk = btn.closest('.prog-dag-filter');
     if (!balk) return;
@@ -3645,6 +3721,16 @@ function renderResultaat(data, snr, prog) {
                     html += `</div>`;
                 }
 
+                // Filter-pills: "Alleen mijn ritten" + "Alleen nog te rijden".
+                // Toggle data-filter-mijn / data-filter-gereden-uit op de
+                // tab-content container; CSS verbergt non-matchende rij-en.
+                html += `<div class="prog-rit-filter">
+                    <button type="button" class="prog-rit-btn" data-filter="mijn"
+                            onclick="filterProgRit(this,'mijn')">${esc(t('prog_filter_mijn'))}</button>
+                    <button type="button" class="prog-rit-btn" data-filter="te-rijden"
+                            onclick="filterProgRit(this,'te-rijden')">${esc(t('prog_filter_te_rijden'))}</button>
+                </div>`;
+
                 let nr = 0;
                 let vorigeDag = null;
                 // Combi-state: ritten met dezelfde combi_group worden samen
@@ -3702,12 +3788,17 @@ function renderResultaat(data, snr, prog) {
                     // Highlight als deze rijder in deze rit zit
                     const isInRit = r.heats.some(h => h.rit_naam === rit.rit_naam);
                     const rt = rit.ronde_type ?? 'heats';
-                    const statusIcon = rit.resultaten_count > 0  ? '🏁'
-                                     : rit.definitief          ? '🚩'
-                                     :                           '';
+                    const gereden = rit.resultaten_count > 0;
+                    const statusIcon = gereden ? '🏁'
+                                     : rit.definitief ? '🚩'
+                                     : '';
                     const opmHtml = rit.rit_opmerking
                         ? `<div class="prog-rit-opm">📝 ${esc(rit.rit_opmerking)}</div>` : '';
-                    html += `<div class="prog-rij${combi !== null ? ' prog-rij-combi' : ''}" style="${isInRit ? 'background:#fffbe6;font-weight:600;margin:0 -16px;padding:6px 16px;border-radius:4px' : ''};cursor:pointer"
+                    // Classes voor filter-pills: prog-rij-mijn (= rijder zit
+                    // in rit) en prog-rij-gereden (= rit heeft uitslagen).
+                    const filterCls = (isInRit ? ' prog-rij-mijn' : '')
+                                    + (gereden ? ' prog-rij-gereden' : '');
+                    html += `<div class="prog-rij${combi !== null ? ' prog-rij-combi' : ''}${filterCls}" style="${isInRit ? 'background:#fffbe6;font-weight:600;margin:0 -16px;padding:6px 16px;border-radius:4px' : ''};cursor:pointer"
                                  data-rit-naam="${esc(rit.rit_naam)}" data-dc-naam="${esc(rit.dc_naam)}"
                                  data-dag-nr="${dag}" onclick="toonRitDetail(this)">
                         <span class="prog-nr">${statusIcon} ${nr}</span>
@@ -4220,7 +4311,25 @@ function _eggHandler() {
     }
 }
 
-function updateHeaderLogos(opt) {
+// Logo dat — bij height 50px — breder zou worden dan deze ratio, past niet
+// netjes in de vaste footer-positie en duwt de sponsor-marquee weg. We
+// verplaatsen 'm dan naar de marquee zodat 'ie wel op volle hoogte leesbaar
+// blijft (lichtkrant rolt 'm langs).
+const _FOOTER_LOGO_MAX_RATIO = 150 / 50;   // = 3.0 : 1
+                                           // (incl. Warmondse 250×71 ≈ 3.52
+                                           // → naar marquee i.p.v. footer)
+
+// Async helper — preload image, lever ratio terug. Bij fout: 1 (= niet te breed).
+function _logoRatio(src) {
+    return new Promise(resolve => {
+        const img = new Image();
+        img.onload  = () => resolve(img.naturalHeight ? img.naturalWidth / img.naturalHeight : 1);
+        img.onerror = () => resolve(1);
+        img.src = src;
+    });
+}
+
+async function updateHeaderLogos(opt) {
     const footer   = document.getElementById('org-footer');
     const logoEl   = document.getElementById('footer-org-logo');
     const naamEl   = document.getElementById('footer-org-naam');
@@ -4249,34 +4358,57 @@ function updateHeaderLogos(opt) {
     // maar een upload is uiterlijk binnen het uur zichtbaar.
     const cb = `?v=${Math.floor(Date.now() / 3600000)}`;
 
-    // Organisatie-logo + naam (links in footer)
-    logoEl.innerHTML = orgLogo ? `<img class="org-footer-logo" src="../${esc(orgLogo)}${cb}" alt="">` : '';
-    naamEl.textContent = orgLogo ? '' : orgNaam; // naam alleen als fallback zonder logo
+    // Te brede logo's (bv. landscape-vereniging-logo) passen niet in de
+    // vaste footer-positie. We preloaden ze, meten de aspect-ratio en
+    // verhuizen ze naar de marquee als ze te breed zijn — dan hebben ze
+    // wel ruimte om op volle hoogte langs te rollen.
+    const orgRatio  = orgLogo  ? await _logoRatio(`../${esc(orgLogo)}${cb}`)  : 0;
+    const baanRatio = baanLogo ? await _logoRatio(`../${esc(baanLogo)}${cb}`) : 0;
+    const orgInFooter  = orgLogo  && orgRatio  <= _FOOTER_LOGO_MAX_RATIO;
+    const baanInFooter = baanLogo && baanRatio <= _FOOTER_LOGO_MAX_RATIO;
+
+    // Organisatie-logo links in footer. Bij te-breed logo: vaste positie
+    // leeg laten — logo gaat naar marquee.
+    logoEl.innerHTML = orgInFooter ? `<img class="org-footer-logo" src="../${esc(orgLogo)}${cb}" alt="">` : '';
+    // Naam-fallback ALLEEN als er helemaal geen logo is (niet als 't te breed
+    // is — dan rolt het logo zelf langs in de marquee, naam-tekst overbodig).
+    naamEl.textContent = !orgLogo ? orgNaam : '';
     // Easter egg: 3× klikken op het org-logo binnen 2 sec opent blobart.
     // Geheim — cursor blijft default zodat het niet verraadt klikbaar te zijn.
     const _eggImg = logoEl.querySelector('img');
     if (_eggImg) _eggImg.addEventListener('click', _eggHandler);
 
-    // Gastheer-vereniging-logo (rechts in footer). Heeft de baan geen logo
-    // maar wel een vereniging-naam? Dan tonen we die als compacte tekst.
-    if (baanLogo) {
+    // Gastheer-vereniging rechts in footer. Bij te-breed logo: vaste
+    // positie leeg, logo naar marquee. Naam-fallback alleen bij ECHT
+    // geen logo (geen visuele verdubbeling met de marquee-versie).
+    if (baanInFooter) {
         baanEl.innerHTML = `<img class="org-footer-logo" src="../${esc(baanLogo)}${cb}" alt="">`;
-    } else if (baanVer) {
+    } else if (baanVer && !baanLogo) {
         baanEl.innerHTML = `<span class="org-footer-naam">${esc(baanVer)}</span>`;
     } else {
         baanEl.innerHTML = '';
     }
+    // Lege wrapper inklappen zodat de marquee de hele rechter-ruimte vult
+    // (anders blijft 't <div> leeg layout-ruimte innemen ondanks empty html).
+    baanEl.style.display = baanEl.innerHTML ? '' : 'none';
 
-    // Sponsors (lichtkrant-ticker). Altijd marquee, ook bij 1 sponsor —
-    // anders 'hangt' de enige logo statisch en verraadt het dat er maar
-    // één is. Min-duur 8s zodat 1 logo niet onhandig snel langs schiet.
-    if (sponsors.length) {
-        let imgs = '';
-        for (const s of sponsors) {
-            const img = `<img src="../${esc(s.logo)}${cb}" alt="${esc(s.naam)}" title="${esc(s.naam)}" style="height:50px;width:auto;object-fit:contain">`;
-            imgs += s.url ? `<a href="${esc(s.url)}" target="_blank" rel="noopener">${img}</a>` : img;
-        }
-        const duur = Math.max(8, sponsors.length * 3);
+    // Sponsors (lichtkrant-ticker) + eventueel te-brede org/baan-logo's.
+    // Altijd marquee, ook bij 1 item — anders 'hangt' de enige logo
+    // statisch. Min-duur 8s zodat 1 logo niet onhandig snel langs schiet.
+    let imgs = '';
+    const _liggendImg = (src, naam) =>
+        `<img src="../${esc(src)}${cb}" alt="${esc(naam)}" title="${esc(naam)}" style="height:50px;width:auto;object-fit:contain">`;
+    if (orgLogo  && !orgInFooter)  imgs += _liggendImg(orgLogo,  orgNaam);
+    if (baanLogo && !baanInFooter) imgs += _liggendImg(baanLogo, baanVer || '');
+    for (const s of sponsors) {
+        const img = _liggendImg(s.logo, s.naam);
+        imgs += s.url ? `<a href="${esc(s.url)}" target="_blank" rel="noopener">${img}</a>` : img;
+    }
+    if (imgs) {
+        const aantal = sponsors.length
+                     + (orgLogo  && !orgInFooter  ? 1 : 0)
+                     + (baanLogo && !baanInFooter ? 1 : 0);
+        const duur = Math.max(8, aantal * 3);
         sponsEl.innerHTML = `<div class="sponsor-marquee"><div class="sponsor-marquee-inner" style="animation-duration:${duur}s">${imgs}${imgs}</div></div>`;
     } else {
         sponsEl.innerHTML = '';
@@ -4514,14 +4646,25 @@ function updateMeldingenBadge() {
     const btn = document.getElementById('btn-meldingen-overzicht');
     const badge = document.getElementById('meldingen-badge');
     if (!btn || !badge) return;
-    if (_meldingLijst.length > 0) {
-        btn.style.display = '';
-        badge.textContent = _meldingLijst.length;
-        badge.style.display = '';
-    } else {
+    if (_meldingLijst.length === 0) {
         btn.style.display = 'none';
         badge.style.display = 'none';
+        return;
     }
+    // Badge toont ALTIJD het totaal aantal meldingen zodat je ziet dat ze er
+    // zijn. Als er nog ONGELEZEN zijn: rood + uitroepteken (= "kijk even");
+    // als alles is gezien: grijs zonder uitroepteken (= "alleen FYI"). Een
+    // melding telt als gelezen zodra de fullscreen-pop-up met OK is wegge-
+    // klikt (zie _markGezien in de OK-handler hieronder).
+    btn.style.display = '';
+    const aantalOngelezen = _meldingLijst.filter(m =>
+        !_gezienSet(_meldingScope(m)).has(m.id)
+    ).length;
+    badge.textContent = aantalOngelezen > 0
+        ? `${_meldingLijst.length}!`
+        : String(_meldingLijst.length);
+    badge.classList.toggle('gezien', aantalOngelezen === 0);
+    badge.style.display = '';
 }
 
 // Klik op 📢-knop: toont een lijst van alle nu-actieve meldingen
@@ -4658,6 +4801,7 @@ function toonMelding(m, compId) {
     document.body.appendChild(overlay);
     overlay.querySelector('.meld-ok').addEventListener('click', () => {
         _markGezien(_meldingScope(m), m.id);
+        updateMeldingenBadge();
         overlay.remove();
         _meldingActief = false;
         _huidigeMelding = null;

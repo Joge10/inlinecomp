@@ -180,13 +180,13 @@ if (is_array($eigenScope) && !empty($eigenScope)) {
                             </div>
                             <div class="detail-knoppen">
                                 <button id="btn-export" class="btn-export" title="Deelnemers exporteren als KNSB-CSV">
-                                    &#8657; Exporteer
+                                    &#128228; Exporteer
                                 </button>
                                 <!-- CSV-import: alleen zichtbaar bij handmatige wedstrijden.
                                      Opent de 4-staps wizard (upload → mapping → DC →
                                      match) voor het invoeren van deelnemers vanuit een
                                      CSV-bestand (club-wedstrijden, geen KNSB-feed). -->
-                                <button id="btn-csv-import" class="btn-secondary" title="Deelnemers importeren uit CSV-bestand" style="display:none;">
+                                <button id="btn-csv-import" class="btn-export" title="Deelnemers importeren uit CSV-bestand" style="display:none;">
                                     &#128229; CSV Importeren
                                 </button>
                                 <button id="btn-import" class="btn-import" title="Wedstrijd importeren in database">

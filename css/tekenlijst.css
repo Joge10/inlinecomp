@@ -44,6 +44,11 @@ tr.rij-reserve .td-nr { font-weight: 700; color: #b08000; }
 
 .tp-boxes { display: flex; align-items: center; gap: 1mm; }
 
+/* Org-internummer-prefix (bv "#EJ43") wordt vóór de transponder-code gezet
+   als het een organisatie-transponder is. Vet rood zodat de jury direct
+   ziet welke transponders na afloop terug moeten naar de organisatie. */
+.tp-orgnr { color: #b71c1c; font-weight: bold; }
+
 .tp-box { display: inline-block; width: 6mm; height: 6mm;
           border: 1px dotted #999; border-radius: 1mm; flex-shrink: 0; }
 
@@ -59,3 +64,66 @@ tr.rij-reserve .td-nr { font-weight: 700; color: #b08000; }
 .meld-uitroep   { font-size: 11pt; line-height: 1; flex: 0 0 auto; }
 .meld-tekst     { font-size: 7.5pt; color: #c00; font-weight: bold;
                   line-height: 1.2; text-align: right; white-space: nowrap; }
+
+/* ── Compact tekenlijst (boom-saver actief): één tabel per cat ────────────
+   Afstand-kolommen tonen per rijder welke distances ze rijden;
+   subgroep-headers groeperen op afstand-combinatie. */
+.cat-blok-compact      { page-break-inside: avoid; break-inside: avoid;
+                         margin: 0 0 4mm 0; }
+.cat-titel             { font-size: 12pt; font-weight: bold; line-height: 1.2;
+                         margin: 3mm 0 1mm 0; color: #1a3a5c; }
+.cat-titel .cat-tel    { font-size: 8pt; font-weight: normal; color: #555;
+                         margin-left: 2mm; }
+
+.tekenlijst-compact .td-tp     { width: 33mm; white-space: nowrap; }
+.tekenlijst-compact .td-tp-cor { width: 58mm; }
+.tekenlijst-compact .td-hand   { width: 70mm; }
+
+/* Afstand-kolommen: smaller doordat header vertikaal staat. */
+.td-dist               { width: 8mm; text-align: center; padding: 0.3mm 0;
+                         font-size: 8pt; }
+.tekenlijst-compact th.td-dist {
+    writing-mode: vertical-rl;
+    text-orientation: mixed;
+    height: 24mm;
+    font-size: 8pt; font-weight: bold; line-height: 1.1;
+    padding: 1.5mm 0 1mm 0; white-space: nowrap;
+    text-align: left;
+    vertical-align: middle;
+    /* Expliciet — anders mist border bij vertikale writing-mode. */
+    border-bottom: 1px solid #1a3a5c;
+}
+/* Geen eigen achtergrond — de zebra-streep van de rij loopt door onder
+   het vinkje. Alleen visuele markering via vinkje (aan) of leeg (uit). */
+.td-dist-aan           { color: #1a3a5c; font-weight: bold; font-size: 11pt; }
+.td-dist-uit           { /* leeg — zebra loopt door */ }
+
+tr.sub-head td         { background: #d6e2ee !important; padding: 0.8mm 2mm;
+                         font-size: 8.5pt; border-top: 1.5px solid #1a3a5c;
+                         border-bottom: 1px solid #1a3a5c; }
+tr.sub-head .sub-tel   { font-weight: normal; color: #444; font-size: 8pt;
+                         margin-left: 2mm; }
+
+/* Compact-pagina mag NIET als één onbreekbaar blok behandeld worden —
+   de cat-blokken regelen zelf hun page-break-inside-avoid en de browser
+   breekt op cat-grenzen waar nodig. Anders schuift het hele document
+   naar pagina 2 en blijft pagina 1 leeg (alleen gedeelde Print-Center
+   header). */
+.pagina.pagina-compact { page-break-after: auto;
+                         page-break-inside: auto;
+                         break-inside: auto; }
+
+/* Bij compact-tekenlijst rendert elke cat-pagina z'n eigen volledige
+   comp-header (logos + wedstrijdnaam + datum + cat-titel). De gedeelde
+   Print-Center shared-header zou dan op pagina 1 dubbel tonen — die
+   verbergen we hier. Caveat: dit raakt ook gecombineerde boomSaver-prints
+   met klassement/tijdschema; bij solo tekenlijst-compact (gangbaar
+   gebruik) werkt 't perfect. */
+body.pc-boomsaver .pc-shared-header { display: none !important; }
+
+/* Cat-titel: volledige distance-namen ipv NL-cat-code zodat een
+   buitenlandse rijder snapt waar 't om gaat. Op meerdere regels als
+   nodig. */
+.cat-titel .cat-volledig { font-weight: normal; font-size: 9.5pt;
+                           color: #1a3a5c; display: block;
+                           margin-top: 0.5mm; line-height: 1.2; }

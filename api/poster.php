@@ -28,7 +28,8 @@ if (!in_array($_authUser['role'] ?? '', ['owner', 'admin', 'planner'], true)) {
 
 $orgId  = trim($_GET['org_id'] ?? '');
 $compId = trim($_GET['competition_id'] ?? '');
-$appType = ($_GET['app'] ?? 'public') === 'coach' ? 'coach' : 'public';
+$appType = in_array($_GET['app'] ?? 'public', ['coach', 'check', 'public'], true)
+    ? $_GET['app'] : 'public';
 // Taal van de poster-teksten. nl=Nederlands (default), en=English. Datum-
 // strings worden hieronder ook locale-aware geformatteerd.
 $lang   = in_array($_GET['lang'] ?? 'nl', ['nl', 'en'], true) ? $_GET['lang'] : 'nl';
@@ -178,9 +179,12 @@ if (!empty($_GET['debug'])) {
 }
 
 // ── QR-url: specifiek per comp als die er is, anders generiek ────────────
-$baseUrl = $appType === 'coach'
-    ? 'https://inlineresults.devriesen.com/coach/'
-    : 'https://inlineresults.devriesen.com/public/';
+$baseUrlMap = [
+    'coach'  => 'https://inlineresults.devriesen.com/coach/',
+    'check'  => 'https://inlineresults.devriesen.com/check/',
+    'public' => 'https://inlineresults.devriesen.com/public/',
+];
+$baseUrl = $baseUrlMap[$appType];
 $qrUrl   = $comp ? ($baseUrl . '?comp=' . $comp['id']) : $baseUrl;
 
 // ── Datum-string (locale-aware) ────────────────────────────────────────
@@ -325,7 +329,8 @@ if (!is_file($tmpPdf) || filesize($tmpPdf) < 500) {
 }
 
 // ── PDF streamen als attachment ─────────────────────────────────────────
-$prefix = $appType === 'coach' ? 'coach-poster' : 'poster';
+$prefixMap = ['coach' => 'coach-poster', 'check' => 'check-poster', 'public' => 'poster'];
+$prefix    = $prefixMap[$appType];
 $bestandsnaam = $prefix . '-' . preg_replace('/[^a-zA-Z0-9_-]+/', '_', $org['naam']);
 if ($comp)  $bestandsnaam .= '-' . preg_replace('/[^a-zA-Z0-9_-]+/', '_', $comp['name']);
 $bestandsnaam .= '.pdf';

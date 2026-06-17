@@ -144,7 +144,9 @@ const _PC_I18N = {
         'tekenlijst.startnr_n':          'Startnr. {nr}',
         'tekenlijst.tp_niet_betaald':    'Transponder niet betaald',
         'tekenlijst.melding':            'melding',
-        'tekenlijst.persoonlijk_melden': 'persoonlijk melden',
+        'tekenlijst.persoonlijk_melden': 'jury aanspreken',
+        'tekenlijst.sub_alle_n':         'Alle {n} afstanden',
+        'tekenlijst.sub_alleen':         'Alleen {naam}',
         // ── Deelnemerslijsten ─────────────────────────────────────────────
         'deelnemers.titel':              'Deelnemerslijst',
         'deelnemers.titel_meervoud':     'Deelnemerslijst',
@@ -312,7 +314,9 @@ const _PC_I18N = {
         'tekenlijst.startnr_n':          'Bib {nr}',
         'tekenlijst.tp_niet_betaald':    'Transponder unpaid',
         'tekenlijst.melding':            'report',
-        'tekenlijst.persoonlijk_melden': 'report in person',
+        'tekenlijst.persoonlijk_melden': 'speak to staff',
+        'tekenlijst.sub_alle_n':         'All {n} distances',
+        'tekenlijst.sub_alleen':         '{naam} only',
         'deelnemers.titel':              'Skater list',
         'deelnemers.titel_meervoud':     'Skater list',
         'deelnemers.col_cat_kort':       'Cat',
@@ -401,15 +405,19 @@ const _pcItemData = new Map();
 
 // Wordt door import.js aangeroepen bij selectie van (andere) wedstrijd.
 function printCenterResetVoorWedstrijd(compId) {
-    // Behoud lang-voorkeur over wedstrijd-wissel heen — fallback naar
-    // localStorage als _pcState nog niet bestaat (eerste sessie).
+    // Behoud lang- en boom-saver-voorkeur over wedstrijd-wissel heen —
+    // fallback naar localStorage als _pcState nog niet bestaat (eerste sessie).
     const _bewaardeLang = (_pcState && _pcState.lang)
         || (typeof localStorage !== 'undefined'
             && localStorage.getItem('printcenter_lang') === 'en' ? 'en' : 'nl');
+    const _bewaardeBoomSaver = (_pcState && typeof _pcState.boomSaver === 'boolean')
+        ? _pcState.boomSaver
+        : (typeof localStorage !== 'undefined'
+            && localStorage.getItem('printcenter_boomsaver') === '1');
     _pcState = {
         compId:        compId ?? null,
         geselecteerd:  new Set(),
-        boomSaver:     false,
+        boomSaver:     _bewaardeBoomSaver,
         lang:          _bewaardeLang,
         tijdschemaBeschikbaar: null,
         startlijstenLaad:      null,
@@ -565,6 +573,8 @@ function _pcBouwModal() {
     d.addEventListener('click', e => { if (e.target === d) sluitPrintCenter(); });
     d.querySelector('#pc-boomsaver').addEventListener('change', e => {
         _pcState.boomSaver = e.target.checked;
+        try { localStorage.setItem('printcenter_boomsaver', e.target.checked ? '1' : '0'); }
+        catch (err) { /* private browsing → stil falen */ }
     });
     // Initialiseer checkboxes op huidige _pcState.lang (uit localStorage).
     // Twee checkboxes met mutual-exclusion-JS — visueel vierkant (zoals

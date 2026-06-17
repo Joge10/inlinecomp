@@ -712,6 +712,8 @@ select:focus, input:focus { outline: 2px solid var(--middenblauw); outline-offse
     display: flex; align-items: center; justify-content: space-between; gap: 12px;
 }
 .org-footer-logo { height: 50px; width: auto; object-fit: contain; flex-shrink: 0; }
+/* Lege footer-cellen inklappen zodat de marquee tot de rand kan doorlopen. */
+.org-footer-inner > :empty { display: none !important; }
 .org-footer-naam { font-size: .85rem; color: var(--blauw); font-weight: 600; flex-shrink: 0; }
 .org-footer-sponsors {
     flex: 1; overflow: hidden; display: flex; align-items: center; justify-content: flex-end;
@@ -1384,7 +1386,18 @@ function vulCompDropdown() {
 }
 
 // ── Org/sponsor-footer (zelfde patroon als /public) ──────────────────────
-function updateFooter(opt) {
+// Te brede logos (ratio > 3.6:1) gaan naar de marquee zodat ze op volle
+// hoogte leesbaar langs rollen ipv de footer-positie weg te duwen.
+const _FOOTER_LOGO_MAX_RATIO = 150 / 50;   // = 3.0 : 1
+function _logoRatio(src) {
+    return new Promise(resolve => {
+        const img = new Image();
+        img.onload  = () => resolve(img.naturalHeight ? img.naturalWidth / img.naturalHeight : 1);
+        img.onerror = () => resolve(1);
+        img.src = src;
+    });
+}
+async function updateFooter(opt) {
     const footer  = $('org-footer');
     const logoEl  = $('footer-org-logo');
     const naamEl  = $('footer-org-naam');
@@ -1410,30 +1423,44 @@ function updateFooter(opt) {
     // Cache-buster per uur — vers upload na max 1 uur zichtbaar
     const cb = `?v=${Math.floor(Date.now() / 3600000)}`;
 
-    logoEl.innerHTML = orgLogo
+    // Detecteer welke logos te breed zijn voor de vaste positie
+    const orgRatio  = orgLogo  ? await _logoRatio(`../${esc(orgLogo)}${cb}`)  : 0;
+    const baanRatio = baanLogo ? await _logoRatio(`../${esc(baanLogo)}${cb}`) : 0;
+    const orgInFooter  = orgLogo  && orgRatio  <= _FOOTER_LOGO_MAX_RATIO;
+    const baanInFooter = baanLogo && baanRatio <= _FOOTER_LOGO_MAX_RATIO;
+
+    logoEl.innerHTML = orgInFooter
         ? `<img class="org-footer-logo" src="../${esc(orgLogo)}${cb}" alt="">`
         : '';
-    naamEl.textContent = orgLogo ? '' : orgNaam;
+    // Naam-fallback alleen als er ECHT geen logo is.
+    naamEl.textContent = !orgLogo ? orgNaam : '';
 
-    if (baanLogo) {
+    if (baanInFooter) {
         baanEl.innerHTML = `<img class="org-footer-logo" src="../${esc(baanLogo)}${cb}" alt="">`;
-    } else if (baanVer) {
+    } else if (baanVer && !baanLogo) {
         baanEl.innerHTML = `<span class="org-footer-naam">${esc(baanVer)}</span>`;
     } else {
         baanEl.innerHTML = '';
     }
+    baanEl.style.display = baanEl.innerHTML ? '' : 'none';
 
-    if (sponsors.length) {
-        let imgs = '';
-        for (const s of sponsors) {
-            const img = `<img src="../${esc(s.logo)}${cb}" alt="${esc(s.naam)}" title="${esc(s.naam)}">`;
-            imgs += s.url
-                ? `<a href="${esc(s.url)}" target="_blank" rel="noopener">${img}</a>`
-                : img;
-        }
-        // Verdubbel imgs voor seamless loop. Duur schaalt met aantal sponsors,
-        // minimum 8s zodat één logo niet onhandig snel langs schiet.
-        const duur = Math.max(8, sponsors.length * 3);
+    // Marquee: te-brede logos + sponsors
+    let imgs = '';
+    const _liggendImg = (src, naam) =>
+        `<img src="../${esc(src)}${cb}" alt="${esc(naam)}" title="${esc(naam)}" style="height:50px;width:auto;object-fit:contain">`;
+    if (orgLogo  && !orgInFooter)  imgs += _liggendImg(orgLogo,  orgNaam);
+    if (baanLogo && !baanInFooter) imgs += _liggendImg(baanLogo, baanVer || '');
+    for (const s of sponsors) {
+        const img = _liggendImg(s.logo, s.naam);
+        imgs += s.url
+            ? `<a href="${esc(s.url)}" target="_blank" rel="noopener">${img}</a>`
+            : img;
+    }
+    if (imgs) {
+        const aantal = sponsors.length
+                     + (orgLogo  && !orgInFooter  ? 1 : 0)
+                     + (baanLogo && !baanInFooter ? 1 : 0);
+        const duur = Math.max(8, aantal * 3);
         sponsEl.innerHTML = `<div class="sponsor-marquee"><div class="sponsor-marquee-inner" style="animation-duration:${duur}s">${imgs}${imgs}</div></div>`;
     } else {
         sponsEl.innerHTML = '';
