@@ -1,3 +1,51 @@
+# ════════════════════════════════════════════════════════════════════════
+#  SECURITY — /uploads/ serveert ALLEEN data, nooit code
+#
+#  Defense-in-depth. api/upload.php laat enkel ge-whiteliste image/doc-MIMEs
+#  toe en bouwt de bestandsnaam zélf (extensie uit de whitelist, niet uit de
+#  user-filename), dus een .php kan hier normaal niet belanden. Onderstaande
+#  is de tweede linie: mocht er ooit tóch een script-bestand in deze map
+#  terechtkomen (ander code-pad, misconfig), dan kan het hier niet draaien.
+#
+#  LET OP: als cPanel deze .htaccess ooit regenereert, plak dit block terug
+#  vanuit de code-repo.
+# ════════════════════════════════════════════════════════════════════════
+
+# 1. PHP-engine uit voor deze map (LiteSpeed/lsapi + mod_php-varianten).
+<IfModule lsapi_module>
+    php_flag engine off
+</IfModule>
+<IfModule php8_module>
+    php_flag engine off
+</IfModule>
+<IfModule php7_module>
+    php_flag engine off
+</IfModule>
+
+# 2. Backstop: elke script-extensie expliciet weigeren (403), voor 't geval
+#    'engine off' door de hosting genegeerd wordt. Geen uitvoering én geen
+#    plain-text source-leak.
+<FilesMatch "\.(php|php[0-9]|phtml|phps|pht|phar|cgi|pl|py|sh|bash|asp|aspx|jsp)$">
+    <IfModule mod_authz_core.c>
+        Require all denied
+    </IfModule>
+    <IfModule !mod_authz_core.c>
+        Order allow,deny
+        Deny from all
+    </IfModule>
+</FilesMatch>
+
+# 3. Anti stored-XSS bij DIRECT openen van een geüploade .svg/.html/.xml:
+#    neutraliseer scripts via CSP en verbied MIME-sniffing. Raakt <img>-
+#    weergave van SVG-logo's NIET (CSP geldt alleen bij top-level document-
+#    load; in <img>-context draaien SVG-scripts sowieso al niet).
+<IfModule mod_headers.c>
+    Header set X-Content-Type-Options "nosniff"
+    <FilesMatch "\.(svg|svgz|xml|html?|xhtml)$">
+        Header set Content-Security-Policy "default-src 'none'; style-src 'unsafe-inline'"
+    </FilesMatch>
+</IfModule>
+
 # Logo's + sponsor-images + baan-images veranderen zelden — agressief browser-
 # cachen scheelt enorm veel requests per app-open.
 #
