@@ -302,7 +302,14 @@ table.compact th {
             <h1>InlineComp Coach</h1>
             <div class="subtitle">Quick Reference — voor coaches die meerdere rijders tegelijk volgen</div>
         </div>
-        <div style="font-size:24pt">👥</div>
+        <div style="display:flex; align-items:center; gap:12px">
+            <svg width="75" height="50" viewBox="0 0 9 6" style="display:block; border:1px solid rgba(255,255,255,.6); border-radius:3px; -webkit-print-color-adjust:exact; print-color-adjust:exact" role="img" aria-label="Nederlands">
+                <rect width="9" height="6" fill="#21468B"/>
+                <rect width="9" height="4" fill="#FFFFFF"/>
+                <rect width="9" height="2" fill="#AE1C28"/>
+            </svg>
+            <div style="font-size:24pt">👥</div>
+        </div>
     </div>
     <div class="url-bar">
         <span>Open de coach-app:</span>
@@ -336,7 +343,7 @@ table.compact th {
             <p>Vul één of meer velden in en klik <b>+ Voeg toe</b>:</p>
             <ul>
                 <li><b>Club</b>: knop "— kies club(s) —" → paneel met checkboxes → meerdere clubs tegelijk aanvinken → <b>Klaar</b>. Geselecteerde clubs verschijnen als chips onder de knop.</li>
-                <li><b>Sponsor</b>: zelfde widget, meerdere sponsors tegelijk. Handig als rijders dezelfde sponsor net anders hebben opgegeven.</li>
+                <li><b>Sponsor</b>: zelfde widget, meerdere sponsors tegelijk ook mogelijk.</li>
                 <li><b>Startnummer</b>: één rijder per nummer.</li>
             </ul>
             <p>Je kunt alle drie combineren in één klik op <b>+ Voeg toe</b>. Toegevoegde rijders verschijnen als chips bovenaan; klikken op een chip = verwijderen uit je lijst.</p>
@@ -436,14 +443,13 @@ table.compact th {
                             <tr><th>#</th><th>Snr</th><th>Naam</th><th style="text-align:right">Tijd</th></tr>
                             <tr><td>1</td><td><b>344</b></td><td>Anna J.</td><td style="text-align:right">39.177</td></tr>
                             <tr><td>2</td><td><b>87</b></td><td>Bram K.</td><td style="text-align:right">39.333</td></tr>
-                            <tr><td>3</td><td><b>42</b></td><td>Carla S.</td><td style="text-align:right">39.663</td></tr>
+                            <tr class="mijn"><td>3</td><td><b>42</b></td><td>Carla S.</td><td style="text-align:right">39.663</td></tr>
                             <tr><td>4</td><td><b>26</b></td><td>Daan V.</td><td style="text-align:right">40.166</td></tr>
-                            <tr class="mijn"><td>5</td><td><b>432</b></td><td>Eva M.</td><td style="text-align:right">41.904</td></tr>
-                            <tr><td>6</td><td><b>139</b></td><td>Finn P.</td><td style="text-align:right">42.048</td></tr>
+                            <tr><td>5</td><td><b>432</b></td><td>Eva M.</td><td style="text-align:right">41.904</td></tr>
                         </table>
                     </div>
                     <div class="mock-uitleg">
-                        Kies eerst <b>categorie</b> (bovenste dropdown) en dan <b>ronde/afstand</b> (onderste). De eindstand verschijnt met snr, naam en tijd. Jouw rijders <em>geel gemarkeerd</em>. Afstand-uitslagen verschijnen zodra de wedstrijdleider ze bevestigt; het <b>klassement</b> pas nadat de organisatie het publiceert — meestal ná de prijsuitreiking.
+                        Kies eerst <b>categorie</b> en dan <b>ronde/afstand</b>. De eindstand verschijnt met snr, naam en tijd. Jouw rijders <em>geel gemarkeerd</em>. Afstand-uitslagen verschijnen zodra de wedstrijdleider ze bevestigt; het <b>klassement</b> pas nadat de organisatie het publiceert — meestal ná de prijsuitreiking.
                     </div>
                 </div>
 

@@ -382,7 +382,20 @@ table.compact th {
             <h1>InlineComp Public</h1>
             <div class="subtitle">Quick Reference — for yourself, your son or daughter, and supporters</div>
         </div>
-        <div style="font-size:24pt">🔍</div>
+        <div style="display:flex; align-items:center; gap:12px">
+            <svg width="100" height="50" viewBox="0 0 60 30" style="display:block; border:1px solid rgba(255,255,255,.6); border-radius:3px; -webkit-print-color-adjust:exact; print-color-adjust:exact" role="img" aria-label="English">
+                <clipPath id="uks"><path d="M0,0 v30 h60 v-30 z"/></clipPath>
+                <clipPath id="ukt"><path d="M30,15 h30 v15 z v15 h-30 z h-30 v-15 z v-15 h30 z"/></clipPath>
+                <g clip-path="url(#uks)">
+                    <path d="M0,0 v30 h60 v-30 z" fill="#012169"/>
+                    <path d="M0,0 L60,30 M60,0 L0,30" stroke="#fff" stroke-width="6"/>
+                    <path d="M0,0 L60,30 M60,0 L0,30" clip-path="url(#ukt)" stroke="#C8102E" stroke-width="4"/>
+                    <path d="M30,0 v30 M0,15 h60" stroke="#fff" stroke-width="10"/>
+                    <path d="M30,0 v30 M0,15 h60" stroke="#C8102E" stroke-width="6"/>
+                </g>
+            </svg>
+            <div style="font-size:24pt">🔍</div>
+        </div>
     </div>
     <div class="url-bar">
         <span>Open the public app:</span>

@@ -301,7 +301,20 @@ table.compact th {
             <h1>InlineComp Coach</h1>
             <div class="subtitle">Quick Reference — for coaches following multiple skaters at once</div>
         </div>
-        <div style="font-size:24pt">👥</div>
+        <div style="display:flex; align-items:center; gap:12px">
+            <svg width="100" height="50" viewBox="0 0 60 30" style="display:block; border:1px solid rgba(255,255,255,.6); border-radius:3px; -webkit-print-color-adjust:exact; print-color-adjust:exact" role="img" aria-label="English">
+                <clipPath id="uks"><path d="M0,0 v30 h60 v-30 z"/></clipPath>
+                <clipPath id="ukt"><path d="M30,15 h30 v15 z v15 h-30 z h-30 v-15 z v-15 h30 z"/></clipPath>
+                <g clip-path="url(#uks)">
+                    <path d="M0,0 v30 h60 v-30 z" fill="#012169"/>
+                    <path d="M0,0 L60,30 M60,0 L0,30" stroke="#fff" stroke-width="6"/>
+                    <path d="M0,0 L60,30 M60,0 L0,30" clip-path="url(#ukt)" stroke="#C8102E" stroke-width="4"/>
+                    <path d="M30,0 v30 M0,15 h60" stroke="#fff" stroke-width="10"/>
+                    <path d="M30,0 v30 M0,15 h60" stroke="#C8102E" stroke-width="6"/>
+                </g>
+            </svg>
+            <div style="font-size:24pt">👥</div>
+        </div>
     </div>
     <div class="url-bar">
         <span>Open the coach app:</span>
@@ -335,7 +348,7 @@ table.compact th {
             <p>Fill in one or more fields and click <b>+ Add</b>:</p>
             <ul>
                 <li><b>Club</b>: button "— pick club(s) —" → panel with checkboxes → tick multiple clubs at once → <b>Done</b>. Selected clubs appear as chips below the button.</li>
-                <li><b>Sponsor</b>: same widget, multiple sponsors at once. Handy when skaters spell the same sponsor slightly differently.</li>
+                <li><b>Sponsor</b>: same widget, select multiple sponsors at once possible aswell. </li>
                 <li><b>Bib number</b>: one skater per number.</li>
             </ul>
             <p>All three can be combined in a single click on <b>+ Add</b>. Added skaters appear as chips at the top; click a chip = remove from your list.</p>
@@ -435,14 +448,13 @@ table.compact th {
                             <tr><th>#</th><th>Bib</th><th>Name</th><th style="text-align:right">Time</th></tr>
                             <tr><td>1</td><td><b>344</b></td><td>Anna J.</td><td style="text-align:right">39.177</td></tr>
                             <tr><td>2</td><td><b>87</b></td><td>Bram K.</td><td style="text-align:right">39.333</td></tr>
-                            <tr><td>3</td><td><b>42</b></td><td>Carla S.</td><td style="text-align:right">39.663</td></tr>
+                            <tr class="mijn"><td>3</td><td><b>42</b></td><td>Carla S.</td><td style="text-align:right">39.663</td></tr>
                             <tr><td>4</td><td><b>26</b></td><td>Daan V.</td><td style="text-align:right">40.166</td></tr>
-                            <tr class="mijn"><td>5</td><td><b>432</b></td><td>Eva M.</td><td style="text-align:right">41.904</td></tr>
-                            <tr><td>6</td><td><b>139</b></td><td>Finn P.</td><td style="text-align:right">42.048</td></tr>
+                            <tr><td>5</td><td><b>432</b></td><td>Eva M.</td><td style="text-align:right">41.904</td></tr>
                         </table>
                     </div>
                     <div class="mock-uitleg">
-                        First pick <b>category</b> (top dropdown) and then <b>round/distance</b> (bottom). The final standing appears with bib, name and time. Your skaters are <em>highlighted yellow</em>. Distance results appear as soon as the race director confirms them; the <b>standings</b> only after the organisation publishes them — usually after the prize ceremony.
+                        First pick <b>category</b> and then <b>round/distance</b>. The final standing appears with bib, name and time. Your skaters are <em>highlighted yellow</em>. Distance results appear as soon as the race director confirms them; the <b>standings</b> only after the organisation publishes them — usually after the prize ceremony.
                     </div>
                 </div>
 
