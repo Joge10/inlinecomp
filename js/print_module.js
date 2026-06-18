@@ -937,7 +937,7 @@ function _pcBouwStartlijstenSectie() {
     // verschijnen = KNSB-programma-volgorde (distances_db op `number`).
     const perAfst = new Map();  // distNaam → Map(rondeLabel → {sleutel, items[]})
     const distNaamVolgorde = new Map();
-    const combiGezien = new Set();   // "distId:combi_group" → al toegevoegd
+    const combiGezien = new Set();   // combi_group → al toegevoegd
 
     for (const [catNaam, distMap] of _slPrintOpties) {
         for (const [distId, distInfo] of distMap) {
@@ -959,7 +959,13 @@ function _pcBouwStartlijstenSectie() {
                         if (g) { cg = g; break; }
                     }
                     if (cg != null) {
-                        const combiKey = `${distId}::${cg}`;
+                        // Dedup op combi_group alléén (uniek per tijdschema). NIET
+                        // op distId mee-sleutelen: in het internationaal-systeem
+                        // hebben gecombineerde categorieën vaak verschillende
+                        // distance_id's, en dan zou de combi twee keer in de lijst
+                        // belanden (één per afstand). combi_group is per definitie
+                        // uniek, dus dat is de juiste sleutel.
+                        const combiKey = `${cg}`;
                         if (combiGezien.has(combiKey)) continue; // al toegevoegd
                         combiGezien.add(combiKey);
                         // Verzamel alle dc-namen in de combi-groep

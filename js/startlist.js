@@ -744,18 +744,24 @@ async function _bouwStartlijstDrukInternal(optData) {
     let combiHeatsSamengevoegd = null;  // [{heat, dc_id, dc_name, rit}]
     if (combiGroup && combiDcIds?.length > 1) {
         try {
-            const fetches = await Promise.all(combiDcIds.map(async dcId => {
+            // Fetch per combi-rit met de EIGEN dc + afstand van die rit. In het
+            // internationaal-systeem kunnen gecombineerde categorieën verschillende
+            // distance_id's hebben; de afstand van de aangeklikte rit hergebruiken
+            // zou de partner-loting onder de verkeerde afstand zoeken (= "niet
+            // gevonden", terwijl de loting wél bestaat). Key op rit.id: elke
+            // combi-rit is een aparte categorie (guard: verschillende dc_id).
+            const fetches = await Promise.all(combiRittenMap.map(async rit => {
                 const url = `api/startlijst_laden.php`
                           + `?competition_id=${encodeURIComponent(huidigCompId)}`
-                          + `&dc_ids=${encodeURIComponent(dcId)}`
-                          + `&distance_id=${encodeURIComponent(distId ?? '')}`;
+                          + `&dc_ids=${encodeURIComponent(rit.dc_id)}`
+                          + `&distance_id=${encodeURIComponent(rit.distance_id ?? '')}`;
                 const r = await fetch(url);
-                return { dcId, json: await r.json() };
+                return { ritId: rit.id, json: await r.json() };
             }));
             combiHeatsSamengevoegd = [];
             const ontbrekendeRitten = []; // rit_naam van ritten zonder loting
             for (const rit of combiRittenMap) {
-                const pack = fetches.find(f => f.dcId === rit.dc_id);
+                const pack = fetches.find(f => f.ritId === rit.id);
                 if (!pack?.json?.exists) {
                     ontbrekendeRitten.push(rit.rit_naam || rit.dc_naam || rit.dc_id);
                     continue;

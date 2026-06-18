@@ -1565,9 +1565,10 @@ function renderRittenLijst(ritten, blokken) {
         }
     });
 
-    // Combineer-toolbar: alleen voor full-final met schrijfrechten
-    const systeemFFTop = (huidigTijdschema?.systeem ?? '') === 'full-final';
-    const combineerToolbar = (systeemFFTop && !_tsLeesOnly)
+    // Combineer-toolbar: voor full-final én internationaal, met schrijfrechten.
+    // Beide systemen genereren losse finale_a-ritten; combineren is puur visueel.
+    const combiSysteemTop = ['full-final', 'internationaal-nieuw'].includes(huidigTijdschema?.systeem ?? '');
+    const combineerToolbar = (combiSysteemTop && !_tsLeesOnly)
         ? `<div class="ts-combi-toolbar" id="ts-combi-toolbar">
                <span class="ts-combi-toolbar-hint">🔗 Selecteer 2–4 opeenvolgende A-finale ritten om te combineren in het programma</span>
                <button class="btn-primary ts-btn-combi" id="ts-btn-combi" disabled>Combineer selectie (<span id="ts-combi-count">0</span>)</button>
@@ -1758,9 +1759,9 @@ function renderRittenLijst(ritten, blokken) {
                     <td colspan="3" class="ts-rit-opm-cel">📝 ${ovOpmVal}</td>
                 </tr>`;
             }
-            // Combi-eligibility voor UI: alleen full-final + finale_a ritten
-            const systeemFF = (huidigTijdschema?.systeem ?? '') === 'full-final';
-            const combiEligible = systeemFF && rit.ronde_type === 'finale_a' && !_tsLeesOnly;
+            // Combi-eligibility voor UI: full-final óf internationaal + finale_a ritten
+            const combiSysteem = ['full-final', 'internationaal-nieuw'].includes(huidigTijdschema?.systeem ?? '');
+            const combiEligible = combiSysteem && rit.ronde_type === 'finale_a' && !_tsLeesOnly;
 
             // Ritnummer: leider toont nummer + 🔗, middle/end leden tonen niks
             let nrCelInhoud;

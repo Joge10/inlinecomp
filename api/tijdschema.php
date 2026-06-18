@@ -1918,16 +1918,18 @@ try {
 
         // set_combi: valideren + nieuwe combi_group toewijzen
 
-        // 0) Alleen voor full-final competitie-systeem
+        // 0) Alleen voor systemen die losse finale_a-ritten genereren: full-final
+        //    en internationaal-nieuw. Combineren is puur visueel, dus beide
+        //    veilig (loting/uitslag/klassement blijven per categorie).
         $sysStmt = $pdo->prepare(
             "SELECT systeem FROM competition_tijdschema WHERE id = ?"
         );
         $sysStmt->execute([$tsId]);
         $systeem = $sysStmt->fetchColumn();
-        if ($systeem !== 'full-final') {
+        if (!in_array($systeem, ['full-final', 'internationaal-nieuw'], true)) {
             http_response_code(400);
             echo json_encode([
-                'error' => 'Ritten combineren is alleen beschikbaar bij het full-final systeem',
+                'error' => 'Ritten combineren is niet beschikbaar voor dit wedstrijdsysteem',
             ]);
             exit;
         }
@@ -1966,6 +1968,24 @@ try {
                 ]);
                 exit;
             }
+        }
+
+        // 2b) Elke geselecteerde rit moet een ándere categorie zijn. In het
+        //     internationaal-systeem kan één categorie meerdere A-finale-heats
+        //     hebben; die horen NIET samengevoegd te worden (dan zou je heat 1
+        //     en heat 2 van dezelfde finale visueel als één rit tonen). Combineren
+        //     is bedoeld om verschillende categorieën samen op de baan te zetten.
+        $catSleutels = array_map(
+            fn($r) => $r['dc_id'] . '|' . ($r['distance_id'] ?? ''),
+            $ritten
+        );
+        if (count(array_unique($catSleutels)) !== count($catSleutels)) {
+            http_response_code(400);
+            echo json_encode([
+                'error' => 'Combineer alleen ritten van verschillende categorieën — '
+                         . 'meerdere heats van dezelfde categorie kunnen niet samengevoegd worden',
+            ]);
+            exit;
         }
 
         // 3) Opvolgende volgorde: check dat de volgorde-nummers aaneengesloten zijn
