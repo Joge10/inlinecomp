@@ -1371,9 +1371,13 @@ const _JURY_FUNCTIES = [
 // Volgorde op de Officials-pagina van het Wedstrijdprotokol. Per kolom
 // alfabetisch binnen elke functie. Onbekende functies (legacy / vrije
 // invoer) sluiten zich aan onderaan de linkerkolom.
+// Volgorde bepaalt welke functie als PRIMAIR geldt bij dubbelrol. Video
+// staat bewust vóór tijdwaarneming: iemand die beide doet, is in de
+// praktijk een video-referee die ook tijd opneemt — niet andersom. Onder
+// z'n naam staat dan "Video Referee" met de noot "also Timekeeping".
 const _JURY_KOLOM_LINKS = [
-    'hoofdscheidsrechter', 'scheidsrechter', 'tijdwaarneming',
-    'video', 'uitslagverwerking', 'speaker',
+    'hoofdscheidsrechter', 'scheidsrechter', 'video',
+    'tijdwaarneming', 'uitslagverwerking', 'speaker',
 ];
 const _JURY_KOLOM_RECHTS = [
     'algemeen jury lid', 'stagiair',
@@ -1682,8 +1686,8 @@ async function printWedstrijdrapport(compId, compNaam) {
     if (!compId) return;
     const esc = s => String(s ?? '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
 
-    // Taalkeuze (hergebruikt poster-modal — zelfde NL/EN-flow).
-    const lang = await kiesPosterTaal();
+    // Taalkeuze — simpele NL/EN-modal.
+    const lang = await kiesTaal();
     if (!lang) return;
 
     let data;
@@ -1741,6 +1745,17 @@ async function printWedstrijdrapport(compId, compNaam) {
             kol_pl:           'Pl', kol_naam: 'Naam', kol_cat: 'Cat', kol_club: 'Club',
             kol_tijd:         'Tijd', kol_punten: 'Punten', kol_opm: 'Opm',
             eindklassement:   'Eindklassement',
+            nieuwe_prs:                  'Nieuwe persoonlijke records',
+            nieuwe_prs_subtitel:         'Rijders die in deze wedstrijd hun PR scherper hebben gezet',
+            nieuwe_prs_geen:             'Geen nieuwe PR\'s vastgesteld in deze wedstrijd.',
+            nieuwe_prs_kol_rijder:       'Rijder',
+            nieuwe_prs_kol_cat:          'Cat',
+            nieuwe_prs_kol_afstand:      'Afstand',
+            nieuwe_prs_kol_nieuwe_tijd:  'Nieuwe tijd',
+            nieuwe_prs_kol_oude_pr:      'Vorige PR',
+            nieuwe_prs_kol_delta:        'Δ',
+            nieuwe_prs_kol_pr_bron:      'Vorige PR bij',
+            nieuwe_prs_toelichting:      'Vergelijking met de eerder vastgelegde tijden in het systeem. Alleen sprint-afstanden t/m 1000m; puntenkoers/afvalkoers tellen niet mee (niet vergelijkbaar).',
             afstanden_n:      n => `${n} afstanden · totaal-puntenklassement`,
             geen_afstanden:   'Geen afstanden gedefinieerd.',
             geen_uitslag:     'Geen uitslag vastgelegd.',
@@ -1779,6 +1794,17 @@ async function printWedstrijdrapport(compId, compNaam) {
             kol_pl:           'Pos', kol_naam: 'Name', kol_cat: 'Cat', kol_club: 'Club',
             kol_tijd:         'Time', kol_punten: 'Points', kol_opm: 'Note',
             eindklassement:   'Overall Classification',
+            nieuwe_prs:                  'New personal records',
+            nieuwe_prs_subtitel:         'Skaters who set a new PR during this race',
+            nieuwe_prs_geen:             'No new PRs recorded in this race.',
+            nieuwe_prs_kol_rijder:       'Skater',
+            nieuwe_prs_kol_cat:          'Cat',
+            nieuwe_prs_kol_afstand:      'Distance',
+            nieuwe_prs_kol_nieuwe_tijd:  'New time',
+            nieuwe_prs_kol_oude_pr:      'Previous PR',
+            nieuwe_prs_kol_delta:        'Δ',
+            nieuwe_prs_kol_pr_bron:      'Previous PR at',
+            nieuwe_prs_toelichting:      'Comparison with previously recorded times in the system. Only sprint distances ≤ 1000m; points/elimination races excluded (not comparable).',
             afstanden_n:      n => `${n} distances · total points classification`,
             geen_afstanden:   'No distances defined.',
             geen_uitslag:     'No results recorded.',
@@ -2252,15 +2278,21 @@ async function printWedstrijdrapport(compId, compNaam) {
             for (const fn of functies) {
                 const inFn = personen.filter(p => p.primair === fn)
                     .sort((a, b) => a.naam.localeCompare(b.naam, 'nl'));
-                for (const p of inFn) {
+                // Functie-cel krijgt rowspan = aantal personen met deze rol,
+                // zodat het kopje maar 1× boven de namen-groep staat in plaats
+                // van herhaald per rij.
+                inFn.forEach((p, i) => {
                     const noot = p.notenIdx
                         ? ` <sup class="pr-noot-marker">(${p.notenIdx})</sup>`
                         : '';
-                    html += `<tr>
-                        <th>${esc(_juryFnLabel(p.primair))}</th>
+                    const fnCel = i === 0
+                        ? `<th rowspan="${inFn.length}">${esc(_juryFnLabel(p.primair))}</th>`
+                        : '';
+                    html += `<tr class="${i === 0 ? 'jr-eerste' : 'jr-vervolg'}">
+                        ${fnCel}
                         <td>${esc(p.naam)}${noot}</td>
                     </tr>`;
-                }
+                });
             }
             return html;
         };
@@ -2293,18 +2325,40 @@ async function printWedstrijdrapport(compId, compNaam) {
         : '';
 
     // Sponsoren in een grid van logo's. URL als optionele href.
+    //
+    // Anti-wees-strategie: standaard 2 sponsoren per rij, maar als de laatste
+    // rij anders maar 1 sponsor zou krijgen (oneven aantal), maak die laatste
+    // rij van 3 zodat de wees zich met de vorige rij voegt. Implementatie:
+    // splits sponsoren in groepen, elke groep krijgt z'n eigen grid met juist
+    // aantal kolommen.
+    const _splitSponsors = arr => {
+        const groepen = [];
+        let i = 0;
+        while (i < arr.length) {
+            const rest = arr.length - i;
+            if (rest === 1)        { groepen.push({ k: 1, sp: arr.slice(i, i+1) }); i += 1; }
+            else if (rest === 3)   { groepen.push({ k: 3, sp: arr.slice(i, i+3) }); i += 3; }
+            else if (rest === 5)   { groepen.push({ k: 2, sp: arr.slice(i, i+2) });
+                                     groepen.push({ k: 3, sp: arr.slice(i+2, i+5) }); i += 5; }
+            else                   { groepen.push({ k: 2, sp: arr.slice(i, i+2) }); i += 2; }
+        }
+        return groepen;
+    };
+    const _renderSpCard = s => {
+        const img = s.logo_path
+            ? `<img src="${esc(s.logo_path)}" alt="${esc(s.naam || '')}">`
+            : `<div class="pr-sp-no-logo">${esc(s.naam || '')}</div>`;
+        const block = `<div class="pr-sp-card">${img}<div class="pr-sp-naam">${esc(s.naam || '')}</div></div>`;
+        return s.url
+            ? `<a class="pr-sp-link" href="${esc(s.url)}" target="_blank" rel="noopener">${block}</a>`
+            : block;
+    };
     const _sponsorenHtml = sponsors.length
         ? `<section class="protokol-blad">
             <h1 class="pr-blad-titel">${esc(T('sponsoren'))}</h1>
-            <div class="pr-sponsors-grid">${sponsors.map(s => {
-                const img = s.logo_path
-                    ? `<img src="${esc(s.logo_path)}" alt="${esc(s.naam || '')}">`
-                    : `<div class="pr-sp-no-logo">${esc(s.naam || '')}</div>`;
-                const block = `<div class="pr-sp-card">${img}<div class="pr-sp-naam">${esc(s.naam || '')}</div></div>`;
-                return s.url
-                    ? `<a class="pr-sp-link" href="${esc(s.url)}" target="_blank" rel="noopener">${block}</a>`
-                    : block;
-            }).join('')}</div>
+            ${_splitSponsors(sponsors).map(g =>
+                `<div class="pr-sponsors-grid pr-sp-k${g.k}">${g.sp.map(_renderSpCard).join('')}</div>`
+            ).join('')}
         </section>`
         : '';
 
@@ -2368,6 +2422,129 @@ async function printWedstrijdrapport(compId, compNaam) {
     const _uitslagenIntroHtml = `<section class="pr-uitslagen-intro">
         <h1 class="pr-blad-titel">${esc(T('uitslagen'))}</h1>
     </section>`;
+
+    // ── PR-sectie: nieuwe persoonlijke records ─────────────────────────
+    // Compacte bijlage met rijders die in deze wedstrijd hun PR scherper
+    // hebben gezet. Backend (api/_pr_helper.php) levert alleen de echte
+    // verbeteringen (gereden_ms < pr_ms). Render alleen als de lijst niet
+    // leeg is — bij 0 PRs slaan we de sectie over zodat we geen lege
+    // pagina printen.
+    const _nieuwePRs = Array.isArray(data.nieuwe_prs) ? data.nieuwe_prs : [];
+    // _fmtTijd en _fmtDatum bestaan al eerder in deze functie (hergebruik).
+    // Eigen formatter voor delta (= negatief getal → "−0.234s").
+    const _prFmtDelta = ms => {
+        if (ms == null || ms >= 0) return '—';
+        const abs = Math.abs(ms);
+        const sec = Math.floor(abs / 1000);
+        const mil = abs % 1000;
+        return `−${sec}.${String(mil).padStart(3,'0')}s`;
+    };
+    // _catRank bestaat al eerder in deze functie (regel ~2013) en handelt
+    // ook senioren-uitschrijvingen en masters af — hergebruik die.
+    // Ronde-label formatter voor de NIEUWE tijd (huidige wedstrijd) —
+    // inclusief heat-nummer zodat het terug te vinden is in het programma.
+    const _prRondeLabel = (rt, hn) => {
+        const m = {
+            'heats':        'Serie heat ',
+            'kwartfinale':  'KF heat ',
+            'halve_finale': 'HF heat ',
+            'finale_a':     'A-finale heat ',
+            'finale_b':     'B-finale heat ',
+            'runner_up':    'Runner-up heat ',
+        };
+        return (m[rt] || (rt || '?') + ' heat ') + (hn != null ? hn : '?');
+    };
+    // Normalisatie voor de PR-BRON-ronde (oude PR). Twee bronnen leveren
+    // elk hun eigen format: 'results'-tabel geeft "Serie heat 2", maar
+    // 'uitslag_afstand' (historische PDF-imports) geeft alleen "A-Finale"
+    // of "Serie" zonder heat-nummer. Voor consistentie strippen we 't
+    // heat-nummer en mappen we naar één uniforme korte vorm — het heat-
+    // nummer van een historische PR is voor herkenning toch minder nuttig
+    // dan de wedstrijd-naam zelf.
+    const _prCleanRondeBron = label => {
+        if (!label) return '';
+        const s = String(label).toLowerCase();
+        if (s.includes('a-final'))                     return 'A-finale';
+        if (s.includes('b-final'))                     return 'B-finale';
+        if (s.includes('runner'))                      return 'Runner-up';
+        if (s.includes('halve') || /\bhf\b/.test(s))   return 'HF';
+        if (s.includes('kwart') || /\bkf\b/.test(s))   return 'KF';
+        if (s.includes('serie') || s.includes('heat')) return 'Serie';
+        return label;
+    };
+    // Groepeer per rijder (persoon = license_key, of naam-cat-fallback bij
+    // onbekende licentie). Binnen rijder PR-rijen op afstand_meters ASC.
+    const _prPerPersoon = new Map();
+    for (const r of _nieuwePRs) {
+        const key = r.person_license || `${r.full_name}|${r.categorie}`;
+        if (!_prPerPersoon.has(key)) _prPerPersoon.set(key, {
+            person_license: r.person_license,
+            full_name:      r.full_name,
+            categorie:      r.categorie,
+            start_number:   r.start_number,
+            rijen:          [],
+        });
+        _prPerPersoon.get(key).rijen.push(r);
+    }
+    // Sorteer rijders: KNSB-cat-volgorde → startnummer ASC → naam (tiebreaker).
+    const _rijders = [..._prPerPersoon.values()].sort((a, b) => {
+        const cr = _catRank(a.categorie) - _catRank(b.categorie);
+        if (cr !== 0) return cr;
+        const an = a.start_number ?? 99999;
+        const bn = b.start_number ?? 99999;
+        if (an !== bn) return an - bn;
+        return String(a.full_name).localeCompare(String(b.full_name));
+    });
+    // Per rijder: PR-rijen op afstand ASC.
+    for (const r of _rijders) {
+        r.rijen.sort((a, b) => (a.afstand_meters || 0) - (b.afstand_meters || 0));
+    }
+    const _nieuwePRsHtml = _nieuwePRs.length === 0 ? '' : `
+<section class="protokol-blad pr-prs-blad">
+    <h1 class="pr-blad-titel">${esc(T('nieuwe_prs'))}</h1>
+    <div class="pr-prs-sub">${esc(T('nieuwe_prs_subtitel'))}</div>
+    <div class="pr-prs-toel">${esc(T('nieuwe_prs_toelichting'))}</div>
+    <table class="pr-prs-tabel">
+        <thead><tr>
+            <th class="pp-c-snr">${esc(T('kol_snr'))}</th>
+            <th class="pp-c-naam">${esc(T('nieuwe_prs_kol_rijder'))}</th>
+            <th class="pp-c-cat">${esc(T('nieuwe_prs_kol_cat'))}</th>
+            <th class="pp-c-afst">${esc(T('nieuwe_prs_kol_afstand'))}</th>
+            <th class="pp-c-tijd">${esc(T('nieuwe_prs_kol_nieuwe_tijd'))}</th>
+            <th class="pp-c-delta">${esc(T('nieuwe_prs_kol_delta'))}</th>
+            <th class="pp-c-bron">${esc(T('nieuwe_prs_kol_pr_bron'))}</th>
+        </tr></thead>
+        <tbody>${_rijders.map(rij => {
+            const span = rij.rijen.length;
+            return rij.rijen.map((pr, i) => {
+                const ersteCell = i === 0
+                    ? `<td class="pp-c-snr"  rowspan="${span}">${esc(rij.start_number ?? '')}</td>
+                       <td class="pp-c-naam" rowspan="${span}">${esc(rij.full_name || '')}</td>
+                       <td class="pp-c-cat"  rowspan="${span}">${esc(rij.categorie || '')}</td>`
+                    : '';
+                const bron = [
+                    pr.pr_wedstrijd,
+                    _fmtDatum(pr.pr_datum),
+                    _prCleanRondeBron(pr.pr_ronde),
+                ].filter(Boolean).join(' · ');
+                return `<tr class="${i === 0 ? 'pp-eerste' : 'pp-vervolg'}">
+                    ${ersteCell}
+                    <td class="pp-c-afst">${esc(pr.afstand_naam || '')}</td>
+                    <td class="pp-c-tijd">
+                        <b>${esc(_fmtTijd(pr.gereden_ms))}</b>
+                        <span class="pp-ronde">${esc(_prRondeLabel(pr.ronde_type, pr.heat_nr))}</span>
+                    </td>
+                    <td class="pp-c-delta">${esc(_prFmtDelta(pr.delta_ms))}</td>
+                    <td class="pp-c-bron">
+                        <span class="pp-bron-tijd">${esc(_fmtTijd(pr.pr_ms))}</span>
+                        <span class="pp-bron-meta">${esc(bron)}</span>
+                    </td>
+                </tr>`;
+            }).join('');
+        }).join('')}
+        </tbody>
+    </table>
+</section>`;
 
     // Afsluitend blad — kort dankblok + org-logo onderaan.
     // Afsluitings-blok: drie InlineComp-logos naast elkaar (algemeen / P
@@ -2504,7 +2681,10 @@ footer{margin-top:6mm;border-top:1px solid #ccc;padding-top:2mm;font-size:7.5pt;
     position:relative;width:100%;height:12.5cm;
     margin:0 0 1cm;overflow:hidden;
 }
-.pv-foto{width:100%;height:100%;object-fit:cover;display:block}
+/* object-fit contain ipv cover: de hele foto blijft zichtbaar (geen crop,
+   fotograaf-vriendelijk). Eventuele letterbox-randen vallen op de witte
+   body — geen eigen background nodig. */
+.pv-foto{width:100%;height:100%;object-fit:contain;display:block}
 .pv-logo-hoek{
     position:absolute;top:5mm;
     background:#fff;padding:4mm 6mm;border-radius:3px;
@@ -2521,15 +2701,83 @@ footer{margin-top:6mm;border-top:1px solid #ccc;padding-top:2mm;font-size:7.5pt;
     font-size:18pt;font-weight:700;color:#1a3a5c;
     border-bottom:1.5px solid #1a3a5c;padding-bottom:2mm;margin:0 0 6mm;
 }
+
+/* ── Nieuwe-PR's sectie: per persoon (rowspan op snr/naam/cat) ─── */
+/* Landscape voor deze pagina via named page (Chrome/Edge/Safari modern).
+   Browser-fallback: blijft portrait — tabel past dan krapper maar werkt. */
+@page pr-prs-landscape { size: A4 landscape; margin: 1cm 1.2cm }
+.pr-prs-blad{ page: pr-prs-landscape; min-height: 18cm }
+.pr-prs-sub{
+    font-size:10.5pt;color:#1a3a5c;font-style:italic;margin:-4mm 0 3mm 0;
+}
+.pr-prs-toel{
+    font-size:8.5pt;color:#555;background:#f4f7fa;border-left:3px solid #1a3a5c;
+    padding:2mm 3mm;margin:0 0 5mm 0;line-height:1.4;
+}
+.pr-prs-tabel{
+    width:100%;border-collapse:collapse;font-size:9pt;
+    table-layout:fixed;margin-bottom:3mm;
+}
+.pr-prs-tabel th{
+    background:#dce6f0;color:#1a3a5c;padding:1.5mm 2mm;font-size:8pt;
+    text-align:left;font-weight:600;border-bottom:1px solid #bbb;
+    vertical-align:bottom;
+}
+.pr-prs-tabel td{
+    padding:1.2mm 2mm;border-bottom:1px solid #eee;
+    vertical-align:top;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;
+}
+/* Eerste rij van een rijder krijgt een dikkere bovenrand zodat duidelijk
+   is waar een rijder-blok begint (achtergrond-rowspan effect zonder echte
+   verticale lijnen). Vervolg-rijen krijgen een lichtere onderkant. */
+.pr-prs-tabel tr.pp-eerste td{border-top:1.5px solid #1a3a5c}
+.pr-prs-tabel tr.pp-vervolg td{border-bottom:1px dotted #ddd}
+.pr-prs-tabel tr.pp-vervolg{background:#fafcfe}
+.pr-prs-tabel .pp-c-snr{
+    width:6%;text-align:right;font-weight:700;color:#1a3a5c;
+}
+.pr-prs-tabel .pp-c-naam{
+    width:18%;font-weight:600;white-space:normal;
+}
+.pr-prs-tabel .pp-c-cat{
+    width:6%;color:#1a3a5c;font-weight:600;
+}
+.pr-prs-tabel .pp-c-afst{
+    width:14%;white-space:normal;
+}
+.pr-prs-tabel .pp-c-tijd{
+    width:18%;
+    font-family:'Consolas','Courier New',monospace;font-size:9pt;
+    white-space:normal;
+}
+.pr-prs-tabel .pp-c-tijd b{font-size:9.5pt}
+.pr-prs-tabel .pp-c-tijd .pp-ronde{
+    display:block;font-size:7.5pt;color:#5a7491;
+    font-family:Arial,sans-serif;font-style:italic;margin-top:0.5mm;
+}
+.pr-prs-tabel .pp-c-delta{
+    width:9%;text-align:right;font-family:'Consolas','Courier New',monospace;
+    color:#0a7d2a;font-weight:700;
+}
+.pr-prs-tabel .pp-c-bron{
+    width:29%;font-size:8pt;color:#555;white-space:normal;
+}
+.pr-prs-tabel .pp-c-bron .pp-bron-tijd{
+    display:inline-block;font-family:'Consolas','Courier New',monospace;
+    color:#222;font-weight:600;margin-right:2mm;
+}
+.pr-prs-tabel .pp-c-bron .pp-bron-meta{
+    display:inline;font-style:italic;
+}
 .pr-nawoord{font-size:10pt;line-height:1.5;color:#222;white-space:normal;max-width:18cm}
 /* Nawoord-foto: gefloat rechts zodat de tekst er omheen valt. Caption
    onder de foto, klein en gedimd. */
 .pr-nawoord-foto{
     float:right;margin:0 0 4mm 6mm;
-    max-width:5cm;text-align:center;
+    max-width:6.3cm;text-align:center;
 }
 .pr-nawoord-foto img{
-    width:100%;height:auto;max-height:7cm;object-fit:cover;
+    width:100%;height:auto;max-height:8.8cm;object-fit:cover;
     border-radius:3px;border:1px solid #ddd;
 }
 .pr-nawoord-foto figcaption{
@@ -2576,8 +2824,12 @@ footer{margin-top:6mm;border-top:1px solid #ccc;padding-top:2mm;font-size:7.5pt;
    mogen flink groot. Bij heel veel sponsors wrapt 'ie naar meerdere
    pagina's (.protokol-blad heeft page-break-after). */
 .pr-sponsors-grid{
-    display:grid;grid-template-columns:repeat(2, 1fr);gap:12mm 10mm;
+    display:grid;gap:12mm 10mm;
 }
+.pr-sponsors-grid + .pr-sponsors-grid{ margin-top:12mm }
+.pr-sponsors-grid.pr-sp-k1{ grid-template-columns:1fr }
+.pr-sponsors-grid.pr-sp-k2{ grid-template-columns:repeat(2, 1fr) }
+.pr-sponsors-grid.pr-sp-k3{ grid-template-columns:repeat(3, 1fr) }
 .pr-sp-link{text-decoration:none;color:inherit}
 .pr-sp-card{
     border:1px solid #eee;border-radius:4px;padding:8mm 6mm;
@@ -2718,6 +2970,7 @@ ${_uitslagenIntroHtml}
 </header>
 <hr class="top-rule">
 ${dcBlocks}
+${_nieuwePRsHtml}
 ${_afsluitingHtml}
 <script>window.addEventListener('load', () => { window.focus(); window.print(); });<\/script>
 </body></html>`;
@@ -2882,6 +3135,41 @@ async function uploadLogo(type, id, file, sponsorRij = null) {
 // Modal voor poster-type + taalkeuze. Returnt { lang, type } | null.
 // localStorage onthoudt zowel laatste type als laatste taal — zodat een
 // operator die series posters print niet steeds opnieuw moet kiezen.
+// Eenvoudige taal-keuze modal voor prints zonder verdere opties (bv. het
+// wedstrijdrapport). Returnt 'nl' | 'en' | null (geannuleerd). Gedeelde
+// localStorage-key met kiesPosterOpties zodat de keuze blijft hangen.
+function kiesTaal() {
+    const laatste = localStorage.getItem('poster_lang') || 'nl';
+    return new Promise(resolve => {
+        const overlay = document.createElement('div');
+        overlay.className = 'modal-overlay';
+        overlay.innerHTML = `
+            <div class="modal-dialog modal-dialog--smal">
+                <div class="modal-header"><span>Taal</span></div>
+                <div class="modal-body modal-body--gecentreerd">
+                    In welke taal wil je dit document?
+                </div>
+                <div class="modal-knoppen modal-knoppen--gecentreerd">
+                    <button class="modal-btn modal-annuleer" data-act="cancel">Annuleer</button>
+                    <button class="modal-btn modal-doorgaan" data-act="nl">🇳🇱 Nederlands</button>
+                    <button class="modal-btn modal-doorgaan" data-act="en">🇬🇧 English</button>
+                </div>
+            </div>`;
+        document.body.appendChild(overlay);
+        const sluit = lang => { overlay.remove(); resolve(lang); };
+        overlay.querySelectorAll('[data-act]').forEach(b => {
+            b.addEventListener('click', () => {
+                const act = b.dataset.act;
+                if (act === 'cancel') return sluit(null);
+                localStorage.setItem('poster_lang', act);
+                sluit(act);
+            });
+        });
+        overlay.addEventListener('click', e => { if (e.target === overlay) sluit(null); });
+        overlay.querySelector(`[data-act="${laatste}"]`)?.focus();
+    });
+}
+
 function kiesPosterOpties() {
     const laatsteLang = localStorage.getItem('poster_lang') || 'nl';
     const laatsteType = localStorage.getItem('poster_type') || 'public';

@@ -51,8 +51,8 @@ $geenUsers   = ($aantalUsers === 0);
             background: #fff;
             border-radius: 12px;
             box-shadow: 0 8px 32px rgba(0,0,0,.25);
-            padding: 2.5rem 2rem;
-            width: min(360px, 92vw);
+            padding: 2.2rem 2rem 2rem;
+            width: min(460px, 94vw);
         }
         .login-logo {
             text-align: center;
@@ -66,8 +66,72 @@ $geenUsers   = ($aantalUsers === 0);
             text-align: center;
             font-size: .82rem;
             color: #888;
-            margin-bottom: 1.8rem;
+            margin-bottom: 1.5rem;
         }
+        /* ── App-tegels (Check / Public / Coach) ─────────────────────────
+           Eén rij van drie aanklikbare tegels. Niet-ingelogde bezoekers
+           kunnen direct naar de app-die-ze-zochten. Jury bewust NIET hier
+           — die blijft alleen via directe URL bereikbaar. */
+        .ic-tiles {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 10px;
+            margin-bottom: 1.2rem;
+        }
+        .ic-tile {
+            display: flex; flex-direction: column; align-items: center;
+            gap: 6px; padding: 12px 6px 10px; text-decoration: none;
+            color: var(--blauw); border: 1px solid #e3e7ec; border-radius: 8px;
+            background: #fff; transition: background .12s, border-color .12s, transform .08s;
+        }
+        @media (hover: hover) {
+            .ic-tile:hover {
+                background: #f4f8fc; border-color: var(--middenblauw);
+                transform: translateY(-1px);
+            }
+        }
+        .ic-tile:active { transform: translateY(0); }
+        /* IC-logo blok met letter-badge in oranje rechtsonder. Identiek
+           patroon als de live-app icoontjes (zie favicon.svg + apple-touch). */
+        .ic-icon {
+            position: relative;
+            width: 56px; height: 56px;
+            background: var(--blauw); border-radius: 12px;
+            display: flex; align-items: center; justify-content: center;
+            color: #fff; font-weight: 700; font-size: 1.1rem;
+            box-shadow: 0 2px 6px rgba(31,78,121,.25);
+        }
+        .ic-icon::after {
+            /* Oranje balkje onderaan, zelfde stijl als de favicon. */
+            content: ''; position: absolute; left: 14%; right: 14%; bottom: 22%;
+            height: 4px; background: var(--oranje); border-radius: 2px;
+        }
+        .ic-icon .ic-badge {
+            position: absolute; right: -6px; bottom: -6px;
+            width: 22px; height: 22px;
+            background: var(--oranje); color: #fff;
+            border: 2px solid #fff; border-radius: 50%;
+            display: flex; align-items: center; justify-content: center;
+            font-size: .72rem; font-weight: 700;
+            box-shadow: 0 1px 3px rgba(0,0,0,.2);
+        }
+        .ic-badge-check { font-size: .85rem; line-height: 1; }
+        .ic-label { font-size: .85rem; font-weight: 700; margin-top: 2px; }
+        .ic-tagline { font-size: .67rem; color: #888; text-align: center;
+                      line-height: 1.2; min-height: 1.7em; }
+        /* Divider met "of" tussen tegels en login-formulier. */
+        .ic-divider {
+            position: relative; text-align: center;
+            margin: .4rem 0 1.2rem;
+            font-size: .72rem; color: #aaa; letter-spacing: 1px;
+        }
+        .ic-divider::before, .ic-divider::after {
+            content: ''; position: absolute; top: 50%;
+            width: 38%; height: 1px; background: #e3e7ec;
+        }
+        .ic-divider::before { left: 0; }
+        .ic-divider::after  { right: 0; }
+        .ic-divider span { background: #fff; padding: 0 8px; }
         .login-veld {
             display: flex; flex-direction: column; gap: 4px;
             margin-bottom: 1rem;
@@ -114,6 +178,27 @@ $geenUsers   = ($aantalUsers === 0);
 <div class="login-kaart">
     <div class="login-logo">InlineComp</div>
     <div class="login-subtitel">Wedstrijdbeheer inline-skaten</div>
+
+    <!-- Drie app-tegels voor publiek/coach/check.
+         Jury bewust niet hier — die blijft alleen via directe URL. -->
+    <div class="ic-tiles">
+        <a class="ic-tile" href="check/" title="Controleer je inschrijving">
+            <div class="ic-icon">IC<span class="ic-badge ic-badge-check">✓</span></div>
+            <div class="ic-label">Check</div>
+            <div class="ic-tagline">Controleer<br>je inschrijving</div>
+        </a>
+        <a class="ic-tile" href="public/" title="Live wedstrijdinfo voor rijders en publiek">
+            <div class="ic-icon">IC<span class="ic-badge">P</span></div>
+            <div class="ic-label">Public</div>
+            <div class="ic-tagline">Voor rijders<br>en publiek</div>
+        </a>
+        <a class="ic-tile" href="coach/" title="Voor coaches">
+            <div class="ic-icon">IC<span class="ic-badge">C</span></div>
+            <div class="ic-label">Coach</div>
+            <div class="ic-tagline">Voor coaches</div>
+        </a>
+    </div>
+    <div class="ic-divider"><span>of inloggen</span></div>
 
     <?php if ($geenUsers): ?>
     <div class="login-info">

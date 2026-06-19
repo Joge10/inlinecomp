@@ -51,6 +51,7 @@ header('Access-Control-Allow-Origin: *');
 
 require_once __DIR__ . '/../../config_inlinecomp.php';
 require_once __DIR__ . '/../auth/session.php';
+require_once __DIR__ . '/_pr_helper.php';
 $_authUser = requireAuth($pdo);
 
 $compId = trim($_GET['id'] ?? '');
@@ -337,6 +338,18 @@ try {
         $deelnemers[] = $d;
     }
 
+    // Nieuwe PRs uit eerdere wedstrijden — fail-soft: bij een onverwachte
+    // SQL-fout (bv. ontbrekende kolom op een nog niet gemigreerde server)
+    // mag het wedstrijdrapport gewoon zonder PR-sectie gegenereerd worden.
+    $nieuwePRs       = [];
+    $nieuwePRsError  = null;
+    try {
+        $nieuwePRs = getNieuwePRs($pdo, $compId, $comp['starts'] ?? '1970-01-01');
+    } catch (Throwable $e) {
+        $nieuwePRsError = $e->getMessage();
+        @error_log('[wedstrijdrapport] PR-helper failed: ' . $e->getMessage());
+    }
+
     echo json_encode([
         'competition' => [
             'id'                => $comp['id'],
@@ -363,6 +376,8 @@ try {
         'afstanden_lijst' => $afstandenLijst,
         'deelnemers'      => $deelnemers,
         'dcs'             => $dcs,
+        'nieuwe_prs'       => $nieuwePRs,
+        'nieuwe_prs_error' => $nieuwePRsError,
     ], JSON_UNESCAPED_UNICODE);
 
 } catch (Throwable $e) {

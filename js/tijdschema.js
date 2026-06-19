@@ -1239,6 +1239,104 @@ function renderRittenLijst(ritten, blokken) {
         af.cats.forEach(c => { if (!dcNaamMap.has(c.dc_id)) dcNaamMap.set(c.dc_id, c.dc_naam); })
     );
 
+    // ── Actueel aantal deelnemers per DC (live op basis van entry-status) ────
+    // Reserves tellen niet (reserve = optioneel, niet ingezet). Status 2/3
+    // (afgemeld) en 4 (niet-getekend) tellen niet — 1 (aanwezig) en 5
+    // (bevestigd bij org) wél.
+    const actueelPerDc = new Map();
+    for (const dc of (vergelijkData ?? [])) {
+        const aantal = (dc.competitors ?? []).filter(c => {
+            const st = c.entry_status;
+            const isReserve = c.reserve_nr != null && parseInt(c.reserve_nr) > 0;
+            return (st === 1 || st === 5) && !isReserve;
+        }).length;
+        actueelPerDc.set(dc.dc_id, aantal);
+    }
+    // Per DC welke ronde-types bestaan (om "direct A-finale" te detecteren).
+    const rondesPerDc = new Map();
+    for (const r of ritten) {
+        if (!rondesPerDc.has(r.dc_id)) rondesPerDc.set(r.dc_id, new Set());
+        rondesPerDc.get(r.dc_id).add(r.ronde_type);
+    }
+    const isDirectFinaleDc = (dc_id) => {
+        const s = rondesPerDc.get(dc_id);
+        if (!s) return false;
+        return s.has('finale_a')
+            && !s.has('heats') && !s.has('kwartfinale') && !s.has('halve_finale');
+    };
+    // Verdeel actueel-deelnemers over de heats per (dc_id × ronde_type):
+    //   floor(actueel / n) per heat, eerste `rest` heats krijgen +1.
+    //   Bv. 11 / 6 → [2, 2, 2, 2, 2, 1]. Operator ziet meteen welke heat
+    //   kandidaat is om te schrappen.
+    // Per rit: Map<rit.id, actueel_in_die_heat>. Per groep-key: totaal.
+    const _verdeelKey = (r) => `${r.dc_id}|${r.ronde_type}`;
+    const _ritsPerKey = new Map();
+    for (const r of ritten) {
+        const k = _verdeelKey(r);
+        if (!_ritsPerKey.has(k)) _ritsPerKey.set(k, []);
+        _ritsPerKey.get(k).push(r);
+    }
+    // Eerste ronde + doorstroom-ronde per DC. De EERSTE ronde is waar alle
+    // entries instromen — kan series (heats) zijn, of (als de operator
+    // besluit te skippen) direct KF of HF. De DOORSTROOM-ronde is wat
+    // erna komt: het verschil tussen entries en doorstroom-slots = RU.
+    //
+    // Bv. cascade series (19) → KF (16) → HF (8) → AF (4):
+    //     eerste = series, doorstroom = KF, RU = 19 − 16 = 3
+    // Cascade KF (12) → HF (8) → AF (4) (geen series):
+    //     eerste = KF, doorstroom = HF, RU = 12 − 8 = 4
+    const _cascadeOrder = ['heats','kwartfinale','halve_finale','finale_a'];
+    const sumVerwacht = (dc_id, type) =>
+        ritten.filter(r => r.dc_id === dc_id && r.ronde_type === type)
+              .reduce((sum, r) => sum + (parseInt(r.verwacht) || 0), 0);
+    const slotsDoorstroom = (dc_id) => {
+        const s = rondesPerDc.get(dc_id);
+        if (!s) return null;
+        // Vind eerste cascade-ronde die bestaat.
+        const eersteIdx = _cascadeOrder.findIndex(rt => s.has(rt));
+        if (eersteIdx < 0) return null;
+        // Doorstroom = eerstvolgende cascade-ronde NA de eerste.
+        for (let i = eersteIdx + 1; i < _cascadeOrder.length; i++) {
+            if (s.has(_cascadeOrder[i])) return sumVerwacht(dc_id, _cascadeOrder[i]);
+        }
+        return null;
+    };
+    const actueelPerRit       = new Map();  // rit.id → aantal
+    const actueelTotPerDcRonde = new Map(); // 'dc_id|ronde_type' → totaal actueel
+
+    // Helper: verdeel een totaal over n heats en sla op per rit.
+    const _verdeelOpslaan = (rs, totaal, gKey) => {
+        actueelTotPerDcRonde.set(gKey, totaal);
+        const n    = rs.length;
+        const base = Math.floor(totaal / n);
+        const rest = totaal - base * n;
+        rs.forEach((r, i) => actueelPerRit.set(r.id, i < rest ? base + 1 : base));
+    };
+
+    // ── PASS 1: cascade-rondes (heats/KF/HF) + DIRECT A-finale ─────────
+    // Hier is totaal_actueel = aantal entries in de DC.
+    for (const [k, rs] of _ritsPerKey) {
+        const dc_id      = rs[0].dc_id;
+        const ronde_type = rs[0].ronde_type;
+        const isCascadeRonde = ['heats','kwartfinale','halve_finale'].includes(ronde_type);
+        const isDirectA      = ronde_type === 'finale_a' && isDirectFinaleDc(dc_id);
+        if (!isCascadeRonde && !isDirectA) continue;
+        const totaal = actueelPerDc.get(dc_id);
+        if (totaal == null) continue;
+        _verdeelOpslaan(rs, totaal, k);
+    }
+
+    // ── PASS 2: runner-up = totaal − doorstroom-slots ──────────────────
+    for (const [k, rs] of _ritsPerKey) {
+        if (rs[0].ronde_type !== 'runner_up') continue;
+        const dc_id  = rs[0].dc_id;
+        const totaal = actueelPerDc.get(dc_id);
+        const slots  = slotsDoorstroom(dc_id);
+        if (totaal == null || slots == null) continue;
+        const ruActu = Math.max(0, totaal - slots);
+        _verdeelOpslaan(rs, ruActu, k);
+    }
+
     // ── Hulpstructuren ───────────────────────────────────────────────────────────
     // Heat-duur per ronde-blok (voor tijdberekening per rit)
     const heatDuurMap = new Map(
@@ -1678,7 +1776,23 @@ function renderRittenLijst(ritten, blokken) {
             if (groepKey !== prevGroepKey) {
                 prevGroepKey = groepKey;
                 const n    = groepGrootte[groepKey] ?? 1;
-                const nTxt = n === 1 ? '1 rit' : `${n} heats`;
+                // Actueel aantal deelnemers voor deze groep (op basis van DC
+                // van de eerste rit + ronde-type filter). Voor heats/KF/HF: toon
+                // het DC-totaal — daar is afmelding direct relevant voor "kan
+                // een rit minder". Voor finales niet (finale-grootte komt uit
+                // cat_config en hangt af van cascade, niet 1-op-1 op afmeldingen).
+                // Actueel deelnemertotaal: alleen tonen waar we 't betrouwbaar
+                // kunnen verdelen — heats/KF/HF + direct A-finale-cats. Voor
+                // cascade-finales (na series), B-finales en runner-up niet,
+                // want hun aantal hangt af van wie doorstroomt, niet van
+                // afmeldingen alleen.
+                let deelnTxt = '';
+                const _grKey = `${rit.dc_id}|${rit.ronde_type}`;
+                const actueelTot = actueelTotPerDcRonde.get(_grKey);
+                if (actueelTot != null) {
+                    deelnTxt = ` · <span class="ts-groep-deeln">${actueelTot} deelnemers</span>`;
+                }
+                const nTxt = (n === 1 ? '1 rit' : `${n} heats`) + deelnTxt;
                 const aantalCols = heeftStartTijden ? 5 : 4;
                 const tijdInhoud = heeftStartTijden
                     ? `<span class="ts-groep-tijd">${startTijdMap.get(rit.id) ?? '—'}</span>`
@@ -1759,9 +1873,19 @@ function renderRittenLijst(ritten, blokken) {
                     <td colspan="3" class="ts-rit-opm-cel">📝 ${ovOpmVal}</td>
                 </tr>`;
             }
-            // Combi-eligibility voor UI: full-final óf internationaal + finale_a ritten
-            const combiSysteem = ['full-final', 'internationaal-nieuw'].includes(huidigTijdschema?.systeem ?? '');
-            const combiEligible = combiSysteem && rit.ronde_type === 'finale_a' && !_tsLeesOnly;
+            // Combi-eligibility voor UI:
+            //   - DIRECT A-finales (cats zonder series/KF/HF) → combineerbaar
+            //   - Runner-up                                    → combineerbaar
+            //   - Cascade A-finales (na series/KF/HF)          → NIET — die
+            //     krijgen hun deelnemers via cascade-doorstroom; combineren
+            //     zou uitslag/doorstroom kunnen verstoren.
+            // Combi is puur OPTISCH (= "rijden tegelijk"), loting blijft per
+            // cat apart.
+            const combiSysteem  = ['full-final', 'internationaal-nieuw'].includes(huidigTijdschema?.systeem ?? '');
+            const isDirectAFin  = rit.ronde_type === 'finale_a' && isDirectFinaleDc(rit.dc_id);
+            const combiEligible = combiSysteem
+                                && !_tsLeesOnly
+                                && (isDirectAFin || rit.ronde_type === 'runner_up');
 
             // Ritnummer: leider toont nummer + 🔗, middle/end leden tonen niks
             let nrCelInhoud;
@@ -1806,7 +1930,7 @@ function renderRittenLijst(ritten, blokken) {
                 <td class="ts-rit-nr">${nrCelInhoud}</td>
                 <td class="ts-rit-naam">${escHtml(rit.rit_naam)}</td>
                 <td><span class="ts-type-badge ts-type-badge-sm" style="background:${kleur}">${escHtml(label)}${escHtml(fin)}</span></td>
-                <td class="ts-rit-verwacht">${rit.verwacht ?? '?'}${kopieerBtn}${verwijderBtn}</td>
+                <td class="ts-rit-verwacht">${actueelPerRit.has(rit.id) ? actueelPerRit.get(rit.id) : (rit.verwacht ?? '?')}${kopieerBtn}${verwijderBtn}</td>
             </tr>`;
         }
     });
