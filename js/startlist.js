@@ -1516,11 +1516,18 @@ function slangenpatroon(rijders, maxPerHeat) {
 // wordt zelf wordt overgeslagen (je seedt niet op je eigen nog-te-rijden DC).
 async function vulAfstandBronnen(selEl, cache, groep) {
     if (!selEl) return;
-    const huidigeDcs = new Set(groep?.dc_ids || [groep?.dc_id]);
+    // Filter op (dc_id + distance_id) — niet alleen dc_id. In KNSB-feed
+    // zitten verschillende afstanden vaak in dezelfde DC (1 DC per cat,
+    // meerdere distances). Filter alleen de afstand-die-nu-geloot-wordt
+    // weg; andere afstanden binnen dezelfde DC mogen wel als bron dienen
+    // (bv. 200m series als seed voor 1000m HF van dezelfde cat).
+    const huidigeDistKey = groep?.dc_id + '|' + (cache.distId || groep?.distance_id || '');
     try {
         const res  = await fetch('api/uitslag_bronnen.php?competition_id=' + encodeURIComponent(huidigCompId));
         const data = await res.json();
-        const bronnen = (data?.bronnen || []).filter(b => !huidigeDcs.has(b.dc_id));
+        const bronnen = (data?.bronnen || []).filter(b =>
+            (b.dc_id + '|' + b.distance_id) !== huidigeDistKey
+        );
         if (!bronnen.length) {
             selEl.innerHTML = '<option value="">— geen uitslagen beschikbaar —</option>';
             return;

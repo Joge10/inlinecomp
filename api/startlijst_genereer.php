@@ -334,6 +334,38 @@ try {
                 if ((int)$row['uitgesloten']) continue;  // uitgesloten → achteraan
                 $auMap[$row['person_license']] = $auRank++;
             }
+            // ── LIVE fallback: bron-DC zonder vastgelegde uitslag ────────
+            // Als geen uitslag_afstand-rijen → gebruik best-tijd-per-rijder
+            // uit results (alle reeds gereden rondes van die afstand). Voor
+            // in-event seeden tussen afstanden zonder dat de bron al officieel
+            // vastgelegd hoeft te zijn.
+            if (empty($auMap)) {
+                $liveWhere = $bronDistId !== '' ? 'AND h.distance_id = ?' : '';
+                $liveParams = $bronDistId !== ''
+                    ? [$compId, $bronDcId, $bronDistId]
+                    : [$compId, $bronDcId];
+                $liveSql = "
+                    SELECT he.person_license,
+                           MIN(COALESCE(res.bruto_tijd_ms, res.tijd_ms)) AS beste_ms
+                    FROM   results              res
+                    JOIN   heat_entries         he  ON he.id = res.heat_entry_id
+                    JOIN   heats                h   ON h.id  = he.heat_id
+                    WHERE  h.competition_id          = ?
+                      AND  h.distance_combination_id = ?
+                      {$liveWhere}
+                      AND  COALESCE(res.bruto_tijd_ms, res.tijd_ms) > 0
+                      AND  (res.sanctie IS NULL
+                            OR res.sanctie NOT IN ('DQ-SF','DQ-DF'))
+                    GROUP BY he.person_license
+                    ORDER BY beste_ms ASC
+                ";
+                $liveStmt = $pdo->prepare($liveSql);
+                $liveStmt->execute($liveParams);
+                $auRank = 1;
+                foreach ($liveStmt->fetchAll(PDO::FETCH_ASSOC) as $row) {
+                    $auMap[$row['person_license']] = $auRank++;
+                }
+            }
             foreach ($rijders as $r) {
                 $lk = $r['license_key'];
                 if (isset($auMap[$lk])) {

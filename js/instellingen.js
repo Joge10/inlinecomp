@@ -1743,7 +1743,13 @@ async function printWedstrijdrapport(compId, compNaam) {
             tagline_footer:   'InlineComp · Van startlijn tot uitslag — live.',
             pagina_label:     'pagina',
             kol_pl:           'Pl', kol_naam: 'Naam', kol_cat: 'Cat', kol_club: 'Club',
+            kol_bib:          'Bib', kol_ronde: 'Ronde', kol_sponsor_club: 'Sponsor / Club',
+            kol_rondes:       'Ronden', kol_sprintpt: 'Sprint-pt',
             kol_tijd:         'Tijd', kol_punten: 'Punten', kol_opm: 'Opm',
+            uitslag_fn_titel:  'Aanpassingen door jury',
+            uitslag_fn_pf:     'fotofinish',
+            uitslag_fn_hand:   'handmatig',
+            uitslag_fn_gemeten: ({ bruto, off }) => `gemeten ${bruto}, officieel ${off}`,
             eindklassement:   'Eindklassement',
             nieuwe_prs:                  'Nieuwe persoonlijke records',
             nieuwe_prs_subtitel:         'Rijders die in deze wedstrijd hun PR scherper hebben gezet',
@@ -1792,6 +1798,12 @@ async function printWedstrijdrapport(compId, compNaam) {
             tagline_footer:   'InlineComp · From start line to results — live.',
             pagina_label:     'page',
             kol_pl:           'Pos', kol_naam: 'Name', kol_cat: 'Cat', kol_club: 'Club',
+            kol_bib:          'Bib', kol_ronde: 'Round', kol_sponsor_club: 'Sponsor / Club',
+            kol_rondes:       'Laps', kol_sprintpt: 'Sprint pt',
+            uitslag_fn_titel:  'Jury adjustments',
+            uitslag_fn_pf:     'photofinish',
+            uitslag_fn_hand:   'manual',
+            uitslag_fn_gemeten: ({ bruto, off }) => `measured ${bruto}, official ${off}`,
             kol_tijd:         'Time', kol_punten: 'Points', kol_opm: 'Note',
             eindklassement:   'Overall Classification',
             nieuwe_prs:                  'New personal records',
@@ -1881,13 +1893,29 @@ async function printWedstrijdrapport(compId, compNaam) {
 
     // ── Tabel-builder voor één set rijen (uitslag of klassement) ────────
     // Kolommen dynamisch op basis van data, voorkomt lege "—" kolommen.
+    // Stijl gebaseerd op print-center-uitslag (boom-saver): blauwe Rang/Bib,
+    // naam vet, cat-tag, sponsor met fallback naar club, ronde-kolom.
     // Bij split_group: rijen per split apart groeperen met een tussenkop.
     const _bouwTabel = (rijen, opts = {}) => {
         if (!rijen?.length) return '';
         const isKlassement = opts.isKlassement === true;
-        const heeftTijd    = !isKlassement && rijen.some(r => r.tijd_ms !== null);
-        const heeftPunten  = rijen.some(r => (isKlassement ? r.punten_totaal : r.punten) !== null);
-        const heeftSanctie = !isKlassement && rijen.some(r => r.sanctie);
+        const isPuntenkoers = opts.raceType === 'puntenkoers';
+        // Voor puntenkoers tonen we pk_punten (behaalde sprint-punten) ipv de
+        // rang-als-klassement-punten, plus een aparte Ronden-kolom.
+        const heeftTijd     = !isKlassement && rijen.some(r => r.tijd_ms !== null);
+        const heeftPkPunten = isPuntenkoers && !isKlassement && rijen.some(r => r.pk_punten != null);
+        const heeftRondes   = isPuntenkoers && !isKlassement && rijen.some(r => r.rondes != null);
+        // Klassement-punten alleen tonen voor het EINDklassement (multi-distance
+        // DC). Voor een individuele afstand-uitslag is `punten` gewoon de rang
+        // en dus visueel dubbel met de Pos-kolom — Geert: altijd weg.
+        const heeftPunten   = isKlassement
+                              && rijen.some(r => r.punten_totaal !== null);
+        // Note-kolom altijd tonen (ook als leeg) zodat het tabel-frame
+        // consistent is — voor sancties + jury-footnote-supscript.
+        const heeftSanctie  = !isKlassement;
+        const heeftBib      = rijen.some(r => r.start_number != null);
+        const heeftRonde    = !isKlassement && rijen.some(r => (r.finale_naam || '').trim() !== '');
+        const heeftSpClub   = rijen.some(r => (r.sponsor || r.club_full || '').trim() !== '');
 
         // Splits detecteren — als er meerdere unieke split_groups zijn,
         // tonen we per split een aparte sub-tabel met cat-naam als kop.
@@ -1895,36 +1923,98 @@ async function printWedstrijdrapport(compId, compNaam) {
         const meerdereSplits = splits.length > 1;
 
         const headCols = [
-            `<th class="c">${esc(T('kol_pl'))}</th>`,
-            `<th>${esc(T('kol_naam'))}</th>`,
-            `<th class="c">${esc(T('kol_cat'))}</th>`,
-            `<th>${esc(T('kol_club'))}</th>`,
-            heeftTijd    ? `<th class="c">${esc(T('kol_tijd'))}</th>`   : '',
-            heeftPunten  ? `<th class="c">${esc(T('kol_punten'))}</th>` : '',
-            heeftSanctie ? `<th class="c">${esc(T('kol_opm'))}</th>`    : '',
+            `<th class="c col-rang">${esc(T('kol_pl'))}</th>`,
+            `<th class="col-naam">${esc(T('kol_naam'))}</th>`,
+            heeftBib     ? `<th class="c col-bib">${esc(T('kol_bib'))}</th>`             : '',
+            `<th class="c col-cat">${esc(T('kol_cat'))}</th>`,
+            heeftSpClub  ? `<th class="col-spclub">${esc(T('kol_sponsor_club'))}</th>`   : '',
+            heeftRonde   ? `<th class="c col-ronde">${esc(T('kol_ronde'))}</th>`         : '',
+            heeftTijd    ? `<th class="c col-tijd">${esc(T('kol_tijd'))}</th>`           : '',
+            heeftRondes  ? `<th class="c col-rondes">${esc(T('kol_rondes'))}</th>`       : '',
+            heeftPkPunten? `<th class="c col-pkpunten">${esc(T('kol_sprintpt'))}</th>`   : '',
+            heeftPunten  ? `<th class="c col-punten">${esc(T('kol_punten'))}</th>`       : '',
+            heeftSanctie ? `<th class="c col-sanctie">${esc(T('kol_opm'))}</th>`         : '',
         ].filter(Boolean).join('');
 
+        // Jury-aanpassingen footnote: per uitslag-tabel verzamelen we de
+        // rijders met afwijkende bruto-tijd (fotofinish of handmatige
+        // correctie). Het footnote-nummer staat als superscript in de
+        // sanctie-kolom; lijst onder de tabel.
+        const fnItems = [];
         const _bouwRijen = (subset) => subset.map((r, i) => {
-            const punten = isKlassement ? r.punten_totaal : r.punten;
+            const punten   = isKlassement ? r.punten_totaal : r.punten;
+            const sponsor  = (r.sponsor || '').trim();
+            const club     = (r.club_full || '').trim();
+            const spClub   = sponsor !== '' ? sponsor : club;
+            // Sancties — voorkeur voor alle_sancties[] (per ronde), met
+            // fallback op de oude `sanctie` string als die niet beschikbaar is.
+            let sanctieTxt = '';
+            const allS = Array.isArray(r.alle_sancties) ? r.alle_sancties : [];
+            if (allS.length) {
+                sanctieTxt = allS.map(s => `${esc(s.ronde)}:${esc(s.sanctie)}`).join(', ');
+            } else if (r.sanctie) {
+                sanctieTxt = esc(r.sanctie);
+            }
+            // Jury-aanpassingen per heat — kan meerdere zijn voor één rijder
+            // (bv. fotofinish-wissel in Serie + handmatige correctie in HF).
+            // Iedere aanpassing krijgt een eigen icoon + superscript-nummer
+            // in de note-kolom, en een eigen entry in de footnote-lijst.
+            let fnSup = '';
+            const juryAanp = Array.isArray(r.jury_aanpassingen) ? r.jury_aanpassingen : [];
+            for (const ja of juryAanp) {
+                const isPF = ja.is_photofinish === true || ja.is_photofinish === 1;
+                const icon = isPF ? '📷' : '✋';
+                fnItems.push({
+                    icon, isPhotofinish: isPF,
+                    naam:      r.full_name ?? '',
+                    ronde:     ja.ronde ?? '?',
+                    bruto:     _fmtTijd(ja.bruto_ms),
+                    officieel: ja.officieel_ms != null ? _fmtTijd(ja.officieel_ms) : '—',
+                });
+                fnSup += ` ${icon}<sup>${fnItems.length}</sup>`;
+            }
             const cells = [
-                // NULL-rang (DQ/DNS-rijders zonder positie) → '—' ipv lege
-                // cel of de letterlijke string 'null'. Consistent met de
-                // punten-kolom hieronder.
-                `<td class="c">${r.rang !== null ? esc(r.rang) : '—'}</td>`,
-                `<td>${esc(r.full_name)}</td>`,
-                `<td class="c">${esc(r.categorie ?? '')}</td>`,
-                `<td>${esc(r.club_full ?? '')}</td>`,
-                heeftTijd    ? `<td class="c mono">${esc(_fmtTijd(r.tijd_ms))}</td>` : '',
-                heeftPunten  ? `<td class="c">${punten !== null ? esc(punten) : '—'}</td>` : '',
-                heeftSanctie ? `<td class="c sanctie">${esc(r.sanctie ?? '')}</td>` : '',
+                // NULL-rang (DQ/DNS-rijders zonder positie) → '—'.
+                `<td class="c col-rang">${r.rang !== null ? esc(r.rang) : '—'}</td>`,
+                `<td class="col-naam">${esc(r.full_name)}</td>`,
+                heeftBib     ? `<td class="c col-bib">${r.start_number != null ? esc(r.start_number) : ''}</td>` : '',
+                `<td class="c col-cat">${esc(r.categorie ?? '')}</td>`,
+                heeftSpClub  ? `<td class="col-spclub">${esc(spClub)}</td>` : '',
+                heeftRonde   ? `<td class="c col-ronde">${esc(r.finale_naam ?? '')}</td>` : '',
+                heeftTijd    ? `<td class="c mono col-tijd">${esc(_fmtTijd(r.tijd_ms))}</td>` : '',
+                heeftRondes  ? `<td class="c col-rondes">${r.rondes != null ? esc(r.rondes) : '—'}</td>` : '',
+                heeftPkPunten? `<td class="c col-pkpunten">${r.pk_punten != null ? esc(r.pk_punten) : '—'}</td>` : '',
+                heeftPunten  ? `<td class="c col-punten">${punten !== null ? esc(punten) : '—'}</td>` : '',
+                heeftSanctie ? `<td class="c sanctie col-sanctie">${sanctieTxt}${fnSup}</td>` : '',
             ].filter(Boolean).join('');
-            return `<tr class="${i % 2 === 1 ? 'z' : ''}">${cells}</tr>`;
+            return `<tr>${cells}</tr>`;
         }).join('');
 
+        // Footnote-rij onder de tabel: alleen renderen als er jury-aanpassingen
+        // waren. Toont per item bruto vs officieel.
+        const _fnRowHtml = () => {
+            if (!fnItems.length) return '';
+            const items = fnItems.map((f, i) => `
+                <div class="pr-fn">
+                    <sup>${i + 1}</sup> ${f.icon}
+                    ${esc(f.isPhotofinish ? T('uitslag_fn_pf') : T('uitslag_fn_hand'))}
+                    <span class="pr-fn-ronde">${esc(f.ronde)}</span> —
+                    <b>${esc(f.naam)}</b>:
+                    ${esc(Tfn('uitslag_fn_gemeten', { bruto: f.bruto, off: f.officieel }))}
+                </div>`).join('');
+            return `<tr class="pr-fn-row"><td colspan="99" class="pr-fn-cell">
+                <div class="pr-fn-titel">${esc(T('uitslag_fn_titel'))}</div>
+                ${items}
+            </td></tr>`;
+        };
+
         if (!meerdereSplits) {
+            // _bouwRijen vult fnItems als bijwerking — eerst rendering,
+            // dan de footnote-rij (anders is fnItems nog leeg).
+            const rowsHtml = _bouwRijen(rijen);
             return `<table>
                 <thead><tr>${headCols}</tr></thead>
-                <tbody>${_bouwRijen(rijen)}</tbody>
+                <tbody>${rowsHtml}${_fnRowHtml()}</tbody>
             </table>`;
         }
 
@@ -1937,9 +2027,10 @@ async function printWedstrijdrapport(compId, compNaam) {
             const splitTitel = sg
                 ? `<div class="split-titel">${esc(T('sectie'))}: ${esc(sg)}</div>`
                 : '';
+            const rowsHtml = _bouwRijen(subset);
             return splitTitel + `<table>
                 <thead><tr>${headCols}</tr></thead>
-                <tbody>${_bouwRijen(subset)}</tbody>
+                <tbody>${rowsHtml}${_fnRowHtml()}</tbody>
             </table>`;
         }).join('');
     };
@@ -1981,7 +2072,7 @@ async function printWedstrijdrapport(compId, compNaam) {
                 blocks.push(`<section class="dc-block">
                     <h2 class="dc-titel">${esc(titel)}</h2>
                     <div class="dc-sub">${esc(subMeta)}</div>
-                    ${_bouwTabel(dist.uitslag)}
+                    ${_bouwTabel(dist.uitslag, { raceType: dist.race_type })}
                 </section>`);
             }
         }
@@ -2087,6 +2178,16 @@ async function printWedstrijdrapport(compId, compNaam) {
         if (pa !== pb) return pa - pb;
         return String(a.name || '').localeCompare(String(b.name || ''), 'nl');
     });
+    // Track vorige categorie zodat we elke nieuwe cat op een eigen pagina
+    // beginnen (Geert: "nieuwe categorie altijd op nieuwe blz"). Afstanden
+    // binnen één cat mogen wel doorlopen (page-break in tabel toegestaan).
+    // Eerste cat krijgt geen break (start sowieso op landscape-pagina-één).
+    let prevCat = null;
+    const _wrap = (cat, html) => {
+        const breakCls = (prevCat !== null && cat !== prevCat) ? ' dc-cat-break' : '';
+        prevCat = cat;
+        return `<div class="dc-cat-wrap${breakCls}">${html}</div>`;
+    };
     const dcBlocks = dcsGesorteerd.flatMap(dc => {
         const distances = dc.distances || [];
         const klassement = dc.klassement || [];
@@ -2094,7 +2195,8 @@ async function printWedstrijdrapport(compId, compNaam) {
         const splits = [...new Set(distances.map(d => d.target_group).filter(Boolean))];
 
         if (splits.length === 0) {
-            return [_bouwDcSectie(dc.name, distances, klassement)];
+            const cat = dc.category_filter || dc.name || '?';
+            return [_wrap(cat, _bouwDcSectie(dc.name, distances, klassement))];
         }
 
         // Splits ook op cat-volgorde (zelfde inline-cat-rangorde als DCs).
@@ -2102,7 +2204,7 @@ async function printWedstrijdrapport(compId, compNaam) {
         return splitsGesorteerd.map(splitLabel => {
             const splitDists = distances.filter(d => d.target_group === splitLabel);
             const splitKlas  = klassement.filter(k => (k.split_group || '') === splitLabel);
-            return _bouwDcSectie(splitLabel, splitDists, splitKlas);
+            return _wrap(splitLabel, _bouwDcSectie(splitLabel, splitDists, splitKlas));
         });
     }).join('');
 
@@ -2702,6 +2804,95 @@ footer{margin-top:6mm;border-top:1px solid #ccc;padding-top:2mm;font-size:7.5pt;
     border-bottom:1.5px solid #1a3a5c;padding-bottom:2mm;margin:0 0 6mm;
 }
 
+/* ── Uitslagen: eigen landscape-pagina + boom-saver-achtige tabel-stijl */
+@page pr-uitslag-landscape { size: A4 landscape; margin: 1cm 1.2cm 1.6cm;
+    @bottom-left{
+        content:"${esc(T('tagline_footer'))}";
+        font:8pt Arial,sans-serif; color:#1a3a5c; padding-top:5mm;
+    }
+    @bottom-right{
+        content:"${esc(T('pagina_label'))} " counter(page) "/" counter(pages);
+        font:8pt Arial,sans-serif; color:#888; padding-top:5mm;
+    }
+}
+.pr-uitslag-blad{ page: pr-uitslag-landscape }
+/* Uitslag-tabel: stijl-elementen zoals print-center boom-saver-uitslag —
+   blauwe Rang/Bib, naam vet, cat-tag, geen alternerende rij-kleuren. */
+.pr-uitslag-blad table{ font-size: 9.2pt }
+.pr-uitslag-blad td{ border-bottom: 1px solid #f0f0f0 }
+.pr-uitslag-blad td.col-rang,
+.pr-uitslag-blad td.col-bib{ color: #1a3a5c; font-weight: 700 }
+.pr-uitslag-blad td.col-naam{ font-weight: 600 }
+.pr-uitslag-blad td.col-cat{
+    color: #2E75B6; font-weight: 600; font-size: 8.8pt;
+}
+.pr-uitslag-blad td.col-ronde{ color: #555; font-size: 8.8pt }
+.pr-uitslag-blad td.col-spclub{ color: #444 }
+.pr-uitslag-blad td.col-tijd{ font-weight: 600 }
+/* Kolom-breedtes — naam/sponsor mogen rekken, anderen vast. */
+.pr-uitslag-blad th.col-rang,
+.pr-uitslag-blad td.col-rang{ width: 8mm }
+.pr-uitslag-blad th.col-bib,
+.pr-uitslag-blad td.col-bib{ width: 14mm }
+.pr-uitslag-blad th.col-cat,
+.pr-uitslag-blad td.col-cat{ width: 14mm }
+.pr-uitslag-blad th.col-ronde,
+.pr-uitslag-blad td.col-ronde{ width: 22mm }
+.pr-uitslag-blad th.col-tijd,
+.pr-uitslag-blad td.col-tijd{ width: 22mm }
+.pr-uitslag-blad th.col-punten,
+.pr-uitslag-blad td.col-punten{ width: 16mm }
+.pr-uitslag-blad th.col-rondes,
+.pr-uitslag-blad td.col-rondes{ width: 14mm }
+.pr-uitslag-blad th.col-pkpunten,
+.pr-uitslag-blad td.col-pkpunten{ width: 18mm; font-weight: 700; color: #1a3a5c }
+.pr-uitslag-blad th.col-sanctie,
+.pr-uitslag-blad td.col-sanctie{ width: 28mm; color:#c00; font-weight:700; font-size:8.5pt }
+.pr-uitslag-blad td.col-sanctie sup{ color:#1a3a5c; font-weight:600 }
+/* Jury-aanpassingen footnote-rij onder elke uitslag-tabel. */
+.pr-uitslag-blad tr.pr-fn-row td.pr-fn-cell{
+    background:#f7faff; border-top:1px solid #c4d4e6;
+    padding:4px 8px 6px; color:#1a3a5c;
+}
+.pr-uitslag-blad .pr-fn-titel{
+    font-size:8.5pt; font-weight:700; margin-bottom:2px;
+}
+.pr-uitslag-blad .pr-fn{
+    font-size:8.2pt; line-height:1.35; color:#333; margin:1px 0;
+}
+.pr-uitslag-blad .pr-fn sup{ color:#1a3a5c; font-weight:700; margin-right:2px }
+.pr-uitslag-blad .pr-fn b{ color:#1a3a5c }
+.pr-uitslag-blad .pr-fn-ronde{
+    display:inline-block; padding:0 5px;
+    background:#e3edf7; color:#1a3a5c;
+    border-radius:3px; font-size:7.5pt; font-weight:600;
+    margin:0 1px; vertical-align:1px;
+}
+/* Categorie-page-break: eerste DC van elke nieuwe categorie begint op een
+   nieuwe pagina. Afstanden binnen één cat mogen wel doorgaan; de tabel mag
+   ook breken. dc-block dus GEEN page-break-inside: avoid. */
+.pr-uitslag-blad .dc-cat-wrap.dc-cat-break{ page-break-before: always }
+.pr-uitslag-blad .dc-block{ page-break-inside: auto }
+/* Geen break vlak NA de afstand-titel of subtitel — die horen bij de tabel
+   die erna komt. break-after: avoid hint de browser om de break boven de
+   titel te plaatsen ipv eronder. Plus thead niet alleen op een pagina. */
+.pr-uitslag-blad .dc-titel,
+.pr-uitslag-blad .dc-sub,
+.pr-uitslag-blad .split-titel{
+    page-break-after: avoid;
+    break-after: avoid-page;
+}
+.pr-uitslag-blad thead{
+    page-break-after: avoid;
+    break-after: avoid-page;
+}
+/* Houd minstens 2-3 rijen samen bij begin/eind van een pagina-break. */
+.pr-uitslag-blad tbody tr{
+    page-break-inside: avoid;
+    break-inside: avoid-page;
+    orphans: 3; widows: 3;
+}
+
 /* ── Nieuwe-PR's sectie: per persoon (rowspan op snr/naam/cat) ─── */
 /* Landscape voor deze pagina via named page (Chrome/Edge/Safari modern).
    Browser-fallback: blijft portrait — tabel past dan krapper maar werkt. */
@@ -2958,6 +3149,7 @@ ${_nawoordHtml}
 ${_officialsHtml}
 ${_sponsorenHtml}
 ${_deelnemersHtml}
+<div class="pr-uitslag-blad">
 ${_uitslagenIntroHtml}
 <header>
   <div class="hdr-links">
@@ -2970,6 +3162,7 @@ ${_uitslagenIntroHtml}
 </header>
 <hr class="top-rule">
 ${dcBlocks}
+</div>
 ${_nieuwePRsHtml}
 ${_afsluitingHtml}
 <script>window.addEventListener('load', () => { window.focus(); window.print(); });<\/script>

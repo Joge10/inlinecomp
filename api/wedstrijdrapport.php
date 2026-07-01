@@ -141,8 +141,10 @@ try {
         SELECT ua.rang, ua.categorie, ua.split_group,
                ua.person_license   AS license_key,
                p.full_name,
+               p.start_number,
                p.club_full,
                p.sponsor,
+               ua.finale_naam,
                ua.tijd_ms, ua.punten, ua.sanctie
         FROM uitslag_afstand ua
         LEFT JOIN persons p ON p.license_key = ua.person_license
@@ -154,10 +156,49 @@ try {
                  ua.rang,
                  p.full_name
     ");
+    // Live-query: per persoon × heat alle results-data ophalen. Dekt
+    // meerdere protocol-features tegelijk zonder schema-wijziging:
+    //   - pk_punten + rondes      (alleen voor puntenkoers-afstanden)
+    //   - bruto_tijd_ms + is_photofinish (jury-aanpassingen footnote)
+    //   - alle_sancties[]          (sanctie + ronde-label per heat)
+    // Eén query per (dc, distance); in PHP per persoon geaggregeerd.
+    // h.distance_id is NULL voor cascade-rondes (KF/HF) — de echte distance_id
+    // staat dan op tijdschema_ritten via h.tijdschema_rit_id. Anders pakt de
+    // query alleen finale-heats op (waar h.distance_id wel direct gevuld is)
+    // en mist alle voorrondes — incl. de jury-aanpassingen daarin.
+    $liveExtraStmt = $pdo->prepare("
+        SELECT he.person_license,
+               res.tijd_ms,
+               res.bruto_tijd_ms,
+               res.is_photofinish,
+               res.sanctie,
+               res.punten   AS pk_punten,
+               res.rondes,
+               COALESCE(tsr.ronde_type,
+                   CASE WHEN h.heat_naam LIKE '%finale%' THEN 'finale_a' ELSE 'heats' END
+               )           AS ronde_type
+        FROM   results            res
+        JOIN   heat_entries       he  ON he.id = res.heat_entry_id
+        JOIN   heats              h   ON h.id  = he.heat_id
+        LEFT JOIN tijdschema_ritten tsr ON tsr.id = h.tijdschema_rit_id
+        WHERE  h.competition_id          = ?
+          AND  h.distance_combination_id = ?
+          AND  COALESCE(h.distance_id, tsr.distance_id) = ?
+    ");
+    $rondeKortMap = [
+        'heats'        => 'S',
+        'kwartfinale'  => 'KF',
+        'halve_finale' => 'HF',
+        'finale_a'     => 'A',
+        'finale_b'     => 'B',
+        'runner_up'    => 'RU',
+    ];
+
     $klassementStmt = $pdo->prepare("
         SELECT uk.rang, uk.categorie, uk.split_group,
                uk.person_license   AS license_key,
                p.full_name,
+               p.start_number,
                p.club_full,
                p.sponsor,
                uk.punten_totaal
@@ -185,18 +226,96 @@ try {
                     // BELANGRIJK: NULL behouden, niet casten naar (int) want
                     // dat geeft 0 — wat de UI vervolgens als positie '0'
                     // bovenaan rendert ipv onderaan met '—'.
-                    'rang'        => $r['rang'] !== null ? (int)$r['rang'] : null,
-                    'license_key' => $r['license_key'],
-                    'full_name'   => $r['full_name'] ?? '(onbekend)',
-                    'categorie'   => $r['categorie'],
-                    'split_group' => $r['split_group'] ?? '',
-                    'club_full'   => $r['club_full'],
-                    'sponsor'     => $r['sponsor'],
-                    'tijd_ms'     => $r['tijd_ms'] !== null ? (int)$r['tijd_ms'] : null,
-                    'punten'      => $r['punten']  !== null ? (float)$r['punten']  : null,
-                    'sanctie'     => $r['sanctie'],
+                    'rang'         => $r['rang'] !== null ? (int)$r['rang'] : null,
+                    'license_key'  => $r['license_key'],
+                    'full_name'    => $r['full_name'] ?? '(onbekend)',
+                    'start_number' => $r['start_number'] !== null ? (int)$r['start_number'] : null,
+                    'categorie'    => $r['categorie'],
+                    'split_group'  => $r['split_group'] ?? '',
+                    'club_full'    => $r['club_full'],
+                    'sponsor'      => $r['sponsor'],
+                    'finale_naam'  => $r['finale_naam'],
+                    'tijd_ms'      => $r['tijd_ms'] !== null ? (int)$r['tijd_ms'] : null,
+                    'punten'       => $r['punten']  !== null ? (float)$r['punten']  : null,
+                    // Velden hieronder worden live gemerged uit `results`:
+                    'pk_punten'        => null,   // puntenkoers: behaalde sprint-punten
+                    'rondes'           => null,   // puntenkoers/lange afstand
+                    'alle_sancties'    => [],     // [{ronde, sanctie}, ...]
+                    // Jury-aanpassingen: één entry per heat waar bruto != netto
+                    // (fotofinish-wisseling of handmatige correctie). Eén
+                    // rijder kan meerdere aanpassingen hebben over meerdere
+                    // rondes — print-center toont ze allemaal in de footnote.
+                    'jury_aanpassingen' => [],   // [{ronde, bruto_ms, officieel_ms, is_photofinish}]
+                    'sanctie'      => $r['sanctie'],
                 ];
             }, $rows);
+
+            // Live-merge uit results: pk_punten/rondes (puntenkoers), bruto-
+            // tijd + photofinish (jury-aanpassingen), alle_sancties (per ronde).
+            // Eén query per distance, in PHP per persoon geaggregeerd.
+            $liveExtraStmt->execute([$compId, $dc['id'], $dist['id']]);
+            $resByPerson = [];   // license_key => [{tijd_ms, bruto, isPf, sanctie, ronde, pk_punten, rondes}, …]
+            foreach ($liveExtraStmt->fetchAll(PDO::FETCH_ASSOC) as $ext) {
+                $resByPerson[$ext['person_license']][] = [
+                    'tijd_ms'        => $ext['tijd_ms'] !== null ? (int)$ext['tijd_ms'] : null,
+                    'bruto_tijd_ms'  => $ext['bruto_tijd_ms'] !== null ? (int)$ext['bruto_tijd_ms'] : null,
+                    'is_photofinish' => (int)($ext['is_photofinish'] ?? 0) === 1,
+                    'sanctie'        => $ext['sanctie'],
+                    'pk_punten'      => $ext['pk_punten'] !== null ? (float)$ext['pk_punten'] : null,
+                    'rondes'         => $ext['rondes']    !== null ? (int)$ext['rondes']     : null,
+                    'ronde'          => $rondeKortMap[$ext['ronde_type']] ?? '?',
+                ];
+            }
+            $isPK = ($dist['race_type'] ?? null) === 'puntenkoers';
+            foreach ($dist['uitslag'] as &$u) {
+                $rows = $resByPerson[$u['license_key']] ?? [];
+                $alleSancties = [];
+                $juryAanp     = [];
+                $maxPk = null;
+                $maxRn = null;
+                foreach ($rows as $row) {
+                    if ($row['sanctie']) {
+                        $alleSancties[] = [
+                            'ronde'   => $row['ronde'],
+                            'sanctie' => $row['sanctie'],
+                        ];
+                    }
+                    // Jury-aanpassing per heat: elke results-rij waar bruto
+                    // != netto = één aanpassing. Ook voor heats die niet de
+                    // eindtijd opleverden (Serie/KF/HF), want jury-correcties
+                    // in voorrondes horen ook in het protocol.
+                    //
+                    // BELANGRIJK: tijd_ms mag NULL zijn — dan heeft de jury
+                    // de tijd handmatig verwijderd (DNF/FS/DQ-TF na een
+                    // gemeten tijd). Dat is de meest typische jury-actie en
+                    // hoort juist getoond te worden ("gemeten X, officieel —").
+                    if ($row['bruto_tijd_ms'] !== null
+                        && $row['bruto_tijd_ms'] !== $row['tijd_ms']) {
+                        $juryAanp[] = [
+                            'ronde'          => $row['ronde'],
+                            'bruto_ms'       => $row['bruto_tijd_ms'],
+                            'officieel_ms'   => $row['tijd_ms'],
+                            'is_photofinish' => $row['is_photofinish'],
+                        ];
+                    }
+                    if ($isPK) {
+                        if ($row['pk_punten'] !== null && ($maxPk === null || $row['pk_punten'] > $maxPk)) {
+                            $maxPk = $row['pk_punten'];
+                        }
+                        if ($row['rondes'] !== null && ($maxRn === null || $row['rondes'] > $maxRn)) {
+                            $maxRn = $row['rondes'];
+                        }
+                    }
+                }
+                $u['alle_sancties']     = $alleSancties;
+                $u['jury_aanpassingen'] = $juryAanp;
+                if ($isPK) {
+                    $u['pk_punten'] = $maxPk;
+                    $u['rondes']    = $maxRn;
+                }
+            }
+            unset($u);
+
             $dist['value_meters'] = $dist['value_meters'] !== null
                 ? (int)$dist['value_meters'] : null;
             // target_group = split-label (bv. 'DP2', 'HP2') voor gesplitste
@@ -219,6 +338,7 @@ try {
                     'rang'          => $r['rang'] !== null ? (int)$r['rang'] : null,
                     'license_key'   => $r['license_key'],
                     'full_name'     => $r['full_name'] ?? '(onbekend)',
+                    'start_number'  => $r['start_number'] !== null ? (int)$r['start_number'] : null,
                     'categorie'     => $r['categorie'],
                     'split_group'   => $r['split_group'] ?? '',
                     'club_full'     => $r['club_full'],

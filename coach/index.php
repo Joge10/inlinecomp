@@ -1708,38 +1708,104 @@ select.sel {
 .prog-dag-btn.actief .prog-dag-btn-datum { opacity: .95; }
 .verborgen { display: none !important; }
 
-/* Programma-rit-filter: pills onder de dag-balk om "Alleen mijn rijders"
-   en "Alleen nog te rijden" toggelen. Identiek patroon als /public. */
-.prog-rit-filter {
-    display: flex; flex-wrap: nowrap; gap: 6px;
-    margin: 0 0 8px 0; padding: 4px 0;
+/* Programma-inklap-knoppen: segment-control boven de programma-lijst.
+   Rechthoekige balk, 3 gelijke kolommen, actieve knop donkerblauw. */
+.prog-klap-balk {
+    display: grid;
+    grid-template-columns: 1fr 1fr 1fr;
+    background: #fff;
+    border-top: 1px solid #b3cae6;
+    border-bottom: 1px solid #b3cae6;
+    margin: 0 0 8px;
 }
-.prog-rit-btn {
-    flex: 1 1 0;            /* beide pills delen breedte 50/50 */
-    min-width: 0;           /* laat krimpen toe op smalle schermen */
-    text-align: center;
+.prog-klap-btn {
+    background: #fff;
+    color: #1a3a5c;
+    border: 0;
+    border-right: 1px solid #d5dee7;
+    padding: 8px 2px;
+    font-size: .78rem; font-weight: 600;
+    line-height: 1.15;
+    cursor: pointer;
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
-    border: 1px solid #b3cae6; background: #fff; color: #1a3a5c;
-    padding: 4px 10px; border-radius: 14px; font-size: .66rem;
-    font-weight: 600; cursor: pointer; transition: background .12s;
+    letter-spacing: -.02em;
+    transition: background .12s, color .12s;
 }
-/* Hover alleen op apparaten met echte hover (muis) — op touch blijft
-   :hover anders plakken na een tap totdat je elders tikt. */
+.prog-klap-btn:last-child { border-right: 0; }
 @media (hover: hover) {
-    .prog-rit-btn:hover { background: #eaf2fb; }
+    .prog-klap-btn:not(.actief):hover { background: #eaf2fb; }
 }
-.prog-rit-btn.actief {
-    background: #1a3a5c; color: #fff; border-color: #1a3a5c;
+.prog-klap-btn.actief {
+    background: #1a3a5c;
+    color: #fff;
 }
-#programma[data-filter-mijn="1"] .heat-rij:not(.mijn),
-#programma[data-filter-mijn="1"] .prog-combi-box:not(:has(.heat-rij.mijn)) {
-    display: none !important;
+
+/* Cat-groep header — één inklapbare header per (dc_naam + ronde_type).
+   Standaard ingeklapt in coach; alleen chevron + naam + telling zichtbaar.
+   Coach-rijders indicator: oranje links-strip + subtiel badge rechts. */
+.prog-groep {
+    margin: 4px 0 6px;
+    background: #fff;
+    border: 1px solid #d5dee7;
+    border-radius: 6px;
+    overflow: hidden;
+    transition: box-shadow .15s;
 }
-#programma[data-filter-gereden-uit="1"] .heat-rij.gereden {
-    display: none !important;
+.prog-groep.mijn {
+    border-left: 4px solid var(--oranje, #E8630A);
 }
+.prog-groep-hdr {
+    display: flex; align-items: center; gap: 8px;
+    padding: 8px 10px;
+    cursor: pointer;
+    background: #f4f7fb;
+    user-select: none;
+    transition: background .12s;
+}
+@media (hover: hover) {
+    .prog-groep-hdr:hover { background: #eaf2fb; }
+}
+.prog-groep-chev {
+    display: inline-block; width: 12px; color: #1a3a5c;
+    font-size: .78rem; flex-shrink: 0;
+    transition: transform .15s;
+}
+.prog-groep-status {
+    display: inline-flex; align-items: center; justify-content: center;
+    width: 18px; height: 18px;
+    font-size: .9rem; line-height: 1;
+    flex-shrink: 0;
+}
+.prog-groep-titel {
+    flex: 1 1 auto; min-width: 0;
+    font-weight: 600; color: #1a3a5c;
+    font-size: .9rem;
+    text-overflow: ellipsis; overflow: hidden; white-space: nowrap;
+}
+.prog-groep-badge {
+    display: inline-block;
+    background: #eef3f9; color: #1a3a5c;
+    padding: 1px 7px; border-radius: 8px;
+    font-size: .72rem; font-weight: 600;
+    flex-shrink: 0;
+}
+.prog-groep.mijn .prog-groep-mijn-badge {
+    display: inline-flex;
+    align-items: center;
+    background: var(--oranje, #E8630A); color: #fff;
+    padding: 1px 7px; border-radius: 8px;
+    font-size: .72rem; font-weight: 700;
+    flex-shrink: 0;
+}
+.prog-groep-mijn-badge { display: none; }
+.prog-groep-body {
+    padding: 4px 6px 6px;
+    background: #fff;
+}
+.prog-groep.ingeklapt .prog-groep-body { display: none; }
+.prog-groep.ingeklapt .prog-groep-chev { transform: rotate(-90deg); }
 /* Dag-header bij meerdaags evenement: prominente scheiding tussen dagen */
 .prog-dag-header {
     background: linear-gradient(to right, #1a3a5c, #2E75B6);
@@ -2273,6 +2339,13 @@ const T = {
         prog_dag: 'Dag',
         prog_filter_mijn: '👥 Mijn rijders',
         prog_filter_te_rijden: '⏳ Nog te rijden',
+        prog_klap_alles_uit:  'Alles uit',
+        prog_klap_alles_in:   'Alles in',
+        prog_klap_mijn:       'Mijn rijders',
+        prog_klap_mijn_tooltip: 'Aantal van jouw rijders in deze groep',
+        prog_groep_status_klaar:  'Alle ritten in deze groep zijn verreden',
+        prog_groep_status_deels:  'Uitslagverwerking bezig — deels verreden',
+        prog_groep_status_geloot: 'Loting bekend voor alle ritten',
         coach_pw_titel: 'Coach-toegang',
         coach_pw_uitleg: 'De Coach-app is afgeschermd. Vraag het wachtwoord bij de wedstrijdorganisator of kijk op de Coach-poster.',
         coach_pw_ok: 'OK',
@@ -2513,6 +2586,13 @@ const T = {
         prog_dag: 'Day',
         prog_filter_mijn: '👥 My skaters',
         prog_filter_te_rijden: '⏳ Upcoming',
+        prog_klap_alles_uit:  'Collapse all',
+        prog_klap_alles_in:   'Expand all',
+        prog_klap_mijn:       'My skaters',
+        prog_klap_mijn_tooltip: 'Number of your skaters in this group',
+        prog_groep_status_klaar:  'All races in this group have been raced',
+        prog_groep_status_deels:  'Result processing ongoing — partially raced',
+        prog_groep_status_geloot: 'Draw complete for all races',
         coach_pw_titel: 'Coach access',
         coach_pw_uitleg: 'The Coach app is restricted. Ask the race organiser for the password or check the Coach poster.',
         coach_pw_ok: 'OK',
@@ -2753,6 +2833,13 @@ const T = {
         prog_dag: 'Tag',
         prog_filter_mijn: '👥 Meine Sportler',
         prog_filter_te_rijden: '⏳ Kommende',
+        prog_klap_alles_uit:  'Alle zu',
+        prog_klap_alles_in:   'Alle auf',
+        prog_klap_mijn:       'Meine Sportler',
+        prog_klap_mijn_tooltip: 'Anzahl deiner Sportler in dieser Gruppe',
+        prog_groep_status_klaar:  'Alle Rennen dieser Gruppe wurden gefahren',
+        prog_groep_status_deels:  'Ergebnisverarbeitung läuft — teilweise gefahren',
+        prog_groep_status_geloot: 'Auslosung für alle Rennen bekannt',
         coach_pw_titel: 'Coach-Zugang',
         coach_pw_uitleg: 'Die Coach-App ist geschützt. Frage den Wettkampf-Organisator nach dem Passwort oder schaue auf das Coach-Poster.',
         coach_pw_ok: 'OK',
@@ -2992,6 +3079,13 @@ const T = {
         prog_dag_alle: 'Tous',
         prog_dag: 'Jour',
         prog_filter_mijn: '👥 Mes coureurs',
+        prog_klap_alles_uit:  'Tout fermer',
+        prog_klap_alles_in:   'Tout ouvrir',
+        prog_klap_mijn:       'Mes coureurs',
+        prog_klap_mijn_tooltip: 'Nombre de tes coureurs dans ce groupe',
+        prog_groep_status_klaar:  'Toutes les courses de ce groupe sont terminées',
+        prog_groep_status_deels:  'Traitement des résultats en cours — partiel',
+        prog_groep_status_geloot: 'Tirage effectué pour toutes les courses',
         prog_filter_te_rijden: '⏳ À venir',
         coach_pw_titel: 'Accès Coach',
         coach_pw_uitleg: 'L\'application Coach est protégée. Demandez le mot de passe à l\'organisateur de la course ou consultez l\'affiche Coach.',
@@ -3200,6 +3294,55 @@ const chipsEl = $('coach-chips'), aantalEl = $('coach-aantal');
 const progEl = $('programma'), snrFb = $('snr-feedback');
 
 let coachLijst = []; // [{snr, license_key, full_name, category, club_full, sponsor}]
+
+// ── Programma-tab: inklap-state ──────────────────────────────────────────────
+// _progIngeklapt bevat de groep-keys die momenteel INGEKLAPT zijn (default:
+// alle bij eerste render). _progGroepAlleKeys = alle keys van de laatste
+// render, nodig voor "Alles in/uit". _progGroepenMetMijn = keys waar een
+// coach-rijder in zit ("Mijn ritten"-knop). _progEersteRender zorgt dat de
+// default-collapsed alleen bij de eerste render van deze wedstrijd geldt.
+const _progIngeklapt = new Set();
+let _progGroepAlleKeys = [];
+const _progGroepenMetMijn = new Set();
+let _progEersteRender = true;
+
+function klapGroep(hdrEl) {
+    const groep = hdrEl.closest('.prog-groep');
+    if (!groep) return;
+    const key = groep.dataset.groepKey;
+    const nuIngeklapt = groep.classList.toggle('ingeklapt');
+    if (nuIngeklapt) _progIngeklapt.add(key); else _progIngeklapt.delete(key);
+    // Individuele klik → geen preset-actie past meer, wis de highlight.
+    const balk = document.querySelector('.prog-klap-balk');
+    if (balk) {
+        balk.dataset.actief = '';
+        balk.querySelectorAll('.prog-klap-btn').forEach(b => b.classList.remove('actief'));
+    }
+}
+
+function klapProg(actie, btnEl) {
+    const prog = document.getElementById('programma');
+    if (!prog) return;
+    _progIngeklapt.clear();
+    if (actie === 'in') {
+        _progGroepAlleKeys.forEach(k => _progIngeklapt.add(k));
+    } else if (actie === 'mijn') {
+        _progGroepAlleKeys.forEach(k => {
+            if (!_progGroepenMetMijn.has(k)) _progIngeklapt.add(k);
+        });
+    }
+    // 'uit' → _progIngeklapt blijft leeg = alles zichtbaar
+    prog.querySelectorAll('.prog-groep').forEach(el => {
+        el.classList.toggle('ingeklapt', _progIngeklapt.has(el.dataset.groepKey));
+    });
+    // Actieve knop-highlight bijwerken.
+    const balk = (btnEl && btnEl.closest('.prog-klap-balk')) || document.querySelector('.prog-klap-balk');
+    if (balk) {
+        balk.dataset.actief = actie;
+        balk.querySelectorAll('.prog-klap-btn').forEach(b =>
+            b.classList.toggle('actief', b.dataset.actie === actie));
+    }
+}
 let programmaCache = null; // {ritten, blokken}
 let coachInfoCache = {}; // license_key → {entry_status, sancties:[]}
 let alleComps = []; // ruwe lijst uit /?action=competitions — gebruikt door filterComps()
@@ -3801,42 +3944,127 @@ function renderProgramma() {
         html += `</div>`;
     }
 
-    // Filter-pills: "Alleen mijn rijders" + "Alleen nog te rijden". Toggle
-    // gebeurt via data-attributes op #prog; CSS verbergt non-matchende rijen.
-    html += `<div class="prog-rit-filter">
-        <button type="button" class="prog-rit-btn" data-filter="mijn"
-                onclick="filterProgRit(this,'mijn')">${esc(t('prog_filter_mijn'))}</button>
-        <button type="button" class="prog-rit-btn" data-filter="te-rijden"
-                onclick="filterProgRit(this,'te-rijden')">${esc(t('prog_filter_te_rijden'))}</button>
+    // Drie inklap-knoppen: Alles uit / Alles in / Mijn rijders.
+    // Standaard-state = alles ingeklapt, dus "Alles in" is de actieve knop.
+    html += `<div class="prog-klap-balk" data-actief="in">
+        <button type="button" class="prog-klap-btn" data-actie="uit" onclick="klapProg('uit', this)">▼ ${esc(t('prog_klap_alles_uit'))}</button>
+        <button type="button" class="prog-klap-btn actief" data-actie="in" onclick="klapProg('in', this)">▶ ${esc(t('prog_klap_alles_in'))}</button>
+        <button type="button" class="prog-klap-btn" data-actie="mijn" onclick="klapProg('mijn', this)">👤 ${esc(t('prog_klap_mijn'))}</button>
     </div>`;
 
-    let vorigeCombi = null; // combi_group van het vorige item (of null)
+    // ── Renderloop met cat-groepering ──────────────────────────────────
+    // Consecutieve ritten met dezelfde (dc_naam + ronde_type + dag) worden
+    // in één inklapbare `.prog-groep` gestopt. Blokken (pauze/inrijden/…)
+    // en dc-wisselingen breken de groep. Combi-boxen zitten BINNEN een
+    // groep. Groep-key = "dcNaam|rondeType|dag".
+    let vorigeCombi = null;
     let vorigeDag   = null;
+    let vorigeGroepKey = null;  // sluit-open tussen consecutieve heat-clusters
+    // Live-tellers voor de huidige groep. Header wordt met markers gebouwd
+    // en post-render aangevuld met de accurate waardes (aantal mijn-rijders
+    // + status-icoon 🏁/◑/🚩 op basis van heat-progressie).
+    let huidigeGroepMijnCount = 0;
+    let huidigeGroepAantalHeats = 0;
+    let huidigeGroepMetRes = 0;      // heats met resultaten_count > 0
+    let huidigeGroepDefinitief = 0;  // heats met definitief == true
+    const groepHdrPlaceholders = []; // [{key, count, statusIcon}] voor post-fix
+
+    const sluitCombi = () => {
+        if (vorigeCombi !== null) { html += `</div></div>`; vorigeCombi = null; }
+    };
+    // Status-icoon voor de groep — spiegelt de heat-status-icoontjes.
+    // Returnt {icon, i18nKey} zodat de post-fix een correcte tooltip-key
+    // kan opzoeken (emoji's zijn geen geldige JS-identifiers voor object-
+    // keys, dus i18n gebruikt semantische namen: klaar/deels/geloot).
+    const bepaalStatus = () => {
+        if (huidigeGroepAantalHeats === 0) return { icon: '', i18nKey: '' };
+        if (huidigeGroepMetRes === huidigeGroepAantalHeats)  return { icon: '🏁', i18nKey: 'prog_groep_status_klaar' };
+        if (huidigeGroepMetRes > 0)                          return { icon: '◑', i18nKey: 'prog_groep_status_deels' };
+        if (huidigeGroepDefinitief === huidigeGroepAantalHeats) return { icon: '🚩', i18nKey: 'prog_groep_status_geloot' };
+        return { icon: '', i18nKey: '' };
+    };
+    const sluitGroep = () => {
+        sluitCombi();
+        if (vorigeGroepKey !== null) {
+            html += `</div></div>`; // sluit .prog-groep-body en .prog-groep
+            const st = bepaalStatus();
+            groepHdrPlaceholders.push({
+                key: vorigeGroepKey,
+                count: huidigeGroepMijnCount,
+                statusIcon: st.icon,
+                statusKey: st.i18nKey,
+            });
+            vorigeGroepKey = null;
+            huidigeGroepMijnCount = 0;
+            huidigeGroepAantalHeats = 0;
+            huidigeGroepMetRes = 0;
+            huidigeGroepDefinitief = 0;
+        }
+    };
+    const openGroep = (key, r, dag) => {
+        // Bij eerste render van deze wedstrijd: altijd ingeklapt (default).
+        // _progIngeklapt wordt pas post-render gevuld — dus bij render-tijd
+        // is de Set nog leeg en zou alles uitgeklapt lijken.
+        const ingeklapt = _progEersteRender || _progIngeklapt.has(key);
+        const rondeLbl  = r.ronde_type && BADGE[r.ronde_type]
+            ? `<span class="badge ${BADGE[r.ronde_type]}" style="margin-right:6px">${getRondeLabel(r.ronde_type)}</span>`
+            : '';
+        // းMarkers voor post-render: mijn-badge + status-icoon met accurate waardes.
+        const idx = groepHdrPlaceholders.length;
+        const iconMarker = `[[STATUS-ICON-${idx}]]`;
+        const mijnMarker = `[[MIJN-BADGE-${idx}]]`;
+        html += `<div class="prog-groep${ingeklapt ? ' ingeklapt' : ''}" data-groep-key="${esc(key)}" data-dag-nr="${dag}">
+            <div class="prog-groep-hdr" onclick="klapGroep(this)">
+                <span class="prog-groep-chev">▼</span>
+                <span class="prog-groep-status">${iconMarker}</span>
+                <span class="prog-groep-titel">${rondeLbl}${esc(r.dc_naam ?? '')}</span>
+                ${mijnMarker}
+            </div>
+            <div class="prog-groep-body">`;
+        vorigeGroepKey = key;
+        huidigeGroepMijnCount = 0;
+        huidigeGroepAantalHeats = 0;
+        huidigeGroepMetRes = 0;
+        huidigeGroepDefinitief = 0;
+    };
+
     allesGesorteerd.forEach((item, idx) => {
         const dag = dagPerItem[idx];
-        // Dag-header bij dag-wisseling (multi-day). Sluit combi-box eerst.
+        // Dag-header (multi-day): sluit alles, dan header.
         if (isMultiDag && dag !== vorigeDag) {
-            if (vorigeCombi !== null) { html += `</div></div>`; vorigeCombi = null; }
+            sluitGroep();
             const info = dagInfoPerNr.get(dag);
-            const lbl = info?.datumLbl
-                ? `Dag ${dag} — ${info.datumLbl}`
-                : `Dag ${dag}`;
+            const lbl = info?.datumLbl ? `Dag ${dag} — ${info.datumLbl}` : `Dag ${dag}`;
             html += `<div class="prog-dag-header" data-dag-nr="${dag}">${esc(lbl)}</div>`;
             vorigeDag = dag;
         }
+        // Blok = altijd los tussen groepen, sluit lopende groep.
         if (item.type === 'blok') {
-            if (vorigeCombi !== null) { html += `</div></div>`; vorigeCombi = null; }
-            // Wrap blokHtml uitvoer in een dag-nr-aware wrapper via post-fix.
-            // blokHtml() returnt al een div met class — we voegen data-dag-nr
-            // toe door de eerste <div> te patchen. Eenvoudig: vervang eerste '>'.
+            sluitGroep();
             const raw = blokHtml(item.data);
             html += raw.replace(/^<div /, `<div data-dag-nr="${dag}" `);
             return;
         }
+        // Rit: bepaal groep-key.
         const r = item.data;
+        const grpKey = `${r.dc_naam || '?'}|${r.ronde_type || '?'}|${dag}`;
+        if (grpKey !== vorigeGroepKey) {
+            sluitGroep();
+            openGroep(grpKey, r, dag);
+        }
+        // Coach-rijders + status-tellers voor de groep-badge en het icoon.
+        const heatRijders = Array.isArray(r.heat_rijders) ? r.heat_rijders
+                          : (r.heat_snrs || []).map(n => ({snr: parseInt(n), lic: null}));
+        const mijnInHeat = heatRijders.filter(hr => hr.lic ? mijnLics.has(hr.lic) : mijnSnrs.has(hr.snr));
+        huidigeGroepMijnCount += mijnInHeat.length;
+        huidigeGroepAantalHeats += 1;
+        if ((r.resultaten_count ?? 0) > 0) huidigeGroepMetRes += 1;
+        if (r.definitief) huidigeGroepDefinitief += 1;
+
+        // Combi-box: consecutieve heats met dezelfde combi_group.
         const combi = r.combi_group ? parseInt(r.combi_group) : null;
         if (combi !== vorigeCombi) {
-            if (vorigeCombi !== null) html += `</div></div>`; // sluit vorige combi-box
+            if (vorigeCombi !== null) html += `</div></div>`;
             if (combi !== null) {
                 html += `<div class="prog-combi-box" data-dag-nr="${dag}">
                     <div class="prog-combi-kop">${t('prog_combi_kop')}</div>
@@ -3847,8 +4075,42 @@ function renderProgramma() {
         const ritRaw = ritHtml(r);
         html += ritRaw.replace(/^<div /, `<div data-dag-nr="${dag}" `);
     });
-    if (vorigeCombi !== null) html += `</div></div>`; // sluit laatste open combi-box
+    sluitGroep();
+
+    // Post-fix: markers vervangen door status-icoon + mijn-badge met de
+    // accurate waardes die we tijdens de loop hebben opgebouwd. Ook de
+    // "mijn"-class op de groep-div bepalen op basis van p.count > 0.
+    groepHdrPlaceholders.forEach((p, i) => {
+        const iconMarker = `[[STATUS-ICON-${i}]]`;
+        const mijnMarker = `[[MIJN-BADGE-${i}]]`;
+        const iconHtml = p.statusIcon
+            ? `<span title="${esc(t(p.statusKey))}">${p.statusIcon}</span>`
+            : '';
+        const mijnHtml = p.count > 0
+            ? `<span class="prog-groep-mijn-badge" title="${esc(t('prog_klap_mijn_tooltip'))}">${p.count}</span>`
+            : '';
+        html = html.replace(iconMarker, iconHtml).replace(mijnMarker, mijnHtml);
+    });
     progEl.innerHTML = html;
+    // Groepen met mijn-rijders visueel markeren (oranje strip links).
+    groepHdrPlaceholders.forEach(p => {
+        if (p.count === 0) return;
+        const el = progEl.querySelector(`.prog-groep[data-groep-key="${CSS.escape(p.key)}"]`);
+        if (el) el.classList.add('mijn');
+        _progGroepenMetMijn.add(p.key);
+    });
+    // Bewaar alle groep-keys — bepaalt scope voor "Alles in/uit"-knoppen.
+    _progGroepAlleKeys = groepHdrPlaceholders.map(p => p.key);
+    // Bij eerste render: iedereen ingeklapt (default coach-UX).
+    if (_progEersteRender) {
+        _progGroepAlleKeys.forEach(k => _progIngeklapt.add(k));
+        // Reflect DOM-state met _progIngeklapt.
+        _progGroepAlleKeys.forEach(k => {
+            const el = progEl.querySelector(`.prog-groep[data-groep-key="${CSS.escape(k)}"]`);
+            if (el) el.classList.add('ingeklapt');
+        });
+        _progEersteRender = false;
+    }
 }
 
 // Multi-day filter (Alle / Dag 1 / Dag 2 / …): toggle .verborgen op items
@@ -4301,6 +4563,57 @@ function renderKlassementTabel(data) {
     return `<table class="uitsl-tabel"><thead><tr>${hdr}</tr></thead><tbody>${rows}</tbody></table>`;
 }
 
+// Sorteer heat-rijders — startvolgorde vóór de rit (loting), finish erna.
+// Bewust versimpeld voor de rit-modal: alle non-finishers (DNF/DNS/DQ-*) worden
+// gelijk behandeld, onderaan op startnummer. Rit-rang (Fin-kolom) is al leeg
+// voor niet-finishers. De KNSB-rang met ronde-context zit in de Uitslag-tab.
+// Zie public/index.php voor volledige rationale.
+function _sorteerHeatRijders(rijders) {
+    if (!Array.isArray(rijders) || rijders.length < 2) return rijders;
+    const heeftFinishData = rijders.some(r =>
+        r.finishpositie != null || r.tijd_ms != null || (r.sanctie || '').trim() !== ''
+    );
+    if (!heeftFinishData) return rijders;
+    const _isFinisher = (r) => {
+        const s = String(r.sanctie || '').trim().toUpperCase();
+        const heeft = code => s.split(/[,\s]+/).some(x => x === code);
+        if (heeft('DNS') || heeft('DNF')
+            || heeft('DQ-TF') || heeft('DQ-SF') || heeft('DQ-DF')) return false;
+        return r.finishpositie != null || r.tijd_ms != null;
+    };
+    // Non-finishers oplopende ernst: DNF < DQ-TF < DNS < DQ-SF < DQ-DF.
+    // DNS is bewust niet-starten (ernstiger dan pech-DNF); DQ-DF is de
+    // zwaarste disciplinaire sanctie. Zie public/index.php voor rationale.
+    const _ernst = (r) => {
+        const s = String(r.sanctie || '').toUpperCase();
+        const heeft = code => s.split(/[,\s]+/).some(x => x === code);
+        if (heeft('DQ-DF')) return 5;
+        if (heeft('DQ-SF')) return 4;
+        if (heeft('DNS'))   return 3;
+        if (heeft('DQ-TF')) return 2;
+        if (heeft('DNF'))   return 1;
+        return 0;
+    };
+    return [...rijders].sort((a, b) => {
+        const fa = _isFinisher(a); const fb = _isFinisher(b);
+        if (fa !== fb) return fa ? -1 : 1;
+        if (fa) {
+            const pa = a.finishpositie ?? Infinity;
+            const pb = b.finishpositie ?? Infinity;
+            if (pa !== pb) return pa - pb;
+            const ta = a.tijd_ms ?? Infinity;
+            const tb = b.tijd_ms ?? Infinity;
+            if (ta !== tb) return ta - tb;
+            return (a.startpositie ?? 999) - (b.startpositie ?? 999);
+        }
+        const ea = _ernst(a), eb = _ernst(b);
+        if (ea !== eb) return ea - eb;
+        const sa = parseInt(a.snr) || 99999;
+        const sb = parseInt(b.snr) || 99999;
+        return sa - sb;
+    });
+}
+
 async function toonRitDetail(el) {
     const ritNaam = el.dataset.ritNaam;
     const dcNaam  = el.dataset.dcNaam;
@@ -4330,6 +4643,10 @@ async function toonRitDetail(el) {
         // met zelfde nummer worden anders beide gehighlight.
         const mijnLics = new Set(coachLijst.map(p => p.license_key));
         const mijnSnrs = new Set(coachLijst.map(p => parseInt(p.snr)));
+        // Sorteren: startvolgorde vóór de rit (loting), finishvolgorde erna.
+        // Detect op "iemand heeft finishpositie/tijd/sanctie". Sancties:
+        // DQ-TF/SF na finishers, DNF/DQ-DF daaronder, DNS onderaan.
+        heat.rijders = _sorteerHeatRijders(heat.rijders);
         const heeftRnd = heat.rijders.some(r => r.rondes != null);
         const heeftPK  = heat.rijders.some(r => r.pk_punten != null);
         const rijen = heat.rijders.map(r => {
@@ -4348,10 +4665,18 @@ async function toonRitDetail(el) {
             const auditIcon = heeftAudit
                 ? `<span class="col-tijd-audit" title="${esc(t('heat_bruto_gemeten'))} ${esc(msTijd(r.bruto_tijd_ms))}">${r.is_photofinish == 1 ? '📷' : '✋'}</span>`
                 : '';
+            // Fin-kolom leeg voor non-finishers, ook als de operator een
+            // finishpositie heeft ingevuld — sanctie wint (consistent met
+            // _sorteerHeatRijders en public/index.php).
+            const _sanctieCodes = String(r.sanctie || '').toUpperCase().split(/[,\s]+/);
+            const isNonFinisher = ['DNS','DNF','DQ-TF','DQ-SF','DQ-DF']
+                .some(c => _sanctieCodes.includes(c));
+            const finTxt = (isNonFinisher || r.finishpositie == null)
+                ? '' : r.finishpositie;
             return `<tr class="${isMij ? 'mijn' : ''}">
                 <td class="col-pos">${esc(r.startpositie)}</td>
                 <td class="col-snr">${esc(r.snr)}</td>
-                <td class="col-fin">${esc(r.finishpositie ?? '')}</td>
+                <td class="col-fin">${esc(finTxt)}</td>
                 <td>${esc(r.full_name)}${sanctie}</td>
                 ${heeftRnd ? `<td class="col-rnd">${r.rondes ?? ''}</td>` : ''}
                 ${heeftPK  ? `<td class="col-pk">${r.pk_punten != null ? parseFloat(r.pk_punten) : ''}</td>` : ''}
@@ -4704,6 +5029,14 @@ async function opCompetitionChange() {
     zetStap2Enabled(true);
     secProg.style.display = 'block';
     loadCoachLijst();
+    // Reset programma-inklap-state bij wisselen van wedstrijd zodat de
+    // default-collapsed logica opnieuw geldt (anders zou je bij switch
+    // een leeggemaakte "alles open" krijgen omdat _progIngeklapt niet meer
+    // matcht met de nieuwe groep-keys).
+    _progIngeklapt.clear();
+    _progGroepenMetMijn.clear();
+    _progGroepAlleKeys = [];
+    _progEersteRender = true;
     coachInfoCache = {};
     uitslagenCats = [];
     $('u-sel-cat').innerHTML = `<option value="">${t('uitsl_opt_kies_cat')}</option>`;
