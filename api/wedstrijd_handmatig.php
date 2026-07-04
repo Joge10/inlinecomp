@@ -306,8 +306,17 @@ if ($action === 'detail') {
 //
 // Filter: alleen bron='handmatig' (KNSB-imports zitten al in de KNSB-feed-
 // proxy, geen dubbeling). Scope: alleen orgs waar deze user rechten op heeft.
+// Datum-cutoff: standaard alleen wedstrijden vanaf 7 dagen geleden — matcht
+// de KNSB-feed-proxy, zodat afgelopen wedstrijden vanzelf uit de importlijst
+// verdwijnen. Met ?van=YYYY-MM-DD kan de operator een eerdere cutoff kiezen.
 if ($action === 'lijst') {
     $scope = gebruikerOrgScope($pdo, $_authUser);
+
+    $eenWeekGeleden = date('Y-m-d', strtotime('-7 days'));
+    $vanParam = trim($_GET['van'] ?? '');
+    if ($vanParam && preg_match('/^\d{4}-\d{2}-\d{2}$/', $vanParam) && $vanParam < $eenWeekGeleden) {
+        $eenWeekGeleden = $vanParam;
+    }
 
     $sql = "
         SELECT c.id, c.name, c.starts, c.ends, c.location, c.venue_name, c.venue_city,
@@ -316,15 +325,16 @@ if ($action === 'lijst') {
         FROM competitions c
         LEFT JOIN organisaties o ON o.id = c.organisatie_id
         WHERE c.bron = 'handmatig'
+          AND DATE(c.starts) >= ?
     ";
-    $params = [];
+    $params = [$eenWeekGeleden];
     if ($scope !== null) {
         if (empty($scope)) {
             echo json_encode([]); exit;
         }
         $ph = implode(',', array_fill(0, count($scope), '?'));
         $sql   .= " AND c.organisatie_id IN ($ph)";
-        $params = $scope;
+        $params = array_merge($params, $scope);
     }
     $sql .= " ORDER BY c.starts ASC";
 

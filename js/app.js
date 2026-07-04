@@ -512,9 +512,13 @@ async function laadWedstrijden() {
         // in één lijst zodat operator beide vanuit hetzelfde scherm kan
         // selecteren. Handmatige wedstrijden zijn al server-side scope-gefilterd
         // (via wedstrijd_handmatig.php?action=lijst).
+        // ?van param óók aan handmatig-endpoint meegeven zodat het "Van"-filter
+        // ook oude handmatige wedstrijden terughaalt. Zonder ?van hanteert de
+        // backend dezelfde -7 dagen cutoff als de KNSB-feed-proxy.
+        const vanSepHand = vanDatum ? `&van=${encodeURIComponent(vanDatum)}` : '';
         const [resKnsb, resHand] = await Promise.all([
             fetch(BASE + 'api/competitions.php' + vanParam),
-            fetch(BASE + 'api/wedstrijd_handmatig.php?action=lijst'),
+            fetch(BASE + 'api/wedstrijd_handmatig.php?action=lijst' + vanSepHand),
         ]);
         if (!resKnsb.ok) throw new Error('KNSB-feed HTTP ' + resKnsb.status);
         const dataKnsb = await resKnsb.json();
