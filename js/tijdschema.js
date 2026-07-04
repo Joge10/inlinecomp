@@ -556,6 +556,13 @@ function renderAfstandPanel(afstand, cfg, catConfigMap) {
                         Niet-gekwalificeerden rijden een runner-up race
                     </label>
                 </div>
+                <div class="ts-gedeeld-rij">
+                    <span class="ts-gedeeld-lbl">Kleine finale</span>
+                    <label class="ts-gedeeld-inputs">
+                        <input type="checkbox" name="heeft_kleine_finale" ${Number(cfg?.heeft_kleine_finale) ? 'checked' : ''}>
+                        Afgevallen rijders voor de finale rijden kleine finale (B-finale)
+                    </label>
+                </div>
                 <div class="ts-gedeeld-rij ts-ru-max-rij" ${hRAny ? '' : 'style="display:none"'}>
                     <span class="ts-gedeeld-lbl">Max. per heat</span>
                     <span class="ts-gedeeld-inputs">
@@ -734,9 +741,10 @@ function renderAfstandPanel(afstand, cfg, catConfigMap) {
             </td>
             <td class="ts-td-c">
                 <select name="finale_seeding" class="ts-sel-sm ts-sel-finale-seeding"
-                        title="Standaard (slangenpatroon): gelijke sterkte per heat&#10;Tijdkoppeling: langzaamsten in heat 1, snelsten in laatste heat — ZOWEL in series ALS finale (= 200m DTT-format)">
+                        title="Standaard (slangenpatroon): gelijke sterkte per heat&#10;Tijdkoppeling: langzaamsten in heat 1, snelsten in laatste heat — ZOWEL in series ALS finale (= 200m DTT-format)&#10;Omgekeerd (slangenpatroon): snelste tegen langzaamste rijder in de laatste heat, geldt voor alle rondes (100m sprint 2-lane)">
                     <option value="slang" ${(cfg?.finale_seeding ?? 'slang') === 'slang' ? 'selected' : ''}>Standaard (snake)</option>
                     <option value="tijdkoppeling" ${cfg?.finale_seeding === 'tijdkoppeling' ? 'selected' : ''}>Tijdkoppeling (DTT)</option>
+                    <option value="reverse_slang" ${cfg?.finale_seeding === 'reverse_slang' ? 'selected' : ''}>Omgekeerd (snake)</option>
                 </select>
             </td>`;
         } else {
@@ -998,7 +1006,26 @@ function renderAfstandCalc(afstand, cfg, catConfigMap) {
                 }
                 stappen.push(`${finR} → ${parts.join(' + ')}`);
             } else {
-                stappen.push(`A-finale: ${finR}`);
+                // Internationaal-nieuw: A krijgt alle doorstromers uit vorige
+                // ronde. Bij heeft_kleine_finale (per-afstand): rest van de
+                // voorgaande ronde (= input − output) rijdt de kleine finale.
+                // Number() forceert conversie — MySQL levert tinyint als string.
+                const heeftKF = !!Number(cfg?.heeft_kleine_finale);
+                // Input van de laatste actieve ronde vóór de finale.
+                let totaalInVorige = finR;
+                if (hHf) {
+                    totaalInVorige = hK ? kDoor : (hH ? qDoor : cat.n);
+                } else if (hK) {
+                    totaalInVorige = hH ? qDoor : cat.n;
+                } else if (hH) {
+                    totaalInVorige = cat.n;
+                }
+                const kfR = heeftKF ? Math.max(0, totaalInVorige - finR) : 0;
+                if (kfR > 0) {
+                    stappen.push(`A-finale: ${finR} + kleine finale: ${kfR}`);
+                } else {
+                    stappen.push(`A-finale: ${finR}`);
+                }
             }
         }
 
@@ -1314,15 +1341,42 @@ function renderRittenLijst(ritten, blokken) {
     };
 
     // ── PASS 1: cascade-rondes (heats/KF/HF) + DIRECT A-finale ─────────
-    // Hier is totaal_actueel = aantal entries in de DC.
+    // Verdeel-input volgt de doorstroom-keten uit cat_config:
+    //   heats        : cat.n (alle entries stromen in)
+    //   kwartfinale  : heats_q (indien series) of cat.n
+    //   halve_finale : kwart_door / heats_q / cat.n (afhankelijk van keten)
+    //   direct-A     : cat.n
+    // Zonder deze correctie zou een halve finale met bv 4 doorstromers
+    // over 2 heats verdeeld worden als 7/2 = 4+3 i.p.v. 4/2 = 2+2.
+    const _catCfgMap = new Map();
+    for (const cc of (huidigTijdschema?.cat_configs ?? [])) {
+        _catCfgMap.set(cc.dc_id + '|' + (cc.distance_id ?? ''), cc);
+    }
+    const _distanceIdVanRit = (r) => r.distance_id ?? '';
     for (const [k, rs] of _ritsPerKey) {
         const dc_id      = rs[0].dc_id;
         const ronde_type = rs[0].ronde_type;
         const isCascadeRonde = ['heats','kwartfinale','halve_finale'].includes(ronde_type);
         const isDirectA      = ronde_type === 'finale_a' && isDirectFinaleDc(dc_id);
         if (!isCascadeRonde && !isDirectA) continue;
-        const totaal = actueelPerDc.get(dc_id);
-        if (totaal == null) continue;
+        const catN = actueelPerDc.get(dc_id);
+        if (catN == null) continue;
+        const cc = _catCfgMap.get(dc_id + '|' + _distanceIdVanRit(rs[0]));
+        let totaal;
+        if (ronde_type === 'kwartfinale') {
+            totaal = cc && Number(cc.heeft_heats) ? Math.max(0, parseInt(cc.heats_q) || 0) : catN;
+        } else if (ronde_type === 'halve_finale') {
+            if (cc && Number(cc.heeft_kwartfinale)) {
+                totaal = Math.max(0, parseInt(cc.kwart_door) || 0);
+            } else if (cc && Number(cc.heeft_heats)) {
+                totaal = Math.max(0, parseInt(cc.heats_q) || 0);
+            } else {
+                totaal = catN;
+            }
+        } else {
+            // heats of direct-A
+            totaal = catN;
+        }
         _verdeelOpslaan(rs, totaal, k);
     }
 
@@ -2272,7 +2326,7 @@ function bindTsEvents(afstandGroepen) {
         });
     });
 
-    const calcInputs = ['heats_q','heats_q_heat','kwart_heats','kwart_door','kwart_q_heat','half_heats','half_door','half_q_heat','q_direct','q_tijd','finale_heat_grootte','finale_b_grootte','laatste_b_grootste','heeft_runner_up','heats_aantal','runner_up_max','runner_up_min','finale_a_grootte','finale_b_heats'];
+    const calcInputs = ['heats_q','heats_q_heat','kwart_heats','kwart_door','kwart_q_heat','half_heats','half_door','half_q_heat','q_direct','q_tijd','finale_heat_grootte','finale_b_grootte','laatste_b_grootste','heeft_runner_up','heeft_kleine_finale','heats_aantal','runner_up_max','runner_up_min','finale_a_grootte','finale_b_heats'];
     calcInputs.forEach(name => {
         container.querySelectorAll(`[name="${name}"]`).forEach(inp => {
             inp.addEventListener('input',  () => updateCalc(inp.closest('.ts-panel-form'), afstandGroepen));
@@ -2355,6 +2409,7 @@ function bindTsEvents(afstandGroepen) {
                     finale_seeding:      form.querySelector('[name="finale_seeding"]')?.value ?? 'slang',
                     // race_type niet meer meesturen — afgeleid uit distances.race_type
                     heeft_runner_up:     heeftRU,
+                    heeft_kleine_finale: form.querySelector('[name="heeft_kleine_finale"]')?.checked ? 1 : 0,
                     runner_up_max:       ruMax,
                     runner_up_min:       ruMin,
                     cat_configs:         catConfigs,
@@ -3098,6 +3153,7 @@ function updateCalc(form, afstandGroepen) {
         finale_b_grootte:    num('finale_b_grootte')    || 6,
         laatste_b_grootste:  form.querySelector('[name="laatste_b_grootste"]')?.checked ?? true,
         heeft_runner_up:     form.querySelector('[name="heeft_runner_up"]')?.checked ?? false,
+        heeft_kleine_finale: form.querySelector('[name="heeft_kleine_finale"]')?.checked ? 1 : 0,
         runner_up_max:       num('runner_up_max'),
         runner_up_min:       num('runner_up_min'),
     };

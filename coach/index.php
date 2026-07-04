@@ -787,6 +787,10 @@ if ($action === 'uitslagen') {
     $dcId   = trim($_GET['dc_id'] ?? '');
     $type   = trim($_GET['type'] ?? 'afstand');
     $distId = trim($_GET['distance_id'] ?? '');
+    // Optionele categorie-filter voor combi-DC's (bv 'DSA+HSA'): zonder
+    // filter zou een cat-select 'HSA' óók DSA-rijders tonen omdat beide in
+    // dezelfde DC zitten. Frontend geeft de gekozen cat mee.
+    $catFilter = trim($_GET['categorie'] ?? '');
     if (!$compId || !$dcId) { echo json_encode(['error' => 'competition_id en dc_id verplicht']); exit; }
     try {
         if ($type === 'klassement') {
@@ -801,6 +805,7 @@ if ($action === 'uitslagen') {
                 echo json_encode(['rijders' => [], 'afstanden' => [], 'niet_gepubliceerd' => true], JSON_UNESCAPED_UNICODE);
                 exit;
             }
+            $catWhere = $catFilter !== '' ? ' WHERE p.category = ?' : '';
             $stmt = $pdo->prepare("
                 SELECT t.rang, t.punten_totaal, t.dc_naam, t.punten_detail,
                        t.person_license AS lic,
@@ -815,10 +820,12 @@ if ($action === 'uitslagen') {
                 ) latest ON latest.max_id = t.id
                 JOIN persons p ON p.license_key = t.person_license
                 LEFT JOIN competition_startnummers cs ON cs.person_license = t.person_license AND cs.competition_id = ?
-                -- Uitgesloten rijders (rang IS NULL) sorteren naar het eind.
+                $catWhere
                 ORDER BY CASE WHEN t.rang IS NULL THEN 1 ELSE 0 END, t.rang, t.punten_totaal
             ");
-            $stmt->execute([$compId, $dcId, $compId]);
+            $params = [$compId, $dcId, $compId];
+            if ($catFilter !== '') $params[] = $catFilter;
+            $stmt->execute($params);
             $rijders = $stmt->fetchAll(PDO::FETCH_ASSOC);
             $afstanden = [];
             foreach ($rijders as &$r) {
@@ -833,6 +840,7 @@ if ($action === 'uitslagen') {
             echo json_encode(['rijders' => $rijders, 'afstanden' => $afstanden], JSON_UNESCAPED_UNICODE);
         } else {
             if (!$distId) { echo json_encode(['error' => 'distance_id verplicht']); exit; }
+            $catWhere = $catFilter !== '' ? ' WHERE p.category = ?' : '';
             $stmt = $pdo->prepare("
                 SELECT t.rang, t.finale_naam, t.tijd_ms, t.sanctie, t.distance_naam,
                        t.person_license AS lic,
@@ -858,9 +866,12 @@ if ($action === 'uitslagen') {
                       AND (res.rondes IS NOT NULL OR res.punten IS NOT NULL)
                     ORDER BY res.id DESC
                 ) res_agg ON res_agg.person_license = t.person_license
+                $catWhere
                 ORDER BY CASE WHEN t.rang IS NULL THEN 1 ELSE 0 END, t.rang
             ");
-            $stmt->execute([$compId, $dcId, $distId, $compId, $compId, $dcId, $distId]);
+            $params = [$compId, $dcId, $distId, $compId, $compId, $dcId, $distId];
+            if ($catFilter !== '') $params[] = $catFilter;
+            $stmt->execute($params);
             $rijders = $stmt->fetchAll(PDO::FETCH_ASSOC);
             $seen = []; $unique = [];
             foreach ($rijders as $r) {
@@ -874,6 +885,484 @@ if ($action === 'uitslagen') {
                 'rijders' => $unique, 'heeft_rondes' => $heeftRnd, 'heeft_pk_punten' => $heeftPK,
             ], JSON_UNESCAPED_UNICODE);
         }
+    } catch (Throwable $e) {
+        http_response_code(500);
+        echo json_encode(['error' => $e->getMessage()]);
+    }
+    exit;
+}
+
+// ── API: categorieën + afstanden voor Rondes- én Uitslagen-tab ──────────────
+// Anders dan /categorieen (die op DC-naam werkt): hier per persoons-categorie
+// (DP4, DP3, DKA, …) een lijst van afstanden waar rijders in die categorie
+// aan meedoen. Elke afstand krijgt de bijbehorende dc_id mee. Daarnaast per
+// categorie de klassementen (unieke DC's met gepubliceerd klassement) — de
+// Uitslagen-tab toont die als extra optie(s) in de afstand-dropdown.
+// Bron: heat_entries → persons.category, want dat is de authentieke categorie
+// per rijder (DC kan meerdere categorieën samen bevatten).
+if ($action === 'rondes_cats') {
+    header('Content-Type: application/json; charset=utf-8');
+    header('Cache-Control: no-store, must-revalidate');
+    $compId = trim($_GET['competition_id'] ?? '');
+    if (!$compId) { echo json_encode(['error' => 'competition_id verplicht']); exit; }
+    try {
+        // Alle (categorie, afstand, dc) combinaties die daadwerkelijk in
+        // heats zitten. COALESCE tussen h.distance_id en tsr.distance_id —
+        // dezelfde regel als in ronde_uitslagen (heats kunnen soms de
+        // distance uit tijdschema_ritten overnemen). dc.name meenemen voor
+        // klassement-labeling bij gecombineerde DC's.
+        $stmt = $pdo->prepare("
+            SELECT DISTINCT
+                   p.category           AS categorie,
+                   d.id                 AS distance_id,
+                   d.name               AS distance_naam,
+                   d.value_meters,
+                   d.number,
+                   d.distance_combination_id AS dc_id,
+                   dc.name              AS dc_naam
+            FROM heats h
+            JOIN heat_entries he ON he.heat_id = h.id
+            JOIN persons p       ON p.license_key = he.person_license
+            LEFT JOIN tijdschema_ritten tsr ON tsr.id = h.tijdschema_rit_id
+            -- distances heeft compound PK (distance_combination_id, id).
+            -- Dezelfde distance_id komt bewust in meerdere DCs voor voor
+            -- cross-DC aggregatie. JOIN moet daarom ook op DC, anders
+            -- claimt bv HSA per ongeluk de DP4-versie van de distance.
+            JOIN distances d  ON d.id  = COALESCE(h.distance_id, tsr.distance_id)
+                             AND d.distance_combination_id = h.distance_combination_id
+            JOIN distance_combinations dc ON dc.id = d.distance_combination_id
+            WHERE h.competition_id = ?
+              AND p.category IS NOT NULL AND p.category <> ''
+            ORDER BY p.category, d.number, d.name
+        ");
+        $stmt->execute([$compId]);
+        $rows = $stmt->fetchAll(PDO::FETCH_ASSOC);
+
+        // Gepubliceerde klassement-DC's — voor "🏆 Klassement"-optie in
+        // Uitslagen-afstand-dropdown.
+        $klasStmt = $pdo->prepare("
+            SELECT DISTINCT dc_id
+            FROM klassement_config
+            WHERE competition_id = ? AND gepubliceerd_at IS NOT NULL
+        ");
+        $klasStmt->execute([$compId]);
+        $klasDcIds = $klasStmt->fetchAll(PDO::FETCH_COLUMN);
+        $klasSet = array_flip($klasDcIds);
+
+        // Sorteersleutel: jongste → oudste categorie, dames vóór heren per
+        // leeftijd. Dezelfde volgorde als de jury-tabs (_juryCatSortKey), zodat
+        // internationale rijders die "DJB = Youth, DJA = Junior" vertalen ook
+        // logisch door de dropdown gaan zonder KNSB-codes te kennen.
+        $catSortKey = function(string $cat): int {
+            $cat = strtoupper(trim($cat));
+            // Masters: HM40, DM45, M50, … — leeftijd is de sleutel.
+            if (preg_match('/^([HD]?)M(\d{2,3})$/', $cat, $m)) {
+                $genderRank = match($m[1]) { 'D' => 0, 'H' => 1, default => 1 };
+                $leeftijd = (int)$m[2];
+                if ($leeftijd >= 40) {
+                    $ageRank = 10 + intdiv($leeftijd - 40, 5);
+                    return $ageRank * 10 + $genderRank;
+                }
+            }
+            $genderRank = match(substr($cat, 0, 1)) { 'D' => 0, 'H' => 1, default => 9 };
+            $sub = substr($cat, 1);
+            $ageRank = match($sub) {
+                'P4' => 0, 'P3' => 1, 'P2' => 2, 'P1' => 3,
+                'KA' => 4, 'JB' => 5, 'JA' => 6,
+                'SJ' => 7, 'SA' => 8, 'SB' => 9,
+                default => 99,
+            };
+            return $ageRank * 10 + $genderRank;
+        };
+
+        // Eerst per DC de cats verzamelen (welke DC bevat welke cats?).
+        $dcCats = [];        // dc_id => [cat, ...]
+        $dcNaam = [];        // dc_id => dc_naam
+        $dcAfstanden = [];   // dc_id => [afstand, ...]
+        foreach ($rows as $r) {
+            $dcId = $r['dc_id'];
+            $dcNaam[$dcId] = $r['dc_naam'];
+            if (!isset($dcCats[$dcId])) $dcCats[$dcId] = [];
+            if (!in_array($r['categorie'], $dcCats[$dcId], true)) $dcCats[$dcId][] = $r['categorie'];
+            if (!isset($dcAfstanden[$dcId])) $dcAfstanden[$dcId] = [];
+            $al = false;
+            foreach ($dcAfstanden[$dcId] as $a) {
+                if ($a['distance_id'] === $r['distance_id']) { $al = true; break; }
+            }
+            if (!$al) {
+                $dcAfstanden[$dcId][] = [
+                    'distance_id'   => $r['distance_id'],
+                    'distance_naam' => $r['distance_naam'],
+                ];
+            }
+        }
+        // Groepeer per cat-signatuur (bv "HJA+HSA"). Zo worden meerdere
+        // DC's met dezelfde cat-samenstelling ÉÉN dropdown-optie. Afstanden
+        // uit alle DC's worden samengevoegd, elk met eigen dc_id voor de fetch.
+        $perSig = [];
+        foreach ($dcCats as $dcId => $cats) {
+            $sorted = $cats;
+            usort($sorted, fn($a, $b) => $catSortKey($a) - $catSortKey($b));
+            $sig = implode('+', $sorted);
+            if (!isset($perSig[$sig])) {
+                $perSig[$sig] = [
+                    'sig' => $sig,
+                    'label' => implode(' + ', $sorted),
+                    'categorieen' => $sorted,
+                    'afstanden' => [],
+                    'klassementen' => [],
+                    '_sortkey' => $catSortKey($sorted[0] ?? ''),
+                ];
+            }
+            // Afstanden merge — elke afstand krijgt haar bijbehorende dc_id mee.
+            foreach ($dcAfstanden[$dcId] as $a) {
+                $perSig[$sig]['afstanden'][] = [
+                    'distance_id'   => $a['distance_id'],
+                    'distance_naam' => $a['distance_naam'],
+                    'dc_id'         => $dcId,
+                ];
+            }
+            // Klassement per DC (elke DC heeft z'n eigen klassement).
+            if (isset($klasSet[$dcId])) {
+                $perSig[$sig]['klassementen'][] = [
+                    'dc_id'   => $dcId,
+                    'dc_naam' => $dcNaam[$dcId],
+                ];
+            }
+        }
+        // Sorteer afstanden binnen een signatuur op distance-naam voor
+        // consistente volgorde (500m, 1000m, ...).
+        foreach ($perSig as &$sig) {
+            usort($sig['afstanden'], fn($a, $b) => strnatcmp($a['distance_naam'] ?? '', $b['distance_naam'] ?? ''));
+        }
+        unset($sig);
+        $out = array_values($perSig);
+        usort($out, fn($a, $b) => $a['_sortkey'] - $b['_sortkey']);
+        foreach ($out as &$sig) unset($sig['_sortkey']);
+        unset($sig);
+        echo json_encode($out, JSON_UNESCAPED_UNICODE);
+    } catch (Throwable $e) {
+        http_response_code(500);
+        echo json_encode(['error' => $e->getMessage()]);
+    }
+    exit;
+}
+
+// ── API: rondes-verloop per DC (1-op-1 uit /public) ─────────────────────────
+// Verschil met /public: geen license_key-parameter — coach wil alle rondes +
+// alle heats zien, ook waar geen eigen rijder in zit. De frontend markeert
+// eigen rijders zelf via coachLijst (.mijn-highlight in tabel).
+if ($action === 'ronde_uitslagen') {
+    header('Content-Type: application/json; charset=utf-8');
+    header('Cache-Control: no-store, must-revalidate');
+    $compId = trim($_GET['competition_id'] ?? '');
+    $dcId   = trim($_GET['dc_id'] ?? '');
+    // Optioneel: bij combi-DC (bv 'DSA+HSA') filter rijders per cat zodat
+    // je bij "HSA" niet de DSA-rijders in dezelfde heat te zien krijgt.
+    // Zonder deze filter zou de tabel visueel misleiden bij cat-select.
+    $catFilter = trim($_GET['categorie'] ?? '');
+    if (!$compId || !$dcId) { echo json_encode(['error' => 'competition_id en dc_id verplicht']); exit; }
+
+    try {
+        // Wedstrijdsysteem ophalen (bepaalt label 'B-finale' vs 'Kleine finale').
+        $sysStmt = $pdo->prepare("SELECT systeem FROM competition_tijdschema WHERE competition_id = ? LIMIT 1");
+        $sysStmt->execute([$compId]);
+        $systeem = $sysStmt->fetchColumn() ?: 'internationaal-nieuw';
+
+        // 1) Afstanden van deze DC in programma-volgorde.
+        $distStmt = $pdo->prepare("
+            SELECT d.id, d.name, d.value_meters, d.race_type, d.number,
+                   v.prog_volgorde
+            FROM distances d
+            LEFT JOIN (
+                SELECT tr.dc_id, tr.distance_id, MIN(tr.volgorde) AS prog_volgorde
+                FROM tijdschema_ritten tr
+                JOIN competition_tijdschema ct ON ct.id = tr.tijdschema_id
+                WHERE ct.competition_id = ?
+                GROUP BY tr.dc_id, tr.distance_id
+            ) v ON v.dc_id = d.distance_combination_id AND v.distance_id = d.id
+            WHERE d.distance_combination_id = ?
+            ORDER BY v.prog_volgorde IS NULL, v.prog_volgorde, d.number, d.name
+        ");
+        $distStmt->execute([$compId, $dcId]);
+        $distances = $distStmt->fetchAll(PDO::FETCH_ASSOC);
+
+        // 2) catConfig ophalen (voor Q/q + finale-heat-grootte + runner-up).
+        $ccStmt = $pdo->prepare("
+            SELECT * FROM tijdschema_cat_config cc
+            JOIN competition_tijdschema ct ON ct.id = cc.tijdschema_id
+            WHERE ct.competition_id = ? AND cc.dc_id = ?
+        ");
+        $ccStmt->execute([$compId, $dcId]);
+        $catConfigs = [];
+        foreach ($ccStmt->fetchAll(PDO::FETCH_ASSOC) as $cc) {
+            $catConfigs[$cc['distance_id']] = $cc;
+        }
+
+        // 3) Query voor rijders per heat. Categorie-filter alleen tijdens
+        // het samenstellen van de rondeRijders — heat-config (Q/q) wordt
+        // ná filter berekend zodat de kwal-badges kloppen voor de zichtbare
+        // rijders. Bij combi-DC wil de coach uiteraard alleen zijn cat zien.
+        $catAnd = $catFilter !== '' ? ' AND p.category = ?' : '';
+        $heatRijStmt = $pdo->prepare("
+            SELECT h.id AS heat_id, h.heat_nr,
+                   COALESCE(tsr.ronde_type, 'heats') AS ronde_type,
+                   he.person_license, he.startpositie,
+                   p.full_name, p.category AS categorie,
+                   COALESCE(cs.startnummer, p.start_number) AS snr,
+                   res.tijd_ms, res.bruto_tijd_ms, res.is_photofinish,
+                   res.sanctie, res.finishpositie,
+                   res.rondes, res.punten AS pk_punten
+            FROM heats h
+            LEFT JOIN tijdschema_ritten tsr ON tsr.id = h.tijdschema_rit_id
+            JOIN heat_entries he ON he.heat_id = h.id
+            JOIN persons p ON p.license_key = he.person_license
+            LEFT JOIN competition_startnummers cs
+                ON cs.person_license = he.person_license AND cs.competition_id = ?
+            LEFT JOIN results res ON res.heat_entry_id = he.id
+            WHERE h.competition_id = ?
+              AND h.distance_combination_id = ?
+              AND COALESCE(h.distance_id, tsr.distance_id) = ?
+              $catAnd
+            ORDER BY h.heat_nr, he.startpositie
+        ");
+
+        $RONDE_VOLGORDE = ['heats' => 1, 'kwartfinale' => 2, 'halve_finale' => 3, 'runner_up' => 4, 'finale_a' => 5, 'finale_b' => 6];
+        // finale_b heet 'Kleine finale' bij internationaal-nieuw systeem.
+        $finaleBLabel = ($systeem === 'internationaal-nieuw') ? 'Kleine finale' : 'B-finale';
+        $RONDE_LABEL    = ['heats' => 'Serie', 'kwartfinale' => 'Kwartfinale', 'halve_finale' => 'Halve finale', 'runner_up' => 'Runner-up', 'finale_a' => 'A-finale', 'finale_b' => $finaleBLabel];
+
+        $doorstrKortLabel = function(string $rondeType, ?int $heatNr): string {
+            if ($rondeType === 'finale_a')  return 'A';
+            if ($rondeType === 'finale_b')  return 'B' . ($heatNr ?? 1);
+            if ($rondeType === 'runner_up') return 'RU' . ($heatNr ?? 1);
+            if ($rondeType === 'kwartfinale')  return 'KF';
+            if ($rondeType === 'halve_finale') return 'HF';
+            return '';
+        };
+
+        $out = [];
+        foreach ($distances as $dist) {
+            $distId = $dist['id'];
+            $cc     = $catConfigs[$distId] ?? [];
+
+            $heatParams = [$compId, $compId, $dcId, $distId];
+            if ($catFilter !== '') $heatParams[] = $catFilter;
+            $heatRijStmt->execute($heatParams);
+            $rows = $heatRijStmt->fetchAll(PDO::FETCH_ASSOC);
+            $perRonde = [];
+            foreach ($rows as $r) {
+                $rt = $r['ronde_type'];
+                if (!isset($perRonde[$rt])) $perRonde[$rt] = [];
+                $perRonde[$rt][] = $r;
+            }
+
+            $rondeTypes = array_keys($perRonde);
+            usort($rondeTypes, fn($a, $b) => ($RONDE_VOLGORDE[$a] ?? 99) - ($RONDE_VOLGORDE[$b] ?? 99));
+
+            // Doorstroom-map: voor elke ronde X → per persoon het label van
+            // hun eerst-volgende ronde-heat (A / B1 / RU1 / …).
+            $doorstroomPerRondePersoon = [];
+            foreach ($rondeTypes as $rt) {
+                $vol = $RONDE_VOLGORDE[$rt] ?? 99;
+                $doorstroomPerRondePersoon[$rt] = [];
+                foreach ($rondeTypes as $laterRt) {
+                    if (($RONDE_VOLGORDE[$laterRt] ?? 99) <= $vol) continue;
+                    foreach ($perRonde[$laterRt] as $laterR) {
+                        $lic = $laterR['person_license'];
+                        if (isset($doorstroomPerRondePersoon[$rt][$lic])) continue;
+                        $label = $doorstrKortLabel($laterRt, (int)$laterR['heat_nr']);
+                        if ($label !== '') $doorstroomPerRondePersoon[$rt][$lic] = $label;
+                    }
+                }
+            }
+
+            $rondes = [];
+            foreach ($rondeTypes as $rt) {
+                $rondeRijders = $perRonde[$rt];
+                if (!count($rondeRijders)) continue;
+
+                // Compleetheid: alle rijders hebben tijd of sanctie.
+                $compleet = true;
+                foreach ($rondeRijders as $r) {
+                    if ($r['tijd_ms'] === null && !$r['sanctie']) { $compleet = false; break; }
+                }
+
+                // Bereken Q/q voor doorstroom-rondes.
+                $qPerHeat = 0; $totaalDoor = 0;
+                if ($rt === 'heats')        { $qPerHeat = (int)($cc['heats_q_heat'] ?? 0); $totaalDoor = (int)($cc['heats_q'] ?? 0); }
+                elseif ($rt === 'kwartfinale')  { $qPerHeat = (int)($cc['kwart_q_heat'] ?? 1); $totaalDoor = (int)($cc['kwart_door'] ?? 0); }
+                elseif ($rt === 'halve_finale') { $qPerHeat = (int)($cc['half_q_heat'] ?? 1);  $totaalDoor = (int)($cc['half_door'] ?? 0); }
+
+                $UITVAL_SANC = ['DNS', 'DNF', 'DQ-TF', 'DQ-SF', 'DQ-DF'];
+                $isUitval = function($s) use ($UITVAL_SANC) {
+                    if (!$s) return false;
+                    foreach (explode(',', $s) as $c) {
+                        $c = strtoupper(trim($c));
+                        if (in_array($c, $UITVAL_SANC, true)) return true;
+                    }
+                    return false;
+                };
+                $qRijders = [];
+                $qTijdRijders = [];
+                if ($compleet && $totaalDoor > 0) {
+                    $perHeat = [];
+                    foreach ($rondeRijders as $r) {
+                        $hk = $r['heat_nr'];
+                        if (!isset($perHeat[$hk])) $perHeat[$hk] = [];
+                        $perHeat[$hk][] = $r;
+                    }
+                    foreach ($perHeat as &$hr) {
+                        usort($hr, fn($a, $b) => ($a['finishpositie'] ?? 999) - ($b['finishpositie'] ?? 999));
+                    }
+                    unset($hr);
+                    if ($qPerHeat > 0) {
+                        foreach ($perHeat as $hr) {
+                            $teller = 0;
+                            foreach ($hr as $r) {
+                                if ($teller >= $qPerHeat) break;
+                                if ($r['finishpositie'] !== null && !$isUitval($r['sanctie'])) {
+                                    $qRijders[$r['person_license']] = true;
+                                    $teller++;
+                                }
+                            }
+                        }
+                    }
+                    $aantalQ = count($qRijders);
+                    $aantalq = max(0, $totaalDoor - $aantalQ);
+                    if ($aantalq > 0) {
+                        $metTijd = array_filter($rondeRijders, fn($r) =>
+                            $r['tijd_ms'] !== null
+                            && !isset($qRijders[$r['person_license']])
+                            && !$isUitval($r['sanctie'])
+                        );
+                        usort($metTijd, fn($a, $b) => $a['tijd_ms'] - $b['tijd_ms']);
+                        $metTijd = array_values($metTijd);
+                        for ($i = 0; $i < min($aantalq, count($metTijd)); $i++) {
+                            $qTijdRijders[$metTijd[$i]['person_license']] = true;
+                        }
+                        if ($aantalq < count($metTijd) && ($metTijd[$aantalq - 1] ?? null)) {
+                            $grens = $metTijd[$aantalq - 1]['tijd_ms'];
+                            for ($i = $aantalq; $i < count($metTijd); $i++) {
+                                if ($metTijd[$i]['tijd_ms'] === $grens) $qTijdRijders[$metTijd[$i]['person_license']] = true;
+                                else break;
+                            }
+                        }
+                    }
+                }
+
+                // Runner-up start-positie = aantal rijders in de eerst-
+                // VOLGENDE ronde na de EERSTE gereden ronde + 1. RU is voor
+                // uitvallers na de eerste ronde; de eerste ronde is niet
+                // altijd 'heats' (kleinere wedstrijden beginnen soms met HF).
+                //   heats → KF → …    : RU-start = |KF| + 1  (bv 16+1=17)
+                //   heats → A(+B)     : RU-start = |A|+|B| + 1
+                //   HF → A(+B)        : RU-start = |A|+|B| + 1  (HF was eerste)
+                // Meerdere RU-heats (RU-1, RU-2, …) tellen cumulatief door
+                // op tijd — dat regelt de RU-sorteer-loop hieronder.
+                $ruStartPos = null;
+                if ($rt === 'runner_up') {
+                    // Volgorde van rondes die daadwerkelijk plaatsen toekennen
+                    // (RU zelf niet meegerekend; die krijgt zijn plaats HIER).
+                    $plaatsVolgorde = ['heats', 'kwartfinale', 'halve_finale', 'finale_a', 'finale_b'];
+                    $eerste = null;
+                    foreach ($plaatsVolgorde as $r) {
+                        if (isset($perRonde[$r])) { $eerste = $r; break; }
+                    }
+                    $volgend = null;
+                    $naEerste = false;
+                    foreach ($plaatsVolgorde as $r) {
+                        if ($r === $eerste) { $naEerste = true; continue; }
+                        if ($naEerste && isset($perRonde[$r])) { $volgend = $r; break; }
+                    }
+                    if ($volgend === 'finale_a') {
+                        // A + B parallel: doorstromers verdelen over beide.
+                        $nA = count($perRonde['finale_a']);
+                        $nB = isset($perRonde['finale_b']) ? count($perRonde['finale_b']) : 0;
+                        $ruStartPos = $nA + $nB + 1;
+                    } elseif ($volgend !== null) {
+                        // KF of HF (of edge case finale_b zonder A)
+                        $ruStartPos = count($perRonde[$volgend]) + 1;
+                    } else {
+                        // Geen ronde na de eerste? Rare setup; fallback 1.
+                        $ruStartPos = 1;
+                    }
+                }
+
+                $ds = $doorstroomPerRondePersoon[$rt] ?? [];
+                foreach ($rondeRijders as &$r) {
+                    $r['kwal'] = '';
+                    if (isset($qRijders[$r['person_license']]))    $r['kwal'] = 'Q';
+                    elseif (isset($qTijdRijders[$r['person_license']])) $r['kwal'] = 'q';
+                    $r['doorstroom_label'] = $ds[$r['person_license']] ?? null;
+                    $r['ru_positie'] = null;
+                }
+                unset($r);
+
+                if ($rt === 'runner_up' && $ruStartPos) {
+                    $perHeat = [];
+                    foreach ($rondeRijders as $r) {
+                        $hk = $r['heat_nr'] ?? 1;
+                        if (!isset($perHeat[$hk])) $perHeat[$hk] = [];
+                        $perHeat[$hk][] = $r;
+                    }
+                    ksort($perHeat, SORT_NUMERIC);
+                    $volgendePos = $ruStartPos;
+                    foreach ($perHeat as $hk => &$hr) {
+                        usort($hr, function($a, $b) use ($isUitval) {
+                            $aOk = $a['tijd_ms'] !== null && !$isUitval($a['sanctie']);
+                            $bOk = $b['tijd_ms'] !== null && !$isUitval($b['sanctie']);
+                            if ($aOk !== $bOk) return $aOk ? -1 : 1;
+                            if ($aOk) return $a['tijd_ms'] - $b['tijd_ms'];
+                            return ($a['startpositie'] ?? 999) - ($b['startpositie'] ?? 999);
+                        });
+                        foreach ($hr as $r) {
+                            foreach ($rondeRijders as &$mr) {
+                                if ($mr['person_license'] === $r['person_license']
+                                    && $mr['heat_nr'] === $r['heat_nr']) {
+                                    $mr['ru_positie'] = $volgendePos++;
+                                    break;
+                                }
+                            }
+                            unset($mr);
+                        }
+                    }
+                    unset($hr);
+                }
+
+                foreach ($rondeRijders as &$r) {
+                    $r['tijd_ms']       = $r['tijd_ms']       !== null ? (int)$r['tijd_ms']       : null;
+                    $r['bruto_tijd_ms'] = $r['bruto_tijd_ms'] !== null ? (int)$r['bruto_tijd_ms'] : null;
+                    $r['finishpositie'] = $r['finishpositie'] !== null ? (int)$r['finishpositie'] : null;
+                    $r['heat_nr']       = $r['heat_nr']       !== null ? (int)$r['heat_nr']       : null;
+                    $r['snr']           = $r['snr']           !== null ? (string)$r['snr']        : null;
+                    $r['is_photofinish']= (int)($r['is_photofinish'] ?? 0);
+                    $r['rondes']        = $r['rondes']        !== null ? (int)$r['rondes']       : null;
+                    $r['pk_punten']     = $r['pk_punten']     !== null ? (float)$r['pk_punten']  : null;
+                    unset($r['startpositie']);
+                }
+                unset($r);
+
+                $rondes[] = [
+                    'ronde_type'  => $rt,
+                    'ronde_label' => $RONDE_LABEL[$rt] ?? $rt,
+                    'compleet'    => $compleet,
+                    'aantal'      => count($rondeRijders),
+                    'rijders'     => $rondeRijders,
+                ];
+            }
+
+            $out[] = [
+                'distance_id'    => $dist['id'],
+                'distance_naam'  => $dist['name'],
+                'distance_meters'=> $dist['value_meters'] !== null ? (int)$dist['value_meters'] : null,
+                'race_type'      => $dist['race_type'],
+                'rondes'         => $rondes,
+                'eind_uitslag'   => [],
+            ];
+        }
+
+        echo json_encode(['distances' => $out], JSON_UNESCAPED_UNICODE);
     } catch (Throwable $e) {
         http_response_code(500);
         echo json_encode(['error' => $e->getMessage()]);
@@ -1486,6 +1975,91 @@ body.heeft-footer .container { padding-bottom: 90px; }
 .card { margin-bottom:18px; }
 .card h2 { font-size:1rem; color:var(--blauw); margin-bottom:8px; }
 
+/* ── Setup-strook: klikbare compacte header met huidige wedstrijd + aantal
+      rijders, opent de setup-modal voor wijzigen. Bespaart verticale ruimte
+      op mobiel t.o.v. de oude altijd-zichtbare stap 1/2/chips-secties. ─── */
+.setup-strip {
+    display: flex; align-items: center; gap: 8px;
+    padding: 8px 12px;
+    background: #fff;
+    border: 1px solid #d3dbe3;
+    border-radius: 6px;
+    cursor: pointer;
+    margin: 8px 0 12px;
+    transition: background .12s, border-color .12s;
+}
+.setup-strip:hover { background: #f5f8fc; border-color: #b3cae6; }
+.setup-strip-tekst {
+    flex: 1 1 auto; min-width: 0;
+    overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+    color: #1a3a5c; font-size: .9rem;
+}
+.setup-strip-tekst b { color: #1a3a5c; }
+.setup-strip-tekst small {
+    display: block; font-size: .74rem; color: #666; font-weight: normal;
+    margin-top: 1px;
+}
+.setup-strip-empty { color: #888; font-style: italic; font-size: .88rem; }
+.setup-strip-edit {
+    background: none; border: 0;
+    color: var(--blauw); font-size: 1.05rem;
+    padding: 4px 8px; cursor: pointer; flex-shrink: 0;
+}
+/* Modal-overlay voor setup. Opent bij klik op setup-strip of automatisch
+   bij eerste bezoek van de dag (localStorage-detectie). */
+.setup-modal-overlay {
+    position: fixed; inset: 0;
+    background: rgba(0,0,0,.4);
+    z-index: 200;
+    display: none;
+    align-items: flex-start; justify-content: center;
+    padding: 20px 12px;
+    overflow-y: auto;
+}
+.setup-modal-overlay.open { display: flex; }
+.setup-modal-box {
+    background: #fff;
+    border-radius: 10px;
+    max-width: 520px; width: 100%;
+    padding: 18px 16px;
+    position: relative;
+    box-shadow: 0 8px 24px rgba(0,0,0,.25);
+    animation: setup-modal-in .18s ease-out;
+}
+@keyframes setup-modal-in {
+    from { opacity: 0; transform: translateY(-8px); }
+    to   { opacity: 1; transform: translateY(0); }
+}
+.setup-modal-close {
+    position: absolute; top: 8px; right: 8px;
+    background: none; border: 0;
+    font-size: 1.4rem; color: #666; cursor: pointer;
+    width: 32px; height: 32px;
+    border-radius: 50%;
+    display: flex; align-items: center; justify-content: center;
+    transition: background .12s;
+}
+.setup-modal-close:hover { background: #f0f0f0; color: #333; }
+.setup-modal-titel {
+    font-size: 1.05rem; font-weight: 700; color: var(--blauw);
+    margin: 0 0 12px; padding-right: 32px;
+}
+/* Secties binnen modal: geen dubbele card-omranding — modal-box is al de
+   container. Wél scheiding tussen stappen. */
+.setup-modal-box .card { margin: 0; padding: 0; border: 0; box-shadow: none; background: none; }
+.setup-modal-box > .card + .card { margin-top: 14px; padding-top: 14px; border-top: 1px solid #eef2f6; }
+/* "Klaar"-knop onderaan de modal — primaire, sticky-bottom voelt vanzelfsprekender
+   dan alleen het ×-kruisje bovenin. Full-width op smal scherm, rechts op ruimer. */
+.setup-modal-klaar-rij {
+    margin-top: 16px; padding-top: 12px;
+    border-top: 1px solid #eef2f6;
+    display: flex; justify-content: flex-end;
+}
+.setup-modal-klaar-rij .btn-primair { min-width: 120px; }
+@media (max-width: 420px) {
+    .setup-modal-klaar-rij .btn-primair { width: 100%; }
+}
+
 /* Stap-label met blauw cijfer (1-op-1 uit /public) */
 .stap-label {
     font-size: 1.05rem; font-weight: 700; color: var(--blauw);
@@ -1873,10 +2447,17 @@ select.sel {
     margin-bottom:10px;
 }
 .tab-btn {
-    flex:1; padding:12px 4px; font-size:.85rem; font-weight:600;
+    flex:1 1 0; min-width:0;
+    padding:8px 2px; font-size:.68rem; font-weight:600;
     text-align:center; border:none; background:none; cursor:pointer;
     color:#888; border-bottom:3px solid transparent; margin-bottom:-2px;
+    /* Emoji op regel 1, tekst op regel 2 (via \n in i18n-label).
+       flex:1 1 0 + min-width:0 → alle 5 tabs delen container gelijk zonder
+       horizontale scroll, tekst clipt binnen tab als 't niet past. */
+    white-space:pre-line; line-height:1.2;
+    overflow:hidden;
 }
+.tab-btn::first-line { font-size:.95rem; }
 .tab-btn.active { color:var(--blauw); border-bottom-color:var(--oranje); }
 .tab-pane { display:none; }
 .tab-pane.active { display:block; }
@@ -1924,6 +2505,8 @@ table.uitsl-tabel th { background:var(--lichtblauw); color:var(--blauw);
 table.uitsl-tabel td { padding:6px 4px; border-bottom:1px solid #eee; }
 table.uitsl-tabel tr.mijn td { background:var(--accent); font-weight:600; }
 .col-rang { width:32px; text-align:center; font-weight:700; }
+table.uitsl-tabel td.col-cat-rank { width:40px; text-align:center; font-weight:700; color:var(--blauw); }
+table.uitsl-tabel th.col-cat-rank { width:40px; text-align:center; }
 .col-rnd, .col-pk { width:40px; text-align:right; }
 .col-tijd { width:96px; text-align:right; font-variant-numeric:tabular-nums; white-space:nowrap; }
 /* Audit-icoon ✋/📷 links van de tijd; cijfers blijven rechts-uitgelijnd.
@@ -1932,6 +2515,50 @@ table.uitsl-tabel tr.mijn td { background:var(--accent); font-weight:600; }
 .col-punten { width:44px; text-align:right; }
 .col-totaal { width:50px; text-align:right; font-weight:700; color:var(--blauw); }
 .col-sanctie { color:#b71c1c; font-weight:700; font-size:.8em; }
+
+/* Rondes-tab: per-ronde uitslag (heats/KF/HF/RU/A/B).
+   Analoog aan public rijder-pagina, maar zonder rijder-filter — toont
+   alle heats van alle afstanden binnen de gekozen categorie. */
+.rondeu-afstand { margin-bottom:16px; }
+.rondeu-afstand-titel {
+    font-weight:700; color:var(--blauw); font-size:1rem;
+    margin:12px 0 6px; padding:6px 8px;
+    background:var(--lichtblauw); border-radius:4px;
+}
+.rondeu-ronde { margin:8px 0 10px; padding:6px 4px 4px;
+                border-left:3px solid var(--middenblauw);
+                overflow-x:auto; -webkit-overflow-scrolling:touch; }
+/* Uitslag- en rondes-tab containers scrollen horizontaal als een brede
+   tabel (bv gecombineerde categorie met extra #cat-kolommen) niet past. */
+#uitslagen, #rondes-inhoud { overflow-x:auto; -webkit-overflow-scrolling:touch; }
+.rondeu-ronde.pending { border-left-color:#f9a825; opacity:.85; }
+.rondeu-ronde-titel { display:flex; align-items:center; gap:8px;
+                      margin-bottom:4px; }
+.rondeu-badge { display:inline-block; padding:2px 8px; border-radius:10px;
+                font-size:.75rem; font-weight:700; color:#fff;
+                background:var(--middenblauw); }
+.rondeu-badge.badge-heats        { background:#546e7a; }
+.rondeu-badge.badge-kwartfinale  { background:#00695c; }
+.rondeu-badge.badge-halve_finale { background:#00838f; }
+.rondeu-badge.badge-runner_up    { background:#8e24aa; }
+.rondeu-badge.badge-finale_a     { background:#c62828; }
+.rondeu-badge.badge-finale_b     { background:#ef6c00; }
+.rondeu-pending { font-size:.75rem; color:#f9a825; font-style:italic; }
+table.rondeu-tabel { width:100%; border-collapse:collapse; margin-top:4px;
+                     font-size:.82rem; }
+table.rondeu-tabel th { background:#eef4fb; color:var(--blauw);
+                        padding:4px 3px; text-align:left;
+                        border-bottom:1px solid #cfdcec; font-weight:600; }
+table.rondeu-tabel td { padding:4px 3px; border-bottom:1px solid #f0f0f0; }
+table.rondeu-tabel td.c, table.rondeu-tabel th.c { text-align:center; }
+table.rondeu-tabel tr.mijn td { background:var(--accent); font-weight:600; }
+table.rondeu-tabel tr.rondeu-heat-sub td {
+    background:#f5f5f5; font-weight:700; color:#555;
+    padding:3px 6px; font-size:.78rem;
+}
+
+/* Extra-smalle schermen: font iets omlaag zodat clipping niet actief wordt. */
+@media (max-width:340px) { .tab-btn { font-size:.62rem; padding:8px 1px; } }
 
 /* Gecombineerde rit: ritten die tegelijk rijden in één kader */
 .prog-combi-box {
@@ -2112,6 +2739,28 @@ body.heeft-footer .auto-refresh-stempel { bottom:84px; }
 
 <div class="container">
 
+<!-- Setup-strook: klikbaar → opent modal met wedstrijd-keuze, rijder-
+     selecties en huidige coach-lijst. Vervangt de altijd-zichtbare stap
+     1/2/chips secties zodat er meer verticale ruimte over is voor het
+     programma en de heat/uitslagen-tabs. -->
+<div class="setup-strip" id="setup-strip" onclick="openSetupModal()"
+     data-i18n-title="setup_strip_edit_title" title="Wijzig wedstrijd of rijders">
+    <div class="setup-strip-tekst" id="setup-strip-tekst">
+        <span class="setup-strip-empty" data-i18n="setup_strip_leeg">Kies je wedstrijd…</span>
+    </div>
+    <button class="setup-strip-edit" type="button"
+            data-i18n-title="setup_strip_edit_title" title="Wijzigen">✎</button>
+</div>
+
+<!-- Setup-modal: stap 1 (wedstrijd) + stap 2 (rijder-select) + coach-lijst.
+     Opent via de setup-strip bovenaan of automatisch bij eerste bezoek van
+     de dag (localStorage-check op datum-key). -->
+<div class="setup-modal-overlay" id="setup-modal" onclick="if(event.target===this)closeSetupModal()">
+<div class="setup-modal-box">
+<button class="setup-modal-close" type="button" onclick="closeSetupModal()"
+        data-i18n-title="pwa_btn_sluit" title="Sluiten">&times;</button>
+<h2 class="setup-modal-titel" data-i18n="setup_modal_titel">Wedstrijd &amp; rijders</h2>
+
 <div class="card">
     <div class="stap-label"><span class="stap-nr">1</span> <span data-i18n="stap1_label">Kies je wedstrijd</span></div>
     <div class="filter-rij">
@@ -2186,11 +2835,20 @@ body.heeft-footer .auto-refresh-stempel { bottom:84px; }
     <div id="coach-chips" class="chips"></div>
 </div>
 
+<div class="setup-modal-klaar-rij">
+    <button type="button" class="btn-primair" id="setup-modal-klaar"
+            onclick="closeSetupModal()" data-i18n="btn_klaar">Klaar</button>
+</div>
+
+</div><!-- .setup-modal-box -->
+</div><!-- .setup-modal-overlay -->
+
 <div id="sectie-programma" class="card" style="display:none">
     <div class="tabs">
         <button class="tab-btn active" data-tab="programma" data-i18n="tab_programma">📋 Programma</button>
         <button class="tab-btn" data-tab="heats" data-i18n="tab_heats">🏃 Heats</button>
         <button class="tab-btn" data-tab="sancties" data-i18n="tab_sancties">⚠️ Sancties</button>
+        <button class="tab-btn" data-tab="rondes" data-i18n="tab_rondes">📈 Rondes</button>
         <button class="tab-btn" data-tab="uitslagen" data-i18n="tab_uitslagen">📊 Uitslagen</button>
     </div>
     <div id="tab-programma" class="tab-pane active">
@@ -2201,6 +2859,15 @@ body.heeft-footer .auto-refresh-stempel { bottom:84px; }
     </div>
     <div id="tab-sancties" class="tab-pane">
         <div id="sancties"></div>
+    </div>
+    <div id="tab-rondes" class="tab-pane">
+        <div class="rij">
+            <select id="r-sel-cat" class="sel"><option value="" data-i18n="rondes_opt_kies_cat">— kies categorie —</option></select>
+        </div>
+        <div class="rij" id="r-afstand-rij" style="display:none">
+            <select id="r-sel-afstand" class="sel"><option value="" data-i18n="rondes_opt_kies_afstand">— kies afstand —</option></select>
+        </div>
+        <div id="rondes-inhoud"></div>
     </div>
     <div id="tab-uitslagen" class="tab-pane">
         <div class="rij">
@@ -2290,11 +2957,18 @@ const T = {
         coach_aantal_single: '{n} rijder geselecteerd',
         coach_aantal_plural: '{n} rijders geselecteerd',
         coach_leeg: 'Nog niemand geselecteerd — gebruik de selectors hierboven.',
+        // ── Setup-strip + modal ──
+        setup_strip_leeg: 'Kies je wedstrijd…',
+        setup_strip_edit_title: 'Wijzig wedstrijd of rijders',
+        setup_strip_rijders: 'rijders',
+        setup_strip_1rijder: '1 rijder',
+        setup_modal_titel: 'Wedstrijd & rijders',
         // ── Tabs ──
-        tab_programma: '📋 Programma',
-        tab_heats: '🏃 Heats',
-        tab_sancties: '⚠️ Sancties',
-        tab_uitslagen: '📊 Uitslagen',
+        tab_programma: '📋\nProgramma',
+        tab_heats: '🏃\nHeats',
+        tab_sancties: '⚠️\nSancties',
+        tab_uitslagen: '📊\nUitslagen',
+        tab_rondes: '📈\nRondes',
         // ── Uitslagen-tab dropdowns ──
         uitsl_opt_kies_cat: '— kies categorie —',
         uitsl_opt_kies_afstand: '— kies afstand —',
@@ -2303,6 +2977,28 @@ const T = {
         uitsl_klassement_opt: '🏆 Klassement',
         uitsl_opt_laden: 'Laden…',
         uitsl_opt_afstand_fallback: 'Afstand',
+        // ── Rondes-tab ──
+        rondes_opt_kies_cat: '— kies categorie —',
+        rondes_opt_kies_afstand: '— kies afstand —',
+        rondes_kies_cat_hint: 'Kies eerst een categorie, dan een afstand.',
+        rondes_kies_afstand_hint: 'Kies een afstand om de rondes te zien.',
+        rondes_geen_rondes: 'Nog geen resultaten voor deze afstand.',
+        rondes_pending: 'nog niet compleet',
+        rondes_ronde_serie: 'Serie',
+        rondes_ronde_kwartfinale: 'Kwartfinale',
+        rondes_ronde_halve_finale: 'Halve finale',
+        rondes_ronde_runner_up: 'Runner-up',
+        rondes_ronde_finale_a: 'A-finale',
+        rondes_ronde_finale_b: 'B-finale',
+        rondes_col_pos: 'Pos',
+        rondes_col_snr: 'Snr',
+        rondes_col_naam: 'Naam',
+        rondes_col_kwal: 'Q/q',
+        rondes_col_rondes: 'Rnd',
+        rondes_col_pkpt: 'Pnt',
+        rondes_col_tijd: 'Tijd',
+        rondes_col_sanctie: 'Sanctie',
+        rondes_col_fin: 'Fin',
         // ── Status-labels (idx 0-5) ──
         status_0: 'Niet bevestigd',
         status_1: 'Bevestigd',
@@ -2537,11 +3233,18 @@ const T = {
         coach_aantal_single: '{n} skater selected',
         coach_aantal_plural: '{n} skaters selected',
         coach_leeg: 'No one selected yet — use the selectors above.',
+        // ── Setup-strip + modal ──
+        setup_strip_leeg: 'Choose your race…',
+        setup_strip_edit_title: 'Change race or skaters',
+        setup_strip_rijders: 'skaters',
+        setup_strip_1rijder: '1 skater',
+        setup_modal_titel: 'Race & skaters',
         // ── Tabs ──
-        tab_programma: '📋 Program',
-        tab_heats: '🏃 Heats',
-        tab_sancties: '⚠️ Sanctions',
-        tab_uitslagen: '📊 Results',
+        tab_programma: '📋\nProgram',
+        tab_heats: '🏃\nHeats',
+        tab_sancties: '⚠️\nSanctions',
+        tab_uitslagen: '📊\nResults',
+        tab_rondes: '📈\nRounds',
         // ── Uitslagen-tab dropdowns ──
         uitsl_opt_kies_cat: '— choose category —',
         uitsl_opt_kies_afstand: '— choose distance —',
@@ -2550,6 +3253,28 @@ const T = {
         uitsl_klassement_opt: '🏆 Standings',
         uitsl_opt_laden: 'Loading…',
         uitsl_opt_afstand_fallback: 'Distance',
+        // ── Rondes-tab ──
+        rondes_opt_kies_cat: '— choose category —',
+        rondes_opt_kies_afstand: '— choose distance —',
+        rondes_kies_cat_hint: 'Choose a category first, then a distance.',
+        rondes_kies_afstand_hint: 'Choose a distance to see the rounds.',
+        rondes_geen_rondes: 'No results yet for this distance.',
+        rondes_pending: 'not yet complete',
+        rondes_ronde_serie: 'Series',
+        rondes_ronde_kwartfinale: 'Quarterfinal',
+        rondes_ronde_halve_finale: 'Semifinal',
+        rondes_ronde_runner_up: 'Runner-up',
+        rondes_ronde_finale_a: 'A-final',
+        rondes_ronde_finale_b: 'B-final',
+        rondes_col_pos: 'Pos',
+        rondes_col_snr: 'Bib',
+        rondes_col_naam: 'Name',
+        rondes_col_kwal: 'Q/q',
+        rondes_col_rondes: 'Lap',
+        rondes_col_pkpt: 'Pts',
+        rondes_col_tijd: 'Time',
+        rondes_col_sanctie: 'Sanction',
+        rondes_col_fin: 'Fin',
         // ── Status-labels (idx 0-5) ──
         status_0: 'Not confirmed',
         status_1: 'Confirmed',
@@ -2784,11 +3509,18 @@ const T = {
         coach_aantal_single: '{n} Skater ausgewählt',
         coach_aantal_plural: '{n} Skater ausgewählt',
         coach_leeg: 'Noch niemand ausgewählt — verwende die Auswahl oben.',
+        // ── Setup-strip + modal ──
+        setup_strip_leeg: 'Wähle dein Rennen…',
+        setup_strip_edit_title: 'Rennen oder Skater ändern',
+        setup_strip_rijders: 'Skater',
+        setup_strip_1rijder: '1 Skater',
+        setup_modal_titel: 'Rennen & Skater',
         // ── Tabs ──
-        tab_programma: '📋 Programm',
-        tab_heats: '🏃 Heats',
-        tab_sancties: '⚠️ Strafen',
-        tab_uitslagen: '📊 Ergebnisse',
+        tab_programma: '📋\nProgramm',
+        tab_heats: '🏃\nHeats',
+        tab_sancties: '⚠️\nStrafen',
+        tab_uitslagen: '📊\nErgebnisse',
+        tab_rondes: '📈\nRunden',
         // ── Uitslagen-tab dropdowns ──
         uitsl_opt_kies_cat: '— Kategorie wählen —',
         uitsl_opt_kies_afstand: '— Distanz wählen —',
@@ -2797,6 +3529,28 @@ const T = {
         uitsl_klassement_opt: '🏆 Klassement',
         uitsl_opt_laden: 'Laden…',
         uitsl_opt_afstand_fallback: 'Distanz',
+        // ── Rondes-tab ──
+        rondes_opt_kies_cat: '— Kategorie wählen —',
+        rondes_opt_kies_afstand: '— Distanz wählen —',
+        rondes_kies_cat_hint: 'Erst Kategorie wählen, dann Distanz.',
+        rondes_kies_afstand_hint: 'Wähle eine Distanz, um die Runden zu sehen.',
+        rondes_geen_rondes: 'Noch keine Ergebnisse für diese Distanz.',
+        rondes_pending: 'noch nicht vollständig',
+        rondes_ronde_serie: 'Vorlauf',
+        rondes_ronde_kwartfinale: 'Viertelfinale',
+        rondes_ronde_halve_finale: 'Halbfinale',
+        rondes_ronde_runner_up: 'Runner-up',
+        rondes_ronde_finale_a: 'A-Finale',
+        rondes_ronde_finale_b: 'B-Finale',
+        rondes_col_pos: 'Pos',
+        rondes_col_snr: 'Nr',
+        rondes_col_naam: 'Name',
+        rondes_col_kwal: 'Q/q',
+        rondes_col_rondes: 'Rd',
+        rondes_col_pkpt: 'Pkt',
+        rondes_col_tijd: 'Zeit',
+        rondes_col_sanctie: 'Strafe',
+        rondes_col_fin: 'Fin',
         // ── Status-labels ──
         status_0: 'Nicht bestätigt',
         status_1: 'Bestätigt',
@@ -3031,11 +3785,18 @@ const T = {
         coach_aantal_single: '{n} skateur sélectionné',
         coach_aantal_plural: '{n} skateurs sélectionnés',
         coach_leeg: 'Personne sélectionné pour l\'instant — utilisez les sélecteurs ci-dessus.',
+        // ── Setup-strip + modal ──
+        setup_strip_leeg: 'Choisissez votre course…',
+        setup_strip_edit_title: 'Modifier la course ou les skateurs',
+        setup_strip_rijders: 'skateurs',
+        setup_strip_1rijder: '1 skateur',
+        setup_modal_titel: 'Course & skateurs',
         // ── Tabs ──
-        tab_programma: '📋 Programme',
-        tab_heats: '🏃 Heats',
-        tab_sancties: '⚠️ Sanctions',
-        tab_uitslagen: '📊 Résultats',
+        tab_programma: '📋\nProgramme',
+        tab_heats: '🏃\nHeats',
+        tab_sancties: '⚠️\nSanctions',
+        tab_uitslagen: '📊\nRésultats',
+        tab_rondes: '📈\nRondes',
         // ── Uitslagen-tab dropdowns ──
         uitsl_opt_kies_cat: '— choisir catégorie —',
         uitsl_opt_kies_afstand: '— choisir distance —',
@@ -3044,6 +3805,28 @@ const T = {
         uitsl_klassement_opt: '🏆 Classement',
         uitsl_opt_laden: 'Chargement…',
         uitsl_opt_afstand_fallback: 'Distance',
+        // ── Rondes-tab ──
+        rondes_opt_kies_cat: '— choisir catégorie —',
+        rondes_opt_kies_afstand: '— choisir distance —',
+        rondes_kies_cat_hint: 'Choisissez d\'abord une catégorie, puis une distance.',
+        rondes_kies_afstand_hint: 'Choisissez une distance pour voir les manches.',
+        rondes_geen_rondes: 'Aucun résultat pour cette distance.',
+        rondes_pending: 'pas encore complet',
+        rondes_ronde_serie: 'Série',
+        rondes_ronde_kwartfinale: 'Quart de finale',
+        rondes_ronde_halve_finale: 'Demi-finale',
+        rondes_ronde_runner_up: 'Runner-up',
+        rondes_ronde_finale_a: 'Finale A',
+        rondes_ronde_finale_b: 'Finale B',
+        rondes_col_pos: 'Pos',
+        rondes_col_snr: 'Dos',
+        rondes_col_naam: 'Nom',
+        rondes_col_kwal: 'Q/q',
+        rondes_col_rondes: 'Tr',
+        rondes_col_pkpt: 'Pts',
+        rondes_col_tijd: 'Temps',
+        rondes_col_sanctie: 'Sanction',
+        rondes_col_fin: 'Fin',
         // ── Status-labels ──
         status_0: 'Non confirmé',
         status_1: 'Confirmé',
@@ -3645,6 +4428,66 @@ async function safeFetch(url, maxRetries = 1) {
     }
 }
 
+// ── Setup-modal (stap 1 + stap 2 + coach-lijst) ──────────────────────────────
+// Vervangt de altijd-zichtbare secties bovenaan. Opent via de setup-strip,
+// of automatisch bij eerste bezoek van de dag (datum-key in localStorage).
+function openSetupModal() {
+    const m = document.getElementById('setup-modal');
+    if (m) m.classList.add('open');
+    document.body.style.overflow = 'hidden'; // scroll-lock achtergrond
+}
+function closeSetupModal() {
+    const m = document.getElementById('setup-modal');
+    if (m) m.classList.remove('open');
+    document.body.style.overflow = '';
+}
+// "Wedstrijd X · N rijders" — samenvat voor de strook. Bij 0 rijders alleen
+// wedstrijd; bij 1 speciale label ("1 rijder") ipv aantal + meervoud.
+function updateSetupStrip() {
+    const el = document.getElementById('setup-strip-tekst');
+    if (!el) return;
+    const opt = selComp.selectedOptions[0];
+    const compNaam  = opt?.textContent?.trim() || '';
+    // De comp-info dataset heeft datum/plaats — wedstrijd-naam zit als
+    // text-content. Datum uit `comp-info` innerHTML halen zou fragile zijn;
+    // laten we het simpel: alleen naam + rijders-count.
+    let rijderStr = '';
+    if (coachLijst.length === 1) {
+        rijderStr = `<small>${esc(t('setup_strip_1rijder'))}</small>`;
+    } else if (coachLijst.length > 1) {
+        rijderStr = `<small>${coachLijst.length} ${esc(t('setup_strip_rijders'))}</small>`;
+    }
+    if (selComp.value && compNaam) {
+        el.innerHTML = `<b>${esc(compNaam)}</b>${rijderStr}`;
+    } else {
+        el.innerHTML = `<span class="setup-strip-empty">${esc(t('setup_strip_leeg'))}</span>`;
+    }
+}
+// Escape sluit modal (accessibility + snelheid).
+document.addEventListener('keydown', e => {
+    if (e.key === 'Escape') {
+        const m = document.getElementById('setup-modal');
+        if (m && m.classList.contains('open')) closeSetupModal();
+    }
+});
+// Eerste-bezoek-per-dag: modal automatisch openen zodat de coach bij een
+// nieuwe dag naar wedstrijd-keuze gestuurd wordt (bijna altijd een andere).
+// Bij herhaald openen dezelfde dag: geen ruis.
+(function autoOpenFirstOfDay() {
+    const vandaag = new Date().toISOString().slice(0, 10);
+    const laatstGezien = localStorage.getItem('ic_coach_setup_dag') || '';
+    const nogNiksGekozen = !selComp || !selComp.value;
+    if (laatstGezien !== vandaag || nogNiksGekozen) {
+        // Kleine timeout zodat applyI18n() de modal-teksten in juiste taal
+        // heeft gezet vóór openen (anders zie je even "Wedstrijd & rijders"
+        // in verkeerde taal flashen).
+        setTimeout(() => {
+            openSetupModal();
+            localStorage.setItem('ic_coach_setup_dag', vandaag);
+        }, 100);
+    }
+})();
+
 // ── Coach-lijst persistentie (localStorage per wedstrijd) ────────────────────
 function lsKey() { return `coach_lijst_${selComp.value || 'geen'}`; }
 function saveCoachLijst() {
@@ -3682,6 +4525,9 @@ function verwijderUitLijst(licenseKey) {
 
 // ── UI-render ────────────────────────────────────────────────────────────────
 function renderChips() {
+    // Setup-strook mee-updaten — die toont aantal rijders + wedstrijd, dus
+    // hij moet vernieuwen bij elke coach-lijst-mutatie.
+    if (typeof updateSetupStrip === 'function') updateSetupStrip();
     aantalEl.textContent = t(coachLijst.length === 1 ? 'coach_aantal_single' : 'coach_aantal_plural', {n: coachLijst.length});
     if (coachLijst.length === 0) {
         chipsEl.innerHTML = `<span style="color:#888;font-size:.85rem">${t('coach_leeg')}</span>`;
@@ -4444,52 +5290,67 @@ function renderSancties() {
 }
 
 // ── Uitslagen-tab ────────────────────────────────────────────────────────────
-let uitslagenCats = []; // [{dc_id, dc_naam, afstanden:[{distance_id, distance_naam}], klassement_beschikbaar}]
+// Twee dropdowns: eerst categorie (DP4/DP3/…), dan afstand + eventueel
+// klassement. Zelfde bron als de Rondes-tab (_catsMetAfstanden via
+// /rondes_cats endpoint), zodat de UX consistent is en gecombineerde DC's
+// niet als "DP4+DP3" in de UI opduiken.
 
 async function laadUitslagenCategorieen() {
     const sel = $('u-sel-cat');
     sel.innerHTML = `<option value="">${t('uitsl_opt_laden')}</option>`;
-    try {
-        const res = await safeFetch(`?action=categorieen&competition_id=${encodeURIComponent(selComp.value)}&_t=${Date.now()}`);
-        const cats = await res.json();
-        uitslagenCats = Array.isArray(cats) ? cats : [];
-        if (!uitslagenCats.length) {
-            sel.innerHTML = `<option value="">${t('uitsl_opt_geen_uitslagen')}</option>`;
-            $('uitslagen').innerHTML = `<div class="leeg-melding">${t('uit_leeg')}</div>`;
-            $('u-afstand-rij').style.display = 'none';
-            return;
-        }
-        sel.innerHTML = `<option value="">${t('uitsl_opt_kies_cat')}</option>` +
-            uitslagenCats.map(c => `<option value="${esc(c.dc_id)}">${esc(c.dc_naam)}</option>`).join('');
-    } catch (e) {
-        sel.innerHTML = `<option value="">${t('uit_fout', {msg: esc(e.message)})}</option>`;
+    if (!selComp.value) return;
+    if (!_catsMetAfstanden.length) await _laadCatsMetAfstanden();
+    if (!_catsMetAfstanden.length) {
+        sel.innerHTML = `<option value="">${t('uitsl_opt_geen_uitslagen')}</option>`;
+        $('uitslagen').innerHTML = `<div class="leeg-melding">${t('uit_leeg')}</div>`;
+        $('u-afstand-rij').style.display = 'none';
+        return;
     }
+    // Cat-dropdown op cat-signatuur (bv "HJA+HSA"). Meerdere DC's met
+    // dezelfde cats zijn samengevoegd tot 1 optie; afstanden weten hun
+    // eigen dc_id voor de fetch.
+    sel.innerHTML = `<option value="">${t('uitsl_opt_kies_cat')}</option>` +
+        _catsMetAfstanden.map(c => `<option value="${esc(c.sig)}">${esc(c.label)}</option>`).join('');
 }
 
 function opCatChange() {
-    const dcId = $('u-sel-cat').value;
+    const sig = $('u-sel-cat').value;
     const afstRij = $('u-afstand-rij');
-    const selAf = $('u-sel-afstand');
-    const uit = $('uitslagen');
+    const selAf   = $('u-sel-afstand');
+    const uit     = $('uitslagen');
     uit.innerHTML = '';
-    if (!dcId) { afstRij.style.display = 'none'; return; }
-    const cat = uitslagenCats.find(c => c.dc_id === dcId);
-    if (!cat) return;
-    const opts = [
+    if (!sig) { afstRij.style.display = 'none'; return; }
+    const catObj = _catsMetAfstanden.find(c => c.sig === sig);
+    if (!catObj) return;
+    // Value-format (dc_id nu weer per afstand nodig, want signatuur kan
+    // meerdere DC's overspannen):
+    //   afstand: "afstand|<dc_id>|<distance_id>"
+    //   klassement: "klassement|<dc_id>"
+    const afstOpts = catObj.afstanden.map(a =>
+        `<option value="afstand|${esc(a.dc_id)}|${esc(a.distance_id)}">${esc(a.distance_naam || t('uitsl_opt_afstand_fallback'))}</option>`
+    );
+    const klas = catObj.klassementen || [];
+    const klasOpts = klas.map(k => {
+        const suffix = klas.length > 1 ? ` (${esc(k.dc_naam)})` : '';
+        return `<option value="klassement|${esc(k.dc_id)}">${t('uitsl_klassement_opt')}${suffix}</option>`;
+    });
+    selAf.innerHTML = [
         `<option value="">${t('uitsl_opt_kies_afstand_of_klassement')}</option>`,
-        ...cat.afstanden.map(a => `<option value="afstand|${esc(a.distance_id)}">${esc(a.distance_naam || t('uitsl_opt_afstand_fallback'))}</option>`),
-        cat.klassement_beschikbaar ? `<option value="klassement|">${t('uitsl_klassement_opt')}</option>` : ''
-    ].filter(Boolean);
-    selAf.innerHTML = opts.join('');
+        ...afstOpts,
+        ...klasOpts,
+    ].join('');
     afstRij.style.display = 'flex';
 }
 
 async function opAfstandChange() {
-    const dcId = $('u-sel-cat').value;
     const afVal = $('u-sel-afstand').value;
     const uit = $('uitslagen');
-    if (!dcId || !afVal) { uit.innerHTML = ''; return; }
-    const [type, distId] = afVal.split('|');
+    if (!afVal) { uit.innerHTML = ''; return; }
+    const parts = afVal.split('|');
+    const type = parts[0];
+    const dcId   = parts[1] || '';
+    const distId = type === 'afstand' ? (parts[2] || '') : '';
+    if (!dcId) { uit.innerHTML = ''; return; }
     uit.innerHTML = `<div class="leeg-melding"><span class="spinner"></span> ${t('uit_laden')}</div>`;
     try {
         const url = `?action=uitslagen&competition_id=${encodeURIComponent(selComp.value)}&dc_id=${encodeURIComponent(dcId)}&type=${encodeURIComponent(type)}${distId ? '&distance_id=' + encodeURIComponent(distId) : ''}&_t=${Date.now()}`;
@@ -4504,6 +5365,303 @@ async function opAfstandChange() {
 
 function sl(s) { return s ?? ''; }
 
+// ── Rondes-tab ─────────────────────────────────────────────────────────────
+// Twee dropdowns: eerst categorie (DP4/DP3/…), dan afstand. Anders dan de
+// Uitslagen-tab die op DC-naam werkt ("DP4+DP3" bij gecombineerde ritten).
+// Bron: /rondes_cats endpoint dat per persoons-categorie de afstanden geeft.
+// Renderer haalt via ?action=ronde_uitslagen alle rondes van de gekozen DC
+// op (ZONDER license_key — coach wil alle heats zien) en filtert client-side
+// op distance_id zodat je precies één afstand ziet.
+// Gedeelde state voor Rondes- en Uitslagen-tab: categorieën met daarbinnen
+// de afstanden (met dc_id) en gepubliceerde klassementen. Één fetch, twee
+// dropdowns die er hun opties uit halen.
+let _catsMetAfstanden = []; // [{categorie, afstanden:[{distance_id, distance_naam, dc_id}], klassementen:[{dc_id, dc_naam}]}]
+
+async function _laadCatsMetAfstanden() {
+    if (!selComp.value) return;
+    try {
+        const res = await safeFetch(`?action=rondes_cats&competition_id=${encodeURIComponent(selComp.value)}&_t=${Date.now()}`);
+        const data = await res.json();
+        _catsMetAfstanden = Array.isArray(data) ? data : [];
+    } catch (e) {
+        _catsMetAfstanden = [];
+    }
+    initRondesCatDropdown();
+}
+
+function initRondesCatDropdown() {
+    const sel = $('r-sel-cat');
+    if (!sel) return;
+    const huidig = sel.value;
+    if (!_catsMetAfstanden.length) {
+        sel.innerHTML = `<option value="">${t('uitsl_opt_geen_uitslagen')}</option>`;
+        return;
+    }
+    sel.innerHTML = `<option value="">${t('rondes_opt_kies_cat')}</option>` +
+        _catsMetAfstanden.map(c => `<option value="${esc(c.sig)}">${esc(c.label)}</option>`).join('');
+    // Restore na auto-refresh
+    if (huidig && sel.querySelector(`option[value="${CSS.escape(huidig)}"]`)) {
+        sel.value = huidig;
+    }
+}
+
+async function laadRondesCategorieen() {
+    await _laadCatsMetAfstanden();
+    const cat = $('r-sel-cat').value;
+    const c = $('rondes-inhoud');
+    if (!cat) {
+        c.innerHTML = `<div class="leeg-melding">${t('rondes_kies_cat_hint')}</div>`;
+        $('r-afstand-rij').style.display = 'none';
+        return;
+    }
+    // Cat is nog geselecteerd (auto-refresh) → vul afstand + re-render
+    opRondeCatChange();
+    const afVal = $('r-sel-afstand').value;
+    if (afVal) opRondeAfstandChange();
+}
+
+function opRondeCatChange() {
+    const sig = $('r-sel-cat').value;
+    const afstRij = $('r-afstand-rij');
+    const selAf   = $('r-sel-afstand');
+    const c       = $('rondes-inhoud');
+    if (!sig) {
+        afstRij.style.display = 'none';
+        c.innerHTML = `<div class="leeg-melding">${t('rondes_kies_cat_hint')}</div>`;
+        return;
+    }
+    const catObj = _catsMetAfstanden.find(x => x.sig === sig);
+    if (!catObj) { afstRij.style.display = 'none'; c.innerHTML = ''; return; }
+    const huidig = selAf.value;
+    // Value = "dcId|distanceId" — afstand hoort bij een specifieke DC binnen
+    // deze signatuur (bij samengevoegde DC's zijn afstanden verdeeld).
+    selAf.innerHTML = `<option value="">${t('rondes_opt_kies_afstand')}</option>` +
+        catObj.afstanden.map(a =>
+            `<option value="${esc(a.dc_id)}|${esc(a.distance_id)}">${esc(a.distance_naam)}</option>`
+        ).join('');
+    afstRij.style.display = 'flex';
+    if (catObj.afstanden.length === 1) {
+        const a = catObj.afstanden[0];
+        selAf.value = `${a.dc_id}|${a.distance_id}`;
+        opRondeAfstandChange();
+    } else if (huidig && selAf.querySelector(`option[value="${CSS.escape(huidig)}"]`)) {
+        selAf.value = huidig;
+        opRondeAfstandChange();
+    } else {
+        c.innerHTML = `<div class="leeg-melding">${t('rondes_kies_afstand_hint')}</div>`;
+    }
+}
+
+async function opRondeAfstandChange() {
+    const afVal = $('r-sel-afstand').value;
+    const c = $('rondes-inhoud');
+    if (!afVal || !selComp.value) { c.innerHTML = ''; return; }
+    const [dcId, distId] = afVal.split('|');
+    if (!dcId) { c.innerHTML = ''; return; }
+    await renderRondesVoorDc(dcId, distId);
+}
+
+async function renderRondesVoorDc(dcId, distIdFilter) {
+    const c = $('rondes-inhoud');
+    if (!dcId || !selComp.value) { c.innerHTML = ''; return; }
+    c.innerHTML = `<div class="leeg-melding"><span class="spinner"></span> ${t('uit_laden')}</div>`;
+    // Geen cat-filter: gecombineerde heats (bv HJA+HSA samen op 500m) zijn
+    // de wedstrijdrealiteit — Q/q en volgorde slaan op de gehele heat.
+    try {
+        const url = `?action=ronde_uitslagen&competition_id=${encodeURIComponent(selComp.value)}&dc_id=${encodeURIComponent(dcId)}&_t=${Date.now()}`;
+        const res = await safeFetch(url);
+        const data = await res.json();
+        if (data.error) { c.innerHTML = `<div class="leeg-melding">⚠ ${esc(data.error)}</div>`; return; }
+        const distances = Array.isArray(data.distances) ? data.distances : [];
+        if (!distances.length) {
+            c.innerHTML = `<div class="leeg-melding">${t('rondes_geen_rondes')}</div>`;
+            return;
+        }
+        // Set voor .mijn-highlight — license_key is uniek per rijder.
+        const mijnLics = new Set(coachLijst.map(p => p.license_key).filter(Boolean));
+        // Labels per ronde_type via i18n zodat het meebeweegt met taalkeuze.
+        const RONDE_LABEL = {
+            heats:         t('rondes_ronde_serie'),
+            kwartfinale:   t('rondes_ronde_kwartfinale'),
+            halve_finale:  t('rondes_ronde_halve_finale'),
+            runner_up:     t('rondes_ronde_runner_up'),
+            finale_a:      t('rondes_ronde_finale_a'),
+            finale_b:      t('rondes_ronde_finale_b'),
+        };
+        let html = '';
+        // Filter op gekozen afstand — endpoint returnt alle distances van de DC,
+        // maar user heeft één specifieke gekozen (cat → afstand).
+        const zichtbaar = distIdFilter
+            ? distances.filter(d => String(d.distance_id) === String(distIdFilter))
+            : distances;
+        if (!zichtbaar.length) {
+            c.innerHTML = `<div class="leeg-melding">${t('rondes_geen_rondes')}</div>`;
+            return;
+        }
+        for (const d of zichtbaar) {
+            html += `<div class="rondeu-afstand">
+                <div class="rondeu-afstand-titel">${esc(d.distance_naam)}</div>`;
+            if (!d.rondes.length) {
+                html += `<div class="leeg-melding">${t('rondes_geen_rondes')}</div>`;
+            }
+            for (const r of d.rondes) {
+                // finale_b: backend-label wint (is systeem-aware — 'Kleine finale'
+                // bij internationaal-nieuw, 'B-finale' bij full-final). Andere
+                // rondes gebruiken de i18n-vertaling.
+                const label = (r.ronde_type === 'finale_b' && r.ronde_label)
+                    ? r.ronde_label
+                    : (RONDE_LABEL[r.ronde_type] || r.ronde_label || r.ronde_type);
+                html += `<div class="rondeu-ronde ${r.compleet ? '' : 'pending'}">
+                    <div class="rondeu-ronde-titel">
+                        <span class="rondeu-badge badge-${r.ronde_type}">${esc(label)}</span>
+                        ${r.compleet ? '' : `<span class="rondeu-pending">${esc(t('rondes_pending'))}</span>`}
+                    </div>`;
+                if (r.compleet && r.rijders.length) {
+                    // Kolom-decisies: bij puntenkoers/afvalkoers/inline weegt
+                    // rondes + punten zwaarder dan tijd. Fin altijd als er data is.
+                    const isLangeAfstand = ['puntenkoers','afvalkoers','inline'].includes(d.race_type);
+                    const heeftFin      = r.rijders.some(x => x.finishpositie != null);
+                    const heeftRondes   = isLangeAfstand && r.rijders.some(x => x.rondes != null);
+                    const heeftPkPunten = d.race_type === 'puntenkoers' && r.rijders.some(x => x.pk_punten != null);
+                    // Sorteer: Q eerst op tijd, dan q, dan rest. Runner-up op ru_positie.
+                    // B-finale gescheiden per heat (B1 fin 1..n, dan B2, etc).
+                    const rijders = [...r.rijders];
+                    if (r.ronde_type === 'runner_up') {
+                        rijders.sort((a, b) => (a.ru_positie ?? 999) - (b.ru_positie ?? 999));
+                    } else if (r.ronde_type === 'finale_b') {
+                        rijders.sort((a, b) => {
+                            const ha = a.heat_nr ?? 999, hb = b.heat_nr ?? 999;
+                            if (ha !== hb) return ha - hb;
+                            const fa = a.finishpositie ?? 999;
+                            const fb = b.finishpositie ?? 999;
+                            if (fa !== fb) return fa - fb;
+                            return (a.tijd_ms ?? 999999999) - (b.tijd_ms ?? 999999999);
+                        });
+                    } else {
+                        // Volgorde binnen een ronde:
+                        //   1. Q's op tijd (snelste eerst)
+                        //   2. q's op tijd
+                        //   3. Overige rijders — bij doorstroom-rondes
+                        //      (heats/KF/HF) puur op tijd (fin uit verschillende
+                        //      heats is niet vergelijkbaar); bij finale_a is fin
+                        //      officiële ranking, tijd = tiebreaker.
+                        //   4. Uitvallers (DNS/DNF/DQ-*) altijd onderaan.
+                        const _ord = x => x.kwal === 'Q' ? 0 : x.kwal === 'q' ? 1 : 2;
+                        const _uitvalCodes = ['DNS','DNF','DQ-TF','DQ-SF','DQ-DF'];
+                        const _isUit = x => {
+                            const s = String(x.sanctie || '').toUpperCase().split(/[,\s]+/);
+                            return _uitvalCodes.some(c => s.includes(c));
+                        };
+                        const _finaleFin = r.ronde_type === 'finale_a';
+                        rijders.sort((a, b) => {
+                            const ua = _isUit(a), ub = _isUit(b);
+                            if (ua !== ub) return ua ? 1 : -1;
+                            const oa = _ord(a), ob = _ord(b);
+                            if (oa !== ob) return oa - ob;
+                            if (oa === 2 && _finaleFin) {
+                                const fa = a.finishpositie ?? 999;
+                                const fb = b.finishpositie ?? 999;
+                                if (fa !== fb) return fa - fb;
+                            }
+                            return (a.tijd_ms ?? 999999999) - (b.tijd_ms ?? 999999999);
+                        });
+                    }
+                    html += `<table class="rondeu-tabel">
+                        <thead><tr>
+                            ${r.ronde_type === 'runner_up' ? `<th class="c">${esc(t('rondes_col_pos'))}</th>` : ''}
+                            <th class="c">${esc(t('rondes_col_snr'))}</th>
+                            <th>${esc(t('rondes_col_naam'))}</th>
+                            <th class="c">${esc(t('rondes_col_kwal'))}</th>
+                            ${heeftRondes   ? `<th class="c">${esc(t('rondes_col_rondes'))}</th>` : ''}
+                            ${heeftPkPunten ? `<th class="c">${esc(t('rondes_col_pkpt'))}</th>`   : ''}
+                            <th class="c">${esc(t('rondes_col_tijd'))}</th>
+                            <th class="c">${esc(t('rondes_col_sanctie'))}</th>
+                            ${heeftFin      ? `<th class="c">${esc(t('rondes_col_fin'))}</th>`    : ''}
+                        </tr></thead>
+                        <tbody>`;
+                    let vorigHeatNr = null;
+                    for (const rr of rijders) {
+                        // Sub-header bij B-finale / Runner-up bij heat-wissel.
+                        if ((r.ronde_type === 'finale_b' || r.ronde_type === 'runner_up')
+                            && rr.heat_nr !== vorigHeatNr) {
+                            const prefix = r.ronde_type === 'finale_b' ? 'B' : 'RU';
+                            const nr = rr.heat_nr ?? '?';
+                            html += `<tr class="rondeu-heat-sub"><td colspan="99">${esc(prefix + nr)}</td></tr>`;
+                            vorigHeatNr = rr.heat_nr;
+                        }
+                        const isMij = rr.person_license && mijnLics.has(rr.person_license);
+                        // Q/q + doorstroom-label (A / B1 / RU1 / …).
+                        const dsSuffix = rr.doorstroom_label
+                            ? `<span style="color:#666;font-weight:600">→${esc(rr.doorstroom_label)}</span>` : '';
+                        const kwalHtml = rr.kwal === 'Q'
+                            ? `<b style="color:#198754">Q</b>${dsSuffix}`
+                            : rr.kwal === 'q' ? `<b style="color:#0d6efd">q</b>${dsSuffix}`
+                            : dsSuffix;
+                        const tijdStr = rr.tijd_ms != null ? msTijd(rr.tijd_ms) : '—';
+                        const sanctieStr = rr.sanctie || '';
+                        // Non-finisher krijgt geen Fin-getal, ook al staat 'ie in DB.
+                        const sanctieCodes = String(sanctieStr).toUpperCase().split(/[,\s]+/);
+                        const isNonFin = ['DNS','DNF','DQ-TF','DQ-SF','DQ-DF'].some(c => sanctieCodes.includes(c));
+                        const finVal = (isNonFin || rr.finishpositie == null) ? '' : rr.finishpositie;
+                        html += `<tr${isMij ? ' class="mijn"' : ''}>
+                            ${r.ronde_type === 'runner_up' ? `<td class="c" style="font-weight:700;color:#1a3a5c">${rr.ru_positie ?? '—'}</td>` : ''}
+                            <td class="c" style="font-weight:600">${esc(rr.snr ?? '')}</td>
+                            <td>${esc(rr.full_name)}</td>
+                            <td class="c">${kwalHtml}</td>
+                            ${heeftRondes   ? `<td class="c">${rr.rondes ?? '—'}</td>` : ''}
+                            ${heeftPkPunten ? `<td class="c" style="font-weight:600">${rr.pk_punten ?? '—'}</td>` : ''}
+                            <td class="col-tijd">${esc(tijdStr)}</td>
+                            <td class="c" style="color:#c00;font-weight:600">${esc(sanctieStr)}</td>
+                            ${heeftFin      ? `<td class="c" style="font-weight:700;color:#1a3a5c">${esc(String(finVal))}</td>` : ''}
+                        </tr>`;
+                    }
+                    html += `</tbody></table>`;
+                }
+                html += `</div>`;
+            }
+            html += `</div>`;
+        }
+        c.innerHTML = html;
+    } catch (e) {
+        c.innerHTML = `<div class="leeg-melding">${t('uit_fout', {msg: esc(e.message)})}</div>`;
+    }
+}
+
+// JS-equivalent van backend catSortKey — jong → oud, dames → heren.
+function _catSortKey(cat) {
+    const c = (cat || '').toUpperCase().trim();
+    const mMasters = c.match(/^([HD]?)M(\d{2,3})$/);
+    if (mMasters) {
+        const g = mMasters[1] === 'D' ? 0 : 1;
+        const lft = parseInt(mMasters[2], 10);
+        if (lft >= 40) return (10 + Math.floor((lft - 40) / 5)) * 10 + g;
+    }
+    const g = c[0] === 'D' ? 0 : c[0] === 'H' ? 1 : 9;
+    const sub = c.slice(1);
+    const ageMap = { P4:0, P3:1, P2:2, P1:3, KA:4, JB:5, JA:6, SJ:7, SA:8, SB:9 };
+    const a = ageMap[sub] ?? 99;
+    return a * 10 + g;
+}
+
+// Per-cat rang berekenen — bij combi-DC (bv HJA+HSA) zie je zowel de
+// gecombineerde positie als de plek binnen je eigen cat. Uitvallers
+// (rang===null) krijgen geen cat-rang.
+function _catRanksBerekenen(rijders) {
+    const cats = [];
+    const catRank = new Map();
+    const teller = {};
+    rijders.forEach((r, idx) => {
+        const c = r.categorie || '';
+        if (!c) { catRank.set(idx, null); return; }
+        if (!cats.includes(c)) cats.push(c);
+        if (r.rang == null) { catRank.set(idx, null); return; }
+        teller[c] = (teller[c] || 0) + 1;
+        catRank.set(idx, teller[c]);
+    });
+    cats.sort((a, b) => _catSortKey(a) - _catSortKey(b));
+    return { cats, catRank };
+}
+
 function renderAfstandTabel(data) {
     if (!data.rijders?.length) return `<div class="leeg-melding">${t('uit_geen_uitslagen')}</div>`;
     // Match per persoon (license_key uniek) ipv per snr — twee rijders met
@@ -4511,47 +5669,64 @@ function renderAfstandTabel(data) {
     const mijnLics = new Set(coachLijst.map(p => p.license_key));
     const mijnSnrs = new Set(coachLijst.map(p => parseInt(p.snr)));
     const heeftRnd = data.heeft_rondes, heeftPK = data.heeft_pk_punten;
-    let hdr = `<th class="col-rang">${t('col_rang')}</th><th class="col-snr">${t('col_snr')}</th><th>${t('col_naam')}</th>`;
+    const { cats, catRank } = _catRanksBerekenen(data.rijders);
+    const toonCatKol = cats.length > 1;
+    let hdr = `<th class="col-rang">${t('col_rang')}</th>`;
+    if (toonCatKol) for (const c of cats) hdr += `<th class="col-cat-rank" title="${esc(c)}">${esc(c)}</th>`;
+    hdr += `<th class="col-snr">${t('col_snr')}</th><th>${t('col_naam')}</th>`;
     if (heeftRnd) hdr += `<th class="col-rnd">${t('col_rnd')}</th>`;
     if (heeftPK)  hdr += `<th class="col-pk">${t('col_pnt')}</th>`;
     hdr += `<th class="col-tijd">${t('col_tijd')}</th>`;
     let rows = '';
-    for (const r of data.rijders) {
-        // Primair op lic, fallback op snr voor oude cached payloads
+    data.rijders.forEach((r, idx) => {
         const isMij = r.lic ? mijnLics.has(r.lic) : mijnSnrs.has(parseInt(r.snr));
         const sanctie = sl(r.sanctie);
         rows += `<tr class="${isMij ? 'mijn' : ''}">
-            <td class="col-rang">${r.rang ?? '—'}</td>
-            <td class="col-snr">${esc(r.snr)}</td>
+            <td class="col-rang">${r.rang ?? '—'}</td>`;
+        if (toonCatKol) {
+            const cr = catRank.get(idx);
+            for (const c of cats) {
+                rows += `<td class="col-cat-rank">${(c === r.categorie && cr != null) ? cr : ''}</td>`;
+            }
+        }
+        rows += `<td class="col-snr">${esc(r.snr)}</td>
             <td>${esc(r.full_name)}${sanctie ? ` <span class="col-sanctie">${esc(sanctie)}</span>` : ''}</td>`;
         if (heeftRnd) rows += `<td class="col-rnd">${r.rondes ?? ''}</td>`;
         if (heeftPK)  rows += `<td class="col-pk">${r.pk_punten != null ? parseFloat(r.pk_punten) : ''}</td>`;
         rows += `<td class="col-tijd">${r.tijd_ms != null ? msTijd(r.tijd_ms) : ''}</td>`;
         rows += '</tr>';
-    }
+    });
     return `<table class="uitsl-tabel"><thead><tr>${hdr}</tr></thead><tbody>${rows}</tbody></table>`;
 }
 
 function renderKlassementTabel(data) {
     if (!data.rijders?.length) return `<div class="leeg-melding">${t('uit_geen_klassement')}</div>`;
-    // Match op license_key (uniek), fallback op snr. Zo voorkomen we dat
-    // twee rijders met zelfde startnummer beiden gehighlight worden.
     const mijnLics = new Set(coachLijst.map(p => p.license_key));
     const mijnSnrs = new Set(coachLijst.map(p => parseInt(p.snr)));
     const afstanden = data.afstanden ?? [];
-    let hdr = `<th class="col-rang">${t('col_rang')}</th><th class="col-snr">${t('col_snr')}</th><th>${t('col_naam')}</th>`;
+    const { cats, catRank } = _catRanksBerekenen(data.rijders);
+    const toonCatKol = cats.length > 1;
+    let hdr = `<th class="col-rang">${t('col_rang')}</th>`;
+    if (toonCatKol) for (const c of cats) hdr += `<th class="col-cat-rank" title="${esc(c)}">${esc(c)}</th>`;
+    hdr += `<th class="col-snr">${t('col_snr')}</th><th>${t('col_naam')}</th>`;
     for (const a of afstanden) {
         const kort = a.length > 6 ? a.substring(0,5) + '.' : a;
         hdr += `<th class="col-punten" title="${esc(a)}">${esc(kort)}</th>`;
     }
     hdr += `<th class="col-totaal">${t('col_tot')}</th>`;
     let rows = '';
-    for (const r of data.rijders) {
+    data.rijders.forEach((r, idx) => {
         const isMij = r.lic ? mijnLics.has(r.lic) : mijnSnrs.has(parseInt(r.snr));
         const detail = r.punten_detail ?? {};
         rows += `<tr class="${isMij ? 'mijn' : ''}">
-            <td class="col-rang">${r.rang ?? '—'}</td>
-            <td class="col-snr">${esc(r.snr)}</td>
+            <td class="col-rang">${r.rang ?? '—'}</td>`;
+        if (toonCatKol) {
+            const cr = catRank.get(idx);
+            for (const c of cats) {
+                rows += `<td class="col-cat-rank">${(c === r.categorie && cr != null) ? cr : ''}</td>`;
+            }
+        }
+        rows += `<td class="col-snr">${esc(r.snr)}</td>
             <td>${esc(r.full_name)}</td>`;
         for (const a of afstanden) {
             const p = detail[a];
@@ -4559,7 +5734,7 @@ function renderKlassementTabel(data) {
         }
         rows += `<td class="col-totaal">${r.punten_totaal != null ? parseFloat(r.punten_totaal) : '—'}</td>`;
         rows += '</tr>';
-    }
+    });
     return `<table class="uitsl-tabel"><thead><tr>${hdr}</tr></thead><tbody>${rows}</tbody></table>`;
 }
 
@@ -4932,6 +6107,11 @@ function filterComps() {
             selComp.dispatchEvent(new Event('change'));
         }
     }
+    // Setup-strook synchroniseren — bij vorigeWaarde-restore triggert
+    // change() niet (dat gebeurt alleen bij auto-select), dus updateSetupStrip
+    // handmatig aanroepen zodat de strip niet "Kies je wedstrijd…" blijft
+    // tonen terwijl er wel een selectie is.
+    if (typeof updateSetupStrip === 'function') updateSetupStrip();
 }
 
 async function laadCompetitions() {
@@ -5038,10 +6218,13 @@ async function opCompetitionChange() {
     _progGroepAlleKeys = [];
     _progEersteRender = true;
     coachInfoCache = {};
-    uitslagenCats = [];
+    _catsMetAfstanden = [];
     $('u-sel-cat').innerHTML = `<option value="">${t('uitsl_opt_kies_cat')}</option>`;
     $('u-afstand-rij').style.display = 'none';
     $('uitslagen').innerHTML = '';
+    $('r-sel-cat').innerHTML = `<option value="">${t('rondes_opt_kies_cat')}</option>`;
+    $('r-afstand-rij').style.display = 'none';
+    $('rondes-inhoud').innerHTML = '';
     renderChips();
     renderSancties();
     renderHeats();
@@ -5475,16 +6658,24 @@ document.querySelectorAll('.tab-btn').forEach(btn => {
         document.querySelectorAll('.tab-pane').forEach(p =>
             p.classList.toggle('active', p.id === 'tab-' + tab));
         // Categorieën altijd opnieuw laden bij switch naar uitslagen-tab —
-        // klassement_beschikbaar (publish/intrek-vlag) kan tussentijds
-        // gewijzigd zijn. Cache-busting via _t in laadUitslagenCategorieen.
+        // klassement-publish/intrek en nieuwe heats kunnen tussentijds
+        // wijzigen. Cache-busting via _t in _laadCatsMetAfstanden.
         if (tab === 'uitslagen' && selComp.value) {
+            _catsMetAfstanden = [];
             laadUitslagenCategorieen();
+        }
+        // Rondes-tab: idem, hergebruikt dezelfde cat-cache.
+        if (tab === 'rondes' && selComp.value) {
+            _catsMetAfstanden = [];
+            laadRondesCategorieen();
         }
     });
 });
 
 $('u-sel-cat').addEventListener('change', opCatChange);
 $('u-sel-afstand').addEventListener('change', opAfstandChange);
+$('r-sel-cat').addEventListener('change', opRondeCatChange);
+$('r-sel-afstand').addEventListener('change', opRondeAfstandChange);
 
 // ── Mededelingen (pop-ups bij belangrijke aankondigingen) ──────────────
 const _MELDING_PRIO = {
@@ -5737,15 +6928,40 @@ function toonMelding(m, compId) {
             renderChips();
             renderSancties();
             renderHeats();
-            // Uitslagen-tab: categorieën + actieve uitslag herladen als er een gekozen is
-            uitslagenCats = [];
-            if (document.querySelector('.tab-btn[data-tab="uitslagen"]').classList.contains('active')) {
-                const huidigDc = $('u-sel-cat').value;
-                const huidigAf = $('u-sel-afstand').value;
+            // Gedeelde cat-cache verversen — beide tabs lezen hieruit.
+            // klassement_config publish/intrek + nieuwe heats kunnen tijdens
+            // de dag wijzigen.
+            _catsMetAfstanden = [];
+            const uitsTabAct = document.querySelector('.tab-btn[data-tab="uitslagen"]').classList.contains('active');
+            const rondTabAct = document.querySelector('.tab-btn[data-tab="rondes"]').classList.contains('active');
+            if (uitsTabAct || rondTabAct) await _laadCatsMetAfstanden();
+
+            // Uitslagen-tab: cat + afstand/klassement-keuze bewaren.
+            if (uitsTabAct) {
+                const huidigCatU = $('u-sel-cat').value;
+                const huidigAfU  = $('u-sel-afstand').value;
                 await laadUitslagenCategorieen();
-                if (huidigDc) {
-                    $('u-sel-cat').value = huidigDc; opCatChange();
-                    if (huidigAf) { $('u-sel-afstand').value = huidigAf; opAfstandChange(); }
+                if (huidigCatU && $('u-sel-cat').querySelector(`option[value="${CSS.escape(huidigCatU)}"]`)) {
+                    $('u-sel-cat').value = huidigCatU;
+                    opCatChange();
+                    if (huidigAfU && $('u-sel-afstand').querySelector(`option[value="${CSS.escape(huidigAfU)}"]`)) {
+                        $('u-sel-afstand').value = huidigAfU;
+                        await opAfstandChange();
+                    }
+                }
+            }
+            // Rondes-tab: idem — nieuwe heat-uitslagen verschijnen automatisch.
+            if (rondTabAct) {
+                const huidigCatR = $('r-sel-cat').value;
+                const huidigAfR  = $('r-sel-afstand').value;
+                initRondesCatDropdown();
+                if (huidigCatR && $('r-sel-cat').querySelector(`option[value="${CSS.escape(huidigCatR)}"]`)) {
+                    $('r-sel-cat').value = huidigCatR;
+                    opRondeCatChange();
+                    if (huidigAfR && $('r-sel-afstand').querySelector(`option[value="${CSS.escape(huidigAfR)}"]`)) {
+                        $('r-sel-afstand').value = huidigAfR;
+                        await opRondeAfstandChange();
+                    }
                 }
             }
             ptrLaatste = Date.now();

@@ -17,13 +17,24 @@ CREATE TABLE IF NOT EXISTS `tijdschema_afstand_config` (
     `finale_heat_grootte` TINYINT UNSIGNED NOT NULL DEFAULT 6,
     `finale_b_grootte`    TINYINT UNSIGNED NOT NULL DEFAULT 6,
     `laatste_b_grootste`  TINYINT(1)   NOT NULL DEFAULT 1,
-    `finale_seeding`      ENUM('slang','tijdkoppeling') NOT NULL DEFAULT 'slang',
+    -- 'slang'          : klassiek slangenpatroon, snelste paar in H1
+    -- 'tijdkoppeling'  : langzaamsten in H1, snelsten in laatste heat (200m DTT)
+    -- 'reverse_slang'  : snake-pairs, maar heat-nummering omgekeerd zodat
+    --                    snelsten in laatste heat rijden (100m sprint 2-lane,
+    --                    Art. 114.10-114.13 WorldSkate Rulebook 2026)
+    `finale_seeding`      ENUM('slang','tijdkoppeling','reverse_slang') NOT NULL DEFAULT 'slang',
     `race_type`           ENUM('sprint','long_distance') NOT NULL DEFAULT 'sprint',
     `heats_ranking`       ENUM('time','position_time') NOT NULL DEFAULT 'time',
     `kwart_ranking`       ENUM('time','position_time') NOT NULL DEFAULT 'time',
     `half_ranking`        ENUM('time','position_time') NOT NULL DEFAULT 'time',
     `finale_ranking`      ENUM('time','position_time') NOT NULL DEFAULT 'time',
     `heeft_runner_up`     TINYINT(1)   NOT NULL DEFAULT 0,
+    -- Kleine finale (per-afstand, alle categorieën). Alleen zinvol in
+    -- internationaal-nieuw systeem: verliezers uit de laatste ronde vóór de
+    -- A-finale rijden een aparte race om de plek na de A-finale (bv 3-4).
+    -- Ronde-type in tijdschema_ritten blijft 'finale_b' — betekenis is
+    -- systeem-afhankelijk (full-final: klassieke B; internationaal: kleine).
+    `heeft_kleine_finale` TINYINT(1)   NOT NULL DEFAULT 0,
     `runner_up_max`       TINYINT UNSIGNED NOT NULL DEFAULT 6,
     `runner_up_min`       TINYINT UNSIGNED NOT NULL DEFAULT 0,
     PRIMARY KEY (`id`),

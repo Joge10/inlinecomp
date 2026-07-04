@@ -337,14 +337,20 @@ try {
         //          'time' als technische default.
         $isSprint = ($raceType === 'sprint');
         // Sprint-afstanden splitsen op meters:
+        //  - 100m     : alle rondes 'time' — WorldSkate Rulebook Art. 113.3
+        //               "During the first round, only best times are qualified"
+        //               en Art. 114.4 "During all the qualifying round, only
+        //               best times are advanced to the following round".
         //  - < 600m   : klassieke sprint-flow (eerste ronde 'time',
-        //               tussenrondes 'position_time', finale 'time')
+        //               tussenrondes 'position_time', finale 'time') — voor
+        //               200m DTT / 500m+D waar de bracket-pattern uit posities
+        //               volgt.
         //  - ≥ 600m   : alle rondes 'time' (langere sprint waar tijd-meting
         //               leidend is, niet positie + tijd in tussenrondes)
         //  - long_distance : voorronden 'position_time', finale 'time'
         //                    (technisch; A-finale wordt sowieso door
         //                    race_type-regels gesorteerd)
-        if ($isSprint && $afstandMeters !== null && $afstandMeters >= 600) {
+        if ($isSprint && $afstandMeters !== null && ($afstandMeters >= 600 || $afstandMeters === 100)) {
             $rankingMethods = [
                 'heats'        => 'time',
                 'kwartfinale'  => 'time',
@@ -461,13 +467,15 @@ try {
             ORDER BY he.startpositie
         ");
 
-        // Groepeer heats per ronde_type
+        // Groepeer heats per ronde_type. Bij internationaal-nieuw: finale_b
+        // = kleine finale (rijders uit voorgaande ronde die niet naar A gingen).
         $rondeGroepen = [];
         $rondeLabels = [
             'heats'        => 'Serie',
             'kwartfinale'  => 'Kwartfinale',
             'halve_finale' => 'Halve finale',
             'finale_a'     => 'A-Finale',
+            'finale_b'     => ($systeem === 'internationaal-nieuw') ? 'Kleine finale' : 'B-Finale',
             'runner_up'    => 'Runner-up',
         ];
 
@@ -499,7 +507,10 @@ try {
         //   chain heats → … → finale + RU  → orde: finale, half, kwart, RU, heats
         //   chain kwart → finale + RU       → orde: finale, half, RU, kwart
         //   chain HF    → finale + RU       → orde: finale, RU, half
-        $standaardVolgorde = ['finale_a', 'halve_finale', 'kwartfinale', 'heats'];
+        // finale_b (= kleine finale bij internationaal-nieuw) komt direct na
+        // A-Finale: rijders daar krijgen plek N+1..N+M (na de A-finalisten),
+        // vóór de halve-finale-restant.
+        $standaardVolgorde = ['finale_a', 'finale_b', 'halve_finale', 'kwartfinale', 'heats'];
         if (isset($rondeGroepen['runner_up'])) {
             $aanwezig = array_keys($rondeGroepen);
             $bron = null;
@@ -1019,10 +1030,14 @@ try {
             ];
         }
 
-        // Nette label bepalen
+        // Nette label bepalen. Bij internationaal-nieuw + finale_b: dat is
+        // de kleine finale (rijders uit voorgaande ronde die niet naar A
+        // gingen, strijden om plek na A). Bij full-final: klassieke B-finale.
         $rondeType = $heat['ronde_type'];
         if ($rondeType === 'finale_a') {
             $label = 'A-Finale';
+        } elseif ($systeem === 'internationaal-nieuw') {
+            $label = 'Kleine finale';
         } else {
             $label = 'B' . (int)$heat['heat_nr'] . '-Finale';
         }

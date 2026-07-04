@@ -738,6 +738,12 @@ if ($action === 'genereer_volgende_ronde') {
         // ook de B-finales worden aangemaakt op basis van finale_heat_grootte.
         $isFullFinal = ($systeem === 'full-final') && ($naarRondeType === 'finale_a');
 
+        // Kleine finale (internationaal-nieuw alternatief voor B-finale).
+        // Rijders uit de voorgaande ronde die niet in de A-finale kwalificeren
+        // rijden een aparte race om de plek na A (bv 3-4 bij 100m 2-lane).
+        // Wordt hieronder gezet nadat afCfg is geladen.
+        $isKleinFinale = false;
+
         // Haal afstand-config op (nodig voor finaleHg, B-verdeling en seeding-methode)
         $finaleHg       = 6;
         $bFinaleHg      = 6;
@@ -763,7 +769,8 @@ if ($action === 'genereer_volgende_ronde') {
 
         if ($afstandNaam) {
             $afCfgStmt = $pdo->prepare("
-                SELECT finale_heat_grootte, finale_b_grootte, laatste_b_grootste, finale_seeding
+                SELECT finale_heat_grootte, finale_b_grootte, laatste_b_grootste,
+                       finale_seeding, heeft_kleine_finale
                 FROM tijdschema_afstand_config
                 WHERE tijdschema_id = ? AND afstand_naam = ?
                 LIMIT 1
@@ -776,6 +783,12 @@ if ($action === 'genereer_volgende_ronde') {
                 $bFinaleHg      = max($finaleHg, $bFinaleHgRaw);
                 $bLaatstGrootst = !empty($afCfg['laatste_b_grootste']);
                 $finaleSeeding  = $afCfg['finale_seeding'] ?? 'slang';
+                // Kleine finale alleen voor internationaal-nieuw systeem én
+                // als we naar de A-finale gaan (rijders uit voorgaande ronde
+                // die niet in A komen → kleine finale).
+                $isKleinFinale = !$isFullFinal
+                                 && ($naarRondeType === 'finale_a')
+                                 && !empty($afCfg['heeft_kleine_finale']);
             }
         }
 
@@ -1129,6 +1142,10 @@ if ($action === 'genereer_volgende_ronde') {
 
         // Voor full-final: A-finale krijgt max $finaleHg rijders; de rest gaat naar B-finales.
         // heats_q is voor full-final gelijk aan cat.n (iedereen), maar dat klopt niet voor A-finale.
+        // Bij kleine finale (internationaal-nieuw): $aantalDoor is al correct
+        // uit de bestaande logica (heats_q / kwart_door / half_door). Alleen
+        // moet dat aantal ook naar A gaan; de "rest" uit de vorige ronde gaat
+        // automatisch naar $bSlots verderop via array_slice.
         if ($isFullFinal) {
             // Check of er daadwerkelijk B-finale ritten in het tijdschema staan.
             // Als een rijder later is bijgekomen (nadat de planning al was gemaakt
@@ -1484,8 +1501,10 @@ if ($action === 'genereer_volgende_ronde') {
             $alleGesorteerd = array_merge($metTijd, $zonderTijd);
             $allSlots = array_slice($alleGesorteerd, 0, $aantalDoor);
 
-            // Full-final: riders die niet in A-finale passen → B-finales
-            if ($isFullFinal) {
+            // Rijders die niet in A-finale passen → B-slots.
+            // - Full-final: klassieke B-finale (rest op series-tijd)
+            // - Internationaal-nieuw + kleine finale: verliezers uit vorige ronde
+            if ($isFullFinal || $isKleinFinale) {
                 $bSlots = array_slice($alleGesorteerd, $aantalDoor);
 
                 // Ex-aequo aan A-finale grens: als de laatste A-finalist dezelfde tijd
@@ -1536,11 +1555,11 @@ if ($action === 'genereer_volgende_ronde') {
         // Nu vergelijken we per ronde-type: A moet exact dezelfde rijders
         // hebben EN B moet exact dezelfde rijders hebben.
         $nieuwePerRonde = [$naarRondeType => []];
-        if ($isFullFinal) $nieuwePerRonde['finale_b'] = [];
+        if ($isFullFinal || $isKleinFinale) $nieuwePerRonde['finale_b'] = [];
         foreach ($allSlots as $r) {
             if (!empty($r['person_license'])) $nieuwePerRonde[$naarRondeType][] = $r['person_license'];
         }
-        if ($isFullFinal) {
+        if ($isFullFinal || $isKleinFinale) {
             foreach (($bSlots ?? []) as $r) {
                 if (!empty($r['person_license'])) $nieuwePerRonde['finale_b'][] = $r['person_license'];
             }
@@ -1555,7 +1574,7 @@ if ($action === 'genereer_volgende_ronde') {
         // Bestaande set per ronde-type ophalen. JOIN ook tijdschema_ritten zodat
         // we per ronde_type kunnen groeperen (en split-filter kunnen toepassen).
         $cmpTypes = [$naarRondeType];
-        if ($isFullFinal) $cmpTypes[] = 'finale_b';
+        if ($isFullFinal || $isKleinFinale) $cmpTypes[] = 'finale_b';
         $cmpPh = implode(',', array_fill(0, count($cmpTypes), '?'));
         $bestStmt = $pdo->prepare("
             SELECT r.ronde_type, he.person_license
@@ -1574,7 +1593,7 @@ if ($action === 'genereer_volgende_ronde') {
             $splitBindR
         ));
         $bestaandePerRonde = [$naarRondeType => []];
-        if ($isFullFinal) $bestaandePerRonde['finale_b'] = [];
+        if ($isFullFinal || $isKleinFinale) $bestaandePerRonde['finale_b'] = [];
         foreach ($bestStmt->fetchAll(PDO::FETCH_ASSOC) as $row) {
             $bestaandePerRonde[$row['ronde_type']][] = $row['person_license'];
         }
@@ -1961,6 +1980,14 @@ if ($action === 'genereer_volgende_ronde') {
         // ── Seed alle slots naar dest-heats ──────────────────────────────────
         $heatNummers     = array_keys($heatIds);
         sort($heatNummers);
+        // reverse_slang (100m sprint 2-lane, Art. 114.10-13): heat-nummering
+        // omkeren zodat het snelste paar in de laatste heat rijdt. Alle
+        // seeding-varianten hieronder (bracket-pattern, twee-pass snake,
+        // standaard snake) gebruiken $heatNummers als volgorde-array, dus
+        // door hier te reversen krijgen ze automatisch de omgekeerde output.
+        if ($finaleSeeding === 'reverse_slang') {
+            $heatNummers = array_reverse($heatNummers);
+        }
         $nDest           = count($heatNummers);
         $aantalSlots     = count($allSlots);
 
@@ -2084,8 +2111,9 @@ if ($action === 'genereer_volgende_ronde') {
         }
 
         // ── Overflow-rijders (ex-aequo) ─────────────────────────────────────────
-        // Full-final: ex-aequo is al verwerkt in $allSlots/$bSlots, skip hier.
-        if (!$isFullFinal && !empty($overflowRijders)) {
+        // Full-final/kleine finale: ex-aequo is al verwerkt in $allSlots/$bSlots,
+        // hier alleen voor andere internationaal-scenario's.
+        if (!$isFullFinal && !$isKleinFinale && !empty($overflowRijders)) {
             // Meerdere finale-heats (bijv. DTT): maak extra heat(s) aan
             // KF/HF of 1 finale-heat: voeg toe aan bestaande heats (heat 1, 2, ...)
             {
@@ -2116,7 +2144,7 @@ if ($action === 'genereer_volgende_ronde') {
 
         // ── Full-Final: genereer B-finale heats ──────────────────────────────────
         $bHeatIds = [];
-        if ($isFullFinal && !empty($bSlots)) {
+        if (($isFullFinal || $isKleinFinale) && !empty($bSlots)) {
             // Als de planner per-cat 0 B-heats heeft ingesteld: alle B-rijders
             // toevoegen aan de A-finale. De planner is verantwoordelijk voor
             // het in de gaten houden of de A-finale dan niet te vol wordt.
@@ -2148,7 +2176,7 @@ if ($action === 'genereer_volgende_ronde') {
                 $bSlots = [];  // verwerkt — geen B-finale nodig
             }
         }
-        if ($isFullFinal && !empty($bSlots)) {
+        if (($isFullFinal || $isKleinFinale) && !empty($bSlots)) {
             // Haal finale_b ritten op uit tijdschema. Bij split: alleen B-ritten
             // van DEZE split (dc_naam-filter) — anders pakken we B-finale ritten
             // van zustersplits mee en insertien we heats in het verkeerde subblok.

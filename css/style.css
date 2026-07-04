@@ -2042,6 +2042,31 @@ col.heat-tp   { width: 72px; }   /* XX-12345 = 8 monospace tekens */
 .ronde-blok {
     margin-bottom: 2rem;
 }
+/* Finales-rij: kleine finale + A-finale naast elkaar (internationaal-nieuw
+   + heeft_kleine_finale). Volgorde in DOM = kleine finale eerst, dan A-finale
+   → visueel links de kleine, rechts de A. Matcht tijdschema-rijvolgorde.
+   Grid identiek aan .heat-grid (3 kolommen, gap 12px) zodat de kleine-finale-
+   kaart onder halve-heat-1 komt te staan en de A-finale-kaart onder halve-
+   heat-2 — gelijke breedte en spacing. */
+.ronde-finales-rij {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 12px;
+    align-items: start;
+    margin-bottom: 2rem;
+}
+.ronde-finales-rij > .ronde-blok {
+    margin-bottom: 0;
+    min-width: 0;
+}
+/* Binnen de finales-rij is elk ronde-blok al 1 grid-cel — de heat-grid
+   erbinnen moet dus 1 kolom zijn, niet weer 3 kolommen splitsen. */
+.ronde-finales-rij .heat-grid {
+    grid-template-columns: 1fr;
+}
+@media (max-width: 900px) {
+    .ronde-finales-rij { grid-template-columns: 1fr; }
+}
 .ronde-kop {
     display: flex;
     align-items: baseline;

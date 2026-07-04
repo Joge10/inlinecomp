@@ -437,8 +437,10 @@ function berekenInternationaalResultaat(array $rondeData, string $raceSubType = 
     // Bepaal per rijder de EERSTE ronde (chronologisch) waarin ze voorkomen.
     // $rondeData is geordend finale→series, chronologisch is het omgekeerd.
     // DNS in de eerste ronde = 0 punten (art. 144.4: "DNS except the first round")
+    // finale_b (kleine finale internationaal-nieuw) staat qua chronologie
+    // gelijk aan runner_up: gereden ná de finale_a-doorstroom-scheiding.
     $rondeNiveau = ['heats' => 1, 'kwartfinale' => 2, 'halve_finale' => 3,
-                    'runner_up' => 4, 'finale_a' => 5];
+                    'runner_up' => 4, 'finale_b' => 4, 'finale_a' => 5];
     $eersteRonde = []; // person_license => laagste ronde_type niveau
     foreach ($rondeData as $ronde) {
         $niveau = $rondeNiveau[$ronde['ronde_type']] ?? 0;

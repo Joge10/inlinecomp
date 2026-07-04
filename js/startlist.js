@@ -407,7 +407,7 @@ function slVindCatCfg(schema, dcId, distId) {
 
 // Bouw ronde-flow op basis van cat_config + systeem
 // Geeft array van { sleutel, naam } terug
-function bouwSlFlow(catCfg, systeem) {
+function bouwSlFlow(catCfg, systeem, afstandCfg = null) {
     const KLEUREN = typeof TS_RONDE_KLEUR !== 'undefined' ? TS_RONDE_KLEUR : {};
     if (!catCfg || !systeem) return [{ sleutel: 'heats', naam: 'Series', kleur: KLEUREN.heats || '#0d6efd' }];
     const flow = [];
@@ -441,6 +441,13 @@ function bouwSlFlow(catCfg, systeem) {
             flow.push({ sleutel: 'finale_b', naam: 'B-finale(s)', kleur: KLEUREN.finale_b || '#20c997' });
         }
     } else {
+        // Kleine finale bij internationaal-nieuw: rijders uit voorgaande ronde
+        // die niet naar A-finale gingen strijden om plek na A (100m sprint).
+        // Volgorde in flow = tijdschema-volgorde: kleine finale wordt eerst
+        // gereden, dan A-finale.
+        if (afstandCfg && Number(afstandCfg.heeft_kleine_finale) === 1) {
+            flow.push({ sleutel: 'finale_b', naam: 'Kleine finale', kleur: KLEUREN.finale_b || '#20c997' });
+        }
         flow.push({ sleutel: 'finale_a', naam: 'A-finale', kleur: KLEUREN.finale_a || '#198754' });
     }
     return flow.length ? flow : [{ sleutel: 'heats', naam: 'Series', kleur: '#0d6efd' }];
@@ -588,8 +595,11 @@ async function vulPrintSelect() {
             // zodat de correcte eerste ronde wordt getoond ook als de cache nog
             // niet gevuld is (bijv. tab nog niet aangeklikt na page refresh).
             const catCfg = schema ? slVindCatCfg(schema, groep.dc_id, distId ?? '') : null;
+            const afstandCfgLocal = schema
+                ? ((schema.afstand_configs ?? []).find(ac => ac.afstand_naam === distNaam) ?? null)
+                : null;
             const flow   = catCfg
-                ? bouwSlFlow(catCfg, schema?.systeem ?? null)
+                ? bouwSlFlow(catCfg, schema?.systeem ?? null, afstandCfgLocal)
                 : (startlijstCache[cacheKey]?.flow ?? [{ sleutel: 'heats', naam: 'Series' }]);
             // Ronde 1 is altijd beschikbaar als er een loting is
             const ronden = [{ label: SL_RONDE_LABEL[flow[0]?.sleutel] ?? flow[0]?.naam ?? 'Series',
@@ -598,9 +608,7 @@ async function vulPrintSelect() {
                                           rondeLabel: SL_RONDE_LABEL[flow[0]?.sleutel] ?? flow[0]?.naam ?? 'Series' } }];
 
             // Voeg volgende rondes toe als die al gegenereerd zijn (max_ronde > 1)
-            const maxRonde     = (_slStatusCache?.rondeMap?.get(statusKey)) ?? 1;
-            const isFullFinal  = (schema?.systeem === 'full-final');
-            let ffFinalesAdded = false; // voorkom dubbele Finales-optie bij full-final
+            const maxRonde = (_slStatusCache?.rondeMap?.get(statusKey)) ?? 1;
 
             for (let ri = 1; ri < flow.length; ri++) {
                 const fr = flow[ri];
@@ -608,27 +616,33 @@ async function vulPrintSelect() {
                 const rondeNrMap = { heats:1, kwartfinale:2, halve_finale:3, finale:4, runner_up:4, finale_a:4, finale_b:4 };
                 const frNr = rondeNrMap[fr.sleutel] ?? (ri + 1);
                 if (frNr <= maxRonde) {
-                    // Full-final: finale_a + finale_b samenvoegen tot één "Finales"-optie
-                    if (isFullFinal && (fr.sleutel === 'finale_a' || fr.sleutel === 'finale_b')) {
-                        if (!ffFinalesAdded) {
-                            ronden.push({
-                                label:   'Finales',
-                                sleutel: 'full_final_finales',
-                                optData: { ...baseOpt, rondeSleutel: 'full_final_finales',
-                                           rondeLabel: 'Finales', rondeNr: 4 },
-                            });
-                            ffFinalesAdded = true;
-                        }
-                    } else {
-                        ronden.push({
-                            label:   SL_RONDE_LABEL[fr.sleutel] ?? fr.naam ?? fr.sleutel,
-                            sleutel: fr.sleutel,
-                            optData: { ...baseOpt, rondeSleutel: fr.sleutel,
-                                       rondeLabel: SL_RONDE_LABEL[fr.sleutel] ?? fr.naam ?? fr.sleutel,
-                                       rondeNr: frNr },
-                        });
-                    }
+                    ronden.push({
+                        label:   SL_RONDE_LABEL[fr.sleutel] ?? fr.naam ?? fr.sleutel,
+                        sleutel: fr.sleutel,
+                        optData: { ...baseOpt, rondeSleutel: fr.sleutel,
+                                   rondeLabel: SL_RONDE_LABEL[fr.sleutel] ?? fr.naam ?? fr.sleutel,
+                                   rondeNr: frNr },
+                    });
                 }
+            }
+            // finale_a + finale_b altijd samensmelten tot één 'Finales'-optie:
+            // A- en B-finale (of A + kleine finale bij internationaal-nieuw)
+            // worden bij een categorie ALTIJD direct na elkaar gereden en horen
+            // dus in één print te zitten. Geldt voor beide systemen.
+            const idxA = ronden.findIndex(r => r.sleutel === 'finale_a');
+            const idxB = ronden.findIndex(r => r.sleutel === 'finale_b');
+            if (idxA !== -1 && idxB !== -1) {
+                const finaleOptData = ronden[idxA].optData;
+                const insertIdx = Math.min(idxA, idxB);
+                // Verwijder beide entries (hoge index eerst zodat lage index blijft kloppen)
+                ronden.splice(Math.max(idxA, idxB), 1);
+                ronden.splice(Math.min(idxA, idxB), 1);
+                ronden.splice(insertIdx, 0, {
+                    label:   'Finales',
+                    sleutel: 'full_final_finales',
+                    optData: { ...finaleOptData, rondeSleutel: 'full_final_finales',
+                               rondeLabel: 'Finales', rondeNr: 4 },
+                });
             }
 
             // Niveau-1: displayNaam (merge_label als die bestaat, anders dc_name)
@@ -651,6 +665,29 @@ async function vulPrintSelect() {
                 verzamel(af.id ?? '', af.name ?? String(af.value_meters ?? af.id ?? ''));
         else
             verzamel('', '');
+    }
+
+    // Post-processing dedup: als finale_a EN finale_b beide in ronden zitten
+    // (via 2x verzamel() bij split-groepen, of via cache/status-race), smelt
+    // ze alsnog samen tot één 'Finales'-optie. Backstop voor de merge in verzamel().
+    for (const [, distMap] of _slPrintOpties) {
+        for (const [, distInfo] of distMap) {
+            const ronden = distInfo.ronden;
+            const idxA = ronden.findIndex(r => r.sleutel === 'finale_a');
+            const idxB = ronden.findIndex(r => r.sleutel === 'finale_b');
+            if (idxA !== -1 && idxB !== -1) {
+                const finaleOptData = ronden[idxA].optData;
+                const insertIdx = Math.min(idxA, idxB);
+                ronden.splice(Math.max(idxA, idxB), 1);
+                ronden.splice(Math.min(idxA, idxB), 1);
+                ronden.splice(insertIdx, 0, {
+                    label:   'Finales',
+                    sleutel: 'full_final_finales',
+                    optData: { ...finaleOptData, rondeSleutel: 'full_final_finales',
+                               rondeLabel: 'Finales', rondeNr: 4 },
+                });
+            }
+        }
     }
 
     // Eerste select (categorie) vullen — alleen als DOM er is
@@ -1000,11 +1037,14 @@ async function _bouwStartlijstDrukInternal(optData) {
             <div class="pr-combi-kolommen">${kolommen}</div>
         </div>`;
     } else if (isFullFinalPrint) {
-        // B-finales sectie
+        // B-finales sectie. Bij internationaal-nieuw is finale_b de "kleine
+        // finale" (1 heat, verliezers uit voorgaande ronde) — dan andere kop.
         const bHeats = afdrukHeats.filter(h => h._finaleType === 'b');
         const aHeats = afdrukHeats.filter(h => h._finaleType === 'a');
+        const isKleineFinaleFlow = schema?.systeem !== 'full-final';
         if (bHeats.length) {
-            cardsHtml += `<div class="pr-sectie-kop pr-sectie-b">${esc(T('startlijst.sec_b_finales'))}</div>`;
+            const bKopTxt = isKleineFinaleFlow ? 'Kleine finale' : T('startlijst.sec_b_finales');
+            cardsHtml += `<div class="pr-sectie-kop pr-sectie-b">${esc(bKopTxt)}</div>`;
             for (const heat of bHeats)
                 cardsHtml += maakCard(heat, rlB, '', bHeats.length);
         }
@@ -1651,7 +1691,8 @@ async function toonAfstandConfig(groep, distId, distNaam) {
     }
 
     const catCfg      = slVindCatCfg(schema, groep.dc_id, distId);
-    const flow        = bouwSlFlow(catCfg, schema?.systeem ?? null);
+    const _afstandCfgVoorFlow = (schema?.afstand_configs ?? []).find(ac => ac.afstand_naam === distNaam) ?? null;
+    const flow        = bouwSlFlow(catCfg, schema?.systeem ?? null, _afstandCfgVoorFlow);
     cache.flow        = flow;
     const _eersteSleutel = flow[0]?.sleutel;
     // Gebruik het werkelijke aantal ritten uit het tijdschema als die er zijn,
@@ -2635,13 +2676,46 @@ function berekenSchemaHeats(r, catCfg, totaalRijders, ritLookup = null, systeem 
             }
             nHeats = Math.max(1, int(catCfg.finale_heats ?? 1));
             break;
-        case 'finale_b':
-            return null;
+        case 'finale_b': {
+            // Kleine finale (internationaal-nieuw): rijders uit de voorgaande
+            // ronde die NIET naar de A-finale doorstroomden. Slots = tijden
+            // N+1 t/m totaal, waarbij N het aantal A-doorstromers is.
+            let totIn, aRij;
+            if (catCfg.heeft_halve_finale) {
+                totIn = catCfg.heeft_kwartfinale
+                    ? int(catCfg.kwart_door)
+                    : (catCfg.heeft_heats ? int(catCfg.heats_q) : totaalRijders);
+                aRij = int(catCfg.half_door);
+            } else if (catCfg.heeft_kwartfinale) {
+                totIn = catCfg.heeft_heats ? int(catCfg.heats_q) : totaalRijders;
+                aRij = int(catCfg.kwart_door);
+            } else if (catCfg.heeft_heats) {
+                totIn = totaalRijders;
+                aRij = int(catCfg.heats_q);
+            } else {
+                return null;
+            }
+            const bRij = Math.max(0, totIn - aRij);
+            if (bRij <= 0) return null;
+            const slots = [];
+            for (let i = aRij + 1; i <= totIn; i++) slots.push(`${i}e tijdsnelste`);
+            return [{ nummer: 1, slots }];
+        }
         default:
             return null;
     }
 
     if (nSlots <= 0 || prevNHeats <= 0) return null;
+
+    // reverse_slang: pairs blijven klassiek snake, maar heat-nummering wordt
+    // omgedraaid zodat het snelste paar in de laatste heat rijdt (100m sprint
+    // 2-lane, Art. 114.10-13). Wordt hieronder aan alle heat-return-paden
+    // toegepast via applyRS().
+    const applyRS = (heats) => {
+        if (afstandCfg?.finale_seeding !== 'reverse_slang') return heats;
+        if (!Array.isArray(heats) || heats.length < 2) return heats;
+        return [...heats].reverse().map((h, i) => ({ ...h, nummer: i + 1 }));
+    };
 
     // Tijdkoppeling: paren van achteren, langzaamsten in heat 1, snelsten in laatste heat.
     // Bestaande logic — bouwSchemaSlots geeft de Q+q labels, daarna pair-distributie.
@@ -2673,7 +2747,7 @@ function berekenSchemaHeats(r, catCfg, totaalRijders, ritLookup = null, systeem 
 
     // CASE 1: alleen Q → bracket (heat-paren {1,last}, {2,last-1}, ...)
     if (caseAlleenQ && nHeats > 1) {
-        return bracketVerdeelLabels(prevNaam, prevNHeats, qph, nHeats);
+        return applyRS(bracketVerdeelLabels(prevNaam, prevNHeats, qph, nHeats));
     }
 
     // CASE 3: Q + q → twee-pass snake met tier+time-labels
@@ -2697,7 +2771,7 @@ function berekenSchemaHeats(r, catCfg, totaalRijders, ritLookup = null, systeem 
         const heats = Array.from({ length: nHeats }, (_, i) => ({ nummer: i + 1, slots: [] }));
         snakeAppendSlots(qLabels, heats);
         snakeAppendSlots(qqLabels, heats);
-        return heats;
+        return applyRS(heats);
     }
 
     // CASE 2 / fallback: alleen q óf 1 destination-heat — gewone snake.
@@ -2705,7 +2779,7 @@ function berekenSchemaHeats(r, catCfg, totaalRijders, ritLookup = null, systeem 
     // "Xe tijdsnelste" voor q (voor 1-heat finale: Q's eerst, dan q's).
     const slots = bouwSchemaSlots(prevNaam, prevNHeats, nSlots, qph);
     if (nHeats === 1) return [{ nummer: 1, slots }];
-    return snakeVerdeelSlots(slots, nHeats);
+    return applyRS(snakeVerdeelSlots(slots, nHeats));
 }
 
 // ── Resultaten weergeven ──────────────────────────────────────────────────────
@@ -2843,6 +2917,12 @@ function toonSlResultaten(cacheKey, vergrendeld = false) {
     const totaalRijders  = cache.resultaat?.totaalRijders ?? 0;
     const volgendeRondes = cache.resultaat?.volgende_rondes ?? [];
 
+    // Detecteer kleine finale + A-finale combi (internationaal-nieuw): render
+    // ze naast elkaar in een gedeelde flex-row zodat de kleine finale visueel
+    // aan de linkerkant staat naast de A-finale (matcht rijvolgorde).
+    const heeftKleineFin = flow.some(f => f.sleutel === 'finale_b')
+                         && flow.some(f => f.sleutel === 'finale_a');
+    let finalesRij = null;
     for (let i = 1; i < flow.length; i++) {
         const r          = flow[i];
         const ritLookupR = bouwRitLookup(schema, groep?.dc_id, distId, r.sleutel);
@@ -2852,6 +2932,7 @@ function toonSlResultaten(cacheKey, vergrendeld = false) {
 
         const div = document.createElement('div');
         div.className = 'ronde-blok';
+        div.dataset.rondetype = r.sleutel;
 
         if (echteRonde) {
             // Echte riders beschikbaar uit DB
@@ -2885,7 +2966,18 @@ function toonSlResultaten(cacheKey, vergrendeld = false) {
                 `</div>`;
             div.appendChild(maakSchemaHeatGrid(schemaHeats, ritLookupR));
         }
-        blokkenDiv.appendChild(div);
+        // Finales-rij: bij internationaal + kleine finale worden finale_b en
+        // finale_a in één flex-row gepakt zodat ze naast elkaar staan.
+        if (heeftKleineFin && (r.sleutel === 'finale_b' || r.sleutel === 'finale_a')) {
+            if (!finalesRij) {
+                finalesRij = document.createElement('div');
+                finalesRij.className = 'ronde-finales-rij';
+                blokkenDiv.appendChild(finalesRij);
+            }
+            finalesRij.appendChild(div);
+        } else {
+            blokkenDiv.appendChild(div);
+        }
     }
 
 }

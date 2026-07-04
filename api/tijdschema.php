@@ -740,19 +740,71 @@ function genereerRitten(PDO $pdo, int $tsId, string $compId, ?array $catVanJS = 
                             $ritten[] = $r;
                         }
                     } else {
+                        // ── Internationaal-nieuw ─────────────────────────────
+                        // A-finale krijgt exact het aantal doorstromers uit de
+                        // voorgaande ronde ($rijders — bepaald door heats_q /
+                        // kwart_door / half_door). Bij heeft_kleine_finale:
+                        // de REST van de voorgaande ronde (die niet doorstroomde
+                        // naar A) rijdt de kleine finale (finale_b, 1 heat).
+                        $heeftKleineFinale = !empty($afCfg['heeft_kleine_finale']);
                         $aRijders = $rijders;
+
+                        // Totaal in voorgaande ronde bepalen om kleine-finale-
+                        // grootte af te leiden: input van de laatste actieve
+                        // ronde vóór de finale.
+                        $totaalInVorige = $rijders;
+                        if (!empty($cc['heeft_halve_finale'])) {
+                            if (!empty($cc['heeft_kwartfinale'])) {
+                                $totaalInVorige = max(0, (int)($cc['kwart_door'] ?? 0));
+                            } elseif (!empty($cc['heeft_heats'])) {
+                                $totaalInVorige = max(0, (int)($cc['heats_q'] ?? 0));
+                            } else {
+                                $totaalInVorige = $cat['n'];
+                            }
+                        } elseif (!empty($cc['heeft_kwartfinale'])) {
+                            if (!empty($cc['heeft_heats'])) {
+                                $totaalInVorige = max(0, (int)($cc['heats_q'] ?? 0));
+                            } else {
+                                $totaalInVorige = $cat['n'];
+                            }
+                        } elseif (!empty($cc['heeft_heats'])) {
+                            $totaalInVorige = $cat['n'];
+                        }
+                        $bRijders = $heeftKleineFinale
+                                    ? max(0, $totaalInVorige - $aRijders)
+                                    : 0;
+
+                        $catRitten = [];
+
+                        // Kleine finale eerst (rijdt vóór A in het programma,
+                        // net als bij full-final Bn eerst dan A).
+                        if ($bRijders > 0) {
+                            $catRitten[] = [
+                                'blok_id'      => $blokId,
+                                'volgorde'     => 0,
+                                'dc_id'        => $cat['dc_id'],
+                                'distance_id'  => $cat['distance_id'],
+                                'afstand_naam' => $afstandNaam,
+                                'ronde_type'   => 'finale_b',
+                                'finale_label' => 'B',
+                                'heat_nr'      => 1,
+                                'rit_naam'     => "Kleine finale {$afstandNaam} – {$cat['dc_naam']}",
+                                'dc_naam'      => $cat['dc_naam'],
+                                'verwacht'     => $bRijders,
+                            ];
+                        }
 
                         // ── A-finale (1 of meer heats) ───────────────────────
                         $nFinaleHeats = max(1, (int)($cc['finale_heats'] ?? 1));
-                        $verwachtPerHeat = (int)ceil($rijders / max(1, $nFinaleHeats));
+                        $verwachtPerHeat = (int)ceil($aRijders / max(1, $nFinaleHeats));
                         for ($fh = 1; $fh <= $nFinaleHeats; $fh++) {
-                            $fhVerwacht = min($verwachtPerHeat, $rijders - $verwachtPerHeat * ($fh - 1));
+                            $fhVerwacht = min($verwachtPerHeat, $aRijders - $verwachtPerHeat * ($fh - 1));
                             $fhNaam = $nFinaleHeats > 1
                                 ? "A-finale heat {$fh} {$afstandNaam} – {$cat['dc_naam']}"
                                 : "A-finale {$afstandNaam} – {$cat['dc_naam']}";
-                            $ritten[] = [
+                            $catRitten[] = [
                                 'blok_id'      => $blokId,
-                                'volgorde'     => $volgorde++,
+                                'volgorde'     => 0,
                                 'dc_id'        => $cat['dc_id'],
                                 'distance_id'  => $cat['distance_id'],
                                 'afstand_naam' => $afstandNaam,
@@ -763,6 +815,11 @@ function genereerRitten(PDO $pdo, int $tsId, string $compId, ?array $catVanJS = 
                                 'dc_naam'      => $cat['dc_naam'],
                                 'verwacht'     => max(0, $fhVerwacht),
                             ];
+                        }
+
+                        foreach ($catRitten as $r) {
+                            $r['volgorde'] = $volgorde++;
+                            $ritten[] = $r;
                         }
                     }
                 }
@@ -978,7 +1035,7 @@ try {
         $finaleHg        = max(1, (int)($body['finale_heat_grootte'] ?? 6));
         $finaleBg        = max($finaleHg, (int)($body['finale_b_grootte'] ?? 6));
         $bLaatstGrootst  = !empty($body['laatste_b_grootste']) ? 1 : 0;
-        $finaleSeeding   = in_array($body['finale_seeding'] ?? '', ['slang', 'tijdkoppeling'], true)
+        $finaleSeeding   = in_array($body['finale_seeding'] ?? '', ['slang', 'tijdkoppeling', 'reverse_slang'], true)
                          ? $body['finale_seeding'] : 'slang';
         // race_type wordt niet meer uit het tijdschema-formulier gelezen:
         // canonieke bron is distances.race_type (Beheer → afstand-dropdown én
@@ -994,16 +1051,22 @@ try {
         //         A-finale = time.
         // Lange afstand: voorronden = position_time, A-finale = time (UI verbergt
         //         die sowieso — race_type bepaalt finale-sortering automatisch).
-        // race_type wordt opgehaald uit distances.race_type — canonieke bron.
+        // race_type + value_meters uit distances — canonieke bron.
         $rtStmt = $pdo->prepare(
-            "SELECT race_type FROM distances d
+            "SELECT race_type, value_meters FROM distances d
              JOIN distance_combinations dc ON dc.id = d.distance_combination_id
              JOIN competition_tijdschema ct ON ct.competition_id = dc.competition_id
              WHERE ct.id = ? AND d.name = ? LIMIT 1"
         );
         $rtStmt->execute([$tsId, $afstandNaam]);
-        $distRt = $rtStmt->fetchColumn() ?: 'sprint';
-        $isSprint = ($distRt === 'sprint');
+        $distRow = $rtStmt->fetch(PDO::FETCH_ASSOC) ?: [];
+        $distRt      = $distRow['race_type']    ?? 'sprint';
+        $distMeters  = $distRow['value_meters'] !== null ? (int)$distRow['value_meters'] : null;
+        $isSprint    = ($distRt === 'sprint');
+        // 100m sprint of ≥600m sprint: alle rondes op tijd (Art. 113.3/114.4).
+        // Overige sprints (200m DTT, 500m+D): tussenrondes op positie+tijd.
+        $sprintAllesTime = $isSprint && $distMeters !== null
+                         && ($distMeters === 100 || $distMeters >= 600);
 
         // Eerste actieve ronde uit body cat_configs bepalen — zelfde keten als
         // bij runner-up: heats > kwart > half. Default 'heats' als fallback.
@@ -1014,9 +1077,12 @@ try {
             if (!empty($cc['heeft_halve_finale']))     { $eersteRonde = 'halve_finale'; break; }
         }
 
-        $defH = $isSprint ? ($eersteRonde === 'heats'        ? 'time' : 'position_time') : 'position_time';
-        $defK = $isSprint ? ($eersteRonde === 'kwartfinale'  ? 'time' : 'position_time') : 'position_time';
-        $defL = $isSprint ? ($eersteRonde === 'halve_finale' ? 'time' : 'position_time') : 'position_time';
+        $defH = $sprintAllesTime ? 'time'
+              : ($isSprint ? ($eersteRonde === 'heats'        ? 'time' : 'position_time') : 'position_time');
+        $defK = $sprintAllesTime ? 'time'
+              : ($isSprint ? ($eersteRonde === 'kwartfinale'  ? 'time' : 'position_time') : 'position_time');
+        $defL = $sprintAllesTime ? 'time'
+              : ($isSprint ? ($eersteRonde === 'halve_finale' ? 'time' : 'position_time') : 'position_time');
         $defF = 'time';
 
         $heatsRanking    = in_array($body['heats_ranking'] ?? '', $geldigeRanking, true)
@@ -1029,6 +1095,7 @@ try {
                          ? $body['finale_ranking'] : $defF;
 
         $heeftRU  = !empty($body['heeft_runner_up']) ? 1 : 0;
+        $heeftKF  = !empty($body['heeft_kleine_finale']) ? 1 : 0;
         $ruMax    = max(2, min(30, (int)($body['runner_up_max'] ?? 6)));
         $ruMin    = max(0, min(30, (int)($body['runner_up_min'] ?? 0)));
 
@@ -1048,11 +1115,11 @@ try {
                 (tijdschema_id, afstand_naam, q_direct, q_tijd, finale_heat_grootte,
                  finale_b_grootte, laatste_b_grootste, finale_seeding,
                  race_type, heats_ranking, kwart_ranking, half_ranking, finale_ranking,
-                 heeft_runner_up, runner_up_max, runner_up_min)
-            VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+                 heeft_runner_up, heeft_kleine_finale, runner_up_max, runner_up_min)
+            VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
         ")->execute([$tsId, $afstandNaam, $qD, $qT, $finaleHg, $finaleBg, $bLaatstGrootst,
                      $finaleSeeding, $raceType, $heatsRanking, $kwartRanking, $halfRanking, $finaleRanking,
-                     $heeftRU, $ruMax, $ruMin]);
+                     $heeftRU, $heeftKF, $ruMax, $ruMin]);
 
         // Per-categorie config opslaan
         $catConfigs = $body['cat_configs'] ?? [];

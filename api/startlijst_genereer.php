@@ -565,6 +565,19 @@ try {
                 }
             }
         }
+
+        // ── Omgekeerde volgorde bij reverse_slang ────────────────────────
+        // Pairs blijven klassiek snake (snelste↔langzaamste), alleen de
+        // heat-nummering draait om zodat het snelste paar in de LAATSTE
+        // heat komt. Voorschrift bij 100m sprint 2-lane: Art. 114.10-13
+        // WorldSkate Rulebook 2026. Werkt op alle rondes die deze functie
+        // beheert (heats/kwart/half/finale) via de bestaande
+        // finale_seeding-config.
+        if ($finaleSeeding === 'reverse_slang') {
+            $heats = array_reverse($heats);
+            foreach ($heats as $i => &$h) $h['nummer'] = $i + 1;
+            unset($h);
+        }
     }
 
     // --------------------------------------------------------
