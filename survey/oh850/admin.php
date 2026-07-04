@@ -102,6 +102,9 @@ $scoreVragen = [
     'Vergelijking' => [
         'score_vergelijking' => 'InlineComp t.o.v. andere tools',
     ],
+    'Ontwikkeling' => [
+        'score_ontwikkeling' => 'Ontwikkelingsrichting sinds vorige keer',
+    ],
 ];
 
 $scoreStats = [];
@@ -152,6 +155,41 @@ $langStats = $pdo->query("
     GROUP BY lang
     ORDER BY n DESC
 ")->fetchAll(PDO::FETCH_ASSOC);
+
+// Ontwikkeling — "eerste keer"-tel (aparte metric, want die respondenten
+// hebben geen score_ontwikkeling en zouden anders het gemiddelde vertekenen)
+$nEersteKeer = (int)$pdo->query(
+    "SELECT COALESCE(SUM(ontwikkeling_eerste_keer), 0) FROM survey_oh850"
+)->fetchColumn();
+
+// Welke wedstrijden — expand comma-separated UUID's en tel per wedstrijd.
+// Toon alleen wedstrijden waarvoor daadwerkelijk minstens 1 respondent iets
+// aanvinkte, gesorteerd op count aflopend.
+$compTelling = [];
+$rows = $pdo->query("SELECT competition_ids FROM survey_oh850 WHERE competition_ids IS NOT NULL AND competition_ids != ''")->fetchAll(PDO::FETCH_COLUMN);
+foreach ($rows as $csv) {
+    foreach (explode(',', $csv) as $id) {
+        $id = trim($id);
+        if ($id === '') continue;
+        $compTelling[$id] = ($compTelling[$id] ?? 0) + 1;
+    }
+}
+if (!empty($compTelling)) {
+    $ph  = implode(',', array_fill(0, count($compTelling), '?'));
+    $stm = $pdo->prepare("SELECT id, name, starts FROM competitions WHERE id IN ($ph)");
+    $stm->execute(array_keys($compTelling));
+    $compMeta = [];
+    foreach ($stm->fetchAll(PDO::FETCH_ASSOC) as $r) $compMeta[$r['id']] = $r;
+    // Bouw finale lijst { name, starts, count } en sorteer op count desc
+    $compLijst = [];
+    foreach ($compTelling as $id => $n) {
+        $m = $compMeta[$id] ?? ['name' => '(onbekend)', 'starts' => null];
+        $compLijst[] = ['name' => $m['name'], 'starts' => $m['starts'], 'n' => $n];
+    }
+    usort($compLijst, fn($a, $b) => $b['n'] <=> $a['n']);
+} else {
+    $compLijst = [];
+}
 
 // ── Open antwoorden ────────────────────────────────────────────────────────
 $opens = $pdo->query("
@@ -379,6 +417,37 @@ section h2 {
         </section>
     <?php else: ?>
 
+    <!-- ── Welke wedstrijden gebruikt ── -->
+    <?php if (!empty($compLijst)): ?>
+    <section>
+        <h2>Bij welke wedstrijden InlineComp gebruikt?</h2>
+        <?php
+            $maxW = 0;
+            foreach ($compLijst as $w) $maxW = max($maxW, $w['n']);
+            if ($maxW === 0) $maxW = 1;
+        ?>
+        <?php foreach ($compLijst as $w):
+            $pct = round($w['n'] * 100 / $maxW);
+            $datum = '';
+            if (!empty($w['starts'])) {
+                $ts = strtotime($w['starts']);
+                if ($ts) $datum = date('j M Y', $ts);
+            }
+        ?>
+        <div class="multi-rij">
+            <div class="multi-lbl">
+                <?= esc($w['name']) ?>
+                <?php if ($datum !== ''): ?>
+                <span style="color:#888;font-size:.82rem">· <?= esc($datum) ?></span>
+                <?php endif; ?>
+            </div>
+            <div class="multi-cnt"><?= $w['n'] ?></div>
+            <div class="multi-bar"><span style="width:<?= $pct ?>%"></span></div>
+        </div>
+        <?php endforeach; ?>
+    </section>
+    <?php endif; ?>
+
     <!-- ── Multi-select counts ── -->
     <section>
         <h2>Multiple-choice antwoorden</h2>
@@ -419,7 +488,14 @@ section h2 {
     <section>
         <h2>Scores (schaal 1–5)</h2>
         <?php foreach ($scoreVragen as $groep => $vragen): ?>
-            <div class="groep-titel"><?= esc($groep) ?></div>
+            <div class="groep-titel">
+                <?= esc($groep) ?>
+                <?php if ($groep === 'Ontwikkeling' && $nEersteKeer > 0): ?>
+                <span style="font-size:.82rem;font-weight:400;color:#666;margin-left:8px">
+                    (+<?= $nEersteKeer ?> respondenten gebruikten InlineComp voor het eerst)
+                </span>
+                <?php endif; ?>
+            </div>
             <?php foreach ($vragen as $col => $label):
                 $s = $scoreStats[$col];
                 $gem = $s['gem'] !== null ? round((float)$s['gem'], 2) : null;

@@ -41,6 +41,22 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'submi
         if ($v === '') return null;
         return mb_substr($v, 0, $max);
     };
+    // Comma-gescheiden UUID's: valideer elk item strikt op UUID-formaat
+    // en dedup. Alles wat niet aan format voldoet wordt genegeerd, geen
+    // fout — we willen liever een halfvolle lijst dan een submit-fail.
+    $uuidList = function($k) {
+        $raw = $_POST[$k] ?? '';
+        if (is_array($raw)) $items = $raw;
+        else                $items = explode(',', (string)$raw);
+        $ok = [];
+        foreach ($items as $it) {
+            $it = trim((string)$it);
+            if (preg_match('/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i', $it)) {
+                $ok[strtolower($it)] = true;
+            }
+        }
+        return $ok ? implode(',', array_keys($ok)) : null;
+    };
     $lang = preg_match('/^(nl|en)$/i', $_POST['lang'] ?? '') ? strtolower($_POST['lang']) : 'nl';
 
     try {
@@ -54,11 +70,17 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'submi
         // Volgorde-coin-flip + 50-500ms sleep tussen inserts
         $vraagEerst = $heeftVraag && (mt_rand(0, 1) === 0);
 
-        $insertSurvey = function() use ($pdo, $score, $bool, $text, $lang) {
+        $insertSurvey = function() use ($pdo, $score, $bool, $text, $uuidList, $lang) {
+            // Als "eerste keer"-checkbox aan staat, is score_ontwikkeling niet
+            // zinvol — forceer NULL zodat we ontwikkelings-trends niet vervuilen
+            // met arbitraire waarden van eerste-keer-gebruikers.
+            $eersteKeer = $bool('ontwikkeling_eerste_keer');
+            $scoreOntw  = $eersteKeer ? null : $score('score_ontwikkeling');
             $stmt = $pdo->prepare("
                 INSERT INTO survey_oh850 (
                     lang,
                     used_public, used_coach, used_check, used_geen, used_unaware,
+                    competition_ids,
                     score_algemeen, score_nps,
                     score_public_snelheid, score_public_mobiel,
                     score_public_uitslagen, score_public_programma,
@@ -68,10 +90,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'submi
                     kent_sportity, kent_skateresults, kent_combinatie,
                     kent_anders, kent_geen, kent_anders_naam,
                     score_vergelijking,
+                    score_ontwikkeling, ontwikkeling_eerste_keer,
                     tip_open, miste_open
                 ) VALUES (
                     ?,
                     ?, ?, ?, ?, ?,
+                    ?,
                     ?, ?,
                     ?, ?,
                     ?, ?,
@@ -81,12 +105,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'submi
                     ?, ?, ?,
                     ?, ?, ?,
                     ?,
+                    ?, ?,
                     ?, ?
                 )
             ");
             $stmt->execute([
                 $lang,
                 $bool('used_public'), $bool('used_coach'), $bool('used_check'), $bool('used_geen'), $bool('used_unaware'),
+                $uuidList('competition_ids'),
                 $score('score_algemeen'), $score('score_nps'),
                 $score('score_public_snelheid'), $score('score_public_mobiel'),
                 $score('score_public_uitslagen'), $score('score_public_programma'),
@@ -96,6 +122,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'submi
                 $bool('kent_sportity'), $bool('kent_skateresults'), $bool('kent_combinatie'),
                 $bool('kent_anders'), $bool('kent_geen'), $text('kent_anders_naam', 80),
                 $score('score_vergelijking'),
+                $scoreOntw, $eersteKeer,
                 $text('tip_open'), $text('miste_open'),
             ]);
         };
@@ -129,13 +156,34 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'submi
         exit;
     }
 }
+
+// ── Wedstrijden-lijst voor multi-select ────────────────────────────────────
+// Toont alle publiek-zichtbare wedstrijden van het huidige + afgelopen
+// seizoen (kalenderjaar-basis: in 2026 zie je 2025 + 2026). Gesorteerd op
+// datum aflopend (recentste bovenaan) — de meest waarschijnlijke aanleiding
+// voor het invullen van de survey staat als eerste.
+try {
+    $stmtWed = $pdo->prepare("
+        SELECT id, name, starts, venue_city
+        FROM competitions
+        WHERE public_zichtbaar = 1
+          AND starts IS NOT NULL
+          AND YEAR(starts) >= (YEAR(CURDATE()) - 1)
+        ORDER BY starts DESC
+    ");
+    $stmtWed->execute();
+    $wedstrijdenLijst = $stmtWed->fetchAll(PDO::FETCH_ASSOC);
+} catch (Throwable $e) {
+    $wedstrijdenLijst = [];
+    error_log('survey wedstrijden ophalen: ' . $e->getMessage());
+}
 ?><!DOCTYPE html>
 <html lang="nl">
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1">
 <link rel="icon" type="image/svg+xml" href="../../favicon.svg">
-<title data-i18n="title">InlineComp – Feedback Open Heerde 850</title>
+<title data-i18n="title">InlineComp — jouw feedback</title>
 <style>
 :root {
     --blauw: #1F4E79;
@@ -344,7 +392,7 @@ footer {
 <div class="wrap" id="wrap">
     <header>
         <div>
-            <h1 data-i18n="h1">Feedback Open Heerde 850</h1>
+            <h1 data-i18n="h1">InlineComp — jouw feedback</h1>
             <div class="sub" data-i18n="sub">Korte enquête — duurt ca. 2 minuten</div>
         </div>
         <div class="lang-toggle" role="group" aria-label="taal">
@@ -355,7 +403,7 @@ footer {
 
     <div class="intro">
         <p data-i18n="intro1">
-            Bedankt voor je deelname aan Open Heerde 850! We willen InlineComp graag verbeteren —
+            Bedankt voor het gebruiken van InlineComp! We willen 'm graag verbeteren —
             laat je weten wat je vond? Anoniem, geen account nodig.
         </p>
         <span class="anon">🔒 <span data-i18n="intro_anon">100% anoniem</span></span>
@@ -363,9 +411,38 @@ footer {
 
     <form id="survey-form">
 
+    <!-- 0. Bij welke wedstrijd(en) heb je InlineComp gebruikt? -->
+    <?php if (!empty($wedstrijdenLijst)): ?>
+    <section class="q">
+        <div class="q-lbl" data-i18n="q_comps">1. Bij welke wedstrijd(en) heb je InlineComp gebruikt?</div>
+        <div class="q-hint" data-i18n="q_comps_hint">Meerdere antwoorden mogelijk — laat leeg als je 't niet meer weet</div>
+        <div class="chk-grid">
+            <?php foreach ($wedstrijdenLijst as $w):
+                $datumLabel = '';
+                if (!empty($w['starts'])) {
+                    $ts = strtotime($w['starts']);
+                    if ($ts) $datumLabel = date('j M Y', $ts);
+                }
+                $stad = trim((string)($w['venue_city'] ?? ''));
+                $meta = trim($datumLabel . ($stad !== '' ? ' · ' . $stad : ''));
+            ?>
+            <label class="chk-lbl">
+                <input type="checkbox" name="competition_ids[]" value="<?= htmlspecialchars($w['id'], ENT_QUOTES) ?>">
+                <span>
+                    <?= htmlspecialchars($w['name']) ?>
+                    <?php if ($meta !== ''): ?>
+                    <span style="color:#888;font-size:.82rem;display:block;margin-top:1px"><?= htmlspecialchars($meta) ?></span>
+                    <?php endif; ?>
+                </span>
+            </label>
+            <?php endforeach; ?>
+        </div>
+    </section>
+    <?php endif; ?>
+
     <!-- 1. Welke app(s) gebruikt? -->
     <section class="q">
-        <div class="q-lbl" data-i18n="q_used">1. Welke onderdelen heb je gebruikt?</div>
+        <div class="q-lbl" data-i18n="q_used">2. Welke onderdelen heb je gebruikt?</div>
         <div class="q-hint" data-i18n="q_used_hint">Meerdere antwoorden mogelijk</div>
         <div class="chk-grid cols-2">
             <label class="chk-lbl"><input type="checkbox" name="used_public" data-show="#sec-public"> <span data-i18n="opt_public">Public — live-uitslag voor publiek</span></label>
@@ -482,20 +559,33 @@ footer {
         <div class="scale-extremes"><span data-i18n="scale_low_worse">1 = veel slechter</span><span data-i18n="scale_high_better">5 = veel beter</span></div>
     </section>
 
-    <!-- 5. Open vragen -->
+    <!-- Ontwikkelingsrichting -->
+    <section class="q">
+        <div class="q-lbl" data-i18n="q_ontwikkeling">10. Hoe vind je dat InlineComp zich ontwikkelt sinds vorige keer?</div>
+        <label class="chk-lbl" style="margin-bottom:8px" id="lbl-eerste-keer">
+            <input type="checkbox" name="ontwikkeling_eerste_keer" id="cb-eerste-keer" data-hide="#sec-ontw-schaal">
+            <span data-i18n="opt_eerste_keer">Ik gebruik InlineComp voor het eerst</span>
+        </label>
+        <div id="sec-ontw-schaal">
+            <div class="scale-row" data-name="score_ontwikkeling"></div>
+            <div class="scale-extremes"><span data-i18n="scale_low_worse">1 = veel slechter</span><span data-i18n="scale_high_better">5 = veel beter</span></div>
+        </div>
+    </section>
+
+    <!-- Open vragen -->
     <section class="q subtle">
-        <div class="q-lbl" data-i18n="q_miste">10. Wat miste je / wat had je beter gewild?</div>
+        <div class="q-lbl" data-i18n="q_miste">11. Wat miste je / wat had je beter gewild?</div>
         <textarea name="miste_open" data-i18n-ph="ph_miste" placeholder="Optioneel — laat leeg als je niets specifieks hebt"></textarea>
     </section>
 
     <section class="q subtle">
-        <div class="q-lbl" data-i18n="q_tip">11. Tips / ideeën voor verbetering?</div>
+        <div class="q-lbl" data-i18n="q_tip">12. Tips / ideeën voor verbetering?</div>
         <textarea name="tip_open" data-i18n-ph="ph_tip" placeholder="Optioneel"></textarea>
     </section>
 
-    <!-- 6. Vraag voor Geert (optioneel + email) -->
+    <!-- Vraag voor Geert (optioneel + email) -->
     <section class="q subtle">
-        <div class="q-lbl" data-i18n="q_vraag">12. Heb je een vraag voor mij?</div>
+        <div class="q-lbl" data-i18n="q_vraag">13. Heb je een vraag voor mij?</div>
         <div class="q-hint" data-i18n="q_vraag_hint">
             Volledig optioneel. Als je iets invult: laat ook je e-mailadres achter zodat ik kan reageren.
             Je e-mail wordt los van je antwoorden opgeslagen — er is geen koppeling.
@@ -528,19 +618,21 @@ footer {
 // ── Translations (NL / EN) ──────────────────────────────────────────────────
 const T = {
     nl: {
-        title: 'InlineComp – Feedback Open Heerde 850',
-        h1: 'Feedback Open Heerde 850',
+        title: 'InlineComp — jouw feedback',
+        h1: 'InlineComp — jouw feedback',
         sub: 'Korte enquête — duurt ca. 2 minuten',
-        intro1: 'Bedankt voor je deelname aan Open Heerde 850! We willen InlineComp graag verbeteren — laat je weten wat je vond? Anoniem, geen account nodig.',
+        intro1: 'Bedankt voor het gebruiken van InlineComp! We willen \'m graag verbeteren — laat je weten wat je vond? Anoniem, geen account nodig.',
         intro_anon: '100% anoniem',
-        q_used: '1. Welke onderdelen heb je gebruikt?',
+        q_comps: '1. Bij welke wedstrijd(en) heb je InlineComp gebruikt?',
+        q_comps_hint: 'Meerdere antwoorden mogelijk — laat leeg als je \'t niet meer weet',
+        q_used: '2. Welke onderdelen heb je gebruikt?',
         q_used_hint: 'Meerdere antwoorden mogelijk',
         opt_public: 'Public — live-uitslag voor publiek',
         opt_coach: 'Coach — overzicht voor coaches',
         opt_check: 'Check — inschrijving vooraf controleren',
         opt_geen: 'Geen',
         opt_unaware: 'Wist niet dat InlineComp bestond',
-        q_algemeen: '2. Algemene ervaring met InlineComp',
+        q_algemeen: '3. Algemene ervaring met InlineComp',
         grp_public: '📺 Public — live-uitslag',
         q_public_snelheid: 'Snelheid',
         q_public_mobiel: 'Werken op mobiel',
@@ -563,11 +655,13 @@ const T = {
         opt_geen_tool: 'Nooit iets anders gebruikt',
         ph_anders_naam: 'Welke tool? (optioneel)',
         q_vergelijking: '9. Hoe vond je InlineComp t.o.v. de andere tool(s)?',
-        q_miste: '10. Wat miste je / wat had je beter gewild?',
+        q_ontwikkeling: '10. Hoe vind je dat InlineComp zich ontwikkelt sinds vorige keer?',
+        opt_eerste_keer: 'Ik gebruik InlineComp voor het eerst',
+        q_miste: '11. Wat miste je / wat had je beter gewild?',
         ph_miste: 'Optioneel — laat leeg als je niets specifieks hebt',
-        q_tip: '11. Tips / ideeën voor verbetering?',
+        q_tip: '12. Tips / ideeën voor verbetering?',
         ph_tip: 'Optioneel',
-        q_vraag: '12. Heb je een vraag voor mij?',
+        q_vraag: '13. Heb je een vraag voor mij?',
         q_vraag_hint: 'Volledig optioneel. Als je iets invult: laat ook je e-mailadres achter zodat ik kan reageren. Je e-mail wordt los van je antwoorden opgeslagen — er is geen koppeling.',
         ph_vraag: 'Je vraag (optioneel)',
         ph_email: 'Je e-mail (alleen als je een vraag hebt)',
@@ -590,19 +684,21 @@ const T = {
         err_vraag_email: 'Heb je een vraag ingevuld? Vul dan ook een geldig e-mailadres in.',
     },
     en: {
-        title: 'InlineComp – Open Heerde 850 Feedback',
-        h1: 'Open Heerde 850 Feedback',
+        title: 'InlineComp — your feedback',
+        h1: 'InlineComp — your feedback',
         sub: 'Short survey — takes about 2 minutes',
-        intro1: 'Thanks for participating in Open Heerde 850! We\'d like to improve InlineComp — would you let us know what you thought? Anonymous, no account needed.',
+        intro1: 'Thanks for using InlineComp! We\'d like to improve it — would you let us know what you thought? Anonymous, no account needed.',
         intro_anon: '100% anonymous',
-        q_used: '1. Which parts did you use?',
+        q_comps: '1. Which race(s) did you use InlineComp at?',
+        q_comps_hint: 'Multiple answers possible — leave blank if you don\'t remember',
+        q_used: '2. Which parts did you use?',
         q_used_hint: 'Multiple answers possible',
         opt_public: 'Public — live results for the audience',
         opt_coach: 'Coach — overview for coaches',
         opt_check: 'Check — verify your registration beforehand',
         opt_geen: 'None',
         opt_unaware: 'Didn\'t know InlineComp existed',
-        q_algemeen: '2. Overall experience with InlineComp',
+        q_algemeen: '3. Overall experience with InlineComp',
         grp_public: '📺 Public — live results',
         q_public_snelheid: 'Speed',
         q_public_mobiel: 'Mobile experience',
@@ -625,11 +721,13 @@ const T = {
         opt_geen_tool: 'Never used anything else',
         ph_anders_naam: 'Which tool? (optional)',
         q_vergelijking: '9. How was InlineComp compared to the other tool(s)?',
-        q_miste: '10. What was missing / what would you have wanted differently?',
+        q_ontwikkeling: '10. How is InlineComp developing since last time?',
+        opt_eerste_keer: 'I\'m using InlineComp for the first time',
+        q_miste: '11. What was missing / what would you have wanted differently?',
         ph_miste: 'Optional — leave blank if nothing specific',
-        q_tip: '11. Tips / ideas for improvement?',
+        q_tip: '12. Tips / ideas for improvement?',
         ph_tip: 'Optional',
-        q_vraag: '12. Do you have a question for me?',
+        q_vraag: '13. Do you have a question for me?',
         q_vraag_hint: 'Entirely optional. If you fill something in: also leave your email so I can reply. Your email is stored separately from your answers — there is no link.',
         ph_vraag: 'Your question (optional)',
         ph_email: 'Your email (only if you have a question)',
@@ -710,6 +808,18 @@ function refreshConditionals() {
         const target = document.querySelector(cb.getAttribute('data-show'));
         if (!target) return;
         target.classList.toggle('hidden', !cb.checked);
+    });
+    // Omgekeerde variant: data-hide → verberg wanneer aangevinkt.
+    // Gebruikt voor "eerste keer"-checkbox die de ontwikkelings-schaal verbergt.
+    document.querySelectorAll('input[type=checkbox][data-hide]').forEach(cb => {
+        const target = document.querySelector(cb.getAttribute('data-hide'));
+        if (!target) return;
+        target.classList.toggle('hidden', cb.checked);
+        // Wis de score ook zodat er geen restwaarde meegaat bij submit
+        if (cb.checked) {
+            target.querySelectorAll('input[type=radio]').forEach(r => { r.checked = false; });
+            target.querySelectorAll('.scale-row label.sel').forEach(l => l.classList.remove('sel'));
+        }
     });
     // Vergelijking-vraag: alleen als minstens 1 tool-checkbox aan staat (geen_tool uitgezonderd)
     const anyTool = document.querySelectorAll('input[type=checkbox][data-tools]:not([name=kent_geen]):checked').length > 0;

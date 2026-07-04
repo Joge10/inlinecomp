@@ -24,6 +24,12 @@ CREATE TABLE IF NOT EXISTS `survey_oh850` (
     `used_geen`           BOOLEAN       NOT NULL DEFAULT 0,
     `used_unaware`        BOOLEAN       NOT NULL DEFAULT 0,
 
+    -- Bij welke wedstrijd(en) heeft de respondent InlineComp gebruikt?
+    -- Komma-gescheiden UUID's — multi-select uit competitions van huidig
+    -- en afgelopen seizoen (public_zichtbaar=1). Aparte tabel is overkill
+    -- voor deze use-case; blijft parse-baar met SUBSTRING_INDEX in SQL.
+    `competition_ids`     TEXT          DEFAULT NULL,
+
     -- Algemeen (over InlineComp als geheel)
     `score_algemeen`      TINYINT UNSIGNED DEFAULT NULL,
     `score_nps`           TINYINT UNSIGNED DEFAULT NULL,
@@ -51,6 +57,11 @@ CREATE TABLE IF NOT EXISTS `survey_oh850` (
     `kent_geen`           BOOLEAN       NOT NULL DEFAULT 0,
     `kent_anders_naam`    VARCHAR(80)   DEFAULT NULL,
     `score_vergelijking`  TINYINT UNSIGNED DEFAULT NULL,
+
+    -- Ontwikkelingsrichting sinds vorige keer (5-punts schaal).
+    -- ontwikkeling_eerste_keer=1 → schaal niet zinvol (score_ontwikkeling NULL).
+    `score_ontwikkeling`       TINYINT UNSIGNED DEFAULT NULL,
+    `ontwikkeling_eerste_keer` BOOLEAN          NOT NULL DEFAULT 0,
 
     -- Open vragen (op het einde, optioneel)
     `tip_open`            TEXT          DEFAULT NULL,
