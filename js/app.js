@@ -3,6 +3,11 @@
 const BASE = '';   // zelfde origin, geen absolute URL nodig
 
 let allWedstrijden  = [];
+// Pseudo-wedstrijden (alleen locatie/org-velden) uit ALLE competitions in DB,
+// ongeacht datum. Gebruikt om de filter-dropdowns compleet te maken ook voor
+// organisaties/locaties waarvan de wedstrijd-cards zelf buiten de 7-daagse
+// cutoff vallen. Zie api/import_filters.php.
+let alleFiltersBron = [];
 let activeCard      = null;
 let activeCat       = null;
 const MAX_ZONDER_FILTER = 5;
@@ -516,9 +521,12 @@ async function laadWedstrijden() {
         // ook oude handmatige wedstrijden terughaalt. Zonder ?van hanteert de
         // backend dezelfde -7 dagen cutoff als de KNSB-feed-proxy.
         const vanSepHand = vanDatum ? `&van=${encodeURIComponent(vanDatum)}` : '';
-        const [resKnsb, resHand] = await Promise.all([
+        // Filter-bron: alle locaties/orgs uit DB (ongeacht datum) — vult
+        // de dropdowns compleet, ook voor wedstrijden buiten de 7-daagse cutoff.
+        const [resKnsb, resHand, resFilters] = await Promise.all([
             fetch(BASE + 'api/competitions.php' + vanParam),
             fetch(BASE + 'api/wedstrijd_handmatig.php?action=lijst' + vanSepHand),
+            fetch(BASE + 'api/import_filters.php'),
         ]);
         if (!resKnsb.ok) throw new Error('KNSB-feed HTTP ' + resKnsb.status);
         const dataKnsb = await resKnsb.json();
@@ -530,6 +538,17 @@ async function laadWedstrijden() {
             catch (e) { console.warn('Handmatige wedstrijden parse-fout', e); }
         } else {
             console.warn('Handmatige wedstrijden HTTP ' + resHand.status);
+        }
+        // Filters-bron (alle DB-competities) — falen mag stil, dropdowns
+        // vallen dan terug op wat in allWedstrijden zit.
+        alleFiltersBron = [];
+        if (resFilters.ok) {
+            try {
+                const f = await resFilters.json();
+                if (Array.isArray(f)) alleFiltersBron = f;
+            } catch (e) { console.warn('Filter-bron parse-fout', e); }
+        } else {
+            console.warn('Filter-bron HTTP ' + resFilters.status);
         }
 
         if (dataKnsb.error) throw new Error(dataKnsb.error);
@@ -571,9 +590,17 @@ async function laadWedstrijden() {
     }
 }
 
+// Bron voor de filter-dropdowns: aankomende wedstrijden (allWedstrijden)
+// PLUS alle historische locaties/orgs uit de DB (alleFiltersBron). Dropdowns
+// tonen dus ALLE waarden die ooit in InlineComp zijn voorgekomen, niet alleen
+// die uit de 7-daagse cutoff-lijst.
+function _filterBron() {
+    return [...allWedstrijden, ...alleFiltersBron];
+}
+
 function vulLocatieDropdown() {
     const sel    = el('filter-locatie');
-    const uniek  = [...new Set(allWedstrijden.map(getLocatie).filter(Boolean))].sort();
+    const uniek  = [...new Set(_filterBron().map(getLocatie).filter(Boolean))].sort();
     const huidig = sel.value;
     sel.innerHTML = '<option value="">— alle —</option>';
     uniek.forEach(loc => {
@@ -591,7 +618,7 @@ function vulOrganisatieDropdown() {
 
     // Groepeer op email (of naam als fallback) → tel per naam hoe vaak die voorkomt
     const groepen = new Map();  // key (email|naam) → Map(naam → count)
-    for (const comp of allWedstrijden) {
+    for (const comp of _filterBron()) {
         const email = getOrganisatieEmail(comp);
         const naam  = getOrganisatieNaam(comp);
         if (!email && !naam) continue;
@@ -641,7 +668,15 @@ function renderWedstrijdLijst() {
     });
 
     if (!gefilterd.length) {
-        statusMsg(list, 'info', 'Geen wedstrijden gevonden met deze filters.');
+        // Als loc/org zijn ingevuld maar er is niks in de huidige (7-daagse
+        // cutoff) lijst, hint dat er wellicht historische wedstrijden voor deze
+        // filter zijn — bereikbaar door "Van" op een eerdere datum te zetten.
+        const heeftHistBron = (loc || org) && alleFiltersBron.length > 0 && !van;
+        const bericht = heeftHistBron
+            ? 'Geen aankomende wedstrijden met deze filters. '
+              + 'Zet "Van" op een eerdere datum om historische wedstrijden mee te tonen.'
+            : 'Geen wedstrijden gevonden met deze filters.';
+        statusMsg(list, 'info', bericht);
         return;
     }
 
