@@ -321,7 +321,8 @@ if ($action === 'lijst') {
     $sql = "
         SELECT c.id, c.name, c.starts, c.ends, c.location, c.venue_name, c.venue_city,
                c.discipline, c.bron, c.organisatie_id,
-               o.naam AS org_naam
+               o.naam  AS org_naam,
+               o.email AS org_email
         FROM competitions c
         LEFT JOIN organisaties o ON o.id = c.organisatie_id
         WHERE c.bron = 'handmatig'
@@ -345,6 +346,9 @@ if ($action === 'lijst') {
     // Vorm om naar KNSB-feed-compatibel formaat: organizer.name voor
     // getOrganisatieNaam(), venue.address.city voor getLocatie(),
     // discipline-string die op 'SpeedSkating.Inline' matcht.
+    // settings.contact vullen zodat getOrganisatieEmail() dezelfde key
+    // teruggeeft als api/import_filters.php doet — anders matcht het
+    // Organisatie-filter niet tussen dropdown-key en wedstrijd-key.
     $out = array_map(function($r) {
         return [
             'id'         => $r['id'],
@@ -357,6 +361,10 @@ if ($action === 'lijst') {
                 'address' => ['city' => $r['venue_city'] ?? null],
             ],
             'organizer'    => ['name' => $r['org_naam'] ?? ''],
+            'settings'     => ['contact' => [
+                'email'            => $r['org_email'] ?? '',
+                'organizationName' => $r['org_naam']  ?? '',
+            ]],
             'is_handmatig' => true,
             'bron'         => $r['bron'],
         ];
