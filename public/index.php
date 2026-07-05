@@ -2777,10 +2777,13 @@ if (is_readable($i18nPath)) {
 ?>
 
 // ── App-versie (bijhouden bij elke user-visible wijziging) ─────────────────
-// SEMVER-schema: MAJOR.MINOR.PATCH. Bij bump: ook een entry toevoegen aan
-// het "Wat is nieuw"-blok in toonHelp() zodat gebruikers de wijzigingen zien.
-// De versie wordt getoond onder de copyright in de i-modal.
-const APP_VERSIE = '1.0.0';
+// Formaat: H<uren>.<MM>.<DD>
+//   uren = aantal uren sinds InlineComp v0 live ging op OH850 (2026-06-20 00:00)
+//   MM.DD = release-datum (kalender)
+// Bij bump: bereken nieuwe uren-count sinds 2026-06-20, update datum, en
+// voeg een entry toe aan het "Wat is nieuw"-blok in toonHelp().
+// Versie verschijnt onder de copyright in de i-modal.
+const APP_VERSIE = 'H360.07.05';
 
 // ── App-specifiek vertaal-woordenboek (NL + EN + DE + FR) ──────────────────
 // Toggle via vlag-knop in header. Persisteert in localStorage onder 'ic_lang'.
@@ -6158,7 +6161,7 @@ function toonHelp(scrollAnker) {
 
             <div class="changelog-versie">
                 <div class="changelog-kop">
-                    <span class="changelog-vnr">v1.0.0</span>
+                    <span class="changelog-vnr">${esc(APP_VERSIE)}</span>
                     <span class="changelog-datum">2026-07-05</span>
                 </div>
                 <ul class="changelog-lijst">
