@@ -2010,12 +2010,19 @@ body.heeft-footer .container { padding-bottom: 90px; }
     background: #fff; border: 1.5px solid #cdd8e3; border-radius: 6px;
     padding: 6px 8px; width: 100%; font-size: .75rem; color: #555; margin-bottom: 6px;
 }
-.mock-tabs { display:flex; background: var(--blauw); }
-.mock-tab {
-    flex:1; text-align:center; padding: 5px 2px; color: #cfd8e0;
-    font-size: .68rem; font-weight: 600; border-bottom: 2px solid transparent;
+/* Match echte coach-tabs: witte achtergrond, grijze tekst, emoji op regel 1
+   (via \n in tab_-labels), tekst op regel 2, blauw + oranje underline actief. */
+.mock-tabs {
+    display: flex; background: #fff; border-bottom: 2px solid #dde3ea;
 }
-.mock-tab.active { color: #fff; border-bottom-color: var(--oranje); }
+.mock-tab {
+    flex: 1 1 0; min-width: 0; text-align: center; padding: 5px 2px;
+    color: #888; font-size: .56rem; font-weight: 600;
+    border-bottom: 2px solid transparent; margin-bottom: -2px;
+    white-space: pre-line; line-height: 1.15; overflow: hidden;
+}
+.mock-tab::first-line { font-size: .8rem; }
+.mock-tab.active { color: var(--blauw); border-bottom-color: var(--oranje); }
 .mock-row {
     display: flex; align-items: center; gap: 4px;
     padding: 3px 0; border-bottom: 1px solid #eef2f6; font-size: .72rem;
@@ -6338,11 +6345,11 @@ function toonHelp() {
             <!-- Mockup: programma met inklap-balk + heat-rijen -->
             <div class="mock">
                 <div class="mock-tabs">
-                    <div class="mock-tab active">${t('tab_programma').replace(/^[^\s]+\s*/, '')}</div>
-                    <div class="mock-tab">${t('tab_heats').replace(/^[^\s]+\s*/, '')}</div>
-                    <div class="mock-tab">${t('tab_sancties').replace(/^[^\s]+\s*/, '')}</div>
-                    <div class="mock-tab">${t('tab_rondes').replace(/^[^\s]+\s*/, '')}</div>
-                    <div class="mock-tab">${t('tab_uitslagen').replace(/^[^\s]+\s*/, '')}</div>
+                    <div class="mock-tab active">${t('tab_programma')}</div>
+                    <div class="mock-tab">${t('tab_heats')}</div>
+                    <div class="mock-tab">${t('tab_sancties')}</div>
+                    <div class="mock-tab">${t('tab_rondes')}</div>
+                    <div class="mock-tab">${t('tab_uitslagen')}</div>
                 </div>
                 <div style="display:flex;gap:3px;padding:4px 6px;background:#eef2f6">
                     <span style="flex:1;text-align:center;font-size:.65rem;font-weight:600;padding:3px 0;border-radius:4px;border:1px solid #cdd8e3;background:#fff;color:#555">▼ ${t('prog_klap_alles_uit')}</span>
@@ -6362,11 +6369,11 @@ function toonHelp() {
             <!-- Mockup: coach heats-tab (per rijder overzicht van alle rondes) -->
             <div class="mock">
                 <div class="mock-tabs">
-                    <div class="mock-tab">${t('tab_programma').replace(/^[^\s]+\s*/, '')}</div>
-                    <div class="mock-tab active">${t('tab_heats').replace(/^[^\s]+\s*/, '')}</div>
-                    <div class="mock-tab">${t('tab_sancties').replace(/^[^\s]+\s*/, '')}</div>
-                    <div class="mock-tab">${t('tab_rondes').replace(/^[^\s]+\s*/, '')}</div>
-                    <div class="mock-tab">${t('tab_uitslagen').replace(/^[^\s]+\s*/, '')}</div>
+                    <div class="mock-tab">${t('tab_programma')}</div>
+                    <div class="mock-tab active">${t('tab_heats')}</div>
+                    <div class="mock-tab">${t('tab_sancties')}</div>
+                    <div class="mock-tab">${t('tab_rondes')}</div>
+                    <div class="mock-tab">${t('tab_uitslagen')}</div>
                 </div>
                 <div class="mock-body" style="padding:6px 8px">
                     <!-- Rijder-blok 1: Mees (voorbeeld met meerdere DC's) -->
@@ -6428,11 +6435,11 @@ function toonHelp() {
             <!-- Mockup: rondes-tab (per-ronde uitslag alle DC's, doorstroom Q→A) -->
             <div class="mock">
                 <div class="mock-tabs">
-                    <div class="mock-tab">${t('tab_programma').replace(/^[^\s]+\s*/, '')}</div>
-                    <div class="mock-tab">${t('tab_heats').replace(/^[^\s]+\s*/, '')}</div>
-                    <div class="mock-tab">${t('tab_sancties').replace(/^[^\s]+\s*/, '')}</div>
-                    <div class="mock-tab active">${t('tab_rondes').replace(/^[^\s]+\s*/, '')}</div>
-                    <div class="mock-tab">${t('tab_uitslagen').replace(/^[^\s]+\s*/, '')}</div>
+                    <div class="mock-tab">${t('tab_programma')}</div>
+                    <div class="mock-tab">${t('tab_heats')}</div>
+                    <div class="mock-tab">${t('tab_sancties')}</div>
+                    <div class="mock-tab active">${t('tab_rondes')}</div>
+                    <div class="mock-tab">${t('tab_uitslagen')}</div>
                 </div>
                 <div class="mock-body" style="padding:6px 10px">
                     <div style="font-weight:700;color:var(--blauw);font-size:.75rem;margin:2px 0 4px">DJB — 500 meter</div>
@@ -6454,11 +6461,11 @@ function toonHelp() {
             <!-- Mockup: uitslagen met combi-cat kolommen -->
             <div class="mock">
                 <div class="mock-tabs">
-                    <div class="mock-tab">${t('tab_programma').replace(/^[^\s]+\s*/, '')}</div>
-                    <div class="mock-tab">${t('tab_heats').replace(/^[^\s]+\s*/, '')}</div>
-                    <div class="mock-tab">${t('tab_sancties').replace(/^[^\s]+\s*/, '')}</div>
-                    <div class="mock-tab">${t('tab_rondes').replace(/^[^\s]+\s*/, '')}</div>
-                    <div class="mock-tab active">${t('tab_uitslagen').replace(/^[^\s]+\s*/, '')}</div>
+                    <div class="mock-tab">${t('tab_programma')}</div>
+                    <div class="mock-tab">${t('tab_heats')}</div>
+                    <div class="mock-tab">${t('tab_sancties')}</div>
+                    <div class="mock-tab">${t('tab_rondes')}</div>
+                    <div class="mock-tab active">${t('tab_uitslagen')}</div>
                 </div>
                 <div class="mock-body" style="padding:6px 10px">
                     <div class="mock-select">HJA + HSA</div>
