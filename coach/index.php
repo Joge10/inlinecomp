@@ -2377,47 +2377,77 @@ select.sel {
 .prog-dag-btn.actief .prog-dag-btn-datum { opacity: .95; }
 
 /* ── Programma-filter-strook (dag + afstand) — identiek aan public ── */
+/* Vierkante blokken die visueel matchen met .prog-klap-balk — geen
+   border-radius, dunne scheidingslijnen, hover/actief-kleuren identiek
+   aan .prog-klap-btn. Coach heeft geen kaart-sectie-padding, dus geen
+   horizontal negative-margin. Klap-balk staat eronder; sibling-selector
+   verwijdert dubbele scheidingslijn. */
 .prog-filter-strook {
-    margin: 0 0 8px 0;
+    margin: 0 0 0;
     position: sticky; top: 0; z-index: 5;
     background: #fff;
-    display: flex; flex-direction: column; gap: 4px;
-    padding: 4px 0;
+    border-top: 1px solid #b3cae6;
+    border-bottom: 1px solid #b3cae6;
+    display: flex; flex-direction: column;
 }
+.prog-filter-strook + .prog-klap-balk { border-top: 0; }
 .prog-filter-trigger {
     display: flex; align-items: center; gap: 8px;
-    border: 1px solid #b3cae6; background: #fff; color: #1a3a5c;
-    padding: 8px 12px; border-radius: 8px;
-    font-size: .88rem; font-weight: 600; cursor: pointer;
-    transition: background .12s;
+    background: #fff; color: #1a3a5c;
+    border: 0;
+    border-bottom: 1px solid #d5dee7;
+    padding: 8px 12px;
+    font-size: .78rem; font-weight: 600;
+    line-height: 1.15;
+    letter-spacing: -.02em;
+    cursor: pointer;
+    transition: background .12s, color .12s;
     width: 100%;
+    text-align: left;
 }
-.prog-filter-trigger:hover { background: #eaf2fb; }
-.prog-filter-trigger.open  { background: #eaf2fb; border-color: #1a3a5c; }
+.prog-filter-trigger:last-of-type { border-bottom: 0; }
+@media (hover: hover) {
+    .prog-filter-trigger:not(.open):hover { background: #eaf2fb; }
+}
+.prog-filter-trigger.open {
+    background: #1a3a5c; color: #fff;
+    border-bottom-color: #1a3a5c;
+}
 .prog-filter-icon { font-size: 1rem; flex-shrink: 0; }
 .prog-filter-lbl  { flex: 1; text-align: left; }
-.prog-filter-caret { color: #888; font-size: .7rem; transition: transform .15s; }
+.prog-filter-caret { font-size: .7rem; transition: transform .15s; }
 .prog-filter-trigger.open .prog-filter-caret { transform: rotate(180deg); }
 .prog-filter-panel {
-    display: flex; flex-wrap: wrap; gap: 4px;
-    padding: 6px 8px; background: #f7faff;
-    border: 1px solid #dde3ea; border-radius: 6px;
-    margin-top: -2px;
+    display: flex; flex-wrap: wrap;
+    background: #eef4fb;
+    border-bottom: 1px solid #d5dee7;
     animation: prog-filter-in .12s ease-out;
 }
+.prog-filter-panel:last-child { border-bottom: 0; }
 @keyframes prog-filter-in {
-    from { opacity: 0; transform: translateY(-4px); }
-    to   { opacity: 1; transform: translateY(0); }
+    from { opacity: 0; }
+    to   { opacity: 1; }
 }
 .prog-filter-pill {
-    border: 1px solid #b3cae6; background: #fff; color: #1a3a5c;
-    padding: 5px 10px; border-radius: 14px; font-size: .82rem;
-    font-weight: 600; cursor: pointer; transition: background .12s;
-    display: inline-flex; flex-direction: column; align-items: center;
-    justify-content: center; line-height: 1.15; min-height: 32px;
+    background: #eef4fb; color: #1a3a5c;
+    border: 0;
+    border-right: 1px solid #d5dee7;
+    padding: 8px 12px;
+    font-size: .78rem; font-weight: 600;
+    line-height: 1.15;
+    letter-spacing: -.02em;
+    cursor: pointer;
+    transition: background .12s, color .12s;
+    display: inline-flex; flex-direction: column;
+    align-items: center; justify-content: center;
+    min-height: 34px;
+    flex: 1 0 auto;
+    white-space: nowrap;
 }
-.prog-filter-pill:hover  { background: #eaf2fb; }
-.prog-filter-pill.actief { background: #1a3a5c; color: #fff; border-color: #1a3a5c; }
+@media (hover: hover) {
+    .prog-filter-pill:not(.actief):hover { background: #dde8f5; }
+}
+.prog-filter-pill.actief { background: #1a3a5c; color: #fff; }
 .prog-filter-pill-sub {
     display: block; font-size: .58rem; font-weight: 400;
     opacity: .8; margin-top: 1px; white-space: nowrap;
