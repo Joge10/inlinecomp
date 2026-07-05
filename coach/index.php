@@ -3248,7 +3248,14 @@ const T = {
         help_p_priv: 'Je coach-lijst wordt alleen lokaal op je telefoon bewaard (localStorage). Niemand anders ziet wie je op je lijst hebt staan.',
         // ── Nieuwe kop-secties: Heats en Rondes ──
         help_h_heats: 'Heats',
-        help_p_heats_html: '<b>Heats</b> — per rit alle rijders. Rijders van je coach-lijst zijn gemarkeerd. Na de finish worden de rijders op finish-volgorde weergegeven, met tijden en posities.',
+        help_p_heats_html: '<b>Heats</b> — per rijder op je coach-lijst een overzicht van al zijn heats: heatnummer + startpositie per ronde (serie, kwart, halve, A-finale, kleine finale) van elke afstand. Bij nog niet gelote rondes staat "startlijst nog niet definitief"; is de vorige ronde nog niet compleet, dan "wacht op vorige ronde". Rijders gesorteerd op startnummer.',
+        // Coach heats-mockup labels
+        mock_status_bev: '✓ Bevestigd',
+        mock_heat_lbl: 'Heat',
+        mock_startpos_lbl: 'startpositie',
+        mock_ronde_halve: 'Halve',
+        mock_wacht_loting: 'Startlijst nog niet definitief',
+        mock_niet_geplaatst: 'Niet geplaatst',
         help_h_rondes: 'Rondes',
         help_p_rondes_html: '<b>Rondes</b> — per-ronde uitslagen van alle DC\'s waarvoor je rijders volgt. Zichtbaar is de plek per ronde en of doorstroom naar de volgende ronde heeft plaatsgevonden.',
         // ── Info-modal versienummer ──
@@ -3257,7 +3264,6 @@ const T = {
         nieuw_jump: 'Direct naar Wat is nieuw ↓',
         nieuw_h: 'Wat is nieuw?',
         nieuw_intro: 'Kort overzicht van recente wijzigingen. Voor terugkerende gebruikers een compacte samenvatting van de aanpassingen.',
-        nieuw_v100_12_html: '<b>Heats op finish-volgorde</b> — na de finish worden de rijders in de Heats-tab weergegeven in de volgorde waarin ze zijn gefinisht, zodat de eindstand van een heat in één oogopslag zichtbaar is.',
         nieuw_v100_7_html: '<b>Rondes-tab</b> — nieuw tabblad met per-ronde uitslagen van alle DC\'s waarvoor je rijders volgt (serie, kwart, halve finale, A-finale, kleine finale). Zichtbaar is welke plek per ronde is behaald en of doorstroom naar de volgende ronde heeft plaatsgevonden.',
         nieuw_v100_8_html: '<b>Programma inklappen</b> met de segment-knoppen <i>Alles in / Alles uit / Mijn</i> — snel schakelen tussen totaaloverzicht en alleen de ritten van de rijders op je lijst.',
         nieuw_v100_2_html: '<b>Snelle wedstrijd-selectie</b> in een nieuw <b>openings-venster</b> met filter-knoppen <i>Eerder / Vandaag / Later</i>. Verschijnt automatisch bij het openen van de app en sluit zodra een wedstrijd is geselecteerd — directe focus op de keuze, daarna de volledige ruimte voor het overzicht.',
@@ -3563,14 +3569,19 @@ const T = {
         help_h_priv: 'Privacy',
         help_p_priv: 'Your coach list is only stored locally on your phone (localStorage). Nobody else sees who is on your list.',
         help_h_heats: 'Heats',
-        help_p_heats_html: '<b>Heats</b> — all skaters per race. Skaters on your coach list are highlighted. After the finish, skaters are shown in finish order, with times and positions.',
+        help_p_heats_html: '<b>Heats</b> — for each skater on your coach list, an overview of all their heats: heat number + starting position per round (heat, quarter, semi, A-final, small final) of each distance. Rounds not yet drawn show "start list not final yet"; if the previous round is not complete, it shows "waiting for previous round". Skaters sorted by start number.',
+        mock_status_bev: '✓ Confirmed',
+        mock_heat_lbl: 'Heat',
+        mock_startpos_lbl: 'start position',
+        mock_ronde_halve: 'Semi',
+        mock_wacht_loting: 'Start list not final yet',
+        mock_niet_geplaatst: 'Not placed',
         help_h_rondes: 'Rounds',
         help_p_rondes_html: '<b>Rounds</b> — per-round results across all DCs you follow skaters in. Shows the position achieved in each round and whether progression to the next round has occurred.',
         info_versie: 'Version',
         nieuw_jump: 'Jump to What\'s new ↓',
         nieuw_h: 'What\'s new?',
         nieuw_intro: 'Short overview of recent changes. A compact summary of what has been adjusted, aimed at returning users.',
-        nieuw_v100_12_html: '<b>Heats in finish order</b> — after the finish, skaters in the Heats tab are shown in the order in which they finished, so the outcome of a heat is visible at a glance.',
         nieuw_v100_7_html: '<b>Rounds tab</b> — new tab with per-round results across all DCs you follow skaters in (heats, quarter, semi, A-final, small final). Shows the position achieved in each round and whether progression to the next round has occurred.',
         nieuw_v100_8_html: '<b>Collapse the program</b> with the segment buttons <i>All in / All out / Mine</i> — quickly toggle between full overview and only the races of the skaters on your list.',
         nieuw_v100_2_html: '<b>Quick race selection</b> in a new <b>opening window</b> with filter buttons <i>Earlier / Today / Later</i>. Appears automatically when the app opens and closes as soon as a race is selected — direct focus on the choice, then the full space for the overview.',
@@ -3875,16 +3886,20 @@ const T = {
         help_h_priv: 'Datenschutz',
         help_p_priv: 'Deine Coach-Liste wird nur lokal auf deinem Telefon gespeichert (localStorage). Niemand sonst sieht, wer auf deiner Liste steht.',
         help_h_heats: 'Heats',
-        help_p_heats_html: '<b>Heats</b> — alle Läufer pro Rennen. Läufer auf deiner Coach-Liste sind markiert. Nach dem Zieleinlauf werden die Läufer in Zieleinlaufreihenfolge angezeigt, mit Zeiten und Positionen.',
+        help_p_heats_html: '<b>Heats</b> — für jeden Läufer auf deiner Coach-Liste eine Übersicht aller Heats: Heatnummer + Startposition pro Runde (Vorlauf, Viertel, Halbfinale, A-Finale, kleines Finale) jeder Distanz. Bei noch nicht gelosten Runden erscheint "Startliste noch nicht endgültig"; ist die vorherige Runde nicht vollständig, dann "wartet auf vorherige Runde". Läufer nach Startnummer sortiert.',
+        mock_status_bev: '✓ Bestätigt',
+        mock_heat_lbl: 'Heat',
+        mock_startpos_lbl: 'Startposition',
+        mock_ronde_halve: 'Halbf.',
+        mock_wacht_loting: 'Startliste noch nicht endgültig',
+        mock_niet_geplaatst: 'Nicht platziert',
         help_h_rondes: 'Runden',
         help_p_rondes_html: '<b>Runden</b> — Ergebnisse pro Runde für alle DCs, in denen du Läufer verfolgst. Zeigt die in jeder Runde erreichte Platzierung und ob ein Weiterkommen in die nächste Runde erfolgt ist.',
         info_versie: 'Version',
         nieuw_jump: 'Direkt zu Was ist neu ↓',
         nieuw_h: 'Was ist neu?',
         nieuw_intro: 'Kurze Übersicht der jüngsten Änderungen. Für wiederkehrende Nutzer eine kompakte Zusammenfassung der Anpassungen.',
-        nieuw_v100_12_html: '<b>Heats in Zieleinlaufreihenfolge</b> — nach dem Zieleinlauf werden die Läufer im Heats-Tab in der Reihenfolge des Zieleinlaufs angezeigt, sodass das Ergebnis eines Heats auf einen Blick sichtbar ist.',
         nieuw_v100_7_html: '<b>Runden-Tab</b> — neuer Tab mit Ergebnissen pro Runde für alle DCs, in denen du Läufer verfolgst (Vorläufe, Viertel, Halbfinale, A-Finale, kleines Finale). Zeigt die in jeder Runde erreichte Platzierung und ob ein Weiterkommen in die nächste Runde erfolgt ist.',
-        nieuw_v100_8_html: '<b>Programm einklappen</b> mit den Segment-Buttons <i>Alle ein / Alle aus / Meine</i> — schnell zwischen Gesamtübersicht und nur den Rennen der Läufer auf deiner Liste wechseln.',
         nieuw_v100_2_html: '<b>Schnelle Rennauswahl</b> in einem neuen <b>Startfenster</b> mit Filter-Buttons <i>Früher / Heute / Später</i>. Erscheint automatisch beim Öffnen der App und schließt, sobald ein Rennen ausgewählt wurde — direkter Fokus auf die Auswahl, danach der volle Platz für die Übersicht.',
         nieuw_v100_4_html: '<b>Bruttozeit</b> sichtbar neben der Nettozeit — kenntlich an ✋ (Handkorrektur) oder 📷 (Fotofinish-Korrektur). So ist in den Heat-Tabellen sichtbar, wann eine Korrektur der Uhrzeit erfolgt ist.',
         nieuw_v100_11_html: '<b>Platzierung pro Kategorie</b> im Ergebnisse-Tab — bei kombinierten Rennen (z.B. HJA + HSA zusammen) erscheint neben dem Gesamtrang eine separate Spalte pro Kategorie, sodass die innerhalb der eigenen Kategorie erreichte Platzierung auf einen Blick sichtbar ist.',
@@ -4187,17 +4202,21 @@ const T = {
         help_h_priv: 'Confidentialité',
         help_p_priv: 'Votre liste de coach est uniquement stockée localement sur votre téléphone (localStorage). Personne d\'autre ne voit qui est sur votre liste.',
         help_h_heats: 'Séries',
-        help_p_heats_html: '<b>Séries</b> — tous les skateurs par course. Les skateurs de ta liste de coach sont surlignés. Après l\'arrivée, les skateurs sont affichés dans l\'ordre d\'arrivée, avec les temps et positions.',
+        help_p_heats_html: '<b>Séries</b> — pour chaque skateur de ta liste de coach, un aperçu de toutes ses séries : numéro de série + position de départ par tour (série, quart, demi, finale A, petite finale) de chaque distance. Pour les tours non encore tirés au sort, "liste de départ pas encore définitive" apparaît ; si le tour précédent n\'est pas complet, "en attente du tour précédent". Skateurs triés par numéro de dossard.',
+        mock_status_bev: '✓ Confirmé',
+        mock_heat_lbl: 'Série',
+        mock_startpos_lbl: 'position de départ',
+        mock_ronde_halve: 'Demi',
+        mock_wacht_loting: 'Liste de départ pas encore définitive',
+        mock_niet_geplaatst: 'Non placé',
         help_h_rondes: 'Rondes',
         help_p_rondes_html: '<b>Rondes</b> — résultats par tour pour toutes les DCs dont tu suis des skateurs. Montre la place obtenue à chaque tour et si un passage au tour suivant a eu lieu.',
         info_versie: 'Version',
         nieuw_jump: 'Aller à Quoi de neuf ↓',
         nieuw_h: 'Quoi de neuf ?',
         nieuw_intro: 'Bref aperçu des changements récents. Un résumé compact des ajustements, destiné aux utilisateurs habitués.',
-        nieuw_v100_12_html: '<b>Séries dans l\'ordre d\'arrivée</b> — après l\'arrivée, les skateurs dans l\'onglet Séries sont affichés dans l\'ordre d\'arrivée, ce qui rend le résultat d\'une série visible d\'un coup d\'œil.',
         nieuw_v100_7_html: '<b>Onglet Rondes</b> — nouvel onglet avec les résultats par tour pour toutes les DCs dont tu suis des skateurs (séries, quart, demi, finale A, petite finale). Montre la place obtenue à chaque tour et si un passage au tour suivant a eu lieu.',
         nieuw_v100_8_html: '<b>Réduire le programme</b> avec les boutons de segment <i>Tout ouvrir / Tout fermer / Les miens</i> — basculer rapidement entre vue complète et uniquement les courses des skateurs de ta liste.',
-        nieuw_v100_2_html: '<b>Sélection rapide de course</b> dans une nouvelle <b>fenêtre d\'ouverture</b> avec les boutons de filtre <i>Antérieur / Aujourd\'hui / Plus tard</i>. Apparaît automatiquement à l\'ouverture de l\'appli et se ferme dès qu\'une course est sélectionnée — focus direct sur le choix, puis tout l\'espace pour l\'aperçu.',
         nieuw_v100_4_html: '<b>Temps brut</b> visible à côté du temps net — marqué ✋ (correction manuelle) ou 📷 (correction photo-finish). Ainsi, les tableaux de séries montrent exactement quand une correction a été appliquée au temps de l\'horloge.',
         nieuw_v100_11_html: '<b>Classement par catégorie</b> dans l\'onglet Résultats — pour les courses combinées (par ex. HJA + HSA ensemble) une colonne distincte par catégorie apparaît à côté du rang général, ce qui rend la place obtenue dans la propre catégorie visible d\'un coup d\'œil.',
         nieuw_v100_9_html: '<b>Petites améliorations</b> pour l\'affichage sur écrans étroits et pour la navigation — dont des boutons de filtre qui tiennent à nouveau dans la fenêtre d\'ouverture.',
@@ -6303,7 +6322,7 @@ function toonHelp() {
             <h3>${t('help_h_heats')}</h3>
             <p>${t('help_p_heats_html')}</p>
 
-            <!-- Mockup: heats-tab (met finish-volgorde en audit-icoontje) -->
+            <!-- Mockup: coach heats-tab (per rijder overzicht van alle rondes) -->
             <div class="mock">
                 <div class="mock-tabs">
                     <div class="mock-tab">${t('tab_programma').replace(/^[^\s]+\s*/, '')}</div>
@@ -6312,14 +6331,41 @@ function toonHelp() {
                     <div class="mock-tab">${t('tab_rondes').replace(/^[^\s]+\s*/, '')}</div>
                     <div class="mock-tab">${t('tab_uitslagen').replace(/^[^\s]+\s*/, '')}</div>
                 </div>
-                <div style="background:var(--blauw);color:#fff;padding:5px 10px;font-size:.7rem;font-weight:700">
-                    <span style="background:#198754;border-radius:3px;padding:0 5px;font-size:.6rem">${t('mock_ronde_finale')}</span> 500m A-${t('mock_ronde_finale')}
-                </div>
-                <div class="mock-body" style="padding:4px 10px">
-                    <div class="mock-row" style="font-size:.6rem;color:#888;font-weight:600"><span style="width:18px">${t('mock_col_fin')}</span><span style="width:24px">${t('mock_col_snr')}</span><span class="mock-naam">${t('mock_col_naam')}</span><span class="mock-tijd">${t('mock_col_tijd')}</span></div>
-                    <div class="mock-row"><span class="mock-rang">1</span><span class="mock-snr">86</span><span class="mock-naam">Emma V.</span><span class="mock-tijd">45.12 📷</span></div>
-                    <div class="mock-row mock-hl"><span class="mock-rang">2</span><span class="mock-snr">12</span><span class="mock-naam">${t('mock_jouw_rijder')}</span><span class="mock-tijd">45.30</span></div>
-                    <div class="mock-row"><span class="mock-rang">3</span><span class="mock-snr">34</span><span class="mock-naam">Tim B.</span><span class="mock-tijd">46.01</span></div>
+                <div class="mock-body" style="padding:6px 10px">
+                    <!-- Rijder-blok 1: Emma V. — met status en per-ronde overzicht -->
+                    <div style="border:1px solid #dde3ea;border-radius:6px;padding:6px 8px;margin-bottom:6px">
+                        <div style="display:flex;align-items:center;gap:6px;font-size:.72rem;font-weight:700">
+                            <span style="background:var(--blauw);color:#fff;padding:1px 5px;border-radius:3px">12</span>
+                            <span style="flex:1">Emma V.</span>
+                            <span style="color:#888;font-size:.65rem">DJB</span>
+                        </div>
+                        <div style="display:flex;justify-content:space-between;font-size:.62rem;color:#155724;background:#d4edda;padding:2px 6px;border-radius:3px;margin:3px 0">
+                            <span>500m</span>
+                            <span>${t('mock_status_bev')}</span>
+                        </div>
+                        <div style="font-size:.65rem;color:var(--blauw);font-weight:700;margin:4px 0 2px">DJB — 500m</div>
+                        <div style="display:flex;align-items:center;gap:5px;font-size:.62rem;padding:2px 0">
+                            <span style="background:#0d6efd;color:#fff;padding:0 4px;border-radius:2px;font-size:.55rem;font-weight:700">${t('mock_ronde_serie')}</span>
+                            <span><b>${t('mock_heat_lbl')} 2</b> · ${t('mock_startpos_lbl')} 4</span>
+                        </div>
+                        <div style="display:flex;align-items:center;gap:5px;font-size:.62rem;padding:2px 0;color:#888">
+                            <span style="background:#fd7e14;color:#fff;padding:0 4px;border-radius:2px;font-size:.55rem;font-weight:700">${t('mock_ronde_halve')}</span>
+                            <span>${t('mock_wacht_loting')}</span>
+                        </div>
+                    </div>
+                    <!-- Rijder-blok 2: compact voorbeeld tweede rijder -->
+                    <div style="border:1px solid #dde3ea;border-radius:6px;padding:6px 8px">
+                        <div style="display:flex;align-items:center;gap:6px;font-size:.72rem;font-weight:700">
+                            <span style="background:var(--blauw);color:#fff;padding:1px 5px;border-radius:3px">34</span>
+                            <span style="flex:1">Tim B.</span>
+                            <span style="color:#888;font-size:.65rem">HJA</span>
+                        </div>
+                        <div style="font-size:.65rem;color:var(--blauw);font-weight:700;margin:4px 0 2px">HJA — 1000m</div>
+                        <div style="display:flex;align-items:center;gap:5px;font-size:.62rem;padding:2px 0;color:#888">
+                            <span style="background:#0d6efd;color:#fff;padding:0 4px;border-radius:2px;font-size:.55rem;font-weight:700">${t('mock_ronde_serie')}</span>
+                            <span>${t('mock_niet_geplaatst')}</span>
+                        </div>
+                    </div>
                 </div>
             </div>
 
@@ -6394,7 +6440,6 @@ function toonHelp() {
                     <span class="changelog-datum">2026-07-05</span>
                 </div>
                 <ul class="changelog-lijst">
-                    <li>${t('nieuw_v100_12_html')}</li>
                     <li>${t('nieuw_v100_7_html')}</li>
                     <li>${t('nieuw_v100_8_html')}</li>
                     <li>${t('nieuw_v100_2_html')}</li>
