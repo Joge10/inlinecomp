@@ -1953,6 +1953,58 @@ body.heeft-footer .container { padding-bottom: 90px; }
     background: var(--oranje); color: var(--wit); font-weight: 700;
     display: flex; align-items: center; justify-content: center; font-size: .8rem;
 }
+/* ── "Wat is nieuw"-jump knop bovenin help-modal ── */
+.btn-nieuw-jump {
+    display: block; width: 100%;
+    background: linear-gradient(180deg, #eaf2fa 0%, #d6e4f0 100%);
+    color: var(--blauw); border: 1.5px solid var(--middenblauw);
+    border-radius: 8px; padding: 10px 12px;
+    font-size: .92rem; font-weight: 700; cursor: pointer;
+    margin: 0 0 14px; transition: transform .1s, background .15s;
+}
+.btn-nieuw-jump:hover  { background: linear-gradient(180deg, #d6e4f0 0%, #b9d0e6 100%); }
+.btn-nieuw-jump:active { transform: scale(.98); }
+/* ── Changelog / "Wat is nieuw" ── */
+.changelog-versie {
+    background: #f7faff; border-left: 3px solid var(--middenblauw);
+    border-radius: 4px; padding: 10px 12px; margin: 10px 0;
+}
+.changelog-kop {
+    display: flex; justify-content: space-between; align-items: baseline;
+    margin-bottom: 6px;
+}
+.changelog-vnr    { font-weight: 700; color: var(--blauw); font-size: .95rem; }
+.changelog-datum  { font-size: .78rem; color: #888; }
+.changelog-lijst  { margin: 0; padding-left: 20px; font-size: .88rem; }
+.changelog-lijst li { margin: 3px 0; }
+/* ── Mockups in help ── */
+.mock {
+    border: 2px solid #dde3ea; border-radius: 10px; overflow: hidden;
+    margin: 10px 0 14px; font-size: .78rem;
+}
+.mock-hdr { background: var(--blauw); color: #fff; padding: 6px 10px;
+            font-weight: 700; font-size: .75rem; text-align: center; }
+.mock-body { padding: 8px 10px; background: #fafbfc; }
+.mock-select {
+    background: #fff; border: 1.5px solid #cdd8e3; border-radius: 6px;
+    padding: 6px 8px; width: 100%; font-size: .75rem; color: #555; margin-bottom: 6px;
+}
+.mock-tabs { display:flex; background: var(--blauw); }
+.mock-tab {
+    flex:1; text-align:center; padding: 5px 2px; color: #cfd8e0;
+    font-size: .68rem; font-weight: 600; border-bottom: 2px solid transparent;
+}
+.mock-tab.active { color: #fff; border-bottom-color: var(--oranje); }
+.mock-row {
+    display: flex; align-items: center; gap: 4px;
+    padding: 3px 0; border-bottom: 1px solid #eef2f6; font-size: .72rem;
+}
+.mock-row:last-child { border-bottom: none; }
+.mock-row.mock-hl { background: #fffbe6; font-weight: 600; }
+.mock-naam { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.mock-tijd { width: 44px; text-align: right; font-family: monospace; }
+.mock-snr  { display: inline-block; width: 24px; text-align: center; color: #666; }
+.mock-rang { display: inline-block; width: 18px; text-align: center; color: var(--blauw); font-weight: 700; }
 
 /* In-app bevestigings-dialoog (vervangt native confirm()) */
 .bev-knoppen {
@@ -2903,7 +2955,17 @@ if (is_readable($i18nPath)) {
 }
 ?>
 
-// ── App-specifiek vertaal-woordenboek (NL + EN) ──────────────────────────
+// ── App-versie (bijhouden bij elke user-visible wijziging) ─────────────────
+// Formaat: H<uren>.<MM>.<DD>       (uren sinds InlineComp v0 op OH850, 2026-06-20 00:00)
+// Rollover als de uren-teller onhandig lang wordt:
+//   H9999+ → Y<jaren>.<MM>.<DD>    waar 1 Y = 1 jaar (~8760 uur)
+// M (maanden) slaan we bewust over — anders komen we nooit bij Y ;)
+// Bij bump: bereken nieuwe uren-count sinds 2026-06-20, update datum, en
+// voeg een entry toe aan het "Wat is nieuw"-blok in toonHelp().
+// Versie verschijnt onder de copyright in de i-modal.
+const APP_VERSIE = 'H360.07.05';
+
+// ── App-specifiek vertaal-woordenboek (NL + EN + DE + FR) ──────────────────
 // Toggle via vlag-knop in header. Persisteert in localStorage onder 'ic_lang'
 // (gedeeld met /public — als rijder NL kiest in public ziet hij coach óók in NL).
 // Dynamische content (rendered via JS) gebruikt t('key'); statische HTML
@@ -3184,6 +3246,39 @@ const T = {
         help_p_meld_html: 'Bovenaan verschijnt een <b>📢-knop</b> zodra er een mededeling van de organisatie actief is. Belangrijke aankondigingen verschijnen automatisch als pop-up en blijven daarna onder die knop bereikbaar.',
         help_h_priv: 'Privacy',
         help_p_priv: 'Je coach-lijst wordt alleen lokaal op je telefoon bewaard (localStorage). Niemand anders ziet wie je op je lijst hebt staan.',
+        // ── Nieuwe kop-secties: Heats en Rondes ──
+        help_h_heats: 'Heats',
+        help_p_heats_html: '<b>Heats</b> — per rit alle rijders. Rijders van je coach-lijst zijn gemarkeerd. Na de finish worden de rijders op finish-volgorde weergegeven, met tijden en posities.',
+        help_h_rondes: 'Rondes',
+        help_p_rondes_html: '<b>Rondes</b> — per-ronde uitslagen van alle DC\'s waarvoor je rijders volgt. Zichtbaar is de plek per ronde en of doorstroom naar de volgende ronde heeft plaatsgevonden.',
+        // ── Info-modal versienummer ──
+        info_versie: 'Versie',
+        // ── Wat is nieuw ──
+        nieuw_jump: 'Direct naar Wat is nieuw ↓',
+        nieuw_h: 'Wat is nieuw?',
+        nieuw_intro: 'Kort overzicht van recente wijzigingen. Voor terugkerende gebruikers een compacte samenvatting van de aanpassingen.',
+        nieuw_v100_12_html: '<b>Heats op finish-volgorde</b> — na de finish worden de rijders in de Heats-tab weergegeven in de volgorde waarin ze zijn gefinisht, zodat de eindstand van een heat in één oogopslag zichtbaar is.',
+        nieuw_v100_7_html: '<b>Rondes-tab</b> — nieuw tabblad met per-ronde uitslagen van alle DC\'s waarvoor je rijders volgt (serie, kwart, halve finale, A-finale, kleine finale). Zichtbaar is welke plek per ronde is behaald en of doorstroom naar de volgende ronde heeft plaatsgevonden.',
+        nieuw_v100_8_html: '<b>Programma inklappen</b> met de segment-knoppen <i>Alles in / Alles uit / Mijn</i> — snel schakelen tussen totaaloverzicht en alleen de ritten van de rijders op je lijst.',
+        nieuw_v100_2_html: '<b>Snelle wedstrijd-selectie</b> in een nieuw <b>openings-venster</b> met filter-knoppen <i>Eerder / Vandaag / Later</i>. Verschijnt automatisch bij het openen van de app en sluit zodra een wedstrijd is geselecteerd — directe focus op de keuze, daarna de volledige ruimte voor het overzicht.',
+        nieuw_v100_4_html: '<b>Bruto-tijd</b> zichtbaar naast de netto-tijd — herkenbaar aan ✋ (handmatige correctie) of 📷 (foto-finish correctie). Zo is in de heat-tabellen zichtbaar wanneer een correctie op de klokwaarde is toegepast.',
+        nieuw_v100_11_html: '<b>Klassering per categorie</b> in de Uitslagen-tab — bij gecombineerde races (bv. HJA + HSA samen) verschijnt naast de overall rang een aparte kolom per categorie, zodat in één oogopslag zichtbaar is welke plek de rijder binnen de eigen categorie heeft behaald.',
+        nieuw_v100_9_html: '<b>Kleine verbeteringen</b> voor de weergave op smalle schermen en de navigatie — waaronder filter-knoppen die weer binnen het openings-venster passen.',
+        // ── Mockup-labels ──
+        mock_venster_titel: 'Wedstrijd & rijder',
+        mock_kies_w: 'Kies je wedstrijd',
+        mock_kies_rijders: 'Kies je rijders',
+        mock_voorbeeld_w: 'Voorbeeldwedstrijd — 19 april 2026',
+        mock_snr_lic: 'Startnummer, licentie of achternaam',
+        mock_btn_start: 'Toevoegen',
+        mock_ronde_serie: 'Serie',
+        mock_ronde_finale: 'Finale',
+        mock_col_fin:  'Fin',
+        mock_col_snr:  'St#',
+        mock_col_naam: 'Naam',
+        mock_col_tijd: 'Tijd',
+        mock_col_rang: '#',
+        mock_jouw_rijder: 'Jouw rijder',
     },
     en: {
         // ── Document ──
@@ -3460,6 +3555,35 @@ const T = {
         help_p_meld_html: 'At the top a <b>📢 button</b> appears as soon as there is an active announcement from the organization. Important announcements pop up automatically and remain accessible afterwards via that button.',
         help_h_priv: 'Privacy',
         help_p_priv: 'Your coach list is only stored locally on your phone (localStorage). Nobody else sees who is on your list.',
+        help_h_heats: 'Heats',
+        help_p_heats_html: '<b>Heats</b> — all skaters per race. Skaters on your coach list are highlighted. After the finish, skaters are shown in finish order, with times and positions.',
+        help_h_rondes: 'Rounds',
+        help_p_rondes_html: '<b>Rounds</b> — per-round results across all DCs you follow skaters in. Shows the position achieved in each round and whether progression to the next round has occurred.',
+        info_versie: 'Version',
+        nieuw_jump: 'Jump to What\'s new ↓',
+        nieuw_h: 'What\'s new?',
+        nieuw_intro: 'Short overview of recent changes. A compact summary of what has been adjusted, aimed at returning users.',
+        nieuw_v100_12_html: '<b>Heats in finish order</b> — after the finish, skaters in the Heats tab are shown in the order in which they finished, so the outcome of a heat is visible at a glance.',
+        nieuw_v100_7_html: '<b>Rounds tab</b> — new tab with per-round results across all DCs you follow skaters in (heats, quarter, semi, A-final, small final). Shows the position achieved in each round and whether progression to the next round has occurred.',
+        nieuw_v100_8_html: '<b>Collapse the program</b> with the segment buttons <i>All in / All out / Mine</i> — quickly toggle between full overview and only the races of the skaters on your list.',
+        nieuw_v100_2_html: '<b>Quick race selection</b> in a new <b>opening window</b> with filter buttons <i>Earlier / Today / Later</i>. Appears automatically when the app opens and closes as soon as a race is selected — direct focus on the choice, then the full space for the overview.',
+        nieuw_v100_4_html: '<b>Raw time</b> visible next to the net time — marked with ✋ (manual correction) or 📷 (photo-finish correction). This way, the heat tables show exactly when a correction was applied to the clock value.',
+        nieuw_v100_11_html: '<b>Ranking per category</b> in the Results tab — for combined races (e.g. HJA + HSA together) a separate column per category appears next to the overall rank, so the position achieved within the own category is visible at a glance.',
+        nieuw_v100_9_html: '<b>Small improvements</b> to the display on narrow screens and to navigation — including filter buttons that now fit within the opening window.',
+        mock_venster_titel: 'Race & skater',
+        mock_kies_w: 'Choose your race',
+        mock_kies_rijders: 'Choose your skaters',
+        mock_voorbeeld_w: 'Example race — 19 April 2026',
+        mock_snr_lic: 'Start number, licence or surname',
+        mock_btn_start: 'Add',
+        mock_ronde_serie: 'Heat',
+        mock_ronde_finale: 'Final',
+        mock_col_fin:  'Fin',
+        mock_col_snr:  'St#',
+        mock_col_naam: 'Name',
+        mock_col_tijd: 'Time',
+        mock_col_rang: '#',
+        mock_jouw_rijder: 'Your skater',
     },
     de: {
         // ── Document ──
@@ -3736,6 +3860,35 @@ const T = {
         help_p_meld_html: 'Oben erscheint ein <b>📢-Button</b> sobald eine aktive Mitteilung der Organisation vorliegt. Wichtige Mitteilungen erscheinen automatisch und bleiben danach über diesen Button zugänglich.',
         help_h_priv: 'Datenschutz',
         help_p_priv: 'Deine Coach-Liste wird nur lokal auf deinem Telefon gespeichert (localStorage). Niemand sonst sieht, wer auf deiner Liste steht.',
+        help_h_heats: 'Heats',
+        help_p_heats_html: '<b>Heats</b> — alle Läufer pro Rennen. Läufer auf deiner Coach-Liste sind markiert. Nach dem Zieleinlauf werden die Läufer in Zieleinlaufreihenfolge angezeigt, mit Zeiten und Positionen.',
+        help_h_rondes: 'Runden',
+        help_p_rondes_html: '<b>Runden</b> — Ergebnisse pro Runde für alle DCs, in denen du Läufer verfolgst. Zeigt die in jeder Runde erreichte Platzierung und ob ein Weiterkommen in die nächste Runde erfolgt ist.',
+        info_versie: 'Version',
+        nieuw_jump: 'Direkt zu Was ist neu ↓',
+        nieuw_h: 'Was ist neu?',
+        nieuw_intro: 'Kurze Übersicht der jüngsten Änderungen. Für wiederkehrende Nutzer eine kompakte Zusammenfassung der Anpassungen.',
+        nieuw_v100_12_html: '<b>Heats in Zieleinlaufreihenfolge</b> — nach dem Zieleinlauf werden die Läufer im Heats-Tab in der Reihenfolge des Zieleinlaufs angezeigt, sodass das Ergebnis eines Heats auf einen Blick sichtbar ist.',
+        nieuw_v100_7_html: '<b>Runden-Tab</b> — neuer Tab mit Ergebnissen pro Runde für alle DCs, in denen du Läufer verfolgst (Vorläufe, Viertel, Halbfinale, A-Finale, kleines Finale). Zeigt die in jeder Runde erreichte Platzierung und ob ein Weiterkommen in die nächste Runde erfolgt ist.',
+        nieuw_v100_8_html: '<b>Programm einklappen</b> mit den Segment-Buttons <i>Alle ein / Alle aus / Meine</i> — schnell zwischen Gesamtübersicht und nur den Rennen der Läufer auf deiner Liste wechseln.',
+        nieuw_v100_2_html: '<b>Schnelle Rennauswahl</b> in einem neuen <b>Startfenster</b> mit Filter-Buttons <i>Früher / Heute / Später</i>. Erscheint automatisch beim Öffnen der App und schließt, sobald ein Rennen ausgewählt wurde — direkter Fokus auf die Auswahl, danach der volle Platz für die Übersicht.',
+        nieuw_v100_4_html: '<b>Bruttozeit</b> sichtbar neben der Nettozeit — kenntlich an ✋ (Handkorrektur) oder 📷 (Fotofinish-Korrektur). So ist in den Heat-Tabellen sichtbar, wann eine Korrektur der Uhrzeit erfolgt ist.',
+        nieuw_v100_11_html: '<b>Platzierung pro Kategorie</b> im Ergebnisse-Tab — bei kombinierten Rennen (z.B. HJA + HSA zusammen) erscheint neben dem Gesamtrang eine separate Spalte pro Kategorie, sodass die innerhalb der eigenen Kategorie erreichte Platzierung auf einen Blick sichtbar ist.',
+        nieuw_v100_9_html: '<b>Kleine Verbesserungen</b> an der Darstellung auf schmalen Bildschirmen und der Navigation — u.a. Filter-Buttons, die wieder in das Startfenster passen.',
+        mock_venster_titel: 'Rennen & Läufer',
+        mock_kies_w: 'Wähle dein Rennen',
+        mock_kies_rijders: 'Wähle deine Läufer',
+        mock_voorbeeld_w: 'Beispielrennen — 19. April 2026',
+        mock_snr_lic: 'Startnummer, Lizenz oder Nachname',
+        mock_btn_start: 'Hinzufügen',
+        mock_ronde_serie: 'Vorlauf',
+        mock_ronde_finale: 'Finale',
+        mock_col_fin:  'Fin',
+        mock_col_snr:  'St#',
+        mock_col_naam: 'Name',
+        mock_col_tijd: 'Zeit',
+        mock_col_rang: '#',
+        mock_jouw_rijder: 'Dein Läufer',
     },
     fr: {
         // ── Document ──
@@ -4012,6 +4165,35 @@ const T = {
         help_p_meld_html: 'En haut un <b>bouton 📢</b> apparaît dès qu\'il y a une annonce active de l\'organisation. Les annonces importantes apparaissent automatiquement et restent ensuite accessibles via ce bouton.',
         help_h_priv: 'Confidentialité',
         help_p_priv: 'Votre liste de coach est uniquement stockée localement sur votre téléphone (localStorage). Personne d\'autre ne voit qui est sur votre liste.',
+        help_h_heats: 'Séries',
+        help_p_heats_html: '<b>Séries</b> — tous les skateurs par course. Les skateurs de ta liste de coach sont surlignés. Après l\'arrivée, les skateurs sont affichés dans l\'ordre d\'arrivée, avec les temps et positions.',
+        help_h_rondes: 'Rondes',
+        help_p_rondes_html: '<b>Rondes</b> — résultats par tour pour toutes les DCs dont tu suis des skateurs. Montre la place obtenue à chaque tour et si un passage au tour suivant a eu lieu.',
+        info_versie: 'Version',
+        nieuw_jump: 'Aller à Quoi de neuf ↓',
+        nieuw_h: 'Quoi de neuf ?',
+        nieuw_intro: 'Bref aperçu des changements récents. Un résumé compact des ajustements, destiné aux utilisateurs habitués.',
+        nieuw_v100_12_html: '<b>Séries dans l\'ordre d\'arrivée</b> — après l\'arrivée, les skateurs dans l\'onglet Séries sont affichés dans l\'ordre d\'arrivée, ce qui rend le résultat d\'une série visible d\'un coup d\'œil.',
+        nieuw_v100_7_html: '<b>Onglet Rondes</b> — nouvel onglet avec les résultats par tour pour toutes les DCs dont tu suis des skateurs (séries, quart, demi, finale A, petite finale). Montre la place obtenue à chaque tour et si un passage au tour suivant a eu lieu.',
+        nieuw_v100_8_html: '<b>Réduire le programme</b> avec les boutons de segment <i>Tout ouvrir / Tout fermer / Les miens</i> — basculer rapidement entre vue complète et uniquement les courses des skateurs de ta liste.',
+        nieuw_v100_2_html: '<b>Sélection rapide de course</b> dans une nouvelle <b>fenêtre d\'ouverture</b> avec les boutons de filtre <i>Antérieur / Aujourd\'hui / Plus tard</i>. Apparaît automatiquement à l\'ouverture de l\'appli et se ferme dès qu\'une course est sélectionnée — focus direct sur le choix, puis tout l\'espace pour l\'aperçu.',
+        nieuw_v100_4_html: '<b>Temps brut</b> visible à côté du temps net — marqué ✋ (correction manuelle) ou 📷 (correction photo-finish). Ainsi, les tableaux de séries montrent exactement quand une correction a été appliquée au temps de l\'horloge.',
+        nieuw_v100_11_html: '<b>Classement par catégorie</b> dans l\'onglet Résultats — pour les courses combinées (par ex. HJA + HSA ensemble) une colonne distincte par catégorie apparaît à côté du rang général, ce qui rend la place obtenue dans la propre catégorie visible d\'un coup d\'œil.',
+        nieuw_v100_9_html: '<b>Petites améliorations</b> pour l\'affichage sur écrans étroits et pour la navigation — dont des boutons de filtre qui tiennent à nouveau dans la fenêtre d\'ouverture.',
+        mock_venster_titel: 'Course & skateur',
+        mock_kies_w: 'Choisis ta course',
+        mock_kies_rijders: 'Choisis tes skateurs',
+        mock_voorbeeld_w: 'Course exemple — 19 avril 2026',
+        mock_snr_lic: 'Numéro de dossard, licence ou nom',
+        mock_btn_start: 'Ajouter',
+        mock_ronde_serie: 'Série',
+        mock_ronde_finale: 'Finale',
+        mock_col_fin:  'Fin',
+        mock_col_snr:  'St#',
+        mock_col_naam: 'Nom',
+        mock_col_tijd: 'Temps',
+        mock_col_rang: '#',
+        mock_jouw_rijder: 'Ton skateur',
     }
 };
 
@@ -6000,6 +6182,9 @@ function toonInfo() {
             <p style="font-size:.85rem;color:#555">${t('info_p_stats_html')}</p>
 
             <p style="font-size:.8rem;color:#999;text-align:center;margin-top:16px">${t('info_copyright', {jaar: new Date().getFullYear()})}</p>
+            <p style="font-size:.75rem;color:#aaa;text-align:center;margin-top:4px">
+                ${t('info_versie')} <strong>${APP_VERSIE}</strong>
+            </p>
         </div>
     </div>`;
     document.body.appendChild(overlay);
@@ -6016,6 +6201,12 @@ function toonHelp() {
             <button class="help-sluit" onclick="this.closest('.help-overlay').remove()">&times;</button>
         </div>
         <div class="help-body">
+
+            <button type="button" class="btn-nieuw-jump"
+                    onclick="this.closest('.help-body').querySelector('#wat-is-nieuw').scrollIntoView({behavior:'smooth',block:'start'})">
+                ✨ ${t('nieuw_jump')}
+            </button>
+
             <h3>${t('help_h_start')}</h3>
             <div class="help-stap"><span class="help-stap-nr">1</span>
                 <span>${t('help_stap1_html')}</span></div>
@@ -6024,8 +6215,96 @@ function toonHelp() {
             <div class="help-stap"><span class="help-stap-nr">3</span>
                 <span>${t('help_stap3_html')}</span></div>
 
+            <!-- Mockup: openings-venster met filter-chips + wedstrijd-select -->
+            <div class="mock">
+                <div class="mock-hdr">${t('mock_venster_titel')}</div>
+                <div class="mock-body">
+                    <div style="display:flex;align-items:center;gap:5px;font-size:.75rem;font-weight:700;color:var(--blauw);margin:0 0 4px">
+                        <span style="background:var(--blauw);color:#fff;width:16px;height:16px;border-radius:50%;display:inline-flex;align-items:center;justify-content:center;font-size:.65rem">1</span>
+                        ${t('mock_kies_w')}
+                    </div>
+                    <div style="display:flex;gap:4px;margin:0 0 6px">
+                        <span style="flex:1;text-align:center;font-size:.7rem;font-weight:600;padding:4px 0;border-radius:12px;border:1.5px solid #cdd8e3;color:#888;background:#fff">${t('filter_eerder')}</span>
+                        <span style="flex:1;text-align:center;font-size:.7rem;font-weight:600;padding:4px 0;border-radius:12px;border:1.5px solid var(--middenblauw);color:var(--blauw);background:var(--lichtblauw)">${t('filter_vandaag')}</span>
+                        <span style="flex:1;text-align:center;font-size:.7rem;font-weight:600;padding:4px 0;border-radius:12px;border:1.5px solid #cdd8e3;color:#888;background:#fff">${t('filter_later')}</span>
+                    </div>
+                    <div class="mock-select">${t('mock_voorbeeld_w')}</div>
+                    <div style="display:flex;align-items:center;gap:5px;font-size:.75rem;font-weight:700;color:var(--blauw);margin:8px 0 4px">
+                        <span style="background:var(--blauw);color:#fff;width:16px;height:16px;border-radius:50%;display:inline-flex;align-items:center;justify-content:center;font-size:.65rem">2</span>
+                        ${t('mock_kies_rijders')}
+                    </div>
+                    <div class="mock-select">${t('mock_snr_lic')}</div>
+                    <div style="background:var(--oranje);color:#fff;text-align:center;padding:6px;border-radius:6px;font-weight:700;font-size:.75rem;margin-top:4px">${t('mock_btn_start')}</div>
+                </div>
+            </div>
+
             <h3>${t('help_h_prog')}</h3>
             <p>${t('help_p_prog_html')}</p>
+
+            <!-- Mockup: programma met inklap-balk + heat-rijen -->
+            <div class="mock">
+                <div class="mock-tabs">
+                    <div class="mock-tab active">${t('tab_programma').replace(/^[^\s]+\s*/, '')}</div>
+                    <div class="mock-tab">${t('tab_heats').replace(/^[^\s]+\s*/, '')}</div>
+                    <div class="mock-tab">${t('tab_sancties').replace(/^[^\s]+\s*/, '')}</div>
+                    <div class="mock-tab">${t('tab_rondes').replace(/^[^\s]+\s*/, '')}</div>
+                    <div class="mock-tab">${t('tab_uitslagen').replace(/^[^\s]+\s*/, '')}</div>
+                </div>
+                <div style="display:flex;gap:3px;padding:4px 6px;background:#eef2f6">
+                    <span style="flex:1;text-align:center;font-size:.65rem;font-weight:600;padding:3px 0;border-radius:4px;border:1px solid #cdd8e3;background:#fff;color:#555">▼ ${t('prog_klap_alles_uit')}</span>
+                    <span style="flex:1;text-align:center;font-size:.65rem;font-weight:700;padding:3px 0;border-radius:4px;border:1px solid var(--blauw);background:var(--blauw);color:#fff">▶ ${t('prog_klap_alles_in')}</span>
+                    <span style="flex:1;text-align:center;font-size:.65rem;font-weight:600;padding:3px 0;border-radius:4px;border:1px solid #cdd8e3;background:#fff;color:#555">👤 ${t('prog_klap_mijn')}</span>
+                </div>
+                <div class="mock-body" style="padding:4px 10px">
+                    <div class="mock-row"><span style="color:#aaa">1</span> <span class="mock-naam">500m ${t('mock_ronde_serie')} Heat 1</span> <span style="font-size:.6rem;background:#0d6efd;color:#fff;border-radius:3px;padding:0 4px">${t('mock_ronde_serie')}</span></div>
+                    <div class="mock-row mock-hl"><span style="color:#aaa">2</span> <span class="mock-naam">500m ${t('mock_ronde_serie')} Heat 2</span> <span style="font-size:.6rem;background:#0d6efd;color:#fff;border-radius:3px;padding:0 4px">${t('mock_ronde_serie')}</span></div>
+                    <div class="mock-row"><span style="color:#aaa">3</span> <span class="mock-naam">500m A-${t('mock_ronde_finale')}</span> <span style="font-size:.6rem;background:#198754;color:#fff;border-radius:3px;padding:0 4px">${t('mock_ronde_finale')}</span></div>
+                </div>
+            </div>
+
+            <h3>${t('help_h_heats')}</h3>
+            <p>${t('help_p_heats_html')}</p>
+
+            <!-- Mockup: heats-tab (met finish-volgorde en audit-icoontje) -->
+            <div class="mock">
+                <div class="mock-tabs">
+                    <div class="mock-tab">${t('tab_programma').replace(/^[^\s]+\s*/, '')}</div>
+                    <div class="mock-tab active">${t('tab_heats').replace(/^[^\s]+\s*/, '')}</div>
+                    <div class="mock-tab">${t('tab_sancties').replace(/^[^\s]+\s*/, '')}</div>
+                    <div class="mock-tab">${t('tab_rondes').replace(/^[^\s]+\s*/, '')}</div>
+                    <div class="mock-tab">${t('tab_uitslagen').replace(/^[^\s]+\s*/, '')}</div>
+                </div>
+                <div style="background:var(--blauw);color:#fff;padding:5px 10px;font-size:.7rem;font-weight:700">
+                    <span style="background:#198754;border-radius:3px;padding:0 5px;font-size:.6rem">${t('mock_ronde_finale')}</span> 500m A-${t('mock_ronde_finale')}
+                </div>
+                <div class="mock-body" style="padding:4px 10px">
+                    <div class="mock-row" style="font-size:.6rem;color:#888;font-weight:600"><span style="width:18px">${t('mock_col_fin')}</span><span style="width:24px">${t('mock_col_snr')}</span><span class="mock-naam">${t('mock_col_naam')}</span><span class="mock-tijd">${t('mock_col_tijd')}</span></div>
+                    <div class="mock-row"><span class="mock-rang">1</span><span class="mock-snr">86</span><span class="mock-naam">Emma V.</span><span class="mock-tijd">45.12 📷</span></div>
+                    <div class="mock-row mock-hl"><span class="mock-rang">2</span><span class="mock-snr">12</span><span class="mock-naam">${t('mock_jouw_rijder')}</span><span class="mock-tijd">45.30</span></div>
+                    <div class="mock-row"><span class="mock-rang">3</span><span class="mock-snr">34</span><span class="mock-naam">Tim B.</span><span class="mock-tijd">46.01</span></div>
+                </div>
+            </div>
+
+            <h3>${t('help_h_rondes')}</h3>
+            <p>${t('help_p_rondes_html')}</p>
+
+            <!-- Mockup: rondes-tab (per-ronde uitslag alle DC's, doorstroom Q→A) -->
+            <div class="mock">
+                <div class="mock-tabs">
+                    <div class="mock-tab">${t('tab_programma').replace(/^[^\s]+\s*/, '')}</div>
+                    <div class="mock-tab">${t('tab_heats').replace(/^[^\s]+\s*/, '')}</div>
+                    <div class="mock-tab">${t('tab_sancties').replace(/^[^\s]+\s*/, '')}</div>
+                    <div class="mock-tab active">${t('tab_rondes').replace(/^[^\s]+\s*/, '')}</div>
+                    <div class="mock-tab">${t('tab_uitslagen').replace(/^[^\s]+\s*/, '')}</div>
+                </div>
+                <div class="mock-body" style="padding:6px 10px">
+                    <div style="font-weight:700;color:var(--blauw);font-size:.75rem;margin:2px 0 4px">DJB — 500 meter</div>
+                    <div style="display:inline-block;background:#0d6efd;color:#fff;border-radius:3px;padding:1px 6px;font-size:.6rem;font-weight:700;margin-bottom:3px">${t('mock_ronde_serie')}</div>
+                    <div class="mock-row" style="font-size:.6rem;color:#888;font-weight:600"><span style="width:24px">${t('mock_col_snr')}</span><span class="mock-naam">${t('mock_col_naam')}</span><span style="width:36px;text-align:center">Kwal</span><span class="mock-tijd">${t('mock_col_tijd')}</span></div>
+                    <div class="mock-row mock-hl"><span class="mock-snr">12</span><span class="mock-naam">${t('mock_jouw_rijder')}</span><span style="width:36px;text-align:center;font-weight:700;color:#198754">Q→A</span><span class="mock-tijd">45.30</span></div>
+                    <div class="mock-row"><span class="mock-snr">86</span><span class="mock-naam">Emma V.</span><span style="width:36px;text-align:center;font-weight:700;color:#198754">Q→A</span><span class="mock-tijd">45.12</span></div>
+                </div>
+            </div>
 
             <h3>${t('help_h_sanc')}</h3>
             <p>${t('help_p_sanc1')}</p>
@@ -6035,6 +6314,27 @@ function toonHelp() {
             <h3>${t('help_h_uitsl')}</h3>
             <p>${t('help_p_uitsl')}</p>
 
+            <!-- Mockup: uitslagen met combi-cat kolommen -->
+            <div class="mock">
+                <div class="mock-tabs">
+                    <div class="mock-tab">${t('tab_programma').replace(/^[^\s]+\s*/, '')}</div>
+                    <div class="mock-tab">${t('tab_heats').replace(/^[^\s]+\s*/, '')}</div>
+                    <div class="mock-tab">${t('tab_sancties').replace(/^[^\s]+\s*/, '')}</div>
+                    <div class="mock-tab">${t('tab_rondes').replace(/^[^\s]+\s*/, '')}</div>
+                    <div class="mock-tab active">${t('tab_uitslagen').replace(/^[^\s]+\s*/, '')}</div>
+                </div>
+                <div class="mock-body" style="padding:6px 10px">
+                    <div class="mock-select">HJA + HSA</div>
+                    <div class="mock-select">500 meter</div>
+                    <div style="margin-top:6px">
+                        <div class="mock-row" style="font-size:.6rem;color:#fff;background:var(--blauw);margin:0 -10px;padding:3px 10px;font-weight:600"><span style="width:18px">${t('mock_col_rang')}</span><span style="width:26px;text-align:center">HJA</span><span style="width:26px;text-align:center">HSA</span><span style="width:24px">${t('mock_col_snr')}</span><span class="mock-naam">${t('mock_col_naam')}</span><span class="mock-tijd">${t('mock_col_tijd')}</span></div>
+                        <div class="mock-row"><span class="mock-rang">1</span><span style="width:26px;text-align:center;color:var(--blauw);font-weight:700">1</span><span style="width:26px;text-align:center;color:#aaa">·</span><span class="mock-snr">86</span><span class="mock-naam">Emma V.</span><span class="mock-tijd">45.12</span></div>
+                        <div class="mock-row mock-hl"><span class="mock-rang">2</span><span style="width:26px;text-align:center;color:#aaa">·</span><span style="width:26px;text-align:center;color:var(--blauw);font-weight:700">1</span><span class="mock-snr">12</span><span class="mock-naam">${t('mock_jouw_rijder')}</span><span class="mock-tijd">45.30</span></div>
+                        <div class="mock-row"><span class="mock-rang">3</span><span style="width:26px;text-align:center;color:var(--blauw);font-weight:700">2</span><span style="width:26px;text-align:center;color:#aaa">·</span><span class="mock-snr">34</span><span class="mock-naam">Tim B.</span><span class="mock-tijd">46.01</span></div>
+                    </div>
+                </div>
+            </div>
+
             <h3>${t('help_h_auto')}</h3>
             <p>${t('help_p_auto_html')}</p>
 
@@ -6043,6 +6343,28 @@ function toonHelp() {
 
             <h3>${t('help_h_priv')}</h3>
             <p>${t('help_p_priv')}</p>
+
+            <!-- ── Wat is nieuw (changelog per versie) ── -->
+            <h3 id="wat-is-nieuw" style="margin-top:24px;padding-top:12px;border-top:2px solid #eef2f6">
+                ✨ ${t('nieuw_h')}
+            </h3>
+            <p style="font-size:.88rem;color:#555">${t('nieuw_intro')}</p>
+
+            <div class="changelog-versie">
+                <div class="changelog-kop">
+                    <span class="changelog-vnr">${APP_VERSIE}</span>
+                    <span class="changelog-datum">2026-07-05</span>
+                </div>
+                <ul class="changelog-lijst">
+                    <li>${t('nieuw_v100_12_html')}</li>
+                    <li>${t('nieuw_v100_7_html')}</li>
+                    <li>${t('nieuw_v100_8_html')}</li>
+                    <li>${t('nieuw_v100_2_html')}</li>
+                    <li>${t('nieuw_v100_4_html')}</li>
+                    <li>${t('nieuw_v100_11_html')}</li>
+                    <li>${t('nieuw_v100_9_html')}</li>
+                </ul>
+            </div>
         </div>
     </div>`;
     document.body.appendChild(overlay);
