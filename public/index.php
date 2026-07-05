@@ -4756,6 +4756,69 @@ let _progAlleKeysPub = [];
 const _progGroepenMetMijnPub = new Set();
 let _progEersteRenderPub = true;
 
+// Snapshot / restore van de programma-tab UI-state rond een re-render.
+// renderKinderen() bouwt de rijder-tab-HTML opnieuw én reset de klap-state
+// naar default-collapsed. Bij auto-refresh (stilleRefresh) willen we die
+// user-state juist behouden: filter-strook (dag+afstand), klap-balk
+// (uit/in/mijn), én welke groepen handmatig open/dicht zijn geklapt.
+function _snapshotProgUiStatePub() {
+    const tab = document.querySelector('.tab-content[data-tab="programma"]');
+    if (!tab) return null;
+    const strook = tab.querySelector('.prog-filter-strook');
+    const balk   = tab.querySelector('.prog-klap-balk');
+    const open   = new Set();
+    tab.querySelectorAll('.prog-groep').forEach(g => {
+        if (g.classList.contains('samenvat')) return;
+        if (!g.classList.contains('ingeklapt')) open.add(g.dataset.groepKey);
+    });
+    return {
+        dag:     strook?.dataset.actieveDag     || 'alle',
+        afstand: strook?.dataset.actieveAfstand || 'alle',
+        klap:    balk?.dataset.actief           || '',
+        open,
+    };
+}
+
+function _restoreProgUiStatePub(state) {
+    if (!state) return;
+    const tab = document.querySelector('.tab-content[data-tab="programma"]');
+    if (!tab) return;
+    const strook = tab.querySelector('.prog-filter-strook');
+    // Filter via bestaande handler — die triggert applyProgFilter (samenvat,
+    // heat-tellers, verborgen-classes).
+    if (strook) {
+        if (state.dag && state.dag !== 'alle') {
+            const p = strook.querySelector(
+                `.prog-filter-panel[data-panel="dag"] .prog-filter-pill[data-value="${CSS.escape(state.dag)}"]`);
+            if (p) kiesProgFilter('dag', state.dag, p);
+        }
+        if (state.afstand && state.afstand !== 'alle') {
+            const p = strook.querySelector(
+                `.prog-filter-panel[data-panel="afstand"] .prog-filter-pill[data-value="${CSS.escape(state.afstand)}"]`);
+            if (p) kiesProgFilter('afstand', state.afstand, p);
+        }
+    }
+    // Klap-balk: preset actief → knop klikken. Anders per-groep restore.
+    if (state.klap === 'uit' || state.klap === 'in' || state.klap === 'mijn') {
+        const btn = tab.querySelector(`.prog-klap-balk .prog-klap-btn[data-actie="${state.klap}"]`);
+        if (btn) btn.click();
+    } else if (state.open) {
+        tab.querySelectorAll('.prog-groep').forEach(g => {
+            if (g.classList.contains('samenvat')) return;
+            const key = g.dataset.groepKey;
+            const moetOpen = state.open.has(key);
+            g.classList.toggle('ingeklapt', !moetOpen);
+            if (moetOpen) _progIngeklaptPub.delete(key);
+            else          _progIngeklaptPub.add(key);
+        });
+        const balk = tab.querySelector('.prog-klap-balk');
+        if (balk) {
+            balk.dataset.actief = '';
+            balk.querySelectorAll('.prog-klap-btn').forEach(b => b.classList.remove('actief'));
+        }
+    }
+}
+
 // ── Setup-modal: wedstrijd + rijder-kies overlay ─────────────────────────────
 // Vervangt de altijd-zichtbare stap 1 + 2 secties. Opent via de setup-strip
 // bovenaan, de "+"-rijder-tab-knop, of automatisch bij eerste bezoek van
@@ -6939,7 +7002,11 @@ let _huidigStempel = '';
             // re-render — initUitslagenTab() zet ze daarna terug zodat de
             // gebruiker zijn categorie/afstand niet kwijtraakt elke 60s.
             _bewaarKindUistate();
+            // Idem voor de programma-tab UI-state (filter, klap-balk,
+            // handmatig open/dicht) — renderKinderen() reset die anders.
+            const _progUiState = _snapshotProgUiStatePub();
             renderKinderen();
+            _restoreProgUiStatePub(_progUiState);
             // Scroll herstellen: renderKinderen() vervangt innerHTML, en
             // sommige sub-tabs (Rondes/Uitslagen) laden hun content pas
             // async in. Tussen leeg-DOM en volledig-gerenderd is body korter,

@@ -4478,6 +4478,72 @@ let _progGroepAlleKeys = [];
 const _progGroepenMetMijn = new Set();
 let _progEersteRender = true;
 
+// Snapshot / restore van de programma-tab UI-state rond een re-render.
+// renderProgramma() bouwt de HTML opnieuw en dat wist elke DOM-state:
+// filter-strook data-attributen resetten naar 'alle', klap-balk naar 'in',
+// en nieuwe .prog-groep elementen verliezen hun ingeklapt-class als de
+// _progIngeklapt-set niet meer matcht (bv. bij nieuwe/gewijzigde keys).
+// Rond herlaadProgramma() dus: eerst snapshot, na render restore.
+function _snapshotProgUiState() {
+    const tab = document.querySelector('.tab-content[data-tab="programma"]');
+    if (!tab) return null;
+    const strook = tab.querySelector('.prog-filter-strook');
+    const balk   = tab.querySelector('.prog-klap-balk');
+    const open   = new Set();
+    tab.querySelectorAll('.prog-groep').forEach(g => {
+        if (g.classList.contains('samenvat')) return;
+        if (!g.classList.contains('ingeklapt')) open.add(g.dataset.groepKey);
+    });
+    return {
+        dag:     strook?.dataset.actieveDag     || 'alle',
+        afstand: strook?.dataset.actieveAfstand || 'alle',
+        klap:    balk?.dataset.actief           || '',
+        open,
+    };
+}
+
+function _restoreProgUiState(state) {
+    if (!state) return;
+    const tab = document.querySelector('.tab-content[data-tab="programma"]');
+    if (!tab) return;
+    const strook = tab.querySelector('.prog-filter-strook');
+    // Filter herstellen via de bestaande handler — die triggert
+    // applyProgFilter (samenvat-modus, heat-tellers, verborgen items).
+    if (strook) {
+        if (state.dag && state.dag !== 'alle') {
+            const p = strook.querySelector(
+                `.prog-filter-panel[data-panel="dag"] .prog-filter-pill[data-value="${CSS.escape(state.dag)}"]`);
+            if (p) kiesProgFilter('dag', state.dag, p);
+        }
+        if (state.afstand && state.afstand !== 'alle') {
+            const p = strook.querySelector(
+                `.prog-filter-panel[data-panel="afstand"] .prog-filter-pill[data-value="${CSS.escape(state.afstand)}"]`);
+            if (p) kiesProgFilter('afstand', state.afstand, p);
+        }
+    }
+    // Klap-balk: als user een preset actief had, klik die opnieuw. Anders
+    // (handmatige mix van open/dicht) per-groep herstellen én _progIngeklapt
+    // synchroniseren zodat een volgende preset-klik het juiste resultaat geeft.
+    if (state.klap === 'uit' || state.klap === 'in' || state.klap === 'mijn') {
+        const btn = tab.querySelector(`.prog-klap-balk .prog-klap-btn[data-actie="${state.klap}"]`);
+        if (btn) btn.click();
+    } else if (state.open) {
+        tab.querySelectorAll('.prog-groep').forEach(g => {
+            if (g.classList.contains('samenvat')) return;
+            const key = g.dataset.groepKey;
+            const moetOpen = state.open.has(key);
+            g.classList.toggle('ingeklapt', !moetOpen);
+            if (moetOpen) _progIngeklapt.delete(key);
+            else          _progIngeklapt.add(key);
+        });
+        const balk = tab.querySelector('.prog-klap-balk');
+        if (balk) {
+            balk.dataset.actief = '';
+            balk.querySelectorAll('.prog-klap-btn').forEach(b => b.classList.remove('actief'));
+        }
+    }
+}
+
 function klapGroep(hdrEl) {
     const groep = hdrEl.closest('.prog-groep');
     if (!groep) return;
@@ -7680,7 +7746,11 @@ function toonMelding(m, compId) {
         try {
             const res = await safeFetch(`?action=programma&competition_id=${encodeURIComponent(selComp.value)}&_ts=${Date.now()}`);
             programmaCache = await res.json();
+            // Snapshot UI-state vóór re-render zodat filter, klap-balk en
+            // handmatige groep-open/dicht behouden blijven over auto-refresh.
+            const _uiState = _snapshotProgUiState();
             renderProgramma();
+            _restoreProgUiState(_uiState);
             // Bij elke refresh ook status + sancties opnieuw: kan veranderen tijdens de dag
             await laadCoachInfo();
             renderChips();
