@@ -2550,6 +2550,22 @@ select:focus, input:focus { border-color: var(--middenblauw); outline: none; }
     opacity: .8; margin-top: 1px; white-space: nowrap;
 }
 .prog-filter-pill.actief .prog-filter-pill-sub { opacity: .95; }
+
+/* Samenvat-modus: bij afstand-filter tonen we voor niet-matchende
+   afstanden per (afstand × ronde-type) één compacte, niet-uitklapbare
+   header met heat-teller. Body is verborgen, chev onzichtbaar, cursor
+   niet-klikbaar. Subtiel grijzer zodat het visueel context is, geen
+   primaire content. */
+.prog-groep.samenvat {
+    opacity: .72; background: #f6f8fb;
+}
+.prog-groep.samenvat .prog-groep-body { display: none; }
+.prog-groep.samenvat .prog-groep-chev { visibility: hidden; }
+.prog-groep.samenvat .prog-groep-hdr  { cursor: default; }
+.samenvat-teller {
+    font-size: .78rem; color: #666; font-weight: 500;
+    margin-left: 4px;
+}
 /* Verbergen-class voor de filter: data-dag-nr items krijgen .verborgen
    als de actieve dag-filter ze niet matcht. */
 .verborgen { display: none !important; }
@@ -2993,6 +3009,8 @@ const T = {
         prog_afstand_alle: 'Alle',
         prog_filter_alle_dagen: 'Alle dagen',
         prog_filter_alle_afstanden: 'Alle afstanden',
+        prog_samenvat_heat_1: '1 heat',
+        prog_samenvat_heat_n: '{n} heats',
         // Programma-filter pills (alleen-mijn / alleen-nog-te-rijden)
         prog_filter_mijn: '👤 Mijn ritten',
         prog_filter_te_rijden: '⏳ Nog te rijden',
@@ -3226,6 +3244,8 @@ const T = {
         prog_afstand_alle: 'All',
         prog_filter_alle_dagen: 'All days',
         prog_filter_alle_afstanden: 'All distances',
+        prog_samenvat_heat_1: '1 heat',
+        prog_samenvat_heat_n: '{n} heats',
         // ── Heats ──
         heat_wachten_vorige: 'Waiting for previous round',
         heat_jouw_resultaat: 'You:',
@@ -3438,6 +3458,8 @@ const T = {
         prog_afstand_alle: 'Alle',
         prog_filter_alle_dagen: 'Alle Tage',
         prog_filter_alle_afstanden: 'Alle Distanzen',
+        prog_samenvat_heat_1: '1 Heat',
+        prog_samenvat_heat_n: '{n} Heats',
         // Programma-filter pills
         prog_filter_mijn: '👤 Meine Rennen',
         prog_filter_te_rijden: '⏳ Kommende',
@@ -3660,6 +3682,8 @@ const T = {
         prog_afstand_alle: 'Toutes',
         prog_filter_alle_dagen: 'Tous les jours',
         prog_filter_alle_afstanden: 'Toutes les distances',
+        prog_samenvat_heat_1: '1 série',
+        prog_samenvat_heat_n: '{n} séries',
         // Programma-filter pills
         prog_filter_mijn: '👤 Mes courses',
         prog_filter_te_rijden: '⏳ À venir',
@@ -4152,17 +4176,58 @@ function applyProgFilter(strook) {
     const afs = strook.getAttribute('data-actieve-afstand') || 'alle';
     const container = strook.parentElement;
     if (!container) return;
+
+    // Reset alle samenvat-modi (was ingeschakeld door vorige filter)
+    container.querySelectorAll('.prog-groep.samenvat').forEach(el => {
+        el.classList.remove('samenvat');
+        el.querySelector('.samenvat-teller')?.remove();
+    });
+
+    // Bij afstand-filter: voor niet-matchende groepen ÉÉN samenvat-blok
+    // per (afstand × ronde-type) tonen op de plek van de eerste vindplaats,
+    // de rest van dezelfde combinatie verbergen. Heat-teller = som.
+    const eersteVanCombi = new Map();  // "afs|rt" -> {el, heats}
+
     container.querySelectorAll('[data-dag-nr]').forEach(el => {
         if (el === strook || el.classList.contains('prog-filter-strook')) return;
         const elDag = el.getAttribute('data-dag-nr');
         const elAfs = el.getAttribute('data-afstand-key');
-        // Dag-match: alle → altijd match; anders exacte match
+        const elRt  = el.getAttribute('data-ronde-type');
         const dagOk = (dag === 'alle') || (elDag === String(dag));
-        // Afstand-match: alle → altijd match; item zonder afstand-key
-        // (blokken, dag-headers) → altijd tonen (context); anders exacte match.
-        const afsOk = (afs === 'alle') || !elAfs || (elAfs === afs);
-        el.classList.toggle('verborgen', !(dagOk && afsOk));
+        if (!dagOk) { el.classList.add('verborgen'); return; }
+        // Geen afstand-filter, of item zonder afstand (blokken/headers), of match
+        if (afs === 'alle' || !elAfs || elAfs === afs) {
+            el.classList.remove('verborgen');
+            return;
+        }
+        // Afstand-mismatch: samenvat-modus alleen op .prog-groep zelf
+        // (combi-wraps en andere items met alleen afstand-key verbergen).
+        if (!el.classList.contains('prog-groep')) {
+            el.classList.add('verborgen');
+            return;
+        }
+        const combiKey = `${elAfs}|${elRt || ''}`;
+        const heats = el.querySelectorAll('.prog-rij').length;
+        if (eersteVanCombi.has(combiKey)) {
+            el.classList.add('verborgen');
+            eersteVanCombi.get(combiKey).heats += heats;
+        } else {
+            el.classList.remove('verborgen');
+            el.classList.add('samenvat');
+            eersteVanCombi.set(combiKey, {el, heats});
+        }
     });
+    // Heat-tellers injecteren in de samenvat-headers
+    for (const {el, heats} of eersteVanCombi.values()) {
+        const hdr = el.querySelector('.prog-groep-hdr');
+        if (!hdr) continue;
+        hdr.querySelector('.samenvat-teller')?.remove();
+        const span = document.createElement('span');
+        span.className = 'samenvat-teller';
+        const suffix = heats === 1 ? t('prog_samenvat_heat_1') : t('prog_samenvat_heat_n', {n: heats});
+        span.textContent = ` · ${suffix}`;
+        hdr.appendChild(span);
+    }
 }
 // Legacy: oude onclick="filterDag(...)"-code in andere plekken kan nog naar
 // deze naam wijzen. Wrapper om compatibiliteit te houden totdat we die
@@ -4710,6 +4775,9 @@ document.addEventListener('keydown', e => {
 function klapGroepPub(hdrEl) {
     const groep = hdrEl.closest('.prog-groep');
     if (!groep) return;
+    // Samenvat-modus: klikken doet niks (heat-lijst is niet beschikbaar
+    // in deze weergave, zie applyProgFilter).
+    if (groep.classList.contains('samenvat')) return;
     const key = groep.dataset.groepKey;
     const nuIngeklapt = groep.classList.toggle('ingeklapt');
     if (nuIngeklapt) _progIngeklaptPub.add(key); else _progIngeklaptPub.delete(key);
@@ -5216,7 +5284,8 @@ function renderResultaat(data, snr, prog) {
                     // multi-kind view geen scope-verwarring krijgt.
                     const mijnMarker = `[[MIJN-CLASS-${idx}]]`;
                     const afsAttr = rit.distance_naam ? ` data-afstand-key="${esc(rit.distance_naam)}"` : '';
-                    html += `<div class="prog-groep${ingeklapt ? ' ingeklapt' : ''}${mijnMarker}" data-groep-key="${esc(key)}" data-dag-nr="${dag}"${afsAttr}>
+                    const rtAttr  = rit.ronde_type ? ` data-ronde-type="${esc(rit.ronde_type)}"` : '';
+                    html += `<div class="prog-groep${ingeklapt ? ' ingeklapt' : ''}${mijnMarker}" data-groep-key="${esc(key)}" data-dag-nr="${dag}"${afsAttr}${rtAttr}>
                         <div class="prog-groep-hdr" onclick="klapGroepPub(this)">
                             <span class="prog-groep-chev">▼</span>
                             <span class="prog-groep-status">${iconMarker}</span>

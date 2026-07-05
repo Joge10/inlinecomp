@@ -2418,6 +2418,17 @@ select.sel {
     opacity: .8; margin-top: 1px; white-space: nowrap;
 }
 .prog-filter-pill.actief .prog-filter-pill-sub { opacity: .95; }
+
+/* Samenvat-modus voor niet-geselecteerde afstanden — één compacte
+   regel per (afstand × ronde-type), niet uitklapbaar. */
+.prog-groep.samenvat { opacity: .72; background: #f6f8fb; }
+.prog-groep.samenvat .prog-groep-body { display: none; }
+.prog-groep.samenvat .prog-groep-chev { visibility: hidden; }
+.prog-groep.samenvat .prog-groep-hdr  { cursor: default; }
+.samenvat-teller {
+    font-size: .78rem; color: #666; font-weight: 500;
+    margin-left: 4px;
+}
 .verborgen { display: none !important; }
 
 /* Programma-inklap-knoppen: segment-control boven de programma-lijst.
@@ -3184,6 +3195,8 @@ const T = {
         prog_afstand_alle: 'Alle',
         prog_filter_alle_dagen: 'Alle dagen',
         prog_filter_alle_afstanden: 'Alle afstanden',
+        prog_samenvat_heat_1: '1 heat',
+        prog_samenvat_heat_n: '{n} heats',
         prog_filter_mijn: '👥 Mijn rijders',
         prog_filter_te_rijden: '⏳ Nog te rijden',
         prog_klap_alles_uit:  'Alles uit',
@@ -3511,6 +3524,8 @@ const T = {
         prog_afstand_alle: 'All',
         prog_filter_alle_dagen: 'All days',
         prog_filter_alle_afstanden: 'All distances',
+        prog_samenvat_heat_1: '1 heat',
+        prog_samenvat_heat_n: '{n} heats',
         prog_filter_mijn: '👥 My skaters',
         prog_filter_te_rijden: '⏳ Upcoming',
         prog_klap_alles_uit:  'Collapse all',
@@ -3833,6 +3848,8 @@ const T = {
         prog_afstand_alle: 'Alle',
         prog_filter_alle_dagen: 'Alle Tage',
         prog_filter_alle_afstanden: 'Alle Distanzen',
+        prog_samenvat_heat_1: '1 Heat',
+        prog_samenvat_heat_n: '{n} Heats',
         prog_filter_mijn: '👥 Meine Sportler',
         prog_filter_te_rijden: '⏳ Kommende',
         prog_klap_alles_uit:  'Alle zu',
@@ -4154,6 +4171,8 @@ const T = {
         prog_afstand_alle: 'Toutes',
         prog_filter_alle_dagen: 'Tous les jours',
         prog_filter_alle_afstanden: 'Toutes les distances',
+        prog_samenvat_heat_1: '1 série',
+        prog_samenvat_heat_n: '{n} séries',
         prog_filter_mijn: '👥 Mes coureurs',
         prog_klap_alles_uit:  'Tout fermer',
         prog_klap_alles_in:   'Tout ouvrir',
@@ -4427,6 +4446,8 @@ let _progEersteRender = true;
 function klapGroep(hdrEl) {
     const groep = hdrEl.closest('.prog-groep');
     if (!groep) return;
+    // Samenvat-modus: klikken doet niks.
+    if (groep.classList.contains('samenvat')) return;
     const key = groep.dataset.groepKey;
     const nuIngeklapt = groep.classList.toggle('ingeklapt');
     if (nuIngeklapt) _progIngeklapt.add(key); else _progIngeklapt.delete(key);
@@ -5234,7 +5255,8 @@ function renderProgramma() {
         const iconMarker = `[[STATUS-ICON-${idx}]]`;
         const mijnMarker = `[[MIJN-BADGE-${idx}]]`;
         const afsAttr = r.distance_naam ? ` data-afstand-key="${esc(r.distance_naam)}"` : '';
-        html += `<div class="prog-groep${ingeklapt ? ' ingeklapt' : ''}" data-groep-key="${esc(key)}" data-dag-nr="${dag}"${afsAttr}>
+        const rtAttr  = r.ronde_type ? ` data-ronde-type="${esc(r.ronde_type)}"` : '';
+        html += `<div class="prog-groep${ingeklapt ? ' ingeklapt' : ''}" data-groep-key="${esc(key)}" data-dag-nr="${dag}"${afsAttr}${rtAttr}>
             <div class="prog-groep-hdr" onclick="klapGroep(this)">
                 <span class="prog-groep-chev">▼</span>
                 <span class="prog-groep-status">${iconMarker}</span>
@@ -5430,14 +5452,48 @@ function applyProgFilter(strook) {
     const afs = strook.getAttribute('data-actieve-afstand') || 'alle';
     const container = strook.parentElement;
     if (!container) return;
+    container.querySelectorAll('.prog-groep.samenvat').forEach(el => {
+        el.classList.remove('samenvat');
+        el.querySelector('.samenvat-teller')?.remove();
+    });
+    const eersteVanCombi = new Map();
     container.querySelectorAll('[data-dag-nr]').forEach(el => {
         if (el === strook || el.classList.contains('prog-filter-strook')) return;
         const elDag = el.getAttribute('data-dag-nr');
         const elAfs = el.getAttribute('data-afstand-key');
+        const elRt  = el.getAttribute('data-ronde-type');
         const dagOk = (dag === 'alle') || (elDag === String(dag));
-        const afsOk = (afs === 'alle') || !elAfs || (elAfs === afs);
-        el.classList.toggle('verborgen', !(dagOk && afsOk));
+        if (!dagOk) { el.classList.add('verborgen'); return; }
+        if (afs === 'alle' || !elAfs || elAfs === afs) {
+            el.classList.remove('verborgen');
+            return;
+        }
+        if (!el.classList.contains('prog-groep')) {
+            el.classList.add('verborgen');
+            return;
+        }
+        const combiKey = `${elAfs}|${elRt || ''}`;
+        // Coach heeft geen .prog-rij, wel .prog-rit (heat-rij). Fallback op beide.
+        const heats = el.querySelectorAll('.prog-rit, .prog-rij').length;
+        if (eersteVanCombi.has(combiKey)) {
+            el.classList.add('verborgen');
+            eersteVanCombi.get(combiKey).heats += heats;
+        } else {
+            el.classList.remove('verborgen');
+            el.classList.add('samenvat');
+            eersteVanCombi.set(combiKey, {el, heats});
+        }
     });
+    for (const {el, heats} of eersteVanCombi.values()) {
+        const hdr = el.querySelector('.prog-groep-hdr');
+        if (!hdr) continue;
+        hdr.querySelector('.samenvat-teller')?.remove();
+        const span = document.createElement('span');
+        span.className = 'samenvat-teller';
+        const suffix = heats === 1 ? t('prog_samenvat_heat_1') : t('prog_samenvat_heat_n', {n: heats});
+        span.textContent = ` · ${suffix}`;
+        hdr.appendChild(span);
+    }
 }
 // Legacy wrapper voor onclick="filterDag(...)"-plekken die er nog zijn.
 function filterDag(btn, dag) {
