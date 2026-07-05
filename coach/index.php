@@ -3230,7 +3230,7 @@ const T = {
         help_titel: 'Hoe werkt de Coach-view?',
         help_h_start: 'Aan de slag',
         help_stap1_html: 'Kies je <b>wedstrijd</b> bovenaan.',
-        help_stap2_html: 'Voeg rijders toe aan je coach-lijst op drie manieren: <ul style="margin:4px 0 0 18px"><li><b>Op club</b> — selecteer een club en alle rijders daarvan komen in je lijst.</li><li><b>Op sponsor</b> — idem op sponsor-naam.</li><li><b>Op startnummer</b> — typ een getal en druk op Toevoegen (of Enter).</li></ul>',
+        help_stap2_html: 'Voeg rijders toe aan je coach-lijst op drie manieren: <ul style="margin:4px 0 4px 18px"><li><b>Op club</b> — selecteer een club en alle rijders daarvan komen in je lijst.</li><li><b>Op sponsor</b> — idem op sponsor-naam.</li><li><b>Op startnummer</b> — typ een getal en druk op Toevoegen (of Enter).</li></ul><b>Let op:</b> klik pas op <b>Klaar</b> als alle gewenste rijders in de geselecteerd-lijst staan — dat wordt vaak te vroeg gedaan.',
         help_stap3_html: 'Bekijk de tabs: <b>📋 Programma</b>, <b>🏃 Heats</b>, <b>⚠️ Sancties</b>, <b>📊 Uitslagen</b>.',
         help_h_prog: 'Programma',
         help_p_prog_html: 'Toont alle ritten van de wedstrijd. Ritten waar minstens één van jouw rijders in zit zijn <b>geel gemarkeerd</b> met een strip van hun startnummers aan de rechterkant. Tik een rit aan om de volledige startlijst te zien — jouw rijders zijn opnieuw geel gemarkeerd.',
@@ -3265,12 +3265,19 @@ const T = {
         nieuw_v100_11_html: '<b>Klassering per categorie</b> in de Uitslagen-tab — bij gecombineerde races (bv. HJA + HSA samen) verschijnt naast de overall rang een aparte kolom per categorie, zodat in één oogopslag zichtbaar is welke plek de rijder binnen de eigen categorie heeft behaald.',
         nieuw_v100_9_html: '<b>Kleine verbeteringen</b> voor de weergave op smalle schermen en de navigatie — waaronder filter-knoppen die weer binnen het openings-venster passen.',
         // ── Mockup-labels ──
-        mock_venster_titel: 'Wedstrijd & rijder',
+        mock_venster_titel: 'Wedstrijd & rijders',
         mock_kies_w: 'Kies je wedstrijd',
-        mock_kies_rijders: 'Kies je rijders',
+        mock_kies_rijders: 'Voeg rijders toe aan je coach-lijst',
         mock_voorbeeld_w: 'Voorbeeldwedstrijd — 19 april 2026',
-        mock_snr_lic: 'Startnummer, licentie of achternaam',
-        mock_btn_start: 'Toevoegen',
+        mock_op_club:     'Op club',
+        mock_kies_club:   '— kies club(s) —',
+        mock_op_sponsor:  'Op sponsor',
+        mock_kies_sponsor:'— kies sponsor(s) —',
+        mock_op_snr:      'Op startnummer, naam of licentie',
+        mock_snr_lic:     'Startnummer, naam (≥2 letters)',
+        mock_btn_start:   'Toevoegen',
+        mock_geselecteerd:'0 rijders geselecteerd',
+        mock_btn_klaar:   'Klaar',
         mock_ronde_serie: 'Serie',
         mock_ronde_finale: 'Finale',
         mock_col_fin:  'Fin',
@@ -3539,7 +3546,7 @@ const T = {
         help_titel: 'How does the Coach view work?',
         help_h_start: 'Getting started',
         help_stap1_html: 'Choose your <b>race</b> at the top.',
-        help_stap2_html: 'Add skaters to your coach list in three ways: <ul style="margin:4px 0 0 18px"><li><b>By club</b> — select a club and all its skaters appear in your list.</li><li><b>By sponsor</b> — same by sponsor name.</li><li><b>By start number</b> — type a number and press Add (or Enter).</li></ul>',
+        help_stap2_html: 'Add skaters to your coach list in three ways: <ul style="margin:4px 0 4px 18px"><li><b>By club</b> — select a club and all its skaters appear in your list.</li><li><b>By sponsor</b> — same by sponsor name.</li><li><b>By start number</b> — type a number and press Add (or Enter).</li></ul><b>Note:</b> only click <b>Done</b> once all desired skaters are in the selected list — this is often done too early.',
         help_stap3_html: 'Browse the tabs: <b>📋 Program</b>, <b>🏃 Heats</b>, <b>⚠️ Sanctions</b>, <b>📊 Results</b>.',
         help_h_prog: 'Program',
         help_p_prog_html: 'Shows all races of the meet. Races containing at least one of your skaters are <b>highlighted in yellow</b> with a strip of their start numbers on the right. Tap a race to view the full start list — your skaters are again highlighted in yellow.',
@@ -3570,12 +3577,19 @@ const T = {
         nieuw_v100_4_html: '<b>Raw time</b> visible next to the net time — marked with ✋ (manual correction) or 📷 (photo-finish correction). This way, the heat tables show exactly when a correction was applied to the clock value.',
         nieuw_v100_11_html: '<b>Ranking per category</b> in the Results tab — for combined races (e.g. HJA + HSA together) a separate column per category appears next to the overall rank, so the position achieved within the own category is visible at a glance.',
         nieuw_v100_9_html: '<b>Small improvements</b> to the display on narrow screens and to navigation — including filter buttons that now fit within the opening window.',
-        mock_venster_titel: 'Race & skater',
+        mock_venster_titel: 'Race & skaters',
         mock_kies_w: 'Choose your race',
-        mock_kies_rijders: 'Choose your skaters',
+        mock_kies_rijders: 'Add skaters to your coach list',
         mock_voorbeeld_w: 'Example race — 19 April 2026',
-        mock_snr_lic: 'Start number, licence or surname',
-        mock_btn_start: 'Add',
+        mock_op_club:     'By club',
+        mock_kies_club:   '— select club(s) —',
+        mock_op_sponsor:  'By sponsor',
+        mock_kies_sponsor:'— select sponsor(s) —',
+        mock_op_snr:      'By start number, name or licence',
+        mock_snr_lic:     'Start number, name (≥2 letters)',
+        mock_btn_start:   'Add',
+        mock_geselecteerd:'0 skaters selected',
+        mock_btn_klaar:   'Done',
         mock_ronde_serie: 'Heat',
         mock_ronde_finale: 'Final',
         mock_col_fin:  'Fin',
@@ -3844,7 +3858,7 @@ const T = {
         help_titel: 'Wie funktioniert die Coach-Ansicht?',
         help_h_start: 'Erste Schritte',
         help_stap1_html: 'Wähle dein <b>Rennen</b> oben.',
-        help_stap2_html: 'Skater auf drei Arten zu deiner Coach-Liste hinzufügen: <ul style="margin:4px 0 0 18px"><li><b>Nach Verein</b> — wähle einen Verein und alle dessen Skater erscheinen in deiner Liste.</li><li><b>Nach Sponsor</b> — gleiches nach Sponsorname.</li><li><b>Nach Startnummer</b> — gib eine Nummer ein und drücke Hinzufügen (oder Enter).</li></ul>',
+        help_stap2_html: 'Skater auf drei Arten zu deiner Coach-Liste hinzufügen: <ul style="margin:4px 0 4px 18px"><li><b>Nach Verein</b> — wähle einen Verein und alle dessen Skater erscheinen in deiner Liste.</li><li><b>Nach Sponsor</b> — gleiches nach Sponsorname.</li><li><b>Nach Startnummer</b> — gib eine Nummer ein und drücke Hinzufügen (oder Enter).</li></ul><b>Achtung:</b> klicke erst auf <b>Fertig</b>, wenn alle gewünschten Läufer in der Auswahlliste stehen — das wird oft zu früh gemacht.',
         help_stap3_html: 'Durchstöbere die Tabs: <b>📋 Programm</b>, <b>🏃 Heats</b>, <b>⚠️ Strafen</b>, <b>📊 Ergebnisse</b>.',
         help_h_prog: 'Programm',
         help_p_prog_html: 'Zeigt alle Rennen der Veranstaltung. Rennen mit mindestens einem deiner Skater sind <b>gelb markiert</b> mit einem Streifen ihrer Startnummern rechts. Tippe auf ein Rennen für die vollständige Startliste — deine Skater sind dort wieder gelb markiert.',
@@ -3877,10 +3891,17 @@ const T = {
         nieuw_v100_9_html: '<b>Kleine Verbesserungen</b> an der Darstellung auf schmalen Bildschirmen und der Navigation — u.a. Filter-Buttons, die wieder in das Startfenster passen.',
         mock_venster_titel: 'Rennen & Läufer',
         mock_kies_w: 'Wähle dein Rennen',
-        mock_kies_rijders: 'Wähle deine Läufer',
+        mock_kies_rijders: 'Läufer zur Coach-Liste hinzufügen',
         mock_voorbeeld_w: 'Beispielrennen — 19. April 2026',
-        mock_snr_lic: 'Startnummer, Lizenz oder Nachname',
-        mock_btn_start: 'Hinzufügen',
+        mock_op_club:     'Nach Verein',
+        mock_kies_club:   '— Verein(e) wählen —',
+        mock_op_sponsor:  'Nach Sponsor',
+        mock_kies_sponsor:'— Sponsor(en) wählen —',
+        mock_op_snr:      'Nach Startnummer, Name oder Lizenz',
+        mock_snr_lic:     'Startnummer, Name (≥2 Buchstaben)',
+        mock_btn_start:   'Hinzufügen',
+        mock_geselecteerd:'0 Läufer ausgewählt',
+        mock_btn_klaar:   'Fertig',
         mock_ronde_serie: 'Vorlauf',
         mock_ronde_finale: 'Finale',
         mock_col_fin:  'Fin',
@@ -4149,7 +4170,7 @@ const T = {
         help_titel: 'Comment fonctionne la vue Coach?',
         help_h_start: 'Pour commencer',
         help_stap1_html: 'Choisissez votre <b>course</b> en haut.',
-        help_stap2_html: 'Ajoutez des skateurs à votre liste de coach de trois manières: <ul style="margin:4px 0 0 18px"><li><b>Par club</b> — sélectionnez un club et tous ses skateurs apparaissent dans votre liste.</li><li><b>Par sponsor</b> — pareil par nom de sponsor.</li><li><b>Par numéro de départ</b> — tapez un numéro et appuyez sur Ajouter (ou Entrée).</li></ul>',
+        help_stap2_html: 'Ajoutez des skateurs à votre liste de coach de trois manières : <ul style="margin:4px 0 4px 18px"><li><b>Par club</b> — sélectionnez un club et tous ses skateurs apparaissent dans votre liste.</li><li><b>Par sponsor</b> — pareil par nom de sponsor.</li><li><b>Par numéro de départ</b> — tapez un numéro et appuyez sur Ajouter (ou Entrée).</li></ul><b>Attention :</b> ne cliquez sur <b>Terminer</b> qu\'une fois tous les skateurs souhaités dans la liste sélectionnée — cela se fait souvent trop tôt.',
         help_stap3_html: 'Parcourez les onglets: <b>📋 Programme</b>, <b>🏃 Heats</b>, <b>⚠️ Sanctions</b>, <b>📊 Résultats</b>.',
         help_h_prog: 'Programme',
         help_p_prog_html: 'Affiche toutes les courses de l\'événement. Les courses contenant au moins un de vos skateurs sont <b>surlignées en jaune</b> avec une bande de leurs numéros de départ à droite. Appuyez sur une course pour voir la liste de départ complète — vos skateurs y sont à nouveau surlignés en jaune.',
@@ -4180,12 +4201,19 @@ const T = {
         nieuw_v100_4_html: '<b>Temps brut</b> visible à côté du temps net — marqué ✋ (correction manuelle) ou 📷 (correction photo-finish). Ainsi, les tableaux de séries montrent exactement quand une correction a été appliquée au temps de l\'horloge.',
         nieuw_v100_11_html: '<b>Classement par catégorie</b> dans l\'onglet Résultats — pour les courses combinées (par ex. HJA + HSA ensemble) une colonne distincte par catégorie apparaît à côté du rang général, ce qui rend la place obtenue dans la propre catégorie visible d\'un coup d\'œil.',
         nieuw_v100_9_html: '<b>Petites améliorations</b> pour l\'affichage sur écrans étroits et pour la navigation — dont des boutons de filtre qui tiennent à nouveau dans la fenêtre d\'ouverture.',
-        mock_venster_titel: 'Course & skateur',
+        mock_venster_titel: 'Course & skateurs',
         mock_kies_w: 'Choisis ta course',
-        mock_kies_rijders: 'Choisis tes skateurs',
+        mock_kies_rijders: 'Ajoute des skateurs à ta liste de coach',
         mock_voorbeeld_w: 'Course exemple — 19 avril 2026',
-        mock_snr_lic: 'Numéro de dossard, licence ou nom',
-        mock_btn_start: 'Ajouter',
+        mock_op_club:     'Par club',
+        mock_kies_club:   '— choisir club(s) —',
+        mock_op_sponsor:  'Par sponsor',
+        mock_kies_sponsor:'— choisir sponsor(s) —',
+        mock_op_snr:      'Par dossard, nom ou licence',
+        mock_snr_lic:     'Numéro, nom (≥2 lettres)',
+        mock_btn_start:   'Ajouter',
+        mock_geselecteerd:'0 skateur sélectionné',
+        mock_btn_klaar:   'Terminer',
         mock_ronde_serie: 'Série',
         mock_ronde_finale: 'Finale',
         mock_col_fin:  'Fin',
@@ -6212,10 +6240,8 @@ function toonHelp() {
                 <span>${t('help_stap1_html')}</span></div>
             <div class="help-stap"><span class="help-stap-nr">2</span>
                 <span>${t('help_stap2_html')}</span></div>
-            <div class="help-stap"><span class="help-stap-nr">3</span>
-                <span>${t('help_stap3_html')}</span></div>
 
-            <!-- Mockup: openings-venster met filter-chips + wedstrijd-select -->
+            <!-- Mockup: openings-venster (Wedstrijd & rijders) — hoort bij stap 1+2 -->
             <div class="mock">
                 <div class="mock-hdr">${t('mock_venster_titel')}</div>
                 <div class="mock-body">
@@ -6229,14 +6255,26 @@ function toonHelp() {
                         <span style="flex:1;text-align:center;font-size:.7rem;font-weight:600;padding:4px 0;border-radius:12px;border:1.5px solid #cdd8e3;color:#888;background:#fff">${t('filter_later')}</span>
                     </div>
                     <div class="mock-select">${t('mock_voorbeeld_w')}</div>
-                    <div style="display:flex;align-items:center;gap:5px;font-size:.75rem;font-weight:700;color:var(--blauw);margin:8px 0 4px">
+                    <div style="display:flex;align-items:center;gap:5px;font-size:.75rem;font-weight:700;color:var(--blauw);margin:10px 0 4px">
                         <span style="background:var(--blauw);color:#fff;width:16px;height:16px;border-radius:50%;display:inline-flex;align-items:center;justify-content:center;font-size:.65rem">2</span>
                         ${t('mock_kies_rijders')}
                     </div>
+                    <div style="font-size:.68rem;font-weight:600;color:#333;margin:4px 0 2px">${t('mock_op_club')}</div>
+                    <div class="mock-select">${t('mock_kies_club')}</div>
+                    <div style="font-size:.68rem;font-weight:600;color:#333;margin:4px 0 2px">${t('mock_op_sponsor')}</div>
+                    <div class="mock-select">${t('mock_kies_sponsor')}</div>
+                    <div style="font-size:.68rem;font-weight:600;color:#333;margin:4px 0 2px">${t('mock_op_snr')}</div>
                     <div class="mock-select">${t('mock_snr_lic')}</div>
-                    <div style="background:var(--oranje);color:#fff;text-align:center;padding:6px;border-radius:6px;font-weight:700;font-size:.75rem;margin-top:4px">${t('mock_btn_start')}</div>
+                    <div style="background:#ffdcbc;color:#fff;text-align:center;padding:6px;border-radius:6px;font-weight:700;font-size:.72rem;margin-top:4px">${t('mock_btn_start')}</div>
+                    <div style="display:flex;justify-content:space-between;align-items:center;margin-top:6px;padding-top:6px;border-top:1px solid #eef2f6;font-size:.7rem;color:#555">
+                        <span>${t('mock_geselecteerd')}</span>
+                    </div>
+                    <div style="background:var(--oranje);color:#fff;text-align:center;padding:8px;border-radius:6px;font-weight:700;font-size:.85rem;margin-top:6px">${t('mock_btn_klaar')}</div>
                 </div>
             </div>
+
+            <div class="help-stap"><span class="help-stap-nr">3</span>
+                <span>${t('help_stap3_html')}</span></div>
 
             <h3>${t('help_h_prog')}</h3>
             <p>${t('help_p_prog_html')}</p>
