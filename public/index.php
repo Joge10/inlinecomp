@@ -1865,6 +1865,18 @@ header .sub { font-size: .95rem; opacity: .8; margin-top: 6px; text-align: cente
     border-radius: 50%; display: flex; align-items: center; justify-content: center;
     font-size: .8rem; font-weight: 700; flex-shrink: 0;
 }
+/* ── "Wat is nieuw"-jump knop bovenin help-modal ── */
+.btn-nieuw-jump {
+    display: block; width: 100%;
+    background: linear-gradient(180deg, #eaf2fa 0%, #d6e4f0 100%);
+    color: var(--blauw); border: 1.5px solid var(--middenblauw);
+    border-radius: 8px; padding: 10px 12px;
+    font-size: .92rem; font-weight: 700; cursor: pointer;
+    margin: 0 0 14px; transition: transform .1s, background .15s;
+}
+.btn-nieuw-jump:hover  { background: linear-gradient(180deg, #d6e4f0 0%, #b9d0e6 100%); }
+.btn-nieuw-jump:active { transform: scale(.98); }
+
 /* ── Changelog / "Wat is nieuw" ── */
 .changelog-versie {
     background: #f7faff; border-left: 3px solid var(--middenblauw);
@@ -2692,7 +2704,6 @@ select:focus, input:focus { border-color: var(--middenblauw); outline: none; }
         </div>
         <div class="hdr-btns hdr-btns-right">
             <button class="btn-help" onclick="toonInfo()" data-i18n-title="hdr_info_title" title="Over InlineComp">i</button>
-            <button class="btn-help" onclick="toonHelp('#wat-is-nieuw')" data-i18n-title="hdr_nieuw_title" title="Wat is nieuw?">✨</button>
             <button class="btn-help" onclick="toonHelp()" data-i18n-title="hdr_help_title" title="Hoe werkt het?">?</button>
         </div>
     </div>
@@ -2978,8 +2989,8 @@ const T = {
         info_btn_privacy: '📄 Bekijk privacyverklaring',
         info_copyright: 'InlineComp &copy; {jaar} Geert de Vries',
         info_versie: 'Versie',
-        // Header-knop ✨ + "Wat is nieuw"-sectie in help
-        hdr_nieuw_title: 'Wat is nieuw?',
+        // "Wat is nieuw"-sectie in help + jump-knop bovenin
+        nieuw_jump: 'Direct naar Wat is nieuw ↓',
         nieuw_h: 'Wat is nieuw?',
         nieuw_intro: 'Kort overzicht van recente wijzigingen. Ken je de app al? Dan is dit alles wat je nodig hebt.',
         nieuw_v100_1_html: '<b>Kleine finale</b> op 100 m sprint — afgevallen rijders uit de halve finale strijden om de plaatsen na de A-finale. Herkenbaar aan het label <i>Kleine finale</i>.',
@@ -2990,7 +3001,6 @@ const T = {
         nieuw_v100_4_html: '<b>Bruto-tijd</b> naast netto-tijd in "Jouw resultaat" wanneer een foto-finish of hand-tijd tot correctie heeft geleid.',
         nieuw_v100_5_html: '<b>Sponsor-lichtkrant</b> onderaan met de logo\'s van de organisatie en gastheer-vereniging.',
         nieuw_v100_9_html: '<b>Betere weergave op kleine schermen</b> — de openings-modal met filter-chips past nu ook op smalle telefoons zonder dat de knoppen buiten de rand steken.',
-        nieuw_v100_10_html: '<b>Deze ✨ knop zelf</b> — direct naar "Wat is nieuw" zonder eerst de hele help door te scrollen.',
         nieuw_v100_6_html: '<b>Vier talen</b>: Nederlands, English, Deutsch, Français — schakel via de vlag-knop links in de header.',
         // ── Help modal ──
         help_titel: 'Hoe werkt InlineComp?',
@@ -3203,7 +3213,7 @@ const T = {
         info_btn_privacy: '📄 View privacy statement',
         info_copyright: 'InlineComp &copy; {jaar} Geert de Vries',
         info_versie: 'Version',
-        hdr_nieuw_title: 'What\'s new?',
+        nieuw_jump: 'Jump to What\'s new ↓',
         nieuw_h: 'What\'s new?',
         nieuw_intro: 'Short overview of recent changes. Already know the app? This is all you need.',
         nieuw_v100_1_html: '<b>Small final</b> for 100 m sprint — skaters eliminated in the semi-final race for the places after the A-final. Look for the label <i>Small final</i>.',
@@ -3214,7 +3224,6 @@ const T = {
         nieuw_v100_4_html: '<b>Raw time</b> next to net time in "Your result" when a photo-finish or hand time led to a correction.',
         nieuw_v100_5_html: '<b>Sponsor ticker</b> at the bottom with the organiser and host club logos.',
         nieuw_v100_9_html: '<b>Better view on small screens</b> — the opening dialog with filter chips now fits on narrow phones without the buttons overflowing.',
-        nieuw_v100_10_html: '<b>This ✨ button itself</b> — jump straight to "What\'s new" without scrolling through the whole help.',
         nieuw_v100_6_html: '<b>Four languages</b>: Nederlands, English, Deutsch, Français — switch via the flag button on the left in the header.',
         // ── Help modal ──
         help_titel: 'How does InlineComp work?',
@@ -3427,7 +3436,7 @@ const T = {
         info_btn_privacy: '📄 Datenschutzerklärung ansehen',
         info_copyright: 'InlineComp &copy; {jaar} Geert de Vries',
         info_versie: 'Version',
-        hdr_nieuw_title: 'Was ist neu?',
+        nieuw_jump: 'Direkt zu Was ist neu ↓',
         nieuw_h: 'Was ist neu?',
         nieuw_intro: 'Kurze Übersicht der jüngsten Änderungen. Kennst du die App schon? Dann reicht das.',
         nieuw_v100_1_html: '<b>Kleines Finale</b> beim 100 m-Sprint — im Halbfinale ausgeschiedene Läufer fahren um die Plätze nach dem A-Finale. Kenntlich am Label <i>Kleines Finale</i>.',
@@ -3438,7 +3447,6 @@ const T = {
         nieuw_v100_4_html: '<b>Bruttozeit</b> neben der Nettozeit in "Dein Ergebnis", wenn ein Fotofinish oder Handzeit zu einer Korrektur führte.',
         nieuw_v100_5_html: '<b>Sponsor-Laufband</b> unten mit den Logos der Organisation und des Gastvereins.',
         nieuw_v100_9_html: '<b>Bessere Ansicht auf kleinen Bildschirmen</b> — der Startdialog mit Filter-Chips passt jetzt auch auf schmalen Handys ohne dass die Knöpfe überstehen.',
-        nieuw_v100_10_html: '<b>Diese ✨-Schaltfläche selbst</b> — direkt zu "Was ist neu" springen, ohne die ganze Hilfe durchzuscrollen.',
         nieuw_v100_6_html: '<b>Vier Sprachen</b>: Nederlands, English, Deutsch, Français — umschaltbar über die Flaggen-Schaltfläche links im Header.',
         // ── Help modal ──
         help_titel: 'Wie funktioniert InlineComp?',
@@ -3651,7 +3659,7 @@ const T = {
         info_btn_privacy: '📄 Voir la déclaration de confidentialité',
         info_copyright: 'InlineComp &copy; {jaar} Geert de Vries',
         info_versie: 'Version',
-        hdr_nieuw_title: 'Quoi de neuf ?',
+        nieuw_jump: 'Aller à Quoi de neuf ↓',
         nieuw_h: 'Quoi de neuf ?',
         nieuw_intro: 'Bref aperçu des changements récents. Tu connais déjà l\'appli ? Voici tout ce qu\'il te faut.',
         nieuw_v100_1_html: '<b>Petite finale</b> pour le sprint 100 m — les skateurs éliminés en demi-finale courent pour les places après la finale A. Repère le label <i>Petite finale</i>.',
@@ -3662,7 +3670,6 @@ const T = {
         nieuw_v100_4_html: '<b>Temps brut</b> à côté du temps net dans "Ton résultat" quand un photo-finish ou un temps manuel a conduit à une correction.',
         nieuw_v100_5_html: '<b>Bandeau sponsors</b> en bas avec les logos de l\'organisateur et du club hôte.',
         nieuw_v100_9_html: '<b>Meilleur affichage sur petits écrans</b> — la boîte de dialogue d\'ouverture avec chips de filtre tient maintenant sur les téléphones étroits sans que les boutons débordent.',
-        nieuw_v100_10_html: '<b>Ce bouton ✨ lui-même</b> — accès direct à "Quoi de neuf" sans faire défiler toute l\'aide.',
         nieuw_v100_6_html: '<b>Quatre langues</b> : Nederlands, English, Deutsch, Français — via le bouton drapeau à gauche de l\'en-tête.',
         // ── Help modal ──
         help_titel: 'Comment fonctionne InlineComp ?',
@@ -6047,7 +6054,7 @@ function toonInfo() {
     document.body.appendChild(overlay);
 }
 
-function toonHelp(scrollAnker) {
+function toonHelp() {
     const overlay = document.createElement('div');
     overlay.className = 'help-overlay';
     overlay.addEventListener('click', e => { if (e.target === overlay) overlay.remove(); });
@@ -6058,6 +6065,11 @@ function toonHelp(scrollAnker) {
             <button class="help-sluit" onclick="this.closest('.help-overlay').remove()">&times;</button>
         </div>
         <div class="help-body">
+
+            <button type="button" class="btn-nieuw-jump"
+                    onclick="this.closest('.help-body').querySelector('#wat-is-nieuw').scrollIntoView({behavior:'smooth',block:'start'})">
+                ✨ ${esc(t('nieuw_jump'))}
+            </button>
 
             <h3>${esc(t('help_h1'))}</h3>
             <div class="help-stap">
@@ -6190,7 +6202,6 @@ function toonHelp(scrollAnker) {
                     <li>${t('nieuw_v100_4_html')}</li>
                     <li>${t('nieuw_v100_5_html')}</li>
                     <li>${t('nieuw_v100_9_html')}</li>
-                    <li>${t('nieuw_v100_10_html')}</li>
                     <li>${t('nieuw_v100_6_html')}</li>
                 </ul>
             </div>
@@ -6198,14 +6209,6 @@ function toonHelp(scrollAnker) {
         </div>
     </div>`;
     document.body.appendChild(overlay);
-    // Auto-scroll naar het opgegeven anker (bijv. #wat-is-nieuw wanneer de
-    // ✨-knop is gebruikt). requestAnimationFrame zodat de layout eerst rendert.
-    if (scrollAnker) {
-        requestAnimationFrame(() => {
-            const doel = overlay.querySelector(scrollAnker);
-            if (doel) doel.scrollIntoView({ behavior: 'smooth', block: 'start' });
-        });
-    }
 }
 
 // ── Mededelingen (pop-ups bij belangrijke aankondigingen) ────────────────
