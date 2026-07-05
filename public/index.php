@@ -2924,8 +2924,6 @@ const T = {
         // ── Heats ──
         heat_wachten_vorige: 'Wachten op vorige ronde',
         heat_jouw_resultaat: 'Jij:',
-        heat_bruto_gemeten: 'vóór correctie',
-        heat_bruto_officieel: 'officieel',
         // ── Heat tabel headers ──
         col_pos: '#',
         col_snr: 'Snr',
@@ -3146,8 +3144,6 @@ const T = {
         // ── Heats ──
         heat_wachten_vorige: 'Waiting for previous round',
         heat_jouw_resultaat: 'You:',
-        heat_bruto_gemeten: 'before correction',
-        heat_bruto_officieel: 'official',
         // ── Heat tabel headers ──
         col_pos: '#',
         col_snr: 'Nr',
@@ -3367,8 +3363,6 @@ const T = {
         // ── Heats ──
         heat_wachten_vorige: 'Warte auf vorherige Runde',
         heat_jouw_resultaat: 'Du:',
-        heat_bruto_gemeten: 'vor Korrektur',
-        heat_bruto_officieel: 'offiziell',
         // ── Heat tabel headers ──
         col_pos: '#',
         col_snr: 'Nr.',
@@ -3588,8 +3582,6 @@ const T = {
         // ── Heats ──
         heat_wachten_vorige: 'En attente du tour précédent',
         heat_jouw_resultaat: 'Toi :',
-        heat_bruto_gemeten: 'avant correction',
-        heat_bruto_officieel: 'officiel',
         // ── Heat tabel headers ──
         col_pos: '#',
         col_snr: 'Nº',
@@ -3934,8 +3926,11 @@ function heatTabelRij(r, isIk, extra) {
     // == 1 noodzakelijk: PDO levert is_photofinish soms als string "0"/"1",
     // en "0" is truthy in JS → ternary zou altijd 📷 kiezen voor handmatige
     // RR-tijden. Loose-equality werkt cross-type ("1"==1 ✓, "0"==1 ✗).
+    // Geen title-tooltip: mobiel toont die niet. Het icoontje zelf
+    // signaleert dat er een correctie is toegepast; de bruto-tijd zelf
+    // staat voor de eigen rijder in "Jouw resultaat" (pijl-notatie).
     const auditIcon = heeftAudit
-        ? `<span class="col-tijd-audit" title="${esc(t('heat_bruto_gemeten'))} ${esc(msTijd(r.bruto_tijd_ms))}">${r.is_photofinish == 1 ? '📷' : '✋'}</span>`
+        ? `<span class="col-tijd-audit">${r.is_photofinish == 1 ? '📷' : '✋'}</span>`
         : '';
     return `<tr class="${isIk ? 'rij-ik' : ''}">
         <td class="col-pos">${r.startpositie}</td>
