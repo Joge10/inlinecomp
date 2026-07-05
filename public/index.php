@@ -1205,6 +1205,27 @@ if ($action === 'ronde_uitslagen') {
         $distStmt->execute([$compId, $dcId]);
         $distances = $distStmt->fetchAll(PDO::FETCH_ASSOC);
 
+        // 1b) finale_seeding per afstand ophalen. Nodig voor client-side
+        // sortering van A-finale: bij 'tijdkoppeling' worden alle heats als
+        // één finale gerangschikt op tijd, niet per positie (dan zouden
+        // alle nrs 1 uit verschillende heats ex-aequo eindigen).
+        // Fallback-regel: dc-specifiek → dc_id IS NULL → 'slang'.
+        $seedStmt = $pdo->prepare("
+            SELECT afstand_naam, dc_id, finale_seeding
+            FROM tijdschema_afstand_config tac
+            JOIN competition_tijdschema ct ON ct.id = tac.tijdschema_id
+            WHERE ct.competition_id = ? AND (tac.dc_id = ? OR tac.dc_id IS NULL)
+        ");
+        $seedStmt->execute([$compId, $dcId]);
+        $seedingMap = [];  // afstand_naam => finale_seeding (dc-specifiek wint)
+        foreach ($seedStmt->fetchAll(PDO::FETCH_ASSOC) as $s) {
+            $an = $s['afstand_naam'];
+            // dc-specifiek overrulet null-fallback
+            if (!isset($seedingMap[$an]) || $s['dc_id'] !== null) {
+                $seedingMap[$an] = $s['finale_seeding'];
+            }
+        }
+
         // 2) catConfig ophalen (voor Q/q + finale-heat-grootte + runner-up).
         $ccStmt = $pdo->prepare("
             SELECT * FROM tijdschema_cat_config cc
@@ -1550,6 +1571,7 @@ if ($action === 'ronde_uitslagen') {
                 'distance_naam'  => $dist['name'],
                 'distance_meters'=> $dist['value_meters'] !== null ? (int)$dist['value_meters'] : null,
                 'race_type'      => $dist['race_type'],
+                'finale_seeding' => $seedingMap[$dist['name']] ?? 'slang',
                 'rondes'         => $rondes,
                 'eind_uitslag'   => $eind,
             ];
@@ -5350,7 +5372,12 @@ async function renderRondeUitslagen(container) {
                         const s = String(x.sanctie || '').toUpperCase().split(/[,\s]+/);
                         return _uitvalCodes.some(c => s.includes(c));
                     };
-                    const _finaleFin = ['finale_a'].includes(r.ronde_type);
+                    // Bij tijdkoppeling-seeding zijn de A-heats bewust
+                    // tijd-gekoppeld: één ranking over alle heats op tijd,
+                    // GEEN ex-aequo per positie (dat zou bij slang wél zo zijn,
+                    // want daar zijn de heats onafhankelijk gerangschikt).
+                    const _finaleFin = ['finale_a'].includes(r.ronde_type)
+                                       && d.finale_seeding !== 'tijdkoppeling';
                     rijders.sort((a, b) => {
                         // Uitvallers altijd naar het einde
                         const ua = _isUit(a), ub = _isUit(b);
@@ -5358,8 +5385,9 @@ async function renderRondeUitslagen(container) {
                         // Q/q-groep bepaalt de blok-volgorde
                         const oa = _ord(a), ob = _ord(b);
                         if (oa !== ob) return oa - ob;
-                        // Binnen de "rest"-groep (oa === 2) bij finale_a:
-                        // finishpositie leidend, tijd tiebreaker.
+                        // Binnen de "rest"-groep (oa === 2) bij finale_a
+                        // (behalve tijdkoppeling): finishpositie leidend,
+                        // tijd tiebreaker.
                         if (oa === 2 && _finaleFin) {
                             const fa = a.finishpositie ?? 999;
                             const fb = b.finishpositie ?? 999;
