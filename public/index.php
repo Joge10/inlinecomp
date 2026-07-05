@@ -2993,15 +2993,11 @@ const T = {
         nieuw_jump: 'Direct naar Wat is nieuw ↓',
         nieuw_h: 'Wat is nieuw?',
         nieuw_intro: 'Kort overzicht van recente wijzigingen. Ken je de app al? Dan is dit alles wat je nodig hebt.',
-        nieuw_v100_1_html: '<b>Kleine finale</b> op 100 m sprint — afgevallen rijders uit de halve finale strijden om de plaatsen na de A-finale. Herkenbaar aan het label <i>Kleine finale</i>.',
-        nieuw_v100_7_html: '<b>Rondes-tab</b> — nieuw tabblad met jouw uitslag per ronde (series, kwart, halve, A-finale, kleine finale). Vervangt de vorige "Resultaten"-tab.',
+        nieuw_v100_7_html: '<b>Rondes-tab</b> — nieuw tabblad met jouw uitslag per ronde: welke plek je hebt gehaald in de serie, kwart of halve finale, of je bent doorgestroomd naar de A-finale of kleine finale, en waar je uiteindelijk bent geëindigd. Vervangt de vorige "Resultaten"-tab.',
         nieuw_v100_8_html: '<b>Programma inklappen</b> met de segment-knoppen <i>Alles in / Alles uit / Mijn</i> — snel schakelen tussen totaaloverzicht en alleen je eigen ritten.',
-        nieuw_v100_2_html: '<b>Snelle wedstrijd-selectie</b> met filter-chips <i>Eerder / Vandaag / Later</i> in de openings-modal — vind je wedstrijd sneller zonder door lange lijsten te scrollen.',
-        nieuw_v100_3_html: '<b>Mededelingen</b> per wedstrijd met badge in de header (📢). Onbeantwoorde meldingen kleuren rood, gelezen worden grijs.',
-        nieuw_v100_4_html: '<b>Bruto-tijd</b> naast netto-tijd in "Jouw resultaat" wanneer een foto-finish of hand-tijd tot correctie heeft geleid.',
-        nieuw_v100_5_html: '<b>Sponsor-lichtkrant</b> onderaan met de logo\'s van de organisatie en gastheer-vereniging.',
-        nieuw_v100_9_html: '<b>Betere weergave op kleine schermen</b> — de openings-modal met filter-chips past nu ook op smalle telefoons zonder dat de knoppen buiten de rand steken.',
-        nieuw_v100_6_html: '<b>Vier talen</b>: Nederlands, English, Deutsch, Français — schakel via de vlag-knop links in de header.',
+        nieuw_v100_2_html: '<b>Snelle wedstrijd-selectie</b> in een nieuw <b>openings-venster</b> met filter-knoppen <i>Eerder / Vandaag / Later</i>. Verschijnt automatisch als je de app opent en houdt je wedstrijdkeuze bij de hand terwijl je door de tabs bladert.',
+        nieuw_v100_4_html: '<b>Bruto-tijd</b> zichtbaar naast de netto-tijd — herkenbaar aan ✋ (handmatig gemeten) of 📷 (foto-finish). Zo zie je in "Jouw resultaat" en in de heat-tabellen precies wanneer een correctie op de klokwaarde is toegepast.',
+        nieuw_v100_9_html: '<b>Kleine verbeteringen</b> voor beeld op smalle schermen en soepelere navigatie — o.a. filter-knoppen die weer netjes binnen het openings-venster passen.',
         // ── Help modal ──
         help_titel: 'Hoe werkt InlineComp?',
         help_h1: 'Aan de slag',
@@ -3216,15 +3212,11 @@ const T = {
         nieuw_jump: 'Jump to What\'s new ↓',
         nieuw_h: 'What\'s new?',
         nieuw_intro: 'Short overview of recent changes. Already know the app? This is all you need.',
-        nieuw_v100_1_html: '<b>Small final</b> for 100 m sprint — skaters eliminated in the semi-final race for the places after the A-final. Look for the label <i>Small final</i>.',
-        nieuw_v100_7_html: '<b>Rounds tab</b> — new tab with your result per round (heats, quarter, semi, A-final, small final). Replaces the previous "Results" tab.',
+        nieuw_v100_7_html: '<b>Rounds tab</b> — new tab with your result per round: what place you took in the heat, quarter or semi-final, whether you progressed to the A-final or small final, and where you eventually finished. Replaces the previous "Results" tab.',
         nieuw_v100_8_html: '<b>Collapse the program</b> with the segment buttons <i>All in / All out / Mine</i> — quickly toggle between full overview and only your own races.',
-        nieuw_v100_2_html: '<b>Quick race selection</b> with filter chips <i>Earlier / Today / Later</i> in the opening dialog — find your race without scrolling through long lists.',
-        nieuw_v100_3_html: '<b>Announcements</b> per race with a header badge (📢). Unread ones show red, read ones grey.',
-        nieuw_v100_4_html: '<b>Raw time</b> next to net time in "Your result" when a photo-finish or hand time led to a correction.',
-        nieuw_v100_5_html: '<b>Sponsor ticker</b> at the bottom with the organiser and host club logos.',
-        nieuw_v100_9_html: '<b>Better view on small screens</b> — the opening dialog with filter chips now fits on narrow phones without the buttons overflowing.',
-        nieuw_v100_6_html: '<b>Four languages</b>: Nederlands, English, Deutsch, Français — switch via the flag button on the left in the header.',
+        nieuw_v100_2_html: '<b>Quick race selection</b> in a new <b>opening window</b> with filter buttons <i>Earlier / Today / Later</i>. Appears automatically when you open the app and keeps your race choice handy while you browse the tabs.',
+        nieuw_v100_4_html: '<b>Raw time</b> visible next to the net time — marked with ✋ (hand-timed) or 📷 (photo-finish). This way you see in "Your result" and the heat tables exactly when a correction was applied to the clock value.',
+        nieuw_v100_9_html: '<b>Small improvements</b> for display on narrow screens and smoother navigation — including filter buttons that now fit neatly within the opening window.',
         // ── Help modal ──
         help_titel: 'How does InlineComp work?',
         help_h1: 'Getting started',
@@ -3439,15 +3431,11 @@ const T = {
         nieuw_jump: 'Direkt zu Was ist neu ↓',
         nieuw_h: 'Was ist neu?',
         nieuw_intro: 'Kurze Übersicht der jüngsten Änderungen. Kennst du die App schon? Dann reicht das.',
-        nieuw_v100_1_html: '<b>Kleines Finale</b> beim 100 m-Sprint — im Halbfinale ausgeschiedene Läufer fahren um die Plätze nach dem A-Finale. Kenntlich am Label <i>Kleines Finale</i>.',
-        nieuw_v100_7_html: '<b>Runden-Tab</b> — neuer Tab mit deinem Ergebnis pro Runde (Vorläufe, Viertel, Halbfinale, A-Finale, kleines Finale). Ersetzt den bisherigen "Resultate"-Tab.',
+        nieuw_v100_7_html: '<b>Runden-Tab</b> — neuer Tab mit deinem Ergebnis pro Runde: welchen Platz du im Vorlauf, Viertel- oder Halbfinale belegt hast, ob du ins A-Finale oder kleine Finale weitergekommen bist, und wo du am Ende gelandet bist. Ersetzt den bisherigen "Resultate"-Tab.',
         nieuw_v100_8_html: '<b>Programm einklappen</b> mit den Segment-Buttons <i>Alle ein / Alle aus / Meine</i> — schnell zwischen Gesamtübersicht und nur deinen Rennen wechseln.',
-        nieuw_v100_2_html: '<b>Schnelle Rennauswahl</b> mit Filter-Chips <i>Früher / Heute / Später</i> im Startdialog — finde dein Rennen ohne langes Scrollen.',
-        nieuw_v100_3_html: '<b>Mitteilungen</b> pro Rennen mit Badge im Header (📢). Ungelesene erscheinen rot, gelesene grau.',
-        nieuw_v100_4_html: '<b>Bruttozeit</b> neben der Nettozeit in "Dein Ergebnis", wenn ein Fotofinish oder Handzeit zu einer Korrektur führte.',
-        nieuw_v100_5_html: '<b>Sponsor-Laufband</b> unten mit den Logos der Organisation und des Gastvereins.',
-        nieuw_v100_9_html: '<b>Bessere Ansicht auf kleinen Bildschirmen</b> — der Startdialog mit Filter-Chips passt jetzt auch auf schmalen Handys ohne dass die Knöpfe überstehen.',
-        nieuw_v100_6_html: '<b>Vier Sprachen</b>: Nederlands, English, Deutsch, Français — umschaltbar über die Flaggen-Schaltfläche links im Header.',
+        nieuw_v100_2_html: '<b>Schnelle Rennauswahl</b> in einem neuen <b>Startfenster</b> mit Filter-Buttons <i>Früher / Heute / Später</i>. Erscheint automatisch beim Öffnen der App und hält deine Rennauswahl griffbereit, während du durch die Tabs blätterst.',
+        nieuw_v100_4_html: '<b>Bruttozeit</b> sichtbar neben der Nettozeit — kenntlich an ✋ (Handzeit) oder 📷 (Fotofinish). So siehst du in "Dein Ergebnis" und in den Heat-Tabellen genau, wann eine Korrektur der Uhrzeit erfolgt ist.',
+        nieuw_v100_9_html: '<b>Kleine Verbesserungen</b> für die Darstellung auf schmalen Bildschirmen und geschmeidigere Navigation — u.a. Filter-Buttons, die wieder sauber in das Startfenster passen.',
         // ── Help modal ──
         help_titel: 'Wie funktioniert InlineComp?',
         help_h1: 'Loslegen',
@@ -3662,15 +3650,11 @@ const T = {
         nieuw_jump: 'Aller à Quoi de neuf ↓',
         nieuw_h: 'Quoi de neuf ?',
         nieuw_intro: 'Bref aperçu des changements récents. Tu connais déjà l\'appli ? Voici tout ce qu\'il te faut.',
-        nieuw_v100_1_html: '<b>Petite finale</b> pour le sprint 100 m — les skateurs éliminés en demi-finale courent pour les places après la finale A. Repère le label <i>Petite finale</i>.',
-        nieuw_v100_7_html: '<b>Onglet Rondes</b> — nouvel onglet avec ton résultat par tour (séries, quart, demi, finale A, petite finale). Remplace l\'ancien onglet "Résultats".',
+        nieuw_v100_7_html: '<b>Onglet Rondes</b> — nouvel onglet avec ton résultat par tour : quelle place tu as prise en série, quart ou demi-finale, si tu es passé en finale A ou petite finale, et où tu as terminé. Remplace l\'ancien onglet "Résultats".',
         nieuw_v100_8_html: '<b>Réduire le programme</b> avec les boutons de segment <i>Tout ouvrir / Tout fermer / Les miens</i> — basculer rapidement entre vue complète et tes propres courses.',
-        nieuw_v100_2_html: '<b>Sélection rapide de course</b> avec les chips de filtre <i>Antérieur / Aujourd\'hui / Plus tard</i> dans la boîte de dialogue d\'ouverture.',
-        nieuw_v100_3_html: '<b>Annonces</b> par course avec un badge dans l\'en-tête (📢). Les non lues sont rouges, les lues grises.',
-        nieuw_v100_4_html: '<b>Temps brut</b> à côté du temps net dans "Ton résultat" quand un photo-finish ou un temps manuel a conduit à une correction.',
-        nieuw_v100_5_html: '<b>Bandeau sponsors</b> en bas avec les logos de l\'organisateur et du club hôte.',
-        nieuw_v100_9_html: '<b>Meilleur affichage sur petits écrans</b> — la boîte de dialogue d\'ouverture avec chips de filtre tient maintenant sur les téléphones étroits sans que les boutons débordent.',
-        nieuw_v100_6_html: '<b>Quatre langues</b> : Nederlands, English, Deutsch, Français — via le bouton drapeau à gauche de l\'en-tête.',
+        nieuw_v100_2_html: '<b>Sélection rapide de course</b> dans une nouvelle <b>fenêtre d\'ouverture</b> avec les boutons de filtre <i>Antérieur / Aujourd\'hui / Plus tard</i>. Apparaît automatiquement à l\'ouverture de l\'appli et garde ton choix de course à portée pendant que tu parcours les onglets.',
+        nieuw_v100_4_html: '<b>Temps brut</b> visible à côté du temps net — marqué ✋ (chronométrage manuel) ou 📷 (photo-finish). Ainsi tu vois dans "Ton résultat" et les tableaux de séries exactement quand une correction a été appliquée au temps de l\'horloge.',
+        nieuw_v100_9_html: '<b>Petites améliorations</b> pour l\'affichage sur écrans étroits et une navigation plus fluide — dont des boutons de filtre qui tiennent à nouveau proprement dans la fenêtre d\'ouverture.',
         // ── Help modal ──
         help_titel: 'Comment fonctionne InlineComp ?',
         help_h1: 'Démarrer',
@@ -6194,15 +6178,11 @@ function toonHelp() {
                     <span class="changelog-datum">2026-07-05</span>
                 </div>
                 <ul class="changelog-lijst">
-                    <li>${t('nieuw_v100_1_html')}</li>
                     <li>${t('nieuw_v100_7_html')}</li>
                     <li>${t('nieuw_v100_8_html')}</li>
                     <li>${t('nieuw_v100_2_html')}</li>
-                    <li>${t('nieuw_v100_3_html')}</li>
                     <li>${t('nieuw_v100_4_html')}</li>
-                    <li>${t('nieuw_v100_5_html')}</li>
                     <li>${t('nieuw_v100_9_html')}</li>
-                    <li>${t('nieuw_v100_6_html')}</li>
                 </ul>
             </div>
 
