@@ -2993,6 +2993,7 @@ const T = {
         nieuw_jump: 'Direct naar Wat is nieuw ↓',
         nieuw_h: 'Wat is nieuw?',
         nieuw_intro: 'Kort overzicht van recente wijzigingen. Ken je de app al? Dan is dit alles wat je nodig hebt.',
+        nieuw_v100_12_html: '<b>Heats sorteren op finish-volgorde</b> — na de finish staan de rijders in de Heats-tab niet meer in startvolgorde maar in de volgorde waarin ze zijn gefinisht. Snappen wie er hoe eindigde, zonder eerst met je ogen door de rijen te zoeken.',
         nieuw_v100_7_html: '<b>Rondes-tab</b> — nieuw tabblad met jouw uitslag per ronde: welke plek je hebt gehaald in de serie, kwart of halve finale, of je bent doorgestroomd naar de A-finale of kleine finale, en waar je uiteindelijk bent geëindigd. Vervangt de vorige "Resultaten"-tab.',
         nieuw_v100_8_html: '<b>Programma inklappen</b> met de segment-knoppen <i>Alles in / Alles uit / Mijn</i> — snel schakelen tussen totaaloverzicht en alleen je eigen ritten.',
         nieuw_v100_2_html: '<b>Snelle wedstrijd-selectie</b> in een nieuw <b>openings-venster</b> met filter-knoppen <i>Eerder / Vandaag / Later</i>. Verschijnt automatisch als je de app opent en houdt je wedstrijdkeuze bij de hand terwijl je door de tabs bladert.',
@@ -3213,6 +3214,7 @@ const T = {
         nieuw_jump: 'Jump to What\'s new ↓',
         nieuw_h: 'What\'s new?',
         nieuw_intro: 'Short overview of recent changes. Already know the app? This is all you need.',
+        nieuw_v100_12_html: '<b>Heats sorted by finish order</b> — after the finish, the skaters in the Heats tab no longer appear in start order but in the order in which they finished. Instantly see who ended where without scanning the rows.',
         nieuw_v100_7_html: '<b>Rounds tab</b> — new tab with your result per round: what place you took in the heat, quarter or semi-final, whether you progressed to the A-final or small final, and where you eventually finished. Replaces the previous "Results" tab.',
         nieuw_v100_8_html: '<b>Collapse the program</b> with the segment buttons <i>All in / All out / Mine</i> — quickly toggle between full overview and only your own races.',
         nieuw_v100_2_html: '<b>Quick race selection</b> in a new <b>opening window</b> with filter buttons <i>Earlier / Today / Later</i>. Appears automatically when you open the app and keeps your race choice handy while you browse the tabs.',
@@ -3433,6 +3435,7 @@ const T = {
         nieuw_jump: 'Direkt zu Was ist neu ↓',
         nieuw_h: 'Was ist neu?',
         nieuw_intro: 'Kurze Übersicht der jüngsten Änderungen. Kennst du die App schon? Dann reicht das.',
+        nieuw_v100_12_html: '<b>Heats nach Zieleinlauf sortiert</b> — nach dem Zieleinlauf erscheinen die Läufer im Heats-Tab nicht mehr in Startreihenfolge, sondern in der Reihenfolge, in der sie das Ziel erreicht haben. Sofort sehen, wer wie geendet ist, ohne die Zeilen abzusuchen.',
         nieuw_v100_7_html: '<b>Runden-Tab</b> — neuer Tab mit deinem Ergebnis pro Runde: welchen Platz du im Vorlauf, Viertel- oder Halbfinale belegt hast, ob du ins A-Finale oder kleine Finale weitergekommen bist, und wo du am Ende gelandet bist. Ersetzt den bisherigen "Resultate"-Tab.',
         nieuw_v100_8_html: '<b>Programm einklappen</b> mit den Segment-Buttons <i>Alle ein / Alle aus / Meine</i> — schnell zwischen Gesamtübersicht und nur deinen Rennen wechseln.',
         nieuw_v100_2_html: '<b>Schnelle Rennauswahl</b> in einem neuen <b>Startfenster</b> mit Filter-Buttons <i>Früher / Heute / Später</i>. Erscheint automatisch beim Öffnen der App und hält deine Rennauswahl griffbereit, während du durch die Tabs blätterst.',
@@ -3653,6 +3656,7 @@ const T = {
         nieuw_jump: 'Aller à Quoi de neuf ↓',
         nieuw_h: 'Quoi de neuf ?',
         nieuw_intro: 'Bref aperçu des changements récents. Tu connais déjà l\'appli ? Voici tout ce qu\'il te faut.',
+        nieuw_v100_12_html: '<b>Séries triées par ordre d\'arrivée</b> — après l\'arrivée, les skateurs dans l\'onglet Séries n\'apparaissent plus dans l\'ordre de départ mais dans l\'ordre d\'arrivée. Vois tout de suite qui a terminé où sans balayer les lignes.',
         nieuw_v100_7_html: '<b>Onglet Rondes</b> — nouvel onglet avec ton résultat par tour : quelle place tu as prise en série, quart ou demi-finale, si tu es passé en finale A ou petite finale, et où tu as terminé. Remplace l\'ancien onglet "Résultats".',
         nieuw_v100_8_html: '<b>Réduire le programme</b> avec les boutons de segment <i>Tout ouvrir / Tout fermer / Les miens</i> — basculer rapidement entre vue complète et tes propres courses.',
         nieuw_v100_2_html: '<b>Sélection rapide de course</b> dans une nouvelle <b>fenêtre d\'ouverture</b> avec les boutons de filtre <i>Antérieur / Aujourd\'hui / Plus tard</i>. Apparaît automatiquement à l\'ouverture de l\'appli et garde ton choix de course à portée pendant que tu parcours les onglets.',
@@ -6101,13 +6105,18 @@ function toonHelp() {
 
             <p>${t('help_p_prog_html')}</p>
 
-            <!-- Mockup: programma -->
+            <!-- Mockup: programma (met segment-control Alles in / Alles uit / Mijn) -->
             <div class="mock">
                 <div class="mock-tabs">
                     <div class="mock-tab active">${esc(t('tab_programma').replace(/^[^\s]+\s*/, ''))}</div>
                     <div class="mock-tab">${esc(t('tab_heats').replace(/^[^\s]+\s*/, ''))}</div>
                     <div class="mock-tab">${esc(t('tab_rondes').replace(/^[^\s]+\s*/, ''))}</div>
                     <div class="mock-tab">${esc(t('tab_uitslagen').replace(/^[^\s]+\s*/, ''))}</div>
+                </div>
+                <div style="display:flex;gap:3px;padding:4px 6px;background:#eef2f6">
+                    <span style="flex:1;text-align:center;font-size:.65rem;font-weight:600;padding:3px 0;border-radius:4px;border:1px solid #cdd8e3;background:#fff;color:#555">▼ ${esc(t('prog_klap_alles_uit'))}</span>
+                    <span style="flex:1;text-align:center;font-size:.65rem;font-weight:700;padding:3px 0;border-radius:4px;border:1px solid var(--blauw);background:var(--blauw);color:#fff">▶ ${esc(t('prog_klap_alles_in'))}</span>
+                    <span style="flex:1;text-align:center;font-size:.65rem;font-weight:600;padding:3px 0;border-radius:4px;border:1px solid #cdd8e3;background:#fff;color:#555">👤 ${esc(t('prog_klap_mijn'))}</span>
                 </div>
                 <div class="mock-body" style="padding:4px 10px">
                     <div class="mock-row"><span style="color:#aaa">1</span> <span class="mock-naam">500m ${esc(t('ronde_serie'))} Heat 1</span> <span style="font-size:.6rem;background:#0d6efd;color:#fff;border-radius:3px;padding:0 4px">${esc(t('ronde_serie'))}</span></div>
@@ -6206,6 +6215,7 @@ function toonHelp() {
                     <span class="changelog-datum">2026-07-05</span>
                 </div>
                 <ul class="changelog-lijst">
+                    <li>${t('nieuw_v100_12_html')}</li>
                     <li>${t('nieuw_v100_7_html')}</li>
                     <li>${t('nieuw_v100_8_html')}</li>
                     <li>${t('nieuw_v100_2_html')}</li>
