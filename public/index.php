@@ -1865,6 +1865,25 @@ header .sub { font-size: .95rem; opacity: .8; margin-top: 6px; text-align: cente
     border-radius: 50%; display: flex; align-items: center; justify-content: center;
     font-size: .8rem; font-weight: 700; flex-shrink: 0;
 }
+/* ── Changelog / "Wat is nieuw" ── */
+.changelog-versie {
+    background: #f7faff; border-left: 3px solid var(--middenblauw);
+    border-radius: 4px; padding: 10px 12px; margin: 10px 0;
+}
+.changelog-kop {
+    display: flex; justify-content: space-between; align-items: baseline;
+    margin-bottom: 6px;
+}
+.changelog-vnr {
+    font-weight: 700; color: var(--blauw); font-size: .95rem;
+}
+.changelog-datum {
+    font-size: .78rem; color: #888;
+}
+.changelog-lijst {
+    margin: 0; padding-left: 20px; font-size: .88rem;
+}
+.changelog-lijst li { margin: 3px 0; }
 /* ── Mockups ── */
 .mock {
     border: 2px solid #dde3ea; border-radius: 10px; overflow: hidden;
@@ -2673,6 +2692,7 @@ select:focus, input:focus { border-color: var(--middenblauw); outline: none; }
         </div>
         <div class="hdr-btns hdr-btns-right">
             <button class="btn-help" onclick="toonInfo()" data-i18n-title="hdr_info_title" title="Over InlineComp">i</button>
+            <button class="btn-help" onclick="toonHelp('#wat-is-nieuw')" data-i18n-title="hdr_nieuw_title" title="Wat is nieuw?">✨</button>
             <button class="btn-help" onclick="toonHelp()" data-i18n-title="hdr_help_title" title="Hoe werkt het?">?</button>
         </div>
     </div>
@@ -2756,7 +2776,13 @@ if (is_readable($i18nPath)) {
 }
 ?>
 
-// ── App-specifiek vertaal-woordenboek (NL + EN) ──────────────────────────
+// ── App-versie (bijhouden bij elke user-visible wijziging) ─────────────────
+// SEMVER-schema: MAJOR.MINOR.PATCH. Bij bump: ook een entry toevoegen aan
+// het "Wat is nieuw"-blok in toonHelp() zodat gebruikers de wijzigingen zien.
+// De versie wordt getoond onder de copyright in de i-modal.
+const APP_VERSIE = '1.0.0';
+
+// ── App-specifiek vertaal-woordenboek (NL + EN + DE + FR) ──────────────────
 // Toggle via vlag-knop in header. Persisteert in localStorage onder 'ic_lang'.
 // Dynamische content (rendered via JS) gebruikt t('key'); statische HTML
 // gebruikt data-i18n* attributen die applyI18n() bij init en bij toggle leest.
@@ -2947,6 +2973,17 @@ const T = {
         info_p6: 'Deze app toont wedstrijdgegevens die door de KNSB of andere wedstrijdorganisaties aan ons worden geleverd (o.a. namen, startnummers, vereniging). In de privacyverklaring lees je welke gegevens wij verwerken, op welke grondslag en hoe je een verwijderverzoek kunt indienen.',
         info_btn_privacy: '📄 Bekijk privacyverklaring',
         info_copyright: 'InlineComp &copy; {jaar} Geert de Vries',
+        info_versie: 'Versie',
+        // Header-knop ✨ + "Wat is nieuw"-sectie in help
+        hdr_nieuw_title: 'Wat is nieuw?',
+        nieuw_h: 'Wat is nieuw?',
+        nieuw_intro: 'Kort overzicht van recente wijzigingen. Ken je de app al? Dan is dit alles wat je nodig hebt.',
+        nieuw_v100_1_html: '<b>Kleine finale</b> op 100 m sprint — afgevallen rijders uit de halve finale strijden om de plaatsen na de A-finale. Herkenbaar aan het label <i>Kleine finale</i>.',
+        nieuw_v100_2_html: '<b>Snelle wedstrijd-selectie</b> met filter-chips <i>Eerder / Vandaag / Later</i> in de openings-modal — vind je wedstrijd sneller zonder door lange lijsten te scrollen.',
+        nieuw_v100_3_html: '<b>Mededelingen</b> per wedstrijd met badge in de header (📢). Onbeantwoorde meldingen kleuren rood, gelezen worden grijs.',
+        nieuw_v100_4_html: '<b>Bruto-tijd</b> naast netto-tijd in "Jouw resultaat" wanneer een foto-finish of hand-tijd tot correctie heeft geleid.',
+        nieuw_v100_5_html: '<b>Sponsor-lichtkrant</b> onderaan met de logo\'s van de organisatie en gastheer-vereniging.',
+        nieuw_v100_6_html: '<b>Vier talen</b>: Nederlands, English, Deutsch, Français — schakel via de vlag-knop links in de header.',
         // ── Help modal ──
         help_titel: 'Hoe werkt InlineComp?',
         help_h1: 'Aan de slag',
@@ -2961,7 +2998,7 @@ const T = {
         help_p_tabs_html: 'Na het zoeken zie je <b>4 tabs</b>:',
         help_p_prog_html: '<b>Programma</b> — alle ritten van de wedstrijd. Jouw ritten zijn gemarkeerd. Tik op een rit om de startlijst te bekijken.',
         help_p_heats_html: '<b>Heats</b> — jouw heats met alle rijders. Je eigen rij is gemarkeerd. Na de finish zie je tijden en posities.',
-        help_p_res_html: '<b>Resultaten</b> — jouw persoonlijke uitslagen per afstand en je klassement.',
+        help_p_res_html: '<b>Rondes</b> — jouw persoonlijke uitslagen per ronde (series, halve finale, A-finale, kleine finale, …) en je klassement.',
         help_p_uitsl_html: '<b>Uitslagen</b> — de volledige uitslag van alle rijders. Kies een categorie en afstand, of bekijk het klassement.',
         help_mock_jouw_naam: 'Jouw naam',
         help_h_auto: 'Automatisch bijgewerkt',
@@ -3157,6 +3194,16 @@ const T = {
         info_p6: 'This app shows race data provided by the KNSB or other race organisations (incl. names, start numbers, club). The privacy statement details which data we process, on what basis and how to submit a removal request.',
         info_btn_privacy: '📄 View privacy statement',
         info_copyright: 'InlineComp &copy; {jaar} Geert de Vries',
+        info_versie: 'Version',
+        hdr_nieuw_title: 'What\'s new?',
+        nieuw_h: 'What\'s new?',
+        nieuw_intro: 'Short overview of recent changes. Already know the app? This is all you need.',
+        nieuw_v100_1_html: '<b>Small final</b> for 100 m sprint — skaters eliminated in the semi-final race for the places after the A-final. Look for the label <i>Small final</i>.',
+        nieuw_v100_2_html: '<b>Quick race selection</b> with filter chips <i>Earlier / Today / Later</i> in the opening dialog — find your race without scrolling through long lists.',
+        nieuw_v100_3_html: '<b>Announcements</b> per race with a header badge (📢). Unread ones show red, read ones grey.',
+        nieuw_v100_4_html: '<b>Raw time</b> next to net time in "Your result" when a photo-finish or hand time led to a correction.',
+        nieuw_v100_5_html: '<b>Sponsor ticker</b> at the bottom with the organiser and host club logos.',
+        nieuw_v100_6_html: '<b>Four languages</b>: Nederlands, English, Deutsch, Français — switch via the flag button on the left in the header.',
         // ── Help modal ──
         help_titel: 'How does InlineComp work?',
         help_h1: 'Getting started',
@@ -3171,7 +3218,7 @@ const T = {
         help_p_tabs_html: 'After searching you see <b>4 tabs</b>:',
         help_p_prog_html: '<b>Program</b> — all races of the meet. Your races are highlighted. Tap a race to view the start list.',
         help_p_heats_html: '<b>Heats</b> — your heats with all skaters. Your own row is highlighted. After the finish you see times and positions.',
-        help_p_res_html: '<b>Results</b> — your personal results per distance and your standings.',
+        help_p_res_html: '<b>Rounds</b> — your personal results per round (series, semi-final, A-final, small final, …) and your standings.',
         help_p_uitsl_html: '<b>All results</b> — the full results of all skaters. Choose a category and distance, or view the standings.',
         help_mock_jouw_naam: 'Your name',
         help_h_auto: 'Automatically updated',
@@ -3367,6 +3414,16 @@ const T = {
         info_p6: 'Diese App zeigt Wettkampfdaten, die uns vom KNSB oder anderen Wettkampforganisationen geliefert werden (u.a. Namen, Startnummern, Verein). In der Datenschutzerklärung steht welche Daten wir verarbeiten, auf welcher Grundlage und wie du einen Löschantrag einreichen kannst.',
         info_btn_privacy: '📄 Datenschutzerklärung ansehen',
         info_copyright: 'InlineComp &copy; {jaar} Geert de Vries',
+        info_versie: 'Version',
+        hdr_nieuw_title: 'Was ist neu?',
+        nieuw_h: 'Was ist neu?',
+        nieuw_intro: 'Kurze Übersicht der jüngsten Änderungen. Kennst du die App schon? Dann reicht das.',
+        nieuw_v100_1_html: '<b>Kleines Finale</b> beim 100 m-Sprint — im Halbfinale ausgeschiedene Läufer fahren um die Plätze nach dem A-Finale. Kenntlich am Label <i>Kleines Finale</i>.',
+        nieuw_v100_2_html: '<b>Schnelle Rennauswahl</b> mit Filter-Chips <i>Früher / Heute / Später</i> im Startdialog — finde dein Rennen ohne langes Scrollen.',
+        nieuw_v100_3_html: '<b>Mitteilungen</b> pro Rennen mit Badge im Header (📢). Ungelesene erscheinen rot, gelesene grau.',
+        nieuw_v100_4_html: '<b>Bruttozeit</b> neben der Nettozeit in "Dein Ergebnis", wenn ein Fotofinish oder Handzeit zu einer Korrektur führte.',
+        nieuw_v100_5_html: '<b>Sponsor-Laufband</b> unten mit den Logos der Organisation und des Gastvereins.',
+        nieuw_v100_6_html: '<b>Vier Sprachen</b>: Nederlands, English, Deutsch, Français — umschaltbar über die Flaggen-Schaltfläche links im Header.',
         // ── Help modal ──
         help_titel: 'Wie funktioniert InlineComp?',
         help_h1: 'Loslegen',
@@ -3381,7 +3438,7 @@ const T = {
         help_p_tabs_html: 'Nach dem Suchen siehst du <b>4 Tabs</b>:',
         help_p_prog_html: '<b>Programm</b> — alle Rennen der Veranstaltung. Deine Rennen sind markiert. Tippe auf ein Rennen für die Startliste.',
         help_p_heats_html: '<b>Heats</b> — deine Heats mit allen Skatern. Deine eigene Zeile ist markiert. Nach dem Finish siehst du Zeiten und Positionen.',
-        help_p_res_html: '<b>Resultate</b> — deine persönlichen Ergebnisse pro Distanz und deine Wertung.',
+        help_p_res_html: '<b>Runden</b> — deine persönlichen Ergebnisse pro Runde (Vorläufe, Halbfinale, A-Finale, kleines Finale, …) und deine Wertung.',
         help_p_uitsl_html: '<b>Ergebnisse</b> — die vollständigen Ergebnisse aller Skater. Wähle eine Kategorie und Distanz, oder sieh die Wertung.',
         help_mock_jouw_naam: 'Dein Name',
         help_h_auto: 'Automatisch aktualisiert',
@@ -3577,6 +3634,16 @@ const T = {
         info_p6: 'Cette app affiche des données de course fournies par la KNSB ou d\'autres organisations de course (noms, dossards, club). La déclaration de confidentialité détaille quelles données nous traitons, sur quelle base et comment soumettre une demande de suppression.',
         info_btn_privacy: '📄 Voir la déclaration de confidentialité',
         info_copyright: 'InlineComp &copy; {jaar} Geert de Vries',
+        info_versie: 'Version',
+        hdr_nieuw_title: 'Quoi de neuf ?',
+        nieuw_h: 'Quoi de neuf ?',
+        nieuw_intro: 'Bref aperçu des changements récents. Tu connais déjà l\'appli ? Voici tout ce qu\'il te faut.',
+        nieuw_v100_1_html: '<b>Petite finale</b> pour le sprint 100 m — les skateurs éliminés en demi-finale courent pour les places après la finale A. Repère le label <i>Petite finale</i>.',
+        nieuw_v100_2_html: '<b>Sélection rapide de course</b> avec les chips de filtre <i>Antérieur / Aujourd\'hui / Plus tard</i> dans la boîte de dialogue d\'ouverture.',
+        nieuw_v100_3_html: '<b>Annonces</b> par course avec un badge dans l\'en-tête (📢). Les non lues sont rouges, les lues grises.',
+        nieuw_v100_4_html: '<b>Temps brut</b> à côté du temps net dans "Ton résultat" quand un photo-finish ou un temps manuel a conduit à une correction.',
+        nieuw_v100_5_html: '<b>Bandeau sponsors</b> en bas avec les logos de l\'organisateur et du club hôte.',
+        nieuw_v100_6_html: '<b>Quatre langues</b> : Nederlands, English, Deutsch, Français — via le bouton drapeau à gauche de l\'en-tête.',
         // ── Help modal ──
         help_titel: 'Comment fonctionne InlineComp ?',
         help_h1: 'Démarrer',
@@ -3591,7 +3658,7 @@ const T = {
         help_p_tabs_html: 'Après la recherche tu vois <b>4 onglets</b> :',
         help_p_prog_html: '<b>Programme</b> — toutes les courses de la rencontre. Tes courses sont surlignées. Tape sur une course pour voir la liste de départ.',
         help_p_heats_html: '<b>Séries</b> — tes séries avec tous les skateurs. Ta propre ligne est surlignée. Après l\'arrivée tu vois les temps et positions.',
-        help_p_res_html: '<b>Résultats</b> — tes résultats personnels par distance et ton classement.',
+        help_p_res_html: '<b>Rondes</b> — tes résultats personnels par tour (séries, demi-finale, finale A, petite finale, …) et ton classement.',
         help_p_uitsl_html: '<b>Tous résultats</b> — les résultats complets de tous les skateurs. Choisis une catégorie et distance, ou consulte le classement.',
         help_mock_jouw_naam: 'Ton nom',
         help_h_auto: 'Mis à jour automatiquement',
@@ -5952,12 +6019,15 @@ function toonInfo() {
             </p>
 
             <p style="font-size:.8rem;color:#999;text-align:center;margin-top:16px">${t('info_copyright', {jaar: new Date().getFullYear()})}</p>
+            <p style="font-size:.75rem;color:#aaa;text-align:center;margin-top:4px">
+                ${esc(t('info_versie'))} <strong>${esc(APP_VERSIE)}</strong>
+            </p>
         </div>
     </div>`;
     document.body.appendChild(overlay);
 }
 
-function toonHelp() {
+function toonHelp(scrollAnker) {
     const overlay = document.createElement('div');
     overlay.className = 'help-overlay';
     overlay.addEventListener('click', e => { if (e.target === overlay) overlay.remove(); });
@@ -6080,9 +6150,38 @@ function toonHelp() {
             <h3>${esc(t('help_h_tip'))}</h3>
             <p>${esc(t('help_p_tip'))}</p>
 
+            <!-- ── Wat is nieuw (changelog per versie) ── -->
+            <h3 id="wat-is-nieuw" style="margin-top:24px;padding-top:12px;border-top:2px solid #eef2f6">
+                ✨ ${esc(t('nieuw_h'))}
+            </h3>
+            <p style="font-size:.88rem;color:#555">${esc(t('nieuw_intro'))}</p>
+
+            <div class="changelog-versie">
+                <div class="changelog-kop">
+                    <span class="changelog-vnr">v1.0.0</span>
+                    <span class="changelog-datum">2026-07-05</span>
+                </div>
+                <ul class="changelog-lijst">
+                    <li>${t('nieuw_v100_1_html')}</li>
+                    <li>${t('nieuw_v100_2_html')}</li>
+                    <li>${t('nieuw_v100_3_html')}</li>
+                    <li>${t('nieuw_v100_4_html')}</li>
+                    <li>${t('nieuw_v100_5_html')}</li>
+                    <li>${t('nieuw_v100_6_html')}</li>
+                </ul>
+            </div>
+
         </div>
     </div>`;
     document.body.appendChild(overlay);
+    // Auto-scroll naar het opgegeven anker (bijv. #wat-is-nieuw wanneer de
+    // ✨-knop is gebruikt). requestAnimationFrame zodat de layout eerst rendert.
+    if (scrollAnker) {
+        requestAnimationFrame(() => {
+            const doel = overlay.querySelector(scrollAnker);
+            if (doel) doel.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        });
+    }
 }
 
 // ── Mededelingen (pop-ups bij belangrijke aankondigingen) ────────────────
