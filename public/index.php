@@ -2997,6 +2997,7 @@ const T = {
         nieuw_v100_8_html: '<b>Programma inklappen</b> met de segment-knoppen <i>Alles in / Alles uit / Mijn</i> — snel schakelen tussen totaaloverzicht en alleen je eigen ritten.',
         nieuw_v100_2_html: '<b>Snelle wedstrijd-selectie</b> in een nieuw <b>openings-venster</b> met filter-knoppen <i>Eerder / Vandaag / Later</i>. Verschijnt automatisch als je de app opent en houdt je wedstrijdkeuze bij de hand terwijl je door de tabs bladert.',
         nieuw_v100_4_html: '<b>Bruto-tijd</b> zichtbaar naast de netto-tijd — herkenbaar aan ✋ (handmatig gemeten) of 📷 (foto-finish). Zo zie je in "Jouw resultaat" en in de heat-tabellen precies wanneer een correctie op de klokwaarde is toegepast.',
+        nieuw_v100_11_html: '<b>Klassering per categorie</b> in de Uitslagen-tab — bij gecombineerde races (bv. HJA + HSA samen) verschijnt naast de overall rang ook een kolom per categorie, zodat je in één oogopslag ziet welke plek je binnen jouw eigen categorie hebt gepakt.',
         nieuw_v100_9_html: '<b>Kleine verbeteringen</b> voor beeld op smalle schermen en soepelere navigatie — o.a. filter-knoppen die weer netjes binnen het openings-venster passen.',
         // ── Help modal ──
         help_titel: 'Hoe werkt InlineComp?',
@@ -3216,6 +3217,7 @@ const T = {
         nieuw_v100_8_html: '<b>Collapse the program</b> with the segment buttons <i>All in / All out / Mine</i> — quickly toggle between full overview and only your own races.',
         nieuw_v100_2_html: '<b>Quick race selection</b> in a new <b>opening window</b> with filter buttons <i>Earlier / Today / Later</i>. Appears automatically when you open the app and keeps your race choice handy while you browse the tabs.',
         nieuw_v100_4_html: '<b>Raw time</b> visible next to the net time — marked with ✋ (hand-timed) or 📷 (photo-finish). This way you see in "Your result" and the heat tables exactly when a correction was applied to the clock value.',
+        nieuw_v100_11_html: '<b>Ranking per category</b> in the Results tab — for combined races (e.g. HJA + HSA together) an extra column per category appears next to the overall rank, so you see at a glance what place you took within your own category.',
         nieuw_v100_9_html: '<b>Small improvements</b> for display on narrow screens and smoother navigation — including filter buttons that now fit neatly within the opening window.',
         // ── Help modal ──
         help_titel: 'How does InlineComp work?',
@@ -3435,6 +3437,7 @@ const T = {
         nieuw_v100_8_html: '<b>Programm einklappen</b> mit den Segment-Buttons <i>Alle ein / Alle aus / Meine</i> — schnell zwischen Gesamtübersicht und nur deinen Rennen wechseln.',
         nieuw_v100_2_html: '<b>Schnelle Rennauswahl</b> in einem neuen <b>Startfenster</b> mit Filter-Buttons <i>Früher / Heute / Später</i>. Erscheint automatisch beim Öffnen der App und hält deine Rennauswahl griffbereit, während du durch die Tabs blätterst.',
         nieuw_v100_4_html: '<b>Bruttozeit</b> sichtbar neben der Nettozeit — kenntlich an ✋ (Handzeit) oder 📷 (Fotofinish). So siehst du in "Dein Ergebnis" und in den Heat-Tabellen genau, wann eine Korrektur der Uhrzeit erfolgt ist.',
+        nieuw_v100_11_html: '<b>Platzierung pro Kategorie</b> im Ergebnisse-Tab — bei kombinierten Rennen (z.B. HJA + HSA zusammen) erscheint neben dem Gesamtrang eine zusätzliche Spalte pro Kategorie, sodass du auf einen Blick siehst, welchen Platz du innerhalb deiner eigenen Kategorie belegt hast.',
         nieuw_v100_9_html: '<b>Kleine Verbesserungen</b> für die Darstellung auf schmalen Bildschirmen und geschmeidigere Navigation — u.a. Filter-Buttons, die wieder sauber in das Startfenster passen.',
         // ── Help modal ──
         help_titel: 'Wie funktioniert InlineComp?',
@@ -3654,6 +3657,7 @@ const T = {
         nieuw_v100_8_html: '<b>Réduire le programme</b> avec les boutons de segment <i>Tout ouvrir / Tout fermer / Les miens</i> — basculer rapidement entre vue complète et tes propres courses.',
         nieuw_v100_2_html: '<b>Sélection rapide de course</b> dans une nouvelle <b>fenêtre d\'ouverture</b> avec les boutons de filtre <i>Antérieur / Aujourd\'hui / Plus tard</i>. Apparaît automatiquement à l\'ouverture de l\'appli et garde ton choix de course à portée pendant que tu parcours les onglets.',
         nieuw_v100_4_html: '<b>Temps brut</b> visible à côté du temps net — marqué ✋ (chronométrage manuel) ou 📷 (photo-finish). Ainsi tu vois dans "Ton résultat" et les tableaux de séries exactement quand une correction a été appliquée au temps de l\'horloge.',
+        nieuw_v100_11_html: '<b>Classement par catégorie</b> dans l\'onglet Résultats — pour les courses combinées (par ex. HJA + HSA ensemble) une colonne supplémentaire par catégorie apparaît à côté du rang général, pour voir d\'un coup d\'œil quelle place tu as prise dans ta propre catégorie.',
         nieuw_v100_9_html: '<b>Petites améliorations</b> pour l\'affichage sur écrans étroits et une navigation plus fluide — dont des boutons de filtre qui tiennent à nouveau proprement dans la fenêtre d\'ouverture.',
         // ── Help modal ──
         help_titel: 'Comment fonctionne InlineComp ?',
@@ -6135,6 +6139,30 @@ function toonHelp() {
 
             <p>${t('help_p_res_html')}</p>
 
+            <!-- Mockup: rondes-tab (per-ronde uitslag + doorstroom Q→A / q→B) -->
+            <div class="mock">
+                <div class="mock-tabs">
+                    <div class="mock-tab">${esc(t('tab_programma').replace(/^[^\s]+\s*/, ''))}</div>
+                    <div class="mock-tab">${esc(t('tab_heats').replace(/^[^\s]+\s*/, ''))}</div>
+                    <div class="mock-tab active">${esc(t('tab_rondes').replace(/^[^\s]+\s*/, ''))}</div>
+                    <div class="mock-tab">${esc(t('tab_uitslagen').replace(/^[^\s]+\s*/, ''))}</div>
+                </div>
+                <div class="mock-body" style="padding:6px 10px">
+                    <div style="font-weight:700;color:var(--blauw);font-size:.75rem;margin:2px 0 4px">100 meter</div>
+
+                    <div style="display:inline-block;background:#0d6efd;color:#fff;border-radius:3px;padding:1px 6px;font-size:.6rem;font-weight:700;margin-bottom:3px">${esc(t('ronde_serie'))}</div>
+                    <div class="mock-row" style="font-size:.6rem;color:#888;font-weight:600"><span style="width:24px">${esc(t('col_snr'))}</span><span class="mock-naam">${esc(t('col_naam'))}</span><span style="width:36px;text-align:center">Kwal</span><span class="mock-tijd">${esc(t('col_tijd'))}</span></div>
+                    <div class="mock-row"><span class="mock-snr">12</span><span class="mock-naam">Emma V.</span><span style="width:36px;text-align:center;font-weight:700;color:#198754">Q→A</span><span class="mock-tijd">10.42</span></div>
+                    <div class="mock-row mock-hl"><span class="mock-snr">86</span><span class="mock-naam">${esc(t('help_mock_jouw_naam'))}</span><span style="width:36px;text-align:center;font-weight:700;color:#198754">Q→A</span><span class="mock-tijd">10.58</span></div>
+                    <div class="mock-row"><span class="mock-snr">34</span><span class="mock-naam">Tim B.</span><span style="width:36px;text-align:center;font-weight:700;color:#0d6efd">q→B</span><span class="mock-tijd">10.71</span></div>
+
+                    <div style="display:inline-block;background:#198754;color:#fff;border-radius:3px;padding:1px 6px;font-size:.6rem;font-weight:700;margin:8px 0 3px">${esc(t('ronde_finale'))} A</div>
+                    <div class="mock-row" style="font-size:.6rem;color:#888;font-weight:600"><span style="width:24px">${esc(t('col_snr'))}</span><span class="mock-naam">${esc(t('col_naam'))}</span><span class="mock-tijd">${esc(t('col_tijd'))}</span><span style="width:20px;text-align:center">${esc(t('col_fin'))}</span></div>
+                    <div class="mock-row mock-hl"><span class="mock-snr">86</span><span class="mock-naam">${esc(t('help_mock_jouw_naam'))}</span><span class="mock-tijd">10.35</span><span style="width:20px;text-align:center;font-weight:700;color:var(--blauw)">1</span></div>
+                    <div class="mock-row"><span class="mock-snr">12</span><span class="mock-naam">Emma V.</span><span class="mock-tijd">10.41</span><span style="width:20px;text-align:center;font-weight:600">2</span></div>
+                </div>
+            </div>
+
             <p>${t('help_p_uitsl_html')}</p>
 
             <!-- Mockup: uitslagen -->
@@ -6182,6 +6210,7 @@ function toonHelp() {
                     <li>${t('nieuw_v100_8_html')}</li>
                     <li>${t('nieuw_v100_2_html')}</li>
                     <li>${t('nieuw_v100_4_html')}</li>
+                    <li>${t('nieuw_v100_11_html')}</li>
                     <li>${t('nieuw_v100_9_html')}</li>
                 </ul>
             </div>
