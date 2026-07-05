@@ -270,13 +270,7 @@ if ($action === 'programma') {
                    h.ronde AS heat_ronde,
                    h.distance_combination_id AS heat_dc_id,
                    COALESCE(h.distance_id, r.distance_id) AS heat_distance_id,
-                   -- distance_naam via gecorreleerd subquery: LEFT JOIN op distances
-                   -- kan 1-op-N vermenigvuldigen bij bepaalde datasets waar de
-                   -- id in meerdere DC-scope-rijen voorkomt. Subselect blijft
-                   -- 1 rij per outer-rij.
-                   (SELECT d.name FROM distances d
-                      WHERE d.id = COALESCE(h.distance_id, r.distance_id)
-                      LIMIT 1) AS distance_naam,
+                   d.name AS distance_naam,
                    (SELECT COUNT(*) FROM heat_entries he2
                     WHERE he2.heat_id = h.id
                    ) AS entries_count,
@@ -287,6 +281,12 @@ if ($action === 'programma') {
             FROM tijdschema_ritten r
             LEFT JOIN tijdschema_blokken b ON b.id = r.blok_id
             LEFT JOIN heats h ON h.tijdschema_rit_id = r.id AND h.competition_id = ?
+            -- distances heeft samengestelde PK (dc_id, id) — join MOET beide
+            -- kolommen meenemen, anders 1-op-N per DC met dezelfde afstand.
+            -- Zie waarschuwing in db/distances.sql.
+            LEFT JOIN distances d
+                ON d.id = COALESCE(h.distance_id, r.distance_id)
+               AND d.distance_combination_id = COALESCE(h.distance_combination_id, r.dc_id)
             WHERE r.tijdschema_id = ?
             ORDER BY r.volgorde
         ");
