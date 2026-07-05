@@ -3248,13 +3248,15 @@ const T = {
         help_p_priv: 'Je coach-lijst wordt alleen lokaal op je telefoon bewaard (localStorage). Niemand anders ziet wie je op je lijst hebt staan.',
         // ── Nieuwe kop-secties: Heats en Rondes ──
         help_h_heats: 'Heats',
-        help_p_heats_html: '<b>Heats</b> — per rijder op je coach-lijst een overzicht van al zijn heats: heatnummer + startpositie per ronde (serie, kwart, halve, A-finale, kleine finale) van elke afstand. Bij nog niet gelote rondes staat "startlijst nog niet definitief"; is de vorige ronde nog niet compleet, dan "wacht op vorige ronde". Rijders gesorteerd op startnummer.',
+        help_p_heats_html: '<b>Heats</b> — per rijder op je coach-lijst een overzicht van al zijn heats: heatnummer + startpositie per ronde (serie, kwart, halve, A-finale, kleine finale) van elke afstand. Bovenaan het rijder-blok een statusregel per afstand (bijv. <b>✓ Bevestigd</b> of <b>✓ Bev. bij org.</b>). Bij nog niet gelote rondes staat "Nog niet geloot"; is de vorige ronde nog niet compleet, dan "wacht op vorige ronde". Rijders gesorteerd op startnummer.',
         // Coach heats-mockup labels
         mock_status_bev: '✓ Bevestigd',
+        mock_status_bev_org: '✓ Bev. bij org.',
         mock_heat_lbl: 'Heat',
-        mock_startpos_lbl: 'startpositie',
-        mock_ronde_halve: 'Halve',
-        mock_wacht_loting: 'Startlijst nog niet definitief',
+        mock_startpos_lbl: 'startpos',
+        mock_ronde_halve: 'HF',
+        mock_ronde_ru:    'Runner-up',
+        mock_wacht_loting: '🕒 Nog niet geloot',
         mock_niet_geplaatst: 'Niet geplaatst',
         help_h_rondes: 'Rondes',
         help_p_rondes_html: '<b>Rondes</b> — per-ronde uitslagen van alle DC\'s waarvoor je rijders volgt. Zichtbaar is de plek per ronde en of doorstroom naar de volgende ronde heeft plaatsgevonden.',
@@ -3569,12 +3571,14 @@ const T = {
         help_h_priv: 'Privacy',
         help_p_priv: 'Your coach list is only stored locally on your phone (localStorage). Nobody else sees who is on your list.',
         help_h_heats: 'Heats',
-        help_p_heats_html: '<b>Heats</b> — for each skater on your coach list, an overview of all their heats: heat number + starting position per round (heat, quarter, semi, A-final, small final) of each distance. Rounds not yet drawn show "start list not final yet"; if the previous round is not complete, it shows "waiting for previous round". Skaters sorted by start number.',
+        help_p_heats_html: '<b>Heats</b> — for each skater on your coach list, an overview of all their heats: heat number + starting position per round (heat, quarter, semi, A-final, small final) of each distance. At the top of the skater block a status line per distance (e.g. <b>✓ Confirmed</b> or <b>✓ Conf. by org.</b>). Rounds not yet drawn show "Not drawn yet"; if the previous round is not complete, it shows "waiting for previous round". Skaters sorted by start number.',
         mock_status_bev: '✓ Confirmed',
+        mock_status_bev_org: '✓ Conf. by org.',
         mock_heat_lbl: 'Heat',
-        mock_startpos_lbl: 'start position',
-        mock_ronde_halve: 'Semi',
-        mock_wacht_loting: 'Start list not final yet',
+        mock_startpos_lbl: 'startpos',
+        mock_ronde_halve: 'SF',
+        mock_ronde_ru:    'Runner-up',
+        mock_wacht_loting: '🕒 Not drawn yet',
         mock_niet_geplaatst: 'Not placed',
         help_h_rondes: 'Rounds',
         help_p_rondes_html: '<b>Rounds</b> — per-round results across all DCs you follow skaters in. Shows the position achieved in each round and whether progression to the next round has occurred.',
@@ -3886,12 +3890,14 @@ const T = {
         help_h_priv: 'Datenschutz',
         help_p_priv: 'Deine Coach-Liste wird nur lokal auf deinem Telefon gespeichert (localStorage). Niemand sonst sieht, wer auf deiner Liste steht.',
         help_h_heats: 'Heats',
-        help_p_heats_html: '<b>Heats</b> — für jeden Läufer auf deiner Coach-Liste eine Übersicht aller Heats: Heatnummer + Startposition pro Runde (Vorlauf, Viertel, Halbfinale, A-Finale, kleines Finale) jeder Distanz. Bei noch nicht gelosten Runden erscheint "Startliste noch nicht endgültig"; ist die vorherige Runde nicht vollständig, dann "wartet auf vorherige Runde". Läufer nach Startnummer sortiert.',
+        help_p_heats_html: '<b>Heats</b> — für jeden Läufer auf deiner Coach-Liste eine Übersicht aller Heats: Heatnummer + Startposition pro Runde (Vorlauf, Viertel, Halbfinale, A-Finale, kleines Finale) jeder Distanz. Oben im Läufer-Block eine Statuszeile pro Distanz (z.B. <b>✓ Bestätigt</b> oder <b>✓ Best. b. Org.</b>). Bei noch nicht gelosten Runden erscheint "Noch nicht gelost"; ist die vorherige Runde nicht vollständig, dann "wartet auf vorherige Runde". Läufer nach Startnummer sortiert.',
         mock_status_bev: '✓ Bestätigt',
+        mock_status_bev_org: '✓ Best. b. Org.',
         mock_heat_lbl: 'Heat',
-        mock_startpos_lbl: 'Startposition',
-        mock_ronde_halve: 'Halbf.',
-        mock_wacht_loting: 'Startliste noch nicht endgültig',
+        mock_startpos_lbl: 'Startpos',
+        mock_ronde_halve: 'HF',
+        mock_ronde_ru:    'Runner-up',
+        mock_wacht_loting: '🕒 Noch nicht gelost',
         mock_niet_geplaatst: 'Nicht platziert',
         help_h_rondes: 'Runden',
         help_p_rondes_html: '<b>Runden</b> — Ergebnisse pro Runde für alle DCs, in denen du Läufer verfolgst. Zeigt die in jeder Runde erreichte Platzierung und ob ein Weiterkommen in die nächste Runde erfolgt ist.',
@@ -4202,12 +4208,14 @@ const T = {
         help_h_priv: 'Confidentialité',
         help_p_priv: 'Votre liste de coach est uniquement stockée localement sur votre téléphone (localStorage). Personne d\'autre ne voit qui est sur votre liste.',
         help_h_heats: 'Séries',
-        help_p_heats_html: '<b>Séries</b> — pour chaque skateur de ta liste de coach, un aperçu de toutes ses séries : numéro de série + position de départ par tour (série, quart, demi, finale A, petite finale) de chaque distance. Pour les tours non encore tirés au sort, "liste de départ pas encore définitive" apparaît ; si le tour précédent n\'est pas complet, "en attente du tour précédent". Skateurs triés par numéro de dossard.',
+        help_p_heats_html: '<b>Séries</b> — pour chaque skateur de ta liste de coach, un aperçu de toutes ses séries : numéro de série + position de départ par tour (série, quart, demi, finale A, petite finale) de chaque distance. En haut du bloc skateur, une ligne de statut par distance (par ex. <b>✓ Confirmé</b> ou <b>✓ Conf. par org.</b>). Pour les tours non encore tirés au sort, "Pas encore tiré" apparaît ; si le tour précédent n\'est pas complet, "en attente du tour précédent". Skateurs triés par numéro de dossard.',
         mock_status_bev: '✓ Confirmé',
+        mock_status_bev_org: '✓ Conf. par org.',
         mock_heat_lbl: 'Série',
-        mock_startpos_lbl: 'position de départ',
+        mock_startpos_lbl: 'pos. départ',
         mock_ronde_halve: 'Demi',
-        mock_wacht_loting: 'Liste de départ pas encore définitive',
+        mock_ronde_ru:    'Runner-up',
+        mock_wacht_loting: '🕒 Pas encore tiré',
         mock_niet_geplaatst: 'Non placé',
         help_h_rondes: 'Rondes',
         help_p_rondes_html: '<b>Rondes</b> — résultats par tour pour toutes les DCs dont tu suis des skateurs. Montre la place obtenue à chaque tour et si un passage au tour suivant a eu lieu.',
@@ -6331,40 +6339,56 @@ function toonHelp() {
                     <div class="mock-tab">${t('tab_rondes').replace(/^[^\s]+\s*/, '')}</div>
                     <div class="mock-tab">${t('tab_uitslagen').replace(/^[^\s]+\s*/, '')}</div>
                 </div>
-                <div class="mock-body" style="padding:6px 10px">
-                    <!-- Rijder-blok 1: Emma V. — met status en per-ronde overzicht -->
-                    <div style="border:1px solid #dde3ea;border-radius:6px;padding:6px 8px;margin-bottom:6px">
-                        <div style="display:flex;align-items:center;gap:6px;font-size:.72rem;font-weight:700">
-                            <span style="background:var(--blauw);color:#fff;padding:1px 5px;border-radius:3px">12</span>
-                            <span style="flex:1">Emma V.</span>
-                            <span style="color:#888;font-size:.65rem">DJB</span>
+                <div class="mock-body" style="padding:6px 8px">
+                    <!-- Rijder-blok 1: Mees (voorbeeld met meerdere DC's) -->
+                    <div style="border:1px solid #dde3ea;border-radius:6px;padding:6px 8px;margin-bottom:6px;background:#fff">
+                        <div style="display:flex;align-items:center;gap:6px;font-size:.75rem;font-weight:700">
+                            <span>38</span>
+                            <span style="flex:1">Mees v.d. Leij</span>
+                            <span style="color:#888;font-size:.62rem">HP1</span>
                         </div>
-                        <div style="display:flex;justify-content:space-between;font-size:.62rem;color:#155724;background:#d4edda;padding:2px 6px;border-radius:3px;margin:3px 0">
-                            <span>500m</span>
-                            <span>${t('mock_status_bev')}</span>
+                        <!-- Samenvat: één rij per afstand met status -->
+                        <div style="display:flex;justify-content:space-between;font-size:.62rem;padding:2px 0"><span>200m DTT Series + A-Final</span><span style="background:#d4edda;color:#155724;padding:1px 5px;border-radius:3px;font-weight:600">${t('mock_status_bev')}</span></div>
+                        <div style="display:flex;justify-content:space-between;font-size:.62rem;padding:2px 0"><span>1000m</span><span style="background:#d4edda;color:#155724;padding:1px 5px;border-radius:3px;font-weight:600">${t('mock_status_bev')}</span></div>
+                        <div style="display:flex;justify-content:space-between;font-size:.62rem;padding:2px 0"><span>Pointsrace</span><span style="background:#d4edda;color:#155724;padding:1px 5px;border-radius:3px;font-weight:600">${t('mock_status_bev')}</span></div>
+                        <!-- DC-blok 1: 200m DTT -->
+                        <div style="background:#f4f8fc;border-left:2px solid var(--middenblauw);border-radius:3px;padding:4px 6px;margin-top:5px">
+                            <div style="font-size:.62rem;font-weight:700;color:var(--blauw);margin-bottom:2px">Pupils Boys 200m DTT — 200m DTT Series + A-Final</div>
+                            <div style="display:flex;align-items:center;gap:5px;font-size:.62rem;padding:1px 0">
+                                <span style="background:#607d8b;color:#fff;padding:0 5px;border-radius:2px;font-size:.56rem;font-weight:700">${t('mock_ronde_serie')}</span>
+                                <span><b>${t('mock_heat_lbl')} 2</b> ${t('mock_startpos_lbl')} 1</span>
+                            </div>
+                            <div style="display:flex;align-items:center;gap:5px;font-size:.62rem;padding:1px 0">
+                                <span style="background:#d32f2f;color:#fff;padding:0 5px;border-radius:2px;font-size:.56rem;font-weight:700">${t('mock_ronde_finale')}</span>
+                                <span><b>${t('mock_heat_lbl')} 1</b> ${t('mock_startpos_lbl')} 1</span>
+                            </div>
                         </div>
-                        <div style="font-size:.65rem;color:var(--blauw);font-weight:700;margin:4px 0 2px">DJB — 500m</div>
-                        <div style="display:flex;align-items:center;gap:5px;font-size:.62rem;padding:2px 0">
-                            <span style="background:#0d6efd;color:#fff;padding:0 4px;border-radius:2px;font-size:.55rem;font-weight:700">${t('mock_ronde_serie')}</span>
-                            <span><b>${t('mock_heat_lbl')} 2</b> · ${t('mock_startpos_lbl')} 4</span>
-                        </div>
-                        <div style="display:flex;align-items:center;gap:5px;font-size:.62rem;padding:2px 0;color:#888">
-                            <span style="background:#fd7e14;color:#fff;padding:0 4px;border-radius:2px;font-size:.55rem;font-weight:700">${t('mock_ronde_halve')}</span>
-                            <span>${t('mock_wacht_loting')}</span>
+                        <!-- DC-blok 2: 1000m met Runner-up nog niet geloot -->
+                        <div style="background:#f4f8fc;border-left:2px solid var(--middenblauw);border-radius:3px;padding:4px 6px;margin-top:4px">
+                            <div style="font-size:.62rem;font-weight:700;color:var(--blauw);margin-bottom:2px">Pupils Boys 1000m — 1000m</div>
+                            <div style="display:flex;align-items:center;gap:5px;font-size:.62rem;padding:1px 0">
+                                <span style="background:#5e35b1;color:#fff;padding:0 5px;border-radius:2px;font-size:.56rem;font-weight:700">HF</span>
+                                <span><b>${t('mock_heat_lbl')} 1</b> ${t('mock_startpos_lbl')} 3</span>
+                            </div>
+                            <div style="display:flex;align-items:center;gap:5px;font-size:.62rem;padding:1px 0;color:#888">
+                                <span style="background:#00897b;color:#fff;padding:0 5px;border-radius:2px;font-size:.56rem;font-weight:700">${t('mock_ronde_ru')}</span>
+                                <span>${t('mock_wacht_loting')}</span>
+                            </div>
+                            <div style="display:flex;align-items:center;gap:5px;font-size:.62rem;padding:1px 0">
+                                <span style="background:#d32f2f;color:#fff;padding:0 5px;border-radius:2px;font-size:.56rem;font-weight:700">${t('mock_ronde_finale')}</span>
+                                <span><b>${t('mock_heat_lbl')} 1</b> ${t('mock_startpos_lbl')} 3</span>
+                            </div>
                         </div>
                     </div>
-                    <!-- Rijder-blok 2: compact voorbeeld tweede rijder -->
-                    <div style="border:1px solid #dde3ea;border-radius:6px;padding:6px 8px">
-                        <div style="display:flex;align-items:center;gap:6px;font-size:.72rem;font-weight:700">
-                            <span style="background:var(--blauw);color:#fff;padding:1px 5px;border-radius:3px">34</span>
-                            <span style="flex:1">Tim B.</span>
-                            <span style="color:#888;font-size:.65rem">HJA</span>
+                    <!-- Rijder-blok 2: tweede rijder met "Bev. bij org." status -->
+                    <div style="border:1px solid #dde3ea;border-radius:6px;padding:6px 8px;background:#fff">
+                        <div style="display:flex;align-items:center;gap:6px;font-size:.75rem;font-weight:700">
+                            <span>40</span>
+                            <span style="flex:1">Hidde v.d. Leij</span>
+                            <span style="color:#888;font-size:.62rem">HJB</span>
                         </div>
-                        <div style="font-size:.65rem;color:var(--blauw);font-weight:700;margin:4px 0 2px">HJA — 1000m</div>
-                        <div style="display:flex;align-items:center;gap:5px;font-size:.62rem;padding:2px 0;color:#888">
-                            <span style="background:#0d6efd;color:#fff;padding:0 4px;border-radius:2px;font-size:.55rem;font-weight:700">${t('mock_ronde_serie')}</span>
-                            <span>${t('mock_niet_geplaatst')}</span>
-                        </div>
+                        <div style="display:flex;justify-content:space-between;font-size:.62rem;padding:2px 0"><span>200m DTT Series + A-Final</span><span style="background:#d1ecf1;color:#0c5460;padding:1px 5px;border-radius:3px;font-weight:600">${t('mock_status_bev_org')}</span></div>
+                        <div style="display:flex;justify-content:space-between;font-size:.62rem;padding:2px 0"><span>1000m</span><span style="background:#d1ecf1;color:#0c5460;padding:1px 5px;border-radius:3px;font-weight:600">${t('mock_status_bev_org')}</span></div>
                     </div>
                 </div>
             </div>
