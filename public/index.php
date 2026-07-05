@@ -2924,7 +2924,7 @@ const T = {
         // ── Heats ──
         heat_wachten_vorige: 'Wachten op vorige ronde',
         heat_jouw_resultaat: 'Jij:',
-        heat_bruto_gemeten: 'gemeten',
+        heat_bruto_gemeten: 'vóór correctie',
         heat_bruto_officieel: 'officieel',
         // ── Heat tabel headers ──
         col_pos: '#',
@@ -2997,7 +2997,7 @@ const T = {
         nieuw_v100_7_html: '<b>Rondes-tab</b> — nieuw tabblad met jouw uitslag per ronde: welke plek je hebt gehaald in de serie, kwart of halve finale, of je bent doorgestroomd naar de A-finale of kleine finale, en waar je uiteindelijk bent geëindigd. Vervangt de vorige "Resultaten"-tab.',
         nieuw_v100_8_html: '<b>Programma inklappen</b> met de segment-knoppen <i>Alles in / Alles uit / Mijn</i> — snel schakelen tussen totaaloverzicht en alleen je eigen ritten.',
         nieuw_v100_2_html: '<b>Snelle wedstrijd-selectie</b> in een nieuw <b>openings-venster</b> met filter-knoppen <i>Eerder / Vandaag / Later</i>. Verschijnt automatisch bij het openen van de app en sluit weer zodra je een wedstrijd hebt aangetikt — meteen focus op de keuze en daarna de volle ruimte voor je overzicht.',
-        nieuw_v100_4_html: '<b>Bruto-tijd</b> zichtbaar naast de netto-tijd — herkenbaar aan ✋ (handmatig gemeten) of 📷 (foto-finish). Zo zie je in "Jouw resultaat" en in de heat-tabellen precies wanneer een correctie op de klokwaarde is toegepast.',
+        nieuw_v100_4_html: '<b>Bruto-tijd</b> zichtbaar naast de netto-tijd — herkenbaar aan ✋ (handmatige correctie) of 📷 (foto-finish correctie). Zo zie je in "Jouw resultaat" en in de heat-tabellen precies wanneer een correctie op de klokwaarde is toegepast.',
         nieuw_v100_11_html: '<b>Klassering per categorie</b> in de Uitslagen-tab — bij gecombineerde races (bv. HJA + HSA samen) verschijnt naast de overall rang ook een kolom per categorie, zodat je in één oogopslag ziet welke plek je binnen jouw eigen categorie hebt gepakt.',
         nieuw_v100_9_html: '<b>Kleine verbeteringen</b> voor beeld op smalle schermen en soepelere navigatie — o.a. filter-knoppen die weer netjes binnen het openings-venster passen.',
         // ── Help modal ──
@@ -3146,7 +3146,7 @@ const T = {
         // ── Heats ──
         heat_wachten_vorige: 'Waiting for previous round',
         heat_jouw_resultaat: 'You:',
-        heat_bruto_gemeten: 'measured',
+        heat_bruto_gemeten: 'before correction',
         heat_bruto_officieel: 'official',
         // ── Heat tabel headers ──
         col_pos: '#',
@@ -3218,7 +3218,7 @@ const T = {
         nieuw_v100_7_html: '<b>Rounds tab</b> — new tab with your result per round: what place you took in the heat, quarter or semi-final, whether you progressed to the A-final or small final, and where you eventually finished. Replaces the previous "Results" tab.',
         nieuw_v100_8_html: '<b>Collapse the program</b> with the segment buttons <i>All in / All out / Mine</i> — quickly toggle between full overview and only your own races.',
         nieuw_v100_2_html: '<b>Quick race selection</b> in a new <b>opening window</b> with filter buttons <i>Earlier / Today / Later</i>. Appears automatically when you open the app and closes as soon as you tap a race — instant focus on the choice, then the full space for your overview.',
-        nieuw_v100_4_html: '<b>Raw time</b> visible next to the net time — marked with ✋ (hand-timed) or 📷 (photo-finish). This way you see in "Your result" and the heat tables exactly when a correction was applied to the clock value.',
+        nieuw_v100_4_html: '<b>Raw time</b> visible next to the net time — marked with ✋ (manual correction) or 📷 (photo-finish correction). This way you see in "Your result" and the heat tables exactly when a correction was applied to the clock value.',
         nieuw_v100_11_html: '<b>Ranking per category</b> in the Results tab — for combined races (e.g. HJA + HSA together) an extra column per category appears next to the overall rank, so you see at a glance what place you took within your own category.',
         nieuw_v100_9_html: '<b>Small improvements</b> for display on narrow screens and smoother navigation — including filter buttons that now fit neatly within the opening window.',
         // ── Help modal ──
@@ -3367,7 +3367,7 @@ const T = {
         // ── Heats ──
         heat_wachten_vorige: 'Warte auf vorherige Runde',
         heat_jouw_resultaat: 'Du:',
-        heat_bruto_gemeten: 'gemessen',
+        heat_bruto_gemeten: 'vor Korrektur',
         heat_bruto_officieel: 'offiziell',
         // ── Heat tabel headers ──
         col_pos: '#',
@@ -3439,7 +3439,7 @@ const T = {
         nieuw_v100_7_html: '<b>Runden-Tab</b> — neuer Tab mit deinem Ergebnis pro Runde: welchen Platz du im Vorlauf, Viertel- oder Halbfinale belegt hast, ob du ins A-Finale oder kleine Finale weitergekommen bist, und wo du am Ende gelandet bist. Ersetzt den bisherigen "Resultate"-Tab.',
         nieuw_v100_8_html: '<b>Programm einklappen</b> mit den Segment-Buttons <i>Alle ein / Alle aus / Meine</i> — schnell zwischen Gesamtübersicht und nur deinen Rennen wechseln.',
         nieuw_v100_2_html: '<b>Schnelle Rennauswahl</b> in einem neuen <b>Startfenster</b> mit Filter-Buttons <i>Früher / Heute / Später</i>. Erscheint automatisch beim Öffnen der App und schließt sich, sobald du ein Rennen antippst — sofort Fokus auf die Auswahl und danach der volle Platz für deine Übersicht.',
-        nieuw_v100_4_html: '<b>Bruttozeit</b> sichtbar neben der Nettozeit — kenntlich an ✋ (Handzeit) oder 📷 (Fotofinish). So siehst du in "Dein Ergebnis" und in den Heat-Tabellen genau, wann eine Korrektur der Uhrzeit erfolgt ist.',
+        nieuw_v100_4_html: '<b>Bruttozeit</b> sichtbar neben der Nettozeit — kenntlich an ✋ (Handkorrektur) oder 📷 (Fotofinish-Korrektur). So siehst du in "Dein Ergebnis" und in den Heat-Tabellen genau, wann eine Korrektur der Uhrzeit erfolgt ist.',
         nieuw_v100_11_html: '<b>Platzierung pro Kategorie</b> im Ergebnisse-Tab — bei kombinierten Rennen (z.B. HJA + HSA zusammen) erscheint neben dem Gesamtrang eine zusätzliche Spalte pro Kategorie, sodass du auf einen Blick siehst, welchen Platz du innerhalb deiner eigenen Kategorie belegt hast.',
         nieuw_v100_9_html: '<b>Kleine Verbesserungen</b> für die Darstellung auf schmalen Bildschirmen und geschmeidigere Navigation — u.a. Filter-Buttons, die wieder sauber in das Startfenster passen.',
         // ── Help modal ──
@@ -3588,7 +3588,7 @@ const T = {
         // ── Heats ──
         heat_wachten_vorige: 'En attente du tour précédent',
         heat_jouw_resultaat: 'Toi :',
-        heat_bruto_gemeten: 'mesuré',
+        heat_bruto_gemeten: 'avant correction',
         heat_bruto_officieel: 'officiel',
         // ── Heat tabel headers ──
         col_pos: '#',
@@ -3660,7 +3660,7 @@ const T = {
         nieuw_v100_7_html: '<b>Onglet Rondes</b> — nouvel onglet avec ton résultat par tour : quelle place tu as prise en série, quart ou demi-finale, si tu es passé en finale A ou petite finale, et où tu as terminé. Remplace l\'ancien onglet "Résultats".',
         nieuw_v100_8_html: '<b>Réduire le programme</b> avec les boutons de segment <i>Tout ouvrir / Tout fermer / Les miens</i> — basculer rapidement entre vue complète et tes propres courses.',
         nieuw_v100_2_html: '<b>Sélection rapide de course</b> dans une nouvelle <b>fenêtre d\'ouverture</b> avec les boutons de filtre <i>Antérieur / Aujourd\'hui / Plus tard</i>. Apparaît automatiquement à l\'ouverture de l\'appli et se ferme dès que tu tapes sur une course — focus immédiat sur le choix, puis tout l\'espace pour ton aperçu.',
-        nieuw_v100_4_html: '<b>Temps brut</b> visible à côté du temps net — marqué ✋ (chronométrage manuel) ou 📷 (photo-finish). Ainsi tu vois dans "Ton résultat" et les tableaux de séries exactement quand une correction a été appliquée au temps de l\'horloge.',
+        nieuw_v100_4_html: '<b>Temps brut</b> visible à côté du temps net — marqué ✋ (correction manuelle) ou 📷 (correction photo-finish). Ainsi tu vois dans "Ton résultat" et les tableaux de séries exactement quand une correction a été appliquée au temps de l\'horloge.',
         nieuw_v100_11_html: '<b>Classement par catégorie</b> dans l\'onglet Résultats — pour les courses combinées (par ex. HJA + HSA ensemble) une colonne supplémentaire par catégorie apparaît à côté du rang général, pour voir d\'un coup d\'œil quelle place tu as prise dans ta propre catégorie.',
         nieuw_v100_9_html: '<b>Petites améliorations</b> pour l\'affichage sur écrans étroits et une navigation plus fluide — dont des boutons de filtre qui tiennent à nouveau proprement dans la fenêtre d\'ouverture.',
         // ── Help modal ──
