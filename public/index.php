@@ -1935,13 +1935,21 @@ select:focus, input:focus { border-color: var(--middenblauw); outline: none; }
 .filter-rij label.filter-chip { flex: 1; }
 .filter-chip {
     display: inline-flex; align-items: center; justify-content: center; gap: 5px;
-    padding: 9px 16px; border-radius: 20px; font-size: .95rem; font-weight: 600;
+    padding: 9px 10px; border-radius: 20px; font-size: .95rem; font-weight: 600;
     border: 2px solid #cdd8e3; background: var(--wit); color: #888;
     cursor: pointer; user-select: none; transition: all .15s;
+    min-width: 0;                 /* laat flex 3-op-een-rij zonder overflow */
 }
 .filter-chip:active { transform: scale(.96); }
 .filter-rij input:checked + .filter-chip {
     background: var(--lichtblauw); border-color: var(--middenblauw); color: var(--blauw);
+}
+/* Smalle schermen (~iPhone SE / ~360-400px): overlay/box/chip-padding
+   verder verkleinen zodat 3 filter-chips netjes binnen de modal passen. */
+@media (max-width: 400px) {
+    .setup-modal-overlay { padding: 14px 6px; }
+    .setup-modal-box     { padding: 16px 12px; }
+    .filter-chip         { padding: 8px 6px; font-size: .88rem; }
 }
 
 .btn-zoek {
