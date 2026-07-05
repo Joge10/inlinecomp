@@ -5483,8 +5483,8 @@ function applyProgFilter(strook) {
             return;
         }
         const combiKey = `${elAfs}|${elRt || ''}`;
-        // Coach heeft geen .prog-rij, wel .prog-rit (heat-rij). Fallback op beide.
-        const heats = el.querySelectorAll('.prog-rit, .prog-rij').length;
+        // Coach gebruikt .heat-rij voor de heat-rijen binnen de groep-body.
+        const heats = el.querySelectorAll('.heat-rij').length;
         if (eersteVanCombi.has(combiKey)) {
             el.classList.add('verborgen');
             eersteVanCombi.get(combiKey).heats += heats;
