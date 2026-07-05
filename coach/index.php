@@ -556,6 +556,7 @@ if ($action === 'programma') {
                    h.ronde AS heat_ronde,
                    h.distance_combination_id AS heat_dc_id,
                    COALESCE(h.distance_id, r.distance_id) AS heat_distance_id,
+                   COALESCE(d.name, r.afstand_naam) AS distance_naam,
                    (SELECT COUNT(*) FROM heat_entries he2
                     WHERE he2.heat_id = h.id) AS entries_count,
                    (SELECT COUNT(*) FROM results res
@@ -565,6 +566,7 @@ if ($action === 'programma') {
             FROM tijdschema_ritten r
             LEFT JOIN tijdschema_blokken b ON b.id = r.blok_id
             LEFT JOIN heats h ON h.tijdschema_rit_id = r.id AND h.competition_id = ?
+            LEFT JOIN distances d ON d.id = COALESCE(h.distance_id, r.distance_id)
             WHERE r.tijdschema_id = ?
             ORDER BY r.volgorde
         ");
@@ -2368,6 +2370,54 @@ select.sel {
     white-space: nowrap;
 }
 .prog-dag-btn.actief .prog-dag-btn-datum { opacity: .95; }
+
+/* ── Programma-filter-strook (dag + afstand) — identiek aan public ── */
+.prog-filter-strook {
+    margin: 0 0 8px 0;
+    position: sticky; top: 0; z-index: 5;
+    background: #fff;
+    display: flex; flex-direction: column; gap: 4px;
+    padding: 4px 0;
+}
+.prog-filter-trigger {
+    display: flex; align-items: center; gap: 8px;
+    border: 1px solid #b3cae6; background: #fff; color: #1a3a5c;
+    padding: 8px 12px; border-radius: 8px;
+    font-size: .88rem; font-weight: 600; cursor: pointer;
+    transition: background .12s;
+    width: 100%;
+}
+.prog-filter-trigger:hover { background: #eaf2fb; }
+.prog-filter-trigger.open  { background: #eaf2fb; border-color: #1a3a5c; }
+.prog-filter-icon { font-size: 1rem; flex-shrink: 0; }
+.prog-filter-lbl  { flex: 1; text-align: left; }
+.prog-filter-caret { color: #888; font-size: .7rem; transition: transform .15s; }
+.prog-filter-trigger.open .prog-filter-caret { transform: rotate(180deg); }
+.prog-filter-panel {
+    display: flex; flex-wrap: wrap; gap: 4px;
+    padding: 6px 8px; background: #f7faff;
+    border: 1px solid #dde3ea; border-radius: 6px;
+    margin-top: -2px;
+    animation: prog-filter-in .12s ease-out;
+}
+@keyframes prog-filter-in {
+    from { opacity: 0; transform: translateY(-4px); }
+    to   { opacity: 1; transform: translateY(0); }
+}
+.prog-filter-pill {
+    border: 1px solid #b3cae6; background: #fff; color: #1a3a5c;
+    padding: 5px 10px; border-radius: 14px; font-size: .82rem;
+    font-weight: 600; cursor: pointer; transition: background .12s;
+    display: inline-flex; flex-direction: column; align-items: center;
+    justify-content: center; line-height: 1.15; min-height: 32px;
+}
+.prog-filter-pill:hover  { background: #eaf2fb; }
+.prog-filter-pill.actief { background: #1a3a5c; color: #fff; border-color: #1a3a5c; }
+.prog-filter-pill-sub {
+    display: block; font-size: .58rem; font-weight: 400;
+    opacity: .8; margin-top: 1px; white-space: nowrap;
+}
+.prog-filter-pill.actief .prog-filter-pill-sub { opacity: .95; }
 .verborgen { display: none !important; }
 
 /* Programma-inklap-knoppen: segment-control boven de programma-lijst.
@@ -3131,6 +3181,9 @@ const T = {
         prog_blok_min: 'min',
         prog_dag_alle: 'Alle',
         prog_dag: 'Dag',
+        prog_afstand_alle: 'Alle',
+        prog_filter_alle_dagen: 'Alle dagen',
+        prog_filter_alle_afstanden: 'Alle afstanden',
         prog_filter_mijn: '👥 Mijn rijders',
         prog_filter_te_rijden: '⏳ Nog te rijden',
         prog_klap_alles_uit:  'Alles uit',
@@ -3455,6 +3508,9 @@ const T = {
         prog_blok_min: 'min',
         prog_dag_alle: 'All',
         prog_dag: 'Day',
+        prog_afstand_alle: 'All',
+        prog_filter_alle_dagen: 'All days',
+        prog_filter_alle_afstanden: 'All distances',
         prog_filter_mijn: '👥 My skaters',
         prog_filter_te_rijden: '⏳ Upcoming',
         prog_klap_alles_uit:  'Collapse all',
@@ -3774,6 +3830,9 @@ const T = {
         prog_blok_min: 'Min',
         prog_dag_alle: 'Alle',
         prog_dag: 'Tag',
+        prog_afstand_alle: 'Alle',
+        prog_filter_alle_dagen: 'Alle Tage',
+        prog_filter_alle_afstanden: 'Alle Distanzen',
         prog_filter_mijn: '👥 Meine Sportler',
         prog_filter_te_rijden: '⏳ Kommende',
         prog_klap_alles_uit:  'Alle zu',
@@ -4092,6 +4151,9 @@ const T = {
         prog_blok_min: 'min',
         prog_dag_alle: 'Tous',
         prog_dag: 'Jour',
+        prog_afstand_alle: 'Toutes',
+        prog_filter_alle_dagen: 'Tous les jours',
+        prog_filter_alle_afstanden: 'Toutes les distances',
         prog_filter_mijn: '👥 Mes coureurs',
         prog_klap_alles_uit:  'Tout fermer',
         prog_klap_alles_in:   'Tout ouvrir',
@@ -5044,21 +5106,60 @@ function renderProgramma() {
     // één kader gegroepeerd (gecombineerde rit — categorieën rijden tegelijk).
     let html = '';
 
-    // Filter-balk bovenaan bij multi-day: "Alle / Dag 1 / Dag 2 / …".
-    if (isMultiDag) {
-        html += `<div class="prog-dag-filter" id="prog-dag-filter" data-actieve-dag="alle">
-            <button class="prog-dag-btn actief" data-dag="alle"
-                    onclick="filterDag(this,'alle')">${esc(t('prog_dag_alle'))}</button>`;
-        for (let dn = 1; dn <= wsBlokken.length; dn++) {
-            // Knop: "Dag N" + korte datum onder (mobiel-vriendelijk).
-            const info = dagInfoPerNr.get(dn);
-            const subDatum = info?.kortLbl
-                ? `<span class="prog-dag-btn-datum">${esc(info.kortLbl)}</span>`
-                : '';
-            html += `<button class="prog-dag-btn" data-dag="${dn}"
-                             onclick="filterDag(this,'${dn}')"
-                             title="${esc(info?.datumLbl || '')}"
-                >${esc(t('prog_dag'))} ${dn}${subDatum}</button>`;
+    // Nieuwe filter-strook: dag- + afstand-triggers, elk uitklapbaar.
+    // Zelfde patroon als public.
+    const _afsPerDagCoach = new Map();
+    const _afsAlleCoach   = new Set();
+    allesGesorteerd.forEach((item, idx) => {
+        if (item.type !== 'rit' || !item.data.distance_naam) return;
+        const dg = dagPerItem[idx];
+        if (!_afsPerDagCoach.has(dg)) _afsPerDagCoach.set(dg, new Set());
+        _afsPerDagCoach.get(dg).add(item.data.distance_naam);
+        _afsAlleCoach.add(item.data.distance_naam);
+    });
+    const afsAlleArrCoach = [..._afsAlleCoach].sort((a,b) => a.localeCompare(b, 'nl', {numeric:true}));
+    const heeftMeerdereAfsCoach = afsAlleArrCoach.length > 1;
+    if (isMultiDag || heeftMeerdereAfsCoach) {
+        const afsPerDagObjCoach = {};
+        for (const [dg, set] of _afsPerDagCoach) afsPerDagObjCoach[dg] = [...set].sort((a,b) => a.localeCompare(b, 'nl', {numeric:true}));
+        html += `<div class="prog-filter-strook" data-actieve-dag="alle" data-actieve-afstand="alle"
+                      data-afs-per-dag='${esc(JSON.stringify(afsPerDagObjCoach))}'>`;
+        if (isMultiDag) {
+            html += `<button class="prog-filter-trigger" type="button" data-filter="dag" onclick="togglePanel(this)">
+                <span class="prog-filter-icon">📅</span>
+                <span class="prog-filter-lbl">${esc(t('prog_filter_alle_dagen'))}</span>
+                <span class="prog-filter-caret">▼</span>
+            </button>
+            <div class="prog-filter-panel verborgen" data-panel="dag">
+                <button class="prog-filter-pill actief" type="button" data-value="alle"
+                        onclick="kiesProgFilter('dag','alle',this)">${esc(t('prog_dag_alle'))}</button>`;
+            for (let dn = 1; dn <= wsBlokken.length; dn++) {
+                const info = dagInfoPerNr.get(dn);
+                const subDatum = info?.kortLbl
+                    ? `<span class="prog-filter-pill-sub">${esc(info.kortLbl)}</span>`
+                    : '';
+                html += `<button class="prog-filter-pill" type="button" data-value="${dn}"
+                                 onclick="kiesProgFilter('dag','${dn}',this)"
+                                 title="${esc(info?.datumLbl || '')}"
+                    >${esc(t('prog_dag'))} ${dn}${subDatum}</button>`;
+            }
+            html += `</div>`;
+        }
+        if (heeftMeerdereAfsCoach) {
+            html += `<button class="prog-filter-trigger" type="button" data-filter="afstand" onclick="togglePanel(this)">
+                <span class="prog-filter-icon">🏁</span>
+                <span class="prog-filter-lbl">${esc(t('prog_filter_alle_afstanden'))}</span>
+                <span class="prog-filter-caret">▼</span>
+            </button>
+            <div class="prog-filter-panel verborgen" data-panel="afstand">
+                <button class="prog-filter-pill actief" type="button" data-value="alle"
+                        onclick="kiesProgFilter('afstand','alle',this)">${esc(t('prog_afstand_alle'))}</button>`;
+            for (const afs of afsAlleArrCoach) {
+                html += `<button class="prog-filter-pill" type="button" data-value="${esc(afs)}"
+                                 onclick="kiesProgFilter('afstand',this.dataset.value,this)"
+                    >${esc(afs)}</button>`;
+            }
+            html += `</div>`;
         }
         html += `</div>`;
     }
@@ -5132,7 +5233,8 @@ function renderProgramma() {
         const idx = groepHdrPlaceholders.length;
         const iconMarker = `[[STATUS-ICON-${idx}]]`;
         const mijnMarker = `[[MIJN-BADGE-${idx}]]`;
-        html += `<div class="prog-groep${ingeklapt ? ' ingeklapt' : ''}" data-groep-key="${esc(key)}" data-dag-nr="${dag}">
+        const afsAttr = r.distance_naam ? ` data-afstand-key="${esc(r.distance_naam)}"` : '';
+        html += `<div class="prog-groep${ingeklapt ? ' ingeklapt' : ''}" data-groep-key="${esc(key)}" data-dag-nr="${dag}"${afsAttr}>
             <div class="prog-groep-hdr" onclick="klapGroep(this)">
                 <span class="prog-groep-chev">▼</span>
                 <span class="prog-groep-status">${iconMarker}</span>
@@ -5185,7 +5287,8 @@ function renderProgramma() {
         if (combi !== vorigeCombi) {
             if (vorigeCombi !== null) html += `</div></div>`;
             if (combi !== null) {
-                html += `<div class="prog-combi-box" data-dag-nr="${dag}">
+                const combiAfsAttr = r.distance_naam ? ` data-afstand-key="${esc(r.distance_naam)}"` : '';
+                html += `<div class="prog-combi-box" data-dag-nr="${dag}"${combiAfsAttr}>
                     <div class="prog-combi-kop">${t('prog_combi_kop')}</div>
                     <div class="prog-combi-leden">`;
             }
@@ -5249,24 +5352,99 @@ function filterProgRit(btn, filter) {
     btn.blur();
 }
 
-function filterDag(btn, dag) {
-    const balk = btn.closest('.prog-dag-filter');
-    if (!balk) return;
-    balk.setAttribute('data-actieve-dag', String(dag));
-    balk.querySelectorAll('.prog-dag-btn').forEach(b =>
-        b.classList.toggle('actief', b.dataset.dag === String(dag))
+// ── Programma filter-strook (dag + afstand) — identiek aan public ──────────
+function togglePanel(triggerBtn) {
+    const strook = triggerBtn.closest('.prog-filter-strook');
+    if (!strook) return;
+    const key = triggerBtn.dataset.filter;
+    const panel = strook.querySelector(`.prog-filter-panel[data-panel="${key}"]`);
+    if (!panel) return;
+    const nuOpen = !panel.classList.contains('verborgen');
+    strook.querySelectorAll('.prog-filter-panel').forEach(p => p.classList.add('verborgen'));
+    strook.querySelectorAll('.prog-filter-trigger').forEach(t => t.classList.remove('open'));
+    if (!nuOpen) {
+        panel.classList.remove('verborgen');
+        triggerBtn.classList.add('open');
+    }
+    triggerBtn.blur();
+}
+function kiesProgFilter(type, waarde, pillBtn) {
+    const strook = pillBtn.closest('.prog-filter-strook');
+    if (!strook) return;
+    strook.setAttribute('data-actieve-' + type, String(waarde));
+    const panel = strook.querySelector(`.prog-filter-panel[data-panel="${type}"]`);
+    panel?.querySelectorAll('.prog-filter-pill').forEach(p =>
+        p.classList.toggle('actief', p.dataset.value === String(waarde))
     );
-    const container = balk.parentElement;
+    const trigger = strook.querySelector(`.prog-filter-trigger[data-filter="${type}"]`);
+    const lblEl   = trigger?.querySelector('.prog-filter-lbl');
+    if (lblEl) {
+        if (waarde === 'alle') {
+            lblEl.textContent = type === 'dag' ? t('prog_filter_alle_dagen') : t('prog_filter_alle_afstanden');
+        } else if (type === 'dag') {
+            const sub = pillBtn.querySelector('.prog-filter-pill-sub')?.textContent || '';
+            lblEl.textContent = `${t('prog_dag')} ${waarde}${sub ? ' · ' + sub : ''}`;
+        } else {
+            lblEl.textContent = waarde;
+        }
+    }
+    panel?.classList.add('verborgen');
+    trigger?.classList.remove('open');
+    if (type === 'dag') _refreshAfstandPanel(strook);
+    applyProgFilter(strook);
+    pillBtn.blur();
+}
+function _refreshAfstandPanel(strook) {
+    const afsPanel = strook.querySelector('.prog-filter-panel[data-panel="afstand"]');
+    if (!afsPanel) return;
+    let perDag = {};
+    try { perDag = JSON.parse(strook.dataset.afsPerDag || '{}'); } catch { perDag = {}; }
+    const dag = strook.getAttribute('data-actieve-dag') || 'alle';
+    const beschikbaar = new Set();
+    if (dag === 'alle') {
+        for (const arr of Object.values(perDag)) for (const a of arr) beschikbaar.add(a);
+    } else {
+        for (const a of (perDag[dag] || [])) beschikbaar.add(a);
+    }
+    let huidigeKeuzeNogGeldig = false;
+    const huidigAfs = strook.getAttribute('data-actieve-afstand') || 'alle';
+    afsPanel.querySelectorAll('.prog-filter-pill').forEach(p => {
+        const v = p.dataset.value;
+        if (v === 'alle') { p.classList.remove('verborgen'); return; }
+        const zichtbaar = beschikbaar.has(v);
+        p.classList.toggle('verborgen', !zichtbaar);
+        if (v === huidigAfs && zichtbaar) huidigeKeuzeNogGeldig = true;
+    });
+    if (huidigAfs !== 'alle' && !huidigeKeuzeNogGeldig) {
+        strook.setAttribute('data-actieve-afstand', 'alle');
+        const trigger = strook.querySelector('.prog-filter-trigger[data-filter="afstand"]');
+        const lblEl   = trigger?.querySelector('.prog-filter-lbl');
+        if (lblEl) lblEl.textContent = t('prog_filter_alle_afstanden');
+        afsPanel.querySelectorAll('.prog-filter-pill').forEach(p =>
+            p.classList.toggle('actief', p.dataset.value === 'alle')
+        );
+    }
+}
+function applyProgFilter(strook) {
+    const dag = strook.getAttribute('data-actieve-dag') || 'alle';
+    const afs = strook.getAttribute('data-actieve-afstand') || 'alle';
+    const container = strook.parentElement;
     if (!container) return;
     container.querySelectorAll('[data-dag-nr]').forEach(el => {
-        if (el === balk || el.classList.contains('prog-dag-filter')) return;
-        if (dag === 'alle') {
-            el.classList.remove('verborgen');
-        } else {
-            el.classList.toggle('verborgen',
-                el.getAttribute('data-dag-nr') !== String(dag));
-        }
+        if (el === strook || el.classList.contains('prog-filter-strook')) return;
+        const elDag = el.getAttribute('data-dag-nr');
+        const elAfs = el.getAttribute('data-afstand-key');
+        const dagOk = (dag === 'alle') || (elDag === String(dag));
+        const afsOk = (afs === 'alle') || !elAfs || (elAfs === afs);
+        el.classList.toggle('verborgen', !(dagOk && afsOk));
     });
+}
+// Legacy wrapper voor onclick="filterDag(...)"-plekken die er nog zijn.
+function filterDag(btn, dag) {
+    const strook = btn.closest('.prog-filter-strook, .prog-dag-filter');
+    if (!strook) return;
+    strook.setAttribute('data-actieve-dag', String(dag));
+    applyProgFilter(strook);
 }
 
 // ── Coach-info (status + sancties) ───────────────────────────────────────────
