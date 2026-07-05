@@ -5460,6 +5460,11 @@ function applyProgFilter(strook) {
     container.querySelectorAll('.prog-groep.samenvat').forEach(el => {
         el.classList.remove('samenvat');
         el.querySelector('.samenvat-teller')?.remove();
+        const titel = el.querySelector('.prog-groep-titel');
+        if (titel?.dataset.originalHtml) {
+            titel.innerHTML = titel.dataset.originalHtml;
+            delete titel.dataset.originalHtml;
+        }
     });
     const eersteVanCombi = new Map();
     container.querySelectorAll('[data-dag-nr]').forEach(el => {
@@ -5493,6 +5498,17 @@ function applyProgFilter(strook) {
         const hdr = el.querySelector('.prog-groep-hdr');
         if (!hdr) continue;
         hdr.querySelector('.samenvat-teller')?.remove();
+        // Titel vervangen: badge + afstand-naam (dc-naam is cat-specifiek,
+        // samenvat is gecombineerd over alle cats van deze afstand+ronde).
+        const titel = hdr.querySelector('.prog-groep-titel');
+        const distNaam = el.getAttribute('data-afstand-key');
+        if (titel && distNaam) {
+            if (!titel.dataset.originalHtml) {
+                titel.dataset.originalHtml = titel.innerHTML;
+            }
+            const badge = titel.querySelector('.heat-card-badge, .badge');
+            titel.innerHTML = (badge ? badge.outerHTML : '') + ' ' + distNaam;
+        }
         const span = document.createElement('span');
         span.className = 'samenvat-teller';
         const suffix = heats === 1 ? t('prog_samenvat_heat_1') : t('prog_samenvat_heat_n', {n: heats});

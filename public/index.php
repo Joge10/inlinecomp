@@ -4186,6 +4186,12 @@ function applyProgFilter(strook) {
     container.querySelectorAll('.prog-groep.samenvat').forEach(el => {
         el.classList.remove('samenvat');
         el.querySelector('.samenvat-teller')?.remove();
+        // Restore originele titel (dc-naam) — was overschreven met afstand
+        const titel = el.querySelector('.prog-groep-titel');
+        if (titel?.dataset.originalHtml) {
+            titel.innerHTML = titel.dataset.originalHtml;
+            delete titel.dataset.originalHtml;
+        }
     });
 
     // Bij afstand-filter: voor niet-matchende groepen ÉÉN samenvat-blok
@@ -4222,11 +4228,24 @@ function applyProgFilter(strook) {
             eersteVanCombi.set(combiKey, {el, heats});
         }
     });
-    // Heat-tellers injecteren in de samenvat-headers
+    // Heat-tellers injecteren + titel vervangen door afstand-naam
+    // (dc-naam is cat-specifiek, terwijl samenvat een gecombineerde
+    // afstand+ronde-view is over alle cats).
     for (const {el, heats} of eersteVanCombi.values()) {
         const hdr = el.querySelector('.prog-groep-hdr');
         if (!hdr) continue;
         hdr.querySelector('.samenvat-teller')?.remove();
+        // Vervang titel: behoud badge (ronde-label), vervang dc-naam
+        // door de afstand-naam. Bewaar origineel voor restore.
+        const titel = hdr.querySelector('.prog-groep-titel');
+        const distNaam = el.getAttribute('data-afstand-key');
+        if (titel && distNaam) {
+            if (!titel.dataset.originalHtml) {
+                titel.dataset.originalHtml = titel.innerHTML;
+            }
+            const badge = titel.querySelector('.heat-card-badge, .badge');
+            titel.innerHTML = (badge ? badge.outerHTML : '') + ' ' + distNaam;
+        }
         const span = document.createElement('span');
         span.className = 'samenvat-teller';
         const suffix = heats === 1 ? t('prog_samenvat_heat_1') : t('prog_samenvat_heat_n', {n: heats});
