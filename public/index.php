@@ -2778,9 +2778,9 @@ if (is_readable($i18nPath)) {
 
 // ── App-versie (bijhouden bij elke user-visible wijziging) ─────────────────
 // Formaat: H<uren>.<MM>.<DD>       (uren sinds InlineComp v0 op OH850, 2026-06-20 00:00)
-// Rollovers als de teller onhandig lang wordt:
-//   H9999+   → M<maanden>.<MM>.<DD>   waar 1 M ≈ 730 uur = 1 maand
-//   M12+     → Y<jaren>.<MM>.<DD>     waar 1 Y = 12 M = 1 jaar
+// Rollover als de uren-teller onhandig lang wordt:
+//   H9999+ → Y<jaren>.<MM>.<DD>    waar 1 Y = 1 jaar (~8760 uur)
+// M (maanden) slaan we bewust over — anders komen we nooit bij Y ;)
 // Bij bump: bereken nieuwe uren-count sinds 2026-06-20, update datum, en
 // voeg een entry toe aan het "Wat is nieuw"-blok in toonHelp().
 // Versie verschijnt onder de copyright in de i-modal.
