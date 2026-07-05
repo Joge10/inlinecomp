@@ -5374,11 +5374,15 @@ async function renderRondeUitslagen(container) {
                         return _uitvalCodes.some(c => s.includes(c));
                     };
                     // A-finale sortering volgt finale_ranking uit admin's
-                    // Uitslag-module:
+                    // Uitslag-module — ALLEEN voor sprint-afstanden:
                     //   'time'          → puur op tijd (correct bij 200m DTT)
                     //   'position_time' → op finishpositie, tijd tiebreak (default)
+                    // Voor lange afstanden (puntenkoers/afvalkoers/inline) is
+                    // tijd niet leidend en houdt admin's finishpositie al
+                    // rekening met punten en rondes — die altijd volgen,
+                    // ongeacht finale_ranking.
                     const _finaleFin = ['finale_a'].includes(r.ronde_type)
-                                       && d.finale_ranking !== 'time';
+                                       && (isLangeAfstand || d.finale_ranking !== 'time');
                     rijders.sort((a, b) => {
                         // Uitvallers altijd naar het einde
                         const ua = _isUit(a), ub = _isUit(b);
