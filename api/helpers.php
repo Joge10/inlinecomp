@@ -2159,14 +2159,63 @@ if ($action === 'pending_merge') {
         $moveStmt->execute([$tgtLic, $srcLic]);
         $verhuisd = $moveStmt->rowCount();
 
+        // ── entries (UNIQUE: distance_combination_id, person_license)
+        $delEntConflict = $pdo->prepare("
+            DELETE src FROM entries src
+            JOIN entries tgt
+              ON tgt.distance_combination_id = src.distance_combination_id
+             AND tgt.person_license = ?
+            WHERE src.person_license = ?
+        ");
+        $delEntConflict->execute([$tgtLic, $srcLic]);
+        $entriesConflictDeleted = $delEntConflict->rowCount();
+        $moveEnt = $pdo->prepare("UPDATE entries SET person_license = ? WHERE person_license = ?");
+        $moveEnt->execute([$tgtLic, $srcLic]);
+        $entriesVerhuisd = $moveEnt->rowCount();
+
+        // ── heat_entries (UNIQUE: heat_id, person_license)
+        $delHeConflict = $pdo->prepare("
+            DELETE src FROM heat_entries src
+            JOIN heat_entries tgt
+              ON tgt.heat_id = src.heat_id
+             AND tgt.person_license = ?
+            WHERE src.person_license = ?
+        ");
+        $delHeConflict->execute([$tgtLic, $srcLic]);
+        $heConflictDeleted = $delHeConflict->rowCount();
+        $moveHe = $pdo->prepare("UPDATE heat_entries SET person_license = ? WHERE person_license = ?");
+        $moveHe->execute([$tgtLic, $srcLic]);
+        $heVerhuisd = $moveHe->rowCount();
+
+        // ── transponders (UNIQUE: competition_id, person_license, slot)
+        $delTpConflict = $pdo->prepare("
+            DELETE src FROM transponders src
+            JOIN transponders tgt
+              ON tgt.competition_id = src.competition_id
+             AND tgt.slot = src.slot
+             AND tgt.person_license = ?
+            WHERE src.person_license = ?
+        ");
+        $delTpConflict->execute([$tgtLic, $srcLic]);
+        $tpConflictDeleted = $delTpConflict->rowCount();
+        $moveTp = $pdo->prepare("UPDATE transponders SET person_license = ? WHERE person_license = ?");
+        $moveTp->execute([$tgtLic, $srcLic]);
+        $tpVerhuisd = $moveTp->rowCount();
+
         $delSrc = $pdo->prepare("DELETE FROM persons WHERE license_key = ? AND pending_source IS NOT NULL");
         $delSrc->execute([$srcLic]);
 
         $pdo->commit();
         echo json_encode([
-            'ok'            => true,
-            'verhuisd'      => $verhuisd,
-            'conflict_skip' => $conflictDeleted,
+            'ok'                => true,
+            'verhuisd'          => $verhuisd,
+            'conflict_skip'     => $conflictDeleted,
+            'entries_verhuisd'  => $entriesVerhuisd,
+            'entries_conflict'  => $entriesConflictDeleted,
+            'he_verhuisd'       => $heVerhuisd,
+            'he_conflict'       => $heConflictDeleted,
+            'tp_verhuisd'       => $tpVerhuisd,
+            'tp_conflict'       => $tpConflictDeleted,
         ]);
     } catch (Throwable $e) {
         if ($pdo->inTransaction()) $pdo->rollBack();
@@ -2219,6 +2268,10 @@ if ($action === 'pending_delete') {
         $delEnt->execute([$lic]);
         $entriesWeg = $delEnt->rowCount();
 
+        $delHe = $pdo->prepare("DELETE FROM heat_entries WHERE person_license = ?");
+        $delHe->execute([$lic]);
+        $heWeg = $delHe->rowCount();
+
         $delTp = $pdo->prepare("DELETE FROM transponders WHERE person_license = ?");
         $delTp->execute([$lic]);
         $tpWeg = $delTp->rowCount();
@@ -2236,6 +2289,7 @@ if ($action === 'pending_delete') {
             'ok' => true,
             'uitslagen_verwijderd'    => $uaWeg,
             'entries_verwijderd'      => $entriesWeg,
+            'heat_entries_verwijderd' => $heWeg,
             'transponders_verwijderd' => $tpWeg,
             'person_verwijderd'       => $personWeg,
         ]);
