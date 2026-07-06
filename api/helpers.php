@@ -1930,7 +1930,7 @@ if ($action === 'pending_link') {
     }
     try {
         // Verifieer beide bestaan + bepaal types
-        $checkStmt = $pdo->prepare("SELECT license_key, pending_source, extern, full_name FROM persons WHERE license_key = ?");
+        $checkStmt = $pdo->prepare("SELECT license_key, pending_source, extern, full_name, category FROM persons WHERE license_key = ?");
         $checkStmt->execute([$pendingLic]);
         $pending = $checkStmt->fetch(PDO::FETCH_ASSOC);
         if (!$pending) {
@@ -1938,21 +1938,30 @@ if ($action === 'pending_link') {
             echo json_encode(['error' => "Bron-persoon $pendingLic niet gevonden"]);
             exit;
         }
-        // Source moet incompleet zijn (pending OR extern). Een echte KNSB-rij
-        // verwijderen via deze flow zou onbedoeld zijn — voor merging tussen
-        // echte accounts is een aparte admin-flow nodig.
-        $sourceIsPending = $pending['pending_source'] !== null;
-        $sourceIsExtern  = ((int)($pending['extern'] ?? 0)) === 1;
-        if (!$sourceIsPending && !$sourceIsExtern) {
-            http_response_code(400);
-            echo json_encode(['error' => 'Bron-persoon is geen pending of externe rij']);
-            exit;
-        }
         $checkStmt->execute([$targetLic]);
         $target = $checkStmt->fetch(PDO::FETCH_ASSOC);
         if (!$target) {
             http_response_code(404);
             echo json_encode(['error' => "Doel-persoon $targetLic niet gevonden"]);
+            exit;
+        }
+        // Source moet incompleet zijn (pending OR extern), of exact dezelfde
+        // genormaliseerde naam+cat hebben als target (naamgenoot-flow — bv
+        // rijder met echte licentie én dagvergunning). Een echte KNSB-rij
+        // verwijderen via deze flow zonder duidelijke match zou onbedoeld
+        // zijn — voor merging tussen echte accounts is een aparte admin-
+        // flow nodig.
+        $sourceIsPending = $pending['pending_source'] !== null;
+        $sourceIsExtern  = ((int)($pending['extern'] ?? 0)) === 1;
+        $srcNaam = _naamNormalize($pending['full_name'] ?? '');
+        $tgtNaam = _naamNormalize($target['full_name']  ?? '');
+        $srcCat  = mb_strtolower(trim($pending['category'] ?? ''), 'UTF-8');
+        $tgtCat  = mb_strtolower(trim($target['category']  ?? ''), 'UTF-8');
+        $sourceIsNaamgenoot = $srcNaam !== '' && $srcCat !== ''
+                           && $srcNaam === $tgtNaam && $srcCat === $tgtCat;
+        if (!$sourceIsPending && !$sourceIsExtern && !$sourceIsNaamgenoot) {
+            http_response_code(400);
+            echo json_encode(['error' => 'Bron-persoon is geen pending/externe rij en geen naamgenoot van doel']);
             exit;
         }
 
@@ -2035,12 +2044,11 @@ if ($action === 'pending_link') {
         // je kiest, krijg je. Een KNSB-target blijft ook altijd KNSB (bron
         // moet pending OF extern zijn, dus dat is automatisch consistent).
 
-        // ── Verwijder de source-rij (zowel pending als extern toegestaan)
-        $delPending = $pdo->prepare("
-            DELETE FROM persons
-            WHERE license_key = ?
-              AND (pending_source IS NOT NULL OR extern = 1)
-        ");
+        // ── Verwijder de source-rij. Safety-check op type is hierboven al
+        // gedaan (pending/extern/naamgenoot); hier alleen op license_key
+        // zodat de DELETE ook slaagt voor naamgenoot-flows (pending_source
+        // NULL en extern=0).
+        $delPending = $pdo->prepare("DELETE FROM persons WHERE license_key = ?");
         $delPending->execute([$pendingLic]);
 
         $pdo->commit();
