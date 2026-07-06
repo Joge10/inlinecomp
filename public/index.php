@@ -2919,7 +2919,7 @@ if (is_readable($i18nPath)) {
 // Bij bump: bereken nieuwe uren-count sinds 2026-06-20, update datum, en
 // voeg een entry toe aan het "Wat is nieuw"-blok in toonHelp().
 // Versie verschijnt onder de copyright in de i-modal.
-const APP_VERSIE = 'H360.07.05';
+const APP_VERSIE = 'H360.07.06';
 
 // ── App-specifiek vertaal-woordenboek (NL + EN + DE + FR) ──────────────────
 // Toggle via vlag-knop in header. Persisteert in localStorage onder 'ic_lang'.
@@ -3127,6 +3127,8 @@ const T = {
         nieuw_v100_4_html: '<b>Bruto-tijd</b> zichtbaar naast de netto-tijd — herkenbaar aan ✋ (handmatige correctie) of 📷 (foto-finish correctie). Zo zie je in "Jouw resultaat" en in de heat-tabellen precies wanneer een correctie op de klokwaarde is toegepast.',
         nieuw_v100_11_html: '<b>Klassering per categorie</b> in de Uitslagen-tab — bij gecombineerde races (bv. HJA + HSA samen) verschijnt naast de overall rang een aparte kolom per categorie, zodat in één oogopslag zichtbaar is welke plek binnen de eigen categorie is behaald.',
         nieuw_v100_9_html: '<b>Kleine verbeteringen</b> voor de weergave op smalle schermen en de navigatie — waaronder filter-knoppen die weer binnen het openings-venster passen.',
+        nieuw_v100_13_html: '<b>Filter op afstand</b> in het programma — kies één afstand (bv. 500m) en klap daarbinnen groepen in of uit. Handig als je alleen één afstand wilt volgen.',
+        nieuw_v100_14_html: '<b>Kleine verbeteringen en bug-fixes</b> in de weergave van het programma.',
         // ── Help modal ──
         help_titel: 'Hoe werkt InlineComp?',
         help_h1: 'Aan de slag',
@@ -3139,7 +3141,7 @@ const T = {
         help_mock_snr: 'Startnummer: 86',
         help_h_tabs: 'Tabs',
         help_p_tabs_html: 'Na het zoeken zie je <b>4 tabs</b>:',
-        help_p_prog_html: '<b>Programma</b> — alle ritten van de wedstrijd. Jouw ritten zijn gemarkeerd. Tik op een rit om de startlijst te bekijken.',
+        help_p_prog_html: '<b>Programma</b> — alle ritten van de wedstrijd. Jouw ritten zijn gemarkeerd. Tik op een rit om de startlijst te bekijken. Bovenaan filter je op afstand; met de balk daaronder klap je binnen die afstand groepen in of uit.',
         help_p_heats_html: '<b>Heats</b> — jouw heats met alle rijders. Je eigen rij is gemarkeerd. Na de finish worden de rijders op finish-volgorde weergegeven, met tijden en posities.',
         help_p_res_html: '<b>Rondes</b> — jouw persoonlijke uitslag per ronde (series, kwart, halve, A-finale, kleine finale). Zichtbaar is welke plek per ronde is behaald en of er is doorgestroomd naar de volgende ronde.',
         help_p_uitsl_html: '<b>Uitslagen</b> — de volledige uitslag van alle rijders. Kies een categorie en afstand, of bekijk het klassement.',
@@ -3351,6 +3353,8 @@ const T = {
         nieuw_v100_4_html: '<b>Raw time</b> visible next to the net time — marked with ✋ (manual correction) or 📷 (photo-finish correction). This way you see in "Your result" and the heat tables exactly when a correction was applied to the clock value.',
         nieuw_v100_11_html: '<b>Ranking per category</b> in the Results tab — for combined races (e.g. HJA + HSA together) a separate column per category appears next to the overall rank, so the position achieved within the own category is visible at a glance.',
         nieuw_v100_9_html: '<b>Small improvements</b> to the display on narrow screens and to navigation — including filter buttons that now fit within the opening window.',
+        nieuw_v100_13_html: '<b>Filter by distance</b> in the program — pick a single distance (e.g. 500m) and collapse or expand groups within it. Handy when you only want to follow one distance.',
+        nieuw_v100_14_html: '<b>Small improvements and bug fixes</b> in the program view.',
         // ── Help modal ──
         help_titel: 'How does InlineComp work?',
         help_h1: 'Getting started',
@@ -3363,7 +3367,7 @@ const T = {
         help_mock_snr: 'Start number: 86',
         help_h_tabs: 'Tabs',
         help_p_tabs_html: 'After searching you see <b>4 tabs</b>:',
-        help_p_prog_html: '<b>Program</b> — all races of the meet. Your races are highlighted. Tap a race to view the start list.',
+        help_p_prog_html: '<b>Program</b> — all races of the meet. Your races are highlighted. Tap a race to view the start list. Filter by distance at the top; use the bar below to collapse or expand groups within that distance.',
         help_p_heats_html: '<b>Heats</b> — your heats with all skaters. Your own row is highlighted. After the finish, skaters are shown in finish order, with times and positions.',
         help_p_res_html: '<b>Rounds</b> — your personal result per round (heats, quarter, semi, A-final, small final). Shows the position achieved in each round and whether you progressed to the next round.',
         help_p_uitsl_html: '<b>All results</b> — the full results of all skaters. Choose a category and distance, or view the standings.',
@@ -3575,6 +3579,8 @@ const T = {
         nieuw_v100_4_html: '<b>Bruttozeit</b> sichtbar neben der Nettozeit — kenntlich an ✋ (Handkorrektur) oder 📷 (Fotofinish-Korrektur). So siehst du in "Dein Ergebnis" und in den Heat-Tabellen genau, wann eine Korrektur der Uhrzeit erfolgt ist.',
         nieuw_v100_11_html: '<b>Platzierung pro Kategorie</b> im Ergebnisse-Tab — bei kombinierten Rennen (z.B. HJA + HSA zusammen) erscheint neben dem Gesamtrang eine separate Spalte pro Kategorie, sodass die innerhalb der eigenen Kategorie erreichte Platzierung auf einen Blick sichtbar ist.',
         nieuw_v100_9_html: '<b>Kleine Verbesserungen</b> an der Darstellung auf schmalen Bildschirmen und der Navigation — u.a. Filter-Buttons, die wieder in das Startfenster passen.',
+        nieuw_v100_13_html: '<b>Distanz-Filter</b> im Programm — wähle eine Distanz (z.B. 500m) und klappe darin Gruppen ein oder aus. Praktisch, wenn du nur eine Distanz verfolgen möchtest.',
+        nieuw_v100_14_html: '<b>Kleine Verbesserungen und Fehlerbehebungen</b> in der Programm-Ansicht.',
         // ── Help modal ──
         help_titel: 'Wie funktioniert InlineComp?',
         help_h1: 'Loslegen',
@@ -3587,7 +3593,7 @@ const T = {
         help_mock_snr: 'Startnummer: 86',
         help_h_tabs: 'Tabs',
         help_p_tabs_html: 'Nach dem Suchen siehst du <b>4 Tabs</b>:',
-        help_p_prog_html: '<b>Programm</b> — alle Rennen der Veranstaltung. Deine Rennen sind markiert. Tippe auf ein Rennen für die Startliste.',
+        help_p_prog_html: '<b>Programm</b> — alle Rennen der Veranstaltung. Deine Rennen sind markiert. Tippe auf ein Rennen für die Startliste. Oben kannst du nach Distanz filtern; mit der Leiste darunter klappst du Gruppen innerhalb dieser Distanz ein oder aus.',
         help_p_heats_html: '<b>Heats</b> — deine Heats mit allen Skatern. Deine eigene Zeile ist markiert. Nach dem Zieleinlauf werden die Läufer in Zieleinlaufreihenfolge angezeigt, mit Zeiten und Positionen.',
         help_p_res_html: '<b>Runden</b> — dein persönliches Ergebnis pro Runde (Vorläufe, Viertel, Halbfinale, A-Finale, kleines Finale). Zeigt die in jeder Runde erreichte Platzierung und ob ein Weiterkommen in die nächste Runde erfolgt ist.',
         help_p_uitsl_html: '<b>Ergebnisse</b> — die vollständigen Ergebnisse aller Skater. Wähle eine Kategorie und Distanz, oder sieh die Wertung.',
@@ -3799,6 +3805,8 @@ const T = {
         nieuw_v100_4_html: '<b>Temps brut</b> visible à côté du temps net — marqué ✋ (correction manuelle) ou 📷 (correction photo-finish). Ainsi tu vois dans "Ton résultat" et les tableaux de séries exactement quand une correction a été appliquée au temps de l\'horloge.',
         nieuw_v100_11_html: '<b>Classement par catégorie</b> dans l\'onglet Résultats — pour les courses combinées (par ex. HJA + HSA ensemble) une colonne distincte par catégorie apparaît à côté du rang général, ce qui rend la place obtenue dans la propre catégorie visible d\'un coup d\'œil.',
         nieuw_v100_9_html: '<b>Petites améliorations</b> pour l\'affichage sur écrans étroits et pour la navigation — dont des boutons de filtre qui tiennent à nouveau dans la fenêtre d\'ouverture.',
+        nieuw_v100_13_html: '<b>Filtre par distance</b> dans le programme — choisis une seule distance (par ex. 500m) et replie ou déplie les groupes à l\'intérieur. Pratique quand tu ne suis qu\'une distance.',
+        nieuw_v100_14_html: '<b>Petites améliorations et corrections</b> dans l\'affichage du programme.',
         // ── Help modal ──
         help_titel: 'Comment fonctionne InlineComp ?',
         help_h1: 'Démarrer',
@@ -3811,7 +3819,7 @@ const T = {
         help_mock_snr: 'Dossard : 86',
         help_h_tabs: 'Onglets',
         help_p_tabs_html: 'Après la recherche tu vois <b>4 onglets</b> :',
-        help_p_prog_html: '<b>Programme</b> — toutes les courses de la rencontre. Tes courses sont surlignées. Tape sur une course pour voir la liste de départ.',
+        help_p_prog_html: '<b>Programme</b> — toutes les courses de la rencontre. Tes courses sont surlignées. Tape sur une course pour voir la liste de départ. Filtre par distance en haut; utilise la barre en dessous pour replier ou déplier les groupes dans cette distance.',
         help_p_heats_html: '<b>Séries</b> — tes séries avec tous les skateurs. Ta propre ligne est surlignée. Après l\'arrivée, les skateurs sont affichés dans l\'ordre d\'arrivée, avec les temps et positions.',
         help_p_res_html: '<b>Rondes</b> — ton résultat personnel par tour (séries, quart, demi, finale A, petite finale). Montre la place obtenue à chaque tour et si tu es passé au tour suivant.',
         help_p_uitsl_html: '<b>Tous résultats</b> — les résultats complets de tous les skateurs. Choisis une catégorie et distance, ou consulte le classement.',
@@ -6517,13 +6525,18 @@ function toonHelp() {
 
             <p>${t('help_p_prog_html')}</p>
 
-            <!-- Mockup: programma (met segment-control Alles in / Alles uit / Mijn) -->
+            <!-- Mockup: programma (filter-strook + segment-control Inklappen / Uitklappen / Mijn) -->
             <div class="mock">
                 <div class="mock-tabs">
                     <div class="mock-tab active">${esc(t('tab_programma').replace(/^[^\s]+\s*/, ''))}</div>
                     <div class="mock-tab">${esc(t('tab_heats').replace(/^[^\s]+\s*/, ''))}</div>
                     <div class="mock-tab">${esc(t('tab_rondes').replace(/^[^\s]+\s*/, ''))}</div>
                     <div class="mock-tab">${esc(t('tab_uitslagen').replace(/^[^\s]+\s*/, ''))}</div>
+                </div>
+                <div style="background:#fff;border-top:1px solid #b3cae6;border-bottom:1px solid #b3cae6">
+                    <div style="padding:5px 10px;font-size:.65rem;font-weight:600;color:#1a3a5c;border-bottom:1px solid #d5dee7;display:flex;align-items:center;gap:6px">
+                        <span>🏁</span><span style="flex:1">${esc(t('prog_filter_alle_afstanden'))}</span><span style="font-size:.55rem">▼</span>
+                    </div>
                 </div>
                 <div style="display:flex;gap:3px;padding:4px 6px;background:#eef2f6">
                     <span style="flex:1;text-align:center;font-size:.65rem;font-weight:700;padding:3px 0;border-radius:4px;border:1px solid var(--blauw);background:var(--blauw);color:#fff">▶ ${esc(t('prog_klap_alles_uit'))}</span>
@@ -6624,6 +6637,17 @@ function toonHelp() {
             <div class="changelog-versie">
                 <div class="changelog-kop">
                     <span class="changelog-vnr">${esc(APP_VERSIE)}</span>
+                    <span class="changelog-datum">2026-07-06</span>
+                </div>
+                <ul class="changelog-lijst">
+                    <li>${t('nieuw_v100_13_html')}</li>
+                    <li>${t('nieuw_v100_14_html')}</li>
+                </ul>
+            </div>
+
+            <div class="changelog-versie">
+                <div class="changelog-kop">
+                    <span class="changelog-vnr">H360.07.05</span>
                     <span class="changelog-datum">2026-07-05</span>
                 </div>
                 <ul class="changelog-lijst">

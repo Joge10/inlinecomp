@@ -3087,7 +3087,7 @@ if (is_readable($i18nPath)) {
 // Bij bump: bereken nieuwe uren-count sinds 2026-06-20, update datum, en
 // voeg een entry toe aan het "Wat is nieuw"-blok in toonHelp().
 // Versie verschijnt onder de copyright in de i-modal.
-const APP_VERSIE = 'H360.07.05';
+const APP_VERSIE = 'H360.07.06';
 
 // ── App-specifiek vertaal-woordenboek (NL + EN + DE + FR) ──────────────────
 // Toggle via vlag-knop in header. Persisteert in localStorage onder 'ic_lang'
@@ -3362,7 +3362,7 @@ const T = {
         help_stap2_html: 'Voeg rijders toe aan je coach-lijst op drie manieren: <ul style="margin:4px 0 4px 18px"><li><b>Op club</b> — selecteer een club en alle rijders daarvan komen in je lijst.</li><li><b>Op sponsor</b> — idem op sponsor-naam.</li><li><b>Op startnummer</b> — typ een getal en druk op Toevoegen (of Enter).</li></ul><b>Let op:</b> klik pas op <b>Klaar</b> als alle gewenste rijders in de geselecteerd-lijst staan — dat wordt vaak te vroeg gedaan.',
         help_stap3_html: 'Bekijk de tabs: <b>📋 Programma</b>, <b>🏃 Heats</b>, <b>⚠️ Sancties</b>, <b>📊 Uitslagen</b>.',
         help_h_prog: 'Programma',
-        help_p_prog_html: 'Toont alle ritten van de wedstrijd. Ritten waar minstens één van jouw rijders in zit zijn <b>geel gemarkeerd</b> met een strip van hun startnummers aan de rechterkant. Tik een rit aan om de volledige startlijst te zien — jouw rijders zijn opnieuw geel gemarkeerd.',
+        help_p_prog_html: 'Toont alle ritten van de wedstrijd. Ritten waar minstens één van jouw rijders in zit zijn <b>geel gemarkeerd</b> met een strip van hun startnummers aan de rechterkant. Tik een rit aan om de volledige startlijst te zien — jouw rijders zijn opnieuw geel gemarkeerd. Bovenaan filter je op afstand; met de balk daaronder klap je binnen die afstand groepen in of uit.',
         help_h_sanc: 'Sancties',
         help_p_sanc1: 'Per rijder uit jouw lijst een kaartje met:',
         help_p_sanc_lijst_html: '<li><b>Status-badge</b> (Bevestigd / Niet getekend / Afgemeld / …)</li><li>Alle <b>sancties</b> die in heats zijn geregistreerd (W1, W2, FS, DQ-SF, DNF, …)</li>',
@@ -3401,6 +3401,8 @@ const T = {
         nieuw_v100_4_html: '<b>Bruto-tijd</b> zichtbaar naast de netto-tijd — herkenbaar aan ✋ (handmatige correctie) of 📷 (foto-finish correctie). Zo is in de heat-tabellen zichtbaar wanneer een correctie op de klokwaarde is toegepast.',
         nieuw_v100_11_html: '<b>Klassering per categorie</b> in de Uitslagen-tab — bij gecombineerde races (bv. HJA + HSA samen) verschijnt naast de overall rang een aparte kolom per categorie, zodat in één oogopslag zichtbaar is welke plek de rijder binnen de eigen categorie heeft behaald.',
         nieuw_v100_9_html: '<b>Kleine verbeteringen</b> voor de weergave op smalle schermen en de navigatie — waaronder filter-knoppen die weer binnen het openings-venster passen.',
+        nieuw_v100_13_html: '<b>Filter op afstand</b> in het programma — kies één afstand (bv. 500m) en klap daarbinnen groepen in of uit. Handig als je alleen één afstand wilt volgen.',
+        nieuw_v100_14_html: '<b>Kleine verbeteringen en bug-fixes</b> in de weergave van het programma.',
         // ── Mockup-labels ──
         mock_venster_titel: 'Wedstrijd & rijders',
         mock_kies_w: 'Kies je wedstrijd',
@@ -3691,7 +3693,7 @@ const T = {
         help_stap2_html: 'Add skaters to your coach list in three ways: <ul style="margin:4px 0 4px 18px"><li><b>By club</b> — select a club and all its skaters appear in your list.</li><li><b>By sponsor</b> — same by sponsor name.</li><li><b>By start number</b> — type a number and press Add (or Enter).</li></ul><b>Note:</b> only click <b>Done</b> once all desired skaters are in the selected list — this is often done too early.',
         help_stap3_html: 'Browse the tabs: <b>📋 Program</b>, <b>🏃 Heats</b>, <b>⚠️ Sanctions</b>, <b>📊 Results</b>.',
         help_h_prog: 'Program',
-        help_p_prog_html: 'Shows all races of the meet. Races containing at least one of your skaters are <b>highlighted in yellow</b> with a strip of their start numbers on the right. Tap a race to view the full start list — your skaters are again highlighted in yellow.',
+        help_p_prog_html: 'Shows all races of the meet. Races containing at least one of your skaters are <b>highlighted in yellow</b> with a strip of their start numbers on the right. Tap a race to view the full start list — your skaters are again highlighted in yellow. Filter by distance at the top; use the bar below to collapse or expand groups within that distance.',
         help_h_sanc: 'Sanctions',
         help_p_sanc1: 'For each skater in your list a card with:',
         help_p_sanc_lijst_html: '<li><b>Status badge</b> (Confirmed / Not signed in / Withdrawn / …)</li><li>All <b>sanctions</b> registered in heats (W1, W2, FS, DQ-SF, DNF, …)</li>',
@@ -3726,6 +3728,8 @@ const T = {
         nieuw_v100_4_html: '<b>Raw time</b> visible next to the net time — marked with ✋ (manual correction) or 📷 (photo-finish correction). This way, the heat tables show exactly when a correction was applied to the clock value.',
         nieuw_v100_11_html: '<b>Ranking per category</b> in the Results tab — for combined races (e.g. HJA + HSA together) a separate column per category appears next to the overall rank, so the position achieved within the own category is visible at a glance.',
         nieuw_v100_9_html: '<b>Small improvements</b> to the display on narrow screens and to navigation — including filter buttons that now fit within the opening window.',
+        nieuw_v100_13_html: '<b>Filter by distance</b> in the program — pick a single distance (e.g. 500m) and collapse or expand groups within it. Handy when you only want to follow one distance.',
+        nieuw_v100_14_html: '<b>Small improvements and bug fixes</b> in the program view.',
         mock_venster_titel: 'Race & skaters',
         mock_kies_w: 'Choose your race',
         mock_kies_rijders: 'Add skaters to your coach list',
@@ -4015,7 +4019,7 @@ const T = {
         help_stap2_html: 'Skater auf drei Arten zu deiner Coach-Liste hinzufügen: <ul style="margin:4px 0 4px 18px"><li><b>Nach Verein</b> — wähle einen Verein und alle dessen Skater erscheinen in deiner Liste.</li><li><b>Nach Sponsor</b> — gleiches nach Sponsorname.</li><li><b>Nach Startnummer</b> — gib eine Nummer ein und drücke Hinzufügen (oder Enter).</li></ul><b>Achtung:</b> klicke erst auf <b>Fertig</b>, wenn alle gewünschten Läufer in der Auswahlliste stehen — das wird oft zu früh gemacht.',
         help_stap3_html: 'Durchstöbere die Tabs: <b>📋 Programm</b>, <b>🏃 Heats</b>, <b>⚠️ Strafen</b>, <b>📊 Ergebnisse</b>.',
         help_h_prog: 'Programm',
-        help_p_prog_html: 'Zeigt alle Rennen der Veranstaltung. Rennen mit mindestens einem deiner Skater sind <b>gelb markiert</b> mit einem Streifen ihrer Startnummern rechts. Tippe auf ein Rennen für die vollständige Startliste — deine Skater sind dort wieder gelb markiert.',
+        help_p_prog_html: 'Zeigt alle Rennen der Veranstaltung. Rennen mit mindestens einem deiner Skater sind <b>gelb markiert</b> mit einem Streifen ihrer Startnummern rechts. Tippe auf ein Rennen für die vollständige Startliste — deine Skater sind dort wieder gelb markiert. Oben kannst du nach Distanz filtern; mit der Leiste darunter klappst du Gruppen innerhalb dieser Distanz ein oder aus.',
         help_h_sanc: 'Strafen',
         help_p_sanc1: 'Für jeden Skater in deiner Liste eine Karte mit:',
         help_p_sanc_lijst_html: '<li><b>Status-Badge</b> (Bestätigt / Nicht angemeldet / Zurückgezogen / …)</li><li>Alle <b>Strafen</b> registriert in Heats (W1, W2, FS, DQ-SF, DNF, …)</li>',
@@ -4049,6 +4053,8 @@ const T = {
         nieuw_v100_4_html: '<b>Bruttozeit</b> sichtbar neben der Nettozeit — kenntlich an ✋ (Handkorrektur) oder 📷 (Fotofinish-Korrektur). So ist in den Heat-Tabellen sichtbar, wann eine Korrektur der Uhrzeit erfolgt ist.',
         nieuw_v100_11_html: '<b>Platzierung pro Kategorie</b> im Ergebnisse-Tab — bei kombinierten Rennen (z.B. HJA + HSA zusammen) erscheint neben dem Gesamtrang eine separate Spalte pro Kategorie, sodass die innerhalb der eigenen Kategorie erreichte Platzierung auf einen Blick sichtbar ist.',
         nieuw_v100_9_html: '<b>Kleine Verbesserungen</b> an der Darstellung auf schmalen Bildschirmen und der Navigation — u.a. Filter-Buttons, die wieder in das Startfenster passen.',
+        nieuw_v100_13_html: '<b>Distanz-Filter</b> im Programm — wähle eine Distanz (z.B. 500m) und klappe darin Gruppen ein oder aus. Praktisch, wenn du nur eine Distanz verfolgen möchtest.',
+        nieuw_v100_14_html: '<b>Kleine Verbesserungen und Fehlerbehebungen</b> in der Programm-Ansicht.',
         mock_venster_titel: 'Rennen & Läufer',
         mock_kies_w: 'Wähle dein Rennen',
         mock_kies_rijders: 'Läufer zur Coach-Liste hinzufügen',
@@ -4338,7 +4344,7 @@ const T = {
         help_stap2_html: 'Ajoutez des skateurs à votre liste de coach de trois manières : <ul style="margin:4px 0 4px 18px"><li><b>Par club</b> — sélectionnez un club et tous ses skateurs apparaissent dans votre liste.</li><li><b>Par sponsor</b> — pareil par nom de sponsor.</li><li><b>Par numéro de départ</b> — tapez un numéro et appuyez sur Ajouter (ou Entrée).</li></ul><b>Attention :</b> ne cliquez sur <b>Terminer</b> qu\'une fois tous les skateurs souhaités dans la liste sélectionnée — cela se fait souvent trop tôt.',
         help_stap3_html: 'Parcourez les onglets: <b>📋 Programme</b>, <b>🏃 Heats</b>, <b>⚠️ Sanctions</b>, <b>📊 Résultats</b>.',
         help_h_prog: 'Programme',
-        help_p_prog_html: 'Affiche toutes les courses de l\'événement. Les courses contenant au moins un de vos skateurs sont <b>surlignées en jaune</b> avec une bande de leurs numéros de départ à droite. Appuyez sur une course pour voir la liste de départ complète — vos skateurs y sont à nouveau surlignés en jaune.',
+        help_p_prog_html: 'Affiche toutes les courses de l\'événement. Les courses contenant au moins un de vos skateurs sont <b>surlignées en jaune</b> avec une bande de leurs numéros de départ à droite. Appuyez sur une course pour voir la liste de départ complète — vos skateurs y sont à nouveau surlignés en jaune. Filtre par distance en haut; utilise la barre en dessous pour replier ou déplier les groupes dans cette distance.',
         help_h_sanc: 'Sanctions',
         help_p_sanc1: 'Pour chaque skateur de votre liste une carte avec:',
         help_p_sanc_lijst_html: '<li><b>Badge de statut</b> (Confirmé / Non enregistré / Retiré / …)</li><li>Toutes les <b>sanctions</b> enregistrées en heats (W1, W2, FS, DQ-SF, DNF, …)</li>',
@@ -4372,6 +4378,8 @@ const T = {
         nieuw_v100_4_html: '<b>Temps brut</b> visible à côté du temps net — marqué ✋ (correction manuelle) ou 📷 (correction photo-finish). Ainsi, les tableaux de séries montrent exactement quand une correction a été appliquée au temps de l\'horloge.',
         nieuw_v100_11_html: '<b>Classement par catégorie</b> dans l\'onglet Résultats — pour les courses combinées (par ex. HJA + HSA ensemble) une colonne distincte par catégorie apparaît à côté du rang général, ce qui rend la place obtenue dans la propre catégorie visible d\'un coup d\'œil.',
         nieuw_v100_9_html: '<b>Petites améliorations</b> pour l\'affichage sur écrans étroits et pour la navigation — dont des boutons de filtre qui tiennent à nouveau dans la fenêtre d\'ouverture.',
+        nieuw_v100_13_html: '<b>Filtre par distance</b> dans le programme — choisis une seule distance (par ex. 500m) et replie ou déplie les groupes à l\'intérieur. Pratique quand tu ne suis qu\'une distance.',
+        nieuw_v100_14_html: '<b>Petites améliorations et corrections</b> dans l\'affichage du programme.',
         mock_venster_titel: 'Course & skateurs',
         mock_kies_w: 'Choisis ta course',
         mock_kies_rijders: 'Ajoute des skateurs à ta liste de coach',
@@ -6693,7 +6701,7 @@ function toonHelp() {
             <h3>${t('help_h_prog')}</h3>
             <p>${t('help_p_prog_html')}</p>
 
-            <!-- Mockup: programma met inklap-balk + heat-rijen -->
+            <!-- Mockup: programma met filter-strook + inklap-balk + heat-rijen -->
             <div class="mock">
                 <div class="mock-tabs">
                     <div class="mock-tab active">${t('tab_programma')}</div>
@@ -6701,6 +6709,11 @@ function toonHelp() {
                     <div class="mock-tab">${t('tab_sancties')}</div>
                     <div class="mock-tab">${t('tab_rondes')}</div>
                     <div class="mock-tab">${t('tab_uitslagen')}</div>
+                </div>
+                <div style="background:#fff;border-top:1px solid #b3cae6;border-bottom:1px solid #b3cae6">
+                    <div style="padding:5px 10px;font-size:.65rem;font-weight:600;color:#1a3a5c;border-bottom:1px solid #d5dee7;display:flex;align-items:center;gap:6px">
+                        <span>🏁</span><span style="flex:1">${t('prog_filter_alle_afstanden')}</span><span style="font-size:.55rem">▼</span>
+                    </div>
                 </div>
                 <div style="display:flex;gap:3px;padding:4px 6px;background:#eef2f6">
                     <span style="flex:1;text-align:center;font-size:.65rem;font-weight:700;padding:3px 0;border-radius:4px;border:1px solid var(--blauw);background:var(--blauw);color:#fff">▶ ${t('prog_klap_alles_uit')}</span>
@@ -6848,6 +6861,17 @@ function toonHelp() {
             <div class="changelog-versie">
                 <div class="changelog-kop">
                     <span class="changelog-vnr">${APP_VERSIE}</span>
+                    <span class="changelog-datum">2026-07-06</span>
+                </div>
+                <ul class="changelog-lijst">
+                    <li>${t('nieuw_v100_13_html')}</li>
+                    <li>${t('nieuw_v100_14_html')}</li>
+                </ul>
+            </div>
+
+            <div class="changelog-versie">
+                <div class="changelog-kop">
+                    <span class="changelog-vnr">H360.07.05</span>
                     <span class="changelog-datum">2026-07-05</span>
                 </div>
                 <ul class="changelog-lijst">
