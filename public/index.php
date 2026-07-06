@@ -5323,7 +5323,7 @@ function renderResultaat(data, snr, prog) {
                 // volgorde). Alles-uit/in/mijn opereert alleen binnen de
                 // gekozen dag+afstand, dus logisch dat filter erboven staat.
                 html += `<div class="prog-klap-balk" data-actief="in">
-                    <button type="button" class="prog-klap-btn" data-actie="uit"  onclick="klapProgPub(this,'uit')">▲ ${esc(t('prog_klap_alles_uit'))}</button>
+                    <button type="button" class="prog-klap-btn" data-actie="uit"  onclick="klapProgPub(this,'uit')">▶ ${esc(t('prog_klap_alles_uit'))}</button>
                     <button type="button" class="prog-klap-btn actief" data-actie="in"   onclick="klapProgPub(this,'in')">▼ ${esc(t('prog_klap_alles_in'))}</button>
                     <button type="button" class="prog-klap-btn" data-actie="mijn" onclick="klapProgPub(this,'mijn')">👤 ${esc(t('prog_klap_mijn'))}</button>
                 </div>`;
@@ -6526,7 +6526,7 @@ function toonHelp() {
                     <div class="mock-tab">${esc(t('tab_uitslagen').replace(/^[^\s]+\s*/, ''))}</div>
                 </div>
                 <div style="display:flex;gap:3px;padding:4px 6px;background:#eef2f6">
-                    <span style="flex:1;text-align:center;font-size:.65rem;font-weight:600;padding:3px 0;border-radius:4px;border:1px solid #cdd8e3;background:#fff;color:#555">▲ ${esc(t('prog_klap_alles_uit'))}</span>
+                    <span style="flex:1;text-align:center;font-size:.65rem;font-weight:600;padding:3px 0;border-radius:4px;border:1px solid #cdd8e3;background:#fff;color:#555">▶ ${esc(t('prog_klap_alles_uit'))}</span>
                     <span style="flex:1;text-align:center;font-size:.65rem;font-weight:700;padding:3px 0;border-radius:4px;border:1px solid var(--blauw);background:var(--blauw);color:#fff">▼ ${esc(t('prog_klap_alles_in'))}</span>
                     <span style="flex:1;text-align:center;font-size:.65rem;font-weight:600;padding:3px 0;border-radius:4px;border:1px solid #cdd8e3;background:#fff;color:#555">👤 ${esc(t('prog_klap_mijn'))}</span>
                 </div>
