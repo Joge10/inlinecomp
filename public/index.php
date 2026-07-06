@@ -6637,7 +6637,7 @@ function toonHelp() {
             <div class="changelog-versie">
                 <div class="changelog-kop">
                     <span class="changelog-vnr">${esc(APP_VERSIE)}</span>
-                    <span class="changelog-datum">2026-07-06</span>
+                    <span class="changelog-datum">06-07-2026</span>
                 </div>
                 <ul class="changelog-lijst">
                     <li>${t('nieuw_v100_13_html')}</li>
