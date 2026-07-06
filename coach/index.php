@@ -3358,9 +3358,11 @@ const T = {
         // ── Help modal ──
         help_titel: 'Hoe werkt de Coach-view?',
         help_h_start: 'Aan de slag',
-        help_stap1_html: 'Kies je <b>wedstrijd</b> bovenaan.',
-        help_stap2_html: 'Voeg rijders toe aan je coach-lijst op drie manieren: <ul style="margin:4px 0 4px 18px"><li><b>Op club</b> — selecteer een club en alle rijders daarvan komen in je lijst.</li><li><b>Op sponsor</b> — idem op sponsor-naam.</li><li><b>Op startnummer</b> — typ een getal en druk op Toevoegen (of Enter).</li></ul><b>Let op:</b> klik pas op <b>Klaar</b> als alle gewenste rijders in de geselecteerd-lijst staan — dat wordt vaak te vroeg gedaan.',
-        help_stap3_html: 'Bekijk de tabs: <b>📋 Programma</b>, <b>🏃 Heats</b>, <b>⚠️ Sancties</b>, <b>📈 Rondes</b>, <b>📊 Uitslagen</b>.',
+        help_stap1_html: 'Kies je <b>wedstrijd</b>.',
+        help_stap2_html: 'Kies je <b>rijders</b> via club, sponsor of startnummer, en klik op <b>Toevoegen</b>.',
+        help_stap3_html: 'Klik op <b>Klaar</b>.',
+        help_h_tabs: 'Tabs',
+        help_p_tabs_html: 'Na het zoeken zie je <b>5 tabs</b>:',
         help_h_prog: 'Programma',
         help_p_prog_html: 'Toont alle ritten van de wedstrijd. Ritten waar minstens één van jouw rijders in zit zijn <b>geel gemarkeerd</b> met een strip van hun startnummers aan de rechterkant. Tik een rit aan om de volledige startlijst te zien — jouw rijders zijn opnieuw geel gemarkeerd. Bovenaan filter je op afstand; met de balk daaronder klap je binnen die afstand groepen in of uit.',
         help_h_sanc: 'Sancties',
@@ -3689,9 +3691,11 @@ const T = {
         // ── Help modal ──
         help_titel: 'How does the Coach view work?',
         help_h_start: 'Getting started',
-        help_stap1_html: 'Choose your <b>race</b> at the top.',
-        help_stap2_html: 'Add skaters to your coach list in three ways: <ul style="margin:4px 0 4px 18px"><li><b>By club</b> — select a club and all its skaters appear in your list.</li><li><b>By sponsor</b> — same by sponsor name.</li><li><b>By start number</b> — type a number and press Add (or Enter).</li></ul><b>Note:</b> only click <b>Done</b> once all desired skaters are in the selected list — this is often done too early.',
-        help_stap3_html: 'Browse the tabs: <b>📋 Program</b>, <b>🏃 Heats</b>, <b>⚠️ Sanctions</b>, <b>📈 Rounds</b>, <b>📊 Results</b>.',
+        help_stap1_html: 'Choose your <b>race</b>.',
+        help_stap2_html: 'Choose your <b>skaters</b> by club, sponsor or start number, and click <b>Add</b>.',
+        help_stap3_html: 'Click <b>Done</b>.',
+        help_h_tabs: 'Tabs',
+        help_p_tabs_html: 'After searching you see <b>5 tabs</b>:',
         help_h_prog: 'Program',
         help_p_prog_html: 'Shows all races of the meet. Races containing at least one of your skaters are <b>highlighted in yellow</b> with a strip of their start numbers on the right. Tap a race to view the full start list — your skaters are again highlighted in yellow. Filter by distance at the top; use the bar below to collapse or expand groups within that distance.',
         help_h_sanc: 'Sanctions',
@@ -4015,9 +4019,11 @@ const T = {
         // ── Help modal ──
         help_titel: 'Wie funktioniert die Coach-Ansicht?',
         help_h_start: 'Erste Schritte',
-        help_stap1_html: 'Wähle dein <b>Rennen</b> oben.',
-        help_stap2_html: 'Skater auf drei Arten zu deiner Coach-Liste hinzufügen: <ul style="margin:4px 0 4px 18px"><li><b>Nach Verein</b> — wähle einen Verein und alle dessen Skater erscheinen in deiner Liste.</li><li><b>Nach Sponsor</b> — gleiches nach Sponsorname.</li><li><b>Nach Startnummer</b> — gib eine Nummer ein und drücke Hinzufügen (oder Enter).</li></ul><b>Achtung:</b> klicke erst auf <b>Fertig</b>, wenn alle gewünschten Läufer in der Auswahlliste stehen — das wird oft zu früh gemacht.',
-        help_stap3_html: 'Durchstöbere die Tabs: <b>📋 Programm</b>, <b>🏃 Heats</b>, <b>⚠️ Strafen</b>, <b>📈 Runden</b>, <b>📊 Ergebnisse</b>.',
+        help_stap1_html: 'Wähle dein <b>Rennen</b>.',
+        help_stap2_html: 'Wähle deine <b>Skater</b> per Verein, Sponsor oder Startnummer und klicke auf <b>Hinzufügen</b>.',
+        help_stap3_html: 'Klicke auf <b>Fertig</b>.',
+        help_h_tabs: 'Tabs',
+        help_p_tabs_html: 'Nach dem Suchen siehst du <b>5 Tabs</b>:',
         help_h_prog: 'Programm',
         help_p_prog_html: 'Zeigt alle Rennen der Veranstaltung. Rennen mit mindestens einem deiner Skater sind <b>gelb markiert</b> mit einem Streifen ihrer Startnummern rechts. Tippe auf ein Rennen für die vollständige Startliste — deine Skater sind dort wieder gelb markiert. Oben kannst du nach Distanz filtern; mit der Leiste darunter klappst du Gruppen innerhalb dieser Distanz ein oder aus.',
         help_h_sanc: 'Strafen',
@@ -4340,9 +4346,11 @@ const T = {
         // ── Help modal ──
         help_titel: 'Comment fonctionne la vue Coach?',
         help_h_start: 'Pour commencer',
-        help_stap1_html: 'Choisissez votre <b>course</b> en haut.',
-        help_stap2_html: 'Ajoutez des skateurs à votre liste de coach de trois manières : <ul style="margin:4px 0 4px 18px"><li><b>Par club</b> — sélectionnez un club et tous ses skateurs apparaissent dans votre liste.</li><li><b>Par sponsor</b> — pareil par nom de sponsor.</li><li><b>Par numéro de départ</b> — tapez un numéro et appuyez sur Ajouter (ou Entrée).</li></ul><b>Attention :</b> ne cliquez sur <b>Terminer</b> qu\'une fois tous les skateurs souhaités dans la liste sélectionnée — cela se fait souvent trop tôt.',
-        help_stap3_html: 'Parcourez les onglets: <b>📋 Programme</b>, <b>🏃 Heats</b>, <b>⚠️ Sanctions</b>, <b>📈 Rondes</b>, <b>📊 Résultats</b>.',
+        help_stap1_html: 'Choisis ta <b>course</b>.',
+        help_stap2_html: 'Choisis tes <b>skateurs</b> par club, sponsor ou numéro de dossard, et clique sur <b>Ajouter</b>.',
+        help_stap3_html: 'Clique sur <b>Terminer</b>.',
+        help_h_tabs: 'Onglets',
+        help_p_tabs_html: 'Après la recherche tu vois <b>5 onglets</b> :',
         help_h_prog: 'Programme',
         help_p_prog_html: 'Affiche toutes les courses de l\'événement. Les courses contenant au moins un de vos skateurs sont <b>surlignées en jaune</b> avec une bande de leurs numéros de départ à droite. Appuyez sur une course pour voir la liste de départ complète — vos skateurs y sont à nouveau surlignés en jaune. Filtre par distance en haut; utilise la barre en dessous pour replier ou déplier les groupes dans cette distance.',
         help_h_sanc: 'Sanctions',
@@ -6697,6 +6705,9 @@ function toonHelp() {
 
             <div class="help-stap"><span class="help-stap-nr">3</span>
                 <span>${t('help_stap3_html')}</span></div>
+
+            <h3>${t('help_h_tabs')}</h3>
+            <p>${t('help_p_tabs_html')}</p>
 
             <h3>${t('help_h_prog')}</h3>
             <p>${t('help_p_prog_html')}</p>
