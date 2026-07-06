@@ -4760,6 +4760,19 @@ let _progAlleKeysPub = [];
 const _progGroepenMetMijnPub = new Set();
 let _progEersteRenderPub = true;
 
+// Programma-UI-state per rijder — bij wisselen van kind-tab willen we
+// dat elke rijder z'n eigen selectie (dag/afstand/klap/open groepen)
+// onthoudt. Bij eerste bezoek van een nieuwe rijder proberen we de state
+// van de vorige rijder over te nemen; als de bewaarde afstand niet in de
+// nieuwe data voorkomt valt _restoreProgUiStatePub automatisch terug op
+// "alle" (want de pill-lookup returnt null en de kiesProgFilter-call
+// wordt geskipt). Keyed op license_key voor stabiliteit tussen sessies.
+const _progUiStatePerKind = new Map();
+let _pendingProgRestore = null;
+function _kindKey(k) {
+    return k?.data?.[k.kozen_idx ?? 0]?.persoon?.license_key || `snr:${k?.snr || ''}`;
+}
+
 // Snapshot / restore van de programma-tab UI-state rond een re-render.
 // renderKinderen() bouwt de rijder-tab-HTML opnieuw én reset de klap-state
 // naar default-collapsed. Bij auto-refresh (stilleRefresh) willen we die
@@ -5069,6 +5082,14 @@ function renderKinderen() {
     const subset = [k.data[k.kozen_idx ?? 0]];
     renderResultaat(subset, k.snr, k.prog);
 
+    // Programma-UI-state herstellen: eigen state bij terugkeer naar deze
+    // rijder, of de state van de vorige rijder als "poging" bij eerste
+    // bezoek. Gezet door wisselKind() vóór renderKinderen().
+    if (_pendingProgRestore) {
+        _restoreProgUiStatePub(_pendingProgRestore);
+        _pendingProgRestore = null;
+    }
+
     // Onthouden sub-tab herstellen (als niet 'programma')
     if (k.sub_tab && k.sub_tab !== 'programma') {
         const subBtn = document.querySelector(`#kind-content .tab-btn[data-tab="${k.sub_tab}"]`);
@@ -5106,12 +5127,22 @@ function wisselKind(idx) {
     if (idx < 0 || idx >= _kinderen.length) return;
     // Huidige sub-tab + dropdown-keuzes onthouden voordat we wisselen
     _bewaarKindUistate();
+    // Programma-UI-state van OUD-actieve kind snapshotten voor terugkeer.
+    const oudKey    = _kindKey(_kinderen[_activeKindIdx]);
+    const oudeStaat = _snapshotProgUiStatePub();
+    if (oudKey && oudeStaat) _progUiStatePerKind.set(oudKey, oudeStaat);
     _activeKindIdx = idx;
+    // Restore-doel voor renderKinderen(): eigen state van NIEUW-actieve
+    // kind als bekend, anders de state van oud-kind als "poging" (afstand
+    // die niet bij nieuw-kind past valt automatisch terug op alle).
+    _pendingProgRestore = _progUiStatePerKind.get(_kindKey(_kinderen[idx])) || oudeStaat;
     renderKinderen();
 }
 
 function verwijderKind(idx) {
     if (idx < 0 || idx >= _kinderen.length) return;
+    // Bewaarde programma-UI-state van weggehaalde kind opruimen.
+    _progUiStatePerKind.delete(_kindKey(_kinderen[idx]));
     _kinderen.splice(idx, 1);
     if (_activeKindIdx >= _kinderen.length) _activeKindIdx = Math.max(0, _kinderen.length - 1);
     _saveKids();
