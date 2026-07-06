@@ -2042,6 +2042,49 @@ if ($action === 'pending_link') {
         $moveHe->execute([$targetLic, $pendingLic]);
         $heVerhuisd = $moveHe->rowCount();
 
+        // ── uitslag_klassement. UNIQUE-key:
+        // (competition_id, distance_combination_id, split_group, person_license).
+        $delUkConflict = $pdo->prepare("
+            DELETE src
+            FROM uitslag_klassement src
+            JOIN uitslag_klassement tgt
+              ON tgt.competition_id          = src.competition_id
+             AND tgt.distance_combination_id = src.distance_combination_id
+             AND tgt.split_group             = src.split_group
+             AND tgt.person_license          = ?
+            WHERE src.person_license = ?
+        ");
+        $delUkConflict->execute([$targetLic, $pendingLic]);
+        $ukConflictDeleted = $delUkConflict->rowCount();
+
+        $moveUk = $pdo->prepare("
+            UPDATE uitslag_klassement
+            SET    person_license = ?
+            WHERE  person_license = ?
+        ");
+        $moveUk->execute([$targetLic, $pendingLic]);
+        $ukVerhuisd = $moveUk->rowCount();
+
+        // ── competition_startnummers. UNIQUE-key: (competition_id, person_license).
+        $delCsnConflict = $pdo->prepare("
+            DELETE src
+            FROM competition_startnummers src
+            JOIN competition_startnummers tgt
+              ON tgt.competition_id  = src.competition_id
+             AND tgt.person_license  = ?
+            WHERE src.person_license = ?
+        ");
+        $delCsnConflict->execute([$targetLic, $pendingLic]);
+        $csnConflictDeleted = $delCsnConflict->rowCount();
+
+        $moveCsn = $pdo->prepare("
+            UPDATE competition_startnummers
+            SET    person_license = ?
+            WHERE  person_license = ?
+        ");
+        $moveCsn->execute([$targetLic, $pendingLic]);
+        $csnVerhuisd = $moveCsn->rowCount();
+
         // ── transponders. UNIQUE-key is (competition_id, person_license, slot).
         $delTpConflict = $pdo->prepare("
             DELETE src
@@ -2087,6 +2130,10 @@ if ($action === 'pending_link') {
             'entries_conflict'    => $entriesConflictDeleted,
             'he_verhuisd'         => $heVerhuisd,
             'he_conflict'         => $heConflictDeleted,
+            'uk_verhuisd'         => $ukVerhuisd,
+            'uk_conflict'         => $ukConflictDeleted,
+            'csn_verhuisd'        => $csnVerhuisd,
+            'csn_conflict'        => $csnConflictDeleted,
             'tp_verhuisd'         => $tpVerhuisd,
             'tp_conflict'         => $tpConflictDeleted,
             'pending_naam'        => $pending['full_name'],
@@ -2187,6 +2234,36 @@ if ($action === 'pending_merge') {
         $moveHe->execute([$tgtLic, $srcLic]);
         $heVerhuisd = $moveHe->rowCount();
 
+        // ── uitslag_klassement (UNIQUE: competition_id, dc, split_group, person_license)
+        $delUkConflict = $pdo->prepare("
+            DELETE src FROM uitslag_klassement src
+            JOIN uitslag_klassement tgt
+              ON tgt.competition_id          = src.competition_id
+             AND tgt.distance_combination_id = src.distance_combination_id
+             AND tgt.split_group             = src.split_group
+             AND tgt.person_license          = ?
+            WHERE src.person_license = ?
+        ");
+        $delUkConflict->execute([$tgtLic, $srcLic]);
+        $ukConflictDeleted = $delUkConflict->rowCount();
+        $moveUk = $pdo->prepare("UPDATE uitslag_klassement SET person_license = ? WHERE person_license = ?");
+        $moveUk->execute([$tgtLic, $srcLic]);
+        $ukVerhuisd = $moveUk->rowCount();
+
+        // ── competition_startnummers (UNIQUE: competition_id, person_license)
+        $delCsnConflict = $pdo->prepare("
+            DELETE src FROM competition_startnummers src
+            JOIN competition_startnummers tgt
+              ON tgt.competition_id = src.competition_id
+             AND tgt.person_license = ?
+            WHERE src.person_license = ?
+        ");
+        $delCsnConflict->execute([$tgtLic, $srcLic]);
+        $csnConflictDeleted = $delCsnConflict->rowCount();
+        $moveCsn = $pdo->prepare("UPDATE competition_startnummers SET person_license = ? WHERE person_license = ?");
+        $moveCsn->execute([$tgtLic, $srcLic]);
+        $csnVerhuisd = $moveCsn->rowCount();
+
         // ── transponders (UNIQUE: competition_id, person_license, slot)
         $delTpConflict = $pdo->prepare("
             DELETE src FROM transponders src
@@ -2214,6 +2291,10 @@ if ($action === 'pending_merge') {
             'entries_conflict'  => $entriesConflictDeleted,
             'he_verhuisd'       => $heVerhuisd,
             'he_conflict'       => $heConflictDeleted,
+            'uk_verhuisd'       => $ukVerhuisd,
+            'uk_conflict'       => $ukConflictDeleted,
+            'csn_verhuisd'      => $csnVerhuisd,
+            'csn_conflict'      => $csnConflictDeleted,
             'tp_verhuisd'       => $tpVerhuisd,
             'tp_conflict'       => $tpConflictDeleted,
         ]);
@@ -2272,6 +2353,14 @@ if ($action === 'pending_delete') {
         $delHe->execute([$lic]);
         $heWeg = $delHe->rowCount();
 
+        $delUk = $pdo->prepare("DELETE FROM uitslag_klassement WHERE person_license = ?");
+        $delUk->execute([$lic]);
+        $ukWeg = $delUk->rowCount();
+
+        $delCsn = $pdo->prepare("DELETE FROM competition_startnummers WHERE person_license = ?");
+        $delCsn->execute([$lic]);
+        $csnWeg = $delCsn->rowCount();
+
         $delTp = $pdo->prepare("DELETE FROM transponders WHERE person_license = ?");
         $delTp->execute([$lic]);
         $tpWeg = $delTp->rowCount();
@@ -2290,6 +2379,8 @@ if ($action === 'pending_delete') {
             'uitslagen_verwijderd'    => $uaWeg,
             'entries_verwijderd'      => $entriesWeg,
             'heat_entries_verwijderd' => $heWeg,
+            'klassement_verwijderd'   => $ukWeg,
+            'startnrs_verwijderd'     => $csnWeg,
             'transponders_verwijderd' => $tpWeg,
             'person_verwijderd'       => $personWeg,
         ]);
