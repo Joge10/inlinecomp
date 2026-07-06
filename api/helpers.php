@@ -1752,6 +1752,9 @@ if ($action === 'pending_lijst') {
         // _naamNormalize (whitespace-collapse + leestekens strip). Geen fuzzy
         // om noise à la 'Henk van der Gugten' ≈ 'Udo van der Wier' te
         // vermijden. Cat idem case-insensitive.
+        // Skip synthetische anoniem-keys ({snr}_{cat}_Anoniem uit vergelijk.php
+        // buildLicenseKey()) — die matchen elkaar allemaal op naam '[Anoniem]'
+        // + cat en zouden anders enorme foute groepen vormen zonder actie-waarde.
         $_allStmt = $pdo->query("
             SELECT license_key, full_name, category, birth_year, club_short,
                    pending_source, extern
@@ -1759,6 +1762,8 @@ if ($action === 'pending_lijst') {
             WHERE anonymized_at IS NULL
               AND full_name IS NOT NULL AND full_name <> ''
               AND category  IS NOT NULL AND category  <> ''
+              AND license_key NOT LIKE '%\\_Anoniem' ESCAPE '\\\\'
+              AND full_name  NOT LIKE '[Anoniem]%'
         ");
         $_alle = $_allStmt->fetchAll(PDO::FETCH_ASSOC);
         $_groepen = [];
