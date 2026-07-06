@@ -6751,11 +6751,11 @@ function toonHelp() {
                     <div class="mock-tab">${t('tab_uitslagen')}</div>
                 </div>
                 <div class="mock-body" style="padding:6px 8px">
-                    <!-- Rijder-blok 1: Mees (voorbeeld met meerdere DC's) -->
+                    <!-- Rijder-blok 1: Emma (voorbeeld met meerdere DC's) -->
                     <div style="border:1px solid #dde3ea;border-radius:6px;padding:6px 8px;margin-bottom:6px;background:#fff">
                         <div style="display:flex;align-items:center;gap:6px;font-size:.75rem;font-weight:700">
-                            <span>38</span>
-                            <span style="flex:1">Mees v.d. Leij</span>
+                            <span>86</span>
+                            <span style="flex:1">Emma V.</span>
                             <span style="color:#888;font-size:.62rem">HP1</span>
                         </div>
                         <!-- Samenvat: één rij per afstand met status -->
@@ -6794,8 +6794,8 @@ function toonHelp() {
                     <!-- Rijder-blok 2: tweede rijder met "Bev. bij org." status -->
                     <div style="border:1px solid #dde3ea;border-radius:6px;padding:6px 8px;background:#fff">
                         <div style="display:flex;align-items:center;gap:6px;font-size:.75rem;font-weight:700">
-                            <span>40</span>
-                            <span style="flex:1">Hidde v.d. Leij</span>
+                            <span>34</span>
+                            <span style="flex:1">Tim B.</span>
                             <span style="color:#888;font-size:.62rem">HJB</span>
                         </div>
                         <div style="display:flex;justify-content:space-between;font-size:.62rem;padding:2px 0"><span>200m DTT Series + A-Final</span><span style="background:#d1ecf1;color:#0c5460;padding:1px 5px;border-radius:3px;font-weight:600">${t('mock_status_bev_org')}</span></div>
