@@ -3234,8 +3234,8 @@ const T = {
         prog_samenvat_heat_n: '{n} heats',
         prog_filter_mijn: '👥 Mijn rijders',
         prog_filter_te_rijden: '⏳ Nog te rijden',
-        prog_klap_alles_uit:  'Alles uit',
-        prog_klap_alles_in:   'Alles in',
+        prog_klap_alles_uit:  'Inklappen',
+        prog_klap_alles_in:   'Uitklappen',
         prog_klap_mijn:       'Mijn rijders',
         prog_klap_mijn_tooltip: 'Aantal van jouw rijders in deze groep',
         prog_groep_status_klaar:  'Alle ritten in deze groep zijn verreden',
@@ -3563,8 +3563,8 @@ const T = {
         prog_samenvat_heat_n: '{n} heats',
         prog_filter_mijn: '👥 My skaters',
         prog_filter_te_rijden: '⏳ Upcoming',
-        prog_klap_alles_uit:  'Collapse all',
-        prog_klap_alles_in:   'Expand all',
+        prog_klap_alles_uit:  'Collapse',
+        prog_klap_alles_in:   'Expand',
         prog_klap_mijn:       'My skaters',
         prog_klap_mijn_tooltip: 'Number of your skaters in this group',
         prog_groep_status_klaar:  'All races in this group have been raced',
@@ -3887,8 +3887,8 @@ const T = {
         prog_samenvat_heat_n: '{n} Heats',
         prog_filter_mijn: '👥 Meine Sportler',
         prog_filter_te_rijden: '⏳ Kommende',
-        prog_klap_alles_uit:  'Alle zu',
-        prog_klap_alles_in:   'Alle auf',
+        prog_klap_alles_uit:  'Einklappen',
+        prog_klap_alles_in:   'Ausklappen',
         prog_klap_mijn:       'Meine Sportler',
         prog_klap_mijn_tooltip: 'Anzahl deiner Sportler in dieser Gruppe',
         prog_groep_status_klaar:  'Alle Rennen dieser Gruppe wurden gefahren',
@@ -4209,8 +4209,8 @@ const T = {
         prog_samenvat_heat_1: '1 série',
         prog_samenvat_heat_n: '{n} séries',
         prog_filter_mijn: '👥 Mes coureurs',
-        prog_klap_alles_uit:  'Tout fermer',
-        prog_klap_alles_in:   'Tout ouvrir',
+        prog_klap_alles_uit:  'Réduire',
+        prog_klap_alles_in:   'Développer',
         prog_klap_mijn:       'Mes coureurs',
         prog_klap_mijn_tooltip: 'Nombre de tes coureurs dans ce groupe',
         prog_groep_status_klaar:  'Toutes les courses de ce groupe sont terminées',
@@ -5289,8 +5289,8 @@ function renderProgramma() {
     // Drie inklap-knoppen: Alles uit / Alles in / Mijn rijders.
     // Standaard-state = alles ingeklapt, dus "Alles in" is de actieve knop.
     html += `<div class="prog-klap-balk" data-actief="in">
-        <button type="button" class="prog-klap-btn" data-actie="uit" onclick="klapProg('uit', this)">▼ ${esc(t('prog_klap_alles_uit'))}</button>
-        <button type="button" class="prog-klap-btn actief" data-actie="in" onclick="klapProg('in', this)">▶ ${esc(t('prog_klap_alles_in'))}</button>
+        <button type="button" class="prog-klap-btn" data-actie="uit" onclick="klapProg('uit', this)">▲ ${esc(t('prog_klap_alles_uit'))}</button>
+        <button type="button" class="prog-klap-btn actief" data-actie="in" onclick="klapProg('in', this)">▼ ${esc(t('prog_klap_alles_in'))}</button>
         <button type="button" class="prog-klap-btn" data-actie="mijn" onclick="klapProg('mijn', this)">👤 ${esc(t('prog_klap_mijn'))}</button>
     </div>`;
 
@@ -6703,8 +6703,8 @@ function toonHelp() {
                     <div class="mock-tab">${t('tab_uitslagen')}</div>
                 </div>
                 <div style="display:flex;gap:3px;padding:4px 6px;background:#eef2f6">
-                    <span style="flex:1;text-align:center;font-size:.65rem;font-weight:600;padding:3px 0;border-radius:4px;border:1px solid #cdd8e3;background:#fff;color:#555">▼ ${t('prog_klap_alles_uit')}</span>
-                    <span style="flex:1;text-align:center;font-size:.65rem;font-weight:700;padding:3px 0;border-radius:4px;border:1px solid var(--blauw);background:var(--blauw);color:#fff">▶ ${t('prog_klap_alles_in')}</span>
+                    <span style="flex:1;text-align:center;font-size:.65rem;font-weight:600;padding:3px 0;border-radius:4px;border:1px solid #cdd8e3;background:#fff;color:#555">▲ ${t('prog_klap_alles_uit')}</span>
+                    <span style="flex:1;text-align:center;font-size:.65rem;font-weight:700;padding:3px 0;border-radius:4px;border:1px solid var(--blauw);background:var(--blauw);color:#fff">▼ ${t('prog_klap_alles_in')}</span>
                     <span style="flex:1;text-align:center;font-size:.65rem;font-weight:600;padding:3px 0;border-radius:4px;border:1px solid #cdd8e3;background:#fff;color:#555">👤 ${t('prog_klap_mijn')}</span>
                 </div>
                 <div class="mock-body" style="padding:4px 10px">

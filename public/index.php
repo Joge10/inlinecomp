@@ -3043,8 +3043,8 @@ const T = {
         // Programma-filter pills (alleen-mijn / alleen-nog-te-rijden)
         prog_filter_mijn: '👤 Mijn ritten',
         prog_filter_te_rijden: '⏳ Nog te rijden',
-        prog_klap_alles_uit:  'Alles uit',
-        prog_klap_alles_in:   'Alles in',
+        prog_klap_alles_uit:  'Inklappen',
+        prog_klap_alles_in:   'Uitklappen',
         prog_klap_mijn:       'Mijn ritten',
         prog_klap_mijn_tooltip_pub: 'Jij zit in deze groep',
         prog_groep_status_klaar:  'Alle ritten in deze groep zijn verreden',
@@ -3260,8 +3260,8 @@ const T = {
         // Programma-filter pills (alleen-mijn / alleen-nog-te-rijden)
         prog_filter_mijn: '👤 My races',
         prog_filter_te_rijden: '⏳ Upcoming',
-        prog_klap_alles_uit:  'Collapse all',
-        prog_klap_alles_in:   'Expand all',
+        prog_klap_alles_uit:  'Collapse',
+        prog_klap_alles_in:   'Expand',
         prog_klap_mijn:       'My races',
         prog_klap_mijn_tooltip_pub: 'You are in this group',
         prog_groep_status_klaar:  'All races in this group have been raced',
@@ -3492,8 +3492,8 @@ const T = {
         // Programma-filter pills
         prog_filter_mijn: '👤 Meine Rennen',
         prog_filter_te_rijden: '⏳ Kommende',
-        prog_klap_alles_uit:  'Alle zu',
-        prog_klap_alles_in:   'Alle auf',
+        prog_klap_alles_uit:  'Einklappen',
+        prog_klap_alles_in:   'Ausklappen',
         prog_klap_mijn:       'Meine Rennen',
         prog_klap_mijn_tooltip_pub: 'Du bist in dieser Gruppe',
         prog_groep_status_klaar:  'Alle Rennen dieser Gruppe wurden gefahren',
@@ -3716,8 +3716,8 @@ const T = {
         // Programma-filter pills
         prog_filter_mijn: '👤 Mes courses',
         prog_filter_te_rijden: '⏳ À venir',
-        prog_klap_alles_uit:  'Tout fermer',
-        prog_klap_alles_in:   'Tout ouvrir',
+        prog_klap_alles_uit:  'Réduire',
+        prog_klap_alles_in:   'Développer',
         prog_klap_mijn:       'Mes courses',
         prog_klap_mijn_tooltip_pub: 'Tu es dans ce groupe',
         prog_groep_status_klaar:  'Toutes les courses de ce groupe sont terminées',
@@ -5323,8 +5323,8 @@ function renderResultaat(data, snr, prog) {
                 // volgorde). Alles-uit/in/mijn opereert alleen binnen de
                 // gekozen dag+afstand, dus logisch dat filter erboven staat.
                 html += `<div class="prog-klap-balk" data-actief="in">
-                    <button type="button" class="prog-klap-btn" data-actie="uit"  onclick="klapProgPub(this,'uit')">▼ ${esc(t('prog_klap_alles_uit'))}</button>
-                    <button type="button" class="prog-klap-btn actief" data-actie="in"   onclick="klapProgPub(this,'in')">▶ ${esc(t('prog_klap_alles_in'))}</button>
+                    <button type="button" class="prog-klap-btn" data-actie="uit"  onclick="klapProgPub(this,'uit')">▲ ${esc(t('prog_klap_alles_uit'))}</button>
+                    <button type="button" class="prog-klap-btn actief" data-actie="in"   onclick="klapProgPub(this,'in')">▼ ${esc(t('prog_klap_alles_in'))}</button>
                     <button type="button" class="prog-klap-btn" data-actie="mijn" onclick="klapProgPub(this,'mijn')">👤 ${esc(t('prog_klap_mijn'))}</button>
                 </div>`;
 
@@ -6526,8 +6526,8 @@ function toonHelp() {
                     <div class="mock-tab">${esc(t('tab_uitslagen').replace(/^[^\s]+\s*/, ''))}</div>
                 </div>
                 <div style="display:flex;gap:3px;padding:4px 6px;background:#eef2f6">
-                    <span style="flex:1;text-align:center;font-size:.65rem;font-weight:600;padding:3px 0;border-radius:4px;border:1px solid #cdd8e3;background:#fff;color:#555">▼ ${esc(t('prog_klap_alles_uit'))}</span>
-                    <span style="flex:1;text-align:center;font-size:.65rem;font-weight:700;padding:3px 0;border-radius:4px;border:1px solid var(--blauw);background:var(--blauw);color:#fff">▶ ${esc(t('prog_klap_alles_in'))}</span>
+                    <span style="flex:1;text-align:center;font-size:.65rem;font-weight:600;padding:3px 0;border-radius:4px;border:1px solid #cdd8e3;background:#fff;color:#555">▲ ${esc(t('prog_klap_alles_uit'))}</span>
+                    <span style="flex:1;text-align:center;font-size:.65rem;font-weight:700;padding:3px 0;border-radius:4px;border:1px solid var(--blauw);background:var(--blauw);color:#fff">▼ ${esc(t('prog_klap_alles_in'))}</span>
                     <span style="flex:1;text-align:center;font-size:.65rem;font-weight:600;padding:3px 0;border-radius:4px;border:1px solid #cdd8e3;background:#fff;color:#555">👤 ${esc(t('prog_klap_mijn'))}</span>
                 </div>
                 <div class="mock-body" style="padding:4px 10px">
