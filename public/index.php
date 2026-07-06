@@ -2919,7 +2919,7 @@ if (is_readable($i18nPath)) {
 // Bij bump: bereken nieuwe uren-count sinds 2026-06-20, update datum, en
 // voeg een entry toe aan het "Wat is nieuw"-blok in toonHelp().
 // Versie verschijnt onder de copyright in de i-modal.
-const APP_VERSIE = 'H360.07.06';
+const APP_VERSIE = 'H360.06.07';
 
 // ── App-specifiek vertaal-woordenboek (NL + EN + DE + FR) ──────────────────
 // Toggle via vlag-knop in header. Persisteert in localStorage onder 'ic_lang'.
@@ -6647,7 +6647,7 @@ function toonHelp() {
 
             <div class="changelog-versie">
                 <div class="changelog-kop">
-                    <span class="changelog-vnr">H360.07.05</span>
+                    <span class="changelog-vnr">H360.05.07</span>
                     <span class="changelog-datum">2026-07-05</span>
                 </div>
                 <ul class="changelog-lijst">
