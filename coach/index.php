@@ -4504,7 +4504,7 @@ function _snapshotProgUiState() {
 
 function _restoreProgUiState(state) {
     if (!state) return;
-    const tab = document.querySelector('.tab-content[data-tab="programma"]');
+    const tab = document.getElementById('programma');
     if (!tab) return;
     const strook = tab.querySelector('.prog-filter-strook');
     // Filter herstellen via de bestaande handler — die triggert
