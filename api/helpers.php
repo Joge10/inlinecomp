@@ -2021,6 +2021,27 @@ if ($action === 'pending_link') {
         $moveEntries->execute([$targetLic, $pendingLic]);
         $entriesVerhuisd = $moveEntries->rowCount();
 
+        // ── heat_entries. UNIQUE-key is (heat_id, person_license) —
+        // dedupe voor UPDATE zoals bij entries hierboven.
+        $delHeConflict = $pdo->prepare("
+            DELETE src
+            FROM heat_entries src
+            JOIN heat_entries tgt
+              ON tgt.heat_id        = src.heat_id
+             AND tgt.person_license = ?
+            WHERE src.person_license = ?
+        ");
+        $delHeConflict->execute([$targetLic, $pendingLic]);
+        $heConflictDeleted = $delHeConflict->rowCount();
+
+        $moveHe = $pdo->prepare("
+            UPDATE heat_entries
+            SET    person_license = ?
+            WHERE  person_license = ?
+        ");
+        $moveHe->execute([$targetLic, $pendingLic]);
+        $heVerhuisd = $moveHe->rowCount();
+
         // ── transponders. UNIQUE-key is (competition_id, person_license, slot).
         $delTpConflict = $pdo->prepare("
             DELETE src
@@ -2064,6 +2085,8 @@ if ($action === 'pending_link') {
             'conflict_skip'       => $conflictDeleted,
             'entries_verhuisd'    => $entriesVerhuisd,
             'entries_conflict'    => $entriesConflictDeleted,
+            'he_verhuisd'         => $heVerhuisd,
+            'he_conflict'         => $heConflictDeleted,
             'tp_verhuisd'         => $tpVerhuisd,
             'tp_conflict'         => $tpConflictDeleted,
             'pending_naam'        => $pending['full_name'],
