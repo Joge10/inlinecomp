@@ -4485,7 +4485,7 @@ let _progEersteRender = true;
 // _progIngeklapt-set niet meer matcht (bv. bij nieuwe/gewijzigde keys).
 // Rond herlaadProgramma() dus: eerst snapshot, na render restore.
 function _snapshotProgUiState() {
-    const tab = document.querySelector('.tab-content[data-tab="programma"]');
+    const tab = document.getElementById('programma');
     if (!tab) return null;
     const strook = tab.querySelector('.prog-filter-strook');
     const balk   = tab.querySelector('.prog-klap-balk');
