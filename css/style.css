@@ -5875,6 +5875,7 @@ col.live-col-rondes  { width: 40px; }
 }
 .hp-pending-type-pending { background: #e3e9f0; color: #1F4E79; }
 .hp-pending-type-extern  { background: #fde7d6; color: #8a4500; }
+.hp-pending-type-zelfde  { background: #f0e5f7; color: #5e2a7a; }
 .hp-pending-sugg-icoon   { margin-right: .25rem; font-size: .9em; }
 .hp-pending-cat {
     background: #1F4E79; color: #fff;

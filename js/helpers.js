@@ -2403,7 +2403,9 @@ function _hpPendingRender() {
         // duplicaten tussen de twee categorieën kan opmerken — bv. een CSV-
         // import die per ongeluk een nieuwe externe maakte terwijl er al een
         // pending bestond met dezelfde naam.
-        const typeBadge = p.is_extern
+        const typeBadge = p.match_reden === 'zelfde_naam_cat'
+            ? '<span class="hp-pending-type hp-pending-type-zelfde" title="Naamgenoot van een echte KNSB-licentie in de DB (waarschijnlijk dagvergunning of dubbele import)">🔀 naamgenoot</span>'
+            : p.is_extern
             ? '<span class="hp-pending-type hp-pending-type-extern" title="Externe rijder uit CSV-import">🌍 extern</span>'
             : '<span class="hp-pending-type hp-pending-type-pending" title="Pending uit uitslag-historie">📜 pending</span>';
 

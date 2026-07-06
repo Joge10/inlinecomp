@@ -1738,6 +1738,117 @@ if ($action === 'pending_lijst') {
         }
         unset($p);
 
+        // ── Zelfde-naam-cat detectie ──────────────────────────────────────
+        // Personen die zichzelf geen historie/extern zijn maar wél een naam-
+        // genoot in de DB hebben met exact dezelfde (genormaliseerde naam,
+        // cat) — klassiek geval: rijder heeft echte KNSB-licentie én een of
+        // meer dagvergunning-licenties (60xxxxxx). De feed importeert die als
+        // reguliere personen; deze helper zag ze niet omdat pending_source
+        // NULL is en extern=0. Nu wel: als er een echte KNSB in dezelfde
+        // groep zit, verschijnt de dagvergunning-rij hier met die KNSB als
+        // één-klik-koppel-suggestie.
+        //
+        // Match-regel per user 2026-07-06: exact match case-insensitive na
+        // _naamNormalize (whitespace-collapse + leestekens strip). Geen fuzzy
+        // om noise à la 'Henk van der Gugten' ≈ 'Udo van der Wier' te
+        // vermijden. Cat idem case-insensitive.
+        $_allStmt = $pdo->query("
+            SELECT license_key, full_name, category, birth_year, club_short,
+                   pending_source, extern
+            FROM persons
+            WHERE anonymized_at IS NULL
+              AND full_name IS NOT NULL AND full_name <> ''
+              AND category  IS NOT NULL AND category  <> ''
+        ");
+        $_alle = $_allStmt->fetchAll(PDO::FETCH_ASSOC);
+        $_groepen = [];
+        foreach ($_alle as $_r) {
+            $_key = _naamNormalize($_r['full_name']) . '|' . mb_strtolower(trim($_r['category']));
+            $_groepen[$_key][] = $_r;
+        }
+
+        $_bestaandeLics = array_flip(array_column($pendings, 'license_key'));
+        $_nieuweRijen   = [];
+        $_detailStmt = $pdo->prepare("
+            SELECT p.license_key, p.full_name, p.category, p.birth_year, p.club_short,
+                   p.pending_source, p.extern, p.created_at,
+                   (SELECT COUNT(*) FROM uitslag_afstand ua
+                    WHERE ua.person_license = p.license_key) AS aantal_uitslagen,
+                   (SELECT YEAR(MIN(ua.competition_datum)) FROM uitslag_afstand ua
+                    WHERE ua.person_license = p.license_key
+                      AND ua.competition_datum IS NOT NULL) AS pdf_jaar,
+                   (SELECT COUNT(*) FROM entries e
+                    WHERE e.person_license = p.license_key) AS aantal_entries,
+                   (SELECT COUNT(*) FROM transponders t
+                    WHERE t.person_license = p.license_key) AS aantal_transponders
+            FROM persons p WHERE p.license_key = ?
+        ");
+
+        foreach ($_groepen as $_leden) {
+            if (count($_leden) < 2) continue;
+            // Echte KNSB in de groep = suggestion-target. Meerdere → 1e alfabetisch.
+            $_knsb = array_values(array_filter($_leden, fn($x) =>
+                $x['pending_source'] === null && ((int)($x['extern'] ?? 0)) !== 1
+            ));
+            if (empty($_knsb)) continue;
+            usort($_knsb, fn($a, $b) => strcmp($a['full_name'], $b['full_name']));
+            $_target = $_knsb[0];
+            $_sugItem = [
+                'license_key' => $_target['license_key'],
+                'full_name'   => $_target['full_name'],
+                'birth_year'  => $_target['birth_year'] !== null ? (int)$_target['birth_year'] : null,
+                'category'    => $_target['category'],
+                'club_short'  => $_target['club_short'],
+                'score'       => 1.0,
+                'reden'       => '✓ zelfde naam + cat',
+                'is_pending'  => false,
+                'is_extern'   => false,
+            ];
+
+            foreach ($_leden as $_lid) {
+                if ($_lid['license_key'] === $_target['license_key']) continue;
+                $_isHist = $_lid['pending_source'] === 'historie';
+                $_isExt  = ((int)($_lid['extern'] ?? 0)) === 1;
+
+                if (isset($_bestaandeLics[$_lid['license_key']])) {
+                    // Bestaande pending/extern: KNSB toevoegen aan suggesties (dedup).
+                    foreach ($pendings as &$__p) {
+                        if ($__p['license_key'] !== $_lid['license_key']) continue;
+                        if (!isset($__p['suggesties'])) $__p['suggesties'] = [];
+                        $_al = false;
+                        foreach ($__p['suggesties'] as $__s) {
+                            if ($__s['license_key'] === $_target['license_key']) { $_al = true; break; }
+                        }
+                        if (!$_al) array_unshift($__p['suggesties'], $_sugItem);
+                        break;
+                    }
+                    unset($__p);
+                } elseif (!$_isHist && !$_isExt) {
+                    // Nieuwe rij (niet-historie, niet-extern maar wel naamgenoot van KNSB).
+                    $_detailStmt->execute([$_lid['license_key']]);
+                    $_detail = $_detailStmt->fetch(PDO::FETCH_ASSOC);
+                    if (!$_detail) continue;
+                    $_detail['birth_year']       = $_detail['birth_year'] !== null ? (int)$_detail['birth_year'] : null;
+                    $_detail['pdf_jaar']         = $_detail['pdf_jaar']   !== null ? (int)$_detail['pdf_jaar']   : null;
+                    $_detail['aantal_uitslagen'] = (int)$_detail['aantal_uitslagen'];
+                    $_detail['aantal_entries']   = (int)$_detail['aantal_entries'];
+                    $_detail['aantal_transponders'] = (int)$_detail['aantal_transponders'];
+                    $_detail['match_reden']      = 'zelfde_naam_cat';
+                    $_detail['dubbele_pendings'] = [];
+                    $_detail['suggesties']       = [$_sugItem];
+                    $_detail['cat_evolutie']     = '';
+                    $_detail['birth_label']      = $_detail['birth_year'] !== null ? (string)$_detail['birth_year'] : '?';
+                    $_nieuweRijen[] = $_detail;
+                    $_bestaandeLics[$_detail['license_key']] = true;
+                }
+            }
+        }
+
+        if (count($_nieuweRijen)) {
+            $pendings = array_merge($pendings, $_nieuweRijen);
+            usort($pendings, fn($a, $b) => strcmp(mb_strtolower($a['full_name']), mb_strtolower($b['full_name'])));
+        }
+
         echo json_encode(['pendings' => $pendings], JSON_UNESCAPED_UNICODE);
     } catch (Throwable $e) {
         http_response_code(500);
