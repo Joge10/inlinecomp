@@ -3127,7 +3127,7 @@ const T = {
         nieuw_v100_4_html: '<b>Bruto-tijd</b> zichtbaar naast de netto-tijd — herkenbaar aan ✋ (handmatige correctie) of 📷 (foto-finish correctie). Zo zie je in "Jouw resultaat" en in de heat-tabellen precies wanneer een correctie op de klokwaarde is toegepast.',
         nieuw_v100_11_html: '<b>Klassering per categorie</b> in de Uitslagen-tab — bij gecombineerde races (bv. HJA + HSA samen) verschijnt naast de overall rang een aparte kolom per categorie, zodat in één oogopslag zichtbaar is welke plek binnen de eigen categorie is behaald.',
         nieuw_v100_9_html: '<b>Kleine verbeteringen</b> voor de weergave op smalle schermen en de navigatie — waaronder filter-knoppen die weer binnen het openings-venster passen.',
-        nieuw_v100_13_html: '<b>Filter op afstand</b> in het programma — kies één afstand (bv. 500m) en klap daarbinnen groepen in of uit. Handig als je alleen één afstand wilt volgen.',
+        nieuw_v100_13_html: '<b>Filter op afstand + inklap-balk</b> in het programma — kies één afstand (bv. 500m) en gebruik de segment-knoppen <i>Inklappen / Uitklappen / Mijn</i> om binnen die afstand groepen dicht te klappen, allemaal open te zetten, of alleen je eigen ritten te tonen.',
         nieuw_v100_14_html: '<b>Kleine verbeteringen en bug-fixes</b> in de weergave van het programma.',
         // ── Help modal ──
         help_titel: 'Hoe werkt InlineComp?',
@@ -3353,7 +3353,7 @@ const T = {
         nieuw_v100_4_html: '<b>Raw time</b> visible next to the net time — marked with ✋ (manual correction) or 📷 (photo-finish correction). This way you see in "Your result" and the heat tables exactly when a correction was applied to the clock value.',
         nieuw_v100_11_html: '<b>Ranking per category</b> in the Results tab — for combined races (e.g. HJA + HSA together) a separate column per category appears next to the overall rank, so the position achieved within the own category is visible at a glance.',
         nieuw_v100_9_html: '<b>Small improvements</b> to the display on narrow screens and to navigation — including filter buttons that now fit within the opening window.',
-        nieuw_v100_13_html: '<b>Filter by distance</b> in the program — pick a single distance (e.g. 500m) and collapse or expand groups within it. Handy when you only want to follow one distance.',
+        nieuw_v100_13_html: '<b>Filter by distance + collapse bar</b> in the program — pick a single distance (e.g. 500m) and use the segment buttons <i>Collapse / Expand / Mine</i> to close groups within that distance, open them all, or show only your own races.',
         nieuw_v100_14_html: '<b>Small improvements and bug fixes</b> in the program view.',
         // ── Help modal ──
         help_titel: 'How does InlineComp work?',
@@ -3579,7 +3579,7 @@ const T = {
         nieuw_v100_4_html: '<b>Bruttozeit</b> sichtbar neben der Nettozeit — kenntlich an ✋ (Handkorrektur) oder 📷 (Fotofinish-Korrektur). So siehst du in "Dein Ergebnis" und in den Heat-Tabellen genau, wann eine Korrektur der Uhrzeit erfolgt ist.',
         nieuw_v100_11_html: '<b>Platzierung pro Kategorie</b> im Ergebnisse-Tab — bei kombinierten Rennen (z.B. HJA + HSA zusammen) erscheint neben dem Gesamtrang eine separate Spalte pro Kategorie, sodass die innerhalb der eigenen Kategorie erreichte Platzierung auf einen Blick sichtbar ist.',
         nieuw_v100_9_html: '<b>Kleine Verbesserungen</b> an der Darstellung auf schmalen Bildschirmen und der Navigation — u.a. Filter-Buttons, die wieder in das Startfenster passen.',
-        nieuw_v100_13_html: '<b>Distanz-Filter</b> im Programm — wähle eine Distanz (z.B. 500m) und klappe darin Gruppen ein oder aus. Praktisch, wenn du nur eine Distanz verfolgen möchtest.',
+        nieuw_v100_13_html: '<b>Distanz-Filter + Ein-/Ausklapp-Leiste</b> im Programm — wähle eine Distanz (z.B. 500m) und benutze die Segment-Buttons <i>Einklappen / Ausklappen / Meine</i>, um Gruppen innerhalb dieser Distanz zu schließen, alle zu öffnen oder nur deine eigenen Rennen zu zeigen.',
         nieuw_v100_14_html: '<b>Kleine Verbesserungen und Fehlerbehebungen</b> in der Programm-Ansicht.',
         // ── Help modal ──
         help_titel: 'Wie funktioniert InlineComp?',
@@ -3805,7 +3805,7 @@ const T = {
         nieuw_v100_4_html: '<b>Temps brut</b> visible à côté du temps net — marqué ✋ (correction manuelle) ou 📷 (correction photo-finish). Ainsi tu vois dans "Ton résultat" et les tableaux de séries exactement quand une correction a été appliquée au temps de l\'horloge.',
         nieuw_v100_11_html: '<b>Classement par catégorie</b> dans l\'onglet Résultats — pour les courses combinées (par ex. HJA + HSA ensemble) une colonne distincte par catégorie apparaît à côté du rang général, ce qui rend la place obtenue dans la propre catégorie visible d\'un coup d\'œil.',
         nieuw_v100_9_html: '<b>Petites améliorations</b> pour l\'affichage sur écrans étroits et pour la navigation — dont des boutons de filtre qui tiennent à nouveau dans la fenêtre d\'ouverture.',
-        nieuw_v100_13_html: '<b>Filtre par distance</b> dans le programme — choisis une seule distance (par ex. 500m) et replie ou déplie les groupes à l\'intérieur. Pratique quand tu ne suis qu\'une distance.',
+        nieuw_v100_13_html: '<b>Filtre par distance + barre pliage</b> dans le programme — choisis une distance (par ex. 500m) et utilise les boutons de segment <i>Réduire / Développer / Les miens</i> pour fermer les groupes dans cette distance, tous les ouvrir, ou n\'afficher que tes propres courses.',
         nieuw_v100_14_html: '<b>Petites améliorations et corrections</b> dans l\'affichage du programme.',
         // ── Help modal ──
         help_titel: 'Comment fonctionne InlineComp ?',
@@ -6643,7 +6643,6 @@ function toonHelp() {
                     <li>${t('nieuw_v100_13_html')}</li>
                     <li>${t('nieuw_v100_12_html')}</li>
                     <li>${t('nieuw_v100_7_html')}</li>
-                    <li>${t('nieuw_v100_8_html')}</li>
                     <li>${t('nieuw_v100_2_html')}</li>
                     <li>${t('nieuw_v100_4_html')}</li>
                     <li>${t('nieuw_v100_11_html')}</li>
