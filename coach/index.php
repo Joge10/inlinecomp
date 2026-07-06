@@ -6876,22 +6876,13 @@ function toonHelp() {
                 </div>
                 <ul class="changelog-lijst">
                     <li>${t('nieuw_v100_13_html')}</li>
-                    <li>${t('nieuw_v100_14_html')}</li>
-                </ul>
-            </div>
-
-            <div class="changelog-versie">
-                <div class="changelog-kop">
-                    <span class="changelog-vnr">H360.05.07</span>
-                    <span class="changelog-datum">2026-07-05</span>
-                </div>
-                <ul class="changelog-lijst">
                     <li>${t('nieuw_v100_7_html')}</li>
                     <li>${t('nieuw_v100_8_html')}</li>
                     <li>${t('nieuw_v100_2_html')}</li>
                     <li>${t('nieuw_v100_4_html')}</li>
                     <li>${t('nieuw_v100_11_html')}</li>
                     <li>${t('nieuw_v100_9_html')}</li>
+                    <li>${t('nieuw_v100_14_html')}</li>
                 </ul>
             </div>
         </div>
