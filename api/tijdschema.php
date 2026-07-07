@@ -329,11 +329,26 @@ function genereerRitten(PDO $pdo, int $tsId, string $compId, ?array $catVanJS = 
     $systeem = (string)$s->fetchColumn();
 
     // Afstand-configs (gedeelde Q/q + finale HG)
+    // Meerdere rijen per afstand mogelijk: de globale (dc_id IS NULL) bevat
+    // alle afstand-scope instellingen (heeft_kleine_finale, finale_heat_grootte,
+    // finale_b_grootte etc.); per-dc rijen (dc_id gevuld) worden door
+    // save_ranking aangemaakt en bevatten alleen zinvolle waardes in de
+    // ranking-velden — de andere velden staan daar op DB-defaults (0/NULL).
+    // Zonder voorkeur voor de globale rij wint zonder ORDER BY een toevallige
+    // rij en gaat b.v. heeft_kleine_finale=0 uit de per-dc rij de globale
+    // heeft_kleine_finale=1 overschrijven → geen B-finale meer.
     $s = $pdo->prepare("SELECT * FROM tijdschema_afstand_config WHERE tijdschema_id = ?");
     $s->execute([$tsId]);
     $configPerAfstand = [];
     foreach ($s->fetchAll(PDO::FETCH_ASSOC) as $cfg) {
-        $configPerAfstand[$cfg['afstand_naam']] = $cfg;
+        $key = $cfg['afstand_naam'];
+        $isGlobal = $cfg['dc_id'] === null;
+        // Globale rij wint altijd; anders eerste-inzet-blijft-staan (fallback
+        // als er alleen per-dc rijen bestaan — theoretisch niet mogelijk maar
+        // veilig als het toch voorkomt).
+        if ($isGlobal || !isset($configPerAfstand[$key])) {
+            $configPerAfstand[$key] = $cfg;
+        }
     }
 
     // Cat-configs (per categorie alle ronde-instellingen)
