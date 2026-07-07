@@ -3578,9 +3578,16 @@ function _bouwProgrammaExternInternal() {
         // Q/q-voetnoot — direct onder dit blok plaatsen als hier voor het eerst
         // Q-kwalificatie voorkomt. Daarna niet meer (eenmalig per programma).
         if (!_qqLegendaGetoond) {
+            // Kwart/halve renderen ALTIJD een tekst met Q- én q-letter
+            // ('{Q}Q/heat + {q}q → {d} rijders'), ook als Q per heat 0 is
+            // (dan is er alleen tijd-doorstroom). Voetnoot dus triggeren op
+            // '_door >= 1' (= er is überhaupt doorstroming) — niet op '_q_heat'
+            // want dat mist de veelvoorkomende '0Q + Nq'-situatie.
+            // Heats renderen 'top N op tijd' zonder Q/q-letter als heats_q_heat=0;
+            // daar blijft de q_heat-check correct.
             const veld = blok.ronde_type === 'heats'        ? 'heats_q_heat'
-                      : blok.ronde_type === 'kwartfinale'   ? 'kwart_q_heat'
-                      : blok.ronde_type === 'halve_finale'  ? 'half_q_heat'
+                      : blok.ronde_type === 'kwartfinale'   ? 'kwart_door'
+                      : blok.ronde_type === 'halve_finale'  ? 'half_door'
                       : null;
             if (veld) {
                 const heeftQHier = [...catMap.keys()].some(k => {
