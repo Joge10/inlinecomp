@@ -997,17 +997,48 @@ try {
         }
 
         if ($setValues) {
-            // Per (tijdschema_id, dc_id, afstand_naam) een eigen rij — upsert.
-            // Bestaande globale rij (dc_id IS NULL) blijft als fallback staan.
-            // MySQL's unique key UNIQUE(ts, dc_id, afstand_naam) triggered
-            // ON DUPLICATE KEY UPDATE zodra dezelfde combinatie terugkomt.
+            // Voor een per-dc rij (dc_id gevuld): kopieer eerst alle waardes
+            // van de globale rij (dc_id IS NULL) zodat de nieuwe rij niet met
+            // DB-defaults (heeft_kleine_finale=0, finale_heat_grootte=6, ...)
+            // wordt aangemaakt. Anders zou een lookup die per-dc rijen leest
+            // half-lege 0-waardes zien i.p.v. de user-instellingen — precies
+            // de bug die 'ineens geen B-finale meer' veroorzaakte.
+            // Bij globale save (dc_id NULL) is er geen bron om van te kopiëren;
+            // bestaande INSERT met defaults blijft dan van kracht.
+            $extraCols = [];
+            if ($dcId !== null) {
+                $glob = $pdo->prepare("
+                    SELECT q_direct, q_tijd, finale_heat_grootte, finale_b_grootte,
+                           laatste_b_grootste, finale_seeding, race_type,
+                           heats_ranking, kwart_ranking, half_ranking, finale_ranking,
+                           heeft_runner_up, heeft_kleine_finale,
+                           runner_up_max, runner_up_min
+                    FROM tijdschema_afstand_config
+                    WHERE tijdschema_id = ? AND dc_id IS NULL AND afstand_naam = ?
+                ");
+                $glob->execute([$tsId, $afstandNaam]);
+                $globRow = $glob->fetch(PDO::FETCH_ASSOC);
+                if ($globRow) {
+                    foreach ($globRow as $c => $v) {
+                        // ranking-overrides in $setValues winnen; overige velden
+                        // (heeft_kleine_finale etc.) erven van globaal.
+                        if (!array_key_exists($c, $setValues) && $v !== null) {
+                            $extraCols[$c] = $v;
+                        }
+                    }
+                }
+            }
+
             $cols = ['tijdschema_id', 'dc_id', 'afstand_naam'];
             $vals = [$tsId, $dcId, $afstandNaam];
-            foreach ($setValues as $col => $v) {
+            foreach ($setValues + $extraCols as $col => $v) {
                 $cols[] = $col;
                 $vals[] = $v;
             }
             $placeholders = implode(', ', array_fill(0, count($cols), '?'));
+            // ON DUPLICATE KEY UPDATE alleen op ranking-velden — anders zou
+            // een save_ranking eventuele wijzigingen die intussen via
+            // save_afstand op de per-dc rij zijn gedaan overschrijven.
             $updateClause = implode(', ',
                 array_map(fn($c) => "$c = VALUES($c)", array_keys($setValues)));
             $sql = "INSERT INTO tijdschema_afstand_config (" . implode(', ', $cols) . ")
