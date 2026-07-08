@@ -3374,7 +3374,34 @@ function _bouwProgrammaExternInternal() {
     // verwijst naar de Q/q-legenda onderaan het programma.
     const isFFschema = schema.systeem === 'full-final';
     const QM = '¹'; // voetnoot-marker (Unicode superscript-1)
-    const doorTxt = (rondeType, cc, nHeats, totRj) => {
+    // Kleine-finale-suffix bouwer voor internationaal-nieuw: als deze
+    // ronde de LAATSTE afvalronde vóór de A-finale is en de afstand
+    // heeft heeft_kleine_finale aan, voeg een tekst toe zoals
+    // ", 3 en 4 op tijd Kleine finale" achter " → Finale". Cap: kleine
+    // finale mag nooit meer rijders bevatten dan de A-finale (zie
+    // rationale in tijdschema.php / commit b166779).
+    const bouwKfBereik = (start, aantal) => {
+        if (aantal <= 0) return '';
+        if (aantal === 1) return `${start}`;
+        const nrs = [];
+        for (let i = 0; i < aantal; i++) nrs.push(start + i);
+        const conj = T('algemeen.en_conj');
+        return nrs.slice(0, -1).join(', ') + ` ${conj} ${nrs[nrs.length - 1]}`;
+    };
+    const kfSuffix = (cc, afCfg, doorstromers, totRj) => {
+        if (isFFschema) return '';
+        if (!afCfg || !Number(afCfg.heeft_kleine_finale)) return '';
+        if (doorstromers <= 0 || totRj <= 0) return '';
+        const kfRruw = Math.max(0, totRj - doorstromers);
+        const kfR    = Math.min(kfRruw, doorstromers);
+        if (kfR <= 0) return '';
+        const bereik = bouwKfBereik(doorstromers + 1, kfR);
+        return T('prog_extern.kf_suffix', {
+            bereik,
+            label: T('algemeen.kleine_finale'),
+        });
+    };
+    const doorTxt = (rondeType, cc, nHeats, totRj, afCfg) => {
         if (!cc) return '';
         const vR = volgendeRonde(rondeType, cc);
         const naar = vR ? ` → ${vR}` : '';
@@ -3405,21 +3432,31 @@ function _bouwProgrammaExternInternal() {
                         : T('prog_extern.ff_tijd_naar_a', { aFin, finaleDeel, bDeel });
                 }
                 const q = parseInt(cc.heats_q) || 0;
-                return T('prog_extern.top_n_op_tijd', { n: q }) + naar;
+                // Kleine-finale-suffix alleen als deze heats de LAATSTE
+                // afvalronde vóór A-finale is (geen kwart, geen halve).
+                const kfHeats = (!cc.heeft_kwartfinale && !cc.heeft_halve_finale)
+                    ? kfSuffix(cc, afCfg, q, totRj) : '';
+                return T('prog_extern.top_n_op_tijd', { n: q }) + naar + kfHeats;
             }
             case 'kwartfinale': {
                 const kD = parseInt(cc.kwart_door)   || 0;
                 const kQ = parseInt(cc.kwart_q_heat) || 0;
                 const kq = Math.max(0, kD - kQ * nHeats);
                 const m  = (kQ >= 1) ? QM : '';
-                return T('prog_extern.qheat_q_door', { Q: kQ, q: kq, m, d: kD }) + naar;
+                // Kleine-finale-suffix alleen als deze kwart de LAATSTE
+                // afvalronde vóór A-finale is (geen halve).
+                const kfKwart = (!cc.heeft_halve_finale)
+                    ? kfSuffix(cc, afCfg, kD, totRj) : '';
+                return T('prog_extern.qheat_q_door', { Q: kQ, q: kq, m, d: kD }) + naar + kfKwart;
             }
             case 'halve_finale': {
                 const hD = parseInt(cc.half_door)    || 0;
                 const hQ = parseInt(cc.half_q_heat)  || 0;
                 const hq = Math.max(0, hD - hQ * nHeats);
                 const m  = (hQ >= 1) ? QM : '';
-                return T('prog_extern.qheat_q_door', { Q: hQ, q: hq, m, d: hD }) + naar;
+                // Halve is per definitie de laatste afvalronde vóór A-finale.
+                const kfHalve = kfSuffix(cc, afCfg, hD, totRj);
+                return T('prog_extern.qheat_q_door', { Q: hQ, q: hq, m, d: hD }) + naar + kfHalve;
             }
             default: return '';
         }
@@ -3506,7 +3543,8 @@ function _bouwProgrammaExternInternal() {
                     T('prog_extern.finale_label_n', { lbl: esc(lbl), finale: T('algemeen.finale'), n })
                 ).join(' · ');
             } else {
-                const dt = doorTxt(blok.ronde_type, cc, nH, totRj);
+                const afCfg = vindAfstandConfig(schema, blok.afstand_naam);
+                const dt = doorTxt(blok.ronde_type, cc, nH, totRj, afCfg);
                 const heatsStr = T(nH > 1 ? 'algemeen.heats_n' : 'algemeen.heat_n', { n: nH });
                 const rijdersStr = T('algemeen.rijders_n', { n: totRj });
                 detail = `${rijdersStr}, ${heatsStr}${dt ? ' · ' + esc(dt) : ''}`;
