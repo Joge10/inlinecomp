@@ -1539,6 +1539,18 @@ if ($action === 'genereer_volgende_ronde') {
                         }
                     }
                 }
+
+                // Kleine finale (internationaal-nieuw) mag nooit meer rijders
+                // bevatten dan de A-finale. Cap NA de ex-aequo-shift zodat
+                // gelijke tijden aan de A-grens correct doorlopen. Overige
+                // 'verliezers' vallen af na de voorgaande ronde — dat matcht
+                // het reglement dat een halve finale vereist wanneer er meer
+                // afvallers zouden zijn dan finale-plaatsen. Alleen voor
+                // internationale kleine finale — full-final B-finales volgen
+                // finale_b_heats per cat.
+                if ($isKleinFinale && count($bSlots) > $aantalDoor) {
+                    $bSlots = array_slice($bSlots, 0, $aantalDoor);
+                }
             }
         }
 

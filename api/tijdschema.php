@@ -788,6 +788,18 @@ function genereerRitten(PDO $pdo, int $tsId, string $compId, ?array $catVanJS = 
                         $bRijders = $heeftKleineFinale
                                     ? max(0, $totaalInVorige - $aRijders)
                                     : 0;
+                        // Kleine finale (internationaal-nieuw) mag nooit meer
+                        // rijders bevatten dan de A-finale. Anders krijg je
+                        // scenarios waar het reglement wordt overgeslagen: bv.
+                        // 100m NK met 7 rijders na kwartfinale zou een halve
+                        // finale horen te hebben (4 snelste door → 2 in A,
+                        // rest in B); zonder deze cap belanden alle 5 verliezers
+                        // in de kleine finale terwijl er maar 2 in de A rijden.
+                        // Cap = A-finale-grootte; overige rijders vallen af na
+                        // de voorgaande ronde. Alleen voor internationaal-nieuw
+                        // kleine finale — full-final B-finales gebruiken
+                        // finale_b_heats per cat en volgen eigen logica.
+                        $bRijders = min($bRijders, $aRijders);
 
                         $catRitten = [];
 

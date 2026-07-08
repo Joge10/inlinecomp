@@ -1020,7 +1020,10 @@ function renderAfstandCalc(afstand, cfg, catConfigMap) {
                 } else if (hH) {
                     totaalInVorige = cat.n;
                 }
-                const kfR = heeftKF ? Math.max(0, totaalInVorige - finR) : 0;
+                // Kleine finale (internationaal-nieuw) mag nooit meer rijders
+                // bevatten dan de A-finale — zie tijdschema.php voor rationale.
+                const kfRruw = heeftKF ? Math.max(0, totaalInVorige - finR) : 0;
+                const kfR    = Math.min(kfRruw, finR);
                 if (kfR > 0) {
                     stappen.push(`A-finale: ${finR} + kleine finale: ${kfR}`);
                 } else {
