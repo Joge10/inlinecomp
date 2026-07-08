@@ -445,7 +445,18 @@ function bouwSlFlow(catCfg, systeem, afstandCfg = null) {
         // die niet naar A-finale gingen strijden om plek na A (100m sprint).
         // Volgorde in flow = tijdschema-volgorde: kleine finale wordt eerst
         // gereden, dan A-finale.
-        if (afstandCfg && Number(afstandCfg.heeft_kleine_finale) === 1) {
+        //
+        // Alleen relevant als deze cat een voorgaande ronde heeft — bij een
+        // cat die direct naar de A-finale gaat (bv. Mannen Kadetten met 1
+        // rijder) is er niks om af te laten vallen. Zonder deze check werd
+        // finale_b onterecht flow[0], stuurde 'Loten' ronde_type=finale_b
+        // naar de backend en belandde de rijder onder 'Kleine finale'.
+        const heeftVoorgaandeRonde =
+            (catCfg.heeft_heats && catCfg.heeft_heats !== '0')
+            || catCfg.heeft_kwartfinale
+            || catCfg.heeft_halve_finale;
+        if (afstandCfg && Number(afstandCfg.heeft_kleine_finale) === 1
+            && heeftVoorgaandeRonde) {
             flow.push({ sleutel: 'finale_b', naam: 'Kleine finale', kleur: KLEUREN.finale_b || '#20c997' });
         }
         flow.push({ sleutel: 'finale_a', naam: 'A-finale', kleur: KLEUREN.finale_a || '#198754' });
