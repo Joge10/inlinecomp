@@ -69,7 +69,6 @@ verwerken wij de volgende gegevens, zoals die door de KNSB via hun
 inschrijf-API aan ons worden verstrekt:</p>
 <ul>
     <li>Naam (volledige naam, eventueel roepnaam)</li>
-    <li>Geboortejaar (niet de volledige geboortedatum)</li>
     <li>Geslacht, KNSB-categorie</li>
     <li>KNSB-licentienummer / relatienummer</li>
     <li>Vereniging en verenigingscode</li>
@@ -79,7 +78,9 @@ inschrijf-API aan ons worden verstrekt:</p>
 <p>Daarnaast leggen wij per wedstrijd de sportieve resultaten vast (tijden,
 sancties, klassering). Deze zijn aan het licentienummer gekoppeld.</p>
 <p>Wij verwerken <strong>geen</strong> e-mailadressen, telefoonnummers,
-adressen of volledige geboortedata van rijders.</p>
+adressen of geboortedata van rijders. Waar leeftijdsindicatie nodig is
+(bijvoorbeeld voor cat-plausibiliteit in klassementen), leiden wij die
+af uit de KNSB-categorie.</p>
 
 <h2>2. Waarom verwerken wij deze gegevens?</h2>
 <ul>
@@ -227,7 +228,7 @@ ze zijn verzameld:</p>
     </p>
     <p>Wij reageren binnen vier weken op jouw verzoek. Om misbruik te voorkomen
         kunnen wij je vragen jouw identiteit aan te tonen (bijvoorbeeld via
-        jouw KNSB-licentienummer en geboortejaar).</p>
+        jouw KNSB-licentienummer).</p>
 </div>
 
 <h2>11. Wijzigingen in deze verklaring</h2>
@@ -261,7 +262,6 @@ process the following data, as supplied to us by the KNSB (Dutch skating
 federation) via their registration API:</p>
 <ul>
     <li>Name (full name, optionally nickname)</li>
-    <li>Year of birth (not the full date of birth)</li>
     <li>Gender, KNSB category</li>
     <li>KNSB licence/relation number</li>
     <li>Club name and code</li>
@@ -271,7 +271,9 @@ federation) via their registration API:</p>
 <p>In addition, for each competition we record sporting results (times,
 sanctions, ranking). These are linked to the licence number.</p>
 <p>We do <strong>not</strong> process e-mail addresses, phone numbers,
-home addresses or full dates of birth of skaters.</p>
+home addresses or dates of birth of skaters. Where an age indication is
+required (for example category plausibility in rankings), it is derived
+from the KNSB category.</p>
 
 <h2>2. Why do we process this data?</h2>
 <ul>
@@ -413,7 +415,7 @@ for which it was collected:</p>
     </p>
     <p>We respond to your request within four weeks. To prevent abuse we
         may ask you to prove your identity (for example via your KNSB
-        licence number and year of birth).</p>
+        licence number).</p>
 </div>
 
 <h2>11. Changes to this statement</h2>
