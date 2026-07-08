@@ -2706,10 +2706,14 @@ function berekenSchemaHeats(r, catCfg, totaalRijders, ritLookup = null, systeem 
             } else {
                 return null;
             }
-            const bRij = Math.max(0, totIn - aRij);
+            // Kleine finale-cap: nooit meer rijders dan de A-finale. Overige
+            // afvallers verlaten de wedstrijd na de voorgaande ronde. Zie
+            // rationale in tijdschema.php.
+            const bRijruw = Math.max(0, totIn - aRij);
+            const bRij    = Math.min(bRijruw, aRij);
             if (bRij <= 0) return null;
             const slots = [];
-            for (let i = aRij + 1; i <= totIn; i++) slots.push(`${i}e tijdsnelste`);
+            for (let i = aRij + 1; i <= aRij + bRij; i++) slots.push(`${i}e tijdsnelste`);
             return [{ nummer: 1, slots }];
         }
         default:
