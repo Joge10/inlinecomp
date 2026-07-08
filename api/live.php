@@ -1140,6 +1140,19 @@ if ($action === 'genereer_volgende_ronde') {
             $aantalDoor = (int)($cc['half_door'] ?? 0);
         }
 
+        // Cat gaat direct naar A-finale (geen heats/kwart/halve): dan is er
+        // niks om af te laten vallen naar de kleine finale. Iedereen naar A.
+        // Zonder deze check bleef $aantalDoor op 0 en belandden alle rijders
+        // in $bSlots (kleine finale) — bug bij bv Mannen Kadetten 100m NK
+        // met 1 rijder die direct naar A-finale hoort.
+        if ($isKleinFinale && $aantalDoor === 0
+            && empty($cc['heeft_heats'])
+            && empty($cc['heeft_kwartfinale'])
+            && empty($cc['heeft_halve_finale'])) {
+            $aantalDoor    = PHP_INT_MAX;
+            $isKleinFinale = false;
+        }
+
         // Voor full-final: A-finale krijgt max $finaleHg rijders; de rest gaat naar B-finales.
         // heats_q is voor full-final gelijk aan cat.n (iedereen), maar dat klopt niet voor A-finale.
         // Bij kleine finale (internationaal-nieuw): $aantalDoor is al correct
