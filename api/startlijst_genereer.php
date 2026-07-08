@@ -618,6 +618,22 @@ try {
         $rittenMap[(int)$r['heat_nr']] = $r;
     }
 
+    // Als er GEEN tijdschema-rit is voor de opgevraagde (dc's × ronde_type),
+    // dan hoort deze cat niet in deze ronde te lotten. Zonder deze check
+    // maakte de code een orphan heat aan met tijdschema_rit_id=NULL en
+    // heat_naam='Heat 1', die de UI vervolgens onder een verkeerde header
+    // toonde (bv. Mannen Kadetten 100m: alleen finale_a in tijdschema, maar
+    // UI stuurde ronde_type=finale_b → rijder belandde onder 'Kleine finale').
+    if (empty($rittenMap)) {
+        http_response_code(400);
+        echo json_encode([
+            'error' => "Geen tijdschema-rit gevonden voor ronde_type='$rondeType' "
+                     . "voor deze categorie. Controleer het tijdschema of kies "
+                     . "een ronde die wel bestaat voor deze cat."
+        ]);
+        exit;
+    }
+
     // ── Methode-label snapshot: mensleesbare beschrijving van de loting-
     // bron, opgeslagen per heat zodat het na refresh / vanuit andere browser
     // achterhaalbaar blijft (geen JOIN-lookups nodig in de leesweg). Wordt
