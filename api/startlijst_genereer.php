@@ -627,9 +627,11 @@ try {
     if (empty($rittenMap)) {
         http_response_code(400);
         echo json_encode([
-            'error' => "Geen tijdschema-rit gevonden voor ronde_type='$rondeType' "
-                     . "voor deze categorie. Controleer het tijdschema of kies "
-                     . "een ronde die wel bestaat voor deze cat."
+            'error' => "Interne fout: geen tijdschema-rit voor '$rondeType' "
+                     . "bij deze categorie. Ververs de pagina (Ctrl+F5); "
+                     . "blijft dit terugkomen dan is het tijdschema gewijzigd "
+                     . "sinds deze pagina laadde — 'Wis programma' en het "
+                     . "tijdschema opnieuw genereren lost het op."
         ]);
         exit;
     }
