@@ -456,7 +456,7 @@ ${filterTabs}
                 // Bij per-afstand-mode tonen we de distance_naam onder het
                 // F/#-label zodat de operator direct ziet welke afstand
                 // welke kolom is. Volle wedstrijd-naam blijft in tooltip.
-                const titel = `${rkEsc(w.naam)}${w.distance_naam ? ' · ' + rkEsc(w.distance_naam) : ''}${w.datum ? ' · ' + String(w.datum).substring(0,10) : ''}${w.is_finale ? ' · FINALE' : ''}`;
+                const titel = `${rkEsc(w.naam)}${w.distance_naam ? ' · ' + rkEsc(w.distance_naam) : ''}${w.datum ? ' · ' + String(w.datum).substring(0,10) : ''}${w.is_finale ? ' · FINALE' : ''}${w.bonus_modus ? ' · BONUS +' + (+w.bonus_punten || 1) + ' p. aanwezige' : ''}`;
                 const top = w.is_finale ? 'F' : '#' + (i + 1);
                 const sub = w.distance_naam ? `<div class="rk-w-sub">${rkEsc(w.distance_naam)}</div>` : '';
                 return `<th class="tc rk-w" title="${titel}">${top}${sub}</th>`;
@@ -764,7 +764,7 @@ async function printSerieKlassement(k) {
         const colKey = w => w.key ?? w.comp_id;  // back-compat
         const wedstrijdHdr = heeftWedstrijden
             ? wMeta.map((w, i) => {
-                const tip = esc(w.naam || '') + (w.distance_naam ? ' · ' + esc(w.distance_naam) : '') + (w.datum ? ' · ' + String(w.datum).substring(0, 10) : '');
+                const tip = esc(w.naam || '') + (w.distance_naam ? ' · ' + esc(w.distance_naam) : '') + (w.datum ? ' · ' + String(w.datum).substring(0, 10) : '') + (w.bonus_modus ? ' · BONUS +' + (+w.bonus_punten || 1) : '');
                 const top = w.is_finale ? 'F' : '#' + (i + 1);
                 const sub = w.distance_naam ? `<div style="font-size:.62rem;font-weight:400;color:#666;line-height:1.1">${esc(w.distance_naam)}</div>` : '';
                 return `<th class="pk-w" title="${tip}">${top}${sub}</th>`;
@@ -795,7 +795,12 @@ async function printSerieKlassement(k) {
         }).join('');
         // Wedstrijd-legenda onder de tabel
         const legendaRijen = heeftWedstrijden
-            ? wMeta.map((w, i) => `<li><b>${w.is_finale ? 'F' : '#' + (i + 1)}</b> — ${esc(w.naam || '')}${w.datum ? ' (' + String(w.datum).substring(0, 10) + ')' : ''}${w.is_finale ? ' · finale' : ''}</li>`).join('')
+            ? wMeta.map((w, i) => {
+                const bp = +w.bonus_punten || 1;
+                const suffix = (w.is_finale ? ' · finale' : '')
+                    + (w.bonus_modus ? ` · <b>bonus</b> (+${bp} per aanwezige)` : '');
+                return `<li><b>${w.is_finale ? 'F' : '#' + (i + 1)}</b> — ${esc(w.naam || '')}${w.datum ? ' (' + String(w.datum).substring(0, 10) + ')' : ''}${suffix}</li>`;
+            }).join('')
             : '';
 
         return `<section class="pk-cat-blok">

@@ -143,7 +143,7 @@ function berekenSerie(PDO $pdo, string $serieId): array {
     $wStmt = $pdo->prepare("
         SELECT w.competition_id,
                COALESCE(c.starts, w.comp_datum) AS starts,
-               w.volgorde, w.is_finale
+               w.volgorde, w.is_finale, w.bonus_modus, w.bonus_punten
         FROM klassement_serie_wedstrijden w
         LEFT JOIN competitions c ON c.id = w.competition_id
         WHERE w.serie_id = ? AND w.telt_mee = 1
@@ -152,6 +152,15 @@ function berekenSerie(PDO $pdo, string $serieId): array {
     $wStmt->execute([$serieId]);
     $wedstrijden = $wStmt->fetchAll(PDO::FETCH_ASSOC);
     $compIds = array_column($wedstrijden, 'competition_id');
+    // Bonus-wedstrijden (afgelast → vast aantal punten per aanwezige): map
+    // competition_id → bonus_punten. Deze worden NIET via het rang→punten-pad
+    // verwerkt maar in een aparte pass verderop (aanwezigen uit `entries`).
+    $bonusWedstrijden = [];
+    foreach ($wedstrijden as $w) {
+        if (!empty($w['bonus_modus'])) {
+            $bonusWedstrijden[$w['competition_id']] = (float)$w['bonus_punten'];
+        }
+    }
     // Bepaal finale-wedstrijd: expliciet aangevinkt wint; fallback = chronologisch laatste.
     $laatsteComp = null;
     if ($wedstrijden) {
@@ -567,6 +576,131 @@ function berekenSerie(PDO $pdo, string $serieId): array {
             }
         }
 
+        // ── Bonus-wedstrijden: EXTRA punten bovenop de uitslag ──────────────
+        // Een bonus-wedstrijd geeft elke AANWEZIGE rijder (entries.status IN
+        // (1,5) = getekend/aanwezig óf bevestigd door de organisatie) een vast
+        // aantal EXTRA punten — additief, bovenop wat de uitslag oplevert:
+        //   • afgelaste wedstrijd (geen uitslag) → wie er was krijgt 0 + bonus
+        //   • zwaardere wedstrijd (finale, lange afstand) → uitslag-punten + bonus
+        // De wedstrijd blijft dus gewoon in het rang→punten-pad (mag zelfs de
+        // finale zijn). Afwezigen krijgen géén bonus. De punten landen — net als
+        // een echte wedstrijd — in de categorie-stand én (gemengde DC's) cluster.
+        if (!empty($bonusWedstrijden)) {
+            // Comps die al een rang-uitslag hebben: daar telde het rang-pad de
+            // deelname + aantalPerCompCat al; de bonus telt dan NIET nog eens als
+            // aparte deelname (hij wordt bij het bestaande resultaat opgeteld).
+            $compsMetUitslag = array_flip(array_column($rijen, 'competition_id'));
+
+            $bonusCompIds = array_keys($bonusWedstrijden);
+            $bPh = implode(',', array_fill(0, count($bonusCompIds), '?'));
+            $bStmt = $pdo->prepare("
+                SELECT e.person_license, dc.competition_id,
+                       dc.id AS dc_id, dc.name AS dc_naam,
+                       p.full_name, p.short_name, p.category AS persoon_cat,
+                       c.name AS comp_naam,
+                       COALESCE(cs.startnummer, p.start_number) AS wedstrijd_snr
+                FROM entries e
+                JOIN distance_combinations dc ON dc.id = e.distance_combination_id
+                JOIN persons p ON p.license_key = e.person_license
+                JOIN competitions c ON c.id = dc.competition_id
+                LEFT JOIN competition_startnummers cs
+                       ON cs.person_license = e.person_license
+                      AND cs.competition_id = dc.competition_id
+                WHERE dc.competition_id IN ($bPh)
+                  AND e.status IN (1, 5)
+            ");
+            $bStmt->execute($bonusCompIds);
+            $bonusRijen = $bStmt->fetchAll(PDO::FETCH_ASSOC);
+
+            // Categorie-filter (whitelist) ook op bonus toepassen.
+            if (!empty($regels['categorie_filter'])) {
+                $catSet = array_flip($regels['categorie_filter']);
+                $bonusRijen = array_values(array_filter($bonusRijen, function($r) use ($catSet) {
+                    $cat = strtoupper(trim((string)($r['persoon_cat'] ?? '')));
+                    return $cat !== '' && isset($catSet[$cat]);
+                }));
+            }
+
+            // Per (comp, dc) de unieke cats verzamelen voor cluster-detectie
+            // (gemengde DC = meerdere cats samen → ook een gecombineerde stand).
+            $bonusCatsPerDc = [];
+            foreach ($bonusRijen as $r) {
+                $dk = $r['competition_id'] . '|' . $r['dc_id'];
+                $bonusCatsPerDc[$dk][(string)($r['persoon_cat'] ?? '')] = true;
+            }
+
+            // Telt de bonus OP bij één (lic, cat)-rij. Retourneert true als deze
+            // comp nog niet in die rij zat (= nieuwe deelname; bij een comp mét
+            // uitslag zat 'ie er al in via het rang-pad → false, geen dubbele
+            // deelname). Hergebruikt voor categorie- én clusterstand.
+            $addBonus = function(string $lic, string $catKey, array $r, float $bonus, string $cId)
+                        use (&$acc): bool {
+                if (!isset($acc[$lic][$catKey])) {
+                    $acc[$lic][$catKey] = [
+                        'naam'          => $r['full_name'],
+                        'short'         => $r['short_name'] ?? '',
+                        'startnr'       => $r['wedstrijd_snr'],
+                        'license'       => $lic,
+                        'cat'           => $catKey,
+                        'totaal'        => 0.0,
+                        'detail'        => [],
+                        'deelnames'     => 0,
+                        'per_wedstrijd' => [],
+                        'in_laatste'    => false,
+                    ];
+                }
+                $nieuweDeelname = !isset($acc[$lic][$catKey]['per_wedstrijd'][$cId]);
+                $acc[$lic][$catKey]['totaal'] += $bonus;
+                $wNaam = $r['comp_naam'] . ' · ' . ($r['dc_naam'] ?? '?') . ' (bonus)';
+                $acc[$lic][$catKey]['detail'][$wNaam] =
+                    ($acc[$lic][$catKey]['detail'][$wNaam] ?? 0) + $bonus;
+                $acc[$lic][$catKey]['per_wedstrijd'][$cId] =
+                    ($acc[$lic][$catKey]['per_wedstrijd'][$cId] ?? 0) + $bonus;
+                if ($nieuweDeelname) $acc[$lic][$catKey]['deelnames']++;
+                if (!empty($r['wedstrijd_snr'])) $acc[$lic][$catKey]['startnr'] = $r['wedstrijd_snr'];
+                return $nieuweDeelname;
+            };
+
+            $bonusGezien = []; // "cId|lic|catKey" → per rijder één keer optellen
+            foreach ($bonusRijen as $r) {
+                $cId   = $r['competition_id'];
+                $bonus = (float)($bonusWedstrijden[$cId] ?? 0);
+                if ($bonus == 0.0) continue;
+                $lic   = $r['person_license'];
+                $cat   = (string)($r['persoon_cat'] ?? '');
+                if ($cat === '') continue;
+
+                $compNaamMap[$cId]           = $r['comp_naam'];
+                $catNaamPerComp[$cId][$cat]  = $r['dc_naam'] ?? '';
+
+                // Categorie-stand (één keer per rijder per cat)
+                $seen = $cId . '|' . $lic . '|' . $cat;
+                if (!isset($bonusGezien[$seen])) {
+                    $bonusGezien[$seen] = true;
+                    $nieuw = $addBonus($lic, $cat, $r, $bonus, $cId);
+                    // aantalPerCompCat alleen ophogen voor een afgelaste comp
+                    // (geen uitslag). Bij een comp mét uitslag telde het rang-pad
+                    // dat al — niet perturben (zou de non-deelname-rang scheeftrekken).
+                    if ($nieuw && !isset($compsMetUitslag[$cId])) {
+                        $aantalPerCompCat[$cId][$cat] = ($aantalPerCompCat[$cId][$cat] ?? 0) + 1;
+                    }
+                }
+
+                // Clusterstand (alleen gemengde DC's, ≥2 cats samen)
+                $dk     = $cId . '|' . $r['dc_id'];
+                $dcCats = array_values(array_filter(array_keys($bonusCatsPerDc[$dk] ?? [])));
+                if (count($dcCats) >= 2) {
+                    sort($dcCats);
+                    $clusterLabel = implode('/', $dcCats);
+                    $seenC = $cId . '|' . $lic . '|' . $clusterLabel;
+                    if (!isset($bonusGezien[$seenC])) {
+                        $bonusGezien[$seenC] = true;
+                        $addBonus($lic, $clusterLabel, $r, $bonus, $cId);
+                    }
+                }
+            }
+        }
+
         // ── Non-deelname-regel: rijders die elders in de serie wél scoren
         //    maar in een specifieke wedstrijd ontbreken (of punten=0 hadden),
         //    krijgen voor die wedstrijd de punten op rang "laatste + 1" uit
@@ -805,6 +939,8 @@ function berekenSerie(PDO $pdo, string $serieId): array {
             'naam'         => $naam,
             'datum'        => $w['starts'] ?? null,
             'is_finale'    => !empty($w['is_finale']) || $cid === $laatsteComp,
+            'bonus_modus'  => !empty($bonusWedstrijden[$cid]),
+            'bonus_punten' => (float)($bonusWedstrijden[$cid] ?? 0),
             'volgorde'     => (int)($w['volgorde'] ?? 0),
             'geimporteerd' => $geimporteerd,
         ];
@@ -826,6 +962,8 @@ function berekenSerie(PDO $pdo, string $serieId): array {
                 'naam'          => $ci['naam'],
                 'datum'         => $ci['datum'],
                 'is_finale'     => $ci['is_finale'],
+                'bonus_modus'   => $ci['bonus_modus'] ?? false,
+                'bonus_punten'  => $ci['bonus_punten'] ?? 0,
                 'volgorde'      => $ci['volgorde'],
                 'geimporteerd'  => $ci['geimporteerd'],
             ];
@@ -843,7 +981,8 @@ function berekenSerie(PDO $pdo, string $serieId): array {
             $cid = $w['competition_id'];
             $ci  = $compInfoCache[$cid] ?? [
                 'naam' => $cid, 'datum' => null,
-                'is_finale' => false, 'volgorde' => $i, 'geimporteerd' => false,
+                'is_finale' => false, 'bonus_modus' => false, 'bonus_punten' => 0,
+                'volgorde' => $i, 'geimporteerd' => false,
             ];
             $meta[] = [
                 'key'          => $cid,        // = comp_id (back-compat)
@@ -851,6 +990,8 @@ function berekenSerie(PDO $pdo, string $serieId): array {
                 'naam'         => $ci['naam'],
                 'datum'        => $ci['datum'],
                 'is_finale'    => $ci['is_finale'],
+                'bonus_modus'  => $ci['bonus_modus'] ?? false,
+                'bonus_punten' => $ci['bonus_punten'] ?? 0,
                 'volgorde'     => (int)($w['volgorde'] ?? $i),
                 'geimporteerd' => $ci['geimporteerd'],
             ];
@@ -1286,7 +1427,8 @@ if ($method === 'GET') {
             $s['categorieen'] = json_decode($s['categorieen'] ?? '[]', true);
             // Gekoppelde wedstrijden
             $wStmt = $pdo->prepare("
-                SELECT w.competition_id, w.telt_mee, w.is_finale, w.volgorde,
+                SELECT w.competition_id, w.telt_mee, w.is_finale,
+                       w.bonus_modus, w.bonus_punten, w.volgorde,
                        COALESCE(c.name,   w.comp_naam)  AS name,
                        COALESCE(c.starts, w.comp_datum) AS starts,
                        (c.id IS NOT NULL)              AS geimporteerd
@@ -1394,17 +1536,21 @@ try {
         // 3. Koppel wedstrijden
         $wIns = $pdo->prepare("
             INSERT INTO klassement_serie_wedstrijden
-                   (serie_id, competition_id, telt_mee, is_finale, volgorde,
+                   (serie_id, competition_id, telt_mee, is_finale,
+                    bonus_modus, bonus_punten, volgorde,
                     comp_naam, comp_datum)
-            VALUES (?, ?, ?, ?, ?, ?, ?)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
         ");
         foreach ($wedstr as $i => $w) {
             $cid = trim($w['competition_id'] ?? '');
             if ($cid === '') continue;
+            $bonusModus = !empty($w['bonus_modus']) ? 1 : 0;
             $wIns->execute([
                 $serieId, $cid,
                 !empty($w['telt_mee'])  ? 1 : 0,
                 !empty($w['is_finale']) ? 1 : 0,
+                $bonusModus,
+                $bonusModus ? (float)($w['bonus_punten'] ?? 1) : 1,
                 (int)($w['volgorde'] ?? $i),
                 trim($w['comp_naam'] ?? '') ?: null,
                 trim($w['comp_datum'] ?? '') ?: null,
@@ -1449,17 +1595,21 @@ try {
         $pdo->prepare("DELETE FROM klassement_serie_wedstrijden WHERE serie_id = ?")->execute([$id]);
         $wIns = $pdo->prepare("
             INSERT INTO klassement_serie_wedstrijden
-                   (serie_id, competition_id, telt_mee, is_finale, volgorde,
+                   (serie_id, competition_id, telt_mee, is_finale,
+                    bonus_modus, bonus_punten, volgorde,
                     comp_naam, comp_datum)
-            VALUES (?, ?, ?, ?, ?, ?, ?)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
         ");
         foreach ($wedstr as $i => $w) {
             $cid = trim($w['competition_id'] ?? '');
             if ($cid === '') continue;
+            $bonusModus = !empty($w['bonus_modus']) ? 1 : 0;
             $wIns->execute([
                 $id, $cid,
                 !empty($w['telt_mee'])  ? 1 : 0,
                 !empty($w['is_finale']) ? 1 : 0,
+                $bonusModus,
+                $bonusModus ? (float)($w['bonus_punten'] ?? 1) : 1,
                 (int)($w['volgorde'] ?? $i),
                 trim($w['comp_naam'] ?? '') ?: null,
                 trim($w['comp_datum'] ?? '') ?: null,

@@ -1587,7 +1587,8 @@ async function _bouwKlassementInternal(optData) {
         const splitParam = optData.isSplit && optData.splitName
             ? `&split_group=${encodeURIComponent(optData.splitName)}` : '';
         const res = await fetch(
-            `api/klassement_live.php?competition_id=${encodeURIComponent(huidigCompId)}&dc_ids=${dcIds.map(encodeURIComponent).join(',')}${splitParam}`
+            `api/klassement_live.php?competition_id=${encodeURIComponent(huidigCompId)}&dc_ids=${dcIds.map(encodeURIComponent).join(',')}${splitParam}`,
+            { cache: 'no-store' }
         );
         data = await res.json();
     } catch (e) { console.warn('[Klassement] Laad-fout:', e); return null; }
@@ -1831,7 +1832,8 @@ async function _bouwUitslagAfstandInternal(optData) {
         const splitParam = optData.isSplit && optData.splitName
             ? `&dc_naam=${encodeURIComponent(optData.splitName)}` : '';
         const res = await fetch(
-            `api/uitslag_afstand.php?competition_id=${encodeURIComponent(huidigCompId)}&dc_ids=${dcParam}${distParam}${splitParam}`
+            `api/uitslag_afstand.php?competition_id=${encodeURIComponent(huidigCompId)}&dc_ids=${dcParam}${distParam}${splitParam}`,
+            { cache: 'no-store' }
         );
         data = await res.json();
     } catch (e) { console.warn('[Uitslag] Laad-fout:', e); return null; }

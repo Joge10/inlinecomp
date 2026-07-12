@@ -13,7 +13,11 @@ CREATE TABLE IF NOT EXISTS `coach_visits` (
     `last_seen`   DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP
                                ON UPDATE CURRENT_TIMESTAMP,
     `hits`        INT UNSIGNED NOT NULL DEFAULT 1,
+    `user_agent`  VARCHAR(255) NULL,
     PRIMARY KEY (`id`),
     UNIQUE KEY `uq_session` (`session_id`),
     KEY `idx_last_seen` (`last_seen`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+-- Migratie voor bestaande installaties:
+--   ALTER TABLE `coach_visits` ADD COLUMN `user_agent` VARCHAR(255) NULL;

@@ -5,6 +5,11 @@
 --                zonder hem uit de serie te halen.
 --   is_finale  — 0/1, markeert dé finale-wedstrijd van de serie. Maximaal één
 --                per serie; zo geen = chronologisch laatste wedstrijd.
+--   bonus_modus / bonus_punten — 0/1 + aantal. Bij bonus_modus=1 krijgt elke
+--                aanwezige rijder (entries.status IN (1,5)) `bonus_punten` EXTRA
+--                punten, BOVENOP de uitslag. Voor een afgelaste wedstrijd (geen
+--                uitslag → puur de bonus) of om een wedstrijd zwaarder te laten
+--                tellen (bv. finale + 5).
 --   comp_naam / comp_datum — fallback-velden voor wedstrijden die (nog) niet
 --                in `competitions` zitten (bv. toekomstige wedstrijden die
 --                al wel in de serie-planning staan maar nog niet geïmporteerd
@@ -19,6 +24,8 @@ CREATE TABLE IF NOT EXISTS `klassement_serie_wedstrijden` (
     `competition_id` VARCHAR(36)  NOT NULL,
     `telt_mee`       TINYINT(1)   NOT NULL DEFAULT 1,
     `is_finale`      TINYINT(1)   NOT NULL DEFAULT 0,
+    `bonus_modus`    TINYINT(1)   NOT NULL DEFAULT 0,
+    `bonus_punten`   DECIMAL(6,2) NOT NULL DEFAULT 1,
     `volgorde`       SMALLINT     NOT NULL DEFAULT 0,
     `comp_naam`      VARCHAR(255) DEFAULT NULL,
     `comp_datum`     DATETIME     DEFAULT NULL,

@@ -3930,6 +3930,21 @@ th.rk-totaal, td.rk-totaal { width:55px; font-weight:700; color:var(--blauw); ba
    blok ervóór. Vervangt inline style="margin-top:1.5rem" op section-title. */
 .gb-stats-blok-volgend { margin-top: 1.5rem; }
 .gb-stat-voetnoot { font-size: .75rem; color: #888; text-align: right; margin-top: 2px; }
+.gb-stat-hourly,
+.gb-stat-weekly { margin-top: 12px; padding: 10px 14px; background: #fafcff;
+                  border: 1px solid var(--border); border-radius: 8px; }
+.gb-stat-hourly-titel { font-size: .8rem; color: #555; margin-bottom: 6px; }
+.gb-stat-hourly-body { display: flex; align-items: stretch; gap: 6px; }
+.gb-stat-hourly-y   { display: flex; flex-direction: column; justify-content: space-between;
+                      font-size: .7rem; color: #888; text-align: right;
+                      min-width: 22px; padding: 0 2px; height: 90px; }
+.gb-stat-hourly-plot { flex: 1; min-width: 0; }
+.gb-stat-hourly-svg { display: block; width: 100%; height: 90px; }
+.gb-stat-xas { position: relative; height: 14px; margin-top: 2px; }
+.gb-stat-xtick { position: absolute; top: 0; left: var(--x, 0);
+                 transform: translateX(-50%);
+                 font-size: .7rem; color: #888; white-space: nowrap; }
+.gb-stat-hourly-leeg { font-size: .8rem; color: #999; font-style: italic; padding: 4px 0; }
 .gb-rol-timer     { background: #9C27B0; color: #fff; }
 .gb-rol-viewer    { background: #aaa;    color: #fff; }
 

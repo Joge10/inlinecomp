@@ -683,6 +683,53 @@ async function slaaBeheerOp(panel, dcDistances) {
         }));
     });
 
+    // ── Canonicaliseer afstanden binnen elke merge-groep ─────────────────
+    // Voor DC's in een merge: sync `dcDistances` zodat alle mergende DC's
+    // dezelfde name/value_meters/race_type per distance_id gebruiken. Kies
+    // de "renamed" variant (niet-KNSB-oorspronkelijk). Zonder deze sync
+    // zou de per-DC save-loop de renamed naam kunnen overschrijven met
+    // een nog-niet-hernoemde variant uit een andere DC in dezelfde merge.
+    {
+        const mergeGroepenSync = new Map(); // merge_group → [dc]
+        vergelijkData.forEach(dc => {
+            if (!dc.merge_group) return;
+            if (!mergeGroepenSync.has(dc.merge_group)) mergeGroepenSync.set(dc.merge_group, []);
+            mergeGroepenSync.get(dc.merge_group).push(dc);
+        });
+        for (const groepDcs of mergeGroepenSync.values()) {
+            // Verzamel per distance_id de "beste" variant. Renamed wint van
+            // KNSB-origineel (name die niet in dc.knsb_distances staat).
+            const bestPerId = new Map();
+            groepDcs.forEach(dc => {
+                const knsbNamen = new Set((dc.knsb_distances || []).map(d => d.name).filter(Boolean));
+                (dcDistances[dc.dc_id] || []).forEach(d => {
+                    if (!d.id) return;
+                    const isRenamed = !knsbNamen.has(d.name);
+                    const bestaand  = bestPerId.get(d.id);
+                    if (!bestaand || (isRenamed && !bestaand.isRenamed)) {
+                        bestPerId.set(d.id, { d, isRenamed });
+                    }
+                });
+            });
+            // Overschrijf per DC de dcDistances met de canonical variant per id.
+            groepDcs.forEach(dc => {
+                const arr = dcDistances[dc.dc_id];
+                if (!arr) return;
+                arr.forEach((d, i) => {
+                    if (!d.id) return;
+                    const best = bestPerId.get(d.id);
+                    if (!best) return;
+                    arr[i] = {
+                        ...d,
+                        name:         best.d.name,
+                        value_meters: best.d.value_meters,
+                        race_type:    best.d.race_type,
+                    };
+                });
+            });
+        }
+    }
+
     // Sync merge_label vanuit DOM (inline — syncMergeLabelsVanDom is lokaal in bouwBeheerTabel)
     panel.querySelectorAll('.dc-merge-label-inp').forEach(inp => {
         const primaryId = inp.dataset.primaryDcId;
@@ -2321,26 +2368,74 @@ function _bouwDeelnemerslijstInternal(opts = {}) {
     //   dcDistances[dc_id]               = basis-afstanden (KNSB, zonder splits)
     //   dcDistances[dc_id::splitgroep]   = afstanden voor een specifieke splitgroep
     // Fallback: knsb_distances rechtstreeks van vergelijkData-object.
-    // We verzamelen UNIEKE afstand-namen over alle keys + fallback zodat het
-    // kolom-overzicht volledig is bij gesplitste DCs.
+    //
+    // Canonical-name-mapping: distance_id is composite met dc_id, dus dezelfde
+    // `id` mag verschillende betekenis hebben per DC (bv. `id X` = 500m bij
+    // P2 en 1000m bij P1). Canonicaliseer daarom ALLEEN binnen dezelfde
+    // merge-groep. Bij naam-conflict binnen een merge: kies de hernoemde
+    // variant (name die NIET in `dc.knsb_distances` van diezelfde DC zit).
+    const knsbNamenPerDc = new Map();
+    vergelijkData.forEach(dc => {
+        knsbNamenPerDc.set(dc.dc_id, new Set(
+            (dc.knsb_distances || []).map(d => d.name).filter(Boolean)
+        ));
+    });
+    // canonicalPerMerge: merge_group → Map<distance_id, name>
+    const canonicalPerMerge = new Map();
+    {
+        const mergeDcs = new Map(); // merge_group → [dc]
+        vergelijkData.forEach(dc => {
+            if (!dc.merge_group) return;
+            if (!mergeDcs.has(dc.merge_group)) mergeDcs.set(dc.merge_group, []);
+            mergeDcs.get(dc.merge_group).push(dc);
+        });
+        for (const [mg, dcs] of mergeDcs) {
+            const perId = new Map(); // distance_id → {name, isRenamed}
+            dcs.forEach(dc => {
+                const knsbNamen = knsbNamenPerDc.get(dc.dc_id) ?? new Set();
+                (dcDistances[dc.dc_id] || []).forEach(d => {
+                    if (!d.name || !d.id) return;
+                    const isRenamed = !knsbNamen.has(d.name);
+                    const bestaand  = perId.get(d.id);
+                    if (!bestaand || (isRenamed && !bestaand.isRenamed)) {
+                        perId.set(d.id, { name: d.name, isRenamed });
+                    }
+                });
+            });
+            canonicalPerMerge.set(mg, new Map([...perId].map(([id, o]) => [id, o.name])));
+        }
+    }
+    // Lookup: geef de canonical naam voor deze (dc, distance_id) — of null als
+    // de DC niet in een merge zit (dan gebruikt de caller d.name direct).
+    const canonicalNaamVoor = (dc, distance_id) => {
+        if (!dc.merge_group || !distance_id) return null;
+        return canonicalPerMerge.get(dc.merge_group)?.get(distance_id) ?? null;
+    };
+
+    // Verzamel kolom-headers: dedup op naam (na canonicalisering per merge).
     const afstandMap = new Map(); // name → value_meters
     vergelijkData.forEach(dc => {
         const prefix = dc.dc_id + '::';
-        // Verzamel: basis-key dc_id + alle split-keys dc_id::*
+        let heeftDbAfstanden = false;
         Object.keys(dcDistances).forEach(k => {
             if (k === dc.dc_id || k.startsWith(prefix)) {
                 (dcDistances[k] || []).forEach(d => {
-                    if (d.name && !afstandMap.has(d.name)) {
-                        afstandMap.set(d.name, d.value_meters ?? 0);
-                    }
+                    if (!d.name) return;
+                    heeftDbAfstanden = true;
+                    const naam = canonicalNaamVoor(dc, d.id) ?? d.name;
+                    if (!afstandMap.has(naam)) afstandMap.set(naam, d.value_meters ?? 0);
                 });
             }
         });
-        // KNSB-feed fallback (als er helemaal geen DB-afstanden zijn)
-        (dc.knsb_distances || []).forEach(d => {
-            if (d.name && !afstandMap.has(d.name))
-                afstandMap.set(d.name, d.value_meters ?? 0);
-        });
+        // Fallback: pas als er GEEN DB-afstanden zijn voor deze DC, gebruik
+        // knsb_distances direct. Anders zouden originele KNSB-namen alsnog
+        // als aparte kolom binnen komen naast de hernoemde.
+        if (!heeftDbAfstanden) {
+            (dc.knsb_distances || []).forEach(d => {
+                if (d.name && !afstandMap.has(d.name))
+                    afstandMap.set(d.name, d.value_meters ?? 0);
+            });
+        }
     });
     // Sorteer: kortste afstand eerst; bij gelijk getal: alfabetisch
     const afstandKols = [...afstandMap.entries()]
@@ -2374,7 +2469,13 @@ function _bouwDeelnemerslijstInternal(opts = {}) {
                 : (dcDistances[dc.dc_id]?.length
                     ? dcDistances[dc.dc_id]
                     : (dc.knsb_distances || []));
-            const dcAfstanden = bronAfst.map(d => d.name);
+            // Map naar de canonical (hernoemde) naam binnen de merge-groep
+            // van deze DC zodat de rijder-× onder de juiste kolom-header
+            // valt, ook als deze DC nog de originele KNSB-naam heeft en een
+            // gemergde partner-DC hernoemd is.
+            const dcAfstanden = bronAfst.map(d =>
+                canonicalNaamVoor(dc, d.id) ?? d.name
+            );
 
             // Kaartsleutel: license_key heeft voorkeur (rijder deelt naam over DCs),
             // anders uniek per DC-entry zodat rijder toch verschijnt
@@ -2729,7 +2830,11 @@ function _bouwDeelnemerslijstInternal(opts = {}) {
             // gesplitste DCs een lege afstand-kolom kregen wanneer afstanden
             // alleen onder de split-specifieke sleutel waren opgeslagen.
             const bouwAfstanden = (splitGroep) => {
-                const afsMap = new Map(); // name → meters
+                // Canonical name gescoopt op merge-groep (via canonicalNaamVoor).
+                // Dedup op naam (na canonicalisering). Niet op distance_id
+                // globaal: dezelfde `id` kan bij een andere DC een heel
+                // andere afstand betekenen (500m vs 1000m).
+                const afsMap = new Map(); // canonical name → meters
                 dcGroup.forEach(dc => {
                     const splitKey = splitGroep ? `${dc.dc_id}::${splitGroep}` : null;
                     let bron = (splitKey && dcDistances[splitKey]?.length)
@@ -2738,7 +2843,9 @@ function _bouwDeelnemerslijstInternal(opts = {}) {
                             ? dcDistances[dc.dc_id]
                             : (dc.knsb_distances || []));
                     bron.forEach(d => {
-                        if (!afsMap.has(d.name)) afsMap.set(d.name, d.value_meters ?? 0);
+                        if (!d.name) return;
+                        const naam = canonicalNaamVoor(dc, d.id) ?? d.name;
+                        if (!afsMap.has(naam)) afsMap.set(naam, d.value_meters ?? 0);
                     });
                 });
                 return [...afsMap.entries()]

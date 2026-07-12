@@ -16,25 +16,25 @@ header('Expires: 0');
 require_once __DIR__ . '/../../config_inlinecomp.php';
 
 // ── Bezoektracking: upsert session-hit in coach_visits ──────────────────────
-// Alleen op de echte HTML pageload (geen action=...) om AJAX-calls niet
-// dubbel te tellen. Aparte session-cookie (ICCOACH) zodat /coach- en
-// /public-sessies los getracked worden.
-if (empty($_GET['action'])) {
-    if (session_status() === PHP_SESSION_NONE) {
-        session_name('ICCOACH');
-        session_set_cookie_params([
-            'lifetime' => 0, 'path' => '/', 'httponly' => true, 'samesite' => 'Lax',
-        ]);
-        @session_start();
-    }
-    $sid = session_id();
-    if ($sid) {
-        try {
+// HTML → full INSERT/UPDATE + peak-check. AJAX → last_seen bumpen met 30s
+// rate-limit zodat peak/hourly de echte activity reflecteren zonder een
+// UPDATE-storm te veroorzaken. Zie public/index.php voor rationale.
+if (session_status() === PHP_SESSION_NONE) {
+    session_name('ICCOACH');
+    session_set_cookie_params([
+        'lifetime' => 0, 'path' => '/', 'httponly' => true, 'samesite' => 'Lax',
+    ]);
+    @session_start();
+}
+$sid = session_id();
+if ($sid) {
+    try {
+        if (empty($_GET['action'])) {
+            $ua = substr((string)($_SERVER['HTTP_USER_AGENT'] ?? ''), 0, 255);
             $pdo->prepare(
-                "INSERT INTO coach_visits (session_id) VALUES (?)
+                "INSERT INTO coach_visits (session_id, user_agent) VALUES (?, ?)
                  ON DUPLICATE KEY UPDATE last_seen = NOW(), hits = hits + 1"
-            )->execute([$sid]);
-            // Piek-tracking (vandaag + all-time) — zelfde patroon als /public
+            )->execute([$sid, $ua]);
             $pdo->prepare("
                 UPDATE peak_stats SET
                     peak_today = CASE
@@ -50,8 +50,13 @@ if (empty($_GET['action'])) {
                         (SELECT COUNT(*) FROM coach_visits WHERE last_seen > NOW() - INTERVAL 5 MINUTE))
                 WHERE scope = 'coach'
             ")->execute();
-        } catch (Throwable $e) { /* tracking mag nooit de pagina breken */ }
-    }
+        } else {
+            $pdo->prepare(
+                "UPDATE coach_visits SET last_seen = NOW()
+                 WHERE session_id = ? AND last_seen < NOW() - INTERVAL 30 SECOND"
+            )->execute([$sid]);
+        }
+    } catch (Throwable $e) { /* tracking mag nooit de pagina breken */ }
 }
 
 // ── Wedstrijd-zichtbaarheidsgate ─────────────────────────────────────────────
@@ -2758,6 +2763,31 @@ table.rondeu-tabel tr.rondeu-heat-sub td {
 }
 .prog-combi-leden .heat-rij { margin-bottom:4px; }
 
+/* Combi-wrapper: omhult MEERDERE cat-groepen die in dezelfde combi_group
+   zitten (categorieën die tegelijk rijden) — één blauw kader met kop-label
+   rond de héle combinatie; elke cat behoudt z'n eigen inklap. Zelfde vorm
+   als in /public zodat coaches het combi-verband in één oogopslag zien. */
+.prog-combi-wrap {
+    border:2px solid #2E75B6;
+    border-radius:8px;
+    background:#eef4fb;
+    margin:8px 0;
+    overflow:hidden;
+}
+.prog-combi-wrap > .prog-combi-kop {
+    background:#2E75B6;
+    color:#fff;
+    font-size:.78rem;
+    font-weight:600;
+    padding:5px 10px;
+    letter-spacing:.02em;
+}
+.prog-combi-body {
+    padding:6px 8px 8px;
+    background:#eef4fb;
+}
+.prog-combi-body .prog-groep { margin:4px 0; }
+
 .overlay { position:fixed; inset:0; background:rgba(0,0,0,.4); z-index:1000;
            display:flex; align-items:flex-start; justify-content:center;
            padding:20px; overflow-y:auto; }
@@ -5324,8 +5354,20 @@ function renderProgramma() {
     let huidigeGroepDefinitief = 0;  // heats met definitief == true
     const groepHdrPlaceholders = []; // [{key, count, statusIcon}] voor post-fix
 
-    const sluitCombi = () => {
-        if (vorigeCombi !== null) { html += `</div></div>`; vorigeCombi = null; }
+    // Combi-wrapper (outer): omhult meerdere cat-groepen die dezelfde
+    // combi_group hebben (categorieën die tegelijk rijden). Groepen zitten
+    // BINNEN de wrap — omgekeerde nesting t.o.v. vroeger (box binnen groep).
+    let combiWrapOpen = false;
+    const openCombiWrap = (dag, afstand) => {
+        const afsAttr = afstand ? ` data-afstand-key="${esc(afstand)}"` : '';
+        html += `<div class="prog-combi-wrap" data-dag-nr="${dag}"${afsAttr}>
+            <div class="prog-combi-kop">${esc(t('prog_combi_kop'))}</div>
+            <div class="prog-combi-body">`;
+        combiWrapOpen = true;
+    };
+    const sluitCombiWrap = () => {
+        if (combiWrapOpen) { html += `</div></div>`; combiWrapOpen = false; }
+        vorigeCombi = null;
     };
     // Status-icoon voor de groep — spiegelt de heat-status-icoontjes.
     // Returnt {icon, i18nKey} zodat de post-fix een correcte tooltip-key
@@ -5339,7 +5381,6 @@ function renderProgramma() {
         return { icon: '', i18nKey: '' };
     };
     const sluitGroep = () => {
-        sluitCombi();
         if (vorigeGroepKey !== null) {
             html += `</div></div>`; // sluit .prog-groep-body en .prog-groep
             const st = bepaalStatus();
@@ -5364,13 +5405,18 @@ function renderProgramma() {
         const rondeLbl  = r.ronde_type && BADGE[r.ronde_type]
             ? `<span class="badge ${BADGE[r.ronde_type]}" style="margin-right:6px">${getRondeLabel(r.ronde_type)}</span>`
             : '';
-        // းMarkers voor post-render: mijn-badge + status-icoon met accurate waardes.
+        // းMarkers voor post-render: mijn-class (op de groep-div) + mijn-badge +
+        // status-icoon met accurate waardes. De mijn-class gaat via een INDEX-
+        // marker i.p.v. querySelector-op-key, zodat élke groep onafhankelijk de
+        // juiste .mijn krijgt — ook als twee groepen dezelfde data-groep-key
+        // delen (querySelector pakte dan alleen de eerste → badge onzichtbaar).
         const idx = groepHdrPlaceholders.length;
-        const iconMarker = `[[STATUS-ICON-${idx}]]`;
-        const mijnMarker = `[[MIJN-BADGE-${idx}]]`;
+        const iconMarker      = `[[STATUS-ICON-${idx}]]`;
+        const mijnMarker      = `[[MIJN-BADGE-${idx}]]`;
+        const mijnClassMarker = `[[MIJN-CLASS-${idx}]]`;
         const afsAttr = r.distance_naam ? ` data-afstand-key="${esc(r.distance_naam)}"` : '';
         const rtAttr  = r.ronde_type ? ` data-ronde-type="${esc(r.ronde_type)}"` : '';
-        html += `<div class="prog-groep${ingeklapt ? ' ingeklapt' : ''}" data-groep-key="${esc(key)}" data-dag-nr="${dag}"${afsAttr}${rtAttr}>
+        html += `<div class="prog-groep${ingeklapt ? ' ingeklapt' : ''}${mijnClassMarker}" data-groep-key="${esc(key)}" data-dag-nr="${dag}"${afsAttr}${rtAttr}>
             <div class="prog-groep-hdr" onclick="klapGroep(this)">
                 <span class="prog-groep-chev">▼</span>
                 <span class="prog-groep-status">${iconMarker}</span>
@@ -5384,12 +5430,14 @@ function renderProgramma() {
         huidigeGroepMetRes = 0;
         huidigeGroepDefinitief = 0;
     };
+    // Volledige sluit: eerst de groep, dan de combi-wrapper eromheen.
+    const sluitAlles = () => { sluitGroep(); sluitCombiWrap(); };
 
     allesGesorteerd.forEach((item, idx) => {
         const dag = dagPerItem[idx];
         // Dag-header (multi-day): sluit alles, dan header.
         if (isMultiDag && dag !== vorigeDag) {
-            sluitGroep();
+            sluitAlles();
             const info = dagInfoPerNr.get(dag);
             const lbl = info?.datumLbl ? `Dag ${dag} — ${info.datumLbl}` : `Dag ${dag}`;
             html += `<div class="prog-dag-header" data-dag-nr="${dag}">${esc(lbl)}</div>`;
@@ -5397,13 +5445,24 @@ function renderProgramma() {
         }
         // Blok = altijd los tussen groepen, sluit lopende groep.
         if (item.type === 'blok') {
-            sluitGroep();
+            sluitAlles();
             const raw = blokHtml(item.data);
             html += raw.replace(/^<div /, `<div data-dag-nr="${dag}" `);
             return;
         }
-        // Rit: bepaal groep-key.
+        // Rit: eerst de combi-wrap (outer), dan de groep (binnen de wrap).
         const r = item.data;
+        // 1) Combi-wrap: bij combi_group-wissel sluit lopende groep + wrap, en
+        //    open een nieuwe wrap als deze rit een combi_group heeft. Zo komen
+        //    álle cat-groepen die samen rijden in één blauw kader.
+        const combi = r.combi_group ? parseInt(r.combi_group) : null;
+        if (combi !== vorigeCombi) {
+            sluitGroep();
+            sluitCombiWrap();
+            if (combi !== null) openCombiWrap(dag, r.distance_naam);
+            vorigeCombi = combi;
+        }
+        // 2) Groep per (dc_naam + ronde_type + dag) — binnen de wrap.
         const grpKey = `${r.dc_naam || '?'}|${r.ronde_type || '?'}|${dag}`;
         if (grpKey !== vorigeGroepKey) {
             sluitGroep();
@@ -5418,45 +5477,33 @@ function renderProgramma() {
         if ((r.resultaten_count ?? 0) > 0) huidigeGroepMetRes += 1;
         if (r.definitief) huidigeGroepDefinitief += 1;
 
-        // Combi-box: consecutieve heats met dezelfde combi_group.
-        const combi = r.combi_group ? parseInt(r.combi_group) : null;
-        if (combi !== vorigeCombi) {
-            if (vorigeCombi !== null) html += `</div></div>`;
-            if (combi !== null) {
-                const combiAfsAttr = r.distance_naam ? ` data-afstand-key="${esc(r.distance_naam)}"` : '';
-                html += `<div class="prog-combi-box" data-dag-nr="${dag}"${combiAfsAttr}>
-                    <div class="prog-combi-kop">${t('prog_combi_kop')}</div>
-                    <div class="prog-combi-leden">`;
-            }
-            vorigeCombi = combi;
-        }
         const ritRaw = ritHtml(r);
         html += ritRaw.replace(/^<div /, `<div data-dag-nr="${dag}" `);
     });
-    sluitGroep();
+    sluitAlles();
 
     // Post-fix: markers vervangen door status-icoon + mijn-badge met de
     // accurate waardes die we tijdens de loop hebben opgebouwd. Ook de
     // "mijn"-class op de groep-div bepalen op basis van p.count > 0.
     groepHdrPlaceholders.forEach((p, i) => {
-        const iconMarker = `[[STATUS-ICON-${i}]]`;
-        const mijnMarker = `[[MIJN-BADGE-${i}]]`;
+        const iconMarker      = `[[STATUS-ICON-${i}]]`;
+        const mijnMarker      = `[[MIJN-BADGE-${i}]]`;
+        const mijnClassMarker = `[[MIJN-CLASS-${i}]]`;
         const iconHtml = p.statusIcon
             ? `<span title="${esc(t(p.statusKey))}">${p.statusIcon}</span>`
             : '';
         const mijnHtml = p.count > 0
             ? `<span class="prog-groep-mijn-badge" title="${esc(t('prog_klap_mijn_tooltip'))}">${p.count}</span>`
             : '';
-        html = html.replace(iconMarker, iconHtml).replace(mijnMarker, mijnHtml);
+        // .mijn (oranje strip links + zichtbare badge) per-groep via de index-
+        // marker — betrouwbaar ook bij dubbele data-groep-key.
+        html = html
+            .replace(iconMarker, iconHtml)
+            .replace(mijnMarker, mijnHtml)
+            .replace(mijnClassMarker, p.count > 0 ? ' mijn' : '');
+        if (p.count > 0) _progGroepenMetMijn.add(p.key);
     });
     progEl.innerHTML = html;
-    // Groepen met mijn-rijders visueel markeren (oranje strip links).
-    groepHdrPlaceholders.forEach(p => {
-        if (p.count === 0) return;
-        const el = progEl.querySelector(`.prog-groep[data-groep-key="${CSS.escape(p.key)}"]`);
-        if (el) el.classList.add('mijn');
-        _progGroepenMetMijn.add(p.key);
-    });
     // Bewaar alle groep-keys — bepaalt scope voor "Alles in/uit"-knoppen.
     _progGroepAlleKeys = groepHdrPlaceholders.map(p => p.key);
     // Bij eerste render: iedereen ingeklapt (default coach-UX).

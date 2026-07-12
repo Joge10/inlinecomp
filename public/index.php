@@ -12,26 +12,32 @@ header('Expires: 0');
 require_once __DIR__ . '/../../config_inlinecomp.php';
 
 // ── Bezoektracking: upsert session-hit in public_visits ─────────────────────
-// Alleen op de echte HTML pageload (geen action=...) om AJAX-calls niet
-// dubbel te tellen. Cookie wordt lightweight: alleen session-id voor tracking.
-if (empty($_GET['action'])) {
-    if (session_status() === PHP_SESSION_NONE) {
-        session_name('ICPUB');  // aparte cookie-naam om admin-sessies niet te raken
-        session_set_cookie_params([
-            'lifetime' => 0,         // browser-sessie
-            'path'     => '/',
-            'httponly' => true,
-            'samesite' => 'Lax',
-        ]);
-        @session_start();
-    }
-    $sid = session_id();
-    if ($sid) {
-        try {
+// HTML-pageload → full INSERT/UPDATE (hits+1, user_agent, peak-check).
+// AJAX-call    → alleen last_seen bumpen, rate-limited op 30 sec zodat een
+//                click-storm niet resulteert in 100 UPDATEs. Peak/hourly
+//                reflecteren zo écht-actief-zijn ipv alleen page-refreshes.
+if (session_status() === PHP_SESSION_NONE) {
+    session_name('ICPUB');  // aparte cookie-naam om admin-sessies niet te raken
+    session_set_cookie_params([
+        'lifetime' => 0,         // browser-sessie
+        'path'     => '/',
+        'httponly' => true,
+        'samesite' => 'Lax',
+    ]);
+    @session_start();
+}
+$sid = session_id();
+if ($sid) {
+    try {
+        if (empty($_GET['action'])) {
+            // HTML pageload: user_agent alleen bij eerste INSERT — verandert
+            // niet binnen dezelfde sessie, en dubbele UPDATE zou legitieme
+            // UA overschrijven als $_SERVER onverwacht leeg is.
+            $ua = substr((string)($_SERVER['HTTP_USER_AGENT'] ?? ''), 0, 255);
             $pdo->prepare(
-                "INSERT INTO public_visits (session_id) VALUES (?)
+                "INSERT INTO public_visits (session_id, user_agent) VALUES (?, ?)
                  ON DUPLICATE KEY UPDATE last_seen = NOW(), hits = hits + 1"
-            )->execute([$sid]);
+            )->execute([$sid, $ua]);
             // Piek bijwerken (vandaag + all-time). Eén UPDATE met subquery:
             // goedkoop genoeg om op elke pageload te draaien.
             $pdo->prepare("
@@ -49,8 +55,17 @@ if (empty($_GET['action'])) {
                         (SELECT COUNT(*) FROM public_visits WHERE last_seen > NOW() - INTERVAL 5 MINUTE))
                 WHERE scope = 'public'
             ")->execute();
-        } catch (Throwable $e) { /* tracking mag nooit de pagina breken */ }
-    }
+        } else {
+            // AJAX: last_seen bumpen, alleen als vorige update > 30s geleden.
+            // Voorkomt UPDATE-storm bij snel-klikkende bezoekers, terwijl de
+            // sessie wel als "actief" blijft gelden binnen het 5-min-window
+            // dat peak/hourly gebruiken.
+            $pdo->prepare(
+                "UPDATE public_visits SET last_seen = NOW()
+                 WHERE session_id = ? AND last_seen < NOW() - INTERVAL 30 SECOND"
+            )->execute([$sid]);
+        }
+    } catch (Throwable $e) { /* tracking mag nooit de pagina breken */ }
 }
 
 // ── Wedstrijd-zichtbaarheidsgate ─────────────────────────────────────────────

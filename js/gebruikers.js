@@ -337,6 +337,8 @@ function renderBezoekersBlok() {
                 <div class="gb-stat-label">Piek gelijktijdig <span class="gb-stat-hint" id="gb-stat-peak-at">(ooit)</span></div>
             </div>
         </div>
+        <div class="gb-stat-hourly" id="gb-stat-hourly"></div>
+        <div class="gb-stat-weekly" id="gb-stat-weekly"></div>
         <div class="gb-stat-voetnoot" id="gb-stat-voet">Laatst bijgewerkt: —</div>
 
         <!-- Coach-pagina statistieken -->
@@ -367,6 +369,8 @@ function renderBezoekersBlok() {
                 <div class="gb-stat-label">Piek gelijktijdig <span class="gb-stat-hint" id="gb-stat-coach-peak-at">(ooit)</span></div>
             </div>
         </div>
+        <div class="gb-stat-hourly" id="gb-stat-coach-hourly"></div>
+        <div class="gb-stat-weekly" id="gb-stat-coach-weekly"></div>
         <div class="gb-stat-voetnoot" id="gb-stat-coach-voet">Laatst bijgewerkt: —</div>
 
         <!-- Check-pagina statistieken -->
@@ -397,6 +401,8 @@ function renderBezoekersBlok() {
                 <div class="gb-stat-label">Piek gelijktijdig <span class="gb-stat-hint" id="gb-stat-check-peak-at">(ooit)</span></div>
             </div>
         </div>
+        <div class="gb-stat-hourly" id="gb-stat-check-hourly"></div>
+        <div class="gb-stat-weekly" id="gb-stat-check-weekly"></div>
         <div class="gb-stat-voetnoot" id="gb-stat-check-voet">Laatst bijgewerkt: —</div>`;
 
     startPublicStatsRefresh();
@@ -412,6 +418,53 @@ function renderLogboekBlok() {
 
 // ── Publieke-pagina bezoekersstatistiek ───────────────────────────────────
 let _gbStatsTimer = null;
+
+// Render inline SVG-staafgrafiek voor gelijktijdig-actief per uur vandaag.
+// hourly: array van 24 getallen. Y-as met max/mid/0, X-as met uur-labels.
+function _renderHourlyChart(containerId, hourly) {
+    const c = el(containerId);
+    if (!c || !Array.isArray(hourly) || hourly.length !== 24) return;
+    const totaal = hourly.reduce((s, n) => s + (Number(n) || 0), 0);
+    if (totaal === 0) {
+        c.innerHTML = '<div class="gb-stat-hourly-leeg">Nog geen bezoekers vandaag</div>';
+        return;
+    }
+    const max = Math.max(...hourly, 1);
+    const mid = Math.round(max / 2);
+    const w   = 100 / 24;
+    // Bars + horizontale gridlijnen op 0/50/100%
+    const grid = [0, 50, 100].map(y =>
+        `<line x1="0" x2="100" y1="${y}" y2="${y}" stroke="#e0e6ee"
+               stroke-width="0.5" vector-effect="non-scaling-stroke"/>`
+    ).join('');
+    const bars = hourly.map((n, i) => {
+        const h = (n / max) * 100;
+        const x = i * w;
+        return `<rect x="${x + 0.15}" y="${100 - h}" width="${w - 0.3}" height="${h}"
+                      fill="var(--blauw)" opacity="${n > 0 ? 0.85 : 0.15}">
+                    <title>${String(i).padStart(2,'0')}:00 — ${n} bezoekers</title>
+                </rect>`;
+    }).join('');
+    // X-as labels in HTML zodat de font niet uitgerekt wordt door SVG viewBox
+    const xTicks = [0, 3, 6, 9, 12, 15, 18, 21].map(h => {
+        const left = h * w + w/2;
+        return `<span class="gb-stat-xtick" style="--x:${left}%">${String(h).padStart(2,'0')}</span>`;
+    }).join('');
+    c.innerHTML = `<div class="gb-stat-hourly-titel">Gelijktijdig actief per uur (vandaag)</div>
+        <div class="gb-stat-hourly-body">
+            <div class="gb-stat-hourly-y">
+                <span>${max}</span>
+                <span>${mid}</span>
+                <span>0</span>
+            </div>
+            <div class="gb-stat-hourly-plot">
+                <svg viewBox="0 0 100 100" preserveAspectRatio="none" class="gb-stat-hourly-svg">
+                    ${grid}${bars}
+                </svg>
+                <div class="gb-stat-xas">${xTicks}</div>
+            </div>
+        </div>`;
+}
 
 async function _laadStatsBlok(endpoint, idPrefix, voetId) {
     try {
@@ -457,7 +510,58 @@ async function _laadStatsBlok(endpoint, idPrefix, voetId) {
             const t = new Date().toLocaleTimeString('nl-NL', {hour:'2-digit', minute:'2-digit', second:'2-digit'});
             v.textContent = 'Laatst bijgewerkt: ' + t;
         }
+        _renderHourlyChart(`${idPrefix}-hourly`, data.hourly);
+        _renderWeeklyChart(`${idPrefix}-weekly`, data.weekly);
     } catch { /* stil */ }
+}
+
+// Weekgrafiek: laatste 52 weken. weekly = array van { label, n }.
+function _renderWeeklyChart(containerId, weekly) {
+    const c = el(containerId);
+    if (!c || !Array.isArray(weekly) || !weekly.length) return;
+    const totaal = weekly.reduce((s, w) => s + (Number(w.n) || 0), 0);
+    if (totaal === 0) {
+        c.innerHTML = '<div class="gb-stat-hourly-leeg">Nog geen bezoekers in het afgelopen jaar</div>';
+        return;
+    }
+    const N = weekly.length;
+    const max = Math.max(...weekly.map(w => Number(w.n) || 0), 1);
+    const mid = Math.round(max / 2);
+    const w   = 100 / N;
+    const grid = [0, 50, 100].map(y =>
+        `<line x1="0" x2="100" y1="${y}" y2="${y}" stroke="#e0e6ee"
+               stroke-width="0.5" vector-effect="non-scaling-stroke"/>`
+    ).join('');
+    const bars = weekly.map((wk, i) => {
+        const n = Number(wk.n) || 0;
+        const h = (n / max) * 100;
+        const x = i * w;
+        return `<rect x="${x + 0.1}" y="${100 - h}" width="${w - 0.2}" height="${h}"
+                      fill="var(--blauw)" opacity="${n > 0 ? 0.85 : 0.15}">
+                    <title>${wk.label} — ${n} bezoekers</title>
+                </rect>`;
+    }).join('');
+    // Tick-labels: 5 stops verdeeld over de 52 weken (bijv. -12m, -9m, -6m, -3m, nu)
+    const tickIdx = [0, Math.floor(N*0.25), Math.floor(N*0.5), Math.floor(N*0.75), N-1];
+    const xTicks = tickIdx.map(i => {
+        const label = weekly[i]?.label ?? '';
+        const left = i * w + w/2;
+        return `<span class="gb-stat-xtick" style="--x:${left}%">${label}</span>`;
+    }).join('');
+    c.innerHTML = `<div class="gb-stat-hourly-titel">Bezoekers per week (laatste 52 weken)</div>
+        <div class="gb-stat-hourly-body">
+            <div class="gb-stat-hourly-y">
+                <span>${max}</span>
+                <span>${mid}</span>
+                <span>0</span>
+            </div>
+            <div class="gb-stat-hourly-plot">
+                <svg viewBox="0 0 100 100" preserveAspectRatio="none" class="gb-stat-hourly-svg">
+                    ${grid}${bars}
+                </svg>
+                <div class="gb-stat-xas">${xTicks}</div>
+            </div>
+        </div>`;
 }
 
 async function laadPublicStats() {

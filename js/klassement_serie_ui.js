@@ -48,6 +48,8 @@ async function openSerieWizard({ orgId = '', serieId = null } = {}) {
                 starts:         w.starts,
                 telt_mee:       !!+w.telt_mee,
                 is_finale:      !!+w.is_finale,
+                bonus_modus:    !!+w.bonus_modus,
+                bonus_punten:   w.bonus_punten != null ? +w.bonus_punten : 1,
                 volgorde:       +w.volgorde || 0,
                 _checked:       true,
                 _geimporteerd:  !!+w.geimporteerd,
@@ -84,6 +86,8 @@ async function _laadWedstrijdenVoorOrg(state) {
                 starts:         c.starts,
                 telt_mee:       true,
                 is_finale:      false,
+                bonus_modus:    false,
+                bonus_punten:   1,
                 volgorde:       state.wedstrijden.length,
                 _checked:       false,
                 _geimporteerd:  !!c.geimporteerd,
@@ -215,6 +219,10 @@ function _renderStap2(state, body) {
                 <td><input type="checkbox" class="ks-w-check" ${w._checked ? 'checked' : ''}></td>
                 <td><input type="checkbox" class="ks-w-telt"  ${w.telt_mee  ? 'checked' : ''} ${w._checked ? '' : 'disabled'} title="Telt mee (uit zetten = opgenomen maar niet meetellend)"></td>
                 <td><input type="radio" name="ks-w-finale" class="ks-w-finale" ${w.is_finale ? 'checked' : ''} ${w._checked ? '' : 'disabled'}></td>
+                <td class="ks-w-bonus" style="white-space:nowrap">
+                    <input type="checkbox" class="ks-w-bonus-chk" ${w.bonus_modus ? 'checked' : ''} ${w._checked ? '' : 'disabled'} title="Bonus / afgelast: elke aanwezige rijder krijgt een vast aantal punten (geen rang-uitslag)">
+                    <input type="number" class="ks-w-bonus-pnt inp" step="0.5" min="0" value="${w.bonus_punten ?? 1}" style="width:3.4em${w.bonus_modus ? '' : ';visibility:hidden'}" ${(w._checked && w.bonus_modus) ? '' : 'disabled'} title="Punten per aanwezige rijder">
+                </td>
                 <td class="ks-w-naam">${rkEsc(w.name)}${badge}</td>
                 <td class="ks-w-datum">${rkEsc(dt)}</td>
             </tr>`;
@@ -227,15 +235,18 @@ function _renderStap2(state, body) {
             getoond als ze qua email of naam overeenkomen met deze organisatie — gebruik het
             zoekveld hieronder als je iets mist.<br>
             <b>Telt mee</b> kun je uitzetten om een wedstrijd wel in de lijst te houden maar niet mee te rekenen
-            (bv. oefenwedstrijd of achteraf afgelast). <b>Finale</b> markeert de afsluitende wedstrijd — wordt
-            gebruikt voor tie-break en streepresultaten-gating.
+            (bv. oefenwedstrijd). <b>Finale</b> markeert de afsluitende wedstrijd — wordt
+            gebruikt voor tie-break en streepresultaten-gating.<br>
+            <b>Bonus</b> geeft elke aanwezige rijder (getekend/bevestigd) het ingevulde aantal <b>extra</b>
+            punten, <b>bovenop</b> de uitslag. Voor een afgelaste wedstrijd (geen uitslag → puur de bonus)
+            óf om een wedstrijd zwaarder te laten tellen (bv. finale + 5).
         </div>
         <div class="ks-veld">
             <input type="text" class="inp" id="ks-w-zoek" placeholder="🔎 Filter op naam…">
         </div>
         <table class="ks-w-tabel">
             <thead><tr>
-                <th>Mee</th><th>Telt</th><th>Finale</th><th>Naam</th><th>Datum</th>
+                <th>Mee</th><th>Telt</th><th>Finale</th><th>Bonus</th><th>Naam</th><th>Datum</th>
             </tr></thead>
             <tbody id="ks-w-tbody">${renderRijen('')}</tbody>
         </table>
@@ -247,17 +258,39 @@ function _renderStap2(state, body) {
         body.querySelectorAll('tr[data-idx]').forEach(tr => {
             const i = +tr.dataset.idx;
             const w = state.wedstrijden[i];
+            const teltEl   = tr.querySelector('.ks-w-telt');
+            const finaleEl = tr.querySelector('.ks-w-finale');
+            const bonusEl  = tr.querySelector('.ks-w-bonus-chk');
+            const bpntEl   = tr.querySelector('.ks-w-bonus-pnt');
+            const syncDisabled = () => {
+                teltEl.disabled   = !w._checked;
+                bonusEl.disabled  = !w._checked;
+                finaleEl.disabled = !w._checked;
+                bpntEl.disabled   = !w._checked || !w.bonus_modus;
+                bpntEl.style.visibility = w.bonus_modus ? '' : 'hidden';
+            };
             tr.querySelector('.ks-w-check').addEventListener('change', e => {
                 w._checked = e.target.checked;
-                tr.querySelector('.ks-w-telt').disabled = !w._checked;
-                tr.querySelector('.ks-w-finale').disabled = !w._checked;
-                if (!w._checked) { w.is_finale = false; tr.querySelector('.ks-w-finale').checked = false; }
+                if (!w._checked) { w.is_finale = false; finaleEl.checked = false; }
+                syncDisabled();
             });
-            tr.querySelector('.ks-w-telt').addEventListener('change', e => w.telt_mee = e.target.checked);
-            tr.querySelector('.ks-w-finale').addEventListener('change', () => {
+            teltEl.addEventListener('change', e => w.telt_mee = e.target.checked);
+            finaleEl.addEventListener('change', () => {
                 // Radio-gedrag: de andere is_finale's uitzetten (in state + DOM)
                 state.wedstrijden.forEach(ww => ww.is_finale = false);
                 w.is_finale = true;
+            });
+            bonusEl.addEventListener('change', e => {
+                w.bonus_modus = e.target.checked;
+                if (w.bonus_modus) {
+                    // Bonus telt altijd mee (de extra punten moeten meetellen).
+                    w.telt_mee = true; teltEl.checked = true;
+                }
+                syncDisabled();
+            });
+            bpntEl.addEventListener('input', e => {
+                w.bonus_punten = parseFloat(e.target.value);
+                if (isNaN(w.bonus_punten) || w.bonus_punten < 0) w.bonus_punten = 1;
             });
         });
     };
@@ -604,6 +637,8 @@ async function _opslaan(state) {
             competition_id: w.competition_id,
             telt_mee:       w.telt_mee ? 1 : 0,
             is_finale:      w.is_finale ? 1 : 0,
+            bonus_modus:    w.bonus_modus ? 1 : 0,
+            bonus_punten:   w.bonus_modus ? (parseFloat(w.bonus_punten) || 1) : 1,
             volgorde:       i,
             // Voor nog-niet-geïmporteerde wedstrijden: naam + datum
             // bijhouden op de koppelrij (geen shadow in `competitions`).

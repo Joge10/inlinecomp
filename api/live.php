@@ -1315,6 +1315,25 @@ if ($action === 'genereer_volgende_ronde') {
             $beschikbaar[] = $r;
         }
 
+        // Full-final: rijders met een 'lichte' sanctie in de bron-ronde
+        // (DNS/DNF/DQ-TF) verdwijnen niet volledig — ze mogen achteraan in de
+        // LAAGSTE B-finale starten (of daar opnieuw een DNS krijgen). Zonder dit
+        // bleef de B-finale leeg als er verder niemand afviel (bv. 3 rijders,
+        // 2 series, één DNS → 2 finalisten in A, niemand in B), waardoor de
+        // uitslag niet vast te leggen was. Zwaardere diskwalificaties
+        // (DQ-SF/DQ-DF) stromen NIET door. Alleen toevoegen als er ook echt een
+        // B-finale gepland staat ($bRittenGeconfigureerd) — anders zouden ze
+        // ten onrechte in de A-finale belanden. In het internationale
+        // (kleine-finale) systeem stroomt GEEN enkele sanctie door, dus daar
+        // blijft deze lijst leeg ($isFullFinal is dan false).
+        $sanctiesNaarB   = ['DNS', 'DNF', 'DQ-TF'];
+        $bSanctieRijders = ($isFullFinal && !empty($bRittenGeconfigureerd))
+            ? array_values(array_filter(
+                $alleRijders,
+                fn($r) => in_array($r['sanctie'] ?? '', $sanctiesNaarB, true)
+            ))
+            : [];
+
         // ── Bouw slot-lijst op (Q-slots + q-slots) ───────────────────────────
         // Sommige slots kunnen null zijn (heat nog niet gespeeld → positie gereserveerd).
         // $overflowRijders: extra rijders door ex-aequo op de kwalificatiegrens.
@@ -1476,7 +1495,8 @@ if ($action === 'genereer_volgende_ronde') {
                     // Tie-break op heat_nr DESC — zelfde regel als hoofdpad
                     return ((int)($b['heat_nr'] ?? 0)) - ((int)($a['heat_nr'] ?? 0));
                 });
-                $bSlots = array_merge($metTijdB, $zonderTijdB);
+                // Lichte-sanctie-rijders (DNS/DNF/DQ-TF) achteraan → laagste B-finale.
+                $bSlots = array_merge($metTijdB, $zonderTijdB, $bSanctieRijders);
             }
         } else {
             // Puur tijdsortering (heats → kwartfinale / runner_up / finale).
@@ -1550,6 +1570,13 @@ if ($action === 'genereer_volgende_ronde') {
                 // finale_b_heats per cat.
                 if ($isKleinFinale && count($bSlots) > $aantalDoor) {
                     $bSlots = array_slice($bSlots, 0, $aantalDoor);
+                }
+
+                // Full-final: lichte-sanctie-rijders (DNS/DNF/DQ-TF) achteraan
+                // in de laagste B-finale. Leeg bij internationaal (kleine finale),
+                // dus dan een no-op.
+                if ($bSanctieRijders) {
+                    $bSlots = array_merge($bSlots, $bSanctieRijders);
                 }
             }
         }

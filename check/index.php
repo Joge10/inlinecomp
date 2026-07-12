@@ -23,25 +23,24 @@ require_once __DIR__ . '/../../config_inlinecomp.php';
 $action = $_GET['action'] ?? '';
 
 // ── Bezoektracking: upsert session-hit in check_visits ──────────────────────
-// Alleen op de echte HTML pageload (geen action=...) om AJAX-calls niet
-// dubbel te tellen. Aparte session-cookie (ICCHECK) zodat /check-, /coach-
-// en /public-sessies los getracked worden.
-if ($action === '') {
-    if (session_status() === PHP_SESSION_NONE) {
-        session_name('ICCHECK');
-        session_set_cookie_params([
-            'lifetime' => 0, 'path' => '/', 'httponly' => true, 'samesite' => 'Lax',
-        ]);
-        @session_start();
-    }
-    $sid = session_id();
-    if ($sid) {
-        try {
+// HTML → full INSERT/UPDATE + peak-check. AJAX → last_seen bumpen met 30s
+// rate-limit. Zie public/index.php voor rationale.
+if (session_status() === PHP_SESSION_NONE) {
+    session_name('ICCHECK');
+    session_set_cookie_params([
+        'lifetime' => 0, 'path' => '/', 'httponly' => true, 'samesite' => 'Lax',
+    ]);
+    @session_start();
+}
+$sid = session_id();
+if ($sid) {
+    try {
+        if ($action === '') {
+            $ua = substr((string)($_SERVER['HTTP_USER_AGENT'] ?? ''), 0, 255);
             $pdo->prepare(
-                "INSERT INTO check_visits (session_id) VALUES (?)
+                "INSERT INTO check_visits (session_id, user_agent) VALUES (?, ?)
                  ON DUPLICATE KEY UPDATE last_seen = NOW(), hits = hits + 1"
-            )->execute([$sid]);
-            // Piek-tracking (vandaag + all-time) — zelfde patroon als /public en /coach
+            )->execute([$sid, $ua]);
             $pdo->prepare("
                 UPDATE peak_stats SET
                     peak_today = CASE
@@ -57,8 +56,13 @@ if ($action === '') {
                         (SELECT COUNT(*) FROM check_visits WHERE last_seen > NOW() - INTERVAL 5 MINUTE))
                 WHERE scope = 'check'
             ")->execute();
-        } catch (Throwable $e) { /* tracking mag nooit de pagina breken */ }
-    }
+        } else {
+            $pdo->prepare(
+                "UPDATE check_visits SET last_seen = NOW()
+                 WHERE session_id = ? AND last_seen < NOW() - INTERVAL 30 SECOND"
+            )->execute([$sid]);
+        }
+    } catch (Throwable $e) { /* tracking mag nooit de pagina breken */ }
 }
 
 // ── Fuzzy voornaam-check ────────────────────────────────────────────────────

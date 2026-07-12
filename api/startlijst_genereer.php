@@ -729,18 +729,33 @@ try {
     ");
 
     $dcIdsJson = json_encode($dcIds);
+    // Koppel heats POSITIONEEL aan de resterende ritten (op heat_nr gesorteerd),
+    // niet via $rittenMap[$hNr]. Reden: delete_rit laat GATEN in heat_nr achter
+    // (verwijder je Serie 2, dan blijven Serie 1 en 3 over — geen hernummering),
+    // terwijl deze functie heats contigu 1..N nummert. Een lookup op contigu
+    // nummer miste dan de rit met heat_nr 3 → die heat kreeg tijdschema_rit_id =
+    // NULL ("Heat 2", zonder categorie) en de resterende rit (heat_nr 3) bleef
+    // heatloos. Gevolg: correct in Startlijsten (leest via dc_id) maar een lege
+    // "heat 1" in Live-verwerking (leest via tijdschema_rit_id). Positioneel
+    // koppelen is gat-immuun en in het normale geval (keys 1..N) identiek aan het
+    // oude gedrag ($hNr - 1 == index bij contigue nummering).
+    $sortedRitten = array_values($rittenMap); // al op heat_nr gevuld (ORDER BY)
     foreach ($heats as $heat) {
         $hNr     = (int)$heat['nummer'];
-        $rit     = $rittenMap[$hNr] ?? null;
+        $rit     = $sortedRitten[$hNr - 1] ?? null;
         $ritId   = $rit ? (int)$rit['id']       : null;
         $ritVolg = $rit ? (int)$rit['volgorde']  : null;
+        // Sla de ECHTE heat_nr van de gekoppelde rit op zodat heat en rit
+        // consistent blijven (en matcht met rit_naam "Serie N"). Zonder rit
+        // (over-loting: meer heats dan ritten) → val terug op $hNr.
+        $ritHeatNr = $rit ? (int)$rit['heat_nr'] : $hNr;
         $heatNaam = $rit ? $rit['rit_naam'] : "Heat {$hNr}";
         $insHeat->execute([
             $compId, $primaryDcId,
             $distId ?: null,
             $splitGroup,
             $ritId, $ritVolg,
-            $heatNaam, $hNr, $methode, $methodeLabel, $dcIdsJson,
+            $heatNaam, $ritHeatNr, $methode, $methodeLabel, $dcIdsJson,
         ]);
         $heatId = (int)$pdo->lastInsertId();
         foreach ($heat['rijders'] as $pos => $r) {

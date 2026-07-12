@@ -1273,23 +1273,45 @@ function renderRittenLijst(ritten, blokken) {
     // Reserves tellen niet (reserve = optioneel, niet ingezet). Status 2/3
     // (afgemeld) en 4 (niet-getekend) tellen niet — 1 (aanwezig) en 5
     // (bevestigd bij org) wél.
+    // Bij merges: alle mergende dc_id's krijgen het merge-totaal. De ritten
+    // dragen slechts één dc_id (de primary uit bouwAfstandGroepen), maar welke
+    // dat is kan verschillen van run tot run — dus map elke mergende dc_id
+    // naar het totaal om zeker te zijn dat de lookup werkt.
     const actueelPerDc = new Map();
+    const _perDcRaw    = new Map(); // dc_id → aantal (voor merge-sommatie)
     for (const dc of (vergelijkData ?? [])) {
         const aantal = (dc.competitors ?? []).filter(c => {
             const st = c.entry_status;
             const isReserve = c.reserve_nr != null && parseInt(c.reserve_nr) > 0;
             return (st === 1 || st === 5) && !isReserve;
         }).length;
+        _perDcRaw.set(dc.dc_id, aantal);
         actueelPerDc.set(dc.dc_id, aantal);
     }
-    // Per DC welke ronde-types bestaan (om "direct A-finale" te detecteren).
-    const rondesPerDc = new Map();
-    for (const r of ritten) {
-        if (!rondesPerDc.has(r.dc_id)) rondesPerDc.set(r.dc_id, new Set());
-        rondesPerDc.get(r.dc_id).add(r.ronde_type);
+    // Merges: sum-over-merge_group toewijzen aan élke mergende dc_id
+    const _mergeGroepenAct = new Map();
+    for (const dc of (vergelijkData ?? [])) {
+        if (!dc.merge_group) continue;
+        if (!_mergeGroepenAct.has(dc.merge_group)) _mergeGroepenAct.set(dc.merge_group, []);
+        _mergeGroepenAct.get(dc.merge_group).push(dc.dc_id);
     }
-    const isDirectFinaleDc = (dc_id) => {
-        const s = rondesPerDc.get(dc_id);
+    for (const dcIds of _mergeGroepenAct.values()) {
+        const totaal = dcIds.reduce((s, id) => s + (_perDcRaw.get(id) ?? 0), 0);
+        for (const id of dcIds) actueelPerDc.set(id, totaal);
+    }
+    // Per (DC × afstand) welke ronde-types bestaan (om "direct A-finale" te
+    // detecteren). Composite key noodzakelijk: één DC kan series hebben op
+    // 100m en direct-A op Marathon — dan is de Marathon-A-finale wél
+    // combineerbaar ook al heeft de DC elders series.
+    const rondesPerDcDist = new Map();
+    const _rpKey = (dc_id, distance_id) => `${dc_id}|${distance_id ?? ''}`;
+    for (const r of ritten) {
+        const k = _rpKey(r.dc_id, r.distance_id);
+        if (!rondesPerDcDist.has(k)) rondesPerDcDist.set(k, new Set());
+        rondesPerDcDist.get(k).add(r.ronde_type);
+    }
+    const isDirectFinaleDc = (dc_id, distance_id) => {
+        const s = rondesPerDcDist.get(_rpKey(dc_id, distance_id));
         if (!s) return false;
         return s.has('finale_a')
             && !s.has('heats') && !s.has('kwartfinale') && !s.has('halve_finale');
@@ -1299,7 +1321,11 @@ function renderRittenLijst(ritten, blokken) {
     //   Bv. 11 / 6 → [2, 2, 2, 2, 2, 1]. Operator ziet meteen welke heat
     //   kandidaat is om te schrappen.
     // Per rit: Map<rit.id, actueel_in_die_heat>. Per groep-key: totaal.
-    const _verdeelKey = (r) => `${r.dc_id}|${r.ronde_type}`;
+    // Key inclusief distance_id: één DC kan series op meerdere afstanden hebben
+    // (bv. merge dc_id gedeeld over 100m + 500m). Zonder distance_id komen alle
+    // heats van alle afstanden in dezelfde `rs` en verdeel je 't totaal over
+    // te veel rits — dan krijgt elke heat 1 ipv de correcte verdeling per afstand.
+    const _verdeelKey = (r) => `${r.dc_id}|${r.distance_id ?? ''}|${r.ronde_type}`;
     const _ritsPerKey = new Map();
     for (const r of ritten) {
         const k = _verdeelKey(r);
@@ -1316,18 +1342,21 @@ function renderRittenLijst(ritten, blokken) {
     // Cascade KF (12) → HF (8) → AF (4) (geen series):
     //     eerste = KF, doorstroom = HF, RU = 12 − 8 = 4
     const _cascadeOrder = ['heats','kwartfinale','halve_finale','finale_a'];
-    const sumVerwacht = (dc_id, type) =>
-        ritten.filter(r => r.dc_id === dc_id && r.ronde_type === type)
-              .reduce((sum, r) => sum + (parseInt(r.verwacht) || 0), 0);
-    const slotsDoorstroom = (dc_id) => {
-        const s = rondesPerDc.get(dc_id);
+    const sumVerwacht = (dc_id, distance_id, type) =>
+        ritten.filter(r =>
+                r.dc_id === dc_id
+             && (r.distance_id ?? '') === (distance_id ?? '')
+             && r.ronde_type === type
+        ).reduce((sum, r) => sum + (parseInt(r.verwacht) || 0), 0);
+    const slotsDoorstroom = (dc_id, distance_id) => {
+        const s = rondesPerDcDist.get(_rpKey(dc_id, distance_id));
         if (!s) return null;
         // Vind eerste cascade-ronde die bestaat.
         const eersteIdx = _cascadeOrder.findIndex(rt => s.has(rt));
         if (eersteIdx < 0) return null;
         // Doorstroom = eerstvolgende cascade-ronde NA de eerste.
         for (let i = eersteIdx + 1; i < _cascadeOrder.length; i++) {
-            if (s.has(_cascadeOrder[i])) return sumVerwacht(dc_id, _cascadeOrder[i]);
+            if (s.has(_cascadeOrder[i])) return sumVerwacht(dc_id, distance_id, _cascadeOrder[i]);
         }
         return null;
     };
@@ -1357,10 +1386,11 @@ function renderRittenLijst(ritten, blokken) {
     }
     const _distanceIdVanRit = (r) => r.distance_id ?? '';
     for (const [k, rs] of _ritsPerKey) {
-        const dc_id      = rs[0].dc_id;
-        const ronde_type = rs[0].ronde_type;
+        const dc_id       = rs[0].dc_id;
+        const distance_id = rs[0].distance_id;
+        const ronde_type  = rs[0].ronde_type;
         const isCascadeRonde = ['heats','kwartfinale','halve_finale'].includes(ronde_type);
-        const isDirectA      = ronde_type === 'finale_a' && isDirectFinaleDc(dc_id);
+        const isDirectA      = ronde_type === 'finale_a' && isDirectFinaleDc(dc_id, distance_id);
         if (!isCascadeRonde && !isDirectA) continue;
         const catN = actueelPerDc.get(dc_id);
         if (catN == null) continue;
@@ -1386,9 +1416,10 @@ function renderRittenLijst(ritten, blokken) {
     // ── PASS 2: runner-up = totaal − doorstroom-slots ──────────────────
     for (const [k, rs] of _ritsPerKey) {
         if (rs[0].ronde_type !== 'runner_up') continue;
-        const dc_id  = rs[0].dc_id;
+        const dc_id       = rs[0].dc_id;
+        const distance_id = rs[0].distance_id;
         const totaal = actueelPerDc.get(dc_id);
-        const slots  = slotsDoorstroom(dc_id);
+        const slots  = slotsDoorstroom(dc_id, distance_id);
         if (totaal == null || slots == null) continue;
         const ruActu = Math.max(0, totaal - slots);
         _verdeelOpslaan(rs, ruActu, k);
@@ -1844,7 +1875,7 @@ function renderRittenLijst(ritten, blokken) {
                 // want hun aantal hangt af van wie doorstroomt, niet van
                 // afmeldingen alleen.
                 let deelnTxt = '';
-                const _grKey = `${rit.dc_id}|${rit.ronde_type}`;
+                const _grKey = `${rit.dc_id}|${rit.distance_id ?? ''}|${rit.ronde_type}`;
                 const actueelTot = actueelTotPerDcRonde.get(_grKey);
                 if (actueelTot != null) {
                     deelnTxt = ` · <span class="ts-groep-deeln">${actueelTot} deelnemers</span>`;
@@ -1939,7 +1970,7 @@ function renderRittenLijst(ritten, blokken) {
             // Combi is puur OPTISCH (= "rijden tegelijk"), loting blijft per
             // cat apart.
             const combiSysteem  = ['full-final', 'internationaal-nieuw'].includes(huidigTijdschema?.systeem ?? '');
-            const isDirectAFin  = rit.ronde_type === 'finale_a' && isDirectFinaleDc(rit.dc_id);
+            const isDirectAFin  = rit.ronde_type === 'finale_a' && isDirectFinaleDc(rit.dc_id, rit.distance_id);
             const combiEligible = combiSysteem
                                 && !_tsLeesOnly
                                 && (isDirectAFin || rit.ronde_type === 'runner_up');

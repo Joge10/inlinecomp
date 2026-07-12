@@ -169,6 +169,62 @@ try {
         ];
     }
 
+    // ── Propageer basis-afstanden naar andere DC's in dezelfde merge_group ─
+    // Als deze DC in een merge zit, moeten alle mergende DC's dezelfde
+    // afstand-namen/meters delen. Zonder deze sync heeft één DC nog
+    // "Lange afstand" en de ander al "Marathon" — dat vervuilt overzichten
+    // die per-DC-naam dedup en zorgt voor dubbele kolommen.
+    //
+    // Alleen basis-afstanden (target_group NULL) propageren: splits kunnen
+    // per DC verschillen en zijn niet symmetrisch tussen mergende DC's.
+    // Bij demerge blijft de renamed naam staan bij elke ex-merge-DC —
+    // dat is bewust: de aanpassing was gewenst, niet terug naar KNSB.
+    if ($splitGroup === null) {
+        $mgStmt = $pdo->prepare("SELECT merge_group FROM distance_combinations WHERE id = ?");
+        $mgStmt->execute([$dcId]);
+        $mergeGroup = $mgStmt->fetchColumn();
+        if ($mergeGroup) {
+            $otherStmt = $pdo->prepare(
+                "SELECT id FROM distance_combinations
+                 WHERE merge_group = ? AND id != ?"
+            );
+            $otherStmt->execute([$mergeGroup, $dcId]);
+            $otherDcIds = $otherStmt->fetchAll(PDO::FETCH_COLUMN);
+
+            foreach ($otherDcIds as $otherId) {
+                // Delete basis-rijen die niet in de payload staan (zelfde
+                // logica als hoofd-DC, maar gescoopt op $otherId).
+                if ($nieuweIds) {
+                    $ph = implode(',', array_fill(0, count($nieuweIds), '?'));
+                    $pdo->prepare("
+                        DELETE FROM distances
+                        WHERE distance_combination_id = ?
+                          AND (target_group IS NULL OR target_group = '')
+                          AND id NOT IN ($ph)
+                    ")->execute(array_merge([$otherId], $nieuweIds));
+                } else {
+                    $pdo->prepare(
+                        "DELETE FROM distances WHERE distance_combination_id = ?
+                         AND (target_group IS NULL OR target_group = '')"
+                    )->execute([$otherId]);
+                }
+                // INSERT/UPDATE met dezelfde id's en waardes; distances-PK is
+                // (dc_id, id), dus 't insert per DC een eigen rij (of update).
+                foreach ($resultaat as $r) {
+                    $stmt->execute([
+                        ':id'           => $r['id'],
+                        ':dc_id'        => $otherId,
+                        ':number'       => $r['number'],
+                        ':name'         => $r['name'],
+                        ':target_group' => null,
+                        ':value_meters' => $r['value_meters'],
+                        ':race_type'    => $r['race_type'],
+                    ]);
+                }
+            }
+        }
+    }
+
     // ── Propageer naam-wijzigingen naar tijdschema_ritten + heats ──────────
     // Zelfde patroon als samenvoeg.php voor dc_naam: REPLACE op de oude
     // naam binnen rit_naam/heat_naam, gescoopt op distance_id zodat we

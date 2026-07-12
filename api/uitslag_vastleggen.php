@@ -379,7 +379,12 @@ try {
             //   chain heats → … → finale + RU  → orde: finale, half, kwart, RU, heats
             //   chain kwart → finale + RU       → orde: finale, half, RU, kwart
             //   chain HF    → finale + RU       → orde: finale, RU, half
-            $standaardVolgorde = ['finale_a', 'halve_finale', 'kwartfinale', 'heats'];
+            // finale_b (kleine finale internationaal-nieuw) staat qua chronologie
+            // gelijk aan runner_up: gereden ná de finale_a-doorstroom-scheiding.
+            // Zonder deze positie krijgt finale_b default order 5 (na heats)
+            // en worden KF-rijders alsnog via heats-tijd gerankt, waardoor de
+            // KF-uitslag niet doorwerkt in de eindrang.
+            $standaardVolgorde = ['finale_a', 'finale_b', 'halve_finale', 'kwartfinale', 'heats'];
             if (isset($rondeGroepen['runner_up'])) {
                 $aanwezig = array_keys($rondeGroepen);
                 $bron = null;

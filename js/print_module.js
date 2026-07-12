@@ -804,28 +804,35 @@ function _pcMinTuple(codes) {
 }
 
 // Lookup: catNaam (dc_name / merge_label) → Set van KNSB-codes erin.
-// Gebouwd op basis van _slGroepen (startlijst-module), fallback vergelijkData.
+// Combineert _slGroepen (startlijsten) én _uGroepen (uitslagen): één van
+// beide kan leeg zijn afhankelijk van welke tab de gebruiker eerder heeft
+// geopend. Zonder combi zou een lege bron de andere gevulde overschrijven.
 function _pcBouwCatCodeMap() {
     const map = new Map();  // catNaam → Set<code>
-    const groepen = (typeof _slGroepen !== 'undefined' && _slGroepen) ? _slGroepen
-                  : (typeof _uGroepen  !== 'undefined' && _uGroepen)  ? _uGroepen : [];
-    for (const g of groepen) {
-        const naam = g.merge_label || g.dc_name;
-        if (!naam) continue;
-        if (!map.has(naam)) map.set(naam, new Set());
-        const set = map.get(naam);
-        for (const c of g.competitors ?? []) {
-            const code = c.knsb?.category || c.category;
-            if (code) set.add(code);
+    const bronnen = [];
+    if (typeof _slGroepen !== 'undefined' && Array.isArray(_slGroepen)) bronnen.push(_slGroepen);
+    if (typeof _uGroepen  !== 'undefined' && Array.isArray(_uGroepen))  bronnen.push(_uGroepen);
+    for (const groepen of bronnen) {
+        for (const g of groepen) {
+            const naam = g.merge_label || g.dc_name;
+            if (!naam) continue;
+            if (!map.has(naam)) map.set(naam, new Set());
+            const set = map.get(naam);
+            for (const c of g.competitors ?? []) {
+                const code = c.knsb?.category || c.category;
+                if (code) set.add(code);
+            }
         }
     }
     return map;
 }
 
-// Cache per render-tick (reset in openPrintCenter)
+// Cache per render-tick (reset in openPrintCenter). Als de cache leeg is
+// (waren _slGroepen/_uGroepen nog niet geladen op eerste sort-call), opnieuw
+// proberen — anders valt sort terug op alfabetisch tot een pagina-refresh.
 let _pcCatCodeMap = null;
 function _pcGetCatCodeMap() {
-    if (!_pcCatCodeMap) _pcCatCodeMap = _pcBouwCatCodeMap();
+    if (!_pcCatCodeMap || _pcCatCodeMap.size === 0) _pcCatCodeMap = _pcBouwCatCodeMap();
     return _pcCatCodeMap;
 }
 
