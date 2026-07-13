@@ -1424,12 +1424,22 @@ try {
                 exit;
             }
         }
+        // Voorvullen: het tijdstip-veld default op de wedstrijd-starttijd uit
+        // competitions.starts (staat sinds de import-fix in NL-tijd). De operator
+        // kan 'm daarna gewoon aanpassen — handig bij een verkeerde feed-tijd of
+        // een multi-day dag-2. substr pakt de HH:MM direct uit "Y-m-d H:i:s"
+        // (positie 11) zodat er geen tijdzone-conversie tussen zit.
+        $stStmt = $pdo->prepare("SELECT starts FROM competitions WHERE id = ?");
+        $stStmt->execute([$compId]);
+        $startsRaw = $stStmt->fetchColumn();
+        $startTijd = ($startsRaw && strlen($startsRaw) >= 16) ? substr($startsRaw, 11, 5) : null;
+
         $s = $pdo->prepare("SELECT COALESCE(MAX(volgorde),0) FROM tijdschema_blokken WHERE tijdschema_id = ?");
         $s->execute([$tsId]);
         $maxV = (int)$s->fetchColumn();
         $pdo->prepare(
-            "INSERT INTO tijdschema_blokken (tijdschema_id, volgorde, blok_type) VALUES (?,?,'wedstrijdstart')"
-        )->execute([$tsId, $maxV + 1]);
+            "INSERT INTO tijdschema_blokken (tijdschema_id, volgorde, blok_type, tijdstip) VALUES (?,?,'wedstrijdstart',?)"
+        )->execute([$tsId, $maxV + 1, $startTijd]);
         $pdo->prepare("UPDATE competitions SET tijdschema_version = tijdschema_version + 1 WHERE id = ?")
             ->execute([$compId]);
         echo json_encode(fetchSchema($pdo, $compId));
