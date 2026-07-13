@@ -109,7 +109,9 @@ try {
         if ($alleenGlobal) {
             // Landing-page van public/coach — alleen globale meldingen.
             $stmt = $pdo->prepare("
-                SELECT id, titel, bericht, titel_en, bericht_en, titel_de, bericht_de, titel_fr, bericht_fr, prio, geldig_van, geldig_tot,
+                SELECT id, titel, bericht, titel_en, bericht_en, titel_de, bericht_de, titel_fr, bericht_fr,
+                       link_url, link_tekst, link_tekst_en, link_tekst_de, link_tekst_fr,
+                       prio, geldig_van, geldig_tot,
                        bijlage_path, bijlage_naam, bijlage_mime,
                        NULL AS competition_id
                 FROM public_meldingen
@@ -122,7 +124,9 @@ try {
         } elseif ($compId !== '') {
             // Wedstrijd-pagina — wedstrijd-specifiek + globaal samen.
             $stmt = $pdo->prepare("
-                SELECT id, titel, bericht, titel_en, bericht_en, titel_de, bericht_de, titel_fr, bericht_fr, prio, geldig_van, geldig_tot,
+                SELECT id, titel, bericht, titel_en, bericht_en, titel_de, bericht_de, titel_fr, bericht_fr,
+                       link_url, link_tekst, link_tekst_en, link_tekst_de, link_tekst_fr,
+                       prio, geldig_van, geldig_tot,
                        bijlage_path, bijlage_naam, bijlage_mime,
                        competition_id
                 FROM public_meldingen
@@ -162,7 +166,9 @@ try {
         $isGlobal = !empty($_GET['global']);
         if ($isGlobal) {
             $stmt = $pdo->prepare("
-                SELECT id, titel, bericht, titel_en, bericht_en, titel_de, bericht_de, titel_fr, bericht_fr, prio, geldig_van, geldig_tot,
+                SELECT id, titel, bericht, titel_en, bericht_en, titel_de, bericht_de, titel_fr, bericht_fr,
+                       link_url, link_tekst, link_tekst_en, link_tekst_de, link_tekst_fr,
+                       prio, geldig_van, geldig_tot,
                        bijlage_path, bijlage_naam, bijlage_mime,
                        aangemaakt_door, aangemaakt_op,
                        NULL AS competition_id
@@ -176,7 +182,9 @@ try {
             // zodat een admin globale meldingen vanuit elke wedstrijd-context
             // kan zien én snel verwijderen als ze tegenstrijdig zijn.
             $stmt = $pdo->prepare("
-                SELECT id, titel, bericht, titel_en, bericht_en, titel_de, bericht_de, titel_fr, bericht_fr, prio, geldig_van, geldig_tot,
+                SELECT id, titel, bericht, titel_en, bericht_en, titel_de, bericht_de, titel_fr, bericht_fr,
+                       link_url, link_tekst, link_tekst_en, link_tekst_de, link_tekst_fr,
+                       prio, geldig_van, geldig_tot,
                        bijlage_path, bijlage_naam, bijlage_mime,
                        aangemaakt_door, aangemaakt_op, competition_id
                 FROM public_meldingen
@@ -221,6 +229,30 @@ try {
         $berichtDe = $berichtDe === '' ? null : $berichtDe;
         $titelFr   = $titelFr   === '' ? null : $titelFr;
         $berichtFr = $berichtFr === '' ? null : $berichtFr;
+        // Optionele call-to-action link/knop. URL alleen http/https toestaan
+        // (geen javascript:/data: e.d.). Leeg = geen knop → labels ook leeg.
+        $linkUrl   = trim($_POST['link_url'] ?? '');
+        if ($linkUrl !== '' && !preg_match('#^https?://#i', $linkUrl)) {
+            http_response_code(400);
+            echo json_encode(['error' => 'Link moet met http:// of https:// beginnen']);
+            exit;
+        }
+        $linkTekst   = trim($_POST['link_tekst']    ?? '');
+        $linkTekstEn = trim($_POST['link_tekst_en'] ?? '');
+        $linkTekstDe = trim($_POST['link_tekst_de'] ?? '');
+        $linkTekstFr = trim($_POST['link_tekst_fr'] ?? '');
+        if ($linkUrl === '') {
+            $linkUrl = $linkTekst = $linkTekstEn = $linkTekstDe = $linkTekstFr = null;
+        } else {
+            if ($linkTekst === '') {
+                http_response_code(400);
+                echo json_encode(['error' => 'Knop-tekst (NL) is verplicht als je een link zet']);
+                exit;
+            }
+            $linkTekstEn = $linkTekstEn === '' ? null : $linkTekstEn;
+            $linkTekstDe = $linkTekstDe === '' ? null : $linkTekstDe;
+            $linkTekstFr = $linkTekstFr === '' ? null : $linkTekstFr;
+        }
         $prio      = trim($_POST['prio']       ?? 'info');
         $vanRaw    = trim($_POST['geldig_van'] ?? '');
         $totRaw    = trim($_POST['geldig_tot'] ?? '') ?: null;
@@ -257,11 +289,13 @@ try {
                 INSERT INTO public_meldingen
                        (id, competition_id, titel, bericht,
                         titel_en, bericht_en, titel_de, bericht_de, titel_fr, bericht_fr,
+                        link_url, link_tekst, link_tekst_en, link_tekst_de, link_tekst_fr,
                         prio, geldig_van, geldig_tot, aangemaakt_door)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             ")->execute([
                 $mid, $compIdDb, $titel, $bericht,
                 $titelEn, $berichtEn, $titelDe, $berichtDe, $titelFr, $berichtFr,
+                $linkUrl, $linkTekst, $linkTekstEn, $linkTekstDe, $linkTekstFr,
                 $prio, $van, $tot, $_authUser['id'] ?? null,
             ]);
         } else {
@@ -273,10 +307,12 @@ try {
                     SET titel = ?, bericht = ?,
                         titel_en = ?, bericht_en = ?, titel_de = ?, bericht_de = ?,
                         titel_fr = ?, bericht_fr = ?,
+                        link_url = ?, link_tekst = ?, link_tekst_en = ?, link_tekst_de = ?, link_tekst_fr = ?,
                         prio = ?, geldig_van = ?, geldig_tot = ?
                     WHERE id = ? AND competition_id IS NULL
                 ")->execute([$titel, $bericht,
                     $titelEn, $berichtEn, $titelDe, $berichtDe, $titelFr, $berichtFr,
+                    $linkUrl, $linkTekst, $linkTekstEn, $linkTekstDe, $linkTekstFr,
                     $prio, $van, $tot, $mid]);
             } else {
                 $pdo->prepare("
@@ -284,10 +320,12 @@ try {
                     SET titel = ?, bericht = ?,
                         titel_en = ?, bericht_en = ?, titel_de = ?, bericht_de = ?,
                         titel_fr = ?, bericht_fr = ?,
+                        link_url = ?, link_tekst = ?, link_tekst_en = ?, link_tekst_de = ?, link_tekst_fr = ?,
                         prio = ?, geldig_van = ?, geldig_tot = ?
                     WHERE id = ? AND competition_id = ?
                 ")->execute([$titel, $bericht,
                     $titelEn, $berichtEn, $titelDe, $berichtDe, $titelFr, $berichtFr,
+                    $linkUrl, $linkTekst, $linkTekstEn, $linkTekstDe, $linkTekstFr,
                     $prio, $van, $tot, $mid, $compId]);
             }
         }

@@ -25,6 +25,13 @@ CREATE TABLE IF NOT EXISTS `public_meldingen` (
     `bericht_de`       TEXT         NULL DEFAULT NULL,
     `titel_fr`         VARCHAR(255) NULL DEFAULT NULL,
     `bericht_fr`       TEXT         NULL DEFAULT NULL,
+    -- Optionele call-to-action link/knop onder het bericht (bv. survey).
+    -- link_url = taal-neutrale externe URL; knop-label is 4-talig.
+    `link_url`         VARCHAR(500) NULL DEFAULT NULL,
+    `link_tekst`       VARCHAR(120) NULL DEFAULT NULL,
+    `link_tekst_en`    VARCHAR(120) NULL DEFAULT NULL,
+    `link_tekst_de`    VARCHAR(120) NULL DEFAULT NULL,
+    `link_tekst_fr`    VARCHAR(120) NULL DEFAULT NULL,
     `prio`             ENUM('info','warn','urgent') NOT NULL DEFAULT 'info',
     `geldig_van`       DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP,
     `geldig_tot`       DATETIME     NULL DEFAULT NULL,

@@ -6819,6 +6819,15 @@ function toonMeldingenOverzicht() {
                    📎 <span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${esc(m.bijlage_naam || 'bijlage')}</span>
                 </a>`
             : '';
+        const linkHtml = m.link_url
+            ? `<a href="${esc(m.link_url)}" target="_blank" rel="noopener"
+                   style="display:inline-flex;align-items:center;gap:.4rem;margin-top:.45rem;
+                          background:${stijl.kleur};color:#fff;text-decoration:none;
+                          padding:.4rem .8rem;border-radius:5px;font-size:.85rem;
+                          font-weight:700;max-width:100%;">
+                   🔗 <span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${esc(_meldingTekst(m, 'link_tekst'))}</span>
+                </a>`
+            : '';
         return `<div style="background:${stijl.bg};border-left:4px solid ${stijl.kleur};
                             padding:.7rem .9rem;margin-bottom:.6rem;border-radius:5px;">
             <div style="display:flex;align-items:center;gap:.4rem;margin-bottom:.3rem;">
@@ -6827,6 +6836,7 @@ function toonMeldingenOverzicht() {
             </div>
             <div style="color:#222;line-height:1.4;font-size:.9rem;white-space:pre-wrap;">${esc(berichtToon)}</div>
             ${bijlHtml}
+            ${linkHtml}
             <div style="font-size:.75rem;color:#888;margin-top:.3rem;">${esc(tijd)}${esc(tot)}</div>
         </div>`;
     }).join('');
@@ -6902,6 +6912,16 @@ function toonMelding(m, compId) {
                     <span style="font-size:1.1rem">📎</span>
                     <span style="flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${esc(m.bijlage_naam || 'Download bijlage')}</span>
                     <span style="font-size:.8rem;opacity:.7">⬇</span>
+                </a>
+            </div>` : ''}
+            ${m.link_url ? `
+            <div style="padding:0 1.5rem .8rem;flex-shrink:0;">
+                <a href="${esc(m.link_url)}" target="_blank" rel="noopener"
+                   style="display:flex;align-items:center;justify-content:center;gap:.5rem;
+                          background:${stijl.kleur};color:#fff;text-decoration:none;
+                          padding:.6rem 1rem;border-radius:6px;font-size:.95rem;font-weight:700;">
+                    <span style="font-size:1.05rem">🔗</span>
+                    <span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${esc(_meldingTekst(m, 'link_tekst'))}</span>
                 </a>
             </div>` : ''}
             <div style="padding:0 1.5rem 1.5rem;flex-shrink:0;">

@@ -224,6 +224,34 @@ function mldOpenForm(compId, id, alleMeldingen = []) {
                     <span class="mld-bijlage-naam" id="mld-bijlage-naam-preview"></span>
                 </div>
             </div>
+            <div class="mld-veld mld-link-blok">
+                <span>🔗 Link/knop <span class="label-hint">— optioneel; verschijnt als klikbare knop onder het bericht (opent in nieuw tabblad)</span></span>
+                <input type="url" id="mld-link-url" class="inp" maxlength="500"
+                       value="${escHtml(m?.link_url ?? '')}" placeholder="https://…  (bv. de survey-link)">
+                <label class="mld-veld">
+                    <span>🇳🇱 Knop-tekst</span>
+                    <input type="text" id="mld-link-tekst" class="inp" maxlength="120"
+                           value="${escHtml(m?.link_tekst ?? '')}" placeholder="bv. Vul de survey in">
+                </label>
+                <div class="mld-rij-veld">
+                    <label class="mld-veld">
+                        <span>🇬🇧 <span class="label-hint">(leeg = fallback NL)</span></span>
+                        <input type="text" id="mld-link-tekst-en" class="inp" maxlength="120"
+                               value="${escHtml(m?.link_tekst_en ?? '')}" placeholder="e.g. Fill in the survey">
+                    </label>
+                    <label class="mld-veld">
+                        <span>🇩🇪</span>
+                        <input type="text" id="mld-link-tekst-de" class="inp" maxlength="120"
+                               value="${escHtml(m?.link_tekst_de ?? '')}" placeholder="z.B. Umfrage ausfüllen">
+                    </label>
+                    <label class="mld-veld">
+                        <span>🇫🇷</span>
+                        <input type="text" id="mld-link-tekst-fr" class="inp" maxlength="120"
+                               value="${escHtml(m?.link_tekst_fr ?? '')}" placeholder="ex. Remplir le sondage">
+                    </label>
+                </div>
+                <span class="label-hint">De knop-tekst wordt met de vertaalknop hierboven meevertaald (NL → EN/DE/FR).</span>
+            </div>
             <div class="mld-rij-veld">
                 <label class="mld-veld">
                     <span>Prioriteit</span>
@@ -291,8 +319,9 @@ function mldOpenForm(compId, id, alleMeldingen = []) {
 function _mldVeldenVoor(taal) {
     const suf = taal === 'nl' ? '' : '-' + taal;
     return {
-        titel:   document.getElementById('mld-titel'   + suf),
-        bericht: document.getElementById('mld-bericht' + suf),
+        titel:     document.getElementById('mld-titel'      + suf),
+        bericht:   document.getElementById('mld-bericht'    + suf),
+        linkTekst: document.getElementById('mld-link-tekst' + suf),
     };
 }
 
@@ -311,6 +340,7 @@ async function mldVertaalBulk(from) {
     if (!src.titel || !src.bericht) return;
     const titel   = src.titel.value.trim();
     const bericht = src.bericht.value.trim();
+    const knop    = src.linkTekst?.value.trim() ?? '';
     if (!titel && !bericht) {
         toonBevestigDialog(
             `Vul eerst de ${TAAL_NAAM[from]}-velden in voor je laat vertalen.`,
@@ -346,7 +376,7 @@ async function mldVertaalBulk(from) {
             headers: { 'Content-Type': 'application/json' },
             // `to` als array → backend gaat in bulk-mode en returnt
             // { translations: { en:{...}, de:{...}, fr:{...} } }
-            body:    JSON.stringify({ titel, bericht, from, to: doelen }),
+            body:    JSON.stringify({ titel, bericht, link_tekst: knop, from, to: doelen }),
         });
         const data = await res.json();
         if (!res.ok || data.error) throw new Error(data.error || `HTTP ${res.status}`);
@@ -356,8 +386,9 @@ async function mldVertaalBulk(from) {
             const tr = data.translations[l];
             if (!tr) continue;
             const dst = _mldVeldenVoor(l);
-            if (dst.titel)   dst.titel.value   = tr.titel   ?? '';
-            if (dst.bericht) dst.bericht.value = tr.bericht ?? '';
+            if (dst.titel)     dst.titel.value     = tr.titel      ?? '';
+            if (dst.bericht)   dst.bericht.value   = tr.bericht    ?? '';
+            if (dst.linkTekst) dst.linkTekst.value = tr.link_tekst ?? '';
         }
     } catch (e) {
         toonBevestigDialog('Vertaal-fout: ' + e.message, 'Vertalen', 'OK', '');
@@ -380,12 +411,25 @@ async function mldOpslaan(compId) {
     const prio      = document.getElementById('mld-prio').value;
     const van       = document.getElementById('mld-van').value;
     const tot       = document.getElementById('mld-tot').value;
+    const linkUrl     = document.getElementById('mld-link-url')?.value.trim()      ?? '';
+    const linkTekst   = document.getElementById('mld-link-tekst')?.value.trim()    ?? '';
+    const linkTekstEn = document.getElementById('mld-link-tekst-en')?.value.trim() ?? '';
+    const linkTekstDe = document.getElementById('mld-link-tekst-de')?.value.trim() ?? '';
+    const linkTekstFr = document.getElementById('mld-link-tekst-fr')?.value.trim() ?? '';
 
     if (!titel || !bericht) {
         toonBevestigDialog(
             'Titel en bericht zijn verplicht (NL is brontaal).',
             'Mededeling opslaan', 'OK', ''
         );
+        return;
+    }
+    if (linkUrl && !/^https?:\/\//i.test(linkUrl)) {
+        toonBevestigDialog('De link moet met http:// of https:// beginnen.', 'Mededeling opslaan', 'OK', '');
+        return;
+    }
+    if (linkUrl && !linkTekst) {
+        toonBevestigDialog('Vul een knop-tekst (NL) in als je een link zet.', 'Mededeling opslaan', 'OK', '');
         return;
     }
     // 'globaal' is geen DB-prio (enum kent 'm niet) maar een scope-keuze:
@@ -408,6 +452,13 @@ async function mldOpslaan(compId) {
     if (berichtDe) fd.append('bericht_de', berichtDe);
     if (titelFr)   fd.append('titel_fr',   titelFr);
     if (berichtFr) fd.append('bericht_fr', berichtFr);
+    if (linkUrl) {
+        fd.append('link_url', linkUrl);
+        fd.append('link_tekst', linkTekst);
+        if (linkTekstEn) fd.append('link_tekst_en', linkTekstEn);
+        if (linkTekstDe) fd.append('link_tekst_de', linkTekstDe);
+        if (linkTekstFr) fd.append('link_tekst_fr', linkTekstFr);
+    }
     fd.append('prio', dbPrio);
     if (van) fd.append('geldig_van', van.replace('T', ' '));
     if (tot) fd.append('geldig_tot', tot.replace('T', ' '));

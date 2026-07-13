@@ -62,6 +62,7 @@ if (!defined('ANTHROPIC_API_KEY') || !ANTHROPIC_API_KEY) {
 $body    = json_decode(file_get_contents('php://input'), true) ?? [];
 $titel   = trim($body['titel']   ?? '');
 $bericht = trim($body['bericht'] ?? '');
+$knop    = trim($body['link_tekst'] ?? ''); // optioneel knop-label (call-to-action)
 $from    = trim($body['from']    ?? 'nl');
 $toRaw   = $body['to']           ?? 'en';
 
@@ -105,14 +106,15 @@ if (count($toLijst) === 1) {
             . "Preserve any numbers, times, and proper names exactly. Do not add "
             . "explanations or commentary.\n\n"
             . "Respond ONLY with this JSON, no other text:\n"
-            . '{"titel": "...translated title...", "bericht": "...translated body..."}'
+            . '{"titel": "...translated title...", "bericht": "...translated body...", "knop": "...translated button label..."}'
             . "\n\nInput:\n"
-            . "Title: " . ($titel ?: '(empty)') . "\n"
-            . "Body: "  . ($bericht ?: '(empty)');
+            . "Title: "  . ($titel   ?: '(empty)') . "\n"
+            . "Body: "   . ($bericht ?: '(empty)') . "\n"
+            . "Button: " . ($knop    ?: '(empty)');
 } else {
     // Bulk: vraag alle doeltalen in 1 JSON-blok zodat we 1 API-call doen
     // ipv N. Scheelt latency en kosten.
-    $taalKeys = array_map(fn($l) => "\"{$l}\": {\"titel\":\"...\",\"bericht\":\"...\"}", $toLijst);
+    $taalKeys = array_map(fn($l) => "\"{$l}\": {\"titel\":\"...\",\"bericht\":\"...\",\"knop\":\"...\"}", $toLijst);
     $taalNamenStr = implode(', ', array_map(fn($l) => $taalNamen[$l], $toLijst));
     $prompt = "You are translating a short race announcement for an inline-skating "
             . "competition app from {$fromNaam} to multiple target languages: {$taalNamenStr}.\n\n"
@@ -123,8 +125,9 @@ if (count($toLijst) === 1) {
             . "Respond ONLY with this JSON, no other text. Use the ISO language codes as keys:\n"
             . '{"translations": {' . implode(', ', $taalKeys) . '}}'
             . "\n\nInput:\n"
-            . "Title: " . ($titel ?: '(empty)') . "\n"
-            . "Body: "  . ($bericht ?: '(empty)');
+            . "Title: "  . ($titel   ?: '(empty)') . "\n"
+            . "Body: "   . ($bericht ?: '(empty)') . "\n"
+            . "Button: " . ($knop    ?: '(empty)');
 }
 
 $ch = curl_init('https://api.anthropic.com/v1/messages');
@@ -196,8 +199,9 @@ if ($bulkMode) {
     foreach ($toLijst as $l) {
         $tr = $parsed['translations'][$l] ?? null;
         $out[$l] = [
-            'titel'   => is_array($tr) ? (string)($tr['titel']   ?? '') : '',
-            'bericht' => is_array($tr) ? (string)($tr['bericht'] ?? '') : '',
+            'titel'      => is_array($tr) ? (string)($tr['titel']   ?? '') : '',
+            'bericht'    => is_array($tr) ? (string)($tr['bericht'] ?? '') : '',
+            'link_tekst' => is_array($tr) ? (string)($tr['knop']    ?? '') : '',
         ];
     }
     echo json_encode([
@@ -216,10 +220,11 @@ if ($bulkMode) {
         exit;
     }
     echo json_encode([
-        'ok'      => true,
-        'titel'   => (string)($parsed['titel']   ?? ''),
-        'bericht' => (string)($parsed['bericht'] ?? ''),
-        'from'    => $from,
-        'to'      => $toLijst[0],
+        'ok'         => true,
+        'titel'      => (string)($parsed['titel']   ?? ''),
+        'bericht'    => (string)($parsed['bericht'] ?? ''),
+        'link_tekst' => (string)($parsed['knop']    ?? ''),
+        'from'       => $from,
+        'to'         => $toLijst[0],
     ], JSON_UNESCAPED_UNICODE);
 }
