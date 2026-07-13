@@ -202,13 +202,15 @@ $opens = $pdo->query("
 ")->fetchAll(PDO::FETCH_ASSOC);
 
 // ── Vragen + email (los van survey-antwoorden) ─────────────────────────────
-$vragen = $pdo->query("
+// Eigen naam: verderop hergebruiken de score-/multi-secties `$vragen` als
+// lus-variabele voor vraag-groepen; die zouden deze lijst anders platlopen.
+$eigenVragen = $pdo->query("
     SELECT id, submitted_at, email, vraag, afgehandeld_at
     FROM   survey_oh850_vragen
     ORDER BY afgehandeld_at IS NULL DESC, submitted_at DESC
 ")->fetchAll(PDO::FETCH_ASSOC);
 $nOpenVragen = 0;
-foreach ($vragen as $v) if (!$v['afgehandeld_at']) $nOpenVragen++;
+foreach ($eigenVragen as $v) if (!$v['afgehandeld_at']) $nOpenVragen++;
 ?><!DOCTYPE html>
 <html lang="nl">
 <head>
@@ -407,7 +409,7 @@ section h2 {
         <div class="kpi">
             <div class="kpi-lbl">Openstaande vragen</div>
             <div class="kpi-val" style="color:<?= $nOpenVragen ? 'var(--oranje)' : 'var(--groen)' ?>"><?= $nOpenVragen ?></div>
-            <div class="kpi-sub">van <?= count($vragen) ?> totaal</div>
+            <div class="kpi-sub">van <?= count($eigenVragen) ?> totaal</div>
         </div>
     </div>
 
@@ -561,15 +563,15 @@ section h2 {
 
     <!-- ── Vragen (los van survey, eigen tabel) ── -->
     <section>
-        <h2>Vragen voor jou (<?= count($vragen) ?> · <?= $nOpenVragen ?> open)</h2>
+        <h2>Vragen voor jou (<?= count($eigenVragen) ?> · <?= $nOpenVragen ?> open)</h2>
         <div class="sub" style="margin:-6px 0 12px">
             Deze vragen zijn opgeslagen in een aparte tabel zonder koppeling
             naar de survey-antwoorden. Mail-adres alleen zichtbaar bij de vraag.
         </div>
-        <?php if (!count($vragen)): ?>
+        <?php if (!count($eigenVragen)): ?>
             <div class="empty">Nog geen vragen binnen.</div>
         <?php else: ?>
-            <?php foreach ($vragen as $v): ?>
+            <?php foreach ($eigenVragen as $v): ?>
                 <div class="vraag-rij<?= $v['afgehandeld_at'] ? ' afgehandeld' : '' ?>">
                     <div class="meta">
                         <span>
