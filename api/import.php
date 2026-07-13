@@ -307,7 +307,20 @@ function apiGet(string $url): ?array {
 }
 
 function dt(?string $s): ?string {
-    return $s ? substr($s, 0, 19) : null;
+    if (!$s) return null;
+    // De KNSB-feed levert tijdstempels in UTC met een 'Z' (bv.
+    // "2026-07-10T22:00:00Z") en vermeldt de bedoelde zone ("W. Europe Standard
+    // Time" = Europe/Amsterdam). Reken die om naar Nederlandse tijd vóór opslaan,
+    // anders valt een middernacht-start (00:00 NL = 22:00 UTC) een dag terug.
+    // new DateTime() respecteert de 'Z'/offset in de string zelf; de setTimezone
+    // zet 'm om naar NL (incl. zomer-/wintertijd). Fallback = het oude gedrag.
+    try {
+        $d = new DateTime($s);
+        $d->setTimezone(new DateTimeZone('Europe/Amsterdam'));
+        return $d->format('Y-m-d H:i:s');
+    } catch (\Throwable $e) {
+        return substr($s, 0, 19);
+    }
 }
 
 try {
