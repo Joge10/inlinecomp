@@ -26,6 +26,28 @@ De databaseconfiguratie en secrets staan **bewust buiten** deze repository, in `
 
 Dit is de daadwerkelijke productiecodebase, geen kant-en-klaar installeerbaar pakket — draaien vergt een eigen database, config en (voor de tijdregistratie) de CSV-Monitor.
 
+## Afhankelijkheden
+
+InlineComp bouwt op een handvol externe open-source libraries. Die worden **niet in deze repository meegeleverd** — de browser-libraries laden via CDN, de Python-libraries installeer je via `pip`.
+
+**In de browser (via CDN):**
+
+- [html2pdf.js](https://github.com/eKoopmans/html2pdf.js) — MIT
+- [JSZip](https://stuk.github.io/jszip/) — MIT
+
+**Python-hulpprogramma's (server-side, via `pip`):**
+
+- [anthropic](https://github.com/anthropics/anthropic-sdk-python) — MIT
+- [PyMySQL](https://github.com/PyMySQL/PyMySQL) — MIT
+- [pdfplumber](https://github.com/jsvine/pdfplumber) — MIT
+- [openpyxl](https://openpyxl.readthedocs.io/) — MIT
+- [Pillow](https://python-pillow.org/) — HPND (MIT-achtig)
+- [reportlab](https://www.reportlab.com/) — BSD
+- [qrcode](https://github.com/lincolnloop/python-qrcode) — BSD
+- [svglib](https://github.com/deeplook/svglib) — LGPL
+
+Alle libraries worden ongewijzigd gebruikt en niet meegeleverd; hun licenties zijn compatibel met de licentie van dit project.
+
 ## Licentie
 
 Dit project valt onder de **PolyForm Perimeter License 1.0.1** — zie [LICENSE.md](LICENSE.md).

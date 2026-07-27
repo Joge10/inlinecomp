@@ -636,6 +636,10 @@ if (is_array($eigenScope) && !empty($eigenScope)) {
                        Gebruiken en aanpassen mag; er een concurrerend product mee maken niet.
                        Andere afspraak nodig? Mail
                        <a href="mailto:inlinecomp@devriesen.com">inlinecomp@devriesen.com</a>.</p>
+                    <p>In de browser gebruikt InlineComp de open-source libraries
+                       <a href="https://github.com/eKoopmans/html2pdf.js" target="_blank" rel="noopener">html2pdf.js</a>
+                       en <a href="https://stuk.github.io/jszip/" target="_blank" rel="noopener">JSZip</a>
+                       (beide MIT-licentie).</p>
                 </div>
 
                 <div class="info-blok info-blok-laatst">
