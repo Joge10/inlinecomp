@@ -97,6 +97,7 @@ try {
     // programma-volgorde ipv alfabetisch.
     $dcStmt = $pdo->prepare("
         SELECT dc.id, dc.name, dc.number, dc.category_filter,
+               dc.merge_group, dc.merge_label,
                v.prog_volgorde
         FROM distance_combinations dc
         LEFT JOIN (
@@ -111,6 +112,36 @@ try {
     ");
     $dcStmt->execute([$compId, $compId]);
     $dcs = $dcStmt->fetchAll(PDO::FETCH_ASSOC);
+
+    // ── Merge-groepen samenvouwen ────────────────────────────────
+    // Gemergede DC's rijden als één race; het programma + de uitslag draaien
+    // onder één (primaire) dc_id. De andere merge-leden zijn lege duplicaten
+    // en zouden anders als apart blok met "Geen uitslag vastgelegd" verschijnen
+    // (bv. Pupil 3 náást Pupil 4 terwijl ze samen rijden). Toon per merge alleen
+    // het lid dát een programma heeft (prog_volgorde niet NULL); heeft geen enkel
+    // lid een programma, dan toon je ze allemaal (merge nog niet geloot).
+    $mergeHeeftProg = [];
+    foreach ($dcs as $dc) {
+        $mg = $dc['merge_group'] ?? null;
+        if (($mg ?? '') !== '' && $dc['prog_volgorde'] !== null) $mergeHeeftProg[$mg] = true;
+    }
+    $dcs = array_values(array_filter($dcs, function ($dc) use ($mergeHeeftProg) {
+        $mg = $dc['merge_group'] ?? null;
+        if (($mg ?? '') === '')            return true;   // niet-gemerged → altijd tonen
+        if (empty($mergeHeeftProg[$mg]))   return true;   // merge zonder programma → toon (edge)
+        return $dc['prog_volgorde'] !== null;             // gemerged: alleen het geprogrammeerde lid
+    }));
+
+    // Voor een gemergede DC: toon het door de operator gegeven merge-label i.p.v.
+    // de naam van het primaire lid. Anders staat er "Pupil 4 …" boven een blok
+    // met louter Pupil 3-rijders (samen gereden) → verwarrend. Val terug op de
+    // eigen naam als er geen merge-label is gezet.
+    foreach ($dcs as &$dc) {
+        if (($dc['merge_group'] ?? '') !== '' && trim((string)($dc['merge_label'] ?? '')) !== '') {
+            $dc['name'] = $dc['merge_label'];
+        }
+    }
+    unset($dc);
 
     // Statements één keer prepareren — worden hieronder per DC hergebruikt
     // (PDO cached deze server-side; N+1 queries zijn voor een eenmalige
@@ -267,13 +298,23 @@ try {
                 ];
             }
             $isPK = ($dist['race_type'] ?? null) === 'puntenkoers';
+            // Ronden-telling geldt voor alle lange afstanden, niet enkel de
+            // puntenkoers. Zelfde set als api/live.php ($accepteertRondes).
+            $heeftRondes = in_array($dist['race_type'] ?? null,
+                                    ['inline', 'puntenkoers', 'afvalkoers'], true);
             foreach ($dist['uitslag'] as &$u) {
                 $rows = $resByPerson[$u['license_key']] ?? [];
                 $alleSancties = [];
                 $juryAanp     = [];
+                $rondeTijden  = [];   // ronde-label (S/KF/HF/RU/B/A) → tijd_ms
                 $maxPk = null;
                 $maxRn = null;
                 foreach ($rows as $row) {
+                    if ($row['tijd_ms'] !== null) {
+                        // Per gereden ronde de (officiële) tijd — geeft de rijder
+                        // een compleet tijdenoverzicht in de afstand-uitslag.
+                        $rondeTijden[$row['ronde']] = $row['tijd_ms'];
+                    }
                     if ($row['sanctie']) {
                         $alleSancties[] = [
                             'ronde'   => $row['ronde'],
@@ -298,21 +339,20 @@ try {
                             'is_photofinish' => $row['is_photofinish'],
                         ];
                     }
-                    if ($isPK) {
-                        if ($row['pk_punten'] !== null && ($maxPk === null || $row['pk_punten'] > $maxPk)) {
-                            $maxPk = $row['pk_punten'];
-                        }
-                        if ($row['rondes'] !== null && ($maxRn === null || $row['rondes'] > $maxRn)) {
-                            $maxRn = $row['rondes'];
-                        }
+                    if ($isPK && $row['pk_punten'] !== null
+                        && ($maxPk === null || $row['pk_punten'] > $maxPk)) {
+                        $maxPk = $row['pk_punten'];
+                    }
+                    if ($heeftRondes && $row['rondes'] !== null
+                        && ($maxRn === null || $row['rondes'] > $maxRn)) {
+                        $maxRn = $row['rondes'];
                     }
                 }
                 $u['alle_sancties']     = $alleSancties;
                 $u['jury_aanpassingen'] = $juryAanp;
-                if ($isPK) {
-                    $u['pk_punten'] = $maxPk;
-                    $u['rondes']    = $maxRn;
-                }
+                $u['ronde_tijden']      = $rondeTijden;
+                if ($isPK)       $u['pk_punten'] = $maxPk;
+                if ($heeftRondes) $u['rondes']   = $maxRn;
             }
             unset($u);
 
@@ -432,6 +472,7 @@ try {
                    d.value_meters AS meters
             FROM uitslag_afstand ua
             JOIN distances d              ON d.id = ua.distance_id
+                                        AND d.distance_combination_id = ua.distance_combination_id
             JOIN distance_combinations dc ON dc.id = ua.distance_combination_id
             WHERE dc.competition_id = ?
               AND (d.race_type IS NULL OR d.race_type <> 'afvalkoers')

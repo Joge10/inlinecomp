@@ -1746,6 +1746,7 @@ async function printWedstrijdrapport(compId, compNaam) {
             kol_bib:          'Bib', kol_ronde: 'Ronde', kol_sponsor_club: 'Sponsor / Club',
             kol_rondes:       'Ronden', kol_sprintpt: 'Sprint-pt',
             kol_tijd:         'Tijd', kol_punten: 'Punten', kol_opm: 'Opm',
+            ronde_s: 'Serie', ronde_kf: 'KF', ronde_hf: 'HF', ronde_ru: 'RU', ronde_b: 'B', ronde_a: 'A',
             uitslag_fn_titel:  'Aanpassingen door jury',
             uitslag_fn_pf:     'fotofinish',
             uitslag_fn_hand:   'handmatig',
@@ -1805,6 +1806,7 @@ async function printWedstrijdrapport(compId, compNaam) {
             uitslag_fn_hand:   'manual',
             uitslag_fn_gemeten: ({ bruto, off }) => `measured ${bruto}, official ${off}`,
             kol_tijd:         'Time', kol_punten: 'Points', kol_opm: 'Note',
+            ronde_s: 'Series', ronde_kf: 'QF', ronde_hf: 'SF', ronde_ru: 'RU', ronde_b: 'B', ronde_a: 'A',
             eindklassement:   'Overall Classification',
             nieuwe_prs:                  'New personal records',
             nieuwe_prs_subtitel:         'Skaters who set a new PR during this race',
@@ -1899,12 +1901,39 @@ async function printWedstrijdrapport(compId, compNaam) {
     const _bouwTabel = (rijen, opts = {}) => {
         if (!rijen?.length) return '';
         const isKlassement = opts.isKlassement === true;
+        // Eindklassement: optionele per-afstand-punten-kolommen. Elk element:
+        // { name, puntenByLic: Map<license_key, punten> }. Alleen bij isKlassement.
+        const afstKols = (isKlassement && Array.isArray(opts.afstanden)) ? opts.afstanden : [];
+        const _fmtPunt = (p) => (p == null || p === 0)
+            ? '—'
+            : (Number.isInteger(p) ? String(p) : p.toFixed(1));
         const isPuntenkoers = opts.raceType === 'puntenkoers';
-        // Voor puntenkoers tonen we pk_punten (behaalde sprint-punten) ipv de
-        // rang-als-klassement-punten, plus een aparte Ronden-kolom.
-        const heeftTijd     = !isKlassement && rijen.some(r => r.tijd_ms !== null);
-        const heeftPkPunten = isPuntenkoers && !isKlassement && rijen.some(r => r.pk_punten != null);
-        const heeftRondes   = isPuntenkoers && !isKlassement && rijen.some(r => r.rondes != null);
+        // Lange afstanden (inline/puntenkoers/afvalkoers) kennen een ronden-telling.
+        // Zelfde set als api/live.php ($accepteertRondes) — houd die in sync.
+        const isLangeAfstand = ['inline', 'puntenkoers', 'afvalkoers'].includes(opts.raceType);
+        // Per-ronde-tijden i.p.v. één Tijd-kolom: geeft de rijder een compleet
+        // overzicht van z'n tijden per gereden ronde. Niet bij het klassement en
+        // niet bij puntenkoers (dat heeft eigen punten/ronden-kolommen).
+        const _rondeVolg  = ['S', 'KF', 'HF', 'RU', 'B', 'A'];
+        const _rondeLabel = {
+            S:  T('ronde_s'),  KF: T('ronde_kf'), HF: T('ronde_hf'),
+            RU: T('ronde_ru'), B:  T('ronde_b'),  A:  T('ronde_a'),
+        };
+        // opts.rondeKols = door de DC-sectie opgelegde, gedeelde kolomset (unie
+        // over alle afstanden) zodat de kolommen tussen afstanden uitlijnen.
+        // Zonder die hint: per tabel zelf bepalen.
+        const rondeKols = (!isKlassement && !isPuntenkoers)
+            ? (Array.isArray(opts.rondeKols)
+                ? opts.rondeKols
+                : _rondeVolg.filter(rk => rijen.some(r => r.ronde_tijden && r.ronde_tijden[rk] != null)))
+            : [];
+        // Puntenkoers: pk_punten (behaalde sprint-punten). Ronden tonen we bij
+        // alle lange afstanden (inline/afvalkoers ook), niet enkel puntenkoers.
+        const heeftPkPunten = isPuntenkoers  && !isKlassement && rijen.some(r => r.pk_punten != null);
+        const heeftRondes   = isLangeAfstand && !isKlassement && rijen.some(r => r.rondes != null);
+        // Enkele Tijd/Ronde-kolom alleen als er GÉÉN per-ronde-kolommen zijn
+        // (bv. puntenkoers, of oude data zonder ronde_tijden).
+        const heeftTijd     = !isKlassement && !rondeKols.length && rijen.some(r => r.tijd_ms !== null);
         // Klassement-punten alleen tonen voor het EINDklassement (multi-distance
         // DC). Voor een individuele afstand-uitslag is `punten` gewoon de rang
         // en dus visueel dubbel met de Pos-kolom — Geert: altijd weg.
@@ -1914,8 +1943,10 @@ async function printWedstrijdrapport(compId, compNaam) {
         // consistent is — voor sancties + jury-footnote-supscript.
         const heeftSanctie  = !isKlassement;
         const heeftBib      = rijen.some(r => r.start_number != null);
-        const heeftRonde    = !isKlassement && rijen.some(r => (r.finale_naam || '').trim() !== '');
-        const heeftSpClub   = rijen.some(r => (r.sponsor || r.club_full || '').trim() !== '');
+        const heeftRonde    = !isKlassement && !rondeKols.length && rijen.some(r => (r.finale_naam || '').trim() !== '');
+        // Sponsor/Club alleen in het klassement — in de afstand-uitslag staat het
+        // al in de deelnemerslijst en maken de per-ronde-tijden de plek nuttiger.
+        const heeftSpClub   = isKlassement && rijen.some(r => (r.sponsor || r.club_full || '').trim() !== '');
 
         // Splits detecteren — als er meerdere unieke split_groups zijn,
         // tonen we per split een aparte sub-tabel met cat-naam als kop.
@@ -1925,13 +1956,15 @@ async function printWedstrijdrapport(compId, compNaam) {
         const headCols = [
             `<th class="c col-rang">${esc(T('kol_pl'))}</th>`,
             `<th class="col-naam">${esc(T('kol_naam'))}</th>`,
-            heeftBib     ? `<th class="c col-bib">${esc(T('kol_bib'))}</th>`             : '',
+            heeftBib     ? `<th class="c col-bib">${esc(T('kol_snr'))}</th>`             : '',
             `<th class="c col-cat">${esc(T('kol_cat'))}</th>`,
             heeftSpClub  ? `<th class="col-spclub">${esc(T('kol_sponsor_club'))}</th>`   : '',
+            rondeKols.length ? rondeKols.map(rk => `<th class="c col-rtijd">${esc(_rondeLabel[rk] || rk)}</th>`).join('') : '',
             heeftRonde   ? `<th class="c col-ronde">${esc(T('kol_ronde'))}</th>`         : '',
             heeftTijd    ? `<th class="c col-tijd">${esc(T('kol_tijd'))}</th>`           : '',
             heeftRondes  ? `<th class="c col-rondes">${esc(T('kol_rondes'))}</th>`       : '',
             heeftPkPunten? `<th class="c col-pkpunten">${esc(T('kol_sprintpt'))}</th>`   : '',
+            afstKols.length ? afstKols.map(a => `<th class="c col-afstpunt">${esc(a.name)}</th>`).join('') : '',
             heeftPunten  ? `<th class="c col-punten">${esc(T('kol_punten'))}</th>`       : '',
             heeftSanctie ? `<th class="c col-sanctie">${esc(T('kol_opm'))}</th>`         : '',
         ].filter(Boolean).join('');
@@ -1980,10 +2013,18 @@ async function printWedstrijdrapport(compId, compNaam) {
                 heeftBib     ? `<td class="c col-bib">${r.start_number != null ? esc(r.start_number) : ''}</td>` : '',
                 `<td class="c col-cat">${esc(r.categorie ?? '')}</td>`,
                 heeftSpClub  ? `<td class="col-spclub">${esc(spClub)}</td>` : '',
+                rondeKols.length ? rondeKols.map(rk => {
+                    const ms = r.ronde_tijden ? r.ronde_tijden[rk] : null;
+                    // Zonder de "s"-suffix van _fmtTijd — in een tijd-kolom is die
+                    // overbodig en zorgde 'ie voor afbreken naar een tweede regel.
+                    const tijd = ms != null ? _fmtTijd(ms).replace(/\s*s$/i, '') : '—';
+                    return `<td class="c mono col-rtijd">${esc(tijd)}</td>`;
+                }).join('') : '',
                 heeftRonde   ? `<td class="c col-ronde">${esc(r.finale_naam ?? '')}</td>` : '',
                 heeftTijd    ? `<td class="c mono col-tijd">${esc(_fmtTijd(r.tijd_ms))}</td>` : '',
                 heeftRondes  ? `<td class="c col-rondes">${r.rondes != null ? esc(r.rondes) : '—'}</td>` : '',
                 heeftPkPunten? `<td class="c col-pkpunten">${r.pk_punten != null ? esc(r.pk_punten) : '—'}</td>` : '',
+                afstKols.length ? afstKols.map(a => `<td class="c col-afstpunt">${_fmtPunt(a.puntenByLic.get(r.license_key))}</td>`).join('') : '',
                 heeftPunten  ? `<td class="c col-punten">${punten !== null ? esc(punten) : '—'}</td>` : '',
                 heeftSanctie ? `<td class="c sanctie col-sanctie">${sanctieTxt}${fnSup}</td>` : '',
             ].filter(Boolean).join('');
@@ -2053,6 +2094,15 @@ async function printWedstrijdrapport(compId, compNaam) {
 
         const blocks = [];
 
+        // Gedeelde ronde-kolomset over álle afstanden van deze DC (unie), zodat
+        // de kolommen (Serie/KF/HF/RU/B/A) tussen de afstand-tabellen uitlijnen
+        // i.p.v. per afstand te verspringen.
+        const _rondeVolgDc = ['S', 'KF', 'HF', 'RU', 'B', 'A'];
+        const dcRondeKols = _rondeVolgDc.filter(rk =>
+            distances.some(d => (d.race_type !== 'puntenkoers')
+                && (d.uitslag || []).some(u => u.ronde_tijden && u.ronde_tijden[rk] != null))
+        );
+
         // 1) Per distance één blok
         for (const dist of distances) {
             const datumKort = dist.starts ? _fmtKortDatum(dist.starts) : '';
@@ -2072,17 +2122,43 @@ async function printWedstrijdrapport(compId, compNaam) {
                 blocks.push(`<section class="dc-block">
                     <h2 class="dc-titel">${esc(titel)}</h2>
                     <div class="dc-sub">${esc(subMeta)}</div>
-                    ${_bouwTabel(dist.uitslag, { raceType: dist.race_type })}
+                    ${_bouwTabel(dist.uitslag, { raceType: dist.race_type, rondeKols: dcRondeKols })}
                 </section>`);
             }
         }
 
         // 2) Eindklassement onderaan, alleen bij multi-distance DC.
         if (distances.length > 1 && klassement?.length) {
+            // Per-afstand-punten + sanctie per rijder — kruisverwijzing op
+            // license_key met de afstand-uitslagen. Voedt de extra punten-
+            // kolommen in het eindklassement én de sanctie-voetnoten eronder.
+            const afstKolommen = distances.map(d => {
+                const puntenByLic  = new Map();
+                const sanctieByLic = new Map();
+                (d.uitslag || []).forEach(u => {
+                    if (u.license_key == null) return;
+                    if (u.punten != null) puntenByLic.set(u.license_key, u.punten);
+                    if (u.sanctie)        sanctieByLic.set(u.license_key, u.sanctie);
+                });
+                return { name: d.name, puntenByLic, sanctieByLic };
+            });
+            const sanctieNoten = [];
+            for (const r of klassement) {
+                const items = afstKolommen
+                    .map(a => { const s = a.sanctieByLic.get(r.license_key); return s ? `${a.name}: ${s}` : ''; })
+                    .filter(Boolean);
+                if (items.length) {
+                    sanctieNoten.push(`<div class="dc-fn-rij"><b>${esc(r.full_name ?? '')}</b> — ${esc(items.join(' · '))}</div>`);
+                }
+            }
+            const voetnootHtml = sanctieNoten.length
+                ? `<div class="dc-fn"><div class="dc-fn-titel">${esc(T('kol_opm'))}</div>${sanctieNoten.join('')}</div>`
+                : '';
             blocks.push(`<section class="dc-block">
                 <h2 class="dc-titel">${esc(label)} — ${esc(T('eindklassement'))}</h2>
                 <div class="dc-sub">${esc(Tfn('afstanden_n', distances.length))}</div>
-                ${_bouwTabel(klassement, { isKlassement: true })}
+                ${_bouwTabel(klassement, { isKlassement: true, afstanden: afstKolommen })}
+                ${voetnootHtml}
             </section>`);
         }
 
@@ -2818,7 +2894,12 @@ footer{margin-top:6mm;border-top:1px solid #ccc;padding-top:2mm;font-size:7.5pt;
 .pr-uitslag-blad{ page: pr-uitslag-landscape }
 /* Uitslag-tabel: stijl-elementen zoals print-center boom-saver-uitslag —
    blauwe Rang/Bib, naam vet, cat-tag, geen alternerende rij-kleuren. */
-.pr-uitslag-blad table{ font-size: 9.2pt }
+/* Auto-layout (GÉÉN table-layout:fixed): dat drukte bij smalle render-context
+   de ongedimensioneerde tijd-kolommen naar nul → overlappende tekst. Auto vult
+   de 100% content-bewust: Naam houdt z'n vaste breedte (Snr/Cat lijnen uit), de
+   tijd-kolommen pakken de rest, en niks stort in.
+   page-break-inside:avoid → een tabel breekt niet over een pagina. */
+.pr-uitslag-blad table{ font-size: 9.2pt; page-break-inside: avoid }
 .pr-uitslag-blad td{ border-bottom: 1px solid #f0f0f0 }
 .pr-uitslag-blad td.col-rang,
 .pr-uitslag-blad td.col-bib{ color: #1a3a5c; font-weight: 700 }
@@ -2840,6 +2921,15 @@ footer{margin-top:6mm;border-top:1px solid #ccc;padding-top:2mm;font-size:7.5pt;
 .pr-uitslag-blad td.col-ronde{ width: 22mm }
 .pr-uitslag-blad th.col-tijd,
 .pr-uitslag-blad td.col-tijd{ width: 22mm }
+/* Per-ronde-tijd-kolommen in de afstand-uitslag (Serie/KF/HF/RU/B/A). */
+/* De ronde-tijd-kolommen krijgen GEEN vaste breedte: zij vangen samen de
+   resterende ruimte op (Naam/Snr/Cat/Opm zijn vast). Zo is elke tabel altijd
+   even breed (100%), vullen de tijden de ruimte naar rechts, en krimpen ze
+   automatisch mee als er meer ronde-kolommen zijn (Serie+HF+A vs alleen HF+A). */
+.pr-uitslag-blad th.col-rtijd,
+.pr-uitslag-blad td.col-rtijd{ font-weight: 600; white-space: nowrap }
+.pr-uitslag-blad th.col-naam,
+.pr-uitslag-blad td.col-naam{ width: 60mm }
 .pr-uitslag-blad th.col-punten,
 .pr-uitslag-blad td.col-punten{ width: 16mm }
 .pr-uitslag-blad th.col-rondes,
@@ -2847,8 +2937,21 @@ footer{margin-top:6mm;border-top:1px solid #ccc;padding-top:2mm;font-size:7.5pt;
 .pr-uitslag-blad th.col-pkpunten,
 .pr-uitslag-blad td.col-pkpunten{ width: 18mm; font-weight: 700; color: #1a3a5c }
 .pr-uitslag-blad th.col-sanctie,
-.pr-uitslag-blad td.col-sanctie{ width: 28mm; color:#c00; font-weight:700; font-size:8.5pt }
+.pr-uitslag-blad td.col-sanctie{ width: 26mm }
+/* Alleen de cellen rood; de kop erft het wit van de blauwe header-balk. */
+.pr-uitslag-blad td.col-sanctie{ color:#c00; font-weight:700; font-size:8.5pt }
 .pr-uitslag-blad td.col-sanctie sup{ color:#1a3a5c; font-weight:600 }
+/* Per-afstand-punten-kolommen in het eindklassement. */
+.pr-uitslag-blad th.col-afstpunt,
+.pr-uitslag-blad td.col-afstpunt{ width: 15mm; color:#444 }
+/* Eindklassement-voetnoot (sancties per rijder) onder de tabel. */
+.pr-uitslag-blad .dc-fn{
+    margin: 1mm 0 2mm; padding: 2px 4px;
+    font-size: 8.2pt; color:#333;
+}
+.pr-uitslag-blad .dc-fn-titel{ font-size:8.5pt; font-weight:700; color:#1a3a5c; margin-bottom:1px }
+.pr-uitslag-blad .dc-fn-rij{ line-height:1.35 }
+.pr-uitslag-blad .dc-fn-rij b{ color:#1a3a5c }
 /* Jury-aanpassingen footnote-rij onder elke uitslag-tabel. */
 .pr-uitslag-blad tr.pr-fn-row td.pr-fn-cell{
     background:#f7faff; border-top:1px solid #c4d4e6;
