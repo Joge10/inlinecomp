@@ -627,6 +627,17 @@ if (is_array($eigenScope) && !empty($eigenScope)) {
                        voor iedereen.</p>
                 </div>
 
+                <div class="info-blok">
+                    <h3>Broncode en licentie</h3>
+                    <p>De broncode staat op
+                       <a href="https://github.com/Joge10/inlinecomp" target="_blank" rel="noopener">GitHub</a>
+                       onder de
+                       <a href="https://polyformproject.org/licenses/perimeter/1.0.1" target="_blank" rel="noopener">PolyForm Perimeter License 1.0.1</a>.
+                       Gebruiken en aanpassen mag; er een concurrerend product mee maken niet.
+                       Andere afspraak nodig? Mail
+                       <a href="mailto:inlinecomp@devriesen.com">inlinecomp@devriesen.com</a>.</p>
+                </div>
+
                 <div class="info-blok info-blok-laatst">
                     <h3>Met dank aan</h3>
                     <p>Iedereen die feedback gaf tijdens de ontwikkeling — speakers,

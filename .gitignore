@@ -5,6 +5,9 @@
 config_inlinecomp.php
 config*.php
 
+# cPanel-gegenereerde PHP-ini (server-specifiek, hoort niet in de repo)
+.user.ini
+
 # VS Code overige instellingen (optioneel bewaren)
 # .vscode/
 
