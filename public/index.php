@@ -1652,6 +1652,31 @@ if ($action === 'series_voor_comp') {
     exit;
 }
 
+// Richting van de punten-tabel: oplopend ([1,2,3,…] → laagste totaal wint) vs
+// aflopend ([10.1,9,8,…] → hoogste wint). Zelfde logica als tabelIsOplopend in
+// klassement_serie.php.
+function tabelIsOplopendPub($tabel): bool {
+    return is_array($tabel) && count($tabel) >= 2 && (float)$tabel[0] < (float)$tabel[1];
+}
+
+// Sorteert klassement-posities voor weergave: geklasseerd (positie > 0) eerst op
+// rang, daarna het onderblok (positie 0 = niet opgenomen) op puntentotaal in de
+// richting van de punten-tabel ($oplopend). Richting komt uit de regels (punten-
+// tabel), NIET uit de rijen — want in positie-volgorde lopen categorieën door
+// elkaar (elke categorie heeft een positie 1). Zo klopt het onderblok bij op- én
+// aflopende tabellen, óók als een categorie helemaal geen geklasseerden heeft.
+function sorteerKlassementPosities(array &$rows, bool $oplopend): void {
+    usort($rows, function($a, $b) use ($oplopend) {
+        $ba = ((int)$a['positie'] <= 0) ? 1 : 0;
+        $bb = ((int)$b['positie'] <= 0) ? 1 : 0;
+        if ($ba !== $bb) return $ba <=> $bb;                         // geklasseerd eerst
+        if ($ba === 0) return (int)$a['positie'] <=> (int)$b['positie']; // op rang
+        $ta = (float)$a['punten_totaal']; $tb = (float)$b['punten_totaal'];
+        if ($ta != $tb) return $oplopend ? ($ta <=> $tb) : ($tb <=> $ta);  // onderblok op punten
+        return strcmp((string)($a['start_number'] ?? ''), (string)($b['start_number'] ?? ''));
+    });
+}
+
 // ── API: volledig serie-klassement (zonder auth) ─────────────────────────────
 if ($action === 'serie_klassement') {
     header('Content-Type: application/json; charset=utf-8');
@@ -1663,7 +1688,8 @@ if ($action === 'serie_klassement') {
         // series mogen in /public worden opgehaald. Niet-gepubliceerd → 404.
         $kl = $pdo->prepare("
             SELECT k.id, k.naam, k.seizoen, k.bron_bestand, k.totaal_rijders,
-                   k.categorieen, k.wedstrijden_meta, k.aangemaakt_op
+                   k.categorieen, k.wedstrijden_meta, k.aangemaakt_op,
+                   s.regels AS serie_regels
             FROM   klassementen k
             JOIN   klassement_series s ON s.klassement_id = k.id
             WHERE  k.id = ?
@@ -1681,7 +1707,7 @@ if ($action === 'serie_klassement') {
                    punten_detail, punten_totaal
             FROM klassement_posities
             WHERE klassement_id = ?
-            ORDER BY positie ASC
+            ORDER BY (positie = 0), positie ASC
         ");
         $pos->execute([$klId]);
         $rows = $pos->fetchAll(PDO::FETCH_ASSOC);
@@ -1692,6 +1718,9 @@ if ($action === 'serie_klassement') {
                 ? (float)$r['punten_totaal'] : null;
         }
         unset($r);
+        $serieRegels = json_decode($k['serie_regels'] ?? 'null', true);
+        unset($k['serie_regels']);
+        sorteerKlassementPosities($rows, tabelIsOplopendPub($serieRegels['punten_tabel'] ?? null));
         $k['posities'] = $rows;
         echo json_encode($k, JSON_UNESCAPED_UNICODE);
     } catch (Throwable $e) {
@@ -2376,6 +2405,13 @@ select:focus, input:focus { border-color: var(--middenblauw); outline: none; }
 .serie-klas-tabel tr.rij-ik td {
     background: #fff3e0 !important; font-weight: 700;
 }
+.serie-klas-tabel tr.serie-klas-scheiding td {
+    background: #eef1f5; color: #5a6472; font-weight: 700;
+    font-size: .78rem; text-transform: uppercase; letter-spacing: .03em;
+    padding: 6px 8px;
+}
+.serie-klas-tabel tr.rij-buiten td { color: #8a95a3; }
+.serie-klas-tabel tr.rij-buiten .col-rang { color: #c2cad3; }
 @media (max-width: 480px) {
     .uitsl-selects { flex-direction: column; }
     .uitsl-tabel { font-size: .78rem; }
@@ -3004,6 +3040,7 @@ const T = {
         msg_geen_klassement: 'Geen klassement beschikbaar.',
         msg_geen_uitslagen: 'Geen uitslagen beschikbaar.',
         msg_geen_posities: 'Geen posities in deze categorie.',
+        klas_niet_opgenomen: 'Niet opgenomen in klassement',
         msg_kies_categorie_klassement: 'Kies een categorie om het klassement te zien.',
         msg_programma_nb: 'Programma niet beschikbaar.',
         msg_nog_geen_heats: 'Nog geen heats beschikbaar.',
@@ -3230,6 +3267,7 @@ const T = {
         msg_geen_klassement: 'No standings available.',
         msg_geen_uitslagen: 'No results available.',
         msg_geen_posities: 'No positions in this category.',
+        klas_niet_opgenomen: 'Not included in classification',
         msg_kies_categorie_klassement: 'Choose a category to view the standings.',
         msg_programma_nb: 'Program not available.',
         msg_nog_geen_heats: 'No heats available yet.',
@@ -3455,6 +3493,7 @@ const T = {
         msg_geen_klassement: 'Keine Wertung verfügbar.',
         msg_geen_uitslagen: 'Keine Ergebnisse verfügbar.',
         msg_geen_posities: 'Keine Positionen in dieser Kategorie.',
+        klas_niet_opgenomen: 'Nicht in der Wertung',
         msg_kies_categorie_klassement: 'Wähle eine Kategorie, um die Wertung anzuzeigen.',
         msg_programma_nb: 'Programm nicht verfügbar.',
         msg_nog_geen_heats: 'Noch keine Heats verfügbar.',
@@ -3680,6 +3719,7 @@ const T = {
         msg_geen_klassement: 'Aucun classement disponible.',
         msg_geen_uitslagen: 'Aucun résultat disponible.',
         msg_geen_posities: 'Aucune position dans cette catégorie.',
+        klas_niet_opgenomen: 'Non inclus au classement',
         msg_kies_categorie_klassement: 'Choisis une catégorie pour voir le classement.',
         msg_programma_nb: 'Programme non disponible.',
         msg_nog_geen_heats: 'Aucune série disponible pour le moment.',
@@ -6153,7 +6193,18 @@ function renderSerieKlassementTabel(k, cat) {
     }
     hdr += '</tr>';
 
+    // Kolomtelling voor de scheidingsrij tussen geklasseerd en niet-opgenomen.
+    const colspan = 3 + (cat ? 0 : 1) + (toonW ? wMeta.length + 1 : 0);
+    let scheidingGedaan = false;
     const rows = rijen.map(p => {
+        // positie 0 = 'niet opgenomen in klassement' (onderblok): getoond op
+        // puntenvolgorde, maar zonder rangnummer.
+        const buiten = !(+p.positie > 0);
+        let voor = '';
+        if (buiten && !scheidingGedaan) {
+            scheidingGedaan = true;
+            voor = `<tr class="serie-klas-scheiding"><td colspan="${colspan}">${esc(t('klas_niet_opgenomen'))}</td></tr>`;
+        }
         const isIk = eigenSnr && String(p.start_number) === String(eigenSnr);
         const detail = p.punten_detail ?? {};
         const wedstrijdCellen = toonW
@@ -6163,8 +6214,8 @@ function renderSerieKlassementTabel(k, cat) {
               }).join('')
             : '';
         const totaalCel = toonW ? `<td class="col-tot">${fmtP(p.punten_totaal)}</td>` : '';
-        return `<tr class="${isIk ? 'rij-ik' : ''}">
-            <td class="col-rang">${p.positie}</td>
+        return `${voor}<tr class="${isIk ? 'rij-ik' : ''}${buiten ? ' rij-buiten' : ''}">
+            <td class="col-rang">${buiten ? '' : p.positie}</td>
             <td class="col-snr">${esc(p.start_number ?? '–')}</td>
             <td class="col-naam">${esc(p.naam)}</td>
             ${!cat ? `<td class="col-cat">${esc(p.categorie ?? '')}</td>` : ''}

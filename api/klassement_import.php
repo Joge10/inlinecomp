@@ -115,7 +115,8 @@ if ($method === 'GET') {
             "SELECT k.id, k.naam, k.seizoen, k.bron_bestand, k.categorieen,
                     k.totaal_rijders, k.org_id, k.aangemaakt_op, k.wedstrijden_meta,
                     s.id              AS serie_id,
-                    s.gepubliceerd_at AS serie_gepubliceerd_at
+                    s.gepubliceerd_at AS serie_gepubliceerd_at,
+                    s.regels          AS serie_regels
              FROM   klassementen k
              LEFT   JOIN klassement_series s ON s.klassement_id = k.id
              WHERE  k.id = ?"
@@ -125,11 +126,15 @@ if ($method === 'GET') {
         if (!$k) { http_response_code(404); echo json_encode(['error' => 'Niet gevonden']); exit; }
         $k['categorieen']      = json_decode($k['categorieen']      ?? '[]');
         $k['wedstrijden_meta'] = json_decode($k['wedstrijden_meta'] ?? 'null', true);
+        // Serie-regels (min_deelnames, streep, tie-break, finale-plicht, …) mee
+        // voor de leesbare regels-samenvatting in de klassement-header.
+        $k['regels']           = json_decode($k['serie_regels']     ?? 'null', true);
+        unset($k['serie_regels']);
 
         $pos = $pdo->prepare(
             "SELECT positie, start_number, naam, categorie, punten_detail, punten_totaal
              FROM klassement_posities WHERE klassement_id = ?
-             ORDER BY positie ASC"
+             ORDER BY (positie = 0), positie ASC"
         );
         $pos->execute([$id]);
         $posRows = $pos->fetchAll(PDO::FETCH_ASSOC);
@@ -142,6 +147,21 @@ if ($method === 'GET') {
                 : null;
         }
         unset($p);
+        // Onderblok (positie 0 = niet opgenomen) op puntentotaal in de richting van
+        // de punten-tabel: oplopend ([1,2,3] → laag wint) vs aflopend ([10,9,8] →
+        // hoog wint). Richting uit de regels, NIET uit de rijen — in positie-volgorde
+        // lopen categorieën door elkaar (elke categorie heeft een positie 1).
+        $tab = $k['regels']['punten_tabel'] ?? null;
+        $opl = is_array($tab) && count($tab) >= 2 && (float)$tab[0] < (float)$tab[1];
+        usort($posRows, function($a, $b) use ($opl) {
+            $ba = ((int)$a['positie'] <= 0) ? 1 : 0;
+            $bb = ((int)$b['positie'] <= 0) ? 1 : 0;
+            if ($ba !== $bb) return $ba <=> $bb;
+            if ($ba === 0) return (int)$a['positie'] <=> (int)$b['positie'];
+            $ta = (float)$a['punten_totaal']; $tb = (float)$b['punten_totaal'];
+            if ($ta != $tb) return $opl ? ($ta <=> $tb) : ($tb <=> $ta);
+            return strcmp((string)($a['start_number'] ?? ''), (string)($b['start_number'] ?? ''));
+        });
         $k['posities'] = $posRows;
         echo json_encode($k);
     } else {

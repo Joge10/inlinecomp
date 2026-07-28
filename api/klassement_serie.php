@@ -769,8 +769,14 @@ function berekenSerie(PDO $pdo, string $serieId): array {
     $vereistFin = $finaleGereden ? !empty($regels['vereist_finale']) : false;
     foreach ($acc as $lic => $perCatMap) {
         foreach ($perCatMap as $cat => $row) {
-            if ($minD > 0 && $row['deelnames'] < $minD) continue;
-            if ($vereistFin && !$row['in_laatste']) continue;
+            // Niet-geklasseerd = voldoet niet aan een klassering-eis (te weinig
+            // deelnames of finale-plicht niet gehaald). Vroeger vloog zo iemand
+            // er via `continue` uit; nu markeren we 'm en houden we 'm — hij komt
+            // in het onderblok (positie 0), mét dezelfde punten-/streepberekening
+            // zover toepasbaar (streep wordt hieronder gewoon meegenomen).
+            $row['buiten_klassement'] =
+                   ($minD > 0 && $row['deelnames'] < $minD)
+                || ($vereistFin && !$row['in_laatste']);
 
             // Sorteer (comp_id, punten)-paren in tabel-richting: bij aflopende
             // tabel staat hoog vooraan (DESC), bij oplopende tabel laag
@@ -901,12 +907,35 @@ function berekenSerie(PDO $pdo, string $serieId): array {
     // tie-break voor unieke posities.
     foreach ($perCat as &$lijst) {
         usort($lijst, function($a, $b) use ($cmpTB, $finaleGereden, $oplopend) {
+            // 1) geklasseerd (bovenblok) vóór niet-geklasseerd (onderblok)
+            $ba = !empty($a['buiten_klassement']) ? 1 : 0;
+            $bb = !empty($b['buiten_klassement']) ? 1 : 0;
+            if ($ba !== $bb) return $ba <=> $bb;
+            // 2) totaal in tabel-richting
             $c = $oplopend ? ($a['totaal'] <=> $b['totaal'])
                            : ($b['totaal'] <=> $a['totaal']);
             if ($c !== 0) return $c;
-            return $finaleGereden ? $cmpTB($a, $b) : 0;
+            // 3) tie-break (pas betekenisvol zodra de finale gereden is)
+            if ($finaleGereden) {
+                $t = $cmpTB($a, $b);
+                if ($t !== 0) return $t;
+            }
+            // 4) stabiele leesvolgorde bij echte ex-aequo: startnummer, dan naam
+            $sa = (int)($a['startnr'] ?? 0);
+            $sb = (int)($b['startnr'] ?? 0);
+            if ($sa !== $sb) return $sa <=> $sb;
+            return strcmp((string)($a['naam'] ?? ''), (string)($b['naam'] ?? ''));
         });
         foreach ($lijst as &$r) {
+            // Tie-break-signatuur bewaren voor de "echte ex-aequo"-detectie in
+            // schrijfKlassement (daar zijn _chrono_punten/_beste_resultaten weg).
+            // Zelfde totaal + zelfde signatuur = onscheidbaar → gedeelde rang.
+            $tb  = $regels['tie_break'];
+            $sig = [];
+            if ($tb === 'laatste')                          $sig = $r['_chrono_punten']   ?? [];
+            elseif ($tb === 'beste_resultaten')             $sig = $r['_beste_resultaten'] ?? [];
+            elseif ($tb === 'beste_resultaten_dan_laatste') $sig = [$r['_beste_resultaten'] ?? [], $r['_chrono_punten'] ?? []];
+            $r['_tb_sig'] = json_encode($sig);
             unset($r['_beste_resultaten'], $r['_laatste_punten'], $r['_chrono_punten']);
         }
     }
@@ -1022,23 +1051,34 @@ function schrijfKlassement(PDO $pdo, array $serie, array $berekend): void {
                 punten_detail, punten_totaal)
         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
     ");
-    // Positie-toekenning met ex-aequo bij tussenstand: als de finale nog niet
-    // gereden is en twee rijders hebben dezelfde totaal-score krijgen ze
-    // dezelfde positie. Klassiek: 1, 2, 2, 4 (positie 3 wordt overgeslagen).
+    // Positie-toekenning:
+    //  * Bovenblok (geklasseerd): rang 1…N. "Echt gelijk" = zelfde totaal én —
+    //    zodra de finale gereden is — identieke tie-break-signatuur → gedeelde
+    //    rang (ex aequo). Klassiek: 1, 2, 2, 4 (positie 3 overgeslagen).
+    //  * Onderblok (buiten_klassement): positie 0 → geen rang, en telt niet mee
+    //    in de rang-teller zodat het bovenblok aaneengesloten 1…N blijft.
     $finaleGereden = !empty($berekend['finale_gereden']);
     foreach ($perCat as $cat => $lijst) {
         $catsLabels[] = $cat;
         $vorigTotaal  = null;
+        $vorigSig     = null;
         $vorigePos    = 0;
-        foreach ($lijst as $i => $r) {
+        $rangTeller   = 0;   // aantal geklasseerde rijders tot nu toe
+        foreach ($lijst as $r) {
             $curTot = (float)($r['totaal'] ?? 0);
-            if (!$finaleGereden && $vorigTotaal !== null && $curTot === $vorigTotaal) {
-                $pos = $vorigePos;   // ex aequo met vorige
+            $curSig = $r['_tb_sig'] ?? null;
+            if (!empty($r['buiten_klassement'])) {
+                $pos = 0;                       // onderblok: geen rang
             } else {
-                $pos = $i + 1;        // klassieke sprong (1,2,4 bij 2 ex aequo)
+                $rangTeller++;
+                $echtGelijk = $vorigTotaal !== null
+                    && $curTot === $vorigTotaal
+                    && ($finaleGereden ? ($curSig === $vorigSig) : true);
+                $pos = $echtGelijk ? $vorigePos : $rangTeller;
+                $vorigTotaal = $curTot;
+                $vorigSig    = $curSig;
+                $vorigePos   = $pos;
             }
-            $vorigTotaal = $curTot;
-            $vorigePos   = $pos;
 
             $kpId = substr(bin2hex(random_bytes(8)), 0, 16);
             // JSON-detail: comp_id → punten (vlakke map, zoals voorheen) plus

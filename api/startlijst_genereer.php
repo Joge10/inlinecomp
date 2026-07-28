@@ -207,6 +207,7 @@ try {
                 SELECT start_number, positie
                 FROM klassement_posities
                 WHERE klassement_id = ? AND categorie = ?
+                  AND positie > 0
                 ORDER BY positie ASC
             ");
             $klStmt->execute([$klassementId, $klassementSectie]);
