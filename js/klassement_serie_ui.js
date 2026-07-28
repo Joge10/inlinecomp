@@ -450,7 +450,7 @@ function _renderStap3(state, body) {
         const wrap = get('#ks-cat-filter-wrap');
         if (!wrap) return;
         const compIds = (state.wedstrijden || [])
-            .filter(w => w.telt_mee !== false)
+            .filter(w => w._checked && w.telt_mee !== false)
             .map(w => w.competition_id)
             .filter(Boolean);
         if (!compIds.length) {
@@ -511,7 +511,7 @@ function _renderStap3(state, body) {
         const wrap = get('#ks-afst-filter-wrap');
         if (!wrap) return;
         const compIds = (state.wedstrijden || [])
-            .filter(w => w.telt_mee !== false)
+            .filter(w => w._checked && w.telt_mee !== false)
             .map(w => w.competition_id)
             .filter(Boolean);
         if (!compIds.length) {
@@ -774,13 +774,15 @@ async function diagnoseSerieer(serieId) {
 
         // Pipeline-telling: waar sneuvelen rijen in de berekening?
         const pl = Array.isArray(resp) ? null : resp.pipeline;
+        const plBron = pl?.bron || 'uitslag_klassement';
+        const plFilter = pl?.filter_label || 'DC-filter (op type)';
         const pipelineHtml = pl
             ? `<h4 style="margin-top:14px;color:var(--blauw);font-size:.95rem">Pipeline-telling</h4>
                <table class="ks-w-tabel">
                  <tbody>
-                   <tr><td>Uit uitslag_klassement</td><td style="text-align:right">${pl.uit_uk}</td></tr>
-                   <tr><td>Na DC-filter (op type)</td><td style="text-align:right">${pl.na_dc_filter}</td></tr>
-                   <tr><td>Na punten_totaal > 0 filter</td><td style="text-align:right">${pl.na_punten_filter}</td></tr>
+                   <tr><td>Uit ${rkEsc(plBron)}</td><td style="text-align:right">${pl.uit_uk}</td></tr>
+                   <tr><td>Na ${rkEsc(plFilter)}</td><td style="text-align:right">${pl.na_dc_filter}</td></tr>
+                   <tr><td>Na punten > 0 filter</td><td style="text-align:right">${pl.na_punten_filter}</td></tr>
                    <tr><td>Na rang ≠ NULL filter</td><td style="text-align:right">${pl.na_rang_filter}</td></tr>
                    <tr><td>Unieke rijders</td><td style="text-align:right"><b>${pl.rijders_uniek}</b></td></tr>
                  </tbody>
@@ -800,8 +802,10 @@ async function diagnoseSerieer(serieId) {
                     <div class="ks-body">
                         <div class="ks-hint">
                             Check per wedstrijd of de uitslagen compleet zijn.
-                            Serie-klassement leest uit <b>uitslag_klassement</b> — dat wordt gevuld bij
-                            <b>"Uitslag bevestigen"</b> per categorie (DC) in de uitslag-verwerking.
+                            Dit serie-klassement leest uit <b>${rkEsc(plBron)}</b> — dat wordt gevuld bij
+                            <b>"Uitslag bevestigen"</b> ${plBron === 'uitslag_afstand'
+                                ? 'per afstand in de uitslag-verwerking (alleen de afstanden die het filter matchen tellen mee).'
+                                : 'per categorie (DC) in de uitslag-verwerking.'}
                         </div>
                         ${regelsSamenv}
                         <table class="ks-w-tabel">
