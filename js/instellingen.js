@@ -1722,6 +1722,35 @@ async function printWedstrijdrapport(compId, compNaam) {
         }
     }
 
+    // ── Serie-klassement(en) meenemen als deze wedstrijd bij een serie hoort ──
+    // Automatisch herberekenen → verse stand ophalen → categorie-keuze (net als
+    // bij de serie-print) → sectie achteraan in het protocol. Alleen bij NL.
+    let serieSectieHtml = '';
+    if (lang === 'nl' && Array.isArray(data.series) && data.series.length
+        && typeof bouwSerieProtocolSectie === 'function') {
+        for (const serie of data.series) {
+            try {
+                await fetch('api/klassement_serie.php?action=berekenen&id='
+                    + encodeURIComponent(serie.serie_id), { method: 'POST' });
+                const kres = await fetch('api/klassement_import.php?action=get&id='
+                    + encodeURIComponent(serie.klassement_id));
+                const k = await kres.json();
+                if (!k || k.error || !((k.posities || []).length)) continue;
+                const catsAlle = (Array.isArray(k.categorieen) && k.categorieen.length)
+                    ? k.categorieen.map(c => c.label ?? c)
+                    : [...new Set((k.posities || []).map(p => p.categorie))];
+                const gesorteerd = catsAlle.slice().sort((a, b) =>
+                    (typeof _rkCatRank === 'function' ? _rkCatRank(a) - _rkCatRank(b)
+                                                      : String(a).localeCompare(b)));
+                const gekozen = await _kiesCatsVoorPrint(gesorteerd, 'Serie-klassement: ' + (serie.naam || ''));
+                if (!gekozen || !gekozen.size) continue;
+                serieSectieHtml += bouwSerieProtocolSectie(k, gekozen);
+            } catch (e) {
+                console.warn('[wedstrijdrapport] serie-sectie faalde:', e);
+            }
+        }
+    }
+
     // ── i18n strings — overal in deze functie via T(key) ───────────────
     const i18nDicts = {
         nl: {
@@ -3267,6 +3296,7 @@ ${_uitslagenIntroHtml}
 ${dcBlocks}
 </div>
 ${_nieuwePRsHtml}
+${serieSectieHtml}
 ${_afsluitingHtml}
 <script>window.addEventListener('load', () => { window.focus(); window.print(); });<\/script>
 </body></html>`;

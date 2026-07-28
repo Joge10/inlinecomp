@@ -511,6 +511,26 @@ try {
         @error_log('[wedstrijdrapport] PR-helper failed: ' . $e->getMessage());
     }
 
+    // Serie('s) waar deze wedstrijd aan meedoet — voor het opnemen van het
+    // (tussen-/eind)klassement in het protocol. Alleen de lijst; het herberekenen
+    // en ophalen doet de front-end via de bestaande serie-endpoints.
+    $serieStmt = $pdo->prepare("
+        SELECT ksw.serie_id, ksw.is_finale,
+               s.klassement_id, k.naam AS klassement_naam
+        FROM klassement_serie_wedstrijden ksw
+        JOIN klassement_series s ON s.id = ksw.serie_id
+        JOIN klassementen k      ON k.id = s.klassement_id
+        WHERE ksw.competition_id = ?
+        ORDER BY k.naam
+    ");
+    $serieStmt->execute([$compId]);
+    $series = array_map(fn($r) => [
+        'serie_id'      => $r['serie_id'],
+        'klassement_id' => $r['klassement_id'],
+        'naam'          => $r['klassement_naam'],
+        'is_finale'     => (int)$r['is_finale'] === 1,
+    ], $serieStmt->fetchAll(PDO::FETCH_ASSOC));
+
     echo json_encode([
         'competition' => [
             'id'                => $comp['id'],
@@ -537,6 +557,7 @@ try {
         'afstanden_lijst' => $afstandenLijst,
         'deelnemers'      => $deelnemers,
         'dcs'             => $dcs,
+        'series'           => $series,
         'nieuwe_prs'       => $nieuwePRs,
         'nieuwe_prs_error' => $nieuwePRsError,
     ], JSON_UNESCAPED_UNICODE);

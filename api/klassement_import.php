@@ -130,6 +130,34 @@ if ($method === 'GET') {
         // voor de leesbare regels-samenvatting in de klassement-header.
         $k['regels']           = json_decode($k['serie_regels']     ?? 'null', true);
         unset($k['serie_regels']);
+        // finale_gereden: heeft de finale-wedstrijd van deze serie al een uitslag?
+        // Betrouwbaar bepalen (niet af te leiden uit wedstrijden_meta — een
+        // resultloze finale staat daar niet in). Finale = expliciet is_finale,
+        // anders de chronologisch laatste wedstrijd. Zonder serie/finale → true.
+        $k['finale_gereden'] = true;
+        if (!empty($k['serie_id'])) {
+            $fw = $pdo->prepare("
+                SELECT ksw.competition_id, ksw.is_finale, c.starts
+                FROM klassement_serie_wedstrijden ksw
+                LEFT JOIN competitions c ON c.id = ksw.competition_id
+                WHERE ksw.serie_id = ?
+            ");
+            $fw->execute([$k['serie_id']]);
+            $wsAll = $fw->fetchAll(PDO::FETCH_ASSOC);
+            if ($wsAll) {
+                $finaleComp = null;
+                foreach ($wsAll as $w) { if ((int)$w['is_finale'] === 1) { $finaleComp = $w['competition_id']; break; } }
+                if (!$finaleComp) {
+                    usort($wsAll, fn($a, $b) => strcmp((string)($b['starts'] ?? ''), (string)($a['starts'] ?? '')));
+                    $finaleComp = $wsAll[0]['competition_id'] ?? null;
+                }
+                if ($finaleComp) {
+                    $uq = $pdo->prepare("SELECT COUNT(*) FROM uitslag_klassement WHERE competition_id = ?");
+                    $uq->execute([$finaleComp]);
+                    $k['finale_gereden'] = ((int)$uq->fetchColumn() > 0);
+                }
+            }
+        }
 
         $pos = $pdo->prepare(
             "SELECT positie, start_number, naam, categorie, punten_detail, punten_totaal

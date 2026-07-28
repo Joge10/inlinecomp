@@ -323,6 +323,10 @@ async function openKlassement(id) {
 // één rijder punten in de finale-kolom? Zo niet (of geen finale aangewezen) →
 // tussenstand, waarin de reglementaire regels nog niet gelden.
 function rkFinaleGereden(k) {
+    // Betrouwbare, server-berekende waarde heeft voorrang (klassement_import.php).
+    if (typeof k.finale_gereden === 'boolean') return k.finale_gereden;
+    // Fallback (oude data): afleiden uit wedstrijden_meta — let op: een resultloze
+    // finale staat daar níet in, dus dit kan een tussenstand als eindstand zien.
     const wm  = Array.isArray(k.wedstrijden_meta) ? k.wedstrijden_meta : [];
     const fin = wm.find(w => w.is_finale);
     if (!fin) return true;
@@ -400,6 +404,96 @@ function rkRegelsPrintBlok(k) {
         ${tussen}
         <ul class="pk-regels-lijst">${items.map(x => `<li>${x}</li>`).join('')}</ul>
     </div>`;
+}
+
+// Bouwt de serie-klassement-sectie voor ONDERAAN het wedstrijdprotocol. Zelf-
+// standig (eigen <style> met skp-prefix) zodat het los in het protocol-document
+// past. Hergebruikt rkRegelItems/rkFinaleGereden/rkEsc. `k` = klassement-object
+// (uit klassement_import.php?action=get), gekozenCats = Set van categorie-labels.
+function bouwSerieProtocolSectie(k, gekozenCats) {
+    const allePos = k.posities ?? [];
+    if (!allePos.length) return '';
+    const wMeta = Array.isArray(k.wedstrijden_meta) ? k.wedstrijden_meta : [];
+    const heeftW = wMeta.length > 0 && allePos.some(p => p.punten_detail && Object.keys(p.punten_detail).length);
+    const esc = rkEsc;
+    const fmtP = n => n == null ? '–' : (Number.isInteger(+n) ? String(+n) : (+n).toFixed(1));
+    const colKey = w => w.key ?? w.comp_id;
+
+    const catsAll = (Array.isArray(k.categorieen) && k.categorieen.length)
+        ? k.categorieen.map(c => c.label ?? c)
+        : [...new Set(allePos.map(p => p.categorie))];
+    const cats = catsAll.filter(c => gekozenCats.has(c));
+    if (!cats.length) return '';
+
+    const gereden = rkFinaleGereden(k);
+    const statusKop = gereden ? 'Eindstand' : 'Tussenstand';
+
+    const regelItems = rkRegelItems(k);
+    const tussen = gereden ? '' :
+        `<div class="skp-tussen">Dit is een tussenstand: de finale is nog niet verreden. De reglementaire regels (min. deelnames, finale-plicht, wegstrepen en tie-break) worden pas ná de finale toegepast. In deze tussenstand wordt uitsluitend op puntentotaal gerangschikt en delen gelijke totalen een plaats.</div>`;
+    const regelsHtml = regelItems.length
+        ? `<div class="skp-regels"><div class="skp-regels-kop">${gereden ? 'Toegepaste klassementsregels' : 'Klassementsregels (na de finale van toepassing)'}</div>${tussen}<ul>${regelItems.map(x => `<li>${x}</li>`).join('')}</ul></div>`
+        : '';
+
+    const wHdr = heeftW ? wMeta.map((w, i) => `<th class="skp-w">${w.is_finale ? 'F' : '#' + (i + 1)}</th>`).join('') : '';
+
+    const blokken = cats.map(cat => {
+        const rijen = allePos.filter(p => p.categorie === cat);
+        if (!rijen.length) return '';
+        const colspan = 3 + (heeftW ? wMeta.length + 1 : 0);
+        let scheiding = false;
+        const rows = rijen.map(p => {
+            const buiten = !(+p.positie > 0);
+            let voor = '';
+            if (buiten && !scheiding) {
+                scheiding = true;
+                voor = `<tr><td colspan="${colspan}" class="skp-scheiding">Niet opgenomen in klassement</td></tr>`;
+            }
+            const detail = p.punten_detail ?? {};
+            const gestr = new Set(detail._gestreept ?? []);
+            const wCel = heeftW ? wMeta.map(w => {
+                const key = colKey(w); const v = detail[key];
+                if (v == null) return `<td class="skp-w skp-nng">–</td>`;
+                return `<td class="skp-w${gestr.has(key) ? ' skp-streep' : ''}">${fmtP(v)}</td>`;
+            }).join('') : '';
+            const tot = heeftW ? `<td class="skp-tot">${fmtP(p.punten_totaal)}</td>` : '';
+            return `${voor}<tr>
+                <td class="skp-pos">${buiten ? '' : esc(p.positie)}</td>
+                <td class="skp-snr">${esc(p.start_number ?? '–')}</td>
+                <td class="skp-naam">${esc(p.naam)}</td>${wCel}${tot}
+            </tr>`;
+        }).join('');
+        return `<section class="skp-blok"><h3 class="skp-cat">${esc(cat)} <span class="skp-tel">(${rijen.length})</span></h3>
+            <table class="skp-tabel"><thead><tr><th class="skp-pos">Pos.</th><th class="skp-snr">Start#</th><th>Naam</th>${wHdr}${heeftW ? '<th class="skp-tot">Totaal</th>' : ''}</tr></thead><tbody>${rows}</tbody></table></section>`;
+    }).join('');
+
+    const legenda = heeftW ? `<ul class="skp-legenda">${wMeta.map((w, i) => `<li><b>${w.is_finale ? 'F' : '#' + (i + 1)}</b> — ${esc(w.naam || '')}${w.datum ? ' (' + String(w.datum).substring(0, 10) + ')' : ''}${w.is_finale ? ' · finale' : ''}${w.bonus_modus ? ' · bonus (+' + (+w.bonus_punten || 1) + ' per aanwezige)' : ''}</li>`).join('')}</ul>` : '';
+    const streepNoot = allePos.some(p => (p.punten_detail?._gestreept ?? []).length) ? `<div class="skp-streepnoot">Doorgehaalde scores zijn weggestreept (streepresultaten-regel) en tellen niet mee in het totaal.</div>` : '';
+
+    const css = `<style>
+        .skp-sectie { page-break-before: always; margin-top: 4mm; }
+        .skp-hoofdkop { font-size: 13pt; font-weight: 700; color: #1a3a5c; border-bottom: 2px solid #1a3a5c; padding-bottom: 1.5mm; margin: 0 0 3mm; }
+        .skp-regels { font-size: 8pt; color: #333; border: 1px solid #c9d3df; border-radius: 1.5mm; background: #f7f9fc; padding: 2mm 3mm; margin-bottom: 4mm; page-break-inside: avoid; }
+        .skp-regels-kop { font-weight: 700; color: #1a3a5c; margin-bottom: 1mm; }
+        .skp-regels ul { margin: 0; padding-left: 4.5mm; line-height: 1.4; }
+        .skp-tussen { font-size: 7.8pt; color: #6b4a12; margin-bottom: 1.5mm; line-height: 1.35; }
+        .skp-blok { margin-bottom: 5mm; page-break-inside: avoid; }
+        .skp-cat { font-size: 11pt; color: #1a3a5c; margin: 0 0 1.5mm; page-break-after: avoid; }
+        .skp-tel { font-size: 8pt; font-weight: 400; color: #666; }
+        .skp-tabel { width: 100%; border-collapse: collapse; table-layout: auto; }
+        .skp-tabel th { background: #dce6f0; text-align: left; padding: 1.2mm 2mm; font-size: 8.5pt; border-bottom: 1px solid #1a3a5c; }
+        .skp-tabel td { padding: 0.8mm 2mm; font-size: 9pt; border-bottom: 1px solid #ddd; }
+        .skp-pos, .skp-snr, .skp-w, .skp-tot { text-align: center; }
+        .skp-w { width: 8mm; }
+        .skp-tot { font-weight: 700; color: #1a3a5c; }
+        .skp-nng { color: #bbb; }
+        .skp-streep { text-decoration: line-through; color: #aaa; }
+        .skp-scheiding { background: #eef1f5; color: #5a6472; font-weight: 700; font-size: 7.5pt; text-transform: uppercase; padding: 1mm 2mm; }
+        .skp-legenda { font-size: 7.5pt; color: #555; list-style: none; padding: 2mm 0 0; margin: 0; }
+        .skp-streepnoot { font-size: 7.5pt; color: #777; font-style: italic; margin-top: 2mm; }
+    </style>`;
+
+    return `${css}<div class="skp-sectie"><h2 class="skp-hoofdkop">Serie-klassement — ${statusKop}: ${esc(k.naam || '')}</h2>${regelsHtml}${blokken}${legenda}${streepNoot}</div>`;
 }
 
 function renderDetail(k) {
@@ -724,7 +818,7 @@ function _rkCatRank(cat) {
 //
 // Toont een modal met een chip per categorie. Operator kan kiezen welke cats
 // hij wil printen. Resolved met Set van gekozen cats, of null bij annuleren.
-function _kiesCatsVoorPrint(catLabels) {
+function _kiesCatsVoorPrint(catLabels, titel) {
     return new Promise(resolve => {
         const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({
             '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'
@@ -740,10 +834,12 @@ function _kiesCatsVoorPrint(catLabels) {
             <div class="modal-dialog" role="dialog" aria-modal="true">
                 <div class="modal-header">
                     <span class="modal-icon">🖨</span>
-                    <span>Welke categorieën printen?</span>
+                    <span>${titel ? 'Categorieën — ' + esc(titel) : 'Welke categorieën printen?'}</span>
                 </div>
                 <div class="modal-body">
-                    <p class="rk-print-uitleg">Vink aan welke categorieën in de print moeten verschijnen.</p>
+                    <p class="rk-print-uitleg">${titel
+                        ? 'Vink aan welke categorieën van <b>' + esc(titel) + '</b> in het protocol moeten verschijnen.'
+                        : 'Vink aan welke categorieën in de print moeten verschijnen.'}</p>
                     <div class="wh-dc-cats" id="rk-print-cats">${chips}</div>
                     <div class="rk-print-quick">
                         <button type="button" class="modal-btn modal-annuleer rk-print-quick-btn" id="rk-print-allemaal">Alle aanvinken</button>
