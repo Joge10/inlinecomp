@@ -319,6 +319,89 @@ async function openKlassement(id) {
     }
 }
 
+// Is de finale-wedstrijd al verreden? Afgeleid uit de posities: heeft minstens
+// één rijder punten in de finale-kolom? Zo niet (of geen finale aangewezen) →
+// tussenstand, waarin de reglementaire regels nog niet gelden.
+function rkFinaleGereden(k) {
+    const wm  = Array.isArray(k.wedstrijden_meta) ? k.wedstrijden_meta : [];
+    const fin = wm.find(w => w.is_finale);
+    if (!fin) return true;
+    const key = fin.key ?? fin.comp_id;
+    return (k.posities ?? []).some(p => p.punten_detail && p.punten_detail[key] != null);
+}
+
+// Bouwt de losse regel-teksten (zonder emoji) — gedeeld door de UI-samenvatting
+// en de print-uitleg.
+function rkRegelItems(k) {
+    const r = k.regels;
+    if (!r) return [];
+    const items = [];
+    const f = r.afstand_filter || 'alle';
+    if (f === 'alle')          items.push('DC-eindklassement — alle afstanden per categorie samen');
+    else if (f === 'sprint')   items.push('Per afstand — alleen sprintafstanden');
+    else if (f === 'lang')     items.push('Per afstand — alleen lange afstanden');
+    else if (f === 'per_naam') items.push('Per afstand — alleen: ' + rkEsc((r.afstand_namen || []).join(', ') || '—'));
+    const tab = Array.isArray(r.punten_tabel) ? r.punten_tabel : [];
+    if (tab.length) items.push('Punten per plek: ' + rkEsc(tab.slice(0, 3).join(', ')) + (tab.length > 3 ? ', …' : '')
+        + '; buiten de tabel ' + (+r.min_punten_bij_deelname || 0) + ' punt(en)');
+    if (+r.streepresultaten > 0) items.push('De ' + (+r.streepresultaten) + ' slechtste score(s) tellen niet mee (streepresultaten)'
+        + (r.streep_direct ? ' — ook in de tussenstand' : ''));
+    if (+r.min_deelnames > 0) items.push('Minimaal ' + (+r.min_deelnames) + ' wedstrijden nodig om opgenomen te worden');
+    if (r.vereist_finale) items.push('De finale moet gereden zijn om opgenomen te worden');
+    const tbMap = {
+        geen: 'geen — gelijke punten blijven een gedeelde plaats',
+        laatste: 'de laatste wedstrijd (bij gelijk: de voorlaatste, enz.)',
+        beste_resultaten: 'de beste losse resultaten',
+        beste_resultaten_dan_laatste: 'de beste losse resultaten, dan de laatste wedstrijd',
+    };
+    items.push('Bij gelijke punten beslist: ' + (tbMap[r.tie_break] || rkEsc(r.tie_break || '—')));
+    if (r.non_deelname_punten) items.push('Afwezigen krijgen "laatste + 1" punten voor die wedstrijd');
+    const bonus = (Array.isArray(k.wedstrijden_meta) ? k.wedstrijden_meta : []).filter(w => w.bonus_modus);
+    if (bonus.length) items.push('Bonuswedstrijd(en): '
+        + bonus.map(w => rkEsc(w.naam) + ' (+' + (+w.bonus_punten || 1) + ' per aanwezige)').join(', '));
+    if (Array.isArray(r.categorie_filter) && r.categorie_filter.length)
+        items.push('Alleen categorieën: ' + rkEsc(r.categorie_filter.join(', ')));
+    return items;
+}
+
+// Leesbare samenvatting van de gebruikte klassement-regels (alleen serie, UI), met
+// onderscheid eindstand (regels toegepast) vs tussenstand (nog niet toegepast).
+function rkRegelsSamenvatting(k) {
+    const items = rkRegelItems(k);
+    if (!items.length) return '';
+    const gereden  = rkFinaleGereden(k);
+    const rand     = gereden ? '#d9e2ec' : '#f0c98a';
+    const achtergr = gereden ? '#f4f7fb' : '#fdf6ec';
+    const titelKl  = gereden ? '#1F4E79' : '#9a6516';
+    const titel    = gereden
+        ? '✅ Eindberekening — de finale is verreden; deze regels zijn toegepast:'
+        : '⏳ Tussenstand — de finale is nog niet verreden';
+    const tussenNoot = gereden ? '' :
+        `<div style="font-size:.82rem;color:#7a5410;margin:2px 0 6px;line-height:1.45">Let op: dit is een <b>tussenstand</b>. De reglementaire regels hieronder — o.a. minimaal aantal deelnames, finale-plicht, wegstrepen en de tie-break bij gelijke stand — worden <b>pas ná de finale</b> toegepast. Nu wordt puur op puntentotaal gerangschikt en delen gelijke totalen een plaats.</div>`;
+    return `<div style="background:${achtergr};border:1px solid ${rand};border-radius:8px;padding:9px 14px;margin:10px 0 2px">
+        <div style="font-weight:700;color:${titelKl};font-size:.88rem;margin-bottom:4px">${titel}</div>
+        ${tussenNoot}
+        <ul style="margin:0;padding-left:18px;font-size:.83rem;color:#33404f;line-height:1.5">${items.map(x => `<li>${x}</li>`).join('')}</ul>
+    </div>`;
+}
+
+// Print-versie van de regels-uitleg — professioneel, zonder emoji, voor deelnemers.
+function rkRegelsPrintBlok(k) {
+    const items = rkRegelItems(k);
+    if (!items.length) return '';
+    const gereden = rkFinaleGereden(k);
+    const kop = gereden
+        ? 'Toegepaste klassementsregels'
+        : 'Tussenstand — reglementaire regels nog niet toegepast';
+    const tussen = gereden ? '' :
+        `<div class="pk-regels-tussen">Dit is een tussenstand: de finale is nog niet verreden. De onderstaande reglementaire regels — waaronder het minimaal aantal deelnames, de finale-plicht, het wegstrepen van resultaten en de tie-break bij gelijke stand — worden pas ná de finale toegepast. In deze tussenstand wordt uitsluitend op puntentotaal gerangschikt en delen gelijke totalen een plaats.</div>`;
+    return `<div class="pk-regels">
+        <div class="pk-regels-kop">${kop}</div>
+        ${tussen}
+        <ul class="pk-regels-lijst">${items.map(x => `<li>${x}</li>`).join('')}</ul>
+    </div>`;
+}
+
 function renderDetail(k) {
     const cats = k.categorieen ?? [];
     const datum = k.aangemaakt_op
@@ -356,7 +439,18 @@ function renderDetail(k) {
         return Number.isInteger(v) ? String(v) : v.toFixed(1);
     };
 
+    // Kolomtelling voor de scheidingsrij tussen geklasseerd en niet-opgenomen.
+    const colspanRk = 3 + (toonCatCol ? 1 : 0) + (toonWedstrijden ? wMeta.length + 1 : 0);
+    let rkScheiding = false;
     const rijen = gefilterd.map(p => {
+        // positie 0 = 'niet opgenomen in klassement' (onderblok): op puntenvolgorde,
+        // zonder rangnummer.
+        const buiten = !(+p.positie > 0);
+        let voor = '';
+        if (buiten && !rkScheiding) {
+            rkScheiding = true;
+            voor = `<tr class="rk-scheiding"><td colspan="${colspanRk}" style="background:#eef1f5;color:#5a6472;font-weight:700;font-size:.78rem;text-transform:uppercase;letter-spacing:.03em;padding:6px 8px">Niet opgenomen in klassement</td></tr>`;
+        }
         const detail = p.punten_detail ?? {};
         // _gestreept = array van pwKeys (= comp_id of comp_id|distance_id)
         // die bij streepresultaten zijn weggehaald. Tonen we doorgehaald +
@@ -381,8 +475,8 @@ function renderDetail(k) {
         const totaalCel = toonWedstrijden
             ? `<td class="tc rk-totaal">${fmtP(p.punten_totaal)}</td>`
             : '';
-        return `<tr>
-            <td class="tc rk-pos">${p.positie}</td>
+        return `${voor}<tr class="${buiten ? 'rk-buiten' : ''}">
+            <td class="tc rk-pos">${buiten ? '' : p.positie}</td>
             <td class="tc rk-nr">${rkEsc(p.start_number ?? '–')}</td>
             <td class="rk-naam">${rkEsc(p.naam)}</td>
             ${toonCatCol ? `<td class="tc rk-cat">${rkEsc(p.categorie ?? '')}</td>` : ''}
@@ -435,6 +529,8 @@ function renderDetail(k) {
     </div>
     ${serieActies}
 </div>
+
+${isSerie ? rkRegelsSamenvatting(k) : ''}
 
 ${filterTabs}
 
@@ -571,7 +667,9 @@ async function verwijderKlassement(id, naam) {
 async function getRankingSeeding(klassementId, categorie) {
     const k = await rkGet(`api/klassement_import.php?action=get&id=${encodeURIComponent(klassementId)}`);
     return (k.posities ?? [])
-        .filter(p => !categorie || p.categorie === categorie)
+        // positie 0 = 'niet opgenomen in klassement' (onderblok) → niet seeden;
+        // startlist.js voegt deze rijders zelf achteraan toe.
+        .filter(p => (!categorie || p.categorie === categorie) && +p.positie > 0)
         .sort((a, b) => a.positie - b.positie)
         .map(p => String(p.start_number));
 }
@@ -770,7 +868,16 @@ async function printSerieKlassement(k) {
                 return `<th class="pk-w" title="${tip}">${top}${sub}</th>`;
             }).join('')
             : '';
+        const pkColspan = 3 + (heeftWedstrijden ? wMeta.length + 1 : 0);
+        let pkScheiding = false;
         const rijenHtml = rijen.map(p => {
+            // positie 0 = 'niet opgenomen in klassement' (onderblok).
+            const buiten = !(+p.positie > 0);
+            let voor = '';
+            if (buiten && !pkScheiding) {
+                pkScheiding = true;
+                voor = `<tr class="pk-scheiding"><td colspan="${pkColspan}" style="background:#eef1f5;color:#5a6472;font-weight:700;font-size:.72rem;text-transform:uppercase;padding:4px 6px">Niet opgenomen in klassement</td></tr>`;
+            }
             const detail = p.punten_detail ?? {};
             const gestreept = new Set(detail._gestreept ?? []);
             const wCellen = heeftWedstrijden
@@ -785,8 +892,8 @@ async function printSerieKlassement(k) {
             const tot = heeftWedstrijden
                 ? `<td class="pk-tot">${fmtP(p.punten_totaal)}</td>`
                 : '';
-            return `<tr>
-                <td class="pk-pos">${esc(p.positie)}</td>
+            return `${voor}<tr>
+                <td class="pk-pos">${buiten ? '' : esc(p.positie)}</td>
                 <td class="pk-snr">${esc(p.start_number ?? '–')}</td>
                 <td class="pk-naam">${esc(p.naam)}</td>
                 ${wCellen}
@@ -904,6 +1011,13 @@ body { font-family: Arial, sans-serif; font-size: 9pt; color: #000; margin: 0; p
 
 .pk-streep-noot { font-size: 7.5pt; color: #777; margin-top: 3mm;
                   border-top: 1px dotted #ccc; padding-top: 1.5mm; font-style: italic; }
+.pk-regels        { font-size: 8pt; color: #333; margin: 0 0 4mm 0; padding: 2mm 3mm;
+                    border: 1px solid #c9d3df; border-radius: 1.5mm; background: #f7f9fc;
+                    page-break-inside: avoid; break-inside: avoid; }
+.pk-regels-kop    { font-weight: 700; color: #1a3a5c; font-size: 8.5pt; margin-bottom: 1mm; }
+.pk-regels-tussen { font-size: 7.8pt; color: #6b4a12; margin-bottom: 1.5mm; line-height: 1.35; }
+.pk-regels-lijst  { margin: 0; padding-left: 4.5mm; line-height: 1.4; }
+.pk-regels-lijst li { padding: 0.2mm 0; break-inside: avoid; }
 </style></head>
 <body>
 <div class="pk-header">
@@ -914,6 +1028,7 @@ body { font-family: Arial, sans-serif; font-size: 9pt; color: #000; margin: 0; p
     ${baanLogoHtml ? `<div class="pk-baan">${baanLogoHtml}</div>` : ''}
     ${orgLogoHtml ? `<div class="pk-orglogo">${orgLogoHtml}</div>` : ''}
 </div>
+${rkRegelsPrintBlok(k)}
 ${blokkenHtml}
 ${heeftStreep ? `<div class="pk-streep-noot">Doorgehaalde scores zijn weggestreept (streepresultaten-regel) en tellen niet mee in het totaal.</div>` : ''}
 ${footerHtml}
