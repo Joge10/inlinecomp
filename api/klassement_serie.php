@@ -467,6 +467,53 @@ function berekenSerie(PDO $pdo, string $serieId): array {
             }
         }
 
+        // Zorg dat de finale-wedstrijd óók een kolom krijgt in per-afstand-
+        // klassementen, ook als die nog geen uitslag heeft (net als bij het
+        // gecombineerde klassement). Eén lege kolom per geselecteerde afstand-
+        // naam die de finale voert. Geen punten/streep-impact: zonder resultaten
+        // is aantalPerCompCat 0, dus non-deelname en streep-quota slaan 'm over.
+        if ($laatsteComp) {
+            $finParams = [$laatsteComp];
+            if ($regels['afstand_filter'] === 'sprint') {
+                $finWhere = " AND d.race_type = 'sprint'";
+            } elseif ($regels['afstand_filter'] === 'lang') {
+                $finWhere = " AND d.race_type <> 'sprint'";
+            } elseif ($regels['afstand_filter'] === 'per_naam' && !empty($regels['afstand_namen'])) {
+                $finWhere = " AND d.name IN (" . implode(',', array_fill(0, count($regels['afstand_namen']), '?')) . ")";
+                $finParams = array_merge($finParams, $regels['afstand_namen']);
+            } else {
+                $finWhere = " AND 1=0";
+            }
+            // Namen die de finale al (deels) via uitslag heeft → niet dubbel.
+            $finaleNamenAl = [];
+            foreach ($pwKeyMeta as $pi) {
+                if (($pi['comp_id'] ?? null) === $laatsteComp && $pi['distance_naam'] !== null) {
+                    $finaleNamenAl[$pi['distance_naam']] = true;
+                }
+            }
+            $finStmt = $pdo->prepare("
+                SELECT MIN(d.id) AS distance_id, d.name AS distance_naam
+                FROM distances d
+                JOIN distance_combinations dc ON dc.id = d.distance_combination_id
+                WHERE dc.competition_id = ?
+                  AND d.name IS NOT NULL AND TRIM(d.name) <> ''
+                  $finWhere
+                GROUP BY d.name
+            ");
+            $finStmt->execute($finParams);
+            foreach ($finStmt->fetchAll(PDO::FETCH_ASSOC) as $fd) {
+                if (isset($finaleNamenAl[$fd['distance_naam']])) continue;
+                $pwKey = $laatsteComp . '|' . ($fd['distance_id'] ?? '0');
+                if (!isset($pwKeyMeta[$pwKey])) {
+                    $pwKeyMeta[$pwKey] = [
+                        'comp_id'       => $laatsteComp,
+                        'distance_id'   => $fd['distance_id'] ?? null,
+                        'distance_naam' => $fd['distance_naam'] ?? null,
+                    ];
+                }
+            }
+        }
+
         foreach ($groepen as $groep) {
             // Sorteer binnen de (comp, DC, splitgroep, cat) op absolute rang ASC
             usort($groep, function($a, $b) {
@@ -1315,6 +1362,16 @@ if ($method === 'GET') {
             $sSt = $pdo->prepare("SELECT regels FROM klassement_series WHERE id = ?");
             $sSt->execute([$id]);
             $regels = normaliseerRegels(json_decode($sSt->fetchColumn() ?: '{}', true) ?: []);
+            // Bij een afstand-klassement (sprint/lang/per_naam) leest de berekening
+            // uit uitslag_afstand en filtert op afstand (naam/type) — niet op DC-type
+            // uit uitslag_klassement. De diagnose moet diezelfde route tonen.
+            $isAfstandLevel = ($regels['afstand_filter'] !== 'alle');
+            $afstandMatcht = function($naam, $rt) use ($regels) {
+                if ($regels['afstand_filter'] === 'sprint')   return $rt === 'sprint';
+                if ($regels['afstand_filter'] === 'lang')     return $rt !== 'sprint';
+                if ($regels['afstand_filter'] === 'per_naam') return in_array($naam, $regels['afstand_namen'] ?? [], true);
+                return true; // 'alle'
+            };
 
             // Per meetellende wedstrijd: DC-types + filter-reden
             $diag = [];
@@ -1336,9 +1393,17 @@ if ($method === 'GET') {
                 foreach ($dcs->fetchAll(PDO::FETCH_ASSOC) as $d) {
                     $n = (int)$d['n_afstanden'];
                     $t = $n === 0 ? 'leeg' : ($n > 1 ? 'gecombineerd' : (($d['race_type'] === 'sprint') ? 'sprint' : 'lang'));
-                    $passes = ($regels['afstand_filter'] === 'alle')
-                           || ($regels['afstand_filter'] === 'sprint' && $t === 'sprint')
-                           || ($regels['afstand_filter'] === 'lang'   && $t === 'lang');
+                    if ($isAfstandLevel) {
+                        // DC telt mee als 'ie ≥1 afstand heeft die het filter matcht.
+                        $dm = $pdo->prepare("SELECT d.name, d.race_type FROM distances d WHERE d.distance_combination_id = ?");
+                        $dm->execute([$d['dc_id']]);
+                        $passes = false;
+                        foreach ($dm->fetchAll(PDO::FETCH_ASSOC) as $dd) {
+                            if ($afstandMatcht($dd['name'], $dd['race_type'])) { $passes = true; break; }
+                        }
+                    } else {
+                        $passes = ($regels['afstand_filter'] === 'alle') && $t !== 'leeg';
+                    }
                     // Hoeveel rijen uitslag_klassement voor deze DC?
                     $c2 = $pdo->prepare("SELECT COUNT(*) FROM uitslag_klassement WHERE competition_id = ? AND distance_combination_id = ?");
                     $c2->execute([$cid, $d['dc_id']]);
@@ -1363,61 +1428,105 @@ if ($method === 'GET') {
                 'rijders_uniek'    => 0,
                 'in_klassement'    => 0,  // na min_deelnames + vereist_finale
                 'voorbeelden_weg'  => [],
+                // Welke bron + filterstap de berekening werkelijk gebruikt, zodat
+                // de diagnose bij een afstand-klassement niet misleidend
+                // "uitslag_klassement / DC-filter" toont.
+                'bron'         => $isAfstandLevel ? 'uitslag_afstand' : 'uitslag_klassement',
+                'filter_label' => $isAfstandLevel
+                    ? ($regels['afstand_filter'] === 'per_naam' ? 'afstand-filter (op naam)' : 'afstand-filter (op type)')
+                    : 'DC-filter (op type)',
             ];
             $compIds = array_values(array_filter(array_map(fn($w) => $w['telt_mee'] ? $w['competition_id'] : null, $wedstrijden)));
             if ($compIds) {
                 $ph = implode(',', array_fill(0, count($compIds), '?'));
-                $dcInfo = $pdo->prepare("
-                    SELECT dc.id, COUNT(d.id) AS n_afst, MIN(d.race_type) AS rt
-                    FROM distance_combinations dc
-                    LEFT JOIN distances d ON d.distance_combination_id = dc.id
-                    WHERE dc.competition_id IN ($ph)
-                    GROUP BY dc.id
-                ");
-                $dcInfo->execute($compIds);
-                $dcT = [];
-                foreach ($dcInfo->fetchAll(PDO::FETCH_ASSOC) as $d) {
-                    $n = (int)$d['n_afst'];
-                    $dcT[$d['id']] = $n===0 ? 'leeg' : ($n>1 ? 'gecombineerd' : ($d['rt']==='sprint'?'sprint':'lang'));
-                }
-                $dcPass = function($t) use ($regels) {
-                    if (!$t || $t === 'leeg') return false;
-                    return $regels['afstand_filter'] === 'alle'
-                        || ($regels['afstand_filter'] === 'sprint' && $t === 'sprint')
-                        || ($regels['afstand_filter'] === 'lang'   && $t === 'lang');
-                };
-                $uk = $pdo->prepare("
-                    SELECT uk.person_license, uk.distance_combination_id AS dc_id,
-                           uk.rang, uk.punten_totaal, uk.categorie,
-                           p.full_name, p.category AS persoon_cat
-                    FROM uitslag_klassement uk
-                    JOIN persons p ON p.license_key = uk.person_license
-                    WHERE uk.competition_id IN ($ph)
-                ");
-                $uk->execute($compIds);
                 $rijders = [];
-                foreach ($uk->fetchAll(PDO::FETCH_ASSOC) as $r) {
-                    $pipeline['uit_uk']++;
-                    $t = $dcT[$r['dc_id']] ?? null;
-                    if (!$dcPass($t)) {
-                        if (count($pipeline['voorbeelden_weg']) < 3)
-                            $pipeline['voorbeelden_weg'][] = "DC-filter: {$r['full_name']} (dc-type={$t})";
-                        continue;
+                if ($isAfstandLevel) {
+                    // ── Afstand-klassement: lees uit uitslag_afstand, filter per afstand ──
+                    $ua = $pdo->prepare("
+                        SELECT ua.person_license, ua.rang, ua.punten, ua.categorie,
+                               d.name AS afst_naam, d.race_type AS rt,
+                               p.full_name, p.category AS persoon_cat
+                        FROM uitslag_afstand ua
+                        JOIN distances d
+                            ON d.distance_combination_id = ua.distance_combination_id
+                           AND d.id = ua.distance_id
+                        JOIN persons p ON p.license_key = ua.person_license
+                        WHERE ua.competition_id IN ($ph)
+                    ");
+                    $ua->execute($compIds);
+                    foreach ($ua->fetchAll(PDO::FETCH_ASSOC) as $r) {
+                        $pipeline['uit_uk']++;
+                        if (!$afstandMatcht($r['afst_naam'], $r['rt'])) {
+                            if (count($pipeline['voorbeelden_weg']) < 3)
+                                $pipeline['voorbeelden_weg'][] = "Afstand-filter: {$r['full_name']} (afstand={$r['afst_naam']})";
+                            continue;
+                        }
+                        $pipeline['na_dc_filter']++;
+                        if ((float)($r['punten'] ?? 0) <= 0) {
+                            if (count($pipeline['voorbeelden_weg']) < 3)
+                                $pipeline['voorbeelden_weg'][] = "Punten<=0: {$r['full_name']} (punten={$r['punten']})";
+                            continue;
+                        }
+                        $pipeline['na_punten_filter']++;
+                        if ($r['rang'] === null) {
+                            if (count($pipeline['voorbeelden_weg']) < 3)
+                                $pipeline['voorbeelden_weg'][] = "Rang=NULL: {$r['full_name']}";
+                            continue;
+                        }
+                        $pipeline['na_rang_filter']++;
+                        $rijders[$r['person_license']] = ($r['persoon_cat'] ?? $r['categorie'] ?? '(leeg)');
                     }
-                    $pipeline['na_dc_filter']++;
-                    if ((float)($r['punten_totaal'] ?? 0) <= 0) {
-                        if (count($pipeline['voorbeelden_weg']) < 3)
-                            $pipeline['voorbeelden_weg'][] = "Punten<=0: {$r['full_name']} (punten={$r['punten_totaal']})";
-                        continue;
+                } else {
+                    // ── Gecombineerd klassement: lees uit uitslag_klassement, filter op DC-type ──
+                    $dcInfo = $pdo->prepare("
+                        SELECT dc.id, COUNT(d.id) AS n_afst, MIN(d.race_type) AS rt
+                        FROM distance_combinations dc
+                        LEFT JOIN distances d ON d.distance_combination_id = dc.id
+                        WHERE dc.competition_id IN ($ph)
+                        GROUP BY dc.id
+                    ");
+                    $dcInfo->execute($compIds);
+                    $dcT = [];
+                    foreach ($dcInfo->fetchAll(PDO::FETCH_ASSOC) as $d) {
+                        $n = (int)$d['n_afst'];
+                        $dcT[$d['id']] = $n===0 ? 'leeg' : ($n>1 ? 'gecombineerd' : ($d['rt']==='sprint'?'sprint':'lang'));
                     }
-                    $pipeline['na_punten_filter']++;
-                    if ($r['rang'] === null) {
-                        if (count($pipeline['voorbeelden_weg']) < 3)
-                            $pipeline['voorbeelden_weg'][] = "Rang=NULL: {$r['full_name']}";
-                        continue;
+                    $dcPass = function($t) use ($regels) {
+                        if (!$t || $t === 'leeg') return false;
+                        return $regels['afstand_filter'] === 'alle';
+                    };
+                    $uk = $pdo->prepare("
+                        SELECT uk.person_license, uk.distance_combination_id AS dc_id,
+                               uk.rang, uk.punten_totaal, uk.categorie,
+                               p.full_name, p.category AS persoon_cat
+                        FROM uitslag_klassement uk
+                        JOIN persons p ON p.license_key = uk.person_license
+                        WHERE uk.competition_id IN ($ph)
+                    ");
+                    $uk->execute($compIds);
+                    foreach ($uk->fetchAll(PDO::FETCH_ASSOC) as $r) {
+                        $pipeline['uit_uk']++;
+                        $t = $dcT[$r['dc_id']] ?? null;
+                        if (!$dcPass($t)) {
+                            if (count($pipeline['voorbeelden_weg']) < 3)
+                                $pipeline['voorbeelden_weg'][] = "DC-filter: {$r['full_name']} (dc-type={$t})";
+                            continue;
+                        }
+                        $pipeline['na_dc_filter']++;
+                        if ((float)($r['punten_totaal'] ?? 0) <= 0) {
+                            if (count($pipeline['voorbeelden_weg']) < 3)
+                                $pipeline['voorbeelden_weg'][] = "Punten<=0: {$r['full_name']} (punten={$r['punten_totaal']})";
+                            continue;
+                        }
+                        $pipeline['na_punten_filter']++;
+                        if ($r['rang'] === null) {
+                            if (count($pipeline['voorbeelden_weg']) < 3)
+                                $pipeline['voorbeelden_weg'][] = "Rang=NULL: {$r['full_name']}";
+                            continue;
+                        }
+                        $pipeline['na_rang_filter']++;
+                        $rijders[$r['person_license']] = ($r['persoon_cat'] ?? $r['categorie'] ?? '(leeg)');
                     }
-                    $pipeline['na_rang_filter']++;
-                    $rijders[$r['person_license']] = ($r['persoon_cat'] ?? $r['categorie'] ?? '(leeg)');
                 }
                 $pipeline['rijders_uniek'] = count($rijders);
                 // Simuleer min_deelnames niet: dat is een laatste stap. Voor nu lopen we tot hier.
