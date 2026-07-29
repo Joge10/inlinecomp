@@ -17,6 +17,7 @@ header('Access-Control-Allow-Origin: *');
 
 require_once __DIR__ . '/../../config_inlinecomp.php';
 require_once __DIR__ . '/../auth/session.php';
+require_once __DIR__ . '/lib_banen.php';
 $_authUser = requireAuth($pdo);
 
 $method = $_SERVER['REQUEST_METHOD'] ?? 'GET';
@@ -166,6 +167,13 @@ try {
     // Koppel een baan aan een wedstrijd (handmatig — voor wedstrijden die
     // bij import géén venue_name meekregen of onbekende baan hadden).
     // baan_id leeg = ontkoppelen.
+    //
+    // De keuze-dropdown is gededupliceerd op naam (action=alle → MIN(id)) en
+    // toont dus een willekeurige org-rij. De OPGESLAGEN koppeling moet echter
+    // altijd de baan van de wedstrijd-org zijn, anders missen de baan-sponsors
+    // van die org (die kennen geen cross-org-fallback). Daarom resolven we de
+    // gekozen baan-naam naar de eigen-org-rij (aanmaken + data kopiëren als die
+    // nog niet bestaat, zie lib_banen.php).
     if ($action === 'koppel_wedstrijd') {
         $compId = trim($_POST['competition_id'] ?? '');
         $bid    = trim($_POST['baan_id']        ?? '');
@@ -180,16 +188,26 @@ try {
             echo json_encode(['ok' => true, 'baan_id' => null]);
             exit;
         }
-        $chk = $pdo->prepare("SELECT 1 FROM banen WHERE id = ?");
+        $chk = $pdo->prepare("SELECT naam FROM banen WHERE id = ?");
         $chk->execute([$bid]);
-        if (!$chk->fetchColumn()) {
+        $gekozenNaam = $chk->fetchColumn();
+        if ($gekozenNaam === false) {
             http_response_code(404);
             echo json_encode(['error' => 'Baan niet gevonden']);
             exit;
         }
+        // Naar eigen-org-rij resolven op basis van de gekozen naam.
+        $co = $pdo->prepare("SELECT organisatie_id FROM competitions WHERE id = ?");
+        $co->execute([$compId]);
+        $compOrg = $co->fetchColumn() ?: null;
+        $doelBaanId = $bid;
+        if ($compOrg) {
+            $eigen = baanVoorOrgResolven($pdo, $compOrg, (string)$gekozenNaam);
+            if ($eigen) $doelBaanId = $eigen;
+        }
         $pdo->prepare("UPDATE competitions SET baan_id = ? WHERE id = ?")
-            ->execute([$bid, $compId]);
-        echo json_encode(['ok' => true, 'baan_id' => $bid]);
+            ->execute([$doelBaanId, $compId]);
+        echo json_encode(['ok' => true, 'baan_id' => $doelBaanId]);
         exit;
     }
 

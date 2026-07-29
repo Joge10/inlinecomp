@@ -27,6 +27,7 @@ if (!$compId) {
 
 require_once __DIR__ . '/../../config_inlinecomp.php';
 require_once __DIR__ . '/../auth/session.php';
+require_once __DIR__ . '/lib_banen.php';
 $_authUser = requireAuth($pdo);
 
 function apiGet(string $url): ?array {
@@ -167,55 +168,46 @@ try {
         }
     }
 
-    // ── Baan koppelen / aanmaken (per organisatie) ────────────────────────
-    // Alleen als er een org-koppeling is en venue_name uit de KNSB-feed
-    // beschikbaar is. Eerst: bestaat er voor deze org al een baan met deze
-    // naam (of alias)? Zo ja → koppelen. Zo nee → nieuwe baan aanmaken met
-    // basis-info (naam + stad uit de feed); de beheerder vult later het logo
-    // en de gastheer-vereniging aan.
+    // ── Baan koppelen / aanmaken / repareren (per organisatie) ────────────
+    // Kernregel: de wedstrijd hangt ALTIJD aan de baan-rij van zijn EIGEN org.
+    //   • Nog geen koppeling  → resolven (match op naam/alias, anders aanmaken
+    //                            met gekopieerde data, zie lib_banen.php).
+    //   • Koppeling naar ANDERE org → repareren naar de eigen-org-rij. Dit is
+    //     de bug die zorgde dat baan-sponsors van de eigen org niet getoond
+    //     werden; self-healing bij de eerstvolgende import/vergelijk.
+    //   • Koppeling al naar eigen org → met rust laten (kan handmatige keuze zijn).
     if ($organisatie) {
         $compRow = $pdo->prepare(
             "SELECT venue_name, venue_city, baan_id FROM competitions WHERE id = ?"
         );
         $compRow->execute([$compId]);
-        $compInfo = $compRow->fetch(PDO::FETCH_ASSOC) ?: [];
-        $venueName = $compInfo['venue_name'] ?? null;
+        $compInfo  = $compRow->fetch(PDO::FETCH_ASSOC) ?: [];
+        $venueName = trim($compInfo['venue_name'] ?? '');
         $venueCity = $compInfo['venue_city'] ?? null;
-        $heeftBaanId = !empty($compInfo['baan_id']);
+        $huidigBaanId = $compInfo['baan_id'] ?? null;
 
-        if ($venueName && !$heeftBaanId) {
-            // 1) Match op exacte naam binnen deze organisatie
-            $bStmt = $pdo->prepare(
-                "SELECT id FROM banen WHERE organisatie_id = ? AND naam = ? LIMIT 1"
-            );
-            $bStmt->execute([$organisatie['id'], $venueName]);
-            $baanId = $bStmt->fetchColumn() ?: null;
+        // Huidige koppeling: van welke org is die baan-rij? (naam als fallback-bron)
+        $huidigBaanRow = null;
+        if ($huidigBaanId) {
+            $bo = $pdo->prepare("SELECT organisatie_id, naam, stad FROM banen WHERE id = ?");
+            $bo->execute([$huidigBaanId]);
+            $huidigBaanRow = $bo->fetch(PDO::FETCH_ASSOC) ?: null;
+        }
+        $huidigIsEigenOrg = $huidigBaanRow && ($huidigBaanRow['organisatie_id'] === $organisatie['id']);
 
-            // 2) Match via alias binnen deze organisatie
-            if (!$baanId) {
-                $aStmt = $pdo->prepare("
-                    SELECT a.baan_id FROM baan_aliassen a
-                    JOIN banen b ON b.id = a.baan_id
-                    WHERE b.organisatie_id = ? AND a.naam = ?
-                    LIMIT 1
-                ");
-                $aStmt->execute([$organisatie['id'], $venueName]);
-                $baanId = $aStmt->fetchColumn() ?: null;
+        if (!$huidigIsEigenOrg) {
+            // Naam om op te resolven: feed-naam heeft voorrang; anders de naam
+            // van de (verkeerd gekoppelde) andere-org-rij zodat ook zonder
+            // feed-venue_name gerepareerd wordt.
+            $targetNaam = $venueName !== '' ? $venueName : trim($huidigBaanRow['naam'] ?? '');
+            $targetStad = $venueCity ?: ($huidigBaanRow['stad'] ?? null);
+            if ($targetNaam !== '') {
+                $baanId = baanVoorOrgResolven($pdo, $organisatie['id'], $targetNaam, $targetStad);
+                if ($baanId) {
+                    $pdo->prepare("UPDATE competitions SET baan_id = ? WHERE id = ?")
+                        ->execute([$baanId, $compId]);
+                }
             }
-
-            // 3) Niet gevonden → automatisch aanmaken met basis-info
-            if (!$baanId) {
-                $baanId = newUuid();
-                $pdo->prepare("
-                    INSERT INTO banen (id, organisatie_id, naam, stad)
-                    VALUES (?, ?, ?, ?)
-                ")->execute([$baanId, $organisatie['id'], $venueName, $venueCity]);
-            }
-
-            // Koppel de wedstrijd aan deze baan
-            $pdo->prepare(
-                "UPDATE competitions SET baan_id = ? WHERE id = ?"
-            )->execute([$baanId, $compId]);
         }
     }
 
