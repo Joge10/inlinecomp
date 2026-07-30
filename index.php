@@ -492,6 +492,7 @@ if (is_array($eigenScope) && !empty($eigenScope)) {
                         <button class="org-tab-btn active" data-tab="gebruikers">Gebruikers</button>
                         <button class="org-tab-btn" data-tab="bezoekers">Bezoekers</button>
                         <button class="org-tab-btn" data-tab="logboek">Logboek</button>
+                        <button class="org-tab-btn" data-tab="coach">Coach</button>
                         <button class="org-tab-btn" data-tab="rijders">Rijders</button>
                         <button class="org-tab-btn" data-tab="uploads">Uploads</button>
                         <button class="org-tab-btn" data-tab="helpers">Helpers</button>
@@ -515,6 +516,13 @@ if (is_array($eigenScope) && !empty($eigenScope)) {
                 <!-- Tab: Logboek (login-history) -->
                 <div class="org-tab-content" id="sys-tab-logboek" style="display:none">
                     <div id="gb-logboek-container">
+                        <div class="status-msg loading"><span class="spinner"></span>Laden…</div>
+                    </div>
+                </div>
+
+                <!-- Tab: Coach (coach-accounts goedkeuren/beheren) -->
+                <div class="org-tab-content" id="sys-tab-coach" style="display:none">
+                    <div id="coach-beheer-container">
                         <div class="status-msg loading"><span class="spinner"></span>Laden…</div>
                     </div>
                 </div>
@@ -720,6 +728,7 @@ function magSchrijven(module) {
 <script src="js/klassement_serie_ui.js"></script>
 <script src="js/instellingen.js"></script>
 <script src="js/banen.js"></script>
+<script src="js/coach_beheer.js"></script>
 <script src="js/meldingen.js"></script>
 <script src="js/gebruikers.js"></script>
 <script src="js/rijders.js"></script>

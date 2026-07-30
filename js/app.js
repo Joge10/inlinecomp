@@ -250,6 +250,7 @@ function switchSysteemTab(tab) {
         gebruikers: 'gb-container',
         bezoekers:  'gb-bezoekers-container',
         logboek:    'gb-logboek-container',
+        coach:      'coach-beheer-container',
         rijders:    'rij-detail',
         uploads:    'up-container',
         helpers:    'hp-container',
@@ -264,6 +265,7 @@ function switchSysteemTab(tab) {
     if (!_sysTabGeladen.has(tab) || !echtGeladen) {
         _sysTabGeladen.add(tab);
         if (tab === 'gebruikers' || tab === 'bezoekers' || tab === 'logboek') toonGebruikersPagina();
+        if (tab === 'coach')    toonCoachBeheer();
         if (tab === 'rijders')  toonRijdersPagina();
         if (tab === 'uploads')  toonUploadsPagina();
         if (tab === 'helpers')  toonHelpersPagina();

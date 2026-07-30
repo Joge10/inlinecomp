@@ -62,6 +62,8 @@ async function laadLogboek(filterValue = '') {
         let qs = '';
         if (filterValue === '__jury__')        qs = '?type=jury';
         else if (filterValue === '__org__')    qs = '?type=organisator';
+        else if (filterValue === '__coach__')  qs = '?type=coach';
+        else if (filterValue === '__staff__')  qs = '?type=staff';
         else if (filterValue)                  qs = '?user_id=' + encodeURIComponent(filterValue);
         const url = 'api/logboek.php' + qs;
         const res  = await fetch(url);
@@ -150,6 +152,8 @@ function renderLogboekSectie() {
                     <option value="">— Alles —</option>
                     <option value="__jury__">⚖ Alleen jury-app</option>
                     <option value="__org__">👤 Alleen organisator-logins</option>
+                    <option value="__coach__">🧑‍🏫 Alleen coach-accounts</option>
+                    <option value="__staff__">🔧 Alleen staf</option>
                     <option disabled>──────────────</option>
                     ${gebruikerOpties}
                 </select>
