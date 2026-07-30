@@ -15,8 +15,8 @@ header('Pragma: no-cache');
 $ORG_NAAM   = 'InlineComp';                 // TODO: aanpassen naar jouw vereniging / beheerder
 $ORG_EMAIL  = 'inlinecomp@devriesen.com';   // TODO: e-mailadres voor verzoeken
 $ORG_ADRES  = '';                           // TODO: eventueel postadres
-$LAATSTE_UPDATE_NL = '27 mei 2026';
-$LAATSTE_UPDATE_EN = '27 May 2026';
+$LAATSTE_UPDATE_NL = '30 juli 2026';
+$LAATSTE_UPDATE_EN = '30 July 2026';
 ?><!DOCTYPE html>
 <html lang="nl">
 <head>
@@ -81,6 +81,21 @@ sancties, klassering). Deze zijn aan het licentienummer gekoppeld.</p>
 adressen of geboortedata van rijders. Waar leeftijdsindicatie nodig is
 (bijvoorbeeld voor cat-plausibiliteit in klassementen), leiden wij die
 af uit de KNSB-categorie.</p>
+
+<h2>1b. Coach-accounts (optioneel)</h2>
+<p>Coaches kunnen — geheel vrijwillig — een persoonlijk account aanmaken in de
+coach-app. Zonder account is het gebruik anoniem; met een account verwerken wij:</p>
+<ul>
+    <li>je <strong>naam</strong> en <strong>e-mailadres</strong> (als inlog- en herkenningsgegeven);</li>
+    <li>de <strong>club of het team</strong> waarvoor je coacht (ter beoordeling van je aanvraag);</li>
+    <li>je zelf samengestelde <strong>atletenlijst</strong> (licentienummers van rijders die je wilt volgen).</li>
+</ul>
+<p>De grondslag is jouw <strong>toestemming</strong> — je maakt het account zelf aan.
+Het doel is uitsluitend je gemak als coach: je atleten één keer instellen en ze
+automatisch terugzien. Een account wordt pas actief na goedkeuring door de beheerder.
+Je kunt je account en atletenlijst op elk moment zelf verwijderen; daarnaast vervalt
+een account automatisch na één jaar zonder inloggen. Het wachtwoord bewaren wij
+uitsluitend versleuteld (bcrypt-hash).</p>
 
 <h2>2. Waarom verwerken wij deze gegevens?</h2>
 <ul>
@@ -274,6 +289,21 @@ sanctions, ranking). These are linked to the licence number.</p>
 home addresses or dates of birth of skaters. Where an age indication is
 required (for example category plausibility in rankings), it is derived
 from the KNSB category.</p>
+
+<h2>1b. Coach accounts (optional)</h2>
+<p>Coaches may — entirely voluntarily — create a personal account in the coach app.
+Without an account, use is anonymous; with an account we process:</p>
+<ul>
+    <li>your <strong>name</strong> and <strong>e-mail address</strong> (as login and identification);</li>
+    <li>the <strong>club or team</strong> you coach for (to assess your request);</li>
+    <li>your self-curated <strong>athlete list</strong> (licence numbers of skaters you wish to follow).</li>
+</ul>
+<p>The legal basis is your <strong>consent</strong> — you create the account yourself.
+Its sole purpose is coach convenience: set up your athletes once and see them
+automatically. An account becomes active only after approval by the administrator.
+You can delete your account and athlete list yourself at any time; in addition, an
+account expires automatically after one year without login. Passwords are stored only
+in encrypted form (bcrypt hash).</p>
 
 <h2>2. Why do we process this data?</h2>
 <ul>
