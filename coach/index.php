@@ -14,6 +14,7 @@ header('Cache-Control: no-store, no-cache, must-revalidate, max-age=0');
 header('Pragma: no-cache');
 header('Expires: 0');
 require_once __DIR__ . '/../../config_inlinecomp.php';
+require_once __DIR__ . '/../api/lib_coach_auth.php';
 
 // ── Bezoektracking: upsert session-hit in coach_visits ──────────────────────
 // HTML → full INSERT/UPDATE + peak-check. AJAX → last_seen bumpen met 30s
@@ -139,6 +140,10 @@ if ($_cacheable) {
 // Bij leeg/onjuist wachtwoord: 401 → frontend prompt opnieuw.
 function _coachAuthGate(PDO $pdo, string $action): void {
     if ($action === '' || $action === 'auth_status') return;
+    // Ingelogde coach (eigen account) passeert de gedeelde-wachtwoord-gate:
+    // identiteit vervangt de anti-misbruik-drempel. Anonieme bezoekers houden
+    // het gedeelde wachtwoord.
+    if (getCoachSession($pdo)) return;
     $st = $pdo->prepare("SELECT password FROM coach_app_settings WHERE id = 1 LIMIT 1");
     $st->execute();
     $stored = $st->fetchColumn();
@@ -372,7 +377,10 @@ if ($action === 'personen_bulk') {
     $compId   = trim($body['competition_id'] ?? '');
     $clubs    = array_values(array_filter(array_map('trim', $body['clubs']    ?? []), 'strlen'));
     $sponsors = array_values(array_filter(array_map('trim', $body['sponsors'] ?? []), 'strlen'));
-    if (!$compId || (!$clubs && !$sponsors)) { echo json_encode([]); exit; }
+    // Ook op license_key selecteerbaar — gebruikt door de auto-highlight van
+    // een ingelogde coach (server-roster → deze wedstrijd, mét startnummer).
+    $licenses = array_values(array_filter(array_map('trim', $body['licenses'] ?? []), 'strlen'));
+    if (!$compId || (!$clubs && !$sponsors && !$licenses)) { echo json_encode([]); exit; }
     try {
         $where  = ['dc.competition_id = ?'];
         $params = [$compId];
@@ -384,6 +392,10 @@ if ($action === 'personen_bulk') {
         if ($sponsors) {
             $sub[]  = 'p.sponsor IN (' . implode(',', array_fill(0, count($sponsors), '?')) . ')';
             $params = array_merge($params, $sponsors);
+        }
+        if ($licenses) {
+            $sub[]  = 'p.license_key IN (' . implode(',', array_fill(0, count($licenses), '?')) . ')';
+            $params = array_merge($params, $licenses);
         }
         $where[] = '(' . implode(' OR ', $sub) . ')';
         $sql = "
@@ -2974,6 +2986,8 @@ body.heeft-footer .auto-refresh-stempel { bottom:84px; }
 <button class="setup-modal-close" type="button" onclick="closeSetupModal()"
         data-i18n-title="pwa_btn_sluit" title="Sluiten">&times;</button>
 <h2 class="setup-modal-titel" data-i18n="setup_modal_titel">Wedstrijd &amp; rijders</h2>
+<button type="button" id="setup-login-btn" onclick="window.coachAccountOpen && window.coachAccountOpen('login')"
+        style="display:none;width:100%;margin:0 0 12px;padding:10px;background:#fff;color:#1b5faa;border:2px solid #1b5faa;border-radius:8px;font-weight:600;font-size:.92rem;font-family:inherit;cursor:pointer">👤 Inloggen als coach met account</button>
 
 <div class="card">
     <div class="stap-label"><span class="stap-nr">1</span> <span data-i18n="stap1_label">Kies je wedstrijd</span></div>
@@ -3039,6 +3053,13 @@ body.heeft-footer .auto-refresh-stempel { bottom:84px; }
     </div>
     <button id="btn-toevoegen" class="btn-primair" disabled data-i18n="btn_toevoegen">Toevoegen</button>
     <div id="snr-feedback" style="font-size:.85rem;color:#b71c1c;min-height:18px;margin-top:6px"></div>
+</div>
+
+<div id="sectie-account-note" class="card" style="display:none">
+    <div class="stap-label"><span class="stap-nr">2</span> <span>Je atleten</span></div>
+    <p style="font-size:.9rem;color:#555;margin:8px 0 0">Je bent ingelogd — je atleten beheer je in je
+    <b>account</b> (👤 rechtsboven), niet per wedstrijd. Ze verschijnen hier automatisch; wie niet
+    meedoet aan deze wedstrijd zie je op de <b>Heats</b>-tab onder "Niet ingeschreven".</p>
 </div>
 
 <div id="sectie-lijst" class="card" style="display:none">
@@ -4845,19 +4866,37 @@ async function _vraagCoachWachtwoord() {
         overlay.className = 'cw-overlay';
         overlay.innerHTML = `
             <div class="cw-dialog">
-                <h2>🔐 ${esc(t('coach_pw_titel'))}</h2>
-                <p>${esc(t('coach_pw_uitleg'))}</p>
-                <input type="text" id="cw-input" class="cw-input" autocomplete="off" autocapitalize="none">
-                <div class="cw-knoppen">
-                    <button class="cw-btn cw-btn-ok" id="cw-ok">${esc(t('coach_pw_ok'))}</button>
+                <h2 style="margin-bottom:4px">InlineComp — Coach</h2>
+                <p style="margin-bottom:18px;color:#666;font-size:.9rem">Kies hoe je verder wilt.</p>
+
+                <div style="border:1px solid #d9e2ec;border-radius:10px;padding:14px;margin-bottom:14px">
+                    <div style="font-weight:700;color:#1a3a5c;margin-bottom:4px">🔒 Anoniem meekijken</div>
+                    <p style="margin:0 0 10px;font-size:.85rem;color:#555;line-height:1.4">Met het organisatie-wachtwoord — vraag het bij de wedstrijdorganisator of kijk op de coach-poster.</p>
+                    <input type="text" id="cw-input" class="cw-input" autocomplete="off" autocapitalize="none" placeholder="Organisatie-wachtwoord">
+                    <div class="cw-fout" id="cw-fout" style="display:none;color:#b71c1c;font-size:.85rem;margin-top:8px"></div>
+                    <button id="cw-ok" style="width:100%;margin-top:10px;padding:12px;background:#1b5faa;color:#fff;border:0;border-radius:8px;font-weight:600;font-size:1rem;cursor:pointer">Doorgaan</button>
                 </div>
-                <div class="cw-fout" id="cw-fout" style="display:none"></div>
+
+                <div style="border:1px solid #d9e2ec;border-radius:10px;padding:14px;background:#f4f8fb">
+                    <div style="font-weight:700;color:#1a3a5c;margin-bottom:4px">👤 Coach met account</div>
+                    <p style="margin:0 0 10px;font-size:.85rem;color:#555;line-height:1.4">Stel je atleten één keer in — ze verschijnen dan automatisch bij elke wedstrijd.</p>
+                    <div style="display:flex;gap:8px">
+                        <button id="cw-login" style="flex:1;padding:11px;background:#1b5faa;color:#fff;border:0;border-radius:8px;font-weight:600;font-size:1rem;cursor:pointer">Inloggen</button>
+                        <button id="cw-register" style="flex:1;padding:11px;background:#fff;color:#1b5faa;border:2px solid #1b5faa;border-radius:8px;font-weight:600;font-size:1rem;cursor:pointer">Registreren</button>
+                    </div>
+                </div>
             </div>`;
         document.body.appendChild(overlay);
         const input = overlay.querySelector('#cw-input');
         const ok    = overlay.querySelector('#cw-ok');
         const fout  = overlay.querySelector('#cw-fout');
         setTimeout(() => input.focus(), 50);
+        // Coach-account: inloggen of registreren. De account-modal komt
+        // erbovenop (z-index); na inloggen herlaadt de app (zie login-handler).
+        overlay.querySelector('#cw-login')?.addEventListener('click',
+            () => window.coachAccountOpen && window.coachAccountOpen('login'));
+        overlay.querySelector('#cw-register')?.addEventListener('click',
+            () => window.coachAccountOpen && window.coachAccountOpen('register'));
         const probeer = async () => {
             const pw = input.value.trim();
             if (!pw) return;
@@ -4882,7 +4921,7 @@ async function _vraagCoachWachtwoord() {
                 fout.textContent = t('coach_pw_neterr');
                 fout.style.display = '';
             } finally {
-                ok.disabled = false; ok.textContent = t('coach_pw_ok');
+                ok.disabled = false; ok.textContent = 'Doorgaan';
             }
         };
         ok.addEventListener('click', probeer);
@@ -4931,10 +4970,25 @@ async function safeFetch(url, maxRetries = 1) {
 // ── Setup-modal (stap 1 + stap 2 + coach-lijst) ──────────────────────────────
 // Vervangt de altijd-zichtbare secties bovenaan. Opent via de setup-strip,
 // of automatisch bij eerste bezoek van de dag (datum-key in localStorage).
+// Ingelogde coach: stap 1 (wedstrijd kiezen) blijft; stap 2 (rijders per
+// wedstrijd toevoegen) + inlog-hint vervallen — de roster komt uit het account.
+// Er geldt maar één lijst: anoniem = per wedstrijd, ingelogd = account-roster.
+// Globaal zodat de account-module 'm na in-/uitloggen kan herroepen.
+function _setupModalLoginToggle() {
+    const ingelogd = !!(window.coachIngelogdApproved && window.coachIngelogdApproved());
+    const sel   = document.getElementById('sectie-selectie');
+    const note  = document.getElementById('sectie-account-note');
+    const login = document.getElementById('setup-login-btn');
+    if (sel)   sel.style.display   = ingelogd ? 'none'  : '';
+    if (note)  note.style.display  = ingelogd ? ''      : 'none';
+    if (login) login.style.display = ingelogd ? 'none'  : 'block';   // login-optie alleen uitgelogd
+}
+window._setupModalLoginToggle = _setupModalLoginToggle;
 function openSetupModal() {
     const m = document.getElementById('setup-modal');
     if (m) m.classList.add('open');
     document.body.style.overflow = 'hidden'; // scroll-lock achtergrond
+    _setupModalLoginToggle();
 }
 function closeSetupModal() {
     const m = document.getElementById('setup-modal');
@@ -4992,10 +5046,17 @@ document.addEventListener('keydown', e => {
 function lsKey() { return `coach_lijst_${selComp.value || 'geen'}`; }
 function saveCoachLijst() {
     if (!selComp.value) return;
+    // Ingelogde coach: coachLijst is afgeleid van de server-roster; niet in
+    // localStorage bewaren (de roster in de DB is de bron).
+    if (window.coachIngelogdApproved && window.coachIngelogdApproved()) return;
     localStorage.setItem(lsKey(), JSON.stringify(coachLijst));
 }
 function loadCoachLijst() {
     if (!selComp.value) { coachLijst = []; return; }
+    // Ingelogde coach: de lijst komt uit de server-roster (auto-merge vult 'm
+    // per wedstrijd), niet uit localStorage — zo blijft 'ie in sync met
+    // roster-wijzigingen in het account.
+    if (window.coachIngelogdApproved && window.coachIngelogdApproved()) { coachLijst = []; return; }
     try { coachLijst = JSON.parse(localStorage.getItem(lsKey()) || '[]'); }
     catch { coachLijst = []; }
     if (!Array.isArray(coachLijst)) coachLijst = [];
@@ -5702,7 +5763,8 @@ const RONDE_VOLGORDE = ['heats','kwartfinale','halve_finale','runner_up','finale
 
 function renderHeats() {
     const el = $('heats');
-    if (!coachLijst.length) {
+    const _ni = window._coachNietIngeschreven || [];
+    if (!coachLijst.length && !_ni.length) {
         el.innerHTML = `<div class="leeg-melding">${t('heats_geen_rijders')}</div>`;
         return;
     }
@@ -5717,7 +5779,7 @@ function renderHeats() {
     }
 
     const gesorteerd = [...coachLijst].sort((a,b) => parseInt(a.snr) - parseInt(b.snr));
-    el.innerHTML = gesorteerd.map(p => {
+    let _hhtml = gesorteerd.map(p => {
         const info    = coachInfoCache[p.license_key];
         const entries = info?.entries || [];
         const mijnHeats = info?.heats || [];
@@ -5935,6 +5997,15 @@ function renderHeats() {
             ${dcBlokken}
         </div>`;
     }).join('');
+    // Account-coach: roster-rijders die NIET meedoen aan deze wedstrijd — apart
+    // blok onderaan (alleen hier, niet in programma/chips).
+    if (_ni.length) {
+        _hhtml += `<div class="heat-ni-blok">
+            <div class="heat-ni-kop">Niet ingeschreven voor deze wedstrijd (${_ni.length})</div>
+            ${_ni.map(p => `<div class="heat-ni-rij">${esc(p.full_name)} <small>${esc(p.club_full || '')}${p.category ? ' · ' + esc(p.category) : ''}</small></div>`).join('')}
+        </div>`;
+    }
+    el.innerHTML = _hhtml;
 }
 
 function renderSancties() {
@@ -7143,6 +7214,13 @@ async function opCompetitionChange() {
         renderSponsorMultiSelect();
         updateSponsorLabel();
         renderProgramma();
+        // Ingelogde + goedgekeurde coach: eigen roster-atleten die in DEZE
+        // wedstrijd meedoen automatisch aan de coach-lijst toevoegen (server-
+        // roster → startnummer van deze wedstrijd). Add-only; de coach kan
+        // chips altijd handmatig weghalen.
+        if (typeof window.coachAccountAutoMerge === 'function') {
+            try { await window.coachAccountAutoMerge(compId); } catch (e) {}
+        }
         // Status + sancties ophalen voor de al bestaande coach-lijst (uit localStorage)
         await laadCoachInfo();
         renderChips();
@@ -8044,6 +8122,369 @@ document.getElementById('pwa-sluit')?.addEventListener('click', () => {
 window.addEventListener('appinstalled', () => {
     document.getElementById('pwa-banner').style.display = 'none';
 });
+
+// ══════════════════════════════════════════════════════════════════════════
+//  Coach-account-module (login/registratie/roster) — zelf-bevattend
+//  Optioneel bovenop de anonieme flow. Ingelogde coach passeert de gedeelde-
+//  wachtwoord-gate (server-side via ic_coach_session-cookie). NL-only voor nu.
+// ══════════════════════════════════════════════════════════════════════════
+(function coachAccountModule() {
+  const A = 'api/coach_account.php';                 // relatief vanaf /coach/
+  const api = (qs) => '../' + A + qs;
+  let account = null;                                // huidig ingelogd account (of null)
+  let rosterLics = null;                             // licenties in de roster (auto-highlight-cache)
+
+  async function laadRosterLics() {
+    const r = await get('roster_list');
+    rosterLics = (r.roster || []).map(p => p.license_key);
+  }
+
+  // Voor loadCoachLijst/saveCoachLijst: ingelogde + goedgekeurde coach?
+  window.coachIngelogdApproved = () => !!(account && account.status === 'approved');
+
+  // Globale hook: opCompetitionChange roept dit aan. Vult coachLijst met de
+  // roster-rijders die in DEZE wedstrijd MEEDOEN (mét startnummer), en zet de
+  // niet-ingeschreven roster-rijders in window._coachNietIngeschreven (apart
+  // blok op de Heats-tab). Bron: roster_hydrate — entry_status NULL = niet
+  // ingeschreven (zelfde signaal als /public).
+  window.coachAccountAutoMerge = async function (compId) {
+    window._coachNietIngeschreven = [];
+    if (!account || account.status !== 'approved' || !compId) return;
+    try {
+      const r = await get('roster_hydrate&competition_id=' + encodeURIComponent(compId));
+      const riders = (r && r.riders) || [];
+      const ni = [];
+      riders.forEach(p => {
+        if (p.entry_status === null || p.entry_status === undefined) {
+          ni.push(p);                                  // niet ingeschreven → Heats-blok
+        } else if (typeof voegToeAanLijst === 'function') {
+          voegToeAanLijst(p);                          // ingeschreven → normale lijst
+        }
+      });
+      window._coachNietIngeschreven = ni;
+    } catch (e) {}
+  };
+
+  // ── CSS injecteren ────────────────────────────────────────────────────────
+  const css = document.createElement('style');
+  css.textContent = `
+    .ca-overlay{position:fixed;inset:0;background:rgba(0,0,0,.45);display:flex;
+      align-items:center;justify-content:center;z-index:100000;padding:14px}
+    .ca-box{background:#fff;border-radius:12px;max-width:420px;width:100%;
+      max-height:90vh;overflow:auto;box-shadow:0 8px 30px rgba(0,0,0,.2)}
+    .ca-hdr{display:flex;justify-content:space-between;align-items:center;
+      padding:16px 18px;border-bottom:1px solid #eef1f5}
+    .ca-hdr b{color:#1b5faa;font-size:1.05rem}
+    .ca-sluit{background:none;border:0;font-size:1.5rem;cursor:pointer;color:#888;line-height:1}
+    .ca-body{padding:18px}
+    .ca-tabs{display:flex;gap:6px;margin-bottom:14px}
+    .ca-tab{flex:1;padding:8px;border:1px solid #ccd3dc;background:#f4f6f9;border-radius:8px;
+      cursor:pointer;font-size:.85rem;font-weight:600;color:#555}
+    .ca-tab.actief{background:#1b5faa;color:#fff;border-color:#1b5faa}
+    .ca-veld{display:block;font-size:.82rem;font-weight:600;margin:10px 0 4px;color:#333}
+    .ca-inp,.ca-sel{width:100%;padding:10px;border:1px solid #ccd3dc;border-radius:8px;font-size:1rem}
+    .ca-knop{width:100%;margin-top:16px;padding:11px;border:0;border-radius:8px;background:#1b5faa;
+      color:#fff;font-weight:600;font-size:1rem;cursor:pointer}
+    .ca-knop:disabled{opacity:.6}
+    .ca-link{background:none;border:0;color:#1b5faa;cursor:pointer;font-size:.82rem;padding:6px 0}
+    .ca-meld{margin-top:12px;padding:9px 11px;border-radius:8px;font-size:.85rem;display:none}
+    .ca-meld.fout{display:block;background:#fdecea;color:#b71c1c}
+    .ca-meld.ok{display:block;background:#e7f5e9;color:#2e7d32}
+    .ca-banner{background:#fff6e5;border:1px solid #ffd98a;color:#8a5a00;border-radius:8px;
+      padding:10px 12px;font-size:.85rem;margin-bottom:12px}
+    .ca-roster-rij{display:flex;justify-content:space-between;align-items:center;
+      padding:8px 0;border-bottom:1px solid #f0f2f5;font-size:.9rem}
+    .ca-roster-rij small{color:#777}
+    .ca-x{background:none;border:0;color:#b71c1c;font-size:1.1rem;cursor:pointer}
+    .ca-zoek-rij{display:flex;justify-content:space-between;align-items:center;padding:7px 0;
+      border-bottom:1px solid #f5f6f8;font-size:.9rem}
+    .ca-add{background:#1b5faa;color:#fff;border:0;border-radius:6px;padding:4px 10px;cursor:pointer;font-size:.8rem}
+    .ca-add[disabled]{background:#9bb4cf}
+    #btn-coach-account{position:relative}
+    .ca-hdr-btn{background:#fff;border-color:#fff;color:#1b5faa;font-style:normal}
+    /* Altijd wit (goed contrast op de blauwe header); ingelogd = groen status-stipje. */
+    .ca-hdr-btn.ingelogd::after{content:'';position:absolute;top:-1px;right:-1px;width:11px;height:11px;
+      border-radius:50%;background:#39b54a;border:2px solid #1e4d80}
+    /* Onze knoppen erven het app-lettertype (native buttons pakken anders het OS-font). */
+    .cw-dialog button, .ca-overlay button{font-family:inherit}
+    .ca-acc{border:1px solid #e3e8ef;border-radius:8px;margin-bottom:8px;overflow:hidden}
+    .ca-acc>summary{padding:9px 12px;cursor:pointer;font-weight:600;font-size:.9rem;color:#33506e;
+      list-style:none;background:#f4f6f9}
+    .ca-acc>summary::-webkit-details-marker{display:none}
+    .ca-acc>summary::before{content:'▸ ';color:#1b5faa}
+    .ca-acc[open]>summary::before{content:'▾ '}
+    .ca-acc[open]>summary{border-bottom:1px solid #e3e8ef}
+    .ca-acc .ca-filter{margin:8px;width:calc(100% - 16px)}
+    .ca-checklist{max-height:170px;overflow:auto;padding:0 8px 8px}
+    .ca-check-rij{display:flex;align-items:center;gap:8px;padding:5px 2px;font-size:.88rem;
+      border-bottom:1px solid #f4f6f9;cursor:pointer}
+    .ca-check-rij input{flex-shrink:0}
+    .heat-ni-blok{margin-top:14px;border-top:2px dashed #d9a3a3;padding-top:8px}
+    .heat-ni-kop{font-weight:700;color:#b71c1c;font-size:.9rem;margin-bottom:4px}
+    .heat-ni-rij{padding:4px 2px;font-size:.9rem;border-bottom:1px solid #f4f6f9}
+    .heat-ni-rij small{color:#888}
+  `;
+  document.head.appendChild(css);
+
+  // ── Header-knop toevoegen (in de rechter knop-groep, naast i/?) ────────────
+  const btn = document.createElement('button');
+  btn.className = 'btn-help ca-hdr-btn';
+  btn.id = 'btn-coach-account';
+  btn.title = 'Coach-account / inloggen';
+  btn.textContent = '👤';
+  btn.addEventListener('click', () => openModal());
+  (document.querySelector('.hdr-btns-right') || document.querySelector('header'))?.appendChild(btn);
+  function _caUpdateHdrBtn() {
+    const b = document.getElementById('btn-coach-account');
+    if (b) {
+      b.classList.toggle('ingelogd', !!account);
+      b.title = account ? ('Ingelogd: ' + account.naam) : 'Coach-account / inloggen';
+    }
+    // Setup-modal (indien open) meteen bijwerken na in-/uitloggen.
+    if (window._setupModalLoginToggle) window._setupModalLoginToggle();
+  }
+
+  // (Eerste-gebruik-promo verwijderd — login is nu altijd zichtbaar via de
+  //  wachtwoord-prompt-knop en de 👤-knop; een banner is overbodig.)
+
+  // ── Modal ─────────────────────────────────────────────────────────────────
+  function openModal(view) {
+    const ov = document.createElement('div');
+    ov.className = 'ca-overlay';
+    ov.addEventListener('click', e => { if (e.target === ov) ov.remove(); });
+    ov.innerHTML = `<div class="ca-box">
+      <div class="ca-hdr"><b>Coach-account</b>
+        <button class="ca-sluit" title="Sluiten">&times;</button></div>
+      <div class="ca-body" id="ca-body"></div></div>`;
+    ov.querySelector('.ca-sluit').addEventListener('click', () => ov.remove());
+    document.body.appendChild(ov);
+    account ? renderIngelogd(ov) : renderUitgelogd(ov, (typeof view === 'string') ? view : 'login');
+  }
+  window.coachAccountOpen = openModal;   // ook bruikbaar vanuit de wachtwoord-prompt
+
+  const esc2 = (s) => (window.esc ? esc(s) : String(s ?? '').replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c])));
+  const meld = (ov, cls, txt) => { const m = ov.querySelector('#ca-meld'); if (m){ m.className='ca-meld '+cls; m.textContent=txt; } };
+
+  // ── Uitgelogd: login / registreren / wachtwoord vergeten ──────────────────
+  function renderUitgelogd(ov, tab) {
+    const body = ov.querySelector('#ca-body');
+    body.innerHTML = `
+      <div class="ca-tabs">
+        <button class="ca-tab" data-t="login">Inloggen</button>
+        <button class="ca-tab" data-t="register">Registreren</button>
+      </div>
+      <div id="ca-form"></div>
+      <div class="ca-meld" id="ca-meld"></div>`;
+    body.querySelectorAll('.ca-tab').forEach(b => {
+      b.classList.toggle('actief', b.dataset.t === tab);
+      b.addEventListener('click', () => renderUitgelogd(ov, b.dataset.t));
+    });
+    const f = body.querySelector('#ca-form');
+    if (tab === 'login')      vulLogin(ov, f);
+    else if (tab === 'register') vulRegister(ov, f);
+    else if (tab === 'forgot')   vulForgot(ov, f);
+  }
+
+  function vulLogin(ov, f) {
+    f.innerHTML = `
+      <label class="ca-veld">E-mail</label><input class="ca-inp" id="l-email" type="email" autocomplete="username">
+      <label class="ca-veld">Wachtwoord</label><input class="ca-inp" id="l-pw" type="password" autocomplete="current-password">
+      <button class="ca-knop" id="l-btn">Inloggen</button>
+      <div style="text-align:center"><button class="ca-link" id="l-forgot">Wachtwoord vergeten?</button></div>`;
+    f.querySelector('#l-forgot').addEventListener('click', () => renderUitgelogd(ov, 'forgot'));
+    f.querySelector('#l-btn').addEventListener('click', async () => {
+      const email = f.querySelector('#l-email').value.trim();
+      const pw = f.querySelector('#l-pw').value;
+      if (!email || !pw) return meld(ov, 'fout', 'Vul e-mail en wachtwoord in.');
+      const btn = f.querySelector('#l-btn'); btn.disabled = true;
+      const r = await post('login', { email, wachtwoord: pw });
+      btn.disabled = false;
+      if (!r.ok) return meld(ov, 'fout', r.error || 'Inloggen mislukt.');
+      account = r.account;
+      _caUpdateHdrBtn();
+      // Ingelogd terwijl de gedeelde-wachtwoord-prompt open staat? Herlaad —
+      // dan start de app schoon met de account-sessie en vervalt de gate.
+      if (document.querySelector('.cw-overlay')) { location.reload(); return; }
+      renderIngelogd(ov);
+      // Meteen effect: roster laden + huidige wedstrijd highlighten.
+      if (account.status === 'approved') {
+        await laadRosterLics();
+        if (typeof selComp !== 'undefined' && selComp.value) {
+          await window.coachAccountAutoMerge(selComp.value);
+          if (typeof verversCoachLijstUI === 'function') await verversCoachLijstUI();
+        }
+      }
+    });
+  }
+
+  function vulRegister(ov, f) {
+    f.innerHTML = `
+      <label class="ca-veld">Naam</label><input class="ca-inp" id="r-naam">
+      <label class="ca-veld">E-mail</label><input class="ca-inp" id="r-email" type="email">
+      <label class="ca-veld">Wachtwoord <small style="font-weight:400">(min. 8 tekens)</small></label>
+      <input class="ca-inp" id="r-pw" type="password">
+      <label class="ca-veld">Coach van <small style="font-weight:400;color:#888">(club, team of anders)</small></label>
+      <input class="ca-inp" id="r-van" placeholder="bv. jouw club of team">
+      <p style="font-size:.72rem;color:#999;margin:4px 0 0">Alleen ter herkenning voor de goedkeurder — dit is niet je atletenlijst.</p>
+      <button class="ca-knop" id="r-btn">Account aanvragen</button>
+      <p style="font-size:.78rem;color:#777;margin-top:10px">
+        Met een account ben je in de coach-app <b>niet meer anoniem</b>: we bewaren je naam, e-mailadres en
+        je atletenlijst om je te herkennen en je atleten te tonen. Je kunt je account altijd zelf verwijderen,
+        en het vervalt automatisch na een jaar zonder inloggen. Zie de
+        <a href="../privacyverklaring.php" target="_blank" rel="noopener">privacyverklaring</a>.<br>
+        Je account wordt na goedkeuring geactiveerd; tot die tijd werk je gewoon met de anonieme lijst.</p>`;
+    f.querySelector('#r-btn').addEventListener('click', async () => {
+      const naam = f.querySelector('#r-naam').value.trim();
+      const email = f.querySelector('#r-email').value.trim();
+      const pw = f.querySelector('#r-pw').value;
+      const van = f.querySelector('#r-van').value.trim();
+      if (!naam || !email || pw.length < 8 || !van) return meld(ov, 'fout', 'Vul alle velden in (wachtwoord min. 8 tekens).');
+      const btn = f.querySelector('#r-btn'); btn.disabled = true;
+      const r = await post('register', { naam, email, wachtwoord: pw, coacht_van_type: 'auto', coacht_van: van });
+      btn.disabled = false;
+      if (!r.ok) return meld(ov, 'fout', r.error || 'Registreren mislukt.');
+      meld(ov, 'ok', 'Account aangevraagd! Je kunt inloggen zodra het is goedgekeurd.');
+    });
+  }
+
+  function vulForgot(ov, f) {
+    f.innerHTML = `
+      <p style="font-size:.85rem;color:#555">Vul je e-mailadres in; we sturen een link om je wachtwoord opnieuw in te stellen.</p>
+      <label class="ca-veld">E-mail</label><input class="ca-inp" id="fg-email" type="email">
+      <button class="ca-knop" id="fg-btn">Stuur reset-link</button>
+      <div style="text-align:center"><button class="ca-link" id="fg-back">Terug naar inloggen</button></div>`;
+    f.querySelector('#fg-back').addEventListener('click', () => renderUitgelogd(ov, 'login'));
+    f.querySelector('#fg-btn').addEventListener('click', async () => {
+      const email = f.querySelector('#fg-email').value.trim();
+      if (!email) return meld(ov, 'fout', 'Vul je e-mailadres in.');
+      const btn = f.querySelector('#fg-btn'); btn.disabled = true;
+      const r = await post('wachtwoord_vergeten', { email });
+      btn.disabled = false;
+      meld(ov, 'ok', r.message || 'Als dit adres bekend is, sturen we een link.');
+    });
+  }
+
+  // ── Ingelogd: status + roster-beheer ──────────────────────────────────────
+  async function renderIngelogd(ov) {
+    const body = ov.querySelector('#ca-body');
+    const pending = account.status !== 'approved';
+    body.innerHTML = `
+      ${pending ? `<div class="ca-banner">⏳ Je account wacht op goedkeuring. Je atleten worden alvast bewaard en verschijnen zodra je bent goedgekeurd.</div>` : ''}
+      <p style="margin:0 0 10px;display:flex;justify-content:space-between;align-items:center">
+        <span>Ingelogd als <b>${esc2(account.naam)}</b></span>
+        <button class="ca-link" id="ca-logout">Uitloggen</button></p>
+
+      <div style="font-weight:600;color:#1b5faa;margin:4px 0 8px">Atleten toevoegen <small style="font-weight:400;color:#888">(geen wedstrijd nodig)</small></div>
+      <details class="ca-acc"><summary>Op club</summary>
+        <input class="ca-inp ca-filter" id="ca-club-filter" placeholder="filter clubs…">
+        <div class="ca-checklist" id="ca-club-list"><div style="padding:8px;color:#888">laden…</div></div>
+      </details>
+      <details class="ca-acc"><summary>Op sponsor / team</summary>
+        <input class="ca-inp ca-filter" id="ca-spon-filter" placeholder="filter sponsors…">
+        <div class="ca-checklist" id="ca-spon-list"><div style="padding:8px;color:#888">laden…</div></div>
+      </details>
+      <button class="ca-knop" id="ca-groep-add">Aangevinkte clubs/sponsors toevoegen</button>
+
+      <details class="ca-acc" style="margin-top:10px"><summary>Op naam of licentie</summary>
+        <input class="ca-inp ca-filter" id="ca-naam-zoek" placeholder="typ naam of licentie (min. 2)…">
+        <div id="ca-naam-res" style="padding:0 8px 8px"></div>
+      </details>
+
+      <div style="font-weight:600;color:#1b5faa;margin:16px 0 6px">In je lijst (<span id="ca-roster-n">…</span>)</div>
+      <div id="ca-roster"><div style="color:#888;font-size:.85rem">laden…</div></div>`;
+
+    body.querySelector('#ca-logout').addEventListener('click', async () => {
+      // Uitloggen: herladen zodat coachLijst/roster/heats vers in de anonieme
+      // staat komen (anders blijven de roster-rijders in beeld zonder account).
+      await post('logout', {});
+      location.reload();
+    });
+
+    get('clubs_teams').then(d => {
+      _caVulChecklist(ov.querySelector('#ca-club-list'), d.clubs || []);
+      _caVulChecklist(ov.querySelector('#ca-spon-list'), d.teams || []);
+    });
+    ov.querySelector('#ca-club-filter').addEventListener('input', e => _caFilter(ov.querySelector('#ca-club-list'), e.target.value));
+    ov.querySelector('#ca-spon-filter').addEventListener('input', e => _caFilter(ov.querySelector('#ca-spon-list'), e.target.value));
+
+    ov.querySelector('#ca-groep-add').addEventListener('click', async () => {
+      const clubs = [...ov.querySelectorAll('#ca-club-list input:checked')].map(i => i.value);
+      const spons = [...ov.querySelectorAll('#ca-spon-list input:checked')].map(i => i.value);
+      if (!clubs.length && !spons.length) return;
+      const btn = ov.querySelector('#ca-groep-add'); btn.disabled = true; btn.textContent = 'Toevoegen…';
+      await post('roster_add_groep', { clubs, sponsors: spons });
+      ov.querySelectorAll('#ca-club-list input:checked, #ca-spon-list input:checked').forEach(i => { i.checked = false; });
+      btn.disabled = false; btn.textContent = 'Aangevinkte clubs/sponsors toevoegen';
+      _caLaadRoster(ov);
+    });
+
+    const zoek = ov.querySelector('#ca-naam-zoek');
+    let tmr; zoek.addEventListener('input', () => { clearTimeout(tmr); tmr = setTimeout(() => _caNaamZoek(ov, zoek.value.trim()), 300); });
+
+    _caLaadRoster(ov);
+  }
+
+  function _caVulChecklist(el, items) {
+    if (!el) return;
+    el.innerHTML = items.length
+      ? items.map(v => `<label class="ca-check-rij"><input type="checkbox" value="${esc2(v)}"><span>${esc2(v)}</span></label>`).join('')
+      : '<div style="padding:8px;color:#888">geen</div>';
+  }
+  function _caFilter(el, q) {
+    if (!el) return;
+    const term = (q || '').toLowerCase();
+    el.querySelectorAll('.ca-check-rij').forEach(r => {
+      r.style.display = r.textContent.toLowerCase().includes(term) ? '' : 'none';
+    });
+  }
+  async function _caNaamZoek(ov, q) {
+    const res = ov.querySelector('#ca-naam-res'); if (!res) return;
+    if (q.length < 2) { res.innerHTML = ''; return; }
+    const r = await get('zoek_personen&q=' + encodeURIComponent(q));
+    const lijst = r.personen || [];
+    res.innerHTML = lijst.length ? lijst.map(p => `<div class="ca-zoek-rij">
+      <span>${esc2(p.full_name)} <small>${esc2(p.club_full || '')}</small></span>
+      <button class="ca-add" data-lic="${esc2(p.license_key)}" ${(+p.in_roster) ? 'disabled' : ''}>${(+p.in_roster) ? '✓' : '+'}</button>
+      </div>`).join('') : '<div style="color:#888;font-size:.85rem;padding:6px 0">geen rijders</div>';
+    res.querySelectorAll('.ca-add').forEach(a => a.addEventListener('click', async () => {
+      a.disabled = true; a.textContent = '✓';
+      await post('roster_add', { person_license: a.dataset.lic }); _caLaadRoster(ov);
+    }));
+  }
+  async function _caLaadRoster(ov) {
+    const el = ov.querySelector('#ca-roster'); if (!el) return;
+    const r = await get('roster_list');
+    const lijst = r.roster || [];
+    rosterLics = lijst.map(p => p.license_key);
+    const n = ov.querySelector('#ca-roster-n'); if (n) n.textContent = lijst.length;
+    el.innerHTML = lijst.length ? lijst.map(p => `<div class="ca-roster-rij">
+      <span>${esc2(p.full_name)} <small>${esc2(p.club_full || '')}${p.category ? ' · ' + esc2(p.category) : ''}</small></span>
+      <button class="ca-x" data-lic="${esc2(p.license_key)}" title="Verwijderen">×</button></div>`).join('')
+      : '<div style="color:#888;font-size:.85rem">Nog geen atleten. Voeg toe via club, sponsor of naam hierboven.</div>';
+    el.querySelectorAll('.ca-x').forEach(x => x.addEventListener('click', async () => {
+      await post('roster_remove', { person_license: x.dataset.lic }); _caLaadRoster(ov);
+    }));
+  }
+
+  // ── fetch-helpers (cookie = same-origin, dus automatisch meegestuurd) ──────
+  async function post(action, data) {
+    try {
+      const r = await fetch(api('?action=' + action), { method: 'POST',
+        headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(data) });
+      return await r.json();
+    } catch { return { error: 'Netwerkfout' }; }
+  }
+  async function get(action) {
+    try { const r = await fetch(api('?action=' + action)); return await r.json(); }
+    catch { return { error: 'Netwerkfout' }; }
+  }
+
+  // ── Bij laden: check of er al een sessie is ───────────────────────────────
+  get('me').then(r => {
+    if (r && r.account) { account = r.account; if (account.status === 'approved') laadRosterLics(); }
+    _caUpdateHdrBtn();
+  }).catch(() => {});
+})();
 </script>
 </body>
 </html>
