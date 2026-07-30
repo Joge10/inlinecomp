@@ -33,13 +33,14 @@ try {
         //                   twee prefixen: 'jury-' (login/logout/rol-keuze) en
         //                   'scheids-' (scheidsrechter-acties zoals
         //                   status-wissels en reserve-inzet).
-        //   'organisator' = alle non-jury entries (reguliere logins van owner/
-        //                   admin/operator/coach-accounts met user_id).
+        //   'organisator' = alle non-jury entries (reguliere staf-logins).
+        //   'coach'       = coach-account-activiteit (bron='coach', user_id NULL).
+        //   'staff'       = alle staf-entries (bron='staff').
         $type   = trim((string)($_GET['type'] ?? ''));
 
         if ($type === 'jury') {
             $stmt = $pdo->prepare("
-                SELECT id, user_id, naam, username, actie, ip_adres, land, stad, browser, os, tijdstip
+                SELECT id, user_id, naam, username, actie, bron, ip_adres, land, stad, browser, os, tijdstip
                 FROM login_logs
                 WHERE actie LIKE 'jury-%' OR actie LIKE 'scheids-%'
                 ORDER BY tijdstip DESC LIMIT 500
@@ -47,22 +48,34 @@ try {
             $stmt->execute();
         } elseif ($type === 'organisator') {
             $stmt = $pdo->prepare("
-                SELECT id, user_id, naam, username, actie, ip_adres, land, stad, browser, os, tijdstip
+                SELECT id, user_id, naam, username, actie, bron, ip_adres, land, stad, browser, os, tijdstip
                 FROM login_logs
                 WHERE actie NOT LIKE 'jury-%' AND actie NOT LIKE 'scheids-%'
                 ORDER BY tijdstip DESC LIMIT 500
             ");
             $stmt->execute();
+        } elseif ($type === 'coach') {
+            $stmt = $pdo->query("
+                SELECT id, user_id, naam, username, actie, bron, ip_adres, land, stad, browser, os, tijdstip
+                FROM login_logs WHERE bron = 'coach'
+                ORDER BY tijdstip DESC LIMIT 500
+            ");
+        } elseif ($type === 'staff') {
+            $stmt = $pdo->query("
+                SELECT id, user_id, naam, username, actie, bron, ip_adres, land, stad, browser, os, tijdstip
+                FROM login_logs WHERE bron = 'staff'
+                ORDER BY tijdstip DESC LIMIT 500
+            ");
         } elseif ($userId) {
             $stmt = $pdo->prepare("
-                SELECT id, user_id, naam, username, actie, ip_adres, land, stad, browser, os, tijdstip
+                SELECT id, user_id, naam, username, actie, bron, ip_adres, land, stad, browser, os, tijdstip
                 FROM login_logs WHERE user_id = ?
                 ORDER BY tijdstip DESC LIMIT 500
             ");
             $stmt->execute([$userId]);
         } else {
             $stmt = $pdo->query("
-                SELECT id, user_id, naam, username, actie, ip_adres, land, stad, browser, os, tijdstip
+                SELECT id, user_id, naam, username, actie, bron, ip_adres, land, stad, browser, os, tijdstip
                 FROM login_logs
                 ORDER BY tijdstip DESC LIMIT 500
             ");
