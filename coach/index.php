@@ -3068,8 +3068,8 @@ body.heeft-footer .auto-refresh-stempel { bottom:84px; }
 </div>
 
 <div id="sectie-account-note" class="card" style="display:none">
-    <div class="stap-label"><span class="stap-nr">2</span> <span>Je atleten</span></div>
-    <p style="font-size:.9rem;color:#555;margin:8px 0 0">Je bent ingelogd — je atleten beheer je in je
+    <div class="stap-label"><span class="stap-nr">2</span> <span data-i18n="acc_note_titel">Je atleten</span></div>
+    <p style="font-size:.9rem;color:#555;margin:8px 0 0" data-i18n-html="acc_note_p_html">Je bent ingelogd — je atleten beheer je in je
     <b>account</b> (👤 rechtsboven), niet per wedstrijd. Ze verschijnen hieronder automatisch:
     <b style="color:#2e7d32">groen</b> = doet mee in deze wedstrijd, <b style="color:#8a929c">grijs</b>
     = niet ingeschreven (die staan ook op de <b>Heats</b>-tab onder "Niet ingeschreven").</p>
@@ -3250,6 +3250,8 @@ const T = {
         coach_roster_lg_ni: 'niet ingeschreven',
         heat_ni_kop: 'Niet ingeschreven voor deze wedstrijd ({n})',
         setup_login_btn: '👤 Inloggen als coach met account',
+        acc_note_titel: 'Je atleten',
+        acc_note_p_html: 'Je bent ingelogd — je atleten beheer je in je <b>account</b> (👤 rechtsboven), niet per wedstrijd. Ze verschijnen hieronder automatisch: <b style="color:#2e7d32">groen</b> = doet mee in deze wedstrijd, <b style="color:#8a929c">grijs</b> = niet ingeschreven (die staan ook op de <b>Heats</b>-tab onder "Niet ingeschreven").',
         // ── Setup-strip + modal ──
         setup_strip_leeg: 'Kies je wedstrijd…',
         setup_strip_edit_title: 'Wijzig wedstrijd of rijders',
@@ -3447,6 +3449,8 @@ const T = {
         meld_kop: '📢 Mededelingen',
         meld_tot: ' tot ',
         meld_begrepen: '✓ Begrepen',
+        meld_bijlage: 'bijlage',
+        meld_download_bijlage: 'Download bijlage',
         // ── Info modal ──
         info_titel: 'Over InlineComp Coach',
         info_h_wat: 'Wat is dit?',
@@ -3592,6 +3596,8 @@ const T = {
         coach_roster_lg_ni: 'not entered',
         heat_ni_kop: 'Not entered for this competition ({n})',
         setup_login_btn: '👤 Log in as coach with account',
+        acc_note_titel: 'Your athletes',
+        acc_note_p_html: 'You are logged in — you manage your athletes in your <b>account</b> (👤 top right), not per competition. They appear below automatically: <b style="color:#2e7d32">green</b> = taking part in this competition, <b style="color:#8a929c">grey</b> = not entered (they also appear on the <b>Heats</b> tab under "Not entered").',
         // ── Setup-strip + modal ──
         setup_strip_leeg: 'Choose your race…',
         setup_strip_edit_title: 'Change race or skaters',
@@ -3789,6 +3795,8 @@ const T = {
         meld_kop: '📢 Announcements',
         meld_tot: ' until ',
         meld_begrepen: '✓ Understood',
+        meld_bijlage: 'attachment',
+        meld_download_bijlage: 'Download attachment',
         // ── Info modal ──
         info_titel: 'About InlineComp Coach',
         info_h_wat: 'What is this?',
@@ -3929,6 +3937,8 @@ const T = {
         coach_roster_lg_ni: 'nicht gemeldet',
         heat_ni_kop: 'Nicht für diesen Wettkampf gemeldet ({n})',
         setup_login_btn: '👤 Als Coach mit Konto anmelden',
+        acc_note_titel: 'Deine Athleten',
+        acc_note_p_html: 'Du bist angemeldet — deine Athleten verwaltest du in deinem <b>Konto</b> (👤 oben rechts), nicht pro Wettkampf. Sie erscheinen unten automatisch: <b style="color:#2e7d32">grün</b> = nimmt an diesem Wettkampf teil, <b style="color:#8a929c">grau</b> = nicht gemeldet (stehen auch im Reiter <b>Heats</b> unter „Nicht gemeldet").',
         // ── Setup-strip + modal ──
         setup_strip_leeg: 'Wähle dein Rennen…',
         setup_strip_edit_title: 'Rennen oder Skater ändern',
@@ -4126,6 +4136,8 @@ const T = {
         meld_kop: '📢 Mitteilungen',
         meld_tot: ' bis ',
         meld_begrepen: '✓ Verstanden',
+        meld_bijlage: 'Anhang',
+        meld_download_bijlage: 'Anhang herunterladen',
         // ── Info modal ──
         info_titel: 'Über InlineComp Coach',
         info_h_wat: 'Was ist das?',
@@ -4266,6 +4278,8 @@ const T = {
         coach_roster_lg_ni: 'non inscrit',
         heat_ni_kop: 'Non inscrits à cette compétition ({n})',
         setup_login_btn: '👤 Se connecter comme coach avec un compte',
+        acc_note_titel: 'Tes athlètes',
+        acc_note_p_html: 'Tu es connecté — tu gères tes athlètes dans ton <b>compte</b> (👤 en haut à droite), pas par compétition. Ils apparaissent ci-dessous automatiquement : <b style="color:#2e7d32">vert</b> = participe à cette compétition, <b style="color:#8a929c">gris</b> = non inscrit (ils figurent aussi dans l\'onglet <b>Heats</b> sous « Non inscrit »).',
         // ── Setup-strip + modal ──
         setup_strip_leeg: 'Choisissez votre course…',
         setup_strip_edit_title: 'Modifier la course ou les skateurs',
@@ -4463,6 +4477,8 @@ const T = {
         meld_kop: '📢 Annonces',
         meld_tot: ' jusqu\'à ',
         meld_begrepen: '✓ Compris',
+        meld_bijlage: 'pièce jointe',
+        meld_download_bijlage: 'Télécharger la pièce jointe',
         // ── Info modal ──
         info_titel: 'À propos d\'InlineComp Coach',
         info_h_wat: 'Qu\'est-ce que c\'est?',
@@ -5625,7 +5641,7 @@ function renderProgramma() {
         if (isMultiDag && dag !== vorigeDag) {
             sluitAlles();
             const info = dagInfoPerNr.get(dag);
-            const lbl = info?.datumLbl ? `Dag ${dag} — ${info.datumLbl}` : `Dag ${dag}`;
+            const lbl = info?.datumLbl ? `${t('prog_dag')} ${dag} — ${info.datumLbl}` : `${t('prog_dag')} ${dag}`;
             html += `<div class="prog-dag-header" data-dag-nr="${dag}">${esc(lbl)}</div>`;
             vorigeDag = dag;
         }
@@ -7870,7 +7886,7 @@ function toonMeldingenOverzicht() {
                           text-decoration:none;padding:.3rem .55rem;
                           border-radius:4px;font-size:.8rem;font-weight:600;
                           max-width:100%;">
-                   📎 <span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${escFn(m.bijlage_naam || 'bijlage')}</span>
+                   📎 <span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${escFn(m.bijlage_naam || t('meld_bijlage'))}</span>
                 </a>`
             : '';
         const linkHtml = m.link_url
@@ -7955,7 +7971,7 @@ function toonMelding(m, compId) {
                           padding:.5rem .8rem;border-radius:6px;font-size:.9rem;
                           font-weight:600;">
                     <span style="font-size:1.1rem">📎</span>
-                    <span style="flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${escFn(m.bijlage_naam || 'Download bijlage')}</span>
+                    <span style="flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${escFn(m.bijlage_naam || t('meld_download_bijlage'))}</span>
                     <span style="font-size:.8rem;opacity:.7">⬇</span>
                 </a>
             </div>` : ''}
