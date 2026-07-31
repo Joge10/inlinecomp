@@ -3344,6 +3344,15 @@ const T = {
         coach_pw_uitleg: 'De Coach-app is afgeschermd. Vraag het wachtwoord bij de wedstrijdorganisator of kijk op de Coach-poster.',
         coach_pw_ok: 'OK',
         coach_pw_fout: 'Onjuist wachtwoord',
+        cw_sub: 'Kies hoe je verder wilt.',
+        cw_anon_kop: '🔒 Anoniem meekijken',
+        cw_anon_uit: 'Met het organisatie-wachtwoord — vraag het bij de wedstrijdorganisator of kijk op de coach-poster.',
+        cw_anon_ph: 'Organisatie-wachtwoord',
+        cw_doorgaan: 'Doorgaan',
+        cw_acc_kop: '👤 Coach met account',
+        cw_acc_uit: 'Stel je atleten één keer in — ze verschijnen dan automatisch bij elke wedstrijd.',
+        cw_login: 'Inloggen',
+        cw_register: 'Registreren',
         coach_pw_neterr: 'Geen verbinding — probeer opnieuw',
         prog_combi_kop: '🔗 Gecombineerde rit — rijden tegelijk',
         prog_laden: 'Programma wordt geladen…',
@@ -3677,6 +3686,15 @@ const T = {
         coach_pw_uitleg: 'The Coach app is restricted. Ask the race organiser for the password or check the Coach poster.',
         coach_pw_ok: 'OK',
         coach_pw_fout: 'Incorrect password',
+        cw_sub: 'Choose how you want to continue.',
+        cw_anon_kop: '🔒 View anonymously',
+        cw_anon_uit: 'With the organisation password — ask the race organiser or check the coach poster.',
+        cw_anon_ph: 'Organisation password',
+        cw_doorgaan: 'Continue',
+        cw_acc_kop: '👤 Coach with account',
+        cw_acc_uit: 'Set up your skaters once — they then appear automatically at every race.',
+        cw_login: 'Log in',
+        cw_register: 'Register',
         coach_pw_neterr: 'No connection — please try again',
         prog_combi_kop: '🔗 Combined race — skating together',
         prog_laden: 'Loading program…',
@@ -4005,6 +4023,15 @@ const T = {
         coach_pw_uitleg: 'Die Coach-App ist geschützt. Frage den Wettkampf-Organisator nach dem Passwort oder schaue auf das Coach-Poster.',
         coach_pw_ok: 'OK',
         coach_pw_fout: 'Falsches Passwort',
+        cw_sub: 'Wähle, wie du fortfahren möchtest.',
+        cw_anon_kop: '🔒 Anonym mitschauen',
+        cw_anon_uit: 'Mit dem Organisations-Passwort — frage beim Wettkampf-Organisator oder schau auf das Coach-Poster.',
+        cw_anon_ph: 'Organisations-Passwort',
+        cw_doorgaan: 'Weiter',
+        cw_acc_kop: '👤 Coach mit Konto',
+        cw_acc_uit: 'Stelle deine Skater einmal ein — sie erscheinen dann automatisch bei jedem Rennen.',
+        cw_login: 'Anmelden',
+        cw_register: 'Registrieren',
         coach_pw_neterr: 'Keine Verbindung — bitte erneut versuchen',
         prog_combi_kop: '🔗 Kombiniertes Rennen — gemeinsam',
         prog_laden: 'Programm wird geladen…',
@@ -4333,6 +4360,15 @@ const T = {
         coach_pw_uitleg: 'L\'application Coach est protégée. Demandez le mot de passe à l\'organisateur de la course ou consultez l\'affiche Coach.',
         coach_pw_ok: 'OK',
         coach_pw_fout: 'Mot de passe incorrect',
+        cw_sub: 'Choisis comment continuer.',
+        cw_anon_kop: '🔒 Voir en anonyme',
+        cw_anon_uit: 'Avec le mot de passe de l\'organisation — demande-le à l\'organisateur ou regarde l\'affiche coach.',
+        cw_anon_ph: 'Mot de passe de l\'organisation',
+        cw_doorgaan: 'Continuer',
+        cw_acc_kop: '👤 Coach avec compte',
+        cw_acc_uit: 'Configure tes skateurs une seule fois — ils apparaissent ensuite automatiquement à chaque course.',
+        cw_login: 'Se connecter',
+        cw_register: 'S\'inscrire',
         coach_pw_neterr: 'Pas de connexion — réessayez',
         prog_combi_kop: '🔗 Course combinée — ensemble',
         prog_laden: 'Chargement du programme…',
@@ -4913,22 +4949,22 @@ async function _vraagCoachWachtwoord() {
         overlay.innerHTML = `
             <div class="cw-dialog">
                 <h2 style="margin-bottom:4px">InlineComp — Coach</h2>
-                <p style="margin-bottom:18px;color:#666;font-size:.9rem">Kies hoe je verder wilt.</p>
+                <p style="margin-bottom:18px;color:#666;font-size:.9rem">${t('cw_sub')}</p>
 
                 <div style="border:1px solid #d9e2ec;border-radius:10px;padding:14px;margin-bottom:14px">
-                    <div style="font-weight:700;color:#1a3a5c;margin-bottom:4px">🔒 Anoniem meekijken</div>
-                    <p style="margin:0 0 10px;font-size:.85rem;color:#555;line-height:1.4">Met het organisatie-wachtwoord — vraag het bij de wedstrijdorganisator of kijk op de coach-poster.</p>
-                    <input type="text" id="cw-input" class="cw-input" autocomplete="off" autocapitalize="none" placeholder="Organisatie-wachtwoord">
+                    <div style="font-weight:700;color:#1a3a5c;margin-bottom:4px">${t('cw_anon_kop')}</div>
+                    <p style="margin:0 0 10px;font-size:.85rem;color:#555;line-height:1.4">${t('cw_anon_uit')}</p>
+                    <input type="text" id="cw-input" class="cw-input" autocomplete="off" autocapitalize="none" placeholder="${t('cw_anon_ph')}">
                     <div class="cw-fout" id="cw-fout" style="display:none;color:#b71c1c;font-size:.85rem;margin-top:8px"></div>
-                    <button id="cw-ok" style="width:100%;margin-top:10px;padding:12px;background:#1b5faa;color:#fff;border:0;border-radius:8px;font-weight:600;font-size:1rem;cursor:pointer">Doorgaan</button>
+                    <button id="cw-ok" style="width:100%;margin-top:10px;padding:12px;background:#1b5faa;color:#fff;border:0;border-radius:8px;font-weight:600;font-size:1rem;cursor:pointer">${t('cw_doorgaan')}</button>
                 </div>
 
                 <div style="border:1px solid #d9e2ec;border-radius:10px;padding:14px;background:#f4f8fb">
-                    <div style="font-weight:700;color:#1a3a5c;margin-bottom:4px">👤 Coach met account</div>
-                    <p style="margin:0 0 10px;font-size:.85rem;color:#555;line-height:1.4">Stel je atleten één keer in — ze verschijnen dan automatisch bij elke wedstrijd.</p>
+                    <div style="font-weight:700;color:#1a3a5c;margin-bottom:4px">${t('cw_acc_kop')}</div>
+                    <p style="margin:0 0 10px;font-size:.85rem;color:#555;line-height:1.4">${t('cw_acc_uit')}</p>
                     <div style="display:flex;gap:8px">
-                        <button id="cw-login" style="flex:1;padding:11px;background:#1b5faa;color:#fff;border:0;border-radius:8px;font-weight:600;font-size:1rem;cursor:pointer">Inloggen</button>
-                        <button id="cw-register" style="flex:1;padding:11px;background:#fff;color:#1b5faa;border:2px solid #1b5faa;border-radius:8px;font-weight:600;font-size:1rem;cursor:pointer">Registreren</button>
+                        <button id="cw-login" style="flex:1;padding:11px;background:#1b5faa;color:#fff;border:0;border-radius:8px;font-weight:600;font-size:1rem;cursor:pointer">${t('cw_login')}</button>
+                        <button id="cw-register" style="flex:1;padding:11px;background:#fff;color:#1b5faa;border:2px solid #1b5faa;border-radius:8px;font-weight:600;font-size:1rem;cursor:pointer">${t('cw_register')}</button>
                     </div>
                 </div>
             </div>`;
@@ -4967,7 +5003,7 @@ async function _vraagCoachWachtwoord() {
                 fout.textContent = t('coach_pw_neterr');
                 fout.style.display = '';
             } finally {
-                ok.disabled = false; ok.textContent = 'Doorgaan';
+                ok.disabled = false; ok.textContent = t('cw_doorgaan');
             }
         };
         ok.addEventListener('click', probeer);
