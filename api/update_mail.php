@@ -93,7 +93,7 @@ function bouwMailBody(array $entries, string $naam): string {
         $r .= "\n" . $ondLabel[$o] . ":\n";
         foreach ($perOnd[$o] as $regel) $r .= '  - ' . $regel . "\n";
     }
-    $r .= "\nWat er verandert voor Public en Coach zie je bij de volgende wedstrijd.\n\n";
+    $r .= "\nDe volledige changelog (alle onderdelen) staat altijd in InlineComp onder Info → Changelog.\n\n";
     $r .= 'Open InlineComp: ' . UPDATE_APP_URL . "\n\n";
     $r .= "— InlineComp\n";
     return $r;
