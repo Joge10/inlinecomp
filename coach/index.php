@@ -2699,6 +2699,17 @@ select.sel {
 .heat-toon-wacht-rij { color:#8a5a00; font-style:italic; }
 .heat-toon-niet-geplaatst { color:#b71c1c; font-style:italic; }
 .chip-waarschuw { background:#ffcdd2 !important; border-color:#b71c1c !important; }
+/* Ingelogde-coach roster in de setup-modal: groen = doet mee, grijs = niet ingeschreven. */
+.chip-mee { background:#e7f5e9 !important; border-color:#a9d6b3 !important; }
+.chip-mee .chip-snr { color:#2e7d32; }
+.chip-ni  { background:#f0f2f4 !important; border-color:#dbe0e6 !important; color:#8a929c !important; }
+.chip-ni .chip-snr { color:#98a0aa; }
+.coach-roster-legenda { width:100%; display:flex; flex-wrap:wrap; gap:14px;
+    font-size:.78rem; color:#666; margin:0 0 6px; }
+.coach-roster-legenda .lg { display:inline-flex; align-items:center; gap:5px; }
+.coach-roster-legenda .dot { width:11px; height:11px; border-radius:50%; display:inline-block; }
+.coach-roster-legenda .dot-mee { background:#7bc48a; }
+.coach-roster-legenda .dot-ni  { background:#c4cad2; }
 
 /* Uitslagen-tabel */
 table.uitsl-tabel { width:100%; border-collapse:collapse; margin-top:10px; font-size:.85rem; }
@@ -3059,8 +3070,9 @@ body.heeft-footer .auto-refresh-stempel { bottom:84px; }
 <div id="sectie-account-note" class="card" style="display:none">
     <div class="stap-label"><span class="stap-nr">2</span> <span>Je atleten</span></div>
     <p style="font-size:.9rem;color:#555;margin:8px 0 0">Je bent ingelogd — je atleten beheer je in je
-    <b>account</b> (👤 rechtsboven), niet per wedstrijd. Ze verschijnen hier automatisch; wie niet
-    meedoet aan deze wedstrijd zie je op de <b>Heats</b>-tab onder "Niet ingeschreven".</p>
+    <b>account</b> (👤 rechtsboven), niet per wedstrijd. Ze verschijnen hieronder automatisch:
+    <b style="color:#2e7d32">groen</b> = doet mee in deze wedstrijd, <b style="color:#8a929c">grijs</b>
+    = niet ingeschreven (die staan ook op de <b>Heats</b>-tab onder "Niet ingeschreven").</p>
 </div>
 
 <div id="sectie-lijst" class="card" style="display:none">
@@ -3231,6 +3243,11 @@ const T = {
         coach_aantal_single: '{n} rijder geselecteerd',
         coach_aantal_plural: '{n} rijders geselecteerd',
         coach_leeg: 'Nog niemand geselecteerd — gebruik de selectors hierboven.',
+        coach_roster_telling: '{totaal} in je account · {mee} doen mee in deze wedstrijd',
+        coach_roster_leeg: 'Je account-roster is nog leeg',
+        coach_roster_leeg_hint: 'Voeg atleten toe via de 👤-knop rechtsboven.',
+        coach_roster_lg_mee: 'doet mee',
+        coach_roster_lg_ni: 'niet ingeschreven',
         // ── Setup-strip + modal ──
         setup_strip_leeg: 'Kies je wedstrijd…',
         setup_strip_edit_title: 'Wijzig wedstrijd of rijders',
@@ -3557,6 +3574,11 @@ const T = {
         coach_aantal_single: '{n} skater selected',
         coach_aantal_plural: '{n} skaters selected',
         coach_leeg: 'No one selected yet — use the selectors above.',
+        coach_roster_telling: '{totaal} in your account · {mee} race in this competition',
+        coach_roster_leeg: 'Your account roster is still empty',
+        coach_roster_leeg_hint: 'Add skaters via the 👤 button top right.',
+        coach_roster_lg_mee: 'racing',
+        coach_roster_lg_ni: 'not entered',
         // ── Setup-strip + modal ──
         setup_strip_leeg: 'Choose your race…',
         setup_strip_edit_title: 'Change race or skaters',
@@ -3878,6 +3900,11 @@ const T = {
         coach_aantal_single: '{n} Skater ausgewählt',
         coach_aantal_plural: '{n} Skater ausgewählt',
         coach_leeg: 'Noch niemand ausgewählt — verwende die Auswahl oben.',
+        coach_roster_telling: '{totaal} in deinem Konto · {mee} starten in diesem Wettkampf',
+        coach_roster_leeg: 'Dein Konto-Roster ist noch leer',
+        coach_roster_leeg_hint: 'Füge Skater über den 👤-Button oben rechts hinzu.',
+        coach_roster_lg_mee: 'startet',
+        coach_roster_lg_ni: 'nicht gemeldet',
         // ── Setup-strip + modal ──
         setup_strip_leeg: 'Wähle dein Rennen…',
         setup_strip_edit_title: 'Rennen oder Skater ändern',
@@ -4199,6 +4226,11 @@ const T = {
         coach_aantal_single: '{n} skateur sélectionné',
         coach_aantal_plural: '{n} skateurs sélectionnés',
         coach_leeg: 'Personne sélectionné pour l\'instant — utilisez les sélecteurs ci-dessus.',
+        coach_roster_telling: '{totaal} dans ton compte · {mee} participent à cette compétition',
+        coach_roster_leeg: 'Ton roster de compte est encore vide',
+        coach_roster_leeg_hint: 'Ajoute des skateurs via le bouton 👤 en haut à droite.',
+        coach_roster_lg_mee: 'participe',
+        coach_roster_lg_ni: 'non inscrit',
         // ── Setup-strip + modal ──
         setup_strip_leeg: 'Choisissez votre course…',
         setup_strip_edit_title: 'Modifier la course ou les skateurs',
@@ -5091,10 +5123,53 @@ function verwijderUitLijst(licenseKey) {
 }
 
 // ── UI-render ────────────────────────────────────────────────────────────────
+// Ingelogde coach: de volledige account-roster in de setup-modal, gekleurd naar
+// deelname aan de gekozen wedstrijd. coachLijst = ingeschreven (groen),
+// window._coachNietIngeschreven = niet ingeschreven (grijs). Read-only: verwijderen
+// gaat via de 👤-account-modal, dus geen ×/Wis-alles hier.
+function _renderIngelogdeRoster() {
+    const wisBtn = document.getElementById('btn-wis-alles');
+    if (wisBtn) wisBtn.style.display = 'none';
+    secLijst.style.display = 'block';
+
+    const bySnr = (a, b) => (parseInt(a.snr) || 1e9) - (parseInt(b.snr) || 1e9);
+    const mee = [...coachLijst].sort(bySnr);
+    const ni  = [...(window._coachNietIngeschreven || [])].sort(bySnr);
+    const totaal = mee.length + ni.length;
+
+    if (totaal === 0) {
+        aantalEl.textContent = t('coach_roster_leeg');
+        chipsEl.innerHTML = `<span style="color:#888;font-size:.85rem">${t('coach_roster_leeg_hint')}</span>`;
+        return;
+    }
+    aantalEl.textContent = t('coach_roster_telling', { totaal, mee: mee.length });
+
+    const chip = (p, cls) => `<span class="chip ${cls}" title="${esc(p.full_name)}${p.club_full ? ' — ' + esc(p.club_full) : ''}">
+        ${(p.snr != null && p.snr !== '') ? `<span class="chip-snr">${esc(p.snr)}</span>` : ''}
+        <span>${esc(p.full_name)}</span>
+    </span>`;
+    const legenda = `<div class="coach-roster-legenda">
+        <span class="lg"><span class="dot dot-mee"></span>${esc(t('coach_roster_lg_mee'))}</span>
+        <span class="lg"><span class="dot dot-ni"></span>${esc(t('coach_roster_lg_ni'))}</span>
+    </div>`;
+    chipsEl.innerHTML = legenda
+        + mee.map(p => chip(p, 'chip-mee')).join('')
+        + ni.map(p => chip(p, 'chip-ni')).join('');
+}
+
 function renderChips() {
     // Setup-strook mee-updaten — die toont aantal rijders + wedstrijd, dus
     // hij moet vernieuwen bij elke coach-lijst-mutatie.
     if (typeof updateSetupStrip === 'function') updateSetupStrip();
+
+    // Ingelogde coach: toon de VOLLEDIGE account-roster met kleur — wie doet mee
+    // in deze wedstrijd (groen) en wie is niet ingeschreven (grijs). Vervangt de
+    // anonieme "0 geselecteerd / Wis alles / gebruik selectors"-weergave.
+    if (window.coachIngelogdApproved && window.coachIngelogdApproved()) {
+        _renderIngelogdeRoster();
+        return;
+    }
+
     aantalEl.textContent = t(coachLijst.length === 1 ? 'coach_aantal_single' : 'coach_aantal_plural', {n: coachLijst.length});
     if (coachLijst.length === 0) {
         chipsEl.innerHTML = `<span style="color:#888;font-size:.85rem">${t('coach_leeg')}</span>`;
