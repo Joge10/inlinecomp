@@ -3248,6 +3248,7 @@ const T = {
         coach_roster_leeg_hint: 'Voeg atleten toe via de 👤-knop rechtsboven.',
         coach_roster_lg_mee: 'doet mee',
         coach_roster_lg_ni: 'niet ingeschreven',
+        heat_ni_kop: 'Niet ingeschreven voor deze wedstrijd ({n})',
         // ── Setup-strip + modal ──
         setup_strip_leeg: 'Kies je wedstrijd…',
         setup_strip_edit_title: 'Wijzig wedstrijd of rijders',
@@ -3579,6 +3580,7 @@ const T = {
         coach_roster_leeg_hint: 'Add skaters via the 👤 button top right.',
         coach_roster_lg_mee: 'racing',
         coach_roster_lg_ni: 'not entered',
+        heat_ni_kop: 'Not entered for this competition ({n})',
         // ── Setup-strip + modal ──
         setup_strip_leeg: 'Choose your race…',
         setup_strip_edit_title: 'Change race or skaters',
@@ -3905,6 +3907,7 @@ const T = {
         coach_roster_leeg_hint: 'Füge Skater über den 👤-Button oben rechts hinzu.',
         coach_roster_lg_mee: 'startet',
         coach_roster_lg_ni: 'nicht gemeldet',
+        heat_ni_kop: 'Nicht für diesen Wettkampf gemeldet ({n})',
         // ── Setup-strip + modal ──
         setup_strip_leeg: 'Wähle dein Rennen…',
         setup_strip_edit_title: 'Rennen oder Skater ändern',
@@ -4231,6 +4234,7 @@ const T = {
         coach_roster_leeg_hint: 'Ajoute des skateurs via le bouton 👤 en haut à droite.',
         coach_roster_lg_mee: 'participe',
         coach_roster_lg_ni: 'non inscrit',
+        heat_ni_kop: 'Non inscrits à cette compétition ({n})',
         // ── Setup-strip + modal ──
         setup_strip_leeg: 'Choisissez votre course…',
         setup_strip_edit_title: 'Modifier la course ou les skateurs',
@@ -6082,7 +6086,7 @@ function renderHeats() {
     // blok onderaan (alleen hier, niet in programma/chips).
     if (_ni.length) {
         _hhtml += `<div class="heat-ni-blok">
-            <div class="heat-ni-kop">Niet ingeschreven voor deze wedstrijd (${_ni.length})</div>
+            <div class="heat-ni-kop">${esc(t('heat_ni_kop', {n: _ni.length}))}</div>
             ${_ni.map(p => `<div class="heat-ni-rij">${esc(p.full_name)} <small>${esc(p.club_full || '')}${p.category ? ' · ' + esc(p.category) : ''}</small></div>`).join('')}
         </div>`;
     }
