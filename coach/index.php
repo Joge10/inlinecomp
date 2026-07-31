@@ -8210,6 +8210,80 @@ window.addEventListener('appinstalled', () => {
   let account = null;                                // huidig ingelogd account (of null)
   let rosterLics = null;                             // licenties in de roster (auto-highlight-cache)
 
+  // ── Zelfstandig woordenboek (nl/en/de/fr) ─────────────────────────────────
+  // Los van de hoofd-T-objecten. Zelfde fallback-keten als t(): huidige taal → en → nl → key.
+  const CA_I18N = {
+    titel:            { nl:'Coach-account', en:'Coach account', de:'Coach-Konto', fr:'Compte entraîneur' },
+    sluiten:          { nl:'Sluiten', en:'Close', de:'Schließen', fr:'Fermer' },
+    tab_login:        { nl:'Inloggen', en:'Log in', de:'Anmelden', fr:'Connexion' },
+    tab_register:     { nl:'Registreren', en:'Register', de:'Registrieren', fr:'Inscription' },
+    lbl_email:        { nl:'E-mail', en:'Email', de:'E-Mail', fr:'E-mail' },
+    lbl_wachtwoord:   { nl:'Wachtwoord', en:'Password', de:'Passwort', fr:'Mot de passe' },
+    btn_login:        { nl:'Inloggen', en:'Log in', de:'Anmelden', fr:'Se connecter' },
+    link_vergeten:    { nl:'Wachtwoord vergeten?', en:'Forgot password?', de:'Passwort vergessen?', fr:'Mot de passe oublié ?' },
+    err_login_leeg:   { nl:'Vul e-mail en wachtwoord in.', en:'Enter your email and password.', de:'E-Mail und Passwort eingeben.', fr:'Saisissez votre e-mail et votre mot de passe.' },
+    err_login_mislukt:{ nl:'Inloggen mislukt.', en:'Login failed.', de:'Anmeldung fehlgeschlagen.', fr:'Échec de la connexion.' },
+    lbl_naam:         { nl:'Naam', en:'Name', de:'Name', fr:'Nom' },
+    pw_min:           { nl:'(min. 8 tekens)', en:'(min. 8 characters)', de:'(mind. 8 Zeichen)', fr:'(min. 8 caractères)' },
+    lbl_coach_van:    { nl:'Coach van', en:'Coach of', de:'Coach von', fr:'Entraîneur de' },
+    coach_van_hint:   { nl:'(club, team of anders)', en:'(club, team or other)', de:'(Verein, Team oder anderes)', fr:'(club, équipe ou autre)' },
+    coach_van_ph:     { nl:'bv. jouw club of team', en:'e.g. your club or team', de:'z. B. dein Verein oder Team', fr:'p. ex. votre club ou équipe' },
+    reg_herkenning:   { nl:'Alleen ter herkenning voor de goedkeurder — dit is niet je atletenlijst.', en:'Only to help the approver recognise you — this is not your athlete list.', de:'Nur zur Erkennung durch die genehmigende Person — dies ist nicht deine Athletenliste.', fr:"Uniquement pour que l'approbateur vous reconnaisse — ce n'est pas votre liste d'athlètes." },
+    btn_reg:          { nl:'Account aanvragen', en:'Request account', de:'Konto beantragen', fr:'Demander un compte' },
+    reg_privacy: {
+      nl:`Met een account ben je in de coach-app <b>niet meer anoniem</b>: we bewaren je naam, e-mailadres en je atletenlijst om je te herkennen en je atleten te tonen. Je kunt je account altijd zelf verwijderen, en het vervalt automatisch na een jaar zonder inloggen. Zie de <a href="../privacyverklaring.php" target="_blank" rel="noopener">privacyverklaring</a>.<br>Je account wordt na goedkeuring geactiveerd; tot die tijd werk je gewoon met de anonieme lijst.`,
+      en:`With an account you are <b>no longer anonymous</b> in the coach app: we store your name, email address and athlete list to recognise you and show your athletes. You can delete your account yourself at any time, and it expires automatically after a year without logging in. See the <a href="../privacyverklaring.php" target="_blank" rel="noopener">privacy statement</a>.<br>Your account is activated after approval; until then you simply work with the anonymous list.`,
+      de:`Mit einem Konto bist du in der Coach-App <b>nicht mehr anonym</b>: Wir speichern deinen Namen, deine E-Mail-Adresse und deine Athletenliste, um dich zu erkennen und deine Athleten anzuzeigen. Du kannst dein Konto jederzeit selbst löschen, und es verfällt automatisch nach einem Jahr ohne Anmeldung. Siehe die <a href="../privacyverklaring.php" target="_blank" rel="noopener">Datenschutzerklärung</a>.<br>Dein Konto wird nach der Genehmigung aktiviert; bis dahin arbeitest du einfach mit der anonymen Liste.`,
+      fr:`Avec un compte, vous n'êtes <b>plus anonyme</b> dans l'app entraîneur : nous conservons votre nom, votre adresse e-mail et votre liste d'athlètes pour vous reconnaître et afficher vos athlètes. Vous pouvez supprimer votre compte vous-même à tout moment, et il expire automatiquement après un an sans connexion. Voir la <a href="../privacyverklaring.php" target="_blank" rel="noopener">déclaration de confidentialité</a>.<br>Votre compte est activé après approbation ; jusque-là, vous travaillez simplement avec la liste anonyme.`
+    },
+    err_reg_velden:   { nl:'Vul alle velden in (wachtwoord min. 8 tekens).', en:'Fill in all fields (password min. 8 characters).', de:'Fülle alle Felder aus (Passwort mind. 8 Zeichen).', fr:'Remplissez tous les champs (mot de passe min. 8 caractères).' },
+    err_reg_mislukt:  { nl:'Registreren mislukt.', en:'Registration failed.', de:'Registrierung fehlgeschlagen.', fr:"Échec de l'inscription." },
+    ok_reg:           { nl:'Account aangevraagd! Je kunt inloggen zodra het is goedgekeurd.', en:'Account requested! You can log in as soon as it is approved.', de:'Konto beantragt! Du kannst dich anmelden, sobald es genehmigt ist.', fr:"Compte demandé ! Vous pourrez vous connecter dès qu'il sera approuvé." },
+    forgot_intro:     { nl:'Vul je e-mailadres in; we sturen een link om je wachtwoord opnieuw in te stellen.', en:"Enter your email address; we'll send a link to reset your password.", de:'Gib deine E-Mail-Adresse ein; wir senden dir einen Link zum Zurücksetzen deines Passworts.', fr:'Saisissez votre adresse e-mail ; nous vous enverrons un lien pour réinitialiser votre mot de passe.' },
+    btn_reset:        { nl:'Stuur reset-link', en:'Send reset link', de:'Reset-Link senden', fr:'Envoyer le lien de réinitialisation' },
+    link_terug_login: { nl:'Terug naar inloggen', en:'Back to login', de:'Zurück zur Anmeldung', fr:'Retour à la connexion' },
+    err_email_leeg:   { nl:'Vul je e-mailadres in.', en:'Enter your email address.', de:'Gib deine E-Mail-Adresse ein.', fr:'Saisissez votre adresse e-mail.' },
+    ok_reset:         { nl:'Als dit adres bekend is, sturen we een link.', en:"If this address is known, we'll send a link.", de:'Wenn diese Adresse bekannt ist, senden wir einen Link.', fr:'Si cette adresse est connue, nous enverrons un lien.' },
+    banner_pending:   { nl:'⏳ Je account wacht op goedkeuring. Je atleten worden alvast bewaard en verschijnen zodra je bent goedgekeurd.', en:'⏳ Your account is awaiting approval. Your athletes are already saved and will appear once you are approved.', de:'⏳ Dein Konto wartet auf Genehmigung. Deine Athleten werden schon gespeichert und erscheinen, sobald du genehmigt bist.', fr:"⏳ Votre compte est en attente d'approbation. Vos athlètes sont déjà enregistrés et apparaîtront dès votre approbation." },
+    ingelogd_als:     { nl:'Ingelogd als', en:'Logged in as', de:'Angemeldet als', fr:'Connecté en tant que' },
+    btn_uitloggen:    { nl:'Uitloggen', en:'Log out', de:'Abmelden', fr:'Se déconnecter' },
+    atleten_toevoegen:{ nl:'Atleten toevoegen', en:'Add athletes', de:'Athleten hinzufügen', fr:'Ajouter des athlètes' },
+    geen_wedstrijd:   { nl:'(geen wedstrijd nodig)', en:'(no competition needed)', de:'(kein Wettkampf nötig)', fr:'(aucune compétition requise)' },
+    op_club:          { nl:'Op club', en:'By club', de:'Nach Verein', fr:'Par club' },
+    ph_filter_clubs:  { nl:'filter clubs…', en:'filter clubs…', de:'Vereine filtern…', fr:'filtrer les clubs…' },
+    laden:            { nl:'laden…', en:'loading…', de:'lädt…', fr:'chargement…' },
+    op_sponsor:       { nl:'Op sponsor / team', en:'By sponsor / team', de:'Nach Sponsor / Team', fr:'Par sponsor / équipe' },
+    ph_filter_sponsors:{ nl:'filter sponsors…', en:'filter sponsors…', de:'Sponsoren filtern…', fr:'filtrer les sponsors…' },
+    btn_groep_add:    { nl:'Aangevinkte clubs/sponsors toevoegen', en:'Add selected clubs/sponsors', de:'Ausgewählte Vereine/Sponsoren hinzufügen', fr:'Ajouter les clubs/sponsors cochés' },
+    op_naam:          { nl:'Op naam of startnummer', en:'By name or start number', de:'Nach Name oder Startnummer', fr:'Par nom ou numéro de départ' },
+    ph_naam_zoek:     { nl:'typ naam of startnummer (min. 2)…', en:'type name or start number (min. 2)…', de:'Name oder Startnummer eingeben (mind. 2)…', fr:'saisir un nom ou numéro de départ (min. 2)…' },
+    in_je_lijst:      { nl:'In je lijst', en:'In your list', de:'In deiner Liste', fr:'Dans votre liste' },
+    btn_wis_alles:    { nl:'Wis alles', en:'Clear all', de:'Alles löschen', fr:'Tout effacer' },
+    btn_account_del:  { nl:'Account verwijderen', en:'Delete account', de:'Konto löschen', fr:'Supprimer le compte' },
+    danger_uitleg:    { nl:'Verwijdert je account én je hele atletenlijst. Dit kan niet ongedaan gemaakt worden.', en:'Deletes your account and your entire athlete list. This cannot be undone.', de:'Löscht dein Konto und deine gesamte Athletenliste. Dies kann nicht rückgängig gemacht werden.', fr:"Supprime votre compte et toute votre liste d'athlètes. Cette action est irréversible." },
+    del_titel:        { nl:'Account verwijderen?', en:'Delete account?', de:'Konto löschen?', fr:'Supprimer le compte ?' },
+    del_tekst: {
+      nl:'Je account <b>én je hele atletenlijst</b> worden definitief verwijderd.<br><br>Dit kan niet ongedaan gemaakt worden.',
+      en:'Your account <b>and your entire athlete list</b> will be permanently deleted.<br><br>This cannot be undone.',
+      de:'Dein Konto <b>und deine gesamte Athletenliste</b> werden endgültig gelöscht.<br><br>Dies kann nicht rückgängig gemacht werden.',
+      fr:"Votre compte <b>et toute votre liste d'athlètes</b> seront définitivement supprimés.<br><br>Cette action est irréversible."
+    },
+    del_ok:           { nl:'Ja, verwijder mijn account', en:'Yes, delete my account', de:'Ja, mein Konto löschen', fr:'Oui, supprimer mon compte' },
+    toevoegen_bezig:  { nl:'Toevoegen…', en:'Adding…', de:'Wird hinzugefügt…', fr:'Ajout…' },
+    geen:             { nl:'geen', en:'none', de:'keine', fr:'aucun' },
+    geen_rijders:     { nl:'geen rijders', en:'no skaters', de:'keine Fahrer', fr:'aucun patineur' },
+    geen_atleten:     { nl:'Nog geen atleten. Voeg toe via club, sponsor of naam hierboven.', en:'No athletes yet. Add them via club, sponsor or name above.', de:'Noch keine Athleten. Füge sie oben über Verein, Sponsor oder Name hinzu.', fr:"Aucun athlète pour l'instant. Ajoutez-en via club, sponsor ou nom ci-dessus." },
+    err_verwijderen:  { nl:'Verwijderen mislukt. Probeer het later opnieuw.', en:'Deletion failed. Please try again later.', de:'Löschen fehlgeschlagen. Bitte versuche es später erneut.', fr:'Échec de la suppression. Réessayez plus tard.' },
+    netwerkfout:      { nl:'Netwerkfout', en:'Network error', de:'Netzwerkfehler', fr:'Erreur réseau' },
+    hdr_btn_title:    { nl:'Coach-account / inloggen', en:'Coach account / log in', de:'Coach-Konto / Anmelden', fr:'Compte entraîneur / connexion' },
+    hdr_btn_ingelogd: { nl:'Ingelogd: {naam}', en:'Logged in: {naam}', de:'Angemeldet: {naam}', fr:'Connecté : {naam}' }
+  };
+  const ct = (k, p = {}) => {
+    let s = (CA_I18N[k] && (CA_I18N[k][typeof getCurLang === 'function' ? getCurLang() : 'nl'] || CA_I18N[k].en || CA_I18N[k].nl)) || k;
+    for (const [kk, vv] of Object.entries(p)) s = String(s).replace('{' + kk + '}', vv);
+    return s;
+  };
+
   async function laadRosterLics() {
     const r = await get('roster_list');
     rosterLics = (r.roster || []).map(p => p.license_key);
@@ -8311,7 +8385,7 @@ window.addEventListener('appinstalled', () => {
   const btn = document.createElement('button');
   btn.className = 'btn-help ca-hdr-btn';
   btn.id = 'btn-coach-account';
-  btn.title = 'Coach-account / inloggen';
+  btn.title = ct('hdr_btn_title');
   btn.textContent = '👤';
   btn.addEventListener('click', () => openModal());
   (document.querySelector('.hdr-btns-right') || document.querySelector('header'))?.appendChild(btn);
@@ -8319,7 +8393,7 @@ window.addEventListener('appinstalled', () => {
     const b = document.getElementById('btn-coach-account');
     if (b) {
       b.classList.toggle('ingelogd', !!account);
-      b.title = account ? ('Ingelogd: ' + account.naam) : 'Coach-account / inloggen';
+      b.title = account ? ct('hdr_btn_ingelogd', { naam: account.naam }) : ct('hdr_btn_title');
     }
     // Setup-modal (indien open) meteen bijwerken na in-/uitloggen.
     if (window._setupModalLoginToggle) window._setupModalLoginToggle();
@@ -8334,8 +8408,8 @@ window.addEventListener('appinstalled', () => {
     ov.className = 'ca-overlay';
     ov.addEventListener('click', e => { if (e.target === ov) ov.remove(); });
     ov.innerHTML = `<div class="ca-box">
-      <div class="ca-hdr"><b>Coach-account</b>
-        <button class="ca-sluit" title="Sluiten">&times;</button></div>
+      <div class="ca-hdr"><b>${ct('titel')}</b>
+        <button class="ca-sluit" title="${ct('sluiten')}">&times;</button></div>
       <div class="ca-body" id="ca-body"></div></div>`;
     ov.querySelector('.ca-sluit').addEventListener('click', () => ov.remove());
     document.body.appendChild(ov);
@@ -8351,8 +8425,8 @@ window.addEventListener('appinstalled', () => {
     const body = ov.querySelector('#ca-body');
     body.innerHTML = `
       <div class="ca-tabs">
-        <button class="ca-tab" data-t="login">Inloggen</button>
-        <button class="ca-tab" data-t="register">Registreren</button>
+        <button class="ca-tab" data-t="login">${ct('tab_login')}</button>
+        <button class="ca-tab" data-t="register">${ct('tab_register')}</button>
       </div>
       <div id="ca-form"></div>
       <div class="ca-meld" id="ca-meld"></div>`;
@@ -8368,19 +8442,19 @@ window.addEventListener('appinstalled', () => {
 
   function vulLogin(ov, f) {
     f.innerHTML = `
-      <label class="ca-veld">E-mail</label><input class="ca-inp" id="l-email" type="email" autocomplete="username">
-      <label class="ca-veld">Wachtwoord</label><input class="ca-inp" id="l-pw" type="password" autocomplete="current-password">
-      <button class="ca-knop" id="l-btn">Inloggen</button>
-      <div style="text-align:center"><button class="ca-link" id="l-forgot">Wachtwoord vergeten?</button></div>`;
+      <label class="ca-veld">${ct('lbl_email')}</label><input class="ca-inp" id="l-email" type="email" autocomplete="username">
+      <label class="ca-veld">${ct('lbl_wachtwoord')}</label><input class="ca-inp" id="l-pw" type="password" autocomplete="current-password">
+      <button class="ca-knop" id="l-btn">${ct('btn_login')}</button>
+      <div style="text-align:center"><button class="ca-link" id="l-forgot">${ct('link_vergeten')}</button></div>`;
     f.querySelector('#l-forgot').addEventListener('click', () => renderUitgelogd(ov, 'forgot'));
     f.querySelector('#l-btn').addEventListener('click', async () => {
       const email = f.querySelector('#l-email').value.trim();
       const pw = f.querySelector('#l-pw').value;
-      if (!email || !pw) return meld(ov, 'fout', 'Vul e-mail en wachtwoord in.');
+      if (!email || !pw) return meld(ov, 'fout', ct('err_login_leeg'));
       const btn = f.querySelector('#l-btn'); btn.disabled = true;
       const r = await post('login', { email, wachtwoord: pw });
       btn.disabled = false;
-      if (!r.ok) return meld(ov, 'fout', r.error || 'Inloggen mislukt.');
+      if (!r.ok) return meld(ov, 'fout', r.error || ct('err_login_mislukt'));
       account = r.account;
       _caUpdateHdrBtn();
       // Ingelogd terwijl de gedeelde-wachtwoord-prompt open staat? Herlaad —
@@ -8400,48 +8474,43 @@ window.addEventListener('appinstalled', () => {
 
   function vulRegister(ov, f) {
     f.innerHTML = `
-      <label class="ca-veld">Naam</label><input class="ca-inp" id="r-naam">
-      <label class="ca-veld">E-mail</label><input class="ca-inp" id="r-email" type="email">
-      <label class="ca-veld">Wachtwoord <small style="font-weight:400">(min. 8 tekens)</small></label>
+      <label class="ca-veld">${ct('lbl_naam')}</label><input class="ca-inp" id="r-naam">
+      <label class="ca-veld">${ct('lbl_email')}</label><input class="ca-inp" id="r-email" type="email">
+      <label class="ca-veld">${ct('lbl_wachtwoord')} <small style="font-weight:400">${ct('pw_min')}</small></label>
       <input class="ca-inp" id="r-pw" type="password">
-      <label class="ca-veld">Coach van <small style="font-weight:400;color:#888">(club, team of anders)</small></label>
-      <input class="ca-inp" id="r-van" placeholder="bv. jouw club of team">
-      <p style="font-size:.72rem;color:#999;margin:4px 0 0">Alleen ter herkenning voor de goedkeurder — dit is niet je atletenlijst.</p>
-      <button class="ca-knop" id="r-btn">Account aanvragen</button>
-      <p style="font-size:.78rem;color:#777;margin-top:10px">
-        Met een account ben je in de coach-app <b>niet meer anoniem</b>: we bewaren je naam, e-mailadres en
-        je atletenlijst om je te herkennen en je atleten te tonen. Je kunt je account altijd zelf verwijderen,
-        en het vervalt automatisch na een jaar zonder inloggen. Zie de
-        <a href="../privacyverklaring.php" target="_blank" rel="noopener">privacyverklaring</a>.<br>
-        Je account wordt na goedkeuring geactiveerd; tot die tijd werk je gewoon met de anonieme lijst.</p>`;
+      <label class="ca-veld">${ct('lbl_coach_van')} <small style="font-weight:400;color:#888">${ct('coach_van_hint')}</small></label>
+      <input class="ca-inp" id="r-van" placeholder="${ct('coach_van_ph')}">
+      <p style="font-size:.72rem;color:#999;margin:4px 0 0">${ct('reg_herkenning')}</p>
+      <button class="ca-knop" id="r-btn">${ct('btn_reg')}</button>
+      <p style="font-size:.78rem;color:#777;margin-top:10px">${ct('reg_privacy')}</p>`;
     f.querySelector('#r-btn').addEventListener('click', async () => {
       const naam = f.querySelector('#r-naam').value.trim();
       const email = f.querySelector('#r-email').value.trim();
       const pw = f.querySelector('#r-pw').value;
       const van = f.querySelector('#r-van').value.trim();
-      if (!naam || !email || pw.length < 8 || !van) return meld(ov, 'fout', 'Vul alle velden in (wachtwoord min. 8 tekens).');
+      if (!naam || !email || pw.length < 8 || !van) return meld(ov, 'fout', ct('err_reg_velden'));
       const btn = f.querySelector('#r-btn'); btn.disabled = true;
       const r = await post('register', { naam, email, wachtwoord: pw, coacht_van_type: 'auto', coacht_van: van });
       btn.disabled = false;
-      if (!r.ok) return meld(ov, 'fout', r.error || 'Registreren mislukt.');
-      meld(ov, 'ok', 'Account aangevraagd! Je kunt inloggen zodra het is goedgekeurd.');
+      if (!r.ok) return meld(ov, 'fout', r.error || ct('err_reg_mislukt'));
+      meld(ov, 'ok', ct('ok_reg'));
     });
   }
 
   function vulForgot(ov, f) {
     f.innerHTML = `
-      <p style="font-size:.85rem;color:#555">Vul je e-mailadres in; we sturen een link om je wachtwoord opnieuw in te stellen.</p>
-      <label class="ca-veld">E-mail</label><input class="ca-inp" id="fg-email" type="email">
-      <button class="ca-knop" id="fg-btn">Stuur reset-link</button>
-      <div style="text-align:center"><button class="ca-link" id="fg-back">Terug naar inloggen</button></div>`;
+      <p style="font-size:.85rem;color:#555">${ct('forgot_intro')}</p>
+      <label class="ca-veld">${ct('lbl_email')}</label><input class="ca-inp" id="fg-email" type="email">
+      <button class="ca-knop" id="fg-btn">${ct('btn_reset')}</button>
+      <div style="text-align:center"><button class="ca-link" id="fg-back">${ct('link_terug_login')}</button></div>`;
     f.querySelector('#fg-back').addEventListener('click', () => renderUitgelogd(ov, 'login'));
     f.querySelector('#fg-btn').addEventListener('click', async () => {
       const email = f.querySelector('#fg-email').value.trim();
-      if (!email) return meld(ov, 'fout', 'Vul je e-mailadres in.');
+      if (!email) return meld(ov, 'fout', ct('err_email_leeg'));
       const btn = f.querySelector('#fg-btn'); btn.disabled = true;
       const r = await post('wachtwoord_vergeten', { email });
       btn.disabled = false;
-      meld(ov, 'ok', r.message || 'Als dit adres bekend is, sturen we een link.');
+      meld(ov, 'ok', r.message || ct('ok_reset'));
     });
   }
 
@@ -8450,36 +8519,36 @@ window.addEventListener('appinstalled', () => {
     const body = ov.querySelector('#ca-body');
     const pending = account.status !== 'approved';
     body.innerHTML = `
-      ${pending ? `<div class="ca-banner">⏳ Je account wacht op goedkeuring. Je atleten worden alvast bewaard en verschijnen zodra je bent goedgekeurd.</div>` : ''}
+      ${pending ? `<div class="ca-banner">${ct('banner_pending')}</div>` : ''}
       <p style="margin:0 0 10px;display:flex;justify-content:space-between;align-items:center">
-        <span>Ingelogd als <b>${esc2(account.naam)}</b></span>
-        <button class="btn btn-klein" id="ca-logout">Uitloggen</button></p>
+        <span>${ct('ingelogd_als')} <b>${esc2(account.naam)}</b></span>
+        <button class="btn btn-klein" id="ca-logout">${ct('btn_uitloggen')}</button></p>
 
-      <div style="font-weight:600;color:#1b5faa;margin:4px 0 8px">Atleten toevoegen <small style="font-weight:400;color:#888">(geen wedstrijd nodig)</small></div>
-      <details class="ca-acc"><summary>Op club</summary>
-        <input class="ca-inp ca-filter" id="ca-club-filter" placeholder="filter clubs…">
-        <div class="ca-checklist" id="ca-club-list"><div style="padding:8px;color:#888">laden…</div></div>
+      <div style="font-weight:600;color:#1b5faa;margin:4px 0 8px">${ct('atleten_toevoegen')} <small style="font-weight:400;color:#888">${ct('geen_wedstrijd')}</small></div>
+      <details class="ca-acc"><summary>${ct('op_club')}</summary>
+        <input class="ca-inp ca-filter" id="ca-club-filter" placeholder="${ct('ph_filter_clubs')}">
+        <div class="ca-checklist" id="ca-club-list"><div style="padding:8px;color:#888">${ct('laden')}</div></div>
       </details>
-      <details class="ca-acc"><summary>Op sponsor / team</summary>
-        <input class="ca-inp ca-filter" id="ca-spon-filter" placeholder="filter sponsors…">
-        <div class="ca-checklist" id="ca-spon-list"><div style="padding:8px;color:#888">laden…</div></div>
+      <details class="ca-acc"><summary>${ct('op_sponsor')}</summary>
+        <input class="ca-inp ca-filter" id="ca-spon-filter" placeholder="${ct('ph_filter_sponsors')}">
+        <div class="ca-checklist" id="ca-spon-list"><div style="padding:8px;color:#888">${ct('laden')}</div></div>
       </details>
-      <button class="ca-knop" id="ca-groep-add">Aangevinkte clubs/sponsors toevoegen</button>
+      <button class="ca-knop" id="ca-groep-add">${ct('btn_groep_add')}</button>
 
-      <details class="ca-acc" style="margin-top:10px"><summary>Op naam of startnummer</summary>
-        <input class="ca-inp ca-filter" id="ca-naam-zoek" placeholder="typ naam of startnummer (min. 2)…">
+      <details class="ca-acc" style="margin-top:10px"><summary>${ct('op_naam')}</summary>
+        <input class="ca-inp ca-filter" id="ca-naam-zoek" placeholder="${ct('ph_naam_zoek')}">
         <div id="ca-naam-res" style="padding:0 8px 8px"></div>
       </details>
 
       <div class="coach-hdr" style="margin:16px 0 6px">
-        <span style="font-weight:600;color:#1b5faa">In je lijst (<span id="ca-roster-n">0</span>)</span>
-        <button id="ca-roster-wis" class="btn btn-klein btn-wis" style="display:none">Wis alles</button>
+        <span style="font-weight:600;color:#1b5faa">${ct('in_je_lijst')} (<span id="ca-roster-n">0</span>)</span>
+        <button id="ca-roster-wis" class="btn btn-klein btn-wis" style="display:none">${ct('btn_wis_alles')}</button>
       </div>
-      <div id="ca-roster" class="chips"><div style="color:#888;font-size:.85rem">laden…</div></div>
+      <div id="ca-roster" class="chips"><div style="color:#888;font-size:.85rem">${ct('laden')}</div></div>
 
       <div class="ca-danger">
-        <button class="ca-danger-knop" id="ca-account-del">Account verwijderen</button>
-        <div class="ca-danger-uitleg">Verwijdert je account én je hele atletenlijst. Dit kan niet ongedaan gemaakt worden.</div>
+        <button class="ca-danger-knop" id="ca-account-del">${ct('btn_account_del')}</button>
+        <div class="ca-danger-uitleg">${ct('danger_uitleg')}</div>
       </div>`;
 
     body.querySelector('#ca-logout').addEventListener('click', async () => {
@@ -8507,15 +8576,15 @@ window.addEventListener('appinstalled', () => {
     // Eigen account definitief verwijderen (AVG-recht op vergetelheid).
     body.querySelector('#ca-account-del').addEventListener('click', async () => {
       const ok = await bevestig({
-        titel: 'Account verwijderen?',
-        tekst: 'Je account <b>én je hele atletenlijst</b> worden definitief verwijderd.<br><br>Dit kan niet ongedaan gemaakt worden.',
-        bevestigLabel: 'Ja, verwijder mijn account',
+        titel: ct('del_titel'),
+        tekst: ct('del_tekst'),
+        bevestigLabel: ct('del_ok'),
         annuleerLabel: t('bev_annuleer'),
       });
       if (!ok) return;
       const r = await post('account_verwijderen', {});
       if (r && r.ok) location.reload();   // uitgelogd → verse anonieme staat
-      else alert('Verwijderen mislukt. Probeer het later opnieuw.');
+      else alert(ct('err_verwijderen'));
     });
 
     get('clubs_teams').then(d => {
@@ -8529,10 +8598,10 @@ window.addEventListener('appinstalled', () => {
       const clubs = [...ov.querySelectorAll('#ca-club-list input:checked')].map(i => i.value);
       const spons = [...ov.querySelectorAll('#ca-spon-list input:checked')].map(i => i.value);
       if (!clubs.length && !spons.length) return;
-      const btn = ov.querySelector('#ca-groep-add'); btn.disabled = true; btn.textContent = 'Toevoegen…';
+      const btn = ov.querySelector('#ca-groep-add'); btn.disabled = true; btn.textContent = ct('toevoegen_bezig');
       await post('roster_add_groep', { clubs, sponsors: spons });
       ov.querySelectorAll('#ca-club-list input:checked, #ca-spon-list input:checked').forEach(i => { i.checked = false; });
-      btn.disabled = false; btn.textContent = 'Aangevinkte clubs/sponsors toevoegen';
+      btn.disabled = false; btn.textContent = ct('btn_groep_add');
       _caLaadRoster(ov);
     });
 
@@ -8546,7 +8615,7 @@ window.addEventListener('appinstalled', () => {
     if (!el) return;
     el.innerHTML = items.length
       ? items.map(v => `<label class="ca-check-rij"><input type="checkbox" value="${esc2(v)}"><span>${esc2(v)}</span></label>`).join('')
-      : '<div style="padding:8px;color:#888">geen</div>';
+      : `<div style="padding:8px;color:#888">${ct('geen')}</div>`;
   }
   function _caFilter(el, q) {
     if (!el) return;
@@ -8563,7 +8632,7 @@ window.addEventListener('appinstalled', () => {
     res.innerHTML = lijst.length ? lijst.map(p => `<div class="ca-zoek-rij">
       <span>${p.start_number != null ? '<b>' + esc2(p.start_number) + '</b> ' : ''}${esc2(p.full_name)} <small>${esc2(p.club_full || '')}</small></span>
       <button class="ca-add" data-lic="${esc2(p.license_key)}" ${(+p.in_roster) ? 'disabled' : ''}>${(+p.in_roster) ? '✓' : '+'}</button>
-      </div>`).join('') : '<div style="color:#888;font-size:.85rem;padding:6px 0">geen rijders</div>';
+      </div>`).join('') : `<div style="color:#888;font-size:.85rem;padding:6px 0">${ct('geen_rijders')}</div>`;
     res.querySelectorAll('.ca-add').forEach(a => a.addEventListener('click', async () => {
       a.disabled = true; a.textContent = '✓';
       await post('roster_add', { person_license: a.dataset.lic }); _caLaadRoster(ov);
@@ -8584,7 +8653,7 @@ window.addEventListener('appinstalled', () => {
         <span>${esc2(p.full_name)}</span>
         <span class="x" data-lic="${esc2(p.license_key)}">×</span>
       </span>`).join('')
-      : '<div style="color:#888;font-size:.85rem">Nog geen atleten. Voeg toe via club, sponsor of naam hierboven.</div>';
+      : `<div style="color:#888;font-size:.85rem">${ct('geen_atleten')}</div>`;
     el.querySelectorAll('.x').forEach(x => x.addEventListener('click', async () => {
       await post('roster_remove', { person_license: x.dataset.lic }); _caLaadRoster(ov);
     }));
@@ -8596,11 +8665,11 @@ window.addEventListener('appinstalled', () => {
       const r = await fetch(api('?action=' + action), { method: 'POST',
         headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(data) });
       return await r.json();
-    } catch { return { error: 'Netwerkfout' }; }
+    } catch { return { error: ct('netwerkfout') }; }
   }
   async function get(action) {
     try { const r = await fetch(api('?action=' + action)); return await r.json(); }
-    catch { return { error: 'Netwerkfout' }; }
+    catch { return { error: ct('netwerkfout') }; }
   }
 
   // ── Bij laden: check of er al een sessie is ───────────────────────────────
