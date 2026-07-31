@@ -2998,7 +2998,7 @@ body.heeft-footer .auto-refresh-stempel { bottom:84px; }
 <button class="setup-modal-close" type="button" onclick="closeSetupModal()"
         data-i18n-title="pwa_btn_sluit" title="Sluiten">&times;</button>
 <h2 class="setup-modal-titel" data-i18n="setup_modal_titel">Wedstrijd &amp; rijders</h2>
-<button type="button" id="setup-login-btn" onclick="window.coachAccountOpen && window.coachAccountOpen('login')"
+<button type="button" id="setup-login-btn" data-i18n="setup_login_btn" onclick="window.coachAccountOpen && window.coachAccountOpen('login')"
         style="display:none;width:100%;margin:0 0 12px;padding:10px;background:#fff;color:#1b5faa;border:2px solid #1b5faa;border-radius:8px;font-weight:600;font-size:.92rem;font-family:inherit;cursor:pointer">👤 Inloggen als coach met account</button>
 
 <div class="card">
@@ -3249,6 +3249,7 @@ const T = {
         coach_roster_lg_mee: 'doet mee',
         coach_roster_lg_ni: 'niet ingeschreven',
         heat_ni_kop: 'Niet ingeschreven voor deze wedstrijd ({n})',
+        setup_login_btn: '👤 Inloggen als coach met account',
         // ── Setup-strip + modal ──
         setup_strip_leeg: 'Kies je wedstrijd…',
         setup_strip_edit_title: 'Wijzig wedstrijd of rijders',
@@ -3581,6 +3582,7 @@ const T = {
         coach_roster_lg_mee: 'racing',
         coach_roster_lg_ni: 'not entered',
         heat_ni_kop: 'Not entered for this competition ({n})',
+        setup_login_btn: '👤 Log in as coach with account',
         // ── Setup-strip + modal ──
         setup_strip_leeg: 'Choose your race…',
         setup_strip_edit_title: 'Change race or skaters',
@@ -3908,6 +3910,7 @@ const T = {
         coach_roster_lg_mee: 'startet',
         coach_roster_lg_ni: 'nicht gemeldet',
         heat_ni_kop: 'Nicht für diesen Wettkampf gemeldet ({n})',
+        setup_login_btn: '👤 Als Coach mit Konto anmelden',
         // ── Setup-strip + modal ──
         setup_strip_leeg: 'Wähle dein Rennen…',
         setup_strip_edit_title: 'Rennen oder Skater ändern',
@@ -4235,6 +4238,7 @@ const T = {
         coach_roster_lg_mee: 'participe',
         coach_roster_lg_ni: 'non inscrit',
         heat_ni_kop: 'Non inscrits à cette compétition ({n})',
+        setup_login_btn: '👤 Se connecter comme coach avec un compte',
         // ── Setup-strip + modal ──
         setup_strip_leeg: 'Choisissez votre course…',
         setup_strip_edit_title: 'Modifier la course ou les skateurs',
