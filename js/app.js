@@ -273,7 +273,171 @@ function switchSysteemTab(tab) {
 }
 
 // ── Info-pagina vullen ────────────────────────────────────────────────────────
+let _infoTabsGeinit = false;
+
+function switchInfoTab(tab) {
+    document.querySelectorAll('#info-tabs-nav .org-tab-btn').forEach(b =>
+        b.classList.toggle('active', b.dataset.tab === tab));
+    document.querySelectorAll('#page-info .org-tab-content').forEach(c => {
+        c.style.display = (c.id === 'info-tab-' + tab) ? '' : 'none';
+    });
+    // Versie-tab: status van de beheerders-update-mail (vers) ophalen.
+    if (tab === 'versie') _updateMailStatusLaden();
+}
+
+// ── Beheerders-update-mail (Info → Versie) ───────────────────────────────────
+function _updateMailFmtTijd(s) {
+    // 'YYYY-MM-DD HH:MM:SS' → 'DD-MM-YYYY HH:MM'
+    const m = /^(\d{4})-(\d{2})-(\d{2})[ T](\d{2}):(\d{2})/.exec(s || '');
+    return m ? `${m[3]}-${m[2]}-${m[1]} ${m[4]}:${m[5]}` : (s || '');
+}
+
+function _updateMailStatusLaden() {
+    const box = document.getElementById('update-mail-status');
+    const btn = document.getElementById('btn-update-mail');
+    if (!box || !btn) return;
+    box.textContent = 'Status laden…';
+    btn.disabled = true;
+    fetch('api/update_mail.php?action=status', { credentials: 'same-origin' })
+        .then(r => r.json())
+        .then(d => {
+            if (d.error) { box.textContent = d.error; return; }
+            btn.dataset.versie     = d.versie || '';
+            btn.dataset.alGemaild  = d.al_gemaild ? '1' : '0';
+            let s = `Versie <strong>${d.versie}</strong> — `
+                  + `${d.aantal_wijzigingen} wijziging(en), ${d.ontvangers} ontvanger(s).`;
+            if (d.al_gemaild && d.laatst) {
+                s += `<br><span class="update-mail-verstuurd">✓ Verstuurd voor ${d.laatst.versie} `
+                   + `op ${_updateMailFmtTijd(d.laatst.tijdstip)} (${d.laatst.aantal} verstuurd)</span>`;
+                btn.textContent = '📧 Opnieuw versturen';
+            } else {
+                btn.textContent = '📧 Beheerders informeren';
+            }
+            if (d.ontvangers === 0) {
+                s += '<br><span style="color:#a00">Geen beheerders met een e-mailadres bekend.</span>';
+            }
+            box.innerHTML = s;
+            btn.disabled = (d.ontvangers === 0);
+        })
+        .catch(() => { box.textContent = 'Kon status niet laden.'; });
+}
+
+function _updateMailVerstuur() {
+    const btn = document.getElementById('btn-update-mail');
+    if (!btn || btn.disabled) return;
+    const versie     = btn.dataset.versie || '';
+    const alGemaild  = btn.dataset.alGemaild === '1';
+    const vraag = alGemaild
+        ? `Versie ${versie} is al gemaild. Wil je ÁLLE beheerders opnieuw mailen?`
+        : `Alle beheerders krijgen een mail over versie ${versie}. Versturen?`;
+    if (!confirm(vraag)) return;
+
+    const oud = btn.textContent;
+    btn.disabled = true;
+    btn.textContent = 'Versturen…';
+    fetch('api/update_mail.php', {
+        method: 'POST',
+        credentials: 'same-origin',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'verstuur', force: alGemaild }),
+    })
+        .then(r => r.json())
+        .then(d => {
+            if (d.ok) {
+                alert(`✓ ${d.aantal} van ${d.ontvangers} mails verstuurd.`);
+            } else if (d.al_gemaild) {
+                alert('Deze versie is al gemaild.');
+            } else {
+                alert(d.error || 'Versturen mislukt.');
+            }
+            _updateMailStatusLaden();
+        })
+        .catch(() => {
+            alert('Versturen mislukt (netwerk).');
+            btn.disabled = false;
+            btn.textContent = oud;
+        });
+}
+
+// ── Changelog-UI: filter op onderdeel + in/uitklapbare versies ───────────────
+// Server rendert alle versies uit; hier alleen progressive enhancement.
+let _changelogGeinit = false;
+
+function initChangelogUI() {
+    if (_changelogGeinit) return;
+    const root = document.getElementById('admin-changelog');
+    if (!root) return;
+    _changelogGeinit = true;
+
+    // Standaard: alleen de nieuwste (eerste) versie uitgeklapt.
+    root.querySelectorAll('.cl-versie').forEach((v, i) => _clZetVersie(v, i === 0));
+
+    // Klik/Enter op versie-header → in/uitklappen.
+    root.querySelectorAll('.cl-versie-head').forEach(head => {
+        const versie = head.closest('.cl-versie');
+        const toggle = () => _clZetVersie(versie, versie.classList.contains('collapsed'));
+        head.addEventListener('click', toggle);
+        head.addEventListener('keydown', e => {
+            if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); toggle(); }
+        });
+    });
+
+    // Filter-knoppen.
+    const btns = [...document.querySelectorAll('#cl-filterbar .cl-filter-btn')];
+    btns.forEach(btn => btn.addEventListener('click', () => {
+        btns.forEach(b => b.classList.toggle('active', b === btn));
+        _clPasFilterToe(root, btn.dataset.filter);
+    }));
+}
+
+// Klap één versie-blok in of uit (houdt aria + chevron in sync).
+function _clZetVersie(versie, uit) {
+    versie.classList.toggle('collapsed', !uit);
+    const head = versie.querySelector('.cl-versie-head');
+    if (head) head.setAttribute('aria-expanded', uit ? 'true' : 'false');
+}
+
+function _clPasFilterToe(root, filter) {
+    let eersteZichtbaar = true;
+    root.querySelectorAll('.cl-versie').forEach(versie => {
+        let zichtbaar = 0;
+        versie.querySelectorAll('.cl-lijst li').forEach(li => {
+            const match = filter === 'alle'
+                || (li.dataset.ond || '').split(' ').includes(filter);
+            li.style.display = match ? '' : 'none';
+            if (match) zichtbaar++;
+        });
+        // Tel-badge bijwerken naar het aantal zichtbare wijzigingen.
+        const telling = versie.querySelector('.cl-versie-telling');
+        if (telling) telling.innerHTML = zichtbaar + '&times;';
+
+        if (zichtbaar === 0) {
+            versie.style.display = 'none';
+            return;
+        }
+        versie.style.display = '';
+        // 'Alles' → default (alleen nieuwste zichtbare uit). Gefilterd → alles uit.
+        if (filter === 'alle') {
+            _clZetVersie(versie, eersteZichtbaar);
+        } else {
+            _clZetVersie(versie, true);
+        }
+        eersteZichtbaar = false;
+    });
+}
+
 function toonInfoPagina() {
+    // Sub-tabs (Info / Versie / Changelog) — statische inhoud, geen lazy load.
+    if (!_infoTabsGeinit) {
+        _infoTabsGeinit = true;
+        document.querySelectorAll('#info-tabs-nav .org-tab-btn').forEach(btn => {
+            btn.addEventListener('click', () => switchInfoTab(btn.dataset.tab));
+        });
+        const mailBtn = document.getElementById('btn-update-mail');
+        if (mailBtn) mailBtn.addEventListener('click', _updateMailVerstuur);
+    }
+    initChangelogUI();
+
     const ROL_LABELS = {
         owner: 'Owner', admin: 'Admin', importer: 'Importer',
         planner: 'Planner', timer: 'Timer', viewer: 'Viewer',

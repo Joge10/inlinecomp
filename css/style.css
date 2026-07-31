@@ -3684,6 +3684,71 @@ th.rk-totaal, td.rk-totaal { width:55px; font-weight:700; color:var(--blauw); ba
 .info-lijst a:hover { text-decoration: underline; }
 .info-blok-laatst { background: #f7fafd; }
 
+/* ── Changelog in de info-tab (volledige changelog, alle onderdelen) ── */
+.admin-changelog { margin-top: .5rem; }
+
+/* Filterbalk: segment-knoppen per onderdeel. */
+.cl-filterbar { display: flex; flex-wrap: wrap; gap: 6px; margin: .75rem 0 1rem; }
+.cl-filter-btn {
+    border: 1px solid var(--border); background: #fff; color: #445;
+    font-size: .8rem; font-weight: 600; padding: 4px 12px; border-radius: 999px;
+    cursor: pointer; transition: background .12s, color .12s, border-color .12s;
+}
+.cl-filter-btn:hover { border-color: var(--middenblauw); }
+.cl-filter-btn.active {
+    background: var(--blauw); border-color: var(--blauw); color: #fff;
+}
+
+/* Eén versie = één blok. De versie-header is een duidelijke gekleurde balk
+   zodat meteen zichtbaar is welke wijzigingen bij welke versie horen. */
+.cl-versie { margin: 0 0 1.1rem 0; }
+.cl-versie:last-child { margin-bottom: 0; }
+/* NB: bewust een <div>, geen <header> — de globale `header{height:56px}`
+   zou de balk anders veel te hoog maken. */
+.cl-versie-head {
+    display: flex; align-items: baseline; gap: .6rem;
+    background: var(--middenblauw); color: #fff;
+    padding: .4rem .7rem; border-radius: 6px;
+    cursor: pointer; user-select: none;
+}
+.cl-versie-head:focus-visible { outline: 2px solid var(--blauw); outline-offset: 2px; }
+.cl-chevron {
+    font-size: 1.05rem; line-height: 1; width: 1rem; text-align: center;
+    transition: transform .15s; align-self: center; opacity: 1;
+}
+.cl-versie.collapsed .cl-chevron { transform: rotate(-90deg); }
+.cl-versie.collapsed .cl-lijst   { display: none; }
+.cl-versie-nr    { font-weight: 700; font-size: 1.02rem; letter-spacing: .01em; }
+.cl-versie-telling {
+    font-size: .72rem; font-weight: 700; background: rgba(255,255,255,.25);
+    padding: 1px 7px; border-radius: 999px;
+}
+.cl-versie-datum { font-size: .8rem; opacity: .9; margin-left: auto; }
+
+.cl-lijst { list-style: none; margin: .55rem 0 0; padding: 0 0 0 .15rem; }
+.cl-lijst li {
+    display: flex; gap: .6rem; align-items: flex-start;
+    padding: .4rem 0; line-height: 1.5;
+    border-bottom: 1px solid #eef1f4;
+}
+.cl-lijst li:last-child { border-bottom: 0; }
+.cl-tekst { flex: 1; }
+
+.cl-tags { flex-shrink: 0; display: flex; flex-wrap: wrap; gap: 3px; margin-top: .12rem; }
+.cl-tag {
+    display: inline-block; min-width: 3.4rem; text-align: center;
+    font-size: .66rem; font-weight: 700; text-transform: uppercase; letter-spacing: .04em;
+    padding: 2px 7px; border-radius: 4px;
+}
+.cl-tag-admin  { background: #e7e9f5; color: #3b3f8c; }  /* Beheer */
+.cl-tag-public { background: #e3f1e6; color: #226b34; }
+.cl-tag-coach  { background: #fdeede; color: #9a5a12; }
+.cl-tag-check  { background: #e2f0f7; color: #1a5f80; }
+
+/* ── Beheerders-update-mail (Info → Versie) ── */
+.update-mail-status { font-size: .9rem; color: #444; margin: 0 0 .6rem; line-height: 1.5; }
+.update-mail-verstuurd { color: #226b34; font-weight: 600; }
+
 /* ── Gedeelde knop-stijlen ───────────────────────────────────────────────────── */
 .btn-primary {
     padding: 5px 16px;
@@ -3977,6 +4042,8 @@ th.rk-totaal, td.rk-totaal { width:55px; font-weight:700; color:var(--blauw); ba
 /* Jury-rol-keuze (jury-rol-area_of_call etc.): lichtblauw — neutrale
    informational kleur, onderscheidt zich van login (groen) / fout (rood). */
 .gb-log-jury-rol    { background: #e3f2fd; color: #1565c0; }
+.gb-log-info        { background: #e3f2fd; color: #1565c0; }  /* neutrale info (bv. coach-registratie) */
+.gb-log-warn        { background: #fff8e1; color: #8a6d00; }  /* in afwachting (bv. reset aangevraagd) */
 
 /* Readonly-modus: subtiele overlay-hint */
 .readonly-modus   { position: relative; pointer-events: none; opacity: .85; }

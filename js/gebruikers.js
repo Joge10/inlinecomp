@@ -57,11 +57,11 @@ async function laadLogboek(filterValue = '') {
     tbody.innerHTML = '<tr><td colspan="6" class="gb-log-laden">Laden…</td></tr>';
     if (statusEl) statusEl.textContent = '';
     try {
-        // filterValue: '' (alles), '__jury__' (alleen jury-app), '__org__'
-        // (alleen organisator), of een gebruiker-ID (alleen die persoon).
+        // filterValue: '' (alles), '__jury__' (jury-app), '__staff__'
+        // (organisatoren/staf), '__coach__' (coach-accounts), of een
+        // gebruiker-ID (alleen die persoon).
         let qs = '';
         if (filterValue === '__jury__')        qs = '?type=jury';
-        else if (filterValue === '__org__')    qs = '?type=organisator';
         else if (filterValue === '__coach__')  qs = '?type=coach';
         else if (filterValue === '__staff__')  qs = '?type=staff';
         else if (filterValue)                  qs = '?user_id=' + encodeURIComponent(filterValue);
@@ -85,6 +85,15 @@ async function laadLogboek(filterValue = '') {
             'jury-login-fail':           '<span class="gb-log-badge gb-log-fout">jury-login mislukt</span>',
             'jury-login-fail-noaccess':  '<span class="gb-log-badge gb-log-fout">jury-login geweigerd</span>',
             'jury-logout':               '<span class="gb-log-badge gb-log-out">jury-uitgelogd</span>',
+            // Coach-accounts: dezelfde kleur-semantiek (groen=in, grijs=uit,
+            // rood=fout/destructief, blauw=info, amber=in afwachting).
+            'coach-login':               '<span class="gb-log-badge gb-log-in">coach-login</span>',
+            'coach-logout':              '<span class="gb-log-badge gb-log-out">coach-uitgelogd</span>',
+            'coach-login-mislukt':       '<span class="gb-log-badge gb-log-fout">coach-login mislukt</span>',
+            'coach-register':            '<span class="gb-log-badge gb-log-info">coach-registratie</span>',
+            'coach-reset-aangevraagd':   '<span class="gb-log-badge gb-log-warn">reset aangevraagd</span>',
+            'coach-reset':               '<span class="gb-log-badge gb-log-in">wachtwoord reset</span>',
+            'coach-account-verwijderd':  '<span class="gb-log-badge gb-log-fout">account verwijderd</span>',
         };
         // Voor jury-rol-* (jury-rol-area_of_call, jury-rol-starter, ...) een
         // lichtblauwe badge met de rol-naam zonder prefix.
@@ -108,7 +117,8 @@ async function laadLogboek(filterValue = '') {
             const locatie = r.land
                 ? escHtml(r.land) + (r.stad ? `<span class="gb-log-stad">, ${escHtml(r.stad)}</span>` : '')
                 : '—';
-            return `<tr class="${r.actie === 'login_mislukt' ? 'gb-log-rij-fout' : ''}">
+            const isFout = r.actie === 'login_mislukt' || r.actie === 'coach-login-mislukt';
+            return `<tr class="${isFout ? 'gb-log-rij-fout' : ''}">
                 <td class="gb-log-ts">${ts}</td>
                 <td>${escHtml(r.naam)}<span class="gb-username"> @${escHtml(r.username)}</span></td>
                 <td>${badge}</td>
@@ -151,9 +161,8 @@ function renderLogboekSectie() {
                 <select id="gb-log-filter" class="inp gb-log-filter-sel">
                     <option value="">— Alles —</option>
                     <option value="__jury__">⚖ Alleen jury-app</option>
-                    <option value="__org__">👤 Alleen organisator-logins</option>
+                    <option value="__staff__">🔧 Alleen staf (organisatoren)</option>
                     <option value="__coach__">🧑‍🏫 Alleen coach-accounts</option>
-                    <option value="__staff__">🔧 Alleen staf</option>
                     <option disabled>──────────────</option>
                     ${gebruikerOpties}
                 </select>

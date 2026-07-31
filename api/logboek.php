@@ -28,32 +28,21 @@ try {
     if ($method === 'GET') {
         $userId = isset($_GET['user_id']) && $_GET['user_id'] !== ''
             ? (int)$_GET['user_id'] : 0;
-        // Speciale filter-types:
-        //   'jury'        = alle jury-app activiteit. De jury-app logt onder
-        //                   twee prefixen: 'jury-' (login/logout/rol-keuze) en
-        //                   'scheids-' (scheidsrechter-acties zoals
-        //                   status-wissels en reserve-inzet).
-        //   'organisator' = alle non-jury entries (reguliere staf-logins).
-        //   'coach'       = coach-account-activiteit (bron='coach', user_id NULL).
-        //   'staff'       = alle staf-entries (bron='staff').
+        // Speciale filter-types — lopen puur op de `bron`-kolom (staff/jury/coach),
+        // elkaar uitsluitend:
+        //   'jury'  = jury-app (bron='jury'). Acties met prefix 'jury-'/'scheids-'
+        //             en toekomstige rollen (bv. 'starter-') lopen vanzelf mee.
+        //   'staff' = organisator/staf-logins en -acties (bron='staff').
+        //   'coach' = coach-account-activiteit (bron='coach', user_id NULL).
+        // ('organisator' is vervallen — dat overlapte verwarrend met 'staff'.)
         $type   = trim((string)($_GET['type'] ?? ''));
 
         if ($type === 'jury') {
-            $stmt = $pdo->prepare("
+            $stmt = $pdo->query("
                 SELECT id, user_id, naam, username, actie, bron, ip_adres, land, stad, browser, os, tijdstip
-                FROM login_logs
-                WHERE actie LIKE 'jury-%' OR actie LIKE 'scheids-%'
+                FROM login_logs WHERE bron = 'jury'
                 ORDER BY tijdstip DESC LIMIT 500
             ");
-            $stmt->execute();
-        } elseif ($type === 'organisator') {
-            $stmt = $pdo->prepare("
-                SELECT id, user_id, naam, username, actie, bron, ip_adres, land, stad, browser, os, tijdstip
-                FROM login_logs
-                WHERE actie NOT LIKE 'jury-%' AND actie NOT LIKE 'scheids-%'
-                ORDER BY tijdstip DESC LIMIT 500
-            ");
-            $stmt->execute();
         } elseif ($type === 'coach') {
             $stmt = $pdo->query("
                 SELECT id, user_id, naam, username, actie, bron, ip_adres, land, stad, browser, os, tijdstip

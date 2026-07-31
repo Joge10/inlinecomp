@@ -10,6 +10,7 @@ header('Cache-Control: no-store, no-cache, must-revalidate, max-age=0');
 header('Pragma: no-cache');
 header('Expires: 0');
 require_once __DIR__ . '/../../config_inlinecomp.php';
+require_once __DIR__ . '/../inc/versie.php';
 
 // ── Bezoektracking: upsert session-hit in public_visits ─────────────────────
 // HTML-pageload → full INSERT/UPDATE (hits+1, user_agent, peak-check).
@@ -2064,6 +2065,13 @@ select:focus, input:focus { border-color: var(--middenblauw); outline: none; }
 }
 .btn-zoek:disabled { opacity: .4; cursor: not-allowed; }
 .btn-zoek:active { transform: scale(.98); }
+/* Max-rijders-hint + expliciete Sluiten-knop in de setup-modal. */
+.setup-max-hint { background:#fff8e1; color:#8a6d00; border:1px solid #ffe08a;
+    border-radius:8px; padding:9px 11px; font-size:.85rem; margin-top:10px; }
+.setup-modal-klaar { width:100%; margin-top:12px; padding:10px;
+    border:1px solid #ccd3db; background:#f4f6f9; color:#33506e;
+    border-radius:8px; font-size:.95rem; font-weight:600; cursor:pointer; }
+.setup-modal-klaar:hover { background:#e9eef5; }
 
 /* ── Comp info ── */
 .comp-info {
@@ -2155,24 +2163,24 @@ select:focus, input:focus { border-color: var(--middenblauw); outline: none; }
     overflow:hidden; text-overflow:ellipsis; white-space:nowrap;
     min-width:0; max-width:100%;
 }
+/* Inactieve tabs duidelijk teruggezet zodat de actieve eruit springt
+   (survey: "schakelen tussen kinderen is soms ingewikkeld"). Inactieve tabs
+   tonen ALLEEN het startnummer + × en krimpen tot hun inhoud, zodat bij 3-4
+   kinderen alles past en de × nooit van de tab afvalt of afgekapt wordt. De
+   actieve tab is breed (nummer + voornaam) en krijgt de resterende ruimte. */
+.kind-tab:not(.active) { background:#eef2f6; color:#8a97a5; flex:0 0 auto; }
+.kind-tab:not(.active) > span:nth-child(2) { display:none; }
 .kind-tab.active {
     color:var(--blauw); border-bottom-color:var(--oranje);
+    background:#fff6ef; font-weight:700; flex:1 1 auto;
 }
+/* Actief kind: oranje snr-badge — sterk signaal wie nu geselecteerd is. */
+.kind-tab.active .kind-tab-snr { background:var(--oranje); color:#fff; }
 .kind-tab .kind-tab-snr {
     background:var(--lichtblauw); color:var(--blauw);
     border-radius:8px; padding:1px 8px; font-weight:700;
     font-size:1rem; flex-shrink:0;
 }
-.kind-tab .kind-tab-close {
-    color:#999; font-size:1.15rem; cursor:pointer;
-    flex-shrink:0;
-    /* margin-left:auto = duw × naar de RECHTERKANT van de tab (snr+naam
-       links, × helemaal rechts). Zo raak je 'm nooit per ongeluk bij
-       snel-tikken op de tab. Padding = ruime touch-target. */
-    margin-left:auto; padding:4px 6px;
-    border-radius:4px;
-}
-.kind-tab .kind-tab-close:hover { color:#b71c1c; background:#f5e5e5; }
 .kind-tab-plus {
     display:inline-flex; align-items:center; justify-content:center;
     padding:10px 14px; font-size:1.35rem; font-weight:700;
@@ -2181,28 +2189,30 @@ select:focus, input:focus { border-color: var(--middenblauw); outline: none; }
     flex-shrink:0;                   /* + knop blijft altijd volledig zichtbaar */
 }
 .kind-tab-plus:disabled { color:#bbb; cursor:not-allowed; }
-/* Compactere tabs bij 3+ kinderen — kleinere padding & font, voornaam BLIJFT
-   zichtbaar (Geert 2026-07-01: alleen startnummer maakt de close-× te dicht
-   bij het klik-target voor tab-wissel). Bij ellipsis wordt de voornaam kort
-   afgekapt, maar zichtbaarheid van 't eerste stukje voorkomt misklikken. */
+/* "Je gevolgde rijders" in de setup-modal — chips met verwijder-× (verwijderen
+   is hierheen verplaatst vanuit de tabs). */
+.setup-volglijst:empty { display:none; }
+.setup-volglijst { margin:2px 0 14px; }
+.setup-volg-label { font-size:.8rem; font-weight:600; color:#556; margin-bottom:6px; }
+.setup-volg-chips { display:flex; flex-wrap:wrap; gap:6px; }
+.setup-volg-chip { display:inline-flex; align-items:center; gap:6px;
+    background:#eef2f6; border:1px solid #d5dee7; border-radius:999px; padding:3px 4px 3px 3px; }
+.setup-volg-snr { background:var(--lichtblauw); color:var(--blauw); border-radius:999px;
+    padding:1px 8px; font-weight:700; font-size:.82rem; }
+.setup-volg-naam { font-size:.9rem; color:#333; }
+.setup-volg-x { border:none; background:none; color:#b71c1c; font-size:1.15rem;
+    line-height:1; cursor:pointer; padding:2px 7px; border-radius:50%; }
+.setup-volg-x:hover { background:#f5e5e5; }
+/* Bij 3-4 kinderen: iets krappere horizontale padding zodat de brede actieve
+   tab (nummer + voornaam) genoeg ruimte houdt naast de smalle nummer-tabs.
+   (Vervangt de oude 2026-07-01-aanpak waarbij álle tabs de voornaam behielden;
+   nu tonen inactieve tabs alleen het nummer, wat de × altijd zichtbaar houdt.) */
 .kind-tabs[data-count="3"] .kind-tab,
-.kind-tabs[data-count="4"] .kind-tab {
-    padding:10px 4px; font-size:.95rem; gap:3px;
-}
+.kind-tabs[data-count="4"] .kind-tab { padding:10px 8px; gap:5px; font-size:1rem; }
 .kind-tabs[data-count="3"] .kind-tab .kind-tab-snr,
-.kind-tabs[data-count="4"] .kind-tab .kind-tab-snr {
-    font-size:.88rem; padding:1px 6px;
-}
-.kind-tabs[data-count="3"] .kind-tab .kind-tab-close,
-.kind-tabs[data-count="4"] .kind-tab .kind-tab-close {
-    /* Kleinere padding op krappe tab-breedte, margin-left:auto blijft
-       zodat × altijd tegen de rechterrand van de tab plakt. */
-    padding:3px 4px; font-size:1rem;
-}
+.kind-tabs[data-count="4"] .kind-tab .kind-tab-snr { font-size:.85rem; padding:1px 6px; }
 .kind-tabs[data-count="3"] .kind-tab-plus,
-.kind-tabs[data-count="4"] .kind-tab-plus {
-    padding:10px 10px;
-}
+.kind-tabs[data-count="4"] .kind-tab-plus { padding:10px 11px; font-size:1.15rem; }
 .tab-btn {
     flex: 1 1 0; min-width: 0;
     padding: 8px 2px; font-size: .72rem; font-weight: 600;
@@ -2332,6 +2342,9 @@ select:focus, input:focus { border-color: var(--middenblauw); outline: none; }
 .heat-card-tabel td { padding: 6px 8px; border-bottom: 1px solid #f0f2f5; }
 .heat-card-tabel tr:last-child td { border-bottom: none; }
 .heat-card-tabel .rij-ik { background: #fffbe6; font-weight: 700; }
+/* Ander gevolgd kind in dezelfde heat (rit-detail vanuit Programma) → violet,
+   zelfde semantiek als de programma-markering. */
+.heat-card-tabel .rij-familie { background: #f1ecfd; font-weight: 700; }
 .heat-card-tabel .col-pos { width: 28px; text-align: center; color: #aaa; }
 .heat-card-tabel .col-snr { width: 40px; font-weight: 600; color: var(--blauw); }
 .heat-card-tabel .col-naam { }
@@ -2700,6 +2713,22 @@ select:focus, input:focus { border-color: var(--middenblauw); outline: none; }
 .prog-groep.mijn {
     border-left: 4px solid var(--oranje, #E8630A);
 }
+/* Ander gevolgd kind rijdt in deze groep/rit → violette markering, duidelijk
+   anders dan de oranje/gele markering van de geselecteerde rijder. Alleen in de
+   Programma-tab (bewust, om dataverkeer te minimaliseren). */
+.prog-groep.familie { border-left: 4px solid #7c4dff; }
+.prog-rij-familie { background:#f1ecfd; margin:0 -16px; padding:6px 16px; border-radius:4px; }
+.prog-legenda { display:flex; flex-wrap:wrap; gap:14px; align-items:center;
+    font-size:.8rem; color:#555; padding:8px 2px 2px; }
+.prog-leg-item { display:inline-flex; align-items:center; gap:6px; }
+.prog-leg-swatch { width:14px; height:14px; border-radius:3px; flex-shrink:0; }
+.prog-leg-swatch.leg-mijn    { background:#fffbe6; border-left:4px solid var(--oranje,#E8630A); }
+.prog-leg-swatch.leg-familie { background:#f1ecfd; border-left:4px solid #7c4dff; }
+/* Geselecteerd kind ÉN een ander gevolgd kind in dezelfde rit: 👥 op de rij +
+   violet stipje op de (ook ingeklapte) groep-header. */
+.prog-rij-multi { font-size:.85rem; flex-shrink:0; }
+.prog-groep-multi-dot { width:9px; height:9px; border-radius:50%; background:#7c4dff;
+    display:inline-block; flex-shrink:0; margin-left:4px; }
 .prog-groep-hdr {
     display: flex; align-items: center; gap: 8px;
     padding: 8px 10px;
@@ -2925,6 +2954,7 @@ select:focus, input:focus { border-color: var(--middenblauw); outline: none; }
         <button class="setup-modal-close" type="button" onclick="closeSetupModal()"
                 data-i18n-title="pwa_btn_sluit" title="Sluiten">&times;</button>
         <h2 class="setup-modal-titel" data-i18n="setup_modal_titel">Wedstrijd &amp; rijder</h2>
+        <div id="setup-volglijst" class="setup-volglijst"></div>
         <div class="stap">
             <div class="stap-label">
                 <span class="stap-nr">1</span> <span data-i18n="stap1_label">Kies je wedstrijd</span>
@@ -2938,11 +2968,13 @@ select:focus, input:focus { border-color: var(--middenblauw); outline: none; }
             <select id="sel-comp"><option value="" data-i18n="opt_laden">Laden…</option></select>
         </div>
         <div id="comp-info" class="comp-info" style="display:none"></div>
-        <div class="stap">
+        <div class="stap" id="stap-rijder">
             <div class="stap-label"><span class="stap-nr">2</span> <span data-i18n="stap2_label">Startnummer, licentie of achternaam</span></div>
             <input type="text" id="inp-snr" data-i18n-placeholder="zoek_placeholder" placeholder="Startnummer, licentienr of achternaam…" autocomplete="off" inputmode="search">
         </div>
         <button class="btn-zoek" id="btn-zoek" data-i18n="btn_zoeken" disabled>Zoeken</button>
+        <div id="setup-max-hint" class="setup-max-hint" style="display:none"></div>
+        <button class="setup-modal-klaar" type="button" onclick="closeSetupModal()" data-i18n="pwa_btn_sluit">Sluiten</button>
     </div>
 </div>
 
@@ -2962,15 +2994,43 @@ if (is_readable($i18nPath)) {
 }
 ?>
 
-// ── App-versie (bijhouden bij elke user-visible wijziging) ─────────────────
-// Formaat: H<uren>.<MM>.<DD>       (uren sinds InlineComp v0 op OH850, 2026-06-20 00:00)
-// Rollover als de uren-teller onhandig lang wordt:
-//   H9999+ → Y<jaren>.<MM>.<DD>    waar 1 Y = 1 jaar (~8760 uur)
-// M (maanden) slaan we bewust over — anders komen we nooit bij Y ;)
-// Bij bump: bereken nieuwe uren-count sinds 2026-06-20, update datum, en
-// voeg een entry toe aan het "Wat is nieuw"-blok in toonHelp().
-// Versie verschijnt onder de copyright in de i-modal.
-const APP_VERSIE = 'H360.06.07';
+// App-versie: één gedeelde bron voor heel InlineComp (zie inc/versie.php).
+// Verschijnt onder de copyright in de i-modal en in "Wat is nieuw".
+const APP_VERSIE = <?= json_encode(INLINECOMP_VERSIE) ?>;
+
+// Master-changelog (inc/changelog.php) — hier gefilterd op het onderdeel
+// 'public'. Eén bron voor alle onderdelen; elk front-end toont z'n eigen slice.
+<?php
+    $__cl     = require __DIR__ . '/../inc/changelog.php';
+    $__clMine = array_values(array_filter($__cl, fn($e) => in_array('public', $e['onderdelen'], true)));
+?>
+const CHANGELOG = <?= json_encode($__clMine, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES) ?>;
+
+// Rendert de changelog: groepeert opeenvolgende entries per versie+datum en
+// kiest per regel de tekst in de actieve taal (fallback en → nl). De tekst is
+// bewust HTML (bevat <b>/<i>) en wordt niet ge-escaped — net als voorheen.
+function renderChangelog(entries) {
+    const lang = (typeof getCurLang === 'function') ? getCurLang() : 'nl';
+    const groepen = [];
+    for (const e of entries) {
+        const laatste = groepen[groepen.length - 1];
+        if (laatste && laatste.versie === e.versie && laatste.datum === e.datum) {
+            laatste.items.push(e);
+        } else {
+            groepen.push({ versie: e.versie, datum: e.datum, items: [e] });
+        }
+    }
+    return groepen.map(g => `
+        <div class="changelog-versie">
+            <div class="changelog-kop">
+                <span class="changelog-vnr">${g.versie}</span>
+                <span class="changelog-datum">${g.datum}</span>
+            </div>
+            <ul class="changelog-lijst">
+                ${g.items.map(it => `<li>${it.tekst[lang] || it.tekst.en || it.tekst.nl}</li>`).join('')}
+            </ul>
+        </div>`).join('');
+}
 
 // ── App-specifiek vertaal-woordenboek (NL + EN + DE + FR) ──────────────────
 // Toggle via vlag-knop in header. Persisteert in localStorage onder 'ic_lang'.
@@ -3017,6 +3077,7 @@ const T = {
         filter_later_title: 'Toekomstige wedstrijden',
         opt_laden: 'Laden…',
         zoek_placeholder: 'Startnummer, licentienr of achternaam…',
+        zoek_max_hint: 'Je volgt al het maximum van {max} rijders. Verwijder er eerst één hierboven om een andere toe te voegen.',
         btn_zoeken: 'Zoeken',
         // ── Connection banner ──
         conn_geen_internet: '📡 Geen internet — ververst zodra de verbinding terug is',
@@ -3051,6 +3112,7 @@ const T = {
         chooser_al_in_lijst: 'al in lijst',
         chooser_doet_niet_mee: 'doet niet mee in deze wedstrijd',
         chooser_max: 'Max {max} rijders · {vrij} plek(ken) vrij',
+        setup_volg_label: 'Je gevolgde rijders',
         chooser_toevoegen: 'Toevoegen',
         alert_max_bereikt: 'Maximum van {max} rijders bereikt. Verwijder eerst iemand om een nieuwe toe te voegen.',
         alert_max_select: 'Maximum {max} — er is nog plek voor {vrij}. Je hebt er {n} aangevinkt.',
@@ -3098,6 +3160,9 @@ const T = {
         prog_klap_alles_uit:  'Inklappen',
         prog_klap_alles_in:   'Uitklappen',
         prog_klap_mijn:       'Mijn ritten',
+        prog_leg_mijn:        'Geselecteerde rijder',
+        prog_leg_familie:     'Ander gevolgd kind',
+        prog_multi_title:     'Ook een ander gevolgd kind rijdt in deze rit',
         prog_klap_mijn_tooltip_pub: 'Jij zit in deze groep',
         prog_groep_status_klaar:  'Alle ritten in deze groep zijn verreden',
         prog_groep_status_deels:  'Uitslagverwerking bezig — deels verreden',
@@ -3172,14 +3237,6 @@ const T = {
         nieuw_jump: 'Direct naar Wat is nieuw ↓',
         nieuw_h: 'Wat is nieuw?',
         nieuw_intro: 'Kort overzicht van recente wijzigingen. Voor terugkerende gebruikers een compacte samenvatting van de aanpassingen.',
-        nieuw_v100_12_html: '<b>Heats op finish-volgorde</b> — na de finish worden de rijders in de Heats-tab weergegeven in de volgorde waarin ze zijn gefinisht, zodat de eindstand van een heat in één oogopslag zichtbaar is.',
-        nieuw_v100_7_html: '<b>Rondes-tab</b> — nieuw tabblad met jouw uitslag per ronde: welke plek je hebt gehaald in de serie, kwart of halve finale, of je bent doorgestroomd naar de A-finale of kleine finale, en waar je uiteindelijk bent geëindigd. Vervangt de vorige "Resultaten"-tab.',
-        nieuw_v100_2_html: '<b>Snelle wedstrijd-selectie</b> in een nieuw <b>openings-venster</b> met filter-knoppen <i>Eerder / Vandaag / Later</i>. Verschijnt automatisch bij het openen van de app en sluit zodra een wedstrijd is geselecteerd — directe focus op de keuze, daarna de volledige ruimte voor het overzicht.',
-        nieuw_v100_4_html: '<b>Bruto-tijd</b> zichtbaar naast de netto-tijd — herkenbaar aan ✋ (handmatige correctie) of 📷 (foto-finish correctie). Zo zie je in "Jouw resultaat" en in de heat-tabellen precies wanneer een correctie op de klokwaarde is toegepast.',
-        nieuw_v100_11_html: '<b>Klassering per categorie</b> in de Uitslagen-tab — bij gecombineerde races (bv. HJA + HSA samen) verschijnt naast de overall rang een aparte kolom per categorie, zodat in één oogopslag zichtbaar is welke plek binnen de eigen categorie is behaald.',
-        nieuw_v100_9_html: '<b>Kleine verbeteringen</b> voor de weergave op smalle schermen en de navigatie — waaronder filter-knoppen die weer binnen het openings-venster passen.',
-        nieuw_v100_13_html: '<b>Filter op afstand + inklap-balk</b> in het programma — kies één afstand (bv. 500m) en gebruik de segment-knoppen <i>Inklappen / Uitklappen / Mijn</i> om binnen die afstand groepen dicht te klappen, allemaal open te zetten, of alleen je eigen ritten te tonen.',
-        nieuw_v100_14_html: '<b>Kleine verbeteringen en bug-fixes</b> in de weergave van het programma.',
         // ── Help modal ──
         help_titel: 'Hoe werkt InlineComp?',
         help_h1: 'Aan de slag',
@@ -3244,6 +3301,7 @@ const T = {
         filter_later_title: 'Upcoming races',
         opt_laden: 'Loading…',
         zoek_placeholder: 'Start number, license nr or last name…',
+        zoek_max_hint: 'You already follow the maximum of {max} skaters. Remove one above first to add another.',
         btn_zoeken: 'Search',
         // ── Connection banner ──
         conn_geen_internet: '📡 No internet — will refresh when the connection returns',
@@ -3278,6 +3336,7 @@ const T = {
         chooser_al_in_lijst: 'already in list',
         chooser_doet_niet_mee: 'not participating in this race',
         chooser_max: 'Max {max} skaters · {vrij} spot(s) free',
+        setup_volg_label: 'Skaters you follow',
         chooser_toevoegen: 'Add',
         alert_max_bereikt: 'Maximum of {max} skaters reached. Remove someone first to add a new one.',
         alert_max_select: 'Maximum {max} — there is room for {vrij}. You selected {n}.',
@@ -3317,6 +3376,9 @@ const T = {
         prog_klap_alles_uit:  'Collapse',
         prog_klap_alles_in:   'Expand',
         prog_klap_mijn:       'My races',
+        prog_leg_mijn:        'Selected skater',
+        prog_leg_familie:     'Other followed skater',
+        prog_multi_title:     'Another followed skater also races in this race',
         prog_klap_mijn_tooltip_pub: 'You are in this group',
         prog_groep_status_klaar:  'All races in this group have been raced',
         prog_groep_status_deels:  'Result processing ongoing — partially raced',
@@ -3398,14 +3460,6 @@ const T = {
         nieuw_jump: 'Jump to What\'s new ↓',
         nieuw_h: 'What\'s new?',
         nieuw_intro: 'Short overview of recent changes. A compact summary of what has been adjusted, aimed at returning users.',
-        nieuw_v100_12_html: '<b>Heats in finish order</b> — after the finish, skaters in the Heats tab are shown in the order in which they finished, so the outcome of a heat is visible at a glance.',
-        nieuw_v100_7_html: '<b>Rounds tab</b> — new tab with your result per round: what place you took in the heat, quarter or semi-final, whether you progressed to the A-final or small final, and where you eventually finished. Replaces the previous "Results" tab.',
-        nieuw_v100_2_html: '<b>Quick race selection</b> in a new <b>opening window</b> with filter buttons <i>Earlier / Today / Later</i>. Appears automatically when the app opens and closes as soon as a race is selected — direct focus on the choice, then the full space for the overview.',
-        nieuw_v100_4_html: '<b>Raw time</b> visible next to the net time — marked with ✋ (manual correction) or 📷 (photo-finish correction). This way you see in "Your result" and the heat tables exactly when a correction was applied to the clock value.',
-        nieuw_v100_11_html: '<b>Ranking per category</b> in the Results tab — for combined races (e.g. HJA + HSA together) a separate column per category appears next to the overall rank, so the position achieved within the own category is visible at a glance.',
-        nieuw_v100_9_html: '<b>Small improvements</b> to the display on narrow screens and to navigation — including filter buttons that now fit within the opening window.',
-        nieuw_v100_13_html: '<b>Filter by distance + collapse bar</b> in the program — pick a single distance (e.g. 500m) and use the segment buttons <i>Collapse / Expand / Mine</i> to close groups within that distance, open them all, or show only your own races.',
-        nieuw_v100_14_html: '<b>Small improvements and bug fixes</b> in the program view.',
         // ── Help modal ──
         help_titel: 'How does InlineComp work?',
         help_h1: 'Getting started',
@@ -3470,6 +3524,7 @@ const T = {
         filter_later_title: 'Kommende Rennen',
         opt_laden: 'Lädt…',
         zoek_placeholder: 'Startnummer, Lizenznr. oder Nachname…',
+        zoek_max_hint: 'Du verfolgst bereits das Maximum von {max} Läufern. Entferne zuerst einen oben, um einen anderen hinzuzufügen.',
         btn_zoeken: 'Suchen',
         // ── Connection banner ──
         conn_geen_internet: '📡 Kein Internet — wird bei wiederhergestellter Verbindung aktualisiert',
@@ -3504,6 +3559,7 @@ const T = {
         chooser_al_in_lijst: 'bereits in Liste',
         chooser_doet_niet_mee: 'nimmt nicht an diesem Rennen teil',
         chooser_max: 'Max. {max} Skater · {vrij} Platz(e) frei',
+        setup_volg_label: 'Deine verfolgten Läufer',
         chooser_toevoegen: 'Hinzufügen',
         alert_max_bereikt: 'Maximum von {max} Skatern erreicht. Entferne zuerst jemanden, um einen neuen hinzuzufügen.',
         alert_max_select: 'Maximum {max} — es ist Platz für {vrij}. Du hast {n} ausgewählt.',
@@ -3551,6 +3607,9 @@ const T = {
         prog_klap_alles_uit:  'Einklappen',
         prog_klap_alles_in:   'Ausklappen',
         prog_klap_mijn:       'Meine Rennen',
+        prog_leg_mijn:        'Ausgewählter Läufer',
+        prog_leg_familie:     'Anderer verfolgter Läufer',
+        prog_multi_title:     'Auch ein anderer verfolgter Läufer startet in diesem Lauf',
         prog_klap_mijn_tooltip_pub: 'Du bist in dieser Gruppe',
         prog_groep_status_klaar:  'Alle Rennen dieser Gruppe wurden gefahren',
         prog_groep_status_deels:  'Ergebnisverarbeitung läuft — teilweise gefahren',
@@ -3624,14 +3683,6 @@ const T = {
         nieuw_jump: 'Direkt zu Was ist neu ↓',
         nieuw_h: 'Was ist neu?',
         nieuw_intro: 'Kurze Übersicht der jüngsten Änderungen. Für wiederkehrende Nutzer eine kompakte Zusammenfassung der Anpassungen.',
-        nieuw_v100_12_html: '<b>Heats in Zieleinlaufreihenfolge</b> — nach dem Zieleinlauf werden die Läufer im Heats-Tab in der Reihenfolge des Zieleinlaufs angezeigt, sodass das Ergebnis eines Heats auf einen Blick sichtbar ist.',
-        nieuw_v100_7_html: '<b>Runden-Tab</b> — neuer Tab mit deinem Ergebnis pro Runde: welchen Platz du im Vorlauf, Viertel- oder Halbfinale belegt hast, ob du ins A-Finale oder kleine Finale weitergekommen bist, und wo du am Ende gelandet bist. Ersetzt den bisherigen "Resultate"-Tab.',
-        nieuw_v100_2_html: '<b>Schnelle Rennauswahl</b> in einem neuen <b>Startfenster</b> mit Filter-Buttons <i>Früher / Heute / Später</i>. Erscheint automatisch beim Öffnen der App und schließt, sobald ein Rennen ausgewählt wurde — direkter Fokus auf die Auswahl, danach der volle Platz für die Übersicht.',
-        nieuw_v100_4_html: '<b>Bruttozeit</b> sichtbar neben der Nettozeit — kenntlich an ✋ (Handkorrektur) oder 📷 (Fotofinish-Korrektur). So siehst du in "Dein Ergebnis" und in den Heat-Tabellen genau, wann eine Korrektur der Uhrzeit erfolgt ist.',
-        nieuw_v100_11_html: '<b>Platzierung pro Kategorie</b> im Ergebnisse-Tab — bei kombinierten Rennen (z.B. HJA + HSA zusammen) erscheint neben dem Gesamtrang eine separate Spalte pro Kategorie, sodass die innerhalb der eigenen Kategorie erreichte Platzierung auf einen Blick sichtbar ist.',
-        nieuw_v100_9_html: '<b>Kleine Verbesserungen</b> an der Darstellung auf schmalen Bildschirmen und der Navigation — u.a. Filter-Buttons, die wieder in das Startfenster passen.',
-        nieuw_v100_13_html: '<b>Distanz-Filter + Ein-/Ausklapp-Leiste</b> im Programm — wähle eine Distanz (z.B. 500m) und benutze die Segment-Buttons <i>Einklappen / Ausklappen / Meine</i>, um Gruppen innerhalb dieser Distanz zu schließen, alle zu öffnen oder nur deine eigenen Rennen zu zeigen.',
-        nieuw_v100_14_html: '<b>Kleine Verbesserungen und Fehlerbehebungen</b> in der Programm-Ansicht.',
         // ── Help modal ──
         help_titel: 'Wie funktioniert InlineComp?',
         help_h1: 'Loslegen',
@@ -3696,6 +3747,7 @@ const T = {
         filter_later_title: 'Courses à venir',
         opt_laden: 'Chargement…',
         zoek_placeholder: 'Numéro de dossard, nº de licence ou nom…',
+        zoek_max_hint: 'Tu suis déjà le maximum de {max} skateurs. Supprime-en un ci-dessus pour en ajouter un autre.',
         btn_zoeken: 'Rechercher',
         // ── Connection banner ──
         conn_geen_internet: '📡 Pas d\'internet — actualisation dès le retour de la connexion',
@@ -3730,6 +3782,7 @@ const T = {
         chooser_al_in_lijst: 'déjà dans la liste',
         chooser_doet_niet_mee: 'ne participe pas à cette course',
         chooser_max: 'Max. {max} skateurs · {vrij} place(s) libre(s)',
+        setup_volg_label: 'Skateurs que tu suis',
         chooser_toevoegen: 'Ajouter',
         alert_max_bereikt: 'Maximum de {max} skateurs atteint. Retire d\'abord quelqu\'un pour en ajouter un nouveau.',
         alert_max_select: 'Maximum {max} — il reste de la place pour {vrij}. Tu en as sélectionné {n}.',
@@ -3777,6 +3830,9 @@ const T = {
         prog_klap_alles_uit:  'Réduire',
         prog_klap_alles_in:   'Développer',
         prog_klap_mijn:       'Mes courses',
+        prog_leg_mijn:        'Skateur sélectionné',
+        prog_leg_familie:     'Autre skateur suivi',
+        prog_multi_title:     'Un autre skateur suivi court aussi dans cette course',
         prog_klap_mijn_tooltip_pub: 'Tu es dans ce groupe',
         prog_groep_status_klaar:  'Toutes les courses de ce groupe sont terminées',
         prog_groep_status_deels:  'Traitement des résultats en cours — partiel',
@@ -3850,14 +3906,6 @@ const T = {
         nieuw_jump: 'Aller à Quoi de neuf ↓',
         nieuw_h: 'Quoi de neuf ?',
         nieuw_intro: 'Bref aperçu des changements récents. Un résumé compact des ajustements, destiné aux utilisateurs habitués.',
-        nieuw_v100_12_html: '<b>Séries dans l\'ordre d\'arrivée</b> — après l\'arrivée, les skateurs dans l\'onglet Séries sont affichés dans l\'ordre d\'arrivée, ce qui rend le résultat d\'une série visible d\'un coup d\'œil.',
-        nieuw_v100_7_html: '<b>Onglet Rondes</b> — nouvel onglet avec ton résultat par tour : quelle place tu as prise en série, quart ou demi-finale, si tu es passé en finale A ou petite finale, et où tu as terminé. Remplace l\'ancien onglet "Résultats".',
-        nieuw_v100_2_html: '<b>Sélection rapide de course</b> dans une nouvelle <b>fenêtre d\'ouverture</b> avec les boutons de filtre <i>Antérieur / Aujourd\'hui / Plus tard</i>. Apparaît automatiquement à l\'ouverture de l\'appli et se ferme dès qu\'une course est sélectionnée — focus direct sur le choix, puis tout l\'espace pour l\'aperçu.',
-        nieuw_v100_4_html: '<b>Temps brut</b> visible à côté du temps net — marqué ✋ (correction manuelle) ou 📷 (correction photo-finish). Ainsi tu vois dans "Ton résultat" et les tableaux de séries exactement quand une correction a été appliquée au temps de l\'horloge.',
-        nieuw_v100_11_html: '<b>Classement par catégorie</b> dans l\'onglet Résultats — pour les courses combinées (par ex. HJA + HSA ensemble) une colonne distincte par catégorie apparaît à côté du rang général, ce qui rend la place obtenue dans la propre catégorie visible d\'un coup d\'œil.',
-        nieuw_v100_9_html: '<b>Petites améliorations</b> pour l\'affichage sur écrans étroits et pour la navigation — dont des boutons de filtre qui tiennent à nouveau dans la fenêtre d\'ouverture.',
-        nieuw_v100_13_html: '<b>Filtre par distance + barre pliage</b> dans le programme — choisis une distance (par ex. 500m) et utilise les boutons de segment <i>Réduire / Développer / Les miens</i> pour fermer les groupes dans cette distance, tous les ouvrir, ou n\'afficher que tes propres courses.',
-        nieuw_v100_14_html: '<b>Petites améliorations et corrections</b> dans l\'affichage du programme.',
         // ── Help modal ──
         help_titel: 'Comment fonctionne InlineComp ?',
         help_h1: 'Démarrer',
@@ -4109,7 +4157,7 @@ function heatTabelHeader(extra) {
         + (extra.heeftPK  ? `<th class="col-pk">${t('col_pnt')}</th>` : '')
         + `<th class="col-tijd">${t('col_tijd')}</th></tr>`;
 }
-function heatTabelRij(r, isIk, extra) {
+function heatTabelRij(r, isIk, extra, isFamilie = false) {
     const rTijd = r.tijd_ms != null ? msTijd(r.tijd_ms) : '';
     // Fin-kolom: heat-lokale finishpositie voor finishers. Voor non-finishers
     // (DNF/DNS/DQ-*) leeg, ook als de operator toevallig een finishpositie
@@ -4135,7 +4183,7 @@ function heatTabelRij(r, isIk, extra) {
     const auditIcon = heeftAudit
         ? `<span class="col-tijd-audit">${r.is_photofinish == 1 ? '📷' : '✋'}</span>`
         : '';
-    return `<tr class="${isIk ? 'rij-ik' : ''}">
+    return `<tr class="${isIk ? 'rij-ik' : (isFamilie ? 'rij-familie' : '')}">
         <td class="col-pos">${r.startpositie}</td>
         <td class="col-snr">${esc(r.snr)}</td>
         <td class="col-fin">${esc(rFin)}</td>
@@ -4427,6 +4475,16 @@ async function toonRitDetail(el) {
     // snr alleen zou bij twee rijders met zelfde nr beide rijen highlighten.
     const actiefKind = (typeof _kinderen !== 'undefined') ? _kinderen[_activeKindIdx] : null;
     const actiefLic = actiefKind?.data?.[actiefKind?.kozen_idx ?? 0]?.persoon?.license_key || null;
+    // License_keys van de ándere gevolgde kinderen — voor de violette markering
+    // in deze startlijst. Lokaal uit _kinderen; de startlijst zelf wordt tóch al
+    // opgehaald voor het detail, dus geen extra dataverkeer.
+    const familieLics = new Set();
+    if (typeof _kinderen !== 'undefined' && _kinderen.length > 1) {
+        for (const _k of _kinderen) {
+            const _lic = _k.data?.[_k.kozen_idx ?? 0]?.persoon?.license_key;
+            if (_lic && _lic !== actiefLic) familieLics.add(_lic);
+        }
+    }
     if (!ritNaam || !compId) return;
 
     // Overlay aanmaken
@@ -4461,7 +4519,8 @@ async function toonRitDetail(el) {
             const isHuidig = (actiefLic && r.license_key)
                 ? r.license_key === actiefLic
                 : String(r.snr) === snr;
-            rows += heatTabelRij(r, isHuidig, extra);
+            const isFamilie = !isHuidig && r.license_key && familieLics.has(r.license_key);
+            rows += heatTabelRij(r, isHuidig, extra, isFamilie);
         }
 
         overlay.querySelector('.overlay-box').innerHTML = `
@@ -4634,6 +4693,7 @@ function _zoekModus(tekst) {
 }
 
 btnZoek.addEventListener('click', async () => {
+    if (_loadKidsUitStorage().length >= MAX_KINDEREN) return;   // max bereikt — eerst verwijderen
     const compId = selComp.value, tekst = inpSnr.value.trim();
     if (!compId || !tekst) return;
     const modus = _zoekModus(tekst);
@@ -4690,9 +4750,11 @@ btnZoek.addEventListener('click', async () => {
 // category, club_short}. Na "Toevoegen" wordt per gekozen license_key een
 // volledige lookup gedaan en aan _kinderen toegevoegd.
 function toonChooserModal(rijen, term, compId) {
-    // Reeds in de lijst → uitschakelen
-    const al = new Set(_kinderen.map(k => k.data[k.kozen_idx ?? 0]?.persoon?.license_key).filter(Boolean));
-    const plaatsVrij = MAX_KINDEREN - _kinderen.length;
+    // Reeds gevolgd (globale volglijst) → uitschakelen. Ook rijders die je volgt
+    // maar die niet in déze wedstrijd meedoen tellen mee, zodat je nooit boven
+    // het maximum van de globale volglijst uitkomt.
+    const al = new Set(_loadKidsUitStorage().map(k => k.license_key).filter(Boolean));
+    const plaatsVrij = MAX_KINDEREN - _loadKidsUitStorage().length;
 
     const modal = document.createElement('div');
     modal.className = 'naamzoek-modal';
@@ -4899,6 +4961,67 @@ function openSetupModal() {
     const m = document.getElementById('setup-modal');
     if (m) m.classList.add('open');
     document.body.style.overflow = 'hidden'; // scroll-lock achtergrond
+    _renderSetupVolglijst();
+    _updateSetupModalMax();
+}
+// Bij het maximum aantal rijders: zoekveld + Zoeken uit + uitleg-hint, zodat
+// duidelijk is dat je eerst een rijder moet verwijderen (via de chips hierboven).
+function _updateSetupModalMax() {
+    const vol = _loadKidsUitStorage().length >= MAX_KINDEREN;   // globale volglijst
+    // Bij max: verberg de hele rijder-zoekstap (label + veld) én de Zoeken-knop,
+    // en toon de hint op díé plek — i.p.v. een grijs, ogenschijnlijk bruikbaar veld.
+    const stap = document.getElementById('stap-rijder');
+    if (stap)   stap.style.display = vol ? 'none' : '';
+    if (inpSnr) inpSnr.disabled = vol;
+    if (btnZoek) { btnZoek.style.display = vol ? 'none' : ''; if (vol) btnZoek.disabled = true; }
+    const hint = document.getElementById('setup-max-hint');
+    if (hint) {
+        hint.style.display = vol ? '' : 'none';
+        if (vol) hint.textContent = t('zoek_max_hint', { max: MAX_KINDEREN });
+    }
+}
+// "Je gevolgde rijders" in de setup-modal: chips met verwijder-×. Hier gebeurt
+// het verwijderen (weggehaald uit de tabs, die waren te krap op smal scherm).
+function _renderSetupVolglijst() {
+    const el = document.getElementById('setup-volglijst');
+    if (!el) return;
+    // Bron = de OPGESLAGEN (globale) volglijst, niet _kinderen. _kinderen is de
+    // per-wedstrijd-subset (nog leeg vóór wedstrijdkeuze); de opgeslagen lijst
+    // kennen we synchroon uit localStorage, dus ook bij vers openen klopt 't.
+    const saved = _loadKidsUitStorage();
+    if (!saved.length) { el.innerHTML = ''; return; }
+    const chips = saved.map(k => {
+        // Live-gegevens (startnummer) als deze rijder in de huidige wedstrijd
+        // geladen is; anders de opgeslagen naam-hint.
+        const live = _kinderen.find(x => x.data?.[x.kozen_idx ?? 0]?.persoon?.license_key === k.license_key);
+        const p = live?.data?.[live.kozen_idx ?? 0]?.persoon;
+        const naam = p?.full_name || k.naam_hint || t('kind_rijder_placeholder');
+        const snr = live ? live.snr : '';
+        return `<span class="setup-volg-chip">
+            ${snr ? `<span class="setup-volg-snr">${esc(snr)}</span>` : ''}
+            <span class="setup-volg-naam">${esc(naam)}</span>
+            <button type="button" class="setup-volg-x" data-lic="${esc(k.license_key)}" title="${esc(t('kind_tab_verwijder'))}">&times;</button>
+        </span>`;
+    }).join('');
+    el.innerHTML = `<div class="setup-volg-label">${esc(t('setup_volg_label'))}</div>
+        <div class="setup-volg-chips">${chips}</div>`;
+    el.querySelectorAll('.setup-volg-x').forEach(b => b.addEventListener('click', () => {
+        _verwijderGevolgdeRijder(b.dataset.lic);
+        _renderSetupVolglijst();   // modal-lijst meteen verversen
+        _updateSetupModalMax();    // zoekveld weer aan als onder max
+    }));
+}
+// Verwijder een rijder uit de globale volglijst (localStorage) én uit de live
+// per-wedstrijd-lijst als 'ie daar geladen is (dan hoofdweergave verversen).
+function _verwijderGevolgdeRijder(lic) {
+    localStorage.setItem(KIDS_LS_KEY,
+        JSON.stringify(_loadKidsUitStorage().filter(k => k.license_key !== lic)));
+    const idx = _kinderen.findIndex(x => x.data?.[x.kozen_idx ?? 0]?.persoon?.license_key === lic);
+    if (idx !== -1) {
+        _kinderen.splice(idx, 1);
+        if (_activeKindIdx >= _kinderen.length) _activeKindIdx = Math.max(0, _kinderen.length - 1);
+        renderKinderen();   // tabs/hoofdweergave bijwerken (schrijft de opgeslagen lijst niet terug)
+    }
 }
 function closeSetupModal() {
     const m = document.getElementById('setup-modal');
@@ -5088,22 +5211,22 @@ function renderKinderen() {
         const p = k.data[k.kozen_idx ?? 0]?.persoon;
         const naam = p?.full_name ? p.full_name.split(' ')[0] : ''; // alleen voornaam in tab — kort
         const actief = idx === _activeKindIdx ? ' active' : '';
-        // ×-knop altijd beschikbaar — ook bij 1 kind handig (je hebt misschien
-        // per ongeluk de verkeerde rijder geselecteerd). verwijderKind()
-        // ruimt bij laatste-kind de view netjes op.
-        const closeBtn = `<span class="kind-tab-close" data-kind-close="${idx}" title="${esc(t('kind_tab_verwijder'))}">×</span>`;
+        // Geen ×-knop meer in de tab — die werd te krap op smalle telefoons bij
+        // 3-4 kinderen (× viel weg / actieve tab klapte in). Verwijderen gaat nu
+        // via de + / setup-modal onder "Je gevolgde rijders" (zoals de coach-app).
         return `<button class="kind-tab${actief}" data-kind-idx="${idx}">
             <span class="kind-tab-snr">${esc(k.snr)}</span>
             <span>${esc(naam || t('kind_rijder_placeholder'))}</span>
-            ${closeBtn}
         </button>`;
     }).join('');
     // Bij 3+ kinderen wordt het tabblad krap op telefoon-breedte. CSS
     // gebruikt data-count om dan compactere stijl toe te passen (voornaam
     // weg, kleinere padding) — de × moet altijd zichtbaar blijven.
-    const plusKnop = _kinderen.length < MAX_KINDEREN
-        ? `<button class="kind-tab-plus" id="kind-tab-plus" title="${esc(t('kind_plus_title'))}">+</button>`
-        : `<button class="kind-tab-plus" disabled title="${esc(t('kind_plus_max', {max: MAX_KINDEREN}))}">+</button>`;
+    // + altijd klikbaar: opent de modal om rijders te beheren (toevoegen én
+    // verwijderen). Bij max kun je zo alsnog iemand verwijderen; de titel legt
+    // uit dat toevoegen pas kan na een verwijdering.
+    const plusVol = _loadKidsUitStorage().length >= MAX_KINDEREN;
+    const plusKnop = `<button class="kind-tab-plus" id="kind-tab-plus" title="${esc(plusVol ? t('kind_plus_max', {max: MAX_KINDEREN}) : t('kind_plus_title'))}">+</button>`;
 
     divResult.innerHTML = `
         <div class="kind-tabs" data-count="${_kinderen.length}">${tabsHtml}${plusKnop}</div>
@@ -5111,24 +5234,17 @@ function renderKinderen() {
 
     // Click-handlers op kind-tabs
     divResult.querySelectorAll('.kind-tab').forEach(btn => {
-        btn.addEventListener('click', e => {
-            if (e.target.classList.contains('kind-tab-close')) {
-                const ci = parseInt(e.target.dataset.kindClose);
-                verwijderKind(ci);
-                e.stopPropagation();
-                return;
-            }
-            const idx = parseInt(btn.dataset.kindIdx);
-            wisselKind(idx);
-        });
+        btn.addEventListener('click', () => wisselKind(parseInt(btn.dataset.kindIdx)));
     });
     const plusEl = document.getElementById('kind-tab-plus');
     if (plusEl) plusEl.addEventListener('click', () => {
-        // Setup-modal open + focus de zoek-input voor snelle rijder-toevoeging.
+        // Setup-modal open. GEEN auto-focus op het zoekveld: op mobiel klapt dan
+        // meteen het toetsenbord op en dat duwt de modal (incl. "Je gevolgde
+        // rijders") weg. Toetsenbord verschijnt pas als de bediener zelf in het
+        // veld tikt.
         inpSnr.value = '';
         btnZoek.disabled = true;
         openSetupModal();
-        setTimeout(() => inpSnr.focus(), 60);
     });
 
     // Content van actieve kind renderen
@@ -5418,6 +5534,27 @@ function renderResultaat(data, snr, prog) {
                     <button type="button" class="prog-klap-btn" data-actie="mijn" onclick="klapProgPub(this,'mijn')">👤 ${esc(t('prog_klap_mijn'))}</button>
                 </div>`;
 
+                // Rit-namen van de ándere gevolgde kinderen — lokaal uit _kinderen
+                // (elk kind heeft z'n lookup/heats al opgehaald), dus GÉÉN extra
+                // dataverkeer. Alleen hier (Programma-tab) markeren we ze, in een
+                // andere kleur dan de geselecteerde rijder.
+                const _actLic = r.persoon?.license_key;
+                const familieRitNamen = new Set();
+                if (typeof _kinderen !== 'undefined' && _kinderen.length > 1) {
+                    for (const _k of _kinderen) {
+                        const _kp   = _k.data?.[_k.kozen_idx ?? 0];
+                        const _kLic = _kp?.persoon?.license_key;
+                        if (!_kp || !_kLic || _kLic === _actLic) continue;
+                        for (const _h of (_kp.heats || [])) if (_h.rit_naam) familieRitNamen.add(_h.rit_naam);
+                    }
+                }
+                if (familieRitNamen.size) {
+                    html += `<div class="prog-legenda">
+                        <span class="prog-leg-item"><span class="prog-leg-swatch leg-mijn"></span>${esc(t('prog_leg_mijn'))}</span>
+                        <span class="prog-leg-item"><span class="prog-leg-swatch leg-familie"></span>${esc(t('prog_leg_familie'))}</span>
+                    </div>`;
+                }
+
                 let nr = 0;
                 let vorigeDag = null;
                 let vorigeCombi = null;
@@ -5426,6 +5563,7 @@ function renderResultaat(data, snr, prog) {
                 // Live-tellers voor de huidige groep. Post-render vullen we
                 // de markers met mijn-dot en status-icoon aan.
                 let huidigeGroepHeeftMijn = false;
+                let huidigeGroepHeeftFamilie = false;
                 let huidigeGroepAantalRitten = 0;
                 let huidigeGroepMetRes = 0;
                 let huidigeGroepDefinitief = 0;
@@ -5459,11 +5597,13 @@ function renderResultaat(data, snr, prog) {
                         groepHdrPlaceholders.push({
                             key: vorigeGroepKey,
                             heeftMijn: huidigeGroepHeeftMijn,
+                            heeftFamilie: huidigeGroepHeeftFamilie,
                             statusIcon: st.icon,
                             statusKey: st.i18nKey,
                         });
                         vorigeGroepKey = null;
                         huidigeGroepHeeftMijn = false;
+                        huidigeGroepHeeftFamilie = false;
                         huidigeGroepAantalRitten = 0;
                         huidigeGroepMetRes = 0;
                         huidigeGroepDefinitief = 0;
@@ -5492,10 +5632,12 @@ function renderResultaat(data, snr, prog) {
                             <span class="prog-groep-chev">▼</span>
                             <span class="prog-groep-status">${iconMarker}</span>
                             <span class="prog-groep-titel">${rondeLbl}${esc(rit.dc_naam ?? '')}</span>
+                            [[MULTI-DOT-${idx}]]
                         </div>
                         <div class="prog-groep-body">`;
                     vorigeGroepKey = key;
                     huidigeGroepHeeftMijn = false;
+                    huidigeGroepHeeftFamilie = false;
                     huidigeGroepAantalRitten = 0;
                     huidigeGroepMetRes = 0;
                     huidigeGroepDefinitief = 0;
@@ -5552,7 +5694,11 @@ function renderResultaat(data, snr, prog) {
                     }
 
                     const isInRit = r.heats.some(h => h.rit_naam === rit.rit_naam);
+                    const heeftAnder = familieRitNamen.has(rit.rit_naam);
+                    const isFamilie  = !isInRit && heeftAnder;   // alleen ander kind → violet
+                    const ookFamilie =  isInRit && heeftAnder;   // geselecteerd kind + ander kind samen
                     if (isInRit) huidigeGroepHeeftMijn = true;
+                    if (heeftAnder) huidigeGroepHeeftFamilie = true;
                     huidigeGroepAantalRitten += 1;
                     const gereden = rit.resultaten_count > 0;
                     if (gereden) huidigeGroepMetRes += 1;
@@ -5564,11 +5710,12 @@ function renderResultaat(data, snr, prog) {
                                      : '';
                     const opmHtml = rit.rit_opmerking
                         ? `<div class="prog-rit-opm">📝 ${esc(rit.rit_opmerking)}</div>` : '';
-                    html += `<div class="prog-rij${isInRit ? ' prog-rij-mijn' : ''}" style="${isInRit ? 'background:#fffbe6;font-weight:600;margin:0 -16px;padding:6px 16px;border-radius:4px' : ''};cursor:pointer"
+                    html += `<div class="prog-rij${isInRit ? ' prog-rij-mijn' : ''}${isFamilie ? ' prog-rij-familie' : ''}" style="${isInRit ? 'background:#fffbe6;font-weight:600;margin:0 -16px;padding:6px 16px;border-radius:4px' : ''};cursor:pointer"
                                  data-rit-naam="${esc(rit.rit_naam)}" data-dc-naam="${esc(rit.dc_naam)}"
                                  data-dag-nr="${dag}" onclick="toonRitDetail(this)">
                         <span class="prog-nr">${statusIcon} ${nr}</span>
                         <span class="prog-naam">${esc(rit.rit_naam)}${opmHtml}</span>
+                        ${ookFamilie ? `<span class="prog-rij-multi" title="${esc(t('prog_multi_title'))}">👥</span>` : ''}
                         <span class="prog-type heat-card-badge ${BADGE[rt]??'badge-serie'}">${esc(getRondeLabel(rt))}</span>
                     </div>`;
                 });
@@ -5583,8 +5730,11 @@ function renderResultaat(data, snr, prog) {
                     const iconHtml = p.statusIcon
                         ? `<span title="${esc(t(p.statusKey))}">${p.statusIcon}</span>`
                         : '';
-                    const klasseHtml = p.heeftMijn ? ' mijn' : '';
-                    html = html.replace(iconMarker, iconHtml).replace(klasseMarker, klasseHtml);
+                    const klasseHtml = p.heeftMijn ? ' mijn' : (p.heeftFamilie ? ' familie' : '');
+                    const multiMarker = `[[MULTI-DOT-${i}]]`;
+                    const multiHtml = (p.heeftMijn && p.heeftFamilie)
+                        ? `<span class="prog-groep-multi-dot" title="${esc(t('prog_multi_title'))}"></span>` : '';
+                    html = html.replace(iconMarker, iconHtml).replace(klasseMarker, klasseHtml).replace(multiMarker, multiHtml);
                 });
                 _progAlleKeysPub = groepHdrPlaceholders.map(p => p.key);
                 _progGroepenMetMijnPub.clear();
@@ -6727,22 +6877,7 @@ function toonHelp() {
             </h3>
             <p style="font-size:.88rem;color:#555">${esc(t('nieuw_intro'))}</p>
 
-            <div class="changelog-versie">
-                <div class="changelog-kop">
-                    <span class="changelog-vnr">${esc(APP_VERSIE)}</span>
-                    <span class="changelog-datum">06-07-2026</span>
-                </div>
-                <ul class="changelog-lijst">
-                    <li>${t('nieuw_v100_13_html')}</li>
-                    <li>${t('nieuw_v100_12_html')}</li>
-                    <li>${t('nieuw_v100_7_html')}</li>
-                    <li>${t('nieuw_v100_2_html')}</li>
-                    <li>${t('nieuw_v100_4_html')}</li>
-                    <li>${t('nieuw_v100_11_html')}</li>
-                    <li>${t('nieuw_v100_9_html')}</li>
-                    <li>${t('nieuw_v100_14_html')}</li>
-                </ul>
-            </div>
+            ${renderChangelog(CHANGELOG)}
 
         </div>
     </div>`;

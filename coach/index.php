@@ -15,6 +15,7 @@ header('Pragma: no-cache');
 header('Expires: 0');
 require_once __DIR__ . '/../../config_inlinecomp.php';
 require_once __DIR__ . '/../api/lib_coach_auth.php';
+require_once __DIR__ . '/../inc/versie.php';
 
 // ── Bezoektracking: upsert session-hit in coach_visits ──────────────────────
 // HTML → full INSERT/UPDATE + peak-check. AJAX → last_seen bumpen met 30s
@@ -3130,15 +3131,43 @@ if (is_readable($i18nPath)) {
 }
 ?>
 
-// ── App-versie (bijhouden bij elke user-visible wijziging) ─────────────────
-// Formaat: H<uren>.<MM>.<DD>       (uren sinds InlineComp v0 op OH850, 2026-06-20 00:00)
-// Rollover als de uren-teller onhandig lang wordt:
-//   H9999+ → Y<jaren>.<MM>.<DD>    waar 1 Y = 1 jaar (~8760 uur)
-// M (maanden) slaan we bewust over — anders komen we nooit bij Y ;)
-// Bij bump: bereken nieuwe uren-count sinds 2026-06-20, update datum, en
-// voeg een entry toe aan het "Wat is nieuw"-blok in toonHelp().
-// Versie verschijnt onder de copyright in de i-modal.
-const APP_VERSIE = 'H360.06.07';
+// App-versie: één gedeelde bron voor heel InlineComp (zie inc/versie.php).
+// Verschijnt onder de copyright in de i-modal en in "Wat is nieuw".
+const APP_VERSIE = <?= json_encode(INLINECOMP_VERSIE) ?>;
+
+// Master-changelog (inc/changelog.php) — hier gefilterd op het onderdeel
+// 'coach'. Eén bron voor alle onderdelen; elk front-end toont z'n eigen slice.
+<?php
+    $__cl     = require __DIR__ . '/../inc/changelog.php';
+    $__clMine = array_values(array_filter($__cl, fn($e) => in_array('coach', $e['onderdelen'], true)));
+?>
+const CHANGELOG = <?= json_encode($__clMine, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES) ?>;
+
+// Rendert de changelog: groepeert opeenvolgende entries per versie+datum en
+// kiest per regel de tekst in de actieve taal (fallback en → nl). De tekst is
+// bewust HTML (bevat <b>/<i>) en wordt niet ge-escaped — net als voorheen.
+function renderChangelog(entries) {
+    const lang = (typeof getCurLang === 'function') ? getCurLang() : 'nl';
+    const groepen = [];
+    for (const e of entries) {
+        const laatste = groepen[groepen.length - 1];
+        if (laatste && laatste.versie === e.versie && laatste.datum === e.datum) {
+            laatste.items.push(e);
+        } else {
+            groepen.push({ versie: e.versie, datum: e.datum, items: [e] });
+        }
+    }
+    return groepen.map(g => `
+        <div class="changelog-versie">
+            <div class="changelog-kop">
+                <span class="changelog-vnr">${g.versie}</span>
+                <span class="changelog-datum">${g.datum}</span>
+            </div>
+            <ul class="changelog-lijst">
+                ${g.items.map(it => `<li>${it.tekst[lang] || it.tekst.en || it.tekst.nl}</li>`).join('')}
+            </ul>
+        </div>`).join('');
+}
 
 // ── App-specifiek vertaal-woordenboek (NL + EN + DE + FR) ──────────────────
 // Toggle via vlag-knop in header. Persisteert in localStorage onder 'ic_lang'
@@ -3393,10 +3422,10 @@ const T = {
         // ── Info modal ──
         info_titel: 'Over InlineComp Coach',
         info_h_wat: 'Wat is dit?',
-        info_p_wat1_html: 'De <b>Coach-view</b> is een dashboard voor coaches: je bouwt per wedstrijd een eigen lijst met rijders en ziet vervolgens hun programma, status, sancties en uitslagen in één oogopslag.',
-        info_p_wat2: 'Je kunt een heel clubteam in één keer toevoegen, rijders op sponsor selecteren, of losse startnummers toevoegen. Je lijst wordt lokaal op je telefoon bewaard (per wedstrijd) — dus een refresh of een terugkeer naar de pagina laat \'m intact.',
-        info_h_login: 'Toegang met wachtwoord',
-        info_p_login_html: 'Coach is afgeschermd met een gedeeld wachtwoord. Coach je <b>meer dan 3 rijders</b>? Vraag het wachtwoord bij de wedstrijdorganisator. Voor 1-3 rijders werkt de <a href="../public/">public app</a> vaak prima. Wedstrijddata is publiek (KNSB-feed); je persoonlijke rijderslijst blijft lokaal op je telefoon.',
+        info_p_wat1_html: 'De <b>Coach-view</b> is een dashboard voor coaches: je volgt je eigen rijders en ziet hun programma, status, sancties en uitslagen in één oogopslag.',
+        info_p_wat2: 'Rijders voeg je toe per club, sponsor of startnummer. <b>Zonder account</b> blijft je lijst lokaal op je telefoon, per wedstrijd (een refresh of terugkeer laat \'m intact). <b>Met een coach-account</b> stel je je atleten één keer in — je lijst staat dan op je account en verschijnt automatisch bij elke wedstrijd, op elk apparaat.',
+        info_h_login: 'Anoniem of met account',
+        info_p_login_html: 'Coach kan op twee manieren. <b>Anoniem</b> met het gedeelde organisatie-wachtwoord (vraag het bij de wedstrijdorganisator of kijk op de coach-poster) — je rijderslijst blijft dan lokaal op je telefoon, per wedstrijd. Of met een <b>eigen coach-account</b>: dan stel je je atleten één keer in en verschijnen ze automatisch bij elke wedstrijd, geen selectie per wedstrijd nodig. Maak of beheer je account via de <b>👤-knop</b> rechtsboven. Wedstrijddata is publiek (KNSB-feed).',
         info_h_tip: 'Tip: toevoegen aan startscherm',
         info_p_tip: 'Op je telefoon: open deze pagina in Safari/Chrome → menu → "Zet op startscherm". Dan opent-ie als een app en heb je \'m direct bij de hand aan de rand van de baan.',
         info_h_dev: 'In ontwikkeling',
@@ -3404,11 +3433,12 @@ const T = {
         info_h_contact_html: 'Contact &amp; feedback',
         info_p_contact: 'Heb je een vraag, suggestie of bug gevonden? Laat het weten:',
         info_h_stats: 'Anonieme bezoek-statistieken',
-        info_p_stats_html: 'We tellen anoniem aantal bezoekers, actieve sessies en piek gelijktijdig online — puur om te zien hoe veel de app wordt gebruikt en om de hosting stabiel te houden. Er worden <b>geen IP-adressen of persoonsgegevens</b> opgeslagen en er zijn <b>geen derde partijen</b> betrokken.',
+        info_p_stats_html: 'We tellen anoniem aantal bezoekers, actieve sessies en piek gelijktijdig online — puur om te zien hoe veel de app wordt gebruikt en om de hosting stabiel te houden. Bij deze telling worden <b>geen IP-adressen of persoonsgegevens</b> opgeslagen en zijn <b>geen derde partijen</b> betrokken. Maak je een <b>coach-account</b> aan, dan bewaren we wél je naam, e-mailadres en atletenlijst om je te herkennen — zie de <a href="../privacyverklaring.php" target="_blank">privacyverklaring</a>.',
         info_copyright: 'InlineComp &copy; {jaar} Geert de Vries',
         // ── Help modal ──
         help_titel: 'Hoe werkt de Coach-view?',
         help_h_start: 'Aan de slag',
+        help_p_start_intro_html: 'Er zijn twee manieren. <b>Anoniem</b>: kies per wedstrijd je rijders (hieronder). <b>Met een coach-account</b> (👤 rechtsboven): stel je atleten één keer in en log in — je hoeft dan alleen nog de wedstrijd te kiezen.',
         help_stap1_html: 'Kies je <b>wedstrijd</b>.',
         help_stap2_html: 'Kies je <b>rijders</b> via club, sponsor of startnummer, en klik op <b>Toevoegen</b>.',
         help_stap3_html: 'Klik op <b>Klaar</b>.',
@@ -3427,7 +3457,7 @@ const T = {
         help_h_meld: 'Mededelingen',
         help_p_meld_html: 'Bovenaan verschijnt een <b>📢-knop</b> zodra er een mededeling van de organisatie actief is. Belangrijke aankondigingen verschijnen automatisch als pop-up en blijven daarna onder die knop bereikbaar.',
         help_h_priv: 'Privacy',
-        help_p_priv: 'Je coach-lijst wordt alleen lokaal op je telefoon bewaard (localStorage). Niemand anders ziet wie je op je lijst hebt staan.',
+        help_p_priv: 'Zonder account blijft je coach-lijst alleen lokaal op je telefoon (localStorage); niemand anders ziet \'m. Met een coach-account staat je atletenlijst op je account (bij ons op de server), alleen zichtbaar voor jou — je kunt \'m altijd zelf verwijderen. Zie de <a href="../privacyverklaring.php" target="_blank">privacyverklaring</a>.',
         // ── Nieuwe kop-secties: Heats en Rondes ──
         help_h_heats: 'Heats',
         help_p_heats_html: '<b>Heats</b> — per rijder op je coach-lijst een overzicht van al zijn heats: heatnummer + startpositie per ronde (serie, kwart, halve, A-finale, kleine finale) van elke afstand. Bovenaan het rijder-blok een statusregel per afstand (bijv. <b>✓ Bevestigd</b> of <b>✓ Bev. bij org.</b>). Bij nog niet gelote rondes staat "Nog niet geloot"; is de vorige ronde nog niet compleet, dan "wacht op vorige ronde". Rijders gesorteerd op startnummer.',
@@ -3448,13 +3478,6 @@ const T = {
         nieuw_jump: 'Direct naar Wat is nieuw ↓',
         nieuw_h: 'Wat is nieuw?',
         nieuw_intro: 'Kort overzicht van recente wijzigingen. Voor terugkerende gebruikers een compacte samenvatting van de aanpassingen.',
-        nieuw_v100_7_html: '<b>Rondes-tab</b> — nieuw tabblad met per-ronde uitslagen van alle DC\'s waarvoor je rijders volgt (serie, kwart, halve finale, A-finale, kleine finale). Zichtbaar is welke plek per ronde is behaald en of doorstroom naar de volgende ronde heeft plaatsgevonden.',
-        nieuw_v100_2_html: '<b>Snelle wedstrijd-selectie</b> in een nieuw <b>openings-venster</b> met filter-knoppen <i>Eerder / Vandaag / Later</i>. Verschijnt automatisch bij het openen van de app en sluit zodra een wedstrijd is geselecteerd — directe focus op de keuze, daarna de volledige ruimte voor het overzicht.',
-        nieuw_v100_4_html: '<b>Bruto-tijd</b> zichtbaar naast de netto-tijd — herkenbaar aan ✋ (handmatige correctie) of 📷 (foto-finish correctie). Zo is in de heat-tabellen zichtbaar wanneer een correctie op de klokwaarde is toegepast.',
-        nieuw_v100_11_html: '<b>Klassering per categorie</b> in de Uitslagen-tab — bij gecombineerde races (bv. HJA + HSA samen) verschijnt naast de overall rang een aparte kolom per categorie, zodat in één oogopslag zichtbaar is welke plek de rijder binnen de eigen categorie heeft behaald.',
-        nieuw_v100_9_html: '<b>Kleine verbeteringen</b> voor de weergave op smalle schermen en de navigatie — waaronder filter-knoppen die weer binnen het openings-venster passen.',
-        nieuw_v100_13_html: '<b>Filter op afstand + inklap-balk</b> in het programma — kies één afstand (bv. 500m) en gebruik de segment-knoppen <i>Inklappen / Uitklappen / Mijn</i> om binnen die afstand groepen dicht te klappen, allemaal open te zetten, of alleen de ritten van de rijders op je lijst te tonen.',
-        nieuw_v100_14_html: '<b>Kleine verbeteringen en bug-fixes</b> in de weergave van het programma.',
         // ── Mockup-labels ──
         mock_venster_titel: 'Wedstrijd & rijders',
         mock_kies_w: 'Kies je wedstrijd',
@@ -3725,10 +3748,10 @@ const T = {
         // ── Info modal ──
         info_titel: 'About InlineComp Coach',
         info_h_wat: 'What is this?',
-        info_p_wat1_html: 'The <b>Coach view</b> is a dashboard for coaches: you build a personal list of skaters per race and then see their program, status, sanctions and results at a glance.',
-        info_p_wat2: 'You can add a whole club team at once, select skaters by sponsor, or add individual start numbers. Your list is stored locally on your phone (per race) — so a refresh or returning to the page keeps it intact.',
-        info_h_login: 'Password-protected access',
-        info_p_login_html: 'Coach is protected by a shared password. Coaching <b>more than 3 skaters</b>? Ask the race organiser for the password. For 1-3 skaters the <a href="../public/">public app</a> often does the job. Race data is public (KNSB feed); your personal skater list stays local on your phone.',
+        info_p_wat1_html: 'The <b>Coach view</b> is a dashboard for coaches: you follow your own skaters and see their program, status, sanctions and results at a glance.',
+        info_p_wat2: 'You add skaters by club, sponsor or start number. <b>Without an account</b> your list stays local on your phone, per race (a refresh or returning to the page keeps it intact). <b>With a coach account</b> you set up your skaters once — your list then lives on your account and appears automatically at every race, on any device.',
+        info_h_login: 'Anonymous or with an account',
+        info_p_login_html: 'There are two ways to use Coach. <b>Anonymously</b> with the shared organisation password (ask the race organiser or check the coach poster) — your skater list then stays local on your phone, per race. Or with your own <b>coach account</b>: set up your skaters once and they appear automatically at every race, no per-race selection needed. Create or manage your account via the <b>👤 button</b> top right. Race data is public (KNSB feed).',
         info_h_tip: 'Tip: add to home screen',
         info_p_tip: 'On your phone: open this page in Safari/Chrome → menu → "Add to Home Screen". It then opens like an app and you have it at hand right at the side of the track.',
         info_h_dev: 'In development',
@@ -3736,11 +3759,12 @@ const T = {
         info_h_contact_html: 'Contact &amp; feedback',
         info_p_contact: 'Have a question, suggestion or found a bug? Let us know:',
         info_h_stats: 'Anonymous visit statistics',
-        info_p_stats_html: 'We anonymously count visitor numbers, active sessions and peak concurrent users — purely to see how much the app is used and to keep hosting stable. <b>No IP addresses or personal data</b> are stored and <b>no third parties</b> are involved.',
+        info_p_stats_html: 'We anonymously count visitor numbers, active sessions and peak concurrent users — purely to see how much the app is used and to keep hosting stable. This counting stores <b>no IP addresses or personal data</b> and involves <b>no third parties</b>. If you create a <b>coach account</b>, we do store your name, e-mail address and skater list to recognise you — see the <a href="../privacyverklaring.php" target="_blank">privacy statement</a>.',
         info_copyright: 'InlineComp &copy; {jaar} Geert de Vries',
         // ── Help modal ──
         help_titel: 'How does the Coach view work?',
         help_h_start: 'Getting started',
+        help_p_start_intro_html: 'There are two ways. <b>Anonymously</b>: choose your skaters per race (below). <b>With a coach account</b> (👤 top right): set up your skaters once and log in — you then only pick the race.',
         help_stap1_html: 'Choose your <b>race</b>.',
         help_stap2_html: 'Choose your <b>skaters</b> by club, sponsor or start number, and click <b>Add</b>.',
         help_stap3_html: 'Click <b>Done</b>.',
@@ -3759,7 +3783,7 @@ const T = {
         help_h_meld: 'Announcements',
         help_p_meld_html: 'At the top a <b>📢 button</b> appears as soon as there is an active announcement from the organization. Important announcements pop up automatically and remain accessible afterwards via that button.',
         help_h_priv: 'Privacy',
-        help_p_priv: 'Your coach list is only stored locally on your phone (localStorage). Nobody else sees who is on your list.',
+        help_p_priv: 'Without an account your coach list stays only on your phone (localStorage); nobody else sees it. With a coach account your skater list is stored on your account (on our server), visible only to you — you can delete it yourself at any time. See the <a href="../privacyverklaring.php" target="_blank">privacy statement</a>.',
         help_h_heats: 'Heats',
         help_p_heats_html: '<b>Heats</b> — for each skater on your coach list, an overview of all their heats: heat number + starting position per round (heat, quarter, semi, A-final, small final) of each distance. At the top of the skater block a status line per distance (e.g. <b>✓ Confirmed</b> or <b>✓ Conf. by org.</b>). Rounds not yet drawn show "Not drawn yet"; if the previous round is not complete, it shows "waiting for previous round". Skaters sorted by start number.',
         mock_status_bev: '✓ Confirmed',
@@ -3776,13 +3800,6 @@ const T = {
         nieuw_jump: 'Jump to What\'s new ↓',
         nieuw_h: 'What\'s new?',
         nieuw_intro: 'Short overview of recent changes. A compact summary of what has been adjusted, aimed at returning users.',
-        nieuw_v100_7_html: '<b>Rounds tab</b> — new tab with per-round results across all DCs you follow skaters in (heats, quarter, semi, A-final, small final). Shows the position achieved in each round and whether progression to the next round has occurred.',
-        nieuw_v100_2_html: '<b>Quick race selection</b> in a new <b>opening window</b> with filter buttons <i>Earlier / Today / Later</i>. Appears automatically when the app opens and closes as soon as a race is selected — direct focus on the choice, then the full space for the overview.',
-        nieuw_v100_4_html: '<b>Raw time</b> visible next to the net time — marked with ✋ (manual correction) or 📷 (photo-finish correction). This way, the heat tables show exactly when a correction was applied to the clock value.',
-        nieuw_v100_11_html: '<b>Ranking per category</b> in the Results tab — for combined races (e.g. HJA + HSA together) a separate column per category appears next to the overall rank, so the position achieved within the own category is visible at a glance.',
-        nieuw_v100_9_html: '<b>Small improvements</b> to the display on narrow screens and to navigation — including filter buttons that now fit within the opening window.',
-        nieuw_v100_13_html: '<b>Filter by distance + collapse bar</b> in the program — pick a single distance (e.g. 500m) and use the segment buttons <i>Collapse / Expand / Mine</i> to close groups within that distance, open them all, or show only the races of the skaters on your list.',
-        nieuw_v100_14_html: '<b>Small improvements and bug fixes</b> in the program view.',
         mock_venster_titel: 'Race & skaters',
         mock_kies_w: 'Choose your race',
         mock_kies_rijders: 'Add skaters to your coach list',
@@ -4052,10 +4069,10 @@ const T = {
         // ── Info modal ──
         info_titel: 'Über InlineComp Coach',
         info_h_wat: 'Was ist das?',
-        info_p_wat1_html: 'Die <b>Coach-Ansicht</b> ist ein Dashboard für Trainer: du erstellst eine persönliche Liste von Skatern pro Rennen und siehst auf einen Blick deren Programm, Status, Strafen und Ergebnisse.',
-        info_p_wat2: 'Du kannst ein ganzes Vereinsteam auf einmal hinzufügen, Skater nach Sponsor auswählen oder einzelne Startnummern hinzufügen. Deine Liste wird lokal auf deinem Telefon gespeichert (pro Rennen) — ein Refresh oder Rückkehr zur Seite behält sie bei.',
-        info_h_login: 'Zugang mit Passwort',
-        info_p_login_html: 'Coach ist mit einem gemeinsamen Passwort geschützt. Betreust du <b>mehr als 3 Läufer</b>? Frag den Wettkampforganisator nach dem Passwort. Für 1-3 Läufer reicht meist die <a href="../public/">Public-App</a>. Wettkampfdaten sind öffentlich (KNSB-Feed); deine persönliche Läuferliste bleibt lokal auf deinem Telefon.',
+        info_p_wat1_html: 'Die <b>Coach-Ansicht</b> ist ein Dashboard für Trainer: du folgst deinen eigenen Skatern und siehst auf einen Blick deren Programm, Status, Strafen und Ergebnisse.',
+        info_p_wat2: 'Skater fügst du per Verein, Sponsor oder Startnummer hinzu. <b>Ohne Konto</b> bleibt deine Liste lokal auf deinem Telefon, pro Rennen (ein Refresh oder Rückkehr behält sie bei). <b>Mit einem Coach-Konto</b> stellst du deine Skater einmal ein — deine Liste liegt dann auf deinem Konto und erscheint automatisch bei jedem Rennen, auf jedem Gerät.',
+        info_h_login: 'Anonym oder mit Konto',
+        info_p_login_html: 'Coach geht auf zwei Arten. <b>Anonym</b> mit dem gemeinsamen Organisations-Passwort (frag den Wettkampforganisator oder schau auf das Coach-Poster) — deine Läuferliste bleibt dann lokal auf deinem Telefon, pro Rennen. Oder mit einem eigenen <b>Coach-Konto</b>: dann stellst du deine Skater einmal ein und sie erscheinen automatisch bei jedem Rennen, keine Auswahl pro Rennen nötig. Konto erstellen oder verwalten über den <b>👤-Button</b> oben rechts. Wettkampfdaten sind öffentlich (KNSB-Feed).',
         info_h_tip: 'Tipp: zum Startbildschirm hinzufügen',
         info_p_tip: 'Auf deinem Telefon: öffne diese Seite in Safari/Chrome → Menü → „Zum Startbildschirm". Sie öffnet sich dann wie eine App und du hast sie direkt an der Strecke griffbereit.',
         info_h_dev: 'In Entwicklung',
@@ -4063,11 +4080,12 @@ const T = {
         info_h_contact_html: 'Kontakt &amp; Feedback',
         info_p_contact: 'Frage, Vorschlag oder einen Fehler entdeckt? Lass es uns wissen:',
         info_h_stats: 'Anonyme Besuchsstatistiken',
-        info_p_stats_html: 'Wir zählen anonym Besucherzahlen, aktive Sessions und Peak-Nutzer — nur um zu sehen, wie viel die App genutzt wird und um das Hosting stabil zu halten. <b>Keine IP-Adressen oder persönliche Daten</b> werden gespeichert und <b>keine Drittanbieter</b> sind beteiligt.',
+        info_p_stats_html: 'Wir zählen anonym Besucherzahlen, aktive Sessions und Peak-Nutzer — nur um zu sehen, wie viel die App genutzt wird und um das Hosting stabil zu halten. Bei dieser Zählung werden <b>keine IP-Adressen oder persönliche Daten</b> gespeichert und <b>keine Drittanbieter</b> sind beteiligt. Erstellst du ein <b>Coach-Konto</b>, speichern wir allerdings deinen Namen, deine E-Mail-Adresse und deine Skater-Liste, um dich zu erkennen — siehe die <a href="../privacyverklaring.php" target="_blank">Datenschutzerklärung</a>.',
         info_copyright: 'InlineComp &copy; {jaar} Geert de Vries',
         // ── Help modal ──
         help_titel: 'Wie funktioniert die Coach-Ansicht?',
         help_h_start: 'Erste Schritte',
+        help_p_start_intro_html: 'Es gibt zwei Wege. <b>Anonym</b>: wähle deine Skater pro Rennen (unten). <b>Mit einem Coach-Konto</b> (👤 oben rechts): stelle deine Skater einmal ein und logge dich ein — dann wählst du nur noch das Rennen.',
         help_stap1_html: 'Wähle dein <b>Rennen</b>.',
         help_stap2_html: 'Wähle deine <b>Skater</b> per Verein, Sponsor oder Startnummer und klicke auf <b>Hinzufügen</b>.',
         help_stap3_html: 'Klicke auf <b>Fertig</b>.',
@@ -4086,7 +4104,7 @@ const T = {
         help_h_meld: 'Mitteilungen',
         help_p_meld_html: 'Oben erscheint ein <b>📢-Button</b> sobald eine aktive Mitteilung der Organisation vorliegt. Wichtige Mitteilungen erscheinen automatisch und bleiben danach über diesen Button zugänglich.',
         help_h_priv: 'Datenschutz',
-        help_p_priv: 'Deine Coach-Liste wird nur lokal auf deinem Telefon gespeichert (localStorage). Niemand sonst sieht, wer auf deiner Liste steht.',
+        help_p_priv: 'Ohne Konto bleibt deine Coach-Liste nur lokal auf deinem Telefon (localStorage); niemand sonst sieht sie. Mit einem Coach-Konto wird deine Skater-Liste auf deinem Konto (auf unserem Server) gespeichert, nur für dich sichtbar — du kannst sie jederzeit selbst löschen. Siehe die <a href="../privacyverklaring.php" target="_blank">Datenschutzerklärung</a>.',
         help_h_heats: 'Heats',
         help_p_heats_html: '<b>Heats</b> — für jeden Läufer auf deiner Coach-Liste eine Übersicht aller Heats: Heatnummer + Startposition pro Runde (Vorlauf, Viertel, Halbfinale, A-Finale, kleines Finale) jeder Distanz. Oben im Läufer-Block eine Statuszeile pro Distanz (z.B. <b>✓ Bestätigt</b> oder <b>✓ Best. b. Org.</b>). Bei noch nicht gelosten Runden erscheint "Noch nicht gelost"; ist die vorherige Runde nicht vollständig, dann "wartet auf vorherige Runde". Läufer nach Startnummer sortiert.',
         mock_status_bev: '✓ Bestätigt',
@@ -4103,13 +4121,6 @@ const T = {
         nieuw_jump: 'Direkt zu Was ist neu ↓',
         nieuw_h: 'Was ist neu?',
         nieuw_intro: 'Kurze Übersicht der jüngsten Änderungen. Für wiederkehrende Nutzer eine kompakte Zusammenfassung der Anpassungen.',
-        nieuw_v100_7_html: '<b>Runden-Tab</b> — neuer Tab mit Ergebnissen pro Runde für alle DCs, in denen du Läufer verfolgst (Vorläufe, Viertel, Halbfinale, A-Finale, kleines Finale). Zeigt die in jeder Runde erreichte Platzierung und ob ein Weiterkommen in die nächste Runde erfolgt ist.',
-        nieuw_v100_2_html: '<b>Schnelle Rennauswahl</b> in einem neuen <b>Startfenster</b> mit Filter-Buttons <i>Früher / Heute / Später</i>. Erscheint automatisch beim Öffnen der App und schließt, sobald ein Rennen ausgewählt wurde — direkter Fokus auf die Auswahl, danach der volle Platz für die Übersicht.',
-        nieuw_v100_4_html: '<b>Bruttozeit</b> sichtbar neben der Nettozeit — kenntlich an ✋ (Handkorrektur) oder 📷 (Fotofinish-Korrektur). So ist in den Heat-Tabellen sichtbar, wann eine Korrektur der Uhrzeit erfolgt ist.',
-        nieuw_v100_11_html: '<b>Platzierung pro Kategorie</b> im Ergebnisse-Tab — bei kombinierten Rennen (z.B. HJA + HSA zusammen) erscheint neben dem Gesamtrang eine separate Spalte pro Kategorie, sodass die innerhalb der eigenen Kategorie erreichte Platzierung auf einen Blick sichtbar ist.',
-        nieuw_v100_9_html: '<b>Kleine Verbesserungen</b> an der Darstellung auf schmalen Bildschirmen und der Navigation — u.a. Filter-Buttons, die wieder in das Startfenster passen.',
-        nieuw_v100_13_html: '<b>Distanz-Filter + Ein-/Ausklapp-Leiste</b> im Programm — wähle eine Distanz (z.B. 500m) und benutze die Segment-Buttons <i>Einklappen / Ausklappen / Meine</i>, um Gruppen innerhalb dieser Distanz zu schließen, alle zu öffnen oder nur die Rennen der Skater deiner Liste zu zeigen.',
-        nieuw_v100_14_html: '<b>Kleine Verbesserungen und Fehlerbehebungen</b> in der Programm-Ansicht.',
         mock_venster_titel: 'Rennen & Läufer',
         mock_kies_w: 'Wähle dein Rennen',
         mock_kies_rijders: 'Läufer zur Coach-Liste hinzufügen',
@@ -4379,10 +4390,10 @@ const T = {
         // ── Info modal ──
         info_titel: 'À propos d\'InlineComp Coach',
         info_h_wat: 'Qu\'est-ce que c\'est?',
-        info_p_wat1_html: 'La <b>vue Coach</b> est un tableau de bord pour entraîneurs: vous créez une liste personnelle de skateurs par course et voyez d\'un coup d\'œil leur programme, statut, sanctions et résultats.',
-        info_p_wat2: 'Vous pouvez ajouter toute une équipe de club à la fois, sélectionner des skateurs par sponsor, ou ajouter des numéros de départ individuels. Votre liste est stockée localement sur votre téléphone (par course) — un rafraîchissement ou retour à la page la conserve.',
-        info_h_login: 'Accès avec mot de passe',
-        info_p_login_html: 'Coach est protégé par un mot de passe partagé. Tu suis <b>plus de 3 skateurs</b> ? Demande le mot de passe à l\'organisateur de la course. Pour 1-3 skateurs, l\'<a href="../public/">app public</a> suffit souvent. Les données de course sont publiques (flux KNSB) ; ta liste de skateurs personnelle reste locale sur ton téléphone.',
+        info_p_wat1_html: 'La <b>vue Coach</b> est un tableau de bord pour entraîneurs : vous suivez vos propres skateurs et voyez d\'un coup d\'œil leur programme, statut, sanctions et résultats.',
+        info_p_wat2: 'Vous ajoutez des skateurs par club, sponsor ou numéro de départ. <b>Sans compte</b>, votre liste reste locale sur votre téléphone, par course (un rafraîchissement ou retour à la page la conserve). <b>Avec un compte coach</b>, vous configurez vos skateurs une seule fois — votre liste est alors sur votre compte et apparaît automatiquement à chaque course, sur n\'importe quel appareil.',
+        info_h_login: 'Anonyme ou avec un compte',
+        info_p_login_html: 'Coach fonctionne de deux façons. <b>En anonyme</b> avec le mot de passe partagé de l\'organisation (demandez-le à l\'organisateur ou regardez l\'affiche coach) — votre liste de skateurs reste alors locale sur votre téléphone, par course. Ou avec votre propre <b>compte coach</b> : configurez vos skateurs une seule fois et ils apparaissent automatiquement à chaque course, pas de sélection par course. Créez ou gérez votre compte via le <b>bouton 👤</b> en haut à droite. Les données de course sont publiques (flux KNSB).',
         info_h_tip: 'Astuce: ajouter à l\'écran d\'accueil',
         info_p_tip: 'Sur votre téléphone: ouvrez cette page dans Safari/Chrome → menu → « Ajouter à l\'écran d\'accueil ». Elle s\'ouvre alors comme une app et vous l\'avez à portée de main au bord de la piste.',
         info_h_dev: 'En développement',
@@ -4390,11 +4401,12 @@ const T = {
         info_h_contact_html: 'Contact &amp; retour',
         info_p_contact: 'Une question, suggestion ou bug trouvé? Faites-le nous savoir:',
         info_h_stats: 'Statistiques de visite anonymes',
-        info_p_stats_html: 'Nous comptons anonymement les visiteurs, sessions actives et pics d\'utilisateurs simultanés — uniquement pour voir combien l\'app est utilisée et pour maintenir l\'hébergement stable. <b>Aucune adresse IP ni donnée personnelle</b> n\'est stockée et <b>aucun tiers</b> n\'est impliqué.',
+        info_p_stats_html: 'Nous comptons anonymement les visiteurs, sessions actives et pics d\'utilisateurs simultanés — uniquement pour voir combien l\'app est utilisée et pour maintenir l\'hébergement stable. Ce comptage ne stocke <b>aucune adresse IP ni donnée personnelle</b> et n\'implique <b>aucun tiers</b>. Si vous créez un <b>compte coach</b>, nous stockons en revanche votre nom, votre adresse e-mail et votre liste de skateurs pour vous reconnaître — voir la <a href="../privacyverklaring.php" target="_blank">déclaration de confidentialité</a>.',
         info_copyright: 'InlineComp &copy; {jaar} Geert de Vries',
         // ── Help modal ──
         help_titel: 'Comment fonctionne la vue Coach?',
         help_h_start: 'Pour commencer',
+        help_p_start_intro_html: 'Il y a deux façons. <b>En anonyme</b> : choisissez vos skateurs par course (ci-dessous). <b>Avec un compte coach</b> (👤 en haut à droite) : configurez vos skateurs une seule fois et connectez-vous — vous ne choisissez alors que la course.',
         help_stap1_html: 'Choisis ta <b>course</b>.',
         help_stap2_html: 'Choisis tes <b>skateurs</b> par club, sponsor ou numéro de dossard, et clique sur <b>Ajouter</b>.',
         help_stap3_html: 'Clique sur <b>Terminer</b>.',
@@ -4413,7 +4425,7 @@ const T = {
         help_h_meld: 'Annonces',
         help_p_meld_html: 'En haut un <b>bouton 📢</b> apparaît dès qu\'il y a une annonce active de l\'organisation. Les annonces importantes apparaissent automatiquement et restent ensuite accessibles via ce bouton.',
         help_h_priv: 'Confidentialité',
-        help_p_priv: 'Votre liste de coach est uniquement stockée localement sur votre téléphone (localStorage). Personne d\'autre ne voit qui est sur votre liste.',
+        help_p_priv: 'Sans compte, votre liste de coach reste uniquement sur votre téléphone (localStorage) ; personne d\'autre ne la voit. Avec un compte coach, votre liste de skateurs est stockée sur votre compte (sur notre serveur), visible seulement par vous — vous pouvez la supprimer vous-même à tout moment. Voir la <a href="../privacyverklaring.php" target="_blank">déclaration de confidentialité</a>.',
         help_h_heats: 'Séries',
         help_p_heats_html: '<b>Séries</b> — pour chaque skateur de ta liste de coach, un aperçu de toutes ses séries : numéro de série + position de départ par tour (série, quart, demi, finale A, petite finale) de chaque distance. En haut du bloc skateur, une ligne de statut par distance (par ex. <b>✓ Confirmé</b> ou <b>✓ Conf. par org.</b>). Pour les tours non encore tirés au sort, "Pas encore tiré" apparaît ; si le tour précédent n\'est pas complet, "en attente du tour précédent". Skateurs triés par numéro de dossard.',
         mock_status_bev: '✓ Confirmé',
@@ -4430,12 +4442,6 @@ const T = {
         nieuw_jump: 'Aller à Quoi de neuf ↓',
         nieuw_h: 'Quoi de neuf ?',
         nieuw_intro: 'Bref aperçu des changements récents. Un résumé compact des ajustements, destiné aux utilisateurs habitués.',
-        nieuw_v100_7_html: '<b>Onglet Rondes</b> — nouvel onglet avec les résultats par tour pour toutes les DCs dont tu suis des skateurs (séries, quart, demi, finale A, petite finale). Montre la place obtenue à chaque tour et si un passage au tour suivant a eu lieu.',
-        nieuw_v100_4_html: '<b>Temps brut</b> visible à côté du temps net — marqué ✋ (correction manuelle) ou 📷 (correction photo-finish). Ainsi, les tableaux de séries montrent exactement quand une correction a été appliquée au temps de l\'horloge.',
-        nieuw_v100_11_html: '<b>Classement par catégorie</b> dans l\'onglet Résultats — pour les courses combinées (par ex. HJA + HSA ensemble) une colonne distincte par catégorie apparaît à côté du rang général, ce qui rend la place obtenue dans la propre catégorie visible d\'un coup d\'œil.',
-        nieuw_v100_9_html: '<b>Petites améliorations</b> pour l\'affichage sur écrans étroits et pour la navigation — dont des boutons de filtre qui tiennent à nouveau dans la fenêtre d\'ouverture.',
-        nieuw_v100_13_html: '<b>Filtre par distance + barre pliage</b> dans le programme — choisis une distance (par ex. 500m) et utilise les boutons de segment <i>Réduire / Développer / Les miens</i> pour fermer les groupes dans cette distance, tous les ouvrir, ou n\'afficher que les courses des skateurs de ta liste.',
-        nieuw_v100_14_html: '<b>Petites améliorations et corrections</b> dans l\'affichage du programme.',
         mock_venster_titel: 'Course & skateurs',
         mock_kies_w: 'Choisis ta course',
         mock_kies_rijders: 'Ajoute des skateurs à ta liste de coach',
@@ -6781,6 +6787,7 @@ function toonHelp() {
             </button>
 
             <h3>${t('help_h_start')}</h3>
+            <p style="font-size:.9rem;color:#555;margin:0 0 10px">${t('help_p_start_intro_html')}</p>
             <div class="help-stap"><span class="help-stap-nr">1</span>
                 <span>${t('help_stap1_html')}</span></div>
             <div class="help-stap"><span class="help-stap-nr">2</span>
@@ -6984,21 +6991,7 @@ function toonHelp() {
             </h3>
             <p style="font-size:.88rem;color:#555">${t('nieuw_intro')}</p>
 
-            <div class="changelog-versie">
-                <div class="changelog-kop">
-                    <span class="changelog-vnr">${APP_VERSIE}</span>
-                    <span class="changelog-datum">06-07-2026</span>
-                </div>
-                <ul class="changelog-lijst">
-                    <li>${t('nieuw_v100_13_html')}</li>
-                    <li>${t('nieuw_v100_7_html')}</li>
-                    <li>${t('nieuw_v100_2_html')}</li>
-                    <li>${t('nieuw_v100_4_html')}</li>
-                    <li>${t('nieuw_v100_11_html')}</li>
-                    <li>${t('nieuw_v100_9_html')}</li>
-                    <li>${t('nieuw_v100_14_html')}</li>
-                </ul>
-            </div>
+            ${renderChangelog(CHANGELOG)}
         </div>
     </div>`;
     document.body.appendChild(overlay);
@@ -8196,6 +8189,11 @@ window.addEventListener('appinstalled', () => {
       padding:8px 0;border-bottom:1px solid #f0f2f5;font-size:.9rem}
     .ca-roster-rij small{color:#777}
     .ca-x{background:none;border:0;color:#b71c1c;font-size:1.1rem;cursor:pointer}
+    .ca-danger{margin-top:22px;padding-top:14px;border-top:1px solid #f0d6d6}
+    .ca-danger-knop{background:none;border:1px solid #d99;color:#b71c1c;border-radius:8px;
+      padding:8px 14px;font-size:.85rem;cursor:pointer}
+    .ca-danger-knop:hover{background:#fdecea}
+    .ca-danger-uitleg{font-size:.78rem;color:#888;margin-top:6px}
     .ca-zoek-rij{display:flex;justify-content:space-between;align-items:center;padding:7px 0;
       border-bottom:1px solid #f5f6f8;font-size:.9rem}
     .ca-add{background:#1b5faa;color:#fff;border:0;border-radius:6px;padding:4px 10px;cursor:pointer;font-size:.8rem}
@@ -8372,7 +8370,7 @@ window.addEventListener('appinstalled', () => {
       ${pending ? `<div class="ca-banner">⏳ Je account wacht op goedkeuring. Je atleten worden alvast bewaard en verschijnen zodra je bent goedgekeurd.</div>` : ''}
       <p style="margin:0 0 10px;display:flex;justify-content:space-between;align-items:center">
         <span>Ingelogd als <b>${esc2(account.naam)}</b></span>
-        <button class="ca-link" id="ca-logout">Uitloggen</button></p>
+        <button class="btn btn-klein" id="ca-logout">Uitloggen</button></p>
 
       <div style="font-weight:600;color:#1b5faa;margin:4px 0 8px">Atleten toevoegen <small style="font-weight:400;color:#888">(geen wedstrijd nodig)</small></div>
       <details class="ca-acc"><summary>Op club</summary>
@@ -8385,19 +8383,56 @@ window.addEventListener('appinstalled', () => {
       </details>
       <button class="ca-knop" id="ca-groep-add">Aangevinkte clubs/sponsors toevoegen</button>
 
-      <details class="ca-acc" style="margin-top:10px"><summary>Op naam of licentie</summary>
-        <input class="ca-inp ca-filter" id="ca-naam-zoek" placeholder="typ naam of licentie (min. 2)…">
+      <details class="ca-acc" style="margin-top:10px"><summary>Op naam of startnummer</summary>
+        <input class="ca-inp ca-filter" id="ca-naam-zoek" placeholder="typ naam of startnummer (min. 2)…">
         <div id="ca-naam-res" style="padding:0 8px 8px"></div>
       </details>
 
-      <div style="font-weight:600;color:#1b5faa;margin:16px 0 6px">In je lijst (<span id="ca-roster-n">…</span>)</div>
-      <div id="ca-roster"><div style="color:#888;font-size:.85rem">laden…</div></div>`;
+      <div class="coach-hdr" style="margin:16px 0 6px">
+        <span style="font-weight:600;color:#1b5faa">In je lijst (<span id="ca-roster-n">0</span>)</span>
+        <button id="ca-roster-wis" class="btn btn-klein btn-wis" style="display:none">Wis alles</button>
+      </div>
+      <div id="ca-roster" class="chips"><div style="color:#888;font-size:.85rem">laden…</div></div>
+
+      <div class="ca-danger">
+        <button class="ca-danger-knop" id="ca-account-del">Account verwijderen</button>
+        <div class="ca-danger-uitleg">Verwijdert je account én je hele atletenlijst. Dit kan niet ongedaan gemaakt worden.</div>
+      </div>`;
 
     body.querySelector('#ca-logout').addEventListener('click', async () => {
       // Uitloggen: herladen zodat coachLijst/roster/heats vers in de anonieme
       // staat komen (anders blijven de roster-rijders in beeld zonder account).
       await post('logout', {});
       location.reload();
+    });
+
+    // Hele atletenlijst in één keer wissen — zelfde bevestiging als de anonieme lijst.
+    body.querySelector('#ca-roster-wis').addEventListener('click', async () => {
+      const n = rosterLics.length;
+      if (!n) return;
+      const ok = await bevestig({
+        titel: t('bev_wis_titel'),
+        tekst: t(n === 1 ? 'bev_wis_tekst_single' : 'bev_wis_tekst_plural', { n }),
+        bevestigLabel: t('bev_wis_ok'),
+        annuleerLabel: t('bev_annuleer'),
+      });
+      if (!ok) return;
+      await post('roster_leeg', {});
+      _caLaadRoster(ov);
+    });
+
+    // Eigen account definitief verwijderen (AVG-recht op vergetelheid).
+    body.querySelector('#ca-account-del').addEventListener('click', async () => {
+      const ok = await bevestig({
+        titel: 'Account verwijderen?',
+        tekst: 'Je account <b>én je hele atletenlijst</b> worden definitief verwijderd.<br><br>Dit kan niet ongedaan gemaakt worden.',
+        bevestigLabel: 'Ja, verwijder mijn account',
+        annuleerLabel: t('bev_annuleer'),
+      });
+      if (!ok) return;
+      const r = await post('account_verwijderen', {});
+      if (r && r.ok) location.reload();   // uitgelogd → verse anonieme staat
+      else alert('Verwijderen mislukt. Probeer het later opnieuw.');
     });
 
     get('clubs_teams').then(d => {
@@ -8443,7 +8478,7 @@ window.addEventListener('appinstalled', () => {
     const r = await get('zoek_personen&q=' + encodeURIComponent(q));
     const lijst = r.personen || [];
     res.innerHTML = lijst.length ? lijst.map(p => `<div class="ca-zoek-rij">
-      <span>${esc2(p.full_name)} <small>${esc2(p.club_full || '')}</small></span>
+      <span>${p.start_number != null ? '<b>' + esc2(p.start_number) + '</b> ' : ''}${esc2(p.full_name)} <small>${esc2(p.club_full || '')}</small></span>
       <button class="ca-add" data-lic="${esc2(p.license_key)}" ${(+p.in_roster) ? 'disabled' : ''}>${(+p.in_roster) ? '✓' : '+'}</button>
       </div>`).join('') : '<div style="color:#888;font-size:.85rem;padding:6px 0">geen rijders</div>';
     res.querySelectorAll('.ca-add').forEach(a => a.addEventListener('click', async () => {
@@ -8457,11 +8492,17 @@ window.addEventListener('appinstalled', () => {
     const lijst = r.roster || [];
     rosterLics = lijst.map(p => p.license_key);
     const n = ov.querySelector('#ca-roster-n'); if (n) n.textContent = lijst.length;
-    el.innerHTML = lijst.length ? lijst.map(p => `<div class="ca-roster-rij">
-      <span>${esc2(p.full_name)} <small>${esc2(p.club_full || '')}${p.category ? ' · ' + esc2(p.category) : ''}</small></span>
-      <button class="ca-x" data-lic="${esc2(p.license_key)}" title="Verwijderen">×</button></div>`).join('')
+    const wisBtn = ov.querySelector('#ca-roster-wis'); if (wisBtn) wisBtn.style.display = lijst.length ? '' : 'none';
+    // Pills — zelfde stijl als de anonieme coach-lijst (.chips/.chip). Roster is
+    // wedstrijd-onafhankelijk, maar NL-rijders hebben een vast startnummer → toon
+    // dat als badge (zoals de anonieme lijst het startnummer toont).
+    el.innerHTML = lijst.length ? lijst.map(p => `<span class="chip" title="${esc2(p.full_name)} — ${esc2(p.club_full || '')}${p.category ? ' · ' + esc2(p.category) : ''}">
+        ${p.start_number != null ? `<span class="chip-snr">${esc2(p.start_number)}</span>` : ''}
+        <span>${esc2(p.full_name)}</span>
+        <span class="x" data-lic="${esc2(p.license_key)}">×</span>
+      </span>`).join('')
       : '<div style="color:#888;font-size:.85rem">Nog geen atleten. Voeg toe via club, sponsor of naam hierboven.</div>';
-    el.querySelectorAll('.ca-x').forEach(x => x.addEventListener('click', async () => {
+    el.querySelectorAll('.x').forEach(x => x.addEventListener('click', async () => {
       await post('roster_remove', { person_license: x.dataset.lic }); _caLaadRoster(ov);
     }));
   }

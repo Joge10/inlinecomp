@@ -67,14 +67,73 @@ function coachMail(string $to, string $subject, string $body): bool {
     return @mail($to, $subject, $body, $headers, '-f' . COACH_MAIL_ENVELOPE);
 }
 
-/** Logt een coach-event in login_logs (user_id=NULL, bron='coach'). */
+/** Vlag-emoji uit 2-letter landcode (zelfde als staff/jury). */
+function coachLandVlag(string $code): string {
+    if (strlen($code) !== 2) return '';
+    $o = 0x1F1E6 - ord('A');
+    return mb_chr(ord($code[0]) + $o, 'UTF-8') . mb_chr(ord($code[1]) + $o, 'UTF-8');
+}
+
+/** Geo-lookup uit IP (ip-api.com, korte timeout). Zelfstandig — net als jury/staff. */
+function coachGeoloceer(string $ip): array {
+    if (!$ip || filter_var($ip, FILTER_VALIDATE_IP,
+            FILTER_FLAG_NO_PRIV_RANGE | FILTER_FLAG_NO_RES_RANGE) === false) {
+        return ['land' => 'Lokaal', 'stad' => ''];
+    }
+    $url = 'http://ip-api.com/json/' . rawurlencode($ip) . '?fields=status,country,countryCode,city&lang=nl';
+    $geo = [];
+    if (function_exists('curl_init')) {
+        $ch = curl_init($url);
+        curl_setopt_array($ch, [CURLOPT_RETURNTRANSFER => true,
+                                CURLOPT_TIMEOUT => 2, CURLOPT_CONNECTTIMEOUT => 2]);
+        $resp = curl_exec($ch);
+        curl_close($ch);
+        if ($resp) $geo = json_decode($resp, true) ?? [];
+    } elseif (ini_get('allow_url_fopen')) {
+        $ctx  = stream_context_create(['http' => ['timeout' => 2]]);
+        $resp = @file_get_contents($url, false, $ctx);
+        if ($resp) $geo = json_decode($resp, true) ?? [];
+    }
+    if (!$geo || ($geo['status'] ?? '') === 'fail') return ['land' => '', 'stad' => ''];
+    $vlag = coachLandVlag($geo['countryCode'] ?? '');
+    return [
+        'land' => ($vlag ? $vlag . ' ' : '') . ($geo['country'] ?? ''),
+        'stad' => $geo['city'] ?? '',
+    ];
+}
+
+/** Compacte browser/OS-extractie uit de user-agent. */
+function coachBrowserOs(string $ua): array {
+    $browser = 'Onbekend';
+    if      (str_contains($ua, 'Edg/'))     $browser = 'Edge';
+    elseif  (str_contains($ua, 'Chrome/'))  $browser = 'Chrome';
+    elseif  (str_contains($ua, 'Firefox/')) $browser = 'Firefox';
+    elseif  (str_contains($ua, 'Safari/'))  $browser = 'Safari';
+    $os = '';
+    if      (str_contains($ua, 'Android'))                          $os = 'Android';
+    elseif  (str_contains($ua, 'iPhone') || str_contains($ua, 'iPad')) $os = 'iOS';
+    elseif  (str_contains($ua, 'Windows NT'))                       $os = 'Windows';
+    elseif  (str_contains($ua, 'Macintosh'))                        $os = 'macOS';
+    elseif  (str_contains($ua, 'Linux'))                            $os = 'Linux';
+    return ['browser' => $browser, 'os' => $os];
+}
+
+/** Logt een coach-event in login_logs (user_id=NULL, bron='coach') incl.
+ *  locatie + browser/OS — belangrijk voor misbruik-detectie en support. */
 function logCoachEvent(PDO $pdo, string $naam, string $email, string $actie): void {
     try {
-        $ua = substr((string)($_SERVER['HTTP_USER_AGENT'] ?? ''), 0, 65535);
+        $ua  = substr((string)($_SERVER['HTTP_USER_AGENT'] ?? ''), 0, 65535);
+        $ip  = coachClientIp();
+        $geo = coachGeoloceer($ip);
+        $bo  = coachBrowserOs($ua);
         $pdo->prepare("
-            INSERT INTO login_logs (user_id, naam, username, actie, ip_adres, bron, user_agent)
-            VALUES (NULL, ?, ?, ?, ?, 'coach', ?)
-        ")->execute([$naam, $email, $actie, coachClientIp(), $ua]);
+            INSERT INTO login_logs
+                (user_id, naam, username, actie, ip_adres, land, stad, browser, os, bron, user_agent)
+            VALUES (NULL, ?, ?, ?, ?, ?, ?, ?, ?, 'coach', ?)
+        ")->execute([
+            $naam, $email, $actie, $ip,
+            $geo['land'], $geo['stad'], $bo['browser'], $bo['os'], $ua,
+        ]);
     } catch (Throwable) { /* logging mag nooit de flow breken */ }
 }
 
@@ -161,7 +220,7 @@ try {
           . "Coach van   : $vanLabel — $van\n\n"
           . "Keur goed of af in Beheer → Coach.\n");
 
-        logCoachEvent($pdo, $naam, $email, 'register');
+        logCoachEvent($pdo, $naam, $email, 'coach-register');
         jsonOut(['ok' => true, 'status' => 'pending']);
     }
 
@@ -177,7 +236,7 @@ try {
         $acc = $stmt->fetch(PDO::FETCH_ASSOC);
 
         if (!$acc || !password_verify($pw, $acc['password_hash'])) {
-            logCoachEvent($pdo, $acc['naam'] ?? '', $email, 'login_mislukt');
+            logCoachEvent($pdo, $acc['naam'] ?? '', $email, 'coach-login-mislukt');
             usleep(random_int(200000, 600000));   // anti-timing (username-enumeratie)
             jsonOut(['error' => 'E-mailadres of wachtwoord onjuist.'], 401);
         }
@@ -187,7 +246,7 @@ try {
 
         maakCoachSessie($pdo, (int)$acc['id']);
         $pdo->prepare("UPDATE coach_accounts SET last_login_at = NOW() WHERE id = ?")->execute([$acc['id']]);
-        logCoachEvent($pdo, $acc['naam'], $email, 'login');
+        logCoachEvent($pdo, $acc['naam'], $email, 'coach-login');
 
         jsonOut(['ok' => true, 'account' => [
             'id' => (int)$acc['id'], 'email' => $acc['email'], 'naam' => $acc['naam'],
@@ -198,9 +257,24 @@ try {
 
     // ── POST logout ────────────────────────────────────────────────────────────
     if ($method === 'POST' && $action === 'logout') {
+        $acc   = getCoachSession($pdo);   // vóór het wissen ophalen, voor de log
         $token = $_COOKIE[COACH_SESSION_COOKIE] ?? '';
         if ($token) $pdo->prepare("DELETE FROM coach_sessions WHERE token = ?")->execute([$token]);
         wisCoachSessieCookie();
+        if ($acc) logCoachEvent($pdo, $acc['naam'] ?? '', $acc['email'] ?? '', 'coach-logout');
+        jsonOut(['ok' => true]);
+    }
+
+    // ── POST account_verwijderen — coach wist z'n eigen account (AVG-recht) ─────
+    // Cascade (coach_athletes/coach_sessions/coach_password_resets → ON DELETE
+    // CASCADE) ruimt roster, sessies en reset-tokens automatisch mee op.
+    if ($method === 'POST' && $action === 'account_verwijderen') {
+        $c = vereisCoachLogin($pdo);
+        // Naam/e-mail vóór de delete pakken — daarna is de rij weg.
+        $naam = $c['naam'] ?? ''; $email = $c['email'] ?? '';
+        $pdo->prepare("DELETE FROM coach_accounts WHERE id = ?")->execute([$c['id']]);
+        wisCoachSessieCookie();
+        logCoachEvent($pdo, $naam, $email, 'coach-account-verwijderd');
         jsonOut(['ok' => true]);
     }
 
@@ -221,6 +295,7 @@ try {
             $exp  = date('Y-m-d H:i:s', strtotime('+1 hour'));
             $pdo->prepare("INSERT INTO coach_password_resets (coach_account_id, token_hash, expires_at) VALUES (?, ?, ?)")
                 ->execute([$acc['id'], $hash, $exp]);
+            logCoachEvent($pdo, $acc['naam'] ?? '', $email, 'coach-reset-aangevraagd');
             coachMail($email,
                 'InlineComp — wachtwoord opnieuw instellen',
                 "Hoi {$acc['naam']},\n\n"
@@ -253,6 +328,10 @@ try {
         $pdo->prepare("UPDATE coach_password_resets SET used_at = NOW() WHERE id = ?")->execute([$row['id']]);
         // Alle bestaande sessies van dit account intrekken (forceer opnieuw inloggen)
         $pdo->prepare("DELETE FROM coach_sessions WHERE coach_account_id = ?")->execute([$row['coach_account_id']]);
+        $ai = $pdo->prepare("SELECT naam, email FROM coach_accounts WHERE id = ?");
+        $ai->execute([$row['coach_account_id']]);
+        $acc = $ai->fetch(PDO::FETCH_ASSOC) ?: ['naam' => '', 'email' => ''];
+        logCoachEvent($pdo, $acc['naam'] ?? '', $acc['email'] ?? '', 'coach-reset');
         jsonOut(['ok' => true]);
     }
 
@@ -260,7 +339,7 @@ try {
     if ($method === 'GET' && $action === 'roster_list') {
         $c = vereisCoachLogin($pdo);
         $stmt = $pdo->prepare("
-            SELECT p.license_key, p.full_name, p.club_full, p.category, p.birth_year, ca.added_at
+            SELECT p.license_key, p.full_name, p.club_full, p.category, p.birth_year, p.start_number, ca.added_at
             FROM   coach_athletes ca
             JOIN   persons p ON p.license_key = ca.person_license
             WHERE  ca.coach_account_id = ?
@@ -278,18 +357,21 @@ try {
         $q = trim($_GET['q'] ?? '');
         if (strlen($q) < 2) jsonOut(['personen' => []]);   // te kort → geen zoekstorm
         $like = '%' . $q . '%';
+        // Startnummer-zoek: NL-rijders hebben een vast startnummer (niet uniek —
+        // kan per categorie hergebruikt worden), dus meerdere treffers mogelijk.
+        $snr  = ctype_digit($q) ? (int)$q : -1;
         $stmt = $pdo->prepare("
-            SELECT p.license_key, p.full_name, p.club_full, p.category, p.birth_year,
+            SELECT p.license_key, p.full_name, p.club_full, p.category, p.birth_year, p.start_number,
                    (ca.person_license IS NOT NULL) AS in_roster
             FROM   persons p
             LEFT JOIN coach_athletes ca
                    ON ca.person_license = p.license_key AND ca.coach_account_id = ?
             WHERE  p.anonymized_at IS NULL
-              AND  (p.full_name LIKE ? OR p.club_full LIKE ?)
+              AND  (p.full_name LIKE ? OR p.club_full LIKE ? OR p.start_number = ?)
             ORDER  BY p.full_name
             LIMIT  25
         ");
-        $stmt->execute([$c['id'], $like, $like]);
+        $stmt->execute([$c['id'], $like, $like, $snr]);
         jsonOut(['personen' => $stmt->fetchAll(PDO::FETCH_ASSOC)]);
     }
 
@@ -313,6 +395,13 @@ try {
         if ($lic === '') jsonOut(['error' => 'person_license ontbreekt'], 400);
         $pdo->prepare("DELETE FROM coach_athletes WHERE coach_account_id = ? AND person_license = ?")
             ->execute([$c['id'], $lic]);
+        jsonOut(['ok' => true]);
+    }
+
+    // ── POST roster_leeg — hele atletenlijst in één keer wissen ────────────────
+    if ($method === 'POST' && $action === 'roster_leeg') {
+        $c = vereisCoachLogin($pdo);
+        $pdo->prepare("DELETE FROM coach_athletes WHERE coach_account_id = ?")->execute([$c['id']]);
         jsonOut(['ok' => true]);
     }
 

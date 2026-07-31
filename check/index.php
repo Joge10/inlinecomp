@@ -19,6 +19,7 @@ header('Cache-Control: no-store, no-cache, must-revalidate, max-age=0');
 header('Pragma: no-cache');
 header('Expires: 0');
 require_once __DIR__ . '/../../config_inlinecomp.php';
+require_once __DIR__ . '/../inc/versie.php';   // één gedeeld versienummer voor heel InlineComp
 
 $action = $_GET['action'] ?? '';
 
@@ -771,6 +772,13 @@ body.met-footer { padding-bottom: 90px; }
     border-radius: 50%; display: flex; align-items: center; justify-content: center;
     font-size: .8rem; font-weight: 700; flex-shrink: 0;
 }
+/* ── Changelog / "Wat is nieuw" ── */
+.changelog-versie { margin: 12px 0; }
+.changelog-kop    { display: flex; align-items: baseline; gap: 8px; margin-bottom: 4px; }
+.changelog-vnr    { font-weight: 700; color: var(--blauw); font-size: .95rem; }
+.changelog-datum  { font-size: .78rem; color: #888; }
+.changelog-lijst  { margin: 0; padding-left: 20px; font-size: .88rem; }
+.changelog-lijst li { margin: 3px 0; }
 </style>
 </head>
 <body>
@@ -834,6 +842,42 @@ if (is_readable($i18nPath)) {
 }
 ?>
 
+// App-versie: één gedeelde bron voor heel InlineComp (zie inc/versie.php).
+const APP_VERSIE = <?= json_encode(INLINECOMP_VERSIE) ?>;
+
+// Master-changelog (inc/changelog.php) — gefilterd op onderdeel 'check'.
+<?php
+    $__cl     = require __DIR__ . '/../inc/changelog.php';
+    $__clMine = array_values(array_filter($__cl, fn($e) => in_array('check', $e['onderdelen'], true)));
+?>
+const CHANGELOG = <?= json_encode($__clMine, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES) ?>;
+
+// Rendert de changelog: groepeert opeenvolgende entries per versie+datum en
+// kiest per regel de tekst in de actieve taal (fallback en → nl). De tekst is
+// bewust HTML (bevat <b>/<i>) en wordt niet ge-escaped.
+function renderChangelog(entries) {
+    const lang = (typeof getCurLang === 'function') ? getCurLang() : 'nl';
+    const groepen = [];
+    for (const e of entries) {
+        const laatste = groepen[groepen.length - 1];
+        if (laatste && laatste.versie === e.versie && laatste.datum === e.datum) {
+            laatste.items.push(e);
+        } else {
+            groepen.push({ versie: e.versie, datum: e.datum, items: [e] });
+        }
+    }
+    return groepen.map(g => `
+        <div class="changelog-versie">
+            <div class="changelog-kop">
+                <span class="changelog-vnr">${g.versie}</span>
+                <span class="changelog-datum">${g.datum}</span>
+            </div>
+            <ul class="changelog-lijst">
+                ${g.items.map(it => `<li>${it.tekst[lang] || it.tekst.en || it.tekst.nl}</li>`).join('')}
+            </ul>
+        </div>`).join('');
+}
+
 // ── Translations (NL / EN / DE / FR) ─────────────────────────────────────
 const T = {
     nl: {
@@ -855,6 +899,9 @@ const T = {
         info_h3_html: 'Contact &amp; feedback',
         info_p5: 'Vragen of bugs?',
         info_p6: 'Geen mail-app op je telefoon? De formulieren versturen rechtstreeks via de pagina, geen mail-programma vereist.',
+        info_versie: 'Versie',
+        nieuw_h: 'Wat is nieuw?',
+        nieuw_intro: 'Kort overzicht van recente wijzigingen.',
         info_copyright: 'InlineComp &copy; {jaar} Geert de Vries',
         help_titel: 'Hoe werkt het?',
         help_h1: 'In 3 stappen',
@@ -975,6 +1022,9 @@ const T = {
         info_h3_html: 'Contact &amp; feedback',
         info_p5: 'Questions or bugs?',
         info_p6: 'No mail app on your phone? Forms submit directly through the page, no mail program required.',
+        info_versie: 'Version',
+        nieuw_h: 'What\'s new?',
+        nieuw_intro: 'Short overview of recent changes.',
         info_copyright: 'InlineComp &copy; {jaar} Geert de Vries',
         help_titel: 'How does it work?',
         help_h1: 'In 3 steps',
@@ -1094,6 +1144,9 @@ const T = {
         info_h3_html: 'Kontakt &amp; Feedback',
         info_p5: 'Fragen oder Bugs?',
         info_p6: 'Keine Mail-App auf dem Handy? Formulare werden direkt über die Seite gesendet, kein Mail-Programm erforderlich.',
+        info_versie: 'Version',
+        nieuw_h: 'Was ist neu?',
+        nieuw_intro: 'Kurze Übersicht der jüngsten Änderungen.',
         info_copyright: 'InlineComp &copy; {jaar} Geert de Vries',
         help_titel: 'Wie funktioniert es?',
         help_h1: 'In 3 Schritten',
@@ -1213,6 +1266,9 @@ const T = {
         info_h3_html: 'Contact &amp; retours',
         info_p5: 'Questions ou bugs ?',
         info_p6: 'Pas d\'app mail sur votre téléphone ? Les formulaires s\'envoient directement via la page, aucun programme mail requis.',
+        info_versie: 'Version',
+        nieuw_h: 'Quoi de neuf ?',
+        nieuw_intro: 'Bref aperçu des changements récents.',
         info_copyright: 'InlineComp &copy; {jaar} Geert de Vries',
         help_titel: 'Comment ça marche ?',
         help_h1: 'En 3 étapes',
@@ -1820,7 +1876,8 @@ function toonInfo() {
         </p>
         <p style="font-size:.85rem;color:#555">${esc(t('info_p6'))}</p>
 
-        <p style="font-size:.8rem;color:#999;text-align:center;margin-top:16px">${copyright}</p>
+        <p style="font-size:.85rem;color:#555;text-align:center;margin-top:16px">${esc(t('info_versie'))} <strong>${esc(APP_VERSIE)}</strong></p>
+        <p style="font-size:.8rem;color:#999;text-align:center;margin-top:4px">${copyright}</p>
     `);
 }
 function toonHelp() {
@@ -1844,6 +1901,10 @@ function toonHelp() {
 
         <h3>${esc(t('help_h_onbekend'))}</h3>
         <p>${t('help_p_onbekend_html')}</p>
+        ${CHANGELOG.length ? `
+        <h3 id="wat-is-nieuw" style="margin-top:24px;padding-top:12px;border-top:2px solid #eef2f6">✨ ${esc(t('nieuw_h'))}</h3>
+        <p style="font-size:.88rem;color:#555">${esc(t('nieuw_intro'))}</p>
+        ${renderChangelog(CHANGELOG)}` : ''}
     `);
 }
 

@@ -349,6 +349,10 @@ html, body {
     display: flex; justify-content: flex-end; gap: .5rem;
     margin-top: 1rem;
 }
+.jury-login-versie {
+    margin: 1rem 0 0; text-align: center;
+    font-size: .74rem; color: var(--jury-grijs);
+}
 
 /* ── Area of Call ─────────────────────────────────────────────────────────── */
 .aoc-scherm { max-width: 100%; }

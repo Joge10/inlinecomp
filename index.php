@@ -1,5 +1,6 @@
 <?php
 require_once __DIR__ . '/../config_inlinecomp.php';
+require_once __DIR__ . '/inc/versie.php';   // één gedeeld versienummer voor heel InlineComp
 require_once __DIR__ . '/auth/session.php';
 
 $gebruiker = getSession($pdo);
@@ -594,67 +595,157 @@ if (is_array($eigenScope) && !empty($eigenScope)) {
 
         <div id="page-info" class="page">
             <div class="pagina-inhoud">
-                <div class="section-title">Info</div>
-
-                <div class="info-blok">
-                    <h3>InlineComp</h3>
-                    <p>Webapplicatie voor het beheren van inline-skatewedstrijden:
-                       deelnemers importeren, tijdschema opstellen, startlijsten loten,
-                       resultaten verwerken, uitslagen en klassementen berekenen en afdrukken.</p>
-                    <p>Ingelogd als <strong id="info-user">…</strong>
-                       (rol: <span id="info-rol">…</span>).</p>
+                <div class="org-tabs-header">
+                    <h2>Info</h2>
+                    <nav class="org-tabs-nav" id="info-tabs-nav">
+                        <button class="org-tab-btn active" data-tab="info">Info</button>
+                        <button class="org-tab-btn" data-tab="versie">Versie</button>
+                        <button class="org-tab-btn" data-tab="changelog">Changelog</button>
+                    </nav>
                 </div>
 
-                <div class="info-blok">
-                    <h3>Documentatie</h3>
-                    <ul class="info-lijst">
-                        <li>📖 <a href="docs/handleiding.html" target="_blank" rel="noopener">
-                            Handleiding</a> — stap-voor-stap uitleg per module en een
-                            appendix voor techneuten.</li>
-                        <li>🔒 <a href="privacyverklaring.php" target="_blank" rel="noopener">
-                            Privacyverklaring (AVG)</a> — welke persoonsgegevens InlineComp
-                            verwerkt, waarom, en hoe lang ze bewaard blijven.</li>
-                    </ul>
+                <!-- Tab: Info -->
+                <div class="org-tab-content" id="info-tab-info">
+                    <div class="info-blok">
+                        <h3>InlineComp</h3>
+                        <p>Webapplicatie voor het beheren van inline-skatewedstrijden:
+                           deelnemers importeren, tijdschema opstellen, startlijsten loten,
+                           resultaten verwerken, uitslagen en klassementen berekenen en afdrukken.</p>
+                        <p>Ingelogd als <strong id="info-user">…</strong>
+                           (rol: <span id="info-rol">…</span>).</p>
+                    </div>
+
+                    <div class="info-blok">
+                        <h3>Documentatie</h3>
+                        <ul class="info-lijst">
+                            <li>📖 <a href="docs/handleiding.html" target="_blank" rel="noopener">
+                                Handleiding</a> — stap-voor-stap uitleg per module en een
+                                appendix voor techneuten.</li>
+                            <li>🔒 <a href="privacyverklaring.php" target="_blank" rel="noopener">
+                                Privacyverklaring (AVG)</a> — welke persoonsgegevens InlineComp
+                                verwerkt, waarom, en hoe lang ze bewaard blijven.</li>
+                        </ul>
+                    </div>
+
+                    <div class="info-blok">
+                        <h3>Hulp en feedback</h3>
+                        <p>Loop je tegen iets aan, of mis je een functie?
+                           Open een issue of mail naar <a href="mailto:inlinecomp@devriesen.com">
+                           inlinecomp@devriesen.com</a>. Dat helpt om InlineComp beter te maken
+                           voor iedereen.</p>
+                    </div>
+
+                    <div class="info-blok">
+                        <h3>Broncode en licentie</h3>
+                        <p>De broncode staat op
+                           <a href="https://github.com/Joge10/inlinecomp" target="_blank" rel="noopener">GitHub</a>
+                           onder de
+                           <a href="https://polyformproject.org/licenses/perimeter/1.0.1" target="_blank" rel="noopener">PolyForm Perimeter License 1.0.1</a>.
+                           Gebruiken en aanpassen mag; er een concurrerend product mee maken niet.
+                           Andere afspraak nodig? Mail
+                           <a href="mailto:inlinecomp@devriesen.com">inlinecomp@devriesen.com</a>.</p>
+                        <p>In de browser gebruikt InlineComp de open-source libraries
+                           <a href="https://github.com/eKoopmans/html2pdf.js" target="_blank" rel="noopener">html2pdf.js</a>
+                           en <a href="https://stuk.github.io/jszip/" target="_blank" rel="noopener">JSZip</a>
+                           (beide MIT-licentie).</p>
+                    </div>
+
+                    <div class="info-blok info-blok-laatst">
+                        <h3>Met dank aan</h3>
+                        <p>Iedereen die feedback gaf tijdens de ontwikkeling — speakers,
+                           juryleden, tijdwaarnemers, coaches, rijders (m/v), publiek
+                           en de KNSB.</p>
+                    </div>
                 </div>
 
-                <div class="info-blok">
-                    <h3>Versie en techniek</h3>
-                    <ul class="info-lijst">
-                        <li>InlineComp draait in jouw browser; alle gegevens worden
-                            opgeslagen op de server van de organisatie.</li>
-                        <li>Browser: <code id="info-browser">…</code></li>
-                        <li>Verbinding: <code id="info-online">…</code></li>
-                    </ul>
+                <!-- Tab: Versie -->
+                <div class="org-tab-content" id="info-tab-versie" style="display:none">
+                    <div class="info-blok">
+                        <h3>Versie en techniek</h3>
+                        <ul class="info-lijst">
+                            <li>Versie: <code><?= htmlspecialchars(INLINECOMP_VERSIE) ?></code>
+                                <span style="color:#888">(<?= htmlspecialchars(INLINECOMP_VERSIE_DATUM) ?>)</span></li>
+                            <li>Eén gedeeld versienummer voor alle onderdelen van InlineComp
+                                (Beheer, Public, Coach, Check en Jury).</li>
+                            <li>InlineComp draait in jouw browser; alle gegevens worden
+                                opgeslagen op de server van de organisatie.</li>
+                            <li>Browser: <code id="info-browser">…</code></li>
+                            <li>Verbinding: <code id="info-online">…</code></li>
+                        </ul>
+                    </div>
+
+                    <div class="info-blok" id="update-mail-blok">
+                        <h3>Beheerders informeren</h3>
+                        <p>Stuur alle beheerders (owners/admins met e-mailadres) een mail met
+                           wat er in deze versie is veranderd — doe dit ná het deployen van een
+                           nieuwe versie.</p>
+                        <div id="update-mail-status" class="update-mail-status">Status laden…</div>
+                        <button type="button" class="btn-primary" id="btn-update-mail" disabled>
+                            📧 Beheerders informeren
+                        </button>
+                    </div>
                 </div>
 
-                <div class="info-blok">
-                    <h3>Hulp en feedback</h3>
-                    <p>Loop je tegen iets aan, of mis je een functie?
-                       Open een issue of mail naar <a href="mailto:inlinecomp@devriesen.com">
-                       inlinecomp@devriesen.com</a>. Dat helpt om InlineComp beter te maken
-                       voor iedereen.</p>
-                </div>
+                <!-- Tab: Changelog (volledige changelog, alle onderdelen) -->
+                <div class="org-tab-content" id="info-tab-changelog" style="display:none">
+                    <div class="info-blok">
+                        <h3>Wat is nieuw</h3>
+                        <p>Volledige changelog voor <em>alle</em> onderdelen van InlineComp —
+                           zo zie je in één oogopslag wat er bij een volgende wedstrijd wijzigt
+                           voor Beheer, Public, Coach en Check.</p>
+<?php
+    $__cl = require __DIR__ . '/inc/changelog.php';
+    // Groepeer opeenvolgende entries per versie+datum (nieuwste bovenaan).
+    $__groepen = [];
+    foreach ($__cl as $__e) {
+        $__n = count($__groepen);
+        if ($__n && $__groepen[$__n - 1]['versie'] === $__e['versie']
+                 && $__groepen[$__n - 1]['datum']  === $__e['datum']) {
+            $__groepen[$__n - 1]['items'][] = $__e;
+        } else {
+            $__groepen[] = ['versie' => $__e['versie'], 'datum' => $__e['datum'], 'items' => [$__e]];
+        }
+    }
+    $__ondLabel = ['admin' => 'Beheer', 'public' => 'Public', 'coach' => 'Coach', 'check' => 'Check'];
+    // Filter-knoppen alleen voor onderdelen die daadwerkelijk voorkomen.
+    $__aanwezig = [];
+    foreach ($__cl as $__e) foreach ($__e['onderdelen'] as $__o) $__aanwezig[$__o] = true;
+    $__filterOrde = array_values(array_filter(
+        ['admin', 'public', 'coach', 'check'], fn($o) => isset($__aanwezig[$o])
+    ));
+?>
+                        <div class="cl-filterbar" id="cl-filterbar" role="group" aria-label="Filter op onderdeel">
+                            <button type="button" class="cl-filter-btn active" data-filter="alle">Alles</button>
+<?php foreach ($__filterOrde as $__o): ?>
+                            <button type="button" class="cl-filter-btn cl-filter-<?= htmlspecialchars($__o) ?>" data-filter="<?= htmlspecialchars($__o) ?>"><?= htmlspecialchars($__ondLabel[$__o]) ?></button>
+<?php endforeach; ?>
+                        </div>
 
-                <div class="info-blok">
-                    <h3>Broncode en licentie</h3>
-                    <p>De broncode staat op
-                       <a href="https://github.com/Joge10/inlinecomp" target="_blank" rel="noopener">GitHub</a>
-                       onder de
-                       <a href="https://polyformproject.org/licenses/perimeter/1.0.1" target="_blank" rel="noopener">PolyForm Perimeter License 1.0.1</a>.
-                       Gebruiken en aanpassen mag; er een concurrerend product mee maken niet.
-                       Andere afspraak nodig? Mail
-                       <a href="mailto:inlinecomp@devriesen.com">inlinecomp@devriesen.com</a>.</p>
-                    <p>In de browser gebruikt InlineComp de open-source libraries
-                       <a href="https://github.com/eKoopmans/html2pdf.js" target="_blank" rel="noopener">html2pdf.js</a>
-                       en <a href="https://stuk.github.io/jszip/" target="_blank" rel="noopener">JSZip</a>
-                       (beide MIT-licentie).</p>
-                </div>
-
-                <div class="info-blok info-blok-laatst">
-                    <h3>Met dank aan</h3>
-                    <p>Iedereen die feedback gaf tijdens de ontwikkeling — speakers,
-                       juryleden, tijdwaarnemers, coaches, rijders (m/v), publiek
-                       en de KNSB.</p>
+                        <div class="admin-changelog" id="admin-changelog">
+<?php foreach ($__groepen as $__g): $__aantal = count($__g['items']); ?>
+                            <section class="cl-versie">
+                                <div class="cl-versie-head" role="button" tabindex="0" aria-expanded="true">
+                                    <span class="cl-chevron" aria-hidden="true">▾</span>
+                                    <span class="cl-versie-nr"><?= htmlspecialchars($__g['versie']) ?></span>
+                                    <span class="cl-versie-telling" data-basis="<?= $__aantal ?>"><?= $__aantal ?>&times;</span>
+                                    <span class="cl-versie-datum"><?= htmlspecialchars($__g['datum']) ?></span>
+                                </div>
+                                <ul class="cl-lijst">
+<?php foreach ($__g['items'] as $__it): ?>
+                                    <li data-ond="<?= htmlspecialchars(implode(' ', $__it['onderdelen'])) ?>">
+                                        <span class="cl-tags">
+<?php foreach ($__it['onderdelen'] as $__o): ?>
+                                            <span class="cl-tag cl-tag-<?= htmlspecialchars($__o) ?>"><?= htmlspecialchars($__ondLabel[$__o] ?? $__o) ?></span>
+<?php endforeach; ?>
+                                        </span>
+                                        <span class="cl-tekst"><?= $__it['tekst']['nl'] ?></span>
+                                    </li>
+<?php endforeach; ?>
+                                </ul>
+                            </section>
+<?php endforeach; ?>
+                        </div>
+                    </div>
                 </div>
             </div>
         </div>

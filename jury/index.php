@@ -23,6 +23,7 @@ header('Cache-Control: no-store, no-cache, must-revalidate, max-age=0');
 header('Pragma: no-cache');
 header('Expires: 0');
 require_once __DIR__ . '/../../config_inlinecomp.php';
+require_once __DIR__ . '/../inc/versie.php';   // één gedeeld versienummer voor heel InlineComp
 require_once __DIR__ . '/../auth/jury_session.php';
 
 $action = $_GET['action'] ?? '';
@@ -107,8 +108,8 @@ function _juryLog(PDO $pdo, string $actie, ?string $compNaam = null, ?string $co
 
         $pdo->prepare("
             INSERT INTO login_logs
-                (user_id, naam, username, actie, ip_adres, land, stad, browser, os, user_agent)
-            VALUES (NULL, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                (user_id, naam, username, actie, ip_adres, land, stad, browser, os, bron, user_agent)
+            VALUES (NULL, ?, ?, ?, ?, ?, ?, ?, ?, 'jury', ?)
         ")->execute([
             $compNaam ?? 'Jury',
             (string)($compId ?? ''),
@@ -2082,6 +2083,7 @@ if ($action === 'scheids_vervang_in_heat' && $_SERVER['REQUEST_METHOD'] === 'POS
                 <button type="submit"  class="jury-btn jury-btn-primary"   id="jury-login-ok">Inloggen</button>
             </div>
         </form>
+        <p class="jury-login-versie">InlineComp Jury &middot; Versie <?= htmlspecialchars(INLINECOMP_VERSIE) ?></p>
     </div>
 </div>
 
