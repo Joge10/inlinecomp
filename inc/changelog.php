@@ -92,10 +92,10 @@ return [
     [
         'versie' => 'H997.31.07', 'datum' => '31-07-2026', 'onderdelen' => ['coach'],
         'tekst' => [
-            'nl' => '<b>Account beheren</b> — je kunt je coach-account nu zelf verwijderen en je hele atletenlijst in één keer wissen (👤-menu). Je roster toont atleten als pills met startnummer, en je zoekt op naam of startnummer.',
-            'en' => '<b>Manage your account</b> — you can now delete your coach account yourself and clear your whole roster at once (👤 menu). Your roster shows skaters as pills with start number, and you search by name or start number.',
-            'de' => '<b>Konto verwalten</b> — du kannst dein Coach-Konto jetzt selbst löschen und deine ganze Läuferliste auf einmal leeren (👤-Menü). Dein Roster zeigt die Skater als Pills mit Startnummer, und du suchst nach Name oder Startnummer.',
-            'fr' => '<b>Gérer le compte</b> — tu peux maintenant supprimer ton compte coach toi-même et vider toute ta liste d\'un coup (menu 👤). Ton roster affiche les skateurs en pastilles avec le numéro de dossard, et tu recherches par nom ou numéro de dossard.',
+            'nl' => '<b>Account beheren</b> — je kunt je coach-account nu zelf verwijderen en je hele atletenlijst in één keer wissen (👤-menu). Je lijst toont je atleten als pills met startnummer, en je zoekt op naam of startnummer.',
+            'en' => '<b>Manage your account</b> — you can now delete your coach account yourself and clear your whole list at once (👤 menu). Your list shows skaters as pills with start number, and you search by name or start number.',
+            'de' => '<b>Konto verwalten</b> — du kannst dein Coach-Konto jetzt selbst löschen und deine ganze Läuferliste auf einmal leeren (👤-Menü). Deine Liste zeigt die Skater als Pills mit Startnummer, und du suchst nach Name oder Startnummer.',
+            'fr' => '<b>Gérer le compte</b> — tu peux maintenant supprimer ton compte coach toi-même et vider toute ta liste d\'un coup (menu 👤). Ta liste affiche les skateurs en pastilles avec le numéro de dossard, et tu recherches par nom ou numéro de dossard.',
         ],
     ],
     // ── Public ──
