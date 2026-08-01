@@ -1194,23 +1194,36 @@ function toonBevestigDialog(bericht, titel = 'Onopgeslagen wijzigingen', labelOk
         // omgezet naar <br>. Dat laatste zorgt dat alert-style multi-line teksten
         // (bv. "Toewijzing vrijgeven?\n\nTransponder X aan Y") netjes worden
         // weergegeven zonder dat elke caller bodyIsHtml hoeft te gebruiken.
-        const bodyHtml = opts.bodyIsHtml
-            ? bericht
-            : escHtml(bericht).replace(/\n/g, '<br>');
         const overlay = document.createElement('div');
         overlay.className = 'modal-overlay';
+        // Vaste shell zónder user-tekst in de HTML. De dynamische tekst (titel,
+        // body, knop-labels) zetten we hierna via textContent → geen "DOM-tekst
+        // als HTML" (CodeQL js/xss-through-dom) en inherent veilig, niet
+        // afhankelijk van escHtml. Alleen bij opts.bodyIsHtml (caller levert
+        // bewust vertrouwde HTML: lijsten/opmaak/input-velden) gaat de body als
+        // innerHTML erin.
         overlay.innerHTML = `
             <div class="modal-dialog" role="dialog" aria-modal="true">
                 <div class="modal-header">
                     <span class="modal-icon">⚠</span>
-                    <span>${escHtml(titel)}</span>
+                    <span class="modal-titel"></span>
                 </div>
-                <div class="modal-body">${bodyHtml}</div>
+                <div class="modal-body"></div>
                 <div class="modal-knoppen">
-                    ${toonAnnuleer ? `<button class="modal-btn modal-annuleer">${escHtml(labelAnnuleer)}</button>` : ''}
-                    <button class="modal-btn modal-doorgaan">${escHtml(labelOk)}</button>
+                    ${toonAnnuleer ? `<button class="modal-btn modal-annuleer"></button>` : ''}
+                    <button class="modal-btn modal-doorgaan"></button>
                 </div>
             </div>`;
+        overlay.querySelector('.modal-titel').textContent = titel;
+        const _bodyEl = overlay.querySelector('.modal-body');
+        if (opts.bodyIsHtml) {
+            _bodyEl.innerHTML = bericht;               // caller levert vertrouwde HTML
+        } else {
+            _bodyEl.style.whiteSpace = 'pre-wrap';     // \n toont als regeleinde (verving de <br>-omzetting)
+            _bodyEl.textContent = bericht;             // inherent veilig — geen HTML-interpretatie
+        }
+        if (toonAnnuleer) overlay.querySelector('.modal-annuleer').textContent = labelAnnuleer;
+        overlay.querySelector('.modal-doorgaan').textContent = labelOk;
 
         document.body.appendChild(overlay);
 
