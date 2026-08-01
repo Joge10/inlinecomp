@@ -7341,7 +7341,6 @@ async function opCompetitionChange() {
         _sponsorSel.clear();
         renderSponsorMultiSelect();
         updateSponsorLabel();
-        renderProgramma();
         // Ingelogde + goedgekeurde coach: eigen roster-atleten die in DEZE
         // wedstrijd meedoen automatisch aan de coach-lijst toevoegen (server-
         // roster → startnummer van deze wedstrijd). Add-only; de coach kan
@@ -7349,8 +7348,13 @@ async function opCompetitionChange() {
         if (typeof window.coachAccountAutoMerge === 'function') {
             try { await window.coachAccountAutoMerge(compId); } catch (e) {}
         }
-        // Status + sancties ophalen voor de al bestaande coach-lijst (uit localStorage)
+        // Status + sancties ophalen; dan PAS het programma renderen zodat de
+        // coach-lijst (na de auto-merge) al gevuld is. Anders toonde het programma
+        // bij een ingelogde coach soms geen rijders — race: renderProgramma liep
+        // vóór coachAccountAutoMerge (async) klaar was, en werd daarna niet meer
+        // opnieuw aangeroepen (alleen chips/heats wel).
         await laadCoachInfo();
+        renderProgramma();
         renderChips();
         renderSancties();
         renderHeats();
