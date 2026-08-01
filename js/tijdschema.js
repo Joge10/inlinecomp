@@ -3381,7 +3381,7 @@ function _bouwProgrammaExternInternal() {
     const dcNaam = new Map();
     bouwAfstandGroepen().forEach(af => af.cats.forEach(c => { if (!dcNaam.has(c.dc_id)) dcNaam.set(c.dc_id, c.dc_naam); }));
 
-    const esc = s => String(s ?? '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+    const esc = s => String(s ?? '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
 
     // Volgende ronde naam op basis van cat-config
     const volgendeRonde = (rondeType, cc) => {
@@ -4160,7 +4160,7 @@ function _bouwProgrammaInternInternal() {
     });
 
     // ── Org-logo header + sponsors footer (gedeelde helper) ─────────────────
-    const esc = s => String(s ?? '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+    const esc = s => String(s ?? '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
     const { orgLogoHtml, baanLogoHtml, footerHtml } = bouwOrgHeaderFooter(esc);
 
     // ── DC-namen opzoektabel ──────────────────────────────────────────────────

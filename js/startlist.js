@@ -855,7 +855,7 @@ async function _bouwStartlijstDrukInternal(optData) {
     const schema = _slTsCache?.competition_id === huidigCompId ? _slTsCache.schema : null;
     const rl     = bouwRitLookup(schema, optData.dcId, distId, rondeSleutel);
 
-    const esc = s => String(s ?? '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+    const esc = s => String(s ?? '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
     const comp = huidigComp;
     // Locale-aware wedstrijddatum (formatDatum is hardcoded nl-NL).
     const datum = comp?.starts

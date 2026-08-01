@@ -1252,7 +1252,7 @@ function _tpSyncAllePagina() {
 // Print alle transponders waarvan toegewezen_snr gevuld is (= uitgeleverd).
 // Gebruikt voor overzicht aan de balie / archief.
 function printUitgeleverdeTransponders() {
-    const esc = s => String(s ?? '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+    const esc = s => String(s ?? '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
     const uitgeleverd = (_tpAlleData || []).filter(tp =>
         tp.toegewezen_snr !== null && tp.toegewezen_snr !== undefined && tp.toegewezen_snr !== ''
     );
@@ -1684,7 +1684,7 @@ async function protokolDataDialog(compId, compNaam) {
 // de operator (kleur/zwart-wit, marges, paginabereik).
 async function printWedstrijdrapport(compId, compNaam) {
     if (!compId) return;
-    const esc = s => String(s ?? '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+    const esc = s => String(s ?? '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
 
     // Taalkeuze — simpele NL/EN-modal.
     const lang = await kiesTaal();

@@ -1002,9 +1002,12 @@ async function _csvBestandGekozen(ev) {
     const foutEl     = document.getElementById('csv-fout');
     const volgendeBtn = document.getElementById('csv-volgende');
 
-    info.innerHTML = `<span class="csv-bestand-naam">${_csvEsc(file.name)}</span>
+    info.innerHTML = `<span class="csv-bestand-naam"></span>
                       <span class="csv-bestand-grootte">${_csvFormatBytes(file.size)}</span>
                       <span class="csv-status">Bezig…</span>`;
+    // Bestandsnaam via textContent (niet innerHTML): DOM-tekst-bron → inherent
+    // veilig, geen HTML-interpretatie (CodeQL js/xss-through-dom).
+    info.querySelector('.csv-bestand-naam').textContent = file.name;
     previewBlk.style.display = 'none';
     foutEl.style.display     = 'none';
     volgendeBtn.disabled     = true;

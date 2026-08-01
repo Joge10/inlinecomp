@@ -1617,7 +1617,7 @@ async function _pcStartPrint() {
             return s || '(onbekende sectie)';
         };
         const escape = (s) => String(s)
-            .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+            .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
         const portraitTitels  = bodies.filter(({ data }) => data.pageOrientation !== 'landscape')
                                       .map(({ data }) => escape(labelVan(data)));
         const landscapeTitels = bodies.filter(({ data }) => data.pageOrientation === 'landscape')

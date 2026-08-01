@@ -1570,7 +1570,7 @@ async function _bouwKlassementInternal(optData) {
     const LANG = (window._pcLang && window._pcLang()) || 'nl';
     const LOC  = LANG === 'en' ? 'en-GB' : 'nl-NL';
 
-    const esc  = s => String(s ?? '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+    const esc  = s => String(s ?? '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
     const comp = huidigComp;
     // Locale-aware wedstrijddatum (formatDatum is hardcoded nl-NL).
     const datum = comp?.starts
@@ -1808,7 +1808,7 @@ async function _bouwUitslagAfstandInternal(optData) {
     const LANG = (window._pcLang && window._pcLang()) || 'nl';
     const LOC  = LANG === 'en' ? 'en-GB' : 'nl-NL';
 
-    const esc  = s => String(s ?? '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+    const esc  = s => String(s ?? '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
     const comp = huidigComp;
     const datum = comp?.starts
         ? new Date(comp.starts).toLocaleDateString(LOC,
