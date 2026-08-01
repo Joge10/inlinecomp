@@ -632,15 +632,19 @@ async function _csvDoeZoek(rowIdx, query) {
             return;
         }
         resEl.innerHTML = d.results.map(p => {
-            const meta = [
+            // metaParts = PURE tekst (brondata uit persons; ongesaneerd opgeslagen).
+            // Eén keer escapen; de vaste "extern"-badge apart als hardcoded markup
+            // erachter — nooit user-data ongeëscaped in de zichtbare render.
+            const metaParts = [
                 p.birth_year ? `geb. ${p.birth_year}` : null,
                 p.club || null,
                 p.start_number ? `snr ${p.start_number}` : null,
-                p.extern ? '<span class="csv-zoek-extern">extern</span>' : null,
             ].filter(Boolean).join(' · ');
-            return `<button class="csv-zoek-resultaat" data-row-idx="${rowIdx}" data-license="${_csvEsc(p.license_key)}" data-fullname="${_csvEsc(p.full_name)}" data-meta="${_csvEsc(meta.replace(/<[^>]+>/g, ''))}">
+            const metaHtml = _csvEsc(metaParts)
+                + (p.extern ? (metaParts ? ' · ' : '') + '<span class="csv-zoek-extern">extern</span>' : '');
+            return `<button class="csv-zoek-resultaat" data-row-idx="${rowIdx}" data-license="${_csvEsc(p.license_key)}" data-fullname="${_csvEsc(p.full_name)}" data-meta="${_csvEsc(metaParts)}">
                 <strong>${_csvEsc(p.full_name)}</strong>
-                <small>${meta}</small>
+                <small>${metaHtml}</small>
             </button>`;
         }).join('');
         // Bind click op resultaten

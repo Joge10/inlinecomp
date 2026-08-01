@@ -1117,7 +1117,7 @@ const RONDE_LABEL = {
 
 // Bouw HTML voor één carousel-kaart
 function _liveBouwKaart(rit, idx, compact = false) {
-    const rondeKls = `live-ronde-${(rit.ronde_type || 'heats').replace('_', '_')}`;
+    const rondeKls = `live-ronde-${escHtml(rit.ronde_type || 'heats')}`;
     const tijdstipHtml = rit.tijdstip
         ? `<span class="live-rit-tijdstip">${escHtml(rit.tijdstip.substring(0,5))}</span>` : '';
     const rondeBadge = `<span class="live-rit-rondebadge ${rondeKls}">${escHtml(RONDE_LABEL[rit.ronde_type] || rit.ronde_type)}</span>`;

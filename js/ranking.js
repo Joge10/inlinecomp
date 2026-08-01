@@ -5,7 +5,7 @@
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
 const rkEl  = id => document.getElementById(id);
-const rkEsc = s  => String(s ?? '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+const rkEsc = s  => String(s ?? '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
 
 async function rkPost(url, body, contentType) {
     // Ondersteunt zowel FormData (legacy PDF-upload) als JSON (serie-wizard).
