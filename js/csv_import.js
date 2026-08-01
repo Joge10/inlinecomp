@@ -642,7 +642,10 @@ async function _csvDoeZoek(rowIdx, query) {
             ].filter(Boolean).join(' · ');
             const metaHtml = _csvEsc(metaParts)
                 + (p.extern ? (metaParts ? ' · ' : '') + '<span class="csv-zoek-extern">extern</span>' : '');
-            return `<button class="csv-zoek-resultaat" data-row-idx="${rowIdx}" data-license="${_csvEsc(p.license_key)}" data-fullname="${_csvEsc(p.full_name)}" data-meta="${_csvEsc(metaParts)}">
+            // data-meta = platte tekst (incl. "extern"-woord zoals voorheen; wordt
+            // teruggelezen in het koppel-dropdown-label via textContent).
+            const metaText = metaParts + (p.extern ? (metaParts ? ' · ' : '') + 'extern' : '');
+            return `<button class="csv-zoek-resultaat" data-row-idx="${rowIdx}" data-license="${_csvEsc(p.license_key)}" data-fullname="${_csvEsc(p.full_name)}" data-meta="${_csvEsc(metaText)}">
                 <strong>${_csvEsc(p.full_name)}</strong>
                 <small>${metaHtml}</small>
             </button>`;
