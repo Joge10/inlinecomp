@@ -5810,6 +5810,29 @@ function _refreshAfstandPanel(strook) {
         );
     }
 }
+// Zet/maak/verwijder de oranje eigen-rijder-badge op een groep-header.
+// Gebruikt bij samenvat (totaal over alle cats) én bij herstel naar de
+// originele cat-waarde als het afstand-filter weer weg wordt gezet.
+function _zetProgMijnBadge(el, count) {
+    const hdr = el.querySelector('.prog-groep-hdr');
+    if (!hdr) return;
+    let badge = hdr.querySelector('.prog-groep-mijn-badge');
+    if (count > 0) {
+        el.classList.add('mijn');
+        if (!badge) {
+            badge = document.createElement('span');
+            badge.className = 'prog-groep-mijn-badge';
+            badge.title = t('prog_klap_mijn_tooltip');
+            const titel = hdr.querySelector('.prog-groep-titel');
+            if (titel && titel.nextSibling) hdr.insertBefore(badge, titel.nextSibling);
+            else hdr.appendChild(badge);
+        }
+        badge.textContent = String(count);
+    } else {
+        el.classList.remove('mijn');
+        badge?.remove();
+    }
+}
 function applyProgFilter(strook) {
     const dag = strook.getAttribute('data-actieve-dag') || 'alle';
     const afs = strook.getAttribute('data-actieve-afstand') || 'alle';
@@ -5822,6 +5845,11 @@ function applyProgFilter(strook) {
         if (titel?.dataset.originalHtml) {
             titel.innerHTML = titel.dataset.originalHtml;
             delete titel.dataset.originalHtml;
+        }
+        // Eigen-rijder-badge terug naar de originele cat-waarde.
+        if (el.dataset.samenvatMijnOrig !== undefined) {
+            _zetProgMijnBadge(el, parseInt(el.dataset.samenvatMijnOrig, 10) || 0);
+            delete el.dataset.samenvatMijnOrig;
         }
     });
     const eersteVanCombi = new Map();
@@ -5843,19 +5871,32 @@ function applyProgFilter(strook) {
         const combiKey = `${elAfs}|${elRt || ''}`;
         // Coach gebruikt .heat-rij voor de heat-rijen binnen de groep-body.
         const heats = el.querySelectorAll('.heat-rij').length;
+        // Eigen-rijder-badge telt óók over álle cats van deze afstand+ronde
+        // (anders toont de samenvat alleen het aantal van de eerste cat).
+        const mijnBadge = el.querySelector('.prog-groep-mijn-badge');
+        const mijn = mijnBadge ? (parseInt(mijnBadge.textContent, 10) || 0) : 0;
         if (eersteVanCombi.has(combiKey)) {
             el.classList.add('verborgen');
-            eersteVanCombi.get(combiKey).heats += heats;
+            const rec = eersteVanCombi.get(combiKey);
+            rec.heats += heats;
+            rec.mijn  += mijn;
         } else {
             el.classList.remove('verborgen');
             el.classList.add('samenvat');
-            eersteVanCombi.set(combiKey, {el, heats});
+            eersteVanCombi.set(combiKey, {el, heats, mijn});
         }
     });
-    for (const {el, heats} of eersteVanCombi.values()) {
+    for (const {el, heats, mijn} of eersteVanCombi.values()) {
         const hdr = el.querySelector('.prog-groep-hdr');
         if (!hdr) continue;
         hdr.querySelector('.samenvat-teller')?.remove();
+        // Bewaar de originele (eerste-cat) waarde vóór we de badge naar het
+        // totaal zetten, zodat clear-loop 'm kan herstellen.
+        if (el.dataset.samenvatMijnOrig === undefined) {
+            const origBadge = hdr.querySelector('.prog-groep-mijn-badge');
+            el.dataset.samenvatMijnOrig = String(origBadge ? (parseInt(origBadge.textContent, 10) || 0) : 0);
+        }
+        _zetProgMijnBadge(el, mijn);
         // Titel vervangen: badge + afstand-naam (dc-naam is cat-specifiek,
         // samenvat is gecombineerd over alle cats van deze afstand+ronde).
         const titel = hdr.querySelector('.prog-groep-titel');
