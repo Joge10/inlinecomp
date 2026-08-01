@@ -294,7 +294,7 @@ async function _slRenderAfstandFilter(groepen) {
 function zetDistTabKleur(distId, heeftLoting) {
     const distTabsEl = el('sl-dist-tabs');
     if (!distTabsEl) return;
-    const btn = distTabsEl.querySelector(`[data-dist-id="${String(distId ?? '').replace(/"/g, '\\"')}"]`);
+    const btn = distTabsEl.querySelector(`[data-dist-id="${CSS.escape(String(distId ?? ''))}"]`);
     if (!btn) return;
     btn.classList.toggle('tab-gereed', !!heeftLoting);
 }
