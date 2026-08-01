@@ -1003,11 +1003,13 @@ async function _csvBestandGekozen(ev) {
     const volgendeBtn = document.getElementById('csv-volgende');
 
     info.innerHTML = `<span class="csv-bestand-naam"></span>
-                      <span class="csv-bestand-grootte">${_csvFormatBytes(file.size)}</span>
+                      <span class="csv-bestand-grootte"></span>
                       <span class="csv-status">Bezig…</span>`;
-    // Bestandsnaam via textContent (niet innerHTML): DOM-tekst-bron → inherent
-    // veilig, geen HTML-interpretatie (CodeQL js/xss-through-dom).
+    // Naam én grootte via textContent (niet innerHTML): beide zijn DOM-bronnen
+    // (van de file-input) → inherent veilig, geen HTML-interpretatie (CodeQL
+    // js/xss-through-dom). Alleen de vaste "Bezig…"-tekst blijft in de innerHTML.
     info.querySelector('.csv-bestand-naam').textContent = file.name;
+    info.querySelector('.csv-bestand-grootte').textContent = _csvFormatBytes(file.size);
     previewBlk.style.display = 'none';
     foutEl.style.display     = 'none';
     volgendeBtn.disabled     = true;
