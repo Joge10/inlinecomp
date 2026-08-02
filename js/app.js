@@ -262,7 +262,12 @@ function switchSysteemTab(tab) {
         && cont.children.length > 0
         && !cont.querySelector(':scope > .status-msg.loading');
 
-    if (!_sysTabGeladen.has(tab) || !echtGeladen) {
+    // Sommige tabs tonen live-data (nieuwe coach-aanmeldingen, laatste-login):
+    // die altijd opnieuw ophalen bij het openen, niet uit cache serveren —
+    // anders verschijnt een net-aangemelde coach pas na een volledige refresh.
+    const altijdVerversen = new Set(['coach']);
+
+    if (altijdVerversen.has(tab) || !_sysTabGeladen.has(tab) || !echtGeladen) {
         _sysTabGeladen.add(tab);
         if (tab === 'gebruikers' || tab === 'bezoekers' || tab === 'logboek') toonGebruikersPagina();
         if (tab === 'coach')    toonCoachBeheer();
