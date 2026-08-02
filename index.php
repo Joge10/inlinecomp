@@ -491,9 +491,9 @@ if (is_array($eigenScope) && !empty($eigenScope)) {
                     <h2>Systeem</h2>
                     <nav class="org-tabs-nav" id="sys-tabs-nav">
                         <button class="org-tab-btn active" data-tab="gebruikers">Gebruikers</button>
-                        <button class="org-tab-btn" data-tab="bezoekers">Bezoekers</button>
+                        <button class="org-tab-btn" data-tab="coach">Coaches</button>
                         <button class="org-tab-btn" data-tab="logboek">Logboek</button>
-                        <button class="org-tab-btn" data-tab="coach">Coach</button>
+                        <button class="org-tab-btn" data-tab="bezoekers">Bezoekers</button>
                         <button class="org-tab-btn" data-tab="rijders">Rijders</button>
                         <button class="org-tab-btn" data-tab="uploads">Uploads</button>
                         <button class="org-tab-btn" data-tab="helpers">Helpers</button>
