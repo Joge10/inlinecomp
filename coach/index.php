@@ -8341,6 +8341,7 @@ window.addEventListener('appinstalled', () => {
     link_terug_login: { nl:'Terug naar inloggen', en:'Back to login', de:'Zurück zur Anmeldung', fr:'Retour à la connexion' },
     err_email_leeg:   { nl:'Vul je e-mailadres in.', en:'Enter your email address.', de:'Gib deine E-Mail-Adresse ein.', fr:'Saisissez votre adresse e-mail.' },
     ok_reset:         { nl:'Als dit adres bekend is, sturen we een link.', en:"If this address is known, we'll send a link.", de:'Wenn diese Adresse bekannt ist, senden wir einen Link.', fr:'Si cette adresse est connue, nous enverrons un lien.' },
+    spam_hint:        { nl:"Kijk ook even in je spam-map en markeer 'm als 'geen spam'.", en:"Also check your spam folder and mark it as 'not spam'.", de:"Schau auch in deinem Spam-Ordner nach und markiere die Mail als 'kein Spam'.", fr:'Vérifiez aussi votre dossier spam et marquez-le comme « non indésirable ».' },
     banner_pending:   { nl:'⏳ Je account wacht op goedkeuring. Je atleten worden alvast bewaard en verschijnen zodra je bent goedgekeurd.', en:'⏳ Your account is awaiting approval. Your athletes are already saved and will appear once you are approved.', de:'⏳ Dein Konto wartet auf Genehmigung. Deine Athleten werden schon gespeichert und erscheinen, sobald du genehmigt bist.', fr:"⏳ Votre compte est en attente d'approbation. Vos athlètes sont déjà enregistrés et apparaîtront dès votre approbation." },
     ingelogd_als:     { nl:'Ingelogd als', en:'Logged in as', de:'Angemeldet als', fr:'Connecté en tant que' },
     btn_uitloggen:    { nl:'Uitloggen', en:'Log out', de:'Abmelden', fr:'Se déconnecter' },
@@ -8590,7 +8591,7 @@ window.addEventListener('appinstalled', () => {
       const r = await post('register', { naam, email, wachtwoord: pw, coacht_van_type: 'auto', coacht_van: van });
       btn.disabled = false;
       if (!r.ok) return meld(ov, 'fout', r.error || ct('err_reg_mislukt'));
-      meld(ov, 'ok', ct('ok_reg'));
+      meld(ov, 'ok', ct('ok_reg') + ' ' + ct('spam_hint'));
     });
   }
 
@@ -8607,7 +8608,7 @@ window.addEventListener('appinstalled', () => {
       const btn = f.querySelector('#fg-btn'); btn.disabled = true;
       const r = await post('wachtwoord_vergeten', { email });
       btn.disabled = false;
-      meld(ov, 'ok', r.message || ct('ok_reset'));
+      meld(ov, 'ok', (r.message || ct('ok_reset')) + ' ' + ct('spam_hint'));
     });
   }
 
