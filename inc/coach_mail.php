@@ -18,12 +18,19 @@ if (!defined('COACH_MAIL_FROM')) {
 }
 
 if (!function_exists('coachMail')) {
-    /** Verstuurt een coach-mail via mail() met de app-standaard headers + -f envelope. */
+    /** Verstuurt een coach-mail via mail() met de app-standaard headers + -f envelope.
+     *  Message-ID/Date op devriesen.com (uitgelijnd met de From-afzender) i.p.v. de
+     *  byethost-default — scheelt een spam-minpunt bij strenge filters. */
     function coachMail(string $to, string $subject, string $body): bool {
+        $msgId = sprintf('<%s.%s@devriesen.com>', date('YmdHis'), bin2hex(random_bytes(8)));
         $headers = implode("\r\n", [
             'From: ' . COACH_MAIL_FROM,
             'Reply-To: ' . COACH_MAIL_ENVELOPE,
+            'MIME-Version: 1.0',
             'Content-Type: text/plain; charset=utf-8',
+            'Content-Transfer-Encoding: 8bit',
+            'Date: ' . date('r'),
+            'Message-ID: ' . $msgId,
             'X-Mailer: InlineComp Coach',
         ]);
         return @mail($to, $subject, $body, $headers, '-f' . COACH_MAIL_ENVELOPE);
