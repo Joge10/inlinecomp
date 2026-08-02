@@ -15,6 +15,7 @@ if (!defined('COACH_MAIL_FROM')) {
     define('COACH_NOTIFY_MAIL_TO', 'inlinecomp@devriesen.com');   // owner krijgt registratie-melding
     define('COACH_RESET_URL',      'https://inlineresults.devriesen.com/coach/reset.php');
     define('COACH_LOGIN_URL',      'https://inlineresults.devriesen.com/coach/');
+    define('COACH_PRIVACY_URL',    'https://inlineresults.devriesen.com/privacyverklaring.php');
 }
 
 if (!function_exists('coachMail')) {
@@ -84,11 +85,14 @@ if (!function_exists('coachMailGoedgekeurd')) {
             . "hele lijst in één keer wissen.\n"
             . "• Tijdens een wedstrijd zie je van jouw rijders meteen hun heats, starttijden en uitslagen, "
             . "met highlight.\n\n"
-            . "PRIVACY (belangrijk)\n"
-            . "Je ziet persoonsgegevens (naam, club, categorie, geboortejaar) van de rijders die jij "
-            . "toevoegt. Voeg alleen rijders toe die je echt coacht, en verwijder rijders — of wis je hele "
-            . "lijst — zodra je ze niet meer volgt. Je kunt je coach-account ook zelf verwijderen; je lijst "
-            . "wordt dan mee gewist.\n\n"
+            . "PRIVACY (jouw gegevens)\n"
+            . "Met een account ben je niet meer anoniem: we bewaren je naam, e-mailadres en je atletenlijst "
+            . "om je te herkennen en je rijders te tonen. Je wachtwoord staat versleuteld opgeslagen en je "
+            . "logins worden vastgelegd voor de beveiliging. Je kunt je account altijd zelf verwijderen "
+            . "(je lijst gaat mee) en het vervalt automatisch na een jaar zonder inloggen. Zie de "
+            . "privacyverklaring: " . COACH_PRIVACY_URL . "\n"
+            . "Voeg van rijders alleen mensen toe die je echt coacht (je ziet naam, club en categorie) en "
+            . "verwijder ze — of wis je hele lijst — zodra je ze niet meer volgt.\n\n"
             . "Groet,\nInlineComp";
         $en = "Hi $naam,\n\n"
             . "Good news: your InlineComp coach account has been approved. You can now log in and follow "
@@ -102,10 +106,14 @@ if (!function_exists('coachMailGoedgekeurd')) {
             . "• Extending or cleaning up: add or remove riders at any time. You can also clear your entire "
             . "list in one go.\n"
             . "• During a race you immediately see your riders' heats, start times and results, highlighted.\n\n"
-            . "PRIVACY (important)\n"
-            . "You see personal data (name, club, category, birth year) of the riders you add. Only add "
-            . "riders you actually coach, and remove riders — or clear your whole list — once you no longer "
-            . "follow them. You can also delete your coach account yourself; your list is then wiped too.\n\n"
+            . "PRIVACY (your data)\n"
+            . "With an account you are no longer anonymous: we store your name, e-mail address and athlete "
+            . "list to recognise you and show your riders. Your password is stored encrypted and your logins "
+            . "are recorded for security. You can delete your account yourself at any time (your list goes "
+            . "with it) and it expires automatically after a year without logging in. See the privacy "
+            . "statement: " . COACH_PRIVACY_URL . "\n"
+            . "As for the riders you add, only add people you actually coach (you see name, club and "
+            . "category) and remove them — or clear your whole list — once you no longer follow them.\n\n"
             . "Regards,\nInlineComp";
         return [
             'subject' => 'InlineComp — je coach-account is goedgekeurd / your coach account is approved',
