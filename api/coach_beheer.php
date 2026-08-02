@@ -20,6 +20,7 @@ header('Access-Control-Allow-Origin: *');
 
 require_once __DIR__ . '/../../config_inlinecomp.php';
 require_once __DIR__ . '/../auth/session.php';
+require_once __DIR__ . '/../inc/coach_mail.php';   // coachMail() + mailteksten
 
 $ik = requireAuth($pdo, ['owner', 'admin']);
 
@@ -65,10 +66,26 @@ try {
         exit;
     }
 
+    // Huidige gegevens ophalen — nodig voor de coach-mail (en om alleen te
+    // mailen bij een ECHTE statuswijziging, niet bij nogmaals goedkeuren).
+    $st = $pdo->prepare("SELECT email, naam, status FROM coach_accounts WHERE id = ?");
+    $st->execute([$id]);
+    $acc = $st->fetch(PDO::FETCH_ASSOC);
+    if (!$acc && in_array($action, ['goedkeuren', 'afwijzen', 'deactiveren', 'activeren'], true)) {
+        http_response_code(404);
+        echo json_encode(['error' => 'Coach-account niet gevonden']);
+        exit;
+    }
+
     if ($action === 'goedkeuren') {
         $pdo->prepare("UPDATE coach_accounts
                        SET status = 'approved', goedgekeurd_door = ?, goedgekeurd_at = NOW()
                        WHERE id = ?")->execute([$ik['id'], $id]);
+        // Mail alleen bij overgang naar goedgekeurd (voorkomt dubbele mails).
+        if ($acc['status'] !== 'approved') {
+            $m = coachMailGoedgekeurd($acc['naam']);
+            coachMail($acc['email'], $m['subject'], $m['body']);
+        }
         echo json_encode(['ok' => true, 'status' => 'approved']);
         exit;
     }
@@ -78,6 +95,10 @@ try {
                        WHERE id = ?")->execute([$ik['id'], $id]);
         // Lopende sessies intrekken zodat een afgewezen coach direct uitvalt.
         $pdo->prepare("DELETE FROM coach_sessions WHERE coach_account_id = ?")->execute([$id]);
+        if ($acc['status'] !== 'rejected') {
+            $m = coachMailAfgewezen($acc['naam']);
+            coachMail($acc['email'], $m['subject'], $m['body']);
+        }
         echo json_encode(['ok' => true, 'status' => 'rejected']);
         exit;
     }

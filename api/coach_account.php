@@ -20,13 +20,7 @@ header('Access-Control-Allow-Origin: *');
 
 require_once __DIR__ . '/../../config_inlinecomp.php';
 require_once __DIR__ . '/lib_coach_auth.php';
-
-// Afzender + notify-adres — zelfde domein als de rest van de app-mail
-// (DKIM/DMARC geregeld op devriesen.com). Eventueel later naar config.
-const COACH_MAIL_FROM      = 'InlineComp <inlinecomp@devriesen.com>';
-const COACH_MAIL_ENVELOPE  = 'inlinecomp@devriesen.com';   // -f envelope-from (SPF-alignment)
-const COACH_NOTIFY_MAIL_TO = 'inlinecomp@devriesen.com';   // owner krijgt registratie-melding
-const COACH_RESET_URL      = 'https://inlineresults.devriesen.com/coach/reset.php';
+require_once __DIR__ . '/../inc/coach_mail.php';   // COACH_MAIL_* + coachMail() + mailteksten
 
 $method = $_SERVER['REQUEST_METHOD'] ?? 'GET';
 $action = $_GET['action'] ?? '';
@@ -54,17 +48,6 @@ function coachRateLimited(string $actie, int $max, int $vensterSec): bool {
     $hits[] = $now;
     @file_put_contents($key, json_encode($hits), LOCK_EX);
     return false;
-}
-
-/** Verstuurt een coach-mail via mail() met de app-standaard headers + -f envelope. */
-function coachMail(string $to, string $subject, string $body): bool {
-    $headers = implode("\r\n", [
-        'From: ' . COACH_MAIL_FROM,
-        'Reply-To: ' . COACH_MAIL_ENVELOPE,
-        'Content-Type: text/plain; charset=utf-8',
-        'X-Mailer: InlineComp Coach',
-    ]);
-    return @mail($to, $subject, $body, $headers, '-f' . COACH_MAIL_ENVELOPE);
 }
 
 /** Vlag-emoji uit 2-letter landcode (zelfde als staff/jury). */
@@ -219,6 +202,10 @@ try {
           . "E-mail      : $email\n"
           . "Coach van   : $vanLabel — $van\n\n"
           . "Keur goed of af in Beheer → Coach.\n");
+
+        // Coach een bevestiging sturen dat de aanvraag is ontvangen.
+        $mBev = coachMailBevestiging($naam);
+        coachMail($email, $mBev['subject'], $mBev['body']);
 
         logCoachEvent($pdo, $naam, $email, 'coach-register');
         jsonOut(['ok' => true, 'status' => 'pending']);
