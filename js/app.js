@@ -369,15 +369,11 @@ function initChangelogUI() {
     if (!root) return;
     _changelogGeinit = true;
 
-    // Standaard: alleen de nieuwste release uitgeklapt, inclusief haar geneste
-    // Onderhoud-subsectie. Oudere versies (en hun Onderhoud) starten ingeklapt.
+    // Standaard: alleen de nieuwste release uitgeklapt. Onderhoud-subsecties
+    // (en oudere versies) starten ingeklapt.
     const eersteRelease = root.querySelector('.cl-versie:not(.cl-subsectie)')
                        || root.querySelector('.cl-versie');
-    root.querySelectorAll('.cl-versie').forEach(v => {
-        const open = v === eersteRelease
-            || (eersteRelease && v.classList.contains('cl-subsectie') && eersteRelease.contains(v));
-        _clZetVersie(v, open);
-    });
+    root.querySelectorAll('.cl-versie').forEach(v => _clZetVersie(v, v === eersteRelease));
 
     // Klik/Enter op versie-header → in/uitklappen.
     root.querySelectorAll('.cl-versie-head').forEach(head => {
@@ -428,19 +424,15 @@ function _clPasFilterToe(root, filter) {
         }
     });
     // 3e pass: in/uitklappen. Gefilterd → alle zichtbare open. 'Alles' spiegelt de
-    // begintoestand: de nieuwste zichtbare release + haar Onderhoud-subsectie open,
-    // de rest dicht.
-    let eersteRelease = null;
+    // begintoestand: alleen de nieuwste zichtbare release open, Onderhoud-subsecties
+    // (en oudere versies) dicht.
+    let eersteZichtbaar = true;
     root.querySelectorAll('.cl-versie').forEach(versie => {
         if (versie.style.display === 'none') return;
         if (filter !== 'alle') { _clZetVersie(versie, true); return; }
-        if (versie.classList.contains('cl-subsectie')) {
-            _clZetVersie(versie, !!eersteRelease && eersteRelease.contains(versie));
-            return;
-        }
-        const isEerste = eersteRelease === null;
-        if (isEerste) eersteRelease = versie;
-        _clZetVersie(versie, isEerste);
+        if (versie.classList.contains('cl-subsectie')) { _clZetVersie(versie, false); return; }
+        _clZetVersie(versie, eersteZichtbaar);
+        eersteZichtbaar = false;
     });
 }
 

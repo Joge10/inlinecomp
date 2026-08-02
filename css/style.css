@@ -3758,6 +3758,7 @@ th.rk-totaal, td.rk-totaal { width:55px; font-weight:700; color:var(--blauw); ba
 .cl-tag-public { background: #e3f1e6; color: #226b34; }
 .cl-tag-coach  { background: #fdeede; color: #9a5a12; }
 .cl-tag-check  { background: #e2f0f7; color: #1a5f80; }
+.cl-tag-patch  { background: #e5e7eb; color: #4b5563; }  /* Onderhoud/patch */
 
 /* ── Beheerders-update-mail (Info → Versie) ── */
 .update-mail-status { font-size: .9rem; color: #444; margin: 0 0 .6rem; line-height: 1.5; }

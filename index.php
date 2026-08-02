@@ -713,12 +713,12 @@ if (is_array($eigenScope) && !empty($eigenScope)) {
             $__groepen[] = ['versie' => $__e['versie'], 'datum' => $__e['datum'], 'items' => [$__e]];
         }
     }
-    $__ondLabel = ['admin' => 'Beheer', 'public' => 'Public', 'coach' => 'Coach', 'check' => 'Check'];
+    $__ondLabel = ['admin' => 'Beheer', 'public' => 'Public', 'coach' => 'Coach', 'check' => 'Check', 'patch' => 'Patch'];
     // Filter-knoppen alleen voor onderdelen die daadwerkelijk voorkomen.
     $__aanwezig = [];
     foreach ($__cl as $__e) foreach ($__e['onderdelen'] as $__o) $__aanwezig[$__o] = true;
     $__filterOrde = array_values(array_filter(
-        ['admin', 'public', 'coach', 'check'], fn($o) => isset($__aanwezig[$o])
+        ['admin', 'public', 'coach', 'check', 'patch'], fn($o) => isset($__aanwezig[$o])
     ));
 ?>
                         <div class="cl-filterbar" id="cl-filterbar" role="group" aria-label="Filter op onderdeel">

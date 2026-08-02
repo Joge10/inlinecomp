@@ -9,14 +9,15 @@
 //   • release  (soort ontbreekt / 'functie') — bepaalt het versienummer.
 //   • patch    (soort='patch')                — security/bugfix ONDER de
 //     lopende versie. Schuift het versienummer NIET vooruit (zie versie.php),
-//     staat altijd getagd op ['admin'] (alleen zichtbaar in Beheer) en wordt
-//     in de changelog apart, gedempt getoond. Triviale copy/typo-fixes komen
-//     NERGENS in de changelog — die commit je gewoon los.
+//     staat altijd getagd op ['patch'] (eigen tag + filterknop; alleen
+//     zichtbaar in Beheer want public/coach filteren op hún eigen onderdeel)
+//     en wordt in de changelog genest + gedempt getoond onder de versie.
+//     Triviale copy/typo-fixes komen NERGENS in de changelog — los committen.
 return [
     // ── Patches onder H997.31.07 (onderhoud & beveiliging, alleen Beheer) ──
     [
         'versie' => 'H997.31.07', 'datum' => '02-08-2026',
-        'soort'  => 'patch', 'onderdelen' => ['admin'],
+        'soort'  => 'patch', 'onderdelen' => ['patch'],
         'tekst' => [
             'nl' => '🔧 <b>Coach — kleine fixes</b> — het programma toont de rijders nu direct na het kiezen van een wedstrijd, en de deelnemers-badge op een ingeklapte afstand telt alle categorieën samen.',
             'en' => '🔧 <b>Coach — small fixes</b> — the programme now shows riders right after picking a race, and the participant badge on a collapsed distance counts all categories together.',
@@ -26,7 +27,7 @@ return [
     ],
     [
         'versie' => 'H997.31.07', 'datum' => '01-08-2026',
-        'soort'  => 'patch', 'onderdelen' => ['admin'],
+        'soort'  => 'patch', 'onderdelen' => ['patch'],
         'tekst' => [
             'nl' => '🔒 <b>Beveiliging</b> — extra escaping van speciale tekens in de weergave (naar aanleiding van code-scanning). Geen zichtbare wijziging bij normaal gebruik.',
             'en' => '🔒 <b>Security</b> — extra escaping of special characters in the UI (following code scanning). No visible change in normal use.',
