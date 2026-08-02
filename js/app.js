@@ -369,8 +369,12 @@ function initChangelogUI() {
     if (!root) return;
     _changelogGeinit = true;
 
-    // Standaard: alleen de nieuwste (eerste) versie uitgeklapt.
-    root.querySelectorAll('.cl-versie').forEach((v, i) => _clZetVersie(v, i === 0));
+    // Standaard: alleen de nieuwste ECHTE release uitgeklapt. Patch-groepen
+    // (onderhoud/beveiliging) staan bovenaan maar starten ingeklapt, zodat de
+    // aandacht op de release-inhoud ligt.
+    const eersteRelease = root.querySelector('.cl-versie:not(.cl-versie-patch)')
+                       || root.querySelector('.cl-versie');
+    root.querySelectorAll('.cl-versie').forEach(v => _clZetVersie(v, v === eersteRelease));
 
     // Klik/Enter op versie-header → in/uitklappen.
     root.querySelectorAll('.cl-versie-head').forEach(head => {

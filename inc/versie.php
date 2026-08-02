@@ -17,11 +17,20 @@
 // ════════════════════════════════════════════════════════════════════════
 
 if (!defined('INLINECOMP_VERSIE')) {
-    // Head van de master-changelog = de huidige versie. Defensieve fallback
-    // als changelog.php onverhoopt leeg/onbereikbaar is.
+    // Huidige versie = de bovenste ECHTE release-entry. Patch-entries
+    // (soort='patch': security/bugfix) staan bovenaan maar schuiven het
+    // versienummer bewust NIET vooruit — ze horen onder de lopende versie.
+    // Defensieve fallback als changelog.php onverhoopt leeg/onbereikbaar is.
     $__clHead = @require __DIR__ . '/changelog.php';
-    $__head   = (is_array($__clHead) && isset($__clHead[0])) ? $__clHead[0] : null;
+    $__head   = null;
+    if (is_array($__clHead)) {
+        foreach ($__clHead as $__e) {
+            if (($__e['soort'] ?? 'functie') !== 'patch') { $__head = $__e; break; }
+        }
+        // Alleen patches (nog geen release)? Val terug op de allerbovenste.
+        if ($__head === null && isset($__clHead[0])) $__head = $__clHead[0];
+    }
     define('INLINECOMP_VERSIE',       $__head['versie'] ?? 'H?.??.??');
     define('INLINECOMP_VERSIE_DATUM', $__head['datum']  ?? '');
-    unset($__clHead, $__head);
+    unset($__clHead, $__head, $__e);
 }

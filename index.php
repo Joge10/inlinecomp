@@ -695,15 +695,19 @@ if (is_array($eigenScope) && !empty($eigenScope)) {
                            voor Beheer, Public, Coach en Check.</p>
 <?php
     $__cl = require __DIR__ . '/inc/changelog.php';
-    // Groepeer opeenvolgende entries per versie+datum (nieuwste bovenaan).
+    // Groepeer opeenvolgende entries per versie+datum+soort (nieuwste bovenaan).
+    // soort='patch' (security/bugfix onder de lopende versie) vormt zo z'n eigen
+    // gedempte groep, los van de release-entries met hetzelfde versienummer.
     $__groepen = [];
     foreach ($__cl as $__e) {
-        $__n = count($__groepen);
+        $__n     = count($__groepen);
+        $__soort = $__e['soort'] ?? 'functie';
         if ($__n && $__groepen[$__n - 1]['versie'] === $__e['versie']
-                 && $__groepen[$__n - 1]['datum']  === $__e['datum']) {
+                 && $__groepen[$__n - 1]['datum']  === $__e['datum']
+                 && $__groepen[$__n - 1]['soort']  === $__soort) {
             $__groepen[$__n - 1]['items'][] = $__e;
         } else {
-            $__groepen[] = ['versie' => $__e['versie'], 'datum' => $__e['datum'], 'items' => [$__e]];
+            $__groepen[] = ['versie' => $__e['versie'], 'datum' => $__e['datum'], 'soort' => $__soort, 'items' => [$__e]];
         }
     }
     $__ondLabel = ['admin' => 'Beheer', 'public' => 'Public', 'coach' => 'Coach', 'check' => 'Check'];
@@ -722,13 +726,19 @@ if (is_array($eigenScope) && !empty($eigenScope)) {
                         </div>
 
                         <div class="admin-changelog" id="admin-changelog">
-<?php foreach ($__groepen as $__g): $__aantal = count($__g['items']); ?>
-                            <section class="cl-versie">
+<?php foreach ($__groepen as $__g): $__aantal = count($__g['items']); $__isPatch = ($__g['soort'] ?? 'functie') === 'patch'; ?>
+                            <section class="cl-versie<?= $__isPatch ? ' cl-versie-patch' : '' ?>">
                                 <div class="cl-versie-head" role="button" tabindex="0" aria-expanded="true">
                                     <span class="cl-chevron" aria-hidden="true">▾</span>
+<?php if ($__isPatch): ?>
+                                    <span class="cl-versie-nr">🔧 Onderhoud</span>
+                                    <span class="cl-versie-telling" data-basis="<?= $__aantal ?>"><?= $__aantal ?>&times;</span>
+                                    <span class="cl-versie-datum"><?= htmlspecialchars($__g['versie']) ?> &middot; <?= htmlspecialchars($__g['datum']) ?></span>
+<?php else: ?>
                                     <span class="cl-versie-nr"><?= htmlspecialchars($__g['versie']) ?></span>
                                     <span class="cl-versie-telling" data-basis="<?= $__aantal ?>"><?= $__aantal ?>&times;</span>
                                     <span class="cl-versie-datum"><?= htmlspecialchars($__g['datum']) ?></span>
+<?php endif; ?>
                                 </div>
                                 <ul class="cl-lijst">
 <?php foreach ($__g['items'] as $__it): ?>

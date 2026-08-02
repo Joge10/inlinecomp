@@ -4,7 +4,37 @@
 //   'admin' | 'public' | 'coach' | 'check'   (jury toont geen changelog)
 // Elk front-end filtert op z'n eigen onderdeel; admin toont ALLES.
 // Nieuwste bovenaan. Bij een nieuwe release: entry(s) bovenaan toevoegen.
+//
+// Twee soorten entries:
+//   • release  (soort ontbreekt / 'functie') — bepaalt het versienummer.
+//   • patch    (soort='patch')                — security/bugfix ONDER de
+//     lopende versie. Schuift het versienummer NIET vooruit (zie versie.php),
+//     staat altijd getagd op ['admin'] (alleen zichtbaar in Beheer) en wordt
+//     in de changelog apart, gedempt getoond. Triviale copy/typo-fixes komen
+//     NERGENS in de changelog — die commit je gewoon los.
 return [
+    // ── Patches onder H997.31.07 (onderhoud & beveiliging, alleen Beheer) ──
+    [
+        'versie' => 'H997.31.07', 'datum' => '02-08-2026',
+        'soort'  => 'patch', 'onderdelen' => ['admin'],
+        'tekst' => [
+            'nl' => '🔧 <b>Coach — kleine fixes</b> — het programma toont de rijders nu direct na het kiezen van een wedstrijd, en de deelnemers-badge op een ingeklapte afstand telt alle categorieën samen.',
+            'en' => '🔧 <b>Coach — small fixes</b> — the programme now shows riders right after picking a race, and the participant badge on a collapsed distance counts all categories together.',
+            'de' => '🔧 <b>Coach — kleine Fixes</b> — das Programm zeigt die Fahrer jetzt direkt nach der Wettkampfauswahl, und das Teilnehmer-Badge einer eingeklappten Distanz zählt alle Kategorien zusammen.',
+            'fr' => '🔧 <b>Coach — petites corrections</b> — le programme affiche les patineurs dès le choix d\'une course, et le badge participants d\'une distance repliée additionne toutes les catégories.',
+        ],
+    ],
+    [
+        'versie' => 'H997.31.07', 'datum' => '01-08-2026',
+        'soort'  => 'patch', 'onderdelen' => ['admin'],
+        'tekst' => [
+            'nl' => '🔒 <b>Beveiliging</b> — extra escaping van speciale tekens in de weergave (naar aanleiding van code-scanning). Geen zichtbare wijziging bij normaal gebruik.',
+            'en' => '🔒 <b>Security</b> — extra escaping of special characters in the UI (following code scanning). No visible change in normal use.',
+            'de' => '🔒 <b>Sicherheit</b> — zusätzliches Escaping von Sonderzeichen in der Anzeige (nach Code-Scanning). Keine sichtbare Änderung im Normalbetrieb.',
+            'fr' => '🔒 <b>Sécurité</b> — échappement supplémentaire des caractères spéciaux dans l\'affichage (suite à l\'analyse de code). Aucun changement visible en usage normal.',
+        ],
+    ],
+
     // ══ H997.31.07 — grote update: coach-accounts, beheer, public multi-kind ══
     // ── Beheer (admin) ──
     [

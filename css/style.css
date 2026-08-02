@@ -3724,6 +3724,9 @@ th.rk-totaal, td.rk-totaal { width:55px; font-weight:700; color:var(--blauw); ba
     padding: 1px 7px; border-radius: 999px;
 }
 .cl-versie-datum { font-size: .8rem; opacity: .9; margin-left: auto; }
+/* Patch-groep (onderhoud & beveiliging): gedempt, ondergeschikt aan releases. */
+.cl-versie-patch .cl-versie-head { background: #6b7280; }
+.cl-versie-patch .cl-versie-nr   { font-weight: 700; font-size: .92rem; }
 
 .cl-lijst { list-style: none; margin: .55rem 0 0; padding: 0 0 0 .15rem; }
 .cl-lijst li {
