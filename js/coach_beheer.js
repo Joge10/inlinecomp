@@ -61,7 +61,10 @@ function _cbRender(lijst) {
     }).join('');
 
     return `
-        <div class="section-title">Coach-accounts${nPending ? ` — <span style="color:#b26a00">${nPending} wacht op goedkeuring</span>` : ''}</div>
+        <div class="gb-kop">
+            <div class="section-title">Coach-accounts${nPending ? ` — <span style="color:#b26a00">${nPending} wacht op goedkeuring</span>` : ''}</div>
+            <button class="btn-secondary" id="cb-verversen" title="Lijst verversen">&#8635; Verversen</button>
+        </div>
         <div class="hp-info">
             Individuele coach-logins. Een coach werkt tot goedkeuring gewoon met de <strong>anonieme lijst</strong>;
             goedkeuring ontgrendelt de persoonlijke roster + auto-highlight. Afwijzen of deactiveren trekt lopende sessies direct in.
@@ -77,6 +80,7 @@ function _cbRender(lijst) {
 }
 
 function _cbBind() {
+    document.getElementById('cb-verversen')?.addEventListener('click', () => toonCoachBeheer());
     document.querySelectorAll('#coach-beheer-container .cb-act').forEach(b => {
         b.addEventListener('click', async () => {
             const act = b.dataset.act, id = b.dataset.id;
