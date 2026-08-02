@@ -369,12 +369,15 @@ function initChangelogUI() {
     if (!root) return;
     _changelogGeinit = true;
 
-    // Standaard: alleen de nieuwste ECHTE release uitgeklapt. Patch-groepen
-    // (onderhoud/beveiliging) staan bovenaan maar starten ingeklapt, zodat de
-    // aandacht op de release-inhoud ligt.
-    const eersteRelease = root.querySelector('.cl-versie:not(.cl-versie-patch)')
+    // Standaard: alleen de nieuwste release uitgeklapt, inclusief haar geneste
+    // Onderhoud-subsectie. Oudere versies (en hun Onderhoud) starten ingeklapt.
+    const eersteRelease = root.querySelector('.cl-versie:not(.cl-subsectie)')
                        || root.querySelector('.cl-versie');
-    root.querySelectorAll('.cl-versie').forEach(v => _clZetVersie(v, v === eersteRelease));
+    root.querySelectorAll('.cl-versie').forEach(v => {
+        const open = v === eersteRelease
+            || (eersteRelease && v.classList.contains('cl-subsectie') && eersteRelease.contains(v));
+        _clZetVersie(v, open);
+    });
 
     // Klik/Enter op versie-header → in/uitklappen.
     root.querySelectorAll('.cl-versie-head').forEach(head => {
@@ -402,31 +405,42 @@ function _clZetVersie(versie, uit) {
 }
 
 function _clPasFilterToe(root, filter) {
-    let eersteZichtbaar = true;
+    // 1e pass: per sectie de EIGEN regels tellen — een geneste Onderhoud-subsectie
+    // telt niet mee bij haar release-ouder (die heeft z'n eigen kop + badge).
     root.querySelectorAll('.cl-versie').forEach(versie => {
         let zichtbaar = 0;
-        versie.querySelectorAll('.cl-lijst li').forEach(li => {
+        versie.querySelectorAll(':scope > .cl-lijst > li').forEach(li => {
             const match = filter === 'alle'
                 || (li.dataset.ond || '').split(' ').includes(filter);
             li.style.display = match ? '' : 'none';
             if (match) zichtbaar++;
         });
-        // Tel-badge bijwerken naar het aantal zichtbare wijzigingen.
-        const telling = versie.querySelector('.cl-versie-telling');
+        const telling = versie.querySelector(':scope > .cl-versie-head .cl-versie-telling');
         if (telling) telling.innerHTML = zichtbaar + '&times;';
-
-        if (zichtbaar === 0) {
-            versie.style.display = 'none';
+        versie.style.display = zichtbaar === 0 ? 'none' : '';
+    });
+    // 2e pass: een release met een zichtbare Onderhoud-subsectie blijft zichtbaar,
+    // ook als de release zelf geen matchende regels heeft.
+    root.querySelectorAll('.cl-subsectie').forEach(sub => {
+        if (sub.style.display !== 'none') {
+            const ouder = sub.parentElement && sub.parentElement.closest('.cl-versie');
+            if (ouder) ouder.style.display = '';
+        }
+    });
+    // 3e pass: in/uitklappen. Gefilterd → alle zichtbare open. 'Alles' spiegelt de
+    // begintoestand: de nieuwste zichtbare release + haar Onderhoud-subsectie open,
+    // de rest dicht.
+    let eersteRelease = null;
+    root.querySelectorAll('.cl-versie').forEach(versie => {
+        if (versie.style.display === 'none') return;
+        if (filter !== 'alle') { _clZetVersie(versie, true); return; }
+        if (versie.classList.contains('cl-subsectie')) {
+            _clZetVersie(versie, !!eersteRelease && eersteRelease.contains(versie));
             return;
         }
-        versie.style.display = '';
-        // 'Alles' → default (alleen nieuwste zichtbare uit). Gefilterd → alles uit.
-        if (filter === 'alle') {
-            _clZetVersie(versie, eersteZichtbaar);
-        } else {
-            _clZetVersie(versie, true);
-        }
-        eersteZichtbaar = false;
+        const isEerste = eersteRelease === null;
+        if (isEerste) eersteRelease = versie;
+        _clZetVersie(versie, isEerste);
     });
 }
 

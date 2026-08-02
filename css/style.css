@@ -3727,6 +3727,11 @@ th.rk-totaal, td.rk-totaal { width:55px; font-weight:700; color:var(--blauw); ba
 /* Patch-groep (onderhoud & beveiliging): gedempt, ondergeschikt aan releases. */
 .cl-versie-patch .cl-versie-head { background: #6b7280; }
 .cl-versie-patch .cl-versie-nr   { font-weight: 700; font-size: .92rem; }
+/* Geneste Onderhoud-subsectie: ingesprongen ONDER de release-kop. */
+.cl-subsectie { margin: .55rem 0 .3rem 1.25rem; }
+.cl-subsectie .cl-versie-head { padding: .3rem .6rem; }
+/* Klapt de release in, dan verdwijnt de Onderhoud-subsectie mee. */
+.cl-versie.collapsed > .cl-subsectie { display: none; }
 /* Datum per patch-regel (releases tonen de datum in de versie-kop). */
 .cl-item-datum {
     display: inline-block; font-size: .72rem; font-weight: 700;

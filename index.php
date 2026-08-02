@@ -695,24 +695,22 @@ if (is_array($eigenScope) && !empty($eigenScope)) {
                            voor Beheer, Public, Coach en Check.</p>
 <?php
     $__cl = require __DIR__ . '/inc/changelog.php';
-    // Groepeer opeenvolgende entries per versie+datum+soort (nieuwste bovenaan).
-    // soort='patch' (security/bugfix onder de lopende versie) vormt zo z'n eigen
-    // gedempte groep, los van de release-entries met hetzelfde versienummer.
-    $__groepen = [];
+    // Release-entries groeperen per versie+datum (nieuwste bovenaan). Patches
+    // (soort='patch') verzamelen we apart PER VERSIE en tonen we straks als een
+    // geneste 'Onderhoud'-subsectie ONDER de release-groep van diezelfde versie.
+    $__groepen = [];        // release-groepen; volgorde = weergavevolgorde
+    $__patchPerVersie = []; // versie => [patch-items…]
     foreach ($__cl as $__e) {
-        $__n     = count($__groepen);
-        $__soort = $__e['soort'] ?? 'functie';
-        $__prev  = $__n ? $__groepen[$__n - 1] : null;
-        // Patches van dezelfde versie bundelen tot ÉÉN 'Onderhoud'-groep (datum
-        // per regel getoond); releases groeperen per versie+datum zoals voorheen.
-        $__merge = $__prev
-            && $__prev['versie'] === $__e['versie']
-            && $__prev['soort']  === $__soort
-            && ($__soort === 'patch' || $__prev['datum'] === $__e['datum']);
-        if ($__merge) {
+        if (($__e['soort'] ?? 'functie') === 'patch') {
+            $__patchPerVersie[$__e['versie']][] = $__e;
+            continue;
+        }
+        $__n = count($__groepen);
+        if ($__n && $__groepen[$__n - 1]['versie'] === $__e['versie']
+                 && $__groepen[$__n - 1]['datum']  === $__e['datum']) {
             $__groepen[$__n - 1]['items'][] = $__e;
         } else {
-            $__groepen[] = ['versie' => $__e['versie'], 'datum' => $__e['datum'], 'soort' => $__soort, 'items' => [$__e]];
+            $__groepen[] = ['versie' => $__e['versie'], 'datum' => $__e['datum'], 'items' => [$__e]];
         }
     }
     $__ondLabel = ['admin' => 'Beheer', 'public' => 'Public', 'coach' => 'Coach', 'check' => 'Check'];
@@ -731,20 +729,36 @@ if (is_array($eigenScope) && !empty($eigenScope)) {
                         </div>
 
                         <div class="admin-changelog" id="admin-changelog">
-<?php foreach ($__groepen as $__g): $__aantal = count($__g['items']); $__isPatch = ($__g['soort'] ?? 'functie') === 'patch'; ?>
-                            <section class="cl-versie<?= $__isPatch ? ' cl-versie-patch' : '' ?>">
+<?php foreach ($__groepen as $__g): $__aantal = count($__g['items']); $__patches = $__patchPerVersie[$__g['versie']] ?? []; ?>
+                            <section class="cl-versie">
                                 <div class="cl-versie-head" role="button" tabindex="0" aria-expanded="true">
                                     <span class="cl-chevron" aria-hidden="true">▾</span>
-<?php if ($__isPatch): ?>
-                                    <span class="cl-versie-nr">🔧 Onderhoud</span>
-                                    <span class="cl-versie-telling" data-basis="<?= $__aantal ?>"><?= $__aantal ?>&times;</span>
-                                    <span class="cl-versie-datum"><?= htmlspecialchars($__g['versie']) ?></span>
-<?php else: ?>
                                     <span class="cl-versie-nr"><?= htmlspecialchars($__g['versie']) ?></span>
                                     <span class="cl-versie-telling" data-basis="<?= $__aantal ?>"><?= $__aantal ?>&times;</span>
                                     <span class="cl-versie-datum"><?= htmlspecialchars($__g['datum']) ?></span>
-<?php endif; ?>
                                 </div>
+<?php if ($__patches): $__pAantal = count($__patches); ?>
+                                <!-- Geneste Onderhoud-subsectie: patches (security/bugfix) onder deze versie -->
+                                <section class="cl-versie cl-versie-patch cl-subsectie">
+                                    <div class="cl-versie-head" role="button" tabindex="0" aria-expanded="true">
+                                        <span class="cl-chevron" aria-hidden="true">▾</span>
+                                        <span class="cl-versie-nr">🔧 Onderhoud</span>
+                                        <span class="cl-versie-telling" data-basis="<?= $__pAantal ?>"><?= $__pAantal ?>&times;</span>
+                                    </div>
+                                    <ul class="cl-lijst">
+<?php foreach ($__patches as $__it): ?>
+                                        <li data-ond="<?= htmlspecialchars(implode(' ', $__it['onderdelen'])) ?>">
+                                            <span class="cl-tags">
+<?php foreach ($__it['onderdelen'] as $__o): ?>
+                                                <span class="cl-tag cl-tag-<?= htmlspecialchars($__o) ?>"><?= htmlspecialchars($__ondLabel[$__o] ?? $__o) ?></span>
+<?php endforeach; ?>
+                                            </span>
+                                            <span class="cl-tekst"><span class="cl-item-datum"><?= htmlspecialchars($__it['datum']) ?></span> <?= $__it['tekst']['nl'] ?></span>
+                                        </li>
+<?php endforeach; ?>
+                                    </ul>
+                                </section>
+<?php endif; ?>
                                 <ul class="cl-lijst">
 <?php foreach ($__g['items'] as $__it): ?>
                                     <li data-ond="<?= htmlspecialchars(implode(' ', $__it['onderdelen'])) ?>">
@@ -753,7 +767,7 @@ if (is_array($eigenScope) && !empty($eigenScope)) {
                                             <span class="cl-tag cl-tag-<?= htmlspecialchars($__o) ?>"><?= htmlspecialchars($__ondLabel[$__o] ?? $__o) ?></span>
 <?php endforeach; ?>
                                         </span>
-                                        <span class="cl-tekst"><?php if ($__isPatch): ?><span class="cl-item-datum"><?= htmlspecialchars($__it['datum']) ?></span> <?php endif; ?><?= $__it['tekst']['nl'] ?></span>
+                                        <span class="cl-tekst"><?= $__it['tekst']['nl'] ?></span>
                                     </li>
 <?php endforeach; ?>
                                 </ul>
