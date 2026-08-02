@@ -68,7 +68,7 @@ try {
 
     // Huidige gegevens ophalen — nodig voor de coach-mail (en om alleen te
     // mailen bij een ECHTE statuswijziging, niet bij nogmaals goedkeuren).
-    $st = $pdo->prepare("SELECT email, naam, status FROM coach_accounts WHERE id = ?");
+    $st = $pdo->prepare("SELECT email, naam, status, actief FROM coach_accounts WHERE id = ?");
     $st->execute([$id]);
     $acc = $st->fetch(PDO::FETCH_ASSOC);
     if (!$acc && in_array($action, ['goedkeuren', 'afwijzen', 'deactiveren', 'activeren'], true)) {
@@ -106,11 +106,20 @@ try {
         $actief = $action === 'activeren' ? 1 : 0;
         $pdo->prepare("UPDATE coach_accounts SET actief = ? WHERE id = ?")->execute([$actief, $id]);
         if (!$actief) $pdo->prepare("DELETE FROM coach_sessions WHERE coach_account_id = ?")->execute([$id]);
+        // Mail alleen bij een echte overgang (geen dubbele bij nogmaals klikken).
+        if ((int)$acc['actief'] !== $actief) {
+            $m = $actief ? coachMailGeheractiveerd($acc['naam']) : coachMailGedeactiveerd($acc['naam']);
+            coachMail($acc['email'], $m['subject'], $m['body']);
+        }
         echo json_encode(['ok' => true, 'actief' => $actief]);
         exit;
     }
     if ($action === 'verwijderen') {
         $pdo->prepare("DELETE FROM coach_accounts WHERE id = ?")->execute([$id]);
+        if ($acc) {
+            $m = coachMailVerwijderd($acc['naam']);
+            coachMail($acc['email'], $m['subject'], $m['body']);
+        }
         echo json_encode(['ok' => true]);
         exit;
     }

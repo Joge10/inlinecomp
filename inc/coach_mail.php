@@ -142,3 +142,83 @@ if (!function_exists('coachMailAfgewezen')) {
         ];
     }
 }
+
+if (!function_exists('coachMailZelfVerwijderd')) {
+    /** Coach verwijderde z'n EIGEN account → bevestiging (AVG). */
+    function coachMailZelfVerwijderd(string $naam): array {
+        $login = COACH_LOGIN_URL;
+        $nl = "Hoi $naam,\n\n"
+            . "Je InlineComp coach-account is op jouw verzoek verwijderd. Je atletenlijst en je gegevens "
+            . "zijn gewist.\n\n"
+            . "Je kunt InlineComp gewoon blijven gebruiken met de (anonieme) deelnemerslijst, en je kunt "
+            . "je later opnieuw aanmelden als je wilt:\n$login\n\n"
+            . "Groet,\nInlineComp";
+        $en = "Hi $naam,\n\n"
+            . "Your InlineComp coach account has been deleted at your request. Your athlete list and your "
+            . "data have been erased.\n\n"
+            . "You can still use InlineComp with the (anonymous) start list, and you're welcome to register "
+            . "again later:\n$login\n\n"
+            . "Regards,\nInlineComp";
+        return ['subject' => 'InlineComp — account verwijderd / account deleted',
+                'body'    => $nl . coachMailScheiding() . $en];
+    }
+}
+
+if (!function_exists('coachMailVerwijderd')) {
+    /** Beheerder verwijderde het account → melding naar de coach. */
+    function coachMailVerwijderd(string $naam): array {
+        $login = COACH_LOGIN_URL;
+        $nl = "Hoi $naam,\n\n"
+            . "Je InlineComp coach-account is verwijderd door de organisatie. Je atletenlijst en je "
+            . "gegevens zijn gewist.\n\n"
+            . "Je kunt InlineComp blijven gebruiken met de (anonieme) deelnemerslijst, en je kunt je "
+            . "opnieuw aanmelden:\n$login\n\n"
+            . "Vragen? Reageer gerust op deze e-mail.\n\n"
+            . "Groet,\nInlineComp";
+        $en = "Hi $naam,\n\n"
+            . "Your InlineComp coach account has been deleted by the organisation. Your athlete list and "
+            . "your data have been erased.\n\n"
+            . "You can still use InlineComp with the (anonymous) start list, and you're welcome to register "
+            . "again:\n$login\n\n"
+            . "Questions? Just reply to this e-mail.\n\n"
+            . "Regards,\nInlineComp";
+        return ['subject' => 'InlineComp — account verwijderd / account deleted',
+                'body'    => $nl . coachMailScheiding() . $en];
+    }
+}
+
+if (!function_exists('coachMailGedeactiveerd')) {
+    /** Beheerder deactiveerde (blokkeerde) het account → melding naar de coach. */
+    function coachMailGedeactiveerd(string $naam): array {
+        $nl = "Hoi $naam,\n\n"
+            . "Je InlineComp coach-account is gedeactiveerd. Je kunt voorlopig niet inloggen. Je gegevens "
+            . "en je atletenlijst blijven bewaard.\n\n"
+            . "Denk je dat dit een vergissing is, of wil je weten waarom? Reageer dan gerust op deze "
+            . "e-mail.\n\n"
+            . "Groet,\nInlineComp";
+        $en = "Hi $naam,\n\n"
+            . "Your InlineComp coach account has been deactivated. For now you cannot log in. Your data and "
+            . "athlete list are kept.\n\n"
+            . "Think this is a mistake, or want to know why? Just reply to this e-mail.\n\n"
+            . "Regards,\nInlineComp";
+        return ['subject' => 'InlineComp — account gedeactiveerd / account deactivated',
+                'body'    => $nl . coachMailScheiding() . $en];
+    }
+}
+
+if (!function_exists('coachMailGeheractiveerd')) {
+    /** Beheerder heractiveerde het account → melding naar de coach. */
+    function coachMailGeheractiveerd(string $naam): array {
+        $login = COACH_LOGIN_URL;
+        $nl = "Hoi $naam,\n\n"
+            . "Je InlineComp coach-account is weer geactiveerd. Je kunt weer inloggen en je rijders "
+            . "volgen:\n$login\n\n"
+            . "Groet,\nInlineComp";
+        $en = "Hi $naam,\n\n"
+            . "Your InlineComp coach account has been reactivated. You can log in again and follow your "
+            . "riders:\n$login\n\n"
+            . "Regards,\nInlineComp";
+        return ['subject' => 'InlineComp — account weer actief / account reactivated',
+                'body'    => $nl . coachMailScheiding() . $en];
+    }
+}

@@ -262,6 +262,8 @@ try {
         $pdo->prepare("DELETE FROM coach_accounts WHERE id = ?")->execute([$c['id']]);
         wisCoachSessieCookie();
         logCoachEvent($pdo, $naam, $email, 'coach-account-verwijderd');
+        // Bevestiging van de verwijdering naar de coach (AVG).
+        if ($email) { $m = coachMailZelfVerwijderd($naam); coachMail($email, $m['subject'], $m['body']); }
         jsonOut(['ok' => true]);
     }
 
