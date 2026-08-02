@@ -702,9 +702,14 @@ if (is_array($eigenScope) && !empty($eigenScope)) {
     foreach ($__cl as $__e) {
         $__n     = count($__groepen);
         $__soort = $__e['soort'] ?? 'functie';
-        if ($__n && $__groepen[$__n - 1]['versie'] === $__e['versie']
-                 && $__groepen[$__n - 1]['datum']  === $__e['datum']
-                 && $__groepen[$__n - 1]['soort']  === $__soort) {
+        $__prev  = $__n ? $__groepen[$__n - 1] : null;
+        // Patches van dezelfde versie bundelen tot ÉÉN 'Onderhoud'-groep (datum
+        // per regel getoond); releases groeperen per versie+datum zoals voorheen.
+        $__merge = $__prev
+            && $__prev['versie'] === $__e['versie']
+            && $__prev['soort']  === $__soort
+            && ($__soort === 'patch' || $__prev['datum'] === $__e['datum']);
+        if ($__merge) {
             $__groepen[$__n - 1]['items'][] = $__e;
         } else {
             $__groepen[] = ['versie' => $__e['versie'], 'datum' => $__e['datum'], 'soort' => $__soort, 'items' => [$__e]];
@@ -733,7 +738,7 @@ if (is_array($eigenScope) && !empty($eigenScope)) {
 <?php if ($__isPatch): ?>
                                     <span class="cl-versie-nr">🔧 Onderhoud</span>
                                     <span class="cl-versie-telling" data-basis="<?= $__aantal ?>"><?= $__aantal ?>&times;</span>
-                                    <span class="cl-versie-datum"><?= htmlspecialchars($__g['versie']) ?> &middot; <?= htmlspecialchars($__g['datum']) ?></span>
+                                    <span class="cl-versie-datum"><?= htmlspecialchars($__g['versie']) ?></span>
 <?php else: ?>
                                     <span class="cl-versie-nr"><?= htmlspecialchars($__g['versie']) ?></span>
                                     <span class="cl-versie-telling" data-basis="<?= $__aantal ?>"><?= $__aantal ?>&times;</span>
@@ -748,7 +753,7 @@ if (is_array($eigenScope) && !empty($eigenScope)) {
                                             <span class="cl-tag cl-tag-<?= htmlspecialchars($__o) ?>"><?= htmlspecialchars($__ondLabel[$__o] ?? $__o) ?></span>
 <?php endforeach; ?>
                                         </span>
-                                        <span class="cl-tekst"><?= $__it['tekst']['nl'] ?></span>
+                                        <span class="cl-tekst"><?php if ($__isPatch): ?><span class="cl-item-datum"><?= htmlspecialchars($__it['datum']) ?></span> <?php endif; ?><?= $__it['tekst']['nl'] ?></span>
                                     </li>
 <?php endforeach; ?>
                                 </ul>
