@@ -36,20 +36,27 @@ function _cbRender(lijst) {
             ` <span style="background:#eee;color:#666;padding:2px 7px;border-radius:6px;font-size:.75rem">inactief</span>`;
         const last = a.last_login_at ? new Date(a.last_login_at.replace(' ', 'T') + 'Z')
             .toLocaleDateString('nl-NL', { day: '2-digit', month: '2-digit', year: 'numeric' }) : '—';
+        // 4 vaste actie-slots (zelfde patroon als Gebruikers): goedkeuren,
+        // afwijzen, (de)activeren, verwijderen. Niet-beschikbare slot = lege
+        // .gb-btn-leeg zodat de icoonknoppen netjes uitgelijnd blijven.
         const acties = [];
-        if (a.status !== 'approved') acties.push(`<button class="btn-secondary cb-act" data-act="goedkeuren" data-id="${a.id}">✔ Goedkeuren</button>`);
-        if (a.status !== 'rejected') acties.push(`<button class="btn-secondary cb-act" data-act="afwijzen" data-id="${a.id}">✖ Afwijzen</button>`);
+        acties.push(a.status !== 'approved'
+            ? `<button class="btn-secondary cb-act" data-act="goedkeuren" data-id="${a.id}" title="Goedkeuren">&#10004;</button>`
+            : `<span class="gb-btn-leeg"></span>`);
+        acties.push(a.status !== 'rejected'
+            ? `<button class="btn-secondary cb-act" data-act="afwijzen" data-id="${a.id}" title="Afwijzen">&#10008;</button>`
+            : `<span class="gb-btn-leeg"></span>`);
         acties.push((+a.actief)
-            ? `<button class="btn-secondary cb-act" data-act="deactiveren" data-id="${a.id}">Deactiveren</button>`
-            : `<button class="btn-secondary cb-act" data-act="activeren" data-id="${a.id}">Activeren</button>`);
-        acties.push(`<button class="btn-del cb-act" data-act="verwijderen" data-id="${a.id}" title="Verwijderen">🗑</button>`);
+            ? `<button class="btn-secondary gb-btn-toggle cb-act" data-act="deactiveren" data-id="${a.id}" title="Account is actief — klik om te deactiveren">&#128275;</button>`
+            : `<button class="btn-secondary gb-btn-toggle gb-btn-toggle-actief cb-act" data-act="activeren" data-id="${a.id}" title="Account is gedeactiveerd — klik om te activeren">&#128274;</button>`);
+        acties.push(`<button class="btn-del cb-act" data-act="verwijderen" data-id="${a.id}" title="Verwijderen">&#128465;</button>`);
         return `<tr>
             <td>${escHtml(a.naam)}<div style="color:#888;font-size:.8rem">${escHtml(a.email)}</div></td>
             <td>${vanLabel}<div style="color:#888;font-size:.8rem">${escHtml(a.coacht_van)}</div></td>
             <td style="text-align:center">${a.roster_count}</td>
             <td style="text-align:center;color:#888;font-size:.85rem">${last}</td>
             <td>${_cbBadge(a.status)}${inactief}</td>
-            <td style="white-space:nowrap">${acties.join(' ')}</td>
+            <td class="gb-acties">${acties.join('')}</td>
         </tr>`;
     }).join('');
 
