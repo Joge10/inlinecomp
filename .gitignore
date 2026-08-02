@@ -45,3 +45,7 @@ tmp/
 # Diagnostic-script: lokaal werkbestand voor server-debug, bevat soms
 # test-secrets. Geert houdt zelf bij dat 'ie niet op de server komt.
 _diag.php
+
+# Mail-testscript: lokaal ad-hoc testbestand, hoort niet in de repo én
+# moet van de server af (zie mail-deliverability-werk).
+_mailtest.php
