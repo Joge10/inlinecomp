@@ -247,6 +247,23 @@ try {
     $wedstrijdenLijst = [];
     error_log('survey wedstrijden ophalen: ' . $e->getMessage());
 }
+
+// ── Throttle-status al bij het openen ───────────────────────────────────────
+// Zelfde check als bij submit, maar nu bij het laden: heeft deze IP-hash
+// recent gesubmit, dan tonen we meteen de "kom later terug"-melding i.p.v.
+// pas na het invullen. Fail-open: bij een fout/ontbrekende tabel geen melding.
+$throttled = false;
+try {
+    $ipHash = hash('sha256', ($_SERVER['REMOTE_ADDR'] ?? '') . SURVEY_IP_PEPPER);
+    $stmtThr = $pdo->prepare("SELECT last_submit FROM survey_oh850_throttle WHERE ip_hash = ?");
+    $stmtThr->execute([$ipHash]);
+    $last = $stmtThr->fetchColumn();
+    if ($last !== false && (time() - strtotime($last)) < SURVEY_THROTTLE_HOURS * 3600) {
+        $throttled = true;
+    }
+} catch (Throwable $e) {
+    error_log('survey_oh850 throttle-load faalde: ' . $e->getMessage());
+}
 ?><!DOCTYPE html>
 <html lang="nl">
 <head>
@@ -687,12 +704,21 @@ footer {
         <p data-i18n="thanks_p">Je antwoorden helpen InlineComp beter te maken.</p>
     </div>
 
+    <div class="thanks hidden" id="throttle-notice" style="border-color: var(--middenblauw)">
+        <div class="icon">🙏</div>
+        <h2 data-i18n="throttle_h">Je hebt al gereageerd</h2>
+        <p data-i18n="err_throttled">Je hebt recent al gereageerd, dank daarvoor! Is je mening over een week veranderd? Vul de survey dan gerust opnieuw in.</p>
+    </div>
+
     <footer>
         InlineComp &copy; <?= date('Y') ?> Geert de Vries
     </footer>
 </div>
 
 <script>
+// Door PHP gezet: heeft deze bezoeker recent al gesubmit? (throttle actief)
+const THROTTLED = <?= $throttled ? 'true' : 'false' ?>;
+
 // ── Translations (NL / EN) ──────────────────────────────────────────────────
 const T = {
     nl: {
@@ -746,6 +772,7 @@ const T = {
         btn_submit: 'Verstuur',
         thanks_h: 'Bedankt voor je feedback!',
         thanks_p: 'Je antwoorden helpen InlineComp beter te maken.',
+        throttle_h: 'Je hebt al gereageerd',
         scale_low: '1 = heel slecht',
         scale_high: '5 = uitmuntend',
         scale_low_slow: '1 = traag',
@@ -814,6 +841,7 @@ const T = {
         btn_submit: 'Submit',
         thanks_h: 'Thanks for your feedback!',
         thanks_p: 'Your answers help make InlineComp better.',
+        throttle_h: 'You already responded',
         scale_low: '1 = very poor',
         scale_high: '5 = excellent',
         scale_low_slow: '1 = slow',
@@ -971,6 +999,15 @@ form.addEventListener('submit', async (ev) => {
         btn.disabled = false;
     }
 });
+
+// ── Al gereageerd? Toon meteen de melding i.p.v. het formulier ──────────────
+if (THROTTLED) {
+    const introEl = document.querySelector('.intro');
+    if (introEl) introEl.classList.add('hidden');
+    form.classList.add('hidden');
+    document.getElementById('throttle-notice').classList.remove('hidden');
+    window.scrollTo({ top: 0 });
+}
 </script>
 </body>
 </html>
