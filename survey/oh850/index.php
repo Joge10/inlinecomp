@@ -2,17 +2,26 @@
 // ============================================================
 //  InlineComp – Anonieme survey OH850
 //
-//  Bewust géén login, géén KNSB-koppeling. Twee tabellen:
-//    - survey_oh850          (anonieme antwoorden)
-//    - survey_oh850_vragen   (follow-up-vragen met email)
-//  De twee inserts gebeuren los van elkaar, met een random sleep-jitter
-//  ertussen, zodat de timestamps niet aan elkaar te koppelen zijn.
+//  Bewust géén login, géén KNSB-koppeling. Drie tabellen:
+//    - survey_oh850           (anonieme antwoorden)
+//    - survey_oh850_vragen    (follow-up-vragen met email)
+//    - survey_oh850_throttle  (alleen: sha256(ip+pepper) + laatste submit-tijd)
+//  De twee antwoord-inserts gebeuren los van elkaar, in willekeurige
+//  volgorde, met een kleine random sleep ertussen. Let op: dat maakt
+//  koppeling survey-rij ↔ vraag-rij lastiger, maar is GEEN harde garantie —
+//  submitted_at is op de seconde en beide tabellen hebben een oplopend id,
+//  dus bij lage aantallen blijft correlatie in principe mogelijk. Zie het
+//  als privacy-scheiding, niet als anonimisering.
 //
-//  GEEN IP-loggen, GEEN session-cookies. Spam-risico is acceptabel
-//  voor één-week-actie met 150-500 verwachte respondenten.
+//  Survey is inmiddels doorlopend (niet meer één-week-actie na OH850).
+//  Herhaald invullen door dezelfde persoon over tijd is gewenst (de app
+//  ontwikkelt door), dus GEEN permanente dedup. Wel een throttle van 1 week
+//  tegen bursts: per IP-hash max 1 submit per SURVEY_THROTTLE_HOURS. Geen
+//  ruwe IP wordt opgeslagen, alleen een salted hash, in een eigen tabel los
+//  van de antwoorden.
 //
 //  Endpoints (POST action=...):
-//    submit  → valideer + insert + return JSON
+//    submit  → honeypot-check + throttle-check + valideer + insert + return JSON
 // ============================================================
 
 header('Cache-Control: no-store, no-cache, must-revalidate, max-age=0');
@@ -21,9 +30,57 @@ header('Expires: 0');
 
 require_once __DIR__ . '/../../../config_inlinecomp.php';
 
+// Pepper voor de IP-hash. Zet SURVEY_IP_PEPPER liever in config_inlinecomp.php
+// (die staat buiten de repo); dit is alleen een fallback zodat het ook zonder
+// die regel werkt.
+if (!defined('SURVEY_IP_PEPPER')) {
+    define('SURVEY_IP_PEPPER', 'oh850-survey-fallback-pepper-verander-mij');
+}
+// Minimale tijd tussen twee submits vanaf hetzelfde IP-adres.
+if (!defined('SURVEY_THROTTLE_HOURS')) {
+    define('SURVEY_THROTTLE_HOURS', 24 * 7); // 1 week
+}
+
 // ── Submit-endpoint (AJAX) ──────────────────────────────────────────────────
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'submit') {
     header('Content-Type: application/json; charset=utf-8');
+
+    // Honeypot: verborgen veld dat alleen bots invullen. Gevuld → doen alsof
+    // het gelukt is (geen insert, geen foutmelding) zodat de bot niks leert.
+    if (trim((string)($_POST['website'] ?? '')) !== '') {
+        echo json_encode(['ok' => true]);
+        exit;
+    }
+
+    // Throttle op sha256(ip + pepper). Geen ruwe IP wordt opgeslagen — alleen
+    // de hash en het laatste-submit-tijdstip, in een eigen tabel los van de
+    // antwoorden. Bij een burst (< SURVEY_THROTTLE_HOURS geleden) weigeren we
+    // vriendelijk, zonder details over de reden prijs te geven.
+    $ip = $_SERVER['REMOTE_ADDR'] ?? '';
+    $ipHash = hash('sha256', $ip . SURVEY_IP_PEPPER);
+    try {
+        $pdo->exec("
+            CREATE TABLE IF NOT EXISTS survey_oh850_throttle (
+                ip_hash CHAR(64) NOT NULL PRIMARY KEY,
+                last_submit DATETIME NOT NULL
+            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
+        ");
+        $stmtCheck = $pdo->prepare("SELECT last_submit FROM survey_oh850_throttle WHERE ip_hash = ?");
+        $stmtCheck->execute([$ipHash]);
+        $lastSubmit = $stmtCheck->fetchColumn();
+        if ($lastSubmit !== false) {
+            $secondsAgo = time() - strtotime($lastSubmit);
+            if ($secondsAgo < SURVEY_THROTTLE_HOURS * 3600) {
+                http_response_code(429);
+                echo json_encode(['ok' => false, 'error' => 'throttled']);
+                exit;
+            }
+        }
+    } catch (Throwable $e) {
+        // Throttle-tabel niet beschikbaar mag de survey nooit blokkeren voor
+        // legitieme invullers — log en ga gewoon door zonder throttle.
+        error_log('survey_oh850 throttle-check faalde: ' . $e->getMessage());
+    }
 
     // Helpers
     $score = function($k) {
@@ -60,8 +117,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'submi
     $lang = preg_match('/^(nl|en)$/i', $_POST['lang'] ?? '') ? strtolower($_POST['lang']) : 'nl';
 
     try {
-        // Schrijf in willekeurige volgorde, met jitter, zodat survey-rij en
-        // vraag-rij niet via timestamp gekoppeld kunnen worden.
+        // Schrijf in willekeurige volgorde, met jitter tussen de twee inserts.
+        // Dit bemoeilijkt koppeling survey-rij ↔ vraag-rij, maar garandeert het
+        // niet (seconde-resolutie timestamps + oplopende id's — zie kop-comment).
         $vraagEmail = $text('vraag_email', 255);
         $vraagTekst = $text('vraag_tekst', 5000);
         $heeftVraag = ($vraagEmail !== null && $vraagTekst !== null
@@ -144,6 +202,19 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'submi
                 usleep(mt_rand(50000, 500000));
                 $insertVraag();
             }
+        }
+
+        // Throttle-tijdstip pas ná succesvolle insert vastleggen, zodat een
+        // mislukte submit (bv. door een DB-hik) iemand niet onterecht blokkeert.
+        try {
+            $stmtThrottle = $pdo->prepare("
+                INSERT INTO survey_oh850_throttle (ip_hash, last_submit)
+                VALUES (?, NOW())
+                ON DUPLICATE KEY UPDATE last_submit = NOW()
+            ");
+            $stmtThrottle->execute([$ipHash]);
+        } catch (Throwable $e) {
+            error_log('survey_oh850 throttle-update faalde: ' . $e->getMessage());
         }
 
         echo json_encode(['ok' => true]);
@@ -411,6 +482,13 @@ footer {
 
     <form id="survey-form">
 
+    <!-- Honeypot: onzichtbaar voor mensen (CSS), bots die alles invullen tuinen erin.
+         autocomplete/tabindex zetten we ook uit zodat browser-autofill hem niet vult. -->
+    <div style="position:absolute; left:-9999px; width:1px; height:1px; overflow:hidden;" aria-hidden="true">
+        <label for="website">Website</label>
+        <input type="text" id="website" name="website" tabindex="-1" autocomplete="off">
+    </div>
+
     <!-- 0. Bij welke wedstrijd(en) heb je InlineComp gebruikt? -->
     <?php if (!empty($wedstrijdenLijst)): ?>
     <section class="q">
@@ -455,7 +533,7 @@ footer {
 
     <!-- 2. Algemene ervaring -->
     <section class="q">
-        <div class="q-lbl" data-i18n="q_algemeen">2. Algemene ervaring met InlineComp</div>
+        <div class="q-lbl" data-i18n="q_algemeen">3. Algemene ervaring met InlineComp</div>
         <div class="scale-row" data-name="score_algemeen"></div>
         <div class="scale-extremes"><span data-i18n="scale_low">1 = heel slecht</span><span data-i18n="scale_high">5 = uitmuntend</span></div>
     </section>
@@ -539,7 +617,7 @@ footer {
 
     <!-- 4. Vergelijking met andere tools -->
     <section class="q">
-        <div class="q-lbl" data-i18n="q_kent">8. Welke andere tools ken je?</div>
+        <div class="q-lbl" data-i18n="q_kent">4. Welke andere tools ken je?</div>
         <div class="q-hint" data-i18n="q_kent_hint">Meerdere antwoorden mogelijk</div>
         <div class="chk-grid cols-2">
             <label class="chk-lbl"><input type="checkbox" name="kent_sportity" data-tools="1"> Sportity</label>
@@ -554,14 +632,14 @@ footer {
     </section>
 
     <section class="q hidden" id="sec-vergelijking">
-        <div class="q-lbl" data-i18n="q_vergelijking">9. Hoe vond je InlineComp t.o.v. de andere tool(s)?</div>
+        <div class="q-lbl" data-i18n="q_vergelijking">Hoe vond je InlineComp t.o.v. de andere tool(s)?</div>
         <div class="scale-row" data-name="score_vergelijking"></div>
         <div class="scale-extremes"><span data-i18n="scale_low_worse">1 = veel slechter</span><span data-i18n="scale_high_better">5 = veel beter</span></div>
     </section>
 
     <!-- Ontwikkelingsrichting -->
     <section class="q">
-        <div class="q-lbl" data-i18n="q_ontwikkeling">10. Hoe vind je dat InlineComp zich ontwikkelt sinds vorige keer?</div>
+        <div class="q-lbl" data-i18n="q_ontwikkeling">5. Hoe vind je dat InlineComp zich ontwikkelt sinds vorige keer?</div>
         <label class="chk-lbl" style="margin-bottom:8px" id="lbl-eerste-keer">
             <input type="checkbox" name="ontwikkeling_eerste_keer" id="cb-eerste-keer" data-hide="#sec-ontw-schaal">
             <span data-i18n="opt_eerste_keer">Ik gebruik InlineComp voor het eerst</span>
@@ -574,25 +652,26 @@ footer {
 
     <!-- Open vragen -->
     <section class="q subtle">
-        <div class="q-lbl" data-i18n="q_miste">11. Wat miste je / wat had je beter gewild?</div>
+        <div class="q-lbl" data-i18n="q_miste">6. Wat miste je / wat had je beter gewild?</div>
         <textarea name="miste_open" data-i18n-ph="ph_miste" placeholder="Optioneel — laat leeg als je niets specifieks hebt"></textarea>
     </section>
 
     <section class="q subtle">
-        <div class="q-lbl" data-i18n="q_tip">12. Tips / ideeën voor verbetering?</div>
+        <div class="q-lbl" data-i18n="q_tip">Tips / ideeën voor verbetering?</div>
         <textarea name="tip_open" data-i18n-ph="ph_tip" placeholder="Optioneel"></textarea>
     </section>
 
     <!-- Vraag voor Geert (optioneel + email) -->
     <section class="q subtle">
-        <div class="q-lbl" data-i18n="q_vraag">13. Heb je een vraag voor mij?</div>
+        <div class="q-lbl" data-i18n="q_vraag">7. Heb je een vraag voor mij?</div>
         <div class="q-hint" data-i18n="q_vraag_hint">
             Volledig optioneel. Als je iets invult: laat ook je e-mailadres achter zodat ik kan reageren.
             Je e-mail wordt los van je antwoorden opgeslagen — er is geen koppeling.
         </div>
-        <textarea name="vraag_tekst" data-i18n-ph="ph_vraag" placeholder="Je vraag (optioneel)"></textarea>
+        <textarea name="vraag_tekst" id="vraag-tekst" data-i18n-ph="ph_vraag" placeholder="Je vraag (optioneel)"></textarea>
         <div style="margin-top:8px">
-            <input type="email" name="vraag_email" data-i18n-ph="ph_email" placeholder="Je e-mail (alleen als je een vraag hebt)" autocomplete="email">
+            <input type="email" name="vraag_email" id="vraag-email" data-i18n-ph="ph_email" placeholder="Je e-mail (alleen als je een vraag hebt)" autocomplete="email" aria-describedby="email-req-hint">
+            <div class="q-hint hidden" id="email-req-hint" data-i18n="email_req_hint" style="color:var(--oranje);margin:5px 0 0">Vul je e-mail in zodat ik op je vraag kan reageren.</div>
         </div>
     </section>
 
@@ -648,20 +727,20 @@ const T = {
         q_check_mobiel: 'Werken op mobiel',
         q_check_duidelijk: 'Duidelijkheid van je geregistreerde gegevens',
         q_nps: 'Zou je InlineComp aanraden aan een andere skater?',
-        q_kent: '8. Welke andere tools ken je?',
+        q_kent: '4. Welke andere tools ken je?',
         q_kent_hint: 'Meerdere antwoorden mogelijk',
         opt_combinatie: 'Combinatie van bovenstaande',
         opt_anders: 'Iets anders',
         opt_geen_tool: 'Nooit iets anders gebruikt',
         ph_anders_naam: 'Welke tool? (optioneel)',
-        q_vergelijking: '9. Hoe vond je InlineComp t.o.v. de andere tool(s)?',
-        q_ontwikkeling: '10. Hoe vind je dat InlineComp zich ontwikkelt sinds vorige keer?',
+        q_vergelijking: 'Hoe vond je InlineComp t.o.v. de andere tool(s)?',
+        q_ontwikkeling: '5. Hoe vind je dat InlineComp zich ontwikkelt sinds vorige keer?',
         opt_eerste_keer: 'Ik gebruik InlineComp voor het eerst',
-        q_miste: '11. Wat miste je / wat had je beter gewild?',
+        q_miste: '6. Wat miste je / wat had je beter gewild?',
         ph_miste: 'Optioneel — laat leeg als je niets specifieks hebt',
-        q_tip: '12. Tips / ideeën voor verbetering?',
+        q_tip: 'Tips / ideeën voor verbetering?',
         ph_tip: 'Optioneel',
-        q_vraag: '13. Heb je een vraag voor mij?',
+        q_vraag: '7. Heb je een vraag voor mij?',
         q_vraag_hint: 'Volledig optioneel. Als je iets invult: laat ook je e-mailadres achter zodat ik kan reageren. Je e-mail wordt los van je antwoorden opgeslagen — er is geen koppeling.',
         ph_vraag: 'Je vraag (optioneel)',
         ph_email: 'Je e-mail (alleen als je een vraag hebt)',
@@ -680,7 +759,9 @@ const T = {
         scale_high_easy: '5 = heel makkelijk',
         scale_low_worse: '1 = veel slechter',
         scale_high_better: '5 = veel beter',
+        email_req_hint: 'Vul je e-mail in zodat ik op je vraag kan reageren.',
         err_submit: 'Versturen mislukt. Probeer het opnieuw.',
+        err_throttled: 'Je hebt recent al gereageerd, dank daarvoor! Is je mening over een week veranderd? Vul de survey dan gerust opnieuw in.',
         err_vraag_email: 'Heb je een vraag ingevuld? Vul dan ook een geldig e-mailadres in.',
     },
     en: {
@@ -714,20 +795,20 @@ const T = {
         q_check_mobiel: 'Mobile experience',
         q_check_duidelijk: 'Clarity of your registered details',
         q_nps: 'Would you recommend InlineComp to another skater?',
-        q_kent: '8. Which other tools do you know?',
+        q_kent: '4. Which other tools do you know?',
         q_kent_hint: 'Multiple answers possible',
         opt_combinatie: 'Combination of the above',
         opt_anders: 'Something else',
         opt_geen_tool: 'Never used anything else',
         ph_anders_naam: 'Which tool? (optional)',
-        q_vergelijking: '9. How was InlineComp compared to the other tool(s)?',
-        q_ontwikkeling: '10. How is InlineComp developing since last time?',
+        q_vergelijking: 'How was InlineComp compared to the other tool(s)?',
+        q_ontwikkeling: '5. How is InlineComp developing since last time?',
         opt_eerste_keer: 'I\'m using InlineComp for the first time',
-        q_miste: '11. What was missing / what would you have wanted differently?',
+        q_miste: '6. What was missing / what would you have wanted differently?',
         ph_miste: 'Optional — leave blank if nothing specific',
-        q_tip: '12. Tips / ideas for improvement?',
+        q_tip: 'Tips / ideas for improvement?',
         ph_tip: 'Optional',
-        q_vraag: '13. Do you have a question for me?',
+        q_vraag: '7. Do you have a question for me?',
         q_vraag_hint: 'Entirely optional. If you fill something in: also leave your email so I can reply. Your email is stored separately from your answers — there is no link.',
         ph_vraag: 'Your question (optional)',
         ph_email: 'Your email (only if you have a question)',
@@ -746,7 +827,9 @@ const T = {
         scale_high_easy: '5 = very easy',
         scale_low_worse: '1 = much worse',
         scale_high_better: '5 = much better',
+        email_req_hint: 'Enter your email so I can reply to your question.',
         err_submit: 'Submit failed. Please try again.',
+        err_throttled: 'Thanks — you already responded recently. Has your opinion changed after a week? Feel free to fill in the survey again then.',
         err_vraag_email: 'You entered a question? Please also enter a valid email address.',
     },
 };
@@ -832,6 +915,20 @@ document.querySelectorAll('.chk-lbl input[type=checkbox]').forEach(cb => {
     });
 });
 
+// ── E-mail wordt verplicht zodra er een vraag is ingevuld ───────────────────
+// Live: de hint verschijnt en het veld krijgt `required` zodra je iets in de
+// vraag typt, en verdwijnt weer als je de vraag leegmaakt.
+const elVraagTekst = document.getElementById('vraag-tekst');
+const elVraagEmail = document.getElementById('vraag-email');
+const elEmailHint  = document.getElementById('email-req-hint');
+function syncVraagEmail() {
+    const heeftVraag = elVraagTekst.value.trim() !== '';
+    elVraagEmail.required = heeftVraag;
+    elEmailHint.classList.toggle('hidden', !heeftVraag);
+}
+elVraagTekst.addEventListener('input', syncVraagEmail);
+syncVraagEmail();
+
 // ── Submit ────────────────────────────────────────────────────────────────
 const form = document.getElementById('survey-form');
 const btn  = document.getElementById('btn-submit');
@@ -840,13 +937,15 @@ form.addEventListener('submit', async (ev) => {
     ev.preventDefault();
     err.style.display = 'none';
 
-    // Front-end: als vraag-tekst gevuld → email vereist
+    // Front-end: als vraag-tekst gevuld → geldig email vereist
     const fd = new FormData(form);
     const vt = (fd.get('vraag_tekst') || '').toString().trim();
     const ve = (fd.get('vraag_email') || '').toString().trim();
     if (vt && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(ve)) {
         err.textContent = t('err_vraag_email');
         err.style.display = 'block';
+        elVraagEmail.focus();
+        elVraagEmail.scrollIntoView({ block: 'center', behavior: 'smooth' });
         return;
     }
     fd.append('action', 'submit');
@@ -856,6 +955,12 @@ form.addEventListener('submit', async (ev) => {
     try {
         const res = await fetch(window.location.pathname, { method: 'POST', body: fd });
         const data = await res.json().catch(() => ({}));
+        if (res.status === 429 || data.error === 'throttled') {
+            err.textContent = t('err_throttled');
+            err.style.display = 'block';
+            btn.disabled = false;
+            return;
+        }
         if (!res.ok || !data.ok) throw new Error('submit failed');
         // Toon bedank-scherm
         form.classList.add('hidden');

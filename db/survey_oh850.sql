@@ -1,11 +1,13 @@
 -- InlineComp – survey_oh850 (anonieme survey-antwoorden OH850)
 --
--- Bewust GEEN koppeling met survey_oh850_vragen: een respondent die
--- z'n email achterlaat voor follow-up-vragen krijgt z'n vraag in een
--- aparte tabel, zonder gedeelde id/foreign-key. Inserts gebeuren via
--- twee losse statements en survey_oh850_vragen gebruikt z'n eigen
--- submitted_at met een random jitter, zodat de timestamps niet exact
--- gelijk vallen en correlatie achteraf onmogelijk is.
+-- Bewust GEEN harde koppeling met survey_oh850_vragen: wie z'n email
+-- achterlaat voor een follow-up-vraag krijgt die in een aparte tabel,
+-- zonder gedeelde id/foreign-key. De inserts gebeuren als twee losse
+-- statements, in willekeurige volgorde, met een random jitter ertussen.
+-- Let op: dat maakt koppeling lastiger, maar NIET onmogelijk — submitted_at
+-- is op de seconde en beide tabellen hebben een oplopend id, dus bij lage
+-- aantallen blijft correlatie in principe mogelijk. Zie het als een
+-- privacy-scheiding, niet als een garantie van anonimiteit.
 --
 -- Schaal-vragen 1..5 zijn TINYINT UNSIGNED NULL: NULL = niet beantwoord
 -- (respondent mag een vraag overslaan, of de hele app-sectie niet gebruikt).
