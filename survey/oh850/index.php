@@ -56,15 +56,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'submi
     // de hash en het laatste-submit-tijdstip, in een eigen tabel los van de
     // antwoorden. Bij een burst (< SURVEY_THROTTLE_HOURS geleden) weigeren we
     // vriendelijk, zonder details over de reden prijs te geven.
+    //
+    // NB: de app-DB-user heeft geen DDL-rechten, dus de tabel wordt NIET hier
+    // aangemaakt — draai db/survey_oh850_throttle.sql één keer met een account
+    // dat CREATE mag. Bestaat de tabel nog niet, dan faalt de SELECT hieronder
+    // → catch → survey gaat gewoon door zonder throttle (fail-open).
     $ip = $_SERVER['REMOTE_ADDR'] ?? '';
     $ipHash = hash('sha256', $ip . SURVEY_IP_PEPPER);
     try {
-        $pdo->exec("
-            CREATE TABLE IF NOT EXISTS survey_oh850_throttle (
-                ip_hash CHAR(64) NOT NULL PRIMARY KEY,
-                last_submit DATETIME NOT NULL
-            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
-        ");
         $stmtCheck = $pdo->prepare("SELECT last_submit FROM survey_oh850_throttle WHERE ip_hash = ?");
         $stmtCheck->execute([$ipHash]);
         $lastSubmit = $stmtCheck->fetchColumn();
