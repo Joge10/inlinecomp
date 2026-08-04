@@ -100,7 +100,7 @@
             let key = null, label = null;
             if (c.split_group)      { key = 'split:' + c.dc_id + '|' + c.split_group; label = c.split_group; }
             else if (c.merge_group) { key = 'merge:' + c.merge_group;                 label = c.merge_label || null; }
-            else if (data.wizard_dc_gedaan) { key = 'dc:' + c.dc_id;                  label = c.feed_combined ? null : c.dc_name; }
+            else                    { key = 'dc:' + c.dc_id;                  label = c.feed_combined ? null : c.dc_name; }
             if (key) {
                 if (!groepMap.has(key)) groepMap.set(key, { leden: [], label });
                 groepMap.get(key).leden.push(id);
@@ -113,28 +113,42 @@
         }));
         state = { pool, groepen };
 
-        // 1b: gedeelde afstand-catalogus (distinct namen) + per groep de afstanden
-        // die bij z'n startlijst horen. Cruciaal: koppel op target_group (= de
-        // split_group) i.p.v. "alle afstanden van de DC" — anders krijgt bij een
-        // bak-feed (alles in één DC) elke groep álle afstanden en verberg je de
-        // werkelijke per-startlijst-indeling.
+        // 1b: catalogus (distinct namen) + per groep de afstanden van z'n startlijst.
+        // Gesplitst → afstanden met target_group = split_group. Niet-gesplitst → de
+        // BASIS-afstanden (target_group null) van de PRIMAIRE DC van de groep
+        // (laagste dc_number) — per-DC, niet globaal, anders lek je afstanden tussen
+        // DC's naar elkaar.
         afstandSeq = 0;
-        const cat = new Map();       // naam → {race_type, value_meters}
-        const perTarget = {};        // target_group | '__basis__' → [{name, number}]
+        const dcNummer = {};
+        (data.categorien || []).forEach(c => { if (dcNummer[c.dc_id] == null) dcNummer[c.dc_id] = c.dc_number || 0; });
+        const cat = new Map();     // naam → {race_type, value_meters}
+        const bySplit = {};        // split_group → [{name, number}]
+        const baseByDc = {};       // dc_id → [{name, number}]  (target_group null)
         Object.keys(data.distances_per_dc || {}).forEach(dcId => (data.distances_per_dc[dcId] || []).forEach(d => {
             if (!cat.has(d.name)) cat.set(d.name, { race_type: d.race_type, value_meters: d.value_meters });
-            const k = d.target_group || '__basis__';
-            perTarget[k] = perTarget[k] || [];
-            if (!perTarget[k].some(x => x.name === d.name)) perTarget[k].push({ name: d.name, number: d.number || 0 });
+            if (d.target_group) {
+                bySplit[d.target_group] = bySplit[d.target_group] || [];
+                if (!bySplit[d.target_group].some(x => x.name === d.name)) bySplit[d.target_group].push({ name: d.name, number: d.number || 0 });
+            } else {
+                baseByDc[dcId] = baseByDc[dcId] || [];
+                if (!baseByDc[dcId].some(x => x.name === d.name)) baseByDc[dcId].push({ name: d.name, number: d.number || 0 });
+            }
         }));
         state.catalog = Array.from(cat, ([name, v]) => ({ id: ++afstandSeq, name, race_type: v.race_type, value_meters: v.value_meters }));
         const idByNaam = {};
         state.catalog.forEach(d => { idByNaam[d.name] = d.id; });
         state.groepen.forEach(g => {
-            // target_group van deze groep = split_group van z'n categorieën (of basis).
-            const sg = g.leden.length ? (catMap[g.leden[0]].splitGroup || '__basis__') : '__basis__';
-            const lijst = (perTarget[sg] || []).slice().sort((a, b) => (a.number || 0) - (b.number || 0));
-            g.afstanden = lijst.map(x => idByNaam[x.name]).filter(Boolean);
+            if (!g.leden.length) { g.afstanden = []; return; }
+            const sg = catMap[g.leden[0]].splitGroup;
+            let lijst;
+            if (sg) {
+                lijst = bySplit[sg] || [];
+            } else {
+                const dcs = [...new Set(g.leden.map(id => catMap[id].dcId))];
+                const primDc = dcs.sort((a, b) => (dcNummer[a] || 0) - (dcNummer[b] || 0))[0];
+                lijst = baseByDc[primDc] || [];
+            }
+            g.afstanden = lijst.slice().sort((a, b) => (a.number || 0) - (b.number || 0)).map(x => idByNaam[x.name]).filter(Boolean);
         });
 
         if (data.heeft_loting)      locked = 'loting';
@@ -284,8 +298,24 @@
         const nieuwDrop = locked ? '' : `<div class="wz-leeg-drop" data-nieuw="1">＋ Nieuwe groep</div>`;
         const groepenHtml = state.groepen.map(groepCard).join('') + nieuwDrop;
 
+        // De wizard toont de indeling zoals in de database (elke DC een groep, mét
+        // afstanden). Bij eerste opening even benoemen dat dit uit de import komt;
+        // de "Groepen verwijderen"-knop blijft altijd staan zodat een bediener
+        // vanaf 0 kan opbouwen.
+        const eersteOpen = !locked && wzData && !wzData.wizard_dc_gedaan && state.groepen.length;
+        const infoRegel = eersteOpen
+            ? `<p class="wz-info">ℹ️ Dit is de indeling uit de import. Pas aan wat nodig is, of gebruik <b>Groepen verwijderen</b> om zelf op te bouwen.</p>`
+            : '';
+        const leegKnop = (!locked && state.groepen.length)
+            ? `<button type="button" id="wz-leeg" class="wz-btn wz-btn-leeg">Groepen verwijderen</button>`
+            : '';
+
         overlay.querySelector('#wz-1a').innerHTML = `
-          <p class="wz-hint">↔ Stel een DC samen: schuif één of meer categorieën in een groep.</p>
+          ${infoRegel}
+          <div class="wz-1a-kop">
+            <p class="wz-hint">↔ Stel een DC samen: schuif één of meer categorieën in een groep.</p>
+            ${leegKnop}
+          </div>
           <div class="wz-grid1a">
             <div class="wz-paneel">
               <h3>Bak · nog niet ingedeeld</h3>
@@ -294,6 +324,15 @@
             </div>
             <div><div class="wz-groepen">${groepenHtml}</div></div>
           </div>`;
+
+        // Alle groepen leegmaken → categorieën terug in de bak, groepen weg. De
+        // afstand-toewijzingen zitten per groep, dus die verdwijnen mee (opnieuw
+        // vanaf 0). De catalogus (state.catalog) blijft, zodat 1b ze weer kent.
+        overlay.querySelector('#wz-leeg')?.addEventListener('click', () => {
+            state.pool = state.pool.concat(state.groepen.flatMap(g => g.leden));
+            state.groepen = [];
+            render();
+        });
 
         renderB();
         if (!locked) wireDnd();

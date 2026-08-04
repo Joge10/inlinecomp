@@ -70,6 +70,17 @@
 .wz-hint{ font-size:.82rem; color:#607089; margin:0 0 12px; }
 .wz-hint b{ color:var(--blauw,#1F4E79); }
 
+/* Info-regel bij eerste opening (indeling komt uit de import) */
+.wz-info{ font-size:.85rem; color:#33404f; margin:0 0 12px;
+  background:#f0f6fc; border:1px solid #cfe0f0; border-radius:8px; padding:9px 12px; }
+.wz-info b{ color:var(--blauw,#1F4E79); }
+
+/* Kop van 1a: hint links, "Groepen verwijderen" rechts */
+.wz-1a-kop{ display:flex; align-items:baseline; justify-content:space-between; gap:14px; }
+.wz-1a-kop .wz-hint{ margin-bottom:12px; }
+.wz-btn-leeg{ flex:0 0 auto; color:#b71c1c; border-color:#e6c3c3; }
+.wz-btn-leeg:hover{ background:#fbeaea; }
+
 /* ── 1a layout ───────────────────────────────────────────── */
 .wz-grid1a{ display:grid; grid-template-columns:340px 1fr; gap:20px; align-items:start; }
 .wz-paneel{ background:#fff; border:1px solid var(--border,#d3dbe3); border-radius:12px; padding:14px 15px; }
