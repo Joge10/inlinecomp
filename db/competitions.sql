@@ -28,9 +28,18 @@ CREATE TABLE IF NOT EXISTS `competitions` (
     -- met KNSB-API-sync), 'handmatig' = via wedstrijd_handmatig.php aangemaakt
     -- (geen KNSB-koppeling; vergelijk.php + import.php skippen dan de KNSB-stappen).
     `bron`               VARCHAR(20)  DEFAULT NULL,
+    -- Tijdschema-wizard Deel 1 (DC's samenstellen) minstens één keer voltooid.
+    -- 0 = nog niet gedraaid → wizard toont alle categorieën los in de "bak".
+    -- 1 = gedraaid → de DC's + merge_group + dc_splits ZIJN de groepen; de
+    -- wizard reconstrueert daaruit (bak leeg). Nodig omdat een als-solo-groepen
+    -- ingedeelde per-categorie-feed géén merges/splits oplevert en dan niet van
+    -- "vers" te onderscheiden is. Zie 2026-08-03_competitions_wizard_dc.sql.
+    `wizard_dc_gedaan`   TINYINT(1)   NOT NULL DEFAULT 0,
     PRIMARY KEY (`id`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
 -- Migratie voor bestaande installaties (fout negeren als kolom al bestaat):
 -- ALTER TABLE competitions
 --     ADD COLUMN bron VARCHAR(20) DEFAULT NULL AFTER public_aankondigen;
+-- ALTER TABLE competitions
+--     ADD COLUMN wizard_dc_gedaan TINYINT(1) NOT NULL DEFAULT 0 AFTER bron;

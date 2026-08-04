@@ -1,11 +1,12 @@
 -- InlineComp – entries (inschrijvingen per wedstrijd per DC)
 --
--- `status` waarden:
---   1  getekend / aanwezig — standaard-situatie
---   2  aangemeld maar nog niet getekend aan de balie
---   3  afgemeld
---   4  niet getekend (afwezig aan de start)
---   5  bevestigd bij organisatie (alternatief pad)
+-- `status` waarden (labels gelijk aan app.js STATUS_LABELS):
+--   0  Niet bevestigd
+--   1  Bevestigd
+--   2  Afgemeld
+--   3  Afgemeld bij org.
+--   4  Niet getekend
+--   5  Bevestigd bij org.
 
 CREATE TABLE IF NOT EXISTS `entries` (
     `id`                      INT UNSIGNED NOT NULL AUTO_INCREMENT,

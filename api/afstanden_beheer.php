@@ -32,7 +32,10 @@ if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
 require_once __DIR__ . '/../../config_inlinecomp.php';
 require_once __DIR__ . '/../auth/session.php';
 $_authUser = requireAuth($pdo);
-if (!kanSchrijven($_authUser, 'beheer')) {
+// 'beheer_basic' (owner/admin/planner) i.p.v. 'beheer': afstanden vormen samen
+// met mergen/splitsen (die al op 'startlijsten'/planner staan) de tijdschema-
+// wizard Deel 1 — een planner moet die end-to-end kunnen afmaken.
+if (!kanSchrijven($_authUser, 'beheer_basic')) {
     http_response_code(403);
     echo json_encode(['error' => 'Geen schrijfrechten voor beheer.']);
     exit;

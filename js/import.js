@@ -1695,6 +1695,9 @@ function updateImportBtn() {
                 : 'Wedstrijd importeren in database')
         : 'Alles is opgeslagen — geen wijzigingen';
     updateExportBtn();
+    // Tijdschema-wizard-knop meebewegen: die mag alleen open als de import
+    // actueel is (anders kloppen de aantallen niet).
+    window.wizardUpdateKnop?.();
 }
 
 // ── Exporteer-knop status ────────────────────────────────────────────────────

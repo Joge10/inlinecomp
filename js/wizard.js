@@ -1,0 +1,723 @@
+/* ============================================================
+ *  InlineComp – Tijdschema-wizard  (Deel 1: DC's samenstellen)
+ *
+ *  Bouwsteen = CATEGORIE (persons.category). 1a = categorie-kaarten die je in
+ *  groepen sleept. Pool ("bak") = nog niet ingedeeld. Elke categorie moet in
+ *  een groep vóór opslaan (solo = groep van 1), ook 0-deelnemers — zodat een
+ *  late aanmelder altijd een startlijst heeft.
+ *
+ *  Laden / re-run:
+ *    - split_group  → groep (per DC)
+ *    - merge_group  → groep
+ *    - anders + vlag wizard_dc_gedaan gezet → de DC is een groep
+ *    - anders → los in de bak
+ *  Feed-gecombineerde categorieën (multi-code DC) staan los in de bak, met een
+ *  stippellijn eromheen als feed-hint.
+ *
+ *  Grendel: loting → alles read-only; cat_config/programma → structureel op slot.
+ *  Opslaan → groepen naar merge_group + dc_splits, afstanden naar afstanden_beheer,
+ *  vlag wizard_dc_gedaan zetten. Kan alleen als !locked én de bak leeg is.
+ * ============================================================ */
+(function () {
+    'use strict';
+
+    let compId  = null;
+    let overlay = null;
+    let wzData  = null;
+    let catMap  = {};     // catId (dcId|code) → {...}
+    let state   = null;   // { pool:[catId], groepen:[{label, auto, leden:[catId]}] }
+    let locked  = null;   // 'loting' | 'structureel' | null
+    let dragId  = null;   // 1a: catId dat gesleept wordt
+    let dragAfstand = null; // 1b: afstand-id die gesleept wordt
+    let afstandSeq = 0;     // teller voor lokale afstand-id's (stabiel bij hernoemen)
+    let editTarget = null;  // 1b: welke afstand-pil staat open in bewerk-modus
+    let dragFromGi = null;  // 1b: sleep-bron — null = uit de lijst, anders groep-index
+
+    function wizardResetVoorWedstrijd(cid) {
+        compId = cid || null;
+        wizardUpdateKnop();
+    }
+    window.wizardResetVoorWedstrijd = wizardResetVoorWedstrijd;
+
+    // Knop alleen aan als er een wedstrijd is ÉN de import actueel is. Zolang
+    // #btn-import klikbaar is (niks geïmporteerd / wijzigingen / nieuwe entries)
+    // kloppen de aantallen niet → wizard blokkeren met uitleg in de tooltip.
+    // Wordt aangeroepen vanuit app.js (wedstrijd-select) en import.js
+    // (updateImportBtn, na elke import-status-wijziging).
+    function wizardUpdateKnop() {
+        const btn = document.getElementById('btn-wizard');
+        if (!btn) return;
+        if (!compId) { btn.disabled = true; btn.title = 'Selecteer eerst een wedstrijd (in Importeer)'; return; }
+        const imp = document.getElementById('btn-import');
+        const importNodig = imp && !imp.disabled;
+        btn.disabled = importNodig;
+        btn.title = importNodig
+            ? 'Eerst importeren in Importeer — de aantallen zijn nog niet actueel'
+            : 'Tijdschema-wizard openen';
+    }
+    window.wizardUpdateKnop = wizardUpdateKnop;
+
+    // ── Open / sluit ─────────────────────────────────────────────────────────
+    async function openWizard() {
+        if (!compId) return;
+        const imp = document.getElementById('btn-import');
+        if (imp && !imp.disabled) return; // import niet actueel — knop hoort disabled te zijn
+        if (!overlay) { overlay = bouwOverlay(); document.body.appendChild(overlay); }
+        zetTab('1a');
+        toonLaden();
+        overlay.classList.add('wz-open');
+        try {
+            const res = await fetch('api/wizard_dc.php?competition_id=' + encodeURIComponent(compId));
+            const data = await res.json();
+            if (!res.ok || data.error) throw new Error(data.error || 'laadfout');
+            wzData = data;
+            bouwState(data);
+            render();
+        } catch (e) {
+            toonFout(e.message || 'Kon de wedstrijd-gegevens niet laden.');
+        }
+    }
+    function sluitWizard() { overlay && overlay.classList.remove('wz-open'); }
+
+    function catId(c) { return c.dc_id + '|' + c.code; }
+
+    function bouwState(data) {
+        catMap = {};
+        (data.categorien || []).forEach(c => {
+            catMap[catId(c)] = {
+                code: c.code, dcId: c.dc_id, dcName: c.dc_name || '',
+                feedCombined: !!c.feed_combined,
+                mergeGroup: c.merge_group, mergeLabel: c.merge_label, splitGroup: c.split_group,
+                n: c.deelnemers || 0, res: c.reserves || 0, na: c.niet_actief || 0, nb: c.niet_bevestigd || 0,
+            };
+        });
+
+        // Reconstrueer groepen + bak
+        const groepMap = new Map(); // key → { label, leden:[] }
+        const pool = [];
+        (data.categorien || []).forEach(c => {
+            const id = catId(c);
+            let key = null, label = null;
+            if (c.split_group)      { key = 'split:' + c.dc_id + '|' + c.split_group; label = c.split_group; }
+            else if (c.merge_group) { key = 'merge:' + c.merge_group;                 label = c.merge_label || null; }
+            else if (data.wizard_dc_gedaan) { key = 'dc:' + c.dc_id;                  label = c.feed_combined ? null : c.dc_name; }
+            if (key) {
+                if (!groepMap.has(key)) groepMap.set(key, { leden: [], label });
+                groepMap.get(key).leden.push(id);
+            } else {
+                pool.push(id);
+            }
+        });
+        const groepen = Array.from(groepMap.values()).map(g => ({
+            leden: g.leden, auto: true, label: g.label || joinLabel(g.leden),
+        }));
+        state = { pool, groepen };
+
+        // 1b: gedeelde afstand-catalogus (distinct namen) + per groep de afstanden
+        // die bij z'n startlijst horen. Cruciaal: koppel op target_group (= de
+        // split_group) i.p.v. "alle afstanden van de DC" — anders krijgt bij een
+        // bak-feed (alles in één DC) elke groep álle afstanden en verberg je de
+        // werkelijke per-startlijst-indeling.
+        afstandSeq = 0;
+        const cat = new Map();       // naam → {race_type, value_meters}
+        const perTarget = {};        // target_group | '__basis__' → [{name, number}]
+        Object.keys(data.distances_per_dc || {}).forEach(dcId => (data.distances_per_dc[dcId] || []).forEach(d => {
+            if (!cat.has(d.name)) cat.set(d.name, { race_type: d.race_type, value_meters: d.value_meters });
+            const k = d.target_group || '__basis__';
+            perTarget[k] = perTarget[k] || [];
+            if (!perTarget[k].some(x => x.name === d.name)) perTarget[k].push({ name: d.name, number: d.number || 0 });
+        }));
+        state.catalog = Array.from(cat, ([name, v]) => ({ id: ++afstandSeq, name, race_type: v.race_type, value_meters: v.value_meters }));
+        const idByNaam = {};
+        state.catalog.forEach(d => { idByNaam[d.name] = d.id; });
+        state.groepen.forEach(g => {
+            // target_group van deze groep = split_group van z'n categorieën (of basis).
+            const sg = g.leden.length ? (catMap[g.leden[0]].splitGroup || '__basis__') : '__basis__';
+            const lijst = (perTarget[sg] || []).slice().sort((a, b) => (a.number || 0) - (b.number || 0));
+            g.afstanden = lijst.map(x => idByNaam[x.name]).filter(Boolean);
+        });
+
+        if (data.heeft_loting)      locked = 'loting';
+        else if (data.heeft_cat_config || data.heeft_programma) locked = 'structureel';
+        else                        locked = null;
+    }
+
+    // Groepsnaam. Eén lid → categorie-naam (of code bij feed-combinatie).
+    // Meerdere → categorie-codes ("DKA* + HKA*").
+    function joinLabel(leden) {
+        if (!leden.length) return 'Nieuwe groep';
+        if (leden.length === 1) { const c = catMap[leden[0]]; return c.feedCombined ? c.code : (c.dcName || c.code); }
+        return leden.map(id => catMap[id].code).join(' + ');
+    }
+    function herlabel() { state.groepen.forEach(g => { if (g.auto) g.label = joinLabel(g.leden); }); }
+
+    function bouwOverlay() {
+        const d = document.createElement('div');
+        d.id = 'wz-overlay';
+        d.className = 'wz-overlay';
+        d.innerHTML = `
+          <div class="wz-dialog" role="dialog" aria-labelledby="wz-titel">
+            <div class="wz-kop">
+              <h2 id="wz-titel">🪄 Tijdschema-wizard <small>Deel 1 · DC's samenstellen</small></h2>
+              <button class="wz-sluit" id="wz-sluit" title="Sluiten">×</button>
+            </div>
+            <div class="wz-body">
+              <div id="wz-status"></div>
+              <div class="wz-steps">
+                <div class="wz-step act"><span class="wz-num">1</span><span class="wz-lbl">DC's samenstellen<small>groepen + afstanden</small></span></div>
+                <div class="wz-step"><span class="wz-num">2</span><span class="wz-lbl">Afstand-instellingen<small>series, A-grootte</small></span></div>
+                <div class="wz-step"><span class="wz-num">3</span><span class="wz-lbl">Programma<small>blok-volgorde</small></span></div>
+                <div class="wz-step"><span class="wz-num">4</span><span class="wz-lbl">A-finales combineren<small>optioneel</small></span></div>
+              </div>
+              <div class="wz-subtabs">
+                <button id="wz-tab-1a" class="act">1a · Groepen vormen</button>
+                <button id="wz-tab-1b">1b · Afstanden per groep</button>
+              </div>
+              <div id="wz-1a"></div>
+              <div id="wz-1b" class="wz-hidden"></div>
+            </div>
+            <div class="wz-foot">
+              <button class="wz-btn" id="wz-annuleer">Sluiten</button>
+              <button class="wz-btn wz-btn-primair" id="wz-opslaan" disabled title="Indeling opslaan">Opslaan</button>
+            </div>
+          </div>`;
+        d.querySelector('#wz-sluit').addEventListener('click', sluitWizard);
+        d.querySelector('#wz-annuleer').addEventListener('click', sluitWizard);
+        d.addEventListener('click', e => { if (e.target === d) sluitWizard(); });
+        d.querySelector('#wz-tab-1a').addEventListener('click', () => zetTab('1a'));
+        d.querySelector('#wz-tab-1b').addEventListener('click', () => zetTab('1b'));
+        d.querySelector('#wz-opslaan').addEventListener('click', opslaan);
+        return d;
+    }
+
+    function zetTab(t) {
+        if (!overlay) return;
+        overlay.querySelector('#wz-tab-1a').classList.toggle('act', t === '1a');
+        overlay.querySelector('#wz-tab-1b').classList.toggle('act', t === '1b');
+        overlay.querySelector('#wz-1a').classList.toggle('wz-hidden', t !== '1a');
+        overlay.querySelector('#wz-1b').classList.toggle('wz-hidden', t !== '1b');
+    }
+    function toonLaden() {
+        overlay.querySelector('#wz-status').innerHTML = '';
+        overlay.querySelector('#wz-1a').innerHTML = '<div style="padding:30px;text-align:center;color:#607089">⏳ Laden…</div>';
+        overlay.querySelector('#wz-1b').innerHTML = '';
+    }
+    function toonFout(msg) {
+        overlay.querySelector('#wz-1a').innerHTML = `<div style="padding:24px;text-align:center;color:#b71c1c">${esc(msg)}</div>`;
+    }
+
+    function esc(s) { return String(s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c])); }
+
+    function statusBanner() {
+        if (locked === 'loting') {
+            return `<div class="wz-band" style="background:#fce4e4;border-color:#f5b5b5;color:#b71c1c">🔒 Er is al geloot — <b>alleen-lezen</b>.</div>`;
+        }
+        if (locked === 'structureel') {
+            return `<div class="wz-band">⚠ Er is al een programma — wijzigingen geblokkeerd. Wis het eerst in het Tijdschema.</div>`;
+        }
+        // Geen bak-melding: of de bak leeg moet, zegt de Opslaan-knop zelf
+        // (disabled + tooltip). De uitleg over de bak staat al in de 1a-hint.
+        return '';
+    }
+
+    // ── Kaarten ──────────────────────────────────────────────────────────────
+    function telLabels(c, kort) {
+        let out = '';
+        if (c.res > 0) out += `<span class="wz-res" title="reserves (status 1/5 met reserve-nr)">+${c.res}${kort ? '' : ' res'}</span>`;
+        if (c.na  > 0) out += `<span class="wz-na"  title="afgemeld/afwezig (status 2, 3, 4)">${c.na}${kort ? '' : ' n.a.'}</span>`;
+        if (c.nb  > 0) out += `<span class="wz-nb"  title="niet bevestigd (status 0)">${c.nb}${kort ? '' : ' nb'}</span>`;
+        return out;
+    }
+    function catNaam(c) { return c.feedCombined ? c.code : (c.dcName || c.code); }
+    function catCard(id) {
+        const c = catMap[id]; const leeg = c.n === 0 ? ' wz-leeg' : '';
+        const chip = c.feedCombined ? '' : `<span class="wz-code">${esc(c.code)}</span>`;
+        return `<div class="wz-cat" ${locked ? '' : 'draggable="true"'} data-id="${esc(id)}">
+            <div class="wz-n${leeg}">${c.n}</div>
+            <div class="wz-meta"><div class="wz-nm">${esc(catNaam(c))}</div>${chip}${telLabels(c, false)}</div>
+          </div>`;
+    }
+    function lidRow(id) {
+        const c = catMap[id]; const leeg = c.n === 0 ? ' wz-leeg' : '';
+        return `<div class="wz-lid" ${locked ? '' : 'draggable="true"'} data-id="${esc(id)}">
+            <div class="wz-ln${leeg}">${c.n}</div><div class="wz-lnm">${esc(catNaam(c))}</div><span class="wz-lcode">${esc(c.code)}</span>${telLabels(c, true)}
+          </div>`;
+    }
+    function groepCard(g, idx) {
+        const rij = g.leden.reduce((s, id) => s + catMap[id].n, 0);
+        const res = g.leden.reduce((s, id) => s + catMap[id].res, 0);
+        const totLbl = `${rij} <small>rijders${res ? ` +${res} res` : ''}</small>`;
+        const leden = g.leden.map(lidRow).join('') || '<div style="color:#93a1b3;font-size:.8rem;padding:6px">sleep hier…</div>';
+        const ontbind = locked ? '' : `<div class="wz-verwijder"><button data-ontbind="${idx}">groep ontbinden ✕</button></div>`;
+        return `<div class="wz-groep" data-idx="${idx}">
+            <div class="wz-groep-head"><input value="${esc(g.label)}" data-idx="${idx}" ${locked === 'loting' ? 'disabled' : ''}><span class="wz-tot">${totLbl}</span></div>
+            <div class="wz-leden">${leden}</div>
+            ${ontbind}
+          </div>`;
+    }
+
+    // Pool: feed-gecombineerde categorieën per DC in een stippellijn-kader.
+    // Rendert de bak in de (gesorteerde) pool-volgorde. Opeenvolgende categorieën
+    // uit dezelfde feed-DC krijgen samen een stippellijn-kader — op hun plek in
+    // de sortering, niet apart onderaan.
+    function poolHtml() {
+        if (!state.pool.length) return '<div style="color:#93a1b3;font-size:.8rem;padding:10px">bak is leeg</div>';
+        let html = '', i = 0;
+        while (i < state.pool.length) {
+            const c = catMap[state.pool[i]];
+            if (c.feedCombined) {
+                const dcId = c.dcId; const run = [];
+                while (i < state.pool.length && catMap[state.pool[i]].feedCombined && catMap[state.pool[i]].dcId === dcId) {
+                    run.push(state.pool[i]); i++;
+                }
+                html += `<div class="wz-feedgroep"><div class="wz-feedgroep-lbl">feed-combinatie: ${esc(catMap[run[0]].dcName)}</div>${run.map(catCard).join('')}</div>`;
+            } else {
+                html += catCard(state.pool[i]); i++;
+            }
+        }
+        return html;
+    }
+
+    function render() {
+        if (!overlay) return;
+        overlay.querySelector('#wz-status').innerHTML = statusBanner();
+        const nieuwDrop = locked ? '' : `<div class="wz-leeg-drop" data-nieuw="1">＋ Nieuwe groep</div>`;
+        const groepenHtml = state.groepen.map(groepCard).join('') + nieuwDrop;
+
+        overlay.querySelector('#wz-1a').innerHTML = `
+          <p class="wz-hint">↔ Stel een DC samen: schuif één of meer categorieën in een groep.</p>
+          <div class="wz-grid1a">
+            <div class="wz-paneel">
+              <h3>Bak · nog niet ingedeeld</h3>
+              <div class="wz-sub">Getal = deelnemers (bevestigd, geen reserve)</div>
+              <div class="wz-pool" data-drop="pool">${poolHtml()}</div>
+            </div>
+            <div><div class="wz-groepen">${groepenHtml}</div></div>
+          </div>`;
+
+        renderB();
+        if (!locked) wireDnd();
+        else wireLabels();
+        updateOpslaanKnop();
+    }
+
+    // ── 1b ───────────────────────────────────────────────────────────────────
+    function typeKlasse(rt) {
+        if (rt === 'inline' || rt === 'afvalkoers' || rt === 'puntenkoers') return 'pack';
+        return 'sprint';
+    }
+    // Labels gelijk aan de Import DC-editor (js/import.js) voor consistentie.
+    function typeLabel(rt) {
+        return ({ sprint: 'Sprint', inline: 'Inline', puntenkoers: 'Puntenkoers', afvalkoers: 'Afvalkoers' })[rt] || rt;
+    }
+    function afstandById(id) { return state.catalog.find(d => d.id === id); }
+
+    // Zoek een afstand met exact deze naam+meters+type, of maak 'm aan (zodat
+    // hij ook in de lijst/bak verschijnt). Geeft het id terug.
+    function findOrCreateAfstand(naam, metersRaw, type) {
+        naam = (naam || '').trim();
+        const v = (metersRaw == null ? '' : String(metersRaw)).trim();
+        const m = v === '' ? null : parseInt(v, 10);
+        const mNorm = (m == null || isNaN(m)) ? null : m;
+        let d = state.catalog.find(x => (x.name || '') === naam && x.value_meters === mNorm && x.race_type === type);
+        if (!d) { d = { id: ++afstandSeq, name: naam, race_type: type, value_meters: mNorm }; state.catalog.push(d); }
+        return d.id;
+    }
+
+    function isEditing(gi, id) {
+        if (!editTarget) return false;
+        return gi == null
+            ? (editTarget.mode === 'bak' && editTarget.id === id)
+            : (editTarget.mode === 'groep' && editTarget.gi === gi && editTarget.aid === id);
+    }
+    // Compacte pil. In de bak is de hele pil sleepbaar. ✎ = bewerken, 🗑/✕ = weg.
+    function afstandPil(d, gi, pos) {
+        const inGroep = gi != null;
+        const posB = (inGroep && pos != null) ? `<span class="wz-pos" title="afstand ${pos + 1}">${pos + 1}</span>` : '';
+        const m = d.value_meters != null ? ` <span class="wz-m">${esc(d.value_meters)} m</span>` : '';
+        const badge = `<span class="wz-type ${typeKlasse(d.race_type)}">${esc(typeLabel(d.race_type))}</span>`;
+        if (locked) return `<span class="wz-achip">${posB}${badge} ${esc(d.name || '(naamloos)')}${m}</span>`;
+        const pen = `<button class="wz-pil-btn wz-pen" title="bewerken" draggable="false">✎</button>`;
+        const actie = inGroep
+            ? `<button class="wz-pil-btn wz-del-groep" title="uit groep halen" draggable="false">✕</button>`
+            : `<button class="wz-pil-btn wz-del-cat" title="verwijderen uit lijst" draggable="false">🗑</button>`;
+        const dataAttr = inGroep ? `data-gi="${gi}" data-aid="${d.id}"` : `data-id="${d.id}"`;
+        return `<span class="wz-achip wz-adrag" draggable="true" ${dataAttr}>${posB}${badge} ${esc(d.name || '(naamloos)')}${m} ${pen}${actie}</span>`;
+    }
+    // Bewerk-formulier (na ✎). Sluit bij focus-weg of ✓.
+    function afstandEdit(d, gi) {
+        const opts = ['sprint', 'inline', 'puntenkoers', 'afvalkoers']
+            .map(rt => `<option value="${rt}"${d.race_type === rt ? ' selected' : ''}>${esc(typeLabel(rt))}</option>`).join('');
+        const dataAttr = gi != null ? `data-gi="${gi}" data-aid="${d.id}"` : `data-id="${d.id}"`;
+        return `<div class="wz-af-kaart wz-af-editing" ${dataAttr}>
+            <div class="wz-af-top">
+              <input class="wz-af-naam" value="${esc(d.name || '')}" placeholder="naam (bv. Sprint 500m)" maxlength="100">
+              <button class="wz-af-klaar" title="klaar">✓</button>
+            </div>
+            <div class="wz-af-bot">
+              <input type="number" class="wz-af-m" value="${d.value_meters != null ? esc(d.value_meters) : ''}" placeholder="meters" min="0">
+              <select class="wz-af-type">${opts}</select>
+            </div>
+          </div>`;
+    }
+    function afstandKaart(d, gi, pos) {
+        return isEditing(gi, d.id) ? afstandEdit(d, gi) : afstandPil(d, gi, pos);
+    }
+    function groepenHtml1b() {
+        return state.groepen.map((g, gi) => {
+            const rij = g.leden.reduce((s, id) => s + catMap[id].n, 0);
+            const items = (g.afstanden || []).map((aid, i) => { const d = afstandById(aid); return d ? afstandKaart(d, gi, i) : ''; }).join('')
+                || `<span style="color:#93a1b3;font-size:.8rem">${locked ? 'geen afstanden' : 'sleep afstanden hierheen'}</span>`;
+            return `<div class="wz-groep" data-bgi="${gi}">
+                <div class="wz-groep-head"><span class="wz-bkop">${esc(g.label)}</span><span class="wz-tot">${rij} <small>rijders</small></span></div>
+                <div class="wz-bafstanden">${items}</div>
+              </div>`;
+        }).join('') || '<div style="color:#93a1b3;font-size:.85rem;padding:10px">Nog geen groepen — deel eerst in bij 1a.</div>';
+    }
+    function renderB() {
+        const editorHtml = state.catalog.map(d => afstandKaart(d, null)).join('')
+            || '<div style="color:#93a1b3;font-size:.8rem;padding:6px">Nog geen afstanden</div>';
+        const addBtn = locked ? '' : `<button class="wz-btn wz-af-add" id="wz-af-add" style="margin-top:10px">＋ Nieuwe afstand</button>`;
+        overlay.querySelector('#wz-1b').innerHTML = `
+          <p class="wz-hint">↔ Sleep afstanden naar een groep. Een afstand in een groep aanpassen maakt een nieuwe variant (andere groepen houden de originele).</p>
+          <div class="wz-grid1a">
+            <div class="wz-paneel">
+              <h3>Afstanden</h3>
+              <div class="wz-afstand-editor">${editorHtml}</div>
+              ${addBtn}
+            </div>
+            <div><div class="wz-groepen">${groepenHtml1b()}</div></div>
+          </div>`;
+        wireB();
+    }
+    function renderGroepen1b() {
+        const cont = overlay && overlay.querySelector('#wz-1b .wz-groepen');
+        if (!cont) return;
+        cont.innerHTML = groepenHtml1b();
+        wireGroepen1b(cont);
+    }
+    // Bewerk-kaart afsluiten (bak: in-place; groep: find-or-create) + opruimen leeg.
+    function commitEdit(card) {
+        const naam = card.querySelector('.wz-af-naam').value;
+        const mtr  = card.querySelector('.wz-af-m').value;
+        const type = card.querySelector('.wz-af-type').value;
+        editTarget = null;
+        if (card.hasAttribute('data-id')) {
+            const id = +card.getAttribute('data-id'); const d = afstandById(id);
+            if (d) {
+                const v = (mtr || '').trim();
+                d.name = (naam || '').trim(); d.value_meters = v === '' ? null : parseInt(v, 10); d.race_type = type;
+                if (d.name === '' && d.value_meters == null) { // leeg → opruimen
+                    state.catalog = state.catalog.filter(x => x.id !== id);
+                    state.groepen.forEach(g => g.afstanden = (g.afstanden || []).filter(a => a !== id));
+                }
+            }
+        } else {
+            const gi = +card.getAttribute('data-gi'); const oldId = +card.getAttribute('data-aid');
+            if ((naam || '').trim() !== '' || (mtr || '').trim() !== '') {
+                const newId = findOrCreateAfstand(naam, mtr, type);
+                if (newId !== oldId) {
+                    const g = state.groepen[gi]; const idx = g.afstanden.indexOf(oldId);
+                    if (idx >= 0) { if (g.afstanden.includes(newId)) g.afstanden.splice(idx, 1); else g.afstanden[idx] = newId; }
+                }
+            }
+        }
+        renderB();
+    }
+    function wireEdit(card) {
+        card.addEventListener('focusout', e => { if (!card.contains(e.relatedTarget)) commitEdit(card); });
+        const klaar = card.querySelector('.wz-af-klaar');
+        if (klaar) klaar.addEventListener('click', () => commitEdit(card));
+    }
+    function startEdit(target) {
+        editTarget = target;
+        renderB();
+        const inp = overlay.querySelector('.wz-af-editing .wz-af-naam');
+        if (inp) inp.focus();
+    }
+    function wireGroepen1b(scope) {
+        if (locked) return;
+        scope.querySelectorAll('.wz-af-editing[data-gi]').forEach(wireEdit);
+        scope.querySelectorAll('.wz-achip[data-gi] .wz-pen').forEach(b => b.addEventListener('click', ev => {
+            ev.stopPropagation();
+            const p = b.closest('[data-gi]');
+            startEdit({ mode: 'groep', gi: +p.getAttribute('data-gi'), aid: +p.getAttribute('data-aid') });
+        }));
+        scope.querySelectorAll('.wz-del-groep').forEach(b => b.addEventListener('click', ev => {
+            ev.stopPropagation();
+            const p = b.closest('[data-gi]'); const gi = +p.getAttribute('data-gi'); const aid = +p.getAttribute('data-aid');
+            state.groepen[gi].afstanden = (state.groepen[gi].afstanden || []).filter(a => a !== aid);
+            renderGroepen1b();
+        }));
+        // Groep-pillen sleepbaar: naar andere groep = verplaatsen, naar de lijst = eruit,
+        // op een andere pil in dezelfde groep = volgorde wijzigen (ervoor invoegen).
+        scope.querySelectorAll('.wz-adrag[data-gi]').forEach(el => {
+            el.addEventListener('dragstart', e => { dragAfstand = +el.getAttribute('data-aid'); dragFromGi = +el.getAttribute('data-gi'); e.dataTransfer.effectAllowed = 'move'; setTimeout(() => el.classList.add('wz-drag'), 0); });
+            el.addEventListener('dragend', () => el.classList.remove('wz-drag'));
+            el.addEventListener('dragover', e => { e.preventDefault(); e.stopPropagation(); el.classList.add('wz-drop-voor'); });
+            el.addEventListener('dragleave', () => el.classList.remove('wz-drop-voor'));
+            el.addEventListener('drop', e => {
+                e.preventDefault(); e.stopPropagation(); el.classList.remove('wz-drop-voor');
+                if (dragAfstand == null) return;
+                const gi = +el.getAttribute('data-gi'); const targetId = +el.getAttribute('data-aid');
+                if (targetId === dragAfstand) { dragAfstand = null; dragFromGi = null; return; }
+                const g = state.groepen[gi]; g.afstanden = g.afstanden || [];
+                if (dragFromGi != null && dragFromGi !== gi) state.groepen[dragFromGi].afstanden = (state.groepen[dragFromGi].afstanden || []).filter(a => a !== dragAfstand);
+                const cur = g.afstanden.indexOf(dragAfstand); if (cur >= 0) g.afstanden.splice(cur, 1);
+                const idx = g.afstanden.indexOf(targetId);
+                g.afstanden.splice(idx < 0 ? g.afstanden.length : idx, 0, dragAfstand);
+                dragAfstand = null; dragFromGi = null; renderGroepen1b();
+            });
+        });
+        scope.querySelectorAll('[data-bgi]').forEach(z => {
+            z.addEventListener('dragover', e => { e.preventDefault(); z.classList.add('wz-over'); });
+            z.addEventListener('dragleave', () => z.classList.remove('wz-over'));
+            z.addEventListener('drop', e => {
+                e.preventDefault(); z.classList.remove('wz-over');
+                if (dragAfstand == null) return;
+                const doel = +z.getAttribute('data-bgi');
+                const g = state.groepen[doel]; g.afstanden = g.afstanden || [];
+                if (!g.afstanden.includes(dragAfstand)) g.afstanden.push(dragAfstand);
+                if (dragFromGi != null && dragFromGi !== doel) {
+                    state.groepen[dragFromGi].afstanden = (state.groepen[dragFromGi].afstanden || []).filter(a => a !== dragAfstand);
+                }
+                dragAfstand = null; dragFromGi = null; renderGroepen1b();
+            });
+        });
+    }
+    function wireB() {
+        if (!overlay || locked) return;
+        const root = overlay.querySelector('#wz-1b');
+        root.querySelectorAll('.wz-af-editing[data-id]').forEach(wireEdit);
+        root.querySelectorAll('.wz-adrag[data-id] .wz-pen').forEach(b => b.addEventListener('click', ev => {
+            ev.stopPropagation();
+            startEdit({ mode: 'bak', id: +b.closest('[data-id]').getAttribute('data-id') });
+        }));
+        root.querySelectorAll('.wz-del-cat').forEach(b => b.addEventListener('click', ev => {
+            ev.stopPropagation();
+            const id = +b.closest('[data-id]').getAttribute('data-id');
+            state.catalog = state.catalog.filter(d => d.id !== id);
+            state.groepen.forEach(g => g.afstanden = (g.afstanden || []).filter(a => a !== id));
+            renderB();
+        }));
+        const addBtn = root.querySelector('#wz-af-add');
+        if (addBtn) addBtn.addEventListener('click', () => {
+            const d = { id: ++afstandSeq, name: '', race_type: 'sprint', value_meters: null };
+            state.catalog.push(d);
+            startEdit({ mode: 'bak', id: d.id });
+        });
+        root.querySelectorAll('.wz-adrag[data-id]').forEach(el => {
+            el.addEventListener('dragstart', e => { dragAfstand = +el.getAttribute('data-id'); dragFromGi = null; e.dataTransfer.effectAllowed = 'copy'; setTimeout(() => el.classList.add('wz-drag'), 0); });
+            el.addEventListener('dragend', () => el.classList.remove('wz-drag'));
+        });
+        // De afstand-lijst is ook een dropzone: een groep-pil hierheen slepen haalt
+        // 'm uit die groep (de afstand zelf blijft in de lijst bestaan).
+        const bak = root.querySelector('.wz-afstand-editor');
+        if (bak) {
+            bak.addEventListener('dragover', e => { if (dragFromGi != null) { e.preventDefault(); bak.classList.add('wz-over'); } });
+            bak.addEventListener('dragleave', () => bak.classList.remove('wz-over'));
+            bak.addEventListener('drop', e => {
+                e.preventDefault(); bak.classList.remove('wz-over');
+                if (dragAfstand != null && dragFromGi != null) {
+                    state.groepen[dragFromGi].afstanden = (state.groepen[dragFromGi].afstanden || []).filter(a => a !== dragAfstand);
+                }
+                dragAfstand = null; dragFromGi = null; renderGroepen1b();
+            });
+        }
+        wireGroepen1b(root);
+    }
+
+    // ── Drag & drop ──────────────────────────────────────────────────────────
+    function wireLabels() {
+        overlay.querySelectorAll('#wz-1a .wz-groep-head input').forEach(inp => {
+            inp.addEventListener('change', () => {
+                const g = state.groepen[+inp.getAttribute('data-idx')];
+                g.label = inp.value; g.auto = false; renderB();
+            });
+        });
+    }
+    function wireDnd() {
+        const root = overlay.querySelector('#wz-1a');
+        root.querySelectorAll('[data-id]').forEach(el => {
+            el.addEventListener('dragstart', e => { dragId = el.getAttribute('data-id'); e.dataTransfer.effectAllowed = 'move'; setTimeout(() => el.classList.add('wz-drag'), 0); });
+            el.addEventListener('dragend', () => el.classList.remove('wz-drag'));
+        });
+        const zones = [];
+        root.querySelectorAll('.wz-pool').forEach(z => zones.push([z, 'pool']));
+        root.querySelectorAll('.wz-groep').forEach(z => zones.push([z, 'groep:' + z.getAttribute('data-idx')]));
+        root.querySelectorAll('.wz-leeg-drop').forEach(z => zones.push([z, 'nieuw']));
+        zones.forEach(([z, doel]) => {
+            z.addEventListener('dragover', e => { e.preventDefault(); z.classList.add('wz-over'); });
+            z.addEventListener('dragleave', () => z.classList.remove('wz-over'));
+            z.addEventListener('drop', e => { e.preventDefault(); z.classList.remove('wz-over'); dropNaar(doel); });
+        });
+        wireLabels();
+        root.querySelectorAll('[data-ontbind]').forEach(b => b.addEventListener('click', () => ontbind(+b.getAttribute('data-ontbind'))));
+    }
+    function verwijderUit(id) {
+        state.pool = state.pool.filter(x => x !== id);
+        state.groepen.forEach(g => g.leden = g.leden.filter(x => x !== id));
+    }
+    function dropNaar(doel) {
+        if (!dragId) return;
+        verwijderUit(dragId);
+        if (doel === 'pool') state.pool.push(dragId);
+        else if (doel === 'nieuw') {
+            const dcId = catMap[dragId].dcId;
+            const namen = [...new Set(((wzData.distances_per_dc || {})[dcId] || []).map(d => d.name))];
+            const ids = namen.map(nm => (state.catalog.find(d => d.name === nm) || {}).id).filter(Boolean);
+            state.groepen.push({ label: joinLabel([dragId]), leden: [dragId], auto: true, afstanden: ids });
+        }
+        else if (doel.startsWith('groep:')) state.groepen[+doel.slice(6)].leden.push(dragId);
+        state.groepen = state.groepen.filter(g => g.leden.length);
+        herlabel();
+        dragId = null;
+        render();
+    }
+    function ontbind(idx) {
+        state.pool.push(...state.groepen[idx].leden);
+        state.groepen.splice(idx, 1);
+        render();
+    }
+
+    // ── Opslaan (increment 3) ────────────────────────────────────────────────
+    function updateOpslaanKnop() {
+        const btn = overlay && overlay.querySelector('#wz-opslaan');
+        if (!btn) return;
+        const inBak = state ? state.pool.length : 0;
+        btn.disabled = !!locked || inBak > 0;
+        btn.title = locked
+            ? 'Vergrendeld — er is al een programma of loting; wis dat eerst in het Tijdschema'
+            : (inBak > 0
+                ? `De bak is nog niet leeg — sleep de laatste ${inBak} categorie${inBak === 1 ? '' : 'ën'} in een groep`
+                : 'Indeling opslaan');
+    }
+
+    async function postJson(url, body) {
+        const res = await fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+        const data = await res.json().catch(() => ({}));
+        if (res.status === 409) throw new Error(data.message || data.error || 'Er is al een programma of loting — wis dat eerst in het Tijdschema.');
+        if (!res.ok || data.error) throw new Error(data.error || ('Fout (' + res.status + ')'));
+        return data;
+    }
+
+    // Vertaal de wizard-indeling naar merge_group + dc_splits + distances-doelen.
+    // Ondersteunt ook het gemengde geval (DC's samenvoegen én daarbinnen splitsen),
+    // net als de Import-opslag: split-afstanden onder de PRIMAIRE DC (laagste
+    // dc_number) van de merge-cluster, gekeyd op split_group; merge_group = die
+    // primaire dc-id.
+    function bouwOpslaanPayload() {
+        const cats = wzData.categorien || [];
+        const allDcs = [...new Set(cats.map(c => c.dc_id))];
+        const dcNummer = {};
+        cats.forEach(c => { if (dcNummer[c.dc_id] == null) dcNummer[c.dc_id] = c.dc_number || 0; });
+        const sgNaam = gi => state.groepen[gi].label || ('groep-' + gi);
+
+        // Union-find: DC's die samen in één wizard-groep zitten → één merge-cluster.
+        const parent = {}; allDcs.forEach(dc => parent[dc] = dc);
+        const find = x => { while (parent[x] !== x) { parent[x] = parent[parent[x]]; x = parent[x]; } return x; };
+        state.groepen.forEach(g => {
+            const dcs = [...new Set(g.leden.map(c => c.split('|')[0]))];
+            for (let i = 1; i < dcs.length; i++) parent[find(dcs[0])] = find(dcs[i]);
+        });
+
+        // Cluster-info: welke DC's + welke wizard-groepen.
+        const cluster = {}; // root → { dcs:Set, groepen:Set }
+        allDcs.forEach(dc => { const r = find(dc); (cluster[r] = cluster[r] || { dcs: new Set(), groepen: new Set() }).dcs.add(dc); });
+        state.groepen.forEach((g, gi) => g.leden.forEach(c => cluster[find(c.split('|')[0])].groepen.add(gi)));
+
+        // Primaire DC per cluster = laagste dc_number (zoals Import).
+        const primair = {};
+        Object.keys(cluster).forEach(r => { primair[r] = [...cluster[r].dcs].sort((a, b) => (dcNummer[a] || 0) - (dcNummer[b] || 0))[0]; });
+
+        // Merges: cluster met >1 DC → merge_group = primaire dc-id; overige → un-merge.
+        const merges = allDcs.map(dc => {
+            const cl = cluster[find(dc)];
+            if (cl.dcs.size > 1) {
+                const label = cl.groepen.size === 1 ? state.groepen[[...cl.groepen][0]].label : null;
+                return { dc_id: dc, merge_group: primair[find(dc)], merge_label: label };
+            }
+            return { dc_id: dc, merge_group: null, merge_label: null };
+        });
+
+        // Splits: cluster die >1 wizard-groep beslaat → elke categorie naar z'n groep-label.
+        const catGroep = {}; // catId → gi
+        state.groepen.forEach((g, gi) => g.leden.forEach(c => { catGroep[c] = gi; }));
+        const splitsByDc = {}; allDcs.forEach(dc => splitsByDc[dc] = []);
+        Object.keys(cluster).forEach(r => {
+            if (cluster[r].groepen.size <= 1) return; // niet gesplitst
+            cluster[r].dcs.forEach(dc => cats.filter(c => c.dc_id === dc).forEach(c => {
+                const gi = catGroep[c.dc_id + '|' + c.code];
+                if (gi != null) splitsByDc[dc].push({ category: c.code, split_group: sgNaam(gi) });
+            }));
+        });
+
+        // Afstand-doelen: per wizard-groep = één startlijst → (primaire dc, split_group).
+        const distTargets = [];
+        state.groepen.forEach((g, gi) => {
+            if (!g.leden.length) return;
+            const r = find(g.leden[0].split('|')[0]);
+            const split_group = cluster[r].groepen.size > 1 ? sgNaam(gi) : null;
+            const distances = (g.afstanden || []).map((aid, i) => {
+                const d = afstandById(aid);
+                return d ? { id: null, number: i + 1, name: d.name, value_meters: d.value_meters, race_type: d.race_type } : null;
+            }).filter(Boolean);
+            distTargets.push({ dc_id: primair[r], split_group, distances });
+        });
+
+        return { merges, splitsByDc, distTargets };
+    }
+
+    async function opslaan() {
+        if (locked || !state || state.pool.length) return;
+        const btn = overlay.querySelector('#wz-opslaan');
+        const payload = bouwOpslaanPayload();
+        if (payload.error) { toonOpslaanMelding(payload.error, false); return; }
+        btn.disabled = true; btn.textContent = 'Opslaan…';
+        try {
+            await postJson('api/samenvoeg.php', { competition_id: compId, merges: payload.merges });
+            for (const dcId of Object.keys(payload.splitsByDc)) {
+                await postJson('api/splits.php', { competition_id: compId, dc_id: dcId, splits: payload.splitsByDc[dcId] });
+            }
+            for (const t of payload.distTargets) {
+                const body = { dc_id: t.dc_id, split_group: t.split_group, distances: t.distances };
+                const verwacht = t.distances.filter(d => (d.name || '').trim() !== '').length;
+                // Vangnet tegen een stille server-hiccup die één insert laat vallen:
+                // controleer of alles is teruggemeld; zo niet → één keer opnieuw;
+                // anders harde fout i.p.v. stille data-loss.
+                let res = await postJson('api/afstanden_beheer.php', body);
+                if ((res.distances || []).length < verwacht) {
+                    res = await postJson('api/afstanden_beheer.php', body);
+                }
+                if ((res.distances || []).length < verwacht) {
+                    throw new Error(`Niet alle afstanden opgeslagen voor "${t.split_group || 'basis'}" (verstuurd ${verwacht}, opgeslagen ${(res.distances || []).length}). Klik nogmaals Opslaan.`);
+                }
+            }
+            await postJson('api/wizard_dc.php', { action: 'mark_done', competition_id: compId });
+            btn.textContent = 'Opslaan';
+            await openWizard();  // herlaad met de opgeslagen stand (vlag gezet)
+            toonOpslaanMelding('✔ Opgeslagen.', true);
+            // Import-DC-panel (indien open achter de wizard) verversen zodat je daar
+            // meteen de nieuwe waardes ziet i.p.v. de oude cache. Op de achtergrond.
+            if (typeof herlaadVergelijking === 'function' && compId) {
+                try { herlaadVergelijking(); } catch (e) { /* geen blocker */ }
+            }
+        } catch (e) {
+            btn.disabled = false; btn.textContent = 'Opslaan';
+            toonOpslaanMelding('Opslaan mislukt: ' + (e.message || ''), false);
+        }
+    }
+
+    function toonOpslaanMelding(tekst, ok) {
+        const st = overlay && overlay.querySelector('#wz-status');
+        if (!st) return;
+        const stijl = ok
+            ? 'background:#e8f5e9;border-color:#b6dbb9;color:#2e7d32'
+            : 'background:#fce4e4;border-color:#f5b5b5;color:#b71c1c';
+        st.insertAdjacentHTML('afterbegin', `<div class="wz-band" style="${stijl}">${esc(tekst)}</div>`);
+    }
+
+    // ── Init ─────────────────────────────────────────────────────────────────
+    const btn = document.getElementById('btn-wizard');
+    if (btn) btn.addEventListener('click', openWizard);
+})();

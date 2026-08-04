@@ -919,6 +919,8 @@ async function selectWedstrijd(card, comp) {
 
     // Print-Center state resetten bij (andere) wedstrijd — header-knop enablen
     window.printCenterResetVoorWedstrijd?.(comp.id);
+    // Idem voor de tijdschema-wizard
+    window.wizardResetVoorWedstrijd?.(comp.id);
 
     const panel = el('detail-panel');
     panel.style.display = 'block';
@@ -1119,6 +1121,7 @@ function resetImportModule(verwijderdId) {
     entryEdits        = {};
     manualTp          = new Set();
     window.printCenterResetVoorWedstrijd?.(null);
+    window.wizardResetVoorWedstrijd?.(null);
     _setHeaderWedstrijd(null);
     heeftWijzigingen  = false;
     standDatum        = '';

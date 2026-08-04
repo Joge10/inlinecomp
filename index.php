@@ -28,6 +28,7 @@ if (is_array($eigenScope) && !empty($eigenScope)) {
     <title>InlineComp</title>
     <link rel="icon" type="image/svg+xml" href="favicon.svg">
     <link rel="stylesheet" href="css/style.css">
+    <link rel="stylesheet" href="css/wizard.css">
     <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js" defer></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js" defer></script>
 </head>
@@ -38,6 +39,10 @@ if (is_array($eigenScope) && !empty($eigenScope)) {
     <span class="badge">KNSB Inline</span>
     <span class="header-wedstrijd" id="header-wedstrijd" title="Huidige wedstrijd (selectie in Importeer)"></span>
     <div class="header-user">
+        <?php /* Tijdelijk owner-only tot de wizard (Deel 1) af is — nu nog voorbeelddata. */ ?>
+        <?php if (($gebruiker['role'] ?? '') === 'owner'): ?>
+        <button class="header-wizard-btn" id="btn-wizard" title="Tijdschema-wizard openen" disabled>&#129668; Wizard</button>
+        <?php endif; ?>
         <button class="header-printcenter-btn" id="btn-printcenter" title="Print-Center openen" disabled>&#128424; Print-Center</button>
         <button class="header-handleiding-btn" id="btn-handleiding" title="Handleiding openen" onclick="window.open('docs/handleiding.html', '_blank', 'noopener')">&#128366; Handleiding</button>
         <span class="header-user-naam"><?= htmlspecialchars($gebruiker['naam']) ?></span>
@@ -855,5 +860,6 @@ function magSchrijven(module) {
 <script src="js/uploads.js"></script>
 <script src="js/helpers.js"></script>
 <script src="js/print_module.js"></script>
+<script src="js/wizard.js"></script>
 </body>
 </html>

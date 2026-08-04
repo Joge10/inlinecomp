@@ -28,6 +28,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') { exit; }
 
 require_once __DIR__ . '/../../config_inlinecomp.php';
 require_once __DIR__ . '/../auth/session.php';
+require_once __DIR__ . '/_cat_helper.php';   // catSorteerSleutel() (gedeeld met wizard_dc.php)
 $_authUser = requireAuth($pdo);
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && !kanSchrijven($_authUser, 'tijdschema')) {
     http_response_code(403);
@@ -164,83 +165,7 @@ function syncBlokken(PDO $pdo, int $tsId, string $afstandNaam, array $enabledRon
  *
  * Fallback op dc_naam als category_filter leeg is.
  */
-function catSorteerSleutel(string $naam, string $catFilter = ''): string {
-
-    // KNSB leeftijdscode → rang (0 = jongste, 8 = oudste)
-    $ageCodeRank = [
-        'P4' => 0, 'P3' => 1, 'P2' => 2, 'P1' => 3,
-        'K'  => 4,
-        'JB' => 5, 'JA' => 6,
-        'S'  => 7,
-        'M'  => 8,
-    ];
-
-    $maxAge = -1;
-    $gk     = '1'; // mannen standaard
-
-    $filter = trim($catFilter);
-    if ($filter !== '') {
-        // Splits op komma; strip wildcards/spaties; bijv. ["DJA*","DS*","HJB*"]
-        $codes = preg_split('/[\s,]+/', strtoupper($filter));
-        foreach ($codes as $raw) {
-            $code = trim($raw, '* ');
-            if (strlen($code) < 2) continue;
-
-            // Geslacht: eerste letter bepaalt (D/V = dames, H = heren)
-            if ($code[0] === 'D' || $code[0] === 'V') {
-                $gk = '0';
-            }
-
-            // Leeftijdscode: alles na de geslachtsletter (bijv. 'JA', 'P4', 'S').
-            // Gebruik progressieve afkapping voor rauwe KNSB-codes zoals 'DJAA' → 'JAA' → 'JA'.
-            $ageStr = substr($code, 1);
-            while ($ageStr !== '' && !isset($ageCodeRank[$ageStr])) {
-                $ageStr = substr($ageStr, 0, -1);
-            }
-            if ($ageStr !== '') {
-                $maxAge = max($maxAge, $ageCodeRank[$ageStr]);
-            }
-        }
-    }
-
-    // ── Fallback: parse dc_naam als category_filter ontbreekt ────────────────
-    if ($maxAge < 0) {
-        $n = mb_strtolower(trim($naam));
-        $leeftijdPatronen = [
-            0 => ['pupillen 4', 'pup 4', 'pup4', 'p4'],
-            1 => ['pupillen 3', 'pup 3', 'pup3', 'p3'],
-            2 => ['pupillen 2', 'pup 2', 'pup2', 'p2'],
-            3 => ['pupillen 1', 'pup 1', 'pup1', 'p1'],
-            4 => ['kadetten', 'kad'],
-            5 => ['junioren b', 'jun b', 'jun. b', 'jb'],
-            6 => ['junioren a', 'jun a', 'jun. a', 'ja'],
-            7 => ['senioren', 'sen'],
-            8 => ['masters', 'mast', 'mas'],
-        ];
-        foreach ($leeftijdPatronen as $idx => $patronen) {
-            foreach ($patronen as $p) {
-                if (str_contains($n, $p)) {
-                    $maxAge = max($maxAge, $idx);
-                    break;
-                }
-            }
-        }
-        // Vrouwen vóór mannen (via naam)
-        $vrouwPatronen = ['vrouwen', 'dames', 'meisjes', 'girls', 'women', 'ladies'];
-        foreach ($vrouwPatronen as $p) {
-            if (str_contains($n, $p)) { $gk = '0'; break; }
-        }
-        if ($gk === '1' && preg_match('/^[dv][jkpsm]/', $n)) {
-            $gk = '0';
-        }
-    }
-
-    $lk = $maxAge >= 0
-        ? str_pad((string)$maxAge, 2, '0', STR_PAD_LEFT)
-        : '99';
-
-    return $lk . $gk . mb_strtolower(trim($naam));
-}
+// catSorteerSleutel() staat nu in api/_cat_helper.php (gedeeld met wizard_dc.php).
 
 // ── Even verdeling hulpfunctie ────────────────────────────────────────────────
 
