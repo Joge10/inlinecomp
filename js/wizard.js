@@ -35,7 +35,12 @@
     let stap    = 1;        // 1 = DC's (subtabs 1a/1b) · 2 = afstand-instellingen
     let subtab  = '1a';     // actieve subtab binnen stap 1
     let d2Sys   = 'full-final';   // Deel 2 vraag 1: systeem
-    let d2Par   = {};       // Deel 2 params per afstand-naam: {format, hG, mS, fA, minB, q, laatsteB}
+    let d2Par   = {};       // Deel 2 params per afstand-index: {format, hG, mS, fA, minB, q, laatsteB, startModus, ov:{gi:{A,bAantal}}}
+    let d2Edit  = null;     // Deel 2: welke groep-regel staat open in bewerk-modus {ai, gi}
+    let d2Locked = false;   // Deel 2: er staat al config in de DB → bulk op slot, alleen ✎
+    let d2Dirty = new Set();// Deel 2: groepen (ai|gi) met onopgeslagen wijzigingen (badge "gewijzigd")
+    let d1Snapshot = null;  // vingerafdruk van de indeling bij openen/opslaan (Deel 1 dirty-check)
+    let d2Changed = false;  // Deel 2 gewijzigd sinds openen/opslaan
 
     function wizardResetVoorWedstrijd(cid) {
         compId = cid || null;
@@ -69,6 +74,7 @@
         if (!overlay) { overlay = bouwOverlay(); document.body.appendChild(overlay); }
         stap = 1; subtab = '1a';
         zetTab('1a');
+        overlay.querySelector('#wz-3').classList.add('wz-hidden');
         overlay.querySelector('#wz-2').classList.add('wz-hidden');
         overlay.querySelector('.wz-subtabs').style.display = '';
         overlay.querySelectorAll('.wz-step').forEach(el => el.classList.toggle('act', el.dataset.step === '1'));
@@ -81,13 +87,40 @@
             wzData = data;
             d2Sys = data.systeem || 'full-final';
             d2Par = {};
+            d2Edit = null;
+            d2Locked = false;
+            d2Dirty = new Set();
+            d2Changed = false;
             bouwState(data);
+            reconstrueerDeel2(data);
+            d1Snapshot = d1Vinger();   // baseline voor de dirty-check
             render();
         } catch (e) {
             toonFout(e.message || 'Kon de wedstrijd-gegevens niet laden.');
         }
     }
-    function sluitWizard() { overlay && overlay.classList.remove('wz-open'); }
+    // "Vingerafdruk" van de Deel-1-indeling om onopgeslagen wijzigingen te zien.
+    function d1Vinger() {
+        if (!state) return '';
+        return JSON.stringify({
+            pool: state.pool,
+            g: state.groepen.map(x => ({ l: x.leden, lb: x.label, a: x.afstanden })),
+            c: state.catalog,
+        });
+    }
+    function heeftWijzigingen() {
+        return (d1Snapshot != null && d1Vinger() !== d1Snapshot) || d2Changed;
+    }
+    async function sluitWizard() {
+        if (!overlay) return;
+        if (heeftWijzigingen()) {
+            const ok = await toonBevestigDialog(
+                'Er zijn niet-opgeslagen wijzigingen in de wizard. Sluiten en die wijzigingen weggooien?',
+                'Onopgeslagen wijzigingen', 'Sluiten', 'Terug');
+            if (!ok) return;
+        }
+        overlay.classList.remove('wz-open');
+    }
 
     function catId(c) { return c.dc_id + '|' + c.code; }
 
@@ -197,7 +230,7 @@
               <div class="wz-steps">
                 <div class="wz-step act wz-klik" data-step="1"><span class="wz-num">1</span><span class="wz-lbl">DC's samenstellen<small>groepen + afstanden</small></span></div>
                 <div class="wz-step wz-klik" data-step="2"><span class="wz-num">2</span><span class="wz-lbl">Afstand-instellingen<small>series, A-grootte</small></span></div>
-                <div class="wz-step" data-step="3"><span class="wz-num">3</span><span class="wz-lbl">Programma<small>blok-volgorde</small></span></div>
+                <div class="wz-step wz-klik" data-step="3"><span class="wz-num">3</span><span class="wz-lbl">Programma<small>blok-volgorde</small></span></div>
                 <div class="wz-step" data-step="4"><span class="wz-num">4</span><span class="wz-lbl">A-finales combineren<small>optioneel</small></span></div>
               </div>
               <div class="wz-subtabs">
@@ -207,6 +240,7 @@
               <div id="wz-1a"></div>
               <div id="wz-1b" class="wz-hidden"></div>
               <div id="wz-2" class="wz-hidden"></div>
+              <div id="wz-3" class="wz-hidden"></div>
             </div>
             <div class="wz-foot" id="wz-foot"></div>
           </div>`;
@@ -225,19 +259,41 @@
     function renderFooter() {
         const f = overlay && overlay.querySelector('#wz-foot');
         if (!f) return;
-        if (stap === 2) {
+        if (stap === 3) {
             f.innerHTML =
                 `<button class="wz-btn" id="wz-annuleer">Annuleren</button>
-                 <button class="wz-btn wz-btn-primair" id="wz-terug">← Terug naar stap 1</button>`;
+                 <button class="wz-btn" id="wz-terug">← Stap 2</button>`;
+            f.querySelector('#wz-annuleer').addEventListener('click', sluitWizard);
+            f.querySelector('#wz-terug').addEventListener('click', () => zetStap(2));
+            return;
+        }
+        if (stap === 2) {
+            const kanD2 = locked !== 'loting';
+            const tip = locked === 'loting' ? 'Er is al geloot — instellingen staan vast.' : '';
+            f.innerHTML =
+                `<button class="wz-btn" id="wz-annuleer">Annuleren</button>
+                 <button class="wz-btn" id="wz-terug">← Stap 1</button>
+                 <button class="wz-btn" id="wz-d2-opslaan-sluit" ${kanD2 ? '' : 'disabled'} title="${esc(tip)}">Opslaan en sluiten</button>
+                 <button class="wz-btn wz-btn-primair" id="wz-d2-opslaan" ${kanD2 ? '' : 'disabled'} title="${esc(tip)}">Opslaan en verder →</button>`;
             f.querySelector('#wz-annuleer').addEventListener('click', sluitWizard);
             f.querySelector('#wz-terug').addEventListener('click', () => zetStap(1));
+            const s = f.querySelector('#wz-d2-opslaan-sluit'); if (s) s.addEventListener('click', () => opslaanDeel2('sluit'));
+            const o = f.querySelector('#wz-d2-opslaan');       if (o) o.addEventListener('click', () => opslaanDeel2('stap3'));
+            return;
+        }
+        // Vergrendeld: stap 1 is alleen-lezen, dus geen opslaan — wel gewoon door
+        // naar stap 2 (afstand-instellingen bekijken/aanpassen).
+        if (locked) {
+            f.innerHTML =
+                `<button class="wz-btn" id="wz-annuleer">Annuleren</button>
+                 <button class="wz-btn wz-btn-primair" id="wz-verder">Verder → stap 2</button>`;
+            f.querySelector('#wz-annuleer').addEventListener('click', sluitWizard);
+            f.querySelector('#wz-verder').addEventListener('click', () => zetStap(2));
             return;
         }
         const inBak = state ? state.pool.length : 0;
-        const kan = !locked && state && inBak === 0;
-        const tip = locked
-            ? 'Vergrendeld — er is al een programma of loting; wis dat eerst in het Tijdschema'
-            : (inBak > 0 ? `De bak is nog niet leeg — sleep de laatste ${inBak} categorie${inBak === 1 ? '' : 'ën'} in een groep` : '');
+        const kan = state && inBak === 0;
+        const tip = inBak > 0 ? `De bak is nog niet leeg — sleep de laatste ${inBak} categorie${inBak === 1 ? '' : 'ën'} in een groep` : '';
         f.innerHTML =
             `<button class="wz-btn" id="wz-annuleer">Annuleren</button>
              <button class="wz-btn" id="wz-opslaan-sluit" ${kan ? '' : 'disabled'} title="${esc(tip)}">Opslaan en sluiten</button>
@@ -247,23 +303,31 @@
         f.querySelector('#wz-opslaan-verder').addEventListener('click', () => opslaan('stap2'));
     }
 
-    // Stap 1 (DC's, met subtabs 1a/1b) ↔ stap 2 (afstand-instellingen).
+    // Stap 1 (DC's, subtabs 1a/1b) ↔ 2 (afstand-instellingen) ↔ 3 (programma).
     function zetStap(n) {
         if (!overlay) return;
         if (n === 2 && (!state || !state.groepen.length)) return;   // niks in te stellen
         stap = n;
+        overlay.querySelector('#wz-status').innerHTML = statusBanner();   // banner is stap-afhankelijk
         overlay.querySelectorAll('.wz-step').forEach(el =>
             el.classList.toggle('act', +el.dataset.step === n));
         overlay.querySelector('.wz-subtabs').style.display = n === 1 ? '' : 'none';
         overlay.querySelector('#wz-2').classList.toggle('wz-hidden', n !== 2);
+        overlay.querySelector('#wz-3').classList.toggle('wz-hidden', n !== 3);
         if (n === 1) {
             zetTab(subtab);
         } else {
             overlay.querySelector('#wz-1a').classList.add('wz-hidden');
             overlay.querySelector('#wz-1b').classList.add('wz-hidden');
-            renderDeel2();
+            if (n === 2) renderDeel2();
+            else if (n === 3) renderStap3();
         }
         updateOpslaanKnop();
+    }
+    function renderStap3() {
+        overlay.querySelector('#wz-3').innerHTML =
+            `<div class="wz-d3-soon"><h3>Deel 3 · Programma</h3>
+             <p>Blok-volgorde, pauzes en tijden — komt binnenkort.</p></div>`;
     }
 
     function zetTab(t) {
@@ -290,7 +354,14 @@
             return `<div class="wz-band" style="background:#fce4e4;border-color:#f5b5b5;color:#b71c1c">🔒 Er is al geloot — <b>alleen-lezen</b>.</div>`;
         }
         if (locked === 'structureel') {
-            return `<div class="wz-band">⚠ Er is al een programma — wijzigingen geblokkeerd. Wis het eerst in het Tijdschema.</div>`;
+            // Deze melding gaat over stap 1 (indeling vast) → op stap 2 zelf niet
+            // tonen; daar spreken de "opgeslagen"-badges + "Opnieuw afleiden".
+            if (stap === 2) return '';
+            // Onderscheid: een echt programma (Deel 3) vs. alleen afstand-
+            // instellingen (Deel 2). Beide zetten de indeling (stap 1) vast.
+            return (wzData && wzData.heeft_programma)
+                ? `<div class="wz-band">⚠ De indeling (groepen + afstanden) ligt vast — er is al een programma. Wil je de indeling wijzigen, wis het programma dan eerst in het Tijdschema.</div>`
+                : `<div class="wz-band">⚠ De indeling (groepen + afstanden) ligt vast — er zijn al afstand-instellingen gemaakt. Wil je de indeling wijzigen, verwijder die dan eerst in het Tijdschema.</div>`;
         }
         // Geen bak-melding: of de bak leeg moet, zegt de Opslaan-knop zelf
         // (disabled + tooltip). De uitleg over de bak staat al in de 1a-hint.
@@ -723,13 +794,14 @@
         if (L <= fA && nBfull >= 1) { laatsteB ? (B[B.length - 1] += L) : (B[0] += L); return B; }  // rest bijmengen
         return null;
     }
-    function d2Los(N, p) {
+    function d2Los(N, p, lb) {
         const hG = p.hG, fA = p.fA || 0, minB = p.minB || 1;
+        if (lb == null) lb = p.laatsteB;
         const maxHeat = hG + fA;
         if (N <= 0) return { leeg: true };
         if (N <= maxHeat) return { A: N, B: [], alleenStart: true, standaard: N <= hG };
         for (let A = hG; A <= hG + fA; A++) {                // standaard-A eerst, dan oprekken
-            const B = d2VerdeelB(N - A, hG, fA, minB, p.laatsteB);
+            const B = d2VerdeelB(N - A, hG, fA, minB, lb);
             if (B) return { A, B, alleenStart: false, standaard: A === hG };
         }
         return { onoplosbaar: true };
@@ -777,6 +849,46 @@
     // hebben, bv. "Sprint" 300m/500m). De index is stabiel binnen een Deel 2-sessie.
     function d2GetPar(af, i) { if (!d2Par[i]) d2Par[i] = d2Defaults(af); return d2Par[i]; }
 
+    // Reconstrueer de opgeslagen Deel-2-stand uit de DB (vergrendel-modus). De
+    // rekenknoppen (max-per-serie/afwijking/min-B) zijn NIET opgeslagen — die
+    // blijven default en doen alleen mee bij "Opnieuw afleiden". Per groep zetten
+    // we de opgeslagen A/B/series als override, per afstand hG + laatste-B.
+    function reconstrueerDeel2(data) {
+        d2Locked = !!data.heeft_cat_config;
+        if (!d2Locked) return;
+        const afCfg = {}, catCfg = {};
+        (data.d2_afstand_config || []).forEach(a => { afCfg[a.dc_id + '|' + a.afstand_naam] = a; });
+        (data.d2_cat_config || []).forEach(c => { catCfg[c.dc_id + '|' + c.distance_id] = c; });
+        const doelen = groepDoelen();
+        d2Afstanden().forEach((af, i) => {
+            const p = d2GetPar(af, i);   // startModus-default 'a-finale' uit d2Defaults blijft
+            p.unlocked = false;
+            p.ov = {};
+            let anySeries = false;
+            af.groepen.forEach(gr => {
+                const doel = doelen[gr.idx]; if (!doel) return;
+                const ac = afCfg[doel.dc_id + '|' + af.naam];
+                if (ac) { p.hG = ac.finale_heat_grootte; p.laatsteB = !!ac.laatste_b_grootste; }
+                const distId = d2DistanceId(doel.dc_id, doel.split_group, af.naam, af.value_meters, af.race_type);
+                const cc = distId ? catCfg[doel.dc_id + '|' + distId] : null;
+                if (!cc) return;
+                if (cc.heeft_heats) {
+                    anySeries = true;
+                    const ovObj = {
+                        A: cc.finale_a_grootte, bAantal: cc.finale_b_heats, heats: cc.heats_aantal,
+                        q: cc.heats_q_heat || 0,
+                    };
+                    if (cc.laatste_b_grootste != null) ovObj.laatsteB = !!cc.laatste_b_grootste;
+                    // startModus alleen zinvol/onthouden bij 1 serie; anders default
+                    // (a-finale) laten gelden i.p.v. een betekenisloze 0 vast te leggen.
+                    if (cc.heats_aantal === 1) ovObj.startModus = cc.series_alleen_startvolgorde ? 'a-finale' : 'optellen';
+                    p.ov[gr.idx] = ovObj;
+                }
+            });
+            p.format = anySeries ? 'series' : 'direct';
+        });
+    }
+
     function renderDeel2() {
         const el = overlay.querySelector('#wz-2');
         const afs = d2Afstanden();
@@ -798,26 +910,32 @@
     function d2Kaart(af, i) {
         const p = d2GetPar(af, i);
         const series = p.format === 'series';
+        const grendel = d2Locked && !p.unlocked;      // bulk op slot, alleen ✎
         const meters = af.value_meters ? `<span class="wz-d2-m">${af.value_meters}m</span>` : '';
-        const rijen = af.groepen.map(gr => d2Rij(gr, p, series)).join('');
+        const rijen = af.groepen.map(gr => d2Rij(gr, p, series, i, grendel)).join('');
+        const dis = grendel ? 'disabled' : '';
+        const rechts = grendel
+            ? `<button class="wz-d2-herleid" data-ai="${i}" title="Alles voor deze afstand opnieuw afleiden uit de instellingen">↻ Opnieuw afleiden</button>`
+            : `<div class="wz-d2-fmt">
+                 <button class="wz-seg ${series ? '' : 'act'}" data-fmt="direct" data-naam="${i}">Direct A-finale</button>
+                 <button class="wz-seg ${series ? 'act' : ''}" data-fmt="series" data-naam="${i}">Series + finales</button>
+               </div>`;
         return `
-          <div class="wz-d2-af">
+          <div class="wz-d2-af${grendel ? ' wz-d2-grendel' : ''}">
             <div class="wz-d2-afkop">
               <span class="wz-d2-afnaam">${esc(af.naam)}</span>${meters}
               <span class="wz-d2-rt wz-${typeKlasse(af.race_type)}">${esc(typeLabel(af.race_type))}</span>
-              <div class="wz-d2-fmt">
-                <button class="wz-seg ${series ? '' : 'act'}" data-fmt="direct" data-naam="${i}">Direct A-finale</button>
-                <button class="wz-seg ${series ? 'act' : ''}" data-fmt="series" data-naam="${i}">Series + finales</button>
-              </div>
+              ${rechts}
             </div>
-            ${series ? d2ParRij(i, p) : ''}
+            ${series ? d2ParRij(i, p, dis) : ''}
             <div class="wz-d2-preview">${rijen}</div>
           </div>`;
     }
 
-    function d2ParRij(naam, p) {
+    function d2ParRij(naam, p, dis) {
         const n = esc(naam);
-        const veld = (lbl, par, val, min) => `<label class="wz-d2-veld">${lbl}<input type="number" min="${min}" value="${val ?? ''}" placeholder="—" data-naam="${n}" data-par="${par}"></label>`;
+        dis = dis || '';
+        const veld = (lbl, par, val, min) => `<label class="wz-d2-veld">${lbl}<input type="number" min="${min}" value="${val ?? ''}" placeholder="—" data-naam="${n}" data-par="${par}" ${dis}></label>`;
         return `<div class="wz-d2-par">
             <div class="wz-d2-pargrp">
               <span class="wz-d2-parlbl">1 · Series</span>
@@ -832,9 +950,11 @@
                 ${veld('Rijders per finale (A/B)', 'hG', p.hG, 2)}
                 ${veld('Max afwijking', 'fA', p.fA, 0)}
                 ${veld('Min. B-finale', 'minB', p.minB, 1)}
-                <label class="wz-d2-chk"><input type="checkbox" ${p.laatsteB ? 'checked' : ''} data-naam="${n}" data-par="laatsteB"> Laatste B grootste</label>
+                <label class="wz-d2-veld">Laatste B grootste
+                  <span class="wz-d2-chkbox"><input type="checkbox" ${p.laatsteB ? 'checked' : ''} data-naam="${n}" data-par="laatsteB" ${dis}></span>
+                </label>
                 <label class="wz-d2-veld wz-d2-breed">Bij 1 serie
-                  <select data-naam="${n}" data-par="startModus">
+                  <select data-naam="${n}" data-par="startModus" ${dis}>
                     <option value="a-finale" ${p.startModus === 'a-finale' ? 'selected' : ''}>A-finale = eindstand</option>
                     <option value="optellen" ${p.startModus === 'optellen' ? 'selected' : ''}>Serie + A opgeteld</option>
                   </select>
@@ -844,52 +964,157 @@
           </div>`;
     }
 
-    function d2Rij(gr, p, series) {
+    // Verdeel 'total' over n finales, zo gelijk mogelijk. Rest naar laatste
+    // (laatsteGrootste) of eerste. Voor handmatig gezet aantal B-finales.
+    function d2VerdeelGelijk(total, n, laatsteGrootste) {
+        if (n <= 0 || total <= 0) return [];
+        const base = Math.floor(total / n), extra = total - base * n;
+        const arr = Array.from({ length: n }, () => base);
+        for (let i = 0; i < extra; i++) arr[laatsteGrootste ? n - 1 - i : i] += 1;
+        return arr;
+    }
+
+    // Uitkomst per groep: override (p.ov[gi]) heeft voorrang op de afleiding.
+    function d2Uitkomst(gr, p, series) {
         const N = gr.N;
-        if (N <= 0) {
-            return `<div class="wz-d2-rij wz-d2-leeg"><span class="wz-d2-grp">${esc(gr.label)}</span><span class="wz-d2-cnt">0</span><span class="wz-d2-uit">geen deelnemers</span></div>`;
+        if (N <= 0) return { leeg: true };
+        if (!series) return { direct: true, A: N, series: [] };
+        if (!p.hG) return { geenHg: true };
+        const ov = (p.ov || {})[gr.idx];
+        // Effectieve laatste-B-grootste: per-groep override boven de afstand-default.
+        const lb = (ov && ov.laatsteB != null) ? ov.laatsteB : p.laatsteB;
+        // Opgeslagen serie-aantal (ov.heats) heeft voorrang; anders afleiden uit max-per-serie.
+        const s = (ov && ov.heats) ? d2VerdeelGelijk(N, ov.heats, false) : d2VerdeelSeries(N, p.mS || p.hG);
+        if (ov && ov.A != null) {
+            const A = Math.max(1, Math.min(ov.A, N));
+            const rest = N - A;
+            let B;
+            if (rest <= 0) B = [];
+            else if (ov.bAantal != null && ov.bAantal > 0) B = d2VerdeelGelijk(rest, ov.bAantal, lb);
+            else B = d2VerdeelB(rest, p.hG, p.fA || 0, p.minB || 1, lb) || [rest];
+            return { A, B, series: s, aangepast: true, alleenStart: B.length === 0 && s.length <= 1 };
         }
-        // Direct A-finale = iedereen in één finale, geen series, geen B.
-        if (!series) {
+        const f = d2Los(N, p, lb);
+        if (f.onoplosbaar) return { onoplosbaar: true, series: s };
+        const ovExtra = ov && (ov.heats != null || ov.laatsteB != null || ov.q != null);   // afwijkend zonder A te zetten
+        return { A: f.A, B: f.B, series: s, alleenStart: f.alleenStart, standaard: f.standaard && !ovExtra, aangepast: !!ovExtra };
+    }
+
+    function d2SchemaPillen(u) {
+        const s = u.series || [];
+        const serieTxt = `<span class="wz-pil">${s.length} serie${s.length === 1 ? '' : 's'} · ${s.join('·')}</span>`;
+        const aTxt = `<span class="wz-pil wz-pil-a">A ${u.A}</span>`;
+        const bTxt = (u.B || []).map((b, i) => `<span class="wz-pil">B${i + 1} ${b}</span>`).join('');
+        return `${serieTxt}<span class="wz-arrow">→</span>${aTxt}${bTxt}`;
+    }
+
+    function d2Rij(gr, p, series, ai, grendel) {
+        const N = gr.N;
+        const kop = `<span class="wz-d2-grp">${esc(gr.label)}</span><span class="wz-d2-cnt">${N > 0 ? N : 0}</span>`;
+        if (N <= 0) return `<div class="wz-d2-rij wz-d2-leeg">${kop}<span class="wz-d2-uit">geen deelnemers</span></div>`;
+
+        const bewerkbaar = series && p.hG;
+        if (d2Edit && d2Edit.ai === ai && d2Edit.gi === gr.idx && bewerkbaar) return d2RijEdit(gr, p, ai);
+
+        const u = d2Uitkomst(gr, p, series);
+        if (u.direct) {
             const uit = `<span class="wz-pil wz-pil-mut">direct</span><span class="wz-arrow">→</span><span class="wz-pil wz-pil-a">A ${N}</span>`;
-            return `<div class="wz-d2-rij"><span class="wz-d2-grp">${esc(gr.label)}</span><span class="wz-d2-cnt">${N}</span><span class="wz-d2-uit">${uit}</span><span class="wz-badge wz-badge-ok">standaard</span></div>`;
+            return `<div class="wz-d2-rij">${kop}<span class="wz-d2-uit">${uit}</span><span class="wz-d2-acties"><span class="wz-badge wz-badge-ok">standaard</span></span></div>`;
         }
-        if (!p.hG) {
-            return `<div class="wz-d2-rij"><span class="wz-d2-grp">${esc(gr.label)}</span><span class="wz-d2-cnt">${N}</span><span class="wz-d2-uit"><span class="wz-d2-note">vul eerst de heat-grootte in</span></span></div>`;
-        }
-        const f = d2Los(N, p);
+        if (u.geenHg) return `<div class="wz-d2-rij">${kop}<span class="wz-d2-uit"><span class="wz-d2-note">vul eerst de heat-grootte in</span></span></div>`;
+
+        const pen = `<button class="wz-d2-pen" data-ai="${ai}" data-gi="${gr.idx}" title="Deze groep aanpassen" aria-label="Deze groep aanpassen">✎</button>`;
         let uit, badge;
-        if (f.onoplosbaar) {
-            uit = `<span class="wz-d2-err">⚠ kan niet oplossen — pas de instelling of deze groep aan</span>`;
+        if (u.onoplosbaar) {
+            uit = `<span class="wz-d2-err">⚠ kan niet oplossen — pas de instelling aan of klik ✎ om handmatig te zetten</span>`;
             badge = `<span class="wz-badge wz-badge-err">kan niet</span>`;
         } else {
-            const s = series ? d2VerdeelSeries(N, p.mS || p.hG) : [];
-            const serieTxt = series
-                ? `<span class="wz-pil">${s.length} serie${s.length === 1 ? '' : 's'} · ${s.join('·')}</span>`
-                : `<span class="wz-pil wz-pil-mut">direct</span>`;
-            const aTxt = `<span class="wz-pil wz-pil-a">A ${f.A}</span>`;
-            const bTxt = (f.B || []).map((b, i) => `<span class="wz-pil">B${i + 1} ${b}</span>`).join('');
-            const note = f.alleenStart && series
-                ? (p.startModus === 'optellen'
+            const smEff = ((p.ov || {})[gr.idx] || {}).startModus || p.startModus;
+            const note = u.alleenStart
+                ? (smEff === 'optellen'
                     ? `<span class="wz-d2-note">serie + A-finale opgeteld · A = tie-break</span>`
                     : `<span class="wz-d2-note">A-finale = eindstand</span>`)
                 : '';
-            uit = `${serieTxt}<span class="wz-arrow">→</span>${aTxt}${bTxt}${note}`;
-            badge = f.standaard
-                ? `<span class="wz-badge wz-badge-ok">standaard</span>`
-                : `<span class="wz-badge wz-badge-warn">aangepast</span>`;
+            uit = `${d2SchemaPillen(u)}${note}`;
+            badge = grendel
+                ? (d2Dirty.has(ai + '|' + gr.idx)
+                    ? `<span class="wz-badge wz-badge-warn">gewijzigd</span>`
+                    : `<span class="wz-badge wz-badge-opg">opgeslagen</span>`)
+                : (u.aangepast || !u.standaard
+                    ? `<span class="wz-badge wz-badge-warn">aangepast</span>`
+                    : `<span class="wz-badge wz-badge-ok">standaard</span>`);
         }
-        return `<div class="wz-d2-rij"><span class="wz-d2-grp">${esc(gr.label)}</span><span class="wz-d2-cnt">${N}</span><span class="wz-d2-uit">${uit}</span>${badge}</div>`;
+        return `<div class="wz-d2-rij">${kop}<span class="wz-d2-uit">${uit}</span><span class="wz-d2-acties">${pen}${badge}</span></div>`;
+    }
+
+    // Inline-editor voor één groep: aantal series + A-finale + aantal B-finales.
+    function d2RijEdit(gr, p, ai) {
+        const N = gr.N;
+        const ov = (p.ov || {})[gr.idx] || {};
+        const f = d2Los(N, p);
+        const derivedA = f.onoplosbaar ? '' : f.A;
+        const derivedS = d2VerdeelSeries(N, p.mS || p.hG).length || 1;
+        const sVal = ov.heats != null ? ov.heats : derivedS;
+        const aVal = ov.A != null ? ov.A : derivedA;
+        const bVal = ov.bAantal != null ? ov.bAantal : '';
+        const u = d2Uitkomst(gr, p, true);
+        const res = u.onoplosbaar
+            ? `<span class="wz-d2-err">vul een A-finale-grootte in</span>`
+            : d2SchemaPillen(u);
+        const qVal = ov.q != null ? ov.q : (p.q || 0);
+        const lbVal = ov.laatsteB != null ? ov.laatsteB : p.laatsteB;
+        // Laatste-B alleen relevant als er B-finales zijn; Uitslag alleen bij 1 serie.
+        const heeftB = !u.onoplosbaar && (u.B || []).length >= 1;
+        const eenSerie = (u.series || []).length === 1;
+        const smVal = ov.startModus || p.startModus;
+        const laatsteB = heeftB
+            ? `<label>Laatste B grootste
+                 <span class="wz-d2-chkbox"><input type="checkbox" ${lbVal ? 'checked' : ''} data-ov="laatsteB" data-ai="${ai}" data-gi="${gr.idx}"></span>
+               </label>`
+            : '';
+        const uitslag = eenSerie
+            ? `<label class="wz-d2-breed">Uitslag
+                 <select data-ov="startModus" data-ai="${ai}" data-gi="${gr.idx}">
+                   <option value="a-finale" ${smVal !== 'optellen' ? 'selected' : ''}>A-finale = eindstand</option>
+                   <option value="optellen" ${smVal === 'optellen' ? 'selected' : ''}>Serie + A opgeteld</option>
+                 </select>
+               </label>`
+            : '';
+        return `<div class="wz-d2-rij wz-d2-editing">
+            <span class="wz-d2-grp">${esc(gr.label)}</span><span class="wz-d2-cnt">${N}</span>
+            <div class="wz-d2-editvelden">
+              <label>Aantal series<input type="number" min="1" max="${N}" value="${sVal}" data-ov="heats" data-ai="${ai}" data-gi="${gr.idx}"></label>
+              <label>Q per heat<input type="number" min="0" value="${qVal}" data-ov="q" data-ai="${ai}" data-gi="${gr.idx}"></label>
+              <label>A-finale<input type="number" min="1" max="${N}" value="${aVal}" data-ov="A" data-ai="${ai}" data-gi="${gr.idx}"></label>
+              <label>Aantal B-finales<input type="number" min="0" placeholder="auto" value="${bVal}" data-ov="bAantal" data-ai="${ai}" data-gi="${gr.idx}"></label>
+              ${laatsteB}
+              ${uitslag}
+              <span class="wz-d2-editres">${res}</span>
+              <button class="wz-d2-auto" data-ai="${ai}" data-gi="${gr.idx}" title="Deze groep terug naar de afgeleide standaard-waardes">Standaard</button>
+              <button class="wz-d2-klaar wz-btn-primair">Klaar</button>
+            </div>
+          </div>`;
     }
 
     function wireDeel2() {
         const el = overlay.querySelector('#wz-2');
         el.querySelectorAll('input[name="wz-sys"]').forEach(r =>
-            r.addEventListener('change', () => { if (!r.disabled) d2Sys = r.value; }));
+            r.addEventListener('change', () => { if (!r.disabled) { d2Sys = r.value; d2Changed = true; } }));
         el.querySelectorAll('.wz-seg').forEach(b =>
             b.addEventListener('click', () => {
                 const p = d2Par[b.dataset.naam]; if (!p) return;
-                p.format = b.dataset.fmt; renderDeel2();
+                if (d2Locked && !p.unlocked) return;   // bulk op slot
+                p.format = b.dataset.fmt; d2Changed = true; renderDeel2();
+            }));
+        el.querySelectorAll('.wz-d2-herleid').forEach(b =>
+            b.addEventListener('click', async () => {
+                const p = d2Par[b.dataset.ai]; if (!p) return;
+                const ok = await toonBevestigDialog(
+                    'Opnieuw afleiden overschrijft de handmatige instellingen van deze afstand. Doorgaan?',
+                    'Opnieuw afleiden', 'Opnieuw afleiden', 'Annuleren');
+                if (!ok) return;
+                p.unlocked = true; p.ov = {}; d2Changed = true;
+                renderDeel2();
             }));
         el.querySelectorAll('[data-par]').forEach(inp =>
             inp.addEventListener('change', () => {
@@ -898,8 +1123,41 @@
                 if (par === 'laatsteB') p[par] = inp.checked;
                 else if (par === 'startModus') p[par] = inp.value;
                 else { const v = inp.value.trim(); p[par] = v === '' ? null : Math.max(0, parseInt(v, 10) || 0); }
+                d2Changed = true;
                 renderDeel2();
             }));
+
+        // Per-groep overrulen (potlood)
+        el.querySelectorAll('.wz-d2-pen').forEach(b =>
+            b.addEventListener('click', () => { d2Edit = { ai: +b.dataset.ai, gi: +b.dataset.gi }; renderDeel2(); }));
+        el.querySelectorAll('[data-ov]').forEach(inp =>
+            inp.addEventListener('change', () => {
+                const p = d2Par[inp.dataset.ai]; if (!p) return;
+                p.ov = p.ov || {};
+                const gi = +inp.dataset.gi;
+                const cur = p.ov[gi] || {};
+                if (inp.dataset.ov === 'startModus') {
+                    cur.startModus = inp.value;
+                } else if (inp.type === 'checkbox') {
+                    cur[inp.dataset.ov] = inp.checked;
+                } else {
+                    const v = inp.value.trim();
+                    cur[inp.dataset.ov] = v === '' ? null : Math.max(0, parseInt(v, 10) || 0);
+                }
+                const leeg = cur.A == null && cur.bAantal == null && cur.heats == null
+                    && !cur.startModus && cur.q == null && cur.laatsteB == null;
+                if (leeg) delete p.ov[gi]; else p.ov[gi] = cur;
+                d2Dirty.add(inp.dataset.ai + '|' + gi); d2Changed = true;
+                renderDeel2();
+            }));
+        el.querySelectorAll('.wz-d2-auto').forEach(b =>
+            b.addEventListener('click', () => {
+                const p = d2Par[b.dataset.ai]; if (p && p.ov) delete p.ov[+b.dataset.gi];
+                d2Dirty.add(b.dataset.ai + '|' + b.dataset.gi); d2Changed = true;
+                renderDeel2();
+            }));
+        el.querySelectorAll('.wz-d2-klaar').forEach(b =>
+            b.addEventListener('click', () => { d2Edit = null; renderDeel2(); }));
     }
 
     function updateOpslaanKnop() { renderFooter(); }
@@ -910,6 +1168,112 @@
         if (res.status === 409) throw new Error(data.message || data.error || 'Er is al een programma of loting — wis dat eerst in het Tijdschema.');
         if (!res.ok || data.error) throw new Error(data.error || ('Fout (' + res.status + ')'));
         return data;
+    }
+
+    // ── Deel 2 opslaan ────────────────────────────────────────────────────────
+    // Per groep: de primaire DC + split_group (zelfde union-find als Deel 1's
+    // opslaan). Standalone zodat bouwOpslaanPayload ongemoeid blijft.
+    function groepDoelen() {
+        const cats = wzData.categorien || [];
+        const allDcs = [...new Set(cats.map(c => c.dc_id))];
+        const dcNummer = {};
+        cats.forEach(c => { if (dcNummer[c.dc_id] == null) dcNummer[c.dc_id] = c.dc_number || 0; });
+        const parent = {}; allDcs.forEach(dc => parent[dc] = dc);
+        const find = x => { while (parent[x] !== x) { parent[x] = parent[parent[x]]; x = parent[x]; } return x; };
+        state.groepen.forEach(g => {
+            const dcs = [...new Set(g.leden.map(c => c.split('|')[0]))];
+            for (let i = 1; i < dcs.length; i++) parent[find(dcs[0])] = find(dcs[i]);
+        });
+        const cluster = {};
+        allDcs.forEach(dc => { const r = find(dc); (cluster[r] = cluster[r] || { dcs: new Set(), groepen: new Set() }).dcs.add(dc); });
+        state.groepen.forEach((g, gi) => g.leden.forEach(c => cluster[find(c.split('|')[0])].groepen.add(gi)));
+        const primair = {};
+        Object.keys(cluster).forEach(r => { primair[r] = [...cluster[r].dcs].sort((a, b) => (dcNummer[a] || 0) - (dcNummer[b] || 0))[0]; });
+        const sgNaam = gi => state.groepen[gi].label || ('groep-' + gi);
+        return state.groepen.map((g, gi) => {
+            if (!g.leden.length) return null;
+            const r = find(g.leden[0].split('|')[0]);
+            return { dc_id: primair[r], split_group: cluster[r].groepen.size > 1 ? sgNaam(gi) : null };
+        });
+    }
+
+    // Zoek de DB-distance_id voor (dc, split_group, naam+meters+type).
+    function d2DistanceId(dcId, splitGroup, naam, meters, rt) {
+        const lst = (wzData.distances_per_dc || {})[dcId] || [];
+        const tg = splitGroup || null;
+        const d = lst.find(x => x.name === naam
+            && (x.value_meters ?? null) === (meters ?? null)
+            && (x.target_group || null) === tg);
+        return d ? d.id : null;
+    }
+
+    function bouwDeel2Payload() {
+        const doelen = groepDoelen();
+        const afs = d2Afstanden();
+        const problemen = [];
+        const afMap = new Map();   // dc_id|naam → afstand_config
+        const catConfigs = [];
+        afs.forEach((af, i) => {
+            const p = d2GetPar(af, i);
+            const series = p.format === 'series';
+            if (series && !p.hG) { problemen.push(`"${af.naam}": vul de heat-grootte in`); return; }
+            af.groepen.forEach(gr => {
+                const doel = doelen[gr.idx]; if (!doel) return;
+                const distId = d2DistanceId(doel.dc_id, doel.split_group, af.naam, af.value_meters, af.race_type);
+                if (!distId) return;   // afstand niet in DB — overslaan
+                const u = d2Uitkomst(gr, p, series);
+                if (u.leeg) return;    // 0 deelnemers
+                let cc;
+                if (u.direct) {
+                    cc = { dc_id: doel.dc_id, distance_id: distId, heeft_heats: 0, heats_aantal: null, heats_q_heat: 0,
+                           finale_a_grootte: gr.N, finale_b_heats: 0, laatste_b_grootste: p.laatsteB ? 1 : 0, series_alleen_startvolgorde: 0 };
+                } else if (u.onoplosbaar) {
+                    problemen.push(`"${af.naam}" · ${gr.label}: kan niet oplossen — zet handmatig met ✎`);
+                    return;
+                } else {
+                    const ovg = (p.ov || {})[gr.idx] || {};
+                    const smEff = ovg.startModus || p.startModus;
+                    const qEff  = ovg.q != null ? ovg.q : (p.q || 0);
+                    const lbEff = ovg.laatsteB != null ? ovg.laatsteB : p.laatsteB;
+                    const sas = (u.alleenStart && smEff === 'a-finale') ? 1 : 0;
+                    cc = { dc_id: doel.dc_id, distance_id: distId, heeft_heats: 1,
+                           heats_aantal: (u.series || []).length || 1, heats_q_heat: qEff,
+                           finale_a_grootte: u.A, finale_b_heats: (u.B || []).length,
+                           laatste_b_grootste: lbEff ? 1 : 0, series_alleen_startvolgorde: sas };
+                }
+                catConfigs.push(cc);
+                const key = doel.dc_id + '|' + af.naam;
+                if (!afMap.has(key)) afMap.set(key, {
+                    dc_id: doel.dc_id, afstand_naam: af.naam,
+                    finale_heat_grootte: p.hG || 6, finale_b_grootte: p.hG || 6,
+                    laatste_b_grootste: p.laatsteB ? 1 : 0, seeding: 'slang', race_type: af.race_type,
+                });
+            });
+        });
+        if (problemen.length) return { error: 'Nog niet compleet:\n• ' + problemen.slice(0, 6).join('\n• ') };
+        return { systeem: d2Sys, afstand_configs: [...afMap.values()], cat_configs: catConfigs };
+    }
+
+    // daarna: 'sluit' = wizard dicht · 'stap3' = door naar programma (stap 3)
+    async function opslaanDeel2(daarna) {
+        if (locked === 'loting') return;
+        const payload = bouwDeel2Payload();
+        if (payload.error) { toonOpslaanMelding(payload.error, false); return; }
+        const btns = overlay.querySelectorAll('#wz-d2-opslaan, #wz-d2-opslaan-sluit');
+        btns.forEach(b => b.disabled = true);
+        toonOpslaanMelding('Opslaan…', true);
+        try {
+            await postJson('api/wizard_deel2.php', { competition_id: compId, ...payload });
+            if (typeof herlaadVergelijking === 'function' && compId) { try { herlaadVergelijking(); } catch (e) { /* geen blocker */ } }
+            d2Changed = false; d2Dirty = new Set(); d1Snapshot = d1Vinger();   // opgeslagen — geen dirty-warning
+            if (daarna === 'sluit') { sluitWizard(); return; }
+            // Herlaad de opgeslagen stand (reconstructie == DB) en ga naar stap 3.
+            await openWizard();
+            zetStap(3);
+        } catch (e) {
+            btns.forEach(b => b.disabled = false);
+            toonOpslaanMelding('Opslaan mislukt: ' + (e.message || ''), false);
+        }
     }
 
     // Vertaal de wizard-indeling naar merge_group + dc_splits + distances-doelen.
@@ -1019,6 +1383,7 @@
             if (typeof herlaadVergelijking === 'function' && compId) {
                 try { herlaadVergelijking(); } catch (e) { /* geen blocker */ }
             }
+            d1Snapshot = d1Vinger();   // indeling is nu opgeslagen — geen dirty-warning
             if (daarna === 'sluit') { sluitWizard(); return; }
             await openWizard();  // herlaad met de opgeslagen stand (vlag gezet) — reset naar stap 1
             if (daarna === 'stap2') zetStap(2);

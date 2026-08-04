@@ -224,9 +224,14 @@
 .wz-d2-parlbl{ font-size:.68rem; font-weight:700; letter-spacing:.03em; text-transform:uppercase; color:#93a1b3; }
 .wz-d2-parvelden{ display:flex; flex-wrap:wrap; gap:14px; align-items:flex-end; }
 .wz-d2-veld{ display:flex; flex-direction:column; gap:3px; font-size:.72rem; color:#7a8699; }
-.wz-d2-veld input{ width:64px; padding:5px 7px; border:1px solid var(--border,#d3dbe3); border-radius:6px; font-size:.85rem; }
-.wz-d2-veld.wz-d2-breed select{ padding:5px 7px; border:1px solid var(--border,#d3dbe3); border-radius:6px; font-size:.82rem; background:#fff; }
-.wz-d2-chk{ display:flex; align-items:center; gap:6px; font-size:.8rem; color:#33404f; }
+.wz-d2-veld input,
+.wz-d2-veld select{ width:64px; height:32px; box-sizing:border-box; padding:4px 7px;
+    border:1px solid var(--border,#d3dbe3); border-radius:6px; font-size:.85rem; background:#fff; }
+.wz-d2-veld.wz-d2-breed select{ width:auto; font-size:.82rem; }
+/* checkbox: label boven (zoals de andere velden), vinkje in een 32px-vak eronder */
+.wz-d2-veld input[type=checkbox],
+.wz-d2-editvelden input[type=checkbox]{ width:auto; height:auto; padding:0; margin:0; background:none; }
+.wz-d2-chkbox{ height:32px; display:flex; align-items:center; }
 
 .wz-d2-preview{ display:flex; flex-direction:column; gap:6px; }
 .wz-d2-rij{ display:grid; grid-template-columns:minmax(120px,1.1fr) 44px minmax(0,3fr) auto;
@@ -241,9 +246,39 @@
 .wz-arrow{ color:#a7b2c1; font-size:.85rem; }
 .wz-d2-note{ font-size:.74rem; color:#8291a4; font-style:italic; }
 .wz-d2-err{ font-size:.82rem; color:#b71c1c; }
+.wz-d2-acties{ display:flex; align-items:center; gap:8px; justify-self:end; }
+.wz-d2-pen{ border:1px solid var(--border,#d3dbe3); background:#fff; color:#5f6e80; width:26px; height:26px;
+    border-radius:6px; cursor:pointer; font-size:.82rem; line-height:1; padding:0; }
+.wz-d2-pen:hover{ background:#eef2f7; color:var(--blauw,#1F4E79); }
+.wz-d2-rij.wz-d2-editing{ background:#eef4fb; align-items:center; }
+.wz-d2-editvelden{ grid-column:3 / -1; display:flex; flex-wrap:wrap; align-items:flex-end; gap:12px; }
+.wz-d2-editvelden label{ display:flex; flex-direction:column; gap:3px; font-size:.72rem; color:#7a8699; }
+.wz-d2-editvelden input,
+.wz-d2-editvelden select{ height:32px; box-sizing:border-box; padding:4px 7px;
+    border:1px solid var(--border,#d3dbe3); border-radius:6px; font-size:.85rem; background:#fff; }
+.wz-d2-editvelden input{ width:66px; }
+.wz-d2-editres{ display:flex; align-items:center; flex-wrap:wrap; gap:5px; margin-left:4px; min-height:32px; }
+.wz-d2-auto{ border:1px solid var(--border,#d3dbe3); background:#fff; color:#33404f; height:32px; padding:0 12px; border-radius:7px; cursor:pointer; font-size:.8rem; }
+.wz-d2-auto:hover{ background:#f2f5f9; }
+.wz-d2-klaar{ border:1px solid var(--oranje,#E8630A); background:var(--oranje,#E8630A); color:#fff; height:32px; padding:0 14px; border-radius:7px; cursor:pointer; font-size:.8rem; }
+.wz-d2-klaar:hover{ background:#cf5409; }
 .wz-badge{ font-size:.7rem; padding:2px 9px; border-radius:20px; white-space:nowrap; }
 .wz-badge-ok{ background:#e7f3ec; color:#1c6b3f; }
 .wz-badge-warn{ background:#fdf0dd; color:#8a5a09; }
 .wz-badge-err{ background:#fce4e4; color:#b71c1c; }
+.wz-badge-opg{ background:#eaf1fb; color:#1f4e79; }
+
+/* Vergrendelde afstand (config staat al in DB): bulk grijs, alleen ✎ */
+.wz-d2-grendel .wz-d2-par{ opacity:.6; }
+.wz-d2-grendel .wz-d2-veld input:not([type=checkbox]):disabled,
+.wz-d2-grendel .wz-d2-veld select:disabled{ background:#f1f4f8; color:#8291a4; cursor:not-allowed; }
+.wz-d2-herleid{ margin-left:auto; border:1px solid var(--border,#d3dbe3); background:#fff; color:#33404f;
+    padding:5px 12px; border-radius:8px; cursor:pointer; font-size:.8rem; }
+.wz-d2-herleid:hover{ background:#f2f5f9; border-color:var(--midden,#2E75B6); }
+
+/* Stap 3 · placeholder */
+.wz-d3-soon{ text-align:center; color:#607089; padding:48px 20px; }
+.wz-d3-soon h3{ color:var(--blauw,#1F4E79); margin:0 0 8px; font-size:1.05rem; }
+.wz-d3-soon p{ margin:0; font-size:.9rem; }
 
 .wz-hidden{ display:none !important; }

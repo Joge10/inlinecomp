@@ -213,14 +213,62 @@ try {
     $sys->execute([$compId]);
     $systeem = $sys->fetchColumn() ?: null;
 
+    // Bestaande Deel-2-config (voor reconstructie + vergrendel-modus).
+    $d2Af = [];
+    $d2Cat = [];
+    if ($heeftCatConfig) {
+        $q = $pdo->prepare("
+            SELECT ac.dc_id, ac.afstand_naam, ac.finale_heat_grootte, ac.finale_b_grootte,
+                   ac.laatste_b_grootste, ac.finale_seeding
+            FROM tijdschema_afstand_config ac
+            JOIN competition_tijdschema ct ON ct.id = ac.tijdschema_id
+            WHERE ct.competition_id = ? AND ac.dc_id IS NOT NULL
+        ");
+        $q->execute([$compId]);
+        foreach ($q->fetchAll(PDO::FETCH_ASSOC) as $r) {
+            $d2Af[] = [
+                'dc_id'               => $r['dc_id'],
+                'afstand_naam'        => $r['afstand_naam'],
+                'finale_heat_grootte' => (int)$r['finale_heat_grootte'],
+                'finale_b_grootte'    => (int)$r['finale_b_grootte'],
+                'laatste_b_grootste'  => (int)$r['laatste_b_grootste'],
+                'finale_seeding'      => $r['finale_seeding'],
+            ];
+        }
+        $q = $pdo->prepare("
+            SELECT cc.dc_id, cc.distance_id, cc.heeft_heats, cc.heats_aantal, cc.heats_q_heat,
+                   cc.finale_a_grootte, cc.finale_b_heats, cc.laatste_b_grootste,
+                   cc.series_alleen_startvolgorde
+            FROM tijdschema_cat_config cc
+            JOIN competition_tijdschema ct ON ct.id = cc.tijdschema_id
+            WHERE ct.competition_id = ?
+        ");
+        $q->execute([$compId]);
+        foreach ($q->fetchAll(PDO::FETCH_ASSOC) as $r) {
+            $d2Cat[] = [
+                'dc_id'                       => $r['dc_id'],
+                'distance_id'                 => $r['distance_id'],
+                'heeft_heats'                 => (int)$r['heeft_heats'],
+                'heats_aantal'                => $r['heats_aantal'] !== null ? (int)$r['heats_aantal'] : null,
+                'heats_q_heat'                => (int)$r['heats_q_heat'],
+                'finale_a_grootte'            => $r['finale_a_grootte'] !== null ? (int)$r['finale_a_grootte'] : null,
+                'finale_b_heats'              => $r['finale_b_heats'] !== null ? (int)$r['finale_b_heats'] : null,
+                'laatste_b_grootste'          => $r['laatste_b_grootste'] !== null ? (int)$r['laatste_b_grootste'] : null,
+                'series_alleen_startvolgorde' => (int)$r['series_alleen_startvolgorde'],
+            ];
+        }
+    }
+
     echo json_encode([
-        'wizard_dc_gedaan' => $wizardGedaan,
-        'heeft_cat_config' => $heeftCatConfig,
-        'heeft_programma'  => $heeftProgramma,
-        'heeft_loting'     => $heeftLoting,
-        'systeem'          => $systeem,
-        'categorien'       => $categorien,
-        'distances_per_dc' => (object)$distPerDc,
+        'wizard_dc_gedaan'  => $wizardGedaan,
+        'heeft_cat_config'  => $heeftCatConfig,
+        'heeft_programma'   => $heeftProgramma,
+        'heeft_loting'      => $heeftLoting,
+        'systeem'           => $systeem,
+        'categorien'        => $categorien,
+        'distances_per_dc'  => (object)$distPerDc,
+        'd2_afstand_config' => $d2Af,
+        'd2_cat_config'     => $d2Cat,
     ], JSON_UNESCAPED_UNICODE);
 
 } catch (Throwable $e) {
