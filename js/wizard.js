@@ -32,6 +32,10 @@
     let afstandSeq = 0;     // teller voor lokale afstand-id's (stabiel bij hernoemen)
     let editTarget = null;  // 1b: welke afstand-pil staat open in bewerk-modus
     let dragFromGi = null;  // 1b: sleep-bron — null = uit de lijst, anders groep-index
+    let stap    = 1;        // 1 = DC's (subtabs 1a/1b) · 2 = afstand-instellingen
+    let subtab  = '1a';     // actieve subtab binnen stap 1
+    let d2Sys   = 'full-final';   // Deel 2 vraag 1: systeem
+    let d2Par   = {};       // Deel 2 params per afstand-naam: {format, hG, mS, fA, minB, q, laatsteB}
 
     function wizardResetVoorWedstrijd(cid) {
         compId = cid || null;
@@ -63,7 +67,11 @@
         const imp = document.getElementById('btn-import');
         if (imp && !imp.disabled) return; // import niet actueel — knop hoort disabled te zijn
         if (!overlay) { overlay = bouwOverlay(); document.body.appendChild(overlay); }
+        stap = 1; subtab = '1a';
         zetTab('1a');
+        overlay.querySelector('#wz-2').classList.add('wz-hidden');
+        overlay.querySelector('.wz-subtabs').style.display = '';
+        overlay.querySelectorAll('.wz-step').forEach(el => el.classList.toggle('act', el.dataset.step === '1'));
         toonLaden();
         overlay.classList.add('wz-open');
         try {
@@ -71,6 +79,8 @@
             const data = await res.json();
             if (!res.ok || data.error) throw new Error(data.error || 'laadfout');
             wzData = data;
+            d2Sys = data.systeem || 'full-final';
+            d2Par = {};
             bouwState(data);
             render();
         } catch (e) {
@@ -121,22 +131,29 @@
         afstandSeq = 0;
         const dcNummer = {};
         (data.categorien || []).forEach(c => { if (dcNummer[c.dc_id] == null) dcNummer[c.dc_id] = c.dc_number || 0; });
-        const cat = new Map();     // naam → {race_type, value_meters}
-        const bySplit = {};        // split_group → [{name, number}]
-        const baseByDc = {};       // dc_id → [{name, number}]  (target_group null)
+        // Afstand-identiteit = naam + meters + type (NIET naam alleen). Binnen een
+        // wedstrijd mag dezelfde naam in verschillende DC's/groepen voorkomen, en
+        // "Sprint" 300m ≠ "Sprint" 500m. Op naam alleen ontdubbelen liet de 500m
+        // samenvallen met de 300m bij herladen.
+        const afKey = d => `${d.name}${d.value_meters ?? ''}${d.race_type ?? ''}`;
+        const cat = new Map();     // afKey → {name, race_type, value_meters}
+        const bySplit = {};        // split_group → [{name, number, value_meters, race_type}]
+        const baseByDc = {};       // dc_id → [...]  (target_group null)
         Object.keys(data.distances_per_dc || {}).forEach(dcId => (data.distances_per_dc[dcId] || []).forEach(d => {
-            if (!cat.has(d.name)) cat.set(d.name, { race_type: d.race_type, value_meters: d.value_meters });
+            const k = afKey(d);
+            if (!cat.has(k)) cat.set(k, { name: d.name, race_type: d.race_type, value_meters: d.value_meters });
+            const item = { name: d.name, number: d.number || 0, value_meters: d.value_meters, race_type: d.race_type };
             if (d.target_group) {
                 bySplit[d.target_group] = bySplit[d.target_group] || [];
-                if (!bySplit[d.target_group].some(x => x.name === d.name)) bySplit[d.target_group].push({ name: d.name, number: d.number || 0 });
+                if (!bySplit[d.target_group].some(x => afKey(x) === k)) bySplit[d.target_group].push(item);
             } else {
                 baseByDc[dcId] = baseByDc[dcId] || [];
-                if (!baseByDc[dcId].some(x => x.name === d.name)) baseByDc[dcId].push({ name: d.name, number: d.number || 0 });
+                if (!baseByDc[dcId].some(x => afKey(x) === k)) baseByDc[dcId].push(item);
             }
         }));
-        state.catalog = Array.from(cat, ([name, v]) => ({ id: ++afstandSeq, name, race_type: v.race_type, value_meters: v.value_meters }));
-        const idByNaam = {};
-        state.catalog.forEach(d => { idByNaam[d.name] = d.id; });
+        state.catalog = Array.from(cat.values(), v => ({ id: ++afstandSeq, name: v.name, race_type: v.race_type, value_meters: v.value_meters }));
+        const idByKey = {};
+        state.catalog.forEach(d => { idByKey[afKey(d)] = d.id; });
         state.groepen.forEach(g => {
             if (!g.leden.length) { g.afstanden = []; return; }
             const sg = catMap[g.leden[0]].splitGroup;
@@ -148,7 +165,7 @@
                 const primDc = dcs.sort((a, b) => (dcNummer[a] || 0) - (dcNummer[b] || 0))[0];
                 lijst = baseByDc[primDc] || [];
             }
-            g.afstanden = lijst.slice().sort((a, b) => (a.number || 0) - (b.number || 0)).map(x => idByNaam[x.name]).filter(Boolean);
+            g.afstanden = lijst.slice().sort((a, b) => (a.number || 0) - (b.number || 0)).map(x => idByKey[afKey(x)]).filter(Boolean);
         });
 
         if (data.heeft_loting)      locked = 'loting';
@@ -178,10 +195,10 @@
             <div class="wz-body">
               <div id="wz-status"></div>
               <div class="wz-steps">
-                <div class="wz-step act"><span class="wz-num">1</span><span class="wz-lbl">DC's samenstellen<small>groepen + afstanden</small></span></div>
-                <div class="wz-step"><span class="wz-num">2</span><span class="wz-lbl">Afstand-instellingen<small>series, A-grootte</small></span></div>
-                <div class="wz-step"><span class="wz-num">3</span><span class="wz-lbl">Programma<small>blok-volgorde</small></span></div>
-                <div class="wz-step"><span class="wz-num">4</span><span class="wz-lbl">A-finales combineren<small>optioneel</small></span></div>
+                <div class="wz-step act wz-klik" data-step="1"><span class="wz-num">1</span><span class="wz-lbl">DC's samenstellen<small>groepen + afstanden</small></span></div>
+                <div class="wz-step wz-klik" data-step="2"><span class="wz-num">2</span><span class="wz-lbl">Afstand-instellingen<small>series, A-grootte</small></span></div>
+                <div class="wz-step" data-step="3"><span class="wz-num">3</span><span class="wz-lbl">Programma<small>blok-volgorde</small></span></div>
+                <div class="wz-step" data-step="4"><span class="wz-num">4</span><span class="wz-lbl">A-finales combineren<small>optioneel</small></span></div>
               </div>
               <div class="wz-subtabs">
                 <button id="wz-tab-1a" class="act">1a · Groepen vormen</button>
@@ -189,23 +206,69 @@
               </div>
               <div id="wz-1a"></div>
               <div id="wz-1b" class="wz-hidden"></div>
+              <div id="wz-2" class="wz-hidden"></div>
             </div>
-            <div class="wz-foot">
-              <button class="wz-btn" id="wz-annuleer">Sluiten</button>
-              <button class="wz-btn wz-btn-primair" id="wz-opslaan" disabled title="Indeling opslaan">Opslaan</button>
-            </div>
+            <div class="wz-foot" id="wz-foot"></div>
           </div>`;
         d.querySelector('#wz-sluit').addEventListener('click', sluitWizard);
-        d.querySelector('#wz-annuleer').addEventListener('click', sluitWizard);
         d.addEventListener('click', e => { if (e.target === d) sluitWizard(); });
         d.querySelector('#wz-tab-1a').addEventListener('click', () => zetTab('1a'));
         d.querySelector('#wz-tab-1b').addEventListener('click', () => zetTab('1b'));
-        d.querySelector('#wz-opslaan').addEventListener('click', opslaan);
+        d.querySelectorAll('.wz-step.wz-klik').forEach(el =>
+            el.addEventListener('click', () => zetStap(+el.dataset.step)));
         return d;
+    }
+
+    // Footer past zich aan de stap aan.
+    //   Stap 1: Annuleren · Opslaan en sluiten · Opslaan en verder → (primair)
+    //   Stap 2: Annuleren · ← Terug naar stap 1
+    function renderFooter() {
+        const f = overlay && overlay.querySelector('#wz-foot');
+        if (!f) return;
+        if (stap === 2) {
+            f.innerHTML =
+                `<button class="wz-btn" id="wz-annuleer">Annuleren</button>
+                 <button class="wz-btn wz-btn-primair" id="wz-terug">← Terug naar stap 1</button>`;
+            f.querySelector('#wz-annuleer').addEventListener('click', sluitWizard);
+            f.querySelector('#wz-terug').addEventListener('click', () => zetStap(1));
+            return;
+        }
+        const inBak = state ? state.pool.length : 0;
+        const kan = !locked && state && inBak === 0;
+        const tip = locked
+            ? 'Vergrendeld — er is al een programma of loting; wis dat eerst in het Tijdschema'
+            : (inBak > 0 ? `De bak is nog niet leeg — sleep de laatste ${inBak} categorie${inBak === 1 ? '' : 'ën'} in een groep` : '');
+        f.innerHTML =
+            `<button class="wz-btn" id="wz-annuleer">Annuleren</button>
+             <button class="wz-btn" id="wz-opslaan-sluit" ${kan ? '' : 'disabled'} title="${esc(tip)}">Opslaan en sluiten</button>
+             <button class="wz-btn wz-btn-primair" id="wz-opslaan-verder" ${kan ? '' : 'disabled'} title="${esc(tip || 'Opslaan en door naar afstand-instellingen')}">Opslaan en verder →</button>`;
+        f.querySelector('#wz-annuleer').addEventListener('click', sluitWizard);
+        f.querySelector('#wz-opslaan-sluit').addEventListener('click', () => opslaan('sluit'));
+        f.querySelector('#wz-opslaan-verder').addEventListener('click', () => opslaan('stap2'));
+    }
+
+    // Stap 1 (DC's, met subtabs 1a/1b) ↔ stap 2 (afstand-instellingen).
+    function zetStap(n) {
+        if (!overlay) return;
+        if (n === 2 && (!state || !state.groepen.length)) return;   // niks in te stellen
+        stap = n;
+        overlay.querySelectorAll('.wz-step').forEach(el =>
+            el.classList.toggle('act', +el.dataset.step === n));
+        overlay.querySelector('.wz-subtabs').style.display = n === 1 ? '' : 'none';
+        overlay.querySelector('#wz-2').classList.toggle('wz-hidden', n !== 2);
+        if (n === 1) {
+            zetTab(subtab);
+        } else {
+            overlay.querySelector('#wz-1a').classList.add('wz-hidden');
+            overlay.querySelector('#wz-1b').classList.add('wz-hidden');
+            renderDeel2();
+        }
+        updateOpslaanKnop();
     }
 
     function zetTab(t) {
         if (!overlay) return;
+        subtab = t;
         overlay.querySelector('#wz-tab-1a').classList.toggle('act', t === '1a');
         overlay.querySelector('#wz-tab-1b').classList.toggle('act', t === '1b');
         overlay.querySelector('#wz-1a').classList.toggle('wz-hidden', t !== '1a');
@@ -350,6 +413,19 @@
         return ({ sprint: 'Sprint', inline: 'Inline', puntenkoers: 'Puntenkoers', afvalkoers: 'Afvalkoers' })[rt] || rt;
     }
     function afstandById(id) { return state.catalog.find(d => d.id === id); }
+
+    // Guard: binnen één groep moet elke afstand-NAAM uniek zijn — downstream
+    // koppelt op (dc_id, afstand_naam). Dezelfde naam met andere meters mag dus
+    // NIET samen in één groep (bv. "Sprint" 300m + "Sprint" 500m). Over groepen
+    // heen mag dezelfde naam wél.
+    function afNaamBotstInGroep(g, aid) {
+        const nieuw = afstandById(aid); if (!nieuw) return null;
+        const conflict = (g.afstanden || []).some(x => x !== aid && (afstandById(x) || {}).name === nieuw.name);
+        return conflict ? nieuw.name : null;
+    }
+    function meldNaamBotsing(naam) {
+        toonOpslaanMelding(`Deze groep heeft al een afstand "${naam}". Binnen één groep moet elke afstand een unieke naam hebben (geef bv. de meters mee: "${naam} 300m").`, false);
+    }
 
     // Zoek een afstand met exact deze naam+meters+type, of maak 'm aan (zodat
     // hij ook in de lijst/bak verschijnt). Geeft het id terug.
@@ -501,6 +577,8 @@
                 const gi = +el.getAttribute('data-gi'); const targetId = +el.getAttribute('data-aid');
                 if (targetId === dragAfstand) { dragAfstand = null; dragFromGi = null; return; }
                 const g = state.groepen[gi]; g.afstanden = g.afstanden || [];
+                const bots1 = afNaamBotstInGroep(g, dragAfstand);
+                if (bots1) { meldNaamBotsing(bots1); dragAfstand = null; dragFromGi = null; return; }
                 if (dragFromGi != null && dragFromGi !== gi) state.groepen[dragFromGi].afstanden = (state.groepen[dragFromGi].afstanden || []).filter(a => a !== dragAfstand);
                 const cur = g.afstanden.indexOf(dragAfstand); if (cur >= 0) g.afstanden.splice(cur, 1);
                 const idx = g.afstanden.indexOf(targetId);
@@ -516,6 +594,8 @@
                 if (dragAfstand == null) return;
                 const doel = +z.getAttribute('data-bgi');
                 const g = state.groepen[doel]; g.afstanden = g.afstanden || [];
+                const bots2 = afNaamBotstInGroep(g, dragAfstand);
+                if (bots2) { meldNaamBotsing(bots2); dragAfstand = null; dragFromGi = null; return; }
                 if (!g.afstanden.includes(dragAfstand)) g.afstanden.push(dragAfstand);
                 if (dragFromGi != null && dragFromGi !== doel) {
                     state.groepen[dragFromGi].afstanden = (state.groepen[dragFromGi].afstanden || []).filter(a => a !== dragAfstand);
@@ -620,17 +700,209 @@
     }
 
     // ── Opslaan (increment 3) ────────────────────────────────────────────────
-    function updateOpslaanKnop() {
-        const btn = overlay && overlay.querySelector('#wz-opslaan');
-        if (!btn) return;
-        const inBak = state ? state.pool.length : 0;
-        btn.disabled = !!locked || inBak > 0;
-        btn.title = locked
-            ? 'Vergrendeld — er is al een programma of loting; wis dat eerst in het Tijdschema'
-            : (inBak > 0
-                ? `De bak is nog niet leeg — sleep de laatste ${inBak} categorie${inBak === 1 ? '' : 'ën'} in een groep`
-                : 'Indeling opslaan');
+    // ── Deel 2 · afstand-instellingen ────────────────────────────────────────
+    // Afleiding series + A/B-finales per groep (full-final). Zie ook de
+    // ontwerp-notities: parameters staan per afstand, de aantallen volgen per
+    // groep uit het deelnemersaantal.
+    // Series-aantal volgt uit MAX-PER-SERIE: ceil(N / mS), daarna zo evenwichtig
+    // mogelijk verdeeld (grootste eerst). Bv. 33 bij max 5 → 7 series [5,5,5,5,5,4,4].
+    function d2VerdeelSeries(N, mS) {
+        if (N <= 0 || !mS) return [];
+        const nS = Math.ceil(N / mS);
+        const base = Math.floor(N / nS), extra = N - base * nS;
+        return Array.from({ length: nS }, (_, i) => base + (i < extra ? 1 : 0));
     }
+    function d2VerdeelB(rest, hG, fA, minB, laatsteB) {
+        if (rest === 0) return [];
+        if (rest < minB) return null;                        // eigen finale te klein
+        const nBfull = Math.floor(rest / hG);
+        const L = rest - nBfull * hG;
+        const B = Array(nBfull).fill(hG);
+        if (L === 0) return B;
+        if (L >= minB) { laatsteB ? B.push(L) : B.unshift(L); return B; }        // L = eigen (kleinste) finale
+        if (L <= fA && nBfull >= 1) { laatsteB ? (B[B.length - 1] += L) : (B[0] += L); return B; }  // rest bijmengen
+        return null;
+    }
+    function d2Los(N, p) {
+        const hG = p.hG, fA = p.fA || 0, minB = p.minB || 1;
+        const maxHeat = hG + fA;
+        if (N <= 0) return { leeg: true };
+        if (N <= maxHeat) return { A: N, B: [], alleenStart: true, standaard: N <= hG };
+        for (let A = hG; A <= hG + fA; A++) {                // standaard-A eerst, dan oprekken
+            const B = d2VerdeelB(N - A, hG, fA, minB, p.laatsteB);
+            if (B) return { A, B, alleenStart: false, standaard: A === hG };
+        }
+        return { onoplosbaar: true };
+    }
+
+    // Unieke afstand (naam+meters+type) → { naam, race_type, value_meters,
+    // groepen:[{idx, label, N}] }. Op naam+meters, zodat "Sprint" 300m en 500m
+    // twee losse afstand-kaarten met eigen instellingen zijn.
+    // Volgorde = KOLOM-gewijs: eerst alle 1e afstanden van de groepen (in
+    // categorie-/groep-volgorde), dan alle 2e, dan alle 3e… i.p.v. per groep.
+    function d2Afstanden() {
+        const byId = {};
+        (state.catalog || []).forEach(d => { byId[d.id] = d; });
+        const key = d => `${d.name}${d.value_meters ?? ''}${d.race_type ?? ''}`;
+        const groepN = state.groepen.map(g => g.leden.reduce((s, id) => s + (catMap[id].n || 0), 0));
+        const map = new Map();
+        const maxLen = state.groepen.reduce((m, g) => Math.max(m, (g.afstanden || []).length), 0);
+        for (let pos = 0; pos < maxLen; pos++) {
+            state.groepen.forEach((g, idx) => {
+                const aid = (g.afstanden || [])[pos];
+                if (aid == null) return;
+                const d = byId[aid]; if (!d) return;
+                const k = key(d);
+                if (!map.has(k)) map.set(k, { naam: d.name, race_type: d.race_type, value_meters: d.value_meters, groepen: [] });
+                map.get(k).groepen.push({ idx, label: g.label, N: groepN[idx] });
+            });
+        }
+        return Array.from(map.values());
+    }
+    // Heat-grootte-default is afstand-afhankelijk (200m/100m→2, 500m→4, 1000m→8);
+    // buiten die bekende afstanden bewust LEEG (null) — dan moet de operator zelf
+    // invullen i.p.v. een fout getal te erven.
+    function d2Defaults(af) {
+        const m = af.value_meters;
+        let hG = null;
+        if (m === 100 || m === 200) hG = 2;
+        else if (m === 500)         hG = 4;
+        else if (m === 1000)        hG = 8;
+        // startModus: bij 1 serie + alleen A-finale — 'a-finale' = A-finale is
+        // eindstand (series_alleen_startvolgorde=1); 'optellen' = serie + A-finale
+        // plek-punten opgeteld, minste wint, A-finale = tie-break (=0).
+        return { format: 'series', hG, mS: hG ? hG + 1 : null, fA: 1, minB: 3, q: 0, laatsteB: true, startModus: 'a-finale' };
+    }
+    // Params per afstand-index (niet op naam — twee afstanden mogen dezelfde naam
+    // hebben, bv. "Sprint" 300m/500m). De index is stabiel binnen een Deel 2-sessie.
+    function d2GetPar(af, i) { if (!d2Par[i]) d2Par[i] = d2Defaults(af); return d2Par[i]; }
+
+    function renderDeel2() {
+        const el = overlay.querySelector('#wz-2');
+        const afs = d2Afstanden();
+        let html = `
+          <div class="wz-d2-sys">
+            <span class="wz-d2-syslbl">Systeem</span>
+            <label class="wz-d2-radio"><input type="radio" name="wz-sys" value="full-final" ${d2Sys === 'full-final' ? 'checked' : ''}> Full-final <small>series → A-finale + B-finales</small></label>
+            <label class="wz-d2-radio wz-dis"><input type="radio" name="wz-sys" value="internationaal-nieuw" disabled ${d2Sys === 'internationaal-nieuw' ? 'checked' : ''}> Internationaal <small>kwart-/halve finale — binnenkort</small></label>
+          </div>`;
+        if (!afs.length) {
+            html += `<p class="wz-hint">Nog geen afstanden — stel eerst in Deel 1 (tab 1b) per groep de afstanden samen.</p>`;
+            el.innerHTML = html; return;
+        }
+        html += afs.map((af, i) => d2Kaart(af, i)).join('');
+        el.innerHTML = html;
+        wireDeel2();
+    }
+
+    function d2Kaart(af, i) {
+        const p = d2GetPar(af, i);
+        const series = p.format === 'series';
+        const meters = af.value_meters ? `<span class="wz-d2-m">${af.value_meters}m</span>` : '';
+        const rijen = af.groepen.map(gr => d2Rij(gr, p, series)).join('');
+        return `
+          <div class="wz-d2-af">
+            <div class="wz-d2-afkop">
+              <span class="wz-d2-afnaam">${esc(af.naam)}</span>${meters}
+              <span class="wz-d2-rt wz-${typeKlasse(af.race_type)}">${esc(typeLabel(af.race_type))}</span>
+              <div class="wz-d2-fmt">
+                <button class="wz-seg ${series ? '' : 'act'}" data-fmt="direct" data-naam="${i}">Direct A-finale</button>
+                <button class="wz-seg ${series ? 'act' : ''}" data-fmt="series" data-naam="${i}">Series + finales</button>
+              </div>
+            </div>
+            ${series ? d2ParRij(i, p) : ''}
+            <div class="wz-d2-preview">${rijen}</div>
+          </div>`;
+    }
+
+    function d2ParRij(naam, p) {
+        const n = esc(naam);
+        const veld = (lbl, par, val, min) => `<label class="wz-d2-veld">${lbl}<input type="number" min="${min}" value="${val ?? ''}" placeholder="—" data-naam="${n}" data-par="${par}"></label>`;
+        return `<div class="wz-d2-par">
+            <div class="wz-d2-pargrp">
+              <span class="wz-d2-parlbl">1 · Series</span>
+              <div class="wz-d2-parvelden">
+                ${veld('Max rijders per serie', 'mS', p.mS, 2)}
+                ${veld('Q per heat', 'q', p.q, 0)}
+              </div>
+            </div>
+            <div class="wz-d2-pargrp">
+              <span class="wz-d2-parlbl">2 · Finales</span>
+              <div class="wz-d2-parvelden">
+                ${veld('Rijders per finale (A/B)', 'hG', p.hG, 2)}
+                ${veld('Max afwijking', 'fA', p.fA, 0)}
+                ${veld('Min. B-finale', 'minB', p.minB, 1)}
+                <label class="wz-d2-chk"><input type="checkbox" ${p.laatsteB ? 'checked' : ''} data-naam="${n}" data-par="laatsteB"> Laatste B grootste</label>
+                <label class="wz-d2-veld wz-d2-breed">Bij 1 serie
+                  <select data-naam="${n}" data-par="startModus">
+                    <option value="a-finale" ${p.startModus === 'a-finale' ? 'selected' : ''}>A-finale = eindstand</option>
+                    <option value="optellen" ${p.startModus === 'optellen' ? 'selected' : ''}>Serie + A opgeteld</option>
+                  </select>
+                </label>
+              </div>
+            </div>
+          </div>`;
+    }
+
+    function d2Rij(gr, p, series) {
+        const N = gr.N;
+        if (N <= 0) {
+            return `<div class="wz-d2-rij wz-d2-leeg"><span class="wz-d2-grp">${esc(gr.label)}</span><span class="wz-d2-cnt">0</span><span class="wz-d2-uit">geen deelnemers</span></div>`;
+        }
+        // Direct A-finale = iedereen in één finale, geen series, geen B.
+        if (!series) {
+            const uit = `<span class="wz-pil wz-pil-mut">direct</span><span class="wz-arrow">→</span><span class="wz-pil wz-pil-a">A ${N}</span>`;
+            return `<div class="wz-d2-rij"><span class="wz-d2-grp">${esc(gr.label)}</span><span class="wz-d2-cnt">${N}</span><span class="wz-d2-uit">${uit}</span><span class="wz-badge wz-badge-ok">standaard</span></div>`;
+        }
+        if (!p.hG) {
+            return `<div class="wz-d2-rij"><span class="wz-d2-grp">${esc(gr.label)}</span><span class="wz-d2-cnt">${N}</span><span class="wz-d2-uit"><span class="wz-d2-note">vul eerst de heat-grootte in</span></span></div>`;
+        }
+        const f = d2Los(N, p);
+        let uit, badge;
+        if (f.onoplosbaar) {
+            uit = `<span class="wz-d2-err">⚠ kan niet oplossen — pas de instelling of deze groep aan</span>`;
+            badge = `<span class="wz-badge wz-badge-err">kan niet</span>`;
+        } else {
+            const s = series ? d2VerdeelSeries(N, p.mS || p.hG) : [];
+            const serieTxt = series
+                ? `<span class="wz-pil">${s.length} serie${s.length === 1 ? '' : 's'} · ${s.join('·')}</span>`
+                : `<span class="wz-pil wz-pil-mut">direct</span>`;
+            const aTxt = `<span class="wz-pil wz-pil-a">A ${f.A}</span>`;
+            const bTxt = (f.B || []).map((b, i) => `<span class="wz-pil">B${i + 1} ${b}</span>`).join('');
+            const note = f.alleenStart && series
+                ? (p.startModus === 'optellen'
+                    ? `<span class="wz-d2-note">serie + A-finale opgeteld · A = tie-break</span>`
+                    : `<span class="wz-d2-note">A-finale = eindstand</span>`)
+                : '';
+            uit = `${serieTxt}<span class="wz-arrow">→</span>${aTxt}${bTxt}${note}`;
+            badge = f.standaard
+                ? `<span class="wz-badge wz-badge-ok">standaard</span>`
+                : `<span class="wz-badge wz-badge-warn">aangepast</span>`;
+        }
+        return `<div class="wz-d2-rij"><span class="wz-d2-grp">${esc(gr.label)}</span><span class="wz-d2-cnt">${N}</span><span class="wz-d2-uit">${uit}</span>${badge}</div>`;
+    }
+
+    function wireDeel2() {
+        const el = overlay.querySelector('#wz-2');
+        el.querySelectorAll('input[name="wz-sys"]').forEach(r =>
+            r.addEventListener('change', () => { if (!r.disabled) d2Sys = r.value; }));
+        el.querySelectorAll('.wz-seg').forEach(b =>
+            b.addEventListener('click', () => {
+                const p = d2Par[b.dataset.naam]; if (!p) return;
+                p.format = b.dataset.fmt; renderDeel2();
+            }));
+        el.querySelectorAll('[data-par]').forEach(inp =>
+            inp.addEventListener('change', () => {
+                const p = d2Par[inp.dataset.naam]; if (!p) return;
+                const par = inp.dataset.par;
+                if (par === 'laatsteB') p[par] = inp.checked;
+                else if (par === 'startModus') p[par] = inp.value;
+                else { const v = inp.value.trim(); p[par] = v === '' ? null : Math.max(0, parseInt(v, 10) || 0); }
+                renderDeel2();
+            }));
+    }
+
+    function updateOpslaanKnop() { renderFooter(); }
 
     async function postJson(url, body) {
         const res = await fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
@@ -647,6 +919,13 @@
     // primaire dc-id.
     function bouwOpslaanPayload() {
         const cats = wzData.categorien || [];
+        // Backstop: binnen één groep moet elke afstand-naam uniek zijn (ook na
+        // hernoemen via het potlood). Downstream koppelt op (dc_id, afstand_naam).
+        for (const g of state.groepen) {
+            const namen = (g.afstanden || []).map(a => (afstandById(a) || {}).name).filter(Boolean);
+            const dup = namen.find((n, i) => namen.indexOf(n) !== i);
+            if (dup) return { error: `Groep "${g.label}" heeft twee afstanden met de naam "${dup}". Geef ze een unieke naam (bv. met de meters erin).` };
+        }
         const allDcs = [...new Set(cats.map(c => c.dc_id))];
         const dcNummer = {};
         cats.forEach(c => { if (dcNummer[c.dc_id] == null) dcNummer[c.dc_id] = c.dc_number || 0; });
@@ -707,12 +986,14 @@
         return { merges, splitsByDc, distTargets };
     }
 
-    async function opslaan() {
+    // daarna: 'sluit' = wizard dicht · 'stap2' = door naar afstand-instellingen
+    async function opslaan(daarna) {
         if (locked || !state || state.pool.length) return;
-        const btn = overlay.querySelector('#wz-opslaan');
         const payload = bouwOpslaanPayload();
         if (payload.error) { toonOpslaanMelding(payload.error, false); return; }
-        btn.disabled = true; btn.textContent = 'Opslaan…';
+        const saveBtns = overlay.querySelectorAll('#wz-opslaan-sluit, #wz-opslaan-verder');
+        saveBtns.forEach(b => b.disabled = true);
+        toonOpslaanMelding('Opslaan…', true);
         try {
             await postJson('api/samenvoeg.php', { competition_id: compId, merges: payload.merges });
             for (const dcId of Object.keys(payload.splitsByDc)) {
@@ -733,16 +1014,17 @@
                 }
             }
             await postJson('api/wizard_dc.php', { action: 'mark_done', competition_id: compId });
-            btn.textContent = 'Opslaan';
-            await openWizard();  // herlaad met de opgeslagen stand (vlag gezet)
-            toonOpslaanMelding('✔ Opgeslagen.', true);
             // Import-DC-panel (indien open achter de wizard) verversen zodat je daar
             // meteen de nieuwe waardes ziet i.p.v. de oude cache. Op de achtergrond.
             if (typeof herlaadVergelijking === 'function' && compId) {
                 try { herlaadVergelijking(); } catch (e) { /* geen blocker */ }
             }
+            if (daarna === 'sluit') { sluitWizard(); return; }
+            await openWizard();  // herlaad met de opgeslagen stand (vlag gezet) — reset naar stap 1
+            if (daarna === 'stap2') zetStap(2);
+            toonOpslaanMelding('✔ Opgeslagen.', true);
         } catch (e) {
-            btn.disabled = false; btn.textContent = 'Opslaan';
+            saveBtns.forEach(b => b.disabled = false);
             toonOpslaanMelding('Opslaan mislukt: ' + (e.message || ''), false);
         }
     }

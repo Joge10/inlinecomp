@@ -207,11 +207,18 @@ try {
     $lot->execute([$compId]);
     $heeftLoting = (int)$lot->fetchColumn() > 0;
 
+    // Systeem (Deel 2 vraag 1). NULL = nog geen tijdschema aangemaakt → default
+    // 'full-final' in de UI.
+    $sys = $pdo->prepare("SELECT systeem FROM competition_tijdschema WHERE competition_id = ? LIMIT 1");
+    $sys->execute([$compId]);
+    $systeem = $sys->fetchColumn() ?: null;
+
     echo json_encode([
         'wizard_dc_gedaan' => $wizardGedaan,
         'heeft_cat_config' => $heeftCatConfig,
         'heeft_programma'  => $heeftProgramma,
         'heeft_loting'     => $heeftLoting,
+        'systeem'          => $systeem,
         'categorien'       => $categorien,
         'distances_per_dc' => (object)$distPerDc,
     ], JSON_UNESCAPED_UNICODE);
