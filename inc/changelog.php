@@ -16,6 +16,16 @@
 return [
     // ── Patches onder H997.31.07 (onderhoud & beveiliging, alleen Beheer) ──
     [
+        'versie' => 'H997.31.07', 'datum' => '05-08-2026',
+        'soort'  => 'patch', 'onderdelen' => ['patch'],
+        'tekst' => [
+            'nl' => '🔧 <b>Tijdschema — gelijk-genoemde afstanden</b> — afstanden met dezelfde naam maar verschillende lengte (bv. "Sprint" 300 m en 500 m) worden nu overal als aparte afstanden behandeld: afstandsinstellingen, programma, startlijsten, uitslag en klassement. Voorheen vielen ze per ongeluk samen.',
+            'en' => '🔧 <b>Schedule — same-named distances</b> — distances that share a name but have different lengths (e.g. "Sprint" 300 m and 500 m) are now treated as separate distances everywhere: distance settings, programme, start lists, results and standings. Previously they were merged by mistake.',
+            'de' => '🔧 <b>Zeitplan — gleichnamige Distanzen</b> — Distanzen mit gleichem Namen aber unterschiedlicher Länge (z. B. „Sprint" 300 m und 500 m) werden jetzt überall als getrennte Distanzen behandelt: Distanzeinstellungen, Programm, Startlisten, Ergebnisse und Wertung. Zuvor wurden sie versehentlich zusammengeführt.',
+            'fr' => '🔧 <b>Programme — distances de même nom</b> — les distances portant le même nom mais de longueur différente (p. ex. « Sprint » 300 m et 500 m) sont désormais traitées comme des distances distinctes partout : réglages de distance, programme, listes de départ, résultats et classement. Auparavant, elles étaient fusionnées par erreur.',
+        ],
+    ],
+    [
         'versie' => 'H997.31.07', 'datum' => '02-08-2026',
         'soort'  => 'patch', 'onderdelen' => ['patch'],
         'tekst' => [

@@ -447,16 +447,24 @@ try {
         $tsId = $tsStmt->fetchColumn();
         if ($tsId && $distId) {
             $afNaamStmt = $pdo->prepare(
-                "SELECT name FROM distances WHERE id = ? LIMIT 1"
+                "SELECT name, value_meters FROM distances WHERE id = ? LIMIT 1"
             );
             $afNaamStmt->execute([$distId]);
-            $afstandNaam = $afNaamStmt->fetchColumn();
+            $afRow       = $afNaamStmt->fetch(PDO::FETCH_ASSOC) ?: [];
+            $afstandNaam = $afRow['name'] ?? '';
+            $afMeters    = isset($afRow['value_meters']) && $afRow['value_meters'] !== null
+                         ? (int)$afRow['value_meters'] : null;
             if ($afstandNaam) {
+                // Config-rij voor exact deze (afstand, meters); val terug op de
+                // naam-only rij (value_meters IS NULL, oude wedstrijden) als er
+                // geen meters-specifieke rij is. Exacte meters wint.
                 $cfgStmt = $pdo->prepare(
                     "SELECT finale_seeding FROM tijdschema_afstand_config
-                     WHERE tijdschema_id = ? AND afstand_naam = ? LIMIT 1"
+                     WHERE tijdschema_id = ? AND afstand_naam = ?
+                       AND (value_meters <=> ? OR value_meters IS NULL)
+                     ORDER BY (value_meters IS NULL) ASC LIMIT 1"
                 );
-                $cfgStmt->execute([$tsId, $afstandNaam]);
+                $cfgStmt->execute([$tsId, $afstandNaam, $afMeters]);
                 $cfgVal = $cfgStmt->fetchColumn();
                 if ($cfgVal) $finaleSeeding = $cfgVal;
             }

@@ -394,19 +394,33 @@ try {
                 $afNaam = $afNaamStmt->fetchColumn();
             }
             if ($afNaam) {
+                // Meters van deze afstand binnen deze DC — om de juiste
+                // config-rij te kiezen wanneer één naam meerdere lengtes heeft
+                // ("Sprint" 300m/500m). Eén meters-waarde per (dc, naam).
+                $amStmt = $pdo->prepare(
+                    "SELECT value_meters FROM distances
+                     WHERE distance_combination_id = ? AND name = ? LIMIT 1"
+                );
+                $amStmt->execute([$primaryDcId, $afNaam]);
+                $amRaw    = $amStmt->fetchColumn();
+                $afMeters = ($amRaw !== false && $amRaw !== null) ? (int)$amRaw : null;
+
                 // Ranking kan per categorie (dc_id) afwijken. Zoek eerst een
                 // DC-specifieke rij voor primaryDcId; als die er niet is,
                 // gebruik de globale rij (dc_id IS NULL) als fallback.
-                // ORDER BY (dc_id IS NULL) ASC zet specifieke rij vóór NULL.
+                // ORDER BY (dc_id IS NULL) ASC zet specifieke rij vóór NULL;
+                // (value_meters IS NULL) ASC geeft de meters-exacte rij voorrang
+                // boven een oude naam-only rij.
                 $acStmt = $pdo->prepare("
                     SELECT heats_ranking, kwart_ranking, half_ranking, finale_ranking
                     FROM tijdschema_afstand_config
                     WHERE tijdschema_id = ? AND afstand_naam = ?
                       AND (dc_id = ? OR dc_id IS NULL)
-                    ORDER BY (dc_id IS NULL) ASC
+                      AND (value_meters <=> ? OR value_meters IS NULL)
+                    ORDER BY (dc_id IS NULL) ASC, (value_meters IS NULL) ASC
                     LIMIT 1
                 ");
-                $acStmt->execute([$tsId, $afNaam, $primaryDcId]);
+                $acStmt->execute([$tsId, $afNaam, $primaryDcId, $afMeters]);
                 $ac = $acStmt->fetch(PDO::FETCH_ASSOC);
                 if ($ac) {
                     // Opgeslagen voorkeur heeft voorrang; ontbrekend veld → race-type-aware default

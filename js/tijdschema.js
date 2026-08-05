@@ -1,4 +1,4 @@
-/* InlineComp – Tijdschema v2 */
+﻿/* InlineComp – Tijdschema v2 */
 
 let huidigTijdschema   = null;   // geladen schema of null
 let tsAfstandOpen      = null;   // naam van open afstand-panel
@@ -453,9 +453,9 @@ function renderSysteemUitleg(systeem) {
 // ── Afstand-kaart ─────────────────────────────────────────────────────────────
 
 function renderAfstandKaart(afstand, schema) {
-    const cfg         = vindAfstandConfig(schema, afstand.naam);
+    const cfg         = vindAfstandConfig(schema, afstand.naam, afstand.meters);
     const catConfigMap = maakCatConfigMap(schema);
-    const isOpen      = tsAfstandOpen === afstand.naam;
+    const isOpen      = tsAfstandOpen === afstand.key;
 
     const isUuid = s => /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(s);
     const catNamen = afstand.cats.map(c =>
@@ -466,14 +466,14 @@ function renderAfstandKaart(afstand, schema) {
         ? renderAfstandSamenvatting(afstand.cats, catConfigMap)
         : '<em class="ts-geen-config">Nog niet ingesteld</em>';
 
-    const panelId = `ts-panel-${afstand.naam.replace(/[^a-z0-9]/gi, '_')}`;
+    const panelId = `ts-panel-${afstand.key.replace(/[^a-z0-9]/gi, '_')}`;
 
-    return `<div class="ts-afstand-kaart" data-naam="${escHtml(afstand.naam)}">
+    return `<div class="ts-afstand-kaart" data-naam="${escHtml(afstand.naam)}" data-meters="${afstand.meters ?? ''}" data-key="${escHtml(afstand.key)}">
         <div class="ts-kaart-header">
-            <span class="ts-kaart-naam">${escHtml(afstand.naam)}</span>
+            <span class="ts-kaart-naam">${escHtml(afstand.label)}</span>
             <span class="ts-kaart-cats">${catNamen}</span>
             <span class="ts-kaart-samenvatting">${samenvatting}</span>
-            <button class="ts-btn-bewerk" data-naam="${escHtml(afstand.naam)}">${huidigTijdschema?.heeft_loting ? '👁 Bekijken' : '✏ Bewerken'}</button>
+            <button class="ts-btn-bewerk" data-naam="${escHtml(afstand.naam)}" data-meters="${afstand.meters ?? ''}" data-key="${escHtml(afstand.key)}">${huidigTijdschema?.heeft_loting ? '👁 Bekijken' : '✏ Bewerken'}</button>
         </div>
         <div class="ts-kaart-panel" id="${panelId}" style="${isOpen ? '' : 'display:none'}">
             ${renderAfstandPanel(afstand, cfg, catConfigMap)}
@@ -512,9 +512,9 @@ function renderAfstandPanel(afstand, cfg, catConfigMap) {
     const isFF    = systeem === 'full-final';
 
     // ── Gedeelde instellingen ─────────────────────────────────────────────────
-    let html = `<div class="ts-panel-form" data-naam="${escHtml(afstand.naam)}" data-ts-id="${tsId}">
+    let html = `<div class="ts-panel-form" data-naam="${escHtml(afstand.naam)}" data-meters="${afstand.meters ?? ''}" data-key="${escHtml(afstand.key)}" data-ts-id="${tsId}">
         <div class="ts-gedeeld-sectie">
-            <div class="ts-cat-sectie-titel">Instellingen voor alle categorieën – ${escHtml(afstand.naam)}</div>
+            <div class="ts-cat-sectie-titel">Instellingen voor alle categorieën – ${escHtml(afstand.label)}</div>
             <div class="ts-gedeeld-velden">`;
 
     // Bepaal of runner-up aan staat (kijk naar eerste gevonden cat-config)
@@ -833,14 +833,14 @@ function renderAfstandPanel(afstand, cfg, catConfigMap) {
     // Berekend overzicht
     html += `<div class="ts-calc-overzicht">
         <div class="ts-calc-titel">📊 Berekend overzicht</div>
-        <div class="ts-calc-inhoud" id="ts-calc-${afstand.naam.replace(/[^a-z0-9]/gi, '_')}">
+        <div class="ts-calc-inhoud" id="ts-calc-${afstand.key.replace(/[^a-z0-9]/gi, '_')}">
             ${renderAfstandCalc(afstand, cfg, catConfigMap)}
         </div>
     </div>`;
 
     html += `<div class="ts-panel-acties">
-        <button class="btn-primary ts-btn-afstand-save" data-naam="${escHtml(afstand.naam)}">Opslaan</button>
-        <button class="ts-btn-annuleer ts-btn-afstand-cancel" data-naam="${escHtml(afstand.naam)}">Annuleren</button>
+        <button class="btn-primary ts-btn-afstand-save" data-naam="${escHtml(afstand.naam)}" data-meters="${afstand.meters ?? ''}" data-key="${escHtml(afstand.key)}">Opslaan</button>
+        <button class="ts-btn-annuleer ts-btn-afstand-cancel" data-naam="${escHtml(afstand.naam)}" data-meters="${afstand.meters ?? ''}" data-key="${escHtml(afstand.key)}">Annuleren</button>
     </div>
     </div>`; // ts-panel-form
 
@@ -1222,7 +1222,7 @@ function renderBlokken(schema, afstandGroepen) {
             html += `<div class="ts-blok-item ts-blok-ronde" draggable="true" data-blok-id="${blok.id}">
                 ${dragHandle}${navBtns}
                 <span class="ts-blok-badge" style="background:${kleur}">${escHtml(rLabel)}</span>
-                <span class="ts-blok-afstand">${escHtml(blok.afstand_naam ?? '')}</span>
+                <span class="ts-blok-afstand">${escHtml(blokAfstandLabel(blok.afstand_naam, blok.value_meters))}</span>
                 <label class="ts-blok-duur-lbl" title="Duur per heat">
                     <input type="text" class="ts-inp-sm ts-inp-heat-duur" data-blok-id="${blok.id}"
                            value="${secNaarMmSs(blok.heat_duur)}" placeholder="m:ss"
@@ -2104,8 +2104,8 @@ function bindTsEvents(afstandGroepen) {
     // ── Afstand-panel openen/sluiten ──────────────────────────────────────────
     container.querySelectorAll('.ts-btn-bewerk').forEach(btn => {
         btn.addEventListener('click', () => {
-            const naam   = btn.dataset.naam;
-            const panelId = `ts-panel-${naam.replace(/[^a-z0-9]/gi, '_')}`;
+            const key    = btn.dataset.key ?? btn.dataset.naam;
+            const panelId = `ts-panel-${key.replace(/[^a-z0-9]/gi, '_')}`;
             const panel  = document.getElementById(panelId);
             if (!panel) return;
             const isOpen = panel.style.display !== 'none';
@@ -2113,7 +2113,7 @@ function bindTsEvents(afstandGroepen) {
             container.querySelectorAll('.ts-kaart-panel').forEach(p => { p.style.display = 'none'; });
             if (!isOpen) {
                 panel.style.display = '';
-                tsAfstandOpen = naam;
+                tsAfstandOpen = key;
             } else {
                 tsAfstandOpen = null;
             }
@@ -2122,7 +2122,8 @@ function bindTsEvents(afstandGroepen) {
 
     container.querySelectorAll('.ts-btn-afstand-cancel').forEach(btn => {
         btn.addEventListener('click', () => {
-            const panelId = `ts-panel-${btn.dataset.naam.replace(/[^a-z0-9]/gi, '_')}`;
+            const key     = btn.dataset.key ?? btn.dataset.naam;
+            const panelId = `ts-panel-${key.replace(/[^a-z0-9]/gi, '_')}`;
             const panel   = document.getElementById(panelId);
             if (panel) panel.style.display = 'none';
             tsAfstandOpen = null;
@@ -2371,7 +2372,10 @@ function bindTsEvents(afstandGroepen) {
     // ── Afstand opslaan ───────────────────────────────────────────────────────
     container.querySelectorAll('.ts-btn-afstand-save').forEach(btn => {
         btn.addEventListener('click', async () => {
-            const naam = btn.dataset.naam;
+            const naam   = btn.dataset.naam;
+            const meters = btn.dataset.meters !== undefined && btn.dataset.meters !== ''
+                         ? parseInt(btn.dataset.meters) : null;
+            const key    = btn.dataset.key ?? afKey(naam, meters);
             const form = btn.closest('.ts-panel-form');
             if (!form) return;
 
@@ -2423,12 +2427,13 @@ function bindTsEvents(afstandGroepen) {
                 });
             });
 
-            tsAfstandOpen = naam;
+            tsAfstandOpen = key;
             try {
                 await postTs({
                     action:              'save_afstand',
                     tijdschema_id:       tsId,
                     afstand_naam:        naam,
+                    value_meters:        meters,
                     q_direct:            num('q_direct'),
                     q_tijd:              num('q_tijd'),
                     finale_heat_grootte: num('finale_heat_grootte') || 6,
@@ -2658,6 +2663,7 @@ function bindTsEvents(afstandGroepen) {
                 for (const cat of afGroep.cats) {
                     categorieen.push({
                         afstand_naam:    afGroep.naam,
+                        value_meters:    cat.value_meters ?? afGroep.meters ?? null,
                         dc_id:           cat.dc_id,
                         dc_naam:         cat.dc_naam,
                         distance_id:     cat.distance_id ?? null,
@@ -3173,8 +3179,8 @@ function bindTsEvents(afstandGroepen) {
 
 function updateCalc(form, afstandGroepen) {
     if (!form) return;
-    const naam    = form.dataset.naam;
-    const afstand = afstandGroepen.find(a => a.naam === naam);
+    const key     = form.dataset.key ?? form.dataset.naam;
+    const afstand = afstandGroepen.find(a => (a.key ?? a.naam) === key);
     if (!afstand) return;
 
     const num = n => parseInt(form.querySelector(`[name="${n}"]`)?.value) || 0;
@@ -3231,7 +3237,7 @@ function updateCalc(form, afstandGroepen) {
         };
     });
 
-    const calcId  = `ts-calc-${naam.replace(/[^a-z0-9]/gi, '_')}`;
+    const calcId  = `ts-calc-${key.replace(/[^a-z0-9]/gi, '_')}`;
     const calcDiv = document.getElementById(calcId);
     if (calcDiv) calcDiv.innerHTML = renderAfstandCalc(afstand, liveCfg, liveCatMap);
 }
@@ -3587,7 +3593,7 @@ function _bouwProgrammaExternInternal() {
                     T('prog_extern.finale_label_n', { lbl: esc(lbl), finale: T('algemeen.finale'), n })
                 ).join(' · ');
             } else {
-                const afCfg = vindAfstandConfig(schema, blok.afstand_naam);
+                const afCfg = vindAfstandConfig(schema, blok.afstand_naam, blok.value_meters);
                 const dt = doorTxt(blok.ronde_type, cc, nH, totRj, afCfg);
                 const heatsStr = T(nH > 1 ? 'algemeen.heats_n' : 'algemeen.heat_n', { n: nH });
                 const rijdersStr = T('algemeen.rijders_n', { n: totRj });
@@ -3654,7 +3660,7 @@ function _bouwProgrammaExternInternal() {
         bloHtml += `<div class="blok ronde">
             <div class="blok-kop">
                 <span class="blok-tijd">${esc(eersteTijd)}</span>
-                <span class="blok-titel">${esc(rondeLabel)} ${esc(blok.afstand_naam ?? '')}</span>
+                <span class="blok-titel">${esc(rondeLabel)} ${esc(blokAfstandLabel(blok.afstand_naam, blok.value_meters))}</span>
                 <span class="blok-info">${esc(duurInfo)}</span>
             </div>
             ${catHtml}
@@ -4455,7 +4461,7 @@ function publiceerTijdschemaIntern() {
 // ── Hulpfuncties ──────────────────────────────────────────────────────────────
 
 function bouwAfstandGroepen() {
-    const afstandMap = new Map(); // naam → [{dc_id, dc_naam, distance_id, n, merged_dc_ids?}]
+    const afstandMap = new Map(); // afKey(naam,meters) → {naam, meters, cats:[{dc_id, dc_naam, distance_id, value_meters, n, merged_dc_ids?}]}
 
     // Helper: voeg één entry toe aan afstandMap.
     // Ook n=0 wordt toegevoegd: dat is een placeholder-categorie (bv. een
@@ -4463,12 +4469,14 @@ function bouwAfstandGroepen() {
     // vast wie meedoet). De planner kan het verwachte aantal heats/finales
     // alvast configureren; ritten weggooien is achteraf simpeler dan ritten
     // bijbouwen. Alleen n<0 (onmogelijk in praktijk) blijft uitgesloten.
-    const voegToe = (dc_id, dc_naam, distance_id, distNaam, n, merged_dc_ids, category_filter) => {
+    const voegToe = (dc_id, dc_naam, distance_id, distNaam, meters, n, merged_dc_ids, category_filter) => {
         if (n < 0) return;
-        if (!afstandMap.has(distNaam)) afstandMap.set(distNaam, []);
-        const entry = { dc_id, dc_naam, distance_id, n, category_filter: category_filter ?? '' };
+        const m   = (meters === null || meters === undefined || meters === '') ? null : parseInt(meters);
+        const key = afKey(distNaam, m);
+        if (!afstandMap.has(key)) afstandMap.set(key, { naam: distNaam, meters: m, cats: [] });
+        const entry = { dc_id, dc_naam, distance_id, value_meters: m, n, category_filter: category_filter ?? '' };
         if (merged_dc_ids) entry.merged_dc_ids = merged_dc_ids;
-        afstandMap.get(distNaam).push(entry);
+        afstandMap.get(key).cats.push(entry);
     };
 
     // Helper: verwerk één enkelvoudige categorie (met eventuele splits)
@@ -4506,7 +4514,7 @@ function bouwAfstandGroepen() {
                                 : [{ id: null, name: '—', target_group: null }];
 
                 perSplit.forEach(dist =>
-                    voegToe(cat.dc_id, sn, dist.id, dist.name, splitN, null, splitFilter)
+                    voegToe(cat.dc_id, sn, dist.id, dist.name, dist.value_meters, splitN, null, splitFilter)
                 );
             });
         } else {
@@ -4520,7 +4528,7 @@ function bouwAfstandGroepen() {
             // deelnemers moeten alsnog in Afstandinstellingen verschijnen
             // (voegToe accepteert n=0).
             perAfstand.forEach(dist =>
-                voegToe(cat.dc_id, cat.dc_name, dist.id, dist.name, n)
+                voegToe(cat.dc_id, cat.dc_name, dist.id, dist.name, dist.value_meters, n)
             );
         }
     };
@@ -4582,20 +4590,30 @@ function bouwAfstandGroepen() {
         const mergeFilter = mergeCodes.join(',');
 
         perAfstand.forEach(dist =>
-            voegToe(primary.dc_id, mergeNaam, dist.id, dist.name, totaalN, merged_dc_ids, mergeFilter)
+            voegToe(primary.dc_id, mergeNaam, dist.id, dist.name, dist.value_meters, totaalN, merged_dc_ids, mergeFilter)
         );
     }
 
-    // Sorteer afstanden op numerieke waarde, dan alfabetisch
-    return [...afstandMap.entries()]
-        .sort(([a], [b]) => {
-            const na = parseInt(a), nb = parseInt(b);
-            if (!isNaN(na) && !isNaN(nb)) return na - nb;
-            return a.localeCompare(b);
+    // Welke namen hebben meerdere lengtes? Alleen die krijgen meters in hun
+    // weergavelabel ("Sprint 300m" / "Sprint 500m"); eenduidige namen blijven kaal.
+    const groepen  = [...afstandMap.values()];
+    const naamTelt = new Map();
+    groepen.forEach(g => naamTelt.set(g.naam, (naamTelt.get(g.naam) || 0) + 1));
+
+    // Sorteer op numerieke naam-waarde dan alfabetisch, daarna op meters.
+    return groepen
+        .sort((ga, gb) => {
+            const na = parseInt(ga.naam), nb = parseInt(gb.naam);
+            const c  = (!isNaN(na) && !isNaN(nb)) ? na - nb : ga.naam.localeCompare(gb.naam);
+            if (c) return c;
+            return (ga.meters ?? 0) - (gb.meters ?? 0);
         })
-        .map(([naam, cats]) => ({
-            naam,
-            cats: cats.slice().sort((a, b) =>
+        .map(g => ({
+            naam:   g.naam,
+            meters: g.meters,
+            key:    afKey(g.naam, g.meters),
+            label:  (naamTelt.get(g.naam) > 1 && g.meters != null) ? `${g.naam} ${g.meters}m` : g.naam,
+            cats: g.cats.slice().sort((a, b) =>
                 catSortKeyKnsb(a.category_filter, a.dc_naam)
                     .localeCompare(catSortKeyKnsb(b.category_filter, b.dc_naam))
             ),
@@ -4649,8 +4667,38 @@ function catSortKey(naam) {
     return lk + gk + n;
 }
 
-function vindAfstandConfig(schema, afstandNaam) {
-    return schema?.afstand_configs?.find(c => c.afstand_naam === afstandNaam) ?? null;
+// Composite afstand-sleutel (naam + meters). meters null/'' → alleen naam.
+// Identiek aan afMetersKey() in api/tijdschema.php. Gebruikt voor DOM-id's en
+// om "Sprint" 300m/500m als aparte afstanden te behandelen.
+function afKey(naam, meters) {
+    const m = (meters === null || meters === undefined || meters === '') ? '' : String(parseInt(meters));
+    return naam + '\u001f' + m;
+}
+
+// Blok-label voor het programma: "Sprint 500m". Toont meters alleen als gezet
+// én de naam ze niet al bevat (bv. een afstand die letterlijk "500m" heet).
+function blokAfstandLabel(naam, meters) {
+    const n = naam ?? '';
+    if (meters === null || meters === undefined || meters === '') return n;
+    const m = parseInt(meters);
+    if (n && new RegExp(`(^|\\D)${m}(\\D|$)`).test(n)) return n;
+    return `${n} ${m}m`;
+}
+
+function vindAfstandConfig(schema, afstandNaam, meters = undefined) {
+    const cfgs = schema?.afstand_configs;
+    if (!cfgs) return null;
+    if (meters !== undefined) {
+        const m = (meters === null || meters === '') ? null : parseInt(meters);
+        // Exacte (naam + meters) match; anders naam-only fallback (oude config
+        // zonder value_meters, backward-compat).
+        const exact = cfgs.find(c => c.afstand_naam === afstandNaam
+            && (c.value_meters === null || c.value_meters === undefined
+                ? m === null
+                : parseInt(c.value_meters) === m));
+        if (exact) return exact;
+    }
+    return cfgs.find(c => c.afstand_naam === afstandNaam) ?? null;
 }
 
 function maakCatConfigMap(schema) {

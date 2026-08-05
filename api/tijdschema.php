@@ -91,10 +91,21 @@ function fetchSchema(PDO $pdo, string $compId): ?array {
 
 // ── Blokken synchroniseren na afstand-opslaan ─────────────────────────────────
 
-// Bepaal welke ronde-blokken een afstand nodig heeft op basis van alle cat-configs
-function enabledRondesVoorAfstand(PDO $pdo, int $tsId, string $afstandNaam, string $compId): array {
-    // Haal alle cat-configs op voor deze afstand (via distance naam)
-    $s = $pdo->prepare("
+// Composite afstand-sleutel: naam + meters. meters NULL/'' → alleen naam.
+// Backward-compat: oude blokken/config zonder value_meters gedragen zich als
+// voorheen (naam-only). Scheidingsteken \x1F kan niet in een afstandsnaam
+// voorkomen, dus geen collisie tussen "Sprint"+"" en een naam met een pipe e.d.
+function afMetersKey(string $naam, $meters): string {
+    $m = ($meters === null || $meters === '') ? '' : (string)(int)$meters;
+    return $naam . "\x1F" . $m;
+}
+
+// Bepaal welke ronde-blokken een afstand nodig heeft op basis van alle cat-configs.
+// $meters null → alle distances met die naam (backward-compat); anders alleen de
+// distances met exact die lengte, zodat "Sprint" 300m en 500m los blijven.
+function enabledRondesVoorAfstand(PDO $pdo, int $tsId, string $afstandNaam, string $compId, $meters = null): array {
+    // Haal alle cat-configs op voor deze afstand (via distance naam + eventueel meters)
+    $sql = "
         SELECT cc.*
         FROM tijdschema_cat_config cc
         JOIN distances d      ON d.id  = cc.distance_id
@@ -102,9 +113,14 @@ function enabledRondesVoorAfstand(PDO $pdo, int $tsId, string $afstandNaam, stri
         JOIN distance_combinations dc ON dc.id = cc.dc_id
         WHERE cc.tijdschema_id = ?
           AND d.name = ?
-          AND dc.competition_id = ?
-    ");
-    $s->execute([$tsId, $afstandNaam, $compId]);
+          AND dc.competition_id = ?";
+    $params = [$tsId, $afstandNaam, $compId];
+    if ($meters !== null && $meters !== '') {
+        $sql .= " AND d.value_meters = ?";
+        $params[] = (int)$meters;
+    }
+    $s = $pdo->prepare($sql);
+    $s->execute($params);
     $cats = $s->fetchAll(PDO::FETCH_ASSOC);
 
     $rondes = ['finale']; // finale altijd aanwezig
@@ -121,13 +137,24 @@ function enabledRondesVoorAfstand(PDO $pdo, int $tsId, string $afstandNaam, stri
     return $rondes;
 }
 
-function syncBlokken(PDO $pdo, int $tsId, string $afstandNaam, array $enabledRondes): void {
-    $s = $pdo->prepare(
-        "SELECT * FROM tijdschema_blokken
-         WHERE tijdschema_id = ? AND afstand_naam = ? AND blok_type = 'ronde'
-         ORDER BY volgorde"
-    );
-    $s->execute([$tsId, $afstandNaam]);
+function syncBlokken(PDO $pdo, int $tsId, string $afstandNaam, array $enabledRondes, $meters = null): void {
+    // Bestaande ronde-blokken voor exact deze (afstand, meters). meters null →
+    // de oude NULL-blokken (backward-compat); meters gevuld → alleen die lengte.
+    if ($meters !== null && $meters !== '') {
+        $s = $pdo->prepare(
+            "SELECT * FROM tijdschema_blokken
+             WHERE tijdschema_id = ? AND afstand_naam = ? AND value_meters = ? AND blok_type = 'ronde'
+             ORDER BY volgorde"
+        );
+        $s->execute([$tsId, $afstandNaam, (int)$meters]);
+    } else {
+        $s = $pdo->prepare(
+            "SELECT * FROM tijdschema_blokken
+             WHERE tijdschema_id = ? AND afstand_naam = ? AND value_meters IS NULL AND blok_type = 'ronde'
+             ORDER BY volgorde"
+        );
+        $s->execute([$tsId, $afstandNaam]);
+    }
     $bestaand      = $s->fetchAll(PDO::FETCH_ASSOC);
     $bestaandTypes = array_column($bestaand, 'ronde_type');
 
@@ -143,13 +170,14 @@ function syncBlokken(PDO $pdo, int $tsId, string $afstandNaam, array $enabledRon
     $s->execute([$tsId]);
     $maxVolgorde = (int)$s->fetchColumn();
 
+    $mVal = ($meters !== null && $meters !== '') ? (int)$meters : null;
     $ins = $pdo->prepare(
-        "INSERT INTO tijdschema_blokken (tijdschema_id, volgorde, blok_type, afstand_naam, ronde_type)
-         VALUES (?,?,?,?,?)"
+        "INSERT INTO tijdschema_blokken (tijdschema_id, volgorde, blok_type, afstand_naam, value_meters, ronde_type)
+         VALUES (?,?,?,?,?,?)"
     );
     foreach ($enabledRondes as $ronde) {
         if (!in_array($ronde, $bestaandTypes, true)) {
-            $ins->execute([$tsId, ++$maxVolgorde, 'ronde', $afstandNaam, $ronde]);
+            $ins->execute([$tsId, ++$maxVolgorde, 'ronde', $afstandNaam, $mVal, $ronde]);
         }
     }
 }
@@ -264,15 +292,22 @@ function genereerRitten(PDO $pdo, int $tsId, string $compId, ?array $catVanJS = 
     // heeft_kleine_finale=1 overschrijven → geen B-finale meer.
     $s = $pdo->prepare("SELECT * FROM tijdschema_afstand_config WHERE tijdschema_id = ?");
     $s->execute([$tsId]);
-    $configPerAfstand = [];
+    // Composiet op (naam + meters); daarnaast een naam-only fallback voor oude
+    // blokken zonder value_meters (die matchen op naam, aggregeren alle meters).
+    $configPerAfstand = [];   // afMetersKey(naam,meters) → config
+    $configPerNaam    = [];   // naam → config (fallback voor NULL-meters blok)
     foreach ($s->fetchAll(PDO::FETCH_ASSOC) as $cfg) {
-        $key = $cfg['afstand_naam'];
+        $key      = afMetersKey($cfg['afstand_naam'], $cfg['value_meters'] ?? null);
+        $naam     = $cfg['afstand_naam'];
         $isGlobal = $cfg['dc_id'] === null;
         // Globale rij wint altijd; anders eerste-inzet-blijft-staan (fallback
         // als er alleen per-dc rijen bestaan — theoretisch niet mogelijk maar
         // veilig als het toch voorkomt).
         if ($isGlobal || !isset($configPerAfstand[$key])) {
             $configPerAfstand[$key] = $cfg;
+        }
+        if ($isGlobal || !isset($configPerNaam[$naam])) {
+            $configPerNaam[$naam] = $cfg;
         }
     }
 
@@ -303,10 +338,41 @@ function genereerRitten(PDO $pdo, int $tsId, string $compId, ?array $catVanJS = 
         $tellingen[$r['dc_id']] = (int)$r['n'];
     }
 
-    // ── Categorieën per afstandsnaam ──────────────────────────────────────────
+    // ── Categorieën per afstand (naam + meters) ───────────────────────────────
     // Voorkeur: gebruik de lijst die JS heeft doorgegeven (verwerkt merges + splits).
     // Fallback: eigen SQL-query (backward compat, geen merges/splits).
-    $catsPerAfstand = [];
+    //
+    // We keyen op afMetersKey(naam, meters) zodat "Sprint" 300m en 500m aparte
+    // afstanden zijn. catsPerNaam is de naam-only aggregatie voor oude blokken
+    // zonder value_meters; afMeta onthoudt per composite-key de losse naam+meters
+    // (voor de full-final auto-aanmaak van finale-blokken hieronder).
+    $catsPerAfstand = [];   // afMetersKey(naam,meters) → cats[]
+    $catsPerNaam    = [];   // naam → cats[]  (fallback NULL-meters blok)
+    $afMeta         = [];   // afMetersKey(naam,meters) → ['naam','meters']
+
+    // Meters per (dc_id|distance_id) — canonieke bron distances.value_meters.
+    $vmStmt = $pdo->prepare("
+        SELECT dc.id AS dc_id, d.id AS distance_id, d.value_meters
+        FROM distances d
+        JOIN distance_combinations dc ON dc.id = d.distance_combination_id
+        WHERE dc.competition_id = ?
+    ");
+    $vmStmt->execute([$compId]);
+    $vmMap = [];
+    foreach ($vmStmt->fetchAll(PDO::FETCH_ASSOC) as $r) {
+        $vmMap[$r['dc_id'] . '|' . $r['distance_id']] =
+            $r['value_meters'] !== null ? (int)$r['value_meters'] : null;
+    }
+
+    $voegCatToe = function (string $naam, $meters, array $cat)
+                  use (&$catsPerAfstand, &$catsPerNaam, &$afMeta) {
+        $key = afMetersKey($naam, $meters);
+        $catsPerAfstand[$key][] = $cat;
+        $catsPerNaam[$naam][]   = $cat;
+        if (!isset($afMeta[$key])) {
+            $afMeta[$key] = ['naam' => $naam, 'meters' => ($meters === null || $meters === '') ? null : (int)$meters];
+        }
+    };
 
     if (!empty($catVanJS) && is_array($catVanJS)) {
         // category_filter ophalen voor sortering (niet in de JS-payload)
@@ -327,25 +393,30 @@ function genereerRitten(PDO $pdo, int $tsId, string $compId, ?array $catVanJS = 
             if ($n < 0) continue;
             $afstandNaam = trim((string)($ce['afstand_naam'] ?? ''));
             if ($afstandNaam === '') continue;
-            $dcId = (string)($ce['dc_id'] ?? '');
+            $dcId   = (string)($ce['dc_id'] ?? '');
+            $distId = $ce['distance_id'] ?: null;
+            // Meters: JS mag value_meters meesturen; anders server-side lookup.
+            $meters = array_key_exists('value_meters', $ce) && $ce['value_meters'] !== null && $ce['value_meters'] !== ''
+                    ? (int)$ce['value_meters']
+                    : ($distId !== null ? ($vmMap[$dcId . '|' . $distId] ?? null) : null);
             // Gebruik category_filter van JS als die er is (bijv. afgeleid van KNSB-codes per split),
             // anders de DB-waarde (voor niet-gesplitste categorieën).
             $catFilter = (string)($ce['category_filter'] ?? '');
             if ($catFilter === '') $catFilter = $cfMap[$dcId] ?? '';
-            $catsPerAfstand[$afstandNaam][] = [
+            $voegCatToe($afstandNaam, $meters, [
                 'dc_id'          => $dcId,
                 'dc_naam'        => (string)($ce['dc_naam']      ?? ''),
                 'category_filter'=> $catFilter,
-                'distance_id'    => $ce['distance_id'] ?: null,
+                'distance_id'    => $distId,
                 'n'              => $n,
-            ];
+            ]);
         }
     } else {
         // Fallback: originele SQL (geen merge/split bewustzijn)
         $s = $pdo->prepare("
             SELECT dc.id AS dc_id, dc.name AS dc_naam,
                    dc.category_filter,
-                   d.id  AS distance_id, d.name AS distance_naam
+                   d.id  AS distance_id, d.name AS distance_naam, d.value_meters
             FROM distance_combinations dc
             JOIN distances d ON d.distance_combination_id = dc.id
             WHERE dc.competition_id = ?
@@ -357,13 +428,14 @@ function genereerRitten(PDO $pdo, int $tsId, string $compId, ?array $catVanJS = 
             $n = $tellingen[$r['dc_id']] ?? 0;
             // Ook n=0 toestaan: placeholder-categorie zonder bevestigde
             // deelnemers (zie hierboven). Negatieve waardes zijn onmogelijk.
-            $catsPerAfstand[$r['distance_naam']][] = [
+            $meters = $r['value_meters'] !== null ? (int)$r['value_meters'] : null;
+            $voegCatToe($r['distance_naam'], $meters, [
                 'dc_id'          => $r['dc_id'],
                 'dc_naam'        => $r['dc_naam'],
                 'category_filter'=> $r['category_filter'] ?? '',
                 'distance_id'    => $r['distance_id'],
                 'n'              => $n,
-            ];
+            ]);
         }
     }
 
@@ -371,10 +443,19 @@ function genereerRitten(PDO $pdo, int $tsId, string $compId, ?array $catVanJS = 
     // Als de gebruiker de afstandskaarten nog niet heeft opgeslagen, bestaan er
     // nog geen ronde-blokken. Voor full-final heeft de finale altijd een blok nodig.
     if ($systeem === 'full-final') {
-        $afstandenMetFinaleBlok = [];
+        // Bestaande finale-blokken: composite-keys (naam+meters) plus de namen
+        // die nog een oud NULL-meters finale-blok hebben. Bij een naam met een
+        // NULL-blok maken we GEEN meters-specifieke finales aan — dat NULL-blok
+        // dekt via naam-fallback alle meters (geen dubbele finale-blokken).
+        $finaleKeys      = [];
+        $finaleNaamNull  = [];
         foreach ($blokken as $b) {
             if ($b['blok_type'] === 'ronde' && $b['ronde_type'] === 'finale') {
-                $afstandenMetFinaleBlok[] = $b['afstand_naam'];
+                if (($b['value_meters'] ?? null) === null) {
+                    $finaleNaamNull[$b['afstand_naam']] = true;
+                } else {
+                    $finaleKeys[afMetersKey($b['afstand_naam'], $b['value_meters'])] = true;
+                }
             }
         }
         $s = $pdo->prepare(
@@ -385,39 +466,63 @@ function genereerRitten(PDO $pdo, int $tsId, string $compId, ?array $catVanJS = 
 
         $ins = $pdo->prepare(
             "INSERT INTO tijdschema_blokken
-                 (tijdschema_id, volgorde, blok_type, afstand_naam, ronde_type)
-             VALUES (?,?,?,?,?)"
+                 (tijdschema_id, volgorde, blok_type, afstand_naam, value_meters, ronde_type)
+             VALUES (?,?,?,?,?,?)"
         );
-        foreach (array_keys($catsPerAfstand) as $afNaam) {
-            if (!in_array($afNaam, $afstandenMetFinaleBlok, true)) {
-                $ins->execute([$tsId, ++$maxVolgorde, 'ronde', $afNaam, 'finale']);
-                $blokken[] = [
-                    'id'            => (int)$pdo->lastInsertId(),
-                    'tijdschema_id' => $tsId,
-                    'volgorde'      => $maxVolgorde,
-                    'blok_type'     => 'ronde',
-                    'afstand_naam'  => $afNaam,
-                    'ronde_type'    => 'finale',
-                    'heat_duur'     => null,
-                    'duur'          => null,
-                    'label'         => null,
-                    'dc_ids'        => null,
-                    'tijdstip'      => null,
-                ];
-            }
+        foreach ($afMeta as $key => $meta) {
+            if (isset($finaleNaamNull[$meta['naam']])) continue; // oud NULL-blok dekt deze naam
+            if (isset($finaleKeys[$key])) continue;
+            $ins->execute([$tsId, ++$maxVolgorde, 'ronde', $meta['naam'], $meta['meters'], 'finale']);
+            $blokken[] = [
+                'id'            => (int)$pdo->lastInsertId(),
+                'tijdschema_id' => $tsId,
+                'volgorde'      => $maxVolgorde,
+                'blok_type'     => 'ronde',
+                'afstand_naam'  => $meta['naam'],
+                'value_meters'  => $meta['meters'],
+                'ronde_type'    => 'finale',
+                'heat_duur'     => null,
+                'duur'          => null,
+                'label'         => null,
+                'dc_ids'        => null,
+                'tijdstip'      => null,
+            ];
         }
     }
 
     $ritten   = [];
     $volgorde = 1;
 
+    // Namen waarvoor meters-specifieke ronde-blokken bestaan. Een oud NULL-blok
+    // voor zo'n naam is de stale (pre-refactor) samengevoegde variant en wordt
+    // overgeslagen — anders zou het via naam-fallback dubbele ritten opleveren
+    // naast de nieuwe meters-blokken. Zelfhelend: geen DB-verwijdering nodig.
+    $naamHeeftMeters = [];
+    foreach ($blokken as $b) {
+        if ($b['blok_type'] === 'ronde' && ($b['value_meters'] ?? null) !== null) {
+            $naamHeeftMeters[$b['afstand_naam']] = true;
+        }
+    }
+
     foreach ($blokken as $blok) {
         if ($blok['blok_type'] !== 'ronde') continue; // sla pauze en inrijden over
 
         $afstandNaam = $blok['afstand_naam'];
         $rondeType   = $blok['ronde_type'];
-        $afCfg       = $configPerAfstand[$afstandNaam] ?? null;
-        $alleCats    = $catsPerAfstand[$afstandNaam]   ?? [];
+        $meters      = $blok['value_meters'] ?? null;
+
+        if ($meters === null || $meters === '') {
+            // Oud blok zonder meters. Als dezelfde naam ook meters-blokken heeft,
+            // is dit het stale samengevoegde blok → overslaan.
+            if (!empty($naamHeeftMeters[$afstandNaam])) continue;
+            $afCfg    = $configPerAfstand[afMetersKey($afstandNaam, null)]
+                        ?? ($configPerNaam[$afstandNaam] ?? null);
+            $alleCats = $catsPerNaam[$afstandNaam] ?? [];
+        } else {
+            $key      = afMetersKey($afstandNaam, $meters);
+            $afCfg    = $configPerAfstand[$key] ?? ($configPerNaam[$afstandNaam] ?? null);
+            $alleCats = $catsPerAfstand[$key] ?? [];
+        }
         if (empty($alleCats)) continue;
         // Vaste volgorde: jong→oud, vrouwen voor mannen
         usort($alleCats, fn($a, $b) =>
@@ -909,6 +1014,8 @@ try {
     if ($action === 'save_ranking') {
         $afstandNaam = trim($body['afstand_naam'] ?? '');
         $dcId        = trim($body['dc_id'] ?? '') ?: null;
+        $meters      = (array_key_exists('value_meters', $body) && $body['value_meters'] !== null && $body['value_meters'] !== '')
+                     ? (int)$body['value_meters'] : null;
         if (!$afstandNaam) {
             http_response_code(400);
             echo json_encode(['error' => 'afstand_naam is verplicht']);
@@ -944,6 +1051,7 @@ try {
             // bestaande INSERT met defaults blijft dan van kracht.
             $extraCols = [];
             if ($dcId !== null) {
+                // Globale rij voor deze (afstand, meters) — null-safe op meters.
                 $glob = $pdo->prepare("
                     SELECT q_direct, q_tijd, finale_heat_grootte, finale_b_grootte,
                            laatste_b_grootste, finale_seeding, race_type,
@@ -952,8 +1060,9 @@ try {
                            runner_up_max, runner_up_min
                     FROM tijdschema_afstand_config
                     WHERE tijdschema_id = ? AND dc_id IS NULL AND afstand_naam = ?
+                      AND value_meters <=> ?
                 ");
-                $glob->execute([$tsId, $afstandNaam]);
+                $glob->execute([$tsId, $afstandNaam, $meters]);
                 $globRow = $glob->fetch(PDO::FETCH_ASSOC);
                 if ($globRow) {
                     foreach ($globRow as $c => $v) {
@@ -966,22 +1075,37 @@ try {
                 }
             }
 
-            $cols = ['tijdschema_id', 'dc_id', 'afstand_naam'];
-            $vals = [$tsId, $dcId, $afstandNaam];
-            foreach ($setValues + $extraCols as $col => $v) {
-                $cols[] = $col;
-                $vals[] = $v;
+            // value_meters zit in de UNIQUE-sleutel; bij NULL-meters triggert
+            // ON DUPLICATE KEY UPDATE niet (MySQL ziet NULL als distinct). Daarom
+            // expliciet: bestaat de rij → UPDATE alleen ranking-velden (bewaart
+            // per-dc wijzigingen uit save_afstand); anders → INSERT met de van
+            // globaal geërfde velden erbij.
+            $exists = $pdo->prepare("
+                SELECT 1 FROM tijdschema_afstand_config
+                WHERE tijdschema_id = ? AND dc_id <=> ? AND afstand_naam = ? AND value_meters <=> ?
+                LIMIT 1
+            ");
+            $exists->execute([$tsId, $dcId, $afstandNaam, $meters]);
+            if ($exists->fetchColumn()) {
+                $setClause = implode(', ', array_map(fn($c) => "$c = ?", array_keys($setValues)));
+                $upd = $pdo->prepare("
+                    UPDATE tijdschema_afstand_config SET $setClause
+                    WHERE tijdschema_id = ? AND dc_id <=> ? AND afstand_naam = ? AND value_meters <=> ?
+                ");
+                $upd->execute([...array_values($setValues), $tsId, $dcId, $afstandNaam, $meters]);
+            } else {
+                $cols = ['tijdschema_id', 'dc_id', 'afstand_naam', 'value_meters'];
+                $vals = [$tsId, $dcId, $afstandNaam, $meters];
+                foreach ($setValues + $extraCols as $col => $v) {
+                    $cols[] = $col;
+                    $vals[] = $v;
+                }
+                $placeholders = implode(', ', array_fill(0, count($cols), '?'));
+                $pdo->prepare(
+                    "INSERT INTO tijdschema_afstand_config (" . implode(', ', $cols) . ")
+                     VALUES ($placeholders)"
+                )->execute($vals);
             }
-            $placeholders = implode(', ', array_fill(0, count($cols), '?'));
-            // ON DUPLICATE KEY UPDATE alleen op ranking-velden — anders zou
-            // een save_ranking eventuele wijzigingen die intussen via
-            // save_afstand op de per-dc rij zijn gedaan overschrijven.
-            $updateClause = implode(', ',
-                array_map(fn($c) => "$c = VALUES($c)", array_keys($setValues)));
-            $sql = "INSERT INTO tijdschema_afstand_config (" . implode(', ', $cols) . ")
-                    VALUES ($placeholders)
-                    ON DUPLICATE KEY UPDATE $updateClause";
-            $pdo->prepare($sql)->execute($vals);
         }
 
         echo json_encode(['ok' => true]);
@@ -992,6 +1116,8 @@ try {
     if ($action === 'save_afstand') {
         $tsId        = (int)($body['tijdschema_id'] ?? 0);
         $afstandNaam = trim($body['afstand_naam'] ?? '');
+        $meters      = (array_key_exists('value_meters', $body) && $body['value_meters'] !== null && $body['value_meters'] !== '')
+                     ? (int)$body['value_meters'] : null;
         if (!$tsId || $afstandNaam === '') {
             http_response_code(400);
             echo json_encode(['error' => 'tijdschema_id of afstand_naam ontbreekt']);
@@ -1034,14 +1160,18 @@ try {
         //         A-finale = time.
         // Lange afstand: voorronden = position_time, A-finale = time (UI verbergt
         //         die sowieso — race_type bepaalt finale-sortering automatisch).
-        // race_type + value_meters uit distances — canonieke bron.
-        $rtStmt = $pdo->prepare(
-            "SELECT race_type, value_meters FROM distances d
+        // race_type + value_meters uit distances — canonieke bron. Scope op
+        // meters wanneer meegegeven, zodat "Sprint" 300m/500m niet willekeurig
+        // door LIMIT 1 de verkeerde race_type/meters pakt.
+        $rtSql = "SELECT race_type, value_meters FROM distances d
              JOIN distance_combinations dc ON dc.id = d.distance_combination_id
              JOIN competition_tijdschema ct ON ct.competition_id = dc.competition_id
-             WHERE ct.id = ? AND d.name = ? LIMIT 1"
-        );
-        $rtStmt->execute([$tsId, $afstandNaam]);
+             WHERE ct.id = ? AND d.name = ?";
+        $rtParams = [$tsId, $afstandNaam];
+        if ($meters !== null) { $rtSql .= " AND d.value_meters = ?"; $rtParams[] = $meters; }
+        $rtSql .= " LIMIT 1";
+        $rtStmt = $pdo->prepare($rtSql);
+        $rtStmt->execute($rtParams);
         $distRow = $rtStmt->fetch(PDO::FETCH_ASSOC) ?: [];
         $distRt      = $distRow['race_type']    ?? 'sprint';
         $distMeters  = $distRow['value_meters'] !== null ? (int)$distRow['value_meters'] : null;
@@ -1088,19 +1218,21 @@ try {
         // i.p.v. de bestaande te updaten — vindAfstandConfig() zou dan een
         // willekeurige (vaak de oudste) rij teruggeven en de zojuist
         // ingevoerde runner_up_max/min "verdwijnen" terug naar oude waarden.
+        // Scope op (afstand_naam, value_meters) — null-safe, zodat "Sprint" 300m
+        // en 500m elk hun eigen globale config-rij hebben.
         $pdo->prepare("
             DELETE FROM tijdschema_afstand_config
-            WHERE tijdschema_id = ? AND dc_id IS NULL AND afstand_naam = ?
-        ")->execute([$tsId, $afstandNaam]);
+            WHERE tijdschema_id = ? AND dc_id IS NULL AND afstand_naam = ? AND value_meters <=> ?
+        ")->execute([$tsId, $afstandNaam, $meters]);
 
         $pdo->prepare("
             INSERT INTO tijdschema_afstand_config
-                (tijdschema_id, afstand_naam, q_direct, q_tijd, finale_heat_grootte,
+                (tijdschema_id, afstand_naam, value_meters, q_direct, q_tijd, finale_heat_grootte,
                  finale_b_grootte, laatste_b_grootste, finale_seeding,
                  race_type, heats_ranking, kwart_ranking, half_ranking, finale_ranking,
                  heeft_runner_up, heeft_kleine_finale, runner_up_max, runner_up_min)
-            VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
-        ")->execute([$tsId, $afstandNaam, $qD, $qT, $finaleHg, $finaleBg, $bLaatstGrootst,
+            VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+        ")->execute([$tsId, $afstandNaam, $meters, $qD, $qT, $finaleHg, $finaleBg, $bLaatstGrootst,
                      $finaleSeeding, $raceType, $heatsRanking, $kwartRanking, $halfRanking, $finaleRanking,
                      $heeftRU, $heeftKF, $ruMax, $ruMin]);
 
@@ -1186,8 +1318,8 @@ try {
         }
 
         // Blokken synchroniseren op basis van alle cat-configs voor deze afstand
-        $enabledRondes = enabledRondesVoorAfstand($pdo, $tsId, $afstandNaam, $compId);
-        syncBlokken($pdo, $tsId, $afstandNaam, $enabledRondes);
+        $enabledRondes = enabledRondesVoorAfstand($pdo, $tsId, $afstandNaam, $compId, $meters);
+        syncBlokken($pdo, $tsId, $afstandNaam, $enabledRondes, $meters);
 
         $pdo->prepare("UPDATE competitions SET tijdschema_version = tijdschema_version + 1 WHERE id = ?")
             ->execute([$compId]);

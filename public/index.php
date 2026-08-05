@@ -1235,18 +1235,26 @@ if ($action === 'ronde_uitslagen') {
         // met tijd als tiebreak (standaard).
         // Fallback-regel: dc-specifiek → dc_id IS NULL → 'position_time'.
         $seedStmt = $pdo->prepare("
-            SELECT afstand_naam, dc_id, finale_ranking
+            SELECT afstand_naam, value_meters, dc_id, finale_ranking
             FROM tijdschema_afstand_config tac
             JOIN competition_tijdschema ct ON ct.id = tac.tijdschema_id
             WHERE ct.competition_id = ? AND (tac.dc_id = ? OR tac.dc_id IS NULL)
         ");
         $seedStmt->execute([$compId, $dcId]);
-        $rankingMap = [];  // afstand_naam => finale_ranking (dc-specifiek wint)
+        // Keyed op "naam\x1fmeters" ("Sprint" 300m/500m los); $rankingMapNaam is
+        // de naam-only fallback (oude config zonder value_meters). Dc-specifiek wint.
+        $rankingMap     = [];
+        $rankingMapNaam = [];
         foreach ($seedStmt->fetchAll(PDO::FETCH_ASSOC) as $s) {
-            $an = $s['afstand_naam'];
+            $an  = $s['afstand_naam'];
+            $m   = $s['value_meters'] !== null ? (int)$s['value_meters'] : null;
+            $key = $an . "\x1f" . ($m ?? '');
             // dc-specifiek overrulet null-fallback
-            if (!isset($rankingMap[$an]) || $s['dc_id'] !== null) {
-                $rankingMap[$an] = $s['finale_ranking'];
+            if (!isset($rankingMap[$key]) || $s['dc_id'] !== null) {
+                $rankingMap[$key] = $s['finale_ranking'];
+            }
+            if (!isset($rankingMapNaam[$an]) || $s['dc_id'] !== null) {
+                $rankingMapNaam[$an] = $s['finale_ranking'];
             }
         }
 
@@ -1595,7 +1603,8 @@ if ($action === 'ronde_uitslagen') {
                 'distance_naam'  => $dist['name'],
                 'distance_meters'=> $dist['value_meters'] !== null ? (int)$dist['value_meters'] : null,
                 'race_type'      => $dist['race_type'],
-                'finale_ranking' => $rankingMap[$dist['name']] ?? 'position_time',
+                'finale_ranking' => $rankingMap[$dist['name'] . "\x1f" . ($dist['value_meters'] !== null ? (int)$dist['value_meters'] : '')]
+                                    ?? $rankingMapNaam[$dist['name']] ?? 'position_time',
                 'rondes'         => $rondes,
                 'eind_uitslag'   => $eind,
             ];

@@ -768,14 +768,28 @@ if ($action === 'genereer_volgende_ronde') {
         $afstandNaam = $afNaamStmt->fetchColumn();
 
         if ($afstandNaam) {
+            // Meters van deze distance — kies de juiste config-rij bij
+            // gelijk-genoemde afstanden ("Sprint" 300m/500m).
+            $afMeters = null;
+            if ($distanceId !== '' && $distanceId !== null) {
+                $amStmt = $pdo->prepare(
+                    "SELECT value_meters FROM distances
+                     WHERE distance_combination_id = ? AND id = ? LIMIT 1"
+                );
+                $amStmt->execute([$dcId, $distanceId]);
+                $amRaw = $amStmt->fetchColumn();
+                if ($amRaw !== false && $amRaw !== null) $afMeters = (int)$amRaw;
+            }
             $afCfgStmt = $pdo->prepare("
                 SELECT finale_heat_grootte, finale_b_grootte, laatste_b_grootste,
                        finale_seeding, heeft_kleine_finale
                 FROM tijdschema_afstand_config
                 WHERE tijdschema_id = ? AND afstand_naam = ?
+                  AND (value_meters <=> ? OR value_meters IS NULL)
+                ORDER BY (value_meters IS NULL) ASC
                 LIMIT 1
             ");
-            $afCfgStmt->execute([$tsId, $afstandNaam]);
+            $afCfgStmt->execute([$tsId, $afstandNaam, $afMeters]);
             $afCfg = $afCfgStmt->fetch(PDO::FETCH_ASSOC);
             if ($afCfg) {
                 $finaleHg       = max(1, (int)($afCfg['finale_heat_grootte'] ?? 6));

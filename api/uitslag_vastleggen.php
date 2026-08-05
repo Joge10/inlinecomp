@@ -328,17 +328,29 @@ try {
             }
 
             if ($tsId2) {
+                // Meters van deze afstand binnen deze DC — kies de juiste
+                // config-rij bij gelijk-genoemde afstanden ("Sprint" 300/500).
+                $amStmt2 = $pdo->prepare(
+                    "SELECT value_meters FROM distances
+                     WHERE distance_combination_id = ? AND name = ? LIMIT 1"
+                );
+                $amStmt2->execute([$primaryDcId, $distNaam]);
+                $amRaw2    = $amStmt2->fetchColumn();
+                $afMeters2 = ($amRaw2 !== false && $amRaw2 !== null) ? (int)$amRaw2 : null;
+
                 // DC-specifieke rij heeft voorrang boven globale (NULL) rij,
-                // identiek aan uitslag_afstand.php.
+                // identiek aan uitslag_afstand.php. Meters-exacte rij vóór een
+                // oude naam-only rij.
                 $acStmt2 = $pdo->prepare("
                     SELECT heats_ranking, kwart_ranking, half_ranking, finale_ranking
                     FROM tijdschema_afstand_config
                     WHERE tijdschema_id = ? AND afstand_naam = ?
                       AND (dc_id = ? OR dc_id IS NULL)
-                    ORDER BY (dc_id IS NULL) ASC
+                      AND (value_meters <=> ? OR value_meters IS NULL)
+                    ORDER BY (dc_id IS NULL) ASC, (value_meters IS NULL) ASC
                     LIMIT 1
                 ");
-                $acStmt2->execute([$tsId2, $distNaam, $primaryDcId]);
+                $acStmt2->execute([$tsId2, $distNaam, $primaryDcId, $afMeters2]);
                 $ac2 = $acStmt2->fetch(PDO::FETCH_ASSOC);
                 if ($ac2) {
                     // Opgeslagen voorkeur heeft voorrang; ontbrekend veld → race-type-aware default

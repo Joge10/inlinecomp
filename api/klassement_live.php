@@ -103,7 +103,7 @@ try {
     $distances = [];
     if ($splitGroup !== '') {
         $distStmt = $pdo->prepare("
-            SELECT id, name, number, race_type
+            SELECT id, name, number, race_type, value_meters
             FROM distances
             WHERE distance_combination_id = ?
               AND target_group = ?
@@ -114,7 +114,7 @@ try {
     }
     if (empty($distances)) {
         $distStmt = $pdo->prepare("
-            SELECT id, name, number, race_type
+            SELECT id, name, number, race_type, value_meters
             FROM distances
             WHERE distance_combination_id = ?
               AND (target_group IS NULL OR target_group = '')
@@ -125,7 +125,11 @@ try {
     }
 
     // ── Ranking methods per afstand (alleen internationaal) ──────────────────
-    $rankingConfigs = []; // afstand_naam => {heats_ranking, kwart_ranking, ...}
+    // Keyed op "naam\x1fmeters" zodat "Sprint" 300m/500m elk hun eigen ranking-
+    // config hebben; $rankingConfigsNaam is de naam-only fallback (oude config
+    // zonder value_meters, backward-compat).
+    $rankingConfigs     = []; // "naam\x1fmeters" => {heats_ranking, ...}
+    $rankingConfigsNaam = []; // naam => config (fallback)
     $tsId = null;
     if ($systeem !== 'full-final') {
         $tsIdStmt = $pdo->prepare("SELECT id FROM competition_tijdschema WHERE competition_id = ?");
@@ -133,13 +137,17 @@ try {
         $tsId = $tsIdStmt->fetchColumn();
         if ($tsId) {
             $rcStmt = $pdo->prepare("
-                SELECT afstand_naam,
+                SELECT afstand_naam, value_meters,
                        heats_ranking, kwart_ranking, half_ranking, finale_ranking
                 FROM tijdschema_afstand_config WHERE tijdschema_id = ?
             ");
             $rcStmt->execute([$tsId]);
             foreach ($rcStmt->fetchAll(PDO::FETCH_ASSOC) as $rc) {
-                $rankingConfigs[$rc['afstand_naam']] = $rc;
+                $m = $rc['value_meters'] !== null ? (int)$rc['value_meters'] : null;
+                $rankingConfigs[$rc['afstand_naam'] . "\x1f" . ($m ?? '')] = $rc;
+                if (!isset($rankingConfigsNaam[$rc['afstand_naam']])) {
+                    $rankingConfigsNaam[$rc['afstand_naam']] = $rc;
+                }
             }
         }
 
@@ -285,8 +293,11 @@ try {
         // Ranking-methods per ronde (alleen internationaal) voor UI-info.
         // race_type (sprint/long_distance) wordt afgeleid uit distances.race_type —
         // canonieke bron, ongeacht systeem.
-        if (!$isFullFinal && isset($rankingConfigs[$dist['name']])) {
-            $rc = $rankingConfigs[$dist['name']];
+        $distM  = isset($dist['value_meters']) && $dist['value_meters'] !== null ? (int)$dist['value_meters'] : null;
+        $rcHit  = $rankingConfigs[$dist['name'] . "\x1f" . ($distM ?? '')]
+                  ?? ($rankingConfigsNaam[$dist['name']] ?? null);
+        if (!$isFullFinal && $rcHit) {
+            $rc = $rcHit;
             $distRt = $dist['race_type'] ?? 'sprint';
             $afInfo['race_type'] = ($distRt && $distRt !== 'sprint') ? 'long_distance' : 'sprint';
 
