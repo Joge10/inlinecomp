@@ -60,6 +60,9 @@
 .wz-step.act .wz-num{ background:var(--blauw,#1F4E79); color:#fff; }
 .wz-step.wz-klik{ cursor:pointer; }
 .wz-step.wz-klik:hover{ opacity:1; border-color:var(--midden,#2E75B6); }
+/* Nog niet bereikbaar (vorige stap niet klaar): niet klikbaar, gedempt. */
+.wz-step.wz-step-uit{ cursor:default; opacity:.32; }
+.wz-step.wz-step-uit:hover{ opacity:.32; border-color:var(--border,#d3dbe3); box-shadow:none; }
 .wz-lbl{ font-size:.82rem; font-weight:600; color:#33404f; }
 .wz-lbl small{ display:block; font-weight:400; color:#8291a4; font-size:.72rem; }
 

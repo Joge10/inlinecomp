@@ -142,6 +142,7 @@
             reconstrueerDeel3(data);   // opgeslagen programma terughalen (indien aanwezig)
             d1Snapshot = d1Vinger();   // baseline voor de dirty-check
             render();
+            wzUpdateStappen();         // tab-bereikbaarheid o.b.v. opgeslagen stand
         } catch (e) {
             toonFout(e.message || 'Kon de wedstrijd-gegevens niet laden.');
         }
@@ -296,8 +297,8 @@
         d.addEventListener('click', e => { if (e.target === d) sluitWizard(); });
         d.querySelector('#wz-tab-1a').addEventListener('click', () => zetTab('1a'));
         d.querySelector('#wz-tab-1b').addEventListener('click', () => zetTab('1b'));
-        d.querySelectorAll('.wz-step.wz-klik').forEach(el =>
-            el.addEventListener('click', () => zetStap(+el.dataset.step)));
+        d.querySelectorAll('.wz-step').forEach(el =>
+            el.addEventListener('click', () => { const n = +el.dataset.step; if (stapBereikbaar(n)) zetStap(n); }));
         return d;
     }
 
@@ -383,6 +384,26 @@
         f.querySelector('#wz-opslaan-verder').addEventListener('click', () => opslaan('stap2'));
     }
 
+    // Mag je naar stap n? Terug/huidige stap altijd; vooruit alleen als de
+    // vorige stap(pen) zijn opgeslagen — anders is de flow nog niet klaar en
+    // moet je via "Opslaan en verder" (die slaat op én gaat door).
+    function stapBereikbaar(n) {
+        if (n <= stap) return true;
+        const d = wzData || {};
+        if (n === 2) return !!(d.wizard_dc_gedaan || d.heeft_cat_config || d.heeft_programma);
+        if (n === 3) return !!(d.heeft_cat_config || d.heeft_programma);
+        if (n === 4) return !!d.heeft_programma;
+        return true;
+    }
+    function wzUpdateStappen() {
+        if (!overlay) return;
+        overlay.querySelectorAll('.wz-step').forEach(el => {
+            const n = +el.dataset.step;
+            el.classList.toggle('act', n === stap);
+            el.classList.toggle('wz-step-uit', !stapBereikbaar(n));
+        });
+    }
+
     // Stap 1 (DC's, subtabs 1a/1b) ↔ 2 (afstand-instellingen) ↔ 3 (programma).
     function zetStap(n) {
         if (!overlay) return;
@@ -391,8 +412,7 @@
         const _titel = overlay.querySelector('#wz-titel small');
         if (_titel) _titel.textContent = WZ_TITELS[n] || '';
         overlay.querySelector('#wz-status').innerHTML = statusBanner();   // banner is stap-afhankelijk
-        overlay.querySelectorAll('.wz-step').forEach(el =>
-            el.classList.toggle('act', +el.dataset.step === n));
+        wzUpdateStappen();
         overlay.querySelector('.wz-subtabs').style.display = n === 1 ? '' : 'none';
         overlay.querySelector('#wz-2').classList.toggle('wz-hidden', n !== 2);
         overlay.querySelector('#wz-3').classList.toggle('wz-hidden', n !== 3);
@@ -1926,6 +1946,7 @@
                 categorieen:    bouwCategorieen(),
             });
             d2Changed = false;
+            if (wzData) wzData.heeft_programma = true;   // stap 4 nu bereikbaar
             if (daarna === 'sluit') { sluitWizard(); return; }
             if (daarna === 'stap4') { zetStap(4); return; }
             btns.forEach(b => b.disabled = false);
