@@ -919,7 +919,14 @@ try {
             $stmt = $pdo->prepare("SELECT entries_version, tijdschema_version FROM competitions WHERE id = ?");
             $stmt->execute([$compId]);
             $v = $stmt->fetch(PDO::FETCH_ASSOC) ?: ['entries_version' => 0, 'tijdschema_version' => 0];
-            echo json_encode(['entries_version' => (int)$v['entries_version'], 'tijdschema_version' => (int)$v['tijdschema_version']]);
+            // Lichte loting-indicator (voor o.a. de wizard-knop): zijn er heats?
+            $hStmt = $pdo->prepare("SELECT COUNT(*) FROM heats WHERE competition_id = ?");
+            $hStmt->execute([$compId]);
+            echo json_encode([
+                'entries_version'    => (int)$v['entries_version'],
+                'tijdschema_version' => (int)$v['tijdschema_version'],
+                'heeft_loting'       => (int)$hStmt->fetchColumn() > 0,
+            ]);
             exit;
         }
         echo json_encode(fetchSchema($pdo, $compId));

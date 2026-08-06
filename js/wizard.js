@@ -56,11 +56,26 @@
     // Markeer een onopgeslagen wijziging + onthoud de stap (voor de footer-melding).
     function d2MarkWijziging() { d2Changed = true; d2WijzigStap = stap; }
 
+    let wizardGeloot = false;   // heeft de huidige wedstrijd al een loting? (knop-disable)
+
     function wizardResetVoorWedstrijd(cid) {
-        compId = cid || null;
+        const nieuw = cid || null;
+        const veranderd = nieuw !== compId;
+        compId = nieuw;
+        if (veranderd) { wizardGeloot = false; if (compId) wizardCheckGeloot(compId); }
         wizardUpdateKnop();
     }
     window.wizardResetVoorWedstrijd = wizardResetVoorWedstrijd;
+
+    // Lichte check: is er al geloot? Zo ja → wizard heeft geen zin meer (wedstrijd
+    // is quasi begonnen) → knop disabled. Async; werkt de knop bij als 't antwoord er is.
+    async function wizardCheckGeloot(cid) {
+        try {
+            const res = await fetch('api/tijdschema.php?competition_id=' + encodeURIComponent(cid) + '&check_version=1');
+            const d = await res.json();
+            if (cid === compId) { wizardGeloot = !!d.heeft_loting; wizardUpdateKnop(); }
+        } catch (e) { /* geen blocker — knop blijft dan gewoon aan */ }
+    }
 
     // Knop alleen aan als er een wedstrijd is ÉN de import actueel is. Zolang
     // #btn-import klikbaar is (niks geïmporteerd / wijzigingen / nieuwe entries)
@@ -71,6 +86,7 @@
         const btn = document.getElementById('btn-wizard');
         if (!btn) return;
         if (!compId) { btn.disabled = true; btn.title = 'Selecteer eerst een wedstrijd (in Importeer)'; return; }
+        if (wizardGeloot) { btn.disabled = true; btn.title = 'Er is al geloot — de wizard is niet meer nodig. Beheer het tijdschema in de Tijdschema-module.'; return; }
         const imp = document.getElementById('btn-import');
         const importNodig = imp && !imp.disabled;
         btn.disabled = importNodig;
@@ -83,6 +99,7 @@
     // ── Open / sluit ─────────────────────────────────────────────────────────
     async function openWizard() {
         if (!compId) return;
+        if (wizardGeloot) return;   // al geloot — wizard heeft geen zin meer
         const imp = document.getElementById('btn-import');
         if (imp && !imp.disabled) return; // import niet actueel — knop hoort disabled te zijn
         if (!overlay) { overlay = bouwOverlay(); document.body.appendChild(overlay); }
