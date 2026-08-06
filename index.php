@@ -39,8 +39,8 @@ if (is_array($eigenScope) && !empty($eigenScope)) {
     <span class="badge">KNSB Inline</span>
     <span class="header-wedstrijd" id="header-wedstrijd" title="Huidige wedstrijd (selectie in Importeer)"></span>
     <div class="header-user">
-        <?php /* Tijdelijk owner-only tot de wizard (Deel 1) af is — nu nog voorbeelddata. */ ?>
-        <?php if (($gebruiker['role'] ?? '') === 'owner'): ?>
+        <?php /* Wizard = tijdschema-beheer → planner-rollen (owner/admin/planner). */ ?>
+        <?php if (in_array($gebruiker['role'] ?? '', ['owner', 'admin', 'planner'], true)): ?>
         <button class="header-wizard-btn" id="btn-wizard" title="Tijdschema-wizard openen" disabled>&#129668; Wizard</button>
         <?php endif; ?>
         <button class="header-printcenter-btn" id="btn-printcenter" title="Print-Center openen" disabled>&#128424; Print-Center</button>
