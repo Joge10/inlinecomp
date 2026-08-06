@@ -836,7 +836,16 @@
         overlay.querySelector('#wz-1a').innerHTML = `<div style="padding:24px;text-align:center;color:#b71c1c">${esc(msg)}</div>`;
     }
 
-    function esc(s) { return String(s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c])); }
+    // Canonieke geketende vorm — CodeQL herkent dit als HTML-escaping (de
+    // single-regex-met-callback-vorm werd niet als sanitizer gecrediteerd,
+    // waardoor xss-through-dom bleef flaggen op renderStap3's innerHTML).
+    function esc(s) {
+        return String(s)
+            .replace(/&/g, '&amp;')
+            .replace(/</g, '&lt;')
+            .replace(/>/g, '&gt;')
+            .replace(/"/g, '&quot;');
+    }
 
     function statusBanner() {
         if (locked === 'loting') {
