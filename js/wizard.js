@@ -41,6 +41,12 @@
     let d2Dirty = new Set();// Deel 2: groepen (ai|gi) met onopgeslagen wijzigingen (badge "gewijzigd")
     let d1Snapshot = null;  // vingerafdruk van de indeling bij openen/opslaan (Deel 1 dirty-check)
     let d2Changed = false;  // Deel 2 gewijzigd sinds openen/opslaan
+    let d3Dur   = {};       // Deel 3: heat-duur override per blok (afstand|meters|ronde → sec)
+    let d3Staggered = {};     // Deel 3: staggered start per afstand (afstand|meters → bool)
+    let d3Start = { datum: null, tijd: null };   // Deel 3: startmoment (anker voor de klok)
+    let d3Opts = null;      // Deel 3: vragen-vooraf (inrijden/pauze/ceremonie)
+    let d3InrijdCluster = {};   // Deel 3: groep-index → inrijd-cluster (1 of 2) bij 'geclusterd'
+    let d3Manueel = null;   // Deel 3: handmatige blok-volgorde (array items) — null = auto-afgeleid
 
     function wizardResetVoorWedstrijd(cid) {
         compId = cid || null;
@@ -91,8 +97,20 @@
             d2Locked = false;
             d2Dirty = new Set();
             d2Changed = false;
+            d3Dur = {};
+            d3Staggered = {};
+            d3Start = { datum: null, tijd: null };
+            d3Opts = { inrijden: true, inrijdenMode: 'gezamenlijk', inrijdenDuur: 15, voorbereidenDuur: 5, pauzeKolom: true, pauzeDuur: 10,
+                       lunch: true, lunchTijd: '12:30', lunchDuur: 30, ceremonie: true, ceremonieDuur: 20 };
+            d3InrijdCluster = {};
+            d3Manueel = null;
+            {
+                const m = String(data.comp_starts || '').match(/(\d{4}-\d{2}-\d{2})(?:[ T](\d{2}:\d{2}))?/);
+                if (m) { d3Start.datum = m[1]; d3Start.tijd = m[2] || '10:00'; }
+            }
             bouwState(data);
             reconstrueerDeel2(data);
+            reconstrueerDeel3(data);   // opgeslagen programma terughalen (indien aanwezig)
             d1Snapshot = d1Vinger();   // baseline voor de dirty-check
             render();
         } catch (e) {
@@ -260,21 +278,34 @@
         const f = overlay && overlay.querySelector('#wz-foot');
         if (!f) return;
         if (stap === 3) {
+            const kanD3 = locked !== 'loting';
+            const tip = locked === 'loting' ? 'Er is al geloot — het programma staat vast.' : '';
             f.innerHTML =
                 `<button class="wz-btn" id="wz-annuleer">Annuleren</button>
-                 <button class="wz-btn" id="wz-terug">← Stap 2</button>`;
+                 <button class="wz-btn" id="wz-terug">← Stap 2</button>
+                 <button class="wz-btn" id="wz-d3-opslaan-sluit" ${kanD3 ? '' : 'disabled'} title="${esc(tip)}">Opslaan en sluiten</button>
+                 <button class="wz-btn wz-btn-primair" id="wz-d3-opslaan" ${kanD3 ? '' : 'disabled'} title="${esc(tip)}">Programma opslaan</button>`;
             f.querySelector('#wz-annuleer').addEventListener('click', sluitWizard);
             f.querySelector('#wz-terug').addEventListener('click', () => zetStap(2));
+            const s = f.querySelector('#wz-d3-opslaan-sluit'); if (s) s.addEventListener('click', () => opslaanDeel3('sluit'));
+            const o = f.querySelector('#wz-d3-opslaan');       if (o) o.addEventListener('click', () => opslaanDeel3('blijf'));
             return;
         }
         if (stap === 2) {
             const kanD2 = locked !== 'loting';
             const tip = locked === 'loting' ? 'Er is al geloot — instellingen staan vast.' : '';
+            // Opslaan nodig? Bij onopgeslagen wijzigingen JA; ook bij een verse
+            // wedstrijd waar de config nog nooit is opgeslagen (defaults vastleggen).
+            // Anders (config bestaat al, niets gewijzigd) → alleen "Verder", het
+            // bestaande programma blijft dan intact.
+            const moetOpslaan = kanD2 && (d2Changed || !(wzData && wzData.heeft_cat_config));
+            const sluitLabel  = moetOpslaan ? 'Opslaan en sluiten' : 'Sluiten';
+            const verderLabel = moetOpslaan ? 'Opslaan en verder → stap 3' : 'Verder → stap 3';
             f.innerHTML =
                 `<button class="wz-btn" id="wz-annuleer">Annuleren</button>
                  <button class="wz-btn" id="wz-terug">← Stap 1</button>
-                 <button class="wz-btn" id="wz-d2-opslaan-sluit" ${kanD2 ? '' : 'disabled'} title="${esc(tip)}">Opslaan en sluiten</button>
-                 <button class="wz-btn wz-btn-primair" id="wz-d2-opslaan" ${kanD2 ? '' : 'disabled'} title="${esc(tip)}">Opslaan en verder →</button>`;
+                 <button class="wz-btn" id="wz-d2-opslaan-sluit" title="${esc(tip)}">${sluitLabel}</button>
+                 <button class="wz-btn wz-btn-primair" id="wz-d2-opslaan" title="${esc(tip)}">${verderLabel}</button>`;
             f.querySelector('#wz-annuleer').addEventListener('click', sluitWizard);
             f.querySelector('#wz-terug').addEventListener('click', () => zetStap(1));
             const s = f.querySelector('#wz-d2-opslaan-sluit'); if (s) s.addEventListener('click', () => opslaanDeel2('sluit'));
@@ -324,10 +355,389 @@
         }
         updateOpslaanKnop();
     }
+    // Deel 3: leid de ronde-blokken af uit de Deel-2-stand. Standaardvolgorde:
+    // per afstand-KOLOM (positie) eerst álle series-blokken, dan álle finale-
+    // blokken; kolom voor kolom. Binnen een kolom staan de afstanden al in
+    // groep-volgorde (jong→oud, dames eerst) omdat d2Afstanden kolom-gewijs
+    // itereert. Aantal heats per blok = som over de groepen.
+    function d3Blokken() {
+        const afs = d2Afstanden();
+        const info = afs.map((af, i) => {
+            const p = d2GetPar(af, i);
+            const series = p.format === 'series';
+            let heats = 0, finaleHeats = 0, totalN = 0;
+            af.groepen.forEach(gr => {
+                const u = d2Uitkomst(gr, p, series);
+                if (u.leeg || u.geenHg || u.onoplosbaar) return;
+                totalN += gr.N;                              // rijders in deze afstand
+                if (u.direct) { finaleHeats += 1; return; }
+                heats += (u.series || []).length;
+                finaleHeats += 1 + (u.B || []).length;      // 1 A-finale + de B-finales
+            });
+            return { af, series, heats, finaleHeats, totalN, pos: af.pos ?? i, hG: p.hG };
+        });
+        const mk = (x, ronde, heats) => ({ afstand: x.af.naam, meters: x.af.value_meters, race_type: x.af.race_type, ronde, heats, totalN: x.totalN, pos: x.pos });
+        const blokken = [];
+        [...new Set(info.map(x => x.pos))].sort((a, b) => a - b).forEach(pos => {
+            const kolom = info.filter(x => x.pos === pos);
+            kolom.forEach(x => { if (x.series && x.heats > 0) blokken.push(mk(x, 'heats', x.heats)); });   // eerst alle series
+            kolom.forEach(x => { if (x.finaleHeats > 0) blokken.push(mk(x, 'finale', x.finaleHeats)); });  // dan alle finales
+        });
+        return blokken;
+    }
+
+    // Voorstel heat-duur (sec) uit Geert's model: rijtijd bij 30 km/h (8,33 m/s)
+    // + klaarzetten/opstel/marge naar start-model. Aan de ruime kant. Aanpasbaar.
+    function d3Rond30(sec) { return Math.ceil(Math.max(0, sec) / 30) * 30; }   // altijd naar boven op 30s
+    // Staggered start (rijders met interval na elkaar, ~10s apart) — niet
+    // betrouwbaar uit de naam: DTT/dual is NIET staggered, tijdrit/slalom WEL.
+    function d3StaggeredDefault(b) { const n = (b.afstand || '').toLowerCase(); return /slalom|tijdrit/.test(n) && !/dtt|dual/.test(n); }
+    function d3IsStaggered(b) { const k = b.afstand + '|' + b.meters; return d3Staggered[k] != null ? d3Staggered[k] : d3StaggeredDefault(b); }
+    function d3HeatDuur(b) {
+        const rij = b.meters ? Math.round(b.meters / 8.33) : 0;   // rijtijd bij 30 km/h
+        const N = b.heats ? Math.max(1, Math.round((b.totalN || 0) / b.heats)) : Math.max(1, b.totalN || 1);  // rijders per heat
+        let sec;
+        if (d3IsStaggered(b))                sec = 30 + rij + Math.max(0, N - 1) * 10 + 15;   // staggered, 10s/rijder
+        else if (b.race_type === 'sprint') sec = 45 + rij + (b.ronde === 'finale' ? 30 : 0);
+        else                               sec = rij + (180 + 5 * N) + 90;                  // pack: rijtijd + opstel(3min+5s/rijder) + jury
+        return d3Rond30(sec);
+    }
+    function d3MmSs(sec) { sec = Math.max(0, Math.round(sec)); return Math.floor(sec / 60) + ':' + String(sec % 60).padStart(2, '0'); }
+    function d3ParseMmSs(str) {
+        str = (str || '').trim(); if (str === '') return null;
+        if (str.includes(':')) { const [m, s] = str.split(':'); return (parseInt(m, 10) || 0) * 60 + (parseInt(s, 10) || 0); }
+        return parseInt(str, 10) || 0;
+    }
+    function d3DurVoor(b) { const k = b.afstand + '|' + b.meters + '|' + b.ronde; return d3Dur[k] != null ? d3Dur[k] : d3HeatDuur(b); }
+    function d3StartSec() { return d3TijdSec(d3Start.tijd); }
+    function d3SecNaarTijd(sec) { sec = Math.round(sec); const h = Math.floor(sec / 3600) % 24, m = Math.floor((sec % 3600) / 60); return String(h).padStart(2, '0') + ':' + String(m).padStart(2, '0'); }
+
+    // Concept-programma, gesplitst in PRE (inrijden + voorbereiden — vóór het
+    // wedstrijdstart-anker, achterwaarts gerekend) en POST (rondes + pauzes +
+    // ceremonie — vanaf het anker). durKey = welke d3Opts-duur het blok stuurt.
+    // Inrijd-cluster (1 of 2) van een groep; default: niet-lege groepen jong→oud
+    // in tweeën gesplitst (eerste helft = 1).
+    function d3Cluster(gi) {
+        if (d3InrijdCluster[gi]) return d3InrijdCluster[gi];
+        const nietLeeg = state.groepen.map((g, i) => i).filter(i => state.groepen[i].leden.length);
+        return nietLeeg.indexOf(gi) < Math.ceil(nietLeeg.length / 2) ? 1 : 2;
+    }
+    function d3Programma() {
+        const pre = [], post = [];
+        if (d3Opts.inrijden) {
+            // dc-id's per inrijd-blok (primaire dc per groep) → tijdschema
+            // vinkt de juiste categorieën aan. Zelfde primair-dc als groepDoelen.
+            const doelen = groepDoelen();
+            const dcVoorGi = gi => (doelen[gi] ? doelen[gi].dc_id : null);
+            const inr = (label, dcs) => pre.push({ type: 'inrijden', duur: d3Opts.inrijdenDuur, durKey: 'inrijdenDuur', label, dcs: [...new Set((dcs || []).filter(Boolean))] });
+            if (d3Opts.inrijdenMode === 'groepen') {
+                state.groepen.forEach((g, gi) => { if (g.leden.length) inr('Inrijden — ' + g.label, [dcVoorGi(gi)]); });
+            } else if (d3Opts.inrijdenMode === 'geclusterd') {
+                [1, 2].forEach(c => {
+                    const gis = state.groepen.map((g, gi) => gi).filter(gi => state.groepen[gi].leden.length && d3Cluster(gi) === c);
+                    if (gis.length) inr('Inrijden cluster ' + c, gis.map(dcVoorGi));
+                });
+            } else {
+                const gis = state.groepen.map((g, gi) => gi).filter(gi => state.groepen[gi].leden.length);
+                inr('Inrijden (gezamenlijk)', gis.map(dcVoorGi));
+            }
+            pre.push({ type: 'pauze', duur: d3Opts.voorbereidenDuur, durKey: 'voorbereidenDuur', label: 'Baan voorbereiden' });
+        }
+        let lastPos = null;
+        d3Blokken().forEach(b => {
+            if (d3Opts.pauzeKolom && lastPos != null && b.pos !== lastPos) post.push({ type: 'pauze', duur: d3Opts.pauzeDuur, durKey: 'pauzeDuur', label: 'Pauze' });
+            post.push({ type: 'ronde', b });
+            lastPos = b.pos;
+        });
+        if (d3Opts.ceremonie) post.push({ type: 'ceremonie', duur: d3Opts.ceremonieDuur, durKey: 'ceremonieDuur', label: 'Ceremonie' });
+        return { pre, post };
+    }
+    function d3ItemDuur(item) { return item.type === 'ronde' ? d3DurVoor(item.b) * item.b.heats : (item.duur || 0) * 60; }
+    const D3_ICON = { inrijden: '🛼', pauze: '☕', ceremonie: '🏅', wedstrijdstart: '🏁' };
+    function d3TijdSec(str) { if (!str) return null; const [h, m] = String(str).split(':'); return (parseInt(h, 10) || 0) * 3600 + (parseInt(m, 10) || 0) * 60; }
+
+    // Voeg pauzes samen die < 30 min racing uit elkaar liggen (twee pauzes vlak
+    // bij elkaar = onzin). Langste duur wint; lunch-identiteit blijft behouden.
+    function d3MergePauzes(items) {
+        const DREMPEL = 30 * 60, out = [];
+        let lastPauze = -1, racing = 0;
+        items.forEach(it => {
+            if (it.type === 'pauze') {
+                if (lastPauze >= 0 && racing < DREMPEL) {
+                    const prev = out[lastPauze], lunch = prev.lunch || it.lunch;
+                    out[lastPauze] = {
+                        type: 'pauze', duur: Math.max(prev.duur, it.duur), lunch,
+                        durKey: lunch ? 'lunchDuur' : prev.durKey,
+                        label: lunch ? 'Lunchpauze' : prev.label,
+                    };
+                    racing = 0; return;   // deze pauze valt samen met de vorige
+                }
+                out.push({ ...it }); lastPauze = out.length - 1; racing = 0;
+            } else { out.push(it); racing += d3ItemDuur(it); }
+        });
+        return out;
+    }
+
+    // Rijen mét begintijden: PRE achterwaarts vanaf het anker, wedstrijdstart-
+    // markering op het anker, POST voorwaarts (lunch ingeschoven op tijd-basis,
+    // daarna pauzes samengevoegd).
+    function d3ProgrammaMetTijden(anchor) {
+        const { pre, post } = d3Programma();
+        let postItems = post.slice();
+        if (d3Opts.lunch && anchor != null) {
+            const lunchSec = d3TijdSec(d3Opts.lunchTijd);
+            let cur = anchor, idx = -1;
+            for (let i = 0; i < postItems.length; i++) {
+                if (postItems[i].type === 'ronde' && cur >= lunchSec) { idx = i; break; }
+                cur += d3ItemDuur(postItems[i]);
+            }
+            if (idx >= 0) postItems.splice(idx, 0, { type: 'pauze', duur: d3Opts.lunchDuur, durKey: 'lunchDuur', label: 'Lunchpauze', lunch: true });
+        }
+        postItems = d3MergePauzes(postItems);
+
+        const rows = [];
+        const preTot = pre.reduce((s, it) => s + d3ItemDuur(it), 0);
+        let t = anchor != null ? anchor - preTot : null;
+        pre.forEach(it => { rows.push({ it, begin: t }); if (t != null) t += d3ItemDuur(it); });
+        rows.push({ it: { type: 'wedstrijdstart', label: 'Wedstrijdstart' }, begin: anchor });
+        let cur = anchor;
+        postItems.forEach(it => { rows.push({ it, begin: cur }); if (cur != null) cur += d3ItemDuur(it); });
+        return { rows, eind: cur };
+    }
+
+    // Bevries de auto-volgorde tot een bewerkbare lijst (voor slepen/toevoegen).
+    function d3Materialiseer() {
+        if (!d3Manueel) d3Manueel = d3ProgrammaMetTijden(d3StartSec()).rows.map(r => ({ ...r.it }));
+    }
+    // Huidige rijen mét tijden: handmatige lijst (PRE vóór, POST na de
+    // wedstrijdstart-markering) of anders de auto-afleiding.
+    function d3RijenHuidig() {
+        const anchor = d3StartSec();
+        if (!d3Manueel) return d3ProgrammaMetTijden(anchor);
+        const items = d3Manueel;
+        let ws = items.findIndex(it => it.type === 'wedstrijdstart'); if (ws < 0) ws = 0;
+        const rows = [];
+        const pre = items.slice(0, ws);
+        const preTot = pre.reduce((s, it) => s + d3ItemDuur(it), 0);
+        let t = anchor != null ? anchor - preTot : null;
+        pre.forEach(it => { rows.push({ it, begin: t }); if (t != null) t += d3ItemDuur(it); });
+        let cur = anchor;
+        items.slice(ws).forEach(it => { rows.push({ it, begin: cur }); if (cur != null && it.type !== 'wedstrijdstart') cur += d3ItemDuur(it); });
+        return { rows, eind: cur };
+    }
+    // Valideer een volgorde: races na de wedstrijdstart, finale na z'n series.
+    function d3VolgordeOk(items) {
+        const ws = items.findIndex(it => it.type === 'wedstrijdstart');
+        for (let i = 0; i < items.length; i++)
+            if (items[i].type === 'ronde' && ws >= 0 && i < ws) return 'races moeten ná de wedstrijdstart staan';
+        const heatsIdx = {};
+        items.forEach((it, i) => { if (it.type === 'ronde' && it.b.ronde === 'heats') heatsIdx[it.b.afstand + '|' + it.b.meters] = i; });
+        for (let i = 0; i < items.length; i++) {
+            const it = items[i];
+            if (it.type === 'ronde' && it.b.ronde === 'finale') {
+                const hi = heatsIdx[it.b.afstand + '|' + it.b.meters];
+                if (hi != null && hi > i) return 'een finale mag niet vóór z\'n series staan';
+            }
+        }
+        return null;
+    }
+
     function renderStap3() {
-        overlay.querySelector('#wz-3').innerHTML =
-            `<div class="wz-d3-soon"><h3>Deel 3 · Programma</h3>
-             <p>Blok-volgorde, pauzes en tijden — komt binnenkort.</p></div>`;
+        const el = overlay.querySelector('#wz-3');
+        if (!d3Blokken().length) {
+            el.innerHTML = `<p class="wz-hint">Nog geen afstanden met instellingen — vul eerst stap 2 in.</p>`;
+            return;
+        }
+        const rondeLbl = r => r === 'heats' ? 'Series' : 'Finales';
+        const o = d3Opts;
+        const manueel = !!d3Manueel;
+        const optsBar =
+            `<div class="wz-d3-opts">
+               <label class="wz-d3-opt"><input type="checkbox" ${o.inrijden ? 'checked' : ''} data-opt="inrijden"> Inrijden</label>
+               <select data-opt="inrijdenMode" ${o.inrijden ? '' : 'disabled'}>
+                 <option value="gezamenlijk" ${o.inrijdenMode === 'gezamenlijk' ? 'selected' : ''}>gezamenlijk</option>
+                 <option value="groepen" ${o.inrijdenMode === 'groepen' ? 'selected' : ''}>groepen apart</option>
+                 <option value="geclusterd" ${o.inrijdenMode === 'geclusterd' ? 'selected' : ''}>geclusterd (2)</option>
+               </select>
+               <input type="number" min="0" value="${o.inrijdenDuur}" data-opt="inrijdenDuur" ${o.inrijden ? '' : 'disabled'}><span class="wz-d3-optm">min</span>
+               <span class="wz-d3-optsep"></span>
+               <label class="wz-d3-opt"><input type="checkbox" ${o.pauzeKolom ? 'checked' : ''} data-opt="pauzeKolom"> Pauze tussen afstand-blokken</label>
+               <input type="number" min="0" value="${o.pauzeDuur}" data-opt="pauzeDuur" ${o.pauzeKolom ? '' : 'disabled'}><span class="wz-d3-optm">min</span>
+               <span class="wz-d3-optsep"></span>
+               <label class="wz-d3-opt"><input type="checkbox" ${o.lunch ? 'checked' : ''} data-opt="lunch"> Lunchpauze om</label>
+               <input type="time" value="${esc(o.lunchTijd)}" data-opt="lunchTijd" ${o.lunch ? '' : 'disabled'}>
+               <input type="number" min="0" value="${o.lunchDuur}" data-opt="lunchDuur" ${o.lunch ? '' : 'disabled'}><span class="wz-d3-optm">min</span>
+               <span class="wz-d3-optsep"></span>
+               <label class="wz-d3-opt"><input type="checkbox" ${o.ceremonie ? 'checked' : ''} data-opt="ceremonie"> Ceremonie</label>
+               <input type="number" min="0" value="${o.ceremonieDuur}" data-opt="ceremonieDuur" ${o.ceremonie ? '' : 'disabled'}><span class="wz-d3-optm">min</span>
+             </div>`;
+        const manueelBar =
+            `<div class="wz-d3-mbar"><span>🔧 Handmatige volgorde — sleep blokken om te herordenen.</span>
+               <button class="wz-d3-mbtn" id="wz-d3-addpauze">+ Pauze</button>
+               <button class="wz-d3-mbtn" id="wz-d3-regen">↻ Opnieuw genereren</button></div>`;
+        const startBar =
+            `<div class="wz-d3-start">
+               <label>Startdatum <input type="date" value="${esc(d3Start.datum || '')}" id="wz-d3-datum"></label>
+               <label>Starttijd <input type="time" value="${esc(d3Start.tijd || '')}" id="wz-d3-tijd"></label>
+             </div>
+             ${manueel ? manueelBar : optsBar + `<div class="wz-d3-mbar"><span>Programma naar wens? Voeg desgewenst een pauze in — het schema wordt dan handmatig bewerkbaar.</span><button class="wz-d3-mbtn" id="wz-d3-addpauze">+ Pauze</button></div>`}`;
+        const grN = gi => state.groepen[gi].leden.reduce((s, id) => s + (catMap[id].n || 0), 0);
+        const clusterPanel = (!manueel && o.inrijden && o.inrijdenMode === 'geclusterd')
+            ? `<div class="wz-d3-clusters">${[1, 2].map(c => {
+                const gis = state.groepen.map((g, gi) => gi).filter(gi => state.groepen[gi].leden.length && d3Cluster(gi) === c);
+                const tot = gis.reduce((s, gi) => s + grN(gi), 0);
+                const chips = gis.map(gi => `<button class="wz-d3-chip" data-cluster-gi="${gi}" title="Klik: naar het andere cluster">${esc(state.groepen[gi].label)} <small>${grN(gi)}</small></button>`).join('') || '<span class="wz-d3-cluster-leeg">leeg</span>';
+                return `<div class="wz-d3-cluster"><div class="wz-d3-cluster-kop">Inrijd-cluster ${c} <small>${tot} rijders</small></div><div class="wz-d3-cluster-chips">${chips}</div></div>`;
+            }).join('')}</div>`
+            : '';
+        const startSec = d3StartSec();
+        const { rows, eind: eindSec } = d3RijenHuidig();
+        // Rust per GROEP tussen opeenvolgende races (>30 min gewenst) — dekt
+        // series→finale én afstand→afstand. CRUCIAAL: een groep rijdt maar een
+        // DEEL van een blok. Binnen een blok rijden de groepen op categorie-
+        // volgorde (jong→oud), dus reken het werkelijke race-venster per groep.
+        const groepBlok = {};   // afKey → [{gi, series, finale}] in groep-volgorde
+        d2Afstanden().forEach((af, i) => {
+            const p = d2GetPar(af, i), series = p.format === 'series';
+            groepBlok[af.naam + '|' + (af.value_meters ?? '')] = af.groepen.slice().sort((a, b) => a.idx - b.idx).map(gr => {
+                const u = d2Uitkomst(gr, p, series);
+                if (u.leeg || u.geenHg || u.onoplosbaar) return null;
+                return { gi: gr.idx, series: u.direct ? 0 : (u.series || []).length, finale: u.direct ? 1 : (1 + (u.B || []).length) };
+            }).filter(Boolean);
+        });
+        const vensters = {};   // gi → [{start, eind, ri}] werkelijke race-vensters
+        rows.forEach((r, ri) => {
+            if (r.it.type !== 'ronde' || r.begin == null) return;
+            const b = r.it.b, heatDur = d3DurVoor(b);
+            let offset = 0;
+            (groepBlok[b.afstand + '|' + (b.meters ?? '')] || []).forEach(gb => {
+                const aantal = b.ronde === 'heats' ? gb.series : gb.finale;
+                if (aantal <= 0) return;
+                const start = r.begin + offset * heatDur;
+                (vensters[gb.gi] = vensters[gb.gi] || []).push({ start, eind: start + aantal * heatDur, ri });
+                offset += aantal;
+            });
+        });
+        const rustWarn = {};   // row-index → [{label, min}] met < 30 min rust
+        Object.keys(vensters).forEach(gi => {
+            // Sorteer op werkelijke starttijd — na handmatig verschuiven kan de
+            // rij-volgorde afwijken van de tijd-volgorde, dus niet op push-volgorde
+            // vertrouwen. De ⚠ hangt aan de rij van het láátste (latere) venster.
+            const w = vensters[gi].slice().sort((a, b) => a.start - b.start);
+            const label = state.groepen[gi].label;
+            for (let j = 1; j < w.length; j++) {
+                const rust = w[j].start - w[j - 1].eind;
+                if (rust < 1800) (rustWarn[w[j].ri] = rustWarn[w[j].ri] || []).push({ label, min: Math.round(rust / 60) });
+            }
+        });
+        const rijen = rows.map((r, i) => {
+            const it = r.it;
+            const dur = d3ItemDuur(it);
+            const begin = r.begin != null ? d3SecNaarTijd(r.begin) : '—';
+            if (it.type === 'wedstrijdstart') {
+                return `
+                <div class="wz-d3-blok wz-d3-rij-start">
+                  <span class="wz-d3-nr"></span>
+                  <span class="wz-d3-tijd">${begin}</span>
+                  <span class="wz-d3-nietronde"><b>${D3_ICON.wedstrijdstart} Wedstrijdstart</b> — eerste race</span>
+                </div>`;
+            }
+            if (it.type !== 'ronde') {
+                const dinp = manueel
+                    ? `<input type="number" min="0" value="${it.duur}" data-d3item="${i}"> min`
+                    : (it.durKey ? `<input type="number" min="0" value="${it.duur}" data-d3duur="${it.durKey}"> min` : `${it.duur} min`);
+                const del = manueel ? `<button class="wz-d3-del" data-d3del="${i}" title="Verwijderen">×</button>` : '';
+                return `
+                <div class="wz-d3-blok wz-d3-rij-${it.type}${it.lunch ? ' wz-d3-rij-lunch' : ''} wz-d3-drag" draggable="true" data-ri="${i}">
+                  <span class="wz-d3-nr">⠿</span>
+                  <span class="wz-d3-tijd">${begin}</span>
+                  <span class="wz-d3-nietronde">${D3_ICON[it.type]} ${esc(it.label)}</span>
+                  <label class="wz-d3-nrduur">${dinp}${del}</label>
+                </div>`;
+            }
+            const b = it.b;
+            const k = esc(b.afstand + '|' + b.meters + '|' + b.ronde);
+            const ak = esc(b.afstand + '|' + b.meters);
+            let warn = '';
+            if (rustWarn[i]) {
+                const txt = rustWarn[i].map(x => `${x.label} ${x.min} min`).join(', ');
+                warn = ` <span class="wz-d3-warn" title="Minder dan 30 min rust sinds de vorige race">⚠ rusttijd: ${esc(txt)}</span>`;
+            }
+            return `
+            <div class="wz-d3-blok wz-d3-drag" draggable="true" data-ri="${i}">
+              <span class="wz-d3-nr">⠿</span>
+              <span class="wz-d3-tijd">${begin}</span>
+              <span class="wz-d3-af">${esc(b.afstand)}${b.meters ? ` <small>${b.meters}m</small>` : ''}${warn}</span>
+              <span class="wz-d3-ronde wz-d3-ronde-${b.ronde}">${rondeLbl(b.ronde)}</span>
+              <span class="wz-d3-heats">${b.heats}×</span>
+              <label class="wz-d3-stag" title="Staggered start: rijders met interval na elkaar (tijdrit/slalom)"><input type="checkbox" ${d3IsStaggered(b) ? 'checked' : ''} data-d3stag="${ak}"> staggered</label>
+              <label class="wz-d3-hd">heat <input type="text" value="${d3MmSs(d3DurVoor(b))}" data-d3key="${k}" size="4"></label>
+              <span class="wz-d3-blokduur">${d3MmSs(dur)}</span>
+            </div>`;
+        }).join('');
+        const eind = eindSec != null ? d3SecNaarTijd(eindSec) : '—';
+        el.innerHTML =
+            `<p class="wz-hint">Concept-programma. Pas heat-duren en instellingen aan; de begintijden schuiven mee. Sleep een blok om te herordenen (finale kan niet vóór z'n series, races niet vóór de start).</p>
+             ${startBar}
+             ${clusterPanel}
+             <div class="wz-d3-lijst">${rijen}</div>
+             <div class="wz-d3-totaal">${startSec != null ? `Klaar rond <b>${eind}</b>` : 'Vul een starttijd in voor de tijden'}</div>`;
+        // Slepen (herordenen) — materialiseert de lijst; valideert de nieuwe volgorde.
+        let dragRi = null;
+        el.querySelectorAll('.wz-d3-drag').forEach(row => {
+            row.addEventListener('dragstart', () => { dragRi = +row.dataset.ri; });
+            row.addEventListener('dragover', e => { e.preventDefault(); row.classList.add('wz-d3-drop'); });
+            row.addEventListener('dragleave', () => row.classList.remove('wz-d3-drop'));
+            row.addEventListener('drop', e => {
+                e.preventDefault(); row.classList.remove('wz-d3-drop');
+                const tgt = +row.dataset.ri;
+                if (dragRi == null || tgt === dragRi) return;
+                d3Materialiseer();
+                const arr = d3Manueel.slice();
+                const [moved] = arr.splice(dragRi, 1);
+                arr.splice(dragRi < tgt ? tgt - 1 : tgt, 0, moved);
+                const fout = d3VolgordeOk(arr);
+                if (fout) { toonBevestigDialog('Dat kan niet: ' + fout + '.', 'Volgorde', 'OK', ''); return; }
+                d3Manueel = arr; d2Changed = true; renderStap3();
+            });
+        });
+        el.querySelectorAll('[data-d3del]').forEach(b =>
+            b.addEventListener('click', () => { d3Materialiseer(); d3Manueel.splice(+b.dataset.d3del, 1); d2Changed = true; renderStap3(); }));
+        el.querySelectorAll('input[data-d3item]').forEach(inp =>
+            inp.addEventListener('change', () => { d3Materialiseer(); const it = d3Manueel[+inp.dataset.d3item]; if (it) it.duur = Math.max(0, parseInt(inp.value, 10) || 0); d2Changed = true; renderStap3(); }));
+        const addP = el.querySelector('#wz-d3-addpauze');
+        if (addP) addP.addEventListener('click', () => {
+            d3Materialiseer();
+            // Bovenaan invoegen (i.p.v. onderaan) — meteen zichtbaar, geen scrollen
+            // bij lange lijsten. Sleep 'm daarna naar de gewenste plek.
+            d3Manueel.unshift({ type: 'pauze', duur: d3Opts.pauzeDuur, label: 'Pauze' });
+            d2Changed = true; renderStap3();
+        });
+        const regen = el.querySelector('#wz-d3-regen');
+        if (regen) regen.addEventListener('click', () => { d3Manueel = null; d2Changed = true; renderStap3(); });
+        el.querySelectorAll('[data-cluster-gi]').forEach(b =>
+            b.addEventListener('click', () => { const gi = +b.dataset.clusterGi; d3InrijdCluster[gi] = d3Cluster(gi) === 1 ? 2 : 1; d2Changed = true; renderStap3(); }));
+        el.querySelector('#wz-d3-datum').addEventListener('change', e => { d3Start.datum = e.target.value || null; d2Changed = true; });
+        el.querySelector('#wz-d3-tijd').addEventListener('change', e => { d3Start.tijd = e.target.value || null; d2Changed = true; renderStap3(); });
+        el.querySelectorAll('[data-opt]').forEach(inp =>
+            inp.addEventListener('change', () => {
+                const key = inp.dataset.opt;
+                if (inp.type === 'checkbox') d3Opts[key] = inp.checked;
+                else if (key === 'inrijdenMode') d3Opts[key] = inp.value;
+                else if (key === 'lunchTijd') d3Opts[key] = inp.value;
+                else d3Opts[key] = Math.max(0, parseInt(inp.value, 10) || 0);
+                d2Changed = true; renderStap3();
+            }));
+        el.querySelectorAll('input[data-d3duur]').forEach(inp =>
+            inp.addEventListener('change', () => { d3Opts[inp.dataset.d3duur] = Math.max(0, parseInt(inp.value, 10) || 0); d2Changed = true; renderStap3(); }));
+        el.querySelectorAll('input[data-d3key]').forEach(inp =>
+            inp.addEventListener('change', () => {
+                const v = d3ParseMmSs(inp.value);
+                if (v == null) delete d3Dur[inp.dataset.d3key]; else d3Dur[inp.dataset.d3key] = d3Rond30(v);
+                d2Changed = true; renderStap3();
+            }));
+        el.querySelectorAll('input[data-d3stag]').forEach(inp =>
+            inp.addEventListener('change', () => { d3Staggered[inp.dataset.d3stag] = inp.checked; d2Changed = true; renderStap3(); }));
     }
 
     function zetTab(t) {
@@ -825,7 +1235,7 @@
                 if (aid == null) return;
                 const d = byId[aid]; if (!d) return;
                 const k = key(d);
-                if (!map.has(k)) map.set(k, { naam: d.name, race_type: d.race_type, value_meters: d.value_meters, groepen: [] });
+                if (!map.has(k)) map.set(k, { naam: d.name, race_type: d.race_type, value_meters: d.value_meters, pos, groepen: [] });
                 map.get(k).groepen.push({ idx, label: g.label, N: groepN[idx] });
             });
         }
@@ -856,8 +1266,14 @@
     function reconstrueerDeel2(data) {
         d2Locked = !!data.heeft_cat_config;
         if (!d2Locked) return;
-        const afCfg = {}, catCfg = {};
-        (data.d2_afstand_config || []).forEach(a => { afCfg[a.dc_id + '|' + a.afstand_naam] = a; });
+        // Key op (dc, naam, meters) zodat "Sprint" 300m/500m los blijven;
+        // afCfgNaam is de naam-only fallback (oude config zonder value_meters).
+        const afCfg = {}, afCfgNaam = {}, catCfg = {};
+        (data.d2_afstand_config || []).forEach(a => {
+            afCfg[a.dc_id + '|' + a.afstand_naam + '|' + (a.value_meters ?? '')] = a;
+            const nk = a.dc_id + '|' + a.afstand_naam;
+            if (!(nk in afCfgNaam)) afCfgNaam[nk] = a;
+        });
         (data.d2_cat_config || []).forEach(c => { catCfg[c.dc_id + '|' + c.distance_id] = c; });
         const doelen = groepDoelen();
         d2Afstanden().forEach((af, i) => {
@@ -867,7 +1283,8 @@
             let anySeries = false;
             af.groepen.forEach(gr => {
                 const doel = doelen[gr.idx]; if (!doel) return;
-                const ac = afCfg[doel.dc_id + '|' + af.naam];
+                const ac = afCfg[doel.dc_id + '|' + af.naam + '|' + (af.value_meters ?? '')]
+                         ?? afCfgNaam[doel.dc_id + '|' + af.naam];
                 if (ac) { p.hG = ac.finale_heat_grootte; p.laatsteB = !!ac.laatste_b_grootste; }
                 const distId = d2DistanceId(doel.dc_id, doel.split_group, af.naam, af.value_meters, af.race_type);
                 const cc = distId ? catCfg[doel.dc_id + '|' + distId] : null;
@@ -905,6 +1322,7 @@
         html += afs.map((af, i) => d2Kaart(af, i)).join('');
         el.innerHTML = html;
         wireDeel2();
+        if (stap === 2) updateOpslaanKnop();   // footer live: Opslaan vs Verder
     }
 
     function d2Kaart(af, i) {
@@ -1099,7 +1517,7 @@
     function wireDeel2() {
         const el = overlay.querySelector('#wz-2');
         el.querySelectorAll('input[name="wz-sys"]').forEach(r =>
-            r.addEventListener('change', () => { if (!r.disabled) { d2Sys = r.value; d2Changed = true; } }));
+            r.addEventListener('change', () => { if (!r.disabled) { d2Sys = r.value; d2Changed = true; updateOpslaanKnop(); } }));
         el.querySelectorAll('.wz-seg').forEach(b =>
             b.addEventListener('click', () => {
                 const p = d2Par[b.dataset.naam]; if (!p) return;
@@ -1242,9 +1660,9 @@
                            laatste_b_grootste: lbEff ? 1 : 0, series_alleen_startvolgorde: sas };
                 }
                 catConfigs.push(cc);
-                const key = doel.dc_id + '|' + af.naam;
+                const key = doel.dc_id + '|' + af.naam + '|' + (af.value_meters ?? '');
                 if (!afMap.has(key)) afMap.set(key, {
-                    dc_id: doel.dc_id, afstand_naam: af.naam,
+                    dc_id: doel.dc_id, afstand_naam: af.naam, value_meters: af.value_meters ?? null,
                     finale_heat_grootte: p.hG || 6, finale_b_grootte: p.hG || 6,
                     laatste_b_grootste: p.laatsteB ? 1 : 0, seeding: 'slang', race_type: af.race_type,
                 });
@@ -1257,8 +1675,24 @@
     // daarna: 'sluit' = wizard dicht · 'stap3' = door naar programma (stap 3)
     async function opslaanDeel2(daarna) {
         if (locked === 'loting') return;
+        // Niets gewijzigd én config bestaat al → NIET opnieuw opslaan (zo blijft
+        // een bestaand programma intact), gewoon door/sluiten. Bij een verse
+        // wedstrijd (nog geen config) slaan we de defaults juist wél op.
+        if (!d2Changed && wzData && wzData.heeft_cat_config) {
+            if (daarna === 'sluit') { sluitWizard(); return; }
+            zetStap(3);
+            return;
+        }
         const payload = bouwDeel2Payload();
         if (payload.error) { toonOpslaanMelding(payload.error, false); return; }
+        // Er is al een programma én de instellingen zijn gewijzigd → dat programma
+        // wordt opnieuw voorgesteld (handmatige volgorde/pauzes gaan verloren).
+        if (wzData && wzData.heeft_programma) {
+            const ok = await toonBevestigDialog(
+                'Er is al een programma. Door de gewijzigde afstand-instellingen op te slaan wordt het programma opnieuw voorgesteld — je handmatige volgorde en ingevoegde pauzes gaan verloren. Doorgaan?',
+                'Programma wordt opnieuw voorgesteld', 'Ja, opslaan', 'Annuleren');
+            if (!ok) return;
+        }
         const btns = overlay.querySelectorAll('#wz-d2-opslaan, #wz-d2-opslaan-sluit');
         btns.forEach(b => b.disabled = true);
         toonOpslaanMelding('Opslaan…', true);
@@ -1269,7 +1703,151 @@
             if (daarna === 'sluit') { sluitWizard(); return; }
             // Herlaad de opgeslagen stand (reconstructie == DB) en ga naar stap 3.
             await openWizard();
+            // Deel 2 is zojuist (her)opgeslagen → toon een VERS auto-programma
+            // i.p.v. een mogelijk verouderde reconstructie van oude blokken.
+            d3Manueel = null;
             zetStap(3);
+        } catch (e) {
+            btns.forEach(b => b.disabled = false);
+            toonOpslaanMelding('Opslaan mislukt: ' + (e.message || ''), false);
+        }
+    }
+
+    // ── Deel 3 opslaan (increment 4a: programma-blokken) ──────────────────────
+    // Bouw de geordende blokkenlijst uit de huidige rijen (auto-afleiding óf
+    // handmatige volgorde). Elke rij → één tijdschema_blokken-rij.
+    function bouwDeel3Payload() {
+        const { rows } = d3RijenHuidig();
+        const blokken = rows.map(r => {
+            const it = r.it;
+            if (it.type === 'wedstrijdstart') {
+                return { blok_type: 'wedstrijdstart', tijdstip: d3Start.tijd || null, datum: d3Start.datum || null };
+            }
+            if (it.type === 'ronde') {
+                const b = it.b;
+                return {
+                    blok_type:    'ronde',
+                    afstand_naam: b.afstand,
+                    value_meters: b.meters ?? null,
+                    ronde_type:   b.ronde,          // 'heats' | 'finale'
+                    heat_duur:    d3DurVoor(b),     // seconden
+                };
+            }
+            // inrijden → dc-id's meesturen zodat tijdschema de juiste categorieën
+            // aanvinkt. pauze/ceremonie → alleen duur; geen auto-opmerking (die
+            // vul je desgewenst zelf in de main in).
+            if (it.type === 'inrijden') {
+                return { blok_type: 'inrijden', duur: it.duur || 0, inrijd_cats: it.dcs || [] };
+            }
+            return { blok_type: it.type, duur: it.duur || 0 };
+        });
+        return { blokken, datum: d3Start.datum || null, tijd: d3Start.tijd || null };
+    }
+
+    // Herstel Deel 3 uit de opgeslagen programma-blokken (bij heropenen), zodat
+    // handmatige volgorde, ingevoegde pauzes, heat-duren, startmoment en de
+    // inrijd-clusters bewaard blijven. Zonder opgeslagen blokken → auto-afleiding.
+    function reconstrueerDeel3(data) {
+        const blokken = data && data.d3_blokken;
+        if (!Array.isArray(blokken) || !blokken.length) return;   // geen programma → auto
+
+        // tijdschema_blokken bevat afstand+meters+ronde+heat_duur, maar niet de
+        // afgeleide info (heats/totalN/pos/race_type). Match op de auto-blokken.
+        const bLookup = {};
+        d3Blokken().forEach(b => { bLookup[b.afstand + '|' + (b.meters ?? '') + '|' + b.ronde] = b; });
+
+        const items = [];
+        let heeftRonde = false;
+        blokken.forEach(bl => {
+            const t = bl.blok_type;
+            if (t === 'ronde') {
+                const ronde = bl.ronde_type === 'heats' ? 'heats' : 'finale';
+                const b = bLookup[(bl.afstand_naam || '') + '|' + (bl.value_meters ?? '') + '|' + ronde];
+                if (!b) return;   // afstand niet meer in Deel 2 → overslaan
+                items.push({ type: 'ronde', b });
+                heeftRonde = true;
+                if (bl.heat_duur != null) d3Dur[b.afstand + '|' + b.meters + '|' + b.ronde] = parseInt(bl.heat_duur, 10) || 0;
+            } else if (t === 'wedstrijdstart') {
+                items.push({ type: 'wedstrijdstart', label: 'Wedstrijdstart' });
+                if (bl.tijdstip) d3Start.tijd = String(bl.tijdstip).slice(0, 5);
+                if (bl.datum)    d3Start.datum = bl.datum;
+            } else if (t === 'inrijden') {
+                let dcs = [];
+                try { dcs = JSON.parse(bl.inrijd_cats || '[]') || []; } catch (e) { dcs = []; }
+                items.push({ type: 'inrijden', duur: parseInt(bl.duur, 10) || 0, label: 'Inrijden', dcs });
+            } else if (t === 'pauze') {
+                items.push({ type: 'pauze', duur: parseInt(bl.duur, 10) || 0, label: 'Pauze' });
+            } else if (t === 'ceremonie') {
+                items.push({ type: 'ceremonie', duur: parseInt(bl.duur, 10) || 0, label: 'Ceremonie' });
+            }
+            // 'herstart' produceert de wizard niet → overslaan
+        });
+
+        // Alleen laden als er echt een programma is (≥ 1 ronde-blok).
+        if (heeftRonde) d3Manueel = items;
+    }
+
+    // Merge/split-bewuste categorielijst (catVanJS) voor genereerRitten: per
+    // (afstand, wizard-groep) één entry met dc_id (primair), distance_id, aantal
+    // en gecombineerde KNSB-codes voor de jong→oud-sortering — net als de
+    // tijdschema-pagina zelf doet (bouwAfstandGroepen).
+    function bouwCategorieen() {
+        const doelen = groepDoelen();
+        const cats = [];
+        d2Afstanden().forEach(af => {
+            af.groepen.forEach(gr => {
+                const doel = doelen[gr.idx]; if (!doel) return;
+                const distId = d2DistanceId(doel.dc_id, doel.split_group, af.naam, af.value_meters, af.race_type);
+                if (!distId) return;   // afstand niet in DB → overslaan
+                const codes = [...new Set((state.groepen[gr.idx].leden || [])
+                    .map(id => catMap[id] && catMap[id].code).filter(Boolean))];
+                cats.push({
+                    afstand_naam:    af.naam,
+                    value_meters:    af.value_meters ?? null,
+                    dc_id:           doel.dc_id,
+                    dc_naam:         gr.label,
+                    distance_id:     distId,
+                    n:               gr.N,
+                    category_filter: codes.join(','),
+                });
+            });
+        });
+        return cats;
+    }
+
+    async function opslaanDeel3(daarna) {
+        if (locked === 'loting') return;
+        if (!d3Blokken().length) {
+            toonOpslaanMelding('Nog geen afstanden met instellingen — vul eerst stap 2 in.', false);
+            return;
+        }
+        // Er is al een programma → opnieuw opslaan regenereert de ritten; een
+        // handmatige rit-volgorde (bijv. rustverdeling) uit het Tijdschema gaat
+        // daarbij verloren. De wizard werkt op blok-niveau en ziet die niet.
+        if (wzData && wzData.heeft_programma) {
+            const ok = await toonBevestigDialog(
+                'Er is al een programma. Opnieuw opslaan regenereert de ritten — een handmatige rit-volgorde (bijv. betere rustverdeling) die je in het Tijdschema hebt gemaakt, gaat daarbij verloren. Doorgaan?',
+                'Programma opnieuw genereren', 'Ja, opslaan', 'Annuleren');
+            if (!ok) return;
+        }
+        const payload = bouwDeel3Payload();
+        const btns = overlay.querySelectorAll('#wz-d3-opslaan, #wz-d3-opslaan-sluit');
+        btns.forEach(b => b.disabled = true);
+        toonOpslaanMelding('Opslaan…', true);
+        try {
+            const res = await postJson('api/wizard_deel3.php', { competition_id: compId, ...payload });
+            // Ritten genereren uit de zojuist opgeslagen blokken + Deel 2-config.
+            // De genereer-actie is merge/split-bewust via de catVanJS-payload.
+            await postJson('api/tijdschema.php', {
+                action:         'genereer',
+                tijdschema_id:  res.tijdschema_id,
+                competition_id: compId,
+                categorieen:    bouwCategorieen(),
+            });
+            d2Changed = false;
+            if (daarna === 'sluit') { sluitWizard(); return; }
+            btns.forEach(b => b.disabled = false);
+            toonOpslaanMelding('Programma opgeslagen.', true);
         } catch (e) {
             btns.forEach(b => b.disabled = false);
             toonOpslaanMelding('Opslaan mislukt: ' + (e.message || ''), false);

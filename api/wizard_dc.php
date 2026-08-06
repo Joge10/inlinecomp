@@ -213,12 +213,17 @@ try {
     $sys->execute([$compId]);
     $systeem = $sys->fetchColumn() ?: null;
 
+    // Wedstrijd-startmoment (default voor Deel 3 wedstrijdstart-tijdstip).
+    $cs = $pdo->prepare("SELECT starts FROM competitions WHERE id = ?");
+    $cs->execute([$compId]);
+    $compStarts = $cs->fetchColumn() ?: null;
+
     // Bestaande Deel-2-config (voor reconstructie + vergrendel-modus).
     $d2Af = [];
     $d2Cat = [];
     if ($heeftCatConfig) {
         $q = $pdo->prepare("
-            SELECT ac.dc_id, ac.afstand_naam, ac.finale_heat_grootte, ac.finale_b_grootte,
+            SELECT ac.dc_id, ac.afstand_naam, ac.value_meters, ac.finale_heat_grootte, ac.finale_b_grootte,
                    ac.laatste_b_grootste, ac.finale_seeding
             FROM tijdschema_afstand_config ac
             JOIN competition_tijdschema ct ON ct.id = ac.tijdschema_id
@@ -229,6 +234,7 @@ try {
             $d2Af[] = [
                 'dc_id'               => $r['dc_id'],
                 'afstand_naam'        => $r['afstand_naam'],
+                'value_meters'        => $r['value_meters'] !== null ? (int)$r['value_meters'] : null,
                 'finale_heat_grootte' => (int)$r['finale_heat_grootte'],
                 'finale_b_grootte'    => (int)$r['finale_b_grootte'],
                 'laatste_b_grootste'  => (int)$r['laatste_b_grootste'],
@@ -259,16 +265,47 @@ try {
         }
     }
 
+    // Deel 3: opgeslagen programma-blokken (voor reconstructie bij heropenen).
+    // In volgorde; tijdstip als HH:MM zodat de wizard het direct in d3Start kan zetten.
+    $d3Blokken = [];
+    if ($heeftProgramma) {
+        $qb = $pdo->prepare("
+            SELECT b.blok_type, b.afstand_naam, b.value_meters, b.ronde_type,
+                   b.duur, b.inrijd_cats, TIME_FORMAT(b.tijdstip, '%H:%i') AS tijdstip,
+                   b.datum, b.heat_duur
+            FROM tijdschema_blokken b
+            JOIN competition_tijdschema ct ON ct.id = b.tijdschema_id
+            WHERE ct.competition_id = ?
+            ORDER BY b.volgorde, b.id
+        ");
+        $qb->execute([$compId]);
+        foreach ($qb->fetchAll(PDO::FETCH_ASSOC) as $r) {
+            $d3Blokken[] = [
+                'blok_type'    => $r['blok_type'],
+                'afstand_naam' => $r['afstand_naam'],
+                'value_meters' => $r['value_meters'] !== null ? (int)$r['value_meters'] : null,
+                'ronde_type'   => $r['ronde_type'],
+                'duur'         => $r['duur']      !== null ? (int)$r['duur']      : null,
+                'inrijd_cats'  => $r['inrijd_cats'],
+                'tijdstip'     => $r['tijdstip'],
+                'datum'        => $r['datum'],
+                'heat_duur'    => $r['heat_duur'] !== null ? (int)$r['heat_duur'] : null,
+            ];
+        }
+    }
+
     echo json_encode([
         'wizard_dc_gedaan'  => $wizardGedaan,
         'heeft_cat_config'  => $heeftCatConfig,
         'heeft_programma'   => $heeftProgramma,
         'heeft_loting'      => $heeftLoting,
         'systeem'           => $systeem,
+        'comp_starts'       => $compStarts,
         'categorien'        => $categorien,
         'distances_per_dc'  => (object)$distPerDc,
         'd2_afstand_config' => $d2Af,
         'd2_cat_config'     => $d2Cat,
+        'd3_blokken'        => $d3Blokken,
     ], JSON_UNESCAPED_UNICODE);
 
 } catch (Throwable $e) {

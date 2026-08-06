@@ -91,20 +91,22 @@ try {
     // ── afstand-config (per dc_id + afstand_naam) ───────────────────────────
     $insAf = $pdo->prepare("
         INSERT INTO tijdschema_afstand_config
-            (tijdschema_id, dc_id, afstand_naam, finale_heat_grootte, finale_b_grootte,
+            (tijdschema_id, dc_id, afstand_naam, value_meters, finale_heat_grootte, finale_b_grootte,
              laatste_b_grootste, finale_seeding, race_type, heats_ranking, finale_ranking)
-        VALUES (?,?,?,?,?,?,?,?,?,?)
+        VALUES (?,?,?,?,?,?,?,?,?,?,?)
     ");
     foreach ($afCfgs as $a) {
         $dcId = trim($a['dc_id'] ?? '');
         $naam = trim($a['afstand_naam'] ?? '');
         if ($dcId === '' || $naam === '') continue;
+        $vm = (array_key_exists('value_meters', $a) && $a['value_meters'] !== null && $a['value_meters'] !== '')
+            ? (int)$a['value_meters'] : null;
         $hg = max(1, (int)($a['finale_heat_grootte'] ?? 6));
         $bg = max($hg, (int)($a['finale_b_grootte'] ?? $hg));
         $lb = !empty($a['laatste_b_grootste']) ? 1 : 0;
         $sd = in_array($a['seeding'] ?? '', ['slang', 'tijdkoppeling', 'reverse_slang'], true) ? $a['seeding'] : 'slang';
         $rt = $a['race_type'] ?? 'sprint';
-        $insAf->execute([$tsId, $dcId, $naam, $hg, $bg, $lb, $sd, afRaceType($rt), heatsRankingVoor($rt), 'time']);
+        $insAf->execute([$tsId, $dcId, $naam, $vm, $hg, $bg, $lb, $sd, afRaceType($rt), heatsRankingVoor($rt), 'time']);
     }
 
     // ── cat-config (per dc_id + distance_id) ────────────────────────────────

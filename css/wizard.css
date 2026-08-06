@@ -276,9 +276,64 @@
     padding:5px 12px; border-radius:8px; cursor:pointer; font-size:.8rem; }
 .wz-d2-herleid:hover{ background:#f2f5f9; border-color:var(--midden,#2E75B6); }
 
-/* Stap 3 · placeholder */
-.wz-d3-soon{ text-align:center; color:#607089; padding:48px 20px; }
-.wz-d3-soon h3{ color:var(--blauw,#1F4E79); margin:0 0 8px; font-size:1.05rem; }
-.wz-d3-soon p{ margin:0; font-size:.9rem; }
+/* Stap 3 · programma (concept-blokken) */
+.wz-d3-start{ display:flex; gap:18px; align-items:center; background:var(--licht,#eef4fb);
+    border:1px solid #cfe0f0; border-radius:10px; padding:9px 14px; margin-bottom:14px; }
+.wz-d3-start label{ display:flex; align-items:center; gap:8px; font-size:.85rem; color:#33404f; }
+.wz-d3-start input{ height:32px; box-sizing:border-box; padding:4px 8px; border:1px solid var(--border,#d3dbe3); border-radius:6px; font-size:.85rem; }
+.wz-d3-clusters{ display:grid; grid-template-columns:1fr 1fr; gap:12px; margin-bottom:14px; }
+.wz-d3-cluster{ background:var(--surface-2,#fff); border:1px solid var(--border,#d3dbe3); border-radius:10px; padding:10px 12px; }
+.wz-d3-cluster-kop{ font-size:.8rem; font-weight:600; color:#33404f; margin-bottom:8px; }
+.wz-d3-cluster-kop small{ color:#8291a4; font-weight:400; }
+.wz-d3-cluster-chips{ display:flex; flex-wrap:wrap; gap:6px; }
+.wz-d3-chip{ border:1px solid var(--border,#d3dbe3); background:#eef4fb; color:#1f4e79; border-radius:20px;
+    padding:3px 10px; font-size:.78rem; cursor:pointer; }
+.wz-d3-chip:hover{ background:#dbe8fb; }
+.wz-d3-chip small{ color:#5f7590; }
+.wz-d3-cluster-leeg{ color:#93a1b3; font-size:.78rem; font-style:italic; }
+.wz-d3-lijst{ display:flex; flex-direction:column; gap:6px; }
+.wz-d3-blok{ display:grid; grid-template-columns:28px 46px minmax(0,2fr) auto 32px auto auto 64px; gap:12px; align-items:center;
+    background:var(--surface-2,#fff); border:1px solid var(--border,#d3dbe3); border-radius:8px; padding:9px 12px; }
+.wz-d3-tijd{ font-size:.85rem; font-weight:600; color:var(--blauw,#1F4E79); font-variant-numeric:tabular-nums; }
+.wz-d3-opts{ display:flex; flex-wrap:wrap; align-items:center; gap:8px; margin-bottom:14px; font-size:.82rem; color:#33404f; }
+.wz-d3-opt{ display:flex; align-items:center; gap:6px; }
+.wz-d3-opts input[type=number], .wz-d3-opts input[type=time], .wz-d3-opts select{ height:30px; box-sizing:border-box; padding:4px 6px; border:1px solid var(--border,#d3dbe3); border-radius:6px; font-size:.82rem; }
+.wz-d3-opts input[type=number]{ width:52px; }
+.wz-d3-optm{ color:#8291a4; font-size:.75rem; }
+.wz-d3-optsep{ width:1px; height:22px; background:#e2e8f0; margin:0 4px; }
+/* Blok-kleuren gelijk aan de main (tijdschema) voor herkenbaarheid. */
+.wz-d3-rij-pauze, .wz-d3-rij-lunch{ background:#fff8e1; border-color:#f0d060; }
+.wz-d3-rij-inrijden{ background:#e8f0fe; border-color:#7aa7f5; }
+.wz-d3-rij-ceremonie{ background:#fdecea; border-color:#e07070; border-left:4px solid #c0392b; }
+.wz-d3-rij-start{ background:#eaf7ea; border-color:#5cb85c; border-left:4px solid #2e8b2e; }
+.wz-d3-rij-start .wz-d3-nietronde{ color:#1e5c1e; }
+.wz-d3-warn{ font-size:.72rem; color:#8a5a09; background:#fdf0dd; padding:1px 8px; border-radius:20px; white-space:nowrap; }
+.wz-d3-drag{ cursor:grab; }
+.wz-d3-drag .wz-d3-nr{ color:#a7b2c1; cursor:grab; background:none; }
+.wz-d3-drop{ box-shadow:inset 0 3px 0 -1px var(--midden,#2E75B6); }
+.wz-d3-del{ border:0; background:none; color:#b71c1c; cursor:pointer; font-size:1rem; line-height:1; padding:0 4px; margin-left:8px; }
+.wz-d3-del:hover{ color:#7a1414; }
+.wz-d3-mbar{ display:flex; align-items:center; gap:10px; background:#eef4fb; border:1px solid #cfe0f0; border-radius:10px; padding:9px 14px; margin-bottom:14px; font-size:.85rem; color:#33404f; }
+.wz-d3-mbar span{ flex:1; }
+.wz-d3-mbtn{ border:1px solid var(--border,#d3dbe3); background:#fff; color:#33404f; padding:5px 12px; border-radius:8px; cursor:pointer; font-size:.8rem; }
+.wz-d3-mbtn:hover{ background:#f2f5f9; border-color:var(--midden,#2E75B6); }
+.wz-d3-nietronde{ grid-column:3 / 7; font-size:.85rem; color:#5f6e80; }
+.wz-d3-nrduur{ grid-column:7 / -1; justify-self:end; display:flex; align-items:center; gap:6px; font-size:.72rem; color:#8291a4; }
+.wz-d3-nrduur input{ width:48px; height:30px; box-sizing:border-box; padding:4px 6px; border:1px solid var(--border,#d3dbe3); border-radius:6px; }
+.wz-d3-stag{ display:flex; align-items:center; gap:5px; font-size:.72rem; color:#8291a4; white-space:nowrap; }
+.wz-d3-hd{ display:flex; align-items:center; gap:6px; font-size:.72rem; color:#8291a4; justify-self:end; }
+.wz-d3-hd input{ width:52px; height:30px; box-sizing:border-box; padding:4px 6px; border:1px solid var(--border,#d3dbe3); border-radius:6px; font-size:.85rem; text-align:center; }
+.wz-d3-blokduur{ font-size:.85rem; font-weight:600; color:#33404f; text-align:right; }
+.wz-d3-totaal{ margin-top:12px; text-align:right; font-size:.9rem; color:#33404f; }
+.wz-d3-totaal b{ color:var(--blauw,#1F4E79); }
+.wz-d3-nr{ width:24px; height:24px; border-radius:50%; background:#eef2f7; color:#5f6e80;
+    display:flex; align-items:center; justify-content:center; font-size:.75rem; font-weight:600; }
+.wz-d3-af{ font-weight:600; font-size:.9rem; color:#33404f; }
+.wz-d3-af small{ color:#8291a4; font-weight:400; }
+/* Ronde-badge gelijk aan de main: Series blauw, Finale groen, witte tekst. */
+.wz-d3-ronde{ font-size:.72rem; font-weight:600; padding:2px 10px; border-radius:20px; background:#adb5bd; color:#fff; }
+.wz-d3-ronde-heats{ background:#0d6efd; }
+.wz-d3-ronde-finale{ background:#198754; }
+.wz-d3-heats{ font-size:.8rem; color:#5f6e80; white-space:nowrap; }
 
 .wz-hidden{ display:none !important; }
