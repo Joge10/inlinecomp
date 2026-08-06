@@ -601,7 +601,7 @@
                <input type="number" min="0" value="${o.pauzeDuur}" data-opt="pauzeDuur" ${o.pauzeKolom ? '' : 'disabled'}><span class="wz-d3-optm">min</span>
                <span class="wz-d3-optsep"></span>
                <label class="wz-d3-opt"><input type="checkbox" ${o.lunch ? 'checked' : ''} data-opt="lunch"> Lunchpauze om</label>
-               <input type="time" value="${esc(o.lunchTijd)}" data-opt="lunchTijd" ${o.lunch ? '' : 'disabled'}>
+               <input type="time" data-opt="lunchTijd" ${o.lunch ? '' : 'disabled'}>
                <input type="number" min="0" value="${o.lunchDuur}" data-opt="lunchDuur" ${o.lunch ? '' : 'disabled'}><span class="wz-d3-optm">min</span>
                <span class="wz-d3-optsep"></span>
                <label class="wz-d3-opt"><input type="checkbox" ${o.ceremonie ? 'checked' : ''} data-opt="ceremonie"> Ceremonie</label>
@@ -613,8 +613,8 @@
                <button class="wz-d3-mbtn" id="wz-d3-regen">↻ Opnieuw genereren</button></div>`;
         const startBar =
             `<div class="wz-d3-start">
-               <label>Startdatum <input type="date" value="${esc(d3Start.datum || '')}" id="wz-d3-datum"></label>
-               <label>Starttijd <input type="time" value="${esc(d3Start.tijd || '')}" id="wz-d3-tijd"></label>
+               <label>Startdatum <input type="date" id="wz-d3-datum"></label>
+               <label>Starttijd <input type="time" id="wz-d3-tijd"></label>
              </div>
              ${manueel ? manueelBar : optsBar + `<div class="wz-d3-mbar"><span>Programma naar wens? Voeg desgewenst een pauze in — het schema wordt dan handmatig bewerkbaar.</span><button class="wz-d3-mbtn" id="wz-d3-addpauze">+ Pauze</button></div>`}`;
         const grN = gi => state.groepen[gi].leden.reduce((s, id) => s + (catMap[id].n || 0), 0);
@@ -718,6 +718,11 @@
              ${clusterPanel}
              <div class="wz-d3-lijst">${rijen}</div>
              <div class="wz-d3-totaal">${startSec != null ? `Klaar rond <b>${eind}</b>` : 'Vul een starttijd in voor de tijden'}</div>`;
+        // Datum/tijd via .value zetten (niet in de HTML-string) — deze waarden
+        // komen uit DOM-inputs; via innerHTML zou CodeQL het als xss-through-dom zien.
+        { const e1 = el.querySelector('#wz-d3-datum'); if (e1) e1.value = d3Start.datum || '';
+          const e2 = el.querySelector('#wz-d3-tijd');  if (e2) e2.value = d3Start.tijd || '';
+          const e3 = el.querySelector('[data-opt="lunchTijd"]'); if (e3) e3.value = d3Opts.lunchTijd || ''; }
         // Slepen (herordenen) — materialiseert de lijst; valideert de nieuwe volgorde.
         let dragRi = null;
         el.querySelectorAll('.wz-d3-drag').forEach(row => {
