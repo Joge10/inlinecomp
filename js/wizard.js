@@ -40,13 +40,21 @@
     let d2Locked = false;   // Deel 2: er staat al config in de DB → bulk op slot, alleen ✎
     let d2Dirty = new Set();// Deel 2: groepen (ai|gi) met onopgeslagen wijzigingen (badge "gewijzigd")
     let d1Snapshot = null;  // vingerafdruk van de indeling bij openen/opslaan (Deel 1 dirty-check)
-    let d2Changed = false;  // Deel 2 gewijzigd sinds openen/opslaan
+    let d2Changed = false;  // Deel 2/3 gewijzigd sinds openen/opslaan
+    let d2WijzigStap = null; // stap waar de laatste onopgeslagen wijziging is gemaakt
     let d3Dur   = {};       // Deel 3: heat-duur override per blok (afstand|meters|ronde → sec)
     let d3Staggered = {};     // Deel 3: staggered start per afstand (afstand|meters → bool)
     let d3Start = { datum: null, tijd: null };   // Deel 3: startmoment (anker voor de klok)
     let d3Opts = null;      // Deel 3: vragen-vooraf (inrijden/pauze/ceremonie)
     let d3InrijdCluster = {};   // Deel 3: groep-index → inrijd-cluster (1 of 2) bij 'geclusterd'
     let d3Manueel = null;   // Deel 3: handmatige blok-volgorde (array items) — null = auto-afgeleid
+    let d4Schema = null;    // Deel 4: geladen tijdschema-schema (ritten) — null = (her)laden
+    let d4Sel = new Set();  // Deel 4: geselecteerde rit-ids om te combineren
+    let d4Max = 12;         // Deel 4: max gecombineerde grootte (rijders)
+    let d4Open = new Set(); // Deel 4: uitgeklapte blok-ids (zoom)
+    const WZ_TITELS = { 1: "Deel 1 · DC's samenstellen", 2: 'Deel 2 · Afstand-instellingen', 3: 'Deel 3 · Programma', 4: 'Deel 4 · A-finales combineren' };
+    // Markeer een onopgeslagen wijziging + onthoud de stap (voor de footer-melding).
+    function d2MarkWijziging() { d2Changed = true; d2WijzigStap = stap; }
 
     function wizardResetVoorWedstrijd(cid) {
         compId = cid || null;
@@ -82,6 +90,9 @@
         zetTab('1a');
         overlay.querySelector('#wz-3').classList.add('wz-hidden');
         overlay.querySelector('#wz-2').classList.add('wz-hidden');
+        overlay.querySelector('#wz-4').classList.add('wz-hidden');
+        overlay.querySelector('#wz-4').innerHTML = '';
+        { const _t = overlay.querySelector('#wz-titel small'); if (_t) _t.textContent = WZ_TITELS[1]; }
         overlay.querySelector('.wz-subtabs').style.display = '';
         overlay.querySelectorAll('.wz-step').forEach(el => el.classList.toggle('act', el.dataset.step === '1'));
         toonLaden();
@@ -104,6 +115,7 @@
                        lunch: true, lunchTijd: '12:30', lunchDuur: 30, ceremonie: true, ceremonieDuur: 20 };
             d3InrijdCluster = {};
             d3Manueel = null;
+            d4Schema = null; d4Sel = new Set(); d4Open = new Set();
             {
                 const m = String(data.comp_starts || '').match(/(\d{4}-\d{2}-\d{2})(?:[ T](\d{2}:\d{2}))?/);
                 if (m) { d3Start.datum = m[1]; d3Start.tijd = m[2] || '10:00'; }
@@ -249,7 +261,7 @@
                 <div class="wz-step act wz-klik" data-step="1"><span class="wz-num">1</span><span class="wz-lbl">DC's samenstellen<small>groepen + afstanden</small></span></div>
                 <div class="wz-step wz-klik" data-step="2"><span class="wz-num">2</span><span class="wz-lbl">Afstand-instellingen<small>series, A-grootte</small></span></div>
                 <div class="wz-step wz-klik" data-step="3"><span class="wz-num">3</span><span class="wz-lbl">Programma<small>blok-volgorde</small></span></div>
-                <div class="wz-step" data-step="4"><span class="wz-num">4</span><span class="wz-lbl">A-finales combineren<small>optioneel</small></span></div>
+                <div class="wz-step wz-klik" data-step="4"><span class="wz-num">4</span><span class="wz-lbl">A-finales combineren<small>optioneel</small></span></div>
               </div>
               <div class="wz-subtabs">
                 <button id="wz-tab-1a" class="act">1a · Groepen vormen</button>
@@ -259,6 +271,7 @@
               <div id="wz-1b" class="wz-hidden"></div>
               <div id="wz-2" class="wz-hidden"></div>
               <div id="wz-3" class="wz-hidden"></div>
+              <div id="wz-4" class="wz-hidden"></div>
             </div>
             <div class="wz-foot" id="wz-foot"></div>
           </div>`;
@@ -277,18 +290,37 @@
     function renderFooter() {
         const f = overlay && overlay.querySelector('#wz-foot');
         if (!f) return;
+        // Melding links in de footer: er is een onopgeslagen wijziging (+ in welke stap).
+        const wijzigNote = d2Changed
+            ? `<span class="wz-foot-note" title="Ga via de stappenbalk bovenin naar die stap om de wijziging aan te passen of ongedaan te maken">● niet-opgeslagen wijziging${d2WijzigStap ? ' in stap ' + d2WijzigStap : ''}</span>`
+            : '';
+        if (stap === 4) {
+            f.innerHTML =
+                `<button class="wz-btn" id="wz-annuleer">Annuleren</button>
+                 <button class="wz-btn" id="wz-terug">← Stap 3</button>
+                 <button class="wz-btn wz-btn-primair" id="wz-d4-sluit">Klaar</button>`;
+            f.querySelector('#wz-annuleer').addEventListener('click', sluitWizard);
+            f.querySelector('#wz-terug').addEventListener('click', () => zetStap(3));
+            f.querySelector('#wz-d4-sluit').addEventListener('click', sluitWizard);
+            return;
+        }
         if (stap === 3) {
             const kanD3 = locked !== 'loting';
             const tip = locked === 'loting' ? 'Er is al geloot — het programma staat vast.' : '';
-            f.innerHTML =
+            // Opslaan nodig? Bij onopgeslagen wijzigingen JA; ook als er nog géén
+            // programma is. Anders (programma bestaat, niets gewijzigd) → alleen door.
+            const moetOpslaan = kanD3 && (d2Changed || !(wzData && wzData.heeft_programma));
+            const sluitLabel  = moetOpslaan ? 'Opslaan en sluiten' : 'Sluiten';
+            const verderLabel = moetOpslaan ? 'Opslaan en verder → stap 4' : 'Verder → stap 4';
+            f.innerHTML = wijzigNote +
                 `<button class="wz-btn" id="wz-annuleer">Annuleren</button>
                  <button class="wz-btn" id="wz-terug">← Stap 2</button>
-                 <button class="wz-btn" id="wz-d3-opslaan-sluit" ${kanD3 ? '' : 'disabled'} title="${esc(tip)}">Opslaan en sluiten</button>
-                 <button class="wz-btn wz-btn-primair" id="wz-d3-opslaan" ${kanD3 ? '' : 'disabled'} title="${esc(tip)}">Programma opslaan</button>`;
+                 <button class="wz-btn" id="wz-d3-opslaan-sluit" title="${esc(tip)}">${sluitLabel}</button>
+                 <button class="wz-btn wz-btn-primair" id="wz-d3-opslaan" title="${esc(tip)}">${verderLabel}</button>`;
             f.querySelector('#wz-annuleer').addEventListener('click', sluitWizard);
             f.querySelector('#wz-terug').addEventListener('click', () => zetStap(2));
             const s = f.querySelector('#wz-d3-opslaan-sluit'); if (s) s.addEventListener('click', () => opslaanDeel3('sluit'));
-            const o = f.querySelector('#wz-d3-opslaan');       if (o) o.addEventListener('click', () => opslaanDeel3('blijf'));
+            const o = f.querySelector('#wz-d3-opslaan');       if (o) o.addEventListener('click', () => opslaanDeel3('stap4'));
             return;
         }
         if (stap === 2) {
@@ -301,7 +333,7 @@
             const moetOpslaan = kanD2 && (d2Changed || !(wzData && wzData.heeft_cat_config));
             const sluitLabel  = moetOpslaan ? 'Opslaan en sluiten' : 'Sluiten';
             const verderLabel = moetOpslaan ? 'Opslaan en verder → stap 3' : 'Verder → stap 3';
-            f.innerHTML =
+            f.innerHTML = wijzigNote +
                 `<button class="wz-btn" id="wz-annuleer">Annuleren</button>
                  <button class="wz-btn" id="wz-terug">← Stap 1</button>
                  <button class="wz-btn" id="wz-d2-opslaan-sluit" title="${esc(tip)}">${sluitLabel}</button>
@@ -339,12 +371,15 @@
         if (!overlay) return;
         if (n === 2 && (!state || !state.groepen.length)) return;   // niks in te stellen
         stap = n;
+        const _titel = overlay.querySelector('#wz-titel small');
+        if (_titel) _titel.textContent = WZ_TITELS[n] || '';
         overlay.querySelector('#wz-status').innerHTML = statusBanner();   // banner is stap-afhankelijk
         overlay.querySelectorAll('.wz-step').forEach(el =>
             el.classList.toggle('act', +el.dataset.step === n));
         overlay.querySelector('.wz-subtabs').style.display = n === 1 ? '' : 'none';
         overlay.querySelector('#wz-2').classList.toggle('wz-hidden', n !== 2);
         overlay.querySelector('#wz-3').classList.toggle('wz-hidden', n !== 3);
+        overlay.querySelector('#wz-4').classList.toggle('wz-hidden', n !== 4);
         if (n === 1) {
             zetTab(subtab);
         } else {
@@ -352,6 +387,7 @@
             overlay.querySelector('#wz-1b').classList.add('wz-hidden');
             if (n === 2) renderDeel2();
             else if (n === 3) renderStap3();
+            else if (n === 4) { d4Schema = null; d4Sel = new Set(); renderStap4(); }  // vers laden
         }
         updateOpslaanKnop();
     }
@@ -698,27 +734,27 @@
                 arr.splice(dragRi < tgt ? tgt - 1 : tgt, 0, moved);
                 const fout = d3VolgordeOk(arr);
                 if (fout) { toonBevestigDialog('Dat kan niet: ' + fout + '.', 'Volgorde', 'OK', ''); return; }
-                d3Manueel = arr; d2Changed = true; renderStap3();
+                d3Manueel = arr; d2MarkWijziging(); renderStap3();
             });
         });
         el.querySelectorAll('[data-d3del]').forEach(b =>
-            b.addEventListener('click', () => { d3Materialiseer(); d3Manueel.splice(+b.dataset.d3del, 1); d2Changed = true; renderStap3(); }));
+            b.addEventListener('click', () => { d3Materialiseer(); d3Manueel.splice(+b.dataset.d3del, 1); d2MarkWijziging(); renderStap3(); }));
         el.querySelectorAll('input[data-d3item]').forEach(inp =>
-            inp.addEventListener('change', () => { d3Materialiseer(); const it = d3Manueel[+inp.dataset.d3item]; if (it) it.duur = Math.max(0, parseInt(inp.value, 10) || 0); d2Changed = true; renderStap3(); }));
+            inp.addEventListener('change', () => { d3Materialiseer(); const it = d3Manueel[+inp.dataset.d3item]; if (it) it.duur = Math.max(0, parseInt(inp.value, 10) || 0); d2MarkWijziging(); renderStap3(); }));
         const addP = el.querySelector('#wz-d3-addpauze');
         if (addP) addP.addEventListener('click', () => {
             d3Materialiseer();
             // Bovenaan invoegen (i.p.v. onderaan) — meteen zichtbaar, geen scrollen
             // bij lange lijsten. Sleep 'm daarna naar de gewenste plek.
             d3Manueel.unshift({ type: 'pauze', duur: d3Opts.pauzeDuur, label: 'Pauze' });
-            d2Changed = true; renderStap3();
+            d2MarkWijziging(); renderStap3();
         });
         const regen = el.querySelector('#wz-d3-regen');
-        if (regen) regen.addEventListener('click', () => { d3Manueel = null; d2Changed = true; renderStap3(); });
+        if (regen) regen.addEventListener('click', () => { d3Manueel = null; d2MarkWijziging(); renderStap3(); });
         el.querySelectorAll('[data-cluster-gi]').forEach(b =>
-            b.addEventListener('click', () => { const gi = +b.dataset.clusterGi; d3InrijdCluster[gi] = d3Cluster(gi) === 1 ? 2 : 1; d2Changed = true; renderStap3(); }));
-        el.querySelector('#wz-d3-datum').addEventListener('change', e => { d3Start.datum = e.target.value || null; d2Changed = true; });
-        el.querySelector('#wz-d3-tijd').addEventListener('change', e => { d3Start.tijd = e.target.value || null; d2Changed = true; renderStap3(); });
+            b.addEventListener('click', () => { const gi = +b.dataset.clusterGi; d3InrijdCluster[gi] = d3Cluster(gi) === 1 ? 2 : 1; d2MarkWijziging(); renderStap3(); }));
+        el.querySelector('#wz-d3-datum').addEventListener('change', e => { d3Start.datum = e.target.value || null; d2MarkWijziging(); updateOpslaanKnop(); });
+        el.querySelector('#wz-d3-tijd').addEventListener('change', e => { d3Start.tijd = e.target.value || null; d2MarkWijziging(); renderStap3(); });
         el.querySelectorAll('[data-opt]').forEach(inp =>
             inp.addEventListener('change', () => {
                 const key = inp.dataset.opt;
@@ -726,18 +762,19 @@
                 else if (key === 'inrijdenMode') d3Opts[key] = inp.value;
                 else if (key === 'lunchTijd') d3Opts[key] = inp.value;
                 else d3Opts[key] = Math.max(0, parseInt(inp.value, 10) || 0);
-                d2Changed = true; renderStap3();
+                d2MarkWijziging(); renderStap3();
             }));
         el.querySelectorAll('input[data-d3duur]').forEach(inp =>
-            inp.addEventListener('change', () => { d3Opts[inp.dataset.d3duur] = Math.max(0, parseInt(inp.value, 10) || 0); d2Changed = true; renderStap3(); }));
+            inp.addEventListener('change', () => { d3Opts[inp.dataset.d3duur] = Math.max(0, parseInt(inp.value, 10) || 0); d2MarkWijziging(); renderStap3(); }));
         el.querySelectorAll('input[data-d3key]').forEach(inp =>
             inp.addEventListener('change', () => {
                 const v = d3ParseMmSs(inp.value);
                 if (v == null) delete d3Dur[inp.dataset.d3key]; else d3Dur[inp.dataset.d3key] = d3Rond30(v);
-                d2Changed = true; renderStap3();
+                d2MarkWijziging(); renderStap3();
             }));
         el.querySelectorAll('input[data-d3stag]').forEach(inp =>
-            inp.addEventListener('change', () => { d3Staggered[inp.dataset.d3stag] = inp.checked; d2Changed = true; renderStap3(); }));
+            inp.addEventListener('change', () => { d3Staggered[inp.dataset.d3stag] = inp.checked; d2MarkWijziging(); renderStap3(); }));
+        if (stap === 3) updateOpslaanKnop();   // footer live: Verder → vs Opslaan en verder →
     }
 
     function zetTab(t) {
@@ -764,12 +801,21 @@
             return `<div class="wz-band" style="background:#fce4e4;border-color:#f5b5b5;color:#b71c1c">🔒 Er is al geloot — <b>alleen-lezen</b>.</div>`;
         }
         if (locked === 'structureel') {
-            // Deze melding gaat over stap 1 (indeling vast) → op stap 2 zelf niet
-            // tonen; daar spreken de "opgeslagen"-badges + "Opnieuw afleiden".
-            if (stap === 2) return '';
-            // Onderscheid: een echt programma (Deel 3) vs. alleen afstand-
-            // instellingen (Deel 2). Beide zetten de indeling (stap 1) vast.
-            return (wzData && wzData.heeft_programma)
+            const heeftProg = wzData && wzData.heeft_programma;
+            // Stap 2: waarschuw vooraf dat opslaan het bestaande programma opnieuw
+            // genereert (combinaties + handmatige rit-volgorde gaan verloren).
+            if (stap === 2) {
+                return heeftProg
+                    ? `<div class="wz-band" style="background:#fdf1dd;border-color:#e8c98a">⚠ Er is al een programma. Als je hier iets wijzigt en opslaat, wordt het programma opnieuw gegenereerd — A-finale-combinaties en handmatige rit-volgorde gaan verloren.</div>`
+                    : '';
+            }
+            if (stap === 3) {
+                return heeftProg
+                    ? `<div class="wz-band" style="background:#fdf1dd;border-color:#e8c98a">⚠ Er is al een programma. Wijzig je hier iets (blok verschuiven, duur, pauze) en sla je op, dan wordt het opnieuw gegenereerd — A-finale-combinaties en handmatige rit-volgorde gaan verloren.</div>`
+                    : '';
+            }
+            // Stap 1: indeling (groepen + afstanden) ligt vast.
+            return heeftProg
                 ? `<div class="wz-band">⚠ De indeling (groepen + afstanden) ligt vast — er is al een programma. Wil je de indeling wijzigen, wis het programma dan eerst in het Tijdschema.</div>`
                 : `<div class="wz-band">⚠ De indeling (groepen + afstanden) ligt vast — er zijn al afstand-instellingen gemaakt. Wil je de indeling wijzigen, verwijder die dan eerst in het Tijdschema.</div>`;
         }
@@ -790,14 +836,14 @@
     function catCard(id) {
         const c = catMap[id]; const leeg = c.n === 0 ? ' wz-leeg' : '';
         const chip = c.feedCombined ? '' : `<span class="wz-code">${esc(c.code)}</span>`;
-        return `<div class="wz-cat" ${locked ? '' : 'draggable="true"'} data-id="${esc(id)}">
+        return `<div class="wz-cat${locked ? ' wz-vast' : ''}" ${locked ? '' : 'draggable="true"'} data-id="${esc(id)}">
             <div class="wz-n${leeg}">${c.n}</div>
             <div class="wz-meta"><div class="wz-nm">${esc(catNaam(c))}</div>${chip}${telLabels(c, false)}</div>
           </div>`;
     }
     function lidRow(id) {
         const c = catMap[id]; const leeg = c.n === 0 ? ' wz-leeg' : '';
-        return `<div class="wz-lid" ${locked ? '' : 'draggable="true"'} data-id="${esc(id)}">
+        return `<div class="wz-lid${locked ? ' wz-vast' : ''}" ${locked ? '' : 'draggable="true"'} data-id="${esc(id)}">
             <div class="wz-ln${leeg}">${c.n}</div><div class="wz-lnm">${esc(catNaam(c))}</div><span class="wz-lcode">${esc(c.code)}</span>${telLabels(c, true)}
           </div>`;
     }
@@ -1517,21 +1563,24 @@
     function wireDeel2() {
         const el = overlay.querySelector('#wz-2');
         el.querySelectorAll('input[name="wz-sys"]').forEach(r =>
-            r.addEventListener('change', () => { if (!r.disabled) { d2Sys = r.value; d2Changed = true; updateOpslaanKnop(); } }));
+            r.addEventListener('change', () => { if (!r.disabled) { d2Sys = r.value; d2MarkWijziging(); updateOpslaanKnop(); } }));
         el.querySelectorAll('.wz-seg').forEach(b =>
             b.addEventListener('click', () => {
                 const p = d2Par[b.dataset.naam]; if (!p) return;
                 if (d2Locked && !p.unlocked) return;   // bulk op slot
-                p.format = b.dataset.fmt; d2Changed = true; renderDeel2();
+                p.format = b.dataset.fmt; d2MarkWijziging(); renderDeel2();
             }));
         el.querySelectorAll('.wz-d2-herleid').forEach(b =>
             b.addEventListener('click', async () => {
                 const p = d2Par[b.dataset.ai]; if (!p) return;
+                const heeftProg = wzData && wzData.heeft_programma;
                 const ok = await toonBevestigDialog(
-                    'Opnieuw afleiden overschrijft de handmatige instellingen van deze afstand. Doorgaan?',
+                    'Opnieuw afleiden overschrijft de handmatige instellingen van deze afstand.'
+                    + (heeftProg ? ' Er is al een programma: als je deze wijziging straks opslaat, wordt het programma opnieuw gegenereerd — A-finale-combinaties en handmatige rit-volgorde gaan verloren.' : '')
+                    + ' Doorgaan?',
                     'Opnieuw afleiden', 'Opnieuw afleiden', 'Annuleren');
                 if (!ok) return;
-                p.unlocked = true; p.ov = {}; d2Changed = true;
+                p.unlocked = true; p.ov = {}; d2MarkWijziging();
                 renderDeel2();
             }));
         el.querySelectorAll('[data-par]').forEach(inp =>
@@ -1541,7 +1590,7 @@
                 if (par === 'laatsteB') p[par] = inp.checked;
                 else if (par === 'startModus') p[par] = inp.value;
                 else { const v = inp.value.trim(); p[par] = v === '' ? null : Math.max(0, parseInt(v, 10) || 0); }
-                d2Changed = true;
+                d2MarkWijziging();
                 renderDeel2();
             }));
 
@@ -1565,13 +1614,13 @@
                 const leeg = cur.A == null && cur.bAantal == null && cur.heats == null
                     && !cur.startModus && cur.q == null && cur.laatsteB == null;
                 if (leeg) delete p.ov[gi]; else p.ov[gi] = cur;
-                d2Dirty.add(inp.dataset.ai + '|' + gi); d2Changed = true;
+                d2Dirty.add(inp.dataset.ai + '|' + gi); d2MarkWijziging();
                 renderDeel2();
             }));
         el.querySelectorAll('.wz-d2-auto').forEach(b =>
             b.addEventListener('click', () => {
                 const p = d2Par[b.dataset.ai]; if (p && p.ov) delete p.ov[+b.dataset.gi];
-                d2Dirty.add(b.dataset.ai + '|' + b.dataset.gi); d2Changed = true;
+                d2Dirty.add(b.dataset.ai + '|' + b.dataset.gi); d2MarkWijziging();
                 renderDeel2();
             }));
         el.querySelectorAll('.wz-d2-klaar').forEach(b =>
@@ -1816,14 +1865,24 @@
     }
 
     async function opslaanDeel3(daarna) {
-        if (locked === 'loting') return;
+        if (locked === 'loting') {
+            if (daarna === 'stap4') zetStap(4);   // vergrendeld: alleen bekijken
+            return;
+        }
         if (!d3Blokken().length) {
             toonOpslaanMelding('Nog geen afstanden met instellingen — vul eerst stap 2 in.', false);
             return;
         }
+        // Niets gewijzigd én programma bestaat al → NIET opnieuw opslaan/genereren
+        // (zo blijven rit-volgorde én combinaties intact); gewoon door/sluiten.
+        if (!d2Changed && wzData && wzData.heeft_programma) {
+            if (daarna === 'sluit') { sluitWizard(); return; }
+            if (daarna === 'stap4') { zetStap(4); return; }
+            return;
+        }
         // Er is al een programma → opnieuw opslaan regenereert de ritten; een
-        // handmatige rit-volgorde (bijv. rustverdeling) uit het Tijdschema gaat
-        // daarbij verloren. De wizard werkt op blok-niveau en ziet die niet.
+        // handmatige rit-volgorde/combinatie uit het Tijdschema gaat daarbij
+        // verloren. De wizard werkt op blok-niveau en ziet die niet.
         if (wzData && wzData.heeft_programma) {
             const ok = await toonBevestigDialog(
                 'Er is al een programma. Opnieuw opslaan regenereert de ritten — een handmatige rit-volgorde (bijv. betere rustverdeling) die je in het Tijdschema hebt gemaakt, gaat daarbij verloren. Doorgaan?',
@@ -1846,11 +1905,248 @@
             });
             d2Changed = false;
             if (daarna === 'sluit') { sluitWizard(); return; }
+            if (daarna === 'stap4') { zetStap(4); return; }
             btns.forEach(b => b.disabled = false);
             toonOpslaanMelding('Programma opgeslagen.', true);
         } catch (e) {
             btns.forEach(b => b.disabled = false);
             toonOpslaanMelding('Opslaan mislukt: ' + (e.message || ''), false);
+        }
+    }
+
+    // ── Deel 4: eindresultaat + A-finales combineren ──────────────────────────
+    const D4_RONDE = { heats:'Serie', kwartfinale:'KF', halve_finale:'HF', runner_up:'Runner-up', finale_a:'A-finale', finale_b:'B-finale' };
+    const d4Label  = (naam, m) => (naam || '') + (m != null && m !== '' ? ' ' + m + 'm' : '');
+    const d4Verw   = r => parseInt(r.verwacht, 10) || 0;
+    const d4TijdSec = t => { if (!t) return null; const p = String(t).split(':'); return (parseInt(p[0], 10) || 0) * 3600 + (parseInt(p[1], 10) || 0) * 60; };
+    const d4SecTijd = sec => { if (sec == null) return '—'; sec = Math.round(sec); const h = Math.floor(sec / 3600) % 24, m = Math.floor((sec % 3600) / 60); return String(h).padStart(2, '0') + ':' + String(m).padStart(2, '0'); };
+
+    // Laad het actuele tijdschema (ritten) uit de DB — vers zodat combineren op
+    // de echte stand werkt (ook bij heropenen zonder opnieuw genereren).
+    async function laadDeel4() {
+        try {
+            const res = await fetch('api/tijdschema.php?competition_id=' + encodeURIComponent(compId));
+            d4Schema = await res.json().catch(() => ({}));
+        } catch (e) { d4Schema = { error: e.message || 'laadfout' }; }
+        if (stap === 4) renderStap4();
+    }
+
+    // Eligibility per (dc,distance): heeft finale_a, géén series/KF/HF én geen B-finale.
+    function d4EligPredicate(ritten) {
+        const per = new Map();
+        ritten.forEach(r => {
+            const k = r.dc_id + '|' + (r.distance_id ?? '');
+            if (!per.has(k)) per.set(k, new Set());
+            per.get(k).add(r.ronde_type);
+        });
+        return (dc_id, distance_id) => {
+            const s = per.get(dc_id + '|' + (distance_id ?? ''));
+            return !!s && s.has('finale_a')
+                && !s.has('heats') && !s.has('kwartfinale') && !s.has('halve_finale') && !s.has('finale_b');
+        };
+    }
+
+    function renderStap4() {
+        const el = overlay.querySelector('#wz-4');
+        if (!d4Schema) { el.innerHTML = '<p class="wz-hint">Laden…</p>'; laadDeel4(); return; }
+        if (d4Schema.error) { el.innerHTML = `<p class="wz-hint" style="color:#b71c1c">Kon het programma niet laden: ${esc(d4Schema.error)}</p>`; return; }
+        const ritten  = d4Schema.ritten || [];
+        if (!ritten.length) { el.innerHTML = '<p class="wz-hint">Nog geen programma — ga naar stap 3 en sla het programma op.</p>'; return; }
+
+        const blokken = (d4Schema.blokken || []).slice().sort((a, b) => (a.volgorde - b.volgorde) || (a.id - b.id));
+        const isElig  = d4EligPredicate(ritten);
+        const perBlok = new Map();
+        ritten.slice().sort((a, b) => (a.volgorde - b.volgorde) || (a.id - b.id))
+            .forEach(r => { (perBlok.get(r.blok_id) || perBlok.set(r.blok_id, []).get(r.blok_id)).push(r); });
+
+        // Klok: begintijd per blok. Anker = wedstrijdstart-tijdstip; pre-blokken
+        // achterwaarts, rest voorwaarts. Gecombineerde ritten tellen als ÉÉN
+        // fysieke heat voor de duur (heat_duur × effectief aantal heats).
+        const effHeats = blokId => {
+            const rs = perBlok.get(blokId) || [];
+            const g = new Set(); let solo = 0;
+            rs.forEach(r => { const cg = r.combi_group ? parseInt(r.combi_group, 10) : null; if (cg) g.add(cg); else solo++; });
+            return solo + g.size;
+        };
+        const blokDuur = b => b.blok_type === 'ronde' ? (parseInt(b.heat_duur, 10) || 0) * effHeats(b.id)
+                            : b.blok_type === 'wedstrijdstart' ? 0
+                            : (parseInt(b.duur, 10) || 0) * 60;
+        const beginMap = {}; let eindSec = null;
+        {
+            const ws = blokken.find(b => b.blok_type === 'wedstrijdstart');
+            const anchor = ws ? d4TijdSec(ws.tijdstip) : null;
+            if (anchor != null) {
+                const wsIdx = blokken.indexOf(ws);
+                let t = anchor;
+                for (let i = wsIdx - 1; i >= 0; i--) { t -= blokDuur(blokken[i]); beginMap[blokken[i].id] = t; }
+                let cur = anchor;
+                for (let i = wsIdx; i < blokken.length; i++) { beginMap[blokken[i].id] = cur; cur += blokDuur(blokken[i]); }
+                eindSec = cur;
+            }
+        }
+
+        // Selectie-stand: alles moet uit hetzelfde blok (= zelfde afstand).
+        const selRit  = ritten.filter(r => d4Sel.has(r.id));
+        const selSom  = selRit.reduce((s, r) => s + d4Verw(r), 0);
+        const selBlok = selRit.length ? selRit[0].blok_id : null;
+        const rest    = Math.max(0, d4Max - selSom);
+        const leesOnly = (locked === 'loting');   // na loting: alleen bekijken
+
+        let html = (leesOnly ? '' : `<div class="wz-d4-top">
+            <label class="wz-d4-max">Max. gecombineerde grootte
+              <input type="number" min="2" value="${d4Max}" id="wz-d4-max"> rijders</label>
+            ${d4Sel.size ? `<span class="wz-d4-rest">resterend: <b>${rest}</b></span>` : ''}
+        </div>`) + `<div class="wz-d4-lijst">`;
+
+        for (const blok of blokken) {
+            if (blok.blok_type !== 'ronde') {
+                // niet-ronde: compacte context-regel (geen ritten)
+                const icoon = { pauze:'☕', inrijden:'🛼', ceremonie:'🏅', wedstrijdstart:'🏁', herstart:'🔁' }[blok.blok_type] || '•';
+                html += `<div class="wz-d4-blk niet"><div class="wz-d4-row">
+                    <span class="wz-d4-chev"></span>
+                    <span class="wz-d4-tijd">${d4SecTijd(beginMap[blok.id])}</span>
+                    <span class="wz-d4-af">${icoon} ${esc({pauze:'Pauze',inrijden:'Inrijden',ceremonie:'Ceremonie',wedstrijdstart:'Wedstrijdstart',herstart:'Herstart'}[blok.blok_type] || blok.blok_type)}</span>
+                    <span class="wz-d4-meta"></span></div></div>`;
+                continue;
+            }
+            const brit = perBlok.get(blok.id) || [];
+            if (!brit.length) continue;
+            const rondeLbl = blok.ronde_type === 'heats' ? 'Series' : 'Finale';
+            const kleur    = blok.ronde_type === 'heats' ? 'wz-d4-b-ser' : 'wz-d4-b-fin';
+            const nRij     = brit.reduce((s, r) => s + d4Verw(r), 0);
+            const open     = d4Open.has(blok.id);
+            // combineerbaar = minstens 2 kandidaten (finale_a, direct-A, >0 rijders);
+            // met 1 (of alleen lege 0-rijder-finales) valt er niets te combineren.
+            const eligCount = brit.filter(r => r.ronde_type === 'finale_a' && d4Verw(r) > 0 && !r.combi_group && isElig(r.dc_id, r.distance_id)).length;
+            const combineerbaar = blok.ronde_type === 'finale' && eligCount >= 2;
+            const hasCombi = brit.some(r => r.combi_group);
+
+            html += `<div class="wz-d4-blk">
+                <div class="wz-d4-row" data-toggle="${blok.id}">
+                  <span class="wz-d4-chev">${open ? '▾' : '▸'}</span>
+                  <span class="wz-d4-tijd">${d4SecTijd(beginMap[blok.id])}</span>
+                  <span class="wz-d4-af">${esc(d4Label(blok.afstand_naam, blok.value_meters))} <span class="wz-d4-badge ${kleur}">${rondeLbl}</span></span>
+                  <span class="wz-d4-meta">${brit.length} heats · ${nRij} rijders${hasCombi ? ' · <span class="wz-d4-combi-mark">🔗 gecombineerd</span>' : ''}${combineerbaar && !leesOnly ? ' · <span class="wz-d4-kan">combineerbaar</span>' : ''}</span>
+                </div>`;
+            if (open) {
+                html += '<div class="wz-d4-kids">';
+                const gezienCg = new Set();
+                for (const r of brit) {
+                    const cg = r.combi_group ? parseInt(r.combi_group, 10) : null;
+                    if (cg) {
+                        if (gezienCg.has(cg)) continue;
+                        gezienCg.add(cg);
+                        const leden = brit.filter(x => (x.combi_group ? parseInt(x.combi_group, 10) : null) === cg);
+                        const som = leden.reduce((s, x) => s + d4Verw(x), 0);
+                        html += `<div class="wz-d4-combi">
+                            <div class="wz-d4-combi-kop"><span>🔗 Gecombineerd — ${som} rijders</span>
+                              ${leesOnly ? '' : `<button class="wz-d4-unlink" data-cg="${cg}">ontkoppel</button>`}</div>
+                            ${leden.map(x => `<div class="wz-d4-fin plain"><span class="wz-d4-cat">${esc(x.dc_naam)}</span><span class="wz-d4-tag">A-finale</span><span class="wz-d4-n">${d4Verw(x)}</span></div>`).join('')}
+                        </div>`;
+                        continue;
+                    }
+                    const n = d4Verw(r);
+                    // 0-rijder-finales (placeholder-categorie) zijn geen kandidaat.
+                    const elig = r.ronde_type === 'finale_a' && n > 0 && isElig(r.dc_id, r.distance_id);
+                    if (!elig) {
+                        html += `<div class="wz-d4-fin noelig plain"><span class="wz-d4-cat">${esc(r.dc_naam)}</span><span class="wz-d4-tag">${D4_RONDE[r.ronde_type] || r.ronde_type}</span><span class="wz-d4-n">${n}</span></div>`;
+                        continue;
+                    }
+                    if (leesOnly) {
+                        html += `<div class="wz-d4-fin plain"><span class="wz-d4-cat">${esc(r.dc_naam)}</span><span class="wz-d4-tag">A-finale</span><span class="wz-d4-n">${n}</span></div>`;
+                        continue;
+                    }
+                    const sel = d4Sel.has(r.id);
+                    let dis = false, reden = 'A-finale';
+                    if (!sel && d4Sel.size) {
+                        if (selBlok !== null && r.blok_id !== selBlok) { dis = true; reden = 'andere afstand'; }
+                        else if (d4Sel.size >= 4)                     { dis = true; reden = 'max 4'; }
+                        else if (n > rest)                            { dis = true; reden = 'past niet (&gt;' + rest + ')'; }
+                    }
+                    html += `<label class="wz-d4-fin ${sel ? 'selected' : 'elig'}${dis ? ' dis' : ''}">
+                        <input type="checkbox" class="wz-d4-sel" data-rit="${r.id}" ${sel ? 'checked' : ''} ${dis ? 'disabled' : ''}>
+                        <span class="wz-d4-cat">${esc(r.dc_naam)}</span><span class="wz-d4-tag">${reden}</span><span class="wz-d4-n">${n}</span>
+                    </label>`;
+                }
+                html += '</div>';
+            }
+            // Combineer-balk direct onder het blok waarin je iets hebt geselecteerd.
+            if (!leesOnly && d4Sel.size >= 1 && blok.id === selBlok) {
+                const ok = d4Sel.size >= 2 && d4Sel.size <= 4 && selSom <= d4Max;
+                html += `<div class="wz-d4-actbar">
+                    <span class="wz-d4-sum">Selectie: <b class="${ok ? 'ok' : 'bad'}">${selSom} / ${d4Max} rijders · ${d4Sel.size} ${d4Sel.size === 1 ? 'rit' : 'ritten'}</b></span>
+                    <button class="wz-d4-clear" id="wz-d4-clear">Wis</button>
+                    <button class="btn-primary wz-d4-combineer" id="wz-d4-combineer" ${ok ? '' : 'disabled'}>🔗 Combineer selectie</button>
+                </div>`;
+            }
+            html += '</div>';
+        }
+        html += '</div>';
+        if (eindSec != null) html += `<div class="wz-d4-eind">Klaar rond <b>${d4SecTijd(eindSec)}</b></div>`;
+
+        el.innerHTML = html;
+        el.querySelectorAll('[data-toggle]').forEach(h => h.addEventListener('click', () => {
+            const id = +h.dataset.toggle;
+            if (d4Open.has(id)) d4Open.delete(id); else d4Open.add(id);
+            renderStap4();
+        }));
+        el.querySelectorAll('.wz-d4-sel').forEach(cb => cb.addEventListener('change', () => {
+            const id = +cb.dataset.rit;
+            if (cb.checked) d4Sel.add(id); else d4Sel.delete(id);
+            renderStap4();
+        }));
+        el.querySelector('#wz-d4-max')?.addEventListener('change', e => {
+            d4Max = Math.max(2, parseInt(e.target.value, 10) || 2);
+            renderStap4();
+        });
+        el.querySelector('#wz-d4-clear')?.addEventListener('click', () => { d4Sel = new Set(); renderStap4(); });
+        el.querySelector('#wz-d4-combineer')?.addEventListener('click', d4Combineer);
+        el.querySelectorAll('.wz-d4-unlink').forEach(b => b.addEventListener('click', () => d4Ontkoppel(+b.dataset.cg)));
+    }
+
+    // Combineer de selectie: maak ze eerst opeenvolgend (herorden) indien nodig,
+    // dan set_combi. Adjacency wordt zo geregeld, niet als selectie-eis.
+    async function d4Combineer() {
+        const ids = [...d4Sel];
+        if (ids.length < 2) return;
+        const tsId = d4Schema.id;
+        const seq = (d4Schema.ritten || []).slice().sort((a, b) => (a.volgorde - b.volgorde) || (a.id - b.id));
+        const selSet = new Set(ids);
+        const idx = seq.map((r, i) => selSet.has(r.id) ? i : -1).filter(i => i >= 0);
+        const aaneengesloten = idx.length > 0 && (idx[idx.length - 1] - idx[0] === idx.length - 1);
+        const combineerBtn = overlay.querySelector('#wz-d4-combineer');
+        if (combineerBtn) combineerBtn.disabled = true;
+        try {
+            if (!aaneengesloten) {
+                // Bundel de geselecteerde ritten op de plek van de EERSTE selectie.
+                const sel  = seq.filter(r => selSet.has(r.id));
+                const rest = seq.filter(r => !selSet.has(r.id));
+                const nBefore = seq.slice(0, idx[0]).filter(r => !selSet.has(r.id)).length;
+                const nieuw = [...rest.slice(0, nBefore), ...sel, ...rest.slice(nBefore)];
+                const volgorde = nieuw.map((r, i) => ({ id: r.id, volgorde: i + 1 }));
+                await postJson('api/tijdschema.php', { action: 'herorden_ritten', tijdschema_id: tsId, competition_id: compId, volgorde });
+            }
+            const res = await postJson('api/tijdschema.php', { action: 'set_combi', tijdschema_id: tsId, competition_id: compId, rit_ids: ids });
+            d4Schema = res;   // set_combi geeft fetchSchema terug
+            d4Sel = new Set();
+            renderStap4();
+        } catch (e) {
+            if (combineerBtn) combineerBtn.disabled = false;
+            toonOpslaanMelding('Combineren mislukt: ' + (e.message || ''), false);
+        }
+    }
+
+    async function d4Ontkoppel(cg) {
+        const ids = (d4Schema.ritten || [])
+            .filter(r => (r.combi_group ? parseInt(r.combi_group, 10) : null) === cg)
+            .map(r => r.id);
+        if (!ids.length) return;
+        try {
+            const res = await postJson('api/tijdschema.php', { action: 'clear_combi', tijdschema_id: d4Schema.id, competition_id: compId, rit_ids: ids });
+            d4Schema = res;
+            renderStap4();
+        } catch (e) {
+            toonOpslaanMelding('Ontkoppelen mislukt: ' + (e.message || ''), false);
         }
     }
 

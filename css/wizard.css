@@ -97,6 +97,9 @@
     border-radius:9px; background:#fff; cursor:grab; transition:box-shadow .12s, border-color .12s; }
 .wz-cat:hover{ border-color:var(--midden,#2E75B6); box-shadow:0 2px 8px rgba(46,117,182,.12); }
 .wz-cat.wz-drag{ opacity:.4; }
+/* Vergrendeld (er is al config/programma): geen sleep-cursor of hover-hint. */
+.wz-cat.wz-vast, .wz-lid.wz-vast{ cursor:default; }
+.wz-cat.wz-vast:hover{ border-color:var(--border,#d3dbe3); box-shadow:none; }
 .wz-n{ min-width:38px; height:38px; border-radius:8px; background:var(--licht,#D6E4F0); color:var(--blauw,#1F4E79);
     font-weight:700; font-size:1.05rem; display:flex; align-items:center; justify-content:center; flex:0 0 auto; }
 .wz-n.wz-leeg{ background:#fdecea; color:#c0392b; }
@@ -194,6 +197,7 @@
 .wz-btn-primair:disabled{ background:#bbb; border-color:#bbb; cursor:not-allowed; }
 .wz-btn:disabled{ opacity:.5; cursor:not-allowed; }
 .wz-foot #wz-annuleer{ margin-right:auto; }   /* Annuleren links, opslaan-knoppen rechts */
+.wz-foot-note{ color:#8a5a09; font-size:.82rem; font-weight:600; white-space:nowrap; }
 
 /* ── Deel 2 · afstand-instellingen ─────────────────────────── */
 .wz-d2-sys{ display:flex; align-items:center; flex-wrap:wrap; gap:16px; background:var(--licht,#eef4fb);
@@ -337,3 +341,40 @@
 .wz-d3-heats{ font-size:.8rem; color:#5f6e80; white-space:nowrap; }
 
 .wz-hidden{ display:none !important; }
+
+/* ── Deel 4: eindresultaat + A-finales combineren ── */
+.wz-d4-top{ display:flex; align-items:center; gap:12px; margin-bottom:14px; }
+.wz-d4-max{ font-weight:600; display:flex; align-items:center; gap:8px; font-size:.9rem; }
+.wz-d4-max input{ width:64px; height:32px; border:1px solid var(--border,#d3dbe3); border-radius:6px; padding:4px 8px; text-align:center; font-size:14px; }
+.wz-d4-rest{ margin-left:auto; color:#8291a4; font-size:.82rem; }
+.wz-d4-lijst{ display:flex; flex-direction:column; gap:6px; }
+.wz-d4-blk{ border:1px solid var(--border,#d3dbe3); border-radius:8px; background:#fff; }
+.wz-d4-blk.niet{ background:#f6f8fb; }
+.wz-d4-row{ display:grid; grid-template-columns:22px 52px minmax(0,1fr) auto; gap:12px; align-items:center; padding:9px 12px; cursor:pointer; }
+.wz-d4-tijd{ font-weight:600; color:var(--blauw,#1F4E79); font-variant-numeric:tabular-nums; font-size:.85rem; }
+.wz-d4-combi-mark{ color:#1c6b3f; font-weight:600; }
+.wz-d4-eind{ margin-top:12px; text-align:right; font-size:.9rem; color:#33404f; }
+.wz-d4-eind b{ color:var(--blauw,#1F4E79); }
+.wz-d4-blk.niet .wz-d4-row{ cursor:default; }
+.wz-d4-chev{ color:#8291a4; }
+.wz-d4-af{ font-weight:600; font-size:.9rem; }
+.wz-d4-badge{ display:inline-block; color:#fff; font-size:11px; font-weight:600; padding:2px 9px; border-radius:20px; margin-left:4px; }
+.wz-d4-b-fin{ background:#198754; } .wz-d4-b-ser{ background:#0d6efd; }
+.wz-d4-meta{ color:#8291a4; font-size:.78rem; white-space:nowrap; }
+.wz-d4-kan{ color:#1c6b3f; font-weight:600; }
+.wz-d4-kids{ border-top:1px dashed var(--border,#d3dbe3); padding:8px 12px 12px; }
+.wz-d4-fin{ display:grid; grid-template-columns:18px minmax(0,1fr) auto auto; gap:12px; align-items:center; padding:7px 8px; border-radius:6px; }
+.wz-d4-fin.elig{ background:#eefaf1; cursor:pointer; }
+.wz-d4-fin.selected{ background:#dcf0e2; outline:1px solid #8fd3a5; cursor:pointer; }
+.wz-d4-fin.noelig{ opacity:.55; }
+.wz-d4-fin.dis{ opacity:.45; cursor:default; }
+.wz-d4-fin.plain{ grid-template-columns:minmax(0,1fr) auto auto; }
+.wz-d4-cat{ font-weight:600; font-size:.88rem; }
+.wz-d4-tag{ font-size:11px; color:#8291a4; }
+.wz-d4-n{ font-variant-numeric:tabular-nums; font-weight:600; text-align:right; }
+.wz-d4-combi{ border:1px solid #8fd3a5; background:#f0faf3; border-radius:8px; padding:8px 10px; margin:4px 0; }
+.wz-d4-combi-kop{ display:flex; justify-content:space-between; align-items:center; font-size:12px; color:#1c6b3f; font-weight:600; margin-bottom:4px; }
+.wz-d4-unlink{ border:0; background:none; color:#1c6b3f; cursor:pointer; font-size:12px; text-decoration:underline; }
+.wz-d4-actbar{ display:flex; align-items:center; gap:12px; margin:8px 12px 12px; padding:10px 12px; background:#f6faf7; border:1px solid #cfe7d6; border-radius:8px; }
+.wz-d4-sum{ font-weight:600; font-size:.88rem; } .wz-d4-sum .ok{ color:#1c6b3f; } .wz-d4-sum .bad{ color:#b23; }
+.wz-d4-clear{ margin-left:auto; border:1px solid var(--border,#d3dbe3); background:#fff; padding:6px 12px; border-radius:8px; cursor:pointer; font-size:13px; }
