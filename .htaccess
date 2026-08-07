@@ -77,40 +77,18 @@ Options -Indexes
 </FilesMatch>
 
 # ──────────────────────────────────────────────────────────────────────
-#  B. PHP-RUNTIME-INSTELLINGEN
+#  B. PHP-RUNTIME-INSTELLINGEN  →  via cPanel MultiPHP INI Editor (NIET hier)
 #
-#  Werkt bewezen via .htaccess op byethost (test met max_input_time = 999
-#  gaf 999, dus LSAPI leest deze block). .user.ini wordt NIET gelezen
-#  op deze hosting (free-tier-restrictie).
+#  Deze stonden vroeger hier als php_flag/php_admin_value binnen
+#  <IfModule lsapi_module>. Op de huidige byethost/LiteSpeed-config geven
+#  PHP_INI_SYSTEM-directieven (o.a. expose_php + disable_functions) via
+#  .htaccess een 500 — eerder getolereerd, nu niet meer (config-drift; zie
+#  ook de cPanel-waarschuwing bovenaan dit bestand). Daarom weggehaald.
+#
+#  Zet ze via cPanel → Software → MultiPHP INI Editor:
+#     display_errors    = Off      (belangrijk: geen stacktraces naar users)
+#     expose_php        = Off
+#     disable_functions = exec,system,passthru,proc_open,popen,pcntl_exec
+#  De session-cookie-flags worden al door de app zelf gezet (api/auth.php),
+#  dus daar hoef je niets voor te doen.
 # ──────────────────────────────────────────────────────────────────────
-
-<IfModule lsapi_module>
-    # Verberg "X-Powered-By: PHP/8.3.31" header (versie-fingerprinting weg).
-    php_flag expose_php Off
-
-    # Geen stacktraces naar de eindgebruiker. log_errors blijft On (door
-    # cPanel hierboven gezet), dus errors gaan nog steeds naar
-    # /home/jorndev1/logs/php.error.log voor jouw eigen debugging.
-    php_flag display_errors Off
-    php_flag display_startup_errors Off
-
-    # Sessie-cookie-hardening voor PHPSESSID (mocht 't ergens gebruikt
-    # worden). InlineComp's eigen ic_session-cookie zet deze flags al
-    # expliciet bij setcookie() in api/auth.php — dubbele bescherming.
-    php_flag  session.cookie_secure    On
-    php_flag  session.cookie_httponly  On
-    php_value session.cookie_samesite  Strict
-    php_flag  session.use_strict_mode  On
-
-    # Defense-in-depth: ongebruikte OS-commands uitschakelen.
-    # GEVERIFIEERD dat geen enkele PHP-file in InlineComp deze functies
-    # gebruikt (122 files gescand, geen composer-dependencies).
-    # shell_exec blijft beschikbaar — gebruikt door api/poster.php +
-    # api/klassement_import.php voor Python-aanroepen met escapeshellarg().
-    #
-    # LET OP: disable_functions is PHP_INI_SYSTEM-classified — werkt
-    # mogelijk niet via .htaccess (afhankelijk van hosting-config). Als
-    # _diag.php na deploy nog steeds toont dat 'exec' beschikbaar is,
-    # haal deze regel weg en accepteer dat het via byethost-support moet.
-    php_admin_value disable_functions "exec,system,passthru,proc_open,popen,pcntl_exec"
-</IfModule>
