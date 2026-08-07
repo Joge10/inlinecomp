@@ -810,7 +810,7 @@ try {
                 'url'   => './',
                 'tag'   => 'loting-' . $primaryDcId . '-' . $rondeType,
             ]);
-            pushFlushOutbox($pdo);   // meteen proberen te versturen (throttled, defensief)
+            pushFlushOutbox($pdo, 15, true);   // meteen versturen (force, defensief)
         }
     } catch (\Throwable $e) { /* push mag loting nooit breken */ }
 

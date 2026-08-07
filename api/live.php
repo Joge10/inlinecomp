@@ -648,6 +648,7 @@ if ($action === 'save_rit_results') {
                         'url'   => './',
                         'tag'   => 'heat-' . $ritId,
                     ]);
+                    pushFlushOutbox($pdo, 15, true);   // meteen versturen (force, defensief)
                 }
             }
         } catch (\Throwable $e) { /* push mag save nooit breken */ }

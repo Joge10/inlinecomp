@@ -28,9 +28,14 @@ function pushVapid(): ?array {
     return ['subject' => $subj, 'publicKey' => $pub, 'privateKey' => $priv];
 }
 
-/** Is versturen mogelijk? (lib aanwezig + VAPID geconfigureerd) */
+/** Is versturen mogelijk? (lib + PSR-18 HTTP-client aanwezig + VAPID geconfigureerd) */
 function pushBeschikbaar(): bool {
-    return class_exists(WebPush::class) && pushVapid() !== null;
+    // minishlink v11 discovery't een PSR-18 client (Guzzle). Ontbreekt die, dan
+    // zou new WebPush() fatalen — deze guard voorkomt dat we events enqueuen/
+    // claimen die we tóch niet kunnen versturen (geen stil verlies).
+    return class_exists(WebPush::class)
+        && class_exists('GuzzleHttp\\Client')
+        && pushVapid() !== null;
 }
 
 /**
@@ -119,9 +124,11 @@ function pushNaarVolgers(PDO $pdo, array $licenses, array $payload, string $scop
  * batch (lock+delete in transactie) en verstuurt die daarna. Volledig defensief.
  * Aan te roepen vanuit een vaak-gehit endpoint (api/meldingen.php).
  */
-function pushFlushOutbox(PDO $pdo, int $max = 15): int {
+function pushFlushOutbox(PDO $pdo, int $max = 15, bool $force = false): int {
+    // $force: operator-triggers (loting/heat) versturen hun event meteen. Alleen
+    // de hoog-frequente meldingen-poll wordt gethrottled (~1x/8s) tegen flush-storms.
     $flag = sys_get_temp_dir() . '/ic_push_flush.flag';
-    if (is_file($flag) && (time() - (int) @filemtime($flag)) < 8) return 0;
+    if (!$force && is_file($flag) && (time() - (int) @filemtime($flag)) < 8) return 0;
     @touch($flag);
     // Vangnet: verouderde events opruimen (push tijdelijk uit geweest, of lang
     // niemand gepolld). Een loting/uitslag van >1u terug is geen zinvolle melding
