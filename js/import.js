@@ -99,16 +99,23 @@ function initEdits() {
                     // persons.
                     category:           item.knsb.category,
                     nationality:        item.knsb.nationality,
-                    // Club + sponsor: DB-correctie wint (operator heeft via
-                    // Systeem → Rijders mogelijk handmatig gecorrigeerd na
-                    // verkeerde KNSB-data). Als de DB-waarde leeg is, valt
-                    // het terug op KNSB. Bij Importeer wordt dit weer terug-
-                    // gestuurd zodat het via import.php in persons komt.
-                    club_code:          p?.club_code  ?? item.knsb.club_code,
-                    club_short:         p?.club_short ?? item.knsb.club_short,
-                    club_full:          p?.club_full  ?? item.knsb.club_full,
-                    sponsor:            p?.sponsor    ?? item.knsb.sponsor,
-                    city:               p?.city       ?? item.knsb.city,
+                    // Club/sponsor/woonplaats — override-regel per WEDSTRIJD:
+                    //  · EERSTE import (rijder heeft nog geen db_entry in déze
+                    //    wedstrijd) → KNSB-feed wint (verse data overschrijft).
+                    //  · HER-import (db_entry bestaat al) → DB-waarde wint, zodat
+                    //    een handmatige correctie (rijder meldde via /check dat
+                    //    club/sponsor niet klopt) niet door een resync sneuvelt.
+                    //    Rijder moet 't zelf in MijnKNSB rechtzetten voor de
+                    //    volgende wedstrijd, anders overschrijft die 't weer.
+                    // We kijken dus naar db_entry (deze wedstrijd), NIET db_person
+                    // (rijder bestaat überhaupt). Let op: club staat op persons
+                    // (globaal), dus een nieuwe wedstrijd verrijkt 'm feed-breed.
+                    // Lege DB-waarde valt sowieso terug op de feed.
+                    club_code:          (item.db_entry ? p?.club_code  : null) ?? item.knsb.club_code,
+                    club_short:         (item.db_entry ? p?.club_short : null) ?? item.knsb.club_short,
+                    club_full:          (item.db_entry ? p?.club_full  : null) ?? item.knsb.club_full,
+                    sponsor:            (item.db_entry ? p?.sponsor    : null) ?? item.knsb.sponsor,
+                    city:               (item.db_entry ? p?.city       : null) ?? item.knsb.city,
                 };
             }
 
