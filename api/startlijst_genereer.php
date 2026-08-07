@@ -778,6 +778,42 @@ try {
         }
     }
 
+    // ── Push (Fase 2): loting van deze DC+ronde is klaar → 1 push per volger ──
+    // De rijders zitten in-memory in $heats. DC-naam + afstand halen we op voor
+    // een leesbare tekst. Volledig defensief: push mag loting nooit breken.
+    try {
+        require_once __DIR__ . '/lib_push.php';
+        $_pushLics = [];
+        foreach ($heats as $_h) {
+            foreach (($_h['rijders'] ?? []) as $_r) {
+                if (!empty($_r['license_key'])) $_pushLics[] = $_r['license_key'];
+            }
+        }
+        if ($_pushLics) {
+            $_q = $pdo->prepare("SELECT name FROM distance_combinations WHERE id = ?");
+            $_q->execute([$primaryDcId]);
+            $_dcNaam = (string) ($_q->fetchColumn() ?: '');
+            $_afNaam = ''; $_afMeters = null;
+            if ($distId) {
+                $_q = $pdo->prepare("SELECT name, value_meters FROM distances WHERE id = ? AND distance_combination_id = ? LIMIT 1");
+                $_q->execute([$distId, $primaryDcId]);
+                $_d = $_q->fetch(PDO::FETCH_ASSOC) ?: [];
+                $_afNaam = (string) ($_d['name'] ?? ''); $_afMeters = $_d['value_meters'] ?? null;
+            }
+            $_rondeLbls = ['heats' => 'Series', 'kwartfinale' => 'Kwartfinale', 'halve_finale' => 'Halve finale',
+                           'finale' => 'Finale', 'finale_a' => 'A-finale', 'finale_b' => 'B-finale', 'runner_up' => 'Runner-up'];
+            $_ronde   = $_rondeLbls[$rondeType] ?? $rondeType;
+            $_afstand = trim($_afNaam . ($_afMeters ? ' ' . $_afMeters . 'm' : ''));
+            pushEnqueue($pdo, $_pushLics, [
+                'title' => 'Loting gereed',
+                'body'  => trim($_dcNaam . ($_afstand !== '' ? ' · ' . $_afstand : '') . ' — ' . $_ronde),
+                'url'   => './',
+                'tag'   => 'loting-' . $primaryDcId . '-' . $rondeType,
+            ]);
+            pushFlushOutbox($pdo);   // meteen proberen te versturen (throttled, defensief)
+        }
+    } catch (\Throwable $e) { /* push mag loting nooit breken */ }
+
     // capaciteit is intern; stuur het mee voor info maar rijders is leidend
     echo json_encode([
         'methode'       => $methode,

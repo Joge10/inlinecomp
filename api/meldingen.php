@@ -33,6 +33,12 @@ header('Expires: 0');
 
 require_once __DIR__ . '/../../config_inlinecomp.php';
 
+// Piggyback: throttled flush van de push-outbox (Fase 2). Dit endpoint wordt door
+// public + coach continu gepolld → geen cron nodig op de shared host. De flush
+// self-throttlet (~1x/8s) en is volledig defensief.
+require_once __DIR__ . '/lib_push.php';
+try { pushFlushOutbox($pdo); } catch (\Throwable $e) {}
+
 $method = $_SERVER['REQUEST_METHOD'] ?? 'GET';
 
 // GET is publiek; POST vereist login + rol

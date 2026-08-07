@@ -586,6 +586,18 @@ if ($action === 'save_rit_results') {
                 is_photofinish = VALUES(is_photofinish)
         ");
 
+        // ── Push-transitie (Fase 2): was deze rit al compleet vóór het opslaan? ──
+        // Zo ja, dan is de "nu compleet"-detectie ná de commit géén nieuwe
+        // gebeurtenis → we pushen alleen bij de overgang niet-compleet → compleet.
+        require_once __DIR__ . '/lib_push.php';
+        require_once __DIR__ . '/_uitslag_helper.php';
+        $_pushWasCompleet = false;
+        try {
+            $_cs = $pdo->prepare("SELECT res.finishpositie, res.sanctie FROM heat_entries he JOIN heats h ON h.id = he.heat_id LEFT JOIN results res ON res.heat_entry_id = he.id WHERE h.tijdschema_rit_id = ? AND h.competition_id = ?");
+            $_cs->execute([$ritId, $compId]);
+            $_pushWasCompleet = isHeatCompleet($_cs->fetchAll(PDO::FETCH_ASSOC));
+        } catch (\Throwable $e) {}
+
         foreach ($alleResultaten as $r) {
             // Bruto-hint van client (pre-save wisseling) heeft voorrang bij INSERT.
             // Geen hint → fallback op huidige tijd_ms/rondes (eerste-save-zonder-
@@ -609,6 +621,36 @@ if ($action === 'save_rit_results') {
         }
 
         $pdo->commit();
+
+        // ── Push (Fase 2): is deze rit zojuist compleet geworden? → 1 push per volger ──
+        try {
+            $_cs = $pdo->prepare("SELECT res.finishpositie, res.sanctie FROM heat_entries he JOIN heats h ON h.id = he.heat_id LEFT JOIN results res ON res.heat_entry_id = he.id WHERE h.tijdschema_rit_id = ? AND h.competition_id = ?");
+            $_cs->execute([$ritId, $compId]);
+            if (!$_pushWasCompleet && isHeatCompleet($_cs->fetchAll(PDO::FETCH_ASSOC))) {
+                $_hi = $pdo->prepare("SELECT heat_naam, distance_combination_id, distance_id FROM heats WHERE tijdschema_rit_id = ? AND competition_id = ? LIMIT 1");
+                $_hi->execute([$ritId, $compId]);
+                $_h = $_hi->fetch(PDO::FETCH_ASSOC) ?: [];
+                $_ls = $pdo->prepare("SELECT he.person_license FROM heat_entries he JOIN heats h ON h.id = he.heat_id WHERE h.tijdschema_rit_id = ? AND h.competition_id = ?");
+                $_ls->execute([$ritId, $compId]);
+                $_lics = $_ls->fetchAll(PDO::FETCH_COLUMN);
+                if ($_lics) {
+                    $_afNaam = ''; $_afMeters = null;
+                    if (!empty($_h['distance_id'])) {
+                        $_af = $pdo->prepare("SELECT name, value_meters FROM distances WHERE id = ? AND distance_combination_id = ? LIMIT 1");
+                        $_af->execute([$_h['distance_id'], $_h['distance_combination_id']]);
+                        $_afr = $_af->fetch(PDO::FETCH_ASSOC) ?: [];
+                        $_afNaam = (string) ($_afr['name'] ?? ''); $_afMeters = $_afr['value_meters'] ?? null;
+                    }
+                    $_afstand = trim($_afNaam . ($_afMeters ? ' ' . $_afMeters . 'm' : ''));
+                    pushEnqueue($pdo, $_lics, [
+                        'title' => 'Uitslag binnen',
+                        'body'  => trim(((string) ($_h['heat_naam'] ?? 'Rit')) . ($_afstand !== '' ? ' · ' . $_afstand : '') . ' is verwerkt'),
+                        'url'   => './',
+                        'tag'   => 'heat-' . $ritId,
+                    ]);
+                }
+            }
+        } catch (\Throwable $e) { /* push mag save nooit breken */ }
 
         // Ronde-status teruggeven: hoeveel ritten zijn compleet voor elke dc+distance in deze ronde?
         // Haal de rit-info op voor dc_id en ronde_type
