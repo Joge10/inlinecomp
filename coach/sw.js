@@ -26,7 +26,7 @@
 //  maar versie-string maakt 't expliciet + diagnose makkelijk).
 // ============================================================
 
-const SW_VERSIE = 'coach-2026.05.27.001';
+const SW_VERSIE = 'coach-2026.08.08.001';
 
 self.addEventListener('install', () => {
     self.skipWaiting();
@@ -50,4 +50,32 @@ self.addEventListener('fetch', event => {
     // headers van de server). Combineert met PHP no-cache headers voor
     // dubbele zekerheid: shell-HTML altijd vers.
     event.respondWith(fetch(event.request, { cache: 'no-store' }));
+});
+
+// ── Web Push (Fase 1) ────────────────────────────────────────────────
+// push: toon de melding (werkt ook als de app dicht is).
+// notificationclick: focus een bestaand coach-venster of open er een.
+self.addEventListener('push', event => {
+    let d = {};
+    try { d = event.data ? event.data.json() : {}; } catch (e) { d = {}; }
+    const title = d.title || 'InlineComp';
+    event.waitUntil(self.registration.showNotification(title, {
+        body:     d.body || '',
+        icon:     'icon-192-v2.svg',
+        badge:    'icon-192-v2.svg',
+        tag:      d.tag || undefined,
+        renotify: !!d.tag,
+        data:     { url: d.url || './' },
+    }));
+});
+
+self.addEventListener('notificationclick', event => {
+    event.notification.close();
+    const url = (event.notification.data && event.notification.data.url) || './';
+    event.waitUntil(self.clients.matchAll({ type: 'window', includeUncontrolled: true }).then(list => {
+        for (const c of list) {
+            if (c.url.includes('/coach') && 'focus' in c) { c.navigate(url); return c.focus(); }
+        }
+        if (self.clients.openWindow) return self.clients.openWindow(url);
+    }));
 });

@@ -8401,7 +8401,18 @@ window.addEventListener('appinstalled', () => {
     err_verwijderen:  { nl:'Verwijderen mislukt. Probeer het later opnieuw.', en:'Deletion failed. Please try again later.', de:'Löschen fehlgeschlagen. Bitte versuche es später erneut.', fr:'Échec de la suppression. Réessayez plus tard.' },
     netwerkfout:      { nl:'Netwerkfout', en:'Network error', de:'Netzwerkfehler', fr:'Erreur réseau' },
     hdr_btn_title:    { nl:'Coach-account / inloggen', en:'Coach account / log in', de:'Coach-Konto / Anmelden', fr:'Compte entraîneur / connexion' },
-    hdr_btn_ingelogd: { nl:'Ingelogd: {naam}', en:'Logged in: {naam}', de:'Angemeldet: {naam}', fr:'Connecté : {naam}' }
+    hdr_btn_ingelogd: { nl:'Ingelogd: {naam}', en:'Logged in: {naam}', de:'Angemeldet: {naam}', fr:'Connecté : {naam}' },
+    push_titel:    { nl:'🔔 Meldingen', en:'🔔 Notifications', de:'🔔 Benachrichtigungen', fr:'🔔 Notifications' },
+    push_uitleg:   { nl:'Krijg een seintje bij loting en uitslag van je atleten.', en:'Get a ping for draws and results of your athletes.', de:'Erhalte eine Info bei Auslosung und Ergebnissen deiner Athleten.', fr:'Recevez une alerte pour les tirages et résultats de vos athlètes.' },
+    push_aan:      { nl:'Aanzetten', en:'Turn on', de:'Einschalten', fr:'Activer' },
+    push_uit:      { nl:'Uitzetten', en:'Turn off', de:'Ausschalten', fr:'Désactiver' },
+    push_test:     { nl:'Stuur test', en:'Send test', de:'Test senden', fr:'Envoyer un test' },
+    push_bezig:    { nl:'Bezig…', en:'Working…', de:'Läuft…', fr:'En cours…' },
+    push_niet:     { nl:'Je browser ondersteunt geen meldingen.', en:'Your browser does not support notifications.', de:'Dein Browser unterstützt keine Benachrichtigungen.', fr:'Votre navigateur ne prend pas en charge les notifications.' },
+    push_geweigerd:{ nl:'Meldingen zijn geblokkeerd — zet ze aan in je browser-instellingen.', en:'Notifications are blocked — enable them in your browser settings.', de:'Benachrichtigungen sind blockiert — aktiviere sie in den Browsereinstellungen.', fr:'Notifications bloquées — activez-les dans les paramètres du navigateur.' },
+    push_test_ok:  { nl:'Testmelding verstuurd — check je toestel.', en:'Test sent — check your device.', de:'Test gesendet — prüfe dein Gerät.', fr:'Test envoyé — vérifiez votre appareil.' },
+    push_fout:     { nl:'Er ging iets mis. Probeer opnieuw.', en:'Something went wrong. Try again.', de:'Etwas ist schiefgelaufen. Versuche es erneut.', fr:"Une erreur s'est produite. Réessayez." },
+    push_ios:      { nl:'Op iPhone: zet de app eerst op je beginscherm (deel-icoon → "Zet op beginscherm").', en:'On iPhone: add the app to your home screen first (share → "Add to Home Screen").', de:'Auf dem iPhone: füge die App zuerst zum Startbildschirm hinzu.', fr:"Sur iPhone : ajoutez d'abord l'app à l'écran d'accueil." }
   };
   const ct = (k, p = {}) => {
     let s = (CA_I18N[k] && (CA_I18N[k][typeof getCurLang === 'function' ? getCurLang() : 'nl'] || CA_I18N[k].en || CA_I18N[k].nl)) || k;
@@ -8439,6 +8450,122 @@ window.addEventListener('appinstalled', () => {
       window._coachNietIngeschreven = ni;
     } catch (e) {}
   };
+
+  // ── Web Push (Fase 1): abonneren + testmelding ─────────────────────────────
+  // ⚠ Fase 1-gate: de 🔔 Meldingen-toggle is ALLEEN zichtbaar voor de coach-
+  // account-e-mailadressen hieronder — zodat andere coaches 'm nog niet zien
+  // ("jipie, het kan al!") terwijl we nog testen. Bij uitrol: leeg maken of
+  // de gate onderin _caPushInit verwijderen.
+  const PUSH_BETA_EMAILS = ['geert.marije@gmail.com'];
+  let _caPushBusy = false;
+  const _caPushSupported = () =>
+    ('serviceWorker' in navigator) && ('PushManager' in window) && ('Notification' in window);
+
+  function _b64ToUint8(base64) {
+    const pad = '='.repeat((4 - (base64.length % 4)) % 4);
+    const raw = atob((base64 + pad).replace(/-/g, '+').replace(/_/g, '/'));
+    const arr = new Uint8Array(raw.length);
+    for (let i = 0; i < raw.length; i++) arr[i] = raw.charCodeAt(i);
+    return arr;
+  }
+
+  async function _caPushHuidigAbo() {
+    if (!_caPushSupported()) return null;
+    const reg = await navigator.serviceWorker.ready;
+    return await reg.pushManager.getSubscription();
+  }
+
+  async function _caPushAan() {
+    const perm = await Notification.requestPermission();
+    if (perm !== 'granted') return 'geweigerd';
+    const reg = await navigator.serviceWorker.ready;
+    const kr = await fetch('../api/push_pubkey.php').then(r => r.json()).catch(() => ({}));
+    if (!kr.publicKey) return 'fout';
+    let sub;
+    try {
+      sub = await reg.pushManager.subscribe({
+        userVisibleOnly: true,
+        applicationServerKey: _b64ToUint8(kr.publicKey),
+      });
+    } catch (e) { return 'fout'; }
+    const r = await fetch('../api/push_subscribe.php?action=subscribe', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      credentials: 'same-origin', body: JSON.stringify(sub.toJSON()),
+    }).then(r => r.json()).catch(() => ({}));
+    return (r && r.ok) ? true : 'fout';
+  }
+
+  async function _caPushUit() {
+    const sub = await _caPushHuidigAbo();
+    if (sub) {
+      await fetch('../api/push_subscribe.php?action=unsubscribe', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        credentials: 'same-origin', body: JSON.stringify({ endpoint: sub.endpoint }),
+      }).catch(() => {});
+      await sub.unsubscribe().catch(() => {});
+    }
+  }
+
+  async function _caPushInit(body) {
+    const wrap = body.querySelector('#ca-push');
+    if (!wrap) return;
+    // Fase 1-gate: alleen het/de proef-account(s) zien de toggle.
+    const _email = ((account && account.email) || '').toLowerCase();
+    if (!PUSH_BETA_EMAILS.map(e => e.toLowerCase()).includes(_email)) { wrap.remove(); return; }
+    const tog  = body.querySelector('#ca-push-toggle');
+    const test = body.querySelector('#ca-push-test');
+    const msg  = body.querySelector('#ca-push-msg');
+    if (!_caPushSupported()) {
+      tog.style.display = 'none';
+      const iOS = /iPhone|iPad|iPod/.test(navigator.userAgent);
+      msg.textContent = ct('push_niet') + (iOS ? ' ' + ct('push_ios') : '');
+      return;
+    }
+    const refresh = async () => {
+      const sub = await _caPushHuidigAbo();
+      const aan = !!sub && Notification.permission === 'granted';
+      tog.textContent = aan ? ct('push_uit') : ct('push_aan');
+      tog.dataset.aan = aan ? '1' : '0';
+      test.style.display = aan ? '' : 'none';
+      if (aan) msg.textContent = '';
+    };
+    await refresh();
+    tog.addEventListener('click', async () => {
+      if (_caPushBusy) return; _caPushBusy = true;
+      tog.textContent = ct('push_bezig'); msg.textContent = '';
+      try {
+        if (tog.dataset.aan === '1') {
+          await _caPushUit();
+        } else {
+          const res = await _caPushAan();
+          if (res === 'geweigerd')      msg.textContent = ct('push_geweigerd');
+          else if (res !== true)        msg.textContent = ct('push_fout');
+        }
+      } catch (e) { msg.textContent = ct('push_fout'); }
+      _caPushBusy = false;
+      await refresh();
+    });
+    test.addEventListener('click', async () => {
+      if (_caPushBusy) return; _caPushBusy = true;
+      msg.textContent = ct('push_bezig');
+      try {
+        const resp = await fetch('../api/push_subscribe.php?action=test', {
+          method: 'POST', credentials: 'same-origin',
+        });
+        const txt = await resp.text();
+        let r = {}; try { r = JSON.parse(txt); } catch (e) {}
+        if (!resp.ok) {
+          msg.textContent = '⚠ HTTP ' + resp.status + ' — ' + txt.slice(0, 160);
+        } else if (r.ok) {
+          const res = r.result || {};
+          msg.textContent = (res.verstuurd > 0) ? ct('push_test_ok') : ('⚠ verstuurd 0 — ' + JSON.stringify(res));
+        } else {
+          msg.textContent = '⚠ ' + (r.reden || ct('push_fout'));
+        }
+      } catch (e) { msg.textContent = ct('push_fout') + ' (' + e.message + ')'; }
+      _caPushBusy = false;
+    });
+  }
 
   // ── CSS injecteren ────────────────────────────────────────────────────────
   const css = document.createElement('style');
@@ -8671,6 +8798,16 @@ window.addEventListener('appinstalled', () => {
       </div>
       <div id="ca-roster" class="chips"><div style="color:#888;font-size:.85rem">${ct('laden')}</div></div>
 
+      <div id="ca-push" style="border:1px solid #e2e8f0;border-radius:10px;padding:10px 12px;margin:16px 0 4px">
+        <div style="font-weight:600;color:#1b5faa">${ct('push_titel')}</div>
+        <div style="font-size:.82rem;color:#667;margin:2px 0 8px">${ct('push_uitleg')}</div>
+        <div style="display:flex;gap:8px;flex-wrap:wrap">
+          <button class="btn btn-klein" id="ca-push-toggle">${ct('push_aan')}</button>
+          <button class="btn btn-klein" id="ca-push-test" style="display:none">${ct('push_test')}</button>
+        </div>
+        <div id="ca-push-msg" style="font-size:.8rem;color:#8a929c;margin-top:6px"></div>
+      </div>
+
       <div class="ca-danger">
         <button class="ca-danger-knop" id="ca-account-del">${ct('btn_account_del')}</button>
         <div class="ca-danger-uitleg">${ct('danger_uitleg')}</div>
@@ -8682,6 +8819,8 @@ window.addEventListener('appinstalled', () => {
       await post('logout', {});
       location.reload();
     });
+
+    _caPushInit(body);   // 🔔 Meldingen-toggle (Fase 1)
 
     // Hele atletenlijst in één keer wissen — zelfde bevestiging als de anonieme lijst.
     body.querySelector('#ca-roster-wis').addEventListener('click', async () => {

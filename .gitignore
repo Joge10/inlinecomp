@@ -49,3 +49,15 @@ _diag.php
 # Mail-testscript: lokaal ad-hoc testbestand, hoort niet in de repo én
 # moet van de server af (zie mail-deliverability-werk).
 _mailtest.php
+
+# Composer-dependencies: gegenereerd uit composer.json/composer.lock en via
+# SFTP naar de server geüpload (geen composer op de shared host). composer.json
+# + composer.lock committen we WEL — die documenteren de deps (reproduceerbaar
+# met `composer install`). De vendor/-map zelf (honderden files) niet.
+/vendor/
+
+# Web Push throwaway-scripts (Fase 0/1 diagnose + VAPID-keygen): niet committen,
+# en van de server af halen na gebruik.
+_diag_push.php
+_vapid_keygen.php
+vapid_keygen.php

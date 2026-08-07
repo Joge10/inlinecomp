@@ -1,0 +1,14 @@
+{
+    "name": "inlinecomp/app",
+    "description": "InlineComp — server-side dependencies. Enige gebruik nu: Web Push (coach/public meldingen).",
+    "type": "project",
+    "require": {
+        "minishlink/web-push": "^11.0",
+        "guzzlehttp/guzzle": "^7.0"
+    },
+    "config": {
+        "allow-plugins": {
+            "php-http/discovery": true
+        }
+    }
+}
