@@ -35,6 +35,9 @@ CREATE TABLE IF NOT EXISTS `competitions` (
     -- ingedeelde per-categorie-feed géén merges/splits oplevert en dan niet van
     -- "vers" te onderscheiden is. Zie 2026-08-03_competitions_wizard_dc.sql.
     `wizard_dc_gedaan`   TINYINT(1)   NOT NULL DEFAULT 0,
+    -- Demo/test-wedstrijd: onzichtbaar voor gewone /public + /coach bezoekers,
+    -- alleen zichtbaar via de demo-URL (?demo). Zie 2026-08-06_competitions_is_demo.sql.
+    `is_demo`            TINYINT(1)   NOT NULL DEFAULT 0,
     PRIMARY KEY (`id`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 

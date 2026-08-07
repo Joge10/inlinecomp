@@ -74,11 +74,18 @@ if ($sid) {
 // competitions-list-action filtert zelf al; deze gate beschermt single-
 // comp endpoints (programma, lookup, uitslagen, etc.) tegen URL-pluk
 // van een wedstrijd in voorbereidingsfase.
+// Demo-URL (?demo): alleen demo-wedstrijden zijn toegankelijk; normaal alleen
+// niet-demo én gepubliceerd. Zo lekt een demo nooit naar gewone bezoekers en
+// zijn echte wedstrijden onzichtbaar in demo-modus.
 function _publicWedstrijdZichtbaar(PDO $pdo, string $compId): bool {
     if (!$compId) return true;
-    $s = $pdo->prepare("SELECT public_zichtbaar FROM competitions WHERE id = ? LIMIT 1");
+    $demo = !empty($_GET['demo']);
+    $s = $pdo->prepare("SELECT public_zichtbaar, is_demo FROM competitions WHERE id = ? LIMIT 1");
     $s->execute([$compId]);
-    return (bool)$s->fetchColumn();
+    $r = $s->fetch(PDO::FETCH_ASSOC);
+    if (!$r) return false;
+    if ($demo) return (bool)$r['is_demo'];
+    return !$r['is_demo'] && (bool)$r['public_zichtbaar'];
 }
 $_zichtCompId = trim($_GET['competition_id'] ?? '');
 if ($_zichtCompId && !_publicWedstrijdZichtbaar($pdo, $_zichtCompId)) {
@@ -178,6 +185,12 @@ if ($action === 'competitions') {
         // voorbereiding" status — operator wil dat publiek niet eens
         // ziet dat InlineComp eraan werkt). Bij zichtbaar=0 +
         // aankondigen=1 verschijnt 'ie wel als disabled "(binnenkort)".
+        // Demo-URL (?demo): toon ALLEEN demo-wedstrijden; anders alleen echte
+        // (niet-demo) die gepubliceerd/aangekondigd zijn.
+        $demo = !empty($_GET['demo']);
+        $whereZicht = $demo
+            ? "c.is_demo = 1"
+            : "c.is_demo = 0 AND (c.public_zichtbaar = 1 OR c.public_aankondigen = 1)";
         $stmt = $pdo->prepare("
             SELECT c.id, c.name, c.starts, c.ends,
                    c.organisatie_id, o.logo_path AS org_logo, o.naam AS org_naam,
@@ -198,7 +211,7 @@ if ($action === 'competitions') {
             JOIN competition_tijdschema ct ON ct.competition_id = c.id
             LEFT JOIN organisaties o ON o.id = c.organisatie_id
             LEFT JOIN banen b ON b.id = c.baan_id
-            WHERE c.public_zichtbaar = 1 OR c.public_aankondigen = 1
+            WHERE $whereZicht
             ORDER BY c.starts DESC
         ");
         $stmt->execute();
@@ -4123,7 +4136,11 @@ window.addEventListener('offline', () => {
 // Retry-strategie: max 1× opnieuw bij 429 met random jitter (2-5 s) zodat
 // honderden publieke bezoekers niet synchroon weer aankloppen en de
 // rate-limit nog erger maken.
+// Demo-modus: staat er ?demo in de pagina-URL, dan hangt safeFetch aan elke
+// API-call &demo=1 zodat de backend alleen demo-wedstrijden toont/toelaat.
+const DEMO_MODE = new URLSearchParams(location.search).has('demo');
 async function safeFetch(url, maxRetries = 1) {
+    if (DEMO_MODE) url += (url.includes('?') ? '&' : '?') + 'demo=1';
     try {
         for (let attempt = 0; attempt <= maxRetries; attempt++) {
             const res = await fetch(url);

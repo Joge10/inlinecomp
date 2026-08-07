@@ -693,9 +693,10 @@ if ($action === 'commit') {
         return ['full' => $volledig, 'short' => $short];
     };
 
-    // Volgende auto-startnummer (1000+) bij MAX(start_number) ophalen
+    // Volgende auto-startnummer (1000+) bij MAX(start_number) ophalen.
+    // Demo/test-rijders (10001+) uitsluiten zodat die de teller niet opblazen.
     $stmt = $pdo->prepare(
-        "SELECT GREATEST(IFNULL(MAX(start_number), 999), 999) + 1 AS next_nr FROM persons"
+        "SELECT GREATEST(IFNULL(MAX(start_number), 999), 999) + 1 AS next_nr FROM persons WHERE license_key NOT LIKE 'demo-%'"
     );
     $stmt->execute();
     $nextStartNr = (int)$stmt->fetchColumn();

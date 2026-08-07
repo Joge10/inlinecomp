@@ -148,11 +148,13 @@ try {
         $clubs = $pdo->query("
             SELECT DISTINCT club_full FROM persons
             WHERE club_full IS NOT NULL AND club_full <> '' AND anonymized_at IS NULL
+              AND license_key NOT LIKE 'demo-%'   -- demo/test-clubs niet in autocomplete
             ORDER BY club_full
         ")->fetchAll(PDO::FETCH_COLUMN);
         $teams = $pdo->query("
             SELECT DISTINCT sponsor FROM persons
             WHERE sponsor IS NOT NULL AND sponsor <> '' AND anonymized_at IS NULL
+              AND license_key NOT LIKE 'demo-%'   -- demo/test-teams niet in autocomplete
             ORDER BY sponsor
         ")->fetchAll(PDO::FETCH_COLUMN);
         jsonOut(['clubs' => $clubs, 'teams' => $teams]);
@@ -356,6 +358,7 @@ try {
             LEFT JOIN coach_athletes ca
                    ON ca.person_license = p.license_key AND ca.coach_account_id = ?
             WHERE  p.anonymized_at IS NULL
+              AND  p.license_key NOT LIKE 'demo-%'   -- demo/test-rijders nooit in coach-zoek
               AND  (p.full_name LIKE ? OR p.club_full LIKE ? OR p.start_number = ?)
             ORDER  BY p.full_name
             LIMIT  25

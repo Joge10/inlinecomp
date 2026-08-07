@@ -55,4 +55,10 @@ usort($inline, function($a, $b) {
     return strcmp($a['starts'] ?? '', $b['starts'] ?? '');
 });
 
+// Demo-wedstrijd(en) als fixture toevoegen — staan permanent in de importlijst,
+// los van de DB, zodat ze na verwijderen in Beheer herbruikbaar blijven voor
+// het doortesten van flows/scenario's. Zie api/demo_fixture.php.
+require_once __DIR__ . '/demo_fixture.php';
+foreach (demo_fixture_lijst_items() as $demo) $inline[] = $demo;
+
 echo json_encode($inline);

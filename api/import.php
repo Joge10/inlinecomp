@@ -272,6 +272,7 @@ if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
 
 require_once __DIR__ . '/../../config_inlinecomp.php';
 require_once __DIR__ . '/../auth/session.php';
+require_once __DIR__ . '/demo_fixture.php';
 $_authUser = requireAuth($pdo);
 if (!kanSchrijven($_authUser, 'importeer')) {
     http_response_code(403);
@@ -336,14 +337,23 @@ try {
     $bronStmt = $pdo->prepare("SELECT bron FROM competitions WHERE id = ?");
     $bronStmt->execute([$compId]);
     $isHandmatig = ($bronStmt->fetchColumn() === 'handmatig');
+    // Demo-fixture: schrijf metadata (org + wedstrijd + DC's + afstanden) uit het
+    // lokale fixture-bestand i.p.v. de KNSB-API. Deelnemers komen daarna via de
+    // normale deelnemers-loop uit de POST-body — precies als bij een echte import.
+    $isDemo = is_demo_fixture_id($compId);
 
-    // $comp wordt bij KNSB in stap 1 gevuld; bij handmatig blijft 'em leeg.
+    // $comp wordt bij KNSB in stap 1 gevuld; bij handmatig/demo blijft 'em leeg.
     // De enige downstream-referentie (orgId-fallback rond regel 511) wordt
-    // alleen geraakt als organisatie_id nog NULL is — voor handmatige
-    // wedstrijden is die altijd gevuld via wedstrijd_handmatig.php.
+    // alleen geraakt als organisatie_id nog NULL is — voor handmatige/demo
+    // wedstrijden is die altijd gevuld (wedstrijd_handmatig.php resp. de fixture).
     $comp = [];
 
-    if ($isHandmatig) {
+    if ($isDemo) {
+        // Demo-id wint van een eventueel achtergebleven bron (bv. oude SQL-seed
+        // met bron='handmatig'); write_meta herstelt bron='demo'.
+        demo_fixture_write_meta($pdo, $compId);
+        $log[] = 'Demo-wedstrijd — metadata uit fixture geschreven';
+    } elseif ($isHandmatig) {
         $log[] = 'Handmatige wedstrijd — KNSB-sync overgeslagen';
     } else {
     // --------------------------------------------------------

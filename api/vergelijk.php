@@ -28,6 +28,7 @@ if (!$compId) {
 require_once __DIR__ . '/../../config_inlinecomp.php';
 require_once __DIR__ . '/../auth/session.php';
 require_once __DIR__ . '/lib_banen.php';
+require_once __DIR__ . '/demo_fixture.php';
 $_authUser = requireAuth($pdo);
 
 function apiGet(string $url): ?array {
@@ -58,6 +59,13 @@ function newUuid(): string {
 }
 
 try {
+
+    // Demo-fixture: lever de deelnemers-preview uit het lokale fixture-bestand
+    // i.p.v. de KNSB-API. Het echte KNSB-pad hieronder blijft volledig ongemoeid.
+    if (is_demo_fixture_id($compId)) {
+        echo json_encode(demo_fixture_vergelijk_response($pdo, $compId), JSON_UNESCAPED_UNICODE);
+        exit;
+    }
 
     $base = 'https://inschrijven.schaatsen.nl/api';
 

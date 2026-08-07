@@ -66,11 +66,18 @@ if ($sid) {
 // competitions-list-action filtert zelf al; deze gate beschermt single-
 // comp endpoints (programma, lookup, uitslagen, etc.) tegen URL-pluk
 // van een wedstrijd in voorbereidingsfase.
+// Demo-URL (?demo): alleen demo-wedstrijden zijn toegankelijk; normaal alleen
+// niet-demo én gepubliceerd. Zo lekt een demo nooit naar gewone bezoekers en
+// zijn echte wedstrijden onzichtbaar in demo-modus.
 function _coachWedstrijdZichtbaar(PDO $pdo, string $compId): bool {
     if (!$compId) return true;
-    $s = $pdo->prepare("SELECT public_zichtbaar FROM competitions WHERE id = ? LIMIT 1");
+    $demo = !empty($_GET['demo']);
+    $s = $pdo->prepare("SELECT public_zichtbaar, is_demo FROM competitions WHERE id = ? LIMIT 1");
     $s->execute([$compId]);
-    return (bool)$s->fetchColumn();
+    $r = $s->fetch(PDO::FETCH_ASSOC);
+    if (!$r) return false;
+    if ($demo) return (bool)$r['is_demo'];
+    return !$r['is_demo'] && (bool)$r['public_zichtbaar'];
 }
 // Cache POST body: coach_info-action gebruikt 'm óók (file_get_contents
 // op php://input kan maar één keer gelezen worden).
@@ -204,6 +211,12 @@ if ($action === 'competitions') {
         // geen logo of geen vereniging-naam heeft, pakken we die uit een
         // andere org-rij met dezelfde baan-naam (zelfde fysieke locatie).
         // Identiek aan /public.
+        // Demo-URL (?demo): toon ALLEEN demo-wedstrijden; anders alleen echte
+        // (niet-demo) die gepubliceerd/aangekondigd zijn.
+        $demo = !empty($_GET['demo']);
+        $whereZicht = $demo
+            ? "c.is_demo = 1"
+            : "c.is_demo = 0 AND (c.public_zichtbaar = 1 OR c.public_aankondigen = 1)";
         $stmt = $pdo->prepare("
             SELECT c.id, c.name, c.starts, c.ends,
                    c.organisatie_id, o.logo_path AS org_logo, o.naam AS org_naam,
@@ -224,7 +237,7 @@ if ($action === 'competitions') {
             JOIN competition_tijdschema ct ON ct.competition_id = c.id
             LEFT JOIN organisaties o ON o.id = c.organisatie_id
             LEFT JOIN banen b ON b.id = c.baan_id
-            WHERE c.public_zichtbaar = 1 OR c.public_aankondigen = 1
+            WHERE $whereZicht
             ORDER BY c.starts DESC
         ");
         $stmt->execute();
@@ -4951,6 +4964,7 @@ function _coachFetchOpts() {
 // safeFetch is GET-only — voor POST (toevoegen, coach_info, etc.) heb je
 // deze helper nodig zodat de auth-gate niet wegvalt.
 async function coachFetch(url, opts = {}) {
+    if (DEMO_MODE) url += (url.includes('?') ? '&' : '?') + 'demo=1';
     const pw = localStorage.getItem('coach_pw') || '';
     const headers = { ...(opts.headers || {}) };
     if (pw) headers['X-Coach-PW'] = pw;
@@ -5036,7 +5050,11 @@ async function _vraagCoachWachtwoord() {
     });
 }
 
+// Demo-modus: staat er ?demo in de pagina-URL, dan hangt safeFetch aan elke
+// API-call &demo=1 zodat de backend alleen demo-wedstrijden toont/toelaat.
+const DEMO_MODE = new URLSearchParams(location.search).has('demo');
 async function safeFetch(url, maxRetries = 1) {
+    if (DEMO_MODE) url += (url.includes('?') ? '&' : '?') + 'demo=1';
     try {
         for (let attempt = 0; attempt <= maxRetries; attempt++) {
             let res = await fetch(url, _coachFetchOpts());
