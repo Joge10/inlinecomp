@@ -4092,7 +4092,10 @@ function _rerenderActiveTab() {
 }
 
 document.addEventListener('DOMContentLoaded', () => {
-    initI18n({ dict: T, onChange: _rerenderActiveTab });
+    initI18n({ dict: T, onChange: () => {
+        _rerenderActiveTab();
+        if (typeof _ppSync === 'function') _ppSync();   // push-taal meteen meeschakelen
+    } });
 });
 
 const selComp = document.getElementById('sel-comp');

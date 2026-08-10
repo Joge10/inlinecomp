@@ -4618,7 +4618,10 @@ function _rerenderCoach() {
 }
 
 document.addEventListener('DOMContentLoaded', () => {
-    initI18n({ dict: T, onChange: _rerenderCoach });
+    initI18n({ dict: T, onChange: () => {
+        _rerenderCoach();
+        if (typeof window._caPushLangSync === 'function') window._caPushLangSync();   // push-taal meeschakelen
+    } });
 });
 
 const $ = id => document.getElementById(id);
@@ -8491,6 +8494,9 @@ window.addEventListener('appinstalled', () => {
       }
     } catch (e) {}
   }
+  // Haakje voor de taalknop (initI18n-onChange staat buiten deze IIFE): bij een
+  // taalwissel meteen de nieuwe taal naar de server syncen.
+  window._caPushLangSync = _caPushSync;
 
   async function _caPushHuidigAbo() {
     if (!_caPushSupported()) return null;
