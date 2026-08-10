@@ -4443,7 +4443,10 @@ function _refreshAfstandPanel(strook) {
 function applyProgFilter(strook) {
     const dag = strook.getAttribute('data-actieve-dag') || 'alle';
     const afs = strook.getAttribute('data-actieve-afstand') || 'alle';
-    const container = strook.parentElement;
+    // Container = het element dat ZOWEL de sticky-kop als de rit-blokken bevat.
+    // Sinds de sticky-kop-wrapper zit de strook niet meer direct náást de
+    // rit-blokken, dus niet strook.parentElement (= de kop) maar de kop z'n ouder.
+    const container = strook.closest('.prog-sticky-kop')?.parentElement || strook.parentElement;
     if (!container) return;
 
     // Reset alle samenvat-modi (was ingeschakeld door vorige filter)
