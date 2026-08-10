@@ -642,10 +642,12 @@ if ($action === 'save_rit_results') {
                         $_afNaam = (string) ($_afr['name'] ?? ''); $_afMeters = $_afr['value_meters'] ?? null;
                     }
                     $_afstand = trim($_afNaam . ($_afMeters ? ' ' . $_afMeters . 'm' : ''));
-                    pushEnqueue($pdo, $_lics, [
-                        'title' => 'Uitslag binnen',
+                    // body = context (rit · afstand); de flush zet er per abonnement
+                    // de naam/namen van díe volgers z'n rijders met " — " vóór.
+                    pushEnqueue($pdo, 'uitslag', $_lics, [
+                        'title' => '🏁 Uitslag binnen',
                         'body'  => trim(((string) ($_h['heat_naam'] ?? 'Rit')) . ($_afstand !== '' ? ' · ' . $_afstand : '') . ' is verwerkt'),
-                        'url'   => './',
+                        'url'   => './?comp=' . rawurlencode($compId),   // deep-link naar de wedstrijd
                         'tag'   => 'heat-' . $ritId,
                     ]);
                     pushFlushOutbox($pdo, 15, true);   // meteen versturen (force, defensief)

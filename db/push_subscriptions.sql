@@ -16,7 +16,9 @@ CREATE TABLE IF NOT EXISTS `push_subscriptions` (
     `endpoint_hash`    CHAR(64)     NOT NULL,               -- sha256(endpoint)
     `p256dh`           VARCHAR(255) NOT NULL,
     `auth`             VARCHAR(255) NOT NULL,
-    `licenses`         TEXT         DEFAULT NULL,           -- bij scope='public': JSON-lijst license_keys
+    `notif_loting`     TINYINT(1)   NOT NULL DEFAULT 1,     -- opt-in per type (Fase 3)
+    `notif_uitslag`    TINYINT(1)   NOT NULL DEFAULT 1,
+    `licenses`         TEXT         DEFAULT NULL,           -- bij scope='public': JSON-lijst license_keys (mirror; targeting via push_sub_licenses)
     `user_agent`       VARCHAR(255) DEFAULT NULL,
     `created_at`       DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP,
     `last_seen`        DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,

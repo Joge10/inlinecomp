@@ -8402,8 +8402,8 @@ window.addEventListener('appinstalled', () => {
     netwerkfout:      { nl:'Netwerkfout', en:'Network error', de:'Netzwerkfehler', fr:'Erreur réseau' },
     hdr_btn_title:    { nl:'Coach-account / inloggen', en:'Coach account / log in', de:'Coach-Konto / Anmelden', fr:'Compte entraîneur / connexion' },
     hdr_btn_ingelogd: { nl:'Ingelogd: {naam}', en:'Logged in: {naam}', de:'Angemeldet: {naam}', fr:'Connecté : {naam}' },
-    push_titel:    { nl:'🔔 Meldingen', en:'🔔 Notifications', de:'🔔 Benachrichtigungen', fr:'🔔 Notifications' },
-    push_uitleg:   { nl:'Krijg een seintje bij loting en uitslag van je atleten.', en:'Get a ping for draws and results of your athletes.', de:'Erhalte eine Info bei Auslosung und Ergebnissen deiner Athleten.', fr:'Recevez une alerte pour les tirages et résultats de vos athlètes.' },
+    push_titel:    { nl:'🔔 Pushmeldingen op je telefoon', en:'🔔 Push notifications on your phone', de:'🔔 Push-Benachrichtigungen auf dein Handy', fr:'🔔 Notifications push sur votre téléphone' },
+    push_uitleg:   { nl:'Krijg een pushmelding op je telefoon bij loting en uitslag van je atleten — ook als de app dicht is.', en:'Get a push notification on your phone for draws and results of your athletes — even when the app is closed.', de:'Erhalte eine Push-Benachrichtigung auf dein Handy bei Auslosung und Ergebnissen deiner Athleten — auch wenn die App geschlossen ist.', fr:'Recevez une notification push sur votre téléphone pour les tirages et résultats de vos athlètes — même lorsque l\'app est fermée.' },
     push_aan:      { nl:'Aanzetten', en:'Turn on', de:'Einschalten', fr:'Activer' },
     push_uit:      { nl:'Uitzetten', en:'Turn off', de:'Ausschalten', fr:'Désactiver' },
     push_test:     { nl:'Stuur test', en:'Send test', de:'Test senden', fr:'Envoyer un test' },
@@ -8412,7 +8412,9 @@ window.addEventListener('appinstalled', () => {
     push_geweigerd:{ nl:'Meldingen zijn geblokkeerd — zet ze aan in je browser-instellingen.', en:'Notifications are blocked — enable them in your browser settings.', de:'Benachrichtigungen sind blockiert — aktiviere sie in den Browsereinstellungen.', fr:'Notifications bloquées — activez-les dans les paramètres du navigateur.' },
     push_test_ok:  { nl:'Testmelding verstuurd — check je toestel.', en:'Test sent — check your device.', de:'Test gesendet — prüfe dein Gerät.', fr:'Test envoyé — vérifiez votre appareil.' },
     push_fout:     { nl:'Er ging iets mis. Probeer opnieuw.', en:'Something went wrong. Try again.', de:'Etwas ist schiefgelaufen. Versuche es erneut.', fr:"Une erreur s'est produite. Réessayez." },
-    push_ios:      { nl:'Op iPhone: zet de app eerst op je beginscherm (deel-icoon → "Zet op beginscherm").', en:'On iPhone: add the app to your home screen first (share → "Add to Home Screen").', de:'Auf dem iPhone: füge die App zuerst zum Startbildschirm hinzu.', fr:"Sur iPhone : ajoutez d'abord l'app à l'écran d'accueil." }
+    push_ios:      { nl:'Op iPhone: zet de app eerst op je beginscherm (deel-icoon → "Zet op beginscherm").', en:'On iPhone: add the app to your home screen first (share → "Add to Home Screen").', de:'Auf dem iPhone: füge die App zuerst zum Startbildschirm hinzu.', fr:"Sur iPhone : ajoutez d'abord l'app à l'écran d'accueil." },
+    push_loting:   { nl:'Loting bekend', en:'Draw ready', de:'Auslosung bekannt', fr:'Tirage prêt' },
+    push_uitslag:  { nl:'Uitslag verwerkt', en:'Result processed', de:'Ergebnis verarbeitet', fr:'Résultat traité' }
   };
   const ct = (k, p = {}) => {
     let s = (CA_I18N[k] && (CA_I18N[k][typeof getCurLang === 'function' ? getCurLang() : 'nl'] || CA_I18N[k].en || CA_I18N[k].nl)) || k;
@@ -8451,12 +8453,8 @@ window.addEventListener('appinstalled', () => {
     } catch (e) {}
   };
 
-  // ── Web Push (Fase 1): abonneren + testmelding ─────────────────────────────
-  // ⚠ Fase 1-gate: de 🔔 Meldingen-toggle is ALLEEN zichtbaar voor de coach-
-  // account-e-mailadressen hieronder — zodat andere coaches 'm nog niet zien
-  // ("jipie, het kan al!") terwijl we nog testen. Bij uitrol: leeg maken of
-  // de gate onderin _caPushInit verwijderen.
-  const PUSH_BETA_EMAILS = ['geert.marije@gmail.com'];
+  // ── Web Push: abonneren + testmelding ──────────────────────────────────────
+  // Open voor alle coach-accounts (beta-gate verwijderd bij uitrol zomer 2026).
   let _caPushBusy = false;
   const _caPushSupported = () =>
     ('serviceWorker' in navigator) && ('PushManager' in window) && ('Notification' in window);
@@ -8467,6 +8465,28 @@ window.addEventListener('appinstalled', () => {
     const arr = new Uint8Array(raw.length);
     for (let i = 0; i < raw.length; i++) arr[i] = raw.charCodeAt(i);
     return arr;
+  }
+
+  // Per-type voorkeuren (loting/uitslag apart), persistent in localStorage.
+  const _caPushPref    = type => localStorage.getItem('ic_coach_push_' + type) !== '0';   // default aan
+  const _caPushSetPref = (type, aan) => localStorage.setItem('ic_coach_push_' + type, aan ? '1' : '0');
+  const _caPushBody    = sub => Object.assign({}, sub.toJSON(), {
+    scope: 'coach',
+    notif_loting:  _caPushPref('loting')  ? 1 : 0,
+    notif_uitslag: _caPushPref('uitslag') ? 1 : 0,
+  });
+
+  // Re-sync voorkeuren naar de server ALS er al een abonnement is.
+  async function _caPushSync() {
+    try {
+      const sub = await _caPushHuidigAbo();
+      if (sub && Notification.permission === 'granted') {
+        await fetch('../api/push_subscribe.php?action=subscribe', {
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          credentials: 'same-origin', body: JSON.stringify(_caPushBody(sub)),
+        }).catch(() => {});
+      }
+    } catch (e) {}
   }
 
   async function _caPushHuidigAbo() {
@@ -8490,12 +8510,14 @@ window.addEventListener('appinstalled', () => {
     } catch (e) { return 'fout'; }
     const r = await fetch('../api/push_subscribe.php?action=subscribe', {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
-      credentials: 'same-origin', body: JSON.stringify(sub.toJSON()),
+      credentials: 'same-origin', body: JSON.stringify(_caPushBody(sub)),
     }).then(r => r.json()).catch(() => ({}));
-    return (r && r.ok) ? true : 'fout';
+    if (r && r.ok) { localStorage.setItem('ic_coach_push_optin', '1'); return true; }
+    return 'fout';
   }
 
   async function _caPushUit() {
+    localStorage.setItem('ic_coach_push_optin', '0');   // bewust uit → niet auto-herstellen
     const sub = await _caPushHuidigAbo();
     if (sub) {
       await fetch('../api/push_subscribe.php?action=unsubscribe', {
@@ -8506,29 +8528,46 @@ window.addEventListener('appinstalled', () => {
     }
   }
 
+  // Zelfherstel: had de coach 'm aan (opt-in), staat toestemming nog op granted,
+  // maar is het abonnement door OS/browser gedropt → stil opnieuw abonneren
+  // (geen prompt: requestPermission() met granted keert meteen terug).
+  async function _caPushHeal() {
+    if (localStorage.getItem('ic_coach_push_optin') !== '1') return false;
+    if (!_caPushSupported() || Notification.permission !== 'granted') return false;
+    if (await _caPushHuidigAbo()) return false;
+    return (await _caPushAan()) === true;
+  }
+
   async function _caPushInit(body) {
     const wrap = body.querySelector('#ca-push');
     if (!wrap) return;
-    // Fase 1-gate: alleen het/de proef-account(s) zien de toggle.
-    const _email = ((account && account.email) || '').toLowerCase();
-    if (!PUSH_BETA_EMAILS.map(e => e.toLowerCase()).includes(_email)) { wrap.remove(); return; }
-    const tog  = body.querySelector('#ca-push-toggle');
-    const test = body.querySelector('#ca-push-test');
-    const msg  = body.querySelector('#ca-push-msg');
+    const tog    = body.querySelector('#ca-push-toggle');
+    const test   = body.querySelector('#ca-push-test');
+    const msg    = body.querySelector('#ca-push-msg');
+    const opties = body.querySelector('#ca-push-opties');
+    const cbL    = body.querySelector('#ca-push-loting');
+    const cbU    = body.querySelector('#ca-push-uitslag');
     if (!_caPushSupported()) {
       tog.style.display = 'none';
       const iOS = /iPhone|iPad|iPod/.test(navigator.userAgent);
       msg.textContent = ct('push_niet') + (iOS ? ' ' + ct('push_ios') : '');
       return;
     }
+    // Vinkjes: initiële stand uit voorkeuren; wijziging → meteen naar de server.
+    if (cbL) cbL.checked = _caPushPref('loting');
+    if (cbU) cbU.checked = _caPushPref('uitslag');
+    if (cbL) cbL.addEventListener('change', () => { _caPushSetPref('loting',  cbL.checked); _caPushSync(); });
+    if (cbU) cbU.addEventListener('change', () => { _caPushSetPref('uitslag', cbU.checked); _caPushSync(); });
     const refresh = async () => {
       const sub = await _caPushHuidigAbo();
       const aan = !!sub && Notification.permission === 'granted';
       tog.textContent = aan ? ct('push_uit') : ct('push_aan');
       tog.dataset.aan = aan ? '1' : '0';
       test.style.display = aan ? '' : 'none';
+      if (opties) opties.style.display = aan ? 'flex' : 'none';
       if (aan) msg.textContent = '';
     };
+    await _caPushHeal();   // door OS gedropt abonnement stil terugzetten
     await refresh();
     tog.addEventListener('click', async () => {
       if (_caPushBusy) return; _caPushBusy = true;
@@ -8801,6 +8840,12 @@ window.addEventListener('appinstalled', () => {
       <div id="ca-push" style="border:1px solid #e2e8f0;border-radius:10px;padding:10px 12px;margin:16px 0 4px">
         <div style="font-weight:600;color:#1b5faa">${ct('push_titel')}</div>
         <div style="font-size:.82rem;color:#667;margin:2px 0 8px">${ct('push_uitleg')}</div>
+        <div id="ca-push-opties" style="display:none;flex-direction:column;gap:5px;margin:0 0 9px">
+          <label style="display:flex;align-items:center;gap:8px;font-size:.88rem;color:#333">
+            <input type="checkbox" id="ca-push-loting" checked> ${ct('push_loting')}</label>
+          <label style="display:flex;align-items:center;gap:8px;font-size:.88rem;color:#333">
+            <input type="checkbox" id="ca-push-uitslag" checked> ${ct('push_uitslag')}</label>
+        </div>
         <div style="display:flex;gap:8px;flex-wrap:wrap">
           <button class="btn btn-klein" id="ca-push-toggle">${ct('push_aan')}</button>
           <button class="btn btn-klein" id="ca-push-test" style="display:none">${ct('push_test')}</button>

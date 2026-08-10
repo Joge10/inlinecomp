@@ -416,7 +416,33 @@ function renderBezoekersBlok() {
         </div>
         <div class="gb-stat-hourly" id="gb-stat-check-hourly"></div>
         <div class="gb-stat-weekly" id="gb-stat-check-weekly"></div>
-        <div class="gb-stat-voetnoot" id="gb-stat-check-voet">Laatst bijgewerkt: —</div>`;
+        <div class="gb-stat-voetnoot" id="gb-stat-check-voet">Laatst bijgewerkt: —</div>
+
+        <!-- Push-meldingen — abonnees (adoptie) -->
+        <div class="section-title gb-stats-blok-volgend">Push-meldingen — abonnees</div>
+        <div class="gb-stats" id="gb-stats-push">
+            <div class="gb-stat-kaart">
+                <div class="gb-stat-waarde" id="gb-stat-push-totaal">—</div>
+                <div class="gb-stat-label">Totaal abonnementen <span class="gb-stat-hint">(apparaten)</span></div>
+            </div>
+            <div class="gb-stat-kaart">
+                <div class="gb-stat-waarde" id="gb-stat-push-coach">—</div>
+                <div class="gb-stat-label">Coach <span class="gb-stat-hint" id="gb-stat-push-coach-hint"></span></div>
+            </div>
+            <div class="gb-stat-kaart">
+                <div class="gb-stat-waarde" id="gb-stat-push-public">—</div>
+                <div class="gb-stat-label">Public</div>
+            </div>
+            <div class="gb-stat-kaart">
+                <div class="gb-stat-waarde" id="gb-stat-push-loting">—</div>
+                <div class="gb-stat-label">Wil loting 🚩</div>
+            </div>
+            <div class="gb-stat-kaart">
+                <div class="gb-stat-waarde" id="gb-stat-push-uitslag">—</div>
+                <div class="gb-stat-label">Wil uitslag 🏁</div>
+            </div>
+        </div>
+        <div class="gb-stat-voetnoot" id="gb-stat-push-voet">Laatst bijgewerkt: —</div>`;
 
     startPublicStatsRefresh();
 }
@@ -581,6 +607,29 @@ async function laadPublicStats() {
     await _laadStatsBlok('api/public_stats.php', 'gb-stat',       'gb-stat-voet');
     await _laadStatsBlok('api/coach_stats.php',  'gb-stat-coach', 'gb-stat-coach-voet');
     await _laadStatsBlok('api/check_stats.php',  'gb-stat-check', 'gb-stat-check-voet');
+    await _laadPushStats();
+}
+
+// Compacte push-abonnee-telling (adoptie). Geen piek/uur/week zoals bezoekers —
+// gewoon de tellingen uit api/push_stats.php.
+async function _laadPushStats() {
+    try {
+        const res = await fetch('api/push_stats.php');
+        if (!res.ok) return;
+        const d = await res.json();
+        const set = (id, val) => { const e = el(id); if (e) e.textContent = val; };
+        set('gb-stat-push-totaal',  d.totaal      ?? 0);
+        set('gb-stat-push-coach',   d.coach       ?? 0);
+        set('gb-stat-push-public',  d.public      ?? 0);
+        set('gb-stat-push-loting',  d.wil_loting  ?? 0);
+        set('gb-stat-push-uitslag', d.wil_uitslag ?? 0);
+        const ch = el('gb-stat-push-coach-hint');
+        if (ch) ch.textContent = (d.coach_accounts != null)
+            ? `(${d.coach_accounts} account${d.coach_accounts === 1 ? '' : 's'})` : '';
+        const v = el('gb-stat-push-voet');
+        if (v) v.textContent = 'Laatst bijgewerkt: '
+            + new Date().toLocaleTimeString('nl-NL', {hour:'2-digit', minute:'2-digit', second:'2-digit'});
+    } catch { /* stil */ }
 }
 
 function startPublicStatsRefresh() {

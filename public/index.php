@@ -2225,6 +2225,24 @@ select:focus, input:focus { border-color: var(--middenblauw); outline: none; }
 .setup-volg-x { border:none; background:none; color:#b71c1c; font-size:1.15rem;
     line-height:1; cursor:pointer; padding:2px 7px; border-radius:50%; }
 .setup-volg-x:hover { background:#f5e5e5; }
+/* Push-meldingen-blok in de setup-modal (Fase 3). */
+.pub-push:empty { display:none; }
+.pub-push { margin:0 0 14px; padding:10px 12px; background:#f4f8fc;
+    border:1px solid #dbe7f2; border-radius:10px; }
+.pub-push-kop { display:flex; align-items:center; justify-content:space-between; gap:8px; }
+.pub-push-titel { font-size:.9rem; font-weight:700; color:#1b5faa; }
+.pub-push-uitleg { margin-top:6px; font-size:.8rem; color:#667; line-height:1.35; }
+.pub-push-toggle { border:1px solid var(--blauw); background:#fff; color:var(--blauw);
+    border-radius:999px; padding:5px 14px; font-size:.85rem; font-weight:600; cursor:pointer; }
+.pub-push-toggle[data-aan="1"] { background:var(--blauw); color:#fff; }
+.pub-push-opties { margin-top:9px; display:flex; flex-direction:column; gap:6px; }
+.pub-push-opties.uit { display:none; }
+.pub-push-opt { display:flex; align-items:center; gap:8px; font-size:.88rem; color:#333; }
+.pub-push-opt input { width:16px; height:16px; }
+.pub-push-rij { margin-top:9px; display:flex; align-items:center; gap:10px; flex-wrap:wrap; }
+.pub-push-test { border:none; background:#e9eef5; color:#1b5faa; border-radius:8px;
+    padding:5px 12px; font-size:.82rem; font-weight:600; cursor:pointer; }
+.pub-push-msg { font-size:.82rem; color:#556; }
 /* Bij 3-4 kinderen: iets krappere horizontale padding zodat de brede actieve
    tab (nummer + voornaam) genoeg ruimte houdt naast de smalle nummer-tabs.
    (Vervangt de oude 2026-07-01-aanpak waarbij álle tabs de voornaam behielden;
@@ -2977,6 +2995,8 @@ select:focus, input:focus { border-color: var(--middenblauw); outline: none; }
                 data-i18n-title="pwa_btn_sluit" title="Sluiten">&times;</button>
         <h2 class="setup-modal-titel" data-i18n="setup_modal_titel">Wedstrijd &amp; rijder</h2>
         <div id="setup-volglijst" class="setup-volglijst"></div>
+        <!-- Push-meldingen (Fase 3). JS vult dit zodra je een rijder volgt. -->
+        <div id="pub-push" class="pub-push"></div>
         <div class="stap">
             <div class="stap-label">
                 <span class="stap-nr">1</span> <span data-i18n="stap1_label">Kies je wedstrijd</span>
@@ -5009,6 +5029,7 @@ function _updateSetupModalMax() {
 // "Je gevolgde rijders" in de setup-modal: chips met verwijder-×. Hier gebeurt
 // het verwijderen (weggehaald uit de tabs, die waren te krap op smal scherm).
 function _renderSetupVolglijst() {
+    if (typeof _ppRender === 'function') _ppRender();   // push-blok mee verversen
     const el = document.getElementById('setup-volglijst');
     if (!el) return;
     // Bron = de OPGESLAGEN (globale) volglijst, niet _kinderen. _kinderen is de
@@ -5042,6 +5063,8 @@ function _renderSetupVolglijst() {
 function _verwijderGevolgdeRijder(lic) {
     localStorage.setItem(KIDS_LS_KEY,
         JSON.stringify(_loadKidsUitStorage().filter(k => k.license_key !== lic)));
+    if (typeof _ppSync === 'function') _ppSync();   // server-licenties meelopen
+
     const idx = _kinderen.findIndex(x => x.data?.[x.kozen_idx ?? 0]?.persoon?.license_key === lic);
     if (idx !== -1) {
         _kinderen.splice(idx, 1);
@@ -5162,6 +5185,7 @@ function _saveKids() {
         })
         .filter(Boolean);
     localStorage.setItem(KIDS_LS_KEY, JSON.stringify(items));
+    if (typeof _ppSync === 'function') _ppSync();   // server-licenties meelopen
 }
 function _loadKidsUitStorage() {
     try { return JSON.parse(localStorage.getItem(KIDS_LS_KEY) || '[]'); }
@@ -7453,6 +7477,178 @@ let _huidigStempel = '';
     // Desktop-fallback: dubbelklik op de header refreshed ook
     document.querySelector('header')?.addEventListener('dblclick', ptrHerlaad);
 })();
+
+// ── Web Push (Fase 3): meldingen voor je gevolgde rijders ─────────────────
+// Open voor iedereen (beta-gate verwijderd bij uitrol zomer 2026). Het blok
+// verschijnt zodra je minstens één rijder volgt. De gevolgde licenties (uit
+// localStorage) worden meegestuurd; loting/uitslag zijn apart aan/uit te zetten.
+// 4 talen (nl/en/de/fr) met fallback lang → en → nl, via de app-brede getCurLang().
+const _pp = o => o[(typeof getCurLang === 'function' ? getCurLang() : 'nl')] || o.en || o.nl;
+const _ppT = {
+    titel:     { nl:'Pushmeldingen op je telefoon', en:'Push notifications on your phone', de:'Push-Benachrichtigungen auf dein Handy', fr:'Notifications push sur votre téléphone' },
+    uitleg:    { nl:'Een pushmelding op je telefoon zodra er geloot is of een uitslag binnenkomt van je rijders — ook als de app dicht is.', en:'A push notification on your phone as soon as a draw is made or a result comes in for your riders — even when the app is closed.', de:'Eine Push-Benachrichtigung auf dein Handy, sobald eine Auslosung erfolgt oder ein Ergebnis deiner Fahrer eintrifft — auch wenn die App geschlossen ist.', fr:'Une notification push sur votre téléphone dès qu\'un tirage est fait ou qu\'un résultat arrive pour vos patineurs — même quand l\'app est fermée.' },
+    niet:      { nl:'Niet ondersteund in deze browser.', en:'Not supported in this browser.', de:'In diesem Browser nicht unterstützt.', fr:'Non pris en charge dans ce navigateur.' },
+    ios:       { nl:'Op iPhone: voeg de app eerst toe aan je beginscherm.', en:'On iPhone: add the app to your home screen first.', de:'Auf dem iPhone: füge die App zuerst zum Startbildschirm hinzu.', fr:"Sur iPhone : ajoutez d'abord l'app à l'écran d'accueil." },
+    uit:       { nl:'Uitzetten', en:'Turn off', de:'Ausschalten', fr:'Désactiver' },
+    aan:       { nl:'Aanzetten', en:'Turn on', de:'Einschalten', fr:'Activer' },
+    loting:    { nl:'Loting bekend', en:'Draw ready', de:'Auslosung bekannt', fr:'Tirage prêt' },
+    uitslag:   { nl:'Uitslag verwerkt', en:'Result processed', de:'Ergebnis verarbeitet', fr:'Résultat traité' },
+    test:      { nl:'Stuur test', en:'Send test', de:'Test senden', fr:'Envoyer un test' },
+    bezig:     { nl:'Bezig…', en:'Working…', de:'Läuft…', fr:'En cours…' },
+    geweigerd: { nl:'Meldingen geweigerd in je browser.', en:'Notifications blocked in your browser.', de:'Benachrichtigungen im Browser blockiert.', fr:'Notifications bloquées dans votre navigateur.' },
+    fout:      { nl:'Er ging iets mis.', en:'Something went wrong.', de:'Etwas ist schiefgelaufen.', fr:"Une erreur s'est produite." },
+    testok:    { nl:'Test verstuurd ✓', en:'Test sent ✓', de:'Test gesendet ✓', fr:'Test envoyé ✓' },
+    mislukt:   { nl:'mislukt', en:'failed', de:'fehlgeschlagen', fr:'échoué' },
+};
+let _ppBusy = false;
+const _ppSupported = () =>
+    ('serviceWorker' in navigator) && ('PushManager' in window) && ('Notification' in window);
+
+function _ppB64ToUint8(base64) {
+    const pad = '='.repeat((4 - (base64.length % 4)) % 4);
+    const raw = atob((base64 + pad).replace(/-/g, '+').replace(/_/g, '/'));
+    const arr = new Uint8Array(raw.length);
+    for (let i = 0; i < raw.length; i++) arr[i] = raw.charCodeAt(i);
+    return arr;
+}
+const _ppLics    = () => _loadKidsUitStorage().map(k => k.license_key).filter(Boolean);
+const _ppPref    = type => localStorage.getItem('ic_pub_push_' + type) !== '0';   // default aan
+const _ppSetPref = (type, aan) => localStorage.setItem('ic_pub_push_' + type, aan ? '1' : '0');
+
+async function _ppHuidigAbo() {
+    if (!_ppSupported()) return null;
+    const reg = await navigator.serviceWorker.ready;
+    return await reg.pushManager.getSubscription();
+}
+
+// POST subscribe met huidige licenties + voorkeuren (ook voor re-sync).
+async function _ppPostSubscribe(sub) {
+    const body = Object.assign({}, sub.toJSON(), {
+        scope: 'public',
+        licenses: _ppLics(),
+        notif_loting:  _ppPref('loting')  ? 1 : 0,
+        notif_uitslag: _ppPref('uitslag') ? 1 : 0,
+    });
+    return fetch('../api/push_subscribe.php?action=subscribe', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
+    }).then(r => r.json()).catch(() => ({}));
+}
+
+async function _ppAan() {
+    const perm = await Notification.requestPermission();
+    if (perm !== 'granted') return 'geweigerd';
+    const reg = await navigator.serviceWorker.ready;
+    const kr = await fetch('../api/push_pubkey.php').then(r => r.json()).catch(() => ({}));
+    if (!kr.publicKey) return 'fout';
+    let sub;
+    try {
+        sub = await reg.pushManager.subscribe({
+            userVisibleOnly: true, applicationServerKey: _ppB64ToUint8(kr.publicKey),
+        });
+    } catch (e) { return 'fout'; }
+    const r = await _ppPostSubscribe(sub);
+    if (r && r.ok) { localStorage.setItem('ic_pub_push_optin', '1'); return true; }
+    return 'fout';
+}
+
+async function _ppUit() {
+    localStorage.setItem('ic_pub_push_optin', '0');   // bewust uit → niet auto-herstellen
+    const sub = await _ppHuidigAbo();
+    if (sub) {
+        await fetch('../api/push_subscribe.php?action=unsubscribe', {
+            method: 'POST', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ scope: 'public', endpoint: sub.endpoint }),
+        }).catch(() => {});
+        await sub.unsubscribe().catch(() => {});
+    }
+}
+
+// Zelfherstel: had de gebruiker 'm aan (opt-in), toestemming nog granted, maar
+// abonnement door OS/browser gedropt → stil opnieuw abonneren (geen prompt).
+async function _ppHeal() {
+    if (localStorage.getItem('ic_pub_push_optin') !== '1') return false;
+    if (!_ppSupported() || Notification.permission !== 'granted') return false;
+    if (await _ppHuidigAbo()) return false;
+    return (await _ppAan()) === true;
+}
+
+// Re-sync licenties/voorkeuren naar de server ALS er een abonnement is. Wordt
+// aangeroepen zodra je gevolgde rijders wijzigen (add/remove) of een voorkeur.
+async function _ppSync() {
+    try {
+        const sub = await _ppHuidigAbo();
+        if (sub && Notification.permission === 'granted') await _ppPostSubscribe(sub);
+    } catch (e) {}
+}
+
+async function _ppRender() {
+    const el = document.getElementById('pub-push');
+    if (!el) return;
+    // Alleen tonen zodra je minstens één rijder volgt.
+    if (!_ppLics().length) { el.innerHTML = ''; return; }
+    if (!_ppSupported()) {
+        const iOS = /iPhone|iPad|iPod/.test(navigator.userAgent);
+        el.innerHTML = `<div class="pub-push-titel">🔔 ${_pp(_ppT.titel)}</div>
+            <div class="pub-push-msg">${_pp(_ppT.niet)}${iOS ? ' ' + _pp(_ppT.ios) : ''}</div>`;
+        return;
+    }
+    await _ppHeal();   // door OS gedropt abonnement stil terugzetten
+    const sub = await _ppHuidigAbo();
+    const aan = !!sub && Notification.permission === 'granted';
+    el.innerHTML = `
+        <div class="pub-push-kop">
+            <span class="pub-push-titel">🔔 ${_pp(_ppT.titel)}</span>
+            <button type="button" class="pub-push-toggle" data-aan="${aan ? '1' : '0'}">${
+                aan ? _pp(_ppT.uit) : _pp(_ppT.aan)}</button>
+        </div>
+        <div class="pub-push-uitleg">${_pp(_ppT.uitleg)}</div>
+        <div class="pub-push-opties${aan ? '' : ' uit'}">
+            <label class="pub-push-opt"><input type="checkbox" data-type="loting"  ${_ppPref('loting')  ? 'checked' : ''}> ${_pp(_ppT.loting)}</label>
+            <label class="pub-push-opt"><input type="checkbox" data-type="uitslag" ${_ppPref('uitslag') ? 'checked' : ''}> ${_pp(_ppT.uitslag)}</label>
+        </div>
+        <div class="pub-push-rij"${aan ? '' : ' style="display:none"'}>
+            <button type="button" class="pub-push-test">${_pp(_ppT.test)}</button>
+            <span class="pub-push-msg"></span>
+        </div>`;
+
+    const msg = el.querySelector('.pub-push-msg');
+    el.querySelector('.pub-push-toggle').addEventListener('click', async () => {
+        if (_ppBusy) return; _ppBusy = true;
+        if (msg) msg.textContent = _pp(_ppT.bezig);
+        try {
+            if (aan) {
+                await _ppUit();
+            } else {
+                const res = await _ppAan();
+                if (res === 'geweigerd')  { if (msg) msg.textContent = _pp(_ppT.geweigerd); }
+                else if (res !== true)    { if (msg) msg.textContent = _pp(_ppT.fout); }
+            }
+        } catch (e) { if (msg) msg.textContent = _pp(_ppT.fout); }
+        _ppBusy = false;
+        _ppRender();
+    });
+    el.querySelectorAll('.pub-push-opt input').forEach(cb => cb.addEventListener('change', () => {
+        _ppSetPref(cb.dataset.type, cb.checked);
+        _ppSync();   // voorkeur meteen naar de server
+    }));
+    const testBtn = el.querySelector('.pub-push-test');
+    if (testBtn) testBtn.addEventListener('click', async () => {
+        if (_ppBusy) return; _ppBusy = true;
+        if (msg) msg.textContent = _pp(_ppT.bezig);
+        try {
+            const cur = await _ppHuidigAbo();
+            const resp = await fetch('../api/push_subscribe.php?action=test', {
+                method: 'POST', headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ scope: 'public', endpoint: cur ? cur.endpoint : '' }),
+            });
+            let r = {}; try { r = JSON.parse(await resp.text()); } catch (e) {}
+            if (r.ok && (r.result?.verstuurd > 0)) { if (msg) msg.textContent = _pp(_ppT.testok); }
+            else { if (msg) msg.textContent = '⚠ ' + (r.reden || _pp(_ppT.mislukt)); }
+        } catch (e) { if (msg) msg.textContent = _pp(_ppT.fout); }
+        _ppBusy = false;
+    });
+}
 
 // ── PWA: service worker ───────────────────────────────────────────────────
 // Update-flow: SW is network-only met cache-cleanup bij activate (zie sw.js).

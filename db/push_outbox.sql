@@ -12,7 +12,8 @@
 
 CREATE TABLE IF NOT EXISTS `push_outbox` (
     `id`         INT UNSIGNED NOT NULL AUTO_INCREMENT,
-    `scope`      VARCHAR(10)  NOT NULL DEFAULT 'coach',   -- 'coach' | 'public' (public = Fase 3)
+    `scope`      VARCHAR(10)  NOT NULL DEFAULT 'coach',   -- historisch; Fase 3 zet 'all' (event → coach+public)
+    `type`       VARCHAR(10)  NOT NULL DEFAULT 'loting',  -- 'loting' | 'uitslag' (bepaalt welke opt-in telt)
     `licenses`   TEXT         NOT NULL,                    -- JSON: person_license-lijst (target = volgers hiervan)
     `payload`    TEXT         NOT NULL,                    -- JSON: {title, body, url, tag}
     `created_at` DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP,

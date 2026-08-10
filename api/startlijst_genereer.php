@@ -804,10 +804,12 @@ try {
                            'finale' => 'Finale', 'finale_a' => 'A-finale', 'finale_b' => 'B-finale', 'runner_up' => 'Runner-up'];
             $_ronde   = $_rondeLbls[$rondeType] ?? $rondeType;
             $_afstand = trim($_afNaam . ($_afMeters ? ' ' . $_afMeters . 'm' : ''));
-            pushEnqueue($pdo, $_pushLics, [
-                'title' => 'Loting gereed',
-                'body'  => trim($_dcNaam . ($_afstand !== '' ? ' · ' . $_afstand : '') . ' — ' . $_ronde),
-                'url'   => './',
+            // body = context (DC · afstand · ronde); de flush zet per abonnement
+            // de naam/namen van díe volgers z'n rijders er met " — " vóór.
+            pushEnqueue($pdo, 'loting', $_pushLics, [
+                'title' => '🚩 Loting gereed',
+                'body'  => trim($_dcNaam . ($_afstand !== '' ? ' · ' . $_afstand : '') . ' · ' . $_ronde, " ·"),
+                'url'   => './?comp=' . rawurlencode($compId),   // deep-link naar de wedstrijd (gevolgde rijders laden auto)
                 'tag'   => 'loting-' . $primaryDcId . '-' . $rondeType,
             ]);
             pushFlushOutbox($pdo, 15, true);   // meteen versturen (force, defensief)
