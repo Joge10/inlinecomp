@@ -19,10 +19,10 @@ return [
     [
         'versie' => 'H1243.10.08', 'datum' => '10-08-2026', 'onderdelen' => ['admin'],
         'tekst' => [
-            'nl' => '<b>Tijdschema-wizard</b> — nieuwe stap-voor-stap-wizard om een wedstrijd op te bouwen: afstandscombinaties samenstellen, afstand-instellingen per groep, het programma met blokken en ritten, en A-finales combineren.',
-            'en' => '<b>Schedule wizard</b> — new step-by-step wizard to build a competition: compose distance combinations, distance settings per group, the programme with blocks and heats, and combine A-finals.',
-            'de' => '<b>Zeitplan-Assistent</b> — neuer Schritt-für-Schritt-Assistent zum Aufbau eines Wettkampfs: Distanzkombinationen zusammenstellen, Distanzeinstellungen pro Gruppe, Programm mit Blöcken und Läufen, und A-Finals kombinieren.',
-            'fr' => '<b>Assistant de programme</b> — nouvel assistant pas à pas pour construire une compétition : combinaisons de distances, réglages par groupe, programme avec blocs et séries, et combinaison des finales A.',
+            'nl' => '<b>Tijdschema-wizard</b> — nieuwe stap-voor-stap-wizard om een wedstrijd op te bouwen: de vanuit de KNSB geïmporteerde afstandscombinaties eenvoudig aanpassen, afstand-instellingen per groep, het programma met blokken en ritten, en A-finales combineren.',
+            'en' => '<b>Schedule wizard</b> — new step-by-step wizard to build a competition: easily adjust the distance combinations imported from the KNSB, distance settings per group, the programme with blocks and heats, and combine A-finals.',
+            'de' => '<b>Zeitplan-Assistent</b> — neuer Schritt-für-Schritt-Assistent zum Aufbau eines Wettkampfs: die aus dem KNSB importierten Distanzkombinationen einfach anpassen, Distanzeinstellungen pro Gruppe, Programm mit Blöcken und Läufen, und A-Finals kombinieren.',
+            'fr' => '<b>Assistant de programme</b> — nouvel assistant pas à pas pour construire une compétition : ajuster facilement les combinaisons de distances importées de la KNSB, réglages par groupe, programme avec blocs et séries, et combinaison des finales A.',
         ],
     ],
     [
