@@ -55,19 +55,19 @@ return [
     [
         'versie' => 'H1243.10.08', 'datum' => '10-08-2026', 'onderdelen' => ['admin'],
         'tekst' => [
-            'nl' => '🔔 <b>Push-meldingen (bèta)</b> — een nieuwe mededeling stuurt nu automatisch een pushbericht naar iedereen die een rijder uit díe wedstrijd volgt (of naar álle abonnees bij een algemene mededeling). In Systeem → Bezoekers zie je het aantal push-abonnees. <i>Nieuw en nog in bèta.</i>',
-            'en' => '🔔 <b>Push notifications (beta)</b> — a new announcement now automatically sends a push to everyone who follows a skater in that competition (or to all subscribers for a general announcement). In System → Visitors you can see the number of push subscribers. <i>New and still in beta.</i>',
-            'de' => '🔔 <b>Push-Benachrichtigungen (Beta)</b> — eine neue Mitteilung sendet jetzt automatisch eine Push an alle, die einen Fahrer aus diesem Wettkampf verfolgen (oder an alle Abonnenten bei einer allgemeinen Mitteilung). Unter System → Besucher siehst du die Zahl der Push-Abonnenten. <i>Neu und noch in Beta.</i>',
-            'fr' => '🔔 <b>Notifications push (bêta)</b> — une nouvelle annonce envoie désormais automatiquement une push à tous ceux qui suivent un patineur de cette compétition (ou à tous les abonnés pour une annonce générale). Dans Système → Visiteurs, vous voyez le nombre d\'abonnés push. <i>Nouveau et encore en bêta.</i>',
+            'nl' => '🔔 <b>Push-meldingen (bèta)</b> — een nieuwe mededeling gaat nu ook als pushbericht naar abonnees die mededelingen aan hebben staan: bij een wedstrijd-mededeling naar wie een rijder uit díe wedstrijd volgt, bij een algemene mededeling naar allen. In Systeem → Bezoekers zie je het aantal push-abonnees. <i>Nieuw en nog in bèta.</i>',
+            'en' => '🔔 <b>Push notifications (beta)</b> — a new announcement is now also sent as a push to subscribers who have announcements enabled: for a competition announcement to those who follow a skater in that competition, for a general announcement to all of them. In System → Visitors you can see the number of push subscribers. <i>New and still in beta.</i>',
+            'de' => '🔔 <b>Push-Benachrichtigungen (Beta)</b> — eine neue Mitteilung geht jetzt auch als Push an Abonnenten, die Mitteilungen aktiviert haben: bei einer Wettkampf-Mitteilung an alle, die einen Fahrer aus diesem Wettkampf verfolgen, bei einer allgemeinen Mitteilung an alle. Unter System → Besucher siehst du die Zahl der Push-Abonnenten. <i>Neu und noch in Beta.</i>',
+            'fr' => '🔔 <b>Notifications push (bêta)</b> — une nouvelle annonce est désormais aussi envoyée en push aux abonnés qui ont activé les annonces : pour une annonce de compétition, à ceux qui suivent un patineur de cette compétition ; pour une annonce générale, à tous. Dans Système → Visiteurs, vous voyez le nombre d\'abonnés push. <i>Nouveau et encore en bêta.</i>',
         ],
     ],
     [
         'versie' => 'H1243.10.08', 'datum' => '10-08-2026', 'onderdelen' => ['admin'],
         'tekst' => [
-            'nl' => '<b>Diverse beheer-verbeteringen</b> — de changelog toont onderhoud/beveiliging genest onder de lopende versie, en de Systeem-tabvolgorde is logischer ("Coach" → "Coaches").',
-            'en' => '<b>Various admin improvements</b> — the changelog shows maintenance/security nested under the current version, and the System tab order is more logical ("Coach" → "Coaches").',
-            'de' => '<b>Diverse Verwaltungs-Verbesserungen</b> — das Changelog zeigt Wartung/Sicherheit verschachtelt unter der laufenden Version, und die System-Tab-Reihenfolge ist logischer ("Coach" → "Coaches").',
-            'fr' => '<b>Diverses améliorations d\'administration</b> — le changelog affiche maintenance/sécurité imbriquées sous la version courante, et l\'ordre des onglets Système est plus logique ("Coach" → "Coaches").',
+            'nl' => '<b>Diverse beheer-verbeteringen</b> — onderhoud- en beveiligingsfixes worden nu gegroepeerd onder de lopende versie (met een eigen filter), en de Systeem-tabvolgorde is logischer ("Coach" → "Coaches").',
+            'en' => '<b>Various admin improvements</b> — maintenance and security fixes are now grouped under the current version (with their own filter), and the System tab order is more logical ("Coach" → "Coaches").',
+            'de' => '<b>Diverse Verwaltungs-Verbesserungen</b> — Wartungs- und Sicherheitsfixes werden jetzt unter der laufenden Version gruppiert (mit eigenem Filter), und die System-Tab-Reihenfolge ist logischer ("Coach" → "Coaches").',
+            'fr' => '<b>Diverses améliorations d\'administration</b> — les correctifs de maintenance et de sécurité sont désormais regroupés sous la version courante (avec leur propre filtre), et l\'ordre des onglets Système est plus logique ("Coach" → "Coaches").',
         ],
     ],
     // ── Public ──
