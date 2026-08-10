@@ -642,13 +642,18 @@ if ($action === 'save_rit_results') {
                         $_afNaam = (string) ($_afr['name'] ?? ''); $_afMeters = $_afr['value_meters'] ?? null;
                     }
                     $_afstand = trim($_afNaam . ($_afMeters ? ' ' . $_afMeters . 'm' : ''));
-                    // body = context (rit · afstand); de flush zet er per abonnement
-                    // de naam/namen van díe volgers z'n rijders met " — " vóór.
+                    // context (rit · afstand + "is verwerkt") per taal; rit- en
+                    // afstandsnaam zijn data (taal-neutraal). De flush zet er per
+                    // abonnement de naam/namen van díe volgers z'n rijders vóór.
+                    $_base = trim(((string) ($_h['heat_naam'] ?? 'Rit')) . ($_afstand !== '' ? ' · ' . $_afstand : ''));
+                    $_verwerkt = ['nl'=>'is verwerkt','en'=>'processed','de'=>'verarbeitet','fr'=>'traité'];
+                    $_ctx = [];
+                    foreach (['nl', 'en', 'de', 'fr'] as $_L) $_ctx[$_L] = trim($_base . ' ' . $_verwerkt[$_L]);
                     pushEnqueue($pdo, 'uitslag', $_lics, [
-                        'title' => '🏁 Uitslag binnen',
-                        'body'  => trim(((string) ($_h['heat_naam'] ?? 'Rit')) . ($_afstand !== '' ? ' · ' . $_afstand : '') . ' is verwerkt'),
-                        'url'   => './?comp=' . rawurlencode($compId),   // deep-link naar de wedstrijd
-                        'tag'   => 'heat-' . $ritId,
+                        'title'   => _pushTitel('uitslag'),
+                        'context' => $_ctx,
+                        'url'     => './?comp=' . rawurlencode($compId),   // deep-link naar de wedstrijd
+                        'tag'     => 'heat-' . $ritId,
                     ]);
                     pushFlushOutbox($pdo, 15, true);   // meteen versturen (force, defensief)
                 }

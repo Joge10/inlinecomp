@@ -800,17 +800,30 @@ try {
                 $_d = $_q->fetch(PDO::FETCH_ASSOC) ?: [];
                 $_afNaam = (string) ($_d['name'] ?? ''); $_afMeters = $_d['value_meters'] ?? null;
             }
-            $_rondeLbls = ['heats' => 'Series', 'kwartfinale' => 'Kwartfinale', 'halve_finale' => 'Halve finale',
-                           'finale' => 'Finale', 'finale_a' => 'A-finale', 'finale_b' => 'B-finale', 'runner_up' => 'Runner-up'];
-            $_ronde   = $_rondeLbls[$rondeType] ?? $rondeType;
+            // Ronde-label in 4 talen; DC-naam + afstand zijn data (taal-neutraal).
+            $_rondeLbls4 = [
+                'heats'        => ['nl'=>'Series','en'=>'Heats','de'=>'Vorläufe','fr'=>'Séries'],
+                'kwartfinale'  => ['nl'=>'Kwartfinale','en'=>'Quarterfinal','de'=>'Viertelfinale','fr'=>'Quart de finale'],
+                'halve_finale' => ['nl'=>'Halve finale','en'=>'Semifinal','de'=>'Halbfinale','fr'=>'Demi-finale'],
+                'finale'       => ['nl'=>'Finale','en'=>'Final','de'=>'Finale','fr'=>'Finale'],
+                'finale_a'     => ['nl'=>'A-finale','en'=>'A final','de'=>'A-Finale','fr'=>'Finale A'],
+                'finale_b'     => ['nl'=>'B-finale','en'=>'B final','de'=>'B-Finale','fr'=>'Finale B'],
+                'runner_up'    => ['nl'=>'Runner-up','en'=>'Runner-up','de'=>'Runner-up','fr'=>'Runner-up'],
+            ];
             $_afstand = trim($_afNaam . ($_afMeters ? ' ' . $_afMeters . 'm' : ''));
-            // body = context (DC · afstand · ronde); de flush zet per abonnement
+            $_dcAf    = trim($_dcNaam . ($_afstand !== '' ? ' · ' . $_afstand : ''), " ·");
+            $_ctx = [];
+            foreach (['nl', 'en', 'de', 'fr'] as $_L) {
+                $_ronde = $_rondeLbls4[$rondeType][$_L] ?? ($_rondeLbls4[$rondeType]['nl'] ?? $rondeType);
+                $_ctx[$_L] = trim($_dcAf . ' · ' . $_ronde, " ·");
+            }
+            // context (DC · afstand · ronde) per taal; de flush zet per abonnement
             // de naam/namen van díe volgers z'n rijders er met " — " vóór.
             pushEnqueue($pdo, 'loting', $_pushLics, [
-                'title' => '🚩 Loting gereed',
-                'body'  => trim($_dcNaam . ($_afstand !== '' ? ' · ' . $_afstand : '') . ' · ' . $_ronde, " ·"),
-                'url'   => './?comp=' . rawurlencode($compId),   // deep-link naar de wedstrijd (gevolgde rijders laden auto)
-                'tag'   => 'loting-' . $primaryDcId . '-' . $rondeType,
+                'title'   => _pushTitel('loting'),
+                'context' => $_ctx,
+                'url'     => './?comp=' . rawurlencode($compId),   // deep-link naar de wedstrijd (gevolgde rijders laden auto)
+                'tag'     => 'loting-' . $primaryDcId . '-' . $rondeType,
             ]);
             pushFlushOutbox($pdo, 15, true);   // meteen versturen (force, defensief)
         }

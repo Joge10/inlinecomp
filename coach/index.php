@@ -8414,7 +8414,8 @@ window.addEventListener('appinstalled', () => {
     push_fout:     { nl:'Er ging iets mis. Probeer opnieuw.', en:'Something went wrong. Try again.', de:'Etwas ist schiefgelaufen. Versuche es erneut.', fr:"Une erreur s'est produite. Réessayez." },
     push_ios:      { nl:'Op iPhone: zet de app eerst op je beginscherm (deel-icoon → "Zet op beginscherm").', en:'On iPhone: add the app to your home screen first (share → "Add to Home Screen").', de:'Auf dem iPhone: füge die App zuerst zum Startbildschirm hinzu.', fr:"Sur iPhone : ajoutez d'abord l'app à l'écran d'accueil." },
     push_loting:   { nl:'Loting bekend', en:'Draw ready', de:'Auslosung bekannt', fr:'Tirage prêt' },
-    push_uitslag:  { nl:'Uitslag verwerkt', en:'Result processed', de:'Ergebnis verarbeitet', fr:'Résultat traité' }
+    push_uitslag:  { nl:'Uitslag verwerkt', en:'Result processed', de:'Ergebnis verarbeitet', fr:'Résultat traité' },
+    push_bericht:  { nl:'Mededelingen', en:'Announcements', de:'Mitteilungen', fr:'Annonces' }
   };
   const ct = (k, p = {}) => {
     let s = (CA_I18N[k] && (CA_I18N[k][typeof getCurLang === 'function' ? getCurLang() : 'nl'] || CA_I18N[k].en || CA_I18N[k].nl)) || k;
@@ -8472,8 +8473,10 @@ window.addEventListener('appinstalled', () => {
   const _caPushSetPref = (type, aan) => localStorage.setItem('ic_coach_push_' + type, aan ? '1' : '0');
   const _caPushBody    = sub => Object.assign({}, sub.toJSON(), {
     scope: 'coach',
+    lang: (typeof getCurLang === 'function') ? getCurLang() : 'nl',
     notif_loting:  _caPushPref('loting')  ? 1 : 0,
     notif_uitslag: _caPushPref('uitslag') ? 1 : 0,
+    notif_bericht: _caPushPref('bericht') ? 1 : 0,
   });
 
   // Re-sync voorkeuren naar de server ALS er al een abonnement is.
@@ -8547,6 +8550,7 @@ window.addEventListener('appinstalled', () => {
     const opties = body.querySelector('#ca-push-opties');
     const cbL    = body.querySelector('#ca-push-loting');
     const cbU    = body.querySelector('#ca-push-uitslag');
+    const cbB    = body.querySelector('#ca-push-bericht');
     if (!_caPushSupported()) {
       tog.style.display = 'none';
       const iOS = /iPhone|iPad|iPod/.test(navigator.userAgent);
@@ -8556,8 +8560,10 @@ window.addEventListener('appinstalled', () => {
     // Vinkjes: initiële stand uit voorkeuren; wijziging → meteen naar de server.
     if (cbL) cbL.checked = _caPushPref('loting');
     if (cbU) cbU.checked = _caPushPref('uitslag');
+    if (cbB) cbB.checked = _caPushPref('bericht');
     if (cbL) cbL.addEventListener('change', () => { _caPushSetPref('loting',  cbL.checked); _caPushSync(); });
     if (cbU) cbU.addEventListener('change', () => { _caPushSetPref('uitslag', cbU.checked); _caPushSync(); });
+    if (cbB) cbB.addEventListener('change', () => { _caPushSetPref('bericht', cbB.checked); _caPushSync(); });
     const refresh = async () => {
       const sub = await _caPushHuidigAbo();
       const aan = !!sub && Notification.permission === 'granted';
@@ -8842,9 +8848,11 @@ window.addEventListener('appinstalled', () => {
         <div style="font-size:.82rem;color:#667;margin:2px 0 8px">${ct('push_uitleg')}</div>
         <div id="ca-push-opties" style="display:none;flex-direction:column;gap:5px;margin:0 0 9px">
           <label style="display:flex;align-items:center;gap:8px;font-size:.88rem;color:#333">
-            <input type="checkbox" id="ca-push-loting" checked> ${ct('push_loting')}</label>
+            <input type="checkbox" id="ca-push-loting" checked> 🚩 ${ct('push_loting')}</label>
           <label style="display:flex;align-items:center;gap:8px;font-size:.88rem;color:#333">
-            <input type="checkbox" id="ca-push-uitslag" checked> ${ct('push_uitslag')}</label>
+            <input type="checkbox" id="ca-push-uitslag" checked> 🏁 ${ct('push_uitslag')}</label>
+          <label style="display:flex;align-items:center;gap:8px;font-size:.88rem;color:#333">
+            <input type="checkbox" id="ca-push-bericht" checked> 📢 ${ct('push_bericht')}</label>
         </div>
         <div style="display:flex;gap:8px;flex-wrap:wrap">
           <button class="btn btn-klein" id="ca-push-toggle">${ct('push_aan')}</button>

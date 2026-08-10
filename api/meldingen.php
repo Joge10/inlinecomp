@@ -304,6 +304,44 @@ try {
                 $linkUrl, $linkTekst, $linkTekstEn, $linkTekstDe, $linkTekstFr,
                 $prio, $van, $tot, $_authUser['id'] ?? null,
             ]);
+
+            // ── Push (Fase 4): nieuwe mededeling → 📢 naar de betrokken abonnees ──
+            // Alleen bij NIEUW (niet bij bewerken). Wedstrijd-mededeling → volgers
+            // van rijders in díe wedstrijd; globale mededeling → broadcast naar
+            // iedereen (met eigen "Algemene"-titel). Volledig defensief.
+            try {
+                require_once __DIR__ . '/lib_push.php';
+                // context = de mededelingtitel in 4 talen (de melding is al
+                // meertalig opgeslagen; leeg → terugval op NL).
+                $_ctx = [
+                    'nl' => $titel,
+                    'en' => $titelEn ?: $titel,
+                    'de' => $titelDe ?: $titel,
+                    'fr' => $titelFr ?: $titel,
+                ];
+                if ($isGlobal) {
+                    pushEnqueue($pdo, 'bericht', [], [
+                        'title'   => _pushTitel('bericht', true),
+                        'context' => $_ctx,
+                        'url'     => './',
+                        'tag'     => 'mededeling-' . $mid,
+                    ], 'global');
+                    pushFlushOutbox($pdo, 15, true);
+                } else {
+                    $_ls = $pdo->prepare("SELECT person_license FROM competition_startnummers WHERE competition_id = ?");
+                    $_ls->execute([$compIdDb]);
+                    $_lics = $_ls->fetchAll(PDO::FETCH_COLUMN);
+                    if ($_lics) {
+                        pushEnqueue($pdo, 'bericht', $_lics, [
+                            'title'   => _pushTitel('bericht', false),
+                            'context' => $_ctx,
+                            'url'     => './?comp=' . rawurlencode($compIdDb),
+                            'tag'     => 'mededeling-' . $mid,
+                        ]);
+                        pushFlushOutbox($pdo, 15, true);
+                    }
+                }
+            } catch (\Throwable $e) { /* push mag melding-opslaan nooit breken */ }
         } else {
             // UPDATE met scope-check: globale melding alleen via global=1,
             // wedstrijd-specifieke alleen via overeenkomstige comp_id.

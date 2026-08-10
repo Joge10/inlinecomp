@@ -99,52 +99,61 @@ function pushVerstuur(PDO $pdo, array $subs, array $payload): array {
 
 // ── Fase 2/3: outbox + gerichte, gepersonaliseerde verzending ───────────────
 
-/** Geldige event-typen ↔ de opt-in-kolom op push_subscriptions. */
+/** Geldige event-typen ↔ de opt-in-kolom op push_subscriptions (whitelist). */
 function _pushTypeKolom(string $type): string {
-    return $type === 'uitslag' ? 'notif_uitslag' : 'notif_loting';   // whitelist
+    if ($type === 'uitslag') return 'notif_uitslag';
+    if ($type === 'bericht') return 'notif_bericht';
+    return 'notif_loting';
 }
 
 /**
  * Zet één gebeurtenis in de outbox (snelle INSERT, géén HTTPS). $type bepaalt
- * welke opt-in telt ('loting'|'uitslag'). $licenses = de person_licenses van de
- * rijders in de DC/heat; de flush zoekt daar de volger-abonnementen bij en zet
- * per abonnement de námen van díe rijders in de meldingtekst.
- * Roep dit aan vanuit een trigger NÁ de commit.
+ * welke opt-in telt ('loting'|'uitslag'|'bericht'). $licenses = de person_licenses
+ * van de betrokken rijders; de flush zoekt daar de volger-abonnementen bij.
+ * $scope='global' = broadcast (mededeling app-breed) → géén licenties nodig,
+ * gaat naar álle abonnementen met dit type aan. Roep aan NÁ de commit.
  */
-function pushEnqueue(PDO $pdo, string $type, array $licenses, array $payload): void {
+function pushEnqueue(PDO $pdo, string $type, array $licenses, array $payload, string $scope = 'all'): void {
     if (!pushBeschikbaar()) return;   // push niet geconfigureerd → niets in de outbox zetten
-    $type = in_array($type, ['loting', 'uitslag'], true) ? $type : 'loting';
+    $type  = in_array($type, ['loting', 'uitslag', 'bericht'], true) ? $type : 'loting';
+    $scope = ($scope === 'global') ? 'global' : 'all';
     $licenses = array_values(array_unique(array_filter(array_map('strval', $licenses), 'strlen')));
-    if (!$licenses) return;
-    $pdo->prepare("INSERT INTO push_outbox (scope, type, licenses, payload) VALUES ('all', ?, ?, ?)")
-        ->execute([$type, json_encode($licenses), json_encode($payload, JSON_UNESCAPED_UNICODE)]);
+    if ($scope !== 'global' && !$licenses) return;   // gericht event zonder licenties = niets te doen
+    $pdo->prepare("INSERT INTO push_outbox (scope, type, licenses, payload) VALUES (?, ?, ?, ?)")
+        ->execute([$scope, $type, json_encode($licenses), json_encode($payload, JSON_UNESCAPED_UNICODE)]);
 }
 
-/** Wie-tekst: 1 rijder = naam; meer = telwoord ("12 rijders"). Zo staat bij
- *  grote trainingsgroepen een eerlijk aantal i.p.v. twee willekeurige namen;
- *  de categorie staat toch al in de context-body. */
-function _pushWieTekst(int $aantal, array $namen): string {
+/** Kies de taal-variant uit een {nl,en,de,fr}-array (fallback → en → nl). */
+function _pushKies(array $vals, string $lang): string {
+    return $vals[$lang] ?? $vals['en'] ?? $vals['nl'] ?? '';
+}
+
+/** Meldingtitel per type in 4 talen. $globaal = app-brede mededeling. */
+function _pushTitel(string $type, bool $globaal = false): array {
+    if ($type === 'uitslag') return ['nl'=>'🏁 Uitslag binnen','en'=>'🏁 Result in','de'=>'🏁 Ergebnis da','fr'=>'🏁 Résultat reçu'];
+    if ($type === 'bericht') return $globaal
+        ? ['nl'=>'📢 Algemene mededeling','en'=>'📢 General announcement','de'=>'📢 Allgemeine Mitteilung','fr'=>'📢 Annonce générale']
+        : ['nl'=>'📢 Mededeling','en'=>'📢 Announcement','de'=>'📢 Mitteilung','fr'=>'📢 Annonce'];
+    return ['nl'=>'🚩 Loting gereed','en'=>'🚩 Draw ready','de'=>'🚩 Auslosung fertig','fr'=>'🚩 Tirage prêt'];
+}
+
+/** Wie-tekst per taal: 1 rijder = naam; meer = telwoord ("12 rijders"). Zo staat
+ *  bij grote trainingsgroepen een eerlijk aantal i.p.v. willekeurige namen; de
+ *  categorie staat toch al in de context. */
+function _pushWieTekst(int $aantal, array $namen, string $lang): string {
     if ($aantal <= 0) return '';
-    if ($aantal === 1) return $namen[0] ?? '1 rijder';
-    return $aantal . ' rijders';
+    if ($aantal === 1) {
+        if (isset($namen[0])) return $namen[0];
+        return ['nl'=>'1 rijder','en'=>'1 rider','de'=>'1 Fahrer','fr'=>'1 patineur'][$lang] ?? '1 rijder';
+    }
+    $tpl = ['nl'=>'%d rijders','en'=>'%d riders','de'=>'%d Fahrer','fr'=>'%d patineurs'];
+    return sprintf($tpl[$lang] ?? $tpl['nl'], $aantal);
 }
 
-/** Bouw uit een subscription-rij (met 'matched'=CSV licenties) een verzend-item. */
-function _pushPersonaliseer(array $sub, array $basis, array $naamMap): array {
-    $matched = array_values(array_filter(array_unique(explode(',', (string) ($sub['matched'] ?? '')))));
-    $namen = [];
-    foreach ($matched as $lic) if (isset($naamMap[$lic])) $namen[] = $naamMap[$lic];
-    $wie     = _pushWieTekst(count($matched), $namen);
-    $context = (string) ($basis['body'] ?? '');
-    $payload = $basis;
-    $payload['body'] = $wie !== ''
-        ? ($context !== '' ? $wie . ' — ' . $context : $wie)
-        : $context;
-    return [
-        'id' => $sub['id'], 'endpoint' => $sub['endpoint'],
-        'p256dh' => $sub['p256dh'], 'auth' => $sub['auth'],
-        'payload' => $payload,
-    ];
+/** Geldige abonnee-taal (fallback nl). */
+function _pushLang($v): string {
+    $v = (string) $v;
+    return in_array($v, ['nl', 'en', 'de', 'fr'], true) ? $v : 'nl';
 }
 
 /**
@@ -160,22 +169,50 @@ function pushEventNaarVolgers(PDO $pdo, string $type, array $licenses, array $pa
 
     $kol = _pushTypeKolom($type);
     $ph  = implode(',', array_fill(0, count($licenses), '?'));
+    $personaliseer = ($type !== 'bericht');   // mededeling = wedstrijd-breed, geen naam ervoor
 
-    // Namen van de betrokken rijders (voor personalisatie).
-    $nm = $pdo->prepare("
-        SELECT license_key, COALESCE(NULLIF(short_name,''), full_name, license_key) AS naam
-        FROM   persons WHERE license_key IN ($ph)
-    ");
-    $nm->execute($licenses);
+    // Namen van de betrokken rijders (alleen nodig voor de gepersonaliseerde tekst).
     $naamMap = [];
-    foreach ($nm->fetchAll(PDO::FETCH_ASSOC) as $r) $naamMap[$r['license_key']] = $r['naam'];
+    if ($personaliseer) {
+        $nm = $pdo->prepare("
+            SELECT license_key, COALESCE(NULLIF(short_name,''), full_name, license_key) AS naam
+            FROM   persons WHERE license_key IN ($ph)
+        ");
+        $nm->execute($licenses);
+        foreach ($nm->fetchAll(PDO::FETCH_ASSOC) as $r) $naamMap[$r['license_key']] = $r['naam'];
+    }
+
+    // Per abonnement-rij een verzend-item in de táal van dat abonnement: titel +
+    // context uit de {nl,en,de,fr}-payload, met bij loting/uitslag de wie-prefix.
+    $bouw = function (array $sub) use ($personaliseer, $payload, $naamMap): array {
+        $lang    = _pushLang($sub['lang'] ?? 'nl');
+        $context = _pushKies($payload['context'] ?? [], $lang);
+        $body    = $context;
+        if ($personaliseer) {
+            $matched = array_values(array_filter(array_unique(explode(',', (string) ($sub['matched'] ?? '')))));
+            $namen = [];
+            foreach ($matched as $lic) if (isset($naamMap[$lic])) $namen[] = $naamMap[$lic];
+            $wie = _pushWieTekst(count($matched), $namen, $lang);
+            if ($wie !== '') $body = $context !== '' ? $wie . ' — ' . $context : $wie;
+        }
+        return [
+            'id' => $sub['id'], 'endpoint' => $sub['endpoint'],
+            'p256dh' => $sub['p256dh'], 'auth' => $sub['auth'],
+            'payload' => [
+                'title' => _pushKies($payload['title'] ?? [], $lang),
+                'body'  => $body,
+                'url'   => $payload['url'] ?? './',
+                'tag'   => $payload['tag'] ?? null,
+            ],
+        ];
+    };
 
     $items = [];
 
     // Coach-volgers (roster = coach_athletes). 'matched' = de rijders van díe
     // coach die in dit event zitten (voor de gepersonaliseerde tekst).
     $cs = $pdo->prepare("
-        SELECT ps.id, ps.endpoint, ps.p256dh, ps.auth,
+        SELECT ps.id, ps.endpoint, ps.p256dh, ps.auth, ps.lang,
                GROUP_CONCAT(ca.person_license) AS matched
         FROM   push_subscriptions ps
         JOIN   coach_athletes ca
@@ -185,11 +222,11 @@ function pushEventNaarVolgers(PDO $pdo, string $type, array $licenses, array $pa
         GROUP  BY ps.id
     ");
     $cs->execute($licenses);
-    foreach ($cs->fetchAll(PDO::FETCH_ASSOC) as $s) $items[] = _pushPersonaliseer($s, $payload, $naamMap);
+    foreach ($cs->fetchAll(PDO::FETCH_ASSOC) as $s) $items[] = $bouw($s);
 
     // Public-volgers (junction push_sub_licenses, gespiegeld uit localStorage).
     $psx = $pdo->prepare("
-        SELECT ps.id, ps.endpoint, ps.p256dh, ps.auth,
+        SELECT ps.id, ps.endpoint, ps.p256dh, ps.auth, ps.lang,
                GROUP_CONCAT(psl.person_license) AS matched
         FROM   push_subscriptions ps
         JOIN   push_sub_licenses psl
@@ -199,8 +236,35 @@ function pushEventNaarVolgers(PDO $pdo, string $type, array $licenses, array $pa
         GROUP  BY ps.id
     ");
     $psx->execute($licenses);
-    foreach ($psx->fetchAll(PDO::FETCH_ASSOC) as $s) $items[] = _pushPersonaliseer($s, $payload, $naamMap);
+    foreach ($psx->fetchAll(PDO::FETCH_ASSOC) as $s) $items[] = $bouw($s);
 
+    return $items ? _pushSendItems($pdo, $items) : $stat;
+}
+
+/**
+ * Broadcast: stuur $payload naar ÁLLE abonnementen met dit type aan — voor een
+ * globale, app-brede mededeling die niet aan rijders gebonden is.
+ */
+function pushBroadcast(PDO $pdo, string $type, array $payload): array {
+    $stat = ['verstuurd' => 0, 'verlopen' => 0, 'mislukt' => 0];
+    if (!pushBeschikbaar()) return $stat;
+    $kol   = _pushTypeKolom($type);
+    $subs  = $pdo->query("SELECT id, endpoint, p256dh, auth, lang FROM push_subscriptions WHERE `$kol` = 1")
+                 ->fetchAll(PDO::FETCH_ASSOC);
+    $items = [];
+    foreach ($subs as $s) {
+        $lang = _pushLang($s['lang'] ?? 'nl');
+        $items[] = [
+            'id' => $s['id'], 'endpoint' => $s['endpoint'],
+            'p256dh' => $s['p256dh'], 'auth' => $s['auth'],
+            'payload' => [
+                'title' => _pushKies($payload['title'] ?? [], $lang),
+                'body'  => _pushKies($payload['context'] ?? [], $lang),
+                'url'   => $payload['url'] ?? './',
+                'tag'   => $payload['tag'] ?? null,
+            ],
+        ];
+    }
     return $items ? _pushSendItems($pdo, $items) : $stat;
 }
 
@@ -225,7 +289,7 @@ function pushFlushOutbox(PDO $pdo, int $max = 15, bool $force = false): int {
     $rows = [];
     try {
         $pdo->beginTransaction();
-        $st = $pdo->query("SELECT id, type, licenses, payload FROM push_outbox ORDER BY id LIMIT " . (int) $max . " FOR UPDATE");
+        $st = $pdo->query("SELECT id, scope, type, licenses, payload FROM push_outbox ORDER BY id LIMIT " . (int) $max . " FOR UPDATE");
         $rows = $st->fetchAll(PDO::FETCH_ASSOC);
         if ($rows) {
             $ids = array_column($rows, 'id');
@@ -240,13 +304,18 @@ function pushFlushOutbox(PDO $pdo, int $max = 15, bool $force = false): int {
 
     $n = 0;
     foreach ($rows as $r) {
-        $type     = $r['type'] ?: 'loting';
-        $licenses = json_decode($r['licenses'] ?? '[]', true) ?: [];
-        $payload  = json_decode($r['payload']  ?? '{}', true) ?: [];
-        if ($licenses && $payload) {
-            try { pushEventNaarVolgers($pdo, $type, $licenses, $payload); $n++; }
-            catch (\Throwable $e) { /* nooit de flush laten crashen */ }
-        }
+        $type    = $r['type']  ?: 'loting';
+        $scope   = $r['scope'] ?: 'all';
+        $payload = json_decode($r['payload'] ?? '{}', true) ?: [];
+        if (!$payload) continue;
+        try {
+            if ($scope === 'global') {
+                pushBroadcast($pdo, $type, $payload); $n++;   // globale mededeling → iedereen
+            } else {
+                $licenses = json_decode($r['licenses'] ?? '[]', true) ?: [];
+                if ($licenses) { pushEventNaarVolgers($pdo, $type, $licenses, $payload); $n++; }
+            }
+        } catch (\Throwable $e) { /* nooit de flush laten crashen */ }
     }
     return $n;
 }

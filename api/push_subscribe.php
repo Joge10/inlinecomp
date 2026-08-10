@@ -65,6 +65,8 @@ if ($action === 'subscribe') {
     $ua   = substr((string) ($_SERVER['HTTP_USER_AGENT'] ?? ''), 0, 255);
     $nl   = _pushBoolIn($body['notif_loting']  ?? 1);
     $nu   = _pushBoolIn($body['notif_uitslag'] ?? 1);
+    $nb   = _pushBoolIn($body['notif_bericht'] ?? 1);
+    $lg   = _pushLang($body['lang'] ?? 'nl');   // taal voor de meldingtekst
     $lics = $scope === 'public' ? _pushLicsIn($body['licenses'] ?? []) : [];
 
     try {
@@ -72,16 +74,17 @@ if ($action === 'subscribe') {
         $pdo->prepare("
             INSERT INTO push_subscriptions
                    (scope, coach_account_id, endpoint, endpoint_hash, p256dh, auth,
-                    notif_loting, notif_uitslag, licenses, user_agent)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    notif_loting, notif_uitslag, notif_bericht, lang, licenses, user_agent)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             ON DUPLICATE KEY UPDATE
                    scope = VALUES(scope), coach_account_id = VALUES(coach_account_id),
                    p256dh = VALUES(p256dh), auth = VALUES(auth),
                    notif_loting = VALUES(notif_loting), notif_uitslag = VALUES(notif_uitslag),
+                   notif_bericht = VALUES(notif_bericht), lang = VALUES(lang),
                    licenses = VALUES(licenses), user_agent = VALUES(user_agent), last_seen = NOW()
         ")->execute([
             $scope, $coachId, $endpoint, $hash, $p256dh, $auth,
-            $nl, $nu, ($scope === 'public' ? json_encode($lics) : null), $ua,
+            $nl, $nu, $nb, $lg, ($scope === 'public' ? json_encode($lics) : null), $ua,
         ]);
 
         // Public: gevolgde rijders spiegelen naar de junction (targeting-bron).

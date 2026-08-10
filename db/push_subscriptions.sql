@@ -18,6 +18,8 @@ CREATE TABLE IF NOT EXISTS `push_subscriptions` (
     `auth`             VARCHAR(255) NOT NULL,
     `notif_loting`     TINYINT(1)   NOT NULL DEFAULT 1,     -- opt-in per type (Fase 3)
     `notif_uitslag`    TINYINT(1)   NOT NULL DEFAULT 1,
+    `notif_bericht`    TINYINT(1)   NOT NULL DEFAULT 1,     -- mededelingen 📢 (Fase 4)
+    `lang`             VARCHAR(5)   NOT NULL DEFAULT 'nl',  -- taal van de meldingtekst (nl/en/de/fr)
     `licenses`         TEXT         DEFAULT NULL,           -- bij scope='public': JSON-lijst license_keys (mirror; targeting via push_sub_licenses)
     `user_agent`       VARCHAR(255) DEFAULT NULL,
     `created_at`       DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP,

@@ -3302,6 +3302,22 @@ const T = {
         help_p_meld_html: 'Bovenaan staat een <b>📢-knop</b> (zichtbaar zodra er een mededeling actief is). Belangrijke aankondigingen van de organisatie verschijnen automatisch als pop-up en blijven daarna onder deze knop bereikbaar — bv. "Programma loopt 15 min uit".',
         help_h_tip: 'Tip',
         help_p_tip: 'Geen resultaten? De uitslag verschijnt zodra de jury de resultaten heeft bevestigd.',
+        // ── Push-meldingen ──
+        push_titel: 'Pushmeldingen op je telefoon',
+        push_uitleg: 'Een pushmelding op je telefoon zodra er geloot is of een uitslag binnenkomt van je rijders — ook als de app dicht is.',
+        push_niet: 'Niet ondersteund in deze browser.',
+        push_ios: 'Op iPhone: voeg de app eerst toe aan je beginscherm.',
+        push_uit: 'Uitzetten',
+        push_aan: 'Aanzetten',
+        push_loting: 'Loting bekend',
+        push_uitslag: 'Uitslag verwerkt',
+        push_bericht: 'Mededelingen',
+        push_test: 'Stuur test',
+        push_bezig: 'Bezig…',
+        push_geweigerd: 'Meldingen geweigerd in je browser.',
+        push_fout: 'Er ging iets mis.',
+        push_testok: 'Test verstuurd ✓',
+        push_mislukt: 'mislukt',
     },
     en: {
         // ── Document ──
@@ -3525,6 +3541,22 @@ const T = {
         help_p_meld_html: 'At the top is a <b>📢 button</b> (visible as soon as there is an active announcement). Important announcements from the organization appear automatically as a pop-up and remain accessible under this button afterwards — e.g. "Program is running 15 min behind".',
         help_h_tip: 'Tip',
         help_p_tip: 'No results yet? The result appears as soon as the jury has confirmed it.',
+        // ── Push notifications ──
+        push_titel: 'Push notifications on your phone',
+        push_uitleg: 'A push notification on your phone as soon as a draw is made or a result comes in for your riders — even when the app is closed.',
+        push_niet: 'Not supported in this browser.',
+        push_ios: 'On iPhone: add the app to your home screen first.',
+        push_uit: 'Turn off',
+        push_aan: 'Turn on',
+        push_loting: 'Draw ready',
+        push_uitslag: 'Result processed',
+        push_bericht: 'Announcements',
+        push_test: 'Send test',
+        push_bezig: 'Working…',
+        push_geweigerd: 'Notifications blocked in your browser.',
+        push_fout: 'Something went wrong.',
+        push_testok: 'Test sent ✓',
+        push_mislukt: 'failed',
     },
     de: {
         // ── Document ──
@@ -3748,6 +3780,22 @@ const T = {
         help_p_meld_html: 'Oben befindet sich ein <b>📢-Button</b> (sichtbar sobald eine aktive Bekanntmachung vorhanden ist). Wichtige Ankündigungen der Organisation erscheinen automatisch als Pop-up und bleiben danach unter diesem Button erreichbar — z.B. "Programm läuft 15 Min hinterher".',
         help_h_tip: 'Tipp',
         help_p_tip: 'Noch keine Ergebnisse? Das Ergebnis erscheint, sobald die Jury es bestätigt hat.',
+        // ── Push-Benachrichtigungen ──
+        push_titel: 'Push-Benachrichtigungen auf dein Handy',
+        push_uitleg: 'Eine Push-Benachrichtigung auf dein Handy, sobald eine Auslosung erfolgt oder ein Ergebnis deiner Fahrer eintrifft — auch wenn die App geschlossen ist.',
+        push_niet: 'In diesem Browser nicht unterstützt.',
+        push_ios: 'Auf dem iPhone: füge die App zuerst zum Startbildschirm hinzu.',
+        push_uit: 'Ausschalten',
+        push_aan: 'Einschalten',
+        push_loting: 'Auslosung bekannt',
+        push_uitslag: 'Ergebnis verarbeitet',
+        push_bericht: 'Mitteilungen',
+        push_test: 'Test senden',
+        push_bezig: 'Läuft…',
+        push_geweigerd: 'Benachrichtigungen im Browser blockiert.',
+        push_fout: 'Etwas ist schiefgelaufen.',
+        push_testok: 'Test gesendet ✓',
+        push_mislukt: 'fehlgeschlagen',
     },
     fr: {
         // ── Document ──
@@ -3971,6 +4019,22 @@ const T = {
         help_p_meld_html: 'En haut se trouve un <b>bouton 📢</b> (visible dès qu\'une annonce est active). Les annonces importantes de l\'organisation apparaissent automatiquement en pop-up et restent accessibles sous ce bouton — par ex. "Programme avec 15 min de retard".',
         help_h_tip: 'Astuce',
         help_p_tip: 'Pas encore de résultats ? Le résultat apparaît dès que le jury l\'a confirmé.',
+        // ── Notifications push ──
+        push_titel: 'Notifications push sur votre téléphone',
+        push_uitleg: 'Une notification push sur votre téléphone dès qu\'un tirage est fait ou qu\'un résultat arrive pour vos patineurs — même quand l\'app est fermée.',
+        push_niet: 'Non pris en charge dans ce navigateur.',
+        push_ios: 'Sur iPhone : ajoutez d\'abord l\'app à l\'écran d\'accueil.',
+        push_uit: 'Désactiver',
+        push_aan: 'Activer',
+        push_loting: 'Tirage prêt',
+        push_uitslag: 'Résultat traité',
+        push_bericht: 'Annonces',
+        push_test: 'Envoyer un test',
+        push_bezig: 'En cours…',
+        push_geweigerd: 'Notifications bloquées dans votre navigateur.',
+        push_fout: 'Une erreur s\'est produite.',
+        push_testok: 'Test envoyé ✓',
+        push_mislukt: 'échoué',
     }
 };
 // Shared i18n-helpers (t, applyI18n, toggleLang, getCurLang, getLocale)
@@ -7481,25 +7545,8 @@ let _huidigStempel = '';
 // ── Web Push (Fase 3): meldingen voor je gevolgde rijders ─────────────────
 // Open voor iedereen (beta-gate verwijderd bij uitrol zomer 2026). Het blok
 // verschijnt zodra je minstens één rijder volgt. De gevolgde licenties (uit
-// localStorage) worden meegestuurd; loting/uitslag zijn apart aan/uit te zetten.
-// 4 talen (nl/en/de/fr) met fallback lang → en → nl, via de app-brede getCurLang().
-const _pp = o => o[(typeof getCurLang === 'function' ? getCurLang() : 'nl')] || o.en || o.nl;
-const _ppT = {
-    titel:     { nl:'Pushmeldingen op je telefoon', en:'Push notifications on your phone', de:'Push-Benachrichtigungen auf dein Handy', fr:'Notifications push sur votre téléphone' },
-    uitleg:    { nl:'Een pushmelding op je telefoon zodra er geloot is of een uitslag binnenkomt van je rijders — ook als de app dicht is.', en:'A push notification on your phone as soon as a draw is made or a result comes in for your riders — even when the app is closed.', de:'Eine Push-Benachrichtigung auf dein Handy, sobald eine Auslosung erfolgt oder ein Ergebnis deiner Fahrer eintrifft — auch wenn die App geschlossen ist.', fr:'Une notification push sur votre téléphone dès qu\'un tirage est fait ou qu\'un résultat arrive pour vos patineurs — même quand l\'app est fermée.' },
-    niet:      { nl:'Niet ondersteund in deze browser.', en:'Not supported in this browser.', de:'In diesem Browser nicht unterstützt.', fr:'Non pris en charge dans ce navigateur.' },
-    ios:       { nl:'Op iPhone: voeg de app eerst toe aan je beginscherm.', en:'On iPhone: add the app to your home screen first.', de:'Auf dem iPhone: füge die App zuerst zum Startbildschirm hinzu.', fr:"Sur iPhone : ajoutez d'abord l'app à l'écran d'accueil." },
-    uit:       { nl:'Uitzetten', en:'Turn off', de:'Ausschalten', fr:'Désactiver' },
-    aan:       { nl:'Aanzetten', en:'Turn on', de:'Einschalten', fr:'Activer' },
-    loting:    { nl:'Loting bekend', en:'Draw ready', de:'Auslosung bekannt', fr:'Tirage prêt' },
-    uitslag:   { nl:'Uitslag verwerkt', en:'Result processed', de:'Ergebnis verarbeitet', fr:'Résultat traité' },
-    test:      { nl:'Stuur test', en:'Send test', de:'Test senden', fr:'Envoyer un test' },
-    bezig:     { nl:'Bezig…', en:'Working…', de:'Läuft…', fr:'En cours…' },
-    geweigerd: { nl:'Meldingen geweigerd in je browser.', en:'Notifications blocked in your browser.', de:'Benachrichtigungen im Browser blockiert.', fr:'Notifications bloquées dans votre navigateur.' },
-    fout:      { nl:'Er ging iets mis.', en:'Something went wrong.', de:'Etwas ist schiefgelaufen.', fr:"Une erreur s'est produite." },
-    testok:    { nl:'Test verstuurd ✓', en:'Test sent ✓', de:'Test gesendet ✓', fr:'Test envoyé ✓' },
-    mislukt:   { nl:'mislukt', en:'failed', de:'fehlgeschlagen', fr:'échoué' },
-};
+// localStorage) worden meegestuurd; loting/uitslag/mededeling zijn apart aan/uit
+// te zetten. Teksten staan in het centrale T-woordenboek (push_*), via t().
 let _ppBusy = false;
 const _ppSupported = () =>
     ('serviceWorker' in navigator) && ('PushManager' in window) && ('Notification' in window);
@@ -7525,9 +7572,11 @@ async function _ppHuidigAbo() {
 async function _ppPostSubscribe(sub) {
     const body = Object.assign({}, sub.toJSON(), {
         scope: 'public',
+        lang: (typeof getCurLang === 'function') ? getCurLang() : 'nl',
         licenses: _ppLics(),
         notif_loting:  _ppPref('loting')  ? 1 : 0,
         notif_uitslag: _ppPref('uitslag') ? 1 : 0,
+        notif_bericht: _ppPref('bericht') ? 1 : 0,
     });
     return fetch('../api/push_subscribe.php?action=subscribe', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
@@ -7589,8 +7638,8 @@ async function _ppRender() {
     if (!_ppLics().length) { el.innerHTML = ''; return; }
     if (!_ppSupported()) {
         const iOS = /iPhone|iPad|iPod/.test(navigator.userAgent);
-        el.innerHTML = `<div class="pub-push-titel">🔔 ${_pp(_ppT.titel)}</div>
-            <div class="pub-push-msg">${_pp(_ppT.niet)}${iOS ? ' ' + _pp(_ppT.ios) : ''}</div>`;
+        el.innerHTML = `<div class="pub-push-titel">🔔 ${t('push_titel')}</div>
+            <div class="pub-push-msg">${t('push_niet')}${iOS ? ' ' + t('push_ios') : ''}</div>`;
         return;
     }
     await _ppHeal();   // door OS gedropt abonnement stil terugzetten
@@ -7598,33 +7647,34 @@ async function _ppRender() {
     const aan = !!sub && Notification.permission === 'granted';
     el.innerHTML = `
         <div class="pub-push-kop">
-            <span class="pub-push-titel">🔔 ${_pp(_ppT.titel)}</span>
+            <span class="pub-push-titel">🔔 ${t('push_titel')}</span>
             <button type="button" class="pub-push-toggle" data-aan="${aan ? '1' : '0'}">${
-                aan ? _pp(_ppT.uit) : _pp(_ppT.aan)}</button>
+                aan ? t('push_uit') : t('push_aan')}</button>
         </div>
-        <div class="pub-push-uitleg">${_pp(_ppT.uitleg)}</div>
+        <div class="pub-push-uitleg">${t('push_uitleg')}</div>
         <div class="pub-push-opties${aan ? '' : ' uit'}">
-            <label class="pub-push-opt"><input type="checkbox" data-type="loting"  ${_ppPref('loting')  ? 'checked' : ''}> ${_pp(_ppT.loting)}</label>
-            <label class="pub-push-opt"><input type="checkbox" data-type="uitslag" ${_ppPref('uitslag') ? 'checked' : ''}> ${_pp(_ppT.uitslag)}</label>
+            <label class="pub-push-opt"><input type="checkbox" data-type="loting"  ${_ppPref('loting')  ? 'checked' : ''}> 🚩 ${t('push_loting')}</label>
+            <label class="pub-push-opt"><input type="checkbox" data-type="uitslag" ${_ppPref('uitslag') ? 'checked' : ''}> 🏁 ${t('push_uitslag')}</label>
+            <label class="pub-push-opt"><input type="checkbox" data-type="bericht" ${_ppPref('bericht') ? 'checked' : ''}> 📢 ${t('push_bericht')}</label>
         </div>
         <div class="pub-push-rij"${aan ? '' : ' style="display:none"'}>
-            <button type="button" class="pub-push-test">${_pp(_ppT.test)}</button>
+            <button type="button" class="pub-push-test">${t('push_test')}</button>
             <span class="pub-push-msg"></span>
         </div>`;
 
     const msg = el.querySelector('.pub-push-msg');
     el.querySelector('.pub-push-toggle').addEventListener('click', async () => {
         if (_ppBusy) return; _ppBusy = true;
-        if (msg) msg.textContent = _pp(_ppT.bezig);
+        if (msg) msg.textContent = t('push_bezig');
         try {
             if (aan) {
                 await _ppUit();
             } else {
                 const res = await _ppAan();
-                if (res === 'geweigerd')  { if (msg) msg.textContent = _pp(_ppT.geweigerd); }
-                else if (res !== true)    { if (msg) msg.textContent = _pp(_ppT.fout); }
+                if (res === 'geweigerd')  { if (msg) msg.textContent = t('push_geweigerd'); }
+                else if (res !== true)    { if (msg) msg.textContent = t('push_fout'); }
             }
-        } catch (e) { if (msg) msg.textContent = _pp(_ppT.fout); }
+        } catch (e) { if (msg) msg.textContent = t('push_fout'); }
         _ppBusy = false;
         _ppRender();
     });
@@ -7635,7 +7685,7 @@ async function _ppRender() {
     const testBtn = el.querySelector('.pub-push-test');
     if (testBtn) testBtn.addEventListener('click', async () => {
         if (_ppBusy) return; _ppBusy = true;
-        if (msg) msg.textContent = _pp(_ppT.bezig);
+        if (msg) msg.textContent = t('push_bezig');
         try {
             const cur = await _ppHuidigAbo();
             const resp = await fetch('../api/push_subscribe.php?action=test', {
@@ -7643,9 +7693,9 @@ async function _ppRender() {
                 body: JSON.stringify({ scope: 'public', endpoint: cur ? cur.endpoint : '' }),
             });
             let r = {}; try { r = JSON.parse(await resp.text()); } catch (e) {}
-            if (r.ok && (r.result?.verstuurd > 0)) { if (msg) msg.textContent = _pp(_ppT.testok); }
-            else { if (msg) msg.textContent = '⚠ ' + (r.reden || _pp(_ppT.mislukt)); }
-        } catch (e) { if (msg) msg.textContent = _pp(_ppT.fout); }
+            if (r.ok && (r.result?.verstuurd > 0)) { if (msg) msg.textContent = t('push_testok'); }
+            else { if (msg) msg.textContent = '⚠ ' + (r.reden || t('push_mislukt')); }
+        } catch (e) { if (msg) msg.textContent = t('push_fout'); }
         _ppBusy = false;
     });
 }
