@@ -2342,7 +2342,9 @@ select:focus, input:focus { border-color: var(--middenblauw); outline: none; }
 /* ── Kaart ── */
 .kaart {
     background: var(--wit); border: 1px solid #dde3ea;
-    border-radius: 0 0 10px 10px; overflow: hidden; margin-bottom: 16px;
+    border-radius: 0 0 10px 10px; margin-bottom: 16px;
+    /* GEEN overflow:hidden — dat maakt van de kaart een scroll-context en
+       breekt position:sticky van de prog-sticky-kop erin (2026-08). */
 }
 .kaart-sectie { padding: 12px 16px; border-bottom: 1px solid #eef2f6; }
 .kaart-sectie:last-child { border-bottom: none; }
@@ -2612,6 +2614,16 @@ select:focus, input:focus { border-color: var(--middenblauw); outline: none; }
    aan .prog-klap-btn. Public heeft kaart-sectie padding, dus horizontal
    negative-margin voor full-width. Klap-balk staat eronder (7-06);
    sibling-selector verlaagt zijn top-margin zodat ze naadloos aansluiten. */
+/* Sticky-kop: het afstand/dag-filter én de inklap-balk blijven bij het scrollen
+   boven aan (2026-08). De twee balken samen in één sticky wrapper — robuust tegen
+   uitklappende filters en wisselende hoogte, i.p.v. per-balk-sticky met top-reken. */
+.prog-sticky-kop {
+    position: sticky; top: 0; z-index: 6;
+    margin: -12px -16px 10px;      /* breekt uit de kaart-sectie-padding → volle kaartbreedte */
+    background: #fff;
+}
+.prog-sticky-kop > .prog-filter-strook,
+.prog-sticky-kop > .prog-klap-balk { margin: 0; position: static; }
 .prog-filter-strook {
     margin: -12px -16px 0;
     position: sticky; top: 0; z-index: 5;
@@ -3283,7 +3295,7 @@ const T = {
         help_titel: 'Hoe werkt InlineComp?',
         help_h1: 'Aan de slag',
         help_stap1_html: 'Kies je <b>wedstrijd</b> uit de lijst. Met de drie filter-knoppen — <i>Eerder</i>, <i>Vandaag</i> en <i>Later</i> — bepaal je welke wedstrijden je ziet. Standaard staat alleen <i>Vandaag</i> aan; klik een knop aan/uit om het bereik aan te passen.',
-        help_stap2_html: 'Vul je <b>startnummer</b> in en klik op <b>Zoeken</b> — je persoonlijke overzicht verschijnt.',
+        help_stap2_html: 'Vul je <b>startnummer, licentie of achternaam</b> in en klik op <b>Zoeken</b> — je persoonlijke overzicht verschijnt.',
         help_stap3_html: 'Wil je meerdere rijders volgen (bv. broer, zus of een teamgenoot)? Klik op de <b>+</b>-knop bovenin. Je kunt tot <b>4 rijders</b> tegelijk volgen — wissel van rijder via de tabs bovenaan met hun startnummers.',
         help_mock_kies_w: 'Kies je wedstrijd',
         help_mock_voorbeeld: 'Voorbeeldwedstrijd — 19 april 2026',
@@ -3318,6 +3330,8 @@ const T = {
         push_fout: 'Er ging iets mis.',
         push_testok: 'Test verstuurd ✓',
         push_mislukt: 'mislukt',
+        help_h_push: 'Meldingen op je telefoon',
+        help_p_push_html: 'Volg je een rijder, dan kun je <b>pushmeldingen</b> aanzetten via het ✎-strookje bovenaan (het <b>🔔-blok</b>). Je krijgt dan een seintje op je telefoon zodra er voor jouw rijder is <b>geloot 🚩</b> of een <b>uitslag 🏁</b> binnen is, en bij <b>mededelingen 📢</b> van de organisatie — óók als de app dicht is. Elk type is apart aan/uit te zetten. Op de iPhone werkt het alleen als de app op je beginscherm staat.',
     },
     en: {
         // ── Document ──
@@ -3522,7 +3536,7 @@ const T = {
         help_titel: 'How does InlineComp work?',
         help_h1: 'Getting started',
         help_stap1_html: 'Choose your <b>race</b> from the list. With the three filter buttons — <i>Earlier</i>, <i>Today</i> and <i>Later</i> — you decide which races you see. By default only <i>Today</i> is on; click a button on/off to adjust the range.',
-        help_stap2_html: 'Enter your <b>start number</b> and click <b>Search</b> — your personal overview appears.',
+        help_stap2_html: 'Enter your <b>start number, license or last name</b> and click <b>Search</b> — your personal overview appears.',
         help_stap3_html: 'Want to follow multiple skaters (e.g. brother, sister or a teammate)? Click the <b>+</b> button at the top. You can follow up to <b>4 skaters</b> at once — switch via the tabs at the top with their start numbers.',
         help_mock_kies_w: 'Choose your race',
         help_mock_voorbeeld: 'Sample race — 19 April 2026',
@@ -3557,6 +3571,8 @@ const T = {
         push_fout: 'Something went wrong.',
         push_testok: 'Test sent ✓',
         push_mislukt: 'failed',
+        help_h_push: 'Notifications on your phone',
+        help_p_push_html: 'When you follow a skater you can turn on <b>push notifications</b> via the ✎ strip at the top (the <b>🔔 block</b>). You then get an alert on your phone as soon as your skater has been <b>drawn 🚩</b> or a <b>result 🏁</b> comes in, and for <b>announcements 📢</b> from the organisation — even when the app is closed. Each type can be switched on/off separately. On iPhone it only works if the app is on your home screen.',
     },
     de: {
         // ── Document ──
@@ -3761,7 +3777,7 @@ const T = {
         help_titel: 'Wie funktioniert InlineComp?',
         help_h1: 'Loslegen',
         help_stap1_html: 'Wähle dein <b>Rennen</b> aus der Liste. Mit den drei Filter-Buttons — <i>Früher</i>, <i>Heute</i> und <i>Später</i> — entscheidest du welche Rennen du siehst. Standardmäßig ist nur <i>Heute</i> aktiv; klicke einen Button an/aus, um den Bereich anzupassen.',
-        help_stap2_html: 'Gib deine <b>Startnummer</b> ein und klicke auf <b>Suchen</b> — deine persönliche Übersicht erscheint.',
+        help_stap2_html: 'Gib deine <b>Startnummer, Lizenz oder deinen Nachnamen</b> ein und klicke auf <b>Suchen</b> — deine persönliche Übersicht erscheint.',
         help_stap3_html: 'Möchtest du mehrere Skater verfolgen (z.B. Bruder, Schwester oder Teamkollege)? Klicke auf den <b>+</b>-Button oben. Du kannst bis zu <b>4 Skater</b> gleichzeitig verfolgen — wechsle über die Tabs oben mit ihren Startnummern.',
         help_mock_kies_w: 'Wähle dein Rennen',
         help_mock_voorbeeld: 'Beispielrennen — 19. April 2026',
@@ -3796,6 +3812,8 @@ const T = {
         push_fout: 'Etwas ist schiefgelaufen.',
         push_testok: 'Test gesendet ✓',
         push_mislukt: 'fehlgeschlagen',
+        help_h_push: 'Benachrichtigungen auf deinem Handy',
+        help_p_push_html: 'Wenn du einen Fahrer verfolgst, kannst du <b>Push-Benachrichtigungen</b> über die ✎-Leiste oben aktivieren (der <b>🔔-Block</b>). Du bekommst dann eine Meldung auf dein Handy, sobald dein Fahrer <b>ausgelost 🚩</b> wurde oder ein <b>Ergebnis 🏁</b> vorliegt, sowie bei <b>Mitteilungen 📢</b> der Organisation — auch wenn die App geschlossen ist. Jeder Typ lässt sich einzeln ein-/ausschalten. Auf dem iPhone funktioniert es nur, wenn die App auf dem Startbildschirm liegt.',
     },
     fr: {
         // ── Document ──
@@ -4000,7 +4018,7 @@ const T = {
         help_titel: 'Comment fonctionne InlineComp ?',
         help_h1: 'Démarrer',
         help_stap1_html: 'Choisis ta <b>course</b> dans la liste. Avec les trois boutons de filtre — <i>Avant</i>, <i>Aujourd\'hui</i> et <i>Plus tard</i> — tu décides quelles courses voir. Par défaut seul <i>Aujourd\'hui</i> est actif ; clique un bouton pour ajuster la plage.',
-        help_stap2_html: 'Entre ton <b>numéro de dossard</b> et clique sur <b>Rechercher</b> — ton aperçu personnel apparaît.',
+        help_stap2_html: 'Entre ton <b>numéro de dossard, licence ou nom de famille</b> et clique sur <b>Rechercher</b> — ton aperçu personnel apparaît.',
         help_stap3_html: 'Tu veux suivre plusieurs skateurs (par ex. frère, sœur ou coéquipier) ? Clique sur le bouton <b>+</b> en haut. Tu peux suivre jusqu\'à <b>4 skateurs</b> en même temps — change via les onglets en haut avec leurs dossards.',
         help_mock_kies_w: 'Choisis ta course',
         help_mock_voorbeeld: 'Course exemple — 19 avril 2026',
@@ -4035,6 +4053,8 @@ const T = {
         push_fout: 'Une erreur s\'est produite.',
         push_testok: 'Test envoyé ✓',
         push_mislukt: 'échoué',
+        help_h_push: 'Notifications sur votre téléphone',
+        help_p_push_html: 'Lorsque vous suivez un patineur, vous pouvez activer les <b>notifications push</b> via le bandeau ✎ en haut (le <b>bloc 🔔</b>). Vous recevez alors une alerte sur votre téléphone dès que votre patineur est <b>tiré au sort 🚩</b> ou qu\'un <b>résultat 🏁</b> arrive, ainsi que pour les <b>annonces 📢</b> de l\'organisation — même quand l\'app est fermée. Chaque type s\'active ou se désactive séparément. Sur iPhone, cela ne fonctionne que si l\'app est sur votre écran d\'accueil.',
     }
 };
 // Shared i18n-helpers (t, applyI18n, toggleLang, getCurLang, getLocale)
@@ -5596,6 +5616,7 @@ function renderResultaat(data, snr, prog) {
                 });
                 const afsAlleArr = [..._afsAlle].sort((a,b) => a.localeCompare(b, 'nl', {numeric:true}));
                 const heeftMeerdereAfs = afsAlleArr.length > 1;
+                html += '<div class="prog-sticky-kop">';   // filter + klap-balk blijven boven bij scrollen
                 if (isMultiDag || heeftMeerdereAfs) {
                     // JSON van afstanden-per-dag zodat JS bij dag-wissel het paneel kan filteren.
                     const afsPerDagObj = {};
@@ -5650,6 +5671,7 @@ function renderResultaat(data, snr, prog) {
                     <button type="button" class="prog-klap-btn" data-actie="uit"  onclick="klapProgPub(this,'uit')">▼ ${esc(t('prog_klap_alles_in'))}</button>
                     <button type="button" class="prog-klap-btn" data-actie="mijn" onclick="klapProgPub(this,'mijn')">👤 ${esc(t('prog_klap_mijn'))}</button>
                 </div>`;
+                html += '</div>';   // /prog-sticky-kop
 
                 // Rit-namen van de ándere gevolgde kinderen — lokaal uit _kinderen
                 // (elk kind heeft z'n lookup/heats al opgehaald), dus GÉÉN extra
@@ -6984,6 +7006,20 @@ function toonHelp() {
 
             <h3>${esc(t('help_h_meld'))}</h3>
             <p>${t('help_p_meld_html')}</p>
+
+            <h3>${esc(t('help_h_push'))}</h3>
+            <p>${t('help_p_push_html')}</p>
+
+            <!-- Mockup: push-meldingen-blok (🔔 + 3 losse type-toggles) -->
+            <div class="mock">
+                <div class="mock-hdr">🔔 ${esc(t('push_titel'))}</div>
+                <div class="mock-body">
+                    <div style="text-align:right;margin:0 0 6px"><span style="background:var(--blauw);color:#fff;border-radius:999px;padding:4px 14px;font-size:.72rem;font-weight:600">${esc(t('push_aan'))}</span></div>
+                    <div class="mock-row" style="border:none;padding:2px 0;gap:6px"><span>☑</span><span class="mock-naam">🚩 ${esc(t('push_loting'))}</span></div>
+                    <div class="mock-row" style="border:none;padding:2px 0;gap:6px"><span>☑</span><span class="mock-naam">🏁 ${esc(t('push_uitslag'))}</span></div>
+                    <div class="mock-row" style="border:none;padding:2px 0;gap:6px"><span>☑</span><span class="mock-naam">📢 ${esc(t('push_bericht'))}</span></div>
+                </div>
+            </div>
 
             <h3>${esc(t('help_h_tip'))}</h3>
             <p>${esc(t('help_p_tip'))}</p>

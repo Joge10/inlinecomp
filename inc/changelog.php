@@ -14,6 +14,102 @@
 //     en wordt in de changelog genest + gedempt getoond onder de versie.
 //     Triviale copy/typo-fixes komen NERGENS in de changelog — los committen.
 return [
+    // ══ H1243.10.08 — tijdschema-wizard, push-meldingen (bèta), demo, sticky filters ══
+    // ── Beheer (admin) ──
+    [
+        'versie' => 'H1243.10.08', 'datum' => '10-08-2026', 'onderdelen' => ['admin'],
+        'tekst' => [
+            'nl' => '<b>Tijdschema-wizard</b> — nieuwe stap-voor-stap-wizard om een wedstrijd op te bouwen: afstandscombinaties samenstellen, afstand-instellingen per groep, het programma met blokken en ritten, en A-finales combineren.',
+            'en' => '<b>Schedule wizard</b> — new step-by-step wizard to build a competition: compose distance combinations, distance settings per group, the programme with blocks and heats, and combine A-finals.',
+            'de' => '<b>Zeitplan-Assistent</b> — neuer Schritt-für-Schritt-Assistent zum Aufbau eines Wettkampfs: Distanzkombinationen zusammenstellen, Distanzeinstellungen pro Gruppe, Programm mit Blöcken und Läufen, und A-Finals kombinieren.',
+            'fr' => '<b>Assistant de programme</b> — nouvel assistant pas à pas pour construire une compétition : combinaisons de distances, réglages par groupe, programme avec blocs et séries, et combinaison des finales A.',
+        ],
+    ],
+    [
+        'versie' => 'H1243.10.08', 'datum' => '10-08-2026', 'onderdelen' => ['admin'],
+        'tekst' => [
+            'nl' => '<b>Demo-wedstrijd</b> — een oefen-wedstrijd met fictieve deelnemers die je via Import binnenhaalt (zichtbaar met <code>?demo</code>), om zonder echte data te testen of te demonstreren.',
+            'en' => '<b>Demo competition</b> — a practice competition with fictional participants that you import (visible with <code>?demo</code>), to test or demonstrate without real data.',
+            'de' => '<b>Demo-Wettkampf</b> — ein Übungswettkampf mit fiktiven Teilnehmern, den du über den Import lädst (sichtbar mit <code>?demo</code>), zum Testen oder Vorführen ohne echte Daten.',
+            'fr' => '<b>Compétition démo</b> — une compétition d\'entraînement avec des participants fictifs, importée (visible avec <code>?demo</code>), pour tester ou faire une démo sans données réelles.',
+        ],
+    ],
+    [
+        'versie' => 'H1243.10.08', 'datum' => '10-08-2026', 'onderdelen' => ['admin'],
+        'tekst' => [
+            'nl' => '<b>Import: vereniging/sponsor/woonplaats overschrijven</b> — een eerste import vult deze velden; een handmatige correctie blijft bij een herimport bewaard.',
+            'en' => '<b>Import: override club/sponsor/town</b> — a first import fills these fields; a manual correction is kept on re-import.',
+            'de' => '<b>Import: Verein/Sponsor/Wohnort überschreiben</b> — ein erster Import füllt diese Felder; eine manuelle Korrektur bleibt beim erneuten Import erhalten.',
+            'fr' => '<b>Import : remplacer club/sponsor/ville</b> — un premier import remplit ces champs ; une correction manuelle est conservée lors d\'un réimport.',
+        ],
+    ],
+    [
+        'versie' => 'H1243.10.08', 'datum' => '10-08-2026', 'onderdelen' => ['admin'],
+        'tekst' => [
+            'nl' => '<b>Coach-beheer</b> — uitgebreid: e-mails bij registratie-aanvraag, goedkeuring en afwijzing, een Verversen-knop en een altijd-verse Coaches-lijst.',
+            'en' => '<b>Coach management</b> — expanded: e-mails on registration request, approval and rejection, a Refresh button and an always-fresh Coaches list.',
+            'de' => '<b>Coach-Verwaltung</b> — erweitert: E-Mails bei Registrierungsanfrage, Genehmigung und Ablehnung, ein Aktualisieren-Button und eine stets frische Coaches-Liste.',
+            'fr' => '<b>Gestion des coachs</b> — enrichie : e-mails lors d\'une demande d\'inscription, approbation et refus, un bouton Actualiser et une liste des coachs toujours à jour.',
+        ],
+    ],
+    [
+        'versie' => 'H1243.10.08', 'datum' => '10-08-2026', 'onderdelen' => ['admin'],
+        'tekst' => [
+            'nl' => '🔔 <b>Push-meldingen (bèta)</b> — een nieuwe mededeling stuurt nu automatisch een pushbericht naar volgers van die wedstrijd (of naar iedereen bij een algemene mededeling). In Systeem → Bezoekers zie je het aantal push-abonnees. <i>Nieuw en nog in bèta.</i>',
+            'en' => '🔔 <b>Push notifications (beta)</b> — a new announcement now automatically sends a push to followers of that competition (or to everyone for a general announcement). In System → Visitors you can see the number of push subscribers. <i>New and still in beta.</i>',
+            'de' => '🔔 <b>Push-Benachrichtigungen (Beta)</b> — eine neue Mitteilung sendet jetzt automatisch eine Push an Follower dieses Wettkampfs (oder an alle bei einer allgemeinen Mitteilung). Unter System → Besucher siehst du die Zahl der Push-Abonnenten. <i>Neu und noch in Beta.</i>',
+            'fr' => '🔔 <b>Notifications push (bêta)</b> — une nouvelle annonce envoie désormais automatiquement une push aux abonnés de cette compétition (ou à tous pour une annonce générale). Dans Système → Visiteurs, vous voyez le nombre d\'abonnés push. <i>Nouveau et encore en bêta.</i>',
+        ],
+    ],
+    [
+        'versie' => 'H1243.10.08', 'datum' => '10-08-2026', 'onderdelen' => ['admin'],
+        'tekst' => [
+            'nl' => '<b>Diverse beheer-verbeteringen</b> — de changelog toont onderhoud/beveiliging genest onder de lopende versie, en de Systeem-tabvolgorde is logischer ("Coach" → "Coaches").',
+            'en' => '<b>Various admin improvements</b> — the changelog shows maintenance/security nested under the current version, and the System tab order is more logical ("Coach" → "Coaches").',
+            'de' => '<b>Diverse Verwaltungs-Verbesserungen</b> — das Changelog zeigt Wartung/Sicherheit verschachtelt unter der laufenden Version, und die System-Tab-Reihenfolge ist logischer ("Coach" → "Coaches").',
+            'fr' => '<b>Diverses améliorations d\'administration</b> — le changelog affiche maintenance/sécurité imbriquées sous la version courante, et l\'ordre des onglets Système est plus logique ("Coach" → "Coaches").',
+        ],
+    ],
+    // ── Public ──
+    [
+        'versie' => 'H1243.10.08', 'datum' => '10-08-2026', 'onderdelen' => ['public'],
+        'tekst' => [
+            'nl' => '🔔 <b>Pushmeldingen op je telefoon (bèta)</b> — volg je een rijder, dan kun je een seintje krijgen zodra er is geloot 🚩, een uitslag 🏁 binnen is of de organisatie een mededeling 📢 plaatst — óók als de app dicht is. Per type apart in te stellen via het 🔔-blok. Goed getest, maar meld gerust als er iets niet klopt (vooral op de iPhone).',
+            'en' => '🔔 <b>Push notifications on your phone (beta)</b> — when you follow a skater you can get an alert as soon as a draw is made 🚩, a result 🏁 comes in or the organisation posts an announcement 📢 — even when the app is closed. Each type separately via the 🔔 block. Well tested, but do let us know if something is off (especially on iPhone).',
+            'de' => '🔔 <b>Push-Benachrichtigungen auf deinem Handy (Beta)</b> — wenn du einen Fahrer verfolgst, bekommst du eine Meldung, sobald ausgelost wurde 🚩, ein Ergebnis 🏁 vorliegt oder die Organisation eine Mitteilung 📢 veröffentlicht — auch wenn die App geschlossen ist. Jeder Typ einzeln über den 🔔-Block. Gut getestet, aber melde dich, wenn etwas nicht stimmt (besonders auf dem iPhone).',
+            'fr' => '🔔 <b>Notifications push sur votre téléphone (bêta)</b> — lorsque vous suivez un patineur, vous pouvez être alerté dès qu\'un tirage est fait 🚩, qu\'un résultat 🏁 arrive ou que l\'organisation publie une annonce 📢 — même quand l\'app est fermée. Chaque type séparément via le bloc 🔔. Bien testé, mais signalez tout souci (surtout sur iPhone).',
+        ],
+    ],
+    // ── Coach ──
+    [
+        'versie' => 'H1243.10.08', 'datum' => '10-08-2026', 'onderdelen' => ['coach'],
+        'tekst' => [
+            'nl' => '🔔 <b>Pushmeldingen op je telefoon (bèta)</b> — met een coach-account krijg je een seintje zodra er voor je atleten is geloot 🚩, een uitslag 🏁 binnen is of de organisatie een mededeling 📢 plaatst — óók als de app dicht is. Per type apart in te stellen. Goed getest, maar meld gerust als er iets niet klopt (vooral op de iPhone).',
+            'en' => '🔔 <b>Push notifications on your phone (beta)</b> — with a coach account you get an alert as soon as your athletes are drawn 🚩, a result 🏁 comes in or the organisation posts an announcement 📢 — even when the app is closed. Each type separately. Well tested, but do let us know if something is off (especially on iPhone).',
+            'de' => '🔔 <b>Push-Benachrichtigungen auf deinem Handy (Beta)</b> — mit einem Coach-Konto bekommst du eine Meldung, sobald deine Athleten ausgelost wurden 🚩, ein Ergebnis 🏁 vorliegt oder die Organisation eine Mitteilung 📢 veröffentlicht — auch wenn die App geschlossen ist. Jeder Typ einzeln. Gut getestet, aber melde dich, wenn etwas nicht stimmt (besonders auf dem iPhone).',
+            'fr' => '🔔 <b>Notifications push sur votre téléphone (bêta)</b> — avec un compte coach, vous êtes alerté dès que vos athlètes sont tirés au sort 🚩, qu\'un résultat 🏁 arrive ou que l\'organisation publie une annonce 📢 — même quand l\'app est fermée. Chaque type séparément. Bien testé, mais signalez tout souci (surtout sur iPhone).',
+        ],
+    ],
+    [
+        'versie' => 'H1243.10.08', 'datum' => '10-08-2026', 'onderdelen' => ['coach'],
+        'tekst' => [
+            'nl' => '<b>Coach-account e-mails</b> — je krijgt nu een bevestiging per e-mail bij een registratie-aanvraag, goedkeuring/afwijzing en wachtwoord-reset.',
+            'en' => '<b>Coach account e-mails</b> — you now get an e-mail confirmation on a registration request, approval/rejection and password reset.',
+            'de' => '<b>Coach-Konto-E-Mails</b> — du erhältst jetzt eine E-Mail-Bestätigung bei Registrierungsanfrage, Genehmigung/Ablehnung und Passwort-Reset.',
+            'fr' => '<b>E-mails du compte coach</b> — vous recevez désormais une confirmation par e-mail lors d\'une demande d\'inscription, d\'une approbation/refus et d\'une réinitialisation de mot de passe.',
+        ],
+    ],
+    // ── Public + Coach ──
+    [
+        'versie' => 'H1243.10.08', 'datum' => '10-08-2026', 'onderdelen' => ['public', 'coach'],
+        'tekst' => [
+            'nl' => '<b>Filters blijven staan</b> — in het Programma blijven het afstand-filter en de inklappen/uitklappen/mijn-balk nu boven in beeld terwijl je scrollt.',
+            'en' => '<b>Filters stay put</b> — in the Programme, the distance filter and the collapse/expand/mine bar now stay at the top while you scroll.',
+            'de' => '<b>Filter bleiben sichtbar</b> — im Programm bleiben der Distanzfilter und die Einklappen/Ausklappen/Meine-Leiste jetzt oben, während du scrollst.',
+            'fr' => '<b>Les filtres restent en place</b> — dans le Programme, le filtre de distance et la barre replier/déplier/les miens restent en haut pendant le défilement.',
+        ],
+    ],
+
     // ── Patches onder H997.31.07 (onderhoud & beveiliging, alleen Beheer) ──
     [
         'versie' => 'H997.31.07', 'datum' => '05-08-2026',

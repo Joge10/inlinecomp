@@ -2422,6 +2422,16 @@ select.sel {
    aan .prog-klap-btn. Coach heeft geen kaart-sectie-padding, dus geen
    horizontal negative-margin. Klap-balk staat eronder; sibling-selector
    verwijdert dubbele scheidingslijn. */
+/* Sticky-kop: het afstand/dag-filter én de inklap-balk blijven bij het scrollen
+   boven aan (2026-08). Beide balken samen in één sticky wrapper — robuust tegen
+   uitklappende filters en wisselende hoogte. */
+.prog-sticky-kop {
+    position: sticky; top: 0; z-index: 6;
+    margin: 0 0 8px;
+    background: #fff;
+}
+.prog-sticky-kop > .prog-filter-strook,
+.prog-sticky-kop > .prog-klap-balk { margin: 0; position: static; }
 .prog-filter-strook {
     margin: 0 0 0;
     position: sticky; top: 0; z-index: 5;
@@ -3526,6 +3536,13 @@ const T = {
         mock_niet_geplaatst: 'Niet geplaatst',
         help_h_rondes: 'Rondes',
         help_p_rondes_html: '<b>Rondes</b> — per-ronde uitslagen van alle DC\'s waarvoor je rijders volgt. Zichtbaar is de plek per ronde en of doorstroom naar de volgende ronde heeft plaatsgevonden.',
+        help_h_push: 'Meldingen op je telefoon',
+        help_p_push_html: 'Met een <b>coach-account</b> (👤 rechtsboven) zet je <b>pushmeldingen</b> aan: een seintje op je telefoon zodra er voor je atleten is <b>geloot 🚩</b> of een <b>uitslag 🏁</b> binnen is, plus <b>mededelingen 📢</b> van de organisatie — óók als de app dicht is. Elk type is apart in te stellen. Op de iPhone werkt het alleen als de app op je beginscherm staat.',
+        help_push_titel: 'Pushmeldingen op je telefoon',
+        help_push_aan: 'Aanzetten',
+        help_push_loting: 'Loting bekend',
+        help_push_uitslag: 'Uitslag verwerkt',
+        help_push_bericht: 'Mededelingen',
         // ── Info-modal versienummer ──
         info_versie: 'Versie',
         // ── Wat is nieuw ──
@@ -3870,6 +3887,13 @@ const T = {
         mock_niet_geplaatst: 'Not placed',
         help_h_rondes: 'Rounds',
         help_p_rondes_html: '<b>Rounds</b> — per-round results across all DCs you follow skaters in. Shows the position achieved in each round and whether progression to the next round has occurred.',
+        help_h_push: 'Notifications on your phone',
+        help_p_push_html: 'With a <b>coach account</b> (👤 top right) you turn on <b>push notifications</b>: an alert on your phone as soon as your athletes have been <b>drawn 🚩</b> or a <b>result 🏁</b> comes in, plus <b>announcements 📢</b> from the organisation — even when the app is closed. Each type can be set separately. On iPhone it only works if the app is on your home screen.',
+        help_push_titel: 'Push notifications on your phone',
+        help_push_aan: 'Turn on',
+        help_push_loting: 'Draw ready',
+        help_push_uitslag: 'Result processed',
+        help_push_bericht: 'Announcements',
         info_versie: 'Version',
         nieuw_jump: 'Jump to What\'s new ↓',
         nieuw_h: 'What\'s new?',
@@ -4211,6 +4235,13 @@ const T = {
         mock_niet_geplaatst: 'Nicht platziert',
         help_h_rondes: 'Runden',
         help_p_rondes_html: '<b>Runden</b> — Ergebnisse pro Runde für alle DCs, in denen du Läufer verfolgst. Zeigt die in jeder Runde erreichte Platzierung und ob ein Weiterkommen in die nächste Runde erfolgt ist.',
+        help_h_push: 'Benachrichtigungen auf deinem Handy',
+        help_p_push_html: 'Mit einem <b>Coach-Konto</b> (👤 oben rechts) aktivierst du <b>Push-Benachrichtigungen</b>: eine Meldung auf dein Handy, sobald deine Athleten <b>ausgelost 🚩</b> wurden oder ein <b>Ergebnis 🏁</b> vorliegt, sowie <b>Mitteilungen 📢</b> der Organisation — auch wenn die App geschlossen ist. Jeder Typ ist einzeln einstellbar. Auf dem iPhone funktioniert es nur, wenn die App auf dem Startbildschirm liegt.',
+        help_push_titel: 'Push-Benachrichtigungen auf dein Handy',
+        help_push_aan: 'Einschalten',
+        help_push_loting: 'Auslosung bekannt',
+        help_push_uitslag: 'Ergebnis verarbeitet',
+        help_push_bericht: 'Mitteilungen',
         info_versie: 'Version',
         nieuw_jump: 'Direkt zu Was ist neu ↓',
         nieuw_h: 'Was ist neu?',
@@ -4552,6 +4583,13 @@ const T = {
         mock_niet_geplaatst: 'Non placé',
         help_h_rondes: 'Rondes',
         help_p_rondes_html: '<b>Rondes</b> — résultats par tour pour toutes les DCs dont tu suis des skateurs. Montre la place obtenue à chaque tour et si un passage au tour suivant a eu lieu.',
+        help_h_push: 'Notifications sur votre téléphone',
+        help_p_push_html: 'Avec un <b>compte coach</b> (👤 en haut à droite) vous activez les <b>notifications push</b> : une alerte sur votre téléphone dès que vos athlètes sont <b>tirés au sort 🚩</b> ou qu\'un <b>résultat 🏁</b> arrive, ainsi que les <b>annonces 📢</b> de l\'organisation — même quand l\'app est fermée. Chaque type se règle séparément. Sur iPhone, cela ne fonctionne que si l\'app est sur l\'écran d\'accueil.',
+        help_push_titel: 'Notifications push sur votre téléphone',
+        help_push_aan: 'Activer',
+        help_push_loting: 'Tirage prêt',
+        help_push_uitslag: 'Résultat traité',
+        help_push_bericht: 'Annonces',
         info_versie: 'Version',
         nieuw_jump: 'Aller à Quoi de neuf ↓',
         nieuw_h: 'Quoi de neuf ?',
@@ -5516,6 +5554,7 @@ function renderProgramma() {
     });
     const afsAlleArrCoach = [..._afsAlleCoach].sort((a,b) => a.localeCompare(b, 'nl', {numeric:true}));
     const heeftMeerdereAfsCoach = afsAlleArrCoach.length > 1;
+    html += '<div class="prog-sticky-kop">';   // filter + klap-balk blijven boven bij scrollen
     if (isMultiDag || heeftMeerdereAfsCoach) {
         const afsPerDagObjCoach = {};
         for (const [dg, set] of _afsPerDagCoach) afsPerDagObjCoach[dg] = [...set].sort((a,b) => a.localeCompare(b, 'nl', {numeric:true}));
@@ -5568,6 +5607,7 @@ function renderProgramma() {
         <button type="button" class="prog-klap-btn" data-actie="uit" onclick="klapProg('uit', this)">▼ ${esc(t('prog_klap_alles_in'))}</button>
         <button type="button" class="prog-klap-btn" data-actie="mijn" onclick="klapProg('mijn', this)">👤 ${esc(t('prog_klap_mijn'))}</button>
     </div>`;
+    html += '</div>';   // /prog-sticky-kop
 
     // ── Renderloop met cat-groepering ──────────────────────────────────
     // Consecutieve ritten met dezelfde (dc_naam + ronde_type + dag) worden
@@ -7187,6 +7227,20 @@ function toonHelp() {
 
             <h3>${t('help_h_meld')}</h3>
             <p>${t('help_p_meld_html')}</p>
+
+            <h3>${t('help_h_push')}</h3>
+            <p>${t('help_p_push_html')}</p>
+
+            <!-- Mockup: push-meldingen-blok in het coach-account (🔔 + 3 type-toggles) -->
+            <div class="mock">
+                <div class="mock-hdr">🔔 ${t('help_push_titel')}</div>
+                <div class="mock-body">
+                    <div style="text-align:right;margin:0 0 6px"><span style="background:#1b5faa;color:#fff;border-radius:999px;padding:4px 14px;font-size:.72rem;font-weight:600">${t('help_push_aan')}</span></div>
+                    <div class="mock-row" style="border:none;padding:2px 0;gap:6px"><span>☑</span><span class="mock-naam">🚩 ${t('help_push_loting')}</span></div>
+                    <div class="mock-row" style="border:none;padding:2px 0;gap:6px"><span>☑</span><span class="mock-naam">🏁 ${t('help_push_uitslag')}</span></div>
+                    <div class="mock-row" style="border:none;padding:2px 0;gap:6px"><span>☑</span><span class="mock-naam">📢 ${t('help_push_bericht')}</span></div>
+                </div>
+            </div>
 
             <h3>${t('help_h_priv')}</h3>
             <p>${t('help_p_priv')}</p>
