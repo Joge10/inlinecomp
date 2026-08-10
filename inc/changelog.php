@@ -110,6 +110,16 @@ return [
         ],
     ],
 
+    [
+        'versie' => 'H1243.10.08', 'datum' => '10-08-2026', 'onderdelen' => ['public', 'coach'],
+        'tekst' => [
+            'nl' => '<b>Privacyverklaring bijgewerkt</b> — een nieuwe paragraaf legt uit welke gegevens de pushmeldingen per apparaat verwerken (push-abonnement, gevolgde licentienummers, taal) en dat de bezorging via de push-dienst van je browser (Google/Mozilla/Apple) verloopt.',
+            'en' => '<b>Privacy statement updated</b> — a new section explains which data push notifications process per device (push subscription, followed licence numbers, language) and that delivery goes via your browser\'s push service (Google/Mozilla/Apple).',
+            'de' => '<b>Datenschutzerklärung aktualisiert</b> — ein neuer Abschnitt erklärt, welche Daten die Push-Benachrichtigungen pro Gerät verarbeiten (Push-Abonnement, verfolgte Lizenznummern, Sprache) und dass die Zustellung über den Push-Dienst deines Browsers (Google/Mozilla/Apple) erfolgt.',
+            'fr' => '<b>Déclaration de confidentialité mise à jour</b> — une nouvelle section explique quelles données les notifications push traitent par appareil (abonnement push, numéros de licence suivis, langue) et que la distribution passe par le service push de votre navigateur (Google/Mozilla/Apple).',
+        ],
+    ],
+
     // ── Patches onder H997.31.07 (onderhoud & beveiliging, alleen Beheer) ──
     [
         'versie' => 'H997.31.07', 'datum' => '05-08-2026',

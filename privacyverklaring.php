@@ -15,8 +15,8 @@ header('Pragma: no-cache');
 $ORG_NAAM   = 'InlineComp';                 // TODO: aanpassen naar jouw vereniging / beheerder
 $ORG_EMAIL  = 'inlinecomp@devriesen.com';   // TODO: e-mailadres voor verzoeken
 $ORG_ADRES  = '';                           // TODO: eventueel postadres
-$LAATSTE_UPDATE_NL = '30 juli 2026';
-$LAATSTE_UPDATE_EN = '30 July 2026';
+$LAATSTE_UPDATE_NL = '10 augustus 2026';
+$LAATSTE_UPDATE_EN = '10 August 2026';
 ?><!DOCTYPE html>
 <html lang="nl">
 <head>
@@ -97,6 +97,30 @@ Je kunt je account en atletenlijst op elk moment zelf verwijderen; daarnaast ver
 een account automatisch na één jaar zonder inloggen. Het wachtwoord bewaren wij
 uitsluitend versleuteld (bcrypt-hash).</p>
 
+<h2>1c. Pushmeldingen (optioneel)</h2>
+<p>In de coach- en publieke app kun je — geheel vrijwillig — <strong>pushmeldingen</strong>
+aanzetten voor een seintje op je telefoon bij loting, uitslag of een mededeling van de
+organisatie. Zet je dit aan, dan verwerken wij per apparaat:</p>
+<ul>
+    <li>een <strong>push-abonnement</strong> van je browser (een technisch adres — het
+        'endpoint' — plus versleutel-sleutels) om de melding aan jouw apparaat te bezorgen;</li>
+    <li>de <strong>licentienummers van de rijders die je volgt</strong> (zodat we alleen
+        relevante meldingen sturen), je gekozen <strong>taal</strong> en welke meldingtypen
+        je aan hebt staan;</li>
+    <li>een korte <strong>browser-/apparaataanduiding</strong> (user-agent) voor beheer en opschoning.</li>
+</ul>
+<p>De grondslag is jouw <strong>toestemming</strong> — je zet de meldingen zelf aan en kunt
+ze op elk moment weer uitzetten, waarna het abonnement wordt verwijderd. In de publieke app
+worden je gevolgde rijders normaal alléén lokaal op je toestel bewaard; <strong>alleen</strong>
+wanneer je pushmeldingen aanzet, worden die licentienummers naar onze server gestuurd om de
+meldingen te kunnen richten. Aan een publiek push-abonnement is <strong>geen naam of
+e-mailadres</strong> gekoppeld. Verlopen of ingetrokken abonnementen worden automatisch verwijderd.</p>
+<p><strong>Bezorging via je browser-push-dienst:</strong> om de melding op je toestel te
+krijgen, loopt deze via de push-dienst van je browser-leverancier — Google (Android/Chrome),
+Mozilla (Firefox) of Apple (Safari/iPhone). Zij ontvangen het technische endpoint en de
+(versleutelde) melding om deze te bezorgen; wij delen hierbij <strong>geen namen of
+rijdersgegevens</strong>, en de inhoud is versleuteld tussen ons en jouw apparaat.</p>
+
 <h2>2. Waarom verwerken wij deze gegevens?</h2>
 <ul>
     <li>Het correct organiseren en uitvoeren van wedstrijden (startlijsten,
@@ -131,6 +155,8 @@ een AI-dienst om tekstherkenning te helpen — zie §5b hieronder.</p>
         en eindtijden worden openbaar gepubliceerd op onze uitslagpagina, zoals
         gangbaar in de sport.</li>
     <li><strong>AI-dienstverlener (Anthropic)</strong>: zie §5b voor uitleg.</li>
+    <li><strong>Push-diensten (Google/Mozilla/Apple)</strong>: uitsluitend voor het
+        bezorgen van pushmeldingen die je zelf hebt aangezet — zie §1c.</li>
     <li>Wij verkopen géén gegevens en delen ze niet met derden buiten het
         bovenstaande.</li>
 </ul>
@@ -191,6 +217,8 @@ ze zijn verzameld:</p>
     <li><strong>AI-verwerking</strong>: zie §5b — data die naar Anthropic
         wordt gestuurd valt onder hun retentiebeleid (standaard maximaal
         30 dagen voor abuse-monitoring, niet gebruikt voor training).</li>
+    <li><strong>Push-abonnementen</strong>: zolang je de meldingen aan hebt
+        staan; ze worden verwijderd zodra je ze uitzet of het abonnement verloopt.</li>
 </ul>
 
 <h2>8. Beveiliging</h2>
@@ -305,6 +333,32 @@ You can delete your account and athlete list yourself at any time; in addition, 
 account expires automatically after one year without login. Passwords are stored only
 in encrypted form (bcrypt hash).</p>
 
+<h2>1c. Push notifications (optional)</h2>
+<p>In the coach and public apps you can — entirely voluntarily — turn on
+<strong>push notifications</strong> to get an alert on your phone for a draw, a
+result or an announcement from the organisation. If you enable this, we process
+per device:</p>
+<ul>
+    <li>a <strong>push subscription</strong> from your browser (a technical address —
+        the 'endpoint' — plus encryption keys) to deliver the notification to your device;</li>
+    <li>the <strong>licence numbers of the skaters you follow</strong> (so we only send
+        relevant notifications), your chosen <strong>language</strong> and which
+        notification types you have enabled;</li>
+    <li>a short <strong>browser/device identifier</strong> (user agent) for management and cleanup.</li>
+</ul>
+<p>The legal basis is your <strong>consent</strong> — you turn the notifications on
+yourself and can turn them off again at any time, after which the subscription is
+deleted. In the public app the skaters you follow are normally kept <strong>only
+locally</strong> on your device; <strong>only</strong> when you enable push notifications
+are those licence numbers sent to our server so notifications can be targeted. A public
+push subscription has <strong>no name or e-mail address</strong> attached to it. Expired
+or revoked subscriptions are deleted automatically.</p>
+<p><strong>Delivery via your browser's push service:</strong> to reach your device, a
+notification is routed through the push service of your browser vendor — Google
+(Android/Chrome), Mozilla (Firefox) or Apple (Safari/iPhone). They receive the technical
+endpoint and the (encrypted) notification in order to deliver it; we share <strong>no names
+or skater data</strong> with them, and the content is encrypted between us and your device.</p>
+
 <h2>2. Why do we process this data?</h2>
 <ul>
     <li>To correctly organise and run competitions (start lists, timekeeping,
@@ -338,6 +392,8 @@ see §5b below.</p>
         and finishing times are published on our public results page, as is
         customary in the sport.</li>
     <li><strong>AI provider (Anthropic)</strong>: see §5b for details.</li>
+    <li><strong>Push services (Google/Mozilla/Apple)</strong>: solely to deliver
+        push notifications you enabled yourself — see §1c.</li>
     <li>We do <strong>not</strong> sell data and do not share it with third
         parties beyond the above.</li>
 </ul>
@@ -394,6 +450,8 @@ for which it was collected:</p>
     <li><strong>AI processing</strong>: see §5b — data sent to Anthropic
         falls under their retention policy (by default up to 30 days for
         abuse-monitoring, not used for training).</li>
+    <li><strong>Push subscriptions</strong>: as long as you keep notifications
+        enabled; they are deleted as soon as you turn them off or the subscription expires.</li>
 </ul>
 
 <h2>8. Security</h2>
