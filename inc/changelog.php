@@ -55,10 +55,10 @@ return [
     [
         'versie' => 'H1243.10.08', 'datum' => '10-08-2026', 'onderdelen' => ['admin'],
         'tekst' => [
-            'nl' => '🔔 <b>Push-meldingen (bèta)</b> — een nieuwe mededeling stuurt nu automatisch een pushbericht naar volgers van die wedstrijd (of naar iedereen bij een algemene mededeling). In Systeem → Bezoekers zie je het aantal push-abonnees. <i>Nieuw en nog in bèta.</i>',
-            'en' => '🔔 <b>Push notifications (beta)</b> — a new announcement now automatically sends a push to followers of that competition (or to everyone for a general announcement). In System → Visitors you can see the number of push subscribers. <i>New and still in beta.</i>',
-            'de' => '🔔 <b>Push-Benachrichtigungen (Beta)</b> — eine neue Mitteilung sendet jetzt automatisch eine Push an Follower dieses Wettkampfs (oder an alle bei einer allgemeinen Mitteilung). Unter System → Besucher siehst du die Zahl der Push-Abonnenten. <i>Neu und noch in Beta.</i>',
-            'fr' => '🔔 <b>Notifications push (bêta)</b> — une nouvelle annonce envoie désormais automatiquement une push aux abonnés de cette compétition (ou à tous pour une annonce générale). Dans Système → Visiteurs, vous voyez le nombre d\'abonnés push. <i>Nouveau et encore en bêta.</i>',
+            'nl' => '🔔 <b>Push-meldingen (bèta)</b> — een nieuwe mededeling stuurt nu automatisch een pushbericht naar iedereen die een rijder uit díe wedstrijd volgt (of naar álle abonnees bij een algemene mededeling). In Systeem → Bezoekers zie je het aantal push-abonnees. <i>Nieuw en nog in bèta.</i>',
+            'en' => '🔔 <b>Push notifications (beta)</b> — a new announcement now automatically sends a push to everyone who follows a skater in that competition (or to all subscribers for a general announcement). In System → Visitors you can see the number of push subscribers. <i>New and still in beta.</i>',
+            'de' => '🔔 <b>Push-Benachrichtigungen (Beta)</b> — eine neue Mitteilung sendet jetzt automatisch eine Push an alle, die einen Fahrer aus diesem Wettkampf verfolgen (oder an alle Abonnenten bei einer allgemeinen Mitteilung). Unter System → Besucher siehst du die Zahl der Push-Abonnenten. <i>Neu und noch in Beta.</i>',
+            'fr' => '🔔 <b>Notifications push (bêta)</b> — une nouvelle annonce envoie désormais automatiquement une push à tous ceux qui suivent un patineur de cette compétition (ou à tous les abonnés pour une annonce générale). Dans Système → Visiteurs, vous voyez le nombre d\'abonnés push. <i>Nouveau et encore en bêta.</i>',
         ],
     ],
     [
