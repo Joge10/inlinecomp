@@ -879,7 +879,7 @@ function bouwVergelijkTabbladen() {
         ).length;
 
         let badge = '';
-        if (nietActief) badge += ` <span class="tab-badge afgemeld" title="niet actief in de loting (afgemeld/niet-bevestigd/reserve)">${nietActief}X</span>`;
+        if (nietActief) badge += ` <span class="tab-badge afgemeld" title="niet actief in de loting (afgemeld/niet-bevestigd/reserve)">${nietActief}✗</span>`;
         if (nieuw)    badge += ` <span class="tab-badge nieuw">${nieuw}N</span>`;
         if (diff)     badge += ` <span class="tab-badge diff" title="${diff} rijder${diff>1?'s':''} met feed-wijziging">${diff}!</span>`;
 

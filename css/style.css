@@ -1845,20 +1845,22 @@ body.live-pagina-actief #main-content {
 
 /* Tab-badges (afgemeld / nieuw) */
 .tab-badge {
-    display: inline-block;
+    /* Vaste-grootte flexbox: min-width + vaste hoogte + gecentreerd, zodat een
+       glyph met afwijkende metrics (bv. de ✗ die als emoji rendert) de pill NIET
+       oprekt. Rood/groen/geel worden zo exact even groot ongeacht ✗ / N / !. */
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 1.9em;
+    height: 1.5em;
+    padding: 0 6px;
+    box-sizing: border-box;
     border-radius: 8px;
-    padding: 1px 5px;
     font-size: .7rem;
     font-weight: 700;
+    line-height: 1;
     margin-left: 3px;
     vertical-align: middle;
-    /* Gelijke grootte ongeacht inhoud ("1X" / "6N" / "12!") — anders ogen de
-       pillen verschillend door wisselende tekenbreedte/-hoogte. Vaste line-height
-       houdt de hoogte gelijk (voorkomt dat een breder glyph de pill oprekt). */
-    min-width: 1.9em;
-    text-align: center;
-    box-sizing: border-box;
-    line-height: 1.5;
 }
 .tab-badge.afgemeld { background: #fce4e4; color: #b71c1c; }
 .tab-badge.nieuw    { background: #c8e6c9; color: #1b5e20; }
