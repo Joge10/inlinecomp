@@ -858,6 +858,7 @@ function bouwVergelijkTabbladen() {
     vergelijkData.forEach((cat, i) => {
         const totaal    = cat.competitors.length;
         const afgemeld  = cat.competitors.filter(c => c.entry_status >= 2 && c.entry_status !== 5).length;
+        const actief    = totaal - afgemeld;   // aantal dat echt meedoet (incl. bevestigd door org)
         const nieuw     = cat.competitors.filter(c => c.is_new).length;
         // Diff-teller: hoeveel rijders hebben ÉÉN of meer KNSB-feed-
         // verschillen (status/reserve/naam/startnummer). Visuele info
@@ -874,7 +875,10 @@ function bouwVergelijkTabbladen() {
 
         const btn = document.createElement('button');
         btn.className = 'tab-btn' + (i === 0 ? ' active' : '');
-        btn.innerHTML = escHtml(cat.dc_name) + ' (' + totaal + ')' + badge;
+        // Haakjes = ACTIEF aantal (echt meedoen, excl. afgemeld). Afgemelde
+        // rijders staan apart in de ✗-badge. Tooltip maakt het expliciet.
+        btn.innerHTML = escHtml(cat.dc_name) + ' (' + actief + ')' + badge;
+        btn.title = actief + ' actief' + (afgemeld ? ` · ${afgemeld} afgemeld (${totaal} totaal)` : '');
         btn.addEventListener('click', () => {
             tabs.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
             btn.classList.add('active');
