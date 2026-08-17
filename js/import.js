@@ -857,8 +857,17 @@ function bouwVergelijkTabbladen() {
     tabs.innerHTML = '';
     vergelijkData.forEach((cat, i) => {
         const totaal    = cat.competitors.length;
-        const afgemeld  = cat.competitors.filter(c => c.entry_status >= 2 && c.entry_status !== 5).length;
-        const actief    = totaal - afgemeld;   // aantal dat echt meedoet (incl. bevestigd door org)
+        // "Actief" = wie er écht in de loting/seeding meegaat — zelfde filter als
+        // startlijst_genereer.php: entry_status IN (1,5) (bevestigd / bevestigd
+        // door org) ÉN geen reserve. Niet-bevestigd (oranje) en afgemeld doen dus
+        // NIET mee. Opsplitsing gaat in de tooltip.
+        const isAfgemeld = c => c.entry_status >= 2 && c.entry_status !== 5;
+        const isReserve  = c => !isAfgemeld(c) && c.reserve != null && c.reserve > 0;
+        const isActief   = c => !isReserve(c) && (c.entry_status === 1 || c.entry_status === 5);
+        const afgemeld   = cat.competitors.filter(isAfgemeld).length;
+        const reserve    = cat.competitors.filter(isReserve).length;
+        const actief     = cat.competitors.filter(isActief).length;
+        const nietBev    = totaal - afgemeld - reserve - actief;   // niet-bevestigd (oranje)
         const nieuw     = cat.competitors.filter(c => c.is_new).length;
         // Diff-teller: hoeveel rijders hebben ÉÉN of meer KNSB-feed-
         // verschillen (status/reserve/naam/startnummer). Visuele info
@@ -875,10 +884,14 @@ function bouwVergelijkTabbladen() {
 
         const btn = document.createElement('button');
         btn.className = 'tab-btn' + (i === 0 ? ' active' : '');
-        // Haakjes = ACTIEF aantal (echt meedoen, excl. afgemeld). Afgemelde
-        // rijders staan apart in de ✗-badge. Tooltip maakt het expliciet.
+        // Haakjes = ACTIEF aantal (wat er in de loting meegaat). Afgemelde
+        // rijders staan apart in de ✗-badge. Tooltip splitst het uit.
         btn.innerHTML = escHtml(cat.dc_name) + ' (' + actief + ')' + badge;
-        btn.title = actief + ' actief' + (afgemeld ? ` · ${afgemeld} afgemeld (${totaal} totaal)` : '');
+        const tt = [`${actief} actief in de loting`];
+        if (nietBev)  tt.push(`${nietBev} niet bevestigd`);
+        if (reserve)  tt.push(`${reserve} reserve`);
+        if (afgemeld) tt.push(`${afgemeld} afgemeld`);
+        btn.title = tt.join(' · ') + ` (${totaal} totaal)`;
         btn.addEventListener('click', () => {
             tabs.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
             btn.classList.add('active');
