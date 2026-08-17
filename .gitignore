@@ -61,3 +61,26 @@ _mailtest.php
 _diag_push.php
 _vapid_keygen.php
 vapid_keygen.php
+
+# ── docs/ — WHITELIST ──────────────────────────────────────────────────────
+# docs/ is een mix van BEWUSTE documentatie en losse werkbestanden (screenshots,
+# PDF's, .docx-backups, concept-plannen zoals roadmap.md / plan-*.md). Om te
+# voorkomen dat die per ongeluk in een commit/PR belanden: negeer standaard
+# ALLES in docs/ en laat hieronder expliciet alleen de echte documentatie door.
+# LET OP: nieuw bewust document? Zet er een !-regel bij (of `git add -f`),
+# anders wordt het stil genegeerd. (Al-getrackte bestanden blijven getrackt —
+# .gitignore raakt alleen untracked bestanden.)
+docs/*
+!docs/database-schema.md
+!docs/handleiding.html
+!docs/operator-quickref.html
+!docs/coach-quickref.html
+!docs/coach-quickref-en.html
+!docs/public-quickref.html
+!docs/public-quickref-en.html
+!docs/project-samenvatting.md
+!docs/project-samenvatting.docx
+!docs/offline-modus-spec.md
+!docs/offline-modus-spec.docx
+!docs/rulebook-review-2026.md
+!docs/quickref-images/
