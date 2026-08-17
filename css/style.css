@@ -1852,6 +1852,11 @@ body.live-pagina-actief #main-content {
     font-weight: 700;
     margin-left: 3px;
     vertical-align: middle;
+    /* Gelijke grootte ongeacht inhoud ("1✗" / "6N" / "12!") — anders ogen de
+       pillen verschillend door de wisselende tekenbreedte. */
+    min-width: 1.9em;
+    text-align: center;
+    box-sizing: border-box;
 }
 .tab-badge.afgemeld { background: #fce4e4; color: #b71c1c; }
 .tab-badge.nieuw    { background: #c8e6c9; color: #1b5e20; }

@@ -868,6 +868,7 @@ function bouwVergelijkTabbladen() {
         const reserve    = cat.competitors.filter(isReserve).length;
         const actief     = cat.competitors.filter(isActief).length;
         const nietBev    = totaal - afgemeld - reserve - actief;   // niet-bevestigd (oranje)
+        const nietActief = totaal - actief;                        // alles wat NIET meeloot (rode pill)
         const nieuw     = cat.competitors.filter(c => c.is_new).length;
         // Diff-teller: hoeveel rijders hebben ÉÉN of meer KNSB-feed-
         // verschillen (status/reserve/naam/startnummer). Visuele info
@@ -878,7 +879,7 @@ function bouwVergelijkTabbladen() {
         ).length;
 
         let badge = '';
-        if (afgemeld) badge += ` <span class="tab-badge afgemeld">${afgemeld}✗</span>`;
+        if (nietActief) badge += ` <span class="tab-badge afgemeld" title="niet actief in de loting (afgemeld/niet-bevestigd/reserve)">${nietActief}✗</span>`;
         if (nieuw)    badge += ` <span class="tab-badge nieuw">${nieuw}N</span>`;
         if (diff)     badge += ` <span class="tab-badge diff" title="${diff} rijder${diff>1?'s':''} met feed-wijziging">${diff}!</span>`;
 
