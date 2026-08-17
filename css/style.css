@@ -1852,11 +1852,13 @@ body.live-pagina-actief #main-content {
     font-weight: 700;
     margin-left: 3px;
     vertical-align: middle;
-    /* Gelijke grootte ongeacht inhoud ("1✗" / "6N" / "12!") — anders ogen de
-       pillen verschillend door de wisselende tekenbreedte. */
+    /* Gelijke grootte ongeacht inhoud ("1X" / "6N" / "12!") — anders ogen de
+       pillen verschillend door wisselende tekenbreedte/-hoogte. Vaste line-height
+       houdt de hoogte gelijk (voorkomt dat een breder glyph de pill oprekt). */
     min-width: 1.9em;
     text-align: center;
     box-sizing: border-box;
+    line-height: 1.5;
 }
 .tab-badge.afgemeld { background: #fce4e4; color: #b71c1c; }
 .tab-badge.nieuw    { background: #c8e6c9; color: #1b5e20; }
