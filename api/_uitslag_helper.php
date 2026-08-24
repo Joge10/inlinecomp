@@ -248,7 +248,13 @@ function alleRondesCompleet(PDO $pdo, string $compId, array $dcIds, ?string $dis
     }
 
     // Pas 2: open heat-entries (geen finish + geen eindsanctie).
-    $RANKED = "'DNS','DNF','DQ-TF','DQ-SF','DQ-DF'";
+    // Eind-sancties tellen als afgerond — ook in een GECOMBINEERDE sanctie
+    // (bv. 'DQ-TF,FS'): FIND_IN_SET op de komma-lijst i.p.v. exacte match
+    // (spaties gestript voor de zekerheid). Vaste codes → geen injectie.
+    $rankedCodes    = ['DNS', 'DNF', 'DQ-TF', 'DQ-SF', 'DQ-DF'];
+    $eindSanctieSql = implode(' OR ', array_map(
+        fn($c) => "FIND_IN_SET('$c', REPLACE(res.sanctie, ' ', ''))", $rankedCodes
+    ));
     $hDistCond = $distId ? 'AND COALESCE(h.distance_id, tsr.distance_id) = ?' : '';
     $hParams   = array_merge([$compId], $dcIds);
     if ($distId) $hParams[] = $distId;
@@ -258,7 +264,7 @@ function alleRondesCompleet(PDO $pdo, string $compId, array $dcIds, ?string $dis
         SELECT h.heat_naam,
                SUM(CASE WHEN res.id IS NULL
                           OR (res.finishpositie IS NULL
-                              AND (res.sanctie IS NULL OR res.sanctie NOT IN ($RANKED)))
+                              AND (res.sanctie IS NULL OR NOT ($eindSanctieSql)))
                         THEN 1 ELSE 0 END) AS open
         FROM heats h
         JOIN heat_entries he ON he.heat_id = h.id
@@ -291,8 +297,7 @@ function isHeatCompleet(array $rows): bool {
     if (empty($rows)) return false;
     foreach ($rows as $r) {
         $s = $r['sanctie'] ?? null;
-        if ($r['finishpositie'] === null &&
-            !in_array($s, ['DNS', 'DNF', 'DQ-SF', 'DQ-TF', 'DQ-DF'], true)) {
+        if ($r['finishpositie'] === null && !isEindSanctie($s)) {
             return false;
         }
     }
