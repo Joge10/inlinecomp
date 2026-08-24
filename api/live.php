@@ -1041,6 +1041,66 @@ if ($action === 'genereer_volgende_ronde') {
                 exit;
             }
 
+            // ── Geen-verandering + waarschuwing (spiegelt het hoofd-doorstroom-
+            //    pad, regel ~1660). Voorheen wiste de RU-tak ONVOORWAARDELIJK,
+            //    waardoor een correctie in een eerdere ronde die de RU-set niet
+            //    raakt tóch de al-gereden RU-resultaten leeggooide.
+            $nieuweRuSet = array_map(fn($r) => $r['person_license'], $afvallers);
+            sort($nieuweRuSet);
+
+            $ruBestStmt = $pdo->prepare("
+                SELECT he.person_license
+                FROM heats h
+                JOIN heat_entries he ON he.heat_id = h.id
+                JOIN tijdschema_ritten r ON r.id = h.tijdschema_rit_id
+                WHERE h.competition_id = ? AND h.distance_combination_id = ?
+                  AND (r.distance_id = ? OR (r.distance_id IS NULL AND ? = ''))
+                  AND r.ronde_type = 'runner_up'
+                  {$splitSql}
+            ");
+            $ruBestStmt->execute(array_merge(
+                [$compId, $dcId, $distanceId, $distanceId],
+                $splitBindR
+            ));
+            $bestaandeRuSet = $ruBestStmt->fetchAll(PDO::FETCH_COLUMN);
+            sort($bestaandeRuSet);
+
+            // Identieke RU-set → niets doen; bestaande RU-resultaten blijven staan.
+            if (!empty($bestaandeRuSet) && $bestaandeRuSet === $nieuweRuSet && empty($body['force'])) {
+                echo json_encode(['ok' => true, 'ongewijzigd' => true, 'heats' => []], JSON_UNESCAPED_UNICODE);
+                exit;
+            }
+
+            // RU-set verandert WEL — staan er al RU-resultaten? Dan bevestiging
+            // vragen (zelfde contract als het hoofdpad: vraag_bevestiging + te_wissen).
+            if (empty($body['force']) && !empty($bestaandeRuSet)) {
+                $ruCntStmt = $pdo->prepare("
+                    SELECT COUNT(res.id)
+                    FROM heats h
+                    JOIN heat_entries he ON he.heat_id = h.id
+                    JOIN tijdschema_ritten r ON r.id = h.tijdschema_rit_id
+                    JOIN results res ON res.heat_entry_id = he.id
+                    WHERE h.competition_id = ? AND h.distance_combination_id = ?
+                      AND (r.distance_id = ? OR (r.distance_id IS NULL AND ? = ''))
+                      AND r.ronde_type = 'runner_up'
+                      {$splitSql}
+                ");
+                $ruCntStmt->execute(array_merge(
+                    [$compId, $dcId, $distanceId, $distanceId],
+                    $splitBindR
+                ));
+                $ruResCnt = (int)$ruCntStmt->fetchColumn();
+                if ($ruResCnt > 0) {
+                    echo json_encode([
+                        'ok'                => true,
+                        'vraag_bevestiging' => true,
+                        'te_wissen'         => [['ronde_type' => 'runner_up', 'aantal_results' => $ruResCnt]],
+                        'heats'             => [],
+                    ], JSON_UNESCAPED_UNICODE);
+                    exit;
+                }
+            }
+
             // ── Bestaande RU-heats opruimen + nieuwe insert ──────────────
             // Bij split: alleen DEZE split's RU-heats wissen, anders sneuvelen
             // zustersplits' RU-heats bij elke regeneratie.
