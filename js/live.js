@@ -985,7 +985,12 @@ function _liveHerbereken(ritIdx) {
         const sanctieWaarde = sel?.value || '';
         const isAfgevallen  = afvalIds && afvalIds.has(r.entry_id);
         rij.classList.remove('live-rit-status-compleet', 'live-rit-status-sanctie', 'live-rit-status-leeg');
-        if (_liveSanctieHeeft(sanctieWaarde, 'FS'))   rij.classList.add(ms > 0 ? 'live-rit-status-compleet' : 'live-rit-status-leeg');
+        // Eindsanctie (DQ-*/DNF/DNS) wint altijd → rood, óók in een combinatie
+        // met FS (bv. 'DQ-TF,FS'). Anders zou de FS-tak hieronder 'm op 'leeg'
+        // (wit) zetten omdat er geen tijd is.
+        const _heeftEindsanctie = [..._SANCTIE_GEEN_FINISH].some(c => _liveSanctieHeeft(sanctieWaarde, c));
+        if (_heeftEindsanctie)        rij.classList.add('live-rit-status-sanctie');
+        else if (_liveSanctieHeeft(sanctieWaarde, 'FS')) rij.classList.add(ms > 0 ? 'live-rit-status-compleet' : 'live-rit-status-leeg');
         else if (heeftSanctie)        rij.classList.add('live-rit-status-sanctie');
         else if (ms > 0)              rij.classList.add('live-rit-status-compleet');
         else if (isAfgevallen)        rij.classList.add('live-rit-status-compleet');
