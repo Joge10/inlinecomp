@@ -470,6 +470,8 @@ function _renderHourlyChart(containerId, hourly) {
     }
     const max = Math.max(...hourly, 1);
     const mid = Math.round(max / 2);
+    // Bij max=1 rondt mid ook naar 1 af → geen dubbele "1" op de y-as tonen.
+    const midLabel = mid < max ? mid : '';
     const w   = 100 / 24;
     // Bars + horizontale gridlijnen op 0/50/100%
     const grid = [0, 50, 100].map(y =>
@@ -493,7 +495,7 @@ function _renderHourlyChart(containerId, hourly) {
         <div class="gb-stat-hourly-body">
             <div class="gb-stat-hourly-y">
                 <span>${max}</span>
-                <span>${mid}</span>
+                <span>${midLabel}</span>
                 <span>0</span>
             </div>
             <div class="gb-stat-hourly-plot">
@@ -566,6 +568,8 @@ function _renderWeeklyChart(containerId, weekly) {
     const N = weekly.length;
     const max = Math.max(...weekly.map(w => Number(w.n) || 0), 1);
     const mid = Math.round(max / 2);
+    // Bij max=1 rondt mid ook naar 1 af → geen dubbele "1" op de y-as tonen.
+    const midLabel = mid < max ? mid : '';
     const w   = 100 / N;
     const grid = [0, 50, 100].map(y =>
         `<line x1="0" x2="100" y1="${y}" y2="${y}" stroke="#e0e6ee"
@@ -591,7 +595,7 @@ function _renderWeeklyChart(containerId, weekly) {
         <div class="gb-stat-hourly-body">
             <div class="gb-stat-hourly-y">
                 <span>${max}</span>
-                <span>${mid}</span>
+                <span>${midLabel}</span>
                 <span>0</span>
             </div>
             <div class="gb-stat-hourly-plot">

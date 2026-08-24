@@ -14,6 +14,28 @@
 //     en wordt in de changelog genest + gedempt getoond onder de versie.
 //     Triviale copy/typo-fixes komen NERGENS in de changelog — los committen.
 return [
+    // ── Patches onder H1243.10.08 (onderhoud & beveiliging, alleen Beheer) ──
+    [
+        'versie' => 'H1243.10.08', 'datum' => '24-08-2026',
+        'soort'  => 'patch', 'onderdelen' => ['patch'],
+        'tekst' => [
+            'nl' => '🔒 <b>Public — zoeken alleen binnen de wedstrijd</b> — bij het toevoegen van een te volgen rijder verschijnen nu alleen deelnemers van de gekozen wedstrijd (dataminimalisatie). Al gevolgde rijders uit andere wedstrijden blijven gewoon in je lijst staan.',
+            'en' => '🔒 <b>Public — search limited to the competition</b> — when adding a rider to follow, only participants of the chosen competition now appear (data minimisation). Riders you already follow from other competitions stay in your list.',
+            'de' => '🔒 <b>Public — Suche nur innerhalb des Wettkampfs</b> — beim Hinzufügen eines zu verfolgenden Fahrers erscheinen jetzt nur Teilnehmer des gewählten Wettkampfs (Datenminimierung). Bereits verfolgte Fahrer aus anderen Wettkämpfen bleiben in deiner Liste.',
+            'fr' => '🔒 <b>Public — recherche limitée à la compétition</b> — lors de l\'ajout d\'un patineur à suivre, seuls les participants de la compétition choisie apparaissent désormais (minimisation des données). Les patineurs déjà suivis d\'autres compétitions restent dans votre liste.',
+        ],
+    ],
+    [
+        'versie' => 'H1243.10.08', 'datum' => '24-08-2026',
+        'soort'  => 'patch', 'onderdelen' => ['patch'],
+        'tekst' => [
+            'nl' => '🔧 <b>Diverse weergave- en scroll-fixes</b> — scrollen in keuze-/pop-upvensters activeert niet langer per ongeluk "trek om te vernieuwen" (public + coach); de rijder-tabs tonen nummer en naam nu op twee regels zodat lange startnummers netjes passen (public); de startnummer-kolom in Import is iets breder; en de bezoekers-grafiek toont geen dubbele "1" meer op de as (Beheer).',
+            'en' => '🔧 <b>Various display and scroll fixes</b> — scrolling inside selection/pop-up windows no longer accidentally triggers "pull to refresh" (public + coach); the rider tabs now show number and name on two lines so long start numbers fit neatly (public); the start-number column in Import is a bit wider; and the visitors chart no longer shows a duplicate "1" on the axis (Admin).',
+            'de' => '🔧 <b>Diverse Anzeige- und Scroll-Fixes</b> — das Scrollen in Auswahl-/Pop-up-Fenstern löst nicht mehr versehentlich "zum Aktualisieren ziehen" aus (Public + Coach); die Fahrer-Tabs zeigen Nummer und Name jetzt auf zwei Zeilen, sodass lange Startnummern gut passen (Public); die Startnummer-Spalte im Import ist etwas breiter; und das Besucher-Diagramm zeigt keine doppelte "1" mehr auf der Achse (Verwaltung).',
+            'fr' => '🔧 <b>Diverses corrections d\'affichage et de défilement</b> — le défilement dans les fenêtres de sélection/pop-up ne déclenche plus accidentellement « tirer pour actualiser » (public + coach) ; les onglets patineur affichent désormais le numéro et le nom sur deux lignes pour que les longs numéros de dossard tiennent bien (public) ; la colonne du numéro de départ dans l\'Import est un peu plus large ; et le graphique des visiteurs n\'affiche plus de « 1 » en double sur l\'axe (Gestion).',
+        ],
+    ],
+
     // ══ H1243.10.08 — tijdschema-wizard, push-meldingen (bèta), demo, sticky filters ══
     // ── Beheer (admin) ──
     [

@@ -8230,9 +8230,22 @@ function toonMelding(m, compId) {
         }
     }
 
+    // Blokkeer PTR als de veeg begint in een overlay/modal (position:fixed) of in
+    // een eigen scroll-gebied — dan hoort de gesture bij dát element, niet bij de
+    // pagina. Generiek: dekt álle (ook toekomstige) modals zonder ze op te sommen.
+    function _ptrGeblokkeerd(el) {
+        for (let n = el; n && n !== document.body && n !== document.documentElement; n = n.parentElement) {
+            const s = getComputedStyle(n);
+            if (s.position === 'fixed') return true;
+            if ((s.overflowY === 'auto' || s.overflowY === 'scroll') && n.scrollHeight > n.clientHeight) return true;
+        }
+        return false;
+    }
+
     document.addEventListener('touchstart', e => {
         if (window.scrollY > 0 || bezigLaden || !selComp.value) { startY = null; return; }
         if (e.touches.length !== 1) { startY = null; return; }
+        if (_ptrGeblokkeerd(e.target)) { startY = null; return; }
         startY = e.touches[0].clientY;
         dragY = 0;
         actief = false;

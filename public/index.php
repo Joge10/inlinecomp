@@ -575,29 +575,32 @@ if ($action === 'search_person') {
     if (!$compId || mb_strlen($term) < 2) { echo json_encode([]); exit; }
     try {
         // Zoek uitsluitend op short_name (= achternaam). Niet op full_name,
-        // om te voorkomen dat bv. "Jorn" matcht in voornamen van andere
-        // rijders. Zoek in de hele persons-tabel (niet beperkt tot deelnemers
-        // van deze wedstrijd) — `in_wedstrijd`-vlag laat de UI zien of ze
-        // deze keer meedoen.
+        // om te voorkomen dat bv. "Jorn" matcht in voornamen van andere rijders.
+        // Beperkt tot deelnemers van DEZE wedstrijd (AVG-dataminimalisatie: toon
+        // niet de hele rijdersdatabase aan willekeurig publiek + functioneel
+        // relevanter). Bestaande gevolgde rijders die deze keer niet meedoen
+        // blijven in de persoonlijke lijst via de license-lookup hieronder.
+        // `in_wedstrijd` blijft 1 voor frontend-compatibiliteit.
         $stmt = $pdo->prepare("
             SELECT p.license_key, p.full_name, p.short_name,
                    p.category, p.club_short,
                    COALESCE(cs.startnummer, p.start_number) AS wedstrijd_snr,
-                   EXISTS (
+                   1 AS in_wedstrijd
+            FROM persons p
+            LEFT JOIN competition_startnummers cs
+                   ON cs.person_license = p.license_key AND cs.competition_id = ?
+            WHERE p.short_name LIKE ?
+              AND EXISTS (
                        SELECT 1 FROM entries e
                        JOIN distance_combinations dc
                          ON dc.id = e.distance_combination_id
                        WHERE e.person_license = p.license_key
                          AND dc.competition_id = ?
-                   ) AS in_wedstrijd
-            FROM persons p
-            LEFT JOIN competition_startnummers cs
-                   ON cs.person_license = p.license_key AND cs.competition_id = ?
-            WHERE p.short_name LIKE ?
+                  )
             ORDER BY p.short_name, p.full_name
             LIMIT 30
         ");
-        $stmt->execute([$compId, $compId, '%' . $term . '%']);
+        $stmt->execute([$compId, '%' . $term . '%', $compId]);
         echo json_encode($stmt->fetchAll(PDO::FETCH_ASSOC), JSON_UNESCAPED_UNICODE);
     } catch (Throwable $e) {
         http_response_code(500);
@@ -2172,36 +2175,38 @@ select:focus, input:focus { border-color: var(--middenblauw); outline: none; }
     white-space:nowrap;
 }
 .kind-tab {
-    display:inline-flex; align-items:center; gap:8px;
-    padding:10px 14px; font-size:1.35rem; font-weight:600;
+    display:inline-flex; flex-direction:column;    /* twee regels: nummer boven, naam onder */
+    align-items:center; justify-content:center; gap:1px;
+    padding:5px 10px; font-weight:600;
     color:#666; background:var(--wit); border:none; cursor:pointer;
     border-bottom:12px solid transparent; margin-bottom:-2px;
-    min-width:0; flex:1 1 auto;      /* laat tabs krimpen bij weinig ruimte */
+    min-width:0; flex:0 0 auto;   /* niks groeit/krimpt standaard — voorkomt dat de actieve tab wordt platgedrukt */
     overflow:hidden;
 }
-/* De naam in de kind-tab mag afbreken met … als hij te lang is; de snr-badge
-   en × worden nooit afgebroken. */
+/* Naam-regel (2e span): staat ónder het nummer en breekt af met … . De cap op
+   de breedte bepaalt hoe breed de tab wordt — apart per tab-type (zie onder). */
 .kind-tab > span:nth-child(2) {
     overflow:hidden; text-overflow:ellipsis; white-space:nowrap;
-    min-width:0; max-width:100%;
+    min-width:0; max-width:15ch; font-size:.95rem; line-height:1.1;
 }
-/* Inactieve tabs duidelijk teruggezet zodat de actieve eruit springt
-   (survey: "schakelen tussen kinderen is soms ingewikkeld"). Inactieve tabs
-   tonen ALLEEN het startnummer + × en krimpen tot hun inhoud, zodat bij 3-4
-   kinderen alles past en de × nooit van de tab afvalt of afgekapt wordt. De
-   actieve tab is breed (nummer + voornaam) en krijgt de resterende ruimte. */
+/* Inactieve tabs teruggezet zodat de actieve eruit springt. Ze tonen nu óók de
+   voornaam (klein) onder het nummer, maar smal — ± 6 tekens. De × is al uit de
+   tab verdwenen (verwijderen gaat via de +), dus er is ruimte voor de naam. */
 .kind-tab:not(.active) { background:#eef2f6; color:#8a97a5; flex:0 0 auto; }
-.kind-tab:not(.active) > span:nth-child(2) { display:none; }
+.kind-tab:not(.active) > span:nth-child(2) { max-width:3.5ch; font-size:.78rem; color:#8a97a5; }  /* ± eerste 3 letters + … */
+.kind-tab:not(.active) .kind-tab-snr { font-size:.72rem; padding:0 5px; }   /* nummer in de kleine tabs compacter */
 .kind-tab.active {
     color:var(--blauw); border-bottom-color:var(--oranje);
-    background:#fff6ef; font-weight:700; flex:1 1 auto;
+    background:#fff6ef; font-weight:700; flex:1 0 auto;   /* groeit in de vrije ruimte, krimpt nooit → altijd de brede tab */
 }
+/* Actieve tab: brede voornaam (± 15 tekens) onder het nummer. */
+.kind-tab.active > span:nth-child(2) { max-width:15ch; font-size:1rem; color:var(--blauw); }
 /* Actief kind: oranje snr-badge — sterk signaal wie nu geselecteerd is. */
 .kind-tab.active .kind-tab-snr { background:var(--oranje); color:#fff; }
 .kind-tab .kind-tab-snr {
     background:var(--lichtblauw); color:var(--blauw);
-    border-radius:8px; padding:1px 8px; font-weight:700;
-    font-size:1rem; flex-shrink:0;
+    border-radius:7px; padding:0 6px; font-weight:700;
+    font-size:.82rem; line-height:1.4; flex-shrink:0;
 }
 .kind-tab-plus {
     display:inline-flex; align-items:center; justify-content:center;
@@ -2243,14 +2248,11 @@ select:focus, input:focus { border-color: var(--middenblauw); outline: none; }
 .pub-push-test { border:none; background:#e9eef5; color:#1b5faa; border-radius:8px;
     padding:5px 12px; font-size:.82rem; font-weight:600; cursor:pointer; }
 .pub-push-msg { font-size:.82rem; color:#556; }
-/* Bij 3-4 kinderen: iets krappere horizontale padding zodat de brede actieve
-   tab (nummer + voornaam) genoeg ruimte houdt naast de smalle nummer-tabs.
-   (Vervangt de oude 2026-07-01-aanpak waarbij álle tabs de voornaam behielden;
-   nu tonen inactieve tabs alleen het nummer, wat de × altijd zichtbaar houdt.) */
+/* Bij 3-4 kinderen iets krappere padding zodat alles op telefoon-breedte past. */
 .kind-tabs[data-count="3"] .kind-tab,
-.kind-tabs[data-count="4"] .kind-tab { padding:10px 8px; gap:5px; font-size:1rem; }
-.kind-tabs[data-count="3"] .kind-tab .kind-tab-snr,
-.kind-tabs[data-count="4"] .kind-tab .kind-tab-snr { font-size:.85rem; padding:1px 6px; }
+.kind-tabs[data-count="4"] .kind-tab { padding:5px 7px; }
+/* Lange nummers (demo) hoeven niet extra geschaald: ze staan op een eigen regel,
+   inactieve tabs tonen het nummer al compact, en de actieve tab groeit mee. */
 .kind-tabs[data-count="3"] .kind-tab-plus,
 .kind-tabs[data-count="4"] .kind-tab-plus { padding:10px 11px; font-size:1.15rem; }
 .tab-btn {
@@ -5355,7 +5357,7 @@ function renderKinderen() {
         // 3-4 kinderen (× viel weg / actieve tab klapte in). Verwijderen gaat nu
         // via de + / setup-modal onder "Je gevolgde rijders" (zoals de coach-app).
         return `<button class="kind-tab${actief}" data-kind-idx="${idx}">
-            <span class="kind-tab-snr">${esc(k.snr)}</span>
+            <span class="kind-tab-snr" data-len="${String(k.snr ?? '').length}">${esc(k.snr)}</span>
             <span>${esc(naam || t('kind_rijder_placeholder'))}</span>
         </button>`;
     }).join('');
@@ -7546,9 +7548,22 @@ let _huidigStempel = '';
         }
     }
 
+    // Blokkeer PTR als de veeg begint in een overlay/modal (position:fixed) of in
+    // een eigen scroll-gebied — dan hoort de gesture bij dát element, niet bij de
+    // pagina. Generiek: dekt álle (ook toekomstige) modals zonder ze op te sommen.
+    function _ptrGeblokkeerd(el) {
+        for (let n = el; n && n !== document.body && n !== document.documentElement; n = n.parentElement) {
+            const s = getComputedStyle(n);
+            if (s.position === 'fixed') return true;
+            if ((s.overflowY === 'auto' || s.overflowY === 'scroll') && n.scrollHeight > n.clientHeight) return true;
+        }
+        return false;
+    }
+
     document.addEventListener('touchstart', e => {
         if (window.scrollY > 0 || ptrBezig || !selComp.value) { ptrStartY = null; return; }
         if (e.touches.length !== 1) { ptrStartY = null; return; }
+        if (_ptrGeblokkeerd(e.target)) { ptrStartY = null; return; }
         ptrStartY = e.touches[0].clientY;
         ptrDragY = 0;
         ptrActief = false;

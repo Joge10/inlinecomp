@@ -1541,8 +1541,8 @@ body.live-pagina-actief #main-content {
 .guest-nr .inp-sn { color: var(--oranje); font-weight: 700; }
 
 /* Kolombreedte */
-.th-sn     { width: 72px;  }
-.th-naam   { min-width: 160px; }
+.th-sn     { width: 88px;  }
+.th-naam   { min-width: 148px; }
 .th-club   { min-width: 110px; }
 .th-tp-sel { width: 200px; }
 .th-status { width: 145px; }
@@ -1565,7 +1565,7 @@ body.live-pagina-actief #main-content {
     background: var(--wit);
     outline: none;
 }
-.inp-sn  { width: 60px; }
+.inp-sn  { width: 76px; }
 .inp-tp  { font-family: monospace; font-size: .8rem; }
 
 /* KNSB-hint: afwijkende waarde tonen */
