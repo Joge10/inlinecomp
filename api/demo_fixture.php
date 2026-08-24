@@ -19,6 +19,7 @@
 
 const DEMO_FIXTURE_FILES = [
     'demo-comp-1' => __DIR__ . '/demo/demo-1.json',
+    'demo-comp-2' => __DIR__ . '/demo/demo-2.json',
 ];
 
 function is_demo_fixture_id(?string $id): bool {
