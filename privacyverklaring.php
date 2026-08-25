@@ -109,11 +109,8 @@ inschrijf-API aan ons worden verstrekt:</p>
 </ul>
 <p>Daarnaast leggen wij per wedstrijd de sportieve resultaten vast (tijden,
 sancties, klassering). Deze zijn aan het licentienummer gekoppeld.</p>
-<p>Wij verwerken <strong>geen</strong> e-mailadressen, telefoonnummers, adressen of
-geboortedatum van rijders. Van KNSB-ingeschreven rijders bewaren wij ook <strong>geen
-geboortejaar</strong>; alleen bij het handmatig inlezen van historische (externe) uitslagen
-kan een geboortejaar worden vastgelegd, als de bron dat vermeldde. Wél bewaren wij de
-KNSB-<strong>categorie</strong>.
+<p>Wij verwerken <strong>geen</strong> e-mailadressen, telefoonnummers, adressen,
+geboortedatum of geboortejaar van rijders. Wél bewaren wij de KNSB-<strong>categorie</strong>.
 Die hoort bij een leeftijdsgroep, waaruit een leeftijdsindicatie — en over meerdere
 seizoenen, via de jaarlijkse categorie-doorschuiving, een geschat geboortejaar-bereik —
 is af te leiden. Wij gebruiken deze categorie-indicatie om te controleren of een
@@ -444,10 +441,8 @@ federation) via their registration API:</p>
 </ul>
 <p>In addition, for each competition we record sporting results (times,
 sanctions, ranking). These are linked to the licence number.</p>
-<p>We do <strong>not</strong> process e-mail addresses, phone numbers, home addresses or
-date of birth of skaters. For KNSB-registered riders we also store <strong>no year of
-birth</strong>; only when manually importing historical (external) result sheets may a year
-of birth be recorded, if the source listed it. We do store the KNSB <strong>category</strong>.
+<p>We do <strong>not</strong> process e-mail addresses, phone numbers, home addresses,
+date of birth or year of birth of skaters. We do store the KNSB <strong>category</strong>.
 A category corresponds to an age group, from which an age indication — and across multiple
 seasons, via the annual category progression, an approximate year-of-birth range — can be
 derived. We use this category indication to check whether a licence number belongs to the
