@@ -15,8 +15,8 @@ header('Pragma: no-cache');
 $ORG_NAAM   = 'InlineComp';                 // TODO: aanpassen naar jouw vereniging / beheerder
 $ORG_EMAIL  = 'inlinecomp@devriesen.com';   // TODO: e-mailadres voor verzoeken
 $ORG_ADRES  = '';                           // TODO: eventueel postadres
-$LAATSTE_UPDATE_NL = '10 augustus 2026';
-$LAATSTE_UPDATE_EN = '10 August 2026';
+$LAATSTE_UPDATE_NL = '25 augustus 2026';
+$LAATSTE_UPDATE_EN = '25 August 2026';
 ?><!DOCTYPE html>
 <html lang="nl">
 <head>
@@ -57,11 +57,43 @@ $LAATSTE_UPDATE_EN = '10 August 2026';
     <a href="#en">below</a> (or scroll down).
 </div>
 
-<p><?= htmlspecialchars($ORG_NAAM) ?> (hierna: “wij”) gebruikt InlineComp, een
-digitaal systeem voor de organisatie van inline-skate-wedstrijden. In deze
-verklaring leggen we uit welke persoonsgegevens wij verwerken, met welk doel,
-op welke grondslag en welke rechten je daarbij hebt. Deze verklaring is
-afgestemd op de Algemene Verordening Gegevensbescherming (AVG/GDPR).</p>
+<p><?= htmlspecialchars($ORG_NAAM) ?> (hierna: “wij”) is een vrijwilligersinitiatief
+van Geert de Vries en gebruikt InlineComp, een digitaal systeem voor de organisatie
+van inline-skate-wedstrijden. In deze verklaring leggen we uit welke persoonsgegevens
+wij verwerken, met welk doel, op welke grondslag en welke rechten je daarbij hebt.
+Deze verklaring is afgestemd op de Algemene Verordening Gegevensbescherming (AVG/GDPR).</p>
+
+<div style="background:#f4f8fb;border-left:4px solid #1a3a5c;padding:.8rem 1rem;margin:1.5rem 0;">
+<h2 style="margin-top:0;border:0;padding-bottom:0;">In het kort</h2>
+<p><em>Dit is een samenvatting in gewone taal. De volledige, juridisch precieze tekst
+staat hieronder — bij twijfel geldt die volledige tekst.</em></p>
+<ul>
+    <li>We verwerken alleen wat nodig is om wedstrijden te organiseren: je naam,
+        KNSB-licentienummer, vereniging, startnummer en je resultaten. Deze gegevens
+        krijgen we van de KNSB zelf, niet van jou.</li>
+    <li>We slaan <strong>geen</strong> e-mailadres, telefoonnummer, adres of
+        geboortedatum van rijders op.</li>
+    <li>Uitslagen worden openbaar gepubliceerd, zoals gebruikelijk in de sport.</li>
+    <li>Als coach kun je vrijwillig een account maken; als rijder of coach kun je
+        vrijwillig pushmeldingen aanzetten. Beide zijn optioneel en je kunt ze zelf
+        weer uitzetten.</li>
+    <li>Voor het digitaliseren van oude papieren uitslagen en voor het vertalen van
+        mededelingen gebruiken we soms AI (Anthropic Claude, een Amerikaans bedrijf)
+        — met de wettelijk vereiste waarborgen.</li>
+    <li>Onze website draait bij een hostingpartij in het Verenigd Koninkrijk;
+        technische bezoekgegevens (zoals IP-adres) worden daar kort bewaard voor
+        beveiliging.</li>
+    <li>Je kunt altijd opvragen welke gegevens we van je hebben, ze laten corrigeren,
+        of vragen om verwijdering (waarbij we je naam vervangen door “Verwijderd” zodat
+        de wedstrijdhistorie klopt blijft).</li>
+</ul>
+<p>Vragen? Mail naar <a href="mailto:<?= htmlspecialchars($ORG_EMAIL) ?>"><?= htmlspecialchars($ORG_EMAIL) ?></a>.</p>
+</div>
+
+<h2>0. Wie is verantwoordelijk voor deze verwerking?</h2>
+<p>InlineComp wordt beheerd door Geert de Vries, als vrijwilliger en zonder dat hier
+een bedrijf of rechtspersoon achter staat. Voor vragen over privacy kun je terecht bij
+de contactgegevens in §10.</p>
 
 <h2>1. Welke gegevens verwerken wij?</h2>
 <p>Van elke rijder die deelneemt aan een wedstrijd die wij organiseren
@@ -77,16 +109,19 @@ inschrijf-API aan ons worden verstrekt:</p>
 </ul>
 <p>Daarnaast leggen wij per wedstrijd de sportieve resultaten vast (tijden,
 sancties, klassering). Deze zijn aan het licentienummer gekoppeld.</p>
-<p>Wij verwerken <strong>geen</strong> e-mailadressen, telefoonnummers,
-adressen of geboortedata van rijders. Waar leeftijdsindicatie nodig is
-(bijvoorbeeld voor cat-plausibiliteit in klassementen), leiden wij die
-af uit de KNSB-categorie.</p>
+<p>Wij verwerken <strong>geen</strong> e-mailadressen, telefoonnummers, adressen,
+geboortedatum of geboortejaar van rijders. Wél bewaren wij de KNSB-<strong>categorie</strong>.
+Die hoort bij een leeftijdsgroep, waaruit een leeftijdsindicatie — en over meerdere
+seizoenen, via de jaarlijkse categorie-doorschuiving, een geschat geboortejaar-bereik —
+is af te leiden. Wij gebruiken deze categorie-indicatie om te controleren of een
+licentienummer over seizoenen heen bij dezelfde rijder hoort (plausibiliteit en juiste
+klassementen).</p>
 
 <h2>1b. Coach-accounts (optioneel)</h2>
 <p>Coaches kunnen — geheel vrijwillig — een persoonlijk account aanmaken in de
 coach-app. Zonder account is het gebruik anoniem; met een account verwerken wij:</p>
 <ul>
-    <li>je <strong>naam</strong> en <strong>e-mailadres</strong> (als inlog- en herkenningsgegeven);</li>
+    <li>je <strong>naam</strong> en <strong>e-mailadres</strong> (als inlog- en herkenningsgegeven, en om je account-berichten te sturen — bijvoorbeeld goedkeuring, afwijzing of een wachtwoord-reset);</li>
     <li>de <strong>club of het team</strong> waarvoor je coacht (ter beoordeling van je aanvraag);</li>
     <li>je zelf samengestelde <strong>atletenlijst</strong> (licentienummers van rijders die je wilt volgen).</li>
 </ul>
@@ -96,6 +131,8 @@ automatisch terugzien. Een account wordt pas actief na goedkeuring door de behee
 Je kunt je account en atletenlijst op elk moment zelf verwijderen; daarnaast vervalt
 een account automatisch na één jaar zonder inloggen. Het wachtwoord bewaren wij
 uitsluitend versleuteld (bcrypt-hash).</p>
+<p>Bij het in- en uitloggen leggen wij, net als bij beheerders en jury, een
+beveiligingsregel vast in ons login-logboek (zie §5d).</p>
 
 <h2>1c. Pushmeldingen (optioneel)</h2>
 <p>In de coach- en publieke app kun je — geheel vrijwillig — <strong>pushmeldingen</strong>
@@ -125,18 +162,25 @@ rijdersgegevens</strong>, en de inhoud is versleuteld tussen ons en jouw apparaa
 <ul>
     <li>Het correct organiseren en uitvoeren van wedstrijden (startlijsten,
         tijdregistratie, uitslag, klassement).</li>
-    <li>Het voldoen aan verplichtingen en afspraken richting de KNSB
+    <li>Het bijdragen aan de wedstrijdorganisatie binnen de context van de KNSB
         als overkoepelende bond.</li>
     <li>Het bewaren van een historisch uitslagoverzicht voor deelnemers,
         verenigingen en de bond.</li>
 </ul>
 
 <h2>3. Grondslag</h2>
-<p>De verwerking vindt plaats op grond van <em>gerechtvaardigd belang</em>
-(art. 6 lid 1 sub f AVG): zonder deze gegevens kunnen wij geen eerlijke
-wedstrijd organiseren of uitslagen publiceren. Voor KNSB-wedstrijden is er
-daarnaast sprake van een <em>overeenkomst</em> tussen deelnemer en bond waar
-wij als organisator onderdeel van zijn (art. 6 lid 1 sub b AVG).</p>
+<p>De verwerking vindt plaats op grond van <strong>gerechtvaardigd belang</strong>
+(art. 6 lid 1 sub f AVG): zonder deze gegevens kunnen wij geen eerlijke wedstrijd
+organiseren of uitslagen publiceren, en dit belang is niet onevenredig ten opzichte
+van de privacy van deelnemers — het gaat om beperkte, sport-functionele gegevens die
+in deze sport gebruikelijk openbaar worden gemaakt.</p>
+<p>Voor de coach-accounts en pushmeldingen geldt daarnaast <strong>toestemming</strong>
+(art. 6 lid 1 sub a AVG) als grondslag — zie §1b en §1c.</p>
+<p><em>Toelichting: er bestaat geen formele overeenkomst of opdracht tussen ons en de
+KNSB die onze verwerking regelt. Wij zijn een zelfstandig, vrijwillig opererende
+wedstrijdorganisator die gegevens van de KNSB ontvangt om wedstrijden te faciliteren.
+Om die reden baseren wij ons niet op “uitvoering van een overeenkomst” maar uitsluitend
+op gerechtvaardigd belang en toestemming.</em></p>
 
 <h2>4. Bron van de gegevens</h2>
 <p>De persoonsgegevens ontvangen wij rechtstreeks van de KNSB via hun
@@ -157,6 +201,10 @@ een AI-dienst om tekstherkenning te helpen — zie §5b hieronder.</p>
     <li><strong>AI-dienstverlener (Anthropic)</strong>: zie §5b voor uitleg.</li>
     <li><strong>Push-diensten (Google/Mozilla/Apple)</strong>: uitsluitend voor het
         bezorgen van pushmeldingen die je zelf hebt aangezet — zie §1c.</li>
+    <li><strong>Hostingprovider (iFastNet Ltd)</strong>: zie §5c voor uitleg.</li>
+    <li><strong>Geo-IP-dienst (ip-api.com – Artia International S.R.L., Roemenië)</strong>:
+        uitsluitend om bij een login het IP-adres om te zetten naar een globale locatie
+        (land/stad) voor het login-logboek — zie §5d.</li>
     <li>Wij verkopen géén gegevens en delen ze niet met derden buiten het
         bovenstaande.</li>
 </ul>
@@ -180,7 +228,9 @@ Claude</strong> aan via hun API:</p>
 <ul>
     <li>Anthropic is een Amerikaans bedrijf, gevestigd in San Francisco (VS).
         De doorgifte naar de VS vindt plaats op basis van <em>Standard
-        Contractual Clauses (SCC's)</em> zoals voorzien onder de AVG.</li>
+        Contractual Clauses (SCC's)</em> zoals voorzien onder de AVG, aangevuld
+        met de verwerkersovereenkomst (Data Processing Addendum) die Anthropic
+        voor haar zakelijke/API-klanten aanbiedt.</li>
     <li>Volgens het privacy-beleid van Anthropic worden API-data <strong>niet
         gebruikt voor het trainen</strong> van hun AI-modellen. Data kan
         beperkt bewaard worden voor het detecteren van misbruik (standaard
@@ -193,11 +243,54 @@ Claude</strong> aan via hun API:</p>
         AI wordt gestuurd.</li>
 </ul>
 
+<h2>5c. Serverlogbestanden &amp; Hosting</h2>
+<p>Onze website wordt gehost door <strong>iFastNet Ltd</strong> (Verenigd Koninkrijk).
+Wanneer je onze website bezoekt, slaat de webserver automatisch technische informatie op
+in serverlogbestanden (Raw Access Logs). Dit omvat onder andere je IP-adres, browsertype,
+de opgevraagde pagina en de datum/tijd van het bezoek.</p>
+<ul>
+    <li><strong>Grondslag &amp; doel</strong>: deze verwerking gebeurt op basis van ons
+        gerechtvaardigd belang (art. 6 lid 1 sub f AVG) om de website technisch te
+        beveiligen, fouten op te sporen en misbruik of cyberaanvallen tegen te gaan.</li>
+    <li><strong>Doorgifte buiten de EU</strong>: omdat onze hostingprovider in het Verenigd
+        Koninkrijk is gevestigd, vindt hiervoor een doorgifte plaats zonder aanvullende
+        waarborgen (zoals SCC's), op basis van het adequaatheidsbesluit van de Europese
+        Commissie voor het Verenigd Koninkrijk (laatst verlengd tot december 2031). De
+        VK-locatie is geverifieerd via het RIPE-netwerkregister.</li>
+    <li><strong>Bewaartermijn</strong>: deze technische serverlogs worden via het
+        cPanel-systeem automatisch binnen 24 uur tot maximaal 30 dagen overschreven of
+        verwijderd, tenzij ze langer nodig zijn voor een specifiek beveiligingsonderzoek.</li>
+    <li>Deze logs worden niet gekoppeld aan een gebruikersaccount en niet gebruikt voor
+        tracking — zie ook de “Anonieme bezoek-statistieken” op de publieke pagina, die
+        los hiervan géén IP-adressen bewaren.</li>
+</ul>
+
+<h2>5d. Login-logboek &amp; locatiebepaling</h2>
+<p>Voor de beveiliging houden wij een login-logboek bij van in- en uitlogpogingen van
+<strong>beheerders, coaches en jury</strong> (niet van gewone bezoekers). Per gebeurtenis
+leggen wij vast: tijdstip, IP-adres, een globale locatie (land en stad) en een korte
+browser-/apparaataanduiding. Ook mislukte inlogpogingen worden vastgelegd, om misbruik en
+brute-force-aanvallen te detecteren.</p>
+<ul>
+    <li><strong>Grondslag &amp; doel</strong>: gerechtvaardigd belang (art. 6 lid 1 sub f
+        AVG) — beveiliging en misbruikdetectie.</li>
+    <li><strong>Locatiebepaling</strong>: om het IP-adres om te zetten naar land/stad
+        gebruiken wij de geo-IP-dienst <strong>ip-api.com</strong>, geleverd door
+        <strong>Artia International S.R.L. (Boekarest, Roemenië)</strong>. Deze verwerker is
+        in de EU gevestigd en valt onder de AVG; er vindt géén doorgifte buiten de EU plaats.
+        Wij sturen uitsluitend het IP-adres (geen naam of rijdersgegevens) en bewaren zelf
+        alleen de afgeleide land/stad.</li>
+    <li><strong>Bewaartermijn</strong>: login-logboekregels worden na 30 dagen automatisch
+        verwijderd.</li>
+</ul>
+
 <h2>6. Waar staan de gegevens?</h2>
-<p>De gegevens staan op een webserver binnen de Europese Unie. Toegang is
-beperkt tot beheerders van <?= htmlspecialchars($ORG_NAAM) ?> via
-wachtwoord-beveiligde accounts. AI-verwerking (zie §5b) gebeurt op servers
-van Anthropic in de Verenigde Staten.</p>
+<p>Al onze wedstrijd-, account- en technische gegevens (§1, §1b, §1c, §5c) staan op
+dezelfde webserver bij onze hostingprovider <strong>iFastNet Ltd in het Verenigd
+Koninkrijk</strong>. Toegang is beperkt tot beheerders van <?= htmlspecialchars($ORG_NAAM) ?>
+via wachtwoord-beveiligde accounts.</p>
+<p>Eén uitzondering: <strong>AI-verwerking</strong> (zie §5b) gebeurt op servers van
+Anthropic in de Verenigde Staten.</p>
 
 <h2>7. Bewaartermijn</h2>
 <p>Wij bewaren persoonsgegevens zolang dat nodig is voor het doel waarvoor
@@ -219,6 +312,11 @@ ze zijn verzameld:</p>
         30 dagen voor abuse-monitoring, niet gebruikt voor training).</li>
     <li><strong>Push-abonnementen</strong>: zolang je de meldingen aan hebt
         staan; ze worden verwijderd zodra je ze uitzet of het abonnement verloopt.</li>
+    <li><strong>Serverlogbestanden</strong>: 24 uur tot maximaal 30 dagen, tenzij langer
+        nodig voor beveiligingsonderzoek — zie §5c.</li>
+    <li><strong>Login-logboek (beheer/coach/jury)</strong>: 30 dagen — zie §5d.</li>
+    <li><strong>Coach-accounts</strong>: zolang het account bestaat; je kunt het zelf
+        verwijderen en het vervalt automatisch na één jaar zonder inloggen — zie §1b.</li>
 </ul>
 
 <h2>8. Beveiliging</h2>
@@ -266,6 +364,7 @@ ze zijn verzameld:</p>
 <div class="contact">
     <p>Vragen of verzoeken over privacy stuur je naar:<br>
         <strong><?= htmlspecialchars($ORG_NAAM) ?></strong><br>
+        Beheerd door Geert de Vries (vrijwilliger)<br>
         E-mail: <a href="mailto:<?= htmlspecialchars($ORG_EMAIL) ?>"><?= htmlspecialchars($ORG_EMAIL) ?></a>
         <?php if ($ORG_ADRES): ?><br>Adres: <?= htmlspecialchars($ORG_ADRES) ?><?php endif; ?>
     </p>
@@ -293,11 +392,40 @@ met de datum “laatst bijgewerkt” bovenaan.</p>
     is <a href="#nl">bovenaan</a> te vinden (or scroll up).
 </div>
 
-<p><?= htmlspecialchars($ORG_NAAM) ?> (referred to as “we”) uses InlineComp,
-a digital system for organising inline-skating competitions. This statement
-explains what personal data we process, for what purpose, on what legal
-basis, and what rights you have. This statement aligns with the General
+<p><?= htmlspecialchars($ORG_NAAM) ?> (referred to as “we”) is a volunteer initiative
+run by Geert de Vries, using InlineComp, a digital system for organising inline-skating
+competitions. This statement explains what personal data we process, for what purpose,
+on what legal basis, and what rights you have. This statement aligns with the General
 Data Protection Regulation (GDPR).</p>
+
+<div style="background:#f4f8fb;border-left:4px solid #1a3a5c;padding:.8rem 1rem;margin:1.5rem 0;">
+<h2 style="margin-top:0;border:0;padding-bottom:0;">In short</h2>
+<p><em>This is a plain-language summary. The full, legally precise text is below — in
+case of doubt, that full text applies.</em></p>
+<ul>
+    <li>We only process what's needed to organise competitions: your name, KNSB licence
+        number, club, start number and your results. We get this data from the KNSB
+        itself, not from you.</li>
+    <li>We do <strong>not</strong> store skaters' e-mail address, phone number, home
+        address or date of birth.</li>
+    <li>Results are published publicly, as is customary in the sport.</li>
+    <li>As a coach you can voluntarily create an account; as a skater or coach you can
+        voluntarily enable push notifications. Both are optional and you can turn them off
+        yourself.</li>
+    <li>For digitising old paper results and translating announcements, we sometimes use
+        AI (Anthropic Claude, a US company) — with the legally required safeguards in place.</li>
+    <li>Our website runs with a hosting provider in the United Kingdom; technical visit
+        data (such as IP address) is briefly retained there for security purposes.</li>
+    <li>You can always ask what data we hold about you, have it corrected, or request
+        deletion (in which case we replace your name with “Removed” so the competition
+        history stays intact).</li>
+</ul>
+<p>Questions? Email <a href="mailto:<?= htmlspecialchars($ORG_EMAIL) ?>"><?= htmlspecialchars($ORG_EMAIL) ?></a>.</p>
+</div>
+
+<h2>0. Who is responsible for this processing?</h2>
+<p>InlineComp is run by Geert de Vries, as a volunteer and without any company or legal
+entity behind it. For privacy questions, see the contact details in section 10.</p>
 
 <h2>1. What data do we process?</h2>
 <p>For each skater participating in a competition that we organise we
@@ -313,16 +441,18 @@ federation) via their registration API:</p>
 </ul>
 <p>In addition, for each competition we record sporting results (times,
 sanctions, ranking). These are linked to the licence number.</p>
-<p>We do <strong>not</strong> process e-mail addresses, phone numbers,
-home addresses or dates of birth of skaters. Where an age indication is
-required (for example category plausibility in rankings), it is derived
-from the KNSB category.</p>
+<p>We do <strong>not</strong> process e-mail addresses, phone numbers, home addresses,
+date of birth or year of birth of skaters. We do store the KNSB <strong>category</strong>.
+A category corresponds to an age group, from which an age indication — and across multiple
+seasons, via the annual category progression, an approximate year-of-birth range — can be
+derived. We use this category indication to check whether a licence number belongs to the
+same skater across seasons (plausibility and correct standings).</p>
 
 <h2>1b. Coach accounts (optional)</h2>
 <p>Coaches may — entirely voluntarily — create a personal account in the coach app.
 Without an account, use is anonymous; with an account we process:</p>
 <ul>
-    <li>your <strong>name</strong> and <strong>e-mail address</strong> (as login and identification);</li>
+    <li>your <strong>name</strong> and <strong>e-mail address</strong> (as login and identification, and to send you account-related messages — for example approval, rejection or a password reset);</li>
     <li>the <strong>club or team</strong> you coach for (to assess your request);</li>
     <li>your self-curated <strong>athlete list</strong> (licence numbers of skaters you wish to follow).</li>
 </ul>
@@ -332,6 +462,8 @@ automatically. An account becomes active only after approval by the administrato
 You can delete your account and athlete list yourself at any time; in addition, an
 account expires automatically after one year without login. Passwords are stored only
 in encrypted form (bcrypt hash).</p>
+<p>When you sign in and out we record a security entry in our login log, as we do for
+administrators and jury (see section 5d).</p>
 
 <h2>1c. Push notifications (optional)</h2>
 <p>In the coach and public apps you can — entirely voluntarily — turn on
@@ -363,17 +495,22 @@ or skater data</strong> with them, and the content is encrypted between us and y
 <ul>
     <li>To correctly organise and run competitions (start lists, timekeeping,
         results, standings).</li>
-    <li>To meet obligations and agreements with the KNSB as the governing body.</li>
+    <li>To contribute to competition organisation within the context of the KNSB as governing body.</li>
     <li>To maintain a historical results archive for participants, clubs
         and the federation.</li>
 </ul>
 
 <h2>3. Legal basis</h2>
-<p>Processing takes place on the basis of <em>legitimate interest</em>
-(Article 6(1)(f) GDPR): without this data we cannot organise a fair
-competition or publish results. For KNSB competitions there is also a
-<em>contract</em> between the participant and the federation in which we
-are involved as organiser (Article 6(1)(b) GDPR).</p>
+<p>Processing takes place on the basis of <strong>legitimate interest</strong>
+(Article 6(1)(f) GDPR): without this data we cannot organise a fair competition or publish
+results, and this interest is not disproportionate to participants' privacy — it concerns
+limited, sport-functional data that is customarily made public in this sport.</p>
+<p>For coach accounts and push notifications, <strong>consent</strong> (Article 6(1)(a)
+GDPR) additionally applies as the legal basis — see sections 1b and 1c.</p>
+<p><em>Note: there is no formal agreement or mandate between us and the KNSB governing our
+processing. We are an independent, volunteer-run competition organiser that receives data
+from the KNSB to facilitate competitions. For this reason we do not rely on “performance of
+a contract” but solely on legitimate interest and consent.</em></p>
 
 <h2>4. Source of the data</h2>
 <p>We receive personal data directly from the KNSB via their official
@@ -394,6 +531,10 @@ see §5b below.</p>
     <li><strong>AI provider (Anthropic)</strong>: see §5b for details.</li>
     <li><strong>Push services (Google/Mozilla/Apple)</strong>: solely to deliver
         push notifications you enabled yourself — see §1c.</li>
+    <li><strong>Hosting provider (iFastNet Ltd)</strong>: see §5c for details.</li>
+    <li><strong>Geo-IP service (ip-api.com – Artia International S.R.L., Romania)</strong>:
+        solely to convert an IP address into an approximate location (country/city) for the
+        login log at sign-in — see §5d.</li>
     <li>We do <strong>not</strong> sell data and do not share it with third
         parties beyond the above.</li>
 </ul>
@@ -416,7 +557,8 @@ see §5b below.</p>
 <ul>
     <li>Anthropic is a US company based in San Francisco (USA). The transfer
         to the US is based on <em>Standard Contractual Clauses (SCCs)</em>
-        as provided for under the GDPR.</li>
+        as provided for under the GDPR, supplemented by the Data Processing
+        Addendum Anthropic offers its business/API customers.</li>
     <li>According to Anthropic's privacy policy, API data is <strong>not used
         to train</strong> their AI models. Data may be retained briefly for
         abuse-monitoring purposes (by default up to 30 days).</li>
@@ -427,11 +569,50 @@ see §5b below.</p>
         is sent to the AI.</li>
 </ul>
 
+<h2>5c. Server logs &amp; Hosting</h2>
+<p>Our website is hosted by <strong>iFastNet Ltd</strong> (United Kingdom). When you visit
+our website, the web server automatically stores technical information in server log files
+(Raw Access Logs). This includes your IP address, browser type, the page requested, and the
+date/time of the visit.</p>
+<ul>
+    <li><strong>Legal basis &amp; purpose</strong>: this processing is based on our legitimate
+        interest (Article 6(1)(f) GDPR) to technically secure the website, detect errors, and
+        counter abuse or cyberattacks.</li>
+    <li><strong>Transfer outside the EU</strong>: because our hosting provider is based in the
+        United Kingdom, this transfer takes place without additional safeguards (such as SCCs),
+        on the basis of the European Commission's adequacy decision for the United Kingdom (last
+        renewed until December 2031). The UK location has been verified via the RIPE network
+        registry.</li>
+    <li><strong>Retention period</strong>: these technical server logs are automatically
+        overwritten or deleted via the cPanel system within 24 hours to a maximum of 30 days,
+        unless needed longer for a specific security investigation.</li>
+    <li>These logs are not linked to a user account and are not used for tracking — see also the
+        “anonymous visit statistics” on the public page, which separately store no IP addresses.</li>
+</ul>
+
+<h2>5d. Login log &amp; location lookup</h2>
+<p>For security we keep a login log of sign-in and sign-out events by <strong>administrators,
+coaches and jury</strong> (not ordinary visitors). Per event we record: timestamp, IP address,
+an approximate location (country and city) and a short browser/device identifier. Failed
+sign-in attempts are also logged, to detect abuse and brute-force attacks.</p>
+<ul>
+    <li><strong>Legal basis &amp; purpose</strong>: legitimate interest (Article 6(1)(f) GDPR)
+        — security and abuse detection.</li>
+    <li><strong>Location lookup</strong>: to convert the IP address into country/city we use the
+        geo-IP service <strong>ip-api.com</strong>, provided by <strong>Artia International
+        S.R.L. (Bucharest, Romania)</strong>. This processor is EU-based and subject to the GDPR;
+        no transfer outside the EU takes place. We send only the IP address (no name or skater
+        data) and store only the derived country/city.</li>
+    <li><strong>Retention</strong>: login-log entries are automatically deleted after 30 days.</li>
+</ul>
+
 <h2>6. Where is the data stored?</h2>
-<p>The data is stored on a web server within the European Union. Access is
-limited to administrators of <?= htmlspecialchars($ORG_NAAM) ?> via
-password-protected accounts. AI processing (see §5b) takes place on
-Anthropic's servers in the United States.</p>
+<p>All our competition, account and technical data (sections 1, 1b, 1c, 5c) is stored on the
+same web server at our hosting provider, <strong>iFastNet Ltd in the United Kingdom</strong>.
+Access is limited to administrators of <?= htmlspecialchars($ORG_NAAM) ?> via
+password-protected accounts.</p>
+<p>One exception: <strong>AI processing</strong> (see §5b) takes place on Anthropic's servers
+in the United States.</p>
 
 <h2>7. Retention period</h2>
 <p>We retain personal data for as long as is necessary for the purpose
@@ -452,6 +633,11 @@ for which it was collected:</p>
         abuse-monitoring, not used for training).</li>
     <li><strong>Push subscriptions</strong>: as long as you keep notifications
         enabled; they are deleted as soon as you turn them off or the subscription expires.</li>
+    <li><strong>Server log files</strong>: 24 hours to a maximum of 30 days, unless needed
+        longer for a security investigation — see section 5c.</li>
+    <li><strong>Login log (admin/coach/jury)</strong>: 30 days — see section 5d.</li>
+    <li><strong>Coach accounts</strong>: for as long as the account exists; you can delete it
+        yourself and it expires automatically after one year without login — see section 1b.</li>
 </ul>
 
 <h2>8. Security</h2>
@@ -498,6 +684,7 @@ for which it was collected:</p>
 <div class="contact">
     <p>Privacy questions or requests can be sent to:<br>
         <strong><?= htmlspecialchars($ORG_NAAM) ?></strong><br>
+        Run by Geert de Vries (volunteer)<br>
         E-mail: <a href="mailto:<?= htmlspecialchars($ORG_EMAIL) ?>"><?= htmlspecialchars($ORG_EMAIL) ?></a>
         <?php if ($ORG_ADRES): ?><br>Address: <?= htmlspecialchars($ORG_ADRES) ?><?php endif; ?>
     </p>
