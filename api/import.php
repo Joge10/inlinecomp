@@ -466,12 +466,20 @@ try {
     // --------------------------------------------------------
     // 3. Deelnemers verwerken vanuit beoordeelde POST-data
     // --------------------------------------------------------
+    // Demo-wedstrijd: markeer de persons als demo (extern=1, extern_federatie='DEMO')
+    // zodat ÓÓK later aan de fixture toegevoegde demo-rijders die vlag krijgen — en
+    // overal (bv. de pending-koppel-lijst) als demo herkend worden. Bij een her-
+    // import worden bestaande demo-persons zonder vlag hierdoor alsnog gemarkeerd
+    // (self-heal). Bij KNSB/handmatig blijft extern/extern_federatie ongemoeid.
+    $demoCols = $isDemo ? ', extern, extern_federatie'          : '';
+    $demoVals = $isDemo ? ", 1, 'DEMO'"                         : '';
+    $demoUpd  = $isDemo ? "extern = 1, extern_federatie = 'DEMO'," : '';
     $stmtPers = $pdo->prepare("
         INSERT INTO persons
                (license_key, full_name, short_name, gender, category,
-                nationality, start_number, club_code, club_short, club_full, sponsor, city)
+                nationality, start_number, club_code, club_short, club_full, sponsor, city{$demoCols})
         VALUES (:license_key, :full_name, :short_name, :gender, :category,
-                :nationality, :start_number, :club_code, :club_short, :club_full, :sponsor, :city)
+                :nationality, :start_number, :club_code, :club_short, :club_full, :sponsor, :city{$demoVals})
         ON DUPLICATE KEY UPDATE
                -- Behoud bestaande waarde als de nieuwe leeg/null is, zodat een
                -- per ongeluk leeg ingestuurde naam geen goede naam wist.
@@ -493,6 +501,7 @@ try {
                club_full    = COALESCE(NULLIF(VALUES(club_full),  ''), club_full),
                sponsor      = COALESCE(NULLIF(VALUES(sponsor),    ''), sponsor),
                city         = COALESCE(NULLIF(VALUES(city),       ''), city),
+               {$demoUpd}
                updated_at   = CURRENT_TIMESTAMP
     ");
 

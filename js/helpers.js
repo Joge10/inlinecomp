@@ -1957,6 +1957,7 @@ function _hpBevestigModal({ titel, bericht, bevestigLabel = 'OK', annuleerLabel 
 }
 
 let _hpPendingData = null;
+let _hpPendingFilter = 'alles';   // 'alles' | 'zonder' (geen uitslag) | 'wees' (geen uitslag+entry+transponder)
 
 function _hpPendingInit() {
     el('hp-pending-btn-laad').addEventListener('click', _hpPendingLaad);
@@ -2527,9 +2528,12 @@ function _hpPendingRender() {
                   Geen suggesties die op naam + leeftijd plausibel zijn.
                   Gebruik handmatig zoeken hieronder.
               </div>`;
+        const heeftUit = p.aantal_uitslagen > 0;
+        const isWees   = !heeftUit && !(p.aantal_entries > 0) && !(p.aantal_transponders > 0);
         return `
-            <div class="hp-pending-rij" data-lic="${escHtml(p.license_key)}" data-type="${p.is_extern ? 'extern' : 'pending'}">
+            <div class="hp-pending-rij" data-lic="${escHtml(p.license_key)}" data-type="${p.is_extern ? 'extern' : 'pending'}" data-uitslag="${heeftUit ? 1 : 0}" data-wees="${isWees ? 1 : 0}">
                 <div class="hp-pending-hoofd">
+                    <input type="checkbox" class="hp-pending-check" aria-label="Selecteer voor verwijderen">
                     <div class="hp-pending-naam">
                         ${typeBadge}
                         <b>${escHtml(p.full_name)}</b>
@@ -2548,7 +2552,22 @@ function _hpPendingRender() {
                 <div class="hp-pending-zoekres" style="display:none"></div>
             </div>`;
     };
-    lijst.innerHTML = `<div class="hp-pending-wrap">${_hpPendingData.map(rij).join('')}</div>`;
+    const nTotaal = _hpPendingData.length;
+    const nZonder = _hpPendingData.filter(p => !(p.aantal_uitslagen > 0)).length;
+    const nWees   = _hpPendingData.filter(p => !(p.aantal_uitslagen > 0) && !(p.aantal_entries > 0) && !(p.aantal_transponders > 0)).length;
+    lijst.innerHTML = `
+        <div class="hp-pending-toolbar">
+            <div class="hp-pending-filters">
+                <button class="btn-secondary hp-pf-btn hp-pf-act" data-filter="alles">Alles (${nTotaal})</button>
+                <button class="btn-secondary hp-pf-btn" data-filter="zonder">Zonder uitslag (${nZonder})</button>
+                <button class="btn-secondary hp-pf-btn" data-filter="wees">Weesrijders (${nWees})</button>
+            </div>
+            <div class="hp-pending-bulkbar">
+                <label class="hp-pending-selall-lbl"><input type="checkbox" id="hp-pending-selall"> alle zichtbare</label>
+                <button class="btn-danger" id="hp-pending-bulkdel" disabled>🗑 Verwijder geselecteerde (0)</button>
+            </div>
+        </div>
+        <div class="hp-pending-wrap">${_hpPendingData.map(rij).join('')}</div>`;
 
     // Event-handlers
     lijst.querySelectorAll('.hp-pending-sugg-btn').forEach(btn => {
@@ -2572,6 +2591,44 @@ function _hpPendingRender() {
         btn.addEventListener('click', () =>
             _hpPendingMerge(btn.dataset.source, btn.dataset.target));
     });
+
+    // ── Filter + bulk-selectie ──────────────────────────────────────────────
+    const pasFilter = () => {
+        lijst.querySelectorAll('.hp-pending-rij').forEach(r => {
+            const toon = _hpPendingFilter === 'alles'
+                || (_hpPendingFilter === 'zonder' && r.dataset.uitslag === '0')
+                || (_hpPendingFilter === 'wees'   && r.dataset.wees === '1');
+            r.style.display = toon ? '' : 'none';
+        });
+        const selall = el('hp-pending-selall');
+        if (selall) selall.checked = false;
+    };
+    const updateBulk = () => {
+        const n = lijst.querySelectorAll('.hp-pending-check:checked').length;
+        const btn = el('hp-pending-bulkdel');
+        btn.disabled = n === 0;
+        btn.textContent = `🗑 Verwijder geselecteerde (${n})`;
+    };
+    lijst.querySelectorAll('.hp-pf-btn').forEach(b => {
+        b.addEventListener('click', () => {
+            _hpPendingFilter = b.dataset.filter;
+            lijst.querySelectorAll('.hp-pf-btn').forEach(x => x.classList.toggle('hp-pf-act', x === b));
+            pasFilter();
+        });
+    });
+    lijst.querySelectorAll('.hp-pending-check').forEach(cb => cb.addEventListener('change', updateBulk));
+    el('hp-pending-selall').addEventListener('change', e => {
+        lijst.querySelectorAll('.hp-pending-rij').forEach(r => {
+            if (r.style.display !== 'none') {
+                const cb = r.querySelector('.hp-pending-check');
+                if (cb) cb.checked = e.target.checked;
+            }
+        });
+        updateBulk();
+    });
+    el('hp-pending-bulkdel').addEventListener('click', _hpPendingBulkVerwijder);
+    pasFilter();
+    updateBulk();
 }
 
 async function _hpPendingMerge(sourceLic, targetLic) {
@@ -2758,6 +2815,54 @@ async function _hpPendingKoppel(pendingLic, targetLic) {
         await _hpPendingLaad();
     } catch (e) {
         const stat = el('hp-pending-status');
+        stat.textContent = '⚠ ' + e.message;
+        stat.className = 'hp-status hp-status-fout';
+    }
+}
+
+async function _hpPendingBulkVerwijder() {
+    const lijst = el('hp-pending-lijst');
+    const checked = [...lijst.querySelectorAll('.hp-pending-check:checked')]
+        .map(cb => cb.closest('.hp-pending-rij')?.dataset.lic)
+        .filter(Boolean);
+    if (!checked.length) return;
+    const geselecteerd = _hpPendingData.filter(p => checked.includes(p.license_key));
+    // Waarschuw als een selectie nog uitslagen/entries/transponders heeft — die
+    // gaan óók weg (bv. een rijder die nog in een komende wedstrijd staat).
+    const metData = geselecteerd.filter(p =>
+        p.aantal_uitslagen > 0 || p.aantal_entries > 0 || p.aantal_transponders > 0);
+    const waarschuwing = metData.length
+        ? `<p style="color:#b71c1c;font-size:.9em">⚠ <b>${metData.length}</b> van de geselecteerde rijders
+           ${metData.length === 1 ? 'heeft' : 'hebben'} nog uitslagen, inschrijvingen of transponders —
+           die worden óók permanent verwijderd (incl. een eventuele plek in een komende wedstrijd).</p>`
+        : '';
+    const ok = await _hpBevestigModal({
+        titel: `${checked.length} rijder(s) verwijderen?`,
+        bericht: `<p>Dit verwijdert <b>${checked.length}</b> pending/externe rij(en) permanent.</p>
+                  ${waarschuwing}
+                  <p>Doe dit alleen voor rijen die per ongeluk zijn aangemaakt of overblijven van
+                  verwijderde wedstrijden.</p>`,
+        bevestigLabel: 'Ja, verwijder',
+        annuleerLabel: 'Annuleer',
+    });
+    if (!ok) return;
+    const stat = el('hp-pending-status');
+    stat.textContent = 'Bezig met verwijderen…';
+    stat.className = 'hp-status';
+    try {
+        const res = await fetch('api/helpers.php', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ action: 'pending_bulk_delete', license_keys: checked }),
+        });
+        const data = await res.json();
+        if (data.error) throw new Error(data.error);
+        const extra = data.overgeslagen > 0
+            ? ` · ${data.overgeslagen} overgeslagen (geen pending/extern)` : '';
+        stat.textContent = `✓ ${data.personen_verwijderd} rijder(s) verwijderd${extra}`;
+        stat.className = 'hp-status hp-status-ok';
+        await _hpPendingLaad();
+    } catch (e) {
         stat.textContent = '⚠ ' + e.message;
         stat.className = 'hp-status hp-status-fout';
     }

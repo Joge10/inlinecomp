@@ -1352,6 +1352,7 @@ if ($action === 'pending_lijst') {
             FROM persons p
             WHERE (p.pending_source = 'historie' OR p.extern = 1)
               AND p.anonymized_at IS NULL
+              AND p.license_key NOT LIKE 'demo-%'   -- demo/test-rijders nooit in de koppel-lijst
             ORDER BY p.full_name
         ");
         $pendings = $stmt->fetchAll(PDO::FETCH_ASSOC);
@@ -1880,6 +1881,7 @@ if ($action === 'pending_zoek_echte') {
                    pending_source, extern
             FROM persons
             WHERE anonymized_at IS NULL
+              AND license_key NOT LIKE 'demo-%'   -- demo/test-accounts nooit als koppel-doel
               AND (full_name LIKE ? OR license_key LIKE ?)
             ORDER BY full_name
             LIMIT 20
@@ -2383,6 +2385,81 @@ if ($action === 'pending_delete') {
             'startnrs_verwijderd'     => $csnWeg,
             'transponders_verwijderd' => $tpWeg,
             'person_verwijderd'       => $personWeg,
+        ]);
+    } catch (Throwable $e) {
+        if ($pdo->inTransaction()) $pdo->rollBack();
+        http_response_code(500);
+        echo json_encode(['error' => $e->getMessage()]);
+    }
+    exit;
+}
+
+// ── 3f) Bulk verwijderen van pending/externe rijen ─────────────────────────
+// Verwijdert meerdere "wacht-op-KNSB"-rijen in één transactie. Per license_key
+// geldt dezelfde guard als pending_delete: alleen pending (pending_source IS
+// NOT NULL) of extern (extern = 1) — echte KNSB-accounts worden overgeslagen.
+if ($action === 'pending_bulk_delete') {
+    header('Content-Type: application/json; charset=utf-8');
+    $lics = $body['license_keys'] ?? [];
+    if (!is_array($lics)) $lics = [];
+    $lics = array_values(array_unique(array_filter(array_map('trim', $lics), 'strlen')));
+    if (!count($lics)) {
+        http_response_code(400);
+        echo json_encode(['error' => 'license_keys (niet-lege array) verplicht']);
+        exit;
+    }
+    if (count($lics) > 1000) {
+        http_response_code(400);
+        echo json_encode(['error' => 'te veel rijders in één keer (max 1000)']);
+        exit;
+    }
+    try {
+        // Guard: welke van de gevraagde licenties zijn écht pending/extern?
+        $ph  = implode(',', array_fill(0, count($lics), '?'));
+        $chk = $pdo->prepare("
+            SELECT license_key FROM persons
+            WHERE license_key IN ($ph)
+              AND (pending_source IS NOT NULL OR extern = 1)
+        ");
+        $chk->execute($lics);
+        $teDoen       = array_column($chk->fetchAll(PDO::FETCH_ASSOC), 'license_key');
+        $overgeslagen = count($lics) - count($teDoen);
+        if (!count($teDoen)) {
+            echo json_encode(['ok' => true, 'personen_verwijderd' => 0, 'overgeslagen' => $overgeslagen]);
+            exit;
+        }
+
+        $pdo->beginTransaction();
+        $stmts = [
+            'uitslagen'    => $pdo->prepare("DELETE FROM uitslag_afstand WHERE person_license = ?"),
+            'entries'      => $pdo->prepare("DELETE FROM entries WHERE person_license = ?"),
+            'heat_entries' => $pdo->prepare("DELETE FROM heat_entries WHERE person_license = ?"),
+            'klassement'   => $pdo->prepare("DELETE FROM uitslag_klassement WHERE person_license = ?"),
+            'startnrs'     => $pdo->prepare("DELETE FROM competition_startnummers WHERE person_license = ?"),
+            'transponders' => $pdo->prepare("DELETE FROM transponders WHERE person_license = ?"),
+        ];
+        $delP = $pdo->prepare("
+            DELETE FROM persons
+            WHERE license_key = ?
+              AND (pending_source IS NOT NULL OR extern = 1)
+        ");
+        $tot = ['uitslagen'=>0,'entries'=>0,'heat_entries'=>0,'klassement'=>0,'startnrs'=>0,'transponders'=>0,'personen'=>0];
+        foreach ($teDoen as $lic) {
+            foreach ($stmts as $key => $st) { $st->execute([$lic]); $tot[$key] += $st->rowCount(); }
+            $delP->execute([$lic]);
+            $tot['personen'] += $delP->rowCount();
+        }
+        $pdo->commit();
+        echo json_encode([
+            'ok' => true,
+            'personen_verwijderd'     => $tot['personen'],
+            'overgeslagen'            => $overgeslagen,
+            'uitslagen_verwijderd'    => $tot['uitslagen'],
+            'entries_verwijderd'      => $tot['entries'],
+            'heat_entries_verwijderd' => $tot['heat_entries'],
+            'klassement_verwijderd'   => $tot['klassement'],
+            'startnrs_verwijderd'     => $tot['startnrs'],
+            'transponders_verwijderd' => $tot['transponders'],
         ]);
     } catch (Throwable $e) {
         if ($pdo->inTransaction()) $pdo->rollBack();
