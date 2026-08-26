@@ -437,9 +437,12 @@ try {
     // ── Deelnemerslijst-data ─────────────────────────────────────
     // Afstanden gegroepeerd op NAAM (zoals "200m DTT", "500m+D") — niet
     // per DC. Een wedstrijd met DPA/HPA/DPB/... 200m-DTT heeft dus één
-    // kolom "200m DTT" gedeeld door alle cats. Afvalkoers eruit gefilterd
-    // omdat InlineComp die nog niet ondersteunt. Zelfde logica als de
-    // Print Center deelnemerslijst.
+    // kolom "200m DTT" gedeeld door alle cats. Relays (aflossing/estafette)
+    // eruit gefilterd — die ondersteunt InlineComp nog niet. Afvalkoersen
+    // horen er WEL in (worden vanaf het begin ondersteund). Relays worden
+    // op NAAM herkend omdat de distances.race_type-enum er geen waarde voor
+    // heeft (sprint/inline/puntenkoers/afvalkoers) — zelfde detectie als in
+    // rapport_pr.php / rapport_records.php / jury.js.
     $afstStmt = $pdo->prepare("
         SELECT d.name AS naam,
                MIN(d.value_meters) AS meters,
@@ -447,7 +450,9 @@ try {
         FROM distances d
         JOIN distance_combinations dc ON dc.id = d.distance_combination_id
         WHERE dc.competition_id = ?
-          AND (d.race_type IS NULL OR d.race_type <> 'afvalkoers')
+          AND LOWER(d.name) NOT LIKE '%relay%'
+          AND LOWER(d.name) NOT LIKE '%estafette%'
+          AND LOWER(d.name) NOT LIKE '%aflossing%'
         GROUP BY d.name
         ORDER BY meters, naam
     ");
@@ -475,7 +480,9 @@ try {
                                         AND d.distance_combination_id = ua.distance_combination_id
             JOIN distance_combinations dc ON dc.id = ua.distance_combination_id
             WHERE dc.competition_id = ?
-              AND (d.race_type IS NULL OR d.race_type <> 'afvalkoers')
+              AND LOWER(d.name) NOT LIKE '%relay%'
+              AND LOWER(d.name) NOT LIKE '%estafette%'
+              AND LOWER(d.name) NOT LIKE '%aflossing%'
             UNION
             SELECT e.person_license AS license_key,
                    d.name AS distance_naam,
@@ -484,7 +491,9 @@ try {
             JOIN distances d              ON d.distance_combination_id = e.distance_combination_id
             JOIN distance_combinations dc ON dc.id = e.distance_combination_id
             WHERE dc.competition_id = ?
-              AND (d.race_type IS NULL OR d.race_type <> 'afvalkoers')
+              AND LOWER(d.name) NOT LIKE '%relay%'
+              AND LOWER(d.name) NOT LIKE '%estafette%'
+              AND LOWER(d.name) NOT LIKE '%aflossing%'
               AND (e.status IS NULL OR e.status <> 3)
         ) src
         JOIN persons p ON p.license_key = src.license_key

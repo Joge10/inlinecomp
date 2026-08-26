@@ -19,6 +19,16 @@ return [
         'versie' => 'H1243.10.08', 'datum' => '26-08-2026',
         'soort'  => 'patch', 'onderdelen' => ['patch'],
         'tekst' => [
+            'nl' => '🔧 <b>Wedstrijdprotocol — afvalkoers in deelnemerslijst</b> — de deelnemerslijst in het protocol liet afvalkoersen ten onrechte weg. Afvalkoersen horen er nu gewoon in; relays (aflossing/estafette, nog niet ondersteund) worden wél uitgesloten.',
+            'en' => '🔧 <b>Competition protocol — elimination race in participant list</b> — the protocol\'s participant list wrongly omitted elimination races. Elimination races now appear as they should; relays (not yet supported) are excluded instead.',
+            'de' => '🔧 <b>Wettkampfprotokoll — Ausscheidungsrennen in Teilnehmerliste</b> — die Teilnehmerliste im Protokoll ließ Ausscheidungsrennen fälschlich weg. Ausscheidungsrennen erscheinen jetzt wie vorgesehen; Staffeln (noch nicht unterstützt) werden stattdessen ausgeschlossen.',
+            'fr' => '🔧 <b>Protocole de compétition — course à élimination dans la liste des participants</b> — la liste des participants du protocole omettait à tort les courses à élimination. Elles apparaissent désormais correctement ; les relais (pas encore pris en charge) sont exclus à la place.',
+        ],
+    ],
+    [
+        'versie' => 'H1243.10.08', 'datum' => '26-08-2026',
+        'soort'  => 'patch', 'onderdelen' => ['patch'],
+        'tekst' => [
             'nl' => '🔧 <b>Demo-rijders correct gemarkeerd</b> — demo-rijders verschijnen niet langer in de "Wacht-op-KNSB rijders koppelen"-lijst (Systeem → Helpers), en een demo-import markeert nieuwe demo-rijders nu consistent als demo.',
             'en' => '🔧 <b>Demo riders correctly marked</b> — demo riders no longer appear in the "Link pending-KNSB riders" list (System → Helpers), and a demo import now consistently marks new demo riders as demo.',
             'de' => '🔧 <b>Demo-Fahrer korrekt markiert</b> — Demo-Fahrer erscheinen nicht mehr in der "Auf-KNSB-wartende Fahrer verknüpfen"-Liste (System → Helfer), und ein Demo-Import markiert neue Demo-Fahrer jetzt konsistent als Demo.',
