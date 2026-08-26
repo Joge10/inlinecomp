@@ -46,6 +46,27 @@ return [
         ],
     ],
 
+    [
+        'versie' => 'H1243.10.08', 'datum' => '24-08-2026',
+        'soort'  => 'patch', 'onderdelen' => ['patch'],
+        'tekst' => [
+            'nl' => '🔧 <b>Jury/uitslag — kleine fixes</b> — een gecombineerde eindsanctie (bv. DQ-TF,FS) kleurt de rij nu rood en telt mee als afgerond in de compleet-check; en een handmatig gezette runner-up wordt niet meer onvoorwaardelijk gewist bij een upstream-wijziging.',
+            'en' => '🔧 <b>Jury/results — small fixes</b> — a combined final sanction (e.g. DQ-TF,FS) now turns the row red and counts as completed in the completeness check; and a manually set runner-up is no longer unconditionally cleared on an upstream change.',
+            'de' => '🔧 <b>Jury/Ergebnisse — kleine Fixes</b> — eine kombinierte Endsanktion (z. B. DQ-TF,FS) färbt die Zeile jetzt rot und zählt als abgeschlossen in der Vollständigkeitsprüfung; und ein manuell gesetzter Runner-up wird bei einer Upstream-Änderung nicht mehr bedingungslos gelöscht.',
+            'fr' => '🔧 <b>Jury/résultats — petites corrections</b> — une sanction finale combinée (p. ex. DQ-TF,FS) colore désormais la ligne en rouge et compte comme terminée dans le contrôle de complétude ; et un runner-up défini manuellement n\'est plus effacé sans condition lors d\'une modification en amont.',
+        ],
+    ],
+    [
+        'versie' => 'H1243.10.08', 'datum' => '24-08-2026',
+        'soort'  => 'patch', 'onderdelen' => ['patch'],
+        'tekst' => [
+            'nl' => '🔧 <b>Import — kleine UI-verbeteringen</b> — de categorie-tab toont nu het aantal actieve (loting-)rijders in plaats van het totaal, en de status-badges hebben een gelijke grootte.',
+            'en' => '🔧 <b>Import — small UI improvements</b> — the category tab now shows the number of active (draw-eligible) riders instead of the total, and the status badges are equal in size.',
+            'de' => '🔧 <b>Import — kleine UI-Verbesserungen</b> — der Kategorie-Tab zeigt jetzt die Zahl der aktiven (auslosbaren) Fahrer statt der Gesamtzahl, und die Status-Badges haben eine einheitliche Größe.',
+            'fr' => '🔧 <b>Import — petites améliorations d\'interface</b> — l\'onglet de catégorie affiche désormais le nombre de patineurs actifs (éligibles au tirage) au lieu du total, et les badges de statut ont une taille uniforme.',
+        ],
+    ],
+
     // ══ H1243.10.08 — tijdschema-wizard, push-meldingen (bèta), demo, sticky filters ══
     // ── Beheer (admin) ──
     [
