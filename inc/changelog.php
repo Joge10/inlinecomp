@@ -19,6 +19,16 @@ return [
         'versie' => 'H1243.10.08', 'datum' => '26-08-2026',
         'soort'  => 'patch', 'onderdelen' => ['patch'],
         'tekst' => [
+            'nl' => '🔧 <b>Speaker — historie-filter op One Lap</b> — in de rijder-historie (speaker) werkte de "Alleen [afstand] tonen"-filter niet voor One Lap: die toonde alle uitslagen i.p.v. alleen de One Laps. One Lap wordt nu net als puntenkoers als eigen afstand-type herkend, dus de filter slaat aan.',
+            'en' => '🔧 <b>Speaker — history filter for One Lap</b> — in the rider history (speaker) the "Show only [distance]" filter did not work for One Lap: it showed all results instead of only the One Laps. One Lap is now recognised as its own distance type (like the points race), so the filter works.',
+            'de' => '🔧 <b>Speaker — Historie-Filter für One Lap</b> — in der Fahrer-Historie (Speaker) funktionierte der Filter "Nur [Distanz] zeigen" nicht für One Lap: er zeigte alle Ergebnisse statt nur die One Laps. One Lap wird jetzt wie das Punkterennen als eigener Distanz-Typ erkannt, sodass der Filter greift.',
+            'fr' => '🔧 <b>Speaker — filtre historique pour One Lap</b> — dans l\'historique du patineur (speaker), le filtre « Afficher uniquement [distance] » ne fonctionnait pas pour le One Lap : il affichait tous les résultats au lieu des seuls One Lap. Le One Lap est désormais reconnu comme un type de distance à part entière (comme la course aux points), donc le filtre fonctionne.',
+        ],
+    ],
+    [
+        'versie' => 'H1243.10.08', 'datum' => '26-08-2026',
+        'soort'  => 'patch', 'onderdelen' => ['patch'],
+        'tekst' => [
             'nl' => '🔧 <b>Wedstrijdprotocol — afvalkoers in deelnemerslijst</b> — de deelnemerslijst in het protocol liet afvalkoersen ten onrechte weg. Afvalkoersen horen er nu gewoon in; relays (aflossing/estafette, nog niet ondersteund) worden wél uitgesloten.',
             'en' => '🔧 <b>Competition protocol — elimination race in participant list</b> — the protocol\'s participant list wrongly omitted elimination races. Elimination races now appear as they should; relays (not yet supported) are excluded instead.',
             'de' => '🔧 <b>Wettkampfprotokoll — Ausscheidungsrennen in Teilnehmerliste</b> — die Teilnehmerliste im Protokoll ließ Ausscheidungsrennen fälschlich weg. Ausscheidungsrennen erscheinen jetzt wie vorgesehen; Staffeln (noch nicht unterstützt) werden stattdessen ausgeschlossen.',

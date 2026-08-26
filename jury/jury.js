@@ -2499,6 +2499,13 @@ function _spkAfstandKey(naam) {
     if (s.includes('afval'))     return 'afvalkoers';
     if (s.includes('marathon'))  return 'marathon';
     if (s.includes('estafette') || s.includes('relay')) return 'estafette';
+    // One Lap = benoemde afstand zonder vast metertal (varieert per baan/weg).
+    // Net als puntenkoers een special-type-key, anders zou "One Lap" (bare
+    // distance_naam) niet matchen met "Jun.B Vrouwen One Lap" (dc_naam met
+    // cat-prefix) → filter zou nooit aanslaan. Check vóór de getal-regex zodat
+    // "1 ronde" niet als "1m" wordt geïnterpreteerd.
+    if (s.includes('one lap') || s.includes('onelap')
+        || /\b(?:1|één|eén|een)\s*ronde\b/.test(s)) return 'onelap';
     // Eerste getal in de string → "{n}m"
     const m = s.match(/(\d+)\s*(m|km|meter|kilometer)?/i);
     if (m) {
@@ -2514,6 +2521,7 @@ function _spkAfstandLabel(key) {
     if (key === 'afvalkoers')  return 'Afvalkoers (alle)';
     if (key === 'marathon')    return 'Marathon';
     if (key === 'estafette')   return 'Estafette';
+    if (key === 'onelap')      return 'One Lap (alle)';
     return key;
 }
 
