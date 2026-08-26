@@ -13,6 +13,10 @@ Ondersteunde formaten
                  ("nr Naam Cat Woonplaats Club Sponsor A1..A5 tot af tot").
                  De volgorde in de PDF = de ranking; de laatste numerieke kolom
                  is de eind-score (som na weggestreepte slechtste).
+  - NK_SELECTIE: "Tussenstand selectie NK Weg" — MET losse Lic.Nr.-kolom en
+                 meerdere secties per pagina ("1Vrouwen Kadetten Sprint").
+                 Rij: "pl Lic.Nr startnr(geplakt)Naam Cat Woonplaats Club …".
+                 De pl-kolom is de ranking per (discipline-)sectie.
 """
 
 import sys, re, json
@@ -417,6 +421,69 @@ def parse_nk_tussenstand(pdf):
 
 
 # ═════════════════════════════════════════════════════════════════════════════
+# NK-selectie parser  ("Tussenstand selectie NK Weg")
+# ─────────────────────────────────────────────────────────────────────────────
+# Sectie-kop (nummer geplakt aan geslacht): "1Vrouwen Kadetten Sprint".
+# MEERDERE secties per pagina → inline verwerken (niet één-per-pagina zoals KNSB).
+# Rij MET losse Lic.Nr.-kolom (dat mist de gewone KNSB-parser):
+#     pl  Lic.Nr  startnr(geplakt)Naam  Cat  Woonplaats  Club  Sponsor  A1..A6 tot af tot
+#     "1 10219545 53Eline van Leijenhorst DKA Lelystad Radboud Inline-skating 2 1 …"
+# De `pl`-kolom is de ranking (per sectie); sectienaam (incl. discipline) = sleutel.
+NKSEL_SECTIE_RE = re.compile(
+    r'^\d+\s*((?:Vrouwen|Mannen|Dames|Heren)[A-Za-z\s]+?)\s*$'
+)
+NKSEL_REGEL_RE = re.compile(
+    r'^(\d{1,3})\s+'          # pl (positie in de sectie)
+    r'\d{6,}\s+'             # KNSB-licentie (Lic.Nr.-kolom) — overslaan
+    r'(\d+)'                 # startnummer (geplakt aan de naam)
+    r'([A-Z\xc0-\xd6\xd8-\xf6\xf8-\xff]'
+    r'[A-Za-z\xc0-\xff\s\'\-\.]+?)'  # naam
+    r'\s+([HD][A-Z]{1,2}\d?)\s'      # cat-code (DKA/HKA/DJB/HJB/...)
+)
+
+def parse_nk_selectie(pdf):
+    secties = {}
+    header_info = {}
+    sectie_naam = None
+
+    for pagina in pdf.pages:
+        txt = pagina.extract_text()
+        if not txt:
+            continue
+        for regel in txt.splitlines():
+            r = regel.strip()
+            if not r:
+                continue
+
+            if not header_info.get('titel') and 'selectie NK' in r:
+                header_info['titel'] = r
+
+            # Sectie-kop? (moet een kleine letter bevatten → geen caps-header)
+            ms = NKSEL_SECTIE_RE.match(r)
+            if ms and re.search(r'[a-z]', ms.group(1)):
+                sectie_naam = ms.group(1).strip()
+                continue
+
+            # Rijder-regel
+            mr = NKSEL_REGEL_RE.match(r)
+            if not mr or not sectie_naam:
+                continue
+
+            positie = int(mr.group(1))
+            nr      = mr.group(2).strip()
+            naam    = mr.group(3).strip()
+            cat     = mr.group(4).strip()
+
+            if sectie_naam not in secties:
+                secties[sectie_naam] = {'sectie': sectie_naam, 'cat_codes': set(), 'rijders': []}
+            secties[sectie_naam]['cat_codes'].add(cat)
+            secties[sectie_naam]['rijders'].append(
+                {'positie': positie, 'nr': nr, 'naam': naam, 'cat_code': cat})
+
+    return secties, header_info
+
+
+# ═════════════════════════════════════════════════════════════════════════════
 # Formaat-detectie
 # ─────────────────────────────────────────────────────────────────────────────
 def detect_format(pdf):
@@ -425,6 +492,8 @@ def detect_format(pdf):
     )
     if 'Tussenstand NK deelname' in tekst or 'NK deelname' in tekst:
         return 'nk_tussen'
+    if 'selectie NK' in tekst or 'Tussenstand selectie' in tekst:
+        return 'nk_selectie'
     if 'Beennr' in tekst or 'Algemeen klassement' in tekst:
         return 'jsc'
     if re.search(r'categorie\s*:', tekst, re.I):
@@ -448,6 +517,8 @@ def parse_pdf(pad):
             secties_raw, header_info = parse_regio(pdf)
         elif fmt == 'nk_tussen':
             secties_raw, header_info = parse_nk_tussenstand(pdf)
+        elif fmt == 'nk_selectie':
+            secties_raw, header_info = parse_nk_selectie(pdf)
         else:
             secties_raw, header_info = parse_knsb(pdf)
 

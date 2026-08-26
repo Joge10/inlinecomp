@@ -19,6 +19,16 @@ return [
         'versie' => 'H1243.10.08', 'datum' => '24-08-2026',
         'soort'  => 'patch', 'onderdelen' => ['patch'],
         'tekst' => [
+            'nl' => '🔧 <b>Klassement-import — extra PDF-formaat</b> — de tussenstand-selectielijst "Tussenstand selectie NK Weg" (met aparte licentie-kolom en meerdere secties per pagina) wordt nu herkend. Voorheen gaf de import "geen rijders herkend".',
+            'en' => '🔧 <b>Standings import — extra PDF format</b> — the interim selection list "Tussenstand selectie NK Weg" (with a separate licence column and multiple sections per page) is now recognised. Previously the import returned "no riders recognised".',
+            'de' => '🔧 <b>Wertungs-Import — zusätzliches PDF-Format</b> — die Zwischenstands-Auswahlliste "Tussenstand selectie NK Weg" (mit separater Lizenznummer-Spalte und mehreren Abschnitten pro Seite) wird jetzt erkannt. Zuvor meldete der Import "keine Fahrer erkannt".',
+            'fr' => '🔧 <b>Import de classement — format PDF supplémentaire</b> — la liste de sélection intermédiaire « Tussenstand selectie NK Weg » (avec une colonne licence distincte et plusieurs sections par page) est désormais reconnue. Auparavant, l\'import renvoyait « aucun patineur reconnu ».',
+        ],
+    ],
+    [
+        'versie' => 'H1243.10.08', 'datum' => '24-08-2026',
+        'soort'  => 'patch', 'onderdelen' => ['patch'],
+        'tekst' => [
             'nl' => '🔒 <b>Public — zoeken alleen binnen de wedstrijd</b> — bij het toevoegen van een te volgen rijder verschijnen nu alleen deelnemers van de gekozen wedstrijd (dataminimalisatie). Al gevolgde rijders uit andere wedstrijden blijven gewoon in je lijst staan.',
             'en' => '🔒 <b>Public — search limited to the competition</b> — when adding a rider to follow, only participants of the chosen competition now appear (data minimisation). Riders you already follow from other competitions stay in your list.',
             'de' => '🔒 <b>Public — Suche nur innerhalb des Wettkampfs</b> — beim Hinzufügen eines zu verfolgenden Fahrers erscheinen jetzt nur Teilnehmer des gewählten Wettkampfs (Datenminimierung). Bereits verfolgte Fahrer aus anderen Wettkämpfen bleiben in deiner Liste.',
