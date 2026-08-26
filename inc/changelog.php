@@ -16,6 +16,16 @@
 return [
     // ── Patches onder H1243.10.08 (onderhoud & beveiliging, alleen Beheer) ──
     [
+        'versie' => 'H1243.10.08', 'datum' => '26-08-2026',
+        'soort'  => 'patch', 'onderdelen' => ['patch'],
+        'tekst' => [
+            'nl' => '🔧 <b>Demo-rijders correct gemarkeerd</b> — demo-rijders verschijnen niet langer in de "Wacht-op-KNSB rijders koppelen"-lijst (Systeem → Helpers), en een demo-import markeert nieuwe demo-rijders nu consistent als demo.',
+            'en' => '🔧 <b>Demo riders correctly marked</b> — demo riders no longer appear in the "Link pending-KNSB riders" list (System → Helpers), and a demo import now consistently marks new demo riders as demo.',
+            'de' => '🔧 <b>Demo-Fahrer korrekt markiert</b> — Demo-Fahrer erscheinen nicht mehr in der "Auf-KNSB-wartende Fahrer verknüpfen"-Liste (System → Helfer), und ein Demo-Import markiert neue Demo-Fahrer jetzt konsistent als Demo.',
+            'fr' => '🔧 <b>Patineurs démo correctement marqués</b> — les patineurs démo n\'apparaissent plus dans la liste « Lier les patineurs en attente KNSB » (Système → Assistants), et un import démo marque désormais les nouveaux patineurs démo de façon cohérente comme démo.',
+        ],
+    ],
+    [
         'versie' => 'H1243.10.08', 'datum' => '24-08-2026',
         'soort'  => 'patch', 'onderdelen' => ['patch'],
         'tekst' => [
