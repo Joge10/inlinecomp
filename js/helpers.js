@@ -74,6 +74,25 @@ async function toonHelpersPagina() {
             <div id="hp-hist-preview" style="display:none"></div>
         </div>
 
+        <div class="hp-card" id="hp-histedit-card">
+            <h3 class="hp-card-titel">✏️ Geïmporteerde wedstrijd bewerken</h3>
+            <p class="hp-card-uitleg">
+                Corrigeer de <b>naam</b> van een historisch geïmporteerde wedstrijd, de
+                <b>afstand-namen</b> en de <b>categorie</b> per afstand — zonder opnieuw te
+                importeren. Handig als de AI een categorie verkeerd overnam of een naam net
+                anders moet. Toont alleen via de historie-import aangemaakte wedstrijden.
+            </p>
+            <div class="hp-hist-veld">
+                <label>Wedstrijd</label>
+                <select class="inp" id="hp-he-comp"><option value="">— laden… —</option></select>
+            </div>
+            <div id="hp-he-form" style="display:none"></div>
+            <div class="hp-card-acties">
+                <button class="btn-primary" id="hp-he-btn-save" disabled>💾 Opslaan</button>
+                <span class="hp-status" id="hp-he-status"></span>
+            </div>
+        </div>
+
         ${currentUser?.role === 'owner' ? `
         <div class="hp-card" id="hp-coach-auth-card">
             <h3 class="hp-card-titel">🔐 Coach-app toegangswachtwoord</h3>
@@ -216,6 +235,7 @@ async function toonHelpersPagina() {
         el('hp-btn-scan').addEventListener('click', _hpDoeScan);
         _hpCsvInit();
         _hpHistInit();
+        _hpHistEditInit();
         _hpPendingInit();
         _hpClusterCheckInit();
         if (currentUser?.role === 'owner') _hpCoachAuthInit();
@@ -242,7 +262,20 @@ let _hpHistComps = [];      // van /api/helpers.php?action=historie_competitions
 let _hpHistResult = null;   // van /api/helpers.php?action=historie_extract
 
 async function _hpHistInit() {
+    await _hpHistVulComps();
+    el('hp-hist-comp').addEventListener('change', _hpHistCompChange);
+    el('hp-hist-tekst').addEventListener('input', _hpHistTekstChange);
+    el('hp-hist-btn-extract').addEventListener('click', _hpHistExtract);
+    el('hp-hist-btn-nieuw').addEventListener('click', _hpHistNieuweWedstrijd);
+}
+
+// Vult de wedstrijd-dropdown van de import-card. Herbruikbaar: wordt óók na een
+// hernoem-actie in het bewerk-paneel aangeroepen, zodat de nieuwe naam direct
+// verschijnt (voorheen zag je 'm pas na een harde refresh). Behoudt de huidige
+// selectie.
+async function _hpHistVulComps() {
     const sel = el('hp-hist-comp');
+    const behoud = sel.value;
     sel.innerHTML = '<option value="">— laden… —</option>';
     try {
         const res = await fetch('api/helpers.php', {
@@ -263,13 +296,10 @@ async function _hpHistInit() {
             opts.push(`<option value="${escHtml(w.competition_id)}">${escHtml(w.competition_naam)} (${escHtml(dat)}) — ${w.dcs.length} DC's</option>`);
         }
         sel.innerHTML = opts.join('');
+        if (behoud) sel.value = behoud;
     } catch (e) {
         sel.innerHTML = `<option value="">⚠ Fout: ${escHtml(e.message)}</option>`;
     }
-    sel.addEventListener('change', _hpHistCompChange);
-    el('hp-hist-tekst').addEventListener('input', _hpHistTekstChange);
-    el('hp-hist-btn-extract').addEventListener('click', _hpHistExtract);
-    el('hp-hist-btn-nieuw').addEventListener('click', _hpHistNieuweWedstrijd);
 }
 
 // Banen ophalen voor de baan-dropdown. Toont ALLE banen (cross-org) zodat
@@ -1954,6 +1984,201 @@ function _hpBevestigModal({ titel, bericht, bevestigLabel = 'OK', annuleerLabel 
         overlay.querySelector('[data-act="1"]').addEventListener('click', () => sluit(true));
         overlay.addEventListener('click', e => { if (e.target === overlay) sluit(false); });
     });
+}
+
+// ════════════════════════════════════════════════════════════════════════════
+//   Geïmporteerde historie-wedstrijd bewerken — naam / afstand-namen / categorie
+//   Alleen hist-%-wedstrijden (via de historie-PDF-import aangemaakt).
+// ════════════════════════════════════════════════════════════════════════════
+let _hpHeAfstanden = [];
+let _hpHeLijst = [];       // geïmporteerde wedstrijden (voor de combineer-dropdown)
+
+async function _hpHistEditInit() {
+    await _hpHistEditLaadLijst();
+    el('hp-he-comp').addEventListener('change', e => {
+        if (e.target.value) {
+            _hpHistEditLaadAfstanden(e.target.value);
+        } else {
+            el('hp-he-form').style.display = 'none';
+            el('hp-he-btn-save').disabled = true;
+        }
+    });
+    el('hp-he-btn-save').addEventListener('click', _hpHistEditOpslaan);
+}
+
+async function _hpHistEditLaadLijst(behoudId) {
+    const sel = el('hp-he-comp');
+    try {
+        const res = await fetch('api/helpers.php', {
+            method: 'POST', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ action: 'historie_geimporteerd_lijst' }),
+        });
+        const data = await res.json();
+        if (data.error) throw new Error(data.error);
+        const ws = data.wedstrijden || [];
+        _hpHeLijst = ws;
+        if (!ws.length) {
+            sel.innerHTML = '<option value="">— geen via historie-import aangemaakte wedstrijden —</option>';
+            return;
+        }
+        sel.innerHTML = '<option value="">— kies wedstrijd —</option>' + ws.map(w => {
+            const dat = w.datum ? ` (${w.datum})` : '';
+            return `<option value="${escHtml(w.competition_id)}">${escHtml(w.naam || '?')}${dat} · ${w.aantal_afstanden} afst.</option>`;
+        }).join('');
+        if (behoudId) sel.value = behoudId;
+    } catch (e) {
+        sel.innerHTML = `<option value="">⚠ ${escHtml(e.message)}</option>`;
+    }
+}
+
+async function _hpHistEditLaadAfstanden(compId) {
+    const form = el('hp-he-form');
+    form.style.display = '';
+    form.innerHTML = '<p class="hp-status">Laden…</p>';
+    el('hp-he-btn-save').disabled = true;
+    try {
+        const res = await fetch('api/helpers.php', {
+            method: 'POST', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ action: 'historie_comp_afstanden', competition_id: compId }),
+        });
+        const data = await res.json();
+        if (data.error) throw new Error(data.error);
+        _hpHistEditRender(data);
+    } catch (e) {
+        form.innerHTML = `<p class="hp-status hp-status-fout">⚠ ${escHtml(e.message)}</p>`;
+    }
+}
+
+function _hpHistEditRender(data) {
+    const form = el('hp-he-form');
+    _hpHeAfstanden = data.afstanden || [];
+    const rijen = _hpHeAfstanden.map((a, i) => {
+        const cats = (a.cats || '').split(',').filter(Boolean);
+        const catWaarde = cats.length === 1 ? cats[0] : '';
+        const catNote = cats.length > 1
+            ? `<span class="hp-he-catmix" title="Meerdere categorieën in deze afstand. Leeg laten = ongemoeid; een waarde invullen zet álle rijders van deze afstand op die categorie.">⚠ gemengd: ${escHtml(a.cats)}</span>`
+            : '';
+        return `
+            <div class="hp-he-afstand" data-idx="${i}">
+                <input type="text" class="inp hp-he-dc"   value="${escHtml(a.dc_naam || '')}"       placeholder="DC-naam" title="Naam van de afstandscombinatie">
+                <input type="text" class="inp hp-he-dist" value="${escHtml(a.distance_naam || '')}" placeholder="Afstand" title="Naam van de afstand">
+                <input type="text" class="inp hp-he-cat"  value="${escHtml(catWaarde)}"             placeholder="Cat" title="Categorie voor deze afstand (bv. DKA)">
+                <span class="hp-he-n">${a.n}×</span>
+                ${catNote}
+            </div>`;
+    }).join('');
+    const huidigId = el('hp-he-comp').value;
+    const andere = _hpHeLijst.filter(w => w.competition_id !== huidigId);
+    const mergeBlok = andere.length ? `
+        <div class="hp-he-merge">
+            <label>🔗 Combineer een andere geïmporteerde wedstrijd ín deze
+                <span class="hp-he-merge-hint">(bv. baan + weg apart aangemaakt — de andere verdwijnt, deze blijft)</span></label>
+            <div class="hp-he-merge-rij">
+                <select class="inp" id="hp-he-merge-sel">
+                    <option value="">— kies wedstrijd om in te voegen —</option>
+                    ${andere.map(w => {
+                        const dat = w.datum ? ` (${escHtml(w.datum)})` : '';
+                        return `<option value="${escHtml(w.competition_id)}">${escHtml(w.naam || '?')}${dat} · ${w.aantal_afstanden} afst.</option>`;
+                    }).join('')}
+                </select>
+                <button class="btn-secondary" id="hp-he-merge-btn" disabled>Samenvoegen</button>
+            </div>
+        </div>` : '';
+    form.innerHTML = `
+        <div class="hp-hist-veld">
+            <label>Wedstrijdnaam</label>
+            <input type="text" class="inp" id="hp-he-naam" value="${escHtml(data.competition_naam || '')}">
+        </div>
+        <div class="hp-he-afstanden">
+            <div class="hp-he-kop"><span>DC-naam</span><span>Afstand</span><span>Categorie</span><span></span></div>
+            ${rijen}
+        </div>
+        ${mergeBlok}`;
+    el('hp-he-btn-save').disabled = false;
+    const mSel = el('hp-he-merge-sel');
+    const mBtn = el('hp-he-merge-btn');
+    if (mSel && mBtn) {
+        mSel.addEventListener('change', () => { mBtn.disabled = !mSel.value; });
+        mBtn.addEventListener('click', () => _hpHistEditMerge(huidigId, mSel.value));
+    }
+}
+
+async function _hpHistEditOpslaan() {
+    const compId = el('hp-he-comp').value;
+    const stat = el('hp-he-status');
+    if (!compId) return;
+    const naam = el('hp-he-naam')?.value.trim() || '';
+    if (!naam) {
+        stat.textContent = '⚠ Wedstrijdnaam mag niet leeg zijn';
+        stat.className = 'hp-status hp-status-fout';
+        return;
+    }
+    const afstanden = [...document.querySelectorAll('#hp-he-form .hp-he-afstand')].map(r => {
+        const bron = _hpHeAfstanden[+r.dataset.idx] || {};
+        return {
+            dc_id:         bron.dc_id,
+            distance_id:   bron.distance_id,
+            dc_naam:       r.querySelector('.hp-he-dc').value.trim(),
+            distance_naam: r.querySelector('.hp-he-dist').value.trim(),
+            categorie:     r.querySelector('.hp-he-cat').value.trim(),
+        };
+    });
+    stat.textContent = 'Opslaan…';
+    stat.className = 'hp-status';
+    el('hp-he-btn-save').disabled = true;
+    try {
+        const res = await fetch('api/helpers.php', {
+            method: 'POST', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ action: 'historie_edit_comp', competition_id: compId, competition_naam: naam, afstanden }),
+        });
+        const data = await res.json();
+        if (data.error) throw new Error(data.error);
+        stat.textContent = `✓ Opgeslagen (${data.afstanden_bijgewerkt} afstand(en) bijgewerkt)`;
+        stat.className = 'hp-status hp-status-ok';
+        await _hpHistEditLaadLijst(compId);   // naam kan gewijzigd zijn → bewerk-dropdown verversen
+        _hpHistVulComps();                    // én de import-dropdown (hp-hist-comp) direct bijwerken
+    } catch (e) {
+        stat.textContent = '⚠ ' + e.message;
+        stat.className = 'hp-status hp-status-fout';
+    } finally {
+        el('hp-he-btn-save').disabled = false;
+    }
+}
+
+async function _hpHistEditMerge(targetId, sourceId) {
+    if (!targetId || !sourceId) return;
+    const bron = _hpHeLijst.find(w => w.competition_id === sourceId);
+    const doel = _hpHeLijst.find(w => w.competition_id === targetId);
+    const ok = await _hpBevestigModal({
+        titel: 'Wedstrijden samenvoegen?',
+        bericht: `<p>De afstanden van <b>${escHtml(bron?.naam || '?')}</b> worden ín
+                  <b>${escHtml(doel?.naam || '?')}</b> gezet, en <b>${escHtml(bron?.naam || '?')}</b>
+                  verdwijnt daarna.</p>
+                  <p style="color:#666;font-size:.9em">Bedoeld voor twee imports van dezelfde
+                  wedstrijd (bv. baan + weg apart aangemaakt).</p>`,
+        bevestigLabel: 'Ja, samenvoegen',
+        annuleerLabel: 'Annuleer',
+    });
+    if (!ok) return;
+    const stat = el('hp-he-status');
+    stat.textContent = 'Samenvoegen…';
+    stat.className = 'hp-status';
+    try {
+        const res = await fetch('api/helpers.php', {
+            method: 'POST', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ action: 'historie_merge_comp', target_id: targetId, source_id: sourceId }),
+        });
+        const data = await res.json();
+        if (data.error) throw new Error(data.error);
+        stat.textContent = `✓ Samengevoegd — ${data.dcs_verplaatst} afstand(en) en ${data.uitslagen_verplaatst} uitslag-rijen verplaatst`;
+        stat.className = 'hp-status hp-status-ok';
+        await _hpHistEditLaadLijst(targetId);   // dropdowns verversen (bron is weg)
+        _hpHistVulComps();                      // import-dropdown ook
+        _hpHistEditLaadAfstanden(targetId);     // afstanden van doel herladen (nu incl. de ingevoegde)
+    } catch (e) {
+        stat.textContent = '⚠ ' + e.message;
+        stat.className = 'hp-status hp-status-fout';
+    }
 }
 
 let _hpPendingData = null;

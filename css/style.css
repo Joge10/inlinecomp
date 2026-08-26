@@ -5957,6 +5957,25 @@ col.live-col-rondes  { width: 40px; }
     font-size: .82rem;
 }
 
+/* ── Geïmporteerde wedstrijd bewerken ─────────────────────────────────── */
+.hp-he-afstanden { display: flex; flex-direction: column; gap: .35rem; margin-top: .5rem; }
+.hp-he-kop { display: flex; gap: .5rem; font-size: .78rem; color: #667; font-weight: 600; padding: 0 .1rem; }
+.hp-he-kop span:nth-child(1) { flex: 1 1 40%; }
+.hp-he-kop span:nth-child(2) { flex: 1 1 30%; }
+.hp-he-kop span:nth-child(3) { flex: 0 0 6em; }
+.hp-he-kop span:nth-child(4) { flex: 0 0 4em; }
+.hp-he-afstand { display: flex; flex-wrap: wrap; gap: .5rem; align-items: center; }
+.hp-he-afstand .hp-he-dc   { flex: 1 1 40%; min-width: 0; }
+.hp-he-afstand .hp-he-dist { flex: 1 1 30%; min-width: 0; }
+.hp-he-afstand .hp-he-cat  { flex: 0 0 6em; }
+.hp-he-n { flex: 0 0 4em; font-size: .8rem; color: #888; text-align: right; }
+.hp-he-catmix { flex: 1 1 100%; font-size: .78rem; color: #b85a00; }
+.hp-he-merge { margin-top: .9rem; padding-top: .7rem; border-top: 1px dashed #d5dee7; }
+.hp-he-merge > label { display: block; font-weight: 600; font-size: .85rem; color: #33475b; margin-bottom: .4rem; }
+.hp-he-merge-hint { font-weight: 400; color: #7a8895; font-size: .8rem; }
+.hp-he-merge-rij { display: flex; gap: .5rem; align-items: center; flex-wrap: wrap; }
+.hp-he-merge-rij .inp { flex: 1 1 auto; min-width: 12em; }
+
 /* ── Pending-koppelen tab ─────────────────────────────────────────────── */
 /* Toolbar: filter-knoppen + bulk-selectie/verwijderen */
 .hp-pending-toolbar {

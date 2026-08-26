@@ -368,14 +368,16 @@ if ($action === 'csv_export_data') {
 // ── 1) Lijst van wedstrijden + hun DCs (voor het kies-dropdown) ─────────────
 if ($action === 'historie_competitions') {
     try {
-        // Alle wedstrijden tonen (ook toekomstige) zodat de operator vrij is
-        // wat te kiezen. Default sortering: nieuwste eerst.
+        // Alleen via de historie-import aangemaakte wedstrijden (id 'hist-…') —
+        // de tool is bedoeld voor historische uitslagen van wedstrijden die
+        // BUITEN InlineComp zijn verreden, niet voor echte KNSB-feed-wedstrijden.
+        // Een nieuwe historische wedstrijd maak je met de knop "➕ Nieuwe wedstrijd".
         // Multi-tenant: scoped admin ziet alleen zijn org-wedstrijden.
         $scope = gebruikerCompScopeWhere($pdo, $_authUser);
         $stmt  = $pdo->prepare("
             SELECT id, name, starts
             FROM   competitions
-            WHERE  1=1 " . $scope['where'] . "
+            WHERE  id LIKE 'hist-%' " . $scope['where'] . "
             ORDER  BY starts DESC, name
         ");
         $stmt->execute($scope['params']);
@@ -409,6 +411,198 @@ if ($action === 'historie_competitions') {
         }
         echo json_encode(['wedstrijden' => $out], JSON_UNESCAPED_UNICODE);
     } catch (Throwable $e) {
+        http_response_code(500);
+        echo json_encode(['error' => $e->getMessage()]);
+    }
+    exit;
+}
+
+// ── 1b) Geïmporteerde historie-wedstrijden (met uitslagen) — voor het bewerken ──
+if ($action === 'historie_geimporteerd_lijst') {
+    header('Content-Type: application/json; charset=utf-8');
+    try {
+        $stmt = $pdo->query("
+            SELECT ua.competition_id,
+                   MAX(ua.competition_naam)  AS naam,
+                   MAX(ua.competition_datum) AS datum,
+                   COUNT(DISTINCT CONCAT(ua.distance_combination_id,'|',ua.distance_id)) AS aantal_afstanden,
+                   COUNT(*) AS aantal_rijen
+            FROM uitslag_afstand ua
+            WHERE ua.competition_id LIKE 'hist-%'
+            GROUP BY ua.competition_id
+            ORDER BY datum DESC, naam
+        ");
+        echo json_encode(['wedstrijden' => $stmt->fetchAll(PDO::FETCH_ASSOC)], JSON_UNESCAPED_UNICODE);
+    } catch (Throwable $e) {
+        http_response_code(500);
+        echo json_encode(['error' => $e->getMessage()]);
+    }
+    exit;
+}
+
+// ── 1c) Afstanden van één geïmporteerde wedstrijd — voor het bewerk-formulier ──
+if ($action === 'historie_comp_afstanden') {
+    header('Content-Type: application/json; charset=utf-8');
+    $compId = trim($body['competition_id'] ?? ($_GET['competition_id'] ?? ''));
+    if ($compId === '') {
+        http_response_code(400);
+        echo json_encode(['error' => 'competition_id verplicht']);
+        exit;
+    }
+    try {
+        $naamStmt = $pdo->prepare("SELECT MAX(competition_naam) AS naam FROM uitslag_afstand WHERE competition_id = ?");
+        $naamStmt->execute([$compId]);
+        $naam = $naamStmt->fetchColumn() ?: '';
+        $stmt = $pdo->prepare("
+            SELECT distance_combination_id AS dc_id, distance_id,
+                   MAX(dc_naam)       AS dc_naam,
+                   MAX(distance_naam) AS distance_naam,
+                   GROUP_CONCAT(DISTINCT categorie ORDER BY categorie SEPARATOR ',') AS cats,
+                   COUNT(*) AS n
+            FROM uitslag_afstand
+            WHERE competition_id = ?
+            GROUP BY distance_combination_id, distance_id
+            ORDER BY dc_naam, distance_naam
+        ");
+        $stmt->execute([$compId]);
+        echo json_encode([
+            'competition_naam' => $naam,
+            'afstanden'        => $stmt->fetchAll(PDO::FETCH_ASSOC),
+        ], JSON_UNESCAPED_UNICODE);
+    } catch (Throwable $e) {
+        http_response_code(500);
+        echo json_encode(['error' => $e->getMessage()]);
+    }
+    exit;
+}
+
+// ── 1d) Bewerk een geïmporteerde historie-wedstrijd (naam / afstanden / categorie) ──
+// Werkt zowel de gedenormaliseerde uitslag_afstand-namen bij als de canonieke
+// competitions/distance_combinations/distances. Alleen voor hist-%-wedstrijden
+// (echte KNSB-wedstrijden komen uit de feed en worden niet hier hernoemd).
+if ($action === 'historie_edit_comp') {
+    header('Content-Type: application/json; charset=utf-8');
+    $compId   = trim($body['competition_id'] ?? '');
+    $compNaam = trim($body['competition_naam'] ?? '');
+    $afstanden = $body['afstanden'] ?? [];
+    if ($compId === '' || strpos($compId, 'hist-') !== 0) {
+        http_response_code(400);
+        echo json_encode(['error' => 'Alleen historisch geïmporteerde wedstrijden (hist-…) kunnen hier bewerkt worden']);
+        exit;
+    }
+    if ($compNaam === '') {
+        http_response_code(400);
+        echo json_encode(['error' => 'wedstrijdnaam mag niet leeg zijn']);
+        exit;
+    }
+    if (!is_array($afstanden)) $afstanden = [];
+    try {
+        $pdo->beginTransaction();
+        // Wedstrijdnaam — canoniek + gedenormaliseerd
+        $pdo->prepare("UPDATE competitions SET name = ? WHERE id = ?")->execute([$compNaam, $compId]);
+        $pdo->prepare("UPDATE uitslag_afstand SET competition_naam = ? WHERE competition_id = ?")->execute([$compNaam, $compId]);
+
+        $uaStmt      = $pdo->prepare("
+            UPDATE uitslag_afstand SET dc_naam = ?, distance_naam = ?, categorie = ?
+            WHERE competition_id = ? AND distance_combination_id = ? AND distance_id = ?
+        ");
+        $uaStmtNoCat = $pdo->prepare("
+            UPDATE uitslag_afstand SET dc_naam = ?, distance_naam = ?
+            WHERE competition_id = ? AND distance_combination_id = ? AND distance_id = ?
+        ");
+        $dcStmt   = $pdo->prepare("UPDATE distance_combinations SET name = ? WHERE id = ?");
+        $distStmt = $pdo->prepare("UPDATE distances SET name = ? WHERE id = ?");
+        $nAfst = 0;
+        foreach ($afstanden as $a) {
+            $dcId   = trim($a['dc_id'] ?? '');
+            $distId = trim($a['distance_id'] ?? '');
+            $dcNaam = trim($a['dc_naam'] ?? '');
+            $diNaam = trim($a['distance_naam'] ?? '');
+            $cat    = trim($a['categorie'] ?? '');
+            if ($dcId === '' && $distId === '') continue;
+            if ($dcNaam === '' || $diNaam === '') continue;   // namen niet leeg maken
+            // Leeg cat-veld = categorie ONGEMOEID laten (voorkomt per ongeluk
+            // wissen van de cats van een gemengde afstand). Ingevuld = alle
+            // rijders van deze afstand op die categorie zetten.
+            if ($cat !== '') {
+                $uaStmt->execute([$dcNaam, $diNaam, $cat, $compId, $dcId, $distId]);
+            } else {
+                $uaStmtNoCat->execute([$dcNaam, $diNaam, $compId, $dcId, $distId]);
+            }
+            if ($dcId   !== '') $dcStmt->execute([$dcNaam, $dcId]);
+            if ($distId !== '') $distStmt->execute([$diNaam, $distId]);
+            $nAfst++;
+        }
+        $pdo->commit();
+        echo json_encode(['ok' => true, 'afstanden_bijgewerkt' => $nAfst]);
+    } catch (Throwable $e) {
+        if ($pdo->inTransaction()) $pdo->rollBack();
+        http_response_code(500);
+        echo json_encode(['error' => $e->getMessage()]);
+    }
+    exit;
+}
+
+// ── 1e) Twee geïmporteerde wedstrijden samenvoegen (bron → doel) ────────────
+// Voor als per ongeluk twee historie-wedstrijden zijn aangemaakt voor hetzelfde
+// event (bv. baan + weg apart). De afstanden (DC's + uitslagen + klassementen)
+// van de BRON worden omgehangen naar het DOEL; de lege bron verdwijnt. De naam
+// van het doel blijft. Alleen hist-%-wedstrijden.
+if ($action === 'historie_merge_comp') {
+    header('Content-Type: application/json; charset=utf-8');
+    $targetId = trim($body['target_id'] ?? '');
+    $sourceId = trim($body['source_id'] ?? '');
+    if ($targetId === '' || $sourceId === '') {
+        http_response_code(400);
+        echo json_encode(['error' => 'target_id en source_id verplicht']);
+        exit;
+    }
+    if ($targetId === $sourceId) {
+        http_response_code(400);
+        echo json_encode(['error' => 'doel en bron mogen niet dezelfde wedstrijd zijn']);
+        exit;
+    }
+    if (strpos($targetId, 'hist-') !== 0 || strpos($sourceId, 'hist-') !== 0) {
+        http_response_code(400);
+        echo json_encode(['error' => 'Alleen historisch geïmporteerde wedstrijden (hist-…) kunnen samengevoegd worden']);
+        exit;
+    }
+    try {
+        $chk = $pdo->prepare("SELECT id, name FROM competitions WHERE id IN (?, ?)");
+        $chk->execute([$targetId, $sourceId]);
+        $found = $chk->fetchAll(PDO::FETCH_KEY_PAIR);   // id => name
+        if (!isset($found[$targetId]) || !isset($found[$sourceId])) {
+            http_response_code(404);
+            echo json_encode(['error' => 'Doel- of bron-wedstrijd niet gevonden']);
+            exit;
+        }
+        $targetNaam = $found[$targetId];
+
+        $pdo->beginTransaction();
+        // 1) DC's van bron → doel (distances volgen automatisch via dc_id)
+        $dc = $pdo->prepare("UPDATE distance_combinations SET competition_id = ? WHERE competition_id = ?");
+        $dc->execute([$targetId, $sourceId]);
+        $dcWeg = $dc->rowCount();
+        // 2) uitslag_afstand → doel (+ gedenormaliseerde naam = doel-naam)
+        $ua = $pdo->prepare("UPDATE uitslag_afstand SET competition_id = ?, competition_naam = ? WHERE competition_id = ?");
+        $ua->execute([$targetId, $targetNaam, $sourceId]);
+        $uaWeg = $ua->rowCount();
+        // 3) uitslag_klassement → doel
+        $uk = $pdo->prepare("UPDATE uitslag_klassement SET competition_id = ? WHERE competition_id = ?");
+        $uk->execute([$targetId, $sourceId]);
+        $ukWeg = $uk->rowCount();
+        // 4) lege bron-wedstrijd verwijderen (heeft nu geen DC's meer)
+        $pdo->prepare("DELETE FROM competitions WHERE id = ?")->execute([$sourceId]);
+        $pdo->commit();
+        echo json_encode([
+            'ok' => true,
+            'dcs_verplaatst'        => $dcWeg,
+            'uitslagen_verplaatst'  => $uaWeg,
+            'klassement_verplaatst' => $ukWeg,
+            'target_naam'           => $targetNaam,
+        ]);
+    } catch (Throwable $e) {
+        if ($pdo->inTransaction()) $pdo->rollBack();
         http_response_code(500);
         echo json_encode(['error' => $e->getMessage()]);
     }
