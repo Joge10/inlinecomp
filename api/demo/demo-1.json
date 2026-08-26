@@ -32,13 +32,6 @@
             "name": "Lange afstand",
             "discipline": "SpeedSkating.Inline.Track.PointsEliminationDistance",
             "race_type": "inline"
-        },
-        {
-            "id": "demo1-d-punten",
-            "number": 4,
-            "name": "Puntenkoers 3km",
-            "discipline": "SpeedSkating.Inline.Track.PointsDistance",
-            "race_type": "puntenkoers"
         }
     ],
     "dcs": [
@@ -99,14 +92,8 @@
         {
             "id": "demo1-dc-10",
             "number": 10,
-            "name": "Junioren B jongens",
-            "category_filter": "HJB"
-        },
-        {
-            "id": "demo1-dc-11",
-            "number": 11,
-            "name": "Junioren A jongens",
-            "category_filter": "HJA"
+            "name": "Junioren jongens",
+            "category_filter": "HJ*"
         }
     ],
     "competitors": [
@@ -1935,7 +1922,7 @@
             "reserve": null
         },
         {
-            "dc_id": "demo1-dc-11",
+            "dc_id": "demo1-dc-10",
             "license_key": "demo-0097",
             "knsb_entry_id": "demo1-e-0097",
             "start_number": 10097,
@@ -1954,7 +1941,7 @@
             "reserve": null
         },
         {
-            "dc_id": "demo1-dc-11",
+            "dc_id": "demo1-dc-10",
             "license_key": "demo-0098",
             "knsb_entry_id": "demo1-e-0098",
             "start_number": 10098,
@@ -1973,7 +1960,7 @@
             "reserve": null
         },
         {
-            "dc_id": "demo1-dc-11",
+            "dc_id": "demo1-dc-10",
             "license_key": "demo-0099",
             "knsb_entry_id": "demo1-e-0099",
             "start_number": 10099,
@@ -1992,7 +1979,7 @@
             "reserve": null
         },
         {
-            "dc_id": "demo1-dc-11",
+            "dc_id": "demo1-dc-10",
             "license_key": "demo-0100",
             "knsb_entry_id": "demo1-e-0100",
             "start_number": 10100,
@@ -2011,7 +1998,7 @@
             "reserve": null
         },
         {
-            "dc_id": "demo1-dc-11",
+            "dc_id": "demo1-dc-10",
             "license_key": "demo-0101",
             "knsb_entry_id": "demo1-e-0101",
             "start_number": 10101,
@@ -2026,139 +2013,6 @@
             "club_full": "InlineComp",
             "sponsor": null,
             "city": "Assen",
-            "status": 1,
-            "reserve": null
-        },
-        {
-            "dc_id": "demo1-dc-11",
-            "license_key": "demo-0102",
-            "knsb_entry_id": "demo1-e-0102",
-            "start_number": 10102,
-            "full_name": "Sem de Groot",
-            "short_name": "de Groot",
-            "gender": 0,
-            "category": "HJA",
-            "nationality": "NED",
-            "birth_year": 2009,
-            "club_code": 9999,
-            "club_short": "INCOMP-IC",
-            "club_full": "InlineComp",
-            "sponsor": null,
-            "city": "Groningen",
-            "status": 1,
-            "reserve": null
-        },
-        {
-            "dc_id": "demo1-dc-11",
-            "license_key": "demo-0103",
-            "knsb_entry_id": "demo1-e-0103",
-            "start_number": 10103,
-            "full_name": "Lucas Jansen",
-            "short_name": "Jansen",
-            "gender": 0,
-            "category": "HJA",
-            "nationality": "NED",
-            "birth_year": 2008,
-            "club_code": 9999,
-            "club_short": "INCOMP-IC",
-            "club_full": "InlineComp",
-            "sponsor": null,
-            "city": "Heerde",
-            "status": 1,
-            "reserve": null
-        },
-        {
-            "dc_id": "demo1-dc-11",
-            "license_key": "demo-0104",
-            "knsb_entry_id": "demo1-e-0104",
-            "start_number": 10104,
-            "full_name": "Finn Mulder",
-            "short_name": "Mulder",
-            "gender": 0,
-            "category": "HJA",
-            "nationality": "NED",
-            "birth_year": 2009,
-            "club_code": 9999,
-            "club_short": "INCOMP-IC",
-            "club_full": "InlineComp",
-            "sponsor": null,
-            "city": "Deventer",
-            "status": 1,
-            "reserve": null
-        },
-        {
-            "dc_id": "demo1-dc-11",
-            "license_key": "demo-0105",
-            "knsb_entry_id": "demo1-e-0105",
-            "start_number": 10105,
-            "full_name": "Tim Smit",
-            "short_name": "Smit",
-            "gender": 0,
-            "category": "HJA",
-            "nationality": "NED",
-            "birth_year": 2008,
-            "club_code": 9999,
-            "club_short": "INCOMP-IC",
-            "club_full": "InlineComp",
-            "sponsor": null,
-            "city": "Utrecht",
-            "status": 1,
-            "reserve": null
-        },
-        {
-            "dc_id": "demo1-dc-11",
-            "license_key": "demo-0106",
-            "knsb_entry_id": "demo1-e-0106",
-            "start_number": 10106,
-            "full_name": "Ruben Dijkstra",
-            "short_name": "Dijkstra",
-            "gender": 0,
-            "category": "HJA",
-            "nationality": "NED",
-            "birth_year": 2009,
-            "club_code": 9999,
-            "club_short": "INCOMP-IC",
-            "club_full": "InlineComp",
-            "sponsor": null,
-            "city": "Leeuwarden",
-            "status": 1,
-            "reserve": null
-        },
-        {
-            "dc_id": "demo1-dc-11",
-            "license_key": "demo-0107",
-            "knsb_entry_id": "demo1-e-0107",
-            "start_number": 10107,
-            "full_name": "Thijs van Dijk",
-            "short_name": "van Dijk",
-            "gender": 0,
-            "category": "HJA",
-            "nationality": "NED",
-            "birth_year": 2008,
-            "club_code": 9999,
-            "club_short": "INCOMP-IC",
-            "club_full": "InlineComp",
-            "sponsor": null,
-            "city": "Zwolle",
-            "status": 1,
-            "reserve": null
-        },
-        {
-            "dc_id": "demo1-dc-11",
-            "license_key": "demo-0108",
-            "knsb_entry_id": "demo1-e-0108",
-            "start_number": 10108,
-            "full_name": "Niels Kramer",
-            "short_name": "Kramer",
-            "gender": 0,
-            "category": "HJA",
-            "nationality": "NED",
-            "birth_year": 2009,
-            "club_code": 9999,
-            "club_short": "INCOMP-IC",
-            "club_full": "InlineComp",
-            "sponsor": null,
-            "city": "Apeldoorn",
             "status": 1,
             "reserve": null
         },
