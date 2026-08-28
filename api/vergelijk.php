@@ -658,16 +658,18 @@ try {
                    AND person_license          = ?
                    AND reserve_handmatig_ingezet = 0
             ");
+            // Wis alleen een stale KNSB-reserve-nummer bij NIET-handmatig-
+            // ingezette entries. Een handmatig ingezette reserve (handmatig=1,
+            // reserve IS NULL) wordt NOOIT aangeraakt — zie reserves_sync.php:
+            // de vroegere "(handmatig=1 AND reserve IS NULL) → reset naar 0"-tak
+            // draaide operator-inzet bij elke load stilletjes terug.
             $stmtClrRes = $pdo->prepare("
                 UPDATE entries
-                   SET reserve                   = NULL,
-                       reserve_handmatig_ingezet = 0
-                 WHERE distance_combination_id = ?
-                   AND person_license          = ?
-                   AND (
-                         (reserve_handmatig_ingezet = 0 AND reserve IS NOT NULL)
-                      OR (reserve_handmatig_ingezet = 1 AND reserve IS NULL)
-                       )
+                   SET reserve = NULL
+                 WHERE distance_combination_id   = ?
+                   AND person_license            = ?
+                   AND reserve_handmatig_ingezet = 0
+                   AND reserve IS NOT NULL
             ");
             foreach ($result as $groep) {
                 $dcId = $groep['dc_id'] ?? null;

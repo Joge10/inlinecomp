@@ -20,9 +20,11 @@
 //  Voor elke rijder in `niet_reserves`:
 //    UPDATE entries SET reserve = NULL
 //     WHERE dc + license matcht EN reserve_handmatig_ingezet = 0
+//                              EN reserve IS NOT NULL
 //
-//  reserve_handmatig_ingezet = 1 is beschermd — die rijden zijn door operator
-//  ingezet en blijven NULL ongeacht KNSB-state.
+//  reserve_handmatig_ingezet = 1 is VOLLEDIG beschermd — die rijders zijn door
+//  de operator ingezet en worden door deze sync nooit aangeraakt (reserve
+//  blijft NULL, vlag blijft 1) ongeacht KNSB-state. Loslaten = expliciet 'terug'.
 //
 //  Doel: entries.reserve synchroon houden met de KNSB-feed zonder dat de
 //  operator een Importeer/Opslaan-actie hoeft te doen. Frontend roept aan
@@ -94,25 +96,25 @@ try {
         $nGezet += $stmtSetRes->rowCount();
     }
 
-    // Niet-reserves → entries.reserve = NULL.
-    // Twee gevallen:
-    //  1) reserve_handmatig_ingezet = 0 + reserve IS NOT NULL → wis naar NULL
-    //     (normale sync, KNSB-feed leidend)
-    //  2) reserve_handmatig_ingezet = 1 + reserve IS NULL     → reset óók
-    //     reserve_handmatig naar 0. Reden: operator had ingezet, maar KNSB
-    //     heeft de rijder ondertussen ook doorgeschoven (R-flag eraf). De
-    //     "alleen NULL beschermd"-vlag is dan overbodig en zou alleen leiden
-    //     tot een stale "Reeds ingezet"-rij in de UI. KNSB-leidend = vlag op.
+    // Niet-reserves → entries.reserve = NULL, ALLEEN voor niet-handmatig-
+    // ingezette entries met een reserve-nummer (normale sync, KNSB-feed
+    // leidend). Een handmatig ingezette reserve (reserve_handmatig_ingezet=1,
+    // reserve IS NULL) wordt NOOIT aangeraakt.
+    //
+    // LET OP: eerder had dit een tweede tak die (handmatig=1 AND reserve IS
+    // NULL) óók resette naar handmatig=0 ("doorschuif-reconciliatie"). Maar
+    // de frontend stopt een ingezette reserve in `niet_reserves` (item.reserve
+    // = null), dus die tak draaide de operator-inzet bij ELKE verse page-load
+    // stilletjes terug — de reserve viel uit de loting en het importscherm
+    // werd onterecht oranje. Een achtergrond-sync hoort een bewuste inzet niet
+    // ongedaan te maken; loslaten doet de operator expliciet via 'terug'.
     $stmtClrRes = $pdo->prepare("
         UPDATE entries
-           SET reserve                   = NULL,
-               reserve_handmatig_ingezet = 0
-         WHERE distance_combination_id = ?
-           AND person_license          = ?
-           AND (
-                 (reserve_handmatig_ingezet = 0 AND reserve IS NOT NULL)
-              OR (reserve_handmatig_ingezet = 1 AND reserve IS NULL)
-               )
+           SET reserve = NULL
+         WHERE distance_combination_id     = ?
+           AND person_license              = ?
+           AND reserve_handmatig_ingezet   = 0
+           AND reserve IS NOT NULL
     ");
     $nGewist = 0;
     foreach ($nietReserves as $lk) {
