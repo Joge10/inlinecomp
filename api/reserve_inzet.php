@@ -115,29 +115,40 @@ try {
         // ── Capaciteit-cap ───────────────────────────────────────────────
         // Reserves mogen alleen ingezet worden ter vervanging van iemand die
         // afgemeld of niet getekend staat. Het totaal in de startlijst-loting
-        // mag het oorspronkelijke aantal niet-reserves niet overstijgen.
+        // mag het maximum niet overstijgen.
         //
-        //   Max     = aantal entries waar dit NOOIT een reserve was
+        //   Max     = override (distance_combinations.max_in_loting) indien
+        //             gezet — bv. wanneer de operator het maximum handmatig
+        //             hoger zet dan het aantal KNSB-inschrijvingen — anders
+        //             het auto-max = aantal entries dat NOOIT een reserve was
         //             (reserve IS NULL AND reserve_handmatig_ingezet = 0)
         //   Huidig  = aantal entries dat momenteel in de loting valt
         //             (reserve IS NULL AND status IN (1, 5))
         //   Vrij    = Max - Huidig
         //
         // Als Vrij <= 0 → weigeren. Een ingezette reserve zit in Huidig
-        // (reserve=NULL, status=5) maar NIET in Max (reserve_handmatig=1) →
-        // dat is de "vervangings"-eigenschap die we hier afdwingen.
+        // (reserve=NULL, status=5) maar NIET in auto-max (reserve_handmatig=1)
+        // → dat is de "vervangings"-eigenschap die we hier afdwingen. De
+        // max_in_loting-override MOET hier meegenomen worden, identiek aan de
+        // loting-teller en jury _scheidsTeller() — anders weigert de inzet op
+        // het auto-max terwijl de loting een hoger maximum toont.
         $capStmt = $pdo->prepare("
             SELECT
-                SUM(CASE WHEN reserve IS NULL AND reserve_handmatig_ingezet = 0
-                         THEN 1 ELSE 0 END) AS max_slots,
-                SUM(CASE WHEN reserve IS NULL AND status IN (1, 5)
+                dc.max_in_loting AS override_max,
+                SUM(CASE WHEN e.reserve IS NULL AND e.reserve_handmatig_ingezet = 0
+                         THEN 1 ELSE 0 END) AS auto_max,
+                SUM(CASE WHEN e.reserve IS NULL AND e.status IN (1, 5)
                          THEN 1 ELSE 0 END) AS in_loting
-            FROM entries
-            WHERE distance_combination_id = ?
+            FROM distance_combinations dc
+            LEFT JOIN entries e ON e.distance_combination_id = dc.id
+            WHERE dc.id = ?
+            GROUP BY dc.id, dc.max_in_loting
         ");
         $capStmt->execute([$dcId]);
-        $cap = $capStmt->fetch(PDO::FETCH_ASSOC) ?: ['max_slots' => 0, 'in_loting' => 0];
-        $maxSlots = (int)($cap['max_slots'] ?? 0);
+        $cap = $capStmt->fetch(PDO::FETCH_ASSOC) ?: [];
+        $autoMax  = (int)($cap['auto_max'] ?? 0);
+        $override = ($cap['override_max'] ?? null) !== null ? (int)$cap['override_max'] : null;
+        $maxSlots = $override !== null ? $override : $autoMax;
         $inLoting = (int)($cap['in_loting'] ?? 0);
         if ($inLoting >= $maxSlots) {
             http_response_code(409);

@@ -347,7 +347,18 @@ try {
             //   status 5 (bevestigd bij org.) vervalt als KNSB nu bevestigt.
             $knsbSt = (int)($item['status'] ?? 1);
             $dbSt   = $dbEntry ? (int)$dbEntry['status'] : null;
-            if ($dbSt !== null && $dbSt >= 3 && $knsbSt !== 2) {
+            $handmatigIngezet = $dbEntry !== null
+                && (int)($dbEntry['reserve_handmatig_ingezet'] ?? 0) === 1;
+            if ($handmatigIngezet) {
+                // Operator heeft de reserve handmatig ingezet → status is
+                // beschermd, net als de reserve-waarde (zie import.php: bij
+                // reserve_handmatig_ingezet=1 laat een re-import status ongemoeid).
+                // Effectief = de huidige DB-status. Zonder deze uitzondering zou
+                // de "status 5 vervalt zodra KNSB bevestigt"-regel hieronder een
+                // VALSE status-diff geven → Importeer-knop blijft eeuwig oranje
+                // en "onopgeslagen wijzigingen" bij het verlaten van het scherm.
+                $effectiefStatus = $dbSt;
+            } elseif ($dbSt !== null && $dbSt >= 3 && $knsbSt !== 2) {
                 $effectiefStatus = ($dbSt === 5 && $knsbSt !== 0) ? $knsbSt : $dbSt;
             } else {
                 $effectiefStatus = $knsbSt;

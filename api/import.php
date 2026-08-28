@@ -506,17 +506,26 @@ try {
     ");
 
     // Reserve-persist:
-    //  - Nieuwe entry: reserve uit KNSB-feed direct opslaan.
-    //  - Bestaande entry: reserve_handmatig_ingezet=1 → KNSB mag de reserve-
-    //    waarde NIET overschrijven (operator heeft ingezet, NULL blijft NULL).
-    //    Anders: KNSB-waarde overschrijft (resync is leidend).
+    //  - Nieuwe entry: reserve + status uit KNSB-feed direct opslaan.
+    //  - Bestaande entry: reserve_handmatig_ingezet=1 → operator heeft de
+    //    reserve handmatig ingezet. KNSB mag dan NIET overschrijven:
+    //      · reserve blijft NULL (rijder staat in de loting, niet als reserve)
+    //      · status blijft staan (typisch 5 = 'bevestigd bij org' — telt mee
+    //        in de loting). Zonder deze bescherming zette een re-import de
+    //        status terug naar de KNSB-waarde en viel de ingezette reserve
+    //        weer uit de startlijst-loting.
+    //    Anders (handmatig=0): KNSB-waarde overschrijft (resync is leidend).
+    //    Terugdraaien doet de operator bewust via 'terug' (zet handmatig=0).
     $stmtEntry = $pdo->prepare("
         INSERT INTO entries
                (distance_combination_id, person_license, knsb_entry_id, status, reserve)
         VALUES (:dc_id, :person_license, :knsb_entry_id, :status, :reserve)
         ON DUPLICATE KEY UPDATE
                knsb_entry_id = VALUES(knsb_entry_id),
-               status        = VALUES(status),
+               status        = CASE WHEN reserve_handmatig_ingezet = 1
+                                    THEN status
+                                    ELSE VALUES(status)
+                               END,
                reserve       = CASE WHEN reserve_handmatig_ingezet = 1
                                     THEN reserve
                                     ELSE VALUES(reserve)
