@@ -1448,6 +1448,31 @@ function _slRenderDagTabs(dagInfo, actieveDag) {
 
 // ── Startlijst – configuratie tonen (per afstand) ────────────────────────────
 
+// Read-only badge: toont of deze categorie (doel-DC) een afhankelijke loting
+// heeft (geloot op de uitslag van een andere afstand). Ook zichtbaar bij een
+// al gegenereerde/vastgelegde loting, zodat de operator ziet dat een correctie
+// van de bron de loting opnieuw laat genereren.
+async function _slAfhBadge(groep) {
+    const badge = el('sl-afh-badge');
+    if (!badge) return;
+    const doelDcId = groep.dc_ids?.[0] || groep.dc_id;
+    try {
+        const d   = await (await fetch('api/afhankelijke_loting.php?action=lijst&competition_id='
+                        + encodeURIComponent(huidigCompId))).json();
+        const rij = (d.rijen || []).find(r => r.doel_dc_id === doelDcId);
+        if (rij) {
+            const bron = rij.bron_dc_naam || rij.bron_dc_id;
+            badge.className = 'sl-afh-badge';
+            badge.innerHTML = `&#128279; <b>Afhankelijke loting:</b> deze categorie wordt geloot op de uitslag van
+                <b>${escHtml(bron)}</b>. Bij een correctie van die uitslag wordt de loting opnieuw gegenereerd
+                (zolang deze afstand nog niet gereden is).`;
+        } else {
+            badge.className = '';
+            badge.innerHTML = '';
+        }
+    } catch { /* stil — badge is puur informatief */ }
+}
+
 async function toonStartlijstConfig(groep) {
     const content  = el('sl-cat-content');
     const distTabs = el('sl-dist-tabs');
@@ -1525,7 +1550,8 @@ async function toonStartlijstConfig(groep) {
     }).catch(() => {});
 
     // ── Inhoud: only sl-dist-content placeholder + optionele info-label ──────
-    content.innerHTML = `${infoLabelHtml}<div id="sl-dist-content"></div>`;
+    content.innerHTML = `${infoLabelHtml}<div id="sl-afh-badge"></div><div id="sl-dist-content"></div>`;
+    _slAfhBadge(groep);
 
     // Toon de geselecteerde afstand (zelfde idx als gebruikt voor active-tab).
     const initieelGekozen = afstanden[initieleIdx];
@@ -1565,6 +1591,18 @@ function slangenpatroon(rijders, maxPerHeat) {
 // Toont alle afstanden van DEZE wedstrijd waarvoor uitslag (met rang) bestaat —
 // inclusief via de helper geïmporteerde PDF-uitslagen. De DC die nu geloot
 // wordt zelf wordt overgeslagen (je seedt niet op je eigen nog-te-rijden DC).
+// Categorieën (KNSB-codes, uppercase) van de groep die nu geloot wordt.
+function _slGroepCats(groep) {
+    if (Array.isArray(groep?.category_filter) && groep.category_filter.length)
+        return groep.category_filter.map(c => String(c).toUpperCase());
+    const set = new Set();
+    for (const c of groep?.competitors ?? []) {
+        const cat = c.knsb?.category ?? c.category;
+        if (cat) set.add(String(cat).toUpperCase());
+    }
+    return [...set];
+}
+
 async function vulAfstandBronnen(selEl, cache, groep) {
     if (!selEl) return;
     // Filter op (dc_id + distance_id) — niet alleen dc_id. In KNSB-feed
@@ -1572,27 +1610,41 @@ async function vulAfstandBronnen(selEl, cache, groep) {
     // meerdere distances). Filter alleen de afstand-die-nu-geloot-wordt
     // weg; andere afstanden binnen dezelfde DC mogen wel als bron dienen
     // (bv. 200m series als seed voor 1000m HF van dezelfde cat).
-    const huidigeDistKey = groep?.dc_id + '|' + (cache.distId || groep?.distance_id || '');
+    const huidigeDistKey = groep?.dc_id + '|' + (cache._distId || cache.distId || groep?.distance_id || '');
+    // Alleen bronnen die minstens één categorie delen met de te-loten afstand
+    // zijn zinvol (anders staan er rijders in die hier niet meedoen). Lenient
+    // als één van beide geen cat-info heeft.
+    const huidigeCats = _slGroepCats(groep);
     try {
         const res  = await fetch('api/uitslag_bronnen.php?competition_id=' + encodeURIComponent(huidigCompId));
         const data = await res.json();
-        const bronnen = (data?.bronnen || []).filter(b =>
-            (b.dc_id + '|' + b.distance_id) !== huidigeDistKey
-        );
+        const bronnen = (data?.bronnen || []).filter(b => {
+            if ((b.dc_id + '|' + b.distance_id) === huidigeDistKey) return false; // niet op zichzelf
+            const bCats = Array.isArray(b.cats) ? b.cats.map(c => String(c).toUpperCase()) : [];
+            if (!huidigeCats.length || !bCats.length) return true;       // onbekend → tonen
+            return bCats.some(c => huidigeCats.includes(c));             // categorie-overlap
+        });
         if (!bronnen.length) {
-            selEl.innerHTML = '<option value="">— geen uitslagen beschikbaar —</option>';
+            selEl.innerHTML = '<option value="">— geen bruikbare bron-afstand —</option>';
             return;
         }
         selEl.innerHTML = '<option value="">— kies bron-afstand —</option>' +
             bronnen.map(b => {
                 const sel = (b.dc_id === cache.bronDcId && b.distance_id === cache.bronDistId) ? ' selected' : '';
-                const lbl = `${b.dc_naam} · ${b.distance_naam} (${b.met_rang})`;
+                // Lege/onvolledige bron → duidelijk labelen; de loting wordt dan
+                // pas automatisch gegenereerd bij bevestigen van die bron-uitslag
+                // (afhankelijke loting). Een uitslag die niet (meer) compleet is
+                // telt NIET als bevestigde bron.
+                const suffix = (b.met_rang > 0) ? `(${b.met_rang})`
+                             : b.incompleet     ? '(nog niet compleet)'
+                             :                    '(nog geen uitslag)';
+                const lbl = `${b.dc_naam} · ${b.distance_naam} ${suffix}`;
                 // Cats meegeven als CSV-string in data-cats — confirm-modal
                 // vergelijkt deze met de te-loten cats voor mismatch-check.
                 const catsCsv = Array.isArray(b.cats) ? b.cats.join(',') : '';
                 return `<option value="${escHtml(b.dc_id + '|' + b.distance_id)}"
                                 data-dc="${escHtml(b.dc_id)}" data-dist="${escHtml(b.distance_id)}"
-                                data-cats="${escHtml(catsCsv)}"${sel}>${escHtml(lbl)}</option>`;
+                                data-cats="${escHtml(catsCsv)}" data-metrang="${(b.met_rang > 0) ? 1 : 0}"${sel}>${escHtml(lbl)}</option>`;
             }).join('');
     } catch (e) {
         selEl.innerHTML = `<option value="">— laden mislukt —</option>`;
@@ -1648,6 +1700,89 @@ async function vulTussenklPreview(container, nRijders, nHeats, schema, groep, di
         const heats = nHeats === 1 ? [{ nummer: 1, slots }] : snakeVerdeelSlots(slots, nHeats);
         container.appendChild(maakSchemaHeatGrid(heats, ritLookup));
         return false;
+    }
+}
+
+// ── Preview voor methode 'afstand_uitslag' ───────────────────────────────────
+// Toont de heat-indeling. Heeft de bron al een uitslag → ECHTE namen in
+// seeding-volgorde (zoals tussenklassement); anders placeholder-slots
+// ("1e van <bron>"). Puur een BEHEER-preview op het loting-scherm — wordt
+// nergens opgeslagen of gepubliceerd (de namen lekken dus niet naar
+// public/coach/print); de echte loting ontstaat pas bij Genereren of
+// automatisch bij het bevestigen van de bron-uitslag.
+async function vulAfstandPreview(container, nRijders, nHeats, schema, groep, distId, flow,
+                                 bronDcId, bronDistId, bronLabel, bronMetRang) {
+    if (!container) return;
+    if (!bronDcId || !bronLabel || !nRijders || !nHeats) { container.innerHTML = ''; return; }
+    nHeats = Math.min(nHeats, nRijders);
+    const ritLookup = bouwRitLookup(schema, groep?.dc_id, distId, flow?.[0]?.sleutel ?? 'heats');
+
+    // Echte namen als de bron een uitslag heeft; anders placeholders.
+    let slots = null;
+    let echteNamen = false;
+    if (bronMetRang) {
+        container.innerHTML = '<span class="sl-tk-laden">⏳ Bron-volgorde laden…</span>';
+        try {
+            const url = 'api/afhankelijke_loting.php?action=bron_ranking'
+                + '&competition_id=' + encodeURIComponent(huidigCompId)
+                + '&dc_id='          + encodeURIComponent(bronDcId)
+                + '&distance_id='    + encodeURIComponent(bronDistId || '');
+            const d     = await (await fetch(url)).json();
+            const namen = Array.isArray(d.namen) ? d.namen : [];
+            if (namen.length) {
+                echteNamen = true;
+                slots = namen.slice(0, nRijders);
+                while (slots.length < nRijders) slots.push('(overige — op startnummer)');
+            }
+        } catch { /* val terug op placeholders */ }
+    }
+    const kort = (bronLabel.split('·').pop() || bronLabel).trim();
+    if (!slots) slots = Array.from({ length: nRijders }, (_, i) => `${i + 1}e van ${kort}`);
+
+    container.innerHTML = '';
+    const info = document.createElement('div');
+    info.className = 'sl-tk-afstanden' + (echteNamen ? '' : ' sl-tk-geen-data');
+    info.textContent = echteNamen
+        ? `Volgorde van: ${bronLabel} — voorbereiding, nog niet gepubliceerd.`
+        : `Indeling op volgorde van: ${bronLabel} (voorbereiding).`;
+    container.appendChild(info);
+    const heats = nHeats === 1 ? [{ nummer: 1, slots }] : snakeVerdeelSlots(slots, nHeats);
+    container.appendChild(maakSchemaHeatGrid(heats, ritLookup));
+}
+
+// Werk de UI bij nadat de bron-afstand (of de methode) gewijzigd is: onthoud
+// bron + of die al een uitslag heeft, toon de auto-melding + preview, en pas
+// het label/enable van de Genereer-knop aan. Bij een bron ZONDER uitslag wordt
+// de knop een "instellen"-actie (onthouden, auto-genereren bij bevestigen bron).
+function _slAuUpdate(cache, groep, distId, schema, flow) {
+    const auSel = el('sl-au-sel');
+    const opt   = auSel?.selectedOptions?.[0];
+    cache.bronDcId    = opt?.dataset.dc      || '';
+    cache.bronDistId  = opt?.dataset.dist    || '';
+    cache.bronMetRang = opt?.dataset.metrang === '1';
+    const bronLabel   = (cache.bronDcId && opt) ? opt.textContent.trim() : '';
+
+    const autoEl = el('sl-au-auto');
+    if (autoEl) {
+        if (cache.bronDcId && !cache.bronMetRang) {
+            autoEl.style.display = '';
+            autoEl.innerHTML = '🔗 Deze bron is nog niet verreden. De loting wordt <b>automatisch</b> gegenereerd zodra de bron-uitslag wordt bevestigd.';
+        } else {
+            autoEl.style.display = 'none';
+            autoEl.innerHTML = '';
+        }
+    }
+    vulAfstandPreview(el('sl-au-preview'), groep.competitors.length, cache.heatsAantal,
+                      schema, groep, distId, flow,
+                      cache.bronDcId, cache.bronDistId, bronLabel, cache.bronMetRang);
+
+    const genBtn = el('sl-genereer');
+    if (genBtn) {
+        if (!genBtn.dataset.genlabel) genBtn.dataset.genlabel = genBtn.innerHTML;
+        genBtn.innerHTML = (cache.bronDcId && !cache.bronMetRang)
+            ? '🔗 Instellen (automatisch bij bevestigen bron)'
+            : genBtn.dataset.genlabel;
+        genBtn.disabled = !cache.bronDcId;
     }
 }
 
@@ -1824,13 +1959,18 @@ async function toonAfstandConfig(groep, distId, distNaam) {
             <div class="sl-afstanduit-kiezer" id="sl-au-kiezer"
                  style="${methode === 'afstand_uitslag' ? '' : 'display:none'}">
                 <div class="sl-au-uitleg">
-                    Seed op de uitslag van een eerder verreden afstand (ook
-                    geïmporteerde PDF-uitslagen). Rijders worden gerangschikt op
-                    hun plek in die afstand; wie er niet in voorkomt gaat achteraan.
+                    Seed op de uitslag van een andere afstand in deze wedstrijd.
+                    Rijders worden gerangschikt op hun plek in die afstand; wie er
+                    niet in voorkomt gaat achteraan.<br>
+                    Kies je een afstand die nog <strong>niet</strong> verreden is,
+                    dan wordt deze loting automatisch gegenereerd zodra die
+                    bron-uitslag wordt bevestigd (afhankelijke loting).
                 </div>
                 <select class="inp sl-inp" id="sl-au-sel">
                     <option value="">— kies bron-afstand —</option>
                 </select>
+                <div class="sl-au-auto" id="sl-au-auto" style="display:none"></div>
+                <div id="sl-au-preview"></div>
             </div>
             <div class="sl-klassement-kiezer" id="sl-kl-kiezer"
                  style="${methode === 'klassement' ? '' : 'display:none'}">
@@ -1871,6 +2011,10 @@ async function toonAfstandConfig(groep, distId, distNaam) {
             cache.methode = btn.dataset.methode;
             slDist.querySelectorAll('.sl-meth-btn').forEach(b => b.classList.remove('actief'));
             btn.classList.add('actief');
+            // Genereer-knop terug naar default-label (afstand_uitslag met een
+            // nog-niet-verreden bron zet 'm hierna eventueel op "Instellen").
+            const _gb = el('sl-genereer');
+            if (_gb && _gb.dataset.genlabel) _gb.innerHTML = _gb.dataset.genlabel;
             el('sl-kl-kiezer').style.display = cache.methode === 'klassement'       ? '' : 'none';
             el('sl-tk-kiezer').style.display  = cache.methode === 'tussenklassement' ? '' : 'none';
             const auKiezer = el('sl-au-kiezer');
@@ -1881,10 +2025,10 @@ async function toonAfstandConfig(groep, distId, distNaam) {
                 const heeftData = await vulTussenklPreview(el('sl-tk-preview'), groep.competitors.length, cache.heatsAantal, schema, groep, distId, flow);
                 if (genBtn) genBtn.disabled = !heeftData;
             } else if (cache.methode === 'afstand_uitslag') {
-                // Bron-afstanden laden; genereer pas mogelijk na keuze
-                if (genBtn) genBtn.disabled = !cache.bronDcId;
+                // Bron-afstanden laden; daarna preview/auto-melding/knop bijwerken
+                if (genBtn) genBtn.disabled = true;
                 await vulAfstandBronnen(el('sl-au-sel'), cache, groep);
-                if (genBtn) genBtn.disabled = !cache.bronDcId;
+                _slAuUpdate(cache, groep, distId, schema, flow);
             } else {
                 if (genBtn) genBtn.disabled = false;
             }
@@ -1895,13 +2039,12 @@ async function toonAfstandConfig(groep, distId, distNaam) {
     const auSel = el('sl-au-sel');
     if (auSel) {
         // Bij init al gevuld als methode al op afstand_uitslag stond
-        if (methode === 'afstand_uitslag') vulAfstandBronnen(auSel, cache, groep);
+        if (methode === 'afstand_uitslag') {
+            vulAfstandBronnen(auSel, cache, groep).then(() =>
+                _slAuUpdate(cache, groep, distId, schema, flow));
+        }
         auSel.addEventListener('change', () => {
-            const opt = auSel.selectedOptions[0];
-            cache.bronDcId   = opt?.dataset.dc   || '';
-            cache.bronDistId = opt?.dataset.dist || '';
-            const genBtn = el('sl-genereer');
-            if (genBtn) genBtn.disabled = !cache.bronDcId;
+            _slAuUpdate(cache, groep, distId, schema, flow);
         });
     }
 
@@ -2117,6 +2260,33 @@ async function genereerRonde1(cacheKey) {
     const groep  = cache._groep;
     const distId = cache._distId;
 
+    // ── Afhankelijke loting: bron nog niet verreden ───────────────────────
+    // Methode 'afstand_uitslag' op een bron ZONDER uitslag → nu GÉÉN echte
+    // loting; onthoud de afhankelijkheid zodat de loting automatisch wordt
+    // gemaakt zodra de bron-uitslag bevestigd wordt (trigger in js/uitslag.js).
+    if (cache.methode === 'afstand_uitslag' && cache.bronDcId && !cache.bronMetRang) {
+        try {
+            const res = await fetch('api/afhankelijke_loting.php', {
+                method: 'POST', headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    action: 'set', competition_id: huidigCompId,
+                    doel_dc_id: groep.dc_ids?.[0] || groep.dc_id, doel_distance_id: '',
+                    methode: 'afstand_uitslag',
+                    bron_dc_id: cache.bronDcId, bron_distance_id: cache.bronDistId || '',
+                }),
+            });
+            const d = await res.json();
+            if (d.error) throw new Error(d.error);
+            await toonBevestigDialog(
+                'Ingesteld. De loting voor deze categorie wordt automatisch gegenereerd zodra de gekozen bron-uitslag wordt bevestigd.',
+                'Afhankelijke loting ingesteld', 'OK', null
+            );
+        } catch (e) {
+            await toonBevestigDialog('Kon afhankelijke loting niet opslaan: ' + (e.message || e), 'Fout');
+        }
+        return;
+    }
+
     // ── Bevestig-dialog bij klassement / tussenklassement ─────────────────
     // Grote klassementen met veel categorieën zijn foutgevoelig: makkelijk
     // verkeerde sectie gekozen voor verkeerde cat/afstand. Vraag operator
@@ -2239,6 +2409,26 @@ async function genereerRonde1(cacheKey) {
     resultDiv.innerHTML = '<div class="status-msg loading"><span class="spinner"></span>Genereren…</div>';
 
     try {
+        // Afhankelijke loting bijhouden. Bij methode 'afstand_uitslag' blijft
+        // de koppeling (doel ← bron) bestaan, óók na het genereren: als de
+        // bron-uitslag later gecorrigeerd/opnieuw bevestigd wordt, moet deze
+        // loting automatisch opnieuw gegenereerd worden (tenzij het doel al
+        // gereden is). Bij een ándere methode ruimen we een eventuele
+        // koppeling juist op. Niet kritiek als het faalt.
+        try {
+            const doelDc = groep.dc_ids?.[0] || groep.dc_id;
+            const payload = (cache.methode === 'afstand_uitslag' && cache.bronDcId)
+                ? { action: 'set', competition_id: huidigCompId, doel_dc_id: doelDc,
+                    doel_distance_id: '', methode: 'afstand_uitslag',
+                    bron_dc_id: cache.bronDcId, bron_distance_id: cache.bronDistId || '' }
+                : { action: 'verwijder', competition_id: huidigCompId,
+                    doel_dc_id: doelDc, doel_distance_id: '' };
+            await fetch('api/afhankelijke_loting.php', {
+                method: 'POST', headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(payload),
+            });
+        } catch { /* niet kritiek */ }
+
         const dcIds = (groep.dc_ids || [groep.dc_id]).join(',');
         const eersteRondeType = cache.flow?.[0]?.sleutel ?? 'heats';
         let url = `api/startlijst_genereer.php`

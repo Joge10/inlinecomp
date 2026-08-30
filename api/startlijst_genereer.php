@@ -36,7 +36,7 @@ $methode         = trim($_GET['methode']           ?? 'startnummer');
 $klassementId    = trim($_GET['klassement_id']    ?? '');
 $klassementSectie= trim($_GET['klassement_sectie']?? '');
 // Voor methode 'afstand_uitslag': seed op de uitslag van een ANDERE afstand-DC
-// binnen deze wedstrijd (bv. 500m op de geïmporteerde 200m-uitslag).
+// binnen deze wedstrijd (bv. de puntenkoers op de 500m-uitslag).
 $bronDcId        = trim($_GET['bron_dc_id']       ?? '');
 $bronDistId      = trim($_GET['bron_distance_id'] ?? '');
 
@@ -298,7 +298,7 @@ try {
 
         case 'afstand_uitslag':
             // Seed op de uitslag van een ANDERE afstand-DC binnen dezelfde
-            // wedstrijd — bv. 500m seeden op de (geïmporteerde) 200m-uitslag.
+            // wedstrijd — bv. de puntenkoers seeden op de 500m-uitslag.
             // Leest uitslag_afstand voor de gekozen bron (DC + optioneel
             // distance), rangschikt op rang (punten is bij PDF-import meestal
             // NULL), matcht op person_license. Rijders zonder uitslag (of met

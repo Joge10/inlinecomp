@@ -1472,6 +1472,17 @@ body.live-pagina-actief #main-content {
     color: var(--oranje);
 }
 
+/* Read-only badge: afhankelijke loting (deze categorie loot op een andere afstand). */
+.sl-afh-badge {
+    background: #eef5ff;
+    border: 1px solid #b9d4ff;
+    border-radius: 4px;
+    padding: 6px 12px;
+    margin-bottom: 10px;
+    font-size: .82rem;
+    color: #1c3d5a;
+}
+
 /* ── Meta-rij: datum/locatie + KNSB-tijdstempel op één regel ── */
 .meta-rij {
     display: flex;

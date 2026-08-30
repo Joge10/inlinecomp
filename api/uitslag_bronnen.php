@@ -4,12 +4,15 @@
 //
 //  GET ?competition_id=UUID
 //  Geeft de afstand-uitslagen terug die als seeding-bron gebruikt
-//  kunnen worden voor de methode "Op afstand-uitslag" — bv. een via
-//  de helper geïmporteerde 200m-uitslag om de 500m op te seeden.
+//  kunnen worden voor de methode "Op afstand-uitslag" — bv. de 500m
+//  van deze wedstrijd als seed voor de puntenkoers van dezelfde wedstrijd.
+//  Bron = altijd een afstand van DEZE wedstrijd (geen cross-wedstrijd).
 //
 //  Respons: { bronnen: [ { dc_id, dc_naam, distance_id, distance_naam,
-//                          aantal, met_rang } ] }
-//  Alleen afstanden met minstens één rang-rij zijn bruikbaar.
+//                          aantal, met_rang, is_leeg } ] }
+//  Afstanden met een rang-rij zijn direct bruikbaar; afstanden zonder
+//  uitslag verschijnen ook (is_leeg=true) voor een afhankelijke loting die
+//  pas genereert zodra die bron-uitslag bevestigd wordt.
 // ============================================================
 
 header('Content-Type: application/json; charset=utf-8');
@@ -17,7 +20,20 @@ header('Access-Control-Allow-Origin: *');
 
 require_once __DIR__ . '/../../config_inlinecomp.php';
 require_once __DIR__ . '/../auth/session.php';
+require_once __DIR__ . '/_uitslag_helper.php';
 $_authUser = requireAuth($pdo);
+
+// Is de afstand NU compleet (alle heats gereden)? Een bron mag alleen als
+// bevestigde seeding-bron gelden als 'ie compleet is — anders zou je loten op
+// een onvolledige of achteraf aangepaste ("niet meer bevestigde") uitslag.
+function _bronCompleet(PDO $pdo, string $compId, string $dcId, string $distId): bool {
+    try {
+        $r = alleRondesCompleet($pdo, $compId, [$dcId], $distId !== '' ? $distId : null);
+        return !empty($r['compleet']);
+    } catch (Throwable $e) {
+        return true;   // bij twijfel niet blokkeren
+    }
+}
 
 $compId = trim($_GET['competition_id'] ?? '');
 if ($compId === '') {
@@ -48,21 +64,41 @@ try {
     $bronnen = [];
     $vastgelegdeKeys = [];
     foreach ($stmt->fetchAll(PDO::FETCH_ASSOC) as $r) {
+        $key = $r['dc_id'] . '|' . $r['distance_id'];
+        $vastgelegdeKeys[$key] = true;   // voorrang boven live/lege
         $cats = array_values(array_filter(
             array_map('trim', explode(',', $r['cats_csv'] ?? '')),
             fn($c) => $c !== ''
         ));
-        $bronnen[] = [
-            'dc_id'         => $r['dc_id'],
-            'dc_naam'       => $r['dc_naam'],
-            'distance_id'   => $r['distance_id'],
-            'distance_naam' => $r['distance_naam'],
-            'aantal'        => (int)$r['aantal'],
-            'met_rang'      => (int)$r['met_rang'],
-            'cats'          => $cats,
-            'is_live'       => false,
-        ];
-        $vastgelegdeKeys[$r['dc_id'] . '|' . $r['distance_id']] = true;
+        if (_bronCompleet($pdo, $compId, (string)$r['dc_id'], (string)$r['distance_id'])) {
+            $bronnen[] = [
+                'dc_id'         => $r['dc_id'],
+                'dc_naam'       => $r['dc_naam'],
+                'distance_id'   => $r['distance_id'],
+                'distance_naam' => $r['distance_naam'],
+                'aantal'        => (int)$r['aantal'],
+                'met_rang'      => (int)$r['met_rang'],
+                'cats'          => $cats,
+                'is_live'       => false,
+            ];
+        } else {
+            // Vastgelegd maar NIET meer compleet (bv. tijd verwijderd na
+            // vastleggen) → niet bruikbaar als bevestigde bron. Wél tonen als
+            // "nog niet compleet" zodat je 'm als afhankelijke loting kunt
+            // instellen (genereert dan zodra 'ie compleet + bevestigd is).
+            $bronnen[] = [
+                'dc_id'         => $r['dc_id'],
+                'dc_naam'       => $r['dc_naam'],
+                'distance_id'   => $r['distance_id'],
+                'distance_naam' => $r['distance_naam'],
+                'aantal'        => 0,
+                'met_rang'      => 0,
+                'cats'          => $cats,
+                'is_live'       => false,
+                'is_leeg'       => true,
+                'incompleet'    => true,
+            ];
+        }
     }
 
     // ── LIVE bronnen: DC × distance waar minstens 1 rit results heeft
@@ -94,6 +130,71 @@ try {
         $k = $r['dc_id'] . '|' . $r['distance_id'];
         // Skip als al een vastgelegde uitslag bestaat — die heeft voorrang.
         if (isset($vastgelegdeKeys[$k])) continue;
+        $vastgelegdeKeys[$k] = true;   // ook live-key markeren als "al opgenomen"
+        $cats = array_values(array_filter(
+            array_map('trim', explode(',', $r['cats_csv'] ?? '')),
+            fn($c) => $c !== ''
+        ));
+        if (_bronCompleet($pdo, $compId, (string)$r['dc_id'], (string)$r['distance_id'])) {
+            $bronnen[] = [
+                'dc_id'         => $r['dc_id'],
+                'dc_naam'       => $r['dc_naam'],
+                'distance_id'   => $r['distance_id'],
+                'distance_naam' => $r['distance_naam'] . ' [LIVE]',
+                'aantal'        => (int)$r['aantal'],
+                'met_rang'      => (int)$r['aantal'],
+                'cats'          => $cats,
+                'is_live'       => true,
+            ];
+        } else {
+            // Nog niet alle heats gereden → niet bruikbaar als bevestigde bron.
+            $bronnen[] = [
+                'dc_id'         => $r['dc_id'],
+                'dc_naam'       => $r['dc_naam'],
+                'distance_id'   => $r['distance_id'],
+                'distance_naam' => $r['distance_naam'],
+                'aantal'        => 0,
+                'met_rang'      => 0,
+                'cats'          => $cats,
+                'is_live'       => false,
+                'is_leeg'       => true,
+                'incompleet'    => true,
+            ];
+        }
+    }
+
+    // ── LEGE bronnen: afstanden die nog GEEN uitslag/live-data hebben ──────
+    // Nodig om een afhankelijke loting vooruit in te stellen: je wilt een
+    // bron-afstand kunnen kiezen die nog niet verreden is (bv. de 500m als
+    // bron voor de puntenkoers, vóór de 500m gereden is). De loting/generatie
+    // wacht dan tot die bron bevestigd wordt (zie js/uitslag.js). We lezen
+    // alle afstanden uit de distances-tabel en voegen toe wat nog niet in de
+    // lijst staat, met met_rang = 0.
+    // Categorieën uit de daadwerkelijke inschrijvingen (persons.category),
+    // met terugval op dc.category_filter — nodig voor het categorie-overlap-
+    // filter in de UI (een bron is alleen zinvol als 'ie een cat deelt met de
+    // te-loten afstand).
+    $legeStmt = $pdo->prepare("
+        SELECT d.distance_combination_id AS dc_id,
+               dc.name                   AS dc_naam,
+               d.id                      AS distance_id,
+               d.name                    AS distance_naam,
+               COALESCE(
+                   GROUP_CONCAT(DISTINCT p.category ORDER BY p.category SEPARATOR ','),
+                   dc.category_filter
+               )                         AS cats_csv
+        FROM distances d
+        JOIN distance_combinations dc ON dc.id = d.distance_combination_id
+        LEFT JOIN entries e ON e.distance_combination_id = dc.id
+        LEFT JOIN persons p ON p.license_key = e.person_license
+        WHERE dc.competition_id = ?
+        GROUP BY d.distance_combination_id, dc.name, d.id, d.name, dc.category_filter
+        ORDER BY dc.number, dc.name, d.number, d.name
+    ");
+    $legeStmt->execute([$compId]);
+    foreach ($legeStmt->fetchAll(PDO::FETCH_ASSOC) as $r) {
+        $k = $r['dc_id'] . '|' . $r['distance_id'];
+        if (isset($vastgelegdeKeys[$k])) continue;   // al met (live-)uitslag
         $cats = array_values(array_filter(
             array_map('trim', explode(',', $r['cats_csv'] ?? '')),
             fn($c) => $c !== ''
@@ -102,13 +203,15 @@ try {
             'dc_id'         => $r['dc_id'],
             'dc_naam'       => $r['dc_naam'],
             'distance_id'   => $r['distance_id'],
-            'distance_naam' => $r['distance_naam'] . ' [LIVE]',
-            'aantal'        => (int)$r['aantal'],
-            'met_rang'      => (int)$r['aantal'],
+            'distance_naam' => $r['distance_naam'],
+            'aantal'        => 0,
+            'met_rang'      => 0,
             'cats'          => $cats,
-            'is_live'       => true,
+            'is_live'       => false,
+            'is_leeg'       => true,
         ];
     }
+
     echo json_encode(['bronnen' => $bronnen], JSON_UNESCAPED_UNICODE);
 } catch (Throwable $e) {
     http_response_code(500);

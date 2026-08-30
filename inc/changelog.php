@@ -14,6 +14,44 @@
 //     en wordt in de changelog genest + gedempt getoond onder de versie.
 //     Triviale copy/typo-fixes komen NERGENS in de changelog — los committen.
 return [
+    // ── Release H1719.30.08 ────────────────────────────────────────────────
+    [
+        'versie' => 'H1719.30.08', 'datum' => '30-08-2026', 'onderdelen' => ['admin'],
+        'tekst' => [
+            'nl' => '🔗 <b>Afhankelijke lotingen</b> — je kunt de loting van een afstand nu automatisch laten bepalen door de uitslag van een andere afstand in dezelfde wedstrijd (bv. de puntenkoers loten op de uitslag van de One Lap). Stel dit in bij de loting-methode <i>Op afstand-uitslag</i> — óók op een afstand die nog niet verreden is (met preview). Zodra de bron-uitslag bevestigd is, wordt de loting automatisch gegenereerd; bij een correctie van die uitslag wordt de loting opnieuw gemaakt (zolang het doel nog niet gereden is). Je krijgt een melding als een bestaande loting wordt overschreven.',
+            'en' => '🔗 <b>Dependent draws</b> — a distance\'s draw can now be determined automatically by the result of another distance in the same competition (e.g. seed the points race on the One Lap result). Set it up under the <i>By distance result</i> draw method — even on a distance not yet skated (with preview). Once the source result is confirmed the draw is generated automatically; if that result is corrected the draw is regenerated (as long as the target hasn\'t been skated). You are warned when an existing draw is overwritten.',
+            'de' => '🔗 <b>Abhängige Auslosungen</b> — die Auslosung einer Distanz kann jetzt automatisch durch das Ergebnis einer anderen Distanz im selben Wettkampf bestimmt werden (z. B. das Punkterennen nach dem One-Lap-Ergebnis setzen). Einstellbar unter der Auslosungsmethode <i>Nach Distanz-Ergebnis</i> — auch bei einer noch nicht gefahrenen Distanz (mit Vorschau). Sobald das Quell-Ergebnis bestätigt ist, wird die Auslosung automatisch erzeugt; bei einer Korrektur wird sie neu erstellt (solange das Ziel noch nicht gefahren ist). Es wird gewarnt, wenn eine bestehende Auslosung überschrieben wird.',
+            'fr' => '🔗 <b>Tirages dépendants</b> — le tirage d\'une distance peut désormais être déterminé automatiquement par le résultat d\'une autre distance de la même compétition (p. ex. tirer la course aux points sur le résultat du One Lap). À régler sous la méthode de tirage <i>Sur résultat de distance</i> — même sur une distance pas encore courue (avec aperçu). Dès que le résultat source est confirmé, le tirage est généré automatiquement ; s\'il est corrigé, le tirage est régénéré (tant que la cible n\'a pas été courue). Vous êtes averti lorsqu\'un tirage existant est écrasé.',
+        ],
+    ],
+    [
+        'versie' => 'H1719.30.08', 'datum' => '30-08-2026', 'onderdelen' => ['admin'],
+        'tekst' => [
+            'nl' => '✏️ <b>Helpers — geïmporteerde wedstrijd bewerken</b> — van een via PDF geïmporteerde historie-wedstrijd kun je nu de naam, afstand-namen en categorie aanpassen, en twee historie-wedstrijden samenvoegen tot één (bv. baan + weg die per ongeluk apart zijn geïmporteerd).',
+            'en' => '✏️ <b>Helpers — edit an imported competition</b> — for a competition imported from PDF you can now edit its name, distance names and category, and merge two imported competitions into one (e.g. track + road accidentally imported separately).',
+            'de' => '✏️ <b>Helfer — importierten Wettkampf bearbeiten</b> — bei einem aus PDF importierten Wettkampf kannst du jetzt Name, Distanznamen und Kategorie ändern und zwei importierte Wettkämpfe zu einem zusammenführen (z. B. Bahn + Straße, die versehentlich getrennt importiert wurden).',
+            'fr' => '✏️ <b>Assistants — modifier une compétition importée</b> — pour une compétition importée depuis un PDF, vous pouvez désormais modifier son nom, les noms des distances et la catégorie, et fusionner deux compétitions importées en une seule (p. ex. piste + route importées par erreur séparément).',
+        ],
+    ],
+    [
+        'versie' => 'H1719.30.08', 'datum' => '30-08-2026', 'onderdelen' => ['admin'],
+        'tekst' => [
+            'nl' => '🧹 <b>Helpers — wachtrijders in bulk beheren</b> — de lijst <i>Wacht-op-KNSB rijders koppelen</i> (Systeem → Helpers) heeft nu filters (alles / zonder uitslag / weesrijders) en een aanvink-selectie om rijders in bulk te verwijderen.',
+            'en' => '🧹 <b>Helpers — bulk-manage pending riders</b> — the <i>Link pending-KNSB riders</i> list (System → Helpers) now has filters (all / without result / orphan riders) and checkbox selection to delete riders in bulk.',
+            'de' => '🧹 <b>Helfer — wartende Fahrer in Massen verwalten</b> — die Liste <i>Auf-KNSB-wartende Fahrer verknüpfen</i> (System → Helfer) hat jetzt Filter (alle / ohne Ergebnis / Waisen-Fahrer) und eine Auswahl per Häkchen zum Löschen mehrerer Fahrer auf einmal.',
+            'fr' => '🧹 <b>Assistants — gérer les patineurs en attente en masse</b> — la liste <i>Lier les patineurs en attente KNSB</i> (Système → Assistants) dispose maintenant de filtres (tous / sans résultat / patineurs orphelins) et d\'une sélection par cases pour supprimer des patineurs en masse.',
+        ],
+    ],
+    [
+        'versie' => 'H1719.30.08', 'datum' => '30-08-2026', 'onderdelen' => ['public', 'coach', 'admin'],
+        'tekst' => [
+            'nl' => '🔒 <b>Privacyverklaring bijgewerkt</b> — de privacyverklaring is herzien: aanmeldmomenten worden gelogd (beveiliging), bij het inloggen wordt een globale locatie (op basis van IP-adres) vastgelegd, en de tekst over geboortejaar is verduidelijkt.',
+            'en' => '🔒 <b>Privacy statement updated</b> — the privacy statement has been revised: sign-in events are logged (security), a rough location (based on IP address) is recorded at sign-in, and the wording about year of birth has been clarified.',
+            'de' => '🔒 <b>Datenschutzerklärung aktualisiert</b> — die Datenschutzerklärung wurde überarbeitet: Anmeldungen werden protokolliert (Sicherheit), beim Anmelden wird ein grober Standort (auf Basis der IP-Adresse) erfasst, und die Formulierung zum Geburtsjahr wurde präzisiert.',
+            'fr' => '🔒 <b>Déclaration de confidentialité mise à jour</b> — la déclaration de confidentialité a été révisée : les connexions sont journalisées (sécurité), une localisation approximative (basée sur l\'adresse IP) est enregistrée à la connexion, et la formulation concernant l\'année de naissance a été clarifiée.',
+        ],
+    ],
+
     // ── Patches onder H1243.10.08 (onderhoud & beveiliging, alleen Beheer) ──
     [
         'versie' => 'H1243.10.08', 'datum' => '26-08-2026',

@@ -1126,10 +1126,62 @@ async function _uVastleggen(groep, afstand, btnEl, rankingInfo = null) {
     // keuze-mogelijkheden (long-distance / full-final / etc.) is samenv null
     // en gaan we direct door.
     const samenv = _uBouwRankingSamenvatting(rankingInfo);
-    if (samenv) {
+
+    // ── Afhankelijke loting? ──────────────────────────────────────────────
+    // Als deze DC de bron is voor de loting van een andere DC
+    // (afhankelijke_loting), genereren we die straks automatisch. We vuren bij
+    // ELKE bevestiging van deze DC (per-afstand én hele-DC) — single-afstand
+    // DC's (500m/punten/afval) worden per-afstand bevestigd. De generatie is
+    // idempotent en wordt server-side overgeslagen als het doel al gereden
+    // resultaten heeft, dus meerdere keren vuren is veilig: het her-seedt op de
+    // dan beschikbare bron-stand tot het doel zélf gereden is.
+    // We halen de doelen NU op zodat de bevestig-dialog het meteen kan melden
+    // en "annuleren" ook de vastlegging tegenhoudt.
+    let _afhTeGenereren = [];
+    let _afhNoteHtml    = '';
+    {
+        try {
+            const bronDc = groep.dc_ids?.[0];
+            if (bronDc) {
+                const r = await fetch('api/afhankelijke_loting.php?action=voor_bron'
+                    + '&competition_id=' + encodeURIComponent(huidigCompId)
+                    + '&bron_dc_id='     + encodeURIComponent(bronDc));
+                if (r.ok) {
+                    const d      = await r.json();
+                    const doelen = Array.isArray(d.doelen) ? d.doelen : [];
+                    _afhTeGenereren = doelen.filter(x => x.gen && !x.heeft_resultaten);
+                    const teGenNamen    = _afhTeGenereren.map(x => x.doel_dc_naam || x.doel_dc_id);
+                    const overschrijven = _afhTeGenereren.filter(x => x.heeft_loting)
+                                                         .map(x => x.doel_dc_naam || x.doel_dc_id);
+                    const geblokkeerd   = doelen.filter(x => x.heeft_resultaten)
+                                                .map(x => x.doel_dc_naam || x.doel_dc_id);
+                    const geenSchema    = doelen.filter(x => !x.gen && !x.heeft_resultaten)
+                                                .map(x => x.doel_dc_naam || x.doel_dc_id);
+                    if (teGenNamen.length || geblokkeerd.length || geenSchema.length) {
+                        _afhNoteHtml = '';
+                        if (teGenNamen.length)
+                            _afhNoteHtml += `<p style="margin:.6em 0;padding:.5em .75em;background:#eef5ff;border:1px solid #b9d4ff;border-radius:3px">
+                                🔗 <b>Afhankelijke loting:</b> dit (her)genereert de loting voor
+                                <b>${escHtml(teGenNamen.join(', '))}</b> op basis van deze uitslag.</p>`;
+                        if (overschrijven.length)
+                            _afhNoteHtml += `<p style="margin:.4em 0;padding:.5em .75em;background:#fff4e6;border:1px solid #ffd9a3;border-radius:3px;color:#8a4a00">
+                                ⚠ De <b>bestaande</b> loting van <b>${escHtml(overschrijven.join(', '))}</b> wordt hierbij <b>overschreven</b> — druk zo nodig nieuwe startlijsten af.</p>`;
+                        if (geblokkeerd.length)
+                            _afhNoteHtml += `<p style="margin:.4em 0;color:#8a4a00">⚠ ${escHtml(geblokkeerd.join(', '))} heeft al resultaten — die loting wordt NIET opnieuw gegenereerd.</p>`;
+                        if (geenSchema.length)
+                            _afhNoteHtml += `<p style="margin:.4em 0;color:#8a4a00">⚠ ${escHtml(geenSchema.join(', '))} heeft nog geen tijdschema — genereer die loting handmatig.</p>`;
+                    }
+                }
+            }
+        } catch { /* stil → gewoon normaal vastleggen zonder afhankelijke loting */ }
+    }
+
+    // Eén bevestig-dialog: ranking-samenvatting (indien) + afhankelijke-melding
+    // (indien). Bij annuleren wordt de uitslag NIET bevestigd.
+    if (samenv || _afhNoteHtml) {
         const ok = await toonBevestigDialog(
-            samenv.html,
-            samenv.titel,
+            (samenv ? samenv.html : '') + _afhNoteHtml,
+            samenv ? samenv.titel : 'Uitslag bevestigen',
             'Bevestigen',
             'Annuleren',
             { bodyIsHtml: true }
@@ -1187,6 +1239,11 @@ async function _uVastleggen(groep, afstand, btnEl, rankingInfo = null) {
             if (typeof window.printCenterInvalideerUitslagen === 'function') {
                 window.printCenterInvalideerUitslagen();
             }
+            // Afhankelijke loting(en) genereren op basis van de zojuist
+            // vastgelegde bron-uitslag (methode 'afstand_uitslag').
+            if (_afhTeGenereren.length) {
+                await _uGenereerAfhankelijk(_afhTeGenereren);
+            }
         } else {
             toonBevestigDialog(data.error ?? data.melding ?? 'Fout bij vastleggen', 'Fout');
             if (btnEl) { btnEl.innerHTML = origTekst; btnEl.disabled = false; }
@@ -1195,6 +1252,47 @@ async function _uVastleggen(groep, afstand, btnEl, rankingInfo = null) {
         toonBevestigDialog(e.message, 'Fout');
         if (btnEl) { btnEl.innerHTML = origTekst; btnEl.disabled = false; }
     }
+}
+
+// ── Afhankelijke loting(en) genereren ─────────────────────────────────────────
+// Wordt aangeroepen door _uVastleggen ná een succesvolle bron-vastlegging.
+// Roept per doel-DC api/startlijst_genereer.php aan met methode
+// 'afstand_uitslag' + de bron; de generatie-params (heats_aantal, ronde_type,
+// distance_id, category_filter, heat_namen) zijn server-side uit het tijdschema
+// afgeleid en meegeleverd in `doel.gen` (zie api/afhankelijke_loting.php).
+async function _uGenereerAfhankelijk(doelen) {
+    const gelukt  = [];
+    const mislukt = [];
+    for (const d of doelen) {
+        const g = d.gen || {};
+        try {
+            let url = 'api/startlijst_genereer.php'
+                + '?competition_id='   + encodeURIComponent(huidigCompId)
+                + '&dc_ids='           + encodeURIComponent(g.dc_ids || d.doel_dc_id)
+                + '&distance_id='      + encodeURIComponent(g.distance_id || '')
+                + '&heats_aantal='     + encodeURIComponent(g.heats_aantal || 1)
+                + '&methode='          + encodeURIComponent(d.methode || 'afstand_uitslag')
+                + '&ronde_type='       + encodeURIComponent(g.ronde_type || 'heats')
+                + '&bron_dc_id='       + encodeURIComponent(d.bron_dc_id || '')
+                + '&bron_distance_id=' + encodeURIComponent(d.bron_distance_id || '');
+            // GEEN category_filter meesturen: net als de handmatige loting voor
+            // niet-gesplitste DC's loten we de hele DC. Een dc.category_filter die
+            // niet 1-op-1 matcht met persons.category zou anders alle deelnemers
+            // wegfilteren ("geen bevestigde deelnemers"). (Gesplitste DC's: later.)
+            if (g.heat_namen && Object.keys(g.heat_namen).length)
+                url += '&heat_namen=' + encodeURIComponent(JSON.stringify(g.heat_namen));
+            const r   = await fetch(url);
+            const res = await r.json();
+            if (res.error) throw new Error(res.error);
+            gelukt.push(d.doel_dc_naam || d.doel_dc_id);
+        } catch (e) {
+            mislukt.push((d.doel_dc_naam || d.doel_dc_id) + ': ' + (e.message || e));
+        }
+    }
+    let msg = '';
+    if (gelukt.length)  msg += `✅ Loting gegenereerd voor: <b>${escHtml(gelukt.join(', '))}</b>.`;
+    if (mislukt.length) msg += `${msg ? '<br>' : ''}⚠ Mislukt: ${escHtml(mislukt.join('; '))}`;
+    if (msg) toonBevestigDialog(msg, 'Afhankelijke loting', 'OK', null, { bodyIsHtml: true });
 }
 
 // ── Hulp: milliseconden → m:ss.mmm ────────────────────────────────────────────
