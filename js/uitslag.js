@@ -734,6 +734,12 @@ async function toonUitslagVoorAfstand(groep, afstand) {
             }
 
             if (data.has_results) {
+                // Puntenkoers-plausibiliteit: totaal-punten normaal deelbaar
+                // door 3. Som de punten (pk_punten) zodat _uVastleggen bij het
+                // bevestigen kan waarschuwen als het niet klopt.
+                const pkPuntenTotaal = data.heeft_pk_punten
+                    ? (data.resultaat || []).reduce((s, r) => s + (Number(r.pk_punten) || 0), 0)
+                    : null;
                 const rankingInfo = {
                     rondes:         data.rondes,
                     current:        data.ranking,
@@ -743,6 +749,7 @@ async function toonUitslagVoorAfstand(groep, afstand) {
                     raceSubtype:    data.race_subtype,
                     isLongDistance: data.race_type === 'long_distance',
                     modus:          data.modus,
+                    pkPuntenTotaal: pkPuntenTotaal,
                 };
                 content.prepend(_uMaakAfstandBevestigKnop(groep, afstand, !!data.vastgelegd, data.rondes_compleet !== false, data.rondes_reden || '', rankingInfo));
             }
@@ -1127,6 +1134,15 @@ async function _uVastleggen(groep, afstand, btnEl, rankingInfo = null) {
     // en gaan we direct door.
     const samenv = _uBouwRankingSamenvatting(rankingInfo);
 
+    // ── Plausibiliteitscheck puntenkoers ──────────────────────────────────
+    // Het totaal aantal punten (opgeteld over alle rijders) is bij een
+    // puntenkoers normaal deelbaar door 3. Zo niet → waarschuwen (geen harde
+    // blokkade); vaak een tik-/invoerfout in de punten.
+    let _pkWaarschuwing = '';
+    if (rankingInfo?.pkPuntenTotaal != null && rankingInfo.pkPuntenTotaal % 3 !== 0) {
+        _pkWaarschuwing = `<p class="modal-warn">⚠ <b>Punten-controle:</b> het totaal aantal punten (<b>${rankingInfo.pkPuntenTotaal}</b>) is niet deelbaar door 3. Bij een puntenkoers hoort dat normaal wél — controleer of de punten kloppen voordat je bevestigt.</p>`;
+    }
+
     // ── Afhankelijke loting? ──────────────────────────────────────────────
     // Als deze DC de bron is voor de loting van een andere DC
     // (afhankelijke_loting), genereren we die straks automatisch. We vuren bij
@@ -1141,46 +1157,60 @@ async function _uVastleggen(groep, afstand, btnEl, rankingInfo = null) {
     let _afhNoteHtml    = '';
     {
         try {
-            const bronDc = groep.dc_ids?.[0];
+            const bronDc   = groep.dc_ids?.[0];
+            const bronDist = afstand?.id ?? '';   // bevestigde afstand (leeg = hele DC)
             if (bronDc) {
                 const r = await fetch('api/afhankelijke_loting.php?action=voor_bron'
-                    + '&competition_id=' + encodeURIComponent(huidigCompId)
-                    + '&bron_dc_id='     + encodeURIComponent(bronDc));
+                    + '&competition_id='   + encodeURIComponent(huidigCompId)
+                    + '&bron_dc_id='       + encodeURIComponent(bronDc)
+                    + '&bron_distance_id=' + encodeURIComponent(bronDist));
                 if (r.ok) {
                     const d      = await r.json();
                     const doelen = Array.isArray(d.doelen) ? d.doelen : [];
+                    // Label mét afstand (bv. "Junioren A heren · Puntenkoers 3km")
+                    // zodat de operator ziet wélke loting gegenereerd wordt.
+                    const _doelLabel = x => (x.doel_dc_naam || x.doel_dc_id)
+                        + (x.doel_distance_naam ? ' · ' + x.doel_distance_naam : '');
                     _afhTeGenereren = doelen.filter(x => x.gen && !x.heeft_resultaten);
-                    const teGenNamen    = _afhTeGenereren.map(x => x.doel_dc_naam || x.doel_dc_id);
+                    const teGenNamen    = _afhTeGenereren.map(_doelLabel);
                     const overschrijven = _afhTeGenereren.filter(x => x.heeft_loting)
-                                                         .map(x => x.doel_dc_naam || x.doel_dc_id);
+                                                         .map(_doelLabel);
                     const geblokkeerd   = doelen.filter(x => x.heeft_resultaten)
-                                                .map(x => x.doel_dc_naam || x.doel_dc_id);
+                                                .map(_doelLabel);
                     const geenSchema    = doelen.filter(x => !x.gen && !x.heeft_resultaten)
-                                                .map(x => x.doel_dc_naam || x.doel_dc_id);
+                                                .map(_doelLabel);
                     if (teGenNamen.length || geblokkeerd.length || geenSchema.length) {
                         _afhNoteHtml = '';
-                        if (teGenNamen.length)
-                            _afhNoteHtml += `<p style="margin:.6em 0;padding:.5em .75em;background:#eef5ff;border:1px solid #b9d4ff;border-radius:3px">
-                                🔗 <b>Afhankelijke loting:</b> dit (her)genereert de loting voor
-                                <b>${escHtml(teGenNamen.join(', '))}</b> op basis van deze uitslag.</p>`;
+                        // Per doel een regel: afstand-uitslag → "op basis van deze
+                        // uitslag"; tussenklassement → "op basis van het
+                        // tussenklassement (de meetellende afstanden)".
+                        _afhNoteHtml += _afhTeGenereren.map(x => {
+                            const label = escHtml(_doelLabel(x));
+                            if (x.methode === 'tussenklassement') {
+                                const basis = Array.isArray(x.tk_afstanden) && x.tk_afstanden.length
+                                    ? escHtml(x.tk_afstanden.join(' + ')) : 'de huidige tussenstand';
+                                return `<p class="modal-info">🔗 <b>Afhankelijke loting:</b> dit (her)genereert de loting voor <b>${label}</b> op basis van het <b>tussenklassement</b> (${basis}).</p>`;
+                            }
+                            return `<p class="modal-info">🔗 <b>Afhankelijke loting:</b> dit (her)genereert de loting voor <b>${label}</b> op basis van deze uitslag.</p>`;
+                        }).join('');
                         if (overschrijven.length)
-                            _afhNoteHtml += `<p style="margin:.4em 0;padding:.5em .75em;background:#fff4e6;border:1px solid #ffd9a3;border-radius:3px;color:#8a4a00">
-                                ⚠ De <b>bestaande</b> loting van <b>${escHtml(overschrijven.join(', '))}</b> wordt hierbij <b>overschreven</b> — druk zo nodig nieuwe startlijsten af.</p>`;
+                            _afhNoteHtml += `<p class="modal-warn">⚠ De <b>bestaande</b> loting van <b>${escHtml(overschrijven.join(', '))}</b> wordt hierbij <b>overschreven</b> — druk zo nodig nieuwe startlijsten af.</p>`;
                         if (geblokkeerd.length)
-                            _afhNoteHtml += `<p style="margin:.4em 0;color:#8a4a00">⚠ ${escHtml(geblokkeerd.join(', '))} heeft al resultaten — die loting wordt NIET opnieuw gegenereerd.</p>`;
+                            _afhNoteHtml += `<p class="modal-warn">⚠ ${escHtml(geblokkeerd.join(', '))} heeft al resultaten — die loting wordt NIET opnieuw gegenereerd.</p>`;
                         if (geenSchema.length)
-                            _afhNoteHtml += `<p style="margin:.4em 0;color:#8a4a00">⚠ ${escHtml(geenSchema.join(', '))} heeft nog geen tijdschema — genereer die loting handmatig.</p>`;
+                            _afhNoteHtml += `<p class="modal-warn">⚠ ${escHtml(geenSchema.join(', '))} heeft nog geen tijdschema — genereer die loting handmatig.</p>`;
                     }
                 }
             }
         } catch { /* stil → gewoon normaal vastleggen zonder afhankelijke loting */ }
     }
 
-    // Eén bevestig-dialog: ranking-samenvatting (indien) + afhankelijke-melding
-    // (indien). Bij annuleren wordt de uitslag NIET bevestigd.
-    if (samenv || _afhNoteHtml) {
+    // Eén bevestig-dialog: ranking-samenvatting (indien) + puntenkoers-
+    // waarschuwing (indien) + afhankelijke-melding (indien). Bij annuleren
+    // wordt de uitslag NIET bevestigd.
+    if (samenv || _pkWaarschuwing || _afhNoteHtml) {
         const ok = await toonBevestigDialog(
-            (samenv ? samenv.html : '') + _afhNoteHtml,
+            (samenv ? samenv.html : '') + _pkWaarschuwing + _afhNoteHtml,
             samenv ? samenv.titel : 'Uitslag bevestigen',
             'Bevestigen',
             'Annuleren',
@@ -1263,6 +1293,9 @@ async function _uVastleggen(groep, afstand, btnEl, rankingInfo = null) {
 async function _uGenereerAfhankelijk(doelen) {
     const gelukt  = [];
     const mislukt = [];
+    // Label mét afstand (bv. "Junioren A heren · Puntenkoers 3km").
+    const _doelLabel = d => (d.doel_dc_naam || d.doel_dc_id)
+        + (d.doel_distance_naam ? ' · ' + d.doel_distance_naam : '');
     for (const d of doelen) {
         const g = d.gen || {};
         try {
@@ -1284,9 +1317,9 @@ async function _uGenereerAfhankelijk(doelen) {
             const r   = await fetch(url);
             const res = await r.json();
             if (res.error) throw new Error(res.error);
-            gelukt.push(d.doel_dc_naam || d.doel_dc_id);
+            gelukt.push(_doelLabel(d));
         } catch (e) {
-            mislukt.push((d.doel_dc_naam || d.doel_dc_id) + ': ' + (e.message || e));
+            mislukt.push(_doelLabel(d) + ': ' + (e.message || e));
         }
     }
     let msg = '';

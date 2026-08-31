@@ -22,6 +22,7 @@ header('Access-Control-Allow-Origin: *');
 
 require_once __DIR__ . '/../../config_inlinecomp.php';
 require_once __DIR__ . '/../auth/session.php';
+require_once __DIR__ . '/_uitslag_helper.php';   // alleRondesCompleet (tussenklassement-compleetheid)
 $_authUser = requireAuth($pdo);
 if (!kanSchrijven($_authUser, 'startlijsten')) {
     http_response_code(403);
@@ -254,6 +255,28 @@ try {
             $tkParams    = $distId
                 ? [$compId, $primaryDcId, $distId]
                 : [$compId, $primaryDcId];
+            // Alleen COMPLETE afstanden meetellen (spiegelt api/tussenklassement.php):
+            // een afstand met een verwijderde/ontbrekende tijd is niet meer
+            // compleet → z'n oude uitslag mag de tussenstand niet vervuilen.
+            $tkIncSql = ''; $tkIncParams = [];
+            try {
+                $tkAfStmt = $pdo->prepare(
+                    "SELECT DISTINCT distance_id FROM uitslag_afstand
+                      WHERE competition_id = ? AND distance_combination_id = ? {$tkDistWhere}");
+                $tkAfStmt->execute($tkParams);
+                $tkIncompleet = [];
+                foreach ($tkAfStmt->fetchAll(PDO::FETCH_COLUMN) as $dId) {
+                    $dId = (string)($dId ?? '');
+                    if ($dId === '') continue;
+                    $chk = alleRondesCompleet($pdo, $compId, [$primaryDcId], $dId);
+                    if (empty($chk['compleet'])) $tkIncompleet[] = $dId;
+                }
+                if ($tkIncompleet) {
+                    $ph          = implode(',', array_fill(0, count($tkIncompleet), '?'));
+                    $tkIncSql    = "AND (distance_id IS NULL OR distance_id NOT IN ($ph))";
+                    $tkIncParams = $tkIncompleet;
+                }
+            } catch (\Throwable $e) { /* bij twijfel: geen extra uitsluiting */ }
             // Rijders met uitsluitende sanctie (DQ-SF, DQ-DF, DNS met 0 punten)
             // krijgen geen klassementspositie → achteraan op startnummer
             $tkSql = "
@@ -267,11 +290,12 @@ try {
                 WHERE    competition_id          = ?
                   AND    distance_combination_id = ?
                   {$tkDistWhere}
+                  {$tkIncSql}
                 GROUP BY person_license
                 ORDER BY uitgesloten ASC, totaal_punten ASC, beste_rang ASC
             ";
             $tkStmt = $pdo->prepare($tkSql);
-            $tkStmt->execute($tkParams);
+            $tkStmt->execute(array_merge($tkParams, $tkIncParams));
             $tkMap  = [];  // person_license => positie
             $tkUit  = [];  // person_license => true (uitgesloten)
             $tkRank = 1;

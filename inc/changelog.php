@@ -14,9 +14,9 @@
 //     en wordt in de changelog genest + gedempt getoond onder de versie.
 //     Triviale copy/typo-fixes komen NERGENS in de changelog — los committen.
 return [
-    // ── Patches onder H1719.30.08 (onderhoud & beveiliging, alleen Beheer) ──
+    // ── Patches onder H1752.01.09 (onderhoud & beveiliging, alleen Beheer) ──
     [
-        'versie' => 'H1719.30.08', 'datum' => '31-08-2026',
+        'versie' => 'H1752.01.09', 'datum' => '01-09-2026',
         'soort'  => 'patch', 'onderdelen' => ['patch'],
         'tekst' => [
             'nl' => '🔧 <b>Ex-aequo doorstroming — weergave + full-final</b> — bij een exact gelijke tijd op de kwalificatiegrens stromen álle gelijk-geëindigde rijders door. Ze tonen nu ook een <b>Q</b> in de overzichten (Beheer, Publiek, Coach), en na een tijd-correctie die een ex-aequo maakt wordt de volgende ronde bij opnieuw genereren daadwerkelijk bijgewerkt. In het full-final-systeem belandt zo\'n ex-aequo-groep nu in de A-finale (i.p.v. de B-finale); de rijders daaronder schuiven door.',
@@ -25,18 +25,36 @@ return [
             'fr' => '🔧 <b>Qualification ex æquo — affichage + full-final</b> — en cas de temps exactement égaux à la limite de qualification, tous les patineurs ex æquo passent. Ils affichent désormais aussi un <b>Q</b> dans les aperçus (Gestion, Public, Coach), et après une correction de temps créant une égalité, la régénération de la manche suivante la met bien à jour. Dans le système full-final, un tel groupe ex æquo se retrouve maintenant en finale A (au lieu de la finale B) ; tous ceux en dessous descendent d\'un cran.',
         ],
     ],
-    // ── Release H1719.30.08 ────────────────────────────────────────────────
+    // ── Release H1752.01.09 ────────────────────────────────────────────────
     [
-        'versie' => 'H1719.30.08', 'datum' => '30-08-2026', 'onderdelen' => ['admin'],
+        'versie' => 'H1752.01.09', 'datum' => '01-09-2026', 'onderdelen' => ['admin'],
         'tekst' => [
-            'nl' => '🔗 <b>Afhankelijke lotingen</b> — je kunt de loting van een afstand nu automatisch laten bepalen door de uitslag van een andere afstand in dezelfde wedstrijd (bv. de puntenkoers loten op de uitslag van de One Lap). Stel dit in bij de loting-methode <i>Op afstand-uitslag</i> — óók op een afstand die nog niet verreden is (met preview). Zodra de bron-uitslag bevestigd is, wordt de loting automatisch gegenereerd; bij een correctie van die uitslag wordt de loting opnieuw gemaakt (zolang het doel nog niet gereden is). Je krijgt een melding als een bestaande loting wordt overschreven.',
-            'en' => '🔗 <b>Dependent draws</b> — a distance\'s draw can now be determined automatically by the result of another distance in the same competition (e.g. seed the points race on the One Lap result). Set it up under the <i>By distance result</i> draw method — even on a distance not yet skated (with preview). Once the source result is confirmed the draw is generated automatically; if that result is corrected the draw is regenerated (as long as the target hasn\'t been skated). You are warned when an existing draw is overwritten.',
-            'de' => '🔗 <b>Abhängige Auslosungen</b> — die Auslosung einer Distanz kann jetzt automatisch durch das Ergebnis einer anderen Distanz im selben Wettkampf bestimmt werden (z. B. das Punkterennen nach dem One-Lap-Ergebnis setzen). Einstellbar unter der Auslosungsmethode <i>Nach Distanz-Ergebnis</i> — auch bei einer noch nicht gefahrenen Distanz (mit Vorschau). Sobald das Quell-Ergebnis bestätigt ist, wird die Auslosung automatisch erzeugt; bei einer Korrektur wird sie neu erstellt (solange das Ziel noch nicht gefahren ist). Es wird gewarnt, wenn eine bestehende Auslosung überschrieben wird.',
-            'fr' => '🔗 <b>Tirages dépendants</b> — le tirage d\'une distance peut désormais être déterminé automatiquement par le résultat d\'une autre distance de la même compétition (p. ex. tirer la course aux points sur le résultat du One Lap). À régler sous la méthode de tirage <i>Sur résultat de distance</i> — même sur une distance pas encore courue (avec aperçu). Dès que le résultat source est confirmé, le tirage est généré automatiquement ; s\'il est corrigé, le tirage est régénéré (tant que la cible n\'a pas été courue). Vous êtes averti lorsqu\'un tirage existant est écrasé.',
+            'nl' => '🔗 <b>Afhankelijke lotingen</b> — je kunt de loting van een afstand nu automatisch laten bepalen door een andere afstand in dezelfde wedstrijd. Twee methoden: <i>Op afstand-uitslag</i> (bv. de puntenkoers loten op de uitslag van de One Lap) en <i>Op tussenklassement</i> (een afstand loten op de tussenstand ná een eerdere afstand — óók binnen één categorie met meerdere afstanden, als keten: 1e afstand → 2e → 3e). Stel het vooraf in, óók op een bron die nog niet verreden is (met preview); zodra die afstand bevestigd is wordt de loting automatisch gegenereerd, en bij een correctie opnieuw (zolang het doel nog niet gereden is). De koppeling is zichtbaar via een tab-markering en een <i>Wis loting</i>-knop, en je krijgt een melding — met de afstanden waarop geloot wordt — als een bestaande loting wordt overschreven.',
+            'en' => '🔗 <b>Dependent draws</b> — a distance\'s draw can now be determined automatically by another distance in the same competition. Two methods: <i>By distance result</i> (e.g. seed the points race on the One Lap result) and <i>By intermediate standings</i> (seed a distance on the standings after an earlier distance — also within a single category with several distances, as a chain: 1st distance → 2nd → 3rd). Set it up in advance, even on a source not yet skated (with preview); once that distance is confirmed the draw is generated automatically, and regenerated on a correction (as long as the target hasn\'t been skated). The link is shown with a tab marker and a <i>Clear draw</i> button, and you are warned — with the distances used — when an existing draw is overwritten.',
+            'de' => '🔗 <b>Abhängige Auslosungen</b> — die Auslosung einer Distanz kann jetzt automatisch durch eine andere Distanz im selben Wettkampf bestimmt werden. Zwei Methoden: <i>Nach Distanz-Ergebnis</i> (z. B. das Punkterennen nach dem One-Lap-Ergebnis setzen) und <i>Nach Zwischenstand</i> (eine Distanz nach dem Zwischenstand einer früheren Distanz setzen — auch innerhalb einer Kategorie mit mehreren Distanzen, als Kette: 1. Distanz → 2. → 3.). Vorab einstellbar, auch auf einer noch nicht gefahrenen Quelle (mit Vorschau); sobald diese Distanz bestätigt ist, wird die Auslosung automatisch erzeugt und bei einer Korrektur neu erstellt (solange das Ziel noch nicht gefahren ist). Die Verknüpfung ist über eine Tab-Markierung und einen <i>Auslosung löschen</i>-Button sichtbar, und es wird gewarnt — mit den verwendeten Distanzen — wenn eine bestehende Auslosung überschrieben wird.',
+            'fr' => '🔗 <b>Tirages dépendants</b> — le tirage d\'une distance peut désormais être déterminé automatiquement par une autre distance de la même compétition. Deux méthodes : <i>Sur résultat de distance</i> (p. ex. tirer la course aux points sur le résultat du One Lap) et <i>Sur classement intermédiaire</i> (tirer une distance sur le classement après une distance précédente — aussi au sein d\'une catégorie à plusieurs distances, en chaîne : 1re distance → 2e → 3e). À régler à l\'avance, même sur une source pas encore courue (avec aperçu) ; dès que cette distance est confirmée, le tirage est généré automatiquement, et régénéré en cas de correction (tant que la cible n\'a pas été courue). Le lien est indiqué par un marqueur d\'onglet et un bouton <i>Effacer le tirage</i>, et vous êtes averti — avec les distances utilisées — lorsqu\'un tirage existant est écrasé.',
         ],
     ],
     [
-        'versie' => 'H1719.30.08', 'datum' => '30-08-2026', 'onderdelen' => ['admin'],
+        'versie' => 'H1752.01.09', 'datum' => '01-09-2026', 'onderdelen' => ['admin'],
+        'tekst' => [
+            'nl' => '🎯 <b>Puntenkoers — controle op puntentotaal</b> — bij het vastleggen van een puntenkoers-uitslag krijg je nu een waarschuwing als het totaal aantal toegekende punten niet deelbaar is door 3. Dat hoort normaal wél zo, dus het is meestal een tikfout — je kunt daarna alsnog bevestigen.',
+            'en' => '🎯 <b>Points race — points-total check</b> — when confirming a points-race result you now get a warning if the total of the awarded points is not divisible by 3. It normally should be, so it\'s usually a typo — you can still confirm afterwards.',
+            'de' => '🎯 <b>Punkterennen — Prüfung der Punktsumme</b> — beim Festlegen eines Punkterennen-Ergebnisses erhältst du jetzt eine Warnung, wenn die Summe der vergebenen Punkte nicht durch 3 teilbar ist. Normalerweise ist sie das, also meist ein Tippfehler — du kannst danach trotzdem bestätigen.',
+            'fr' => '🎯 <b>Course aux points — contrôle du total de points</b> — lors de la validation d\'un résultat de course aux points, vous recevez maintenant un avertissement si le total des points attribués n\'est pas divisible par 3. Normalement il l\'est, donc c\'est souvent une faute de frappe — vous pouvez quand même valider ensuite.',
+        ],
+    ],
+    [
+        'versie' => 'H1752.01.09', 'datum' => '01-09-2026', 'onderdelen' => ['public'],
+        'tekst' => [
+            'nl' => 'ℹ️ <b>Rijder — status per afstand</b> — in de rijder-weergave zie je de aanmeldstatus. Staat een rijder voor meerdere afstanden ingeschreven met een <i>verschillende</i> status (bv. voor één afstand afgemeld), dan verschijnt een klikbare <b>ⓘ status</b> — tik erop voor een overzicht met de status per afstand.',
+            'en' => 'ℹ️ <b>Rider — status per distance</b> — the rider view shows the entry status. If a rider is entered for several distances with a <i>different</i> status (e.g. withdrawn for one distance), a clickable <b>ⓘ status</b> appears — tap it for an overview of the status per distance.',
+            'de' => 'ℹ️ <b>Fahrer — Status je Distanz</b> — in der Fahrer-Ansicht siehst du den Meldestatus. Ist ein Fahrer für mehrere Distanzen mit <i>unterschiedlichem</i> Status gemeldet (z. B. für eine Distanz abgemeldet), erscheint ein anklickbares <b>ⓘ Status</b> — tippe darauf für eine Übersicht des Status je Distanz.',
+            'fr' => 'ℹ️ <b>Patineur — statut par distance</b> — la vue patineur affiche le statut d\'inscription. Si un patineur est inscrit pour plusieurs distances avec un statut <i>différent</i> (p. ex. désinscrit pour une distance), un <b>ⓘ statut</b> cliquable apparaît — touchez-le pour un aperçu du statut par distance.',
+        ],
+    ],
+    [
+        'versie' => 'H1752.01.09', 'datum' => '01-09-2026', 'onderdelen' => ['admin'],
         'tekst' => [
             'nl' => '✏️ <b>Helpers — geïmporteerde wedstrijd bewerken</b> — van een via PDF geïmporteerde historie-wedstrijd kun je nu de naam, afstand-namen en categorie aanpassen, en twee historie-wedstrijden samenvoegen tot één (bv. baan + weg die per ongeluk apart zijn geïmporteerd).',
             'en' => '✏️ <b>Helpers — edit an imported competition</b> — for a competition imported from PDF you can now edit its name, distance names and category, and merge two imported competitions into one (e.g. track + road accidentally imported separately).',
@@ -45,7 +63,7 @@ return [
         ],
     ],
     [
-        'versie' => 'H1719.30.08', 'datum' => '30-08-2026', 'onderdelen' => ['admin'],
+        'versie' => 'H1752.01.09', 'datum' => '01-09-2026', 'onderdelen' => ['admin'],
         'tekst' => [
             'nl' => '🧹 <b>Helpers — wachtrijders in bulk beheren</b> — de lijst <i>Wacht-op-KNSB rijders koppelen</i> (Systeem → Helpers) heeft nu filters (alles / zonder uitslag / weesrijders) en een aanvink-selectie om rijders in bulk te verwijderen.',
             'en' => '🧹 <b>Helpers — bulk-manage pending riders</b> — the <i>Link pending-KNSB riders</i> list (System → Helpers) now has filters (all / without result / orphan riders) and checkbox selection to delete riders in bulk.',
@@ -54,7 +72,7 @@ return [
         ],
     ],
     [
-        'versie' => 'H1719.30.08', 'datum' => '30-08-2026', 'onderdelen' => ['public', 'coach', 'admin'],
+        'versie' => 'H1752.01.09', 'datum' => '01-09-2026', 'onderdelen' => ['public', 'coach', 'admin'],
         'tekst' => [
             'nl' => '🔒 <b>Privacyverklaring bijgewerkt</b> — de privacyverklaring is herzien: aanmeldmomenten worden gelogd (beveiliging), bij het inloggen wordt een globale locatie (op basis van IP-adres) vastgelegd, en de tekst over geboortejaar is verduidelijkt.',
             'en' => '🔒 <b>Privacy statement updated</b> — the privacy statement has been revised: sign-in events are logged (security), a rough location (based on IP address) is recorded at sign-in, and the wording about year of birth has been clarified.',

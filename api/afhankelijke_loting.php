@@ -32,11 +32,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') { exit; }
 
 require_once __DIR__ . '/../../config_inlinecomp.php';
 require_once __DIR__ . '/../auth/session.php';
+require_once __DIR__ . '/_uitslag_helper.php';   // alleRondesCompleet (tussenklassement-basis)
 $_authUser = requireAuth($pdo);
 
-// Alleen 'afstand_uitslag' in de MVP. De kolom kan later meer aan
-// (bv. 'tussenklassement'); breid deze whitelist dan uit én de trigger.
-$GELDIGE_METHODES = ['afstand_uitslag'];
+// Ondersteunde seeding-methodes voor een afhankelijke loting.
+//  - 'afstand_uitslag'  : loot op de uitslag-ranking van een andere afstand.
+//  - 'tussenklassement' : loot op het tussenklassement van de DC, getriggerd
+//                         zodra de gekozen (bron-)afstand bevestigd is.
+$GELDIGE_METHODES = ['afstand_uitslag', 'tussenklassement'];
 
 $isPost = $_SERVER['REQUEST_METHOD'] === 'POST';
 $body   = $isPost ? (json_decode(file_get_contents('php://input'), true) ?? []) : [];
@@ -56,16 +59,29 @@ function _alDcHoortBij(PDO $pdo, string $dcId, string $compId): bool {
 // api/startlijst_genereer.php nodig heeft, zodat de auto-trigger geen
 // startlist.js-interne cache hoeft na te bouwen. NULL als er (nog) geen
 // tijdschema-ritten voor deze DC zijn (schema niet compleet).
-function _alGenParams(PDO $pdo, string $compId, string $doelDc): ?array {
-    $s = $pdo->prepare("
-        SELECT tr.ronde_type, tr.distance_id, tr.heat_nr, tr.rit_naam, tr.volgorde
-        FROM tijdschema_ritten tr
-        JOIN competition_tijdschema ct ON ct.id = tr.tijdschema_id
-        WHERE ct.competition_id = ? AND tr.dc_id = ?
-        ORDER BY tr.volgorde, tr.heat_nr
-    ");
-    $s->execute([$compId, $doelDc]);
-    $ritten = $s->fetchAll(PDO::FETCH_ASSOC);
+function _alGenParams(PDO $pdo, string $compId, string $doelDc, string $doelDist = ''): ?array {
+    $sql = "SELECT tr.ronde_type, tr.distance_id, tr.heat_nr, tr.rit_naam, tr.volgorde
+            FROM tijdschema_ritten tr
+            JOIN competition_tijdschema ct ON ct.id = tr.tijdschema_id
+            WHERE ct.competition_id = ? AND tr.dc_id = ? %s
+            ORDER BY tr.volgorde, tr.heat_nr";
+    // Bij een doel-DC met meerdere afstanden (bv. 500m + puntenkoers) eerst de
+    // EIGEN afstand van het doel proberen (strikte distance_id-match).
+    $ritten = [];
+    if ($doelDist !== '') {
+        $s = $pdo->prepare(sprintf($sql, 'AND tr.distance_id = ?'));
+        $s->execute([$compId, $doelDc, $doelDist]);
+        $ritten = $s->fetchAll(PDO::FETCH_ASSOC);
+    }
+    // Fallback: tijdschema_ritten.distance_id kan NULL / naam-gebaseerd zijn
+    // (zie startlijst_genereer: `distance_id ?: null`). Levert de strikte match
+    // niets op, pak dan alle ritten van de DC; de generatie zelf scope't nog
+    // op doelDist (distance_id hieronder), dus het juiste doel wordt geraakt.
+    if (!$ritten) {
+        $s = $pdo->prepare(sprintf($sql, ''));
+        $s->execute([$compId, $doelDc]);
+        $ritten = $s->fetchAll(PDO::FETCH_ASSOC);
+    }
     if (!$ritten) return null;
     // Eerste ronde = de ronde met de laagste volgorde (bovenaan na ORDER BY).
     $eersteRonde = $ritten[0]['ronde_type'];
@@ -79,7 +95,9 @@ function _alGenParams(PDO $pdo, string $compId, string $doelDc): ?array {
     return [
         'dc_ids'          => $doelDc,
         'ronde_type'      => $eersteRonde,
-        'distance_id'     => (string)($rondeRitten[0]['distance_id'] ?? ''),
+        // Bewust doelDist (de bedoelde distances.id) i.p.v. de mogelijk-NULL
+        // rit-distance_id, zodat de generatie de juiste afstand scope't.
+        'distance_id'     => $doelDist !== '' ? $doelDist : (string)($rondeRitten[0]['distance_id'] ?? ''),
         'heats_aantal'    => count($rondeRitten),
         'category_filter' => (string)($cs->fetchColumn() ?: ''),
         'heat_namen'      => $heatNamen,
@@ -89,29 +107,58 @@ function _alGenParams(PDO $pdo, string $compId, string $doelDc): ?array {
 // ── Helper: heeft een doel-DC al gereden resultaten? Zo ja, mag de
 // auto-trigger de loting NIET opnieuw genereren (zou geraceerde heats
 // overschrijven — bv. als de operator de bron-uitslag achteraf corrigeert).
-function _alDoelHeeftResultaten(PDO $pdo, string $compId, string $doelDc): bool {
+function _alDoelHeeftResultaten(PDO $pdo, string $compId, string $doelDc, string $doelDist = ''): bool {
+    // Op afstand-niveau: alleen ZELFDE afstand telt als "al gereden". Anders
+    // zou bij een multi-afstand-DC het bevestigen van de bron-afstand (bv. 500m)
+    // de doel-afstand (puntenkoers) in dezelfde DC ten onrechte als gereden zien.
+    $distWhere = $doelDist !== '' ? 'AND h.distance_id = ?' : '';
+    $params    = $doelDist !== '' ? [$compId, $doelDc, $doelDist] : [$compId, $doelDc];
     $s = $pdo->prepare("
         SELECT 1
         FROM results       res
         JOIN heat_entries  he ON he.id = res.heat_entry_id
         JOIN heats         h  ON h.id  = he.heat_id
-        WHERE h.competition_id = ? AND h.distance_combination_id = ?
+        WHERE h.competition_id = ? AND h.distance_combination_id = ? {$distWhere}
         LIMIT 1
     ");
-    $s->execute([$compId, $doelDc]);
+    $s->execute($params);
     return (bool)$s->fetchColumn();
 }
 
 // ── Helper: heeft een doel-DC al een loting (heats)? Zo ja, dan wordt die
 // bij het (her)genereren OVERSCHREVEN — nuttig om de operator op te wijzen
 // dat er evt. nieuwe startlijsten geprint moeten worden.
-function _alDoelHeeftLoting(PDO $pdo, string $compId, string $doelDc): bool {
+function _alDoelHeeftLoting(PDO $pdo, string $compId, string $doelDc, string $doelDist = ''): bool {
+    $distWhere = $doelDist !== '' ? 'AND distance_id = ?' : '';
+    $params    = $doelDist !== '' ? [$compId, $doelDc, $doelDist] : [$compId, $doelDc];
     $s = $pdo->prepare("
         SELECT 1 FROM heats
-        WHERE competition_id = ? AND distance_combination_id = ? LIMIT 1
+        WHERE competition_id = ? AND distance_combination_id = ? {$distWhere} LIMIT 1
     ");
-    $s->execute([$compId, $doelDc]);
+    $s->execute($params);
     return (bool)$s->fetchColumn();
+}
+
+// ── Helper: welke afstanden zitten (straks) in het tussenklassement waarop een
+// tussenklassement-doel geloot wordt? = de COMPLETE afstanden van de DC, de
+// doel-afstand zelf uitgesloten. Gebruikt `alleRondesCompleet` (resultaat-
+// niveau), dus de zojuist-te-bevestigen bron-afstand telt al mee. Puur voor de
+// melding ("op basis van het tussenklassement (Tijdrit + Sprint)").
+function _alTkBasisAfstanden(PDO $pdo, string $compId, string $doelDc, string $doelDist): array {
+    $s = $pdo->prepare(
+        "SELECT id, name FROM distances WHERE distance_combination_id = ? ORDER BY name"
+    );
+    $s->execute([$doelDc]);
+    $namen = [];
+    foreach ($s->fetchAll(PDO::FETCH_ASSOC) as $a) {
+        $dId = (string)($a['id'] ?? '');
+        if ($dId !== '' && $dId === $doelDist) continue;   // doel-afstand telt niet mee
+        try {
+            $chk = alleRondesCompleet($pdo, $compId, [$doelDc], $dId !== '' ? $dId : null);
+            if (!empty($chk['compleet'])) $namen[] = $a['name'];
+        } catch (\Throwable $e) { /* afstand overslaan bij twijfel */ }
+    }
+    return $namen;
 }
 
 try {
@@ -127,10 +174,16 @@ try {
             SELECT al.id, al.doel_dc_id, al.doel_distance_id, al.methode,
                    al.bron_dc_id, al.bron_distance_id, al.max_per_heat,
                    dcd.name AS doel_dc_naam,
-                   dcb.name AS bron_dc_naam
+                   dcb.name AS bron_dc_naam,
+                   dbd.name AS doel_distance_naam,
+                   dbb.name AS bron_distance_naam
             FROM afhankelijke_loting al
             LEFT JOIN distance_combinations dcd ON dcd.id = al.doel_dc_id
             LEFT JOIN distance_combinations dcb ON dcb.id = al.bron_dc_id
+            LEFT JOIN distances dbd ON dbd.id = al.doel_distance_id
+                                   AND dbd.distance_combination_id = al.doel_dc_id
+            LEFT JOIN distances dbb ON dbb.id = al.bron_distance_id
+                                   AND dbb.distance_combination_id = al.bron_dc_id
             WHERE al.competition_id = ?
             ORDER BY dcd.number, dcd.name
         ");
@@ -198,29 +251,50 @@ try {
 
     // ── READ: voor_bron (trigger-lookup) ────────────────────────────────────
     if ($action === 'voor_bron') {
-        $compId  = trim($_GET['competition_id'] ?? '');
-        $bronDc  = trim($_GET['bron_dc_id']     ?? '');
+        $compId   = trim($_GET['competition_id']   ?? '');
+        $bronDc   = trim($_GET['bron_dc_id']       ?? '');
+        $bronDist = trim($_GET['bron_distance_id'] ?? '');
         if ($compId === '' || $bronDc === '') {
             http_response_code(400);
             echo json_encode(['error' => 'competition_id en bron_dc_id verplicht']);
             exit;
         }
+        // Match op BRON-DC + de ZOJUIST bevestigde bron-afstand. Cruciaal voor
+        // een keten binnen één DC (Tijdrit → Sprint → Lange afstand): het
+        // bevestigen van Tijdrit mag alléén de koppeling met bron=Tijdrit
+        // triggeren, niet die met bron=Sprint. Een koppeling met lege
+        // bron_distance_id (hele DC / legacy) matcht altijd; bij een hele-DC-
+        // bevestiging (bron_distance_id leeg meegestuurd) vallen we terug op
+        // alle doelen van deze DC.
+        $distWhere = $bronDist !== ''
+            ? "AND (al.bron_distance_id = '' OR al.bron_distance_id = ?)" : '';
+        $params    = $bronDist !== '' ? [$compId, $bronDc, $bronDist] : [$compId, $bronDc];
         $stmt = $pdo->prepare("
             SELECT al.id, al.doel_dc_id, al.doel_distance_id, al.methode,
                    al.bron_dc_id, al.bron_distance_id, al.max_per_heat,
-                   dcd.name AS doel_dc_naam
+                   dcd.name AS doel_dc_naam,
+                   dbd.name AS doel_distance_naam
             FROM afhankelijke_loting al
             LEFT JOIN distance_combinations dcd ON dcd.id = al.doel_dc_id
-            WHERE al.competition_id = ? AND al.bron_dc_id = ?
+            LEFT JOIN distances dbd ON dbd.id = al.doel_distance_id
+                                   AND dbd.distance_combination_id = al.doel_dc_id
+            WHERE al.competition_id = ? AND al.bron_dc_id = ? {$distWhere}
             ORDER BY dcd.number, dcd.name
         ");
-        $stmt->execute([$compId, $bronDc]);
+        $stmt->execute($params);
         $doelen = $stmt->fetchAll(PDO::FETCH_ASSOC);
-        // Verrijk elk doel met de afgeleide generatie-params + veiligheidsvlag.
+        // Verrijk elk doel met de afgeleide generatie-params + veiligheidsvlag
+        // (alles op afstand-niveau: doel_distance_id meesturen).
         foreach ($doelen as &$d) {
-            $d['gen']              = _alGenParams($pdo, $compId, $d['doel_dc_id']);
-            $d['heeft_resultaten'] = _alDoelHeeftResultaten($pdo, $compId, $d['doel_dc_id']);
-            $d['heeft_loting']     = _alDoelHeeftLoting($pdo, $compId, $d['doel_dc_id']);
+            $dDist = (string)($d['doel_distance_id'] ?? '');
+            $d['gen']              = _alGenParams($pdo, $compId, $d['doel_dc_id'], $dDist);
+            $d['heeft_resultaten'] = _alDoelHeeftResultaten($pdo, $compId, $d['doel_dc_id'], $dDist);
+            $d['heeft_loting']     = _alDoelHeeftLoting($pdo, $compId, $d['doel_dc_id'], $dDist);
+            // Tussenklassement-doel: de afstanden waarop de tussenstand berust
+            // (voor de bevestig-melding).
+            if (($d['methode'] ?? '') === 'tussenklassement') {
+                $d['tk_afstanden'] = _alTkBasisAfstanden($pdo, $compId, $d['doel_dc_id'], $dDist);
+            }
         }
         unset($d);
         echo json_encode(['doelen' => $doelen], JSON_UNESCAPED_UNICODE);
@@ -292,9 +366,12 @@ try {
             echo json_encode(['error' => "Methode '$methode' wordt (nog) niet ondersteund"]);
             exit;
         }
-        if ($doelDc === $bronDc) {
+        // Doel en bron mogen dezelfde DC zijn (een DC kan meerdere afstanden
+        // hebben, bv. 500m + puntenkoers) — alleen dezelfde AFSTAND binnen die
+        // DC zou zichzelf seeden en is onzin.
+        if ($doelDc === $bronDc && $doelDist === $bronDist) {
             http_response_code(409);
-            echo json_encode(['error' => 'Doel-DC en bron-DC mogen niet dezelfde zijn']);
+            echo json_encode(['error' => 'Doel en bron mogen niet dezelfde afstand zijn']);
             exit;
         }
         // Beide DC's moeten bij deze wedstrijd horen (voorkomt cross-comp injectie).
@@ -308,22 +385,29 @@ try {
         // Volg de bron-keten vanaf de nieuwe bron terug; als we het doel weer
         // tegenkomen zou er een kring ontstaan (A→B→…→A). Ketens zijn kort,
         // dus een simpele walk met visited-set volstaat.
+        // Sleutel op (dc|afstand): binnen één DC is 500m←puntenkoers geen kring.
         $keten = $pdo->prepare(
-            "SELECT bron_dc_id FROM afhankelijke_loting
-              WHERE competition_id = ? AND doel_dc_id = ? LIMIT 1"
+            "SELECT bron_dc_id, bron_distance_id FROM afhankelijke_loting
+              WHERE competition_id = ? AND doel_dc_id = ? AND doel_distance_id = ? LIMIT 1"
         );
-        $huidige = $bronDc;
-        $bezocht = [$doelDc => true];
-        $stappen = 0;
-        while ($huidige !== '' && $stappen++ < 50) {
-            if (isset($bezocht[$huidige])) {
+        $sleutel     = fn(string $dc, string $di): string => $dc . '|' . $di;
+        $huidigeDc   = $bronDc;
+        $huidigeDist = $bronDist;
+        $bezocht     = [$sleutel($doelDc, $doelDist) => true];
+        $stappen     = 0;
+        while ($huidigeDc !== '' && $stappen++ < 50) {
+            $k = $sleutel($huidigeDc, $huidigeDist);
+            if (isset($bezocht[$k])) {
                 http_response_code(409);
                 echo json_encode(['error' => 'Dit maakt een kringverwijzing tussen de lotingen — niet toegestaan']);
                 exit;
             }
-            $bezocht[$huidige] = true;
-            $keten->execute([$compId, $huidige]);
-            $huidige = (string)($keten->fetchColumn() ?: '');
+            $bezocht[$k] = true;
+            $keten->execute([$compId, $huidigeDc, $huidigeDist]);
+            $row = $keten->fetch(PDO::FETCH_ASSOC);
+            if (!$row) break;
+            $huidigeDc   = (string)($row['bron_dc_id']       ?? '');
+            $huidigeDist = (string)($row['bron_distance_id'] ?? '');
         }
 
         // Upsert op de UNIQUE (competition_id, doel_dc_id, doel_distance_id).

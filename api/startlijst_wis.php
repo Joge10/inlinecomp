@@ -121,6 +121,20 @@ try {
     $stmt->execute([$compId, $primaryDcId, $distId, $distId, $splitGroup, $splitGroup]);
     $heatsVerwijderd = $stmt->rowCount();
 
+    // 1b. Bijbehorende afhankelijke-loting-koppeling(en) mee-verwijderen: als
+    // deze afstand het DOEL van een koppeling was, is die na het wissen zinloos
+    // — anders blijft de "afhankelijke loting"-mededeling hangen en zou de
+    // loting bij een volgende bron-bevestiging weer terugkomen. Op AFSTAND-
+    // niveau (doel_distance_id), zodat een ándere afstand in dezelfde DC blijft
+    // staan. Defensief: tabel bestaat pas na de migratie.
+    try {
+        $pdo->prepare(
+            "DELETE FROM afhankelijke_loting
+              WHERE competition_id = ? AND doel_dc_id = ?
+                AND (doel_distance_id = ? OR doel_distance_id = '' OR ? = '')"
+        )->execute([$compId, $primaryDcId, $distId, $distId]);
+    } catch (\Throwable $e) { /* koppeling-cleanup mag wis nooit breken */ }
+
     // 2. Optioneel: vastgelegde uitslag voor deze cat+afstand mee-verwijderen
     $uitslagVerwijderd = 0;
     if (!empty($body['wis_uitslag'])) {

@@ -2149,6 +2149,21 @@ select:focus, input:focus { border-color: var(--middenblauw); outline: none; }
 .persoon-naam { font-size: 1.35rem; font-weight: 700; }
 .persoon-snr { font-size: .9rem; opacity: .8; }
 .persoon-cat { font-size: .85rem; background: rgba(255,255,255,.2); border-radius: 10px; padding: 2px 10px; }
+/* Status-badge in de rijder-header + status-modal. Kleur per status via
+   .pstat-*-classes (spiegelt STATUS_KLEUR/STATUS_BG). */
+.persoon-status { font-size: .75rem; border-radius: 10px; padding: 1px 8px; margin-left: 6px; display: inline-block; }
+.persoon-status-klik { cursor: pointer; text-decoration: underline; background: #e7eefc; color: #26456e; }
+.pstat-0  { background: #fff3e0; color: #e65100; }
+.pstat-1  { background: #e8f5e9; color: #2e7d32; }
+.pstat-2  { background: #fce4e4; color: #b71c1c; }
+.pstat-3  { background: #f3e5f5; color: #6a1b9a; }
+.pstat-4  { background: #e8eaf6; color: #283593; }
+.pstat-5  { background: #e0f7fa; color: #006064; }
+.pstat-ni { background: #fce4e4; color: #b71c1c; }
+.status-modal-body  { padding: 8px 12px 14px; }
+.status-modal-tabel { width: 100%; border-collapse: collapse; }
+.status-modal-tabel td { padding: 6px 10px; border-top: 1px solid #eef2f6; }
+.status-modal-tabel td:last-child { text-align: right; white-space: nowrap; }
 /* Stempel in persoon-card-header: zelfde kleur + grootte als .persoon-snr
    (witte tekst met .8 opacity op blauwe achtergrond). Icoon boven de tijd
    gestapeld zodat het compact blijft naast de cat-badge. */
@@ -5511,19 +5526,20 @@ function verwijderKind(idx) {
 // Status-per-DC voor de klikbare "klik voor status"-badge (alleen gevuld als
 // de statussen per DC verschillen). Key = license_key.
 let _dcStatusMap = {};
+// Status-index → kleur-class (spiegelt STATUS_KLEUR/STATUS_BG). Niet-ingeschreven
+// of onbekend → pstat-ni.
+function _pstatClass(st, nietIngeschreven) {
+    if (nietIngeschreven) return 'pstat-ni';
+    const s = parseInt(st);
+    return (s >= 0 && s <= 5) ? ('pstat-' + s) : 'pstat-ni';
+}
 function toonStatusModal(license) {
     const info = _dcStatusMap[license];
     if (!info) return;
     const rows = (info.dc || []).map(x => {
         const s   = parseInt(x.status);
         const lbl = (s >= 0 && s <= 5 ? getStatusLabel(s) : t('status_onbekend'));
-        const kleur = STATUS_KLEUR[s] ?? '#555';
-        const bg    = STATUS_BG[s] ?? '#eee';
-        return `<tr>
-            <td style="padding:6px 10px;border-top:1px solid #eef2f6">${esc(x.dc_naam)}</td>
-            <td style="padding:6px 10px;border-top:1px solid #eef2f6;text-align:right;white-space:nowrap">
-                <span style="font-size:.8rem;background:${bg};color:${kleur};border-radius:10px;padding:2px 9px">${esc(lbl)}</span>
-            </td></tr>`;
+        return `<tr><td>${esc(x.dc_naam)}</td><td><span class="persoon-status ${_pstatClass(s, false)}">${esc(lbl)}</span></td></tr>`;
     }).join('');
     const overlay = document.createElement('div');
     overlay.className = 'overlay';
@@ -5532,8 +5548,8 @@ function toonStatusModal(license) {
             <button class="overlay-sluit" onclick="this.closest('.overlay').remove()">&times;</button>
             ${esc(info.naam)} &middot; ${esc(t('status_per_afstand'))}
         </div>
-        <div style="padding:8px 12px 14px">
-            <table style="width:100%;border-collapse:collapse">${rows}</table>
+        <div class="status-modal-body">
+            <table class="status-modal-tabel">${rows}</table>
         </div>
     </div>`;
     overlay.addEventListener('click', e => { if (e.target === overlay) overlay.remove(); });
@@ -5549,21 +5565,20 @@ function renderResultaat(data, snr, prog) {
             const nietIngeschreven = p.entry_status === null || p.entry_status === undefined;
             const st = nietIngeschreven ? -1 : parseInt(p.entry_status);
             const stLabel = nietIngeschreven ? t('status_niet_ingeschreven') : (st >= 0 && st <= 5 ? getStatusLabel(st) : t('status_onbekend'));
-            const stKleur = nietIngeschreven ? '#b71c1c' : (STATUS_KLEUR[st] ?? '#555');
-            const stBg    = nietIngeschreven ? '#fce4e4' : (STATUS_BG[st] ?? '#eee');
 
             // Status-badge: één badge als alle DC's dezelfde status hebben (of
             // niet-ingeschreven / geen DC-info). Bij VERSCHILLENDE status per DC
             // (bv. voor één afstand afgemeld) een klikbare "klik voor status"-
-            // badge die een modal met afstand + status opent.
+            // badge die een modal met afstand + status opent. Kleuren via
+            // .persoon-status + .pstat-*-classes.
             const _dcSt  = Array.isArray(p.dc_statussen) ? p.dc_statussen : [];
             const _uniek = [...new Set(_dcSt.map(x => parseInt(x.status)))];
             let statusHtml;
             if (nietIngeschreven || _dcSt.length === 0 || _uniek.length <= 1) {
-                statusHtml = `<span style="font-size:.75rem;background:${stBg};color:${stKleur};border-radius:10px;padding:1px 8px;margin-left:6px">${esc(stLabel)}</span>`;
+                statusHtml = `<span class="persoon-status ${_pstatClass(st, nietIngeschreven)}">${esc(stLabel)}</span>`;
             } else {
                 _dcStatusMap[p.license_key] = { naam: p.full_name, dc: _dcSt };
-                statusHtml = `<span onclick="toonStatusModal('${esc(p.license_key)}')" style="font-size:.75rem;background:#e7eefc;color:#26456e;border-radius:10px;padding:1px 8px;margin-left:6px;cursor:pointer;text-decoration:underline">&#9432; ${esc(t('status_klik'))}</span>`;
+                statusHtml = `<span class="persoon-status persoon-status-klik" onclick="toonStatusModal('${esc(p.license_key)}')">&#9432; ${esc(t('status_klik'))}</span>`;
             }
 
             html += `

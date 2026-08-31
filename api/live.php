@@ -671,16 +671,26 @@ if ($action === 'save_rit_results') {
         $ritInfo = $ritInfoStmt->fetch(PDO::FETCH_ASSOC);
 
         // Afhankelijke loting opruimen: zodra de eerste heat-uitslag van deze
-        // afstand binnenkomt, is een afhankelijke loting mét DEZE DC als DOEL
-        // zinloos geworden — opnieuw loten kan niet meer (de afstand wordt
-        // gereden). Verwijderen zodat 'ie niet blijft hangen. Defensief: de
-        // tabel bestaat pas na de migratie, dus fouten negeren.
+        // AFSTAND binnenkomt, is een afhankelijke loting mét DEZE AFSTAND als
+        // DOEL zinloos geworden — opnieuw loten kan niet meer (de afstand wordt
+        // gereden). Op AFSTAND-niveau opruimen, niet op DC: bij een DC met
+        // meerdere afstanden (bv. 500m + puntenkoers, doel_dc == bron_dc) zou
+        // een DC-brede wis de koppeling van de ándere afstand meeslepen zodra
+        // de bron-afstand gereden wordt. Defensief: tabel/kolom bestaat pas na
+        // de migratie, dus fouten negeren.
         if ($ritInfo && !empty($ritInfo['dc_id'])) {
             try {
+                $ritDist = (string)($ritInfo['distance_id'] ?? '');
+                // Wis alleen koppelingen waarvan DEZE afstand het doel is:
+                //  - exact deze afstand,  of
+                //  - een hele-DC-koppeling (doel_distance_id ''),  of
+                //  - als de rit geen distance_id heeft (single-afstand/naam-
+                //    gebaseerd) → val terug op DC-breed (kan niet fijner).
                 $pdo->prepare(
                     "DELETE FROM afhankelijke_loting
-                      WHERE competition_id = ? AND doel_dc_id = ?"
-                )->execute([$compId, $ritInfo['dc_id']]);
+                      WHERE competition_id = ? AND doel_dc_id = ?
+                        AND (doel_distance_id = ? OR doel_distance_id = '' OR ? = '')"
+                )->execute([$compId, $ritInfo['dc_id'], $ritDist, $ritDist]);
             } catch (\Throwable $e) { /* cleanup mag save nooit breken */ }
         }
 

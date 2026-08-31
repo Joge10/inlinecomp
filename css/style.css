@@ -1932,6 +1932,10 @@ body.live-pagina-actief #main-content {
 .sl-afstanduit-kiezer select { min-width: 320px; max-width: 600px;
                                font-size: .85rem; }
 
+/* Trigger-afstand-dropdown bij tussenklassement zonder tussenstand. */
+.sl-tk-trigger-wrap        { margin: .4rem 0; }
+.sl-tk-trigger-wrap select { min-width: 260px; max-width: 500px; font-size: .85rem; }
+
 .btn-genereer {
     background: var(--middenblauw);
     color: var(--wit);
@@ -1946,6 +1950,12 @@ body.live-pagina-actief #main-content {
     transition: background .15s;
 }
 .btn-genereer:hover { background: var(--blauw); }
+/* Afhankelijke loting (vergrendelde weergave): info-regel onder de kop. */
+.sl-afh-info {
+    font-size: .85rem;
+    color: #555;
+    margin: 2px 0 12px;
+}
 
 /* ── Heat grid ── */
 .sl-info {
@@ -5139,6 +5149,17 @@ col.live-col-rondes  { width: 40px; }
     border-left: 3px solid #f5a623;
     color: #8a3f00;
     padding: 6px 10px;
+    margin: 12px 0 0;
+    border-radius: 0 4px 4px 0;
+    font-size: .85rem;
+}
+/* Info-regel binnen modal (neutrale melding, bv. afhankelijke loting). */
+.modal-body p.modal-info {
+    background: #eef5ff;
+    border-left: 3px solid #4d8ad0;
+    color: #1c3d5a;
+    padding: 6px 10px;
+    margin: 12px 0 0;
     border-radius: 0 4px 4px 0;
     font-size: .85rem;
 }

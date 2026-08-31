@@ -26,6 +26,7 @@ header('Access-Control-Allow-Origin: *');
 
 require_once __DIR__ . '/../../config_inlinecomp.php';
 require_once __DIR__ . '/../auth/session.php';
+require_once __DIR__ . '/_uitslag_helper.php';   // alleRondesCompleet
 requireAuth($pdo);
 
 $compId  = trim($_GET['competition_id'] ?? '');
@@ -44,7 +45,7 @@ try {
     $afstandParams = $distId ? [$compId, $dcId, $distId] : [$compId, $dcId];
 
     $afStmt = $pdo->prepare("
-        SELECT DISTINCT distance_naam
+        SELECT DISTINCT distance_id, distance_naam
         FROM   uitslag_afstand
         WHERE  competition_id          = ?
           AND  distance_combination_id = ?
@@ -52,14 +53,42 @@ try {
         ORDER BY distance_naam
     ");
     $afStmt->execute($afstandParams);
-    $afstanden = array_column($afStmt->fetchAll(PDO::FETCH_ASSOC), 'distance_naam');
+    $alleAfstanden = $afStmt->fetchAll(PDO::FETCH_ASSOC);
+
+    // Alleen COMPLETE afstanden meetellen: een afstand waarvan (bijv.) een tijd
+    // is verwijderd is niet meer compleet → de oude, ongeldig geworden uitslag
+    // mag het tussenklassement niet vervuilen. distance_id-loos (single-afstand)
+    // kunnen we niet gericht uitsluiten → die telt mee.
+    $incompleet = [];   // distance_id's die NIET meer compleet zijn
+    $afstanden  = [];   // namen van de wél-complete afstanden
+    foreach ($alleAfstanden as $a) {
+        $dId = (string)($a['distance_id'] ?? '');
+        $compleet = true;
+        if ($dId !== '') {
+            try {
+                $chk = alleRondesCompleet($pdo, $compId, [$dcId], $dId);
+                $compleet = !empty($chk['compleet']);
+            } catch (Throwable $e) { $compleet = true; }   // bij twijfel meetellen
+        }
+        if ($compleet) $afstanden[] = $a['distance_naam'];
+        else           $incompleet[] = $dId;
+    }
 
     if (empty($afstanden)) {
         echo json_encode(['ranking' => [], 'afstanden' => [], 'heeft_data' => false]);
         exit;
     }
 
-    // ── Tussenklassement berekenen ────────────────────────────────────────────
+    // Uitsluit-clausule voor de incomplete afstanden (NULL blijft meetellen).
+    $incSql    = '';
+    $incParams = [];
+    if ($incompleet) {
+        $ph        = implode(',', array_fill(0, count($incompleet), '?'));
+        $incSql    = "AND (distance_id IS NULL OR distance_id NOT IN ($ph))";
+        $incParams = $incompleet;
+    }
+
+    // ── Tussenklassement berekenen (alleen op complete afstanden) ─────────────
     $rkSql = "
         SELECT   ua.person_license,
                  p.full_name,
@@ -73,10 +102,11 @@ try {
         WHERE    ua.competition_id          = ?
           AND    ua.distance_combination_id = ?
           {$afstandSql}
+          {$incSql}
         GROUP BY ua.person_license, p.full_name, p.short_name, p.start_number
         ORDER BY totaal_punten ASC, beste_rang ASC
     ";
-    $rkParams = $distId ? [$compId, $dcId, $distId] : [$compId, $dcId];
+    $rkParams = array_merge($afstandParams, $incParams);
     $rkStmt   = $pdo->prepare($rkSql);
     $rkStmt->execute($rkParams);
     $rows = $rkStmt->fetchAll(PDO::FETCH_ASSOC);
