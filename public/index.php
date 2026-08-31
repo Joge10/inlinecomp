@@ -675,6 +675,23 @@ if ($action === 'lookup') {
             exit;
         }
 
+        // Status PER DC voor de rijder-header. Een rijder kan in meerdere DC's
+        // (afstanden) staan met verschillende status — bv. voor één afstand
+        // afgemeld. De frontend toont bij gelijke status één badge (zoals nu),
+        // en bij verschil per DC (DC-naam + status).
+        $dcStatusStmt = $pdo->prepare("
+            SELECT dc.name AS dc_naam, e.status
+            FROM entries e
+            JOIN distance_combinations dc ON dc.id = e.distance_combination_id
+            WHERE e.person_license = ? AND dc.competition_id = ?
+            ORDER BY dc.number, dc.name
+        ");
+        foreach ($personen as &$pp) {
+            $dcStatusStmt->execute([$pp['license_key'], $compId]);
+            $pp['dc_statussen'] = $dcStatusStmt->fetchAll(PDO::FETCH_ASSOC);
+        }
+        unset($pp);
+
         // Heats + alle rijders per heat
         // bruto_tijd_ms + is_photofinish meesturen zodat "Jouw resultaat" een
         // gemeten/officieel-paar kan tonen wanneer jury de tijd gewijzigd heeft.
@@ -3200,6 +3217,8 @@ const T = {
         status_1: 'Bevestigd',
         status_2: 'Afgemeld',
         status_3: 'Afgem. bij org.',
+        status_klik: 'klik voor status',
+        status_per_afstand: 'Status per afstand',
         status_4: 'Niet getekend',
         status_5: 'Bev. bij org.',
         status_onbekend: '?',
@@ -3442,6 +3461,8 @@ const T = {
         status_1: 'Confirmed',
         status_2: 'Withdrawn',
         status_3: 'Withdrawn by org.',
+        status_klik: 'tap for status',
+        status_per_afstand: 'Status per distance',
         status_4: 'Not signed in',
         status_5: 'Confirmed by org.',
         status_onbekend: '?',
@@ -3683,6 +3704,8 @@ const T = {
         status_1: 'Bestätigt',
         status_2: 'Abgemeldet',
         status_3: 'Abgem. bei Org.',
+        status_klik: 'für Status tippen',
+        status_per_afstand: 'Status pro Distanz',
         status_4: 'Nicht unterschrieben',
         status_5: 'Best. bei Org.',
         status_onbekend: '?',
@@ -3924,6 +3947,8 @@ const T = {
         status_1: 'Confirmé',
         status_2: 'Désinscrit',
         status_3: 'Désinsc. à l\'org.',
+        status_klik: 'voir le statut',
+        status_per_afstand: 'Statut par distance',
         status_4: 'Non signé',
         status_5: 'Conf. à l\'org.',
         status_onbekend: '?',
@@ -5483,6 +5508,38 @@ function verwijderKind(idx) {
     }
 }
 
+// Status-per-DC voor de klikbare "klik voor status"-badge (alleen gevuld als
+// de statussen per DC verschillen). Key = license_key.
+let _dcStatusMap = {};
+function toonStatusModal(license) {
+    const info = _dcStatusMap[license];
+    if (!info) return;
+    const rows = (info.dc || []).map(x => {
+        const s   = parseInt(x.status);
+        const lbl = (s >= 0 && s <= 5 ? getStatusLabel(s) : t('status_onbekend'));
+        const kleur = STATUS_KLEUR[s] ?? '#555';
+        const bg    = STATUS_BG[s] ?? '#eee';
+        return `<tr>
+            <td style="padding:6px 10px;border-top:1px solid #eef2f6">${esc(x.dc_naam)}</td>
+            <td style="padding:6px 10px;border-top:1px solid #eef2f6;text-align:right;white-space:nowrap">
+                <span style="font-size:.8rem;background:${bg};color:${kleur};border-radius:10px;padding:2px 9px">${esc(lbl)}</span>
+            </td></tr>`;
+    }).join('');
+    const overlay = document.createElement('div');
+    overlay.className = 'overlay';
+    overlay.innerHTML = `<div class="overlay-box">
+        <div class="heat-card-titel">
+            <button class="overlay-sluit" onclick="this.closest('.overlay').remove()">&times;</button>
+            ${esc(info.naam)} &middot; ${esc(t('status_per_afstand'))}
+        </div>
+        <div style="padding:8px 12px 14px">
+            <table style="width:100%;border-collapse:collapse">${rows}</table>
+        </div>
+    </div>`;
+    overlay.addEventListener('click', e => { if (e.target === overlay) overlay.remove(); });
+    document.body.appendChild(overlay);
+}
+
 function renderResultaat(data, snr, prog) {
         let html = '';
         for (const r of data) {
@@ -5495,12 +5552,26 @@ function renderResultaat(data, snr, prog) {
             const stKleur = nietIngeschreven ? '#b71c1c' : (STATUS_KLEUR[st] ?? '#555');
             const stBg    = nietIngeschreven ? '#fce4e4' : (STATUS_BG[st] ?? '#eee');
 
+            // Status-badge: één badge als alle DC's dezelfde status hebben (of
+            // niet-ingeschreven / geen DC-info). Bij VERSCHILLENDE status per DC
+            // (bv. voor één afstand afgemeld) een klikbare "klik voor status"-
+            // badge die een modal met afstand + status opent.
+            const _dcSt  = Array.isArray(p.dc_statussen) ? p.dc_statussen : [];
+            const _uniek = [...new Set(_dcSt.map(x => parseInt(x.status)))];
+            let statusHtml;
+            if (nietIngeschreven || _dcSt.length === 0 || _uniek.length <= 1) {
+                statusHtml = `<span style="font-size:.75rem;background:${stBg};color:${stKleur};border-radius:10px;padding:1px 8px;margin-left:6px">${esc(stLabel)}</span>`;
+            } else {
+                _dcStatusMap[p.license_key] = { naam: p.full_name, dc: _dcSt };
+                statusHtml = `<span onclick="toonStatusModal('${esc(p.license_key)}')" style="font-size:.75rem;background:#e7eefc;color:#26456e;border-radius:10px;padding:1px 8px;margin-left:6px;cursor:pointer;text-decoration:underline">&#9432; ${esc(t('status_klik'))}</span>`;
+            }
+
             html += `
             <div style="margin-top:16px">
                 <div class="persoon-header">
                     <div><div class="persoon-naam">${esc(p.full_name)}</div>
                          <span class="persoon-snr">${esc(t('snr_label'))} ${esc(p.wedstrijd_snr??p.start_number)}</span>
-                         <span style="font-size:.75rem;background:${stBg};color:${stKleur};border-radius:10px;padding:1px 8px;margin-left:6px">${esc(stLabel)}</span></div>
+                         ${statusHtml}</div>
                     <div style="display:flex;align-items:center;gap:8px">
                         <span class="persoon-cat">${esc(p.category)}</span>
                         <span class="auto-stempel" title="${esc(t('auto_stempel_title'))}">${_huidigStempel}</span>
