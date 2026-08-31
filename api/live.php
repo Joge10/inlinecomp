@@ -1719,6 +1719,27 @@ if ($action === 'genereer_volgende_ronde') {
             }
         }
 
+        // Full-final: een ex-aequo op de A/B-grens hoort in de A-finale (de
+        // héle tie-groep, ook als >2 rijders gelijk eindigen), niet in de
+        // B-finale. Verplaats de overflow-rijders (die aan de A-grens gelijk
+        // eindigden) van $bSlots naar $allSlots; iedereen daaronder schuift
+        // vanzelf door (de B/B-grenzen worden bij de B-verdeling verderop al
+        // tie-bewust behandeld, ~regel 2507-2522, en de laatste B-finale krimpt).
+        // Voorbeeld: 16 in de series, top-4 → A; ex-aequo op plek 4 (2 rijders)
+        // → A-finale met 5, B1/B2 elk 4, B3 met 3.
+        if ($isFullFinal && !empty($overflowRijders)) {
+            $ovIds = [];
+            foreach ($overflowRijders as $r) {
+                if (!empty($r['entry_id'])) $ovIds[$r['entry_id']] = true;
+            }
+            $allSlots = array_merge($allSlots, $overflowRijders);
+            $bSlots   = array_values(array_filter(
+                $bSlots,
+                fn($r) => empty($r['entry_id']) || !isset($ovIds[$r['entry_id']])
+            ));
+            $overflowRijders = [];   // verwerkt in de A-finale
+        }
+
         // Bepaal ronde-nummer
         $rondeNrMap = [
             'heats'        => 1,
@@ -1748,6 +1769,18 @@ if ($action === 'genereer_volgende_ronde') {
         if ($isFullFinal || $isKleinFinale) $nieuwePerRonde['finale_b'] = [];
         foreach ($allSlots as $r) {
             if (!empty($r['person_license'])) $nieuwePerRonde[$naarRondeType][] = $r['person_license'];
+        }
+        // Ex-aequo-overflow-rijders belanden bij internationaal (niet full-final,
+        // niet klein-finale) óók in de doel-ronde (A-finale) — zie de overflow-
+        // afhandeling verderop (regel ~2306) en de multi-finale-merge (~2065).
+        // Neem ze hier mee, anders ziet de "ongewijzigd"-check een net-gecreëerde
+        // ex-aequo niet en slaat-ie de regeneratie ten onrechte over (A-finale
+        // wordt dan niet bijgewerkt tot je 'm forceert). Bij full-final/klein-
+        // finale zitten ze al in $bSlots (finale_b) en tellen ze daar mee.
+        if (!$isFullFinal && !$isKleinFinale) {
+            foreach ($overflowRijders as $r) {
+                if (!empty($r['person_license'])) $nieuwePerRonde[$naarRondeType][] = $r['person_license'];
+            }
         }
         if ($isFullFinal || $isKleinFinale) {
             foreach (($bSlots ?? []) as $r) {

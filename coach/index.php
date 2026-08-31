@@ -1293,6 +1293,23 @@ if ($action === 'ronde_uitslagen') {
                                 }
                             }
                         }
+                        // Ex-aequo Q (per heat): als de laatste Q-rijder van een
+                        // heat exact dezelfde tijd heeft als de eerstvolgende
+                        // rijder(s), gaan die ook door (overflow) — spiegelt de
+                        // backend (live.php genereer_volgende_ronde). Zonder dit
+                        // toont het overzicht zo'n ex-aequo-rijder niet als
+                        // gekwalificeerd terwijl hij wél in de volgende ronde zit.
+                        foreach ($perHeat as $hr) {
+                            $grens = $hr[$qPerHeat - 1] ?? null;
+                            if (!$grens || $grens['tijd_ms'] === null) continue;
+                            for ($i = $qPerHeat; $i < count($hr); $i++) {
+                                if ($hr[$i]['tijd_ms'] !== null
+                                        && (int)$hr[$i]['tijd_ms'] === (int)$grens['tijd_ms']
+                                        && !$isUitval($hr[$i]['sanctie']))
+                                    $qRijders[$hr[$i]['person_license']] = true;
+                                else break;
+                            }
+                        }
                     }
                     $aantalQ = count($qRijders);
                     $aantalq = max(0, $totaalDoor - $aantalQ);

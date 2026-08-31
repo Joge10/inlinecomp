@@ -1658,6 +1658,22 @@ function _liveVerzamelPanelRijders(dcId, distanceId, rondeType) {
                         qRijders.add(r.entry_id);
                 }
             }
+            // Ex-aequo Q (per heat): als de laatste Q-rijder van een heat exact
+            // dezelfde tijd heeft als de eerstvolgende niet-Q rijder(s), gaan die
+            // ook door — spiegelt de backend-overflow (live.php genereer_volgende_
+            // ronde). Zonder dit toont het panel zo'n ex-aequo-rijder niet als
+            // gekwalificeerd, terwijl hij wél in de volgende ronde staat.
+            for (const hk of Object.keys(perHeat)) {
+                const hr    = perHeat[hk];               // al op finishpositie gesorteerd
+                const grens = hr[qPerHeat - 1];
+                if (!grens || grens.tijd_ms == null) continue;
+                for (let i = qPerHeat; i < hr.length; i++) {
+                    if (hr[i].tijd_ms != null && hr[i].tijd_ms === grens.tijd_ms
+                            && !_liveSanctieHeeftSet(hr[i].sanctie, _SANCTIE_GEEN_FINISH))
+                        qRijders.add(hr[i].entry_id);
+                    else break;
+                }
+            }
         }
 
         const metTijd = alleRijders

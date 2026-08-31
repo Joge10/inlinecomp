@@ -14,6 +14,17 @@
 //     en wordt in de changelog genest + gedempt getoond onder de versie.
 //     Triviale copy/typo-fixes komen NERGENS in de changelog — los committen.
 return [
+    // ── Patches onder H1719.30.08 (onderhoud & beveiliging, alleen Beheer) ──
+    [
+        'versie' => 'H1719.30.08', 'datum' => '31-08-2026',
+        'soort'  => 'patch', 'onderdelen' => ['patch'],
+        'tekst' => [
+            'nl' => '🔧 <b>Ex-aequo doorstroming — weergave + full-final</b> — bij een exact gelijke tijd op de kwalificatiegrens stromen álle gelijk-geëindigde rijders door. Ze tonen nu ook een <b>Q</b> in de overzichten (Beheer, Publiek, Coach), en na een tijd-correctie die een ex-aequo maakt wordt de volgende ronde bij opnieuw genereren daadwerkelijk bijgewerkt. In het full-final-systeem belandt zo\'n ex-aequo-groep nu in de A-finale (i.p.v. de B-finale); de rijders daaronder schuiven door.',
+            'en' => '🔧 <b>Tied advancement — display + full-final</b> — when times are exactly equal at the qualification cut-off, all tied skaters advance. They now also show a <b>Q</b> in the overviews (Admin, Public, Coach), and after a time correction that creates a tie, regenerating the next round now actually updates it. In the full-final system such a tied group now lands in the A-final (instead of the B-final); everyone below shifts down.',
+            'de' => '🔧 <b>Gleichstand-Aufstieg — Anzeige + Full-Final</b> — bei exakt gleicher Zeit an der Qualifikationsgrenze steigen alle gleichplatzierten Fahrer auf. Sie zeigen jetzt auch ein <b>Q</b> in den Übersichten (Verwaltung, Public, Coach), und nach einer Zeitkorrektur, die einen Gleichstand erzeugt, wird die nächste Runde beim erneuten Generieren tatsächlich aktualisiert. Im Full-Final-System landet so eine Gleichstand-Gruppe jetzt im A-Finale (statt im B-Finale); alle darunter rücken nach.',
+            'fr' => '🔧 <b>Qualification ex æquo — affichage + full-final</b> — en cas de temps exactement égaux à la limite de qualification, tous les patineurs ex æquo passent. Ils affichent désormais aussi un <b>Q</b> dans les aperçus (Gestion, Public, Coach), et après une correction de temps créant une égalité, la régénération de la manche suivante la met bien à jour. Dans le système full-final, un tel groupe ex æquo se retrouve maintenant en finale A (au lieu de la finale B) ; tous ceux en dessous descendent d\'un cran.',
+        ],
+    ],
     // ── Release H1719.30.08 ────────────────────────────────────────────────
     [
         'versie' => 'H1719.30.08', 'datum' => '30-08-2026', 'onderdelen' => ['admin'],
