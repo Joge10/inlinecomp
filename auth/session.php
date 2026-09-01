@@ -16,7 +16,7 @@ function getSession(PDO $pdo): ?array {
     if (!$token || strlen($token) !== 64 || !ctype_xdigit($token)) return null;
 
     $stmt = $pdo->prepare("
-        SELECT u.id, u.username, u.naam, u.role
+        SELECT u.id, u.username, u.naam, u.email, u.role
         FROM   sessions s
         JOIN   users    u ON u.id = s.user_id
         WHERE  s.token      = ?

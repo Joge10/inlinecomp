@@ -815,6 +815,7 @@ const currentUser = <?= json_encode([
     'id'                => (int)$gebruiker['id'],
     'username'          => $gebruiker['username'],
     'naam'              => $gebruiker['naam'],
+    'email'             => $gebruiker['email'] ?? null,
     'role'              => $gebruiker['role'],
     // Array van org-UUIDs die deze user mag zien (leeg = unscoped = alle).
     'organisatie_ids'   => $eigenScope ?? [],

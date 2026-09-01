@@ -338,6 +338,7 @@ try {
                 'id'       => $user['id'],
                 'username' => $user['username'],
                 'naam'     => $user['naam'],
+                'email'    => $user['email'] ?? null,
                 'role'     => $user['role'],
             ],
         ]);
@@ -380,6 +381,7 @@ try {
         }
         $naam       = trim($body['naam']     ?? '');
         $username   = trim($body['username'] ?? '');
+        $email      = trim($body['email']    ?? '');
         $huidigPw   = $body['huidig_wachtwoord'] ?? '';
         if ($naam === '' || $username === '') {
             http_response_code(400);
@@ -389,6 +391,14 @@ try {
         if ($huidigPw === '') {
             http_response_code(400);
             echo json_encode(['error' => 'Huidig wachtwoord is verplicht ter bevestiging']);
+            exit;
+        }
+        // E-mail is optioneel (mag leeg = geen adres), maar als 'ie ingevuld is
+        // moet 'ie een geldig formaat hebben. Niet-uniek (zie users.sql), net als
+        // in de gebruikers-beheer.
+        if ($email !== '' && !filter_var($email, FILTER_VALIDATE_EMAIL)) {
+            http_response_code(400);
+            echo json_encode(['error' => 'Ongeldig e-mailadres']);
             exit;
         }
         // Hash op DB ophalen — getSession() geeft die niet noodzakelijk terug
@@ -410,10 +420,11 @@ try {
                 exit;
             }
         }
-        $pdo->prepare("UPDATE users SET naam = ?, username = ?, updated_at = NOW() WHERE id = ?")
-            ->execute([$naam, $username, $user['id']]);
+        $emailWaarde = $email === '' ? null : $email;
+        $pdo->prepare("UPDATE users SET naam = ?, username = ?, email = ?, updated_at = NOW() WHERE id = ?")
+            ->execute([$naam, $username, $emailWaarde, $user['id']]);
         schrijfLog($pdo, (int)$user['id'], $naam, $username, 'profiel_aangepast');
-        echo json_encode(['ok' => true, 'naam' => $naam, 'username' => $username]);
+        echo json_encode(['ok' => true, 'naam' => $naam, 'username' => $username, 'email' => $emailWaarde]);
         exit;
     }
 

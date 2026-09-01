@@ -502,6 +502,11 @@ function toonMijnAccountDialog() {
                         <input type="text" id="ma-username" class="inp" value="${escHtml(currentUser.username || '')}" required>
                     </label>
                 </div>
+                <div class="mf-rij">
+                    <label class="mf-lbl"><span>E-mailadres</span>
+                        <input type="email" id="ma-email" class="inp" value="${escHtml(currentUser.email || '')}" autocomplete="email">
+                    </label>
+                </div>
                 <hr style="margin:1em 0;border:none;border-top:1px solid #e0e0e0">
                 <div class="mf-rij">
                     <label class="mf-lbl"><span>Huidig wachtwoord <span class="vereist">*</span></span>
@@ -547,6 +552,7 @@ function toonMijnAccountDialog() {
     el('ma-opslaan').addEventListener('click', async () => {
         const naam     = el('ma-naam').value.trim();
         const username = el('ma-username').value.trim();
+        const email    = el('ma-email').value.trim();
         const huidigPw = el('ma-pw-huidig').value;
         const nieuwPw  = el('ma-pw-nieuw').value;
         const nieuwPw2 = el('ma-pw-nieuw2').value;
@@ -554,6 +560,7 @@ function toonMijnAccountDialog() {
 
         if (!naam || !username) { toonFout('Naam en gebruikersnaam zijn verplicht.'); return; }
         if (!huidigPw)          { toonFout('Huidig wachtwoord is verplicht ter bevestiging.'); return; }
+        if (email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) { toonFout('Ongeldig e-mailadres.'); return; }
         if (nieuwPw || nieuwPw2) {
             if (nieuwPw.length < 8)   { toonFout('Nieuw wachtwoord moet minimaal 8 tekens zijn.'); return; }
             if (nieuwPw !== nieuwPw2) { toonFout('Nieuwe wachtwoorden komen niet overeen.'); return; }
@@ -562,14 +569,15 @@ function toonMijnAccountDialog() {
         const opslaanBtn = el('ma-opslaan');
         opslaanBtn.disabled = true;
         try {
-            // Stap 1: profiel-update (naam + username) — alleen als iets gewijzigd is
-            const naamGewijzigd = naam !== (currentUser.naam || '');
-            const userGewijzigd = username !== (currentUser.username || '');
-            if (naamGewijzigd || userGewijzigd) {
+            // Stap 1: profiel-update (naam + username + email) — alleen als iets gewijzigd is
+            const naamGewijzigd  = naam !== (currentUser.naam || '');
+            const userGewijzigd  = username !== (currentUser.username || '');
+            const emailGewijzigd = email !== (currentUser.email || '');
+            if (naamGewijzigd || userGewijzigd || emailGewijzigd) {
                 const r1 = await fetch('api/auth.php?action=update_profiel', {
                     method: 'POST', headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({
-                        action: 'update_profiel', naam, username,
+                        action: 'update_profiel', naam, username, email,
                         huidig_wachtwoord: huidigPw,
                     }),
                 });
@@ -577,6 +585,7 @@ function toonMijnAccountDialog() {
                 if (!r1.ok) { toonFout(d1.error || 'Fout bij opslaan profiel.'); return; }
                 currentUser.naam     = d1.naam;
                 currentUser.username = d1.username;
+                currentUser.email    = d1.email || '';
             }
             // Stap 2: wachtwoord-wijziging — alleen als nieuw wachtwoord ingevuld
             if (nieuwPw) {
