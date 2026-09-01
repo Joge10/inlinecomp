@@ -198,6 +198,9 @@ if (is_array($eigenScope) && !empty($eigenScope)) {
                                 <button id="btn-import" class="btn-import" title="Wedstrijd importeren in database">
                                     &#8659; Importeer
                                 </button>
+                                <!-- Combineren (andere KNSB-wedstrijden zelfde org+locatie aan
+                                     deze koppelen) gebeurt via de 🔗-knop op de wedstrijd-cards
+                                     zelf (alleen zichtbaar bij combineerbare wedstrijden). -->
                             </div>
                         </div>
                         <div id="import-result"></div>

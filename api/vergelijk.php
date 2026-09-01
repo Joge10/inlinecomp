@@ -29,6 +29,7 @@ require_once __DIR__ . '/../../config_inlinecomp.php';
 require_once __DIR__ . '/../auth/session.php';
 require_once __DIR__ . '/lib_banen.php';
 require_once __DIR__ . '/demo_fixture.php';
+require_once __DIR__ . '/lib_combineren.php';
 $_authUser = requireAuth($pdo);
 
 function apiGet(string $url): ?array {
@@ -219,8 +220,18 @@ try {
         }
     }
 
-    // 1. KNSB deelnemers ophalen
-    $groepen = apiGet("$base/competitions/$compId/competitors");
+    // 1. KNSB deelnemers ophalen. Bij een GECOMBINEERDE wedstrijd loopen we over
+    //    [doel + bron-wedstrijden] en voegen de deelnemer-groepen samen; alle
+    //    DC's komen zo onder deze doel-wedstrijd te staan (DC-id's zijn globaal
+    //    uniek, dus geen botsing). De DB-queries hieronder draaien op
+    //    competition_id = doel, dus na import volgen de bron-DC's vanzelf.
+    $groepen = [];
+    foreach (importBronnenVoorDoel($pdo, $compId) as $cid) {
+        $g = apiGet("$base/competitions/$cid/competitors");
+        if (is_array($g)) { foreach ($g as $grp) $groepen[] = $grp; }
+        elseif ($cid === $compId) throw new RuntimeException('Kan deelnemers niet ophalen van KNSB');
+        // Een bron die (tijdelijk) niet uit de feed komt slaan we stil over.
+    }
     if (!$groepen) throw new RuntimeException('Kan deelnemers niet ophalen van KNSB');
 
     // 2. Alle license keys verzamelen (incl. synthetische sleutels voor anonieme rijders)

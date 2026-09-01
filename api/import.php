@@ -273,6 +273,7 @@ if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
 require_once __DIR__ . '/../../config_inlinecomp.php';
 require_once __DIR__ . '/../auth/session.php';
 require_once __DIR__ . '/demo_fixture.php';
+require_once __DIR__ . '/lib_combineren.php';
 $_authUser = requireAuth($pdo);
 if (!kanSchrijven($_authUser, 'importeer')) {
     http_response_code(403);
@@ -399,14 +400,32 @@ try {
     $dcs = apiGet("$base/competitions/$compId/distancecombinations");
     if (!$dcs) throw new RuntimeException('Kan categorieën niet ophalen van KNSB');
 
+    // Gecombineerde wedstrijd: ook de categorieën van de bron-wedstrijden
+    // ophalen. Ze worden hieronder onder het DOEL-competition_id weggeschreven
+    // (DC-id's zijn globaal uniek KNSB-UUID's, dus geen botsing). Metadata
+    // (naam/venue) blijft die van de doelwedstrijd (hierboven al geschreven).
+    foreach (bronCompetitionIds($pdo, $compId) as $bronId) {
+        $bronDcs = apiGet("$base/competitions/$bronId/distancecombinations");
+        if (is_array($bronDcs) && $bronDcs) {
+            foreach ($bronDcs as $bdc) $dcs[] = $bdc;
+            $log[] = count($bronDcs) . " categorieën uit bron-wedstrijd toegevoegd";
+        } else {
+            $log[] = "⚠ Bron-wedstrijd leverde geen categorieën (overgeslagen): $bronId";
+        }
+    }
+
     $stmtDC = $pdo->prepare("
         INSERT INTO distance_combinations
                (id, competition_id, number, name, category_filter)
         VALUES (:id, :comp_id, :number, :name, :cat_filter)
         ON DUPLICATE KEY UPDATE
+               competition_id = VALUES(competition_id),
                number = VALUES(number), name = VALUES(name),
                category_filter = VALUES(category_filter)
     ");
+    // competition_id = VALUES(...) is voor een gewone import een no-op (zelfde
+    // waarde), maar zorgt bij een GECOMBINEERDE wedstrijd dat een bron-DC die
+    // eerder los geïmporteerd was, naar het doel-competition_id verhuist.
     // Bij nieuwe rijen worden alle velden uit de KNSB-data gevuld; bestaande
     // rijen behouden hun handmatig aangepaste waarden voor velden die de
     // user via de afstanden-beheer UI kan wijzigen:
@@ -461,6 +480,27 @@ try {
         }
     }
     $log[] = count($dcs) . ' categorieën opgeslagen';
+
+    // Gecombineerde wedstrijd: een bron die eerder LOS geïmporteerd was heeft
+    // nog een eigen competitions-rij (ghost). Nu z'n DC's naar het doel zijn
+    // verhuisd, ruimen we die lege rij op zodat er in Beheer alleen de
+    // doelwedstrijd staat. VEILIG: alleen verwijderen als de bron geen heats
+    // heeft (niet los geloot) — dan cascade't er niets nuttigs weg. Is er wél
+    // geloot onder de losse bron, dan laten we 'm staan + waarschuwen (operator
+    // beslist zelf; combineren ná los loten is een rand-geval).
+    foreach (bronCompetitionIds($pdo, $compId) as $bronId) {
+        $heeftRij = $pdo->prepare("SELECT 1 FROM competitions WHERE id = ? LIMIT 1");
+        $heeftRij->execute([$bronId]);
+        if (!$heeftRij->fetchColumn()) continue;   // geen losse import → niets op te ruimen
+        $heeftHeats = $pdo->prepare("SELECT 1 FROM heats WHERE competition_id = ? LIMIT 1");
+        $heeftHeats->execute([$bronId]);
+        if ($heeftHeats->fetchColumn()) {
+            $log[] = "⚠ Bron $bronId was los geïmporteerd én geloot — losse wedstrijd blijft staan (verwijder 'm evt. handmatig).";
+            continue;
+        }
+        $pdo->prepare("DELETE FROM competitions WHERE id = ?")->execute([$bronId]);
+        $log[] = "Losse bron-wedstrijd opgeruimd (opgegaan in de combinatie): $bronId";
+    }
     } // einde if (!$isHandmatig) — stappen 1+2 KNSB-only
 
     // --------------------------------------------------------

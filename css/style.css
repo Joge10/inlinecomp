@@ -616,6 +616,7 @@ body.live-pagina-actief #main-content {
 }
 
 .comp-card {
+    position: relative;
     background: var(--wit);
     border: 1px solid var(--border);
     border-radius: 8px;
@@ -626,6 +627,37 @@ body.live-pagina-actief #main-content {
 .comp-card:hover {
     border-color: var(--middenblauw);
     box-shadow: 0 2px 8px rgba(46,117,182,.15);
+}
+/* Combineer-knop op de card (alleen bij combineerbare/doel-wedstrijden). */
+.comp-combi-btn {
+    position: absolute;
+    top: 10px;
+    right: 10px;
+    width: 30px;
+    height: 30px;
+    padding: 0;
+    font-size: 1rem;
+    line-height: 1;
+    background: var(--wit);
+    border: 1px solid var(--middenblauw);
+    color: var(--middenblauw);
+    border-radius: 6px;
+    cursor: pointer;
+    transition: background .15s, color .15s;
+}
+.comp-combi-btn:hover {
+    background: var(--middenblauw);
+    color: var(--wit);
+}
+/* Bron-wedstrijd: gecombineerd in een doel → niet selecteerbaar. */
+.comp-card-bron {
+    cursor: default;
+    opacity: .6;
+    background: var(--lichtgrijs, #f3f4f6);
+}
+.comp-card-bron:hover {
+    border-color: var(--border);
+    box-shadow: none;
 }
 .comp-card.active {
     border-color: var(--oranje);
@@ -5163,6 +5195,21 @@ col.live-col-rondes  { width: 40px; }
     border-radius: 0 4px 4px 0;
     font-size: .85rem;
 }
+/* Wedstrijden-combineren-modal: gekoppelde bronnen + combineerbare kandidaten */
+.modal-dialog.cmb-modal { max-width:640px; }
+.cmb-intro { margin:0 0 10px; color:#555; font-size:.9rem; }
+.cmb-kop   { font-weight:600; margin:12px 0 4px; }
+.cmb-leeg  { color:#888; font-size:.88rem; margin:0 0 4px; }
+.cmb-koppel { margin-top:10px; }
+.cmb-lijst { list-style:none; margin:0; padding:0; }
+.cmb-lijst li { display:flex; align-items:center; justify-content:space-between; gap:10px;
+    padding:7px 0; border-bottom:1px solid #e2e6ea; }
+.cmb-lijst li:last-child { border-bottom:0; }
+.cmb-kand { display:flex; flex-direction:column; gap:6px; max-height:210px; overflow-y:auto;
+    border:1px solid #e2e6ea; border-radius:6px; padding:8px 10px; }
+.cmb-kand label { display:flex; align-items:center; gap:8px; cursor:pointer; font-size:.92rem; }
+.cmb-dat { color:#8b95a1; font-size:.82rem; }
+
 /* Checkbox-blok voor cascade-keuzes (uitslag/klassement mee-verwijderen) */
 .modal-body .modal-checks {
     background: #f8fbff;

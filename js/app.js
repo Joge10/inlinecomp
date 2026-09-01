@@ -8,6 +8,9 @@ let allWedstrijden  = [];
 // organisaties/locaties waarvan de wedstrijd-cards zelf buiten de 7-daagse
 // cutoff vallen. Zie api/import_filters.php.
 let alleFiltersBron = [];
+// Bron→doel-koppelingen (wedstrijden combineren). Bron-cards worden disabled
+// getoond; alleen het doel blijft selecteerbaar. Zie api/wedstrijd_combineer.php.
+let combiBronnen    = {};   // { bronCompetitionId: doelCompetitionId }
 let activeCard      = null;
 let activeCat       = null;
 const MAX_ZONDER_FILTER = 5;
@@ -704,10 +707,11 @@ async function laadWedstrijden() {
         const vanSepHand = vanDatum ? `&van=${encodeURIComponent(vanDatum)}` : '';
         // Filter-bron: alle locaties/orgs uit DB (ongeacht datum) — vult
         // de dropdowns compleet, ook voor wedstrijden buiten de 7-daagse cutoff.
-        const [resKnsb, resHand, resFilters] = await Promise.all([
+        const [resKnsb, resHand, resFilters, resCombi] = await Promise.all([
             fetch(BASE + 'api/competitions.php' + vanParam),
             fetch(BASE + 'api/wedstrijd_handmatig.php?action=lijst' + vanSepHand),
             fetch(BASE + 'api/import_filters.php'),
+            fetch(BASE + 'api/wedstrijd_combineer.php?action=alle'),
         ]);
         if (!resKnsb.ok) throw new Error('KNSB-feed HTTP ' + resKnsb.status);
         const dataKnsb = await resKnsb.json();
@@ -720,6 +724,15 @@ async function laadWedstrijden() {
         } else {
             console.warn('Handmatige wedstrijden HTTP ' + resHand.status);
         }
+        // Bron→doel-koppelingen — falen mag stil (feature/tabel optioneel).
+        combiBronnen = {};
+        if (resCombi.ok) {
+            try {
+                const c = await resCombi.json();
+                if (c && c.bronnen) combiBronnen = c.bronnen;
+            } catch (e) { console.warn('Combi-koppelingen parse-fout', e); }
+        }
+
         // Filters-bron (alle DB-competities) — falen mag stil, dropdowns
         // vallen dan terug op wat in allWedstrijden zit.
         alleFiltersBron = [];
@@ -864,10 +877,19 @@ function renderWedstrijdLijst() {
     const toonAlles = van || tot || loc || gefilterd.length <= MAX_ZONDER_FILTER;
     const zichtbaar = toonAlles ? gefilterd : gefilterd.slice(0, MAX_ZONDER_FILTER);
 
+    // Welke wedstrijden zijn combineerbaar (zelfde org+locatie, ±4 dagen)? Over
+    // de héle gefilterde set bepalen zodat een partner buiten de MAX-cutoff ook telt.
+    const combibaar = combineerbareIds(gefilterd);
+    const doelen    = new Set(Object.values(combiBronnen));   // ids die een doel zijn
+
     list.innerHTML = '';
     zichtbaar.forEach(comp => {
+        const isBron = Object.prototype.hasOwnProperty.call(combiBronnen, comp.id);
+        const isDoel = doelen.has(comp.id);
+
         const card = document.createElement('div');
         card.className = 'comp-card';
+        if (isBron) card.classList.add('comp-card-bron');   // gecombineerd → niet selecteerbaar
         if (activeCard && comp.id === huidigCompId) {
             card.classList.add('active');
             activeCard = card;   // synchroon houden met opnieuw-gerenderd DOM-element
@@ -880,11 +902,27 @@ function renderWedstrijdLijst() {
         const handBadge = comp.is_handmatig
             ? ' <span class="comp-bron-badge" title="Handmatig aangemaakt — geen KNSB-feed-koppeling">🔧 handmatig</span>'
             : '';
+        // Bron: badge "gecombineerd" + card disabled. Doel of combineerbaar: 🔗-knop.
+        const combiBadge = isBron
+            ? ' <span class="comp-bron-badge" title="Gecombineerd in een andere wedstrijd — importeer via de doelwedstrijd">🔗 gecombineerd</span>'
+            : '';
+        const combiBtn = (!isBron && (combibaar.has(comp.id) || isDoel))
+            ? '<button class="comp-combi-btn" title="' +
+              (isDoel ? 'Gecombineerde wedstrijden beheren' : 'Combineer met andere wedstrijd(en) op dezelfde locatie') +
+              '">&#128279;</button>'
+            : '';
         card.innerHTML =
-            `<div class="comp-naam">${escHtml(comp.name || comp.title || '')}${handBadge}</div>` +
+            combiBtn +
+            `<div class="comp-naam">${escHtml(comp.name || comp.title || '')}${handBadge}${combiBadge}</div>` +
             `<div class="comp-meta">${escHtml(datum)}${loc ? ' · ' + escHtml(loc) : ''}</div>`;
 
-        card.addEventListener('click', () => selectWedstrijd(card, comp));
+        // Bron-cards zijn niet selecteerbaar (alleen het doel importeer je).
+        if (!isBron) card.addEventListener('click', () => selectWedstrijd(card, comp));
+        const cb = card.querySelector('.comp-combi-btn');
+        if (cb) cb.addEventListener('click', e => {
+            e.stopPropagation();   // niet de card selecteren
+            openCombineerModal(comp.id, comp.name || comp.title || '');
+        });
         list.appendChild(card);
     });
 
@@ -987,6 +1025,130 @@ async function selectWedstrijd(card, comp) {
         if (e.name === 'AbortError') return; // nieuwere klik heeft deze aanvraag afgebroken
         setHTML('imp-cat-content', `<div class="status-msg error">⚠ ${escHtml(e.message)}</div>`);
     }
+}
+
+// ── Wedstrijden combineren (multi-bron onder één wedstrijd) ──────────────────
+// Bepaal client-side welke wedstrijden combineerbaar zijn: ≥2 wedstrijden met
+// dezelfde organisatie + locatie binnen ±4 dagen. Spiegelt de backend-guard
+// (cmbZelfdeOrgLocatie); de feed-items bevatten venue + settings.contact, dus
+// dit hoeft geen server-call — de 🔗-knop op de card verschijnt alleen hier.
+function combineerbareIds(comps) {
+    const norm = comps.map(c => ({
+        id:    c.id,
+        email: getOrganisatieEmail(c),
+        naam:  getOrganisatieNaam(c).toLowerCase().trim(),
+        venue: (c.venue?.name || '').toLowerCase().trim(),
+        stad:  (c.venue?.address?.city || '').toLowerCase().trim(),
+        dag:   c.starts ? Math.floor(new Date(c.starts).getTime() / 86400000) : null,
+    })).filter(x => x.id && x.dag !== null);
+
+    const set = new Set();
+    for (let i = 0; i < norm.length; i++) {
+        for (let j = i + 1; j < norm.length; j++) {
+            const a = norm[i], b = norm[j];
+            const orgOk = (a.email && a.email === b.email) || (a.naam && a.naam === b.naam);
+            const locOk = (a.venue && a.venue === b.venue) || (a.stad  && a.stad  === b.stad);
+            if (orgOk && locOk && Math.abs(a.dag - b.dag) <= 4) { set.add(a.id); set.add(b.id); }
+        }
+    }
+    return set;
+}
+
+// Herlaad de bron→doel-koppelingen en teken de wedstrijd-lijst opnieuw, zodat
+// nieuw gecombineerde bron-cards meteen disabled worden (en losgekoppelde weer
+// selecteerbaar). Aangeroepen na koppel/ontkoppel in de combineer-modal.
+async function verversCombiBronnen() {
+    try {
+        const c = await (await fetch(BASE + 'api/wedstrijd_combineer.php?action=alle')).json();
+        combiBronnen = (c && c.bronnen) ? c.bronnen : {};
+    } catch { /* stil — lijst blijft op oude state */ }
+    renderWedstrijdLijst();
+}
+
+async function openCombineerModal(compId, compNaam) {
+    const ov = document.createElement('div');
+    ov.className = 'modal-overlay';
+    ov.innerHTML =
+        '<div class="modal-dialog cmb-modal" role="dialog" aria-modal="true">' +
+        '<div class="modal-header"><span class="modal-icon">&#128279;</span>' +
+        '<span class="modal-titel">Wedstrijden combineren</span></div>' +
+        '<div class="modal-body" id="cmb-body"><div class="status-msg loading"><span class="spinner"></span>Laden…</div></div>' +
+        '<div class="modal-knoppen"><button class="modal-btn modal-annuleer" id="cmb-sluit">Sluiten</button></div>' +
+        '</div>';
+    document.body.appendChild(ov);
+    const sluit = () => { ov.remove(); };
+    ov.querySelector('#cmb-sluit').addEventListener('click', sluit);
+    ov.addEventListener('click', e => { if (e.target === ov) sluit(); });
+    const body = ov.querySelector('#cmb-body');
+
+    async function herlaad() {
+        body.innerHTML = '<div class="status-msg loading"><span class="spinner"></span>Zoeken naar combineerbare wedstrijden…</div>';
+        let bronnen = [], kandidaten = [];
+        try {
+            const [l, c] = await Promise.all([
+                fetch('api/wedstrijd_combineer.php?action=lijst&competition_id=' + encodeURIComponent(compId)).then(r => r.json()),
+                fetch('api/wedstrijd_combineer.php?action=combineerbaar&competition_id=' + encodeURIComponent(compId)).then(r => r.json()),
+            ]);
+            if (l.error) throw new Error(l.error);
+            if (c.error) throw new Error(c.error);
+            bronnen = l.bronnen || [];
+            kandidaten = (c.kandidaten || []).filter(k => !k.al_gekoppeld);
+        } catch (e) {
+            body.innerHTML = '<div class="status-msg error">⚠ ' + escHtml(e.message) + '</div>';
+            return;
+        }
+
+        let html = '<p class="cmb-intro">Koppel KNSB-wedstrijden met <b>dezelfde organisatie en locatie</b> aan <b>' + escHtml(compNaam) + '</b>. Ze worden dan als één wedstrijd geïmporteerd, geloot en uitgeslagen.</p>';
+
+        html += '<div class="cmb-kop">Nu gekoppeld</div>';
+        html += bronnen.length
+            ? '<ul class="cmb-lijst">' + bronnen.map(b =>
+                '<li><span>' + escHtml(b.naam) + (b.starts ? ' <span class="cmb-dat">' + escHtml(b.starts) + '</span>' : '') + '</span>' +
+                '<button class="btn-danger-outline cmb-ontkoppel" data-bron="' + escHtml(b.bron_competition_id) + '">Ontkoppel</button></li>').join('') + '</ul>'
+            : '<p class="cmb-leeg">Nog geen gekoppelde wedstrijden.</p>';
+
+        html += '<div class="cmb-kop">Combineerbaar (zelfde org + locatie)</div>';
+        html += kandidaten.length
+            ? '<div class="cmb-kand">' + kandidaten.map(k =>
+                '<label><input type="checkbox" value="' + escHtml(k.id) + '"> ' + escHtml(k.naam) +
+                (k.starts ? ' <span class="cmb-dat">' + escHtml(k.starts) + '</span>' : '') + '</label>').join('') + '</div>' +
+                '<button class="btn-import cmb-koppel">&#128279; Koppel geselecteerde</button>'
+            : '<p class="cmb-leeg">Geen andere wedstrijden gevonden met dezelfde organisatie en locatie rond deze datum.</p>';
+
+        html += '<p class="modal-info">Na koppelen/ontkoppelen: klik <b>Importeer</b> om de wijziging door te voeren (alle categorieën + rijders onder deze wedstrijd).</p>';
+        body.innerHTML = html;
+
+        body.querySelectorAll('.cmb-ontkoppel').forEach(b => b.addEventListener('click', async () => {
+            b.disabled = true;
+            try {
+                const r = await (await fetch('api/wedstrijd_combineer.php', {
+                    method: 'POST', headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ action: 'ontkoppel', doel_competition_id: compId, bron_competition_id: b.dataset.bron }),
+                })).json();
+                if (r.error) throw new Error(r.error);
+                herlaad();
+                verversCombiBronnen();   // lijst-cards bijwerken (bron weer selecteerbaar)
+            } catch (e) { b.disabled = false; toonBevestigDialog('Kon niet ontkoppelen: ' + e.message, 'Fout', 'OK', ''); }
+        }));
+
+        const koppelBtn = body.querySelector('.cmb-koppel');
+        if (koppelBtn) koppelBtn.addEventListener('click', async () => {
+            const ids = [...body.querySelectorAll('.cmb-kand input:checked')].map(i => i.value);
+            if (!ids.length) { toonBevestigDialog('Selecteer eerst een of meer wedstrijden.', 'Combineren', 'OK', ''); return; }
+            koppelBtn.disabled = true; koppelBtn.textContent = 'Koppelen…';
+            try {
+                const r = await (await fetch('api/wedstrijd_combineer.php', {
+                    method: 'POST', headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ action: 'koppel', doel_competition_id: compId, bron_competition_ids: ids }),
+                })).json();
+                if (r.error) throw new Error(r.error);
+                if ((r.geweigerd || []).length) toonBevestigDialog((r.gekoppeld || []).length + ' gekoppeld, ' + r.geweigerd.length + ' geweigerd (andere org/locatie of al gekoppeld).', 'Combineren', 'OK', '');
+                herlaad();
+                verversCombiBronnen();   // lijst-cards bijwerken (bron nu disabled)
+            } catch (e) { koppelBtn.disabled = false; koppelBtn.innerHTML = '&#128279; Koppel geselecteerde'; toonBevestigDialog('Kon niet koppelen: ' + e.message, 'Fout', 'OK', ''); }
+        });
+    }
+    herlaad();
 }
 
 // ── Baan-rij in detail-header ────────────────────────────────────────────────

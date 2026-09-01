@@ -125,6 +125,10 @@
 .wz-tot{ background:var(--blauw,#1F4E79); color:#fff; border-radius:999px; padding:4px 11px;
     font-weight:700; font-size:.82rem; white-space:nowrap; }
 .wz-tot small{ font-weight:400; opacity:.8; }
+/* Originele DC-naam uit de KNSB-import (alleen bij een nog-intacte feed-DC). */
+.wz-dc-badge{ display:inline-block; margin:-3px 0 9px; padding:2px 9px; font-size:.74rem;
+    color:var(--midden,#2E75B6); background:#eaf2fb; border:1px solid #d4e4f5;
+    border-radius:999px; font-weight:600; }
 .wz-leden{ display:flex; flex-direction:column; gap:6px; min-height:44px; }
 .wz-lid{ display:flex; align-items:center; gap:9px; padding:6px 9px; background:#fff;
     border:1px solid var(--border,#d3dbe3); border-radius:8px; cursor:grab; font-size:.82rem; }

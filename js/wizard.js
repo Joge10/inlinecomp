@@ -263,6 +263,22 @@
     }
     function herlabel() { state.groepen.forEach(g => { if (g.auto) g.label = joinLabel(g.leden); }); }
 
+    // Originele DC-naam uit de KNSB-import, alleen als de groep die feed-DC nog
+    // ongewijzigd bevat: precies één DC, álle categorieën ervan, niet gesplitst.
+    // Zodra een groep gesplitst/samengevoegd is (of leden weggesleept) → null.
+    function origDcNaam(g) {
+        if (!g.leden.length) return null;
+        const first = catMap[g.leden[0]];
+        if (first.splitGroup) return null;
+        const dcs = [...new Set(g.leden.map(id => catMap[id].dcId))];
+        if (dcs.length !== 1) return null;
+        const naam = (first.dcName || '').trim();
+        if (!naam) return null;
+        const alleVanDc = Object.keys(catMap).filter(id => catMap[id].dcId === dcs[0]);
+        if (alleVanDc.length !== g.leden.length) return null;   // deels weggesleept
+        return naam;
+    }
+
     function bouwOverlay() {
         const d = document.createElement('div');
         d.id = 'wz-overlay';
@@ -904,8 +920,11 @@
         const totLbl = `${rij} <small>rijders${res ? ` +${res} res` : ''}</small>`;
         const leden = g.leden.map(lidRow).join('') || '<div style="color:#93a1b3;font-size:.8rem;padding:6px">sleep hier…</div>';
         const ontbind = locked ? '' : `<div class="wz-verwijder"><button data-ontbind="${idx}">groep ontbinden ✕</button></div>`;
+        const dcNaam = origDcNaam(g);
+        const dcBadge = dcNaam ? `<div class="wz-dc-badge" title="Originele DC-naam uit de KNSB-import">&#128203; ${esc(dcNaam)}</div>` : '';
         return `<div class="wz-groep" data-idx="${idx}">
             <div class="wz-groep-head"><input value="${esc(g.label)}" data-idx="${idx}" ${locked === 'loting' ? 'disabled' : ''}><span class="wz-tot">${totLbl}</span></div>
+            ${dcBadge}
             <div class="wz-leden">${leden}</div>
             ${ontbind}
           </div>`;
@@ -1031,11 +1050,13 @@
         const badge = `<span class="wz-type ${typeKlasse(d.race_type)}">${esc(typeLabel(d.race_type))}</span>`;
         if (locked) return `<span class="wz-achip">${posB}${badge} ${esc(d.name || '(naamloos)')}${m}</span>`;
         const pen = `<button class="wz-pil-btn wz-pen" title="bewerken" draggable="false">✎</button>`;
+        // Alleen in de bak: kopiëren (zelfde naam/type, andere meters instellen).
+        const kopie = inGroep ? '' : `<button class="wz-pil-btn wz-copy" title="kopiëren (andere meters)" draggable="false">📄</button>`;
         const actie = inGroep
             ? `<button class="wz-pil-btn wz-del-groep" title="uit groep halen" draggable="false">✕</button>`
             : `<button class="wz-pil-btn wz-del-cat" title="verwijderen uit lijst" draggable="false">🗑</button>`;
         const dataAttr = inGroep ? `data-gi="${gi}" data-aid="${d.id}"` : `data-id="${d.id}"`;
-        return `<span class="wz-achip wz-adrag" draggable="true" ${dataAttr}>${posB}${badge} ${esc(d.name || '(naamloos)')}${m} ${pen}${actie}</span>`;
+        return `<span class="wz-achip wz-adrag" draggable="true" ${dataAttr}>${posB}${badge} ${esc(d.name || '(naamloos)')}${m} ${pen}${kopie}${actie}</span>`;
     }
     // Bewerk-formulier (na ✎). Sluit bij focus-weg of ✓.
     function afstandEdit(d, gi) {
@@ -1189,6 +1210,20 @@
         root.querySelectorAll('.wz-adrag[data-id] .wz-pen').forEach(b => b.addEventListener('click', ev => {
             ev.stopPropagation();
             startEdit({ mode: 'bak', id: +b.closest('[data-id]').getAttribute('data-id') });
+        }));
+        root.querySelectorAll('.wz-adrag[data-id] .wz-copy').forEach(b => b.addEventListener('click', ev => {
+            ev.stopPropagation();
+            const id = +b.closest('[data-id]').getAttribute('data-id');
+            const src = afstandById(id);
+            if (!src) return;
+            // Duplicaat (zelfde naam + type + meters) direct achter het origineel;
+            // meteen de inline-editor openen met focus op meters om de afstand te zetten.
+            const d = { id: ++afstandSeq, name: src.name, race_type: src.race_type, value_meters: src.value_meters };
+            const idx = state.catalog.findIndex(x => x.id === id);
+            state.catalog.splice(idx >= 0 ? idx + 1 : state.catalog.length, 0, d);
+            startEdit({ mode: 'bak', id: d.id });
+            const mInp = overlay.querySelector('.wz-af-editing .wz-af-m');
+            if (mInp) { mInp.focus(); mInp.select(); }
         }));
         root.querySelectorAll('.wz-del-cat').forEach(b => b.addEventListener('click', ev => {
             ev.stopPropagation();
