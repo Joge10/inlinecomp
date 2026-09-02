@@ -172,6 +172,11 @@ try {
         ];
     }
 
+    // Deze DC is nu handmatig samengesteld → import.php laat z'n afstanden voortaan
+    // met rust (geen verwijderde/vervangen feed-afstanden terugzetten bij her-import).
+    $pdo->prepare("UPDATE distance_combinations SET afstanden_handmatig = 1 WHERE id = ?")
+        ->execute([$dcId]);
+
     // ── Propageer basis-afstanden naar andere DC's in dezelfde merge_group ─
     // Als deze DC in een merge zit, moeten alle mergende DC's dezelfde
     // afstand-namen/meters delen. Zonder deze sync heeft één DC nog
@@ -224,6 +229,9 @@ try {
                         ':race_type'    => $r['race_type'],
                     ]);
                 }
+                // Ook de mergende DC's zijn nu handmatig samengesteld.
+                $pdo->prepare("UPDATE distance_combinations SET afstanden_handmatig = 1 WHERE id = ?")
+                    ->execute([$otherId]);
             }
         }
     }

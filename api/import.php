@@ -458,6 +458,20 @@ try {
         if (is_numeric($meters) && (int)$meters > 1000)                           return 'inline';
         return 'sprint';
     };
+    // DC's waarvan de afstanden handmatig zijn samengesteld (wizard/beheer) laten
+    // we met rust: een her-import mag verwijderde/vervangen afstanden niet opnieuw
+    // uit de KNSB-feed terugzetten. Defensief: als de kolom nog niet bestaat
+    // (migratie niet gedraaid), val terug op het oude gedrag (niets overslaan).
+    $handmatigeDcs = [];
+    $dcIdsFeed = array_values(array_filter(array_map(fn($d) => $d['id'] ?? null, $dcs)));
+    if ($dcIdsFeed) {
+        try {
+            $ph = implode(',', array_fill(0, count($dcIdsFeed), '?'));
+            $hq = $pdo->prepare("SELECT id FROM distance_combinations WHERE afstanden_handmatig = 1 AND id IN ($ph)");
+            $hq->execute($dcIdsFeed);
+            foreach ($hq->fetchAll(PDO::FETCH_COLUMN) as $hid) $handmatigeDcs[$hid] = true;
+        } catch (\Throwable $e) { /* kolom bestaat nog niet → geen skip */ }
+    }
     foreach ($dcs as $dc) {
         $stmtDC->execute([
             ':id'         => $dc['id'],
@@ -466,6 +480,11 @@ try {
             ':name'       => $dc['name']           ?? '',
             ':cat_filter' => $dc['categoryFilter'] ?? null,
         ]);
+        // Handmatig samengestelde DC: DC-metadata gesynct, afstanden met rust laten.
+        if (isset($handmatigeDcs[$dc['id']])) {
+            $log[] = "↦ afstanden van '" . ($dc['name'] ?? $dc['id']) . "' handmatig samengesteld — feed-afstanden overgeslagen";
+            continue;
+        }
         foreach ($dc['distances'] ?? [] as $dist) {
             $stmtDist->execute([
                 ':id'           => $dist['id'],

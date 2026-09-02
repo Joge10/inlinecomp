@@ -12,6 +12,10 @@ CREATE TABLE IF NOT EXISTS `distance_combinations` (
     -- (= aantal niet-reserves uit KNSB-feed). Gezet = die waarde wint
     -- voor de capaciteit-cap in het reserve-paneel.
     `max_in_loting`   INT UNSIGNED DEFAULT NULL,
+    -- 1 zodra de afstanden van deze DC handmatig zijn samengesteld (wizard/beheer).
+    -- import.php laat de afstanden dan met rust bij een her-import (geen feed-
+    -- afstanden terugzetten die de user had verwijderd/vervangen).
+    `afstanden_handmatig` TINYINT(1) NOT NULL DEFAULT 0,
     PRIMARY KEY (`id`),
     KEY `idx_dc_competition` (`competition_id`),
     CONSTRAINT `fk_dc_competition`
