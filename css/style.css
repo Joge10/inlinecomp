@@ -2649,6 +2649,40 @@ col.heat-tp   { width: 72px; }   /* XX-12345 = 8 monospace tekens */
                               background: #e2f0d9; color: #2d6a2d; font-weight: 600; }
 .beheer-wedstrijd-badge.badge-extern { background: #f0f0f0; color: #888; }
 .beheer-wedstrijd-badge.badge-alleen-db { background: #fff3cd; color: #856404; border: 1px solid #ffe69c; }
+/* Gecombineerde wedstrijden: doel toont "samengesteld (N)", bron is opgegaan in het doel. */
+.beheer-wedstrijd-badge.badge-combi { background: #eaf2fb; color: #2E75B6; border: 1px solid #d4e4f5; }
+.beheer-wedstrijd-badge.badge-bron  { background: #f0f0f0; color: #888; border: 1px dashed #ccc; }
+.beheer-wedstrijd-rij.is-bron,
+.beheer-wedstrijd-rij.is-bron.in-db {
+    position: relative;
+    margin-left: 36px;
+    opacity: .6;
+    background: #fafafa;
+    border-color: #e5e5e5;
+}
+/* Boom-connector naar het samengestelde doel erboven (├ tussenliggend, └ laatste). */
+.beheer-wedstrijd-rij.is-bron::before {          /* verticale lijn */
+    content: "";
+    position: absolute;
+    left: -22px;
+    top: -9px;
+    bottom: 50%;
+    border-left: 2px solid #c3d0e0;
+    pointer-events: none;
+}
+/* niet de laatste bron → lijn loopt door en overbrugt de tussenruimte naar de volgende */
+.beheer-wedstrijd-rij.is-bron:has(+ .beheer-wedstrijd-rij.is-bron)::before {
+    bottom: -16px;
+}
+.beheer-wedstrijd-rij.is-bron::after {           /* horizontale aftakking naar de rij */
+    content: "";
+    position: absolute;
+    left: -22px;
+    top: 50%;
+    width: 15px;
+    border-top: 2px solid #c3d0e0;
+    pointer-events: none;
+}
 .btn-sm                { padding: 4px 10px; font-size: .78rem; }
 /* Zichtbaarheids-toggle: 3-state segmented control.
    - Verborgen (rood): wedstrijd NIET in /coach + /public dropdowns

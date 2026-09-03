@@ -406,6 +406,18 @@ async function laadOrgWedstrijden() {
     } catch { /* stil falen */ }
     const dbIds = new Set(dbComps.map(w => w.id));
 
+    // Combi-koppelingen: een bron-wedstrijd is opgegaan in een doel-wedstrijd.
+    // De bron mag hier geen eigen functies/acties hebben; het doel toont dat het
+    // samengesteld is. (Mag stil falen — feature/tabel optioneel.)
+    let combiBron = {};   // bronId → doelId
+    try {
+        const c = await (await fetch('api/wedstrijd_combineer.php?action=alle')).json();
+        if (c && c.bronnen) combiBron = c.bronnen;
+    } catch { /* stil */ }
+    const combiDoelen = new Set(Object.values(combiBron));
+    const bronPerDoel = {};
+    for (const b in combiBron) { const d = combiBron[b]; bronPerDoel[d] = (bronPerDoel[d] || 0) + 1; }
+
     // Filter allWedstrijden op naam/email/alias van deze org
     const orgNamen = new Set([
         actieveOrg.naam?.toLowerCase(),
@@ -448,6 +460,10 @@ async function laadOrgWedstrijden() {
 
     // dbComps map houden voor zichtbaarheids-status (komt alleen uit DB-kant)
     const dbCompsMap = new Map(dbComps.map(c => [c.id, c]));
+    // Naam-lookup (DB + feed) voor de "gecombineerd in <doel>"-melding.
+    const naamById = new Map();
+    dbComps.forEach(c => naamById.set(c.id, c.name));
+    (allWedstrijden ?? []).forEach(w => { if (!naamById.has(w.id)) naamById.set(w.id, w.name ?? w.title); });
 
     // Persistent legenda boven de wedstrijden-rijen — iconen-only-knoppen
     // zijn compact maar voor nieuwe gebruikers niet meteen leesbaar.
@@ -471,12 +487,22 @@ async function laadOrgWedstrijden() {
 
     lijst.innerHTML = legenda + alleItems.map(w => {
         const inDb   = dbIds.has(w.id);
+        const isBron = Object.prototype.hasOwnProperty.call(combiBron, w.id);
+        const isDoel = combiDoelen.has(w.id);
+        // Bron = opgegaan in een doel → geen eigen acties (ook niet als 'ie per
+        // ongeluk nog een eigen DB-rij heeft).
+        const kanActies = inDb && !isBron;
         const datum  = w.starts ? new Date(w.starts).toLocaleDateString('nl-NL', {day:'2-digit',month:'long',year:'numeric'}) : '—';
-        const badge  = inDb && w._alleenDb
-            ? '<span class="beheer-wedstrijd-badge badge-alleen-db">Alleen in database</span>'
-            : inDb
-                ? '<span class="beheer-wedstrijd-badge">In database</span>'
-                : '<span class="beheer-wedstrijd-badge badge-extern">inschrijven.schaatsen.nl</span>';
+        const doelBadge = isDoel
+            ? ` <span class="beheer-wedstrijd-badge badge-combi">🔗 samengesteld (${bronPerDoel[w.id] || 0})</span>`
+            : '';
+        const badge  = isBron
+            ? '<span class="beheer-wedstrijd-badge badge-bron">🔗 gecombineerd in ' + escHtml(naamById.get(combiBron[w.id]) || 'andere wedstrijd') + '</span>'
+            : (inDb && w._alleenDb
+                ? '<span class="beheer-wedstrijd-badge badge-alleen-db">Alleen in database</span>' + doelBadge
+                : inDb
+                    ? '<span class="beheer-wedstrijd-badge">In database</span>' + doelBadge
+                    : '<span class="beheer-wedstrijd-badge badge-extern">inschrijven.schaatsen.nl</span>');
         const dbRow      = dbCompsMap.get(w.id);
         const zicht      = inDb && !!Number(dbRow?.public_zichtbaar);
         const aankondigen = inDb && !!Number(dbRow?.public_aankondigen ?? 1);
@@ -488,7 +514,7 @@ async function laadOrgWedstrijden() {
         // Icon-only segmented control voor zichtbaarheid (tooltip vertelt
         // wat elke status doet). Bespaart horizontale ruimte want dit
         // staat op een rij met 4+ andere actie-knoppen.
-        const zichtBtn = inDb
+        const zichtBtn = kanActies
             ? `<div class="beheer-zicht-group" role="group" aria-label="Zichtbaarheid">
                  <button class="btn-sm beheer-zicht-knop ${status==='verborgen' ? 'is-actief beheer-zicht-uit' : ''}"
                          data-id="${escHtml(w.id)}" data-naam="${escHtml(w.name ?? w.id)}" data-status="verborgen"
@@ -501,7 +527,7 @@ async function laadOrgWedstrijden() {
                          title="Live — selecteerbaar voor coach + publiek">👁</button>
                </div>`
             : '';
-        return `<div class="beheer-wedstrijd-rij ${inDb ? 'in-db' : ''}">
+        return `<div class="beheer-wedstrijd-rij ${inDb ? 'in-db' : ''} ${isBron ? 'is-bron' : ''}">
             <div class="beheer-wedstrijd-info">
                 <span class="beheer-wedstrijd-naam">${escHtml(w.name ?? w.title ?? w.id)}</span>
                 <span class="beheer-wedstrijd-datum">${datum}</span>
@@ -509,13 +535,13 @@ async function laadOrgWedstrijden() {
             </div>
             <div class="beheer-wedstrijd-acties">
                 ${zichtBtn}
-                ${inDb ? `<button class="btn-secondary btn-sm beheer-comp-meld beheer-icon-btn" data-id="${escHtml(w.id)}" data-naam="${escHtml(w.name ?? w.id)}" title="Mededelingen — verstuur push-bericht naar /coach + /public">📢</button>` : ''}
-                ${inDb ? `<button class="btn-secondary btn-sm beheer-comp-poster beheer-icon-btn" data-id="${escHtml(w.id)}" title="Posters — download QR-poster voor public, coach of check (kies type + taal in dialog)">📄</button>` : ''}
-                ${inDb ? `<div class="beheer-rapport-group" role="group" aria-label="Protokol">
+                ${kanActies ? `<button class="btn-secondary btn-sm beheer-comp-meld beheer-icon-btn" data-id="${escHtml(w.id)}" data-naam="${escHtml(w.name ?? w.id)}" title="Mededelingen — verstuur push-bericht naar /coach + /public">📢</button>` : ''}
+                ${kanActies ? `<button class="btn-secondary btn-sm beheer-comp-poster beheer-icon-btn" data-id="${escHtml(w.id)}" title="Posters — download QR-poster voor public, coach of check (kies type + taal in dialog)">📄</button>` : ''}
+                ${kanActies ? `<div class="beheer-rapport-group" role="group" aria-label="Protokol">
                     <button class="btn-secondary btn-sm beheer-comp-protokol beheer-icon-btn" data-id="${escHtml(w.id)}" data-naam="${escHtml(w.name ?? w.id)}" title="Protokol-data — officials + nawoord voor het protokol">⚖</button>
                     <button class="btn-secondary btn-sm beheer-comp-print beheer-icon-btn" data-id="${escHtml(w.id)}" data-naam="${escHtml(w.name ?? w.id)}" title="Protokol genereren — print of opslaan als PDF (via browser-print)">🖨</button>
                 </div>` : ''}
-                ${inDb ? `<button class="btn-secondary btn-sm beheer-comp-jurypwd beheer-icon-btn ${Number(dbRow?.jury_password_set) ? 'is-actief' : ''}"
+                ${kanActies ? `<button class="btn-secondary btn-sm beheer-comp-jurypwd beheer-icon-btn ${Number(dbRow?.jury_password_set) ? 'is-actief' : ''}"
                     data-id="${escHtml(w.id)}" data-naam="${escHtml(w.name ?? w.id)}"
                     data-set="${Number(dbRow?.jury_password_set) ? '1' : '0'}"
                     ${_beheerUitgebreidOk ? '' : 'disabled'}
@@ -524,7 +550,7 @@ async function laadOrgWedstrijden() {
                             ? 'Jury-wachtwoord INGESTELD — klik om te wijzigen of wissen'
                             : 'Jury-wachtwoord NIET ingesteld — klik om in te stellen')
                         : 'Alleen owner/admin mag het jury-wachtwoord wijzigen'}">🔑</button>` : ''}
-                ${inDb ? `<button class="btn-del beheer-comp-del"
+                ${kanActies ? `<button class="btn-del beheer-comp-del"
                     data-id="${escHtml(w.id)}" data-naam="${escHtml(w.name ?? w.id)}"
                     ${_beheerUitgebreidOk ? '' : 'disabled'}
                     title="${_beheerUitgebreidOk
