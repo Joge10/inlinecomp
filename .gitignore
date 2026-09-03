@@ -80,7 +80,7 @@ docs/*
 !docs/public-quickref-en.html
 !docs/project-samenvatting.md
 !docs/project-samenvatting.docx
-!docs/offline-modus-spec.md
-!docs/offline-modus-spec.docx
+# offline-modus-spec: bewust NIET in git — nog een richting-/discussiedocument,
+# geen echte specificatie. Zodra het dat wel is, mag de !-regel terug.
 !docs/rulebook-review-2026.md
 !docs/quickref-images/
