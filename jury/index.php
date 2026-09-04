@@ -855,6 +855,15 @@ if ($action === 'speaker_serieklassement') {
             WHERE klassement_id = ? AND license_key = ?
             ORDER BY positie
         ");
+        // Buur-punten (plek erboven = positie-1, plek eronder = positie+1) in
+        // dezelfde sectie, zodat de speaker de marge kan omroepen. categorie
+        // null-safe matchen (<=>), want overall-klassementen hebben geen cat.
+        $nbStmt = $pdo->prepare("
+            SELECT kp.positie, kp.punten_totaal, pe.full_name
+            FROM klassement_posities kp
+            LEFT JOIN persons pe ON pe.license_key = kp.license_key
+            WHERE kp.klassement_id = ? AND kp.categorie <=> ? AND kp.positie IN (?, ?)
+        ");
         $out = [];
         foreach ($series as $s) {
             $pStmt->execute([$s['klassement_id'], $lic]);
@@ -862,6 +871,17 @@ if ($action === 'speaker_serieklassement') {
             foreach ($posities as &$p) {
                 $p['positie']       = (int)$p['positie'];
                 $p['punten_totaal'] = ($p['punten_totaal'] !== null) ? (float)$p['punten_totaal'] : null;
+                // Punten + naam van de directe buren erbij (null = plek bestaat niet).
+                $p['voor_punten']   = null;   // plek erboven (positie-1)
+                $p['voor_naam']     = null;
+                $p['achter_punten'] = null;   // plek eronder (positie+1)
+                $p['achter_naam']   = null;
+                $nbStmt->execute([$s['klassement_id'], $p['categorie'], $p['positie'] - 1, $p['positie'] + 1]);
+                foreach ($nbStmt->fetchAll(PDO::FETCH_ASSOC) as $nb) {
+                    $pt = ($nb['punten_totaal'] !== null) ? (float)$nb['punten_totaal'] : null;
+                    if ((int)$nb['positie'] === $p['positie'] - 1) { $p['voor_punten']   = $pt; $p['voor_naam']   = $nb['full_name']; }
+                    if ((int)$nb['positie'] === $p['positie'] + 1) { $p['achter_punten'] = $pt; $p['achter_naam'] = $nb['full_name']; }
+                }
             }
             unset($p);
             if ($posities) {

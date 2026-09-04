@@ -1656,6 +1656,9 @@ html, body {
 .spk-serie-pos   { font-weight: 800; color: var(--jury-oranje, #e8630a); min-width: 2.4em; }
 .spk-serie-sec   { flex: 1; }
 .spk-serie-ptn   { color: #556; font-size: .9em; white-space: nowrap; }
+/* Marge t.o.v. de buren — compact, ingesprongen onder de categorie zodat het
+   bij de positie-rij hoort zonder de aandacht te stelen. */
+.spk-serie-gap   { padding-left: calc(2.4em + 8px); margin: 0 0 3px; color: #778; font-size: 1.23em; }
 
 .spk-historie-wrap {
     margin-top: 14px;

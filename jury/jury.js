@@ -2606,12 +2606,32 @@ async function _spkVulSerieKlassement(overlay, licenseKey) {
         if (!res.ok || data?.error) return;   // stil: blok blijft leeg/verborgen
         const series = Array.isArray(data.series) ? data.series : [];
         if (!series.length) return;
+        const fmtPt = n => Number.isInteger(n) ? String(n) : n.toFixed(1);
+        // Marge t.o.v. de directe buren. Absolute puntenverschillen — de
+        // richting (voor/achter) volgt al uit de plek, dus dit klopt of het
+        // klassement nu hoog-is-beter of laag-is-beter telt.
+        // De plek zelf is al af te leiden (buur = eigen plek ±1), dus toon de
+        // naam als die er is; alleen zonder naam val je terug op '<n>e'.
+        const gapTxt = (diff, pos, richting, naam) => {
+            const wie = naam || `${pos}e`;
+            return (diff === 0) ? `gelijk met ${wie}` : `${fmtPt(diff)} pt ${richting} ${wie}`;
+        };
         const blokken = series.map(s => {
             const rijen = (s.posities || []).map(p => {
                 const pnt = (p.punten_totaal != null) ? ` · ${p.punten_totaal} ptn` : '';
                 const sec = p.categorie ? escHtml(p.categorie) : '—';
+                let gapHtml = '';
+                if (p.punten_totaal != null) {
+                    const delen = [];
+                    if (p.voor_punten != null)
+                        delen.push('↑ ' + gapTxt(Math.abs(p.voor_punten - p.punten_totaal), p.positie - 1, 'achter', p.voor_naam));
+                    if (p.achter_punten != null)
+                        delen.push('↓ ' + gapTxt(Math.abs(p.punten_totaal - p.achter_punten), p.positie + 1, 'vóór', p.achter_naam));
+                    if (delen.length)
+                        gapHtml = `<div class="spk-serie-gap">${escHtml(delen.join('  ·  '))}</div>`;
+                }
                 return `<div class="spk-serie-rij"><span class="spk-serie-pos">${p.positie}e</span>
-                        <span class="spk-serie-sec">${sec}</span><span class="spk-serie-ptn">${pnt}</span></div>`;
+                        <span class="spk-serie-sec">${sec}</span><span class="spk-serie-ptn">${pnt}</span></div>${gapHtml}`;
             }).join('');
             const kop = escHtml(s.serie_naam) + (s.seizoen ? ` <span class="spk-serie-seizoen">${escHtml(String(s.seizoen))}</span>` : '');
             return `<div class="spk-serie-groep"><div class="spk-serie-naam">🏆 ${kop}</div>${rijen}</div>`;
