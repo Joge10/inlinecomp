@@ -328,10 +328,22 @@ try {
                     ], 'global');
                     pushFlushOutbox($pdo, 15, true);
                 } else {
-                    $_ls = $pdo->prepare("SELECT person_license FROM competition_startnummers WHERE competition_id = ?");
+                    // Rijders in deze wedstrijd = inschrijvingen (entries via DC).
+                    // NIET competition_startnummers: dat is een sparse override-tabel
+                    // (alleen handmatig gewijzigde startnummers) en is meestal leeg,
+                    // waardoor de push voorheen niemand bereikte.
+                    $_ls = $pdo->prepare("
+                        SELECT DISTINCT e.person_license
+                        FROM entries e
+                        JOIN distance_combinations dc ON dc.id = e.distance_combination_id
+                        WHERE dc.competition_id = ?
+                    ");
                     $_ls->execute([$compIdDb]);
                     $_lics = $_ls->fetchAll(PDO::FETCH_COLUMN);
-                    if ($_lics) {
+                    // Alleen pushen als de wedstrijd publiek live is (eenduidig met
+                    // loting/uitslag). Anders zouden abonnees bv. een vooraf
+                    // klaargezet programma-bericht al krijgen vóór de rest → oneerlijk.
+                    if ($_lics && pushWedstrijdZichtbaar($pdo, $compIdDb)) {
                         pushEnqueue($pdo, 'bericht', $_lics, [
                             'title'   => _pushTitel('bericht', false),
                             'context' => $_ctx,
