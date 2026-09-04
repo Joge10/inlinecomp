@@ -813,7 +813,9 @@ try {
                 if (!empty($_r['license_key'])) $_pushLics[] = $_r['license_key'];
             }
         }
-        if ($_pushLics) {
+        // Alleen pushen als de wedstrijd publiek live is (geen lek tijdens de
+        // stille voorbereiding / "binnenkort").
+        if ($_pushLics && pushWedstrijdZichtbaar($pdo, $compId)) {
             $_q = $pdo->prepare("SELECT name FROM distance_combinations WHERE id = ?");
             $_q->execute([$primaryDcId]);
             $_dcNaam = (string) ($_q->fetchColumn() ?: '');

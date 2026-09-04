@@ -633,7 +633,9 @@ if ($action === 'save_rit_results') {
                 $_ls = $pdo->prepare("SELECT he.person_license FROM heat_entries he JOIN heats h ON h.id = he.heat_id WHERE h.tijdschema_rit_id = ? AND h.competition_id = ?");
                 $_ls->execute([$ritId, $compId]);
                 $_lics = $_ls->fetchAll(PDO::FETCH_COLUMN);
-                if ($_lics) {
+                // Alleen pushen als de wedstrijd publiek live is (geen lek tijdens
+                // de stille voorbereiding / "binnenkort").
+                if ($_lics && pushWedstrijdZichtbaar($pdo, $compId)) {
                     $_afNaam = ''; $_afMeters = null;
                     if (!empty($_h['distance_id'])) {
                         $_af = $pdo->prepare("SELECT name, value_meters FROM distances WHERE id = ? AND distance_combination_id = ? LIMIT 1");

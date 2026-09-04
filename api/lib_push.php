@@ -113,6 +113,23 @@ function _pushTypeKolom(string $type): string {
  * $scope='global' = broadcast (mededeling app-breed) → géén licenties nodig,
  * gaat naar álle abonnementen met dit type aan. Roep aan NÁ de commit.
  */
+/**
+ * Alleen pushen voor een wedstrijd die PUBLIEK LIVE is (`public_zichtbaar=1`).
+ * Bij verborgen (stille voorbereiding) of "binnenkort" staat de wedstrijd niet
+ * in /public of /coach → een loting-/uitslag-push zou info lekken vóór de
+ * operator 'm zichtbaar maakt. Defensief: bij twijfel/fout → niet pushen.
+ */
+function pushWedstrijdZichtbaar(PDO $pdo, string $compId): bool {
+    if ($compId === '') return false;
+    try {
+        $st = $pdo->prepare("SELECT public_zichtbaar FROM competitions WHERE id = ? LIMIT 1");
+        $st->execute([$compId]);
+        return (int) $st->fetchColumn() === 1;
+    } catch (\Throwable $e) {
+        return false;
+    }
+}
+
 function pushEnqueue(PDO $pdo, string $type, array $licenses, array $payload, string $scope = 'all'): void {
     if (!pushBeschikbaar()) return;   // push niet geconfigureerd → niets in de outbox zetten
     $type  = in_array($type, ['loting', 'uitslag', 'bericht'], true) ? $type : 'loting';

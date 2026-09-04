@@ -1931,6 +1931,47 @@ async function _slLaadAfhBestaand(cache, groep, distId) {
 // (wacht op de bron-uitslag). Toont een preview-indeling (placeholder-namen) +
 // een 🗑 Wis-knop die de koppeling opheft. Methode-onafhankelijk zodat de
 // tussenklassement-tak later dezelfde weergave hergebruikt.
+// Rendert de finale-shells (rondes ná de eerste in de flow) als placeholder-blokken,
+// exact zoals de normale loting-view (berekenSchemaHeats + maakSchemaHeatGrid). Zo
+// toont de afhankelijke-loting-preview óók de A/B-finale ("nog in te vullen na
+// rijtijden") — zowel bij tussenklassement als bij afstand-uitslag.
+function _slPreviewFinaleShells(container, flow, schema, groep, distId, nRijders, cache) {
+    if (!container || !flow || flow.length < 2) return;
+    const heeftKleineFin = flow.some(f => f.sleutel === 'finale_b')
+                        && flow.some(f => f.sleutel === 'finale_a');
+    let finalesRij = null;
+    for (let i = 1; i < flow.length; i++) {
+        const r          = flow[i];
+        const ritLookupR = bouwRitLookup(schema, groep?.dc_id, distId, r.sleutel);
+        const schemaHeats = berekenSchemaHeats(r, cache?._catCfg, nRijders, ritLookupR,
+                                               cache?._systeem, cache?._afstandCfg);
+        if (!schemaHeats) continue;   // bv. te weinig rijders voor een B-finale
+        if (ritLookupR) {
+            schemaHeats.sort((a, b) =>
+                (ritLookupR[a.nummer]?.volgorde ?? 9999) - (ritLookupR[b.nummer]?.volgorde ?? 9999));
+        }
+        const div = document.createElement('div');
+        div.className = 'ronde-blok';
+        div.dataset.rondetype = r.sleutel;
+        div.innerHTML =
+            `<div class="ronde-kop">` +
+            `<span class="ronde-titel" style="color:${r.kleur}">${escHtml(r.naam)}</span>` +
+            `<span class="sl-flow-ph-info">Schema op basis van tijdschema · nog in te vullen na rijtijden</span>` +
+            `</div>`;
+        div.appendChild(maakSchemaHeatGrid(schemaHeats, ritLookupR));
+        if (heeftKleineFin && (r.sleutel === 'finale_b' || r.sleutel === 'finale_a')) {
+            if (!finalesRij) {
+                finalesRij = document.createElement('div');
+                finalesRij.className = 'ronde-finales-rij';
+                container.appendChild(finalesRij);
+            }
+            finalesRij.appendChild(div);
+        } else {
+            container.appendChild(div);
+        }
+    }
+}
+
 function toonAfhVergrendeld(cacheKey) {
     const cache = startlijstCache[cacheKey];
     if (!cache?.afhBestaand) return;
@@ -1966,14 +2007,18 @@ function toonAfhVergrendeld(cacheKey) {
 
     // Voorlopige indeling. Tussenklassement → tussenstand-preview (huidige
     // stand, kan nog leeg zijn); afstand-uitslag → "1e van <bron>"-placeholders.
-    if (isTk) {
-        vulTussenklPreview(el('sl-au-preview'), groep.competitors.length, cache.heatsAantal,
-                           schema, groep, distId, flow);
-    } else {
-        vulAfstandPreview(el('sl-au-preview'), groep.competitors.length, cache.heatsAantal,
-                          schema, groep, distId, flow,
-                          best.bronDcId, best.bronDistId, best.bronLabel, false);
-    }
+    const previewProm = isTk
+        ? vulTussenklPreview(el('sl-au-preview'), groep.competitors.length, cache.heatsAantal,
+                             schema, groep, distId, flow)
+        : vulAfstandPreview(el('sl-au-preview'), groep.competitors.length, cache.heatsAantal,
+                            schema, groep, distId, flow,
+                            best.bronDcId, best.bronDistId, best.bronLabel, false);
+    // Ná de series-preview óók de finale-shells (A/B-finale · nog in te vullen na
+    // rijtijden) tonen, net als de normale loting-view.
+    Promise.resolve(previewProm).then(() => {
+        _slPreviewFinaleShells(el('sl-au-preview'), flow, schema, groep, distId,
+                               groep.competitors.length, cache);
+    });
 
     // ── Wis: koppeling opheffen ───────────────────────────────────────────────
     const wisBtn = el('sl-btn-afh-wis');
