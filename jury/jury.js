@@ -1354,12 +1354,20 @@ document.addEventListener('keydown', e => {
 //      woonplaats, club, geboortejaar, etc.) voor speaker-commentaar.
 
 const _spk = {
-    struktuur:  null,  // { cats: [{cat, dcs:[{dc_id, dc_naam, aantal}]}] }
-    cat:        null,  // huidige cat-string
-    dcId:       null,  // huidige dc_id-string
-    deelnemers: [],    // lijst voor huidige dc+cat
+    struktuur:  null,  // { dcs: [{dc_id, dc_naam, cats:[...], aantal, afstanden:[{id,naam,value_meters,race_type}]}] }
+    dcId:       null,  // huidige dc_id-string (niveau 1)
+    afstand:    null,  // huidige afstand-object {id,naam,value_meters,race_type} (niveau 2)
+    cat:        null,  // representatieve categorie van de DC (voor record/kans/gender-onderkant)
+    deelnemers: [],    // lijst voor huidige DC (alle categorieën samen)
     laden:      false,
 };
+// Zet dcId + eerste afstand + representatieve cat voor een DC uit de struktuur.
+function _spkSelectDc(dcId) {
+    const dc = _spk.struktuur?.dcs?.find(d => d.dc_id === dcId) || null;
+    _spk.dcId    = dc?.dc_id ?? null;
+    _spk.afstand = dc?.afstanden?.[0] ?? null;
+    _spk.cat     = dc?.cats?.[0] ?? null;
+}
 
 async function toonSpeaker(rolDef) {
     elJ('jury-main').innerHTML = `<div class="jury-laden">Deelnemers-structuur laden…</div>`;
@@ -1372,7 +1380,7 @@ async function toonSpeaker(rolDef) {
         toonFout('Kan deelnemers-structuur niet laden: ' + e.message);
         return;
     }
-    if (!_spk.struktuur.cats?.length) {
+    if (!_spk.struktuur.dcs?.length) {
         elJ('jury-main').innerHTML = `
             <div class="jury-scherm jury-rol-detail">
                 <div class="jury-rol-detail-kop">
@@ -1391,9 +1399,8 @@ async function toonSpeaker(rolDef) {
             </div>`;
         return;
     }
-    // Eerste cat + eerste DC als default
-    _spk.cat  = _spk.struktuur.cats[0].cat;
-    _spk.dcId = _spk.struktuur.cats[0].dcs[0]?.dc_id ?? null;
+    // Eerste DC (+ eerste afstand + representatieve cat) als default
+    _spkSelectDc(_spk.struktuur.dcs[0].dc_id);
     _spkRender(rolDef);
 }
 
@@ -1439,45 +1446,45 @@ function _spkRender(rolDef) {
     elJ('spk-bb-sel-afstand').addEventListener('change',  _spkOnAfstandChange);
 }
 
+// Niveau 1 = DC-tabs (gecombineerde categorieën samen in één tab; label = DC-naam).
 function _spkRenderCatTabs() {
     const wrap = elJ('spk-tab-cats');
-    // Geen aantal-pill: speaker hoeft niet het aantal te zien — alleen de
-    // beschikbare cats. Houdt de tab-balk strak en leesbaar.
-    wrap.innerHTML = _spk.struktuur.cats.map(c => {
-        const act = c.cat === _spk.cat ? 'is-active' : '';
-        return `<button class="spk-tab ${act}" data-cat="${escHtml(c.cat)}">${escHtml(c.cat)}</button>`;
+    wrap.innerHTML = _spk.struktuur.dcs.map(d => {
+        const act = d.dc_id === _spk.dcId ? 'is-active' : '';
+        const lbl = (d.cats && d.cats.length) ? d.cats.join(' + ') : (d.dc_naam || '?');
+        return `<button class="spk-tab ${act}" data-dc-id="${escHtml(d.dc_id)}" title="${escHtml(d.dc_naam || '')}">${escHtml(lbl)}</button>`;
     }).join('');
     wrap.querySelectorAll('.spk-tab').forEach(btn => {
         btn.addEventListener('click', () => {
-            if (btn.dataset.cat === _spk.cat) return;
-            _spk.cat  = btn.dataset.cat;
-            // Eerste DC binnen de nieuwe cat selecteren
-            const newCat = _spk.struktuur.cats.find(c => c.cat === _spk.cat);
-            _spk.dcId = newCat?.dcs[0]?.dc_id ?? null;
+            if (btn.dataset.dcId === _spk.dcId) return;
+            _spkSelectDc(btn.dataset.dcId);   // dcId + eerste afstand + representatieve cat
             _spkRenderCatTabs();
             _spkRenderDcTabs();
             _spkLaadEnRenderDeelnemers();
             // Bottom-bar overzicht is cat-onafhankelijk (3 cascade-dropdowns
-            // zonder pre-filter) — geen herlaad nodig bij cat-wissel.
+            // zonder pre-filter) — geen herlaad nodig bij DC-wissel.
         });
     });
 }
 
+// Niveau 2 = afstand-tabs binnen de gekozen DC.
 function _spkRenderDcTabs() {
-    const wrap   = elJ('spk-tab-dcs');
-    const catObj = _spk.struktuur.cats.find(c => c.cat === _spk.cat);
-    if (!catObj || !catObj.dcs.length) {
-        wrap.innerHTML = '';
+    const wrap = elJ('spk-tab-dcs');
+    const dc   = _spk.struktuur.dcs.find(d => d.dc_id === _spk.dcId);
+    const afs  = dc?.afstanden ?? [];
+    if (!afs.length) {
+        wrap.innerHTML = '<span class="spk-tab-geen-afst">Geen afstanden</span>';
         return;
     }
-    wrap.innerHTML = catObj.dcs.map(d => {
-        const act = d.dc_id === _spk.dcId ? 'is-active' : '';
-        return `<button class="spk-tab spk-tab-dc ${act}" data-dc-id="${escHtml(d.dc_id)}">${escHtml(d.dc_naam)}</button>`;
+    wrap.innerHTML = afs.map(a => {
+        const act = (a.id === _spk.afstand?.id) ? 'is-active' : '';
+        const lbl = a.naam + (a.value_meters ? ` ${a.value_meters}m` : '');
+        return `<button class="spk-tab spk-tab-dc ${act}" data-afst-id="${escHtml(a.id)}">${escHtml(lbl)}</button>`;
     }).join('');
     wrap.querySelectorAll('.spk-tab-dc').forEach(btn => {
         btn.addEventListener('click', () => {
-            if (btn.dataset.dcId === _spk.dcId) return;
-            _spk.dcId = btn.dataset.dcId;
+            if (btn.dataset.afstId === _spk.afstand?.id) return;
+            _spk.afstand = afs.find(a => a.id === btn.dataset.afstId) ?? null;
             _spkRenderDcTabs();
             _spkLaadEnRenderDeelnemers();
         });
@@ -1489,16 +1496,16 @@ async function _spkLaadEnRenderDeelnemers() {
     // dezelfde DC/cat-wijziging dus is dit het natuurlijke moment.
     _spkLaadNationaalRecord();
     const grid = elJ('spk-grid');
-    if (!_spk.dcId || !_spk.cat) {
+    if (!_spk.dcId) {
         grid.innerHTML = '<div class="jury-placeholder">Geen DC geselecteerd.</div>';
         return;
     }
     grid.innerHTML = '<div class="jury-laden">Deelnemers laden…</div>';
     _spk.laden = true;
     try {
+        // DC-breed: alle categorieën van de DC samen (geen cat-filter).
         const url = '?action=speaker_deelnemers'
-                  + '&dc_id=' + encodeURIComponent(_spk.dcId)
-                  + '&cat='   + encodeURIComponent(_spk.cat);
+                  + '&dc_id=' + encodeURIComponent(_spk.dcId);
         const res  = await fetch(url, { credentials: 'same-origin' });
         const data = await res.json();
         if (!res.ok || data?.error) throw new Error(data?.error || ('HTTP ' + res.status));
@@ -1520,9 +1527,7 @@ async function _spkLaadEnRenderDeelnemers() {
 
     // PK/afval: aparte compact-grid met punten-bijhouden scratchpad.
     // Wordt lokaal opgeslagen (geen DB-impact) — speaker-only nota's.
-    const catObj = _spk.struktuur?.cats?.find(c => c.cat === _spk.cat);
-    const dc = catObj?.dcs?.find(d => d.dc_id === _spk.dcId);
-    const afstandKey = _spkAfstandKey(dc?.dc_naam || '');
+    const afstandKey = _spkAfstandKey(_spk.afstand?.naam || '');
     if (afstandKey === 'puntenkoers') {
         _spkRenderPK(grid, afstandKey);
         return;
@@ -2281,21 +2286,20 @@ function _spkAVOpenCfgModal(grid) {
 // tegels worden eerst zonder badge gerendered, badges verschijnen zodra
 // data binnen is via re-render-call.
 async function _spkLaadKans() {
-    if (!_spk.dcId || !_spk.cat) return;
-    const cacheKey = _spk.dcId + ':' + _spk.cat;
+    if (!_spk.dcId) return;
+    const cacheKey = _spk.dcId;   // DC-breed (alle categorieën samen)
     if (_spk.kansCache?.key === cacheKey) return;   // hit, geen reload
     try {
         const url = '?action=speaker_kans'
-                  + '&dc_id=' + encodeURIComponent(_spk.dcId)
-                  + '&cat='   + encodeURIComponent(_spk.cat);
+                  + '&dc_id=' + encodeURIComponent(_spk.dcId);
         const res = await fetch(url, { credentials: 'same-origin' });
         const data = await res.json();
         if (!res.ok || data?.error) return;   // silent fail — badges blijven leeg
         const map = new Map((data.rijders || []).map(r => [r.license_key, r]));
         _spk.kansCache = { key: cacheKey, map, groepen: data.groepen || [] };
         // Re-render alleen als deze data nog actueel is (gebruiker kan tussentijds
-        // van DC gewisseld zijn). Check via cacheKey vs huidig _spk.dcId/cat.
-        if (cacheKey === (_spk.dcId + ':' + _spk.cat)) {
+        // van DC gewisseld zijn). Check via cacheKey vs huidig _spk.dcId.
+        if (cacheKey === _spk.dcId) {
             // Re-render standaard tegel-grid (PK/AV hebben eigen render-paden;
             // die zou je apart kunnen voorzien — V1 alleen standaard tegels)
             _spkUpdateKansBadges();
@@ -2462,6 +2466,9 @@ function _spkToonDetail(r) {
                 ${veld('Woonplaats',    r.city)}
                 ${veld('Club',          r.club_full)}
                 ${veld('Sponsor',       r.sponsor)}
+                <!-- Positie(s) in het serie-klassement — asynchroon gevuld;
+                     leeg (verborgen) als deze wedstrijd niet in een serie zit. -->
+                <div id="spk-serie-klassement"></div>
                 <!-- Snelste tijd op de geselecteerde afstand — asynchroon
                      gevuld door _spkVulHistorie zodra de historie binnen is. -->
                 <div id="spk-pr-rij"></div>
@@ -2483,6 +2490,36 @@ function _spkToonDetail(r) {
     // Historie asynchroon ophalen + invullen — modal opent direct met basis-
     // info, historie verschijnt zodra de fetch klaar is.
     _spkVulHistorie(overlay, r.license_key);
+    _spkVulSerieKlassement(overlay, r.license_key);
+}
+
+// ── Serie-klassement-positie(s) in de modal ─────────────────────────────────
+// Toont de OPGESLAGEN positie(s) van de rijder in het serie-klassement waar
+// deze wedstrijd deel van uitmaakt. Puur uitlezen (klassement_posities) — geen
+// herberekening. Een rijder kan in meerdere secties staan (bv. losse DP3 én
+// gecombineerde DP3/HP3); die tonen we allemaal.
+async function _spkVulSerieKlassement(overlay, licenseKey) {
+    const box = overlay.querySelector('#spk-serie-klassement');
+    if (!box || !licenseKey) return;
+    try {
+        const res  = await fetch('?action=speaker_serieklassement&license_key=' + encodeURIComponent(licenseKey),
+                                 { credentials: 'same-origin' });
+        const data = await res.json();
+        if (!res.ok || data?.error) return;   // stil: blok blijft leeg/verborgen
+        const series = Array.isArray(data.series) ? data.series : [];
+        if (!series.length) return;
+        const blokken = series.map(s => {
+            const rijen = (s.posities || []).map(p => {
+                const pnt = (p.punten_totaal != null) ? ` · ${p.punten_totaal} ptn` : '';
+                const sec = p.categorie ? escHtml(p.categorie) : '—';
+                return `<div class="spk-serie-rij"><span class="spk-serie-pos">${p.positie}e</span>
+                        <span class="spk-serie-sec">${sec}</span><span class="spk-serie-ptn">${pnt}</span></div>`;
+            }).join('');
+            const kop = escHtml(s.serie_naam) + (s.seizoen ? ` <span class="spk-serie-seizoen">${escHtml(String(s.seizoen))}</span>` : '');
+            return `<div class="spk-serie-groep"><div class="spk-serie-naam">🏆 ${kop}</div>${rijen}</div>`;
+        }).join('');
+        box.innerHTML = `<div class="spk-serie-wrap"><div class="spk-serie-titel">Serie-klassement</div>${blokken}</div>`;
+    } catch { /* stil */ }
 }
 
 // ── Historie ophalen + renderen in modal ───────────────────────────────────
@@ -2525,17 +2562,10 @@ function _spkAfstandLabel(key) {
     return key;
 }
 
-// Bepaalt de afstand-key van de momenteel geselecteerde DC in de speaker-
-// deelnemers-tab. Gebruikt om de modal-historie te filteren op alleen die
-// afstand. Bij combo-DC (meerdere afstanden onder 1 DC, zoals NK 2024 HJB
-// = 500m + 1000m) → de afstand uit dc_naam (vaak de eerste die genoemd
-// wordt). Komt geen DC-context → leeg → geen filter mogelijk.
+// Afstand-key van de momenteel geselecteerde afstand (niveau 2), voor het
+// filteren van de modal-historie. Leeg → geen filter mogelijk.
 function _spkHuidigeAfstandKey() {
-    const cat = _spk.struktuur?.cats?.find(c => c.cat === _spk.cat);
-    if (!cat) return '';
-    const dc = cat.dcs?.find(d => d.dc_id === _spk.dcId);
-    if (!dc) return '';
-    return _spkAfstandKey(dc.dc_naam);
+    return _spkAfstandKey(_spk.afstand?.naam || '');
 }
 
 async function _spkVulHistorie(overlay, licenseKey) {
@@ -2786,8 +2816,7 @@ function _spkOnCatChange(ev) {
     aSel.disabled  = false;
 
     // Smart preselect — match op huidige speaker DC-naam (last-word-trick)
-    const huidigeDcNaam = (_spk.struktuur?.cats
-        ?.find(c => c.cat === _spk.cat)?.dcs
+    const huidigeDcNaam = (_spk.struktuur?.dcs
         ?.find(d => d.dc_id === _spk.dcId)?.dc_naam) || '';
     if (huidigeDcNaam) {
         const matched = relevant.find(a => {
@@ -2989,11 +3018,12 @@ function _spkNrTypeZet(afstandKey, type) {
 async function _spkLaadNationaalRecord() {
     const wrap = elJ('spk-bb-nr');
     if (!wrap) return;
-    const catObj = _spk.struktuur?.cats?.find(c => c.cat === _spk.cat);
-    const dc = catObj?.dcs?.find(d => d.dc_id === _spk.dcId);
+    const dc = _spk.struktuur?.dcs?.find(d => d.dc_id === _spk.dcId);
     if (!dc) { wrap.innerHTML = ''; return; }
 
-    const afstandKey = _spkAfstandKey(dc.dc_naam);
+    // Record volgt de gekozen afstand (niveau 2) + de representatieve categorie
+    // (bij een gemengde DC kan de speaker via de dropdown het andere geslacht kiezen).
+    const afstandKey = _spkAfstandKey(_spk.afstand?.naam || '');
     const catGroep   = _spkCatNaarGroep(_spk.cat);
     const gender     = _spkCatNaarGender(_spk.cat);
     if (!afstandKey || !catGroep || gender === null) {

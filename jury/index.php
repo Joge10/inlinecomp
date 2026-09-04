@@ -698,12 +698,14 @@ if ($action === 'speaker_struktuur') {
     header('Content-Type: application/json; charset=utf-8');
     $compId = _speakerRequire();
     try {
+        // Niveau 1 = DC (gecombineerde categorieën samen in één DC), niveau 2 =
+        // afstand. Per DC de categorieën + deelnemer-aantal.
         $stmt = $pdo->prepare("
             SELECT
-                p.category                       AS cat,
                 dc.id                            AS dc_id,
                 dc.name                          AS dc_naam,
                 dc.number                        AS dc_number,
+                p.category                       AS cat,
                 COUNT(*)                         AS aantal
             FROM entries e
             JOIN persons p              ON p.license_key = e.person_license
@@ -713,27 +715,49 @@ if ($action === 'speaker_struktuur') {
               AND e.reserve IS NULL
               AND p.category IS NOT NULL
               AND p.category <> ''
-            GROUP BY p.category, dc.id, dc.name, dc.number
-            ORDER BY p.category, dc.number, dc.name
+            GROUP BY dc.id, dc.name, dc.number, p.category
+            ORDER BY dc.number, dc.name, p.category
         ");
         $stmt->execute([$compId]);
         $rows = $stmt->fetchAll(PDO::FETCH_ASSOC);
 
-        // Groepeer naar { cats: [ {cat, dcs: [{dc_id, dc_naam, aantal}]} ] }
-        $catMap = [];
+        // Basis-afstanden per DC (target_group leeg) — het afstand-niveau.
+        $afStmt = $pdo->prepare("
+            SELECT id, name AS naam, value_meters, race_type
+            FROM distances
+            WHERE distance_combination_id = ?
+              AND (target_group IS NULL OR target_group = '')
+            ORDER BY number, name
+        ");
+
+        // Groepeer naar { dcs: [ {dc_id, dc_naam, cats:[...], aantal, afstanden:[...]} ] }
+        $dcMap = [];
         foreach ($rows as $r) {
-            $c = $r['cat'];
-            if (!isset($catMap[$c])) $catMap[$c] = [];
-            $catMap[$c][] = [
-                'dc_id'   => $r['dc_id'],
-                'dc_naam' => $r['dc_naam'],
-                'aantal'  => (int)$r['aantal'],
-            ];
+            $id = $r['dc_id'];
+            if (!isset($dcMap[$id])) {
+                $dcMap[$id] = [
+                    'dc_id'     => $id,
+                    'dc_naam'   => $r['dc_naam'],
+                    'dc_number' => $r['dc_number'] !== null ? (int)$r['dc_number'] : null,
+                    'cats'      => [],
+                    'aantal'    => 0,
+                    'afstanden' => [],
+                ];
+            }
+            if (!in_array($r['cat'], $dcMap[$id]['cats'], true)) $dcMap[$id]['cats'][] = $r['cat'];
+            $dcMap[$id]['aantal'] += (int)$r['aantal'];
         }
-        $cats = [];
-        foreach ($catMap as $c => $dcs) {
-            $cats[] = ['cat' => $c, 'dcs' => $dcs];
+        foreach ($dcMap as $id => &$_dc) {
+            $afStmt->execute([$id]);
+            $af = $afStmt->fetchAll(PDO::FETCH_ASSOC);
+            foreach ($af as &$_a) {
+                if ($_a['value_meters'] !== null) $_a['value_meters'] = (int)$_a['value_meters'];
+            }
+            unset($_a);
+            $_dc['afstanden'] = $af;
         }
+        unset($_dc);
+        $cats = array_values($dcMap);   // (variabele heet 'cats' voor de sortering hieronder; = DC's)
 
         // Sorteren op KNSB-categorie-volgorde (jongste → oudste), niet alfabetisch.
         // Volgorde: per leeftijd eerst Dames, dan Heren, dan volgende leeftijd.
@@ -778,9 +802,15 @@ if ($action === 'speaker_struktuur') {
             };
             return $ageRank * 10 + $genderRank;
         };
-        usort($cats, fn($a, $b) => $catSortKey($a['cat']) <=> $catSortKey($b['cat']));
+        // DC's sorteren op de KNSB-volgorde van hun (jongste) categorie, zodat
+        // DP4(+HP4) vóór DP3(+HP3) … vóór DKA/HKA … staat.
+        $dcSortKey = function(array $dc) use ($catSortKey): int {
+            $keys = array_map($catSortKey, $dc['cats'] ?? []);
+            return $keys ? min($keys) : 9999;
+        };
+        usort($cats, fn($a, $b) => $dcSortKey($a) <=> $dcSortKey($b));
 
-        echo json_encode(['cats' => $cats], JSON_UNESCAPED_UNICODE);
+        echo json_encode(['dcs' => $cats], JSON_UNESCAPED_UNICODE);
     } catch (Throwable $e) {
         http_response_code(500);
         echo json_encode(['error' => $e->getMessage()]);
@@ -794,14 +824,70 @@ if ($action === 'speaker_struktuur') {
 // velden meesturen zodat het detail-popup geen extra request hoeft te doen.
 // Sortering: startnummer ASC zodat tegels in de gangbare omroep-volgorde
 // staan; rijders zonder startnummer achteraan op naam.
+// ── API: serie-klassement-positie(s) van een rijder ────────────────────────
+// Toont de OPGESLAGEN positie(s) uit klassement_posities voor het serie-
+// klassement waar de huidige wedstrijd deel van uitmaakt. Geen herberekening.
+// Keten: klassement_serie_wedstrijden (serie↔wedstrijd) → klassement_series
+// (klassement_id) → klassement_posities (per sectie/categorie, per license).
+if ($action === 'speaker_serieklassement') {
+    header('Content-Type: application/json; charset=utf-8');
+    $compId = _speakerRequire();
+    $lic    = trim($_GET['license_key'] ?? '');
+    if ($lic === '') {
+        http_response_code(400);
+        echo json_encode(['error' => 'license_key is verplicht']);
+        exit;
+    }
+    try {
+        $sStmt = $pdo->prepare("
+            SELECT ks.id AS serie_id, ks.naam AS serie_naam, ks.seizoen, ks.klassement_id
+            FROM klassement_serie_wedstrijden ksw
+            JOIN klassement_series ks ON ks.id = ksw.serie_id
+            WHERE ksw.competition_id = ?
+            ORDER BY ks.seizoen DESC, ks.naam
+        ");
+        $sStmt->execute([$compId]);
+        $series = $sStmt->fetchAll(PDO::FETCH_ASSOC);
+
+        $pStmt = $pdo->prepare("
+            SELECT categorie, positie, punten_totaal
+            FROM klassement_posities
+            WHERE klassement_id = ? AND license_key = ?
+            ORDER BY positie
+        ");
+        $out = [];
+        foreach ($series as $s) {
+            $pStmt->execute([$s['klassement_id'], $lic]);
+            $posities = $pStmt->fetchAll(PDO::FETCH_ASSOC);
+            foreach ($posities as &$p) {
+                $p['positie']       = (int)$p['positie'];
+                $p['punten_totaal'] = ($p['punten_totaal'] !== null) ? (float)$p['punten_totaal'] : null;
+            }
+            unset($p);
+            if ($posities) {
+                $out[] = [
+                    'serie_naam' => $s['serie_naam'],
+                    'seizoen'    => $s['seizoen'],
+                    'posities'   => $posities,
+                ];
+            }
+        }
+        echo json_encode(['series' => $out], JSON_UNESCAPED_UNICODE);
+    } catch (Throwable $e) {
+        http_response_code(500);
+        echo json_encode(['error' => $e->getMessage()]);
+    }
+    exit;
+}
+
 if ($action === 'speaker_deelnemers') {
     header('Content-Type: application/json; charset=utf-8');
     $compId = _speakerRequire();
     $dcId   = trim($_GET['dc_id'] ?? '');
-    $cat    = trim($_GET['cat']   ?? '');
-    if ($dcId === '' || $cat === '') {
+    $cat    = trim($_GET['cat']   ?? '');   // leeg = alle categorieën van de DC (gecombineerd)
+    if ($dcId === '') {
         http_response_code(400);
-        echo json_encode(['error' => 'dc_id en cat zijn verplicht']);
+        echo json_encode(['error' => 'dc_id is verplicht']);
         exit;
     }
     try {
@@ -839,13 +925,15 @@ if ($action === 'speaker_deelnemers') {
             WHERE e.distance_combination_id = ?
               AND e.status IN (1, 5)
               AND e.reserve IS NULL
-              AND p.category = ?
+              " . ($cat !== '' ? 'AND p.category = ?' : '') . "
             ORDER BY
                 CASE WHEN COALESCE(csn.startnummer, p.start_number) IS NULL THEN 1 ELSE 0 END,
                 COALESCE(csn.startnummer, p.start_number),
                 p.full_name
         ");
-        $stmt->execute([$compId, $dcId, $cat]);
+        $params = [$compId, $dcId];
+        if ($cat !== '') $params[] = $cat;
+        $stmt->execute($params);
         $rows = $stmt->fetchAll(PDO::FETCH_ASSOC);
 
         // Type-cleanup
@@ -894,10 +982,10 @@ if ($action === 'speaker_kans') {
     header('Content-Type: application/json; charset=utf-8');
     $compId = _speakerRequire();
     $dcId = trim($_GET['dc_id'] ?? '');
-    $cat  = trim($_GET['cat']   ?? '');
-    if ($dcId === '' || $cat === '') {
+    $cat  = trim($_GET['cat']   ?? '');   // leeg = alle categorieën van de DC
+    if ($dcId === '') {
         http_response_code(400);
-        echo json_encode(['error' => 'dc_id en cat zijn verplicht']);
+        echo json_encode(['error' => 'dc_id is verplicht']);
         exit;
     }
     try {
@@ -952,17 +1040,19 @@ if ($action === 'speaker_kans') {
             exit;
         }
 
-        // 2. Get deelnemers in DC+cat
+        // 2. Get deelnemers in DC (+ evt. cat-filter; leeg = alle cats van de DC)
         $stmt = $pdo->prepare("
             SELECT DISTINCT p.license_key
             FROM entries e
             JOIN persons p ON p.license_key = e.person_license
             WHERE e.distance_combination_id = ?
-              AND p.category = ?
+              " . ($cat !== '' ? 'AND p.category = ?' : '') . "
               AND e.status IN (1, 5)
               AND e.reserve IS NULL
         ");
-        $stmt->execute([$dcId, $cat]);
+        $kansParams = [$dcId];
+        if ($cat !== '') $kansParams[] = $cat;
+        $stmt->execute($kansParams);
         $deelnemers = array_column($stmt->fetchAll(PDO::FETCH_ASSOC), 'license_key');
         if (empty($deelnemers)) {
             echo json_encode(['rijders' => [], 'groep' => $groep]);

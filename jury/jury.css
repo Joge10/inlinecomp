@@ -1617,6 +1617,29 @@ html, body {
 .spk-detail-val { color: #222; font-weight: 600; text-align: right; }
 
 /* Historie-sectie in detail-modal */
+/* Serie-klassement-positie(s) in de speaker-detail-modal (boven de historie). */
+.spk-serie-wrap {
+    margin-top: 14px;
+    padding: 10px 12px;
+    background: var(--jury-blauw-bg);
+    border-radius: 10px;
+}
+.spk-serie-titel {
+    font-size: 1.05rem;
+    font-weight: 700;
+    color: var(--jury-blauw);
+    margin-bottom: 6px;
+    text-transform: uppercase;
+    letter-spacing: .03em;
+}
+.spk-serie-groep { margin-top: 6px; }
+.spk-serie-naam  { font-weight: 700; color: var(--jury-blauw); margin-bottom: 2px; }
+.spk-serie-seizoen { font-weight: 400; color: #667; font-size: .85em; }
+.spk-serie-rij   { display: flex; align-items: baseline; gap: 8px; font-size: 1.15rem; padding: 1px 0; }
+.spk-serie-pos   { font-weight: 800; color: var(--jury-oranje, #e8630a); min-width: 2.4em; }
+.spk-serie-sec   { flex: 1; }
+.spk-serie-ptn   { color: #556; font-size: .9em; white-space: nowrap; }
+
 .spk-historie-wrap {
     margin-top: 14px;
     padding-top: 14px;
