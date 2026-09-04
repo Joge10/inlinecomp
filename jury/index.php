@@ -953,6 +953,114 @@ if ($action === 'speaker_deelnemers') {
     exit;
 }
 
+// ── API: gecombineerde ritten voor gekozen (DC, afstand) ────────────────────
+// Voor de speaker-tegels: als de A-finale van deze DC+afstand visueel met
+// andere DC's is samengevoegd (tijdschema_ritten.combi_group, zie
+// api/tijdschema.php set_combi), geef dan de partner-DC's + hun rijders terug.
+// De speaker toont die als extra rijen ONDER de eigen tegels, zodat het hele
+// gecombineerde veld (en het puntenkoers/afvalkoers-scratchpad) samen werkt.
+// Puur visueel — loting/uitslag/klassement blijven per categorie.
+if ($action === 'speaker_combi') {
+    header('Content-Type: application/json; charset=utf-8');
+    $compId = _speakerRequire();
+    $dcId   = trim($_GET['dc_id'] ?? '');
+    $distId = trim($_GET['distance_id'] ?? '');   // leeg = afstand zonder distance_id (NULL)
+    if ($dcId === '') {
+        http_response_code(400);
+        echo json_encode(['error' => 'dc_id is verplicht']);
+        exit;
+    }
+    try {
+        // DC-veiligheidscheck (zelfde als speaker_deelnemers)
+        $check = $pdo->prepare("SELECT 1 FROM distance_combinations WHERE id = ? AND competition_id = ?");
+        $check->execute([$dcId, $compId]);
+        if (!$check->fetchColumn()) {
+            http_response_code(403);
+            echo json_encode(['error' => 'DC hoort niet bij deze wedstrijd']);
+            exit;
+        }
+
+        // Eén tijdschema per wedstrijd.
+        $tsStmt = $pdo->prepare("SELECT id FROM competition_tijdschema WHERE competition_id = ?");
+        $tsStmt->execute([$compId]);
+        $tsId = $tsStmt->fetchColumn();
+        if (!$tsId) { echo json_encode(['combi_group' => null, 'groepen' => []]); exit; }
+
+        // combi_group van de A-finale-rit van deze DC+afstand.
+        $ritStmt = $pdo->prepare("
+            SELECT combi_group FROM tijdschema_ritten
+            WHERE tijdschema_id = ? AND dc_id = ? AND ronde_type = 'finale_a'
+              AND (distance_id = ? OR (distance_id IS NULL AND ? = ''))
+            LIMIT 1
+        ");
+        $ritStmt->execute([$tsId, $dcId, $distId, $distId]);
+        $combi = $ritStmt->fetchColumn();
+        if ($combi === false || $combi === null) {
+            echo json_encode(['combi_group' => null, 'groepen' => []]);
+            exit;
+        }
+        $combi = (int)$combi;
+
+        // Partner-ritten in dezelfde combi_group (andere DC dan de gekozen).
+        // Dedup op dc_id: de tegels zijn DC-breed (afstand-agnostisch), dus per
+        // partner-DC één keer laden ook al zijn meerdere afstanden gecombineerd.
+        $pStmt = $pdo->prepare("
+            SELECT dc_id, dc_naam, MIN(volgorde) AS volgorde
+            FROM tijdschema_ritten
+            WHERE tijdschema_id = ? AND combi_group = ? AND dc_id <> ?
+            GROUP BY dc_id, dc_naam
+            ORDER BY volgorde
+        ");
+        $pStmt->execute([$tsId, $combi, $dcId]);
+        $partners = $pStmt->fetchAll(PDO::FETCH_ASSOC);
+
+        // DC-brede deelnemers per partner-DC (zelfde query als speaker_deelnemers).
+        $dStmt = $pdo->prepare("
+            SELECT
+                COALESCE(csn.startnummer, p.start_number) AS startnummer,
+                p.license_key, p.full_name, p.short_name, p.category,
+                p.birth_year, p.gender, p.nationality,
+                p.club_full, p.club_short, p.sponsor, p.city,
+                e.status AS entry_status
+            FROM entries e
+            JOIN persons p ON p.license_key = e.person_license
+            LEFT JOIN competition_startnummers csn
+                   ON csn.competition_id = ? AND csn.person_license = p.license_key
+            WHERE e.distance_combination_id = ?
+              AND e.status IN (1, 5)
+              AND e.reserve IS NULL
+            ORDER BY
+                CASE WHEN COALESCE(csn.startnummer, p.start_number) IS NULL THEN 1 ELSE 0 END,
+                COALESCE(csn.startnummer, p.start_number),
+                p.full_name
+        ");
+
+        $groepen = [];
+        foreach ($partners as $pt) {
+            $dStmt->execute([$compId, $pt['dc_id']]);
+            $rows = $dStmt->fetchAll(PDO::FETCH_ASSOC);
+            foreach ($rows as &$r) {
+                if ($r['startnummer'] !== null) $r['startnummer'] = (int)$r['startnummer'];
+                if ($r['birth_year']  !== null) $r['birth_year']  = (int)$r['birth_year'];
+                if ($r['gender']      !== null) $r['gender']      = (int)$r['gender'];
+                $r['entry_status'] = (int)$r['entry_status'];
+            }
+            unset($r);
+            $groepen[] = [
+                'dc_id'      => $pt['dc_id'],
+                'dc_naam'    => $pt['dc_naam'],
+                'deelnemers' => $rows,
+            ];
+        }
+
+        echo json_encode(['combi_group' => $combi, 'groepen' => $groepen], JSON_UNESCAPED_UNICODE);
+    } catch (Throwable $e) {
+        http_response_code(500);
+        echo json_encode(['error' => $e->getMessage()]);
+    }
+    exit;
+}
+
 // ── API: speaker kans-score (1-10) per rijder in DC ─────────────────────
 // Speaker wil per rijder zien hoe waarschijnlijk podium is, gebaseerd op
 // historische prestaties op vergelijkbare afstand-groep.

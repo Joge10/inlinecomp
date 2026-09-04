@@ -1358,8 +1358,10 @@ const _spk = {
     dcId:       null,  // huidige dc_id-string (niveau 1)
     afstand:    null,  // huidige afstand-object {id,naam,value_meters,race_type} (niveau 2)
     cat:        null,  // representatieve categorie van de DC (voor record/kans/gender-onderkant)
-    deelnemers: [],    // lijst voor huidige DC (alle categorieën samen)
+    deelnemers: [],    // lijst voor huidige DC (alle cats + evt. gecombineerde partner-DC's)
+    combiKey:   null,  // combi_group van de A-finale (visueel samengevoegde ritten) of null
     laden:      false,
+    laadSeq:    0,     // race-guard tegen snel tab-wisselen tijdens async laden
 };
 // Zet dcId + eerste afstand + representatieve cat voor een DC uit de struktuur.
 function _spkSelectDc(dcId) {
@@ -1491,6 +1493,34 @@ function _spkRenderDcTabs() {
     });
 }
 
+// Label van een DC uit de struktuur (= de cats, net als de DC-tabs). Valt
+// terug op de dc_naam uit de feed als de DC niet in de struktuur zit.
+function _spkDcLabel(dcId, fallback) {
+    const dc = _spk.struktuur?.dcs?.find(d => d.dc_id === dcId);
+    if (dc?.cats?.length) return dc.cats.join(' + ');
+    return fallback || dcId || '';
+}
+
+// Bouw grid-HTML met een tussenkop per gecombineerde partner-DC (nieuwe rij),
+// net als bij de info-tegels. Groepsvolgorde uit _spk.deelnemers (eigen DC
+// eerst, dan partners); binnen elke groep de meegegeven (bv. op startnummer
+// gesorteerde) volgorde. Gebruikt door PK- en AV-scratchpad.
+function _spkGroepeerGrid(deelnemersGesorteerd, tegelFn) {
+    const volgorde = [];
+    _spk.deelnemers.forEach(d => {
+        const k = d._grp || '';
+        if (!volgorde.includes(k)) volgorde.push(k);
+    });
+    let html = '';
+    volgorde.forEach(k => {
+        const leden = deelnemersGesorteerd.filter(d => (d._grp || '') === k);
+        if (!leden.length) return;
+        if (k) html += `<div class="spk-combi-kop">🔗 samen met ${escHtml(k)}</div>`;
+        html += leden.map(tegelFn).join('');
+    });
+    return html;
+}
+
 async function _spkLaadEnRenderDeelnemers() {
     // Trigger NR-banner update naast de deelnemers-load — beide reageren op
     // dezelfde DC/cat-wijziging dus is dit het natuurlijke moment.
@@ -1502,6 +1532,11 @@ async function _spkLaadEnRenderDeelnemers() {
     }
     grid.innerHTML = '<div class="jury-laden">Deelnemers laden…</div>';
     _spk.laden = true;
+    _spk.combiKey = null;
+    // Race-guard: bij snel wisselen van DC/afstand mogen oude fetches het
+    // resultaat van de nieuwe niet overschrijven (twee awaits hieronder).
+    const mySeq = ++_spk.laadSeq;
+    let hoofd = [];
     try {
         // DC-breed: alle categorieën van de DC samen (geen cat-filter).
         const url = '?action=speaker_deelnemers'
@@ -1509,13 +1544,63 @@ async function _spkLaadEnRenderDeelnemers() {
         const res  = await fetch(url, { credentials: 'same-origin' });
         const data = await res.json();
         if (!res.ok || data?.error) throw new Error(data?.error || ('HTTP ' + res.status));
-        _spk.deelnemers = Array.isArray(data.deelnemers) ? data.deelnemers : [];
+        hoofd = Array.isArray(data.deelnemers) ? data.deelnemers : [];
     } catch (e) {
+        if (mySeq !== _spk.laadSeq) return;
         grid.innerHTML = `<div class="jury-fout">⚠ ${escHtml(e.message)}</div>`;
         _spk.laden = false;
         return;
     }
-    _spk.laden = false;
+    if (mySeq !== _spk.laadSeq) return;   // inmiddels andere tab gekozen
+
+    // Gecombineerde ritten (visueel samengevoegde A-finales) ophalen: partner-
+    // DC's + hun rijders komen als extra rijen onder de eigen tegels, zodat het
+    // hele veld samen staat en het PK/AV-scratchpad over de combi heen werkt.
+    let combiGroepen = [];
+    let combiKey = null;
+    try {
+        const cu = '?action=speaker_combi'
+                 + '&dc_id=' + encodeURIComponent(_spk.dcId)
+                 + '&distance_id=' + encodeURIComponent(_spk.afstand?.id || '');
+        const cres = await fetch(cu, { credentials: 'same-origin' });
+        const cdata = await cres.json();
+        if (cres.ok && !cdata?.error) {
+            combiGroepen = Array.isArray(cdata.groepen) ? cdata.groepen : [];
+        }
+    } catch { /* combi is best-effort; zonder combi tonen we alleen de eigen DC */ }
+    if (mySeq !== _spk.laadSeq) return;
+
+    // Scratchpad-key voor het gecombineerde veld: de gesorteerde set dc_id's
+    // (globaal uniek, en identiek vanuit welke combi-tab je ook binnenkomt) —
+    // combi_group zelf is per-tijdschema en dus niet uniek in localStorage.
+    if (combiGroepen.length) {
+        combiKey = [_spk.dcId, ...combiGroepen.map(g => g.dc_id)]
+            .filter(Boolean).sort().join('+');
+    }
+
+    // Samenvoegen: eigen rijders (_grp=null) + per partner-DC een gelabelde
+    // groep. Dedup op license_key zodat niemand dubbel in de tegels/scratchpad
+    // belandt (een rijder kan in principe maar in één DC per veld zitten).
+    const gezien = new Set();
+    const merged = [];
+    hoofd.forEach(r => {
+        if (gezien.has(r.license_key)) return;
+        gezien.add(r.license_key);
+        r._grp = null;
+        merged.push(r);
+    });
+    combiGroepen.forEach(g => {
+        const label = _spkDcLabel(g.dc_id, g.dc_naam);
+        (g.deelnemers || []).forEach(r => {
+            if (gezien.has(r.license_key)) return;
+            gezien.add(r.license_key);
+            r._grp = label;
+            merged.push(r);
+        });
+    });
+    _spk.deelnemers = merged;
+    _spk.combiKey   = combiKey;
+    _spk.laden      = false;
 
     if (!_spk.deelnemers.length) {
         grid.innerHTML = '<div class="jury-placeholder">Geen deelnemers in deze cat + DC.</div>';
@@ -1536,13 +1621,22 @@ async function _spkLaadEnRenderDeelnemers() {
         _spkRenderAV(grid);
         return;
     }
-    grid.innerHTML = _spk.deelnemers.map(d => `
-        <button class="spk-tegel" data-license="${escHtml(d.license_key)}">
-            ${_spkKansBadge(d.license_key)}
-            <span class="spk-tegel-snr">${d.startnummer ?? '—'}</span>
-            <span class="spk-tegel-naam">${escHtml(d.full_name ?? '(onbekend)')}</span>
-        </button>
-    `).join('');
+    // Info-tegels, met een tussenkop per gecombineerde partner-DC (nieuwe rij).
+    let vorigGrp = undefined;
+    let html = '';
+    _spk.deelnemers.forEach(d => {
+        if (d._grp !== vorigGrp) {
+            if (d._grp) html += `<div class="spk-combi-kop">🔗 samen met ${escHtml(d._grp)}</div>`;
+            vorigGrp = d._grp;
+        }
+        html += `
+            <button class="spk-tegel" data-license="${escHtml(d.license_key)}">
+                ${_spkKansBadge(d.license_key)}
+                <span class="spk-tegel-snr">${d.startnummer ?? '—'}</span>
+                <span class="spk-tegel-naam">${escHtml(d.full_name ?? '(onbekend)')}</span>
+            </button>`;
+    });
+    grid.innerHTML = html;
     grid.querySelectorAll('.spk-tegel').forEach(btn => {
         btn.addEventListener('click', () => {
             const lk = btn.dataset.license;
@@ -1570,7 +1664,10 @@ function _spkPKKey() {
     // dc_id is een UUID/PK uit distance_combinations en uniek over alle
     // wedstrijden — comp_id is dus overbodig in de key. Per-cat scope niet
     // nodig want één PK-DC = één gezamenlijke koers (combi-cats racen
-    // samen, zelfde puntenoptelling).
+    // samen, zelfde puntenoptelling). Zijn de ritten visueel gecombineerd met
+    // andere DC's, dan één gedeelde key (de set dc_id's) zodat het scratchpad
+    // over het hele veld werkt, ongeacht via welke tab je binnenkomt.
+    if (_spk.combiKey) return `spk_pk_combi_${_spk.combiKey}`;
     return `spk_pk_${_spk.dcId || ''}`;
 }
 function _spkPKLoad() {
@@ -1647,7 +1744,7 @@ function _spkRenderPK(grid, afstandKey) {
                 ${actieBtn(1)}
             </div>
             <div class="spk-pk-grid">
-                ${deelnemers.map(d => tegelHtml(d, true)).join('')}
+                ${_spkGroepeerGrid(deelnemers, d => tegelHtml(d, true))}
             </div>
         </div>`;
 
@@ -1715,8 +1812,9 @@ function _spkRenderPK(grid, afstandKey) {
 // interval, eindsprint). Geen schema-berekening hier — speaker hoeft niet
 // exact te weten welk rondebord, alleen de high-level info ("18 ronden,
 // vanaf bord 21, eindsprint met 4 rijders"). Validatie minimaal.
-function _spkAVKey()    { return `spk_av_${_spk.dcId || ''}`; }
-function _spkAVCfgKey() { return `spk_avcfg_${_spk.dcId || ''}`; }
+// Bij gecombineerde ritten één gedeelde key over het hele veld (zie _spkPKKey).
+function _spkAVKey()    { return _spk.combiKey ? `spk_av_combi_${_spk.combiKey}`    : `spk_av_${_spk.dcId || ''}`; }
+function _spkAVCfgKey() { return _spk.combiKey ? `spk_avcfg_combi_${_spk.combiKey}` : `spk_avcfg_${_spk.dcId || ''}`; }
 function _spkAVLoad() {
     try {
         const raw = localStorage.getItem(_spkAVKey());
@@ -2038,7 +2136,7 @@ function _spkRenderAV(grid) {
                 : '<div class="spk-pk-leeg">Nog niemand afgevallen.</div>'}
             ${statsHtml}
             <div class="spk-pk-grid">
-                ${nogIn.map(tegelInKoersHtml).join('')}
+                ${_spkGroepeerGrid(nogIn, tegelInKoersHtml)}
             </div>
         </div>`;
 

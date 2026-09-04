@@ -996,6 +996,23 @@ html, body {
 /* Speaker-tegel needs position:relative voor absolute kans-badge */
 .spk-tegel { position: relative; }
 
+/* ── Gecombineerde-ritten tussenkop ─────────────────────────────────────
+ * Bij visueel samengevoegde A-finales (tijdschema combi_group) tonen we de
+ * partner-DC's als extra rijen onder de eigen tegels. Deze kop breekt de
+ * grid-rij (grid-column: 1 / -1) zodat de partner-categorie op een nieuwe
+ * regel begint en het geheel als één veld leest. */
+.spk-combi-kop {
+    grid-column: 1 / -1;
+    margin: 8px 0 2px;
+    padding: 6px 10px;
+    font-size: .85em;
+    font-weight: 600;
+    color: var(--jury-blauw);
+    background: var(--jury-blauw-bg, #eef3f8);
+    border-left: 3px solid var(--jury-blauw-licht);
+    border-radius: 4px;
+}
+
 /* ── Kans-score badge (1-10) op speaker-tegels ──────────────────────────
  * Ster-emoji + cijfer rechtsboven op tegel. Vier varianten:
  *   🌟 favoriet (7-10) — goud-gele tint
