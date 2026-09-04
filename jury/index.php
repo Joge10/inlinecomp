@@ -855,14 +855,37 @@ if ($action === 'speaker_serieklassement') {
             WHERE klassement_id = ? AND license_key = ?
             ORDER BY positie
         ");
-        // Buur-punten (plek erboven = positie-1, plek eronder = positie+1) in
-        // dezelfde sectie, zodat de speaker de marge kan omroepen. categorie
-        // null-safe matchen (<=>), want overall-klassementen hebben geen cat.
-        $nbStmt = $pdo->prepare("
+        // Buren: de dichtstbijzijnde BETERE (voor) en SLECHTERE (achter) plek,
+        // zodat de speaker de marge kan omroepen. Bewust op ongelijke positie
+        // zoeken (niet exact ±1) — bij ex-aequo springt de nummering (bv. twee
+        // 3e's → dan 5e), dus positie+1 zou niet bestaan. categorie null-safe
+        // (<=>), want overall-klassementen hebben geen cat. Bij meerdere op de
+        // buur-plek pakt LIMIT 1 er één (zelfde punten; naam getiebreakt).
+        $voorStmt = $pdo->prepare("
             SELECT kp.positie, kp.punten_totaal, pe.full_name
             FROM klassement_posities kp
             LEFT JOIN persons pe ON pe.license_key = kp.license_key
-            WHERE kp.klassement_id = ? AND kp.categorie <=> ? AND kp.positie IN (?, ?)
+            WHERE kp.klassement_id = ? AND kp.categorie <=> ? AND kp.positie < ?
+            ORDER BY kp.positie DESC, pe.full_name ASC
+            LIMIT 1
+        ");
+        $achterStmt = $pdo->prepare("
+            SELECT kp.positie, kp.punten_totaal, pe.full_name
+            FROM klassement_posities kp
+            LEFT JOIN persons pe ON pe.license_key = kp.license_key
+            WHERE kp.klassement_id = ? AND kp.categorie <=> ? AND kp.positie > ?
+            ORDER BY kp.positie ASC, pe.full_name ASC
+            LIMIT 1
+        ");
+        // Ex-aequo tie-mates: iedereen ANDERS op exact dezelfde plek (zelfde
+        // punten). Meerdere mogelijk bij een 3+-voudige gedeelde plek.
+        $gelijkStmt = $pdo->prepare("
+            SELECT pe.full_name
+            FROM klassement_posities kp
+            LEFT JOIN persons pe ON pe.license_key = kp.license_key
+            WHERE kp.klassement_id = ? AND kp.categorie <=> ? AND kp.positie = ?
+              AND kp.license_key <> ?
+            ORDER BY pe.full_name ASC
         ");
         $out = [];
         foreach ($series as $s) {
@@ -871,17 +894,28 @@ if ($action === 'speaker_serieklassement') {
             foreach ($posities as &$p) {
                 $p['positie']       = (int)$p['positie'];
                 $p['punten_totaal'] = ($p['punten_totaal'] !== null) ? (float)$p['punten_totaal'] : null;
-                // Punten + naam van de directe buren erbij (null = plek bestaat niet).
-                $p['voor_punten']   = null;   // plek erboven (positie-1)
-                $p['voor_naam']     = null;
-                $p['achter_punten'] = null;   // plek eronder (positie+1)
-                $p['achter_naam']   = null;
-                $nbStmt->execute([$s['klassement_id'], $p['categorie'], $p['positie'] - 1, $p['positie'] + 1]);
-                foreach ($nbStmt->fetchAll(PDO::FETCH_ASSOC) as $nb) {
-                    $pt = ($nb['punten_totaal'] !== null) ? (float)$nb['punten_totaal'] : null;
-                    if ((int)$nb['positie'] === $p['positie'] - 1) { $p['voor_punten']   = $pt; $p['voor_naam']   = $nb['full_name']; }
-                    if ((int)$nb['positie'] === $p['positie'] + 1) { $p['achter_punten'] = $pt; $p['achter_naam'] = $nb['full_name']; }
+                // Buur-info (null = die kant bestaat niet, bv. koploper/laatste).
+                $p['voor_punten']   = null; $p['voor_naam']   = null; $p['voor_pos']   = null;
+                $p['achter_punten'] = null; $p['achter_naam'] = null; $p['achter_pos'] = null;
+                $p['gelijk_namen']  = [];     // ex-aequo tie-mates op dezelfde plek
+
+                $voorStmt->execute([$s['klassement_id'], $p['categorie'], $p['positie']]);
+                if ($nb = $voorStmt->fetch(PDO::FETCH_ASSOC)) {
+                    $p['voor_punten'] = ($nb['punten_totaal'] !== null) ? (float)$nb['punten_totaal'] : null;
+                    $p['voor_naam']   = $nb['full_name'];
+                    $p['voor_pos']    = (int)$nb['positie'];
                 }
+                $achterStmt->execute([$s['klassement_id'], $p['categorie'], $p['positie']]);
+                if ($nb = $achterStmt->fetch(PDO::FETCH_ASSOC)) {
+                    $p['achter_punten'] = ($nb['punten_totaal'] !== null) ? (float)$nb['punten_totaal'] : null;
+                    $p['achter_naam']   = $nb['full_name'];
+                    $p['achter_pos']    = (int)$nb['positie'];
+                }
+                $gelijkStmt->execute([$s['klassement_id'], $p['categorie'], $p['positie'], $lic]);
+                $p['gelijk_namen'] = array_values(array_filter(
+                    $gelijkStmt->fetchAll(PDO::FETCH_COLUMN),
+                    fn($n) => $n !== null && $n !== ''
+                ));
             }
             unset($p);
             if ($posities) {

@@ -2623,10 +2623,17 @@ async function _spkVulSerieKlassement(overlay, licenseKey) {
                 let gapHtml = '';
                 if (p.punten_totaal != null) {
                     const delen = [];
+                    const gelijk = Array.isArray(p.gelijk_namen) ? p.gelijk_namen : [];
+                    if (gelijk.length === 1)
+                        delen.push('= gelijk met ' + gelijk[0]);
+                    else if (gelijk.length === 2)
+                        delen.push('= gelijk met ' + gelijk[0] + ' en ' + gelijk[1]);
+                    else if (gelijk.length >= 3)
+                        delen.push(`= gedeelde ${p.positie}e (met ${gelijk[0]} e.a.)`);
                     if (p.voor_punten != null)
-                        delen.push('↑ ' + gapTxt(Math.abs(p.voor_punten - p.punten_totaal), p.positie - 1, 'achter', p.voor_naam));
+                        delen.push('↑ ' + gapTxt(Math.abs(p.voor_punten - p.punten_totaal), p.voor_pos, 'achter', p.voor_naam));
                     if (p.achter_punten != null)
-                        delen.push('↓ ' + gapTxt(Math.abs(p.punten_totaal - p.achter_punten), p.positie + 1, 'vóór', p.achter_naam));
+                        delen.push('↓ ' + gapTxt(Math.abs(p.punten_totaal - p.achter_punten), p.achter_pos, 'vóór', p.achter_naam));
                     if (delen.length)
                         gapHtml = `<div class="spk-serie-gap">${escHtml(delen.join('  ·  '))}</div>`;
                 }
