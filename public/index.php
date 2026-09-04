@@ -4830,8 +4830,11 @@ safeFetch('?action=competitions').then(r=>r.json()).then(comps => {
 
     filterComps();
 
-    // Na filterComps: selecteer 'm als de optie nu beschikbaar is
-    if (wantedComp && selComp.querySelector(`option[value="${wantedComp}"]`)) {
+    // Na filterComps: selecteer 'm als de optie nu beschikbaar is. Alleen
+    // dispatchen als filterComps 'm niet al auto-geselecteerd heeft (bij één optie),
+    // anders vuurt de change 2× → dubbele kinderen-load.
+    if (wantedComp && selComp.value !== wantedComp
+        && selComp.querySelector(`option[value="${wantedComp}"]`)) {
         selComp.value = wantedComp;
         selComp.dispatchEvent(new Event('change'));
     }
@@ -4854,17 +4857,24 @@ selComp.addEventListener('change', async () => {
     if (!selComp.value) return;
     const opgeslagen = _loadKidsUitStorage();
     if (!opgeslagen.length) return;
+    const mySeq = ++_kindLoadSeq;   // deze load claimt de nieuwste beurt
     divResult.innerHTML = `<div class="melding"><span class="spinner"></span> ${t('msg_je_rijders_ophalen')}</div>`;
     let gedeeldeProg = null;
     try {
         const pr = await safeFetch(`?action=programma&competition_id=${encodeURIComponent(selComp.value)}`);
         gedeeldeProg = await pr.json();
     } catch {}
+    if (mySeq !== _kindLoadSeq) return;   // nieuwere change gestart → deze afbreken
+    // In een lokale array verzamelen en pas op 't eind toewijzen: twee gelijktijdige
+    // loads kunnen zo nooit in dezelfde _kinderen interleaven (→ geen dubbele rijders).
+    const verzameld = [];
     for (const item of opgeslagen) {
         const k = await _fetchKind({ license_key: item.license_key }, selComp.value, gedeeldeProg);
-        if (k) _kinderen.push(k);
+        if (mySeq !== _kindLoadSeq) return;   // afgebroken door nieuwere load
+        if (k) verzameld.push(k);
         // k == null → kind doet niet mee aan deze wedstrijd, we slaan 'm stil over.
     }
+    _kinderen = verzameld;
     if (_kinderen.length) {
         _activeKindIdx = 0;
         renderKinderen();
@@ -5060,6 +5070,11 @@ function toonRijder(idx) {
 const MAX_KINDEREN = 4;
 let _kinderen = [];
 let _activeKindIdx = 0;
+// Volgnummer per kinderen-load: beschermt tegen twee (bijna) gelijktijdige
+// change-handlers die anders tijdens hun await's in dezelfde _kinderen zouden
+// pushen → dubbele rijders (bv. QR-open dispatcht change 2×). Alleen de nieuwste
+// load mag _kinderen vullen + renderen; oudere breken af.
+let _kindLoadSeq = 0;
 
 // ── Programma-tab: inklap-state (public) ─────────────────────────────────────
 // _progIngeklaptPub bevat de groep-keys die INGEKLAPT zijn (default = alles
@@ -5327,12 +5342,16 @@ function klapProgPub(btnEl, actie) {
 // overgeslagen — zonder dat de ouder ze moet afvinken.
 const KIDS_LS_KEY = 'public_kinderen_licenses';
 function _saveKids() {
+    const seen = new Set();
     const items = _kinderen
         .map(k => {
             const p = k.data[k.kozen_idx ?? 0]?.persoon;
             return p?.license_key ? { license_key: p.license_key, naam_hint: p.full_name } : null;
         })
-        .filter(Boolean);
+        .filter(Boolean)
+        // Dedup op license_key: vangnet zodat een (ooit) dubbele _kinderen nooit
+        // dubbel in localStorage belandt.
+        .filter(it => !seen.has(it.license_key) && seen.add(it.license_key));
     localStorage.setItem(KIDS_LS_KEY, JSON.stringify(items));
     if (typeof _ppSync === 'function') _ppSync();   // server-licenties meelopen
 }
