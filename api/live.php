@@ -1465,6 +1465,17 @@ if ($action === 'genereer_volgende_ronde') {
             $beschikbaar[] = $r;
         }
 
+        // $aantalDoor kan hierboven op PHP_INT_MAX gezet zijn ("iedereen naar de
+        // A-finale, geen B-finale gepland"). Dat is veilig als array_slice-cap,
+        // maar NIET in het q-slot-rekenwerk hieronder: $nqSlots = $aantalDoor -
+        // $nQSlots (regel ~1584) of floor($aantalDoor / $nBronHeats) (~1514)
+        // wordt dan ≈ PHP_INT_MAX, waarna de slot-lus miljarden null-slots
+        // aanmaakt → geheugen op (fatal op regel ~1623). "Iedereen" is nooit
+        // meer dan het aantal beschikbare rijders, dus cap daarop.
+        if ($aantalDoor > count($beschikbaar)) {
+            $aantalDoor = count($beschikbaar);
+        }
+
         // Full-final: rijders met een 'lichte' sanctie in de bron-ronde
         // (DNS/DNF/DQ-TF) verdwijnen niet volledig — ze mogen achteraan in de
         // LAAGSTE B-finale starten (of daar opnieuw een DNS krijgen). Zonder dit
