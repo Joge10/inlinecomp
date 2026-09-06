@@ -778,12 +778,17 @@ function renderAfstandPanel(afstand, cfg, catConfigMap) {
             // dus !!"0" zou ten onrechte true geven.
             const sasChecked = parseInt(cc?.series_alleen_startvolgorde) === 1;
             const sasEnabled = hH && parseInt(nH) === 1;
+            // Q per heat is alleen zinvol bij >1 serie-heat: met 1 heat zit
+            // iedereen in dezelfde serie en gaat sowieso door (positie = tijd).
+            // Bij 1 heat dus vast op 0 en niet-aanpasbaar — voorkomt de onzinnige
+            // config die de A-finale-generatie kon laten omvallen.
+            const qhEnabled = hH && parseInt(nH) > 1;
 
             html += `
             <td class="ts-td-c ts-heats-velden" style="${hH ? '' : 'visibility:hidden'}">
-                <input type="number" name="heats_q_heat" value="${parseInt(cc?.heats_q_heat ?? 0)}"
-                       min="0" max="20" class="ts-inp-sm ts-inp-heats-qh"
-                       title="Q per heat: aantal rijders dat per serie direct doorgaat naar de A-finale (op basis van heat-positie). Rest van de A-finale wordt aangevuld met de tijdsnelsten van de overige rijders. 0 = puur tijdsnelsten (oude gedrag).">
+                <input type="number" name="heats_q_heat" value="${qhEnabled ? parseInt(cc?.heats_q_heat ?? 0) : 0}"
+                       min="0" max="20" class="ts-inp-sm ts-inp-heats-qh" ${qhEnabled ? '' : 'disabled'}
+                       title="Q per heat: aantal rijders dat per serie direct doorgaat naar de A-finale (op basis van heat-positie). Rest van de A-finale wordt aangevuld met de tijdsnelsten van de overige rijders. 0 = puur tijdsnelsten (oude gedrag).&#10;Alleen instelbaar bij meer dan 1 serie-heat.">
             </td>
             <td class="ts-td-c">
                 <input type="checkbox" name="series_alleen_startvolgorde"
@@ -2157,6 +2162,17 @@ function bindTsEvents(afstandGroepen) {
                     sasCb.disabled = (nh !== 1);
                 }
             }
+            // Q per heat: alleen zinvol met series én >1 heat
+            const qhInp = tr.querySelector('.ts-inp-heats-qh');
+            if (qhInp) {
+                const nh = parseInt(tr.querySelector('.ts-inp-heats-aantal')?.value) || 0;
+                if (cb.checked && nh > 1) {
+                    qhInp.disabled = false;
+                } else {
+                    qhInp.value    = 0;
+                    qhInp.disabled = true;
+                }
+            }
             updateCalc(cb.closest('.ts-panel-form'), afstandGroepen);
         });
     });
@@ -2222,6 +2238,16 @@ function bindTsEvents(afstandGroepen) {
                 } else {
                     sasCb.checked  = false;
                     sasCb.disabled = true;
+                }
+            }
+            // Q per heat: alleen bij >1 heat; bij 1 heat vast op 0 en dichtgezet
+            const qhInp = inp.closest('tr')?.querySelector('.ts-inp-heats-qh');
+            if (qhInp) {
+                if (nh > 1) {
+                    qhInp.disabled = false;
+                } else {
+                    qhInp.value    = 0;
+                    qhInp.disabled = true;
                 }
             }
 

@@ -1634,7 +1634,7 @@
             <span class="wz-d2-grp">${esc(gr.label)}</span><span class="wz-d2-cnt">${N}</span>
             <div class="wz-d2-editvelden">
               <label>Aantal series<input type="number" min="1" max="${N}" value="${sVal}" data-ov="heats" data-ai="${ai}" data-gi="${gr.idx}"></label>
-              <label>Q per heat<input type="number" min="0" value="${qVal}" data-ov="q" data-ai="${ai}" data-gi="${gr.idx}"></label>
+              <label>Q per heat<input type="number" min="0" value="${eenSerie ? 0 : qVal}" data-ov="q" data-ai="${ai}" data-gi="${gr.idx}" ${eenSerie ? 'disabled title="Alleen instelbaar bij meer dan 1 serie"' : ''}></label>
               <label>A-finale<input type="number" min="1" max="${N}" value="${aVal}" data-ov="A" data-ai="${ai}" data-gi="${gr.idx}"></label>
               <label>Aantal B-finales<input type="number" min="0" placeholder="auto" value="${bVal}" data-ov="bAantal" data-ai="${ai}" data-gi="${gr.idx}"></label>
               ${laatsteB}
@@ -1786,11 +1786,17 @@
                 } else {
                     const ovg = (p.ov || {})[gr.idx] || {};
                     const smEff = ovg.startModus || p.startModus;
-                    const qEff  = ovg.q != null ? ovg.q : (p.q || 0);
+                    const nSeries = (u.series || []).length || 1;
+                    // Q per heat is alleen zinvol bij >1 serie: met 1 serie zit
+                    // iedereen in dezelfde heat en gaat sowieso door (positie =
+                    // tijd). Forceer 0 ongeacht de groep-brede default, anders
+                    // schrijft de wizard een onzinnige Q op een 1-heat-categorie
+                    // (wat de A-finale-generatie kon laten omvallen).
+                    const qEff  = nSeries > 1 ? (ovg.q != null ? ovg.q : (p.q || 0)) : 0;
                     const lbEff = ovg.laatsteB != null ? ovg.laatsteB : p.laatsteB;
                     const sas = (u.alleenStart && smEff === 'a-finale') ? 1 : 0;
                     cc = { dc_id: doel.dc_id, distance_id: distId, heeft_heats: 1,
-                           heats_aantal: (u.series || []).length || 1, heats_q_heat: qEff,
+                           heats_aantal: nSeries, heats_q_heat: qEff,
                            finale_a_grootte: u.A, finale_b_heats: (u.B || []).length,
                            laatste_b_grootste: lbEff ? 1 : 0, series_alleen_startvolgorde: sas };
                 }
