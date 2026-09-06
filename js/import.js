@@ -331,6 +331,10 @@ async function bouwBeheerTabel() {
     function renderTabel() {
         const ro       = panel.dataset.readonly === '1';
         const sl       = panel.dataset.structuurLock === '1';  // structureel geblokkeerd
+        // Zelf-herstel: een merge-groep met nog maar 1 lid is nooit geldig
+        // (bv. een verweesde groep uit een eerder corrupte samenvoeging). Ruim
+        // 'm op vóór het bouwen van de rijen, zodat de DC weer als vrij verschijnt.
+        cleanupMergeGroups();
         const rows     = computeRows();
         // maxDists over alle sleutels (inclusief split-groep sleutels)
         const maxDists = Math.max(0, ...Object.values(dcDistances).map(a => a.length));
@@ -586,9 +590,22 @@ async function bouwBeheerTabel() {
             const primary     = vergelijkData.find(c => c.dc_id === primaryDcId);
             const target      = vergelijkData.find(c => c.dc_id === targetDcId);
             if (!primary || !target) return;
-            const mergeKey = primaryDcId;   // gebruik dc_id als unieke merge-sleutel
-            primary.merge_group = mergeKey;
-            target.merge_group  = mergeKey;
+            // Gebruik de BESTAANDE merge-sleutel van de primary als die al in een
+            // groep zit (3e/4e DC toevoegen). Voorheen werd de sleutel altijd op
+            // primaryDcId gezet; stond de groep op een andere sleutel (afhankelijk
+            // van de samenvoeg-richting van de eerste twee), dan raakte het andere
+            // lid zijn groep kwijt en verdween het uit de dropdown.
+            const mergeKey = primary.merge_group || primaryDcId;
+            // Verzamel alles wat naar deze sleutel moet: primary + target, plus
+            // een eventuele bestaande groep van de target (twee groepen samen).
+            const teVerplaatsen = new Set([primary.dc_id, target.dc_id]);
+            if (target.merge_group) {
+                vergelijkData.forEach(c => {
+                    if (c.merge_group === target.merge_group) teVerplaatsen.add(c.dc_id);
+                });
+            }
+            vergelijkData.forEach(c => { if (teVerplaatsen.has(c.dc_id)) c.merge_group = mergeKey; });
+            cleanupMergeGroups();
             syncAllesVanDom();
             markBeheerDirty();
             renderTabel(); return;

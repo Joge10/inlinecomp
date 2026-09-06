@@ -206,10 +206,38 @@ try {
     if ($action === 'ontkoppel') {
         $bron = trim($body['bron_competition_id'] ?? '');
         if ($bron === '') { http_response_code(400); echo json_encode(['error' => 'bron_competition_id verplicht']); exit; }
+
+        // Guard: ontkoppelen mag alleen zolang er nog GEEN werk op de
+        // gecombineerde data staat. Zodra er een tijdschema is begonnen, is
+        // geloot, of DC's zijn aangepast (categorieën samengevoegd/gesplitst,
+        // afstanden handmatig gewijzigd), is de bron-data met dat werk verweven
+        // en zou losmaken wezen achterlaten (opruimen = Fase 3, nog niet
+        // gebouwd). Dan is de veilige weg: Beheer → wedstrijd verwijderen +
+        // opnieuw. Vóór dat werk kan ontkoppelen wel veilig.
+        $bestaat = function(string $sql) use ($pdo, $doel): bool {
+            try { $s = $pdo->prepare($sql); $s->execute([$doel]); return (bool)$s->fetchColumn(); }
+            catch (Throwable $e) { return false; }   // ontbrekende kolom/tabel = geen signaal
+        };
+        $reden = null;
+        if     ($bestaat("SELECT 1 FROM competition_tijdschema WHERE competition_id = ? LIMIT 1"))                          $reden = 'er is al een tijdschema begonnen';
+        elseif ($bestaat("SELECT 1 FROM heats WHERE competition_id = ? LIMIT 1"))                                           $reden = 'er is al geloot';
+        elseif ($bestaat("SELECT 1 FROM distance_combinations WHERE competition_id = ? AND merge_group IS NOT NULL LIMIT 1")) $reden = 'er zijn categorieën samengevoegd';
+        elseif ($bestaat("SELECT 1 FROM distance_combinations WHERE competition_id = ? AND afstanden_handmatig = 1 LIMIT 1")) $reden = 'er zijn afstanden handmatig aangepast';
+        elseif ($bestaat("SELECT 1 FROM dc_splits WHERE competition_id = ? LIMIT 1"))                                       $reden = 'er zijn categorieën gesplitst';
+        if ($reden !== null) {
+            http_response_code(409);
+            echo json_encode(['error' =>
+                "{$reden}. De al-geïmporteerde deelnemers van deze bron zijn met dit werk verweven. "
+                . "Wil je de combinatie wijzigen, verwijder de wedstrijd dan via Beheer en begin opnieuw."
+            ], JSON_UNESCAPED_UNICODE);
+            exit;
+        }
+
         $del = $pdo->prepare('DELETE FROM competition_bronnen WHERE doel_competition_id = ? AND bron_competition_id = ?');
         $del->execute([$doel, $bron]);
-        // NB: de al-geïmporteerde DC's van deze bron blijven onder het doel
-        // staan tot een her-import; opruimen = Fase 3 (zie plan-doc).
+        // NB: vóór deze guard is er nog geen werk op de bron-data; de al-
+        // geïmporteerde DC's van deze bron verdwijnen pas bij een her-import
+        // van het doel (die de bron dan niet meer meeneemt).
         echo json_encode(['ok' => true, 'verwijderd' => $del->rowCount()], JSON_UNESCAPED_UNICODE);
         exit;
     }
