@@ -14,6 +14,67 @@
 //     en wordt in de changelog genest + gedempt getoond onder de versie.
 //     Triviale copy/typo-fixes komen NERGENS in de changelog — los committen.
 return [
+    // ── Patches 06-09-2026 (onder H1752.01.09, onderhoud & beveiliging, alleen Beheer) ──
+    [
+        'versie' => 'H1752.01.09', 'datum' => '06-09-2026',
+        'soort'  => 'patch', 'onderdelen' => ['patch'],
+        'tekst' => [
+            'nl' => '🔧 <b>A-finale genereren — vastloper opgelost</b> — bij een full-final-categorie die vanuit de series rechtstreeks naar de A-finale gaat zónder geplande B-finale, kon het genereren vastlopen als er "rijders per serie rechtstreeks door" was ingesteld. Dat is verholpen; bovendien staat die instelling nu automatisch op 0 (en niet-aanpasbaar) zodra een categorie maar één serie heeft — daar heeft ze geen betekenis.',
+            'en' => '🔧 <b>Generating the A-final — freeze fixed</b> — for a full-final category going straight from the series to the A-final without a planned B-final, generation could freeze when "riders advancing directly per series" was set. Fixed; that setting is now automatically 0 (and locked) for categories with just one series, where it has no meaning.',
+            'de' => '🔧 <b>A-Finale erzeugen — Blockade behoben</b> — bei einer Full-Final-Kategorie, die aus den Serien direkt ins A-Finale geht, ohne geplantes B-Finale, konnte das Erzeugen hängen bleiben, wenn "Fahrer, die pro Serie direkt weiterkommen" gesetzt war. Behoben; diese Einstellung steht jetzt automatisch auf 0 (und gesperrt) bei Kategorien mit nur einer Serie, wo sie keine Bedeutung hat.',
+            'fr' => '🔧 <b>Génération de la finale A — blocage corrigé</b> — pour une catégorie full-final passant des séries directement à la finale A sans finale B prévue, la génération pouvait se bloquer si « coureurs qualifiés directement par série » était réglé. Corrigé ; ce réglage est désormais automatiquement à 0 (et verrouillé) pour les catégories à une seule série, où il n\'a pas de sens.',
+        ],
+    ],
+    [
+        'versie' => 'H1752.01.09', 'datum' => '06-09-2026',
+        'soort'  => 'patch', 'onderdelen' => ['patch'],
+        'tekst' => [
+            'nl' => '🔧 <b>Serie-klassement — streepresultaat</b> — als een hele categorie een wedstrijd uit de serie niet reed, werd ten onrechte een écht (laag) resultaat weggestreept in plaats van die niet-gereden wedstrijd. Een niet-gereden wedstrijd vult nu eerst de streep-ruimte, zodat je echte uitslagen behouden blijven.',
+            'en' => '🔧 <b>Series standings — dropped result</b> — if a whole category did not ride one competition of the series, a real (low) result was wrongly dropped instead of the not-ridden competition. A not-ridden competition now fills the drop allowance first, so your real results are kept.',
+            'de' => '🔧 <b>Serien-Klassement — Streichresultat</b> — wenn eine ganze Kategorie einen Wettkampf der Serie nicht fuhr, wurde fälschlich ein echtes (niedriges) Ergebnis gestrichen statt des nicht gefahrenen Wettkampfs. Ein nicht gefahrener Wettkampf füllt jetzt zuerst das Streichkontingent, sodass echte Ergebnisse erhalten bleiben.',
+            'fr' => '🔧 <b>Classement de série — résultat biffé</b> — si toute une catégorie n\'a pas couru une épreuve de la série, un vrai résultat (faible) était biffé à tort au lieu de l\'épreuve non courue. Une épreuve non courue remplit désormais d\'abord le quota de biffage, afin de conserver vos vrais résultats.',
+        ],
+    ],
+    [
+        'versie' => 'H1752.01.09', 'datum' => '06-09-2026',
+        'soort'  => 'patch', 'onderdelen' => ['patch'],
+        'tekst' => [
+            'nl' => '🔧 <b>Push-meldingen — alleen bij live + juiste ontvangers</b> — push-berichten (loting/uitslag/mededeling) worden nu pas verstuurd zodra een wedstrijd op zichtbaar (live) staat. Een mededeling-push bereikt bovendien weer de daadwerkelijk ingeschreven rijders.',
+            'en' => '🔧 <b>Push notifications — only when live + correct recipients</b> — push messages (draw/result/announcement) are now only sent once a competition is set to visible (live). An announcement push also reaches the actually entered riders again.',
+            'de' => '🔧 <b>Push-Benachrichtigungen — nur live + richtige Empfänger</b> — Push-Nachrichten (Auslosung/Ergebnis/Mitteilung) werden jetzt erst gesendet, sobald ein Wettkampf auf sichtbar (live) steht. Eine Mitteilungs-Push erreicht zudem wieder die tatsächlich gemeldeten Fahrer.',
+            'fr' => '🔧 <b>Notifications push — uniquement en direct + bons destinataires</b> — les messages push (tirage/résultat/annonce) ne sont désormais envoyés qu\'une fois une épreuve rendue visible (en direct). Une push d\'annonce atteint de nouveau les patineurs réellement inscrits.',
+        ],
+    ],
+    [
+        'versie' => 'H1752.01.09', 'datum' => '06-09-2026',
+        'soort'  => 'patch', 'onderdelen' => ['patch'],
+        'tekst' => [
+            'nl' => '🔧 <b>Afhankelijke loting — preview toont de finales</b> — de voorbeeldweergave van een afhankelijke loting (op afstand-uitslag of tussenklassement) toont nu ook de A- en B-finales, net als bij een gewone loting.',
+            'en' => '🔧 <b>Dependent draw — preview shows the finals</b> — the preview of a dependent draw (by distance result or intermediate standings) now also shows the A- and B-finals, just like a normal draw.',
+            'de' => '🔧 <b>Abhängige Auslosung — Vorschau zeigt die Finals</b> — die Vorschau einer abhängigen Auslosung (nach Distanz-Ergebnis oder Zwischenstand) zeigt jetzt auch die A- und B-Finals, wie bei einer normalen Auslosung.',
+            'fr' => '🔧 <b>Tirage dépendant — l\'aperçu montre les finales</b> — l\'aperçu d\'un tirage dépendant (sur résultat de distance ou classement intermédiaire) montre désormais aussi les finales A et B, comme pour un tirage normal.',
+        ],
+    ],
+    [
+        'versie' => 'H1752.01.09', 'datum' => '06-09-2026',
+        'soort'  => 'patch', 'onderdelen' => ['patch'],
+        'tekst' => [
+            'nl' => '🔧 <b>Import — handmatige afstand-aanpassingen blijven behouden</b> — bij het opnieuw importeren van een wedstrijd worden handmatig aangepaste afstanden van een (gecombineerde) categorie niet meer overschreven met de oude feed-afstanden.',
+            'en' => '🔧 <b>Import — manual distance changes are kept</b> — re-importing a competition no longer overwrites manually adjusted distances of a (combined) category with the old feed distances.',
+            'de' => '🔧 <b>Import — manuelle Distanz-Anpassungen bleiben erhalten</b> — beim erneuten Importieren eines Wettkampfs werden manuell angepasste Distanzen einer (kombinierten) Kategorie nicht mehr mit den alten Feed-Distanzen überschrieben.',
+            'fr' => '🔧 <b>Import — les modifications manuelles de distances sont conservées</b> — réimporter une épreuve n\'écrase plus les distances ajustées manuellement d\'une catégorie (combinée) par les anciennes distances du flux.',
+        ],
+    ],
+    [
+        'versie' => 'H1752.01.09', 'datum' => '06-09-2026',
+        'soort'  => 'patch', 'onderdelen' => ['patch'],
+        'tekst' => [
+            'nl' => '🔧 <b>Publiek — geen dubbele gevolgde rijders</b> — de publieke app openen via een poster-QR zet eerder gevolgde rijders niet meer dubbel in je lijst.',
+            'en' => '🔧 <b>Public — no duplicate followed riders</b> — opening the public app via a poster QR no longer adds previously followed riders to your list twice.',
+            'de' => '🔧 <b>Public — keine doppelten verfolgten Fahrer</b> — das Öffnen der Public-App über einen Poster-QR fügt zuvor verfolgte Fahrer nicht mehr doppelt zur Liste hinzu.',
+            'fr' => '🔧 <b>Public — pas de patineurs suivis en double</b> — ouvrir l\'app publique via un QR d\'affiche n\'ajoute plus en double les patineurs déjà suivis à votre liste.',
+        ],
+    ],
     // ── Patches onder H1752.01.09 (onderhoud & beveiliging, alleen Beheer) ──
     [
         'versie' => 'H1752.01.09', 'datum' => '01-09-2026',
