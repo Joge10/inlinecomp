@@ -42,6 +42,9 @@ uploader/
 # Werkmap voor ad-hoc gegenereerde files (PDF-rapporten, debug-scripts)
 tmp/
 
+# Promo-drukwerk: gegenereerde folder-PDF, hoort niet in de repo
+promo/InlineComp_Folder.pdf
+
 # Diagnostic-script: lokaal werkbestand voor server-debug, bevat soms
 # test-secrets. Geert houdt zelf bij dat 'ie niet op de server komt.
 _diag.php
