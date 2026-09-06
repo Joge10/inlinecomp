@@ -857,17 +857,31 @@ function berekenSerie(PDO $pdo, string $serieId): array {
             // voor deze correctie en wordt z'n echte uitslag onterecht gestreept.
             $effectStreep = $streep;
             if ($streep > 0) {
-                $constituents = explode('/', $cat);
-                $nGereden = 0;
-                // Bij afstand-level loopt aantalPerCompCat op pwKey ipv comp_id
-                // — gebruik dan de pwKeys, anders de compIds. Zo blijft de
-                // streep-quota berekening kloppen in beide modes.
-                $keysToCheck = $isAfstandLevel ? array_keys($pwKeyMeta) : $compIds;
-                foreach ($keysToCheck as $kk) {
-                    foreach ($constituents as $c) {
-                        if (($aantalPerCompCat[$kk][$c] ?? 0) > 0) {
-                            $nGereden++;
-                            break;
+                // "Verwacht"-aantal wedstrijden bepaalt hoeveel gemiste 0's de
+                // streep-quota opvullen vóór een echte uitslag wordt gestreept.
+                //
+                // Comp-level: élke tellende serie-wedstrijd is "verwacht" — ook
+                // een wedstrijd waar de HÉLE categorie afwezig was (aantalPerCompCat
+                // is dan 0, maar de wedstrijd hoort nog steeds bij de serie).
+                // Vroeger telde alleen mee waar de cat ≥1 deelnemer had, waardoor
+                // een compleet afwezige categorie z'n streep op een echte lage
+                // uitslag zag vallen i.p.v. op de niet-gereden wedstrijd
+                // (Geert 2026-09-06: niet-gereden = de streepresultaat).
+                //
+                // Afstand-level: hou de cat-participatie-check aan — "alle
+                // (comp,afstand)-keys" zou daar ook afstanden meetellen die deze
+                // categorie nooit rijdt, en dat over-absorbeert de streep.
+                if (!$isAfstandLevel) {
+                    $nGereden = count($compIds);
+                } else {
+                    $constituents = explode('/', $cat);
+                    $nGereden = 0;
+                    foreach (array_keys($pwKeyMeta) as $kk) {
+                        foreach ($constituents as $c) {
+                            if (($aantalPerCompCat[$kk][$c] ?? 0) > 0) {
+                                $nGereden++;
+                                break;
+                            }
                         }
                     }
                 }
