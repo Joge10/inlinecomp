@@ -14,6 +14,17 @@
 //     en wordt in de changelog genest + gedempt getoond onder de versie.
 //     Triviale copy/typo-fixes komen NERGENS in de changelog — los committen.
 return [
+    // ── Patch 07-09-2026 (onder H1752.01.09, onderhoud, alleen Beheer) ──
+    [
+        'versie' => 'H1752.01.09', 'datum' => '07-09-2026',
+        'soort'  => 'patch', 'onderdelen' => ['patch'],
+        'tekst' => [
+            'nl' => '🔧 <b>Wedstrijdprogramma (extern) — runner-up & Q/q duidelijker</b> — in het geprinte programma verschijnt de runner-up-uitleg nu bij <i>elk</i> blok waar rijders naar de runner-up doorstromen (voorheen eenmalig, op een losse plek), en de doorstroom-regel vermeldt nu ook hoeveel rijders naar de runner-up gaan (bv. "top 8 op tijd → Halve finale + 2 → Runner-up"). De Q/q-uitleg (¹) staat eveneens bij elk blok waar de ¹ voorkomt.',
+            'en' => '🔧 <b>Competition programme (external) — runner-up & Q/q clearer</b> — in the printed programme the runner-up explanation now appears at <i>every</i> block where skaters advance to the runner-up (previously only once, in a disconnected spot), and the progression line now also states how many skaters go to the runner-up (e.g. "top 8 on time → Semi-final + 2 → Runner-up"). The Q/q explanation (¹) likewise appears at every block where the ¹ is shown.',
+            'de' => '🔧 <b>Wettkampfprogramm (extern) — Runner-up & Q/q klarer</b> — im gedruckten Programm erscheint die Runner-up-Erklärung jetzt bei <i>jedem</i> Block, aus dem Fahrer in den Runner-up aufsteigen (vorher nur einmalig, an einer losgelösten Stelle), und die Aufstiegszeile nennt jetzt auch, wie viele Fahrer in den Runner-up gehen (z. B. "top 8 auf Zeit → Halbfinale + 2 → Runner-up"). Die Q/q-Erklärung (¹) steht ebenfalls bei jedem Block mit einer ¹.',
+            'fr' => '🔧 <b>Programme de compétition (externe) — runner-up & Q/q plus clairs</b> — dans le programme imprimé, l\'explication du runner-up apparaît désormais à <i>chaque</i> bloc d\'où des patineurs passent au runner-up (auparavant une seule fois, à un endroit détaché), et la ligne de qualification indique aussi combien de patineurs vont au runner-up (p. ex. "top 8 au temps → demi-finale + 2 → Runner-up"). L\'explication Q/q (¹) figure également à chaque bloc où le ¹ apparaît.',
+        ],
+    ],
     // ── Patches 06-09-2026 (onder H1752.01.09, onderhoud & beveiliging, alleen Beheer) ──
     [
         'versie' => 'H1752.01.09', 'datum' => '06-09-2026',

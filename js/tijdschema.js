@@ -3462,6 +3462,25 @@ function _bouwProgrammaExternInternal() {
         if (!cc) return '';
         const vR = volgendeRonde(rondeType, cc);
         const naar = vR ? ` → ${vR}` : '';
+        // Runner-up-split: de niet-gekwalificeerden van de EERSTE ronde rijden de
+        // runner-up. Alleen bij díe eerste ronde vermelden (latere rondes voeden
+        // de RU niet). Aantal = totaal rijders − doorstromers (= wat ook in het
+        // 'Berekend overzicht' staat). Niet in full-final (daar geen runner-up).
+        let ruSuffix = '';
+        if (!isFFschema && cc.heeft_runner_up) {
+            const eersteRonde = cc.heeft_heats        ? 'heats'
+                              : cc.heeft_kwartfinale  ? 'kwartfinale'
+                              : cc.heeft_halve_finale ? 'halve_finale'
+                              : null;
+            if (eersteRonde === rondeType) {
+                const door = rondeType === 'heats'        ? (parseInt(cc.heats_q)    || 0)
+                           : rondeType === 'kwartfinale'  ? (parseInt(cc.kwart_door) || 0)
+                           : rondeType === 'halve_finale' ? (parseInt(cc.half_door)  || 0)
+                           : 0;
+                const ru = Math.max(0, (totRj || 0) - door);
+                if (ru > 0) ruSuffix = T('prog_extern.ru_suffix', { n: ru, ru: T('algemeen.runner_up') });
+            }
+        }
         switch (rondeType) {
             case 'heats': {
                 if (isFFschema) {
@@ -3500,7 +3519,7 @@ function _bouwProgrammaExternInternal() {
                         bRange: bouwRange(q + 1, kfRheats),
                     });
                 }
-                return T('prog_extern.top_n_op_tijd', { n: q }) + naar;
+                return T('prog_extern.top_n_op_tijd', { n: q }) + naar + ruSuffix;
             }
             case 'kwartfinale': {
                 const kD = parseInt(cc.kwart_door)   || 0;
@@ -3516,7 +3535,7 @@ function _bouwProgrammaExternInternal() {
                         bRange: bouwRange(kD + 1, kfRkwart),
                     });
                 }
-                return T('prog_extern.qheat_q_door', { Q: kQ, q: kq, m, d: kD }) + naar;
+                return T('prog_extern.qheat_q_door', { Q: kQ, q: kq, m, d: kD }) + naar + ruSuffix;
             }
             case 'halve_finale': {
                 const hD = parseInt(cc.half_door)    || 0;
@@ -3532,7 +3551,7 @@ function _bouwProgrammaExternInternal() {
                         bRange: bouwRange(hD + 1, kfRhalve),
                     });
                 }
-                return T('prog_extern.qheat_q_door', { Q: hQ, q: hq, m, d: hD }) + naar;
+                return T('prog_extern.qheat_q_door', { Q: hQ, q: hq, m, d: hD }) + naar + ruSuffix;
             }
             default: return '';
         }
@@ -3543,17 +3562,14 @@ function _bouwProgrammaExternInternal() {
 
     // ── HTML via rijen (volgorde-gebaseerd) ──────────────────────────────────
     let bloHtml = '';
-    // Eenmalig per programma de Q/q-voetnoot tonen onder het eerste blok dat
-    // Q-kwalificatie gebruikt. Daarna verwijst elke ¹ in de tabel naar deze
-    // uitleg zonder herhaling.
-    let _qqLegendaGetoond = false;
-    // Runner-up legenda — apart van qq. Toont één regel uitleg over het
-    // RU-concept wanneer minstens één cat 'heeft_runner_up' aan heeft staan.
-    // Plaatsing: bij eerste blok dat een afval-ronde is (heats/kwart/halve),
-    // zo verschijnt 'em vlak voor de cat-rij waar de runner-up daadwerkelijk
-    // relevant wordt — meestal direct na de qq-voetnoot, samen in dezelfde
-    // visuele blok.
-    let _ruLegendaGetoond = false;
+    // Q/q-voetnoot (¹) en runner-up-note verschijnen nu PER BLOK waar ze relevant
+    // zijn (zie hieronder), niet meer eenmalig — geen legenda-vlaggen meer nodig.
+    // Runner-up legenda — apart van qq. Verschijnt bij ELK blok waar rijders
+    // vanuit een ronde doorstromen naar de runner-up (= de eerste ronde van een
+    // cat met heeft_runner_up), zodat de uitleg altijd bij het blok staat waar
+    // die doorstroom echt plaatsvindt. Bewust niet eenmalig — voorheen stond de
+    // note los onder alleen het eerste afval-blok, ook als een later blok óók
+    // naar de RU voedde.
 
     // Helper: flush een verzamelde sectie (ritten van één ronde-blok) naar HTML
     const flushSectie = (sectieRitten, blok) => {
@@ -3692,19 +3708,15 @@ function _bouwProgrammaExternInternal() {
             ${catHtml}
         </div>`;
 
-        // Q/q-voetnoot — direct onder dit blok plaatsen als hier voor het eerst
-        // Q-kwalificatie voorkomt. Daarna niet meer (eenmalig per programma).
-        if (!_qqLegendaGetoond) {
-            // Kwart/halve renderen ALTIJD een tekst met Q- én q-letter
-            // ('{Q}Q/heat + {q}q → {d} rijders'), ook als Q per heat 0 is
-            // (dan is er alleen tijd-doorstroom). Voetnoot dus triggeren op
-            // '_door >= 1' (= er is überhaupt doorstroming) — niet op '_q_heat'
-            // want dat mist de veelvoorkomende '0Q + Nq'-situatie.
-            // Heats renderen 'top N op tijd' zonder Q/q-letter als heats_q_heat=0;
-            // daar blijft de q_heat-check correct.
+        // Q/q-voetnoot — verschijnt bij ELK blok waar de ¹-verwijzing in de
+        // tekst staat, zodat de uitleg altijd bij een ¹ hoort (bewust niet
+        // eenmalig meer). De ¹ (QM) wordt alleen gerenderd als er positie-Q per
+        // heat is (heats_q_heat / kwart_q_heat / half_q_heat ≥ 1); pure
+        // '0Q + Nq'-tijddoorstroom toont geen ¹ en dus ook geen voetnoot.
+        {
             const veld = blok.ronde_type === 'heats'        ? 'heats_q_heat'
-                      : blok.ronde_type === 'kwartfinale'   ? 'kwart_door'
-                      : blok.ronde_type === 'halve_finale'  ? 'half_door'
+                      : blok.ronde_type === 'kwartfinale'   ? 'kwart_q_heat'
+                      : blok.ronde_type === 'halve_finale'  ? 'half_q_heat'
                       : null;
             if (veld) {
                 const heeftQHier = [...catMap.keys()].some(k => {
@@ -3714,34 +3726,30 @@ function _bouwProgrammaExternInternal() {
                 if (heeftQHier) {
                     // Korte one-liner voetnoot: past op 1 regel, breekt niet
                     // over pagina-einde, blijft dicht bij de ¹-markeringen.
-                    // page-break-inside:avoid als vangnet voor wrap.
                     bloHtml += `<div class="qq-voetnoot" style="margin:4px 0 12px 18px;padding:4px 8px;font-size:9pt;color:#555;page-break-inside:avoid;break-inside:avoid">
   ${T('prog_extern.qq_voetnoot')}
 </div>`;
-                    _qqLegendaGetoond = true;
                 }
             }
         }
-        // Runner-up voetnoot — separaat van Q/q. Verschijnt eenmalig, bij het
-        // eerste afval-ronde-blok (heats/kwart/halve) wanneer minstens één
-        // cat 'heeft_runner_up' aan heeft. Reden voor scheiding: een wedstrijd
-        // kan wel runner-ups hebben maar geen Q-systeem (bv. zuiver knock-out
-        // tussen heats en finale via runner-up). Andersom kan ook.
-        if (!_ruLegendaGetoond) {
-            const isAfvalRonde = blok.ronde_type === 'heats'
-                              || blok.ronde_type === 'kwartfinale'
-                              || blok.ronde_type === 'halve_finale';
-            if (isAfvalRonde) {
-                const heeftRUHier = [...catMap.keys()].some(k => {
-                    const cc = catCfgMap[k];
-                    return cc && !!cc.heeft_runner_up;
-                });
-                if (heeftRUHier) {
-                    bloHtml += `<div class="qq-voetnoot" style="margin:4px 0 12px 18px;padding:4px 8px;font-size:9pt;color:#555;page-break-inside:avoid;break-inside:avoid">
+        // Runner-up voetnoot — separaat van Q/q (een wedstrijd kan runner-ups
+        // hebben zonder Q-systeem, en andersom).
+        // RU-intake = de EERSTE ronde van een cat met heeft_runner_up: de niet-
+        // gekwalificeerden van díe ronde rijden de runner-up. Latere rondes
+        // (bv. halve finale ná series) voeden de RU niet, dus daar geen note.
+        {
+            const eersteRonde = cc => cc.heeft_heats        ? 'heats'
+                                    : cc.heeft_kwartfinale  ? 'kwartfinale'
+                                    : cc.heeft_halve_finale ? 'halve_finale'
+                                    : null;
+            const heeftRUIntakeHier = [...catMap.keys()].some(k => {
+                const cc = catCfgMap[k];
+                return cc && !!cc.heeft_runner_up && eersteRonde(cc) === blok.ronde_type;
+            });
+            if (heeftRUIntakeHier) {
+                bloHtml += `<div class="qq-voetnoot" style="margin:4px 0 12px 18px;padding:4px 8px;font-size:9pt;color:#555;page-break-inside:avoid;break-inside:avoid">
   ${T('prog_extern.ru_voetnoot')}
 </div>`;
-                    _ruLegendaGetoond = true;
-                }
             }
         }
     };
