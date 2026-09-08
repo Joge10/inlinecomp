@@ -75,11 +75,26 @@ function normaliseerRegels(array $in): array {
         }
         $catFilter = array_values(array_unique($catFilter));
     }
+    // Verberg-klassementen: lijst van uitkomst-labels (losse cat 'HSA' of
+    // cluster 'HJA/HSA') die NIET als eigen klassement aangemaakt worden.
+    // Leeg = alle afgeleide klassementen (huidig gedrag, backwards-compatible).
+    // Dit is een VERBERG-lijst, geen whitelist: later toegevoegde categorieën
+    // blijven vanzelf zichtbaar; je onderdrukt alleen expliciet wat je niet
+    // wilt. Labels hoofdletter-genormaliseerd; de '/' in clusters blijft staan.
+    $verberg = [];
+    if (is_array($in['verberg_klassementen'] ?? null)) {
+        foreach ($in['verberg_klassementen'] as $v) {
+            $s = strtoupper(trim((string)$v));
+            if ($s !== '') $verberg[] = $s;
+        }
+        $verberg = array_values(array_unique($verberg));
+    }
     return [
         'type'                    => $type,
         'afstand_filter'          => $filter,
         'afstand_namen'           => $namen,
         'categorie_filter'        => $catFilter,
+        'verberg_klassementen'    => $verberg,
         'punten_tabel'            => $tabel,
         'min_punten_bij_deelname' => (float)($in['min_punten_bij_deelname'] ?? 1),
         'streepresultaten'        => max(0, (int)($in['streepresultaten'] ?? 0)),
@@ -790,6 +805,25 @@ function berekenSerie(PDO $pdo, string $serieId): array {
         }
     }
 
+    // ── Verberg-klassementen: onderdruk expliciet uitgevinkte uitkomst-
+    //    klassementen (losse cat 'HSA' of cluster 'HJA/HSA'). We filteren hier
+    //    één keer op het volledige $acc — dat dekt zowel de per-cat- als de
+    //    cluster-pass én de bonus-passes. Leeg = niets verbergen (default).
+    if (!empty($regels['verberg_klassementen'])) {
+        $verbergSet = [];
+        foreach ($regels['verberg_klassementen'] as $vl) {
+            $verbergSet[strtoupper(trim((string)$vl))] = true;
+        }
+        foreach ($acc as $lic => $perCatMap) {
+            foreach ($perCatMap as $label => $_) {
+                if (isset($verbergSet[strtoupper((string)$label)])) {
+                    unset($acc[$lic][$label]);
+                }
+            }
+            if (empty($acc[$lic])) unset($acc[$lic]);
+        }
+    }
+
     // Markeer "aanwezig in finale" per rijder (ongeacht punten) op basis van
     // de eerder opgehaalde set. Een rijder die in de finale DNS had maar
     // wel op de startlijst stond telt dus als aanwezig — voor de regel
@@ -1322,6 +1356,48 @@ if ($method === 'GET') {
                 fn($c) => $c !== null && $c !== ''
             ));
             echo json_encode($cats, JSON_UNESCAPED_UNICODE);
+            exit;
+        }
+
+        if ($action === 'klassement_labels_van_wedstrijden') {
+            // Kandidaat-uitkomstlabels voor de "welke klassementen"-keuze in de
+            // wizard: de losse categorieën + de gedetecteerde clusters (DC's
+            // waar ≥2 categorieën samen rijden → gesorteerd '/'-label, exact
+            // zoals berekenSerie de cluster-stand vormt).
+            $idsRaw = trim($_GET['comp_ids'] ?? '');
+            $compIds = array_values(array_filter(array_map('trim', explode(',', $idsRaw))));
+            if (empty($compIds)) { echo json_encode(['categorieen' => [], 'clusters' => []]); exit; }
+            $ph = implode(',', array_fill(0, count($compIds), '?'));
+            $st = $pdo->prepare("
+                SELECT e.distance_combination_id AS dc_id, UPPER(TRIM(p.category)) AS cat
+                FROM entries e
+                JOIN distance_combinations dc ON dc.id = e.distance_combination_id
+                JOIN persons p ON p.license_key = e.person_license
+                WHERE dc.competition_id IN ($ph)
+                  AND p.category IS NOT NULL AND TRIM(p.category) <> ''
+                GROUP BY e.distance_combination_id, UPPER(TRIM(p.category))
+                ORDER BY cat
+            ");
+            $st->execute($compIds);
+            $perDc = [];     // dc_id => set van cats
+            $catsAlle = [];  // set van alle losse cats
+            foreach ($st->fetchAll(PDO::FETCH_ASSOC) as $row) {
+                $c = $row['cat'];
+                if ($c === null || $c === '') continue;
+                $catsAlle[$c] = true;
+                $perDc[$row['dc_id']][$c] = true;
+            }
+            $clusters = [];  // set van cluster-labels
+            foreach ($perDc as $cats) {
+                if (count($cats) < 2) continue;  // alleen gemengde DC's
+                $lst = array_keys($cats);
+                sort($lst);
+                $clusters[implode('/', $lst)] = true;
+            }
+            $catList = array_keys($catsAlle); sort($catList);
+            $cluList = array_keys($clusters); sort($cluList);
+            echo json_encode(['categorieen' => $catList, 'clusters' => $cluList],
+                JSON_UNESCAPED_UNICODE);
             exit;
         }
 

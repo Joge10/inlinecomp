@@ -11,6 +11,7 @@ const SERIE_DEFAULT_REGELS = {
     afstand_filter: 'alle',
     afstand_namen: [],
     categorie_filter: [],       // [] = alle cats. Bv. ['HKA','DKA','HJB','DJB']
+    verberg_klassementen: [],   // [] = alle afgeleide klassementen. Labels (losse cat 'HSA' of cluster 'HJA/HSA') die je NIET als eigen klassement wilt
     punten_tabel: [50.1,47,45,43,41,39,37,35,33,31,30,29,28,27,26,25,24,23,22,21,20,19,18,17,16,15,14,13,12,11,10,9,8,7,6,5,4,3,2,1],
     min_punten_bij_deelname: 1,
     tie_break: 'beste_resultaten_dan_laatste',
@@ -219,9 +220,9 @@ function _renderStap2(state, body) {
                 <td><input type="checkbox" class="ks-w-check" ${w._checked ? 'checked' : ''}></td>
                 <td><input type="checkbox" class="ks-w-telt"  ${w.telt_mee  ? 'checked' : ''} ${w._checked ? '' : 'disabled'} title="Telt mee (uit zetten = opgenomen maar niet meetellend)"></td>
                 <td><input type="radio" name="ks-w-finale" class="ks-w-finale" ${w.is_finale ? 'checked' : ''} ${w._checked ? '' : 'disabled'}></td>
-                <td class="ks-w-bonus" style="white-space:nowrap">
+                <td class="ks-w-bonus">
                     <input type="checkbox" class="ks-w-bonus-chk" ${w.bonus_modus ? 'checked' : ''} ${w._checked ? '' : 'disabled'} title="Bonus / afgelast: elke aanwezige rijder krijgt een vast aantal punten (geen rang-uitslag)">
-                    <input type="number" class="ks-w-bonus-pnt inp" step="0.5" min="0" value="${w.bonus_punten ?? 1}" style="width:3.4em${w.bonus_modus ? '' : ';visibility:hidden'}" ${(w._checked && w.bonus_modus) ? '' : 'disabled'} title="Punten per aanwezige rijder">
+                    <input type="number" class="ks-w-bonus-pnt inp${w.bonus_modus ? '' : ' ks-onzichtbaar'}" step="0.5" min="0" value="${w.bonus_punten ?? 1}" ${(w._checked && w.bonus_modus) ? '' : 'disabled'} title="Punten per aanwezige rijder">
                 </td>
                 <td class="ks-w-naam">${rkEsc(w.name)}${badge}</td>
                 <td class="ks-w-datum">${rkEsc(dt)}</td>
@@ -250,7 +251,7 @@ function _renderStap2(state, body) {
             </tr></thead>
             <tbody id="ks-w-tbody">${renderRijen('')}</tbody>
         </table>
-        <div style="text-align:right;font-size:.8rem;color:#666;margin-top:6px">
+        <div class="ks-w-voetteller">
             ${state.wedstrijden.length} wedstrijden in lijst
         </div>`;
 
@@ -267,7 +268,7 @@ function _renderStap2(state, body) {
                 bonusEl.disabled  = !w._checked;
                 finaleEl.disabled = !w._checked;
                 bpntEl.disabled   = !w._checked || !w.bonus_modus;
-                bpntEl.style.visibility = w.bonus_modus ? '' : 'hidden';
+                bpntEl.classList.toggle('ks-onzichtbaar', !w.bonus_modus);
             };
             tr.querySelector('.ks-w-check').addEventListener('change', e => {
                 w._checked = e.target.checked;
@@ -322,7 +323,7 @@ function _renderStap3(state, body) {
 
         <div class="ks-veld">
             <label>Type klassement</label>
-            <div style="display:flex;flex-direction:column;gap:6px;font-size:12.5px">
+            <div class="ks-type-opts">
                 <label><input type="radio" name="ks-type" value="custom"
                     ${r.type !== 'gecombineerd' ? 'checked' : ''}>
                     <b>Per afstand</b> — kies hieronder welke afstanden meedoen; punten per afstand worden opgeteld</label>
@@ -333,12 +334,12 @@ function _renderStap3(state, body) {
         </div>
 
         <!-- Afstanden-multi-select: alleen zichtbaar bij type='custom' (per-afstand). -->
-        <div class="ks-veld" id="ks-afst-veld" style="${r.type === 'gecombineerd' ? 'display:none' : ''}">
-            <label>Afstanden voor dit klassement <span style="color:#666;font-weight:400;font-size:11.5px">(niets aangevinkt = niets telt mee)</span></label>
-            <div id="ks-afst-filter-wrap" style="border:1px solid var(--border);background:#fafbfc;border-radius:4px;padding:6px;min-height:36px">
-                <em style="color:#888;font-size:11.5px">Afstanden laden uit geselecteerde wedstrijden…</em>
+        <div class="ks-veld${r.type === 'gecombineerd' ? ' ks-verborgen' : ''}" id="ks-afst-veld">
+            <label>Afstanden voor dit klassement <span class="ks-lbl-sub">(niets aangevinkt = niets telt mee)</span></label>
+            <div id="ks-afst-filter-wrap" class="ks-pillwrap">
+                <em class="ks-pill-leeg">Afstanden laden uit geselecteerde wedstrijden…</em>
             </div>
-            <div style="font-size:11.5px;color:#666;margin:4px 0 0 2px">
+            <div class="ks-pill-hint">
                 Vink aan welke afstanden meetellen. De punten per geselecteerde afstand
                 worden per rijder opgeteld tot een serie-totaal.<br>
                 Voorbeeld <b>1000m-serie</b>: alleen "1000 meter" aankruisen.<br>
@@ -360,7 +361,7 @@ function _renderStap3(state, body) {
             <div class="ks-veld">
                 <label>Streepresultaten (slechtste N wegstrepen)</label>
                 <input type="number" class="inp" id="ks-streep" min="0" value="${r.streepresultaten}">
-                <label style="display:block;margin-top:6px;font-size:11.5px"><input type="checkbox" id="ks-streep-direct" ${r.streep_direct?'checked':''}> Direct toepassen (ook in tussenstand)</label>
+                <label class="ks-check-sub"><input type="checkbox" id="ks-streep-direct" ${r.streep_direct?'checked':''}> Direct toepassen (ook in tussenstand)</label>
             </div>
         </div>
 
@@ -384,15 +385,25 @@ function _renderStap3(state, body) {
         </div>
 
         <div class="ks-veld">
-            <label>Categorie-filter <span style="color:#666;font-weight:400;font-size:11.5px">(niets aangevinkt = alle categorieën)</span></label>
-            <div id="ks-cat-filter-wrap" style="border:1px solid var(--border);background:#fafbfc;border-radius:4px;padding:6px;min-height:36px">
-                <em style="color:#888;font-size:11.5px">Categorieën laden uit geselecteerde wedstrijden…</em>
+            <label>Categorie-filter <span class="ks-lbl-sub">(niets aangevinkt = alle categorieën)</span></label>
+            <div id="ks-cat-filter-wrap" class="ks-pillwrap">
+                <em class="ks-pill-leeg">Categorieën laden uit geselecteerde wedstrijden…</em>
             </div>
-            <div style="font-size:11.5px;color:#666;margin:4px 0 0 2px">
+            <div class="ks-pill-hint">
                 Vink aan welke categorieën meedoen in dit klassement. Voorbeelden:<br>
                 <b>Combi-klassement</b> alleen voor Kadetten + Junioren B → kruis HKA, DKA, HKB, DKB, HJB, DJB aan.<br>
                 <b>Sprint/lang-klassement</b> alleen voor senioren → kruis HSA, DSA, HSB, DSB aan.<br>
                 Niets aangevinkt = geen filter, alle categorieën doen mee.
+            </div>
+        </div>
+
+        <div class="ks-veld ks-verborgen" id="ks-klassement-sel-veld">
+            <label>Welke klassementen aanmaken? <span class="ks-lbl-sub">(alles aan = standaard)</span></label>
+            <div id="ks-klassement-sel-wrap" class="ks-pillwrap"></div>
+            <div class="ks-pill-hint">
+                Vink uit welk klassement je <b>niet</b> apart wilt. Bij gecombineerde categorieën
+                ontstaan zowel de losse klassementen (bv. HJA, HSA) als het gecombineerde (HJA/HSA).
+                Wil je bv. alleen HJA en HJA/HSA maar géén los HSA? Vink dan HSA uit.
             </div>
         </div>
 
@@ -402,7 +413,7 @@ function _renderStap3(state, body) {
 
         <div class="ks-veld">
             <label><input type="checkbox" id="ks-non-deelname" ${r.non_deelname_punten?'checked':''}> Punten voor niet-deelname (rang laatste + 1)</label>
-            <div style="font-size:11.5px;color:#666;margin:4px 0 0 22px">
+            <div class="ks-check-hint">
                 Rijders die wél elders in deze serie scoren maar in een specifieke wedstrijd
                 ontbraken (of punten = 0 hadden), krijgen voor die wedstrijd de punten op
                 rang "laatste deelnemer + 1" uit de tabel. Bij meerdere afwezigen krijgen
@@ -410,9 +421,9 @@ function _renderStap3(state, body) {
             </div>
         </div>
 
-        <div class="ks-veld" style="border-top:1px solid #eee;padding-top:12px;margin-top:12px">
+        <div class="ks-veld ks-veld-scheiding">
             <label><input type="checkbox" id="ks-save-preset"> Regels opslaan als preset voor deze organisatie</label>
-            <input type="text" class="inp" id="ks-preset-naam" placeholder="Preset-naam (bv. 'KNSB tabel 2026')" style="display:none">
+            <input type="text" class="inp ks-verborgen" id="ks-preset-naam" placeholder="Preset-naam (bv. 'KNSB tabel 2026')">
         </div>`;
 
     // ── Event wiring ─────────
@@ -427,13 +438,13 @@ function _renderStap3(state, body) {
             if (r.type === 'gecombineerd') {
                 r.afstand_filter = 'alle';
                 r.afstand_namen = [];
-                body.querySelector('#ks-afst-veld').style.display = 'none';
+                body.querySelector('#ks-afst-veld').classList.add('ks-verborgen');
             } else {
                 r.type = 'custom';
                 r.afstand_filter = 'per_naam';
                 // afstand_namen blijft leeg tot operator iets aanvinkt;
                 // multi-select verschijnt direct.
-                body.querySelector('#ks-afst-veld').style.display = '';
+                body.querySelector('#ks-afst-veld').classList.remove('ks-verborgen');
             }
         });
     });
@@ -441,6 +452,11 @@ function _renderStap3(state, body) {
         r.punten_tabel = e.target.value.split(',').map(s => parseFloat(s.trim())).filter(n => !isNaN(n));
     });
     get('#ks-min-pnt').addEventListener('input', e => r.min_punten_bij_deelname = parseFloat(e.target.value) || 0);
+
+    // Gedeeld: het "welke klassementen"-blok hangt af van de categorie-filter,
+    // dus de filter roept dit aan om te herrenderen. Wordt hieronder in de
+    // klassement-IIFE ingevuld zodra de kandidaat-labels geladen zijn.
+    let refreshKlasSel = () => {};
 
     // ── Categorie-filter: ophalen + checkbox-grid bouwen ─────────────
     // Cats komen uit de daadwerkelijk-aangevinkte wedstrijden zodat de
@@ -454,39 +470,41 @@ function _renderStap3(state, body) {
             .map(w => w.competition_id)
             .filter(Boolean);
         if (!compIds.length) {
-            wrap.innerHTML = '<em style="color:#888;font-size:11.5px">Selecteer eerst wedstrijden in stap 2.</em>';
+            wrap.innerHTML = '<em class="ks-pill-leeg">Selecteer eerst wedstrijden in stap 2.</em>';
             return;
         }
         try {
             const res = await fetch(`api/klassement_serie.php?action=categorieen_van_wedstrijden&comp_ids=${encodeURIComponent(compIds.join(','))}`);
             const cats = await res.json();
             if (!Array.isArray(cats) || !cats.length) {
-                wrap.innerHTML = '<em style="color:#888;font-size:11.5px">Geen categorieën gevonden in de geselecteerde wedstrijden.</em>';
+                wrap.innerHTML = '<em class="ks-pill-leeg">Geen categorieën gevonden in de geselecteerde wedstrijden.</em>';
                 return;
             }
             const aangevinkt = new Set((r.categorie_filter ?? []).map(c => String(c).toUpperCase()));
             // Render als grid van checkbox-knopjes — compact en aanklikbaar
             wrap.innerHTML = `
-                <div style="display:flex;flex-wrap:wrap;gap:5px;margin-bottom:4px">
+                <div class="ks-pillrow">
                     ${cats.map(c => `
-                        <label style="display:inline-flex;align-items:center;gap:3px;padding:2px 7px;border:1px solid var(--border);border-radius:12px;background:${aangevinkt.has(c) ? '#dceaf5' : '#fff'};font-size:11.5px;cursor:pointer">
-                            <input type="checkbox" class="ks-cat-cb" data-cat="${rkEsc(c)}" ${aangevinkt.has(c) ? 'checked' : ''} style="margin:0">
+                        <label class="ks-pill${aangevinkt.has(c) ? ' aan' : ''}">
+                            <input type="checkbox" class="ks-cat-cb" data-cat="${rkEsc(c)}" ${aangevinkt.has(c) ? 'checked' : ''}>
                             <span>${rkEsc(c)}</span>
                         </label>`).join('')}
                 </div>
-                <div style="display:flex;gap:8px;font-size:11px">
-                    <button type="button" id="ks-cat-allemaal" class="btn-secondary" style="font-size:11px;padding:2px 8px">Alle aanvinken</button>
-                    <button type="button" id="ks-cat-geen"     class="btn-secondary" style="font-size:11px;padding:2px 8px">Niets aanvinken</button>
-                    <span id="ks-cat-aantal" style="margin-left:auto;color:#666;font-style:italic">${aangevinkt.size} van ${cats.length} aangevinkt</span>
+                <div class="ks-pilltools">
+                    <button type="button" id="ks-cat-allemaal" class="btn-secondary ks-pill-btn">Alle aanvinken</button>
+                    <button type="button" id="ks-cat-geen"     class="btn-secondary ks-pill-btn">Niets aanvinken</button>
+                    <span id="ks-cat-aantal" class="ks-pill-teller">${aangevinkt.size} van ${cats.length} aangevinkt</span>
                 </div>`;
             const updateState = () => {
                 const aan = Array.from(wrap.querySelectorAll('.ks-cat-cb:checked')).map(cb => cb.dataset.cat);
                 r.categorie_filter = aan;
                 wrap.querySelectorAll('.ks-cat-cb').forEach(cb => {
-                    cb.closest('label').style.background = cb.checked ? '#dceaf5' : '#fff';
+                    cb.closest('label').classList.toggle('aan', cb.checked);
                 });
                 const teller = wrap.querySelector('#ks-cat-aantal');
                 if (teller) teller.textContent = `${aan.length} van ${cats.length} aangevinkt`;
+                // Klassement-selectie hangt af van welke cats meedoen → herrender.
+                refreshKlasSel();
             };
             wrap.querySelectorAll('.ks-cat-cb').forEach(cb => cb.addEventListener('change', updateState));
             wrap.querySelector('#ks-cat-allemaal')?.addEventListener('click', () => {
@@ -498,8 +516,87 @@ function _renderStap3(state, body) {
                 updateState();
             });
         } catch (e) {
-            wrap.innerHTML = `<em style="color:#b71c1c;font-size:11.5px">⚠ Categorieën laden mislukt: ${rkEsc(e.message)}</em>`;
+            wrap.innerHTML = `<em class="ks-pill-fout">⚠ Categorieën laden mislukt: ${rkEsc(e.message)}</em>`;
         }
+    })();
+
+    // ── Welke klassementen aanmaken (verberg-lijst) ──────────────────
+    // Checkboxes voor de kandidaat-uitkomsten, beperkt tot de categorieën die
+    // in de categorie-filter meedoen (leeg filter = alle). Een cluster verschijnt
+    // alleen als ál zijn categorieën meedoen — anders wordt hij sowieso niet
+    // gevormd. Alleen zichtbaar als er dan nog clusters overblijven; het losse
+    // geval dekt de categorie-filter al. Alles aan = standaard; uitgevinkte
+    // labels → r.verberg_klassementen (VERBERG-lijst, nieuwe cats blijven aan).
+    // Reageert live op de categorie-filter via refreshKlasSel(). Bij laadfout
+    // blijft het veld verborgen en behoudt r zijn waarde — geen opslag-blokkade.
+    (async () => {
+        const veld = get('#ks-klassement-sel-veld');
+        const wrap = get('#ks-klassement-sel-wrap');
+        if (!veld || !wrap) return;
+        const compIds = (state.wedstrijden || [])
+            .filter(w => w._checked && w.telt_mee !== false)
+            .map(w => w.competition_id)
+            .filter(Boolean);
+        if (!compIds.length) return;
+        let alleCats = [], alleClusters = [];
+        try {
+            const res  = await fetch(`api/klassement_serie.php?action=klassement_labels_van_wedstrijden&comp_ids=${encodeURIComponent(compIds.join(','))}`);
+            const data = await res.json();
+            alleCats     = Array.isArray(data?.categorieen) ? data.categorieen : [];
+            alleClusters = Array.isArray(data?.clusters)    ? data.clusters    : [];
+        } catch (e) { return; /* stil: standaardgedrag (alle klassementen) */ }
+
+        refreshKlasSel = () => {
+            // Actieve categorie-filter (leeg = alle cats meedoen).
+            const filter   = new Set((r.categorie_filter ?? []).map(c => String(c).toUpperCase()));
+            const inFilter = c => filter.size === 0 || filter.has(String(c).toUpperCase());
+            const cats     = alleCats.filter(inFilter);
+            const clusters = alleClusters.filter(cl => cl.split('/').every(inFilter));
+            if (!clusters.length) { veld.classList.add('ks-verborgen'); return; }
+            const labels    = [...cats, ...clusters];
+            const verborgen = new Set((r.verberg_klassementen ?? []).map(c => String(c).toUpperCase()));
+            const pill = (lab, isCluster) => {
+                const checked = !verborgen.has(String(lab).toUpperCase());
+                return `<label class="ks-pill${checked ? (isCluster ? ' aan-cluster' : ' aan') : ''}">
+                    <input type="checkbox" class="ks-klas-cb" data-lab="${rkEsc(lab)}" ${checked ? 'checked' : ''}>
+                    <span>${rkEsc(lab)}</span>
+                </label>`;
+            };
+            wrap.innerHTML = `
+                <div class="ks-pillrow">
+                    ${cats.map(c => pill(c, false)).join('')}
+                    ${clusters.map(c => pill(c, true)).join('')}
+                </div>
+                <div class="ks-pilltools">
+                    <button type="button" id="ks-klas-allemaal" class="btn-secondary ks-pill-btn">Alle aanvinken</button>
+                    <button type="button" id="ks-klas-geen"     class="btn-secondary ks-pill-btn">Niets aanvinken</button>
+                    <span id="ks-klas-aantal" class="ks-pill-teller"></span>
+                </div>`;
+            veld.classList.remove('ks-verborgen');
+            const updateState = () => {
+                const uit = Array.from(wrap.querySelectorAll('.ks-klas-cb'))
+                    .filter(cb => !cb.checked).map(cb => cb.dataset.lab);
+                r.verberg_klassementen = uit;
+                wrap.querySelectorAll('.ks-klas-cb').forEach(cb => {
+                    const isC = cb.dataset.lab.includes('/');
+                    const lab = cb.closest('label');
+                    lab.classList.toggle('aan', cb.checked && !isC);
+                    lab.classList.toggle('aan-cluster', cb.checked && isC);
+                });
+                const teller = wrap.querySelector('#ks-klas-aantal');
+                const aan = wrap.querySelectorAll('.ks-klas-cb:checked').length;
+                if (teller) teller.textContent = `${aan} van ${labels.length} aangemaakt`;
+            };
+            wrap.querySelectorAll('.ks-klas-cb').forEach(cb => cb.addEventListener('change', updateState));
+            wrap.querySelector('#ks-klas-allemaal')?.addEventListener('click', () => {
+                wrap.querySelectorAll('.ks-klas-cb').forEach(cb => cb.checked = true); updateState();
+            });
+            wrap.querySelector('#ks-klas-geen')?.addEventListener('click', () => {
+                wrap.querySelectorAll('.ks-klas-cb').forEach(cb => cb.checked = false); updateState();
+            });
+            updateState();
+        };
+        refreshKlasSel();
     })();
 
     // ── Afstanden-multi-select: zelfde patroon als categorie-filter ──
@@ -515,14 +612,14 @@ function _renderStap3(state, body) {
             .map(w => w.competition_id)
             .filter(Boolean);
         if (!compIds.length) {
-            wrap.innerHTML = '<em style="color:#888;font-size:11.5px">Selecteer eerst wedstrijden in stap 2.</em>';
+            wrap.innerHTML = '<em class="ks-pill-leeg">Selecteer eerst wedstrijden in stap 2.</em>';
             return;
         }
         try {
             const res = await fetch(`api/klassement_serie.php?action=afstanden_van_wedstrijden&comp_ids=${encodeURIComponent(compIds.join(','))}`);
             const afstanden = await res.json();
             if (!Array.isArray(afstanden) || !afstanden.length) {
-                wrap.innerHTML = '<em style="color:#888;font-size:11.5px">Geen afstanden gevonden in de geselecteerde wedstrijden.</em>';
+                wrap.innerHTML = '<em class="ks-pill-leeg">Geen afstanden gevonden in de geselecteerde wedstrijden.</em>';
                 return;
             }
             // Backwards-compat: oude series met type='sprint'/'lang' hebben
@@ -541,22 +638,22 @@ function _renderStap3(state, body) {
             }
             // Render checkbox-grid
             wrap.innerHTML = `
-                <div style="display:flex;flex-wrap:wrap;gap:5px;margin-bottom:4px">
+                <div class="ks-pillrow">
                     ${afstanden.map(a => {
                         const aan = aangevinktSet.has(a.naam);
-                        const rtBadge = a.race_type === 'sprint' ? ' <small style="color:#888">sprint</small>' : '';
-                        return `<label style="display:inline-flex;align-items:center;gap:3px;padding:2px 7px;border:1px solid var(--border);border-radius:12px;background:${aan ? '#dceaf5' : '#fff'};font-size:11.5px;cursor:pointer">
-                            <input type="checkbox" class="ks-afst-cb" data-naam="${rkEsc(a.naam)}" ${aan ? 'checked' : ''} style="margin:0">
+                        const rtBadge = a.race_type === 'sprint' ? ' <small class="ks-pill-badge">sprint</small>' : '';
+                        return `<label class="ks-pill${aan ? ' aan' : ''}">
+                            <input type="checkbox" class="ks-afst-cb" data-naam="${rkEsc(a.naam)}" ${aan ? 'checked' : ''}>
                             <span>${rkEsc(a.naam)}${rtBadge}</span>
                         </label>`;
                     }).join('')}
                 </div>
-                <div style="display:flex;gap:8px;font-size:11px">
-                    <button type="button" id="ks-afst-allemaal" class="btn-secondary" style="font-size:11px;padding:2px 8px">Alle aanvinken</button>
-                    <button type="button" id="ks-afst-sprint"   class="btn-secondary" style="font-size:11px;padding:2px 8px">Alleen sprint</button>
-                    <button type="button" id="ks-afst-lang"     class="btn-secondary" style="font-size:11px;padding:2px 8px">Alleen lange afstand</button>
-                    <button type="button" id="ks-afst-geen"     class="btn-secondary" style="font-size:11px;padding:2px 8px">Niets aanvinken</button>
-                    <span id="ks-afst-aantal" style="margin-left:auto;color:#666;font-style:italic">${aangevinktSet.size} van ${afstanden.length} aangevinkt</span>
+                <div class="ks-pilltools">
+                    <button type="button" id="ks-afst-allemaal" class="btn-secondary ks-pill-btn">Alle aanvinken</button>
+                    <button type="button" id="ks-afst-sprint"   class="btn-secondary ks-pill-btn">Alleen sprint</button>
+                    <button type="button" id="ks-afst-lang"     class="btn-secondary ks-pill-btn">Alleen lange afstand</button>
+                    <button type="button" id="ks-afst-geen"     class="btn-secondary ks-pill-btn">Niets aanvinken</button>
+                    <span id="ks-afst-aantal" class="ks-pill-teller">${aangevinktSet.size} van ${afstanden.length} aangevinkt</span>
                 </div>`;
             const updateState = () => {
                 const aan = Array.from(wrap.querySelectorAll('.ks-afst-cb:checked')).map(cb => cb.dataset.naam);
@@ -566,7 +663,7 @@ function _renderStap3(state, body) {
                 r.afstand_filter = 'per_naam';
                 r.type = 'custom';
                 wrap.querySelectorAll('.ks-afst-cb').forEach(cb => {
-                    cb.closest('label').style.background = cb.checked ? '#dceaf5' : '#fff';
+                    cb.closest('label').classList.toggle('aan', cb.checked);
                 });
                 const teller = wrap.querySelector('#ks-afst-aantal');
                 if (teller) teller.textContent = `${aan.length} van ${afstanden.length} aangevinkt`;
@@ -599,7 +696,7 @@ function _renderStap3(state, body) {
                 updateState();
             });
         } catch (e) {
-            wrap.innerHTML = `<em style="color:#b71c1c;font-size:11.5px">⚠ Afstanden laden mislukt: ${rkEsc(e.message)}</em>`;
+            wrap.innerHTML = `<em class="ks-pill-fout">⚠ Afstanden laden mislukt: ${rkEsc(e.message)}</em>`;
         }
     })();
 
@@ -611,7 +708,7 @@ function _renderStap3(state, body) {
     get('#ks-non-deelname').addEventListener('change',   e => r.non_deelname_punten = e.target.checked);
 
     get('#ks-save-preset')?.addEventListener('change', e => {
-        get('#ks-preset-naam').style.display = e.target.checked ? '' : 'none';
+        get('#ks-preset-naam').classList.toggle('ks-verborgen', !e.target.checked);
     });
 
     get('#ks-preset')?.addEventListener('change', e => {
@@ -716,9 +813,9 @@ async function diagnoseSerieer(serieId) {
             return `<tr>
                 <td>${rkEsc(r.name)}</td>
                 <td>${rkEsc(dt)}</td>
-                <td style="text-align:center">${imp}</td>
-                <td style="text-align:center">${telt}</td>
-                <td style="text-align:center">${fin}</td>
+                <td class="ks-c">${imp}</td>
+                <td class="ks-c">${telt}</td>
+                <td class="ks-c">${fin}</td>
                 <td>${status}</td>
             </tr>`;
         }).join('');
@@ -727,13 +824,13 @@ async function diagnoseSerieer(serieId) {
             const dcs = (d.dcs || []).map(dc =>
                 `<tr>
                     <td>${rkEsc(dc.dc_naam)}</td>
-                    <td style="text-align:center">${dc.n_afstanden}</td>
+                    <td class="ks-c">${dc.n_afstanden}</td>
                     <td>${rkEsc(dc.dc_type)}</td>
-                    <td style="text-align:center">${dc.passes_filter ? '✅' : '❌'}</td>
-                    <td style="text-align:right">${dc.uk_rijen}</td>
+                    <td class="ks-c">${dc.passes_filter ? '✅' : '❌'}</td>
+                    <td class="ks-r">${dc.uk_rijen}</td>
                 </tr>`
             ).join('') || '<tr><td colspan="5" class="ks-leeg">Geen DCs in deze wedstrijd.</td></tr>';
-            return `<h4 style="margin-top:14px;color:var(--blauw);font-size:.95rem">Wedstrijd-detail · ${rkEsc(d.comp_id)}</h4>
+            return `<h4 class="ks-diag-h4">Wedstrijd-detail · ${rkEsc(d.comp_id)}</h4>
                 <table class="ks-w-tabel">
                     <thead><tr>
                         <th>DC</th><th># afst.</th><th>Type</th><th>Filter</th><th>UK-rijen</th>
@@ -746,10 +843,10 @@ async function diagnoseSerieer(serieId) {
         const streepDirect = !Array.isArray(resp) && resp.regels?.streep_direct;
         const finaleStatus = !Array.isArray(resp)
             ? (finaleG
-                ? '<span style="color:#2e7d32">✅ finale is gereden</span>'
+                ? '<span class="ks-groen">✅ finale is gereden</span>'
                 : streepDirect
-                    ? '<span style="color:#b71c1c">⏳ finale nog niet gereden — <b>min_deelnames en vereist_finale worden tijdelijk NIET toegepast</b> (streepresultaten staat op "direct toepassen" en is wél actief)</span>'
-                    : '<span style="color:#b71c1c">⏳ finale nog niet gereden — <b>streepresultaten, min_deelnames en vereist_finale worden tijdelijk NIET toegepast</b></span>')
+                    ? '<span class="ks-rood">⏳ finale nog niet gereden — <b>min_deelnames en vereist_finale worden tijdelijk NIET toegepast</b> (streepresultaten staat op "direct toepassen" en is wél actief)</span>'
+                    : '<span class="ks-rood">⏳ finale nog niet gereden — <b>streepresultaten, min_deelnames en vereist_finale worden tijdelijk NIET toegepast</b></span>')
             : '';
         const catFilterTxt = (regels.categorie_filter ?? []).length
             ? ` · cats = <b>${rkEsc((regels.categorie_filter || []).join(', '))}</b>`
@@ -777,14 +874,14 @@ async function diagnoseSerieer(serieId) {
         const plBron = pl?.bron || 'uitslag_klassement';
         const plFilter = pl?.filter_label || 'DC-filter (op type)';
         const pipelineHtml = pl
-            ? `<h4 style="margin-top:14px;color:var(--blauw);font-size:.95rem">Pipeline-telling</h4>
+            ? `<h4 class="ks-diag-h4">Pipeline-telling</h4>
                <table class="ks-w-tabel">
                  <tbody>
-                   <tr><td>Uit ${rkEsc(plBron)}</td><td style="text-align:right">${pl.uit_uk}</td></tr>
-                   <tr><td>Na ${rkEsc(plFilter)}</td><td style="text-align:right">${pl.na_dc_filter}</td></tr>
-                   <tr><td>Na punten > 0 filter</td><td style="text-align:right">${pl.na_punten_filter}</td></tr>
-                   <tr><td>Na rang ≠ NULL filter</td><td style="text-align:right">${pl.na_rang_filter}</td></tr>
-                   <tr><td>Unieke rijders</td><td style="text-align:right"><b>${pl.rijders_uniek}</b></td></tr>
+                   <tr><td>Uit ${rkEsc(plBron)}</td><td class="ks-r">${pl.uit_uk}</td></tr>
+                   <tr><td>Na ${rkEsc(plFilter)}</td><td class="ks-r">${pl.na_dc_filter}</td></tr>
+                   <tr><td>Na punten > 0 filter</td><td class="ks-r">${pl.na_punten_filter}</td></tr>
+                   <tr><td>Na rang ≠ NULL filter</td><td class="ks-r">${pl.na_rang_filter}</td></tr>
+                   <tr><td>Unieke rijders</td><td class="ks-r"><b>${pl.rijders_uniek}</b></td></tr>
                  </tbody>
                </table>
                ${pl.voorbeelden_weg?.length

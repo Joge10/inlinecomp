@@ -3655,6 +3655,44 @@ tr.ts-drop-below td  { border-bottom: 3px solid #2563eb !important; }
     vertical-align:middle; font-weight:500;
 }
 
+/* ── Serie-wizard: checkbox-pill-grid ───────────────────────────────────────
+   Herbruikbaar voor de categorie-filter, klassement-selectie en afstanden-
+   multiselect (stap 3). Vervangt de vroegere inline styling per element. */
+.ks-pillwrap    { border:1px solid var(--border); background:#fafbfc; border-radius:4px;
+                  padding:6px; min-height:36px; }
+.ks-pillrow     { display:flex; flex-wrap:wrap; gap:5px; margin-bottom:4px; }
+.ks-pill        { display:inline-flex; align-items:center; gap:3px; padding:2px 7px;
+                  border:1px solid var(--border); border-radius:12px; background:#fff;
+                  font-size:11.5px; cursor:pointer; }
+.ks-pill input  { margin:0; }
+.ks-pill.aan          { background:#dceaf5; }  /* aangevinkt: losse categorie/afstand */
+.ks-pill.aan-cluster  { background:#e7f0e7; }  /* aangevinkt: cluster-klassement */
+.ks-pill-badge  { color:#888; }                /* bv. 'sprint'-badge binnen de pill */
+.ks-pilltools   { display:flex; gap:8px; font-size:11px; }
+.ks-pill-btn    { font-size:11px; padding:2px 8px; }
+.ks-pill-teller { margin-left:auto; color:#666; font-style:italic; }
+.ks-pill-hint   { font-size:11.5px; color:#666; margin:4px 0 0 2px; }
+.ks-pill-leeg   { color:#888; font-size:11.5px; }     /* laad-/lege melding */
+.ks-pill-fout   { color:#b71c1c; font-size:11.5px; }  /* laadfout */
+.ks-lbl-sub     { color:#666; font-weight:400; font-size:11.5px; }  /* subtekst in label */
+
+/* ── Serie-wizard: overige (voorheen inline) styling ────────────────────────── */
+.ks-verborgen     { display:none !important; }        /* JS-toggle i.p.v. style.display */
+.ks-onzichtbaar   { visibility:hidden; }              /* JS-toggle i.p.v. style.visibility */
+.ks-w-bonus       { white-space:nowrap; }
+.ks-w-bonus-pnt   { width:3.4em; }
+.ks-w-voetteller  { text-align:right; font-size:.8rem; color:#666; margin-top:6px; }
+.ks-type-opts     { display:flex; flex-direction:column; gap:6px; font-size:12.5px; }
+.ks-check-sub     { display:block; margin-top:6px; font-size:11.5px; }
+.ks-check-hint    { font-size:11.5px; color:#666; margin:4px 0 0 22px; }
+.ks-veld-scheiding{ border-top:1px solid #eee; padding-top:12px; margin-top:12px; }
+/* Diagnose-modal celuitlijning + statuskleuren */
+.ks-c             { text-align:center; }
+.ks-r             { text-align:right; }
+.ks-diag-h4       { margin-top:14px; color:var(--blauw); font-size:.95rem; }
+.ks-groen         { color:#2e7d32; }
+.ks-rood          { color:#b71c1c; }
+
 /* Serie-klassement-detail kolommen */
 .rk-sub-hdr th { background:#e8f0f8 !important; font-size:.75rem; color:#5580a8; font-weight:600; letter-spacing:.5px; }
 .rk-wedstrijden-kop { text-align:center; }
