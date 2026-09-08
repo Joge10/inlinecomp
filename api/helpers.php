@@ -25,34 +25,47 @@ $body   = json_decode(file_get_contents('php://input'), true) ?? [];
 // tolerant voor beide patronen — geen breekrisico voor bestaande fetches.
 $action = $body['action'] ?? $_GET['action'] ?? '';
 
+// ── Gedeelde "wees"-definitie (scan ÉN cleanup MOETEN identiek blijven) ──────
+// Een vastgelegde uitslag-rij is wees als er GEEN matchende loting (meer) is:
+// de rijder zit in géén enkele heat_entry van een heat met dezelfde (dc,
+// afstand, split_group). Reden: in InlineComp ontstaat een uitslag ALTIJD uit
+// een loting; een uitslag zonder matchende loting is dus stale — heats gewist
+// (wis-programma van vóór de cascade-fix), afstand/split heringericht (oud
+// label), of een fantoom-rijder uit een vorige loting.
+//
+// Beschermingen:
+//   • INNER JOIN op competitions (in de queries) → sport-archief van
+//     verwijderde wedstrijden blijft staan.
+//   • EXISTS competition_tijdschema → wedstrijden zonder tijdschema (bv. pure
+//     historische imports zonder loting) worden NIET aangeraakt.
+// De split_group-match is bewust STRIKT: een oud split-label ('' terwijl de
+// huidige loting 'DP1' draagt) telt als mismatch → wees. Zo worden ook de
+// resten van een herindeling opgeruimd, niet alleen dode distance_ids.
+$UA_WEES = "(
+    EXISTS (SELECT 1 FROM competition_tijdschema ct WHERE ct.competition_id = ua.competition_id)
+    AND NOT EXISTS (SELECT 1 FROM heats h JOIN heat_entries he ON he.heat_id = h.id
+            WHERE h.competition_id          = ua.competition_id
+              AND h.distance_combination_id = ua.distance_combination_id
+              AND (h.distance_id = ua.distance_id OR (h.distance_id IS NULL AND ua.distance_id = ''))
+              AND (h.split_group = ua.split_group OR (h.split_group IS NULL AND ua.split_group = ''))
+              AND he.person_license = ua.person_license)
+)";
+$UK_WEES = "(
+    EXISTS (SELECT 1 FROM competition_tijdschema ct WHERE ct.competition_id = uk.competition_id)
+    AND NOT EXISTS (SELECT 1 FROM heats h JOIN heat_entries he ON he.heat_id = h.id
+            WHERE h.competition_id          = uk.competition_id
+              AND h.distance_combination_id = uk.distance_combination_id
+              AND (h.split_group = uk.split_group OR (h.split_group IS NULL AND uk.split_group = ''))
+              AND he.person_license = uk.person_license)
+)";
+
 // ── Scan: rapport per wedstrijd ─────────────────────────────────────────────
 if ($action === 'scan_wees_uitslagen') {
     try {
-        // BELANGRIJK: alleen wees-rijen waar de wedstrijd nog bestaat. Als de
-        // wedstrijd zelf is verwijderd (uit competitions-tabel), is de
-        // uitslag-rij sport-archief en MOET die blijven staan — daarom
-        // bewust GEEN cascade op competition_id in uitslag_afstand/_klassement.
-        // De INNER JOIN op competitions filtert die archief-rijen weg.
-        //
-        // Twee soorten 'wees' worden gevangen:
-        //   (1) Geen heats meer voor deze cat+afstand+split → loting compleet
-        //       weg, uitslag is een orphan.
-        //   (2) Heats bestaan wél, maar deze rijder zit in geen enkel
-        //       heat_entry → fantoom uit een vorige loting (rijder die uit
-        //       de nieuwe indeling is gevallen, met stale rang/tijd uit de
-        //       oude run). Detectie: NOT EXISTS op person-niveau.
-        //
-        // BELANGRIJK: handmatige imports (uitslag direct in DB ingevoegd zonder
-        // ooit een tijdschema te hebben — bv. historische NK-PDF's) zouden
-        // anders ALLE rijen als wees laten lijken. Een "heats bestaan"-check
-        // was niet robuust (kon false-negative geven na een complete loting-
-        // wis). Daarom de stabielere check: EXISTS competition_tijdschema
-        // voor de wedstrijd. Dat record wordt aangemaakt zodra operator een
-        // tijdschema-systeem kiest in de Tijdschema-tab; handmatige imports
-        // missen 'm. Effecten:
-        //   - Handmatige imports zonder tijdschema → genegeerd
-        //   - Echte loting-wedstrijden (tijdschema bestaat, ook al zijn alle
-        //     heats inmiddels gewist) → wees-check werkt normaal
+        // Wees-definitie = $UA_WEES (hierboven, gedeeld met de cleanup): geen
+        // matchende loting (heat_entry met dezelfde dc+afstand+split), met de
+        // tijdschema-gate + INNER JOIN op competitions als bescherming. Zie de
+        // uitleg bij $UA_WEES.
         $uaStmt = $pdo->query("
             SELECT
                 ua.id,
@@ -71,19 +84,7 @@ if ($action === 'scan_wees_uitslagen') {
             FROM uitslag_afstand ua
             JOIN competitions c ON c.id = ua.competition_id
             LEFT JOIN persons p ON p.license_key = ua.person_license
-            WHERE EXISTS (
-                SELECT 1 FROM competition_tijdschema ct
-                WHERE ct.competition_id = ua.competition_id
-            )
-            AND NOT EXISTS (
-                SELECT 1 FROM heats h
-                JOIN heat_entries he ON he.heat_id = h.id
-                WHERE h.competition_id          = ua.competition_id
-                  AND h.distance_combination_id = ua.distance_combination_id
-                  AND (h.distance_id = ua.distance_id OR (h.distance_id IS NULL AND ua.distance_id = ''))
-                  AND (h.split_group = ua.split_group OR (h.split_group IS NULL AND ua.split_group = ''))
-                  AND he.person_license = ua.person_license
-            )
+            WHERE {$UA_WEES}
             ORDER BY ua.competition_datum DESC, ua.competition_naam,
                      ua.dc_naam, ua.distance_naam, ua.rang
         ");
@@ -108,18 +109,7 @@ if ($action === 'scan_wees_uitslagen') {
             FROM uitslag_klassement uk
             JOIN competitions c ON c.id = uk.competition_id
             LEFT JOIN persons p ON p.license_key = uk.person_license
-            WHERE EXISTS (
-                SELECT 1 FROM competition_tijdschema ct
-                WHERE ct.competition_id = uk.competition_id
-            )
-            AND NOT EXISTS (
-                SELECT 1 FROM heats h
-                JOIN heat_entries he ON he.heat_id = h.id
-                WHERE h.competition_id          = uk.competition_id
-                  AND h.distance_combination_id = uk.distance_combination_id
-                  AND (h.split_group = uk.split_group OR (h.split_group IS NULL AND uk.split_group = ''))
-                  AND he.person_license = uk.person_license
-            )
+            WHERE {$UK_WEES}
             ORDER BY uk.competition_datum DESC, uk.competition_naam, uk.dc_naam, uk.rang
         ");
         $weesKlassement = $ukStmt->fetchAll(PDO::FETCH_ASSOC);
@@ -159,50 +149,25 @@ if ($action === 'cleanup_wees_uitslagen') {
     try {
         $pdo->beginTransaction();
 
-        // uitslag_afstand — match person-niveau zodat zowel "geen heats meer"
-        // als "fantoom-rijder uit vorige loting" worden opgeruimd. INNER JOIN
-        // op competitions beschermt sport-archief (gewiste wedstrijden).
-        // EXISTS-gate (heats voor DC+distance+split): zelfde bescherming als
-        // in scan_wees_uitslagen — handmatig geïmporteerde uitslagen (geen
-        // heats) worden niet meegerekend als wees.
+        // uitslag_afstand — IDENTIEKE wees-definitie als scan_wees_uitslagen
+        // ($UA_WEES): geen matchende loting (heat_entry met dezelfde dc+afstand+
+        // split). Tijdschema-gate + INNER JOIN op competitions als bescherming.
         $sql = "
             DELETE ua FROM uitslag_afstand ua
             JOIN competitions c ON c.id = ua.competition_id
-            WHERE EXISTS (
-                SELECT 1 FROM competition_tijdschema ct
-                WHERE ct.competition_id = ua.competition_id
-            )
-            AND NOT EXISTS (
-                SELECT 1 FROM heats h
-                JOIN heat_entries he ON he.heat_id = h.id
-                WHERE h.competition_id          = ua.competition_id
-                  AND h.distance_combination_id = ua.distance_combination_id
-                  AND (h.distance_id = ua.distance_id OR (h.distance_id IS NULL AND ua.distance_id = ''))
-                  AND (h.split_group = ua.split_group OR (h.split_group IS NULL AND ua.split_group = ''))
-                  AND he.person_license = ua.person_license
-            )
+            WHERE {$UA_WEES}
         ";
         if ($scope !== 'all') $sql .= " AND ua.competition_id = ?";
         $stmt = $pdo->prepare($sql);
         $stmt->execute($scope === 'all' ? [] : [$scope]);
         $uaWeg = $stmt->rowCount();
 
-        // uitslag_klassement — zelfde person-niveau-detectie + EXISTS-gate.
+        // uitslag_klassement — IDENTIEKE wees-definitie als scan ($UK_WEES):
+        // geen matchende loting (heat_entry met dezelfde dc+split).
         $sql = "
             DELETE uk FROM uitslag_klassement uk
             JOIN competitions c ON c.id = uk.competition_id
-            WHERE EXISTS (
-                SELECT 1 FROM competition_tijdschema ct
-                WHERE ct.competition_id = uk.competition_id
-            )
-            AND NOT EXISTS (
-                SELECT 1 FROM heats h
-                JOIN heat_entries he ON he.heat_id = h.id
-                WHERE h.competition_id          = uk.competition_id
-                  AND h.distance_combination_id = uk.distance_combination_id
-                  AND (h.split_group = uk.split_group OR (h.split_group IS NULL AND uk.split_group = ''))
-                  AND he.person_license = uk.person_license
-            )
+            WHERE {$UK_WEES}
         ";
         if ($scope !== 'all') $sql .= " AND uk.competition_id = ?";
         $stmt = $pdo->prepare($sql);

@@ -2743,8 +2743,10 @@ function bindTsEvents(afstandGroepen) {
         if (!await toonBevestigDialog(
             'De volgende worden verwijderd:\n'
             + '• Ritten + startlijsten\n'
+            + '• ⚠ Vastgelegde uitslagen én klassementen van deze wedstrijd\n'
             + '• Blokken (wedstrijdstart/pauze/ceremonie/herstart)\n\n'
-            + 'De afstandinstellingen blijven behouden.\n\n'
+            + 'De afstandinstellingen blijven behouden. Dit kan NIET ongedaan '
+            + 'gemaakt worden.\n\n'
             + 'Klik daarna op Opslaan in Afstandinstellingen om de blokken '
             + 'opnieuw te genereren.',
             'Programma wissen'

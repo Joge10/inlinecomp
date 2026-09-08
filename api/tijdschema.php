@@ -1948,6 +1948,12 @@ try {
         $compId = $getCompId($tsId);
         $pdo->beginTransaction();
         $pdo->prepare("DELETE FROM heats WHERE competition_id = ?")->execute([$compId]);
+        // Wis-programma = "begin opnieuw" → de vastgelegde uitslagen + klassement
+        // horen ook weg. Zonder dit bleven ze als wees achter (heats gewist, maar
+        // uitslag_afstand/_klassement hebben geen cascade). Spiegelt de per-rit
+        // verwijder-actie die z'n resultaten ook meeneemt.
+        $pdo->prepare("DELETE FROM uitslag_afstand    WHERE competition_id = ?")->execute([$compId]);
+        $pdo->prepare("DELETE FROM uitslag_klassement WHERE competition_id = ?")->execute([$compId]);
         $pdo->prepare("DELETE FROM tijdschema_ritten WHERE tijdschema_id = ?")->execute([$tsId]);
         $pdo->prepare("DELETE FROM tijdschema_blokken WHERE tijdschema_id = ?")->execute([$tsId]);
         // tijdschema_cat_config + tijdschema_afstand_config BEWUST behouden.

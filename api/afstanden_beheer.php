@@ -88,6 +88,10 @@ try {
     // Verwijder afstanden die niet meer in de lijst staan, gescoopt op target_group
     $nieuweIds = array_values(array_filter(array_column($dists, 'id')));
 
+    // DC's die door deze operatie geraakt worden (primair + merge-group);
+    // aan het eind ruimen we hun wees-uitslagen (dode distance_id) op.
+    $affectedDcIds = [$dcId];
+
     if ($splitGroup !== null) {
         // Splitgroep-afstanden: scope op target_group = $splitGroup
         if ($nieuweIds) {
@@ -200,6 +204,7 @@ try {
             $otherDcIds = $otherStmt->fetchAll(PDO::FETCH_COLUMN);
 
             foreach ($otherDcIds as $otherId) {
+                $affectedDcIds[] = $otherId;
                 // Delete basis-rijen die niet in de payload staan (zelfde
                 // logica als hoofd-DC, maar gescoopt op $otherId).
                 if ($nieuweIds) {
@@ -262,6 +267,20 @@ try {
         $updRit ->execute([$oldName, $newName, $id]);
         $updHeat->execute([$oldName, $newName, $id]);
     }
+
+    // ── Wees-uitslagen van deze herinrichting opruimen ─────────────────────
+    // uitslag_afstand heeft géén cascade op distances. Zonder dit bleven na een
+    // afstand-herinrichting/splitsen (verwijderde/vervangen distance-kopieën)
+    // uitslag-rijen achter die naar een niet-bestaande distance verwijzen —
+    // wees die in historie/tussenklassement/klassement dubbel opdook. Ruim ze
+    // op voor alle geraakte DC's (primair + merge-group).
+    $affPh = implode(',', array_fill(0, count($affectedDcIds), '?'));
+    $pdo->prepare("
+        DELETE ua FROM uitslag_afstand ua
+        WHERE ua.distance_combination_id IN ($affPh)
+          AND ua.distance_id IS NOT NULL AND ua.distance_id <> ''
+          AND NOT EXISTS (SELECT 1 FROM distances d WHERE d.id = ua.distance_id)
+    ")->execute($affectedDcIds);
 
     $pdo->commit();
 
