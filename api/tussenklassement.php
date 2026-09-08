@@ -32,6 +32,13 @@ requireAuth($pdo);
 $compId  = trim($_GET['competition_id'] ?? '');
 $dcId    = trim($_GET['dc_id']          ?? '');
 $distId  = trim($_GET['distance_id']    ?? '');
+// Gesplitste DC: alleen de rijders van deze split meetellen (bijv. "DP2").
+// Zonder dit filter kreeg een split de ranking van de HELE oorspronkelijke DC
+// (beide splits). Spiegelt startlijst_genereer.php (category_filter → p.category).
+$catFilterRaw = trim($_GET['category_filter'] ?? '');
+$catFilter    = $catFilterRaw
+    ? array_values(array_filter(array_map('trim', explode(',', $catFilterRaw))))
+    : [];
 
 if (!$compId || !$dcId) {
     http_response_code(400);
@@ -40,19 +47,52 @@ if (!$compId || !$dcId) {
 }
 
 try {
+    // ── Split-filter ──────────────────────────────────────────────────────────
+    // Bij een gesplitste DC krijgt elke split-groep een EIGEN kopie van elke
+    // afstand (distances.target_group = split-groep, bv. "HP2") en de uitslag
+    // wordt op die eigen kopie vastgelegd. Zonder filter telt het tussen-
+    // klassement álle kopieën van dezelfde DC mee (ook de andere splits) →
+    // dubbele afstanden ("tijdrit ×2") en dubbele/verkeerde rijders.
+    //
+    // Voorkeur: filter op de EIGEN distances van deze split, afgeleid uit de
+    // target_group van de gekozen afstand — de bron van waarheid, ook als
+    // categorie-codes rommelig zijn. Zonder target_group (oudere data) valt 't
+    // terug op category_filter (rijders van deze categorie). Subqueries i.p.v.
+    // joins zodat er geen alias-conflict met de bestaande persons-join ontstaat.
+    $splitTg = '';
+    if ($distId !== '') {
+        $tgStmt = $pdo->prepare("SELECT target_group FROM distances WHERE id = ? LIMIT 1");
+        $tgStmt->execute([$distId]);
+        $tg = $tgStmt->fetchColumn();
+        if (is_string($tg) && $tg !== '') $splitTg = $tg;
+    }
+    $filtSql = ''; $filtParams = [];
+    if ($splitTg !== '') {
+        $filtSql    = "AND ua.distance_id IN (
+                          SELECT id FROM distances
+                          WHERE distance_combination_id = ? AND target_group = ?)";
+        $filtParams = [$dcId, $splitTg];
+    } elseif ($catFilter) {
+        $catPh      = implode(',', array_fill(0, count($catFilter), '?'));
+        $filtSql    = "AND ua.person_license IN (
+                          SELECT license_key FROM persons WHERE category IN ($catPh))";
+        $filtParams = $catFilter;
+    }
+
     // ── Welke afstanden zijn al afgesloten? ───────────────────────────────────
-    $afstandSql    = $distId ? 'AND distance_id <> ?' : '';
+    $afstandSql    = $distId ? 'AND ua.distance_id <> ?' : '';
     $afstandParams = $distId ? [$compId, $dcId, $distId] : [$compId, $dcId];
 
     $afStmt = $pdo->prepare("
-        SELECT DISTINCT distance_id, distance_naam
-        FROM   uitslag_afstand
-        WHERE  competition_id          = ?
-          AND  distance_combination_id = ?
+        SELECT DISTINCT ua.distance_id, ua.distance_naam
+        FROM   uitslag_afstand ua
+        WHERE  ua.competition_id          = ?
+          AND  ua.distance_combination_id = ?
           {$afstandSql}
-        ORDER BY distance_naam
+          {$filtSql}
+        ORDER BY ua.distance_naam
     ");
-    $afStmt->execute($afstandParams);
+    $afStmt->execute(array_merge($afstandParams, $filtParams));
     $alleAfstanden = $afStmt->fetchAll(PDO::FETCH_ASSOC);
 
     // Alleen COMPLETE afstanden meetellen: een afstand waarvan (bijv.) een tijd
@@ -103,10 +143,11 @@ try {
           AND    ua.distance_combination_id = ?
           {$afstandSql}
           {$incSql}
+          {$filtSql}
         GROUP BY ua.person_license, p.full_name, p.short_name, p.start_number
         ORDER BY totaal_punten ASC, beste_rang ASC
     ";
-    $rkParams = array_merge($afstandParams, $incParams);
+    $rkParams = array_merge($afstandParams, $incParams, $filtParams);
     $rkStmt   = $pdo->prepare($rkSql);
     $rkStmt->execute($rkParams);
     $rows = $rkStmt->fetchAll(PDO::FETCH_ASSOC);

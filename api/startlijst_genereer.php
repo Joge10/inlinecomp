@@ -277,6 +277,20 @@ try {
                     $tkIncParams = $tkIncompleet;
                 }
             } catch (\Throwable $e) { /* bij twijfel: geen extra uitsluiting */ }
+            // Split: tel alleen de EIGEN distance-kopieën van deze split mee
+            // (target_group van de gekozen afstand), anders vervuilen cross-
+            // kopie-rijen van de andere split(s) de tussenstand. Spiegelt
+            // api/tussenklassement.php.
+            $tkTgSql = ''; $tkTgParams = [];
+            if ($distId !== '') {
+                $tgS = $pdo->prepare("SELECT target_group FROM distances WHERE id = ? LIMIT 1");
+                $tgS->execute([$distId]);
+                $tgV = $tgS->fetchColumn();
+                if (is_string($tgV) && $tgV !== '') {
+                    $tkTgSql    = "AND distance_id IN (SELECT id FROM distances WHERE distance_combination_id = ? AND target_group = ?)";
+                    $tkTgParams = [$primaryDcId, $tgV];
+                }
+            }
             // Rijders met uitsluitende sanctie (DQ-SF, DQ-DF, DNS met 0 punten)
             // krijgen geen klassementspositie → achteraan op startnummer
             $tkSql = "
@@ -291,11 +305,12 @@ try {
                   AND    distance_combination_id = ?
                   {$tkDistWhere}
                   {$tkIncSql}
+                  {$tkTgSql}
                 GROUP BY person_license
                 ORDER BY uitgesloten ASC, totaal_punten ASC, beste_rang ASC
             ";
             $tkStmt = $pdo->prepare($tkSql);
-            $tkStmt->execute(array_merge($tkParams, $tkIncParams));
+            $tkStmt->execute(array_merge($tkParams, $tkIncParams, $tkTgParams));
             $tkMap  = [];  // person_license => positie
             $tkUit  = [];  // person_license => true (uitgesloten)
             $tkRank = 1;

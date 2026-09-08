@@ -1664,11 +1664,20 @@ async function vulAfstandBronnen(selEl, cache, groep) {
     try {
         const res  = await fetch('api/uitslag_bronnen.php?competition_id=' + encodeURIComponent(huidigCompId));
         const data = await res.json();
+        const _gezienBron = new Set();
         const bronnen = (data?.bronnen || []).filter(b => {
             if ((b.dc_id + '|' + b.distance_id) === huidigeDistKey) return false; // niet op zichzelf
             const bCats = Array.isArray(b.cats) ? b.cats.map(c => String(c).toUpperCase()) : [];
-            if (!huidigeCats.length || !bCats.length) return true;       // onbekend → tonen
-            return bCats.some(c => huidigeCats.includes(c));             // categorie-overlap
+            if (huidigeCats.length && bCats.length && !bCats.some(c => huidigeCats.includes(c)))
+                return false;                                            // geen categorie-overlap
+            // Dedup op werkelijke identiteit (dc_id|distance_id): een oudere
+            // wedstrijd kan door naam-varianten (split-label vs oorspronkelijke
+            // DC-naam) dezelfde afstand dubbel teruggeven. Behoud de eerste
+            // (backend zet die-met-uitslag vooraan).
+            const idKey = b.dc_id + '|' + b.distance_id;
+            if (_gezienBron.has(idKey)) return false;
+            _gezienBron.add(idKey);
+            return true;
         });
         if (!bronnen.length) {
             selEl.innerHTML = '<option value="">— geen bruikbare bron-afstand —</option>';
@@ -1711,6 +1720,10 @@ async function vulTussenklPreview(container, nRijders, nHeats, schema, groep, di
         const dcId = groep?.dc_id ?? '';
         let url = `api/tussenklassement.php?competition_id=${encodeURIComponent(huidigCompId)}&dc_id=${encodeURIComponent(dcId)}`;
         if (distId) url += `&distance_id=${encodeURIComponent(distId)}`;
+        // Gesplitste DC: alleen deze split-categorie(ën) meetellen, anders krijg
+        // je de ranking van de hele oorspronkelijke DC (beide splits).
+        const cf = Array.isArray(groep?.category_filter) ? groep.category_filter : [];
+        if (cf.length) url += `&category_filter=${encodeURIComponent(cf.join(','))}`;
         const res  = await fetch(url);
         const data = await res.json();
         if (data.heeft_data && data.ranking?.length) {
