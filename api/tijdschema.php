@@ -1028,6 +1028,19 @@ try {
             echo json_encode(['error' => 'afstand_naam is verplicht']);
             exit;
         }
+        // Gesplitste DC: ranking staat per split. Leid de target_group af uit de
+        // meegestuurde distance_id (de afstand-kopie van déze split). Leeg/NULL =
+        // niet-gesplitst → één rij per (dc, afstand, meters) zoals voorheen.
+        $distanceId  = trim($body['distance_id'] ?? '') ?: null;
+        $targetGroup = null;
+        if ($distanceId) {
+            $tgS = $pdo->prepare("SELECT target_group FROM distances WHERE id = ? LIMIT 1");
+            $tgS->execute([$distanceId]);
+            $tgV = $tgS->fetchColumn();
+            if ($tgV !== false && $tgV !== null && trim($tgV) !== '') {
+                $targetGroup = trim($tgV);
+            }
+        }
         // Zoek tijdschema_id via competition_id
         $compId = trim($body['competition_id'] ?? '');
         $tsIdStmt = $pdo->prepare("SELECT id FROM competition_tijdschema WHERE competition_id = ?");
@@ -1089,20 +1102,20 @@ try {
             // globaal geërfde velden erbij.
             $exists = $pdo->prepare("
                 SELECT 1 FROM tijdschema_afstand_config
-                WHERE tijdschema_id = ? AND dc_id <=> ? AND afstand_naam = ? AND value_meters <=> ?
+                WHERE tijdschema_id = ? AND dc_id <=> ? AND target_group <=> ? AND afstand_naam = ? AND value_meters <=> ?
                 LIMIT 1
             ");
-            $exists->execute([$tsId, $dcId, $afstandNaam, $meters]);
+            $exists->execute([$tsId, $dcId, $targetGroup, $afstandNaam, $meters]);
             if ($exists->fetchColumn()) {
                 $setClause = implode(', ', array_map(fn($c) => "$c = ?", array_keys($setValues)));
                 $upd = $pdo->prepare("
                     UPDATE tijdschema_afstand_config SET $setClause
-                    WHERE tijdschema_id = ? AND dc_id <=> ? AND afstand_naam = ? AND value_meters <=> ?
+                    WHERE tijdschema_id = ? AND dc_id <=> ? AND target_group <=> ? AND afstand_naam = ? AND value_meters <=> ?
                 ");
-                $upd->execute([...array_values($setValues), $tsId, $dcId, $afstandNaam, $meters]);
+                $upd->execute([...array_values($setValues), $tsId, $dcId, $targetGroup, $afstandNaam, $meters]);
             } else {
-                $cols = ['tijdschema_id', 'dc_id', 'afstand_naam', 'value_meters'];
-                $vals = [$tsId, $dcId, $afstandNaam, $meters];
+                $cols = ['tijdschema_id', 'dc_id', 'target_group', 'afstand_naam', 'value_meters'];
+                $vals = [$tsId, $dcId, $targetGroup, $afstandNaam, $meters];
                 foreach ($setValues + $extraCols as $col => $v) {
                     $cols[] = $col;
                     $vals[] = $v;

@@ -307,6 +307,7 @@ try {
         // of de cat met series, kwartfinale of halve finale begint. Zelfde
         // detectie-keten als runner-up in tijdschema.php.
         $eersteRonde = null;
+        $cc          = null;   // afstand-specifieke cat-config (per split via distance_id)
         if ($tsId && $primaryDcId) {
             // Filter op de HUIDIGE afstand — een DC met meerdere afstanden
             // (bv. 500m+D, tijdrit, puntenkoers) heeft per afstand een eigen
@@ -412,6 +413,27 @@ try {
                 $amRaw    = $amStmt->fetchColumn();
                 $afMeters = ($amRaw !== false && $amRaw !== null) ? (int)$amRaw : null;
 
+                // Gesplitste DC: ranking staat per split (target_group). Bepaal
+                // de target_group van de gekozen afstand-kopie; leeg = niet
+                // gesplitst. Bij een split filteren we STRIKT op die target_group
+                // zodat DP1 en HP1 elk hun eigen ranking-rij lezen (anders lekt
+                // een wijziging bij de één door naar de ander). Niet-splits lezen
+                // alleen de NULL-rij (legacy gedrag).
+                $splitTg = '';
+                if ($distId) {
+                    $tgStmt = $pdo->prepare("SELECT target_group FROM distances WHERE id = ? LIMIT 1");
+                    $tgStmt->execute([$distId]);
+                    $tgRaw   = $tgStmt->fetchColumn();
+                    $splitTg = ($tgRaw !== false && $tgRaw !== null) ? trim($tgRaw) : '';
+                }
+                if ($splitTg !== '') {
+                    $tgCond  = 'AND target_group = ?';
+                    $tgParam = [$splitTg];
+                } else {
+                    $tgCond  = "AND (target_group IS NULL OR target_group = '')";
+                    $tgParam = [];
+                }
+
                 // Ranking kan per categorie (dc_id) afwijken. Zoek eerst een
                 // DC-specifieke rij voor primaryDcId; als die er niet is,
                 // gebruik de globale rij (dc_id IS NULL) als fallback.
@@ -424,10 +446,11 @@ try {
                     WHERE tijdschema_id = ? AND afstand_naam = ?
                       AND (dc_id = ? OR dc_id IS NULL)
                       AND (value_meters <=> ? OR value_meters IS NULL)
+                      $tgCond
                     ORDER BY (dc_id IS NULL) ASC, (value_meters IS NULL) ASC
                     LIMIT 1
                 ");
-                $acStmt->execute([$tsId, $afNaam, $primaryDcId, $afMeters]);
+                $acStmt->execute(array_merge([$tsId, $afNaam, $primaryDcId, $afMeters], $tgParam));
                 $ac = $acStmt->fetch(PDO::FETCH_ASSOC);
                 if ($ac) {
                     // Opgeslagen voorkeur heeft voorrang; ontbrekend veld → race-type-aware default
@@ -612,12 +635,27 @@ try {
         // de andere afstand(en) in dezelfde DC).
         $rondeKeys = ['heats' => 'heats', 'kwartfinale' => 'kwart',
                       'halve_finale' => 'half', 'finale_a' => 'finale'];
+        // Beschikbare rondes PER SPLIT/afstand. Elke split heeft een eigen
+        // distance_id + cat-config, dus we leiden de ronden af uit $cc (de
+        // afstand-specifieke cat-config van hierboven). Zo toont een split
+        // zónder series (bv. HP1 met heeft_heats=0) geen 'Series'-ronde-dropdown,
+        // ook al heeft een andere split van dezelfde DC (DP1, ander distance_id)
+        // die wél. Voorheen kwam 'heats' uit tijdschema_ritten van de héle DC
+        // (beide splits) → spookronde bij HP1.
         $beschikbareRondes = [];
-        if ($tsId) {
+        if (!empty($cc)) {
+            if (!empty($cc['heeft_heats']))        $beschikbareRondes[] = 'heats';
+            if (!empty($cc['heeft_kwartfinale']))  $beschikbareRondes[] = 'kwartfinale';
+            if (!empty($cc['heeft_halve_finale'])) $beschikbareRondes[] = 'halve_finale';
+            $beschikbareRondes[] = 'finale_a';
+        } elseif ($tsId) {
+            // Fallback (geen cat-config): uit tijdschema_ritten, gefilterd op
+            // afstand + distance_id zodat andere splits/afstanden niet meelekken.
             $sql = "SELECT DISTINCT r.ronde_type FROM tijdschema_ritten r
                     WHERE r.tijdschema_id = ? AND r.dc_id IN ($dcPh)
-                      AND r.ronde_type IN ('heats','kwartfinale','halve_finale','finale_a')";
-            $args = array_merge([$tsId], $dcIds);
+                      AND r.ronde_type IN ('heats','kwartfinale','halve_finale','finale_a')
+                      AND (r.distance_id = ? OR (r.distance_id IS NULL AND ? = ''))";
+            $args = array_merge([$tsId], $dcIds, [$distId, $distId]);
             if (!empty($afNaam)) {
                 $sql .= " AND r.afstand_naam = ?";
                 $args[] = $afNaam;
@@ -628,7 +666,7 @@ try {
             $beschikbareRondes = array_column($brStmt->fetchAll(PDO::FETCH_ASSOC), 'ronde_type');
         }
         if (empty($beschikbareRondes)) {
-            // Fallback: gebruik rondes uit bestaande heats
+            // Laatste terugval: rondes uit bestaande heats
             foreach (array_keys($rondeGroepen) as $rt) {
                 if (isset($rondeKeys[$rt])) $beschikbareRondes[] = $rt;
             }

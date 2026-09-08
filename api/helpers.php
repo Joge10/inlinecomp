@@ -28,26 +28,30 @@ $action = $body['action'] ?? $_GET['action'] ?? '';
 // ── Gedeelde "wees"-definitie (scan ÉN cleanup MOETEN identiek blijven) ──────
 // Een vastgelegde uitslag-rij is wees als er GEEN matchende loting (meer) is:
 // de rijder zit in géén enkele heat_entry van een heat met dezelfde (dc,
-// afstand, split_group). Reden: in InlineComp ontstaat een uitslag ALTIJD uit
-// een loting; een uitslag zonder matchende loting is dus stale — heats gewist
-// (wis-programma van vóór de cascade-fix), afstand/split heringericht (oud
-// label), of een fantoom-rijder uit een vorige loting.
+// afstand). Reden: in InlineComp ontstaat een uitslag ALTIJD uit een loting;
+// een uitslag zonder matchende loting is dus stale — heats gewist (wis-programma
+// van vóór de cascade-fix) of de afstand heringericht (dood distance_id).
 //
 // Beschermingen:
 //   • INNER JOIN op competitions (in de queries) → sport-archief van
 //     verwijderde wedstrijden blijft staan.
 //   • EXISTS competition_tijdschema → wedstrijden zonder tijdschema (bv. pure
 //     historische imports zonder loting) worden NIET aangeraakt.
-// De split_group-match is bewust STRIKT: een oud split-label ('' terwijl de
-// huidige loting 'DP1' draagt) telt als mismatch → wees. Zo worden ook de
-// resten van een herindeling opgeruimd, niet alleen dode distance_ids.
+//
+// BEWUST GEEN split_group-match. Bij een gesplitste DC dragen de heats een
+// split_group (de categorie-filter, bv. 'DP1'), maar uitslag_vastleggen schrijft
+// split_group ALTIJD leeg — het onderscheid DP1/HP1 zit volledig in distance_id
+// (elke split heeft een eigen distance-kopie) + dc_naam. Matchen op split_group
+// vergeleek dus heat.split_group='DP1' met uitslag.split_group='' → nooit waar,
+// waardoor élke geldige split-uitslag vals als wees werd gemarkeerd. Het
+// distance_id-onderscheid (uitslag) resp. dc + person_license (klassement) is
+// voldoende om stale/heringerichte afstanden te herkennen.
 $UA_WEES = "(
     EXISTS (SELECT 1 FROM competition_tijdschema ct WHERE ct.competition_id = ua.competition_id)
     AND NOT EXISTS (SELECT 1 FROM heats h JOIN heat_entries he ON he.heat_id = h.id
             WHERE h.competition_id          = ua.competition_id
               AND h.distance_combination_id = ua.distance_combination_id
               AND (h.distance_id = ua.distance_id OR (h.distance_id IS NULL AND ua.distance_id = ''))
-              AND (h.split_group = ua.split_group OR (h.split_group IS NULL AND ua.split_group = ''))
               AND he.person_license = ua.person_license)
 )";
 $UK_WEES = "(
@@ -55,7 +59,6 @@ $UK_WEES = "(
     AND NOT EXISTS (SELECT 1 FROM heats h JOIN heat_entries he ON he.heat_id = h.id
             WHERE h.competition_id          = uk.competition_id
               AND h.distance_combination_id = uk.distance_combination_id
-              AND (h.split_group = uk.split_group OR (h.split_group IS NULL AND uk.split_group = ''))
               AND he.person_license = uk.person_license)
 )";
 

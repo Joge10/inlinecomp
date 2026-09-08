@@ -683,6 +683,7 @@ async function toonUitslagVoorAfstand(groep, afstand) {
                     <select class="u-ranking-sel"
                             data-afstand="${escHtml(afNaam)}"
                             data-dc-id="${escHtml(primaryDcId)}"
+                            data-distance-id="${escHtml(afstand.id ?? '')}"
                             data-ronde="${escHtml(key)}">
                         <option value="time" ${val === 'time' ? 'selected' : ''}>Op tijd</option>
                         <option value="position_time" ${val === 'position_time' ? 'selected' : ''}>Positie + tijd</option>
@@ -766,6 +767,7 @@ async function toonUitslagVoorAfstand(groep, afstand) {
                                 competition_id: huidigCompId,
                                 afstand_naam:   sel.dataset.afstand,
                                 dc_id:          sel.dataset.dcId || null,
+                                distance_id:    sel.dataset.distanceId || null,
                                 [`${sel.dataset.ronde}_ranking`]: sel.value,
                             }),
                         });

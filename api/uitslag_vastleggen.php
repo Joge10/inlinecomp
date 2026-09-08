@@ -342,6 +342,26 @@ try {
                 $amRaw2    = $amStmt2->fetchColumn();
                 $afMeters2 = ($amRaw2 !== false && $amRaw2 !== null) ? (int)$amRaw2 : null;
 
+                // Gesplitste DC: ranking staat per split (target_group). Filter
+                // STRIKT op de target_group van deze afstand-kopie zodat de
+                // officiële uitslag met de eigen ranking van de split wordt
+                // berekend (identiek aan uitslag_afstand.php). Niet-splits lezen
+                // alleen de NULL-rij.
+                $splitTg2 = '';
+                if ($distId) {
+                    $tgStmt2 = $pdo->prepare("SELECT target_group FROM distances WHERE id = ? LIMIT 1");
+                    $tgStmt2->execute([$distId]);
+                    $tgRaw2   = $tgStmt2->fetchColumn();
+                    $splitTg2 = ($tgRaw2 !== false && $tgRaw2 !== null) ? trim($tgRaw2) : '';
+                }
+                if ($splitTg2 !== '') {
+                    $tgCond2  = 'AND target_group = ?';
+                    $tgParam2 = [$splitTg2];
+                } else {
+                    $tgCond2  = "AND (target_group IS NULL OR target_group = '')";
+                    $tgParam2 = [];
+                }
+
                 // DC-specifieke rij heeft voorrang boven globale (NULL) rij,
                 // identiek aan uitslag_afstand.php. Meters-exacte rij vóór een
                 // oude naam-only rij.
@@ -351,10 +371,11 @@ try {
                     WHERE tijdschema_id = ? AND afstand_naam = ?
                       AND (dc_id = ? OR dc_id IS NULL)
                       AND (value_meters <=> ? OR value_meters IS NULL)
+                      $tgCond2
                     ORDER BY (dc_id IS NULL) ASC, (value_meters IS NULL) ASC
                     LIMIT 1
                 ");
-                $acStmt2->execute([$tsId2, $distNaam, $primaryDcId, $afMeters2]);
+                $acStmt2->execute(array_merge([$tsId2, $distNaam, $primaryDcId, $afMeters2], $tgParam2));
                 $ac2 = $acStmt2->fetch(PDO::FETCH_ASSOC);
                 if ($ac2) {
                     // Opgeslagen voorkeur heeft voorrang; ontbrekend veld → race-type-aware default
