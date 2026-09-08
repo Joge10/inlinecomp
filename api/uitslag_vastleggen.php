@@ -295,13 +295,17 @@ try {
             // Eerste actieve ronde detecteren (zelfde keten als runner-up).
             $eersteRonde = null;
             if ($tsId2 && $primaryDcId) {
+                // Filter op de huidige afstand (multi-afstand-DC heeft per
+                // afstand een eigen rondestructuur) — zonder distance_id-filter
+                // pakte LIMIT 1 een willekeurige config → foute sprint-default.
                 $ccStmt2 = $pdo->prepare("
                     SELECT heeft_heats, heeft_kwartfinale, heeft_halve_finale
                     FROM tijdschema_cat_config
                     WHERE tijdschema_id = ? AND dc_id = ?
+                      AND (distance_id = ? OR (distance_id IS NULL AND ? = ''))
                     LIMIT 1
                 ");
-                $ccStmt2->execute([$tsId2, $primaryDcId]);
+                $ccStmt2->execute([$tsId2, $primaryDcId, $distId, $distId]);
                 $cc2 = $ccStmt2->fetch(PDO::FETCH_ASSOC);
                 if ($cc2) {
                     if (!empty($cc2['heeft_heats']))            $eersteRonde = 'heats';

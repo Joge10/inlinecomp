@@ -308,13 +308,20 @@ try {
         // detectie-keten als runner-up in tijdschema.php.
         $eersteRonde = null;
         if ($tsId && $primaryDcId) {
+            // Filter op de HUIDIGE afstand — een DC met meerdere afstanden
+            // (bv. 500m+D, tijdrit, puntenkoers) heeft per afstand een eigen
+            // cat-config met eigen rondestructuur. Zonder distance_id-filter
+            // pakte LIMIT 1 een willekeurige (bv. de tijdrit zonder series),
+            // waardoor de "eerste ronde"-detectie en dus de sprint-default fout
+            // ging (valse afwijking "standaard: Positie + tijd" op de series).
             $ccStmt = $pdo->prepare("
                 SELECT heeft_heats, heeft_kwartfinale, heeft_halve_finale
                 FROM tijdschema_cat_config
                 WHERE tijdschema_id = ? AND dc_id = ?
+                  AND (distance_id = ? OR (distance_id IS NULL AND ? = ''))
                 LIMIT 1
             ");
-            $ccStmt->execute([$tsId, $primaryDcId]);
+            $ccStmt->execute([$tsId, $primaryDcId, $distId, $distId]);
             $cc = $ccStmt->fetch(PDO::FETCH_ASSOC);
             if ($cc) {
                 if (!empty($cc['heeft_heats']))            $eersteRonde = 'heats';
