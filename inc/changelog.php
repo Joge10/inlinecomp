@@ -14,6 +14,27 @@
 //     en wordt in de changelog genest + gedempt getoond onder de versie.
 //     Triviale copy/typo-fixes komen NERGENS in de changelog — los committen.
 return [
+    // ── Patches 08-09-2026 (onder H1752.01.09, onderhoud, alleen Beheer) ──
+    [
+        'versie' => 'H1752.01.09', 'datum' => '08-09-2026',
+        'soort'  => 'patch', 'onderdelen' => ['patch'],
+        'tekst' => [
+            'nl' => '🔧 <b>Uitslag bevestigen — ranking per split</b> — bij een gesplitste categorie (bv. DP1/HP1 uit één gecombineerde afstand) werkt de ranking-keuze (op tijd / positie + tijd) per ronde nu onafhankelijk per split. Voorheen deelden beide splits één instelling, waardoor een wijziging bij DP1 ook HP1 aanpaste (en andersom) — terwijl een split zónder series de eerste ronde anders rankt dan een split mét series. Bovendien toont het bevestig-venster geen ronde meer die die split niet heeft (bv. "Serie" bij een split zonder series).',
+            'en' => '🔧 <b>Confirming results — ranking per split</b> — for a split category (e.g. DP1/HP1 from one combined distance) the ranking choice (on time / position + time) per round now works independently per split. Previously both splits shared one setting, so changing DP1 also changed HP1 (and vice versa) — while a split without series ranks its first round differently from a split with series. The confirmation dialog also no longer shows a round the split does not have (e.g. "Series" for a split without series).',
+            'de' => '🔧 <b>Ergebnis bestätigen — Ranking pro Split</b> — bei einer geteilten Kategorie (z. B. DP1/HP1 aus einer kombinierten Distanz) wirkt die Ranking-Wahl (auf Zeit / Position + Zeit) pro Runde jetzt unabhängig pro Split. Vorher teilten sich beide Splits eine Einstellung, sodass eine Änderung bei DP1 auch HP1 änderte (und umgekehrt) — obwohl ein Split ohne Serien seine erste Runde anders rankt als ein Split mit Serien. Zudem zeigt der Bestätigungsdialog keine Runde mehr, die der Split nicht hat (z. B. „Serie" bei einem Split ohne Serien).',
+            'fr' => '🔧 <b>Confirmer le résultat — classement par split</b> — pour une catégorie scindée (p. ex. DP1/HP1 issus d\'une distance combinée), le choix de classement (au temps / position + temps) par tour fonctionne désormais indépendamment par split. Auparavant les deux splits partageaient un seul réglage, de sorte que modifier DP1 modifiait aussi HP1 (et inversement) — alors qu\'un split sans séries classe son premier tour différemment d\'un split avec séries. La fenêtre de confirmation n\'affiche plus non plus un tour que le split n\'a pas (p. ex. « Séries » pour un split sans séries).',
+        ],
+    ],
+    [
+        'versie' => 'H1752.01.09', 'datum' => '08-09-2026',
+        'soort'  => 'patch', 'onderdelen' => ['patch'],
+        'tekst' => [
+            'nl' => '🔧 <b>Wees-uitslagen opschonen — geen valse treffers bij splits</b> — de opschoon-helper in Beheer markeerde geldige uitslagen van een gesplitste wedstrijd ten onrechte als "wees". Oorzaak: de heats van een split dragen een split-label terwijl de vastgelegde uitslag dat leeg laat; de controle vergeleek die twee. De helper herkent een wees nu aan de ontbrekende loting op afstand/rijder (resp. categorie/rijder voor het klassement), zodat echte uitslagen blijven staan.',
+            'en' => '🔧 <b>Cleaning orphan results — no false hits on splits</b> — the cleanup helper in Admin wrongly flagged valid results of a split competition as "orphans". Cause: a split\'s heats carry a split label while the confirmed result leaves it empty; the check compared those two. The helper now recognises an orphan by the missing draw on distance/rider (resp. category/rider for the standings), so real results are kept.',
+            'de' => '🔧 <b>Verwaiste Ergebnisse bereinigen — keine Falschtreffer bei Splits</b> — der Bereinigungs-Helfer im Beheer markierte gültige Ergebnisse eines geteilten Wettkampfs fälschlich als „verwaist". Ursache: die Heats eines Splits tragen ein Split-Label, während das bestätigte Ergebnis es leer lässt; die Prüfung verglich beide. Der Helfer erkennt eine Waise jetzt an der fehlenden Auslosung auf Distanz/Fahrer (bzw. Kategorie/Fahrer beim Klassement), sodass echte Ergebnisse erhalten bleiben.',
+            'fr' => '🔧 <b>Nettoyage des résultats orphelins — pas de faux positifs sur les splits</b> — l\'assistant de nettoyage dans l\'admin marquait à tort comme « orphelins » des résultats valides d\'une épreuve scindée. Cause : les séries d\'un split portent une étiquette de split alors que le résultat confirmé la laisse vide ; le contrôle comparait les deux. L\'assistant reconnaît désormais un orphelin à l\'absence de tirage sur distance/patineur (resp. catégorie/patineur pour le classement), de sorte que les vrais résultats sont conservés.',
+        ],
+    ],
     // ── Patch 07-09-2026 (onder H1752.01.09, onderhoud, alleen Beheer) ──
     [
         'versie' => 'H1752.01.09', 'datum' => '07-09-2026',
