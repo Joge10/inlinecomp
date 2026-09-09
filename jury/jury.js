@@ -2612,8 +2612,14 @@ async function _spkVulSerieKlassement(overlay, licenseKey) {
         // klassement nu hoog-is-beter of laag-is-beter telt.
         // De plek zelf is al af te leiden (buur = eigen plek ±1), dus toon de
         // naam als die er is; alleen zonder naam val je terug op '<n>e'.
-        const gapTxt = (diff, pos, richting, naam) => {
-            const wie = naam || `${pos}e`;
+        // Buur-plek kan gedeeld zijn (ex-aequo) → toon dan álle namen op die plek,
+        // niet één willekeurige. 2 namen: "2e (A + B)"; 3+: "2e (A e.a.)".
+        const gapTxt = (diff, pos, richting, namen) => {
+            const lijst = Array.isArray(namen) ? namen.filter(Boolean) : [];
+            let wie;
+            if (lijst.length >= 3)       wie = `${pos}e (${lijst[0]} e.a.)`;
+            else if (lijst.length === 2) wie = `${pos}e (${lijst[0]} + ${lijst[1]})`;
+            else                         wie = lijst[0] || `${pos}e`;
             return (diff === 0) ? `gelijk met ${wie}` : `${fmtPt(diff)} pt ${richting} ${wie}`;
         };
         const blokken = series.map(s => {
@@ -2631,9 +2637,11 @@ async function _spkVulSerieKlassement(overlay, licenseKey) {
                     else if (gelijk.length >= 3)
                         delen.push(`= gedeelde ${p.positie}e (met ${gelijk[0]} e.a.)`);
                     if (p.voor_punten != null)
-                        delen.push('↑ ' + gapTxt(Math.abs(p.voor_punten - p.punten_totaal), p.voor_pos, 'achter', p.voor_naam));
+                        delen.push('↑ ' + gapTxt(Math.abs(p.voor_punten - p.punten_totaal), p.voor_pos, 'achter',
+                                   (p.voor_namen && p.voor_namen.length) ? p.voor_namen : [p.voor_naam]));
                     if (p.achter_punten != null)
-                        delen.push('↓ ' + gapTxt(Math.abs(p.punten_totaal - p.achter_punten), p.achter_pos, 'vóór', p.achter_naam));
+                        delen.push('↓ ' + gapTxt(Math.abs(p.punten_totaal - p.achter_punten), p.achter_pos, 'vóór',
+                                   (p.achter_namen && p.achter_namen.length) ? p.achter_namen : [p.achter_naam]));
                     if (delen.length)
                         gapHtml = `<div class="spk-serie-gap">${escHtml(delen.join('  ·  '))}</div>`;
                 }

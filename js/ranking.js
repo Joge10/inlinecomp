@@ -374,6 +374,9 @@ function rkRegelsSamenvatting(k) {
     const items = rkRegelItems(k);
     if (!items.length) return '';
     const gereden  = rkFinaleGereden(k);
+    // Bij 'streep_direct' wordt wegstrepen NU al toegepast → niet meer noemen
+    // in het "pas ná de finale"-rijtje (anders spreekt de kop de bullet tegen).
+    const streepNu = !!(k.regels && k.regels.streep_direct) && (+(k.regels && k.regels.streepresultaten) > 0);
     const rand     = gereden ? '#d9e2ec' : '#f0c98a';
     const achtergr = gereden ? '#f4f7fb' : '#fdf6ec';
     const titelKl  = gereden ? '#1F4E79' : '#9a6516';
@@ -381,7 +384,7 @@ function rkRegelsSamenvatting(k) {
         ? '✅ Eindberekening — de finale is verreden; deze regels zijn toegepast:'
         : '⏳ Tussenstand — de finale is nog niet verreden';
     const tussenNoot = gereden ? '' :
-        `<div style="font-size:.82rem;color:#7a5410;margin:2px 0 6px;line-height:1.45">Let op: dit is een <b>tussenstand</b>. De reglementaire regels hieronder — o.a. minimaal aantal deelnames, finale-plicht, wegstrepen en de tie-break bij gelijke stand — worden <b>pas ná de finale</b> toegepast. Nu wordt puur op puntentotaal gerangschikt en delen gelijke totalen een plaats.</div>`;
+        `<div style="font-size:.82rem;color:#7a5410;margin:2px 0 6px;line-height:1.45">Let op: dit is een <b>tussenstand</b>. De reglementaire regels hieronder — o.a. minimaal aantal deelnames, finale-plicht${streepNu ? '' : ', wegstrepen'} en de tie-break bij gelijke stand — worden <b>pas ná de finale</b> toegepast. Nu wordt puur op puntentotaal gerangschikt en delen gelijke totalen een plaats.</div>`;
     return `<div style="background:${achtergr};border:1px solid ${rand};border-radius:8px;padding:9px 14px;margin:10px 0 2px">
         <div style="font-weight:700;color:${titelKl};font-size:.88rem;margin-bottom:4px">${titel}</div>
         ${tussenNoot}
@@ -394,11 +397,12 @@ function rkRegelsPrintBlok(k) {
     const items = rkRegelItems(k);
     if (!items.length) return '';
     const gereden = rkFinaleGereden(k);
+    const streepNu = !!(k.regels && k.regels.streep_direct) && (+(k.regels && k.regels.streepresultaten) > 0);
     const kop = gereden
         ? 'Toegepaste klassementsregels'
         : 'Tussenstand — reglementaire regels nog niet toegepast';
     const tussen = gereden ? '' :
-        `<div class="pk-regels-tussen">Dit is een tussenstand: de finale is nog niet verreden. De onderstaande reglementaire regels — waaronder het minimaal aantal deelnames, de finale-plicht, het wegstrepen van resultaten en de tie-break bij gelijke stand — worden pas ná de finale toegepast. In deze tussenstand wordt uitsluitend op puntentotaal gerangschikt en delen gelijke totalen een plaats.</div>`;
+        `<div class="pk-regels-tussen">Dit is een tussenstand: de finale is nog niet verreden. De onderstaande reglementaire regels — waaronder het minimaal aantal deelnames, de finale-plicht${streepNu ? '' : ', het wegstrepen van resultaten'} en de tie-break bij gelijke stand — worden pas ná de finale toegepast. In deze tussenstand wordt uitsluitend op puntentotaal gerangschikt en delen gelijke totalen een plaats.</div>`;
     return `<div class="pk-regels">
         <div class="pk-regels-kop">${kop}</div>
         ${tussen}
@@ -429,8 +433,9 @@ function bouwSerieProtocolSectie(k, gekozenCats) {
     const statusKop = gereden ? 'Eindstand' : 'Tussenstand';
 
     const regelItems = rkRegelItems(k);
+    const streepNu = !!(k.regels && k.regels.streep_direct) && (+(k.regels && k.regels.streepresultaten) > 0);
     const tussen = gereden ? '' :
-        `<div class="skp-tussen">Dit is een tussenstand: de finale is nog niet verreden. De reglementaire regels (min. deelnames, finale-plicht, wegstrepen en tie-break) worden pas ná de finale toegepast. In deze tussenstand wordt uitsluitend op puntentotaal gerangschikt en delen gelijke totalen een plaats.</div>`;
+        `<div class="skp-tussen">Dit is een tussenstand: de finale is nog niet verreden. De reglementaire regels (min. deelnames, finale-plicht${streepNu ? '' : ', wegstrepen'} en tie-break) worden pas ná de finale toegepast. In deze tussenstand wordt uitsluitend op puntentotaal gerangschikt en delen gelijke totalen een plaats.</div>`;
     const regelsHtml = regelItems.length
         ? `<div class="skp-regels"><div class="skp-regels-kop">${gereden ? 'Toegepaste klassementsregels' : 'Klassementsregels (na de finale van toepassing)'}</div>${tussen}<ul>${regelItems.map(x => `<li>${x}</li>`).join('')}</ul></div>`
         : '';

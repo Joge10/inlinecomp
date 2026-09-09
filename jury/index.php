@@ -887,6 +887,16 @@ if ($action === 'speaker_serieklassement') {
               AND kp.license_key <> ?
             ORDER BY pe.full_name ASC
         ");
+        // ÁLLE namen op een gegeven plek — voor de buur-plek boven/onder, zodat
+        // een gedeelde buur-plek (bv. gedeeld 2e: Floris + Senn) volledig wordt
+        // getoond i.p.v. één willekeurige naam (voorStmt/achterStmt pakken LIMIT 1).
+        $namenStmt = $pdo->prepare("
+            SELECT pe.full_name
+            FROM klassement_posities kp
+            LEFT JOIN persons pe ON pe.license_key = kp.license_key
+            WHERE kp.klassement_id = ? AND kp.categorie <=> ? AND kp.positie = ?
+            ORDER BY pe.full_name ASC
+        ");
         $out = [];
         foreach ($series as $s) {
             $pStmt->execute([$s['klassement_id'], $lic]);
@@ -895,8 +905,8 @@ if ($action === 'speaker_serieklassement') {
                 $p['positie']       = (int)$p['positie'];
                 $p['punten_totaal'] = ($p['punten_totaal'] !== null) ? (float)$p['punten_totaal'] : null;
                 // Buur-info (null = die kant bestaat niet, bv. koploper/laatste).
-                $p['voor_punten']   = null; $p['voor_naam']   = null; $p['voor_pos']   = null;
-                $p['achter_punten'] = null; $p['achter_naam'] = null; $p['achter_pos'] = null;
+                $p['voor_punten']   = null; $p['voor_naam']   = null; $p['voor_pos']   = null; $p['voor_namen']   = [];
+                $p['achter_punten'] = null; $p['achter_naam'] = null; $p['achter_pos'] = null; $p['achter_namen'] = [];
                 $p['gelijk_namen']  = [];     // ex-aequo tie-mates op dezelfde plek
 
                 $voorStmt->execute([$s['klassement_id'], $p['categorie'], $p['positie']]);
@@ -904,12 +914,23 @@ if ($action === 'speaker_serieklassement') {
                     $p['voor_punten'] = ($nb['punten_totaal'] !== null) ? (float)$nb['punten_totaal'] : null;
                     $p['voor_naam']   = $nb['full_name'];
                     $p['voor_pos']    = (int)$nb['positie'];
+                    // Alle rijders op die buur-plek (gedeelde plek → meerdere namen).
+                    $namenStmt->execute([$s['klassement_id'], $p['categorie'], $p['voor_pos']]);
+                    $p['voor_namen'] = array_values(array_filter(
+                        $namenStmt->fetchAll(PDO::FETCH_COLUMN),
+                        fn($n) => $n !== null && $n !== ''
+                    ));
                 }
                 $achterStmt->execute([$s['klassement_id'], $p['categorie'], $p['positie']]);
                 if ($nb = $achterStmt->fetch(PDO::FETCH_ASSOC)) {
                     $p['achter_punten'] = ($nb['punten_totaal'] !== null) ? (float)$nb['punten_totaal'] : null;
                     $p['achter_naam']   = $nb['full_name'];
                     $p['achter_pos']    = (int)$nb['positie'];
+                    $namenStmt->execute([$s['klassement_id'], $p['categorie'], $p['achter_pos']]);
+                    $p['achter_namen'] = array_values(array_filter(
+                        $namenStmt->fetchAll(PDO::FETCH_COLUMN),
+                        fn($n) => $n !== null && $n !== ''
+                    ));
                 }
                 $gelijkStmt->execute([$s['klassement_id'], $p['categorie'], $p['positie'], $lic]);
                 $p['gelijk_namen'] = array_values(array_filter(
