@@ -65,25 +65,13 @@ _diag_push.php
 _vapid_keygen.php
 vapid_keygen.php
 
-# ── docs/ — WHITELIST ──────────────────────────────────────────────────────
-# docs/ is een mix van BEWUSTE documentatie en losse werkbestanden (screenshots,
-# PDF's, .docx-backups, concept-plannen zoals roadmap.md / plan-*.md). Om te
-# voorkomen dat die per ongeluk in een commit/PR belanden: negeer standaard
-# ALLES in docs/ en laat hieronder expliciet alleen de echte documentatie door.
-# LET OP: nieuw bewust document? Zet er een !-regel bij (of `git add -f`),
-# anders wordt het stil genegeerd. (Al-getrackte bestanden blijven getrackt —
-# .gitignore raakt alleen untracked bestanden.)
-docs/*
-!docs/database-schema.md
-!docs/handleiding.html
-!docs/operator-quickref.html
-!docs/coach-quickref.html
-!docs/coach-quickref-en.html
-!docs/public-quickref.html
-!docs/public-quickref-en.html
-!docs/project-samenvatting.md
-!docs/project-samenvatting.docx
-# offline-modus-spec: bewust NIET in git — nog een richting-/discussiedocument,
-# geen echte specificatie. Zodra het dat wel is, mag de !-regel terug.
-!docs/rulebook-review-2026.md
-!docs/quickref-images/
+# ── docs_internal/ — ALLES NEGEREN ─────────────────────────────────────────
+# Interne werkmap (07-09-2026 hernoemd van docs/). Bevat roadmap, plan-*.md,
+# concept-specs, screenshots, .docx/.pdf-versies — kortom de strategie en het
+# denkwerk. Dat hoort NIET in een publieke repo, dus hier geen whitelist maar
+# een dichte deur.
+# Wil je er ooit tóch iets uit committen: `git add -f docs_internal/<bestand>`,
+# en denk dan eerst na of het openbaar mag staan.
+# LET OP: al-getrackte bestanden blijven getrackt — .gitignore raakt alleen
+# untracked bestanden. Zie `git ls-files docs_internal/` voor wat er nog in zit.
+docs_internal/
