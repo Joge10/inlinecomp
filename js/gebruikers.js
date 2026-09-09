@@ -331,11 +331,11 @@ function renderBezoekersBlok() {
             </div>
             <div class="gb-stat-kaart">
                 <div class="gb-stat-waarde" id="gb-stat-vandaag">—</div>
-                <div class="gb-stat-label">Unieke bezoekers vandaag <span class="gb-stat-hint gb-stat-hint--toggle" id="gb-stat-vandaag-hint"></span></div>
+                <div class="gb-stat-label">Sessies vandaag <span class="gb-stat-hint gb-stat-hint--toggle" id="gb-stat-vandaag-hint"></span></div>
             </div>
             <div class="gb-stat-kaart">
                 <div class="gb-stat-waarde" id="gb-stat-uniek">—</div>
-                <div class="gb-stat-label">Unieke bezoekers ooit <span class="gb-stat-hint gb-stat-hint--toggle" id="gb-stat-uniek-hint"></span></div>
+                <div class="gb-stat-label">Sessies ooit <span class="gb-stat-hint gb-stat-hint--toggle" id="gb-stat-uniek-hint"></span></div>
             </div>
             <div class="gb-stat-kaart">
                 <div class="gb-stat-waarde" id="gb-stat-hits">—</div>
@@ -363,11 +363,11 @@ function renderBezoekersBlok() {
             </div>
             <div class="gb-stat-kaart">
                 <div class="gb-stat-waarde" id="gb-stat-coach-vandaag">—</div>
-                <div class="gb-stat-label">Unieke bezoekers vandaag <span class="gb-stat-hint gb-stat-hint--toggle" id="gb-stat-coach-vandaag-hint"></span></div>
+                <div class="gb-stat-label">Sessies vandaag <span class="gb-stat-hint gb-stat-hint--toggle" id="gb-stat-coach-vandaag-hint"></span></div>
             </div>
             <div class="gb-stat-kaart">
                 <div class="gb-stat-waarde" id="gb-stat-coach-uniek">—</div>
-                <div class="gb-stat-label">Unieke bezoekers ooit <span class="gb-stat-hint gb-stat-hint--toggle" id="gb-stat-coach-uniek-hint"></span></div>
+                <div class="gb-stat-label">Sessies ooit <span class="gb-stat-hint gb-stat-hint--toggle" id="gb-stat-coach-uniek-hint"></span></div>
             </div>
             <div class="gb-stat-kaart">
                 <div class="gb-stat-waarde" id="gb-stat-coach-hits">—</div>
@@ -395,11 +395,11 @@ function renderBezoekersBlok() {
             </div>
             <div class="gb-stat-kaart">
                 <div class="gb-stat-waarde" id="gb-stat-check-vandaag">—</div>
-                <div class="gb-stat-label">Unieke bezoekers vandaag <span class="gb-stat-hint gb-stat-hint--toggle" id="gb-stat-check-vandaag-hint"></span></div>
+                <div class="gb-stat-label">Sessies vandaag <span class="gb-stat-hint gb-stat-hint--toggle" id="gb-stat-check-vandaag-hint"></span></div>
             </div>
             <div class="gb-stat-kaart">
                 <div class="gb-stat-waarde" id="gb-stat-check-uniek">—</div>
-                <div class="gb-stat-label">Unieke bezoekers ooit <span class="gb-stat-hint gb-stat-hint--toggle" id="gb-stat-check-uniek-hint"></span></div>
+                <div class="gb-stat-label">Sessies ooit <span class="gb-stat-hint gb-stat-hint--toggle" id="gb-stat-check-uniek-hint"></span></div>
             </div>
             <div class="gb-stat-kaart">
                 <div class="gb-stat-waarde" id="gb-stat-check-hits">—</div>
