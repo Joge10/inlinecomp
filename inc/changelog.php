@@ -14,6 +14,17 @@
 //     en wordt in de changelog genest + gedempt getoond onder de versie.
 //     Triviale copy/typo-fixes komen NERGENS in de changelog — los committen.
 return [
+    // ── Patch 09-09-2026 (onder H1752.01.09, onderhoud, alleen Beheer) ──
+    [
+        'versie' => 'H1752.01.09', 'datum' => '09-09-2026',
+        'soort'  => 'patch', 'onderdelen' => ['patch'],
+        'tekst' => [
+            'nl' => '🔧 <b>Klassement-tussenstand — uitleg bij "direct strepen" gecorrigeerd</b> — in de reglement-uitleg boven een tussenstand stond dat het wegstrepen van resultaten "pas ná de finale" gebeurt, terwijl dat bij een klassement met "streepresultaten direct toepassen" al in de tussenstand plaatsvindt (zoals de regel eronder óók aangaf). De kop laat "wegstrepen" nu weg uit dat rijtje zodra direct strepen aan staat — geen tegenstrijdige uitleg meer. Geldt voor de weergave, de print én het wedstrijdprotocol.',
+            'en' => '🔧 <b>Standings interim view — "apply drops immediately" note fixed</b> — the rules note above an interim standing said dropping results happens "only after the final", while for a standing set to "apply dropped results immediately" it already happens in the interim view (as the rule below it also stated). The header now omits "dropping" from that list when immediate dropping is on — no more contradictory explanation. Applies to the on-screen view, the print and the competition protocol.',
+            'de' => '🔧 <b>Klassement-Zwischenstand — Hinweis bei "sofort streichen" korrigiert</b> — im Regel-Hinweis über einem Zwischenstand stand, dass das Streichen von Ergebnissen "erst nach dem Finale" erfolgt, während es bei einem Klassement mit "Streichergebnisse sofort anwenden" bereits im Zwischenstand geschieht (wie die Regel darunter ebenfalls angab). Die Kopfzeile lässt "Streichen" jetzt weg, sobald sofortiges Streichen aktiv ist — keine widersprüchliche Erklärung mehr. Gilt für Anzeige, Druck und Wettkampfprotokoll.',
+            'fr' => '🔧 <b>Classement intermédiaire — note « biffer immédiatement » corrigée</b> — la note de règles au-dessus d\'un classement intermédiaire indiquait que le biffage des résultats a lieu « seulement après la finale », alors que pour un classement réglé sur « appliquer les résultats biffés immédiatement » cela se produit déjà dans le classement intermédiaire (comme l\'indiquait aussi la règle en dessous). L\'en-tête omet désormais « biffage » de cette liste lorsque le biffage immédiat est actif — plus d\'explication contradictoire. S\'applique à l\'affichage, à l\'impression et au protocole de compétition.',
+        ],
+    ],
     // ── Patches 08-09-2026 (onder H1752.01.09, onderhoud, alleen Beheer) ──
     [
         'versie' => 'H1752.01.09', 'datum' => '08-09-2026',
