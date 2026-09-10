@@ -404,7 +404,7 @@ table.pr tbody tr:last-child td{border-bottom:0}
       <li>Je eigen gegevens corrigeren per wedstrijd <span class="tag">binnenkort</span></li>
       <li>Je profiel (deels) publiek deelbaar maken — link, embed of API <span class="tag">binnenkort</span></li>
       <li>Kiezen welke coaches je profiel mogen zien <span class="tag">binnenkort</span></li>
-      <li>Anoniem tonen op de publieke pagina's <span class="tag">binnenkort</span></li>
+      <li>Je naam afschermen op de publieke pagina's — startnummer blijft <span class="tag">binnenkort</span></li>
     </ul>
   </section>
 
