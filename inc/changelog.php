@@ -25,6 +25,15 @@ return [
         ],
     ],
     [
+        'versie' => 'H1983.10.09', 'datum' => '10-09-2026', 'onderdelen' => ['public', 'check'],
+        'tekst' => [
+            'nl' => '🔒 <b>Privacyverklaring bijgewerkt — Mijn InlineComp</b> — de privacyverklaring heeft een nieuwe paragraaf over het persoonlijke profiel: welke gegevens we bewaren (een zelfgekozen gebruikersnaam en een versleutelde pincode, <b>géén e-mailadres</b>), dat het profiel privé is en alleen je eigen, al gepubliceerde resultaten toont, en dat je het op elk moment kunt laten verwijderen.',
+            'en' => '🔒 <b>Privacy statement updated — My InlineComp</b> — the privacy statement has a new section about the personal profile: which data we keep (a self-chosen username and an encrypted PIN, <b>no e-mail address</b>), that the profile is private and shows only your own, already-published results, and that you can have it deleted at any time.',
+            'de' => '🔒 <b>Datenschutzerklärung aktualisiert — Mein InlineComp</b> — die Datenschutzerklärung hat einen neuen Abschnitt zum persönlichen Profil: welche Daten wir speichern (einen selbst gewählten Benutzernamen und eine verschlüsselte PIN, <b>keine E-Mail-Adresse</b>), dass das Profil privat ist und nur deine eigenen, bereits veröffentlichten Ergebnisse zeigt, und dass du es jederzeit löschen lassen kannst.',
+            'fr' => '🔒 <b>Déclaration de confidentialité mise à jour — Mon InlineComp</b> — la déclaration de confidentialité comporte une nouvelle section sur le profil personnel : quelles données nous conservons (un nom d\'utilisateur choisi par vous et un code PIN chiffré, <b>pas d\'adresse e-mail</b>), que le profil est privé et n\'affiche que vos propres résultats déjà publiés, et que vous pouvez le faire supprimer à tout moment.',
+        ],
+    ],
+    [
         'versie' => 'H1983.10.09', 'datum' => '10-09-2026', 'onderdelen' => ['admin'],
         'tekst' => [
             'nl' => '👤 <b>Rijder-profielen beheren</b> — in Systeem → Rijders zie je nu of een rijder een <i>Mijn InlineComp</i>-profiel heeft. Je genereert een eenmalige aanmeldlink (met een vooraf ingevulde, op uniek gecontroleerde gebruikersnaam), kunt die opnieuw genereren als iemand zijn pincode kwijt is, en kunt een profiel verwijderen. Met de knop <b>Profielen</b> zie je alle rijders met een profiel of openstaande aanvraag in één lijst (met status-badge); typ in het zoekveld om daarbinnen te filteren. De onderliggende uitslagen blijven bij verwijderen gewoon bestaan.',
