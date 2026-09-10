@@ -71,6 +71,42 @@ try {
         exit;
     }
 
+    if ($action === 'zoek_profielen') {
+        // Toon rijders met een "Mijn InlineComp"-profiel (of openstaande
+        // aanvraag). Zelfde cap van 100 als de gewone zoek. Optioneel filter
+        // via ?q= (zelfde matching als 'zoek'), zodat je ook bij >100 profielen
+        // kunt filteren. Levert dezelfde velden als 'zoek' + de profielstatus.
+        $q       = trim($_GET['q'] ?? '');
+        $isNum   = ctype_digit($q);
+        $like    = '%' . $q . '%';
+        $zoekLic = strlen($q) >= 4 ? 1 : 0;
+        $filter  = strlen($q) >= 2;   // korter dan 2 tekens = geen filter (alles)
+        $stmt = $pdo->prepare("
+            SELECT p.license_key, p.full_name, p.short_name, p.start_number,
+                   p.category, p.club_short, p.club_full, p.anonymized_at,
+                   (rp.pin_hash IS NOT NULL) AS prof_geclaimd,
+                   (rp.claim_token_hash IS NOT NULL AND rp.claim_expires > NOW()) AS prof_claim_open
+            FROM rijder_profiel rp
+            JOIN persons p ON p.license_key = rp.license_key
+            WHERE ? = 0
+               OR (? = 1 AND p.start_number = ?)
+               OR (? = 1 AND p.license_key LIKE ?)
+               OR p.short_name LIKE ?
+               OR p.full_name  LIKE ?
+            ORDER BY prof_geclaimd DESC, prof_claim_open DESC, p.short_name, p.full_name
+            LIMIT 100
+        ");
+        $stmt->execute([
+            $filter ? 1 : 0,
+            $isNum ? 1 : 0, $isNum ? (int)$q : 0,
+            $zoekLic, $like,
+            $like,
+            $like,
+        ]);
+        echo json_encode(['rijders' => $stmt->fetchAll(PDO::FETCH_ASSOC)]);
+        exit;
+    }
+
     if ($action === 'profiel_claim') {
         // Genereer een eenmalige claim-link voor het persoonlijke rijder-profiel
         // ("Mijn InlineComp"). De operator mailt/geeft deze link aan de rijder;

@@ -548,6 +548,7 @@ if (is_array($eigenScope) && !empty($eigenScope)) {
                             <div class="rij-zoek-rij">
                                 <input type="text" id="rij-zoek-inp" class="inp" placeholder="Zoek op achternaam, startnummer of licentienummer…" autocomplete="off">
                                 <button class="btn-secondary" id="rij-zoek-btn">Zoek</button>
+                                <button class="btn-secondary" id="rij-profielen-btn" title="Toon alle rijders met een 'Mijn InlineComp'-profiel of openstaande aanvraag (max 100)">👤 Profielen</button>
                             </div>
                             <div class="rij-zoek-hint">Zoekt gelijktijdig op startnummer, achternaam en naam. Licentienummer wordt meegenomen vanaf 4 tekens (overal in de licentie — ook de laatste 4 cijfers werken).</div>
                             <div id="rij-zoek-resultaat"></div>

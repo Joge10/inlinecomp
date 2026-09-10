@@ -7,6 +7,7 @@
 // ==========================================================
 
 let _rijGeselecteerd = null;   // license_key van de rijder die rechts getoond wordt
+let _rijProfielModus = false;  // true = zoekveld filtert binnen "Mijn InlineComp"-profielen
 
 function toonRijdersPagina() {
     // Zet event-listeners één keer (idempotent via flag op element)
@@ -14,19 +15,60 @@ function toonRijdersPagina() {
     const btn = document.getElementById('rij-zoek-btn');
     if (inp && !inp.dataset.init) {
         inp.dataset.init = '1';
-        // Debounce op typen (350ms); Enter = direct zoeken
+        // Debounce op typen (350ms); Enter = direct. Route naar de actieve
+        // modus (gewone zoek óf filteren binnen de profielen).
         let timer;
         inp.addEventListener('input', () => {
             clearTimeout(timer);
-            timer = setTimeout(rijZoek, 350);
+            timer = setTimeout(rijZoekActief, 350);
         });
         inp.addEventListener('keydown', e => {
-            if (e.key === 'Enter') { clearTimeout(timer); rijZoek(); }
+            if (e.key === 'Enter') { clearTimeout(timer); rijZoekActief(); }
         });
-        btn?.addEventListener('click', rijZoek);
+        btn?.addEventListener('click', () => { rijZetProfielModus(false); rijZoek(); });
+        document.getElementById('rij-profielen-btn')?.addEventListener('click', () => {
+            rijZetProfielModus(true);
+            rijToonProfielen();
+        });
         inp.focus();
     } else {
         inp?.focus();
+    }
+}
+
+// Roep de juiste zoekfunctie aan afhankelijk van de actieve modus.
+function rijZoekActief() {
+    if (_rijProfielModus) rijToonProfielen();
+    else rijZoek();
+}
+
+// Zet de profielen-filtermodus aan/uit (knop-highlight + hint-tekst).
+function rijZetProfielModus(aan) {
+    _rijProfielModus = aan;
+    document.getElementById('rij-profielen-btn')?.classList.toggle('actief', aan);
+    const hint = document.querySelector('.rij-zoek-hint');
+    if (hint) {
+        if (aan && !hint.dataset.orig) hint.dataset.orig = hint.textContent;
+        hint.textContent = aan
+            ? 'Toont rijders met een profiel of openstaande aanvraag (max 100). Typ om te filteren op startnummer, achternaam, naam of licentie.'
+            : (hint.dataset.orig || hint.textContent);
+    }
+}
+
+// Toon rijders met een "Mijn InlineComp"-profiel (of openstaande aanvraag),
+// zelfde cap van 100 als de gewone zoek. Het zoekveld filtert binnen de lijst
+// (leeg = alle profielen, max 100).
+async function rijToonProfielen() {
+    const q = document.getElementById('rij-zoek-inp').value.trim();
+    const container = document.getElementById('rij-zoek-resultaat');
+    container.innerHTML = '<div class="status-msg loading"><span class="spinner"></span>Profielen laden…</div>';
+    try {
+        const res = await fetch('api/persoon_beheer.php?action=zoek_profielen&q=' + encodeURIComponent(q));
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.error || 'Fout bij laden');
+        rijToonResultaten(data.rijders || [], 'profiel');
+    } catch (e) {
+        container.innerHTML = `<div class="status-msg error">${escHtml(e.message)}</div>`;
     }
 }
 
@@ -48,19 +90,32 @@ async function rijZoek() {
     }
 }
 
-function rijToonResultaten(rijders) {
+function rijToonResultaten(rijders, soort = 'resultaat') {
     const container = document.getElementById('rij-zoek-resultaat');
+    const profielenLijst = soort === 'profiel';
     if (!rijders.length) {
-        container.innerHTML = '<div class="status-msg" style="color:#666">Geen rijders gevonden.</div>';
+        const leeg = profielenLijst ? 'Nog geen rijders met een profiel.' : 'Geen rijders gevonden.';
+        container.innerHTML = `<div class="status-msg" style="color:#666">${leeg}</div>`;
         return;
     }
-    let html = `<div class="rij-tel">${rijders.length} resultaat${rijders.length !== 1 ? 'en' : ''}${rijders.length === 100 ? ' (max)' : ''}</div>`;
+    const enkel = profielenLijst ? 'profiel' : 'resultaat';
+    const meerv = profielenLijst ? 'profielen' : 'resultaten';
+    let html = `<div class="rij-tel">${rijders.length} ${rijders.length !== 1 ? meerv : enkel}${rijders.length === 100 ? ' (max)' : ''}</div>`;
     html += '<ul class="rij-zoek-lijst">';
     rijders.forEach(r => {
         const anoniem = !!r.anonymized_at;
         const actief  = _rijGeselecteerd === r.license_key ? ' actief' : '';
+        // Profielbadge alleen in de profielen-lijst (velden aanwezig)
+        let profBadge = '';
+        if ('prof_geclaimd' in r) {
+            profBadge = Number(r.prof_geclaimd)
+                ? ' <span class="rij-profiel-badge groen">✅ profiel</span>'
+                : (Number(r.prof_claim_open)
+                    ? ' <span class="rij-profiel-badge oranje">🔑 aanvraag open</span>'
+                    : ' <span class="rij-profiel-badge grijs">⏳ aanvraag verlopen</span>');
+        }
         html += `<li class="rij-zoek-item${actief}${anoniem ? ' rij-anoniem' : ''}" data-lk="${escHtml(r.license_key)}">
-            <div class="rij-zoek-naam">${escHtml(r.full_name)}${anoniem ? ' <span class="rij-anoniem-badge">geanonimiseerd</span>' : ''}</div>
+            <div class="rij-zoek-naam">${escHtml(r.full_name)}${anoniem ? ' <span class="rij-anoniem-badge">geanonimiseerd</span>' : ''}${profBadge}</div>
             <div class="rij-zoek-meta">
                 ${r.start_number ? 'Snr <strong>' + r.start_number + '</strong> · ' : ''}
                 ${escHtml(r.category ?? '')}${r.category && r.club_short ? ' · ' : ''}${escHtml(r.club_short ?? '')}

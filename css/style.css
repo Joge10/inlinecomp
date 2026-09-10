@@ -5992,6 +5992,19 @@ col.live-col-rondes  { width: 40px; }
 .rij-profiel-meta   { display: block; color: #667; font-size: .8rem; margin-top: 2px; }
 .rij-profiel-geen   { color: #888; }
 .rij-profiel-del    { font-size: .82rem; }
+/* Badge in de profielen-zoeklijst */
+.rij-profiel-badge {
+    display: inline-block; font-size: .72rem; font-weight: 600;
+    padding: .05rem .4rem; border-radius: 10px; vertical-align: middle;
+    margin-left: .3rem; white-space: nowrap;
+}
+.rij-profiel-badge.groen  { background: #e3f4e5; color: #2e7d32; }
+.rij-profiel-badge.oranje { background: #fdeede; color: #b5670a; }
+.rij-profiel-badge.grijs  { background: #eceff1; color: #78838a; }
+/* Actieve "Profielen"-filterknop */
+#rij-profielen-btn.actief {
+    background: #1565c0; color: #fff; border-color: #1565c0;
+}
 /* Live gebruikersnaam-check in het profiel-link-genereer-scherm */
 .rij-cg-status { display: block; font-size: .8rem; margin-top: 3px; min-height: 1em; color: #667; }
 .rij-cg-groen  { color: #2e7d32; font-weight: 600; }
