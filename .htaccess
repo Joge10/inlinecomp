@@ -55,7 +55,7 @@ Options -Indexes
 
 # Backup-/editor-files en interne source/docs die plain-text geserveerd
 # zouden worden (auth.php.bak zou DB-creds lekken).
-<FilesMatch "\.(bak|old|orig|save|swp|swo|sql|ini|conf|ya?ml|log|md|py|sh|bash)$|~$">
+<FilesMatch "\.(bak|old|orig|save|swp|swo|sql|ini|conf|ya?ml|json|log|md|py|sh|bash)$|~$">
     <IfModule mod_authz_core.c>
         Require all denied
     </IfModule>
@@ -64,6 +64,19 @@ Options -Indexes
         Deny from all
     </IfModule>
 </FilesMatch>
+
+# PWA-manifesten MOETEN wel door de browser opgehaald kunnen worden. Deze
+# uitzondering staat bewust NA de blokkade hierboven: bij gelijke match wint
+# de laatste sectie. Geldt voor public/, coach/ en jury/.
+<Files "manifest.json">
+    <IfModule mod_authz_core.c>
+        Require all granted
+    </IfModule>
+    <IfModule !mod_authz_core.c>
+        Order allow,deny
+        Allow from all
+    </IfModule>
+</Files>
 
 # composer/node/env artefacten (toekomst-proof)
 <FilesMatch "^(composer\.(json|lock)|package(-lock)?\.json|\.env|\.env\..+)$">
