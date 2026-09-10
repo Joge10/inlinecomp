@@ -5992,6 +5992,10 @@ col.live-col-rondes  { width: 40px; }
 .rij-profiel-meta   { display: block; color: #667; font-size: .8rem; margin-top: 2px; }
 .rij-profiel-geen   { color: #888; }
 .rij-profiel-del    { font-size: .82rem; }
+/* Live gebruikersnaam-check in het profiel-link-genereer-scherm */
+.rij-cg-status { display: block; font-size: .8rem; margin-top: 3px; min-height: 1em; color: #667; }
+.rij-cg-groen  { color: #2e7d32; font-weight: 600; }
+.rij-cg-rood   { color: #b71c1c; font-weight: 600; }
 .rij-edit-card {
     border: 1px solid #c0d8ec; border-radius: 6px;
     padding: .7rem .9rem; background: #f8fbfd;

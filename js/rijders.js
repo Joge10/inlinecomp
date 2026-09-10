@@ -898,31 +898,76 @@ async function rijAnonUndo(rijder) {
 // ── Profiel-claim: genereer een eenmalige link waarmee de rijder zelf een PIN
 //    aanmaakt voor "Mijn InlineComp" (check/profiel.php). Geen e-mail opgeslagen;
 //    de operator mailt de link. Toont de link in een kopieerbaar venster.
-async function rijGenereerProfielClaim(licenseKey) {
-    // Vraag eerst de gewenste gebruikersnaam (uit de aanvraag-mail). Leeg = rijder
-    // kiest zelf bij het activeren. De backend controleert vorm + uniekheid.
-    const gbn = await toonInputDialog({
-        titel:       'Profiel-link genereren',
-        bericht:     'Gewenste gebruikersnaam uit de aanvraag (3–30 tekens: letters, cijfers, . _ of -).\n' +
-                     'Laat leeg om de rijder zelf te laten kiezen bij het activeren.',
-        inputType:   'text',
-        placeholder: 'bv. jorn.devries',
-        labelOk:     'Genereer link',
+function rijGenereerProfielClaim(licenseKey) {
+    // Genereer-scherm met LIVE beschikbaarheids-check op de gebruikersnaam
+    // (endpoint username_vrij, alleen-beheer). Leeg = rijder kiest zelf.
+    const overlay = document.createElement('div');
+    overlay.className = 'rij-edit-nc-overlay';
+    overlay.innerHTML = `
+        <div class="rij-edit-nc-box">
+            <div class="rij-edit-nc-titel">🔑 Profiel-link genereren</div>
+            <div class="rij-edit-nc-uitleg">
+                Vul de gewenste gebruikersnaam in (uit de aanvraag). Laat leeg om de
+                rijder zelf te laten kiezen bij het activeren.
+            </div>
+            <label class="rij-edit-nc-veld">
+                Gebruikersnaam
+                <input type="text" id="rij-cg-user" class="inp" placeholder="bv. jorn.devries" autocomplete="off" maxlength="30">
+                <span class="rij-cg-status" id="rij-cg-status"></span>
+            </label>
+            <div class="rij-edit-nc-knoppen">
+                <button class="btn-secondary" id="rij-cg-annul" type="button">Annuleren</button>
+                <button class="btn-primary" id="rij-cg-ok" type="button">Genereer link</button>
+            </div>
+        </div>`;
+    document.body.appendChild(overlay);
+    const inp = overlay.querySelector('#rij-cg-user');
+    const status = overlay.querySelector('#rij-cg-status');
+    const okBtn = overlay.querySelector('#rij-cg-ok');
+    const sluit = () => overlay.remove();
+    overlay.querySelector('#rij-cg-annul').onclick = sluit;
+    overlay.addEventListener('click', e => { if (e.target === overlay) sluit(); });
+
+    let vrij = true, timer = null;
+    const zet = (txt, kl) => { status.textContent = txt; status.className = 'rij-cg-status' + (kl ? ' ' + kl : ''); };
+    inp.addEventListener('input', () => {
+        const v = inp.value.trim();
+        clearTimeout(timer);
+        if (v === '') { vrij = true; zet('', ''); okBtn.disabled = false; return; }
+        if (!/^[A-Za-z0-9._-]{3,30}$/.test(v)) { vrij = false; zet('3–30 tekens: letters, cijfers, . _ of -', 'rij-cg-rood'); okBtn.disabled = true; return; }
+        zet('controleren…', ''); okBtn.disabled = true;
+        timer = setTimeout(async () => {
+            try {
+                const res = await fetch('api/persoon_beheer.php?action=username_vrij&u='
+                    + encodeURIComponent(v) + '&license_key=' + encodeURIComponent(licenseKey));
+                const d = await res.json();
+                if (inp.value.trim() !== v) return;   // ondertussen verder getypt
+                vrij = !!d.vrij;
+                if (vrij) { zet('✓ vrij', 'rij-cg-groen'); okBtn.disabled = false; }
+                else      { zet('✗ al in gebruik', 'rij-cg-rood'); okBtn.disabled = true; }
+            } catch (e) { zet('', ''); okBtn.disabled = false; }   // netwerkfout: server checkt bij verzenden
+        }, 350);
     });
-    if (gbn === null) return;   // geannuleerd
-    try {
-        const res = await fetch('api/persoon_beheer.php?action=profiel_claim', {
-            method:  'POST',
-            headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-            body:    'license_key=' + encodeURIComponent(licenseKey) +
-                     '&username='   + encodeURIComponent(gbn.trim()),
-        });
-        const d = await res.json();
-        if (!res.ok || d.error) throw new Error(d.error || 'Fout bij genereren');
-        _rijToonClaimLink(d);
-    } catch (e) {
-        toonBevestigDialog('Fout: ' + e.message, 'Profiel-link', 'OK', '');
-    }
+    okBtn.onclick = async () => {
+        const v = inp.value.trim();
+        if (v !== '' && !vrij) return;
+        okBtn.disabled = true;
+        try {
+            const res = await fetch('api/persoon_beheer.php?action=profiel_claim', {
+                method:  'POST',
+                headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+                body:    'license_key=' + encodeURIComponent(licenseKey) + '&username=' + encodeURIComponent(v),
+            });
+            const d = await res.json();
+            if (!res.ok || d.error) throw new Error(d.error || 'Fout bij genereren');
+            sluit();
+            _rijToonClaimLink(d);
+        } catch (e) {
+            okBtn.disabled = false;
+            zet(e.message, 'rij-cg-rood');
+        }
+    };
+    inp.focus();
 }
 
 // Profiel verwijderen (rijder_profiel-rij). Uitslagen/persons blijven; daarna

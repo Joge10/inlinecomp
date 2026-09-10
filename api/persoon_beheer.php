@@ -138,6 +138,21 @@ try {
         exit;
     }
 
+    if ($action === 'username_vrij') {
+        // Live beschikbaarheids-check voor de gebruikersnaam bij het genereren
+        // van een profiel-link. Alleen-beheer (dit endpoint is al owner/admin) →
+        // geen publieke enumeratie van gebruikersnamen.
+        $u  = trim($_GET['u'] ?? '');
+        $lk = trim($_GET['license_key'] ?? '');
+        if (!preg_match('/^[A-Za-z0-9._-]{3,30}$/', $u)) {
+            echo json_encode(['ongeldig' => true, 'vrij' => false]); exit;
+        }
+        $q = $pdo->prepare("SELECT 1 FROM rijder_profiel WHERE username = ? AND license_key <> ? LIMIT 1");
+        $q->execute([$u, $lk]);
+        echo json_encode(['vrij' => !$q->fetchColumn()]);
+        exit;
+    }
+
     if ($action === 'detail') {
         $lk = trim($_GET['license_key'] ?? '');
         if (!$lk) {
