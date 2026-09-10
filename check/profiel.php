@@ -30,15 +30,8 @@ function esc($s) { return htmlspecialchars((string)$s, ENT_QUOTES, 'UTF-8'); }
 
 $fout = '';          // foutmelding onder een formulier
 $okmsg = '';         // succesmelding
+$prefillUser = '';   // vooringevulde gebruikersnaam bij een fout
 $claimRaw = trim($_GET['claim'] ?? '');   // raw claim-token uit de link
-
-// ── Naam-normalisatie voor de login-lookup (accenten/streepjes weg) ─────────
-function _rpNaamNorm(string $s): string {
-    $s = mb_strtolower(trim($s));
-    $s = strtr($s, ['á'=>'a','à'=>'a','ä'=>'a','â'=>'a','é'=>'e','è'=>'e','ë'=>'e','ê'=>'e',
-        'í'=>'i','ï'=>'i','ó'=>'o','ö'=>'o','ô'=>'o','ú'=>'u','ü'=>'u','û'=>'u','ç'=>'c','ñ'=>'n']);
-    return preg_replace('/\s+/u', ' ', trim($s));
-}
 
 $POST = ($_SERVER['REQUEST_METHOD'] === 'POST');
 $body = [];
@@ -65,66 +58,77 @@ if ($actie === 'logout') {
 // ── Actie: PIN aanmaken via claim-link ──────────────────────────────────────
 if ($actie === 'set_pin') {
     $tok  = trim($body['token'] ?? '');
+    $gbn  = trim($body['username'] ?? '');
     $pin  = trim($body['pin'] ?? '');
     $pin2 = trim($body['pin2'] ?? '');
     $claimRaw = $tok;   // blijf op de claim-view bij een fout
-    $th = hash('sha256', $tok);
-    $st = $pdo->prepare("SELECT rp.license_key, p.full_name
+    $prefillUser = $gbn;
+    $st = $pdo->prepare("SELECT rp.license_key, rp.username, p.full_name
         FROM rijder_profiel rp JOIN persons p ON p.license_key = rp.license_key
         WHERE rp.claim_token_hash = ? AND rp.claim_expires > NOW() LIMIT 1");
-    $st->execute([$th]);
+    $st->execute([hash('sha256', $tok)]);
     $rij = $st->fetch(PDO::FETCH_ASSOC);
+    $vasteUser = $rij ? trim((string)$rij['username']) : '';   // door beheerder ingesteld (uit de aanvraag)
     if (!$rij) {
         $fout = 'Deze claim-link is ongeldig of verlopen. Vraag een nieuwe aan.';
+    } elseif (!preg_match('/^[A-Za-z0-9._-]{3,30}$/', $gbn)) {
+        $fout = 'Vul een gebruikersnaam van 3–30 tekens in (letters, cijfers, . _ of -).';
     } elseif (!preg_match('/^\d{5,6}$/', $pin)) {
         $fout = 'Kies een PIN van 5 of 6 cijfers.';
     } elseif ($pin !== $pin2) {
         $fout = 'De twee PINs zijn niet gelijk.';
+    } elseif ($vasteUser !== '' && strcasecmp($gbn, $vasteUser) !== 0) {
+        // Beheerder zette de aanvraag-gebruikersnaam → moet matchen (zelfde-persoon-check).
+        $fout = 'De gebruikersnaam komt niet overeen met je aanvraag — kijk in de e-mail van de organisatie.';
     } else {
-        $pdo->prepare("UPDATE rijder_profiel
-            SET pin_hash = ?, claim_token_hash = NULL, claim_expires = NULL,
-                claimed_at = NOW(), pin_pogingen = 0, lockout_tot = NULL
-            WHERE license_key = ?")
-            ->execute([password_hash($pin, PASSWORD_DEFAULT), $rij['license_key']]);
-        $_SESSION['rijder_lic'] = $rij['license_key'];   // meteen ingelogd
-        unset($_SESSION['rp_fails'], $_SESSION['rp_lock_tot']);
-        header('Location: profiel.php'); exit;
+        // Zelf-gekozen gebruikersnaam (beheerder liet 'm leeg) → uniek-check.
+        if ($vasteUser === '') {
+            $uq = $pdo->prepare("SELECT 1 FROM rijder_profiel WHERE username = ? AND license_key <> ? LIMIT 1");
+            $uq->execute([$gbn, $rij['license_key']]);
+            if ($uq->fetchColumn()) $fout = 'Die gebruikersnaam is al in gebruik — kies een andere.';
+        }
+        if ($fout === '') {
+            $pdo->prepare("UPDATE rijder_profiel
+                SET username = ?, pin_hash = ?, claim_token_hash = NULL, claim_expires = NULL,
+                    claimed_at = NOW(), pin_pogingen = 0, lockout_tot = NULL
+                WHERE license_key = ?")
+                ->execute([($vasteUser !== '' ? $vasteUser : $gbn),
+                           password_hash($pin, PASSWORD_DEFAULT), $rij['license_key']]);
+            $_SESSION['rijder_lic'] = $rij['license_key'];   // meteen ingelogd
+            unset($_SESSION['rp_fails'], $_SESSION['rp_lock_tot']);
+            header('Location: profiel.php'); exit;
+        }
     }
 }
 
-// ── Actie: inloggen (naam + PIN) ────────────────────────────────────────────
+// ── Actie: inloggen (gebruikersnaam + PIN) ──────────────────────────────────
 if ($actie === 'login') {
-    $naam = trim($body['naam'] ?? '');
-    $pin  = trim($body['pin'] ?? '');
+    $gbn = trim($body['username'] ?? '');
+    $pin = trim($body['pin'] ?? '');
+    $prefillUser = $gbn;
     $wacht = _rpGelockt();
     if ($wacht > 0) {
         $fout = 'Te veel pogingen. Probeer over ' . ceil($wacht / 60) . ' min opnieuw.';
-    } elseif ($naam === '' || $pin === '') {
-        $fout = 'Vul je naam en PIN in.';
+    } elseif ($gbn === '' || $pin === '') {
+        $fout = 'Vul je gebruikersnaam en PIN in.';
     } else {
-        // Kandidaten: personen wier naam (genormaliseerd) matcht én die een
-        // geclaimd profiel (pin_hash) hebben. PIN is de discriminator.
-        $st = $pdo->prepare("SELECT rp.license_key, rp.pin_hash, p.full_name
+        // Uniek op gebruikersnaam (CI-collation) → geen naam-giswerk meer.
+        $st = $pdo->prepare("SELECT rp.license_key, rp.pin_hash
             FROM rijder_profiel rp JOIN persons p ON p.license_key = rp.license_key
-            WHERE rp.pin_hash IS NOT NULL AND p.anonymized_at IS NULL");
-        $st->execute();
-        $nn = _rpNaamNorm($naam);
-        $match = null;
-        foreach ($st->fetchAll(PDO::FETCH_ASSOC) as $c) {
-            if (_rpNaamNorm($c['full_name']) !== $nn) continue;
-            if (password_verify($pin, $c['pin_hash'])) { $match = $c; break; }
-        }
-        if ($match) {
-            $_SESSION['rijder_lic'] = $match['license_key'];
+            WHERE rp.username = ? AND rp.pin_hash IS NOT NULL AND p.anonymized_at IS NULL LIMIT 1");
+        $st->execute([$gbn]);
+        $c = $st->fetch(PDO::FETCH_ASSOC);
+        if ($c && password_verify($pin, $c['pin_hash'])) {
+            $_SESSION['rijder_lic'] = $c['license_key'];
             unset($_SESSION['rp_fails'], $_SESSION['rp_lock_tot']);
             $pdo->prepare("UPDATE rijder_profiel SET laatste_login = NOW() WHERE license_key = ?")
-                ->execute([$match['license_key']]);
+                ->execute([$c['license_key']]);
             header('Location: profiel.php'); exit;
         }
         // Mislukt → tel op; lockout na 5 pogingen voor 15 min.
         $_SESSION['rp_fails'] = ($_SESSION['rp_fails'] ?? 0) + 1;
         if ($_SESSION['rp_fails'] >= 5) { $_SESSION['rp_lock_tot'] = time() + 900; $_SESSION['rp_fails'] = 0; }
-        $fout = 'Naam of PIN klopt niet.';
+        $fout = 'Gebruikersnaam of PIN klopt niet.';
     }
 }
 
@@ -136,6 +140,7 @@ if ($actie === 'aanvraag') {
     $aNaam  = trim($body['a_naam']  ?? '');
     $aSnr   = trim($body['a_snr']   ?? '');
     $aEmail = trim($body['a_email'] ?? '');
+    $aUser  = trim($body['a_user']  ?? '');
     $aOpm   = trim($body['a_opm']   ?? '');
     $honey  = trim($body['website'] ?? '');   // honeypot: bots vullen 'm, mensen zien 'm niet
     if ($honey !== '') {
@@ -148,14 +153,16 @@ if ($actie === 'aanvraag') {
         $r = [];
         $r[] = 'InlineComp – profiel-aanvraag via /check/profiel.php';
         $r[] = str_repeat('─', 50);
-        $r[] = 'Naam:        ' . $aNaam;
-        $r[] = 'Startnummer: ' . ($aSnr !== '' ? $aSnr : '—');
-        $r[] = 'E-mail:      ' . $aEmail;
+        $r[] = 'Naam:         ' . $aNaam;
+        $r[] = 'Startnummer:  ' . ($aSnr !== '' ? $aSnr : '—');
+        $r[] = 'E-mail:       ' . $aEmail;
+        $r[] = 'Gewenste gebruikersnaam: ' . ($aUser !== '' ? $aUser : '— (nog niet gekozen)');
         if ($aOpm !== '') { $r[] = ''; $r[] = 'Opmerking:'; foreach (explode("\n", $aOpm) as $l) $r[] = '  ' . $l; }
         $r[] = '';
         $r[] = 'Verstuurd:   ' . date('Y-m-d H:i:s');
         $r[] = str_repeat('─', 50);
-        $r[] = 'Beantwoord deze mail en stuur de claim-link (Systeem → Rijders → 🔑 Profiel-link).';
+        $r[] = 'Genereer de claim-link via Systeem → Rijders → 🔑 Profiel-link';
+        $r[] = '(vul daar de gewenste gebruikersnaam in) en mail terug: gebruikersnaam + link.';
         $bodyTxt = implode("\n", $r);
         $headers = implode("\r\n", [
             'From: InlineComp <inlinecomp@devriesen.com>',
@@ -176,14 +183,16 @@ if ($actie === 'aanvraag') {
 // ── Bepaal de weer te geven toestand ────────────────────────────────────────
 $ingelogd  = !empty($_SESSION['rijder_lic']);
 $claimView = ($claimRaw !== '' && !$ingelogd);
-$claimNaam = '';
+$claimNaam = ''; $claimUser = '';
 if ($claimView) {
-    // Toon voor wie de claim is (naam) als de link geldig is.
-    $st = $pdo->prepare("SELECT p.full_name
+    // Toon voor wie de claim is (naam) + evt. de door de beheerder ingestelde
+    // gebruikersnaam, als de link geldig is.
+    $st = $pdo->prepare("SELECT p.full_name, rp.username
         FROM rijder_profiel rp JOIN persons p ON p.license_key = rp.license_key
         WHERE rp.claim_token_hash = ? AND rp.claim_expires > NOW() LIMIT 1");
     $st->execute([hash('sha256', $claimRaw)]);
-    $claimNaam = (string)($st->fetchColumn() ?: '');
+    $row = $st->fetch(PDO::FETCH_ASSOC);
+    if ($row) { $claimNaam = (string)$row['full_name']; $claimUser = (string)($row['username'] ?? ''); }
     if ($claimNaam === '' && $fout === '') $fout = 'Deze claim-link is ongeldig of verlopen.';
 }
 
@@ -231,6 +240,7 @@ a{color:var(--accent)}
 .authcard .sub{color:var(--muted);font-size:.92rem;margin-bottom:18px}
 .veld{margin-bottom:12px}
 .veld label{display:block;font-size:.82rem;color:#555;font-weight:600;margin-bottom:4px}
+.veld-hint{font-weight:400;color:var(--faint);font-size:.8rem}
 .veld input{width:100%;font:inherit;padding:10px 11px;border:1px solid #c0c8d0;border-radius:8px}
 .veld input:focus{outline:2px solid var(--accent);outline-offset:-1px}
 .authcard .btn{width:100%;margin-top:6px;padding:11px}
@@ -268,8 +278,11 @@ a{color:var(--accent)}
 .seg button{font-weight:600;font-size:.9rem;color:var(--muted);background:transparent;border:0;cursor:pointer;padding:7px 16px;border-radius:8px}
 .seg button[aria-pressed="true"]{background:var(--accent);color:#fff}
 .seg[hidden]{display:none}
-.chartwrap{position:relative;margin-top:14px}
+.chartwrap{position:relative;margin-top:14px;overflow-x:auto;-webkit-overflow-scrolling:touch}
 svg{width:100%;height:auto;display:block;overflow:visible}
+#chart{min-width:680px}   /* breder bij meer seizoenen (JS); anders zijwaarts scrollen */
+.scroll-hint{display:none;text-align:center;color:var(--faint);font-size:.78rem;margin-top:6px}
+.scroll-hint.show{display:block}
 .gridline{stroke:var(--grid);stroke-width:1}
 .axis-tick{fill:var(--faint);font-size:12px;font-variant-numeric:tabular-nums}
 .axis-tick.y{text-anchor:end}
@@ -336,7 +349,6 @@ table.pr tbody tr:last-child td{border-bottom:0}
   .wrap{padding:14px 12px 40px}
   .hero{padding:18px 16px}
   .statrow{gap:14px 22px}
-  #chart{min-width:0}          /* grafiek past op het scherm — geen zijwaarts scrollen */
   .pr-ctx{display:none}         /* context uit de tabel; te zien via de tik-box */
   .pr-more{display:block}
   table.pr td{padding:9px 8px}
@@ -397,6 +409,7 @@ table.pr tbody tr:last-child td{border-bottom:0}
       <div class="tip" id="tip"></div>
       <div class="leeg-chart" id="leeg-chart" style="display:none">Nog geen uitslagen in deze groep.</div>
     </div>
+    <div class="scroll-hint" id="scroll-hint">↔ Sleep de grafiek zijwaarts om alle seizoenen te zien</div>
     <div class="legend" id="legend" aria-label="Afstanden — klik om te tonen/verbergen"></div>
     <p class="note"><b>Sprint</b> = 200m · 500m · 1000m · One Lap. &nbsp; <b>Lang</b> = puntenkoers &amp; afvalkoers.
       Klassering is de eindplek in je eigen categorie; de veldgrootte verschilt per wedstrijd, dus lees de lijn als vórm. Bron: alle vastgelegde en geïmporteerde uitslagen in InlineComp.</p>
@@ -431,13 +444,17 @@ table.pr tbody tr:last-child td{border-bottom:0}
 
 <?php elseif ($claimView && $claimNaam !== ''): ?>
   <div class="authcard">
-    <h1>PIN aanmaken</h1>
-    <div class="sub">Welkom <b><?= esc($claimNaam) ?></b> — kies een PIN voor je persoonlijke InlineComp-profiel.</div>
+    <h1>Profiel activeren</h1>
+    <div class="sub">Welkom <b><?= esc($claimNaam) ?></b> — vul je gebruikersnaam in (zoals in de e-mail van de organisatie) en kies een PIN.</div>
     <?php if ($fout): ?><div class="melding fout"><?= esc($fout) ?></div><?php endif; ?>
     <form method="post" autocomplete="off">
       <input type="hidden" name="csrf" value="<?= esc($CSRF) ?>">
       <input type="hidden" name="actie" value="set_pin">
       <input type="hidden" name="token" value="<?= esc($claimRaw) ?>">
+      <div class="veld">
+        <label for="username">Gebruikersnaam</label>
+        <input type="text" id="username" name="username" value="<?= esc($prefillUser) ?>" autocomplete="off" required>
+      </div>
       <div class="veld">
         <label for="pin">Kies een PIN (5 of 6 cijfers)</label>
         <input type="password" id="pin" name="pin" inputmode="numeric" pattern="\d{5,6}" maxlength="6" autocomplete="new-password" required>
@@ -446,23 +463,23 @@ table.pr tbody tr:last-child td{border-bottom:0}
         <label for="pin2">Herhaal je PIN</label>
         <input type="password" id="pin2" name="pin2" inputmode="numeric" pattern="\d{5,6}" maxlength="6" autocomplete="new-password" required>
       </div>
-      <button class="btn" type="submit">PIN opslaan &amp; inloggen</button>
+      <button class="btn" type="submit">Profiel activeren &amp; inloggen</button>
     </form>
-    <div class="uitleg">Onthoud je PIN goed. Volgende keer log je in met <b>je naam + PIN</b>. PIN vergeten? Vraag een nieuwe claim-link aan.</div>
+    <div class="uitleg">Onthoud je <b>gebruikersnaam + PIN</b> — daarmee log je voortaan in. Kwijt? Vraag een nieuwe link aan bij de organisatie.</div>
   </div>
 
 <?php else: ?>
   <div class="authcard">
     <h1>Mijn InlineComp</h1>
-    <div class="sub">Log in met je naam en PIN om je persoonlijke profiel te zien — je resultaten, records en progressie.</div>
+    <div class="sub">Log in met je gebruikersnaam en PIN om je persoonlijke profiel te zien — je resultaten, records en progressie.</div>
     <?php if ($fout): ?><div class="melding fout"><?= esc($fout) ?></div><?php endif; ?>
     <?php if ($claimView && $claimNaam === ''): ?><div class="melding fout">De claim-link is ongeldig of verlopen.</div><?php endif; ?>
     <form method="post" autocomplete="off">
       <input type="hidden" name="csrf" value="<?= esc($CSRF) ?>">
       <input type="hidden" name="actie" value="login">
       <div class="veld">
-        <label for="naam">Je volledige naam</label>
-        <input type="text" id="naam" name="naam" autocomplete="off" required>
+        <label for="luser">Gebruikersnaam</label>
+        <input type="text" id="luser" name="username" value="<?= esc($prefillUser) ?>" autocomplete="off" required>
       </div>
       <div class="veld">
         <label for="lpin">PIN</label>
@@ -487,6 +504,8 @@ table.pr tbody tr:last-child td{border-bottom:0}
             <input type="text" id="a_snr" name="a_snr" inputmode="numeric"></div>
           <div class="veld"><label for="a_email">Je e-mailadres</label>
             <input type="email" id="a_email" name="a_email" required></div>
+          <div class="veld"><label for="a_user">Gewenste gebruikersnaam <span class="veld-hint">— hiermee log je straks in</span></label>
+            <input type="text" id="a_user" name="a_user" pattern="[A-Za-z0-9._-]{3,30}" minlength="3" maxlength="30" placeholder="bv. jorn.devries" required></div>
           <div class="veld"><label for="a_opm">Opmerking (optioneel)</label>
             <input type="text" id="a_opm" name="a_opm"></div>
           <button class="btn" type="submit">Profiel-account aanvragen</button>

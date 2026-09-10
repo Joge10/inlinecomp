@@ -10,7 +10,8 @@
         btnRang=document.getElementById('btn-rang'), btnTijd=document.getElementById('btn-tijd'),
         nlToggle=document.getElementById('nl-toggle'), nlCheck=document.getElementById('nl-check'),
         leegEl=document.getElementById('leeg-chart'),
-        btnSprint=document.getElementById('btn-sprint'), btnLang=document.getElementById('btn-lang');
+        btnSprint=document.getElementById('btn-sprint'), btnLang=document.getElementById('btn-lang'),
+        hintEl=document.getElementById('scroll-hint');
   const NS="http://www.w3.org/2000/svg";
   const W=920,H=460, M={t:26,r:104,b:44,l:56};
   const PW=W-M.l-M.r, PH=H-M.t-M.b;
@@ -28,6 +29,9 @@
     minYear=new Date(minT).getFullYear(); maxYear=new Date(maxT).getFullYear();
     const maxRank=Math.max(...allPts.map(p=>Math.max(p.r||1, p.rn||1)));
     yMax=Math.max(6, maxRank+2);
+    // Breedte mee-schalen met het aantal seizoenen zodat de grafiek leesbaar
+    // blijft bij veel historie (anders priegelig); de chartwrap scrollt dan.
+    svg.style.minWidth = Math.max(680, (maxYear - minYear + 1) * 68) + 'px';
   }
   const x = d => M.l + (Date.parse(d)-minT)/(maxT-minT)*PW;
   const y = r => M.t + (yMax-r)/(yMax-1)*PH;               // 1 onderaan
@@ -78,10 +82,16 @@
     }
   }
 
+  function updateScrollHint(){
+    if(!hintEl) return;
+    const wrap=svg.parentElement;
+    hintEl.classList.toggle('show', svg.style.display!=='none' && wrap.scrollWidth > wrap.clientWidth + 4);
+  }
+
   function render(){
     if(leeg(group)){
       svg.style.display='none'; legendEl.style.display='none'; metricrow.style.display='none';
-      leegEl.style.display='block'; return;
+      leegEl.style.display='block'; updateScrollHint(); return;
     }
     svg.style.display='block'; legendEl.style.display='flex'; leegEl.style.display='none';
     updateMetricRow();
@@ -117,6 +127,7 @@
     }
     buildLegend();
     hookHover(pts);
+    updateScrollHint();
   }
 
   function buildLegend(){
@@ -132,7 +143,7 @@
 
   let cross=null;
   function hookHover(pts){
-    const overlay=el("rect",{x:M.l,y:M.t,width:PW,height:PH,fill:"transparent",style:"cursor:crosshair;touch-action:none"});
+    const overlay=el("rect",{x:M.l,y:M.t,width:PW,height:PH,fill:"transparent",style:"cursor:crosshair"});
     svg.appendChild(overlay);
     const wrap=svg.parentElement;                 // .chartwrap
     const rect=()=>svg.getBoundingClientRect();
@@ -172,8 +183,9 @@
     function hide(){tip.style.opacity=0; if(cross){cross.remove();cross=null;}}
     overlay.addEventListener("mousemove",e=>showAt(e.clientX,e.clientY));
     overlay.addEventListener("mouseleave",hide);
-    overlay.addEventListener("touchstart",e=>{const t=e.touches[0]; if(t){showAt(t.clientX,t.clientY); e.preventDefault();}},{passive:false});
-    overlay.addEventListener("touchmove", e=>{const t=e.touches[0]; if(t){showAt(t.clientX,t.clientY); e.preventDefault();}},{passive:false});
+    // Touch: een TIK toont het punt; SLEPEN laat de grafiek scrollen (geen
+    // preventDefault, zodat de zijwaartse scroll gewoon blijft werken).
+    overlay.addEventListener("touchstart",e=>{const t=e.touches[0]; if(t) showAt(t.clientX,t.clientY);},{passive:true});
   }
 
   function buildPR(){
@@ -237,5 +249,10 @@
 
   btnSprint.setAttribute("aria-pressed", group==='sprint');
   btnLang.setAttribute("aria-pressed", group==='lang');
+  // Scroll-hint verbergen zodra de gebruiker daadwerkelijk scrollt.
+  svg.parentElement.addEventListener('scroll', () => {
+    if (hintEl && svg.parentElement.scrollLeft > 8) hintEl.classList.remove('show');
+  }, {passive:true});
+  window.addEventListener('resize', updateScrollHint, {passive:true});
   render(); buildPR();
 })();

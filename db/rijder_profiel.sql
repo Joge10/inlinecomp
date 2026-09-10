@@ -11,6 +11,7 @@
 
 CREATE TABLE IF NOT EXISTS `rijder_profiel` (
     `license_key`       VARCHAR(30)      NOT NULL,
+    `username`          VARCHAR(40)      DEFAULT NULL,   -- zelfgekozen inlognaam (uniek, CI); NULL tot claim
     `pin_hash`          VARCHAR(255)     DEFAULT NULL,   -- bcrypt; NULL = nog niet geclaimd
     `claim_token_hash`  CHAR(64)         DEFAULT NULL,   -- sha256-hex van de eenmalige claim-token
     `claim_expires`     DATETIME         DEFAULT NULL,   -- claim-link vervaltijd
@@ -20,6 +21,7 @@ CREATE TABLE IF NOT EXISTS `rijder_profiel` (
     `laatste_login`     DATETIME         DEFAULT NULL,
     `aangemaakt_at`     DATETIME         NOT NULL DEFAULT CURRENT_TIMESTAMP,
     PRIMARY KEY (`license_key`),
+    UNIQUE KEY `uq_rp_username` (`username`),
     KEY `idx_rp_claimtoken` (`claim_token_hash`),
     CONSTRAINT `fk_rp_person`
         FOREIGN KEY (`license_key`) REFERENCES `persons` (`license_key`) ON DELETE CASCADE

@@ -873,11 +873,23 @@ async function rijAnonUndo(rijder) {
 //    aanmaakt voor "Mijn InlineComp" (check/profiel.php). Geen e-mail opgeslagen;
 //    de operator mailt de link. Toont de link in een kopieerbaar venster.
 async function rijGenereerProfielClaim(licenseKey) {
+    // Vraag eerst de gewenste gebruikersnaam (uit de aanvraag-mail). Leeg = rijder
+    // kiest zelf bij het activeren. De backend controleert vorm + uniekheid.
+    const gbn = await toonInputDialog({
+        titel:       'Profiel-link genereren',
+        bericht:     'Gewenste gebruikersnaam uit de aanvraag (3–30 tekens: letters, cijfers, . _ of -).\n' +
+                     'Laat leeg om de rijder zelf te laten kiezen bij het activeren.',
+        inputType:   'text',
+        placeholder: 'bv. jorn.devries',
+        labelOk:     'Genereer link',
+    });
+    if (gbn === null) return;   // geannuleerd
     try {
         const res = await fetch('api/persoon_beheer.php?action=profiel_claim', {
             method:  'POST',
             headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-            body:    'license_key=' + encodeURIComponent(licenseKey),
+            body:    'license_key=' + encodeURIComponent(licenseKey) +
+                     '&username='   + encodeURIComponent(gbn.trim()),
         });
         const d = await res.json();
         if (!res.ok || d.error) throw new Error(d.error || 'Fout bij genereren');
@@ -888,23 +900,24 @@ async function rijGenereerProfielClaim(licenseKey) {
 }
 
 function _rijToonClaimLink(d) {
+    const copyLabel = d.username ? '📋 Kopieer gebruikersnaam + link' : '📋 Kopieer link';
     const overlay = document.createElement('div');
     overlay.className = 'rij-edit-nc-overlay';
     overlay.innerHTML = `
         <div class="rij-edit-nc-box">
             <div class="rij-edit-nc-titel">🔑 Profiel-link voor ${escHtml(d.naam)}</div>
             <div class="rij-edit-nc-uitleg">
-                Stuur deze link naar de rijder (per e-mail); ze maken er zelf een PIN mee aan.
-                Geldig tot <b>${escHtml(d.verloopt)}</b>.
+                Mail de rijder de <b>gebruikersnaam + link</b>. Ze activeren hun profiel met die
+                gebruikersnaam en een zelfgekozen PIN. Geldig tot <b>${escHtml(d.verloopt)}</b>.
                 ${d.reset ? '<br><b>Let op:</b> deze rijder had al een PIN — met deze link stelt hij een <b>nieuwe</b> in (reset).' : ''}
             </div>
-            <label class="rij-edit-nc-veld">
-                Claim-link
-                <input type="text" id="rij-claim-url" class="inp" readonly value="${escHtml(d.url)}">
-            </label>
+            ${d.username ? `<label class="rij-edit-nc-veld">Gebruikersnaam
+                <input type="text" id="rij-claim-user" class="inp" readonly value="${escHtml(d.username)}"></label>` : ''}
+            <label class="rij-edit-nc-veld">Claim-link
+                <input type="text" id="rij-claim-url" class="inp" readonly value="${escHtml(d.url)}"></label>
             <div class="rij-edit-nc-knoppen">
                 <button class="btn-secondary" id="rij-claim-sluit" type="button">Sluiten</button>
-                <button class="btn-primary" id="rij-claim-copy" type="button">📋 Kopieer link</button>
+                <button class="btn-primary" id="rij-claim-copy" type="button">${copyLabel}</button>
             </div>
         </div>`;
     document.body.appendChild(overlay);
@@ -915,16 +928,17 @@ function _rijToonClaimLink(d) {
     inp.addEventListener('focus', () => inp.select());
     overlay.querySelector('#rij-claim-copy').onclick = async () => {
         const btn = overlay.querySelector('#rij-claim-copy');
+        const tekst = (d.username ? 'Gebruikersnaam: ' + d.username + '\n' : '') + 'Link: ' + d.url;
         try {
             if (navigator.clipboard && navigator.clipboard.writeText) {
-                await navigator.clipboard.writeText(inp.value);
+                await navigator.clipboard.writeText(tekst);
             } else {
                 inp.select(); document.execCommand('copy');
             }
             btn.textContent = '✓ Gekopieerd!';
-            setTimeout(() => { btn.textContent = '📋 Kopieer link'; }, 1600);
+            setTimeout(() => { btn.textContent = copyLabel; }, 1600);
         } catch (e) {
-            inp.select();   // laat de operator handmatig kopiëren
+            inp.select();
         }
     };
     inp.focus();

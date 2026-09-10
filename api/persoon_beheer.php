@@ -86,22 +86,51 @@ try {
         $ps->execute([$lk]);
         $naam = $ps->fetchColumn();
         if ($naam === false) { http_response_code(404); echo json_encode(['error' => 'Rijder niet gevonden']); exit; }
+        // Gewenste gebruikersnaam (uit de aanvraag) — optioneel. Wordt op het
+        // profiel gezet; de rijder moet die bij het activeren invullen (check).
+        $gbn = trim($_POST['username'] ?? '');
+        if ($gbn !== '') {
+            if (!preg_match('/^[A-Za-z0-9._-]{3,30}$/', $gbn)) {
+                http_response_code(400);
+                echo json_encode(['error' => 'Ongeldige gebruikersnaam (3–30 tekens: letters, cijfers, . _ of -).']); exit;
+            }
+            $uq = $pdo->prepare("SELECT 1 FROM rijder_profiel WHERE username = ? AND license_key <> ? LIMIT 1");
+            $uq->execute([$gbn, $lk]);
+            if ($uq->fetchColumn()) {
+                http_response_code(409);
+                echo json_encode(['error' => 'Die gebruikersnaam is al in gebruik — kies een andere.']); exit;
+            }
+        }
         // Al een PIN? Dan is deze nieuwe link een reset — meld dat aan de operator.
         $al = $pdo->prepare("SELECT pin_hash IS NOT NULL FROM rijder_profiel WHERE license_key = ?");
         $al->execute([$lk]);
         $reset = (bool)$al->fetchColumn();
         $rawTok = bin2hex(random_bytes(16));
-        $pdo->prepare("
-            INSERT INTO rijder_profiel (license_key, claim_token_hash, claim_expires)
-            VALUES (?, ?, DATE_ADD(NOW(), INTERVAL 7 DAY))
-            ON DUPLICATE KEY UPDATE claim_token_hash = VALUES(claim_token_hash),
-                                    claim_expires    = VALUES(claim_expires)
-        ")->execute([$lk, hash('sha256', $rawTok)]);
+        if ($gbn !== '') {
+            $pdo->prepare("
+                INSERT INTO rijder_profiel (license_key, username, claim_token_hash, claim_expires)
+                VALUES (?, ?, ?, DATE_ADD(NOW(), INTERVAL 7 DAY))
+                ON DUPLICATE KEY UPDATE username = VALUES(username),
+                                        claim_token_hash = VALUES(claim_token_hash),
+                                        claim_expires    = VALUES(claim_expires)
+            ")->execute([$lk, $gbn, hash('sha256', $rawTok)]);
+        } else {
+            $pdo->prepare("
+                INSERT INTO rijder_profiel (license_key, claim_token_hash, claim_expires)
+                VALUES (?, ?, DATE_ADD(NOW(), INTERVAL 7 DAY))
+                ON DUPLICATE KEY UPDATE claim_token_hash = VALUES(claim_token_hash),
+                                        claim_expires    = VALUES(claim_expires)
+            ")->execute([$lk, hash('sha256', $rawTok)]);
+        }
+        $cur = $pdo->prepare("SELECT username FROM rijder_profiel WHERE license_key = ?");
+        $cur->execute([$lk]);
+        $unStored = (string)($cur->fetchColumn() ?: '');
         $scheme = (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off') ? 'https' : 'http';
         $host   = $_SERVER['HTTP_HOST'] ?? 'inlineresults.devriesen.com';
         echo json_encode([
             'ok'       => true,
             'naam'     => $naam,
+            'username' => $unStored,
             'url'      => $scheme . '://' . $host . '/check/profiel.php?claim=' . $rawTok,
             'verloopt' => date('d-m-Y H:i', time() + 7 * 86400),
             'reset'    => $reset,
