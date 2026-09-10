@@ -2466,6 +2466,10 @@ select:focus, input:focus { border-color: var(--middenblauw); outline: none; }
     white-space: nowrap;
 }
 .pwa-banner .btn-install:active { transform: scale(.96); }
+.pwa-banner a.btn-install { text-decoration: none; display: inline-block; }
+.promo-niet { display: inline-flex; align-items: center; gap: 5px; font-size: .78rem;
+    margin-top: 4px; opacity: .92; cursor: pointer; }
+.promo-niet input { margin: 0; }
 .pwa-banner .btn-sluit {
     background: none; border: none; color: rgba(255,255,255,.6);
     font-size: 1.2rem; cursor: pointer; padding: 0 4px; line-height: 1;
@@ -3040,6 +3044,7 @@ select:focus, input:focus { border-color: var(--middenblauw); outline: none; }
         <div class="pwa-banner-tekst">
             <b data-i18n="profiel_promo_titel">Nieuw: Mijn InlineComp</b>
             <span data-i18n="profiel_promo_uitleg">Je persoonlijke profiel met records &amp; progressie</span>
+            <label class="promo-niet"><input type="checkbox" id="profiel-promo-niet"> <span data-i18n="profiel_promo_niet">Niet meer tonen</span></label>
         </div>
         <a class="btn-install" href="../check/profiel.php?demo=1" data-i18n="profiel_promo_demo">Bekijk voorbeeld</a>
         <button class="btn-sluit" id="profiel-promo-sluit" type="button" data-i18n-title="pwa_btn_sluit" title="Sluiten">&times;</button>
@@ -3167,6 +3172,7 @@ const T = {
         profiel_promo_titel: 'Nieuw: Mijn InlineComp',
         profiel_promo_uitleg: 'Je persoonlijke profiel met records & progressie',
         profiel_promo_demo: 'Bekijk voorbeeld',
+        profiel_promo_niet: 'Niet meer tonen',
         stap1_label: 'Kies je wedstrijd',
         stap2_label: 'Startnummer, licentie of achternaam',
         setup_strip_leeg: 'Kies je wedstrijd…',
@@ -3414,6 +3420,7 @@ const T = {
         profiel_promo_titel: 'New: My InlineComp',
         profiel_promo_uitleg: 'Your personal profile with records & progress',
         profiel_promo_demo: 'See example',
+        profiel_promo_niet: 'Don\'t show again',
         stap1_label: 'Choose your race',
         setup_strip_leeg: 'Choose your race…',
         setup_strip_edit_title: 'Change race or skater',
@@ -3660,6 +3667,7 @@ const T = {
         profiel_promo_titel: 'Neu: Mein InlineComp',
         profiel_promo_uitleg: 'Dein persönliches Profil mit Rekorden & Fortschritt',
         profiel_promo_demo: 'Beispiel ansehen',
+        profiel_promo_niet: 'Nicht mehr anzeigen',
         stap1_label: 'Wähle dein Rennen',
         setup_strip_leeg: 'Wähle dein Rennen…',
         setup_strip_edit_title: 'Rennen oder Sportler ändern',
@@ -3906,6 +3914,7 @@ const T = {
         profiel_promo_titel: 'Nouveau : Mon InlineComp',
         profiel_promo_uitleg: 'Ton profil personnel avec records & progression',
         profiel_promo_demo: 'Voir l’exemple',
+        profiel_promo_niet: 'Ne plus afficher',
         stap1_label: 'Choisis ta course',
         setup_strip_leeg: 'Choisis ta course…',
         setup_strip_edit_title: 'Modifier la course ou le coureur',
@@ -7944,15 +7953,22 @@ document.getElementById('pwa-sluit')?.addEventListener('click', () => {
     localStorage.setItem('pwa-dismissed', '1');
 });
 
-// Profiel-promo (Mijn InlineComp): standaard zichtbaar, wegklikbaar (onthouden).
+// Profiel-promo (Mijn InlineComp): standaard ELKE keer tonen. Sluiten (×) verbergt
+// 'm alleen deze keer; pas met het vinkje 'Niet meer tonen' blijft-ie weg.
 (function () {
     const el = document.getElementById('profiel-promo');
     if (!el) return;
-    try { if (localStorage.getItem('profiel-promo-dismissed')) el.style.display = 'none'; } catch (e) {}
+    try { if (localStorage.getItem('profiel-promo-nooit')) el.style.display = 'none'; } catch (e) {}
+    const onthoudAlsGevinkt = () => {
+        const niet = document.getElementById('profiel-promo-niet');
+        if (niet && niet.checked) { try { localStorage.setItem('profiel-promo-nooit', '1'); } catch (e) {} }
+    };
     document.getElementById('profiel-promo-sluit')?.addEventListener('click', () => {
         el.style.display = 'none';
-        try { localStorage.setItem('profiel-promo-dismissed', '1'); } catch (e) {}
+        onthoudAlsGevinkt();
     });
+    // Ook onthouden als ze 'niet meer tonen' aanvinken en op 'Bekijk voorbeeld' klikken.
+    el.querySelector('a.btn-install')?.addEventListener('click', onthoudAlsGevinkt);
 })();
 
 // Verberg banner als app al geinstalleerd is

@@ -182,6 +182,14 @@ if ($actie === 'aanvraag') {
 
 // ── Bepaal de weer te geven toestand ────────────────────────────────────────
 $ingelogd  = !empty($_SESSION['rijder_lic']);
+// Sessie direct ongeldig maken als het profiel intussen is verwijderd door de
+// beheerder (de weergave leest uit persons/uitslagen, dus zonder deze check zou
+// een al-open sessie blijven werken tot uitloggen).
+if ($ingelogd) {
+    $chk = $pdo->prepare("SELECT 1 FROM rijder_profiel WHERE license_key = ? AND pin_hash IS NOT NULL LIMIT 1");
+    $chk->execute([$_SESSION['rijder_lic']]);
+    if (!$chk->fetchColumn()) { unset($_SESSION['rijder_lic']); $ingelogd = false; }
+}
 $claimView = ($claimRaw !== '' && !$ingelogd);
 $claimNaam = ''; $claimUser = '';
 if ($claimView) {
