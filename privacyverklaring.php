@@ -77,6 +77,10 @@ staat hieronder — bij twijfel geldt die volledige tekst.</em></p>
     <li>Als coach kun je vrijwillig een account maken; als rijder of coach kun je
         vrijwillig pushmeldingen aanzetten. Beide zijn optioneel en je kunt ze zelf
         weer uitzetten.</li>
+    <li>Als rijder kun je vrijwillig een persoonlijk profiel ("Mijn InlineComp")
+        aanvragen om je eigen resultaten privé terug te zien. We bewaren daarvoor
+        alleen een gebruikersnaam en een versleutelde pincode, geen e-mailadres; het
+        profiel is niet openbaar.</li>
     <li>Voor het digitaliseren van oude papieren uitslagen en voor het vertalen van
         mededelingen gebruiken we soms AI (Anthropic Claude, een Amerikaans bedrijf)
         — met de wettelijk vereiste waarborgen.</li>
@@ -442,6 +446,9 @@ case of doubt, that full text applies.</em></p>
     <li>As a coach you can voluntarily create an account; as a skater or coach you can
         voluntarily enable push notifications. Both are optional and you can turn them off
         yourself.</li>
+    <li>As a skater you can voluntarily request a personal profile ("My InlineComp") to
+        review your own results privately. For this we store only a username and an
+        encrypted PIN, no e-mail address; the profile is not public.</li>
     <li>For digitising old paper results and translating announcements, we sometimes use
         AI (Anthropic Claude, a US company) — with the legally required safeguards in place.</li>
     <li>Our website runs with a hosting provider in the United Kingdom; technical visit
