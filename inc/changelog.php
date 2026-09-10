@@ -14,6 +14,71 @@
 //     en wordt in de changelog genest + gedempt getoond onder de versie.
 //     Triviale copy/typo-fixes komen NERGENS in de changelog — los committen.
 return [
+    // ── Release H1983.10.09 ────────────────────────────────────────────────
+    [
+        'versie' => 'H1983.10.09', 'datum' => '10-09-2026', 'onderdelen' => ['public', 'check'],
+        'tekst' => [
+            'nl' => '🏅 <b>Mijn InlineComp — je eigen resultaten op één plek</b> — rijders kunnen voortaan een persoonlijk profiel aanvragen met een overzicht van hun persoonlijke records, hun resultaten en een voortgangsgrafiek per afstand. Je vraagt het aan via het formulier, kiest zelf een gebruikersnaam en krijgt een link om een pincode in te stellen; inloggen doe je daarna met gebruikersnaam + pincode. Het profiel is <b>privé</b> (niet openbaar) en toont alleen je eigen, al gepubliceerde uitslagen.',
+            'en' => '🏅 <b>My InlineComp — your own results in one place</b> — skaters can now request a personal profile with an overview of their personal records, their results and a progress chart per distance. You request it via the form, choose a username and get a link to set a PIN; you then log in with username + PIN. The profile is <b>private</b> (not public) and shows only your own, already-published results.',
+            'de' => '🏅 <b>Mein InlineComp — deine eigenen Ergebnisse an einem Ort</b> — Fahrer können jetzt ein persönliches Profil anfordern mit einer Übersicht ihrer persönlichen Rekorde, ihrer Ergebnisse und einer Fortschrittsgrafik je Distanz. Du forderst es über das Formular an, wählst einen Benutzernamen und erhältst einen Link, um eine PIN festzulegen; danach meldest du dich mit Benutzername + PIN an. Das Profil ist <b>privat</b> (nicht öffentlich) und zeigt nur deine eigenen, bereits veröffentlichten Ergebnisse.',
+            'fr' => '🏅 <b>Mon InlineComp — vos propres résultats au même endroit</b> — les patineurs peuvent désormais demander un profil personnel avec un aperçu de leurs records personnels, de leurs résultats et un graphique de progression par distance. Vous le demandez via le formulaire, choisissez un nom d\'utilisateur et recevez un lien pour définir un code PIN ; vous vous connectez ensuite avec nom d\'utilisateur + PIN. Le profil est <b>privé</b> (non public) et n\'affiche que vos propres résultats déjà publiés.',
+        ],
+    ],
+    [
+        'versie' => 'H1983.10.09', 'datum' => '10-09-2026', 'onderdelen' => ['admin'],
+        'tekst' => [
+            'nl' => '👤 <b>Rijder-profielen beheren</b> — in Systeem → Rijders zie je nu of een rijder een <i>Mijn InlineComp</i>-profiel heeft. Je genereert een eenmalige aanmeldlink (met een vooraf ingevulde, op uniek gecontroleerde gebruikersnaam), kunt die opnieuw genereren als iemand zijn pincode kwijt is, en kunt een profiel verwijderen. De onderliggende uitslagen blijven bij verwijderen gewoon bestaan.',
+            'en' => '👤 <b>Manage rider profiles</b> — in System → Riders you now see whether a rider has a <i>My InlineComp</i> profile. You generate a one-time sign-up link (with a pre-filled, uniqueness-checked username), can regenerate it if someone loses their PIN, and can delete a profile. The underlying results are kept when deleting.',
+            'de' => '👤 <b>Fahrerprofile verwalten</b> — unter System → Fahrer siehst du jetzt, ob ein Fahrer ein <i>Mein InlineComp</i>-Profil hat. Du erzeugst einen einmaligen Anmeldelink (mit vorausgefülltem, auf Eindeutigkeit geprüftem Benutzernamen), kannst ihn neu erzeugen, wenn jemand seine PIN vergessen hat, und ein Profil löschen. Die zugrunde liegenden Ergebnisse bleiben beim Löschen erhalten.',
+            'fr' => '👤 <b>Gérer les profils des patineurs</b> — dans Système → Patineurs, vous voyez désormais si un patineur possède un profil <i>Mon InlineComp</i>. Vous générez un lien d\'inscription à usage unique (avec un nom d\'utilisateur pré-rempli et vérifié comme unique), pouvez le régénérer si quelqu\'un a oublié son code PIN, et supprimer un profil. Les résultats sous-jacents sont conservés lors de la suppression.',
+        ],
+    ],
+    [
+        'versie' => 'H1983.10.09', 'datum' => '10-09-2026', 'onderdelen' => ['admin'],
+        'tekst' => [
+            'nl' => '🔗 <b>Wedstrijden combineren (multi-bron)</b> — meerdere KNSB-inschrijvingen van dezelfde organisatie/locatie (bv. baan en weg apart ingeschreven) kun je nu bij het importeren samenvoegen tot één InlineComp-wedstrijd. In de wizard krijgt elke afstand-combinatie een <b>bron-badge</b> zodat duidelijk is waar ze vandaan komt, en er is een knop om de instellingen van een afstand naar een andere combinatie te kopiëren.',
+            'en' => '🔗 <b>Combine competitions (multi-source)</b> — several KNSB entries from the same organisation/venue (e.g. track and road entered separately) can now be merged into one InlineComp competition during import. In the wizard each distance combination gets a <b>source badge</b> so it\'s clear where it comes from, and there\'s a button to copy a distance\'s settings to another combination.',
+            'de' => '🔗 <b>Wettkämpfe kombinieren (Mehrquellen)</b> — mehrere KNSB-Anmeldungen derselben Organisation/desselben Ortes (z. B. Bahn und Straße getrennt angemeldet) kannst du jetzt beim Import zu einem InlineComp-Wettkampf zusammenführen. Im Assistenten erhält jede Distanzkombination ein <b>Quellen-Badge</b>, sodass klar ist, woher sie stammt, und es gibt eine Schaltfläche, um die Einstellungen einer Distanz in eine andere Kombination zu kopieren.',
+            'fr' => '🔗 <b>Combiner des compétitions (multi-source)</b> — plusieurs inscriptions KNSB de la même organisation/du même lieu (p. ex. piste et route inscrites séparément) peuvent désormais être fusionnées en une seule compétition InlineComp lors de l\'import. Dans l\'assistant, chaque combinaison de distances reçoit un <b>badge de source</b> pour montrer d\'où elle provient, et un bouton permet de copier les réglages d\'une distance vers une autre combinaison.',
+        ],
+    ],
+    [
+        'versie' => 'H1983.10.09', 'datum' => '10-09-2026', 'onderdelen' => ['admin'],
+        'tekst' => [
+            'nl' => '🏆 <b>Serie-klassement — kies welke klassementen worden aangemaakt</b> — bij een serie-klassement over meerdere categorieën kun je nu per (combinatie van) categorie(ën) aanvinken welke klassementen daadwerkelijk worden gemaakt. Zo maak je bijvoorbeeld alleen HJA en HJA+HSA, en niet het losse HSA-klassement dat je niet nodig hebt.',
+            'en' => '🏆 <b>Series standings — choose which standings are created</b> — for a series standing across several categories you can now tick, per (combination of) categor(y/ies), which standings are actually created. So you make e.g. only HJA and HJA+HSA, and not the separate HSA standing you don\'t need.',
+            'de' => '🏆 <b>Serien-Klassement — wähle, welche Klassements erstellt werden</b> — bei einem Serien-Klassement über mehrere Kategorien kannst du jetzt pro (Kombination von) Kategorie(n) ankreuzen, welche Klassements tatsächlich erstellt werden. So erstellst du z. B. nur HJA und HJA+HSA und nicht das separate HSA-Klassement, das du nicht brauchst.',
+            'fr' => '🏆 <b>Classement de série — choisissez quels classements sont créés</b> — pour un classement de série sur plusieurs catégories, vous pouvez désormais cocher, par (combinaison de) catégorie(s), quels classements sont réellement créés. Vous créez ainsi p. ex. uniquement HJA et HJA+HSA, et non le classement HSA séparé dont vous n\'avez pas besoin.',
+        ],
+    ],
+    [
+        'versie' => 'H1983.10.09', 'datum' => '10-09-2026', 'onderdelen' => ['admin'],
+        'tekst' => [
+            'nl' => '✉️ <b>Mijn account — e-mailadres zelf aanpassen</b> — in <i>Mijn account</i> kun je nu naast je naam en gebruikersnaam ook je e-mailadres wijzigen, bevestigd met je huidige wachtwoord.',
+            'en' => '✉️ <b>My account — change your e-mail yourself</b> — in <i>My account</i> you can now change your e-mail address in addition to your name and username, confirmed with your current password.',
+            'de' => '✉️ <b>Mein Konto — E-Mail-Adresse selbst ändern</b> — unter <i>Mein Konto</i> kannst du jetzt neben Name und Benutzername auch deine E-Mail-Adresse ändern, bestätigt mit deinem aktuellen Passwort.',
+            'fr' => '✉️ <b>Mon compte — modifier votre e-mail vous-même</b> — dans <i>Mon compte</i>, vous pouvez désormais modifier votre adresse e-mail en plus de votre nom et de votre nom d\'utilisateur, confirmé avec votre mot de passe actuel.',
+        ],
+    ],
+    [
+        'versie' => 'H1983.10.09', 'datum' => '10-09-2026', 'onderdelen' => ['public', 'coach'],
+        'tekst' => [
+            'nl' => '🔔 <b>Pushmeldingen (bèta)</b> — je kunt voortaan vrijwillig pushmeldingen op je telefoon aanzetten voor loting, uitslag of een mededeling van de rijders die je volgt. Per type in te stellen en op elk moment weer uit te zetten. Deze functie is nog in <b>bèta</b> — laat gerust weten als iets niet werkt.',
+            'en' => '🔔 <b>Push notifications (beta)</b> — you can now voluntarily enable push notifications on your phone for a draw, a result or an announcement about the skaters you follow. Configurable per type and switchable off at any time. This feature is still in <b>beta</b> — do let us know if something doesn\'t work.',
+            'de' => '🔔 <b>Push-Benachrichtigungen (Beta)</b> — du kannst jetzt freiwillig Push-Benachrichtigungen auf deinem Telefon für Auslosung, Ergebnis oder eine Mitteilung zu den von dir verfolgten Fahrern aktivieren. Pro Typ einstellbar und jederzeit wieder abschaltbar. Diese Funktion ist noch in der <b>Beta</b> — sag gerne Bescheid, wenn etwas nicht funktioniert.',
+            'fr' => '🔔 <b>Notifications push (bêta)</b> — vous pouvez désormais activer volontairement des notifications push sur votre téléphone pour un tirage, un résultat ou une annonce concernant les patineurs que vous suivez. Configurable par type et désactivable à tout moment. Cette fonction est encore en <b>bêta</b> — n\'hésitez pas à nous signaler tout problème.',
+        ],
+    ],
+    [
+        'versie' => 'H1983.10.09', 'datum' => '10-09-2026', 'onderdelen' => ['admin'],
+        'tekst' => [
+            'nl' => '📊 <b>Bezoekers-dashboard — "Sessies" i.p.v. "Unieke bezoekers"</b> — de teller op het beheer-dashboard heette "Unieke bezoekers" maar telt in werkelijkheid sessies (een terugkerende bezoeker telt opnieuw). Het label is aangepast zodat het cijfer eerlijk weergeeft wat het meet.',
+            'en' => '📊 <b>Visitor dashboard — "Sessions" instead of "Unique visitors"</b> — the counter on the admin dashboard was labelled "Unique visitors" but actually counts sessions (a returning visitor counts again). The label was corrected so the figure honestly reflects what it measures.',
+            'de' => '📊 <b>Besucher-Dashboard — „Sitzungen" statt „Eindeutige Besucher"</b> — der Zähler im Verwaltungs-Dashboard hieß „Eindeutige Besucher", zählt aber tatsächlich Sitzungen (ein wiederkehrender Besucher wird erneut gezählt). Das Label wurde korrigiert, damit die Zahl ehrlich widerspiegelt, was sie misst.',
+            'fr' => '📊 <b>Tableau de bord visiteurs — « Sessions » au lieu de « Visiteurs uniques »</b> — le compteur du tableau de bord d\'administration s\'appelait « Visiteurs uniques » mais compte en réalité des sessions (un visiteur qui revient est compté à nouveau). Le libellé a été corrigé pour que le chiffre reflète honnêtement ce qu\'il mesure.',
+        ],
+    ],
+
     // ── Patch 09-09-2026 (onder H1752.01.09, onderhoud, alleen Beheer) ──
     [
         'versie' => 'H1752.01.09', 'datum' => '09-09-2026',
