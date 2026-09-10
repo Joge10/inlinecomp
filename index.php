@@ -545,6 +545,7 @@ if (is_array($eigenScope) && !empty($eigenScope)) {
                     </div>
                     <div class="rij-layout">
                         <div class="rij-left">
+                            <div id="rij-aanvragen"></div>
                             <div class="rij-zoek-rij">
                                 <input type="text" id="rij-zoek-inp" class="inp" placeholder="Zoek op achternaam, startnummer of licentienummer…" autocomplete="off">
                                 <button class="btn-secondary" id="rij-zoek-btn">Zoek</button>

@@ -6005,6 +6005,45 @@ col.live-col-rondes  { width: 40px; }
 #rij-profielen-btn.actief {
     background: #1565c0; color: #fff; border-color: #1565c0;
 }
+/* Openstaande profiel-aanvragen (pending) */
+#rij-aanvragen:empty { display: none; }
+#rij-aanvragen { margin-bottom: 1rem; }
+.rij-aanvr-kop {
+    font-weight: 700; color: #8a5a12; font-size: .95rem;
+    display: flex; align-items: center; gap: .4rem; margin-bottom: .4rem;
+}
+.rij-aanvr-tel {
+    background: #f0e0bd; color: #8a5a12; font-size: .78rem; font-weight: 700;
+    border-radius: 10px; padding: 0 .5rem; min-width: 1.3em; text-align: center;
+}
+.rij-aanvr-lijst { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: .5rem; }
+.rij-aanvr-item {
+    border: 1px solid #e6c07a; background: #fbf7ee; border-radius: 8px; padding: .55rem .7rem;
+}
+.rij-aanvr-naam { font-weight: 600; color: #1a2733; }
+.rij-aanvr-snr { font-weight: 400; color: #667; font-size: .85em; }
+.rij-aanvr-meta { font-size: .82rem; color: #667; margin-top: 2px; }
+.rij-aanvr-opm { font-size: .82rem; color: #556; font-style: italic; margin-top: 3px; }
+.rij-aanvr-knoppen { display: flex; gap: .45rem; margin-top: .5rem; }
+.rij-aanvr-knoppen button { font-size: .82rem; padding: .3rem .7rem; }
+/* Goedkeur-modal: ingebedde rijder-zoek */
+.rij-aanvr-box { max-width: 460px; }
+.rij-ag-resultaat { max-height: 190px; overflow-y: auto; }
+.rij-ag-lijst { list-style: none; margin: .2rem 0 0; padding: 0; border: 1px solid var(--border); border-radius: 6px; }
+.rij-ag-lijst li { padding: .4rem .6rem; cursor: pointer; border-bottom: 1px solid #eef2f6; font-size: .9rem; }
+.rij-ag-lijst li:last-child { border-bottom: 0; }
+.rij-ag-lijst li:hover { background: #eef5fc; }
+.rij-ag-sub { display: block; color: #778; font-size: .78rem; }
+.rij-ag-leeg { color: #888; font-size: .85rem; padding: .35rem .2rem; }
+.rij-ag-gekozen {
+    background: #e3f4e5; border: 1px solid #b6ddb9; border-radius: 6px;
+    padding: .4rem .6rem; font-size: .88rem; margin: .3rem 0;
+}
+.rij-ag-gekozen .rij-ag-lk { color: #667; font-size: .8em; }
+.rij-ag-gekozen .rij-ag-wis {
+    background: none; border: 0; color: #1565c0; cursor: pointer;
+    text-decoration: underline; font-size: .82em; padding: 0; margin-left: .3rem;
+}
 /* Live gebruikersnaam-check in het profiel-link-genereer-scherm */
 .rij-cg-status { display: block; font-size: .8rem; margin-top: 3px; min-height: 1em; color: #667; }
 .rij-cg-groen  { color: #2e7d32; font-weight: 600; }

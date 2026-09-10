@@ -176,8 +176,10 @@ de rijder aan wedstrijden heeft deelgenomen &mdash; er komt <strong>geen nieuwe 
     <li>de koppeling aan het bestaande <strong>licentienummer</strong> van de rijder.</li>
 </ul>
 <p>Wij bewaren <strong>geen e-mailadres</strong> bij het profiel. Een aanvraag verloopt via een
-formulier of e-mail aan de organisatie; een e-mailadres gebruiken wij alleen éénmalig om de
-aanvrager de aanmaaklink te sturen en verwijderen wij daarna. Het profiel is <strong>privé</strong>:
+formulier aan de organisatie. Je e-mailadres bewaren wij daarbij alleen <strong>tijdelijk</strong> —
+tot de aanvraag is goedgekeurd of afgewezen — om je een ontvangstbevestiging en (bij goedkeuring)
+de aanmaaklink te sturen; daarna verwijderen wij het e-mailadres. Het wordt niet aan het profiel
+zelf gekoppeld. Het profiel is <strong>privé</strong>:
 het is alleen zichtbaar na inloggen met gebruikersnaam en pincode, wordt niet door zoekmachines
 geïndexeerd en de gegevens worden <strong>niet openbaar gedeeld</strong> &mdash; het is een privé-inzage
 van je eigen, reeds verwerkte resultaten. De grondslag is <strong>gerechtvaardigd belang</strong>
@@ -540,8 +542,9 @@ hold because the skater took part in competitions — <strong>no new information
     <li>the link to the skater's existing <strong>licence number</strong>.</li>
 </ul>
 <p>We store <strong>no e-mail address</strong> with the profile. A request is made via a form or
-e-mail to the organisation; any e-mail address is used only once to send the applicant the
-activation link and is then deleted. The profile is <strong>private</strong>: it is visible only
+the organisation. We keep your e-mail address only <strong>temporarily</strong> for this — until
+the request is approved or rejected — to send you an acknowledgement and (on approval) the
+activation link; after that we delete the e-mail address. It is not linked to the profile itself. The profile is <strong>private</strong>: it is visible only
 after logging in with a username and PIN, is not indexed by search engines, and the data is
 <strong>not shared publicly</strong> — it is a private view of your own, already-processed
 results. The legal basis is <strong>legitimate interest</strong> (Article 6(1)(f) GDPR): it is a

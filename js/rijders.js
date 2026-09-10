@@ -34,6 +34,233 @@ function toonRijdersPagina() {
     } else {
         inp?.focus();
     }
+    rijLaadAanvragen();   // openstaande profiel-aanvragen (elke keer verversen)
+}
+
+// ── Profiel-aanvragen (pending) — goedkeuren/afwijzen ───────────────────────
+// Toont openstaande "Mijn InlineComp"-aanvragen bovenaan de Rijders-kolom.
+async function rijLaadAanvragen() {
+    const box = document.getElementById('rij-aanvragen');
+    if (!box) return;
+    try {
+        const res = await fetch('api/persoon_beheer.php?action=aanvragen_lijst&status=pending');
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.error || 'Fout');
+        rijRenderAanvragen(data.aanvragen || []);
+    } catch (e) {
+        box.innerHTML = '';   // stil falen: geen blokkade van de rest van de tab
+    }
+}
+
+function rijRenderAanvragen(lijst) {
+    const box = document.getElementById('rij-aanvragen');
+    if (!box) return;
+    if (!lijst.length) { box.innerHTML = ''; return; }
+    let html = `<div class="rij-aanvr-kop">📥 Profiel-aanvragen <span class="rij-aanvr-tel">${lijst.length}</span></div>`;
+    html += '<ul class="rij-aanvr-lijst">';
+    lijst.forEach(a => {
+        html += `<li class="rij-aanvr-item" data-id="${a.id}">
+            <div class="rij-aanvr-naam">${escHtml(a.naam)}${a.startnummer ? ' <span class="rij-aanvr-snr">Snr ' + escHtml(a.startnummer) + '</span>' : ''}</div>
+            <div class="rij-aanvr-meta">
+                gewenste naam: <b>${a.gewenste_username ? escHtml(a.gewenste_username) : '—'}</b>
+                · ${escHtml((a.created_at || '').replace('T', ' ').slice(0, 16))}
+            </div>
+            ${a.opmerking ? `<div class="rij-aanvr-opm">“${escHtml(a.opmerking)}”</div>` : ''}
+            <div class="rij-aanvr-knoppen">
+                <button class="btn-primary rij-aanvr-ok" type="button">✓ Goedkeuren</button>
+                <button class="btn-secondary rij-aanvr-nee" type="button">✗ Afwijzen</button>
+            </div>
+        </li>`;
+    });
+    html += '</ul>';
+    box.innerHTML = html;
+    lijst.forEach(a => {
+        const li = box.querySelector(`.rij-aanvr-item[data-id="${a.id}"]`);
+        if (!li) return;
+        li.querySelector('.rij-aanvr-ok').addEventListener('click', () => rijAanvraagGoedkeuren(a));
+        li.querySelector('.rij-aanvr-nee').addEventListener('click', () => rijAanvraagAfwijzen(a));
+    });
+}
+
+// Afwijzen: bevestiging → mail (indien e-mail) → verwijderen uit de lijst.
+async function rijAanvraagAfwijzen(a) {
+    const ok = await toonBevestigDialog(
+        `De profiel-aanvraag van ${a.naam} afwijzen? De aanvrager krijgt een nette e-mail en het ` +
+        `bewaarde e-mailadres wordt gewist.`,
+        'Aanvraag afwijzen'
+    );
+    if (!ok) return;
+    try {
+        const res = await fetch('api/persoon_beheer.php?action=aanvraag_afwijzen', {
+            method:  'POST',
+            headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+            body:    'id=' + encodeURIComponent(a.id),
+        });
+        const d = await res.json();
+        if (!res.ok || d.error) throw new Error(d.error || 'Fout bij afwijzen');
+        toonBevestigDialog(d.mail_ok ? 'Afgewezen; de aanvrager is gemaild.' : 'Afgewezen. Let op: de e-mail kon niet verstuurd worden.', 'Aanvraag afwijzen', 'OK', '');
+        rijLaadAanvragen();
+    } catch (e) {
+        toonBevestigDialog('Fout: ' + e.message, 'Aanvraag afwijzen', 'OK', '');
+    }
+}
+
+// Goedkeuren: modal met (1) rijder koppelen via zoeken, (2) gebruikersnaam
+// bevestigen met live check, (3) goedkeuren → mailt de link (organisatie in Cc).
+function rijAanvraagGoedkeuren(a) {
+    let gekozenLic = '';
+    let gekozenNaam = '';
+    const overlay = document.createElement('div');
+    overlay.className = 'rij-edit-nc-overlay';
+    overlay.innerHTML = `
+        <div class="rij-edit-nc-box rij-aanvr-box">
+            <div class="rij-edit-nc-titel">✓ Aanvraag goedkeuren — ${escHtml(a.naam)}</div>
+            <div class="rij-edit-nc-uitleg">
+                Koppel de juiste rijder en bevestig de gebruikersnaam. Bij goedkeuren
+                krijgt de aanvrager automatisch de link (jij in Cc); het e-mailadres wordt daarna gewist.
+            </div>
+            <label class="rij-edit-nc-veld">1. Zoek en koppel de rijder
+                <input type="text" id="rij-ag-zoek" class="inp" placeholder="naam, startnummer of licentie…" autocomplete="off"></label>
+            <div id="rij-ag-resultaat" class="rij-ag-resultaat"></div>
+            <div id="rij-ag-gekozen" class="rij-ag-gekozen" hidden></div>
+            <label class="rij-edit-nc-veld">2. Gebruikersnaam
+                <input type="text" id="rij-ag-user" class="inp" placeholder="bv. voornaam.achternaam" autocomplete="off" maxlength="30">
+                <span class="rij-cg-status" id="rij-ag-status"></span></label>
+            <div class="rij-edit-nc-knoppen">
+                <button class="btn-secondary" id="rij-ag-annul" type="button">Annuleren</button>
+                <button class="btn-primary" id="rij-ag-ok" type="button" disabled>Goedkeuren &amp; mailen</button>
+            </div>
+        </div>`;
+    document.body.appendChild(overlay);
+    const zoek   = overlay.querySelector('#rij-ag-zoek');
+    const resBox = overlay.querySelector('#rij-ag-resultaat');
+    const gekBox = overlay.querySelector('#rij-ag-gekozen');
+    const userInp = overlay.querySelector('#rij-ag-user');
+    const status  = overlay.querySelector('#rij-ag-status');
+    const okBtn   = overlay.querySelector('#rij-ag-ok');
+    const sluit = () => overlay.remove();
+    overlay.querySelector('#rij-ag-annul').onclick = sluit;
+    overlay.addEventListener('click', e => { if (e.target === overlay) sluit(); });
+
+    // Prefill gewenste gebruikersnaam
+    if (a.gewenste_username) userInp.value = a.gewenste_username;
+
+    // Username live-check (afhankelijk van de gekozen rijder)
+    let vrij = false, uTimer = null;
+    const zet = (txt, kl) => { status.textContent = txt; status.className = 'rij-cg-status' + (kl ? ' ' + kl : ''); };
+    const herwaardeer = () => {
+        okBtn.disabled = !(gekozenLic && vrij);
+    };
+    const checkUser = () => {
+        const v = userInp.value.trim();
+        clearTimeout(uTimer);
+        vrij = false; herwaardeer();
+        if (!/^[A-Za-z0-9._-]{3,30}$/.test(v)) { zet(v === '' ? '' : '3–30 tekens: letters, cijfers, . _ of -', v === '' ? '' : 'rij-cg-rood'); return; }
+        if (!gekozenLic) { zet('kies eerst een rijder', ''); return; }
+        zet('controleren…', '');
+        uTimer = setTimeout(async () => {
+            try {
+                const r = await fetch('api/persoon_beheer.php?action=username_vrij&u=' + encodeURIComponent(v) + '&license_key=' + encodeURIComponent(gekozenLic));
+                const d = await r.json();
+                if (userInp.value.trim() !== v) return;
+                vrij = !!d.vrij;
+                zet(vrij ? '✓ vrij' : '✗ al in gebruik', vrij ? 'rij-cg-groen' : 'rij-cg-rood');
+                herwaardeer();
+            } catch (e) { zet('', ''); }
+        }, 350);
+    };
+    userInp.addEventListener('input', checkUser);
+
+    // Rijder zoeken (zelfde endpoint als de gewone zoek)
+    let zTimer = null;
+    const doeZoek = async () => {
+        const q = zoek.value.trim();
+        if (q.length < 2) { resBox.innerHTML = ''; return; }
+        try {
+            const r = await fetch('api/persoon_beheer.php?action=zoek&q=' + encodeURIComponent(q));
+            const d = await r.json();
+            const rs = d.rijders || [];
+            if (!rs.length) { resBox.innerHTML = '<div class="rij-ag-leeg">Geen rijders gevonden.</div>'; return; }
+            resBox.innerHTML = '<ul class="rij-ag-lijst">' + rs.map(x =>
+                `<li data-lk="${escHtml(x.license_key)}" data-naam="${escHtml(x.full_name)}">
+                    ${escHtml(x.full_name)}
+                    <span class="rij-ag-sub">${x.start_number ? 'Snr ' + escHtml(String(x.start_number)) + ' · ' : ''}${escHtml(x.category || '')}${x.club_short ? ' · ' + escHtml(x.club_short) : ''} · ${escHtml(x.license_key)}</span>
+                </li>`).join('') + '</ul>';
+            resBox.querySelectorAll('li').forEach(li => li.addEventListener('click', () => {
+                gekozenLic = li.dataset.lk; gekozenNaam = li.dataset.naam;
+                gekBox.hidden = false;
+                gekBox.innerHTML = `Gekoppeld: <b>${escHtml(gekozenNaam)}</b> <span class="rij-ag-lk">${escHtml(gekozenLic)}</span> <button type="button" class="rij-ag-wis">wijzig</button>`;
+                gekBox.querySelector('.rij-ag-wis').onclick = () => {
+                    gekozenLic = ''; gekozenNaam = ''; gekBox.hidden = true; gekBox.innerHTML = '';
+                    herwaardeer(); checkUser();
+                };
+                resBox.innerHTML = ''; zoek.value = '';
+                checkUser();   // her-check username tegen de nieuwe licentie
+            }));
+        } catch (e) { resBox.innerHTML = ''; }
+    };
+    zoek.addEventListener('input', () => { clearTimeout(zTimer); zTimer = setTimeout(doeZoek, 350); });
+    zoek.addEventListener('keydown', e => { if (e.key === 'Enter') { e.preventDefault(); clearTimeout(zTimer); doeZoek(); } });
+    // Prefill zoekterm met de opgegeven naam
+    zoek.value = a.naam || '';
+    if (zoek.value.trim().length >= 2) doeZoek();
+
+    okBtn.onclick = async () => {
+        if (!gekozenLic || !vrij) return;
+        okBtn.disabled = true;
+        try {
+            const res = await fetch('api/persoon_beheer.php?action=aanvraag_goedkeuren', {
+                method:  'POST',
+                headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+                body:    'id=' + encodeURIComponent(a.id)
+                       + '&license_key=' + encodeURIComponent(gekozenLic)
+                       + '&username=' + encodeURIComponent(userInp.value.trim()),
+            });
+            const d = await res.json();
+            if (!res.ok || d.error) throw new Error(d.error || 'Fout bij goedkeuren');
+            sluit();
+            rijLaadAanvragen();
+            _rijToonAanvraagOk(d, gekozenNaam);
+        } catch (e) {
+            okBtn.disabled = false;
+            zet(e.message, 'rij-cg-rood');
+        }
+    };
+    zoek.focus();
+}
+
+// Bevestiging na goedkeuren: toont de gemaakte link + mailstatus (kopieerbaar,
+// zodat je 'm desnoods zelf kunt sturen als de mail faalde).
+function _rijToonAanvraagOk(d, naam) {
+    const overlay = document.createElement('div');
+    overlay.className = 'rij-edit-nc-overlay';
+    overlay.innerHTML = `
+        <div class="rij-edit-nc-box">
+            <div class="rij-edit-nc-titel">✓ Goedgekeurd — ${escHtml(naam)}</div>
+            <div class="rij-edit-nc-uitleg">
+                ${d.mail_ok
+                    ? 'De aanvrager heeft de link per e-mail gekregen (jij in Cc). Het e-mailadres is gewist.'
+                    : '<b>Let op:</b> de e-mail kon niet verstuurd worden. Kopieer de link hieronder en stuur \'m zelf. Het e-mailadres is gewist.'}
+                Geldig tot <b>${escHtml(d.verloopt || '')}</b>.
+            </div>
+            <label class="rij-edit-nc-veld">Gebruikersnaam
+                <input type="text" class="inp" readonly value="${escHtml(d.username || '')}"></label>
+            <label class="rij-edit-nc-veld">Claim-link
+                <input type="text" id="rij-ao-url" class="inp" readonly value="${escHtml(d.url || '')}"></label>
+            <div class="rij-edit-nc-knoppen">
+                <button class="btn-secondary" id="rij-ao-copy" type="button">📋 Kopieer link</button>
+                <button class="btn-primary" id="rij-ao-ok" type="button">Klaar</button>
+            </div>
+        </div>`;
+    document.body.appendChild(overlay);
+    const sluit = () => overlay.remove();
+    overlay.querySelector('#rij-ao-ok').onclick = sluit;
+    overlay.addEventListener('click', e => { if (e.target === overlay) sluit(); });
+    overlay.querySelector('#rij-ao-copy').onclick = () => {
+        const u = overlay.querySelector('#rij-ao-url');
+        u.select();
+        navigator.clipboard?.writeText(u.value).catch(() => {});
+    };
 }
 
 // Roep de juiste zoekfunctie aan afhankelijk van de actieve modus.
@@ -243,11 +470,26 @@ function rijRenderDetail(data) {
     if (weds.length) {
         wedHtml = '<table class="rij-detail-tabel"><thead><tr><th>Datum</th><th>Wedstrijd</th><th>Categorie</th><th>Positie</th><th>Punten</th></tr></thead><tbody>';
         weds.forEach(w => {
+            // Split-DC (bv. HP1+DP1 samen): de opgeslagen rang is de GECOMBINEERDE
+            // stand. Toon daarom de rang binnen de eigen categorie voorop (dat is
+            // wat de rijder als zijn klassering kent) met de gecombineerde erachter.
+            // positie_cat/cats_in_dc worden in api/persoon_beheer.php afgeleid.
+            const gesplitst = typeof w.cats_in_dc === 'string'
+                           && w.cats_in_dc.includes(' + ')
+                           && w.positie_cat !== null && w.positie_cat !== undefined;
+            const posCel = w.positie === null || w.positie === undefined || w.positie === ''
+                ? ''
+                : gesplitst
+                    ? `<strong>${escHtml(w.positie_cat)}</strong>`
+                      + ` <span class="rij-loc">(${escHtml(w.categorie ?? '')})</span>`
+                      + ` <span class="rij-loc">&middot; ${escHtml(w.positie)}`
+                      + ` (${escHtml(w.cats_in_dc)})</span>`
+                    : escHtml(w.positie);
             wedHtml += `<tr>
                 <td>${escHtml(w.comp_datum ?? '')}</td>
                 <td>${escHtml(w.comp_naam)}</td>
                 <td>${escHtml(w.dc_naam)}${w.categorie && w.categorie !== w.dc_naam ? ' <span class="rij-loc">(' + escHtml(w.categorie) + ')</span>' : ''}</td>
-                <td>${escHtml(w.positie ?? '')}</td>
+                <td>${posCel}</td>
                 <td>${w.punten !== null && w.punten !== undefined ? escHtml(parseFloat(w.punten).toFixed(2).replace(/\.?0+$/, '')) : ''}</td>
             </tr>`;
         });
@@ -967,7 +1209,7 @@ function rijGenereerProfielClaim(licenseKey) {
             </div>
             <label class="rij-edit-nc-veld">
                 Gebruikersnaam
-                <input type="text" id="rij-cg-user" class="inp" placeholder="bv. voornaam.achternaam" autocomplete="off" maxlength="30"
+                <input type="text" id="rij-cg-user" class="inp" placeholder="bv. voornaam.achternaam" autocomplete="off" maxlength="30">
                 <span class="rij-cg-status" id="rij-cg-status"></span>
             </label>
             <div class="rij-edit-nc-knoppen">

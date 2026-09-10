@@ -137,45 +137,65 @@ if ($actie === 'login') {
 // de pagina. De app slaat NIETS op — het bericht gaat naar de inbox; de
 // beheerder stuurt de claim-link terug (Systeem → Rijders → Profiel-link).
 if ($actie === 'aanvraag') {
+    // Nieuwe aanvraag → als 'pending' in rijder_profiel_aanvraag; de rijder
+    // krijgt een "in afwachting"-mail (organisatie in Cc). De beheerder koppelt
+    // later de juiste rijder + gebruikersnaam en keurt goed (Systeem → Rijders),
+    // waarna de claim-link automatisch gemaild wordt. Het e-mailadres staat
+    // alleen tussen aanvraag en verwerking in de DB (daarna gewist).
     $aNaam  = trim($body['a_naam']  ?? '');
     $aSnr   = trim($body['a_snr']   ?? '');
     $aEmail = trim($body['a_email'] ?? '');
     $aUser  = trim($body['a_user']  ?? '');
     $aOpm   = trim($body['a_opm']   ?? '');
     $honey  = trim($body['website'] ?? '');   // honeypot: bots vullen 'm, mensen zien 'm niet
+    // Lengtes begrenzen (defensief + past op de kolommen)
+    $aNaam = mb_substr($aNaam, 0, 120);
+    $aSnr  = mb_substr($aSnr, 0, 20);
+    $aUser = mb_substr($aUser, 0, 30);
+    $aOpm  = mb_substr($aOpm, 0, 500);
     if ($honey !== '') {
         $okmsg = 'Bedankt! Je aanvraag is verstuurd.';   // bot: stil doen alsof
     } elseif ($aNaam === '' || !filter_var($aEmail, FILTER_VALIDATE_EMAIL)) {
         $fout = 'Vul je naam en een geldig e-mailadres in.';
+    } elseif (!preg_match('/^[A-Za-z0-9._-]{3,30}$/', $aUser)) {
+        // Zelfde tekenset als de beheer-kant (geen spaties), zodat een aanvraag
+        // niet later op de gebruikersnaam blijft hangen bij het goedkeuren.
+        $fout = 'Kies een gebruikersnaam van 3–30 tekens: letters, cijfers, punt, - of _ (geen spaties).';
+        $prefillUser = $aUser;
     } elseif (!empty($_SESSION['rp_aanvr_tot']) && $_SESSION['rp_aanvr_tot'] > time()) {
         $okmsg = 'Je aanvraag is al verstuurd — de organisatie neemt contact op.';
     } else {
-        $r = [];
-        $r[] = 'InlineComp – profiel-aanvraag via /check/profiel.php';
-        $r[] = str_repeat('─', 50);
-        $r[] = 'Naam:         ' . $aNaam;
-        $r[] = 'Startnummer:  ' . ($aSnr !== '' ? $aSnr : '—');
-        $r[] = 'E-mail:       ' . $aEmail;
-        $r[] = 'Gewenste gebruikersnaam: ' . ($aUser !== '' ? $aUser : '— (nog niet gekozen)');
-        if ($aOpm !== '') { $r[] = ''; $r[] = 'Opmerking:'; foreach (explode("\n", $aOpm) as $l) $r[] = '  ' . $l; }
-        $r[] = '';
-        $r[] = 'Verstuurd:   ' . date('Y-m-d H:i:s');
-        $r[] = str_repeat('─', 50);
-        $r[] = 'Genereer de claim-link via Systeem → Rijders → 🔑 Profiel-link';
-        $r[] = '(vul daar de gewenste gebruikersnaam in) en mail terug: gebruikersnaam + link.';
-        $bodyTxt = implode("\n", $r);
-        $headers = implode("\r\n", [
-            'From: InlineComp <inlinecomp@devriesen.com>',
-            'Reply-To: ' . $aEmail,
-            'Content-Type: text/plain; charset=utf-8',
-            'X-Mailer: InlineComp Profiel',
-        ]);
-        $ok = @mail('inlinecomp@devriesen.com', '[InlineComp] Profiel-aanvraag — ' . $aNaam, $bodyTxt, $headers);
-        if ($ok) {
-            $_SESSION['rp_aanvr_tot'] = time() + 60;   // simpele rate-limit
-            $okmsg = 'Bedankt! Je aanvraag is verstuurd. Je krijgt van de organisatie een link om zelf een PIN aan te maken.';
+        // Dubbele openstaande aanvraag met hetzelfde e-mailadres voorkomen.
+        $dup = $pdo->prepare("SELECT 1 FROM rijder_profiel_aanvraag WHERE status='pending' AND email = ? LIMIT 1");
+        $dup->execute([$aEmail]);
+        if ($dup->fetchColumn()) {
+            $_SESSION['rp_aanvr_tot'] = time() + 60;
+            $okmsg = 'Je hebt al een aanvraag lopen — de organisatie behandelt hem. Controleer ook je spam-map.';
         } else {
-            $fout = 'Versturen is niet gelukt — probeer het later opnieuw.';
+            $ins = $pdo->prepare("
+                INSERT INTO rijder_profiel_aanvraag (naam, startnummer, email, gewenste_username, opmerking)
+                VALUES (?, ?, ?, ?, ?)
+            ");
+            $ins->execute([
+                $aNaam,
+                $aSnr !== '' ? $aSnr : null,
+                $aEmail,
+                $aUser !== '' ? $aUser : null,
+                $aOpm !== '' ? $aOpm : null,
+            ]);
+            require_once __DIR__ . '/../inc/profiel_mail.php';
+            $m = profielMailInAfwachting($aNaam);
+            $ok = profielMail($aEmail, $m['subject'], $m['body'], PROFIEL_MAIL_CC);
+            $_SESSION['rp_aanvr_tot'] = time() + 60;   // simpele rate-limit
+            if ($ok) {
+                $okmsg = 'Bedankt! Je aanvraag is verstuurd. Je krijgt zo een bevestiging per e-mail, en na '
+                       . 'goedkeuring een link om zelf een pincode aan te maken. Controleer ook je spam-map — '
+                       . 'onze mail belandt daar soms.';
+            } else {
+                // Aanvraag staat wél in de DB; alleen de bevestigingsmail faalde.
+                $okmsg = 'Bedankt! Je aanvraag is ontvangen. Het versturen van de bevestigingsmail lukte niet '
+                       . 'meteen, maar de organisatie ziet je aanvraag en neemt contact op.';
+            }
         }
     }
 }
@@ -531,7 +551,10 @@ table.pr tbody tr:last-child td{border-bottom:0}
           <div class="veld"><label for="a_email">Je e-mailadres</label>
             <input type="email" id="a_email" name="a_email" required></div>
           <div class="veld"><label for="a_user">Gewenste gebruikersnaam <span class="veld-hint">— hiermee log je straks in</span></label>
-            <input type="text" id="a_user" name="a_user" pattern="[-A-Za-z0-9._]{3,30}" minlength="3" maxlength="30" placeholder="bv. voornaam.achternaam" required></div>
+            <input type="text" id="a_user" name="a_user" pattern="[A-Za-z0-9._-]{3,30}" minlength="3" maxlength="30" placeholder="bv. voornaam.achternaam" required
+                   title="3–30 tekens: letters, cijfers, punt, - of _ — geen spaties"
+                   value="<?= esc($prefillUser) ?>">
+            <span class="veld-hint">3–30 tekens: letters, cijfers, punt, - of _ (geen spaties)</span></div>
           <div class="veld"><label for="a_opm">Opmerking (optioneel)</label>
             <input type="text" id="a_opm" name="a_opm"></div>
           <button class="btn" type="submit">Profiel-account aanvragen</button>
