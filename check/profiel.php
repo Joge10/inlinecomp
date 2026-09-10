@@ -451,7 +451,7 @@ table.pr tbody tr:last-child td{border-bottom:0}
   <section class="soon">
     <h3>Binnenkort</h3>
     <ul>
-      <li>Je eigen gegevens corrigeren per wedstrijd <span class="tag">binnenkort</span></li>
+      <li>Ontbrekende of foutieve <strong>eigen gegevens</strong> (bv. naam, club of woonplaats) melden per wedstrijd — de organisatie past ze dan aan. Officiële uitslagen en tijden blijven ongewijzigd. <span class="tag">binnenkort</span></li>
       <li>Je profiel (deels) publiek deelbaar maken — link, embed of API <span class="tag">binnenkort</span></li>
       <li>Kiezen welke coaches je profiel mogen zien <span class="tag">binnenkort</span></li>
       <li>Je naam afschermen op de publieke pagina's — startnummer blijft <span class="tag">binnenkort</span></li>
