@@ -304,7 +304,8 @@ table.pr tbody tr:last-child td{border-bottom:0}
 .pr-ctx{display:block;color:var(--faint);font-size:.8rem;margin-top:2px;line-height:1.35}
 .pr-none{color:var(--faint)}
 .tip{position:absolute;pointer-events:none;z-index:5;opacity:0;transition:opacity .1s;background:var(--surface);
-  border:1px solid var(--line);border-radius:10px;box-shadow:var(--shadow);padding:9px 11px;min-width:170px;transform:translate(-50%,-112%)}
+  border:1px solid var(--line);border-radius:10px;box-shadow:var(--shadow);padding:9px 11px;min-width:150px;
+  max-width:min(240px,78vw);overflow-wrap:anywhere;transform:translate(-50%,-112%)}
 .tip .t-af{font-weight:700;font-size:.92rem;display:flex;align-items:center;gap:7px}
 .tip .t-af .sw{width:10px;height:10px;border-radius:3px}
 .tip .t-rang{font-weight:700;font-size:1.35rem;line-height:1.1;margin:3px 0 1px;font-variant-numeric:tabular-nums}
@@ -312,6 +313,18 @@ table.pr tbody tr:last-child td{border-bottom:0}
 .tip .t-comp{color:var(--ink);font-size:.86rem;margin-top:3px}
 .crosshair{stroke:var(--faint);stroke-width:1;stroke-dasharray:3 3;opacity:.7}
 .leeg-chart{color:var(--faint);text-align:center;padding:30px 10px}
+/* PR-rij → detail-popup (vooral mobiel) */
+.pr-row{cursor:pointer}
+.pr-more{display:none;color:var(--accent);font-size:.78rem;font-weight:600;margin-top:3px}
+.prpop{display:none;position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:50;align-items:center;justify-content:center;padding:20px}
+.prpop-box{background:var(--surface);border:1px solid var(--line);border-radius:14px;box-shadow:var(--shadow);padding:18px 20px;max-width:340px;width:100%}
+.prpop-af{font-weight:700;display:flex;align-items:center;gap:8px;font-size:1.05rem}
+.prpop-af .sw{width:12px;height:12px;border-radius:3px}
+.prp-blok{margin-top:12px}
+.prp-lbl{text-transform:uppercase;letter-spacing:.06em;font-size:.68rem;color:var(--muted);font-weight:600}
+.prp-big{font-weight:700;font-size:1.3rem;font-variant-numeric:tabular-nums;line-height:1.1;margin-top:1px}
+.prp-sub{color:var(--faint);font-size:.82rem;margin-top:1px}
+.prpop-sluit{margin-top:16px;width:100%;background:var(--brand);color:#fff;border:0;border-radius:8px;padding:10px;font:inherit;font-weight:600;cursor:pointer}
 /* Binnenkort-blok */
 .soon{margin-top:18px;padding:16px 18px;background:var(--surface-2);border:1px dashed var(--line);border-radius:14px}
 .soon h3{margin:0 0 6px;font-size:1rem;color:var(--brand)}
@@ -323,8 +336,10 @@ table.pr tbody tr:last-child td{border-bottom:0}
   .wrap{padding:14px 12px 40px}
   .hero{padding:18px 16px}
   .statrow{gap:14px 22px}
-  .chartwrap{overflow-x:auto;-webkit-overflow-scrolling:touch}
-  #chart{min-width:520px}
+  #chart{min-width:0}          /* grafiek past op het scherm — geen zijwaarts scrollen */
+  .pr-ctx{display:none}         /* context uit de tabel; te zien via de tik-box */
+  .pr-more{display:block}
+  table.pr td{padding:9px 8px}
 }
 </style>
 </head>

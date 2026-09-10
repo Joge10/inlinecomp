@@ -132,19 +132,21 @@
 
   let cross=null;
   function hookHover(pts){
-    const overlay=el("rect",{x:M.l,y:M.t,width:PW,height:PH,fill:"transparent",style:"cursor:crosshair"});
+    const overlay=el("rect",{x:M.l,y:M.t,width:PW,height:PH,fill:"transparent",style:"cursor:crosshair;touch-action:none"});
     svg.appendChild(overlay);
+    const wrap=svg.parentElement;                 // .chartwrap
     const rect=()=>svg.getBoundingClientRect();
-    function move(ev){
-      const r=rect(), sx=(ev.clientX-r.left)/r.width*W, sy=(ev.clientY-r.top)/r.height*H;
+    function showAt(clientX,clientY){
+      const r=rect(), sx=(clientX-r.left)/r.width*W, sy=(clientY-r.top)/r.height*H;
       let best=null,bd=1e9;
       pts.forEach(p=>{const d=(p.x-sx)**2+(p.y-sy)**2; if(d<bd){bd=d;best=p;}});
-      if(!best||bd>60*60){hide();return;}
+      if(!best||bd>80*80){hide();return;}
       if(cross) cross.remove();
       cross=el("line",{class:"crosshair",x1:best.x,x2:best.x,y1:M.t,y2:M.t+PH});
       svg.insertBefore(cross,overlay);
       const rr=rect();
-      tip.style.left=(best.x/W*rr.width)+"px"; tip.style.top=(best.y/H*rr.height)+"px";
+      const cx=best.x/W*rr.width, cy=best.y/H*rr.height;
+      tip.style.left=cx+"px"; tip.style.top=cy+"px"; tip.style.transform='translate(-50%,-112%)';
       const head='<div class="t-af"><span class="sw" style="background:'+best.color+'"></span>'+best.name+'</div>';
       let val;
       if(best.metric==='tijd'){
@@ -157,10 +159,21 @@
       }
       tip.innerHTML=head+val+'<div class="t-comp">'+best.pt.w+'</div>';
       tip.style.opacity=1;
+      // Binnen beeld houden: horizontaal klemmen + verticaal flippen als de
+      // tooltip boven de grafiek uit zou steken (mobiel/randpunten).
+      const wr=wrap.getBoundingClientRect(); let tr=tip.getBoundingClientRect();
+      let dx=0;
+      if(tr.left < wr.left+6)      dx=(wr.left+6)-tr.left;
+      else if(tr.right > wr.right-6) dx=(wr.right-6)-tr.right;
+      if(dx) tip.style.left=(cx+dx)+"px";
+      tr=tip.getBoundingClientRect();
+      if(tr.top < wr.top+4) tip.style.transform='translate(-50%,14%)';
     }
     function hide(){tip.style.opacity=0; if(cross){cross.remove();cross=null;}}
-    overlay.addEventListener("mousemove",move);
+    overlay.addEventListener("mousemove",e=>showAt(e.clientX,e.clientY));
     overlay.addEventListener("mouseleave",hide);
+    overlay.addEventListener("touchstart",e=>{const t=e.touches[0]; if(t){showAt(t.clientX,t.clientY); e.preventDefault();}},{passive:false});
+    overlay.addEventListener("touchmove", e=>{const t=e.touches[0]; if(t){showAt(t.clientX,t.clientY); e.preventDefault();}},{passive:false});
   }
 
   function buildPR(){
@@ -168,18 +181,42 @@
     const all={...DATA.sprint,...DATA.lang};
     const order=[...Object.keys(DATA.sprint),...Object.keys(DATA.lang)];
     if(!order.length){ tb.innerHTML='<tr><td colspan="3" class="pr-none">Nog geen uitslagen.</td></tr>'; return; }
-    tb.innerHTML=order.map(name=>{
+    tb.innerHTML=order.map((name,idx)=>{
       const s=all[name], timed=s.p.filter(p=>p.t!=null);
       let tijd='<span class="pr-none">—</span>';
       if(timed.length){ const bt=timed.reduce((a,b)=>b.t<a.t?b:a);
         tijd='<span class="pr-big">'+fmtTime(bt.t)+'</span>'+
           '<span class="pr-ctx">'+(bt.tr?bt.tr+' · ':'')+bt.w+' · '+fmt(bt.d)+'</span>'; }
       const bp=s.p.reduce((a,b)=>b.r<a.r?b:a);
-      return '<tr><td><span class="pr-af"><span class="sw" style="background:'+s.color+'"></span>'+name+'</span></td>'+
+      return '<tr class="pr-row" data-i="'+idx+'"><td><span class="pr-af"><span class="sw" style="background:'+s.color+'"></span>'+name+'</span></td>'+
         '<td>'+tijd+'</td>'+
         '<td><span class="pr-big">'+bp.r+'e</span>'+
-          '<span class="pr-ctx">'+bp.c+' · '+bp.w+' · '+fmt(bp.d)+'</span></td></tr>';
+          '<span class="pr-ctx">'+bp.c+' · '+bp.w+' · '+fmt(bp.d)+'</span>'+
+          '<span class="pr-more">details ›</span></td></tr>';
     }).join('');
+    // Rij aantikbaar → info-box (vooral mobiel, waar de context-regel verborgen is).
+    tb.querySelectorAll('.pr-row').forEach(row=>{
+      row.addEventListener('click',()=>{
+        const name=order[+row.dataset.i], s=all[name];
+        const timed=s.p.filter(p=>p.t!=null);
+        const bt=timed.length?timed.reduce((a,b)=>b.t<a.t?b:a):null;
+        const bp=s.p.reduce((a,b)=>b.r<a.r?b:a);
+        let h='<div class="prpop-af"><span class="sw" style="background:'+s.color+'"></span>'+name+'</div>';
+        if(bt) h+='<div class="prp-blok"><div class="prp-lbl">Beste tijd</div><div class="prp-big">'+fmtTime(bt.t)+'</div><div class="prp-sub">'+(bt.tr?bt.tr+' · ':'')+bt.w+' · '+fmt(bt.d)+'</div></div>';
+        h+='<div class="prp-blok"><div class="prp-lbl">Beste klassering</div><div class="prp-big">'+bp.r+'e</div><div class="prp-sub">'+bp.c+' · '+bp.w+' · '+fmt(bp.d)+'</div></div>';
+        toonInfoPop(h);
+      });
+    });
+  }
+
+  function toonInfoPop(html){
+    let ov=document.getElementById('prpop');
+    if(!ov){ ov=document.createElement('div'); ov.id='prpop'; ov.className='prpop'; document.body.appendChild(ov); }
+    ov.innerHTML='<div class="prpop-box">'+html+'<button class="prpop-sluit" type="button">Sluiten</button></div>';
+    ov.style.display='flex';
+    const sluit=()=>{ ov.style.display='none'; };
+    ov.onclick=e=>{ if(e.target===ov) sluit(); };
+    ov.querySelector('.prpop-sluit').onclick=sluit;
   }
 
   function fmtTime(ms){ ms=Math.round(ms); const s=Math.floor(ms/1000), m=Math.floor(s/60), sec=s%60, mmm=String(ms%1000).padStart(3,'0'); return m>0 ? m+':'+String(sec).padStart(2,'0')+'.'+mmm : sec+'.'+mmm; }
