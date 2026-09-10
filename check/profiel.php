@@ -128,6 +128,51 @@ if ($actie === 'login') {
     }
 }
 
+// ── Actie: profiel aanvragen (formulier → mail naar de beheerder) ───────────
+// Netter + minder spam-gevoelig dan een mailto: het e-mailadres staat niet in
+// de pagina. De app slaat NIETS op — het bericht gaat naar de inbox; de
+// beheerder stuurt de claim-link terug (Systeem → Rijders → Profiel-link).
+if ($actie === 'aanvraag') {
+    $aNaam  = trim($body['a_naam']  ?? '');
+    $aSnr   = trim($body['a_snr']   ?? '');
+    $aEmail = trim($body['a_email'] ?? '');
+    $aOpm   = trim($body['a_opm']   ?? '');
+    $honey  = trim($body['website'] ?? '');   // honeypot: bots vullen 'm, mensen zien 'm niet
+    if ($honey !== '') {
+        $okmsg = 'Bedankt! Je aanvraag is verstuurd.';   // bot: stil doen alsof
+    } elseif ($aNaam === '' || !filter_var($aEmail, FILTER_VALIDATE_EMAIL)) {
+        $fout = 'Vul je naam en een geldig e-mailadres in.';
+    } elseif (!empty($_SESSION['rp_aanvr_tot']) && $_SESSION['rp_aanvr_tot'] > time()) {
+        $okmsg = 'Je aanvraag is al verstuurd — de organisatie neemt contact op.';
+    } else {
+        $r = [];
+        $r[] = 'InlineComp – profiel-aanvraag via /check/profiel.php';
+        $r[] = str_repeat('─', 50);
+        $r[] = 'Naam:        ' . $aNaam;
+        $r[] = 'Startnummer: ' . ($aSnr !== '' ? $aSnr : '—');
+        $r[] = 'E-mail:      ' . $aEmail;
+        if ($aOpm !== '') { $r[] = ''; $r[] = 'Opmerking:'; foreach (explode("\n", $aOpm) as $l) $r[] = '  ' . $l; }
+        $r[] = '';
+        $r[] = 'Verstuurd:   ' . date('Y-m-d H:i:s');
+        $r[] = str_repeat('─', 50);
+        $r[] = 'Beantwoord deze mail en stuur de claim-link (Systeem → Rijders → 🔑 Profiel-link).';
+        $bodyTxt = implode("\n", $r);
+        $headers = implode("\r\n", [
+            'From: InlineComp <inlinecomp@devriesen.com>',
+            'Reply-To: ' . $aEmail,
+            'Content-Type: text/plain; charset=utf-8',
+            'X-Mailer: InlineComp Profiel',
+        ]);
+        $ok = @mail('inlinecomp@devriesen.com', '[InlineComp] Profiel-aanvraag — ' . $aNaam, $bodyTxt, $headers);
+        if ($ok) {
+            $_SESSION['rp_aanvr_tot'] = time() + 60;   // simpele rate-limit
+            $okmsg = 'Bedankt! Je aanvraag is verstuurd. Je krijgt van de organisatie een link om zelf een PIN aan te maken.';
+        } else {
+            $fout = 'Versturen is niet gelukt — probeer het later opnieuw.';
+        }
+    }
+}
+
 // ── Bepaal de weer te geven toestand ────────────────────────────────────────
 $ingelogd  = !empty($_SESSION['rijder_lic']);
 $claimView = ($claimRaw !== '' && !$ingelogd);
@@ -194,6 +239,11 @@ a{color:var(--accent)}
 .melding.ok{background:#e8f5e9;color:#2e7d32;border:1px solid #a5d6a7}
 .uitleg{margin-top:18px;padding-top:16px;border-top:1px solid var(--line);font-size:.86rem;color:var(--muted)}
 .uitleg b{color:var(--ink)}
+.aanvraag-form{margin-top:12px}
+.aanvraag-form .veld{margin-bottom:9px}
+.aanvraag-form .btn{width:100%;padding:11px;margin-top:4px}
+.hp{position:absolute!important;left:-9999px;width:1px;height:1px;overflow:hidden}
+.mt12{margin-top:12px}
 
 /* ── Profiel: hero + kaarten (uit de mockup, light-only) ── */
 .hero{background:linear-gradient(150deg,var(--brand) 0%,var(--brand-2) 140%);color:#eaf2fa;
@@ -406,10 +456,28 @@ table.pr tbody tr:last-child td{border-bottom:0}
       <button class="btn" type="submit">Inloggen</button>
     </form>
     <div class="uitleg">
-      <b>Nog geen profiel?</b> Vraag er een aan: mail naar
-      <a href="mailto:inlinecomp@devriesen.com?subject=Profiel-aanvraag">inlinecomp@devriesen.com</a>
-      en meld je bij een wedstrijd persoonlijk bij de organisatie. Je krijgt dan een link om zelf een PIN aan te maken.
-      <br><br>Je profiel is <b>privé</b> — niet openbaar en niet vindbaar in zoekmachines.
+      <b>Nog geen profiel? Vraag een profiel-account aan.</b> Je krijgt van de organisatie
+      een link waarmee je zelf een PIN aanmaakt. Meld je ook even persoonlijk bij de
+      organisatie op de wedstrijd.
+      <?php if ($okmsg): ?>
+        <div class="melding ok mt12"><?= esc($okmsg) ?></div>
+      <?php else: ?>
+        <form method="post" autocomplete="off" class="aanvraag-form">
+          <input type="hidden" name="csrf" value="<?= esc($CSRF) ?>">
+          <input type="hidden" name="actie" value="aanvraag">
+          <input type="text" name="website" class="hp" tabindex="-1" autocomplete="off" aria-hidden="true">
+          <div class="veld"><label for="a_naam">Je volledige naam</label>
+            <input type="text" id="a_naam" name="a_naam" required></div>
+          <div class="veld"><label for="a_snr">Startnummer (indien bekend)</label>
+            <input type="text" id="a_snr" name="a_snr" inputmode="numeric"></div>
+          <div class="veld"><label for="a_email">Je e-mailadres</label>
+            <input type="email" id="a_email" name="a_email" required></div>
+          <div class="veld"><label for="a_opm">Opmerking (optioneel)</label>
+            <input type="text" id="a_opm" name="a_opm"></div>
+          <button class="btn" type="submit">Profiel-account aanvragen</button>
+        </form>
+      <?php endif; ?>
+      <div class="mt12">Je profiel is <b>privé</b> — niet openbaar en niet vindbaar in zoekmachines.</div>
     </div>
   </div>
 <?php endif; ?>
