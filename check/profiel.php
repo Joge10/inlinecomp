@@ -243,6 +243,7 @@ a{color:var(--accent)}
 .veld-hint{font-weight:400;color:var(--faint);font-size:.8rem}
 .veld input{width:100%;font:inherit;padding:10px 11px;border:1px solid #c0c8d0;border-radius:8px}
 .veld input:focus{outline:2px solid var(--accent);outline-offset:-1px}
+.veld input[readonly]{background:var(--surface-2);color:var(--muted)}
 .authcard .btn{width:100%;margin-top:6px;padding:11px}
 .melding{padding:9px 12px;border-radius:8px;font-size:.9rem;margin-bottom:12px}
 .melding.fout{background:#fce4e4;color:#b71c1c;border:1px solid #f3b6b6}
@@ -445,7 +446,7 @@ table.pr tbody tr:last-child td{border-bottom:0}
 <?php elseif ($claimView && $claimNaam !== ''): ?>
   <div class="authcard">
     <h1>Profiel activeren</h1>
-    <div class="sub">Welkom <b><?= esc($claimNaam) ?></b> — vul je gebruikersnaam in (zoals in de e-mail van de organisatie) en kies een PIN.</div>
+    <div class="sub">Welkom <b><?= esc($claimNaam) ?></b> — <?= $claimUser !== '' ? 'je gebruikersnaam staat al ingevuld; kies alleen nog een PIN.' : 'vul je gebruikersnaam in (zoals in de e-mail van de organisatie) en kies een PIN.' ?></div>
     <?php if ($fout): ?><div class="melding fout"><?= esc($fout) ?></div><?php endif; ?>
     <form method="post" autocomplete="off">
       <input type="hidden" name="csrf" value="<?= esc($CSRF) ?>">
@@ -453,7 +454,11 @@ table.pr tbody tr:last-child td{border-bottom:0}
       <input type="hidden" name="token" value="<?= esc($claimRaw) ?>">
       <div class="veld">
         <label for="username">Gebruikersnaam</label>
-        <input type="text" id="username" name="username" value="<?= esc($prefillUser) ?>" autocomplete="off" required>
+        <?php if ($claimUser !== ''): ?>
+          <input type="text" id="username" name="username" value="<?= esc($claimUser) ?>" readonly>
+        <?php else: ?>
+          <input type="text" id="username" name="username" value="<?= esc($prefillUser) ?>" autocomplete="off" required>
+        <?php endif; ?>
       </div>
       <div class="veld">
         <label for="pin">Kies een PIN (5 of 6 cijfers)</label>
