@@ -967,7 +967,7 @@ function rijGenereerProfielClaim(licenseKey) {
             </div>
             <label class="rij-edit-nc-veld">
                 Gebruikersnaam
-                <input type="text" id="rij-cg-user" class="inp" placeholder="bv. snelle.schaatser" autocomplete="off" maxlength="30"
+                <input type="text" id="rij-cg-user" class="inp" placeholder="bv. snelle.skater" autocomplete="off" maxlength="30"
                 <span class="rij-cg-status" id="rij-cg-status"></span>
             </label>
             <div class="rij-edit-nc-knoppen">
