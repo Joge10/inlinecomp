@@ -264,6 +264,29 @@ function rijRenderDetail(data) {
         }
     }
 
+    // Profiel-status ("Mijn InlineComp"): geclaimd / claim openstaand / geen.
+    const pf = data.profiel;
+    const _dfmt = s => s ? new Date(String(s).replace(' ', 'T')).toLocaleDateString('nl-NL',
+        { day: 'numeric', month: 'short', year: 'numeric' }) : '—';
+    let profielBlok = '';
+    if (!anoniem) {
+        let status;
+        if (pf && pf.geclaimd) {
+            status = `✅ Actief profiel — gebruikersnaam <b>${escHtml(pf.username || '?')}</b>`
+                   + `<span class="rij-profiel-meta">geclaimd ${escHtml(_dfmt(pf.claimed_at))} · laatste login ${escHtml(_dfmt(pf.laatste_login))}</span>`;
+        } else if (pf && pf.claim_open) {
+            status = `⏳ Claim-link openstaand${pf.username ? ` (gebruikersnaam <b>${escHtml(pf.username)}</b>)` : ''}`
+                   + `<span class="rij-profiel-meta">nog niet geactiveerd · geldig tot ${escHtml(_dfmt(pf.claim_expires))}</span>`;
+        } else {
+            status = '<span class="rij-profiel-geen">— Geen profiel</span>';
+        }
+        profielBlok = `
+        <div class="rij-profiel-blok">
+            <div class="rij-profiel-status">${status}</div>
+            ${pf ? `<button class="btn-secondary rij-profiel-del" id="rij-btn-profiel-del">🗑 Profiel verwijderen</button>` : ''}
+        </div>`;
+    }
+
     document.getElementById('rij-detail').innerHTML = `
         <div class="rij-detail-header">
             <h2>${escHtml(r.full_name)}${anoniem ? ' <span class="rij-anoniem-badge">geanonimiseerd</span>' : ''}</h2>
@@ -276,8 +299,9 @@ function rijRenderDetail(data) {
         <div class="rij-acties-blok" id="rij-acties-blok">
             <button class="btn-secondary" id="rij-btn-bewerk">✎ Bewerken</button>
             <button class="btn-secondary" id="rij-btn-verplaats">📋 Inschrijvingen verplaatsen</button>
-            <button class="btn-secondary" id="rij-btn-profiel" title="Genereer een eenmalige link waarmee deze rijder zelf een PIN aanmaakt voor 'Mijn InlineComp'">🔑 Profiel-link</button>
+            <button class="btn-secondary" id="rij-btn-profiel" title="Genereer een eenmalige link waarmee deze rijder een PIN aanmaakt voor 'Mijn InlineComp' (ook voor PIN-reset)">🔑 Profiel-link</button>
         </div>`}
+        ${profielBlok}
 
         <h3>Persoonsgegevens</h3>
         <div class="rij-detail-grid" id="rij-pers-grid">
@@ -323,6 +347,8 @@ function rijRenderDetail(data) {
         () => rijEditOpenVerplaatsmodus(r.license_key));
     document.getElementById('rij-btn-profiel')?.addEventListener('click',
         () => rijGenereerProfielClaim(r.license_key));
+    document.getElementById('rij-btn-profiel-del')?.addEventListener('click',
+        () => rijVerwijderProfiel(r));
 }
 
 // ── Edit-modi (persoonsdata bewerken / DC-verplaatsen) ────────────────
@@ -896,6 +922,31 @@ async function rijGenereerProfielClaim(licenseKey) {
         _rijToonClaimLink(d);
     } catch (e) {
         toonBevestigDialog('Fout: ' + e.message, 'Profiel-link', 'OK', '');
+    }
+}
+
+// Profiel verwijderen (rijder_profiel-rij). Uitslagen/persons blijven; daarna
+// kan de rijder opnieuw een claim-link krijgen. Bevestiging vereist.
+async function rijVerwijderProfiel(rijder) {
+    const ok = await toonBevestigDialog(
+        `Het persoonlijke profiel (Mijn InlineComp) van ${rijder.full_name} verwijderen? ` +
+        `Gebruikersnaam en PIN vervallen; wedstrijduitslagen blijven ongewijzigd. ` +
+        `Je kunt daarna een nieuwe profiel-link genereren.`,
+        'Profiel verwijderen'
+    );
+    if (!ok) return;
+    try {
+        const res = await fetch('api/persoon_beheer.php?action=profiel_verwijderen', {
+            method:  'POST',
+            headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+            body:    'license_key=' + encodeURIComponent(rijder.license_key),
+        });
+        const d = await res.json();
+        if (!res.ok || d.error) throw new Error(d.error || 'Fout bij verwijderen');
+        toonBevestigDialog('Profiel verwijderd.', 'Profiel verwijderen', 'OK', '');
+        rijToonDetail(rijder.license_key);   // ververs de detail-weergave
+    } catch (e) {
+        toonBevestigDialog('Fout: ' + e.message, 'Profiel verwijderen', 'OK', '');
     }
 }
 

@@ -287,6 +287,22 @@ try {
         $bktStmt->execute([$lk]);
         $bekendeTransponders = $bktStmt->fetchAll(PDO::FETCH_ASSOC);
 
+        // Profiel-status ("Mijn InlineComp"): geclaimd / claim openstaand / geen.
+        $prStmt = $pdo->prepare("
+            SELECT username, (pin_hash IS NOT NULL) AS geclaimd, claimed_at, laatste_login,
+                   (claim_token_hash IS NOT NULL AND claim_expires > NOW()) AS claim_open, claim_expires
+            FROM rijder_profiel WHERE license_key = ?");
+        $prStmt->execute([$lk]);
+        $prof = $prStmt->fetch(PDO::FETCH_ASSOC);
+        $profiel = $prof ? [
+            'username'      => $prof['username'],
+            'geclaimd'      => (bool)$prof['geclaimd'],
+            'claimed_at'    => $prof['claimed_at'],
+            'laatste_login' => $prof['laatste_login'],
+            'claim_open'    => (bool)$prof['claim_open'],
+            'claim_expires' => $prof['claim_expires'],
+        ] : null;
+
         echo json_encode([
             'rijder'               => $rijder,
             'transponders'         => $transponders,
@@ -294,7 +310,22 @@ try {
             'wedstrijden'          => $wedstrijden,
             'afstanden'            => $afstanden,
             'pdf_klassementen'     => $pdfKlassementen,
+            'profiel'              => $profiel,
         ]);
+        exit;
+    }
+
+    if ($action === 'profiel_verwijderen') {
+        // Verwijder het persoonlijke profiel (rijder_profiel-rij). Uitslagen/
+        // persons blijven ongemoeid. Daarna kan opnieuw een claim-link.
+        if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
+            http_response_code(405); echo json_encode(['error' => 'POST vereist']); exit;
+        }
+        $lk = trim($_POST['license_key'] ?? '');
+        if ($lk === '') { http_response_code(400); echo json_encode(['error' => 'license_key vereist']); exit; }
+        $del = $pdo->prepare("DELETE FROM rijder_profiel WHERE license_key = ?");
+        $del->execute([$lk]);
+        echo json_encode(['ok' => true, 'verwijderd' => $del->rowCount()]);
         exit;
     }
 

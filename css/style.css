@@ -5982,6 +5982,16 @@ col.live-col-rondes  { width: 40px; }
     display: flex; gap: .5rem; align-items: center; flex-wrap: wrap;
     margin: .8rem 0 .4rem;
 }
+/* Profiel-status ("Mijn InlineComp") in de rijder-detail */
+.rij-profiel-blok {
+    display: flex; align-items: center; justify-content: space-between; gap: .6rem;
+    flex-wrap: wrap; margin: .2rem 0 .6rem; padding: .55rem .8rem;
+    background: #f5f8fd; border: 1px solid var(--border); border-radius: 8px;
+}
+.rij-profiel-status { font-size: .9rem; color: #1a3a5c; }
+.rij-profiel-meta   { display: block; color: #667; font-size: .8rem; margin-top: 2px; }
+.rij-profiel-geen   { color: #888; }
+.rij-profiel-del    { font-size: .82rem; }
 .rij-edit-card {
     border: 1px solid #c0d8ec; border-radius: 6px;
     padding: .7rem .9rem; background: #f8fbfd;
