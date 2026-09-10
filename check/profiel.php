@@ -531,7 +531,7 @@ table.pr tbody tr:last-child td{border-bottom:0}
           <div class="veld"><label for="a_email">Je e-mailadres</label>
             <input type="email" id="a_email" name="a_email" required></div>
           <div class="veld"><label for="a_user">Gewenste gebruikersnaam <span class="veld-hint">— hiermee log je straks in</span></label>
-            <input type="text" id="a_user" name="a_user" pattern="[-A-Za-z0-9._]{3,30}" minlength="3" maxlength="30" placeholder="bv. snelle.skater" required></div>
+            <input type="text" id="a_user" name="a_user" pattern="[-A-Za-z0-9._]{3,30}" minlength="3" maxlength="30" placeholder="bv. voornaam.achternaam" required></div>
           <div class="veld"><label for="a_opm">Opmerking (optioneel)</label>
             <input type="text" id="a_opm" name="a_opm"></div>
           <button class="btn" type="submit">Profiel-account aanvragen</button>
