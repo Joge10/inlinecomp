@@ -654,6 +654,11 @@ header h1 { font-size: 1.5rem; font-weight: 700; line-height: 1.1; }
     border-radius: 10px; padding: 14px; margin-bottom: 10px;
     box-shadow: 0 1px 3px rgba(0,0,0,.04);
 }
+.mijn-link {
+    margin-top: 12px; padding-top: 12px; border-top: 1px solid #eef1f4; font-size: .9rem;
+}
+.mijn-link a { color: var(--blauw); font-weight: 600; text-decoration: none; }
+.mijn-link a:hover { text-decoration: underline; }
 label.veld-lbl {
     display: block; font-size: .82rem; color: #555;
     margin-bottom: 4px; font-weight: 600;
@@ -814,6 +819,9 @@ body.met-footer { padding-bottom: 90px; }
         <div class="veld-rij" id="zoek-rij" style="display:none">
             <label class="veld-lbl" for="zoek" data-i18n="lbl_zoek">2. Zoek je naam</label>
             <input type="text" id="zoek" autocomplete="off" inputmode="search">
+        </div>
+        <div class="mijn-link">
+            <a href="profiel.php">👤 Mijn InlineComp — inloggen op je persoonlijke profiel</a>
         </div>
     </div>
 

@@ -276,6 +276,7 @@ function rijRenderDetail(data) {
         <div class="rij-acties-blok" id="rij-acties-blok">
             <button class="btn-secondary" id="rij-btn-bewerk">✎ Bewerken</button>
             <button class="btn-secondary" id="rij-btn-verplaats">📋 Inschrijvingen verplaatsen</button>
+            <button class="btn-secondary" id="rij-btn-profiel" title="Genereer een eenmalige link waarmee deze rijder zelf een PIN aanmaakt voor 'Mijn InlineComp'">🔑 Profiel-link</button>
         </div>`}
 
         <h3>Persoonsgegevens</h3>
@@ -320,6 +321,8 @@ function rijRenderDetail(data) {
         () => rijEditOpenBewerkmodus(r.license_key));
     document.getElementById('rij-btn-verplaats')?.addEventListener('click',
         () => rijEditOpenVerplaatsmodus(r.license_key));
+    document.getElementById('rij-btn-profiel')?.addEventListener('click',
+        () => rijGenereerProfielClaim(r.license_key));
 }
 
 // ── Edit-modi (persoonsdata bewerken / DC-verplaatsen) ────────────────
@@ -864,4 +867,65 @@ async function rijAnonUndo(rijder) {
     } catch (e) {
         toonBevestigDialog('Fout: ' + e.message, 'Anonimisatie opheffen', 'OK', '');
     }
+}
+
+// ── Profiel-claim: genereer een eenmalige link waarmee de rijder zelf een PIN
+//    aanmaakt voor "Mijn InlineComp" (check/profiel.php). Geen e-mail opgeslagen;
+//    de operator mailt de link. Toont de link in een kopieerbaar venster.
+async function rijGenereerProfielClaim(licenseKey) {
+    try {
+        const res = await fetch('api/persoon_beheer.php?action=profiel_claim', {
+            method:  'POST',
+            headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+            body:    'license_key=' + encodeURIComponent(licenseKey),
+        });
+        const d = await res.json();
+        if (!res.ok || d.error) throw new Error(d.error || 'Fout bij genereren');
+        _rijToonClaimLink(d);
+    } catch (e) {
+        toonBevestigDialog('Fout: ' + e.message, 'Profiel-link', 'OK', '');
+    }
+}
+
+function _rijToonClaimLink(d) {
+    const overlay = document.createElement('div');
+    overlay.className = 'rij-edit-nc-overlay';
+    overlay.innerHTML = `
+        <div class="rij-edit-nc-box">
+            <div class="rij-edit-nc-titel">🔑 Profiel-link voor ${escHtml(d.naam)}</div>
+            <div class="rij-edit-nc-uitleg">
+                Stuur deze link naar de rijder (per e-mail); ze maken er zelf een PIN mee aan.
+                Geldig tot <b>${escHtml(d.verloopt)}</b>.
+                ${d.reset ? '<br><b>Let op:</b> deze rijder had al een PIN — met deze link stelt hij een <b>nieuwe</b> in (reset).' : ''}
+            </div>
+            <label class="rij-edit-nc-veld">
+                Claim-link
+                <input type="text" id="rij-claim-url" class="inp" readonly value="${escHtml(d.url)}">
+            </label>
+            <div class="rij-edit-nc-knoppen">
+                <button class="btn-secondary" id="rij-claim-sluit" type="button">Sluiten</button>
+                <button class="btn-primary" id="rij-claim-copy" type="button">📋 Kopieer link</button>
+            </div>
+        </div>`;
+    document.body.appendChild(overlay);
+    const inp = overlay.querySelector('#rij-claim-url');
+    const sluit = () => overlay.remove();
+    overlay.querySelector('#rij-claim-sluit').onclick = sluit;
+    overlay.addEventListener('click', e => { if (e.target === overlay) sluit(); });
+    inp.addEventListener('focus', () => inp.select());
+    overlay.querySelector('#rij-claim-copy').onclick = async () => {
+        const btn = overlay.querySelector('#rij-claim-copy');
+        try {
+            if (navigator.clipboard && navigator.clipboard.writeText) {
+                await navigator.clipboard.writeText(inp.value);
+            } else {
+                inp.select(); document.execCommand('copy');
+            }
+            btn.textContent = '✓ Gekopieerd!';
+            setTimeout(() => { btn.textContent = '📋 Kopieer link'; }, 1600);
+        } catch (e) {
+            inp.select();   // laat de operator handmatig kopiëren
+        }
+    };
+    inp.focus();
 }

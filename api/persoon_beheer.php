@@ -71,6 +71,44 @@ try {
         exit;
     }
 
+    if ($action === 'profiel_claim') {
+        // Genereer een eenmalige claim-link voor het persoonlijke rijder-profiel
+        // ("Mijn InlineComp"). De operator mailt/geeft deze link aan de rijder;
+        // die stelt er zelf een PIN mee in (zie check/profiel.php). Geen e-mail
+        // wordt opgeslagen — de identiteitscheck is de Geert-gate (in-persoon +
+        // e-mail). Token 7 dagen geldig; alleen de sha256-hash wordt bewaard.
+        if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
+            http_response_code(405); echo json_encode(['error' => 'POST vereist']); exit;
+        }
+        $lk = trim($_POST['license_key'] ?? '');
+        if ($lk === '') { http_response_code(400); echo json_encode(['error' => 'license_key vereist']); exit; }
+        $ps = $pdo->prepare("SELECT full_name FROM persons WHERE license_key = ? AND anonymized_at IS NULL");
+        $ps->execute([$lk]);
+        $naam = $ps->fetchColumn();
+        if ($naam === false) { http_response_code(404); echo json_encode(['error' => 'Rijder niet gevonden']); exit; }
+        // Al een PIN? Dan is deze nieuwe link een reset — meld dat aan de operator.
+        $al = $pdo->prepare("SELECT pin_hash IS NOT NULL FROM rijder_profiel WHERE license_key = ?");
+        $al->execute([$lk]);
+        $reset = (bool)$al->fetchColumn();
+        $rawTok = bin2hex(random_bytes(16));
+        $pdo->prepare("
+            INSERT INTO rijder_profiel (license_key, claim_token_hash, claim_expires)
+            VALUES (?, ?, DATE_ADD(NOW(), INTERVAL 7 DAY))
+            ON DUPLICATE KEY UPDATE claim_token_hash = VALUES(claim_token_hash),
+                                    claim_expires    = VALUES(claim_expires)
+        ")->execute([$lk, hash('sha256', $rawTok)]);
+        $scheme = (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off') ? 'https' : 'http';
+        $host   = $_SERVER['HTTP_HOST'] ?? 'inlineresults.devriesen.com';
+        echo json_encode([
+            'ok'       => true,
+            'naam'     => $naam,
+            'url'      => $scheme . '://' . $host . '/check/profiel.php?claim=' . $rawTok,
+            'verloopt' => date('d-m-Y H:i', time() + 7 * 86400),
+            'reset'    => $reset,
+        ], JSON_UNESCAPED_UNICODE);
+        exit;
+    }
+
     if ($action === 'detail') {
         $lk = trim($_GET['license_key'] ?? '');
         if (!$lk) {
