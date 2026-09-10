@@ -229,9 +229,33 @@ if ($ingelogd) {
     $profiel = rijderProfielData($pdo, $_SESSION['rijder_lic']);
     if (!$profiel['persoon']) { unset($_SESSION['rijder_lic']); $ingelogd = false; }
 }
+
+// ── Admin-testweergave ──────────────────────────────────────────────────────
+// Een ingelogde beheerder (owner/admin) kan via ?preview=<license_key> het
+// profiel van een rijder bekijken zoals de rijder het ziet — zonder PIN.
+// Alleen-lezen; handig om te controleren of alles goed in "Mijn InlineComp"
+// landt (bv. bij een nieuwe aanvraag). Leest de admin-sessie (cookie
+// ic_session, zelfde origin) los van de rijder-sessie.
+$adminPreview = false;
+$previewLic = trim($_GET['preview'] ?? '');
+if ($previewLic !== '' && !$ingelogd) {
+    require_once __DIR__ . '/../auth/session.php';
+    $admin = getSession($pdo);
+    if ($admin && in_array($admin['role'] ?? '', ['owner', 'admin'], true)) {
+        $p = rijderProfielData($pdo, $previewLic);
+        if (!empty($p['persoon'])) {
+            $adminPreview = true; $claimView = false; $profiel = $p;
+        } else {
+            $fout = 'Testweergave: deze rijder is niet gevonden.';
+        }
+    } else {
+        $fout = 'Testweergave is alleen beschikbaar voor ingelogde beheerders.';
+    }
+}
+
 // Demo-modus: laat (verzonnen) voorbeelddata zien zodat een bezoeker weet wat
-// een profiel is vóór hij er een aanvraagt. Alleen als niet ingelogd.
-$demo = (isset($_GET['demo']) && !$ingelogd);
+// een profiel is vóór hij er een aanvraagt. Alleen als niet ingelogd/geen preview.
+$demo = (isset($_GET['demo']) && !$ingelogd && !$adminPreview);
 if ($demo) { $claimView = false; $profiel = rijderProfielDemo(); }
 ?><!DOCTYPE html>
 <html lang="nl">
@@ -282,6 +306,8 @@ a{color:var(--accent)}
 .melding.ok{background:#e8f5e9;color:#2e7d32;border:1px solid #a5d6a7}
 .demo-banner{background:#fff4e6;border:1px solid #ffd9a3;color:#8a5a1a;border-radius:10px;padding:10px 14px;margin-top:12px;font-size:.9rem}
 .demo-banner a{color:var(--oranje);font-weight:600;white-space:nowrap}
+.admin-banner{background:#eef3fb;border:1px solid #bcd2ee;color:#1a3a5c;border-radius:10px;padding:10px 14px;margin-top:12px;font-size:.9rem}
+.ap-tag{display:inline-block;background:#1a3a5c;color:#fff;border-radius:8px;padding:6px 12px;font-size:.85rem;font-weight:600}
 .uitleg{margin-top:18px;padding-top:16px;border-top:1px solid var(--line);font-size:.86rem;color:var(--muted)}
 .uitleg b{color:var(--ink)}
 .aanvraag-form{margin-top:12px}
@@ -392,12 +418,14 @@ table.pr tbody tr:last-child td{border-bottom:0}
 </head>
 <body>
 <div class="wrap">
-<?php if ($ingelogd || $demo): $pr = $profiel['persoon']; $stat = $profiel['stats'];
+<?php if ($ingelogd || $demo || $adminPreview): $pr = $profiel['persoon']; $stat = $profiel['stats'];
       $catTxt = $pr['category'] ?: ''; ?>
   <div class="topbar">
     <a class="home" href="<?= $demo ? 'profiel.php' : './' ?>"><?= $demo ? '← Terug' : '← InlineComp Check' ?></a>
     <?php if ($demo): ?>
       <a class="btn" href="profiel.php">Vraag je eigen profiel aan</a>
+    <?php elseif ($adminPreview): ?>
+      <span class="ap-tag">🔒 Testweergave (beheer)</span>
     <?php else: ?>
       <form method="post" style="margin:0">
         <input type="hidden" name="csrf" value="<?= esc($CSRF) ?>">
@@ -407,6 +435,8 @@ table.pr tbody tr:last-child td{border-bottom:0}
   </div>
   <?php if ($demo): ?>
     <div class="demo-banner">👀 <b>Voorbeeld</b> — zo ziet je persoonlijke profiel eruit. Met een eigen profiel zie je je <b>échte</b> resultaten, records en progressie. <a href="profiel.php">Vraag er een aan →</a></div>
+  <?php elseif ($adminPreview): ?>
+    <div class="admin-banner">🔒 <b>Testweergave (beheer)</b> — je bekijkt het profiel van <b><?= esc($pr['full_name']) ?></b> zoals de rijder het straks ziet. Alleen-lezen; je bent niet ingelogd als deze rijder. Sluit dit tabblad om terug te gaan.</div>
   <?php endif; ?>
 
   <header class="hero">

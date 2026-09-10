@@ -6040,10 +6040,12 @@ col.live-col-rondes  { width: 40px; }
     padding: .4rem .6rem; font-size: .88rem; margin: .3rem 0;
 }
 .rij-ag-gekozen .rij-ag-lk { color: #667; font-size: .8em; }
-.rij-ag-gekozen .rij-ag-wis {
+.rij-ag-gekozen .rij-ag-wis,
+.rij-ag-gekozen .rij-ag-prev {
     background: none; border: 0; color: #1565c0; cursor: pointer;
     text-decoration: underline; font-size: .82em; padding: 0; margin-left: .3rem;
 }
+.rij-profiel-knoppen { display: flex; gap: .45rem; flex-wrap: wrap; align-items: center; }
 /* Live gebruikersnaam-check in het profiel-link-genereer-scherm */
 .rij-cg-status { display: block; font-size: .8rem; margin-top: 3px; min-height: 1em; color: #667; }
 .rij-cg-groen  { color: #2e7d32; font-weight: 600; }

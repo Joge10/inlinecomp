@@ -189,7 +189,11 @@ function rijAanvraagGoedkeuren(a) {
             resBox.querySelectorAll('li').forEach(li => li.addEventListener('click', () => {
                 gekozenLic = li.dataset.lk; gekozenNaam = li.dataset.naam;
                 gekBox.hidden = false;
-                gekBox.innerHTML = `Gekoppeld: <b>${escHtml(gekozenNaam)}</b> <span class="rij-ag-lk">${escHtml(gekozenLic)}</span> <button type="button" class="rij-ag-wis">wijzig</button>`;
+                gekBox.innerHTML = `Gekoppeld: <b>${escHtml(gekozenNaam)}</b> <span class="rij-ag-lk">${escHtml(gekozenLic)}</span>
+                    <button type="button" class="rij-ag-prev">🔍 bekijk profiel</button>
+                    <button type="button" class="rij-ag-wis">wijzig</button>`;
+                gekBox.querySelector('.rij-ag-prev').onclick = () =>
+                    window.open('check/profiel.php?preview=' + encodeURIComponent(gekozenLic), '_blank', 'noopener');
                 gekBox.querySelector('.rij-ag-wis').onclick = () => {
                     gekozenLic = ''; gekozenNaam = ''; gekBox.hidden = true; gekBox.innerHTML = '';
                     herwaardeer(); checkUser();
@@ -580,7 +584,10 @@ function rijRenderDetail(data) {
         profielBlok = `
         <div class="rij-profiel-blok">
             <div class="rij-profiel-status">${status}</div>
-            ${pf ? `<button class="btn-secondary rij-profiel-del" id="rij-btn-profiel-del">🗑 Profiel verwijderen</button>` : ''}
+            ${pf ? `<div class="rij-profiel-knoppen">
+                <button class="btn-secondary" id="rij-btn-testprofiel" title="Bekijk dit profiel zoals de rijder het ziet (alleen-lezen, geen PIN nodig)">🔍 Test profiel</button>
+                <button class="btn-secondary rij-profiel-del" id="rij-btn-profiel-del">🗑 Profiel verwijderen</button>
+            </div>` : ''}
         </div>`;
     }
 
@@ -644,6 +651,8 @@ function rijRenderDetail(data) {
         () => rijEditOpenVerplaatsmodus(r.license_key));
     document.getElementById('rij-btn-profiel')?.addEventListener('click',
         () => rijGenereerProfielClaim(r.license_key));
+    document.getElementById('rij-btn-testprofiel')?.addEventListener('click',
+        () => window.open('check/profiel.php?preview=' + encodeURIComponent(r.license_key), '_blank', 'noopener'));
     document.getElementById('rij-btn-profiel-del')?.addEventListener('click',
         () => rijVerwijderProfiel(r));
 }
