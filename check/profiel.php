@@ -201,6 +201,10 @@ if ($ingelogd) {
     $profiel = rijderProfielData($pdo, $_SESSION['rijder_lic']);
     if (!$profiel['persoon']) { unset($_SESSION['rijder_lic']); $ingelogd = false; }
 }
+// Demo-modus: laat (verzonnen) voorbeelddata zien zodat een bezoeker weet wat
+// een profiel is vóór hij er een aanvraagt. Alleen als niet ingelogd.
+$demo = (isset($_GET['demo']) && !$ingelogd);
+if ($demo) { $claimView = false; $profiel = rijderProfielDemo(); }
 ?><!DOCTYPE html>
 <html lang="nl">
 <head>
@@ -248,6 +252,8 @@ a{color:var(--accent)}
 .melding{padding:9px 12px;border-radius:8px;font-size:.9rem;margin-bottom:12px}
 .melding.fout{background:#fce4e4;color:#b71c1c;border:1px solid #f3b6b6}
 .melding.ok{background:#e8f5e9;color:#2e7d32;border:1px solid #a5d6a7}
+.demo-banner{background:#fff4e6;border:1px solid #ffd9a3;color:#8a5a1a;border-radius:10px;padding:10px 14px;margin-top:12px;font-size:.9rem}
+.demo-banner a{color:var(--oranje);font-weight:600;white-space:nowrap}
 .uitleg{margin-top:18px;padding-top:16px;border-top:1px solid var(--line);font-size:.86rem;color:var(--muted)}
 .uitleg b{color:var(--ink)}
 .aanvraag-form{margin-top:12px}
@@ -358,15 +364,22 @@ table.pr tbody tr:last-child td{border-bottom:0}
 </head>
 <body>
 <div class="wrap">
-<?php if ($ingelogd): $pr = $profiel['persoon']; $stat = $profiel['stats'];
+<?php if ($ingelogd || $demo): $pr = $profiel['persoon']; $stat = $profiel['stats'];
       $catTxt = $pr['category'] ?: ''; ?>
   <div class="topbar">
-    <a class="home" href="./">← InlineComp Check</a>
-    <form method="post" style="margin:0">
-      <input type="hidden" name="csrf" value="<?= esc($CSRF) ?>">
-      <button class="btn btn-sec" name="actie" value="logout">Uitloggen</button>
-    </form>
+    <a class="home" href="<?= $demo ? 'profiel.php' : './' ?>"><?= $demo ? '← Terug' : '← InlineComp Check' ?></a>
+    <?php if ($demo): ?>
+      <a class="btn" href="profiel.php">Vraag je eigen profiel aan</a>
+    <?php else: ?>
+      <form method="post" style="margin:0">
+        <input type="hidden" name="csrf" value="<?= esc($CSRF) ?>">
+        <button class="btn btn-sec" name="actie" value="logout">Uitloggen</button>
+      </form>
+    <?php endif; ?>
   </div>
+  <?php if ($demo): ?>
+    <div class="demo-banner">👀 <b>Voorbeeld</b> — zo ziet je persoonlijke profiel eruit. Met een eigen profiel zie je je <b>échte</b> resultaten, records en progressie. <a href="profiel.php">Vraag er een aan →</a></div>
+  <?php endif; ?>
 
   <header class="hero">
     <div class="eyebrow">Mijn InlineComp</div>

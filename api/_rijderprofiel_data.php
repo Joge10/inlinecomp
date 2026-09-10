@@ -212,4 +212,48 @@ function rijderProfielData(PDO $pdo, string $lic): array {
     ];
 }
 
+// Verzonnen voorbeeld-profiel voor de demo (?demo=1) — GEEN echte rijder, zodat
+// er geen publiek dossier van een bestaand persoon ontstaat. Toont een mooie
+// dalende (= verbeterende) lijn zodat de bezoeker snapt wat de grafiek doet.
+function rijderProfielDemo(): array {
+    $blue = 'var(--c-blue)'; $orange = 'var(--c-orange)'; $green = 'var(--c-green)';
+    return [
+        'persoon' => ['license_key' => 'demo', 'full_name' => 'Voorbeeld Rijder',
+            'category' => 'HSA', 'club' => 'Skeelerclub Voorbeeld', 'nationality' => 'NED', 'start_number' => 99],
+        'stats'   => ['wedstrijden' => 8, 'uitslagen' => 28, 'beste_klassering' => 2, 'seizoenen' => 4],
+        'sprint'  => [
+            '200m'  => ['color' => $blue, 'p' => [
+                ['d'=>'2023-06-15','c'=>'HSB','w'=>'Voorbeeld NK Baan 2023','r'=>12,'t'=>20450,'tr'=>'Serie'],
+                ['d'=>'2024-05-20','c'=>'HSA','w'=>'Voorbeeld Competitie 1','r'=>9,'t'=>20110,'tr'=>'Serie'],
+                ['d'=>'2025-05-18','c'=>'HSA','w'=>'Voorbeeld Competitie 2','r'=>6,'t'=>19680,'tr'=>'Halve finale'],
+                ['d'=>'2026-05-28','c'=>'HSA','w'=>'Voorbeeld NK Baan 2026','r'=>4,'t'=>19340,'tr'=>'Serie'],
+            ]],
+            '500m'  => ['color' => $orange, 'p' => [
+                ['d'=>'2023-06-15','c'=>'HSB','w'=>'Voorbeeld NK Baan 2023','r'=>14,'t'=>47200,'tr'=>'Serie'],
+                ['d'=>'2024-05-20','c'=>'HSA','w'=>'Voorbeeld Competitie 1','r'=>10,'t'=>46300,'tr'=>'Serie'],
+                ['d'=>'2025-05-18','c'=>'HSA','w'=>'Voorbeeld Competitie 2','r'=>7,'t'=>45550],
+                ['d'=>'2026-05-28','c'=>'HSA','w'=>'Voorbeeld NK Baan 2026','r'=>5,'t'=>44900,'tr'=>'Finale'],
+            ]],
+            '1000m' => ['color' => $green, 'p' => [
+                ['d'=>'2024-05-20','c'=>'HSA','w'=>'Voorbeeld Competitie 1','r'=>11,'t'=>92000,'tr'=>'Halve finale'],
+                ['d'=>'2025-05-18','c'=>'HSA','w'=>'Voorbeeld Competitie 2','r'=>8,'t'=>90500,'tr'=>'Halve finale'],
+                ['d'=>'2026-06-20','c'=>'HSA','w'=>'Voorbeeld Weg 2026','r'=>3,'rn'=>2,'t'=>88900,'tr'=>'Halve finale'],
+            ]],
+        ],
+        'lang'    => [
+            'Puntenkoers' => ['color' => $blue, 'p' => [
+                ['d'=>'2023-06-15','c'=>'HSB','w'=>'Voorbeeld NK Baan 2023','r'=>13],
+                ['d'=>'2024-05-20','c'=>'HSA','w'=>'Voorbeeld Competitie 1','r'=>9],
+                ['d'=>'2025-05-18','c'=>'HSA','w'=>'Voorbeeld Competitie 2','r'=>5],
+                ['d'=>'2026-06-20','c'=>'HSA','w'=>'Voorbeeld Weg 2026','r'=>2],
+            ]],
+            'Afvalkoers'  => ['color' => $orange, 'p' => [
+                ['d'=>'2024-05-20','c'=>'HSA','w'=>'Voorbeeld Competitie 1','r'=>12],
+                ['d'=>'2025-05-18','c'=>'HSA','w'=>'Voorbeeld Competitie 2','r'=>8],
+                ['d'=>'2026-05-28','c'=>'HSA','w'=>'Voorbeeld NK Baan 2026','r'=>6],
+            ]],
+        ],
+    ];
+}
+
 } // function_exists
