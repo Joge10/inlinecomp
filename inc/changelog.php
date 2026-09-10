@@ -61,15 +61,6 @@ return [
         ],
     ],
     [
-        'versie' => 'H1983.10.09', 'datum' => '10-09-2026', 'onderdelen' => ['public', 'coach'],
-        'tekst' => [
-            'nl' => '🔔 <b>Pushmeldingen (bèta)</b> — je kunt voortaan vrijwillig pushmeldingen op je telefoon aanzetten voor loting, uitslag of een mededeling van de rijders die je volgt. Per type in te stellen en op elk moment weer uit te zetten. Deze functie is nog in <b>bèta</b> — laat gerust weten als iets niet werkt.',
-            'en' => '🔔 <b>Push notifications (beta)</b> — you can now voluntarily enable push notifications on your phone for a draw, a result or an announcement about the skaters you follow. Configurable per type and switchable off at any time. This feature is still in <b>beta</b> — do let us know if something doesn\'t work.',
-            'de' => '🔔 <b>Push-Benachrichtigungen (Beta)</b> — du kannst jetzt freiwillig Push-Benachrichtigungen auf deinem Telefon für Auslosung, Ergebnis oder eine Mitteilung zu den von dir verfolgten Fahrern aktivieren. Pro Typ einstellbar und jederzeit wieder abschaltbar. Diese Funktion ist noch in der <b>Beta</b> — sag gerne Bescheid, wenn etwas nicht funktioniert.',
-            'fr' => '🔔 <b>Notifications push (bêta)</b> — vous pouvez désormais activer volontairement des notifications push sur votre téléphone pour un tirage, un résultat ou une annonce concernant les patineurs que vous suivez. Configurable par type et désactivable à tout moment. Cette fonction est encore en <b>bêta</b> — n\'hésitez pas à nous signaler tout problème.',
-        ],
-    ],
-    [
         'versie' => 'H1983.10.09', 'datum' => '10-09-2026', 'onderdelen' => ['admin'],
         'tekst' => [
             'nl' => '📊 <b>Bezoekers-dashboard — "Sessies" i.p.v. "Unieke bezoekers"</b> — de teller op het beheer-dashboard heette "Unieke bezoekers" maar telt in werkelijkheid sessies (een terugkerende bezoeker telt opnieuw). Het label is aangepast zodat het cijfer eerlijk weergeeft wat het meet.',
