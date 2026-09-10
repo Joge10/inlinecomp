@@ -158,6 +158,32 @@ Mozilla (Firefox) of Apple (Safari/iPhone). Zij ontvangen het technische endpoin
 (versleutelde) melding om deze te bezorgen; wij delen hierbij <strong>geen namen of
 rijdersgegevens</strong>, en de inhoud is versleuteld tussen ons en jouw apparaat.</p>
 
+<h2>1d. Persoonlijk profiel &mdash; "Mijn InlineComp" (optioneel)</h2>
+<p>Een rijder (of, bij jeugd, de ouder/verzorger) kan &mdash; geheel vrijwillig &mdash; een
+<strong>persoonlijk profiel</strong> aanvragen om de <strong>eigen</strong> wedstrijdgegevens
+overzichtelijk op één plek terug te zien: persoonlijke records, resultaten en een
+voortgangsgrafiek. Het profiel toont uitsluitend gegevens die al bij ons aanwezig zijn omdat
+de rijder aan wedstrijden heeft deelgenomen &mdash; er komt <strong>geen nieuwe informatie</strong> bij.</p>
+<p>Voor een profiel bewaren wij per rijder alleen:</p>
+<ul>
+    <li>een <strong>zelfgekozen gebruikersnaam</strong> om mee in te loggen;</li>
+    <li>een <strong>versleutelde pincode</strong> (bcrypt-hash) &mdash; wij kunnen de pincode
+        niet uitlezen;</li>
+    <li>de koppeling aan het bestaande <strong>licentienummer</strong> van de rijder.</li>
+</ul>
+<p>Wij bewaren <strong>geen e-mailadres</strong> bij het profiel. Een aanvraag verloopt via een
+formulier of e-mail aan de organisatie; een e-mailadres gebruiken wij alleen éénmalig om de
+aanvrager de aanmaaklink te sturen en verwijderen wij daarna. Het profiel is <strong>privé</strong>:
+het is alleen zichtbaar na inloggen met gebruikersnaam en pincode, wordt niet door zoekmachines
+geïndexeerd en de gegevens worden <strong>niet openbaar gedeeld</strong> &mdash; het is een privé-inzage
+van je eigen, reeds verwerkte resultaten. De grondslag is <strong>gerechtvaardigd belang</strong>
+(art. 6 lid 1 sub f AVG): het gaat om een besloten weergave van gegevens die de rijder zelf
+betreffen en die al onderdeel zijn van het wedstrijdarchief. Omdat er niets openbaar wordt
+gemaakt of extern wordt gedeeld, is hiervoor <strong>geen aparte toestemming</strong> nodig, ook
+niet bij jeugdrijders. Je kunt het profiel op elk moment laten verwijderen door de organisatie;
+de onderliggende wedstrijduitslagen blijven dan bestaan als onderdeel van het sporthistorisch
+archief (zie §7).</p>
+
 <h2>2. Waarom verwerken wij deze gegevens?</h2>
 <ul>
     <li>Het correct organiseren en uitvoeren van wedstrijden (startlijsten,
@@ -317,6 +343,10 @@ ze zijn verzameld:</p>
     <li><strong>Login-logboek (beheer/coach/jury)</strong>: 30 dagen — zie §5d.</li>
     <li><strong>Coach-accounts</strong>: zolang het account bestaat; je kunt het zelf
         verwijderen en het vervalt automatisch na één jaar zonder inloggen — zie §1b.</li>
+    <li><strong>Persoonlijk profiel ("Mijn InlineComp")</strong>: gebruikersnaam en
+        versleutelde pincode blijven bewaard zolang het profiel bestaat; het wordt op verzoek
+        van de rijder of door de organisatie verwijderd. De onderliggende wedstrijduitslagen
+        blijven bestaan als onderdeel van het historisch archief — zie §1d.</li>
 </ul>
 
 <h2>8. Beveiliging</h2>
@@ -491,6 +521,29 @@ notification is routed through the push service of your browser vendor — Googl
 endpoint and the (encrypted) notification in order to deliver it; we share <strong>no names
 or skater data</strong> with them, and the content is encrypted between us and your device.</p>
 
+<h2>1d. Personal profile &mdash; "My InlineComp" (optional)</h2>
+<p>A skater (or, for youth, a parent/guardian) can — entirely voluntarily — request a
+<strong>personal profile</strong> to review their <strong>own</strong> competition data in one
+place: personal records, results and a progress chart. The profile shows only data we already
+hold because the skater took part in competitions — <strong>no new information</strong> is added.</p>
+<p>For a profile we store per skater only:</p>
+<ul>
+    <li>a <strong>self-chosen username</strong> to log in with;</li>
+    <li>an <strong>encrypted PIN</strong> (bcrypt hash) — we cannot read the PIN;</li>
+    <li>the link to the skater's existing <strong>licence number</strong>.</li>
+</ul>
+<p>We store <strong>no e-mail address</strong> with the profile. A request is made via a form or
+e-mail to the organisation; any e-mail address is used only once to send the applicant the
+activation link and is then deleted. The profile is <strong>private</strong>: it is visible only
+after logging in with a username and PIN, is not indexed by search engines, and the data is
+<strong>not shared publicly</strong> — it is a private view of your own, already-processed
+results. The legal basis is <strong>legitimate interest</strong> (Article 6(1)(f) GDPR): it is a
+closed view of data concerning the skater themselves that is already part of the competition
+archive. Because nothing is made public or shared externally, <strong>no separate consent</strong>
+is required, including for youth skaters. You can have the profile deleted at any time by the
+organisation; the underlying competition results remain as part of the sport-historical archive
+(see §7).</p>
+
 <h2>2. Why do we process this data?</h2>
 <ul>
     <li>To correctly organise and run competitions (start lists, timekeeping,
@@ -638,6 +691,10 @@ for which it was collected:</p>
     <li><strong>Login log (admin/coach/jury)</strong>: 30 days — see section 5d.</li>
     <li><strong>Coach accounts</strong>: for as long as the account exists; you can delete it
         yourself and it expires automatically after one year without login — see section 1b.</li>
+    <li><strong>Personal profile ("My InlineComp")</strong>: the username and encrypted PIN are
+        kept for as long as the profile exists; it is deleted at the skater's request or by the
+        organisation. The underlying competition results remain as part of the historical archive
+        — see section 1d.</li>
 </ul>
 
 <h2>8. Security</h2>
