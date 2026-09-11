@@ -1046,48 +1046,69 @@ if ($action === 'speaker_combi') {
         exit;
     }
     try {
-        // DC-veiligheidscheck (zelfde als speaker_deelnemers)
-        $check = $pdo->prepare("SELECT 1 FROM distance_combinations WHERE id = ? AND competition_id = ?");
+        // DC-veiligheidscheck + merge_group ophalen (samengevoegde DC's delen
+        // een merge_group — de "samenvoegen" uit loting/startlijsten).
+        $check = $pdo->prepare("SELECT merge_group FROM distance_combinations WHERE id = ? AND competition_id = ?");
         $check->execute([$dcId, $compId]);
-        if (!$check->fetchColumn()) {
+        $curRow = $check->fetch(PDO::FETCH_ASSOC);
+        if ($curRow === false) {
             http_response_code(403);
             echo json_encode(['error' => 'DC hoort niet bij deze wedstrijd']);
             exit;
         }
+        $mergeGroup = $curRow['merge_group'] ?? null;
 
-        // Eén tijdschema per wedstrijd.
+        $partners = [];   // [{dc_id, dc_naam}, …]
+        $combi    = null;
+
+        // ── Route 1: tijdschema-combi (combi_group) — visueel samengevoegde
+        //    A-finale-ritten PER afstand (bv. DP2/HP2 op de massastart). ──
         $tsStmt = $pdo->prepare("SELECT id FROM competition_tijdschema WHERE competition_id = ?");
         $tsStmt->execute([$compId]);
         $tsId = $tsStmt->fetchColumn();
-        if (!$tsId) { echo json_encode(['combi_group' => null, 'groepen' => []]); exit; }
+        if ($tsId) {
+            $ritStmt = $pdo->prepare("
+                SELECT combi_group FROM tijdschema_ritten
+                WHERE tijdschema_id = ? AND dc_id = ? AND ronde_type = 'finale_a'
+                  AND (distance_id = ? OR (distance_id IS NULL AND ? = ''))
+                LIMIT 1
+            ");
+            $ritStmt->execute([$tsId, $dcId, $distId, $distId]);
+            $c = $ritStmt->fetchColumn();
+            if ($c !== false && $c !== null) {
+                $combi = (int)$c;
+                // Partner-ritten in dezelfde combi_group (andere DC). Dedup op
+                // dc_id: de tegels zijn DC-breed (afstand-agnostisch).
+                $pStmt = $pdo->prepare("
+                    SELECT dc_id, dc_naam, MIN(volgorde) AS volgorde
+                    FROM tijdschema_ritten
+                    WHERE tijdschema_id = ? AND combi_group = ? AND dc_id <> ?
+                    GROUP BY dc_id, dc_naam
+                    ORDER BY volgorde
+                ");
+                $pStmt->execute([$tsId, $combi, $dcId]);
+                $partners = $pStmt->fetchAll(PDO::FETCH_ASSOC);
+            }
+        }
 
-        // combi_group van de A-finale-rit van deze DC+afstand.
-        $ritStmt = $pdo->prepare("
-            SELECT combi_group FROM tijdschema_ritten
-            WHERE tijdschema_id = ? AND dc_id = ? AND ronde_type = 'finale_a'
-              AND (distance_id = ? OR (distance_id IS NULL AND ? = ''))
-            LIMIT 1
-        ");
-        $ritStmt->execute([$tsId, $dcId, $distId, $distId]);
-        $combi = $ritStmt->fetchColumn();
-        if ($combi === false || $combi === null) {
-            echo json_encode(['combi_group' => null, 'groepen' => []]);
+        // ── Route 2 (terugval): DC-samenvoeging (merge_group). Geldt voor de
+        //    HÉLE DC — dus onafhankelijk van distance_id, óók op een tijdrit.
+        //    Alleen als de combi-route niets opleverde. ──
+        if (!$partners && $mergeGroup !== null && $mergeGroup !== '') {
+            $mStmt = $pdo->prepare("
+                SELECT id AS dc_id, name AS dc_naam
+                FROM distance_combinations
+                WHERE competition_id = ? AND merge_group = ? AND id <> ?
+                ORDER BY number, name
+            ");
+            $mStmt->execute([$compId, $mergeGroup, $dcId]);
+            $partners = $mStmt->fetchAll(PDO::FETCH_ASSOC);
+        }
+
+        if (!$partners) {
+            echo json_encode(['combi_group' => $combi, 'groepen' => []]);
             exit;
         }
-        $combi = (int)$combi;
-
-        // Partner-ritten in dezelfde combi_group (andere DC dan de gekozen).
-        // Dedup op dc_id: de tegels zijn DC-breed (afstand-agnostisch), dus per
-        // partner-DC één keer laden ook al zijn meerdere afstanden gecombineerd.
-        $pStmt = $pdo->prepare("
-            SELECT dc_id, dc_naam, MIN(volgorde) AS volgorde
-            FROM tijdschema_ritten
-            WHERE tijdschema_id = ? AND combi_group = ? AND dc_id <> ?
-            GROUP BY dc_id, dc_naam
-            ORDER BY volgorde
-        ");
-        $pStmt->execute([$tsId, $combi, $dcId]);
-        $partners = $pStmt->fetchAll(PDO::FETCH_ASSOC);
 
         // DC-brede deelnemers per partner-DC (zelfde query als speaker_deelnemers).
         $dStmt = $pdo->prepare("
