@@ -2548,6 +2548,19 @@ function _spkToonDetail(r) {
            </div>`
         : '';
 
+    // Quicklink naar skateresults.app — slug = genormaliseerde volledige naam
+    // (diacritics eruit, spaties → koppelteken). Werkt voor ~90%; bij een
+    // naamgenoot kun je op de verkeerde persoon landen, vandaar de titel-hint.
+    const srSlug = String(r.full_name || '')
+        .normalize('NFD').replace(/[̀-ͯ]/g, '')
+        .toLowerCase().trim()
+        .replace(/[^a-z0-9]+/g, '-')
+        .replace(/^-+|-+$/g, '');
+    const srLink = srSlug
+        ? `<a class="spk-sr-link" href="https://skateresults.app/athletes/${srSlug}" target="_blank" rel="noopener noreferrer"
+              title="Zoek deze rijder op skateresults.app (op naam — meestal raak; controleer bij naamgenoten)">↗ skateresults.app</a>`
+        : '';
+
     overlay.innerHTML = `
         <div class="spk-detail-modal${isPending ? ' spk-detail-modal-pending' : ''}" role="dialog" aria-labelledby="spk-detail-titel">
             <div class="spk-detail-kop">
@@ -2564,6 +2577,7 @@ function _spkToonDetail(r) {
                 ${veld('Woonplaats',    r.city)}
                 ${veld('Club',          r.club_full)}
                 ${veld('Sponsor',       r.sponsor)}
+                ${srLink ? `<div class="spk-sr-rij" id="spk-sr-rij">${srLink}</div>` : ''}
                 <!-- Positie(s) in het serie-klassement — asynchroon gevuld;
                      leeg (verborgen) als deze wedstrijd niet in een serie zit. -->
                 <div id="spk-serie-klassement"></div>
@@ -2589,6 +2603,27 @@ function _spkToonDetail(r) {
     // info, historie verschijnt zodra de fetch klaar is.
     _spkVulHistorie(overlay, r.license_key);
     _spkVulSerieKlassement(overlay, r.license_key);
+    if (srSlug) _spkCheckSkateResults(overlay, srSlug);
+}
+
+// Async: bestaat er een skateresults.app-profiel voor deze naam-slug? Zo niet
+// (harde 404), schakel de quicklink uit. Bij twijfel/fout laten we 'm staan
+// (best-effort — server-side check, want CORS blokkeert een client-side lezen).
+async function _spkCheckSkateResults(overlay, slug) {
+    const link = overlay.querySelector('#spk-sr-rij .spk-sr-link');
+    if (!link) return;
+    try {
+        const res = await fetch('?action=speaker_skateresults_check&slug=' + encodeURIComponent(slug),
+                                { credentials: 'same-origin' });
+        const d = await res.json();
+        if (res.ok && d && d.exists === false && !d.uncertain) {
+            const span = document.createElement('span');
+            span.className = 'spk-sr-link spk-sr-link-uit';
+            span.textContent = '↗ skateresults.app — geen profiel';
+            span.title = 'Geen profiel gevonden op skateresults.app voor deze naam';
+            link.replaceWith(span);
+        }
+    } catch (e) { /* stil: link blijft gewoon staan */ }
 }
 
 // ── Serie-klassement-positie(s) in de modal ─────────────────────────────────

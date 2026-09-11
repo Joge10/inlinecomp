@@ -1630,6 +1630,26 @@ html, body {
     font-size: 1.425rem;
 }
 .spk-detail-rij:last-child { border-bottom: none; }
+/* Externe quicklink (skateresults.app) — best-effort op naam */
+.spk-sr-rij { padding: 8px 0 2px; }
+.spk-sr-link {
+    display: inline-block;
+    font-size: 1.05rem;
+    font-weight: 600;
+    color: var(--jury-blauw, #1a3a5c);
+    text-decoration: none;
+    padding: 4px 10px;
+    border: 1px solid var(--jury-blauw-bg, #cfe0f0);
+    border-radius: 8px;
+}
+.spk-sr-link:hover { background: var(--jury-blauw-bg, #eef3fb); }
+.spk-sr-link-uit {
+    color: #9aa5ad;
+    border-color: #e0e4e8;
+    cursor: default;
+    pointer-events: none;
+}
+.spk-sr-link-uit:hover { background: none; }
 .spk-detail-lbl { color: var(--jury-grijs); font-weight: 500; }
 .spk-detail-val { color: #222; font-weight: 600; text-align: right; }
 

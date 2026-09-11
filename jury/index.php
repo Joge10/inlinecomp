@@ -1434,6 +1434,58 @@ if ($action === 'speaker_historie') {
     exit;
 }
 
+// ── API: bestaat er een skateresults.app-profiel voor deze slug? ───────────
+// Server-side check (de browser kan een cross-origin 404 door CORS niet zelf
+// lezen). SSRF-veilig: vaste basis-URL + strikt gevalideerde slug, nooit een
+// vrije URL. Antwoord { exists: bool, uncertain: bool }: exists=true alleen bij
+// HTTP 200; false bij 404; uncertain=true bij time-out/fout/geen cURL → de
+// frontend laat de link dan gewoon staan (best-effort, niet blokkeren).
+if ($action === 'speaker_skateresults_check') {
+    header('Content-Type: application/json; charset=utf-8');
+    _speakerRequire();
+    $slug = trim($_GET['slug'] ?? '');
+    if (!preg_match('/^[a-z0-9-]{1,80}$/', $slug)) {
+        echo json_encode(['exists' => false, 'uncertain' => false]);
+        exit;
+    }
+    // Lichte cache (1 dag) zodat we skateresults tijdens een wedstrijd niet
+    // per rijder-open opnieuw bevragen.
+    $cacheFile = sys_get_temp_dir() . '/ic_sr_' . md5($slug) . '.json';
+    if (is_file($cacheFile) && (time() - filemtime($cacheFile)) < 86400) {
+        $cached = json_decode((string)@file_get_contents($cacheFile), true);
+        if (is_array($cached) && isset($cached['exists'])) { echo json_encode($cached); exit; }
+    }
+    $out = ['exists' => true, 'uncertain' => true];   // default = niet blokkeren
+    if (function_exists('curl_init')) {
+        $url = 'https://skateresults.app/athletes/' . $slug;
+        $ch = curl_init($url);
+        curl_setopt_array($ch, [
+            // GET (geen HEAD): skateresults is een SPA-host; een GET geeft de
+            // echte route-status (404 op een niet-bestaande atleet), HEAD is
+            // daar niet gegarandeerd gelijk aan. Body gooien we weg — we lezen
+            // alleen de HTTP-status. Klein antwoord + 1-dag cache, dus goedkoop.
+            CURLOPT_FOLLOWLOCATION => true,
+            CURLOPT_MAXREDIRS      => 3,
+            CURLOPT_TIMEOUT        => 4,
+            CURLOPT_CONNECTTIMEOUT => 4,
+            CURLOPT_RETURNTRANSFER => true,
+            CURLOPT_USERAGENT      => 'InlineComp-Speaker/1.0',
+        ]);
+        curl_exec($ch);
+        $code = (int)curl_getinfo($ch, CURLINFO_HTTP_CODE);
+        $err  = curl_errno($ch);
+        curl_close($ch);
+        if ($err === 0 && $code > 0) {
+            if ($code === 200)      $out = ['exists' => true,  'uncertain' => false];
+            elseif ($code === 404)  $out = ['exists' => false, 'uncertain' => false];
+            // andere codes (3xx opgevolgd, 5xx, 403…) → uncertain blijft, link blijft staan
+        }
+    }
+    @file_put_contents($cacheFile, json_encode($out));
+    echo json_encode($out);
+    exit;
+}
+
 // ── API: volledig overzicht van alle eerdere wedstrijden ──────────────────
 // Voor de bottom-bar cascade-dropdowns. Eén call levert per eerdere
 // wedstrijd alle (DC × distance) combinaties met de cats die erin
