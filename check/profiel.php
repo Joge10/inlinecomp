@@ -304,9 +304,9 @@ a{color:var(--accent)}
 .melding{padding:9px 12px;border-radius:8px;font-size:.9rem;margin-bottom:12px}
 .melding.fout{background:#fce4e4;color:#b71c1c;border:1px solid #f3b6b6}
 .melding.ok{background:#e8f5e9;color:#2e7d32;border:1px solid #a5d6a7}
-.demo-banner{background:#fff4e6;border:1px solid #ffd9a3;color:#8a5a1a;border-radius:10px;padding:10px 14px;margin-top:12px;font-size:.9rem}
+.demo-banner{background:#fff4e6;border:1px solid #ffd9a3;color:#8a5a1a;border-radius:10px;padding:10px 14px;margin-top:12px;margin-bottom:18px;font-size:.9rem}
 .demo-banner a{color:var(--oranje);font-weight:600;white-space:nowrap}
-.admin-banner{background:#eef3fb;border:1px solid #bcd2ee;color:#1a3a5c;border-radius:10px;padding:10px 14px;margin-top:12px;font-size:.9rem}
+.admin-banner{background:#eef3fb;border:1px solid #bcd2ee;color:#1a3a5c;border-radius:10px;padding:10px 14px;margin-top:12px;margin-bottom:18px;font-size:.9rem}
 .ap-tag{display:inline-block;background:#1a3a5c;color:#fff;border-radius:8px;padding:6px 12px;font-size:.85rem;font-weight:600}
 .uitleg{margin-top:18px;padding-top:16px;border-top:1px solid var(--line);font-size:.86rem;color:var(--muted)}
 .uitleg b{color:var(--ink)}
