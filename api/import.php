@@ -274,6 +274,7 @@ require_once __DIR__ . '/../../config_inlinecomp.php';
 require_once __DIR__ . '/../auth/session.php';
 require_once __DIR__ . '/demo_fixture.php';
 require_once __DIR__ . '/lib_combineren.php';
+require_once __DIR__ . '/../inc/person_id.php';   // zorgVoorExternalId (fase 3d-ii-a)
 $_authUser = requireAuth($pdo);
 if (!kanSchrijven($_authUser, 'importeer')) {
     http_response_code(403);
@@ -702,6 +703,12 @@ try {
                 ':sponsor'      => $c['sponsor']      ?? null,
                 ':city'         => $c['city']         ?? null,
             ]);
+
+            // person_external_ids-mapping borgen (fase 3d-ii-a): elke net
+            // geminte/bijgewerkte rijder krijgt z'n externe-id-rij, met het
+            // systeem-label afgeleid uit de license_key-vorm (knsb / ic-manual /
+            // ic-anoniem / ic-demo). Zo ontstaat er nooit een rijder zonder mapping.
+            zorgVoorExternalId($pdo, personIdVoorLicentie($pdo, $lk), $lk);
 
             // Inschrijving aanmaken of bijwerken
             // reserve uit KNSB-feed; NULL als geen reserve (1, 2, ... voor R1, R2, ...)

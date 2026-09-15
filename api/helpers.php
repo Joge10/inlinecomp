@@ -17,6 +17,7 @@ header('Access-Control-Allow-Origin: *');
 
 require_once __DIR__ . '/../../config_inlinecomp.php';
 require_once __DIR__ . '/../auth/session.php';
+require_once __DIR__ . '/../inc/person_id.php';   // zorgVoorExternalId (fase 3d-ii-a)
 $_authUser = requireAuth($pdo, ['owner', 'admin']);
 
 $body   = json_decode(file_get_contents('php://input'), true) ?? [];
@@ -1346,6 +1347,9 @@ if ($action === 'historie_insert') {
             $catN = $nieuweCat !== null ? trim($nieuweCat) : '';
             $lic  = 'p-' . substr(bin2hex(random_bytes(8)), 0, 12);
             $pendingInsStmt->execute([$lic, $naam, $catN ?: null, $birthYear]);
+            // person_external_ids-mapping borgen (fase 3d-ii-a): nieuwe pending
+            // (p-…) krijgt meteen z'n ic-pending-mapping.
+            zorgVoorExternalId($pdo, personIdVoorLicentie($pdo, $lic), $lic);
             $pendingAangemaakt++;
             // Toevoegen aan pool zodat volgende rij in dezelfde request hem
             // ook kan hergebruiken (bv 200m + 500m van zelfde onbekende rijder).

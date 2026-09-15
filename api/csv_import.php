@@ -41,6 +41,7 @@ if ($method !== 'POST' && $method !== 'GET') {
 
 require_once __DIR__ . '/../../config_inlinecomp.php';
 require_once __DIR__ . '/../auth/session.php';
+require_once __DIR__ . '/../inc/person_id.php';   // zorgVoorExternalId (fase 3d-ii-a)
 $_authUser = requireAuth($pdo);
 if (!kanSchrijven($_authUser, 'beheer')) {
     http_response_code(403);
@@ -821,6 +822,9 @@ if ($action === 'commit') {
                         ':spn' => $sponsor ?: null,
                         ':fed' => $fed,
                     ]);
+                    // person_external_ids-mapping borgen (fase 3d-ii-a): nieuwe
+                    // extern-rijder (x-…) krijgt meteen z'n ic-extern-mapping.
+                    zorgVoorExternalId($pdo, personIdVoorLicentie($pdo, $licenseKey), $licenseKey);
                     $stats['nieuw']++;
                 } catch (Throwable $e) {
                     $stats['errors'][] = "Rij " . ($i + 1) . " (" . $namen['full'] . "): " . $e->getMessage();
