@@ -609,6 +609,7 @@ function rijRenderDetail(data) {
 
         <h3>Persoonsgegevens</h3>
         <div class="rij-detail-grid" id="rij-pers-grid">
+            ${veld('Licentienummer', r.license_key)}
             ${veld('Volledige naam', r.full_name)}
             ${veld('Achternaam (short_name)', r.short_name)}
             ${veld('Geslacht', geslacht)}
