@@ -50,19 +50,34 @@ if (!function_exists('profielMailScheiding')) {
 
 if (!function_exists('profielMailInAfwachting')) {
     /** (1) Direct na de aanvraag → naar de rijder (organisatie in Cc).
-     *  Bevestigt ontvangst + legt uit dat goedkeuring volgt. */
-    function profielMailInAfwachting(string $naam): array {
+     *  Bevestigt ontvangst + legt uit dat goedkeuring volgt. Bevat een
+     *  samenvatting van het ingevulde formulier — als bevestiging voor de
+     *  aanvrager én zodat de organisatie (in Cc) de aanvraag in de inbox heeft. */
+    function profielMailInAfwachting(string $naam, string $startnummer = '', string $gewensteUsername = '', string $opmerking = ''): array {
+        $streep = str_repeat('-', 40);
         $nl = "Hoi $naam,\n\n"
             . "Bedankt voor je aanvraag voor een persoonlijk InlineComp-profiel (\"Mijn InlineComp\"). "
             . "We hebben 'm ontvangen — de organisatie bekijkt 'm en keurt 'm goed. Zodra dat gebeurd is, "
             . "krijg je van ons een e-mail met een link waarmee je zelf een pincode instelt, plus je "
             . "gebruikersnaam.\n\n"
+            . "Je aanvraag:\n$streep\n"
+            . "  Naam:                    " . $naam . "\n"
+            . "  Startnummer:             " . ($startnummer !== '' ? $startnummer : '—') . "\n"
+            . "  Gewenste gebruikersnaam: " . ($gewensteUsername !== '' ? $gewensteUsername : '—') . "\n"
+            . "  Opmerking:               " . ($opmerking !== '' ? $opmerking : '—') . "\n"
+            . "$streep\n\n"
             . "Je hoeft nu even niets te doen. Dit kan een dag duren.\n\n"
             . "Groet,\nInlineComp";
         $en = "Hi $naam,\n\n"
             . "Thanks for requesting a personal InlineComp profile (\"My InlineComp\"). We've received it — "
             . "the organisation will review and approve it. Once that's done you'll get an e-mail from us with "
             . "a link to set your own PIN, plus your username.\n\n"
+            . "Your request:\n$streep\n"
+            . "  Name:               " . $naam . "\n"
+            . "  Start number:       " . ($startnummer !== '' ? $startnummer : '—') . "\n"
+            . "  Preferred username: " . ($gewensteUsername !== '' ? $gewensteUsername : '—') . "\n"
+            . "  Comment:            " . ($opmerking !== '' ? $opmerking : '—') . "\n"
+            . "$streep\n\n"
             . "Nothing to do for now. This may take up to a day.\n\n"
             . "Regards,\nInlineComp";
         return [

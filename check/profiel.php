@@ -184,7 +184,7 @@ if ($actie === 'aanvraag') {
                 $aOpm !== '' ? $aOpm : null,
             ]);
             require_once __DIR__ . '/../inc/profiel_mail.php';
-            $m = profielMailInAfwachting($aNaam);
+            $m = profielMailInAfwachting($aNaam, $aSnr, $aUser, $aOpm);
             $ok = profielMail($aEmail, $m['subject'], $m['body'], PROFIEL_MAIL_CC);
             $_SESSION['rp_aanvr_tot'] = time() + 60;   // simpele rate-limit
             if ($ok) {
