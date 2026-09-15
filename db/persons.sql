@@ -3,6 +3,12 @@
 
 CREATE TABLE IF NOT EXISTS `persons` (
     `license_key`  VARCHAR(30)   NOT NULL,
+    -- Eigen, KNSB-onafhankelijke interne identiteit (GUID). Fase 1 van de
+    -- person_id-migratie (2026-09-15). DB-default UUID() zodat élke nieuwe
+    -- rijder er automatisch een krijgt, ook vóór de code 'm expliciet schrijft.
+    -- Wordt gaandeweg de canonieke sleutel; license_key verhuist uiteindelijk
+    -- naar person_external_ids. Zie docs_internal/plan-guid-migratie.md.
+    `person_id`    CHAR(36)      NOT NULL DEFAULT (UUID()),
     `full_name`    VARCHAR(255)  NOT NULL,
     `short_name`   VARCHAR(100)  DEFAULT NULL,
     `birth_year`   SMALLINT UNSIGNED DEFAULT NULL,
@@ -37,6 +43,7 @@ CREATE TABLE IF NOT EXISTS `persons` (
     `extern`           BOOLEAN     NOT NULL DEFAULT 0,
     `extern_federatie` VARCHAR(50) DEFAULT NULL,           -- 'FFRS', 'DRIV', ...
     PRIMARY KEY (`license_key`),
+    UNIQUE KEY `uq_persons_person_id` (`person_id`),
     KEY `idx_persons_anon`    (`anonymized_at`),
     KEY `idx_persons_pending` (`pending_source`),
     KEY `idx_persons_extern`  (`extern`)
@@ -57,3 +64,6 @@ CREATE TABLE IF NOT EXISTS `persons` (
 --     ADD COLUMN extern BOOLEAN NOT NULL DEFAULT 0 AFTER pending_source,
 --     ADD COLUMN extern_federatie VARCHAR(50) DEFAULT NULL AFTER extern,
 --     ADD KEY idx_persons_extern (extern);
+--
+-- person_id GUID-migratie fase 1 (2026-09-15) — zie
+-- db/migrations/2026-09-15_person_id_fase1.sql (person_id + person_external_ids + backfill).
