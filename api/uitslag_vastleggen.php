@@ -22,6 +22,7 @@ header('Access-Control-Allow-Origin: *');
 require_once __DIR__ . '/../../config_inlinecomp.php';
 require_once __DIR__ . '/../auth/session.php';
 require_once __DIR__ . '/_uitslag_helper.php';
+require_once __DIR__ . '/../inc/person_id.php';   // person_id-migratie fase 3 (dual-write)
 requireAuth($pdo);
 
 if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
@@ -192,11 +193,12 @@ try {
             (competition_id, competition_naam, competition_datum,
              distance_combination_id, dc_naam, split_group,
              distance_id, distance_naam, distance_meters,
-             person_license, categorie,
+             person_license, person_id, categorie,
              rang, finale_positie, finale_naam,
              tijd_ms, punten, sanctie)
-        VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+        VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
         ON DUPLICATE KEY UPDATE
+            person_id       = VALUES(person_id),
             rang            = VALUES(rang),
             finale_positie  = VALUES(finale_positie),
             finale_naam     = VALUES(finale_naam),
@@ -469,7 +471,7 @@ try {
                     $compId, $compNaam, $compDatum,
                     $primaryDcId, $dcNaam, '',
                     $distId, $distNaam, $distMeters,
-                    $lic, $personCache[$lic]['categorie'] ?? $r['categorie'] ?? null,
+                    $lic, personIdVoorLicentie($pdo, $lic), $personCache[$lic]['categorie'] ?? $r['categorie'] ?? null,
                     $r['rang'], null, $r['ronde_label'] ?? 'Finale',
                     $r['tijd_ms'], $punten, $sanctieDb,
                 ]);
@@ -643,7 +645,7 @@ try {
                     $compId, $compNaam, $compDatum,
                     $primaryDcId, $dcNaam, '',
                     $distId, $distNaam, $distMeters,
-                    $lic, $personCache[$lic]['categorie'] ?? null,
+                    $lic, personIdVoorLicentie($pdo, $lic), $personCache[$lic]['categorie'] ?? null,
                     $gc['rang'], null, 'Serie + A-finale',
                     $gc['finale_tijd_ms'], $punten, $sanctieDb,
                 ]);
@@ -682,7 +684,7 @@ try {
                     $compId, $compNaam, $compDatum,
                     $primaryDcId, $dcNaam, '',
                     $distId, $distNaam, $distMeters,
-                    $lic, $personCache[$lic]['categorie'] ?? null,
+                    $lic, personIdVoorLicentie($pdo, $lic), $personCache[$lic]['categorie'] ?? null,
                     $rang, (int)$r['finishpositie'], $finaleNaam,
                     $r['tijd_ms'] !== null ? (int)$r['tijd_ms'] : null,
                     $punten, null,
@@ -703,7 +705,7 @@ try {
                     $compId, $compNaam, $compDatum,
                     $primaryDcId, $dcNaam, '',
                     $distId, $distNaam, $distMeters,
-                    $lic, $personCache[$lic]['categorie'] ?? null,
+                    $lic, personIdVoorLicentie($pdo, $lic), $personCache[$lic]['categorie'] ?? null,
                     null, null, $finaleNaam,
                     null, $punten, $sanctieDb,
                 ]);
@@ -858,10 +860,11 @@ try {
         INSERT INTO uitslag_klassement
             (competition_id, competition_naam, competition_datum,
              distance_combination_id, dc_naam, split_group,
-             person_license, categorie,
+             person_license, person_id, categorie,
              rang, punten_totaal, punten_detail)
-        VALUES (?,?,?,?,?,?,?,?,?,?,?)
+        VALUES (?,?,?,?,?,?,?,?,?,?,?,?)
         ON DUPLICATE KEY UPDATE
+            person_id       = VALUES(person_id),
             rang            = VALUES(rang),
             punten_totaal   = VALUES(punten_totaal),
             punten_detail   = VALUES(punten_detail),
@@ -883,7 +886,7 @@ try {
         $upsertKlas->execute([
             $compId, $compNaam, $compDatum,
             $primaryDcId, $dcNaam, '',
-            $kr['lic'], $cat,
+            $kr['lic'], personIdVoorLicentie($pdo, $kr['lic']), $cat,
             $rang, $kr['totaal'],
             json_encode($kr['detail'], JSON_UNESCAPED_UNICODE),
         ]);
@@ -898,7 +901,7 @@ try {
         $upsertKlas->execute([
             $compId, $compNaam, $compDatum,
             $primaryDcId, $dcNaam, '',
-            $ur['lic'], $cat,
+            $ur['lic'], personIdVoorLicentie($pdo, $ur['lic']), $cat,
             null, 0,
             json_encode($ur['detail'], JSON_UNESCAPED_UNICODE),
         ]);

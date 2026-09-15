@@ -854,7 +854,8 @@ if ($action === 'corrigeer_persoon') {
     if ($compId !== '' && is_array($verplaatsingen) && count($verplaatsingen)) {
         checkCompetitieToegang($pdo, $_authUser, $compId);
         $insEntry = $pdo->prepare(
-            "INSERT IGNORE INTO entries (distance_combination_id, person_license, status) VALUES (?, ?, 1)"
+            "INSERT IGNORE INTO entries (distance_combination_id, person_license, person_id, status)
+             VALUES (?, ?, (SELECT person_id FROM persons WHERE license_key = ?), 1)"
         );
         $delEntry = $pdo->prepare("DELETE FROM entries WHERE id = ?");
         $delHe    = $pdo->prepare("
@@ -882,7 +883,7 @@ if ($action === 'corrigeer_persoon') {
             $vChk = $pdo->prepare("SELECT 1 FROM distance_combinations WHERE id = ? AND competition_id = ?");
             $vChk->execute([$doelDcId, $compId]);
             if (!$vChk->fetchColumn()) continue;
-            $insEntry->execute([$doelDcId, $lic]);
+            $insEntry->execute([$doelDcId, $lic, $lic]);
             $delHe->execute([$compId, $eRow['dc_id'], $lic]);
             $heWeg += $delHe->rowCount();
             $delEntry->execute([$eId]);
@@ -954,8 +955,8 @@ if ($action === 'verplaats') {
     // INSERT IGNORE: als persoon al ingeschreven in doel-DC, niets nieuws
     // (zou kunnen als operator handmatig al wat veranderd had).
     $insEntry = $pdo->prepare("
-        INSERT IGNORE INTO entries (distance_combination_id, person_license, status)
-        VALUES (?, ?, 1)
+        INSERT IGNORE INTO entries (distance_combination_id, person_license, person_id, status)
+        VALUES (?, ?, (SELECT person_id FROM persons WHERE license_key = ?), 1)
     ");
     $delEntry = $pdo->prepare("DELETE FROM entries WHERE id = ?");
     // heat_entries van OUDE DC verwijderen — die kunnen niet meeverhuizen
@@ -972,7 +973,7 @@ if ($action === 'verplaats') {
     $alAanwezig = 0;
     $heWeg      = 0;
     foreach ($entries as $e) {
-        $insEntry->execute([$doelDcId, $e['person_license']]);
+        $insEntry->execute([$doelDcId, $e['person_license'], $e['person_license']]);
         if ($insEntry->rowCount() === 0) $alAanwezig++;
         else                              $verplaatst++;
         $delHe->execute([$compId, $e['dc_id'], $e['person_license']]);

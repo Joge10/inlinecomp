@@ -772,8 +772,8 @@ try {
         VALUES (?,?,?,?,1,?,?,?,?,?,?,?)
     ");
     $insEntry = $pdo->prepare("
-        INSERT INTO heat_entries (heat_id, person_license, categorie, startpositie, startnummer)
-        VALUES (?,?,?,?,?)
+        INSERT INTO heat_entries (heat_id, person_license, person_id, categorie, startpositie, startnummer)
+        VALUES (?,?,(SELECT person_id FROM persons WHERE license_key = ?),?,?,?)
     ");
 
     $dcIdsJson = json_encode($dcIds);
@@ -810,6 +810,7 @@ try {
             $insEntry->execute([
                 $heatId,
                 $r['license_key'],
+                $r['license_key'],   // voor de person_id-subquery
                 $r['category']     ?? null,
                 $pos + 1,
                 $r['start_number'] ?? null,

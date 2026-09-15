@@ -19,6 +19,7 @@ header('Access-Control-Allow-Origin: *');
 
 require_once __DIR__ . '/../../config_inlinecomp.php';
 require_once __DIR__ . '/../auth/session.php';
+require_once __DIR__ . '/../inc/person_id.php';   // person_id-migratie fase 3 (dual-write)
 $_authUser = requireAuth($pdo);
 
 $method = $_SERVER['REQUEST_METHOD'] ?? 'GET';
@@ -1142,9 +1143,9 @@ function schrijfKlassement(PDO $pdo, array $serie, array $berekend): void {
 
     $ins = $pdo->prepare("
         INSERT INTO klassement_posities
-               (id, klassement_id, positie, start_number, license_key, naam, categorie,
+               (id, klassement_id, positie, start_number, license_key, person_id, naam, categorie,
                 punten_detail, punten_totaal)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     ");
     // Positie-toekenning:
     //  * Bovenblok (geklasseerd): rang 1…N. "Echt gelijk" = zelfde totaal én —
@@ -1190,6 +1191,7 @@ function schrijfKlassement(PDO $pdo, array $serie, array $berekend): void {
                 $kpId, $klId, $pos,
                 (string)($r['startnr'] ?? ''),
                 $r['license'],
+                personIdVoorLicentie($pdo, $r['license']),
                 $r['naam'],
                 $cat,
                 $detail,

@@ -125,10 +125,11 @@ try {
         $persoon = $pStmt->fetch(PDO::FETCH_ASSOC) ?: [];
 
         $pdo->prepare("
-            INSERT INTO heat_entries (heat_id, person_license, categorie, startpositie, startnummer)
-            VALUES (?, ?, ?, ?, ?)
+            INSERT INTO heat_entries (heat_id, person_license, person_id, categorie, startpositie, startnummer)
+            VALUES (?, ?, (SELECT person_id FROM persons WHERE license_key = ?), ?, ?, ?)
         ")->execute([
             $heat['id'],
+            $license,
             $license,
             $persoon['category']     ?? null,
             $startPos,

@@ -730,16 +730,16 @@ if ($action === 'commit') {
               )
         ");
         $tpInsert = $pdo->prepare("
-            INSERT INTO transponders (person_license, competition_id, slot, code, source)
-            VALUES (?, ?, ?, ?, ?)
-            ON DUPLICATE KEY UPDATE code = VALUES(code)
+            INSERT INTO transponders (person_license, person_id, competition_id, slot, code, source)
+            VALUES (?, (SELECT person_id FROM persons WHERE license_key = ?), ?, ?, ?, ?)
+            ON DUPLICATE KEY UPDATE code = VALUES(code), person_id = VALUES(person_id)
         ");
         $kopieerTpsVoorRijder = function($licenseKey) use ($tpFetch, $tpInsert, $compId) {
             $tpFetch->execute([$licenseKey]);
             foreach ($tpFetch->fetchAll(PDO::FETCH_ASSOC) as $tp) {
                 if (!$tp['code']) continue;
                 $tpInsert->execute([
-                    $licenseKey, $compId, (int)$tp['slot'], $tp['code'], $tp['source'],
+                    $licenseKey, $licenseKey, $compId, (int)$tp['slot'], $tp['code'], $tp['source'],
                 ]);
             }
         };
@@ -757,9 +757,9 @@ if ($action === 'commit') {
                     1, :fed)
         ");
         $insEntry = $pdo->prepare("
-            INSERT INTO entries (distance_combination_id, person_license, status)
-            VALUES (?, ?, 1)
-            ON DUPLICATE KEY UPDATE status = 1
+            INSERT INTO entries (distance_combination_id, person_license, person_id, status)
+            VALUES (?, ?, (SELECT person_id FROM persons WHERE license_key = ?), 1)
+            ON DUPLICATE KEY UPDATE status = 1, person_id = VALUES(person_id)
         ");
 
         foreach ($rows as $i => $r) {
@@ -851,7 +851,7 @@ if ($action === 'commit') {
                 }
 
                 try {
-                    $insEntry->execute([$dcId, $licenseKey]);
+                    $insEntry->execute([$dcId, $licenseKey, $licenseKey]);
                     // rowCount = 1 bij INSERT, 2 bij UPDATE (MySQL ON DUPLICATE KEY UPDATE)
                     if ($insEntry->rowCount() === 1) $stats['entries_nieuw']++;
                     else                              $stats['entries_upgedate']++;

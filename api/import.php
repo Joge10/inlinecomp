@@ -577,10 +577,13 @@ try {
     //    Terugdraaien doet de operator bewust via 'terug' (zet handmatig=0).
     $stmtEntry = $pdo->prepare("
         INSERT INTO entries
-               (distance_combination_id, person_license, knsb_entry_id, status, reserve)
-        VALUES (:dc_id, :person_license, :knsb_entry_id, :status, :reserve)
+               (distance_combination_id, person_license, person_id, knsb_entry_id, status, reserve)
+        VALUES (:dc_id, :person_license,
+                (SELECT person_id FROM persons WHERE license_key = :pl_pid),
+                :knsb_entry_id, :status, :reserve)
         ON DUPLICATE KEY UPDATE
                knsb_entry_id = VALUES(knsb_entry_id),
+               person_id     = VALUES(person_id),
                status        = CASE WHEN reserve_handmatig_ingezet = 1
                                     THEN status
                                     ELSE VALUES(status)
@@ -595,11 +598,14 @@ try {
     // source='manual' als de voorbereider de waarde heeft gewijzigd
     $stmtTp = $pdo->prepare("
         INSERT INTO transponders
-               (person_license, competition_id, slot, code, source)
-        VALUES (:person_license, :comp_id, :slot, :code, :source)
+               (person_license, person_id, competition_id, slot, code, source)
+        VALUES (:person_license,
+                (SELECT person_id FROM persons WHERE license_key = :pl_pid),
+                :comp_id, :slot, :code, :source)
         ON DUPLICATE KEY UPDATE
                code       = VALUES(code),
                source     = VALUES(source),
+               person_id  = VALUES(person_id),
                updated_at = CURRENT_TIMESTAMP
     ");
 
@@ -706,7 +712,7 @@ try {
             }
             $stmtEntry->execute([
                 ':dc_id'          => $dcId,
-                ':person_license' => $lk,
+                ':person_license' => $lk, ':pl_pid' => $lk,
                 ':knsb_entry_id'  => $c['knsb_entry_id'] ?? null,
                 ':status'         => $c['entry_status']  ?? 1,
                 ':reserve'        => $reserveNr,
@@ -717,7 +723,7 @@ try {
                 $code = $c[$veld] ?? null;
                 if ($code !== null && $code !== '') {
                     $stmtTp->execute([
-                        ':person_license' => $lk,
+                        ':person_license' => $lk, ':pl_pid' => $lk,
                         ':comp_id'        => $compId,
                         ':slot'           => $slot,
                         ':code'           => $code,
@@ -738,7 +744,7 @@ try {
                 $code = trim($code ?? '');
                 if ($code !== '') {
                     $stmtTp->execute([
-                        ':person_license' => $lk,
+                        ':person_license' => $lk, ':pl_pid' => $lk,
                         ':comp_id'        => $compId,
                         ':slot'           => $i + 3,
                         ':code'           => $code,
@@ -756,7 +762,7 @@ try {
                     ? trim($c['transponder_actief'])
                     : null;
                 $stmtTp->execute([
-                    ':person_license' => $lk,
+                    ':person_license' => $lk, ':pl_pid' => $lk,
                     ':comp_id'        => $compId,
                     ':slot'           => 0,
                     ':code'           => $tpActief,
