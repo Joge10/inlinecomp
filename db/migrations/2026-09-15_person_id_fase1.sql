@@ -47,12 +47,16 @@ CREATE TABLE IF NOT EXISTS `person_external_ids` (
 --    'x-…' = extern (CSV/buitenland), 'p-…' = pending-historie, rest = KNSB.
 INSERT INTO `person_external_ids` (`person_id`, `systeem`, `extern_id`)
 SELECT `person_id`,
-       CASE WHEN `license_key` LIKE 'x-%' THEN 'ic-extern'
-            WHEN `license_key` LIKE 'p-%' THEN 'ic-pending'
+       CASE WHEN `license_key` LIKE 'x-%'    THEN 'ic-extern'
+            WHEN `license_key` LIKE 'p-%'    THEN 'ic-pending'
+            WHEN `license_key` LIKE 'demo-%' THEN 'ic-demo'
             ELSE 'knsb' END,
        `license_key`
 FROM `persons`
 ON DUPLICATE KEY UPDATE `person_id` = VALUES(`person_id`);
+-- NB: 'demo-%' → 'ic-demo' is later toegevoegd (16-09). De eerste run (15-09)
+-- had demo-rijders per abuis als 'knsb' gelabeld; migratie
+-- 2026-09-16_person_id_demo_relabel.sql herstelt bestaande data.
 
 -- Controle na afloop (optioneel, verwacht 0):
 --   SELECT COUNT(*) FROM persons WHERE person_id IS NULL;
