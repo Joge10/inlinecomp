@@ -1473,6 +1473,7 @@ if ($action === 'coach_info') {
         // We nemen MAX(status); 4=niet getekend valt altijd op.
         $stStmt = $pdo->prepare("
             SELECT p.license_key,
+                   p.person_id,
                    COALESCE(cs.startnummer, p.start_number) AS snr,
                    p.full_name, p.category, p.club_full, p.sponsor,
                    MAX(e.status) AS entry_status
@@ -5248,13 +5249,16 @@ function loadCoachLijst() {
 }
 
 function voegToeAanLijst(persoon) {
-    if (!persoon || !persoon.license_key) return false;
-    // Dedup op license_key (uniek per persoon). Eerder op snr → bug bij
-    // twee rijders met hetzelfde startnummer: de tweede werd geweigerd.
-    if (coachLijst.some(p => p.license_key === persoon.license_key)) return false;
+    if (!persoon || (!persoon.license_key && !persoon.person_id)) return false;
+    // Dedup op person_id (interne GUID, fase 3c), valt terug op license_key.
+    // Eerder op snr → bug bij twee rijders met hetzelfde startnummer.
+    if (coachLijst.some(p =>
+        (persoon.person_id && p.person_id === persoon.person_id) ||
+        (persoon.license_key && p.license_key === persoon.license_key))) return false;
     coachLijst.push({
         snr: persoon.snr != null ? parseInt(persoon.snr) : null,
-        license_key: persoon.license_key,
+        person_id: persoon.person_id ?? null,
+        license_key: persoon.license_key ?? null,
         full_name: persoon.full_name,
         category: persoon.category || '',
         club_full: persoon.club_full || '',
@@ -5263,10 +5267,10 @@ function voegToeAanLijst(persoon) {
     return true;
 }
 
-function verwijderUitLijst(licenseKey) {
-    // Filter op license_key (uniek). Eerder op snr → bug bij twee
-    // rijders met hetzelfde nummer (beiden tegelijk verwijderd).
-    coachLijst = coachLijst.filter(p => p.license_key !== licenseKey);
+function verwijderUitLijst(kid) {
+    // kid = person_id (fase 3c) óf license_key (oude items). Filter de rij die
+    // op één van beide matcht. Eerder op snr → bug bij dubbele startnummers.
+    coachLijst = coachLijst.filter(p => p.person_id !== kid && p.license_key !== kid);
 }
 
 // ── UI-render ────────────────────────────────────────────────────────────────
@@ -5334,15 +5338,15 @@ function renderChips() {
         return `<span class="chip${alarm ? ' chip-waarschuw' : ''}" title="${esc(p.full_name)} — ${esc(p.club_full)}${p.sponsor ? ' / ' + esc(p.sponsor) : ''}\n${t('status_label')}: ${esc(stLabel)}">
             <span class="chip-snr">${esc(p.snr)}</span>
             <span>${icon}${esc(p.full_name)}</span>
-            <span class="x" data-lic="${esc(p.license_key)}">×</span>
+            <span class="x" data-kid="${esc(p.person_id || p.license_key)}">×</span>
          </span>`;
     }).join('');
     chipsEl.querySelectorAll('.x').forEach(x => {
         x.onclick = async () => {
-            // Verwijder per persoon (license_key), niet per snr — twee
+            // Verwijder per persoon (person_id/license_key), niet per snr — twee
             // rijders kunnen hetzelfde startnummer hebben.
-            const lic = x.dataset.lic;
-            const persoon = coachLijst.find(p => p.license_key === lic);
+            const kid = x.dataset.kid;
+            const persoon = coachLijst.find(p => p.person_id === kid || p.license_key === kid);
             if (!persoon) return;
             const naam = persoon.full_name || t('bev_verwijder_snr_fallback', {snr: persoon.snr});
             const ok = await bevestig({
@@ -5352,7 +5356,7 @@ function renderChips() {
                 annuleerLabel: t('bev_annuleer'),
             });
             if (!ok) return;
-            verwijderUitLijst(lic);
+            verwijderUitLijst(kid);
             saveCoachLijst();
             renderChips();
             renderProgramma();
@@ -6030,6 +6034,16 @@ async function laadCoachInfo() {
         const map = {};
         (data.personen || []).forEach(p => { map[p.license_key] = p; });
         coachInfoCache = map;
+        // Fase 3c-migratie: vul person_id passief in bij oude coach-lijst-items
+        // die 'm nog missen (coach_info levert person_id sinds fase 3b).
+        let gemigreerd = false;
+        coachLijst.forEach(p => {
+            if (!p.person_id && p.license_key && map[p.license_key]?.person_id) {
+                p.person_id = map[p.license_key].person_id;
+                gemigreerd = true;
+            }
+        });
+        if (gemigreerd) saveCoachLijst();
     } catch { /* stil falen — UI blijft werken zonder status */ }
 }
 
@@ -7551,7 +7565,9 @@ async function _coachLookupEnToevoegen(param, meldingen, foutMeldingen, label) {
 // en disabled getoond ("al toegevoegd").
 function _coachKiesPersoonModal(rijders, label, meldingen) {
     return new Promise(resolve => {
-        const al = new Set(coachLijst.map(p => p.license_key));
+        // Reeds-in-lijst-set met zowel person_id als license_key (fase 3c).
+        const al = new Set();
+        coachLijst.forEach(p => { if (p.person_id) al.add(p.person_id); if (p.license_key) al.add(p.license_key); });
         const modal = document.createElement('div');
         modal.className = 'naamzoek-modal';
         modal.innerHTML = `
@@ -7562,12 +7578,12 @@ function _coachKiesPersoonModal(rijders, label, meldingen) {
                 </div>
                 <div class="naamzoek-body">
                     ${rijders.map(r => {
-                        const uit = al.has(r.license_key);
+                        const uit = (r.person_id && al.has(r.person_id)) || al.has(r.license_key);
                         const meta = [r.category || '', r.club_short || r.club_full || '',
                                       uit ? `<span style="color:#999">${t('nz_al_in_lijst')}</span>` : '']
                                      .filter(Boolean).join(' · ');
                         return `<label class="naamzoek-rij" style="${uit ? 'opacity:.55' : ''}">
-                            <input type="checkbox" data-lic="${esc(r.license_key)}" ${uit ? 'checked disabled' : ''}>
+                            <input type="checkbox" data-pid="${esc(r.person_id ?? '')}" data-lic="${esc(r.license_key)}" ${uit ? 'checked disabled' : ''}>
                             <span class="naamzoek-rij-snr">${esc(r.snr ?? '—')}</span>
                             <div class="naamzoek-rij-naam">
                                 ${esc(r.full_name)}
@@ -7588,7 +7604,8 @@ function _coachKiesPersoonModal(rijders, label, meldingen) {
         modal.querySelector('#coach-modal-ok').addEventListener('click', () => {
             const vinkjes = [...modal.querySelectorAll('input[type=checkbox]:checked:not(:disabled)')];
             for (const cb of vinkjes) {
-                const r = rijders.find(x => x.license_key === cb.dataset.lic);
+                const r = rijders.find(x =>
+                    (cb.dataset.pid && x.person_id === cb.dataset.pid) || x.license_key === cb.dataset.lic);
                 if (r && voegToeAanLijst(r)) {
                     meldingen.push(r.snr ? t('fb_naam_snr', {naam: r.full_name, snr: r.snr}) : r.full_name);
                 }

@@ -624,6 +624,21 @@ if ($action === 'lookup') {
     // zodat ze ook in een volgende wedstrijd automatisch verschijnen, ongeacht
     // of ze een ander startnummer hebben).
     $license = trim($_GET['license_key'] ?? '');
+    // Volglijst draait sinds fase 3c op person_id (stabiele interne GUID). We
+    // resolven person_id → license_key zodat de onderliggende queries (die op
+    // person_license matchen) ongewijzigd blijven. Vlak vóór fase 4 — als
+    // license_key naar person_external_ids verhuist — wordt person_id de
+    // canonieke sleutel en vervalt deze shim.
+    $pidParam = trim($_GET['person_id'] ?? '');
+    if ($pidParam !== '' && $license === '') {
+        $rs = $pdo->prepare("SELECT license_key FROM persons WHERE person_id = ? LIMIT 1");
+        $rs->execute([$pidParam]);
+        $license = (string)($rs->fetchColumn() ?: '');
+        if ($license === '') {
+            echo json_encode(['error' => 'Geen rijder gevonden voor deze rijder in deze wedstrijd']);
+            exit;
+        }
+    }
 
     if (!$compId || (!$snr && !$license)) {
         echo json_encode(['error' => 'competition_id en startnummer of license_key zijn verplicht']);
@@ -4903,12 +4918,30 @@ selComp.addEventListener('change', async () => {
     // loads kunnen zo nooit in dezelfde _kinderen interleaven (→ geen dubbele rijders).
     const verzameld = [];
     for (const item of opgeslagen) {
-        const k = await _fetchKind({ license_key: item.license_key }, selComp.value, gedeeldeProg);
+        const k = await _fetchKind({ person_id: item.person_id, license_key: item.license_key }, selComp.value, gedeeldeProg);
         if (mySeq !== _kindLoadSeq) return;   // afgebroken door nieuwere load
         if (k) verzameld.push(k);
         // k == null → kind doet niet mee aan deze wedstrijd, we slaan 'm stil over.
     }
     _kinderen = verzameld;
+    // Fase 3c-migratie: vul person_id passief in bij oude opgeslagen items die
+    // 'm nog missen (de lookup-respons draagt person_id sinds fase 3b). We
+    // MERGEN in de volledige opgeslagen lijst — rijders die deze wedstrijd niet
+    // meedoen zitten niet in _kinderen en mogen niet uit de store verdwijnen.
+    if (opgeslagen.some(it => !it.person_id)) {
+        const pidByLic = new Map();
+        verzameld.forEach(k => {
+            const p = k.data[k.kozen_idx ?? 0]?.persoon;
+            if (p?.license_key && p?.person_id) pidByLic.set(p.license_key, p.person_id);
+        });
+        if (pidByLic.size) {
+            const gemigreerd = opgeslagen.map(it =>
+                (!it.person_id && it.license_key && pidByLic.has(it.license_key))
+                    ? { ...it, person_id: pidByLic.get(it.license_key) }
+                    : it);
+            localStorage.setItem(KIDS_LS_KEY, JSON.stringify(gemigreerd));
+        }
+    }
     if (_kinderen.length) {
         _activeKindIdx = 0;
         renderKinderen();
@@ -4962,6 +4995,7 @@ btnZoek.addEventListener('click', async () => {
         // met checkboxes zodat de user er meerdere tegelijk kan toevoegen.
         if (data.length > 1) {
             const rijen = data.map(d => ({
+                person_id:    d.persoon.person_id ?? null,
                 license_key:  d.persoon.license_key,
                 full_name:    d.persoon.full_name,
                 wedstrijd_snr: d.persoon.wedstrijd_snr ?? d.persoon.start_number,
@@ -4992,7 +5026,11 @@ function toonChooserModal(rijen, term, compId) {
     // Reeds gevolgd (globale volglijst) → uitschakelen. Ook rijders die je volgt
     // maar die niet in déze wedstrijd meedoen tellen mee, zodat je nooit boven
     // het maximum van de globale volglijst uitkomt.
-    const al = new Set(_loadKidsUitStorage().map(k => k.license_key).filter(Boolean));
+    // Reeds-gevolgd-set bevat zowel person_id als license_key (fase 3c), zodat
+    // een treffer op één van beide als "al in lijst" telt, ongeacht welke sleutel
+    // het opgeslagen item draagt.
+    const al = new Set();
+    _loadKidsUitStorage().forEach(k => { if (k.person_id) al.add(k.person_id); if (k.license_key) al.add(k.license_key); });
     const plaatsVrij = MAX_KINDEREN - _loadKidsUitStorage().length;
 
     const modal = document.createElement('div');
@@ -5007,7 +5045,7 @@ function toonChooserModal(rijen, term, compId) {
                 ${rijen.length === 0
                     ? `<div class="naamzoek-leeg">${esc(t('msg_geen_rijders'))}</div>`
                     : rijen.map(r => {
-                        const uit = al.has(r.license_key);
+                        const uit = (r.person_id && al.has(r.person_id)) || al.has(r.license_key);
                         // search_person geeft `in_wedstrijd` (1/0); snr-pad niet,
                         // dan behandelen we als altijd-wel (undefined === wel).
                         const doetMee = r.in_wedstrijd === undefined ? true : !!parseInt(r.in_wedstrijd);
@@ -5018,7 +5056,7 @@ function toonChooserModal(rijen, term, compId) {
                             !doetMee ? `<span style="color:#b71c1c">${esc(t('chooser_doet_niet_mee'))}</span>` : '',
                         ].filter(Boolean).join(' · ');
                         return `<label class="naamzoek-rij" style="${uit ? 'opacity:.55' : ''}">
-                            <input type="checkbox" data-lic="${esc(r.license_key)}" ${uit ? 'checked disabled' : ''}>
+                            <input type="checkbox" data-pid="${esc(r.person_id ?? '')}" data-lic="${esc(r.license_key)}" ${uit ? 'checked disabled' : ''}>
                             <span class="naamzoek-rij-snr">${esc(r.wedstrijd_snr ?? '—')}</span>
                             <div class="naamzoek-rij-naam">
                                 ${esc(r.full_name)}
@@ -5056,10 +5094,15 @@ function toonChooserModal(rijen, term, compId) {
             prog = await pr.json();
         } catch {}
         for (const cb of vinkjes) {
+            const pid = cb.dataset.pid;
             const lic = cb.dataset.lic;
-            if (!lic) continue;
+            if (!pid && !lic) continue;
+            // Prefereer person_id (fase 3c); val terug op license_key.
+            const param = pid
+                ? `person_id=${encodeURIComponent(pid)}`
+                : `license_key=${encodeURIComponent(lic)}`;
             try {
-                const r = await safeFetch(`?action=lookup&competition_id=${encodeURIComponent(compId)}&license_key=${encodeURIComponent(lic)}`);
+                const r = await safeFetch(`?action=lookup&competition_id=${encodeURIComponent(compId)}&${param}`);
                 const d = await r.json();
                 if (d && !d.error && d.length) {
                     const huidigSnr = d[0].persoon.wedstrijd_snr ?? d[0].persoon.start_number ?? '';
@@ -5238,32 +5281,42 @@ function _renderSetupVolglijst() {
     const chips = saved.map(k => {
         // Live-gegevens (startnummer) als deze rijder in de huidige wedstrijd
         // geladen is; anders de opgeslagen naam-hint.
-        const live = _kinderen.find(x => x.data?.[x.kozen_idx ?? 0]?.persoon?.license_key === k.license_key);
+        // Identiteit prefereert person_id (fase 3c), valt terug op license_key.
+        const kid = k.person_id || k.license_key;
+        const live = _kinderen.find(x => {
+            const xp = x.data?.[x.kozen_idx ?? 0]?.persoon;
+            return (k.person_id && xp?.person_id === k.person_id) || (k.license_key && xp?.license_key === k.license_key);
+        });
         const p = live?.data?.[live.kozen_idx ?? 0]?.persoon;
         const naam = p?.full_name || k.naam_hint || t('kind_rijder_placeholder');
         const snr = live ? live.snr : '';
         return `<span class="setup-volg-chip">
             ${snr ? `<span class="setup-volg-snr">${esc(snr)}</span>` : ''}
             <span class="setup-volg-naam">${esc(naam)}</span>
-            <button type="button" class="setup-volg-x" data-lic="${esc(k.license_key)}" title="${esc(t('kind_tab_verwijder'))}">&times;</button>
+            <button type="button" class="setup-volg-x" data-kid="${esc(kid)}" title="${esc(t('kind_tab_verwijder'))}">&times;</button>
         </span>`;
     }).join('');
     el.innerHTML = `<div class="setup-volg-label">${esc(t('setup_volg_label'))}</div>
         <div class="setup-volg-chips">${chips}</div>`;
     el.querySelectorAll('.setup-volg-x').forEach(b => b.addEventListener('click', () => {
-        _verwijderGevolgdeRijder(b.dataset.lic);
+        _verwijderGevolgdeRijder(b.dataset.kid);
         _renderSetupVolglijst();   // modal-lijst meteen verversen
         _updateSetupModalMax();    // zoekveld weer aan als onder max
     }));
 }
 // Verwijder een rijder uit de globale volglijst (localStorage) én uit de live
 // per-wedstrijd-lijst als 'ie daar geladen is (dan hoofdweergave verversen).
-function _verwijderGevolgdeRijder(lic) {
+function _verwijderGevolgdeRijder(kid) {
+    // kid = person_id (fase 3c) óf license_key (oude items). Verwijder de rij
+    // die op één van beide matcht.
     localStorage.setItem(KIDS_LS_KEY,
-        JSON.stringify(_loadKidsUitStorage().filter(k => k.license_key !== lic)));
+        JSON.stringify(_loadKidsUitStorage().filter(k => k.person_id !== kid && k.license_key !== kid)));
     if (typeof _ppSync === 'function') _ppSync();   // server-licenties meelopen
 
-    const idx = _kinderen.findIndex(x => x.data?.[x.kozen_idx ?? 0]?.persoon?.license_key === lic);
+    const idx = _kinderen.findIndex(x => {
+        const xp = x.data?.[x.kozen_idx ?? 0]?.persoon;
+        return xp?.person_id === kid || xp?.license_key === kid;
+    });
     if (idx !== -1) {
         _kinderen.splice(idx, 1);
         if (_activeKindIdx >= _kinderen.length) _activeKindIdx = Math.max(0, _kinderen.length - 1);
@@ -5380,12 +5433,16 @@ function _saveKids() {
     const items = _kinderen
         .map(k => {
             const p = k.data[k.kozen_idx ?? 0]?.persoon;
-            return p?.license_key ? { license_key: p.license_key, naam_hint: p.full_name } : null;
+            // person_id (interne GUID) is sinds fase 3c de stabiele sleutel.
+            // license_key blijft meegeschreven zolang die nog bestaat (fase 4
+            // laat 'm vervallen); dedup en lookup prefereren person_id.
+            if (!p?.license_key && !p?.person_id) return null;
+            return { person_id: p.person_id ?? null, license_key: p.license_key ?? null, naam_hint: p.full_name };
         })
         .filter(Boolean)
-        // Dedup op license_key: vangnet zodat een (ooit) dubbele _kinderen nooit
-        // dubbel in localStorage belandt.
-        .filter(it => !seen.has(it.license_key) && seen.add(it.license_key));
+        // Dedup op person_id (of license_key als GUID nog ontbreekt): vangnet
+        // zodat een (ooit) dubbele _kinderen nooit dubbel in localStorage belandt.
+        .filter(it => { const key = it.person_id || it.license_key; return !seen.has(key) && seen.add(key); });
     localStorage.setItem(KIDS_LS_KEY, JSON.stringify(items));
     if (typeof _ppSync === 'function') _ppSync();   // server-licenties meelopen
 }
@@ -5397,11 +5454,15 @@ function _loadKidsUitStorage() {
 // Haal lookup op voor een license_key of startnummer. Gebruikt de shared
 // programma-respons als die al gefetcht is (scheelt netwerk-calls bij
 // meerdere kinderen).
-async function _fetchKind({ license_key = null, snr = null }, compId, gedeeldeProg = null) {
-    if (!license_key && !snr) return null;
-    const param = license_key
-        ? `license_key=${encodeURIComponent(license_key)}`
-        : `startnummer=${encodeURIComponent(snr)}`;
+async function _fetchKind({ person_id = null, license_key = null, snr = null }, compId, gedeeldeProg = null) {
+    if (!person_id && !license_key && !snr) return null;
+    // Sinds fase 3c prefereren we de stabiele person_id; valt terug op
+    // license_key (oude opgeslagen items) en tot slot startnummer.
+    const param = person_id
+        ? `person_id=${encodeURIComponent(person_id)}`
+        : license_key
+            ? `license_key=${encodeURIComponent(license_key)}`
+            : `startnummer=${encodeURIComponent(snr)}`;
     const [lookupRes, progRes] = await Promise.all([
         safeFetch(`?action=lookup&competition_id=${encodeURIComponent(compId)}&${param}`),
         gedeeldeProg
@@ -5418,10 +5479,16 @@ async function _fetchKind({ license_key = null, snr = null }, compId, gedeeldePr
 }
 
 function toonRijderData(data, startIdx, snr, prog) {
-    // Dedupeer op license_key (stabiel over wedstrijden), niet op startnummer.
-    const nieuweLic = data[startIdx]?.persoon?.license_key;
-    const bestaande = nieuweLic
-        ? _kinderen.findIndex(k => k.data[k.kozen_idx ?? 0]?.persoon?.license_key === nieuweLic)
+    // Dedupeer op person_id (stabiel over wedstrijden, fase 3c), valt terug op
+    // license_key. Niet op startnummer (dat wisselt per wedstrijd).
+    const nieuweP = data[startIdx]?.persoon;
+    const nieuwePid = nieuweP?.person_id;
+    const nieuweLic = nieuweP?.license_key;
+    const bestaande = (nieuwePid || nieuweLic)
+        ? _kinderen.findIndex(k => {
+            const kp = k.data[k.kozen_idx ?? 0]?.persoon;
+            return (nieuwePid && kp?.person_id === nieuwePid) || (nieuweLic && kp?.license_key === nieuweLic);
+          })
         : -1;
     if (bestaande !== -1) {
         _activeKindIdx = bestaande;
