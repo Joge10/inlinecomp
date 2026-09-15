@@ -21,11 +21,14 @@ if (!function_exists('personIdVoorLicentie')) {
     function personIdVoorLicentie(PDO $pdo, ?string $license): ?string {
         static $cache = [];
         if ($license === null || $license === '') return null;
-        if (array_key_exists($license, $cache)) return $cache[$license];
+        if (isset($cache[$license])) return $cache[$license];
         $st = $pdo->prepare("SELECT person_id FROM persons WHERE license_key = ? LIMIT 1");
         $st->execute([$license]);
         $pid = $st->fetchColumn();
-        return $cache[$license] = ($pid !== false ? (string)$pid : null);
+        // Niet-gevonden NIET cachen: dezelfde licentie kan later in dezelfde
+        // request geïnsert worden (bv. rijder in meerdere DC's / net geminte).
+        if ($pid === false) return null;
+        return $cache[$license] = (string)$pid;
     }
 }
 
@@ -54,11 +57,14 @@ if (!function_exists('personIdVoorExtern')) {
         static $cache = [];
         if ($externId === null || $externId === '') return null;
         $k = $systeem . "\0" . $externId;
-        if (array_key_exists($k, $cache)) return $cache[$k];
+        if (isset($cache[$k])) return $cache[$k];
         $st = $pdo->prepare("SELECT person_id FROM person_external_ids WHERE systeem = ? AND extern_id = ? LIMIT 1");
         $st->execute([$systeem, $externId]);
         $pid = $st->fetchColumn();
-        return $cache[$k] = ($pid !== false ? (string)$pid : null);
+        // Niet-gevonden NIET cachen: de mapping kan later in dezelfde request
+        // ontstaan (net geminte rijder die in een tweede DC nog eens langskomt).
+        if ($pid === false) return null;
+        return $cache[$k] = (string)$pid;
     }
 }
 

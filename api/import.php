@@ -565,6 +565,28 @@ try {
                updated_at   = CURRENT_TIMESTAMP
     ");
 
+    // Variant-A (fase 3d-ii-b): identiteit-UPDATE op person_id i.p.v. de
+    // license_key-PK. Zelfde COALESCE-behoud-logica als de ON DUPLICATE KEY
+    // hierboven, maar de rijder is gevonden via person_external_ids → person_id.
+    // license_key wordt NIET aangeraakt (blijft de schaduw tot fase 4).
+    $stmtPersUpdate = $pdo->prepare("
+        UPDATE persons SET
+               full_name    = COALESCE(NULLIF(:full_name,  ''), full_name),
+               short_name   = COALESCE(NULLIF(:short_name, ''), short_name),
+               gender       = :gender,
+               category     = COALESCE(NULLIF(:category,   ''), category),
+               nationality  = :nationality,
+               start_number = COALESCE(:start_number, start_number),
+               club_code    = COALESCE(NULLIF(:club_code,  ''), club_code),
+               club_short   = COALESCE(NULLIF(:club_short, ''), club_short),
+               club_full    = COALESCE(NULLIF(:club_full,  ''), club_full),
+               sponsor      = COALESCE(NULLIF(:sponsor,    ''), sponsor),
+               city         = COALESCE(NULLIF(:city,       ''), city),
+               {$demoUpd}
+               updated_at   = CURRENT_TIMESTAMP
+        WHERE person_id = :pid
+    ");
+
     // Reserve-persist:
     //  - Nieuwe entry: reserve + status uit KNSB-feed direct opslaan.
     //  - Bestaande entry: reserve_handmatig_ingezet=1 → operator heeft de
@@ -688,9 +710,12 @@ try {
             $lk = $c['license_key'] ?? null;
             if (!$lk) { $overgeslagen++; continue; }
 
-            // Persoon aanmaken of bijwerken
-            $stmtPers->execute([
-                ':license_key'  => $lk,
+            // ── Persoon: identiteit resolven via person_external_ids ──────────
+            // Variant A (fase 3d-ii-b): NIET meer de license_key-PK als anker,
+            // maar de externe-id-mapping. Het systeem-label volgt uit de vorm van
+            // de sleutel (knsb = numeriek relatienummer, of ic-manual / ic-anoniem
+            // / ic-demo / ic-extern / ic-pending voor de synthetische sleutels).
+            $persParams = [
                 ':full_name'    => $c['full_name']    ?? '',
                 ':short_name'   => $c['short_name']   ?? null,
                 ':gender'       => $c['gender']       ?? null,
@@ -702,13 +727,20 @@ try {
                 ':club_full'    => $c['club_full']    ?? null,
                 ':sponsor'      => $c['sponsor']      ?? null,
                 ':city'         => $c['city']         ?? null,
-            ]);
-
-            // person_external_ids-mapping borgen (fase 3d-ii-a): elke net
-            // geminte/bijgewerkte rijder krijgt z'n externe-id-rij, met het
-            // systeem-label afgeleid uit de license_key-vorm (knsb / ic-manual /
-            // ic-anoniem / ic-demo). Zo ontstaat er nooit een rijder zonder mapping.
-            zorgVoorExternalId($pdo, personIdVoorLicentie($pdo, $lk), $lk);
+            ];
+            $pid = personIdVoorExtern($pdo, systeemVoorLicentie($lk), $lk);
+            if ($pid !== null) {
+                // Bestaande rijder → in-place bijwerken op person_id (geen
+                // license_key nodig — bewijst dat fase 4 werkt).
+                $stmtPersUpdate->execute($persParams + [':pid' => $pid]);
+            } else {
+                // Nieuwe rijder → minten. license_key nog als schaduw (NOT NULL PK
+                // tot fase 4); de ON DUPLICATE KEY-vangnet dekt de theoretische
+                // race waarin de licentie tóch al bestaat zonder mapping.
+                $stmtPers->execute($persParams + [':license_key' => $lk]);
+                $pid = personIdVoorLicentie($pdo, $lk);
+                zorgVoorExternalId($pdo, $pid, $lk);   // mapping borgen (fase 3d-ii-a)
+            }
 
             // Inschrijving aanmaken of bijwerken
             // reserve uit KNSB-feed; NULL als geen reserve (1, 2, ... voor R1, R2, ...)
