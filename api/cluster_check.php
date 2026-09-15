@@ -463,7 +463,7 @@ if ($action === 'vervang') {
     }
     $entryIds = array_values(array_filter(array_map('intval', $entryIds)));
 
-    $pStmt = $pdo->prepare("SELECT license_key, full_name FROM persons WHERE license_key = ?");
+    $pStmt = $pdo->prepare("SELECT license_key, person_id, full_name FROM persons WHERE license_key = ?");
     $pStmt->execute([$nieuwLic]);
     $nieuw = $pStmt->fetch(PDO::FETCH_ASSOC);
     if (!$nieuw) {
@@ -471,6 +471,9 @@ if ($action === 'vervang') {
         echo json_encode(['error' => 'Nieuwe persoon niet gevonden']);
         exit;
     }
+    // person_id-migratie: her-toewijzing zet óók person_id op de nieuwe GUID,
+    // zodat person_license en person_id niet uit elkaar gaan lopen (drift).
+    $nieuwPid = $nieuw['person_id'] ?? null;
 
     // entries-info ophalen — distance_combination_id voor heat_entries-sync.
     $ph = implode(',', array_fill(0, count($entryIds), '?'));
@@ -504,7 +507,7 @@ if ($action === 'vervang') {
     $eConflict = $pdo->prepare(
         "SELECT 1 FROM entries WHERE distance_combination_id = ? AND person_license = ? AND id <> ? LIMIT 1"
     );
-    $eUpdate = $pdo->prepare("UPDATE entries SET person_license = ? WHERE id = ?");
+    $eUpdate = $pdo->prepare("UPDATE entries SET person_license = ?, person_id = ? WHERE id = ?");
     $eDelete = $pdo->prepare("DELETE FROM entries WHERE id = ?");
 
     // heat_entries voor zelfde DC + (oude OF nieuwe) license — daar zit de
@@ -514,7 +517,7 @@ if ($action === 'vervang') {
     $heConflict = $pdo->prepare(
         "SELECT 1 FROM heat_entries WHERE heat_id = ? AND person_license = ? LIMIT 1"
     );
-    $heUpdate = $pdo->prepare("UPDATE heat_entries SET person_license = ? WHERE id = ?");
+    $heUpdate = $pdo->prepare("UPDATE heat_entries SET person_license = ?, person_id = ? WHERE id = ?");
     $heDelete = $pdo->prepare("DELETE FROM heat_entries WHERE id = ?");
     $heLookup = $pdo->prepare("
         SELECT he.id, he.heat_id
@@ -544,7 +547,7 @@ if ($action === 'vervang') {
             $eDelete->execute([$e['id']]);
             $verwijderd++;
         } else {
-            $eUpdate->execute([$nieuwLic, $e['id']]);
+            $eUpdate->execute([$nieuwLic, $nieuwPid, $e['id']]);
             $bijgewerkt++;
         }
         // heat_entries-laag: alle heats van deze DC waar de OUDE license in
@@ -556,7 +559,7 @@ if ($action === 'vervang') {
                 $heDelete->execute([$he['id']]);
                 $heVerwijderd++;
             } else {
-                $heUpdate->execute([$nieuwLic, $he['id']]);
+                $heUpdate->execute([$nieuwLic, $nieuwPid, $he['id']]);
                 $heBijgewerkt++;
             }
         }

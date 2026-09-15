@@ -777,7 +777,9 @@ try {
                     if (!isset($stmtOrgTpUpdateMetBetaald)) {
                         $stmtOrgTpUpdateMetBetaald = $pdo->prepare("
                             UPDATE organisatie_transponders
-                            SET person_license = ?, toegewezen_snr = ?, toegewezen_naam = ?, categorie = ?,
+                            SET person_license = ?,
+                                person_id = (SELECT person_id FROM persons WHERE license_key = ?),
+                                toegewezen_snr = ?, toegewezen_naam = ?, categorie = ?,
                                 betaald = ?, betaald_op = ?
                             WHERE organisatie_id = ? AND transponder_code = ?
                         ");
@@ -789,7 +791,9 @@ try {
                     if (!isset($stmtOrgTpUpdateBehoudBetaald)) {
                         $stmtOrgTpUpdateBehoudBetaald = $pdo->prepare("
                             UPDATE organisatie_transponders
-                            SET person_license = ?, toegewezen_snr = ?, toegewezen_naam = ?, categorie = ?
+                            SET person_license = ?,
+                                person_id = (SELECT person_id FROM persons WHERE license_key = ?),
+                                toegewezen_snr = ?, toegewezen_naam = ?, categorie = ?
                             WHERE organisatie_id = ? AND transponder_code = ?
                         ");
                     }
@@ -800,7 +804,7 @@ try {
                     if (!isset($stmtOrgTpVrijgeven)) {
                         $stmtOrgTpVrijgeven = $pdo->prepare("
                             UPDATE organisatie_transponders
-                            SET person_license = NULL, toegewezen_snr = NULL, toegewezen_naam = NULL,
+                            SET person_license = NULL, person_id = NULL, toegewezen_snr = NULL, toegewezen_naam = NULL,
                                 categorie = NULL, betaald = 0, betaald_op = NULL
                             WHERE organisatie_id = ?
                               AND transponder_code != ?
@@ -865,13 +869,13 @@ try {
                             $betaald   = ((int)$c['tp_betaald']) === 1 ? 1 : 0;
                             $betaaldOp = $betaald ? date('Y-m-d') : null;
                             $stmtOrgTpUpdateMetBetaald->execute([
-                                $lk, $startnr, $fullNaam, $cat, $betaald, $betaaldOp,
+                                $lk, $lk, $startnr, $fullNaam, $cat, $betaald, $betaaldOp,
                                 $orgId, $tpActief
                             ]);
                             $raakte = $stmtOrgTpUpdateMetBetaald->rowCount();
                         } else {
                             $stmtOrgTpUpdateBehoudBetaald->execute([
-                                $lk, $startnr, $fullNaam, $cat, $orgId, $tpActief
+                                $lk, $lk, $startnr, $fullNaam, $cat, $orgId, $tpActief
                             ]);
                             $raakte = $stmtOrgTpUpdateBehoudBetaald->rowCount();
                         }

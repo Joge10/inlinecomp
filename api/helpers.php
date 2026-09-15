@@ -2101,7 +2101,7 @@ if ($action === 'pending_link') {
     }
     try {
         // Verifieer beide bestaan + bepaal types
-        $checkStmt = $pdo->prepare("SELECT license_key, pending_source, extern, full_name, category FROM persons WHERE license_key = ?");
+        $checkStmt = $pdo->prepare("SELECT license_key, person_id, pending_source, extern, full_name, category FROM persons WHERE license_key = ?");
         $checkStmt->execute([$pendingLic]);
         $pending = $checkStmt->fetch(PDO::FETCH_ASSOC);
         if (!$pending) {
@@ -2136,6 +2136,11 @@ if ($action === 'pending_link') {
             exit;
         }
 
+        // person_id-migratie: bij elke verhuizing zetten we óók person_id op de
+        // doel-GUID, zodat person_license en person_id consistent blijven (anders
+        // ontstaat drift die fase 4 zou breken). $targetPid is de canonieke sleutel.
+        $targetPid = $target['person_id'] ?? null;
+
         $pdo->beginTransaction();
 
         // ── uitslag_afstand ──
@@ -2158,10 +2163,10 @@ if ($action === 'pending_link') {
 
         $moveStmt = $pdo->prepare("
             UPDATE uitslag_afstand
-            SET    person_license = ?
+            SET    person_license = ?, person_id = ?
             WHERE  person_license = ?
         ");
-        $moveStmt->execute([$targetLic, $pendingLic]);
+        $moveStmt->execute([$targetLic, $targetPid, $pendingLic]);
         $verhuisd = $moveStmt->rowCount();
 
         // ── entries (alleen relevant als source extern is — pendings hebben
@@ -2181,10 +2186,10 @@ if ($action === 'pending_link') {
 
         $moveEntries = $pdo->prepare("
             UPDATE entries
-            SET    person_license = ?
+            SET    person_license = ?, person_id = ?
             WHERE  person_license = ?
         ");
-        $moveEntries->execute([$targetLic, $pendingLic]);
+        $moveEntries->execute([$targetLic, $targetPid, $pendingLic]);
         $entriesVerhuisd = $moveEntries->rowCount();
 
         // ── heat_entries. UNIQUE-key is (heat_id, person_license) —
@@ -2202,10 +2207,10 @@ if ($action === 'pending_link') {
 
         $moveHe = $pdo->prepare("
             UPDATE heat_entries
-            SET    person_license = ?
+            SET    person_license = ?, person_id = ?
             WHERE  person_license = ?
         ");
-        $moveHe->execute([$targetLic, $pendingLic]);
+        $moveHe->execute([$targetLic, $targetPid, $pendingLic]);
         $heVerhuisd = $moveHe->rowCount();
 
         // ── uitslag_klassement. UNIQUE-key:
@@ -2225,10 +2230,10 @@ if ($action === 'pending_link') {
 
         $moveUk = $pdo->prepare("
             UPDATE uitslag_klassement
-            SET    person_license = ?
+            SET    person_license = ?, person_id = ?
             WHERE  person_license = ?
         ");
-        $moveUk->execute([$targetLic, $pendingLic]);
+        $moveUk->execute([$targetLic, $targetPid, $pendingLic]);
         $ukVerhuisd = $moveUk->rowCount();
 
         // ── competition_startnummers. UNIQUE-key: (competition_id, person_license).
@@ -2245,10 +2250,10 @@ if ($action === 'pending_link') {
 
         $moveCsn = $pdo->prepare("
             UPDATE competition_startnummers
-            SET    person_license = ?
+            SET    person_license = ?, person_id = ?
             WHERE  person_license = ?
         ");
-        $moveCsn->execute([$targetLic, $pendingLic]);
+        $moveCsn->execute([$targetLic, $targetPid, $pendingLic]);
         $csnVerhuisd = $moveCsn->rowCount();
 
         // ── transponders. UNIQUE-key is (competition_id, person_license, slot).
@@ -2266,10 +2271,10 @@ if ($action === 'pending_link') {
 
         $moveTp = $pdo->prepare("
             UPDATE transponders
-            SET    person_license = ?
+            SET    person_license = ?, person_id = ?
             WHERE  person_license = ?
         ");
-        $moveTp->execute([$targetLic, $pendingLic]);
+        $moveTp->execute([$targetLic, $targetPid, $pendingLic]);
         $tpVerhuisd = $moveTp->rowCount();
 
         // ── organisatie_transponders (club-inventaris-toewijzingen). Werd
@@ -2352,7 +2357,8 @@ if ($action === 'pending_merge') {
         exit;
     }
     try {
-        $checkStmt = $pdo->prepare("SELECT license_key, pending_source, full_name FROM persons WHERE license_key = ?");
+        $checkStmt = $pdo->prepare("SELECT license_key, person_id, pending_source, full_name FROM persons WHERE license_key = ?");
+        $tgtPid = null;
         foreach ([$srcLic, $tgtLic] as $lk) {
             $checkStmt->execute([$lk]);
             $row = $checkStmt->fetch(PDO::FETCH_ASSOC);
@@ -2361,6 +2367,7 @@ if ($action === 'pending_merge') {
                 echo json_encode(['error' => "Pending-rij $lk niet gevonden of geen pending"]);
                 exit;
             }
+            if ($lk === $tgtLic) $tgtPid = $row['person_id'] ?? null;
         }
 
         $pdo->beginTransaction();
@@ -2382,9 +2389,9 @@ if ($action === 'pending_merge') {
         $conflictDeleted = $delConflict->rowCount();
 
         $moveStmt = $pdo->prepare("
-            UPDATE uitslag_afstand SET person_license = ? WHERE person_license = ?
+            UPDATE uitslag_afstand SET person_license = ?, person_id = ? WHERE person_license = ?
         ");
-        $moveStmt->execute([$tgtLic, $srcLic]);
+        $moveStmt->execute([$tgtLic, $tgtPid, $srcLic]);
         $verhuisd = $moveStmt->rowCount();
 
         // ── entries (UNIQUE: distance_combination_id, person_license)
@@ -2397,8 +2404,8 @@ if ($action === 'pending_merge') {
         ");
         $delEntConflict->execute([$tgtLic, $srcLic]);
         $entriesConflictDeleted = $delEntConflict->rowCount();
-        $moveEnt = $pdo->prepare("UPDATE entries SET person_license = ? WHERE person_license = ?");
-        $moveEnt->execute([$tgtLic, $srcLic]);
+        $moveEnt = $pdo->prepare("UPDATE entries SET person_license = ?, person_id = ? WHERE person_license = ?");
+        $moveEnt->execute([$tgtLic, $tgtPid, $srcLic]);
         $entriesVerhuisd = $moveEnt->rowCount();
 
         // ── heat_entries (UNIQUE: heat_id, person_license)
@@ -2411,8 +2418,8 @@ if ($action === 'pending_merge') {
         ");
         $delHeConflict->execute([$tgtLic, $srcLic]);
         $heConflictDeleted = $delHeConflict->rowCount();
-        $moveHe = $pdo->prepare("UPDATE heat_entries SET person_license = ? WHERE person_license = ?");
-        $moveHe->execute([$tgtLic, $srcLic]);
+        $moveHe = $pdo->prepare("UPDATE heat_entries SET person_license = ?, person_id = ? WHERE person_license = ?");
+        $moveHe->execute([$tgtLic, $tgtPid, $srcLic]);
         $heVerhuisd = $moveHe->rowCount();
 
         // ── uitslag_klassement (UNIQUE: competition_id, dc, split_group, person_license)
@@ -2427,8 +2434,8 @@ if ($action === 'pending_merge') {
         ");
         $delUkConflict->execute([$tgtLic, $srcLic]);
         $ukConflictDeleted = $delUkConflict->rowCount();
-        $moveUk = $pdo->prepare("UPDATE uitslag_klassement SET person_license = ? WHERE person_license = ?");
-        $moveUk->execute([$tgtLic, $srcLic]);
+        $moveUk = $pdo->prepare("UPDATE uitslag_klassement SET person_license = ?, person_id = ? WHERE person_license = ?");
+        $moveUk->execute([$tgtLic, $tgtPid, $srcLic]);
         $ukVerhuisd = $moveUk->rowCount();
 
         // ── competition_startnummers (UNIQUE: competition_id, person_license)
@@ -2441,8 +2448,8 @@ if ($action === 'pending_merge') {
         ");
         $delCsnConflict->execute([$tgtLic, $srcLic]);
         $csnConflictDeleted = $delCsnConflict->rowCount();
-        $moveCsn = $pdo->prepare("UPDATE competition_startnummers SET person_license = ? WHERE person_license = ?");
-        $moveCsn->execute([$tgtLic, $srcLic]);
+        $moveCsn = $pdo->prepare("UPDATE competition_startnummers SET person_license = ?, person_id = ? WHERE person_license = ?");
+        $moveCsn->execute([$tgtLic, $tgtPid, $srcLic]);
         $csnVerhuisd = $moveCsn->rowCount();
 
         // ── transponders (UNIQUE: competition_id, person_license, slot)
@@ -2456,8 +2463,8 @@ if ($action === 'pending_merge') {
         ");
         $delTpConflict->execute([$tgtLic, $srcLic]);
         $tpConflictDeleted = $delTpConflict->rowCount();
-        $moveTp = $pdo->prepare("UPDATE transponders SET person_license = ? WHERE person_license = ?");
-        $moveTp->execute([$tgtLic, $srcLic]);
+        $moveTp = $pdo->prepare("UPDATE transponders SET person_license = ?, person_id = ? WHERE person_license = ?");
+        $moveTp->execute([$tgtLic, $tgtPid, $srcLic]);
         $tpVerhuisd = $moveTp->rowCount();
 
         $delSrc = $pdo->prepare("DELETE FROM persons WHERE license_key = ? AND pending_source IS NOT NULL");
