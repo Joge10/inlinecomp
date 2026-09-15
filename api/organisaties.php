@@ -365,12 +365,13 @@ try {
             }
 
             $pdo->prepare("DELETE FROM organisatie_transponders WHERE organisatie_id = ?")->execute([$orgId]);
+            require_once __DIR__ . '/../inc/person_id.php';   // dual-write person_id (fase 3)
             $insTp = $pdo->prepare("
                 INSERT INTO organisatie_transponders
                     (organisatie_id, intern_nummer, transponder_code, eigendom,
-                     toegewezen_snr, toegewezen_naam, person_license, categorie,
+                     toegewezen_snr, toegewezen_naam, person_license, person_id, categorie,
                      betaald, betaald_op, geblokkeerd)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             ");
             foreach ($transponders as $t) {
                 $nr   = trim($t['intern_nummer'] ?? '');
@@ -381,12 +382,14 @@ try {
                 $betaald   = ($snr && ((int)($t['betaald'] ?? 0)) === 1) ? 1 : 0;
                 $betaaldOp = $betaald ? ((!empty($t['betaald_op']) && $t['betaald_op'] !== '—') ? $t['betaald_op'] : date('Y-m-d')) : null;
                 $geblokk   = ((int)($t['geblokkeerd'] ?? 0)) === 1 ? 1 : 0;
+                $otLic = trim($t['person_license'] ?? '') ?: null;
                 $insTp->execute([
                     $orgId, $nr, $code,
                     trim($t['eigendom'] ?? '') ?: null,
                     $snr,
                     trim($t['toegewezen_naam'] ?? '') ?: null,
-                    trim($t['person_license'] ?? '') ?: null,
+                    $otLic,
+                    personIdVoorLicentie($pdo, $otLic),
                     trim($t['categorie'] ?? '') ?: null,
                     $betaald,
                     $betaaldOp,

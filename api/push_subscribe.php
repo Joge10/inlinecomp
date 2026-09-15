@@ -95,8 +95,9 @@ if ($action === 'subscribe') {
             if ($subId) {
                 $pdo->prepare("DELETE FROM push_sub_licenses WHERE subscription_id = ?")->execute([$subId]);
                 if ($lics) {
-                    $ins = $pdo->prepare("INSERT IGNORE INTO push_sub_licenses (subscription_id, person_license) VALUES (?, ?)");
-                    foreach ($lics as $l) $ins->execute([$subId, $l]);
+                    require_once __DIR__ . '/../inc/person_id.php';   // dual-write person_id (fase 3)
+                    $ins = $pdo->prepare("INSERT IGNORE INTO push_sub_licenses (subscription_id, person_license, person_id) VALUES (?, ?, ?)");
+                    foreach ($lics as $l) $ins->execute([$subId, $l, personIdVoorLicentie($pdo, $l)]);
                 }
             }
         }

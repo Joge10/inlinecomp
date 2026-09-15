@@ -375,7 +375,8 @@ try {
         $chk = $pdo->prepare("SELECT 1 FROM persons WHERE license_key = ? LIMIT 1");
         $chk->execute([$lic]);
         if (!$chk->fetchColumn()) jsonOut(['error' => 'Rijder niet gevonden'], 404);
-        $pdo->prepare("INSERT IGNORE INTO coach_athletes (coach_account_id, person_license) VALUES (?, ?)")
+        $pdo->prepare("INSERT IGNORE INTO coach_athletes (coach_account_id, person_license, person_id)
+                       SELECT ?, license_key, person_id FROM persons WHERE license_key = ?")
             ->execute([$c['id'], $lic]);
         jsonOut(['ok' => true]);
     }
@@ -411,8 +412,8 @@ try {
                 $ph = implode(',', array_fill(0, count($lics), '?'));
                 $pdo->prepare("DELETE FROM coach_athletes WHERE coach_account_id = ? AND person_license NOT IN ($ph)")
                     ->execute(array_merge([$c['id']], $lics));
-                $ins = $pdo->prepare("INSERT IGNORE INTO coach_athletes (coach_account_id, person_license)
-                                      SELECT ?, license_key FROM persons WHERE license_key = ?");
+                $ins = $pdo->prepare("INSERT IGNORE INTO coach_athletes (coach_account_id, person_license, person_id)
+                                      SELECT ?, license_key, person_id FROM persons WHERE license_key = ?");
                 foreach ($lics as $lic) $ins->execute([$c['id'], $lic]);
             } else {
                 $pdo->prepare("DELETE FROM coach_athletes WHERE coach_account_id = ?")->execute([$c['id']]);
@@ -462,8 +463,8 @@ try {
             $params = array_merge($params, $sponsors);
         }
         $stmt = $pdo->prepare("
-            INSERT IGNORE INTO coach_athletes (coach_account_id, person_license)
-            SELECT ?, license_key FROM persons
+            INSERT IGNORE INTO coach_athletes (coach_account_id, person_license, person_id)
+            SELECT ?, license_key, person_id FROM persons
             WHERE anonymized_at IS NULL AND (" . implode(' OR ', $sub) . ")
         ");
         $stmt->execute($params);

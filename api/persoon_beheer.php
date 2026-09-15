@@ -256,10 +256,10 @@ try {
         // E-mail wissen + status bijwerken (AVG: adres niet langer bewaren).
         $pdo->prepare("
             UPDATE rijder_profiel_aanvraag
-            SET status = 'approved', license_key = ?, email = NULL,
+            SET status = 'approved', license_key = ?, person_id = ?, email = NULL,
                 behandeld_door = ?, behandeld_at = NOW()
             WHERE id = ?
-        ")->execute([$lk, $_authUser['id'] ?? null, $aid]);
+        ")->execute([$lk, $pid, $_authUser['id'] ?? null, $aid]);
 
         echo json_encode([
             'ok'       => true,
