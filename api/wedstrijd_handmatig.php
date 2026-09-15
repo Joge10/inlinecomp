@@ -116,6 +116,7 @@ if ($action === 'detail') {
         $stmt = $pdo->prepare("
             SELECT e.distance_combination_id AS dc_id,
                    e.person_license, e.status, e.reserve, e.knsb_entry_id,
+                   p.person_id,
                    p.full_name, p.short_name, p.birth_year, p.gender,
                    p.category, p.nationality, p.start_number,
                    p.club_code, p.club_short, p.club_full, p.sponsor, p.city,

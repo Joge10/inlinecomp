@@ -74,7 +74,7 @@ try {
     $ph   = implode(',', array_fill(0, count($heatIds), '?'));
     $stmt = $pdo->prepare("
         SELECT he.heat_id, he.startpositie, he.startnummer, he.categorie,
-               p.license_key, p.full_name, p.short_name, p.club_short, p.city,
+               p.license_key, p.person_id, p.full_name, p.short_name, p.club_short, p.city,
                p.start_number
         FROM heat_entries he
         JOIN persons p ON p.license_key = he.person_license
@@ -227,7 +227,7 @@ try {
             // Verschijnt als 📷-icoon in de Opm.-kolom van de startlijst.
             $veStmt = $pdo->prepare("
                 SELECT he.heat_id, he.startpositie, he.startnummer, he.categorie,
-                       p.license_key, p.full_name, p.short_name,
+                       p.license_key, p.person_id, p.full_name, p.short_name,
                        p.start_number, p.club_short,
                        (SELECT GROUP_CONCAT(
                                    CONCAT(

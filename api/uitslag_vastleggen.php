@@ -176,6 +176,7 @@ try {
     // ── Rijder-query ──────────────────────────────────────────────────────────
     $rijderStmt = $pdo->prepare("
         SELECT he.person_license,
+               p.person_id,
                p.full_name, p.short_name, p.start_number,
                p.category AS categorie,
                res.finishpositie, res.tijd_ms, res.sanctie,

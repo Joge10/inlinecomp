@@ -539,7 +539,7 @@ if ($action === 'rit_detail') {
         $rStmt = $pdo->prepare("
             SELECT he.startpositie,
                    COALESCE(cs.startnummer, p.start_number) AS snr,
-                   p.license_key,
+                   p.license_key, p.person_id,
                    p.full_name, p.category,
                    res.finishpositie, res.tijd_ms, res.sanctie,
                    res.rondes, res.punten AS pk_punten,
@@ -582,7 +582,7 @@ if ($action === 'search_person') {
         // blijven in de persoonlijke lijst via de license-lookup hieronder.
         // `in_wedstrijd` blijft 1 voor frontend-compatibiliteit.
         $stmt = $pdo->prepare("
-            SELECT p.license_key, p.full_name, p.short_name,
+            SELECT p.license_key, p.person_id, p.full_name, p.short_name,
                    p.category, p.club_short,
                    COALESCE(cs.startnummer, p.start_number) AS wedstrijd_snr,
                    1 AS in_wedstrijd
@@ -638,7 +638,7 @@ if ($action === 'lookup') {
             // wordt NULL als er geen inschrijving is voor deze comp; de
             // frontend toont dan een "niet ingeschreven"-placeholder.
             $persStmt = $pdo->prepare("
-                SELECT p.license_key, p.full_name, p.category, p.start_number,
+                SELECT p.license_key, p.person_id, p.full_name, p.category, p.start_number,
                        p.club_short,
                        COALESCE(cs.startnummer, p.start_number) AS wedstrijd_snr,
                        (SELECT MAX(e.status)
@@ -655,7 +655,7 @@ if ($action === 'lookup') {
             $persStmt->execute([$compId, $compId, $license]);
         } else {
             $persStmt = $pdo->prepare("
-                SELECT p.license_key, p.full_name, p.category, p.start_number,
+                SELECT p.license_key, p.person_id, p.full_name, p.category, p.start_number,
                        p.club_short,
                        COALESCE(cs.startnummer, p.start_number) AS wedstrijd_snr,
                        e.status AS entry_status
@@ -724,7 +724,7 @@ if ($action === 'lookup') {
         $rijdersStmt = $pdo->prepare("
             SELECT he.startpositie,
                    COALESCE(cs.startnummer, p.start_number) AS snr,
-                   p.license_key,
+                   p.license_key, p.person_id,
                    p.full_name, p.category,
                    res.finishpositie, res.tijd_ms,
                    res.bruto_tijd_ms, res.is_photofinish, res.sanctie,
@@ -989,6 +989,7 @@ if ($action === 'uitslagen') {
             $catWhere = $catFilter !== '' ? ' WHERE p.category = ?' : '';
             $stmt = $pdo->prepare("
                 SELECT t.rang, t.punten_totaal, t.dc_naam, t.punten_detail,
+                       p.person_id,
                        p.full_name, p.category AS categorie,
                        COALESCE(cs.startnummer, p.start_number) AS snr
                 FROM uitslag_klassement t
@@ -1027,6 +1028,7 @@ if ($action === 'uitslagen') {
             $stmt = $pdo->prepare("
                 SELECT t.rang, t.finale_naam, t.tijd_ms, t.sanctie,
                        t.distance_naam,
+                       p.person_id,
                        p.full_name, p.category AS categorie,
                        COALESCE(cs.startnummer, p.start_number) AS snr,
                        res_agg.rondes, res_agg.pk_punten
@@ -1308,6 +1310,7 @@ if ($action === 'ronde_uitslagen') {
             SELECT h.id AS heat_id, h.heat_nr,
                    COALESCE(tsr.ronde_type, 'heats') AS ronde_type,
                    he.person_license, he.startpositie,
+                   p.person_id,
                    p.full_name, p.category AS categorie,
                    COALESCE(cs.startnummer, p.start_number) AS snr,
                    res.tijd_ms, res.bruto_tijd_ms, res.is_photofinish,
@@ -1330,6 +1333,7 @@ if ($action === 'ronde_uitslagen') {
         $eindStmt = $pdo->prepare("
             SELECT ua.rang, ua.tijd_ms, ua.sanctie, ua.punten, ua.finale_naam,
                    ua.person_license,
+                   p.person_id,
                    p.full_name, COALESCE(cs.startnummer, p.start_number) AS snr
             FROM uitslag_afstand ua
             JOIN persons p ON p.license_key = ua.person_license

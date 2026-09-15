@@ -131,6 +131,7 @@ try {
     // ── Tussenklassement berekenen (alleen op complete afstanden) ─────────────
     $rkSql = "
         SELECT   ua.person_license,
+                 p.person_id,
                  p.full_name,
                  p.short_name,
                  p.start_number,

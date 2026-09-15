@@ -162,6 +162,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'GET') {
                 he.id           AS entry_id,
                 he.startpositie,
                 he.startnummer,
+                p.person_id,
                 p.full_name,
                 tp.code         AS transponder_actief,
                 res.finishpositie,
@@ -978,7 +979,7 @@ if ($action === 'genereer_volgende_ronde') {
             // voor de tie-break-regel bij ex-aequo doorstroming.
             // Bij split: alleen rijders uit DEZE split's bron-heats.
             $resStmt = $pdo->prepare("
-                SELECT he.person_license, he.categorie, he.startnummer,
+                SELECT he.person_license, p.person_id, he.categorie, he.startnummer,
                        p.full_name, p.club_short,
                        h.heat_nr,
                        res.tijd_ms, res.rondes, res.sanctie
@@ -1431,6 +1432,7 @@ if ($action === 'genereer_volgende_ronde') {
             SELECT
                 he.id           AS entry_id,
                 he.person_license,
+                p.person_id,
                 he.categorie,
                 he.startnummer,
                 h.heat_nr,

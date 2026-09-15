@@ -466,6 +466,7 @@ if ($action === 'aoc_heats') {
                    he.heat_id,
                    he.startpositie,
                    he.startnummer,
+                   p.person_id,
                    p.full_name,
                    COALESCE(aoc.status, 'onbekend') AS aoc_status,
                    res.finishpositie,
@@ -982,6 +983,7 @@ if ($action === 'speaker_deelnemers') {
             SELECT
                 COALESCE(csn.startnummer, p.start_number) AS startnummer,
                 p.license_key,
+                p.person_id,
                 p.full_name,
                 p.short_name,
                 p.category,
@@ -1114,7 +1116,7 @@ if ($action === 'speaker_combi') {
         $dStmt = $pdo->prepare("
             SELECT
                 COALESCE(csn.startnummer, p.start_number) AS startnummer,
-                p.license_key, p.full_name, p.short_name, p.category,
+                p.license_key, p.person_id, p.full_name, p.short_name, p.category,
                 p.birth_year, p.gender, p.nationality,
                 p.club_full, p.club_short, p.sponsor, p.city,
                 e.status AS entry_status
@@ -1618,6 +1620,7 @@ if ($action === 'speaker_eerdere_top3') {
                 COALESCE(csn.startnummer, p.start_number) AS startnummer,
                 COALESCE(p.full_name, ua.person_license) AS naam,
                 ua.person_license,
+                p.person_id,
                 ua.categorie,
                 ua.tijd_ms,
                 ua.sanctie,
@@ -1673,6 +1676,7 @@ if ($action === 'speaker_persoon') {
             SELECT
                 COALESCE(csn.startnummer, p.start_number) AS startnummer,
                 p.license_key,
+                p.person_id,
                 p.full_name,
                 p.short_name,
                 p.category,
@@ -1962,6 +1966,7 @@ if ($action === 'scheids_dc') {
             SELECT
                 COALESCE(csn.startnummer, p.start_number) AS startnummer,
                 p.license_key,
+                p.person_id,
                 p.full_name,
                 p.short_name,
                 p.category,

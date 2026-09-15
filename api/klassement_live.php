@@ -256,7 +256,7 @@ try {
     if ($alleKlasLics) {
         $licPh = implode(',', array_fill(0, count($alleKlasLics), '?'));
         $pStmt = $pdo->prepare("
-            SELECT license_key, full_name, short_name, start_number,
+            SELECT license_key, person_id, full_name, short_name, start_number,
                    category AS categorie, club_short, club_full, sponsor
             FROM persons
             WHERE license_key IN ($licPh)

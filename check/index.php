@@ -327,7 +327,7 @@ if ($action !== '') {
             // broers/zussen of toevallig dezelfde achternaam zitten samen.
             // De juiste persoon kiezen we via beste-fuzzy-match op voornaam.
             $kStmt = $pdo->prepare("
-                SELECT DISTINCT p.license_key, p.full_name, p.short_name, p.gender,
+                SELECT DISTINCT p.license_key, p.person_id, p.full_name, p.short_name, p.gender,
                                 p.category, p.start_number, p.club_short, p.club_full,
                                 p.nationality, p.sponsor
                 FROM entries e

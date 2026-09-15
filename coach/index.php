@@ -361,7 +361,7 @@ if ($action === 'personen_by_club') {
     try {
         $stmt = $pdo->prepare("
             SELECT DISTINCT COALESCE(cs.startnummer, p.start_number) AS snr,
-                   p.license_key, p.full_name, p.category, p.club_full, p.sponsor
+                   p.license_key, p.person_id, p.full_name, p.category, p.club_full, p.sponsor
             FROM entries e
             JOIN distance_combinations dc ON dc.id = e.distance_combination_id
             JOIN persons p ON p.license_key = e.person_license
@@ -414,7 +414,7 @@ if ($action === 'personen_bulk') {
         $where[] = '(' . implode(' OR ', $sub) . ')';
         $sql = "
             SELECT DISTINCT COALESCE(cs.startnummer, p.start_number) AS snr,
-                   p.license_key, p.full_name, p.category, p.club_full, p.sponsor
+                   p.license_key, p.person_id, p.full_name, p.category, p.club_full, p.sponsor
             FROM entries e
             JOIN distance_combinations dc ON dc.id = e.distance_combination_id
             JOIN persons p ON p.license_key = e.person_license
@@ -443,7 +443,7 @@ if ($action === 'personen_by_sponsor') {
     try {
         $stmt = $pdo->prepare("
             SELECT DISTINCT COALESCE(cs.startnummer, p.start_number) AS snr,
-                   p.license_key, p.full_name, p.category, p.club_full, p.sponsor
+                   p.license_key, p.person_id, p.full_name, p.category, p.club_full, p.sponsor
             FROM entries e
             JOIN distance_combinations dc ON dc.id = e.distance_combination_id
             JOIN persons p ON p.license_key = e.person_license
@@ -474,7 +474,7 @@ if ($action === 'person_by_startnummer') {
     try {
         $stmt = $pdo->prepare("
             SELECT COALESCE(cs.startnummer, p.start_number) AS snr,
-                   p.license_key, p.full_name, p.category, p.club_full, p.sponsor
+                   p.license_key, p.person_id, p.full_name, p.category, p.club_full, p.sponsor
             FROM entries e
             JOIN distance_combinations dc ON dc.id = e.distance_combination_id
             JOIN persons p ON p.license_key = e.person_license
@@ -521,7 +521,7 @@ if ($action === 'person_lookup') {
         $base = "
             SELECT DISTINCT
                    COALESCE(cs.startnummer, p.start_number) AS snr,
-                   p.license_key, p.full_name, p.category, p.club_full,
+                   p.license_key, p.person_id, p.full_name, p.category, p.club_full,
                    p.club_short, p.sponsor
             FROM entries e
             JOIN distance_combinations dc ON dc.id = e.distance_combination_id
@@ -681,6 +681,7 @@ if ($action === 'programma') {
         $snrStmt = $pdo->prepare("
             SELECT he.heat_id,
                    he.person_license AS lic,
+                   p.person_id,
                    COALESCE(cs.startnummer, p.start_number) AS snr
             FROM heat_entries he
             JOIN heats h ON h.id = he.heat_id
@@ -847,6 +848,7 @@ if ($action === 'uitslagen') {
             $stmt = $pdo->prepare("
                 SELECT t.rang, t.punten_totaal, t.dc_naam, t.punten_detail,
                        t.person_license AS lic,
+                       p.person_id,
                        p.full_name, p.category AS categorie,
                        COALESCE(cs.startnummer, p.start_number) AS snr
                 FROM uitslag_klassement t
@@ -1822,7 +1824,7 @@ if ($action === 'rit_detail') {
         $rStmt = $pdo->prepare("
             SELECT he.startpositie,
                    COALESCE(cs.startnummer, p.start_number) AS snr,
-                   p.license_key, p.full_name, p.category, p.club_full, p.sponsor,
+                   p.license_key, p.person_id, p.full_name, p.category, p.club_full, p.sponsor,
                    res.finishpositie, res.tijd_ms,
                    res.bruto_tijd_ms, res.is_photofinish, res.sanctie,
                    res.rondes, res.punten AS pk_punten

@@ -171,6 +171,7 @@ try {
     $uitslagStmt = $pdo->prepare("
         SELECT ua.rang, ua.categorie, ua.split_group,
                ua.person_license   AS license_key,
+               p.person_id,
                p.full_name,
                p.start_number,
                p.club_full,
@@ -228,6 +229,7 @@ try {
     $klassementStmt = $pdo->prepare("
         SELECT uk.rang, uk.categorie, uk.split_group,
                uk.person_license   AS license_key,
+               p.person_id,
                p.full_name,
                p.start_number,
                p.club_full,
@@ -468,7 +470,7 @@ try {
     // Dedup op license_key zodat iedereen 1x in de lijst staat.
     // Sortering: startnummer dan achternaam.
     $delnStmt = $pdo->prepare("
-        SELECT p.license_key, p.full_name, p.short_name, p.category,
+        SELECT p.license_key, p.person_id, p.full_name, p.short_name, p.category,
                p.nationality, p.start_number, p.club_full, p.sponsor,
                GROUP_CONCAT(DISTINCT src.distance_naam ORDER BY src.meters SEPARATOR '|||') AS gereden
         FROM (

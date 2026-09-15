@@ -318,7 +318,7 @@ function berekenSerie(PDO $pdo, string $serieId): array {
                        ua.split_group, ua.person_license, ua.categorie,
                        ua.rang, ua.punten AS punten_totaal,
                        c.name AS comp_naam,
-                       p.full_name, p.short_name, p.category AS persoon_cat,
+                       p.person_id, p.full_name, p.short_name, p.category AS persoon_cat,
                        COALESCE(cs.startnummer, p.start_number) AS wedstrijd_snr
                 FROM uitslag_afstand ua
                 JOIN distances d
@@ -380,7 +380,7 @@ function berekenSerie(PDO $pdo, string $serieId): array {
                        uk.split_group, uk.person_license, uk.categorie,
                        uk.rang, uk.punten_totaal,
                        c.name AS comp_naam,
-                       p.full_name, p.short_name, p.category AS persoon_cat,
+                       p.person_id, p.full_name, p.short_name, p.category AS persoon_cat,
                        COALESCE(cs.startnummer, p.start_number) AS wedstrijd_snr
                 FROM uitslag_klassement uk
                 JOIN competitions c ON c.id = uk.competition_id
@@ -659,7 +659,7 @@ function berekenSerie(PDO $pdo, string $serieId): array {
             $bStmt = $pdo->prepare("
                 SELECT e.person_license, dc.competition_id,
                        dc.id AS dc_id, dc.name AS dc_naam,
-                       p.full_name, p.short_name, p.category AS persoon_cat,
+                       p.person_id, p.full_name, p.short_name, p.category AS persoon_cat,
                        c.name AS comp_naam,
                        COALESCE(cs.startnummer, p.start_number) AS wedstrijd_snr
                 FROM entries e
@@ -1537,7 +1537,7 @@ if ($method === 'GET') {
                     $ua = $pdo->prepare("
                         SELECT ua.person_license, ua.rang, ua.punten, ua.categorie,
                                d.name AS afst_naam, d.race_type AS rt,
-                               p.full_name, p.category AS persoon_cat
+                               p.person_id, p.full_name, p.category AS persoon_cat
                         FROM uitslag_afstand ua
                         JOIN distances d
                             ON d.distance_combination_id = ua.distance_combination_id
@@ -1590,7 +1590,7 @@ if ($method === 'GET') {
                     $uk = $pdo->prepare("
                         SELECT uk.person_license, uk.distance_combination_id AS dc_id,
                                uk.rang, uk.punten_totaal, uk.categorie,
-                               p.full_name, p.category AS persoon_cat
+                               p.person_id, p.full_name, p.category AS persoon_cat
                         FROM uitslag_klassement uk
                         JOIN persons p ON p.license_key = uk.person_license
                         WHERE uk.competition_id IN ($ph)

@@ -262,6 +262,7 @@ if ($action === 'csv_export_data') {
                    uk.person_license,
                    uk.categorie                                          AS persoon_cat,
                    uk.split_group,
+                   p.person_id,
                    p.full_name                                           AS naam,
                    COALESCE(NULLIF(p.club_short,''), p.club_full, '')    AS club,
                    p.sponsor                                             AS sponsor,
@@ -1495,6 +1496,7 @@ if ($action === 'pending_lijst') {
         $stmt = $pdo->query("
             SELECT
                 p.license_key,
+                p.person_id,
                 p.full_name,
                 p.category,
                 p.birth_year,

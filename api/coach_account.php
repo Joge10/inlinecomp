@@ -330,7 +330,7 @@ try {
     if ($method === 'GET' && $action === 'roster_list') {
         $c = vereisCoachLogin($pdo);
         $stmt = $pdo->prepare("
-            SELECT p.license_key, p.full_name, p.club_full, p.category, p.birth_year, p.start_number, ca.added_at
+            SELECT p.license_key, p.person_id, p.full_name, p.club_full, p.category, p.birth_year, p.start_number, ca.added_at
             FROM   coach_athletes ca
             JOIN   persons p ON p.license_key = ca.person_license
             WHERE  ca.coach_account_id = ?
@@ -352,7 +352,7 @@ try {
         // kan per categorie hergebruikt worden), dus meerdere treffers mogelijk.
         $snr  = ctype_digit($q) ? (int)$q : -1;
         $stmt = $pdo->prepare("
-            SELECT p.license_key, p.full_name, p.club_full, p.category, p.birth_year, p.start_number,
+            SELECT p.license_key, p.person_id, p.full_name, p.club_full, p.category, p.birth_year, p.start_number,
                    (ca.person_license IS NOT NULL) AS in_roster
             FROM   persons p
             LEFT JOIN coach_athletes ca
@@ -431,7 +431,7 @@ try {
         $compId = trim($_GET['competition_id'] ?? '');
         if ($compId === '') jsonOut(['riders' => []]);
         $stmt = $pdo->prepare("
-            SELECT p.license_key, p.full_name, p.category, p.club_full, p.sponsor,
+            SELECT p.license_key, p.person_id, p.full_name, p.category, p.club_full, p.sponsor,
                    COALESCE(cs.startnummer, p.start_number) AS snr,
                    (SELECT MAX(e.status) FROM entries e
                       JOIN distance_combinations dc ON dc.id = e.distance_combination_id

@@ -500,7 +500,7 @@ try {
         // zodat berekenInternationaalResultaat() ze kan propageren naar de
         // resultaat-output (basis voor de jury-aanpassings-footnote in print).
         $rijderStmt = $pdo->prepare("
-            SELECT he.person_license, p.full_name, p.short_name, p.start_number,
+            SELECT he.person_license, p.person_id, p.full_name, p.short_name, p.start_number,
                    p.category AS categorie, res.finishpositie, res.tijd_ms,
                    res.bruto_tijd_ms, res.is_photofinish, res.sanctie,
                    res.rondes, res.punten AS pk_punten, res.afval_rang
@@ -756,6 +756,7 @@ try {
     // ── Rijders per heat ophalen ──────────────────────────────────────────────
     $rijderStmt = $pdo->prepare("
         SELECT he.person_license,
+               p.person_id,
                he.startpositie,
                p.full_name,
                p.short_name,
