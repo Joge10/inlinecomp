@@ -15,6 +15,7 @@ header('Content-Type: application/json; charset=utf-8');
 
 require_once __DIR__ . '/../../config_inlinecomp.php';
 require_once __DIR__ . '/../auth/session.php';
+require_once __DIR__ . '/../inc/person_id.php';   // person_id-migratie fase 3 (dual-write)
 $_authUser = requireAuth($pdo);
 
 if (!in_array($_authUser['role'] ?? '', ['owner', 'admin'], true)) {
@@ -142,21 +143,24 @@ try {
         $al->execute([$lk]);
         $reset = (bool)$al->fetchColumn();
         $rawTok = bin2hex(random_bytes(16));
+        $pid = personIdVoorLicentie($pdo, $lk);   // dual-write person_id (fase 3)
         if ($gbn !== '') {
             $pdo->prepare("
-                INSERT INTO rijder_profiel (license_key, username, claim_token_hash, claim_expires)
-                VALUES (?, ?, ?, DATE_ADD(NOW(), INTERVAL 7 DAY))
-                ON DUPLICATE KEY UPDATE username = VALUES(username),
+                INSERT INTO rijder_profiel (license_key, person_id, username, claim_token_hash, claim_expires)
+                VALUES (?, ?, ?, ?, DATE_ADD(NOW(), INTERVAL 7 DAY))
+                ON DUPLICATE KEY UPDATE person_id = VALUES(person_id),
+                                        username = VALUES(username),
                                         claim_token_hash = VALUES(claim_token_hash),
                                         claim_expires    = VALUES(claim_expires)
-            ")->execute([$lk, $gbn, hash('sha256', $rawTok)]);
+            ")->execute([$lk, $pid, $gbn, hash('sha256', $rawTok)]);
         } else {
             $pdo->prepare("
-                INSERT INTO rijder_profiel (license_key, claim_token_hash, claim_expires)
-                VALUES (?, ?, DATE_ADD(NOW(), INTERVAL 7 DAY))
-                ON DUPLICATE KEY UPDATE claim_token_hash = VALUES(claim_token_hash),
+                INSERT INTO rijder_profiel (license_key, person_id, claim_token_hash, claim_expires)
+                VALUES (?, ?, ?, DATE_ADD(NOW(), INTERVAL 7 DAY))
+                ON DUPLICATE KEY UPDATE person_id = VALUES(person_id),
+                                        claim_token_hash = VALUES(claim_token_hash),
                                         claim_expires    = VALUES(claim_expires)
-            ")->execute([$lk, hash('sha256', $rawTok)]);
+            ")->execute([$lk, $pid, hash('sha256', $rawTok)]);
         }
         $cur = $pdo->prepare("SELECT username FROM rijder_profiel WHERE license_key = ?");
         $cur->execute([$lk]);
@@ -231,13 +235,15 @@ try {
         }
         // Claim-link maken (7 dagen), zoals profiel_claim.
         $rawTok = bin2hex(random_bytes(16));
+        $pid = personIdVoorLicentie($pdo, $lk);   // dual-write person_id (fase 3)
         $pdo->prepare("
-            INSERT INTO rijder_profiel (license_key, username, claim_token_hash, claim_expires)
-            VALUES (?, ?, ?, DATE_ADD(NOW(), INTERVAL 7 DAY))
-            ON DUPLICATE KEY UPDATE username = VALUES(username),
+            INSERT INTO rijder_profiel (license_key, person_id, username, claim_token_hash, claim_expires)
+            VALUES (?, ?, ?, ?, DATE_ADD(NOW(), INTERVAL 7 DAY))
+            ON DUPLICATE KEY UPDATE person_id = VALUES(person_id),
+                                    username = VALUES(username),
                                     claim_token_hash = VALUES(claim_token_hash),
                                     claim_expires    = VALUES(claim_expires)
-        ")->execute([$lk, $gbn, hash('sha256', $rawTok)]);
+        ")->execute([$lk, $pid, $gbn, hash('sha256', $rawTok)]);
 
         require_once __DIR__ . '/../inc/profiel_mail.php';
         $claimUrl = PROFIEL_LOGIN_URL . '?claim=' . $rawTok;
