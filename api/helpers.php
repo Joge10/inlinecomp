@@ -2270,6 +2270,20 @@ if ($action === 'pending_link') {
         $moveTp->execute([$targetLic, $pendingLic]);
         $tpVerhuisd = $moveTp->rowCount();
 
+        // ── organisatie_transponders (club-inventaris-toewijzingen). Werd
+        // eerder NIET meeverhuisd → een club-transponder bleef aan de oude
+        // (verwijderde) pending/extern-rij hangen (bv. extern → KNSB-koppeling).
+        // Geen unique op persoon, dus simpele verplaatsing. person_id meenemen
+        // (mid person_id-migratie) zodat beide kolommen consistent blijven.
+        $moveOt = $pdo->prepare("
+            UPDATE organisatie_transponders
+            SET    person_license = ?,
+                   person_id      = (SELECT person_id FROM persons WHERE license_key = ?)
+            WHERE  person_license = ?
+        ");
+        $moveOt->execute([$targetLic, $targetLic, $pendingLic]);
+        $otVerhuisd = $moveOt->rowCount();
+
         // ── Target's type blijft zoals 't is — geen "smart promotion".
         // Operator's intentie respecteren: als hij vanuit pending naar extern
         // klikt → eindresultaat is extern. Andersom: extern naar pending →
@@ -2300,6 +2314,7 @@ if ($action === 'pending_link') {
             'csn_conflict'        => $csnConflictDeleted,
             'tp_verhuisd'         => $tpVerhuisd,
             'tp_conflict'         => $tpConflictDeleted,
+            'ot_verhuisd'         => $otVerhuisd,
             'pending_naam'        => $pending['full_name'],
             'target_naam'         => $target['full_name'],
         ], JSON_UNESCAPED_UNICODE);
