@@ -47,7 +47,10 @@ try {
         $likeNaam   = '%' . $q . '%';
         $zoekLic    = strlen($q) >= 4 ? 1 : 0;
         $stmt  = $pdo->prepare("
-            SELECT person_id AS license_key, person_id, full_name, short_name, start_number,
+            SELECT person_id AS license_key, person_id,
+                   (SELECT extern_id FROM person_external_ids e
+                     WHERE e.person_id = persons.person_id AND e.systeem = 'knsb' LIMIT 1) AS relatienummer,
+                   full_name, short_name, start_number,
                    category, club_short, club_full, anonymized_at
             FROM persons
             WHERE (? = 1 AND start_number = ?)
@@ -83,7 +86,10 @@ try {
         $zoekLic = strlen($q) >= 4 ? 1 : 0;
         $filter  = strlen($q) >= 2;   // korter dan 2 tekens = geen filter (alles)
         $stmt = $pdo->prepare("
-            SELECT p.person_id AS license_key, p.person_id, p.full_name, p.short_name, p.start_number,
+            SELECT p.person_id AS license_key, p.person_id,
+                   (SELECT extern_id FROM person_external_ids e
+                     WHERE e.person_id = p.person_id AND e.systeem = 'knsb' LIMIT 1) AS relatienummer,
+                   p.full_name, p.short_name, p.start_number,
                    p.category, p.club_short, p.club_full, p.anonymized_at,
                    (rp.pin_hash IS NOT NULL) AS prof_geclaimd,
                    (rp.claim_token_hash IS NOT NULL AND rp.claim_expires > NOW()) AS prof_claim_open
@@ -327,7 +333,11 @@ try {
         }
 
         // 1. Alle persons-velden
-        $stmt = $pdo->prepare("SELECT * FROM persons WHERE person_id = ?");
+        $stmt = $pdo->prepare("
+            SELECT persons.*,
+                   (SELECT extern_id FROM person_external_ids e
+                     WHERE e.person_id = persons.person_id AND e.systeem = 'knsb' LIMIT 1) AS relatienummer
+            FROM persons WHERE person_id = ?");
         $stmt->execute([$pid]);
         $rijder = $stmt->fetch(PDO::FETCH_ASSOC);
         if (!$rijder) {

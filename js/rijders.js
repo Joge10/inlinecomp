@@ -184,7 +184,7 @@ function rijAanvraagGoedkeuren(a) {
             resBox.innerHTML = '<ul class="rij-ag-lijst">' + rs.map(x =>
                 `<li data-lk="${escHtml(x.license_key)}" data-naam="${escHtml(x.full_name)}">
                     ${escHtml(x.full_name)}
-                    <span class="rij-ag-sub">${x.start_number ? 'Snr ' + escHtml(String(x.start_number)) + ' · ' : ''}${escHtml(x.category || '')}${x.club_short ? ' · ' + escHtml(x.club_short) : ''} · ${escHtml(x.license_key)}</span>
+                    <span class="rij-ag-sub">${x.start_number ? 'Snr ' + escHtml(String(x.start_number)) + ' · ' : ''}${escHtml(x.category || '')}${x.club_short ? ' · ' + escHtml(x.club_short) : ''} · ${escHtml(x.relatienummer || 'geen KNSB-lid')}</span>
                 </li>`).join('') + '</ul>';
             resBox.querySelectorAll('li').forEach(li => li.addEventListener('click', () => {
                 gekozenLic = li.dataset.lk; gekozenNaam = li.dataset.naam;
@@ -350,7 +350,7 @@ function rijToonResultaten(rijders, soort = 'resultaat') {
             <div class="rij-zoek-meta">
                 ${r.start_number ? 'Snr <strong>' + r.start_number + '</strong> · ' : ''}
                 ${escHtml(r.category ?? '')}${r.category && r.club_short ? ' · ' : ''}${escHtml(r.club_short ?? '')}
-                · <span class="rij-zoek-lk">${escHtml(r.license_key)}</span>
+                · <span class="rij-zoek-lk">${escHtml(r.relatienummer || 'geen KNSB-lid')}</span>
             </div>
         </li>`;
     });
@@ -594,7 +594,7 @@ function rijRenderDetail(data) {
     document.getElementById('rij-detail').innerHTML = `
         <div class="rij-detail-header">
             <h2>${escHtml(r.full_name)}${anoniem ? ' <span class="rij-anoniem-badge">geanonimiseerd</span>' : ''}</h2>
-            <div class="rij-detail-lk">Licentie: <strong>${escHtml(r.license_key)}</strong></div>
+            <div class="rij-detail-lk">Licentie: <strong>${escHtml(r.relatienummer || 'geen KNSB-lid')}</strong></div>
         </div>
 
         ${anonBlok}
@@ -609,7 +609,7 @@ function rijRenderDetail(data) {
 
         <h3>Persoonsgegevens</h3>
         <div class="rij-detail-grid" id="rij-pers-grid">
-            ${veld('Licentienummer', r.license_key)}
+            ${veld('Licentienummer', r.relatienummer || 'geen KNSB-lid')}
             ${veld('Volledige naam', r.full_name)}
             ${veld('Achternaam (short_name)', r.short_name)}
             ${veld('Geslacht', geslacht)}
@@ -1136,20 +1136,24 @@ async function _rijEditPostEnHerlaad(payload, lic, isVerplaats) {
 async function rijAnonimiseer(rijder) {
     // Stap 1: bevestiging via input-modal — operator moet expliciet het
     // licentienummer typen om per-ongeluk-klikken te voorkomen.
+    // Bevestig-code: KNSB-relatienummer indien lid, anders de volledige naam
+    // (person_id/license_key is nu een interne GUID en niet typbaar).
+    const bevestigCode  = (rijder.relatienummer || rijder.full_name || '').trim();
+    const bevestigLabel = rijder.relatienummer ? 'het licentienummer' : 'de volledige naam';
     const bericht =
         `Je staat op het punt om ONOMKEERBAAR de persoonsgegevens van\n` +
-        `${rijder.full_name} (licentie ${rijder.license_key}) te anonimiseren.\n\n` +
-        `Typ het licentienummer ter bevestiging:`;
+        `${rijder.full_name}${rijder.relatienummer ? ' (licentie ' + rijder.relatienummer + ')' : ''} te anonimiseren.\n\n` +
+        `Typ ${bevestigLabel} ter bevestiging:`;
     const ingetypt = await toonInputDialog({
         titel:        'Rijder anonimiseren',
         bericht:      bericht,
         inputType:    'text',
-        placeholder:  rijder.license_key,
-        monospace:    true,           // licentienummers in monospace voor leesbaarheid
+        placeholder:  bevestigCode,
+        monospace:    true,
         labelOk:      'Anonimiseren',
     });
     if (ingetypt === null) return;     // geannuleerd
-    if (ingetypt.trim() !== rijder.license_key) {
+    if (ingetypt.trim() !== bevestigCode) {
         toonBevestigDialog(
             'Bevestiging klopt niet — geen actie ondernomen.',
             'Anonimiseren', 'OK', ''
@@ -1178,7 +1182,7 @@ async function rijAnonimiseer(rijder) {
 
 async function rijAnonUndo(rijder) {
     const ok = await toonBevestigDialog(
-        `Anonimisatie-vlag opheffen voor licentie ${rijder.license_key}? ` +
+        `Anonimisatie-vlag opheffen voor ${rijder.relatienummer ? 'licentie ' + rijder.relatienummer : (rijder.full_name || 'deze rijder')}? ` +
         `De gegevens zelf blijven leeg; alleen via een nieuwe KNSB-import komen ze terug.`,
         'Anonimisatie opheffen'
     );

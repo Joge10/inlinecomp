@@ -69,6 +69,27 @@ function voegTranspondersToe(PDO $pdo, array $rows): array {
     }, $rows);
 }
 
+// Verrijkt rijen met het KNSB-relatienummer als 'license_key'. Fase 4: persons
+// heeft geen license_key-kolom meer; het relatienummer leeft in
+// person_external_ids(systeem='knsb'). Leeg (null) voor niet-KNSB-leden
+// (extern/demo/manual/pending) — dan hoort het Relatienummer-veld leeg te zijn.
+function voegKnsbLicentieToe(PDO $pdo, array $rows): array {
+    if (!$rows) return $rows;
+    $pids = array_unique(array_column($rows, 'person_id'));
+    $ph   = implode(',', array_fill(0, count($pids), '?'));
+    $stmt = $pdo->prepare(
+        "SELECT person_id, extern_id FROM person_external_ids
+         WHERE systeem = 'knsb' AND person_id IN ($ph)"
+    );
+    $stmt->execute(array_values($pids));
+    $map = [];
+    foreach ($stmt->fetchAll(PDO::FETCH_ASSOC) as $r) $map[$r['person_id']] = $r['extern_id'];
+    return array_map(function($row) use ($map) {
+        $row['license_key'] = $map[$row['person_id']] ?? null;
+        return $row;
+    }, $rows);
+}
+
 try {
     $action = trim($_GET['action'] ?? '');
 
@@ -106,7 +127,7 @@ try {
         $stmt->execute([':pid' => $pid]);
         $row  = $stmt->fetch(PDO::FETCH_ASSOC);
         if ($row) {
-            $row = voegTranspondersToe($pdo, [$row])[0];
+            $row = voegKnsbLicentieToe($pdo, voegTranspondersToe($pdo, [$row]))[0];
         }
         echo json_encode($row ?: null, JSON_UNESCAPED_UNICODE);
         exit;
@@ -135,7 +156,7 @@ try {
             $stmt->execute([':sn' => $sn]);
         }
         $rows = $stmt->fetchAll(PDO::FETCH_ASSOC);
-        echo json_encode(voegTranspondersToe($pdo, $rows), JSON_UNESCAPED_UNICODE);
+        echo json_encode(voegKnsbLicentieToe($pdo, voegTranspondersToe($pdo, $rows)), JSON_UNESCAPED_UNICODE);
         exit;
     }
 
