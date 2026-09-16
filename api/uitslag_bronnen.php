@@ -111,7 +111,7 @@ try {
             dc.name                   AS dc_naam,
             h.distance_id,
             d.name                    AS distance_naam,
-            COUNT(DISTINCT he.person_license) AS aantal,
+            COUNT(DISTINCT he.person_id) AS aantal,
             GROUP_CONCAT(DISTINCT p.category
                          ORDER BY p.category SEPARATOR ',') AS cats_csv
         FROM results              res
@@ -119,7 +119,7 @@ try {
         JOIN heats                h   ON h.id  = he.heat_id
         JOIN distance_combinations dc ON dc.id = h.distance_combination_id
         JOIN distances            d   ON d.id  = h.distance_id
-        JOIN persons              p   ON p.license_key = he.person_license
+        JOIN persons              p   ON p.person_id = he.person_id
         WHERE h.competition_id = ?
           AND COALESCE(res.bruto_tijd_ms, res.tijd_ms) > 0
           AND (res.sanctie IS NULL OR res.sanctie NOT IN ('DQ-SF','DQ-DF'))
@@ -186,7 +186,7 @@ try {
         FROM distances d
         JOIN distance_combinations dc ON dc.id = d.distance_combination_id
         LEFT JOIN entries e ON e.distance_combination_id = dc.id
-        LEFT JOIN persons p ON p.license_key = e.person_license
+        LEFT JOIN persons p ON p.person_id = e.person_id
         WHERE dc.competition_id = ?
         GROUP BY d.distance_combination_id, dc.name, d.id, d.name, dc.category_filter
         ORDER BY dc.number, dc.name, d.number, d.name

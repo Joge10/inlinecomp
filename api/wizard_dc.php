@@ -83,7 +83,7 @@ try {
                SUM(CASE WHEN e.status IN (2,3,4)                         THEN 1 ELSE 0 END) AS niet_actief,
                SUM(CASE WHEN e.status = 0                                THEN 1 ELSE 0 END) AS niet_bevestigd
         FROM entries e
-        JOIN persons p ON p.license_key = e.person_license
+        JOIN persons p ON p.person_id = e.person_id
         JOIN distance_combinations dc ON dc.id = e.distance_combination_id
         WHERE dc.competition_id = ?
           AND p.category IS NOT NULL AND p.category <> ''

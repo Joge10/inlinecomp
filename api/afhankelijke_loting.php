@@ -234,9 +234,9 @@ try {
                    MIN(COALESCE(ua.rang, 9999)) AS beste_rang,
                    MAX(CASE WHEN ua.sanctie IN ('DQ-SF','DQ-DF') THEN 1 ELSE 0 END) AS uitgesloten
             FROM uitslag_afstand ua
-            LEFT JOIN persons p ON p.license_key = ua.person_license
+            LEFT JOIN persons p ON p.person_id = ua.person_id
             WHERE ua.competition_id = ? AND ua.distance_combination_id = ? {$distWhere}
-            GROUP BY ua.person_license, p.full_name
+            GROUP BY ua.person_id, p.full_name
             ORDER BY uitgesloten ASC, beste_rang ASC
         ");
         $stmt->execute($params);
