@@ -25,6 +25,7 @@ header('Expires: 0');
 require_once __DIR__ . '/../../config_inlinecomp.php';
 require_once __DIR__ . '/../inc/versie.php';   // één gedeeld versienummer voor heel InlineComp
 require_once __DIR__ . '/../auth/jury_session.php';
+require_once __DIR__ . '/../inc/person_id.php';   // person_id-resolutie (fase 3d-iii)
 
 $action = $_GET['action'] ?? '';
 
@@ -472,7 +473,7 @@ if ($action === 'aoc_heats') {
                    res.finishpositie,
                    res.sanctie
             FROM heat_entries he
-            JOIN persons p ON p.license_key = he.person_license
+            JOIN persons p ON p.person_id = he.person_id
             LEFT JOIN area_of_call_aanwezigheid aoc ON aoc.heat_entry_id = he.id
             LEFT JOIN results res ON res.heat_entry_id = he.id
             WHERE he.heat_id IN ($ph)
@@ -709,7 +710,7 @@ if ($action === 'speaker_struktuur') {
                 p.category                       AS cat,
                 COUNT(*)                         AS aantal
             FROM entries e
-            JOIN persons p              ON p.license_key = e.person_license
+            JOIN persons p              ON p.person_id = e.person_id
             JOIN distance_combinations dc ON dc.id = e.distance_combination_id
             WHERE dc.competition_id = ?
               AND e.status IN (1, 5)
@@ -839,6 +840,7 @@ if ($action === 'speaker_serieklassement') {
         echo json_encode(['error' => 'license_key is verplicht']);
         exit;
     }
+    $lic = (string)(resolveNaarPersonId($pdo, $lic) ?? $lic);   // token → person_id (fase 3d-iii)
     try {
         $sStmt = $pdo->prepare("
             SELECT ks.id AS serie_id, ks.naam AS serie_naam, ks.seizoen, ks.klassement_id
@@ -853,7 +855,7 @@ if ($action === 'speaker_serieklassement') {
         $pStmt = $pdo->prepare("
             SELECT categorie, positie, punten_totaal
             FROM klassement_posities
-            WHERE klassement_id = ? AND license_key = ?
+            WHERE klassement_id = ? AND person_id = ?
             ORDER BY positie
         ");
         // Buren: de dichtstbijzijnde BETERE (voor) en SLECHTERE (achter) plek,
@@ -865,7 +867,7 @@ if ($action === 'speaker_serieklassement') {
         $voorStmt = $pdo->prepare("
             SELECT kp.positie, kp.punten_totaal, pe.full_name
             FROM klassement_posities kp
-            LEFT JOIN persons pe ON pe.license_key = kp.license_key
+            LEFT JOIN persons pe ON pe.person_id = kp.person_id
             WHERE kp.klassement_id = ? AND kp.categorie <=> ? AND kp.positie < ?
             ORDER BY kp.positie DESC, pe.full_name ASC
             LIMIT 1
@@ -873,7 +875,7 @@ if ($action === 'speaker_serieklassement') {
         $achterStmt = $pdo->prepare("
             SELECT kp.positie, kp.punten_totaal, pe.full_name
             FROM klassement_posities kp
-            LEFT JOIN persons pe ON pe.license_key = kp.license_key
+            LEFT JOIN persons pe ON pe.person_id = kp.person_id
             WHERE kp.klassement_id = ? AND kp.categorie <=> ? AND kp.positie > ?
             ORDER BY kp.positie ASC, pe.full_name ASC
             LIMIT 1
@@ -883,9 +885,9 @@ if ($action === 'speaker_serieklassement') {
         $gelijkStmt = $pdo->prepare("
             SELECT pe.full_name
             FROM klassement_posities kp
-            LEFT JOIN persons pe ON pe.license_key = kp.license_key
+            LEFT JOIN persons pe ON pe.person_id = kp.person_id
             WHERE kp.klassement_id = ? AND kp.categorie <=> ? AND kp.positie = ?
-              AND kp.license_key <> ?
+              AND kp.person_id <> ?
             ORDER BY pe.full_name ASC
         ");
         // ÁLLE namen op een gegeven plek — voor de buur-plek boven/onder, zodat
@@ -894,7 +896,7 @@ if ($action === 'speaker_serieklassement') {
         $namenStmt = $pdo->prepare("
             SELECT pe.full_name
             FROM klassement_posities kp
-            LEFT JOIN persons pe ON pe.license_key = kp.license_key
+            LEFT JOIN persons pe ON pe.person_id = kp.person_id
             WHERE kp.klassement_id = ? AND kp.categorie <=> ? AND kp.positie = ?
             ORDER BY pe.full_name ASC
         ");
@@ -982,7 +984,7 @@ if ($action === 'speaker_deelnemers') {
         $stmt = $pdo->prepare("
             SELECT
                 COALESCE(csn.startnummer, p.start_number) AS startnummer,
-                p.license_key,
+                p.person_id AS license_key,
                 p.person_id,
                 p.full_name,
                 p.short_name,
@@ -996,9 +998,9 @@ if ($action === 'speaker_deelnemers') {
                 p.city,
                 e.status AS entry_status
             FROM entries e
-            JOIN persons p ON p.license_key = e.person_license
+            JOIN persons p ON p.person_id = e.person_id
             LEFT JOIN competition_startnummers csn
-                   ON csn.competition_id = ? AND csn.person_license = p.license_key
+                   ON csn.competition_id = ? AND csn.person_id = p.person_id
             WHERE e.distance_combination_id = ?
               AND e.status IN (1, 5)
               AND e.reserve IS NULL
@@ -1116,14 +1118,14 @@ if ($action === 'speaker_combi') {
         $dStmt = $pdo->prepare("
             SELECT
                 COALESCE(csn.startnummer, p.start_number) AS startnummer,
-                p.license_key, p.person_id, p.full_name, p.short_name, p.category,
+                p.person_id AS license_key, p.person_id, p.full_name, p.short_name, p.category,
                 p.birth_year, p.gender, p.nationality,
                 p.club_full, p.club_short, p.sponsor, p.city,
                 e.status AS entry_status
             FROM entries e
-            JOIN persons p ON p.license_key = e.person_license
+            JOIN persons p ON p.person_id = e.person_id
             LEFT JOIN competition_startnummers csn
-                   ON csn.competition_id = ? AND csn.person_license = p.license_key
+                   ON csn.competition_id = ? AND csn.person_id = p.person_id
             WHERE e.distance_combination_id = ?
               AND e.status IN (1, 5)
               AND e.reserve IS NULL
@@ -1248,9 +1250,9 @@ if ($action === 'speaker_kans') {
 
         // 2. Get deelnemers in DC (+ evt. cat-filter; leeg = alle cats van de DC)
         $stmt = $pdo->prepare("
-            SELECT DISTINCT p.license_key
+            SELECT DISTINCT p.person_id AS license_key
             FROM entries e
-            JOIN persons p ON p.license_key = e.person_license
+            JOIN persons p ON p.person_id = e.person_id
             WHERE e.distance_combination_id = ?
               " . ($cat !== '' ? 'AND p.category = ?' : '') . "
               AND e.status IN (1, 5)
@@ -1285,13 +1287,13 @@ if ($action === 'speaker_kans') {
         $orgJoin   = $orgId !== null ? 'JOIN competitions c ON c.id = ua.competition_id' : '';
         $orgFilter = $orgId !== null ? 'AND c.organisatie_id = ?' : '';
         $stmt = $pdo->prepare("
-            SELECT ua.person_license, ua.competition_datum, ua.rang
+            SELECT ua.person_id AS person_license, ua.competition_datum, ua.rang
             FROM uitslag_afstand ua
             JOIN distances d
                  ON d.id = ua.distance_id
                 AND d.distance_combination_id = ua.distance_combination_id
             {$orgJoin}
-            WHERE ua.person_license IN ($ph)
+            WHERE ua.person_id IN ($ph)
               AND ua.rang IS NOT NULL
               AND ({$groepConditie})
               {$orgFilter}
@@ -1410,6 +1412,7 @@ if ($action === 'speaker_historie') {
         echo json_encode(['error' => 'license_key is verplicht']);
         exit;
     }
+    $lk = (string)(resolveNaarPersonId($pdo, $lk) ?? $lk);   // token → person_id (fase 3d-iii)
     try {
         // Historie = uitsluitend per-afstand uitslagen (uitslag_afstand).
         // Speaker vergelijkt met de afstand die nu wordt gereden, dus
@@ -1432,7 +1435,7 @@ if ($action === 'speaker_historie') {
                 ua.tijd_ms,
                 NULL          AS punten_totaal
             FROM uitslag_afstand ua
-            WHERE ua.person_license = ?
+            WHERE ua.person_id = ?
             -- Sorteren op uitslag-positie (laag = beter). Binnen podium-sectie:
             -- eerst alle goud, dan zilver, dan brons. Binnen Overige-sectie:
             -- rang 4, 5, 6, ... oplopend. NULL-rangen (DQ/DNS zonder positie)
@@ -1618,8 +1621,8 @@ if ($action === 'speaker_eerdere_top3') {
             SELECT
                 ua.rang,
                 COALESCE(csn.startnummer, p.start_number) AS startnummer,
-                COALESCE(p.full_name, ua.person_license) AS naam,
-                ua.person_license,
+                COALESCE(p.full_name, ua.person_id) AS naam,
+                ua.person_id AS person_license,
                 p.person_id,
                 ua.categorie,
                 ua.tijd_ms,
@@ -1629,10 +1632,10 @@ if ($action === 'speaker_eerdere_top3') {
                 -- KNSB-rijder. Frontend toont ⚡ badge bij pending.
                 p.pending_source
             FROM uitslag_afstand ua
-            LEFT JOIN persons p ON p.license_key = ua.person_license
+            LEFT JOIN persons p ON p.person_id = ua.person_id
             LEFT JOIN competition_startnummers csn
                    ON csn.competition_id = ua.competition_id
-                  AND csn.person_license = ua.person_license
+                  AND csn.person_id = ua.person_id
             WHERE ua.competition_id          = ?
               AND ua.distance_combination_id = ?
               AND ua.distance_id             = ?
@@ -1671,11 +1674,12 @@ if ($action === 'speaker_persoon') {
         echo json_encode(['error' => 'license_key is verplicht']);
         exit;
     }
+    $lk = (string)(resolveNaarPersonId($pdo, $lk) ?? $lk);   // token → person_id (fase 3d-iii)
     try {
         $stmt = $pdo->prepare("
             SELECT
                 COALESCE(csn.startnummer, p.start_number) AS startnummer,
-                p.license_key,
+                p.person_id AS license_key,
                 p.person_id,
                 p.full_name,
                 p.short_name,
@@ -1692,8 +1696,8 @@ if ($action === 'speaker_persoon') {
                 p.pending_source
             FROM persons p
             LEFT JOIN competition_startnummers csn
-                   ON csn.competition_id = ? AND csn.person_license = p.license_key
-            WHERE p.license_key = ?
+                   ON csn.competition_id = ? AND csn.person_id = p.person_id
+            WHERE p.person_id = ?
             LIMIT 1
         ");
         $stmt->execute([$compId, $lk]);
@@ -1902,7 +1906,7 @@ if ($action === 'scheids_struktuur') {
                 SUM(CASE WHEN e.reserve IS NOT NULL
                          THEN 1 ELSE 0 END) AS aantal_reserves
             FROM entries e
-            JOIN persons p                ON p.license_key = e.person_license
+            JOIN persons p                ON p.person_id = e.person_id
             JOIN distance_combinations dc ON dc.id = e.distance_combination_id
             WHERE dc.competition_id = ?
               AND p.category IS NOT NULL AND p.category <> ''
@@ -1965,7 +1969,7 @@ if ($action === 'scheids_dc') {
         $stmt = $pdo->prepare("
             SELECT
                 COALESCE(csn.startnummer, p.start_number) AS startnummer,
-                p.license_key,
+                p.person_id AS license_key,
                 p.person_id,
                 p.full_name,
                 p.short_name,
@@ -1975,9 +1979,9 @@ if ($action === 'scheids_dc') {
                 e.reserve                   AS reserve_nr,
                 e.reserve_handmatig_ingezet AS ingezet
             FROM entries e
-            JOIN persons p ON p.license_key = e.person_license
+            JOIN persons p ON p.person_id = e.person_id
             LEFT JOIN competition_startnummers csn
-                   ON csn.competition_id = ? AND csn.person_license = p.license_key
+                   ON csn.competition_id = ? AND csn.person_id = p.person_id
             WHERE e.distance_combination_id = ?
               {$catFilterSql}
             ORDER BY
@@ -1994,7 +1998,7 @@ if ($action === 'scheids_dc') {
         // afgemelde rijder in een NIET-gereden heat invallen.
         $heatStmt = $pdo->prepare("
             SELECT
-                he.person_license,
+                he.person_id AS person_license,
                 h.id        AS heat_id,
                 h.heat_naam,
                 h.heat_nr,
@@ -2080,6 +2084,7 @@ if ($action === 'scheids_inzet' && $_SERVER['REQUEST_METHOD'] === 'POST') {
         echo json_encode(['error' => 'dc_id en person_license verplicht']);
         exit;
     }
+    $lic = (string)(resolveNaarPersonId($pdo, $lic) ?? $lic);   // token → person_id (fase 3d-iii)
     try {
         if (!_scheidsCheckDc($pdo, $dcId, $compId)) {
             http_response_code(403);
@@ -2089,7 +2094,7 @@ if ($action === 'scheids_inzet' && $_SERVER['REQUEST_METHOD'] === 'POST') {
         // Huidige entry-status ophalen
         $eStmt = $pdo->prepare("
             SELECT status, reserve FROM entries
-            WHERE distance_combination_id = ? AND person_license = ?
+            WHERE distance_combination_id = ? AND person_id = ?
         ");
         $eStmt->execute([$dcId, $lic]);
         $ent = $eStmt->fetch(PDO::FETCH_ASSOC);
@@ -2130,7 +2135,7 @@ if ($action === 'scheids_inzet' && $_SERVER['REQUEST_METHOD'] === 'POST') {
                SET reserve                   = NULL,
                    reserve_handmatig_ingezet = 1,
                    status                    = 5
-             WHERE distance_combination_id = ? AND person_license = ?
+             WHERE distance_combination_id = ? AND person_id = ?
         ")->execute([$dcId, $lic]);
 
         // Geen audit-log meer: scheids-* acties zonder leesbare context (wie,
@@ -2155,6 +2160,7 @@ if ($action === 'scheids_status' && $_SERVER['REQUEST_METHOD'] === 'POST') {
     $body   = json_decode(file_get_contents('php://input'), true) ?: [];
     $dcId   = trim($body['dc_id'] ?? '');
     $lic    = trim($body['person_license'] ?? '');
+    $lic    = (string)(resolveNaarPersonId($pdo, $lic) ?? $lic);   // token → person_id (fase 3d-iii)
     $target = (int)($body['status'] ?? -1);
     if ($dcId === '' || $lic === '' || !in_array($target, [1, 3, 4], true)) {
         http_response_code(400);
@@ -2169,7 +2175,7 @@ if ($action === 'scheids_status' && $_SERVER['REQUEST_METHOD'] === 'POST') {
         }
         $eStmt = $pdo->prepare("
             SELECT status, reserve, reserve_handmatig_ingezet FROM entries
-            WHERE distance_combination_id = ? AND person_license = ?
+            WHERE distance_combination_id = ? AND person_id = ?
         ");
         $eStmt->execute([$dcId, $lic]);
         $ent = $eStmt->fetch(PDO::FETCH_ASSOC);
@@ -2193,7 +2199,7 @@ if ($action === 'scheids_status' && $_SERVER['REQUEST_METHOD'] === 'POST') {
         }
         $pdo->prepare("
             UPDATE entries SET status = ?
-             WHERE distance_combination_id = ? AND person_license = ?
+             WHERE distance_combination_id = ? AND person_id = ?
         ")->execute([$nieuweStatus, $dcId, $lic]);
 
         // scheids-* audit-log verwijderd — zonder leesbare context niet zinvol.
@@ -2226,6 +2232,9 @@ if ($action === 'scheids_vervang_in_heat' && $_SERVER['REQUEST_METHOD'] === 'POS
     $dcId   = trim($body['dc_id']       ?? '');
     $uitLic = trim($body['uit_license'] ?? '');
     $inLic  = trim($body['in_license']  ?? '');
+    // Tokens → person_id (fase 3d-iii); de queries hieronder draaien op person_id.
+    $uitLic = (string)(resolveNaarPersonId($pdo, $uitLic) ?? $uitLic);
+    $inLic  = (string)(resolveNaarPersonId($pdo, $inLic)  ?? $inLic);
     if ($dcId === '' || $uitLic === '' || $inLic === '' || $uitLic === $inLic) {
         http_response_code(400);
         echo json_encode(['error' => 'dc_id, uit_license en in_license (verschillend) verplicht']);
@@ -2240,7 +2249,7 @@ if ($action === 'scheids_vervang_in_heat' && $_SERVER['REQUEST_METHOD'] === 'POS
         // Reserve-entry valideren: moet entry in deze DC zijn, reserve én getekend.
         $resStmt = $pdo->prepare("
             SELECT status, reserve FROM entries
-            WHERE distance_combination_id = ? AND person_license = ?
+            WHERE distance_combination_id = ? AND person_id = ?
         ");
         $resStmt->execute([$dcId, $inLic]);
         $resEnt = $resStmt->fetch(PDO::FETCH_ASSOC);
@@ -2272,7 +2281,7 @@ if ($action === 'scheids_vervang_in_heat' && $_SERVER['REQUEST_METHOD'] === 'POS
             FROM heat_entries he
             JOIN heats h ON h.id = he.heat_id
             WHERE h.distance_combination_id = ?
-              AND he.person_license = ?
+              AND he.person_id = ?
         ");
         $hStmt->execute([$dcId, $uitLic]);
         $heats = $hStmt->fetchAll(PDO::FETCH_ASSOC);
@@ -2300,7 +2309,7 @@ if ($action === 'scheids_vervang_in_heat' && $_SERVER['REQUEST_METHOD'] === 'POS
         $hidPh   = implode(',', array_fill(0, count($heatIds), '?'));
         $dupStmt = $pdo->prepare("
             SELECT COUNT(*) FROM heat_entries
-            WHERE person_license = ? AND heat_id IN ($hidPh)
+            WHERE person_id = ? AND heat_id IN ($hidPh)
         ");
         $dupStmt->execute(array_merge([$inLic], $heatIds));
         if ((int)$dupStmt->fetchColumn() > 0) {
@@ -2318,8 +2327,8 @@ if ($action === 'scheids_vervang_in_heat' && $_SERVER['REQUEST_METHOD'] === 'POS
             SELECT COALESCE(csn.startnummer, p.start_number) AS startnummer, p.category
             FROM persons p
             LEFT JOIN competition_startnummers csn
-                   ON csn.competition_id = ? AND csn.person_license = p.license_key
-            WHERE p.license_key = ?
+                   ON csn.competition_id = ? AND csn.person_id = p.person_id
+            WHERE p.person_id = ?
         ");
         $pStmt->execute([$compId, $inLic]);
         $pInfo = $pStmt->fetch(PDO::FETCH_ASSOC) ?: [];
@@ -2330,29 +2339,30 @@ if ($action === 'scheids_vervang_in_heat' && $_SERVER['REQUEST_METHOD'] === 'POS
         // 1. Heat-slot(s) overzetten — startpositie blijft ongemoeid.
         $swap = $pdo->prepare("
             UPDATE heat_entries
-               SET person_license = ?, startnummer = ?, categorie = ?
-             WHERE heat_id = ? AND person_license = ?
+               SET person_license = (SELECT license_key FROM persons WHERE person_id = ?),
+                   person_id = ?, startnummer = ?, categorie = ?
+             WHERE heat_id = ? AND person_id = ?
         ");
         foreach ($heats as $h) {
-            $swap->execute([$inLic, $inSnr, $inCat, (int)$h['heat_id'], $uitLic]);
+            $swap->execute([$inLic, $inLic, $inSnr, $inCat, (int)$h['heat_id'], $uitLic]);
         }
         // 2a. Afgemelde → status 3 (afgem. bij org.), tenzij al 3/4 gezet.
         $uitCur = $pdo->prepare("
-            SELECT status FROM entries WHERE distance_combination_id = ? AND person_license = ?
+            SELECT status FROM entries WHERE distance_combination_id = ? AND person_id = ?
         ");
         $uitCur->execute([$dcId, $uitLic]);
         $uitStatus = (int)($uitCur->fetchColumn() ?: 1);
         if (!in_array($uitStatus, [3, 4], true)) {
             $pdo->prepare("
                 UPDATE entries SET status = 3
-                 WHERE distance_combination_id = ? AND person_license = ?
+                 WHERE distance_combination_id = ? AND person_id = ?
             ")->execute([$dcId, $uitLic]);
         }
         // 2b. Reserve → in de loting (status 5, geen reserve-nr, handmatig ingezet).
         $pdo->prepare("
             UPDATE entries
                SET reserve = NULL, reserve_handmatig_ingezet = 1, status = 5
-             WHERE distance_combination_id = ? AND person_license = ?
+             WHERE distance_combination_id = ? AND person_id = ?
         ")->execute([$dcId, $inLic]);
         $pdo->commit();
 
