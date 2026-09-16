@@ -132,7 +132,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'GET' && ($_GET['action'] ?? '') === 'export_
     // wanneer je een ander startnummer toewijst.
     $rowStmt = $pdo->prepare("
         SELECT
-            p.license_key,
+            pei_knsb.extern_id AS license_key,
             p.full_name,
             p.short_name,
             p.gender,
@@ -147,13 +147,15 @@ if ($_SERVER['REQUEST_METHOD'] === 'GET' && ($_GET['action'] ?? '') === 'export_
             COALESCE(csn.startnummer, p.start_number) AS effective_startnumber
         FROM entries e
         JOIN distance_combinations dc ON dc.id = e.distance_combination_id
-        JOIN persons p ON p.license_key = e.person_license
+        JOIN persons p ON p.person_id = e.person_id
+        LEFT JOIN person_external_ids pei_knsb
+            ON pei_knsb.person_id = p.person_id AND pei_knsb.systeem = 'knsb'
         LEFT JOIN competition_startnummers csn
             ON csn.competition_id = dc.competition_id
-           AND csn.person_license = e.person_license
+           AND csn.person_id = e.person_id
         WHERE dc.competition_id = ?
           AND e.status NOT IN (3, 4)
-        GROUP BY p.license_key
+        GROUP BY p.person_id
         ORDER BY p.category, effective_startnumber
     ");
     $rowStmt->execute([$expCompId]);
@@ -165,16 +167,16 @@ if ($_SERVER['REQUEST_METHOD'] === 'GET' && ($_GET['action'] ?? '') === 'export_
     // Orbits/MyLaps nodig heeft. Bron kan 'knsb' (uit feed) of 'manual'
     // (via balie/Beheer) zijn — beide tellen mee.
     $tpStmt = $pdo->prepare("
-        SELECT person_license, slot, code
+        SELECT person_id, slot, code
         FROM transponders
         WHERE competition_id = ?
           AND code IS NOT NULL AND code <> ''
-        ORDER BY person_license, slot
+        ORDER BY person_id, slot
     ");
     $tpStmt->execute([$expCompId]);
-    $tpMap = []; // license_key => [slot0, slot1, ...]
+    $tpMap = []; // person_id => [slot0, slot1, ...]
     foreach ($tpStmt->fetchAll(PDO::FETCH_ASSOC) as $tp) {
-        $tpMap[$tp['person_license']][(int)$tp['slot']] = $tp['code'];
+        $tpMap[$tp['person_id']][(int)$tp['slot']] = $tp['code'];
     }
 
     // MyLaps Orbits is een ouderwets Windows-tijdperk-tool dat verwacht:
@@ -602,7 +604,7 @@ try {
         INSERT INTO entries
                (distance_combination_id, person_license, person_id, knsb_entry_id, status, reserve)
         VALUES (:dc_id, :person_license,
-                (SELECT person_id FROM persons WHERE license_key = :pl_pid),
+                :pl_pid,
                 :knsb_entry_id, :status, :reserve)
         ON DUPLICATE KEY UPDATE
                knsb_entry_id = VALUES(knsb_entry_id),
@@ -623,7 +625,7 @@ try {
         INSERT INTO transponders
                (person_license, person_id, competition_id, slot, code, source)
         VALUES (:person_license,
-                (SELECT person_id FROM persons WHERE license_key = :pl_pid),
+                :pl_pid,
                 :comp_id, :slot, :code, :source)
         ON DUPLICATE KEY UPDATE
                code       = VALUES(code),
@@ -751,7 +753,7 @@ try {
             }
             $stmtEntry->execute([
                 ':dc_id'          => $dcId,
-                ':person_license' => $lk, ':pl_pid' => $lk,
+                ':person_license' => $lk, ':pl_pid' => $pid,
                 ':knsb_entry_id'  => $c['knsb_entry_id'] ?? null,
                 ':status'         => $c['entry_status']  ?? 1,
                 ':reserve'        => $reserveNr,
@@ -762,7 +764,7 @@ try {
                 $code = $c[$veld] ?? null;
                 if ($code !== null && $code !== '') {
                     $stmtTp->execute([
-                        ':person_license' => $lk, ':pl_pid' => $lk,
+                        ':person_license' => $lk, ':pl_pid' => $pid,
                         ':comp_id'        => $compId,
                         ':slot'           => $slot,
                         ':code'           => $code,
@@ -776,14 +778,14 @@ try {
             // dan opnieuw invoegen wat de voorbereider heeft opgegeven.
             $pdo->prepare("
                 DELETE FROM transponders
-                WHERE person_license = ? AND competition_id = ? AND slot >= 3
-            ")->execute([$lk, $compId]);
+                WHERE person_id = ? AND competition_id = ? AND slot >= 3
+            ")->execute([$pid, $compId]);
 
             foreach ($c['transponders_extra'] ?? [] as $i => $code) {
                 $code = trim($code ?? '');
                 if ($code !== '') {
                     $stmtTp->execute([
-                        ':person_license' => $lk, ':pl_pid' => $lk,
+                        ':person_license' => $lk, ':pl_pid' => $pid,
                         ':comp_id'        => $compId,
                         ':slot'           => $i + 3,
                         ':code'           => $code,
@@ -801,7 +803,7 @@ try {
                     ? trim($c['transponder_actief'])
                     : null;
                 $stmtTp->execute([
-                    ':person_license' => $lk, ':pl_pid' => $lk,
+                    ':person_license' => $lk, ':pl_pid' => $pid,
                     ':comp_id'        => $compId,
                     ':slot'           => 0,
                     ':code'           => $tpActief,
@@ -848,8 +850,8 @@ try {
                             WHERE organisatie_id = ?
                               AND transponder_code != ?
                               AND (
-                                  person_license = ?
-                                  OR (person_license IS NULL
+                                  person_id = ?
+                                  OR (person_id IS NULL
                                       AND toegewezen_snr  = ?
                                       AND toegewezen_naam = ?)
                               )
@@ -874,7 +876,7 @@ try {
                     }
                     if ($tpIsOrgTp && $lk) {
                         $stmtOrgTpVrijgeven->execute([
-                            $orgId, $tpActief, $lk, $startnr, $naamVrijgeven
+                            $orgId, $tpActief, $pid, $startnr, $naamVrijgeven
                         ]);
                     }
 
@@ -961,17 +963,17 @@ try {
                        t.code AS gebruikt_code
                 FROM organisatie_transponders ot
                 JOIN persons p
-                  ON (ot.person_license IS NOT NULL AND p.license_key = ot.person_license)
-                  OR (ot.person_license IS NULL
+                  ON (ot.person_id IS NOT NULL AND p.person_id = ot.person_id)
+                  OR (ot.person_id IS NULL
                       AND p.full_name     = ot.toegewezen_naam
                       AND p.start_number  = ot.toegewezen_snr)
-                JOIN transponders t ON t.person_license = p.license_key
+                JOIN transponders t ON t.person_id = p.person_id
                                     AND t.competition_id = ?
                                     AND t.slot = 0
                                     AND t.code IS NOT NULL
                                     AND t.code != ot.transponder_code
                 WHERE ot.organisatie_id = ?
-                  AND (ot.person_license IS NOT NULL OR ot.toegewezen_snr IS NOT NULL)
+                  AND (ot.person_id IS NOT NULL OR ot.toegewezen_snr IS NOT NULL)
                 ORDER BY CAST(ot.intern_nummer AS UNSIGNED)
             ");
             $afwijkStmt->execute([$compId, $orgId]);
