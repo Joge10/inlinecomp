@@ -21,6 +21,7 @@ header('Access-Control-Allow-Origin: *');
 require_once __DIR__ . '/../../config_inlinecomp.php';
 require_once __DIR__ . '/lib_coach_auth.php';
 require_once __DIR__ . '/../inc/coach_mail.php';   // COACH_MAIL_* + coachMail() + mailteksten
+require_once __DIR__ . '/../inc/person_id.php';    // person_id-resolutie (fase 3d-iii)
 
 $method = $_SERVER['REQUEST_METHOD'] ?? 'GET';
 $action = $_GET['action'] ?? '';
@@ -330,9 +331,9 @@ try {
     if ($method === 'GET' && $action === 'roster_list') {
         $c = vereisCoachLogin($pdo);
         $stmt = $pdo->prepare("
-            SELECT p.license_key, p.person_id, p.full_name, p.club_full, p.category, p.birth_year, p.start_number, ca.added_at
+            SELECT p.person_id AS license_key, p.person_id, p.full_name, p.club_full, p.category, p.birth_year, p.start_number, ca.added_at
             FROM   coach_athletes ca
-            JOIN   persons p ON p.license_key = ca.person_license
+            JOIN   persons p ON p.person_id = ca.person_id
             WHERE  ca.coach_account_id = ?
             ORDER  BY p.full_name
         ");
@@ -352,13 +353,13 @@ try {
         // kan per categorie hergebruikt worden), dus meerdere treffers mogelijk.
         $snr  = ctype_digit($q) ? (int)$q : -1;
         $stmt = $pdo->prepare("
-            SELECT p.license_key, p.person_id, p.full_name, p.club_full, p.category, p.birth_year, p.start_number,
-                   (ca.person_license IS NOT NULL) AS in_roster
+            SELECT p.person_id AS license_key, p.person_id, p.full_name, p.club_full, p.category, p.birth_year, p.start_number,
+                   (ca.person_id IS NOT NULL) AS in_roster
             FROM   persons p
             LEFT JOIN coach_athletes ca
-                   ON ca.person_license = p.license_key AND ca.coach_account_id = ?
+                   ON ca.person_id = p.person_id AND ca.coach_account_id = ?
             WHERE  p.anonymized_at IS NULL
-              AND  p.license_key NOT LIKE 'demo-%'   -- demo/test-rijders nooit in coach-zoek
+              AND  COALESCE(p.extern_federatie,'') <> 'DEMO'   -- demo/test-rijders nooit in coach-zoek
               AND  (p.full_name LIKE ? OR p.club_full LIKE ? OR p.start_number = ?)
             ORDER  BY p.full_name
             LIMIT  25
@@ -370,24 +371,24 @@ try {
     // ── POST roster_add ────────────────────────────────────────────────────────
     if ($method === 'POST' && $action === 'roster_add') {
         $c   = vereisCoachLogin($pdo);
-        $lic = trim($body['person_license'] ?? '');
-        if ($lic === '') jsonOut(['error' => 'person_license ontbreekt'], 400);
-        $chk = $pdo->prepare("SELECT 1 FROM persons WHERE license_key = ? LIMIT 1");
-        $chk->execute([$lic]);
+        $pid = resolveNaarPersonId($pdo, trim($body['person_license'] ?? '') ?: trim($body['person_id'] ?? ''));
+        if (!$pid) jsonOut(['error' => 'person_license ontbreekt'], 400);
+        $chk = $pdo->prepare("SELECT 1 FROM persons WHERE person_id = ? LIMIT 1");
+        $chk->execute([$pid]);
         if (!$chk->fetchColumn()) jsonOut(['error' => 'Rijder niet gevonden'], 404);
         $pdo->prepare("INSERT IGNORE INTO coach_athletes (coach_account_id, person_license, person_id)
-                       SELECT ?, license_key, person_id FROM persons WHERE license_key = ?")
-            ->execute([$c['id'], $lic]);
+                       SELECT ?, license_key, person_id FROM persons WHERE person_id = ?")
+            ->execute([$c['id'], $pid]);
         jsonOut(['ok' => true]);
     }
 
     // ── POST roster_remove ─────────────────────────────────────────────────────
     if ($method === 'POST' && $action === 'roster_remove') {
         $c   = vereisCoachLogin($pdo);
-        $lic = trim($body['person_license'] ?? '');
-        if ($lic === '') jsonOut(['error' => 'person_license ontbreekt'], 400);
-        $pdo->prepare("DELETE FROM coach_athletes WHERE coach_account_id = ? AND person_license = ?")
-            ->execute([$c['id'], $lic]);
+        $pid = resolveNaarPersonId($pdo, trim($body['person_license'] ?? '') ?: trim($body['person_id'] ?? ''));
+        if (!$pid) jsonOut(['error' => 'person_license ontbreekt'], 400);
+        $pdo->prepare("DELETE FROM coach_athletes WHERE coach_account_id = ? AND person_id = ?")
+            ->execute([$c['id'], $pid]);
         jsonOut(['ok' => true]);
     }
 
@@ -406,15 +407,19 @@ try {
         $lics = $body['person_licenses'] ?? [];
         if (!is_array($lics)) $lics = [];
         $lics = array_values(array_unique(array_filter(array_map('trim', $lics), 'strlen')));
+        // Tokens (licentie of person_id) → person_id (fase 3d-iii).
+        $pids = [];
+        foreach ($lics as $l) { $p = resolveNaarPersonId($pdo, $l); if ($p) $pids[] = $p; }
+        $pids = array_values(array_unique($pids));
         $pdo->beginTransaction();
         try {
-            if ($lics) {
-                $ph = implode(',', array_fill(0, count($lics), '?'));
-                $pdo->prepare("DELETE FROM coach_athletes WHERE coach_account_id = ? AND person_license NOT IN ($ph)")
-                    ->execute(array_merge([$c['id']], $lics));
+            if ($pids) {
+                $ph = implode(',', array_fill(0, count($pids), '?'));
+                $pdo->prepare("DELETE FROM coach_athletes WHERE coach_account_id = ? AND person_id NOT IN ($ph)")
+                    ->execute(array_merge([$c['id']], $pids));
                 $ins = $pdo->prepare("INSERT IGNORE INTO coach_athletes (coach_account_id, person_license, person_id)
-                                      SELECT ?, license_key, person_id FROM persons WHERE license_key = ?");
-                foreach ($lics as $lic) $ins->execute([$c['id'], $lic]);
+                                      SELECT ?, license_key, person_id FROM persons WHERE person_id = ?");
+                foreach ($pids as $pid) $ins->execute([$c['id'], $pid]);
             } else {
                 $pdo->prepare("DELETE FROM coach_athletes WHERE coach_account_id = ?")->execute([$c['id']]);
             }
@@ -431,15 +436,15 @@ try {
         $compId = trim($_GET['competition_id'] ?? '');
         if ($compId === '') jsonOut(['riders' => []]);
         $stmt = $pdo->prepare("
-            SELECT p.license_key, p.person_id, p.full_name, p.category, p.club_full, p.sponsor,
+            SELECT p.person_id AS license_key, p.person_id, p.full_name, p.category, p.club_full, p.sponsor,
                    COALESCE(cs.startnummer, p.start_number) AS snr,
                    (SELECT MAX(e.status) FROM entries e
                       JOIN distance_combinations dc ON dc.id = e.distance_combination_id
-                     WHERE e.person_license = p.license_key AND dc.competition_id = ?) AS entry_status
+                     WHERE e.person_id = p.person_id AND dc.competition_id = ?) AS entry_status
             FROM   coach_athletes ca
-            JOIN   persons p ON p.license_key = ca.person_license
+            JOIN   persons p ON p.person_id = ca.person_id
             LEFT JOIN competition_startnummers cs
-                   ON cs.person_license = p.license_key AND cs.competition_id = ?
+                   ON cs.person_id = p.person_id AND cs.competition_id = ?
             WHERE  ca.coach_account_id = ?
             ORDER  BY p.full_name
         ");

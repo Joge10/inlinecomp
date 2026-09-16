@@ -30,6 +30,7 @@ require_once __DIR__ . '/../auth/session.php';
 require_once __DIR__ . '/lib_banen.php';
 require_once __DIR__ . '/demo_fixture.php';
 require_once __DIR__ . '/lib_combineren.php';
+require_once __DIR__ . '/../inc/person_id.php';   // person_id-resolutie (fase 3d-iii)
 $_authUser = requireAuth($pdo);
 
 function apiGet(string $url): ?array {
@@ -249,19 +250,26 @@ try {
     }
     $licenseKeys = array_values(array_unique($licenseKeys));
 
+    // Fase 3d-iii: resolve de (feed-)licenties naar person_id. De DB-maps
+    // (dbPersons/dbEntries/dbTp) worden op person_id gesleuteld → fase-4-proof.
+    // $pidByLk mapt elke feed-licentie naar person_id voor de lookups in de loop.
+    $pidByLk = [];
+    foreach ($licenseKeys as $l) { $p = resolveNaarPersonId($pdo, $l); if ($p) $pidByLk[$l] = $p; }
+    $personIds = array_values(array_unique(array_values($pidByLk)));
+
     // 3. Personen uit DB
     $dbPersons = [];
-    if ($licenseKeys) {
-        $ph   = implode(',', array_fill(0, count($licenseKeys), '?'));
-        $stmt = $pdo->prepare("SELECT * FROM persons WHERE license_key IN ($ph)");
-        $stmt->execute($licenseKeys);
-        foreach ($stmt->fetchAll() as $p) $dbPersons[$p['license_key']] = $p;
+    if ($personIds) {
+        $ph   = implode(',', array_fill(0, count($personIds), '?'));
+        $stmt = $pdo->prepare("SELECT * FROM persons WHERE person_id IN ($ph)");
+        $stmt->execute($personIds);
+        foreach ($stmt->fetchAll() as $p) $dbPersons[$p['person_id']] = $p;
     }
 
     // 4. Entries voor déze competitie
     $dbEntries = [];
     $stmt = $pdo->prepare("
-        SELECT e.person_license, e.distance_combination_id, e.knsb_entry_id, e.status,
+        SELECT e.person_id AS person_license, e.distance_combination_id, e.knsb_entry_id, e.status,
                e.reserve, e.reserve_handmatig_ingezet
         FROM entries e
         JOIN distance_combinations dc ON e.distance_combination_id = dc.id
@@ -277,7 +285,7 @@ try {
     $stmt = $pdo->prepare("SELECT * FROM transponders WHERE competition_id = ?");
     $stmt->execute([$compId]);
     foreach ($stmt->fetchAll() as $t) {
-        $dbTp[$t['person_license']][$t['slot']] = $t;
+        $dbTp[$t['person_id']][$t['slot']] = $t;
     }
 
     // 5b. Merge-groepen + category_filter + max-in-loting override voor déze competitie
@@ -296,18 +304,18 @@ try {
     }
 
     // 5d. Extra license-keys laden: org-toegevoegde rijders (in DB maar niet in KNSB API)
-    $allDbLks = [];
+    $allDbLks = [];   // person_id's van DB-entries die niet in de feed zitten
     foreach ($dbEntries as $entries) {
-        foreach (array_keys($entries) as $lk) {
-            if (!in_array($lk, $licenseKeys, true)) $allDbLks[] = $lk;
+        foreach (array_keys($entries) as $lk) {   // $lk = person_id
+            if (!in_array($lk, $personIds, true)) $allDbLks[] = $lk;
         }
     }
     $allDbLks = array_values(array_unique($allDbLks));
     if ($allDbLks) {
         $ph   = implode(',', array_fill(0, count($allDbLks), '?'));
-        $stmt = $pdo->prepare("SELECT * FROM persons WHERE license_key IN ($ph)");
+        $stmt = $pdo->prepare("SELECT * FROM persons WHERE person_id IN ($ph)");
         $stmt->execute($allDbLks);
-        foreach ($stmt->fetchAll() as $p) $dbPersons[$p['license_key']] = $p;
+        foreach ($stmt->fetchAll() as $p) $dbPersons[$p['person_id']] = $p;
     }
 
     // 5c. Split-configuratie voor déze competitie
@@ -334,17 +342,21 @@ try {
                 $c['category']    ?? null
             );
             $isAnoniem = ($c['licenseKey'] ?? null) === '' || $c['licenseKey'] === null;
-            $dbPerson = $lk ? ($dbPersons[$lk] ?? null) : null;
-            $dbEntry  = $lk ? ($dbEntries[$dcId][$lk] ?? null) : null;
-            $tp1      = $lk ? ($dbTp[$lk][1] ?? null) : null;
-            $tp2      = $lk ? ($dbTp[$lk][2] ?? null) : null;
+            // DB-maps zijn op person_id gesleuteld (fase 3d-iii) → resolve de
+            // (feed-)licentie naar person_id voor de lookups. $lk blijft de
+            // licentie voor de output/import-POST.
+            $pid = $lk ? ($pidByLk[$lk] ?? resolveNaarPersonId($pdo, $lk)) : null;
+            $dbPerson = $pid ? ($dbPersons[$pid] ?? null) : null;
+            $dbEntry  = $pid ? ($dbEntries[$dcId][$pid] ?? null) : null;
+            $tp1      = $pid ? ($dbTp[$pid][1] ?? null) : null;
+            $tp2      = $pid ? ($dbTp[$pid][2] ?? null) : null;
 
             // Actieve transponder (slot 0) en extra transponders (slot >= 3)
-            $tpActiefIsset = $lk && isset($dbTp[$lk][0]);          // slot 0 bestaat echt in DB
-            $tpActief      = $tpActiefIsset ? $dbTp[$lk][0]['code'] : null;
+            $tpActiefIsset = $pid && isset($dbTp[$pid][0]);          // slot 0 bestaat echt in DB
+            $tpActief      = $tpActiefIsset ? $dbTp[$pid][0]['code'] : null;
             $tpExtra  = [];
-            if ($lk && isset($dbTp[$lk])) {
-                foreach ($dbTp[$lk] as $slot => $tp) {
+            if ($pid && isset($dbTp[$pid])) {
+                foreach ($dbTp[$pid] as $slot => $tp) {
                     if ($slot >= 3) $tpExtra[] = $tp['code'];
                 }
             }
@@ -483,8 +495,11 @@ try {
         });
 
         // Org-toegevoegde rijders: in DB maar niet in KNSB API (status >= 3)
-        $knsbLkSet = array_flip(array_column($rows, 'license_key'));
-        foreach ($dbEntries[$dcId] ?? [] as $lk => $entry) {
+        // KNSB-set op person_id (feed-licenties → person_id) — dbEntries is nu
+        // op person_id gesleuteld.
+        $knsbLkSet = [];
+        foreach ($rows as $rr) { $rp = resolveNaarPersonId($pdo, $rr['license_key']); if ($rp) $knsbLkSet[$rp] = true; }
+        foreach ($dbEntries[$dcId] ?? [] as $lk => $entry) {   // $lk = person_id
             if (isset($knsbLkSet[$lk])) continue;          // al verwerkt vanuit KNSB
             if ((int)$entry['status'] < 3) continue;       // alleen org-statussen bewaren
             $dbPerson = $dbPersons[$lk] ?? null;
@@ -666,7 +681,7 @@ try {
                 UPDATE entries
                    SET reserve = ?
                  WHERE distance_combination_id = ?
-                   AND person_license          = ?
+                   AND person_id               = ?
                    AND reserve_handmatig_ingezet = 0
             ");
             // Wis alleen een stale KNSB-reserve-nummer bij NIET-handmatig-
@@ -678,7 +693,7 @@ try {
                 UPDATE entries
                    SET reserve = NULL
                  WHERE distance_combination_id   = ?
-                   AND person_license            = ?
+                   AND person_id                 = ?
                    AND reserve_handmatig_ingezet = 0
                    AND reserve IS NOT NULL
             ");
@@ -688,11 +703,13 @@ try {
                 foreach ($groep['competitors'] ?? [] as $row) {
                     $lk = $row['license_key'] ?? null;
                     if (!$lk) continue;
+                    $pid2 = resolveNaarPersonId($pdo, $lk);   // token → person_id
+                    if (!$pid2) continue;
                     $knsbRes = $row['knsb_reserve'] ?? null;
                     if ($knsbRes !== null && (int)$knsbRes > 0) {
-                        $stmtSetRes->execute([(int)$knsbRes, $dcId, $lk]);
+                        $stmtSetRes->execute([(int)$knsbRes, $dcId, $pid2]);
                     } else {
-                        $stmtClrRes->execute([$dcId, $lk]);
+                        $stmtClrRes->execute([$dcId, $pid2]);
                     }
                 }
             }
