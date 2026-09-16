@@ -115,14 +115,14 @@ if ($action === 'detail') {
         $ph = implode(',', array_fill(0, count($dcIds), '?'));
         $stmt = $pdo->prepare("
             SELECT e.distance_combination_id AS dc_id,
-                   e.person_license, e.status, e.reserve, e.knsb_entry_id,
+                   e.person_id AS person_license, e.status, e.reserve, e.knsb_entry_id,
                    p.person_id,
                    p.full_name, p.short_name, p.birth_year, p.gender,
                    p.category, p.nationality, p.start_number,
                    p.club_code, p.club_short, p.club_full, p.sponsor, p.city,
                    p.extern, p.extern_federatie
             FROM entries e
-            JOIN persons p ON p.license_key = e.person_license
+            JOIN persons p ON p.person_id = e.person_id
             WHERE e.distance_combination_id IN ($ph)
               AND p.anonymized_at IS NULL
             ORDER BY p.start_number, p.full_name
@@ -140,11 +140,11 @@ if ($action === 'detail') {
         $ph = implode(',', array_fill(0, count($personRijen), '?'));
         $stmt = $pdo->prepare("
             SELECT * FROM transponders
-            WHERE competition_id = ? AND person_license IN ($ph)
+            WHERE competition_id = ? AND person_id IN ($ph)
         ");
         $stmt->execute(array_merge([$compId], array_keys($personRijen)));
         foreach ($stmt->fetchAll(PDO::FETCH_ASSOC) as $t) {
-            $dbTp[$t['person_license']][(int)$t['slot']] = $t;
+            $dbTp[$t['person_id']][(int)$t['slot']] = $t;
         }
     }
 
@@ -159,18 +159,18 @@ if ($action === 'detail') {
     if ($personRijen) {
         $ph = implode(',', array_fill(0, count($personRijen), '?'));
         $stmt = $pdo->prepare("
-            SELECT t1.person_license, t1.slot, t1.code, t1.source, t1.updated_at
+            SELECT t1.person_id, t1.slot, t1.code, t1.source, t1.updated_at
             FROM transponders t1
-            WHERE t1.person_license IN ($ph)
+            WHERE t1.person_id IN ($ph)
               AND t1.id = (
                   SELECT MAX(t2.id) FROM transponders t2
-                  WHERE t2.person_license = t1.person_license
+                  WHERE t2.person_id = t1.person_id
                     AND t2.slot           = t1.slot
               )
         ");
         $stmt->execute(array_keys($personRijen));
         foreach ($stmt->fetchAll(PDO::FETCH_ASSOC) as $t) {
-            $lk   = $t['person_license'];
+            $lk   = $t['person_id'];
             $slot = (int)$t['slot'];
             // Alleen toevoegen als deze (person, slot) NIET al voor deze
             // wedstrijd specifiek is gezet — eigen TPs winnen altijd.
