@@ -15,6 +15,7 @@
 
 $__push_autoload = __DIR__ . '/../vendor/autoload.php';
 if (is_file($__push_autoload)) require_once $__push_autoload;
+require_once __DIR__ . '/../inc/person_id.php';   // resolveNaarPersonId (fase 3d-iii)
 
 use Minishlink\WebPush\WebPush;
 use Minishlink\WebPush\Subscription;
@@ -179,24 +180,31 @@ function _pushLang($v): string {
  *   - GROUP BY ps.id = dedup: één push per abonnement, ook bij meerdere rijders.
  *   - de tekst noemt per ontvanger díens eigen gevolgde rijder(s) uit dit event.
  */
-function pushEventNaarVolgers(PDO $pdo, string $type, array $licenses, array $payload): array {
+function pushEventNaarVolgers(PDO $pdo, string $type, array $tokens, array $payload): array {
     $stat = ['verstuurd' => 0, 'verlopen' => 0, 'mislukt' => 0];
-    $licenses = array_values(array_unique(array_filter(array_map('strval', $licenses), 'strlen')));
-    if (!$licenses || !pushBeschikbaar()) return $stat;
+    // Tokens kunnen licenties (oude callers) óf person_id's (nieuwe callers) zijn →
+    // universeel resolven naar person_id en overal op person_id matchen (fase 3d-iii).
+    $personIds = [];
+    foreach ($tokens as $t) {
+        $pid = resolveNaarPersonId($pdo, (string)$t);
+        if ($pid !== null && $pid !== '') $personIds[] = $pid;
+    }
+    $personIds = array_values(array_unique($personIds));
+    if (!$personIds || !pushBeschikbaar()) return $stat;
 
     $kol = _pushTypeKolom($type);
-    $ph  = implode(',', array_fill(0, count($licenses), '?'));
+    $ph  = implode(',', array_fill(0, count($personIds), '?'));
     $personaliseer = ($type !== 'bericht');   // mededeling = wedstrijd-breed, geen naam ervoor
 
     // Namen van de betrokken rijders (alleen nodig voor de gepersonaliseerde tekst).
     $naamMap = [];
     if ($personaliseer) {
         $nm = $pdo->prepare("
-            SELECT license_key, COALESCE(NULLIF(short_name,''), full_name, license_key) AS naam
-            FROM   persons WHERE license_key IN ($ph)
+            SELECT person_id, COALESCE(NULLIF(short_name,''), full_name, person_id) AS naam
+            FROM   persons WHERE person_id IN ($ph)
         ");
-        $nm->execute($licenses);
-        foreach ($nm->fetchAll(PDO::FETCH_ASSOC) as $r) $naamMap[$r['license_key']] = $r['naam'];
+        $nm->execute($personIds);
+        foreach ($nm->fetchAll(PDO::FETCH_ASSOC) as $r) $naamMap[$r['person_id']] = $r['naam'];
     }
 
     // Per abonnement-rij een verzend-item in de táal van dat abonnement: titel +
@@ -230,29 +238,29 @@ function pushEventNaarVolgers(PDO $pdo, string $type, array $licenses, array $pa
     // coach die in dit event zitten (voor de gepersonaliseerde tekst).
     $cs = $pdo->prepare("
         SELECT ps.id, ps.endpoint, ps.p256dh, ps.auth, ps.lang,
-               GROUP_CONCAT(ca.person_license) AS matched
+               GROUP_CONCAT(ca.person_id) AS matched
         FROM   push_subscriptions ps
         JOIN   coach_athletes ca
                ON ca.coach_account_id = ps.coach_account_id
-              AND ca.person_license IN ($ph)
+              AND ca.person_id IN ($ph)
         WHERE  ps.scope = 'coach' AND ps.`$kol` = 1
         GROUP  BY ps.id
     ");
-    $cs->execute($licenses);
+    $cs->execute($personIds);
     foreach ($cs->fetchAll(PDO::FETCH_ASSOC) as $s) $items[] = $bouw($s);
 
     // Public-volgers (junction push_sub_licenses, gespiegeld uit localStorage).
     $psx = $pdo->prepare("
         SELECT ps.id, ps.endpoint, ps.p256dh, ps.auth, ps.lang,
-               GROUP_CONCAT(psl.person_license) AS matched
+               GROUP_CONCAT(psl.person_id) AS matched
         FROM   push_subscriptions ps
         JOIN   push_sub_licenses psl
                ON psl.subscription_id = ps.id
-              AND psl.person_license IN ($ph)
+              AND psl.person_id IN ($ph)
         WHERE  ps.scope = 'public' AND ps.`$kol` = 1
         GROUP  BY ps.id
     ");
-    $psx->execute($licenses);
+    $psx->execute($personIds);
     foreach ($psx->fetchAll(PDO::FETCH_ASSOC) as $s) $items[] = $bouw($s);
 
     return $items ? _pushSendItems($pdo, $items) : $stat;

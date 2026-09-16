@@ -333,7 +333,7 @@ try {
                     // (alleen handmatig gewijzigde startnummers) en is meestal leeg,
                     // waardoor de push voorheen niemand bereikte.
                     $_ls = $pdo->prepare("
-                        SELECT DISTINCT e.person_license
+                        SELECT DISTINCT e.person_id
                         FROM entries e
                         JOIN distance_combinations dc ON dc.id = e.distance_combination_id
                         WHERE dc.competition_id = ?

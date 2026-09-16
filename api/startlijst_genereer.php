@@ -86,10 +86,10 @@ try {
     // status getekend/bevestigd stonden — dat is fout: een reserve moet
     // pas in de loting na expliciete inzet.
     $stmt = $pdo->prepare("
-        SELECT p.license_key, p.full_name, p.short_name,
+        SELECT p.person_id AS license_key, p.full_name, p.short_name,
                p.start_number, p.club_short, p.club_full, p.city, p.category
         FROM entries e
-        JOIN persons p ON e.person_license = p.license_key
+        JOIN persons p ON e.person_id = p.person_id
         WHERE e.distance_combination_id IN ($ph)
           AND e.status IN (1, 5)
           AND e.reserve IS NULL
@@ -118,12 +118,12 @@ try {
         // reserve (of geen entry-rij = legacy/cross-comp rijder); reserve=N
         // betekent expliciet reserve en moet uitgesloten worden.
         $extraStmt = $pdo->prepare("
-            SELECT DISTINCT p.license_key, p.full_name, p.short_name,
+            SELECT DISTINCT p.person_id AS license_key, p.full_name, p.short_name,
                             p.start_number, p.club_short, p.club_full, p.city, p.category
             FROM uitslag_afstand ua
-            JOIN persons p ON p.license_key = ua.person_license
+            JOIN persons p ON p.person_id = ua.person_id
             LEFT JOIN entries e
-                   ON e.person_license          = ua.person_license
+                   ON e.person_id               = ua.person_id
                   AND e.distance_combination_id = ua.distance_combination_id
             WHERE ua.competition_id = ?
               AND ua.distance_combination_id IN ($extraPh)
@@ -151,16 +151,16 @@ try {
     $params      = array_merge([$compId], $licenseKeys);
 
     $stmt = $pdo->prepare("
-        SELECT person_license, slot, code
+        SELECT person_id, slot, code
         FROM transponders
-        WHERE competition_id = ? AND person_license IN ($ph)
+        WHERE competition_id = ? AND person_id IN ($ph)
         ORDER BY slot
     ");
     $stmt->execute($params);
 
     $tpMap = [];
     foreach ($stmt->fetchAll() as $tp) {
-        $tpMap[$tp['person_license']][$tp['slot']] = $tp['code'];
+        $tpMap[$tp['person_id']][$tp['slot']] = $tp['code'];
     }
 
     foreach ($rijders as &$r) {
@@ -294,7 +294,7 @@ try {
             // Rijders met uitsluitende sanctie (DQ-SF, DQ-DF, DNS met 0 punten)
             // krijgen geen klassementspositie → achteraan op startnummer
             $tkSql = "
-                SELECT   person_license,
+                SELECT   person_id,
                          SUM(CASE WHEN sanctie IN ('DQ-SF','DQ-DF') OR (punten IS NOT NULL AND punten = 0)
                                   THEN 9999 ELSE COALESCE(punten, 9999) END) AS totaal_punten,
                          MIN(COALESCE(rang, 9999)) AS beste_rang,
@@ -306,7 +306,7 @@ try {
                   {$tkDistWhere}
                   {$tkIncSql}
                   {$tkTgSql}
-                GROUP BY person_license
+                GROUP BY person_id
                 ORDER BY uitgesloten ASC, totaal_punten ASC, beste_rang ASC
             ";
             $tkStmt = $pdo->prepare($tkSql);
@@ -316,9 +316,9 @@ try {
             $tkRank = 1;
             foreach ($tkStmt->fetchAll(PDO::FETCH_ASSOC) as $row) {
                 if ((int)$row['uitgesloten']) {
-                    $tkUit[$row['person_license']] = true;
+                    $tkUit[$row['person_id']] = true;
                 } else {
-                    $tkMap[$row['person_license']] = $tkRank++;
+                    $tkMap[$row['person_id']] = $tkRank++;
                 }
             }
             foreach ($rijders as $r) {
@@ -356,14 +356,14 @@ try {
                 ? [$compId, $bronDcId, $bronDistId]
                 : [$compId, $bronDcId];
             $auSql = "
-                SELECT   person_license,
+                SELECT   person_id,
                          MIN(COALESCE(rang, 9999)) AS beste_rang,
                          MAX(CASE WHEN sanctie IN ('DQ-SF','DQ-DF') THEN 1 ELSE 0 END) AS uitgesloten
                 FROM     uitslag_afstand
                 WHERE    competition_id          = ?
                   AND    distance_combination_id = ?
                   {$auWhere}
-                GROUP BY person_license
+                GROUP BY person_id
                 ORDER BY uitgesloten ASC, beste_rang ASC
             ";
             $auStmt = $pdo->prepare($auSql);
@@ -372,7 +372,7 @@ try {
             $auRank = 1;
             foreach ($auStmt->fetchAll(PDO::FETCH_ASSOC) as $row) {
                 if ((int)$row['uitgesloten']) continue;  // uitgesloten → achteraan
-                $auMap[$row['person_license']] = $auRank++;
+                $auMap[$row['person_id']] = $auRank++;
             }
             // ── LIVE fallback: bron-DC zonder vastgelegde uitslag ────────
             // Als geen uitslag_afstand-rijen → gebruik best-tijd-per-rijder
@@ -385,7 +385,7 @@ try {
                     ? [$compId, $bronDcId, $bronDistId]
                     : [$compId, $bronDcId];
                 $liveSql = "
-                    SELECT he.person_license,
+                    SELECT he.person_id,
                            MIN(COALESCE(res.bruto_tijd_ms, res.tijd_ms)) AS beste_ms
                     FROM   results              res
                     JOIN   heat_entries         he  ON he.id = res.heat_entry_id
@@ -396,14 +396,14 @@ try {
                       AND  COALESCE(res.bruto_tijd_ms, res.tijd_ms) > 0
                       AND  (res.sanctie IS NULL
                             OR res.sanctie NOT IN ('DQ-SF','DQ-DF'))
-                    GROUP BY he.person_license
+                    GROUP BY he.person_id
                     ORDER BY beste_ms ASC
                 ";
                 $liveStmt = $pdo->prepare($liveSql);
                 $liveStmt->execute($liveParams);
                 $auRank = 1;
                 foreach ($liveStmt->fetchAll(PDO::FETCH_ASSOC) as $row) {
-                    $auMap[$row['person_license']] = $auRank++;
+                    $auMap[$row['person_id']] = $auRank++;
                 }
             }
             foreach ($rijders as $r) {
@@ -773,7 +773,7 @@ try {
     ");
     $insEntry = $pdo->prepare("
         INSERT INTO heat_entries (heat_id, person_license, person_id, categorie, startpositie, startnummer)
-        VALUES (?,?,(SELECT person_id FROM persons WHERE license_key = ?),?,?,?)
+        VALUES (?,(SELECT license_key FROM persons WHERE person_id = ?),?,?,?,?)
     ");
 
     $dcIdsJson = json_encode($dcIds);
@@ -809,8 +809,8 @@ try {
         foreach ($heat['rijders'] as $pos => $r) {
             $insEntry->execute([
                 $heatId,
-                $r['license_key'],
-                $r['license_key'],   // voor de person_id-subquery
+                $r['license_key'],   // = person_id → reverse-lookup naar person_license (schaduw, tot fase 4)
+                $r['license_key'],   // = person_id → person_id-kolom
                 $r['category']     ?? null,
                 $pos + 1,
                 $r['start_number'] ?? null,

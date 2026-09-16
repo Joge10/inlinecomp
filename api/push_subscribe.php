@@ -95,9 +95,17 @@ if ($action === 'subscribe') {
             if ($subId) {
                 $pdo->prepare("DELETE FROM push_sub_licenses WHERE subscription_id = ?")->execute([$subId]);
                 if ($lics) {
-                    require_once __DIR__ . '/../inc/person_id.php';   // dual-write person_id (fase 3)
+                    require_once __DIR__ . '/../inc/person_id.php';   // person_id-resolutie (fase 3d-iii)
+                    // $l kan een licentie (oude JS) of een person_id (nieuwe JS) zijn.
+                    // person_id is leidend voor de targeting; person_license is nog de
+                    // schaduw (VARCHAR(32)) en krijgt de licentie, of NULL als het token
+                    // al een person_id was (past sowieso niet in 32 tekens). Fase-4-proof.
                     $ins = $pdo->prepare("INSERT IGNORE INTO push_sub_licenses (subscription_id, person_license, person_id) VALUES (?, ?, ?)");
-                    foreach ($lics as $l) $ins->execute([$subId, $l, personIdVoorLicentie($pdo, $l)]);
+                    foreach ($lics as $l) {
+                        $pid = resolveNaarPersonId($pdo, (string)$l);
+                        $lic = ($pid !== null && $pid !== $l) ? $l : null;
+                        $ins->execute([$subId, $lic, $pid]);
+                    }
                 }
             }
         }
