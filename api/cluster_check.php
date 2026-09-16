@@ -133,7 +133,7 @@ if ($action === 'scan') {
     $stmt = $pdo->prepare("
         SELECT
             e.id              AS entry_id,
-            e.person_license,
+            e.person_id AS person_license,
             e.distance_combination_id AS dc_id,
             dc.name           AS dc_naam,
             p.full_name, p.short_name, p.gender   AS person_gender,
@@ -143,7 +143,7 @@ if ($action === 'scan') {
             p.extern, p.pending_source
         FROM entries e
         JOIN distance_combinations dc   ON dc.id = e.distance_combination_id
-        JOIN persons p                  ON p.license_key = e.person_license
+        JOIN persons p                  ON p.person_id = e.person_id
         WHERE dc.competition_id = ?
         ORDER BY p.full_name
     ");
@@ -318,12 +318,12 @@ if ($action === 'zoek_kandidaten') {
     }
     // entry_id verwijst nu naar entries.id (inschrijving), niet heat_entries.
     $stmt = $pdo->prepare("
-        SELECT e.person_license, e.distance_combination_id,
+        SELECT e.person_id AS person_license, e.distance_combination_id,
                dc.competition_id, dc.name AS dc_naam,
                p.start_number AS person_snr
         FROM entries e
         JOIN distance_combinations dc ON dc.id = e.distance_combination_id
-        JOIN persons p ON p.license_key = e.person_license
+        JOIN persons p ON p.person_id = e.person_id
         WHERE e.id = ?
     ");
     $stmt->execute([$entryId]);
@@ -341,7 +341,7 @@ if ($action === 'zoek_kandidaten') {
         SELECT p.gender AS person_gender, p.category AS person_cat,
                p.extern, p.pending_source
         FROM entries e
-        JOIN persons p ON p.license_key = e.person_license
+        JOIN persons p ON p.person_id = e.person_id
         WHERE e.distance_combination_id = ?
     ");
     $dcStmt->execute([$row['distance_combination_id']]);
@@ -361,7 +361,7 @@ if ($action === 'zoek_kandidaten') {
 
     // EXACT match op dominante KNSB-cat + startnummer. KNSB-belofte: precies 1.
     $kStmt = $pdo->prepare("
-        SELECT license_key, full_name, short_name, gender, category,
+        SELECT person_id AS license_key, full_name, short_name, gender, category,
                start_number, club_short, club_full, birth_year
         FROM persons
         WHERE category = ? AND start_number = ?
@@ -380,8 +380,8 @@ if ($action === 'zoek_kandidaten') {
     // Pak persoon's eigen cluster, scan alle ANDERE DCs in deze comp, vind
     // die waarvan dominantie matcht met persoon's cluster. Exacte cat-match
     // boven (HJA-persoon naar HJA-DC > naar HJB-DC binnen zelfde cluster).
-    $persStmt = $pdo->prepare("SELECT gender, category FROM persons WHERE license_key = ?");
-    $persStmt->execute([$row['person_license']]);
+    $persStmt = $pdo->prepare("SELECT gender, category FROM persons WHERE person_id = ?");
+    $persStmt->execute([$row['person_license']]);   // = person_id (alias)
     $pers = $persStmt->fetch(PDO::FETCH_ASSOC);
     $doelDcs = [];
     if ($pers) {
@@ -396,7 +396,7 @@ if ($action === 'zoek_kandidaten') {
                        p.extern, p.pending_source
                 FROM distance_combinations dc
                 LEFT JOIN entries e ON e.distance_combination_id = dc.id
-                LEFT JOIN persons p ON p.license_key = e.person_license
+                LEFT JOIN persons p ON p.person_id = e.person_id
                 WHERE dc.competition_id = ? AND dc.id != ?
             ");
             $aStmt->execute([$row['competition_id'], $row['distance_combination_id']]);
@@ -463,22 +463,22 @@ if ($action === 'vervang') {
     }
     $entryIds = array_values(array_filter(array_map('intval', $entryIds)));
 
-    $pStmt = $pdo->prepare("SELECT license_key, person_id, full_name FROM persons WHERE license_key = ?");
-    $pStmt->execute([$nieuwLic]);
+    // Token (licentie of person_id) → person_id (fase 3d-iii).
+    $nieuwPid = resolveNaarPersonId($pdo, $nieuwLic);
+    $pStmt = $pdo->prepare("SELECT person_id, full_name FROM persons WHERE person_id = ?");
+    $pStmt->execute([$nieuwPid]);
     $nieuw = $pStmt->fetch(PDO::FETCH_ASSOC);
     if (!$nieuw) {
         http_response_code(404);
         echo json_encode(['error' => 'Nieuwe persoon niet gevonden']);
         exit;
     }
-    // person_id-migratie: her-toewijzing zet óók person_id op de nieuwe GUID,
-    // zodat person_license en person_id niet uit elkaar gaan lopen (drift).
-    $nieuwPid = $nieuw['person_id'] ?? null;
+    $nieuwPid = $nieuw['person_id'];
 
     // entries-info ophalen — distance_combination_id voor heat_entries-sync.
     $ph = implode(',', array_fill(0, count($entryIds), '?'));
     $eStmt = $pdo->prepare("
-        SELECT e.id, e.person_license, e.distance_combination_id AS dc_id,
+        SELECT e.id, e.person_id AS person_license, e.distance_combination_id AS dc_id,
                dc.competition_id
         FROM entries e
         JOIN distance_combinations dc ON dc.id = e.distance_combination_id
@@ -505,9 +505,9 @@ if ($action === 'vervang') {
     // dan willen we de foute entry verwijderen i.p.v. updaten — anders
     // duplicate-key fout.
     $eConflict = $pdo->prepare(
-        "SELECT 1 FROM entries WHERE distance_combination_id = ? AND person_license = ? AND id <> ? LIMIT 1"
+        "SELECT 1 FROM entries WHERE distance_combination_id = ? AND person_id = ? AND id <> ? LIMIT 1"
     );
-    $eUpdate = $pdo->prepare("UPDATE entries SET person_license = ?, person_id = ? WHERE id = ?");
+    $eUpdate = $pdo->prepare("UPDATE entries SET person_license = (SELECT license_key FROM persons WHERE person_id = ?), person_id = ? WHERE id = ?");
     $eDelete = $pdo->prepare("DELETE FROM entries WHERE id = ?");
 
     // heat_entries voor zelfde DC + (oude OF nieuwe) license — daar zit de
@@ -515,9 +515,9 @@ if ($action === 'vervang') {
     // UNIQUE (heat_id, person_license): nieuwe persoon mag niet al in
     // dezelfde heat staan.
     $heConflict = $pdo->prepare(
-        "SELECT 1 FROM heat_entries WHERE heat_id = ? AND person_license = ? LIMIT 1"
+        "SELECT 1 FROM heat_entries WHERE heat_id = ? AND person_id = ? LIMIT 1"
     );
-    $heUpdate = $pdo->prepare("UPDATE heat_entries SET person_license = ?, person_id = ? WHERE id = ?");
+    $heUpdate = $pdo->prepare("UPDATE heat_entries SET person_license = (SELECT license_key FROM persons WHERE person_id = ?), person_id = ? WHERE id = ?");
     $heDelete = $pdo->prepare("DELETE FROM heat_entries WHERE id = ?");
     $heLookup = $pdo->prepare("
         SELECT he.id, he.heat_id
@@ -525,7 +525,7 @@ if ($action === 'vervang') {
         JOIN heats h ON h.id = he.heat_id
         WHERE h.competition_id = ?
           AND h.distance_combination_id = ?
-          AND he.person_license = ?
+          AND he.person_id = ?
     ");
 
     $bijgewerkt = 0;
@@ -535,31 +535,31 @@ if ($action === 'vervang') {
     $geskipped  = [];
 
     foreach ($entries as $e) {
-        $oudLic = $e['person_license'];
-        if ($oudLic === $nieuwLic) {
+        $oudLic = $e['person_license'];   // = person_id (alias)
+        if ($oudLic === $nieuwPid) {
             $geskipped[] = (int)$e['id'];
             continue;
         }
         // entries-laag: update of delete bij conflict
-        $eConflict->execute([$e['dc_id'], $nieuwLic, $e['id']]);
+        $eConflict->execute([$e['dc_id'], $nieuwPid, $e['id']]);
         if ($eConflict->fetchColumn()) {
             // Juiste persoon zat al ingeschreven — foute entry weggooien
             $eDelete->execute([$e['id']]);
             $verwijderd++;
         } else {
-            $eUpdate->execute([$nieuwLic, $nieuwPid, $e['id']]);
+            $eUpdate->execute([$nieuwPid, $nieuwPid, $e['id']]);
             $bijgewerkt++;
         }
-        // heat_entries-laag: alle heats van deze DC waar de OUDE license in
+        // heat_entries-laag: alle heats van deze DC waar de OUDE persoon in
         // staat → vervangen of verwijderen
         $heLookup->execute([$compId, $e['dc_id'], $oudLic]);
         foreach ($heLookup->fetchAll(PDO::FETCH_ASSOC) as $he) {
-            $heConflict->execute([$he['heat_id'], $nieuwLic]);
+            $heConflict->execute([$he['heat_id'], $nieuwPid]);
             if ($heConflict->fetchColumn()) {
                 $heDelete->execute([$he['id']]);
                 $heVerwijderd++;
             } else {
-                $heUpdate->execute([$nieuwLic, $nieuwPid, $he['id']]);
+                $heUpdate->execute([$nieuwPid, $nieuwPid, $he['id']]);
                 $heBijgewerkt++;
             }
         }
@@ -594,7 +594,7 @@ if ($action === 'zoek_persoon') {
     $like = '%' . $q . '%';
     $isNr = ctype_digit($q);
     $sql = "
-        SELECT license_key, full_name, short_name, gender, category,
+        SELECT person_id AS license_key, full_name, short_name, gender, category,
                start_number, club_short, club_full,
                extern, pending_source
         FROM persons
@@ -630,14 +630,15 @@ if ($action === 'persoon_detail') {
         echo json_encode(['error' => 'license_key verplicht']);
         exit;
     }
+    $pid = resolveNaarPersonId($pdo, $lic);   // token → person_id (fase 3d-iii)
     $pStmt = $pdo->prepare("
-        SELECT license_key, full_name, short_name, gender, category,
+        SELECT person_id AS license_key, full_name, short_name, gender, category,
                start_number, nationality, club_short, club_full,
                sponsor, city, birth_year,
                extern, pending_source
-        FROM persons WHERE license_key = ?
+        FROM persons WHERE person_id = ?
     ");
-    $pStmt->execute([$lic]);
+    $pStmt->execute([$pid]);
     $persoon = $pStmt->fetch(PDO::FETCH_ASSOC);
     if (!$persoon) {
         http_response_code(404);
@@ -660,10 +661,10 @@ if ($action === 'persoon_detail') {
                    dc.name AS dc_naam
             FROM entries e
             JOIN distance_combinations dc ON dc.id = e.distance_combination_id
-            WHERE e.person_license = ? AND dc.competition_id = ?
+            WHERE e.person_id = ? AND dc.competition_id = ?
             ORDER BY dc.name
         ");
-        $eStmt->execute([$lic, $compId]);
+        $eStmt->execute([$pid, $compId]);
         $entries = $eStmt->fetchAll(PDO::FETCH_ASSOC);
         $dcStmt = $pdo->prepare("
             SELECT id AS dc_id, name AS dc_naam, category_filter
@@ -692,7 +693,7 @@ if ($action === 'persoon_detail') {
             SELECT DISTINCT p.category
             FROM entries e
             JOIN distance_combinations dc ON dc.id = e.distance_combination_id
-            JOIN persons p ON p.license_key = e.person_license
+            JOIN persons p ON p.person_id = e.person_id
             WHERE dc.competition_id = ?
               AND p.category IS NOT NULL AND p.category <> ''
         ");
@@ -772,6 +773,7 @@ if ($action === 'corrigeer_persoon') {
         echo json_encode(['error' => 'license_key verplicht']);
         exit;
     }
+    $pid = resolveNaarPersonId($pdo, $lic);   // token → person_id (fase 3d-iii)
     // ── persons-update — semantiek:
     //   key niet aanwezig in body  → niet wijzigen
     //   key aanwezig met ''        → SET NULL (= veld leegmaken)
@@ -845,8 +847,8 @@ if ($action === 'corrigeer_persoon') {
     }
     $personsUpdated = false;
     if ($updates) {
-        $upParams[] = $lic;
-        $upStmt = $pdo->prepare("UPDATE persons SET " . implode(', ', $updates) . " WHERE license_key = ?");
+        $upParams[] = $pid;
+        $upStmt = $pdo->prepare("UPDATE persons SET " . implode(', ', $updates) . " WHERE person_id = ?");
         $upStmt->execute($upParams);
         $personsUpdated = $upStmt->rowCount() > 0;
     }
@@ -858,7 +860,7 @@ if ($action === 'corrigeer_persoon') {
         checkCompetitieToegang($pdo, $_authUser, $compId);
         $insEntry = $pdo->prepare(
             "INSERT IGNORE INTO entries (distance_combination_id, person_license, person_id, status)
-             VALUES (?, ?, (SELECT person_id FROM persons WHERE license_key = ?), 1)"
+             VALUES (?, (SELECT license_key FROM persons WHERE person_id = ?), ?, 1)"
         );
         $delEntry = $pdo->prepare("DELETE FROM entries WHERE id = ?");
         $delHe    = $pdo->prepare("
@@ -866,19 +868,19 @@ if ($action === 'corrigeer_persoon') {
             JOIN heats h ON h.id = he.heat_id
             WHERE h.competition_id = ?
               AND h.distance_combination_id = ?
-              AND he.person_license = ?
+              AND he.person_id = ?
         ");
         $getEntry = $pdo->prepare("
-            SELECT e.id, e.person_license, e.distance_combination_id AS dc_id
+            SELECT e.id, e.person_id AS person_license, e.distance_combination_id AS dc_id
             FROM entries e
             JOIN distance_combinations dc ON dc.id = e.distance_combination_id
-            WHERE e.id = ? AND dc.competition_id = ? AND e.person_license = ?
+            WHERE e.id = ? AND dc.competition_id = ? AND e.person_id = ?
         ");
         foreach ($verplaatsingen as $v) {
             $eId      = (int)($v['entry_id'] ?? 0);
             $doelDcId = trim($v['doel_dc_id'] ?? '');
             if (!$eId || $doelDcId === '') continue;
-            $getEntry->execute([$eId, $compId, $lic]);
+            $getEntry->execute([$eId, $compId, $pid]);
             $eRow = $getEntry->fetch(PDO::FETCH_ASSOC);
             if (!$eRow) continue;
             if ($eRow['dc_id'] === $doelDcId) continue;
@@ -886,8 +888,8 @@ if ($action === 'corrigeer_persoon') {
             $vChk = $pdo->prepare("SELECT 1 FROM distance_combinations WHERE id = ? AND competition_id = ?");
             $vChk->execute([$doelDcId, $compId]);
             if (!$vChk->fetchColumn()) continue;
-            $insEntry->execute([$doelDcId, $lic, $lic]);
-            $delHe->execute([$compId, $eRow['dc_id'], $lic]);
+            $insEntry->execute([$doelDcId, $pid, $pid]);
+            $delHe->execute([$compId, $eRow['dc_id'], $pid]);
             $heWeg += $delHe->rowCount();
             $delEntry->execute([$eId]);
             $verplaatst++;
@@ -923,7 +925,7 @@ if ($action === 'verplaats') {
 
     $ph = implode(',', array_fill(0, count($entryIds), '?'));
     $eStmt = $pdo->prepare("
-        SELECT e.id, e.person_license, e.distance_combination_id AS dc_id,
+        SELECT e.id, e.person_id AS person_license, e.distance_combination_id AS dc_id,
                dc.competition_id
         FROM entries e
         JOIN distance_combinations dc ON dc.id = e.distance_combination_id
@@ -959,7 +961,7 @@ if ($action === 'verplaats') {
     // (zou kunnen als operator handmatig al wat veranderd had).
     $insEntry = $pdo->prepare("
         INSERT IGNORE INTO entries (distance_combination_id, person_license, person_id, status)
-        VALUES (?, ?, (SELECT person_id FROM persons WHERE license_key = ?), 1)
+        VALUES (?, (SELECT license_key FROM persons WHERE person_id = ?), ?, 1)
     ");
     $delEntry = $pdo->prepare("DELETE FROM entries WHERE id = ?");
     // heat_entries van OUDE DC verwijderen — die kunnen niet meeverhuizen
@@ -969,7 +971,7 @@ if ($action === 'verplaats') {
         JOIN heats h ON h.id = he.heat_id
         WHERE h.competition_id = ?
           AND h.distance_combination_id = ?
-          AND he.person_license = ?
+          AND he.person_id = ?
     ");
 
     $verplaatst = 0;
@@ -1016,7 +1018,7 @@ if ($action === 'verwijder') {
     // van bijbehorende heat_entries.
     $ph = implode(',', array_fill(0, count($entryIds), '?'));
     $eStmt = $pdo->prepare("
-        SELECT e.id, e.person_license, e.distance_combination_id AS dc_id,
+        SELECT e.id, e.person_id AS person_license, e.distance_combination_id AS dc_id,
                dc.competition_id
         FROM entries e
         JOIN distance_combinations dc ON dc.id = e.distance_combination_id
@@ -1044,7 +1046,7 @@ if ($action === 'verwijder') {
         JOIN heats h ON h.id = he.heat_id
         WHERE h.competition_id = ?
           AND h.distance_combination_id = ?
-          AND he.person_license = ?
+          AND he.person_id = ?
     ");
     $entriesWeg = 0;
     $heWeg      = 0;
