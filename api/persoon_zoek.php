@@ -94,12 +94,8 @@ try {
     // ── Zoek op person_id (fase 3d-iii) of legacy relatienummer ───────────────
     // person_id heeft voorrang; een meegegeven license_key wordt naar person_id
     // geresolved. De persons-query draait op person_id → fase-4-proof.
-    $pid = trim($_GET['person_id'] ?? '');
-    if ($pid === '' && isset($_GET['license_key']) && $_GET['license_key'] !== '') {
-        $lk  = trim($_GET['license_key']);
-        $pid = (string)(personIdVoorExtern($pdo, systeemVoorLicentie($lk), $lk) ?? '');
-        if ($pid === '') { echo json_encode(null, JSON_UNESCAPED_UNICODE); exit; }
-    }
+    $token = trim($_GET['person_id'] ?? '') ?: trim($_GET['license_key'] ?? '');
+    $pid   = (string)(resolveNaarPersonId($pdo, $token) ?? '');
     if ($pid !== '') {
         $stmt = $pdo->prepare(
             "SELECT * FROM persons

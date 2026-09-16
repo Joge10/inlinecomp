@@ -68,6 +68,22 @@ if (!function_exists('personIdVoorExtern')) {
     }
 }
 
+if (!function_exists('resolveNaarPersonId')) {
+    /**
+     * Universele identiteit-resolutie voor request-tokens (fase 3d-iii).
+     * Een endpoint kan een token binnenkrijgen dat óf een externe id (KNSB-licentie
+     * / ic-*) is, óf al een person_id. We resolven het naar person_id:
+     *   - komt het voor als extern_id in person_external_ids → die person_id;
+     *   - anders → het token zélf (het is al een person_id, of onbekend → geen match).
+     * Zo accepteert elk endpoint zowel oude (licentie) als nieuwe (person_id) JS,
+     * en kunnen bestanden onafhankelijk omgezet worden zonder de app te breken.
+     */
+    function resolveNaarPersonId(PDO $pdo, ?string $token): ?string {
+        if ($token === null || $token === '') return null;
+        return personIdVoorExtern($pdo, systeemVoorLicentie($token), $token) ?? $token;
+    }
+}
+
 if (!function_exists('zorgVoorExternalId')) {
     /**
      * Zorgt dat er een person_external_ids-rij bestaat voor deze (net geminte of

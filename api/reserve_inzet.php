@@ -54,11 +54,7 @@ $reserveNr     = isset($body['reserve_nr']) ? (int)$body['reserve_nr'] : null;
 // Identiteit: person_id (nieuw, fase 3d-iii) heeft voorrang; valt terug op de
 // legacy person_license (die intern naar person_id wordt geresolved via
 // person_external_ids). De queries draaien op person_id → fase-4-proof.
-$personId = trim($body['person_id'] ?? '');
-if ($personId === '') {
-    $legacyLic = trim($body['person_license'] ?? '');
-    if ($legacyLic !== '') $personId = (string)(personIdVoorExtern($pdo, systeemVoorLicentie($legacyLic), $legacyLic) ?? '');
-}
+$personId = (string)(resolveNaarPersonId($pdo, (trim($body['person_id'] ?? '') ?: trim($body['person_license'] ?? ''))) ?? '');
 
 if (!$compId || !$dcId || !$personId) {
     http_response_code(400);

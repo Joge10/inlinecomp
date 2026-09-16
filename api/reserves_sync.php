@@ -90,12 +90,7 @@ try {
     ");
     $nGezet = 0;
     foreach ($reserves as $r) {
-        // person_id (nieuw) heeft voorrang; anders legacy person_license resolven.
-        $pid = trim($r['person_id'] ?? '');
-        if ($pid === '') {
-            $lk = trim($r['person_license'] ?? '');
-            if ($lk !== '') $pid = (string)(personIdVoorExtern($pdo, systeemVoorLicentie($lk), $lk) ?? '');
-        }
+        $pid = (string)(resolveNaarPersonId($pdo, (trim($r['person_id'] ?? '') ?: trim($r['person_license'] ?? ''))) ?? '');
         $nr = isset($r['reserve_nr']) ? (int)$r['reserve_nr'] : 0;
         if (!$pid || $nr <= 0) continue;
         $stmtSetRes->execute([$nr, $dcId, $pid]);
@@ -129,8 +124,8 @@ try {
         // (of onbekend → geen match = ongevaarlijk). Fase-4-proof.
         $val = trim((string)$item);
         if ($val === '') continue;
-        $pid = (string)(personIdVoorExtern($pdo, systeemVoorLicentie($val), $val) ?? '');
-        if ($pid === '') $pid = $val;
+        $pid = (string)(resolveNaarPersonId($pdo, $val) ?? '');
+        if ($pid === '') continue;
         $stmtClrRes->execute([$dcId, $pid]);
         $nGewist += $stmtClrRes->rowCount();
     }

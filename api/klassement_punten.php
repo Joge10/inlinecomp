@@ -68,12 +68,7 @@ try {
     $opgeslagen = 0;
 
     foreach ($items as $item) {
-        // person_id (fase 3d-iii) heeft voorrang; anders legacy person_license resolven.
-        $pid = trim($item['person_id'] ?? '');
-        if ($pid === '') {
-            $lic = trim($item['person_license'] ?? '');
-            if ($lic !== '') $pid = (string)(personIdVoorExtern($pdo, systeemVoorLicentie($lic), $lic) ?? '');
-        }
+        $pid = (string)(resolveNaarPersonId($pdo, (trim($item['person_id'] ?? '') ?: trim($item['person_license'] ?? ''))) ?? '');
         $distId   = trim($item['distance_id']    ?? '');
         $punten   = isset($item['punten']) ? (float)$item['punten'] : null;
 

@@ -39,12 +39,9 @@ $heatNr     = (isset($body['heat_nr']) && $body['heat_nr'] !== '' && $body['heat
 // Identiteit: person_id (fase 3d-iii) heeft voorrang, anders legacy person_license.
 // De READ draait op person_id; de dual-write heeft in de overgangsfase óók de
 // license nodig (person_license-kolom bestaat tot fase 4), dus we leiden beide af.
-$personId = trim($body['person_id'] ?? '');
-$license  = trim($body['person_license'] ?? '');
-if ($personId === '' && $license !== '') {
-    $personId = (string)(personIdVoorExtern($pdo, systeemVoorLicentie($license), $license) ?? '');
-}
-if ($license === '' && $personId !== '') {
+$personId = (string)(resolveNaarPersonId($pdo, (trim($body['person_id'] ?? '') ?: trim($body['person_license'] ?? ''))) ?? '');
+$license  = '';
+if ($personId !== '') {
     $rl = $pdo->prepare("SELECT license_key FROM persons WHERE person_id = ? LIMIT 1");
     $rl->execute([$personId]);
     $license = (string)($rl->fetchColumn() ?: '');
