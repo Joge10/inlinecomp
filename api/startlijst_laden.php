@@ -74,10 +74,10 @@ try {
     $ph   = implode(',', array_fill(0, count($heatIds), '?'));
     $stmt = $pdo->prepare("
         SELECT he.heat_id, he.startpositie, he.startnummer, he.categorie,
-               p.license_key, p.person_id, p.full_name, p.short_name, p.club_short, p.city,
+               p.person_id AS license_key, p.person_id, p.full_name, p.short_name, p.club_short, p.city,
                p.start_number
         FROM heat_entries he
-        JOIN persons p ON p.license_key = he.person_license
+        JOIN persons p ON p.person_id = he.person_id
         WHERE he.heat_id IN ($ph)
         ORDER BY he.heat_id, he.startpositie
     ");
@@ -98,14 +98,14 @@ try {
     if ($licenseKeys) {
         $ph2   = implode(',', array_fill(0, count($licenseKeys), '?'));
         $tpStmt = $pdo->prepare("
-            SELECT person_license, slot, code
+            SELECT person_id, slot, code
             FROM transponders
-            WHERE competition_id = ? AND person_license IN ($ph2)
+            WHERE competition_id = ? AND person_id IN ($ph2)
             ORDER BY slot
         ");
         $tpStmt->execute(array_merge([$compId], $licenseKeys));
         foreach ($tpStmt->fetchAll() as $tp) {
-            $tpMap[$tp['person_license']][$tp['slot']] = $tp['code'];
+            $tpMap[$tp['person_id']][$tp['slot']] = $tp['code'];
         }
     }
 
@@ -227,7 +227,7 @@ try {
             // Verschijnt als 📷-icoon in de Opm.-kolom van de startlijst.
             $veStmt = $pdo->prepare("
                 SELECT he.heat_id, he.startpositie, he.startnummer, he.categorie,
-                       p.license_key, p.person_id, p.full_name, p.short_name,
+                       p.person_id AS license_key, p.person_id, p.full_name, p.short_name,
                        p.start_number, p.club_short,
                        (SELECT GROUP_CONCAT(
                                    CONCAT(
@@ -247,7 +247,7 @@ try {
                         FROM heat_entries he_v
                         JOIN heats h_v ON h_v.id = he_v.heat_id
                         JOIN results res_v ON res_v.heat_entry_id = he_v.id
-                        WHERE he_v.person_license         = he.person_license
+                        WHERE he_v.person_id         = he.person_id
                           AND h_v.competition_id          = ?
                           AND h_v.distance_combination_id = ?
                           AND (h_v.distance_id = ? OR (h_v.distance_id IS NULL AND ? = ''))
@@ -265,7 +265,7 @@ try {
                         FROM heat_entries he_pf
                         JOIN heats h_pf ON h_pf.id = he_pf.heat_id
                         JOIN results res_pf ON res_pf.heat_entry_id = he_pf.id
-                        WHERE he_pf.person_license         = he.person_license
+                        WHERE he_pf.person_id         = he.person_id
                           AND h_pf.competition_id          = ?
                           AND h_pf.distance_combination_id = ?
                           AND (h_pf.distance_id = ? OR (h_pf.distance_id IS NULL AND ? = ''))
@@ -274,7 +274,7 @@ try {
                         LIMIT 1
                        ) AS vorige_photofinish
                 FROM heat_entries he
-                JOIN persons p ON p.license_key = he.person_license
+                JOIN persons p ON p.person_id = he.person_id
                 WHERE he.heat_id IN ($phV)
                 ORDER BY he.heat_id, he.startpositie
             ");
@@ -297,14 +297,14 @@ try {
             if ($vLicenses) {
                 $phLic  = implode(',', array_fill(0, count($vLicenses), '?'));
                 $vtpStmt = $pdo->prepare("
-                    SELECT person_license, slot, code
+                    SELECT person_id, slot, code
                     FROM transponders
-                    WHERE competition_id = ? AND person_license IN ($phLic)
+                    WHERE competition_id = ? AND person_id IN ($phLic)
                     ORDER BY slot
                 ");
                 $vtpStmt->execute(array_merge([$compId], $vLicenses));
                 foreach ($vtpStmt->fetchAll() as $tp) {
-                    $vTpMap[$tp['person_license']][$tp['slot']] = $tp['code'];
+                    $vTpMap[$tp['person_id']][$tp['slot']] = $tp['code'];
                 }
             }
 

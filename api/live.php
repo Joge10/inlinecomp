@@ -174,10 +174,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'GET') {
                 res.sanctie,
                 res.afval_rang,
                 res.is_photofinish,
-                he.person_license
+                he.person_id AS person_license
             FROM heat_entries he
-            JOIN persons p ON p.license_key = he.person_license
-            LEFT JOIN transponders tp ON tp.person_license = he.person_license
+            JOIN persons p ON p.person_id = he.person_id
+            LEFT JOIN transponders tp ON tp.person_id = he.person_id
                 AND tp.competition_id = ?
                 AND tp.slot = 0
             LEFT JOIN results res ON res.heat_entry_id = he.id
@@ -631,7 +631,7 @@ if ($action === 'save_rit_results') {
                 $_hi = $pdo->prepare("SELECT heat_naam, distance_combination_id, distance_id FROM heats WHERE tijdschema_rit_id = ? AND competition_id = ? LIMIT 1");
                 $_hi->execute([$ritId, $compId]);
                 $_h = $_hi->fetch(PDO::FETCH_ASSOC) ?: [];
-                $_ls = $pdo->prepare("SELECT he.person_license FROM heat_entries he JOIN heats h ON h.id = he.heat_id WHERE h.tijdschema_rit_id = ? AND h.competition_id = ?");
+                $_ls = $pdo->prepare("SELECT he.person_id AS person_license FROM heat_entries he JOIN heats h ON h.id = he.heat_id WHERE h.tijdschema_rit_id = ? AND h.competition_id = ?");
                 $_ls->execute([$ritId, $compId]);
                 $_lics = $_ls->fetchAll(PDO::FETCH_COLUMN);
                 // Alleen pushen als de wedstrijd publiek live is (geen lek tijdens
@@ -979,14 +979,14 @@ if ($action === 'genereer_volgende_ronde') {
             // voor de tie-break-regel bij ex-aequo doorstroming.
             // Bij split: alleen rijders uit DEZE split's bron-heats.
             $resStmt = $pdo->prepare("
-                SELECT he.person_license, p.person_id, he.categorie, he.startnummer,
+                SELECT he.person_id AS person_license, p.person_id, he.categorie, he.startnummer,
                        p.full_name, p.club_short,
                        h.heat_nr,
                        res.tijd_ms, res.rondes, res.sanctie
                 FROM tijdschema_ritten r
                 JOIN heats h ON h.tijdschema_rit_id = r.id AND h.competition_id = ?
                 JOIN heat_entries he ON he.heat_id = h.id
-                JOIN persons p ON p.license_key = he.person_license
+                JOIN persons p ON p.person_id = he.person_id
                 JOIN results res ON res.heat_entry_id = he.id
                 WHERE r.tijdschema_id = ? AND r.dc_id = ?
                   AND (r.distance_id = ? OR (r.distance_id IS NULL AND ? = ''))
@@ -1042,7 +1042,7 @@ if ($action === 'genereer_volgende_ronde') {
             // gefilterd worden.
             $naPh = implode(',', array_fill(0, count($naRondes), '?'));
             $alDoorStmt = $pdo->prepare("
-                SELECT DISTINCT he.person_license
+                SELECT DISTINCT he.person_id AS person_license
                 FROM heats h
                 JOIN heat_entries he ON he.heat_id = h.id
                 JOIN tijdschema_ritten r ON r.id = h.tijdschema_rit_id
@@ -1076,7 +1076,7 @@ if ($action === 'genereer_volgende_ronde') {
             sort($nieuweRuSet);
 
             $ruBestStmt = $pdo->prepare("
-                SELECT he.person_license
+                SELECT he.person_id AS person_license
                 FROM heats h
                 JOIN heat_entries he ON he.heat_id = h.id
                 JOIN tijdschema_ritten r ON r.id = h.tijdschema_rit_id
@@ -1197,7 +1197,7 @@ if ($action === 'genereer_volgende_ronde') {
             $insEntry = $pdo->prepare("
                 INSERT IGNORE INTO heat_entries
                     (heat_id, person_license, person_id, categorie, startpositie, startnummer)
-                VALUES (?, ?, (SELECT person_id FROM persons WHERE license_key = ?), ?, ?, ?)
+                VALUES (?, (SELECT license_key FROM persons WHERE person_id = ?), ?, ?, ?, ?)
             ");
             $dcIdsJson = json_encode([$dcId]);
 
@@ -1431,7 +1431,7 @@ if ($action === 'genereer_volgende_ronde') {
         $resStmt = $pdo->prepare("
             SELECT
                 he.id           AS entry_id,
-                he.person_license,
+                he.person_id AS person_license,
                 p.person_id,
                 he.categorie,
                 he.startnummer,
@@ -1446,7 +1446,7 @@ if ($action === 'genereer_volgende_ronde') {
             JOIN heats h ON h.tijdschema_rit_id = r.id
               AND h.competition_id = ?
             JOIN heat_entries he ON he.heat_id = h.id
-            JOIN persons p ON p.license_key = he.person_license
+            JOIN persons p ON p.person_id = he.person_id
             JOIN results res ON res.heat_entry_id = he.id
             WHERE r.tijdschema_id = ?
               AND r.dc_id = ?
@@ -1826,7 +1826,7 @@ if ($action === 'genereer_volgende_ronde') {
         if ($isFullFinal || $isKleinFinale) $cmpTypes[] = 'finale_b';
         $cmpPh = implode(',', array_fill(0, count($cmpTypes), '?'));
         $bestStmt = $pdo->prepare("
-            SELECT r.ronde_type, he.person_license
+            SELECT r.ronde_type, he.person_id AS person_license
             FROM heats h
             JOIN heat_entries he ON he.heat_id = h.id
             JOIN tijdschema_ritten r ON r.id = h.tijdschema_rit_id
@@ -2095,7 +2095,7 @@ if ($action === 'genereer_volgende_ronde') {
         ");
         $insEntry = $pdo->prepare("
             INSERT IGNORE INTO heat_entries (heat_id, person_license, person_id, categorie, startpositie, startnummer)
-            VALUES (?, ?, (SELECT person_id FROM persons WHERE license_key = ?), ?, ?, ?)
+            VALUES (?, (SELECT license_key FROM persons WHERE person_id = ?), ?, ?, ?, ?)
         ");
 
         $dcIdsJson = json_encode([$dcId]);
