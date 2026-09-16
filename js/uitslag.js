@@ -91,6 +91,36 @@ async function _uRenderAfstandFilter(groepen) {
 // DB = UI codes, geen mapping meer nodig
 function sanctieLabel(s) { return s ?? ''; }
 
+// ── Puntenkoers: vervallen punten (ronde-achterstand) ─────────────────────────
+// Een rijder met minder gereden ronden dan de leider raakt z'n sprintpunten
+// kwijt voor de klassering (server rekent dit al door in de rang). De behaalde
+// punten blijven wél zichtbaar, doorgestreept + note. Afgeleid uit rondes.
+function _pkMaxRondes(rows) {
+    let max = 0;
+    for (const r of (rows || [])) {
+        const rd = r.rondes;
+        if (rd != null && Number(rd) > max) max = Number(rd);
+    }
+    return max;
+}
+function _pkPuntCel(r, maxRnd) {
+    if (r.pk_punten == null) return '—';
+    const vervallen = maxRnd > 0 && r.rondes != null && Number(r.rondes) < maxRnd;
+    if (!vervallen) return String(r.pk_punten);
+    return `<span class="u-pkpunten-vervallen" title="Punten vervallen: ronde-achterstand op de koploper">`
+         + `<s>${escHtml(String(r.pk_punten))}</s>`
+         + `<span class="u-pkpunten-note">vervallen</span></span>`;
+}
+// Print-variant: de print-HTML heeft z'n eigen <style> (niet style.css), dus
+// inline stylen zodat de vervallen-markering ook op papier/PDF klopt.
+function _pkPuntCelPrint(r, maxRnd) {
+    if (r.pk_punten == null) return '—';
+    const vervallen = maxRnd > 0 && r.rondes != null && Number(r.rondes) < maxRnd;
+    const p = String(r.pk_punten);
+    if (!vervallen) return p;
+    return `<s>${p}</s> <span style="font-size:6.5pt;color:#b02a37;font-weight:600">vervallen</span>`;
+}
+
 // ── Hulpfuncties ──────────────────────────────────────────────────────────────
 
 // In-flight tracking voor uLaadAfstanden — als meerdere callers tegelijk
@@ -712,6 +742,7 @@ async function toonUitslagVoorAfstand(groep, afstand) {
                             </tr></thead>
                             <tbody>`;
 
+                const pkMaxRnd = data.heeft_pk_punten ? _pkMaxRondes(data.resultaat) : 0;
                 for (const r of data.resultaat) {
                     const rangTxt    = r.rang    != null ? r.rang    : '—';
                     const tijdTxt    = r.tijd_ms != null ? msTijd(r.tijd_ms) : '—';
@@ -724,7 +755,7 @@ async function toonUitslagVoorAfstand(groep, afstand) {
                         <td class="u-col-cat">${escHtml(r.categorie ?? '')}</td>
                         <td class="u-col-ronde">${escHtml(r.ronde_label ?? '')}</td>
                         ${data.heeft_rondes ? `<td class="u-col-rondes">${r.rondes ?? '—'}</td>` : ''}
-                        ${data.heeft_pk_punten ? `<td class="u-col-pkpunten">${r.pk_punten ?? '—'}</td>` : ''}
+                        ${data.heeft_pk_punten ? `<td class="u-col-pkpunten">${_pkPuntCel(r, pkMaxRnd)}</td>` : ''}
                         <td class="u-col-tijd">${tijdTxt}</td>
                         <td class="u-col-sanctie">${escHtml(sanctieTxt)}</td>
                     </tr>`;
@@ -947,6 +978,8 @@ async function toonUitslagVoorAfstand(groep, afstand) {
             </tr></thead>
             <tbody>`;
 
+        const pkMaxRnd = data.heeft_pk_punten
+            ? _pkMaxRondes(data.finales.flatMap(f => f.rijders || [])) : 0;
         for (const finale of data.finales) {
             for (const r of finale.rijders) {
                 const rangTxt    = r.rang    != null ? r.rang    : '—';
@@ -961,7 +994,7 @@ async function toonUitslagVoorAfstand(groep, afstand) {
                     <td class="u-col-cat">${escHtml(r.categorie ?? '')}</td>
                     <td class="u-col-finale-label">${escHtml(finale.label)}</td>
                     ${data.heeft_rondes ? `<td class="u-col-rondes">${r.rondes ?? '—'}</td>` : ''}
-                    ${data.heeft_pk_punten ? `<td class="u-col-pkpunten">${r.pk_punten ?? '—'}</td>` : ''}
+                    ${data.heeft_pk_punten ? `<td class="u-col-pkpunten">${_pkPuntCel(r, pkMaxRnd)}</td>` : ''}
                     <td class="u-col-tijd">${tijdTxt}</td>
                     <td class="u-col-sanctie">${escHtml(sanctieTxt)}</td>
                 </tr>`;
@@ -1995,6 +2028,7 @@ async function _bouwUitslagAfstandInternal(optData) {
 
         // Footnotes voor jury-aanpassingen (zie verderop in de loop).
         const fnItems = [];
+        const pkMaxRnd = data.heeft_pk_punten ? _pkMaxRondes(data.resultaat) : 0;
         let tbody = '';
         for (const r of data.resultaat) {
             const alleSancties = (r.alle_sancties ?? [])
@@ -2021,7 +2055,7 @@ async function _bouwUitslagAfstandInternal(optData) {
             let tdExtra = '';
             if (toonRonde) tdExtra += `<td class="pr-col-ronde">${esc(r.ronde_label ?? '')}</td>`;
             if (data.heeft_rondes)    tdExtra += `<td class="pr-col-rondes">${r.rondes ?? '\u2014'}</td>`;
-            if (data.heeft_pk_punten) tdExtra += `<td class="pr-col-pkpunten">${r.pk_punten ?? '\u2014'}</td>`;
+            if (data.heeft_pk_punten) tdExtra += `<td class="pr-col-pkpunten">${_pkPuntCelPrint(r, pkMaxRnd)}</td>`;
             if (toonTijd)  tdExtra += `<td class="pr-col-tijd">${r.tijd_ms != null ? msTijd(r.tijd_ms) : '\u2014'}</td>`;
 
             // Bruto-tijd-indicator: alleen als bruto bekend is \u00e9n verschilt van netto.
@@ -2213,6 +2247,7 @@ async function _bouwUitslagAfstandInternal(optData) {
 
     // Footnotes voor jury-aanpassingen (zie verderop in de loop).
     const fnItems = [];
+    const pkMaxRnd = data.heeft_pk_punten ? _pkMaxRondes(alleRijdersNormaal) : 0;
     let tbody = '';
     for (const finale of data.finales) {
         for (const r of finale.rijders) {
@@ -2236,7 +2271,7 @@ async function _bouwUitslagAfstandInternal(optData) {
             let tdExtra = '';
             if (toonRonde) tdExtra += `<td class="pr-col-finale">${esc(finale.label)}</td>`;
             if (data.heeft_rondes)    tdExtra += `<td class="pr-col-rondes">${r.rondes ?? '\u2014'}</td>`;
-            if (data.heeft_pk_punten) tdExtra += `<td class="pr-col-pkpunten">${r.pk_punten ?? '\u2014'}</td>`;
+            if (data.heeft_pk_punten) tdExtra += `<td class="pr-col-pkpunten">${_pkPuntCelPrint(r, pkMaxRnd)}</td>`;
             if (toonTijd)  tdExtra += `<td class="pr-col-tijd">${r.tijd_ms != null ? msTijd(r.tijd_ms) : '\u2014'}</td>`;
 
             // Bruto-tijd-indicator + footnote (identiek aan internationaal-pad).

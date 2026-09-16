@@ -110,11 +110,40 @@ function splitsFinishersOverigen(array $rows): array {
 }
 
 // ── Sorteert een set heat-rijen ──────────────────────────────────────────────
+// ── Puntenkoers: punten vervallen bij ronde-achterstand ───────────────────────
+// Inline-reglement: een rijder die door het peloton wordt ingehaald rijdt niet
+// vol uit → minder ronden (laps) dan de leider → z'n uitgedeelde sprintpunten
+// VERVALLEN voor de klassering. Voor de rangschikking telt zo'n rijder als "geen
+// punten" (zakt naar de puntenloze groep, daar op ronden→tijd). De behaalde
+// punten blijven zichtbaar aan de weergavekant (met note). Wie alleen door de
+// koploper wordt gelapt maar wél het volle aantal ronden rijdt, houdt z'n punten
+// (rondes == max → niet vervallen).
+function pkMaxRondes(array $rows): int {
+    $max = 0;
+    foreach ($rows as $r) {
+        if (isEindSanctie($r['sanctie'] ?? null)) continue;
+        $rd = $r['rondes'] ?? null;
+        if ($rd !== null && (int)$rd > $max) $max = (int)$rd;
+    }
+    return $max;
+}
+function pkPuntenVervallen(array $r, int $maxRnd): bool {
+    if ($maxRnd <= 0) return false;
+    $rd = $r['rondes'] ?? null;
+    return $rd !== null && (int)$rd < $maxRnd;
+}
+// Effectieve punten voor sortering/ex-aequo: vervallen → null (= geen punten).
+function pkEffectievePunten(array $r, int $maxRnd) {
+    return pkPuntenVervallen($r, $maxRnd) ? null : ($r['pk_punten'] ?? null);
+}
+
 // Detecteert automatisch puntenkoers (pk_punten) en lange afstand (rondes).
 // Rijders met eindsanctie (DNS/DNF/DQ-*) behandelen we als "geen finish"
 // ongeacht of finishpositie gevuld is, zodat ze altijd achteraan sorteren.
 function sorteerRijdersOpTijd(array $rows): array {
     $isPK     = !empty(array_filter($rows, fn($r) => isset($r['pk_punten']) && $r['pk_punten'] !== null));
+    // Puntenkoers: max ronden onder de finishers → punten van gelapte rijders vervallen.
+    $pkMaxRnd = $isPK ? pkMaxRondes($rows) : 0;
     // Lange-afstand-detectie: alleen activeren als ALLE finishers rondes
     // hebben én er minstens één rijder > 0 rondes heeft. Voorkomt dat
     // losse rondes-restwaarden (bv. achtergebleven na een gewiste DNS op een
@@ -132,7 +161,7 @@ function sorteerRijdersOpTijd(array $rows): array {
         $heeftRnd = $allesGevuld && $maxRnd > 0;
     }
 
-    usort($rows, function ($a, $b) use ($isPK, $heeftRnd) {
+    usort($rows, function ($a, $b) use ($isPK, $heeftRnd, $pkMaxRnd) {
         // Eindsanctie overschrijft finishpositie → behandel als "geen finish"
         $hasA = $a['finishpositie'] !== null && !isEindSanctie($a['sanctie'] ?? null);
         $hasB = $b['finishpositie'] !== null && !isEindSanctie($b['sanctie'] ?? null);
@@ -140,10 +169,11 @@ function sorteerRijdersOpTijd(array $rows): array {
         if (!$hasA) return 1;
         if (!$hasB) return -1;
 
-        // Puntenkoers: punten DESC → rondes DESC → tijd ASC
+        // Puntenkoers: (effectieve) punten DESC → rondes DESC → tijd ASC.
+        // Gelapte rijders (rondes < max) hebben vervallen punten → tellen als geen.
         if ($isPK) {
-            $pA = $a['pk_punten'] ?? -PHP_INT_MAX;
-            $pB = $b['pk_punten'] ?? -PHP_INT_MAX;
+            $pA = pkEffectievePunten($a, $pkMaxRnd) ?? -PHP_INT_MAX;
+            $pB = pkEffectievePunten($b, $pkMaxRnd) ?? -PHP_INT_MAX;
             if ($pA != $pB) return $pB <=> $pA;
         }
         // Lange afstand: rondes DESC → tijd ASC
@@ -598,6 +628,9 @@ function berekenInternationaalResultaat(array $rondeData, string $raceSubType = 
         // Eerst finishers, dan ranked_last
         // Detecteer puntenkoers: als minstens 1 rijder pk_punten heeft
         $isPK = !empty(array_filter($uitgevallen, fn($r) => ($r['pk_punten'] ?? null) !== null));
+        // Puntenkoers: max ronden in deze ronde-groep → gelapte rijders (rondes < max)
+        // hebben vervallen punten (tellen als geen punten voor de rangschikking).
+        $pkMaxRnd = $isPK ? pkMaxRondes($uitgevallen) : 0;
 
         // Lange-afstand-detectie: alleen activeren als ALLE échte finishers
         // (niet-ranked_last) rondes hebben én er minstens één > 0 is.
@@ -615,7 +648,7 @@ function berekenInternationaalResultaat(array $rondeData, string $raceSubType = 
             $heeftRnd = $allesGevuld && $maxRnd > 0;
         }
 
-        usort($uitgevallen, function ($a, $b) use ($rankingMethod, $isPK, $heeftRnd, $useFiPosExAequo) {
+        usort($uitgevallen, function ($a, $b) use ($rankingMethod, $isPK, $heeftRnd, $useFiPosExAequo, $pkMaxRnd) {
             // ranked_last altijd onderaan
             if ($a['_ranked_last'] && !$b['_ranked_last']) return 1;
             if (!$a['_ranked_last'] && $b['_ranked_last']) return -1;
@@ -630,10 +663,11 @@ function berekenInternationaalResultaat(array $rondeData, string $raceSubType = 
                 return $pA <=> $pB;
             }
 
-            // Puntenkoers: punten DESC → rondes DESC → tijd ASC
+            // Puntenkoers: (effectieve) punten DESC → rondes DESC → tijd ASC.
+            // Gelapte rijders (rondes < max) hebben vervallen punten → tellen als geen.
             if ($isPK) {
-                $pA = $a['pk_punten'] ?? -PHP_INT_MAX;
-                $pB = $b['pk_punten'] ?? -PHP_INT_MAX;
+                $pA = pkEffectievePunten($a, $pkMaxRnd) ?? -PHP_INT_MAX;
+                $pB = pkEffectievePunten($b, $pkMaxRnd) ?? -PHP_INT_MAX;
                 if ($pA != $pB) return $pB <=> $pA; // DESC
                 $rA = $a['rondes'] ?? -1;
                 $rB = $b['rondes'] ?? -1;
@@ -692,7 +726,7 @@ function berekenInternationaalResultaat(array $rondeData, string $raceSubType = 
                     $exAequo = $r['finishpositie'] !== null
                             && $r['finishpositie'] === $prev['finishpositie'];
                 } elseif ($isPK) {
-                    $exAequo = ($r['pk_punten'] ?? null) === ($prev['pk_punten'] ?? null)
+                    $exAequo = pkEffectievePunten($r, $pkMaxRnd) === pkEffectievePunten($prev, $pkMaxRnd)
                             && ($r['rondes'] ?? null) === ($prev['rondes'] ?? null)
                             && $r['tijd_ms'] === $prev['tijd_ms'];
                 } elseif ($rankingMethod === 'position_time') {

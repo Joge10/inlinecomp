@@ -3314,6 +3314,7 @@ const T = {
         col_naam: 'Naam',
         col_rnd: 'Rnd',
         col_pnt: 'Pnt',
+        pk_vervallen: 'vervallen',
         col_tijd: 'Tijd',
         col_fin: 'Fin',
         col_rang: '#',
@@ -3562,6 +3563,7 @@ const T = {
         col_naam: 'Name',
         col_rnd: 'Lap',
         col_pnt: 'Pts',
+        pk_vervallen: 'void',
         col_tijd: 'Time',
         col_fin: 'Fin',
         col_rang: '#',
@@ -3809,6 +3811,7 @@ const T = {
         col_naam: 'Name',
         col_rnd: 'Runde',
         col_pnt: 'Pkt.',
+        pk_vervallen: 'verfallen',
         col_tijd: 'Zeit',
         col_fin: 'Fin',
         col_rang: '#',
@@ -4056,6 +4059,7 @@ const T = {
         col_naam: 'Nom',
         col_rnd: 'Tour',
         col_pnt: 'Pts',
+        pk_vervallen: 'annulés',
         col_tijd: 'Temps',
         col_fin: 'Fin',
         col_rang: '#',
@@ -4376,11 +4380,31 @@ async function safeFetch(url, maxRetries = 1) {
         throw e;
     }
 }
+// Puntenkoers: punten van gelapte rijders (minder ronden dan de leider) zijn
+// vervallen voor de klassering (server rekent dit door in de rang). Toon de
+// behaalde punten wél, doorgestreept + note. Inline-styled zodat het los van
+// het stylesheet werkt.
+function pkMaxRnd(rijders) {
+    let m = 0;
+    for (const r of (rijders || [])) {
+        const rd = r.rondes;
+        if (rd != null && Number(rd) > m) m = Number(rd);
+    }
+    return m;
+}
+function pkPuntCel(r, mx) {
+    if (r.pk_punten == null) return '';
+    const p = parseFloat(r.pk_punten);
+    const vervallen = mx > 0 && r.rondes != null && Number(r.rondes) < mx;
+    if (!vervallen) return String(p);
+    return `<s>${p}</s> <span style="font-size:.72em;color:#b02a37;font-weight:600">${esc(t('pk_vervallen') || 'vervallen')}</span>`;
+}
 // Detecteer extra kolommen voor heat-rijders
 function heatExtraKolommen(rijders, rondeType) {
     const heeftRnd = rijders.some(r => r.rondes != null);
     const heeftPK  = rijders.some(r => r.pk_punten != null);
-    return { heeftRnd, heeftPK, rondeType: rondeType ?? null };
+    const pkMax    = heeftPK ? pkMaxRnd(rijders) : 0;
+    return { heeftRnd, heeftPK, pkMax, rondeType: rondeType ?? null };
 }
 function heatTabelHeader(extra) {
     // Volgorde: pos, snr, FIN (direct na snr, rood weergegeven in CSS),
@@ -4424,7 +4448,7 @@ function heatTabelRij(r, isIk, extra, isFamilie = false) {
         <td class="col-fin">${esc(rFin)}</td>
         <td class="col-naam">${esc(r.full_name)}${rSanctie ? ` <span class="col-sanctie">${esc(rSanctie)}</span>` : ''}</td>`
         + (extra.heeftRnd ? `<td class="col-rnd">${r.rondes ?? ''}</td>` : '')
-        + (extra.heeftPK  ? `<td class="col-pk">${r.pk_punten != null ? parseFloat(r.pk_punten) : ''}</td>` : '')
+        + (extra.heeftPK  ? `<td class="col-pk">${pkPuntCel(r, extra.pkMax)}</td>` : '')
         + `<td class="col-tijd">${auditIcon}${esc(rTijd)}</td>
     </tr>`;
 }
@@ -6324,6 +6348,7 @@ async function renderRondeUitslagen(container) {
                 const heeftFin      = r.rijders.some(x => x.finishpositie != null);
                 const heeftRondes   = isLangeAfstand && r.rijders.some(x => x.rondes != null);
                 const heeftPkPunten = d.race_type === 'puntenkoers' && r.rijders.some(x => x.pk_punten != null);
+                const pkMaxR        = heeftPkPunten ? pkMaxRnd(r.rijders) : 0;
                 // Sorteer: Q eerst op tijd, dan q op tijd, dan rest op tijd/positie.
                 // Voor runner-up: op ru_positie oplopend.
                 const rijders = [...r.rijders];
@@ -6437,7 +6462,7 @@ async function renderRondeUitslagen(container) {
                         <td>${esc(rr.full_name)}</td>
                         <td class="c">${kwalHtml}</td>
                         ${heeftRondes   ? `<td class="c">${rr.rondes ?? '—'}</td>` : ''}
-                        ${heeftPkPunten ? `<td class="c" style="font-weight:600">${rr.pk_punten ?? '—'}</td>` : ''}
+                        ${heeftPkPunten ? `<td class="c" style="font-weight:600">${pkPuntCel(rr, pkMaxR) || '—'}</td>` : ''}
                         <td class="c mono">${esc(tijdStr)}</td>
                         <td class="c" style="color:#c00;font-weight:600">${esc(sanctieStr)}</td>
                         ${heeftFin      ? `<td class="c" style="font-weight:700;color:#1a3a5c">${esc(finVal)}</td>` : ''}
@@ -6778,6 +6803,7 @@ function renderAfstandTabel(data) {
     if (!data.rijders?.length) return `<div class="melding">${esc(t('msg_geen_uitslagen'))}</div>`;
     const heeftRnd = data.heeft_rondes;
     const heeftPK  = data.heeft_pk_punten;
+    const pkMax    = heeftPK ? pkMaxRnd(data.rijders) : 0;
     // Per-cat kolommen bij gecombineerde DC (meer dan 1 cat in de uitslag).
     const { cats, catRank } = _catRanksBerekenen(data.rijders);
     const toonCatKol = cats.length > 1;
@@ -6803,7 +6829,7 @@ function renderAfstandTabel(data) {
         rows += `<td class="col-snr">${esc(r.snr)}</td>
             <td class="col-naam">${esc(r.full_name)}${sanctie ? ` <span class="col-sanctie">${esc(sanctie)}</span>` : ''}</td>`;
         if (heeftRnd) rows += `<td class="col-rnd">${r.rondes ?? ''}</td>`;
-        if (heeftPK)  rows += `<td class="col-pk">${r.pk_punten != null ? parseFloat(r.pk_punten) : ''}</td>`;
+        if (heeftPK)  rows += `<td class="col-pk">${pkPuntCel(r, pkMax)}</td>`;
         rows += `<td class="col-tijd">${r.tijd_ms != null ? msTijd(r.tijd_ms) : ''}</td>`;
         rows += '</tr>';
     });

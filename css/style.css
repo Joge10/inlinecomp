@@ -1279,6 +1279,20 @@ body.live-pagina-actief #main-content {
     padding: 1px 7px;
 }
 
+/* Puntenkoers: vervallen punten (ronde-achterstand) — doorgestreept + note */
+.u-pkpunten-vervallen s { color: #adb5bd; }
+.u-pkpunten-note {
+    display: inline-block;
+    font-size: 10px;
+    font-weight: 400;
+    color: #b02a37;
+    background: #f8d7da;
+    border-radius: 8px;
+    padding: 0 6px;
+    margin-left: 3px;
+    vertical-align: middle;
+}
+
 .u-uitslag-tabel {
     width: 100%;
     border-collapse: collapse;
