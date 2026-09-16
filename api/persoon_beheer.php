@@ -119,8 +119,12 @@ try {
         }
         $lk = trim($_POST['license_key'] ?? '');
         if ($lk === '') { http_response_code(400); echo json_encode(['error' => 'license_key vereist']); exit; }
-        $ps = $pdo->prepare("SELECT full_name FROM persons WHERE license_key = ? AND anonymized_at IS NULL");
-        $ps->execute([$lk]);
+        // Token → person_id (fase 3d-iii); $lic = license-schaduw voor de
+        // rijder_profiel-PK (blijft tot fase 4). rijder_profiel-queries op person_id.
+        $pid = resolveNaarPersonId($pdo, $lk);
+        $lic = (string)(licentieVoorPersonId($pdo, $pid) ?? $lk);
+        $ps = $pdo->prepare("SELECT full_name FROM persons WHERE person_id = ? AND anonymized_at IS NULL");
+        $ps->execute([$pid]);
         $naam = $ps->fetchColumn();
         if ($naam === false) { http_response_code(404); echo json_encode(['error' => 'Rijder niet gevonden']); exit; }
         // Gewenste gebruikersnaam (uit de aanvraag) — optioneel. Wordt op het
@@ -131,19 +135,18 @@ try {
                 http_response_code(400);
                 echo json_encode(['error' => 'Ongeldige gebruikersnaam (3–30 tekens: letters, cijfers, . _ of -).']); exit;
             }
-            $uq = $pdo->prepare("SELECT 1 FROM rijder_profiel WHERE username = ? AND license_key <> ? LIMIT 1");
-            $uq->execute([$gbn, $lk]);
+            $uq = $pdo->prepare("SELECT 1 FROM rijder_profiel WHERE username = ? AND person_id <> ? LIMIT 1");
+            $uq->execute([$gbn, $pid]);
             if ($uq->fetchColumn()) {
                 http_response_code(409);
                 echo json_encode(['error' => 'Die gebruikersnaam is al in gebruik — kies een andere.']); exit;
             }
         }
         // Al een PIN? Dan is deze nieuwe link een reset — meld dat aan de operator.
-        $al = $pdo->prepare("SELECT pin_hash IS NOT NULL FROM rijder_profiel WHERE license_key = ?");
-        $al->execute([$lk]);
+        $al = $pdo->prepare("SELECT pin_hash IS NOT NULL FROM rijder_profiel WHERE person_id = ?");
+        $al->execute([$pid]);
         $reset = (bool)$al->fetchColumn();
         $rawTok = bin2hex(random_bytes(16));
-        $pid = personIdVoorLicentie($pdo, $lk);   // dual-write person_id (fase 3)
         if ($gbn !== '') {
             $pdo->prepare("
                 INSERT INTO rijder_profiel (license_key, person_id, username, claim_token_hash, claim_expires)
@@ -152,7 +155,7 @@ try {
                                         username = VALUES(username),
                                         claim_token_hash = VALUES(claim_token_hash),
                                         claim_expires    = VALUES(claim_expires)
-            ")->execute([$lk, $pid, $gbn, hash('sha256', $rawTok)]);
+            ")->execute([$lic, $pid, $gbn, hash('sha256', $rawTok)]);
         } else {
             $pdo->prepare("
                 INSERT INTO rijder_profiel (license_key, person_id, claim_token_hash, claim_expires)
@@ -160,10 +163,10 @@ try {
                 ON DUPLICATE KEY UPDATE person_id = VALUES(person_id),
                                         claim_token_hash = VALUES(claim_token_hash),
                                         claim_expires    = VALUES(claim_expires)
-            ")->execute([$lk, $pid, hash('sha256', $rawTok)]);
+            ")->execute([$lic, $pid, hash('sha256', $rawTok)]);
         }
-        $cur = $pdo->prepare("SELECT username FROM rijder_profiel WHERE license_key = ?");
-        $cur->execute([$lk]);
+        $cur = $pdo->prepare("SELECT username FROM rijder_profiel WHERE person_id = ?");
+        $cur->execute([$pid]);
         $unStored = (string)($cur->fetchColumn() ?: '');
         $scheme = (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off') ? 'https' : 'http';
         $host   = $_SERVER['HTTP_HOST'] ?? 'inlineresults.devriesen.com';
@@ -219,23 +222,25 @@ try {
         if (!$aanvr) { http_response_code(404); echo json_encode(['error' => 'Aanvraag niet gevonden']); exit; }
         if ($aanvr['status'] !== 'pending') { http_response_code(409); echo json_encode(['error' => 'Deze aanvraag is al verwerkt.']); exit; }
         if ($lk === '') { http_response_code(400); echo json_encode(['error' => 'Koppel eerst de juiste rijder.']); exit; }
-        $ps = $pdo->prepare("SELECT full_name FROM persons WHERE license_key = ? AND anonymized_at IS NULL");
-        $ps->execute([$lk]);
+        // Token → person_id (+ license-schaduw voor de dual-write). Fase 3d-iii.
+        $pid = resolveNaarPersonId($pdo, $lk);
+        $lic = (string)(licentieVoorPersonId($pdo, $pid) ?? $lk);
+        $ps = $pdo->prepare("SELECT full_name FROM persons WHERE person_id = ? AND anonymized_at IS NULL");
+        $ps->execute([$pid]);
         $pnaam = $ps->fetchColumn();
         if ($pnaam === false) { http_response_code(404); echo json_encode(['error' => 'Gekoppelde rijder niet gevonden']); exit; }
         if ($gbn === '' || !preg_match('/^[A-Za-z0-9._-]{3,30}$/', $gbn)) {
             http_response_code(400);
             echo json_encode(['error' => 'Vul een geldige gebruikersnaam in (3–30 tekens: letters, cijfers, . _ of -).']); exit;
         }
-        $uq = $pdo->prepare("SELECT 1 FROM rijder_profiel WHERE username = ? AND license_key <> ? LIMIT 1");
-        $uq->execute([$gbn, $lk]);
+        $uq = $pdo->prepare("SELECT 1 FROM rijder_profiel WHERE username = ? AND person_id <> ? LIMIT 1");
+        $uq->execute([$gbn, $pid]);
         if ($uq->fetchColumn()) {
             http_response_code(409);
             echo json_encode(['error' => 'Die gebruikersnaam is al in gebruik — kies een andere.']); exit;
         }
         // Claim-link maken (7 dagen), zoals profiel_claim.
         $rawTok = bin2hex(random_bytes(16));
-        $pid = personIdVoorLicentie($pdo, $lk);   // dual-write person_id (fase 3)
         $pdo->prepare("
             INSERT INTO rijder_profiel (license_key, person_id, username, claim_token_hash, claim_expires)
             VALUES (?, ?, ?, ?, DATE_ADD(NOW(), INTERVAL 7 DAY))
@@ -243,7 +248,7 @@ try {
                                     username = VALUES(username),
                                     claim_token_hash = VALUES(claim_token_hash),
                                     claim_expires    = VALUES(claim_expires)
-        ")->execute([$lk, $pid, $gbn, hash('sha256', $rawTok)]);
+        ")->execute([$lic, $pid, $gbn, hash('sha256', $rawTok)]);
 
         require_once __DIR__ . '/../inc/profiel_mail.php';
         $claimUrl = PROFIEL_LOGIN_URL . '?claim=' . $rawTok;
@@ -259,7 +264,7 @@ try {
             SET status = 'approved', license_key = ?, person_id = ?, email = NULL,
                 behandeld_door = ?, behandeld_at = NOW()
             WHERE id = ?
-        ")->execute([$lk, $pid, $_authUser['id'] ?? null, $aid]);
+        ")->execute([$lic, $pid, $_authUser['id'] ?? null, $aid]);
 
         echo json_encode([
             'ok'       => true,
@@ -316,6 +321,7 @@ try {
 
     if ($action === 'detail') {
         $lk = trim($_GET['license_key'] ?? '');
+        $pid = resolveNaarPersonId($pdo, $lk);   // token → person_id (fase 3d-iii)
         if (!$lk) {
             http_response_code(400);
             echo json_encode(['error' => 'license_key ontbreekt']);
@@ -323,8 +329,8 @@ try {
         }
 
         // 1. Alle persons-velden
-        $stmt = $pdo->prepare("SELECT * FROM persons WHERE license_key = ?");
-        $stmt->execute([$lk]);
+        $stmt = $pdo->prepare("SELECT * FROM persons WHERE person_id = ?");
+        $stmt->execute([$pid]);
         $rijder = $stmt->fetch(PDO::FETCH_ASSOC);
         if (!$rijder) {
             http_response_code(404);
@@ -345,14 +351,14 @@ try {
                    o.naam AS organisatie_naam
             FROM organisatie_transponders ot
             JOIN organisaties o ON o.id = ot.organisatie_id
-            JOIN persons p     ON p.license_key = ?
-            WHERE ot.person_license = ?
-               OR (ot.person_license IS NULL
+            JOIN persons p     ON p.person_id = ?
+            WHERE ot.person_id = ?
+               OR (ot.person_id IS NULL
                    AND ot.toegewezen_naam = p.full_name
                    AND ot.toegewezen_snr  = p.start_number)
             ORDER BY o.naam, CAST(ot.intern_nummer AS UNSIGNED)
         ");
-        $tpStmt->execute([$lk, $lk]);
+        $tpStmt->execute([$pid, $pid]);
         $transponders = $tpStmt->fetchAll(PDO::FETCH_ASSOC);
 
         // 3. Wedstrijd-deelnames + per-DC einduitslag
@@ -392,10 +398,10 @@ try {
                        AND uk3.distance_combination_id = uk.distance_combination_id
                        AND uk3.categorie IS NOT NULL) AS cats_in_dc
             FROM uitslag_klassement uk
-            WHERE uk.person_license = ?
+            WHERE uk.person_id = ?
             ORDER BY uk.competition_datum DESC, uk.competition_naam, uk.dc_naam
         ");
-        $wedStmt->execute([$lk]);
+        $wedStmt->execute([$pid]);
         $wedstrijden = $wedStmt->fetchAll(PDO::FETCH_ASSOC);
 
         // 4. Per-afstand uitslagen (detail-overzicht)
@@ -411,10 +417,10 @@ try {
                    ua.punten,
                    ua.sanctie
             FROM uitslag_afstand ua
-            WHERE ua.person_license = ?
+            WHERE ua.person_id = ?
             ORDER BY ua.competition_datum DESC, ua.competition_naam, ua.dc_naam, ua.distance_naam
         ");
-        $afStmt->execute([$lk]);
+        $afStmt->execute([$pid]);
         $afstandenRaw = $afStmt->fetchAll(PDO::FETCH_ASSOC);
 
         // Format tijd_ms naar leesbare mm:ss.hhh
@@ -477,21 +483,21 @@ try {
                    COUNT(DISTINCT competition_id)            AS aantal_wedstrijden,
                    MAX(updated_at)                           AS laatst_gezien
             FROM transponders
-            WHERE person_license = ?
+            WHERE person_id = ?
               AND code IS NOT NULL
               AND code != ''
             GROUP BY code
             ORDER BY MAX(updated_at) DESC
         ");
-        $bktStmt->execute([$lk]);
+        $bktStmt->execute([$pid]);
         $bekendeTransponders = $bktStmt->fetchAll(PDO::FETCH_ASSOC);
 
         // Profiel-status ("Mijn InlineComp"): geclaimd / claim openstaand / geen.
         $prStmt = $pdo->prepare("
             SELECT username, (pin_hash IS NOT NULL) AS geclaimd, claimed_at, laatste_login,
                    (claim_token_hash IS NOT NULL AND claim_expires > NOW()) AS claim_open, claim_expires
-            FROM rijder_profiel WHERE license_key = ?");
-        $prStmt->execute([$lk]);
+            FROM rijder_profiel WHERE person_id = ?");
+        $prStmt->execute([$pid]);
         $prof = $prStmt->fetch(PDO::FETCH_ASSOC);
         $profiel = $prof ? [
             'username'      => $prof['username'],
@@ -522,8 +528,9 @@ try {
         }
         $lk = trim($_POST['license_key'] ?? '');
         if ($lk === '') { http_response_code(400); echo json_encode(['error' => 'license_key vereist']); exit; }
-        $del = $pdo->prepare("DELETE FROM rijder_profiel WHERE license_key = ?");
-        $del->execute([$lk]);
+        $pid = resolveNaarPersonId($pdo, $lk);
+        $del = $pdo->prepare("DELETE FROM rijder_profiel WHERE person_id = ?");
+        $del->execute([$pid]);
         echo json_encode(['ok' => true, 'verwijderd' => $del->rowCount()]);
         exit;
     }

@@ -31,7 +31,7 @@ WITH current_results AS (
         d.name                                   AS afstand_naam,
         d.value_meters                           AS afstand_meters,
         p.category                               AS categorie,
-        p.license_key                            AS person_license,
+        p.person_id                              AS person_license,
         p.full_name                              AS full_name,
         p.start_number                           AS start_number,
         COALESCE(tsr.ronde_type,
@@ -46,13 +46,13 @@ WITH current_results AS (
             ELSE LOWER(CONCAT(REGEXP_SUBSTR(d.name, '[0-9]+'), 'm'))
         END                                      AS afstand_key,
         ROW_NUMBER() OVER (
-            PARTITION BY p.license_key, d.name, p.category
+            PARTITION BY p.person_id, d.name, p.category
             ORDER BY COALESCE(res.bruto_tijd_ms, res.tijd_ms)
         )                                        AS rider_rn
     FROM results res
     JOIN heat_entries           he  ON he.id = res.heat_entry_id
     JOIN heats                  h   ON h.id  = he.heat_id
-    JOIN persons                p   ON p.license_key = he.person_license
+    JOIN persons                p   ON p.person_id = he.person_id
     LEFT JOIN tijdschema_ritten tsr ON tsr.id = h.tijdschema_rit_id
     JOIN distances              d   ON d.id  = h.distance_id
                                    AND d.distance_combination_id = h.distance_combination_id
@@ -67,7 +67,7 @@ best_per_rider AS (
 ),
 pr_source_results AS (
     SELECT
-        he.person_license,
+        he.person_id AS person_license,
         d.name                                   AS distance_naam,
         COALESCE(res.bruto_tijd_ms, res.tijd_ms) AS tijd_ms,
         c.name                                   AS comp_naam,
@@ -99,7 +99,7 @@ pr_source_results AS (
 ),
 pr_source_uitslag AS (
     SELECT
-        ua.person_license,
+        ua.person_id AS person_license,
         ua.distance_naam,
         ua.tijd_ms,
         ua.competition_naam                      AS comp_naam,

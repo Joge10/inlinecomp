@@ -723,24 +723,28 @@ if ($action === 'commit') {
         $tpFetch = $pdo->prepare("
             SELECT t1.slot, t1.code, t1.source
             FROM transponders t1
-            WHERE t1.person_license = ?
+            WHERE t1.person_id = ?
               AND t1.id = (
                   SELECT MAX(t2.id) FROM transponders t2
-                  WHERE t2.person_license = t1.person_license
-                    AND t2.slot           = t1.slot
+                  WHERE t2.person_id = t1.person_id
+                    AND t2.slot      = t1.slot
               )
         ");
+        // D-write: person_license blijft gevuld (shadow tot fase 4) via subquery
+        // op person_id; identiteit is person_id.
         $tpInsert = $pdo->prepare("
             INSERT INTO transponders (person_license, person_id, competition_id, slot, code, source)
-            VALUES (?, (SELECT person_id FROM persons WHERE license_key = ?), ?, ?, ?, ?)
+            VALUES ((SELECT license_key FROM persons WHERE person_id = ?), ?, ?, ?, ?, ?)
             ON DUPLICATE KEY UPDATE code = VALUES(code), person_id = VALUES(person_id)
         ");
-        $kopieerTpsVoorRijder = function($licenseKey) use ($tpFetch, $tpInsert, $compId) {
-            $tpFetch->execute([$licenseKey]);
+        $kopieerTpsVoorRijder = function($token) use ($pdo, $tpFetch, $tpInsert, $compId) {
+            $pid = resolveNaarPersonId($pdo, $token);
+            if (!$pid) return;
+            $tpFetch->execute([$pid]);
             foreach ($tpFetch->fetchAll(PDO::FETCH_ASSOC) as $tp) {
                 if (!$tp['code']) continue;
                 $tpInsert->execute([
-                    $licenseKey, $licenseKey, $compId, (int)$tp['slot'], $tp['code'], $tp['source'],
+                    $pid, $pid, $compId, (int)$tp['slot'], $tp['code'], $tp['source'],
                 ]);
             }
         };
