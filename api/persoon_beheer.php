@@ -88,7 +88,7 @@ try {
                    (rp.pin_hash IS NOT NULL) AS prof_geclaimd,
                    (rp.claim_token_hash IS NOT NULL AND rp.claim_expires > NOW()) AS prof_claim_open
             FROM rijder_profiel rp
-            JOIN persons p ON p.license_key = rp.license_key
+            JOIN persons p ON p.person_id = rp.person_id
             WHERE ? = 0
                OR (? = 1 AND p.start_number = ?)
                OR (? = 1 AND p.license_key LIKE ?)
@@ -196,7 +196,7 @@ try {
                    (a.email IS NOT NULL) AS heeft_email,
                    p.full_name AS gekoppeld_naam
             FROM rijder_profiel_aanvraag a
-            LEFT JOIN persons p ON p.license_key = a.license_key
+            LEFT JOIN persons p ON p.person_id = a.person_id
             $where
             ORDER BY (a.status = 'pending') DESC, a.created_at DESC
             LIMIT 200

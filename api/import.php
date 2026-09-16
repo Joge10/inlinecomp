@@ -886,14 +886,14 @@ try {
                         $cat       = trim((string)($c['category']  ?? ''));
 
                         // Vangnet: als de client geen naam meestuurt, haal 'm uit de
-                        // persons-tabel op basis van license_key.
-                        if ($fullNaam === '' && $lk) {
+                        // persons-tabel op basis van person_id.
+                        if ($fullNaam === '' && $pid) {
                             if (!isset($stmtHaalNaam)) {
                                 $stmtHaalNaam = $pdo->prepare(
-                                    "SELECT full_name FROM persons WHERE license_key = ?"
+                                    "SELECT full_name FROM persons WHERE person_id = ?"
                                 );
                             }
-                            $stmtHaalNaam->execute([$lk]);
+                            $stmtHaalNaam->execute([$pid]);
                             $row = $stmtHaalNaam->fetch(PDO::FETCH_ASSOC);
                             if ($row && !empty($row['full_name'])) {
                                 $fullNaam = $row['full_name'];

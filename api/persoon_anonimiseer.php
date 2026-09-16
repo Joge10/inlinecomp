@@ -24,6 +24,7 @@ header('Content-Type: application/json; charset=utf-8');
 
 require_once __DIR__ . '/../../config_inlinecomp.php';
 require_once __DIR__ . '/../auth/session.php';
+require_once __DIR__ . '/../inc/person_id.php';   // person_id-migratie fase 3 (identiteit)
 $_authUser = requireAuth($pdo);
 
 // Alleen owner/admin mogen anonimiseren — dit is een onomkeerbare actie
@@ -62,11 +63,18 @@ try {
         echo json_encode(['error' => 'license_key ontbreekt']);
         exit;
     }
+    // Opaque token: mag license_key OF person_id zijn → resolve naar person_id.
+    $pid = resolveNaarPersonId($pdo, $lk);
+    if (!$pid) {
+        http_response_code(404);
+        echo json_encode(['error' => 'Rijder niet gevonden']);
+        exit;
+    }
 
     // Bestaat de rijder wel?
-    $check = $pdo->prepare("SELECT license_key, full_name, anonymized_at
-                            FROM persons WHERE license_key = ?");
-    $check->execute([$lk]);
+    $check = $pdo->prepare("SELECT person_id, full_name, anonymized_at
+                            FROM persons WHERE person_id = ?");
+    $check->execute([$pid]);
     $huidig = $check->fetch(PDO::FETCH_ASSOC);
     if (!$huidig) {
         http_response_code(404);
@@ -91,9 +99,9 @@ try {
                 sponsor       = NULL,
                 start_number  = NULL,
                 anonymized_at = NOW()
-            WHERE license_key = ?
+            WHERE person_id = ?
         ");
-        $stmt->execute([$lk]);
+        $stmt->execute([$pid]);
 
         // Óók: alle toegewezen_naam-referenties in organisatie_transponders
         // en de transponder-toewijzing zelf leegmaken. Wedstrijd-entries en
@@ -104,11 +112,12 @@ try {
             SET toegewezen_naam = NULL,
                 toegewezen_snr  = NULL,
                 person_license  = NULL,
+                person_id       = NULL,
                 categorie       = NULL,
                 betaald         = 0,
                 betaald_op      = NULL
-            WHERE person_license = ?
-        ")->execute([$lk]);
+            WHERE person_id = ?
+        ")->execute([$pid]);
 
         // Log het ter verantwoording (welke admin, wanneer, welke rijder).
         // Geen naam in de log — die is nu juist weg. Alleen license_key + admin-id.
@@ -131,9 +140,9 @@ try {
         // Hef de anonimisatie op. De gegevens zijn wèl weg — een nieuwe
         // KNSB-import (of handmatige invoer) moet de rijder opnieuw vullen.
         $stmt = $pdo->prepare("
-            UPDATE persons SET anonymized_at = NULL WHERE license_key = ?
+            UPDATE persons SET anonymized_at = NULL WHERE person_id = ?
         ");
-        $stmt->execute([$lk]);
+        $stmt->execute([$pid]);
 
         if (function_exists('logboekSchrijf')) {
             logboekSchrijf($pdo, $_authUser['id'] ?? null,
