@@ -47,11 +47,11 @@ try {
         $likeNaam   = '%' . $q . '%';
         $zoekLic    = strlen($q) >= 4 ? 1 : 0;
         $stmt  = $pdo->prepare("
-            SELECT license_key, person_id, full_name, short_name, start_number,
+            SELECT person_id AS license_key, person_id, full_name, short_name, start_number,
                    category, club_short, club_full, anonymized_at
             FROM persons
             WHERE (? = 1 AND start_number = ?)
-               OR (? = 1 AND license_key LIKE ?)
+               OR (? = 1 AND person_id IN (SELECT person_id FROM person_external_ids WHERE extern_id LIKE ?))
                OR short_name  LIKE ?
                OR full_name   LIKE ?
             ORDER BY
@@ -83,7 +83,7 @@ try {
         $zoekLic = strlen($q) >= 4 ? 1 : 0;
         $filter  = strlen($q) >= 2;   // korter dan 2 tekens = geen filter (alles)
         $stmt = $pdo->prepare("
-            SELECT p.license_key, p.person_id, p.full_name, p.short_name, p.start_number,
+            SELECT p.person_id AS license_key, p.person_id, p.full_name, p.short_name, p.start_number,
                    p.category, p.club_short, p.club_full, p.anonymized_at,
                    (rp.pin_hash IS NOT NULL) AS prof_geclaimd,
                    (rp.claim_token_hash IS NOT NULL AND rp.claim_expires > NOW()) AS prof_claim_open
@@ -91,7 +91,7 @@ try {
             JOIN persons p ON p.person_id = rp.person_id
             WHERE ? = 0
                OR (? = 1 AND p.start_number = ?)
-               OR (? = 1 AND p.license_key LIKE ?)
+               OR (? = 1 AND p.person_id IN (SELECT person_id FROM person_external_ids WHERE extern_id LIKE ?))
                OR p.short_name LIKE ?
                OR p.full_name  LIKE ?
             ORDER BY prof_geclaimd DESC, prof_claim_open DESC, p.short_name, p.full_name
@@ -149,21 +149,19 @@ try {
         $rawTok = bin2hex(random_bytes(16));
         if ($gbn !== '') {
             $pdo->prepare("
-                INSERT INTO rijder_profiel (license_key, person_id, username, claim_token_hash, claim_expires)
-                VALUES (?, ?, ?, ?, DATE_ADD(NOW(), INTERVAL 7 DAY))
-                ON DUPLICATE KEY UPDATE person_id = VALUES(person_id),
-                                        username = VALUES(username),
+                INSERT INTO rijder_profiel (person_id, username, claim_token_hash, claim_expires)
+                VALUES (?, ?, ?, DATE_ADD(NOW(), INTERVAL 7 DAY))
+                ON DUPLICATE KEY UPDATE username = VALUES(username),
                                         claim_token_hash = VALUES(claim_token_hash),
                                         claim_expires    = VALUES(claim_expires)
-            ")->execute([$lic, $pid, $gbn, hash('sha256', $rawTok)]);
+            ")->execute([$pid, $gbn, hash('sha256', $rawTok)]);
         } else {
             $pdo->prepare("
-                INSERT INTO rijder_profiel (license_key, person_id, claim_token_hash, claim_expires)
-                VALUES (?, ?, ?, DATE_ADD(NOW(), INTERVAL 7 DAY))
-                ON DUPLICATE KEY UPDATE person_id = VALUES(person_id),
-                                        claim_token_hash = VALUES(claim_token_hash),
+                INSERT INTO rijder_profiel (person_id, claim_token_hash, claim_expires)
+                VALUES (?, ?, DATE_ADD(NOW(), INTERVAL 7 DAY))
+                ON DUPLICATE KEY UPDATE claim_token_hash = VALUES(claim_token_hash),
                                         claim_expires    = VALUES(claim_expires)
-            ")->execute([$lic, $pid, hash('sha256', $rawTok)]);
+            ")->execute([$pid, hash('sha256', $rawTok)]);
         }
         $cur = $pdo->prepare("SELECT username FROM rijder_profiel WHERE person_id = ?");
         $cur->execute([$pid]);
@@ -192,7 +190,7 @@ try {
         }
         $st = $pdo->prepare("
             SELECT a.id, a.naam, a.startnummer, a.gewenste_username, a.opmerking,
-                   a.status, a.license_key, a.created_at, a.behandeld_at,
+                   a.status, a.person_id AS license_key, a.created_at, a.behandeld_at,
                    (a.email IS NOT NULL) AS heeft_email,
                    p.full_name AS gekoppeld_naam
             FROM rijder_profiel_aanvraag a
@@ -242,13 +240,12 @@ try {
         // Claim-link maken (7 dagen), zoals profiel_claim.
         $rawTok = bin2hex(random_bytes(16));
         $pdo->prepare("
-            INSERT INTO rijder_profiel (license_key, person_id, username, claim_token_hash, claim_expires)
-            VALUES (?, ?, ?, ?, DATE_ADD(NOW(), INTERVAL 7 DAY))
-            ON DUPLICATE KEY UPDATE person_id = VALUES(person_id),
-                                    username = VALUES(username),
+            INSERT INTO rijder_profiel (person_id, username, claim_token_hash, claim_expires)
+            VALUES (?, ?, ?, DATE_ADD(NOW(), INTERVAL 7 DAY))
+            ON DUPLICATE KEY UPDATE username = VALUES(username),
                                     claim_token_hash = VALUES(claim_token_hash),
                                     claim_expires    = VALUES(claim_expires)
-        ")->execute([$lic, $pid, $gbn, hash('sha256', $rawTok)]);
+        ")->execute([$pid, $gbn, hash('sha256', $rawTok)]);
 
         require_once __DIR__ . '/../inc/profiel_mail.php';
         $claimUrl = PROFIEL_LOGIN_URL . '?claim=' . $rawTok;
@@ -261,10 +258,10 @@ try {
         // E-mail wissen + status bijwerken (AVG: adres niet langer bewaren).
         $pdo->prepare("
             UPDATE rijder_profiel_aanvraag
-            SET status = 'approved', license_key = ?, person_id = ?, email = NULL,
+            SET status = 'approved', person_id = ?, email = NULL,
                 behandeld_door = ?, behandeld_at = NOW()
             WHERE id = ?
-        ")->execute([$lic, $pid, $_authUser['id'] ?? null, $aid]);
+        ")->execute([$pid, $_authUser['id'] ?? null, $aid]);
 
         echo json_encode([
             'ok'       => true,
@@ -313,8 +310,9 @@ try {
         if (!preg_match('/^[A-Za-z0-9._-]{3,30}$/', $u)) {
             echo json_encode(['ongeldig' => true, 'vrij' => false]); exit;
         }
-        $q = $pdo->prepare("SELECT 1 FROM rijder_profiel WHERE username = ? AND license_key <> ? LIMIT 1");
-        $q->execute([$u, $lk]);
+        $pid = resolveNaarPersonId($pdo, $lk);   // token → person_id (fase 4)
+        $q = $pdo->prepare("SELECT 1 FROM rijder_profiel WHERE username = ? AND person_id <> ? LIMIT 1");
+        $q->execute([$u, (string)$pid]);
         echo json_encode(['vrij' => !$q->fetchColumn()]);
         exit;
     }
@@ -347,7 +345,7 @@ try {
         $tpStmt = $pdo->prepare("
             SELECT ot.intern_nummer, ot.transponder_code, ot.categorie,
                    ot.betaald, ot.betaald_op, ot.eigendom,
-                   ot.person_license, ot.toegewezen_naam, ot.toegewezen_snr,
+                   ot.person_id AS person_license, ot.toegewezen_naam, ot.toegewezen_snr,
                    o.naam AS organisatie_naam
             FROM organisatie_transponders ot
             JOIN organisaties o ON o.id = ot.organisatie_id

@@ -538,9 +538,9 @@ try {
     $demoUpd  = $isDemo ? "extern = 1, extern_federatie = 'DEMO'," : '';
     $stmtPers = $pdo->prepare("
         INSERT INTO persons
-               (license_key, full_name, short_name, gender, category,
+               (person_id, full_name, short_name, gender, category,
                 nationality, start_number, club_code, club_short, club_full, sponsor, city{$demoCols})
-        VALUES (:license_key, :full_name, :short_name, :gender, :category,
+        VALUES (:pid, :full_name, :short_name, :gender, :category,
                 :nationality, :start_number, :club_code, :club_short, :club_full, :sponsor, :city{$demoVals})
         ON DUPLICATE KEY UPDATE
                -- Behoud bestaande waarde als de nieuwe leeg/null is, zodat een
@@ -602,9 +602,8 @@ try {
     //    Terugdraaien doet de operator bewust via 'terug' (zet handmatig=0).
     $stmtEntry = $pdo->prepare("
         INSERT INTO entries
-               (distance_combination_id, person_license, person_id, knsb_entry_id, status, reserve)
-        VALUES (:dc_id, :person_license,
-                :pl_pid,
+               (distance_combination_id, person_id, knsb_entry_id, status, reserve)
+        VALUES (:dc_id, :pl_pid,
                 :knsb_entry_id, :status, :reserve)
         ON DUPLICATE KEY UPDATE
                knsb_entry_id = VALUES(knsb_entry_id),
@@ -623,9 +622,8 @@ try {
     // source='manual' als de voorbereider de waarde heeft gewijzigd
     $stmtTp = $pdo->prepare("
         INSERT INTO transponders
-               (person_license, person_id, competition_id, slot, code, source)
-        VALUES (:person_license,
-                :pl_pid,
+               (person_id, competition_id, slot, code, source)
+        VALUES (:pl_pid,
                 :comp_id, :slot, :code, :source)
         ON DUPLICATE KEY UPDATE
                code       = VALUES(code),
@@ -736,12 +734,12 @@ try {
                 // license_key nodig — bewijst dat fase 4 werkt).
                 $stmtPersUpdate->execute($persParams + [':pid' => $pid]);
             } else {
-                // Nieuwe rijder → minten. license_key nog als schaduw (NOT NULL PK
-                // tot fase 4); de ON DUPLICATE KEY-vangnet dekt de theoretische
-                // race waarin de licentie tóch al bestaat zonder mapping.
-                $stmtPers->execute($persParams + [':license_key' => $lk]);
-                $pid = personIdVoorLicentie($pdo, $lk);
-                zorgVoorExternalId($pdo, $pid, $lk);   // mapping borgen (fase 3d-ii-a)
+                // Nieuwe rijder → minten met een verse person_id (fase 4: persons
+                // heeft geen license_key meer; de licentie leeft in
+                // person_external_ids). We kennen de GUID meteen voor de child-rows.
+                $pid = nieuwPersonId();
+                $stmtPers->execute($persParams + [':pid' => $pid]);
+                zorgVoorExternalId($pdo, $pid, $lk);   // externe id (KNSB/ic-*) borgen
             }
 
             // Inschrijving aanmaken of bijwerken
@@ -753,7 +751,7 @@ try {
             }
             $stmtEntry->execute([
                 ':dc_id'          => $dcId,
-                ':person_license' => $lk, ':pl_pid' => $pid,
+                ':pl_pid' => $pid,
                 ':knsb_entry_id'  => $c['knsb_entry_id'] ?? null,
                 ':status'         => $c['entry_status']  ?? 1,
                 ':reserve'        => $reserveNr,
@@ -764,7 +762,7 @@ try {
                 $code = $c[$veld] ?? null;
                 if ($code !== null && $code !== '') {
                     $stmtTp->execute([
-                        ':person_license' => $lk, ':pl_pid' => $pid,
+                        ':pl_pid' => $pid,
                         ':comp_id'        => $compId,
                         ':slot'           => $slot,
                         ':code'           => $code,
@@ -785,7 +783,7 @@ try {
                 $code = trim($code ?? '');
                 if ($code !== '') {
                     $stmtTp->execute([
-                        ':person_license' => $lk, ':pl_pid' => $pid,
+                        ':pl_pid' => $pid,
                         ':comp_id'        => $compId,
                         ':slot'           => $i + 3,
                         ':code'           => $code,
@@ -803,7 +801,7 @@ try {
                     ? trim($c['transponder_actief'])
                     : null;
                 $stmtTp->execute([
-                    ':person_license' => $lk, ':pl_pid' => $pid,
+                    ':pl_pid' => $pid,
                     ':comp_id'        => $compId,
                     ':slot'           => 0,
                     ':code'           => $tpActief,
@@ -818,8 +816,7 @@ try {
                     if (!isset($stmtOrgTpUpdateMetBetaald)) {
                         $stmtOrgTpUpdateMetBetaald = $pdo->prepare("
                             UPDATE organisatie_transponders
-                            SET person_license = ?,
-                                person_id = (SELECT person_id FROM persons WHERE license_key = ?),
+                            SET person_id = ?,
                                 toegewezen_snr = ?, toegewezen_naam = ?, categorie = ?,
                                 betaald = ?, betaald_op = ?
                             WHERE organisatie_id = ? AND transponder_code = ?
@@ -832,8 +829,7 @@ try {
                     if (!isset($stmtOrgTpUpdateBehoudBetaald)) {
                         $stmtOrgTpUpdateBehoudBetaald = $pdo->prepare("
                             UPDATE organisatie_transponders
-                            SET person_license = ?,
-                                person_id = (SELECT person_id FROM persons WHERE license_key = ?),
+                            SET person_id = ?,
                                 toegewezen_snr = ?, toegewezen_naam = ?, categorie = ?
                             WHERE organisatie_id = ? AND transponder_code = ?
                         ");
@@ -845,7 +841,7 @@ try {
                     if (!isset($stmtOrgTpVrijgeven)) {
                         $stmtOrgTpVrijgeven = $pdo->prepare("
                             UPDATE organisatie_transponders
-                            SET person_license = NULL, person_id = NULL, toegewezen_snr = NULL, toegewezen_naam = NULL,
+                            SET person_id = NULL, toegewezen_snr = NULL, toegewezen_naam = NULL,
                                 categorie = NULL, betaald = 0, betaald_op = NULL
                             WHERE organisatie_id = ?
                               AND transponder_code != ?
@@ -910,13 +906,13 @@ try {
                             $betaald   = ((int)$c['tp_betaald']) === 1 ? 1 : 0;
                             $betaaldOp = $betaald ? date('Y-m-d') : null;
                             $stmtOrgTpUpdateMetBetaald->execute([
-                                $lk, $lk, $startnr, $fullNaam, $cat, $betaald, $betaaldOp,
+                                $pid, $startnr, $fullNaam, $cat, $betaald, $betaaldOp,
                                 $orgId, $tpActief
                             ]);
                             $raakte = $stmtOrgTpUpdateMetBetaald->rowCount();
                         } else {
                             $stmtOrgTpUpdateBehoudBetaald->execute([
-                                $lk, $lk, $startnr, $fullNaam, $cat, $orgId, $tpActief
+                                $pid, $startnr, $fullNaam, $cat, $orgId, $tpActief
                             ]);
                             $raakte = $stmtOrgTpUpdateBehoudBetaald->rowCount();
                         }

@@ -275,7 +275,7 @@ if ($action === 'detail') {
     if ($organisatie && !empty($organisatie['id'])) {
         $otStmt = $pdo->prepare("
             SELECT intern_nummer, transponder_code, toegewezen_snr, toegewezen_naam,
-                   person_license, categorie, betaald
+                   person_id AS person_license, categorie, betaald
             FROM organisatie_transponders
             WHERE organisatie_id = ? AND COALESCE(geblokkeerd, 0) = 0
             ORDER BY CAST(intern_nummer AS UNSIGNED), intern_nummer

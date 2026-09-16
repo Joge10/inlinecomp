@@ -752,7 +752,7 @@ if ($action === 'lookup') {
                     WHERE competition_id = ?
                       AND distance_combination_id = ?
                       AND distance_id = ?
-                    GROUP BY person_license
+                    GROUP BY person_id
                 ) latest ON latest.max_id = ua1.id
             ) ua ON ua.person_id = he.person_id
             WHERE he.heat_id = ?
@@ -1003,10 +1003,10 @@ if ($action === 'uitslagen') {
                        COALESCE(cs.startnummer, p.start_number) AS snr
                 FROM uitslag_klassement t
                 INNER JOIN (
-                    SELECT MAX(id) AS max_id, person_license
+                    SELECT MAX(id) AS max_id, person_id
                     FROM uitslag_klassement
                     WHERE competition_id = ? AND distance_combination_id = ?
-                    GROUP BY person_license
+                    GROUP BY person_id
                 ) latest ON latest.max_id = t.id
                 JOIN persons p ON p.person_id = t.person_id
                 LEFT JOIN competition_startnummers cs ON cs.person_id = t.person_id AND cs.competition_id = ?
@@ -1043,10 +1043,10 @@ if ($action === 'uitslagen') {
                        res_agg.rondes, res_agg.pk_punten
                 FROM uitslag_afstand t
                 INNER JOIN (
-                    SELECT MAX(id) AS max_id, person_license
+                    SELECT MAX(id) AS max_id, person_id
                     FROM uitslag_afstand
                     WHERE competition_id = ? AND distance_combination_id = ? AND distance_id = ?
-                    GROUP BY person_license
+                    GROUP BY person_id
                 ) latest ON latest.max_id = t.id
                 JOIN persons p ON p.person_id = t.person_id
                 LEFT JOIN competition_startnummers cs ON cs.person_id = t.person_id AND cs.competition_id = ?

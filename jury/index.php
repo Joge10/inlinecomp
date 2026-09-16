@@ -2339,12 +2339,11 @@ if ($action === 'scheids_vervang_in_heat' && $_SERVER['REQUEST_METHOD'] === 'POS
         // 1. Heat-slot(s) overzetten — startpositie blijft ongemoeid.
         $swap = $pdo->prepare("
             UPDATE heat_entries
-               SET person_license = (SELECT license_key FROM persons WHERE person_id = ?),
-                   person_id = ?, startnummer = ?, categorie = ?
+               SET person_id = ?, startnummer = ?, categorie = ?
              WHERE heat_id = ? AND person_id = ?
         ");
         foreach ($heats as $h) {
-            $swap->execute([$inLic, $inLic, $inSnr, $inCat, (int)$h['heat_id'], $uitLic]);
+            $swap->execute([$inLic, $inSnr, $inCat, (int)$h['heat_id'], $uitLic]);
         }
         // 2a. Afgemelde → status 3 (afgem. bij org.), tenzij al 3/4 gezet.
         $uitCur = $pdo->prepare("

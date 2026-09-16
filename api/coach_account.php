@@ -149,13 +149,13 @@ try {
         $clubs = $pdo->query("
             SELECT DISTINCT club_full FROM persons
             WHERE club_full IS NOT NULL AND club_full <> '' AND anonymized_at IS NULL
-              AND license_key NOT LIKE 'demo-%'   -- demo/test-clubs niet in autocomplete
+              AND person_id NOT IN (SELECT person_id FROM person_external_ids WHERE systeem = 'ic-demo')   -- demo/test-clubs niet in autocomplete
             ORDER BY club_full
         ")->fetchAll(PDO::FETCH_COLUMN);
         $teams = $pdo->query("
             SELECT DISTINCT sponsor FROM persons
             WHERE sponsor IS NOT NULL AND sponsor <> '' AND anonymized_at IS NULL
-              AND license_key NOT LIKE 'demo-%'   -- demo/test-teams niet in autocomplete
+              AND person_id NOT IN (SELECT person_id FROM person_external_ids WHERE systeem = 'ic-demo')   -- demo/test-teams niet in autocomplete
             ORDER BY sponsor
         ")->fetchAll(PDO::FETCH_COLUMN);
         jsonOut(['clubs' => $clubs, 'teams' => $teams]);
@@ -376,8 +376,8 @@ try {
         $chk = $pdo->prepare("SELECT 1 FROM persons WHERE person_id = ? LIMIT 1");
         $chk->execute([$pid]);
         if (!$chk->fetchColumn()) jsonOut(['error' => 'Rijder niet gevonden'], 404);
-        $pdo->prepare("INSERT IGNORE INTO coach_athletes (coach_account_id, person_license, person_id)
-                       SELECT ?, license_key, person_id FROM persons WHERE person_id = ?")
+        $pdo->prepare("INSERT IGNORE INTO coach_athletes (coach_account_id, person_id)
+                       SELECT ?, person_id FROM persons WHERE person_id = ?")
             ->execute([$c['id'], $pid]);
         jsonOut(['ok' => true]);
     }
@@ -417,8 +417,8 @@ try {
                 $ph = implode(',', array_fill(0, count($pids), '?'));
                 $pdo->prepare("DELETE FROM coach_athletes WHERE coach_account_id = ? AND person_id NOT IN ($ph)")
                     ->execute(array_merge([$c['id']], $pids));
-                $ins = $pdo->prepare("INSERT IGNORE INTO coach_athletes (coach_account_id, person_license, person_id)
-                                      SELECT ?, license_key, person_id FROM persons WHERE person_id = ?");
+                $ins = $pdo->prepare("INSERT IGNORE INTO coach_athletes (coach_account_id, person_id)
+                                      SELECT ?, person_id FROM persons WHERE person_id = ?");
                 foreach ($pids as $pid) $ins->execute([$c['id'], $pid]);
             } else {
                 $pdo->prepare("DELETE FROM coach_athletes WHERE coach_account_id = ?")->execute([$c['id']]);
@@ -468,8 +468,8 @@ try {
             $params = array_merge($params, $sponsors);
         }
         $stmt = $pdo->prepare("
-            INSERT IGNORE INTO coach_athletes (coach_account_id, person_license, person_id)
-            SELECT ?, license_key, person_id FROM persons
+            INSERT IGNORE INTO coach_athletes (coach_account_id, person_id)
+            SELECT ?, person_id FROM persons
             WHERE anonymized_at IS NULL AND (" . implode(' OR ', $sub) . ")
         ");
         $stmt->execute($params);

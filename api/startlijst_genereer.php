@@ -772,8 +772,8 @@ try {
         VALUES (?,?,?,?,1,?,?,?,?,?,?,?)
     ");
     $insEntry = $pdo->prepare("
-        INSERT INTO heat_entries (heat_id, person_license, person_id, categorie, startpositie, startnummer)
-        VALUES (?,(SELECT license_key FROM persons WHERE person_id = ?),?,?,?,?)
+        INSERT INTO heat_entries (heat_id, person_id, categorie, startpositie, startnummer)
+        VALUES (?,?,?,?,?)
     ");
 
     $dcIdsJson = json_encode($dcIds);
@@ -809,7 +809,6 @@ try {
         foreach ($heat['rijders'] as $pos => $r) {
             $insEntry->execute([
                 $heatId,
-                $r['license_key'],   // = person_id → reverse-lookup naar person_license (schaduw, tot fase 4)
                 $r['license_key'],   // = person_id → person_id-kolom
                 $r['category']     ?? null,
                 $pos + 1,

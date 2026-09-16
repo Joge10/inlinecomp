@@ -1196,8 +1196,8 @@ if ($action === 'genereer_volgende_ronde') {
             ");
             $insEntry = $pdo->prepare("
                 INSERT IGNORE INTO heat_entries
-                    (heat_id, person_license, person_id, categorie, startpositie, startnummer)
-                VALUES (?, (SELECT license_key FROM persons WHERE person_id = ?), ?, ?, ?, ?)
+                    (heat_id, person_id, categorie, startpositie, startnummer)
+                VALUES (?, ?, ?, ?, ?)
             ");
             $dcIdsJson = json_encode([$dcId]);
 
@@ -1256,7 +1256,6 @@ if ($action === 'genereer_volgende_ronde') {
                     $startpos++;
                     $insEntry->execute([
                         $heatId,
-                        $rijder['person_license'],
                         $rijder['person_license'],
                         $rijder['categorie'],
                         $startpos,
@@ -2094,8 +2093,8 @@ if ($action === 'genereer_volgende_ronde') {
             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'kwalificatie', ?)
         ");
         $insEntry = $pdo->prepare("
-            INSERT IGNORE INTO heat_entries (heat_id, person_license, person_id, categorie, startpositie, startnummer)
-            VALUES (?, (SELECT license_key FROM persons WHERE person_id = ?), ?, ?, ?, ?)
+            INSERT IGNORE INTO heat_entries (heat_id, person_id, categorie, startpositie, startnummer)
+            VALUES (?, ?, ?, ?, ?)
         ");
 
         $dcIdsJson = json_encode([$dcId]);
@@ -2346,7 +2345,6 @@ if ($action === 'genereer_volgende_ronde') {
                 $insEntry->execute([
                     $heatInfo['id'],
                     $rijder['person_license'],
-                    $rijder['person_license'],
                     $rijder['categorie'],
                     $startpos,
                     $rijder['startnummer'],
@@ -2376,7 +2374,6 @@ if ($action === 'genereer_volgende_ronde') {
                     $heatInfo = &$heatIds[$heatNr];
                     $insEntry->execute([
                         $heatInfo['id'],
-                        $rijder['person_license'],
                         $rijder['person_license'],
                         $rijder['categorie'],
                         $startpos,
@@ -2410,7 +2407,6 @@ if ($action === 'genereer_volgende_ronde') {
                             $startposMerge = $startposPerHeat[$eersteAHeat];
                             $insEntry->execute([
                                 $heatInfoMerge['id'],
-                                $rijder['person_license'],
                                 $rijder['person_license'],
                                 $rijder['categorie'],
                                 $startposMerge,
@@ -2464,7 +2460,6 @@ if ($action === 'genereer_volgende_ronde') {
                             $startposFb = $startposPerHeat[$eersteAHeat];
                             $insEntry->execute([
                                 $heatInfoFallback['id'],
-                                $rijder['person_license'],
                                 $rijder['person_license'],
                                 $rijder['categorie'],
                                 $startposFb,
@@ -2577,7 +2572,6 @@ if ($action === 'genereer_volgende_ronde') {
                     $startpos++;
                     $insEntry->execute([
                         $bHeatId,
-                        $rijder['person_license'],
                         $rijder['person_license'],
                         $rijder['categorie'],
                         $startpos,

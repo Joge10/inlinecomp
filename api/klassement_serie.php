@@ -1143,9 +1143,9 @@ function schrijfKlassement(PDO $pdo, array $serie, array $berekend): void {
 
     $ins = $pdo->prepare("
         INSERT INTO klassement_posities
-               (id, klassement_id, positie, start_number, license_key, person_id, naam, categorie,
+               (id, klassement_id, positie, start_number, person_id, naam, categorie,
                 punten_detail, punten_totaal)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
     ");
     // Positie-toekenning:
     //  * Bovenblok (geklasseerd): rang 1…N. "Echt gelijk" = zelfde totaal én —
@@ -1190,7 +1190,6 @@ function schrijfKlassement(PDO $pdo, array $serie, array $berekend): void {
             $ins->execute([
                 $kpId, $klId, $pos,
                 (string)($r['startnr'] ?? ''),
-                licentieVoorPersonId($pdo, $r['license']),
                 $r['license'],
                 $r['naam'],
                 $cat,

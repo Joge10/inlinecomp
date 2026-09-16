@@ -17,6 +17,8 @@
 //  Toekomst: demo-2/3 = extra JSON-bestand + id toevoegen in DEMO_FIXTURE_FILES.
 // ============================================================
 
+require_once __DIR__ . '/../inc/person_id.php';   // resolveNaarPersonId (fase 4-identiteit)
+
 const DEMO_FIXTURE_FILES = [
     'demo-comp-1' => __DIR__ . '/demo/demo-1.json',
     'demo-comp-2' => __DIR__ . '/demo/demo-2.json',
@@ -139,9 +141,12 @@ function demo_fixture_vergelijk_response(PDO $pdo, string $id): array {
     }
 
     // persons + entries van deze demo-wedstrijd in maps (voor is_new/diff).
+    // Fase 4: sleutel op person_id (persons.license_key en entries.person_license
+    // bestaan niet meer). De fixture-competitors dragen een demo-token dat we in
+    // de loop hieronder naar person_id resolven.
     $persons = [];
-    $ps = $pdo->query("SELECT * FROM persons WHERE license_key LIKE 'demo-%'");
-    foreach ($ps->fetchAll(PDO::FETCH_ASSOC) as $row) $persons[$row['license_key']] = $row;
+    $ps = $pdo->query("SELECT * FROM persons WHERE person_id IN (SELECT person_id FROM person_external_ids WHERE systeem='ic-demo')");
+    foreach ($ps->fetchAll(PDO::FETCH_ASSOC) as $row) $persons[$row['person_id']] = $row;
 
     $entries = [];
     $es = $pdo->prepare("
@@ -151,7 +156,7 @@ function demo_fixture_vergelijk_response(PDO $pdo, string $id): array {
     ");
     $es->execute([$compId]);
     foreach ($es->fetchAll(PDO::FETCH_ASSOC) as $row) {
-        $entries[$row['distance_combination_id'] . '|' . $row['person_license']] = $row;
+        $entries[$row['distance_combination_id'] . '|' . $row['person_id']] = $row;
     }
 
     // Afstanden-preview per DC (zelfde 3 voor elke DC).
@@ -171,8 +176,10 @@ function demo_fixture_vergelijk_response(PDO $pdo, string $id): array {
         $rows = [];
         foreach (($perDc[$dc['id']] ?? []) as $c) {
             $lk       = $c['license_key'];
-            $dbPerson = $persons[$lk] ?? null;
-            $dbEntry  = $entries[$dc['id'] . '|' . $lk] ?? null;
+            // Demo-token → person_id (via person_external_ids); pas dan matchen.
+            $pid      = resolveNaarPersonId($pdo, $lk);
+            $dbPerson = ($pid !== null) ? ($persons[$pid] ?? null) : null;
+            $dbEntry  = ($pid !== null) ? ($entries[$dc['id'] . '|' . $pid] ?? null) : null;
             $knsbSt   = (int)$c['status'];
             $effectief = $knsbSt;
 

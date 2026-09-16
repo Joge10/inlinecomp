@@ -40,12 +40,6 @@ $heatNr     = (isset($body['heat_nr']) && $body['heat_nr'] !== '' && $body['heat
 // De READ draait op person_id; de dual-write heeft in de overgangsfase óók de
 // license nodig (person_license-kolom bestaat tot fase 4), dus we leiden beide af.
 $personId = (string)(resolveNaarPersonId($pdo, (trim($body['person_id'] ?? '') ?: trim($body['person_license'] ?? ''))) ?? '');
-$license  = '';
-if ($personId !== '') {
-    $rl = $pdo->prepare("SELECT license_key FROM persons WHERE person_id = ? LIMIT 1");
-    $rl->execute([$personId]);
-    $license = (string)($rl->fetchColumn() ?: '');
-}
 
 if (!$compId || !$personId || !$dcId) {
     http_response_code(400);
@@ -135,14 +129,11 @@ try {
         $pStmt->execute([$personId]);
         $persoon = $pStmt->fetch(PDO::FETCH_ASSOC) ?: [];
 
-        // Dual-write: person_id is leidend; person_license (schaduw tot fase 4)
-        // wordt uit person_id afgeleid.
         $pdo->prepare("
-            INSERT INTO heat_entries (heat_id, person_license, person_id, categorie, startpositie, startnummer)
-            VALUES (?, (SELECT license_key FROM persons WHERE person_id = ?), ?, ?, ?, ?)
+            INSERT INTO heat_entries (heat_id, person_id, categorie, startpositie, startnummer)
+            VALUES (?, ?, ?, ?, ?)
         ")->execute([
             $heat['id'],
-            $personId,
             $personId,
             $persoon['category']     ?? null,
             $startPos,

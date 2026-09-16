@@ -367,7 +367,7 @@ if ($action === 'match_preview') {
     if ($alleStartnrs) {
         $ph = implode(',', array_fill(0, count($alleStartnrs), '?'));
         $stmt = $pdo->prepare("
-            SELECT license_key, full_name, short_name, birth_year, gender, category,
+            SELECT person_id AS license_key, full_name, short_name, birth_year, gender, category,
                    start_number, club_short, club_full, extern
             FROM persons
             WHERE start_number IN ($ph)
@@ -386,7 +386,7 @@ if ($action === 'match_preview') {
         // tweede kans. Geen LIKE wildcards — alleen exact-match.
         $ph = implode(',', array_fill(0, count($alleNamen), '?'));
         $stmt = $pdo->prepare("
-            SELECT license_key, full_name, short_name, birth_year, gender,
+            SELECT person_id AS license_key, full_name, short_name, birth_year, gender,
                    start_number, club_short, club_full, extern
             FROM persons
             WHERE (LOWER(full_name) IN ($ph) OR LOWER(short_name) IN ($ph))
@@ -565,7 +565,7 @@ if ($action === 'zoek_personen') {
     // mis je rijders die in andere wedstrijden zaten).
     $pat = '%' . str_replace(['%', '_'], ['\\%', '\\_'], mb_strtolower($q)) . '%';
     $stmt = $pdo->prepare("
-        SELECT license_key, full_name, short_name, birth_year, gender,
+        SELECT person_id AS license_key, full_name, short_name, birth_year, gender,
                start_number, club_short, club_full, extern
         FROM persons
         WHERE (LOWER(full_name) LIKE ? OR LOWER(short_name) LIKE ?)
@@ -697,7 +697,7 @@ if ($action === 'commit') {
     // Volgende auto-startnummer (1000+) bij MAX(start_number) ophalen.
     // Demo/test-rijders (10001+) uitsluiten zodat die de teller niet opblazen.
     $stmt = $pdo->prepare(
-        "SELECT GREATEST(IFNULL(MAX(start_number), 999), 999) + 1 AS next_nr FROM persons WHERE license_key NOT LIKE 'demo-%'"
+        "SELECT GREATEST(IFNULL(MAX(start_number), 999), 999) + 1 AS next_nr FROM persons WHERE person_id NOT IN (SELECT person_id FROM person_external_ids WHERE systeem = 'ic-demo')"
     );
     $stmt->execute();
     $nextStartNr = (int)$stmt->fetchColumn();
@@ -730,11 +730,9 @@ if ($action === 'commit') {
                     AND t2.slot      = t1.slot
               )
         ");
-        // D-write: person_license blijft gevuld (shadow tot fase 4) via subquery
-        // op person_id; identiteit is person_id.
         $tpInsert = $pdo->prepare("
-            INSERT INTO transponders (person_license, person_id, competition_id, slot, code, source)
-            VALUES ((SELECT license_key FROM persons WHERE person_id = ?), ?, ?, ?, ?, ?)
+            INSERT INTO transponders (person_id, competition_id, slot, code, source)
+            VALUES (?, ?, ?, ?, ?)
             ON DUPLICATE KEY UPDATE code = VALUES(code), person_id = VALUES(person_id)
         ");
         $kopieerTpsVoorRijder = function($token) use ($pdo, $tpFetch, $tpInsert, $compId) {
@@ -744,7 +742,7 @@ if ($action === 'commit') {
             foreach ($tpFetch->fetchAll(PDO::FETCH_ASSOC) as $tp) {
                 if (!$tp['code']) continue;
                 $tpInsert->execute([
-                    $pid, $pid, $compId, (int)$tp['slot'], $tp['code'], $tp['source'],
+                    $pid, $compId, (int)$tp['slot'], $tp['code'], $tp['source'],
                 ]);
             }
         };
@@ -752,18 +750,18 @@ if ($action === 'commit') {
         // Prepared statements (eenmalig opbouwen voor performance)
         $insPerson = $pdo->prepare("
             INSERT INTO persons
-                (license_key, full_name, short_name, birth_year, gender,
+                (person_id, full_name, short_name, birth_year, gender,
                  category, nationality, start_number,
                  club_short, club_full, sponsor,
                  extern, extern_federatie)
-            VALUES (:lk, :fn, :sn, :by, :gd,
+            VALUES (:pid, :fn, :sn, :by, :gd,
                     :cat, :nat, :snr,
                     :cls, :clf, :spn,
                     1, :fed)
         ");
         $insEntry = $pdo->prepare("
-            INSERT INTO entries (distance_combination_id, person_license, person_id, status)
-            VALUES (?, ?, (SELECT person_id FROM persons WHERE license_key = ?), 1)
+            INSERT INTO entries (distance_combination_id, person_id, status)
+            VALUES (?, ?, 1)
             ON DUPLICATE KEY UPDATE status = 1, person_id = VALUES(person_id)
         ");
 
@@ -812,8 +810,10 @@ if ($action === 'commit') {
                 $fed = ($nation && $nation !== 'NED' && $nation !== 'NLD') ? $nation : null;
 
                 try {
+                    // Fase 4: verse person_id (geen license_key meer op persons).
+                    $pid = nieuwPersonId();
                     $insPerson->execute([
-                        ':lk'  => $licenseKey,
+                        ':pid' => $pid,
                         ':fn'  => $namen['full'],
                         ':sn'  => $namen['short'],
                         ':by'  => $birthY ?: null,
@@ -826,20 +826,22 @@ if ($action === 'commit') {
                         ':spn' => $sponsor ?: null,
                         ':fed' => $fed,
                     ]);
-                    // person_external_ids-mapping borgen (fase 3d-ii-a): nieuwe
-                    // extern-rijder (x-…) krijgt meteen z'n ic-extern-mapping.
-                    zorgVoorExternalId($pdo, personIdVoorLicentie($pdo, $licenseKey), $licenseKey);
+                    // externe id borgen: nieuwe extern-rijder (x-…) krijgt meteen
+                    // z'n ic-extern-mapping in person_external_ids.
+                    zorgVoorExternalId($pdo, $pid, $licenseKey);
                     $stats['nieuw']++;
                 } catch (Throwable $e) {
                     $stats['errors'][] = "Rij " . ($i + 1) . " (" . $namen['full'] . "): " . $e->getMessage();
                     continue;
                 }
             } else {
-                // Bestaande persoon: license_key is de actie-waarde
+                // Bestaande persoon: de actie-waarde is een identiteit-token
+                // (person_id of licentie) → resolve naar person_id.
                 $licenseKey = $actie;
+                $pid = resolveNaarPersonId($pdo, $licenseKey);
                 $stats['gelinked']++;
                 // Kopieer laatste-bekende transponders → persistent voor deze comp
-                try { $kopieerTpsVoorRijder($licenseKey); }
+                try { $kopieerTpsVoorRijder($pid); }
                 catch (Throwable $e) { /* niet kritiek, fallback in detail werkt ook */ }
             }
 
@@ -859,7 +861,7 @@ if ($action === 'commit') {
                 }
 
                 try {
-                    $insEntry->execute([$dcId, $licenseKey, $licenseKey]);
+                    $insEntry->execute([$dcId, $pid]);
                     // rowCount = 1 bij INSERT, 2 bij UPDATE (MySQL ON DUPLICATE KEY UPDATE)
                     if ($insEntry->rowCount() === 1) $stats['entries_nieuw']++;
                     else                              $stats['entries_upgedate']++;

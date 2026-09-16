@@ -194,10 +194,10 @@ try {
             (competition_id, competition_naam, competition_datum,
              distance_combination_id, dc_naam, split_group,
              distance_id, distance_naam, distance_meters,
-             person_license, person_id, categorie,
+             person_id, categorie,
              rang, finale_positie, finale_naam,
              tijd_ms, punten, sanctie)
-        VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+        VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
         ON DUPLICATE KEY UPDATE
             person_id       = VALUES(person_id),
             rang            = VALUES(rang),
@@ -472,7 +472,7 @@ try {
                     $compId, $compNaam, $compDatum,
                     $primaryDcId, $dcNaam, '',
                     $distId, $distNaam, $distMeters,
-                    licentieVoorPersonId($pdo, $lic), $lic, $personCache[$lic]['categorie'] ?? $r['categorie'] ?? null,
+                    $lic, $personCache[$lic]['categorie'] ?? $r['categorie'] ?? null,
                     $r['rang'], null, $r['ronde_label'] ?? 'Finale',
                     $r['tijd_ms'], $punten, $sanctieDb,
                 ]);
@@ -646,7 +646,7 @@ try {
                     $compId, $compNaam, $compDatum,
                     $primaryDcId, $dcNaam, '',
                     $distId, $distNaam, $distMeters,
-                    licentieVoorPersonId($pdo, $lic), $lic, $personCache[$lic]['categorie'] ?? null,
+                    $lic, $personCache[$lic]['categorie'] ?? null,
                     $gc['rang'], null, 'Serie + A-finale',
                     $gc['finale_tijd_ms'], $punten, $sanctieDb,
                 ]);
@@ -685,7 +685,7 @@ try {
                     $compId, $compNaam, $compDatum,
                     $primaryDcId, $dcNaam, '',
                     $distId, $distNaam, $distMeters,
-                    licentieVoorPersonId($pdo, $lic), $lic, $personCache[$lic]['categorie'] ?? null,
+                    $lic, $personCache[$lic]['categorie'] ?? null,
                     $rang, (int)$r['finishpositie'], $finaleNaam,
                     $r['tijd_ms'] !== null ? (int)$r['tijd_ms'] : null,
                     $punten, null,
@@ -706,7 +706,7 @@ try {
                     $compId, $compNaam, $compDatum,
                     $primaryDcId, $dcNaam, '',
                     $distId, $distNaam, $distMeters,
-                    licentieVoorPersonId($pdo, $lic), $lic, $personCache[$lic]['categorie'] ?? null,
+                    $lic, $personCache[$lic]['categorie'] ?? null,
                     null, null, $finaleNaam,
                     null, $punten, $sanctieDb,
                 ]);
@@ -861,9 +861,9 @@ try {
         INSERT INTO uitslag_klassement
             (competition_id, competition_naam, competition_datum,
              distance_combination_id, dc_naam, split_group,
-             person_license, person_id, categorie,
+             person_id, categorie,
              rang, punten_totaal, punten_detail)
-        VALUES (?,?,?,?,?,?,?,?,?,?,?,?)
+        VALUES (?,?,?,?,?,?,?,?,?,?,?)
         ON DUPLICATE KEY UPDATE
             person_id       = VALUES(person_id),
             rang            = VALUES(rang),
@@ -887,7 +887,7 @@ try {
         $upsertKlas->execute([
             $compId, $compNaam, $compDatum,
             $primaryDcId, $dcNaam, '',
-            licentieVoorPersonId($pdo, $kr['lic']), $kr['lic'], $cat,
+            $kr['lic'], $cat,
             $rang, $kr['totaal'],
             json_encode($kr['detail'], JSON_UNESCAPED_UNICODE),
         ]);
@@ -902,7 +902,7 @@ try {
         $upsertKlas->execute([
             $compId, $compNaam, $compDatum,
             $primaryDcId, $dcNaam, '',
-            licentieVoorPersonId($pdo, $ur['lic']), $ur['lic'], $cat,
+            $ur['lic'], $cat,
             null, 0,
             json_encode($ur['detail'], JSON_UNESCAPED_UNICODE),
         ]);

@@ -369,9 +369,9 @@ try {
             $insTp = $pdo->prepare("
                 INSERT INTO organisatie_transponders
                     (organisatie_id, intern_nummer, transponder_code, eigendom,
-                     toegewezen_snr, toegewezen_naam, person_license, person_id, categorie,
+                     toegewezen_snr, toegewezen_naam, person_id, categorie,
                      betaald, betaald_op, geblokkeerd)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             ");
             foreach ($transponders as $t) {
                 $nr   = trim($t['intern_nummer'] ?? '');
@@ -388,7 +388,6 @@ try {
                     trim($t['eigendom'] ?? '') ?: null,
                     $snr,
                     trim($t['toegewezen_naam'] ?? '') ?: null,
-                    $otLic,
                     personIdVoorLicentie($pdo, $otLic),
                     trim($t['categorie'] ?? '') ?: null,
                     $betaald,

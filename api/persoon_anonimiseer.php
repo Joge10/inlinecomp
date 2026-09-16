@@ -42,7 +42,7 @@ $action = $body['action'] ?? $_GET['action'] ?? '';
 try {
     if ($method === 'GET' && $action === 'lijst') {
         $stmt = $pdo->query("
-            SELECT license_key, anonymized_at, updated_at
+            SELECT person_id AS license_key, anonymized_at, updated_at
             FROM persons
             WHERE anonymized_at IS NOT NULL
             ORDER BY anonymized_at DESC
@@ -111,7 +111,6 @@ try {
             UPDATE organisatie_transponders
             SET toegewezen_naam = NULL,
                 toegewezen_snr  = NULL,
-                person_license  = NULL,
                 person_id       = NULL,
                 categorie       = NULL,
                 betaald         = 0,

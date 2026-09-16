@@ -2,48 +2,68 @@
 // ============================================================
 //  inc/person_id.php — gedeelde person_id ↔ license_key resolutie
 //
-//  Fase 3 van de person_id-migratie (dual-column-transitie). Tijdens de
-//  overgang schrijven INSERT's BEIDE kolommen (person_license + person_id) zodat
-//  er geen drift ontstaat; reads schuiven gaandeweg naar person_id. Bij fase 4
-//  (license_key weg uit persons) verhuist deze lookup naar person_external_ids.
+//  Fase 4 van de person_id-migratie: person_id is de canonieke identiteit.
+//  persons.license_key en de <child>.person_license/license_key-kolommen zijn
+//  gedropt; de KNSB-licentie (en ic-extern/pending/demo/manual/anoniem) leeft
+//  alleen nog in person_external_ids(person_id, systeem, extern_id). Alle
+//  license↔person_id-resolutie loopt via die koppeltabel.
 //  Zie docs_internal/plan-guid-migratie.md.
 //
-//  Gebruik bij een dual-write INSERT:
+//  Gebruik:
 //    require_once __DIR__ . '/../inc/person_id.php';
-//    $pid = personIdVoorLicentie($pdo, $license);
-//    INSERT INTO kind (..., person_license, person_id) VALUES (..., ?, ?)
-//    ON DUPLICATE KEY UPDATE ..., person_id = VALUES(person_id)
-//  (bij INSERT ... SELECT: JOIN persons p en selecteer p.person_id mee.)
+//    $pid = resolveNaarPersonId($pdo, $token);   // token = person_id OF licentie
+//    INSERT INTO kind (..., person_id) VALUES (..., ?)
+//  Na een mint (nieuwe persons-rij) de externe id borgen:
+//    zorgVoorExternalId($pdo, $pid, $license);
 // ============================================================
 
+if (!function_exists('nieuwPersonId')) {
+    /**
+     * Genereert een nieuwe person_id (UUID v4) in PHP. Fase 4: persons heeft geen
+     * license_key-PK meer om op terug te vinden en geen auto-increment, dus minten
+     * we de GUID zelf en zetten die expliciet in de INSERT — zo kent de aanroeper
+     * de person_id meteen voor child-inserts en zorgVoorExternalId().
+     * (De DB-default UUID() blijft als vangnet voor kolommen die 'm niet meesturen.)
+     */
+    function nieuwPersonId(): string {
+        $b = random_bytes(16);
+        $b[6] = chr((ord($b[6]) & 0x0f) | 0x40); // versie 4
+        $b[8] = chr((ord($b[8]) & 0x3f) | 0x80); // variant
+        $h = bin2hex($b);
+        return substr($h,0,8).'-'.substr($h,8,4).'-'.substr($h,12,4).'-'.substr($h,16,4).'-'.substr($h,20,12);
+    }
+}
+
 if (!function_exists('personIdVoorLicentie')) {
-    /** license_key → person_id (of null als onbekend). Statische cache per request. */
+    /**
+     * license_key/externe id → person_id (of null als onbekend).
+     * Fase 4: persons.license_key bestaat niet meer — resolutie loopt via
+     * person_external_ids (systeem afgeleid uit de vorm van de licentie).
+     */
     function personIdVoorLicentie(PDO $pdo, ?string $license): ?string {
-        static $cache = [];
         if ($license === null || $license === '') return null;
-        if (isset($cache[$license])) return $cache[$license];
-        $st = $pdo->prepare("SELECT person_id FROM persons WHERE license_key = ? LIMIT 1");
-        $st->execute([$license]);
-        $pid = $st->fetchColumn();
-        // Niet-gevonden NIET cachen: dezelfde licentie kan later in dezelfde
-        // request geïnsert worden (bv. rijder in meerdere DC's / net geminte).
-        if ($pid === false) return null;
-        return $cache[$license] = (string)$pid;
+        return personIdVoorExtern($pdo, systeemVoorLicentie($license), $license);
     }
 }
 
 if (!function_exists('licentieVoorPersonId')) {
     /**
-     * person_id → license_key (of null). Omgekeerde van personIdVoorLicentie.
-     * Gebruikt om de person_license-SCHADUW te vullen bij dual-write inserts nu de
-     * code op person_id draait (fase 3d-iii). Bij fase 4 (license_key weg uit
-     * persons) valt deze en de schaduw-kolom weg. Statische cache per request.
+     * person_id → licentie/externe id (of null). Omgekeerde van
+     * personIdVoorLicentie. Fase 4: leest uit person_external_ids; de KNSB-
+     * licentie ('knsb') heeft voorrang, anders de eerste beschikbare externe id
+     * (ic-extern/ic-pending/…). Voor weergave/koppel; niet meer voor schaduw-
+     * kolommen (die zijn in fase 4 gedropt). Statische cache per request.
      */
     function licentieVoorPersonId(PDO $pdo, ?string $personId): ?string {
         static $cache = [];
         if ($personId === null || $personId === '') return null;
         if (isset($cache[$personId])) return $cache[$personId];
-        $st = $pdo->prepare("SELECT license_key FROM persons WHERE person_id = ? LIMIT 1");
+        $st = $pdo->prepare("
+            SELECT extern_id FROM person_external_ids
+            WHERE person_id = ?
+            ORDER BY (systeem = 'knsb') DESC
+            LIMIT 1
+        ");
         $st->execute([$personId]);
         $lk = $st->fetchColumn();
         if ($lk === false) return null;

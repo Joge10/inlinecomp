@@ -253,10 +253,11 @@ ALTER TABLE `rijder_profiel_aanvraag`
 
 
 -- ════════════════════════════════════════════════════════════════════════
---  BIJBEHORENDE CODE-WIJZIGINGEN — MOETEN VÓÓR/BIJ DEZE MIGRATIE LIVE ZIJN
+--  BIJBEHORENDE CODE-WIJZIGINGEN — ✅ GEBOUWD (fase-4 code-commit)
 -- ════════════════════════════════════════════════════════════════════════
---  Zolang de app-code hieronder nog op license_key/person_license leunt, breekt
---  'ie zodra de kolommen weg zijn. Herwerk deze naar person_id-native:
+--  De app-code hieronder is person_id-native gemaakt en moet SAMEN met deze
+--  migratie live (site offline, geen app-gebruik tussen deploy en migratie).
+--  Onderstaande lijst = wat er is aangepast (ter referentie / controle):
 --
 --  1) inc/person_id.php — de license↔person_id-brug:
 --       • personIdVoorLicentie() leest persons.license_key → moet via
@@ -294,7 +295,8 @@ ALTER TABLE `rijder_profiel_aanvraag`
 --     meer in zit; eventueel de JSON migreren naar person_id-lijsten.
 --
 --  6) api/persoon_anonimiseer.php logt nog 'license_key'=>token in het logboek
---     (cosmetisch; token is nu person_id). Optioneel bijwerken.
+--     (cosmetisch; token is nu person_id). Niet aangepast — puur audit-label.
 --
---  Pas ná deploy van 1–5 is deze migratie veilig.
+--  Punt 5 (push JSON-lijsten) was al in fase 3 via person_external_ids geresolved
+--  (lib_push) — geen rauwe license_key-vergelijking meer; JSON blijft as-is.
 -- ============================================================

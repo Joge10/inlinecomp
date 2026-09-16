@@ -1156,8 +1156,8 @@ if ($action === 'historie_insert') {
                 (competition_id, competition_naam, competition_datum,
                  distance_combination_id, dc_naam,
                  split_group, distance_id, distance_naam, distance_meters,
-                 person_license, person_id, categorie, rang, tijd_ms, sanctie)
-            VALUES (?, ?, ?, ?, ?, '', ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                 person_id, categorie, rang, tijd_ms, sanctie)
+            VALUES (?, ?, ?, ?, ?, '', ?, ?, ?, ?, ?, ?, ?, ?)
             $onDup
         ");
 
@@ -1278,7 +1278,7 @@ if ($action === 'historie_insert') {
         }
 
         $pendingInsStmt = $pdo->prepare("
-            INSERT INTO persons (license_key, full_name, category, birth_year, pending_source)
+            INSERT INTO persons (person_id, full_name, category, birth_year, pending_source)
             VALUES (?, ?, ?, ?, 'historie')
         ");
         $pendingAangemaakt = 0;
@@ -1344,31 +1344,36 @@ if ($action === 'historie_insert') {
             // 0 matches → nieuwe pending (normaal pad). 2+ matches → nieuwe
             // pending want te onveilig om te raden welke; operator merget later.
 
-            // Geen passende bestaande pending → nieuwe rij
+            // Geen passende bestaande pending → nieuwe rij. Fase 4: mint de
+            // person_id zelf en zet die expliciet in de INSERT; identiteit =
+            // person_id (persons.license_key bestaat niet meer).
             $catN = $nieuweCat !== null ? trim($nieuweCat) : '';
             $lic  = 'p-' . substr(bin2hex(random_bytes(8)), 0, 12);
-            $pendingInsStmt->execute([$lic, $naam, $catN ?: null, $birthYear]);
-            // person_external_ids-mapping borgen (fase 3d-ii-a): nieuwe pending
-            // (p-…) krijgt meteen z'n ic-pending-mapping.
-            zorgVoorExternalId($pdo, personIdVoorLicentie($pdo, $lic), $lic);
+            $pid  = nieuwPersonId();
+            $pendingInsStmt->execute([$pid, $naam, $catN ?: null, $birthYear]);
+            // person_external_ids-mapping borgen: nieuwe pending (p-…) krijgt
+            // meteen z'n ic-pending-mapping onder de zojuist geminte person_id.
+            zorgVoorExternalId($pdo, $pid, $lic);
             $pendingAangemaakt++;
             // Toevoegen aan pool zodat volgende rij in dezelfde request hem
             // ook kan hergebruiken (bv 200m + 500m van zelfde onbekende rijder).
             // birth_set = bereik van nieuwe rij (toekomstige uitslag-rijen in
             // dezelfde call zullen dit verder verfijnen via intersection).
+            // 'license_key'-poolsleutel houdt nu de person_id vast (consistent
+            // met de DB-geladen pool-rijen, die via person_id AS license_key komen).
             if (!isset($pendingPool[$nameKey])) $pendingPool[$nameKey] = [];
             $pendingPool[$nameKey][] = [
-                'license_key' => $lic,
+                'license_key' => $pid,
                 'full_name'   => $naam,
                 'category'    => $catN ?: null,
                 'birth_set'   => $nieuwJaren,  // array of jaren, of null
             ];
             // OOK in pendingInDezeComp opnemen (by-ref via use): zelfde rijder
             // in volgende rijen van deze request (bv. 200m + 500m sprint zelfde
-            // rijder) krijgt dezelfde license — anders zou rij 2 weer een
+            // rijder) krijgt dezelfde person_id — anders zou rij 2 weer een
             // nieuwe pending aanmaken.
-            $pendingInDezeComp[$nameKey] = $lic;
-            return $lic;
+            $pendingInDezeComp[$nameKey] = $pid;
+            return $pid;
         };
 
         // ── Stap 2: uitslag-rijen invoegen ──────────────────────────────────
@@ -1412,10 +1417,9 @@ if ($action === 'historie_insert') {
             $rang = $r['rang'] !== null ? (int)$r['rang'] : null;
             if ($rang === 0) $rang = null;
 
-            // Dual-write: $lic kan een licentie (p-…/knsb) of een person_id-token
-            // zijn → leid beide af (person_license = schaduw tot fase 4).
+            // $lic kan een licentie (p-…/knsb) of een person_id-token zijn →
+            // resolve aan de grens naar person_id (fase 4: identiteit = person_id).
             $pidForRow = resolveNaarPersonId($pdo, $lic);
-            $licForRow = licentieVoorPersonId($pdo, $pidForRow) ?? $lic;
             $ins->execute([
                 $compId,
                 $comp['name'],
@@ -1425,7 +1429,6 @@ if ($action === 'historie_insert') {
                 $distSlug,
                 $afstandNaam,
                 $afstandMeters !== null ? (int)$afstandMeters : null,
-                $licForRow,
                 $pidForRow,
                 $r['categorie'] ?? null,
                 $rang,
@@ -1937,7 +1940,7 @@ if ($action === 'pending_lijst') {
             WHERE anonymized_at IS NULL
               AND full_name IS NOT NULL AND full_name <> ''
               AND category  IS NOT NULL AND category  <> ''
-              AND license_key NOT LIKE '%\\_Anoniem' ESCAPE '\\\\'
+              AND person_id NOT IN (SELECT person_id FROM person_external_ids WHERE systeem = 'ic-anoniem')
               AND full_name  NOT LIKE '[Anoniem]%'
         ");
         $_alle = $_allStmt->fetchAll(PDO::FETCH_ASSOC);
@@ -2056,7 +2059,7 @@ if ($action === 'pending_zoek_echte') {
             FROM persons
             WHERE anonymized_at IS NULL
               AND COALESCE(extern_federatie,'') <> 'DEMO'   -- demo/test-accounts nooit als koppel-doel
-              AND (full_name LIKE ? OR license_key LIKE ?)
+              AND (full_name LIKE ? OR person_id IN (SELECT person_id FROM person_external_ids WHERE extern_id LIKE ?))
             ORDER BY full_name
             LIMIT 20
         ");
@@ -2097,39 +2100,37 @@ if ($action === 'pending_zoek_echte') {
 // Hetzelfde patroon voor entries (per comp) en transponders (per comp+slot).
 if ($action === 'pending_link') {
     header('Content-Type: application/json; charset=utf-8');
-    $pendingLic = trim($body['pending_license'] ?? '');
-    $targetLic  = trim($body['target_license']  ?? '');
-    // Tokens kunnen person_id's zijn (nieuwe UI, fase 3c/3d) → terug naar de
-    // licentie voor de (nog license-based) koppel-moves. NB: de moves + de
-    // persons-delete draaien nog op person_license/license_key en worden bij
-    // fase 4 person_id-native gemaakt (data-destructief → aparte, geteste stap).
-    if ($pendingLic !== '') $pendingLic = (string)(licentieVoorPersonId($pdo, resolveNaarPersonId($pdo, $pendingLic)) ?? $pendingLic);
-    if ($targetLic  !== '') $targetLic  = (string)(licentieVoorPersonId($pdo, resolveNaarPersonId($pdo, $targetLic))  ?? $targetLic);
-    if ($pendingLic === '' || $targetLic === '') {
+    $pendingTok = trim($body['pending_license'] ?? '');
+    $targetTok  = trim($body['target_license']  ?? '');
+    // Fase 4: tokens (person_id OF licentie) één keer aan de grens resolven naar
+    // person_id. Alle koppel-moves + de persons-delete draaien person_id-native.
+    $sourcePid = $pendingTok !== '' ? resolveNaarPersonId($pdo, $pendingTok) : null;
+    $targetPid = $targetTok  !== '' ? resolveNaarPersonId($pdo, $targetTok)  : null;
+    if (!$sourcePid || !$targetPid) {
         http_response_code(400);
         echo json_encode(['error' => 'pending_license en target_license verplicht']);
         exit;
     }
-    if ($pendingLic === $targetLic) {
+    if ($sourcePid === $targetPid) {
         http_response_code(400);
         echo json_encode(['error' => 'Bron en doel zijn dezelfde rij']);
         exit;
     }
     try {
         // Verifieer beide bestaan + bepaal types
-        $checkStmt = $pdo->prepare("SELECT license_key, person_id, pending_source, extern, full_name, category FROM persons WHERE license_key = ?");
-        $checkStmt->execute([$pendingLic]);
+        $checkStmt = $pdo->prepare("SELECT person_id, pending_source, extern, full_name, category FROM persons WHERE person_id = ?");
+        $checkStmt->execute([$sourcePid]);
         $pending = $checkStmt->fetch(PDO::FETCH_ASSOC);
         if (!$pending) {
             http_response_code(404);
-            echo json_encode(['error' => "Bron-persoon $pendingLic niet gevonden"]);
+            echo json_encode(['error' => "Bron-persoon $pendingTok niet gevonden"]);
             exit;
         }
-        $checkStmt->execute([$targetLic]);
+        $checkStmt->execute([$targetPid]);
         $target = $checkStmt->fetch(PDO::FETCH_ASSOC);
         if (!$target) {
             http_response_code(404);
-            echo json_encode(['error' => "Doel-persoon $targetLic niet gevonden"]);
+            echo json_encode(['error' => "Doel-persoon $targetTok niet gevonden"]);
             exit;
         }
         // Source moet incompleet zijn (pending OR extern), of exact dezelfde
@@ -2152,10 +2153,8 @@ if ($action === 'pending_link') {
             exit;
         }
 
-        // person_id-migratie: bij elke verhuizing zetten we óók person_id op de
-        // doel-GUID, zodat person_license en person_id consistent blijven (anders
-        // ontstaat drift die fase 4 zou breken). $targetPid is de canonieke sleutel.
-        $targetPid = $target['person_id'] ?? null;
+        // $targetPid (aan de grens geresolved) is de canonieke doel-sleutel;
+        // alle child-moves hieronder herschrijven person_id van bron → doel.
 
         $pdo->beginTransaction();
 
@@ -2171,18 +2170,18 @@ if ($action === 'pending_link') {
              AND tgt.distance_combination_id = pend.distance_combination_id
              AND tgt.distance_id             = pend.distance_id
              AND tgt.split_group             = pend.split_group
-             AND tgt.person_license          = ?
-            WHERE pend.person_license = ?
+             AND tgt.person_id               = ?
+            WHERE pend.person_id = ?
         ");
-        $delConflict->execute([$targetLic, $pendingLic]);
+        $delConflict->execute([$targetPid, $sourcePid]);
         $conflictDeleted = $delConflict->rowCount();
 
         $moveStmt = $pdo->prepare("
             UPDATE uitslag_afstand
-            SET    person_license = ?, person_id = ?
-            WHERE  person_license = ?
+            SET    person_id = ?
+            WHERE  person_id = ?
         ");
-        $moveStmt->execute([$targetLic, $targetPid, $pendingLic]);
+        $moveStmt->execute([$targetPid, $sourcePid]);
         $verhuisd = $moveStmt->rowCount();
 
         // ── entries (alleen relevant als source extern is — pendings hebben
@@ -2194,18 +2193,18 @@ if ($action === 'pending_link') {
             FROM entries src
             JOIN entries tgt
               ON tgt.distance_combination_id = src.distance_combination_id
-             AND tgt.person_license = ?
-            WHERE src.person_license = ?
+             AND tgt.person_id = ?
+            WHERE src.person_id = ?
         ");
-        $delEntriesConflict->execute([$targetLic, $pendingLic]);
+        $delEntriesConflict->execute([$targetPid, $sourcePid]);
         $entriesConflictDeleted = $delEntriesConflict->rowCount();
 
         $moveEntries = $pdo->prepare("
             UPDATE entries
-            SET    person_license = ?, person_id = ?
-            WHERE  person_license = ?
+            SET    person_id = ?
+            WHERE  person_id = ?
         ");
-        $moveEntries->execute([$targetLic, $targetPid, $pendingLic]);
+        $moveEntries->execute([$targetPid, $sourcePid]);
         $entriesVerhuisd = $moveEntries->rowCount();
 
         // ── heat_entries. UNIQUE-key is (heat_id, person_license) —
@@ -2215,18 +2214,18 @@ if ($action === 'pending_link') {
             FROM heat_entries src
             JOIN heat_entries tgt
               ON tgt.heat_id        = src.heat_id
-             AND tgt.person_license = ?
-            WHERE src.person_license = ?
+             AND tgt.person_id      = ?
+            WHERE src.person_id = ?
         ");
-        $delHeConflict->execute([$targetLic, $pendingLic]);
+        $delHeConflict->execute([$targetPid, $sourcePid]);
         $heConflictDeleted = $delHeConflict->rowCount();
 
         $moveHe = $pdo->prepare("
             UPDATE heat_entries
-            SET    person_license = ?, person_id = ?
-            WHERE  person_license = ?
+            SET    person_id = ?
+            WHERE  person_id = ?
         ");
-        $moveHe->execute([$targetLic, $targetPid, $pendingLic]);
+        $moveHe->execute([$targetPid, $sourcePid]);
         $heVerhuisd = $moveHe->rowCount();
 
         // ── uitslag_klassement. UNIQUE-key:
@@ -2238,18 +2237,18 @@ if ($action === 'pending_link') {
               ON tgt.competition_id          = src.competition_id
              AND tgt.distance_combination_id = src.distance_combination_id
              AND tgt.split_group             = src.split_group
-             AND tgt.person_license          = ?
-            WHERE src.person_license = ?
+             AND tgt.person_id               = ?
+            WHERE src.person_id = ?
         ");
-        $delUkConflict->execute([$targetLic, $pendingLic]);
+        $delUkConflict->execute([$targetPid, $sourcePid]);
         $ukConflictDeleted = $delUkConflict->rowCount();
 
         $moveUk = $pdo->prepare("
             UPDATE uitslag_klassement
-            SET    person_license = ?, person_id = ?
-            WHERE  person_license = ?
+            SET    person_id = ?
+            WHERE  person_id = ?
         ");
-        $moveUk->execute([$targetLic, $targetPid, $pendingLic]);
+        $moveUk->execute([$targetPid, $sourcePid]);
         $ukVerhuisd = $moveUk->rowCount();
 
         // ── competition_startnummers. UNIQUE-key: (competition_id, person_license).
@@ -2258,18 +2257,18 @@ if ($action === 'pending_link') {
             FROM competition_startnummers src
             JOIN competition_startnummers tgt
               ON tgt.competition_id  = src.competition_id
-             AND tgt.person_license  = ?
-            WHERE src.person_license = ?
+             AND tgt.person_id       = ?
+            WHERE src.person_id = ?
         ");
-        $delCsnConflict->execute([$targetLic, $pendingLic]);
+        $delCsnConflict->execute([$targetPid, $sourcePid]);
         $csnConflictDeleted = $delCsnConflict->rowCount();
 
         $moveCsn = $pdo->prepare("
             UPDATE competition_startnummers
-            SET    person_license = ?, person_id = ?
-            WHERE  person_license = ?
+            SET    person_id = ?
+            WHERE  person_id = ?
         ");
-        $moveCsn->execute([$targetLic, $targetPid, $pendingLic]);
+        $moveCsn->execute([$targetPid, $sourcePid]);
         $csnVerhuisd = $moveCsn->rowCount();
 
         // ── transponders. UNIQUE-key is (competition_id, person_license, slot).
@@ -2279,18 +2278,18 @@ if ($action === 'pending_link') {
             JOIN transponders tgt
               ON tgt.competition_id = src.competition_id
              AND tgt.slot           = src.slot
-             AND tgt.person_license = ?
-            WHERE src.person_license = ?
+             AND tgt.person_id      = ?
+            WHERE src.person_id = ?
         ");
-        $delTpConflict->execute([$targetLic, $pendingLic]);
+        $delTpConflict->execute([$targetPid, $sourcePid]);
         $tpConflictDeleted = $delTpConflict->rowCount();
 
         $moveTp = $pdo->prepare("
             UPDATE transponders
-            SET    person_license = ?, person_id = ?
-            WHERE  person_license = ?
+            SET    person_id = ?
+            WHERE  person_id = ?
         ");
-        $moveTp->execute([$targetLic, $targetPid, $pendingLic]);
+        $moveTp->execute([$targetPid, $sourcePid]);
         $tpVerhuisd = $moveTp->rowCount();
 
         // ── organisatie_transponders (club-inventaris-toewijzingen). Werd
@@ -2300,11 +2299,10 @@ if ($action === 'pending_link') {
         // (mid person_id-migratie) zodat beide kolommen consistent blijven.
         $moveOt = $pdo->prepare("
             UPDATE organisatie_transponders
-            SET    person_license = ?,
-                   person_id      = (SELECT person_id FROM persons WHERE license_key = ?)
-            WHERE  person_license = ?
+            SET    person_id = ?
+            WHERE  person_id = ?
         ");
-        $moveOt->execute([$targetLic, $targetLic, $pendingLic]);
+        $moveOt->execute([$targetPid, $sourcePid]);
         $otVerhuisd = $moveOt->rowCount();
 
         // ── Target's type blijft zoals 't is — geen "smart promotion".
@@ -2318,8 +2316,8 @@ if ($action === 'pending_link') {
         // gedaan (pending/extern/naamgenoot); hier alleen op license_key
         // zodat de DELETE ook slaagt voor naamgenoot-flows (pending_source
         // NULL en extern=0).
-        $delPending = $pdo->prepare("DELETE FROM persons WHERE license_key = ?");
-        $delPending->execute([$pendingLic]);
+        $delPending = $pdo->prepare("DELETE FROM persons WHERE person_id = ?");
+        $delPending->execute([$sourcePid]);
 
         $pdo->commit();
 
@@ -2360,33 +2358,35 @@ if ($action === 'pending_link') {
 // echte KNSB-account betrokken.
 if ($action === 'pending_merge') {
     header('Content-Type: application/json; charset=utf-8');
-    $srcLic = trim($body['source_license'] ?? '');
-    $tgtLic = trim($body['target_license'] ?? '');
-    // person_id-tokens → licentie voor de (license-based) merge-moves (zie pending_link).
-    if ($srcLic !== '') $srcLic = (string)(licentieVoorPersonId($pdo, resolveNaarPersonId($pdo, $srcLic)) ?? $srcLic);
-    if ($tgtLic !== '') $tgtLic = (string)(licentieVoorPersonId($pdo, resolveNaarPersonId($pdo, $tgtLic)) ?? $tgtLic);
-    if ($srcLic === '' || $tgtLic === '' || $srcLic === $tgtLic) {
+    $srcTok = trim($body['source_license'] ?? '');
+    $tgtTok = trim($body['target_license'] ?? '');
+    // Fase 4: resolve tokens (person_id OF licentie) één keer naar person_id;
+    // de merge-moves + de persons-delete draaien person_id-native.
+    $srcPid = $srcTok !== '' ? resolveNaarPersonId($pdo, $srcTok) : null;
+    $tgtPid = $tgtTok !== '' ? resolveNaarPersonId($pdo, $tgtTok) : null;
+    if (!$srcPid || !$tgtPid || $srcPid === $tgtPid) {
         http_response_code(400);
         echo json_encode(['error' => 'source_license en target_license verplicht, niet identiek']);
         exit;
     }
-    if (strpos($srcLic, 'p-') !== 0 || strpos($tgtLic, 'p-') !== 0) {
+    // Beide moeten pending-rijders zijn: hun externe id in person_external_ids
+    // is een p-…-key (ic-pending). Was voorheen een prefix-check op de licentie.
+    if (strncmp((string)licentieVoorPersonId($pdo, $srcPid), 'p-', 2) !== 0
+        || strncmp((string)licentieVoorPersonId($pdo, $tgtPid), 'p-', 2) !== 0) {
         http_response_code(400);
         echo json_encode(['error' => 'Beide licenses moeten pending-keys zijn (p-…)']);
         exit;
     }
     try {
-        $checkStmt = $pdo->prepare("SELECT license_key, person_id, pending_source, full_name FROM persons WHERE license_key = ?");
-        $tgtPid = null;
-        foreach ([$srcLic, $tgtLic] as $lk) {
-            $checkStmt->execute([$lk]);
+        $checkStmt = $pdo->prepare("SELECT pending_source FROM persons WHERE person_id = ?");
+        foreach ([$srcPid, $tgtPid] as $pid) {
+            $checkStmt->execute([$pid]);
             $row = $checkStmt->fetch(PDO::FETCH_ASSOC);
             if (!$row || $row['pending_source'] === null) {
                 http_response_code(404);
-                echo json_encode(['error' => "Pending-rij $lk niet gevonden of geen pending"]);
+                echo json_encode(['error' => "Pending-rij $pid niet gevonden of geen pending"]);
                 exit;
             }
-            if ($lk === $tgtLic) $tgtPid = $row['person_id'] ?? null;
         }
 
         $pdo->beginTransaction();
@@ -2401,16 +2401,16 @@ if ($action === 'pending_merge') {
              AND tgt.distance_combination_id = src.distance_combination_id
              AND tgt.distance_id             = src.distance_id
              AND tgt.split_group             = src.split_group
-             AND tgt.person_license          = ?
-            WHERE src.person_license = ?
+             AND tgt.person_id               = ?
+            WHERE src.person_id = ?
         ");
-        $delConflict->execute([$tgtLic, $srcLic]);
+        $delConflict->execute([$tgtPid, $srcPid]);
         $conflictDeleted = $delConflict->rowCount();
 
         $moveStmt = $pdo->prepare("
-            UPDATE uitslag_afstand SET person_license = ?, person_id = ? WHERE person_license = ?
+            UPDATE uitslag_afstand SET person_id = ? WHERE person_id = ?
         ");
-        $moveStmt->execute([$tgtLic, $tgtPid, $srcLic]);
+        $moveStmt->execute([$tgtPid, $srcPid]);
         $verhuisd = $moveStmt->rowCount();
 
         // ── entries (UNIQUE: distance_combination_id, person_license)
@@ -2418,13 +2418,13 @@ if ($action === 'pending_merge') {
             DELETE src FROM entries src
             JOIN entries tgt
               ON tgt.distance_combination_id = src.distance_combination_id
-             AND tgt.person_license = ?
-            WHERE src.person_license = ?
+             AND tgt.person_id = ?
+            WHERE src.person_id = ?
         ");
-        $delEntConflict->execute([$tgtLic, $srcLic]);
+        $delEntConflict->execute([$tgtPid, $srcPid]);
         $entriesConflictDeleted = $delEntConflict->rowCount();
-        $moveEnt = $pdo->prepare("UPDATE entries SET person_license = ?, person_id = ? WHERE person_license = ?");
-        $moveEnt->execute([$tgtLic, $tgtPid, $srcLic]);
+        $moveEnt = $pdo->prepare("UPDATE entries SET person_id = ? WHERE person_id = ?");
+        $moveEnt->execute([$tgtPid, $srcPid]);
         $entriesVerhuisd = $moveEnt->rowCount();
 
         // ── heat_entries (UNIQUE: heat_id, person_license)
@@ -2432,13 +2432,13 @@ if ($action === 'pending_merge') {
             DELETE src FROM heat_entries src
             JOIN heat_entries tgt
               ON tgt.heat_id = src.heat_id
-             AND tgt.person_license = ?
-            WHERE src.person_license = ?
+             AND tgt.person_id = ?
+            WHERE src.person_id = ?
         ");
-        $delHeConflict->execute([$tgtLic, $srcLic]);
+        $delHeConflict->execute([$tgtPid, $srcPid]);
         $heConflictDeleted = $delHeConflict->rowCount();
-        $moveHe = $pdo->prepare("UPDATE heat_entries SET person_license = ?, person_id = ? WHERE person_license = ?");
-        $moveHe->execute([$tgtLic, $tgtPid, $srcLic]);
+        $moveHe = $pdo->prepare("UPDATE heat_entries SET person_id = ? WHERE person_id = ?");
+        $moveHe->execute([$tgtPid, $srcPid]);
         $heVerhuisd = $moveHe->rowCount();
 
         // ── uitslag_klassement (UNIQUE: competition_id, dc, split_group, person_license)
@@ -2448,13 +2448,13 @@ if ($action === 'pending_merge') {
               ON tgt.competition_id          = src.competition_id
              AND tgt.distance_combination_id = src.distance_combination_id
              AND tgt.split_group             = src.split_group
-             AND tgt.person_license          = ?
-            WHERE src.person_license = ?
+             AND tgt.person_id               = ?
+            WHERE src.person_id = ?
         ");
-        $delUkConflict->execute([$tgtLic, $srcLic]);
+        $delUkConflict->execute([$tgtPid, $srcPid]);
         $ukConflictDeleted = $delUkConflict->rowCount();
-        $moveUk = $pdo->prepare("UPDATE uitslag_klassement SET person_license = ?, person_id = ? WHERE person_license = ?");
-        $moveUk->execute([$tgtLic, $tgtPid, $srcLic]);
+        $moveUk = $pdo->prepare("UPDATE uitslag_klassement SET person_id = ? WHERE person_id = ?");
+        $moveUk->execute([$tgtPid, $srcPid]);
         $ukVerhuisd = $moveUk->rowCount();
 
         // ── competition_startnummers (UNIQUE: competition_id, person_license)
@@ -2462,13 +2462,13 @@ if ($action === 'pending_merge') {
             DELETE src FROM competition_startnummers src
             JOIN competition_startnummers tgt
               ON tgt.competition_id = src.competition_id
-             AND tgt.person_license = ?
-            WHERE src.person_license = ?
+             AND tgt.person_id = ?
+            WHERE src.person_id = ?
         ");
-        $delCsnConflict->execute([$tgtLic, $srcLic]);
+        $delCsnConflict->execute([$tgtPid, $srcPid]);
         $csnConflictDeleted = $delCsnConflict->rowCount();
-        $moveCsn = $pdo->prepare("UPDATE competition_startnummers SET person_license = ?, person_id = ? WHERE person_license = ?");
-        $moveCsn->execute([$tgtLic, $tgtPid, $srcLic]);
+        $moveCsn = $pdo->prepare("UPDATE competition_startnummers SET person_id = ? WHERE person_id = ?");
+        $moveCsn->execute([$tgtPid, $srcPid]);
         $csnVerhuisd = $moveCsn->rowCount();
 
         // ── transponders (UNIQUE: competition_id, person_license, slot)
@@ -2477,17 +2477,17 @@ if ($action === 'pending_merge') {
             JOIN transponders tgt
               ON tgt.competition_id = src.competition_id
              AND tgt.slot = src.slot
-             AND tgt.person_license = ?
-            WHERE src.person_license = ?
+             AND tgt.person_id = ?
+            WHERE src.person_id = ?
         ");
-        $delTpConflict->execute([$tgtLic, $srcLic]);
+        $delTpConflict->execute([$tgtPid, $srcPid]);
         $tpConflictDeleted = $delTpConflict->rowCount();
-        $moveTp = $pdo->prepare("UPDATE transponders SET person_license = ?, person_id = ? WHERE person_license = ?");
-        $moveTp->execute([$tgtLic, $tgtPid, $srcLic]);
+        $moveTp = $pdo->prepare("UPDATE transponders SET person_id = ? WHERE person_id = ?");
+        $moveTp->execute([$tgtPid, $srcPid]);
         $tpVerhuisd = $moveTp->rowCount();
 
-        $delSrc = $pdo->prepare("DELETE FROM persons WHERE license_key = ? AND pending_source IS NOT NULL");
-        $delSrc->execute([$srcLic]);
+        $delSrc = $pdo->prepare("DELETE FROM persons WHERE person_id = ? AND pending_source IS NOT NULL");
+        $delSrc->execute([$srcPid]);
 
         $pdo->commit();
         echo json_encode([
@@ -2521,22 +2521,23 @@ if ($action === 'pending_merge') {
 // niet via deze flow verwijderd worden (zou onbedoeld gevoelig zijn).
 if ($action === 'pending_delete') {
     header('Content-Type: application/json; charset=utf-8');
-    $lic = trim($body['license_key'] ?? '');
-    // person_id-token → licentie voor de (license-based) delete-queries (zie pending_link).
-    if ($lic !== '') $lic = (string)(licentieVoorPersonId($pdo, resolveNaarPersonId($pdo, $lic)) ?? $lic);
-    if ($lic === '') {
+    $tok = trim($body['license_key'] ?? '');
+    // Fase 4: resolve token (person_id OF licentie) naar person_id aan de grens;
+    // de delete-queries draaien person_id-native.
+    $pid = $tok !== '' ? resolveNaarPersonId($pdo, $tok) : null;
+    if (!$pid) {
         http_response_code(400);
         echo json_encode(['error' => 'license_key verplicht']);
         exit;
     }
     try {
         // Verifieer dat 't een pending of extern is — geen KNSB-account
-        $chk = $pdo->prepare("SELECT pending_source, extern, full_name FROM persons WHERE license_key = ?");
-        $chk->execute([$lic]);
+        $chk = $pdo->prepare("SELECT pending_source, extern, full_name FROM persons WHERE person_id = ?");
+        $chk->execute([$pid]);
         $persoon = $chk->fetch(PDO::FETCH_ASSOC);
         if (!$persoon) {
             http_response_code(404);
-            echo json_encode(['error' => "Persoon $lic niet gevonden"]);
+            echo json_encode(['error' => "Persoon $tok niet gevonden"]);
             exit;
         }
         $isPending = $persoon['pending_source'] !== null;
@@ -2549,37 +2550,37 @@ if ($action === 'pending_delete') {
 
         $pdo->beginTransaction();
         // Volgorde: kindrijen → ouder. uitslag_afstand + entries + transponders
-        // hangen allemaal aan person_license, niet aan elkaar — onafhankelijk.
-        $delUa = $pdo->prepare("DELETE FROM uitslag_afstand WHERE person_license = ?");
-        $delUa->execute([$lic]);
+        // hangen allemaal aan person_id, niet aan elkaar — onafhankelijk.
+        $delUa = $pdo->prepare("DELETE FROM uitslag_afstand WHERE person_id = ?");
+        $delUa->execute([$pid]);
         $uaWeg = $delUa->rowCount();
 
-        $delEnt = $pdo->prepare("DELETE FROM entries WHERE person_license = ?");
-        $delEnt->execute([$lic]);
+        $delEnt = $pdo->prepare("DELETE FROM entries WHERE person_id = ?");
+        $delEnt->execute([$pid]);
         $entriesWeg = $delEnt->rowCount();
 
-        $delHe = $pdo->prepare("DELETE FROM heat_entries WHERE person_license = ?");
-        $delHe->execute([$lic]);
+        $delHe = $pdo->prepare("DELETE FROM heat_entries WHERE person_id = ?");
+        $delHe->execute([$pid]);
         $heWeg = $delHe->rowCount();
 
-        $delUk = $pdo->prepare("DELETE FROM uitslag_klassement WHERE person_license = ?");
-        $delUk->execute([$lic]);
+        $delUk = $pdo->prepare("DELETE FROM uitslag_klassement WHERE person_id = ?");
+        $delUk->execute([$pid]);
         $ukWeg = $delUk->rowCount();
 
-        $delCsn = $pdo->prepare("DELETE FROM competition_startnummers WHERE person_license = ?");
-        $delCsn->execute([$lic]);
+        $delCsn = $pdo->prepare("DELETE FROM competition_startnummers WHERE person_id = ?");
+        $delCsn->execute([$pid]);
         $csnWeg = $delCsn->rowCount();
 
-        $delTp = $pdo->prepare("DELETE FROM transponders WHERE person_license = ?");
-        $delTp->execute([$lic]);
+        $delTp = $pdo->prepare("DELETE FROM transponders WHERE person_id = ?");
+        $delTp->execute([$pid]);
         $tpWeg = $delTp->rowCount();
 
         $delP = $pdo->prepare("
             DELETE FROM persons
-            WHERE license_key = ?
+            WHERE person_id = ?
               AND (pending_source IS NOT NULL OR extern = 1)
         ");
-        $delP->execute([$lic]);
+        $delP->execute([$pid]);
         $personWeg = $delP->rowCount();
 
         $pdo->commit();
@@ -2610,30 +2611,31 @@ if ($action === 'pending_bulk_delete') {
     $lics = $body['license_keys'] ?? [];
     if (!is_array($lics)) $lics = [];
     $lics = array_values(array_unique(array_filter(array_map('trim', $lics), 'strlen')));
-    // person_id-tokens → licenties voor de (license-based) delete-queries.
-    $lics = array_values(array_unique(array_filter(array_map(
-        fn($l) => (string)(licentieVoorPersonId($pdo, resolveNaarPersonId($pdo, $l)) ?? $l), $lics), 'strlen')));
-    if (!count($lics)) {
+    // Fase 4: resolve tokens (person_id OF licentie) naar person_id aan de grens;
+    // de delete-queries draaien person_id-native.
+    $pids = array_values(array_unique(array_filter(array_map(
+        fn($l) => (string)(resolveNaarPersonId($pdo, $l) ?? ''), $lics), 'strlen')));
+    if (!count($pids)) {
         http_response_code(400);
         echo json_encode(['error' => 'license_keys (niet-lege array) verplicht']);
         exit;
     }
-    if (count($lics) > 1000) {
+    if (count($pids) > 1000) {
         http_response_code(400);
         echo json_encode(['error' => 'te veel rijders in één keer (max 1000)']);
         exit;
     }
     try {
-        // Guard: welke van de gevraagde licenties zijn écht pending/extern?
-        $ph  = implode(',', array_fill(0, count($lics), '?'));
+        // Guard: welke van de gevraagde rijders zijn écht pending/extern?
+        $ph  = implode(',', array_fill(0, count($pids), '?'));
         $chk = $pdo->prepare("
-            SELECT license_key FROM persons
-            WHERE license_key IN ($ph)
+            SELECT person_id FROM persons
+            WHERE person_id IN ($ph)
               AND (pending_source IS NOT NULL OR extern = 1)
         ");
-        $chk->execute($lics);
-        $teDoen       = array_column($chk->fetchAll(PDO::FETCH_ASSOC), 'license_key');
-        $overgeslagen = count($lics) - count($teDoen);
+        $chk->execute($pids);
+        $teDoen       = array_column($chk->fetchAll(PDO::FETCH_ASSOC), 'person_id');
+        $overgeslagen = count($pids) - count($teDoen);
         if (!count($teDoen)) {
             echo json_encode(['ok' => true, 'personen_verwijderd' => 0, 'overgeslagen' => $overgeslagen]);
             exit;
@@ -2641,22 +2643,22 @@ if ($action === 'pending_bulk_delete') {
 
         $pdo->beginTransaction();
         $stmts = [
-            'uitslagen'    => $pdo->prepare("DELETE FROM uitslag_afstand WHERE person_license = ?"),
-            'entries'      => $pdo->prepare("DELETE FROM entries WHERE person_license = ?"),
-            'heat_entries' => $pdo->prepare("DELETE FROM heat_entries WHERE person_license = ?"),
-            'klassement'   => $pdo->prepare("DELETE FROM uitslag_klassement WHERE person_license = ?"),
-            'startnrs'     => $pdo->prepare("DELETE FROM competition_startnummers WHERE person_license = ?"),
-            'transponders' => $pdo->prepare("DELETE FROM transponders WHERE person_license = ?"),
+            'uitslagen'    => $pdo->prepare("DELETE FROM uitslag_afstand WHERE person_id = ?"),
+            'entries'      => $pdo->prepare("DELETE FROM entries WHERE person_id = ?"),
+            'heat_entries' => $pdo->prepare("DELETE FROM heat_entries WHERE person_id = ?"),
+            'klassement'   => $pdo->prepare("DELETE FROM uitslag_klassement WHERE person_id = ?"),
+            'startnrs'     => $pdo->prepare("DELETE FROM competition_startnummers WHERE person_id = ?"),
+            'transponders' => $pdo->prepare("DELETE FROM transponders WHERE person_id = ?"),
         ];
         $delP = $pdo->prepare("
             DELETE FROM persons
-            WHERE license_key = ?
+            WHERE person_id = ?
               AND (pending_source IS NOT NULL OR extern = 1)
         ");
         $tot = ['uitslagen'=>0,'entries'=>0,'heat_entries'=>0,'klassement'=>0,'startnrs'=>0,'transponders'=>0,'personen'=>0];
-        foreach ($teDoen as $lic) {
-            foreach ($stmts as $key => $st) { $st->execute([$lic]); $tot[$key] += $st->rowCount(); }
-            $delP->execute([$lic]);
+        foreach ($teDoen as $pid) {
+            foreach ($stmts as $key => $st) { $st->execute([$pid]); $tot[$key] += $st->rowCount(); }
+            $delP->execute([$pid]);
             $tot['personen'] += $delP->rowCount();
         }
         $pdo->commit();

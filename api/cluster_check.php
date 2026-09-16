@@ -507,7 +507,7 @@ if ($action === 'vervang') {
     $eConflict = $pdo->prepare(
         "SELECT 1 FROM entries WHERE distance_combination_id = ? AND person_id = ? AND id <> ? LIMIT 1"
     );
-    $eUpdate = $pdo->prepare("UPDATE entries SET person_license = (SELECT license_key FROM persons WHERE person_id = ?), person_id = ? WHERE id = ?");
+    $eUpdate = $pdo->prepare("UPDATE entries SET person_id = ? WHERE id = ?");
     $eDelete = $pdo->prepare("DELETE FROM entries WHERE id = ?");
 
     // heat_entries voor zelfde DC + (oude OF nieuwe) license — daar zit de
@@ -517,7 +517,7 @@ if ($action === 'vervang') {
     $heConflict = $pdo->prepare(
         "SELECT 1 FROM heat_entries WHERE heat_id = ? AND person_id = ? LIMIT 1"
     );
-    $heUpdate = $pdo->prepare("UPDATE heat_entries SET person_license = (SELECT license_key FROM persons WHERE person_id = ?), person_id = ? WHERE id = ?");
+    $heUpdate = $pdo->prepare("UPDATE heat_entries SET person_id = ? WHERE id = ?");
     $heDelete = $pdo->prepare("DELETE FROM heat_entries WHERE id = ?");
     $heLookup = $pdo->prepare("
         SELECT he.id, he.heat_id
@@ -547,7 +547,7 @@ if ($action === 'vervang') {
             $eDelete->execute([$e['id']]);
             $verwijderd++;
         } else {
-            $eUpdate->execute([$nieuwPid, $nieuwPid, $e['id']]);
+            $eUpdate->execute([$nieuwPid, $e['id']]);
             $bijgewerkt++;
         }
         // heat_entries-laag: alle heats van deze DC waar de OUDE persoon in
@@ -559,7 +559,7 @@ if ($action === 'vervang') {
                 $heDelete->execute([$he['id']]);
                 $heVerwijderd++;
             } else {
-                $heUpdate->execute([$nieuwPid, $nieuwPid, $he['id']]);
+                $heUpdate->execute([$nieuwPid, $he['id']]);
                 $heBijgewerkt++;
             }
         }
@@ -859,8 +859,8 @@ if ($action === 'corrigeer_persoon') {
     if ($compId !== '' && is_array($verplaatsingen) && count($verplaatsingen)) {
         checkCompetitieToegang($pdo, $_authUser, $compId);
         $insEntry = $pdo->prepare(
-            "INSERT IGNORE INTO entries (distance_combination_id, person_license, person_id, status)
-             VALUES (?, (SELECT license_key FROM persons WHERE person_id = ?), ?, 1)"
+            "INSERT IGNORE INTO entries (distance_combination_id, person_id, status)
+             VALUES (?, ?, 1)"
         );
         $delEntry = $pdo->prepare("DELETE FROM entries WHERE id = ?");
         $delHe    = $pdo->prepare("
@@ -888,7 +888,7 @@ if ($action === 'corrigeer_persoon') {
             $vChk = $pdo->prepare("SELECT 1 FROM distance_combinations WHERE id = ? AND competition_id = ?");
             $vChk->execute([$doelDcId, $compId]);
             if (!$vChk->fetchColumn()) continue;
-            $insEntry->execute([$doelDcId, $pid, $pid]);
+            $insEntry->execute([$doelDcId, $pid]);
             $delHe->execute([$compId, $eRow['dc_id'], $pid]);
             $heWeg += $delHe->rowCount();
             $delEntry->execute([$eId]);
@@ -960,8 +960,8 @@ if ($action === 'verplaats') {
     // INSERT IGNORE: als persoon al ingeschreven in doel-DC, niets nieuws
     // (zou kunnen als operator handmatig al wat veranderd had).
     $insEntry = $pdo->prepare("
-        INSERT IGNORE INTO entries (distance_combination_id, person_license, person_id, status)
-        VALUES (?, (SELECT license_key FROM persons WHERE person_id = ?), ?, 1)
+        INSERT IGNORE INTO entries (distance_combination_id, person_id, status)
+        VALUES (?, ?, 1)
     ");
     $delEntry = $pdo->prepare("DELETE FROM entries WHERE id = ?");
     // heat_entries van OUDE DC verwijderen — die kunnen niet meeverhuizen
@@ -978,7 +978,7 @@ if ($action === 'verplaats') {
     $alAanwezig = 0;
     $heWeg      = 0;
     foreach ($entries as $e) {
-        $insEntry->execute([$doelDcId, $e['person_license'], $e['person_license']]);
+        $insEntry->execute([$doelDcId, $e['person_license']]);
         if ($insEntry->rowCount() === 0) $alAanwezig++;
         else                              $verplaatst++;
         $delHe->execute([$compId, $e['dc_id'], $e['person_license']]);

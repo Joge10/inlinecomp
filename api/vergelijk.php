@@ -602,7 +602,7 @@ try {
         // inventaris (kapot/zoek) maar mogen niet meer worden toegewezen.
         // Beheerder ziet ze nog in de Beheer-tabel; overal anders niet.
         $otStmt = $pdo->prepare("
-            SELECT intern_nummer, transponder_code, toegewezen_snr, toegewezen_naam, person_license, categorie, betaald
+            SELECT intern_nummer, transponder_code, toegewezen_snr, toegewezen_naam, person_id AS person_license, categorie, betaald
             FROM organisatie_transponders
             WHERE organisatie_id = ? AND COALESCE(geblokkeerd, 0) = 0
             ORDER BY CAST(intern_nummer AS UNSIGNED), intern_nummer

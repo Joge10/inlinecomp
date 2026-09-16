@@ -100,11 +100,10 @@ if ($action === 'subscribe') {
                     // person_id is leidend voor de targeting; person_license is nog de
                     // schaduw (VARCHAR(32)) en krijgt de licentie, of NULL als het token
                     // al een person_id was (past sowieso niet in 32 tekens). Fase-4-proof.
-                    $ins = $pdo->prepare("INSERT IGNORE INTO push_sub_licenses (subscription_id, person_license, person_id) VALUES (?, ?, ?)");
+                    $ins = $pdo->prepare("INSERT IGNORE INTO push_sub_licenses (subscription_id, person_id) VALUES (?, ?)");
                     foreach ($lics as $l) {
                         $pid = resolveNaarPersonId($pdo, (string)$l);
-                        $lic = ($pid !== null && $pid !== $l) ? $l : null;
-                        $ins->execute([$subId, $lic, $pid]);
+                        $ins->execute([$subId, $pid]);
                     }
                 }
             }
