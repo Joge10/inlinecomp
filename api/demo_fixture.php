@@ -308,8 +308,25 @@ function demo_fixture_write_meta(PDO $pdo, string $id): void {
         VALUES (?, ?, ?, ?, NULL, ?, ?, ?)
         ON DUPLICATE KEY UPDATE number = VALUES(number), discipline = VALUES(discipline), starts = VALUES(starts)
     ");
+    // Welke DC's hebben handmatig samengestelde afstanden (via de tijdschema-
+    // wizard)? Die laten we met rust — anders plakt de demo-import z'n eigen
+    // fixture-afstanden er telkens weer bovenop, náást de wizard-afstanden
+    // (dubbele afstanden in de loting). Spiegelt de KNSB-import (import.php).
+    $handmatigeDcs = [];
+    try {
+        $dcIds = array_column($f['dcs'], 'id');
+        if ($dcIds) {
+            $ph = implode(',', array_fill(0, count($dcIds), '?'));
+            $hq = $pdo->prepare("SELECT id FROM distance_combinations WHERE afstanden_handmatig = 1 AND id IN ($ph)");
+            $hq->execute($dcIds);
+            foreach ($hq->fetchAll(PDO::FETCH_COLUMN) as $hid) $handmatigeDcs[$hid] = true;
+        }
+    } catch (\Throwable $e) { /* kolom bestaat nog niet → geen skip */ }
+
     foreach ($f['dcs'] as $dc) {
         $insDc->execute([$dc['id'], $f['id'], $dc['number'], $dc['name'], $dc['category_filter']]);
+        // Handmatig samengestelde DC: DC-metadata gesynct, afstanden met rust laten.
+        if (isset($handmatigeDcs[$dc['id']])) continue;
         foreach ($f['distances'] as $d) {
             $insDist->execute([
                 $d['id'], $dc['id'], $d['number'], $d['name'],
