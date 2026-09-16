@@ -41,7 +41,7 @@ WITH current_results AS (
         d.name                                   AS afstand,
         d.value_meters                           AS afstand_meters,
         p.category                               AS kat,
-        p.license_key                            AS p_lic,
+        p.person_id                              AS p_lic,
         p.full_name                              AS rijder,
         h.heat_naam                              AS heat,
         COALESCE(tsr.ronde_type,
@@ -56,13 +56,13 @@ WITH current_results AS (
             ELSE LOWER(CONCAT(REGEXP_SUBSTR(d.name, '[0-9]+'), 'm'))
         END                                      AS afstand_key,
         ROW_NUMBER() OVER (
-            PARTITION BY p.license_key, d.name, p.category
+            PARTITION BY p.person_id, d.name, p.category
             ORDER BY COALESCE(res.bruto_tijd_ms, res.tijd_ms)
         )                                        AS rider_rn
     FROM results res
     JOIN heat_entries           he  ON he.id = res.heat_entry_id
     JOIN heats                  h   ON h.id  = he.heat_id
-    JOIN persons                p   ON p.license_key = he.person_license
+    JOIN persons                p   ON p.person_id = he.person_id
     LEFT JOIN tijdschema_ritten tsr ON tsr.id = h.tijdschema_rit_id
     JOIN distances              d   ON d.id  = h.distance_id
                                    AND d.distance_combination_id = h.distance_combination_id
@@ -90,7 +90,7 @@ pr_source_results AS (
     -- Ronde-label uit tijdschema_ritten.ronde_type + heat_nr (fallback bij
     -- ontbrekende tsr-link: heat_naam-pattern).
     SELECT
-        he.person_license,
+        he.person_id,
         d.name                                   AS distance_naam,
         COALESCE(res.bruto_tijd_ms, res.tijd_ms) AS tijd_ms,
         c.name                                   AS comp_naam,
@@ -134,7 +134,7 @@ pr_source_uitslag AS (
     -- DEZELFDE wedstrijd, maar same-day verschillende wedstrijden zijn
     -- bewust toegestaan (zou een echte historische tijd kunnen zijn).
     SELECT
-        ua.person_license,
+        ua.person_id,
         ua.distance_naam,
         ua.tijd_ms,
         ua.competition_naam                      AS comp_naam,
@@ -158,7 +158,7 @@ pr_source_uitslag AS (
 ),
 pr_combined AS (
     SELECT
-        person_license,
+        person_id,
         CASE
             WHEN LOWER(distance_naam) LIKE '%marathon%' THEN 'marathon'
             WHEN LOWER(distance_naam) LIKE '%relay%' OR LOWER(distance_naam) LIKE '%estafette%'
@@ -177,20 +177,20 @@ pr_combined AS (
 ),
 pr_history AS (
     SELECT
-        person_license,
+        person_id,
         afstand_key,
         tijd_ms                                  AS pr_ms,
         comp_naam                                AS pr_wedstrijd,
         comp_datum                               AS pr_datum,
         ronde_label                              AS pr_ronde,
         ROW_NUMBER() OVER (
-            PARTITION BY person_license, afstand_key
+            PARTITION BY person_id, afstand_key
             ORDER BY tijd_ms ASC, comp_datum ASC
         )                                        AS pr_rn
     FROM pr_combined
 ),
 pr_best AS (
-    SELECT person_license, afstand_key, pr_ms, pr_wedstrijd, pr_datum, pr_ronde
+    SELECT person_id, afstand_key, pr_ms, pr_wedstrijd, pr_datum, pr_ronde
     FROM pr_history
     WHERE pr_rn = 1
 ),
@@ -204,7 +204,7 @@ ranked AS (
         ROW_NUMBER() OVER (PARTITION BY b.afstand, b.kat ORDER BY b.gereden_ms) AS rn
     FROM best_per_rider b
     LEFT JOIN pr_best pr
-           ON pr.person_license = b.p_lic
+           ON pr.person_id = b.p_lic
           AND pr.afstand_key    = b.afstand_key
 )
 SELECT * FROM ranked

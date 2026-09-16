@@ -57,7 +57,7 @@ WITH base AS (
         d.name                                       AS afstand,
         d.value_meters                               AS afstand_meters,
         p.category                                   AS kat,
-        p.license_key                                AS p_lic,
+        p.person_id                                  AS p_lic,
         p.full_name                                  AS rijder,
         h.heat_naam                                  AS heat,
         h.competition_id                             AS comp_id,
@@ -82,13 +82,13 @@ WITH base AS (
         -- Per rijder de snelste rij eruit pikken: ROW_NUMBER over (rijder,
         -- afstand, cat) sorteert op tijd ASC; rider_rn = 1 = persoonlijk best.
         ROW_NUMBER() OVER (
-            PARTITION BY p.license_key, d.name, p.category
+            PARTITION BY p.person_id, d.name, p.category
             ORDER BY COALESCE(res.bruto_tijd_ms, res.tijd_ms) ASC
         )                                            AS rider_rn
     FROM results res
     JOIN heat_entries           he  ON he.id = res.heat_entry_id
     JOIN heats                  h   ON h.id  = he.heat_id
-    JOIN persons                p   ON p.license_key = he.person_license
+    JOIN persons                p   ON p.person_id = he.person_id
     LEFT JOIN tijdschema_ritten tsr ON tsr.id = h.tijdschema_rit_id
     JOIN distances              d   ON d.id  = h.distance_id
                                    AND d.distance_combination_id = h.distance_combination_id
@@ -125,13 +125,13 @@ uitslag_latest AS (
     -- (rijder × comp × dc × afstand). split_group expliciet WEGGELATEN uit
     -- GROUP BY zodat een rijder met split-keys (bv. multi-cat DC) toch maar
     -- één rang krijgt in dit rapport (de meest recente snapshot).
-    SELECT ua1.person_license, ua1.competition_id,
+    SELECT ua1.person_id, ua1.competition_id,
            ua1.distance_combination_id, ua1.distance_id, ua1.rang
     FROM uitslag_afstand ua1
     INNER JOIN (
         SELECT MAX(id) AS max_id
         FROM uitslag_afstand
-        GROUP BY person_license, competition_id, distance_combination_id, distance_id
+        GROUP BY person_id, competition_id, distance_combination_id, distance_id
     ) lt ON lt.max_id = ua1.id
 ),
 ranked AS (
@@ -153,7 +153,7 @@ ranked AS (
         ul.rang AS uitslag_rang
     FROM best_per_rider b
     LEFT JOIN uitslag_latest ul ON
-            ul.person_license          = b.p_lic
+            ul.person_id               = b.p_lic
         AND ul.competition_id          = b.comp_id
         AND ul.distance_combination_id = b.dc_id
         AND ul.distance_id             = b.dist_id
