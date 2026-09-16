@@ -40,13 +40,16 @@ function _rpRonde(?string $heatNaam, $ronde): string {
 }
 
 function rijderProfielData(PDO $pdo, string $lic): array {
+    require_once __DIR__ . '/../inc/person_id.php';   // person_id-resolutie (fase 3d-iii)
+    // $lic kan een licentie (sessie) of person_id-token zijn → naar person_id.
+    $pid = resolveNaarPersonId($pdo, $lic);
     // ── 0. Persoon (kop) ────────────────────────────────────────────────
     $pStmt = $pdo->prepare("
         SELECT license_key, full_name, short_name, category, birth_year,
                nationality, club_full, club_short, start_number, gender
-        FROM persons WHERE license_key = ? LIMIT 1
+        FROM persons WHERE person_id = ? LIMIT 1
     ");
-    $pStmt->execute([$lic]);
+    $pStmt->execute([$pid]);
     $persoon = $pStmt->fetch(PDO::FETCH_ASSOC) ?: null;
 
     // ── 1. Klassering per wedstrijd+afstand (categorie-eigen + NL-only) ──
@@ -55,19 +58,19 @@ function rijderProfielData(PDO $pdo, string $lic): array {
           SELECT
               ua.competition_id, ua.competition_datum, ua.competition_naam,
               ua.distance_naam, ua.distance_meters, ua.categorie,
-              ua.person_license, ua.rang, ua.tijd_ms, ua.sanctie,
+              ua.person_id, ua.rang, ua.tijd_ms, ua.sanctie,
               (p.nationality = 'NED') AS is_ned,
               ROW_NUMBER() OVER (
                   PARTITION BY ua.competition_id, ua.distance_naam,
                                COALESCE(ua.distance_meters, 0), ua.categorie
-                  ORDER BY ua.rang, ua.person_license) AS klassering_cat,
+                  ORDER BY ua.rang, ua.person_id) AS klassering_cat,
               ROW_NUMBER() OVER (
                   PARTITION BY ua.competition_id, ua.distance_naam,
                                COALESCE(ua.distance_meters, 0), ua.categorie,
                                (p.nationality = 'NED')
-                  ORDER BY ua.rang, ua.person_license) AS klassering_nl
+                  ORDER BY ua.rang, ua.person_id) AS klassering_nl
           FROM uitslag_afstand ua
-          JOIN persons p ON p.license_key = ua.person_license
+          JOIN persons p ON p.person_id = ua.person_id
           WHERE ua.rang IS NOT NULL
             AND ua.distance_naam NOT REGEXP 'stafette|flossing|elay'
         )
@@ -77,10 +80,10 @@ function rijderProfielData(PDO $pdo, string $lic): array {
                CASE WHEN is_ned THEN klassering_nl END AS klassering_nl,
                tijd_ms AS beste_tijd_ms
         FROM ranked
-        WHERE person_license = ?
+        WHERE person_id = ?
         ORDER BY datum
     ");
-    $kStmt->execute([$lic]);
+    $kStmt->execute([$pid]);
     $klasRijen = $kStmt->fetchAll(PDO::FETCH_ASSOC);
 
     // ── 2. Snelste tijd + ronde uit de ritten ──────────────────────────
@@ -99,14 +102,14 @@ function rijderProfielData(PDO $pdo, string $lic): array {
           JOIN heats        h  ON h.id  = he.heat_id
           LEFT JOIN distances d ON d.id = h.distance_id
                                 AND d.distance_combination_id = h.distance_combination_id
-          WHERE he.person_license = ?
+          WHERE he.person_id = ?
             AND r.tijd_ms IS NOT NULL AND r.tijd_ms > 0
             AND (r.sanctie IS NULL OR r.sanctie NOT IN ('DNS','DNF','DQ-TF','DQ-SF','DQ-DF'))
         )
         SELECT competition_id, afstand, meters, ronde, heat_naam, tijd_ms
         FROM ritten WHERE snelste = 1
     ");
-    $tStmt->execute([$lic]);
+    $tStmt->execute([$pid]);
     // Map (comp|canon) → snelste tijd + rondelabel.
     $tmap = [];
     foreach ($tStmt->fetchAll(PDO::FETCH_ASSOC) as $r) {

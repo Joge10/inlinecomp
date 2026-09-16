@@ -274,7 +274,7 @@ if ($action !== '') {
                 SELECT COALESCE(NULLIF(p.short_name, ''), p.full_name) AS short_name
                 FROM entries e
                 JOIN distance_combinations dc ON dc.id = e.distance_combination_id
-                JOIN persons p ON p.license_key = e.person_license
+                JOIN persons p ON p.person_id = e.person_id
                 WHERE dc.competition_id = ?
                   AND p.anonymized_at IS NULL
                 GROUP BY short_name
@@ -327,12 +327,12 @@ if ($action !== '') {
             // broers/zussen of toevallig dezelfde achternaam zitten samen.
             // De juiste persoon kiezen we via beste-fuzzy-match op voornaam.
             $kStmt = $pdo->prepare("
-                SELECT DISTINCT p.license_key, p.person_id, p.full_name, p.short_name, p.gender,
+                SELECT DISTINCT p.person_id AS license_key, p.person_id, p.full_name, p.short_name, p.gender,
                                 p.category, p.start_number, p.club_short, p.club_full,
                                 p.nationality, p.sponsor
                 FROM entries e
                 JOIN distance_combinations dc ON dc.id = e.distance_combination_id
-                JOIN persons p ON p.license_key = e.person_license
+                JOIN persons p ON p.person_id = e.person_id
                 WHERE dc.competition_id = ?
                   AND COALESCE(NULLIF(p.short_name, ''), p.full_name) = ?
                   AND p.anonymized_at IS NULL
@@ -378,14 +378,14 @@ if ($action !== '') {
                 SELECT dc.name AS dc_naam, e.status
                 FROM entries e
                 JOIN distance_combinations dc ON dc.id = e.distance_combination_id
-                WHERE e.person_license = ? AND dc.competition_id = ?
+                WHERE e.person_id = ? AND dc.competition_id = ?
                 ORDER BY dc.name
             ");
             $eStmt->execute([$lic, $compId]);
             $entries = $eStmt->fetchAll(PDO::FETCH_ASSOC);
             $tStmt = $pdo->prepare("
                 SELECT slot, code, source FROM transponders
-                WHERE person_license = ? AND competition_id = ?
+                WHERE person_id = ? AND competition_id = ?
                 ORDER BY slot
             ");
             $tStmt->execute([$lic, $compId]);

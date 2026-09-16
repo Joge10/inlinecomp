@@ -63,8 +63,8 @@ if ($actie === 'set_pin') {
     $pin2 = trim($body['pin2'] ?? '');
     $claimRaw = $tok;   // blijf op de claim-view bij een fout
     $prefillUser = $gbn;
-    $st = $pdo->prepare("SELECT rp.license_key, rp.username, p.full_name
-        FROM rijder_profiel rp JOIN persons p ON p.license_key = rp.license_key
+    $st = $pdo->prepare("SELECT rp.person_id AS license_key, rp.username, p.full_name
+        FROM rijder_profiel rp JOIN persons p ON p.person_id = rp.person_id
         WHERE rp.claim_token_hash = ? AND rp.claim_expires > NOW() LIMIT 1");
     $st->execute([hash('sha256', $tok)]);
     $rij = $st->fetch(PDO::FETCH_ASSOC);
@@ -83,7 +83,7 @@ if ($actie === 'set_pin') {
     } else {
         // Zelf-gekozen gebruikersnaam (beheerder liet 'm leeg) → uniek-check.
         if ($vasteUser === '') {
-            $uq = $pdo->prepare("SELECT 1 FROM rijder_profiel WHERE username = ? AND license_key <> ? LIMIT 1");
+            $uq = $pdo->prepare("SELECT 1 FROM rijder_profiel WHERE username = ? AND person_id <> ? LIMIT 1");
             $uq->execute([$gbn, $rij['license_key']]);
             if ($uq->fetchColumn()) $fout = 'Die gebruikersnaam is al in gebruik — kies een andere.';
         }
@@ -91,7 +91,7 @@ if ($actie === 'set_pin') {
             $pdo->prepare("UPDATE rijder_profiel
                 SET username = ?, pin_hash = ?, claim_token_hash = NULL, claim_expires = NULL,
                     claimed_at = NOW(), pin_pogingen = 0, lockout_tot = NULL
-                WHERE license_key = ?")
+                WHERE person_id = ?")
                 ->execute([($vasteUser !== '' ? $vasteUser : $gbn),
                            password_hash($pin, PASSWORD_DEFAULT), $rij['license_key']]);
             $_SESSION['rijder_lic'] = $rij['license_key'];   // meteen ingelogd
@@ -113,15 +113,15 @@ if ($actie === 'login') {
         $fout = 'Vul je gebruikersnaam en PIN in.';
     } else {
         // Uniek op gebruikersnaam (CI-collation) → geen naam-giswerk meer.
-        $st = $pdo->prepare("SELECT rp.license_key, rp.pin_hash
-            FROM rijder_profiel rp JOIN persons p ON p.license_key = rp.license_key
+        $st = $pdo->prepare("SELECT rp.person_id AS license_key, rp.pin_hash
+            FROM rijder_profiel rp JOIN persons p ON p.person_id = rp.person_id
             WHERE rp.username = ? AND rp.pin_hash IS NOT NULL AND p.anonymized_at IS NULL LIMIT 1");
         $st->execute([$gbn]);
         $c = $st->fetch(PDO::FETCH_ASSOC);
         if ($c && password_verify($pin, $c['pin_hash'])) {
             $_SESSION['rijder_lic'] = $c['license_key'];
             unset($_SESSION['rp_fails'], $_SESSION['rp_lock_tot']);
-            $pdo->prepare("UPDATE rijder_profiel SET laatste_login = NOW() WHERE license_key = ?")
+            $pdo->prepare("UPDATE rijder_profiel SET laatste_login = NOW() WHERE person_id = ?")
                 ->execute([$c['license_key']]);
             header('Location: profiel.php'); exit;
         }
@@ -206,7 +206,7 @@ $ingelogd  = !empty($_SESSION['rijder_lic']);
 // beheerder (de weergave leest uit persons/uitslagen, dus zonder deze check zou
 // een al-open sessie blijven werken tot uitloggen).
 if ($ingelogd) {
-    $chk = $pdo->prepare("SELECT 1 FROM rijder_profiel WHERE license_key = ? AND pin_hash IS NOT NULL LIMIT 1");
+    $chk = $pdo->prepare("SELECT 1 FROM rijder_profiel WHERE person_id = ? AND pin_hash IS NOT NULL LIMIT 1");
     $chk->execute([$_SESSION['rijder_lic']]);
     if (!$chk->fetchColumn()) { unset($_SESSION['rijder_lic']); $ingelogd = false; }
 }
@@ -216,7 +216,7 @@ if ($claimView) {
     // Toon voor wie de claim is (naam) + evt. de door de beheerder ingestelde
     // gebruikersnaam, als de link geldig is.
     $st = $pdo->prepare("SELECT p.full_name, rp.username
-        FROM rijder_profiel rp JOIN persons p ON p.license_key = rp.license_key
+        FROM rijder_profiel rp JOIN persons p ON p.person_id = rp.person_id
         WHERE rp.claim_token_hash = ? AND rp.claim_expires > NOW() LIMIT 1");
     $st->execute([hash('sha256', $claimRaw)]);
     $row = $st->fetch(PDO::FETCH_ASSOC);
