@@ -143,11 +143,11 @@ try {
     }
 
     // ── Startnummers ──────────────────────────────────────────────────────────
-    $snStmt = $pdo->prepare("SELECT person_license, startnummer FROM competition_startnummers WHERE competition_id = ?");
+    $snStmt = $pdo->prepare("SELECT person_id, startnummer FROM competition_startnummers WHERE competition_id = ?");
     $snStmt->execute([$compId]);
     $snMap = [];
     foreach ($snStmt->fetchAll(PDO::FETCH_ASSOC) as $row) {
-        $snMap[$row['person_license']] = $row['startnummer'];
+        $snMap[$row['person_id']] = $row['startnummer'];
     }
 
     // ── dc_ids placeholder ────────────────────────────────────────────────────
@@ -160,7 +160,7 @@ try {
     // gecorrigeerd, omdat we dan "per ongeluk" de vorige auto-berekende punten
     // als override behandelden.
     $overrideStmt = $pdo->prepare("
-        SELECT person_license, distance_id, punten
+        SELECT person_id AS person_license, distance_id, punten
         FROM uitslag_afstand
         WHERE competition_id             = ?
           AND distance_combination_id IN ($dcPh)
@@ -175,14 +175,14 @@ try {
 
     // ── Rijder-query ──────────────────────────────────────────────────────────
     $rijderStmt = $pdo->prepare("
-        SELECT he.person_license,
+        SELECT he.person_id AS person_license,
                p.person_id,
                p.full_name, p.short_name, p.start_number,
                p.category AS categorie,
                res.finishpositie, res.tijd_ms, res.sanctie,
                res.rondes, res.punten AS pk_punten, res.afval_rang
         FROM heat_entries he
-        JOIN persons p ON p.license_key = he.person_license
+        JOIN persons p ON p.person_id = he.person_id
         LEFT JOIN results res ON res.heat_entry_id = he.id
         WHERE he.heat_id = ?
         ORDER BY he.startpositie
@@ -472,7 +472,7 @@ try {
                     $compId, $compNaam, $compDatum,
                     $primaryDcId, $dcNaam, '',
                     $distId, $distNaam, $distMeters,
-                    $lic, personIdVoorLicentie($pdo, $lic), $personCache[$lic]['categorie'] ?? $r['categorie'] ?? null,
+                    licentieVoorPersonId($pdo, $lic), $lic, $personCache[$lic]['categorie'] ?? $r['categorie'] ?? null,
                     $r['rang'], null, $r['ronde_label'] ?? 'Finale',
                     $r['tijd_ms'], $punten, $sanctieDb,
                 ]);
@@ -646,7 +646,7 @@ try {
                     $compId, $compNaam, $compDatum,
                     $primaryDcId, $dcNaam, '',
                     $distId, $distNaam, $distMeters,
-                    $lic, personIdVoorLicentie($pdo, $lic), $personCache[$lic]['categorie'] ?? null,
+                    licentieVoorPersonId($pdo, $lic), $lic, $personCache[$lic]['categorie'] ?? null,
                     $gc['rang'], null, 'Serie + A-finale',
                     $gc['finale_tijd_ms'], $punten, $sanctieDb,
                 ]);
@@ -685,7 +685,7 @@ try {
                     $compId, $compNaam, $compDatum,
                     $primaryDcId, $dcNaam, '',
                     $distId, $distNaam, $distMeters,
-                    $lic, personIdVoorLicentie($pdo, $lic), $personCache[$lic]['categorie'] ?? null,
+                    licentieVoorPersonId($pdo, $lic), $lic, $personCache[$lic]['categorie'] ?? null,
                     $rang, (int)$r['finishpositie'], $finaleNaam,
                     $r['tijd_ms'] !== null ? (int)$r['tijd_ms'] : null,
                     $punten, null,
@@ -706,7 +706,7 @@ try {
                     $compId, $compNaam, $compDatum,
                     $primaryDcId, $dcNaam, '',
                     $distId, $distNaam, $distMeters,
-                    $lic, personIdVoorLicentie($pdo, $lic), $personCache[$lic]['categorie'] ?? null,
+                    licentieVoorPersonId($pdo, $lic), $lic, $personCache[$lic]['categorie'] ?? null,
                     null, null, $finaleNaam,
                     null, $punten, $sanctieDb,
                 ]);
@@ -722,7 +722,7 @@ try {
     // Lees alle afstand-data voor deze DC opnieuw uit uitslag_afstand
     // (bevat ook afstanden die eerder zijn vastgelegd maar nu niet opnieuw berekend).
     $allPuntenStmt = $pdo->prepare("
-        SELECT person_license, distance_id, punten, sanctie
+        SELECT person_id AS person_license, distance_id, punten, sanctie
         FROM uitslag_afstand
         WHERE competition_id          = ?
           AND distance_combination_id = ?
@@ -887,7 +887,7 @@ try {
         $upsertKlas->execute([
             $compId, $compNaam, $compDatum,
             $primaryDcId, $dcNaam, '',
-            $kr['lic'], personIdVoorLicentie($pdo, $kr['lic']), $cat,
+            licentieVoorPersonId($pdo, $kr['lic']), $kr['lic'], $cat,
             $rang, $kr['totaal'],
             json_encode($kr['detail'], JSON_UNESCAPED_UNICODE),
         ]);
@@ -902,7 +902,7 @@ try {
         $upsertKlas->execute([
             $compId, $compNaam, $compDatum,
             $primaryDcId, $dcNaam, '',
-            $ur['lic'], personIdVoorLicentie($pdo, $ur['lic']), $cat,
+            licentieVoorPersonId($pdo, $ur['lic']), $ur['lic'], $cat,
             null, 0,
             json_encode($ur['detail'], JSON_UNESCAPED_UNICODE),
         ]);

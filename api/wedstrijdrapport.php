@@ -170,7 +170,7 @@ try {
     ");
     $uitslagStmt = $pdo->prepare("
         SELECT ua.rang, ua.categorie, ua.split_group,
-               ua.person_license   AS license_key,
+               ua.person_id        AS license_key,
                p.person_id,
                p.full_name,
                p.start_number,
@@ -179,7 +179,7 @@ try {
                ua.finale_naam,
                ua.tijd_ms, ua.punten, ua.sanctie
         FROM uitslag_afstand ua
-        LEFT JOIN persons p ON p.license_key = ua.person_license
+        LEFT JOIN persons p ON p.person_id = ua.person_id
         WHERE ua.distance_combination_id = ?
           AND ua.distance_id             = ?
         ORDER BY ua.split_group,
@@ -199,7 +199,7 @@ try {
     // query alleen finale-heats op (waar h.distance_id wel direct gevuld is)
     // en mist alle voorrondes — incl. de jury-aanpassingen daarin.
     $liveExtraStmt = $pdo->prepare("
-        SELECT he.person_license,
+        SELECT he.person_id AS person_license,
                res.tijd_ms,
                res.bruto_tijd_ms,
                res.is_photofinish,
@@ -228,7 +228,7 @@ try {
 
     $klassementStmt = $pdo->prepare("
         SELECT uk.rang, uk.categorie, uk.split_group,
-               uk.person_license   AS license_key,
+               uk.person_id        AS license_key,
                p.person_id,
                p.full_name,
                p.start_number,
@@ -236,7 +236,7 @@ try {
                p.sponsor,
                uk.punten_totaal
         FROM uitslag_klassement uk
-        LEFT JOIN persons p ON p.license_key = uk.person_license
+        LEFT JOIN persons p ON p.person_id = uk.person_id
         WHERE uk.distance_combination_id = ?
         ORDER BY uk.split_group,
                  -- NULL-rang (DQ/DNF/DNS) onderaan ipv MySQL-default bovenaan
@@ -470,11 +470,11 @@ try {
     // Dedup op license_key zodat iedereen 1x in de lijst staat.
     // Sortering: startnummer dan achternaam.
     $delnStmt = $pdo->prepare("
-        SELECT p.license_key, p.person_id, p.full_name, p.short_name, p.category,
+        SELECT p.person_id AS license_key, p.person_id, p.full_name, p.short_name, p.category,
                p.nationality, p.start_number, p.club_full, p.sponsor,
                GROUP_CONCAT(DISTINCT src.distance_naam ORDER BY src.meters SEPARATOR '|||') AS gereden
         FROM (
-            SELECT ua.person_license AS license_key,
+            SELECT ua.person_id AS license_key,
                    d.name AS distance_naam,
                    d.value_meters AS meters
             FROM uitslag_afstand ua
@@ -486,7 +486,7 @@ try {
               AND LOWER(d.name) NOT LIKE '%estafette%'
               AND LOWER(d.name) NOT LIKE '%aflossing%'
             UNION
-            SELECT e.person_license AS license_key,
+            SELECT e.person_id AS license_key,
                    d.name AS distance_naam,
                    d.value_meters AS meters
             FROM entries e
@@ -498,8 +498,8 @@ try {
               AND LOWER(d.name) NOT LIKE '%aflossing%'
               AND (e.status IS NULL OR e.status <> 3)
         ) src
-        JOIN persons p ON p.license_key = src.license_key
-        GROUP BY p.license_key
+        JOIN persons p ON p.person_id = src.license_key
+        GROUP BY p.person_id
         ORDER BY p.start_number IS NULL, p.start_number, p.short_name, p.full_name
     ");
     $delnStmt->execute([$compId, $compId]);

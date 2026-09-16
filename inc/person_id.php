@@ -32,6 +32,25 @@ if (!function_exists('personIdVoorLicentie')) {
     }
 }
 
+if (!function_exists('licentieVoorPersonId')) {
+    /**
+     * person_id → license_key (of null). Omgekeerde van personIdVoorLicentie.
+     * Gebruikt om de person_license-SCHADUW te vullen bij dual-write inserts nu de
+     * code op person_id draait (fase 3d-iii). Bij fase 4 (license_key weg uit
+     * persons) valt deze en de schaduw-kolom weg. Statische cache per request.
+     */
+    function licentieVoorPersonId(PDO $pdo, ?string $personId): ?string {
+        static $cache = [];
+        if ($personId === null || $personId === '') return null;
+        if (isset($cache[$personId])) return $cache[$personId];
+        $st = $pdo->prepare("SELECT license_key FROM persons WHERE person_id = ? LIMIT 1");
+        $st->execute([$personId]);
+        $lk = $st->fetchColumn();
+        if ($lk === false) return null;
+        return $cache[$personId] = (string)$lk;
+    }
+}
+
 if (!function_exists('systeemVoorLicentie')) {
     /**
      * Bepaalt het person_external_ids.systeem-label uit de vorm van de license_key.

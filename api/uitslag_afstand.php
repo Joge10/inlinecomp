@@ -488,24 +488,24 @@ try {
 
         // Wedstrijd-startnummers
         $snStmt = $pdo->prepare("
-            SELECT person_license, startnummer FROM competition_startnummers WHERE competition_id = ?
+            SELECT person_id, startnummer FROM competition_startnummers WHERE competition_id = ?
         ");
         $snStmt->execute([$compId]);
         $snMap = [];
         foreach ($snStmt->fetchAll(PDO::FETCH_ASSOC) as $row) {
-            $snMap[$row['person_license']] = $row['startnummer'];
+            $snMap[$row['person_id']] = $row['startnummer'];
         }
 
         // Rijders per heat laden — bruto_tijd_ms + is_photofinish meenemen
         // zodat berekenInternationaalResultaat() ze kan propageren naar de
         // resultaat-output (basis voor de jury-aanpassings-footnote in print).
         $rijderStmt = $pdo->prepare("
-            SELECT he.person_license, p.person_id, p.full_name, p.short_name, p.start_number,
+            SELECT he.person_id AS person_license, p.person_id, p.full_name, p.short_name, p.start_number,
                    p.category AS categorie, res.finishpositie, res.tijd_ms,
                    res.bruto_tijd_ms, res.is_photofinish, res.sanctie,
                    res.rondes, res.punten AS pk_punten, res.afval_rang
             FROM heat_entries he
-            JOIN persons p ON p.license_key = he.person_license
+            JOIN persons p ON p.person_id = he.person_id
             LEFT JOIN results res ON res.heat_entry_id = he.id
             WHERE he.heat_id = ?
             ORDER BY he.startpositie
@@ -593,7 +593,7 @@ try {
                 : "";
             $distSanctieParams = $distId ? [$distId] : [];
             $sanctieStmt = $pdo->prepare("
-                SELECT DISTINCT he.person_license,
+                SELECT DISTINCT he.person_id AS person_license,
                        CASE COALESCE(ts_r.ronde_type, CONCAT('ronde_', h.ronde))
                            WHEN 'heats'        THEN 'S'
                            WHEN 'kwartfinale'   THEN 'KF'
@@ -608,7 +608,7 @@ try {
                 JOIN heats h ON h.id = he.heat_id
                 LEFT JOIN tijdschema_ritten ts_r ON ts_r.id = h.tijdschema_rit_id
                 JOIN results res ON res.heat_entry_id = he.id
-                WHERE he.person_license IN ($licPh)
+                WHERE he.person_id IN ($licPh)
                   AND h.competition_id = ?
                   AND h.distance_combination_id IN ($dcPh)
                   {$distSanctieFilter}
@@ -745,17 +745,17 @@ try {
 
     // ── Wedstrijd-startnummers (override persoons-startnummer) ────────────────
     $snStmt = $pdo->prepare("
-        SELECT person_license, startnummer FROM competition_startnummers WHERE competition_id = ?
+        SELECT person_id, startnummer FROM competition_startnummers WHERE competition_id = ?
     ");
     $snStmt->execute([$compId]);
     $snMap = [];
     foreach ($snStmt->fetchAll(PDO::FETCH_ASSOC) as $row) {
-        $snMap[$row['person_license']] = $row['startnummer'];
+        $snMap[$row['person_id']] = $row['startnummer'];
     }
 
     // ── Rijders per heat ophalen ──────────────────────────────────────────────
     $rijderStmt = $pdo->prepare("
-        SELECT he.person_license,
+        SELECT he.person_id AS person_license,
                p.person_id,
                he.startpositie,
                p.full_name,
@@ -771,7 +771,7 @@ try {
                res.bruto_rondes,
                res.punten AS pk_punten
         FROM heat_entries he
-        JOIN persons p ON p.license_key = he.person_license
+        JOIN persons p ON p.person_id = he.person_id
         LEFT JOIN results res ON res.heat_entry_id = he.id
         WHERE he.heat_id = ?
         ORDER BY he.startpositie
@@ -983,7 +983,7 @@ try {
                 : "";
             $distSanctieParams = $distId ? [$distId] : [];
             $sanctieStmt = $pdo->prepare("
-                SELECT DISTINCT he.person_license,
+                SELECT DISTINCT he.person_id AS person_license,
                        CASE COALESCE(ts_r.ronde_type, CONCAT('ronde_', h.ronde))
                            WHEN 'heats'        THEN 'S'
                            WHEN 'kwartfinale'   THEN 'KF'
@@ -998,7 +998,7 @@ try {
                 JOIN heats h ON h.id = he.heat_id
                 LEFT JOIN tijdschema_ritten ts_r ON ts_r.id = h.tijdschema_rit_id
                 JOIN results res ON res.heat_entry_id = he.id
-                WHERE he.person_license IN ($licPh)
+                WHERE he.person_id IN ($licPh)
                   AND h.competition_id = ?
                   AND h.distance_combination_id IN ($dcPh)
                   {$distSanctieFilter}
@@ -1132,7 +1132,7 @@ try {
             : "";
         $distSanctieParams = $distId ? [$distId] : [];
         $sanctieStmt = $pdo->prepare("
-            SELECT DISTINCT he.person_license,
+            SELECT DISTINCT he.person_id AS person_license,
                    CASE COALESCE(ts_r.ronde_type, CONCAT('ronde_', h.ronde))
                        WHEN 'heats'        THEN 'Serie'
                        WHEN 'kwartfinale'   THEN 'KF'
@@ -1147,7 +1147,7 @@ try {
             JOIN heats h ON h.id = he.heat_id
             LEFT JOIN tijdschema_ritten ts_r ON ts_r.id = h.tijdschema_rit_id
             JOIN results res ON res.heat_entry_id = he.id
-            WHERE he.person_license IN ($licPh)
+            WHERE he.person_id IN ($licPh)
               AND h.competition_id = ?
               AND h.distance_combination_id IN ($dcPh)
               {$distSanctieFilter}
