@@ -23,6 +23,7 @@ header('Access-Control-Allow-Origin: *');
 
 require_once __DIR__ . '/../../config_inlinecomp.php';
 require_once __DIR__ . '/../auth/session.php';
+require_once __DIR__ . '/../inc/person_id.php';   // person_id-resolutie (fase 3d-iii)
 requireAuth($pdo);
 
 if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
@@ -60,20 +61,25 @@ try {
         WHERE competition_id             = ?
           AND distance_combination_id    = ?
           AND distance_id                = ?
-          AND person_license             = ?
+          AND person_id                  = ?
     ");
 
     $pdo->beginTransaction();
     $opgeslagen = 0;
 
     foreach ($items as $item) {
-        $lic      = trim($item['person_license'] ?? '');
+        // person_id (fase 3d-iii) heeft voorrang; anders legacy person_license resolven.
+        $pid = trim($item['person_id'] ?? '');
+        if ($pid === '') {
+            $lic = trim($item['person_license'] ?? '');
+            if ($lic !== '') $pid = (string)(personIdVoorExtern($pdo, systeemVoorLicentie($lic), $lic) ?? '');
+        }
         $distId   = trim($item['distance_id']    ?? '');
         $punten   = isset($item['punten']) ? (float)$item['punten'] : null;
 
-        if (!$lic || !$distId || $punten === null) continue;
+        if (!$pid || !$distId || $punten === null) continue;
 
-        $updateStmt->execute([$punten, $compId, $dcId, $distId, $lic]);
+        $updateStmt->execute([$punten, $compId, $dcId, $distId, $pid]);
         if ($updateStmt->rowCount() > 0) $opgeslagen++;
     }
 

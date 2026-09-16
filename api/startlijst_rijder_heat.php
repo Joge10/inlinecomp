@@ -18,6 +18,7 @@ header('Access-Control-Allow-Origin: *');
 
 require_once __DIR__ . '/../../config_inlinecomp.php';
 require_once __DIR__ . '/../auth/session.php';
+require_once __DIR__ . '/../inc/person_id.php';   // person_id-resolutie (fase 3d-iii)
 $user = requireAuth($pdo);
 if (!kanSchrijven($user, 'startlijsten')) {
     http_response_code(403);
@@ -27,7 +28,6 @@ if (!kanSchrijven($user, 'startlijsten')) {
 
 $body       = json_decode(file_get_contents('php://input'), true) ?? [];
 $compId     = trim($body['competition_id'] ?? '');
-$license    = trim($body['person_license'] ?? '');
 $dcId       = trim($body['dc_id']         ?? '');
 $distId     = trim($body['distance_id']   ?? '') ?: null;
 $splitGroup = trim($body['split_group']   ?? '') ?: null;
@@ -36,7 +36,21 @@ $rondeType  = trim($body['ronde_type']    ?? '') ?: null;  // optioneel: voor A/
 $heatNr     = (isset($body['heat_nr']) && $body['heat_nr'] !== '' && $body['heat_nr'] !== null)
     ? (int)$body['heat_nr'] : null;
 
-if (!$compId || !$license || !$dcId) {
+// Identiteit: person_id (fase 3d-iii) heeft voorrang, anders legacy person_license.
+// De READ draait op person_id; de dual-write heeft in de overgangsfase óók de
+// license nodig (person_license-kolom bestaat tot fase 4), dus we leiden beide af.
+$personId = trim($body['person_id'] ?? '');
+$license  = trim($body['person_license'] ?? '');
+if ($personId === '' && $license !== '') {
+    $personId = (string)(personIdVoorExtern($pdo, systeemVoorLicentie($license), $license) ?? '');
+}
+if ($license === '' && $personId !== '') {
+    $rl = $pdo->prepare("SELECT license_key FROM persons WHERE person_id = ? LIMIT 1");
+    $rl->execute([$personId]);
+    $license = (string)($rl->fetchColumn() ?: '');
+}
+
+if (!$compId || !$personId || !$dcId) {
     http_response_code(400);
     echo json_encode(['error' => 'Verplichte velden ontbreken']);
     exit;
@@ -55,10 +69,10 @@ try {
           AND (h.distance_id = ? OR (h.distance_id IS NULL AND ? IS NULL))
           AND (h.split_group = ? OR (h.split_group IS NULL AND ? IS NULL))
           AND h.ronde         = ?
-          AND he.person_license = ?
+          AND he.person_id = ?
         LIMIT 1
     ");
-    $oudHeatStmt->execute([$compId, $dcId, $distId, $distId, $splitGroup, $splitGroup, $ronde, $license]);
+    $oudHeatStmt->execute([$compId, $dcId, $distId, $distId, $splitGroup, $splitGroup, $ronde, $personId]);
     $oudEntry = $oudHeatStmt->fetch(PDO::FETCH_ASSOC);
 
     // Verwijder huidige heat-entry
@@ -120,17 +134,19 @@ try {
         $startPos = (int)$posStmt->fetchColumn();
 
         // Persoonsinformatie
-        $pStmt = $pdo->prepare("SELECT start_number, category FROM persons WHERE license_key = ?");
-        $pStmt->execute([$license]);
+        $pStmt = $pdo->prepare("SELECT start_number, category FROM persons WHERE person_id = ?");
+        $pStmt->execute([$personId]);
         $persoon = $pStmt->fetch(PDO::FETCH_ASSOC) ?: [];
 
+        // Dual-write: person_id is leidend; person_license (schaduw tot fase 4)
+        // wordt uit person_id afgeleid.
         $pdo->prepare("
             INSERT INTO heat_entries (heat_id, person_license, person_id, categorie, startpositie, startnummer)
-            VALUES (?, ?, (SELECT person_id FROM persons WHERE license_key = ?), ?, ?, ?)
+            VALUES (?, (SELECT license_key FROM persons WHERE person_id = ?), ?, ?, ?, ?)
         ")->execute([
             $heat['id'],
-            $license,
-            $license,
+            $personId,
+            $personId,
             $persoon['category']     ?? null,
             $startPos,
             $persoon['start_number'] ?? null,

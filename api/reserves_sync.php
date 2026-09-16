@@ -45,6 +45,7 @@ if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
 
 require_once __DIR__ . '/../../config_inlinecomp.php';
 require_once __DIR__ . '/../auth/session.php';
+require_once __DIR__ . '/../inc/person_id.php';   // person_id-resolutie (fase 3d-iii)
 $_authUser = requireAuth($pdo);
 if (!kanSchrijven($_authUser, 'startlijsten')) {
     http_response_code(403);
@@ -84,15 +85,20 @@ try {
         UPDATE entries
            SET reserve = ?
          WHERE distance_combination_id = ?
-           AND person_license          = ?
+           AND person_id               = ?
            AND reserve_handmatig_ingezet = 0
     ");
     $nGezet = 0;
     foreach ($reserves as $r) {
-        $lk = trim($r['person_license'] ?? '');
+        // person_id (nieuw) heeft voorrang; anders legacy person_license resolven.
+        $pid = trim($r['person_id'] ?? '');
+        if ($pid === '') {
+            $lk = trim($r['person_license'] ?? '');
+            if ($lk !== '') $pid = (string)(personIdVoorExtern($pdo, systeemVoorLicentie($lk), $lk) ?? '');
+        }
         $nr = isset($r['reserve_nr']) ? (int)$r['reserve_nr'] : 0;
-        if (!$lk || $nr <= 0) continue;
-        $stmtSetRes->execute([$nr, $dcId, $lk]);
+        if (!$pid || $nr <= 0) continue;
+        $stmtSetRes->execute([$nr, $dcId, $pid]);
         $nGezet += $stmtSetRes->rowCount();
     }
 
@@ -112,15 +118,20 @@ try {
         UPDATE entries
            SET reserve = NULL
          WHERE distance_combination_id     = ?
-           AND person_license              = ?
+           AND person_id                   = ?
            AND reserve_handmatig_ingezet   = 0
            AND reserve IS NOT NULL
     ");
     $nGewist = 0;
-    foreach ($nietReserves as $lk) {
-        $lk = trim((string)$lk);
-        if (!$lk) continue;
-        $stmtClrRes->execute([$dcId, $lk]);
+    foreach ($nietReserves as $item) {
+        // niet_reserves is een platte lijst; accepteert person_id's óf licenties.
+        // Resolve als externe-id; lukt dat niet, dan is het al een person_id
+        // (of onbekend → geen match = ongevaarlijk). Fase-4-proof.
+        $val = trim((string)$item);
+        if ($val === '') continue;
+        $pid = (string)(personIdVoorExtern($pdo, systeemVoorLicentie($val), $val) ?? '');
+        if ($pid === '') $pid = $val;
+        $stmtClrRes->execute([$dcId, $pid]);
         $nGewist += $stmtClrRes->rowCount();
     }
 

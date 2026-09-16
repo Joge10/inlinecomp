@@ -37,6 +37,7 @@ if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
 
 require_once __DIR__ . '/../../config_inlinecomp.php';
 require_once __DIR__ . '/../auth/session.php';
+require_once __DIR__ . '/../inc/person_id.php';   // person_id-resolutie (fase 3d-iii)
 $_authUser = requireAuth($pdo);
 if (!kanSchrijven($_authUser, 'startlijsten')) {
     http_response_code(403);
@@ -47,13 +48,21 @@ if (!kanSchrijven($_authUser, 'startlijsten')) {
 $body          = json_decode(file_get_contents('php://input'), true) ?? [];
 $compId        = trim($body['competition_id'] ?? '');
 $dcId          = trim($body['dc_id']          ?? '');
-$personLicense = trim($body['person_license'] ?? '');
 $actie         = trim($body['actie']          ?? '');
 $reserveNr     = isset($body['reserve_nr']) ? (int)$body['reserve_nr'] : null;
 
-if (!$compId || !$dcId || !$personLicense) {
+// Identiteit: person_id (nieuw, fase 3d-iii) heeft voorrang; valt terug op de
+// legacy person_license (die intern naar person_id wordt geresolved via
+// person_external_ids). De queries draaien op person_id → fase-4-proof.
+$personId = trim($body['person_id'] ?? '');
+if ($personId === '') {
+    $legacyLic = trim($body['person_license'] ?? '');
+    if ($legacyLic !== '') $personId = (string)(personIdVoorExtern($pdo, systeemVoorLicentie($legacyLic), $legacyLic) ?? '');
+}
+
+if (!$compId || !$dcId || !$personId) {
     http_response_code(400);
-    echo json_encode(['error' => 'competition_id, dc_id en person_license zijn verplicht']);
+    echo json_encode(['error' => 'competition_id, dc_id en person_id (of person_license) zijn verplicht']);
     exit;
 }
 if ($actie !== 'inzet' && $actie !== 'terug') {
@@ -80,10 +89,10 @@ try {
     $entryStmt = $pdo->prepare("
         SELECT status, reserve, reserve_handmatig_ingezet
         FROM entries
-        WHERE distance_combination_id = ? AND person_license = ?
+        WHERE distance_combination_id = ? AND person_id = ?
         LIMIT 1
     ");
-    $entryStmt->execute([$dcId, $personLicense]);
+    $entryStmt->execute([$dcId, $personId]);
     $entry = $entryStmt->fetch(PDO::FETCH_ASSOC);
     if (!$entry) {
         http_response_code(404);
@@ -166,8 +175,8 @@ try {
                SET reserve                   = NULL,
                    reserve_handmatig_ingezet = 1,
                    status                    = 5
-             WHERE distance_combination_id = ? AND person_license = ?
-        ")->execute([$dcId, $personLicense]);
+             WHERE distance_combination_id = ? AND person_id = ?
+        ")->execute([$dcId, $personId]);
 
         echo json_encode([
             'ok'       => true,
@@ -190,8 +199,8 @@ try {
         UPDATE entries
            SET reserve                   = ?,
                reserve_handmatig_ingezet = 0
-         WHERE distance_combination_id = ? AND person_license = ?
-    ")->execute([$reserveNr, $dcId, $personLicense]);
+         WHERE distance_combination_id = ? AND person_id = ?
+    ")->execute([$reserveNr, $dcId, $personId]);
 
     echo json_encode([
         'ok'      => true,
