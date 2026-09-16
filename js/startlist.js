@@ -3570,9 +3570,18 @@ function maakDeelnemersPaneel(container, cache, cacheKey, flow, groep, distId) {
         runner_up: 4, finale_a: 4, finale_b: 4, finale: 4,
     };
 
+    // Stabiele identiteit over ALLE bronnen heen. Sinds de person_id-migratie
+    // spreken de bronnen verschillende tokens: de loting-heats (startlijst_laden/
+    // _genereer) leveren person_id onder `license_key`, de competitor-lijst komt
+    // van vergelijk.php (feed-licentie als `license_key`, person_id in db_person)
+    // óf wedstrijd_handmatig.php (person_id als `license_key`). Dedup/heat-lookup
+    // op alleen `license_key` gaf daardoor dubbele rijen (1× competitor zonder
+    // heat, 1× heat-rij). person_id is de gemene deler → daarop sleutelen.
+    const idVan = o => o?.person_id ?? o?.db_person?.person_id ?? o?.license_key;
+
     // Hulpfunctie: normaliseer competitor-object naar plat formaat
     const normaliseer = c => ({
-        license_key:  c.license_key,
+        license_key:  idVan(c),
         start_number: c.db_person?.start_number ?? c.knsb?.start_number ?? c.start_number ?? null,
         full_name:    c.db_person?.full_name    ?? c.knsb?.full_name    ?? c.full_name    ?? '',
         short_name:   c.db_person?.short_name   ?? c.knsb?.short_name   ?? c.short_name   ?? '',
@@ -3588,7 +3597,7 @@ function maakDeelnemersPaneel(container, cache, cacheKey, flow, groep, distId) {
     heatMapPerRonde[ronde1Type] = {};
     for (const heat of (cache.resultaat?.heats || []))
         for (const r of (heat.rijders || []))
-            heatMapPerRonde[ronde1Type][r.license_key] = heat.nummer;
+            heatMapPerRonde[ronde1Type][idVan(r)] = heat.nummer;
 
     // Volgende rondes: uit cache.resultaat.volgende_rondes
     // Skip ronde_type die al door ronde-1 is gevuld (voorkomt overschrijven bij ghost heats)
@@ -3598,7 +3607,7 @@ function maakDeelnemersPaneel(container, cache, cacheKey, flow, groep, distId) {
         heatMapPerRonde[vr.ronde_type] = {};
         for (const heat of (vr.heats || []))
             for (const r of (heat.rijders || []))
-                heatMapPerRonde[vr.ronde_type][r.license_key] = heat.nummer;
+                heatMapPerRonde[vr.ronde_type][idVan(r)] = heat.nummer;
     }
 
     // Welke rondes zijn al gegenereerd in de DB
@@ -3610,7 +3619,7 @@ function maakDeelnemersPaneel(container, cache, cacheKey, flow, groep, distId) {
     // Alle rijders: geregistreerd + uit alle rondes (voor rijders die evt. niet in competitors staan)
     const rijderMap = {};
     for (const c of (groep?.competitors || []))
-        rijderMap[c.license_key] = normaliseer(c);
+        rijderMap[idVan(c)] = normaliseer(c);
     for (const sleutel of Object.keys(heatMapPerRonde)) {
         // Ronde-1 data zit in cache.resultaat.heats (ook als sleutel bijv. 'finale_a' is)
         const heatsArr = sleutel === ronde1Type
@@ -3618,7 +3627,7 @@ function maakDeelnemersPaneel(container, cache, cacheKey, flow, groep, distId) {
             : (volgendeRondes.find(vr => vr.ronde_type === sleutel)?.heats || []);
         for (const heat of heatsArr)
             for (const r of (heat.rijders || []))
-                if (!rijderMap[r.license_key]) rijderMap[r.license_key] = normaliseer(r);
+                if (!rijderMap[idVan(r)]) rijderMap[idVan(r)] = normaliseer(r);
     }
 
     const rijders = Object.values(rijderMap).sort(
