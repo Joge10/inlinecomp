@@ -16,6 +16,7 @@ header('Expires: 0');
 require_once __DIR__ . '/../../config_inlinecomp.php';
 require_once __DIR__ . '/../api/lib_coach_auth.php';
 require_once __DIR__ . '/../inc/versie.php';
+require_once __DIR__ . '/../inc/person_id.php';   // person_id-resolutie (fase 3d-iii)
 
 // ── Bezoektracking: upsert session-hit in coach_visits ──────────────────────
 // HTML → full INSERT/UPDATE + peak-check. AJAX → last_seen bumpen met 30s
@@ -312,7 +313,7 @@ if ($action === 'clubs') {
                    MIN(NULLIF(p.club_short, '')) AS short
             FROM entries e
             JOIN distance_combinations dc ON dc.id = e.distance_combination_id
-            JOIN persons p ON p.license_key = e.person_license
+            JOIN persons p ON p.person_id = e.person_id
             WHERE dc.competition_id = ?
               AND p.club_full IS NOT NULL AND p.club_full != ''
             GROUP BY p.club_full
@@ -338,7 +339,7 @@ if ($action === 'sponsors') {
             SELECT DISTINCT p.sponsor
             FROM entries e
             JOIN distance_combinations dc ON dc.id = e.distance_combination_id
-            JOIN persons p ON p.license_key = e.person_license
+            JOIN persons p ON p.person_id = e.person_id
             WHERE dc.competition_id = ?
               AND p.sponsor IS NOT NULL AND p.sponsor != ''
             ORDER BY p.sponsor
@@ -361,12 +362,12 @@ if ($action === 'personen_by_club') {
     try {
         $stmt = $pdo->prepare("
             SELECT DISTINCT COALESCE(cs.startnummer, p.start_number) AS snr,
-                   p.license_key, p.person_id, p.full_name, p.category, p.club_full, p.sponsor
+                   p.person_id AS license_key, p.person_id, p.full_name, p.category, p.club_full, p.sponsor
             FROM entries e
             JOIN distance_combinations dc ON dc.id = e.distance_combination_id
-            JOIN persons p ON p.license_key = e.person_license
+            JOIN persons p ON p.person_id = e.person_id
             LEFT JOIN competition_startnummers cs
-                   ON cs.person_license = e.person_license
+                   ON cs.person_id = e.person_id
                   AND cs.competition_id = dc.competition_id
             WHERE dc.competition_id = ? AND p.club_full = ?
             ORDER BY snr
@@ -408,18 +409,20 @@ if ($action === 'personen_bulk') {
             $params = array_merge($params, $sponsors);
         }
         if ($licenses) {
-            $sub[]  = 'p.license_key IN (' . implode(',', array_fill(0, count($licenses), '?')) . ')';
+            // Tokens (licentie of person_id) → person_id (fase 3d-iii).
+            $licenses = array_values(array_filter(array_map(fn($l) => resolveNaarPersonId($pdo, $l), $licenses)));
+            $sub[]  = 'p.person_id IN (' . implode(',', array_fill(0, count($licenses), '?')) . ')';
             $params = array_merge($params, $licenses);
         }
         $where[] = '(' . implode(' OR ', $sub) . ')';
         $sql = "
             SELECT DISTINCT COALESCE(cs.startnummer, p.start_number) AS snr,
-                   p.license_key, p.person_id, p.full_name, p.category, p.club_full, p.sponsor
+                   p.person_id AS license_key, p.person_id, p.full_name, p.category, p.club_full, p.sponsor
             FROM entries e
             JOIN distance_combinations dc ON dc.id = e.distance_combination_id
-            JOIN persons p ON p.license_key = e.person_license
+            JOIN persons p ON p.person_id = e.person_id
             LEFT JOIN competition_startnummers cs
-                   ON cs.person_license = e.person_license
+                   ON cs.person_id = e.person_id
                   AND cs.competition_id = dc.competition_id
             WHERE " . implode(' AND ', $where) . "
             ORDER BY snr
@@ -443,12 +446,12 @@ if ($action === 'personen_by_sponsor') {
     try {
         $stmt = $pdo->prepare("
             SELECT DISTINCT COALESCE(cs.startnummer, p.start_number) AS snr,
-                   p.license_key, p.person_id, p.full_name, p.category, p.club_full, p.sponsor
+                   p.person_id AS license_key, p.person_id, p.full_name, p.category, p.club_full, p.sponsor
             FROM entries e
             JOIN distance_combinations dc ON dc.id = e.distance_combination_id
-            JOIN persons p ON p.license_key = e.person_license
+            JOIN persons p ON p.person_id = e.person_id
             LEFT JOIN competition_startnummers cs
-                   ON cs.person_license = e.person_license
+                   ON cs.person_id = e.person_id
                   AND cs.competition_id = dc.competition_id
             WHERE dc.competition_id = ? AND p.sponsor = ?
             ORDER BY snr
@@ -474,12 +477,12 @@ if ($action === 'person_by_startnummer') {
     try {
         $stmt = $pdo->prepare("
             SELECT COALESCE(cs.startnummer, p.start_number) AS snr,
-                   p.license_key, p.person_id, p.full_name, p.category, p.club_full, p.sponsor
+                   p.person_id AS license_key, p.person_id, p.full_name, p.category, p.club_full, p.sponsor
             FROM entries e
             JOIN distance_combinations dc ON dc.id = e.distance_combination_id
-            JOIN persons p ON p.license_key = e.person_license
+            JOIN persons p ON p.person_id = e.person_id
             LEFT JOIN competition_startnummers cs
-                   ON cs.person_license = e.person_license
+                   ON cs.person_id = e.person_id
                   AND cs.competition_id = dc.competition_id
             WHERE dc.competition_id = ?
               AND COALESCE(cs.startnummer, p.start_number) = ?
@@ -509,6 +512,7 @@ if ($action === 'person_lookup') {
     $compId  = trim($_GET['competition_id'] ?? '');
     $snr     = trim($_GET['snr'] ?? '');
     $license = trim($_GET['license_key'] ?? '');
+    if ($license !== '') $license = (string)(resolveNaarPersonId($pdo, $license) ?? $license);  // token → person_id
     $naam    = trim($_GET['naam'] ?? '');
     if (!$compId || (!$snr && !$license && !$naam)) {
         echo json_encode(['error' => 'competition_id + snr/license_key/naam verplicht']);
@@ -521,18 +525,18 @@ if ($action === 'person_lookup') {
         $base = "
             SELECT DISTINCT
                    COALESCE(cs.startnummer, p.start_number) AS snr,
-                   p.license_key, p.person_id, p.full_name, p.category, p.club_full,
+                   p.person_id AS license_key, p.person_id, p.full_name, p.category, p.club_full,
                    p.club_short, p.sponsor
             FROM entries e
             JOIN distance_combinations dc ON dc.id = e.distance_combination_id
-            JOIN persons p ON p.license_key = e.person_license
+            JOIN persons p ON p.person_id = e.person_id
             LEFT JOIN competition_startnummers cs
-                   ON cs.person_license = e.person_license
+                   ON cs.person_id = e.person_id
                   AND cs.competition_id = dc.competition_id
             WHERE dc.competition_id = ?
         ";
         if ($license !== '') {
-            $stmt = $pdo->prepare($base . " AND p.license_key = ? ORDER BY p.full_name");
+            $stmt = $pdo->prepare($base . " AND p.person_id = ? ORDER BY p.full_name");
             $stmt->execute([$compId, $license]);
         } elseif ($snr !== '') {
             $stmt = $pdo->prepare(
@@ -680,14 +684,14 @@ if ($action === 'programma') {
         // in zit maar niet JOUW rijder met dat nummer.
         $snrStmt = $pdo->prepare("
             SELECT he.heat_id,
-                   he.person_license AS lic,
+                   he.person_id AS lic,
                    p.person_id,
                    COALESCE(cs.startnummer, p.start_number) AS snr
             FROM heat_entries he
             JOIN heats h ON h.id = he.heat_id
-            JOIN persons p ON p.license_key = he.person_license
+            JOIN persons p ON p.person_id = he.person_id
             LEFT JOIN competition_startnummers cs
-                   ON cs.person_license = he.person_license
+                   ON cs.person_id = he.person_id
                   AND cs.competition_id = h.competition_id
             WHERE h.competition_id = ?
         ");
@@ -847,7 +851,7 @@ if ($action === 'uitslagen') {
             $catWhere = $catFilter !== '' ? ' WHERE p.category = ?' : '';
             $stmt = $pdo->prepare("
                 SELECT t.rang, t.punten_totaal, t.dc_naam, t.punten_detail,
-                       t.person_license AS lic,
+                       t.person_id AS lic,
                        p.person_id,
                        p.full_name, p.category AS categorie,
                        COALESCE(cs.startnummer, p.start_number) AS snr
@@ -858,8 +862,8 @@ if ($action === 'uitslagen') {
                     WHERE competition_id = ? AND distance_combination_id = ?
                     GROUP BY person_license
                 ) latest ON latest.max_id = t.id
-                JOIN persons p ON p.license_key = t.person_license
-                LEFT JOIN competition_startnummers cs ON cs.person_license = t.person_license AND cs.competition_id = ?
+                JOIN persons p ON p.person_id = t.person_id
+                LEFT JOIN competition_startnummers cs ON cs.person_id = t.person_id AND cs.competition_id = ?
                 $catWhere
                 ORDER BY CASE WHEN t.rang IS NULL THEN 1 ELSE 0 END, t.rang, t.punten_totaal
             ");
@@ -883,7 +887,7 @@ if ($action === 'uitslagen') {
             $catWhere = $catFilter !== '' ? ' WHERE p.category = ?' : '';
             $stmt = $pdo->prepare("
                 SELECT t.rang, t.finale_naam, t.tijd_ms, t.sanctie, t.distance_naam,
-                       t.person_license AS lic,
+                       t.person_id AS lic,
                        p.full_name, p.category AS categorie,
                        COALESCE(cs.startnummer, p.start_number) AS snr,
                        res_agg.rondes, res_agg.pk_punten
@@ -894,10 +898,10 @@ if ($action === 'uitslagen') {
                     WHERE competition_id = ? AND distance_combination_id = ? AND distance_id = ?
                     GROUP BY person_license
                 ) latest ON latest.max_id = t.id
-                JOIN persons p ON p.license_key = t.person_license
-                LEFT JOIN competition_startnummers cs ON cs.person_license = t.person_license AND cs.competition_id = ?
+                JOIN persons p ON p.person_id = t.person_id
+                LEFT JOIN competition_startnummers cs ON cs.person_id = t.person_id AND cs.competition_id = ?
                 LEFT JOIN (
-                    SELECT he.person_license, res.rondes, res.punten AS pk_punten
+                    SELECT he.person_id, res.rondes, res.punten AS pk_punten
                     FROM heat_entries he
                     JOIN heats h ON h.id = he.heat_id
                     JOIN results res ON res.heat_entry_id = he.id
@@ -905,7 +909,7 @@ if ($action === 'uitslagen') {
                       AND COALESCE(h.distance_id, '') = ?
                       AND (res.rondes IS NOT NULL OR res.punten IS NOT NULL)
                     ORDER BY res.id DESC
-                ) res_agg ON res_agg.person_license = t.person_license
+                ) res_agg ON res_agg.person_id = t.person_id
                 $catWhere
                 ORDER BY CASE WHEN t.rang IS NULL THEN 1 ELSE 0 END, t.rang
             ");
@@ -962,7 +966,7 @@ if ($action === 'rondes_cats') {
                    dc.name              AS dc_naam
             FROM heats h
             JOIN heat_entries he ON he.heat_id = h.id
-            JOIN persons p       ON p.license_key = he.person_license
+            JOIN persons p       ON p.person_id = he.person_id
             LEFT JOIN tijdschema_ritten tsr ON tsr.id = h.tijdschema_rit_id
             -- distances heeft compound PK (distance_combination_id, id).
             -- Dezelfde distance_id komt bewust in meerdere DCs voor voor
@@ -1175,7 +1179,7 @@ if ($action === 'ronde_uitslagen') {
         $heatRijStmt = $pdo->prepare("
             SELECT h.id AS heat_id, h.heat_nr,
                    COALESCE(tsr.ronde_type, 'heats') AS ronde_type,
-                   he.person_license, he.startpositie,
+                   he.person_id AS person_license, he.startpositie,
                    p.full_name, p.category AS categorie,
                    COALESCE(cs.startnummer, p.start_number) AS snr,
                    res.tijd_ms, res.bruto_tijd_ms, res.is_photofinish,
@@ -1184,9 +1188,9 @@ if ($action === 'ronde_uitslagen') {
             FROM heats h
             LEFT JOIN tijdschema_ritten tsr ON tsr.id = h.tijdschema_rit_id
             JOIN heat_entries he ON he.heat_id = h.id
-            JOIN persons p ON p.license_key = he.person_license
+            JOIN persons p ON p.person_id = he.person_id
             LEFT JOIN competition_startnummers cs
-                ON cs.person_license = he.person_license AND cs.competition_id = ?
+                ON cs.person_id = he.person_id AND cs.competition_id = ?
             LEFT JOIN results res ON res.heat_entry_id = he.id
             WHERE h.competition_id = ?
               AND h.distance_combination_id = ?
@@ -1466,25 +1470,28 @@ if ($action === 'coach_info') {
     $compId  = trim($body['competition_id'] ?? '');
     $licenses = is_array($body['licenses'] ?? null) ? $body['licenses'] : [];
     $licenses = array_values(array_filter(array_map('strval', $licenses)));
+    // Tokens (licentie of person_id) → person_id (fase 3d-iii).
+    require_once __DIR__ . '/../inc/person_id.php';
+    $licenses = array_values(array_filter(array_map(fn($l) => resolveNaarPersonId($pdo, $l), $licenses)));
     if (!$compId || !$licenses) { echo json_encode(['personen' => []]); exit; }
     try {
         $ph = implode(',', array_fill(0, count($licenses), '?'));
         // Per rijder: worst-case status (hoogste entry.status → "niet getekend" (4) is belangrijkst).
         // We nemen MAX(status); 4=niet getekend valt altijd op.
         $stStmt = $pdo->prepare("
-            SELECT p.license_key,
+            SELECT p.person_id AS license_key,
                    p.person_id,
                    COALESCE(cs.startnummer, p.start_number) AS snr,
                    p.full_name, p.category, p.club_full, p.sponsor,
                    MAX(e.status) AS entry_status
             FROM persons p
-            JOIN entries e ON e.person_license = p.license_key
+            JOIN entries e ON e.person_id = p.person_id
             JOIN distance_combinations dc ON dc.id = e.distance_combination_id
             LEFT JOIN competition_startnummers cs
-                   ON cs.person_license = p.license_key
+                   ON cs.person_id = p.person_id
                   AND cs.competition_id = dc.competition_id
-            WHERE dc.competition_id = ? AND p.license_key IN ($ph)
-            GROUP BY p.license_key
+            WHERE dc.competition_id = ? AND p.person_id IN ($ph)
+            GROUP BY p.person_id
         ");
         $stStmt->execute(array_merge([$compId], $licenses));
         $personen = [];
@@ -1504,7 +1511,7 @@ if ($action === 'coach_info') {
         //   blok.volgorde (master) → rit.volgorde (tiebreaker). Zo verschijnen
         //   ritten per rijder in de chronologische wedstrijd-volgorde.
         $heatStmt = $pdo->prepare("
-            SELECT he.person_license,
+            SELECT he.person_id AS person_license,
                    h.id AS heat_id, h.ronde, h.heat_naam,
                    h.distance_combination_id AS dc_id,
                    COALESCE(h.distance_id, tsr.distance_id) AS distance_id,
@@ -1522,7 +1529,7 @@ if ($action === 'coach_info') {
             LEFT JOIN distances d ON d.id = COALESCE(h.distance_id, tsr.distance_id)
                                  AND d.distance_combination_id = h.distance_combination_id
             WHERE h.competition_id = ?
-              AND he.person_license IN ($ph)
+              AND he.person_id IN ($ph)
             ORDER BY b.volgorde, tsr.volgorde, h.id
         ");
         $heatStmt->execute(array_merge([$compId], $licenses));
@@ -1616,13 +1623,13 @@ if ($action === 'coach_info') {
         // de coach kan dan in één oogopslag zien dat badge-1 altijd dezelfde
         // categorie betreft, badge-2 dezelfde, etc.
         $entStmt = $pdo->prepare("
-            SELECT e.person_license,
+            SELECT e.person_id AS person_license,
                    dc.id AS dc_id, dc.name AS dc_naam, dc.number AS dc_number,
                    e.status AS entry_status
             FROM entries e
             JOIN distance_combinations dc ON dc.id = e.distance_combination_id
             WHERE dc.competition_id = ?
-              AND e.person_license IN ($ph)
+              AND e.person_id IN ($ph)
             ORDER BY dc.number, dc.name
         ");
         $entStmt->execute(array_merge([$compId], $licenses));
@@ -1713,7 +1720,7 @@ if ($action === 'coach_info') {
 
         // Sancties: alle results met sanctie != NULL voor deze licenties in deze wedstrijd
         $saStmt = $pdo->prepare("
-            SELECT he.person_license,
+            SELECT he.person_id AS person_license,
                    res.sanctie, res.tijd_ms, res.finishpositie,
                    COALESCE(tsr.rit_naam, h.heat_naam) AS rit_naam,
                    COALESCE(tsr.ronde_type, 'heats') AS ronde_type,
@@ -1726,7 +1733,7 @@ if ($action === 'coach_info') {
             LEFT JOIN distances d ON d.id = COALESCE(h.distance_id, tsr.distance_id)
                                  AND d.distance_combination_id = h.distance_combination_id
             WHERE h.competition_id = ?
-              AND he.person_license IN ($ph)
+              AND he.person_id IN ($ph)
               AND res.sanctie IS NOT NULL AND res.sanctie != ''
             ORDER BY h.ronde, tsr.volgorde, h.id
         ");
@@ -1825,14 +1832,14 @@ if ($action === 'rit_detail') {
         $rStmt = $pdo->prepare("
             SELECT he.startpositie,
                    COALESCE(cs.startnummer, p.start_number) AS snr,
-                   p.license_key, p.person_id, p.full_name, p.category, p.club_full, p.sponsor,
+                   p.person_id AS license_key, p.person_id, p.full_name, p.category, p.club_full, p.sponsor,
                    res.finishpositie, res.tijd_ms,
                    res.bruto_tijd_ms, res.is_photofinish, res.sanctie,
                    res.rondes, res.punten AS pk_punten
             FROM heat_entries he
-            JOIN persons p ON p.license_key = he.person_license
+            JOIN persons p ON p.person_id = he.person_id
             LEFT JOIN competition_startnummers cs
-                   ON cs.person_license = he.person_license
+                   ON cs.person_id = he.person_id
                   AND cs.competition_id = ?
             LEFT JOIN results res ON res.heat_entry_id = he.id
             WHERE he.heat_id = ?
