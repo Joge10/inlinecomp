@@ -185,11 +185,11 @@ try {
     }
 
     // ── Wedstrijd-startnummers ────────────────────────────────────────────────
-    $snStmt = $pdo->prepare("SELECT person_license, startnummer FROM competition_startnummers WHERE competition_id = ?");
+    $snStmt = $pdo->prepare("SELECT person_id, startnummer FROM competition_startnummers WHERE competition_id = ?");
     $snStmt->execute([$compId]);
     $snMap = [];
     foreach ($snStmt->fetchAll(PDO::FETCH_ASSOC) as $row) {
-        $snMap[$row['person_license']] = $row['startnummer'];
+        $snMap[$row['person_id']] = $row['startnummer'];
     }
 
     // ── Overrides uit uitslag_afstand ─────────────────────────────────────────
@@ -215,7 +215,7 @@ try {
         $distFilterBind = $distIdsForSplit;
     }
     $ovStmt = $pdo->prepare("
-        SELECT person_license, distance_id, rang, punten, sanctie
+        SELECT person_id AS person_license, distance_id, rang, punten, sanctie
         FROM uitslag_afstand
         WHERE competition_id             = ?
           AND distance_combination_id IN ($dcPh)
@@ -259,14 +259,14 @@ try {
             SELECT license_key, person_id, full_name, short_name, start_number,
                    category AS categorie, club_short, club_full, sponsor
             FROM persons
-            WHERE license_key IN ($licPh)
+            WHERE person_id IN ($licPh)
         ");
         $pStmt->execute($alleKlasLics);
         foreach ($pStmt->fetchAll(PDO::FETCH_ASSOC) as $p) {
-            $personCache[$p['license_key']] = [
+            $personCache[$p['person_id']] = [
                 'full_name'    => $p['full_name'],
                 'short_name'   => $p['short_name'],
-                'start_number' => $snMap[$p['license_key']] ?? $p['start_number'],
+                'start_number' => $snMap[$p['person_id']] ?? $p['start_number'],
                 'categorie'    => $p['categorie'],
                 'club_short'   => $p['club_short'] ?? null,
                 'club_full'    => $p['club_full']  ?? null,
@@ -375,7 +375,7 @@ try {
     if ($alleLics) {
         $licPh = implode(',', array_fill(0, count($alleLics), '?'));
         $sanctieStmt = $pdo->prepare("
-            SELECT DISTINCT he.person_license,
+            SELECT DISTINCT he.person_id AS person_license,
                    d.name AS afstand_naam,
                    CASE COALESCE(ts_r.ronde_type, CONCAT('ronde_', h.ronde))
                        WHEN 'heats'        THEN 'S'
@@ -393,7 +393,7 @@ try {
             LEFT JOIN distances d ON d.id = COALESCE(h.distance_id, ts_r.distance_id)
                                  AND d.distance_combination_id = h.distance_combination_id
             JOIN results res ON res.heat_entry_id = he.id
-            WHERE he.person_license IN ($licPh)
+            WHERE he.person_id IN ($licPh)
               AND h.competition_id = ?
               AND h.distance_combination_id IN ($dcPh)
               AND res.sanctie IS NOT NULL

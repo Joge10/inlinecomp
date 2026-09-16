@@ -74,8 +74,8 @@ try {
         $filtParams = [$dcId, $splitTg];
     } elseif ($catFilter) {
         $catPh      = implode(',', array_fill(0, count($catFilter), '?'));
-        $filtSql    = "AND ua.person_license IN (
-                          SELECT license_key FROM persons WHERE category IN ($catPh))";
+        $filtSql    = "AND ua.person_id IN (
+                          SELECT person_id FROM persons WHERE category IN ($catPh))";
         $filtParams = $catFilter;
     }
 
@@ -130,7 +130,7 @@ try {
 
     // ── Tussenklassement berekenen (alleen op complete afstanden) ─────────────
     $rkSql = "
-        SELECT   ua.person_license,
+        SELECT   ua.person_id AS person_license,
                  p.person_id,
                  p.full_name,
                  p.short_name,
@@ -139,13 +139,13 @@ try {
                  MIN(COALESCE(ua.rang,   9999)) AS beste_rang,
                  COUNT(*)                        AS afstanden
         FROM     uitslag_afstand ua
-        JOIN     persons p ON p.license_key = ua.person_license
+        JOIN     persons p ON p.person_id = ua.person_id
         WHERE    ua.competition_id          = ?
           AND    ua.distance_combination_id = ?
           {$afstandSql}
           {$incSql}
           {$filtSql}
-        GROUP BY ua.person_license, p.full_name, p.short_name, p.start_number
+        GROUP BY ua.person_id, p.full_name, p.short_name, p.start_number
         ORDER BY totaal_punten ASC, beste_rang ASC
     ";
     $rkParams = array_merge($afstandParams, $incParams, $filtParams);

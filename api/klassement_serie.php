@@ -218,7 +218,7 @@ function berekenSerie(PDO $pdo, string $serieId): array {
         // rijder überhaupt voorkomt in het eindklassement van de finale,
         // ongeacht punten/rang.
         $chk = $pdo->prepare("
-            SELECT DISTINCT person_license
+            SELECT DISTINCT person_id AS person_license
             FROM uitslag_klassement
             WHERE competition_id = ?
         ");
@@ -315,7 +315,7 @@ function berekenSerie(PDO $pdo, string $serieId): array {
                 SELECT ua.competition_id,
                        ua.distance_combination_id AS dc_id, ua.dc_naam,
                        ua.distance_id, ua.distance_naam,
-                       ua.split_group, ua.person_license, ua.categorie,
+                       ua.split_group, ua.person_id AS person_license, ua.categorie,
                        ua.rang, ua.punten AS punten_totaal,
                        c.name AS comp_naam,
                        p.person_id, p.full_name, p.short_name, p.category AS persoon_cat,
@@ -325,9 +325,9 @@ function berekenSerie(PDO $pdo, string $serieId): array {
                     ON d.distance_combination_id = ua.distance_combination_id
                    AND d.id = ua.distance_id
                 JOIN competitions c ON c.id = ua.competition_id
-                JOIN persons p ON p.license_key = ua.person_license
+                JOIN persons p ON p.person_id = ua.person_id
                 LEFT JOIN competition_startnummers cs
-                       ON cs.person_license = ua.person_license
+                       ON cs.person_id = ua.person_id
                       AND cs.competition_id = ua.competition_id
                 WHERE ua.competition_id IN ($ph)
                   AND ua.punten IS NOT NULL
@@ -360,10 +360,10 @@ function berekenSerie(PDO $pdo, string $serieId): array {
             // de rijder binnen deze comp+dc, in plaats van op een enkele
             // afstand met punten=0.
             $uitgeslotenSql = "
-                SELECT competition_id, distance_combination_id, person_license
+                SELECT competition_id, distance_combination_id, person_id AS person_license
                 FROM uitslag_afstand
                 WHERE competition_id IN ($ph)
-                GROUP BY competition_id, distance_combination_id, person_license
+                GROUP BY competition_id, distance_combination_id, person_id
                 HAVING SUM(COALESCE(punten, 0)) = 0
             ";
             $uStmt = $pdo->prepare($uitgeslotenSql);
@@ -377,16 +377,16 @@ function berekenSerie(PDO $pdo, string $serieId): array {
             $kSql = "
                 SELECT uk.competition_id, uk.distance_combination_id AS dc_id, uk.dc_naam,
                        NULL AS distance_id, NULL AS distance_naam,
-                       uk.split_group, uk.person_license, uk.categorie,
+                       uk.split_group, uk.person_id AS person_license, uk.categorie,
                        uk.rang, uk.punten_totaal,
                        c.name AS comp_naam,
                        p.person_id, p.full_name, p.short_name, p.category AS persoon_cat,
                        COALESCE(cs.startnummer, p.start_number) AS wedstrijd_snr
                 FROM uitslag_klassement uk
                 JOIN competitions c ON c.id = uk.competition_id
-                JOIN persons p ON p.license_key = uk.person_license
+                JOIN persons p ON p.person_id = uk.person_id
                 LEFT JOIN competition_startnummers cs
-                       ON cs.person_license = uk.person_license
+                       ON cs.person_id = uk.person_id
                       AND cs.competition_id = uk.competition_id
                 WHERE uk.competition_id IN ($ph)
             ";
@@ -657,17 +657,17 @@ function berekenSerie(PDO $pdo, string $serieId): array {
             $bonusCompIds = array_keys($bonusWedstrijden);
             $bPh = implode(',', array_fill(0, count($bonusCompIds), '?'));
             $bStmt = $pdo->prepare("
-                SELECT e.person_license, dc.competition_id,
+                SELECT e.person_id AS person_license, dc.competition_id,
                        dc.id AS dc_id, dc.name AS dc_naam,
                        p.person_id, p.full_name, p.short_name, p.category AS persoon_cat,
                        c.name AS comp_naam,
                        COALESCE(cs.startnummer, p.start_number) AS wedstrijd_snr
                 FROM entries e
                 JOIN distance_combinations dc ON dc.id = e.distance_combination_id
-                JOIN persons p ON p.license_key = e.person_license
+                JOIN persons p ON p.person_id = e.person_id
                 JOIN competitions c ON c.id = dc.competition_id
                 LEFT JOIN competition_startnummers cs
-                       ON cs.person_license = e.person_license
+                       ON cs.person_id = e.person_id
                       AND cs.competition_id = dc.competition_id
                 WHERE dc.competition_id IN ($bPh)
                   AND e.status IN (1, 5)
@@ -1190,8 +1190,8 @@ function schrijfKlassement(PDO $pdo, array $serie, array $berekend): void {
             $ins->execute([
                 $kpId, $klId, $pos,
                 (string)($r['startnr'] ?? ''),
+                licentieVoorPersonId($pdo, $r['license']),
                 $r['license'],
-                personIdVoorLicentie($pdo, $r['license']),
                 $r['naam'],
                 $cat,
                 $detail,
@@ -1346,7 +1346,7 @@ if ($method === 'GET') {
                 SELECT DISTINCT UPPER(TRIM(p.category)) AS cat
                 FROM entries e
                 JOIN distance_combinations dc ON dc.id = e.distance_combination_id
-                JOIN persons p ON p.license_key = e.person_license
+                JOIN persons p ON p.person_id = e.person_id
                 WHERE dc.competition_id IN ($ph)
                   AND p.category IS NOT NULL
                   AND TRIM(p.category) <> ''
@@ -1374,7 +1374,7 @@ if ($method === 'GET') {
                 SELECT e.distance_combination_id AS dc_id, UPPER(TRIM(p.category)) AS cat
                 FROM entries e
                 JOIN distance_combinations dc ON dc.id = e.distance_combination_id
-                JOIN persons p ON p.license_key = e.person_license
+                JOIN persons p ON p.person_id = e.person_id
                 WHERE dc.competition_id IN ($ph)
                   AND p.category IS NOT NULL AND TRIM(p.category) <> ''
                 GROUP BY e.distance_combination_id, UPPER(TRIM(p.category))
@@ -1535,14 +1535,14 @@ if ($method === 'GET') {
                 if ($isAfstandLevel) {
                     // ── Afstand-klassement: lees uit uitslag_afstand, filter per afstand ──
                     $ua = $pdo->prepare("
-                        SELECT ua.person_license, ua.rang, ua.punten, ua.categorie,
+                        SELECT ua.person_id AS person_license, ua.rang, ua.punten, ua.categorie,
                                d.name AS afst_naam, d.race_type AS rt,
                                p.person_id, p.full_name, p.category AS persoon_cat
                         FROM uitslag_afstand ua
                         JOIN distances d
                             ON d.distance_combination_id = ua.distance_combination_id
                            AND d.id = ua.distance_id
-                        JOIN persons p ON p.license_key = ua.person_license
+                        JOIN persons p ON p.person_id = ua.person_id
                         WHERE ua.competition_id IN ($ph)
                     ");
                     $ua->execute($compIds);
@@ -1588,11 +1588,11 @@ if ($method === 'GET') {
                         return $regels['afstand_filter'] === 'alle';
                     };
                     $uk = $pdo->prepare("
-                        SELECT uk.person_license, uk.distance_combination_id AS dc_id,
+                        SELECT uk.person_id AS person_license, uk.distance_combination_id AS dc_id,
                                uk.rang, uk.punten_totaal, uk.categorie,
                                p.person_id, p.full_name, p.category AS persoon_cat
                         FROM uitslag_klassement uk
-                        JOIN persons p ON p.license_key = uk.person_license
+                        JOIN persons p ON p.person_id = uk.person_id
                         WHERE uk.competition_id IN ($ph)
                     ");
                     $uk->execute($compIds);
