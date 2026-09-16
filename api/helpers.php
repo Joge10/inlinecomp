@@ -53,14 +53,14 @@ $UA_WEES = "(
             WHERE h.competition_id          = ua.competition_id
               AND h.distance_combination_id = ua.distance_combination_id
               AND (h.distance_id = ua.distance_id OR (h.distance_id IS NULL AND ua.distance_id = ''))
-              AND he.person_license = ua.person_license)
+              AND he.person_id = ua.person_id)
 )";
 $UK_WEES = "(
     EXISTS (SELECT 1 FROM competition_tijdschema ct WHERE ct.competition_id = uk.competition_id)
     AND NOT EXISTS (SELECT 1 FROM heats h JOIN heat_entries he ON he.heat_id = h.id
             WHERE h.competition_id          = uk.competition_id
               AND h.distance_combination_id = uk.distance_combination_id
-              AND he.person_license = uk.person_license)
+              AND he.person_id = uk.person_id)
 )";
 
 // ── Scan: rapport per wedstrijd ─────────────────────────────────────────────
@@ -79,15 +79,15 @@ if ($action === 'scan_wees_uitslagen') {
                 ua.dc_naam,
                 ua.distance_naam,
                 ua.split_group,
-                ua.person_license,
+                ua.person_id AS person_license,
                 ua.rang,
                 ua.tijd_ms,
                 ua.sanctie,
                 ua.vastgelegd_at,
-                COALESCE(p.full_name, ua.person_license) AS naam
+                COALESCE(p.full_name, ua.person_id) AS naam
             FROM uitslag_afstand ua
             JOIN competitions c ON c.id = ua.competition_id
-            LEFT JOIN persons p ON p.license_key = ua.person_license
+            LEFT JOIN persons p ON p.person_id = ua.person_id
             WHERE {$UA_WEES}
             ORDER BY ua.competition_datum DESC, ua.competition_naam,
                      ua.dc_naam, ua.distance_naam, ua.rang
@@ -105,14 +105,14 @@ if ($action === 'scan_wees_uitslagen') {
                 uk.competition_datum,
                 uk.dc_naam,
                 uk.split_group,
-                uk.person_license,
+                uk.person_id AS person_license,
                 uk.rang,
                 uk.punten_totaal,
                 uk.vastgelegd_at,
-                COALESCE(p.full_name, uk.person_license) AS naam
+                COALESCE(p.full_name, uk.person_id) AS naam
             FROM uitslag_klassement uk
             JOIN competitions c ON c.id = uk.competition_id
-            LEFT JOIN persons p ON p.license_key = uk.person_license
+            LEFT JOIN persons p ON p.person_id = uk.person_id
             WHERE {$UK_WEES}
             ORDER BY uk.competition_datum DESC, uk.competition_naam, uk.dc_naam, uk.rang
         ");
@@ -260,7 +260,7 @@ if ($action === 'csv_export_data') {
             SELECT uk.rang,
                    uk.punten_totaal,
                    uk.punten_detail,
-                   uk.person_license,
+                   uk.person_id AS person_license,
                    uk.categorie                                          AS persoon_cat,
                    uk.split_group,
                    p.person_id,
@@ -270,10 +270,10 @@ if ($action === 'csv_export_data') {
                    p.category                                            AS knsb_cat,
                    COALESCE(cs.startnummer, p.start_number)              AS startnummer
             FROM   uitslag_klassement uk
-            JOIN   persons p ON p.license_key = uk.person_license
+            JOIN   persons p ON p.person_id = uk.person_id
             LEFT JOIN competition_startnummers cs
                    ON cs.competition_id = uk.competition_id
-                  AND cs.person_license = uk.person_license
+                  AND cs.person_id = uk.person_id
             WHERE  uk.competition_id          = ?
               AND  uk.distance_combination_id = ?
             ORDER  BY (uk.rang IS NULL), uk.rang
@@ -783,7 +783,7 @@ if ($action === 'historie_extract') {
     $personsByLic = [];
     $personsByNaam = [];
     $stmt = $pdo->query(
-        "SELECT license_key, full_name, birth_year, category, club_short
+        "SELECT person_id AS license_key, full_name, birth_year, category, club_short
          FROM persons
          WHERE anonymized_at IS NULL
            AND pending_source IS NULL"
@@ -957,13 +957,13 @@ if ($action === 'historie_extract') {
     // die nog niet gematched zijn maar wel een eerdere PDF-rij deelden.
     if ($compIdHint !== '') {
         $eerderStmt = $pdo->prepare("
-            SELECT ua.person_license, ua.categorie, p.full_name, COUNT(*) AS freq
+            SELECT ua.person_id AS person_license, ua.categorie, p.full_name, COUNT(*) AS freq
             FROM uitslag_afstand ua
-            LEFT JOIN persons p ON p.license_key = ua.person_license
+            LEFT JOIN persons p ON p.person_id = ua.person_id
             WHERE ua.competition_id = ?
               AND ua.categorie IS NOT NULL AND ua.categorie <> ''
-            GROUP BY ua.person_license, ua.categorie
-            ORDER BY ua.person_license, freq DESC
+            GROUP BY ua.person_id, ua.categorie
+            ORDER BY ua.person_id, freq DESC
         ");
         $eerderStmt->execute([$compIdHint]);
         $catPerLic  = [];   // license → meest-voorkomende cat
@@ -1142,6 +1142,7 @@ if ($action === 'historie_insert') {
         // op basis van de vervang_bestaand-vlag uit de payload.
         $onDup = $vervang
             ? "ON DUPLICATE KEY UPDATE
+                   person_id   = VALUES(person_id),
                    rang        = VALUES(rang),
                    tijd_ms     = VALUES(tijd_ms),
                    sanctie     = VALUES(sanctie),
@@ -1155,8 +1156,8 @@ if ($action === 'historie_insert') {
                 (competition_id, competition_naam, competition_datum,
                  distance_combination_id, dc_naam,
                  split_group, distance_id, distance_naam, distance_meters,
-                 person_license, categorie, rang, tijd_ms, sanctie)
-            VALUES (?, ?, ?, ?, ?, '', ?, ?, ?, ?, ?, ?, ?, ?)
+                 person_license, person_id, categorie, rang, tijd_ms, sanctie)
+            VALUES (?, ?, ?, ?, ?, '', ?, ?, ?, ?, ?, ?, ?, ?, ?)
             $onDup
         ");
 
@@ -1207,7 +1208,7 @@ if ($action === 'historie_insert') {
         // naar de cat-string-van-eerste-aanmaak, niet naar alle uitslag-cats.
         $pendingPool = [];   // 'naam-sleutel' => [ {license_key, category, birth_set, …}, … ]
         $pendingAllStmt = $pdo->query("
-            SELECT p.license_key, p.full_name, p.category
+            SELECT p.person_id AS license_key, p.full_name, p.category
             FROM persons p
             WHERE p.pending_source = 'historie'
         ");
@@ -1222,9 +1223,9 @@ if ($action === 'historie_insert') {
         if (!empty($alleLicenses)) {
             $phLic = implode(',', array_fill(0, count($alleLicenses), '?'));
             $combosStmt = $pdo->prepare("
-                SELECT DISTINCT person_license, YEAR(competition_datum) AS jr, categorie
+                SELECT DISTINCT person_id AS person_license, YEAR(competition_datum) AS jr, categorie
                 FROM uitslag_afstand
-                WHERE person_license IN ($phLic)
+                WHERE person_id IN ($phLic)
                   AND competition_datum IS NOT NULL
                   AND categorie IS NOT NULL
             ");
@@ -1263,9 +1264,9 @@ if ($action === 'historie_insert') {
         // pool overrulet de algemene match: naam-only, eerste wint.
         $pendingInDezeComp = [];   // 'naam-key' => license_key
         $inCompStmt = $pdo->prepare("
-            SELECT DISTINCT p.license_key, p.full_name
+            SELECT DISTINCT p.person_id AS license_key, p.full_name
             FROM persons p
-            JOIN uitslag_afstand ua ON ua.person_license = p.license_key
+            JOIN uitslag_afstand ua ON ua.person_id = p.person_id
             WHERE p.pending_source = 'historie'
               AND ua.competition_id = ?
         ");
@@ -1411,6 +1412,10 @@ if ($action === 'historie_insert') {
             $rang = $r['rang'] !== null ? (int)$r['rang'] : null;
             if ($rang === 0) $rang = null;
 
+            // Dual-write: $lic kan een licentie (p-…/knsb) of een person_id-token
+            // zijn → leid beide af (person_license = schaduw tot fase 4).
+            $pidForRow = resolveNaarPersonId($pdo, $lic);
+            $licForRow = licentieVoorPersonId($pdo, $pidForRow) ?? $lic;
             $ins->execute([
                 $compId,
                 $comp['name'],
@@ -1420,7 +1425,8 @@ if ($action === 'historie_insert') {
                 $distSlug,
                 $afstandNaam,
                 $afstandMeters !== null ? (int)$afstandMeters : null,
-                $lic,
+                $licForRow,
+                $pidForRow,
                 $r['categorie'] ?? null,
                 $rang,
                 $r['tijd_ms'] !== null ? (int)$r['tijd_ms'] : null,
@@ -1499,7 +1505,7 @@ if ($action === 'pending_lijst') {
         // oudste jaar het meest restrictief en daarmee veiligst.
         $stmt = $pdo->query("
             SELECT
-                p.license_key,
+                p.person_id AS license_key,
                 p.person_id,
                 p.full_name,
                 p.category,
@@ -1509,18 +1515,18 @@ if ($action === 'pending_lijst') {
                 p.extern,
                 p.created_at,
                 (SELECT COUNT(*) FROM uitslag_afstand ua
-                 WHERE ua.person_license = p.license_key) AS aantal_uitslagen,
+                 WHERE ua.person_id = p.person_id) AS aantal_uitslagen,
                 (SELECT YEAR(MIN(ua.competition_datum)) FROM uitslag_afstand ua
-                 WHERE ua.person_license = p.license_key
+                 WHERE ua.person_id = p.person_id
                    AND ua.competition_datum IS NOT NULL) AS pdf_jaar,
                 (SELECT COUNT(*) FROM entries e
-                 WHERE e.person_license = p.license_key) AS aantal_entries,
+                 WHERE e.person_id = p.person_id) AS aantal_entries,
                 (SELECT COUNT(*) FROM transponders t
-                 WHERE t.person_license = p.license_key) AS aantal_transponders
+                 WHERE t.person_id = p.person_id) AS aantal_transponders
             FROM persons p
             WHERE (p.pending_source = 'historie' OR p.extern = 1)
               AND p.anonymized_at IS NULL
-              AND p.license_key NOT LIKE 'demo-%'   -- demo/test-rijders nooit in de koppel-lijst
+              AND COALESCE(p.extern_federatie,'') <> 'DEMO'   -- demo/test-rijders nooit in de koppel-lijst
             ORDER BY p.full_name
         ");
         $pendings = $stmt->fetchAll(PDO::FETCH_ASSOC);
@@ -1540,9 +1546,9 @@ if ($action === 'pending_lijst') {
             $licenses = array_column($pendings, 'license_key');
             $ph = implode(',', array_fill(0, count($licenses), '?'));
             $combosStmt = $pdo->prepare("
-                SELECT DISTINCT person_license, YEAR(competition_datum) AS jr, categorie
+                SELECT DISTINCT person_id AS person_license, YEAR(competition_datum) AS jr, categorie
                 FROM uitslag_afstand
-                WHERE person_license IN ($ph)
+                WHERE person_id IN ($ph)
                   AND competition_datum IS NOT NULL
                   AND categorie IS NOT NULL
             ");
@@ -1568,7 +1574,7 @@ if ($action === 'pending_lijst') {
         // zodat een pending óók een externe als suggestie kan krijgen (en
         // omgekeerd). Self-match wordt later in de loop voorkomen.
         $allRealStmt = $pdo->query("
-            SELECT license_key, full_name, birth_year, category, club_short,
+            SELECT person_id AS license_key, full_name, birth_year, category, club_short,
                    pending_source, extern
             FROM persons
             WHERE anonymized_at IS NULL
@@ -1774,9 +1780,9 @@ if ($action === 'pending_lijst') {
             $licenses = array_column($pendings, 'license_key');
             $ph = implode(',', array_fill(0, count($licenses), '?'));
             $compsStmt = $pdo->prepare("
-                SELECT DISTINCT person_license, competition_id
+                SELECT DISTINCT person_id AS person_license, competition_id
                 FROM uitslag_afstand
-                WHERE person_license IN ($ph)
+                WHERE person_id IN ($ph)
             ");
             $compsStmt->execute($licenses);
             foreach ($compsStmt->fetchAll(PDO::FETCH_ASSOC) as $r) {
@@ -1925,7 +1931,7 @@ if ($action === 'pending_lijst') {
         // buildLicenseKey()) — die matchen elkaar allemaal op naam '[Anoniem]'
         // + cat en zouden anders enorme foute groepen vormen zonder actie-waarde.
         $_allStmt = $pdo->query("
-            SELECT license_key, full_name, category, birth_year, club_short,
+            SELECT person_id AS license_key, full_name, category, birth_year, club_short,
                    pending_source, extern
             FROM persons
             WHERE anonymized_at IS NULL
@@ -1944,18 +1950,18 @@ if ($action === 'pending_lijst') {
         $_bestaandeLics = array_flip(array_column($pendings, 'license_key'));
         $_nieuweRijen   = [];
         $_detailStmt = $pdo->prepare("
-            SELECT p.license_key, p.full_name, p.category, p.birth_year, p.club_short,
+            SELECT p.person_id AS license_key, p.full_name, p.category, p.birth_year, p.club_short,
                    p.pending_source, p.extern, p.created_at,
                    (SELECT COUNT(*) FROM uitslag_afstand ua
-                    WHERE ua.person_license = p.license_key) AS aantal_uitslagen,
+                    WHERE ua.person_id = p.person_id) AS aantal_uitslagen,
                    (SELECT YEAR(MIN(ua.competition_datum)) FROM uitslag_afstand ua
-                    WHERE ua.person_license = p.license_key
+                    WHERE ua.person_id = p.person_id
                       AND ua.competition_datum IS NOT NULL) AS pdf_jaar,
                    (SELECT COUNT(*) FROM entries e
-                    WHERE e.person_license = p.license_key) AS aantal_entries,
+                    WHERE e.person_id = p.person_id) AS aantal_entries,
                    (SELECT COUNT(*) FROM transponders t
-                    WHERE t.person_license = p.license_key) AS aantal_transponders
-            FROM persons p WHERE p.license_key = ?
+                    WHERE t.person_id = p.person_id) AS aantal_transponders
+            FROM persons p WHERE p.person_id = ?
         ");
 
         foreach ($_groepen as $_leden) {
@@ -2045,11 +2051,11 @@ if ($action === 'pending_zoek_echte') {
     }
     try {
         $stmt = $pdo->prepare("
-            SELECT license_key, full_name, birth_year, category, club_short,
+            SELECT person_id AS license_key, full_name, birth_year, category, club_short,
                    pending_source, extern
             FROM persons
             WHERE anonymized_at IS NULL
-              AND license_key NOT LIKE 'demo-%'   -- demo/test-accounts nooit als koppel-doel
+              AND COALESCE(extern_federatie,'') <> 'DEMO'   -- demo/test-accounts nooit als koppel-doel
               AND (full_name LIKE ? OR license_key LIKE ?)
             ORDER BY full_name
             LIMIT 20
@@ -2093,6 +2099,12 @@ if ($action === 'pending_link') {
     header('Content-Type: application/json; charset=utf-8');
     $pendingLic = trim($body['pending_license'] ?? '');
     $targetLic  = trim($body['target_license']  ?? '');
+    // Tokens kunnen person_id's zijn (nieuwe UI, fase 3c/3d) → terug naar de
+    // licentie voor de (nog license-based) koppel-moves. NB: de moves + de
+    // persons-delete draaien nog op person_license/license_key en worden bij
+    // fase 4 person_id-native gemaakt (data-destructief → aparte, geteste stap).
+    if ($pendingLic !== '') $pendingLic = (string)(licentieVoorPersonId($pdo, resolveNaarPersonId($pdo, $pendingLic)) ?? $pendingLic);
+    if ($targetLic  !== '') $targetLic  = (string)(licentieVoorPersonId($pdo, resolveNaarPersonId($pdo, $targetLic))  ?? $targetLic);
     if ($pendingLic === '' || $targetLic === '') {
         http_response_code(400);
         echo json_encode(['error' => 'pending_license en target_license verplicht']);
@@ -2350,6 +2362,9 @@ if ($action === 'pending_merge') {
     header('Content-Type: application/json; charset=utf-8');
     $srcLic = trim($body['source_license'] ?? '');
     $tgtLic = trim($body['target_license'] ?? '');
+    // person_id-tokens → licentie voor de (license-based) merge-moves (zie pending_link).
+    if ($srcLic !== '') $srcLic = (string)(licentieVoorPersonId($pdo, resolveNaarPersonId($pdo, $srcLic)) ?? $srcLic);
+    if ($tgtLic !== '') $tgtLic = (string)(licentieVoorPersonId($pdo, resolveNaarPersonId($pdo, $tgtLic)) ?? $tgtLic);
     if ($srcLic === '' || $tgtLic === '' || $srcLic === $tgtLic) {
         http_response_code(400);
         echo json_encode(['error' => 'source_license en target_license verplicht, niet identiek']);
@@ -2507,6 +2522,8 @@ if ($action === 'pending_merge') {
 if ($action === 'pending_delete') {
     header('Content-Type: application/json; charset=utf-8');
     $lic = trim($body['license_key'] ?? '');
+    // person_id-token → licentie voor de (license-based) delete-queries (zie pending_link).
+    if ($lic !== '') $lic = (string)(licentieVoorPersonId($pdo, resolveNaarPersonId($pdo, $lic)) ?? $lic);
     if ($lic === '') {
         http_response_code(400);
         echo json_encode(['error' => 'license_key verplicht']);
@@ -2593,6 +2610,9 @@ if ($action === 'pending_bulk_delete') {
     $lics = $body['license_keys'] ?? [];
     if (!is_array($lics)) $lics = [];
     $lics = array_values(array_unique(array_filter(array_map('trim', $lics), 'strlen')));
+    // person_id-tokens → licenties voor de (license-based) delete-queries.
+    $lics = array_values(array_unique(array_filter(array_map(
+        fn($l) => (string)(licentieVoorPersonId($pdo, resolveNaarPersonId($pdo, $l)) ?? $l), $lics), 'strlen')));
     if (!count($lics)) {
         http_response_code(400);
         echo json_encode(['error' => 'license_keys (niet-lege array) verplicht']);
