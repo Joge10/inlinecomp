@@ -10,13 +10,20 @@
 --  Oplossing: lijn de ene uitzondering uit naar general_ci → alle person_id-
 --  kolommen gelijk → joins nergens een COLLATE nodig (schoner + index-vriendelijk).
 --
---  Veilig: person_id bevat alleen UUID-tekens (ASCII hex + '-'), dus de collation-
---  wissel raakt geen enkele waarde/vergelijking. Index idx_psl_person_id wordt
---  herbouwd. Herhaalbaar (MODIFY is idempotent qua eindresultaat).
+--  We zetten de HELE tabel op general_ci (table-wide CONVERT) i.p.v. alleen de
+--  person_id-kolom, zodat push_sub_licenses intern eenduidig is. Veilig: de
+--  kolommen zijn al utf8mb4 (geen her-codering), alleen de collation wijzigt →
+--  geen dataverlies. Het raakt ook person_license (VARCHAR(32)), maar dat breekt
+--  de fase-2-backfill-joins niet: die dragen een EXPLICIETE COLLATE (wint van de
+--  kolom-collation). Herhaalbaar.
+--
+--  NB: upload_map_blokkades is ook unicode_ci maar heeft geen person_id → irrelevant.
+--  De DB-default (latin1_swedish_ci) volledig uniform maken is een aparte, grotere
+--  opruimklus die losstaat van deze migratie.
 -- ============================================================
 
 ALTER TABLE `push_sub_licenses`
-  MODIFY `person_id` CHAR(36) COLLATE utf8mb4_general_ci DEFAULT NULL;
+  CONVERT TO CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci;
 
 -- Controle (verwacht: nu 1 regel, alle person_id-kolommen general_ci):
 --   SELECT COLLATION_NAME, COUNT(*) FROM information_schema.COLUMNS
