@@ -845,7 +845,12 @@ if ($action === 'commit') {
                 catch (Throwable $e) { /* niet kritiek, fallback in detail werkt ook */ }
             }
 
-            // Entries per dc_marker-kolom met "x"
+            // Entries per dc_marker-kolom met "x". Let op: een inschrijving zit
+            // per categorie (DC), niet per afstand. Meerdere afstand-kolommen
+            // kunnen naar dezelfde DC wijzen (een DC heeft vaak >1 afstand); dan
+            // is er maar ÉÉN entry. Verwerk elke DC daarom max één keer per rijder,
+            // anders telt de teller dubbel terwijl er niets extra's gebeurt.
+            $gedaanDcs = [];
             foreach ($afstandPerKol as $kol => $afstandNaam) {
                 $kolIdx = (int)$kol;
                 $val    = $r[$kolIdx] ?? '';
@@ -859,6 +864,8 @@ if ($action === 'commit') {
                     }
                     continue;
                 }
+                if (isset($gedaanDcs[$dcId])) continue;   // DC al ingeschreven voor deze rijder
+                $gedaanDcs[$dcId] = true;
 
                 try {
                     $insEntry->execute([$dcId, $pid]);
