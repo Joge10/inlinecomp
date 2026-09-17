@@ -702,6 +702,12 @@ try {
     $aantalDeelnemers = 0;
     $overgeslagen     = 0;
 
+    // Vangnet: een handmatige wedstrijd stuurt de person_id zélf mee als token
+    // (wedstrijd_handmatig.php levert person_id als license_key), geen externe
+    // licentie. Dan vindt personIdVoorExtern niets → check of de persoon al
+    // bestaat, anders mint elke (her)import een nieuwe persoon = dubbele deelnemers.
+    $stmtChkPid = $pdo->prepare("SELECT 1 FROM persons WHERE person_id = ? LIMIT 1");
+
     foreach ($categories as $cat) {
         $dcId = $cat['dc_id'] ?? null;
         if (!$dcId) continue;
@@ -729,6 +735,12 @@ try {
                 ':city'         => $c['city']         ?? null,
             ];
             $pid = personIdVoorExtern($pdo, systeemVoorLicentie($lk), $lk);
+            if ($pid === null) {
+                // Token is misschien al een person_id (handmatige wedstrijd) →
+                // alleen hergebruiken als die persoon echt bestaat, anders minten.
+                $stmtChkPid->execute([$lk]);
+                if ($stmtChkPid->fetchColumn()) $pid = $lk;
+            }
             if ($pid !== null) {
                 // Bestaande rijder → in-place bijwerken op person_id (geen
                 // license_key nodig — bewijst dat fase 4 werkt).
