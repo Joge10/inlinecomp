@@ -3295,6 +3295,7 @@ const T = {
         msg_je_rijders_ophalen: 'Je rijders ophalen…',
         msg_geen_resultaten: 'Geen resultaten gevonden.',
         msg_geen_rijders: 'Geen rijders gevonden.',
+        msg_naam_geen_of_of: 'Geen rijder op deze naam gevonden. Mogelijk doet deze rijder niet mee aan deze wedstrijd, óf koos hij/zij ervoor anoniem te blijven — voeg de rijder in dat geval toe via het licentie- of ID-nummer in het zoekveld hierboven.',
         msg_geen_startlijst: 'Geen startlijst beschikbaar voor deze rit.',
         msg_geen_klassement: 'Geen klassement beschikbaar.',
         msg_geen_uitslagen: 'Geen uitslagen beschikbaar.',
@@ -3544,6 +3545,7 @@ const T = {
         msg_je_rijders_ophalen: 'Fetching your skaters…',
         msg_geen_resultaten: 'No results found.',
         msg_geen_rijders: 'No skaters found.',
+        msg_naam_geen_of_of: 'No skater found by that name. They may not be entered in this competition, or chose to stay anonymous — in that case add them using their licence or ID number in the search field above.',
         msg_geen_startlijst: 'No start list available for this race.',
         msg_geen_klassement: 'No standings available.',
         msg_geen_uitslagen: 'No results available.',
@@ -3792,6 +3794,7 @@ const T = {
         msg_je_rijders_ophalen: 'Deine Skater abrufen…',
         msg_geen_resultaten: 'Keine Ergebnisse gefunden.',
         msg_geen_rijders: 'Keine Skater gefunden.',
+        msg_naam_geen_of_of: 'Kein Skater mit diesem Namen gefunden. Möglicherweise nimmt er/sie nicht an diesem Wettkampf teil oder hat sich für Anonymität entschieden — füge ihn/sie in dem Fall über die Lizenz- oder ID-Nummer im Suchfeld oben hinzu.',
         msg_geen_startlijst: 'Keine Startliste für dieses Rennen verfügbar.',
         msg_geen_klassement: 'Keine Wertung verfügbar.',
         msg_geen_uitslagen: 'Keine Ergebnisse verfügbar.',
@@ -4040,6 +4043,7 @@ const T = {
         msg_je_rijders_ophalen: 'Récupération de tes skateurs…',
         msg_geen_resultaten: 'Aucun résultat trouvé.',
         msg_geen_rijders: 'Aucun skateur trouvé.',
+        msg_naam_geen_of_of: 'Aucun skateur trouvé sous ce nom. Il/elle ne participe peut-être pas à cette compétition, ou a choisi de rester anonyme — dans ce cas, ajoutez-le/la via son numéro de licence ou d\'ID dans le champ de recherche ci-dessus.',
         msg_geen_startlijst: 'Aucune liste de départ disponible pour cette course.',
         msg_geen_klassement: 'Aucun classement disponible.',
         msg_geen_uitslagen: 'Aucun résultat disponible.',
@@ -5040,6 +5044,10 @@ inpSnr.addEventListener('keydown', e => { if (e.key==='Enter' && !btnZoek.disabl
 //      - bevat letters              → achternaam-zoek
 function _zoekModus(tekst) {
     const t = tekst.trim();
+    // Volg-ID (person_id / UUID uit Mijn InlineComp) → license-lookup. Dit is de
+    // enige manier om een publiek anonieme rijder te volgen (variant B): het GUID
+    // resolvet naar zichzelf → 'entitled' → de volger ziet de echte naam.
+    if (/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(t)) return 'license';
     if (/^\d+$/.test(t)) return t.length <= 4 ? 'snr' : 'license';
     return 'naam';
 }
@@ -5209,6 +5217,13 @@ async function zoekOpNaam(compId, term) {
         btnZoek.disabled = false;
         return;
     } finally { btnZoek.disabled = false; }
+    // Geen naam-treffer → of/of-melding (variant B): niet-bevestigend, dekt zowel
+    // "doet niet mee" als "koos anoniem". Een anonieme rijder is nooit op naam
+    // vindbaar; toevoegen kan dan alleen via het licentie-/ID-nummer.
+    if (rijen.length === 0) {
+        divResult.innerHTML = `<div class="melding">${esc(t('msg_naam_geen_of_of'))}</div>`;
+        return;
+    }
     toonChooserModal(rijen, term, compId);
 }
 
