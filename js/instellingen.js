@@ -736,7 +736,10 @@ async function verwijderCompetitie(id, naam) {
         const d   = await res.json();
         if (!res.ok) throw new Error(d.error ?? `HTTP ${res.status}`);
         if (typeof resetImportModule === 'function') resetImportModule(id);
-        if (typeof laadWedstrijden === 'function') laadWedstrijden();
+        // Verwijderde wedstrijd ook uit de globale import-cache (allWedstrijden)
+        // halen — anders toont laadOrgWedstrijden 'm nog als "inschrijven.schaatsen.nl"
+        // (niet meer in DB, wél nog in de cache) tot een harde refresh.
+        if (Array.isArray(allWedstrijden)) allWedstrijden = allWedstrijden.filter(w => w.id !== id);
         laadOrgWedstrijden();
         laadOrgs();
     } catch(e) {
