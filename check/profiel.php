@@ -347,6 +347,12 @@ dialog.settings-modal::backdrop{background:rgba(18,58,94,.45)}
   font-size:.85rem;user-select:all;word-break:break-all;flex:1;min-width:120px}
 .toggle-row{display:flex;align-items:center;gap:10px;font-weight:600;cursor:pointer;margin:0 0 10px;font-size:1rem}
 .toggle-row input{width:20px;height:20px;cursor:pointer;accent-color:var(--brand);flex:none}
+/* Eigen mini-bevestiging (geen native confirm/alert). */
+dialog.mini-modal{border:0;border-radius:14px;padding:18px;max-width:360px;width:calc(100% - 32px);
+  box-shadow:var(--shadow);color:var(--ink);background:var(--surface)}
+dialog.mini-modal::backdrop{background:rgba(18,58,94,.5)}
+dialog.mini-modal p{margin:0 0 16px;font-size:.95rem;line-height:1.5}
+.mini-modal-acties{display:flex;gap:8px;justify-content:flex-end;flex-wrap:wrap}
 
 /* ── Login / claim kaart ── */
 .authcard{background:var(--surface);border:1px solid var(--line);border-radius:16px;
@@ -611,8 +617,39 @@ table.pr tbody tr:last-child td{border-bottom:0}
       </p>
     </div>
   </dialog>
+
+  <dialog id="bevestig-modal" class="mini-modal">
+    <p id="bevestig-tekst"></p>
+    <div class="mini-modal-acties">
+      <button type="button" id="bevestig-annuleer" class="btn btn-sec">Annuleren</button>
+      <button type="button" id="bevestig-ok" class="btn">OK</button>
+    </div>
+  </dialog>
+
   <script>
   (function () {
+    // Eigen bevestiging/melding (géén native confirm/alert). alleenOk = melding.
+    function _bevestig(tekst, opts) {
+      opts = opts || {};
+      return new Promise(resolve => {
+        const d = document.getElementById('bevestig-modal');
+        const p = document.getElementById('bevestig-tekst');
+        const okB = document.getElementById('bevestig-ok');
+        const anB = document.getElementById('bevestig-annuleer');
+        if (!d || !p || !okB || !anB) { resolve(true); return; }
+        p.textContent = tekst;
+        okB.textContent = opts.okLabel || 'OK';
+        anB.textContent = opts.cancelLabel || 'Annuleren';
+        anB.style.display = opts.alleenOk ? 'none' : '';
+        let klaar = false;
+        const eind = (v) => { if (klaar) return; klaar = true; okB.onclick = anB.onclick = null; try { d.close(); } catch (e) {} resolve(v); };
+        okB.onclick = () => eind(true);
+        anB.onclick = () => eind(false);
+        d.addEventListener('close', () => eind(opts.alleenOk ? true : false), { once: true });
+        d.showModal();
+      });
+    }
+
     const dlg = document.getElementById('settings-modal');
     const openBtn = document.getElementById('btn-settings');
     if (dlg && openBtn) {
@@ -672,7 +709,7 @@ table.pr tbody tr:last-child td{border-bottom:0}
           updateAnonUI(!!data.anoniem);
         } catch (e) {
           chk.checked = !chk.checked;   // terugdraaien bij fout
-          alert('Kon de instelling niet opslaan. Probeer het opnieuw.');
+          await _bevestig('Kon de instelling niet opslaan. Probeer het opnieuw.', { alleenOk: true });
         } finally {
           chk.disabled = false;
         }
@@ -684,7 +721,10 @@ table.pr tbody tr:last-child td{border-bottom:0}
     const vBtn = document.getElementById('btn-volg-vernieuw');
     if (vBtn) {
       vBtn.addEventListener('click', async () => {
-        if (!confirm('Volg-ID vernieuwen? Iedereen die je nu volgt wordt afgesneden — ook mensen aan wie je het eerder gaf. Deel daarna het nieuwe volg-ID opnieuw.')) return;
+        const akkoord = await _bevestig(
+          'Volg-ID vernieuwen? Iedereen die je nu volgt wordt afgesneden — ook mensen aan wie je het eerder gaf. Deel daarna het nieuwe volg-ID opnieuw.',
+          { okLabel: 'Vernieuwen', cancelLabel: 'Annuleren' });
+        if (!akkoord) return;
         vBtn.disabled = true;
         try {
           const res = await fetch('profiel.php', {
@@ -700,7 +740,7 @@ table.pr tbody tr:last-child td{border-bottom:0}
           vBtn.textContent = '✓ Vernieuwd';
           setTimeout(() => { vBtn.textContent = orig; }, 1500);
         } catch (e) {
-          alert('Kon het volg-ID niet vernieuwen. Probeer het opnieuw.');
+          await _bevestig('Kon het volg-ID niet vernieuwen. Probeer het opnieuw.', { alleenOk: true });
         } finally {
           vBtn.disabled = false;
         }
