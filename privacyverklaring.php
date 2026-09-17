@@ -74,7 +74,7 @@ staat hieronder — bij twijfel geldt die volledige tekst.</em></p>
     <li>We slaan <strong>geen</strong> e-mailadres, telefoonnummer, adres of
         geboortedatum van rijders op.</li>
     <li>Veel rijders zijn <strong>minderjarig</strong>; van hen verwerken we dezelfde
-        beperkte gegevens en doen we geen marketing of profilering. Optionele keuzes
+        beperkte gegevens. Marketing of profilering doen we van niemand. Optionele keuzes
         (profiel, anoniem, meldingen) maakt de ouder/verzorger (zie §1f).</li>
     <li>Uitslagen worden openbaar gepubliceerd, zoals gebruikelijk in de sport.</li>
     <li>Als coach kun je vrijwillig een account maken; als rijder of coach kun je
@@ -231,7 +231,7 @@ bescherming toe (overweging 38 AVG). Wij houden daar op de volgende manier reken
 <ul>
     <li>Voor minderjarigen verwerken wij <strong>dezelfde beperkte, sport-functionele gegevens</strong>
         als voor volwassenen (zie §1) — niet meer. Wij doen <strong>geen marketing, profilering
-        of tracking</strong> van kinderen.</li>
+        of tracking</strong> — van niemand, dus ook niet van kinderen.</li>
     <li>De gegevens ontvangen wij van de <strong>KNSB</strong>; daar ligt de lidmaatschaps-relatie,
         die bij inschrijving door het lid of diens ouder/verzorger wordt aangegaan. Wij krijgen de
         gegevens uitsluitend om de wedstrijd te kunnen organiseren (zie §4).</li>
@@ -507,8 +507,8 @@ case of doubt, that full text applies.</em></p>
         itself, not from you.</li>
     <li>We do <strong>not</strong> store skaters' e-mail address, phone number, home
         address or date of birth.</li>
-    <li>Many skaters are <strong>minors</strong>; for them we process the same limited data
-        and do no marketing or profiling. Optional choices (profile, anonymous, notifications)
+    <li>Many skaters are <strong>minors</strong>; for them we process the same limited data.
+        We do no marketing or profiling of anyone. Optional choices (profile, anonymous, notifications)
         should be made by the parent/guardian (see §1f).</li>
     <li>Results are published publicly, as is customary in the sport.</li>
     <li>As a coach you can voluntarily create an account; as a skater or coach you can
@@ -658,7 +658,7 @@ protection (recital 38 GDPR). We take this into account as follows:</p>
 <ul>
     <li>For minors we process the <strong>same limited, sport-functional data</strong> as for
         adults (see §1) — no more. We do <strong>no marketing, profiling or tracking</strong>
-        of children.</li>
+        — of anyone, so not of children either.</li>
     <li>We receive the data from the <strong>KNSB</strong>; that is where the membership
         relationship lies, entered into at registration by the member or their parent/guardian. We
         receive the data solely to organise the competition (see §4).</li>
