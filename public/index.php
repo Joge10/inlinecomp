@@ -3296,6 +3296,7 @@ const T = {
         msg_geen_resultaten: 'Geen resultaten gevonden.',
         msg_geen_rijders: 'Geen rijders gevonden.',
         msg_naam_geen_of_of: 'Geen rijder op deze naam gevonden. Mogelijk doet deze rijder niet mee aan deze wedstrijd, óf koos hij/zij ervoor anoniem te blijven — voeg de rijder in dat geval toe via het licentie- of ID-nummer in het zoekveld hierboven.',
+        msg_rijder_anoniem: 'Deze rijder is anoniem. Volgen kan alleen met het persoonlijke volg-ID dat de rijder zelf deelt (via ‘Mijn InlineComp’ of de organisatie).',
         msg_geen_startlijst: 'Geen startlijst beschikbaar voor deze rit.',
         msg_geen_klassement: 'Geen klassement beschikbaar.',
         msg_geen_uitslagen: 'Geen uitslagen beschikbaar.',
@@ -3546,6 +3547,7 @@ const T = {
         msg_geen_resultaten: 'No results found.',
         msg_geen_rijders: 'No skaters found.',
         msg_naam_geen_of_of: 'No skater found by that name. They may not be entered in this competition, or chose to stay anonymous — in that case add them using their licence or ID number in the search field above.',
+        msg_rijder_anoniem: 'This skater is anonymous. You can only follow them with the personal follow-ID they share themselves (via ‘My InlineComp’ or the organisation).',
         msg_geen_startlijst: 'No start list available for this race.',
         msg_geen_klassement: 'No standings available.',
         msg_geen_uitslagen: 'No results available.',
@@ -3795,6 +3797,7 @@ const T = {
         msg_geen_resultaten: 'Keine Ergebnisse gefunden.',
         msg_geen_rijders: 'Keine Skater gefunden.',
         msg_naam_geen_of_of: 'Kein Skater mit diesem Namen gefunden. Möglicherweise nimmt er/sie nicht an diesem Wettkampf teil oder hat sich für Anonymität entschieden — füge ihn/sie in dem Fall über die Lizenz- oder ID-Nummer im Suchfeld oben hinzu.',
+        msg_rijder_anoniem: 'Dieser Skater ist anonym. Folgen ist nur mit der persönlichen Folge-ID möglich, die der Skater selbst teilt (über ‚Mein InlineComp‘ oder die Organisation).',
         msg_geen_startlijst: 'Keine Startliste für dieses Rennen verfügbar.',
         msg_geen_klassement: 'Keine Wertung verfügbar.',
         msg_geen_uitslagen: 'Keine Ergebnisse verfügbar.',
@@ -4044,6 +4047,7 @@ const T = {
         msg_geen_resultaten: 'Aucun résultat trouvé.',
         msg_geen_rijders: 'Aucun skateur trouvé.',
         msg_naam_geen_of_of: 'Aucun skateur trouvé sous ce nom. Il/elle ne participe peut-être pas à cette compétition, ou a choisi de rester anonyme — dans ce cas, ajoutez-le/la via son numéro de licence ou d\'ID dans le champ de recherche ci-dessus.',
+        msg_rijder_anoniem: 'Ce skateur est anonyme. Le suivi n\'est possible qu\'avec l\'ID de suivi personnel que le skateur partage lui-même (via « Mon InlineComp » ou l\'organisation).',
         msg_geen_startlijst: 'Aucune liste de départ disponible pour cette course.',
         msg_geen_klassement: 'Aucun classement disponible.',
         msg_geen_uitslagen: 'Aucun résultat disponible.',
@@ -5079,10 +5083,19 @@ btnZoek.addEventListener('click', async () => {
         if (data.error) { divResult.innerHTML = `<div class="melding melding-fout">${esc(data.error)}</div>`; return; }
         if (!data.length) { divResult.innerHTML = `<div class="melding">${esc(t('msg_geen_resultaten'))}</div>`; return; }
 
+        // Een anonieme rijder kun je niet op startnummer (of naam) volgen —
+        // alleen via het onraadbare volg-ID. Filter anonieme treffers eruit en
+        // toon een uitleg als er niets volgbaars overblijft.
+        const volgbaar = data.filter(d => !d.persoon?.is_anoniem);
+        if (!volgbaar.length) {
+            divResult.innerHTML = `<div class="melding">${esc(t('msg_rijder_anoniem'))}</div>`;
+            return;
+        }
+
         // Meerdere personen met zelfde startnummer (of license) → chooser-modal
         // met checkboxes zodat de user er meerdere tegelijk kan toevoegen.
-        if (data.length > 1) {
-            const rijen = data.map(d => ({
+        if (volgbaar.length > 1) {
+            const rijen = volgbaar.map(d => ({
                 person_id:    d.persoon.person_id ?? null,
                 license_key:  d.persoon.license_key,
                 full_name:    d.persoon.full_name,
@@ -5096,8 +5109,8 @@ btnZoek.addEventListener('click', async () => {
 
         // Voor license/snr gebruiken we het startnr uit de response (kan per
         // wedstrijd verschillen); toonRijderData deduped op license_key.
-        const huidigSnr = data[0].persoon.wedstrijd_snr ?? data[0].persoon.start_number ?? tekst;
-        toonRijderData(data, 0, huidigSnr, prog);
+        const huidigSnr = volgbaar[0].persoon.wedstrijd_snr ?? volgbaar[0].persoon.start_number ?? tekst;
+        toonRijderData([volgbaar[0]], 0, huidigSnr, prog);
         inpSnr.value = '';
         btnZoek.disabled = true;
     } catch (e) {
