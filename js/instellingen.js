@@ -736,10 +736,12 @@ async function verwijderCompetitie(id, naam) {
         const d   = await res.json();
         if (!res.ok) throw new Error(d.error ?? `HTTP ${res.status}`);
         if (typeof resetImportModule === 'function') resetImportModule(id);
-        // Verwijderde wedstrijd ook uit de globale import-cache (allWedstrijden)
-        // halen — anders toont laadOrgWedstrijden 'm nog als "inschrijven.schaatsen.nl"
-        // (niet meer in DB, wél nog in de cache) tot een harde refresh.
-        if (Array.isArray(allWedstrijden)) allWedstrijden = allWedstrijden.filter(w => w.id !== id);
+        // Feed + handmatige lijst compleet herladen (rebuild allWedstrijden) en
+        // dán pas de org-lijst hertekenen. Await is cruciaal: zonder await draaide
+        // laadOrgWedstrijden op de nog-stale cache → verwijderde wedstrijd bleef
+        // hangen als "inschrijven.schaatsen.nl" tot een harde refresh. Volledig
+        // herladen houdt óók de feed-only wedstrijden van andere orgs compleet.
+        if (typeof laadWedstrijden === 'function') await laadWedstrijden();
         laadOrgWedstrijden();
         laadOrgs();
     } catch(e) {
