@@ -17,6 +17,7 @@ require_once __DIR__ . '/../../config_inlinecomp.php';
 require_once __DIR__ . '/../api/lib_coach_auth.php';
 require_once __DIR__ . '/../inc/versie.php';
 require_once __DIR__ . '/../inc/person_id.php';   // person_id-resolutie (fase 3d-iii)
+require_once __DIR__ . '/../inc/anoniem.php';      // publieke anonimiteit (variant B)
 
 // ── Bezoektracking: upsert session-hit in coach_visits ──────────────────────
 // HTML → full INSERT/UPDATE + peak-check. AJAX → last_seen bumpen met 30s
@@ -169,6 +170,33 @@ function _coachAuthGate(PDO $pdo, string $action): void {
     }
 }
 _coachAuthGate($pdo, $action);
+
+// ── Anonimiteit (variant B): coach-laag bepalen ───────────────────────────────
+// Account-coach (eigen login) = operationele laag → altijd echte naam
+// (identificatie; roster spant bewust de hele DB, zie feedback_zoek_scope_avg).
+// Gedeeld wachtwoord / open = publieke laag → exact de /public-venster-regel
+// (naam binnen [wedstrijddag −1 … +1], daarbuiten gemaskeerd; anonieme rijders
+// niet op naam vindbaar). Eén keer bepaald, hergebruikt in alle handlers.
+$coachLaag = getCoachSession($pdo) ? 'operationeel' : 'public';
+
+// SQL-fragment: in de publieke laag anonieme rijders weglaten uit NAAM-zoek
+// (nooit op naam vindbaar); account-coach ziet ze wel.
+$coachAnonNaamExcl = ($coachLaag === 'operationeel') ? '' : ' AND p.publiek_anoniem IS NULL ';
+
+/**
+ * Maskeer een lijst rijder-rijen volgens de coach-laag. Operationeel → alleen
+ * is_anoniem=false zetten (geen maskering). Public → venster-maskering per rij.
+ * De rijen moeten 'publiek_anoniem' bevatten.
+ */
+function _coachMaskeerRijders(PDO $pdo, array $rows, string $laag, string $compId, array $velden = []): array {
+    if ($laag === 'operationeel') {
+        foreach ($rows as &$r) { $r['is_anoniem'] = false; }
+        unset($r);
+        return $rows;
+    }
+    [$s, $e] = anoniemCompVenster($pdo, $compId);
+    return array_map(fn($r) => pasAnonimiteitToe($r, $laag, $s, $e, false, $velden), $rows);
+}
 
 // ── auth_status: returnt alleen of er een wachtwoord IS ────────────────────
 // Vóór de rate-limit zodat frontend deze zonder 429-risico bij elke load
@@ -362,7 +390,7 @@ if ($action === 'personen_by_club') {
     try {
         $stmt = $pdo->prepare("
             SELECT DISTINCT COALESCE(cs.startnummer, p.start_number) AS snr,
-                   p.person_id AS license_key, p.person_id, p.full_name, p.category, p.club_full, p.sponsor
+                   p.person_id AS license_key, p.person_id, p.full_name, p.category, p.club_full, p.sponsor, p.publiek_anoniem
             FROM entries e
             JOIN distance_combinations dc ON dc.id = e.distance_combination_id
             JOIN persons p ON p.person_id = e.person_id
@@ -373,7 +401,7 @@ if ($action === 'personen_by_club') {
             ORDER BY snr
         ");
         $stmt->execute([$compId, $club]);
-        echo json_encode($stmt->fetchAll(PDO::FETCH_ASSOC), JSON_UNESCAPED_UNICODE);
+        echo json_encode(_coachMaskeerRijders($pdo, $stmt->fetchAll(PDO::FETCH_ASSOC), $coachLaag, $compId), JSON_UNESCAPED_UNICODE);
     } catch (Throwable $e) {
         http_response_code(500);
         echo json_encode(['error' => $e->getMessage()]);
@@ -417,7 +445,7 @@ if ($action === 'personen_bulk') {
         $where[] = '(' . implode(' OR ', $sub) . ')';
         $sql = "
             SELECT DISTINCT COALESCE(cs.startnummer, p.start_number) AS snr,
-                   p.person_id AS license_key, p.person_id, p.full_name, p.category, p.club_full, p.sponsor
+                   p.person_id AS license_key, p.person_id, p.full_name, p.category, p.club_full, p.sponsor, p.publiek_anoniem
             FROM entries e
             JOIN distance_combinations dc ON dc.id = e.distance_combination_id
             JOIN persons p ON p.person_id = e.person_id
@@ -429,7 +457,7 @@ if ($action === 'personen_bulk') {
         ";
         $stmt = $pdo->prepare($sql);
         $stmt->execute($params);
-        echo json_encode($stmt->fetchAll(PDO::FETCH_ASSOC), JSON_UNESCAPED_UNICODE);
+        echo json_encode(_coachMaskeerRijders($pdo, $stmt->fetchAll(PDO::FETCH_ASSOC), $coachLaag, $compId), JSON_UNESCAPED_UNICODE);
     } catch (Throwable $e) {
         http_response_code(500);
         echo json_encode(['error' => $e->getMessage()]);
@@ -446,7 +474,7 @@ if ($action === 'personen_by_sponsor') {
     try {
         $stmt = $pdo->prepare("
             SELECT DISTINCT COALESCE(cs.startnummer, p.start_number) AS snr,
-                   p.person_id AS license_key, p.person_id, p.full_name, p.category, p.club_full, p.sponsor
+                   p.person_id AS license_key, p.person_id, p.full_name, p.category, p.club_full, p.sponsor, p.publiek_anoniem
             FROM entries e
             JOIN distance_combinations dc ON dc.id = e.distance_combination_id
             JOIN persons p ON p.person_id = e.person_id
@@ -457,7 +485,7 @@ if ($action === 'personen_by_sponsor') {
             ORDER BY snr
         ");
         $stmt->execute([$compId, $sponsor]);
-        echo json_encode($stmt->fetchAll(PDO::FETCH_ASSOC), JSON_UNESCAPED_UNICODE);
+        echo json_encode(_coachMaskeerRijders($pdo, $stmt->fetchAll(PDO::FETCH_ASSOC), $coachLaag, $compId), JSON_UNESCAPED_UNICODE);
     } catch (Throwable $e) {
         http_response_code(500);
         echo json_encode(['error' => $e->getMessage()]);
@@ -477,7 +505,7 @@ if ($action === 'person_by_startnummer') {
     try {
         $stmt = $pdo->prepare("
             SELECT COALESCE(cs.startnummer, p.start_number) AS snr,
-                   p.person_id AS license_key, p.person_id, p.full_name, p.category, p.club_full, p.sponsor
+                   p.person_id AS license_key, p.person_id, p.full_name, p.category, p.club_full, p.sponsor, p.publiek_anoniem
             FROM entries e
             JOIN distance_combinations dc ON dc.id = e.distance_combination_id
             JOIN persons p ON p.person_id = e.person_id
@@ -489,7 +517,9 @@ if ($action === 'person_by_startnummer') {
             LIMIT 1
         ");
         $stmt->execute([$compId, $snr]);
-        echo json_encode($stmt->fetch(PDO::FETCH_ASSOC) ?: null, JSON_UNESCAPED_UNICODE);
+        $row = $stmt->fetch(PDO::FETCH_ASSOC) ?: null;
+        if ($row) $row = _coachMaskeerRijders($pdo, [$row], $coachLaag, $compId)[0];
+        echo json_encode($row, JSON_UNESCAPED_UNICODE);
     } catch (Throwable $e) {
         http_response_code(500);
         echo json_encode(['error' => $e->getMessage()]);
@@ -526,7 +556,7 @@ if ($action === 'person_lookup') {
             SELECT DISTINCT
                    COALESCE(cs.startnummer, p.start_number) AS snr,
                    p.person_id AS license_key, p.person_id, p.full_name, p.category, p.club_full,
-                   p.club_short, p.sponsor
+                   p.club_short, p.sponsor, p.publiek_anoniem
             FROM entries e
             JOIN distance_combinations dc ON dc.id = e.distance_combination_id
             JOIN persons p ON p.person_id = e.person_id
@@ -549,12 +579,13 @@ if ($action === 'person_lookup') {
                 echo json_encode(['error' => 'Naam-zoek vereist minimaal 2 tekens']);
                 exit;
             }
+            // Publieke laag: anonieme rijder niet op naam vindbaar ($coachAnonNaamExcl).
             $stmt = $pdo->prepare(
-                $base . " AND LOWER(p.full_name) LIKE LOWER(?) ORDER BY p.full_name LIMIT 50"
+                $base . " AND LOWER(p.full_name) LIKE LOWER(?) $coachAnonNaamExcl ORDER BY p.full_name LIMIT 50"
             );
             $stmt->execute([$compId, '%' . $naam . '%']);
         }
-        echo json_encode($stmt->fetchAll(PDO::FETCH_ASSOC), JSON_UNESCAPED_UNICODE);
+        echo json_encode(_coachMaskeerRijders($pdo, $stmt->fetchAll(PDO::FETCH_ASSOC), $coachLaag, $compId), JSON_UNESCAPED_UNICODE);
     } catch (Throwable $e) {
         http_response_code(500);
         echo json_encode(['error' => $e->getMessage()]);
@@ -852,7 +883,7 @@ if ($action === 'uitslagen') {
             $stmt = $pdo->prepare("
                 SELECT t.rang, t.punten_totaal, t.dc_naam, t.punten_detail,
                        t.person_id AS lic,
-                       p.person_id,
+                       p.person_id, p.publiek_anoniem,
                        p.full_name, p.category AS categorie,
                        COALESCE(cs.startnummer, p.start_number) AS snr
                 FROM uitslag_klassement t
@@ -881,13 +912,14 @@ if ($action === 'uitslagen') {
                 }
             }
             unset($r);
+            $rijders = _coachMaskeerRijders($pdo, $rijders, $coachLaag, $compId);
             echo json_encode(['rijders' => $rijders, 'afstanden' => $afstanden], JSON_UNESCAPED_UNICODE);
         } else {
             if (!$distId) { echo json_encode(['error' => 'distance_id verplicht']); exit; }
             $catWhere = $catFilter !== '' ? ' WHERE p.category = ?' : '';
             $stmt = $pdo->prepare("
                 SELECT t.rang, t.finale_naam, t.tijd_ms, t.sanctie, t.distance_naam,
-                       t.person_id AS lic,
+                       t.person_id AS lic, p.publiek_anoniem,
                        p.full_name, p.category AS categorie,
                        COALESCE(cs.startnummer, p.start_number) AS snr,
                        res_agg.rondes, res_agg.pk_punten
@@ -923,6 +955,8 @@ if ($action === 'uitslagen') {
                 if (isset($seen[$lic])) continue;
                 $seen[$lic] = true; $unique[] = $r;
             }
+            // Dedup op de echte naam+snr; daarna pas anonimiteit toepassen.
+            $unique = _coachMaskeerRijders($pdo, $unique, $coachLaag, $compId);
             $heeftRnd = !empty(array_filter($unique, fn($r) => $r['rondes'] !== null));
             $heeftPK  = !empty(array_filter($unique, fn($r) => $r['pk_punten'] !== null));
             echo json_encode([
@@ -1108,6 +1142,9 @@ if ($action === 'ronde_uitslagen') {
     if (!$compId || !$dcId) { echo json_encode(['error' => 'competition_id en dc_id verplicht']); exit; }
 
     try {
+        // Anonimiteit (variant B): venster voor de public-laag (gedeeld ww).
+        [$cStarts, $cEnds] = anoniemCompVenster($pdo, $compId);
+
         // Wedstrijdsysteem ophalen (bepaalt label 'B-finale' vs 'Kleine finale').
         $sysStmt = $pdo->prepare("SELECT systeem FROM competition_tijdschema WHERE competition_id = ? LIMIT 1");
         $sysStmt->execute([$compId]);
@@ -1180,7 +1217,7 @@ if ($action === 'ronde_uitslagen') {
             SELECT h.id AS heat_id, h.heat_nr,
                    COALESCE(tsr.ronde_type, 'heats') AS ronde_type,
                    he.person_id AS person_license, he.startpositie,
-                   p.full_name, p.category AS categorie,
+                   p.full_name, p.category AS categorie, p.publiek_anoniem,
                    COALESCE(cs.startnummer, p.start_number) AS snr,
                    res.tijd_ms, res.bruto_tijd_ms, res.is_photofinish,
                    res.sanctie, res.finishpositie,
@@ -1221,6 +1258,8 @@ if ($action === 'ronde_uitslagen') {
             $heatParams = [$compId, $compId, $dcId, $distId];
             if ($catFilter !== '') $heatParams[] = $catFilter;
             $heatRijStmt->execute($heatParams);
+            // Anonimiteit pas in de normalisatie-loop hieronder — de Q/doorstroom-
+            // logica leunt op person_license (= person_id), en maskeren strípt die.
             $rows = $heatRijStmt->fetchAll(PDO::FETCH_ASSOC);
             $perRonde = [];
             foreach ($rows as $r) {
@@ -1429,6 +1468,9 @@ if ($action === 'ronde_uitslagen') {
                     $r['rondes']        = $r['rondes']        !== null ? (int)$r['rondes']       : null;
                     $r['pk_punten']     = $r['pk_punten']     !== null ? (float)$r['pk_punten']  : null;
                     unset($r['startpositie']);
+                    // Anonimiteit ná de Q/doorstroom-logica (die op person_license
+                    // leunde). Operationeel = geen maskering; public = venster.
+                    $r = pasAnonimiteitToe($r, $coachLaag, $cStarts, $cEnds, false, ['naam' => ['full_name']]);
                 }
                 unset($r);
 
@@ -1839,7 +1881,7 @@ if ($action === 'rit_detail') {
         $rStmt = $pdo->prepare("
             SELECT he.startpositie,
                    COALESCE(cs.startnummer, p.start_number) AS snr,
-                   p.person_id AS license_key, p.person_id, p.full_name, p.category, p.club_full, p.sponsor,
+                   p.person_id AS license_key, p.person_id, p.full_name, p.category, p.club_full, p.sponsor, p.publiek_anoniem,
                    res.finishpositie, res.tijd_ms,
                    res.bruto_tijd_ms, res.is_photofinish, res.sanctie,
                    res.rondes, res.punten AS pk_punten
@@ -1853,7 +1895,7 @@ if ($action === 'rit_detail') {
             ORDER BY he.startpositie
         ");
         $rStmt->execute([$compId, $heat['id']]);
-        $heat['rijders'] = $rStmt->fetchAll(PDO::FETCH_ASSOC);
+        $heat['rijders'] = _coachMaskeerRijders($pdo, $rStmt->fetchAll(PDO::FETCH_ASSOC), $coachLaag, $compId);
         echo json_encode(['heat' => $heat], JSON_UNESCAPED_UNICODE);
     } catch (Throwable $e) {
         http_response_code(500);

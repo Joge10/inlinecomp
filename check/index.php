@@ -277,6 +277,10 @@ if ($action !== '') {
                 JOIN persons p ON p.person_id = e.person_id
                 WHERE dc.competition_id = ?
                   AND p.anonymized_at IS NULL
+                  -- Publiek anonieme rijder is nooit op naam vindbaar (variant B):
+                  -- óók niet in de publieke self-check. Zo'n rijder mailt de
+                  -- organisatie; die verifieert (bv. via licentie) en antwoordt.
+                  AND p.publiek_anoniem IS NULL
                 GROUP BY short_name
                 ORDER BY short_name
             ");
@@ -336,6 +340,8 @@ if ($action !== '') {
                 WHERE dc.competition_id = ?
                   AND COALESCE(NULLIF(p.short_name, ''), p.full_name) = ?
                   AND p.anonymized_at IS NULL
+                  -- Publiek anoniem → niet via naam opvraagbaar (variant B).
+                  AND p.publiek_anoniem IS NULL
             ");
             $kStmt->execute([$compId, $shortIn]);
             $kandidaten = $kStmt->fetchAll(PDO::FETCH_ASSOC);

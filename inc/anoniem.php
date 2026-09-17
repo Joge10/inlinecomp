@@ -38,6 +38,30 @@ if (!function_exists('binnenAnoniemVenster')) {
     }
 }
 
+if (!function_exists('anoniemCompVenster')) {
+    /**
+     * Haalt [starts, ends] van een wedstrijd op voor het publieke venster.
+     * Cachet per competition_id binnen één request (meerdere leesplekken lezen
+     * dezelfde wedstrijd). Faalt stil naar [null, null] → dan maskeert de
+     * public-laag (veilig).
+     */
+    function anoniemCompVenster(PDO $pdo, string $compId): array {
+        static $cache = [];
+        if ($compId === '') return [null, null];
+        if (!array_key_exists($compId, $cache)) {
+            try {
+                $st = $pdo->prepare("SELECT starts, ends FROM competitions WHERE id = ?");
+                $st->execute([$compId]);
+                $row = $st->fetch(PDO::FETCH_ASSOC) ?: [];
+                $cache[$compId] = [$row['starts'] ?? null, $row['ends'] ?? null];
+            } catch (Throwable $e) {
+                $cache[$compId] = [null, null];
+            }
+        }
+        return $cache[$compId];
+    }
+}
+
 if (!function_exists('moetAnoniemMaskeren')) {
     /**
      * Bepaalt of een rij gemaskeerd moet worden.
@@ -60,17 +84,37 @@ if (!function_exists('moetAnoniemMaskeren')) {
     }
 }
 
+if (!function_exists('verbergAnoniemId')) {
+    /**
+     * Strip ALLEEN de identiteits-tokens (person_id + aliassen) uit een rij.
+     *
+     * CRUCIAAL (variant B): person_id is de onraadbare entitlement-sleutel — wie
+     * 'm heeft, ziet de echte naam. De publieke/gedeelde API emit person_id voor
+     * élke rijder; voor een anonieme rijder mag die dus NOOIT publiek mee, ook
+     * niet binnen het venster waarin de naam wél zichtbaar is. Anders plukt iemand
+     * de GUID op de wedstrijddag uit de JSON en houdt daarmee PERMANENT toegang.
+     * De echte volger heeft de GUID al via Mijn InlineComp / de organisatie.
+     */
+    function verbergAnoniemId(array $row, array $velden = []): array {
+        $ids = $velden['ids'] ?? ['person_id', 'license_key', 'person_license', 'lic', 'db_person'];
+        foreach ($ids as $f) if (array_key_exists($f, $row)) $row[$f] = null;
+        return $row;
+    }
+}
+
 if (!function_exists('maskeerAnoniemeRij')) {
     /**
-     * Vervangt de naam-velden door "Anoniem" en wist club/woonplaats/sponsor.
-     * Startnummer blijft staan. Zet 'is_anoniem' = true als hint voor de frontend.
-     * $velden overschrijft de default veldnamen (naam-set / te-wissen-set) per endpoint.
+     * Volledige maskering: naam → "Anoniem", club/woonplaats/sponsor gewist, en
+     * de identiteits-tokens gestript (zie verbergAnoniemId). Startnummer blijft
+     * staan. Zet 'is_anoniem' = true als hint voor de frontend. $velden overschrijft
+     * de default veldnamen (naam-set / te-wissen-set / ids-set) per endpoint.
      */
     function maskeerAnoniemeRij(array $row, array $velden = []): array {
         $naam = $velden['naam'] ?? ['full_name', 'short_name', 'naam', 'voornaam', 'achternaam'];
         $wis  = $velden['wis']  ?? ['club_full', 'club_short', 'club_code', 'sponsor', 'city', 'club', 'woonplaats', 'nationality'];
         foreach ($naam as $f) if (array_key_exists($f, $row)) $row[$f] = 'Anoniem';
         foreach ($wis  as $f) if (array_key_exists($f, $row)) $row[$f] = null;
+        $row = verbergAnoniemId($row, $velden);
         $row['is_anoniem'] = true;
         return $row;
     }
@@ -78,16 +122,31 @@ if (!function_exists('maskeerAnoniemeRij')) {
 
 if (!function_exists('pasAnonimiteitToe')) {
     /**
-     * Gemaksfunctie: maskeer $row als dat nodig is, anders geef 'm ongewijzigd terug
-     * (met 'is_anoniem' = false). Verwacht dat $row een 'publiek_anoniem'-veld heeft.
+     * Past anonimiteit toe op één rij. Verwacht een 'publiek_anoniem'-veld.
+     *
+     *   - Niet anoniem / entitled (heeft GUID) / operationele laag → volledige data
+     *     (is_anoniem = false).
+     *   - Anoniem, publiek/permanent, geen entitlement:
+     *       • GUID (person_id + aliassen) wordt ALTIJD verborgen (ook in-venster);
+     *       • naam/club worden gemaskeerd bij laag 'altijd', of bij laag 'public'
+     *         zodra we búíten het venster [wedstrijddag −1 … +1] zitten.
+     *     In beide gevallen is_anoniem = true (frontend-hint).
      */
     function pasAnonimiteitToe(array $row, string $laag,
                               ?string $starts = null, ?string $ends = null,
                               bool $entitled = false, array $velden = []): array {
-        if (moetAnoniemMaskeren($row['publiek_anoniem'] ?? null, $laag, $starts, $ends, $entitled)) {
-            return maskeerAnoniemeRij($row, $velden);
+        $anon = $row['publiek_anoniem'] ?? null;
+        if ($anon === null || $anon === '' || $entitled || $laag === 'operationeel') {
+            $row['is_anoniem'] = false;
+            return $row;
         }
-        $row['is_anoniem'] = false;
+        $naamMaskeren = ($laag === 'altijd') || !binnenAnoniemVenster($starts, $ends);
+        if ($naamMaskeren) {
+            return maskeerAnoniemeRij($row, $velden);   // naam + club + GUID weg
+        }
+        // Binnen het venster: naam blijft zichtbaar (operationeel), GUID tóch weg.
+        $row = verbergAnoniemId($row, $velden);
+        $row['is_anoniem'] = true;
         return $row;
     }
 }

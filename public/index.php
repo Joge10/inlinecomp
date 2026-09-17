@@ -11,6 +11,7 @@ header('Pragma: no-cache');
 header('Expires: 0');
 require_once __DIR__ . '/../../config_inlinecomp.php';
 require_once __DIR__ . '/../inc/person_id.php';   // person_id-resolutie (fase 3d-iii)
+require_once __DIR__ . '/../inc/anoniem.php';      // publieke anonimiteit (variant B)
 require_once __DIR__ . '/../inc/versie.php';
 
 // ── Bezoektracking: upsert session-hit in public_visits ─────────────────────
@@ -541,7 +542,7 @@ if ($action === 'rit_detail') {
             SELECT he.startpositie,
                    COALESCE(cs.startnummer, p.start_number) AS snr,
                    p.person_id AS license_key, p.person_id,
-                   p.full_name, p.category,
+                   p.full_name, p.category, p.publiek_anoniem,
                    res.finishpositie, res.tijd_ms, res.sanctie,
                    res.rondes, res.punten AS pk_punten,
                    ua.rang AS uitslag_rang
@@ -555,7 +556,11 @@ if ($action === 'rit_detail') {
             ORDER BY he.startpositie
         ");
         $rStmt->execute([$compId, $compId, $dcId, $distId, $heat['id']]);
-        $heat['rijders'] = $rStmt->fetchAll(PDO::FETCH_ASSOC);
+        // Anonimiteit (variant B): publieke heat-weergave → public-venster maskering.
+        [$cStarts, $cEnds] = anoniemCompVenster($pdo, $compId);
+        $heat['rijders'] = array_map(function ($r) use ($cStarts, $cEnds) {
+            return pasAnonimiteitToe($r, 'public', $cStarts, $cEnds, false, ['naam' => ['full_name']]);
+        }, $rStmt->fetchAll(PDO::FETCH_ASSOC));
 
         echo json_encode(['heat' => $heat], JSON_UNESCAPED_UNICODE);
     } catch (Throwable $e) {
@@ -591,6 +596,11 @@ if ($action === 'search_person') {
             LEFT JOIN competition_startnummers cs
                    ON cs.person_id = p.person_id AND cs.competition_id = ?
             WHERE p.short_name LIKE ?
+              -- Publiek anonieme rijder is NOOIT op naam vindbaar (variant B,
+              -- laag 'altijd'): weglaten i.p.v. maskeren, zodat de zoek ook niet
+              -- bevestigt dát iemand meedoet/anoniem is. Toevoegen aan de
+              -- volglijst kan alleen via het onraadbare person_id (GUID).
+              AND p.publiek_anoniem IS NULL
               AND EXISTS (
                        SELECT 1 FROM entries e
                        JOIN distance_combinations dc
@@ -629,6 +639,12 @@ if ($action === 'lookup') {
     // queries draaien op person_id → fase-4-proof.
     $token = trim($_GET['license_key'] ?? '') ?: trim($_GET['person_id'] ?? '');
     $pid   = $token !== '' ? (string)(resolveNaarPersonId($pdo, $token) ?? '') : '';
+    // Entitled (variant B): de kijker ziet de echte naam van een anonieme rijder
+    // ALLEEN als hij het onraadbare person_id (GUID) heeft. Een GUID resolvet
+    // naar zichzelf ($token === $pid); een (raadbaar) licentienummer resolvet
+    // naar een ander person_id → géén entitlement. Startnummer-lookup (guessbaar)
+    // is per definitie niet entitled.
+    $entitled = ($pid !== '' && $token === $pid);
     if ($token !== '' && $pid === '') {
         echo json_encode(['error' => 'Geen rijder gevonden voor deze rijder in deze wedstrijd']);
         exit;
@@ -648,7 +664,7 @@ if ($action === 'lookup') {
             // frontend toont dan een "niet ingeschreven"-placeholder.
             $persStmt = $pdo->prepare("
                 SELECT p.person_id AS license_key, p.person_id, p.full_name, p.category, p.start_number,
-                       p.club_short,
+                       p.club_short, p.publiek_anoniem,
                        COALESCE(cs.startnummer, p.start_number) AS wedstrijd_snr,
                        (SELECT MAX(e.status)
                           FROM entries e
@@ -665,7 +681,7 @@ if ($action === 'lookup') {
         } else {
             $persStmt = $pdo->prepare("
                 SELECT p.person_id AS license_key, p.person_id, p.full_name, p.category, p.start_number,
-                       p.club_short,
+                       p.club_short, p.publiek_anoniem,
                        COALESCE(cs.startnummer, p.start_number) AS wedstrijd_snr,
                        e.status AS entry_status
                 FROM persons p
@@ -682,6 +698,21 @@ if ($action === 'lookup') {
             $omschr = $pid !== '' ? 'deze rijder' : "startnummer $snr";
             echo json_encode(['error' => "Geen rijder gevonden voor $omschr in deze wedstrijd"]);
             exit;
+        }
+
+        // ── Anonimiteit (variant B) ──────────────────────────────────────────
+        // Wedstrijd-datums voor het publieke venster [wedstrijddag −1 … +1].
+        [$cStarts, $cEnds] = anoniemCompVenster($pdo, $compId);
+
+        // Entitled (kijker heeft het GUID) → onthoud de person_id('s) zodat het
+        // eigen kind óók in de heat-grid hieronder niet gemaskeerd wordt. De
+        // subject-rij zelf wordt pas bij het bouwen van de output gemaskeerd
+        // (hieronder leunen dc-status/heat-queries nog op $p['license_key']).
+        $entitledPids = [];
+        if ($entitled) {
+            foreach ($personen as $pp) {
+                if (!empty($pp['person_id'])) $entitledPids[$pp['person_id']] = true;
+            }
         }
 
         // Status PER DC voor de rijder-header. Een rijder kan in meerdere DC's
@@ -734,7 +765,7 @@ if ($action === 'lookup') {
             SELECT he.startpositie,
                    COALESCE(cs.startnummer, p.start_number) AS snr,
                    p.person_id AS license_key, p.person_id,
-                   p.full_name, p.category,
+                   p.full_name, p.category, p.publiek_anoniem,
                    res.finishpositie, res.tijd_ms,
                    res.bruto_tijd_ms, res.is_photofinish, res.sanctie,
                    res.rondes, res.punten AS pk_punten,
@@ -885,7 +916,12 @@ if ($action === 'lookup') {
                 }
 
                 $rijdersStmt->execute([$compId, $compId, $h['distance_combination_id'] ?? '', $h['distance_id'] ?? '', $h['heat_id']]);
-                $h['rijders'] = $rijdersStmt->fetchAll(PDO::FETCH_ASSOC);
+                $h['rijders'] = array_map(function ($r) use ($cStarts, $cEnds, $entitledPids) {
+                    // Heat-genoten volgen de public-venster-regel. Alleen het eigen
+                    // kind (entitled via GUID) blijft ook buiten het venster zichtbaar.
+                    $ent = !empty($r['person_id']) && isset($entitledPids[$r['person_id']]);
+                    return pasAnonimiteitToe($r, 'public', $cStarts, $cEnds, $ent, ['naam' => ['full_name']]);
+                }, $rijdersStmt->fetchAll(PDO::FETCH_ASSOC));
                 $heats[] = $h;
             }
 
@@ -894,8 +930,11 @@ if ($action === 'lookup') {
             $klasStmt->execute([$lic, $compId]);
             $klassementen = $klasStmt->fetchAll(PDO::FETCH_ASSOC);
 
+            // Subject-rij nu pas maskeren (queries hierboven zijn klaar). Entitled
+            // (eigen GUID) → echte naam; anders public-venster.
             $resultaten[] = [
-                'persoon'      => $p,
+                'persoon'      => pasAnonimiteitToe($p, 'public', $cStarts, $cEnds, $entitled,
+                                                    ['naam' => ['full_name'], 'wis' => ['club_short']]),
                 'heats'        => $heats,
                 'uitslagen'    => $uitslagen,
                 'klassementen' => $klassementen,
@@ -982,6 +1021,10 @@ if ($action === 'uitslagen') {
     $catFilter = trim($_GET['categorie'] ?? '');
     if (!$compId || !$dcId) { echo json_encode(['error' => 'competition_id en dc_id verplicht']); exit; }
 
+    // Anonimiteit (variant B): per-wedstrijd dag-uitslag/klassement volgt het
+    // public-venster [wedstrijddag −1 … +1].
+    [$cStarts, $cEnds] = anoniemCompVenster($pdo, $compId);
+
     try {
         if ($type === 'klassement') {
             // Pre-check: alleen gepubliceerde klassementen tonen
@@ -998,7 +1041,7 @@ if ($action === 'uitslagen') {
             $catWhere = $catFilter !== '' ? ' WHERE p.category = ?' : '';
             $stmt = $pdo->prepare("
                 SELECT t.rang, t.punten_totaal, t.dc_naam, t.punten_detail,
-                       p.person_id,
+                       p.person_id, p.publiek_anoniem,
                        p.full_name, p.category AS categorie,
                        COALESCE(cs.startnummer, p.start_number) AS snr
                 FROM uitslag_klassement t
@@ -1027,6 +1070,7 @@ if ($action === 'uitslagen') {
                 foreach (array_keys($detail) as $dn) {
                     if (!in_array($dn, $afstanden)) $afstanden[] = $dn;
                 }
+                $r = pasAnonimiteitToe($r, 'public', $cStarts, $cEnds, false, ['naam' => ['full_name']]);
             }
             unset($r);
 
@@ -1037,7 +1081,7 @@ if ($action === 'uitslagen') {
             $stmt = $pdo->prepare("
                 SELECT t.rang, t.finale_naam, t.tijd_ms, t.sanctie,
                        t.distance_naam,
-                       p.person_id,
+                       p.person_id, p.publiek_anoniem,
                        p.full_name, p.category AS categorie,
                        COALESCE(cs.startnummer, p.start_number) AS snr,
                        res_agg.rondes, res_agg.pk_punten
@@ -1068,14 +1112,16 @@ if ($action === 'uitslagen') {
             $stmt->execute($params);
             $rijders = $stmt->fetchAll(PDO::FETCH_ASSOC);
 
-            // Dedup (res_agg kan meerdere rijen geven)
+            // Dedup (res_agg kan meerdere rijen geven). Dedup op de ECHTE naam+snr
+            // vóór maskering — daarna pas anonimiteit toepassen (anders vallen
+            // verschillende anonieme rijders samen als 'Anoniem'+snr).
             $seen = [];
             $unique = [];
             foreach ($rijders as $r) {
                 $lic = $r['full_name'] . $r['snr'];
                 if (isset($seen[$lic])) continue;
                 $seen[$lic] = true;
-                $unique[] = $r;
+                $unique[] = pasAnonimiteitToe($r, 'public', $cStarts, $cEnds, false, ['naam' => ['full_name']]);
             }
 
             $heeftRnd = !empty(array_filter($unique, fn($r) => $r['rondes'] !== null));
@@ -1249,6 +1295,9 @@ if ($action === 'ronde_uitslagen') {
     if (!$compId || !$dcId) { echo json_encode(['error' => 'competition_id en dc_id verplicht']); exit; }
 
     try {
+        // Anonimiteit (variant B): publiek rondes-overzicht → public-venster.
+        [$cStarts, $cEnds] = anoniemCompVenster($pdo, $compId);
+
         // Wedstrijdsysteem ophalen (bepaalt label 'B-finale' vs 'Kleine finale').
         $sysStmt = $pdo->prepare("SELECT systeem FROM competition_tijdschema WHERE competition_id = ? LIMIT 1");
         $sysStmt->execute([$compId]);
@@ -1319,7 +1368,7 @@ if ($action === 'ronde_uitslagen') {
             SELECT h.id AS heat_id, h.heat_nr,
                    COALESCE(tsr.ronde_type, 'heats') AS ronde_type,
                    he.person_id AS person_license, he.startpositie,
-                   p.person_id,
+                   p.person_id, p.publiek_anoniem,
                    p.full_name, p.category AS categorie,
                    COALESCE(cs.startnummer, p.start_number) AS snr,
                    res.tijd_ms, res.bruto_tijd_ms, res.is_photofinish,
@@ -1342,7 +1391,7 @@ if ($action === 'ronde_uitslagen') {
         $eindStmt = $pdo->prepare("
             SELECT ua.rang, ua.tijd_ms, ua.sanctie, ua.punten, ua.finale_naam,
                    ua.person_id AS person_license,
-                   p.person_id,
+                   p.person_id, p.publiek_anoniem,
                    p.full_name, COALESCE(cs.startnummer, p.start_number) AS snr
             FROM uitslag_afstand ua
             JOIN persons p ON p.person_id = ua.person_id
@@ -1380,7 +1429,9 @@ if ($action === 'ronde_uitslagen') {
             $distId = $dist['id'];
             $cc     = $catConfigs[$distId] ?? [];
 
-            // Rijders ophalen + groeperen per ronde_type
+            // Rijders ophalen + groeperen per ronde_type. Anonimiteit wordt pas
+            // in de normalisatie-loop hieronder toegepast — de Q/doorstroom-logica
+            // leunt nog op person_license (= person_id), en maskeren strípt die.
             $heatRijStmt->execute([$compId, $compId, $dcId, $distId]);
             $rows = $heatRijStmt->fetchAll(PDO::FETCH_ASSOC);
             $perRonde = [];
@@ -1625,6 +1676,9 @@ if ($action === 'ronde_uitslagen') {
                     $r['rondes']        = $r['rondes']        !== null ? (int)$r['rondes']       : null;
                     $r['pk_punten']     = $r['pk_punten']     !== null ? (float)$r['pk_punten']  : null;
                     unset($r['startpositie']);
+                    // Anonimiteit (public-venster) — ná de Q/doorstroom-logica,
+                    // die op person_license leunde; maskeren strípt die token nu.
+                    $r = pasAnonimiteitToe($r, 'public', $cStarts, $cEnds, false, ['naam' => ['full_name']]);
                 }
                 unset($r);
 
@@ -1654,6 +1708,7 @@ if ($action === 'ronde_uitslagen') {
                 $e['tijd_ms'] = $e['tijd_ms'] !== null ? (int)$e['tijd_ms'] : null;
                 $e['punten']  = $e['punten']  !== null ? (float)$e['punten'] : null;
                 $e['snr']     = $e['snr']     !== null ? (string)$e['snr']  : null;
+                $e = pasAnonimiteitToe($e, 'public', $cStarts, $cEnds, false, ['naam' => ['full_name']]);
             }
             unset($e);
 
@@ -1775,12 +1830,16 @@ if ($action === 'serie_klassement') {
         $k['categorieen']      = json_decode($k['categorieen']      ?? '[]', true);
         $k['wedstrijden_meta'] = json_decode($k['wedstrijden_meta'] ?? 'null', true);
 
+        // LEFT JOIN persons voor de anonimiteits-vlag (klassement_posities heeft
+        // een eigen naam-snapshot, geen vlag). person_id kan bij oude rijen leeg
+        // zijn → dan geen match, geen maskering (die rij is toch niet koppelbaar).
         $pos = $pdo->prepare("
-            SELECT positie, start_number, person_id AS license_key, naam, categorie,
-                   punten_detail, punten_totaal
-            FROM klassement_posities
-            WHERE klassement_id = ?
-            ORDER BY (positie = 0), positie ASC
+            SELECT kp.positie, kp.start_number, kp.person_id AS license_key, kp.naam, kp.categorie,
+                   kp.punten_detail, kp.punten_totaal, p.publiek_anoniem
+            FROM klassement_posities kp
+            LEFT JOIN persons p ON p.person_id = kp.person_id
+            WHERE kp.klassement_id = ?
+            ORDER BY (kp.positie = 0), kp.positie ASC
         ");
         $pos->execute([$klId]);
         $rows = $pos->fetchAll(PDO::FETCH_ASSOC);
@@ -1789,6 +1848,9 @@ if ($action === 'serie_klassement') {
                 ? json_decode($r['punten_detail'], true) : null;
             $r['punten_totaal'] = $r['punten_totaal'] !== null
                 ? (float)$r['punten_totaal'] : null;
+            // Permanent, cross-seizoen doorzoekbaar record → laag 'altijd': een
+            // publiek anonieme rijder wordt hier ALTIJD gemaskeerd (geen venster).
+            $r = pasAnonimiteitToe($r, 'altijd', null, null, false, ['naam' => ['naam']]);
         }
         unset($r);
         $serieRegels = json_decode($k['serie_regels'] ?? 'null', true);
