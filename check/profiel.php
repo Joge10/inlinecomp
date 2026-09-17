@@ -311,11 +311,13 @@ a{color:var(--accent)}
 .btn:hover{background:var(--brand-2)}
 .btn-sec{background:var(--surface);color:var(--brand);border:1px solid var(--line)}
 .btn-sec:hover{background:var(--surface-2)}
-.hdr-actions{display:flex;align-items:center;gap:8px}
-.icon-btn{background:var(--surface);color:var(--brand);border:1px solid var(--line);border-radius:8px;
-  width:38px;height:38px;display:inline-flex;align-items:center;justify-content:center;
-  font-size:1.1rem;line-height:1;padding:0;cursor:pointer}
-.icon-btn:hover{background:var(--surface-2)}
+.hero-gear{position:absolute;top:16px;right:16px;z-index:2;display:inline-flex;align-items:center;justify-content:center;
+  width:40px;height:40px;padding:0;background:rgba(255,255,255,.16);border:1px solid rgba(255,255,255,.3);
+  color:#fff;border-radius:10px;cursor:pointer;line-height:1}
+.hero-gear:hover{background:rgba(255,255,255,.28)}
+.hero-gear svg{display:block}
+/* Tekst vrijhouden van het hoekknopje (lange namen). */
+.hero .eyebrow,.hero h1{padding-right:52px}
 .chip.chip-anon{background:rgba(255,255,255,.22);border-color:rgba(255,255,255,.3)}
 dialog.settings-modal{border:0;border-radius:16px;padding:0;max-width:440px;width:calc(100% - 32px);
   box-shadow:var(--shadow);color:var(--ink);background:var(--surface)}
@@ -475,13 +477,10 @@ table.pr tbody tr:last-child td{border-bottom:0}
     <?php elseif ($adminPreview): ?>
       <span class="ap-tag">🔒 Testweergave (beheer)</span>
     <?php else: ?>
-      <div class="hdr-actions">
-        <button type="button" class="icon-btn" id="btn-settings" title="Instellingen" aria-label="Instellingen">⚙</button>
-        <form method="post" style="margin:0">
-          <input type="hidden" name="csrf" value="<?= esc($CSRF) ?>">
-          <button class="btn btn-sec" name="actie" value="logout">Uitloggen</button>
-        </form>
-      </div>
+      <form method="post" style="margin:0">
+        <input type="hidden" name="csrf" value="<?= esc($CSRF) ?>">
+        <button class="btn btn-sec" name="actie" value="logout">Uitloggen</button>
+      </form>
     <?php endif; ?>
   </div>
   <?php if ($demo): ?>
@@ -491,6 +490,11 @@ table.pr tbody tr:last-child td{border-bottom:0}
   <?php endif; ?>
 
   <header class="hero">
+    <?php if ($isEigen): ?>
+    <button type="button" class="hero-gear" id="btn-settings" title="Instellingen" aria-label="Instellingen">
+      <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="3"></circle><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"></path></svg>
+    </button>
+    <?php endif; ?>
     <div class="eyebrow">Mijn InlineComp</div>
     <h1><?= esc($pr['full_name']) ?></h1>
     <div class="meta">
