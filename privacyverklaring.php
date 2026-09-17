@@ -120,7 +120,8 @@ inschrijf-API aan ons worden verstrekt:</p>
     <li>Startnummer en, bij gebruik, transponder-code voor tijdregistratie</li>
 </ul>
 <p>Daarnaast leggen wij per wedstrijd de sportieve resultaten vast (tijden,
-sancties, klassering). Deze zijn aan het licentienummer gekoppeld.</p>
+sancties, klassering). Deze koppelen wij intern aan de rijder via een niet-openbaar
+kenmerk (en, waar van toepassing, het licentienummer).</p>
 <p>Wij verwerken <strong>geen</strong> e-mailadressen, telefoonnummers, adressen,
 geboortedatum of geboortejaar van rijders. Wél bewaren wij de KNSB-<strong>categorie</strong>.
 Die hoort bij een leeftijdsgroep, waaruit een leeftijdsindicatie — en over meerdere
@@ -135,7 +136,7 @@ coach-app. Zonder account is het gebruik anoniem; met een account verwerken wij:
 <ul>
     <li>je <strong>naam</strong> en <strong>e-mailadres</strong> (als inlog- en herkenningsgegeven, en om je account-berichten te sturen — bijvoorbeeld goedkeuring, afwijzing of een wachtwoord-reset);</li>
     <li>de <strong>club of het team</strong> waarvoor je coacht (ter beoordeling van je aanvraag);</li>
-    <li>je zelf samengestelde <strong>atletenlijst</strong> (licentienummers van rijders die je wilt volgen).</li>
+    <li>je zelf samengestelde <strong>lijst van rijders die je wilt volgen</strong> (intern opgeslagen via een niet-openbaar kenmerk per rijder, niet als KNSB-licentienummer).</li>
 </ul>
 <p>De grondslag is jouw <strong>toestemming</strong> — je maakt het account zelf aan.
 Het doel is uitsluitend je gemak als coach: je atleten één keer instellen en ze
@@ -153,16 +154,16 @@ organisatie. Zet je dit aan, dan verwerken wij per apparaat:</p>
 <ul>
     <li>een <strong>push-abonnement</strong> van je browser (een technisch adres — het
         'endpoint' — plus versleutel-sleutels) om de melding aan jouw apparaat te bezorgen;</li>
-    <li>de <strong>licentienummers van de rijders die je volgt</strong> (zodat we alleen
-        relevante meldingen sturen), je gekozen <strong>taal</strong> en welke meldingtypen
+    <li>welke <strong>rijders je volgt</strong> (intern via een niet-openbaar kenmerk, zodat we
+        alleen relevante meldingen sturen), je gekozen <strong>taal</strong> en welke meldingtypen
         je aan hebt staan;</li>
     <li>een korte <strong>browser-/apparaataanduiding</strong> (user-agent) voor beheer en opschoning.</li>
 </ul>
 <p>De grondslag is jouw <strong>toestemming</strong> — je zet de meldingen zelf aan en kunt
 ze op elk moment weer uitzetten, waarna het abonnement wordt verwijderd. In de publieke app
 worden je gevolgde rijders normaal alléén lokaal op je toestel bewaard; <strong>alleen</strong>
-wanneer je pushmeldingen aanzet, worden die licentienummers naar onze server gestuurd om de
-meldingen te kunnen richten. Aan een publiek push-abonnement is <strong>geen naam of
+wanneer je pushmeldingen aanzet, worden die (interne, niet-openbare) kenmerken naar onze server
+gestuurd om de meldingen te kunnen richten. Aan een publiek push-abonnement is <strong>geen naam of
 e-mailadres</strong> gekoppeld. Verlopen of ingetrokken abonnementen worden automatisch verwijderd.</p>
 <p><strong>Bezorging via je browser-push-dienst:</strong> om de melding op je toestel te
 krijgen, loopt deze via de push-dienst van je browser-leverancier — Google (Android/Chrome),
@@ -548,7 +549,8 @@ federation) via their registration API:</p>
     <li>Start number and, where used, transponder code for timekeeping</li>
 </ul>
 <p>In addition, for each competition we record sporting results (times,
-sanctions, ranking). These are linked to the licence number.</p>
+sanctions, ranking). We link these internally to the skater via a non-public
+identifier (and, where applicable, the licence number).</p>
 <p>We do <strong>not</strong> process e-mail addresses, phone numbers, home addresses,
 date of birth or year of birth of skaters. We do store the KNSB <strong>category</strong>.
 A category corresponds to an age group, from which an age indication — and across multiple
@@ -562,7 +564,7 @@ Without an account, use is anonymous; with an account we process:</p>
 <ul>
     <li>your <strong>name</strong> and <strong>e-mail address</strong> (as login and identification, and to send you account-related messages — for example approval, rejection or a password reset);</li>
     <li>the <strong>club or team</strong> you coach for (to assess your request);</li>
-    <li>your self-curated <strong>athlete list</strong> (licence numbers of skaters you wish to follow).</li>
+    <li>your self-curated <strong>list of skaters you wish to follow</strong> (stored internally via a non-public identifier per skater, not as a KNSB licence number).</li>
 </ul>
 <p>The legal basis is your <strong>consent</strong> — you create the account yourself.
 Its sole purpose is coach convenience: set up your athletes once and see them
@@ -581,8 +583,8 @@ per device:</p>
 <ul>
     <li>a <strong>push subscription</strong> from your browser (a technical address —
         the 'endpoint' — plus encryption keys) to deliver the notification to your device;</li>
-    <li>the <strong>licence numbers of the skaters you follow</strong> (so we only send
-        relevant notifications), your chosen <strong>language</strong> and which
+    <li>which <strong>skaters you follow</strong> (internally via a non-public identifier, so
+        we only send relevant notifications), your chosen <strong>language</strong> and which
         notification types you have enabled;</li>
     <li>a short <strong>browser/device identifier</strong> (user agent) for management and cleanup.</li>
 </ul>
@@ -590,7 +592,7 @@ per device:</p>
 yourself and can turn them off again at any time, after which the subscription is
 deleted. In the public app the skaters you follow are normally kept <strong>only
 locally</strong> on your device; <strong>only</strong> when you enable push notifications
-are those licence numbers sent to our server so notifications can be targeted. A public
+are those (internal, non-public) identifiers sent to our server so notifications can be targeted. A public
 push subscription has <strong>no name or e-mail address</strong> attached to it. Expired
 or revoked subscriptions are deleted automatically.</p>
 <p><strong>Delivery via your browser's push service:</strong> to reach your device, a
