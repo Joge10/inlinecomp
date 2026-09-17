@@ -311,13 +311,12 @@ a{color:var(--accent)}
 .btn:hover{background:var(--brand-2)}
 .btn-sec{background:var(--surface);color:var(--brand);border:1px solid var(--line)}
 .btn-sec:hover{background:var(--surface-2)}
-.hero-gear{position:absolute;top:16px;right:16px;z-index:2;display:inline-flex;align-items:center;justify-content:center;
-  width:40px;height:40px;padding:0;background:rgba(255,255,255,.16);border:1px solid rgba(255,255,255,.3);
-  color:#fff;border-radius:10px;cursor:pointer;line-height:1}
+.hero-top{display:flex;align-items:center;justify-content:space-between;gap:12px;position:relative;z-index:1}
+.hero-gear{display:inline-flex;align-items:center;gap:6px;flex:none;
+  background:rgba(255,255,255,.16);border:1px solid rgba(255,255,255,.32);color:#fff;
+  border-radius:999px;padding:6px 13px 6px 10px;font-size:.8rem;font-weight:600;cursor:pointer;line-height:1;white-space:nowrap}
 .hero-gear:hover{background:rgba(255,255,255,.28)}
 .hero-gear svg{display:block}
-/* Tekst vrijhouden van het hoekknopje (lange namen). */
-.hero .eyebrow,.hero h1{padding-right:52px}
 .chip.chip-anon{background:rgba(255,255,255,.22);border-color:rgba(255,255,255,.3)}
 dialog.settings-modal{border:0;border-radius:16px;padding:0;max-width:440px;width:calc(100% - 32px);
   box-shadow:var(--shadow);color:var(--ink);background:var(--surface)}
@@ -490,12 +489,15 @@ table.pr tbody tr:last-child td{border-bottom:0}
   <?php endif; ?>
 
   <header class="hero">
-    <?php if ($isEigen): ?>
-    <button type="button" class="hero-gear" id="btn-settings" title="Instellingen" aria-label="Instellingen">
-      <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="3"></circle><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"></path></svg>
-    </button>
-    <?php endif; ?>
-    <div class="eyebrow">Mijn InlineComp</div>
+    <div class="hero-top">
+      <div class="eyebrow">Mijn InlineComp</div>
+      <?php if ($isEigen): ?>
+      <button type="button" class="hero-gear" id="btn-settings" title="Instellingen">
+        <svg viewBox="0 0 24 24" width="15" height="15" fill="currentColor" aria-hidden="true"><path d="M19.14 12.94c.04-.31.06-.63.06-.94s-.02-.63-.06-.94l2.03-1.58a.5.5 0 0 0 .12-.64l-1.92-3.32a.5.5 0 0 0-.6-.22l-2.39.96a7.03 7.03 0 0 0-1.62-.94l-.36-2.54A.5.5 0 0 0 13.9 2h-3.8a.5.5 0 0 0-.5.42l-.36 2.54c-.59.24-1.13.56-1.62.94l-2.39-.96a.5.5 0 0 0-.6.22L2.31 8.48a.5.5 0 0 0 .12.64l2.03 1.58c-.04.31-.06.63-.06.94s.02.63.06.94l-2.03 1.58a.5.5 0 0 0-.12.64l1.92 3.32c.13.24.41.34.66.22l2.39-.96c.5.38 1.03.7 1.62.94l.36 2.54c.05.24.25.42.5.42h3.8c.25 0 .46-.18.5-.42l.36-2.54c.59-.24 1.13-.56 1.62-.94l2.39.96c.25.12.53.02.66-.22l1.92-3.32a.5.5 0 0 0-.12-.64l-2.05-1.58zM12 15.5a3.5 3.5 0 1 1 0-7 3.5 3.5 0 0 1 0 7z"/></svg>
+        <span>Instellingen</span>
+      </button>
+      <?php endif; ?>
+    </div>
     <h1><?= esc($pr['full_name']) ?></h1>
     <div class="meta">
       <?php if ($catTxt): ?><span class="chip"><?= esc($catTxt) ?></span><?php endif; ?>
