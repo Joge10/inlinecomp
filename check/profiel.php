@@ -55,6 +55,21 @@ if ($actie === 'logout') {
     header('Location: profiel.php'); exit;
 }
 
+// ── Actie: eigen publieke anonimiteit aan/uit (self-service, variant B) ──────
+// Alleen in een echte rijder-sessie (niet in admin-preview). Zet/wist de
+// omkeerbare persons.publiek_anoniem-vlag; data blijft behouden.
+if ($actie === 'pubanon' && !empty($_SESSION['rijder_lic'])) {
+    $pid = $_SESSION['rijder_lic'];
+    if (!empty($body['aan'])) {
+        $pdo->prepare("UPDATE persons SET publiek_anoniem = COALESCE(publiek_anoniem, NOW()) WHERE person_id = ?")
+            ->execute([$pid]);
+    } else {
+        $pdo->prepare("UPDATE persons SET publiek_anoniem = NULL WHERE person_id = ?")
+            ->execute([$pid]);
+    }
+    header('Location: profiel.php'); exit;
+}
+
 // ── Actie: PIN aanmaken via claim-link ──────────────────────────────────────
 if ($actie === 'set_pin') {
     $tok  = trim($body['token'] ?? '');
@@ -498,13 +513,46 @@ table.pr tbody tr:last-child td{border-bottom:0}
     </div>
   </section>
 
+  <?php if (!$demo && !$adminPreview): $pubAnon = !empty($pr['publiek_anoniem']); ?>
+  <section class="card">
+    <h2 style="margin:0 0 3px;font-size:1.18rem;font-weight:700">Privacy — publiek anoniem</h2>
+    <p style="margin:0 0 8px;color:var(--muted);font-size:.9rem">
+      Ben je publiek anoniem, dan wordt je naam (en club/woonplaats) op de publieke
+      pagina's vervangen door <b>“Anoniem”</b> — je startnummer blijft staan en je
+      gegevens blijven volledig behouden. Op de <b>wedstrijddag zelf</b> (dag ervoor
+      t/m dag erna) blijft je naam zichtbaar; dat is nodig voor de startlijst en tactiek.
+      In het permanente archief en het serie-klassement blijf je anoniem.
+    </p>
+    <p style="margin:0 0 8px">
+      <b>Status:</b>
+      <?= $pubAnon ? '🕶 Je bent <b>publiek anoniem</b>.' : 'Je bent normaal met naam zichtbaar.' ?>
+    </p>
+    <form method="post" style="margin:0 0 10px">
+      <input type="hidden" name="csrf" value="<?= esc($CSRF) ?>">
+      <input type="hidden" name="actie" value="pubanon">
+      <input type="hidden" name="aan" value="<?= $pubAnon ? '0' : '1' ?>">
+      <button class="btn <?= $pubAnon ? 'btn-sec' : '' ?>">
+        <?= $pubAnon ? 'Anonimiteit opheffen' : 'Maak mij publiek anoniem' ?>
+      </button>
+    </form>
+    <p style="margin:0 0 4px;color:var(--muted);font-size:.9rem">
+      Wil je dat iemand (bv. je ouder of coach) je tóch kan volgen terwijl je anoniem
+      bent? Geef ze dan jouw persoonlijke <b>volg-ID</b> — daarmee zien zij wél je naam.
+      Deel het alleen met wie je vertrouwt.
+    </p>
+    <p style="margin:0">
+      <b>Jouw volg-ID:</b>
+      <code style="background:var(--grijs,#f4f6f8);padding:2px 8px;border-radius:6px;font-size:.9rem;user-select:all;word-break:break-all"><?= esc($pr['license_key']) ?></code>
+    </p>
+  </section>
+  <?php endif; ?>
+
   <section class="soon">
     <h3>Binnenkort</h3>
     <ul>
       <li>Ontbrekende of foutieve <strong>eigen gegevens</strong> (bv. naam, club of woonplaats) melden per wedstrijd — de organisatie past ze dan aan. Officiële uitslagen en tijden blijven ongewijzigd. <span class="tag">binnenkort</span></li>
       <li>Je profiel (deels) publiek deelbaar maken — link, embed of API <span class="tag">binnenkort</span></li>
       <li>Kiezen welke coaches je profiel mogen zien <span class="tag">binnenkort</span></li>
-      <li>Je naam afschermen op de publieke pagina's — startnummer blijft <span class="tag">binnenkort</span></li>
     </ul>
   </section>
 

@@ -46,7 +46,7 @@ function rijderProfielData(PDO $pdo, string $lic): array {
     // ── 0. Persoon (kop) ────────────────────────────────────────────────
     $pStmt = $pdo->prepare("
         SELECT person_id AS license_key, full_name, short_name, category, birth_year,
-               nationality, club_full, club_short, start_number, gender
+               nationality, club_full, club_short, start_number, gender, publiek_anoniem
         FROM persons WHERE person_id = ? LIMIT 1
     ");
     $pStmt->execute([$pid]);
@@ -197,12 +197,13 @@ function rijderProfielData(PDO $pdo, string $lic): array {
 
     return [
         'persoon' => $persoon ? [
-            'license_key'  => $persoon['license_key'],
-            'full_name'    => $persoon['full_name'],
-            'category'     => $persoon['category'],
-            'club'         => $persoon['club_full'] ?: $persoon['club_short'] ?: '',
-            'nationality'  => $persoon['nationality'],
-            'start_number' => $persoon['start_number'] !== null ? (int)$persoon['start_number'] : null,
+            'license_key'    => $persoon['license_key'],
+            'full_name'      => $persoon['full_name'],
+            'category'       => $persoon['category'],
+            'club'           => $persoon['club_full'] ?: $persoon['club_short'] ?: '',
+            'nationality'    => $persoon['nationality'],
+            'start_number'   => $persoon['start_number'] !== null ? (int)$persoon['start_number'] : null,
+            'publiek_anoniem'=> $persoon['publiek_anoniem'],
         ] : null,
         'stats' => [
             'wedstrijden'      => count($wedstrijden),
@@ -222,7 +223,8 @@ function rijderProfielDemo(): array {
     $blue = 'var(--c-blue)'; $orange = 'var(--c-orange)'; $green = 'var(--c-green)';
     return [
         'persoon' => ['license_key' => 'demo', 'full_name' => 'Voorbeeld Rijder',
-            'category' => 'HSA', 'club' => 'Skeelerclub Voorbeeld', 'nationality' => 'NED', 'start_number' => 99],
+            'category' => 'HSA', 'club' => 'Skeelerclub Voorbeeld', 'nationality' => 'NED', 'start_number' => 99,
+            'publiek_anoniem' => null],
         'stats'   => ['wedstrijden' => 8, 'uitslagen' => 28, 'beste_klassering' => 2, 'seizoenen' => 4],
         'sprint'  => [
             '200m'  => ['color' => $blue, 'p' => [
