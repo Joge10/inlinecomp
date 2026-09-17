@@ -15,6 +15,7 @@ header('Access-Control-Allow-Origin: *');
 
 require_once __DIR__ . '/../../config_inlinecomp.php';
 require_once __DIR__ . '/../auth/session.php';
+require_once __DIR__ . '/../inc/anoniem.php';   // publieke anonimiteit (variant B)
 $_authUser = requireAuth($pdo);
 
 $method = $_SERVER['REQUEST_METHOD'] ?? 'GET';
@@ -159,13 +160,21 @@ if ($method === 'GET') {
             }
         }
 
+        // LEFT JOIN persons voor de anonimiteits-vlag (klassement_posities heeft
+        // een eigen naam-snapshot). Alleen relevant als om maskering gevraagd wordt.
         $pos = $pdo->prepare(
-            "SELECT positie, start_number, naam, categorie, punten_detail, punten_totaal
-             FROM klassement_posities WHERE klassement_id = ?
-             ORDER BY (positie = 0), positie ASC"
+            "SELECT kp.positie, kp.start_number, kp.naam, kp.categorie, kp.punten_detail, kp.punten_totaal,
+                    p.publiek_anoniem
+             FROM klassement_posities kp
+             LEFT JOIN persons p ON p.person_id = kp.person_id
+             WHERE kp.klassement_id = ?
+             ORDER BY (kp.positie = 0), kp.positie ASC"
         );
         $pos->execute([$id]);
         $posRows = $pos->fetchAll(PDO::FETCH_ASSOC);
+        // Protocol-versie (maskeer_anoniem=1): publiek anonieme rijders → 'Anoniem'.
+        // De losse serie-print roept dit endpoint zónder de vlag aan (intern → naam blijft).
+        $maskeerAnon = !empty($_GET['maskeer_anoniem']);
         foreach ($posRows as &$p) {
             $p['punten_detail'] = $p['punten_detail'] !== null
                 ? json_decode($p['punten_detail'], true)
@@ -173,6 +182,10 @@ if ($method === 'GET') {
             $p['punten_totaal'] = $p['punten_totaal'] !== null
                 ? (float)$p['punten_totaal']
                 : null;
+            if ($maskeerAnon && !empty($p['publiek_anoniem'])) {
+                $p = maskeerAnoniemeRij($p, ['naam' => ['naam']]);   // naam → 'Anoniem'
+            }
+            unset($p['publiek_anoniem']);   // hulpveld niet meesturen
         }
         unset($p);
         // Onderblok (positie 0 = niet opgenomen) op puntentotaal in de richting van

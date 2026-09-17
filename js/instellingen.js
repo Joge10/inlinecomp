@@ -1763,7 +1763,11 @@ async function printWedstrijdrapport(compId, compNaam) {
             try {
                 await fetch('api/klassement_serie.php?action=berekenen&id='
                     + encodeURIComponent(serie.serie_id), { method: 'POST' });
-                const kres = await fetch('api/klassement_import.php?action=get&id='
+                // maskeer_anoniem=1: publiek anonieme rijders maskeren in de
+                // protocol-versie van het serie-klassement (blijvend document).
+                // De LOSSE serie-print roept dit endpoint zónder deze vlag aan
+                // en houdt de namen (intern gebruik).
+                const kres = await fetch('api/klassement_import.php?action=get&maskeer_anoniem=1&id='
                     + encodeURIComponent(serie.klassement_id));
                 const k = await kres.json();
                 if (!k || k.error || !((k.posities || []).length)) continue;
