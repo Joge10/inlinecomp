@@ -52,6 +52,7 @@ header('Access-Control-Allow-Origin: *');
 require_once __DIR__ . '/../../config_inlinecomp.php';
 require_once __DIR__ . '/../auth/session.php';
 require_once __DIR__ . '/_pr_helper.php';
+require_once __DIR__ . '/../inc/anoniem.php';   // publieke anonimiteit (variant B)
 $_authUser = requireAuth($pdo);
 
 $compId = trim($_GET['id'] ?? '');
@@ -541,6 +542,33 @@ try {
         'naam'          => $r['klassement_naam'],
         'is_finale'     => (int)$r['is_finale'] === 1,
     ], $serieStmt->fetchAll(PDO::FETCH_ASSOC));
+
+    // ── Anonimiteit ──────────────────────────────────────────────────────
+    // Het protocol is een blijvend, geprint archiefdocument → publiek anonieme
+    // rijders ook hier maskeren (laag 'altijd', geen wedstrijddag-venster). De
+    // organisatie kan een rijder desnoods nog in de app (Beheer → Rijders) op
+    // naam terugvinden; dit raakt alleen het bewaar-/herinzage-document.
+    $anonPids = [];
+    try {
+        foreach ($pdo->query("SELECT person_id FROM persons WHERE publiek_anoniem IS NOT NULL")
+                     ->fetchAll(PDO::FETCH_COLUMN) as $__pid) {
+            $anonPids[$__pid] = true;
+        }
+    } catch (Throwable $e) { /* fail-soft: geen set → niets maskeren */ }
+    $maskArchief = function (array $r) use ($anonPids) {
+        $pid = $r['person_id'] ?? $r['license_key'] ?? $r['person_license'] ?? null;
+        return ($pid !== null && isset($anonPids[$pid])) ? maskeerAnoniemeRij($r) : $r;
+    };
+    $deelnemers = array_map($maskArchief, $deelnemers);
+    $nieuwePRs  = array_map($maskArchief, $nieuwePRs);
+    foreach ($dcs as &$__dc) {
+        foreach (($__dc['distances'] ?? []) as &$__dist) {
+            if (!empty($__dist['uitslag'])) $__dist['uitslag'] = array_map($maskArchief, $__dist['uitslag']);
+        }
+        unset($__dist);
+        if (!empty($__dc['klassement'])) $__dc['klassement'] = array_map($maskArchief, $__dc['klassement']);
+    }
+    unset($__dc);
 
     echo json_encode([
         'competition' => [
