@@ -347,10 +347,9 @@ try {
             echo json_encode(['error' => 'Rijder niet gevonden']);
             exit;
         }
-        // Volg-token (lazy gemint) + aantal push-volgers — voor de e-mail-route
-        // (organisatie geeft het volg-ID aan een rijder zonder profiel).
+        // Volg-token (lazy gemint) — voor de e-mail-route (organisatie geeft
+        // het volg-ID aan een rijder zonder profiel).
         $rijder['volg_token'] = zorgVoorVolgToken($pdo, $pid);
-        $rijder['volgers']    = volgersAantal($pdo, $pid);
 
         // 2. Transponder-toewijzingen (per organisatie)
         // Match-strategie:

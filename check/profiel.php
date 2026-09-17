@@ -481,9 +481,8 @@ table.pr tbody tr:last-child td{border-bottom:0}
       $catTxt = $pr['category'] ?: '';
       $isEigen = (!$demo && !$adminPreview);                       // echte ingelogde rijder
       $pubAnon = $isEigen && !empty($pr['publiek_anoniem']);
-      // Geheim volg-token (lazy gemint) + aantal push-volgers — voor de modal.
-      $volgToken = $isEigen ? (zorgVoorVolgToken($pdo, (string)$pr['license_key']) ?? '') : '';
-      $volgers   = $isEigen ? volgersAantal($pdo, (string)$pr['license_key']) : 0; ?>
+      // Geheim volg-token (lazy gemint) — voor de instellingen-modal.
+      $volgToken = $isEigen ? (zorgVoorVolgToken($pdo, (string)$pr['license_key']) ?? '') : ''; ?>
   <div class="topbar">
     <a class="home" href="<?= $demo ? 'profiel.php' : './' ?>"><?= $demo ? '← Terug' : '← InlineComp Check' ?></a>
     <?php if ($demo): ?>
@@ -603,13 +602,6 @@ table.pr tbody tr:last-child td{border-bottom:0}
         <code id="volg-id-code"><?= esc($volgToken) ?></code>
         <button type="button" class="btn btn-sec" id="btn-copy-id" title="Kopieer">📋 Kopieer</button>
       </div>
-      <p class="volg-count" id="volg-count" style="margin:9px 0 0;font-size:.9rem">
-        <?php if ($volgers > 0): ?>
-          🔔 <b><?= (int)$volgers ?></b> <?= $volgers === 1 ? 'apparaat volgt' : 'apparaten volgen' ?> je met meldingen aan.
-        <?php else: ?>
-          Nog niemand volgt je met meldingen aan.
-        <?php endif; ?>
-      </p>
       <p style="margin:12px 0 0">
         <button type="button" class="btn btn-sec" id="btn-volg-vernieuw">🔄 Volg-ID vernieuwen</button>
       </p>
@@ -704,8 +696,6 @@ table.pr tbody tr:last-child td{border-bottom:0}
           if (!data || !data.ok || !data.volg_token) throw new Error('mislukt');
           const code = document.getElementById('volg-id-code');
           if (code) code.textContent = data.volg_token;
-          const cnt = document.getElementById('volg-count');
-          if (cnt) cnt.textContent = 'Nog niemand volgt je met meldingen aan.';
           const orig = vBtn.textContent;
           vBtn.textContent = '✓ Vernieuwd';
           setTimeout(() => { vBtn.textContent = orig; }, 1500);

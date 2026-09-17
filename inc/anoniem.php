@@ -120,22 +120,6 @@ if (!function_exists('personIdVoorVolgToken')) {
     }
 }
 
-if (!function_exists('volgersAantal')) {
-    /**
-     * Aantal apparaten/abonnementen dat deze rijder volgt MET meldingen aan
-     * (de enige server-kant die volgers kent — de volglijst zelf is client-side).
-     * Undertelt bewust: volgers zonder push tellen niet mee.
-     */
-    function volgersAantal(PDO $pdo, string $pid): int {
-        if ($pid === '') return 0;
-        try {
-            $st = $pdo->prepare("SELECT COUNT(DISTINCT subscription_id) FROM push_sub_licenses WHERE person_id = ?");
-            $st->execute([$pid]);
-            return (int)$st->fetchColumn();
-        } catch (Throwable $e) { return 0; }
-    }
-}
-
 if (!function_exists('moetAnoniemMaskeren')) {
     /**
      * Bepaalt of een rij gemaskeerd moet worden.
