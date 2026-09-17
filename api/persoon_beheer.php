@@ -335,6 +335,7 @@ try {
         // 1. Alle persons-velden
         $stmt = $pdo->prepare("
             SELECT persons.*,
+                   persons.person_id AS license_key,
                    (SELECT extern_id FROM person_external_ids e
                      WHERE e.person_id = persons.person_id AND e.systeem = 'knsb' LIMIT 1) AS relatienummer
             FROM persons WHERE person_id = ?");
