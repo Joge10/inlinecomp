@@ -335,6 +335,7 @@ function rijToonResultaten(rijders, soort = 'resultaat') {
     html += '<ul class="rij-zoek-lijst">';
     rijders.forEach(r => {
         const anoniem = !!r.anonymized_at;
+        const pubAnon = !!r.publiek_anoniem;
         const actief  = _rijGeselecteerd === r.license_key ? ' actief' : '';
         // Profielbadge alleen in de profielen-lijst (velden aanwezig)
         let profBadge = '';
@@ -346,7 +347,7 @@ function rijToonResultaten(rijders, soort = 'resultaat') {
                     : ' <span class="rij-profiel-badge grijs">⏳ aanvraag verlopen</span>');
         }
         html += `<li class="rij-zoek-item${actief}${anoniem ? ' rij-anoniem' : ''}" data-lk="${escHtml(r.license_key)}">
-            <div class="rij-zoek-naam">${escHtml(r.full_name)}${anoniem ? ' <span class="rij-anoniem-badge">geanonimiseerd</span>' : ''}${profBadge}</div>
+            <div class="rij-zoek-naam">${escHtml(r.full_name)}${anoniem ? ' <span class="rij-anoniem-badge">geanonimiseerd</span>' : ''}${pubAnon ? ' <span class="rij-anoniem-badge">🕶 publiek anoniem</span>' : ''}${profBadge}</div>
             <div class="rij-zoek-meta">
                 ${r.start_number ? 'Snr <strong>' + r.start_number + '</strong> · ' : ''}
                 ${escHtml(r.category ?? '')}${r.category && r.club_short ? ' · ' : ''}${escHtml(r.club_short ?? '')}
@@ -604,6 +605,7 @@ function rijRenderDetail(data) {
             <button class="btn-secondary" id="rij-btn-bewerk">✎ Bewerken</button>
             <button class="btn-secondary" id="rij-btn-verplaats">📋 Inschrijvingen verplaatsen</button>
             <button class="btn-secondary" id="rij-btn-profiel" title="Genereer een eenmalige link waarmee deze rijder een PIN aanmaakt voor 'Mijn InlineComp' (ook voor PIN-reset)">🔑 Profiel-link</button>
+            <button class="btn-secondary" id="rij-btn-pubanon" title="Publieke anonimiteit: naam/club worden buiten de wedstrijddagen publiek gemaskeerd. Omkeerbaar; gegevens blijven behouden.">${r.publiek_anoniem ? '👁 Publieke anonimiteit opheffen' : '🕶 Publiek anoniem maken'}</button>
         </div>`}
         ${profielBlok}
 
@@ -618,6 +620,7 @@ function rijRenderDetail(data) {
             ${veld('KNSB-categorie', r.category)}
             ${veld('Nationaliteit', r.nationality)}
             ${veld('Startnummer', r.start_number)}
+            ${veld('Publiek anoniem', r.publiek_anoniem ? ('Ja — sinds ' + escHtml(String(r.publiek_anoniem))) : 'Nee')}
             ${veld('Woonplaats', r.city)}
             ${veld('Sponsor', r.sponsor)}
             ${veld('Vereniging', r.club_full)}
@@ -653,6 +656,8 @@ function rijRenderDetail(data) {
         () => rijEditOpenVerplaatsmodus(r.license_key));
     document.getElementById('rij-btn-profiel')?.addEventListener('click',
         () => rijGenereerProfielClaim(r.license_key));
+    document.getElementById('rij-btn-pubanon')?.addEventListener('click',
+        () => rijPubAnonToggle(r));
     document.getElementById('rij-btn-testprofiel')?.addEventListener('click',
         () => window.open('check/profiel.php?preview=' + encodeURIComponent(r.license_key), '_blank', 'noopener'));
     document.getElementById('rij-btn-profiel-del')?.addEventListener('click',
@@ -1204,6 +1209,40 @@ async function rijAnonUndo(rijder) {
         rijZoek();
     } catch (e) {
         toonBevestigDialog('Fout: ' + e.message, 'Anonimisatie opheffen', 'OK', '');
+    }
+}
+
+// ── Publieke anonimiteit (variant B): omkeerbare vlag aan/uit. Los van de
+//    onomkeerbare AVG-anonimisatie hierboven. Data blijft volledig behouden;
+//    alleen de publieke weergave wordt buiten de wedstrijddagen gemaskeerd.
+async function rijPubAnonToggle(rijder) {
+    const aanZetten = !rijder.publiek_anoniem;
+    const wie = rijder.relatienummer ? 'licentie ' + rijder.relatienummer : (rijder.full_name || 'deze rijder');
+    const bericht = aanZetten
+        ? `${wie} publiek anoniem maken?\n\n` +
+          `De naam en club worden buiten de wedstrijddagen (venster: dag ervoor t/m dag erna) ` +
+          `publiek gemaskeerd als "Anoniem". Op de wedstrijddag zelf blijft de naam zichtbaar. ` +
+          `De gegevens blijven volledig behouden en dit is omkeerbaar.`
+        : `Publieke anonimiteit opheffen voor ${wie}?\n\n` +
+          `De rijder is dan weer overal met naam zichtbaar.`;
+    const ok = await toonBevestigDialog(bericht, aanZetten ? 'Publiek anoniem maken' : 'Anonimiteit opheffen');
+    if (!ok) return;
+    try {
+        const res = await fetch('api/persoon_anonimiseer.php', {
+            method:  'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body:    JSON.stringify({
+                action:      aanZetten ? 'publiek_anoniem_aan' : 'publiek_anoniem_uit',
+                license_key: rijder.license_key,
+            }),
+        });
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.error || 'Fout bij wijzigen');
+        toonBevestigDialog(data.message || 'Bijgewerkt.', 'Publieke anonimiteit', 'OK', '');
+        rijToonDetail(rijder.license_key);   // herlaad het paneel
+        rijZoek();                            // ververs de lijst
+    } catch (e) {
+        toonBevestigDialog('Fout: ' + e.message, 'Publieke anonimiteit', 'OK', '');
     }
 }
 

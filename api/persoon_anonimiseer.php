@@ -17,6 +17,13 @@
 //
 //  GET  action=lijst        → rijders die anoniem zijn (voor audit)
 //
+//  POST action=publiek_anoniem_aan / _uit  { license_key }
+//      → OMKEERBARE publieke anonimiteit (variant B), los van bovenstaande
+//        onomkeerbare AVG-wis. Zet/wist persons.publiek_anoniem. Data blijft
+//        volledig behouden; alleen de publieke weergave wordt gemaskeerd
+//        (zie inc/anoniem.php). Dit is de organisatie-kant van de vlag
+//        (rijder mailt → beheerder zet aan/uit).
+//
 //  Alleen voor admins (mag andermans persoonsgegevens verwijderen).
 // ============================================================
 
@@ -151,6 +158,37 @@ try {
         echo json_encode([
             'ok'      => true,
             'message' => 'Anonimisatie opgeheven. Herimporteer de rijder om de gegevens aan te vullen.',
+        ]);
+        exit;
+    }
+
+    if ($action === 'publiek_anoniem_aan') {
+        // Omkeerbare publieke anonimiteit AAN. COALESCE bewaart een reeds
+        // gezette (audit-)datum bij een herhaalde klik.
+        $pdo->prepare("UPDATE persons SET publiek_anoniem = COALESCE(publiek_anoniem, NOW()) WHERE person_id = ?")
+            ->execute([$pid]);
+        if (function_exists('logboekSchrijf')) {
+            logboekSchrijf($pdo, $_authUser['id'] ?? null,
+                'publiek_anoniem_aan', ['license_key' => $lk]);
+        }
+        echo json_encode([
+            'ok'      => true,
+            'message' => 'Rijder is nu publiek anoniem. Naam en club worden buiten de wedstrijddagen gemaskeerd; de gegevens blijven behouden.',
+        ]);
+        exit;
+    }
+
+    if ($action === 'publiek_anoniem_uit') {
+        // Omkeerbare publieke anonimiteit UIT (data was nooit weg).
+        $pdo->prepare("UPDATE persons SET publiek_anoniem = NULL WHERE person_id = ?")
+            ->execute([$pid]);
+        if (function_exists('logboekSchrijf')) {
+            logboekSchrijf($pdo, $_authUser['id'] ?? null,
+                'publiek_anoniem_uit', ['license_key' => $lk]);
+        }
+        echo json_encode([
+            'ok'      => true,
+            'message' => 'Publieke anonimiteit opgeheven. De rijder is weer met naam zichtbaar.',
         ]);
         exit;
     }

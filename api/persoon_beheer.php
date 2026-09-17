@@ -51,7 +51,7 @@ try {
                    (SELECT extern_id FROM person_external_ids e
                      WHERE e.person_id = persons.person_id AND e.systeem = 'knsb' LIMIT 1) AS relatienummer,
                    full_name, short_name, start_number,
-                   category, club_short, club_full, anonymized_at
+                   category, club_short, club_full, anonymized_at, publiek_anoniem
             FROM persons
             WHERE (? = 1 AND start_number = ?)
                OR (? = 1 AND person_id IN (SELECT person_id FROM person_external_ids WHERE extern_id LIKE ?))
