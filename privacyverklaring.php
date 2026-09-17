@@ -120,8 +120,8 @@ inschrijf-API aan ons worden verstrekt:</p>
     <li>Startnummer en, bij gebruik, transponder-code voor tijdregistratie</li>
 </ul>
 <p>Daarnaast leggen wij per wedstrijd de sportieve resultaten vast (tijden,
-sancties, klassering). Deze koppelen wij intern aan de rijder via een niet-openbaar
-kenmerk (en, waar van toepassing, het licentienummer).</p>
+sancties, klassering). Deze koppelen wij aan de rijder via een intern ID dat wij
+zelf toekennen.</p>
 <p>Wij verwerken <strong>geen</strong> e-mailadressen, telefoonnummers, adressen,
 geboortedatum of geboortejaar van rijders. Wél bewaren wij de KNSB-<strong>categorie</strong>.
 Die hoort bij een leeftijdsgroep, waaruit een leeftijdsindicatie — en over meerdere
@@ -136,7 +136,7 @@ coach-app. Zonder account is het gebruik anoniem; met een account verwerken wij:
 <ul>
     <li>je <strong>naam</strong> en <strong>e-mailadres</strong> (als inlog- en herkenningsgegeven, en om je account-berichten te sturen — bijvoorbeeld goedkeuring, afwijzing of een wachtwoord-reset);</li>
     <li>de <strong>club of het team</strong> waarvoor je coacht (ter beoordeling van je aanvraag);</li>
-    <li>je zelf samengestelde <strong>lijst van rijders die je wilt volgen</strong> (intern opgeslagen via een niet-openbaar kenmerk per rijder, niet als KNSB-licentienummer).</li>
+    <li>je zelf samengestelde <strong>lijst van rijders die je wilt volgen</strong> (opgeslagen met een intern ID per rijder).</li>
 </ul>
 <p>De grondslag is jouw <strong>toestemming</strong> — je maakt het account zelf aan.
 Het doel is uitsluitend je gemak als coach: je atleten één keer instellen en ze
@@ -154,7 +154,7 @@ organisatie. Zet je dit aan, dan verwerken wij per apparaat:</p>
 <ul>
     <li>een <strong>push-abonnement</strong> van je browser (een technisch adres — het
         'endpoint' — plus versleutel-sleutels) om de melding aan jouw apparaat te bezorgen;</li>
-    <li>welke <strong>rijders je volgt</strong> (intern via een niet-openbaar kenmerk, zodat we
+    <li>welke <strong>rijders je volgt</strong> (via een intern ID, zodat we
         alleen relevante meldingen sturen), je gekozen <strong>taal</strong> en welke meldingtypen
         je aan hebt staan;</li>
     <li>een korte <strong>browser-/apparaataanduiding</strong> (user-agent) voor beheer en opschoning.</li>
@@ -162,7 +162,7 @@ organisatie. Zet je dit aan, dan verwerken wij per apparaat:</p>
 <p>De grondslag is jouw <strong>toestemming</strong> — je zet de meldingen zelf aan en kunt
 ze op elk moment weer uitzetten, waarna het abonnement wordt verwijderd. In de publieke app
 worden je gevolgde rijders normaal alléén lokaal op je toestel bewaard; <strong>alleen</strong>
-wanneer je pushmeldingen aanzet, worden die (interne, niet-openbare) kenmerken naar onze server
+wanneer je pushmeldingen aanzet, worden die interne ID's naar onze server
 gestuurd om de meldingen te kunnen richten. Aan een publiek push-abonnement is <strong>geen naam of
 e-mailadres</strong> gekoppeld. Verlopen of ingetrokken abonnementen worden automatisch verwijderd.</p>
 <p><strong>Bezorging via je browser-push-dienst:</strong> om de melding op je toestel te
@@ -391,9 +391,9 @@ ze zijn verzameld:</p>
         meerjarenklassement.</li>
     <li><strong>Historische uitslagen</strong>: uitslagen en klasseringen
         bewaren wij onbeperkt als onderdeel van het sporthistorisch archief,
-        gekoppeld via een intern, niet-openbaar kenmerk. Op verzoek anonimiseren
-        wij de naam en overige persoonsgegevens (inclusief de licentie-koppeling)
-        zodat alleen dat niet-herleidbare kenmerk overblijft (zie §9).</li>
+        gekoppeld via een intern ID. Op verzoek anonimiseren wij de naam en
+        overige persoonsgegevens (inclusief de licentie-koppeling) zodat alleen
+        dat interne ID overblijft, dat alleen in ons eigen systeem betekenis heeft (zie §9).</li>
     <li><strong>Login-gegevens van beheerders</strong>: zo lang het account
         actief is; uiterlijk 12 maanden na laatste login worden inactieve
         accounts verwijderd.</li>
@@ -444,8 +444,8 @@ ze zijn verzameld:</p>
         door “Verwijderd” en <strong>wissen wij al je externe koppelingen</strong>
         (je KNSB-licentie, en eventuele koppelingen met andere systemen waarmee
         we in de toekomst ID's uitwisselen). De historische uitslagen blijven
-        daarna gekoppeld via een intern, niet-openbaar kenmerk dat losstaat van
-        die externe systemen; ook met een externe ledendatabase is dat niet meer
+        daarna gekoppeld via een intern ID dat alleen in ons eigen systeem
+        betekenis heeft; ook met een externe ledendatabase is het niet meer
         naar jou herleidbaar.</li>
     <li><strong>Bezwaar en beperking</strong> — je kunt bezwaar maken tegen
         de verwerking (inclusief de AI-verwerking uit §5b) of vragen om
@@ -551,8 +551,8 @@ federation) via their registration API:</p>
     <li>Start number and, where used, transponder code for timekeeping</li>
 </ul>
 <p>In addition, for each competition we record sporting results (times,
-sanctions, ranking). We link these internally to the skater via a non-public
-identifier (and, where applicable, the licence number).</p>
+sanctions, ranking). We link these to the skater via an internal ID that
+we assign ourselves.</p>
 <p>We do <strong>not</strong> process e-mail addresses, phone numbers, home addresses,
 date of birth or year of birth of skaters. We do store the KNSB <strong>category</strong>.
 A category corresponds to an age group, from which an age indication — and across multiple
@@ -566,7 +566,7 @@ Without an account, use is anonymous; with an account we process:</p>
 <ul>
     <li>your <strong>name</strong> and <strong>e-mail address</strong> (as login and identification, and to send you account-related messages — for example approval, rejection or a password reset);</li>
     <li>the <strong>club or team</strong> you coach for (to assess your request);</li>
-    <li>your self-curated <strong>list of skaters you wish to follow</strong> (stored internally via a non-public identifier per skater, not as a KNSB licence number).</li>
+    <li>your self-curated <strong>list of skaters you wish to follow</strong> (stored with an internal ID per skater).</li>
 </ul>
 <p>The legal basis is your <strong>consent</strong> — you create the account yourself.
 Its sole purpose is coach convenience: set up your athletes once and see them
@@ -585,7 +585,7 @@ per device:</p>
 <ul>
     <li>a <strong>push subscription</strong> from your browser (a technical address —
         the 'endpoint' — plus encryption keys) to deliver the notification to your device;</li>
-    <li>which <strong>skaters you follow</strong> (internally via a non-public identifier, so
+    <li>which <strong>skaters you follow</strong> (via an internal ID, so
         we only send relevant notifications), your chosen <strong>language</strong> and which
         notification types you have enabled;</li>
     <li>a short <strong>browser/device identifier</strong> (user agent) for management and cleanup.</li>
@@ -594,7 +594,7 @@ per device:</p>
 yourself and can turn them off again at any time, after which the subscription is
 deleted. In the public app the skaters you follow are normally kept <strong>only
 locally</strong> on your device; <strong>only</strong> when you enable push notifications
-are those (internal, non-public) identifiers sent to our server so notifications can be targeted. A public
+are those internal IDs sent to our server so notifications can be targeted. A public
 push subscription has <strong>no name or e-mail address</strong> attached to it. Expired
 or revoked subscriptions are deleted automatically.</p>
 <p><strong>Delivery via your browser's push service:</strong> to reach your device, a
@@ -806,9 +806,9 @@ for which it was collected:</p>
         and two calendar years thereafter, for season and multi-year standings.</li>
     <li><strong>Historical results</strong>: results and rankings are
         retained indefinitely as part of the sport-historical archive,
-        linked via an internal, non-public identifier. On request we anonymise
-        the name and other personal data (including the licence link) so that
-        only that non-traceable identifier remains (see §9).</li>
+        linked via an internal ID. On request we anonymise the name and other
+        personal data (including the licence link) so that only that internal ID
+        remains, which only has meaning within our own system (see §9).</li>
     <li><strong>Administrator login data</strong>: as long as the account is
         active; inactive accounts are removed no later than 12 months after
         last login.</li>
@@ -857,9 +857,9 @@ for which it was collected:</p>
         name and other directly identifying data with “Removed” and
         <strong>delete all your external links</strong> (your KNSB licence, and any
         links with other systems we may exchange IDs with in the future). The
-        historical results then remain linked via an internal, non-public
-        identifier that is separate from those external systems; even with an
-        external membership database this is no longer traceable to you.</li>
+        historical results then remain linked via an internal ID that only has
+        meaning within our own system; even with an external membership database
+        this is no longer traceable to you.</li>
     <li><strong>Objection and restriction</strong> — you may object to the
         processing (including the AI processing in §5b) or request
         temporary restriction. If you don't want to disappear from the results
