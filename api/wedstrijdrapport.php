@@ -562,10 +562,14 @@ try {
     $deelnemers = array_map($maskArchief, $deelnemers);
     $nieuwePRs  = array_map($maskArchief, $nieuwePRs);
     foreach ($dcs as &$__dc) {
-        foreach (($__dc['distances'] ?? []) as &$__dist) {
-            if (!empty($__dist['uitslag'])) $__dist['uitslag'] = array_map($maskArchief, $__dist['uitslag']);
+        // NB: geen `?? []` in de foreach — dat maakt een kopie waardoor de
+        // &-referentie naar wegwerp-data wijst en de maskering verloren gaat.
+        if (!empty($__dc['distances'])) {
+            foreach ($__dc['distances'] as &$__dist) {
+                if (!empty($__dist['uitslag'])) $__dist['uitslag'] = array_map($maskArchief, $__dist['uitslag']);
+            }
+            unset($__dist);
         }
-        unset($__dist);
         if (!empty($__dc['klassement'])) $__dc['klassement'] = array_map($maskArchief, $__dc['klassement']);
     }
     unset($__dc);
