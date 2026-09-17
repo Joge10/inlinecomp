@@ -2217,6 +2217,9 @@ select:focus, input:focus { border-color: var(--middenblauw); outline: none; }
     border:1px solid #ccd3db; background:#f4f6f9; color:#33506e;
     border-radius:8px; font-size:.95rem; font-weight:600; cursor:pointer; }
 .setup-modal-klaar:hover { background:#e9eef5; }
+/* Meldingsplek ín de setup-modal (anders valt een melding achter de modal). */
+.setup-melding { margin-top: 10px; }
+.setup-melding:empty { display: none; }
 
 /* ── Comp info ── */
 .comp-info {
@@ -3178,6 +3181,7 @@ select:focus, input:focus { border-color: var(--middenblauw); outline: none; }
             <input type="text" id="inp-snr" data-i18n-placeholder="zoek_placeholder" placeholder="Startnummer, licentienr of achternaam…" autocomplete="off" inputmode="search">
         </div>
         <button class="btn-zoek" id="btn-zoek" data-i18n="btn_zoeken" disabled>Zoeken</button>
+        <div id="setup-melding" class="setup-melding" aria-live="polite"></div>
         <div id="setup-max-hint" class="setup-max-hint" style="display:none"></div>
         <button class="setup-modal-klaar" type="button" onclick="closeSetupModal()" data-i18n="pwa_btn_sluit">Sluiten</button>
     </div>
@@ -5067,6 +5071,20 @@ function _zoekModus(tekst) {
     return 'naam';
 }
 
+// Toon een zoek-melding op de JUISTE plek: ín de setup-modal als die open staat
+// (anders valt de melding achter de modal), anders in het hoofdresultaat-gebied.
+function _zoekFeedback(html, isFout = false) {
+    const box = `<div class="melding${isFout ? ' melding-fout' : ''}">${html}</div>`;
+    const modal = document.getElementById('setup-modal');
+    const sm = document.getElementById('setup-melding');
+    if (modal && modal.classList.contains('open') && sm) sm.innerHTML = box;
+    else divResult.innerHTML = box;
+}
+function _zoekFeedbackWis() {
+    const sm = document.getElementById('setup-melding');
+    if (sm) sm.innerHTML = '';
+}
+
 btnZoek.addEventListener('click', async () => {
     if (_loadKidsUitStorage().length >= MAX_KINDEREN) return;   // max bereikt — eerst verwijderen
     const compId = selComp.value, tekst = inpSnr.value.trim();
@@ -5078,7 +5096,7 @@ btnZoek.addEventListener('click', async () => {
         return;
     }
 
-    divResult.innerHTML = `<div class="melding"><span class="spinner"></span> ${t('msg_zoeken')}</div>`;
+    _zoekFeedback(`<span class="spinner"></span> ${esc(t('msg_zoeken'))}`);
     btnZoek.disabled = true;
     try {
         const param = modus === 'volg'
@@ -5093,15 +5111,15 @@ btnZoek.addEventListener('click', async () => {
         const data = await lookupRes.json();
         const prog = await progRes.json();
 
-        if (data.error) { divResult.innerHTML = `<div class="melding melding-fout">${esc(data.error)}</div>`; return; }
-        if (!data.length) { divResult.innerHTML = `<div class="melding">${esc(t('msg_geen_resultaten'))}</div>`; return; }
+        if (data.error) { _zoekFeedback(esc(data.error), true); return; }
+        if (!data.length) { _zoekFeedback(esc(t('msg_geen_resultaten'))); return; }
 
         // Een anonieme rijder kun je niet op startnummer (of naam) volgen —
         // alleen via het onraadbare volg-ID. Filter anonieme treffers eruit en
         // toon een uitleg als er niets volgbaars overblijft.
         const volgbaar = data.filter(d => !d.persoon?.is_anoniem);
         if (!volgbaar.length) {
-            divResult.innerHTML = `<div class="melding">${esc(t('msg_rijder_anoniem'))}</div>`;
+            _zoekFeedback(esc(t('msg_rijder_anoniem')));
             return;
         }
 
@@ -5116,6 +5134,7 @@ btnZoek.addEventListener('click', async () => {
                 category:     d.persoon.category,
                 club_short:   d.persoon.club_short ?? '',
             }));
+            _zoekFeedbackWis();
             toonChooserModal(rijen, tekst, compId);
             return;
         }
@@ -5123,11 +5142,12 @@ btnZoek.addEventListener('click', async () => {
         // Voor license/snr gebruiken we het startnr uit de response (kan per
         // wedstrijd verschillen); toonRijderData deduped op license_key.
         const huidigSnr = volgbaar[0].persoon.wedstrijd_snr ?? volgbaar[0].persoon.start_number ?? tekst;
+        _zoekFeedbackWis();                // modal sluit hierna → geen stale spinner
         toonRijderData([volgbaar[0]], 0, huidigSnr, prog);
         inpSnr.value = '';
         btnZoek.disabled = true;
     } catch (e) {
-        divResult.innerHTML = `<div class="melding melding-fout">${esc(t('err_prefix', {msg: e.message}))}</div>`;
+        _zoekFeedback(esc(t('err_prefix', {msg: e.message})), true);
     } finally { btnZoek.disabled = false; }
 });
 
@@ -5231,7 +5251,7 @@ function toonChooserModal(rijen, term, compId) {
 
 // ── Naam-zoek: zoek via backend, toon chooser ────────────────────────────────
 async function zoekOpNaam(compId, term) {
-    divResult.innerHTML = `<div class="melding"><span class="spinner"></span> ${esc(t('msg_zoeken_op', {term: esc(term)}))}</div>`;
+    _zoekFeedback(`<span class="spinner"></span> ${esc(t('msg_zoeken_op', {term: esc(term)}))}`);
     btnZoek.disabled = true;
     let rijen = [];
     try {
@@ -5239,7 +5259,7 @@ async function zoekOpNaam(compId, term) {
         rijen = await res.json();
         if (!Array.isArray(rijen)) rijen = [];
     } catch (e) {
-        divResult.innerHTML = `<div class="melding melding-fout">${esc(t('err_zoeken', {msg: e.message}))}</div>`;
+        _zoekFeedback(esc(t('err_zoeken', {msg: e.message})), true);
         btnZoek.disabled = false;
         return;
     } finally { btnZoek.disabled = false; }
@@ -5247,9 +5267,10 @@ async function zoekOpNaam(compId, term) {
     // "doet niet mee" als "koos anoniem". Een anonieme rijder is nooit op naam
     // vindbaar; toevoegen kan dan alleen via het licentie-/ID-nummer.
     if (rijen.length === 0) {
-        divResult.innerHTML = `<div class="melding">${esc(t('msg_naam_geen_of_of'))}</div>`;
+        _zoekFeedback(esc(t('msg_naam_geen_of_of')));
         return;
     }
+    _zoekFeedbackWis();
     toonChooserModal(rijen, term, compId);
 }
 
@@ -5369,6 +5390,7 @@ function openSetupModal() {
     const m = document.getElementById('setup-modal');
     if (m) m.classList.add('open');
     document.body.style.overflow = 'hidden'; // scroll-lock achtergrond
+    _zoekFeedbackWis();                       // geen stale melding van vorige keer
     _renderSetupVolglijst();
     _updateSetupModalMax();
 }
