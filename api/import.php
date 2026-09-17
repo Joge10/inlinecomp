@@ -708,6 +708,17 @@ try {
     // bestaat, anders mint elke (her)import een nieuwe persoon = dubbele deelnemers.
     $stmtChkPid = $pdo->prepare("SELECT 1 FROM persons WHERE person_id = ? LIMIT 1");
 
+    // Anonimiteit (variant B): een bron die de rijder als anoniem markeert →
+    // publiek_anoniem ZETTEN (naam/gegevens blijven behouden). Signaal: KNSB
+    // lege licentie → synthetische sleutel '…_Anoniem' (systeem 'ic-anoniem'),
+    // of een expliciete is_anoniem-vlag (CSV/andere API). COALESCE bewaart een
+    // reeds gezette (audit-)datum; import HEFT NOOIT op — dat kan alleen de rijder
+    // zelf (Mijn InlineComp) of de organisatie (Beheer → Rijders). Zo blijft een
+    // rijder die ooit anoniem was dat óók als de bron later geen vlag meer stuurt.
+    $stmtAnoniemZet = $pdo->prepare(
+        "UPDATE persons SET publiek_anoniem = COALESCE(publiek_anoniem, NOW()) WHERE person_id = ?"
+    );
+
     foreach ($categories as $cat) {
         $dcId = $cat['dc_id'] ?? null;
         if (!$dcId) continue;
@@ -752,6 +763,11 @@ try {
                 $pid = nieuwPersonId();
                 $stmtPers->execute($persParams + [':pid' => $pid]);
                 zorgVoorExternalId($pdo, $pid, $lk);   // externe id (KNSB/ic-*) borgen
+            }
+
+            // Bron-signaal anoniem → vlag zetten (nooit wissen; zie boven).
+            if (systeemVoorLicentie($lk) === 'ic-anoniem' || !empty($c['is_anoniem'])) {
+                $stmtAnoniemZet->execute([$pid]);
             }
 
             // Inschrijving aanmaken of bijwerken

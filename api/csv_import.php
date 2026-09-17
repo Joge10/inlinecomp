@@ -641,6 +641,7 @@ if ($action === 'commit') {
         'club_full'    => $kolVoor('club_full'),
         'club_sponsor' => $kolVoor('club_of_sponsor'),
         'sponsor'      => $kolVoor('sponsor'),
+        'anoniem'      => $kolVoor('anoniem'),
     ];
 
     // Helper: is een dc-marker waarde "true"? (x, X, 1, ja, yes)
@@ -764,6 +765,12 @@ if ($action === 'commit') {
             VALUES (?, ?, 1)
             ON DUPLICATE KEY UPDATE status = 1, person_id = VALUES(person_id)
         ");
+        // Anonimiteit (variant B): 'anoniem'-kolom → vlag ZETTEN (nooit wissen).
+        // COALESCE bewaart een reeds gezette datum; opheffen kan alleen de rijder
+        // zelf (Mijn InlineComp) of de organisatie (Beheer → Rijders).
+        $stmtAnoniemZet = $pdo->prepare(
+            "UPDATE persons SET publiek_anoniem = COALESCE(publiek_anoniem, NOW()) WHERE person_id = ?"
+        );
 
         foreach ($rows as $i => $r) {
             $actie = $matchActies[$i] ?? '__skip__';
@@ -843,6 +850,11 @@ if ($action === 'commit') {
                 // Kopieer laatste-bekende transponders → persistent voor deze comp
                 try { $kopieerTpsVoorRijder($pid); }
                 catch (Throwable $e) { /* niet kritiek, fallback in detail werkt ook */ }
+            }
+
+            // Bron-signaal anoniem ('anoniem'-kolom = x/1/ja) → vlag zetten.
+            if ($kIs['anoniem'] !== null && $pid && $isTrueMarker($r[$kIs['anoniem']] ?? '')) {
+                $stmtAnoniemZet->execute([$pid]);
             }
 
             // Entries per dc_marker-kolom met "x". Let op: een inschrijving zit

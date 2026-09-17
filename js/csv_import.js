@@ -110,6 +110,7 @@ const _CSV_TARGETS = [
     { val: 'club_full',       label: 'Club (volledig)',              groep: 'Club' },
     { val: 'sponsor',         label: 'Sponsor',                      groep: 'Club' },
     { val: 'club_of_sponsor', label: 'Club ÉN sponsor (mixed-kolom)', groep: 'Club' },
+    { val: 'anoniem',         label: 'Anoniem (x = publiek anoniem)', groep: 'Persoonlijk' },
     { val: 'dc_marker',       label: 'DC-markering (x = doet mee)',  groep: 'Afstand' },
 ];
 
@@ -957,6 +958,7 @@ function _csvRaadTarget(header) {
     if (/(start.?(nr|nummer|number)|^nr$|^bib|rugnummer)/.test(h)) return 'start_number';
     if (/^cat$|categorie|category/.test(h))                 return 'cat_groep';
     if (/sponsor/.test(h))                                  return 'sponsor';
+    if (/anoniem|anonymous|priv/.test(h))                   return 'anoniem';
     if (/club|team|vereniging/.test(h))                     return 'club_short';
     // Korte numerieke headers (200, 1000) of bekende race-types als DC-marker
     if (/^\d{2,4}(m|m?)?$/.test(h) ||
