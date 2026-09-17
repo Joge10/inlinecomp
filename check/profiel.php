@@ -565,11 +565,11 @@ table.pr tbody tr:last-child td{border-bottom:0}
     <div class="sm-body">
       <h3>Privacy — publiek anoniem</h3>
       <p>
-        Als je publiek anoniem bent, staat er op de publieke pagina's <b>“Anoniem”</b>
-        in plaats van je naam, club en woonplaats. Je startnummer blijft zichtbaar en al
-        je gegevens blijven bewaard. Rond een wedstrijd — van de dag ervoor tot en met de
-        dag erna — is je naam wél zichtbaar; daarbuiten en in het serie-klassement blijf
-        je anoniem.
+        Ben je publiek anoniem, dan wordt je naam (en club/woonplaats) op de publieke
+        pagina's vervangen door <b>“Anoniem”</b> — je startnummer blijft staan en je
+        gegevens blijven volledig behouden. Rond de wedstrijddag (van de dag ervoor tot
+        en met de dag erna) wordt je naam wél getoond; daarbuiten en in het serie-klassement
+        blijf je anoniem.
       </p>
       <label class="toggle-row">
         <input type="checkbox" id="chk-anon" <?= $pubAnon ? 'checked' : '' ?>>
