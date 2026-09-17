@@ -391,9 +391,9 @@ ze zijn verzameld:</p>
         meerjarenklassement.</li>
     <li><strong>Historische uitslagen</strong>: uitslagen en klasseringen
         bewaren wij onbeperkt als onderdeel van het sporthistorisch archief,
-        gekoppeld aan het licentienummer. Op verzoek anonimiseren wij de naam
-        en overige persoonsgegevens zodat alleen het licentienummer overblijft
-        (zie §9).</li>
+        gekoppeld via een intern, niet-openbaar kenmerk. Op verzoek anonimiseren
+        wij de naam en overige persoonsgegevens (inclusief de licentie-koppeling)
+        zodat alleen dat niet-herleidbare kenmerk overblijft (zie §9).</li>
     <li><strong>Login-gegevens van beheerders</strong>: zo lang het account
         actief is; uiterlijk 12 maanden na laatste login worden inactieve
         accounts verwijderd.</li>
@@ -440,11 +440,13 @@ ze zijn verzameld:</p>
         niet opnieuw verkeerd binnenkomt.</li>
     <li><strong>Verwijdering / anonimisering</strong> — je kunt vragen om
         verwijdering. Om de sportieve geschiedenis en klassementen intact te
-        houden vervangen wij jouw naam en overige persoonsgegevens door
-        “Verwijderd”; jouw licentienummer blijft als pseudonieme sleutel
-        aan de historische uitslagen gekoppeld. Zonder toegang tot de
-        KNSB-ledendatabase is het licentienummer alléén niet herleidbaar
-        naar jou.</li>
+        houden vervangen wij jouw naam en overige direct herleidbare gegevens
+        door “Verwijderd” en <strong>wissen wij al je externe koppelingen</strong>
+        (je KNSB-licentie, en eventuele koppelingen met andere systemen waarmee
+        we in de toekomst ID's uitwisselen). De historische uitslagen blijven
+        daarna gekoppeld via een intern, niet-openbaar kenmerk dat losstaat van
+        die externe systemen; ook met een externe ledendatabase is dat niet meer
+        naar jou herleidbaar.</li>
     <li><strong>Bezwaar en beperking</strong> — je kunt bezwaar maken tegen
         de verwerking (inclusief de AI-verwerking uit §5b) of vragen om
         tijdelijke beperking. Wil je niet uit de uitslagen verdwijnen maar wél
@@ -804,9 +806,9 @@ for which it was collected:</p>
         and two calendar years thereafter, for season and multi-year standings.</li>
     <li><strong>Historical results</strong>: results and rankings are
         retained indefinitely as part of the sport-historical archive,
-        linked to the licence number. On request we anonymise the name and
-        other personal data so that only the licence number remains
-        (see §9).</li>
+        linked via an internal, non-public identifier. On request we anonymise
+        the name and other personal data (including the licence link) so that
+        only that non-traceable identifier remains (see §9).</li>
     <li><strong>Administrator login data</strong>: as long as the account is
         active; inactive accounts are removed no later than 12 months after
         last login.</li>
@@ -852,10 +854,12 @@ for which it was collected:</p>
         registrations.</li>
     <li><strong>Erasure / anonymisation</strong> — you may request erasure.
         To keep the sporting history and standings intact, we replace your
-        name and other personal data with “Removed”; your licence number
-        remains as a pseudonymous key linked to the historical results.
-        Without access to the KNSB membership database, the licence number
-        alone is not traceable to you.</li>
+        name and other directly identifying data with “Removed” and
+        <strong>delete all your external links</strong> (your KNSB licence, and any
+        links with other systems we may exchange IDs with in the future). The
+        historical results then remain linked via an internal, non-public
+        identifier that is separate from those external systems; even with an
+        external membership database this is no longer traceable to you.</li>
     <li><strong>Objection and restriction</strong> — you may object to the
         processing (including the AI processing in §5b) or request
         temporary restriction. If you don't want to disappear from the results

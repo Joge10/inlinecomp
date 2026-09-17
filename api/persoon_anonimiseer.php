@@ -97,22 +97,35 @@ try {
         //   zonder naam niet-herleidbaar.
         // - start_number → NULL (kan aan één wedstrijd gekoppeld zijn maar
         //   is combineerbaar met andere bronnen)
+        // - publiek_anoniem / volg_token → NULL (een gewiste rijder is niet
+        //   meer 'publiek anoniem' of volgbaar; die vlaggen horen niet te blijven)
         $stmt = $pdo->prepare("
             UPDATE persons
-            SET full_name     = 'Verwijderd',
-                short_name    = NULL,
-                birth_year    = NULL,
-                city          = NULL,
-                sponsor       = NULL,
-                start_number  = NULL,
-                anonymized_at = NOW()
+            SET full_name       = 'Verwijderd',
+                short_name      = NULL,
+                birth_year      = NULL,
+                city            = NULL,
+                sponsor         = NULL,
+                start_number    = NULL,
+                publiek_anoniem = NULL,
+                volg_token      = NULL,
+                anonymized_at   = NOW()
             WHERE person_id = ?
         ");
         $stmt->execute([$pid]);
 
+        // Recht op vergetelheid: óók ALLE externe-id-koppelingen wissen. De
+        // DELETE filtert bewust NIET op systeem, dus dit dekt de KNSB-licentie
+        // én elke toekomstige koppeling (bv. skateresults.app, World Skate, of
+        // andere systemen waarmee we ID's uitwisselen). Zo blijft ná anonimisering
+        // alléén het interne, niet-herleidbare person_id over als sleutel voor de
+        // (naamloze) historische uitslagen; met een externe ledendatabase is er
+        // dan niets meer naar de rijder te herleiden.
+        $pdo->prepare("DELETE FROM person_external_ids WHERE person_id = ?")->execute([$pid]);
+
         // Óók: alle toegewezen_naam-referenties in organisatie_transponders
         // en de transponder-toewijzing zelf leegmaken. Wedstrijd-entries en
-        // results blijven staan (alleen de license_key is de link; daar is
+        // results blijven staan (gekoppeld via het interne person_id; daar is
         // geen naam opgeslagen).
         $pdo->prepare("
             UPDATE organisatie_transponders
@@ -143,8 +156,10 @@ try {
     }
 
     if ($action === 'undo') {
-        // Hef de anonimisatie op. De gegevens zijn wèl weg — een nieuwe
-        // KNSB-import (of handmatige invoer) moet de rijder opnieuw vullen.
+        // Hef de anonimisatie-vlag op. De gegevens én de licentie-koppeling zijn
+        // echter gewist; een nieuwe KNSB-import voegt de rijder opnieuw toe als
+        // een VERS record (nieuwe koppeling) — deze naamloze uitslag-historie
+        // blijft apart bestaan. Undo is dus vooral een 'per ongeluk gewist'-vangnet.
         $stmt = $pdo->prepare("
             UPDATE persons SET anonymized_at = NULL WHERE person_id = ?
         ");
@@ -157,7 +172,7 @@ try {
 
         echo json_encode([
             'ok'      => true,
-            'message' => 'Anonimisatie opgeheven. Herimporteer de rijder om de gegevens aan te vullen.',
+            'message' => 'Anonimisatie-vlag opgeheven. De persoonsgegevens en licentie-koppeling zijn gewist; een nieuwe import voegt de rijder als vers record toe.',
         ]);
         exit;
     }
