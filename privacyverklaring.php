@@ -171,16 +171,16 @@ Mozilla (Firefox) of Apple (Safari/iPhone). Zij ontvangen het technische endpoin
 (versleutelde) melding om deze te bezorgen; wij delen hierbij <strong>geen namen of
 rijdersgegevens</strong>, en de inhoud is versleuteld tussen ons en jouw apparaat.</p>
 
-<h2>1d. Persoonlijk profiel &mdash; "Mijn InlineComp" (optioneel)</h2>
-<p>Een rijder (of, bij jeugd, de ouder/verzorger) kan &mdash; geheel vrijwillig &mdash; een
+<h2>1d. Persoonlijk profiel — "Mijn InlineComp" (optioneel)</h2>
+<p>Een rijder (of, bij jeugd, de ouder/verzorger) kan — geheel vrijwillig — een
 <strong>persoonlijk profiel</strong> aanvragen om de <strong>eigen</strong> wedstrijdgegevens
 overzichtelijk op één plek terug te zien: persoonlijke records, resultaten en een
 voortgangsgrafiek. Het profiel toont uitsluitend gegevens die al bij ons aanwezig zijn omdat
-de rijder aan wedstrijden heeft deelgenomen &mdash; er komt <strong>geen nieuwe informatie</strong> bij.</p>
+de rijder aan wedstrijden heeft deelgenomen — er komt <strong>geen nieuwe informatie</strong> bij.</p>
 <p>Voor een profiel bewaren wij per rijder alleen:</p>
 <ul>
     <li>een <strong>zelfgekozen gebruikersnaam</strong> om mee in te loggen;</li>
-    <li>een <strong>versleutelde pincode</strong> (bcrypt-hash) &mdash; wij kunnen de pincode
+    <li>een <strong>versleutelde pincode</strong> (bcrypt-hash) — wij kunnen de pincode
         niet uitlezen;</li>
     <li>de koppeling aan het bestaande <strong>licentienummer</strong> van de rijder.</li>
 </ul>
@@ -190,7 +190,7 @@ tot de aanvraag is goedgekeurd of afgewezen — om je een ontvangstbevestiging e
 de aanmaaklink te sturen; daarna verwijderen wij het e-mailadres. Het wordt niet aan het profiel
 zelf gekoppeld. Het profiel is <strong>privé</strong>:
 het is alleen zichtbaar na inloggen met gebruikersnaam en pincode, wordt niet door zoekmachines
-geïndexeerd en de gegevens worden <strong>niet openbaar gedeeld</strong> &mdash; het is een privé-inzage
+geïndexeerd en de gegevens worden <strong>niet openbaar gedeeld</strong> — het is een privé-inzage
 van je eigen, reeds verwerkte resultaten. De grondslag is <strong>gerechtvaardigd belang</strong>
 (art. 6 lid 1 sub f AVG): het gaat om een besloten weergave van gegevens die de rijder zelf
 betreffen en die al onderdeel zijn van het wedstrijdarchief. Omdat er niets openbaar wordt
@@ -203,7 +203,7 @@ archief (zie §7).</p>
 <p>Een rijder (of, bij jeugd, de ouder/verzorger) kan ervoor kiezen om <strong>publiek
 anoniem</strong> te zijn. Wij tonen dan op de openbare pagina's niet de naam, vereniging en
 woonplaats maar <strong>“Anoniem”</strong>; het <strong>startnummer blijft</strong> zichtbaar,
-zodat de wedstrijd te volgen blijft. De gegevens zelf blijven bij ons bewaard &mdash; het is
+zodat de wedstrijd te volgen blijft. De gegevens zelf blijven bij ons bewaard — het is
 uitsluitend een <strong>weergave-keuze</strong> en volledig omkeerbaar.</p>
 <ul>
     <li><strong>Rond de wedstrijddag</strong> (van de dag ervoor tot en met de dag erna) tonen
@@ -211,7 +211,7 @@ uitsluitend een <strong>weergave-keuze</strong> en volledig omkeerbaar.</p>
         en in het permanente uitslag- en serie-klassement-archief, blijf je anoniem. Je bent ook
         <strong>niet op naam vindbaar</strong> in de publieke zoek.</li>
     <li><strong>Zelf instellen</strong>: via je persoonlijke profiel “Mijn InlineComp” (§1d), of
-        &mdash; zonder profiel &mdash; door de organisatie te mailen; die zet de keuze voor je
+        — zonder profiel — door de organisatie te mailen; die zet de keuze voor je
         (en kan 'm op jouw verzoek weer opheffen).</li>
     <li><strong>Gericht laten volgen</strong>: wie jou tóch wil volgen (bijvoorbeeld een ouder of
         coach) kan dat met een <strong>persoonlijk, geheim volg-ID</strong> dat je zelf deelt;
@@ -222,7 +222,7 @@ uitsluitend een <strong>weergave-keuze</strong> en volledig omkeerbaar.</p>
 </ul>
 <p>De grondslag is <strong>dataminimalisatie en het honoreren van je bezwaar</strong> (art. 21
 AVG): je maakt bezwaar tegen het openbaar tonen van je naam, en wij respecteren dat terwijl de
-sportieve uitslag intact blijft. Deze keuze is los van de onomkeerbare verwijdering uit §9 &mdash;
+sportieve uitslag intact blijft. Deze keuze is los van de onomkeerbare verwijdering uit §9 —
 bij “publiek anoniem” blijven je gegevens behouden en kun je de keuze weer terugdraaien.</p>
 
 <h2>1f. Minderjarige rijders</h2>
@@ -230,7 +230,7 @@ bij “publiek anoniem” blijven je gegevens behouden en kun je de keuze weer t
 bescherming toe (overweging 38 AVG). Wij houden daar op de volgende manier rekening mee:</p>
 <ul>
     <li>Voor minderjarigen verwerken wij <strong>dezelfde beperkte, sport-functionele gegevens</strong>
-        als voor volwassenen (zie §1) &mdash; niet meer. Wij doen <strong>geen marketing, profilering
+        als voor volwassenen (zie §1) — niet meer. Wij doen <strong>geen marketing, profilering
         of tracking</strong> van kinderen.</li>
     <li>De gegevens ontvangen wij van de <strong>KNSB</strong>; daar ligt de lidmaatschaps-relatie,
         die bij inschrijving door het lid of diens ouder/verzorger wordt aangegaan. Wij krijgen de
@@ -238,8 +238,8 @@ bescherming toe (overweging 38 AVG). Wij houden daar op de volgende manier reken
     <li>In de belangenafweging voor onze grondslag (gerechtvaardigd belang, §3) wegen wij expliciet
         mee dat veel betrokkenen kind zijn: we houden de verwerking minimaal en bieden de mogelijkheid
         om de naam publiek af te schermen (<strong>publiek anoniem</strong>, §1e).</li>
-    <li>De <strong>optionele</strong>, op toestemming gebaseerde keuzes &mdash; een persoonlijk profiel
-        (§1d), publiek anoniem (§1e) en pushmeldingen (§1c) &mdash; horen voor een minderjarige
+    <li>De <strong>optionele</strong>, op toestemming gebaseerde keuzes — een persoonlijk profiel
+        (§1d), publiek anoniem (§1e) en pushmeldingen (§1c) — horen voor een minderjarige
         <strong>door de ouder/verzorger</strong> gemaakt en beheerd te worden (in Nederland geldt dit
         tot 16 jaar).</li>
     <li>De <strong>rechten</strong> uit §9 (inzage, correctie, verwijdering/anonimisering, bezwaar)
@@ -286,7 +286,7 @@ een AI-dienst om tekstherkenning te helpen — zie §5b hieronder.</p>
         de KNSB als onderdeel van de bondswedstrijden.</li>
     <li><strong>Publiek (uitslagen)</strong>: namen, verenigingen, startnummers
         en eindtijden worden openbaar gepubliceerd op onze uitslagpagina, zoals
-        gangbaar in de sport &mdash; behalve van rijders die voor <strong>publiek
+        gangbaar in de sport — behalve van rijders die voor <strong>publiek
         anoniem</strong> hebben gekozen; die tonen wij als “Anoniem” (zie §1e).</li>
     <li><strong>AI-dienstverlener (Anthropic)</strong>: zie §5b voor uitleg.</li>
     <li><strong>Push-diensten (Google/Mozilla/Apple)</strong>: uitsluitend voor het
@@ -603,7 +603,7 @@ notification is routed through the push service of your browser vendor — Googl
 endpoint and the (encrypted) notification in order to deliver it; we share <strong>no names
 or skater data</strong> with them, and the content is encrypted between us and your device.</p>
 
-<h2>1d. Personal profile &mdash; "My InlineComp" (optional)</h2>
+<h2>1d. Personal profile — "My InlineComp" (optional)</h2>
 <p>A skater (or, for youth, a parent/guardian) can — entirely voluntarily — request a
 <strong>personal profile</strong> to review their <strong>own</strong> competition data in one
 place: personal records, results and a progress chart. The profile shows only data we already
@@ -631,7 +631,7 @@ organisation; the underlying competition results remain as part of the sport-his
 <p>A skater (or, for youth, a parent/guardian) can choose to be <strong>publicly
 anonymous</strong>. On the public pages we then do not show the name, club and place of
 residence but <strong>“Anonymous”</strong>; the <strong>start number stays</strong> visible so
-the competition can still be followed. The data itself is retained &mdash; it is purely a
+the competition can still be followed. The data itself is retained — it is purely a
 <strong>display choice</strong> and fully reversible.</p>
 <ul>
     <li><strong>Around the competition day</strong> (from the day before through the day after)
@@ -639,7 +639,7 @@ the competition can still be followed. The data itself is retained &mdash; it is
         Outside that window, and in the permanent results and series-standings archive, you
         remain anonymous. You are also <strong>not findable by name</strong> in the public search.</li>
     <li><strong>Setting it yourself</strong>: via your personal “My InlineComp” profile (§1d), or
-        &mdash; without a profile &mdash; by e-mailing the organisation, who set the choice for you
+        — without a profile — by e-mailing the organisation, who set the choice for you
         (and can lift it again at your request).</li>
     <li><strong>Letting specific people follow you</strong>: someone who still wants to follow you
         (for example a parent or coach) can do so with a <strong>personal, secret follow-ID</strong>
@@ -650,7 +650,7 @@ the competition can still be followed. The data itself is retained &mdash; it is
 </ul>
 <p>The legal basis is <strong>data minimisation and honouring your objection</strong> (Article 21
 GDPR): you object to your name being shown publicly, and we respect that while the sporting result
-stays intact. This choice is separate from the irreversible erasure in §9 &mdash; with “publicly
+stays intact. This choice is separate from the irreversible erasure in §9 — with “publicly
 anonymous” your data is retained and you can reverse the choice.</p>
 
 <h2>1f. Minor (under-age) skaters</h2>
@@ -658,7 +658,7 @@ anonymous” your data is retained and you can reverse the choice.</p>
 protection (recital 38 GDPR). We take this into account as follows:</p>
 <ul>
     <li>For minors we process the <strong>same limited, sport-functional data</strong> as for
-        adults (see §1) &mdash; no more. We do <strong>no marketing, profiling or tracking</strong>
+        adults (see §1) — no more. We do <strong>no marketing, profiling or tracking</strong>
         of children.</li>
     <li>We receive the data from the <strong>KNSB</strong>; that is where the membership
         relationship lies, entered into at registration by the member or their parent/guardian. We
@@ -666,8 +666,8 @@ protection (recital 38 GDPR). We take this into account as follows:</p>
     <li>In the balancing test for our legal basis (legitimate interest, §3) we explicitly weigh that
         many data subjects are children: we keep processing minimal and offer the option to shield the
         name publicly (<strong>publicly anonymous</strong>, §1e).</li>
-    <li>The <strong>optional</strong>, consent-based choices &mdash; a personal profile (§1d),
-        publicly anonymous (§1e) and push notifications (§1c) &mdash; should for a minor be made and
+    <li>The <strong>optional</strong>, consent-based choices — a personal profile (§1d),
+        publicly anonymous (§1e) and push notifications (§1c) — should for a minor be made and
         managed <strong>by the parent/guardian</strong> (in the Netherlands this applies under age 16).</li>
     <li>The <strong>rights</strong> in §9 (access, correction, erasure/anonymisation, objection) may
         be exercised on a minor's behalf by the parent/guardian.</li>
@@ -710,7 +710,7 @@ see §5b below.</p>
         the KNSB as part of federation competitions.</li>
     <li><strong>The public (results)</strong>: names, clubs, start numbers
         and finishing times are published on our public results page, as is
-        customary in the sport &mdash; except for skaters who have chosen to be
+        customary in the sport — except for skaters who have chosen to be
         <strong>publicly anonymous</strong>, who are shown as “Anonymous” (see §1e).</li>
     <li><strong>AI provider (Anthropic)</strong>: see §5b for details.</li>
     <li><strong>Push services (Google/Mozilla/Apple)</strong>: solely to deliver
