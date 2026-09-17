@@ -5630,11 +5630,16 @@ async function _fetchKind({ person_id = null, license_key = null, snr = null, vo
     ]);
     const data = await lookupRes.json();
     const prog = await progRes.json();
-    if (data.error || !data.length) return null;
+    if (data.error || !data.length) {
+        // Zochten we via een volg-token en bestaat dat niet (meer)? Dan is het
+        // ingetrokken/vernieuwd door de rijder → follow verbroken → pruimen
+        // (__anoniem-sentinel). Bij person_id/snr betekent leeg gewoon "doet niet
+        // mee aan deze wedstrijd" → behouden (kan een andere wedstrijd rijden).
+        return volg ? { __anoniem: true } : null;
+    }
     // Rijder is nu anoniem én we hebben geen geldig volg-token (meer) → signaleer
     // dit apart (niet null = "doet niet mee"), zodat de aanroeper 'm uit de
-    // opgeslagen volglijst kan pruimen (bv. iemand die je volgde vóór hij anoniem
-    // werd, of een vernieuwd/ingetrokken token).
+    // opgeslagen volglijst kan pruimen.
     if (data[0]?.persoon?.is_anoniem) return { __anoniem: true };
     // Pak huidige startnr uit de response (kan in nieuwe wedstrijd anders zijn).
     const p = data[0].persoon;
