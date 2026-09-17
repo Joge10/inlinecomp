@@ -73,6 +73,9 @@ staat hieronder — bij twijfel geldt die volledige tekst.</em></p>
         krijgen we van de KNSB zelf, niet van jou.</li>
     <li>We slaan <strong>geen</strong> e-mailadres, telefoonnummer, adres of
         geboortedatum van rijders op.</li>
+    <li>Veel rijders zijn <strong>minderjarig</strong>; van hen verwerken we dezelfde
+        beperkte gegevens en doen we geen marketing of profilering. Optionele keuzes
+        (profiel, anoniem, meldingen) hoort de ouder/verzorger te maken (zie §1f).</li>
     <li>Uitslagen worden openbaar gepubliceerd, zoals gebruikelijk in de sport.</li>
     <li>Als coach kun je vrijwillig een account maken; als rijder of coach kun je
         vrijwillig pushmeldingen aanzetten. Beide zijn optioneel en je kunt ze zelf
@@ -221,6 +224,27 @@ AVG): je maakt bezwaar tegen het openbaar tonen van je naam, en wij respecteren 
 sportieve uitslag intact blijft. Deze keuze is los van de onomkeerbare verwijdering uit §9 &mdash;
 bij “publiek anoniem” blijven je gegevens behouden en kun je de keuze weer terugdraaien.</p>
 
+<h2>1f. Minderjarige rijders</h2>
+<p>Het merendeel van de deelnemers is <strong>minderjarig</strong>. De AVG kent kinderen extra
+bescherming toe (overweging 38 AVG). Wij houden daar op de volgende manier rekening mee:</p>
+<ul>
+    <li>Voor minderjarigen verwerken wij <strong>dezelfde beperkte, sport-functionele gegevens</strong>
+        als voor volwassenen (zie §1) &mdash; niet meer. Wij doen <strong>geen marketing, profilering
+        of tracking</strong> van kinderen.</li>
+    <li>De gegevens ontvangen wij van de <strong>KNSB</strong>; daar ligt de lidmaatschaps-relatie,
+        die bij inschrijving door het lid of diens ouder/verzorger wordt aangegaan. Wij krijgen de
+        gegevens uitsluitend om de wedstrijd te kunnen organiseren (zie §4).</li>
+    <li>In de belangenafweging voor onze grondslag (gerechtvaardigd belang, §3) wegen wij expliciet
+        mee dat veel betrokkenen kind zijn: we houden de verwerking minimaal en bieden de mogelijkheid
+        om de naam publiek af te schermen (<strong>publiek anoniem</strong>, §1e).</li>
+    <li>De <strong>optionele</strong>, op toestemming gebaseerde keuzes &mdash; een persoonlijk profiel
+        (§1d), publiek anoniem (§1e) en pushmeldingen (§1c) &mdash; horen voor een minderjarige
+        <strong>door de ouder/verzorger</strong> gemaakt en beheerd te worden (in Nederland geldt dit
+        tot 16 jaar).</li>
+    <li>De <strong>rechten</strong> uit §9 (inzage, correctie, verwijdering/anonimisering, bezwaar)
+        kunnen namens een minderjarige door de ouder/verzorger worden uitgeoefend.</li>
+</ul>
+
 <h2>2. Waarom verwerken wij deze gegevens?</h2>
 <ul>
     <li>Het correct organiseren en uitvoeren van wedstrijden (startlijsten,
@@ -236,7 +260,8 @@ bij “publiek anoniem” blijven je gegevens behouden en kun je de keuze weer t
 (art. 6 lid 1 sub f AVG): zonder deze gegevens kunnen wij geen eerlijke wedstrijd
 organiseren of uitslagen publiceren, en dit belang is niet onevenredig ten opzichte
 van de privacy van deelnemers — het gaat om beperkte, sport-functionele gegevens die
-in deze sport gebruikelijk openbaar worden gemaakt.</p>
+in deze sport gebruikelijk openbaar worden gemaakt. Bij deze afweging houden wij er in het
+bijzonder rekening mee dat veel deelnemers minderjarig zijn (zie §1f).</p>
 <p>Voor de coach-accounts en pushmeldingen geldt daarnaast <strong>toestemming</strong>
 (art. 6 lid 1 sub a AVG) als grondslag — zie §1b en §1c.</p>
 <p><em>Toelichting: er bestaat geen formele overeenkomst of opdracht tussen ons en de
@@ -480,6 +505,9 @@ case of doubt, that full text applies.</em></p>
         itself, not from you.</li>
     <li>We do <strong>not</strong> store skaters' e-mail address, phone number, home
         address or date of birth.</li>
+    <li>Many skaters are <strong>minors</strong>; for them we process the same limited data
+        and do no marketing or profiling. Optional choices (profile, anonymous, notifications)
+        should be made by the parent/guardian (see §1f).</li>
     <li>Results are published publicly, as is customary in the sport.</li>
     <li>As a coach you can voluntarily create an account; as a skater or coach you can
         voluntarily enable push notifications. Both are optional and you can turn them off
@@ -621,6 +649,26 @@ GDPR): you object to your name being shown publicly, and we respect that while t
 stays intact. This choice is separate from the irreversible erasure in §9 &mdash; with “publicly
 anonymous” your data is retained and you can reverse the choice.</p>
 
+<h2>1f. Minor (under-age) skaters</h2>
+<p>The majority of participants are <strong>minors</strong>. The GDPR grants children specific
+protection (recital 38 GDPR). We take this into account as follows:</p>
+<ul>
+    <li>For minors we process the <strong>same limited, sport-functional data</strong> as for
+        adults (see §1) &mdash; no more. We do <strong>no marketing, profiling or tracking</strong>
+        of children.</li>
+    <li>We receive the data from the <strong>KNSB</strong>; that is where the membership
+        relationship lies, entered into at registration by the member or their parent/guardian. We
+        receive the data solely to organise the competition (see §4).</li>
+    <li>In the balancing test for our legal basis (legitimate interest, §3) we explicitly weigh that
+        many data subjects are children: we keep processing minimal and offer the option to shield the
+        name publicly (<strong>publicly anonymous</strong>, §1e).</li>
+    <li>The <strong>optional</strong>, consent-based choices &mdash; a personal profile (§1d),
+        publicly anonymous (§1e) and push notifications (§1c) &mdash; should for a minor be made and
+        managed <strong>by the parent/guardian</strong> (in the Netherlands this applies under age 16).</li>
+    <li>The <strong>rights</strong> in §9 (access, correction, erasure/anonymisation, objection) may
+        be exercised on a minor's behalf by the parent/guardian.</li>
+</ul>
+
 <h2>2. Why do we process this data?</h2>
 <ul>
     <li>To correctly organise and run competitions (start lists, timekeeping,
@@ -634,7 +682,8 @@ anonymous” your data is retained and you can reverse the choice.</p>
 <p>Processing takes place on the basis of <strong>legitimate interest</strong>
 (Article 6(1)(f) GDPR): without this data we cannot organise a fair competition or publish
 results, and this interest is not disproportionate to participants' privacy — it concerns
-limited, sport-functional data that is customarily made public in this sport.</p>
+limited, sport-functional data that is customarily made public in this sport. In this balancing
+we take particular account of the fact that many participants are minors (see §1f).</p>
 <p>For coach accounts and push notifications, <strong>consent</strong> (Article 6(1)(a)
 GDPR) additionally applies as the legal basis — see sections 1b and 1c.</p>
 <p><em>Note: there is no formal agreement or mandate between us and the KNSB governing our
