@@ -62,6 +62,80 @@ if (!function_exists('anoniemCompVenster')) {
     }
 }
 
+if (!function_exists('zorgVoorVolgToken')) {
+    /**
+     * Geheim volg-token voor een rijder — de ENIGE sleutel die de naam van een
+     * anonieme rijder ontsluit (entitlement). Los van person_id (dat is publiek).
+     * Lazy: mint een token als er nog geen is en geeft het terug. Idempotent en
+     * concurrency-veilig (UPDATE ... WHERE volg_token IS NULL + re-read).
+     */
+    function zorgVoorVolgToken(PDO $pdo, string $pid): ?string {
+        if ($pid === '') return null;
+        $sel = $pdo->prepare("SELECT volg_token FROM persons WHERE person_id = ?");
+        $sel->execute([$pid]);
+        $tok = $sel->fetchColumn();
+        if ($tok) return (string)$tok;
+        for ($i = 0; $i < 3; $i++) {
+            try {
+                $new = bin2hex(random_bytes(16));   // 32 hex
+                $upd = $pdo->prepare("UPDATE persons SET volg_token = ? WHERE person_id = ? AND volg_token IS NULL");
+                $upd->execute([$new, $pid]);
+            } catch (Throwable $e) { /* unieke botsing → opnieuw */ }
+            $sel->execute([$pid]);
+            $tok = $sel->fetchColumn();
+            if ($tok) return (string)$tok;
+        }
+        return null;
+    }
+}
+
+if (!function_exists('nieuwVolgToken')) {
+    /**
+     * Vernieuw (rotate) het volg-token → snijdt in één klap ALLE huidige volgers
+     * af (ook mensen aan wie het token eerder bewust gegeven is). Geeft het nieuwe
+     * token terug.
+     */
+    function nieuwVolgToken(PDO $pdo, string $pid): ?string {
+        if ($pid === '') return null;
+        for ($i = 0; $i < 3; $i++) {
+            try {
+                $new = bin2hex(random_bytes(16));
+                $pdo->prepare("UPDATE persons SET volg_token = ? WHERE person_id = ?")->execute([$new, $pid]);
+                return $new;
+            } catch (Throwable $e) { /* unieke botsing → opnieuw */ }
+        }
+        return null;
+    }
+}
+
+if (!function_exists('personIdVoorVolgToken')) {
+    /** Resolve een volg-token → person_id (of null). */
+    function personIdVoorVolgToken(PDO $pdo, string $token): ?string {
+        $token = trim($token);
+        if ($token === '') return null;
+        $st = $pdo->prepare("SELECT person_id FROM persons WHERE volg_token = ? LIMIT 1");
+        $st->execute([$token]);
+        $pid = $st->fetchColumn();
+        return $pid !== false ? (string)$pid : null;
+    }
+}
+
+if (!function_exists('volgersAantal')) {
+    /**
+     * Aantal apparaten/abonnementen dat deze rijder volgt MET meldingen aan
+     * (de enige server-kant die volgers kent — de volglijst zelf is client-side).
+     * Undertelt bewust: volgers zonder push tellen niet mee.
+     */
+    function volgersAantal(PDO $pdo, string $pid): int {
+        if ($pid === '') return 0;
+        try {
+            $st = $pdo->prepare("SELECT COUNT(DISTINCT subscription_id) FROM push_sub_licenses WHERE person_id = ?");
+            $st->execute([$pid]);
+            return (int)$st->fetchColumn();
+        } catch (Throwable $e) { return 0; }
+    }
+}
+
 if (!function_exists('moetAnoniemMaskeren')) {
     /**
      * Bepaalt of een rij gemaskeerd moet worden.

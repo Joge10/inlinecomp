@@ -637,15 +637,21 @@ if ($action === 'lookup') {
     // Volglijst draait sinds fase 3c/3d op person_id. Het inkomende token
     // (license_key óf person_id) wordt universeel naar person_id geresolved; de
     // queries draaien op person_id → fase-4-proof.
-    $token = trim($_GET['license_key'] ?? '') ?: trim($_GET['person_id'] ?? '');
-    $pid   = $token !== '' ? (string)(resolveNaarPersonId($pdo, $token) ?? '') : '';
-    // Entitled (variant B): de kijker ziet de echte naam van een anonieme rijder
-    // ALLEEN als hij het onraadbare person_id (GUID) heeft. Een GUID resolvet
-    // naar zichzelf ($token === $pid); een (raadbaar) licentienummer resolvet
-    // naar een ander person_id → géén entitlement. Startnummer-lookup (guessbaar)
-    // is per definitie niet entitled.
-    $entitled = ($pid !== '' && $token === $pid);
-    if ($token !== '' && $pid === '') {
+    // Entitlement (variant B): de naam van een anonieme rijder wordt ALLEEN
+    // ontsloten door het geheime volg-token (?volg=). person_id/licentie geven
+    // GEEN entitlement meer — dat was het lek (person_id is publiek, dus wie je
+    // ooit volgde had 'm en bleef de naam zien). Zie migratie …_volg_token.sql.
+    $volgTok = trim($_GET['volg'] ?? '');
+    $token   = trim($_GET['license_key'] ?? '') ?: trim($_GET['person_id'] ?? '');
+    $pid      = '';
+    $entitled = false;
+    if ($volgTok !== '') {
+        $pid = (string)(personIdVoorVolgToken($pdo, $volgTok) ?? '');
+        $entitled = ($pid !== '');
+    } elseif ($token !== '') {
+        $pid = (string)(resolveNaarPersonId($pdo, $token) ?? '');
+    }
+    if (($volgTok !== '' || $token !== '') && $pid === '') {
         echo json_encode(['error' => 'Geen rijder gevonden voor deze rijder in deze wedstrijd']);
         exit;
     }
@@ -931,10 +937,15 @@ if ($action === 'lookup') {
             $klassementen = $klasStmt->fetchAll(PDO::FETCH_ASSOC);
 
             // Subject-rij nu pas maskeren (queries hierboven zijn klaar). Entitled
-            // (eigen GUID) → echte naam; anders public-venster.
+            // (geldig volg-token) → echte naam; anders public-venster.
+            $persoonOut = pasAnonimiteitToe($p, 'public', $cStarts, $cEnds, $entitled,
+                                            ['naam' => ['full_name'], 'wis' => ['club_short']]);
+            // Bij een entitled volg-lookup het token terugleveren, zodat de
+            // volglijst het kan bewaren en bij herladen weer via ?volg= ophaalt
+            // (person_id zou immers géén naam meer ontsluiten).
+            if ($entitled && $volgTok !== '') $persoonOut['volg_token'] = $volgTok;
             $resultaten[] = [
-                'persoon'      => pasAnonimiteitToe($p, 'public', $cStarts, $cEnds, $entitled,
-                                                    ['naam' => ['full_name'], 'wis' => ['club_short']]),
+                'persoon'      => $persoonOut,
                 'heats'        => $heats,
                 'uitslagen'    => $uitslagen,
                 'klassementen' => $klassementen,
@@ -5006,7 +5017,7 @@ selComp.addEventListener('change', async () => {
     // loads kunnen zo nooit in dezelfde _kinderen interleaven (→ geen dubbele rijders).
     const verzameld = [];
     for (const item of opgeslagen) {
-        const k = await _fetchKind({ person_id: item.person_id, license_key: item.license_key }, selComp.value, gedeeldeProg);
+        const k = await _fetchKind({ person_id: item.person_id, license_key: item.license_key, volg: item.volg }, selComp.value, gedeeldeProg);
         if (mySeq !== _kindLoadSeq) return;   // afgebroken door nieuwere load
         if (k) verzameld.push(k);
         // k == null → kind doet niet mee aan deze wedstrijd, we slaan 'm stil over.
@@ -5048,10 +5059,10 @@ inpSnr.addEventListener('keydown', e => { if (e.key==='Enter' && !btnZoek.disabl
 //      - bevat letters              → achternaam-zoek
 function _zoekModus(tekst) {
     const t = tekst.trim();
-    // Volg-ID (person_id / UUID uit Mijn InlineComp) → license-lookup. Dit is de
-    // enige manier om een publiek anonieme rijder te volgen (variant B): het GUID
-    // resolvet naar zichzelf → 'entitled' → de volger ziet de echte naam.
-    if (/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(t)) return 'license';
+    // Volg-ID (geheim token uit Mijn InlineComp) = 32 hex-tekens → volg-lookup.
+    // Dit is de enige manier om een publiek anonieme rijder te volgen (variant B):
+    // het token ontsluit ('entitled') de echte naam; person_id doet dat niet.
+    if (/^[0-9a-f]{32}$/i.test(t)) return 'volg';
     if (/^\d+$/.test(t)) return t.length <= 4 ? 'snr' : 'license';
     return 'naam';
 }
@@ -5070,9 +5081,11 @@ btnZoek.addEventListener('click', async () => {
     divResult.innerHTML = `<div class="melding"><span class="spinner"></span> ${t('msg_zoeken')}</div>`;
     btnZoek.disabled = true;
     try {
-        const param = modus === 'license'
-            ? `license_key=${encodeURIComponent(tekst)}`
-            : `startnummer=${encodeURIComponent(tekst)}`;
+        const param = modus === 'volg'
+            ? `volg=${encodeURIComponent(tekst)}`
+            : modus === 'license'
+                ? `license_key=${encodeURIComponent(tekst)}`
+                : `startnummer=${encodeURIComponent(tekst)}`;
         const [lookupRes, progRes] = await Promise.all([
             safeFetch(`?action=lookup&competition_id=${encodeURIComponent(compId)}&${param}`),
             safeFetch(`?action=programma&competition_id=${encodeURIComponent(compId)}`)
@@ -5544,8 +5557,11 @@ function _saveKids() {
             // person_id (interne GUID) is sinds fase 3c de stabiele sleutel.
             // license_key blijft meegeschreven zolang die nog bestaat (fase 4
             // laat 'm vervallen); dedup en lookup prefereren person_id.
-            if (!p?.license_key && !p?.person_id) return null;
-            return { person_id: p.person_id ?? null, license_key: p.license_key ?? null, naam_hint: p.full_name };
+            if (!p?.license_key && !p?.person_id && !p?.volg_token) return null;
+            // volg = geheim token; nodig om een anonieme rijder bij herladen weer
+            // te ontsluiten (person_id ontsluit de naam niet).
+            return { person_id: p.person_id ?? null, license_key: p.license_key ?? null,
+                     volg: p.volg_token ?? null, naam_hint: p.full_name };
         })
         .filter(Boolean)
         // Dedup op person_id (of license_key als GUID nog ontbreekt): vangnet
@@ -5562,15 +5578,17 @@ function _loadKidsUitStorage() {
 // Haal lookup op voor een license_key of startnummer. Gebruikt de shared
 // programma-respons als die al gefetcht is (scheelt netwerk-calls bij
 // meerdere kinderen).
-async function _fetchKind({ person_id = null, license_key = null, snr = null }, compId, gedeeldeProg = null) {
-    if (!person_id && !license_key && !snr) return null;
-    // Sinds fase 3c prefereren we de stabiele person_id; valt terug op
-    // license_key (oude opgeslagen items) en tot slot startnummer.
-    const param = person_id
-        ? `person_id=${encodeURIComponent(person_id)}`
-        : license_key
-            ? `license_key=${encodeURIComponent(license_key)}`
-            : `startnummer=${encodeURIComponent(snr)}`;
+async function _fetchKind({ person_id = null, license_key = null, snr = null, volg = null }, compId, gedeeldeProg = null) {
+    if (!person_id && !license_key && !snr && !volg) return null;
+    // Volg-token eerst (enige sleutel die een anonieme rijder ontsluit), daarna
+    // de stabiele person_id, dan license_key (oude items), tot slot startnummer.
+    const param = volg
+        ? `volg=${encodeURIComponent(volg)}`
+        : person_id
+            ? `person_id=${encodeURIComponent(person_id)}`
+            : license_key
+                ? `license_key=${encodeURIComponent(license_key)}`
+                : `startnummer=${encodeURIComponent(snr)}`;
     const [lookupRes, progRes] = await Promise.all([
         safeFetch(`?action=lookup&competition_id=${encodeURIComponent(compId)}&${param}`),
         gedeeldeProg
@@ -5580,6 +5598,10 @@ async function _fetchKind({ person_id = null, license_key = null, snr = null }, 
     const data = await lookupRes.json();
     const prog = await progRes.json();
     if (data.error || !data.length) return null;
+    // Rijder is nu anoniem én we hebben geen geldig volg-token (meer) → laten
+    // vallen i.p.v. als 'Anoniem' in de volglijst te tonen (bv. iemand die je
+    // volgde vóór hij anoniem werd, of een vernieuwd/ingetrokken token).
+    if (data[0]?.persoon?.is_anoniem) return null;
     // Pak huidige startnr uit de response (kan in nieuwe wedstrijd anders zijn).
     const p = data[0].persoon;
     const huidigSnr = p.wedstrijd_snr ?? p.start_number ?? snr ?? '';

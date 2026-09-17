@@ -621,6 +621,8 @@ function rijRenderDetail(data) {
             ${veld('Nationaliteit', r.nationality)}
             ${veld('Startnummer', r.start_number)}
             ${veld('Publiek anoniem', r.publiek_anoniem ? ('Ja — sinds ' + escHtml(String(r.publiek_anoniem))) : 'Nee')}
+            ${veld('Volg-ID (deelbaar)', r.volg_token)}
+            ${veld('Volgers (meldingen)', r.volgers != null ? r.volgers : '—')}
             ${veld('Woonplaats', r.city)}
             ${veld('Sponsor', r.sponsor)}
             ${veld('Vereniging', r.club_full)}

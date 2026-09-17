@@ -16,6 +16,7 @@
 header('Cache-Control: no-store, no-cache, must-revalidate, max-age=0');
 require_once __DIR__ . '/../../config_inlinecomp.php';
 require_once __DIR__ . '/../inc/versie.php';
+require_once __DIR__ . '/../inc/anoniem.php';   // volg-token + volger-teller
 require_once __DIR__ . '/../api/_rijderprofiel_data.php';
 
 if (session_status() === PHP_SESSION_NONE) {
@@ -73,6 +74,17 @@ if ($actie === 'pubanon' && !empty($_SESSION['rijder_lic'])) {
     if (!empty($body['ajax'])) {
         header('Content-Type: application/json; charset=utf-8');
         echo json_encode(['ok' => true, 'anoniem' => $aan]);
+        exit;
+    }
+    header('Location: profiel.php'); exit;
+}
+
+// ── Actie: volg-ID vernieuwen (rotate) — snijdt ALLE huidige volgers af ──────
+if ($actie === 'volg_vernieuw' && !empty($_SESSION['rijder_lic'])) {
+    $nieuw = nieuwVolgToken($pdo, $_SESSION['rijder_lic']);
+    if (!empty($body['ajax'])) {
+        header('Content-Type: application/json; charset=utf-8');
+        echo json_encode(['ok' => (bool)$nieuw, 'volg_token' => $nieuw]);
         exit;
     }
     header('Location: profiel.php'); exit;
@@ -468,7 +480,10 @@ table.pr tbody tr:last-child td{border-bottom:0}
 <?php if ($ingelogd || $demo || $adminPreview): $pr = $profiel['persoon']; $stat = $profiel['stats'];
       $catTxt = $pr['category'] ?: '';
       $isEigen = (!$demo && !$adminPreview);                       // echte ingelogde rijder
-      $pubAnon = $isEigen && !empty($pr['publiek_anoniem']); ?>
+      $pubAnon = $isEigen && !empty($pr['publiek_anoniem']);
+      // Geheim volg-token (lazy gemint) + aantal push-volgers — voor de modal.
+      $volgToken = $isEigen ? (zorgVoorVolgToken($pdo, (string)$pr['license_key']) ?? '') : '';
+      $volgers   = $isEigen ? volgersAantal($pdo, (string)$pr['license_key']) : 0; ?>
   <div class="topbar">
     <a class="home" href="<?= $demo ? 'profiel.php' : './' ?>"><?= $demo ? '← Terug' : '← InlineComp Check' ?></a>
     <?php if ($demo): ?>
@@ -585,9 +600,23 @@ table.pr tbody tr:last-child td{border-bottom:0}
         Deel het alleen met wie je vertrouwt.
       </p>
       <div class="volg-id">
-        <code id="volg-id-code"><?= esc($pr['license_key']) ?></code>
+        <code id="volg-id-code"><?= esc($volgToken) ?></code>
         <button type="button" class="btn btn-sec" id="btn-copy-id" title="Kopieer">📋 Kopieer</button>
       </div>
+      <p class="volg-count" id="volg-count" style="margin:9px 0 0;font-size:.9rem">
+        <?php if ($volgers > 0): ?>
+          🔔 <b><?= (int)$volgers ?></b> <?= $volgers === 1 ? 'apparaat volgt' : 'apparaten volgen' ?> je met meldingen aan.
+        <?php else: ?>
+          Nog niemand volgt je met meldingen aan.
+        <?php endif; ?>
+      </p>
+      <p style="margin:12px 0 0">
+        <button type="button" class="btn btn-sec" id="btn-volg-vernieuw">🔄 Volg-ID vernieuwen</button>
+      </p>
+      <p style="margin:6px 0 0;color:var(--muted);font-size:.82rem">
+        Vernieuwen maakt je oude volg-ID ongeldig en snijdt <b>iedereen</b> die je nu volgt af —
+        ook mensen aan wie je het eerder gaf. Deel daarna het nieuwe volg-ID opnieuw.
+      </p>
     </div>
   </dialog>
   <script>
@@ -654,6 +683,36 @@ table.pr tbody tr:last-child td{border-bottom:0}
           alert('Kon de instelling niet opslaan. Probeer het opnieuw.');
         } finally {
           chk.disabled = false;
+        }
+      });
+    }
+
+    // Volg-ID vernieuwen: rotate het geheime token → snijdt alle huidige volgers
+    // af. Bevestigen, dan live het getoonde ID + de teller bijwerken.
+    const vBtn = document.getElementById('btn-volg-vernieuw');
+    if (vBtn) {
+      vBtn.addEventListener('click', async () => {
+        if (!confirm('Volg-ID vernieuwen? Iedereen die je nu volgt wordt afgesneden — ook mensen aan wie je het eerder gaf. Deel daarna het nieuwe volg-ID opnieuw.')) return;
+        vBtn.disabled = true;
+        try {
+          const res = await fetch('profiel.php', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+            body: new URLSearchParams({ csrf: CSRF, actie: 'volg_vernieuw', ajax: '1' }),
+          });
+          const data = await res.json();
+          if (!data || !data.ok || !data.volg_token) throw new Error('mislukt');
+          const code = document.getElementById('volg-id-code');
+          if (code) code.textContent = data.volg_token;
+          const cnt = document.getElementById('volg-count');
+          if (cnt) cnt.textContent = 'Nog niemand volgt je met meldingen aan.';
+          const orig = vBtn.textContent;
+          vBtn.textContent = '✓ Vernieuwd';
+          setTimeout(() => { vBtn.textContent = orig; }, 1500);
+        } catch (e) {
+          alert('Kon het volg-ID niet vernieuwen. Probeer het opnieuw.');
+        } finally {
+          vBtn.disabled = false;
         }
       });
     }

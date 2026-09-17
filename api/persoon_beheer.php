@@ -16,6 +16,7 @@ header('Content-Type: application/json; charset=utf-8');
 require_once __DIR__ . '/../../config_inlinecomp.php';
 require_once __DIR__ . '/../auth/session.php';
 require_once __DIR__ . '/../inc/person_id.php';   // person_id-migratie fase 3 (dual-write)
+require_once __DIR__ . '/../inc/anoniem.php';      // volg-token + volger-teller
 $_authUser = requireAuth($pdo);
 
 if (!in_array($_authUser['role'] ?? '', ['owner', 'admin'], true)) {
@@ -346,6 +347,10 @@ try {
             echo json_encode(['error' => 'Rijder niet gevonden']);
             exit;
         }
+        // Volg-token (lazy gemint) + aantal push-volgers — voor de e-mail-route
+        // (organisatie geeft het volg-ID aan een rijder zonder profiel).
+        $rijder['volg_token'] = zorgVoorVolgToken($pdo, $pid);
+        $rijder['volgers']    = volgersAantal($pdo, $pid);
 
         // 2. Transponder-toewijzingen (per organisatie)
         // Match-strategie:
