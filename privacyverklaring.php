@@ -75,7 +75,7 @@ staat hieronder — bij twijfel geldt die volledige tekst.</em></p>
         geboortedatum van rijders op.</li>
     <li>Veel rijders zijn <strong>minderjarig</strong>; van hen verwerken we dezelfde
         beperkte gegevens en doen we geen marketing of profilering. Optionele keuzes
-        (profiel, anoniem, meldingen) hoort de ouder/verzorger te maken (zie §1f).</li>
+        (profiel, anoniem, meldingen) maakt de ouder/verzorger (zie §1f).</li>
     <li>Uitslagen worden openbaar gepubliceerd, zoals gebruikelijk in de sport.</li>
     <li>Als coach kun je vrijwillig een account maken; als rijder of coach kun je
         vrijwillig pushmeldingen aanzetten. Beide zijn optioneel en je kunt ze zelf
@@ -97,7 +97,7 @@ staat hieronder — bij twijfel geldt die volledige tekst.</em></p>
         beveiliging.</li>
     <li>Je kunt altijd opvragen welke gegevens we van je hebben, ze laten corrigeren,
         of vragen om verwijdering (waarbij we je naam vervangen door “Verwijderd” zodat
-        de wedstrijdhistorie klopt blijft).</li>
+        de wedstrijdhistorie blijft kloppen).</li>
 </ul>
 <p>Vragen? Mail naar <a href="mailto:<?= htmlspecialchars($ORG_EMAIL) ?>"><?= htmlspecialchars($ORG_EMAIL) ?></a>.</p>
 </div>
