@@ -60,12 +60,20 @@ if ($actie === 'logout') {
 // omkeerbare persons.publiek_anoniem-vlag; data blijft behouden.
 if ($actie === 'pubanon' && !empty($_SESSION['rijder_lic'])) {
     $pid = $_SESSION['rijder_lic'];
-    if (!empty($body['aan'])) {
+    $aan = !empty($body['aan']);
+    if ($aan) {
         $pdo->prepare("UPDATE persons SET publiek_anoniem = COALESCE(publiek_anoniem, NOW()) WHERE person_id = ?")
             ->execute([$pid]);
     } else {
         $pdo->prepare("UPDATE persons SET publiek_anoniem = NULL WHERE person_id = ?")
             ->execute([$pid]);
+    }
+    // AJAX (vinkje in de instellingen-modal) → JSON terug, geen herlaad; anders
+    // de klassieke redirect (no-JS fallback).
+    if (!empty($body['ajax'])) {
+        header('Content-Type: application/json; charset=utf-8');
+        echo json_encode(['ok' => true, 'anoniem' => $aan]);
+        exit;
     }
     header('Location: profiel.php'); exit;
 }
@@ -324,6 +332,8 @@ dialog.settings-modal::backdrop{background:rgba(18,58,94,.45)}
 .volg-id{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
 .volg-id code{background:var(--surface-2);border:1px solid var(--line);padding:5px 9px;border-radius:6px;
   font-size:.85rem;user-select:all;word-break:break-all;flex:1;min-width:120px}
+.toggle-row{display:flex;align-items:center;gap:10px;font-weight:600;cursor:pointer;margin:0 0 10px;font-size:1rem}
+.toggle-row input{width:20px;height:20px;cursor:pointer;accent-color:var(--brand);flex:none}
 
 /* ── Login / claim kaart ── */
 .authcard{background:var(--surface);border:1px solid var(--line);border-radius:16px;
@@ -486,8 +496,8 @@ table.pr tbody tr:last-child td{border-bottom:0}
     <div class="meta">
       <?php if ($catTxt): ?><span class="chip"><?= esc($catTxt) ?></span><?php endif; ?>
       <?php if ($pr['start_number'] !== null): ?><span class="chip">Startnr <?= (int)$pr['start_number'] ?></span><?php endif; ?>
-      <?php if ($pubAnon): ?><span class="chip chip-anon" title="Je bent publiek anoniem — je naam is buiten de wedstrijddagen afgeschermd">🕶 anoniem</span><?php endif; ?>
       <?php if ($pr['club']): ?><span><?= esc($pr['club']) ?></span><?php endif; ?>
+      <?php if ($pubAnon): ?><span class="chip chip-anon" id="hero-anon-chip" title="Je bent publiek anoniem — je naam is buiten de wedstrijddagen afgeschermd">🕶 anoniem</span><?php endif; ?>
     </div>
     <div class="statrow">
       <div class="stat"><div class="n"><?= (int)$stat['wedstrijden'] ?></div><div class="l">Wedstrijden</div></div>
@@ -555,18 +565,13 @@ table.pr tbody tr:last-child td{border-bottom:0}
         t/m dag erna) blijft je naam zichtbaar; dat is nodig voor de startlijst en tactiek.
         In het permanente archief en het serie-klassement blijf je anoniem.
       </p>
-      <p class="sm-status">
-        <b>Status:</b>
+      <label class="toggle-row">
+        <input type="checkbox" id="chk-anon" <?= $pubAnon ? 'checked' : '' ?>>
+        <span>Publiek anoniem</span>
+      </label>
+      <p class="sm-status" id="anon-status" style="margin:0 0 18px">
         <?= $pubAnon ? '🕶 Je bent <b>publiek anoniem</b>.' : 'Je bent normaal met naam zichtbaar.' ?>
       </p>
-      <form method="post" style="margin:0 0 18px">
-        <input type="hidden" name="csrf" value="<?= esc($CSRF) ?>">
-        <input type="hidden" name="actie" value="pubanon">
-        <input type="hidden" name="aan" value="<?= $pubAnon ? '0' : '1' ?>">
-        <button class="btn <?= $pubAnon ? 'btn-sec' : '' ?>">
-          <?= $pubAnon ? 'Anonimiteit opheffen' : 'Maak mij publiek anoniem' ?>
-        </button>
-      </form>
       <h3>Jouw volg-ID</h3>
       <p>
         Wil je dat iemand (bv. je ouder of coach) je tóch kan volgen terwijl je anoniem
@@ -602,6 +607,47 @@ table.pr tbody tr:last-child td{border-bottom:0}
           // Fallback: selecteer de tekst zodat handmatig kopiëren makkelijk is.
           const r = document.createRange(); r.selectNode(code);
           const sel = window.getSelection(); sel.removeAllRanges(); sel.addRange(r);
+        }
+      });
+    }
+
+    // Vinkje: direct opslaan (auto-save). Je vinkt aan/uit en sluit de modal —
+    // de wijziging is meteen doorgevoerd. Hero-chip + status live bijwerken.
+    const CSRF = <?= json_encode($CSRF) ?>;
+    const chk = document.getElementById('chk-anon');
+    function updateAnonUI(anon) {
+      const st = document.getElementById('anon-status');
+      if (st) st.innerHTML = anon ? '🕶 Je bent <b>publiek anoniem</b>.' : 'Je bent normaal met naam zichtbaar.';
+      let chip = document.getElementById('hero-anon-chip');
+      const meta = document.querySelector('.hero .meta');
+      if (anon && !chip && meta) {
+        chip = document.createElement('span');
+        chip.id = 'hero-anon-chip';
+        chip.className = 'chip chip-anon';
+        chip.title = 'Je bent publiek anoniem — je naam is buiten de wedstrijddagen afgeschermd';
+        chip.textContent = '🕶 anoniem';
+        meta.appendChild(chip);
+      } else if (!anon && chip) {
+        chip.remove();
+      }
+    }
+    if (chk) {
+      chk.addEventListener('change', async () => {
+        chk.disabled = true;
+        try {
+          const res = await fetch('profiel.php', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+            body: new URLSearchParams({ csrf: CSRF, actie: 'pubanon', aan: chk.checked ? '1' : '0', ajax: '1' }),
+          });
+          const data = await res.json();
+          if (!data || !data.ok) throw new Error('opslaan mislukt');
+          updateAnonUI(!!data.anoniem);
+        } catch (e) {
+          chk.checked = !chk.checked;   // terugdraaien bij fout
+          alert('Kon de instelling niet opslaan. Probeer het opnieuw.');
+        } finally {
+          chk.disabled = false;
         }
       });
     }
