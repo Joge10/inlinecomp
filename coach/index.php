@@ -1468,12 +1468,19 @@ if ($action === 'coach_info') {
     // POST body is al gelezen door de zichtbaarheidsgate bovenaan
     $body    = $_POST_BODY ?? [];
     $compId  = trim($body['competition_id'] ?? '');
-    $licenses = is_array($body['licenses'] ?? null) ? $body['licenses'] : [];
-    $licenses = array_values(array_filter(array_map('strval', $licenses)));
-    // Tokens (licentie of person_id) → person_id (fase 3d-iii).
+    $licensesRaw = is_array($body['licenses'] ?? null) ? $body['licenses'] : [];
+    $licensesRaw = array_values(array_filter(array_map('strval', $licensesRaw)));
+    // Tokens (licentie of person_id) → person_id (fase 3d-iii). Bewaar de mapping
+    // ingestuurd-token → person_id zodat de client oude volglijst-items (opgeslagen
+    // op het KNSB-relatienummer, van vóór de migratie) kan backfillen naar person_id.
     require_once __DIR__ . '/../inc/person_id.php';
-    $licenses = array_values(array_filter(array_map(fn($l) => resolveNaarPersonId($pdo, $l), $licenses)));
-    if (!$compId || !$licenses) { echo json_encode(['personen' => []]); exit; }
+    $tokenMap = [];
+    foreach ($licensesRaw as $tok) {
+        $pid = resolveNaarPersonId($pdo, $tok);
+        if ($pid) $tokenMap[$tok] = $pid;
+    }
+    $licenses = array_values(array_unique(array_values($tokenMap)));
+    if (!$compId || !$licenses) { echo json_encode(['personen' => [], 'token_map' => (object)$tokenMap]); exit; }
     try {
         $ph = implode(',', array_fill(0, count($licenses), '?'));
         // Per rijder: worst-case status (hoogste entry.status → "niet getekend" (4) is belangrijkst).
@@ -1743,7 +1750,7 @@ if ($action === 'coach_info') {
             if (isset($personen[$lic])) $personen[$lic]['sancties'][] = $s;
         }
 
-        echo json_encode(['personen' => array_values($personen)], JSON_UNESCAPED_UNICODE);
+        echo json_encode(['personen' => array_values($personen), 'token_map' => (object)$tokenMap], JSON_UNESCAPED_UNICODE);
     } catch (Throwable $e) {
         http_response_code(500);
         echo json_encode(['error' => $e->getMessage()]);
@@ -5394,7 +5401,7 @@ function renderProgramma() {
     // kunnen hetzelfde startnummer hebben en dan zou snr-only beide heats
     // valselijk highlighten. mijnSnrs blijft beschikbaar voor wat al snr
     // gebruikt, maar primaire match is via lic.
-    const mijnLics = new Set(coachLijst.map(p => p.license_key));
+    const mijnLics = new Set(coachLijst.flatMap(p => [p.person_id, p.license_key]).filter(Boolean));
     const mijnSnrs = new Set(coachLijst.map(p => parseInt(p.snr)));
     const { ritten, blokken } = programmaCache;
 
@@ -6033,7 +6040,7 @@ function filterDag(btn, dag) {
 // ── Coach-info (status + sancties) ───────────────────────────────────────────
 async function laadCoachInfo() {
     if (!selComp.value || !coachLijst.length) { coachInfoCache = {}; return; }
-    const licenses = coachLijst.map(p => p.license_key).filter(Boolean);
+    const licenses = coachLijst.flatMap(p => [p.person_id, p.license_key]).filter(Boolean);
     if (!licenses.length) { coachInfoCache = {}; return; }
     try {
         const res = await coachFetch(`?action=coach_info`, {
@@ -6043,15 +6050,23 @@ async function laadCoachInfo() {
         });
         const data = await res.json();
         const map = {};
+        // Respons is gesleuteld op person_id (coach_info levert person_id AS license_key).
         (data.personen || []).forEach(p => { map[p.license_key] = p; });
+        const tokenMap = data.token_map || {};   // ingestuurd token → person_id
+        // Alias: laat oude tokens (relatienummer) óók naar dezelfde info wijzen,
+        // zodat lookups op p.license_key blijven werken voor niet-gemigreerde items.
+        for (const tok in tokenMap) {
+            const pid = tokenMap[tok];
+            if (map[pid] && !map[tok]) map[tok] = map[pid];
+        }
         coachInfoCache = map;
-        // Fase 3c-migratie: vul person_id passief in bij oude coach-lijst-items
-        // die 'm nog missen (coach_info levert person_id sinds fase 3b).
+        // Fase 3c/4-migratie: vul person_id passief in bij oude coach-lijst-items
+        // die 'm nog missen (opgeslagen op relatienummer vóór de migratie).
         let gemigreerd = false;
         coachLijst.forEach(p => {
-            if (!p.person_id && p.license_key && map[p.license_key]?.person_id) {
-                p.person_id = map[p.license_key].person_id;
-                gemigreerd = true;
+            if (!p.person_id && p.license_key) {
+                const pid = tokenMap[p.license_key] || map[p.license_key]?.person_id;
+                if (pid) { p.person_id = pid; gemigreerd = true; }
             }
         });
         if (gemigreerd) saveCoachLijst();
@@ -6551,7 +6566,7 @@ async function renderRondesVoorDc(dcId, distIdFilter) {
             return;
         }
         // Set voor .mijn-highlight — license_key is uniek per rijder.
-        const mijnLics = new Set(coachLijst.map(p => p.license_key).filter(Boolean));
+        const mijnLics = new Set(coachLijst.flatMap(p => [p.person_id, p.license_key]).filter(Boolean));
         // Labels per ronde_type via i18n zodat het meebeweegt met taalkeuze.
         const RONDE_LABEL = {
             heats:         t('rondes_ronde_serie'),
@@ -6748,7 +6763,7 @@ function renderAfstandTabel(data) {
     if (!data.rijders?.length) return `<div class="leeg-melding">${t('uit_geen_uitslagen')}</div>`;
     // Match per persoon (license_key uniek) ipv per snr — twee rijders met
     // hetzelfde startnummer worden anders allebei gehighlight.
-    const mijnLics = new Set(coachLijst.map(p => p.license_key));
+    const mijnLics = new Set(coachLijst.flatMap(p => [p.person_id, p.license_key]).filter(Boolean));
     const mijnSnrs = new Set(coachLijst.map(p => parseInt(p.snr)));
     const heeftRnd = data.heeft_rondes, heeftPK = data.heeft_pk_punten;
     const pkMax = heeftPK ? pkMaxRnd(data.rijders) : 0;
@@ -6784,7 +6799,7 @@ function renderAfstandTabel(data) {
 
 function renderKlassementTabel(data) {
     if (!data.rijders?.length) return `<div class="leeg-melding">${t('uit_geen_klassement')}</div>`;
-    const mijnLics = new Set(coachLijst.map(p => p.license_key));
+    const mijnLics = new Set(coachLijst.flatMap(p => [p.person_id, p.license_key]).filter(Boolean));
     const mijnSnrs = new Set(coachLijst.map(p => parseInt(p.snr)));
     const afstanden = data.afstanden ?? [];
     const { cats, catRank } = _catRanksBerekenen(data.rijders);
@@ -6899,7 +6914,7 @@ async function toonRitDetail(el) {
         }
         // Match op license_key (uniek), fallback op snr. Bij twee rijders
         // met zelfde nummer worden anders beide gehighlight.
-        const mijnLics = new Set(coachLijst.map(p => p.license_key));
+        const mijnLics = new Set(coachLijst.flatMap(p => [p.person_id, p.license_key]).filter(Boolean));
         const mijnSnrs = new Set(coachLijst.map(p => parseInt(p.snr)));
         // Sorteren: startvolgorde vóór de rit (loting), finishvolgorde erna.
         // Detect op "iemand heeft finishpositie/tijd/sanctie". Sancties:
