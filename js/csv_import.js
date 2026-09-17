@@ -715,7 +715,7 @@ function _csvMatchStats(matches) {
 
 function _csvMatchRijHtml(m) {
     const tierLabel = {
-        1: '🟢 KNSB-nr match',
+        1: '🟢 Startnr match',
         2: '🟢 Naam+club match',
         3: '🟡 Meerdere kandidaten',
         4: '🔴 Geen match → nieuw',
