@@ -316,7 +316,7 @@ a{color:var(--accent)}
   background:rgba(255,255,255,.16);border:1px solid rgba(255,255,255,.32);color:#fff;
   border-radius:999px;padding:6px 13px 6px 10px;font-size:.8rem;font-weight:600;cursor:pointer;line-height:1;white-space:nowrap}
 .hero-gear:hover{background:rgba(255,255,255,.28)}
-.hero-gear svg{display:block}
+.hero-gear svg{display:block;color:var(--oranje)}   /* subtiele InlineComp-oranje merk-accent op de cog */
 .chip.chip-anon{background:rgba(255,255,255,.22);border-color:rgba(255,255,255,.3)}
 dialog.settings-modal{border:0;border-radius:16px;padding:0;max-width:440px;width:calc(100% - 32px);
   box-shadow:var(--shadow);color:var(--ink);background:var(--surface)}
