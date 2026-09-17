@@ -15,8 +15,8 @@ header('Pragma: no-cache');
 $ORG_NAAM   = 'InlineComp';                 // TODO: aanpassen naar jouw vereniging / beheerder
 $ORG_EMAIL  = 'inlinecomp@devriesen.com';   // TODO: e-mailadres voor verzoeken
 $ORG_ADRES  = '';                           // TODO: eventueel postadres
-$LAATSTE_UPDATE_NL = '25 augustus 2026';
-$LAATSTE_UPDATE_EN = '25 August 2026';
+$LAATSTE_UPDATE_NL = '17 september 2026';
+$LAATSTE_UPDATE_EN = '17 September 2026';
 ?><!DOCTYPE html>
 <html lang="nl">
 <head>
@@ -81,6 +81,11 @@ staat hieronder — bij twijfel geldt die volledige tekst.</em></p>
         aanvragen om je eigen resultaten privé terug te zien. We bewaren daarvoor
         alleen een gebruikersnaam en een versleutelde pincode, geen e-mailadres; het
         profiel is niet openbaar.</li>
+    <li>Als rijder kun je ervoor kiezen <strong>publiek anoniem</strong> te zijn: je
+        naam, vereniging en woonplaats worden op de openbare pagina's vervangen door
+        “Anoniem” (je startnummer blijft). Rond de wedstrijddag zelf is je naam wél
+        zichtbaar voor de start-indeling. Wie jou tóch wil volgen, kan dat met een
+        persoonlijk volg-ID dat je zelf deelt.</li>
     <li>Voor het digitaliseren van oude papieren uitslagen en voor het vertalen van
         mededelingen gebruiken we soms AI (Anthropic Claude, een Amerikaans bedrijf)
         — met de wettelijk vereiste waarborgen.</li>
@@ -190,6 +195,32 @@ niet bij jeugdrijders. Je kunt het profiel op elk moment laten verwijderen door 
 de onderliggende wedstrijduitslagen blijven dan bestaan als onderdeel van het sporthistorisch
 archief (zie §7).</p>
 
+<h2>1e. Publiek anoniem tonen (optioneel)</h2>
+<p>Een rijder (of, bij jeugd, de ouder/verzorger) kan ervoor kiezen om <strong>publiek
+anoniem</strong> te zijn. Wij tonen dan op de openbare pagina's niet de naam, vereniging en
+woonplaats maar <strong>“Anoniem”</strong>; het <strong>startnummer blijft</strong> zichtbaar,
+zodat de wedstrijd te volgen blijft. De gegevens zelf blijven bij ons bewaard &mdash; het is
+uitsluitend een <strong>weergave-keuze</strong> en volledig omkeerbaar.</p>
+<ul>
+    <li><strong>Rond de wedstrijddag</strong> (van de dag ervoor tot en met de dag erna) tonen
+        wij de naam wél, omdat de start- en heat-indeling dan operationeel nodig is. Daarbuiten,
+        en in het permanente uitslag- en serie-klassement-archief, blijf je anoniem. Je bent ook
+        <strong>niet op naam vindbaar</strong> in de publieke zoek.</li>
+    <li><strong>Zelf instellen</strong>: via je persoonlijke profiel “Mijn InlineComp” (§1d), of
+        &mdash; zonder profiel &mdash; door de organisatie te mailen; die zet de keuze voor je
+        (en kan 'm op jouw verzoek weer opheffen).</li>
+    <li><strong>Gericht laten volgen</strong>: wie jou tóch wil volgen (bijvoorbeeld een ouder of
+        coach) kan dat met een <strong>persoonlijk, geheim volg-ID</strong> dat je zelf deelt;
+        alleen wie dat ID heeft, ziet je naam. Je kunt dit volg-ID op elk moment vernieuwen,
+        waarna eerdere volgers geen toegang meer hebben.</li>
+    <li><strong>Import</strong>: geeft een gegevensbron (bijvoorbeeld de KNSB) aan dat een rijder
+        anoniem wil zijn, dan nemen wij die keuze over bij het inlezen.</li>
+</ul>
+<p>De grondslag is <strong>dataminimalisatie en het honoreren van je bezwaar</strong> (art. 21
+AVG): je maakt bezwaar tegen het openbaar tonen van je naam, en wij respecteren dat terwijl de
+sportieve uitslag intact blijft. Deze keuze is los van de onomkeerbare verwijdering uit §9 &mdash;
+bij “publiek anoniem” blijven je gegevens behouden en kun je de keuze weer terugdraaien.</p>
+
 <h2>2. Waarom verwerken wij deze gegevens?</h2>
 <ul>
     <li>Het correct organiseren en uitvoeren van wedstrijden (startlijsten,
@@ -229,7 +260,8 @@ een AI-dienst om tekstherkenning te helpen — zie §5b hieronder.</p>
         de KNSB als onderdeel van de bondswedstrijden.</li>
     <li><strong>Publiek (uitslagen)</strong>: namen, verenigingen, startnummers
         en eindtijden worden openbaar gepubliceerd op onze uitslagpagina, zoals
-        gangbaar in de sport.</li>
+        gangbaar in de sport &mdash; behalve van rijders die voor <strong>publiek
+        anoniem</strong> hebben gekozen; die tonen wij als “Anoniem” (zie §1e).</li>
     <li><strong>AI-dienstverlener (Anthropic)</strong>: zie §5b voor uitleg.</li>
     <li><strong>Push-diensten (Google/Mozilla/Apple)</strong>: uitsluitend voor het
         bezorgen van pushmeldingen die je zelf hebt aangezet — zie §1c.</li>
@@ -353,6 +385,8 @@ ze zijn verzameld:</p>
         versleutelde pincode blijven bewaard zolang het profiel bestaat; het wordt op verzoek
         van de rijder of door de organisatie verwijderd. De onderliggende wedstrijduitslagen
         blijven bestaan als onderdeel van het historisch archief — zie §1d.</li>
+    <li><strong>Publiek-anoniem-keuze</strong>: de voorkeur (en het bijbehorende volg-ID)
+        blijft bewaard zolang die geldt; je kunt 'm zelf of via de organisatie weer opheffen — zie §1e.</li>
 </ul>
 
 <h2>8. Beveiliging</h2>
@@ -387,7 +421,9 @@ ze zijn verzameld:</p>
         naar jou.</li>
     <li><strong>Bezwaar en beperking</strong> — je kunt bezwaar maken tegen
         de verwerking (inclusief de AI-verwerking uit §5b) of vragen om
-        tijdelijke beperking.</li>
+        tijdelijke beperking. Wil je niet uit de uitslagen verdwijnen maar wél
+        je naam publiek afschermen, dan kun je kiezen voor <strong>publiek
+        anoniem</strong> (zie §1e).</li>
     <li><strong>Dataportabiliteit</strong> — je kunt een export van jouw
         gegevens in een gangbaar formaat opvragen.</li>
     <li><strong>Klacht indienen</strong> — je hebt het recht een klacht in
@@ -451,6 +487,11 @@ case of doubt, that full text applies.</em></p>
     <li>As a skater you can voluntarily request a personal profile ("My InlineComp") to
         review your own results privately. For this we store only a username and an
         encrypted PIN, no e-mail address; the profile is not public.</li>
+    <li>As a skater you can choose to be <strong>publicly anonymous</strong>: your name,
+        club and place of residence are replaced by “Anonymous” on the public pages (your
+        start number stays). Around the competition day itself your name is shown for the
+        start list. Someone who still wants to follow you can do so with a personal
+        follow-ID that you share yourself.</li>
     <li>For digitising old paper results and translating announcements, we sometimes use
         AI (Anthropic Claude, a US company) — with the legally required safeguards in place.</li>
     <li>Our website runs with a hosting provider in the United Kingdom; technical visit
@@ -554,6 +595,32 @@ is required, including for youth skaters. You can have the profile deleted at an
 organisation; the underlying competition results remain as part of the sport-historical archive
 (see §7).</p>
 
+<h2>1e. Showing as publicly anonymous (optional)</h2>
+<p>A skater (or, for youth, a parent/guardian) can choose to be <strong>publicly
+anonymous</strong>. On the public pages we then do not show the name, club and place of
+residence but <strong>“Anonymous”</strong>; the <strong>start number stays</strong> visible so
+the competition can still be followed. The data itself is retained &mdash; it is purely a
+<strong>display choice</strong> and fully reversible.</p>
+<ul>
+    <li><strong>Around the competition day</strong> (from the day before through the day after)
+        we do show the name, because the start and heat line-up is operationally needed then.
+        Outside that window, and in the permanent results and series-standings archive, you
+        remain anonymous. You are also <strong>not findable by name</strong> in the public search.</li>
+    <li><strong>Setting it yourself</strong>: via your personal “My InlineComp” profile (§1d), or
+        &mdash; without a profile &mdash; by e-mailing the organisation, who set the choice for you
+        (and can lift it again at your request).</li>
+    <li><strong>Letting specific people follow you</strong>: someone who still wants to follow you
+        (for example a parent or coach) can do so with a <strong>personal, secret follow-ID</strong>
+        that you share yourself; only someone with that ID sees your name. You can renew this
+        follow-ID at any time, after which earlier followers no longer have access.</li>
+    <li><strong>Import</strong>: if a data source (for example the KNSB) indicates that a skater
+        wishes to be anonymous, we adopt that choice on import.</li>
+</ul>
+<p>The legal basis is <strong>data minimisation and honouring your objection</strong> (Article 21
+GDPR): you object to your name being shown publicly, and we respect that while the sporting result
+stays intact. This choice is separate from the irreversible erasure in §9 &mdash; with “publicly
+anonymous” your data is retained and you can reverse the choice.</p>
+
 <h2>2. Why do we process this data?</h2>
 <ul>
     <li>To correctly organise and run competitions (start lists, timekeeping,
@@ -590,7 +657,8 @@ see §5b below.</p>
         the KNSB as part of federation competitions.</li>
     <li><strong>The public (results)</strong>: names, clubs, start numbers
         and finishing times are published on our public results page, as is
-        customary in the sport.</li>
+        customary in the sport &mdash; except for skaters who have chosen to be
+        <strong>publicly anonymous</strong>, who are shown as “Anonymous” (see §1e).</li>
     <li><strong>AI provider (Anthropic)</strong>: see §5b for details.</li>
     <li><strong>Push services (Google/Mozilla/Apple)</strong>: solely to deliver
         push notifications you enabled yourself — see §1c.</li>
@@ -705,6 +773,8 @@ for which it was collected:</p>
         kept for as long as the profile exists; it is deleted at the skater's request or by the
         organisation. The underlying competition results remain as part of the historical archive
         — see section 1d.</li>
+    <li><strong>Publicly-anonymous choice</strong>: the preference (and its follow-ID) is kept for
+        as long as it applies; you can lift it yourself or via the organisation — see section 1e.</li>
 </ul>
 
 <h2>8. Security</h2>
@@ -737,7 +807,9 @@ for which it was collected:</p>
         alone is not traceable to you.</li>
     <li><strong>Objection and restriction</strong> — you may object to the
         processing (including the AI processing in §5b) or request
-        temporary restriction.</li>
+        temporary restriction. If you don't want to disappear from the results
+        but do want to shield your name publicly, you can choose
+        <strong>publicly anonymous</strong> (see §1e).</li>
     <li><strong>Data portability</strong> — you may request an export of
         your data in a common format.</li>
     <li><strong>Lodging a complaint</strong> — you have the right to lodge
