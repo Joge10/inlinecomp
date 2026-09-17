@@ -5020,30 +5020,41 @@ selComp.addEventListener('change', async () => {
     // In een lokale array verzamelen en pas op 't eind toewijzen: twee gelijktijdige
     // loads kunnen zo nooit in dezelfde _kinderen interleaven (→ geen dubbele rijders).
     const verzameld = [];
+    const anoniemGeworden = [];   // gevolgde rijders die nu anoniem zijn (geen geldig token)
     for (const item of opgeslagen) {
         const k = await _fetchKind({ person_id: item.person_id, license_key: item.license_key, volg: item.volg }, selComp.value, gedeeldeProg);
         if (mySeq !== _kindLoadSeq) return;   // afgebroken door nieuwere load
+        if (k && k.__anoniem) { anoniemGeworden.push(item); continue; }
         if (k) verzameld.push(k);
         // k == null → kind doet niet mee aan deze wedstrijd, we slaan 'm stil over.
     }
     _kinderen = verzameld;
-    // Fase 3c-migratie: vul person_id passief in bij oude opgeslagen items die
-    // 'm nog missen (de lookup-respons draagt person_id sinds fase 3b). We
-    // MERGEN in de volledige opgeslagen lijst — rijders die deze wedstrijd niet
-    // meedoen zitten niet in _kinderen en mogen niet uit de store verdwijnen.
-    if (opgeslagen.some(it => !it.person_id)) {
+
+    // Opslag bijwerken: (a) rijders die nu anoniem zijn pruimen (chip weg, volgen
+    // verbroken — je had geen geldig volg-token), en (b) fase 3c-migratie: passief
+    // person_id invullen bij oude items. Rijders die deze wedstrijd niet meedoen
+    // blijven staan (die zijn niet gecontroleerd).
+    const wegKeys = new Set(anoniemGeworden.map(it => it.person_id || it.volg || it.license_key));
+    let basis = opgeslagen.filter(it => !wegKeys.has(it.person_id || it.volg || it.license_key));
+    let veranderd = wegKeys.size > 0;
+    if (basis.some(it => !it.person_id)) {
         const pidByLic = new Map();
         verzameld.forEach(k => {
             const p = k.data[k.kozen_idx ?? 0]?.persoon;
             if (p?.license_key && p?.person_id) pidByLic.set(p.license_key, p.person_id);
         });
         if (pidByLic.size) {
-            const gemigreerd = opgeslagen.map(it =>
+            basis = basis.map(it =>
                 (!it.person_id && it.license_key && pidByLic.has(it.license_key))
                     ? { ...it, person_id: pidByLic.get(it.license_key) }
                     : it);
-            localStorage.setItem(KIDS_LS_KEY, JSON.stringify(gemigreerd));
+            veranderd = true;
         }
+    }
+    if (veranderd) {
+        localStorage.setItem(KIDS_LS_KEY, JSON.stringify(basis));
+        if (typeof _renderSetupVolglijst === 'function') _renderSetupVolglijst();  // chips meteen bij
+        if (wegKeys.size && typeof _ppSync === 'function') _ppSync();               // push-abonnement bij
     }
     if (_kinderen.length) {
         _activeKindIdx = 0;
@@ -5620,10 +5631,11 @@ async function _fetchKind({ person_id = null, license_key = null, snr = null, vo
     const data = await lookupRes.json();
     const prog = await progRes.json();
     if (data.error || !data.length) return null;
-    // Rijder is nu anoniem én we hebben geen geldig volg-token (meer) → laten
-    // vallen i.p.v. als 'Anoniem' in de volglijst te tonen (bv. iemand die je
-    // volgde vóór hij anoniem werd, of een vernieuwd/ingetrokken token).
-    if (data[0]?.persoon?.is_anoniem) return null;
+    // Rijder is nu anoniem én we hebben geen geldig volg-token (meer) → signaleer
+    // dit apart (niet null = "doet niet mee"), zodat de aanroeper 'm uit de
+    // opgeslagen volglijst kan pruimen (bv. iemand die je volgde vóór hij anoniem
+    // werd, of een vernieuwd/ingetrokken token).
+    if (data[0]?.persoon?.is_anoniem) return { __anoniem: true };
     // Pak huidige startnr uit de response (kan in nieuwe wedstrijd anders zijn).
     const p = data[0].persoon;
     const huidigSnr = p.wedstrijd_snr ?? p.start_number ?? snr ?? '';
