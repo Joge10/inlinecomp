@@ -1253,7 +1253,7 @@ body.live-pagina-actief #main-content {
     overflow: hidden;
     min-width: 280px;
     flex: 1 1 280px;
-    max-width: 480px;
+    max-width: 620px;   /* ruimer: puntenkoers heeft veel kolommen + "vervallen"-label */
 }
 
 .u-finale-compleet   { border-top: 3px solid var(--middenblauw); }
@@ -1280,6 +1280,7 @@ body.live-pagina-actief #main-content {
 }
 
 /* Puntenkoers: vervallen punten (ronde-achterstand) — doorgestreept + note */
+.u-pkpunten-vervallen { white-space: nowrap; }   /* "26 vervallen" op één regel */
 .u-pkpunten-vervallen s { color: #adb5bd; }
 .u-pkpunten-note {
     display: inline-block;
