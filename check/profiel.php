@@ -303,6 +303,27 @@ a{color:var(--accent)}
 .btn:hover{background:var(--brand-2)}
 .btn-sec{background:var(--surface);color:var(--brand);border:1px solid var(--line)}
 .btn-sec:hover{background:var(--surface-2)}
+.hdr-actions{display:flex;align-items:center;gap:8px}
+.icon-btn{background:var(--surface);color:var(--brand);border:1px solid var(--line);border-radius:8px;
+  width:38px;height:38px;display:inline-flex;align-items:center;justify-content:center;
+  font-size:1.1rem;line-height:1;padding:0;cursor:pointer}
+.icon-btn:hover{background:var(--surface-2)}
+.chip.chip-anon{background:rgba(255,255,255,.22);border-color:rgba(255,255,255,.3)}
+dialog.settings-modal{border:0;border-radius:16px;padding:0;max-width:440px;width:calc(100% - 32px);
+  box-shadow:var(--shadow);color:var(--ink);background:var(--surface)}
+dialog.settings-modal::backdrop{background:rgba(18,58,94,.45)}
+.sm-head{display:flex;align-items:center;justify-content:space-between;gap:12px;
+  padding:15px 18px;border-bottom:1px solid var(--line)}
+.sm-head h2{margin:0;font-size:1.12rem;font-weight:700}
+.sm-x{margin:0}
+.sm-x button{background:transparent;border:0;font-size:1.5rem;line-height:1;color:var(--muted);cursor:pointer;padding:0 2px}
+.sm-body{padding:16px 18px}
+.sm-body h3{margin:0 0 4px;font-size:1rem;font-weight:700}
+.sm-body p{margin:0 0 10px;color:var(--muted);font-size:.9rem}
+.sm-status{color:var(--ink);font-size:.95rem;margin:0 0 12px}
+.volg-id{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+.volg-id code{background:var(--surface-2);border:1px solid var(--line);padding:5px 9px;border-radius:6px;
+  font-size:.85rem;user-select:all;word-break:break-all;flex:1;min-width:120px}
 
 /* ── Login / claim kaart ── */
 .authcard{background:var(--surface);border:1px solid var(--line);border-radius:16px;
@@ -434,7 +455,9 @@ table.pr tbody tr:last-child td{border-bottom:0}
 <body>
 <div class="wrap">
 <?php if ($ingelogd || $demo || $adminPreview): $pr = $profiel['persoon']; $stat = $profiel['stats'];
-      $catTxt = $pr['category'] ?: ''; ?>
+      $catTxt = $pr['category'] ?: '';
+      $isEigen = (!$demo && !$adminPreview);                       // echte ingelogde rijder
+      $pubAnon = $isEigen && !empty($pr['publiek_anoniem']); ?>
   <div class="topbar">
     <a class="home" href="<?= $demo ? 'profiel.php' : './' ?>"><?= $demo ? '← Terug' : '← InlineComp Check' ?></a>
     <?php if ($demo): ?>
@@ -442,10 +465,13 @@ table.pr tbody tr:last-child td{border-bottom:0}
     <?php elseif ($adminPreview): ?>
       <span class="ap-tag">🔒 Testweergave (beheer)</span>
     <?php else: ?>
-      <form method="post" style="margin:0">
-        <input type="hidden" name="csrf" value="<?= esc($CSRF) ?>">
-        <button class="btn btn-sec" name="actie" value="logout">Uitloggen</button>
-      </form>
+      <div class="hdr-actions">
+        <button type="button" class="icon-btn" id="btn-settings" title="Instellingen" aria-label="Instellingen">⚙</button>
+        <form method="post" style="margin:0">
+          <input type="hidden" name="csrf" value="<?= esc($CSRF) ?>">
+          <button class="btn btn-sec" name="actie" value="logout">Uitloggen</button>
+        </form>
+      </div>
     <?php endif; ?>
   </div>
   <?php if ($demo): ?>
@@ -460,6 +486,7 @@ table.pr tbody tr:last-child td{border-bottom:0}
     <div class="meta">
       <?php if ($catTxt): ?><span class="chip"><?= esc($catTxt) ?></span><?php endif; ?>
       <?php if ($pr['start_number'] !== null): ?><span class="chip">Startnr <?= (int)$pr['start_number'] ?></span><?php endif; ?>
+      <?php if ($pubAnon): ?><span class="chip chip-anon" title="Je bent publiek anoniem — je naam is buiten de wedstrijddagen afgeschermd">🕶 anoniem</span><?php endif; ?>
       <?php if ($pr['club']): ?><span><?= esc($pr['club']) ?></span><?php endif; ?>
     </div>
     <div class="statrow">
@@ -513,38 +540,73 @@ table.pr tbody tr:last-child td{border-bottom:0}
     </div>
   </section>
 
-  <?php if (!$demo && !$adminPreview): $pubAnon = !empty($pr['publiek_anoniem']); ?>
-  <section class="card">
-    <h2 style="margin:0 0 3px;font-size:1.18rem;font-weight:700">Privacy — publiek anoniem</h2>
-    <p style="margin:0 0 8px;color:var(--muted);font-size:.9rem">
-      Ben je publiek anoniem, dan wordt je naam (en club/woonplaats) op de publieke
-      pagina's vervangen door <b>“Anoniem”</b> — je startnummer blijft staan en je
-      gegevens blijven volledig behouden. Op de <b>wedstrijddag zelf</b> (dag ervoor
-      t/m dag erna) blijft je naam zichtbaar; dat is nodig voor de startlijst en tactiek.
-      In het permanente archief en het serie-klassement blijf je anoniem.
-    </p>
-    <p style="margin:0 0 8px">
-      <b>Status:</b>
-      <?= $pubAnon ? '🕶 Je bent <b>publiek anoniem</b>.' : 'Je bent normaal met naam zichtbaar.' ?>
-    </p>
-    <form method="post" style="margin:0 0 10px">
-      <input type="hidden" name="csrf" value="<?= esc($CSRF) ?>">
-      <input type="hidden" name="actie" value="pubanon">
-      <input type="hidden" name="aan" value="<?= $pubAnon ? '0' : '1' ?>">
-      <button class="btn <?= $pubAnon ? 'btn-sec' : '' ?>">
-        <?= $pubAnon ? 'Anonimiteit opheffen' : 'Maak mij publiek anoniem' ?>
-      </button>
-    </form>
-    <p style="margin:0 0 4px;color:var(--muted);font-size:.9rem">
-      Wil je dat iemand (bv. je ouder of coach) je tóch kan volgen terwijl je anoniem
-      bent? Geef ze dan jouw persoonlijke <b>volg-ID</b> — daarmee zien zij wél je naam.
-      Deel het alleen met wie je vertrouwt.
-    </p>
-    <p style="margin:0">
-      <b>Jouw volg-ID:</b>
-      <code style="background:var(--grijs,#f4f6f8);padding:2px 8px;border-radius:6px;font-size:.9rem;user-select:all;word-break:break-all"><?= esc($pr['license_key']) ?></code>
-    </p>
-  </section>
+  <?php if ($isEigen): ?>
+  <dialog id="settings-modal" class="settings-modal">
+    <div class="sm-head">
+      <h2>⚙ Instellingen</h2>
+      <form method="dialog" class="sm-x"><button aria-label="Sluiten" title="Sluiten">&times;</button></form>
+    </div>
+    <div class="sm-body">
+      <h3>Privacy — publiek anoniem</h3>
+      <p>
+        Ben je publiek anoniem, dan wordt je naam (en club/woonplaats) op de publieke
+        pagina's vervangen door <b>“Anoniem”</b> — je startnummer blijft staan en je
+        gegevens blijven volledig behouden. Op de <b>wedstrijddag zelf</b> (dag ervoor
+        t/m dag erna) blijft je naam zichtbaar; dat is nodig voor de startlijst en tactiek.
+        In het permanente archief en het serie-klassement blijf je anoniem.
+      </p>
+      <p class="sm-status">
+        <b>Status:</b>
+        <?= $pubAnon ? '🕶 Je bent <b>publiek anoniem</b>.' : 'Je bent normaal met naam zichtbaar.' ?>
+      </p>
+      <form method="post" style="margin:0 0 18px">
+        <input type="hidden" name="csrf" value="<?= esc($CSRF) ?>">
+        <input type="hidden" name="actie" value="pubanon">
+        <input type="hidden" name="aan" value="<?= $pubAnon ? '0' : '1' ?>">
+        <button class="btn <?= $pubAnon ? 'btn-sec' : '' ?>">
+          <?= $pubAnon ? 'Anonimiteit opheffen' : 'Maak mij publiek anoniem' ?>
+        </button>
+      </form>
+      <h3>Jouw volg-ID</h3>
+      <p>
+        Wil je dat iemand (bv. je ouder of coach) je tóch kan volgen terwijl je anoniem
+        bent? Geef ze dan jouw persoonlijke volg-ID — daarmee zien zij wél je naam.
+        Deel het alleen met wie je vertrouwt.
+      </p>
+      <div class="volg-id">
+        <code id="volg-id-code"><?= esc($pr['license_key']) ?></code>
+        <button type="button" class="btn btn-sec" id="btn-copy-id" title="Kopieer">📋 Kopieer</button>
+      </div>
+    </div>
+  </dialog>
+  <script>
+  (function () {
+    const dlg = document.getElementById('settings-modal');
+    const openBtn = document.getElementById('btn-settings');
+    if (dlg && openBtn) {
+      openBtn.addEventListener('click', () => dlg.showModal());
+      // Klik op de achtergrond (buiten de inhoud) sluit de modal.
+      dlg.addEventListener('click', (e) => { if (e.target === dlg) dlg.close(); });
+    }
+    const copyBtn = document.getElementById('btn-copy-id');
+    if (copyBtn) {
+      copyBtn.addEventListener('click', async () => {
+        const code = document.getElementById('volg-id-code');
+        const txt = (code.textContent || '').trim();
+        try {
+          await navigator.clipboard.writeText(txt);
+          const orig = copyBtn.textContent;
+          copyBtn.textContent = '✓ Gekopieerd';
+          setTimeout(() => { copyBtn.textContent = orig; }, 1500);
+        } catch (e) {
+          // Fallback: selecteer de tekst zodat handmatig kopiëren makkelijk is.
+          const r = document.createRange(); r.selectNode(code);
+          const sel = window.getSelection(); sel.removeAllRanges(); sel.addRange(r);
+        }
+      });
+    }
+  })();
+  </script>
   <?php endif; ?>
 
   <section class="soon">
