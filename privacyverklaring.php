@@ -442,8 +442,7 @@ ze zijn verzameld:</p>
         verwijdering. Om de sportieve geschiedenis en klassementen intact te
         houden vervangen wij jouw naam en overige direct herleidbare gegevens
         door “Verwijderd” en <strong>wissen wij al je externe koppelingen</strong>
-        (je KNSB-licentie, en eventuele koppelingen met andere systemen waarmee
-        we in de toekomst ID's uitwisselen). De historische uitslagen blijven
+        (waaronder je KNSB-licentie). De historische uitslagen blijven
         daarna gekoppeld via een intern ID dat alleen in ons eigen systeem
         betekenis heeft; ook met een externe ledendatabase is het niet meer
         naar jou herleidbaar.</li>
@@ -855,9 +854,9 @@ for which it was collected:</p>
     <li><strong>Erasure / anonymisation</strong> — you may request erasure.
         To keep the sporting history and standings intact, we replace your
         name and other directly identifying data with “Removed” and
-        <strong>delete all your external links</strong> (your KNSB licence, and any
-        links with other systems we may exchange IDs with in the future). The
-        historical results then remain linked via an internal ID that only has
+        <strong>delete all your external links</strong> (including your KNSB
+        licence). The historical results then remain linked via an internal ID
+        that only has
         meaning within our own system; even with an external membership database
         this is no longer traceable to you.</li>
     <li><strong>Objection and restriction</strong> — you may object to the
