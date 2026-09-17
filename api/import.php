@@ -708,13 +708,15 @@ try {
     // bestaat, anders mint elke (her)import een nieuwe persoon = dubbele deelnemers.
     $stmtChkPid = $pdo->prepare("SELECT 1 FROM persons WHERE person_id = ? LIMIT 1");
 
-    // Anonimiteit (variant B): een bron die de rijder als anoniem markeert →
-    // publiek_anoniem ZETTEN (naam/gegevens blijven behouden). Signaal: KNSB
-    // lege licentie → synthetische sleutel '…_Anoniem' (systeem 'ic-anoniem'),
-    // of een expliciete is_anoniem-vlag (CSV/andere API). COALESCE bewaart een
-    // reeds gezette (audit-)datum; import HEFT NOOIT op — dat kan alleen de rijder
-    // zelf (Mijn InlineComp) of de organisatie (Beheer → Rijders). Zo blijft een
-    // rijder die ooit anoniem was dat óók als de bron later geen vlag meer stuurt.
+    // Anonimiteit (variant B) — TOEKOMST-HOOK. Als een bron een rijder expliciet
+    // als anoniem markeert (een 'is_anoniem'-vlag in de payload) → publiek_anoniem
+    // ZETTEN (naam/gegevens blijven behouden). Bedoeld voor een toekomstige
+    // KNSB/Vantage-API die de echte naam ÉN een anoniem-vlag levert: InlineComp
+    // respecteert die vlag dan. NB: de huidige KNSB-feed levert anonieme rijders
+    // al met de naam 'Anoniem' (lege licentie), dus daar is niets extra's nodig —
+    // we koppelen bewust NIET aan de lege-licentie-vorm om gewone rijders niet
+    // per ongeluk te maskeren. COALESCE bewaart een reeds gezette datum; import
+    // HEFT NOOIT op (alleen de rijder zelf via Mijn InlineComp of de organisatie).
     $stmtAnoniemZet = $pdo->prepare(
         "UPDATE persons SET publiek_anoniem = COALESCE(publiek_anoniem, NOW()) WHERE person_id = ?"
     );
@@ -765,8 +767,10 @@ try {
                 zorgVoorExternalId($pdo, $pid, $lk);   // externe id (KNSB/ic-*) borgen
             }
 
-            // Bron-signaal anoniem → vlag zetten (nooit wissen; zie boven).
-            if (systeemVoorLicentie($lk) === 'ic-anoniem' || !empty($c['is_anoniem'])) {
+            // Expliciete anoniem-vlag uit de bron → vlag zetten (nooit wissen).
+            // Vandaag nog niet gevuld door de KNSB-feed (die geeft 'Anoniem' als
+            // naam); klaar voor een toekomstige API met een echte anoniem-vlag.
+            if (!empty($c['is_anoniem'])) {
                 $stmtAnoniemZet->execute([$pid]);
             }
 
