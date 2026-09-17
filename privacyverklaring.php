@@ -436,8 +436,8 @@ ze zijn verzameld:</p>
     <li><strong>Rectificatie</strong> — onjuiste gegevens laten corrigeren.
         Let op: basisgegevens (naam, licentienummer, vereniging) komen van
         de KNSB; een correctie doen wij graag, maar je wordt gevraagd die
-        óók bij de KNSB door te voeren zodat hij bij volgende inschrijvingen
-        niet opnieuw verkeerd binnenkomt.</li>
+        óók bij de KNSB door te voeren zodat het gegeven bij volgende
+        inschrijvingen niet opnieuw verkeerd binnenkomt.</li>
     <li><strong>Verwijdering / anonimisering</strong> — je kunt vragen om
         verwijdering. Om de sportieve geschiedenis en klassementen intact te
         houden vervangen wij jouw naam en overige direct herleidbare gegevens
@@ -614,7 +614,7 @@ hold because the skater took part in competitions — <strong>no new information
     <li>an <strong>encrypted PIN</strong> (bcrypt hash) — we cannot read the PIN;</li>
     <li>the link to the skater's existing <strong>licence number</strong>.</li>
 </ul>
-<p>We store <strong>no e-mail address</strong> with the profile. A request is made via a form or
+<p>We store <strong>no e-mail address</strong> with the profile. A request is made via a form to
 the organisation. We keep your e-mail address only <strong>temporarily</strong> for this — until
 the request is approved or rejected — to send you an acknowledgement and (on approval) the
 activation link; after that we delete the e-mail address. It is not linked to the profile itself. The profile is <strong>private</strong>: it is visible only
