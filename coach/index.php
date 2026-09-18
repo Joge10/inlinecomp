@@ -14,6 +14,7 @@ header('Cache-Control: no-store, no-cache, must-revalidate, max-age=0');
 header('Pragma: no-cache');
 header('Expires: 0');
 require_once __DIR__ . '/../../config_inlinecomp.php';
+require_once __DIR__ . '/../inc/maintenance.php'; maintenanceGate($pdo);   // onderhoudsmodus
 require_once __DIR__ . '/../api/lib_coach_auth.php';
 require_once __DIR__ . '/../inc/versie.php';
 require_once __DIR__ . '/../inc/person_id.php';   // person_id-resolutie (fase 3d-iii)

@@ -257,6 +257,7 @@ function switchSysteemTab(tab) {
         rijders:    'rij-detail',
         uploads:    'up-container',
         helpers:    'hp-container',
+        onderhoud:  'onderhoud-container',
     };
     const cont = document.getElementById(containerMap[tab]);
     // "Echt geladen" = container bestaat én heeft content die niet meer
@@ -269,7 +270,7 @@ function switchSysteemTab(tab) {
     // openstaande profiel-aanvragen): die altijd opnieuw ophalen bij het openen,
     // niet uit cache serveren — anders verschijnt een net-aangemelde coach of een
     // net-binnengekomen profiel-aanvraag pas na een volledige refresh.
-    const altijdVerversen = new Set(['coach', 'rijders']);
+    const altijdVerversen = new Set(['coach', 'rijders', 'onderhoud']);
 
     if (altijdVerversen.has(tab) || !_sysTabGeladen.has(tab) || !echtGeladen) {
         _sysTabGeladen.add(tab);
@@ -278,7 +279,76 @@ function switchSysteemTab(tab) {
         if (tab === 'rijders')  toonRijdersPagina();
         if (tab === 'uploads')  toonUploadsPagina();
         if (tab === 'helpers')  toonHelpersPagina();
+        if (tab === 'onderhoud') toonOnderhoudPagina();
     }
+}
+
+// ── Systeem → Onderhoud (in-app maintenance mode) ─────────────────────────────
+async function toonOnderhoudPagina() {
+    const c = document.getElementById('onderhoud-container');
+    if (!c) return;
+    c.innerHTML = '<div class="status-msg loading"><span class="spinner"></span>Laden…</div>';
+    let st;
+    try {
+        const r = await fetch('api/maintenance.php');
+        st = await r.json();
+        if (!r.ok) throw new Error(st.error || 'Laden mislukt');
+    } catch (e) {
+        c.innerHTML = `<div class="status-msg" style="color:#c00">Kon status niet laden: ${escHtml(e.message)}</div>`;
+        return;
+    }
+    const aan     = st.mode === '1';
+    const bypass  = st.bypass || 'owner_admin';
+    const bericht = st.bericht || '';
+    const sinds   = st.sinds ? _updateMailFmtTijd(st.sinds) : '';
+
+    c.innerHTML = `
+        <div class="ond-status ${aan ? 'aan' : 'uit'}">
+            <strong>Status:</strong> ${aan
+                ? '🔴 Onderhoudsmodus is <b>AAN</b>' + (sinds ? ` — sinds ${escHtml(sinds)}` : '')
+                : '🟢 Site is normaal online'}
+        </div>
+        <div class="ond-veld">
+            <label class="ond-lbl">Wie mag er tijdens onderhoud nog in (bypass)?</label>
+            <label class="ond-radio"><input type="radio" name="ond-bypass" value="owner_admin" ${bypass !== 'owner' ? 'checked' : ''}> Owner + admin</label>
+            <label class="ond-radio"><input type="radio" name="ond-bypass" value="owner" ${bypass === 'owner' ? 'checked' : ''}> Alleen owner <span class="ond-hint">(voor het echt risicovolle werk)</span></label>
+        </div>
+        <div class="ond-veld">
+            <label class="ond-lbl" for="ond-bericht">Bericht op de onderhoudspagina (optioneel)</label>
+            <input type="text" id="ond-bericht" class="inp" maxlength="300" placeholder="Bijv. terug rond 15:00" value="${escHtml(bericht)}">
+        </div>
+        <div class="ond-acties">
+            ${aan
+                ? '<button class="btn-primary" id="ond-btn-uit">Onderhoud UITzetten</button>'
+                : '<button class="btn-primary" id="ond-btn-aan">Onderhoud AANzetten</button>'}
+            <button class="btn-secondary" id="ond-btn-opslaan">Instellingen opslaan</button>
+        </div>
+        <div class="ond-melding" id="ond-melding"></div>`;
+
+    const leesForm = () => ({
+        bypass:  document.querySelector('input[name="ond-bypass"]:checked')?.value || 'owner_admin',
+        bericht: document.getElementById('ond-bericht')?.value ?? '',
+    });
+    const bewaar = async (mode) => {
+        const meld = document.getElementById('ond-melding');
+        meld.textContent = 'Opslaan…';
+        try {
+            const f = leesForm();
+            const r = await fetch('api/maintenance.php', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ mode, bypass: f.bypass, bericht: f.bericht }),
+            });
+            const d = await r.json();
+            if (!r.ok || !d.ok) throw new Error(d.error || 'Opslaan mislukt');
+            toonOnderhoudPagina();   // herlaad met verse status
+        } catch (e) {
+            meld.innerHTML = `<span style="color:#c00">Fout: ${escHtml(e.message)}</span>`;
+        }
+    };
+    document.getElementById('ond-btn-aan')?.addEventListener('click', () => bewaar('1'));
+    document.getElementById('ond-btn-uit')?.addEventListener('click', () => bewaar('0'));
+    document.getElementById('ond-btn-opslaan')?.addEventListener('click', () => bewaar(aan ? '1' : '0'));
 }
 
 // ── Info-pagina vullen ────────────────────────────────────────────────────────

@@ -19,6 +19,7 @@ header('Cache-Control: no-store, no-cache, must-revalidate, max-age=0');
 header('Pragma: no-cache');
 header('Expires: 0');
 require_once __DIR__ . '/../../config_inlinecomp.php';
+require_once __DIR__ . '/../inc/maintenance.php'; maintenanceGate($pdo);   // onderhoudsmodus
 require_once __DIR__ . '/../inc/versie.php';   // één gedeeld versienummer voor heel InlineComp
 
 $action = $_GET['action'] ?? '';

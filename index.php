@@ -505,6 +505,7 @@ if (is_array($eigenScope) && !empty($eigenScope)) {
                         <button class="org-tab-btn" data-tab="rijders">Rijders</button>
                         <button class="org-tab-btn" data-tab="uploads">Uploads</button>
                         <button class="org-tab-btn" data-tab="helpers">Helpers</button>
+                        <button class="org-tab-btn" data-tab="onderhoud">Onderhoud</button>
                     </nav>
                 </div>
 
@@ -541,7 +542,7 @@ if (is_array($eigenScope) && !empty($eigenScope)) {
                     <div class="section-title">Rijderbeheer — persoonsgegevens &amp; wedstrijdhistorie</div>
                     <div class="rij-avg-info">
                         <strong>AVG-beheer.</strong> Hier kun je van rijders hun gegevens inzien, hun wedstrijdhistorie bekijken en — op verzoek — hun persoonsgegevens anonimiseren.
-                        Na anonimisatie blijft het <em>licentienummer</em> aan de wedstrijduitslagen gekoppeld, maar naam en overige gegevens zijn onomkeerbaar vervangen door <em>"Verwijderd"</em>/leeg.
+                        Na anonimisatie blijven de wedstrijduitslagen gekoppeld via een intern kenmerk, maar naam, licentie en overige gegevens zijn onomkeerbaar verwijderd (de naam wordt <em>"Verwijderd"</em>).
                     </div>
                     <div class="rij-layout">
                         <div class="rij-left">
@@ -596,6 +597,32 @@ if (is_array($eigenScope) && !empty($eigenScope)) {
                         <button class="btn-secondary" id="up-btn-refresh">&#8634; Vernieuw</button>
                     </div>
                     <div id="up-container">
+                        <div class="status-msg loading"><span class="spinner"></span>Laden…</div>
+                    </div>
+                </div>
+
+                <!-- Tab: Onderhoud (in-app maintenance mode) -->
+                <div class="org-tab-content" id="sys-tab-onderhoud" style="display:none">
+                    <div class="section-title">Onderhoudsmodus</div>
+                    <div class="up-info">
+                        Zet de publieke apps (Publiek, Coach, Check) tijdelijk op een onderhoudspagina.
+                        Jij blijft — afhankelijk van de gekozen toegang — gewoon inloggen en op productie
+                        testen. Vergeet 'm daarna weer uit te zetten. Voor een <strong>harde</strong> offline
+                        (bijv. tijdens het uploaden van bestanden) blijft de <code>.htaccess</code>-noodrem beschikbaar.
+                    </div>
+                    <style>
+                        #sys-tab-onderhoud .ond-status{padding:12px 14px;border-radius:8px;margin:0 0 18px;font-size:1rem}
+                        #sys-tab-onderhoud .ond-status.aan{background:#fdecea;border:1px solid #f5c6c0}
+                        #sys-tab-onderhoud .ond-status.uit{background:#eafaf1;border:1px solid #bfe6cf}
+                        #sys-tab-onderhoud .ond-veld{margin:0 0 16px;max-width:560px}
+                        #sys-tab-onderhoud .ond-lbl{display:block;font-weight:600;margin:0 0 6px}
+                        #sys-tab-onderhoud .ond-radio{display:block;margin:4px 0;cursor:pointer}
+                        #sys-tab-onderhoud .ond-hint{color:#777;font-size:.88rem}
+                        #sys-tab-onderhoud #ond-bericht{width:100%;max-width:560px}
+                        #sys-tab-onderhoud .ond-acties{display:flex;gap:10px;flex-wrap:wrap;margin:18px 0 0}
+                        #sys-tab-onderhoud .ond-melding{margin:12px 0 0;min-height:1.2em}
+                    </style>
+                    <div id="onderhoud-container">
                         <div class="status-msg loading"><span class="spinner"></span>Laden…</div>
                     </div>
                 </div>
