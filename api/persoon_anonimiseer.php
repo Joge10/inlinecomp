@@ -3,11 +3,11 @@
 //  InlineComp – persoon anonimiseren (AVG / recht op vergetelheid)
 //
 //  POST action=anonimiseer  { license_key }
-//      → vervangt naam/geboortejaar/woonplaats/sponsor/short_name
-//        door 'Verwijderd'/NULL en zet anonymized_at = NOW().
-//        De license_key blijft staan als pseudonieme FK — alle
-//        wedstrijdgeschiedenis (heats/results/klassement) blijft
-//        intact, maar toont voortaan "Verwijderd" i.p.v. naam.
+//      → vervangt naam/roepnaam/geboortejaar/woonplaats/sponsor(team)/
+//        club/startnummer door 'Verwijderd'/NULL en zet anonymized_at = NOW().
+//        Alleen categorie + de (naamloze) wedstrijdgeschiedenis blijven, via
+//        het interne person_id — alle externe koppelingen worden gewist.
+//        De uitslagen tonen voortaan "Verwijderd" i.p.v. naam.
 //
 //  POST action=undo         { license_key }
 //      → alleen beschikbaar zolang we de oorspronkelijke gegevens
@@ -93,8 +93,13 @@ try {
         // Pseudonimiseer: vervang alles wat direct herleidbaar is.
         // - full_name → 'Verwijderd'
         // - short_name, birth_year, city, sponsor → NULL
-        // - gender, category, club_* blijven staan; dat is statistiek,
-        //   zonder naam niet-herleidbaar.
+        // - club_code/short/full → NULL. De club is verreweg het meest
+        //   identificerende restveld: in combinatie met categorie + een
+        //   specifieke tijd kan een insider een rijder alsnog herleiden. Wissen
+        //   brengt de uitslag dichter bij echte anonimisering. (De uitslag
+        //   verliest daarmee wel de club-context; bewust geaccepteerd.)
+        // - gender, category blijven staan; categorie zonder club/naam is
+        //   statistiek en op zichzelf niet naar een persoon te herleiden.
         // - start_number → NULL (kan aan één wedstrijd gekoppeld zijn maar
         //   is combineerbaar met andere bronnen)
         // - publiek_anoniem / volg_token → NULL (een gewiste rijder is niet
@@ -106,6 +111,9 @@ try {
                 birth_year      = NULL,
                 city            = NULL,
                 sponsor         = NULL,
+                club_code       = NULL,
+                club_short      = NULL,
+                club_full       = NULL,
                 start_number    = NULL,
                 publiek_anoniem = NULL,
                 volg_token      = NULL,

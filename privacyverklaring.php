@@ -391,9 +391,10 @@ ze zijn verzameld:</p>
         meerjarenklassement.</li>
     <li><strong>Historische uitslagen</strong>: uitslagen en klasseringen
         bewaren wij onbeperkt als onderdeel van het sporthistorisch archief,
-        gekoppeld via een intern ID. Op verzoek anonimiseren wij de naam en
-        overige persoonsgegevens (inclusief de licentie-koppeling) zodat alleen
-        dat interne ID overblijft, dat alleen in ons eigen systeem betekenis heeft (zie §9).</li>
+        gekoppeld via een intern ID. Op verzoek verwijderen wij de naam en
+        overige persoonsgegevens (inclusief de licentie-koppeling), zodat alleen
+        het naamloze resultaat onder dat interne ID overblijft, dat alleen in ons
+        eigen systeem betekenis heeft (zie §9).</li>
     <li><strong>Login-gegevens van beheerders</strong>: zo lang het account
         actief is; uiterlijk 12 maanden na laatste login worden inactieve
         accounts verwijderd.</li>
@@ -440,12 +441,16 @@ ze zijn verzameld:</p>
         inschrijvingen niet opnieuw verkeerd binnenkomt.</li>
     <li><strong>Verwijdering / anonimisering</strong> — je kunt vragen om
         verwijdering. Om de sportieve geschiedenis en klassementen intact te
-        houden vervangen wij jouw naam en overige direct herleidbare gegevens
-        door “Verwijderd” en <strong>wissen wij al je externe koppelingen</strong>
-        (waaronder je KNSB-licentie). De historische uitslagen blijven
-        daarna gekoppeld via een intern ID dat alleen in ons eigen systeem
-        betekenis heeft; ook met een externe ledendatabase is het niet meer
-        naar jou herleidbaar.</li>
+        houden vervangen wij jouw naam door “Verwijderd” en <strong>wissen wij
+        je overige persoonsgegevens</strong> — geboortejaar, woonplaats,
+        club/team, sponsor en startnummer — <strong>plus al je externe
+        koppelingen</strong> (waaronder je KNSB-licentie). Wat overblijft is de
+        naamloze wedstrijduitslag (categorie en tijden), gekoppeld via een
+        intern ID dat alleen in ons eigen systeem betekenis heeft. Dit is strikt
+        genomen pseudonimisering: wij zorgen ervoor dat de resterende
+        sporttechnische gegevens redelijkerwijs niet meer tot jou als persoon
+        herleidbaar zijn, ook niet in combinatie met een externe
+        ledendatabase.</li>
     <li><strong>Bezwaar en beperking</strong> — je kunt bezwaar maken tegen
         de verwerking (inclusief de AI-verwerking uit §5b) of vragen om
         tijdelijke beperking. Wil je niet uit de uitslagen verdwijnen maar wél
@@ -805,9 +810,10 @@ for which it was collected:</p>
         and two calendar years thereafter, for season and multi-year standings.</li>
     <li><strong>Historical results</strong>: results and rankings are
         retained indefinitely as part of the sport-historical archive,
-        linked via an internal ID. On request we anonymise the name and other
-        personal data (including the licence link) so that only that internal ID
-        remains, which only has meaning within our own system (see §9).</li>
+        linked via an internal ID. On request we remove the name and other
+        personal data (including the licence link) so that only the nameless
+        result under that internal ID remains, which only has meaning within our
+        own system (see §9).</li>
     <li><strong>Administrator login data</strong>: as long as the account is
         active; inactive accounts are removed no later than 12 months after
         last login.</li>
@@ -853,12 +859,15 @@ for which it was collected:</p>
         registrations.</li>
     <li><strong>Erasure / anonymisation</strong> — you may request erasure.
         To keep the sporting history and standings intact, we replace your
-        name and other directly identifying data with “Removed” and
-        <strong>delete all your external links</strong> (including your KNSB
-        licence). The historical results then remain linked via an internal ID
-        that only has
-        meaning within our own system; even with an external membership database
-        this is no longer traceable to you.</li>
+        name with “Removed” and <strong>erase your other personal data</strong>
+        — year of birth, place of residence, club/team, sponsor and start
+        number — <strong>plus all your external links</strong> (including your
+        KNSB licence). What remains is the nameless competition result (category
+        and times), linked via an internal ID that only has meaning within our
+        own system. Strictly speaking this is pseudonymisation: we ensure that
+        the remaining sport-technical data can no longer reasonably be traced
+        back to you as an individual, not even in combination with an external
+        membership database.</li>
     <li><strong>Objection and restriction</strong> — you may object to the
         processing (including the AI processing in §5b) or request
         temporary restriction. If you don't want to disappear from the results
