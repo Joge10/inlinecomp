@@ -200,8 +200,8 @@ de onderliggende wedstrijduitslagen blijven dan bestaan als onderdeel van het sp
 archief (zie §7).</p>
 
 <h2>1e. Publiek anoniem tonen (optioneel)</h2>
-<p>Een rijder (of, bij jeugd, de ouder/verzorger) kan ervoor kiezen om <strong>publiek
-anoniem</strong> te zijn. Wij tonen dan op de openbare pagina's niet de naam, vereniging en
+<p>Een rijder kan ervoor kiezen <strong>publiek anoniem</strong> te zijn; bij jeugd regelt
+de ouder/verzorger dat. Wij tonen dan op de openbare pagina's niet de naam, vereniging en
 woonplaats maar <strong>“Anoniem”</strong>; het <strong>startnummer blijft</strong> zichtbaar,
 zodat de wedstrijd te volgen blijft. De gegevens zelf blijven bij ons bewaard — het is
 uitsluitend een <strong>weergave-keuze</strong> en volledig omkeerbaar.</p>
@@ -627,8 +627,8 @@ organisation; the underlying competition results remain as part of the sport-his
 (see §7).</p>
 
 <h2>1e. Showing as publicly anonymous (optional)</h2>
-<p>A skater (or, for youth, a parent/guardian) can choose to be <strong>publicly
-anonymous</strong>. On the public pages we then do not show the name, club and place of
+<p>A skater can choose to be <strong>publicly anonymous</strong>; for youth, the
+parent/guardian arranges this. On the public pages we then do not show the name, club and place of
 residence but <strong>“Anonymous”</strong>; the <strong>start number stays</strong> visible so
 the competition can still be followed. The data itself is retained — it is purely a
 <strong>display choice</strong> and fully reversible.</p>
