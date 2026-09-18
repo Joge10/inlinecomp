@@ -34,6 +34,15 @@ return [
         ],
     ],
     [
+        'versie' => 'H2160.18.09', 'datum' => '18-09-2026', 'onderdelen' => ['admin'],
+        'tekst' => [
+            'nl' => '🔑 <b>Eigen rijder-ID onder de motorkap</b> — InlineComp koppelt rijders en resultaten nu intern aan een <b>eigen, intern ID</b> in plaats van aan het KNSB-relatie-/licentienummer. Voor het dagelijks gebruik verandert er niets; wél is het privacy-vriendelijker (het KNSB-nummer is niet langer de sleutel) en het maakt functies als \'publiek anoniem\' en het persoonlijke volg-ID mogelijk. Bij het anonimiseren van een rijder wordt nu ook de licentie-koppeling gewist, zodat er alleen een intern kenmerk overblijft.',
+            'en' => '🔑 <b>Own rider ID under the hood</b> — InlineComp now links riders and results internally to its <b>own, internal ID</b> instead of the KNSB relation/licence number. Nothing changes for day-to-day use; it is more privacy-friendly (the KNSB number is no longer the key) and it makes features like \'publicly anonymous\' and the personal follow-ID possible. When a rider is anonymised, the licence link is now wiped too, leaving only an internal identifier.',
+            'de' => '🔑 <b>Eigene Fahrer-ID unter der Haube</b> — InlineComp verknüpft Fahrer und Ergebnisse jetzt intern mit einer <b>eigenen, internen ID</b> statt mit der KNSB-Beziehungs-/Lizenznummer. Für den täglichen Gebrauch ändert sich nichts; es ist datenschutzfreundlicher (die KNSB-Nummer ist nicht mehr der Schlüssel) und ermöglicht Funktionen wie \'öffentlich anonym\' und die persönliche Verfolgungs-ID. Beim Anonymisieren eines Fahrers wird jetzt auch die Lizenzverknüpfung gelöscht, sodass nur ein internes Kennzeichen bleibt.',
+            'fr' => '🔑 <b>Identifiant patineur propre, en coulisses</b> — InlineComp relie désormais les patineurs et les résultats en interne à un <b>identifiant propre et interne</b> au lieu du numéro de relation/licence KNSB. Rien ne change pour l\'usage quotidien ; c\'est plus respectueux de la vie privée (le numéro KNSB n\'est plus la clé) et cela rend possibles des fonctions comme « anonyme en public » et l\'ID de suivi personnel. Lors de l\'anonymisation d\'un patineur, le lien de licence est désormais aussi effacé, ne laissant qu\'un identifiant interne.',
+        ],
+    ],
+    [
         'versie' => 'H2160.18.09', 'datum' => '18-09-2026', 'onderdelen' => ['public', 'coach', 'admin'],
         'tekst' => [
             'nl' => '🏁 <b>Puntenkoers — punten bij een ronde-achterstand</b> — een rijder die door de koploper op een ronde is gezet, eindigt voortaan achter de rijders die in de ronde bleven: de behaalde punten <b>vervallen</b> voor het klassement. De punten blijven wél zichtbaar in de uitslag, met de vermelding <i>“vervallen”</i>, zodat te zien is dat ze zijn uitgedeeld.',
