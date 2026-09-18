@@ -388,6 +388,10 @@ function _updateMailStatusLaden() {
             if (d.al_gemaild && d.laatst) {
                 s += `<br><span class="update-mail-verstuurd">✓ Verstuurd voor ${d.laatst.versie} `
                    + `op ${_updateMailFmtTijd(d.laatst.tijdstip)} (${d.laatst.aantal} verstuurd)</span>`;
+                if (d.laatst.reden) {
+                    s += `<br><span class="update-mail-reden" style="color:#666">`
+                       + `Reden opnieuw versturen: ${escHtml(d.laatst.reden)}</span>`;
+                }
                 btn.textContent = '📧 Opnieuw versturen';
             } else {
                 btn.textContent = '📧 Beheerders informeren';
@@ -404,38 +408,97 @@ function _updateMailStatusLaden() {
 function _updateMailVerstuur() {
     const btn = document.getElementById('btn-update-mail');
     if (!btn || btn.disabled) return;
-    const versie     = btn.dataset.versie || '';
-    const alGemaild  = btn.dataset.alGemaild === '1';
-    const vraag = alGemaild
-        ? `Versie ${versie} is al gemaild. Wil je ÁLLE beheerders opnieuw mailen?`
-        : `Alle beheerders krijgen een mail over versie ${versie}. Versturen?`;
-    if (!confirm(vraag)) return;
+    const versie    = btn.dataset.versie || '';
+    const alGemaild = btn.dataset.alGemaild === '1';
 
-    const oud = btn.textContent;
-    btn.disabled = true;
-    btn.textContent = 'Versturen…';
-    fetch('api/update_mail.php', {
-        method: 'POST',
-        credentials: 'same-origin',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ action: 'verstuur', force: alGemaild }),
-    })
-        .then(r => r.json())
-        .then(d => {
-            if (d.ok) {
-                alert(`✓ ${d.aantal} van ${d.ontvangers} mails verstuurd.`);
-            } else if (d.al_gemaild) {
-                alert('Deze versie is al gemaild.');
-            } else {
-                alert(d.error || 'Versturen mislukt.');
-            }
-            _updateMailStatusLaden();
+    _updateMailBevestig(alGemaild, versie).then(reden => {
+        if (reden === null) return;   // geannuleerd
+
+        const oud = btn.textContent;
+        btn.disabled = true;
+        btn.textContent = 'Versturen…';
+        fetch('api/update_mail.php', {
+            method: 'POST',
+            credentials: 'same-origin',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ action: 'verstuur', force: alGemaild, reden }),
         })
-        .catch(() => {
-            alert('Versturen mislukt (netwerk).');
-            btn.disabled = false;
-            btn.textContent = oud;
-        });
+            .then(r => r.json())
+            .then(d => {
+                if (d.ok) {
+                    toonBevestigDialog(`✓ ${d.aantal} van ${d.ontvangers} mails verstuurd.`,
+                        'Verstuurd', 'OK', '');
+                } else if (d.al_gemaild) {
+                    toonBevestigDialog('Deze versie is al gemaild.', 'Al gemaild', 'OK', '');
+                } else {
+                    toonBevestigDialog(d.error || 'Versturen mislukt.', 'Mislukt', 'OK', '');
+                }
+                _updateMailStatusLaden();
+            })
+            .catch(() => {
+                toonBevestigDialog('Versturen mislukt (netwerk).', 'Mislukt', 'OK', '');
+                btn.disabled = false;
+                btn.textContent = oud;
+            });
+    });
+}
+
+// Bevestig-modal voor de update-mail. Bij 'opnieuw versturen' vraagt hij ook een
+// (optionele) reden, die meegestuurd + gelogd wordt en in de status verschijnt.
+// Resolvet met de reden-string ('' = geen/niet van toepassing) of null = annuleren.
+function _updateMailBevestig(alGemaild, versie) {
+    return new Promise(resolve => {
+        const overlay = document.createElement('div');
+        overlay.className = 'modal-overlay';
+        // Vaste shell zonder user-tekst in de HTML; dynamische tekst via textContent.
+        overlay.innerHTML = `
+            <div class="modal-dialog" role="dialog" aria-modal="true" style="max-width:440px">
+                <div class="modal-header">
+                    <span class="modal-icon">📧</span>
+                    <span class="modal-titel"></span>
+                </div>
+                <div class="modal-body">
+                    <p class="um-uitleg" style="margin:0 0 12px"></p>
+                    <label class="um-reden-wrap" style="display:none">
+                        <span style="font-size:.85rem;font-weight:600">Reden (optioneel)</span>
+                        <textarea id="um-reden" class="inp" rows="2" style="width:100%;margin-top:3px"
+                            placeholder="Bijv. eerste mail kwam in spam, of extra correctie toegevoegd"></textarea>
+                    </label>
+                </div>
+                <div class="modal-knoppen">
+                    <button class="modal-btn modal-annuleer">Annuleren</button>
+                    <button class="modal-btn modal-doorgaan"></button>
+                </div>
+            </div>`;
+
+        overlay.querySelector('.modal-titel').textContent =
+            alGemaild ? 'Beheerders opnieuw mailen' : 'Beheerders informeren';
+        overlay.querySelector('.um-uitleg').textContent = alGemaild
+            ? `Versie ${versie} is al eerder gemaild. Alle beheerders krijgen opnieuw een mail. `
+              + `Je kunt erbij vermelden waarom.`
+            : `Alle beheerders krijgen een mail over versie ${versie}.`;
+        overlay.querySelector('.modal-doorgaan').textContent =
+            alGemaild ? 'Opnieuw versturen' : 'Versturen';
+        if (alGemaild) overlay.querySelector('.um-reden-wrap').style.display = 'block';
+
+        document.body.appendChild(overlay);
+        const redenInp = overlay.querySelector('#um-reden');
+        if (alGemaild && redenInp) setTimeout(() => redenInp.focus(), 0);
+
+        const sluit = (resultaat) => {
+            overlay.remove();
+            document.removeEventListener('keydown', onKey);
+            resolve(resultaat);
+        };
+        // Geen Enter-bevestiging: het reden-veld is een textarea (Enter = nieuwe regel).
+        const onKey = e => { if (e.key === 'Escape') sluit(null); };
+
+        overlay.querySelector('.modal-annuleer').addEventListener('click', () => sluit(null));
+        overlay.querySelector('.modal-doorgaan').addEventListener('click',
+            () => sluit(redenInp ? redenInp.value.trim() : ''));
+        overlay.addEventListener('click', e => { if (e.target === overlay) sluit(null); });
+        document.addEventListener('keydown', onKey);
+    });
 }
 
 // ── Changelog-UI: filter op onderdeel + in/uitklapbare versies ───────────────
