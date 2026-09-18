@@ -39,6 +39,10 @@ Thumbs.db
 # Uploader-map: lokale test-CSVs / live MyLaps-output, niet committen
 uploader/
 
+# Wedstrijddata-map: lokale/live wedstrijdbestanden (o.a. jury-documenten),
+# server- en wedstrijd-specifiek, hoort niet in de repo.
+wedstrijdData/
+
 # Werkmap voor ad-hoc gegenereerde files (PDF-rapporten, debug-scripts)
 tmp/
 
