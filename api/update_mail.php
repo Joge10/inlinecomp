@@ -74,24 +74,24 @@ function huidigeVersieEntries(): array {
 }
 
 // ── Bouwt de platte-tekst mail-body (per ontvanger gepersonaliseerd) ────────
+// Elke wijziging wordt ÉÉN keer getoond (owners/admins zien toch alles), met een
+// label welke onderdelen het raakt — geen herhaling meer per onderdeel.
 function bouwMailBody(array $entries, string $naam): string {
     $ondLabel = ['admin' => 'Beheer', 'public' => 'Public', 'coach' => 'Coach', 'check' => 'Check'];
-    // Groepeer per onderdeel in vaste volgorde.
-    $perOnd = [];
-    foreach ($entries as $e) {
-        foreach ($e['onderdelen'] as $o) {
-            $perOnd[$o][] = trim(strip_tags(str_replace(['<br>', '<br/>', '<br />'], ' ', $e['tekst']['nl'] ?? '')));
-        }
-    }
 
     $r  = 'Hoi ' . ($naam !== '' ? $naam : 'beheerder') . ",\n\n";
     $r .= 'Er staat een nieuwe versie van InlineComp klaar: '
         . INLINECOMP_VERSIE . ' (' . INLINECOMP_VERSIE_DATUM . ").\n\n";
-    $r .= "Wat is er nieuw:\n";
-    foreach (['admin', 'public', 'coach', 'check'] as $o) {
-        if (empty($perOnd[$o])) continue;
-        $r .= "\n" . $ondLabel[$o] . ":\n";
-        foreach ($perOnd[$o] as $regel) $r .= '  - ' . $regel . "\n";
+    $r .= "Wat is er nieuw:\n\n";
+    foreach ($entries as $e) {
+        $tekst = trim(strip_tags(str_replace(['<br>', '<br/>', '<br />'], ' ', $e['tekst']['nl'] ?? '')));
+        if ($tekst === '') continue;
+        $tags = [];
+        foreach (['admin', 'public', 'coach', 'check'] as $o) {
+            if (in_array($o, $e['onderdelen'] ?? [], true)) $tags[] = $ondLabel[$o];
+        }
+        $label = $tags ? '[' . implode(' · ', $tags) . '] ' : '';
+        $r .= '  - ' . $label . $tekst . "\n";
     }
     $r .= "\nDe volledige changelog (alle onderdelen) staat altijd in InlineComp onder Info → Changelog.\n\n";
     $r .= 'Open InlineComp: ' . UPDATE_APP_URL . "\n\n";
