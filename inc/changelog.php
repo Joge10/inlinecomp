@@ -14,6 +14,53 @@
 //     en wordt in de changelog genest + gedempt getoond onder de versie.
 //     Triviale copy/typo-fixes komen NERGENS in de changelog — los committen.
 return [
+    // ── Release H2160.18.09 ────────────────────────────────────────────────
+    [
+        'versie' => 'H2160.18.09', 'datum' => '18-09-2026', 'onderdelen' => ['public', 'coach', 'check'],
+        'tekst' => [
+            'nl' => '🕶 <b>Publiek anoniem</b> — een rijder (of de ouder/verzorger) kan er nu zelf voor kiezen om niet met naam op de openbare pagina\'s te verschijnen. Naam, vereniging en woonplaats worden dan getoond als <b>“Anoniem”</b>; het startnummer blijft staan. Rond de wedstrijddag zelf blijft de naam zichtbaar voor de startlijst en tactiek. Je stelt het zelf in via <i>Mijn InlineComp</i>, of vraagt het aan de organisatie. Wil iemand je tóch volgen — bijvoorbeeld een ouder of coach — dan kan dat met je persoonlijke volg-ID.',
+            'en' => '🕶 <b>Publicly anonymous</b> — a skater (or their parent/guardian) can now choose not to appear by name on the public pages. Name, club and place of residence are then shown as <b>“Anonymous”</b>; the start number stays. Around the competition day itself the name stays visible for the start list and tactics. You set it yourself in <i>My InlineComp</i>, or ask the organisation. If someone still wants to follow you — a parent or coach, for instance — they can with your personal follow-ID.',
+            'de' => '🕶 <b>Öffentlich anonym</b> — ein Fahrer (oder die Eltern/Erziehungsberechtigten) kann jetzt selbst wählen, nicht mit Namen auf den öffentlichen Seiten zu erscheinen. Name, Verein und Wohnort werden dann als <b>„Anonym“</b> angezeigt; die Startnummer bleibt. Rund um den Wettkampftag bleibt der Name für Startliste und Taktik sichtbar. Du stellst es selbst in <i>Mein InlineComp</i> ein oder fragst die Organisation. Möchte dich jemand trotzdem verfolgen — etwa ein Elternteil oder Trainer — geht das mit deiner persönlichen Verfolgungs-ID.',
+            'fr' => '🕶 <b>Anonyme en public</b> — un patineur (ou son parent/tuteur) peut désormais choisir de ne pas apparaître avec son nom sur les pages publiques. Le nom, le club et le lieu de résidence sont alors affichés comme <b>« Anonyme »</b> ; le numéro de départ reste. Autour du jour de la compétition, le nom reste visible pour la liste de départ et la tactique. Vous le réglez vous-même dans <i>Mon InlineComp</i>, ou demandez à l\'organisation. Si quelqu\'un veut quand même vous suivre — un parent ou un coach, par exemple — c\'est possible avec votre ID de suivi personnel.',
+        ],
+    ],
+    [
+        'versie' => 'H2160.18.09', 'datum' => '18-09-2026', 'onderdelen' => ['admin'],
+        'tekst' => [
+            'nl' => '🕶 <b>Publiek anoniem — beheer</b> — in Systeem → Rijders kun je een rijder op verzoek publiek anoniem zetten (en weer terug); het rijder-detail toont de status en het deelbare volg-ID. Wat voorheen handmatig per wedstrijd kon (de naam op “Anoniem” zetten), regel je nu in één keer per rijder, en het blijft bij een volgende import behouden. Levert een import (CSV of API) zelf een anoniem-markering mee, dan nemen we die over.',
+            'en' => '🕶 <b>Publicly anonymous — management</b> — in System → Riders you can set a skater to publicly anonymous on request (and back again); the rider detail shows the status and the shareable follow-ID. What used to be done manually per competition (setting the name to “Anonymous”) is now arranged once per rider and is kept on the next import. If an import (CSV or API) carries an anonymous marker itself, we adopt it.',
+            'de' => '🕶 <b>Öffentlich anonym — Verwaltung</b> — unter System → Fahrer kannst du einen Fahrer auf Wunsch öffentlich anonym setzen (und wieder zurück); das Fahrerdetail zeigt den Status und die teilbare Verfolgungs-ID. Was früher manuell pro Wettkampf ging (den Namen auf „Anonym“ setzen), regelst du jetzt einmalig pro Fahrer, und es bleibt beim nächsten Import erhalten. Enthält ein Import (CSV oder API) selbst eine Anonym-Markierung, übernehmen wir sie.',
+            'fr' => '🕶 <b>Anonyme en public — gestion</b> — dans Système → Patineurs, vous pouvez rendre un patineur anonyme en public sur demande (et revenir en arrière) ; le détail du patineur affiche le statut et l\'ID de suivi partageable. Ce qui se faisait auparavant manuellement par compétition (mettre le nom sur « Anonyme ») se règle désormais une fois par patineur et est conservé lors de l\'import suivant. Si un import (CSV ou API) porte lui-même un marqueur anonyme, nous le reprenons.',
+        ],
+    ],
+    [
+        'versie' => 'H2160.18.09', 'datum' => '18-09-2026', 'onderdelen' => ['public', 'coach', 'admin'],
+        'tekst' => [
+            'nl' => '🏁 <b>Puntenkoers — punten bij een ronde-achterstand</b> — een rijder die door de koploper op een ronde is gezet, eindigt voortaan achter de rijders die in de ronde bleven: de behaalde punten <b>vervallen</b> voor het klassement. De punten blijven wél zichtbaar in de uitslag, met de vermelding <i>“vervallen”</i>, zodat te zien is dat ze zijn uitgedeeld.',
+            'en' => '🏁 <b>Points race — points with a lap down</b> — a skater who has been lapped by the leader now finishes behind the skaters who stayed on the lead lap: the points earned <b>lapse</b> for the standings. The points do stay visible in the result, marked <i>“lapsed”</i>, so it\'s clear they were awarded.',
+            'de' => '🏁 <b>Punktefahren — Punkte bei Rundenrückstand</b> — ein Fahrer, der vom Führenden überrundet wurde, wird jetzt hinter den Fahrern gewertet, die in der Runde blieben: die erzielten Punkte <b>verfallen</b> für die Wertung. Die Punkte bleiben im Ergebnis sichtbar, mit dem Hinweis <i>„verfallen“</i>, damit erkennbar ist, dass sie vergeben wurden.',
+            'fr' => '🏁 <b>Course aux points — points en cas de tour de retard</b> — un patineur pris un tour par le leader est désormais classé derrière les patineurs restés dans le tour : les points obtenus <b>sont annulés</b> pour le classement. Les points restent visibles dans le résultat, avec la mention <i>« annulés »</i>, afin qu\'on voie qu\'ils ont été attribués.',
+        ],
+    ],
+    [
+        'versie' => 'H2160.18.09', 'datum' => '18-09-2026', 'onderdelen' => ['admin'],
+        'tekst' => [
+            'nl' => '🛠️ <b>Onderhoudsmodus</b> — in Systeem → Onderhoud zet je met één schakelaar de publieke pagina\'s tijdelijk op een onderhoudsscherm, terwijl beheerders gewoon kunnen doorwerken en testen. Met een optioneel bericht (bijv. verwachte eindtijd) en een keuze wie er tijdens onderhoud nog toegang houdt.',
+            'en' => '🛠️ <b>Maintenance mode</b> — in System → Maintenance a single switch temporarily puts the public pages on a maintenance screen, while administrators keep working and testing. With an optional message (e.g. expected end time) and a choice of who retains access during maintenance.',
+            'de' => '🛠️ <b>Wartungsmodus</b> — unter System → Wartung schaltest du die öffentlichen Seiten mit einem Schalter vorübergehend auf einen Wartungsbildschirm, während Administratoren weiterarbeiten und testen können. Mit einer optionalen Nachricht (z. B. voraussichtliches Ende) und der Wahl, wer während der Wartung Zugang behält.',
+            'fr' => '🛠️ <b>Mode maintenance</b> — dans Système → Maintenance, un seul interrupteur place temporairement les pages publiques sur un écran de maintenance, tandis que les administrateurs continuent à travailler et à tester. Avec un message optionnel (p. ex. l\'heure de fin prévue) et le choix de qui conserve l\'accès pendant la maintenance.',
+        ],
+    ],
+    [
+        'versie' => 'H2160.18.09', 'datum' => '18-09-2026', 'onderdelen' => ['public', 'check'],
+        'tekst' => [
+            'nl' => '🔒 <b>Privacyverklaring bijgewerkt</b> — de verklaring beschrijft nu ook de optie <i>publiek anoniem</i> en heeft een aparte paragraaf over minderjarige deelnemers. Daarnaast is op een aantal punten de tekst verduidelijkt.',
+            'en' => '🔒 <b>Privacy statement updated</b> — the statement now also describes the <i>publicly anonymous</i> option and has a separate section on minor (under-age) participants. The wording has also been clarified in several places.',
+            'de' => '🔒 <b>Datenschutzerklärung aktualisiert</b> — die Erklärung beschreibt jetzt auch die Option <i>öffentlich anonym</i> und hat einen eigenen Abschnitt zu minderjährigen Teilnehmern. Außerdem wurde der Text an einigen Stellen verdeutlicht.',
+            'fr' => '🔒 <b>Déclaration de confidentialité mise à jour</b> — la déclaration décrit désormais aussi l\'option <i>anonyme en public</i> et comporte une section distincte sur les participants mineurs. Le texte a également été clarifié à plusieurs endroits.',
+        ],
+    ],
+
     // ── Release H1983.10.09 ────────────────────────────────────────────────
     [
         'versie' => 'H1983.10.09', 'datum' => '10-09-2026', 'onderdelen' => ['public', 'check'],
