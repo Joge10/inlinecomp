@@ -162,16 +162,34 @@ if (!function_exists('verbergAnoniemId')) {
 
 if (!function_exists('maskeerAnoniemeRij')) {
     /**
-     * Volledige maskering: naam → "Anoniem", club/woonplaats/sponsor gewist, en
-     * de identiteits-tokens gestript (zie verbergAnoniemId). Startnummer blijft
-     * staan. Zet 'is_anoniem' = true als hint voor de frontend. $velden overschrijft
-     * de default veldnamen (naam-set / te-wissen-set / ids-set) per endpoint.
+     * Volledige maskering: naam → "Anoniem", club/woonplaats/sponsor gewist, het
+     * STARTNUMMER vervangen door een marker (🕶), en de identiteits-tokens gestript
+     * (zie verbergAnoniemId). Zet 'is_anoniem' = true als hint voor de frontend.
+     *
+     * Waarom óók het startnummer: in NL is dat een meerjarige, vaste identifier
+     * (t/m junioren B hetzelfde nummer, vanaf junioren A opnieuw een vast nummer).
+     * Zichtbaar laten zou een anonieme rijder alsnog eenvoudig herleidbaar maken
+     * (bv. vooraf op nummer opzoeken of iemand meedoet). Daarom volgt het start-
+     * nummer exact hetzelfde regime als de naam: buiten het wedstrijdvenster (en in
+     * het permanente archief/serie-klassement) gemaskeerd — binnen het venster komt
+     * deze functie niet langs, dus dan blijft het gewoon zichtbaar.
+     *
+     * $velden overschrijft de default veldnamen (naam-/wis-/snr-/ids-set) en de
+     * startnummer-marker ('snr_masker') per endpoint.
      */
     function maskeerAnoniemeRij(array $row, array $velden = []): array {
         $naam = $velden['naam'] ?? ['full_name', 'short_name', 'naam', 'voornaam', 'achternaam'];
         $wis  = $velden['wis']  ?? ['club_full', 'club_short', 'club_code', 'sponsor', 'city', 'club', 'woonplaats', 'nationality'];
+        $snr  = $velden['snr']  ?? ['snr', 'start_number', 'startnummer', 'startnr', 'bib'];
+        $snrMasker = $velden['snr_masker'] ?? '🕶';
         foreach ($naam as $f) if (array_key_exists($f, $row)) $row[$f] = 'Anoniem';
         foreach ($wis  as $f) if (array_key_exists($f, $row)) $row[$f] = null;
+        // Alleen een écht startnummer vervangen (leeg/NULL laten we leeg).
+        foreach ($snr as $f) {
+            if (array_key_exists($f, $row) && $row[$f] !== null && $row[$f] !== '') {
+                $row[$f] = $snrMasker;
+            }
+        }
         $row = verbergAnoniemId($row, $velden);
         $row['is_anoniem'] = true;
         return $row;

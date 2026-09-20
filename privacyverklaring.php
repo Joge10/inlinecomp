@@ -85,9 +85,9 @@ staat hieronder — bij twijfel geldt die volledige tekst.</em></p>
         alleen een gebruikersnaam en een versleutelde pincode, geen e-mailadres; het
         profiel is niet openbaar.</li>
     <li>Als rijder kun je ervoor kiezen <strong>publiek anoniem</strong> te zijn: je
-        naam, vereniging en woonplaats worden op de openbare pagina's vervangen door
-        “Anoniem” (je startnummer blijft). Rond de wedstrijddag zelf is je naam wél
-        zichtbaar voor de start-indeling. Wie jou tóch wil volgen, kan dat met een
+        naam, vereniging, woonplaats én startnummer worden op de openbare pagina's
+        vervangen door “Anoniem”. Rond de wedstrijddag zelf zijn je naam en startnummer
+        wél zichtbaar voor de start-indeling. Wie jou tóch wil volgen, kan dat met een
         persoonlijk volg-ID dat je zelf deelt.</li>
     <li>Voor het digitaliseren van oude papieren uitslagen en voor het vertalen van
         mededelingen gebruiken we soms AI (Anthropic Claude, een Amerikaans bedrijf)
@@ -201,15 +201,16 @@ archief (zie §7).</p>
 
 <h2>1e. Publiek anoniem tonen (optioneel)</h2>
 <p>Een rijder kan ervoor kiezen <strong>publiek anoniem</strong> te zijn; bij jeugd regelt
-de ouder/verzorger dat. Wij tonen dan op de openbare pagina's niet de naam, vereniging en
-woonplaats maar <strong>“Anoniem”</strong>; het <strong>startnummer blijft</strong> zichtbaar,
-zodat de wedstrijd te volgen blijft. De gegevens zelf blijven bij ons bewaard — het is
-uitsluitend een <strong>weergave-keuze</strong> en volledig omkeerbaar.</p>
+de ouder/verzorger dat. Wij tonen dan op de openbare pagina's <strong>“Anoniem”</strong> in
+plaats van je naam, vereniging en woonplaats, en we verbergen ook je <strong>startnummer</strong>
+(dat is in Nederland meerjarig vast, dus zichtbaar laten zou je alsnog herleidbaar maken). De
+gegevens zelf blijven bij ons bewaard — het is uitsluitend een <strong>weergave-keuze</strong> en
+volledig omkeerbaar.</p>
 <ul>
     <li><strong>Rond de wedstrijddag</strong> (van de dag ervoor tot en met de dag erna) tonen
-        wij de naam wél, omdat de start- en heat-indeling dan operationeel nodig is. Daarbuiten,
-        en in het permanente uitslag- en serie-klassement-archief, blijf je anoniem. Je bent ook
-        <strong>niet op naam vindbaar</strong> in de publieke zoek.</li>
+        wij de naam <strong>en het startnummer</strong> wél, omdat de start- en heat-indeling dan
+        operationeel nodig is. Daarbuiten, en in het permanente uitslag- en serie-klassement-archief,
+        blijf je anoniem. Je bent ook <strong>niet op naam vindbaar</strong> in de publieke zoek.</li>
     <li><strong>Zelf instellen</strong>: via je persoonlijke profiel “Mijn InlineComp” (§1d), of
         — zonder profiel — door de organisatie te mailen; die zet de keuze voor je
         (en kan 'm op jouw verzoek weer opheffen).</li>
@@ -523,8 +524,8 @@ case of doubt, that full text applies.</em></p>
         review your own results privately. For this we store only a username and an
         encrypted PIN, no e-mail address; the profile is not public.</li>
     <li>As a skater you can choose to be <strong>publicly anonymous</strong>: your name,
-        club and place of residence are replaced by “Anonymous” on the public pages (your
-        start number stays). Around the competition day itself your name is shown for the
+        club, place of residence and start number are replaced by “Anonymous” on the public
+        pages. Around the competition day itself your name and start number are shown for the
         start list. Someone who still wants to follow you can do so with a personal
         follow-ID that you share yourself.</li>
     <li>For digitising old paper results and translating announcements, we sometimes use
@@ -633,15 +634,17 @@ organisation; the underlying competition results remain as part of the sport-his
 
 <h2>1e. Showing as publicly anonymous (optional)</h2>
 <p>A skater can choose to be <strong>publicly anonymous</strong>; for youth, the
-parent/guardian arranges this. On the public pages we then do not show the name, club and place of
-residence but <strong>“Anonymous”</strong>; the <strong>start number stays</strong> visible so
-the competition can still be followed. The data itself is retained — it is purely a
-<strong>display choice</strong> and fully reversible.</p>
+parent/guardian arranges this. On the public pages we then show <strong>“Anonymous”</strong>
+instead of the name, club and place of residence, and we also hide the <strong>start number</strong>
+(in the Netherlands it stays the same for years, so leaving it visible would still make you
+identifiable). The data itself is retained — it is purely a <strong>display choice</strong> and
+fully reversible.</p>
 <ul>
     <li><strong>Around the competition day</strong> (from the day before through the day after)
-        we do show the name, because the start and heat line-up is operationally needed then.
-        Outside that window, and in the permanent results and series-standings archive, you
-        remain anonymous. You are also <strong>not findable by name</strong> in the public search.</li>
+        we do show the name <strong>and start number</strong>, because the start and heat line-up is
+        operationally needed then. Outside that window, and in the permanent results and
+        series-standings archive, you remain anonymous. You are also <strong>not findable by
+        name</strong> in the public search.</li>
     <li><strong>Setting it yourself</strong>: via your personal “My InlineComp” profile (§1d), or
         — without a profile — by e-mailing the organisation, who set the choice for you
         (and can lift it again at your request).</li>
