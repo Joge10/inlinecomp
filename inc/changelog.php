@@ -70,15 +70,35 @@ return [
         ],
     ],
 
-    // ── Patch 20-09-2026 (onder H2160.18.09, AVG-onderhoud, alleen Beheer) ──
+    // ── Patches 20-09-2026 (onder H2160.18.09, AVG-onderhoud, alleen Beheer) ──
     [
         'versie' => 'H2160.18.09', 'datum' => '20-09-2026',
         'soort'  => 'patch', 'onderdelen' => ['patch'],
         'tekst' => [
-            'nl' => '🔒 <b>Anonimiteit (AVG) verder aangescherpt</b> — <b>Publiek anoniem:</b> buiten het wedstrijdvenster (dag ervoor t/m dag erna) verbergen we nu ook het <b>startnummer</b> — dat is in Nederland een meerjarig vast nummer, dus daarmee was een anonieme rijder alsnog te herleiden. <b>Anonimiseren</b> (onomkeerbaar) wist nu óók de <b>vereniging</b>, de <b>sponsor/team</b> en de <b>transponder-registraties</b> (naast naam, licentie en alle overige koppelingen); een transpondercode was via de MyLaps-historie anders alsnog aan een naam te herleiden. Omdat er daarna geen sleutel meer is om gegevens te herstellen, is anonimiseren nu écht definitief en is de knop \'anonimisatie ongedaan maken\' vervallen. In Systeem → Rijders kun je bovendien met een filter de <b>publiek anonieme</b> en <b>geanonimiseerde</b> rijders opvragen — handig om te controleren dat alle persoonsgegevens voor een rijder zijn gewist.',
-            'en' => '🔒 <b>Anonymity (GDPR) tightened further</b> — <b>Publicly anonymous:</b> outside the competition window (day before through day after) we now also hide the <b>start number</b> — in the Netherlands that is a fixed multi-year number, so an anonymous rider could otherwise still be identified. <b>Anonymisation</b> (irreversible) now also erases the <b>club</b>, the <b>sponsor/team</b> and the <b>transponder registrations</b> (in addition to name, licence and all other links); via the MyLaps history a transponder code could otherwise still be traced back to a name. As there is then no key left to restore data, anonymisation is now truly final and the \'undo anonymisation\' button has been removed. In System → Riders you can also filter the <b>publicly anonymous</b> and <b>anonymised</b> riders — handy to check that all personal data for a rider has been erased.',
-            'de' => '🔒 <b>Anonymität (DSGVO) weiter verschärft</b> — <b>Öffentlich anonym:</b> außerhalb des Wettkampffensters (Tag davor bis Tag danach) verbergen wir jetzt auch die <b>Startnummer</b> — in den Niederlanden ist das eine über Jahre feste Nummer, sodass ein anonymer Fahrer sonst doch identifizierbar wäre. <b>Anonymisieren</b> (unwiderruflich) löscht jetzt auch den <b>Verein</b>, den <b>Sponsor/das Team</b> und die <b>Transponder-Registrierungen</b> (zusätzlich zu Name, Lizenz und allen übrigen Verknüpfungen); über die MyLaps-Historie war ein Transpondercode sonst doch noch einem Namen zuzuordnen. Da danach kein Schlüssel mehr zum Wiederherstellen bleibt, ist die Anonymisierung jetzt wirklich endgültig und die Schaltfläche „Anonymisierung rückgängig machen" ist entfallen. Unter System → Fahrer kannst du zudem die <b>öffentlich anonymen</b> und <b>anonymisierten</b> Fahrer filtern — praktisch, um zu prüfen, dass alle personenbezogenen Daten eines Fahrers gelöscht sind.',
-            'fr' => '🔒 <b>Anonymat (RGPD) encore renforcé</b> — <b>Anonyme en public :</b> en dehors de la fenêtre de compétition (la veille au lendemain), nous masquons désormais aussi le <b>numéro de départ</b> — aux Pays-Bas, c\'est un numéro fixe sur plusieurs années, sinon un patineur anonyme pourrait encore être identifié. L\'<b>anonymisation</b> (irréversible) efface désormais aussi le <b>club</b>, le <b>sponsor/l\'équipe</b> et les <b>enregistrements de transpondeur</b> (en plus du nom, de la licence et de tous les autres liens) ; via l\'historique MyLaps, un code de transpondeur pouvait sinon encore être rattaché à un nom. Comme il ne reste ensuite aucune clé pour restaurer les données, l\'anonymisation est maintenant vraiment définitive et le bouton « annuler l\'anonymisation » a été supprimé. Dans Système → Patineurs, vous pouvez en outre filtrer les patineurs <b>anonymes en public</b> et <b>anonymisés</b> — pratique pour vérifier que toutes les données personnelles d\'un patineur ont été effacées.',
+            'nl' => '🕶 <b>Publiek anoniem — startnummer verborgen</b> — buiten het wedstrijdvenster (dag ervoor t/m dag erna) wordt nu ook het startnummer van een publiek anonieme rijder verborgen.',
+            'en' => '🕶 <b>Publicly anonymous — start number hidden</b> — outside the competition window (day before through day after) a publicly anonymous rider\'s start number is now hidden too.',
+            'de' => '🕶 <b>Öffentlich anonym — Startnummer verborgen</b> — außerhalb des Wettkampffensters (Tag davor bis Tag danach) wird jetzt auch die Startnummer eines öffentlich anonymen Fahrers verborgen.',
+            'fr' => '🕶 <b>Anonyme en public — numéro de départ masqué</b> — en dehors de la fenêtre de compétition (la veille au lendemain), le numéro de départ d\'un patineur anonyme en public est désormais également masqué.',
+        ],
+    ],
+    [
+        'versie' => 'H2160.18.09', 'datum' => '20-09-2026',
+        'soort'  => 'patch', 'onderdelen' => ['patch'],
+        'tekst' => [
+            'nl' => '🔒 <b>Anonimiseren (AVG) — meer gegevens gewist, onomkeerbaar</b> — bij het anonimiseren van een rijder worden nu ook de vereniging, de sponsor/team en de transponder-registraties gewist (naast naam, licentie en de overige koppelingen). Anonimiseren is definitief; de knop \'anonimisatie ongedaan maken\' is vervallen.',
+            'en' => '🔒 <b>Anonymisation (GDPR) — more data erased, irreversible</b> — when a rider is anonymised, the club, sponsor/team and transponder registrations are now erased too (in addition to name, licence and the other links). Anonymisation is final; the \'undo anonymisation\' button has been removed.',
+            'de' => '🔒 <b>Anonymisieren (DSGVO) — mehr Daten gelöscht, unwiderruflich</b> — beim Anonymisieren eines Fahrers werden jetzt auch der Verein, der Sponsor/das Team und die Transponder-Registrierungen gelöscht (zusätzlich zu Name, Lizenz und den übrigen Verknüpfungen). Anonymisieren ist endgültig; die Schaltfläche „Anonymisierung rückgängig machen" ist entfallen.',
+            'fr' => '🔒 <b>Anonymisation (RGPD) — plus de données effacées, irréversible</b> — lors de l\'anonymisation d\'un patineur, le club, le sponsor/l\'équipe et les enregistrements de transpondeur sont désormais aussi effacés (en plus du nom, de la licence et des autres liens). L\'anonymisation est définitive ; le bouton « annuler l\'anonymisation » a été supprimé.',
+        ],
+    ],
+    [
+        'versie' => 'H2160.18.09', 'datum' => '20-09-2026',
+        'soort'  => 'patch', 'onderdelen' => ['patch'],
+        'tekst' => [
+            'nl' => '🔎 <b>Rijders — filters publiek anoniem / geanonimiseerd</b> — in Systeem → Rijders kun je nu met een filter de publiek anonieme en de geanonimiseerde rijders opvragen.',
+            'en' => '🔎 <b>Riders — publicly anonymous / anonymised filters</b> — in System → Riders you can now filter for publicly anonymous and anonymised riders.',
+            'de' => '🔎 <b>Fahrer — Filter öffentlich anonym / anonymisiert</b> — unter System → Fahrer kannst du jetzt die öffentlich anonymen und die anonymisierten Fahrer filtern.',
+            'fr' => '🔎 <b>Patineurs — filtres anonyme en public / anonymisé</b> — dans Système → Patineurs, vous pouvez désormais filtrer les patineurs anonymes en public et anonymisés.',
         ],
     ],
 
