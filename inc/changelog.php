@@ -70,6 +70,18 @@ return [
         ],
     ],
 
+    // ── Patch 20-09-2026 (onder H2160.18.09, AVG-onderhoud, alleen Beheer) ──
+    [
+        'versie' => 'H2160.18.09', 'datum' => '20-09-2026',
+        'soort'  => 'patch', 'onderdelen' => ['patch'],
+        'tekst' => [
+            'nl' => '🔒 <b>Anonimiseren (AVG) verder aangescherpt</b> — bij het onomkeerbaar anonimiseren van een rijder wissen we nu óók de <b>vereniging</b>, de <b>sponsor/team</b> en de <b>transponder-registraties</b> (naast naam, licentie en alle overige koppelingen); een transpondercode was via de MyLaps-historie anders alsnog aan een naam te herleiden. Omdat er daarna geen sleutel meer is om gegevens te herstellen, is anonimiseren nu écht definitief en is de knop \'anonimisatie ongedaan maken\' vervallen. In Systeem → Rijders kun je bovendien met een filter de <b>publiek anonieme</b> en <b>geanonimiseerde</b> rijders opvragen — handig om te controleren dat alle persoonsgegevens voor een rijder zijn gewist.',
+            'en' => '🔒 <b>Anonymisation (GDPR) tightened further</b> — when a rider is irreversibly anonymised we now also erase the <b>club</b>, the <b>sponsor/team</b> and the <b>transponder registrations</b> (in addition to name, licence and all other links); via the MyLaps history a transponder code could otherwise still be traced back to a name. As there is then no key left to restore data, anonymisation is now truly final and the \'undo anonymisation\' button has been removed. In System → Riders you can also filter the <b>publicly anonymous</b> and <b>anonymised</b> riders — handy to check that all personal data for a rider has been erased.',
+            'de' => '🔒 <b>Anonymisierung (DSGVO) weiter verschärft</b> — beim unwiderruflichen Anonymisieren eines Fahrers löschen wir jetzt auch den <b>Verein</b>, den <b>Sponsor/das Team</b> und die <b>Transponder-Registrierungen</b> (zusätzlich zu Name, Lizenz und allen übrigen Verknüpfungen); über die MyLaps-Historie war ein Transpondercode sonst doch noch einem Namen zuzuordnen. Da danach kein Schlüssel mehr zum Wiederherstellen bleibt, ist die Anonymisierung jetzt wirklich endgültig und die Schaltfläche „Anonymisierung rückgängig machen" ist entfallen. Unter System → Fahrer kannst du zudem die <b>öffentlich anonymen</b> und <b>anonymisierten</b> Fahrer filtern — praktisch, um zu prüfen, dass alle personenbezogenen Daten eines Fahrers gelöscht sind.',
+            'fr' => '🔒 <b>Anonymisation (RGPD) encore renforcée</b> — lors de l\'anonymisation irréversible d\'un patineur, nous effaçons désormais aussi le <b>club</b>, le <b>sponsor/l\'équipe</b> et les <b>enregistrements de transpondeur</b> (en plus du nom, de la licence et de tous les autres liens) ; via l\'historique MyLaps, un code de transpondeur pouvait sinon encore être rattaché à un nom. Comme il ne reste ensuite aucune clé pour restaurer les données, l\'anonymisation est maintenant vraiment définitive et le bouton « annuler l\'anonymisation » a été supprimé. Dans Système → Patineurs, vous pouvez en outre filtrer les patineurs <b>anonymes en public</b> et <b>anonymisés</b> — pratique pour vérifier que toutes les données personnelles d\'un patineur ont été effacées.',
+        ],
+    ],
+
     // ── Release H1983.10.09 ────────────────────────────────────────────────
     [
         'versie' => 'H1983.10.09', 'datum' => '10-09-2026', 'onderdelen' => ['public', 'check'],
