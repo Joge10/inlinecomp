@@ -549,15 +549,21 @@ if (is_array($eigenScope) && !empty($eigenScope)) {
                             <div id="rij-aanvragen"></div>
                             <div class="rij-zoek-rij">
                                 <input type="text" id="rij-zoek-inp" class="inp" placeholder="Zoek op achternaam, startnummer of licentienummer…" autocomplete="off">
+                            </div>
+                            <div class="rij-filter-rij">
+                                <div class="rij-seg-group" role="group" aria-label="Filter rijders">
+                                    <button class="rij-seg-btn" id="rij-profielen-btn" title="Rijders met een 'Mijn InlineComp'-profiel of openstaande aanvraag (max 100)"><span class="rij-seg-ico">👤</span>Profielen</button>
+                                    <button class="rij-seg-btn" id="rij-pubanon-btn" title="Rijders die publiek anoniem staan (max 100)"><span class="rij-seg-ico">🕶</span>Publiek</button>
+                                    <button class="rij-seg-btn" id="rij-geanon-btn" title="Geanonimiseerde (AVG-gewiste) rijders — controleer of alle persoonsdata weg is (max 100)"><span class="rij-seg-ico">🗑</span>Gewist</button>
+                                </div>
                                 <button class="btn-secondary" id="rij-zoek-btn">Zoek</button>
-                                <button class="btn-secondary" id="rij-profielen-btn" title="Toon alle rijders met een 'Mijn InlineComp'-profiel of openstaande aanvraag (max 100)">👤 Profielen</button>
                             </div>
                             <div class="rij-zoek-hint">Zoekt gelijktijdig op startnummer, achternaam en naam. Licentienummer wordt meegenomen vanaf 4 tekens (overal in de licentie — ook de laatste 4 cijfers werken).</div>
                             <div id="rij-zoek-resultaat"></div>
                         </div>
                         <div class="rij-right">
                             <div id="rij-detail">
-                                <div class="status-msg" style="color:#666">Selecteer links een rijder voor de details.</div>
+                                <div class="status-msg rij-muted">Selecteer links een rijder voor de details.</div>
                             </div>
                         </div>
                     </div>

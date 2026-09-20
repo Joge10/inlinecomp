@@ -7,7 +7,7 @@
 // ==========================================================
 
 let _rijGeselecteerd = null;   // license_key van de rijder die rechts getoond wordt
-let _rijProfielModus = false;  // true = zoekveld filtert binnen "Mijn InlineComp"-profielen
+let _rijModus = '';            // '' = gewone zoek · 'profielen' · 'publiek_anoniem' · 'geanonimiseerd'
 
 function toonRijdersPagina() {
     // Zet event-listeners één keer (idempotent via flag op element)
@@ -25,11 +25,10 @@ function toonRijdersPagina() {
         inp.addEventListener('keydown', e => {
             if (e.key === 'Enter') { clearTimeout(timer); rijZoekActief(); }
         });
-        btn?.addEventListener('click', () => { rijZetProfielModus(false); rijZoek(); });
-        document.getElementById('rij-profielen-btn')?.addEventListener('click', () => {
-            rijZetProfielModus(true);
-            rijToonProfielen();
-        });
+        btn?.addEventListener('click', () => { rijZetModus(''); rijZoek(); });
+        document.getElementById('rij-profielen-btn')?.addEventListener('click', () => rijFilterKlik('profielen'));
+        document.getElementById('rij-pubanon-btn')?.addEventListener('click', () => rijFilterKlik('publiek_anoniem'));
+        document.getElementById('rij-geanon-btn')?.addEventListener('click', () => rijFilterKlik('geanonimiseerd'));
         inp.focus();
     } else {
         inp?.focus();
@@ -184,7 +183,7 @@ function rijAanvraagGoedkeuren(a) {
             resBox.innerHTML = '<ul class="rij-ag-lijst">' + rs.map(x =>
                 `<li data-lk="${escHtml(x.license_key)}" data-naam="${escHtml(x.full_name)}">
                     ${escHtml(x.full_name)}
-                    <span class="rij-ag-sub">${x.start_number ? 'Snr ' + escHtml(String(x.start_number)) + ' · ' : ''}${escHtml(x.category || '')}${x.club_short ? ' · ' + escHtml(x.club_short) : ''} · ${escHtml(x.relatienummer || 'geen KNSB-lid')}</span>
+                    <span class="rij-ag-sub">${x.start_number ? 'Snr ' + escHtml(String(x.start_number)) + ' · ' : ''}${escHtml(x.category || '')}${x.club_short ? ' · ' + escHtml(x.club_short) : ''} · ${escHtml(x.relatienummer || '—')}</span>
                 </li>`).join('') + '</ul>';
             resBox.querySelectorAll('li').forEach(li => li.addEventListener('click', () => {
                 gekozenLic = li.dataset.lk; gekozenNaam = li.dataset.naam;
@@ -267,22 +266,64 @@ function _rijToonAanvraagOk(d, naam) {
     };
 }
 
+// Segment-klik: nogmaals op het actieve segment = filter uit (terug naar vrij
+// zoeken); anders het gekozen filter activeren.
+function rijFilterKlik(modus) {
+    if (_rijModus === modus) {
+        rijZetModus('');
+        document.getElementById('rij-zoek-resultaat').innerHTML = '';
+        return;
+    }
+    rijZetModus(modus);
+    if (modus === 'profielen') rijToonProfielen();
+    else rijToonStatus(modus);
+}
+
 // Roep de juiste zoekfunctie aan afhankelijk van de actieve modus.
 function rijZoekActief() {
-    if (_rijProfielModus) rijToonProfielen();
+    if (_rijModus === 'profielen') rijToonProfielen();
+    else if (_rijModus === 'publiek_anoniem' || _rijModus === 'geanonimiseerd') rijToonStatus(_rijModus);
     else rijZoek();
 }
 
-// Zet de profielen-filtermodus aan/uit (knop-highlight + hint-tekst).
-function rijZetProfielModus(aan) {
-    _rijProfielModus = aan;
-    document.getElementById('rij-profielen-btn')?.classList.toggle('actief', aan);
+// Zet de actieve filtermodus (knop-highlight + hint-tekst).
+// modus: '' = gewone zoek · 'profielen' · 'publiek_anoniem' · 'geanonimiseerd'.
+function rijZetModus(modus) {
+    _rijModus = modus;
+    const knoppen = {
+        profielen:       'rij-profielen-btn',
+        publiek_anoniem: 'rij-pubanon-btn',
+        geanonimiseerd:  'rij-geanon-btn',
+    };
+    Object.entries(knoppen).forEach(([m, id]) => {
+        document.getElementById(id)?.classList.toggle('actief', m === modus);
+    });
     const hint = document.querySelector('.rij-zoek-hint');
     if (hint) {
-        if (aan && !hint.dataset.orig) hint.dataset.orig = hint.textContent;
-        hint.textContent = aan
-            ? 'Toont rijders met een profiel of openstaande aanvraag (max 100). Typ om te filteren op startnummer, achternaam, naam of licentie.'
-            : (hint.dataset.orig || hint.textContent);
+        if (!hint.dataset.orig) hint.dataset.orig = hint.textContent;
+        const hints = {
+            profielen:       'Toont rijders met een profiel of openstaande aanvraag (max 100). Typ om te filteren op startnummer, achternaam, naam of licentie.',
+            publiek_anoniem: 'Toont rijders die publiek anoniem staan (max 100). Typ om binnen de lijst te filteren.',
+            geanonimiseerd:  'Toont geanonimiseerde (AVG-gewiste) rijders (max 100). Klik een rijder om te controleren dat naam, club en overige persoonsdata weg zijn.',
+        };
+        hint.textContent = hints[modus] || hint.dataset.orig || hint.textContent;
+    }
+}
+
+// Toon rijders met een status-vlag (publiek anoniem of geanonimiseerd). Het
+// zoekveld filtert binnen de lijst (leeg = alle, max 100).
+async function rijToonStatus(status) {
+    const q = document.getElementById('rij-zoek-inp').value.trim();
+    const container = document.getElementById('rij-zoek-resultaat');
+    container.innerHTML = '<div class="status-msg loading"><span class="spinner"></span>Laden…</div>';
+    try {
+        const res = await fetch('api/persoon_beheer.php?action=zoek_status&status='
+            + encodeURIComponent(status) + '&q=' + encodeURIComponent(q));
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.error || 'Fout bij laden');
+        rijToonResultaten(data.rijders || [], status);
+    } catch (e) {
+        container.innerHTML = `<div class="status-msg error">${escHtml(e.message)}</div>`;
     }
 }
 
@@ -323,14 +364,23 @@ async function rijZoek() {
 
 function rijToonResultaten(rijders, soort = 'resultaat') {
     const container = document.getElementById('rij-zoek-resultaat');
-    const profielenLijst = soort === 'profiel';
+    const leegMsg = {
+        profiel:         'Nog geen rijders met een profiel.',
+        publiek_anoniem: 'Geen publiek anonieme rijders.',
+        geanonimiseerd:  'Geen geanonimiseerde rijders.',
+        resultaat:       'Geen rijders gevonden.',
+    };
+    const telWoord = {
+        profiel:         ['profiel', 'profielen'],
+        publiek_anoniem: ['rijder', 'rijders'],
+        geanonimiseerd:  ['rijder', 'rijders'],
+        resultaat:       ['resultaat', 'resultaten'],
+    };
     if (!rijders.length) {
-        const leeg = profielenLijst ? 'Nog geen rijders met een profiel.' : 'Geen rijders gevonden.';
-        container.innerHTML = `<div class="status-msg" style="color:#666">${leeg}</div>`;
+        container.innerHTML = `<div class="status-msg rij-muted">${leegMsg[soort] || leegMsg.resultaat}</div>`;
         return;
     }
-    const enkel = profielenLijst ? 'profiel' : 'resultaat';
-    const meerv = profielenLijst ? 'profielen' : 'resultaten';
+    const [enkel, meerv] = telWoord[soort] || telWoord.resultaat;
     let html = `<div class="rij-tel">${rijders.length} ${rijders.length !== 1 ? meerv : enkel}${rijders.length === 100 ? ' (max)' : ''}</div>`;
     html += '<ul class="rij-zoek-lijst">';
     rijders.forEach(r => {
@@ -351,7 +401,7 @@ function rijToonResultaten(rijders, soort = 'resultaat') {
             <div class="rij-zoek-meta">
                 ${r.start_number ? 'Snr <strong>' + r.start_number + '</strong> · ' : ''}
                 ${escHtml(r.category ?? '')}${r.category && r.club_short ? ' · ' : ''}${escHtml(r.club_short ?? '')}
-                · <span class="rij-zoek-lk">${escHtml(r.relatienummer || 'geen KNSB-lid')}</span>
+                · <span class="rij-zoek-lk">${escHtml(r.relatienummer || '—')}</span>
             </div>
         </li>`;
     });
@@ -411,12 +461,13 @@ function rijRenderDetail(data) {
     if (anoniem) {
         anonBlok = `<div class="rij-avg-anoniem">
             <strong>Geanonimiseerd</strong> op ${escHtml(r.anonymized_at)}.
-            Persoonsgegevens zijn onomkeerbaar gewist; alleen het licentienummer
-            is nog aan de wedstrijdgeschiedenis gekoppeld.
-            <div style="margin-top:.5rem">
-                <button class="btn-secondary" id="rij-anon-undo-btn">Anonimisatie-vlag opheffen</button>
-                <span class="rij-avg-hint">(gegevens komen pas terug na een nieuwe KNSB-import)</span>
-            </div>
+            Persoonsgegevens (naam, club, licentie, …) zijn <strong>onomkeerbaar
+            gewist</strong>; alleen een intern kenmerk (het InlineComp-ID) blijft
+            aan de naamloze wedstrijdgeschiedenis gekoppeld.
+            <span class="rij-avg-hint">Dit is definitief: er is geen koppeling meer
+            met de KNSB-licentie, dus de gegevens kunnen niet worden hersteld —
+            ook niet via een nieuwe import. Meldt de rijder zich later opnieuw aan,
+            dan komt die als een nieuw record binnen.</span>
         </div>`;
     } else {
         anonBlok = `<div class="rij-avg-actie">
@@ -547,7 +598,7 @@ function rijRenderDetail(data) {
         klHtml = '<h3>Geïmporteerde klassementen (PDF/serie)</h3>';
         for (const g of groepen.values()) {
             const titel = escHtml(g.naam) + (g.seizoen ? ` <span class="rij-loc">(${escHtml(g.seizoen)})</span>` : '');
-            const bron  = g.bron ? `<div class="rij-leeg" style="margin:.15rem 0 .35rem;font-size:.78rem">Bron: ${escHtml(g.bron)}</div>` : '';
+            const bron  = g.bron ? `<div class="rij-leeg rij-bronregel">Bron: ${escHtml(g.bron)}</div>` : '';
             klHtml += `<details class="rij-detail-details" open>
                 <summary>${titel} <span class="rij-loc">· ${g.items.length} positie${g.items.length === 1 ? '' : 's'}</span></summary>
                 ${bron}
@@ -595,7 +646,7 @@ function rijRenderDetail(data) {
     document.getElementById('rij-detail').innerHTML = `
         <div class="rij-detail-header">
             <h2>${escHtml(r.full_name)}${anoniem ? ' <span class="rij-anoniem-badge">geanonimiseerd</span>' : ''}</h2>
-            <div class="rij-detail-lk">Licentie: <strong>${escHtml(r.relatienummer || 'geen KNSB-lid')}</strong></div>
+            <div class="rij-detail-lk">Licentie: <strong>${escHtml(r.relatienummer || '—')}</strong></div>
         </div>
 
         ${anonBlok}
@@ -612,7 +663,7 @@ function rijRenderDetail(data) {
         <h3>Persoonsgegevens</h3>
         <div class="rij-detail-grid" id="rij-pers-grid">
             ${veld('InlineComp-ID', r.person_id)}
-            ${veld('Licentienummer', r.relatienummer || 'geen KNSB-lid')}
+            ${veld('Licentienummer', r.relatienummer || '—')}
             ${veld('Volledige naam', r.full_name)}
             ${veld('Achternaam (short_name)', r.short_name)}
             ${veld('Geslacht', geslacht)}
@@ -646,9 +697,8 @@ function rijRenderDetail(data) {
         ${klHtml}
     `;
 
-    // Anonimiseer-knop
+    // Anonimiseer-knop (onomkeerbaar; geen 'undo' meer — zie rij-avg-anoniem)
     document.getElementById('rij-anon-btn')?.addEventListener('click', () => rijAnonimiseer(r));
-    document.getElementById('rij-anon-undo-btn')?.addEventListener('click', () => rijAnonUndo(r));
 
     // Bewerken-knoppen (alleen voor niet-geanonimiseerde rijders)
     document.getElementById('rij-btn-bewerk')?.addEventListener('click',
@@ -1184,32 +1234,6 @@ async function rijAnonimiseer(rijder) {
         rijZoek();                            // ververs de lijst
     } catch (e) {
         toonBevestigDialog('Fout: ' + e.message, 'Anonimiseren', 'OK', '');
-    }
-}
-
-async function rijAnonUndo(rijder) {
-    const ok = await toonBevestigDialog(
-        `Anonimisatie-vlag opheffen voor ${rijder.relatienummer ? 'licentie ' + rijder.relatienummer : (rijder.full_name || 'deze rijder')}? ` +
-        `De gegevens zelf blijven leeg; alleen via een nieuwe KNSB-import komen ze terug.`,
-        'Anonimisatie opheffen'
-    );
-    if (!ok) return;
-    try {
-        const res = await fetch('api/persoon_anonimiseer.php', {
-            method:  'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body:    JSON.stringify({ action: 'undo', license_key: rijder.license_key }),
-        });
-        const data = await res.json();
-        if (!res.ok) throw new Error(data.error || 'Fout bij opheffen');
-        toonBevestigDialog(
-            data.message || 'Anonimisatie-vlag opgeheven.',
-            'Anonimisatie opheffen', 'OK', ''
-        );
-        rijToonDetail(rijder.license_key);
-        rijZoek();
-    } catch (e) {
-        toonBevestigDialog('Fout: ' + e.message, 'Anonimisatie opheffen', 'OK', '');
     }
 }
 

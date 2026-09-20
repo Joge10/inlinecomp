@@ -6,14 +6,13 @@
 //      → vervangt naam/roepnaam/geboortejaar/woonplaats/sponsor(team)/
 //        club/startnummer door 'Verwijderd'/NULL en zet anonymized_at = NOW().
 //        Alleen categorie + de (naamloze) wedstrijdgeschiedenis blijven, via
-//        het interne person_id — alle externe koppelingen worden gewist.
-//        De uitslagen tonen voortaan "Verwijderd" i.p.v. naam.
+//        het interne person_id — alle externe koppelingen én transponder-
+//        registraties (person_external_ids, organisatie_transponders,
+//        transponders) worden gewist. De uitslagen tonen "Verwijderd" i.p.v. naam.
 //
-//  POST action=undo         { license_key }
-//      → alleen beschikbaar zolang we de oorspronkelijke gegevens
-//        kunnen herstellen via een nieuwe KNSB-import. Deze endpoint
-//        zet anonymized_at weer op NULL en laat de velden zoals ze
-//        zijn; een herimport van de rijder vult ze dan opnieuw.
+//  (Bewust GEEN 'undo': anonimiseren is onomkeerbaar — de licentie- en overige
+//   koppelingen zijn gewist, dus er is geen sleutel om een her-import aan dit
+//   record te matchen. De bevestiging vooraf is de beveiliging.)
 //
 //  GET  action=lijst        → rijders die anoniem zijn (voor audit)
 //
@@ -146,6 +145,14 @@ try {
             WHERE person_id = ?
         ")->execute([$pid]);
 
+        // Óók: alle per-wedstrijd transponder-registraties van deze rijder wissen
+        // (`transponders`-tabel). Een transpondercode zelf is geen persoonsgegeven,
+        // maar via de MyLaps-historie is een code alsnog aan een naam te herleiden —
+        // dus de code↔person_id-koppeling verwijderen we. person_id is daar NOT NULL
+        // (deel van de unique+FK), dus nullen kan niet → rijen verwijderen. Raakt
+        // geen uitslagen (die hangen aan person_id, niet aan de transponder).
+        $pdo->prepare("DELETE FROM transponders WHERE person_id = ?")->execute([$pid]);
+
         // Log het ter verantwoording (welke admin, wanneer, welke rijder).
         // Geen naam in de log — die is nu juist weg. Alleen license_key + admin-id.
         if (function_exists('logboekSchrijf')) {
@@ -163,27 +170,10 @@ try {
         exit;
     }
 
-    if ($action === 'undo') {
-        // Hef de anonimisatie-vlag op. De gegevens én de licentie-koppeling zijn
-        // echter gewist; een nieuwe KNSB-import voegt de rijder opnieuw toe als
-        // een VERS record (nieuwe koppeling) — deze naamloze uitslag-historie
-        // blijft apart bestaan. Undo is dus vooral een 'per ongeluk gewist'-vangnet.
-        $stmt = $pdo->prepare("
-            UPDATE persons SET anonymized_at = NULL WHERE person_id = ?
-        ");
-        $stmt->execute([$pid]);
-
-        if (function_exists('logboekSchrijf')) {
-            logboekSchrijf($pdo, $_authUser['id'] ?? null,
-                'persoon_anonimiseer_undo', ['license_key' => $lk]);
-        }
-
-        echo json_encode([
-            'ok'      => true,
-            'message' => 'Anonimisatie-vlag opgeheven. De persoonsgegevens en licentie-koppeling zijn gewist; een nieuwe import voegt de rijder als vers record toe.',
-        ]);
-        exit;
-    }
+    // NB: er is bewust GEEN 'undo'-actie. Anonimiseren is onomkeerbaar (recht op
+    // vergetelheid): naam/club/licentie/transponders zijn gewist en er is geen
+    // sleutel meer om de rijder aan een her-import te koppelen. De beveiliging
+    // tegen 'verkeerde rijder' is de bevestigingsdialoog vóóraf, niet een undo.
 
     if ($action === 'publiek_anoniem_aan') {
         // Omkeerbare publieke anonimiteit AAN. COALESCE bewaart een reeds
