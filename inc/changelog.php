@@ -70,6 +70,18 @@ return [
         ],
     ],
 
+    // ── Patch 21-09-2026 (onder H2160.18.09, onderhoud, alleen Beheer) ──
+    [
+        'versie' => 'H2160.18.09', 'datum' => '21-09-2026',
+        'soort'  => 'patch', 'onderdelen' => ['patch'],
+        'tekst' => [
+            'nl' => '🔧 <b>Demo-wedstrijden lekken niet meer naar echte data</b> — een demo-/testwedstrijd telt niet langer mee voor persoonlijke records, het records-rapport of het rijder-profiel, en laat bij verwijderen geen uitslag-archief achter. Een bestaande rijder die je in een demo-wedstrijd zet, houdt bovendien zijn normale status (krijgt geen demo-markering meer).',
+            'en' => '🔧 <b>Demo competitions no longer leak into real data</b> — a demo/test competition no longer counts towards personal records, the records report or the rider profile, and leaves no results archive behind when deleted. An existing rider you add to a demo competition also keeps their normal status (no longer gets a demo marker).',
+            'de' => '🔧 <b>Demo-Wettkämpfe wirken nicht mehr auf echte Daten</b> — ein Demo-/Testwettkampf zählt nicht mehr für persönliche Rekorde, den Rekord-Bericht oder das Fahrerprofil und lässt beim Löschen kein Ergebnisarchiv zurück. Ein bestehender Fahrer, den du einem Demo-Wettkampf hinzufügst, behält zudem seinen normalen Status (erhält keine Demo-Markierung mehr).',
+            'fr' => '🔧 <b>Les compétitions démo ne contaminent plus les données réelles</b> — une compétition démo/test ne compte plus pour les records personnels, le rapport de records ou le profil du patineur, et ne laisse aucune archive de résultats lors de sa suppression. Un patineur existant que vous ajoutez à une compétition démo conserve en outre son statut normal (ne reçoit plus de marqueur démo).',
+        ],
+    ],
+
     // ── Patches 20-09-2026 (onder H2160.18.09, AVG-onderhoud, alleen Beheer) ──
     [
         'versie' => 'H2160.18.09', 'datum' => '20-09-2026',

@@ -73,6 +73,8 @@ function rijderProfielData(PDO $pdo, string $lic): array {
           JOIN persons p ON p.person_id = ua.person_id
           WHERE ua.rang IS NOT NULL
             AND ua.distance_naam NOT REGEXP 'stafette|flossing|elay'
+            AND NOT EXISTS (SELECT 1 FROM competitions c            -- demo-wedstrijden nooit in het profiel
+                            WHERE c.id = ua.competition_id AND c.is_demo = 1)
         )
         SELECT competition_id, competition_datum AS datum, categorie,
                competition_naam AS wedstrijd, distance_naam AS afstand,
@@ -105,6 +107,8 @@ function rijderProfielData(PDO $pdo, string $lic): array {
           WHERE he.person_id = ?
             AND r.tijd_ms IS NOT NULL AND r.tijd_ms > 0
             AND (r.sanctie IS NULL OR r.sanctie NOT IN ('DNS','DNF','DQ-TF','DQ-SF','DQ-DF'))
+            AND NOT EXISTS (SELECT 1 FROM competitions c            -- demo-wedstrijden nooit in het profiel
+                            WHERE c.id = h.competition_id AND c.is_demo = 1)
         )
         SELECT competition_id, afstand, meters, ronde, heat_naam, tijd_ms
         FROM ritten WHERE snelste = 1

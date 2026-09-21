@@ -112,6 +112,8 @@ WITH base AS (
             END
     WHERE COALESCE(res.bruto_tijd_ms, res.tijd_ms) > 0
       AND res.sanctie IS NULL
+      AND NOT EXISTS (SELECT 1 FROM competitions c
+                      WHERE c.id = h.competition_id AND c.is_demo = 1)  -- geen demo-records
       AND nr.type = '" . $recordType . "'
       " . ($compId ? "AND h.competition_id = ?" : "") . "
 ),

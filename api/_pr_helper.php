@@ -94,6 +94,7 @@ pr_source_results AS (
       AND res.sanctie IS NULL
       AND h.competition_id != ?
       AND c.starts < ?
+      AND c.is_demo = 0                      -- demo-wedstrijden tellen niet mee als PR-bron
       AND d.value_meters <= 1000
       AND COALESCE(d.race_type, 'sprint') NOT IN ('puntenkoers', 'afvalkoers')
 ),
@@ -118,6 +119,12 @@ pr_source_uitslag AS (
       AND LOWER(ua.distance_naam) NOT LIKE '%afval%'
       AND LOWER(ua.distance_naam) NOT LIKE '%elimination%'
       AND LOWER(ua.distance_naam) NOT LIKE '%eliminatie%'
+      -- demo-wedstrijden tellen niet mee als PR-bron. NOT EXISTS i.p.v. join:
+      -- uitslag_afstand wordt bewust bewaard ná een normale wedstrijd-delete, dus
+      -- een join zou legitieme wees-rijen laten vallen; dit sluit alleen nog-
+      -- bestaande demo's uit.
+      AND NOT EXISTS (SELECT 1 FROM competitions c
+                      WHERE c.id = ua.competition_id AND c.is_demo = 1)
 ),
 pr_combined AS (
     SELECT

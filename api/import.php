@@ -64,10 +64,21 @@ if ($_SERVER['REQUEST_METHOD'] === 'DELETE') {
     }
     $ookUitslag = !empty($_GET['uitslag']);
     try {
+        // Demo-wedstrijden mogen NOOIT een uitslag-archief achterlaten (dat zou
+        // als echte historie/PR-bron blijven meetellen), dus daar wissen we de
+        // uitslag altijd mee — ongeacht de &uitslag-vlag.
+        $isDemoDel = false;
+        try {
+            $ds = $pdo->prepare("SELECT is_demo FROM competitions WHERE id = ?");
+            $ds->execute([$delId]);
+            $isDemoDel = (bool)$ds->fetchColumn();
+        } catch (Throwable $e) { /* fail-soft: dan gedraagt 'ie zich als vanouds */ }
+
         // uitslag_afstand en uitslag_klassement hebben geen ON DELETE CASCADE:
         // ze worden standaard bewaard voor historische inzage en competitieklassement.
-        // Alleen als &uitslag=1 meegegeven wordt (bv. testwedstrijden) worden ze ook verwijderd.
-        if ($ookUitslag) {
+        // Alleen als &uitslag=1 meegegeven wordt (bv. testwedstrijden), of bij een
+        // demo-wedstrijd, worden ze ook verwijderd.
+        if ($ookUitslag || $isDemoDel) {
             $pdo->prepare("DELETE FROM uitslag_afstand    WHERE competition_id = ?")->execute([$delId]);
             $pdo->prepare("DELETE FROM uitslag_klassement WHERE competition_id = ?")->execute([$delId]);
         }
@@ -528,14 +539,15 @@ try {
     // --------------------------------------------------------
     // 3. Deelnemers verwerken vanuit beoordeelde POST-data
     // --------------------------------------------------------
-    // Demo-wedstrijd: markeer de persons als demo (extern=1, extern_federatie='DEMO')
-    // zodat ÓÓK later aan de fixture toegevoegde demo-rijders die vlag krijgen — en
-    // overal (bv. de pending-koppel-lijst) als demo herkend worden. Bij een her-
-    // import worden bestaande demo-persons zonder vlag hierdoor alsnog gemarkeerd
-    // (self-heal). Bij KNSB/handmatig blijft extern/extern_federatie ongemoeid.
-    $demoCols = $isDemo ? ', extern, extern_federatie'          : '';
-    $demoVals = $isDemo ? ", 1, 'DEMO'"                         : '';
-    $demoUpd  = $isDemo ? "extern = 1, extern_federatie = 'DEMO'," : '';
+    // Demo-wedstrijd: markeer ALLEEN NIEUW aangemaakte persons als demo
+    // (extern=1, extern_federatie='DEMO'). Bestaande persons worden BEWUST niet
+    // (her)gestempeld — een echte rijder die je even in een demo-wedstrijd hangt
+    // hoort géén DEMO-stempel te krijgen (anders verdwijnt-ie uit koppel-lijst/
+    // zoek en telt z'n demo-tijd mee als echte data). Daarom zit de stempel alleen
+    // in de INSERT-tak, niet in de UPDATE-takken. Bij KNSB/handmatig blijft
+    // extern/extern_federatie sowieso ongemoeid.
+    $demoCols = $isDemo ? ', extern, extern_federatie' : '';
+    $demoVals = $isDemo ? ", 1, 'DEMO'"                : '';
     $stmtPers = $pdo->prepare("
         INSERT INTO persons
                (person_id, full_name, short_name, gender, category,
@@ -563,7 +575,6 @@ try {
                club_full    = COALESCE(NULLIF(VALUES(club_full),  ''), club_full),
                sponsor      = COALESCE(NULLIF(VALUES(sponsor),    ''), sponsor),
                city         = COALESCE(NULLIF(VALUES(city),       ''), city),
-               {$demoUpd}
                updated_at   = CURRENT_TIMESTAMP
     ");
 
@@ -584,7 +595,6 @@ try {
                club_full    = COALESCE(NULLIF(:club_full,  ''), club_full),
                sponsor      = COALESCE(NULLIF(:sponsor,    ''), sponsor),
                city         = COALESCE(NULLIF(:city,       ''), city),
-               {$demoUpd}
                updated_at   = CURRENT_TIMESTAMP
         WHERE person_id = :pid
     ");
