@@ -70,6 +70,18 @@ return [
         ],
     ],
 
+    // ── Patch 21-09-2026 (onder H2160.18.09, AVG/privacy, alleen Beheer) ──
+    [
+        'versie' => 'H2160.18.09', 'datum' => '21-09-2026',
+        'soort'  => 'patch', 'onderdelen' => ['patch'],
+        'tekst' => [
+            'nl' => '🔒 <b>Privacyverklaring — statistiek/trendanalyse als doel benoemd</b> — §2 vermeldt nu expliciet dat wedstrijdgegevens ook worden gebruikt voor <b>geaggregeerde statistiek en trend-/kwaliteitsanalyse</b> (bijvoorbeeld deelname- en verloopcijfers over meerdere jaren). Hiervoor wordt niets extra verzameld en de uitkomsten zijn geanonimiseerd/geaggregeerd, zodat individuele rijders niet herleidbaar zijn.',
+            'en' => '🔒 <b>Privacy statement — statistics/trend analysis named as a purpose</b> — §2 now explicitly states that competition data is also used for <b>aggregated statistics and trend/quality analysis</b> (for example participation and retention figures across several years). Nothing extra is collected for this and the outcomes are anonymised/aggregated, so individual riders cannot be identified.',
+            'de' => '🔒 <b>Datenschutzerklärung — Statistik/Trendanalyse als Zweck benannt</b> — §2 nennt jetzt ausdrücklich, dass Wettkampfdaten auch für <b>aggregierte Statistik und Trend-/Qualitätsanalyse</b> verwendet werden (zum Beispiel Teilnahme- und Verlaufszahlen über mehrere Jahre). Dafür wird nichts zusätzlich erhoben, und die Ergebnisse sind anonymisiert/aggregiert, sodass einzelne Fahrer nicht identifizierbar sind.',
+            'fr' => '🔒 <b>Déclaration de confidentialité — statistiques/analyse de tendances mentionnées comme finalité</b> — le §2 indique désormais explicitement que les données de compétition sont aussi utilisées pour des <b>statistiques agrégées et une analyse de tendances/qualité</b> (par exemple les chiffres de participation et de rétention sur plusieurs années). Rien n\'est collecté en plus pour cela et les résultats sont anonymisés/agrégés, de sorte que les patineurs individuels ne sont pas identifiables.',
+        ],
+    ],
+
     // ── Patch 21-09-2026 (onder H2160.18.09, onderhoud, alleen Beheer) ──
     [
         'versie' => 'H2160.18.09', 'datum' => '21-09-2026',

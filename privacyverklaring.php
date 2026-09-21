@@ -255,6 +255,11 @@ bescherming toe (overweging 38 AVG). Wij houden daar op de volgende manier reken
         als overkoepelende bond.</li>
     <li>Het bewaren van een historisch uitslagoverzicht voor deelnemers,
         verenigingen en de bond.</li>
+    <li>Het uitvoeren van <strong>geaggregeerde statistiek en trend-/kwaliteitsanalyse</strong>
+        voor de sport en de wedstrijdorganisatie (bijvoorbeeld deelname- en verloopcijfers
+        over meerdere jaren). Dit gebeurt op basis van gegevens die wij al voor bovenstaande
+        doelen verwerken — wij verzamelen hiervoor niets extra — en de uitkomsten zijn
+        geanonimiseerd/geaggregeerd, zodat individuele rijders daaruit niet herleidbaar zijn.</li>
 </ul>
 
 <h2>3. Grondslag</h2>
@@ -687,6 +692,11 @@ protection (recital 38 GDPR). We take this into account as follows:</p>
     <li>To contribute to competition organisation within the context of the KNSB as governing body.</li>
     <li>To maintain a historical results archive for participants, clubs
         and the federation.</li>
+    <li>To perform <strong>aggregated statistics and trend/quality analysis</strong> for the
+        sport and the competition organisation (for example participation and retention figures
+        across several years). This uses data we already process for the purposes above — we do
+        not collect anything extra for it — and the outcomes are anonymised/aggregated so that
+        individual skaters cannot be identified from them.</li>
 </ul>
 
 <h2>3. Legal basis</h2>
