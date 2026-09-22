@@ -329,8 +329,6 @@ a{color:var(--accent)}
   background:rgba(255,255,255,.16);border:1px solid rgba(255,255,255,.32);color:#fff;
   border-radius:999px;padding:6px 13px 6px 10px;font-size:.8rem;font-weight:600;cursor:pointer;line-height:1;white-space:nowrap}
 .hero-gear:hover{background:rgba(255,255,255,.28)}
-.hero-gear:disabled,.hero-gear.is-demo{opacity:.5;cursor:default}
-.hero-gear:disabled:hover{background:rgba(255,255,255,.14)}
 .hero-gear svg{display:block;color:var(--oranje)}   /* subtiele InlineComp-oranje merk-accent op de cog */
 .chip.chip-anon{background:rgba(255,255,255,.22);border-color:rgba(255,255,255,.3)}
 dialog.settings-modal{border:0;border-radius:16px;padding:0;max-width:440px;width:calc(100% - 32px);
@@ -515,7 +513,7 @@ table.pr tbody tr:last-child td{border-bottom:0}
     <div class="hero-top">
       <div class="eyebrow">Mijn InlineComp</div>
       <?php if ($isEigen || $demo): ?>
-      <button type="button" class="hero-gear<?= $demo ? ' is-demo' : '' ?>" id="btn-settings" <?= $demo ? 'disabled aria-disabled="true" title="Voorbeeld — in je eigen profiel stel je dit zelf in"' : 'title="Instellingen"' ?>>
+      <button type="button" class="hero-gear" id="btn-settings" title="<?= $demo ? 'Voorbeeld — zo stel je dit in je eigen profiel in' : 'Instellingen' ?>">
         <svg viewBox="0 0 24 24" width="18" height="18" fill="currentColor" aria-hidden="true"><path d="M19.14 12.94c.04-.31.06-.63.06-.94s-.02-.63-.06-.94l2.03-1.58a.5.5 0 0 0 .12-.64l-1.92-3.32a.5.5 0 0 0-.6-.22l-2.39.96a7.03 7.03 0 0 0-1.62-.94l-.36-2.54A.5.5 0 0 0 13.9 2h-3.8a.5.5 0 0 0-.5.42l-.36 2.54c-.59.24-1.13.56-1.62.94l-2.39-.96a.5.5 0 0 0-.6.22L2.31 8.48a.5.5 0 0 0 .12.64l2.03 1.58c-.04.31-.06.63-.06.94s.02.63.06.94l-2.03 1.58a.5.5 0 0 0-.12.64l1.92 3.32c.13.24.41.34.66.22l2.39-.96c.5.38 1.03.7 1.62.94l.36 2.54c.05.24.25.42.5.42h3.8c.25 0 .46-.18.5-.42l.36-2.54c.59-.24 1.13-.56 1.62-.94l2.39.96c.25.12.53.02.66-.22l1.92-3.32a.5.5 0 0 0-.12-.64l-2.05-1.58zM12 15.5a3.5 3.5 0 1 1 0-7 3.5 3.5 0 0 1 0 7z"/></svg>
         <span>Instellingen</span>
       </button>
@@ -754,14 +752,30 @@ table.pr tbody tr:last-child td{border-bottom:0}
   <?php endif; ?>
 
   <?php if ($demo): ?>
-  <section class="card">
-    <h2 style="margin:0 0 3px;font-size:1.18rem;font-weight:700">Instellingen · Privacy <span class="chip">voorbeeld</span></h2>
-    <p style="margin:0 0 10px;color:var(--muted);font-size:.9rem">Zo ziet de privacy-instelling in je eigen profiel eruit — in deze demo alleen ter illustratie (niet actief).</p>
-    <h3 style="margin:0 0 4px;font-size:1rem">Publiek anoniem</h3>
-    <p style="margin:0 0 10px">Ben je publiek anoniem, dan wordt je naam (en club/woonplaats) op de publieke pagina's vervangen door <b>&ldquo;Anoniem&rdquo;</b> — je startnummer wordt buiten de wedstrijddagen verborgen en je gegevens blijven volledig behouden. Van de dag vóór tot en met de dag ná de wedstrijd wordt je naam wél getoond; daarbuiten en in het serie-klassement blijf je anoniem.</p>
-    <label class="toggle-row" style="opacity:.55;cursor:default"><input type="checkbox" disabled> <span>Publiek anoniem</span></label>
-    <p class="note" style="margin:10px 0 0">In je eigen profiel (na inloggen met naam + pincode) zet je dit zelf aan of uit. Je krijgt daar ook een deelbaar <b>volg-ID</b>, waarmee bijvoorbeeld je ouder of coach je tóch op naam kan volgen.</p>
-  </section>
+  <dialog id="settings-modal-demo" class="settings-modal">
+    <div class="sm-head">
+      <h2>⚙ Instellingen <span class="chip">voorbeeld</span></h2>
+      <form method="dialog" class="sm-x"><button aria-label="Sluiten" title="Sluiten">&times;</button></form>
+    </div>
+    <div class="sm-body">
+      <p class="note" style="margin:0 0 14px">Dit is een <b>voorbeeld</b>. In je eigen profiel (na inloggen met naam + pincode) kun je dit echt instellen.</p>
+      <h3>Privacy — publiek anoniem</h3>
+      <p>Ben je publiek anoniem, dan wordt je naam (en club/woonplaats) op de publieke pagina's vervangen door <b>&ldquo;Anoniem&rdquo;</b> — je startnummer wordt buiten de wedstrijddagen verborgen en je gegevens blijven volledig behouden. Van de dag vóór tot en met de dag ná de wedstrijd wordt je naam wél getoond; daarbuiten en in het serie-klassement blijf je anoniem.</p>
+      <label class="toggle-row" style="opacity:.6;cursor:default"><input type="checkbox" disabled> <span>Publiek anoniem</span></label>
+      <h3>Jouw volg-ID</h3>
+      <p>Je krijgt een deelbaar volg-ID waarmee bijvoorbeeld je ouder of coach je tóch op naam kan volgen terwijl je anoniem bent.</p>
+    </div>
+  </dialog>
+  <script>
+  (function () {
+    var g = document.getElementById('btn-settings');
+    var d = document.getElementById('settings-modal-demo');
+    if (g && d) {
+      g.addEventListener('click', function () { if (d.showModal) d.showModal(); });
+      d.addEventListener('click', function (e) { if (e.target === d) d.close(); });
+    }
+  })();
+  </script>
   <?php endif; ?>
 
   <section class="soon">
