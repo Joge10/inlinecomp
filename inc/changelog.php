@@ -70,6 +70,18 @@ return [
         ],
     ],
 
+    // ── Patch 23-09-2026 (onder H2160.18.09, performance /public, alleen Beheer) ──
+    [
+        'versie' => 'H2160.18.09', 'datum' => '23-09-2026',
+        'soort'  => 'patch', 'onderdelen' => ['patch'],
+        'tekst' => [
+            'nl' => '🔧 <b>Snellere publieke pagina\'s</b> — de <i>Programma</i>-weergave op /public laadt merkbaar sneller, doordat de browser vaker een compacte "niets veranderd"-controle bij de server doet in plaats van elke keer de volledige lijst op te halen. Bij een drukke wedstrijd scheelt dat een aanzienlijk deel van de serverbelasting. Ook is de onderliggende database-opdracht efficiënter gemaakt.',
+            'en' => '🔧 <b>Faster public pages</b> — the <i>Programme</i> view on /public loads noticeably faster: the browser now more often does a compact "nothing changed" check with the server instead of fetching the full list every time. During a busy competition this saves a significant part of the server load. The underlying database query has also been made more efficient.',
+            'de' => '🔧 <b>Schnellere öffentliche Seiten</b> — die <i>Programm</i>-Ansicht auf /public lädt spürbar schneller: der Browser führt jetzt häufiger eine kompakte „nichts geändert“-Prüfung beim Server durch, statt jedes Mal die vollständige Liste zu holen. Bei einem stark besuchten Wettkampf spart das einen erheblichen Teil der Serverlast. Auch die zugrundeliegende Datenbankabfrage wurde effizienter gemacht.',
+            'fr' => '🔧 <b>Pages publiques plus rapides</b> — la vue <i>Programme</i> sur /public se charge nettement plus vite : le navigateur effectue plus souvent une vérification compacte « rien de nouveau » auprès du serveur au lieu de récupérer la liste complète à chaque fois. Lors d\'une compétition très suivie, cela réduit sensiblement la charge du serveur. La requête sous-jacente vers la base de données a également été rendue plus efficace.',
+        ],
+    ],
+
     // ── Patch 23-09-2026 (onder H2160.18.09, AVG/privacy, alleen Beheer) ──
     [
         'versie' => 'H2160.18.09', 'datum' => '23-09-2026',

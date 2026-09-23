@@ -8,7 +8,7 @@
 //  toch waardeloos.
 // ============================================================
 
-const SW_VERSIE = 'public-2026.08.08.001';
+const SW_VERSIE = 'public-2026.09.23.001';
 
 self.addEventListener('install', () => {
     self.skipWaiting();
@@ -24,7 +24,19 @@ self.addEventListener('activate', event => {
 self.addEventListener('fetch', event => {
     if (event.request.method !== 'GET') return;
     if (new URL(event.request.url).origin !== self.location.origin) return;
-    event.respondWith(fetch(event.request, { cache: 'no-store' }));
+
+    // HTML-pageloads (navigations) blijven pure-network-only met no-store —
+    // dat was de oorspronkelijke aanleiding voor deze SW (voorkomt stale
+    // HTML na app-updates; PHP zet zelf ook al no-cache-headers op de HTML).
+    //
+    // Alle andere requests (JSON-API calls zoals ?action=programma, images,
+    // JS, CSS) laten we NIET meer forceren naar no-store. Zonder respondWith
+    // handelt de browser ze default af en honoreert daardoor de server-side
+    // Cache-Control + ETag + Last-Modified — wat de 304-revalidatie mogelijk
+    // maakt. Was hiervoor stuk omdat no-store elke If-None-Match onderdrukt.
+    if (event.request.mode === 'navigate') {
+        event.respondWith(fetch(event.request, { cache: 'no-store' }));
+    }
 });
 
 // ── Web Push (Fase 3) ────────────────────────────────────────────────
