@@ -71,19 +71,24 @@ if (!function_exists('zorgVoorVolgToken')) {
      */
     function zorgVoorVolgToken(PDO $pdo, string $pid): ?string {
         if ($pid === '') return null;
-        $sel = $pdo->prepare("SELECT volg_token FROM persons WHERE person_id = ?");
+        $sel = $pdo->prepare("SELECT volg_token, anonymized_at, publiek_anoniem FROM persons WHERE person_id = ?");
         $sel->execute([$pid]);
-        $tok = $sel->fetchColumn();
-        if ($tok) return (string)$tok;
+        $row = $sel->fetch(PDO::FETCH_ASSOC);
+        if (!$row) return null;
+        // Het volg-ID heeft alléén betekenis voor een publiek-anonieme rijder
+        // (dan kan een vertrouwde volger via de geheime ID tóch de naam zien).
+        // Voor een normaal-zichtbare of gewiste rijder: niet tonen én niet minten.
+        if ($row['anonymized_at'] !== null || $row['publiek_anoniem'] === null) return null;
+        if ($row['volg_token']) return (string)$row['volg_token'];
         for ($i = 0; $i < 3; $i++) {
             try {
                 $new = bin2hex(random_bytes(16));   // 32 hex
-                $upd = $pdo->prepare("UPDATE persons SET volg_token = ? WHERE person_id = ? AND volg_token IS NULL");
+                $upd = $pdo->prepare("UPDATE persons SET volg_token = ? WHERE person_id = ? AND volg_token IS NULL AND anonymized_at IS NULL AND publiek_anoniem IS NOT NULL");
                 $upd->execute([$new, $pid]);
             } catch (Throwable $e) { /* unieke botsing → opnieuw */ }
             $sel->execute([$pid]);
-            $tok = $sel->fetchColumn();
-            if ($tok) return (string)$tok;
+            $row = $sel->fetch(PDO::FETCH_ASSOC);
+            if ($row && $row['volg_token']) return (string)$row['volg_token'];
         }
         return null;
     }

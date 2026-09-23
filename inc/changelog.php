@@ -70,6 +70,18 @@ return [
         ],
     ],
 
+    // ── Patch 23-09-2026 (onder H2160.18.09, AVG/privacy, alleen Beheer) ──
+    [
+        'versie' => 'H2160.18.09', 'datum' => '23-09-2026',
+        'soort'  => 'patch', 'onderdelen' => ['patch'],
+        'tekst' => [
+            'nl' => '🔒 <b>Anonimiseren & publiek anoniem — privacy aangescherpt</b> — bij het anonimiseren van een rijder worden nu ook de <b>nationaliteit</b> en het persoonlijke <b>volg-ID</b> gewist. En het volg-ID bestaat voortaan uitsluitend zolang een rijder <b>publiek anoniem</b> is: zet je dat uit, dan vervalt het ID; zet je het later opnieuw aan, dan krijg je bewust een nieuw ID (eerdere volgers zijn dan afgesneden).',
+            'en' => '🔒 <b>Anonymisation & publicly anonymous — privacy tightened</b> — anonymising a rider now also erases the <b>nationality</b> and the personal <b>follow-ID</b>. And the follow-ID now exists only while a rider is <b>publicly anonymous</b>: turning that off clears the ID; turning it back on later deliberately yields a new ID (earlier followers are then cut off).',
+            'de' => '🔒 <b>Anonymisieren & öffentlich anonym — Datenschutz verschärft</b> — beim Anonymisieren eines Fahrers werden jetzt auch die <b>Nationalität</b> und die persönliche <b>Verfolgungs-ID</b> gelöscht. Und die Verfolgungs-ID besteht künftig nur, solange ein Fahrer <b>öffentlich anonym</b> ist: schaltest du das aus, verfällt die ID; schaltest du es später wieder ein, erhältst du bewusst eine neue ID (frühere Verfolger sind dann abgeschnitten).',
+            'fr' => '🔒 <b>Anonymisation & anonyme en public — confidentialité renforcée</b> — l\'anonymisation d\'un patineur efface désormais aussi la <b>nationalité</b> et l\'<b>ID de suivi</b> personnel. Et l\'ID de suivi n\'existe désormais que tant qu\'un patineur est <b>anonyme en public</b> : le désactiver supprime l\'ID ; le réactiver plus tard produit délibérément un nouvel ID (les suiveurs précédents sont alors coupés).',
+        ],
+    ],
+
     // ── Patch 21-09-2026 (onder H2160.18.09, AVG/privacy, alleen Beheer) ──
     [
         'versie' => 'H2160.18.09', 'datum' => '21-09-2026',

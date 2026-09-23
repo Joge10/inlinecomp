@@ -3,9 +3,10 @@
 //  InlineComp – persoon anonimiseren (AVG / recht op vergetelheid)
 //
 //  POST action=anonimiseer  { license_key }
-//      → vervangt naam/roepnaam/geboortejaar/woonplaats/sponsor(team)/
-//        club/startnummer door 'Verwijderd'/NULL en zet anonymized_at = NOW().
-//        Alleen categorie + de (naamloze) wedstrijdgeschiedenis blijven, via
+//      → vervangt naam/roepnaam/geboortejaar/woonplaats/nationaliteit/
+//        sponsor(team)/club/startnummer/volg-ID door 'Verwijderd'/NULL en zet
+//        anonymized_at = NOW().
+//        Alleen geslacht + categorie + de (naamloze) wedstrijdgeschiedenis blijven, via
 //        het interne person_id — alle externe koppelingen én transponder-
 //        registraties (person_external_ids, organisatie_transponders,
 //        transponders) worden gewist. De uitslagen tonen "Verwijderd" i.p.v. naam.
@@ -101,6 +102,8 @@ try {
         //   statistiek en op zichzelf niet naar een persoon te herleiden.
         // - start_number → NULL (kan aan één wedstrijd gekoppeld zijn maar
         //   is combineerbaar met andere bronnen)
+        // - nationality → NULL (op zichzelf grof, maar combineerbaar met
+        //   andere bronnen → hoort bij een volledige wis)
         // - publiek_anoniem / volg_token → NULL (een gewiste rijder is niet
         //   meer 'publiek anoniem' of volgbaar; die vlaggen horen niet te blijven)
         $stmt = $pdo->prepare("
@@ -114,6 +117,7 @@ try {
                 club_short      = NULL,
                 club_full       = NULL,
                 start_number    = NULL,
+                nationality     = NULL,
                 publiek_anoniem = NULL,
                 volg_token      = NULL,
                 anonymized_at   = NOW()
@@ -192,8 +196,10 @@ try {
     }
 
     if ($action === 'publiek_anoniem_uit') {
-        // Omkeerbare publieke anonimiteit UIT (data was nooit weg).
-        $pdo->prepare("UPDATE persons SET publiek_anoniem = NULL WHERE person_id = ?")
+        // Omkeerbare publieke anonimiteit UIT (data was nooit weg). Het volg-ID
+        // heeft alleen betekenis bij anonimiteit → mee wissen; weer aanzetten
+        // levert bewust een vers ID op (oude volgers zijn dan afgesneden).
+        $pdo->prepare("UPDATE persons SET publiek_anoniem = NULL, volg_token = NULL WHERE person_id = ?")
             ->execute([$pid]);
         if (function_exists('logboekSchrijf')) {
             logboekSchrijf($pdo, $_authUser['id'] ?? null,

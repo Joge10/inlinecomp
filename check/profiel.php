@@ -63,18 +63,22 @@ if ($actie === 'logout') {
 if ($actie === 'pubanon' && !empty($_SESSION['rijder_lic'])) {
     $pid = $_SESSION['rijder_lic'];
     $aan = !empty($body['aan']);
+    $tok = null;
     if ($aan) {
         $pdo->prepare("UPDATE persons SET publiek_anoniem = COALESCE(publiek_anoniem, NOW()) WHERE person_id = ?")
             ->execute([$pid]);
+        $tok = zorgVoorVolgToken($pdo, $pid);   // mint nu publiek_anoniem aan staat
     } else {
-        $pdo->prepare("UPDATE persons SET publiek_anoniem = NULL WHERE person_id = ?")
+        // Anonimiteit UIT → volg-ID vervalt: weer aanzetten geeft bewust een vers
+        // ID (je hoeft niet te onthouden of het ooit aanstond of wie het had).
+        $pdo->prepare("UPDATE persons SET publiek_anoniem = NULL, volg_token = NULL WHERE person_id = ?")
             ->execute([$pid]);
     }
     // AJAX (vinkje in de instellingen-modal) → JSON terug, geen herlaad; anders
     // de klassieke redirect (no-JS fallback).
     if (!empty($body['ajax'])) {
         header('Content-Type: application/json; charset=utf-8');
-        echo json_encode(['ok' => true, 'anoniem' => $aan]);
+        echo json_encode(['ok' => true, 'anoniem' => $aan, 'volg_token' => $tok]);
         exit;
     }
     header('Location: profiel.php'); exit;
@@ -599,6 +603,7 @@ table.pr tbody tr:last-child td{border-bottom:0}
       <p class="sm-status" id="anon-status" style="margin:0 0 18px">
         <?= $pubAnon ? '🕶 Je bent <b>publiek anoniem</b>.' : 'Je bent normaal met naam zichtbaar.' ?>
       </p>
+      <div id="volg-blok"<?= $pubAnon ? '' : ' hidden' ?>>
       <h3>Jouw volg-ID</h3>
       <p>
         Wil je dat iemand (bv. je ouder of coach) je tóch kan volgen terwijl je anoniem
@@ -616,6 +621,7 @@ table.pr tbody tr:last-child td{border-bottom:0}
         Vernieuwen maakt je oude volg-ID ongeldig en snijdt <b>iedereen</b> die je nu volgt af —
         ook mensen aan wie je het eerder gaf. Deel daarna het nieuwe volg-ID opnieuw.
       </p>
+      </div>
     </div>
   </dialog>
 
@@ -680,7 +686,7 @@ table.pr tbody tr:last-child td{border-bottom:0}
     // de wijziging is meteen doorgevoerd. Hero-chip + status live bijwerken.
     const CSRF = <?= json_encode($CSRF) ?>;
     const chk = document.getElementById('chk-anon');
-    function updateAnonUI(anon) {
+    function updateAnonUI(anon, token) {
       const st = document.getElementById('anon-status');
       if (st) st.innerHTML = anon ? '🕶 Je bent <b>publiek anoniem</b>.' : 'Je bent normaal met naam zichtbaar.';
       let chip = document.getElementById('hero-anon-chip');
@@ -695,6 +701,11 @@ table.pr tbody tr:last-child td{border-bottom:0}
       } else if (!anon && chip) {
         chip.remove();
       }
+      // Volg-ID-blok hoort alleen bij anonimiteit: live tonen/verbergen, en het
+      // verse token invullen zodra anonimiteit net is aangezet.
+      const blok = document.getElementById('volg-blok');
+      if (blok) blok.hidden = !anon;
+      if (anon && token) { const c = document.getElementById('volg-id-code'); if (c) c.textContent = token; }
     }
     if (chk) {
       chk.addEventListener('change', async () => {
@@ -707,7 +718,7 @@ table.pr tbody tr:last-child td{border-bottom:0}
           });
           const data = await res.json();
           if (!data || !data.ok) throw new Error('opslaan mislukt');
-          updateAnonUI(!!data.anoniem);
+          updateAnonUI(!!data.anoniem, data.volg_token);
         } catch (e) {
           chk.checked = !chk.checked;   // terugdraaien bij fout
           await _bevestig('Kon de instelling niet opslaan. Probeer het opnieuw.', { alleenOk: true });
