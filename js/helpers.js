@@ -736,9 +736,8 @@ function _hpHistRenderPreview(data) {
             statusCls = heeftWaarschuwing ? 'hp-hist-st-warn' : 'hp-hist-st-ok';
             const icon = heeftWaarschuwing ? '⚠' : '✓';
             const p = r.match_person || {};
-            const jaar = p.birth_year ? ` ${p.birth_year}` : '';
             const cat  = p.category   ? ` ${p.category}`   : '';
-            statusHtml = `${icon} ${escHtml(p.full_name || '?')}<small>${escHtml(jaar + cat)}</small>`;
+            statusHtml = `${icon} ${escHtml(p.full_name || '?')}<small>${escHtml(cat)}</small>`;
             if (heeftWaarschuwing) {
                 statusHtml += `<small class="hp-hist-warn-txt">${escHtml(r.match_warning)}</small>`;
             }
@@ -828,7 +827,7 @@ function _hpHistRenderPreview(data) {
         const opts = ['<option value="">— ⚡ pending aanmaken —</option>'];
         for (const k of kandidaten) {
             const sel = k.license_key === r.person_license ? ' selected' : '';
-            const extra = [k.birth_year, k.category, k.club_short].filter(Boolean).join(' · ');
+            const extra = [k.category, k.club_short].filter(Boolean).join(' · ');
             const lbl = `${k.full_name}${extra ? ' (' + extra + ')' : ''}`;
             opts.push(`<option value="${escHtml(k.license_key)}"${sel}>${escHtml(lbl)}</option>`);
         }
@@ -2406,7 +2405,6 @@ async function _hpClusterCheckZoekFix(prob, idx, compId) {
                 <div class="hp-cc-kand">
                     <span>
                         <b>${escHtml(k.full_name)}</b>
-                        ${k.birth_year ? `(${k.birth_year})` : ''}
                         <span style="font-size:.85em;color:#555">
                             · ${escHtml(k.category ?? '?')} · #${k.start_number ?? '?'}
                             · ${escHtml(k.club || '—')}
@@ -2717,7 +2715,7 @@ function _hpPendingRender() {
             ? `<div class="hp-pending-sugg">
                   <div class="hp-pending-sugg-titel">Suggesties uit DB:</div>
                   ${p.suggesties.map(s => {
-                      const meta = [s.birth_year, s.category, s.club_short].filter(Boolean).join(' · ');
+                      const meta = [s.category, s.club_short].filter(Boolean).join(' · ');
                       const redenCls = s.reden && s.reden.startsWith('✓') ? 'hp-pending-reden-ok'
                                      : s.reden && s.reden.startsWith('?') ? 'hp-pending-reden-onbekend'
                                      : '';
@@ -2959,7 +2957,7 @@ async function _hpPendingZoek(inp) {
                     <span class="hp-pending-sugg-icoon">${tgtIcoon}</span>
                     ${escHtml(p.full_name)}
                     <span class="hp-pending-sugg-meta">
-                        ${[p.birth_year, p.category, p.club_short, p.license_key].filter(Boolean).join(' · ')}
+                        ${[p.category, p.club_short, p.license_key].filter(Boolean).join(' · ')}
                     </span>
                 </button>`;
             }).join('');

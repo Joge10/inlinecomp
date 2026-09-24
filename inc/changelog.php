@@ -70,6 +70,18 @@ return [
         ],
     ],
 
+    // ── Patch 24-09-2026 (onder H2160.18.09, AVG/privacy, alleen Beheer) ──
+    [
+        'versie' => 'H2160.18.09', 'datum' => '24-09-2026',
+        'soort'  => 'patch', 'onderdelen' => ['patch'],
+        'tekst' => [
+            'nl' => '🔒 <b>Geboortejaar volledig verwijderd</b> — het (in de praktijk vrijwel altijd lege) geboortejaar-veld is helemaal uit InlineComp gehaald: uit de rijder-administratie, de import, de coach- en jury-modules en het check-meldformulier. InlineComp bewaart daarmee <b>geen geboortejaar meer</b>. De leeftijdsinschatting die nodig is om historische uitslagen aan de juiste rijder te koppelen, gebeurt voortaan volledig uit de KNSB-categorie.',
+            'en' => '🔒 <b>Year of birth fully removed</b> — the (in practice almost always empty) year-of-birth field has been removed from InlineComp entirely: from the rider administration, the import, the coach and jury modules and the check report form. InlineComp therefore <b>no longer stores a year of birth</b>. The age estimate needed to link historical results to the right rider now comes entirely from the KNSB category.',
+            'de' => '🔒 <b>Geburtsjahr vollständig entfernt</b> — das (in der Praxis fast immer leere) Geburtsjahr-Feld wurde komplett aus InlineComp entfernt: aus der Fahrerverwaltung, dem Import, den Trainer- und Jury-Modulen und dem Check-Meldeformular. InlineComp speichert damit <b>kein Geburtsjahr mehr</b>. Die Altersschätzung, die nötig ist, um historische Ergebnisse dem richtigen Fahrer zuzuordnen, erfolgt jetzt vollständig aus der KNSB-Kategorie.',
+            'fr' => '🔒 <b>Année de naissance entièrement supprimée</b> — le champ année de naissance (en pratique presque toujours vide) a été entièrement retiré d\'InlineComp : de l\'administration des patineurs, de l\'import, des modules coach et jury et du formulaire de signalement check. InlineComp ne <b>conserve donc plus d\'année de naissance</b>. L\'estimation d\'âge nécessaire pour relier les résultats historiques au bon patineur provient désormais entièrement de la catégorie KNSB.',
+        ],
+    ],
+
     // ── Patch 23-09-2026 (onder H2160.18.09, performance /public, alleen Beheer) ──
     [
         'versie' => 'H2160.18.09', 'datum' => '23-09-2026',

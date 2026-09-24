@@ -260,7 +260,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'GET' && ($_GET['action'] ?? '') === 'export_
             $orbits($sn),
             $orbits($fn),
             $orbits($sn),
-            '',                         // BirthDate: leeg (DB heeft alleen jaar)
+            '',                         // BirthDate: altijd leeg (InlineComp bewaart geen geboortedatum/-jaar)
             $orbits($genderChar),
             $orbits($r['city']),
             $orbits($r['nationality']),

@@ -103,7 +103,6 @@ const _CSV_TARGETS = [
     { val: 'name_last',       label: 'Achternaam-deel',              groep: 'Naam' },
     { val: 'gender',          label: 'Geslacht (M/W of M/V)',        groep: 'Persoonlijk' },
     { val: 'nationality',     label: 'Nationaliteit (NLD, GER, …)',  groep: 'Persoonlijk' },
-    { val: 'birth_year',      label: 'Geboortejaar',                 groep: 'Persoonlijk' },
     { val: 'start_number',    label: 'Startnummer (KNSB)',           groep: 'Persoonlijk' },
     { val: 'cat_groep',       label: 'Categorie-groep (Pupil/Cadet/…)', groep: 'Categorie' },
     { val: 'club_short',      label: 'Club (kort)',                  groep: 'Club' },
@@ -637,7 +636,6 @@ async function _csvDoeZoek(rowIdx, query) {
             // Eén keer escapen; de vaste "extern"-badge apart als hardcoded markup
             // erachter — nooit user-data ongeëscaped in de zichtbare render.
             const metaParts = [
-                p.birth_year ? `geb. ${p.birth_year}` : null,
                 p.club || null,
                 p.start_number ? `snr ${p.start_number}` : null,
             ].filter(Boolean).join(' · ');
@@ -730,7 +728,6 @@ function _csvMatchRijHtml(m) {
         ...m.candidates.map(c => {
             const sel  = c.license_key === huidigeKeuze ? ' selected' : '';
             const meta = [
-                c.birth_year ? `geb. ${c.birth_year}` : null,
                 c.club || null,
                 c.extern ? 'extern' : null,
             ].filter(Boolean).join(', ');
@@ -954,7 +951,6 @@ function _csvRaadTarget(header) {
     if (/^(volledige.?naam|naam$|full.?name|name)$/.test(h))return 'name_full';
     if (/geslacht|sex|gender/.test(h))                      return 'gender';
     if (/land|nation|country/.test(h))                      return 'nationality';
-    if (/geboorte|birth/.test(h))                           return 'birth_year';
     if (/(start.?(nr|nummer|number)|^nr$|^bib|rugnummer)/.test(h)) return 'start_number';
     if (/^cat$|categorie|category/.test(h))                 return 'cat_groep';
     if (/sponsor/.test(h))                                  return 'sponsor';

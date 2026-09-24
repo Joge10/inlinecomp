@@ -11,7 +11,6 @@ CREATE TABLE IF NOT EXISTS `persons` (
     `person_id`    CHAR(36)      NOT NULL DEFAULT (UUID()),
     `full_name`    VARCHAR(255)  NOT NULL,
     `short_name`   VARCHAR(100)  DEFAULT NULL,
-    `birth_year`   SMALLINT UNSIGNED DEFAULT NULL,
     `gender`       TINYINT UNSIGNED DEFAULT NULL,       -- 0=man 1=vrouw
     `category`     VARCHAR(20)   DEFAULT NULL,          -- DKA, HKA, DJB …
     `nationality`  VARCHAR(3)    DEFAULT 'NED',
@@ -25,8 +24,8 @@ CREATE TABLE IF NOT EXISTS `persons` (
     `updated_at`   DATETIME      NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
     -- AVG: rijders kunnen een verwijderverzoek indienen. Om de wedstrijdgeschiedenis
     -- (uitslagen, klassementen) intact te houden anonimiseren we de persoonsgegevens
-    -- in plaats van het record te verwijderen. De `license_key` blijft als
-    -- pseudonieme FK; naam/geboortejaar/woonplaats worden op 'Verwijderd'/NULL gezet.
+    -- in plaats van het record te verwijderen. Het interne `person_id` blijft als
+    -- pseudonieme sleutel; naam/woonplaats/nationaliteit e.d. worden op 'Verwijderd'/NULL gezet.
     -- Bij een niet-null `anonymized_at` toont de UI "Verwijderd" i.p.v. de naam.
     `anonymized_at` DATETIME     DEFAULT NULL,
     -- Pending-rijders: aangemaakt vanuit historie-import (PDF) als de echte

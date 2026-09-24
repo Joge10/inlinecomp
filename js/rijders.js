@@ -472,7 +472,7 @@ function rijRenderDetail(data) {
     } else {
         anonBlok = `<div class="rij-avg-actie">
             <button class="btn-danger" id="rij-anon-btn">⚠ Rijder anonimiseren (AVG)</button>
-            <div class="rij-avg-hint">Vervangt naam, geboortejaar, woonplaats, sponsor en startnummer door leeg/"Verwijderd". Wedstrijdhistorie blijft behouden. <strong>Onomkeerbaar.</strong></div>
+            <div class="rij-avg-hint">Vervangt naam, woonplaats, nationaliteit, vereniging, sponsor en startnummer door leeg/"Verwijderd" en wist de licentie-koppeling, transponders en het volg-ID. Wedstrijdhistorie blijft behouden. <strong>Onomkeerbaar.</strong></div>
         </div>`;
     }
 
@@ -667,7 +667,6 @@ function rijRenderDetail(data) {
             ${veld('Volledige naam', r.full_name)}
             ${veld('Achternaam (short_name)', r.short_name)}
             ${veld('Geslacht', geslacht)}
-            ${veld('Geboortejaar', r.birth_year)}
             ${veld('KNSB-categorie', r.category)}
             ${veld('Nationaliteit', r.nationality)}
             ${veld('Startnummer', r.start_number)}
@@ -817,12 +816,6 @@ function _rijEditRenderBewerkmodus() {
                     <span>Achternaam (kort)</span>
                     <input type="text" class="inp" id="rij-edit-shortname"
                            value="${escHtml(p.short_name || '')}">
-                </label>
-                <label class="rij-edit-veld">
-                    <span>Geboortejaar</span>
-                    <input type="number" class="inp" id="rij-edit-birth"
-                           value="${p.birth_year ?? ''}"
-                           min="1900" max="${new Date().getFullYear()}">
                 </label>
                 <label class="rij-edit-veld">
                     <span>Nationaliteit</span>
@@ -1065,7 +1058,6 @@ async function _rijEditOpslaanPersons() {
         start_number: p.start_number == null ? '' : String(p.start_number),
         full_name:    p.full_name   || '',
         short_name:   p.short_name  || '',
-        birth_year:   p.birth_year  == null ? '' : String(p.birth_year),
         nationality: (p.nationality || '').toUpperCase(),
         club_short:   p.club_short  || '',
         club_full:    p.club_full   || '',
@@ -1082,7 +1074,6 @@ async function _rijEditOpslaanPersons() {
         start_number: document.getElementById('rij-edit-snr').value.trim(),
         full_name:    document.getElementById('rij-edit-fullname').value.trim(),
         short_name:   document.getElementById('rij-edit-shortname').value.trim(),
-        birth_year:   document.getElementById('rij-edit-birth').value.trim(),
         nationality:  document.getElementById('rij-edit-nat').value.trim().toUpperCase(),
         club_short:   clubShort,
         club_full:    clubFull,
@@ -1101,7 +1092,6 @@ async function _rijEditOpslaanPersons() {
         start_number: 'nieuwe_start_number',
         full_name:    'nieuwe_full_name',
         short_name:   'nieuwe_short_name',
-        birth_year:   'nieuwe_birth_year',
         nationality:  'nieuwe_nationality',
         club_short:   'nieuwe_club_short',
         club_full:    'nieuwe_club_full',

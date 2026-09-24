@@ -448,7 +448,7 @@ ze zijn verzameld:</p>
     <li><strong>Verwijdering / anonimisering</strong> — je kunt vragen om
         verwijdering. Om de sportieve geschiedenis en klassementen intact te
         houden vervangen wij jouw naam door “Verwijderd” en <strong>wissen wij
-        je overige persoonsgegevens</strong> — geboortejaar, woonplaats,
+        je overige persoonsgegevens</strong> — woonplaats, nationaliteit,
         club/team, sponsor en startnummer — <strong>plus al je externe
         koppelingen</strong> (waaronder je KNSB-licentie). Wat overblijft is de
         naamloze wedstrijduitslag (categorie en tijden), gekoppeld via een
@@ -873,7 +873,7 @@ for which it was collected:</p>
     <li><strong>Erasure / anonymisation</strong> — you may request erasure.
         To keep the sporting history and standings intact, we replace your
         name with “Removed” and <strong>erase your other personal data</strong>
-        — year of birth, place of residence, club/team, sponsor and start
+        — place of residence, nationality, club/team, sponsor and start
         number — <strong>plus all your external links</strong> (including your
         KNSB licence). What remains is the nameless competition result (category
         and times), linked via an internal ID that only has meaning within our

@@ -362,7 +362,7 @@ if ($action === 'zoek_kandidaten') {
     // EXACT match op dominante KNSB-cat + startnummer. KNSB-belofte: precies 1.
     $kStmt = $pdo->prepare("
         SELECT person_id AS license_key, full_name, short_name, gender, category,
-               start_number, club_short, club_full, birth_year
+               start_number, club_short, club_full
         FROM persons
         WHERE category = ? AND start_number = ?
           AND extern = 0
@@ -373,7 +373,6 @@ if ($action === 'zoek_kandidaten') {
     $kand = $kStmt->fetchAll(PDO::FETCH_ASSOC);
     foreach ($kand as &$k) {
         $k['start_number'] = $k['start_number'] !== null ? (int)$k['start_number'] : null;
-        $k['birth_year']   = $k['birth_year']   !== null ? (int)$k['birth_year']   : null;
         $k['club']         = $k['club_short'] ?: $k['club_full'] ?: '';
     }
     // ── Doel-DC kandidaten: voor Roan-scenario (persoon correct, fout DC).
@@ -634,7 +633,7 @@ if ($action === 'persoon_detail') {
     $pStmt = $pdo->prepare("
         SELECT person_id AS license_key, full_name, short_name, gender, category,
                start_number, nationality, club_short, club_full,
-               sponsor, city, birth_year,
+               sponsor, city,
                extern, pending_source
         FROM persons WHERE person_id = ?
     ");
@@ -650,7 +649,6 @@ if ($action === 'persoon_detail') {
     // badge omdat "0" truthy is in JS.
     $persoon['extern']       = (int)($persoon['extern'] ?? 0) === 1;
     $persoon['start_number'] = $persoon['start_number'] !== null ? (int)$persoon['start_number'] : null;
-    $persoon['birth_year']   = $persoon['birth_year']   !== null ? (int)$persoon['birth_year']   : null;
     $entries = [];
     $alleDcs = [];
     $wedstrijdCats = [];
@@ -819,18 +817,6 @@ if ($action === 'corrigeer_persoon') {
         } else {
             $updates[]  = $f . ' = ?';
             $upParams[] = $v;
-        }
-    }
-    if (isset($body['nieuwe_birth_year'])) {
-        $v = trim((string)$body['nieuwe_birth_year']);
-        if ($v === '') {
-            $updates[] = 'birth_year = NULL';
-        } else {
-            $by = (int)$v;
-            if ($by >= 1900 && $by <= (int)date('Y')) {
-                $updates[]  = 'birth_year = ?';
-                $upParams[] = $by;
-            }
         }
     }
     if (isset($body['nieuwe_club_code'])) {

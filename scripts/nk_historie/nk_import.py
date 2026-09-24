@@ -220,7 +220,7 @@ class PersonsCache:
         self.by_naam = {}     # naam_normalize(full_name) → [persons]
         cur = db.cursor(pymysql.cursors.DictCursor)
         cur.execute(
-            "SELECT license_key, full_name, birth_year "
+            "SELECT license_key, full_name "
             "FROM persons WHERE anonymized_at IS NULL"
         )
         for p in cur.fetchall():
@@ -247,13 +247,6 @@ class PersonsCache:
 
         if len(kandidaten) == 1:
             return kandidaten[0]['license_key'], 'naam (uniek)'
-
-        # Meerdere personen met dezelfde naam → tiebreaker op geboortejaar
-        bj = rijder.get('geboortejaar')
-        if bj:
-            jaar_match = [k for k in kandidaten if k['birth_year'] == bj]
-            if len(jaar_match) == 1:
-                return jaar_match[0]['license_key'], 'naam+jaar'
 
         # Ambigu — laat operator beslissen
         return None, f'ambigu ({len(kandidaten)} matches)'

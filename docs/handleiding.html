@@ -3411,8 +3411,8 @@ Binnen elke groep gelden de bekende tiebreakers (gesorteerde individuele punten,
 <p>Klik op een rijder. Rechts opent het detail-paneel met deze blokken:</p>
 
 <ul>
-    <li><b>AVG-actieblok</b> bovenaan: knop <em>Rijder anonimiseren</em> (rood) of, als de rijder al anoniem is, een groen blok met de anonimisatie-datum en de knop <em>Anonimisatie-vlag opheffen</em>.</li>
-    <li><b>Persoonsgegevens</b>: volledige naam, achternaam, geslacht, geboortejaar, KNSB-categorie, nationaliteit, startnummer, woonplaats, sponsor, vereniging (volledig + kort), KNSB-vereniging-code, aangemaakt-op en laatst gewijzigd-op.</li>
+    <li><b>AVG-actieblok</b> bovenaan: knop <em>Rijder anonimiseren</em> (rood), of — als de rijder al geanonimiseerd is — een groen informatieblok met de anonimisatie-datum. Anonimiseren is onomkeerbaar, dus er is bewust géén opheffen-knop.</li>
+    <li><b>Persoonsgegevens</b>: volledige naam, achternaam, geslacht, KNSB-categorie, nationaliteit, startnummer, woonplaats, sponsor, vereniging (volledig + kort), KNSB-vereniging-code, aangemaakt-op en laatst gewijzigd-op.</li>
     <li><b>Bekende transponders</b>: alle transponder-codes die ooit voor deze rijder geregistreerd zijn (uit KNSB-feed of handmatig toegewezen aan de balie). Per code zie je: de code, in welke slot-typen ('Actief (balie)', 'T1', 'T2', of 'Extra N'), de bron (KNSB-feed / handmatig / beide), bij hoeveel wedstrijden en wanneer voor het laatst gezien. Handig om snel te zien welke chips bij de persoon horen, ongeacht of ze nu nog uitgegeven zijn.</li>
     <li><b>Transponder-toewijzingen (organisatie-inventaris)</b>: tabel per organisatie met intern nummer, transponder-code, categorie en betaalstatus — wat de organisatie momenteel aan deze rijder heeft uitgeleend.</li>
     <li><b>Wedstrijd-historie (eindklassementen)</b>: tabel met datum, wedstrijdnaam, categorie, eindpositie en behaalde punten per gereden wedstrijd.</li>
@@ -3427,25 +3427,17 @@ Binnen elke groep gelden de bekende tiebreakers (gesorteerde individuele punten,
 
 <ul>
     <li><b>Naam wordt vervangen</b> door de letterlijke tekst <em>"Verwijderd"</em>.</li>
-    <li><b>Persoonlijke gegevens worden gewist</b>: korte naam, geboortejaar, woonplaats, sponsor en startnummer.</li>
+    <li><b>Persoonlijke gegevens worden gewist</b>: korte naam, woonplaats, nationaliteit, sponsor en startnummer.</li>
     <li><b>Geslacht, categorie en clubgegevens blijven staan</b> — zonder naam zijn die niet herleidbaar tot een persoon, en ze zijn nuttig voor statistiek.</li>
     <li><b>Een tijdstempel</b> markeert wanneer de anonimisatie heeft plaatsgevonden.</li>
     <li><b>De transponder-toewijzing</b> van deze rijder bij elke organisatie wordt ook leeggemaakt (naam, startnummer, koppeling, categorie, betaal-status).</li>
 </ul>
 
-<p>De <b>wedstrijdgeschiedenis blijft volledig intact</b> — heats, tijden en klassementen verwijzen alleen via licentienummer, en daar staat geen naam in opgeslagen. In uitslagen en klassementen verschijnt voortaan <em>"Verwijderd"</em> in plaats van de naam.</p>
+<p>De <b>wedstrijdgeschiedenis blijft volledig intact</b> — heats, tijden en klassementen verwijzen alleen via het interne rijder-ID (person_id), en daar staat geen naam in opgeslagen. In uitslagen en klassementen verschijnt voortaan <em>"Verwijderd"</em> in plaats van de naam.</p>
 
-<p>De actie wordt vastgelegd in het systeem-logboek (welke admin, wanneer, welk licentienummer — geen naam, want die is nu juist weg).</p>
+<p>De actie wordt vastgelegd in het systeem-logboek (welke admin, wanneer, welk intern rijder-ID — geen naam, want die is nu juist weg).</p>
 
-<div class="warn"><b>Onomkeerbaar.</b> De originele waarden zijn na anonimiseren echt weg uit de tabel. <em>Anonimisatie-vlag opheffen</em> in Stap 5 herstelt alleen de vlag, niet de gegevens — die komen pas terug als de rijder opnieuw door een KNSB-import wordt opgehaald.</div>
-
-<h4 id="sys-5-undo">Anonimisatie-vlag opheffen</h4>
-
-<p>Was er een fout in de bevestiging — bijvoorbeeld de verkeerde rijder geselecteerd, of bedenkt de rijder zich na een hernieuwde inschrijving — dan kun je de anonimisatie-vlag opheffen via de groene knop in het detail-paneel.</p>
-
-<p>Wat dit doet: alleen de anonimisatie-vlag wordt opgeheven, zodat de rijder niet meer als geanonimiseerd wordt getoond<sup class="ref-link" id="refsrc-46"><a href="#ref-46">[46]</a></sup>. De gewiste velden (naam, geboortejaar, woonplaats, sponsor, startnummer) blijven leeg — die zijn echt verwijderd. Pas een nieuwe KNSB-import (of handmatige invoer via Importeer §1.3) vult ze opnieuw met de actuele gegevens.</p>
-
-<div class="info"><b>Wanneer wel/niet undo?</b> Vlag opheffen heeft alleen zin als je verwacht dat de rijder binnenkort weer in een KNSB-import voorkomt — anders blijft het record gewoon leeg in beeld. Voor échte verwijdering is de anonimisatie zelf al voldoende; undo is een veiligheidsnet voor vergissingen.</div>
+<div class="warn"><b>Onomkeerbaar.</b> De originele waarden zijn na anonimiseren echt weg uit de tabel. Er is bewust <b>geen "ongedaan maken"</b>: omdat óók de KNSB-licentiekoppeling wordt gewist, komen de gegevens niet terug via een herimport. Wees dus zeker van de juiste rijder vóór je bevestigt — de bevestigingsdialoog (waarin je het licentienummer overtypt) is het veiligheidsnet, niet een undo achteraf.</div>
 
 <h3 id="sys-6-uploads">Stap 6 — Tabblad Uploads</h3>
 
@@ -3920,8 +3912,7 @@ Binnen elke groep gelden de bekende tiebreakers (gesorteerde individuele punten,
 <tr><td>Pagina-skelet + zichtbaarheid</td><td><code>index.php</code> regel 72-75 (nav-item, <code>display:none</code> tot rol-check) · regel 360-383 (<code>#page-rijders</code> met <code>#rij-zoek-inp</code>, <code>#rij-zoek-resultaat</code>, <code>#rij-detail</code>). Toegang in <code>api/persoon_beheer.php</code> regel 20-24 + <code>api/persoon_anonimiseer.php</code> regel 31-35 (rol owner/admin)</td></tr>
 <tr><td>Zoeken</td><td><code>js/rijders.js</code> + <code>api/persoon_beheer.php</code></td><td><code>rijZoek()</code> regel 33-49 — debounce 350 ms (<code>setTimeout</code>), Enter direct. API <code>action=zoek</code> regel 29-72: gecombineerde query op <code>start_number</code> (cijfers), <code>license_key</code> (≥4 tekens), <code>short_name</code>, <code>full_name</code> · LIMIT 100 · exacte snr-match bovenaan via ORDER BY-CASE</td></tr>
 <tr><td>Detail-paneel</td><td><code>js/rijders.js</code> + <code>api/persoon_beheer.php</code></td><td><code>rijToonDetail(licenseKey)</code> regel 80-96 · <code>rijRenderDetail(data)</code> 98-230 (persoonsgegevens-grid, transponders, wedstrijden, per-afstand <code>&lt;details&gt;</code>). API <code>action=detail</code>: persons-record + transponders + eindklassement + per-afstand-resultaten</td></tr>
-<tr id="ref-45"><td>Anonimiseren (AVG) <a class="ref-back" href="#refsrc-45" title="Terug naar tekst">↑[45]</a></td><td><code>js/rijders.js</code> + <code>api/persoon_anonimiseer.php</code></td><td>UI: <code>rijAnonimiseer()</code> regel 232-254 — vraagt licentienummer-bevestiging via <code>prompt()</code>. API <code>action=anonimiseer</code> regel 77-128: UPDATE <code>persons</code> (full_name='Verwijderd', short_name/birth_year/city/sponsor/start_number=NULL, anonymized_at=NOW) + leegmaken <code>organisatie_transponders</code>-toewijzing (toegewezen_naam/toegewezen_snr/person_license/categorie/betaald/betaald_op = NULL/0) · gender/category/club_* blijven staan · log-call via <code>logboekSchrijf()</code> · heat_entries/results/uitslag_*-rijen verwijzen alleen via <code>license_key</code> (geen naam)</td></tr>
-<tr id="ref-46"><td>Anonimisatie-vlag opheffen <a class="ref-back" href="#refsrc-46" title="Terug naar tekst">↑[46]</a></td><td><code>js/rijders.js</code> + <code>api/persoon_anonimiseer.php</code></td><td>UI: <code>rijAnonUndo()</code> regel 256-272. API <code>action=undo</code> regel 130-148: UPDATE <code>persons SET anonymized_at = NULL</code> · gegevens komen pas terug bij her-import</td></tr>
+<tr id="ref-45"><td>Anonimiseren (AVG) <a class="ref-back" href="#refsrc-45" title="Terug naar tekst">↑[45]</a></td><td><code>js/rijders.js</code> + <code>api/persoon_anonimiseer.php</code></td><td>UI: <code>rijAnonimiseer()</code> regel 232-254 — vraagt licentienummer-bevestiging via <code>prompt()</code>. API <code>action=anonimiseer</code> regel 77-128: UPDATE <code>persons</code> (full_name='Verwijderd', short_name/city/nationality/sponsor/start_number=NULL, anonymized_at=NOW) + leegmaken <code>organisatie_transponders</code>-toewijzing (toegewezen_naam/toegewezen_snr/person_license/categorie/betaald/betaald_op = NULL/0) · gender/category/club_* blijven staan · log-call via <code>logboekSchrijf()</code> · heat_entries/results/uitslag_*-rijen verwijzen alleen via <code>license_key</code> (geen naam)</td></tr>
 <tr><td>Audit-lijst (alle anonieme rijders)</td><td><code>api/persoon_anonimiseer.php</code> regel 42-51</td><td>GET <code>action=lijst</code> retourneert <code>{license_key, anonymized_at, updated_at}</code> voor alle rijders met <code>anonymized_at IS NOT NULL</code>, ORDER BY <code>anonymized_at DESC</code>. Niet aan UI gekoppeld; bedoeld voor audits via curl/admin-script</td></tr>
 </table>
 
@@ -4299,11 +4290,11 @@ Binnen elke groep gelden de bekende tiebreakers (gesorteerde individuele punten,
 <table class="ref">
 <tr><th>Tabel</th><th>Wanneer geraakt</th></tr>
 <tr><td><code>persons</code> (gelezen)</td><td>Bron voor zoekresultaten en detail-paneel — query op <code>start_number</code> / <code>license_key</code> / <code>short_name</code> / <code>full_name</code></td></tr>
-<tr><td><code>persons</code> (geschreven, anonimiseren)</td><td>UPDATE bij <em>anonimiseren</em>: <code>full_name = 'Verwijderd'</code>, <code>short_name = NULL</code>, <code>birth_year = NULL</code>, <code>city = NULL</code>, <code>sponsor = NULL</code>, <code>start_number = NULL</code>, <code>anonymized_at = NOW()</code>. UPDATE bij <em>vlag opheffen</em>: alleen <code>anonymized_at = NULL</code> (gegevens komen pas terug bij her-import)</td></tr>
+<tr><td><code>persons</code> (geschreven, anonimiseren)</td><td>UPDATE bij <em>anonimiseren</em>: <code>full_name = 'Verwijderd'</code>, <code>short_name = NULL</code>, <code>city = NULL</code>, <code>nationality = NULL</code>, <code>sponsor = NULL</code>, <code>start_number = NULL</code>, <code>anonymized_at = NOW()</code>, plus wissen van alle <code>person_external_ids</code> (incl. KNSB-licentie) en de transponder-registraties. Onomkeerbaar — geen vlag-opheffen meer.</td></tr>
 <tr><td><code>organisatie_transponders</code></td><td>UPDATE bij <em>anonimiseren</em>: <code>toegewezen_naam</code>, <code>toegewezen_snr</code>, <code>person_license</code>, <code>categorie</code>, <code>betaald_op</code> op NULL en <code>betaald = 0</code> (alle toewijzingen voor deze rijder leeggemaakt)</td></tr>
 <tr><td><code>transponders</code> (gelezen)</td><td>Bron voor de transponder-tabel in het detail-paneel</td></tr>
 <tr><td><code>uitslag_afstand</code> / <code>uitslag_klassement</code> / <code>heats</code> / <code>heat_entries</code> / <code>results</code> (gelezen)</td><td>Bron voor de wedstrijd-historie en de per-afstand-uitslagen in het detail-paneel. <b>Niet</b> aangetast door anonimiseren — alleen de naam-link via <code>persons</code> verandert</td></tr>
-<tr><td><code>logboek</code> (geschreven)</td><td>INSERT via <code>logboekSchrijf()</code> bij <em>anonimiseren</em> (<code>persoon_anonimiseer</code>) en <em>vlag opheffen</em> (<code>persoon_anonimiseer_undo</code>) — wie deed wat wanneer met welk licentienummer. Geen naam in de log (die is nu juist weg)</td></tr>
+<tr><td><code>logboek</code> (geschreven)</td><td>INSERT via <code>logboekSchrijf()</code> bij <em>anonimiseren</em> (<code>persoon_anonimiseer</code>) — wie deed wat wanneer met welk intern rijder-ID. Geen naam in de log (die is nu juist weg)</td></tr>
 </table>
 
 <h3>Publieke applicatie (Deel 2)</h3>

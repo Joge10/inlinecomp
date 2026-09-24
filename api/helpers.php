@@ -783,7 +783,7 @@ if ($action === 'historie_extract') {
     $personsByLic = [];
     $personsByNaam = [];
     $stmt = $pdo->query(
-        "SELECT person_id AS license_key, full_name, birth_year, category, club_short
+        "SELECT person_id AS license_key, full_name, category, club_short
          FROM persons
          WHERE anonymized_at IS NULL
            AND pending_source IS NULL"
@@ -799,7 +799,6 @@ if ($action === 'historie_extract') {
         return [
             'license_key' => $p['license_key'],
             'full_name'   => $p['full_name'],
-            'birth_year'  => $p['birth_year'] !== null ? (int)$p['birth_year'] : null,
             'category'    => $p['category'],
             'club_short'  => $p['club_short'],
         ];
@@ -892,10 +891,9 @@ if ($action === 'historie_extract') {
 
         if (count($kandidaten) > 1) {
             // Echt ambigu — geef alle kandidaten terug zodat operator kan
-            // kiezen welke de juiste is. Sortering op birth_year (jongste
-            // eerst, typisch voor recente NK-deelnemers).
+            // kiezen welke de juiste is. Deterministische volgorde (op interne id).
             usort($kandidaten, fn($a, $b) =>
-                (int)($b['birth_year'] ?? 0) - (int)($a['birth_year'] ?? 0)
+                strcmp((string)($a['license_key'] ?? ''), (string)($b['license_key'] ?? ''))
             );
             $r['match_reden'] = 'ambigu';
             $r['match_kandidaten'] = array_map($persPayload, $kandidaten);
@@ -1278,8 +1276,8 @@ if ($action === 'historie_insert') {
         }
 
         $pendingInsStmt = $pdo->prepare("
-            INSERT INTO persons (person_id, full_name, category, birth_year, pending_source)
-            VALUES (?, ?, ?, ?, 'historie')
+            INSERT INTO persons (person_id, full_name, category, pending_source)
+            VALUES (?, ?, ?, 'historie')
         ");
         $pendingAangemaakt = 0;
         $pendingHergebruikt = 0;
@@ -1288,7 +1286,7 @@ if ($action === 'historie_insert') {
             $g = substr($c, 0, 1);
             return ($g === 'H' || $g === 'D') ? $g : '';
         };
-        $maakPendingLic = function(string $naam, ?string $nieuweCat, ?int $birthYear)
+        $maakPendingLic = function(string $naam, ?string $nieuweCat)
             use (&$pendingPool, $pendingInsStmt,
                  &$pendingAangemaakt, &$pendingHergebruikt,
                  $compJaar, $genderUitCat, &$pendingInDezeComp): ?string
@@ -1350,7 +1348,7 @@ if ($action === 'historie_insert') {
             $catN = $nieuweCat !== null ? trim($nieuweCat) : '';
             $lic  = 'p-' . substr(bin2hex(random_bytes(8)), 0, 12);
             $pid  = nieuwPersonId();
-            $pendingInsStmt->execute([$pid, $naam, $catN ?: null, $birthYear]);
+            $pendingInsStmt->execute([$pid, $naam, $catN ?: null]);
             // person_external_ids-mapping borgen: nieuwe pending (p-…) krijgt
             // meteen z'n ic-pending-mapping onder de zojuist geminte person_id.
             zorgVoorExternalId($pdo, $pid, $lic);
@@ -1396,9 +1394,7 @@ if ($action === 'historie_insert') {
                     $skipReasons[] = "Geen license en geen naam — niet te identificeren";
                     continue;
                 }
-                $birthHint = isset($r['birth_year_hint']) && (int)$r['birth_year_hint'] > 1900
-                    ? (int)$r['birth_year_hint'] : null;
-                $lic = $maakPendingLic($naam, $r['categorie'] ?? null, $birthHint);
+                $lic = $maakPendingLic($naam, $r['categorie'] ?? null);
                 if (!$lic) {
                     $skipReasons[] = "Pending-aanmaak mislukt: $naam";
                     continue;
@@ -1512,7 +1508,6 @@ if ($action === 'pending_lijst') {
                 p.person_id,
                 p.full_name,
                 p.category,
-                p.birth_year,
                 p.club_short,
                 p.pending_source,
                 p.extern,
@@ -1577,7 +1572,7 @@ if ($action === 'pending_lijst') {
         // zodat een pending óók een externe als suggestie kan krijgen (en
         // omgekeerd). Self-match wordt later in de loop voorkomen.
         $allRealStmt = $pdo->query("
-            SELECT person_id AS license_key, full_name, birth_year, category, club_short,
+            SELECT person_id AS license_key, full_name, category, club_short,
                    pending_source, extern
             FROM persons
             WHERE anonymized_at IS NULL
@@ -1618,9 +1613,6 @@ if ($action === 'pending_lijst') {
             $birthSet = $birthSets[$p['license_key']] ?? null;
             if ($birthSet && count($birthSet) > 0) {
                 $pdfBirthBereik = [min($birthSet), max($birthSet)];
-            } elseif (!empty($p['birth_year'])) {
-                $by = (int)$p['birth_year'];
-                $pdfBirthBereik = [$by, $by];
             } elseif ($p['category'] && $p['pdf_jaar']) {
                 $pdfBirthBereik = _catNaarJaarBereik($p['category'], $p['pdf_jaar']);
             } elseif ($p['category']) {
@@ -1681,7 +1673,7 @@ if ($action === 'pending_lijst') {
                     $leeftijdReden = "✓ leeftijd matcht (PDF " . $pdfBirthBereik[0]
                                    . '-' . $pdfBirthBereik[1] . ", DB "
                                    . $realBirthBereik[0] . '-' . $realBirthBereik[1] . ")";
-                } elseif ($pdfBirthBereik && empty($r['birth_year']) && empty($r['category'])) {
+                } elseif ($pdfBirthBereik && empty($r['category'])) {
                     $leeftijdReden = "? leeftijd onbekend in DB";
                 } elseif (!$pdfBirthBereik) {
                     $leeftijdReden = "? PDF-jaar onbekend";
@@ -1710,7 +1702,6 @@ if ($action === 'pending_lijst') {
             $p['suggesties'] = array_map(fn($x) => [
                 'license_key' => $x['r']['license_key'],
                 'full_name'   => $x['r']['full_name'],
-                'birth_year'  => $x['r']['birth_year'] !== null ? (int)$x['r']['birth_year'] : null,
                 'category'    => $x['r']['category'],
                 'club_short'  => $x['r']['club_short'],
                 'score'       => round($x['s'], 2),
@@ -1934,7 +1925,7 @@ if ($action === 'pending_lijst') {
         // buildLicenseKey()) — die matchen elkaar allemaal op naam '[Anoniem]'
         // + cat en zouden anders enorme foute groepen vormen zonder actie-waarde.
         $_allStmt = $pdo->query("
-            SELECT person_id AS license_key, full_name, category, birth_year, club_short,
+            SELECT person_id AS license_key, full_name, category, club_short,
                    pending_source, extern
             FROM persons
             WHERE anonymized_at IS NULL
@@ -1953,7 +1944,7 @@ if ($action === 'pending_lijst') {
         $_bestaandeLics = array_flip(array_column($pendings, 'license_key'));
         $_nieuweRijen   = [];
         $_detailStmt = $pdo->prepare("
-            SELECT p.person_id AS license_key, p.full_name, p.category, p.birth_year, p.club_short,
+            SELECT p.person_id AS license_key, p.full_name, p.category, p.club_short,
                    p.pending_source, p.extern, p.created_at,
                    (SELECT COUNT(*) FROM uitslag_afstand ua
                     WHERE ua.person_id = p.person_id) AS aantal_uitslagen,
@@ -1979,7 +1970,6 @@ if ($action === 'pending_lijst') {
             $_sugItem = [
                 'license_key' => $_target['license_key'],
                 'full_name'   => $_target['full_name'],
-                'birth_year'  => $_target['birth_year'] !== null ? (int)$_target['birth_year'] : null,
                 'category'    => $_target['category'],
                 'club_short'  => $_target['club_short'],
                 'score'       => 1.0,
@@ -2011,7 +2001,6 @@ if ($action === 'pending_lijst') {
                     $_detailStmt->execute([$_lid['license_key']]);
                     $_detail = $_detailStmt->fetch(PDO::FETCH_ASSOC);
                     if (!$_detail) continue;
-                    $_detail['birth_year']       = $_detail['birth_year'] !== null ? (int)$_detail['birth_year'] : null;
                     $_detail['pdf_jaar']         = $_detail['pdf_jaar']   !== null ? (int)$_detail['pdf_jaar']   : null;
                     $_detail['aantal_uitslagen'] = (int)$_detail['aantal_uitslagen'];
                     $_detail['aantal_entries']   = (int)$_detail['aantal_entries'];
@@ -2020,7 +2009,7 @@ if ($action === 'pending_lijst') {
                     $_detail['dubbele_pendings'] = [];
                     $_detail['suggesties']       = [$_sugItem];
                     $_detail['cat_evolutie']     = '';
-                    $_detail['birth_label']      = $_detail['birth_year'] !== null ? (string)$_detail['birth_year'] : '?';
+                    $_detail['birth_label']      = '?';   // birth_year-kolom bestaat niet meer; geen afgeleid jaar voor deze naamgenoot-rij
                     $_nieuweRijen[] = $_detail;
                     $_bestaandeLics[$_detail['license_key']] = true;
                 }
@@ -2054,7 +2043,7 @@ if ($action === 'pending_zoek_echte') {
     }
     try {
         $stmt = $pdo->prepare("
-            SELECT person_id AS license_key, full_name, birth_year, category, club_short,
+            SELECT person_id AS license_key, full_name, category, club_short,
                    pending_source, extern
             FROM persons
             WHERE anonymized_at IS NULL
@@ -2067,7 +2056,6 @@ if ($action === 'pending_zoek_echte') {
         $stmt->execute([$like, $like]);
         $rows = $stmt->fetchAll(PDO::FETCH_ASSOC);
         foreach ($rows as &$r) {
-            if ($r['birth_year'] !== null) $r['birth_year'] = (int)$r['birth_year'];
             $r['is_pending'] = $r['pending_source'] !== null;
             $r['is_extern']  = ((int)($r['extern'] ?? 0)) === 1;
         }
@@ -2962,10 +2950,7 @@ function _clubNormalize($club) {
 // category. Door uit de huidige cat een bereik af te leiden kunnen we toch
 // kandidaten uitsluiten die qua leeftijd onmogelijk in de PDF-cat zaten.
 function _persoonNaarJaarBereik($persoon, $huidigJaar) {
-    if (!empty($persoon['birth_year'])) {
-        $by = (int)$persoon['birth_year'];
-        return [$by, $by];
-    }
+    // birth_year bestaat niet meer; het bereik komt volledig uit (categorie × jaar).
     if (!empty($persoon['category'])) {
         return _catNaarJaarBereik($persoon['category'], $huidigJaar);
     }

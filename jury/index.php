@@ -989,7 +989,6 @@ if ($action === 'speaker_deelnemers') {
                 p.full_name,
                 p.short_name,
                 p.category,
-                p.birth_year,
                 p.gender,
                 p.nationality,
                 p.club_full,
@@ -1018,7 +1017,6 @@ if ($action === 'speaker_deelnemers') {
         // Type-cleanup
         foreach ($rows as &$r) {
             if ($r['startnummer'] !== null) $r['startnummer'] = (int)$r['startnummer'];
-            if ($r['birth_year']  !== null) $r['birth_year']  = (int)$r['birth_year'];
             if ($r['gender']      !== null) $r['gender']      = (int)$r['gender'];
             $r['entry_status']                  = (int)$r['entry_status'];
         }
@@ -1119,7 +1117,7 @@ if ($action === 'speaker_combi') {
             SELECT
                 COALESCE(csn.startnummer, p.start_number) AS startnummer,
                 p.person_id AS license_key, p.person_id, p.full_name, p.short_name, p.category,
-                p.birth_year, p.gender, p.nationality,
+                p.gender, p.nationality,
                 p.club_full, p.club_short, p.sponsor, p.city,
                 e.status AS entry_status
             FROM entries e
@@ -1141,7 +1139,6 @@ if ($action === 'speaker_combi') {
             $rows = $dStmt->fetchAll(PDO::FETCH_ASSOC);
             foreach ($rows as &$r) {
                 if ($r['startnummer'] !== null) $r['startnummer'] = (int)$r['startnummer'];
-                if ($r['birth_year']  !== null) $r['birth_year']  = (int)$r['birth_year'];
                 if ($r['gender']      !== null) $r['gender']      = (int)$r['gender'];
                 $r['entry_status'] = (int)$r['entry_status'];
             }
@@ -1684,7 +1681,6 @@ if ($action === 'speaker_persoon') {
                 p.full_name,
                 p.short_name,
                 p.category,
-                p.birth_year,
                 p.gender,
                 p.nationality,
                 p.club_full,
@@ -1708,7 +1704,6 @@ if ($action === 'speaker_persoon') {
             exit;
         }
         if ($row['startnummer'] !== null) $row['startnummer'] = (int)$row['startnummer'];
-        if ($row['birth_year']  !== null) $row['birth_year']  = (int)$row['birth_year'];
         if ($row['gender']      !== null) $row['gender']      = (int)$row['gender'];
         echo json_encode(['rijder' => $row], JSON_UNESCAPED_UNICODE);
     } catch (Throwable $e) {

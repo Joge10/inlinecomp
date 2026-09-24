@@ -2533,7 +2533,6 @@ function _spkToonDetail(r) {
     const veld = (label, waarde) => waarde !== null && waarde !== '' && waarde !== undefined
         ? `<div class="spk-detail-rij"><span class="spk-detail-lbl">${escHtml(label)}</span><span class="spk-detail-val">${escHtml(waarde)}</span></div>`
         : '';
-    const leeftijd = r.birth_year ? (new Date().getFullYear() - r.birth_year) : '';
 
     // Pending-rijders: placeholder uit historische PDF-import zonder echte
     // KNSB-licentie. Mist club/jaar/etc. — toon dat expliciet zodat speaker
@@ -2571,8 +2570,6 @@ function _spkToonDetail(r) {
             <div class="spk-detail-body">
                 ${pendingBanner}
                 ${veld('Categorie',     r.category)}
-                ${veld('Geboortejaar',  r.birth_year)}
-                ${veld('Leeftijd',      leeftijd ? leeftijd + ' jaar' : '')}
                 ${veld('Nationaliteit', r.nationality)}
                 ${veld('Woonplaats',    r.city)}
                 ${veld('Club',          r.club_full)}

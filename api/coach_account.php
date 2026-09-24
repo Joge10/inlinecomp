@@ -331,7 +331,7 @@ try {
     if ($method === 'GET' && $action === 'roster_list') {
         $c = vereisCoachLogin($pdo);
         $stmt = $pdo->prepare("
-            SELECT p.person_id AS license_key, p.person_id, p.full_name, p.club_full, p.category, p.birth_year, p.start_number, ca.added_at
+            SELECT p.person_id AS license_key, p.person_id, p.full_name, p.club_full, p.category, p.start_number, ca.added_at
             FROM   coach_athletes ca
             JOIN   persons p ON p.person_id = ca.person_id
             WHERE  ca.coach_account_id = ?
@@ -353,7 +353,7 @@ try {
         // kan per categorie hergebruikt worden), dus meerdere treffers mogelijk.
         $snr  = ctype_digit($q) ? (int)$q : -1;
         $stmt = $pdo->prepare("
-            SELECT p.person_id AS license_key, p.person_id, p.full_name, p.club_full, p.category, p.birth_year, p.start_number,
+            SELECT p.person_id AS license_key, p.person_id, p.full_name, p.club_full, p.category, p.start_number,
                    (ca.person_id IS NOT NULL) AS in_roster
             FROM   persons p
             LEFT JOIN coach_athletes ca

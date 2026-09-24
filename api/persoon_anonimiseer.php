@@ -3,7 +3,7 @@
 //  InlineComp – persoon anonimiseren (AVG / recht op vergetelheid)
 //
 //  POST action=anonimiseer  { license_key }
-//      → vervangt naam/roepnaam/geboortejaar/woonplaats/nationaliteit/
+//      → vervangt naam/roepnaam/woonplaats/nationaliteit/
 //        sponsor(team)/club/startnummer/volg-ID door 'Verwijderd'/NULL en zet
 //        anonymized_at = NOW().
 //        Alleen geslacht + categorie + de (naamloze) wedstrijdgeschiedenis blijven, via
@@ -92,7 +92,7 @@ try {
     if ($action === 'anonimiseer') {
         // Pseudonimiseer: vervang alles wat direct herleidbaar is.
         // - full_name → 'Verwijderd'
-        // - short_name, birth_year, city, sponsor → NULL
+        // - short_name, city, sponsor → NULL
         // - club_code/short/full → NULL. De club is verreweg het meest
         //   identificerende restveld: in combinatie met categorie + een
         //   specifieke tijd kan een insider een rijder alsnog herleiden. Wissen
@@ -110,7 +110,6 @@ try {
             UPDATE persons
             SET full_name       = 'Verwijderd',
                 short_name      = NULL,
-                birth_year      = NULL,
                 city            = NULL,
                 sponsor         = NULL,
                 club_code       = NULL,

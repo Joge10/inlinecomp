@@ -117,7 +117,7 @@ if ($action === 'detail') {
             SELECT e.distance_combination_id AS dc_id,
                    e.person_id AS person_license, e.status, e.reserve, e.knsb_entry_id,
                    p.person_id,
-                   p.full_name, p.short_name, p.birth_year, p.gender,
+                   p.full_name, p.short_name, p.gender,
                    p.category, p.nationality, p.start_number,
                    p.club_code, p.club_short, p.club_full, p.sponsor, p.city,
                    p.extern, p.extern_federatie
@@ -197,7 +197,6 @@ if ($action === 'detail') {
             'license_key'  => $lk,
             'full_name'    => $row['full_name'],
             'short_name'   => $row['short_name'],
-            'birth_year'   => $row['birth_year'] !== null ? (int)$row['birth_year'] : null,
             'gender'       => $row['gender'] !== null ? (int)$row['gender'] : null,
             'category'     => $row['category'],
             'nationality'  => $row['nationality'] ?: 'NED',

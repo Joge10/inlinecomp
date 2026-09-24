@@ -45,7 +45,7 @@ function rijderProfielData(PDO $pdo, string $lic): array {
     $pid = resolveNaarPersonId($pdo, $lic);
     // ── 0. Persoon (kop) ────────────────────────────────────────────────
     $pStmt = $pdo->prepare("
-        SELECT person_id AS license_key, full_name, short_name, category, birth_year,
+        SELECT person_id AS license_key, full_name, short_name, category,
                nationality, club_full, club_short, start_number, gender, publiek_anoniem
         FROM persons WHERE person_id = ? LIMIT 1
     ");

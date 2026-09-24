@@ -367,7 +367,7 @@ if ($action === 'match_preview') {
     if ($alleStartnrs) {
         $ph = implode(',', array_fill(0, count($alleStartnrs), '?'));
         $stmt = $pdo->prepare("
-            SELECT person_id AS license_key, full_name, short_name, birth_year, gender, category,
+            SELECT person_id AS license_key, full_name, short_name, gender, category,
                    start_number, club_short, club_full, extern
             FROM persons
             WHERE start_number IN ($ph)
@@ -386,7 +386,7 @@ if ($action === 'match_preview') {
         // tweede kans. Geen LIKE wildcards — alleen exact-match.
         $ph = implode(',', array_fill(0, count($alleNamen), '?'));
         $stmt = $pdo->prepare("
-            SELECT person_id AS license_key, full_name, short_name, birth_year, gender,
+            SELECT person_id AS license_key, full_name, short_name, gender,
                    start_number, club_short, club_full, extern
             FROM persons
             WHERE (LOWER(full_name) IN ($ph) OR LOWER(short_name) IN ($ph))
@@ -518,7 +518,6 @@ if ($action === 'match_preview') {
             'license_key' => $p['license_key'],
             'full_name'   => $p['full_name'],
             'club'        => $p['club_short'] ?: $p['club_full'] ?: '',
-            'birth_year'  => $p['birth_year'] !== null ? (int)$p['birth_year'] : null,
             'start_number'=> $p['start_number'] !== null ? (int)$p['start_number'] : null,
             'extern'      => (int)($p['extern'] ?? 0) === 1,
         ], $kandidaten);
@@ -565,7 +564,7 @@ if ($action === 'zoek_personen') {
     // mis je rijders die in andere wedstrijden zaten).
     $pat = '%' . str_replace(['%', '_'], ['\\%', '\\_'], mb_strtolower($q)) . '%';
     $stmt = $pdo->prepare("
-        SELECT person_id AS license_key, full_name, short_name, birth_year, gender,
+        SELECT person_id AS license_key, full_name, short_name, gender,
                start_number, club_short, club_full, extern
         FROM persons
         WHERE (LOWER(full_name) LIKE ? OR LOWER(short_name) LIKE ?)
@@ -579,7 +578,6 @@ if ($action === 'zoek_personen') {
         'license_key'  => $p['license_key'],
         'full_name'    => $p['full_name'],
         'club'         => $p['club_short'] ?: $p['club_full'] ?: '',
-        'birth_year'   => $p['birth_year']   !== null ? (int)$p['birth_year']   : null,
         'start_number' => $p['start_number'] !== null ? (int)$p['start_number'] : null,
         'extern'       => (int)($p['extern'] ?? 0) === 1,
     ], $stmt->fetchAll(PDO::FETCH_ASSOC));
@@ -634,7 +632,6 @@ if ($action === 'commit') {
         'name_last'    => $kolVoor('name_last'),
         'gender'       => $kolVoor('gender'),
         'nationality'  => $kolVoor('nationality'),
-        'birth_year'   => $kolVoor('birth_year'),
         'start_number' => $kolVoor('start_number'),
         'cat_groep'    => $kolVoor('cat_groep'),
         'club_short'   => $kolVoor('club_short'),
@@ -751,11 +748,11 @@ if ($action === 'commit') {
         // Prepared statements (eenmalig opbouwen voor performance)
         $insPerson = $pdo->prepare("
             INSERT INTO persons
-                (person_id, full_name, short_name, birth_year, gender,
+                (person_id, full_name, short_name, gender,
                  category, nationality, start_number,
                  club_short, club_full, sponsor,
                  extern, extern_federatie)
-            VALUES (:pid, :fn, :sn, :by, :gd,
+            VALUES (:pid, :fn, :sn, :gd,
                     :cat, :nat, :snr,
                     :cls, :clf, :spn,
                     1, :fed)
@@ -794,7 +791,6 @@ if ($action === 'commit') {
             // Persoon bepalen
             if ($actie === '__new__') {
                 $namen   = $bouwNamen($r);
-                $birthY  = $kIs['birth_year']   !== null ? (int)($r[$kIs['birth_year']] ?? 0) : 0;
                 $nation  = $kIs['nationality']  !== null ? strtoupper(substr(trim($r[$kIs['nationality']] ?? ''), 0, 3)) : '';
                 // Club: club_of_sponsor vult zowel club als sponsor met dezelfde waarde
                 $club    = '';
@@ -823,7 +819,6 @@ if ($action === 'commit') {
                         ':pid' => $pid,
                         ':fn'  => $namen['full'],
                         ':sn'  => $namen['short'],
-                        ':by'  => $birthY ?: null,
                         ':gd'  => $gender === 'M' ? 0 : 1,
                         ':cat' => $catCode,
                         ':nat' => $nation ?: 'NED',
