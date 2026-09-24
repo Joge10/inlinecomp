@@ -70,6 +70,18 @@ return [
         ],
     ],
 
+    // ── Patch 24-09-2026 (onder H2160.18.09, privacyverklaring herzien, alleen Beheer) ──
+    [
+        'versie' => 'H2160.18.09', 'datum' => '24-09-2026',
+        'soort'  => 'patch', 'onderdelen' => ['patch'],
+        'tekst' => [
+            'nl' => '🔒 <b>Privacyverklaring herzien</b> — de publieke privacyverklaring is geactualiseerd: een helder verantwoordelijkheidsmodel (InlineComp/Geert de Vries als enig verwerkingsverantwoordelijke), de gegevensbronnen (KNSB, organiserende vereniging, historische uitslagen en de rijder zelf), de grondslag, en een korte uitleg over de anonieme bezoekteller. Daarnaast diverse tekstuele correcties, waaronder een weergavefout in §6.',
+            'en' => '🔒 <b>Privacy statement revised</b> — the public privacy statement has been updated: a clear controller model (InlineComp/Geert de Vries as sole controller), the data sources (KNSB, organising club, historical results and the rider), the legal basis, and a short explanation of the anonymous visit counter. Plus various textual corrections, including a display error in section 6.',
+            'de' => '🔒 <b>Datenschutzerklärung überarbeitet</b> — die öffentliche Datenschutzerklärung wurde aktualisiert: ein klares Verantwortlichkeitsmodell (InlineComp/Geert de Vries als alleiniger Verantwortlicher), die Datenquellen (KNSB, ausrichtender Verein, historische Ergebnisse und der Fahrer selbst), die Rechtsgrundlage und eine kurze Erläuterung zum anonymen Besucherzähler. Dazu diverse Textkorrekturen, u. a. ein Anzeigefehler in §6.',
+            'fr' => '🔒 <b>Déclaration de confidentialité révisée</b> — la déclaration de confidentialité publique a été mise à jour : un modèle de responsabilité clair (InlineComp/Geert de Vries comme seul responsable du traitement), les sources de données (KNSB, club organisateur, résultats historiques et le patineur lui-même), la base légale et une brève explication du compteur de visites anonyme. Ainsi que diverses corrections de texte, dont une erreur d\'affichage au §6.',
+        ],
+    ],
+
     // ── Patch 24-09-2026 (onder H2160.18.09, AVG/privacy, alleen Beheer) ──
     [
         'versie' => 'H2160.18.09', 'datum' => '24-09-2026',

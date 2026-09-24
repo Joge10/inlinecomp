@@ -15,8 +15,8 @@ header('Pragma: no-cache');
 $ORG_NAAM   = 'InlineComp';                 // TODO: aanpassen naar jouw vereniging / beheerder
 $ORG_EMAIL  = 'inlinecomp@devriesen.com';   // TODO: e-mailadres voor verzoeken
 $ORG_ADRES  = '';                           // TODO: eventueel postadres
-$LAATSTE_UPDATE_NL = '17 september 2026';
-$LAATSTE_UPDATE_EN = '17 September 2026';
+$LAATSTE_UPDATE_NL = '24 september 2026';
+$LAATSTE_UPDATE_EN = '24 September 2026';
 ?><!DOCTYPE html>
 <html lang="nl">
 <head>
@@ -57,11 +57,11 @@ $LAATSTE_UPDATE_EN = '17 September 2026';
     <a href="#en">below</a> (or scroll down).
 </div>
 
-<p><?= htmlspecialchars($ORG_NAAM) ?> (hierna: “wij”) is een vrijwilligersinitiatief
-van Geert de Vries en gebruikt InlineComp, een digitaal systeem voor de organisatie
-van inline-skate-wedstrijden. In deze verklaring leggen we uit welke persoonsgegevens
-wij verwerken, met welk doel, op welke grondslag en welke rechten je daarbij hebt.
-Deze verklaring is afgestemd op de Algemene Verordening Gegevensbescherming (AVG/GDPR).</p>
+<p>InlineComp is een digitaal systeem voor het beheer van inline-skate-wedstrijden,
+ontwikkeld en beheerd door Geert de Vries als vrijwilliger. In deze verklaring leggen
+we uit welke persoonsgegevens wij verwerken, met welk doel, op welke grondslag en welke
+rechten je daarbij hebt. Deze verklaring is afgestemd op de Algemene Verordening
+Gegevensbescherming (AVG/GDPR).</p>
 
 <div style="background:#f4f8fb;border-left:4px solid #1a3a5c;padding:.8rem 1rem;margin:1.5rem 0;">
 <h2 style="margin-top:0;border:0;padding-bottom:0;">In het kort</h2>
@@ -70,7 +70,8 @@ staat hieronder — bij twijfel geldt die volledige tekst.</em></p>
 <ul>
     <li>We verwerken alleen wat nodig is om wedstrijden te organiseren: je naam,
         KNSB-licentienummer, vereniging, startnummer en je resultaten. Deze gegevens
-        krijgen we van de KNSB zelf, niet van jou.</li>
+        krijgen we meestal van de KNSB, soms van de organiserende vereniging, en
+        alleen bij optionele verzoeken (profiel, anoniem) rechtstreeks van jou.</li>
     <li>We slaan <strong>geen</strong> e-mailadres, telefoonnummer, adres of
         geboortedatum van rijders op.</li>
     <li>Veel rijders zijn <strong>minderjarig</strong>; van hen verwerken we dezelfde
@@ -102,15 +103,26 @@ staat hieronder — bij twijfel geldt die volledige tekst.</em></p>
 <p>Vragen? Mail naar <a href="mailto:<?= htmlspecialchars($ORG_EMAIL) ?>"><?= htmlspecialchars($ORG_EMAIL) ?></a>.</p>
 </div>
 
-<h2>0. Wie is verantwoordelijk voor deze verwerking?</h2>
-<p>InlineComp wordt beheerd door Geert de Vries, als vrijwilliger en zonder dat hier
-een bedrijf of rechtspersoon achter staat. Voor vragen over privacy kun je terecht bij
-de contactgegevens in §10.</p>
+<h2>0. Wie is verantwoordelijk?</h2>
+<p>InlineComp is een wedstrijdmanagementsysteem, beheerd door Geert de Vries als
+vrijwilliger, zonder dat hier (nog) een bedrijf of rechtspersoon achter staat. De
+wedstrijden zelf worden georganiseerd door verenigingen en organisaties; InlineComp
+organiseert geen wedstrijden.</p>
+<p>Voor de verwerking van persoonsgegevens in InlineComp — het verwerken van
+wedstrijdgegevens, het historisch uitslagarchief en de wedstrijdoverstijgende klassementen,
+de openbare uitslagpagina's, persoonlijke profielen, publiek anoniem, coach-accounts,
+pushmeldingen, geaggregeerde statistiek en het login-logboek — is <strong>InlineComp
+verwerkingsverantwoordelijke</strong>. Het beheer van InlineComp bepaalt de doelen en de
+middelen van deze verwerking (hoe het systeem werkt, wat er bewaard en gepubliceerd wordt).
+De organiserende vereniging gebruikt InlineComp als hulpmiddel, maar geeft geen instructies
+over de wijze van verwerken.</p>
+<p>Zolang er geen rechtspersoon achter InlineComp staat, treedt Geert de Vries op als de
+verantwoordelijke natuurlijke persoon. Met vragen of verzoeken over privacy kun je bij ons
+terecht (§10).</p>
 
 <h2>1. Welke gegevens verwerken wij?</h2>
-<p>Van elke rijder die deelneemt aan een wedstrijd die wij organiseren
-verwerken wij de volgende gegevens, zoals die door de KNSB via hun
-inschrijf-API aan ons worden verstrekt:</p>
+<p>Van elke rijder die deelneemt aan een wedstrijd die in InlineComp wordt verwerkt,
+verwerken wij de volgende gegevens. Welke bron deze gegevens aanlevert, staat in §4.</p>
 <ul>
     <li>Naam (volledige naam, eventueel roepnaam)</li>
     <li>Geslacht, KNSB-categorie</li>
@@ -127,8 +139,9 @@ geboortedatum of geboortejaar van rijders. Wél bewaren wij de KNSB-<strong>cate
 Die hoort bij een leeftijdsgroep, waaruit een leeftijdsindicatie — en over meerdere
 seizoenen, via de jaarlijkse categorie-doorschuiving, een geschat geboortejaar-bereik —
 is af te leiden. Wij gebruiken deze categorie-indicatie om te controleren of een
-licentienummer over seizoenen heen bij dezelfde rijder hoort (plausibiliteit en juiste
-klassementen).</p>
+nieuwe inschrijving bij een rijder hoort die al in ons systeem staat (plausibiliteit en
+juiste klassementen). Deze indicatie berekenen wij per controle opnieuw en slaan wij
+niet op.</p>
 
 <h2>1b. Coach-accounts (optioneel)</h2>
 <p>Coaches kunnen — geheel vrijwillig — een persoonlijk account aanmaken in de
@@ -221,10 +234,11 @@ volledig omkeerbaar.</p>
     <li><strong>Import</strong>: geeft een gegevensbron (bijvoorbeeld de KNSB) aan dat een rijder
         anoniem wil zijn, dan nemen wij die keuze over bij het inlezen.</li>
 </ul>
-<p>De grondslag is <strong>dataminimalisatie en het honoreren van je bezwaar</strong> (art. 21
-AVG): je maakt bezwaar tegen het openbaar tonen van je naam, en wij respecteren dat terwijl de
-sportieve uitslag intact blijft. Deze keuze is los van de onomkeerbare verwijdering uit §9 —
-bij “publiek anoniem” blijven je gegevens behouden en kun je de keuze weer terugdraaien.</p>
+<p>Dit is een <strong>beperking van de openbaarmaking</strong>: je maakt bezwaar (art. 21
+AVG) tegen het openbaar tonen van je naam, en wij honoreren dat door je publiek af te
+schermen, terwijl de sportieve uitslag intact blijft. Deze keuze staat los van de
+onomkeerbare verwijdering uit §9: bij “publiek anoniem” blijven je gegevens behouden en
+kun je de keuze weer terugdraaien.</p>
 
 <h2>1f. Minderjarige rijders</h2>
 <p>Het merendeel van de deelnemers is <strong>minderjarig</strong>. De AVG kent kinderen extra
@@ -239,18 +253,19 @@ bescherming toe (overweging 38 AVG). Wij houden daar op de volgende manier reken
     <li>In de belangenafweging voor onze grondslag (gerechtvaardigd belang, §3) wegen wij expliciet
         mee dat veel betrokkenen kind zijn: we houden de verwerking minimaal en bieden de mogelijkheid
         om de naam publiek af te schermen (<strong>publiek anoniem</strong>, §1e).</li>
-    <li>De <strong>optionele</strong>, op toestemming gebaseerde keuzes — een persoonlijk profiel
-        (§1d), publiek anoniem (§1e) en pushmeldingen (§1c) — horen voor een minderjarige
-        <strong>door de ouder/verzorger</strong> gemaakt en beheerd te worden (in Nederland geldt dit
-        tot 16 jaar).</li>
+    <li>De <strong>optionele</strong> keuzes — een persoonlijk profiel (§1d), publiek
+        anoniem (§1e) en pushmeldingen (§1c) — horen voor een minderjarige
+        <strong>door de ouder/verzorger</strong> gemaakt en beheerd te worden. Voor
+        pushmeldingen, die op toestemming rusten, geeft bij rijders onder de 16 jaar de
+        ouder/verzorger die toestemming (art. 5 UAVG).</li>
     <li>De <strong>rechten</strong> uit §9 (inzage, correctie, verwijdering/anonimisering, bezwaar)
         kunnen namens een minderjarige door de ouder/verzorger worden uitgeoefend.</li>
 </ul>
 
 <h2>2. Waarom verwerken wij deze gegevens?</h2>
 <ul>
-    <li>Het correct organiseren en uitvoeren van wedstrijden (startlijsten,
-        tijdregistratie, uitslag, klassement).</li>
+    <li>Het ondersteunen van verenigingen en organisatoren bij het correct organiseren en
+        uitvoeren van wedstrijden (startlijsten, tijdregistratie, uitslag, klassement).</li>
     <li>Het bijdragen aan de wedstrijdorganisatie binnen de context van de KNSB
         als overkoepelende bond.</li>
     <li>Het bewaren van een historisch uitslagoverzicht voor deelnemers,
@@ -264,32 +279,39 @@ bescherming toe (overweging 38 AVG). Wij houden daar op de volgende manier reken
 
 <h2>3. Grondslag</h2>
 <p>De verwerking vindt plaats op grond van <strong>gerechtvaardigd belang</strong>
-(art. 6 lid 1 sub f AVG): zonder deze gegevens kunnen wij geen eerlijke wedstrijd
-organiseren of uitslagen publiceren, en dit belang is niet onevenredig ten opzichte
-van de privacy van deelnemers — het gaat om beperkte, sport-functionele gegevens die
-in deze sport gebruikelijk openbaar worden gemaakt. Bij deze afweging houden wij er in het
-bijzonder rekening mee dat veel deelnemers minderjarig zijn (zie §1f).</p>
-<p>Voor de coach-accounts en pushmeldingen geldt daarnaast <strong>toestemming</strong>
+(art. 6 lid 1 sub f AVG): zonder deze gegevens kan geen eerlijke wedstrijd worden
+georganiseerd, kunnen uitslagen niet worden gepubliceerd en kan de sportieve geschiedenis
+niet worden bewaard en ontsloten voor rijders, verenigingen en de sport. Het gaat om
+beperkte, sport-functionele gegevens die in deze sport gebruikelijk openbaar zijn, en dit
+belang is niet onevenredig ten opzichte van de privacy van deelnemers. In deze afweging
+houden wij er in het bijzonder rekening mee dat veel deelnemers minderjarig zijn (zie §1f),
+en bieden wij de mogelijkheid om de naam publiek af te schermen (§1e).</p>
+<p>Voor coach-accounts en pushmeldingen geldt daarnaast <strong>toestemming</strong>
 (art. 6 lid 1 sub a AVG) als grondslag — zie §1b en §1c.</p>
-<p><em>Toelichting: er bestaat geen formele overeenkomst of opdracht tussen ons en de
-KNSB die onze verwerking regelt. Wij zijn een zelfstandig, vrijwillig opererende
-wedstrijdorganisator die gegevens van de KNSB ontvangt om wedstrijden te faciliteren.
-Om die reden baseren wij ons niet op “uitvoering van een overeenkomst” maar uitsluitend
-op gerechtvaardigd belang en toestemming.</em></p>
 
 <h2>4. Bron van de gegevens</h2>
-<p>De persoonsgegevens ontvangen wij rechtstreeks van de KNSB via hun
-officiële inschrijf-systeem op het moment dat een rijder zich voor onze
-wedstrijd inschrijft. Wij verzamelen zelf géén gegevens van rijders.</p>
-<p>Voor het reconstrueren van historische uitslagen (voor seizoens- of
-meerjarenklassementen) kunnen wij oude papieren of PDF-uitslagen handmatig
-inlezen via een import-tool. Hierbij gebruiken wij in sommige gevallen
-een AI-dienst om tekstherkenning te helpen — zie §5b hieronder.</p>
+<p>Wij ontvangen persoonsgegevens uit de volgende bronnen:</p>
+<ul>
+    <li><strong>KNSB</strong>: via het officiële inschrijfsysteem (API) van de KNSB, op
+        het moment dat een rijder zich voor een wedstrijd inschrijft. Dit is de hoofdbron.</li>
+    <li><strong>Organiserende vereniging of organisatie</strong>: voor wedstrijden die
+        niet (volledig) via de KNSB lopen, kan de organisator de deelnemerslijst als
+        CSV-bestand aanleveren. Wij nemen daaruit alleen de gegevens over die in §1 zijn
+        genoemd; overige kolommen worden niet ingelezen.</li>
+    <li><strong>Historische uitslagen</strong>: voor seizoens- of meerjarenklassementen
+        kunnen wij oude papieren of pdf-uitslagen inlezen via een import-tool, in sommige
+        gevallen met hulp van een AI-dienst voor tekstherkenning (zie §5b).</li>
+    <li><strong>De rijder of ouder/verzorger zelf</strong>: uitsluitend bij optionele
+        verzoeken, zoals het aanvragen van een persoonlijk profiel (§1d) of publiek anoniem
+        (§1e), en bij het aanmaken van een coach-account (§1b) of het aanzetten van
+        pushmeldingen (§1c).</li>
+</ul>
+<p>Buiten deze bronnen verzamelen wij geen gegevens over rijders.</p>
 
 <h2>5. Met wie delen wij de gegevens?</h2>
 <ul>
-    <li><strong>KNSB</strong>: wij wisselen inschrijf- en uitslagdata uit met
-        de KNSB als onderdeel van de bondswedstrijden.</li>
+    <li><strong>KNSB</strong>: wij wisselen inschrijf- en uitslagdata uit met de KNSB als
+        onderdeel van de bondswedstrijden.</li>
     <li><strong>Publiek (uitslagen)</strong>: namen, verenigingen, startnummers
         en eindtijden worden openbaar gepubliceerd op onze uitslagpagina, zoals
         gangbaar in de sport — behalve van rijders die voor <strong>publiek
@@ -360,6 +382,14 @@ de opgevraagde pagina en de datum/tijd van het bezoek.</p>
         tracking — zie ook de “Anonieme bezoek-statistieken” op de publieke pagina, die
         los hiervan géén IP-adressen bewaren.</li>
 </ul>
+<p><strong>Anonieme bezoek-statistieken (publieke pagina):</strong> op de publieke pagina's
+houden wij bij hoeveel bezoekers er tegelijk actief zijn, zodat wij de serverbelasting
+kunnen bewaken en zo nodig kunnen ingrijpen om de wedstrijd te laten doordraaien. Hiervoor bewaren
+wij per bezoeksessie alleen een technisch sessie-ID, een browser-/apparaataanduiding
+(user-agent) en tijdstempels — <strong>geen IP-adres en geen naam of andere
+persoonsgegevens</strong>. Om bezoeken binnen één sessie niet dubbel te tellen plaatsen wij
+hierbij een klein sessie-cookie (<code>ICPUB</code>) op je apparaat; dit verdwijnt zodra je de
+browser sluit en wordt niet gebruikt om je gedrag over websites heen te volgen.</p>
 
 <h2>5d. Login-logboek &amp; locatiebepaling</h2>
 <p>Voor de beveiliging houden wij een login-logboek bij van in- en uitlogpogingen van
@@ -383,8 +413,8 @@ brute-force-aanvallen te detecteren.</p>
 <h2>6. Waar staan de gegevens?</h2>
 <p>Al onze wedstrijd-, account- en technische gegevens (§1, §1b, §1c, §5c) staan op
 dezelfde webserver bij onze hostingprovider <strong>iFastNet Ltd in het Verenigd
-Koninkrijk</strong>. Toegang is beperkt tot beheerders van <?= htmlspecialchars($ORG_NAAM) ?>
-via wachtwoord-beveiligde accounts.</p>
+Koninkrijk</strong>. Toegang is beperkt tot beheerders van
+<?= htmlspecialchars($ORG_NAAM) ?> via wachtwoord-beveiligde accounts.</p>
 <p>Eén uitzondering: <strong>AI-verwerking</strong> (zie §5b) gebeurt op servers van
 Anthropic in de Verenigde Staten.</p>
 
@@ -479,8 +509,8 @@ ze zijn verzameld:</p>
         <?php if ($ORG_ADRES): ?><br>Adres: <?= htmlspecialchars($ORG_ADRES) ?><?php endif; ?>
     </p>
     <p>Wij reageren binnen vier weken op jouw verzoek. Om misbruik te voorkomen
-        kunnen wij je vragen jouw identiteit aan te tonen (bijvoorbeeld via
-        jouw KNSB-licentienummer).</p>
+        kunnen wij je vragen je identiteit aan te tonen, bijvoorbeeld door in te loggen
+        op je persoonlijk profiel of via bevestiging door je vereniging.</p>
 </div>
 
 <h2>11. Wijzigingen in deze verklaring</h2>
@@ -502,11 +532,10 @@ met de datum “laatst bijgewerkt” bovenaan.</p>
     is <a href="#nl">bovenaan</a> te vinden (or scroll up).
 </div>
 
-<p><?= htmlspecialchars($ORG_NAAM) ?> (referred to as “we”) is a volunteer initiative
-run by Geert de Vries, using InlineComp, a digital system for organising inline-skating
-competitions. This statement explains what personal data we process, for what purpose,
-on what legal basis, and what rights you have. This statement aligns with the General
-Data Protection Regulation (GDPR).</p>
+<p>InlineComp is a digital system for managing inline-skating competitions, developed
+and run by Geert de Vries as a volunteer. This statement explains what personal data we
+process, for what purpose, on what legal basis, and what rights you have. This statement
+aligns with the General Data Protection Regulation (GDPR).</p>
 
 <div style="background:#f4f8fb;border-left:4px solid #1a3a5c;padding:.8rem 1rem;margin:1.5rem 0;">
 <h2 style="margin-top:0;border:0;padding-bottom:0;">In short</h2>
@@ -514,8 +543,9 @@ Data Protection Regulation (GDPR).</p>
 case of doubt, that full text applies.</em></p>
 <ul>
     <li>We only process what's needed to organise competitions: your name, KNSB licence
-        number, club, start number and your results. We get this data from the KNSB
-        itself, not from you.</li>
+        number, club, start number and your results. We usually receive this data from
+        the KNSB, sometimes from the organising club, and only for optional requests
+        (profile, anonymity) directly from you.</li>
     <li>We do <strong>not</strong> store skaters' e-mail address, phone number, home
         address or date of birth.</li>
     <li>Many skaters are <strong>minors</strong>; for them we process the same limited data.
@@ -544,14 +574,24 @@ case of doubt, that full text applies.</em></p>
 <p>Questions? Email <a href="mailto:<?= htmlspecialchars($ORG_EMAIL) ?>"><?= htmlspecialchars($ORG_EMAIL) ?></a>.</p>
 </div>
 
-<h2>0. Who is responsible for this processing?</h2>
-<p>InlineComp is run by Geert de Vries, as a volunteer and without any company or legal
-entity behind it. For privacy questions, see the contact details in section 10.</p>
+<h2>0. Who is responsible?</h2>
+<p>InlineComp is a competition management system run by Geert de Vries as a volunteer,
+without (yet) any company or legal entity behind it. The competitions themselves are
+organised by clubs and organisations; InlineComp does not organise competitions.</p>
+<p>For the processing of personal data in InlineComp — processing competition data, the
+historical results archive and cross-competition standings, the public results pages,
+personal profiles, public anonymity, coach accounts, push notifications, aggregated
+statistics and the login log — <strong>InlineComp is the controller</strong>. The
+management of InlineComp determines the purposes and means of this processing (how the
+system works, what is retained and published). The organising club uses InlineComp as a
+tool but does not give instructions on how the data is processed.</p>
+<p>As long as there is no legal entity behind InlineComp, Geert de Vries acts as the
+responsible natural person. You can contact us with any privacy questions or requests
+(section 10).</p>
 
 <h2>1. What data do we process?</h2>
-<p>For each skater participating in a competition that we organise we
-process the following data, as supplied to us by the KNSB (Dutch skating
-federation) via their registration API:</p>
+<p>For each skater taking part in a competition processed in InlineComp, we process the
+following data. Which source supplies this data is described in section 4.</p>
 <ul>
     <li>Name (full name, optionally nickname)</li>
     <li>Gender, KNSB category</li>
@@ -567,8 +607,9 @@ we assign ourselves.</p>
 date of birth or year of birth of skaters. We do store the KNSB <strong>category</strong>.
 A category corresponds to an age group, from which an age indication — and across multiple
 seasons, via the annual category progression, an approximate year-of-birth range — can be
-derived. We use this category indication to check whether a licence number belongs to the
-same skater across seasons (plausibility and correct standings).</p>
+derived. We use this category indication to check whether a new registration belongs to a skater
+already in our system (plausibility and correct standings). This indication is calculated
+anew for each check and is not stored.</p>
 
 <h2>1b. Coach accounts (optional)</h2>
 <p>Coaches may — entirely voluntarily — create a personal account in the coach app.
@@ -660,10 +701,10 @@ fully reversible.</p>
     <li><strong>Import</strong>: if a data source (for example the KNSB) indicates that a skater
         wishes to be anonymous, we adopt that choice on import.</li>
 </ul>
-<p>The legal basis is <strong>data minimisation and honouring your objection</strong> (Article 21
-GDPR): you object to your name being shown publicly, and we respect that while the sporting result
-stays intact. This choice is separate from the irreversible erasure in §9 — with “publicly
-anonymous” your data is retained and you can reverse the choice.</p>
+<p>This is a <strong>restriction of publication</strong>: you object (Article 21 GDPR) to
+your name being shown publicly, and we honour that by shielding you publicly while the
+sporting result stays intact. This choice is separate from the irreversible erasure in
+section 9: with “publicly anonymous” your data is retained and you can reverse the choice.</p>
 
 <h2>1f. Minor (under-age) skaters</h2>
 <p>The majority of participants are <strong>minors</strong>. The GDPR grants children specific
@@ -678,17 +719,19 @@ protection (recital 38 GDPR). We take this into account as follows:</p>
     <li>In the balancing test for our legal basis (legitimate interest, §3) we explicitly weigh that
         many data subjects are children: we keep processing minimal and offer the option to shield the
         name publicly (<strong>publicly anonymous</strong>, §1e).</li>
-    <li>The <strong>optional</strong>, consent-based choices — a personal profile (§1d),
-        publicly anonymous (§1e) and push notifications (§1c) — should for a minor be made and
-        managed <strong>by the parent/guardian</strong> (in the Netherlands this applies under age 16).</li>
+    <li>The <strong>optional</strong> choices — a personal profile (§1d), publicly anonymous
+        (§1e) and push notifications (§1c) — should for a minor be made and managed
+        <strong>by the parent/guardian</strong>. For push notifications, which are based on
+        consent, the parent/guardian gives that consent for skaters under 16 (Article 5 of the
+        Dutch GDPR Implementation Act).</li>
     <li>The <strong>rights</strong> in §9 (access, correction, erasure/anonymisation, objection) may
         be exercised on a minor's behalf by the parent/guardian.</li>
 </ul>
 
 <h2>2. Why do we process this data?</h2>
 <ul>
-    <li>To correctly organise and run competitions (start lists, timekeeping,
-        results, standings).</li>
+    <li>Supporting clubs and organisers in correctly organising and running competitions
+        (start lists, timekeeping, results, standings).</li>
     <li>To contribute to competition organisation within the context of the KNSB as governing body.</li>
     <li>To maintain a historical results archive for participants, clubs
         and the federation.</li>
@@ -701,30 +744,36 @@ protection (recital 38 GDPR). We take this into account as follows:</p>
 
 <h2>3. Legal basis</h2>
 <p>Processing takes place on the basis of <strong>legitimate interest</strong>
-(Article 6(1)(f) GDPR): without this data we cannot organise a fair competition or publish
-results, and this interest is not disproportionate to participants' privacy — it concerns
-limited, sport-functional data that is customarily made public in this sport. In this balancing
-we take particular account of the fact that many participants are minors (see §1f).</p>
+(Article 6(1)(f) GDPR): without this data no fair competition can be organised, results
+cannot be published, and the sporting history cannot be preserved and made available for
+skaters, clubs and the sport. This concerns limited, sport-functional data that is
+customarily public in this sport, and this interest is not disproportionate to participants'
+privacy. In this balancing we take particular account of the fact that many participants are
+minors (see section 1f), and we offer the option to shield the name publicly (section 1e).</p>
 <p>For coach accounts and push notifications, <strong>consent</strong> (Article 6(1)(a)
 GDPR) additionally applies as the legal basis — see sections 1b and 1c.</p>
-<p><em>Note: there is no formal agreement or mandate between us and the KNSB governing our
-processing. We are an independent, volunteer-run competition organiser that receives data
-from the KNSB to facilitate competitions. For this reason we do not rely on “performance of
-a contract” but solely on legitimate interest and consent.</em></p>
 
 <h2>4. Source of the data</h2>
-<p>We receive personal data directly from the KNSB via their official
-registration system when a skater registers for our competition. We do not
-collect data from skaters ourselves.</p>
-<p>To reconstruct historical results (for season or multi-year standings)
-we may manually import old paper or PDF result sheets via an import tool.
-In some cases this uses an AI service to assist with text recognition —
-see §5b below.</p>
+<p>We receive personal data from the following sources:</p>
+<ul>
+    <li><strong>KNSB</strong>: via the KNSB's official registration system (API), when a
+        skater registers for a competition. This is the main source.</li>
+    <li><strong>Organising club or organisation</strong>: for competitions not (fully) run
+        through the KNSB, the organiser may supply the participant list as a CSV file. We only
+        take over the data listed in section 1; other columns are not imported.</li>
+    <li><strong>Historical results</strong>: for season or multi-year standings we may import
+        old paper or PDF result sheets via an import tool, in some cases assisted by an AI
+        service for text recognition (see §5b).</li>
+    <li><strong>The skater or parent/guardian</strong>: only for optional requests, such as
+        requesting a personal profile (§1d) or public anonymity (§1e), and when creating a
+        coach account (§1b) or enabling push notifications (§1c).</li>
+</ul>
+<p>We do not collect data about skaters from any other source.</p>
 
 <h2>5. With whom do we share data?</h2>
 <ul>
-    <li><strong>KNSB</strong>: we exchange registration and results data with
-        the KNSB as part of federation competitions.</li>
+    <li><strong>KNSB</strong>: we exchange registration and results data with the KNSB as
+        part of federation competitions.</li>
     <li><strong>The public (results)</strong>: names, clubs, start numbers
         and finishing times are published on our public results page, as is
         customary in the sport — except for skaters who have chosen to be
@@ -790,6 +839,13 @@ date/time of the visit.</p>
     <li>These logs are not linked to a user account and are not used for tracking — see also the
         “anonymous visit statistics” on the public page, which separately store no IP addresses.</li>
 </ul>
+<p><strong>Anonymous visit statistics (public page):</strong> on the public pages we count how
+many visitors are active at the same time, so we can monitor server load and step in if
+needed to keep the competition running. For this we store per visit session only
+a technical session ID, a browser/device identifier (user agent) and timestamps —
+<strong>no IP address and no name or other personal data</strong>. To avoid counting visits
+within one session twice, we place a small session cookie (<code>ICPUB</code>) on your device;
+it disappears when you close the browser and is not used to track your behaviour across websites.</p>
 
 <h2>5d. Login log &amp; location lookup</h2>
 <p>For security we keep a login log of sign-in and sign-out events by <strong>administrators,
@@ -904,8 +960,8 @@ for which it was collected:</p>
         <?php if ($ORG_ADRES): ?><br>Address: <?= htmlspecialchars($ORG_ADRES) ?><?php endif; ?>
     </p>
     <p>We respond to your request within four weeks. To prevent abuse we
-        may ask you to prove your identity (for example via your KNSB
-        licence number).</p>
+        may ask you to prove your identity, for example by logging in to your personal
+        profile or through confirmation by your club.</p>
 </div>
 
 <h2>11. Changes to this statement</h2>
