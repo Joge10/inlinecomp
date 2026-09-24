@@ -198,7 +198,7 @@ de rijder aan wedstrijden heeft deelgenomen — er komt <strong>geen nieuwe info
     <li>de koppeling aan het bestaande <strong>licentienummer</strong> van de rijder.</li>
 </ul>
 <p>Wij bewaren <strong>geen e-mailadres</strong> bij het profiel. Een aanvraag verloopt via een
-formulier aan de organisatie. Je e-mailadres bewaren wij daarbij alleen <strong>tijdelijk</strong> —
+formulier aan ons. Je e-mailadres bewaren wij daarbij alleen <strong>tijdelijk</strong> —
 tot de aanvraag is goedgekeurd of afgewezen — om je een ontvangstbevestiging en (bij goedkeuring)
 de aanmaaklink te sturen; daarna verwijderen wij het e-mailadres. Het wordt niet aan het profiel
 zelf gekoppeld. Het profiel is <strong>privé</strong>:
@@ -208,7 +208,7 @@ van je eigen, reeds verwerkte resultaten. De grondslag is <strong>gerechtvaardig
 (art. 6 lid 1 sub f AVG): het gaat om een besloten weergave van gegevens die de rijder zelf
 betreffen en die al onderdeel zijn van het wedstrijdarchief. Omdat er niets openbaar wordt
 gemaakt of extern wordt gedeeld, is hiervoor <strong>geen aparte toestemming</strong> nodig, ook
-niet bij jeugdrijders. Je kunt het profiel op elk moment laten verwijderen door de organisatie;
+niet bij jeugdrijders. Je kunt het profiel op elk moment laten verwijderen door ons;
 de onderliggende wedstrijduitslagen blijven dan bestaan als onderdeel van het sporthistorisch
 archief (zie §7).</p>
 
@@ -225,7 +225,7 @@ volledig omkeerbaar.</p>
         operationeel nodig is. Daarbuiten, en in het permanente uitslag- en serie-klassement-archief,
         blijf je anoniem. Je bent ook <strong>niet op naam vindbaar</strong> in de publieke zoek.</li>
     <li><strong>Zelf instellen</strong>: via je persoonlijke profiel “Mijn InlineComp” (§1d), of
-        — zonder profiel — door de organisatie te mailen; die zet de keuze voor je
+        — zonder profiel — door ons te mailen; wij zetten de keuze voor je
         (en kan 'm op jouw verzoek weer opheffen).</li>
     <li><strong>Gericht laten volgen</strong>: wie jou tóch wil volgen (bijvoorbeeld een ouder of
         coach) kan dat met een <strong>persoonlijk, geheim volg-ID</strong> dat je zelf deelt;
@@ -446,10 +446,10 @@ ze zijn verzameld:</p>
         verwijderen en het vervalt automatisch na één jaar zonder inloggen — zie §1b.</li>
     <li><strong>Persoonlijk profiel ("Mijn InlineComp")</strong>: gebruikersnaam en
         versleutelde pincode blijven bewaard zolang het profiel bestaat; het wordt op verzoek
-        van de rijder of door de organisatie verwijderd. De onderliggende wedstrijduitslagen
+        van de rijder of door ons verwijderd. De onderliggende wedstrijduitslagen
         blijven bestaan als onderdeel van het historisch archief — zie §1d.</li>
     <li><strong>Publiek-anoniem-keuze</strong>: de voorkeur (en het bijbehorende volg-ID)
-        blijft bewaard zolang die geldt; je kunt 'm zelf of via de organisatie weer opheffen — zie §1e.</li>
+        blijft bewaard zolang die geldt; je kunt 'm zelf of via ons weer opheffen — zie §1e.</li>
 </ul>
 
 <h2>8. Beveiliging</h2>
@@ -666,7 +666,7 @@ hold because the skater took part in competitions — <strong>no new information
     <li>the link to the skater's existing <strong>licence number</strong>.</li>
 </ul>
 <p>We store <strong>no e-mail address</strong> with the profile. A request is made via a form to
-the organisation. We keep your e-mail address only <strong>temporarily</strong> for this — until
+us. We keep your e-mail address only <strong>temporarily</strong> for this — until
 the request is approved or rejected — to send you an acknowledgement and (on approval) the
 activation link; after that we delete the e-mail address. It is not linked to the profile itself. The profile is <strong>private</strong>: it is visible only
 after logging in with a username and PIN, is not indexed by search engines, and the data is
@@ -674,8 +674,8 @@ after logging in with a username and PIN, is not indexed by search engines, and 
 results. The legal basis is <strong>legitimate interest</strong> (Article 6(1)(f) GDPR): it is a
 closed view of data concerning the skater themselves that is already part of the competition
 archive. Because nothing is made public or shared externally, <strong>no separate consent</strong>
-is required, including for youth skaters. You can have the profile deleted at any time by the
-organisation; the underlying competition results remain as part of the sport-historical archive
+is required, including for youth skaters. You can have the profile deleted at any time by
+us; the underlying competition results remain as part of the sport-historical archive
 (see §7).</p>
 
 <h2>1e. Showing as publicly anonymous (optional)</h2>
@@ -692,7 +692,7 @@ fully reversible.</p>
         series-standings archive, you remain anonymous. You are also <strong>not findable by
         name</strong> in the public search.</li>
     <li><strong>Setting it yourself</strong>: via your personal “My InlineComp” profile (§1d), or
-        — without a profile — by e-mailing the organisation, who set the choice for you
+        — without a profile — by e-mailing us, and we set the choice for you
         (and can lift it again at your request).</li>
     <li><strong>Letting specific people follow you</strong>: someone who still wants to follow you
         (for example a parent or coach) can do so with a <strong>personal, secret follow-ID</strong>
@@ -897,11 +897,11 @@ for which it was collected:</p>
     <li><strong>Coach accounts</strong>: for as long as the account exists; you can delete it
         yourself and it expires automatically after one year without login — see section 1b.</li>
     <li><strong>Personal profile ("My InlineComp")</strong>: the username and encrypted PIN are
-        kept for as long as the profile exists; it is deleted at the skater's request or by the
-        organisation. The underlying competition results remain as part of the historical archive
+        kept for as long as the profile exists; it is deleted at the skater's request or by
+        us. The underlying competition results remain as part of the historical archive
         — see section 1d.</li>
     <li><strong>Publicly-anonymous choice</strong>: the preference (and its follow-ID) is kept for
-        as long as it applies; you can lift it yourself or via the organisation — see section 1e.</li>
+        as long as it applies; you can lift it yourself or via us — see section 1e.</li>
 </ul>
 
 <h2>8. Security</h2>
