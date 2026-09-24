@@ -226,7 +226,7 @@ volledig omkeerbaar.</p>
         blijf je anoniem. Je bent ook <strong>niet op naam vindbaar</strong> in de publieke zoek.</li>
     <li><strong>Zelf instellen</strong>: via je persoonlijke profiel “Mijn InlineComp” (§1d), of
         — zonder profiel — door ons te mailen; wij zetten de keuze voor je
-        (en kan 'm op jouw verzoek weer opheffen).</li>
+        (en kunnen 'm op jouw verzoek weer opheffen).</li>
     <li><strong>Gericht laten volgen</strong>: wie jou tóch wil volgen (bijvoorbeeld een ouder of
         coach) kan dat met een <strong>persoonlijk, geheim volg-ID</strong> dat je zelf deelt;
         alleen wie dat ID heeft, ziet je naam. Je kunt dit volg-ID op elk moment vernieuwen,
@@ -247,9 +247,9 @@ bescherming toe (overweging 38 AVG). Wij houden daar op de volgende manier reken
     <li>Voor minderjarigen verwerken wij <strong>dezelfde beperkte, sport-functionele gegevens</strong>
         als voor volwassenen (zie §1) — niet meer. Wij doen <strong>geen marketing, profilering
         of tracking</strong> — van niemand, dus ook niet van kinderen.</li>
-    <li>De gegevens ontvangen wij van de <strong>KNSB</strong>; daar ligt de lidmaatschaps-relatie,
-        die bij inschrijving door het lid of diens ouder/verzorger wordt aangegaan. Wij krijgen de
-        gegevens uitsluitend om de wedstrijd te kunnen organiseren (zie §4).</li>
+    <li>De gegevens ontvangen wij hoofdzakelijk van de <strong>KNSB</strong> (zie §4); daar ligt de
+        lidmaatschapsrelatie, die bij inschrijving door het lid of diens ouder/verzorger wordt
+        aangegaan. Wij gebruiken de gegevens uitsluitend voor de doelen in §2.</li>
     <li>In de belangenafweging voor onze grondslag (gerechtvaardigd belang, §3) wegen wij expliciet
         mee dat veel betrokkenen kind zijn: we houden de verwerking minimaal en bieden de mogelijkheid
         om de naam publiek af te schermen (<strong>publiek anoniem</strong>, §1e).</li>
@@ -713,9 +713,9 @@ protection (recital 38 GDPR). We take this into account as follows:</p>
     <li>For minors we process the <strong>same limited, sport-functional data</strong> as for
         adults (see §1) — no more. We do <strong>no marketing, profiling or tracking</strong>
         — of anyone, so not of children either.</li>
-    <li>We receive the data from the <strong>KNSB</strong>; that is where the membership
-        relationship lies, entered into at registration by the member or their parent/guardian. We
-        receive the data solely to organise the competition (see §4).</li>
+    <li>We mainly receive the data from the <strong>KNSB</strong> (see §4); that is where the
+        membership relationship lies, entered into at registration by the member or their
+        parent/guardian. We use the data solely for the purposes in §2.</li>
     <li>In the balancing test for our legal basis (legitimate interest, §3) we explicitly weigh that
         many data subjects are children: we keep processing minimal and offer the option to shield the
         name publicly (<strong>publicly anonymous</strong>, §1e).</li>
