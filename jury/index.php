@@ -32,8 +32,15 @@ $action = $_GET['action'] ?? '';
 // ── Sessie-init (aparte cookie zodat coach/public/jury elkaar niet bijten) ──
 if (session_status() === PHP_SESSION_NONE) {
     session_name('ICJURY');
+    // secure=true: cookie alleen over HTTPS (defense-in-depth op club-wifi).
+    // Cookie-params moeten gelijk blijven aan die in auth/jury_session.php
+    // — welke code als eerste session_start doet, wint.
     session_set_cookie_params([
-        'lifetime' => 0, 'path' => '/', 'httponly' => true, 'samesite' => 'Lax',
+        'lifetime' => 0,
+        'path'     => '/',
+        'secure'   => true,
+        'httponly' => true,
+        'samesite' => 'Lax',
     ]);
     @session_start();
 }
@@ -310,9 +317,11 @@ if ($action === 'login' && $_SERVER['REQUEST_METHOD'] === 'POST') {
         echo json_encode(['error' => 'Onjuist wachtwoord']);
         exit;
     }
-    $_SESSION['jury_comp_id'] = $comp['id'];
-    $_SESSION['jury_role']    = null;
-    $_SESSION['jury_auth_at'] = time();
+    // juryMarkeerLogin() doet: session_regenerate_id (session-fixation-fix),
+    // comp_id/auth_at/last_activity zetten, en UA-familie vastleggen voor de
+    // hijack-detectie in juryHuidigeSessie(). Vervangt de handmatige $_SESSION-
+    // schrijfjes hier, zodat login-invariants op één plek staan.
+    juryMarkeerLogin($comp['id']);
     _juryLog($pdo, 'jury-login', $comp['name'], $comp['id']);
     echo json_encode(['ok' => true, 'comp_naam' => $comp['name']]);
     exit;

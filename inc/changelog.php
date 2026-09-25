@@ -94,6 +94,18 @@ return [
         ],
     ],
 
+    // ── Patch 25-09-2026 (onder H2160.18.09, jury-sessie-security, alleen Beheer) ──
+    [
+        'versie' => 'H2160.18.09', 'datum' => '25-09-2026',
+        'soort'  => 'patch', 'onderdelen' => ['patch'],
+        'tekst' => [
+            'nl' => '🔒 <b>Jury-sessie steviger</b> — de tablet-sessies op de jury-app zijn nu beter beschermd tegen misbruik op een open club-wifi. Na correcte wachtwoord-invoer krijgt de sessie meteen een nieuw sessie-ID (voorkomt dat een eerder afgevangen ID misbruikt wordt), het sessie-cookie mag alleen nog over HTTPS reizen, de sessie is gekoppeld aan het type browser+besturingssysteem van de tablet waarop is ingelogd (een gestolen sessie werkt niet op een ander apparaat), en een sessie die 4 uur inactief is valt automatisch uit — zodat een vergeten tablet in de kleedkamer geen open deur blijft.',
+            'en' => '🔒 <b>Sturdier jury sessions</b> — the tablet sessions on the jury app are now better protected against misuse on an open club Wi-Fi. After a correct password the session immediately gets a new session ID (preventing reuse of a previously captured ID), the session cookie may only travel over HTTPS, the session is tied to the browser+operating system family of the tablet used to log in (a stolen session doesn\'t work on a different device), and a session that\'s idle for 4 hours automatically expires — so a forgotten tablet in the changing room doesn\'t stay an open door.',
+            'de' => '🔒 <b>Robustere Jury-Sitzungen</b> — die Tablet-Sitzungen der Jury-App sind jetzt besser gegen Missbrauch im offenen Vereins-WLAN geschützt. Nach korrekter Passworteingabe erhält die Sitzung sofort eine neue Sitzungs-ID (verhindert die Wiederverwendung einer zuvor abgefangenen ID), das Sitzungs-Cookie darf nur noch über HTTPS übertragen werden, die Sitzung ist an die Browser+Betriebssystem-Familie des verwendeten Tablets gebunden (eine gestohlene Sitzung funktioniert nicht auf einem anderen Gerät), und eine Sitzung, die 4 Stunden inaktiv ist, läuft automatisch ab — damit ein vergessenes Tablet in der Umkleide nicht als offene Tür bleibt.',
+            'fr' => '🔒 <b>Sessions du jury renforcées</b> — les sessions sur les tablettes de l\'application jury sont désormais mieux protégées contre les abus sur un Wi-Fi de club ouvert. Après la saisie correcte du mot de passe, la session reçoit immédiatement un nouvel identifiant (empêche la réutilisation d\'un identifiant précédemment intercepté), le cookie de session ne peut circuler qu\'en HTTPS, la session est liée à la famille navigateur+système d\'exploitation de la tablette utilisée (une session volée ne fonctionne pas sur un autre appareil), et une session inactive pendant 4 heures expire automatiquement — pour qu\'une tablette oubliée au vestiaire ne reste pas une porte ouverte.',
+        ],
+    ],
+
     // ── Patch 23-09-2026 (onder H2160.18.09, performance /public, alleen Beheer) ──
     [
         'versie' => 'H2160.18.09', 'datum' => '23-09-2026',
