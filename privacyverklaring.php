@@ -195,7 +195,8 @@ de rijder aan wedstrijden heeft deelgenomen — er komt <strong>geen nieuwe info
     <li>een <strong>zelfgekozen gebruikersnaam</strong> om mee in te loggen;</li>
     <li>een <strong>versleutelde pincode</strong> (bcrypt-hash) — wij kunnen de pincode
         niet uitlezen;</li>
-    <li>de koppeling aan het bestaande <strong>licentienummer</strong> van de rijder.</li>
+    <li>de koppeling aan het <strong>interne rijder-ID</strong> waaronder de rijder bij ons
+        bekend is (zie §1) — niet aan het KNSB-licentienummer.</li>
 </ul>
 <p>Wij bewaren <strong>geen e-mailadres</strong> bij het profiel. Een aanvraag verloopt via een
 formulier aan ons. Je e-mailadres bewaren wij daarbij alleen <strong>tijdelijk</strong> —
@@ -663,7 +664,8 @@ hold because the skater took part in competitions — <strong>no new information
 <ul>
     <li>a <strong>self-chosen username</strong> to log in with;</li>
     <li>an <strong>encrypted PIN</strong> (bcrypt hash) — we cannot read the PIN;</li>
-    <li>the link to the skater's existing <strong>licence number</strong>.</li>
+    <li>the link to the <strong>internal rider ID</strong> under which the skater is known in
+        our system (see §1) — not to the KNSB licence number.</li>
 </ul>
 <p>We store <strong>no e-mail address</strong> with the profile. A request is made via a form to
 us. We keep your e-mail address only <strong>temporarily</strong> for this — until
