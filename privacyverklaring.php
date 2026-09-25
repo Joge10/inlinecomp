@@ -88,7 +88,7 @@ staat hieronder — bij twijfel geldt die volledige tekst.</em></p>
     <li>Als rijder kun je ervoor kiezen <strong>publiek anoniem</strong> te zijn: je
         naam, vereniging, woonplaats én startnummer worden op de openbare pagina's
         vervangen door “Anoniem”. Rond de wedstrijddag zelf zijn je naam en startnummer
-        wél zichtbaar voor de start-indeling. Wie jou tóch wil volgen, kan dat met een
+        wél zichtbaar, zodat deelnemers zien tegen wie ze rijden. Wie jou tóch wil volgen, kan dat met een
         persoonlijk volg-ID dat je zelf deelt.</li>
     <li>Voor het digitaliseren van oude papieren uitslagen en voor het vertalen van
         mededelingen gebruiken we soms AI (Anthropic Claude, een Amerikaans bedrijf)
@@ -222,9 +222,13 @@ gegevens zelf blijven bij ons bewaard — het is uitsluitend een <strong>weergav
 volledig omkeerbaar.</p>
 <ul>
     <li><strong>Rond de wedstrijddag</strong> (van de dag ervoor tot en met de dag erna) tonen
-        wij de naam <strong>en het startnummer</strong> wél, omdat de start- en heat-indeling dan
-        operationeel nodig is. Daarbuiten, en in het permanente uitslag- en serie-klassement-archief,
-        blijf je anoniem. Je bent ook <strong>niet op naam vindbaar</strong> in de publieke zoek.</li>
+        wij je naam <strong>en startnummer</strong> wél op de volledige wedstrijdpagina — zowel de
+        start- en heat-indeling als de uitslag. Dit dient geen technisch doel; de organisatie en
+        jury beschikken hoe dan ook over de naam. Het volgt uit de openbaarheid van de wedstrijd
+        zelf: gedurende het evenement is inzichtelijk wie deelneemt en wat de resultaten zijn, wat
+        past bij een eerlijk en transparant wedstrijdverloop. Buiten dit venster, en in het
+        permanente uitslag- en serie-klassement-archief, blijf je anoniem. In de publieke
+        zoekfunctie ben je bovendien nooit op naam te vinden.</li>
     <li><strong>Zelf instellen</strong>: via je persoonlijke profiel “Mijn InlineComp” (§1d), of
         — zonder profiel — door ons te mailen; wij zetten de keuze voor je
         (en kunnen 'm op jouw verzoek weer opheffen).</li>
@@ -561,8 +565,8 @@ case of doubt, that full text applies.</em></p>
         encrypted PIN, no e-mail address; the profile is not public.</li>
     <li>As a skater you can choose to be <strong>publicly anonymous</strong>: your name,
         club, place of residence and start number are replaced by “Anonymous” on the public
-        pages. Around the competition day itself your name and start number are shown for the
-        start list. Someone who still wants to follow you can do so with a personal
+        pages. Around the competition day itself your name and start number are shown, so
+        competitors can see who they are racing against. Someone who still wants to follow you can do so with a personal
         follow-ID that you share yourself.</li>
     <li>For digitising old paper results and translating announcements, we sometimes use
         AI (Anthropic Claude, a US company) — with the legally required safeguards in place.</li>
@@ -688,11 +692,14 @@ instead of the name, club and place of residence, and we also hide the <strong>s
 identifiable). The data itself is retained — it is purely a <strong>display choice</strong> and
 fully reversible.</p>
 <ul>
-    <li><strong>Around the competition day</strong> (from the day before through the day after)
-        we do show the name <strong>and start number</strong>, because the start and heat line-up is
-        operationally needed then. Outside that window, and in the permanent results and
-        series-standings archive, you remain anonymous. You are also <strong>not findable by
-        name</strong> in the public search.</li>
+    <li><strong>Around the competition day</strong> (from the day before through the day after) we
+        do show your name <strong>and start number</strong> on the full competition page — both the
+        start and heat line-up and the results. This serves no technical purpose; the organisation
+        and jury have the name in any case. It follows from the public nature of the competition
+        itself: during the event it is apparent who is taking part and what the results are,
+        consistent with a fair and transparent competition. Outside this window, and in the
+        permanent results and series-standings archive, you remain anonymous. In the public
+        search you are never findable by name.</li>
     <li><strong>Setting it yourself</strong>: via your personal “My InlineComp” profile (§1d), or
         — without a profile — by e-mailing us, and we set the choice for you
         (and can lift it again at your request).</li>
