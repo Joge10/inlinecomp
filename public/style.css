@@ -1,0 +1,1201 @@
+﻿/* InlineComp — /public styles
+   Geextraheerd uit public/index.php op 2026-09-29 (fase 1a van refactor-plan).
+   Cache-busting: <link> laadt met ?v=<filemtime()>. */
+
+:root {
+    --blauw: #1F4E79;
+    --middenblauw: #2E75B6;
+    --lichtblauw: #D6E4F0;
+    --oranje: #E8630A;
+    --wit: #fff;
+    --tekst: #1a1a1a;
+    --grijs: #f4f6f8;
+}
+* { box-sizing: border-box; margin: 0; padding: 0; }
+html { font-size: 20px; }
+html {
+    /* Native pull-to-refresh van de browser uitschakelen — moet op html
+       én body staan voor brede browser-compatibiliteit. Onze eigen
+       PTR-handler vangt de gesture in plaats. */
+    overscroll-behavior-y: contain;
+}
+body {
+    font-family: 'Segoe UI', Arial, sans-serif;
+    font-size: 1rem;
+    color: var(--tekst);
+    background: var(--grijs);
+    overscroll-behavior-y: contain;
+    min-height: 100vh;
+}
+header {
+    background: var(--blauw);
+    color: var(--wit);
+    padding: 12px 12px 10px;
+    display: flex; flex-direction: column;
+}
+/* Bovenste rij: 📢 links, titel midden, i + ? rechts. Onderste rij:
+   subtitel breeduit centreren. */
+.hdr-row-top { display: flex; align-items: center; gap: 8px; }
+.hdr-btns       { display: flex; gap: 6px; flex-shrink: 0; align-items: center; }
+.hdr-btns-right { justify-content: flex-end; }
+/* Verbinding-banner: rood strookje boven aan zodra netwerk of server eruit ligt */
+.conn-banner {
+    background: linear-gradient(135deg, #c62828, #b71c1c);
+    color: #fff; text-align: center;
+    padding: 8px 12px; font-size: .9rem; font-weight: 600;
+    box-shadow: 0 2px 4px rgba(0,0,0,.2);
+    position: sticky; top: 0; z-index: 500;
+    animation: conn-pulse 2s ease-in-out infinite;
+}
+@keyframes conn-pulse {
+    0%, 100% { opacity: 1; }
+    50%      { opacity: .82; }
+}
+.conn-banner small { font-weight: 400; font-size: .78rem; opacity: .85; }
+header .hdr-center { flex: 1; min-width: 0; text-align: center; }
+header h1   { font-size: 1.5rem; font-weight: 700; line-height: 1.1; }
+header .sub { font-size: .95rem; opacity: .8; margin-top: 6px; text-align: center; }
+@media (max-width: 480px) {
+    header { padding: 10px 8px 8px; }
+    header h1  { font-size: 1.2rem; }
+    header .sub { font-size: .78rem; margin-top: 4px; }
+    .btn-help { width: 30px; height: 30px; font-size: 1rem; }
+    .btn-meldingen { font-size: .95rem; }
+}
+
+/* ── Org footer ── */
+.org-footer {
+    display: none; /* verborgen tot wedstrijd geselecteerd */
+    background: var(--wit); border-top: 1px solid #dde3ea;
+    padding: 12px 16px;
+    position: fixed; bottom: 0; left: 0; right: 0; z-index: 100;
+    box-shadow: 0 -2px 8px rgba(0,0,0,.08);
+}
+.org-footer-inner {
+    max-width: 720px; margin: 0 auto;
+    display: flex; align-items: center; justify-content: space-between; gap: 12px;
+}
+.org-footer-logo { height: 50px; width: auto; object-fit: contain; flex-shrink: 0; }
+.org-footer-naam { font-size: .85rem; color: var(--blauw); font-weight: 600; flex-shrink: 0; }
+/* Lege footer-cellen (bv. baan-logo bij wedstrijd zonder baan, of org-logo
+   dat te breed was en naar de marquee verhuisd is) volledig inklappen,
+   anders blijft de cell layout-ruimte innemen en eindigt de marquee net
+   vóór de rand. */
+.org-footer-inner > :empty { display: none !important; }
+.org-footer-sponsors {
+    flex: 1; overflow: hidden; display: flex; align-items: center; justify-content: flex-end;
+}
+.sponsor-marquee {
+    display: flex; overflow: hidden; height: 50px; align-items: center;
+}
+.sponsor-marquee-inner {
+    display: flex; align-items: center; gap: 40px; flex-shrink: 0;
+    animation: marquee linear infinite;
+}
+.sponsor-marquee-inner img {
+    height: 40px; width: auto; object-fit: contain; flex-shrink: 0;
+}
+@keyframes marquee {
+    0%   { transform: translateX(0); }
+    100% { transform: translateX(calc(-50% - 20px)); }
+}
+.btn-help {
+    background: rgba(255,255,255,.2); border: 2px solid rgba(255,255,255,.5);
+    color: #fff; width: 36px; height: 36px; border-radius: 50%;
+    font-size: 1.2rem; font-weight: 700; cursor: pointer; line-height: 1;
+    display: flex; align-items: center; justify-content: center;
+    font-style: italic;
+    flex-shrink: 0;          /* nooit ovaal worden in flex-container */
+}
+.btn-help:active { background: rgba(255,255,255,.35); }
+/* Taal-dropdown: toont emoji-vlag van actieve taal. Klik = expand panel
+   met 4 talen. Op Windows zonder emoji-flag-glyph valt 'ie terug op
+   letterparen (NL/GB/DE/FR) — bewust geaccepteerd. Vorm blijft ronde
+   knop, font-style normal voorkomt italic-erfgenaam van .btn-help. */
+.btn-lang {
+    padding: 0;
+    font-style: normal;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    /* manipulation: schakel double-tap-to-zoom uit op touch → eerste tap
+     * vuurt onmiddellijk (geen 300ms delay) → paneel opent direct. */
+    touch-action: manipulation;
+}
+.btn-lang .i18n-flag {
+    font-size: 1.05rem;
+    line-height: 1;
+}
+
+/* Uitgevouwen taal-panel: compact horizontaal rijtje van 4 vlag-knoppen.
+   Geen tekstnamen — vlag-emoji + title-tooltip is voldoende.
+   Positionering wordt via JS gezet (top/right/left vanuit getBoundingClientRect). */
+.i18n-dropdown-panel {
+    background: #fff;
+    border: 1px solid #ccc;
+    border-radius: 6px;
+    box-shadow: 0 4px 14px rgba(0,0,0,.2);
+    padding: 4px;
+    display: flex;
+    flex-direction: row;
+    gap: 2px;
+}
+.i18n-dropdown-opt {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 6px 8px;
+    background: none;
+    border: none;
+    border-radius: 4px;
+    cursor: pointer;
+    font-family: inherit;
+    touch-action: manipulation;
+}
+.i18n-dropdown-opt:hover { background: #f0f6ff; }
+.i18n-dropdown-opt.is-active {
+    background: #1F4E79;
+}
+.i18n-dropdown-opt .i18n-flag {
+    font-size: 1.4rem;
+    line-height: 1;
+}
+.btn-meldingen   { font-style: normal; font-size: 1.1rem; position: relative; }
+.meld-badge      { position: absolute; top: -4px; right: -4px; background: #d22;
+                   color: #fff; font-size: .65rem; font-weight: 700;
+                   min-width: 17px; height: 17px; padding: 0 4px; border-radius: 9px;
+                   display: flex; align-items: center; justify-content: center;
+                   border: 2px solid #fff; line-height: 1; }
+/* Allemaal gelezen → grijs ipv rood. Geeft passief signaal "ze zijn er,
+   geen actie nodig" terwijl rood + uitroepteken = "kijk even". */
+.meld-badge.gezien { background: #888; }
+
+/* ── Help overlay ── */
+.help-overlay {
+    position: fixed; inset: 0; background: rgba(0,0,0,.6);
+    z-index: 2000; display: flex; align-items: flex-start; justify-content: center;
+    padding: 24px 12px; overflow-y: auto;
+}
+.help-box {
+    background: var(--wit); border-radius: 14px; width: 100%; max-width: 520px;
+    box-shadow: 0 12px 40px rgba(0,0,0,.3); overflow: hidden;
+}
+.help-header {
+    background: var(--blauw); color: var(--wit); padding: 14px 16px;
+    display: flex; justify-content: space-between; align-items: center;
+    font-size: 1.1rem; font-weight: 700;
+}
+.help-sluit { background: none; border: none; color: rgba(255,255,255,.7); font-size: 1.5rem; cursor: pointer; line-height: 1; }
+
+.help-body { padding: 16px; font-size: .9rem; line-height: 1.5; color: var(--tekst); }
+.help-body h3 { font-size: .95rem; color: var(--blauw); margin: 16px 0 6px; }
+.help-body h3:first-child { margin-top: 0; }
+.help-body p { margin: 4px 0 8px; }
+.help-body .help-stap { display: flex; gap: 10px; align-items: flex-start; margin-bottom: 10px; }
+.help-body .help-stap-nr {
+    background: var(--oranje); color: #fff; min-width: 24px; height: 24px;
+    border-radius: 50%; display: flex; align-items: center; justify-content: center;
+    font-size: .8rem; font-weight: 700; flex-shrink: 0;
+}
+/* ── "Wat is nieuw"-jump knop bovenin help-modal ── */
+.btn-nieuw-jump {
+    display: block; width: 100%;
+    background: linear-gradient(180deg, #eaf2fa 0%, #d6e4f0 100%);
+    color: var(--blauw); border: 1.5px solid var(--middenblauw);
+    border-radius: 8px; padding: 10px 12px;
+    font-size: .92rem; font-weight: 700; cursor: pointer;
+    margin: 0 0 14px; transition: transform .1s, background .15s;
+}
+.btn-nieuw-jump:hover  { background: linear-gradient(180deg, #d6e4f0 0%, #b9d0e6 100%); }
+.btn-nieuw-jump:active { transform: scale(.98); }
+
+/* ── Changelog / "Wat is nieuw" ── */
+.changelog-versie {
+    background: #f7faff; border-left: 3px solid var(--middenblauw);
+    border-radius: 4px; padding: 10px 12px; margin: 10px 0;
+}
+.changelog-kop {
+    display: flex; justify-content: space-between; align-items: baseline;
+    margin-bottom: 6px;
+}
+.changelog-vnr {
+    font-weight: 700; color: var(--blauw); font-size: .95rem;
+}
+.changelog-datum {
+    font-size: .78rem; color: #888;
+}
+.changelog-lijst {
+    margin: 0; padding-left: 20px; font-size: .88rem;
+}
+.changelog-lijst li { margin: 3px 0; }
+/* ── Mockups ── */
+.mock {
+    border: 2px solid #dde3ea; border-radius: 10px; overflow: hidden;
+    margin: 10px 0 14px; font-size: .78rem;
+}
+.mock-hdr {
+    background: var(--blauw); color: #fff; padding: 6px 10px;
+    font-weight: 700; font-size: .75rem; text-align: center;
+}
+.mock-body { padding: 8px 10px; background: #fafbfc; }
+.mock-select {
+    background: #fff; border: 1.5px solid #cdd8e3; border-radius: 6px;
+    padding: 6px 8px; width: 100%; font-size: .75rem; color: #555; margin-bottom: 6px;
+}
+.mock-tabs {
+    display: flex; border-bottom: 2px solid #dde3ea; margin-bottom: 6px;
+}
+.mock-tab {
+    flex: 1; text-align: center; padding: 5px 4px; font-size: .65rem; font-weight: 600;
+    color: #aaa; border-bottom: 2px solid transparent; margin-bottom: -2px;
+}
+.mock-tab.active { color: var(--blauw); border-bottom-color: var(--oranje); }
+.mock-row {
+    display: flex; gap: 6px; padding: 3px 0; border-bottom: 1px solid #f0f2f5;
+    font-size: .7rem; align-items: center;
+}
+.mock-row:last-child { border-bottom: none; }
+.mock-hl { background: #fffbe6; font-weight: 600; margin: 0 -10px; padding: 3px 10px; border-radius: 3px; }
+.mock-rang { width: 18px; text-align: center; font-weight: 700; color: var(--blauw); }
+.mock-snr { width: 24px; font-weight: 600; color: var(--blauw); }
+.mock-naam { flex: 1; }
+.mock-tijd { font-family: monospace; color: #666; font-size: .65rem; }
+
+.container { max-width: 720px; margin: 0 auto; padding: 6px; padding-bottom: 80px; }
+
+/* ── Stappen ── */
+.stap { margin-bottom: 16px; }
+.auto-stempel {
+    font-size: .7rem; color: #888; font-weight: normal; line-height: 1.4;
+    white-space: nowrap;
+}
+/* In stap-1-label valt de stempel rechts op de regel (oude positie). */
+.stap-label .auto-stempel { float: right; }
+.stap-label {
+    font-size: 1.05rem; font-weight: 700; color: var(--blauw);
+    margin-bottom: 6px; display: flex; align-items: center; gap: 6px;
+}
+.stap-nr {
+    background: var(--blauw); color: var(--wit);
+    width: 28px; height: 28px; border-radius: 50%;
+    display: flex; align-items: center; justify-content: center;
+    font-size: .9rem; font-weight: 700; flex-shrink: 0;
+}
+select, input[type=number], input[type=text], input[type=search] {
+    width: 100%; padding: 14px 14px; font-size: 1rem;
+    border: 2px solid #cdd8e3; border-radius: 8px;
+    background: var(--wit); appearance: none; -webkit-appearance: none;
+}
+select {
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'%3E%3Cpath d='M6 8L1 3h10z' fill='%23666'/%3E%3C/svg%3E");
+    background-repeat: no-repeat; background-position: right 14px center; padding-right: 40px;
+}
+select:focus, input:focus { border-color: var(--middenblauw); outline: none; }
+.filter-rij {
+    display: flex; gap: 8px; margin-bottom: 8px;
+}
+.filter-rij input[type=checkbox] { display: none; }
+.filter-rij label.filter-chip { flex: 1; }
+.filter-chip {
+    display: inline-flex; align-items: center; justify-content: center; gap: 5px;
+    padding: 9px 10px; border-radius: 20px; font-size: .95rem; font-weight: 600;
+    border: 2px solid #cdd8e3; background: var(--wit); color: #888;
+    cursor: pointer; user-select: none; transition: all .15s;
+    min-width: 0;                 /* laat flex 3-op-een-rij zonder overflow */
+}
+.filter-chip:active { transform: scale(.96); }
+.filter-rij input:checked + .filter-chip {
+    background: var(--lichtblauw); border-color: var(--middenblauw); color: var(--blauw);
+}
+/* Smalle schermen (~iPhone SE / ~360-400px): overlay/box/chip-padding
+   verder verkleinen zodat 3 filter-chips netjes binnen de modal passen. */
+@media (max-width: 400px) {
+    .setup-modal-overlay { padding: 14px 6px; }
+    .setup-modal-box     { padding: 16px 12px; }
+    .filter-chip         { padding: 8px 6px; font-size: .88rem; }
+}
+
+.btn-zoek {
+    width: 100%; padding: 16px; font-size: 1.15rem; font-weight: 700;
+    color: var(--wit); background: var(--oranje);
+    border: none; border-radius: 8px; cursor: pointer; margin-top: 10px;
+}
+.btn-zoek:disabled { opacity: .4; cursor: not-allowed; }
+.btn-zoek:active { transform: scale(.98); }
+/* Max-rijders-hint + expliciete Sluiten-knop in de setup-modal. */
+.setup-max-hint { background:#fff8e1; color:#8a6d00; border:1px solid #ffe08a;
+    border-radius:8px; padding:9px 11px; font-size:.85rem; margin-top:10px; }
+.setup-modal-klaar { width:100%; margin-top:12px; padding:10px;
+    border:1px solid #ccd3db; background:#f4f6f9; color:#33506e;
+    border-radius:8px; font-size:.95rem; font-weight:600; cursor:pointer; }
+.setup-modal-klaar:hover { background:#e9eef5; }
+/* Meldingsplek ín de setup-modal (anders valt een melding achter de modal). */
+.setup-melding { margin-top: 10px; }
+.setup-melding:empty { display: none; }
+
+/* ── Comp info ── */
+.comp-info {
+    background: var(--lichtblauw); border-radius: 8px;
+    padding: 12px 14px; margin-bottom: 16px;
+    font-size: 1rem; color: var(--blauw);
+}
+.comp-info strong { font-size: 1.1rem; }
+
+/* ── Persoon header ── */
+.persoon-header {
+    background: var(--blauw); color: var(--wit);
+    padding: 14px 16px; border-radius: 10px 10px 0 0;
+    display: flex; justify-content: space-between; align-items: center;
+}
+.persoon-naam { font-size: 1.35rem; font-weight: 700; }
+.persoon-snr { font-size: .9rem; opacity: .8; }
+.persoon-cat { font-size: .85rem; background: rgba(255,255,255,.2); border-radius: 10px; padding: 2px 10px; }
+/* Status-badge in de rijder-header + status-modal. Kleur per status via
+   .pstat-*-classes (spiegelt STATUS_KLEUR/STATUS_BG). */
+.persoon-status { font-size: .75rem; border-radius: 10px; padding: 1px 8px; margin-left: 6px; display: inline-block; }
+.persoon-status-klik { cursor: pointer; text-decoration: underline; background: #e7eefc; color: #26456e; }
+.pstat-0  { background: #fff3e0; color: #e65100; }
+.pstat-1  { background: #e8f5e9; color: #2e7d32; }
+.pstat-2  { background: #fce4e4; color: #b71c1c; }
+.pstat-3  { background: #f3e5f5; color: #6a1b9a; }
+.pstat-4  { background: #e8eaf6; color: #283593; }
+.pstat-5  { background: #e0f7fa; color: #006064; }
+.pstat-ni { background: #fce4e4; color: #b71c1c; }
+.status-modal-body  { padding: 8px 12px 14px; }
+.status-modal-tabel { width: 100%; border-collapse: collapse; }
+.status-modal-tabel td { padding: 6px 10px; border-top: 1px solid #eef2f6; }
+.status-modal-tabel td:last-child { text-align: right; white-space: nowrap; }
+/* Stempel in persoon-card-header: zelfde kleur + grootte als .persoon-snr
+   (witte tekst met .8 opacity op blauwe achtergrond). Icoon boven de tijd
+   gestapeld zodat het compact blijft naast de cat-badge. */
+.persoon-header .auto-stempel {
+    color: #fff; opacity: .8; font-size: .9rem;
+    display: inline-flex; flex-direction: column; align-items: center;
+    line-height: 1.05;
+}
+.persoon-header .auto-stempel .aut-icon { font-size: .85rem; }
+.persoon-header .auto-stempel .aut-tijd { font-weight: 600; font-variant-numeric: tabular-nums; }
+
+/* ── Tabs ── */
+.tabs {
+    display: flex; background: var(--wit);
+    border-bottom: 2px solid #dde3ea;
+}
+
+/* Naamzoek-chooser (multi-select modal) */
+.naamzoek-modal {
+    position:fixed; inset:0; background:rgba(0,0,0,.5); z-index:2500;
+    display:flex; align-items:center; justify-content:center; padding:16px;
+}
+.naamzoek-box {
+    background:var(--wit); border-radius:12px; max-width:480px; width:100%;
+    max-height:80vh; display:flex; flex-direction:column;
+    box-shadow:0 12px 40px rgba(0,0,0,.3); overflow:hidden;
+}
+.naamzoek-hdr {
+    background:var(--blauw); color:var(--wit); padding:12px 16px;
+    font-weight:700; display:flex; justify-content:space-between; align-items:center;
+}
+.naamzoek-body { overflow-y:auto; padding:8px 0; }
+.naamzoek-rij {
+    display:flex; align-items:center; gap:10px; padding:10px 14px;
+    border-bottom:1px solid #eee; cursor:pointer; user-select:none;
+}
+.naamzoek-rij:hover { background:#f0f5fa; }
+.naamzoek-rij input[type=checkbox] { width:18px; height:18px; flex-shrink:0; }
+.naamzoek-rij-snr { font-weight:700; color:var(--blauw); min-width:34px; text-align:right; }
+.naamzoek-rij-naam { flex:1; }
+.naamzoek-rij-meta { font-size:.75rem; color:#888; }
+.naamzoek-voet {
+    border-top:1px solid #eee; padding:12px 14px;
+    display:flex; gap:10px; justify-content:space-between; align-items:center;
+}
+.naamzoek-voet .aantal { font-size:.85rem; color:#666; }
+.naamzoek-leeg { padding:30px 16px; text-align:center; color:#888; font-style:italic; }
+.naamzoek-sluit { background:none; border:none; color:rgba(255,255,255,.85);
+                  font-size:1.4rem; cursor:pointer; line-height:1; }
+
+/* Kind-tabs (meerdere rijders in één weergave, bv. gezinnen met broertjes/zusjes).
+   Laat deze bovenop de persoon-header staan — klik op een tab toont de
+   bijbehorende rijder met zijn eigen sub-tabs (programma/heats/…). */
+.kind-tabs {
+    display:flex; align-items:stretch; gap:0;
+    margin-top:16px; border-bottom:2px solid #dde3ea;
+    overflow:hidden;                 /* nooit scrollen, gewoon afkappen */
+    white-space:nowrap;
+}
+.kind-tab {
+    display:inline-flex; flex-direction:column;    /* twee regels: nummer boven, naam onder */
+    align-items:center; justify-content:center; gap:1px;
+    padding:5px 10px; font-weight:600;
+    color:#666; background:var(--wit); border:none; cursor:pointer;
+    border-bottom:12px solid transparent; margin-bottom:-2px;
+    min-width:0; flex:0 0 auto;   /* niks groeit/krimpt standaard — voorkomt dat de actieve tab wordt platgedrukt */
+    overflow:hidden;
+}
+/* Naam-regel (2e span): staat ónder het nummer en breekt af met … . De cap op
+   de breedte bepaalt hoe breed de tab wordt — apart per tab-type (zie onder). */
+.kind-tab > span:nth-child(2) {
+    overflow:hidden; text-overflow:ellipsis; white-space:nowrap;
+    min-width:0; max-width:15ch; font-size:.95rem; line-height:1.1;
+}
+/* Inactieve tabs teruggezet zodat de actieve eruit springt. Ze tonen nu óók de
+   voornaam (klein) onder het nummer, maar smal — ± 6 tekens. De × is al uit de
+   tab verdwenen (verwijderen gaat via de +), dus er is ruimte voor de naam. */
+.kind-tab:not(.active) { background:#eef2f6; color:#8a97a5; flex:0 0 auto; }
+.kind-tab:not(.active) > span:nth-child(2) { max-width:3.5ch; font-size:.78rem; color:#8a97a5; }  /* ± eerste 3 letters + … */
+.kind-tab:not(.active) .kind-tab-snr { font-size:.72rem; padding:0 5px; }   /* nummer in de kleine tabs compacter */
+.kind-tab.active {
+    color:var(--blauw); border-bottom-color:var(--oranje);
+    background:#fff6ef; font-weight:700; flex:1 0 auto;   /* groeit in de vrije ruimte, krimpt nooit → altijd de brede tab */
+}
+/* Actieve tab: brede voornaam (± 15 tekens) onder het nummer. */
+.kind-tab.active > span:nth-child(2) { max-width:15ch; font-size:1rem; color:var(--blauw); }
+/* Actief kind: oranje snr-badge — sterk signaal wie nu geselecteerd is. */
+.kind-tab.active .kind-tab-snr { background:var(--oranje); color:#fff; }
+.kind-tab .kind-tab-snr {
+    background:var(--lichtblauw); color:var(--blauw);
+    border-radius:7px; padding:0 6px; font-weight:700;
+    font-size:.82rem; line-height:1.4; flex-shrink:0;
+}
+.kind-tab-plus {
+    display:inline-flex; align-items:center; justify-content:center;
+    padding:10px 14px; font-size:1.35rem; font-weight:700;
+    color:var(--oranje); background:var(--wit); border:none; cursor:pointer;
+    border-bottom:12px solid transparent; margin-bottom:-2px;
+    flex-shrink:0;                   /* + knop blijft altijd volledig zichtbaar */
+}
+.kind-tab-plus:disabled { color:#bbb; cursor:not-allowed; }
+/* "Je gevolgde rijders" in de setup-modal — chips met verwijder-× (verwijderen
+   is hierheen verplaatst vanuit de tabs). */
+.setup-volglijst:empty { display:none; }
+.setup-volglijst { margin:2px 0 14px; }
+.setup-volg-label { font-size:.8rem; font-weight:600; color:#556; margin-bottom:6px; }
+.setup-volg-chips { display:flex; flex-wrap:wrap; gap:6px; }
+.setup-volg-chip { display:inline-flex; align-items:center; gap:6px;
+    background:#eef2f6; border:1px solid #d5dee7; border-radius:999px; padding:3px 4px 3px 3px; }
+.setup-volg-snr { background:var(--lichtblauw); color:var(--blauw); border-radius:999px;
+    padding:1px 8px; font-weight:700; font-size:.82rem; }
+.setup-volg-naam { font-size:.9rem; color:#333; }
+.setup-volg-x { border:none; background:none; color:#b71c1c; font-size:1.15rem;
+    line-height:1; cursor:pointer; padding:2px 7px; border-radius:50%; }
+.setup-volg-x:hover { background:#f5e5e5; }
+/* Push-meldingen-blok in de setup-modal (Fase 3). */
+.pub-push:empty { display:none; }
+.pub-push { margin:0 0 14px; padding:10px 12px; background:#f4f8fc;
+    border:1px solid #dbe7f2; border-radius:10px; }
+.pub-push-kop { display:flex; align-items:center; justify-content:space-between; gap:8px; }
+.pub-push-titel { font-size:.9rem; font-weight:700; color:#1b5faa; }
+.pub-push-uitleg { margin-top:6px; font-size:.8rem; color:#667; line-height:1.35; }
+.pub-push-toggle { border:1px solid var(--blauw); background:#fff; color:var(--blauw);
+    border-radius:999px; padding:5px 14px; font-size:.85rem; font-weight:600; cursor:pointer; }
+.pub-push-toggle[data-aan="1"] { background:var(--blauw); color:#fff; }
+.pub-push-opties { margin-top:9px; display:flex; flex-direction:column; gap:6px; }
+.pub-push-opties.uit { display:none; }
+.pub-push-opt { display:flex; align-items:center; gap:8px; font-size:.88rem; color:#333; }
+.pub-push-opt input { width:16px; height:16px; }
+.pub-push-rij { margin-top:9px; display:flex; align-items:center; gap:10px; flex-wrap:wrap; }
+.pub-push-test { border:none; background:#e9eef5; color:#1b5faa; border-radius:8px;
+    padding:5px 12px; font-size:.82rem; font-weight:600; cursor:pointer; }
+.pub-push-msg { font-size:.82rem; color:#556; }
+/* Bij 3-4 kinderen iets krappere padding zodat alles op telefoon-breedte past. */
+.kind-tabs[data-count="3"] .kind-tab,
+.kind-tabs[data-count="4"] .kind-tab { padding:5px 7px; }
+/* Lange nummers (demo) hoeven niet extra geschaald: ze staan op een eigen regel,
+   inactieve tabs tonen het nummer al compact, en de actieve tab groeit mee. */
+.kind-tabs[data-count="3"] .kind-tab-plus,
+.kind-tabs[data-count="4"] .kind-tab-plus { padding:10px 11px; font-size:1.15rem; }
+.tab-btn {
+    flex: 1 1 0; min-width: 0;
+    padding: 8px 2px; font-size: .72rem; font-weight: 600;
+    text-align: center; border: none; background: none; cursor: pointer;
+    color: #888; border-bottom: 3px solid transparent; margin-bottom: -2px;
+    /* Emoji op regel 1, tekst op regel 2 — via \n in i18n-label.
+       min-width:0 laat flex-items onder hun min-content-breedte krimpen
+       zodat de tabs binnen de container blijven op smalle schermen. */
+    white-space: pre-line; line-height: 1.2;
+    overflow: hidden;
+}
+.tab-btn::first-line { font-size: 1rem; }
+.tab-btn.active { color: var(--blauw); border-bottom-color: var(--oranje); }
+.tab-content { display: none; }
+.tab-content.active { display: block; }
+
+/* ── Setup-strook: klikbare compacte header met huidige wedstrijd-keuze,
+      opent de setup-modal voor wijzigen. Bespaart veel verticale ruimte
+      op mobiel t.o.v. de oude altijd-zichtbare stap 1/2 secties. ─── */
+.setup-strip {
+    display: flex; align-items: center; gap: 8px;
+    padding: 8px 12px;
+    background: #fff;
+    border: 1px solid #d3dbe3;
+    border-radius: 6px;
+    cursor: pointer;
+    margin: 8px 0;
+    transition: background .12s, border-color .12s;
+}
+.setup-strip:hover { background: #f5f8fc; border-color: #b3cae6; }
+.setup-strip-tekst {
+    flex: 1 1 auto; min-width: 0;
+    overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+    color: #1a3a5c; font-size: .9rem;
+}
+.setup-strip-tekst b { color: #1a3a5c; }
+.setup-strip-tekst small {
+    display: block; font-size: .74rem; color: #666; font-weight: normal;
+    margin-top: 1px;
+}
+.setup-strip-empty { color: #888; font-style: italic; font-size: .88rem; }
+.setup-strip-edit {
+    background: none; border: 0;
+    color: var(--blauw); font-size: 1.05rem;
+    padding: 4px 8px; cursor: pointer; flex-shrink: 0;
+}
+/* Modal-overlay voor setup (stap 1 + 2). Opent bij klik op setup-strip
+   of automatisch bij eerste bezoek van de dag (localStorage-detectie). */
+.setup-modal-overlay {
+    position: fixed; inset: 0;
+    background: rgba(0,0,0,.4);
+    z-index: 200;
+    display: none;
+    align-items: flex-start; justify-content: center;
+    padding: 20px 12px;
+    overflow-y: auto;
+}
+.setup-modal-overlay.open { display: flex; }
+.setup-modal-box {
+    background: #fff;
+    border-radius: 10px;
+    max-width: 460px; width: 100%;
+    padding: 18px 16px;
+    position: relative;
+    box-shadow: 0 8px 24px rgba(0,0,0,.25);
+    animation: setup-modal-in .18s ease-out;
+}
+@keyframes setup-modal-in {
+    from { opacity: 0; transform: translateY(-8px); }
+    to   { opacity: 1; transform: translateY(0); }
+}
+.setup-modal-close {
+    position: absolute; top: 8px; right: 8px;
+    background: none; border: 0;
+    font-size: 1.4rem; color: #666; cursor: pointer;
+    width: 32px; height: 32px;
+    border-radius: 50%;
+    display: flex; align-items: center; justify-content: center;
+    transition: background .12s;
+}
+.setup-modal-close:hover { background: #f0f0f0; color: #333; }
+.setup-modal-titel {
+    font-size: 1.05rem; font-weight: 700; color: var(--blauw);
+    margin: 0 0 12px; padding-right: 32px;
+}
+
+/* ── Kaart ── */
+.kaart {
+    background: var(--wit); border: 1px solid #dde3ea;
+    border-radius: 0 0 10px 10px; margin-bottom: 16px;
+    /* GEEN overflow:hidden — dat maakt van de kaart een scroll-context en
+       breekt position:sticky van de prog-sticky-kop erin (2026-08). */
+}
+.kaart-sectie { padding: 12px 16px; border-bottom: 1px solid #eef2f6; }
+.kaart-sectie:last-child { border-bottom: none; }
+.kaart-sectie-titel {
+    font-size: .8rem; font-weight: 700; color: var(--middenblauw);
+    text-transform: uppercase; letter-spacing: .5px; margin-bottom: 8px;
+}
+
+/* ── Heat-card (zoals print) ── */
+.heat-card {
+    border: 1px solid #ccc; border-radius: 8px; overflow: hidden;
+    margin-bottom: 12px;
+}
+.heat-card-titel {
+    background: var(--blauw); color: var(--wit);
+    padding: 8px 44px 8px 12px; font-weight: 700; font-size: .95rem;
+    display: flex; align-items: center; gap: 8px;
+    position: relative;            /* anker voor de absolute close-knop */
+}
+.heat-card-badge {
+    font-size: .75rem; border-radius: 4px; padding: 1px 6px;
+    font-weight: 700; flex-shrink: 0;
+}
+.badge-serie { background: #0d6efd; color: #fff; }
+.badge-kf { background: #6610f2; color: #fff; }
+.badge-hf { background: #fd7e14; color: #fff; }
+.badge-finale { background: #198754; color: #fff; }
+.badge-ru { background: #6c757d; color: #fff; }
+
+.heat-card-tabel {
+    width: 100%; border-collapse: collapse; font-size: .95rem;
+}
+.heat-card-tabel th {
+    background: #eef2f8; color: var(--blauw); padding: 4px 8px;
+    font-size: .8rem; font-weight: 600; text-align: left;
+}
+.heat-card-tabel td { padding: 6px 8px; border-bottom: 1px solid #f0f2f5; }
+.heat-card-tabel tr:last-child td { border-bottom: none; }
+.heat-card-tabel .rij-ik { background: #fffbe6; font-weight: 700; }
+/* Ander gevolgd kind in dezelfde heat (rit-detail vanuit Programma) → violet,
+   zelfde semantiek als de programma-markering. */
+.heat-card-tabel .rij-familie { background: #f1ecfd; font-weight: 700; }
+.heat-card-tabel .col-pos { width: 28px; text-align: center; color: #aaa; }
+.heat-card-tabel .col-snr { width: 40px; font-weight: 600; color: var(--blauw); }
+.heat-card-tabel .col-naam { }
+.heat-card-tabel .col-tijd { font-family: monospace; color: #555; text-align: right; }
+/* Audit-icoon links van de tijd; tijd zelf blijft rechts-uitgelijnd */
+.heat-card-tabel .col-tijd-audit { float: left; font-family: sans-serif; opacity: .85; cursor: help; }
+/* Fin-kolom: header normale kleur (label), data-cijfers ROOD + bold zodat
+ * de finishpositie meteen opvalt. Stond vroeger helemaal rechts, viel weg. */
+.heat-card-tabel .col-fin    { text-align: center; width: 32px; }
+.heat-card-tabel td.col-fin  { font-weight: 700; color: #d32f2f; }
+.heat-card-tabel .col-rnd { text-align: center; width: 32px; color: #666; }
+.heat-card-tabel .col-pk { text-align: center; width: 32px; font-weight: 600; color: var(--oranje); }
+
+/* ── PWA install banner ── */
+.pwa-banner {
+    background: linear-gradient(135deg, var(--blauw), var(--middenblauw));
+    color: var(--wit); padding: 10px 16px; display: flex; align-items: center;
+    gap: 10px; font-size: .85rem; border-radius: 10px; margin-bottom: 12px;
+    box-shadow: 0 2px 8px rgba(0,0,0,.15);
+}
+.pwa-banner-tekst { flex: 1; }
+.pwa-banner-tekst b { display: block; font-size: .95rem; }
+.pwa-banner .btn-install {
+    background: var(--oranje); color: #fff; border: none; border-radius: 8px;
+    padding: 8px 14px; font-weight: 700; font-size: .85rem; cursor: pointer;
+    white-space: nowrap;
+}
+.pwa-banner .btn-install:active { transform: scale(.96); }
+.pwa-banner a.btn-install { text-decoration: none; display: inline-block; }
+.promo-niet { display: inline-flex; align-items: center; gap: 5px; font-size: .78rem;
+    margin-top: 4px; opacity: .92; cursor: pointer; }
+.promo-niet input { margin: 0; }
+.pwa-banner .btn-sluit {
+    background: none; border: none; color: rgba(255,255,255,.6);
+    font-size: 1.2rem; cursor: pointer; padding: 0 4px; line-height: 1;
+}
+
+/* ── Uitslagen tab ── */
+.uitsl-selects { display: flex; gap: 8px; margin-bottom: 12px; }
+.uitsl-selects select { flex: 1; padding: 10px 12px; font-size: .95rem; border: 2px solid #cdd8e3; border-radius: 8px; background: var(--wit); }
+.uitsl-tabel-wrap { overflow-x: auto; -webkit-overflow-scrolling: touch; }
+.uitsl-tabel {
+    width: 100%; border-collapse: collapse; font-size: .85rem; white-space: nowrap;
+}
+.uitsl-tabel th {
+    background: var(--blauw); color: var(--wit); padding: 6px 8px;
+    font-size: .75rem; font-weight: 600; text-align: left; position: sticky; top: 0;
+}
+.uitsl-tabel td { padding: 5px 8px; border-bottom: 1px solid #f0f2f5; }
+.uitsl-tabel tr:nth-child(even) { background: #fafbfc; }
+.uitsl-tabel .col-rang { width: 28px; text-align: center; }
+.uitsl-tabel td.col-rang { font-weight: 700; color: var(--blauw); }
+.uitsl-tabel .col-cat-rank { width: 40px; text-align: center; }
+.uitsl-tabel td.col-cat-rank { font-weight: 700; color: var(--blauw); }
+.uitsl-tabel .col-snr { width: 36px; }
+.uitsl-tabel td.col-snr { font-weight: 600; color: var(--blauw); }
+.uitsl-tabel .col-naam { white-space: normal; word-break: break-word; min-width: 100px; }
+.uitsl-tabel .col-cat { font-size: .75rem; color: #888; }
+.uitsl-tabel .col-tijd { font-family: monospace; text-align: right; }
+.uitsl-tabel .col-rnd, .uitsl-tabel .col-pk { text-align: center; }
+.uitsl-tabel .col-pk { font-weight: 600; color: var(--oranje); }
+.uitsl-tabel .col-sanctie { color: #c00; font-weight: 600; font-size: .8rem; }
+.uitsl-tabel .col-punten { text-align: center; font-weight: 600; }
+.uitsl-tabel .col-totaal { text-align: center; font-weight: 700; color: var(--oranje); }
+/* Serie-klassement (nieuw) */
+.serie-klas-tabel-wrap { overflow-x: auto; -webkit-overflow-scrolling: touch; }
+.serie-klas-tabel .col-w {
+    width: 36px; text-align: center; font-size: .85rem;
+}
+.serie-klas-tabel .col-tot {
+    width: 50px; text-align: right; font-weight: 700;
+    color: var(--blauw); background: #eef5fb;
+}
+.serie-klas-tabel .col-nng { color: #bbb; }
+.serie-klas-tabel tr.rij-ik td {
+    background: #fff3e0 !important; font-weight: 700;
+}
+.serie-klas-tabel tr.serie-klas-scheiding td {
+    background: #eef1f5; color: #5a6472; font-weight: 700;
+    font-size: .78rem; text-transform: uppercase; letter-spacing: .03em;
+    padding: 6px 8px;
+}
+.serie-klas-tabel tr.rij-buiten td { color: #8a95a3; }
+.serie-klas-tabel tr.rij-buiten .col-rang { color: #c2cad3; }
+@media (max-width: 480px) {
+    .uitsl-selects { flex-direction: column; }
+    .uitsl-tabel { font-size: .78rem; }
+    .uitsl-tabel th, .uitsl-tabel td { padding: 4px 5px; }
+    /* Heat-tabel compacter op telefoon zodat ook puntenkoers (extra Rnd + Pnt
+       kolommen) binnen het scherm blijft staan. Bij sprints zonder die extra
+       kolommen valt het ruimer uit. */
+    .heat-card-tabel { font-size: .76rem; table-layout: fixed; width: 100%; }
+    .heat-card-tabel th, .heat-card-tabel td { padding: 4px 3px;
+        overflow: hidden; text-overflow: clip; }
+    .heat-card-tabel th { font-size: .68rem; }   /* headers smaller — labels iets breder dan de cijfer-data */
+    .heat-card-tabel .col-pos  { width: 22px; padding-left: 2px; padding-right: 2px; }
+    .heat-card-tabel .col-snr  { width: 30px; padding-left: 2px; padding-right: 2px; }
+    .heat-card-tabel .col-naam { word-break: break-word; }
+    .heat-card-tabel .col-rnd  { width: 26px; padding-left: 2px; padding-right: 2px; }
+    .heat-card-tabel .col-pk   { width: 26px; padding-left: 2px; padding-right: 2px; }
+    .heat-card-tabel .col-fin  { width: 26px; padding-left: 4px; padding-right: 2px; }
+    /* Iets ruimer (was 70px) zodat audit-icoon ✋/📷 + tijd op één regel passen
+       op smalle telefoons. Voorkomt dat 1:00.000 onder het icoon springt. */
+    .heat-card-tabel .col-tijd { font-size: .66rem; width: 88px; padding-left: 4px; padding-right: 4px; white-space: nowrap; }
+}
+.heat-card-tabel .col-sanctie { color: #c00; font-weight: 600; font-size: .85rem; }
+.heat-card-mijn-result {
+    background: var(--lichtblauw); padding: 6px 12px; font-size: .9rem;
+    display: flex; justify-content: space-between; align-items: center;
+}
+
+/* ── Uitslag rij ── */
+.uitslag-rij {
+    display: flex; justify-content: space-between; align-items: center;
+    padding: 8px 0; border-bottom: 1px solid #f5f7fa; font-size: 1rem;
+}
+.uitslag-rij:last-child { border-bottom: none; }
+.uitslag-rang { font-size: 1.2rem; font-weight: 700; color: var(--blauw); min-width: 32px; }
+.uitslag-afstand { flex: 1; }
+.uitslag-punten { font-weight: 600; color: #555; }
+.heat-sanctie { color: #c00; font-weight: 600; font-size: .85rem; }
+
+/* ── Klassement ── */
+.klas-rang { font-size: 1.5rem; font-weight: 700; color: var(--oranje); }
+.klas-totaal { font-size: 1rem; color: #666; }
+
+/* ── Ronde-uitslagen (Resultaten-tab) ── */
+.ronde-uitslagen-container { padding: 6px 0; }
+.rondeu-afstand {
+    padding: 10px 14px 14px;
+    border-bottom: 1px solid #eef2f6;
+}
+.rondeu-afstand:last-child { border-bottom: none; }
+.rondeu-afstand-titel {
+    font-weight: 700; color: var(--blauw); font-size: 1rem;
+    margin-bottom: 8px; padding-bottom: 4px;
+    border-bottom: 2px solid var(--oranje);
+}
+.rondeu-ronde { margin: 8px 0 12px; overflow-x: auto; -webkit-overflow-scrolling: touch; }
+.rondeu-ronde.pending { opacity: .72; }
+.rondeu-ronde-titel {
+    display: flex; align-items: center; gap: 8px; margin-bottom: 4px;
+    font-size: .9rem;
+}
+.rondeu-badge {
+    display: inline-block; padding: 2px 8px; border-radius: 8px;
+    font-size: .75rem; font-weight: 700; color: #fff;
+}
+.rondeu-badge.badge-eind { background: var(--oranje); }
+.rondeu-badge.badge-runner_up { background: #6c5ce7; }
+.rondeu-badge.badge-finale_a { background: #b71c1c; }
+.rondeu-badge.badge-finale_b { background: #d97706; }
+.rondeu-badge.badge-halve_finale { background: #6f4fd8; }
+.rondeu-badge.badge-kwartfinale { background: #5a4fcf; }
+.rondeu-badge.badge-heats { background: #555; }
+.rondeu-pending { color: #999; font-style: italic; font-size: .78rem; }
+.rondeu-tabel {
+    width: 100%; border-collapse: collapse;
+    font-size: .85rem; margin-top: 2px;
+}
+.rondeu-tabel th {
+    background: #f4f7fb; color: var(--blauw);
+    text-align: left; padding: 4px 6px;
+    font-size: .74rem; font-weight: 700;
+    border-bottom: 1px solid #d5dee7;
+}
+.rondeu-tabel th.c { text-align: center; }
+.rondeu-tabel td {
+    padding: 4px 6px; border-bottom: 1px solid #f0f2f5;
+}
+.rondeu-tabel td.c { text-align: center; }
+.rondeu-tabel td.mono { font-family: 'Consolas','Courier New',monospace; }
+.rondeu-tabel tr.rij-ik { background: #fffbe6; font-weight: 600; }
+.rondeu-tabel tr.rondeu-heat-sub td {
+    background: #eaeef4; color: #1a3a5c;
+    font-weight: 700; font-size: .78rem;
+    padding: 3px 8px;
+    border-top: 1px solid #d5dee7;
+    letter-spacing: .02em;
+}
+.rondeu-eind { margin-top: 12px; }
+
+/* ── Programma ── */
+.prog-rij {
+    display: flex; align-items: center; gap: 8px;
+    padding: 6px 0; border-bottom: 1px solid #f0f2f5; font-size: .9rem;
+}
+.prog-rij:last-child { border-bottom: none; }
+.prog-nr { color: #aaa; font-size: .8rem; min-width: 24px; text-align: center; }
+.prog-naam { flex: 1; }
+.prog-rit-opm { font-size: .78rem; color: #856404; font-style: italic; margin-top: 2px; font-weight: 400; }
+.prog-type { font-size: .75rem; }
+.prog-blok {
+    padding: 6px 0; font-size: .85rem; color: #888;
+    border-bottom: 1px solid #f0f2f5; font-style: italic;
+}
+/* ── Programma-blokken (pauze, inrijden, ceremonie, herstart, start) ── */
+/* Dag-filter-balk bovenaan bij multi-day. Sticky zodat hij meegaat als je
+   scrollt — anders moet je bij dag-3 terugscrollen om opnieuw te kiezen. */
+.prog-dag-filter {
+    display: flex; flex-wrap: wrap; gap: 6px;
+    margin: 0 0 10px 0; padding: 6px 0;
+    position: sticky; top: 0; z-index: 5;
+    background: #fff;
+}
+.prog-dag-btn {
+    border: 1px solid #b3cae6; background: #fff; color: #1a3a5c;
+    padding: 4px 9px; border-radius: 14px; font-size: .82rem;
+    font-weight: 600; cursor: pointer; transition: background .12s;
+    display: inline-flex; flex-direction: column; align-items: center;
+    justify-content: center; line-height: 1.15; min-height: 38px;
+}
+.prog-dag-btn:hover { background: #eaf2fb; }
+.prog-dag-btn.actief {
+    background: #1a3a5c; color: #fff; border-color: #1a3a5c;
+}
+/* Korte datum onder "Dag N" — klein zodat 3+ dagen op 1 regel passen
+   op een telefoon, ook in talen met langer woord ("Jour", "Day"). */
+.prog-dag-btn-datum {
+    display: block; font-size: .55rem; font-weight: 400;
+    opacity: .8; margin-top: 1px; letter-spacing: 0;
+    white-space: nowrap;
+}
+.prog-dag-btn.actief .prog-dag-btn-datum { opacity: .95; }
+
+/* ── Programma-filter-strook (dag + afstand) ── */
+/* Vierkante blokken die visueel matchen met .prog-klap-balk — geen
+   border-radius, dunne scheidingslijnen, hover/actief-kleuren identiek
+   aan .prog-klap-btn. Public heeft kaart-sectie padding, dus horizontal
+   negative-margin voor full-width. Klap-balk staat eronder (7-06);
+   sibling-selector verlaagt zijn top-margin zodat ze naadloos aansluiten. */
+/* Sticky-kop: het afstand/dag-filter én de inklap-balk blijven bij het scrollen
+   boven aan (2026-08). De twee balken samen in één sticky wrapper — robuust tegen
+   uitklappende filters en wisselende hoogte, i.p.v. per-balk-sticky met top-reken. */
+.prog-sticky-kop {
+    position: sticky; top: 0; z-index: 6;
+    margin: -12px -16px 10px;      /* breekt uit de kaart-sectie-padding → volle kaartbreedte */
+    background: #fff;
+}
+.prog-sticky-kop > .prog-filter-strook,
+.prog-sticky-kop > .prog-klap-balk { margin: 0; position: static; }
+.prog-filter-strook {
+    margin: -12px -16px 0;
+    position: sticky; top: 0; z-index: 5;
+    background: #fff;
+    border-top: 1px solid #b3cae6;
+    border-bottom: 1px solid #b3cae6;
+    display: flex; flex-direction: column;
+}
+.prog-filter-strook + .prog-klap-balk { margin-top: 0; border-top: 0; }
+.prog-filter-trigger {
+    display: flex; align-items: center; gap: 8px;
+    background: #fff; color: #1a3a5c;
+    border: 0;
+    border-bottom: 1px solid #d5dee7;
+    padding: 8px 12px;
+    font-size: .78rem; font-weight: 600;
+    line-height: 1.15;
+    letter-spacing: -.02em;
+    cursor: pointer;
+    transition: background .12s, color .12s;
+    width: 100%;
+    text-align: left;
+}
+.prog-filter-trigger:last-of-type { border-bottom: 0; }
+@media (hover: hover) {
+    .prog-filter-trigger:not(.open):hover { background: #eaf2fb; }
+}
+.prog-filter-trigger.open {
+    background: #1a3a5c; color: #fff;
+    border-bottom-color: #1a3a5c;
+}
+.prog-filter-icon { font-size: 1rem; flex-shrink: 0; }
+.prog-filter-lbl  { flex: 1; text-align: left; }
+.prog-filter-caret { font-size: .7rem; transition: transform .15s; }
+.prog-filter-trigger.open .prog-filter-caret { transform: rotate(180deg); }
+.prog-filter-panel {
+    display: flex; flex-wrap: wrap;
+    background: #eef4fb;
+    border-bottom: 1px solid #d5dee7;
+    animation: prog-filter-in .12s ease-out;
+}
+.prog-filter-panel:last-child { border-bottom: 0; }
+@keyframes prog-filter-in {
+    from { opacity: 0; }
+    to   { opacity: 1; }
+}
+.prog-filter-pill {
+    background: #eef4fb; color: #1a3a5c;
+    border: 0;
+    border-right: 1px solid #d5dee7;
+    padding: 8px 12px;
+    font-size: .78rem; font-weight: 600;
+    line-height: 1.15;
+    letter-spacing: -.02em;
+    cursor: pointer;
+    transition: background .12s, color .12s;
+    display: inline-flex; flex-direction: column;
+    align-items: center; justify-content: center;
+    min-height: 34px;
+    flex: 1 0 auto;
+    white-space: nowrap;
+}
+@media (hover: hover) {
+    .prog-filter-pill:not(.actief):hover { background: #dde8f5; }
+}
+.prog-filter-pill.actief { background: #1a3a5c; color: #fff; }
+.prog-filter-pill-sub {
+    display: block; font-size: .58rem; font-weight: 400;
+    opacity: .8; margin-top: 1px; white-space: nowrap;
+}
+.prog-filter-pill.actief .prog-filter-pill-sub { opacity: .95; }
+
+/* Samenvat-modus: bij afstand-filter tonen we voor niet-matchende
+   afstanden per (afstand × ronde-type) één compacte, niet-uitklapbare
+   header met heat-teller. Body is verborgen, chev onzichtbaar, cursor
+   niet-klikbaar. Subtiel grijzer zodat het visueel context is, geen
+   primaire content. */
+.prog-groep.samenvat {
+    opacity: .72; background: #f6f8fb;
+}
+.prog-groep.samenvat .prog-groep-body { display: none; }
+.prog-groep.samenvat .prog-groep-chev { visibility: hidden; }
+.prog-groep.samenvat .prog-groep-hdr  { cursor: default; }
+.samenvat-teller {
+    font-size: .78rem; color: #666; font-weight: 500;
+    margin-left: 4px;
+}
+/* Verbergen-class voor de filter: data-dag-nr items krijgen .verborgen
+   als de actieve dag-filter ze niet matcht. */
+.verborgen { display: none !important; }
+
+/* Programma-rit-filter: pills onder de dag-balk om "Alleen mijn ritten"
+   en "Alleen nog te rijden" toggelen. Toggle gebeurt via data-attributen
+   op de tab-content container; CSS hier verbergt non-matchende ritten. */
+/* Programma-inklap-knoppen: segment-control boven de "Wedstrijdprogramma"-
+   titel. Negatieve horizontale margin trekt de balk edge-to-edge over de
+   .kaart-sectie-padding (12px 16px) heen zodat de knoppen de volledige
+   containerbreedte krijgen — op smalle mobielen past de tekst anders niet. */
+.prog-klap-balk {
+    display: grid;
+    grid-template-columns: 1fr 1fr 1fr;
+    background: #fff;
+    border-top: 1px solid #b3cae6;
+    border-bottom: 1px solid #b3cae6;
+    margin: -12px -16px 10px;
+}
+.prog-klap-btn {
+    background: #fff;
+    color: #1a3a5c;
+    border: 0;
+    border-right: 1px solid #d5dee7;
+    padding: 8px 2px;
+    font-size: .78rem; font-weight: 600;
+    line-height: 1.15;
+    cursor: pointer;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    letter-spacing: -.02em;
+    transition: background .12s, color .12s;
+}
+.prog-klap-btn:last-child { border-right: 0; }
+@media (hover: hover) {
+    .prog-klap-btn:not(.actief):hover { background: #eaf2fb; }
+}
+.prog-klap-btn.actief {
+    background: #1a3a5c;
+    color: #fff;
+}
+
+/* Cat-groep header — één inklapbare header per (dc_naam + ronde_type). */
+.prog-groep {
+    margin: 4px 0 6px;
+    background: #fff;
+    border: 1px solid #d5dee7;
+    border-radius: 6px;
+    overflow: hidden;
+}
+.prog-groep.mijn {
+    border-left: 4px solid var(--oranje, #E8630A);
+}
+/* Ander gevolgd kind rijdt in deze groep/rit → violette markering, duidelijk
+   anders dan de oranje/gele markering van de geselecteerde rijder. Alleen in de
+   Programma-tab (bewust, om dataverkeer te minimaliseren). */
+.prog-groep.familie { border-left: 4px solid #7c4dff; }
+.prog-rij-familie { background:#f1ecfd; margin:0 -16px; padding:6px 16px; border-radius:4px; }
+.prog-legenda { display:flex; flex-wrap:wrap; gap:14px; align-items:center;
+    font-size:.8rem; color:#555; padding:8px 2px 2px; }
+.prog-leg-item { display:inline-flex; align-items:center; gap:6px; }
+.prog-leg-swatch { width:14px; height:14px; border-radius:3px; flex-shrink:0; }
+.prog-leg-swatch.leg-mijn    { background:#fffbe6; border-left:4px solid var(--oranje,#E8630A); }
+.prog-leg-swatch.leg-familie { background:#f1ecfd; border-left:4px solid #7c4dff; }
+/* Geselecteerd kind ÉN een ander gevolgd kind in dezelfde rit: 👥 op de rij +
+   violet stipje op de (ook ingeklapte) groep-header. */
+.prog-rij-multi { font-size:.85rem; flex-shrink:0; }
+.prog-groep-multi-dot { width:9px; height:9px; border-radius:50%; background:#7c4dff;
+    display:inline-block; flex-shrink:0; margin-left:4px; }
+.prog-groep-hdr {
+    display: flex; align-items: center; gap: 8px;
+    padding: 8px 10px;
+    cursor: pointer;
+    background: #f4f7fb;
+    user-select: none;
+    transition: background .12s;
+}
+@media (hover: hover) {
+    .prog-groep-hdr:hover { background: #eaf2fb; }
+}
+.prog-groep-chev {
+    display: inline-block; width: 12px; color: #1a3a5c;
+    font-size: .78rem; flex-shrink: 0;
+    transition: transform .15s;
+}
+.prog-groep-status {
+    display: inline-flex; align-items: center; justify-content: center;
+    width: 18px; height: 18px;
+    font-size: .9rem; line-height: 1;
+    flex-shrink: 0;
+}
+.prog-groep-titel {
+    flex: 1 1 auto; min-width: 0;
+    font-weight: 600; color: #1a3a5c;
+    font-size: .9rem;
+    text-overflow: ellipsis; overflow: hidden; white-space: nowrap;
+}
+.prog-groep-mijn-dot {
+    display: inline-block;
+    width: 10px; height: 10px;
+    border-radius: 50%;
+    background: var(--oranje, #E8630A);
+    flex-shrink: 0;
+}
+.prog-groep-body {
+    padding: 4px 6px 6px;
+    background: #fff;
+}
+.prog-groep.ingeklapt .prog-groep-body { display: none; }
+.prog-groep.ingeklapt .prog-groep-chev { transform: rotate(-90deg); }
+/* "Alleen nog te rijden" actief → verberg ritten met uitslagen (🏁). */
+.tab-content[data-filter-gereden-uit="1"] .prog-rij-gereden {
+    display: none !important;
+}
+/* Dag-header bij meerdaags evenement: prominente scheiding tussen dagen */
+.prog-dag-header {
+    background: linear-gradient(to right, #1a3a5c, #2E75B6);
+    color: #fff; padding: 10px 14px; border-radius: 6px;
+    font-size: 1rem; font-weight: 700; margin: 14px 0 8px 0;
+    text-transform: capitalize; letter-spacing: .02em;
+    box-shadow: 0 2px 4px rgba(26,58,92,.15);
+}
+.prog-dag-header:first-child { margin-top: 4px; }
+.prog-blok-rij { background:#e8eaf6; border-radius:6px; padding:6px 10px;
+                 margin:6px 0; font-size:.85rem; color:#333; }
+.prog-blok-top { display:flex; flex-wrap:wrap; align-items:baseline; gap:.5rem; }
+.prog-blok-rij .prog-blok-tijd { color:#666; font-variant-numeric:tabular-nums; }
+.prog-blok-rij .prog-blok-titel { font-weight:600; }
+.prog-blok-rij .prog-blok-duur { color:#555; font-size:.8rem; }
+.prog-blok-rij .prog-blok-opm { color:#555; font-style:italic; }
+.prog-blok-rij .prog-blok-cats { margin-top:2px; padding-left:1.4rem; color:#555; font-size:.78rem; }
+.prog-blok-rij.prog-blok-pauze { background:#fff3e0; }
+.prog-blok-rij.prog-blok-inrijden { background:#e3f2fd; }
+.prog-blok-rij.prog-blok-wedstrijdstart { background:#e8f5e9; }
+.prog-blok-rij.prog-blok-ceremonie { background:#fff8e1; }
+.prog-blok-rij.prog-blok-herstart { background:#ffebee; }
+/* ── Gecombineerde ritten: kader rondom de groep met uitleg-kopje ── */
+.prog-combi-box {
+    border: 2px solid #2E75B6;
+    border-radius: 6px;
+    background: #eef4fb;
+    margin: 8px -4px;
+    overflow: hidden;
+}
+.prog-combi-kop {
+    background: #2E75B6;
+    color: #fff;
+    font-size: .78rem;
+    font-weight: 600;
+    padding: 4px 10px;
+    letter-spacing: .02em;
+}
+.prog-combi-leden {
+    padding: 0 10px;
+}
+.prog-combi-leden .prog-rij {
+    border-bottom: 1px dashed rgba(46,117,182,.25);
+}
+.prog-combi-leden .prog-rij:last-child {
+    border-bottom: none;
+}
+/* Combi-wrapper (nieuw): omhult MEERDERE cat-groepen die in dezelfde
+   combi_group zitten. Elke cat behoudt eigen inklap; het combi-verband
+   is visueel door een blauwe rand + kop-label. */
+.prog-combi-wrap {
+    border: 2px solid #2E75B6;
+    border-radius: 8px;
+    background: #eef4fb;
+    margin: 8px 0;
+    overflow: hidden;
+}
+.prog-combi-wrap > .prog-combi-kop {
+    background: #2E75B6;
+    color: #fff;
+    font-size: .78rem;
+    font-weight: 600;
+    padding: 5px 10px;
+    letter-spacing: .02em;
+}
+.prog-combi-body {
+    padding: 6px 8px 8px;
+    background: #eef4fb;
+}
+/* Cat-groepen binnen combi-wrap: iets krappere marge, transparante
+   achtergrond zodat het combi-blauw doorschijnt aan de zijkanten. */
+.prog-combi-body .prog-groep {
+    margin: 4px 0;
+}
+
+/* ── Overlay ── */
+.overlay {
+    position: fixed; inset: 0; background: rgba(0,0,0,.5);
+    display: flex; align-items: center; justify-content: center;
+    z-index: 1000; padding: 16px;
+}
+.overlay-box {
+    background: var(--wit); border-radius: 12px; width: 100%; max-width: 500px;
+    max-height: 90vh; overflow-y: auto; box-shadow: 0 8px 32px rgba(0,0,0,.25);
+}
+.overlay-sluit {
+    position: absolute; top: 6px; right: 6px;
+    border: none; background: #d22; color: #fff;
+    width: 28px; height: 28px; border-radius: 50%;
+    font-size: 1.1rem; font-weight: 700; cursor: pointer; line-height: 1;
+    display: flex; align-items: center; justify-content: center;
+    box-shadow: 0 1px 3px rgba(0,0,0,.25);
+    transition: background .12s, transform .08s;
+}
+.overlay-sluit:hover  { background: #b71c1c; }
+.overlay-sluit:active { transform: scale(.92); }
+
+.melding { text-align: center; padding: 24px; color: #888; font-size: .95rem; }
+.melding-fout { color: #c00; }
+.spinner {
+    display: inline-block; width: 20px; height: 20px;
+    border: 2px solid #ddd; border-top-color: var(--oranje);
+    border-radius: 50%; animation: spin .6s linear infinite;
+    vertical-align: middle; margin-right: 6px;
+}
+@keyframes spin { to { transform: rotate(360deg); } }
+
+/* Pull-to-refresh indicator (zelfde patroon als coach-app) */
+#ptr {
+    position: fixed; top: 0; left: 0; right: 0;
+    background: var(--middenblauw); color: var(--wit);
+    text-align: center; font-size: .85rem; padding: 6px 0;
+    transform: translateY(-100%); transition: transform .15s ease-out;
+    z-index: 900; pointer-events: none;
+}
+#ptr.zichtbaar { transform: translateY(0); }
+#ptr.laadt     { background: var(--blauw); }
