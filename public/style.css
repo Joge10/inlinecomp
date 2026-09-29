@@ -12,6 +12,10 @@
     --grijs: #f4f6f8;
 }
 * { box-sizing: border-box; margin: 0; padding: 0; }
+/* Utility: HTML5 [hidden] moet ook winnen van componentregels als display:flex. */
+[hidden] { display: none !important; }
+/* Utility: tekst-truncatie met ellipsis (op inline en flex-children). */
+.txt-ellipsis { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 html { font-size: 20px; }
 html {
     /* Native pull-to-refresh van de browser uitschakelen — moet op html
@@ -170,6 +174,99 @@ header .sub { font-size: .95rem; opacity: .8; margin-top: 6px; text-align: cente
    geen actie nodig" terwijl rood + uitroepteken = "kijk even". */
 .meld-badge.gezien { background: #888; }
 
+/* ── Meldingen — overlay + overzichts-modal (lijst) + single popup ──
+   Kleur en achtergrond zijn per-melding dynamisch: JS zet `--kleur` en `--bg`
+   op de container (`.meld-item` in overzicht, `.meld-modal` in popup) en de
+   kinderen refereren daaraan via `var(--kleur)` / `var(--bg)`. */
+.meld-overlay {
+    position: fixed; inset: 0; display: flex; justify-content: center;
+    overflow-y: auto;
+}
+.meld-overlay--popup { background: rgba(0,0,0,.6); z-index: 9500; align-items: center; padding: 1rem; }
+.meld-overlay--overz { background: rgba(0,0,0,.55); z-index: 9400; align-items: flex-start; padding: 4vh 1rem; }
+.meld-overz-box {
+    background: #fff; border-radius: 8px; max-width: 480px; width: 100%;
+    box-shadow: 0 10px 30px rgba(0,0,0,.3);
+}
+.meld-overz-hdr {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: .8rem 1rem; border-bottom: 1px solid #e0e0e0;
+}
+.meld-overz-titel  { margin: 0; color: var(--blauw); font-size: 1.05rem; }
+.meld-overz-sluit  {
+    background: none; border: none; font-size: 1.6rem;
+    cursor: pointer; color: #666; padding: 0; line-height: 1;
+}
+.meld-overz-body   { padding: 1rem; }
+/* Item in overzicht */
+.meld-item {
+    background: var(--bg); border-left: 4px solid var(--kleur);
+    padding: .7rem .9rem; margin-bottom: .6rem; border-radius: 5px;
+}
+.meld-item-hdr     { display: flex; align-items: center; gap: .4rem; margin-bottom: .3rem; }
+.meld-item-icoon   { font-size: 1.2rem; }
+.meld-item-titel   { color: var(--kleur); flex: 1; }
+.meld-item-body    { color: #222; line-height: 1.4; font-size: .9rem; white-space: pre-wrap; }
+.meld-item-tijd    { font-size: .75rem; color: #888; margin-top: .3rem; }
+.meld-item-bijl {
+    display: inline-flex; align-items: center; gap: .3rem;
+    margin-top: .4rem; background: #fff;
+    border: 1px solid var(--kleur); color: var(--kleur);
+    text-decoration: none; padding: .3rem .55rem;
+    border-radius: 4px; font-size: .8rem; font-weight: 600;
+    max-width: 100%;
+}
+.meld-item-link {
+    display: inline-flex; align-items: center; gap: .4rem;
+    margin-top: .45rem;
+    background: var(--kleur); color: #fff;
+    text-decoration: none; padding: .4rem .8rem;
+    border-radius: 5px; font-size: .85rem; font-weight: 700;
+    max-width: 100%;
+}
+/* Single popup */
+.meld-modal {
+    background: var(--bg); border: 3px solid var(--kleur); border-radius: 10px;
+    max-width: 400px; width: 100%; max-height: calc(100vh - 2rem);
+    display: flex; flex-direction: column;
+    box-shadow: 0 10px 40px rgba(0,0,0,.4);
+    animation: meldingPop .3s ease-out;
+}
+.meld-modal-hdr {
+    display: flex; align-items: center; gap: .6rem;
+    padding: 1.5rem 1.5rem 0; flex-shrink: 0;
+}
+.meld-modal-icoon    { font-size: 1.8rem; }
+.meld-modal-titel    { margin: 0; color: var(--kleur); font-size: 1.1rem; flex: 1; }
+.meld-modal-body {
+    color: #222; line-height: 1.5; font-size: .95rem;
+    white-space: pre-wrap; padding: .6rem 1.5rem 1rem;
+    overflow-y: auto; flex: 1 1 auto; min-height: 0;
+}
+.meld-modal-wrap     { padding: 0 1.5rem .8rem; flex-shrink: 0; }
+.meld-modal-wrap--ok { padding: 0 1.5rem 1.5rem; flex-shrink: 0; }
+.meld-modal-bijl {
+    display: flex; align-items: center; gap: .5rem;
+    background: #fff; border: 1.5px solid var(--kleur);
+    color: var(--kleur); text-decoration: none;
+    padding: .5rem .8rem; border-radius: 6px;
+    font-size: .9rem; font-weight: 600;
+}
+.meld-modal-bijl-icoon  { font-size: 1.1rem; }
+.meld-modal-bijl-arrow  { font-size: .8rem; opacity: .7; }
+.meld-modal-link {
+    display: flex; align-items: center; justify-content: center; gap: .5rem;
+    background: var(--kleur); color: #fff; text-decoration: none;
+    padding: .6rem 1rem; border-radius: 6px;
+    font-size: .95rem; font-weight: 700;
+}
+.meld-modal-link-icoon  { font-size: 1.05rem; }
+.meld-ok {
+    background: var(--kleur); color: #fff; border: none;
+    padding: .6rem 1.4rem; border-radius: 6px;
+    font-size: 1rem; font-weight: 600; cursor: pointer; width: 100%;
+}
+
 /* ── Help overlay ── */
 .help-overlay {
     position: fixed; inset: 0; background: rgba(0,0,0,.6);
@@ -260,6 +357,91 @@ header .sub { font-size: .95rem; opacity: .8; margin-top: 6px; text-align: cente
 .mock-snr { width: 24px; font-weight: 600; color: var(--blauw); }
 .mock-naam { flex: 1; }
 .mock-tijd { font-family: monospace; color: #666; font-size: .65rem; }
+/* Extra mockup-decoratie (help-modal): dedupliceerd uit inline styles. */
+.mock-stap-nr {
+    background: var(--blauw); color: #fff; width: 16px; height: 16px;
+    border-radius: 50%; display: inline-flex; align-items: center;
+    justify-content: center; font-size: .65rem;
+}
+.mock-chip {
+    flex: 1; text-align: center; font-size: .7rem; font-weight: 600;
+    padding: 4px 0; border-radius: 12px; border: 1.5px solid #cdd8e3;
+    color: #888; background: #fff;
+}
+.mock-chip--active { border-color: var(--middenblauw); color: var(--blauw); background: var(--lichtblauw); }
+.mock-seg {
+    flex: 1; text-align: center; font-size: .65rem; font-weight: 600;
+    padding: 3px 0; border-radius: 4px; border: 1px solid #cdd8e3;
+    background: #fff; color: #555;
+}
+.mock-seg--active { font-weight: 700; border-color: var(--blauw); background: var(--blauw); color: #fff; }
+.mock-cols-hdr    { font-size: .6rem; color: #888; font-weight: 600; }
+.mock-nr-dim      { color: #aaa; }
+.mock-badge-serie { font-size: .6rem; background: #0d6efd; color: #fff; border-radius: 3px; padding: 0 4px; }
+.mock-row--flat   { border: none; padding: 2px 0; gap: 6px; }
+/* Mockup: stap-label, chip-rij, oranje zoekknop, filter-strook, segment-rij */
+.mock-stap {
+    display: flex; align-items: center; gap: 5px;
+    font-size: .75rem; font-weight: 700; color: var(--blauw);
+    margin: 0 0 4px;
+}
+.mock-stap--mt         { margin: 8px 0 4px; }
+.mock-chip-rij         { display: flex; gap: 4px; margin: 0 0 6px; }
+.mock-zoek-btn {
+    background: var(--oranje); color: #fff; text-align: center;
+    padding: 6px; border-radius: 6px; font-weight: 700;
+    font-size: .75rem; margin-top: 4px;
+}
+.mock-filter-strook    { background: #fff; border-top: 1px solid #b3cae6; border-bottom: 1px solid #b3cae6; }
+.mock-filter-strook-rij {
+    padding: 5px 10px; font-size: .65rem; font-weight: 600;
+    color: #1a3a5c; border-bottom: 1px solid #d5dee7;
+    display: flex; align-items: center; gap: 6px;
+}
+.mock-chev             { font-size: .55rem; }
+.flex-1                { flex: 1; }
+/* Uitslag-tabel cel-varianten (heats) */
+.uitsl-tc-b6           { font-weight: 600; }
+.uitsl-tc-b7-dark      { font-weight: 700; color: #1a3a5c; }
+/* Info-modal CTA-knop (mailto + privacy) — bg via --cta-bg */
+.info-cta-wrap         { text-align: center; margin: 12px 0; }
+.info-cta {
+    display: inline-block; background: var(--cta-bg);
+    color: #fff; padding: 10px 20px; border-radius: 8px;
+    text-decoration: none; font-weight: 700; font-size: .95rem;
+}
+.mock-seg-rij          { display: flex; gap: 3px; padding: 4px 6px; background: #eef2f6; }
+/* Mock-body padding-varianten */
+.mock-body--p4         { padding: 4px 10px; }
+.mock-body--p6         { padding: 6px 10px; }
+/* Mockup: heat-header + badges */
+.mock-heat-hdr         { background: var(--blauw); color: #fff; padding: 5px 10px; font-size: .7rem; font-weight: 700; }
+.mock-heat-hdr-tag     { background: #198754; border-radius: 3px; padding: 0 5px; font-size: .6rem; }
+.mock-badge-finale     { font-size: .6rem; background: #198754; color: #fff; border-radius: 3px; padding: 0 4px; }
+.mock-badge-block      { display: inline-block; color: #fff; border-radius: 3px; padding: 1px 6px; font-size: .6rem; font-weight: 700; }
+.mock-badge-block--serie  { background: #0d6efd; margin-bottom: 3px; }
+.mock-badge-block--finale { background: #198754; margin: 8px 0 3px; }
+/* Mockup: overige helpers */
+.mock-afstand          { font-weight: 700; color: var(--blauw); font-size: .75rem; margin: 2px 0 4px; }
+.mock-mt6              { margin-top: 6px; }
+.mock-uitsl-hdr        { font-size: .6rem; color: #fff; background: var(--blauw); margin: 0 -10px; padding: 3px 10px; font-weight: 600; }
+.mock-push-align       { text-align: right; margin: 0 0 6px; }
+.mock-push-pill        { background: var(--blauw); color: #fff; border-radius: 999px; padding: 4px 14px; font-size: .72rem; font-weight: 600; }
+/* Mockup: kolommen + celwaarde-modifiers */
+.mock-c18              { width: 18px; }
+.mock-c24              { width: 24px; }
+.mock-c20c             { width: 20px; text-align: center; }
+.mock-c30c             { width: 30px; text-align: center; }
+.mock-c36c             { width: 36px; text-align: center; }
+.mock-v                { font-weight: 600; }
+.mock-v7               { font-weight: 700; }
+.mock-cB               { color: var(--blauw); }
+.mock-cO               { color: var(--oranje); }
+.mock-cG               { color: #198754; }
+.mock-cBl              { color: #0d6efd; }
+/* "Wat is nieuw"-sectie (buiten mock) */
+.nieuw-titel           { margin-top: 24px; padding-top: 12px; border-top: 2px solid #eef2f6; }
+.nieuw-intro           { font-size: .88rem; color: #555; }
 
 .container { max-width: 720px; margin: 0 auto; padding: 6px; padding-bottom: 80px; }
 
@@ -402,6 +584,7 @@ select:focus, input:focus { border-color: var(--middenblauw); outline: none; }
     border-bottom:1px solid #eee; cursor:pointer; user-select:none;
 }
 .naamzoek-rij:hover { background:#f0f5fa; }
+.naamzoek-rij.dim  { opacity: .55; }
 .naamzoek-rij input[type=checkbox] { width:18px; height:18px; flex-shrink:0; }
 .naamzoek-rij-snr { font-weight:700; color:var(--blauw); min-width:34px; text-align:right; }
 .naamzoek-rij-naam { flex:1; }
@@ -825,6 +1008,7 @@ select:focus, input:focus { border-color: var(--middenblauw); outline: none; }
 .prog-rij {
     display: flex; align-items: center; gap: 8px;
     padding: 6px 0; border-bottom: 1px solid #f0f2f5; font-size: .9rem;
+    cursor: pointer;
 }
 .prog-rij:last-child { border-bottom: none; }
 .prog-nr { color: #aaa; font-size: .8rem; min-width: 24px; text-align: center; }
@@ -1026,6 +1210,7 @@ select:focus, input:focus { border-color: var(--middenblauw); outline: none; }
    Programma-tab (bewust, om dataverkeer te minimaliseren). */
 .prog-groep.familie { border-left: 4px solid #7c4dff; }
 .prog-rij-familie { background:#f1ecfd; margin:0 -16px; padding:6px 16px; border-radius:4px; }
+.prog-rij-mijn    { background:#fffbe6; font-weight:600; margin:0 -16px; padding:6px 16px; border-radius:4px; }
 .prog-legenda { display:flex; flex-wrap:wrap; gap:14px; align-items:center;
     font-size:.8rem; color:#555; padding:8px 2px 2px; }
 .prog-leg-item { display:inline-flex; align-items:center; gap:6px; }

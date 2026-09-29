@@ -2024,7 +2024,7 @@ if ($action === 'serie_klassement') {
 <header>
     <div class="hdr-row-top">
         <div class="hdr-btns hdr-btns-left">
-            <button class="btn-help btn-meldingen" id="btn-meldingen-overzicht" data-i18n-title="hdr_meldingen_title" title="Mededelingen voor deze wedstrijd">📢<span id="meldingen-badge" class="meld-badge" style="display:none">0</span></button>
+            <button class="btn-help btn-meldingen" id="btn-meldingen-overzicht" data-i18n-title="hdr_meldingen_title" title="Mededelingen voor deze wedstrijd">📢<span id="meldingen-badge" class="meld-badge" hidden>0</span></button>
             <button class="btn-help btn-lang" id="btn-lang" title="Language / Taal" aria-label="Switch language"></button>
         </div>
         <div class="hdr-center">
@@ -2048,7 +2048,7 @@ if ($action === 'serie_klassement') {
 </div>
 
 <div class="container">
-    <div id="pwa-banner" class="pwa-banner" style="display:none">
+    <div id="pwa-banner" class="pwa-banner" hidden>
         <div class="pwa-banner-tekst">
             <b data-i18n="pwa_installeer_titel">Installeer InlineComp</b>
             <span data-i18n="pwa_installeer_uitleg">Voeg toe aan je startscherm voor snelle toegang</span>
@@ -2103,14 +2103,14 @@ if ($action === 'serie_klassement') {
             </div>
             <select id="sel-comp"><option value="" data-i18n="opt_laden">Laden…</option></select>
         </div>
-        <div id="comp-info" class="comp-info" style="display:none"></div>
+        <div id="comp-info" class="comp-info" hidden></div>
         <div class="stap" id="stap-rijder">
             <div class="stap-label"><span class="stap-nr">2</span> <span data-i18n="stap2_label">Startnummer, licentie of achternaam</span></div>
             <input type="text" id="inp-snr" data-i18n-placeholder="zoek_placeholder" placeholder="Startnummer, licentienr of achternaam…" autocomplete="off" inputmode="search">
         </div>
         <button class="btn-zoek" id="btn-zoek" data-i18n="btn_zoeken" disabled>Zoeken</button>
         <div id="setup-melding" class="setup-melding" aria-live="polite"></div>
-        <div id="setup-max-hint" class="setup-max-hint" style="display:none"></div>
+        <div id="setup-max-hint" class="setup-max-hint" hidden></div>
         <button class="setup-modal-klaar" type="button" onclick="closeSetupModal()" data-i18n="pwa_btn_sluit">Sluiten</button>
     </div>
 </div>
@@ -3922,8 +3922,8 @@ safeFetch('?action=competitions').then(r=>r.json()).then(comps => {
 
 selComp.addEventListener('change', async () => {
     const o = selComp.selectedOptions[0];
-    if (o?.value) { divInfo.innerHTML = `<strong>${esc(o.dataset.naam)}</strong><div style="color:#555;margin-top:2px">${esc(o.dataset.datum)}</div>`; divInfo.style.display=''; }
-    else divInfo.style.display='none';
+    if (o?.value) { divInfo.innerHTML = `<strong>${esc(o.dataset.naam)}</strong><div style="color:#555;margin-top:2px">${esc(o.dataset.datum)}</div>`; divInfo.hidden = false; }
+    else divInfo.hidden = true;
     btnZoek.disabled = !(selComp.value && inpSnr.value.trim());
     divResult.innerHTML = '';
     updateHeaderLogos(o);
@@ -4128,7 +4128,7 @@ function toonChooserModal(rijen, term, compId) {
                             uit ? `<span style="color:#999">${esc(t('chooser_al_in_lijst'))}</span>` : '',
                             !doetMee ? `<span style="color:#b71c1c">${esc(t('chooser_doet_niet_mee'))}</span>` : '',
                         ].filter(Boolean).join(' · ');
-                        return `<label class="naamzoek-rij" style="${uit ? 'opacity:.55' : ''}">
+                        return `<label class="naamzoek-rij${uit ? ' dim' : ''}">
                             <input type="checkbox" data-pid="${esc(r.person_id ?? '')}" data-lic="${esc(r.license_key)}" ${uit ? 'checked disabled' : ''}>
                             <span class="naamzoek-rij-snr">${esc(r.wedstrijd_snr ?? '—')}</span>
                             <div class="naamzoek-rij-naam">
@@ -4345,7 +4345,7 @@ function _updateSetupModalMax() {
     if (btnZoek) { btnZoek.style.display = vol ? 'none' : ''; if (vol) btnZoek.disabled = true; }
     const hint = document.getElementById('setup-max-hint');
     if (hint) {
-        hint.style.display = vol ? '' : 'none';
+        hint.hidden = !vol;
         if (vol) hint.textContent = t('zoek_max_hint', { max: MAX_KINDEREN });
     }
 }
@@ -5174,7 +5174,7 @@ function renderResultaat(data, snr, prog) {
                                      : '';
                     const opmHtml = rit.rit_opmerking
                         ? `<div class="prog-rit-opm">📝 ${esc(rit.rit_opmerking)}</div>` : '';
-                    html += `<div class="prog-rij${isInRit ? ' prog-rij-mijn' : ''}${isFamilie ? ' prog-rij-familie' : ''}" style="${isInRit ? 'background:#fffbe6;font-weight:600;margin:0 -16px;padding:6px 16px;border-radius:4px' : ''};cursor:pointer"
+                    html += `<div class="prog-rij${isInRit ? ' prog-rij-mijn' : ''}${isFamilie ? ' prog-rij-familie' : ''}"
                                  data-rit-naam="${esc(rit.rit_naam)}" data-dc-naam="${esc(rit.dc_naam)}"
                                  data-dag-nr="${dag}" onclick="toonRitDetail(this)">
                         <span class="prog-nr">${statusIcon} ${nr}</span>
@@ -5228,7 +5228,7 @@ function renderResultaat(data, snr, prog) {
                         html += `<div class="heat-card heat-card-pending">
                             <div class="heat-card-titel">
                                 <span class="heat-card-badge ${BADGE[rt]??'badge-serie'}">${esc(getRondeLabel(rt))}</span>
-                                <span style="flex:1">${esc(naam)}</span>
+                                <span class="flex-1">${esc(naam)}</span>
                                 <span style="font-size:1rem" title="${esc(t('heat_wachten_vorige'))}">⏳</span>
                             </div>
                             <div style="padding:.6rem .8rem;color:#666;font-style:italic;font-size:.85rem">
@@ -5261,7 +5261,7 @@ function renderResultaat(data, snr, prog) {
                     html += `<div class="heat-card">
                         <div class="heat-card-titel">
                             <span class="heat-card-badge ${BADGE[rt]??'badge-serie'}">${esc(getRondeLabel(rt))}</span>
-                            <span style="flex:1">${esc(naam)}</span>
+                            <span class="flex-1">${esc(naam)}</span>
                             ${heatIcon ? `<span style="font-size:1rem">${heatIcon}</span>` : ''}
                         </div>
                         <table class="heat-card-tabel">
@@ -5325,7 +5325,7 @@ function renderResultaat(data, snr, prog) {
                 </div>
                 <div class="uitsl-tabel-wrap"></div>
             </div>
-            <div class="kaart-sectie" data-serie-lijst style="display:none">
+            <div class="kaart-sectie" data-serie-lijst hidden>
                 <div class="kaart-sectie-titel">${esc(t('serie_titel'))}</div>
                 <div data-serie-selector class="uitsl-selects"></div>
                 <div class="serie-klas-tabel-wrap"></div>
@@ -5536,15 +5536,15 @@ async function renderRondeUitslagen(container) {
                     const isNonFin = ['DNS','DNF','DQ-TF','DQ-SF','DQ-DF'].some(c => sanctieCodes.includes(c));
                     const finVal = (isNonFin || rr.finishpositie == null) ? '' : rr.finishpositie;
                     html += `<tr${isIk ? ' class="rij-ik"' : ''}>
-                        ${r.ronde_type === 'runner_up' ? `<td class="c" style="font-weight:700;color:#1a3a5c">${rr.ru_positie ?? '—'}</td>` : ''}
-                        <td class="c" style="font-weight:600">${esc(rr.snr ?? '')}</td>
+                        ${r.ronde_type === 'runner_up' ? `<td class="c uitsl-tc-b7-dark">${rr.ru_positie ?? '—'}</td>` : ''}
+                        <td class="c uitsl-tc-b6">${esc(rr.snr ?? '')}</td>
                         <td>${esc(rr.full_name)}</td>
                         <td class="c">${kwalHtml}</td>
                         ${heeftRondes   ? `<td class="c">${rr.rondes ?? '—'}</td>` : ''}
-                        ${heeftPkPunten ? `<td class="c" style="font-weight:600">${pkPuntCel(rr, pkMaxR) || '—'}</td>` : ''}
+                        ${heeftPkPunten ? `<td class="c uitsl-tc-b6">${pkPuntCel(rr, pkMaxR) || '—'}</td>` : ''}
                         <td class="c mono">${esc(tijdStr)}</td>
                         <td class="c" style="color:#c00;font-weight:600">${esc(sanctieStr)}</td>
-                        ${heeftFin      ? `<td class="c" style="font-weight:700;color:#1a3a5c">${esc(finVal)}</td>` : ''}
+                        ${heeftFin      ? `<td class="c uitsl-tc-b7-dark">${esc(finVal)}</td>` : ''}
                     </tr>`;
                 }
                 html += `</tbody></table>`;
@@ -5693,9 +5693,9 @@ async function initSerieKlassementen(kaart, compId) {
     try {
         const res = await safeFetch(`?action=series_voor_comp&competition_id=${encodeURIComponent(compId)}`);
         const series = await res.json();
-        if (!Array.isArray(series) || !series.length) { box.style.display = 'none'; return; }
+        if (!Array.isArray(series) || !series.length) { box.hidden = true; return; }
 
-        box.style.display = '';
+        box.hidden = false;
         // Eén select met alle series + categorieën combineert netjes
         selector.innerHTML = `
             <select class="serie-sel">
@@ -5771,7 +5771,7 @@ async function initSerieKlassementen(kaart, compId) {
             }
         }
     } catch (e) {
-        box.style.display = 'none';
+        box.hidden = true;
     }
 }
 
@@ -6153,8 +6153,8 @@ function toonInfo() {
 
             <h3>${t('info_h3_html')}</h3>
             <p>${esc(t('info_p4'))}</p>
-            <p style="text-align:center;margin:12px 0">
-                <a href="mailto:inlinecomp@devriesen.com" style="display:inline-block;background:var(--oranje);color:#fff;padding:10px 20px;border-radius:8px;text-decoration:none;font-weight:700;font-size:.95rem">inlinecomp@devriesen.com</a>
+            <p class="info-cta-wrap">
+                <a class="info-cta" style="--cta-bg:var(--oranje)" href="mailto:inlinecomp@devriesen.com">inlinecomp@devriesen.com</a>
             </p>
 
             <h3>${esc(t('info_h4'))}</h3>
@@ -6162,8 +6162,8 @@ function toonInfo() {
 
             <h3>${t('info_h5_html')}</h3>
             <p>${esc(t('info_p6'))}</p>
-            <p style="text-align:center;margin:12px 0">
-                <a href="../privacyverklaring.php" style="display:inline-block;background:var(--blauw,#1a3a5c);color:#fff;padding:10px 20px;border-radius:8px;text-decoration:none;font-weight:700;font-size:.95rem">${esc(t('info_btn_privacy'))}</a>
+            <p class="info-cta-wrap">
+                <a class="info-cta" style="--cta-bg:var(--blauw,#1a3a5c)" href="../privacyverklaring.php">${esc(t('info_btn_privacy'))}</a>
             </p>
 
             <p style="font-size:.8rem;color:#999;text-align:center;margin-top:16px">${t('info_copyright', {jaar: new Date().getFullYear()})}</p>
@@ -6210,22 +6210,22 @@ function toonHelp() {
             <div class="mock">
                 <div class="mock-hdr">InlineComp – Public</div>
                 <div class="mock-body">
-                    <div style="display:flex;align-items:center;gap:5px;font-size:.75rem;font-weight:700;color:var(--blauw);margin:0 0 4px">
-                        <span style="background:var(--blauw);color:#fff;width:16px;height:16px;border-radius:50%;display:inline-flex;align-items:center;justify-content:center;font-size:.65rem">1</span>
+                    <div class="mock-stap">
+                        <span class="mock-stap-nr">1</span>
                         ${esc(t('help_mock_kies_w'))}
                     </div>
-                    <div style="display:flex;gap:4px;margin:0 0 6px">
-                        <span style="flex:1;text-align:center;font-size:.7rem;font-weight:600;padding:4px 0;border-radius:12px;border:1.5px solid #cdd8e3;color:#888;background:#fff">${esc(t('filter_eerder'))}</span>
-                        <span style="flex:1;text-align:center;font-size:.7rem;font-weight:600;padding:4px 0;border-radius:12px;border:1.5px solid var(--middenblauw);color:var(--blauw);background:var(--lichtblauw)">${esc(t('filter_vandaag'))}</span>
-                        <span style="flex:1;text-align:center;font-size:.7rem;font-weight:600;padding:4px 0;border-radius:12px;border:1.5px solid #cdd8e3;color:#888;background:#fff">${esc(t('filter_later'))}</span>
+                    <div class="mock-chip-rij">
+                        <span class="mock-chip">${esc(t('filter_eerder'))}</span>
+                        <span class="mock-chip mock-chip--active">${esc(t('filter_vandaag'))}</span>
+                        <span class="mock-chip">${esc(t('filter_later'))}</span>
                     </div>
                     <div class="mock-select">${esc(t('help_mock_voorbeeld'))}</div>
-                    <div style="display:flex;align-items:center;gap:5px;font-size:.75rem;font-weight:700;color:var(--blauw);margin:8px 0 4px">
-                        <span style="background:var(--blauw);color:#fff;width:16px;height:16px;border-radius:50%;display:inline-flex;align-items:center;justify-content:center;font-size:.65rem">2</span>
+                    <div class="mock-stap mock-stap--mt">
+                        <span class="mock-stap-nr">2</span>
                         ${esc(t('help_mock_snr_lic'))}
                     </div>
                     <div class="mock-select">${esc(t('help_mock_snr'))}</div>
-                    <div style="background:var(--oranje);color:#fff;text-align:center;padding:6px;border-radius:6px;font-weight:700;font-size:.75rem;margin-top:4px">${esc(t('btn_zoeken'))}</div>
+                    <div class="mock-zoek-btn">${esc(t('btn_zoeken'))}</div>
                 </div>
             </div>
 
@@ -6242,20 +6242,20 @@ function toonHelp() {
                     <div class="mock-tab">${esc(t('tab_rondes').replace(/^[^\s]+\s*/, ''))}</div>
                     <div class="mock-tab">${esc(t('tab_uitslagen').replace(/^[^\s]+\s*/, ''))}</div>
                 </div>
-                <div style="background:#fff;border-top:1px solid #b3cae6;border-bottom:1px solid #b3cae6">
-                    <div style="padding:5px 10px;font-size:.65rem;font-weight:600;color:#1a3a5c;border-bottom:1px solid #d5dee7;display:flex;align-items:center;gap:6px">
-                        <span>🏁</span><span style="flex:1">${esc(t('prog_filter_alle_afstanden'))}</span><span style="font-size:.55rem">▼</span>
+                <div class="mock-filter-strook">
+                    <div class="mock-filter-strook-rij">
+                        <span>🏁</span><span class="flex-1">${esc(t('prog_filter_alle_afstanden'))}</span><span class="mock-chev">▼</span>
                     </div>
                 </div>
-                <div style="display:flex;gap:3px;padding:4px 6px;background:#eef2f6">
-                    <span style="flex:1;text-align:center;font-size:.65rem;font-weight:700;padding:3px 0;border-radius:4px;border:1px solid var(--blauw);background:var(--blauw);color:#fff">▶ ${esc(t('prog_klap_alles_uit'))}</span>
-                    <span style="flex:1;text-align:center;font-size:.65rem;font-weight:600;padding:3px 0;border-radius:4px;border:1px solid #cdd8e3;background:#fff;color:#555">▼ ${esc(t('prog_klap_alles_in'))}</span>
-                    <span style="flex:1;text-align:center;font-size:.65rem;font-weight:600;padding:3px 0;border-radius:4px;border:1px solid #cdd8e3;background:#fff;color:#555">👤 ${esc(t('prog_klap_mijn'))}</span>
+                <div class="mock-seg-rij">
+                    <span class="mock-seg mock-seg--active">▶ ${esc(t('prog_klap_alles_uit'))}</span>
+                    <span class="mock-seg">▼ ${esc(t('prog_klap_alles_in'))}</span>
+                    <span class="mock-seg">👤 ${esc(t('prog_klap_mijn'))}</span>
                 </div>
-                <div class="mock-body" style="padding:4px 10px">
-                    <div class="mock-row"><span style="color:#aaa">1</span> <span class="mock-naam">500m ${esc(t('ronde_serie'))} Heat 1</span> <span style="font-size:.6rem;background:#0d6efd;color:#fff;border-radius:3px;padding:0 4px">${esc(t('ronde_serie'))}</span></div>
-                    <div class="mock-row mock-hl"><span style="color:#aaa">2</span> <span class="mock-naam">500m ${esc(t('ronde_serie'))} Heat 2</span> <span style="font-size:.6rem;background:#0d6efd;color:#fff;border-radius:3px;padding:0 4px">${esc(t('ronde_serie'))}</span></div>
-                    <div class="mock-row"><span style="color:#aaa">3</span> <span class="mock-naam">500m A-${esc(t('ronde_finale'))}</span> <span style="font-size:.6rem;background:#198754;color:#fff;border-radius:3px;padding:0 4px">${esc(t('ronde_finale'))}</span></div>
+                <div class="mock-body mock-body--p4">
+                    <div class="mock-row"><span class="mock-nr-dim">1</span> <span class="mock-naam">500m ${esc(t('ronde_serie'))} Heat 1</span> <span class="mock-badge-serie">${esc(t('ronde_serie'))}</span></div>
+                    <div class="mock-row mock-hl"><span class="mock-nr-dim">2</span> <span class="mock-naam">500m ${esc(t('ronde_serie'))} Heat 2</span> <span class="mock-badge-serie">${esc(t('ronde_serie'))}</span></div>
+                    <div class="mock-row"><span class="mock-nr-dim">3</span> <span class="mock-naam">500m A-${esc(t('ronde_finale'))}</span> <span class="mock-badge-finale">${esc(t('ronde_finale'))}</span></div>
                 </div>
             </div>
 
@@ -6269,14 +6269,14 @@ function toonHelp() {
                     <div class="mock-tab">${esc(t('tab_rondes').replace(/^[^\s]+\s*/, ''))}</div>
                     <div class="mock-tab">${esc(t('tab_uitslagen').replace(/^[^\s]+\s*/, ''))}</div>
                 </div>
-                <div style="background:var(--blauw);color:#fff;padding:5px 10px;font-size:.7rem;font-weight:700">
-                    <span style="background:#198754;border-radius:3px;padding:0 5px;font-size:.6rem">${esc(t('ronde_finale'))}</span> 500m A-${esc(t('ronde_finale'))}
+                <div class="mock-heat-hdr">
+                    <span class="mock-heat-hdr-tag">${esc(t('ronde_finale'))}</span> 500m A-${esc(t('ronde_finale'))}
                 </div>
-                <div class="mock-body" style="padding:4px 10px">
-                    <div class="mock-row" style="font-size:.6rem;color:#888;font-weight:600"><span style="width:18px">${esc(t('col_pos'))}</span><span style="width:24px">${esc(t('col_snr'))}</span><span class="mock-naam">${esc(t('col_naam'))}</span><span class="mock-tijd">${esc(t('col_tijd'))}</span><span style="width:20px;text-align:center">${esc(t('col_fin'))}</span></div>
-                    <div class="mock-row"><span class="mock-rang">1</span><span class="mock-snr">12</span><span class="mock-naam">Emma V.</span><span class="mock-tijd">45.30</span><span style="width:20px;text-align:center;font-weight:600">2</span></div>
-                    <div class="mock-row mock-hl"><span class="mock-rang">2</span><span class="mock-snr">86</span><span class="mock-naam">${esc(t('help_mock_jouw_naam'))}</span><span class="mock-tijd">45.12</span><span style="width:20px;text-align:center;font-weight:600;color:var(--blauw)">1</span></div>
-                    <div class="mock-row"><span class="mock-rang">3</span><span class="mock-snr">34</span><span class="mock-naam">Tim B.</span><span class="mock-tijd">46.01</span><span style="width:20px;text-align:center;font-weight:600">3</span></div>
+                <div class="mock-body mock-body--p4">
+                    <div class="mock-row mock-cols-hdr"><span class="mock-c18">${esc(t('col_pos'))}</span><span class="mock-c24">${esc(t('col_snr'))}</span><span class="mock-naam">${esc(t('col_naam'))}</span><span class="mock-tijd">${esc(t('col_tijd'))}</span><span class="mock-c20c">${esc(t('col_fin'))}</span></div>
+                    <div class="mock-row"><span class="mock-rang">1</span><span class="mock-snr">12</span><span class="mock-naam">Emma V.</span><span class="mock-tijd">45.30</span><span class="mock-c20c mock-v">2</span></div>
+                    <div class="mock-row mock-hl"><span class="mock-rang">2</span><span class="mock-snr">86</span><span class="mock-naam">${esc(t('help_mock_jouw_naam'))}</span><span class="mock-tijd">45.12</span><span class="mock-c20c mock-v mock-cB">1</span></div>
+                    <div class="mock-row"><span class="mock-rang">3</span><span class="mock-snr">34</span><span class="mock-naam">Tim B.</span><span class="mock-tijd">46.01</span><span class="mock-c20c mock-v">3</span></div>
                 </div>
             </div>
 
@@ -6290,19 +6290,19 @@ function toonHelp() {
                     <div class="mock-tab active">${esc(t('tab_rondes').replace(/^[^\s]+\s*/, ''))}</div>
                     <div class="mock-tab">${esc(t('tab_uitslagen').replace(/^[^\s]+\s*/, ''))}</div>
                 </div>
-                <div class="mock-body" style="padding:6px 10px">
-                    <div style="font-weight:700;color:var(--blauw);font-size:.75rem;margin:2px 0 4px">100 meter</div>
+                <div class="mock-body mock-body--p6">
+                    <div class="mock-afstand">100 meter</div>
 
-                    <div style="display:inline-block;background:#0d6efd;color:#fff;border-radius:3px;padding:1px 6px;font-size:.6rem;font-weight:700;margin-bottom:3px">${esc(t('ronde_serie'))}</div>
-                    <div class="mock-row" style="font-size:.6rem;color:#888;font-weight:600"><span style="width:24px">${esc(t('col_snr'))}</span><span class="mock-naam">${esc(t('col_naam'))}</span><span style="width:36px;text-align:center">Kwal</span><span class="mock-tijd">${esc(t('col_tijd'))}</span></div>
-                    <div class="mock-row"><span class="mock-snr">12</span><span class="mock-naam">Emma V.</span><span style="width:36px;text-align:center;font-weight:700;color:#198754">Q→A</span><span class="mock-tijd">10.42</span></div>
-                    <div class="mock-row mock-hl"><span class="mock-snr">86</span><span class="mock-naam">${esc(t('help_mock_jouw_naam'))}</span><span style="width:36px;text-align:center;font-weight:700;color:#198754">Q→A</span><span class="mock-tijd">10.58</span></div>
-                    <div class="mock-row"><span class="mock-snr">34</span><span class="mock-naam">Tim B.</span><span style="width:36px;text-align:center;font-weight:700;color:#0d6efd">q→B</span><span class="mock-tijd">10.71</span></div>
+                    <div class="mock-badge-block mock-badge-block--serie">${esc(t('ronde_serie'))}</div>
+                    <div class="mock-row mock-cols-hdr"><span class="mock-c24">${esc(t('col_snr'))}</span><span class="mock-naam">${esc(t('col_naam'))}</span><span class="mock-c36c">Kwal</span><span class="mock-tijd">${esc(t('col_tijd'))}</span></div>
+                    <div class="mock-row"><span class="mock-snr">12</span><span class="mock-naam">Emma V.</span><span class="mock-c36c mock-v7 mock-cG">Q→A</span><span class="mock-tijd">10.42</span></div>
+                    <div class="mock-row mock-hl"><span class="mock-snr">86</span><span class="mock-naam">${esc(t('help_mock_jouw_naam'))}</span><span class="mock-c36c mock-v7 mock-cG">Q→A</span><span class="mock-tijd">10.58</span></div>
+                    <div class="mock-row"><span class="mock-snr">34</span><span class="mock-naam">Tim B.</span><span class="mock-c36c mock-v7 mock-cBl">q→B</span><span class="mock-tijd">10.71</span></div>
 
-                    <div style="display:inline-block;background:#198754;color:#fff;border-radius:3px;padding:1px 6px;font-size:.6rem;font-weight:700;margin:8px 0 3px">${esc(t('ronde_finale'))} A</div>
-                    <div class="mock-row" style="font-size:.6rem;color:#888;font-weight:600"><span style="width:24px">${esc(t('col_snr'))}</span><span class="mock-naam">${esc(t('col_naam'))}</span><span class="mock-tijd">${esc(t('col_tijd'))}</span><span style="width:20px;text-align:center">${esc(t('col_fin'))}</span></div>
-                    <div class="mock-row mock-hl"><span class="mock-snr">86</span><span class="mock-naam">${esc(t('help_mock_jouw_naam'))}</span><span class="mock-tijd">10.35</span><span style="width:20px;text-align:center;font-weight:700;color:var(--blauw)">1</span></div>
-                    <div class="mock-row"><span class="mock-snr">12</span><span class="mock-naam">Emma V.</span><span class="mock-tijd">10.41</span><span style="width:20px;text-align:center;font-weight:600">2</span></div>
+                    <div class="mock-badge-block mock-badge-block--finale">${esc(t('ronde_finale'))} A</div>
+                    <div class="mock-row mock-cols-hdr"><span class="mock-c24">${esc(t('col_snr'))}</span><span class="mock-naam">${esc(t('col_naam'))}</span><span class="mock-tijd">${esc(t('col_tijd'))}</span><span class="mock-c20c">${esc(t('col_fin'))}</span></div>
+                    <div class="mock-row mock-hl"><span class="mock-snr">86</span><span class="mock-naam">${esc(t('help_mock_jouw_naam'))}</span><span class="mock-tijd">10.35</span><span class="mock-c20c mock-v7 mock-cB">1</span></div>
+                    <div class="mock-row"><span class="mock-snr">12</span><span class="mock-naam">Emma V.</span><span class="mock-tijd">10.41</span><span class="mock-c20c mock-v">2</span></div>
                 </div>
             </div>
 
@@ -6316,14 +6316,14 @@ function toonHelp() {
                     <div class="mock-tab">${esc(t('tab_rondes').replace(/^[^\s]+\s*/, ''))}</div>
                     <div class="mock-tab active">${esc(t('tab_uitslagen').replace(/^[^\s]+\s*/, ''))}</div>
                 </div>
-                <div class="mock-body" style="padding:6px 10px">
+                <div class="mock-body mock-body--p6">
                     <div class="mock-select">DJB/A + HJB/A</div>
                     <div class="mock-select">${esc(t('uitsl_klassement_opt').replace(/^[^\s]+\s*/, ''))}</div>
-                    <div style="margin-top:6px">
-                        <div class="mock-row" style="font-size:.6rem;color:#fff;background:var(--blauw);margin:0 -10px;padding:3px 10px;font-weight:600"><span style="width:18px">${esc(t('col_rang'))}</span><span style="width:24px">${esc(t('col_snr'))}</span><span class="mock-naam">${esc(t('col_naam'))}</span><span style="width:30px;text-align:center">Spr</span><span style="width:30px;text-align:center">L.A.</span><span style="width:30px;text-align:center;color:var(--oranje)">${esc(t('col_tot'))}</span></div>
-                        <div class="mock-row"><span class="mock-rang">1</span><span class="mock-snr">86</span><span class="mock-naam">${esc(t('help_mock_jouw_naam'))}</span><span style="width:30px;text-align:center">4</span><span style="width:30px;text-align:center">1</span><span style="width:30px;text-align:center;font-weight:700;color:var(--oranje)">8</span></div>
-                        <div class="mock-row"><span class="mock-rang">2</span><span class="mock-snr">12</span><span class="mock-naam">Emma V.</span><span style="width:30px;text-align:center">5</span><span style="width:30px;text-align:center">3</span><span style="width:30px;text-align:center;font-weight:700;color:var(--oranje)">11</span></div>
-                        <div class="mock-row"><span class="mock-rang">3</span><span class="mock-snr">34</span><span class="mock-naam">Tim B.</span><span style="width:30px;text-align:center">5</span><span style="width:30px;text-align:center">6</span><span style="width:30px;text-align:center;font-weight:700;color:var(--oranje)">12</span></div>
+                    <div class="mock-mt6">
+                        <div class="mock-row mock-uitsl-hdr"><span class="mock-c18">${esc(t('col_rang'))}</span><span class="mock-c24">${esc(t('col_snr'))}</span><span class="mock-naam">${esc(t('col_naam'))}</span><span class="mock-c30c">Spr</span><span class="mock-c30c">L.A.</span><span class="mock-c30c mock-cO">${esc(t('col_tot'))}</span></div>
+                        <div class="mock-row"><span class="mock-rang">1</span><span class="mock-snr">86</span><span class="mock-naam">${esc(t('help_mock_jouw_naam'))}</span><span class="mock-c30c">4</span><span class="mock-c30c">1</span><span class="mock-c30c mock-v7 mock-cO">8</span></div>
+                        <div class="mock-row"><span class="mock-rang">2</span><span class="mock-snr">12</span><span class="mock-naam">Emma V.</span><span class="mock-c30c">5</span><span class="mock-c30c">3</span><span class="mock-c30c mock-v7 mock-cO">11</span></div>
+                        <div class="mock-row"><span class="mock-rang">3</span><span class="mock-snr">34</span><span class="mock-naam">Tim B.</span><span class="mock-c30c">5</span><span class="mock-c30c">6</span><span class="mock-c30c mock-v7 mock-cO">12</span></div>
                     </div>
                 </div>
             </div>
@@ -6341,10 +6341,10 @@ function toonHelp() {
             <div class="mock">
                 <div class="mock-hdr">🔔 ${esc(t('push_titel'))}</div>
                 <div class="mock-body">
-                    <div style="text-align:right;margin:0 0 6px"><span style="background:var(--blauw);color:#fff;border-radius:999px;padding:4px 14px;font-size:.72rem;font-weight:600">${esc(t('push_aan'))}</span></div>
-                    <div class="mock-row" style="border:none;padding:2px 0;gap:6px"><span>☑</span><span class="mock-naam">🚩 ${esc(t('push_loting'))}</span></div>
-                    <div class="mock-row" style="border:none;padding:2px 0;gap:6px"><span>☑</span><span class="mock-naam">🏁 ${esc(t('push_uitslag'))}</span></div>
-                    <div class="mock-row" style="border:none;padding:2px 0;gap:6px"><span>☑</span><span class="mock-naam">📢 ${esc(t('push_bericht'))}</span></div>
+                    <div class="mock-push-align"><span class="mock-push-pill">${esc(t('push_aan'))}</span></div>
+                    <div class="mock-row mock-row--flat"><span>☑</span><span class="mock-naam">🚩 ${esc(t('push_loting'))}</span></div>
+                    <div class="mock-row mock-row--flat"><span>☑</span><span class="mock-naam">🏁 ${esc(t('push_uitslag'))}</span></div>
+                    <div class="mock-row mock-row--flat"><span>☑</span><span class="mock-naam">📢 ${esc(t('push_bericht'))}</span></div>
                 </div>
             </div>
 
@@ -6352,10 +6352,10 @@ function toonHelp() {
             <p>${esc(t('help_p_tip'))}</p>
 
             <!-- ── Wat is nieuw (changelog per versie) ── -->
-            <h3 id="wat-is-nieuw" style="margin-top:24px;padding-top:12px;border-top:2px solid #eef2f6">
+            <h3 id="wat-is-nieuw" class="nieuw-titel">
                 ✨ ${esc(t('nieuw_h'))}
             </h3>
-            <p style="font-size:.88rem;color:#555">${esc(t('nieuw_intro'))}</p>
+            <p class="nieuw-intro">${esc(t('nieuw_intro'))}</p>
 
             ${renderChangelog(CHANGELOG)}
 
@@ -6428,7 +6428,7 @@ function updateMeldingenBadge() {
     if (!btn || !badge) return;
     if (_meldingLijst.length === 0) {
         btn.style.display = 'none';
-        badge.style.display = 'none';
+        badge.hidden = true;
         return;
     }
     // Badge toont ALTIJD het totaal aantal meldingen zodat je ziet dat ze er
@@ -6444,7 +6444,7 @@ function updateMeldingenBadge() {
         ? `${_meldingLijst.length}!`
         : String(_meldingLijst.length);
     badge.classList.toggle('gezien', aantalOngelezen === 0);
-    badge.style.display = '';
+    badge.hidden = false;
 }
 
 // Klik op 📢-knop: toont een lijst van alle nu-actieve meldingen
@@ -6456,7 +6456,7 @@ function toonMeldingenOverzicht() {
     const overlay = document.createElement('div');
     // data-attribute zodat _rerenderActiveTab 'm kan vinden bij taalwissel
     overlay.dataset.meldOverlay = 'overzicht';
-    overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.55);z-index:9400;display:flex;align-items:flex-start;justify-content:center;padding:4vh 1rem;overflow-y:auto;';
+    overlay.className = 'meld-overlay meld-overlay--overz';
     const _loc = getLocale();
     const items = _meldingLijst.map(m => {
         const stijl = _MELDING_PRIO[m.prio] ?? _MELDING_PRIO.info;
@@ -6474,48 +6474,34 @@ function toonMeldingenOverzicht() {
         const titelToon   = _meldingTekst(m, 'titel');
         const berichtToon = _meldingTekst(m, 'bericht');
         const bijlHtml = m.bijlage_path
-            ? `<a href="../${esc(m.bijlage_path)}" target="_blank" rel="noopener"
-                   download="${esc(m.bijlage_naam || 'bijlage')}"
-                   style="display:inline-flex;align-items:center;gap:.3rem;
-                          margin-top:.4rem;background:#fff;
-                          border:1px solid ${stijl.kleur};color:${stijl.kleur};
-                          text-decoration:none;padding:.3rem .55rem;
-                          border-radius:4px;font-size:.8rem;font-weight:600;
-                          max-width:100%;">
-                   📎 <span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${esc(m.bijlage_naam || 'bijlage')}</span>
+            ? `<a class="meld-item-bijl" href="../${esc(m.bijlage_path)}" target="_blank" rel="noopener"
+                   download="${esc(m.bijlage_naam || 'bijlage')}">
+                   📎 <span class="txt-ellipsis">${esc(m.bijlage_naam || 'bijlage')}</span>
                 </a>`
             : '';
         const linkHtml = m.link_url
-            ? `<a href="${esc(m.link_url)}" target="_blank" rel="noopener"
-                   style="display:inline-flex;align-items:center;gap:.4rem;margin-top:.45rem;
-                          background:${stijl.kleur};color:#fff;text-decoration:none;
-                          padding:.4rem .8rem;border-radius:5px;font-size:.85rem;
-                          font-weight:700;max-width:100%;">
-                   🔗 <span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${esc(_meldingTekst(m, 'link_tekst'))}</span>
+            ? `<a class="meld-item-link" href="${esc(m.link_url)}" target="_blank" rel="noopener">
+                   🔗 <span class="txt-ellipsis">${esc(_meldingTekst(m, 'link_tekst'))}</span>
                 </a>`
             : '';
-        return `<div style="background:${stijl.bg};border-left:4px solid ${stijl.kleur};
-                            padding:.7rem .9rem;margin-bottom:.6rem;border-radius:5px;">
-            <div style="display:flex;align-items:center;gap:.4rem;margin-bottom:.3rem;">
-                <span style="font-size:1.2rem">${stijl.icoon}</span>
-                <strong style="color:${stijl.kleur};flex:1;">${esc(titelToon)}</strong>
+        return `<div class="meld-item" style="--kleur:${stijl.kleur};--bg:${stijl.bg}">
+            <div class="meld-item-hdr">
+                <span class="meld-item-icoon">${stijl.icoon}</span>
+                <strong class="meld-item-titel">${esc(titelToon)}</strong>
             </div>
-            <div style="color:#222;line-height:1.4;font-size:.9rem;white-space:pre-wrap;">${esc(berichtToon)}</div>
+            <div class="meld-item-body">${esc(berichtToon)}</div>
             ${bijlHtml}
             ${linkHtml}
-            <div style="font-size:.75rem;color:#888;margin-top:.3rem;">${esc(tijd)}${esc(tot)}</div>
+            <div class="meld-item-tijd">${esc(tijd)}${esc(tot)}</div>
         </div>`;
     }).join('');
     overlay.innerHTML = `
-        <div style="background:#fff;border-radius:8px;max-width:480px;width:100%;
-                    box-shadow:0 10px 30px rgba(0,0,0,.3);">
-            <div style="display:flex;align-items:center;justify-content:space-between;
-                        padding:.8rem 1rem;border-bottom:1px solid #e0e0e0;">
-                <h3 style="margin:0;color:var(--blauw);font-size:1.05rem;">${esc(t('meld_kop'))}</h3>
-                <button class="meld-overz-sluit" style="background:none;border:none;
-                        font-size:1.6rem;cursor:pointer;color:#666;padding:0;line-height:1;">&times;</button>
+        <div class="meld-overz-box">
+            <div class="meld-overz-hdr">
+                <h3 class="meld-overz-titel">${esc(t('meld_kop'))}</h3>
+                <button class="meld-overz-sluit">&times;</button>
             </div>
-            <div style="padding:1rem;">${items}</div>
+            <div class="meld-overz-body">${items}</div>
         </div>`;
     document.body.appendChild(overlay);
     overlay.querySelector('.meld-overz-sluit').addEventListener('click', () => overlay.remove());
@@ -6548,52 +6534,37 @@ function toonMelding(m, compId) {
     overlay.dataset.meldOverlay = 'popup';
     // Overlay scrolt zelf óók (overflow-y:auto) als achterval voor heel kleine
     // schermen waar zelfs de inner-box met max-height: 90vh nog te hoog is.
-    overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:9500;display:flex;align-items:center;justify-content:center;padding:1rem;overflow-y:auto;';
+    overlay.className = 'meld-overlay meld-overlay--popup';
     // Inner-box als flex-column: header + scrollable bericht + knop. Bericht-
     // div krijgt overflow-y:auto + min-height:0 (cruciaal voor flex-children),
     // knop heeft flex-shrink:0 zodat 'ie altijd onderaan zichtbaar blijft.
     const titelToon   = _meldingTekst(m, 'titel');
     const berichtToon = _meldingTekst(m, 'bericht');
     overlay.innerHTML = `
-        <div style="background:${stijl.bg};border:3px solid ${stijl.kleur};border-radius:10px;
-                    max-width:400px;width:100%;max-height:calc(100vh - 2rem);
-                    display:flex;flex-direction:column;
-                    box-shadow:0 10px 40px rgba(0,0,0,.4);animation:meldingPop .3s ease-out;">
-            <div style="display:flex;align-items:center;gap:.6rem;padding:1.5rem 1.5rem 0;flex-shrink:0;">
-                <span style="font-size:1.8rem">${stijl.icoon}</span>
-                <h2 style="margin:0;color:${stijl.kleur};font-size:1.1rem;flex:1;">${esc(titelToon)}</h2>
+        <div class="meld-modal" style="--kleur:${stijl.kleur};--bg:${stijl.bg}">
+            <div class="meld-modal-hdr">
+                <span class="meld-modal-icoon">${stijl.icoon}</span>
+                <h2 class="meld-modal-titel">${esc(titelToon)}</h2>
             </div>
-            <div style="color:#222;line-height:1.5;font-size:.95rem;
-                        white-space:pre-wrap;padding:.6rem 1.5rem 1rem;
-                        overflow-y:auto;flex:1 1 auto;min-height:0;">${esc(berichtToon)}</div>
+            <div class="meld-modal-body">${esc(berichtToon)}</div>
             ${m.bijlage_path ? `
-            <div style="padding:0 1.5rem .8rem;flex-shrink:0;">
-                <a href="../${esc(m.bijlage_path)}" target="_blank" rel="noopener"
-                   download="${esc(m.bijlage_naam || 'bijlage')}"
-                   style="display:flex;align-items:center;gap:.5rem;
-                          background:#fff;border:1.5px solid ${stijl.kleur};
-                          color:${stijl.kleur};text-decoration:none;
-                          padding:.5rem .8rem;border-radius:6px;font-size:.9rem;
-                          font-weight:600;">
-                    <span style="font-size:1.1rem">📎</span>
-                    <span style="flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${esc(m.bijlage_naam || 'Download bijlage')}</span>
-                    <span style="font-size:.8rem;opacity:.7">⬇</span>
+            <div class="meld-modal-wrap">
+                <a class="meld-modal-bijl" href="../${esc(m.bijlage_path)}" target="_blank" rel="noopener"
+                   download="${esc(m.bijlage_naam || 'bijlage')}">
+                    <span class="meld-modal-bijl-icoon">📎</span>
+                    <span class="txt-ellipsis flex-1">${esc(m.bijlage_naam || 'Download bijlage')}</span>
+                    <span class="meld-modal-bijl-arrow">⬇</span>
                 </a>
             </div>` : ''}
             ${m.link_url ? `
-            <div style="padding:0 1.5rem .8rem;flex-shrink:0;">
-                <a href="${esc(m.link_url)}" target="_blank" rel="noopener"
-                   style="display:flex;align-items:center;justify-content:center;gap:.5rem;
-                          background:${stijl.kleur};color:#fff;text-decoration:none;
-                          padding:.6rem 1rem;border-radius:6px;font-size:.95rem;font-weight:700;">
-                    <span style="font-size:1.05rem">🔗</span>
-                    <span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${esc(_meldingTekst(m, 'link_tekst'))}</span>
+            <div class="meld-modal-wrap">
+                <a class="meld-modal-link" href="${esc(m.link_url)}" target="_blank" rel="noopener">
+                    <span class="meld-modal-link-icoon">🔗</span>
+                    <span class="txt-ellipsis">${esc(_meldingTekst(m, 'link_tekst'))}</span>
                 </a>
             </div>` : ''}
-            <div style="padding:0 1.5rem 1.5rem;flex-shrink:0;">
-                <button class="meld-ok" style="background:${stijl.kleur};color:#fff;border:none;
-                                                padding:.6rem 1.4rem;border-radius:6px;font-size:1rem;
-                                                font-weight:600;cursor:pointer;width:100%;">
+            <div class="meld-modal-wrap meld-modal-wrap--ok">
+                <button class="meld-ok">
                     ${esc(t('meld_begrepen'))}
                 </button>
             </div>
@@ -7044,7 +7015,7 @@ async function _ppRender() {
             <label class="pub-push-opt"><input type="checkbox" data-type="uitslag" ${_ppPref('uitslag') ? 'checked' : ''}> 🏁 ${t('push_uitslag')}</label>
             <label class="pub-push-opt"><input type="checkbox" data-type="bericht" ${_ppPref('bericht') ? 'checked' : ''}> 📢 ${t('push_bericht')}</label>
         </div>
-        <div class="pub-push-rij"${aan ? '' : ' style="display:none"'}>
+        <div class="pub-push-rij"${aan ? '' : ' hidden'}>
             <button type="button" class="pub-push-test">${t('push_test')}</button>
             <span class="pub-push-msg"></span>
         </div>`;
@@ -7112,7 +7083,7 @@ window.addEventListener('beforeinstallprompt', e => {
     _deferredPrompt = e;
     // Toon banner alleen als gebruiker het niet eerder heeft weggeklikt
     if (!localStorage.getItem('pwa-dismissed')) {
-        document.getElementById('pwa-banner').style.display = '';
+        document.getElementById('pwa-banner').hidden = false;
     }
 });
 
@@ -7121,13 +7092,13 @@ document.getElementById('pwa-install')?.addEventListener('click', async () => {
     _deferredPrompt.prompt();
     const result = await _deferredPrompt.userChoice;
     if (result.outcome === 'accepted') {
-        document.getElementById('pwa-banner').style.display = 'none';
+        document.getElementById('pwa-banner').hidden = true;
     }
     _deferredPrompt = null;
 });
 
 document.getElementById('pwa-sluit')?.addEventListener('click', () => {
-    document.getElementById('pwa-banner').style.display = 'none';
+    document.getElementById('pwa-banner').hidden = true;
     localStorage.setItem('pwa-dismissed', '1');
 });
 
@@ -7151,7 +7122,7 @@ document.getElementById('pwa-sluit')?.addEventListener('click', () => {
 
 // Verberg banner als app al geinstalleerd is
 window.addEventListener('appinstalled', () => {
-    document.getElementById('pwa-banner').style.display = 'none';
+    document.getElementById('pwa-banner').hidden = true;
     _deferredPrompt = null;
 });
 </script>
