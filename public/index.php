@@ -2129,6 +2129,16 @@ window.APP_CONFIG = {
     changelog: <?= json_encode($__clMine, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES) ?>
 };
 </script>
-<script src="app.js?v=<?= @filemtime(__DIR__ . '/app.js') ?>"></script>
+<?php
+// Publieke JS-modules — klassieke script-tags in dep-volgorde.
+// i18n eerst (APP_VERSIE/CHANGELOG/T), dan utils (globals+safeFetch),
+// dan features. `runtime` laatste (registreert service-worker +
+// install-prompt bij load). Klassieke tags -> alles deelt global
+// scope, HTML onclick="..."-handlers blijven werken.
+foreach (['i18n','utils','programma','rijder','uitslag','modals','meldingen','runtime'] as $f) {
+    echo '<script src="js/public-' . $f . '.js?v='
+       . @filemtime(__DIR__ . "/js/public-$f.js") . '"></script>' . "\n";
+}
+?>
 </body>
 </html>

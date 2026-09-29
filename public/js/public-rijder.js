@@ -1,0 +1,962 @@
+﻿// ============================================================
+//  InlineComp Public — public-rijder.js
+//
+//  Bevat: wedstrijd-filter + zoek/chooser + naam-zoek + multi-kind-state + setup-modal + toonRijderData/renderKinderen + status-modal.
+//  Geextraheerd uit public/app.js op 2026-09-30 (fase 3 van refactor-plan).
+//  Klassieke script-tag: gedeelde global scope met de andere public-*.js modules.
+// ============================================================
+
+function filterComps() {
+    const nu = new Date();
+    const gisteren = new Date(nu); gisteren.setDate(gisteren.getDate() - 1); gisteren.setHours(0,0,0,0);
+    const morgen   = new Date(nu); morgen.setDate(morgen.getDate() + 1);   morgen.setHours(23,59,59,999);
+
+    const toonOud      = chkOud.checked;
+    const toonVandaag  = chkVandaag.checked;
+    const toonToekomst = chkToekomst.checked;
+    const vorigeWaarde = selComp.value;
+
+    if (!toonOud && !toonVandaag && !toonToekomst) {
+        selComp.innerHTML = `<option value="">${esc(t('opt_kies_filter'))}</option>`;
+        return;
+    }
+
+    selComp.innerHTML = `<option value="">${esc(t('opt_kies_wedstrijd'))}</option>`;
+    for (const c of alleComps) {
+        const startDag = safeDatum(c.starts);
+        const eindDag  = safeDatum(c.ends) ?? startDag;
+
+        // Categoriseer: een wedstrijd is óf vandaag (overlapt met gisteren-morgen),
+        // óf oud (afgelopen vóór gisteren), óf toekomstig (begint ná morgen).
+        const isVandaag  = startDag && startDag <= morgen && eindDag >= gisteren;
+        const isOud      = !isVandaag && eindDag   && eindDag   < gisteren;
+        const isToekomst = !isVandaag && startDag && startDag > morgen;
+
+        // Tonen als bijbehorend filter aan staat
+        if (isVandaag  && !toonVandaag)  continue;
+        if (isOud      && !toonOud)      continue;
+        if (isToekomst && !toonToekomst) continue;
+
+        const d = startDag ? startDag.toLocaleDateString(getLocale(),{day:'numeric',month:'long',year:'numeric'}) : '';
+        // Verborgen wedstrijden: tonen als disabled met "(binnenkort)"
+        // suffix — bezoeker ziet dat de wedstrijd er aankomt zonder
+        // erop te kunnen klikken. Operator publiceert via Beheer.
+        const verborgen = !Number(c.public_zichtbaar);
+        const o = document.createElement('option');
+        o.value = c.id;
+        o.textContent = `${c.name} — ${d}${verborgen ? '  ' + t('opt_binnenkort') : ''}`;
+        if (verborgen) o.disabled = true;
+        o.dataset.datum = d; o.dataset.naam = c.name;
+        o.dataset.orgLogo = c.org_logo ?? '';
+        o.dataset.orgNaam = c.org_naam ?? '';
+        o.dataset.baanLogo = c.baan_logo ?? '';
+        o.dataset.baanVereniging = c.baan_vereniging ?? '';
+        o.dataset.sponsors = JSON.stringify(c.sponsors ?? []);
+        selComp.appendChild(o);
+    }
+
+    // Herstel selectie als die nog in de lijst zit en niet (inmiddels) disabled.
+    const vorigeOpt = vorigeWaarde
+        ? selComp.querySelector(`option[value="${vorigeWaarde}"]`)
+        : null;
+    if (vorigeOpt && !vorigeOpt.disabled) {
+        selComp.value = vorigeWaarde;
+    } else {
+        // Auto-selecteer als er maar 1 selecteerbare wedstrijd is —
+        // disabled ('binnenkort') tellen niet mee, anders zou de
+        // gebruiker bij stappen verder pas een 'niet beschikbaar'
+        // foutmelding krijgen.
+        const opties = selComp.querySelectorAll('option[value]:not([value=""]):not([disabled])');
+        if (opties.length === 1) { selComp.value = opties[0].value; selComp.dispatchEvent(new Event('change')); }
+    }
+}
+
+chkOud.addEventListener('change', filterComps);
+chkVandaag.addEventListener('change', filterComps);
+chkToekomst.addEventListener('change', filterComps);
+
+safeFetch('?action=competitions').then(r=>r.json()).then(comps => {
+    alleComps = comps;
+
+    // Directe-link-support: ?comp=<uuid> in de URL selecteert direct die
+    // wedstrijd. Gebruikt door de QR-code op de promotie-poster per wedstrijd.
+    // Als de wedstrijd buiten het "actieve" venster valt (oud of toekomstig)
+    // vinken we automatisch het juiste filter aan zodat de optie zichtbaar is.
+    const urlParams = new URLSearchParams(window.location.search);
+    const wantedComp = urlParams.get('comp');
+    if (wantedComp) {
+        const comp = alleComps.find(c => c.id === wantedComp);
+        if (comp) {
+            const nu = new Date();
+            const startDag = comp.starts ? new Date(comp.starts) : null;
+            const eindDag  = comp.ends   ? new Date(comp.ends)   : startDag;
+            if (eindDag && eindDag < nu)       chkOud.checked = true;
+            if (startDag && startDag > nu)     chkToekomst.checked = true;
+        }
+    }
+
+    filterComps();
+
+    // Na filterComps: selecteer 'm als de optie nu beschikbaar is. Alleen
+    // dispatchen als filterComps 'm niet al auto-geselecteerd heeft (bij één optie),
+    // anders vuurt de change 2× → dubbele kinderen-load.
+    if (wantedComp && selComp.value !== wantedComp
+        && selComp.querySelector(`option[value="${wantedComp}"]`)) {
+        selComp.value = wantedComp;
+        selComp.dispatchEvent(new Event('change'));
+    }
+}).catch(() => { selComp.innerHTML = `<option value="">${esc(t('opt_fout_laden'))}</option>`; });
+
+selComp.addEventListener('change', async () => {
+    const o = selComp.selectedOptions[0];
+    if (o?.value) { divInfo.innerHTML = `<strong>${esc(o.dataset.naam)}</strong><div style="color:#555;margin-top:2px">${esc(o.dataset.datum)}</div>`; divInfo.hidden = false; }
+    else divInfo.hidden = true;
+    btnZoek.disabled = !(selComp.value && inpSnr.value.trim());
+    divResult.innerHTML = '';
+    updateHeaderLogos(o);
+    updateSetupStrip();   // reflecteer nieuwe wedstrijd in de strip bovenaan
+
+    // Multi-rijder-state resetten en vorige kinderen herladen uit globale
+    // store (op license_key). Kinderen die niet in deze wedstrijd meedoen
+    // worden stil overgeslagen — geen foutmelding.
+    _kinderen = [];
+    _activeKindIdx = 0;
+    if (!selComp.value) return;
+    const opgeslagen = _loadKidsUitStorage();
+    if (!opgeslagen.length) return;
+    const mySeq = ++_kindLoadSeq;   // deze load claimt de nieuwste beurt
+    divResult.innerHTML = `<div class="melding"><span class="spinner"></span> ${t('msg_je_rijders_ophalen')}</div>`;
+    let gedeeldeProg = null;
+    try {
+        const pr = await safeFetch(`?action=programma&competition_id=${encodeURIComponent(selComp.value)}`);
+        gedeeldeProg = await pr.json();
+    } catch {}
+    if (mySeq !== _kindLoadSeq) return;   // nieuwere change gestart → deze afbreken
+    // In een lokale array verzamelen en pas op 't eind toewijzen: twee gelijktijdige
+    // loads kunnen zo nooit in dezelfde _kinderen interleaven (→ geen dubbele rijders).
+    const verzameld = [];
+    const anoniemGeworden = [];   // gevolgde rijders die nu anoniem zijn (geen geldig token)
+    for (const item of opgeslagen) {
+        const k = await _fetchKind({ person_id: item.person_id, license_key: item.license_key, volg: item.volg }, selComp.value, gedeeldeProg);
+        if (mySeq !== _kindLoadSeq) return;   // afgebroken door nieuwere load
+        if (k && k.__anoniem) { anoniemGeworden.push(item); continue; }
+        if (k) verzameld.push(k);
+        // k == null → kind doet niet mee aan deze wedstrijd, we slaan 'm stil over.
+    }
+    _kinderen = verzameld;
+
+    // Opslag bijwerken: (a) rijders die nu anoniem zijn pruimen (chip weg, volgen
+    // verbroken — je had geen geldig volg-token), en (b) fase 3c-migratie: passief
+    // person_id invullen bij oude items. Rijders die deze wedstrijd niet meedoen
+    // blijven staan (die zijn niet gecontroleerd).
+    const wegKeys = new Set(anoniemGeworden.map(it => it.person_id || it.volg || it.license_key));
+    let basis = opgeslagen.filter(it => !wegKeys.has(it.person_id || it.volg || it.license_key));
+    let veranderd = wegKeys.size > 0;
+    if (basis.some(it => !it.person_id)) {
+        const pidByLic = new Map();
+        verzameld.forEach(k => {
+            const p = k.data[k.kozen_idx ?? 0]?.persoon;
+            if (p?.license_key && p?.person_id) pidByLic.set(p.license_key, p.person_id);
+        });
+        if (pidByLic.size) {
+            basis = basis.map(it =>
+                (!it.person_id && it.license_key && pidByLic.has(it.license_key))
+                    ? { ...it, person_id: pidByLic.get(it.license_key) }
+                    : it);
+            veranderd = true;
+        }
+    }
+    if (veranderd) {
+        localStorage.setItem(KIDS_LS_KEY, JSON.stringify(basis));
+        if (typeof _renderSetupVolglijst === 'function') _renderSetupVolglijst();  // chips meteen bij
+        if (wegKeys.size && typeof _ppSync === 'function') _ppSync();               // push-abonnement bij
+    }
+    if (_kinderen.length) {
+        _activeKindIdx = 0;
+        renderKinderen();
+        divResult.scrollIntoView({ behavior:'smooth', block:'start' });
+    } else {
+        divResult.innerHTML = '';
+    }
+});
+inpSnr.addEventListener('input', () => { btnZoek.disabled = !(selComp.value && inpSnr.value.trim()); });
+inpSnr.addEventListener('keydown', e => { if (e.key==='Enter' && !btnZoek.disabled) btnZoek.click(); });
+
+// ── Zoek-input: detecteer of de user een startnummer, licentienummer of
+//    een achternaam typt. Regel:
+//      - alleen cijfers, 1-4 tekens → startnummer
+//      - alleen cijfers, 5+ tekens  → licentienummer (KNSB relatienr)
+//      - bevat letters              → achternaam-zoek
+function _zoekModus(tekst) {
+    const t = tekst.trim();
+    // Volg-ID (geheim token uit Mijn InlineComp) = 32 hex-tekens → volg-lookup.
+    // Dit is de enige manier om een publiek anonieme rijder te volgen (variant B):
+    // het token ontsluit ('entitled') de echte naam; person_id doet dat niet.
+    if (/^[0-9a-f]{32}$/i.test(t)) return 'volg';
+    if (/^\d+$/.test(t)) return t.length <= 4 ? 'snr' : 'license';
+    return 'naam';
+}
+
+// Toon een zoek-melding op de JUISTE plek: ín de setup-modal als die open staat
+// (anders valt de melding achter de modal), anders in het hoofdresultaat-gebied.
+function _zoekFeedback(html, isFout = false) {
+    const box = `<div class="melding${isFout ? ' melding-fout' : ''}">${html}</div>`;
+    const modal = document.getElementById('setup-modal');
+    const sm = document.getElementById('setup-melding');
+    if (modal && modal.classList.contains('open') && sm) sm.innerHTML = box;
+    else divResult.innerHTML = box;
+}
+function _zoekFeedbackWis() {
+    const sm = document.getElementById('setup-melding');
+    if (sm) sm.innerHTML = '';
+}
+
+btnZoek.addEventListener('click', async () => {
+    if (_loadKidsUitStorage().length >= MAX_KINDEREN) return;   // max bereikt — eerst verwijderen
+    const compId = selComp.value, tekst = inpSnr.value.trim();
+    if (!compId || !tekst) return;
+    const modus = _zoekModus(tekst);
+
+    if (modus === 'naam') {
+        await zoekOpNaam(compId, tekst);
+        return;
+    }
+
+    _zoekFeedback(`<span class="spinner"></span> ${esc(t('msg_zoeken'))}`);
+    btnZoek.disabled = true;
+    try {
+        const param = modus === 'volg'
+            ? `volg=${encodeURIComponent(tekst)}`
+            : modus === 'license'
+                ? `license_key=${encodeURIComponent(tekst)}`
+                : `startnummer=${encodeURIComponent(tekst)}`;
+        const [lookupRes, progRes] = await Promise.all([
+            safeFetch(`?action=lookup&competition_id=${encodeURIComponent(compId)}&${param}`),
+            safeFetch(`?action=programma&competition_id=${encodeURIComponent(compId)}`)
+        ]);
+        const data = await lookupRes.json();
+        const prog = await progRes.json();
+
+        if (data.error) { _zoekFeedback(esc(data.error), true); return; }
+        if (!data.length) { _zoekFeedback(esc(t('msg_geen_resultaten'))); return; }
+
+        // Een anonieme rijder kun je niet op startnummer (of naam) volgen —
+        // alleen via het onraadbare volg-ID. Filter anonieme treffers eruit en
+        // toon een uitleg als er niets volgbaars overblijft.
+        const volgbaar = data.filter(d => !d.persoon?.is_anoniem);
+        if (!volgbaar.length) {
+            _zoekFeedback(esc(t('msg_rijder_anoniem')));
+            return;
+        }
+
+        // Meerdere personen met zelfde startnummer (of license) → chooser-modal
+        // met checkboxes zodat de user er meerdere tegelijk kan toevoegen.
+        if (volgbaar.length > 1) {
+            const rijen = volgbaar.map(d => ({
+                person_id:    d.persoon.person_id ?? null,
+                license_key:  d.persoon.license_key,
+                full_name:    d.persoon.full_name,
+                wedstrijd_snr: d.persoon.wedstrijd_snr ?? d.persoon.start_number,
+                category:     d.persoon.category,
+                club_short:   d.persoon.club_short ?? '',
+            }));
+            _zoekFeedbackWis();
+            toonChooserModal(rijen, tekst, compId);
+            return;
+        }
+
+        // Voor license/snr gebruiken we het startnr uit de response (kan per
+        // wedstrijd verschillen); toonRijderData deduped op license_key.
+        const huidigSnr = volgbaar[0].persoon.wedstrijd_snr ?? volgbaar[0].persoon.start_number ?? tekst;
+        _zoekFeedbackWis();                // modal sluit hierna → geen stale spinner
+        toonRijderData([volgbaar[0]], 0, huidigSnr, prog);
+        inpSnr.value = '';
+        btnZoek.disabled = true;
+    } catch (e) {
+        _zoekFeedback(esc(t('err_prefix', {msg: e.message})), true);
+    } finally { btnZoek.disabled = false; }
+});
+
+// ── Herbruikbare multi-select chooser-modal ─────────────────────────────────
+// Gebruikt voor zowel naam-zoek als startnummer-match met meerdere hits.
+// `rijen` moet items hebben met: {license_key, full_name, wedstrijd_snr,
+// category, club_short}. Na "Toevoegen" wordt per gekozen license_key een
+// volledige lookup gedaan en aan _kinderen toegevoegd.
+function toonChooserModal(rijen, term, compId) {
+    // Reeds gevolgd (globale volglijst) → uitschakelen. Ook rijders die je volgt
+    // maar die niet in déze wedstrijd meedoen tellen mee, zodat je nooit boven
+    // het maximum van de globale volglijst uitkomt.
+    // Reeds-gevolgd-set bevat zowel person_id als license_key (fase 3c), zodat
+    // een treffer op één van beide als "al in lijst" telt, ongeacht welke sleutel
+    // het opgeslagen item draagt.
+    const al = new Set();
+    _loadKidsUitStorage().forEach(k => { if (k.person_id) al.add(k.person_id); if (k.license_key) al.add(k.license_key); });
+    const plaatsVrij = MAX_KINDEREN - _loadKidsUitStorage().length;
+
+    const modal = document.createElement('div');
+    modal.className = 'naamzoek-modal';
+    modal.innerHTML = `
+        <div class="naamzoek-box">
+            <div class="naamzoek-hdr">
+                <span>${esc(t('chooser_titel', {term}))}</span>
+                <button class="naamzoek-sluit" title="${esc(t('chooser_sluit'))}">&times;</button>
+            </div>
+            <div class="naamzoek-body">
+                ${rijen.length === 0
+                    ? `<div class="naamzoek-leeg">${esc(t('msg_geen_rijders'))}</div>`
+                    : rijen.map(r => {
+                        const uit = (r.person_id && al.has(r.person_id)) || al.has(r.license_key);
+                        // search_person geeft `in_wedstrijd` (1/0); snr-pad niet,
+                        // dan behandelen we als altijd-wel (undefined === wel).
+                        const doetMee = r.in_wedstrijd === undefined ? true : !!parseInt(r.in_wedstrijd);
+                        const meta = [
+                            r.category || '',
+                            r.club_short ? esc(r.club_short) : '',
+                            uit ? `<span style="color:#999">${esc(t('chooser_al_in_lijst'))}</span>` : '',
+                            !doetMee ? `<span style="color:#b71c1c">${esc(t('chooser_doet_niet_mee'))}</span>` : '',
+                        ].filter(Boolean).join(' · ');
+                        return `<label class="naamzoek-rij${uit ? ' dim' : ''}">
+                            <input type="checkbox" data-pid="${esc(r.person_id ?? '')}" data-lic="${esc(r.license_key)}" ${uit ? 'checked disabled' : ''}>
+                            <span class="naamzoek-rij-snr">${esc(r.wedstrijd_snr ?? '—')}</span>
+                            <div class="naamzoek-rij-naam">
+                                ${esc(r.full_name)}
+                                <div class="naamzoek-rij-meta">${meta}</div>
+                            </div>
+                        </label>`;
+                    }).join('')}
+            </div>
+            <div class="naamzoek-voet">
+                <span class="aantal">${esc(t('chooser_max', {max: MAX_KINDEREN, vrij: plaatsVrij}))}</span>
+                <div>
+                    <button class="btn-zoek" style="padding:8px 18px;margin:0" id="naamzoek-ok">${esc(t('chooser_toevoegen'))}</button>
+                </div>
+            </div>
+        </div>`;
+    document.body.appendChild(modal);
+    divResult.innerHTML = '';
+
+    const sluit = () => modal.remove();
+    modal.querySelector('.naamzoek-sluit').addEventListener('click', sluit);
+    modal.addEventListener('click', e => { if (e.target === modal) sluit(); });
+
+    modal.querySelector('#naamzoek-ok').addEventListener('click', async () => {
+        const vinkjes = [...modal.querySelectorAll('input[type=checkbox]:checked:not(:disabled)')];
+        if (!vinkjes.length) { sluit(); return; }
+        if (vinkjes.length > plaatsVrij) {
+            alert(t('alert_max_select', {max: MAX_KINDEREN, vrij: plaatsVrij, n: vinkjes.length}));
+            return;
+        }
+        sluit();
+        divResult.innerHTML = `<div class="melding"><span class="spinner"></span> ${t('msg_rijders_ophalen')}</div>`;
+        let prog = null;
+        try {
+            const pr = await safeFetch(`?action=programma&competition_id=${encodeURIComponent(compId)}`);
+            prog = await pr.json();
+        } catch {}
+        for (const cb of vinkjes) {
+            const pid = cb.dataset.pid;
+            const lic = cb.dataset.lic;
+            if (!pid && !lic) continue;
+            // Prefereer person_id (fase 3c); val terug op license_key.
+            const param = pid
+                ? `person_id=${encodeURIComponent(pid)}`
+                : `license_key=${encodeURIComponent(lic)}`;
+            try {
+                const r = await safeFetch(`?action=lookup&competition_id=${encodeURIComponent(compId)}&${param}`);
+                const d = await r.json();
+                if (d && !d.error && d.length) {
+                    const huidigSnr = d[0].persoon.wedstrijd_snr ?? d[0].persoon.start_number ?? '';
+                    toonRijderData(d, 0, huidigSnr, prog);
+                }
+            } catch {}
+        }
+        inpSnr.value = '';
+        btnZoek.disabled = true;
+    });
+}
+
+// ── Naam-zoek: zoek via backend, toon chooser ────────────────────────────────
+async function zoekOpNaam(compId, term) {
+    _zoekFeedback(`<span class="spinner"></span> ${esc(t('msg_zoeken_op', {term: esc(term)}))}`);
+    btnZoek.disabled = true;
+    let rijen = [];
+    try {
+        const res = await safeFetch(`?action=search_person&competition_id=${encodeURIComponent(compId)}&q=${encodeURIComponent(term)}`);
+        rijen = await res.json();
+        if (!Array.isArray(rijen)) rijen = [];
+    } catch (e) {
+        _zoekFeedback(esc(t('err_zoeken', {msg: e.message})), true);
+        btnZoek.disabled = false;
+        return;
+    } finally { btnZoek.disabled = false; }
+    // Geen naam-treffer → of/of-melding (variant B): niet-bevestigend, dekt zowel
+    // "doet niet mee" als "koos anoniem". Een anonieme rijder is nooit op naam
+    // vindbaar; toevoegen kan dan alleen via het licentie-/ID-nummer.
+    if (rijen.length === 0) {
+        _zoekFeedback(esc(t('msg_naam_geen_of_of')));
+        return;
+    }
+    _zoekFeedbackWis();
+    toonChooserModal(rijen, term, compId);
+}
+
+// refreshRijder() is verwijderd — was gekoppeld aan het ↻-knopje dat door
+// de auto-refresh + ↻-stempel-indicator overbodig is geworden.
+
+function toonRijder(idx) {
+    window._gekozenIdx = idx;
+    toonRijderData(window._lookupData, idx, window._lookupSnr, window._lookupProg);
+}
+
+// ── Multi-rijder-state (ouders met meerdere kinderen) ────────────────────────
+// _kinderen = [{snr, data, prog, sub_tab}] waarbij data = lookup-response
+// (array met persoon+heats) en prog = programma-response van de wedstrijd.
+// Max 4 kids om de top-tabs leesbaar te houden op een telefoon.
+const MAX_KINDEREN = 4;
+let _kinderen = [];
+let _activeKindIdx = 0;
+// Volgnummer per kinderen-load: beschermt tegen twee (bijna) gelijktijdige
+// change-handlers die anders tijdens hun await's in dezelfde _kinderen zouden
+// pushen → dubbele rijders (bv. QR-open dispatcht change 2×). Alleen de nieuwste
+// load mag _kinderen vullen + renderen; oudere breken af.
+let _kindLoadSeq = 0;
+
+// ── Programma-tab: inklap-state (public) ─────────────────────────────────────
+// _progIngeklaptPub bevat de groep-keys die INGEKLAPT zijn (default = alles
+// bij eerste render). _progAlleKeysPub = alle keys van laatste render, nodig
+// voor "Alles in/uit". _progGroepenMetMijnPub = keys waar de gekozen rijder
+// in zit ("Mijn ritten"-knop). _progEersteRenderPub triggert alleen bij het
+// éérste render van deze rijder-tab.
+const _progIngeklaptPub = new Set();
+let _progAlleKeysPub = [];
+const _progGroepenMetMijnPub = new Set();
+let _progEersteRenderPub = true;
+
+// Programma-UI-state per rijder — bij wisselen van kind-tab willen we
+// dat elke rijder z'n eigen selectie (dag/afstand/klap/open groepen)
+// onthoudt. Bij eerste bezoek van een nieuwe rijder proberen we de state
+// van de vorige rijder over te nemen; als de bewaarde afstand niet in de
+// nieuwe data voorkomt valt _restoreProgUiStatePub automatisch terug op
+// "alle" (want de pill-lookup returnt null en de kiesProgFilter-call
+// wordt geskipt). Keyed op license_key voor stabiliteit tussen sessies.
+const _progUiStatePerKind = new Map();
+let _pendingProgRestore = null;
+function _kindKey(k) {
+    return k?.data?.[k.kozen_idx ?? 0]?.persoon?.license_key || `snr:${k?.snr || ''}`;
+}
+
+// Snapshot / restore van de programma-tab UI-state rond een re-render.
+// renderKinderen() bouwt de rijder-tab-HTML opnieuw én reset de klap-state
+// naar default-collapsed. Bij auto-refresh (stilleRefresh) willen we die
+// user-state juist behouden: filter-strook (dag+afstand), klap-balk
+// (uit/in/mijn), én welke groepen handmatig open/dicht zijn geklapt.
+function _snapshotProgUiStatePub() {
+    const tab = document.querySelector('.tab-content[data-tab="programma"]');
+    if (!tab) return null;
+    const strook = tab.querySelector('.prog-filter-strook');
+    const balk   = tab.querySelector('.prog-klap-balk');
+    const open   = new Set();
+    tab.querySelectorAll('.prog-groep').forEach(g => {
+        if (g.classList.contains('samenvat')) return;
+        if (!g.classList.contains('ingeklapt')) open.add(g.dataset.groepKey);
+    });
+    return {
+        dag:     strook?.dataset.actieveDag     || 'alle',
+        afstand: strook?.dataset.actieveAfstand || 'alle',
+        klap:    balk?.dataset.actief           || '',
+        open,
+    };
+}
+
+function _restoreProgUiStatePub(state) {
+    if (!state) return;
+    const tab = document.querySelector('.tab-content[data-tab="programma"]');
+    if (!tab) return;
+    const strook = tab.querySelector('.prog-filter-strook');
+    // Filter via bestaande handler — die triggert applyProgFilter (samenvat,
+    // heat-tellers, verborgen-classes).
+    if (strook) {
+        if (state.dag && state.dag !== 'alle') {
+            const p = strook.querySelector(
+                `.prog-filter-panel[data-panel="dag"] .prog-filter-pill[data-value="${CSS.escape(state.dag)}"]`);
+            if (p) kiesProgFilter('dag', state.dag, p);
+        }
+        if (state.afstand && state.afstand !== 'alle') {
+            const p = strook.querySelector(
+                `.prog-filter-panel[data-panel="afstand"] .prog-filter-pill[data-value="${CSS.escape(state.afstand)}"]`);
+            if (p) kiesProgFilter('afstand', state.afstand, p);
+        }
+    }
+    // Klap-balk: preset actief → knop klikken. Anders per-groep restore.
+    if (state.klap === 'uit' || state.klap === 'in' || state.klap === 'mijn') {
+        const btn = tab.querySelector(`.prog-klap-balk .prog-klap-btn[data-actie="${state.klap}"]`);
+        if (btn) btn.click();
+    } else if (state.open) {
+        tab.querySelectorAll('.prog-groep').forEach(g => {
+            if (g.classList.contains('samenvat')) return;
+            const key = g.dataset.groepKey;
+            const moetOpen = state.open.has(key);
+            g.classList.toggle('ingeklapt', !moetOpen);
+            if (moetOpen) _progIngeklaptPub.delete(key);
+            else          _progIngeklaptPub.add(key);
+        });
+        const balk = tab.querySelector('.prog-klap-balk');
+        if (balk) {
+            balk.dataset.actief = '';
+            balk.querySelectorAll('.prog-klap-btn').forEach(b => b.classList.remove('actief'));
+        }
+    }
+}
+
+// ── Setup-modal: wedstrijd + rijder-kies overlay ─────────────────────────────
+// Vervangt de altijd-zichtbare stap 1 + 2 secties. Opent via de setup-strip
+// bovenaan, de "+"-rijder-tab-knop, of automatisch bij eerste bezoek van
+// de dag (localStorage-detectie op datum-key).
+function openSetupModal() {
+    const m = document.getElementById('setup-modal');
+    if (m) m.classList.add('open');
+    document.body.style.overflow = 'hidden'; // scroll-lock achtergrond
+    _zoekFeedbackWis();                       // geen stale melding van vorige keer
+    _renderSetupVolglijst();
+    _updateSetupModalMax();
+}
+// Bij het maximum aantal rijders: zoekveld + Zoeken uit + uitleg-hint, zodat
+// duidelijk is dat je eerst een rijder moet verwijderen (via de chips hierboven).
+function _updateSetupModalMax() {
+    const vol = _loadKidsUitStorage().length >= MAX_KINDEREN;   // globale volglijst
+    // Bij max: verberg de hele rijder-zoekstap (label + veld) én de Zoeken-knop,
+    // en toon de hint op díé plek — i.p.v. een grijs, ogenschijnlijk bruikbaar veld.
+    const stap = document.getElementById('stap-rijder');
+    if (stap)   stap.style.display = vol ? 'none' : '';
+    if (inpSnr) inpSnr.disabled = vol;
+    if (btnZoek) { btnZoek.style.display = vol ? 'none' : ''; if (vol) btnZoek.disabled = true; }
+    const hint = document.getElementById('setup-max-hint');
+    if (hint) {
+        hint.hidden = !vol;
+        if (vol) hint.textContent = t('zoek_max_hint', { max: MAX_KINDEREN });
+    }
+}
+// "Je gevolgde rijders" in de setup-modal: chips met verwijder-×. Hier gebeurt
+// het verwijderen (weggehaald uit de tabs, die waren te krap op smal scherm).
+function _renderSetupVolglijst() {
+    if (typeof _ppRender === 'function') _ppRender();   // push-blok mee verversen
+    const el = document.getElementById('setup-volglijst');
+    if (!el) return;
+    // Bron = de OPGESLAGEN (globale) volglijst, niet _kinderen. _kinderen is de
+    // per-wedstrijd-subset (nog leeg vóór wedstrijdkeuze); de opgeslagen lijst
+    // kennen we synchroon uit localStorage, dus ook bij vers openen klopt 't.
+    const saved = _loadKidsUitStorage();
+    if (!saved.length) { el.innerHTML = ''; return; }
+    const chips = saved.map(k => {
+        // Live-gegevens (startnummer) als deze rijder in de huidige wedstrijd
+        // geladen is; anders de opgeslagen naam-hint.
+        // Identiteit prefereert person_id (fase 3c), valt terug op license_key.
+        const kid = k.person_id || k.license_key;
+        const live = _kinderen.find(x => {
+            const xp = x.data?.[x.kozen_idx ?? 0]?.persoon;
+            return (k.person_id && xp?.person_id === k.person_id) || (k.license_key && xp?.license_key === k.license_key);
+        });
+        const p = live?.data?.[live.kozen_idx ?? 0]?.persoon;
+        const naam = p?.full_name || k.naam_hint || t('kind_rijder_placeholder');
+        const snr = live ? live.snr : '';
+        return `<span class="setup-volg-chip">
+            ${snr ? `<span class="setup-volg-snr">${esc(snr)}</span>` : ''}
+            <span class="setup-volg-naam">${esc(naam)}</span>
+            <button type="button" class="setup-volg-x" data-kid="${esc(kid)}" title="${esc(t('kind_tab_verwijder'))}">&times;</button>
+        </span>`;
+    }).join('');
+    el.innerHTML = `<div class="setup-volg-label">${esc(t('setup_volg_label'))}</div>
+        <div class="setup-volg-chips">${chips}</div>`;
+    el.querySelectorAll('.setup-volg-x').forEach(b => b.addEventListener('click', () => {
+        _verwijderGevolgdeRijder(b.dataset.kid);
+        _renderSetupVolglijst();   // modal-lijst meteen verversen
+        _updateSetupModalMax();    // zoekveld weer aan als onder max
+    }));
+}
+// Verwijder een rijder uit de globale volglijst (localStorage) én uit de live
+// per-wedstrijd-lijst als 'ie daar geladen is (dan hoofdweergave verversen).
+function _verwijderGevolgdeRijder(kid) {
+    // kid = person_id (fase 3c) óf license_key (oude items). Verwijder de rij
+    // die op één van beide matcht.
+    localStorage.setItem(KIDS_LS_KEY,
+        JSON.stringify(_loadKidsUitStorage().filter(k => k.person_id !== kid && k.license_key !== kid)));
+    if (typeof _ppSync === 'function') _ppSync();   // server-licenties meelopen
+
+    const idx = _kinderen.findIndex(x => {
+        const xp = x.data?.[x.kozen_idx ?? 0]?.persoon;
+        return xp?.person_id === kid || xp?.license_key === kid;
+    });
+    if (idx !== -1) {
+        _kinderen.splice(idx, 1);
+        if (_activeKindIdx >= _kinderen.length) _activeKindIdx = Math.max(0, _kinderen.length - 1);
+        renderKinderen();   // tabs/hoofdweergave bijwerken (schrijft de opgeslagen lijst niet terug)
+    }
+}
+function closeSetupModal() {
+    const m = document.getElementById('setup-modal');
+    if (m) m.classList.remove('open');
+    document.body.style.overflow = '';
+}
+// Update de strook met de huidige wedstrijd-naam + rijder(s). Wordt
+// aangeroepen bij wedstrijd-wissel, kind-add/remove, en na init.
+function updateSetupStrip() {
+    const el = document.getElementById('setup-strip-tekst');
+    if (!el) return;
+    const compNaam = selComp.selectedOptions[0]?.dataset?.naam || '';
+    const compDatum = selComp.selectedOptions[0]?.dataset?.datum || '';
+    // Rijder-samenvatting: bij 0 = niets, 1 = naam, 2+ = "N rijders".
+    let rijderStr = '';
+    if (_kinderen.length === 1) {
+        const p = _kinderen[0].data?.[_kinderen[0].kozen_idx ?? 0]?.persoon;
+        const nm = p?.full_name || _kinderen[0].snr;
+        rijderStr = `<small>${esc(nm)}</small>`;
+    } else if (_kinderen.length > 1) {
+        rijderStr = `<small>${_kinderen.length} ${esc(t('setup_strip_rijders'))}</small>`;
+    }
+    if (compNaam) {
+        el.innerHTML = `<b>${esc(compNaam)}</b>${compDatum ? ` <small style="display:inline;color:#666">· ${esc(compDatum)}</small>` : ''}${rijderStr}`;
+    } else {
+        el.innerHTML = `<span class="setup-strip-empty">${esc(t('setup_strip_leeg'))}</span>`;
+    }
+}
+// Escape-key sluit de modal (accessibility + snelheid).
+document.addEventListener('keydown', e => {
+    if (e.key === 'Escape') {
+        const m = document.getElementById('setup-modal');
+        if (m && m.classList.contains('open')) closeSetupModal();
+    }
+});
+// Eerste-bezoek-per-dag: modal automatisch openen zodat gebruikers die de
+// PWA vaker per dag openen niet elke keer de modal krijgen, maar bij een
+// nieuwe dag wel gestuurd worden naar wedstrijd-keuze (want het is bijna
+// altijd een andere wedstrijd).
+(function autoOpenFirstOfDay() {
+    const vandaag = new Date().toISOString().slice(0, 10);
+    const laatstGezien = localStorage.getItem('ic_pub_setup_dag') || '';
+    // Openen als: vandaag nog niet gezien, OF nog niks gekozen. selComp
+    // is bij deze code al gerenderd (script staat na de HTML), maar de
+    // dropdown-opties zijn asynchroon geladen — check op value.
+    const nogNiksGekozen = !selComp || !selComp.value;
+    if (laatstGezien !== vandaag || nogNiksGekozen) {
+        // Kleine timeout om te wachten op eerste applyI18n() zodat de
+        // modal-tekst in de juiste taal staat.
+        setTimeout(() => {
+            openSetupModal();
+            localStorage.setItem('ic_pub_setup_dag', vandaag);
+        }, 100);
+    }
+})();
+
+function klapGroepPub(hdrEl) {
+    const groep = hdrEl.closest('.prog-groep');
+    if (!groep) return;
+    // Samenvat-modus: klikken doet niks (heat-lijst is niet beschikbaar
+    // in deze weergave, zie applyProgFilter).
+    if (groep.classList.contains('samenvat')) return;
+    const key = groep.dataset.groepKey;
+    const nuIngeklapt = groep.classList.toggle('ingeklapt');
+    if (nuIngeklapt) _progIngeklaptPub.add(key); else _progIngeklaptPub.delete(key);
+    // Individuele klik → geen actieve knop in de klap-balk meer (state
+    // matcht niet meer bij één van de drie preset-acties).
+    const tab = hdrEl.closest('.tab-content');
+    if (tab) {
+        const balk = tab.querySelector('.prog-klap-balk');
+        if (balk) {
+            balk.dataset.actief = '';
+            balk.querySelectorAll('.prog-klap-btn').forEach(b => b.classList.remove('actief'));
+        }
+    }
+}
+
+function klapProgPub(btnEl, actie) {
+    const tab = btnEl.closest('.tab-content');
+    if (!tab) return;
+    _progIngeklaptPub.clear();
+    if (actie === 'in') {
+        _progAlleKeysPub.forEach(k => _progIngeklaptPub.add(k));
+    } else if (actie === 'mijn') {
+        _progAlleKeysPub.forEach(k => {
+            if (!_progGroepenMetMijnPub.has(k)) _progIngeklaptPub.add(k);
+        });
+    }
+    tab.querySelectorAll('.prog-groep').forEach(el => {
+        el.classList.toggle('ingeklapt', _progIngeklaptPub.has(el.dataset.groepKey));
+    });
+    // Actieve knop bijwerken zodat je meteen ziet welke actie geldt.
+    const balk = btnEl.closest('.prog-klap-balk');
+    if (balk) {
+        balk.dataset.actief = actie;
+        balk.querySelectorAll('.prog-klap-btn').forEach(b =>
+            b.classList.toggle('actief', b.dataset.actie === actie));
+    }
+}
+
+// ── Persistente kind-lijst (GLOBAAL, niet per wedstrijd) ─────────────────────
+// We bewaren `license_key` i.p.v. startnummer, zodat een kind dat in een
+// volgende wedstrijd een ander startnummer krijgt toch automatisch wordt
+// gevonden. Ook kinderen die in een wedstrijd niet meedoen worden stil
+// overgeslagen — zonder dat de ouder ze moet afvinken.
+const KIDS_LS_KEY = 'public_kinderen_licenses';
+function _saveKids() {
+    const seen = new Set();
+    const items = _kinderen
+        .map(k => {
+            const p = k.data[k.kozen_idx ?? 0]?.persoon;
+            // person_id (interne GUID) is sinds fase 3c de stabiele sleutel.
+            // license_key blijft meegeschreven zolang die nog bestaat (fase 4
+            // laat 'm vervallen); dedup en lookup prefereren person_id.
+            if (!p?.license_key && !p?.person_id && !p?.volg_token) return null;
+            // volg = geheim token; nodig om een anonieme rijder bij herladen weer
+            // te ontsluiten (person_id ontsluit de naam niet).
+            return { person_id: p.person_id ?? null, license_key: p.license_key ?? null,
+                     volg: p.volg_token ?? null, naam_hint: p.full_name };
+        })
+        .filter(Boolean)
+        // Dedup op person_id (of license_key als GUID nog ontbreekt): vangnet
+        // zodat een (ooit) dubbele _kinderen nooit dubbel in localStorage belandt.
+        .filter(it => { const key = it.person_id || it.license_key; return !seen.has(key) && seen.add(key); });
+    localStorage.setItem(KIDS_LS_KEY, JSON.stringify(items));
+    if (typeof _ppSync === 'function') _ppSync();   // server-licenties meelopen
+}
+function _loadKidsUitStorage() {
+    try { return JSON.parse(localStorage.getItem(KIDS_LS_KEY) || '[]'); }
+    catch { return []; }
+}
+
+// Haal lookup op voor een license_key of startnummer. Gebruikt de shared
+// programma-respons als die al gefetcht is (scheelt netwerk-calls bij
+// meerdere kinderen).
+async function _fetchKind({ person_id = null, license_key = null, snr = null, volg = null }, compId, gedeeldeProg = null) {
+    if (!person_id && !license_key && !snr && !volg) return null;
+    // Volg-token eerst (enige sleutel die een anonieme rijder ontsluit), daarna
+    // de stabiele person_id, dan license_key (oude items), tot slot startnummer.
+    const param = volg
+        ? `volg=${encodeURIComponent(volg)}`
+        : person_id
+            ? `person_id=${encodeURIComponent(person_id)}`
+            : license_key
+                ? `license_key=${encodeURIComponent(license_key)}`
+                : `startnummer=${encodeURIComponent(snr)}`;
+    const [lookupRes, progRes] = await Promise.all([
+        safeFetch(`?action=lookup&competition_id=${encodeURIComponent(compId)}&${param}`),
+        gedeeldeProg
+            ? Promise.resolve({ json: async () => gedeeldeProg })
+            : safeFetch(`?action=programma&competition_id=${encodeURIComponent(compId)}`),
+    ]);
+    const data = await lookupRes.json();
+    const prog = await progRes.json();
+    if (data.error || !data.length) {
+        // Zochten we via een volg-token en bestaat dat niet (meer)? Dan is het
+        // ingetrokken/vernieuwd door de rijder → follow verbroken → pruimen
+        // (__anoniem-sentinel). Bij person_id/snr betekent leeg gewoon "doet niet
+        // mee aan deze wedstrijd" → behouden (kan een andere wedstrijd rijden).
+        return volg ? { __anoniem: true } : null;
+    }
+    // Rijder is nu anoniem én we hebben geen geldig volg-token (meer) → signaleer
+    // dit apart (niet null = "doet niet mee"), zodat de aanroeper 'm uit de
+    // opgeslagen volglijst kan pruimen.
+    if (data[0]?.persoon?.is_anoniem) return { __anoniem: true };
+    // Pak huidige startnr uit de response (kan in nieuwe wedstrijd anders zijn).
+    const p = data[0].persoon;
+    const huidigSnr = p.wedstrijd_snr ?? p.start_number ?? snr ?? '';
+    return { snr: String(huidigSnr), data, prog, sub_tab: 'programma', kozen_idx: 0 };
+}
+
+function toonRijderData(data, startIdx, snr, prog) {
+    // Dedupeer op person_id (stabiel over wedstrijden, fase 3c), valt terug op
+    // license_key. Niet op startnummer (dat wisselt per wedstrijd).
+    const nieuweP = data[startIdx]?.persoon;
+    const nieuwePid = nieuweP?.person_id;
+    const nieuweLic = nieuweP?.license_key;
+    const bestaande = (nieuwePid || nieuweLic)
+        ? _kinderen.findIndex(k => {
+            const kp = k.data[k.kozen_idx ?? 0]?.persoon;
+            return (nieuwePid && kp?.person_id === nieuwePid) || (nieuweLic && kp?.license_key === nieuweLic);
+          })
+        : -1;
+    if (bestaande !== -1) {
+        _activeKindIdx = bestaande;
+        _kinderen[bestaande].data = data;
+        _kinderen[bestaande].prog = prog;
+        _kinderen[bestaande].kozen_idx = startIdx;
+        _kinderen[bestaande].snr = String(snr);
+    } else {
+        if (_kinderen.length >= MAX_KINDEREN) {
+            alert(t('alert_max_bereikt', {max: MAX_KINDEREN}));
+            return;
+        }
+        _kinderen.push({ snr: String(snr), data, prog, sub_tab: 'programma', kozen_idx: startIdx });
+        _activeKindIdx = _kinderen.length - 1;
+    }
+    _saveKids();
+    renderKinderen();
+}
+
+// Render de complete multi-rijder-weergave: kind-tabs bovenop, met daaronder
+// de persoon-kaart van het actieve kind.
+function renderKinderen() {
+    // Setup-strip volgt de _kinderen-state — ook bij lege lijst updaten.
+    updateSetupStrip();
+    if (!_kinderen.length) { divResult.innerHTML = ''; return; }
+    // Bij render van een rijder-tab: reset klap-state naar default-collapsed.
+    _progIngeklaptPub.clear();
+    _progGroepenMetMijnPub.clear();
+    _progEersteRenderPub = true;
+    // Na succesvolle rijder-load: modal dicht als 'ie nog openstond.
+    // Timeout laat de UI-transitie een tik ademen voor de sluit-animatie.
+    setTimeout(() => {
+        const m = document.getElementById('setup-modal');
+        if (m && m.classList.contains('open')) closeSetupModal();
+    }, 50);
+
+    // Top-tabs: één knop per kind + "+ voeg toe" rechts
+    const tabsHtml = _kinderen.map((k, idx) => {
+        const p = k.data[k.kozen_idx ?? 0]?.persoon;
+        const naam = p?.full_name ? p.full_name.split(' ')[0] : ''; // alleen voornaam in tab — kort
+        const actief = idx === _activeKindIdx ? ' active' : '';
+        // Geen ×-knop meer in de tab — die werd te krap op smalle telefoons bij
+        // 3-4 kinderen (× viel weg / actieve tab klapte in). Verwijderen gaat nu
+        // via de + / setup-modal onder "Je gevolgde rijders" (zoals de coach-app).
+        return `<button class="kind-tab${actief}" data-kind-idx="${idx}">
+            <span class="kind-tab-snr" data-len="${String(k.snr ?? '').length}">${esc(k.snr)}</span>
+            <span>${esc(naam || t('kind_rijder_placeholder'))}</span>
+        </button>`;
+    }).join('');
+    // Bij 3+ kinderen wordt het tabblad krap op telefoon-breedte. CSS
+    // gebruikt data-count om dan compactere stijl toe te passen (voornaam
+    // weg, kleinere padding) — de × moet altijd zichtbaar blijven.
+    // + altijd klikbaar: opent de modal om rijders te beheren (toevoegen én
+    // verwijderen). Bij max kun je zo alsnog iemand verwijderen; de titel legt
+    // uit dat toevoegen pas kan na een verwijdering.
+    const plusVol = _loadKidsUitStorage().length >= MAX_KINDEREN;
+    const plusKnop = `<button class="kind-tab-plus" id="kind-tab-plus" title="${esc(plusVol ? t('kind_plus_max', {max: MAX_KINDEREN}) : t('kind_plus_title'))}">+</button>`;
+
+    divResult.innerHTML = `
+        <div class="kind-tabs" data-count="${_kinderen.length}">${tabsHtml}${plusKnop}</div>
+        <div id="kind-content"></div>`;
+
+    // Click-handlers op kind-tabs
+    divResult.querySelectorAll('.kind-tab').forEach(btn => {
+        btn.addEventListener('click', () => wisselKind(parseInt(btn.dataset.kindIdx)));
+    });
+    const plusEl = document.getElementById('kind-tab-plus');
+    if (plusEl) plusEl.addEventListener('click', () => {
+        // Setup-modal open. GEEN auto-focus op het zoekveld: op mobiel klapt dan
+        // meteen het toetsenbord op en dat duwt de modal (incl. "Je gevolgde
+        // rijders") weg. Toetsenbord verschijnt pas als de bediener zelf in het
+        // veld tikt.
+        inpSnr.value = '';
+        btnZoek.disabled = true;
+        openSetupModal();
+    });
+
+    // Content van actieve kind renderen
+    const k = _kinderen[_activeKindIdx];
+    if (!k) return;
+    const subset = [k.data[k.kozen_idx ?? 0]];
+    renderResultaat(subset, k.snr, k.prog);
+
+    // Programma-UI-state herstellen: eigen state bij terugkeer naar deze
+    // rijder, of de state van de vorige rijder als "poging" bij eerste
+    // bezoek. Gezet door wisselKind() vóór renderKinderen().
+    if (_pendingProgRestore) {
+        _restoreProgUiStatePub(_pendingProgRestore);
+        _pendingProgRestore = null;
+    }
+
+    // Onthouden sub-tab herstellen (als niet 'programma')
+    if (k.sub_tab && k.sub_tab !== 'programma') {
+        const subBtn = document.querySelector(`#kind-content .tab-btn[data-tab="${k.sub_tab}"]`);
+        if (subBtn) subBtn.click();
+    }
+}
+
+// Bewaar UI-state (huidige sub-tab + dropdown-keuzes binnen Uitslagen) van
+// het actief getoonde kind. Wordt aangeroepen vóór elk renderKinderen() zodat
+// na her-render de juiste keuzes hersteld kunnen worden. Zonder dit verloor
+// de gebruiker elke 60s (auto-refresh) zijn categorie/afstand-selectie in de
+// Uitslagen-tab — _kaartwissel_ deed hetzelfde. Restore gebeurt in
+// initUitslagenTab() / het serie-klassement-blok.
+function _bewaarKindUistate() {
+    const k = _kinderen[_activeKindIdx];
+    if (!k) return;
+    const kc = document.getElementById('kind-content');
+    if (!kc) return;
+    // Sub-tab (welke tab is op dit moment open?)
+    const huidigeSub = kc.querySelector('.tab-btn.active')?.dataset.tab;
+    if (huidigeSub) k.sub_tab = huidigeSub;
+    // Dropdown-keuzes binnen Uitslagen-tab
+    const uitslPane = kc.querySelector('.tab-content[data-tab="uitslagen"]');
+    if (uitslPane) {
+        k._uistate = {
+            catVal:      uitslPane.querySelector('.uitsl-cat-sel')?.value      || '',
+            distVal:     uitslPane.querySelector('.uitsl-dist-sel')?.value     || '',
+            serieVal:    uitslPane.querySelector('.serie-sel')?.value          || '',
+            serieCatVal: uitslPane.querySelector('.serie-cat-sel')?.value      || '',
+        };
+    }
+}
+
+function wisselKind(idx) {
+    if (idx < 0 || idx >= _kinderen.length) return;
+    // Huidige sub-tab + dropdown-keuzes onthouden voordat we wisselen
+    _bewaarKindUistate();
+    // Programma-UI-state van OUD-actieve kind snapshotten voor terugkeer.
+    const oudKey    = _kindKey(_kinderen[_activeKindIdx]);
+    const oudeStaat = _snapshotProgUiStatePub();
+    if (oudKey && oudeStaat) _progUiStatePerKind.set(oudKey, oudeStaat);
+    _activeKindIdx = idx;
+    // Restore-doel voor renderKinderen(): eigen state van NIEUW-actieve
+    // kind als bekend, anders de state van oud-kind als "poging" (afstand
+    // die niet bij nieuw-kind past valt automatisch terug op alle).
+    _pendingProgRestore = _progUiStatePerKind.get(_kindKey(_kinderen[idx])) || oudeStaat;
+    renderKinderen();
+}
+
+function verwijderKind(idx) {
+    if (idx < 0 || idx >= _kinderen.length) return;
+    // Bewaarde programma-UI-state van weggehaalde kind opruimen.
+    _progUiStatePerKind.delete(_kindKey(_kinderen[idx]));
+    _kinderen.splice(idx, 1);
+    if (_activeKindIdx >= _kinderen.length) _activeKindIdx = Math.max(0, _kinderen.length - 1);
+    _saveKids();
+    if (_kinderen.length === 0) {
+        divResult.innerHTML = '';
+    } else {
+        renderKinderen();
+    }
+}
+
+// Status-per-DC voor de klikbare "klik voor status"-badge (alleen gevuld als
+// de statussen per DC verschillen). Key = license_key.
+let _dcStatusMap = {};
+// Status-index → kleur-class (spiegelt STATUS_KLEUR/STATUS_BG). Niet-ingeschreven
+// of onbekend → pstat-ni.
+function _pstatClass(st, nietIngeschreven) {
+    if (nietIngeschreven) return 'pstat-ni';
+    const s = parseInt(st);
+    return (s >= 0 && s <= 5) ? ('pstat-' + s) : 'pstat-ni';
+}
+function toonStatusModal(license) {
+    const info = _dcStatusMap[license];
+    if (!info) return;
+    const rows = (info.dc || []).map(x => {
+        const s   = parseInt(x.status);
+        const lbl = (s >= 0 && s <= 5 ? getStatusLabel(s) : t('status_onbekend'));
+        return `<tr><td>${esc(x.dc_naam)}</td><td><span class="persoon-status ${_pstatClass(s, false)}">${esc(lbl)}</span></td></tr>`;
+    }).join('');
+    const overlay = document.createElement('div');
+    overlay.className = 'overlay';
+    overlay.innerHTML = `<div class="overlay-box">
+        <div class="heat-card-titel">
+            <button class="overlay-sluit" onclick="this.closest('.overlay').remove()">&times;</button>
+            ${esc(info.naam)} &middot; ${esc(t('status_per_afstand'))}
+        </div>
+        <div class="status-modal-body">
+            <table class="status-modal-tabel">${rows}</table>
+        </div>
+    </div>`;
+    overlay.addEventListener('click', e => { if (e.target === overlay) overlay.remove(); });
+    document.body.appendChild(overlay);
+}
+
