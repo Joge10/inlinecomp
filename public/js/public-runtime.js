@@ -1,4 +1,4 @@
-﻿// ============================================================
+// ============================================================
 //  InlineComp Public — public-runtime.js
 //
 //  Bevat: auto-refresh + web-push + PWA/SW-registratie + install-prompt + profiel-promo.

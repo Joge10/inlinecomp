@@ -1,4 +1,4 @@
-﻿// ============================================================
+// ============================================================
 //  InlineComp Public — public-uitslag.js
 //
 //  Bevat: renderResultaat + ronde-uitslagen + uitslagen-tab + serie-klassementen + afstand/klassement-tabellen.

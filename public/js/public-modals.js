@@ -1,4 +1,4 @@
-﻿// ============================================================
+// ============================================================
 //  InlineComp Public — public-modals.js
 //
 //  Bevat: footer/logo/sponsor-marquee + easter egg + header-logos + info-modal + help-modal.

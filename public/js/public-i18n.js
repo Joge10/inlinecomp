@@ -1,4 +1,4 @@
-﻿// ============================================================
+// ============================================================
 //  InlineComp Public — public-i18n.js
 //
 //  Bevat: APP_VERSIE + CHANGELOG + renderChangelog + T (vertalingen) + i18n-helpers.

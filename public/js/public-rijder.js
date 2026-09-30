@@ -1,4 +1,4 @@
-﻿// ============================================================
+// ============================================================
 //  InlineComp Public — public-rijder.js
 //
 //  Bevat: wedstrijd-filter + zoek/chooser + naam-zoek + multi-kind-state + setup-modal + toonRijderData/renderKinderen + status-modal.

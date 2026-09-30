@@ -1,4 +1,4 @@
-﻿// ============================================================
+// ============================================================
 //  InlineComp Public — public-meldingen.js
 //
 //  Bevat: meldingen: check-poll + badge + overzicht + volgende + fullscreen popup.

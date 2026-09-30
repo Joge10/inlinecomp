@@ -1,4 +1,4 @@
-﻿// ============================================================
+// ============================================================
 //  InlineComp Public — public-utils.js
 //
 //  Bevat: globals (alleComps/STATUS_KLEUR/BADGE) + esc + safeDatum + verbinding-status-banner + safeFetch.

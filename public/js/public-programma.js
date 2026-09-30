@@ -1,4 +1,4 @@
-﻿// ============================================================
+// ============================================================
 //  InlineComp Public — public-programma.js
 //
 //  Bevat: heat-tabel helpers + programma-filter (dag/afstand) + heat-sortering + rit-detail overlay.
