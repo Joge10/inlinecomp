@@ -25,7 +25,17 @@ function getRondeLabel(rt) {
     return map[rt] ? t(map[rt]) : (rt || '');
 }
 
-function esc(s) { return String(s??'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+// Escape HTML meta-chars — ook " en ' zodat het veilig is in attribute-context
+// (title="${esc(x)}") én tekst-context. Voorkomt XSS bij namen/titels met " erin.
+// Matcht PHP's htmlspecialchars($x, ENT_QUOTES). CodeQL js/incomplete-html-attribute-sanitization.
+function esc(s) {
+    return String(s??'')
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#39;');
+}
 // Safari kan geen "2026-04-19 10:00:00" parsen, wel "2026-04-19T10:00:00"
 function safeDatum(s) { return s ? new Date(String(s).replace(' ', 'T')) : null; }
 
