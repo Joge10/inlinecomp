@@ -38,12 +38,12 @@ if ($action === 'lookup') {
         $pid = (string)(resolveNaarPersonId($pdo, $token) ?? '');
     }
     if (($volgTok !== '' || $token !== '') && $pid === '') {
-        echo json_encode(['error' => 'Geen rijder gevonden voor deze rijder in deze wedstrijd']);
+        echo json_encode(['error' => 'Skater not found in this race']);
         exit;
     }
 
     if (!$compId || (!$snr && $pid === '')) {
-        echo json_encode(['error' => 'competition_id en startnummer of license_key zijn verplicht']);
+        echo json_encode(['error' => 'competition_id and startnummer or license_key are required']);
         exit;
     }
 
@@ -88,7 +88,7 @@ if ($action === 'lookup') {
         $personen = $persStmt->fetchAll(PDO::FETCH_ASSOC);
         if (!$personen) {
             $omschr = $pid !== '' ? 'deze rijder' : "startnummer $snr";
-            echo json_encode(['error' => "Geen rijder gevonden voor $omschr in deze wedstrijd"]);
+            echo json_encode(['error' => "Skater not found for $omschr in this race"]);
             exit;
         }
 

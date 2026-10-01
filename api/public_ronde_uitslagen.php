@@ -15,7 +15,7 @@ if ($action === 'ronde_uitslagen') {
     // license_key: optionele filter. Als meegegeven → alleen rondes tonen
     // waar deze rijder in zit. Zonder license: alle rondes (admin-preview).
     $rijderLic = trim($_GET['license_key'] ?? '');
-    if (!$compId || !$dcId) { echo json_encode(['error' => 'competition_id en dc_id verplicht']); exit; }
+    if (!$compId || !$dcId) { echo json_encode(['error' => 'competition_id and dc_id required']); exit; }
 
     try {
         // Anonimiteit (variant B): publiek rondes-overzicht → public-venster.

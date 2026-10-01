@@ -585,6 +585,9 @@ function switchWedstrijdTab(tabId) {
         if (typeof _ppRender === 'function') _ppRender();
         _wmodalSettingsLeegUpdate();
     }
+    // Organisaties-tab: lijst laden (alleen orgs waar rijders uit volglijst
+    // gereden hebben; AVG-correct, alleen bekende contexten tonen).
+    if (tabId === 'organisaties') _laadOrganisatieLijst();
 }
 
 // Zichtbaarheid van de "nog geen pushmeldingen"-fallback actualiseren.
@@ -759,31 +762,40 @@ function _mndKort(d) {
     return d.toLocaleString(loc, { month: 'short' }).replace('.', '').toUpperCase();
 }
 
-function _kiesWedstrijdUitModal(compId) {
-    if (!compId) return;
+// Shared helper: wedstrijd activeren (zet sel-comp op compId en triggert
+// change). Gebruikt door zowel wedstrijd-modal (kaart-klik) als org-view
+// (agenda-klik). Zoekt c in zowel wmodal-cache als org-wedstrijden-cache
+// zodat een hidden-option toegevoegd kan worden als comp nog niet in
+// sel-comp zit (bv. andere seizoen-filter actief, of org-only wedstrijd).
+function _activeerWedstrijd(compId) {
     _recentBekekenPush(compId);
     _wmodalLaatstKozenComp = compId;   // signaal naar selComp-change-handler
-    // Haak in op bestaande wedstrijd-keuze: zet sel-comp op deze waarde en
-    // trigger change — dat laadt setup-strip-tekst + comp-info correct.
     const selComp = document.getElementById('sel-comp');
-    if (selComp) {
-        // Als competitie niet in de bestaande dropdown-opties zit (bv. andere
-        // seizoen-filter actief), eerst een hidden option toevoegen zodat .value
-        // werkt. filterComps() repopuleert later alsnog.
-        if (!selComp.querySelector(`option[value="${CSS.escape(compId)}"]`)) {
-            const c = (_wmodalComps || []).find(x => x.id === compId);
-            if (c) {
-                const o = document.createElement('option');
-                o.value = c.id;
-                o.textContent = c.name;
-                o.dataset.naam  = c.name;
-                o.dataset.datum = c.starts || '';
-                selComp.appendChild(o);
+    if (!selComp) return;
+    if (!selComp.querySelector(`option[value="${CSS.escape(compId)}"]`)) {
+        let c = (_wmodalComps || []).find(x => x.id === compId);
+        if (!c) {
+            // Pak uit org-wedstrijden-cache (over alle orgs heen).
+            for (const list of Object.values(_orgWedstrijdenCache || {})) {
+                c = (list || []).find(x => x.id === compId);
+                if (c) break;
             }
         }
-        selComp.value = compId;
-        selComp.dispatchEvent(new Event('change'));
+        if (c) {
+            const o = document.createElement('option');
+            o.value = c.id;
+            o.textContent = c.name;
+            o.dataset.naam  = c.name;
+            o.dataset.datum = c.starts || '';
+            selComp.appendChild(o);
+        }
     }
+    selComp.value = compId;
+    selComp.dispatchEvent(new Event('change'));
+}
+function _kiesWedstrijdUitModal(compId) {
+    if (!compId) return;
+    _activeerWedstrijd(compId);
     closeWedstrijdModal();
 }
 
@@ -820,6 +832,338 @@ function _recentBekekenPush(id) {
         localStorage.setItem(_RECENT_WEDSTRIJDEN_KEY, JSON.stringify(schoon));
     } catch (e) { /* storage uit — niet erg */ }
 }
+
+// ── Organisaties-tab (fase 5a-content) ────────────────────────────────────
+// Toont alleen organisaties waar rijders uit de volglijst van de user ooit
+// een wedstrijd hebben gereden. AVG-correct: user ziet alleen bekende
+// contexten. Backend `?action=organisaties&person_ids=...` filtert serverside.
+let _wmodalOrgCache = null;      // laatste fetch-response per volglijst-sig
+let _wmodalOrgSig   = null;      // sig = sorted comma-string van person_ids
+let _wmodalAktieveOrg = null;    // momenteel actieve organisatie (voor placeholder-view)
+
+async function _laadOrganisatieLijst() {
+    const container = document.getElementById('wmodal-organisatie-lijst');
+    if (!container) return;
+    const kinderen = _loadKidsUitStorage();
+    if (!kinderen.length) {
+        container.innerHTML = `
+            <div class="wmodal-placeholder">
+                <div class="wmodal-placeholder-ico">🏛</div>
+                <p data-i18n="wmodal_org_geen_rijders_titel">${esc(t('wmodal_org_geen_rijders_titel'))}</p>
+                <p class="wmodal-placeholder-sub" data-i18n="wmodal_org_geen_rijders_sub">${esc(t('wmodal_org_geen_rijders_sub'))}</p>
+            </div>`;
+        return;
+    }
+    const pids = kinderen.map(k => k.person_id).filter(Boolean);
+    if (!pids.length) {
+        // volglijst bevat alleen legacy license-only items (nog niet gemigreerd).
+        container.innerHTML = `<div class="wmodal-geen-wedstrijden">${esc(t('wmodal_org_geen_wedstrijden'))}</div>`;
+        return;
+    }
+    const sig = [...pids].sort().join(',');
+    if (_wmodalOrgCache && _wmodalOrgSig === sig) {
+        _renderOrganisatieLijst(_wmodalOrgCache);
+        return;
+    }
+    try {
+        const res  = await safeFetch('?action=organisaties&person_ids=' + encodeURIComponent(sig));
+        const data = await res.json();
+        // Server gooit 500 met {error:"..."} bij SQL/PHP-fouten — niet als lege lijst behandelen.
+        if (!res.ok || !Array.isArray(data)) {
+            const msg = (data && data.error) ? data.error : 'HTTP ' + res.status;
+            throw new Error(msg);
+        }
+        _wmodalOrgCache = data;
+        _wmodalOrgSig   = sig;
+        _renderOrganisatieLijst(data);
+    } catch (e) {
+        container.innerHTML = `<div class="wmodal-geen-wedstrijden">${esc(t('msg_fout_laden'))}: ${esc(e.message || e)}</div>`;
+    }
+}
+
+function _renderOrganisatieLijst(orgs) {
+    const container = document.getElementById('wmodal-organisatie-lijst');
+    if (!container) return;
+    if (!orgs.length) {
+        container.innerHTML = `<div class="wmodal-geen-wedstrijden">${esc(t('wmodal_org_geen_wedstrijden'))}</div>`;
+        return;
+    }
+    container.innerHTML = orgs.map(_orgKaartHtml).join('');
+    container.querySelectorAll('.wmodal-org-kaart').forEach(el => {
+        el.addEventListener('click', () => _kiesOrganisatieUitModal(el.dataset.orgId));
+    });
+}
+
+function _orgKaartHtml(o) {
+    const logo = o.logo_path
+        ? `<img class="wmodal-org-logo" src="../${esc(o.logo_path)}" alt="${esc(o.naam)}">`
+        : `<div class="wmodal-org-logo wmodal-org-logo--letters">${esc(_orgInitialen(o.naam))}</div>`;
+    const aantal = Math.max(0, parseInt(o.aantal_wedstrijden, 10) || 0);
+    const stat = aantal === 1
+        ? t('wmodal_org_1_wedstrijd')
+        : t('wmodal_org_n_wedstrijden', { n: aantal });
+    return `
+        <div class="wmodal-org-kaart" data-org-id="${esc(o.id)}" tabindex="0" role="button">
+            ${logo}
+            <div class="wmodal-org-info">
+                <div class="wmodal-org-naam">${esc(o.naam)}</div>
+                <div class="wmodal-org-stat">${esc(stat)}</div>
+            </div>
+        </div>`;
+}
+
+// Simpele initialen-fallback: eerste letter van maximaal 2 "echte" woorden.
+// "Skeelerclub Oost-Veluwe" → "SO"; "KNSB" → "KN"; "IJs- en Skeelerclub …" → "IS".
+function _orgInitialen(naam) {
+    const woorden = String(naam || '').split(/\s+/).filter(w => /[A-Za-zÀ-ÿ]/.test(w)).slice(0, 2);
+    return woorden.map(w => w.charAt(0).toUpperCase()).join('') || '?';
+}
+
+function _kiesOrganisatieUitModal(orgId) {
+    if (!orgId) return;
+    const org = (_wmodalOrgCache || []).find(x => x.id === orgId);
+    if (!org) return;
+    _wmodalAktieveOrg = org;
+    closeWedstrijdModal();
+    _toonOrganisatieView(org);
+}
+
+// Organisatie-detail-view (fase 5a-content): header + 3 tabs (Agenda actief,
+// Algemeen en Nieuws als placeholder). Agenda toont alle wedstrijden van de
+// org gegroepeerd per periode, met labels (publiek/binnenkort/verborgen) en
+// seizoen-filter. Alleen publieke wedstrijden zijn klikbaar.
+const _orgWedstrijdenCache = {};   // {orgId: [...wedstrijd-objecten]}
+let _orgViewSeizoen = null;        // actief seizoen (kalenderjaar)
+
+function _toonOrganisatieView(org) {
+    if (!divResult) return;
+    const logo = org.logo_path
+        ? `<img class="org-view-logo" src="../${esc(org.logo_path)}" alt="${esc(org.naam)}">`
+        : `<div class="org-view-logo org-view-logo--letters">${esc(_orgInitialen(org.naam))}</div>`;
+    divResult.innerHTML = `
+        <div class="org-view" data-org-id="${esc(org.id)}">
+            <div class="org-view-header">
+                <button class="org-view-terug" type="button" data-i18n-title="org_view_terug" title="${esc(t('org_view_terug'))}">&lsaquo;</button>
+                ${logo}
+                <h2 class="org-view-naam">${esc(org.naam)}</h2>
+            </div>
+            <div class="org-view-tabs" role="tablist">
+                <button type="button" class="org-view-tab actief" data-tab="agenda"
+                        role="tab" aria-selected="true" onclick="switchOrgTab('agenda')">
+                    <span class="org-view-tab-ico">📅</span>
+                    <span data-i18n="org_tab_agenda">Agenda</span>
+                </button>
+                <button type="button" class="org-view-tab" data-tab="algemeen"
+                        role="tab" aria-selected="false" onclick="switchOrgTab('algemeen')">
+                    <span class="org-view-tab-ico">📁</span>
+                    <span data-i18n="org_tab_algemeen">Algemeen</span>
+                </button>
+                <button type="button" class="org-view-tab" data-tab="nieuws"
+                        role="tab" aria-selected="false" onclick="switchOrgTab('nieuws')">
+                    <span class="org-view-tab-ico">📰</span>
+                    <span data-i18n="org_tab_nieuws">Nieuws</span>
+                </button>
+            </div>
+            <div class="org-view-pane actief" id="org-view-pane-agenda" role="tabpanel">
+                <div class="wmodal-seizoen-rij">
+                    <label for="org-view-sel-seizoen" class="wmodal-seizoen-label" data-i18n="wmodal_seizoen">Seizoen</label>
+                    <select id="org-view-sel-seizoen" class="wmodal-sel-seizoen"></select>
+                </div>
+                <div id="org-view-agenda-lijst" class="wmodal-wedstrijd-lijst">
+                    <div class="wmodal-laden" data-i18n="opt_laden">Laden…</div>
+                </div>
+            </div>
+            <div class="org-view-pane" id="org-view-pane-algemeen" role="tabpanel" hidden>
+                <div class="org-view-placeholder">
+                    <div class="wmodal-placeholder-ico">📁</div>
+                    <p data-i18n="org_tab_algemeen_binnenkort">${esc(t('org_tab_algemeen_binnenkort'))}</p>
+                    <p class="wmodal-placeholder-sub" data-i18n="org_tab_algemeen_binnenkort_sub">${esc(t('org_tab_algemeen_binnenkort_sub'))}</p>
+                </div>
+            </div>
+            <div class="org-view-pane" id="org-view-pane-nieuws" role="tabpanel" hidden>
+                <div class="org-view-placeholder">
+                    <div class="wmodal-placeholder-ico">📰</div>
+                    <p data-i18n="org_tab_nieuws_binnenkort">${esc(t('org_tab_nieuws_binnenkort'))}</p>
+                    <p class="wmodal-placeholder-sub" data-i18n="org_tab_nieuws_binnenkort_sub">${esc(t('org_tab_nieuws_binnenkort_sub'))}</p>
+                </div>
+            </div>
+        </div>`;
+    const terug = divResult.querySelector('.org-view-terug');
+    if (terug) terug.addEventListener('click', _terugUitOrganisatieView);
+    _laadOrgAgenda(org.id);
+    divResult.scrollIntoView({ behavior: 'smooth', block: 'start' });
+}
+
+function switchOrgTab(tabId) {
+    document.querySelectorAll('.org-view-tab').forEach(t => {
+        const match = t.dataset.tab === tabId;
+        t.classList.toggle('actief', match);
+        t.setAttribute('aria-selected', match ? 'true' : 'false');
+    });
+    document.querySelectorAll('.org-view-pane').forEach(p => {
+        const match = p.id === 'org-view-pane-' + tabId;
+        p.hidden = !match;
+        p.classList.toggle('actief', match);
+    });
+}
+
+async function _laadOrgAgenda(orgId) {
+    const lijst = document.getElementById('org-view-agenda-lijst');
+    if (!lijst) return;
+    try {
+        if (!_orgWedstrijdenCache[orgId]) {
+            // Stuur volglijst-person_ids mee zodat de server per wedstrijd
+            // kan markeren of een eigen rijder meedeed (⭐-marker in UI).
+            // Klikbaarheid hangt NIET af van eigen rijder — dat is al door
+            // operator geregeld via public_zichtbaar; eigen-rijder is puur
+            // een visuele hint "jij hebt hier gereden".
+            const pids = _loadKidsUitStorage().map(k => k.person_id).filter(Boolean);
+            const url = '?action=org_wedstrijden&org_id=' + encodeURIComponent(orgId)
+                      + (pids.length ? '&person_ids=' + encodeURIComponent(pids.join(',')) : '');
+            const res  = await safeFetch(url);
+            const data = await res.json();
+            if (!res.ok || !Array.isArray(data)) {
+                const msg = (data && data.error) ? data.error : 'HTTP ' + res.status;
+                throw new Error(msg);
+            }
+            _orgWedstrijdenCache[orgId] = data;
+        }
+        _vulOrgSeizoenSelector(_orgWedstrijdenCache[orgId]);
+        _renderOrgAgenda(orgId);
+    } catch (e) {
+        lijst.innerHTML = `<div class="wmodal-geen-wedstrijden">${esc(t('msg_fout_laden'))}: ${esc(e.message || e)}</div>`;
+    }
+}
+
+function _vulOrgSeizoenSelector(comps) {
+    const sel = document.getElementById('org-view-sel-seizoen');
+    if (!sel) return;
+    const jaren = new Set();
+    const nu    = new Date().getFullYear();
+    jaren.add(nu);
+    for (const c of comps) {
+        const d = safeDatum(c.starts);
+        if (d) jaren.add(d.getFullYear());
+    }
+    const gesort = [...jaren].sort((a, b) => b - a);
+    sel.innerHTML = gesort.map(j => `<option value="${j}">${j}</option>`).join('');
+    if (_orgViewSeizoen == null || !jaren.has(_orgViewSeizoen)) _orgViewSeizoen = nu;
+    sel.value = _orgViewSeizoen;
+    sel.onchange = () => {
+        _orgViewSeizoen = parseInt(sel.value, 10) || nu;
+        _renderOrgAgenda(sel.closest('.org-view').dataset.orgId);
+    };
+}
+
+function _renderOrgAgenda(orgId) {
+    const lijst = document.getElementById('org-view-agenda-lijst');
+    const comps = _orgWedstrijdenCache[orgId] || [];
+    if (!lijst) return;
+    const nu       = new Date();
+    const vandaag  = new Date(nu.getFullYear(), nu.getMonth(), nu.getDate());
+    const seizoen  = _orgViewSeizoen || vandaag.getFullYear();
+    const recentIds = _recentBekekenGet();
+
+    const inSeizoen = comps.filter(c => {
+        const d = safeDatum(c.starts);
+        return d && d.getFullYear() === seizoen;
+    });
+
+    const groepen = { recent: [], komende: [], verleden: [] };
+    for (const c of inSeizoen) {
+        const d = safeDatum(c.starts);
+        if (!d) { groepen.verleden.push(c); continue; }
+        if (d >= vandaag) groepen.komende.push(c);
+        else              groepen.verleden.push(c);
+    }
+    // Recent-bekeken alleen voor huidig seizoen tonen; snijd uit op de ids.
+    if (seizoen === vandaag.getFullYear()) {
+        for (const id of recentIds) {
+            const c = inSeizoen.find(x => x.id === id);
+            if (c) groepen.recent.push(c);
+        }
+    }
+    // Komende: chronologisch oplopend. Verleden: nieuwste eerst.
+    groepen.komende.sort((a, b) => (safeDatum(a.starts)?.getTime() ?? 0) - (safeDatum(b.starts)?.getTime() ?? 0));
+    groepen.verleden.sort((a, b) => (safeDatum(b.starts)?.getTime() ?? 0) - (safeDatum(a.starts)?.getTime() ?? 0));
+
+    const htmlStukken = [];
+    const toonGroep = (titelKey, lijstC) => {
+        if (!lijstC.length) return;
+        htmlStukken.push(`<div class="wmodal-periode-hdr">${esc(t(titelKey))}</div>`);
+        htmlStukken.push(...lijstC.map(_orgAgendaKaartHtml));
+    };
+    toonGroep('wmodal_recent_bekeken', groepen.recent);
+    toonGroep('org_agenda_komende',     groepen.komende);
+    toonGroep('org_agenda_verleden',    groepen.verleden);
+    if (!htmlStukken.length) {
+        htmlStukken.push(`<div class="wmodal-geen-wedstrijden">${esc(t('wmodal_geen_wedstrijden'))}</div>`);
+    }
+    lijst.innerHTML = htmlStukken.join('');
+    lijst.querySelectorAll('.wmodal-kaart:not(.disabled)').forEach(el => {
+        el.addEventListener('click', () => _kiesWedstrijdUitOrgView(el.dataset.compId));
+    });
+}
+
+function _orgAgendaKaartHtml(c) {
+    const d = safeDatum(c.starts);
+    const dag = d ? d.getDate() : '?';
+    const mnd = d ? _mndKort(d) : '';
+    const plaats = c.baan_vereniging ? esc(c.baan_vereniging) : '';
+    const label = _wedstrijdLabel(c);
+    // Click-restrictie puur op basis van publieke zichtbaarheid: operator
+    // heeft die bewust aan/uit gezet. Eigen-rijder-check doet NIET mee
+    // (publieke wedstrijd is ook via de wedstrijd-tab bereikbaar voor
+    // iedereen — hier blokkeren zou alleen de UX breken).
+    const disabled = label.key !== 'publiek';
+    const labelHtml = `<span class="org-wed-tag org-wed-tag--${label.key}">${esc(t(label.i18n))}</span>`;
+    // Startnummer-pil(len) voor rijders uit de volglijst die aan deze
+    // wedstrijd meededen. Werkt ook met meerdere kinderen (bv. gezinnen).
+    const snrs = c.eigen_startnummers
+        ? String(c.eigen_startnummers).split(',').map(s => s.trim()).filter(Boolean)
+        : [];
+    const snrHtml = snrs.map(snr => `<span class="org-wed-snr-pil">${esc(snr)}</span>`).join('');
+    return `
+        <div class="wmodal-kaart${disabled ? ' disabled' : ''}" data-comp-id="${esc(c.id)}"${disabled ? '' : ' tabindex="0" role="button"'}>
+            <div class="wmodal-datum">
+                <div class="wmodal-datum-dag">${dag}</div>
+                <div class="wmodal-datum-mnd">${esc(mnd)}</div>
+            </div>
+            <div class="wmodal-info">
+                <div class="wmodal-naam">${esc(c.name)}</div>
+                ${plaats ? `<div class="wmodal-plaats">${plaats}</div>` : ''}
+                <div class="wmodal-tags">${labelHtml}${snrHtml}</div>
+            </div>
+        </div>`;
+}
+
+// Label bepalen op basis van publiek_zichtbaar/aankondigen:
+// - publiek:     zichtbaar=1 (klikbaar)
+// - binnenkort:  zichtbaar=0 en aankondigen=1 (disabled)
+// - verborgen:   zichtbaar=0 en aankondigen=0 (disabled)
+function _wedstrijdLabel(c) {
+    if (c.public_zichtbaar == 1)        return { key: 'publiek',    i18n: 'org_wed_tag_publiek' };
+    if (c.public_aankondigen == 1)      return { key: 'binnenkort', i18n: 'org_wed_tag_binnenkort' };
+    return                                     { key: 'verborgen',  i18n: 'org_wed_tag_verborgen' };
+}
+
+function _kiesWedstrijdUitOrgView(compId) {
+    if (!compId) return;
+    _wmodalAktieveOrg = null;
+    _activeerWedstrijd(compId);
+    // De selComp.change-handler leegt divResult en vult 'm async met wedstrijd-
+    // content; de org-view verdwijnt zo automatisch. Expliciete terug-aanroep
+    // zou race-conditie geven, dus niet nodig.
+}
+
+function _terugUitOrganisatieView() {
+    _wmodalAktieveOrg = null;
+    divResult.innerHTML = '';
+    if (_kinderen.length) renderKinderen();
+}
+
+// ── Einde Organisaties-tab ────────────────────────────────────────────────
+
 // Bij het maximum aantal rijders: zoekveld + Zoeken uit + uitleg-hint, zodat
 // duidelijk is dat je eerst een rijder moet verwijderen (via de chips hierboven).
 function _updateSetupModalMax() {

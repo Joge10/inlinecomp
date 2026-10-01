@@ -12,7 +12,7 @@ if ($action === 'categorieen') {
     // klassement_beschikbaar-vlag verandert bij publish/intrek; geen cache.
     header('Cache-Control: no-store, must-revalidate');
     $compId = trim($_GET['competition_id'] ?? '');
-    if (!$compId) { echo json_encode(['error' => 'competition_id verplicht']); exit; }
+    if (!$compId) { echo json_encode(['error' => 'competition_id required']); exit; }
     try {
         // DC's die uitslagen hebben
         $stmt = $pdo->prepare("

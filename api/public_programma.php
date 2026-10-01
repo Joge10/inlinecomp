@@ -26,7 +26,7 @@ if ($action === 'programma') {
     header_remove('Pragma');
     header_remove('Expires');
     $compId = trim($_GET['competition_id'] ?? '');
-    if (!$compId) { echo json_encode(['error' => 'competition_id verplicht']); exit; }
+    if (!$compId) { echo json_encode(['error' => 'competition_id required']); exit; }
     try {
         // Tijdschema-id + tijdschema_version in één lookup. tijdschema_version
         // (op competitions) is de canonical teller die door ELKE tijdschema-

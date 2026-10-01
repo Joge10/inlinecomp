@@ -38,7 +38,7 @@ if ($action === 'serie_klassement') {
     header('Content-Type: application/json; charset=utf-8');
     header('Cache-Control: public, max-age=60');
     $klId = trim($_GET['klassement_id'] ?? '');
-    if (!$klId) { echo json_encode(['error' => 'klassement_id verplicht']); exit; }
+    if (!$klId) { echo json_encode(['error' => 'klassement_id required']); exit; }
     try {
         // Filter via klassement_series.gepubliceerd_at — alleen gepubliceerde
         // series mogen in /public worden opgehaald. Niet-gepubliceerd → 404.
@@ -54,7 +54,7 @@ if ($action === 'serie_klassement') {
         ");
         $kl->execute([$klId]);
         $k = $kl->fetch(PDO::FETCH_ASSOC);
-        if (!$k) { http_response_code(404); echo json_encode(['error' => 'Niet gevonden']); exit; }
+        if (!$k) { http_response_code(404); echo json_encode(['error' => 'Not found']); exit; }
         $k['categorieen']      = json_decode($k['categorieen']      ?? '[]', true);
         $k['wedstrijden_meta'] = json_decode($k['wedstrijden_meta'] ?? 'null', true);
 

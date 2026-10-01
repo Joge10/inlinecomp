@@ -165,7 +165,7 @@ if ($action) {
     if (count($hits) >= 10) {
         header('Content-Type: application/json; charset=utf-8');
         http_response_code(429);
-        echo json_encode(['error' => 'Te veel verzoeken — wacht even']);
+        echo json_encode(['error' => 'Too many requests — please wait']);
         exit;
     }
     $hits[] = $now;
@@ -189,6 +189,8 @@ $actionRoutes = [
     'ronde_uitslagen'  => 'public_ronde_uitslagen.php',
     'series_voor_comp' => 'public_series_voor_comp.php',
     'serie_klassement' => 'public_serie_klassement.php',
+    'organisaties'     => 'public_organisaties.php',
+    'org_wedstrijden'  => 'public_org_wedstrijden.php',
 ];
 if (isset($actionRoutes[$action])) {
     define('INLINECOMP_PUBLIC_BOOTED', true);
@@ -265,7 +267,7 @@ if (isset($actionRoutes[$action])) {
     <!-- Setup-strook: klikbaar → opent modal met wedstrijd-keuze + rijder-
          zoek. Vervangt de altijd-zichtbare stap 1 + 2 secties zodat er meer
          verticale ruimte over is voor het programma zelf. -->
-    <div class="setup-strip" id="setup-strip" onclick="openWedstrijdModal()" title="Wijzig wedstrijd">
+    <div class="setup-strip" id="setup-strip" onclick="openWedstrijdModal()" data-i18n-title="setup_strip_edit_title" title="Wijzig wedstrijd">
         <div class="setup-strip-tekst" id="setup-strip-tekst">
             <span class="setup-strip-empty" data-i18n="setup_strip_leeg">Kies je wedstrijd…</span>
         </div>
@@ -354,12 +356,11 @@ if (isset($actionRoutes[$action])) {
             </div>
         </div>
 
-        <!-- Pane: Organisaties — placeholder tot content gebouwd wordt. -->
+        <!-- Pane: Organisaties — lijst van orgs waar rijders uit volglijst
+             gereden hebben. JS vult; fallback-tekst als volglijst leeg. -->
         <div class="wmodal-pane" id="wmodal-pane-organisaties" role="tabpanel" hidden>
-            <div class="wmodal-placeholder">
-                <div class="wmodal-placeholder-ico">🏛</div>
-                <p data-i18n="setup_org_binnenkort_titel">Organisatie-info komt hier binnenkort</p>
-                <p class="wmodal-placeholder-sub" data-i18n="setup_org_binnenkort_sub">Agenda, reglementen, contactgegevens en nieuws van wedstrijd-organisaties.</p>
+            <div id="wmodal-organisatie-lijst" class="wmodal-organisatie-lijst">
+                <div class="wmodal-laden" data-i18n="opt_laden">Laden…</div>
             </div>
         </div>
 

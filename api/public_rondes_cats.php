@@ -11,7 +11,7 @@ if ($action === 'rondes_cats') {
     header('Content-Type: application/json; charset=utf-8');
     header('Cache-Control: no-store, must-revalidate');
     $compId = trim($_GET['competition_id'] ?? '');
-    if (!$compId) { echo json_encode(['error' => 'competition_id verplicht']); exit; }
+    if (!$compId) { echo json_encode(['error' => 'competition_id required']); exit; }
     try {
         $stmt = $pdo->prepare("
             SELECT DISTINCT

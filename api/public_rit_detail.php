@@ -12,7 +12,7 @@ if ($action === 'rit_detail') {
     $compId = trim($_GET['competition_id'] ?? '');
     $ritNaam = trim($_GET['rit_naam'] ?? '');
     $dcNaam = trim($_GET['dc_naam'] ?? '');
-    if (!$compId || !$ritNaam) { echo json_encode(['error' => 'Verplichte velden ontbreken']); exit; }
+    if (!$compId || !$ritNaam) { echo json_encode(['error' => 'Required fields missing']); exit; }
 
     try {
         // Zoek de heat via rit_naam koppeling

@@ -20,7 +20,7 @@ if ($action === 'uitslagen') {
     // uitslag_afstand bevat rijders van beide cats. Frontend geeft de
     // gekozen cat mee zodat we op p.category kunnen filteren.
     $catFilter = trim($_GET['categorie'] ?? '');
-    if (!$compId || !$dcId) { echo json_encode(['error' => 'competition_id en dc_id verplicht']); exit; }
+    if (!$compId || !$dcId) { echo json_encode(['error' => 'competition_id and dc_id required']); exit; }
 
     // Anonimiteit (variant B): per-wedstrijd dag-uitslag/klassement volgt het
     // public-venster [wedstrijddag −1 … +1].
@@ -77,7 +77,7 @@ if ($action === 'uitslagen') {
 
             echo json_encode(['rijders' => $rijders, 'afstanden' => $afstanden], JSON_UNESCAPED_UNICODE);
         } else {
-            if (!$distId) { echo json_encode(['error' => 'distance_id verplicht voor type=afstand']); exit; }
+            if (!$distId) { echo json_encode(['error' => 'distance_id required for type=afstand']); exit; }
             $catWhere = $catFilter !== '' ? ' WHERE p.category = ?' : '';
             $stmt = $pdo->prepare("
                 SELECT t.rang, t.finale_naam, t.tijd_ms, t.sanctie,
