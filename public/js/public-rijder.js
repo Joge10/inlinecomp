@@ -123,7 +123,17 @@ selComp.addEventListener('change', async () => {
     _activeKindIdx = 0;
     if (!selComp.value) return;
     const opgeslagen = _loadKidsUitStorage();
-    if (!opgeslagen.length) return;
+    if (!opgeslagen.length) {
+        // Lege volglijst: als deze wedstrijd-change het directe gevolg was
+        // van een keuze in de wedstrijd-modal, open meteen de rijder-zoek-
+        // modal — anders ziet de user een lege wedstrijd zonder knop om
+        // een rijder toe te voegen (de + verschijnt pas bij ≥1 kind).
+        if (_wmodalLaatstKozenComp === selComp.value) {
+            _wmodalLaatstKozenComp = null;
+            setTimeout(() => openSetupModal(), 200);
+        }
+        return;
+    }
     const mySeq = ++_kindLoadSeq;   // deze load claimt de nieuwste beurt
     divResult.innerHTML = `<div class="melding"><span class="spinner"></span> ${t('msg_je_rijders_ophalen')}</div>`;
     let gedeeldeProg = null;
@@ -175,8 +185,18 @@ selComp.addEventListener('change', async () => {
         _activeKindIdx = 0;
         renderKinderen();
         divResult.scrollIntoView({ behavior:'smooth', block:'start' });
+        _wmodalLaatstKozenComp = null;   // succes → geen auto-prompt
     } else {
         divResult.innerHTML = '';
+        // Als deze wedstrijd-change het directe gevolg was van een keuze in
+        // de wedstrijd-modal (en de volglijst heeft geen rijders die in déze
+        // wedstrijd meedoen), open dan meteen de rijder-zoek-modal — anders
+        // zou de gebruiker alleen een lege wedstrijd-view zien zonder knop
+        // om een rijder toe te voegen (de + verschijnt pas bij ≥1 kind).
+        if (_wmodalLaatstKozenComp === selComp.value) {
+            _wmodalLaatstKozenComp = null;
+            setTimeout(() => openSetupModal(), 200);
+        }
     }
 });
 inpSnr.addEventListener('input', () => { btnZoek.disabled = !(selComp.value && inpSnr.value.trim()); });
@@ -520,6 +540,286 @@ function openSetupModal() {
     _renderSetupVolglijst();
     _updateSetupModalMax();
 }
+
+// ── Wedstrijd-modal (fase 5a) ────────────────────────────────────────────
+// Nieuwe modal voor wedstrijd-selectie + organisatie-dimensie + instellingen.
+// Opent via klik op setup-strip (hele strook, incl. pennetje). De + bij
+// de kids-tabs opent nog altijd de oude #setup-modal (voor rijder-beheer).
+// Fase 5b: oude modal reduceren tot pure rijder-zoek, push naar settings-tab.
+const _RECENT_WEDSTRIJDEN_KEY    = 'ic_pub_recent_wedstrijden';
+const _RECENT_WEDSTRIJDEN_MAX    = 8;
+const _RECENT_WEDSTRIJDEN_MAX_MS = 30 * 24 * 60 * 60 * 1000;   // 30 dagen
+let _wmodalComps          = null;   // cache van ?action=competitions-response
+let _wmodalSeizoen        = null;   // actieve seizoen (kalenderjaar als number)
+let _wmodalLaatstKozenComp = null;  // comp-id net gekozen uit wmodal → auto-prompt rijder-modal als volglijst leeg blijkt
+
+function openWedstrijdModal() {
+    const m = document.getElementById('wedstrijd-modal');
+    if (m) m.classList.add('open');
+    document.body.style.overflow = 'hidden';
+    switchWedstrijdTab('wedstrijden');
+    _laadWedstrijdLijst();
+}
+function closeWedstrijdModal() {
+    const m = document.getElementById('wedstrijd-modal');
+    if (m) m.classList.remove('open');
+    document.body.style.overflow = '';
+}
+function switchWedstrijdTab(tabId) {
+    document.querySelectorAll('.wmodal-tab').forEach(t => {
+        const match = t.dataset.tab === tabId;
+        t.classList.toggle('actief', match);
+        t.setAttribute('aria-selected', match ? 'true' : 'false');
+    });
+    document.querySelectorAll('.wmodal-pane').forEach(p => {
+        const match = p.id === 'wmodal-pane-' + tabId;
+        p.hidden = !match;
+        p.classList.toggle('actief', match);
+    });
+    // Settings-tab: push-blok (her)renderen + fallback-tekst alleen tonen
+    // als er niks te doen is (geen rijders én push-blok leeg). Fallback staat
+    // los van push-aan-status: een gebruiker die push al aan heeft (controls
+    // zichtbaar) hoort geen "nog geen pushmeldingen"-fallback te zien, ook
+    // niet als volglijst momenteel leeg is — hij weet wat hij doet.
+    if (tabId === 'settings') {
+        if (typeof _ppRender === 'function') _ppRender();
+        _wmodalSettingsLeegUpdate();
+    }
+}
+
+// Zichtbaarheid van de "nog geen pushmeldingen"-fallback actualiseren.
+// Baseert zich op volglijst-count én push-blok-inhoud; _ppRender() is async
+// (checkt subscription), dus we doen een korte setTimeout zodat we na de
+// render evalueren. Robuust tegen race-conditions.
+function _wmodalSettingsLeegUpdate() {
+    const fall = document.getElementById('wmodal-settings-leeg');
+    const pp   = document.getElementById('pub-push');
+    if (!fall) return;
+    const check = () => {
+        const geenRijders = _loadKidsUitStorage().length === 0;
+        const ppLeeg      = !pp || !pp.innerHTML.trim();
+        fall.hidden = !(geenRijders && ppLeeg);
+    };
+    check();
+    setTimeout(check, 200);   // na eventuele async _ppRender()-resolve
+}
+
+// Fetch de competitions-lijst (met 30s server-cache), vul seizoen-selector,
+// en render de kaart-lijst van het actieve seizoen. Reuses alleComps als die
+// al in memory zit; anders aparte fetch zodat we de modal onafhankelijk van
+// filterComps() kunnen openen.
+async function _laadWedstrijdLijst() {
+    const lijst = document.getElementById('wmodal-wedstrijd-lijst');
+    if (!lijst) return;
+    try {
+        if (!_wmodalComps) {
+            const res = await safeFetch('?action=competitions' + (DEMO_MODE ? '&demo=1' : ''));
+            _wmodalComps = await res.json();
+        }
+        _vulSeizoenSelector(_wmodalComps);
+        _renderWedstrijdLijst();
+    } catch (e) {
+        lijst.innerHTML = `<div class="wmodal-geen-wedstrijden">${esc(t('msg_fout_laden'))}</div>`;
+    }
+}
+
+function _vulSeizoenSelector(comps) {
+    const sel = document.getElementById('wmodal-sel-seizoen');
+    if (!sel) return;
+    const jaren = new Set();
+    const nu    = new Date().getFullYear();
+    jaren.add(nu);
+    for (const c of comps) {
+        const d = safeDatum(c.starts);
+        if (d) jaren.add(d.getFullYear());
+    }
+    const gesort = [...jaren].sort((a, b) => b - a);  // nieuwste eerst
+    sel.innerHTML = gesort.map(j =>
+        `<option value="${j}">${j}</option>`
+    ).join('');
+    if (_wmodalSeizoen == null || !jaren.has(_wmodalSeizoen)) _wmodalSeizoen = nu;
+    sel.value = _wmodalSeizoen;
+    sel.onchange = () => {
+        _wmodalSeizoen = parseInt(sel.value, 10) || nu;
+        _renderWedstrijdLijst();
+    };
+}
+
+function _renderWedstrijdLijst() {
+    const lijst = document.getElementById('wmodal-wedstrijd-lijst');
+    if (!lijst || !_wmodalComps) return;
+    const nu = new Date();
+    const vandaag = new Date(nu.getFullYear(), nu.getMonth(), nu.getDate());
+    const overmorgen = new Date(vandaag); overmorgen.setDate(overmorgen.getDate() + 2);
+    const eindweek   = new Date(vandaag); eindweek.setDate(eindweek.getDate() + 7);
+    const seizoenJaar = _wmodalSeizoen || vandaag.getFullYear();
+
+    // Filter op actief seizoen (kalenderjaar: 1-1 t/m 31-12).
+    const inSeizoen = _wmodalComps.filter(c => {
+        const d = safeDatum(c.starts);
+        return d && d.getFullYear() === seizoenJaar;
+    });
+
+    const recentIds = _recentBekekenGet();
+    const groepen = { recent: [], vandaagMorgen: [], dezeWeek: [], overige: [] };
+
+    for (const c of inSeizoen) {
+        const d = safeDatum(c.starts);
+        if (!d) { groepen.overige.push(c); continue; }
+        if (d >= vandaag && d < overmorgen)       groepen.vandaagMorgen.push(c);
+        else if (d >= overmorgen && d < eindweek) groepen.dezeWeek.push(c);
+        else                                       groepen.overige.push(c);
+    }
+    // Recent-bekeken: alleen tonen voor huidig seizoen (verwarring voorkomen
+    // met historische wedstrijden die je ooit opende maar nu buiten scope zijn).
+    if (seizoenJaar === vandaag.getFullYear()) {
+        for (const id of recentIds) {
+            const c = inSeizoen.find(x => x.id === id);
+            if (c) groepen.recent.push(c);
+        }
+    }
+
+    // Chronologisch oplopend binnen elke groep (recent houdt eigen volgorde).
+    const sortChrono = (a, b) => (safeDatum(a.starts)?.getTime() ?? 0) - (safeDatum(b.starts)?.getTime() ?? 0);
+    groepen.vandaagMorgen.sort(sortChrono);
+    groepen.dezeWeek.sort(sortChrono);
+    groepen.overige.sort(sortChrono);
+
+    const htmlStukken = [];
+    if (groepen.vandaagMorgen.length) {
+        htmlStukken.push(`<div class="wmodal-periode-hdr">${esc(t('wmodal_vandaag_morgen'))}</div>`);
+        htmlStukken.push(...groepen.vandaagMorgen.map(_kaartHtml));
+    }
+    if (groepen.dezeWeek.length) {
+        htmlStukken.push(`<div class="wmodal-periode-hdr">${esc(t('wmodal_deze_week'))}</div>`);
+        htmlStukken.push(...groepen.dezeWeek.map(_kaartHtml));
+    }
+    if (groepen.recent.length) {
+        htmlStukken.push(`<div class="wmodal-periode-hdr">${esc(t('wmodal_recent_bekeken'))}</div>`);
+        htmlStukken.push(...groepen.recent.map(_kaartHtml));
+    }
+    if (groepen.overige.length) {
+        htmlStukken.push(`<div class="wmodal-periode-hdr">${esc(t('wmodal_overige'))}</div>`);
+        htmlStukken.push(...groepen.overige.map(_kaartHtml));
+    }
+    if (!htmlStukken.length) {
+        htmlStukken.push(`<div class="wmodal-geen-wedstrijden">${esc(t('wmodal_geen_wedstrijden'))}</div>`);
+    }
+    lijst.innerHTML = htmlStukken.join('');
+
+    // Click-handler per kaart (event-delegation).
+    lijst.querySelectorAll('.wmodal-kaart').forEach(el => {
+        el.addEventListener('click', () => _kiesWedstrijdUitModal(el.dataset.compId));
+    });
+}
+
+function _kaartHtml(c) {
+    const d = safeDatum(c.starts);
+    const dag = d ? d.getDate() : '?';
+    const mnd = d ? _mndKort(d) : '';
+    const plaatsBits = [];
+    if (c.baan_vereniging) plaatsBits.push(esc(c.baan_vereniging));
+    if (c.org_naam)        plaatsBits.push(esc(c.org_naam));
+    const plaats = plaatsBits.join(' · ');
+    const badge  = _wedstrijdBadge(c, d);
+    const badgeHtml = badge ? `<span class="wmodal-tag wmodal-tag--${badge.key}">${esc(t(badge.i18n))}</span>` : '';
+    return `
+        <div class="wmodal-kaart" data-comp-id="${esc(c.id)}" tabindex="0" role="button">
+            <div class="wmodal-datum">
+                <div class="wmodal-datum-dag">${dag}</div>
+                <div class="wmodal-datum-mnd">${esc(mnd)}</div>
+            </div>
+            <div class="wmodal-info">
+                <div class="wmodal-naam">${esc(c.name)}</div>
+                ${plaats ? `<div class="wmodal-plaats">${plaats}</div>` : ''}
+                ${badgeHtml ? `<div class="wmodal-tags">${badgeHtml}</div>` : ''}
+            </div>
+        </div>`;
+}
+
+// State-afleiding voor de badge. Vereenvoudigde heuristiek voor fase 5a:
+// - binnenkort = operator heeft "stille voorbereiding" aan (aankondigen zonder zichtbaar maken)
+// - live       = nu tussen starts en ends (precieze heats-loting-check komt in fase 5b)
+// - vandaag    = starts == today, nog niet begonnen (loting-check idem)
+function _wedstrijdBadge(c, d) {
+    if (!d) return null;
+    const nu       = new Date();
+    const vandaag  = new Date(nu.getFullYear(), nu.getMonth(), nu.getDate());
+    const dagStart = new Date(d.getFullYear(), d.getMonth(), d.getDate());
+    if (c.public_zichtbaar == 0 && c.public_aankondigen == 1) return { key: 'binnenkort', i18n: 'wmodal_tag_binnenkort' };
+    const eindD = safeDatum(c.ends);
+    const nuInWedstrijd = d <= nu && (!eindD || nu <= eindD);
+    if (nuInWedstrijd && dagStart.getTime() === vandaag.getTime()) return { key: 'live', i18n: 'wmodal_tag_live' };
+    if (dagStart.getTime() === vandaag.getTime()) return { key: 'vandaag', i18n: 'wmodal_tag_vandaag' };
+    return null;
+}
+
+function _mndKort(d) {
+    const loc  = (typeof getLocale === 'function') ? getLocale() : 'nl';
+    return d.toLocaleString(loc, { month: 'short' }).replace('.', '').toUpperCase();
+}
+
+function _kiesWedstrijdUitModal(compId) {
+    if (!compId) return;
+    _recentBekekenPush(compId);
+    _wmodalLaatstKozenComp = compId;   // signaal naar selComp-change-handler
+    // Haak in op bestaande wedstrijd-keuze: zet sel-comp op deze waarde en
+    // trigger change — dat laadt setup-strip-tekst + comp-info correct.
+    const selComp = document.getElementById('sel-comp');
+    if (selComp) {
+        // Als competitie niet in de bestaande dropdown-opties zit (bv. andere
+        // seizoen-filter actief), eerst een hidden option toevoegen zodat .value
+        // werkt. filterComps() repopuleert later alsnog.
+        if (!selComp.querySelector(`option[value="${CSS.escape(compId)}"]`)) {
+            const c = (_wmodalComps || []).find(x => x.id === compId);
+            if (c) {
+                const o = document.createElement('option');
+                o.value = c.id;
+                o.textContent = c.name;
+                o.dataset.naam  = c.name;
+                o.dataset.datum = c.starts || '';
+                selComp.appendChild(o);
+            }
+        }
+        selComp.value = compId;
+        selComp.dispatchEvent(new Event('change'));
+    }
+    closeWedstrijdModal();
+}
+
+// Recent-bekeken-cache in localStorage: array van {id, last}-objecten,
+// nieuwste eerst, max _RECENT_WEDSTRIJDEN_MAX, en entries ouder dan
+// _RECENT_WEDSTRIJDEN_MAX_MS (30 dagen) vallen eruit. Faalt stil in
+// private/incognito. Oude plain-string-format (vóór 2026-10-01) wordt
+// stil geschrapt — recent-bekeken is niet-kritiek, lijst start dan leeg.
+function _recentBekekenGet() {
+    try {
+        const raw = localStorage.getItem(_RECENT_WEDSTRIJDEN_KEY);
+        const arr = raw ? JSON.parse(raw) : [];
+        if (!Array.isArray(arr)) return [];
+        const cutoff = Date.now() - _RECENT_WEDSTRIJDEN_MAX_MS;
+        return arr
+            .filter(x => x && typeof x === 'object' && x.id
+                      && typeof x.last === 'number' && x.last >= cutoff)
+            .map(x => x.id);
+    } catch (e) { return []; }
+}
+function _recentBekekenPush(id) {
+    try {
+        const raw = localStorage.getItem(_RECENT_WEDSTRIJDEN_KEY);
+        let arr = [];
+        try { arr = JSON.parse(raw) || []; } catch { arr = []; }
+        if (!Array.isArray(arr)) arr = [];
+        const cutoff = Date.now() - _RECENT_WEDSTRIJDEN_MAX_MS;
+        // Weggooien: oude format, duplicaten, verlopen entries.
+        const schoon = arr.filter(x =>
+            x && typeof x === 'object' && x.id && x.id !== id
+            && typeof x.last === 'number' && x.last >= cutoff);
+        schoon.unshift({ id, last: Date.now() });
+        schoon.length = Math.min(schoon.length, _RECENT_WEDSTRIJDEN_MAX);
+        localStorage.setItem(_RECENT_WEDSTRIJDEN_KEY, JSON.stringify(schoon));
+    } catch (e) { /* storage uit — niet erg */ }
+}
 // Bij het maximum aantal rijders: zoekveld + Zoeken uit + uitleg-hint, zodat
 // duidelijk is dat je eerst een rijder moet verwijderen (via de chips hierboven).
 function _updateSetupModalMax() {
@@ -626,26 +926,10 @@ document.addEventListener('keydown', e => {
         if (m && m.classList.contains('open')) closeSetupModal();
     }
 });
-// Eerste-bezoek-per-dag: modal automatisch openen zodat gebruikers die de
-// PWA vaker per dag openen niet elke keer de modal krijgen, maar bij een
-// nieuwe dag wel gestuurd worden naar wedstrijd-keuze (want het is bijna
-// altijd een andere wedstrijd).
-(function autoOpenFirstOfDay() {
-    const vandaag = new Date().toISOString().slice(0, 10);
-    const laatstGezien = localStorage.getItem('ic_pub_setup_dag') || '';
-    // Openen als: vandaag nog niet gezien, OF nog niks gekozen. selComp
-    // is bij deze code al gerenderd (script staat na de HTML), maar de
-    // dropdown-opties zijn asynchroon geladen — check op value.
-    const nogNiksGekozen = !selComp || !selComp.value;
-    if (laatstGezien !== vandaag || nogNiksGekozen) {
-        // Kleine timeout om te wachten op eerste applyI18n() zodat de
-        // modal-tekst in de juiste taal staat.
-        setTimeout(() => {
-            openSetupModal();
-            localStorage.setItem('ic_pub_setup_dag', vandaag);
-        }, 100);
-    }
-})();
+// Fase 5a (2026-10-01): auto-open van modal bij first-of-day verwijderd op
+// verzoek. De setup-strip toont bij geen-wedstrijd standaard "Kies je
+// wedstrijd…" naast het pennetje — dat is signaal genoeg. Modal opent nu
+// alleen op expliciete gebruikers-actie (klik op strip of pennetje).
 
 function klapGroepPub(hdrEl) {
     const groep = hdrEl.closest('.prog-groep');

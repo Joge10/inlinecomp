@@ -265,7 +265,7 @@ if (isset($actionRoutes[$action])) {
     <!-- Setup-strook: klikbaar → opent modal met wedstrijd-keuze + rijder-
          zoek. Vervangt de altijd-zichtbare stap 1 + 2 secties zodat er meer
          verticale ruimte over is voor het programma zelf. -->
-    <div class="setup-strip" id="setup-strip" onclick="openSetupModal()" title="Wijzig wedstrijd of voeg rijder toe">
+    <div class="setup-strip" id="setup-strip" onclick="openWedstrijdModal()" title="Wijzig wedstrijd">
         <div class="setup-strip-tekst" id="setup-strip-tekst">
             <span class="setup-strip-empty" data-i18n="setup_strip_leeg">Kies je wedstrijd…</span>
         </div>
@@ -275,38 +275,109 @@ if (isset($actionRoutes[$action])) {
     <div id="resultaat"></div>
 </div>
 
-<!-- Setup-modal — bevat stap 1 (wedstrijd) + stap 2 (rijder-zoek).
-     Opent bij klik op setup-strip, bij "+"-rijder-tab-knop, én automatisch
-     bij eerste bezoek van de dag (localStorage-check). -->
+<!-- Rijder-zoek-modal (voorheen "setup-modal"). Fase 5a-2: wedstrijd-selectie
+     verhuisd naar #wedstrijd-modal; deze modal is nu uitsluitend voor rijder-
+     zoek + volglijst-beheer. Opent via de "+"-knop bij de kids-tabs én
+     automatisch na een wedstrijd-keuze als de volglijst nog leeg is.
+     De hidden select/filter-chips blijven in DOM — bestaande JS-flows
+     (filterComps/change-handler/direct-link ?comp=…) gebruiken ze nog. -->
 <div class="setup-modal-overlay" id="setup-modal" onclick="if(event.target===this)closeSetupModal()">
     <div class="setup-modal-box">
         <button class="setup-modal-close" type="button" onclick="closeSetupModal()"
                 data-i18n-title="pwa_btn_sluit" title="Sluiten">&times;</button>
-        <h2 class="setup-modal-titel" data-i18n="setup_modal_titel">Wedstrijd &amp; rijder</h2>
+        <h2 class="setup-modal-titel" data-i18n="setup_modal_titel_rijder">Rijder zoeken</h2>
         <div id="setup-volglijst" class="setup-volglijst"></div>
-        <!-- Push-meldingen (Fase 3). JS vult dit zodra je een rijder volgt. -->
-        <div id="pub-push" class="pub-push"></div>
-        <div class="stap">
-            <div class="stap-label">
-                <span class="stap-nr">1</span> <span data-i18n="stap1_label">Kies je wedstrijd</span>
-                <span class="auto-stempel"></span>
-            </div>
-            <div class="filter-rij">
-                <input type="checkbox" id="chk-oud"><label for="chk-oud" class="filter-chip" data-i18n="filter_eerder" data-i18n-title="filter_eerder_title" title="Eerdere wedstrijden">Eerder</label>
-                <input type="checkbox" id="chk-vandaag" checked><label for="chk-vandaag" class="filter-chip" data-i18n="filter_vandaag">Vandaag</label>
-                <input type="checkbox" id="chk-toekomst"><label for="chk-toekomst" class="filter-chip" data-i18n="filter_later" data-i18n-title="filter_later_title" title="Toekomstige wedstrijden">Later</label>
-            </div>
-            <select id="sel-comp"><option value="" data-i18n="opt_laden">Laden…</option></select>
+
+        <!-- Verborgen wedstrijd-select + filter-chips: nog in DOM voor
+             bestaande JS-flows, niet getoond in de UI. -->
+        <select id="sel-comp" hidden><option value="" data-i18n="opt_laden">Laden…</option></select>
+        <div class="filter-rij" hidden>
+            <input type="checkbox" id="chk-oud">
+            <input type="checkbox" id="chk-vandaag" checked>
+            <input type="checkbox" id="chk-toekomst">
         </div>
         <div id="comp-info" class="comp-info" hidden></div>
-        <div class="stap" id="stap-rijder">
-            <div class="stap-label"><span class="stap-nr">2</span> <span data-i18n="stap2_label">Startnummer, licentie of achternaam</span></div>
+
+        <div id="stap-rijder" class="rijder-zoek">
+            <div class="rijder-zoek-label" data-i18n="setup_rijder_label">Startnummer, licentie of achternaam</div>
             <input type="text" id="inp-snr" data-i18n-placeholder="zoek_placeholder" placeholder="Startnummer, licentienr of achternaam…" autocomplete="off" inputmode="search">
         </div>
         <button class="btn-zoek" id="btn-zoek" data-i18n="btn_zoeken" disabled>Zoeken</button>
         <div id="setup-melding" class="setup-melding" aria-live="polite"></div>
         <div id="setup-max-hint" class="setup-max-hint" hidden></div>
         <button class="setup-modal-klaar" type="button" onclick="closeSetupModal()" data-i18n="pwa_btn_sluit">Sluiten</button>
+    </div>
+</div>
+
+<!-- Wedstrijd-modal (fase 5a): kaart-lijst wedstrijd-selectie + organisaties-
+     dimensie + instellingen. Opent via klik op de setup-strip (pennetje incluis)
+     én bij first-of-day. De oude setup-modal is voortaan alleen voor rijder-
+     beheer (gevolgde chips + zoek), opent via de "+"-knop bij de kids-tabs. -->
+<div class="setup-modal-overlay" id="wedstrijd-modal" onclick="if(event.target===this)closeWedstrijdModal()">
+    <div class="setup-modal-box wmodal-box">
+        <button class="setup-modal-close" type="button" onclick="closeWedstrijdModal()"
+                data-i18n-title="pwa_btn_sluit" title="Sluiten">&times;</button>
+        <h2 class="setup-modal-titel wmodal-titel">
+            <span class="wmodal-titel-ico">🔎</span>
+            <span data-i18n="wmodal_titel">Wat wil je bekijken?</span>
+        </h2>
+
+        <div class="wmodal-tabs" role="tablist">
+            <button type="button" class="wmodal-tab actief" data-tab="wedstrijden"
+                    role="tab" aria-selected="true" aria-controls="wmodal-pane-wedstrijden"
+                    onclick="switchWedstrijdTab('wedstrijden')">
+                <span class="wmodal-tab-ico">🏁</span>
+                <span data-i18n="setup_tab_wedstrijden">Wedstrijden</span>
+            </button>
+            <button type="button" class="wmodal-tab" data-tab="organisaties"
+                    role="tab" aria-selected="false" aria-controls="wmodal-pane-organisaties"
+                    onclick="switchWedstrijdTab('organisaties')">
+                <span class="wmodal-tab-ico">🏛</span>
+                <span data-i18n="setup_tab_organisaties">Organisaties</span>
+            </button>
+            <button type="button" class="wmodal-tab" data-tab="settings"
+                    role="tab" aria-selected="false" aria-controls="wmodal-pane-settings"
+                    onclick="switchWedstrijdTab('settings')">
+                <span class="wmodal-tab-ico">⚙</span>
+                <span data-i18n="setup_tab_settings">Instellingen</span>
+            </button>
+        </div>
+
+        <!-- Pane: Wedstrijden — kaartlijst per periode + seizoen-selector. -->
+        <div class="wmodal-pane actief" id="wmodal-pane-wedstrijden" role="tabpanel">
+            <div class="wmodal-seizoen-rij">
+                <label for="wmodal-sel-seizoen" class="wmodal-seizoen-label" data-i18n="wmodal_seizoen">Seizoen</label>
+                <select id="wmodal-sel-seizoen" class="wmodal-sel-seizoen"></select>
+            </div>
+            <div id="wmodal-wedstrijd-lijst" class="wmodal-wedstrijd-lijst">
+                <div class="wmodal-laden" data-i18n="opt_laden">Laden…</div>
+            </div>
+        </div>
+
+        <!-- Pane: Organisaties — placeholder tot content gebouwd wordt. -->
+        <div class="wmodal-pane" id="wmodal-pane-organisaties" role="tabpanel" hidden>
+            <div class="wmodal-placeholder">
+                <div class="wmodal-placeholder-ico">🏛</div>
+                <p data-i18n="setup_org_binnenkort_titel">Organisatie-info komt hier binnenkort</p>
+                <p class="wmodal-placeholder-sub" data-i18n="setup_org_binnenkort_sub">Agenda, reglementen, contactgegevens en nieuws van wedstrijd-organisaties.</p>
+            </div>
+        </div>
+
+        <!-- Pane: Instellingen — pushmeldingen (verhuisd uit setup-modal). -->
+        <div class="wmodal-pane" id="wmodal-pane-settings" role="tabpanel" hidden>
+            <!-- Push-blok. _ppRender() vult 'm bij tab-open. Toont alleen de
+                 opties als push-support aanwezig is én de gebruiker rijders volgt. -->
+            <div id="pub-push" class="pub-push"></div>
+            <!-- Fallback-uitleg als push-blok leeg is (geen rijders gevolgd of
+                 geen push-support). JS verbergt deze als pub-push wél content heeft. -->
+            <div id="wmodal-settings-leeg" class="wmodal-placeholder" hidden>
+                <div class="wmodal-placeholder-ico">🔔</div>
+                <p data-i18n="setup_settings_leeg_titel">Nog geen pushmeldingen beschikbaar</p>
+                <p class="wmodal-placeholder-sub" data-i18n="setup_settings_leeg_sub">Zoek via de "+" bij je wedstrijd eerst een rijder — dan kun je push aanzetten.</p>
+            </div>
+        </div>
+
+        <button class="setup-modal-klaar" type="button" onclick="closeWedstrijdModal()" data-i18n="pwa_btn_sluit">Sluiten</button>
     </div>
 </div>
 

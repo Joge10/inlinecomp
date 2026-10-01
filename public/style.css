@@ -16,6 +16,42 @@
 [hidden] { display: none !important; }
 /* Utility: tekst-truncatie met ellipsis (op inline en flex-children). */
 .txt-ellipsis { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+/* ──────────────────────────────────────────────────────────────────────
+   Gedeelde modal/overlay-basis (fase 5a CSS-compaction).
+   Elk component houdt eigen size/kleur/animation, maar hoeft deze
+   gemeenschappelijke properties niet meer te herhalen.
+   ────────────────────────────────────────────────────────────────────── */
+/* Full-screen overlays — zelfde fixed-inset-flex basis. Individuele overlay
+   krijgt eigen background/z-index/align-items/padding. */
+.meld-overlay,
+.help-overlay,
+.setup-modal-overlay,
+.overlay {
+    position: fixed; inset: 0;
+    display: flex; justify-content: center;
+}
+/* Modal-boxes — alle delen witte achtergrond + 100% breedte. Border-radius,
+   max-width, padding, box-shadow en animation blijven per modal. */
+.meld-overz-box,
+.help-box,
+.setup-modal-box,
+.overlay-box {
+    background: #fff;
+    width: 100%;
+}
+/* X-sluit-knoppen — gedeelde basis. Variant bepaalt font-size/kleur/positie. */
+.meld-overz-sluit,
+.help-sluit,
+.naamzoek-sluit,
+.setup-modal-close,
+.pwa-banner .btn-sluit,
+.overlay-sluit {
+    background: none;
+    border: none;
+    cursor: pointer;
+    line-height: 1;
+}
 html { font-size: 20px; }
 html {
     /* Native pull-to-refresh van de browser uitschakelen — moet op html
@@ -178,14 +214,11 @@ header .sub { font-size: .95rem; opacity: .8; margin-top: 6px; text-align: cente
    Kleur en achtergrond zijn per-melding dynamisch: JS zet `--kleur` en `--bg`
    op de container (`.meld-item` in overzicht, `.meld-modal` in popup) en de
    kinderen refereren daaraan via `var(--kleur)` / `var(--bg)`. */
-.meld-overlay {
-    position: fixed; inset: 0; display: flex; justify-content: center;
-    overflow-y: auto;
-}
+.meld-overlay { overflow-y: auto; }
 .meld-overlay--popup { background: rgba(0,0,0,.6); z-index: 9500; align-items: center; padding: 1rem; }
 .meld-overlay--overz { background: rgba(0,0,0,.55); z-index: 9400; align-items: flex-start; padding: 4vh 1rem; }
 .meld-overz-box {
-    background: #fff; border-radius: 8px; max-width: 480px; width: 100%;
+    border-radius: 8px; max-width: 480px;
     box-shadow: 0 10px 30px rgba(0,0,0,.3);
 }
 .meld-overz-hdr {
@@ -193,10 +226,7 @@ header .sub { font-size: .95rem; opacity: .8; margin-top: 6px; text-align: cente
     padding: .8rem 1rem; border-bottom: 1px solid #e0e0e0;
 }
 .meld-overz-titel  { margin: 0; color: var(--blauw); font-size: 1.05rem; }
-.meld-overz-sluit  {
-    background: none; border: none; font-size: 1.6rem;
-    cursor: pointer; color: #666; padding: 0; line-height: 1;
-}
+.meld-overz-sluit  { font-size: 1.6rem; color: #666; padding: 0; }
 .meld-overz-body   { padding: 1rem; }
 /* Item in overzicht */
 .meld-item {
@@ -269,12 +299,11 @@ header .sub { font-size: .95rem; opacity: .8; margin-top: 6px; text-align: cente
 
 /* ── Help overlay ── */
 .help-overlay {
-    position: fixed; inset: 0; background: rgba(0,0,0,.6);
-    z-index: 2000; display: flex; align-items: flex-start; justify-content: center;
-    padding: 24px 12px; overflow-y: auto;
+    background: rgba(0,0,0,.6); z-index: 2000;
+    align-items: flex-start; padding: 24px 12px; overflow-y: auto;
 }
 .help-box {
-    background: var(--wit); border-radius: 14px; width: 100%; max-width: 520px;
+    border-radius: 14px; max-width: 520px;
     box-shadow: 0 12px 40px rgba(0,0,0,.3); overflow: hidden;
 }
 .help-header {
@@ -282,7 +311,7 @@ header .sub { font-size: .95rem; opacity: .8; margin-top: 6px; text-align: cente
     display: flex; justify-content: space-between; align-items: center;
     font-size: 1.1rem; font-weight: 700;
 }
-.help-sluit { background: none; border: none; color: rgba(255,255,255,.7); font-size: 1.5rem; cursor: pointer; line-height: 1; }
+.help-sluit { color: rgba(255,255,255,.7); font-size: 1.5rem; }
 
 .help-body { padding: 16px; font-size: .9rem; line-height: 1.5; color: var(--tekst); }
 .help-body h3 { font-size: .95rem; color: var(--blauw); margin: 16px 0 6px; }
@@ -447,6 +476,14 @@ header .sub { font-size: .95rem; opacity: .8; margin-top: 6px; text-align: cente
 
 /* ── Stappen ── */
 .stap { margin-bottom: 16px; }
+/* Rijder-zoek-sectie in #setup-modal (fase 5a-2). Vervangt de oude
+   "stap 2"-label — modal is nu uitsluitend rijder-zoek, geen genummerde
+   stappen meer. */
+.rijder-zoek         { margin-bottom: 16px; }
+.rijder-zoek-label {
+    font-size: 1.05rem; font-weight: 700; color: var(--blauw);
+    margin-bottom: 6px;
+}
 .auto-stempel {
     font-size: .7rem; color: #888; font-weight: normal; line-height: 1.4;
     white-space: nowrap;
@@ -595,8 +632,7 @@ select:focus, input:focus { border-color: var(--middenblauw); outline: none; }
 }
 .naamzoek-voet .aantal { font-size:.85rem; color:#666; }
 .naamzoek-leeg { padding:30px 16px; text-align:center; color:#888; font-style:italic; }
-.naamzoek-sluit { background:none; border:none; color:rgba(255,255,255,.85);
-                  font-size:1.4rem; cursor:pointer; line-height:1; }
+.naamzoek-sluit { color:rgba(255,255,255,.85); font-size:1.4rem; }
 
 /* Kind-tabs (meerdere rijders in één weergave, bv. gezinnen met broertjes/zusjes).
    Laat deze bovenop de persoon-header staan — klik op een tab toont de
@@ -737,19 +773,15 @@ select:focus, input:focus { border-color: var(--middenblauw); outline: none; }
 /* Modal-overlay voor setup (stap 1 + 2). Opent bij klik op setup-strip
    of automatisch bij eerste bezoek van de dag (localStorage-detectie). */
 .setup-modal-overlay {
-    position: fixed; inset: 0;
-    background: rgba(0,0,0,.4);
-    z-index: 200;
-    display: none;
-    align-items: flex-start; justify-content: center;
-    padding: 20px 12px;
-    overflow-y: auto;
+    background: rgba(0,0,0,.4); z-index: 200;
+    display: none;                        /* override: open-knop zet 'm op flex */
+    align-items: flex-start;
+    padding: 20px 12px; overflow-y: auto;
 }
 .setup-modal-overlay.open { display: flex; }
 .setup-modal-box {
-    background: #fff;
     border-radius: 10px;
-    max-width: 460px; width: 100%;
+    max-width: 460px;
     padding: 18px 16px;
     position: relative;
     box-shadow: 0 8px 24px rgba(0,0,0,.25);
@@ -761,8 +793,7 @@ select:focus, input:focus { border-color: var(--middenblauw); outline: none; }
 }
 .setup-modal-close {
     position: absolute; top: 8px; right: 8px;
-    background: none; border: 0;
-    font-size: 1.4rem; color: #666; cursor: pointer;
+    font-size: 1.4rem; color: #666;
     width: 32px; height: 32px;
     border-radius: 50%;
     display: flex; align-items: center; justify-content: center;
@@ -855,8 +886,8 @@ select:focus, input:focus { border-color: var(--middenblauw); outline: none; }
     margin-top: 4px; opacity: .92; cursor: pointer; }
 .promo-niet input { margin: 0; }
 .pwa-banner .btn-sluit {
-    background: none; border: none; color: rgba(255,255,255,.6);
-    font-size: 1.2rem; cursor: pointer; padding: 0 4px; line-height: 1;
+    color: rgba(255,255,255,.6);
+    font-size: 1.2rem; padding: 0 4px;
 }
 
 /* ── Uitslagen tab ── */
@@ -1344,19 +1375,19 @@ select:focus, input:focus { border-color: var(--middenblauw); outline: none; }
 
 /* ── Overlay ── */
 .overlay {
-    position: fixed; inset: 0; background: rgba(0,0,0,.5);
-    display: flex; align-items: center; justify-content: center;
+    background: rgba(0,0,0,.5);
+    align-items: center;
     z-index: 1000; padding: 16px;
 }
 .overlay-box {
-    background: var(--wit); border-radius: 12px; width: 100%; max-width: 500px;
+    border-radius: 12px; max-width: 500px;
     max-height: 90vh; overflow-y: auto; box-shadow: 0 8px 32px rgba(0,0,0,.25);
 }
 .overlay-sluit {
     position: absolute; top: 6px; right: 6px;
-    border: none; background: #d22; color: #fff;
+    background: #d22; color: #fff;
     width: 28px; height: 28px; border-radius: 50%;
-    font-size: 1.1rem; font-weight: 700; cursor: pointer; line-height: 1;
+    font-size: 1.1rem; font-weight: 700;
     display: flex; align-items: center; justify-content: center;
     box-shadow: 0 1px 3px rgba(0,0,0,.25);
     transition: background .12s, transform .08s;
@@ -1384,3 +1415,175 @@ select:focus, input:focus { border-color: var(--middenblauw); outline: none; }
 }
 #ptr.zichtbaar { transform: translateY(0); }
 #ptr.laadt     { background: var(--blauw); }
+
+/* ──────────────────────────────────────────────────────────────────────
+   Wedstrijd-modal (fase 5a) — kaart-lijst voor wedstrijd-selectie met
+   periode-grouping en seizoen-selector, 3 tabs (Wedstrijden/Organisaties/
+   Instellingen). Hergebruikt .setup-modal-overlay/-box/-close/-klaar van
+   de bestaande setup-modal; eigen .wmodal-*-prefix voor nieuwe elementen.
+   ────────────────────────────────────────────────────────────────────── */
+/* Wedstrijd-modal erft .setup-modal-box styling (padding 18px 16px), geen
+   eigen box-override nodig — dan staat de Sluiten-knop automatisch
+   ingekaderd zoals in de rijder-modal. */
+.wmodal-titel {
+    display: flex; align-items: center; gap: 8px;
+    margin: 0 0 12px;
+}
+.wmodal-titel-ico { font-size: 1.1rem; }
+
+/* Tabs — zelfde ritueel als content-tabs (programma/heats/…): oranje
+   underline op actief, blauw tekst op actief, grijs op inactief. */
+.wmodal-tabs {
+    display: flex;
+    border-bottom: 2px solid #dde3ea;
+    margin: 0 0 12px;
+    flex-shrink: 0;
+}
+/* Tabs stapelen icoon BOVEN label. Zo passen alle 4 talen op smal scherm
+   zonder tekst te hoeven inkorten (NL "Instellingen"/DE "Einstellungen"/
+   FR "Paramètres" zijn lang; horizontaal zouden ze afbreken op <420px). */
+.wmodal-tab {
+    flex: 1; min-width: 0;
+    background: none; border: none;
+    padding: 6px 4px 7px;
+    text-align: center;
+    font-size: .7rem; font-weight: 600;
+    color: #888;
+    border-bottom: 3px solid transparent;
+    margin-bottom: -2px;
+    cursor: pointer;
+    display: flex; flex-direction: column; align-items: center; justify-content: center;
+    gap: 2px;
+    line-height: 1.1;
+    overflow: hidden;
+}
+.wmodal-tab > span:not(.wmodal-tab-ico) {
+    overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 100%;
+}
+.wmodal-tab:hover         { color: #555; }
+.wmodal-tab.actief        { color: var(--blauw); border-bottom-color: var(--oranje); }
+.wmodal-tab-ico           { font-size: 1.15rem; line-height: 1; }
+.wmodal-pane              { padding: 0 0 8px; }
+.wmodal-pane[hidden]      { display: none; }
+
+/* Seizoen-selector bovenin Wedstrijden-tab */
+.wmodal-seizoen-rij {
+    display: flex; align-items: center; gap: 10px;
+    padding: 4px 0 12px;
+    border-bottom: 1px solid #eef2f6;
+    margin-bottom: 12px;
+}
+.wmodal-seizoen-label {
+    font-size: .75rem; font-weight: 700; color: #666;
+    text-transform: uppercase; letter-spacing: .5px;
+}
+.wmodal-sel-seizoen {
+    flex: 1; padding: 6px 8px;
+    border: 1px solid #cdd8e3; border-radius: 6px;
+    font-size: .9rem; color: var(--tekst); background: #fff;
+}
+
+/* Wedstrijd-lijst + periode-headers */
+.wmodal-wedstrijd-lijst {
+    display: flex; flex-direction: column; gap: 6px;
+}
+.wmodal-laden, .wmodal-geen-wedstrijden {
+    padding: 24px 12px; text-align: center;
+    color: #888; font-size: .9rem;
+}
+.wmodal-periode-hdr {
+    font-size: .68rem; font-weight: 700; color: #888;
+    text-transform: uppercase; letter-spacing: .6px;
+    padding: 10px 0 2px;
+}
+.wmodal-periode-hdr:first-child { padding-top: 2px; }
+
+/* Wedstrijd-kaart */
+.wmodal-kaart {
+    background: #fff;
+    border: 1px solid #dde3ea;
+    border-radius: 8px;
+    padding: 10px 12px;
+    display: flex; gap: 10px;
+    align-items: flex-start;
+    cursor: pointer;
+    transition: border-color .12s, box-shadow .12s;
+}
+.wmodal-kaart:hover,
+.wmodal-kaart:focus {
+    border-color: var(--middenblauw);
+    box-shadow: 0 2px 6px rgba(31,78,121,.08);
+    outline: none;
+}
+.wmodal-kaart.actief {
+    border-color: var(--oranje);
+    background: #fff8f0;
+}
+
+/* Datum-blok links in kaart */
+.wmodal-datum {
+    flex-shrink: 0;
+    width: 42px;
+    text-align: center;
+    padding: 2px 0;
+}
+.wmodal-datum-dag {
+    font-size: 1.3rem; font-weight: 700; color: var(--blauw);
+    line-height: 1;
+}
+.wmodal-datum-mnd {
+    font-size: .62rem; font-weight: 600; color: #888;
+    text-transform: uppercase; letter-spacing: .4px;
+    margin-top: 2px;
+}
+
+/* Wedstrijd-info rechts in kaart */
+.wmodal-info {
+    flex: 1; min-width: 0;   /* min-width:0 nodig voor ellipsis in flex-child */
+}
+.wmodal-naam {
+    font-size: .92rem; font-weight: 600; color: var(--tekst);
+    line-height: 1.25;
+    overflow: hidden; text-overflow: ellipsis;
+    display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical;
+}
+.wmodal-plaats {
+    font-size: .76rem; color: #888;
+    margin-top: 2px;
+    overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.wmodal-tags {
+    display: flex; gap: 4px; flex-wrap: wrap;
+    margin-top: 5px;
+}
+.wmodal-tag {
+    font-size: .65rem; font-weight: 700;
+    padding: 2px 6px; border-radius: 3px;
+    text-transform: uppercase; letter-spacing: .3px;
+}
+.wmodal-tag--live       { background: #198754; color: #fff; }
+.wmodal-tag--vandaag    { background: var(--oranje); color: #fff; }
+.wmodal-tag--binnenkort { background: #0d6efd; color: #fff; }
+
+/* Placeholder voor Organisaties/Instellingen panes */
+.wmodal-placeholder {
+    text-align: center;
+    padding: 32px 16px;
+    color: #666;
+}
+.wmodal-placeholder-ico {
+    font-size: 2.4rem;
+    margin-bottom: .5rem;
+    opacity: .7;
+}
+.wmodal-placeholder p {
+    margin: 0 0 .4rem;
+    font-weight: 600;
+    color: var(--blauw);
+}
+.wmodal-placeholder-sub {
+    font-weight: 400 !important;
+    color: #888 !important;
+    font-size: .88rem;
+    line-height: 1.4;
+}
