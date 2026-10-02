@@ -557,8 +557,19 @@ function openWedstrijdModal() {
     const m = document.getElementById('wedstrijd-modal');
     if (m) m.classList.add('open');
     document.body.style.overflow = 'hidden';
+    _invalideerWedstrijdModalCaches();
     switchWedstrijdTab('wedstrijden');
     _laadWedstrijdLijst();
+}
+// Alle caches die aan volglijst/wedstrijd-publicatie hangen invalideren.
+// Server-side max-age=30/60 vangt eventuele dubbele requests op bij snel
+// open/dicht/open. Ook aan te roepen vanuit andere flows (bv. kinderen-
+// wijziging die niet via modal-close loopt — zie _saveKids).
+function _invalideerWedstrijdModalCaches() {
+    _wmodalComps        = null;
+    _wmodalOrgCache     = null;
+    _wmodalOrgSig       = null;
+    for (const k of Object.keys(_orgWedstrijdenCache)) delete _orgWedstrijdenCache[k];
 }
 function closeWedstrijdModal() {
     const m = document.getElementById('wedstrijd-modal');
@@ -934,6 +945,7 @@ function _kiesOrganisatieUitModal(orgId) {
 // seizoen-filter. Alleen publieke wedstrijden zijn klikbaar.
 const _orgWedstrijdenCache = {};   // {orgId: [...wedstrijd-objecten]}
 let _orgViewSeizoen = null;        // actief seizoen (kalenderjaar)
+let _eigenRijdersMap = null;       // Map(person_id → kid-record) voor pil-naam-resolve
 
 function _toonOrganisatieView(org) {
     if (!divResult) return;
@@ -990,6 +1002,11 @@ function _toonOrganisatieView(org) {
         </div>`;
     const terug = divResult.querySelector('.org-view-terug');
     if (terug) terug.addEventListener('click', _terugUitOrganisatieView);
+    // De zojuist gebouwde data-i18n-elementen bevatten NL-fallbacktekst in de
+    // span (de template is NL-geschreven). applyI18n vervangt die door de
+    // actuele taal — nodig als deze view voor het eerst na een taalwissel
+    // wordt getoond, want anders staan tab-labels in NL en de rest in EN/etc.
+    if (typeof applyI18n === 'function') applyI18n(divResult);
     _laadOrgAgenda(org.id);
     divResult.scrollIntoView({ behavior: 'smooth', block: 'start' });
 }
@@ -1059,6 +1076,12 @@ function _renderOrgAgenda(orgId) {
     const lijst = document.getElementById('org-view-agenda-lijst');
     const comps = _orgWedstrijdenCache[orgId] || [];
     if (!lijst) return;
+    // Volglijst → Map(person_id → kid-record) voor pil-naam-resolve in
+    // _orgAgendaKaartHtml. Vers maken bij elke render — volglijst kan intussen
+    // zijn gewijzigd en de cache-reset in _saveKids triggert deze render alsnog.
+    _eigenRijdersMap = new Map(
+        _loadKidsUitStorage().filter(k => k.person_id).map(k => [k.person_id, k])
+    );
     const nu       = new Date();
     const vandaag  = new Date(nu.getFullYear(), nu.getMonth(), nu.getDate());
     const seizoen  = _orgViewSeizoen || vandaag.getFullYear();
@@ -1117,12 +1140,21 @@ function _orgAgendaKaartHtml(c) {
     // iedereen — hier blokkeren zou alleen de UX breken).
     const disabled = label.key !== 'publiek';
     const labelHtml = `<span class="org-wed-tag org-wed-tag--${label.key}">${esc(t(label.i18n))}</span>`;
-    // Startnummer-pil(len) voor rijders uit de volglijst die aan deze
-    // wedstrijd meededen. Werkt ook met meerdere kinderen (bv. gezinnen).
-    const snrs = c.eigen_startnummers
-        ? String(c.eigen_startnummers).split(',').map(s => s.trim()).filter(Boolean)
+    // Pil(len) met voornaam voor rijders uit de volglijst die aan deze
+    // wedstrijd meededen. Server geeft person_id's terug (stabiele identiteit,
+    // startnrs kunnen per wedstrijd verschillen); we matchen tegen de
+    // naam-hint in de localStorage-volglijst. Fallback bij lege/onbekende
+    // naam: generieke ⭐.
+    const eigenPids = c.eigen_person_ids
+        ? String(c.eigen_person_ids).split(',').map(s => s.trim()).filter(Boolean)
         : [];
-    const snrHtml = snrs.map(snr => `<span class="org-wed-snr-pil">${esc(snr)}</span>`).join('');
+    const snrHtml = eigenPids.map(pid => {
+        const kid = (_eigenRijdersMap || new Map()).get(pid);
+        const voornaam = (kid?.naam_hint || '').split(/\s+/)[0];
+        return voornaam
+            ? `<span class="org-wed-snr-pil">${esc(voornaam)}</span>`
+            : `<span class="org-wed-snr-pil org-wed-snr-pil--onbekend">⭐</span>`;
+    }).join('');
     return `
         <div class="wmodal-kaart${disabled ? ' disabled' : ''}" data-comp-id="${esc(c.id)}"${disabled ? '' : ' tabindex="0" role="button"'}>
             <div class="wmodal-datum">
@@ -1345,6 +1377,10 @@ function _saveKids() {
         .filter(it => { const key = it.person_id || it.license_key; return !seen.has(key) && seen.add(key); });
     localStorage.setItem(KIDS_LS_KEY, JSON.stringify(items));
     if (typeof _ppSync === 'function') _ppSync();   // server-licenties meelopen
+    // Volglijst gewijzigd → org-caches dumpen zodat de volgende Organisaties-
+    // tab/agenda-opening de nieuwe set (en bijbehorende startnummer-pillen)
+    // ophaalt. Scheelt het "oude pil blijft hangen"-effect.
+    if (typeof _invalideerWedstrijdModalCaches === 'function') _invalideerWedstrijdModalCaches();
 }
 function _loadKidsUitStorage() {
     try { return JSON.parse(localStorage.getItem(KIDS_LS_KEY) || '[]'); }

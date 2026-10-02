@@ -1198,6 +1198,35 @@ function _rerenderActiveTab() {
         overz.remove();
         toonMeldingenOverzicht();
     }
+    // Fase 5a: dynamische content in wedstrijd-modal + org-detail-view wordt
+    // via t() in template-literals geschreven; die blijven in de oude taal
+    // hangen bij een taalwissel. Herbouwen zodat alle labels/periode-headers/
+    // tag-tekst in de nieuwe taal verschijnen. Caches blijven staan — geen
+    // refetch, alleen re-render.
+    const wmodal = document.getElementById('wedstrijd-modal');
+    if (wmodal && wmodal.classList.contains('open')) {
+        const actieveTab = document.querySelector('.wmodal-tab.actief')?.dataset.tab;
+        if (actieveTab === 'wedstrijden' && typeof _renderWedstrijdLijst === 'function' && _wmodalComps) {
+            _renderWedstrijdLijst();
+        } else if (actieveTab === 'organisaties' && typeof _renderOrganisatieLijst === 'function' && _wmodalOrgCache) {
+            _renderOrganisatieLijst(_wmodalOrgCache);
+        }
+    }
+    if (typeof _toonOrganisatieView === 'function' && _wmodalAktieveOrg) {
+        // Onthoud actieve org-tab vóór rebuild — _toonOrganisatieView
+        // start default op 'agenda', wat na een taalwissel bij een gebruiker
+        // die net Algemeen/Nieuws aan het bekijken was een tab-sprong geeft.
+        const prevTab = document.querySelector('.org-view-tab.actief')?.dataset.tab;
+        _toonOrganisatieView(_wmodalAktieveOrg);
+        if (prevTab && prevTab !== 'agenda' && typeof switchOrgTab === 'function') {
+            switchOrgTab(prevTab);
+        }
+    }
+    // De zojuist herbouwde dynamische content bevat verse data-i18n-elementen
+    // met de NL-fallback-tekst in de span. applyI18n liep aan het begin van
+    // deze callback (door setLang), dus moet nu opnieuw over de nieuwe DOM
+    // om die fallbacks te vervangen door de actuele taal.
+    if (typeof applyI18n === 'function') applyI18n();
 }
 
 document.addEventListener('DOMContentLoaded', () => {

@@ -39,37 +39,74 @@ if ($action === 'org_wedstrijden') {
 
         if ($pids) {
             $ph  = implode(',', array_fill(0, count($pids), '?'));
-            // GROUP_CONCAT geeft de startnummers (oplopend, DISTINCT) van alle
-            // rijders uit de volglijst die aan deze wedstrijd meededen. NULL
-            // (geen pil) als niemand uit de volglijst meedeed.
-            $sql = "
+
+            // ── Twee queries + PHP-merge, want MariaDB kan `c.id` niet
+            //    correleren door een UNION-subquery heen (SQLSTATE 42S22).
+            // ── Query 1: alle wedstrijden van de org (zonder person-join).
+            $sql1 = "
                 SELECT c.id, c.name, c.starts, c.ends,
                        c.organisatie_id, c.baan_id, c.public_zichtbaar, c.public_aankondigen,
                        b.logo_path AS baan_logo,
-                       b.vereniging_naam AS baan_vereniging,
-                       (SELECT GROUP_CONCAT(DISTINCT he.startnummer
-                                            ORDER BY he.startnummer SEPARATOR ',')
-                          FROM heats h2
-                          JOIN heat_entries he ON he.heat_id = h2.id
-                         WHERE h2.competition_id = c.id
-                           AND he.person_id IN ($ph)
-                           AND he.startnummer IS NOT NULL
-                       ) AS eigen_startnummers
+                       b.vereniging_naam AS baan_vereniging
                 FROM competitions c
                 LEFT JOIN banen b ON b.id = c.baan_id
                 WHERE c.organisatie_id = ?
                   AND c.is_demo = 0
                 ORDER BY c.starts DESC
             ";
-            $stmt = $pdo->prepare($sql);
-            $stmt->execute(array_merge($pids, [$orgId]));
+            $stmt = $pdo->prepare($sql1);
+            $stmt->execute([$orgId]);
+            $rows = $stmt->fetchAll(PDO::FETCH_ASSOC);
+
+            // ── Query 2: per wedstrijd welke rijders uit de volglijst
+            //    meededen, via UNION over 3 bronnen (heat_entries,
+            //    competition_startnummers, uitslag_afstand) — die laatste
+            //    vangt historische geimporteerde wedstrijden (alleen
+            //    uitslagen, geen heats of startnr-toekenningen).
+            //    GROUP_CONCAT dedupeert; comp_id-sleutel voor merge.
+            $sql2 = "
+                SELECT comp_id, GROUP_CONCAT(DISTINCT pid ORDER BY pid SEPARATOR ',') AS pids
+                FROM (
+                    SELECT h.competition_id AS comp_id, he.person_id AS pid
+                    FROM heats h
+                    JOIN heat_entries he ON he.heat_id = h.id
+                    JOIN competitions c  ON c.id = h.competition_id
+                    WHERE c.organisatie_id = ? AND he.person_id IN ($ph)
+                    UNION
+                    SELECT cs.competition_id, cs.person_id
+                    FROM competition_startnummers cs
+                    JOIN competitions c ON c.id = cs.competition_id
+                    WHERE c.organisatie_id = ? AND cs.person_id IN ($ph)
+                    UNION
+                    SELECT ua.competition_id, ua.person_id
+                    FROM uitslag_afstand ua
+                    JOIN competitions c ON c.id = ua.competition_id
+                    WHERE c.organisatie_id = ? AND ua.person_id IN ($ph)
+                ) t
+                GROUP BY comp_id
+            ";
+            $stmt2 = $pdo->prepare($sql2);
+            $stmt2->execute(array_merge(
+                [$orgId], $pids,
+                [$orgId], $pids,
+                [$orgId], $pids
+            ));
+            $pidsByComp = [];
+            foreach ($stmt2->fetchAll(PDO::FETCH_ASSOC) as $r2) {
+                $pidsByComp[$r2['comp_id']] = $r2['pids'];
+            }
+            // Merge query-2-resultaat per wedstrijd.
+            foreach ($rows as &$r) {
+                $r['eigen_person_ids'] = $pidsByComp[$r['id']] ?? null;
+            }
+            unset($r);
         } else {
             $sql = "
                 SELECT c.id, c.name, c.starts, c.ends,
                        c.organisatie_id, c.baan_id, c.public_zichtbaar, c.public_aankondigen,
                        b.logo_path AS baan_logo,
                        b.vereniging_naam AS baan_vereniging,
-                       NULL AS eigen_startnummers
+                       NULL AS eigen_person_ids
                 FROM competitions c
                 LEFT JOIN banen b ON b.id = c.baan_id
                 WHERE c.organisatie_id = ?
@@ -78,12 +115,12 @@ if ($action === 'org_wedstrijden') {
             ";
             $stmt = $pdo->prepare($sql);
             $stmt->execute([$orgId]);
+            $rows = $stmt->fetchAll(PDO::FETCH_ASSOC);
         }
-        $rows = $stmt->fetchAll(PDO::FETCH_ASSOC);
         foreach ($rows as &$r) {
             $r['public_zichtbaar']   = (int)$r['public_zichtbaar'];
             $r['public_aankondigen'] = (int)$r['public_aankondigen'];
-            // eigen_startnummers blijft string (comma-sep) of null; client splitst.
+            // eigen_person_ids blijft string (comma-sep) of null; client splitst.
         }
         unset($r);
         echo json_encode($rows, JSON_UNESCAPED_UNICODE);

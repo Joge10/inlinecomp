@@ -1725,13 +1725,15 @@ select:focus, input:focus { border-color: var(--middenblauw); outline: none; }
 .org-wed-tag--verborgen  { background: #888; }
 /* Startnummer-pil(len) voor rijders uit de volglijst die aan deze wedstrijd
    meededen. Expliciet nummer ipv ster — bij meerdere kinderen zie je direct
-   welke er meedeed. Oranje accent als "van jou". */
+   welke er meedeed. Oranje accent als "van jou". Fallback-variant met ster
+   voor historische wedstrijden waar het startnummer niet in de DB zit. */
 .org-wed-snr-pil {
     font-size: .62rem; font-weight: 700;
     padding: 2px 6px; border-radius: 3px;
     background: var(--oranje); color: #fff;
     letter-spacing: .3px;
 }
+.org-wed-snr-pil--onbekend { letter-spacing: 0; }
 
 /* Placeholder voor Organisaties/Instellingen panes */
 .wmodal-placeholder {
