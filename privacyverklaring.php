@@ -174,13 +174,9 @@ organisatie. Zet je dit aan, dan verwerken wij per apparaat:</p>
 </ul>
 <p>De grondslag is jouw <strong>toestemming</strong> — je zet de meldingen zelf aan en kunt
 ze op elk moment weer uitzetten, waarna het abonnement wordt verwijderd. In de publieke app
-worden je gevolgde rijders normaal alléén lokaal op je toestel bewaard. Hun interne ID's
-worden in twee situaties kortstondig naar onze server gestuurd: (1) wanneer je
-<strong>pushmeldingen</strong> aanzet, om de meldingen te kunnen richten, en (2) wanneer je
-de <strong>organisatie-navigatie</strong> opent (de lijst van organisaties waar je rijders aan
-hebben meegedaan, en de agenda van zo'n organisatie), om de resultaten voor jouw gevolgde rijders
-te kunnen filteren. In het tweede geval worden ze niet opgeslagen, wel zijn ze kortstondig
-zichtbaar in server-access-logs. Aan een publiek push-abonnement is <strong>geen naam of
+worden je gevolgde rijders normaal alléén lokaal op je toestel bewaard; <strong>alleen</strong>
+wanneer je pushmeldingen aanzet, worden die interne ID's naar onze server
+gestuurd om de meldingen te kunnen richten. Aan een publiek push-abonnement is <strong>geen naam of
 e-mailadres</strong> gekoppeld. Verlopen of ingetrokken abonnementen worden automatisch verwijderd.</p>
 <p><strong>Bezorging via je browser-push-dienst:</strong> om de melding op je toestel te
 krijgen, loopt deze via de push-dienst van je browser-leverancier — Google (Android/Chrome),
@@ -270,6 +266,15 @@ bescherming toe (overweging 38 AVG). Wij houden daar op de volgende manier reken
     <li>De <strong>rechten</strong> uit §9 (inzage, correctie, verwijdering/anonimisering, bezwaar)
         kunnen namens een minderjarige door de ouder/verzorger worden uitgeoefend.</li>
 </ul>
+
+<h2>1g. Organisatie-navigatie (publieke app)</h2>
+<p>In de publieke app kun je een organisatie openen om haar <strong>agenda, mededelingen en
+algemene informatie</strong> te bekijken. Om die inhoud toe te spitsen op jouw
+<strong>gevolgde rijders</strong> — bijvoorbeeld aan welke wedstrijden van die organisatie zij
+hebben meegedaan — sturen we hun interne ID's bij het openen van de tab kortstondig naar onze
+server. Deze ID's worden <strong>niet opgeslagen</strong>; wel zijn ze korte tijd zichtbaar
+in server-access-logs. Op de server is geen naam, e-mailadres of apparaataanduiding aan deze
+aanroep gekoppeld.</p>
 
 <h2>2. Waarom verwerken wij deze gegevens?</h2>
 <ul>
@@ -740,6 +745,14 @@ protection (recital 38 GDPR). We take this into account as follows:</p>
     <li>The <strong>rights</strong> in §9 (access, correction, erasure/anonymisation, objection) may
         be exercised on a minor's behalf by the parent/guardian.</li>
 </ul>
+
+<h2>1g. Organisation navigation (public app)</h2>
+<p>In the public app you can open an organisation to view its <strong>schedule, announcements
+and general information</strong>. To tailor that content to the <strong>skaters you follow</strong>
+— for example which races held by that organisation they competed in — we briefly send their
+internal IDs to our server when you open the tab. These IDs are <strong>not stored</strong>;
+they are visible in server access logs for a short time. No name, email address or device
+identifier is linked to this call on the server.</p>
 
 <h2>2. Why do we process this data?</h2>
 <ul>
