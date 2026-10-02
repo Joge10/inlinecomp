@@ -173,11 +173,12 @@ organisatie. Zet je dit aan, dan verwerken wij per apparaat:</p>
     <li>een korte <strong>browser-/apparaataanduiding</strong> (user-agent) voor beheer en opschoning.</li>
 </ul>
 <p>De grondslag is jouw <strong>toestemming</strong> — je zet de meldingen zelf aan en kunt
-ze op elk moment weer uitzetten, waarna het abonnement wordt verwijderd. In de publieke app
-worden je gevolgde rijders normaal alléén lokaal op je toestel bewaard; <strong>alleen</strong>
-wanneer je pushmeldingen aanzet, worden die interne ID's naar onze server
-gestuurd om de meldingen te kunnen richten. Aan een publiek push-abonnement is <strong>geen naam of
-e-mailadres</strong> gekoppeld. Verlopen of ingetrokken abonnementen worden automatisch verwijderd.</p>
+ze op elk moment weer uitzetten, waarna het abonnement wordt verwijderd. Specifiek voor
+pushmeldingen worden de interne ID's van je gevolgde rijders en je push-abonnement
+<strong>opgeslagen</strong> op de server, zolang de meldingen aan staan. Aan een publiek
+push-abonnement is <strong>geen naam of e-mailadres</strong> gekoppeld. Verlopen of ingetrokken
+abonnementen worden automatisch verwijderd. Zie §1g voor de verdere server-interactie met je
+volglijst in de publieke app.</p>
 <p><strong>Bezorging via je browser-push-dienst:</strong> om de melding op je toestel te
 krijgen, loopt deze via de push-dienst van je browser-leverancier — Google (Android/Chrome),
 Mozilla (Firefox) of Apple (Safari/iPhone). Zij ontvangen het technische endpoint en de
@@ -267,14 +268,25 @@ bescherming toe (overweging 38 AVG). Wij houden daar op de volgende manier reken
         kunnen namens een minderjarige door de ouder/verzorger worden uitgeoefend.</li>
 </ul>
 
-<h2>1g. Organisatie-navigatie (publieke app)</h2>
-<p>In de publieke app kun je een organisatie openen om haar <strong>agenda, mededelingen en
-algemene informatie</strong> te bekijken. Om die inhoud toe te spitsen op jouw
-<strong>gevolgde rijders</strong> — bijvoorbeeld aan welke wedstrijden van die organisatie zij
-hebben meegedaan — sturen we hun interne ID's bij het openen van de tab kortstondig naar onze
-server. Deze ID's worden <strong>niet opgeslagen</strong>; wel zijn ze korte tijd zichtbaar
-in server-access-logs. Op de server is geen naam, e-mailadres of apparaataanduiding aan deze
-aanroep gekoppeld.</p>
+<h2>1g. Volglijst — server-interactie in de publieke app</h2>
+<p>Je zelf samengestelde lijst <strong>gevolgde rijders</strong> wordt in de publieke app
+bewaard in de lokale opslag van je browser (niet op onze server). We sturen de interne ID's
+van die rijders wel <strong>kortstondig</strong> naar onze server wanneer de app die informatie
+nodig heeft, bijvoorbeeld om:</p>
+<ul>
+    <li>de <strong>programma-, heat- en uitslaggegevens</strong> op te halen voor een rijder die
+        je volgt (zodat de "mijn ritten"- en "mijn uitslag"-weergaven werken);</li>
+    <li>de <strong>ritten in het programma te markeren</strong> waarin een gevolgde rijder
+        meedoet;</li>
+    <li>in de <strong>organisatie-navigatie</strong> alleen die organisaties en wedstrijden te
+        tonen waar jouw gevolgde rijders aan hebben meegedaan, en per wedstrijd zichtbaar te
+        maken welke dat zijn.</li>
+</ul>
+<p>Deze ID's worden daarbij <strong>niet opgeslagen</strong> op onze server; wel zijn ze korte
+tijd zichtbaar in server-access-logs. Op de server is geen naam, e-mailadres of
+apparaataanduiding aan deze aanroepen gekoppeld. De uitzondering is <strong>pushmeldingen</strong>
+(zie §1c): als je die aanzet, worden de ID's van je gevolgde rijders wél opgeslagen zolang de
+meldingen aan staan, zodat we gericht kunnen pushen.</p>
 
 <h2>2. Waarom verwerken wij deze gegevens?</h2>
 <ul>
@@ -657,11 +669,11 @@ per device:</p>
 </ul>
 <p>The legal basis is your <strong>consent</strong> — you turn the notifications on
 yourself and can turn them off again at any time, after which the subscription is
-deleted. In the public app the skaters you follow are normally kept <strong>only
-locally</strong> on your device; <strong>only</strong> when you enable push notifications
-are those internal IDs sent to our server so notifications can be targeted. A public
-push subscription has <strong>no name or e-mail address</strong> attached to it. Expired
-or revoked subscriptions are deleted automatically.</p>
+deleted. Specifically for push notifications, the internal IDs of the skaters you follow and
+your push subscription are <strong>stored</strong> on the server for as long as notifications
+are enabled. A public push subscription has <strong>no name or e-mail address</strong> attached
+to it. Expired or revoked subscriptions are deleted automatically. See §1g for the broader
+server interaction with your follow list in the public app.</p>
 <p><strong>Delivery via your browser's push service:</strong> to reach your device, a
 notification is routed through the push service of your browser vendor — Google
 (Android/Chrome), Mozilla (Firefox) or Apple (Safari/iPhone). They receive the technical
@@ -746,13 +758,25 @@ protection (recital 38 GDPR). We take this into account as follows:</p>
         be exercised on a minor's behalf by the parent/guardian.</li>
 </ul>
 
-<h2>1g. Organisation navigation (public app)</h2>
-<p>In the public app you can open an organisation to view its <strong>schedule, announcements
-and general information</strong>. To tailor that content to the <strong>skaters you follow</strong>
-— for example which races held by that organisation they competed in — we briefly send their
-internal IDs to our server when you open the tab. These IDs are <strong>not stored</strong>;
-they are visible in server access logs for a short time. No name, email address or device
-identifier is linked to this call on the server.</p>
+<h2>1g. Follow list — server interaction in the public app</h2>
+<p>The list of <strong>skaters you follow</strong>, which you compile yourself, is kept in your
+browser's local storage in the public app (not on our server). We do send the internal IDs of
+those skaters to our server <strong>briefly</strong> whenever the app needs that information,
+for example to:</p>
+<ul>
+    <li>fetch the <strong>schedule, heat and result data</strong> for a skater you follow (so
+        that the "my races" and "my result" views work);</li>
+    <li><strong>highlight races in the schedule</strong> in which a skater you follow is
+        competing;</li>
+    <li>in the <strong>organisation navigation</strong>, show only the organisations and races
+        in which the skaters you follow have participated, and indicate per race which of them
+        did.</li>
+</ul>
+<p>These IDs are <strong>not stored</strong> on our server in this flow; they are visible in
+server access logs for a short time. No name, email address or device identifier is linked to
+these calls on the server. The exception is <strong>push notifications</strong> (see §1c): if
+you enable those, the IDs of the skaters you follow <em>are</em> stored for as long as
+notifications are enabled, so that we can target them.</p>
 
 <h2>2. Why do we process this data?</h2>
 <ul>
