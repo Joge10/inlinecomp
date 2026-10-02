@@ -174,9 +174,13 @@ organisatie. Zet je dit aan, dan verwerken wij per apparaat:</p>
 </ul>
 <p>De grondslag is jouw <strong>toestemming</strong> — je zet de meldingen zelf aan en kunt
 ze op elk moment weer uitzetten, waarna het abonnement wordt verwijderd. In de publieke app
-worden je gevolgde rijders normaal alléén lokaal op je toestel bewaard; <strong>alleen</strong>
-wanneer je pushmeldingen aanzet, worden die interne ID's naar onze server
-gestuurd om de meldingen te kunnen richten. Aan een publiek push-abonnement is <strong>geen naam of
+worden je gevolgde rijders normaal alléén lokaal op je toestel bewaard. Hun interne ID's
+worden in twee situaties kortstondig naar onze server gestuurd: (1) wanneer je
+<strong>pushmeldingen</strong> aanzet, om de meldingen te kunnen richten, en (2) wanneer je
+de <strong>organisatie-navigatie</strong> opent (de lijst van organisaties waar je rijders aan
+hebben meegedaan, en de agenda van zo'n organisatie), om de resultaten voor jouw gevolgde rijders
+te kunnen filteren. In het tweede geval worden ze niet opgeslagen, wel zijn ze kortstondig
+zichtbaar in server-access-logs. Aan een publiek push-abonnement is <strong>geen naam of
 e-mailadres</strong> gekoppeld. Verlopen of ingetrokken abonnementen worden automatisch verwijderd.</p>
 <p><strong>Bezorging via je browser-push-dienst:</strong> om de melding op je toestel te
 krijgen, loopt deze via de push-dienst van je browser-leverancier — Google (Android/Chrome),
