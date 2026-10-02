@@ -1198,13 +1198,13 @@ function _rerenderActiveTab() {
         overz.remove();
         toonMeldingenOverzicht();
     }
-    // Fase 5a: dynamische content in wedstrijd-modal + org-detail-view wordt
-    // via t() in template-literals geschreven; die blijven in de oude taal
-    // hangen bij een taalwissel. Herbouwen zodat alle labels/periode-headers/
-    // tag-tekst in de nieuwe taal verschijnen. Caches blijven staan — geen
+    // Fase 5a: dynamische content in hub-view + org-detail-view wordt via
+    // t() in template-literals geschreven; die blijft in de oude taal hangen
+    // bij een taalwissel. Herbouwen zodat alle labels/periode-headers/tag-
+    // tekst in de nieuwe taal verschijnen. Caches blijven staan — geen
     // refetch, alleen re-render.
-    const wmodal = document.getElementById('wedstrijd-modal');
-    if (wmodal && wmodal.classList.contains('open')) {
+    const hub = document.getElementById('hub-view');
+    if (hub && !hub.hidden) {
         const actieveTab = document.querySelector('.wmodal-tab.actief')?.dataset.tab;
         if (actieveTab === 'wedstrijden' && typeof _renderWedstrijdLijst === 'function' && _wmodalComps) {
             _renderWedstrijdLijst();

@@ -105,6 +105,16 @@ safeFetch('?action=competitions').then(r=>r.json()).then(comps => {
         selComp.value = wantedComp;
         selComp.dispatchEvent(new Event('change'));
     }
+    // Fase 5a-UX-flat: bepaal view-state na init. Deeplink (?comp=…) met
+    // bestaande wedstrijd → wedstrijd-view (change-handler zet _setViewState
+    // via _activeerWedstrijd niet, dus hier). Anders → hoofdview (hub) met
+    // Wedstrijden-tab, inclusief laden van kaartlijst zodat de "Laden…"-
+    // placeholder niet blijft staan.
+    if (wantedComp && selComp.value === wantedComp) {
+        _setViewState('wedstrijd');
+    } else {
+        toonHubView('wedstrijden');
+    }
 }).catch(() => { selComp.innerHTML = `<option value="">${esc(t('opt_fout_laden'))}</option>`; });
 
 selComp.addEventListener('change', async () => {
@@ -541,41 +551,59 @@ function openSetupModal() {
     _updateSetupModalMax();
 }
 
-// ── Wedstrijd-modal (fase 5a) ────────────────────────────────────────────
-// Nieuwe modal voor wedstrijd-selectie + organisatie-dimensie + instellingen.
-// Opent via klik op setup-strip (hele strook, incl. pennetje). De + bij
-// de kids-tabs opent nog altijd de oude #setup-modal (voor rijder-beheer).
-// Fase 5b: oude modal reduceren tot pure rijder-zoek, push naar settings-tab.
+// ── Hub-view (fase 5a-UX-flat) ───────────────────────────────────────────
+// Hoofdview met 3 tabs (Wedstrijden/Organisaties/Instellingen). Was eerst
+// een modal (#wedstrijd-modal), is nu een inline top-level view: default
+// zichtbaar bij app-start, verborgen zodra een wedstrijd actief is of een
+// org-detail-view wordt getoond. Via de ←-knop in de setup-strip of in de
+// org-view terug naar hub.
+//
+// 3 view-states (via _setViewState):
+//   - 'hub'       → hub-view zichtbaar, strip + resultaat verborgen
+//   - 'wedstrijd' → hub verborgen, strip + resultaat zichtbaar
+//   - 'org'       → hub + strip verborgen, resultaat zichtbaar (met org-view)
 const _RECENT_WEDSTRIJDEN_KEY    = 'ic_pub_recent_wedstrijden';
 const _RECENT_WEDSTRIJDEN_MAX    = 8;
 const _RECENT_WEDSTRIJDEN_MAX_MS = 30 * 24 * 60 * 60 * 1000;   // 30 dagen
 let _wmodalComps          = null;   // cache van ?action=competitions-response
 let _wmodalSeizoen        = null;   // actieve seizoen (kalenderjaar als number)
-let _wmodalLaatstKozenComp = null;  // comp-id net gekozen uit wmodal → auto-prompt rijder-modal als volglijst leeg blijkt
+let _wmodalLaatstKozenComp = null;  // comp-id net gekozen uit hub → auto-prompt rijder-modal als volglijst leeg blijkt
 
-function openWedstrijdModal() {
-    const m = document.getElementById('wedstrijd-modal');
-    if (m) m.classList.add('open');
-    document.body.style.overflow = 'hidden';
+// Centrale view-state helper. 'hub' = hoofdview, 'wedstrijd' = wedstrijd-
+// content (strip + chips + programma/heats/…), 'org' = organisatie-detail
+// (strip verborgen, alleen org-view in #resultaat).
+function _setViewState(mode) {
+    const hub   = document.getElementById('hub-view');
+    const strip = document.getElementById('setup-strip');
+    const res   = document.getElementById('resultaat');
+    if (hub)   hub.hidden   = (mode !== 'hub');
+    if (strip) strip.hidden = (mode !== 'wedstrijd');
+    if (res)   res.hidden   = (mode === 'hub');
+}
+// Hub tonen (aangeroepen vanuit setup-strip klik en vanuit org-view-terug).
+// Behoudt onclick-naam-contract met index.php (setup-strip onclick).
+function toonHubView(tab) {
+    _setViewState('hub');
     _invalideerWedstrijdModalCaches();
-    switchWedstrijdTab('wedstrijden');
-    _laadWedstrijdLijst();
+    switchWedstrijdTab(tab || 'wedstrijden');
+    if ((tab || 'wedstrijden') === 'wedstrijden') _laadWedstrijdLijst();
 }
 // Alle caches die aan volglijst/wedstrijd-publicatie hangen invalideren.
 // Server-side max-age=30/60 vangt eventuele dubbele requests op bij snel
-// open/dicht/open. Ook aan te roepen vanuit andere flows (bv. kinderen-
-// wijziging die niet via modal-close loopt — zie _saveKids).
+// hub-open/dicht/open. Ook aan te roepen vanuit andere flows (bv. kinderen-
+// wijziging die niet via hub-close loopt — zie _saveKids).
 function _invalideerWedstrijdModalCaches() {
     _wmodalComps        = null;
     _wmodalOrgCache     = null;
     _wmodalOrgSig       = null;
     for (const k of Object.keys(_orgWedstrijdenCache)) delete _orgWedstrijdenCache[k];
 }
-function closeWedstrijdModal() {
-    const m = document.getElementById('wedstrijd-modal');
-    if (m) m.classList.remove('open');
-    document.body.style.overflow = '';
-}
+// Backwards-compat alias: nog door andere JS-paden gebruikt (bv. als er in
+// de toekomst code is die refereert aan "modal open"). Nu zet 'ie view-state
+// op 'hub' zonder verdere caching-reset — gebruikt door openWedstrijdModal()
+// als eerste stap.
+function openWedstrijdModal() { toonHubView('wedstrijden'); }
+function closeWedstrijdModal() { _setViewState('wedstrijd'); }
 function switchWedstrijdTab(tabId) {
     document.querySelectorAll('.wmodal-tab').forEach(t => {
         const match = t.dataset.tab === tabId;
@@ -781,6 +809,7 @@ function _mndKort(d) {
 function _activeerWedstrijd(compId) {
     _recentBekekenPush(compId);
     _wmodalLaatstKozenComp = compId;   // signaal naar selComp-change-handler
+    _setViewState('wedstrijd');        // hub + org-view uit, strip + resultaat aan
     const selComp = document.getElementById('sel-comp');
     if (!selComp) return;
     if (!selComp.querySelector(`option[value="${CSS.escape(compId)}"]`)) {
@@ -949,6 +978,7 @@ let _eigenRijdersMap = null;       // Map(person_id → kid-record) voor pil-naa
 
 function _toonOrganisatieView(org) {
     if (!divResult) return;
+    _setViewState('org');   // verberg hub + setup-strip, laat alleen org-view in #resultaat
     const logo = org.logo_path
         ? `<img class="org-view-logo" src="../${esc(org.logo_path)}" alt="${esc(org.naam)}">`
         : `<div class="org-view-logo org-view-logo--letters">${esc(_orgInitialen(org.naam))}</div>`;
@@ -1191,7 +1221,9 @@ function _kiesWedstrijdUitOrgView(compId) {
 function _terugUitOrganisatieView() {
     _wmodalAktieveOrg = null;
     divResult.innerHTML = '';
-    if (_kinderen.length) renderKinderen();
+    // Terug naar hub (hoofdview) op Organisaties-tab — niet terug naar
+    // wedstrijd-view: Geert's UX-flat (fase 5a-UX-flat).
+    toonHubView('organisaties');
 }
 
 // ── Einde Organisaties-tab ────────────────────────────────────────────────
@@ -1461,6 +1493,12 @@ function toonRijderData(data, startIdx, snr, prog) {
 function renderKinderen() {
     // Setup-strip volgt de _kinderen-state — ook bij lege lijst updaten.
     updateSetupStrip();
+    // Safety-net: als er een actieve wedstrijd + rijders is, moeten we in
+    // wedstrijd-view zijn (strip + resultaat zichtbaar). Zonder deze call
+    // kan de setup-strip hidden blijven na een race-conditie (bv. een
+    // snelle sequence van hub/org-switches gevolgd door een wedstrijd-
+    // load) — dan ziet de user content zonder terug-knop.
+    if (_kinderen.length && selComp.value) _setViewState('wedstrijd');
     if (!_kinderen.length) { divResult.innerHTML = ''; return; }
     // Bij render van een rijder-tab: reset klap-state naar default-collapsed.
     _progIngeklaptPub.clear();

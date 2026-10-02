@@ -254,7 +254,7 @@ if (isset($actionRoutes[$action])) {
         <button class="btn-sluit" id="pwa-sluit" data-i18n-title="pwa_btn_sluit" title="Sluiten">&times;</button>
     </div>
 
-    <div id="profiel-promo" class="pwa-banner">
+    <div id="profiel-promo" class="pwa-banner" hidden>
         <div class="pwa-banner-tekst">
             <b data-i18n="profiel_promo_titel">Nieuw: Mijn InlineComp</b>
             <span data-i18n="profiel_promo_uitleg">Je persoonlijke profiel met records &amp; progressie</span>
@@ -264,66 +264,27 @@ if (isset($actionRoutes[$action])) {
         <button class="btn-sluit" id="profiel-promo-sluit" type="button" data-i18n-title="pwa_btn_sluit" title="Sluiten">&times;</button>
     </div>
 
-    <!-- Setup-strook: klikbaar → opent modal met wedstrijd-keuze + rijder-
-         zoek. Vervangt de altijd-zichtbare stap 1 + 2 secties zodat er meer
-         verticale ruimte over is voor het programma zelf. -->
-    <div class="setup-strip" id="setup-strip" onclick="openWedstrijdModal()" data-i18n-title="setup_strip_edit_title" title="Wijzig wedstrijd">
+    <!-- Setup-strook: toont de actieve wedstrijd. Klik op ←-knop = terug naar
+         hoofdview (hub) met Wedstrijden-tab. Alleen zichtbaar als een
+         wedstrijd actief is; in hub/organisatie-view verborgen. Visueel
+         gelijk aan .org-view-header voor consistentie tussen de twee views. -->
+    <div class="setup-strip" id="setup-strip" hidden>
+        <button class="setup-strip-edit" type="button" onclick="toonHubView('wedstrijden')" data-i18n-title="org_view_terug" title="Terug">&lsaquo;</button>
         <div class="setup-strip-tekst" id="setup-strip-tekst">
             <span class="setup-strip-empty" data-i18n="setup_strip_leeg">Kies je wedstrijd…</span>
         </div>
-        <button class="setup-strip-edit" type="button" data-i18n-title="setup_strip_edit_title" title="Wijzigen">✎</button>
     </div>
 
     <div id="resultaat"></div>
-</div>
 
-<!-- Rijder-zoek-modal (voorheen "setup-modal"). Fase 5a-2: wedstrijd-selectie
-     verhuisd naar #wedstrijd-modal; deze modal is nu uitsluitend voor rijder-
-     zoek + volglijst-beheer. Opent via de "+"-knop bij de kids-tabs én
-     automatisch na een wedstrijd-keuze als de volglijst nog leeg is.
-     De hidden select/filter-chips blijven in DOM — bestaande JS-flows
-     (filterComps/change-handler/direct-link ?comp=…) gebruiken ze nog. -->
-<div class="setup-modal-overlay" id="setup-modal" onclick="if(event.target===this)closeSetupModal()">
-    <div class="setup-modal-box">
-        <button class="setup-modal-close" type="button" onclick="closeSetupModal()"
-                data-i18n-title="pwa_btn_sluit" title="Sluiten">&times;</button>
-        <h2 class="setup-modal-titel" data-i18n="setup_modal_titel_rijder">Rijder zoeken</h2>
-        <div id="setup-volglijst" class="setup-volglijst"></div>
-
-        <!-- Verborgen wedstrijd-select + filter-chips: nog in DOM voor
-             bestaande JS-flows, niet getoond in de UI. -->
-        <select id="sel-comp" hidden><option value="" data-i18n="opt_laden">Laden…</option></select>
-        <div class="filter-rij" hidden>
-            <input type="checkbox" id="chk-oud">
-            <input type="checkbox" id="chk-vandaag" checked>
-            <input type="checkbox" id="chk-toekomst">
-        </div>
-        <div id="comp-info" class="comp-info" hidden></div>
-
-        <div id="stap-rijder" class="rijder-zoek">
-            <div class="rijder-zoek-label" data-i18n="setup_rijder_label">Startnummer, licentie of achternaam</div>
-            <input type="text" id="inp-snr" data-i18n-placeholder="zoek_placeholder" placeholder="Startnummer, licentienr of achternaam…" autocomplete="off" inputmode="search">
-        </div>
-        <button class="btn-zoek" id="btn-zoek" data-i18n="btn_zoeken" disabled>Zoeken</button>
-        <div id="setup-melding" class="setup-melding" aria-live="polite"></div>
-        <div id="setup-max-hint" class="setup-max-hint" hidden></div>
-        <button class="setup-modal-klaar" type="button" onclick="closeSetupModal()" data-i18n="pwa_btn_sluit">Sluiten</button>
-    </div>
-</div>
-
-<!-- Wedstrijd-modal (fase 5a): kaart-lijst wedstrijd-selectie + organisaties-
-     dimensie + instellingen. Opent via klik op de setup-strip (pennetje incluis)
-     én bij first-of-day. De oude setup-modal is voortaan alleen voor rijder-
-     beheer (gevolgde chips + zoek), opent via de "+"-knop bij de kids-tabs. -->
-<div class="setup-modal-overlay" id="wedstrijd-modal" onclick="if(event.target===this)closeWedstrijdModal()">
-    <div class="setup-modal-box wmodal-box">
-        <button class="setup-modal-close" type="button" onclick="closeWedstrijdModal()"
-                data-i18n-title="pwa_btn_sluit" title="Sluiten">&times;</button>
-        <h2 class="setup-modal-titel wmodal-titel">
-            <span class="wmodal-titel-ico">🔎</span>
-            <span data-i18n="wmodal_titel">Wat wil je bekijken?</span>
-        </h2>
-
+    <!-- Hub-view (hoofdview): tabs Wedstrijden/Organisaties/Instellingen,
+         zichtbaar als startscherm en wanneer je ← in de setup-strip of org-
+         view indrukt. Als een wedstrijd actief wordt (keuze uit Wedstrijden-
+         tab, keuze binnen org-view, of ?comp=UUID in URL) wordt deze view
+         verborgen en springt de app naar de wedstrijd-view (setup-strip +
+         #resultaat). Organisatie-view verbergt zowel hub als setup-strip,
+         laat alleen org-content in #resultaat staan. -->
+    <div class="hub-view" id="hub-view">
         <div class="wmodal-tabs" role="tablist">
             <button type="button" class="wmodal-tab actief" data-tab="wedstrijden"
                     role="tab" aria-selected="true" aria-controls="wmodal-pane-wedstrijden"
@@ -377,8 +338,40 @@ if (isset($actionRoutes[$action])) {
                 <p class="wmodal-placeholder-sub" data-i18n="setup_settings_leeg_sub">Zoek via de "+" bij je wedstrijd eerst een rijder — dan kun je push aanzetten.</p>
             </div>
         </div>
+    </div>
+</div>
 
-        <button class="setup-modal-klaar" type="button" onclick="closeWedstrijdModal()" data-i18n="pwa_btn_sluit">Sluiten</button>
+<!-- Rijder-zoek-modal (voorheen "setup-modal"). Fase 5a-2: wedstrijd-selectie
+     verhuisd naar #wedstrijd-modal; deze modal is nu uitsluitend voor rijder-
+     zoek + volglijst-beheer. Opent via de "+"-knop bij de kids-tabs én
+     automatisch na een wedstrijd-keuze als de volglijst nog leeg is.
+     De hidden select/filter-chips blijven in DOM — bestaande JS-flows
+     (filterComps/change-handler/direct-link ?comp=…) gebruiken ze nog. -->
+<div class="setup-modal-overlay" id="setup-modal" onclick="if(event.target===this)closeSetupModal()">
+    <div class="setup-modal-box">
+        <button class="setup-modal-close" type="button" onclick="closeSetupModal()"
+                data-i18n-title="pwa_btn_sluit" title="Sluiten">&times;</button>
+        <h2 class="setup-modal-titel" data-i18n="setup_modal_titel_rijder">Rijder zoeken</h2>
+        <div id="setup-volglijst" class="setup-volglijst"></div>
+
+        <!-- Verborgen wedstrijd-select + filter-chips: nog in DOM voor
+             bestaande JS-flows, niet getoond in de UI. -->
+        <select id="sel-comp" hidden><option value="" data-i18n="opt_laden">Laden…</option></select>
+        <div class="filter-rij" hidden>
+            <input type="checkbox" id="chk-oud">
+            <input type="checkbox" id="chk-vandaag" checked>
+            <input type="checkbox" id="chk-toekomst">
+        </div>
+        <div id="comp-info" class="comp-info" hidden></div>
+
+        <div id="stap-rijder" class="rijder-zoek">
+            <div class="rijder-zoek-label" data-i18n="setup_rijder_label">Startnummer, licentie of achternaam</div>
+            <input type="text" id="inp-snr" data-i18n-placeholder="zoek_placeholder" placeholder="Startnummer, licentienr of achternaam…" autocomplete="off" inputmode="search">
+        </div>
+        <button class="btn-zoek" id="btn-zoek" data-i18n="btn_zoeken" disabled>Zoeken</button>
+        <div id="setup-melding" class="setup-melding" aria-live="polite"></div>
+        <div id="setup-max-hint" class="setup-max-hint" hidden></div>
+        <button class="setup-modal-klaar" type="button" onclick="closeSetupModal()" data-i18n="pwa_btn_sluit">Sluiten</button>
     </div>
 </div>
 

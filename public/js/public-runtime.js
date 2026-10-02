@@ -524,7 +524,9 @@ document.getElementById('pwa-sluit')?.addEventListener('click', () => {
 (function () {
     const el = document.getElementById('profiel-promo');
     if (!el) return;
-    try { if (localStorage.getItem('profiel-promo-nooit')) el.style.display = 'none'; } catch (e) {}
+    // Default hidden in HTML (voorkomt FOUC-ruimte boven hub bij app-start).
+    // Tonen als user de banner nog niet permanent heeft weggezet.
+    try { if (!localStorage.getItem('profiel-promo-nooit')) el.hidden = false; } catch (e) { el.hidden = false; }
     const onthoudAlsGevinkt = () => {
         const niet = document.getElementById('profiel-promo-niet');
         if (niet && niet.checked) { try { localStorage.setItem('profiel-promo-nooit', '1'); } catch (e) {} }

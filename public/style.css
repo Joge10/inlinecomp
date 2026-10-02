@@ -472,7 +472,7 @@ header .sub { font-size: .95rem; opacity: .8; margin-top: 6px; text-align: cente
 .nieuw-titel           { margin-top: 24px; padding-top: 12px; border-top: 2px solid #eef2f6; }
 .nieuw-intro           { font-size: .88rem; color: #555; }
 
-.container { max-width: 720px; margin: 0 auto; padding: 6px; padding-bottom: 80px; }
+.container { max-width: 720px; margin: 0 auto; padding: 0 6px 80px; }
 
 /* ── Stappen ── */
 .stap { margin-bottom: 16px; }
@@ -743,33 +743,39 @@ select:focus, input:focus { border-color: var(--middenblauw); outline: none; }
 /* ── Setup-strook: klikbare compacte header met huidige wedstrijd-keuze,
       opent de setup-modal voor wijzigen. Bespaart veel verticale ruimte
       op mobiel t.o.v. de oude altijd-zichtbare stap 1/2 secties. ─── */
+/* Setup-strip = header van de wedstrijd-view. Styling matcht .org-view-header
+   zodat beide views (wedstrijd / organisatie) visueel hetzelfde oogpunt
+   hebben. Alleen de ←-knop is clickbaar (zoals bij org-view-header). */
 .setup-strip {
-    display: flex; align-items: center; gap: 8px;
-    padding: 8px 12px;
+    display: flex; align-items: center; gap: 12px;
+    padding: 14px 16px;
     background: #fff;
-    border: 1px solid #d3dbe3;
-    border-radius: 6px;
-    cursor: pointer;
-    margin: 8px 0;
-    transition: background .12s, border-color .12s;
+    border: 1px solid #dde3ea;
+    border-radius: 10px;
+    margin-bottom: 12px;
 }
-.setup-strip:hover { background: #f5f8fc; border-color: #b3cae6; }
 .setup-strip-tekst {
     flex: 1 1 auto; min-width: 0;
-    overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
-    color: #1a3a5c; font-size: .9rem;
+    font-size: 1.05rem; font-weight: 700; color: var(--blauw);
+    overflow: hidden; text-overflow: ellipsis;
+    display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical;
 }
-.setup-strip-tekst b { color: #1a3a5c; }
+.setup-strip-tekst b { color: var(--blauw); font-weight: 700; }
 .setup-strip-tekst small {
-    display: block; font-size: .74rem; color: #666; font-weight: normal;
-    margin-top: 1px;
+    display: block; font-size: .78rem; color: #666; font-weight: normal;
+    margin-top: 2px;
 }
-.setup-strip-empty { color: #888; font-style: italic; font-size: .88rem; }
+.setup-strip-empty { color: #888; font-style: italic; font-weight: normal; }
+/* ←-knop: identiek aan .org-view-terug (rond vlak, grijs, blauwe chevron). */
 .setup-strip-edit {
-    background: none; border: 0;
-    color: var(--blauw); font-size: 1.05rem;
-    padding: 4px 8px; cursor: pointer; flex-shrink: 0;
+    background: #f4f6f8; border: 1px solid #dde3ea;
+    width: 32px; height: 32px; border-radius: 50%;
+    font-size: 1.3rem; color: var(--blauw);
+    cursor: pointer; line-height: 1;
+    display: flex; align-items: center; justify-content: center;
+    flex-shrink: 0;
 }
+.setup-strip-edit:hover { background: #e9eef5; }
 /* Modal-overlay voor setup (stap 1 + 2). Opent bij klik op setup-strip
    of automatisch bij eerste bezoek van de dag (localStorage-detectie). */
 .setup-modal-overlay {
@@ -1417,54 +1423,49 @@ select:focus, input:focus { border-color: var(--middenblauw); outline: none; }
 #ptr.laadt     { background: var(--blauw); }
 
 /* ──────────────────────────────────────────────────────────────────────
-   Wedstrijd-modal (fase 5a) — kaart-lijst voor wedstrijd-selectie met
-   periode-grouping en seizoen-selector, 3 tabs (Wedstrijden/Organisaties/
-   Instellingen). Hergebruikt .setup-modal-overlay/-box/-close/-klaar van
-   de bestaande setup-modal; eigen .wmodal-*-prefix voor nieuwe elementen.
+   Hub-view (fase 5a-UX-flat) — hoofdview met tabs Wedstrijden/Organisaties/
+   Instellingen. Was eerst een modal (.setup-modal-overlay/-box) maar is
+   nu een inline top-level view: default zichtbaar bij app-start, verborgen
+   zodra er een wedstrijd actief is of een org-view wordt geopend. Behoudt
+   .wmodal-*-prefix voor tabs/panes/kaarten (reuse van bestaande styling).
    ────────────────────────────────────────────────────────────────────── */
-/* Wedstrijd-modal erft .setup-modal-box styling (padding 18px 16px), geen
-   eigen box-override nodig — dan staat de Sluiten-knop automatisch
-   ingekaderd zoals in de rijder-modal. */
-.wmodal-titel {
-    display: flex; align-items: center; gap: 8px;
-    margin: 0 0 12px;
-}
-.wmodal-titel-ico { font-size: 1.1rem; }
+.hub-view { margin: 0; padding: 0; }
+.hub-view[hidden] { display: none; }
 
-/* Tabs — zelfde ritueel als content-tabs (programma/heats/…): oranje
-   underline op actief, blauw tekst op actief, grijs op inactief. */
+/* Tabs — identiek aan .tabs/.tab-btn van de wedstrijd-view (programma/heats/
+   rondes/uitslagen) voor UI-consistentie. Platte strook met oranje underline
+   op actief; icoon boven label via flex-column (want HTML heeft aparte spans
+   voor icoon en tekst, i.p.v. de \n-truc van .tab-btn). */
 .wmodal-tabs {
     display: flex;
+    background: var(--wit);
     border-bottom: 2px solid #dde3ea;
-    margin: 0 0 12px;
+    margin: 0;
     flex-shrink: 0;
 }
-/* Tabs stapelen icoon BOVEN label. Zo passen alle 4 talen op smal scherm
-   zonder tekst te hoeven inkorten (NL "Instellingen"/DE "Einstellungen"/
-   FR "Paramètres" zijn lang; horizontaal zouden ze afbreken op <420px). */
 .wmodal-tab {
-    flex: 1; min-width: 0;
+    flex: 1 1 0; min-width: 0;
     background: none; border: none;
-    padding: 6px 4px 7px;
+    padding: 8px 2px;
     text-align: center;
-    font-size: .7rem; font-weight: 600;
+    font-size: .72rem; font-weight: 600;
     color: #888;
     border-bottom: 3px solid transparent;
     margin-bottom: -2px;
     cursor: pointer;
     display: flex; flex-direction: column; align-items: center; justify-content: center;
     gap: 2px;
-    line-height: 1.1;
+    line-height: 1.2;
     overflow: hidden;
 }
 .wmodal-tab > span:not(.wmodal-tab-ico) {
     overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 100%;
 }
-.wmodal-tab:hover         { color: #555; }
-.wmodal-tab.actief        { color: var(--blauw); border-bottom-color: var(--oranje); }
-.wmodal-tab-ico           { font-size: 1.15rem; line-height: 1; }
-.wmodal-pane              { padding: 0 0 8px; }
-.wmodal-pane[hidden]      { display: none; }
+.wmodal-tab:hover  { color: #555; }
+.wmodal-tab.actief { color: var(--blauw); border-bottom-color: var(--oranje); }
+.wmodal-tab-ico    { font-size: 1rem; line-height: 1; }
+.wmodal-pane       { padding: 12px 0 8px; }
+.wmodal-pane[hidden] { display: none; }
 
 /* Seizoen-selector bovenin Wedstrijden-tab */
 .wmodal-seizoen-rij {
@@ -1662,19 +1663,18 @@ select:focus, input:focus { border-color: var(--middenblauw); outline: none; }
 
 /* Org-view tabs (Agenda / Algemeen / Nieuws) — zelfde ritueel als wmodal-tabs:
    icoon boven label, oranje underline op actief, binnen een witte kaart-rand. */
+/* Org-view-tabs — identiek aan .tabs/.tab-btn (UI-consistentie met wedstrijd-
+   view én hub-view tabs). Platte strook met oranje underline op actief. */
 .org-view-tabs {
     display: flex;
-    background: #fff;
-    border: 1px solid #dde3ea;
-    border-radius: 10px 10px 0 0;
+    background: var(--wit);
     border-bottom: 2px solid #dde3ea;
-    margin-bottom: 0;
-    overflow: hidden;
+    margin: 0;
 }
 .org-view-tab {
-    flex: 1; min-width: 0;
+    flex: 1 1 0; min-width: 0;
     background: none; border: none;
-    padding: 8px 4px 9px;
+    padding: 8px 2px;
     text-align: center;
     font-size: .72rem; font-weight: 600;
     color: #888;
@@ -1682,19 +1682,13 @@ select:focus, input:focus { border-color: var(--middenblauw); outline: none; }
     margin-bottom: -2px;
     cursor: pointer;
     display: flex; flex-direction: column; align-items: center; justify-content: center;
-    gap: 2px; line-height: 1.1;
+    gap: 2px; line-height: 1.2;
     overflow: hidden;
 }
-.org-view-tab:hover   { color: #555; }
-.org-view-tab.actief  { color: var(--blauw); border-bottom-color: var(--oranje); }
-.org-view-tab-ico     { font-size: 1.15rem; line-height: 1; }
-.org-view-pane {
-    background: #fff;
-    border: 1px solid #dde3ea;
-    border-top: none;
-    border-radius: 0 0 10px 10px;
-    padding: 14px;
-}
+.org-view-tab:hover  { color: #555; }
+.org-view-tab.actief { color: var(--blauw); border-bottom-color: var(--oranje); }
+.org-view-tab-ico    { font-size: 1rem; line-height: 1; }
+.org-view-pane       { padding: 12px 0 8px; }
 .org-view-pane[hidden] { display: none; }
 /* De placeholder binnen een pane hoort geen eigen rand te hebben (de pane
    heeft al een rand). Reset de rand-styling. */
