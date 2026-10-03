@@ -271,6 +271,7 @@ if (isset($actionRoutes[$action])) {
          gelijk aan .org-view-header voor consistentie tussen de twee views. -->
     <div class="setup-strip" id="setup-strip" hidden>
         <button class="setup-strip-edit" type="button" onclick="toonHubView('wedstrijden')" data-i18n-title="org_view_terug" title="Terug">&lsaquo;</button>
+        <img class="org-view-logo setup-strip-logo" id="setup-strip-logo" hidden alt="">
         <div class="setup-strip-tekst" id="setup-strip-tekst">
             <span class="setup-strip-empty" data-i18n="setup_strip_leeg">Kies je wedstrijd…</span>
         </div>

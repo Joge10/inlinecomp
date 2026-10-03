@@ -1696,6 +1696,54 @@ select:focus, input:focus { border-color: var(--middenblauw); outline: none; }
     background: transparent; border: none; padding: 24px 8px;
 }
 
+/* ──────────────────────────────────────────────────────────────────────
+   Wedstrijd-info-view (fase 5b-content) — standalone view bereikbaar via
+   klik op wedstrijd in de org-agenda. Header met datum-blok + titel; onder
+   een documenten-sectie (nu placeholder, later uit DB); knop "Open
+   wedstrijd" opent het reguliere programma/heats/rondes/uitslagen.
+   ────────────────────────────────────────────────────────────────────── */
+.wi-view { padding: 0; }
+.wi-view .org-view-header {
+    /* Datum-blok + titel-blok ipv logo + naam; verder zelfde kader-styling. */
+    gap: 12px;
+}
+.wi-datum-blok {
+    width: 48px; height: 48px;
+    background: var(--lichtblauw);
+    border-radius: 8px;
+    display: flex; flex-direction: column; align-items: center; justify-content: center;
+    flex-shrink: 0;
+}
+.wi-datum-dag { font-size: 1.1rem; font-weight: 700; color: var(--blauw); line-height: 1; }
+.wi-datum-mnd { font-size: .7rem; font-weight: 600; color: var(--blauw); text-transform: uppercase; margin-top: 2px; }
+.wi-titel-blok { flex: 1; min-width: 0; }
+.wi-naam {
+    font-size: 1.05rem; font-weight: 700; color: var(--blauw);
+    margin: 0;
+    overflow: hidden; text-overflow: ellipsis;
+    display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical;
+}
+.wi-plaats { font-size: .78rem; color: #666; margin-top: 2px; }
+.wi-documenten { margin: 12px 0; }
+.wi-placeholder {
+    background: #fff; border: 1px solid #dde3ea; border-radius: 10px;
+    padding: 24px 12px; text-align: center; color: #666;
+}
+.wi-placeholder-ico { font-size: 1.6rem; margin-bottom: 6px; }
+.wi-placeholder p { font-size: .9rem; font-weight: 600; color: #333; margin: 0; }
+.wi-placeholder-sub { font-size: .78rem; font-weight: normal; color: #666; margin-top: 4px; }
+.wi-open-wedstrijd {
+    width: 100%;
+    background: var(--oranje); color: #fff;
+    border: none; border-radius: 8px;
+    padding: 12px; font-size: .95rem; font-weight: 700;
+    cursor: pointer;
+    box-shadow: 0 2px 6px rgba(0,0,0,.1);
+}
+.wi-open-wedstrijd:hover,
+.wi-open-wedstrijd:focus { background: #d55608; }
+.wi-open-wedstrijd:active { transform: scale(.98); }
+
 /* Wedstrijd-kaart in org-agenda: hergebruikt .wmodal-kaart-styling maar
    kan disabled zijn (binnenkort/verborgen → niet klikbaar). */
 .wmodal-kaart.disabled {

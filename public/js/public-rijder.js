@@ -579,6 +579,9 @@ function _setViewState(mode) {
     if (hub)   hub.hidden   = (mode !== 'hub');
     if (strip) strip.hidden = (mode !== 'wedstrijd');
     if (res)   res.hidden   = (mode === 'hub');
+    // 'wedstrijdinfo' en 'org' tonen beide alleen #resultaat (strip + hub
+    // verborgen) — _rerenderActiveTab onderscheidt via _aktieveWedstrijdInfo /
+    // _wmodalAktieveOrg welke content er hangt.
 }
 // Hub tonen (aangeroepen vanuit setup-strip klik en vanuit org-view-terug).
 // Behoudt onclick-naam-contract met index.php (setup-strip onclick).
@@ -885,8 +888,17 @@ function _activeerWedstrijd(compId) {
             const o = document.createElement('option');
             o.value = c.id;
             o.textContent = c.name;
-            o.dataset.naam  = c.name;
-            o.dataset.datum = c.starts || '';
+            // Alle dataset-velden spiegelen die filterComps() ook zet — zonder
+            // deze mist de setup-strip het baan-logo én de footer-ticker
+            // (orglogo, baanlogo, sponsors) blijft leeg bij wedstrijden die via
+            // deze fallback-pad (hub-cache of org-cache) in sel-comp belanden.
+            o.dataset.naam           = c.name;
+            o.dataset.datum          = c.starts || '';
+            o.dataset.orgLogo        = c.org_logo ?? '';
+            o.dataset.orgNaam        = c.org_naam ?? '';
+            o.dataset.baanLogo       = c.baan_logo ?? '';
+            o.dataset.baanVereniging = c.baan_vereniging ?? '';
+            o.dataset.sponsors       = JSON.stringify(c.sponsors ?? []);
             selComp.appendChild(o);
         }
     }
@@ -1276,11 +1288,73 @@ function _wedstrijdLabel(c) {
 
 function _kiesWedstrijdUitOrgView(compId) {
     if (!compId) return;
-    _wmodalAktieveOrg = null;
-    _activeerWedstrijd(compId);
-    // De selComp.change-handler leegt divResult en vult 'm async met wedstrijd-
-    // content; de org-view verdwijnt zo automatisch. Expliciete terug-aanroep
-    // zou race-conditie geven, dus niet nodig.
+    // Fase 5b-UX: klik vanuit org-agenda gaat niet direct naar programma,
+    // maar naar een standalone wedstrijd-info-view met organisatie-
+    // specifieke documenten + een "Open wedstrijd"-knop die alsnog naar
+    // het programma schakelt. _wmodalAktieveOrg BLIJFT behouden zodat de
+    // terug-knop in de info-view ons terugbrengt naar de org-agenda.
+    const comps = _orgWedstrijdenCache[_wmodalAktieveOrg?.id] || [];
+    const comp  = comps.find(c => c.id === compId);
+    if (!comp) return;
+    _toonWedstrijdInfoView(comp);
+}
+
+// Wedstrijd-info-view (fase 5b-content): standalone view met wedstrijd-
+// specifieke documenten (infobulletin, flyer, programma-PDF, startlijst-PDF,
+// uitslag-PDF, enz.) + een "Open wedstrijd"-knop die het reguliere
+// programma/heats/rondes/uitslagen opent. Documenten komen later via een
+// nieuwe DB-tabel; voor nu is dit een skeleton met placeholder.
+let _aktieveWedstrijdInfo = null;   // bewaart comp-object voor taalwissel-rerender
+
+function _toonWedstrijdInfoView(comp) {
+    if (!divResult || !comp) return;
+    _aktieveWedstrijdInfo = comp;
+    _setViewState('org');   // zelfde zichtbaarheid als org-view: strip + hub uit
+    const d       = safeDatum(comp.starts);
+    const datum   = d ? `${d.getDate()} ${_mndKort(d)} ${d.getFullYear()}` : '';
+    const plaats  = comp.baan_vereniging ? esc(comp.baan_vereniging) : '';
+    divResult.innerHTML = `
+        <div class="wi-view" data-comp-id="${esc(comp.id)}">
+            <div class="org-view-header">
+                <button class="org-view-terug wi-terug" type="button"
+                        data-i18n-title="org_view_terug" title="${esc(t('org_view_terug'))}">&lsaquo;</button>
+                <div class="wi-datum-blok">
+                    <div class="wi-datum-dag">${d ? d.getDate() : '?'}</div>
+                    <div class="wi-datum-mnd">${d ? esc(_mndKort(d)) : ''}</div>
+                </div>
+                <div class="wi-titel-blok">
+                    <h2 class="wi-naam">${esc(comp.name)}</h2>
+                    ${plaats ? `<div class="wi-plaats">${plaats}</div>` : ''}
+                </div>
+            </div>
+            <div class="wi-documenten">
+                <div class="wi-placeholder">
+                    <div class="wi-placeholder-ico">📄</div>
+                    <p data-i18n="wi_documenten_binnenkort">${esc(t('wi_documenten_binnenkort'))}</p>
+                    <p class="wi-placeholder-sub" data-i18n="wi_documenten_binnenkort_sub">${esc(t('wi_documenten_binnenkort_sub'))}</p>
+                </div>
+            </div>
+            <button class="wi-open-wedstrijd" type="button" data-i18n="wi_open_wedstrijd">${esc(t('wi_open_wedstrijd'))}</button>
+        </div>`;
+    const terug = divResult.querySelector('.wi-terug');
+    if (terug) terug.addEventListener('click', _terugUitWedstrijdInfo);
+    const open  = divResult.querySelector('.wi-open-wedstrijd');
+    if (open)  open.addEventListener('click', () => {
+        _wmodalAktieveOrg = null;        // user verlaat org-context bewust
+        _aktieveWedstrijdInfo = null;
+        _activeerWedstrijd(comp.id);
+    });
+    if (typeof applyI18n === 'function') applyI18n(divResult);
+    divResult.scrollIntoView({ behavior: 'smooth', block: 'start' });
+}
+
+function _terugUitWedstrijdInfo() {
+    _aktieveWedstrijdInfo = null;
+    if (_wmodalAktieveOrg) {
+        _toonOrganisatieView(_wmodalAktieveOrg);
+    } else {
+        toonHubView('organisaties');
+    }
 }
 
 function _terugUitOrganisatieView() {
@@ -1370,24 +1444,29 @@ function closeSetupModal() {
     if (m) m.classList.remove('open');
     document.body.style.overflow = '';
 }
-// Update de strook met de huidige wedstrijd-naam + rijder(s). Wordt
-// aangeroepen bij wedstrijd-wissel, kind-add/remove, en na init.
+// Update de strook met de huidige wedstrijd-naam + baan-logo (als beschikbaar).
+// Styling matcht .org-view-header: logo (optioneel) + naam. Datum en rijder-
+// samenvatting zitten niet meer in de strip — die info staat al elders
+// (hub-kaart heeft datum, kids-chips hebben de rijdernaam).
 function updateSetupStrip() {
-    const el = document.getElementById('setup-strip-tekst');
+    const el   = document.getElementById('setup-strip-tekst');
+    const logo = document.getElementById('setup-strip-logo');
     if (!el) return;
-    const compNaam = selComp.selectedOptions[0]?.dataset?.naam || '';
-    const compDatum = selComp.selectedOptions[0]?.dataset?.datum || '';
-    // Rijder-samenvatting: bij 0 = niets, 1 = naam, 2+ = "N rijders".
-    let rijderStr = '';
-    if (_kinderen.length === 1) {
-        const p = _kinderen[0].data?.[_kinderen[0].kozen_idx ?? 0]?.persoon;
-        const nm = p?.full_name || _kinderen[0].snr;
-        rijderStr = `<small>${esc(nm)}</small>`;
-    } else if (_kinderen.length > 1) {
-        rijderStr = `<small>${_kinderen.length} ${esc(t('setup_strip_rijders'))}</small>`;
+    const opt      = selComp.selectedOptions[0];
+    const compNaam = opt?.dataset?.naam || '';
+    const baanLogo = opt?.dataset?.baanLogo || '';
+    if (logo) {
+        if (compNaam && baanLogo) {
+            logo.src    = '../' + baanLogo;
+            logo.alt    = opt?.dataset?.baanVereniging || '';
+            logo.hidden = false;
+        } else {
+            logo.hidden = true;
+            logo.removeAttribute('src');
+        }
     }
     if (compNaam) {
-        el.innerHTML = `<b>${esc(compNaam)}</b>${compDatum ? ` <small style="display:inline;color:#666">· ${esc(compDatum)}</small>` : ''}${rijderStr}`;
+        el.innerHTML = `<b>${esc(compNaam)}</b>`;
     } else {
         el.innerHTML = `<span class="setup-strip-empty">${esc(t('setup_strip_leeg'))}</span>`;
     }

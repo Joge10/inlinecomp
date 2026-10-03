@@ -92,6 +92,9 @@ const T = {
         org_tab_algemeen_binnenkort_sub: 'Reglementen, selectie-eisen en contactgegevens.',
         org_tab_nieuws_binnenkort: 'Nieuws komt hier binnenkort',
         org_tab_nieuws_binnenkort_sub: 'Mededelingen en aankondigingen van de organisatie.',
+        wi_documenten_binnenkort: 'Wedstrijd-documenten komen hier binnenkort',
+        wi_documenten_binnenkort_sub: 'Infobulletin, flyer, startlijst, uitslag en andere documenten voor deze wedstrijd.',
+        wi_open_wedstrijd: 'Open wedstrijd',
         org_agenda_komende: 'Komende wedstrijden',
         org_agenda_verleden: 'Afgelopen wedstrijden',
         org_wed_tag_publiek: 'PUBLIEK',
@@ -368,6 +371,9 @@ const T = {
         org_tab_algemeen_binnenkort_sub: 'Rules, qualification requirements and contact details.',
         org_tab_nieuws_binnenkort: 'News coming soon',
         org_tab_nieuws_binnenkort_sub: 'Announcements from the organisation.',
+        wi_documenten_binnenkort: 'Race documents coming soon',
+        wi_documenten_binnenkort_sub: 'Info bulletin, flyer, start list, results and other documents for this race.',
+        wi_open_wedstrijd: 'Open race',
         org_agenda_komende: 'Upcoming races',
         org_agenda_verleden: 'Past races',
         org_wed_tag_publiek: 'PUBLIC',
@@ -643,6 +649,9 @@ const T = {
         org_tab_algemeen_binnenkort_sub: 'Reglemente, Qualifikationsanforderungen und Kontaktdaten.',
         org_tab_nieuws_binnenkort: 'News folgen bald',
         org_tab_nieuws_binnenkort_sub: 'Mitteilungen der Organisation.',
+        wi_documenten_binnenkort: 'Wettkampf-Dokumente folgen bald',
+        wi_documenten_binnenkort_sub: 'Infobulletin, Flyer, Startliste, Ergebnisse und weitere Dokumente für diesen Wettkampf.',
+        wi_open_wedstrijd: 'Wettkampf öffnen',
         org_agenda_komende: 'Kommende Wettkämpfe',
         org_agenda_verleden: 'Vergangene Wettkämpfe',
         org_wed_tag_publiek: 'ÖFFENTLICH',
@@ -918,6 +927,9 @@ const T = {
         org_tab_algemeen_binnenkort_sub: 'Règlements, critères de qualification et coordonnées.',
         org_tab_nieuws_binnenkort: 'Actualités bientôt disponibles',
         org_tab_nieuws_binnenkort_sub: 'Annonces de l’organisation.',
+        wi_documenten_binnenkort: 'Documents de course à venir',
+        wi_documenten_binnenkort_sub: 'Bulletin d’information, affiche, liste de départ, résultats et autres documents pour cette course.',
+        wi_open_wedstrijd: 'Ouvrir la course',
         org_agenda_komende: 'Compétitions à venir',
         org_agenda_verleden: 'Compétitions passées',
         org_wed_tag_publiek: 'PUBLIQUE',
@@ -1212,7 +1224,11 @@ function _rerenderActiveTab() {
             _renderOrganisatieLijst(_wmodalOrgCache);
         }
     }
-    if (typeof _toonOrganisatieView === 'function' && _wmodalAktieveOrg) {
+    // Wedstrijd-info-view heeft voorrang: als die open staat, is _wmodalAktieveOrg
+    // misschien ook gezet, maar we willen de info-view herbouwen (niet terug naar org).
+    if (typeof _toonWedstrijdInfoView === 'function' && _aktieveWedstrijdInfo) {
+        _toonWedstrijdInfoView(_aktieveWedstrijdInfo);
+    } else if (typeof _toonOrganisatieView === 'function' && _wmodalAktieveOrg) {
         // Onthoud actieve org-tab vóór rebuild — _toonOrganisatieView
         // start default op 'agenda', wat na een taalwissel bij een gebruiker
         // die net Algemeen/Nieuws aan het bekijken was een tab-sprong geeft.
