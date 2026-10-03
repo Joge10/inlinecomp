@@ -191,6 +191,7 @@ $actionRoutes = [
     'serie_klassement' => 'public_serie_klassement.php',
     'organisaties'     => 'public_organisaties.php',
     'org_wedstrijden'  => 'public_org_wedstrijden.php',
+    'mijn_wedstrijden' => 'public_mijn_wedstrijden.php',
 ];
 if (isset($actionRoutes[$action])) {
     define('INLINECOMP_PUBLIC_BOOTED', true);

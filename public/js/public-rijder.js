@@ -650,13 +650,34 @@ function _wmodalSettingsLeegUpdate() {
 // en render de kaart-lijst van het actieve seizoen. Reuses alleComps als die
 // al in memory zit; anders aparte fetch zodat we de modal onafhankelijk van
 // filterComps() kunnen openen.
+// license_key → person_id resolve-map voor legacy volglijst-items. Gevuld
+// door _laadWedstrijdLijst na de mijn_wedstrijden-fetch. Zonder dit mist
+// _eigenRijdersMap de pid-entries voor legacy items (die alleen een
+// license_key hebben), en krijgt de user ⭐-fallback i.p.v. voornaam.
+let _wmodalLicenseResolve = {};
+
 async function _laadWedstrijdLijst() {
     const lijst = document.getElementById('wmodal-wedstrijd-lijst');
     if (!lijst) return;
     try {
         if (!_wmodalComps) {
-            const res = await safeFetch('?action=competitions' + (DEMO_MODE ? '&demo=1' : ''));
-            _wmodalComps = await res.json();
+            // Parallel: competitions-lijst én eigen-rijder-markering per
+            // wedstrijd (voornaam-pillen op kaarten). mijn_wedstrijden levert
+            // {wedstrijden: {comp_id: pids}, licenses: {lkey: person_id}}
+            // alleen voor niet-demo wedstrijden; lege shape als volglijst leeg.
+            const vl = _volglijstEndpointParams(_loadKidsUitStorage());
+            const [resComps, resMijn] = await Promise.all([
+                safeFetch('?action=competitions' + (DEMO_MODE ? '&demo=1' : '')),
+                vl.empty ? Promise.resolve(null) : safeFetch('?action=mijn_wedstrijden' + vl.qs),
+            ]);
+            const comps = await resComps.json();
+            const mijn  = resMijn ? await resMijn.json() : { wedstrijden: {}, licenses: {} };
+            const wmap  = mijn.wedstrijden || {};
+            _wmodalLicenseResolve = mijn.licenses || {};
+            // Merge eigen_person_ids per wedstrijd (zelfde shape als server-
+            // side in public_org_wedstrijden al teruggeeft: comma-string).
+            for (const c of comps) c.eigen_person_ids = wmap[c.id] || null;
+            _wmodalComps = comps;
         }
         _vulSeizoenSelector(_wmodalComps);
         _renderWedstrijdLijst();
@@ -690,6 +711,19 @@ function _vulSeizoenSelector(comps) {
 function _renderWedstrijdLijst() {
     const lijst = document.getElementById('wmodal-wedstrijd-lijst');
     if (!lijst || !_wmodalComps) return;
+    // Volglijst → Map(person_id → kid-record) voor pil-naam-resolve in
+    // _kaartHtml. Vers maken bij elke render — volglijst kan intussen zijn
+    // gewijzigd en de cache-reset in _saveKids triggert deze render alsnog.
+    // Ook legacy items (alleen license_key) opnemen via de server-side
+    // license→person_id resolve-map; zonder dat zouden pil-pids niet
+    // matchen en krijgt user ⭐-fallback voor de legacy-gevolgde rijder.
+    _eigenRijdersMap = new Map();
+    for (const k of _loadKidsUitStorage()) {
+        if (k.person_id) _eigenRijdersMap.set(k.person_id, k);
+        else if (k.license_key && _wmodalLicenseResolve[k.license_key]) {
+            _eigenRijdersMap.set(_wmodalLicenseResolve[k.license_key], k);
+        }
+    }
     const nu = new Date();
     const vandaag = new Date(nu.getFullYear(), nu.getMonth(), nu.getDate());
     const overmorgen = new Date(vandaag); overmorgen.setDate(overmorgen.getDate() + 2);
@@ -721,11 +755,15 @@ function _renderWedstrijdLijst() {
         }
     }
 
-    // Chronologisch oplopend binnen elke groep (recent houdt eigen volgorde).
+    // Vandaag/deze-week: chronologisch oplopend (eerstvolgende eerst).
+    // Overige: aflopend — gaat vooral om verleden wedstrijden (afgelopen
+    // seizoen), gebruiker wil de meest recente datum bovenaan ("recenste
+    // → langer geleden"). Eventuele verre toekomst-wedstrijden komen zo
+    // ook bovenaan, wat prima is: hoogste datum eerst.
     const sortChrono = (a, b) => (safeDatum(a.starts)?.getTime() ?? 0) - (safeDatum(b.starts)?.getTime() ?? 0);
     groepen.vandaagMorgen.sort(sortChrono);
     groepen.dezeWeek.sort(sortChrono);
-    groepen.overige.sort(sortChrono);
+    groepen.overige.sort((a, b) => -sortChrono(a, b));
 
     const htmlStukken = [];
     if (groepen.vandaagMorgen.length) {
@@ -755,6 +793,26 @@ function _renderWedstrijdLijst() {
     });
 }
 
+// Pil-HTML met voornaam voor rijders uit de volglijst die aan de wedstrijd
+// meededen. Server geeft person_ids (stabiele identiteit, startnrs kunnen per
+// wedstrijd verschillen); client matcht tegen naam-hint in localStorage.
+// Fallback bij lege/onbekende naam: generieke ⭐. Gebruikt in hub Wedstrijden-
+// tab (verhuisd uit org-view-agenda op verzoek fase 5a-UX-flat, waar deze
+// pillen te veel ruimte innemen voor nog-te-komen org-tag-labels).
+function _eigenRijdersPilHtml(eigenPidsStr) {
+    const pids = eigenPidsStr
+        ? String(eigenPidsStr).split(',').map(s => s.trim()).filter(Boolean)
+        : [];
+    if (!pids.length) return '';
+    const map = _eigenRijdersMap || new Map();
+    return pids.map(pid => {
+        const voornaam = (map.get(pid)?.naam_hint || '').split(/\s+/)[0];
+        return voornaam
+            ? `<span class="org-wed-snr-pil">${esc(voornaam)}</span>`
+            : `<span class="org-wed-snr-pil org-wed-snr-pil--onbekend">⭐</span>`;
+    }).join('');
+}
+
 function _kaartHtml(c) {
     const d = safeDatum(c.starts);
     const dag = d ? d.getDate() : '?';
@@ -765,6 +823,8 @@ function _kaartHtml(c) {
     const plaats = plaatsBits.join(' · ');
     const badge  = _wedstrijdBadge(c, d);
     const badgeHtml = badge ? `<span class="wmodal-tag wmodal-tag--${badge.key}">${esc(t(badge.i18n))}</span>` : '';
+    const pilHtml = _eigenRijdersPilHtml(c.eigen_person_ids);
+    const tagsRij = (badgeHtml || pilHtml) ? `<div class="wmodal-tags">${badgeHtml}${pilHtml}</div>` : '';
     return `
         <div class="wmodal-kaart" data-comp-id="${esc(c.id)}" tabindex="0" role="button">
             <div class="wmodal-datum">
@@ -774,7 +834,7 @@ function _kaartHtml(c) {
             <div class="wmodal-info">
                 <div class="wmodal-naam">${esc(c.name)}</div>
                 ${plaats ? `<div class="wmodal-plaats">${plaats}</div>` : ''}
-                ${badgeHtml ? `<div class="wmodal-tags">${badgeHtml}</div>` : ''}
+                ${tagsRij}
             </div>
         </div>`;
 }
@@ -881,6 +941,25 @@ let _wmodalOrgCache = null;      // laatste fetch-response per volglijst-sig
 let _wmodalOrgSig   = null;      // sig = sorted comma-string van person_ids
 let _wmodalAktieveOrg = null;    // momenteel actieve organisatie (voor placeholder-view)
 
+// Volglijst → query-params voor organisaties/org_wedstrijden-endpoints.
+// Haalt person_ids op voor nieuwe items en license_keys als fallback voor
+// legacy pre-GUID-migratie-items (nog niet via wedstrijd-opening passief
+// gemigreerd). Returnt {qs: '&person_ids=…&license_keys=…', sig: '…'} —
+// sig voor cache-matching.
+function _volglijstEndpointParams(kinderen) {
+    const pids  = kinderen.map(k => k.person_id).filter(Boolean);
+    const lkeys = kinderen.filter(k => !k.person_id && k.license_key)
+                          .map(k => k.license_key);
+    const parts = [];
+    if (pids.length)  parts.push('person_ids='  + encodeURIComponent([...pids].sort().join(',')));
+    if (lkeys.length) parts.push('license_keys=' + encodeURIComponent([...lkeys].sort().join(',')));
+    return {
+        qs:  parts.length ? '&' + parts.join('&') : '',
+        sig: 'p:' + [...pids].sort().join(',') + '|l:' + [...lkeys].sort().join(','),
+        empty: pids.length === 0 && lkeys.length === 0,
+    };
+}
+
 async function _laadOrganisatieLijst() {
     const container = document.getElementById('wmodal-organisatie-lijst');
     if (!container) return;
@@ -894,19 +973,17 @@ async function _laadOrganisatieLijst() {
             </div>`;
         return;
     }
-    const pids = kinderen.map(k => k.person_id).filter(Boolean);
-    if (!pids.length) {
-        // volglijst bevat alleen legacy license-only items (nog niet gemigreerd).
+    const vl = _volglijstEndpointParams(kinderen);
+    if (vl.empty) {
         container.innerHTML = `<div class="wmodal-geen-wedstrijden">${esc(t('wmodal_org_geen_wedstrijden'))}</div>`;
         return;
     }
-    const sig = [...pids].sort().join(',');
-    if (_wmodalOrgCache && _wmodalOrgSig === sig) {
+    if (_wmodalOrgCache && _wmodalOrgSig === vl.sig) {
         _renderOrganisatieLijst(_wmodalOrgCache);
         return;
     }
     try {
-        const res  = await safeFetch('?action=organisaties&person_ids=' + encodeURIComponent(sig));
+        const res  = await safeFetch('?action=organisaties' + vl.qs);
         const data = await res.json();
         // Server gooit 500 met {error:"..."} bij SQL/PHP-fouten — niet als lege lijst behandelen.
         if (!res.ok || !Array.isArray(data)) {
@@ -914,7 +991,7 @@ async function _laadOrganisatieLijst() {
             throw new Error(msg);
         }
         _wmodalOrgCache = data;
-        _wmodalOrgSig   = sig;
+        _wmodalOrgSig   = vl.sig;
         _renderOrganisatieLijst(data);
     } catch (e) {
         container.innerHTML = `<div class="wmodal-geen-wedstrijden">${esc(t('msg_fout_laden'))}: ${esc(e.message || e)}</div>`;
@@ -1059,14 +1136,14 @@ async function _laadOrgAgenda(orgId) {
     if (!lijst) return;
     try {
         if (!_orgWedstrijdenCache[orgId]) {
-            // Stuur volglijst-person_ids mee zodat de server per wedstrijd
-            // kan markeren of een eigen rijder meedeed (⭐-marker in UI).
-            // Klikbaarheid hangt NIET af van eigen rijder — dat is al door
+            // Stuur volglijst mee zodat de server per wedstrijd kan markeren
+            // of een eigen rijder meedeed (voornaam-pil in UI). Zowel
+            // person_ids als license_keys (legacy) via _volglijstEndpointParams.
+            // Klikbaarheid hangt NIET af van eigen rijder — dat is door
             // operator geregeld via public_zichtbaar; eigen-rijder is puur
             // een visuele hint "jij hebt hier gereden".
-            const pids = _loadKidsUitStorage().map(k => k.person_id).filter(Boolean);
-            const url = '?action=org_wedstrijden&org_id=' + encodeURIComponent(orgId)
-                      + (pids.length ? '&person_ids=' + encodeURIComponent(pids.join(',')) : '');
+            const vl  = _volglijstEndpointParams(_loadKidsUitStorage());
+            const url = '?action=org_wedstrijden&org_id=' + encodeURIComponent(orgId) + vl.qs;
             const res  = await safeFetch(url);
             const data = await res.json();
             if (!res.ok || !Array.isArray(data)) {
@@ -1170,21 +1247,9 @@ function _orgAgendaKaartHtml(c) {
     // iedereen — hier blokkeren zou alleen de UX breken).
     const disabled = label.key !== 'publiek';
     const labelHtml = `<span class="org-wed-tag org-wed-tag--${label.key}">${esc(t(label.i18n))}</span>`;
-    // Pil(len) met voornaam voor rijders uit de volglijst die aan deze
-    // wedstrijd meededen. Server geeft person_id's terug (stabiele identiteit,
-    // startnrs kunnen per wedstrijd verschillen); we matchen tegen de
-    // naam-hint in de localStorage-volglijst. Fallback bij lege/onbekende
-    // naam: generieke ⭐.
-    const eigenPids = c.eigen_person_ids
-        ? String(c.eigen_person_ids).split(',').map(s => s.trim()).filter(Boolean)
-        : [];
-    const snrHtml = eigenPids.map(pid => {
-        const kid = (_eigenRijdersMap || new Map()).get(pid);
-        const voornaam = (kid?.naam_hint || '').split(/\s+/)[0];
-        return voornaam
-            ? `<span class="org-wed-snr-pil">${esc(voornaam)}</span>`
-            : `<span class="org-wed-snr-pil org-wed-snr-pil--onbekend">⭐</span>`;
-    }).join('');
+    // Fase 5a-UX-flat (2026-10-03): voornaam-pillen van gevolgde rijders
+    // verhuisd naar de hub Wedstrijden-tab. In de org-agenda houden we
+    // ruimte over voor nog-te-komen org-tag-labels.
     return `
         <div class="wmodal-kaart${disabled ? ' disabled' : ''}" data-comp-id="${esc(c.id)}"${disabled ? '' : ' tabindex="0" role="button"'}>
             <div class="wmodal-datum">
@@ -1194,7 +1259,7 @@ function _orgAgendaKaartHtml(c) {
             <div class="wmodal-info">
                 <div class="wmodal-naam">${esc(c.name)}</div>
                 ${plaats ? `<div class="wmodal-plaats">${plaats}</div>` : ''}
-                <div class="wmodal-tags">${labelHtml}${snrHtml}</div>
+                <div class="wmodal-tags">${labelHtml}</div>
             </div>
         </div>`;
 }

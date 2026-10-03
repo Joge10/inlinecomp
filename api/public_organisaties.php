@@ -15,7 +15,6 @@ if ($action === 'organisaties') {
     header('Cache-Control: public, max-age=60');
     try {
         $raw = trim($_GET['person_ids'] ?? '');
-        if ($raw === '') { echo json_encode([]); exit; }
 
         // UUID-validatie en de-duplicate. Max 20 ids om misbruik te voorkomen
         // (MAX_KINDEREN=4, met wat buffer voor historische volglijst-items).
@@ -23,6 +22,32 @@ if ($action === 'organisaties') {
             array_map('trim', explode(',', $raw)),
             fn($x) => preg_match('/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i', $x)
         )));
+
+        // Legacy support: license_keys van pre-GUID-migratie volglijst-items
+        // worden hier server-side geresolved naar person_ids via
+        // person_external_ids(systeem='knsb'). Zonder deze fallback valt een
+        // user met alleen een legacy-license-item in de volglijst terug op
+        // de "eerst rijder volgen"-boodschap in de Organisaties-tab, terwijl
+        // de wedstrijd-view wél werkt (die migreert passief via lookup).
+        $lkRaw = trim($_GET['license_keys'] ?? '');
+        if ($lkRaw !== '') {
+            $lkeys = array_values(array_unique(array_filter(
+                array_map('trim', explode(',', $lkRaw)),
+                fn($x) => $x !== '' && strlen($x) <= 32
+            )));
+            if ($lkeys) {
+                if (count($lkeys) > 20) $lkeys = array_slice($lkeys, 0, 20);
+                $lph = implode(',', array_fill(0, count($lkeys), '?'));
+                $stmt = $pdo->prepare(
+                    "SELECT person_id FROM person_external_ids
+                     WHERE systeem = 'knsb' AND extern_id IN ($lph)"
+                );
+                $stmt->execute($lkeys);
+                $extra = $stmt->fetchAll(PDO::FETCH_COLUMN, 0);
+                $ids = array_values(array_unique(array_merge($ids, $extra)));
+            }
+        }
+
         if (!$ids) { echo json_encode([]); exit; }
         if (count($ids) > 20) {
             http_response_code(400);
