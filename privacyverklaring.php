@@ -284,13 +284,13 @@ nodig heeft, bijvoorbeeld om:</p>
         tonen waar jouw gevolgde rijders aan hebben meegedaan, en per wedstrijd zichtbaar te
         maken welke dat zijn.</li>
 </ul>
-<p>In onze applicatie-code worden deze ID's uitsluitend gebruikt om jouw gevraagde data op te
-halen (als parameter in de database-vraag). Wij <strong>bewaren of combineren ze niet</strong>
-in onze eigen opslag — er wordt geen profiel van je volglijst of je gebruik opgebouwd. Op de
-server is geen naam, e-mailadres of apparaataanduiding aan deze aanroepen gekoppeld.</p>
-<p>Omdat de ID's als URL-parameter worden meegestuurd, komen ze — net als elke andere
-pagina-aanroep — voor in de technische <strong>Raw Access Logs</strong> van onze
-hostingprovider; zie <strong>§5c</strong> voor doel, grondslag en bewaartermijn van die logs.</p>
+<p>In onze applicatie worden deze ID's uitsluitend gebruikt om de door jou gevraagde
+gegevens op te halen. Wij <strong>bewaren of combineren ze niet</strong> en bouwen geen
+profiel op van je volglijst of je gebruik; binnen de applicatie is aan deze aanroepen geen
+naam of e-mailadres gekoppeld. Zoals elke pagina-aanroep komen ze, samen met IP-adres en
+browseraanduiding, wel voor in de serverlogbestanden van onze hostingprovider (zie §5c).
+Grondslag: gerechtvaardigd belang (art. 6 lid 1 sub f AVG), namelijk het tonen van de
+informatie waar je zelf om vraagt.</p>
 <p>De uitzondering is <strong>pushmeldingen</strong> (zie §1c): als je die aanzet, worden de
 ID's van je gevolgde rijders wél in onze database opgeslagen zolang de meldingen aan staan,
 zodat we gericht kunnen pushen.</p>
@@ -399,12 +399,11 @@ Claude</strong> aan via hun API:</p>
 Wanneer je onze website bezoekt, slaat de webserver automatisch technische informatie op
 in serverlogbestanden (Raw Access Logs). Dit omvat onder andere je IP-adres, browsertype,
 de opgevraagde pagina en de datum/tijd van het bezoek.</p>
-<p>De publieke app vraagt gegevens op met parameters in de URL — dit is standaardgedrag van
-webapplicaties. Daardoor komen in deze logregels ook identifiers voor die wij zelf in de
-URL plaatsen, zoals een wedstrijd-ID, een rijder-UUID (zie §1g), een KNSB-licentienummer of
-een persoonlijk <strong>volg-token</strong> uit <em>Mijn InlineComp</em>. Dit is een gevolg
-van het standaard-logformaat van onze hostingprovider en niet door ons apart ingericht;
-wij analyseren deze logs niet en zetten ze niet in voor profilering of tracking.</p>
+<p>De publieke app vraagt gegevens op via parameters in de URL. In de serverlogbestanden
+komen daardoor ook technische identifiers voor, zoals een wedstrijd-ID of een intern
+rijder-ID (zie §1g). Dit zijn interne nummers zonder naam. Zoektermen, startnummers, je
+persoonlijke <strong>volg-token</strong> en KNSB-licentienummers sturen wij bewust niet via
+de URL mee. Wij analyseren deze logs niet en gebruiken ze niet voor profilering of tracking.</p>
 <ul>
     <li><strong>Grondslag &amp; doel</strong>: deze verwerking gebeurt op basis van ons
         gerechtvaardigd belang (art. 6 lid 1 sub f AVG) om de website technisch te
@@ -414,9 +413,10 @@ wij analyseren deze logs niet en zetten ze niet in voor profilering of tracking.
         waarborgen (zoals SCC's), op basis van het adequaatheidsbesluit van de Europese
         Commissie voor het Verenigd Koninkrijk (laatst verlengd tot december 2031). De
         VK-locatie is geverifieerd via het RIPE-netwerkregister.</li>
-    <li><strong>Bewaartermijn</strong>: deze technische serverlogs worden via het
-        cPanel-systeem automatisch binnen 24 uur tot maximaal 30 dagen overschreven of
-        verwijderd, tenzij ze langer nodig zijn voor een specifiek beveiligingsonderzoek.</li>
+    <li><strong>Bewaartermijn</strong>: de ruwe serverlogs worden na de dagelijkse
+        verwerking door het hostingsysteem verwijderd, doorgaans binnen 24 uur; wij
+        archiveren ze niet. Alleen bij een concreet beveiligingsincident bewaren wij de
+        relevante logregels langer, zolang dat voor het onderzoek nodig is.</li>
     <li>Deze logs worden niet gekoppeld aan een gebruikersaccount en niet gebruikt voor
         tracking — zie ook de “Anonieme bezoek-statistieken” op de publieke pagina, die
         los hiervan géén IP-adressen bewaren.</li>
@@ -478,8 +478,8 @@ ze zijn verzameld:</p>
         30 dagen voor abuse-monitoring, niet gebruikt voor training).</li>
     <li><strong>Push-abonnementen</strong>: zolang je de meldingen aan hebt
         staan; ze worden verwijderd zodra je ze uitzet of het abonnement verloopt.</li>
-    <li><strong>Serverlogbestanden</strong>: 24 uur tot maximaal 30 dagen, tenzij langer
-        nodig voor beveiligingsonderzoek — zie §5c.</li>
+    <li><strong>Serverlogbestanden</strong>: doorgaans binnen 24 uur verwijderd (niet
+        gearchiveerd), tenzij langer nodig voor een concreet beveiligingsincident — zie §5c.</li>
     <li><strong>Login-logboek (beheer/coach/jury)</strong>: 30 dagen — zie §5d.</li>
     <li><strong>Coach-accounts</strong>: zolang het account bestaat; je kunt het zelf
         verwijderen en het vervalt automatisch na één jaar zonder inloggen — zie §1b.</li>
@@ -788,13 +788,12 @@ for example to:</p>
         in which the skaters you follow have participated, and indicate per race which of them
         did.</li>
 </ul>
-<p>In our application code these IDs are used only to retrieve the data you asked for (as a
-parameter in the database query). We do <strong>not store or combine them</strong> in our own
-storage — we do not build a profile of your follow list or usage. No name, email address or
-device identifier is linked to these calls on the server.</p>
-<p>Because the IDs are sent as a URL parameter, they do appear — just like any other page
-request — in the technical <strong>Raw Access Logs</strong> of our hosting provider; see
-<strong>§5c</strong> for the purpose, legal basis and retention period of those logs.</p>
+<p>Within our application these IDs are used solely to retrieve the data you requested. We do
+<strong>not store or combine them</strong> and do not build a profile of your follow list or
+usage; within the application no name or e-mail address is linked to these calls. Like any
+page request, they do appear, together with IP address and browser identifier, in our hosting
+provider's server logs (see §5c). Legal basis: legitimate interest (Article 6(1)(f) GDPR),
+namely showing the information you yourself request.</p>
 <p>The exception is <strong>push notifications</strong> (see §1c): if you enable those, the IDs
 of the skaters you follow <em>are</em> stored in our database for as long as notifications are
 enabled, so that we can target them.</p>
@@ -895,12 +894,11 @@ GDPR) additionally applies as the legal basis — see sections 1b and 1c.</p>
 our website, the web server automatically stores technical information in server log files
 (Raw Access Logs). This includes your IP address, browser type, the page requested, and the
 date/time of the visit.</p>
-<p>The public app requests data using parameters in the URL — this is standard behaviour for
-web applications. As a result, these log lines also contain identifiers that we place in
-the URL ourselves, such as a competition ID, a skater UUID (see §1g), a KNSB licence number
-or a personal <strong>follow token</strong> from <em>My InlineComp</em>. This is a consequence
-of the standard log format used by our hosting provider and is not set up separately by us;
-we do not analyse these logs and do not use them for profiling or tracking.</p>
+<p>The public app requests data using URL parameters. As a result, the server log files also
+contain technical identifiers, such as a competition ID or an internal skater ID (see §1g).
+These are internal numbers without a name. Search terms, start numbers, your personal
+<strong>follow token</strong> and KNSB licence numbers are deliberately not sent via the URL.
+We do not analyse these logs and do not use them for profiling or tracking.</p>
 <ul>
     <li><strong>Legal basis &amp; purpose</strong>: this processing is based on our legitimate
         interest (Article 6(1)(f) GDPR) to technically secure the website, detect errors, and
@@ -910,9 +908,10 @@ we do not analyse these logs and do not use them for profiling or tracking.</p>
         on the basis of the European Commission's adequacy decision for the United Kingdom (last
         renewed until December 2031). The UK location has been verified via the RIPE network
         registry.</li>
-    <li><strong>Retention period</strong>: these technical server logs are automatically
-        overwritten or deleted via the cPanel system within 24 hours to a maximum of 30 days,
-        unless needed longer for a specific security investigation.</li>
+    <li><strong>Retention period</strong>: the raw server logs are deleted after daily
+        processing by the hosting system, usually within 24 hours; we do not archive them.
+        Only in the case of a specific security incident do we retain the relevant log lines
+        for longer, for as long as the investigation requires.</li>
     <li>These logs are not linked to a user account and are not used for tracking — see also the
         “anonymous visit statistics” on the public page, which separately store no IP addresses.</li>
 </ul>
@@ -968,8 +967,8 @@ for which it was collected:</p>
         abuse-monitoring, not used for training).</li>
     <li><strong>Push subscriptions</strong>: as long as you keep notifications
         enabled; they are deleted as soon as you turn them off or the subscription expires.</li>
-    <li><strong>Server log files</strong>: 24 hours to a maximum of 30 days, unless needed
-        longer for a security investigation — see section 5c.</li>
+    <li><strong>Server log files</strong>: usually deleted within 24 hours (not archived),
+        unless needed longer for a specific security incident — see section 5c.</li>
     <li><strong>Login log (admin/coach/jury)</strong>: 30 days — see section 5d.</li>
     <li><strong>Coach accounts</strong>: for as long as the account exists; you can delete it
         yourself and it expires automatically after one year without login — see section 1b.</li>

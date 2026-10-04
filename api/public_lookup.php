@@ -14,18 +14,22 @@ if ($action === 'lookup') {
     // browser/proxy nooit een stale snapshot serveert — auto-refresh
     // elke 60 sec is dan altijd vers.
     header('Cache-Control: no-store, must-revalidate');
-    // Startnummer leest uit POST-body (plan URL/log-reductie 2026-10-02):
-    // startnummers zijn meerjarig vast en dus herleidbaar aan een persoon,
-    // ook voor rijders die publiek anoniem zijn — die horen daarom niet in
-    // de access-logs. GET-fallback blijft tijdens de deprecation-fase.
-    // Lookups op person_id / license_key / volg-token blijven GET (die zijn
-    // ofwel al in §1g van de privacyverklaring beschreven, ofwel bij een
-    // volgende stap van het plan apart afgedekt).
+    // Plan URL/log-reductie 2026-10-02 (afsluit-stap): startnummer en volg-
+    // token mogen NIET meer via GET binnenkomen — startnummer is meerjarig
+    // vast en herleidbaar, volg-token is een geheim entitlement. Beide
+    // alleen nog via POST-body. person_id/license_key blijven GET-vriendelijk
+    // (geen herleidbare waarde — intern UUID).
+    if (!empty($_GET['startnummer']) || !empty($_GET['volg'])) {
+        http_response_code(405);
+        header('Allow: POST');
+        echo json_encode(['error' => 'Method Not Allowed: startnummer and volg must be sent via POST body']);
+        exit;
+    }
     $body = (strcasecmp($_SERVER['REQUEST_METHOD'] ?? '', 'POST') === 0)
         ? (json_decode(file_get_contents('php://input'), true) ?: [])
         : [];
     $compId  = trim($body['competition_id'] ?? $_GET['competition_id'] ?? '');
-    $snr     = trim($body['startnummer']    ?? $_GET['startnummer']    ?? '');
+    $snr     = trim($body['startnummer']    ?? '');
     // Optioneel: lookup direct op license_key (stabiel over wedstrijden heen).
     // Gebruikt door multi-rijder (public-view onthoudt kinderen via license_key
     // zodat ze ook in een volgende wedstrijd automatisch verschijnen, ongeacht
@@ -42,7 +46,7 @@ if ($action === 'lookup') {
     // naam van een publiek-anonieme rijder — dus mag het nooit in de web-
     // server-access-logs komen (wie het log leest zou de rijder kunnen
     // volgen). GET-fallback blijft tijdens de deprecation-fase.
-    $volgTok = trim($body['volg'] ?? $_GET['volg'] ?? '');
+    $volgTok = trim($body['volg'] ?? '');
     // Parameter-naam `license_key` is misleidend sinds de GUID-migratie: de
     // waarde is al een person_id-UUID (behalve bij legacy-volglijst-items die
     // nog een KNSB-licentienummer bevatten; resolveNaarPersonId() herkent
