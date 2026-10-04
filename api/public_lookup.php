@@ -43,7 +43,13 @@ if ($action === 'lookup') {
     // server-access-logs komen (wie het log leest zou de rijder kunnen
     // volgen). GET-fallback blijft tijdens de deprecation-fase.
     $volgTok = trim($body['volg'] ?? $_GET['volg'] ?? '');
-    $token   = trim($_GET['license_key'] ?? '') ?: trim($_GET['person_id'] ?? '');
+    // Parameter-naam `license_key` is misleidend sinds de GUID-migratie: de
+    // waarde is al een person_id-UUID (behalve bij legacy-volglijst-items die
+    // nog een KNSB-licentienummer bevatten; resolveNaarPersonId() herkent
+    // beide). De client gebruikt sinds plan URL/log-reductie 2026-10-02
+    // overal `person_id=`; `license_key=` blijft als fallback voor oude PWA-
+    // JS tot de deprecation-fase afloopt.
+    $token   = trim($_GET['person_id'] ?? '') ?: trim($_GET['license_key'] ?? '');
     $pid      = '';
     $entitled = false;
     if ($volgTok !== '') {

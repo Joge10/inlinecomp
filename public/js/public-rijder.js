@@ -302,7 +302,7 @@ btnZoek.addEventListener('click', async () => {
                 headers: { 'Content-Type': 'application/json' },
                 body:    JSON.stringify(bodyParam),
               })
-            : safeFetch(lookupUrl + `&license_key=${encodeURIComponent(tekst)}`);
+            : safeFetch(lookupUrl + `&person_id=${encodeURIComponent(tekst)}`);
         const [lookupRes, progRes] = await Promise.all([
             lookupPromise,
             safeFetch(`?action=programma&competition_id=${encodeURIComponent(compId)}`)
@@ -430,10 +430,12 @@ function toonChooserModal(rijen, term, compId) {
             const pid = cb.dataset.pid;
             const lic = cb.dataset.lic;
             if (!pid && !lic) continue;
-            // Prefereer person_id (fase 3c); val terug op license_key.
-            const param = pid
-                ? `person_id=${encodeURIComponent(pid)}`
-                : `license_key=${encodeURIComponent(lic)}`;
+            // Prefereer de echte person_id (fase 3c); val terug op het
+            // legacy-token (ex-license_key) dat server-side ook via
+            // resolveNaarPersonId() wordt afgehandeld. Beide als `person_id`-
+            // param (plan URL/log-reductie 2026-10-02: parameter-naam
+            // `license_key` is sinds de GUID-migratie misleidend).
+            const param = `person_id=${encodeURIComponent(pid || lic)}`;
             try {
                 const r = await safeFetch(`?action=lookup&competition_id=${encodeURIComponent(compId)}&${param}`);
                 const d = await r.json();
@@ -1632,10 +1634,7 @@ async function _fetchKind({ person_id = null, license_key = null, snr = null, vo
             headers: { 'Content-Type': 'application/json' },
             body:    JSON.stringify(bodyParam),
           })
-        : safeFetch(lookupUrl + (
-            person_id   ? `&person_id=${encodeURIComponent(person_id)}`
-          : /* license */ `&license_key=${encodeURIComponent(license_key)}`
-          ));
+        : safeFetch(lookupUrl + `&person_id=${encodeURIComponent(person_id || license_key)}`);
     const [lookupRes, progRes] = await Promise.all([
         lookupPromise,
         gedeeldeProg

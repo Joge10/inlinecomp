@@ -94,14 +94,20 @@ let _huidigStempel = '';
                 const eerderePersoon = k?.data?.[k.kozen_idx ?? 0]?.persoon;
                 const eerderLic = eerderePersoon?.license_key;
                 const eerderCat = eerderePersoon?.category;
-                const param = eerderLic
-                    ? `license_key=${encodeURIComponent(eerderLic)}`
-                    : (k?.snr ? `startnummer=${encodeURIComponent(k.snr)}` : null);
-                if (!param) return;
+                // Plan URL/log-reductie 2026-10-02: person_id blijft GET
+                // (identifier zonder herleidbare waarde, cache-vriendelijk);
+                // startnummer-pad gaat via POST-body.
+                const url = `?action=lookup&competition_id=${encodeURIComponent(compId)}&_t=${Date.now()}`;
+                const fetchOpts = eerderLic
+                    ? [url + `&person_id=${encodeURIComponent(eerderLic)}`]
+                    : (k?.snr ? [url, {
+                          method: 'POST',
+                          headers: { 'Content-Type': 'application/json' },
+                          body: JSON.stringify({ startnummer: k.snr }),
+                      }] : null);
+                if (!fetchOpts) return;
                 try {
-                    const r = await safeFetch(
-                        `?action=lookup&competition_id=${encodeURIComponent(compId)}&${param}&_t=${Date.now()}`
-                    );
+                    const r = await safeFetch(...fetchOpts);
                     const data = await r.json();
                     if (Array.isArray(data) && data.length) {
                         k.data = data;

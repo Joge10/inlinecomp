@@ -618,7 +618,10 @@ async function renderRondeUitslagen(container) {
     let distances = [];
     try {
         const responses = await Promise.all(dcIds.map(dcId =>
-            safeFetch(`?action=ronde_uitslagen&competition_id=${encodeURIComponent(compId)}&dc_id=${encodeURIComponent(dcId)}&license_key=${encodeURIComponent(lic || '')}`)
+            // Parameter-naam `license_key` is misleidend sinds de GUID-
+            // migratie (waarde is al een person_id-UUID); hernoemd per plan
+            // URL/log-reductie 2026-10-02. Backend accepteert tijdelijk beide.
+            safeFetch(`?action=ronde_uitslagen&competition_id=${encodeURIComponent(compId)}&dc_id=${encodeURIComponent(dcId)}&person_id=${encodeURIComponent(lic || '')}`)
               .then(r => r.json())
         ));
         for (const data of responses) {

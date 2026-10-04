@@ -12,9 +12,11 @@ if ($action === 'ronde_uitslagen') {
     header('Cache-Control: no-store, must-revalidate');
     $compId    = trim($_GET['competition_id'] ?? '');
     $dcId      = trim($_GET['dc_id'] ?? '');
-    // license_key: optionele filter. Als meegegeven → alleen rondes tonen
-    // waar deze rijder in zit. Zonder license: alle rondes (admin-preview).
-    $rijderLic = trim($_GET['license_key'] ?? '');
+    // person_id (optionele filter): alleen rondes tonen waar deze rijder in
+    // zit. Zonder: alle rondes (admin-preview). license_key-fallback blijft
+    // tijdens de deprecation-fase van plan URL/log-reductie 2026-10-02;
+    // waarde is al sinds de GUID-migratie een person_id-UUID.
+    $rijderLic = trim($_GET['person_id'] ?? '') ?: trim($_GET['license_key'] ?? '');
     if (!$compId || !$dcId) { echo json_encode(['error' => 'competition_id and dc_id required']); exit; }
 
     try {
