@@ -15,8 +15,8 @@ header('Pragma: no-cache');
 $ORG_NAAM   = 'InlineComp';                 // TODO: aanpassen naar jouw vereniging / beheerder
 $ORG_EMAIL  = 'inlinecomp@devriesen.com';   // TODO: e-mailadres voor verzoeken
 $ORG_ADRES  = '';                           // TODO: eventueel postadres
-$LAATSTE_UPDATE_NL = '24 september 2026';
-$LAATSTE_UPDATE_EN = '24 September 2026';
+$LAATSTE_UPDATE_NL = '4 oktober 2026';
+$LAATSTE_UPDATE_EN = '4 October 2026';
 ?><!DOCTYPE html>
 <html lang="nl">
 <head>
