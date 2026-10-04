@@ -14,8 +14,18 @@ if ($action === 'lookup') {
     // browser/proxy nooit een stale snapshot serveert — auto-refresh
     // elke 60 sec is dan altijd vers.
     header('Cache-Control: no-store, must-revalidate');
-    $compId  = trim($_GET['competition_id'] ?? '');
-    $snr     = trim($_GET['startnummer'] ?? '');
+    // Startnummer leest uit POST-body (plan URL/log-reductie 2026-10-02):
+    // startnummers zijn meerjarig vast en dus herleidbaar aan een persoon,
+    // ook voor rijders die publiek anoniem zijn — die horen daarom niet in
+    // de access-logs. GET-fallback blijft tijdens de deprecation-fase.
+    // Lookups op person_id / license_key / volg-token blijven GET (die zijn
+    // ofwel al in §1g van de privacyverklaring beschreven, ofwel bij een
+    // volgende stap van het plan apart afgedekt).
+    $body = (strcasecmp($_SERVER['REQUEST_METHOD'] ?? '', 'POST') === 0)
+        ? (json_decode(file_get_contents('php://input'), true) ?: [])
+        : [];
+    $compId  = trim($body['competition_id'] ?? $_GET['competition_id'] ?? '');
+    $snr     = trim($body['startnummer']    ?? $_GET['startnummer']    ?? '');
     // Optioneel: lookup direct op license_key (stabiel over wedstrijden heen).
     // Gebruikt door multi-rijder (public-view onthoudt kinderen via license_key
     // zodat ze ook in een volgende wedstrijd automatisch verschijnen, ongeacht

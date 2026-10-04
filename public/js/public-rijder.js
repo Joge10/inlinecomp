@@ -255,13 +255,24 @@ btnZoek.addEventListener('click', async () => {
     _zoekFeedback(`<span class="spinner"></span> ${esc(t('msg_zoeken'))}`);
     btnZoek.disabled = true;
     try {
-        const param = modus === 'volg'
-            ? `volg=${encodeURIComponent(tekst)}`
-            : modus === 'license'
-                ? `license_key=${encodeURIComponent(tekst)}`
-                : `startnummer=${encodeURIComponent(tekst)}`;
+        // Startnummer-lookup via POST (plan URL/log-reductie 2026-10-02).
+        // volg/license_key blijven GET: volg wordt in een latere stap van het
+        // plan naar URL-fragment verhuisd, license_key wordt tegen die tijd
+        // hernoemd naar person_id (identifier zonder herleidbare waarde).
+        const lookupUrl = `?action=lookup&competition_id=${encodeURIComponent(compId)}`;
+        const lookupPromise = (modus === 'snr')
+            ? safeFetch(lookupUrl, {
+                method:  'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body:    JSON.stringify({ startnummer: tekst }),
+              })
+            : safeFetch(lookupUrl + (
+                modus === 'volg'
+                    ? `&volg=${encodeURIComponent(tekst)}`
+                    : `&license_key=${encodeURIComponent(tekst)}`
+              ));
         const [lookupRes, progRes] = await Promise.all([
-            safeFetch(`?action=lookup&competition_id=${encodeURIComponent(compId)}&${param}`),
+            lookupPromise,
             safeFetch(`?action=programma&competition_id=${encodeURIComponent(compId)}`)
         ]);
         const data = await lookupRes.json();
@@ -1577,15 +1588,22 @@ async function _fetchKind({ person_id = null, license_key = null, snr = null, vo
     if (!person_id && !license_key && !snr && !volg) return null;
     // Volg-token eerst (enige sleutel die een anonieme rijder ontsluit), daarna
     // de stabiele person_id, dan license_key (oude items), tot slot startnummer.
-    const param = volg
-        ? `volg=${encodeURIComponent(volg)}`
-        : person_id
-            ? `person_id=${encodeURIComponent(person_id)}`
-            : license_key
-                ? `license_key=${encodeURIComponent(license_key)}`
-                : `startnummer=${encodeURIComponent(snr)}`;
+    // Startnummer via POST (plan URL/log-reductie 2026-10-02); de andere drie
+    // paden blijven GET.
+    const lookupUrl = `?action=lookup&competition_id=${encodeURIComponent(compId)}`;
+    const lookupPromise = (!volg && !person_id && !license_key && snr)
+        ? safeFetch(lookupUrl, {
+            method:  'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body:    JSON.stringify({ startnummer: snr }),
+          })
+        : safeFetch(lookupUrl + (
+            volg        ? `&volg=${encodeURIComponent(volg)}`
+          : person_id   ? `&person_id=${encodeURIComponent(person_id)}`
+          : /* license */ `&license_key=${encodeURIComponent(license_key)}`
+          ));
     const [lookupRes, progRes] = await Promise.all([
-        safeFetch(`?action=lookup&competition_id=${encodeURIComponent(compId)}&${param}`),
+        lookupPromise,
         gedeeldeProg
             ? Promise.resolve({ json: async () => gedeeldeProg })
             : safeFetch(`?action=programma&competition_id=${encodeURIComponent(compId)}`),
