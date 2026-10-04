@@ -411,7 +411,14 @@ async function zoekOpNaam(compId, term) {
     btnZoek.disabled = true;
     let rijen = [];
     try {
-        const res = await safeFetch(`?action=search_person&competition_id=${encodeURIComponent(compId)}&q=${encodeURIComponent(term)}`);
+        // Zoekterm via POST-body (plan URL/log-reductie 2026-10-02): houdt
+        // achternamen uit de web-server-access-logs. competition_id blijft
+        // in de URL (ETag/cache-vriendelijk, geen privacy-issue).
+        const res = await safeFetch(`?action=search_person&competition_id=${encodeURIComponent(compId)}`, {
+            method:  'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body:    JSON.stringify({ q: term }),
+        });
         rijen = await res.json();
         if (!Array.isArray(rijen)) rijen = [];
     } catch (e) {

@@ -19,6 +19,19 @@ RewriteRule ^/?$ "https\:\/\/inlineresults\.devriesen\.com\/" [R=301,L]
 </IfModule>
 # END cPanel-generated php ini directives, do not edit
 
+
+# === ONDERHOUD ===
+# RewriteCond %{QUERY_STRING} maintenance_bypass=geheimwoord123
+# RewriteRule ^(.*)$ - [CO=bypass:1:%{HTTP_HOST}:1440,L]
+
+# RewriteCond %{HTTP_COOKIE} !bypass=1
+# RewriteCond %{REQUEST_URI} !^/maintenance\.html$
+# RewriteRule ^(.*)$ /maintenance.html [R=503,L]
+# ErrorDocument 503 /maintenance.html
+# Header always set Retry-After "3600"
+# === EINDE ONDERHOUD ===
+
+
 # ════════════════════════════════════════════════════════════════════════
 #  InlineComp — handmatige security-aanvullingen
 #
@@ -88,6 +101,18 @@ Options -Indexes
         Deny from all
     </IfModule>
 </FilesMatch>
+
+# ──────────────────────────────────────────────────────────────────────
+#  Referrer-Policy: same-origin — vangnet zodat URL's met parameters
+#  (person_id, competition_id, enz.) nooit als Referer naar externe
+#  domeinen lekken. Interne navigatie binnen het eigen domein stuurt de
+#  Referer gewoon mee (nuttig voor logs); cross-origin links/sub-resources
+#  zien enkel de origin, geen path of query. Zie plan URL/log-reductie
+#  2026-10-02.
+# ──────────────────────────────────────────────────────────────────────
+<IfModule mod_headers.c>
+    Header always set Referrer-Policy "same-origin"
+</IfModule>
 
 # ──────────────────────────────────────────────────────────────────────
 #  B. PHP-RUNTIME-INSTELLINGEN  →  via cPanel MultiPHP INI Editor (NIET hier)

@@ -136,11 +136,16 @@ window.addEventListener('offline', () => {
 // Demo-modus: staat er ?demo in de pagina-URL, dan hangt safeFetch aan elke
 // API-call &demo=1 zodat de backend alleen demo-wedstrijden toont/toelaat.
 const DEMO_MODE = new URLSearchParams(location.search).has('demo');
-async function safeFetch(url, maxRetries = 1) {
+async function safeFetch(url, optsOrRetries = 1, maxRetriesArg) {
+    // Backward-compat: oude signature safeFetch(url, maxRetries). Nieuwe
+    // signature: safeFetch(url, fetchOpts, maxRetries). Als 2e arg een getal
+    // is, oude vorm; anders options-object (voor POST, headers, body).
+    const opts       = (typeof optsOrRetries === 'object' && optsOrRetries) ? optsOrRetries : undefined;
+    const maxRetries = (typeof optsOrRetries === 'number') ? optsOrRetries : (maxRetriesArg ?? 1);
     if (DEMO_MODE) url += (url.includes('?') ? '&' : '?') + 'demo=1';
     try {
         for (let attempt = 0; attempt <= maxRetries; attempt++) {
-            const res = await fetch(url);
+            const res = await fetch(url, opts);
             if (res.status === 429 && attempt < maxRetries) {
                 const wait = 2000 + Math.random() * 3000;
                 await new Promise(r => setTimeout(r, wait));

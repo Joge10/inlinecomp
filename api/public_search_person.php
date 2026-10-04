@@ -9,8 +9,17 @@ if (!defined('INLINECOMP_PUBLIC_BOOTED')) { http_response_code(404); exit; }
 
 if ($action === 'search_person') {
     header('Content-Type: application/json; charset=utf-8');
-    $compId = trim($_GET['competition_id'] ?? '');
-    $term   = trim($_GET['q'] ?? '');
+    // Zoekterm leest uit POST-body (plan URL/log-reductie 2026-10-02):
+    // voorkomt dat achternamen samen met IP in de web-server-access-logs
+    // terechtkomen. competition_id mag in de URL blijven (geen privacy-
+    // issue). GET-pad blijft voorlopig als fallback voor oude PWA-clients
+    // die nog de pre-POST JS draaien; na een deploy-cyclus wordt GET
+    // geweigerd met HTTP 405.
+    $body = (strcasecmp($_SERVER['REQUEST_METHOD'] ?? '', 'POST') === 0)
+        ? (json_decode(file_get_contents('php://input'), true) ?: [])
+        : [];
+    $compId = trim($body['competition_id'] ?? $_GET['competition_id'] ?? '');
+    $term   = trim($body['q']              ?? $_GET['q']              ?? '');
     if (!$compId || mb_strlen($term) < 2) { echo json_encode([]); exit; }
     try {
         // Zoek uitsluitend op short_name (= achternaam). Niet op full_name,

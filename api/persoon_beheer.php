@@ -29,7 +29,15 @@ $action = $_GET['action'] ?? '';
 
 try {
     if ($action === 'zoek') {
-        $q = trim($_GET['q'] ?? '');
+        // Zoekterm leest uit POST-body (plan URL/log-reductie 2026-10-02):
+        // voorkomt dat achternamen samen met IP + beheerder-sessie in de
+        // web-server-access-logs terechtkomen. GET-pad blijft tijdelijk als
+        // fallback voor beheer-sessies die nog oude JS draaien; wordt later
+        // met HTTP 405 geweigerd.
+        $body = (strcasecmp($_SERVER['REQUEST_METHOD'] ?? '', 'POST') === 0)
+            ? (json_decode(file_get_contents('php://input'), true) ?: [])
+            : [];
+        $q = trim($body['q'] ?? $_GET['q'] ?? '');
         if (strlen($q) < 2) {
             echo json_encode(['rijders' => []]);
             exit;

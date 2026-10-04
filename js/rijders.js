@@ -176,7 +176,14 @@ function rijAanvraagGoedkeuren(a) {
         const q = zoek.value.trim();
         if (q.length < 2) { resBox.innerHTML = ''; return; }
         try {
-            const r = await fetch('api/persoon_beheer.php?action=zoek&q=' + encodeURIComponent(q));
+            // Zoekterm via POST-body: houdt achternamen uit de web-server-
+            // access-logs (plan URL/log-reductie 2026-10-02). SameSite=Strict
+            // op de sessie-cookie beschermt tegen CSRF.
+            const r = await fetch('api/persoon_beheer.php?action=zoek', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ q }),
+            });
             const d = await r.json();
             const rs = d.rijders || [];
             if (!rs.length) { resBox.innerHTML = '<div class="rij-ag-leeg">Geen rijders gevonden.</div>'; return; }
@@ -353,7 +360,13 @@ async function rijZoek() {
     }
     container.innerHTML = '<div class="status-msg loading"><span class="spinner"></span>Zoeken…</div>';
     try {
-        const res = await fetch('api/persoon_beheer.php?action=zoek&q=' + encodeURIComponent(q));
+        // Zoekterm via POST-body (plan URL/log-reductie 2026-10-02). Zie
+        // regel ±179 voor dezelfde flow bij de agenda-koppel-zoek.
+        const res = await fetch('api/persoon_beheer.php?action=zoek', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ q }),
+        });
         const data = await res.json();
         if (!res.ok) throw new Error(data.error || 'Fout bij zoeken');
         rijToonResultaten(data.rijders || []);
