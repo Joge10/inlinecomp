@@ -37,7 +37,12 @@ if ($action === 'lookup') {
     // ontsloten door het geheime volg-token (?volg=). person_id/licentie geven
     // GEEN entitlement meer — dat was het lek (person_id is publiek, dus wie je
     // ooit volgde had 'm en bleef de naam zien). Zie migratie …_volg_token.sql.
-    $volgTok = trim($_GET['volg'] ?? '');
+    // Volg-token leest uit POST-body (plan URL/log-reductie 2026-10-02):
+    // het volg-token is een geheim entitlement — met dit token zie je de
+    // naam van een publiek-anonieme rijder — dus mag het nooit in de web-
+    // server-access-logs komen (wie het log leest zou de rijder kunnen
+    // volgen). GET-fallback blijft tijdens de deprecation-fase.
+    $volgTok = trim($body['volg'] ?? $_GET['volg'] ?? '');
     $token   = trim($_GET['license_key'] ?? '') ?: trim($_GET['person_id'] ?? '');
     $pid      = '';
     $entitled = false;

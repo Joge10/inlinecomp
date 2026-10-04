@@ -75,6 +75,25 @@ chkOud.addEventListener('change', filterComps);
 chkVandaag.addEventListener('change', filterComps);
 chkToekomst.addEventListener('change', filterComps);
 
+// Fragment-reader voor deel-links met een volg-token (plan URL/log-reductie
+// 2026-10-02). Een link van de vorm /public/#volg=TOKEN (optioneel samen met
+// ?comp=UUID) prefillt het rijder-zoek-veld met het token; browsers sturen
+// het #-gedeelte nooit mee naar de server, dus komt het nooit in de access-
+// logs voor. Hash wordt daarna gewist zodat 't niet in history/referer blijft
+// hangen bij navigatie binnen de app.
+let _volgTokenUitHash = null;
+(function () {
+    const hash = (window.location.hash || '').replace(/^#/, '');
+    if (!hash) return;
+    const params = new URLSearchParams(hash);
+    const tok = params.get('volg');
+    if (tok && /^[0-9a-f]{32}$/i.test(tok)) {
+        _volgTokenUitHash = tok;
+        try { history.replaceState(null, '', window.location.pathname + window.location.search); }
+        catch { window.location.hash = ''; }
+    }
+})();
+
 safeFetch('?action=competitions').then(r=>r.json()).then(comps => {
     alleComps = comps;
 
@@ -114,6 +133,21 @@ safeFetch('?action=competitions').then(r=>r.json()).then(comps => {
         _setViewState('wedstrijd');
     } else {
         toonHubView('wedstrijden');
+    }
+
+    // Volg-token-deeplink (uit #volg=TOKEN): prefill het zoekveld. Als er
+    // ook al een wedstrijd actief is (via ?comp=…), open meteen de rijder-
+    // zoek-modal en trigger de zoek-flow — anders ziet de user het token
+    // vanzelf in het veld zodra 'ie na wedstrijdkeuze de modal opent.
+    if (_volgTokenUitHash) {
+        if (inpSnr) inpSnr.value = _volgTokenUitHash;
+        if (selComp.value) {
+            setTimeout(() => {
+                if (typeof openSetupModal === 'function') openSetupModal();
+                setTimeout(() => btnZoek?.click(), 150);
+            }, 100);
+        }
+        _volgTokenUitHash = null;
     }
 }).catch(() => { selComp.innerHTML = `<option value="">${esc(t('opt_fout_laden'))}</option>`; });
 
@@ -255,22 +289,20 @@ btnZoek.addEventListener('click', async () => {
     _zoekFeedback(`<span class="spinner"></span> ${esc(t('msg_zoeken'))}`);
     btnZoek.disabled = true;
     try {
-        // Startnummer-lookup via POST (plan URL/log-reductie 2026-10-02).
-        // volg/license_key blijven GET: volg wordt in een latere stap van het
-        // plan naar URL-fragment verhuisd, license_key wordt tegen die tijd
-        // hernoemd naar person_id (identifier zonder herleidbare waarde).
+        // Startnummer én volg-token via POST (plan URL/log-reductie 2026-10-02).
+        // license_key blijft GET; wordt in batch 4 van het plan hernoemd naar
+        // person_id (identifier zonder herleidbare waarde).
         const lookupUrl = `?action=lookup&competition_id=${encodeURIComponent(compId)}`;
-        const lookupPromise = (modus === 'snr')
+        const bodyParam = (modus === 'snr')  ? { startnummer: tekst }
+                        : (modus === 'volg') ? { volg: tekst }
+                        : null;
+        const lookupPromise = bodyParam
             ? safeFetch(lookupUrl, {
                 method:  'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body:    JSON.stringify({ startnummer: tekst }),
+                body:    JSON.stringify(bodyParam),
               })
-            : safeFetch(lookupUrl + (
-                modus === 'volg'
-                    ? `&volg=${encodeURIComponent(tekst)}`
-                    : `&license_key=${encodeURIComponent(tekst)}`
-              ));
+            : safeFetch(lookupUrl + `&license_key=${encodeURIComponent(tekst)}`);
         const [lookupRes, progRes] = await Promise.all([
             lookupPromise,
             safeFetch(`?action=programma&competition_id=${encodeURIComponent(compId)}`)
@@ -1588,18 +1620,20 @@ async function _fetchKind({ person_id = null, license_key = null, snr = null, vo
     if (!person_id && !license_key && !snr && !volg) return null;
     // Volg-token eerst (enige sleutel die een anonieme rijder ontsluit), daarna
     // de stabiele person_id, dan license_key (oude items), tot slot startnummer.
-    // Startnummer via POST (plan URL/log-reductie 2026-10-02); de andere drie
-    // paden blijven GET.
+    // Volg-token én startnummer via POST (plan URL/log-reductie 2026-10-02);
+    // person_id/license_key blijven GET.
     const lookupUrl = `?action=lookup&competition_id=${encodeURIComponent(compId)}`;
-    const lookupPromise = (!volg && !person_id && !license_key && snr)
+    const bodyParam = volg ? { volg }
+                    : (!person_id && !license_key && snr) ? { startnummer: snr }
+                    : null;
+    const lookupPromise = bodyParam
         ? safeFetch(lookupUrl, {
             method:  'POST',
             headers: { 'Content-Type': 'application/json' },
-            body:    JSON.stringify({ startnummer: snr }),
+            body:    JSON.stringify(bodyParam),
           })
         : safeFetch(lookupUrl + (
-            volg        ? `&volg=${encodeURIComponent(volg)}`
-          : person_id   ? `&person_id=${encodeURIComponent(person_id)}`
+            person_id   ? `&person_id=${encodeURIComponent(person_id)}`
           : /* license */ `&license_key=${encodeURIComponent(license_key)}`
           ));
     const [lookupRes, progRes] = await Promise.all([

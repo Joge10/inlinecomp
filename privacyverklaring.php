@@ -236,7 +236,9 @@ volledig omkeerbaar.</p>
     <li><strong>Gericht laten volgen</strong>: wie jou tóch wil volgen (bijvoorbeeld een ouder of
         coach) kan dat met een <strong>persoonlijk, geheim volg-ID</strong> dat je zelf deelt;
         alleen wie dat ID heeft, ziet je naam. Je kunt dit volg-ID op elk moment vernieuwen,
-        waarna eerdere volgers geen toegang meer hebben.</li>
+        waarna eerdere volgers geen toegang meer hebben. Als het volg-ID via een deelbare link
+        wordt doorgegeven, staat het achter het <code>#</code>-teken in de link; dat deel
+        stuurt je browser niet naar onze server, zodat het niet in serverlogs terechtkomt.</li>
     <li><strong>Import</strong>: geeft een gegevensbron (bijvoorbeeld de KNSB) aan dat een rijder
         anoniem wil zijn, dan nemen wij die keuze over bij het inlezen.</li>
 </ul>
@@ -738,7 +740,10 @@ fully reversible.</p>
     <li><strong>Letting specific people follow you</strong>: someone who still wants to follow you
         (for example a parent or coach) can do so with a <strong>personal, secret follow-ID</strong>
         that you share yourself; only someone with that ID sees your name. You can renew this
-        follow-ID at any time, after which earlier followers no longer have access.</li>
+        follow-ID at any time, after which earlier followers no longer have access. If the
+        follow-ID is passed via a shareable link, it sits in the link after the <code>#</code>
+        sign; your browser does not send that part to our server, so it does not end up in
+        server logs.</li>
     <li><strong>Import</strong>: if a data source (for example the KNSB) indicates that a skater
         wishes to be anonymous, we adopt that choice on import.</li>
 </ul>
