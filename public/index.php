@@ -300,6 +300,12 @@ if (isset($actionRoutes[$action])) {
                 <span class="wmodal-tab-ico">🏛</span>
                 <span data-i18n="setup_tab_organisaties">Organisaties</span>
             </button>
+            <button type="button" class="wmodal-tab" data-tab="mijn_ic"
+                    role="tab" aria-selected="false" aria-controls="wmodal-pane-mijn_ic"
+                    onclick="switchWedstrijdTab('mijn_ic')">
+                <span class="wmodal-tab-ico">👤</span>
+                <span data-i18n="setup_tab_mijn_ic">Mijn InlineComp</span>
+            </button>
             <button type="button" class="wmodal-tab" data-tab="settings"
                     role="tab" aria-selected="false" aria-controls="wmodal-pane-settings"
                     onclick="switchWedstrijdTab('settings')">
@@ -324,6 +330,21 @@ if (isset($actionRoutes[$action])) {
         <div class="wmodal-pane" id="wmodal-pane-organisaties" role="tabpanel" hidden>
             <div id="wmodal-organisatie-lijst" class="wmodal-organisatie-lijst">
                 <div class="wmodal-laden" data-i18n="opt_laden">Laden…</div>
+            </div>
+        </div>
+
+        <!-- Pane: Mijn InlineComp — placeholder-tab voor profiel-integratie.
+             Scope-overweging (2026-10-05): /check/profiel.php verhuist naar
+             /public/ bij de inlinecomp.com-migratie (december 2026); per
+             gevolgde rijder pincode-ontgrendeling + profiel-view/beheer.
+             Nu alleen een lege kaart om te zien hoe de 4e tab zich qua
+             tab-ruimte verhoudt op smalle schermen (NL + DE labels zijn
+             lang: "Mijn InlineComp" / "Mein InlineComp"). -->
+        <div class="wmodal-pane" id="wmodal-pane-mijn_ic" role="tabpanel" hidden>
+            <div class="wmodal-placeholder">
+                <div class="wmodal-placeholder-ico">👤</div>
+                <p data-i18n="setup_mijn_ic_binnenkort">Mijn InlineComp komt hier binnenkort</p>
+                <p class="wmodal-placeholder-sub" data-i18n="setup_mijn_ic_binnenkort_sub">Hier bekijk en beheer je persoonlijke profielen van gevolgde rijders.</p>
             </div>
         </div>
 

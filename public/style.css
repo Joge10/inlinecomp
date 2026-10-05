@@ -1441,12 +1441,18 @@ select:focus, input:focus { border-color: var(--middenblauw); outline: none; }
     background: var(--wit);
     border-bottom: 2px solid #dde3ea;
     margin: 0;
+    overflow: hidden;        /* nooit scrollen, labels afkappen (zie .wmodal-tab) */
     flex-shrink: 0;
 }
+/* Inactieve tabs delen de resterende vrije ruimte gelijk; de actieve tab
+   pakt alleen zoveel als 'ie nodig heeft voor zijn (volledige) label, met
+   een plafond van 45% van de rij-breedte zodat 'ie de andere drie niet
+   platdrukt. Zo passen 4 tabs met lange labels ("Mijn InlineComp" / "Mein
+   InlineComp") op smalle schermen. */
 .wmodal-tab {
     flex: 1 1 0; min-width: 0;
     background: none; border: none;
-    padding: 8px 2px;
+    padding: 8px 4px;
     text-align: center;
     font-size: .72rem; font-weight: 600;
     color: #888;
@@ -1459,10 +1465,16 @@ select:focus, input:focus { border-color: var(--middenblauw); outline: none; }
     overflow: hidden;
 }
 .wmodal-tab > span:not(.wmodal-tab-ico) {
-    overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 100%;
+    overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+    min-width: 0; max-width: 100%;
 }
 .wmodal-tab:hover  { color: #555; }
-.wmodal-tab.actief { color: var(--blauw); border-bottom-color: var(--oranje); }
+.wmodal-tab.actief {
+    flex: 0 0 auto;
+    max-width: 45%;
+    padding-left: 8px; padding-right: 8px;
+    color: var(--blauw); border-bottom-color: var(--oranje);
+}
 .wmodal-tab-ico    { font-size: 1rem; line-height: 1; }
 .wmodal-pane       { padding: 12px 0 8px; }
 .wmodal-pane[hidden] { display: none; }

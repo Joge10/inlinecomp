@@ -628,9 +628,16 @@ function _setViewState(mode) {
     const hub   = document.getElementById('hub-view');
     const strip = document.getElementById('setup-strip');
     const res   = document.getElementById('resultaat');
+    const foot  = document.getElementById('org-footer');
     if (hub)   hub.hidden   = (mode !== 'hub');
     if (strip) strip.hidden = (mode !== 'wedstrijd');
     if (res)   res.hidden   = (mode === 'hub');
+    // Footer-ticker (org-logo + baan-logo + sponsor-marquee) hoort alleen bij
+    // de wedstrijd-view. In hub/org/wedstrijdinfo gaat 'ie uit (anders staat
+    // de ticker van de laatst-gekozen wedstrijd verwarrend onder een org-
+    // view of hub). updateHeaderLogos() in de selComp-change-handler zet 'm
+    // weer op display:block zodra je in de wedstrijd-view terugkomt.
+    if (foot && mode !== 'wedstrijd') foot.style.display = 'none';
     // 'wedstrijdinfo' en 'org' tonen beide alleen #resultaat (strip + hub
     // verborgen) — _rerenderActiveTab onderscheidt via _aktieveWedstrijdInfo /
     // _wmodalAktieveOrg welke content er hangt.
