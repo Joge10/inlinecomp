@@ -124,15 +124,32 @@ safeFetch('?action=competitions').then(r=>r.json()).then(comps => {
         selComp.value = wantedComp;
         selComp.dispatchEvent(new Event('change'));
     }
-    // Fase 5a-UX-flat: bepaal view-state na init. Deeplink (?comp=…) met
-    // bestaande wedstrijd → wedstrijd-view (change-handler zet _setViewState
-    // via _activeerWedstrijd niet, dus hier). Anders → hoofdview (hub) met
-    // Wedstrijden-tab, inclusief laden van kaartlijst zodat de "Laden…"-
-    // placeholder niet blijft staan.
+    // Bepaal view-state na init, in deze volgorde:
+    //  1. Deeplink (?comp=UUID met geldige wedstrijd) wint — binnenkomst via
+    //     QR-code of gedeelde link. URL wordt daarna opgeschoond zodat een
+    //     refresh (pull-to-refresh of auto) niet opnieuw deze wedstrijd
+    //     dwingt wanneer de user intussen naar hub/org is genavigeerd.
+    //  2. Sessie-herstel: als de user tijdens deze browser-sessie al ergens
+    //     was (hub-tab of wedstrijd), ga daar naartoe — zo verhoudt refresh
+    //     zich natuurlijk tot waar je was.
+    //  3. Default: hoofdview (hub) met Wedstrijden-tab, inclusief laden van
+    //     de kaartlijst zodat de "Laden…"-placeholder niet blijft staan.
     if (wantedComp && selComp.value === wantedComp) {
         _setViewState('wedstrijd');
+        try { history.replaceState(null, '', window.location.pathname); }
+        catch {}
     } else {
-        toonHubView('wedstrijden');
+        const saved = _herstelViewState();
+        if (saved?.mode === 'wedstrijd' && saved.compId
+            && selComp.querySelector(`option[value="${CSS.escape(saved.compId)}"]`)) {
+            selComp.value = saved.compId;
+            selComp.dispatchEvent(new Event('change'));
+            _setViewState('wedstrijd');
+        } else if (saved?.mode === 'hub' && saved.tab) {
+            toonHubView(saved.tab);
+        } else {
+            toonHubView('wedstrijden');
+        }
     }
 
     // Volg-token-deeplink (uit #volg=TOKEN): prefill het zoekveld. Als er
@@ -641,14 +658,42 @@ function _setViewState(mode) {
     // 'wedstrijdinfo' en 'org' tonen beide alleen #resultaat (strip + hub
     // verborgen) — _rerenderActiveTab onderscheidt via _aktieveWedstrijdInfo /
     // _wmodalAktieveOrg welke content er hangt.
+
+    // Sessie-herstel: onthoud waar de user is zodat een refresh (pull-to-
+    // refresh of auto) terugkomt op dezelfde plek i.p.v. standaard-hub of
+    // onverwacht in een wedstrijd-view. 'org'/'wedstrijdinfo' slaan we voor
+    // nu niet op (zouden org- of comp-cache nodig hebben om te heropenen) —
+    // bij refresh landt een org-user terug in hub, Organisaties-tab.
+    if (mode === 'wedstrijd' && selComp?.value) {
+        _onthoudViewState({ mode: 'wedstrijd', compId: selComp.value });
+    } else if (mode === 'org') {
+        _onthoudViewState({ mode: 'hub', tab: 'organisaties' });
+    }
+}
+
+// Sessie-storage helpers (per browser-tab, verdwijnt bij browser-close).
+// localStorage zou over tabs heen leaken; sessionStorage voelt juist voor
+// "waar was ik net?"-herstel binnen één app-sessie.
+const _VIEW_STATE_KEY = 'ic_pub_view_state';
+function _onthoudViewState(st) {
+    try { sessionStorage.setItem(_VIEW_STATE_KEY, JSON.stringify(st)); }
+    catch (e) { /* private mode / disabled storage — niet erg */ }
+}
+function _herstelViewState() {
+    try {
+        const raw = sessionStorage.getItem(_VIEW_STATE_KEY);
+        return raw ? JSON.parse(raw) : null;
+    } catch { return null; }
 }
 // Hub tonen (aangeroepen vanuit setup-strip klik en vanuit org-view-terug).
 // Behoudt onclick-naam-contract met index.php (setup-strip onclick).
 function toonHubView(tab) {
+    const t = tab || 'wedstrijden';
     _setViewState('hub');
+    _onthoudViewState({ mode: 'hub', tab: t });
     _invalideerWedstrijdModalCaches();
-    switchWedstrijdTab(tab || 'wedstrijden');
-    if ((tab || 'wedstrijden') === 'wedstrijden') _laadWedstrijdLijst();
+    switchWedstrijdTab(t);
+    if (t === 'wedstrijden') _laadWedstrijdLijst();
 }
 // Alle caches die aan volglijst/wedstrijd-publicatie hangen invalideren.
 // Server-side max-age=30/60 vangt eventuele dubbele requests op bij snel
@@ -677,6 +722,12 @@ function switchWedstrijdTab(tabId) {
         p.hidden = !match;
         p.classList.toggle('actief', match);
     });
+    // Alleen opslaan als de hub ook écht zichtbaar is — switchWedstrijdTab
+    // wordt ook stiekem aangeroepen vanuit toonHubView (die zelf al opslaat
+    // vóór 't tonen) en bij taalwissel; dubbel-save is onschadelijk, maar
+    // verkeerd-save vanuit een niet-hub-context moeten we voorkomen.
+    const hub = document.getElementById('hub-view');
+    if (hub && !hub.hidden) _onthoudViewState({ mode: 'hub', tab: tabId });
     // Settings-tab: push-blok (her)renderen + fallback-tekst alleen tonen
     // als er niks te doen is (geen rijders én push-blok leeg). Fallback staat
     // los van push-aan-status: een gebruiker die push al aan heeft (controls
@@ -1386,11 +1437,42 @@ function _toonWedstrijdInfoView(comp) {
                     ${plaats ? `<div class="wi-plaats">${plaats}</div>` : ''}
                 </div>
             </div>
-            <div class="wi-documenten">
+            <div class="org-view-tabs" role="tablist">
+                <button type="button" class="org-view-tab actief" data-tab="infobulletin"
+                        role="tab" aria-selected="true" onclick="switchWiTab('infobulletin')">
+                    <span class="org-view-tab-ico">📄</span>
+                    <span data-i18n="wi_tab_infobulletin">Infobulletin</span>
+                </button>
+                <button type="button" class="org-view-tab" data-tab="flyer"
+                        role="tab" aria-selected="false" onclick="switchWiTab('flyer')">
+                    <span class="org-view-tab-ico">🖼</span>
+                    <span data-i18n="wi_tab_flyer">Flyer</span>
+                </button>
+                <button type="button" class="org-view-tab" data-tab="vereniging"
+                        role="tab" aria-selected="false" onclick="switchWiTab('vereniging')">
+                    <span class="org-view-tab-ico">🛡️</span>
+                    <span data-i18n="wi_tab_vereniging">Vereniging</span>
+                </button>
+            </div>
+            <div class="org-view-pane actief" id="wi-pane-infobulletin" role="tabpanel">
                 <div class="wi-placeholder">
                     <div class="wi-placeholder-ico">📄</div>
-                    <p data-i18n="wi_documenten_binnenkort">${esc(t('wi_documenten_binnenkort'))}</p>
-                    <p class="wi-placeholder-sub" data-i18n="wi_documenten_binnenkort_sub">${esc(t('wi_documenten_binnenkort_sub'))}</p>
+                    <p data-i18n="wi_infobulletin_binnenkort">${esc(t('wi_infobulletin_binnenkort'))}</p>
+                    <p class="wi-placeholder-sub" data-i18n="wi_infobulletin_binnenkort_sub">${esc(t('wi_infobulletin_binnenkort_sub'))}</p>
+                </div>
+            </div>
+            <div class="org-view-pane" id="wi-pane-flyer" role="tabpanel" hidden>
+                <div class="wi-placeholder">
+                    <div class="wi-placeholder-ico">🖼</div>
+                    <p data-i18n="wi_flyer_binnenkort">${esc(t('wi_flyer_binnenkort'))}</p>
+                    <p class="wi-placeholder-sub" data-i18n="wi_flyer_binnenkort_sub">${esc(t('wi_flyer_binnenkort_sub'))}</p>
+                </div>
+            </div>
+            <div class="org-view-pane" id="wi-pane-vereniging" role="tabpanel" hidden>
+                <div class="wi-placeholder">
+                    <div class="wi-placeholder-ico">🛡️</div>
+                    <p data-i18n="wi_vereniging_binnenkort">${esc(t('wi_vereniging_binnenkort'))}</p>
+                    <p class="wi-placeholder-sub" data-i18n="wi_vereniging_binnenkort_sub">${esc(t('wi_vereniging_binnenkort_sub'))}</p>
                 </div>
             </div>
             <button class="wi-open-wedstrijd" type="button" data-i18n="wi_open_wedstrijd">${esc(t('wi_open_wedstrijd'))}</button>
@@ -1405,6 +1487,19 @@ function _toonWedstrijdInfoView(comp) {
     });
     if (typeof applyI18n === 'function') applyI18n(divResult);
     divResult.scrollIntoView({ behavior: 'smooth', block: 'start' });
+}
+
+function switchWiTab(tabId) {
+    document.querySelectorAll('.wi-view .org-view-tab').forEach(t => {
+        const match = t.dataset.tab === tabId;
+        t.classList.toggle('actief', match);
+        t.setAttribute('aria-selected', match ? 'true' : 'false');
+    });
+    document.querySelectorAll('.wi-view .org-view-pane').forEach(p => {
+        const match = p.id === 'wi-pane-' + tabId;
+        p.hidden = !match;
+        p.classList.toggle('actief', match);
+    });
 }
 
 function _terugUitWedstrijdInfo() {
