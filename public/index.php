@@ -410,8 +410,9 @@ if (isset($actionRoutes[$action])) {
 <script>
 // Shell -> app.js: één bron van waarheid voor versie + changelog (uit PHP).
 window.APP_CONFIG = {
-    versie:    <?= json_encode(INLINECOMP_VERSIE) ?>,
-    changelog: <?= json_encode($__clMine, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES) ?>
+    versie:          <?= json_encode(INLINECOMP_VERSIE) ?>,
+    changelog:       <?= json_encode($__clMine, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES) ?>,
+    gmapsEmbedKey:   <?= json_encode($GLOBALS['GOOGLE_MAPS_EMBED_KEY'] ?? '') ?>
 };
 </script>
 <?php

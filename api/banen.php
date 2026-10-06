@@ -143,6 +143,7 @@ try {
         // alle org's volstaat. Zelfde pattern als gedeeld_logo_path.
         $stmt = $pdo->prepare("
             SELECT b.id, b.organisatie_id, b.naam, b.stad, b.vereniging_naam,
+                   b.adres, b.over_tekst, b.over_foto, b.website_url,
                    b.logo_path, b.logo_updated_at, b.updated_at, b.layout_data,
                    (SELECT b2.logo_path FROM banen b2
                     WHERE b2.naam = b.naam AND b2.id != b.id
@@ -156,6 +157,22 @@ try {
                     WHERE b2.naam = b.naam AND b2.id != b.id
                       AND b2.layout_data IS NOT NULL
                     LIMIT 1) AS gedeeld_layout_data,
+                   (SELECT b2.adres FROM banen b2
+                    WHERE b2.naam = b.naam AND b2.id != b.id
+                      AND b2.adres IS NOT NULL AND b2.adres != ''
+                    LIMIT 1) AS gedeeld_adres,
+                   (SELECT b2.over_tekst FROM banen b2
+                    WHERE b2.naam = b.naam AND b2.id != b.id
+                      AND b2.over_tekst IS NOT NULL AND b2.over_tekst != ''
+                    LIMIT 1) AS gedeeld_over_tekst,
+                   (SELECT b2.over_foto FROM banen b2
+                    WHERE b2.naam = b.naam AND b2.id != b.id
+                      AND b2.over_foto IS NOT NULL AND b2.over_foto != ''
+                    LIMIT 1) AS gedeeld_over_foto,
+                   (SELECT b2.website_url FROM banen b2
+                    WHERE b2.naam = b.naam AND b2.id != b.id
+                      AND b2.website_url IS NOT NULL AND b2.website_url != ''
+                    LIMIT 1) AS gedeeld_website_url,
                    (SELECT COUNT(*) FROM baan_aliassen a WHERE a.baan_id = b.id) AS aliassen_aantal,
                    (SELECT COUNT(*) FROM competitions c WHERE c.baan_id = b.id) AS comp_aantal
             FROM banen b
@@ -223,11 +240,19 @@ try {
 
     // Save (aanmaken of bijwerken)
     if ($action === 'save') {
-        $bid     = trim($_POST['id']               ?? '');
-        $orgId   = trim($_POST['org_id']           ?? '');
-        $naam    = trim($_POST['naam']             ?? '');
-        $stad    = trim($_POST['stad']             ?? '') ?: null;
+        $bid     = trim($_POST['id']                ?? '');
+        $orgId   = trim($_POST['org_id']            ?? '');
+        $naam    = trim($_POST['naam']              ?? '');
+        $stad    = trim($_POST['stad']              ?? '') ?: null;
         $verNaam = trim($_POST['vereniging_naam']   ?? '') ?: null;
+        $adres   = trim($_POST['adres']             ?? '') ?: null;
+        $overTxt = trim($_POST['over_tekst']        ?? '') ?: null;
+        $website = trim($_POST['website_url']       ?? '') ?: null;
+        if ($website !== null && !preg_match('#^https?://#i', $website)) {
+            http_response_code(400);
+            echo json_encode(['error' => 'Website-URL moet beginnen met http:// of https://']);
+            exit;
+        }
 
         if ($naam === '') {
             http_response_code(400);
@@ -251,9 +276,10 @@ try {
             }
             $bid = uuid4_b();
             $pdo->prepare("
-                INSERT INTO banen (id, organisatie_id, naam, stad, vereniging_naam)
-                VALUES (?, ?, ?, ?, ?)
-            ")->execute([$bid, $orgId, $naam, $stad, $verNaam]);
+                INSERT INTO banen (id, organisatie_id, naam, stad, vereniging_naam,
+                                   adres, over_tekst, website_url)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+            ")->execute([$bid, $orgId, $naam, $stad, $verNaam, $adres, $overTxt, $website]);
         } else {
             // Bestaand — naam-conflict check binnen dezelfde org
             $cur = $pdo->prepare("SELECT organisatie_id FROM banen WHERE id = ?");
@@ -274,12 +300,42 @@ try {
                 exit;
             }
             $pdo->prepare("
-                UPDATE banen SET naam = ?, stad = ?, vereniging_naam = ?
-                WHERE id = ?
-            ")->execute([$naam, $stad, $verNaam, $bid]);
+                UPDATE banen
+                   SET naam = ?, stad = ?, vereniging_naam = ?,
+                       adres = ?, over_tekst = ?, website_url = ?
+                 WHERE id = ?
+            ")->execute([$naam, $stad, $verNaam, $adres, $overTxt, $website, $bid]);
         }
 
         echo json_encode(['ok' => true, 'id' => $bid]);
+        exit;
+    }
+
+    // ── Over-foto wissen (bij "Over deze vereniging"-tekst) ───────────────
+    // Verwijdert zowel de DB-verwijzing als de file op schijf. Aparte action
+    // zodat de save-action (die een hele baan opslaat) niet verward wordt
+    // met een losse foto-reset.
+    if ($action === 'wis_over_foto') {
+        $bid = trim($_POST['id'] ?? '');
+        if ($bid === '') {
+            http_response_code(400);
+            echo json_encode(['error' => 'id ontbreekt']);
+            exit;
+        }
+        $oudStmt = $pdo->prepare("SELECT over_foto FROM banen WHERE id = ?");
+        $oudStmt->execute([$bid]);
+        $oudPad = $oudStmt->fetchColumn();
+        if ($oudPad === false) {
+            http_response_code(404);
+            echo json_encode(['error' => 'Baan niet gevonden']);
+            exit;
+        }
+        $pdo->prepare("UPDATE banen SET over_foto = NULL WHERE id = ?")->execute([$bid]);
+        if ($oudPad) {
+            $fs = __DIR__ . '/../' . ltrim($oudPad, '/');
+            if (is_file($fs)) @unlink($fs);
+        }
+        echo json_encode(['ok' => true]);
         exit;
     }
 

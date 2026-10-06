@@ -15,8 +15,8 @@ header('Pragma: no-cache');
 $ORG_NAAM   = 'InlineComp';                 // TODO: aanpassen naar jouw vereniging / beheerder
 $ORG_EMAIL  = 'inlinecomp@devriesen.com';   // TODO: e-mailadres voor verzoeken
 $ORG_ADRES  = '';                           // TODO: eventueel postadres
-$LAATSTE_UPDATE_NL = '4 oktober 2026';
-$LAATSTE_UPDATE_EN = '4 October 2026';
+$LAATSTE_UPDATE_NL = '6 oktober 2026';
+$LAATSTE_UPDATE_EN = '6 October 2026';
 ?><!DOCTYPE html>
 <html lang="nl">
 <head>
@@ -356,6 +356,11 @@ en bieden wij de mogelijkheid om de naam publiek af te schermen (§1e).</p>
     <li><strong>Geo-IP-dienst (ip-api.com – Artia International S.R.L., Roemenië)</strong>:
         uitsluitend om bij een login het IP-adres om te zetten naar een globale locatie
         (land/stad) voor het login-logboek — zie §5d.</li>
+    <li><strong>Google Maps (click-to-load)</strong>: op de Vereniging-tab van de
+        wedstrijd-info-view staat een knop <em>Toon kaart</em>. Pas wanneer je die klikt,
+        wordt een Google Maps-weergave geladen in een afgeschermd venster (iframe).
+        Vanaf dat moment verwerkt Google je bezoekgegevens volgens hun eigen
+        privacybeleid. Zolang je niet klikt gaat er niets naar Google.</li>
     <li>Wij verkopen géén gegevens en delen ze niet met derden buiten het
         bovenstaande.</li>
 </ul>
@@ -855,6 +860,11 @@ GDPR) additionally applies as the legal basis — see sections 1b and 1c.</p>
     <li><strong>Geo-IP service (ip-api.com – Artia International S.R.L., Romania)</strong>:
         solely to convert an IP address into an approximate location (country/city) for the
         login log at sign-in — see §5d.</li>
+    <li><strong>Google Maps (click-to-load)</strong>: the Club tab of the competition
+        info view contains a <em>Show map</em> button. Only when you click it, a Google
+        Maps view is loaded inside a sandboxed window (iframe). From that moment, Google
+        processes your visit according to their own privacy policy. If you do not click,
+        nothing is sent to Google.</li>
     <li>We do <strong>not</strong> sell data and do not share it with third
         parties beyond the above.</li>
 </ul>

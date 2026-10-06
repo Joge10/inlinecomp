@@ -3,7 +3,7 @@
 //  InlineComp – Logo / protokol-foto upload
 //
 //  POST multipart/form-data
-//    type  = 'org' | 'sponsor' | 'baan' | 'baan_sponsor'
+//    type  = 'org' | 'sponsor' | 'baan' | 'baan_sponsor' | 'baan_over_foto'
 //          | 'protokol_voorblad' | 'protokol_nawoord'
 //          | 'wedstrijd_doc_info' (PDF)
 //          | 'wedstrijd_doc_flyer' (image)
@@ -103,6 +103,13 @@ if ($type === 'protokol_voorblad' || $type === 'protokol_nawoord') {
     $stamp     = time();
     $filename  = $veld . '_' . $stamp . '.' . $ext;
     $relPath   = 'uploads/wedstrijd_docs/' . $safeId . '/' . $filename;
+} elseif ($type === 'baan_over_foto') {
+    // Foto bij "Over deze vereniging"-tekst in de Vereniging-tab van de
+    // wedstrijd-info-view. Eigen submap per baan (cache-buster timestamp).
+    $uploadDir = __DIR__ . '/../uploads/banen_over/' . $safeId . '/';
+    $stamp     = time();
+    $filename  = 'over_' . $stamp . '.' . $ext;
+    $relPath   = 'uploads/banen_over/' . $safeId . '/' . $filename;
 } else {
     $uploadDir = __DIR__ . '/../uploads/logos/';
     $filename  = $type . '_' . $safeId . '.' . $ext;
@@ -169,6 +176,16 @@ try {
         $oudStmt->execute([$id]);
         $oudPad = $oudStmt->fetchColumn();
         $pdo->prepare("UPDATE competitions SET $kolom = ? WHERE id = ?")
+            ->execute([$relPath, $id]);
+        if ($oudPad && $oudPad !== $relPath) {
+            $oudFs = __DIR__ . '/../' . $oudPad;
+            if (is_file($oudFs)) @unlink($oudFs);
+        }
+    } elseif ($type === 'baan_over_foto') {
+        $oudStmt = $pdo->prepare("SELECT over_foto FROM banen WHERE id = ?");
+        $oudStmt->execute([$id]);
+        $oudPad = $oudStmt->fetchColumn();
+        $pdo->prepare("UPDATE banen SET over_foto = ? WHERE id = ?")
             ->execute([$relPath, $id]);
         if ($oudPad && $oudPad !== $relPath) {
             $oudFs = __DIR__ . '/../' . $oudPad;

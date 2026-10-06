@@ -1713,29 +1713,43 @@ select:focus, input:focus { border-color: var(--middenblauw); outline: none; }
 .wi-placeholder p { font-size: .9rem; font-weight: 600; color: #333; margin: 0; }
 .wi-placeholder-sub { font-size: .78rem; font-weight: normal; color: #666; margin-top: 4px; }
 
-/* Vereniging-tab: baan-info-kaart + layout-render (fase A-blok 3). */
-.wi-ver-kaart {
-    display: flex; gap: 12px; align-items: center;
+/* Vereniging-tab: alles leeft in één gedeeld paneel (wit kaartje met rand,
+   één afronding). Sub-blokken (baaninfo, baan-layout, over, maps) hebben
+   geen eigen bg/border meer; scheiding via een subtiele border-top op elk
+   opvolgend sub-blok. */
+.wi-ver-paneel {
     background: #fff; border: 1px solid #dde3ea; border-radius: 10px;
-    padding: 12px 14px; margin-bottom: 10px;
+    overflow: hidden;   /* zorg dat kaart-iframe-hoeken netjes afsnijden */
 }
-.wi-ver-logo {
-    width: 56px; height: 56px; flex-shrink: 0;
-    border-radius: 8px; object-fit: contain;
-    background: #f4f6f8;
+.wi-ver-paneel > * + * { border-top: 1px solid #eef2f6; }
+
+.wi-ver-baaninfo {
+    padding: 12px 14px;
 }
-.wi-ver-logo--leeg {
-    display: flex; align-items: center; justify-content: center;
-    font-size: 1.6rem; color: var(--blauw);
+.wi-ver-baaninfo-hdr {
+    display: flex; justify-content: space-between; align-items: flex-start;
+    gap: 10px;
+    margin-bottom: 6px;
 }
-.wi-ver-info { flex: 1; min-width: 0; }
-.wi-ver-naam { font-size: 1.05rem; font-weight: 700; color: var(--blauw); line-height: 1.2; }
-.wi-ver-baan { font-size: .85rem; color: #555; margin-top: 3px; }
-.wi-ver-stad { color: #888; }
-.wi-ver-layout-wrap {
-    background: #fff; border: 1px solid #dde3ea; border-radius: 10px;
-    padding: 10px; overflow: hidden;
+.wi-ver-baaninfo-hdr h3 {
+    margin: 0; font-size: .98rem; font-weight: 700; color: var(--blauw);
+    line-height: 1.4; flex: 1;
 }
+.wi-ver-baaninfo-logo {
+    max-height: 44px; max-width: 110px;
+    object-fit: contain; flex-shrink: 0;
+}
+.wi-ver-baaninfo-rijen { display: flex; flex-direction: column; }
+.wi-ver-baaninfo-rij {
+    display: grid; grid-template-columns: 90px 1fr; gap: 10px;
+    padding: 6px 0;
+    font-size: .86rem;
+}
+.wi-ver-baaninfo-lbl { color: var(--blauw); font-weight: 600; }
+.wi-ver-baaninfo-val { color: #333; line-height: 1.4; word-break: break-word; }
+.wi-ver-baaninfo-val a { color: var(--oranje); text-decoration: none; }
+.wi-ver-baaninfo-val a:hover { text-decoration: underline; }
+.wi-ver-layout-wrap { padding: 10px; overflow: hidden; }
 /* Geen vaste aspect-ratio: de container volgt het natuurlijke
    SVG-aspect (= bounding-box van de baan), zodat er geen witruimte
    links/rechts of boven/onder optreedt. Max-height begrenst sterk
@@ -1747,12 +1761,91 @@ select:focus, input:focus { border-color: var(--middenblauw); outline: none; }
 }
 .wi-ver-legenda {
     display: flex; flex-wrap: wrap; justify-content: center;
-    gap: 10px 16px; margin-top: 10px;
-    padding-top: 10px; border-top: 1px solid #eef2f6;
+    gap: 10px 16px; margin-top: 8px;
     font-size: .78rem; color: #555;
 }
 .wi-ver-legenda-item { display: inline-flex; align-items: center; gap: 5px; }
 .wi-ver-legenda-dot { width: 12px; height: 12px; border-radius: 50%; display: inline-block; }
+
+/* Disclaimer-regel bij geschat adres (gebruikt binnen de baaninformatie-
+   locatie-rij als er geen echt adres is ingevuld). */
+.wi-ver-adres-schatting {
+    font-size: .72rem; color: #888; font-style: italic;
+    margin-top: 4px; line-height: 1.4;
+}
+
+/* "Over deze vereniging"-blok onder de SVG-layout. Foto gaat full-bleed
+   (zelfde breedte als de map onderaan, geen afgeronde hoeken), de tekst
+   krijgt eigen padding. Logo-fallback blijft wel gecentreerd met marge. */
+.wi-ver-over { }
+.wi-ver-over-media {
+    display: block; width: 100%; max-height: 320px;
+    object-fit: cover;
+}
+.wi-ver-over-media--logo {
+    width: auto; margin: 14px auto 0; max-height: 140px;
+    object-fit: contain;
+}
+.wi-ver-over-tekst {
+    padding: 14px;
+    font-size: .9rem; line-height: 1.5; color: #333;
+}
+
+/* Google-Maps click-to-load (fase A-blok 3c): placeholder = fictief
+   kaartje-SVG + knop; iframe wordt pas na expliciete klik ingevoegd zodat
+   er zonder user-actie geen data naar Google gaat. */
+.wi-ver-mapwrap {
+    position: relative;
+    width: 100%; height: 300px;
+    overflow: hidden; background: #e8ece0;
+}
+.wi-ver-map-illus {
+    position: absolute; inset: 0;
+    width: 100%; height: 100%;
+    display: block; object-fit: cover; object-position: center;
+}
+.wi-ver-map-cta {
+    position: absolute; inset: 0;
+    display: flex; flex-direction: column; align-items: center; justify-content: center;
+    gap: 4px;
+    background: rgba(255, 255, 255, .45);
+    border: none; cursor: pointer;
+    color: var(--tekst); font-family: inherit;
+    transition: background .15s;
+}
+.wi-ver-map-cta:hover,
+.wi-ver-map-cta:focus { background: rgba(255, 255, 255, .6); outline: none; }
+.wi-ver-map-cta-ico {
+    font-size: 2.2rem; line-height: 1;
+    background: #fff; border-radius: 50%;
+    width: 56px; height: 56px;
+    display: flex; align-items: center; justify-content: center;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, .15);
+}
+.wi-ver-map-cta-tekst {
+    background: var(--blauw); color: #fff;
+    padding: 8px 20px; border-radius: 7px;
+    font-weight: 700; font-size: .9rem;
+    margin-top: 8px;
+    box-shadow: 0 2px 6px rgba(0, 0, 0, .15);
+}
+.wi-ver-map-cta-sub {
+    font-size: .72rem; color: #333;
+    background: rgba(255, 255, 255, .85);
+    padding: 3px 8px; border-radius: 4px;
+    margin-top: 4px;
+}
+.wi-ver-map-iframe {
+    width: 100%; height: 300px; border: 0; display: block;
+    /* Expliciet pointer/touch activeren: parent-elementen (bv. de
+       touchstart-handler van onze PTR of een overlapping overlay) mogen
+       de interactie binnen de map niet opslokken. */
+    pointer-events: auto; touch-action: auto;
+}
+.wi-ver-map-geen-key {
+    padding: 24px 16px; text-align: center;
+    color: #888; font-size: .85rem; font-style: italic;
+}
 /* Wedstrijd-docs renderen (fase 5b-content):
    - Infobulletin: PDF.js canvas-rendering (werkt mobile én desktop,
      geen 3rd-party privacy-leak — alleen de lib komt van cdnjs).

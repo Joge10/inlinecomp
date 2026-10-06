@@ -259,6 +259,22 @@ function bouwBaanForm(id) {
     const baseUrl = new URL('.', window.location.href).href;
     const cb = encodeURIComponent(b.logo_updated_at ?? b.updated_at ?? '');
     const logoPreviewSrc = b.logo_path ? (baseUrl + b.logo_path + '?v=' + cb) : '';
+    // Over-foto preview: eigen wint, anders gedeelde (toont met opacity-hint
+    // dat 't van een andere org komt — zelfde pattern als bij baan-layout).
+    const overFotoEigen   = b.over_foto    ? (baseUrl + b.over_foto    + '?t=' + Date.now()) : '';
+    const overFotoGedeeld = (!b.over_foto && b.gedeeld_over_foto) ? (baseUrl + b.gedeeld_over_foto + '?t=' + Date.now()) : '';
+    const overFotoSrc     = overFotoEigen || overFotoGedeeld;
+    const overFotoIsGedeeld = !!(overFotoGedeeld && !overFotoEigen);
+
+    // Hint-tekst onder velden met cross-org fallback: als eigen leeg is maar
+    // een andere org dezelfde baan al heeft ingevuld, zien bezoekers die
+    // gedeelde waarde in de public Vereniging-tab. Beheerder kan hier eigen
+    // waarde zetten om de gedeelde te overschrijven voor deze org.
+    const _gedeeldHint = (val, label) => (val && b.id)
+        ? `<div class="label-hint" style="color:#888;font-style:italic">
+             Nu getoond via een andere organisatie: ${escHtml((val + '').slice(0, 80))}${(val + '').length > 80 ? '…' : ''}
+           </div>`
+        : '';
 
     return `<div id="bn-form-wrap" class="bn-form-wrap">
         <h3>${isNieuw ? 'Nieuwe baan' : 'Baan bewerken'}</h3>
@@ -285,6 +301,34 @@ function bouwBaanForm(id) {
                 ${b.id ? '' : '<div class="label-hint">Eerst opslaan, daarna kun je een logo uploaden.</div>'}
             </label>
         </div>
+
+        ${b.id ? `<div class="bn-ver-info-blok">
+            <div class="inst-subtitel">Vereniging-info <span class="inst-subtitel-hint">(verschijnt in de Vereniging-tab op /public bij wedstrijden op deze baan — cross-org: zelfde baan onder meerdere orgs gebruikt automatisch wat de andere org invult, hier override je dat voor jouw org)</span></div>
+            <label class="mf-lbl"><span>Adres</span>
+                <textarea id="bn-adres" class="inp" rows="2" placeholder="bv.&#10;Sportpark Het Plantsoen 10&#10;1234 AB Leiderdorp">${escHtml(b.adres ?? '')}</textarea>
+                ${!b.adres ? _gedeeldHint(b.gedeeld_adres, 'adres') : ''}
+            </label>
+            <label class="mf-lbl"><span>Website</span>
+                <input type="url" id="bn-website" class="inp" value="${escHtml(b.website_url ?? '')}" placeholder="https://…">
+                ${!b.website_url ? _gedeeldHint(b.gedeeld_website_url, 'website') : ''}
+            </label>
+            <label class="mf-lbl"><span>Over deze vereniging</span>
+                <textarea id="bn-over-tekst" class="inp" rows="5" placeholder="Korte intro over de vereniging en de baan — wordt onder de baan-layout getoond op /public.">${escHtml(b.over_tekst ?? '')}</textarea>
+                ${!b.over_tekst ? _gedeeldHint(b.gedeeld_over_tekst, 'over-tekst') : ''}
+            </label>
+            <label class="mf-lbl"><span>Foto bij over-tekst <small style="color:#888">(optioneel; als leeg wordt het logo groot getoond)</small></span>
+                <div class="logo-preview-wrap bn-over-foto-wrap"${overFotoIsGedeeld ? ' style="opacity:.65"' : ''}>
+                    <img id="bn-over-foto-preview" src="${escHtml(overFotoSrc)}" alt="" style="${overFotoSrc ? '' : 'display:none'}">
+                    ${overFotoSrc ? '' : '<span class="logo-geen">Geen foto</span>'}
+                </div>
+                <label class="btn-upload" for="bn-over-foto-file">&#128247; Foto uploaden</label>
+                <input type="file" id="bn-over-foto-file" accept="image/*" style="display:none">
+                ${b.over_foto ? `<button class="btn-del btn-small" id="bn-over-foto-del" type="button" style="margin-top:4px">🗑 Foto verwijderen</button>` : ''}
+                ${overFotoIsGedeeld
+                    ? '<div class="label-hint" style="color:#888;font-style:italic;margin-top:4px">Foto overgenomen van een andere organisatie met dezelfde baan-naam. Upload eigen foto om te overschrijven.</div>'
+                    : ''}
+            </label>
+        </div>` : ''}
 
         ${b.id ? `<div class="bn-aliassen-blok">
             <div class="inst-subtitel">Aliassen <span class="inst-subtitel-hint">(alternatieve schrijfwijzen voor venue-naam in KNSB-feed)</span></div>
@@ -350,6 +394,8 @@ function bindBaanForm() {
     document.getElementById('bn-sponsor-add')?.addEventListener('click', () => voegSponsorRijToeBaan(null));
     document.getElementById('bn-layout-edit')?.addEventListener('click', openBaanLayoutEditor);
     document.getElementById('bn-layout-del')?.addEventListener('click', verwijderBaanLayout);
+    document.getElementById('bn-over-foto-file')?.addEventListener('change', uploadOverFoto);
+    document.getElementById('bn-over-foto-del')?.addEventListener('click', verwijderOverFoto);
 
     if (bnActieveId && bnActieveId !== 'NIEUW') {
         laadAliassen(bnActieveId);
@@ -466,10 +512,13 @@ function leesBaanSponsorsUitForm() {
 }
 
 async function slaBaanOp() {
-    const id   = document.getElementById('bn-id').value;
-    const naam = document.getElementById('bn-naam').value.trim();
-    const stad = document.getElementById('bn-stad').value.trim();
-    const ver  = document.getElementById('bn-ver').value.trim();
+    const id    = document.getElementById('bn-id').value;
+    const naam  = document.getElementById('bn-naam').value.trim();
+    const stad  = document.getElementById('bn-stad').value.trim();
+    const ver   = document.getElementById('bn-ver').value.trim();
+    const adres = document.getElementById('bn-adres')?.value.trim()       ?? '';
+    const over  = document.getElementById('bn-over-tekst')?.value.trim()  ?? '';
+    const web   = document.getElementById('bn-website')?.value.trim()     ?? '';
 
     if (!naam) { toonBevestigDialog('Naam is verplicht.', 'Baan opslaan'); return; }
 
@@ -480,6 +529,9 @@ async function slaBaanOp() {
     fd.append('naam', naam);
     fd.append('stad', stad);
     fd.append('vereniging_naam', ver);
+    fd.append('adres', adres);
+    fd.append('over_tekst', over);
+    fd.append('website_url', web);
 
     try {
         const res = await fetch('api/banen.php', { method: 'POST', body: fd });
@@ -535,6 +587,41 @@ async function uploadBaanLogo(e) {
     const res = await fetch('api/upload.php', { method: 'POST', body: fd });
     const data = await res.json();
     if (!res.ok) { toonBevestigDialog(data.error || 'Upload mislukt', 'Logo uploaden'); return; }
+    await laadBanen();
+}
+
+// Foto bij "Over deze vereniging"-blok — zelfde patroon als logo-upload,
+// upload.php type 'baan_over_foto' schrijft naar uploads/banen_over/<id>/.
+async function uploadOverFoto(e) {
+    const file = e.target.files[0];
+    const id   = document.getElementById('bn-id').value;
+    if (!file || !id) return;
+    const fd = new FormData();
+    fd.append('type', 'baan_over_foto');
+    fd.append('id', id);
+    fd.append('logo', file);
+    const res = await fetch('api/upload.php', { method: 'POST', body: fd });
+    const data = await res.json();
+    if (!res.ok) { toonBevestigDialog(data.error || 'Upload mislukt', 'Foto uploaden'); return; }
+    await laadBanen();
+}
+
+async function verwijderOverFoto() {
+    const id = document.getElementById('bn-id').value;
+    if (!id) return;
+    const ok = await toonBevestigDialog('Foto bij "Over deze vereniging" verwijderen?',
+        'Foto verwijderen', 'Verwijderen', 'Annuleren');
+    if (!ok) return;
+    // Via save-action: over_foto moet apart met een nieuwe mini-action.
+    // Pragmatisch: we gebruiken een losse endpoint-call die alleen over_foto
+    // op null zet. De bestaande save-action herschrijft andere velden niet
+    // ongewenst, maar is bedoeld voor volledige save; dus apart endpoint.
+    const fd = new FormData();
+    fd.append('action', 'wis_over_foto');
+    fd.append('id', id);
+    const res = await fetch('api/banen.php', { method: 'POST', body: fd });
+    const data = await res.json();
+    if (!res.ok) { toonBevestigDialog(data.error || 'Fout', 'Foto verwijderen'); return; }
     await laadBanen();
 }
 

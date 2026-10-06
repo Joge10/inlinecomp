@@ -1589,25 +1589,149 @@ function _renderVerenigingTab(pane, baan) {
         if (typeof applyI18n === 'function') applyI18n(pane);
         return;
     }
-    const naam        = baan.naam        || '';
-    const stad        = baan.stad        || '';
+    const naam        = baan.naam         || '';
+    const stad        = baan.stad         || '';
     const vereniging  = baan.vereniging_naam || '';
-    const logo        = baan.logo_url    || '';
+    const logo        = baan.logo_url     || '';
+    const adres       = baan.adres        || '';
+    const overTekst   = baan.over_tekst   || '';
+    const overFoto    = baan.over_foto_url || '';
+    const website     = baan.website_url  || '';
     const layoutSvg   = baan.layout_data ? _pblRenderLayoutSvg(baan.layout_data) : '';
     const legendaHtml = (layoutSvg && baan.layout_data) ? _pblLegendaHtml(baan.layout_data) : '';
-    pane.innerHTML = `
-        <div class="wi-ver-kaart">
-            ${logo ? `<img class="wi-ver-logo" src="${esc(logo)}" alt="">` : '<div class="wi-ver-logo wi-ver-logo--leeg">🛡️</div>'}
-            <div class="wi-ver-info">
-                ${vereniging ? `<div class="wi-ver-naam">${esc(vereniging)}</div>` : ''}
-                ${naam ? `<div class="wi-ver-baan">${esc(naam)}${stad ? ` <span class="wi-ver-stad">· ${esc(stad)}</span>` : ''}</div>` : ''}
-            </div>
-        </div>
-        <div class="wi-ver-layout-wrap">
-            ${layoutSvg
-                ? `<div class="wi-ver-layout">${layoutSvg}</div>${legendaHtml}`
-                : `<div class="wi-placeholder-sub" style="padding:24px 12px;text-align:center" data-i18n="wi_ver_geen_layout">${esc(t('wi_ver_geen_layout'))}</div>`}
+
+    // Baaninformatie-blok (vervangt de aparte vereniging-kaart + adres-blok):
+    // compacte label/value-tabel met vereniging, locatie en website. Logo
+    // rechtsboven. Google Maps blijft z'n eigen fallback-query gebruiken
+    // (compose van naam/stad/vereniging) als er geen echt adres is.
+    const adresFallbackDelen = [naam, stad, vereniging].filter(Boolean);
+    const adresFallback = adresFallbackDelen.join(', ');
+    const adresWeergave = adres || adresFallback;
+    const adresIsSchatting = !adres && !!adresFallback;
+
+    const locatieRegels = [];
+    if (naam) locatieRegels.push(esc(naam));
+    if (adres) {
+        for (const r of adres.split('\n')) {
+            const t = r.trim();
+            if (t) locatieRegels.push(esc(t));
+        }
+    } else if (stad) {
+        locatieRegels.push(esc(stad));
+    }
+
+    const rijen = [];
+    if (vereniging) {
+        rijen.push(`
+            <div class="wi-ver-baaninfo-rij">
+                <div class="wi-ver-baaninfo-lbl" data-i18n="wi_ver_lbl_vereniging">${esc(t('wi_ver_lbl_vereniging'))}</div>
+                <div class="wi-ver-baaninfo-val">${esc(vereniging)}</div>
+            </div>`);
+    }
+    if (locatieRegels.length) {
+        rijen.push(`
+            <div class="wi-ver-baaninfo-rij">
+                <div class="wi-ver-baaninfo-lbl" data-i18n="wi_ver_lbl_locatie">${esc(t('wi_ver_lbl_locatie'))}</div>
+                <div class="wi-ver-baaninfo-val">${locatieRegels.join('<br>')}${adresIsSchatting
+                    ? `<div class="wi-ver-adres-schatting" data-i18n="wi_ver_adres_schatting">${esc(t('wi_ver_adres_schatting'))}</div>`
+                    : ''}</div>
+            </div>`);
+    }
+    if (website) {
+        const kortWeb = website.replace(/^https?:\/\/(www\.)?/i, '').replace(/\/$/, '');
+        rijen.push(`
+            <div class="wi-ver-baaninfo-rij">
+                <div class="wi-ver-baaninfo-lbl" data-i18n="wi_ver_website">${esc(t('wi_ver_website'))}</div>
+                <div class="wi-ver-baaninfo-val"><a href="${esc(website)}" target="_blank" rel="noopener">${esc(kortWeb)}</a></div>
+            </div>`);
+    }
+    const baaninfoHtml = rijen.length
+        ? `<div class="wi-ver-baaninfo">
+             <div class="wi-ver-baaninfo-hdr">
+                 <h3 data-i18n="wi_ver_hdr_baaninfo">${esc(t('wi_ver_hdr_baaninfo'))}</h3>
+                 ${logo ? `<img class="wi-ver-baaninfo-logo" src="${esc(logo)}" alt="">` : ''}
+             </div>
+             <div class="wi-ver-baaninfo-rijen">${rijen.join('')}</div>
+           </div>`
+        : '';
+
+    // "Over deze vereniging"-blok: tekst + foto (of groot logo als fallback).
+    // Website zit nu in de baaninfo-tabel bovenaan en Google Maps in de kaart
+    // onderaan, dus hier alleen de rijke content (foto + verhaal).
+    const heeftOverContent = overTekst || overFoto || logo;
+    let overBlok = '';
+    if (heeftOverContent) {
+        const mediaSrc = overFoto || logo;
+        const mediaIsFoto = !!overFoto;
+        const mediaHtml = mediaSrc
+            ? `<img class="wi-ver-over-media${mediaIsFoto ? '' : ' wi-ver-over-media--logo'}" src="${esc(mediaSrc)}" alt="">`
+            : '';
+        const tekstHtml = overTekst
+            ? `<div class="wi-ver-over-tekst">${esc(overTekst).replace(/\n/g, '<br>')}</div>`
+            : '';
+        overBlok = `<div class="wi-ver-over">
+            ${mediaHtml}
+            ${tekstHtml}
         </div>`;
+    }
+
+    // Google-Maps-kaart (click-to-load, AVG-schoon): zolang de bezoeker niet
+    // klikt gaat er NIKS naar Google. Placeholder = fictief kaartje-SVG +
+    // knop, zelfde dimensies als het iframe dat 'em bij klik vervangt.
+    //
+    // Query voor Google: vereniging + baan-naam + adres (of stad) samen
+    // geeft Google veel meer context om de juiste venue te matchen dan
+    // alleen een adres (dat soms meerdere steden matcht), of alleen een
+    // naam (die buiten de context van 't dorp verwarrend is).
+    const mapQueryDelen = [vereniging, naam, adres || stad].filter(Boolean);
+    const mapQuery = mapQueryDelen.join(', ');
+    const kaartBlok = mapQuery
+        ? `<div class="wi-ver-mapwrap" data-mapq="${esc(mapQuery)}">
+             ${_pblMapPlaceholder()}
+           </div>`
+        : '';
+
+    pane.innerHTML = `
+        <div class="wi-ver-paneel">
+            ${baaninfoHtml}
+            <div class="wi-ver-layout-wrap">
+                ${layoutSvg
+                    ? `<div class="wi-ver-layout">${layoutSvg}</div>${legendaHtml}`
+                    : `<div class="wi-placeholder-sub" style="padding:24px 12px;text-align:center" data-i18n="wi_ver_geen_layout">${esc(t('wi_ver_geen_layout'))}</div>`}
+            </div>
+            ${overBlok}
+            ${kaartBlok}
+        </div>`;
+
+    // Click-to-load handler: placeholder → iframe met Google Maps embed.
+    // Pas na klik begint data-verkeer richting Google.
+    const mapWrap = pane.querySelector('.wi-ver-mapwrap');
+    if (mapWrap) {
+        const laadKaart = () => {
+            const q = mapWrap.dataset.mapq || '';
+            if (!q) return;
+            const key = window.APP_CONFIG?.gmapsEmbedKey || '';
+            // Embed API (volledig interactief: pan, zoom, StreetView).
+            // Classic ?output=embed had interactie-blocks aan Google-zijde
+            // (CORS/502 op interne RPC), vandaar de upgrade naar API-key.
+            // Zonder key: tonen we een foutmelding ipv een stuk iframe.
+            if (!key) {
+                mapWrap.innerHTML = `<div class="wi-ver-map-geen-key" data-i18n="wi_ver_kaart_geen_key">${esc(t('wi_ver_kaart_geen_key'))}</div>`;
+                return;
+            }
+            const src = `https://www.google.com/maps/embed/v1/place?key=${encodeURIComponent(key)}&q=${encodeURIComponent(q)}`;
+            // referrerpolicy="origin" overschrijft onze globale Referrer-
+            // Policy "same-origin" voor dit iframe, zodat Google de HTTP
+            // Referer meekrijgt om de key-restriction (*.devriesen.com) te
+            // verifiëren. Alleen de origin lekt — geen path of query.
+            mapWrap.innerHTML = `<iframe class="wi-ver-map-iframe"
+                src="${src}"
+                loading="lazy" allowfullscreen
+                referrerpolicy="origin"
+                title="Google Maps"></iframe>`;
+        };
+        mapWrap.querySelector('.wi-ver-map-cta')?.addEventListener('click', laadKaart);
+    }
     if (typeof applyI18n === 'function') applyI18n(pane);
 }
 
@@ -1660,6 +1784,20 @@ function _pblRenderLayoutSvg(layout) {
         `<path d="${p.d}" fill="${p.fill}" ${p.fillOpacity ? `fill-opacity="${p.fillOpacity}"` : ''} stroke="${p.stroke}" stroke-width="${p.width}" stroke-linecap="round" stroke-linejoin="round"/>`
     ).join('');
     return `<svg viewBox="${vb}" xmlns="http://www.w3.org/2000/svg" preserveAspectRatio="xMidYMid meet">${paths}</svg>`;
+}
+
+// Click-to-load-placeholder voor de Google-Maps-embed. Vervangt het iframe
+// tot bezoeker expliciet op "Toon kaart" klikt — tot dat moment gaat er
+// GEEN data naar Google. De fictieve kaart-illustratie (public/img/maps-
+// placeholder.webp) heeft dezelfde dimensies als het iframe (via CSS).
+function _pblMapPlaceholder() {
+    return `
+        <img class="wi-ver-map-illus" src="img/maps-placeholder.webp" alt="" aria-hidden="true" loading="lazy">
+        <button type="button" class="wi-ver-map-cta">
+            <span class="wi-ver-map-cta-ico">🗺️</span>
+            <span class="wi-ver-map-cta-tekst" data-i18n="wi_ver_toon_kaart">${esc(t('wi_ver_toon_kaart'))}</span>
+            <span class="wi-ver-map-cta-sub" data-i18n="wi_ver_toon_kaart_sub">${esc(t('wi_ver_toon_kaart_sub'))}</span>
+        </button>`;
 }
 
 // Legenda met één rij per daadwerkelijk zichtbare laag — kleuren matchen

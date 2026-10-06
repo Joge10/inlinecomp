@@ -64,7 +64,31 @@ if ($action === 'wedstrijd_docs') {
                        WHERE b2.naam = b.naam AND b2.id != b.id
                          AND b2.layout_data IS NOT NULL
                        LIMIT 1
-                   )) AS baan_layout_data
+                   )) AS baan_layout_data,
+                   COALESCE(b.adres, (
+                       SELECT b2.adres FROM banen b2
+                       WHERE b2.naam = b.naam AND b2.id != b.id
+                         AND b2.adres IS NOT NULL AND b2.adres != ''
+                       LIMIT 1
+                   )) AS baan_adres,
+                   COALESCE(b.over_tekst, (
+                       SELECT b2.over_tekst FROM banen b2
+                       WHERE b2.naam = b.naam AND b2.id != b.id
+                         AND b2.over_tekst IS NOT NULL AND b2.over_tekst != ''
+                       LIMIT 1
+                   )) AS baan_over_tekst,
+                   COALESCE(b.over_foto, (
+                       SELECT b2.over_foto FROM banen b2
+                       WHERE b2.naam = b.naam AND b2.id != b.id
+                         AND b2.over_foto IS NOT NULL AND b2.over_foto != ''
+                       LIMIT 1
+                   )) AS baan_over_foto,
+                   COALESCE(b.website_url, (
+                       SELECT b2.website_url FROM banen b2
+                       WHERE b2.naam = b.naam AND b2.id != b.id
+                         AND b2.website_url IS NOT NULL AND b2.website_url != ''
+                       LIMIT 1
+                   )) AS baan_website_url
             FROM competitions c
             LEFT JOIN banen b ON b.id = c.baan_id
             WHERE c.id = ?
@@ -94,12 +118,17 @@ if ($action === 'wedstrijd_docs') {
             $decoded = json_decode($row['baan_layout_data'], true);
             if (is_array($decoded)) $layout = $decoded;
         }
+        $overFoto = $row['baan_over_foto'] ? '/' . ltrim($row['baan_over_foto'], '/') : null;
         $baan = $row['baan_id'] ? [
             'naam'            => $row['baan_naam']        ?: null,
             'stad'            => $row['baan_stad']        ?: null,
             'vereniging_naam' => $row['baan_vereniging']  ?: null,
             'logo_url'        => $baanLogo,
             'layout_data'     => $layout,
+            'adres'           => $row['baan_adres']       ?: null,
+            'over_tekst'      => $row['baan_over_tekst']  ?: null,
+            'over_foto_url'   => $overFoto,
+            'website_url'     => $row['baan_website_url'] ?: null,
         ] : null;
         echo json_encode([
             'infobulletin_url'      => $row['infobulletin_url'] ?: null,
