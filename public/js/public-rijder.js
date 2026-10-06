@@ -1561,6 +1561,10 @@ async function _laadWedstrijdDocs(compId) {
             if (flyerPane) flyerPane.hidden = true;
         }
 
+        // Vereniging-tab: baan-info + layout (fase A-blok 3).
+        const verPane = document.getElementById('wi-pane-vereniging');
+        if (verPane) _renderVerenigingTab(verPane, data.baan);
+
         // Actieve tab verborgen? → terugvallen op vereniging.
         const actief = document.querySelector('.wi-view .org-view-tab.actief');
         if (actief && actief.hidden) switchWiTab('vereniging');
@@ -1569,6 +1573,196 @@ async function _laadWedstrijdDocs(compId) {
     } catch (e) {
         // Stil falen — tabs blijven in placeholder-staat.
     }
+}
+
+// Render de Vereniging-tab met baan-info + layout-tekening. Fallback-tekst
+// als er geen baan gekoppeld is of geen layout getekend; de tab verbergen
+// we niet (vereniging-tab is de default-view bij geen docs).
+function _renderVerenigingTab(pane, baan) {
+    if (!baan) {
+        pane.innerHTML = `
+            <div class="wi-placeholder">
+                <div class="wi-placeholder-ico">🛡️</div>
+                <p data-i18n="wi_vereniging_binnenkort">${esc(t('wi_vereniging_binnenkort'))}</p>
+                <p class="wi-placeholder-sub" data-i18n="wi_vereniging_binnenkort_sub">${esc(t('wi_vereniging_binnenkort_sub'))}</p>
+            </div>`;
+        if (typeof applyI18n === 'function') applyI18n(pane);
+        return;
+    }
+    const naam        = baan.naam        || '';
+    const stad        = baan.stad        || '';
+    const vereniging  = baan.vereniging_naam || '';
+    const logo        = baan.logo_url    || '';
+    const layoutSvg   = baan.layout_data ? _pblRenderLayoutSvg(baan.layout_data) : '';
+    const legendaHtml = (layoutSvg && baan.layout_data) ? _pblLegendaHtml(baan.layout_data) : '';
+    pane.innerHTML = `
+        <div class="wi-ver-kaart">
+            ${logo ? `<img class="wi-ver-logo" src="${esc(logo)}" alt="">` : '<div class="wi-ver-logo wi-ver-logo--leeg">🛡️</div>'}
+            <div class="wi-ver-info">
+                ${vereniging ? `<div class="wi-ver-naam">${esc(vereniging)}</div>` : ''}
+                ${naam ? `<div class="wi-ver-baan">${esc(naam)}${stad ? ` <span class="wi-ver-stad">· ${esc(stad)}</span>` : ''}</div>` : ''}
+            </div>
+        </div>
+        <div class="wi-ver-layout-wrap">
+            ${layoutSvg
+                ? `<div class="wi-ver-layout">${layoutSvg}</div>${legendaHtml}`
+                : `<div class="wi-placeholder-sub" style="padding:24px 12px;text-align:center" data-i18n="wi_ver_geen_layout">${esc(t('wi_ver_geen_layout'))}</div>`}
+        </div>`;
+    if (typeof applyI18n === 'function') applyI18n(pane);
+}
+
+// Baan-layout → SVG (read-only, zonder editor-handles).
+// Dezelfde geometrie als in js/banen.js (`renderBaanLayoutThumb`) maar met
+// expliciete viewBox-bepaling en met vereniging-kleuren consistent met de
+// editor-strokes. Geïsoleerd met _pbl-prefix (public baanlayout) om conflict
+// met elders te voorkomen.
+function _pblRenderLayoutSvg(layout) {
+    if (!layout?.layers) return '';
+    const layers = layout.layers;
+    const order = ['infield', 'weg', 'piste'];
+    const paden = [];
+    let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity;
+    for (const lid of order) {
+        const L = layers[lid];
+        if (!L?.paths) continue;
+        for (const P of L.paths) {
+            if (P.visible === false) continue;
+            const d = _pblPadNaarD(P, layers.piste, L.infieldMargin);
+            if (!d) continue;
+            const styling = lid === 'infield'
+                ? { fill: '#4a9050', fillOpacity: '.35', stroke: '#4a9050', width: 1 }
+                : lid === 'weg'
+                    ? { fill: 'none', stroke: '#5a7bc0', width: P.width || 4 }
+                    : { fill: 'none', stroke: '#4a4a4a', width: P.width || 5 };
+            paden.push({ d, ...styling });
+            if (P.shapeType === 'stadium' && P.stadium) {
+                const r = (P.stadium.diameter || 0) / 2;
+                [P.stadium.A, P.stadium.B].forEach(pt => {
+                    if (!pt) return;
+                    minX = Math.min(minX, pt.x - r); maxX = Math.max(maxX, pt.x + r);
+                    minY = Math.min(minY, pt.y - r); maxY = Math.max(maxY, pt.y + r);
+                });
+            } else if (P.points?.length) {
+                for (const pt of P.points) {
+                    minX = Math.min(minX, pt.x); maxX = Math.max(maxX, pt.x);
+                    minY = Math.min(minY, pt.y); maxY = Math.max(maxY, pt.y);
+                }
+            }
+        }
+    }
+    if (!paden.length || !isFinite(minX)) return '';
+    const w = (maxX - minX) || 1, h = (maxY - minY) || 1;
+    // 3% padding (was 8%): voorkomt dat de baan tegen de rand klapt, maar
+    // laat geen onnodige witruimte eromheen.
+    const pad = Math.max(w, h) * 0.03;
+    const vb = `${minX - pad} ${minY - pad} ${w + pad * 2} ${h + pad * 2}`;
+    const paths = paden.map(p =>
+        `<path d="${p.d}" fill="${p.fill}" ${p.fillOpacity ? `fill-opacity="${p.fillOpacity}"` : ''} stroke="${p.stroke}" stroke-width="${p.width}" stroke-linecap="round" stroke-linejoin="round"/>`
+    ).join('');
+    return `<svg viewBox="${vb}" xmlns="http://www.w3.org/2000/svg" preserveAspectRatio="xMidYMid meet">${paths}</svg>`;
+}
+
+// Legenda met één rij per daadwerkelijk zichtbare laag — kleuren matchen
+// de stroke-kleuren uit _pblRenderLayoutSvg. Lagen zonder zichtbare content
+// (geen punten én geen stadium handen gebruikt) worden overgeslagen zodat
+// de legenda altijd klopt met de SVG eronder.
+function _pblLegendaHtml(layout) {
+    if (!layout?.layers) return '';
+    const items = [];
+    for (const lid of ['piste', 'weg', 'infield']) {
+        const L = layout.layers[lid];
+        if (!L?.paths) continue;
+        const heeftZichtbaar = L.paths.some(p => {
+            if (p.visible === false) return false;
+            if (p.shapeType === 'stadium' || p.shapeType === 'follow-piste') return true;
+            return (p.points?.length ?? 0) >= 2;
+        });
+        if (!heeftZichtbaar) continue;
+        const i18nKey = lid === 'piste' ? 'wi_ver_laag_piste'
+                     : lid === 'weg'   ? 'wi_ver_laag_weg'
+                     :                   'wi_ver_laag_infield';
+        const kleur  = lid === 'piste' ? '#4a4a4a'
+                     : lid === 'weg'   ? '#5a7bc0'
+                     :                   '#4a9050';
+        items.push(`<span class="wi-ver-legenda-item">
+            <span class="wi-ver-legenda-dot" style="background:${kleur}"></span>
+            <span data-i18n="${i18nKey}">${esc(t(i18nKey))}</span>
+        </span>`);
+    }
+    return items.length ? `<div class="wi-ver-legenda">${items.join('')}</div>` : '';
+}
+
+function _pblPadNaarD(P, pisteLaag, infieldMargin) {
+    if (!P) return '';
+    if (P.shapeType === 'stadium' && P.stadium?.A && P.stadium?.B) {
+        return _pblStadiumD(P.stadium.A, P.stadium.B, P.stadium.diameter || 10);
+    }
+    if (P.shapeType === 'follow-piste') {
+        const pisteP = pisteLaag?.paths?.[0];
+        if (!pisteP || pisteP.shapeType !== 'stadium') return '';
+        const margin = infieldMargin ?? 0.5;
+        const innerD = Math.max(0.5, (pisteP.stadium.diameter || 10) - (pisteP.width || 0) - margin * 2);
+        return _pblStadiumD(pisteP.stadium.A, pisteP.stadium.B, innerD);
+    }
+    // freecurve
+    if (!P.points?.length) return '';
+    return _pblCatmullD(P.points, P.closed);
+}
+
+function _pblStadiumD(A, B, D) {
+    const dx = B.x - A.x, dy = B.y - A.y;
+    const L = Math.hypot(dx, dy) || 1;
+    const ux = dx / L, uy = dy / L;
+    const nx = -uy, ny = ux;
+    const r = D / 2;
+    const P1 = { x: A.x + nx * r, y: A.y + ny * r };
+    const P2 = { x: B.x + nx * r, y: B.y + ny * r };
+    const P3 = { x: B.x - nx * r, y: B.y - ny * r };
+    const P4 = { x: A.x - nx * r, y: A.y - ny * r };
+    return `M ${P1.x} ${P1.y} L ${P2.x} ${P2.y} A ${r} ${r} 0 0 0 ${P3.x} ${P3.y} L ${P4.x} ${P4.y} A ${r} ${r} 0 0 0 ${P1.x} ${P1.y} Z`;
+}
+
+function _pblCatmullD(points, closed) {
+    const n = points.length;
+    if (n < 2) return '';
+    const get = (i) => closed
+        ? points[((i % n) + n) % n]
+        : points[Math.max(0, Math.min(n - 1, i))];
+    const segTypeAt = (i) => {
+        if (!closed && (i < 0 || i >= n - 1)) return 'line';
+        return (get(i).segType || 'line');
+    };
+    let d = `M ${points[0].x} ${points[0].y}`;
+    const segs = closed ? n : n - 1;
+    for (let i = 0; i < segs; i++) {
+        const p0 = get(i - 1), p1 = get(i), p2 = get(i + 1), p3 = get(i + 2);
+        if (segTypeAt(i) === 'line') {
+            d += ` L ${p2.x} ${p2.y}`;
+            continue;
+        }
+        const prevIsLine = segTypeAt(i - 1) === 'line';
+        const nextIsLine = segTypeAt(i + 1) === 'line';
+        const dist = Math.hypot(p2.x - p1.x, p2.y - p1.y) || 1;
+        const tLen = dist / 3;
+        let c1x, c1y, c2x, c2y;
+        if (prevIsLine) {
+            const dx = p1.x - p0.x, dy = p1.y - p0.y;
+            const L = Math.hypot(dx, dy) || 1;
+            c1x = p1.x + (dx / L) * tLen; c1y = p1.y + (dy / L) * tLen;
+        } else {
+            c1x = p1.x + (p2.x - p0.x) / 6; c1y = p1.y + (p2.y - p0.y) / 6;
+        }
+        if (nextIsLine) {
+            const dx = p2.x - p3.x, dy = p2.y - p3.y;
+            const L = Math.hypot(dx, dy) || 1;
+            c2x = p2.x + (dx / L) * tLen; c2y = p2.y + (dy / L) * tLen;
+        } else {
+            c2x = p2.x - (p3.x - p1.x) / 6; c2y = p2.y - (p3.y - p1.y) / 6;
+        }
+        d += ` C ${c1x} ${c1y} ${c2x} ${c2y} ${p2.x} ${p2.y}`;
+    }
+    if (closed) d += ' Z';
+    return d;
 }
 
 // PDF.js lazy-loader (zelf-gehost in /assets/vendor/pdfjs/, UMD-versie 3.11.174).

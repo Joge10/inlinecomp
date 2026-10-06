@@ -138,6 +138,9 @@ try {
         // layout_data meesturen voor de thumbnail-render in de tabel; blijft
         // compact (JSON met een handvol punten per sub-path), geen aparte
         // detail-fetch nodig per rij.
+        // gedeeld_layout_data: cross-org fallback zodat beheerders zien dat
+        // een andere org dezelfde baan al heeft getekend — 1× tekenen voor
+        // alle org's volstaat. Zelfde pattern als gedeeld_logo_path.
         $stmt = $pdo->prepare("
             SELECT b.id, b.organisatie_id, b.naam, b.stad, b.vereniging_naam,
                    b.logo_path, b.logo_updated_at, b.updated_at, b.layout_data,
@@ -149,6 +152,10 @@ try {
                     WHERE b2.naam = b.naam AND b2.id != b.id
                       AND b2.vereniging_naam IS NOT NULL AND b2.vereniging_naam != ''
                     LIMIT 1) AS gedeeld_vereniging_naam,
+                   (SELECT b2.layout_data FROM banen b2
+                    WHERE b2.naam = b.naam AND b2.id != b.id
+                      AND b2.layout_data IS NOT NULL
+                    LIMIT 1) AS gedeeld_layout_data,
                    (SELECT COUNT(*) FROM baan_aliassen a WHERE a.baan_id = b.id) AS aliassen_aantal,
                    (SELECT COUNT(*) FROM competitions c WHERE c.baan_id = b.id) AS comp_aantal
             FROM banen b

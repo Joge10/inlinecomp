@@ -3,11 +3,19 @@
 // Endpoint: wedstrijd-documenten voor de wedstrijd-info-view (fase 5b-content).
 //
 // Input (GET): comp_id = UUID van de wedstrijd.
-// Output: JSON { infobulletin_url, infobulletin_file_url, flyer_file_url }
+// Output: JSON {
+//   infobulletin_url, infobulletin_file_url, flyer_file_url,
+//   baan: { naam, stad, vereniging_naam, logo_url, layout_data } | null
+// }
 //
+// Een call bedient alle drie de tabs van de wedstrijd-info-view
+// (Infobulletin / Flyer / Vereniging):
 // - infobulletin_url:      externe URL (primair in render).
 // - infobulletin_file_url: pad naar zelf-gehoste PDF, OF null.
 // - flyer_file_url:        pad naar geuploade flyer-afbeelding, OF null.
+// - baan:                  info voor de Vereniging-tab (naam, stad, vereniging-
+//                          naam, logo, baan-layout als parseable object), OF
+//                          null als de wedstrijd geen baan heeft gekoppeld.
 // `infobulletin_file` en `flyer_file` in de DB bevatten het volledige
 // relpath t.o.v. de webroot (bv. `uploads/wedstrijd_docs/<id>/info_<ts>.pdf`),
 // zoals ingevuld door api/upload.php; de endpoint zet er een leading `/` voor.
@@ -28,11 +36,39 @@ if ($action === 'wedstrijd_docs') {
         // via InlineComp wordt gevolgd (geen programma/startlijsten/uitslagen),
         // niet dat de infobulletin of flyer afgeschermd is. is_demo blijft wel
         // uitgefilterd (demo-wedstrijd mag nooit docs lekken).
+        // Cross-org fallback voor logo + layout_data: zelfde fysieke baan kan
+        // onder meerdere organisaties bestaan (dedupliceert op baan-naam).
+        // Als DEZE org z'n eigen rij nog niet heeft gevuld, pakken we een
+        // waarde van een andere org met dezelfde baan-naam. Zelfde patroon
+        // als public_competitions.php voor logo/vereniging — nu uitgebreid
+        // met layout_data (fase A-blok 3): 1× tekenen volstaat voor alle orgs.
         $stmt = $pdo->prepare("
-            SELECT infobulletin_url, infobulletin_file, flyer_file
-            FROM competitions
-            WHERE id = ?
-              AND is_demo = 0
+            SELECT c.infobulletin_url, c.infobulletin_file, c.flyer_file,
+                   c.baan_id,
+                   b.naam            AS baan_naam,
+                   b.stad            AS baan_stad,
+                   COALESCE(b.vereniging_naam, (
+                       SELECT b2.vereniging_naam FROM banen b2
+                       WHERE b2.naam = b.naam AND b2.id != b.id
+                         AND b2.vereniging_naam IS NOT NULL AND b2.vereniging_naam != ''
+                       LIMIT 1
+                   )) AS baan_vereniging,
+                   COALESCE(b.logo_path, (
+                       SELECT b2.logo_path FROM banen b2
+                       WHERE b2.naam = b.naam AND b2.id != b.id
+                         AND b2.logo_path IS NOT NULL AND b2.logo_path != ''
+                       LIMIT 1
+                   )) AS baan_logo,
+                   COALESCE(b.layout_data, (
+                       SELECT b2.layout_data FROM banen b2
+                       WHERE b2.naam = b.naam AND b2.id != b.id
+                         AND b2.layout_data IS NOT NULL
+                       LIMIT 1
+                   )) AS baan_layout_data
+            FROM competitions c
+            LEFT JOIN banen b ON b.id = c.baan_id
+            WHERE c.id = ?
+              AND c.is_demo = 0
             LIMIT 1
         ");
         $stmt->execute([$compId]);
@@ -42,6 +78,7 @@ if ($action === 'wedstrijd_docs') {
                 'infobulletin_url'      => null,
                 'infobulletin_file_url' => null,
                 'flyer_file_url'        => null,
+                'baan'                  => null,
             ]);
             exit;
         }
@@ -49,10 +86,26 @@ if ($action === 'wedstrijd_docs') {
         // frontend 'em direct als absolute URL kan gebruiken.
         $infoFile  = $row['infobulletin_file'] ? '/' . ltrim($row['infobulletin_file'], '/') : null;
         $flyerFile = $row['flyer_file']        ? '/' . ltrim($row['flyer_file'], '/')        : null;
+        $baanLogo  = $row['baan_logo']         ? '/' . ltrim($row['baan_logo'],       '/') : null;
+        // layout_data staat als JSON-string in MariaDB → decoderen zodat de
+        // client er direct mee kan werken. Null = geen layout getekend.
+        $layout = null;
+        if (!empty($row['baan_layout_data'])) {
+            $decoded = json_decode($row['baan_layout_data'], true);
+            if (is_array($decoded)) $layout = $decoded;
+        }
+        $baan = $row['baan_id'] ? [
+            'naam'            => $row['baan_naam']        ?: null,
+            'stad'            => $row['baan_stad']        ?: null,
+            'vereniging_naam' => $row['baan_vereniging']  ?: null,
+            'logo_url'        => $baanLogo,
+            'layout_data'     => $layout,
+        ] : null;
         echo json_encode([
             'infobulletin_url'      => $row['infobulletin_url'] ?: null,
             'infobulletin_file_url' => $infoFile,
             'flyer_file_url'        => $flyerFile,
+            'baan'                  => $baan,
         ], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
     } catch (Throwable $e) {
         http_response_code(500);

@@ -40,6 +40,7 @@ function renderBaanLayoutThumb(layout, size) {
         const L = layers[lid];
         if (!L?.paths) continue;
         for (const P of L.paths) {
+            if (P.visible === false) continue;   // laag-/sub-path "uit"
             const d = _bnPadNaarSvgD(P, layers.piste);
             if (!d) continue;
             paden.push({ d, stroke: _bnLaagKleur(lid), width: L.width || 4 });
@@ -189,9 +190,15 @@ function renderBanenTabel() {
         } else {
             logo = '<span class="bn-geen-logo">—</span>';
         }
-        const layoutData = _bnParseLayout(b.layout_data);
+        // Eigen layout wint; anders fallback naar gedeelde layout van een
+        // andere org met dezelfde baan-naam (opacity als visuele hint).
+        const eigenLayout   = _bnParseLayout(b.layout_data);
+        const gedeeldLayout = eigenLayout ? null : _bnParseLayout(b.gedeeld_layout_data);
+        const layoutData    = eigenLayout || gedeeldLayout;
         const layoutSvg = layoutData
-            ? renderBaanLayoutThumb(layoutData, 40)
+            ? (gedeeldLayout
+                ? `<span style="opacity:.55" title="Layout overgenomen van een andere organisatie met dezelfde baan-naam">${renderBaanLayoutThumb(layoutData, 40)}</span>`
+                : renderBaanLayoutThumb(layoutData, 40))
             : '<span class="bn-geen-logo">—</span>';
         const verNaam = b.vereniging_naam
             ? escHtml(b.vereniging_naam)
@@ -288,21 +295,33 @@ function bouwBaanForm(id) {
             </div>
         </div>` : ''}
 
-        ${b.id ? `<div class="bn-layout-blok">
-            <div class="inst-subtitel">Baan-layout <span class="inst-subtitel-hint">(piste + wegparcours + infield — getekend via de editor)</span></div>
-            <div class="bn-layout-rij">
-                <div class="bn-layout-preview" id="bn-layout-preview">
-                    ${b.layout_data
-                        ? renderBaanLayoutThumb(_bnParseLayout(b.layout_data), 120)
-                        : '<span class="bn-layout-leeg">Nog geen layout getekend</span>'}
+        ${b.id ? (() => {
+            const eigenL   = _bnParseLayout(b.layout_data);
+            const gedeeldL = eigenL ? null : _bnParseLayout(b.gedeeld_layout_data);
+            const previewL = eigenL || gedeeldL;
+            const previewSvg = previewL
+                ? renderBaanLayoutThumb(previewL, 120)
+                : '<span class="bn-layout-leeg">Nog geen layout getekend</span>';
+            const previewStyle = gedeeldL ? ' style="opacity:.65"' : '';
+            const gedeeldHint = gedeeldL
+                ? '<div class="bn-layout-gedeeld-hint">Overgenomen van andere organisatie met dezelfde baan-naam. Bij "Bewerken" wordt deze als startpunt geladen; opslaan zet een eigen kopie klaar.</div>'
+                : '';
+            const btnTxt = eigenL
+                ? '✎ Layout bewerken…'
+                : (gedeeldL ? '✎ Overnemen & bewerken…' : '＋ Layout tekenen…');
+            return `<div class="bn-layout-blok">
+                <div class="inst-subtitel">Baan-layout <span class="inst-subtitel-hint">(piste + wegparcours + infield — getekend via de editor)</span></div>
+                <div class="bn-layout-rij">
+                    <div class="bn-layout-preview" id="bn-layout-preview"${previewStyle}>${previewSvg}</div>
+                    <div class="bn-layout-acties">
+                        <button class="btn-secondary" id="bn-layout-edit" type="button">${btnTxt}</button>
+                        ${eigenL ? `<button class="btn-del btn-small" id="bn-layout-del" type="button" title="Layout verwijderen">🗑</button>` : ''}
+                    </div>
                 </div>
-                <div class="bn-layout-acties">
-                    <button class="btn-secondary" id="bn-layout-edit" type="button">${b.layout_data ? '✎ Layout bewerken…' : '＋ Layout tekenen…'}</button>
-                    ${b.layout_data ? `<button class="btn-del btn-small" id="bn-layout-del" type="button" title="Layout verwijderen">🗑</button>` : ''}
-                </div>
-            </div>
-            <div class="status-msg bn-layout-msg" id="bn-layout-msg" hidden></div>
-        </div>` : ''}
+                ${gedeeldHint}
+                <div class="status-msg bn-layout-msg" id="bn-layout-msg" hidden></div>
+            </div>`;
+        })() : ''}
 
         ${b.id ? `<div class="bn-sponsors-blok">
             <div class="inst-subtitel">Sponsors <span class="inst-subtitel-hint">(verschijnen in public/coach-footer en op de poster bij wedstrijden op deze baan)</span></div>
@@ -578,6 +597,11 @@ document.addEventListener('click', e => {
 // ── Baan-layout: editor openen + verwijderen ─────────────────────────────
 // De editor-module zit in js/baanlayout_editor.js — PoC-port met piste,
 // wegparcours en infield (stadium / freecurve / follow-piste per sub-path).
+//
+// Cross-org fallback: als deze baan geen eigen layout heeft maar wél een
+// gedeelde (andere org met dezelfde naam), start de editor met die layout
+// als beginpunt. Bij opslaan wordt de eigen rij gevuld — gedeelde layout
+// blijft onaangeraakt.
 function openBaanLayoutEditor() {
     const b = bnLijst.find(x => x.id === bnActieveId);
     if (!b) return;
@@ -588,9 +612,11 @@ function openBaanLayoutEditor() {
         );
         return;
     }
+    const eigen   = _bnParseLayout(b.layout_data);
+    const gedeeld = eigen ? null : _bnParseLayout(b.gedeeld_layout_data);
     window.openBaanlayoutEditorModal({
         baanNaam: b.naam,
-        initial:  _bnParseLayout(b.layout_data),
+        initial:  eigen || gedeeld,
         onSave:   (data) => _bnLayoutSave(b.id, data),
     });
 }

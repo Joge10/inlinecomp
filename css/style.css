@@ -3765,6 +3765,10 @@ th.rk-totaal, td.rk-totaal { width:55px; font-weight:700; color:var(--blauw); ba
 .bn-layout-preview svg { max-width: 100%; max-height: 100%; display: block; }
 .bn-layout-leeg       { color: #bbb; font-size: .78rem; text-align: center; padding: 8px; }
 .bn-layout-acties     { display: flex; flex-direction: column; gap: 6px; }
+.bn-layout-gedeeld-hint {
+    font-size: .75rem; color: #666; font-style: italic;
+    margin-top: .4rem; line-height: 1.4;
+}
 .bn-layout-msg        { margin-top: .5rem; }
 
 /* ── Baan-layout-editor (modal) ──────────────────────────────────────────
@@ -3822,6 +3826,13 @@ th.rk-totaal, td.rk-totaal { width:55px; font-weight:700; color:var(--blauw); ba
 }
 .bl-layer-btn:hover { border-color: #dde3ea; }
 .bl-layer-btn.active { border-color: var(--oranje); background: #fff5ea; }
+.bl-layer-vis {
+    display: inline-flex; align-items: center; justify-content: center;
+    width: 22px; height: 22px; border-radius: 4px;
+    cursor: pointer; font-size: .95rem; color: #67748a;
+    flex-shrink: 0;
+}
+.bl-layer-vis:hover { background: #dde3ea; color: var(--tekst); }
 .bl-layer-dot { width: 12px; height: 12px; border-radius: 50%; flex-shrink: 0; }
 .bl-layer-dot[data-layer="piste"]   { background: #4a4a4a; }
 .bl-layer-dot[data-layer="weg"]     { background: #5a7bc0; }
@@ -3866,7 +3877,9 @@ th.rk-totaal, td.rk-totaal { width:55px; font-weight:700; color:var(--blauw); ba
     position: fixed; background: #fff; border: 1px solid #dde3ea; border-radius: 7px;
     padding: 5px; display: flex; gap: 5px; z-index: 9600;
     box-shadow: 0 6px 20px rgba(0,0,0,.18);
-    transform: translate(-50%, calc(-100% - 10px));
+    /* Verder weg van klik-positie zodat 'ie geen aangrenzende track-segmenten
+       afdekt (fase A-feedback 2026-10-06). */
+    transform: translate(-50%, calc(-100% - 28px));
 }
 .bl-seg-popup button {
     background: #f6f7f9; border: 1px solid #dde3ea; padding: 6px 12px; border-radius: 5px;

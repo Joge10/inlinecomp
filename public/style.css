@@ -1712,6 +1712,47 @@ select:focus, input:focus { border-color: var(--middenblauw); outline: none; }
 .wi-placeholder-ico { font-size: 1.6rem; margin-bottom: 6px; }
 .wi-placeholder p { font-size: .9rem; font-weight: 600; color: #333; margin: 0; }
 .wi-placeholder-sub { font-size: .78rem; font-weight: normal; color: #666; margin-top: 4px; }
+
+/* Vereniging-tab: baan-info-kaart + layout-render (fase A-blok 3). */
+.wi-ver-kaart {
+    display: flex; gap: 12px; align-items: center;
+    background: #fff; border: 1px solid #dde3ea; border-radius: 10px;
+    padding: 12px 14px; margin-bottom: 10px;
+}
+.wi-ver-logo {
+    width: 56px; height: 56px; flex-shrink: 0;
+    border-radius: 8px; object-fit: contain;
+    background: #f4f6f8;
+}
+.wi-ver-logo--leeg {
+    display: flex; align-items: center; justify-content: center;
+    font-size: 1.6rem; color: var(--blauw);
+}
+.wi-ver-info { flex: 1; min-width: 0; }
+.wi-ver-naam { font-size: 1.05rem; font-weight: 700; color: var(--blauw); line-height: 1.2; }
+.wi-ver-baan { font-size: .85rem; color: #555; margin-top: 3px; }
+.wi-ver-stad { color: #888; }
+.wi-ver-layout-wrap {
+    background: #fff; border: 1px solid #dde3ea; border-radius: 10px;
+    padding: 10px; overflow: hidden;
+}
+/* Geen vaste aspect-ratio: de container volgt het natuurlijke
+   SVG-aspect (= bounding-box van de baan), zodat er geen witruimte
+   links/rechts of boven/onder optreedt. Max-height begrenst sterk
+   vertikale banen tot een redelijke hoogte. */
+.wi-ver-layout { display: flex; justify-content: center; }
+.wi-ver-layout svg {
+    width: 100%; height: auto; display: block;
+    max-height: 60vh;
+}
+.wi-ver-legenda {
+    display: flex; flex-wrap: wrap; justify-content: center;
+    gap: 10px 16px; margin-top: 10px;
+    padding-top: 10px; border-top: 1px solid #eef2f6;
+    font-size: .78rem; color: #555;
+}
+.wi-ver-legenda-item { display: inline-flex; align-items: center; gap: 5px; }
+.wi-ver-legenda-dot { width: 12px; height: 12px; border-radius: 50%; display: inline-block; }
 /* Wedstrijd-docs renderen (fase 5b-content):
    - Infobulletin: PDF.js canvas-rendering (werkt mobile én desktop,
      geen 3rd-party privacy-leak — alleen de lib komt van cdnjs).

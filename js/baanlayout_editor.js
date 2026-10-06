@@ -187,6 +187,16 @@
         }
 
         // ── Render laag-lijst ──
+        // Een laag geldt als "aan" zodra minstens één sub-path visible is.
+        // De 👁/⊘-knop toggelt visible op ALLE sub-paths van die laag — zo
+        // kun je bv. de piste in één klik uitzetten als je alleen een
+        // wegparcours wilt tekenen.
+        function isLayerVisible(lid) {
+            return state.layers[lid].paths.some(p => p.visible !== false);
+        }
+        function setLayerVisible(lid, on) {
+            for (const P of state.layers[lid].paths) P.visible = on;
+        }
         function renderLayerList() {
             layerList.innerHTML = '';
             for (const L of LAYERS_DEF) {
@@ -195,11 +205,21 @@
                 btn.type = 'button';
                 const nSub = state.layers[L.id].paths.length;
                 const nPts = totalPoints(L.id);
+                const vis  = isLayerVisible(L.id);
                 btn.innerHTML = `
+                    <span class="bl-layer-vis" title="${vis ? 'Laag uitzetten' : 'Laag aanzetten'}">${vis ? '👁' : '⊘'}</span>
                     <span class="bl-layer-dot" data-layer="${L.id}"></span>
                     <span>${escHtml(L.label)}</span>
                     <span class="bl-layer-count">${nSub} sub · ${nPts} pt</span>
                 `;
+                btn.querySelector('.bl-layer-vis').addEventListener('click', (ev) => {
+                    ev.stopPropagation();
+                    setLayerVisible(L.id, !vis);
+                    markDirty();
+                    renderLayerList();
+                    renderControls();
+                    redraw();
+                });
                 btn.addEventListener('click', () => {
                     state.activeLayer = L.id;
                     renderLayerList();
@@ -657,18 +677,27 @@
                 if (!activeSeg) return;
                 const { layerId, subIdx, segIdx } = activeSeg;
                 state.layers[layerId].paths[subIdx].points[segIdx].segType = btn.dataset.segType;
-                hideSegPopup();
+                // Popup NIET auto-sluiten: zo zie je direct de active-highlight
+                // op de gekozen knop (voorheen sloot 'ie te snel waardoor
+                // feedback miste). Buiten-klik of ESC sluit de popup wel.
+                segPopup.querySelectorAll('button').forEach(b => {
+                    b.classList.toggle('active', b.dataset.segType === btn.dataset.segType);
+                });
                 markDirty();
                 redraw();
             });
         });
-        // Buiten-klik sluit de popup (listener op overlay, niet op document,
-        // zodat de popup ook werkt in combinatie met de modal-overlay-close).
-        overlay.addEventListener('pointerdown', (ev) => {
-            if (!segPopup.hidden && !segPopup.contains(ev.target)) {
-                hideSegPopup();
-            }
-        }, true);
+        // Buiten-klik sluit de popup. Document-level capture-phase vangt
+        // alles vóór iedere andere handler; stopPropagation voorkomt dat de
+        // sluit-klik ook een freecurve-punt zet.
+        const popupBuitenKlik = (ev) => {
+            if (segPopup.hidden) return;
+            if (segPopup.contains(ev.target)) return;
+            hideSegPopup();
+            ev.stopPropagation();
+            ev.preventDefault();
+        };
+        document.addEventListener('pointerdown', popupBuitenKlik, true);
 
         // ── Render editor-overlay (handles + strokes) ──
         function redraw() {
@@ -769,15 +798,22 @@
         btnOpslaan1.addEventListener('click', opslaan);
         btnOpslaan2.addEventListener('click', opslaan);
 
-        // ESC-key sluit
+        // ESC-key: eerst popup sluiten (als die open staat), anders de modal.
         const escHandler = (e) => {
-            if (e.key === 'Escape') sluit(false);
+            if (e.key !== 'Escape') return;
+            if (!segPopup.hidden) { hideSegPopup(); return; }
+            sluit(false);
         };
-        document.addEventListener('keydown', escHandler);
-        // Opruimen bij remove: observer op overlay-removal
+        // Capture-phase zodat we vóór een eventuele <select>/range-input
+        // ESC-afhandeling of andere document-level ESC-handlers vangen.
+        document.addEventListener('keydown', escHandler, true);
+        // Opruimen bij remove: observer op overlay-removal (verwijdert óók
+        // de document-level popup-buiten-klik-listener zodat die niet blijft
+        // hangen voor andere modals).
         const obs = new MutationObserver(() => {
             if (!document.body.contains(overlay)) {
-                document.removeEventListener('keydown', escHandler);
+                document.removeEventListener('keydown', escHandler, true);
+                document.removeEventListener('pointerdown', popupBuitenKlik, true);
                 obs.disconnect();
             }
         });
