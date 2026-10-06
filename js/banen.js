@@ -13,6 +13,128 @@ let bnLijst = [];
 let bnActieveId = null;          // 'NIEUW' | UUID | null
 let bnHuidigeOrgId = null;       // org-context van de getoonde lijst
 
+// ── Layout-data parse + thumbnail-render ────────────────────────────────
+// Server geeft layout_data als string (MySQL JSON kolom → string in PDO).
+// Parse defensief: null, lege string, invalid JSON → null.
+function _bnParseLayout(raw) {
+    if (!raw) return null;
+    if (typeof raw === 'object') return raw;
+    try { return JSON.parse(raw); } catch { return null; }
+}
+
+// Render een kleine SVG-thumbnail uit de layout-state (editor-formaat uit
+// de PoC). Alleen de piste-, weg- en infield-paden; auto-fit naar `size`
+// pixels. Levert een SVG-string op (direct in innerHTML inzetbaar).
+//
+// Deze renderer dient 2 plekken: de kleine tabel-thumbnail (size≈40) én
+// de preview in het baan-form (size≈120). De echte editor-canvas gebruikt
+// een rijkere versie met interactie — hier alleen read-only pad-strokes.
+function renderBaanLayoutThumb(layout, size) {
+    if (!layout?.layers) return '<span class="bn-geen-logo">—</span>';
+    const layers = layout.layers;
+    // Bounding-box bepalen over alle punten (freecurve + stadium-A/B).
+    let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity;
+    const paden = [];
+    const order = ['infield', 'weg', 'piste'];
+    for (const lid of order) {
+        const L = layers[lid];
+        if (!L?.paths) continue;
+        for (const P of L.paths) {
+            const d = _bnPadNaarSvgD(P, layers.piste);
+            if (!d) continue;
+            paden.push({ d, stroke: _bnLaagKleur(lid), width: L.width || 4 });
+            // Breidt bounds uit
+            if (P.shapeType === 'stadium' && P.stadium) {
+                const r = (P.stadium.diameter || 0) / 2;
+                [P.stadium.A, P.stadium.B].forEach(pt => {
+                    if (!pt) return;
+                    minX = Math.min(minX, pt.x - r); maxX = Math.max(maxX, pt.x + r);
+                    minY = Math.min(minY, pt.y - r); maxY = Math.max(maxY, pt.y + r);
+                });
+            } else if (P.points?.length) {
+                for (const pt of P.points) {
+                    minX = Math.min(minX, pt.x); maxX = Math.max(maxX, pt.x);
+                    minY = Math.min(minY, pt.y); maxY = Math.max(maxY, pt.y);
+                }
+            }
+        }
+    }
+    if (!paden.length || !isFinite(minX)) return '<span class="bn-geen-logo">—</span>';
+    const w = (maxX - minX) || 1, h = (maxY - minY) || 1;
+    const pad = Math.max(w, h) * 0.08;
+    const vb = `${minX - pad} ${minY - pad} ${w + pad * 2} ${h + pad * 2}`;
+    // Stroke-width schalen naar viewBox-units (anders onzichtbaar bij 40px).
+    const paths = paden.map(p =>
+        `<path d="${p.d}" fill="none" stroke="${p.stroke}" stroke-width="${p.width}" stroke-linecap="round" stroke-linejoin="round"/>`
+    ).join('');
+    return `<svg class="bn-layout-thumb" width="${size}" height="${size}" viewBox="${vb}" xmlns="http://www.w3.org/2000/svg">${paths}</svg>`;
+}
+
+function _bnLaagKleur(id) {
+    return id === 'piste'   ? '#555'
+         : id === 'weg'     ? '#888'
+         : id === 'infield' ? '#d0d0d0'
+         : '#aaa';
+}
+
+// Minimal SVG-path-string generator (klein subset van de PoC-renderer —
+// voldoende voor read-only preview). Stadium = M line L arc + arc.
+// Freecurve/follow-piste = M-point + bezier/line per segment.
+function _bnPadNaarSvgD(P, pisteLaag) {
+    if (!P) return '';
+    if (P.shapeType === 'stadium' && P.stadium?.A && P.stadium?.B) {
+        return _bnStadiumD(P.stadium.A, P.stadium.B, P.stadium.diameter || 10);
+    }
+    if (P.shapeType === 'follow-piste') {
+        const pisteP = pisteLaag?.paths?.[0];
+        if (!pisteP || pisteP.shapeType !== 'stadium') return '';
+        // Infield = stadium met kleinere diameter (margin binnenin).
+        const margin = P.width ?? 0.5;
+        const innerD = Math.max(1, (pisteP.stadium.diameter || 10) - margin * 2);
+        return _bnStadiumD(pisteP.stadium.A, pisteP.stadium.B, innerD);
+    }
+    // freecurve
+    if (!P.points?.length) return '';
+    const pts = P.points;
+    const closed = !!P.closed;
+    let d = `M ${pts[0].x} ${pts[0].y}`;
+    const n = pts.length;
+    const limit = closed ? n : n - 1;
+    for (let i = 0; i < limit; i++) {
+        const p1 = pts[i];
+        const p2 = pts[(i + 1) % n];
+        const segType = p2.segType || p1.segType || 'curve';
+        if (segType === 'line') {
+            d += ` L ${p2.x} ${p2.y}`;
+        } else {
+            // Catmull-Rom-naar-bezier: c1 = p1 + (p2-p0)/6, c2 = p2 - (p3-p1)/6
+            const p0 = pts[(i - 1 + n) % n];
+            const p3 = pts[(i + 2) % n];
+            const c1x = p1.x + (p2.x - p0.x) / 6;
+            const c1y = p1.y + (p2.y - p0.y) / 6;
+            const c2x = p2.x - (p3.x - p1.x) / 6;
+            const c2y = p2.y - (p3.y - p1.y) / 6;
+            d += ` C ${c1x} ${c1y} ${c2x} ${c2y} ${p2.x} ${p2.y}`;
+        }
+    }
+    if (closed) d += ' Z';
+    return d;
+}
+
+// Stadium = ovaal met 2 centers (A, B) en diameter D. SVG: lijn + arc + lijn + arc.
+function _bnStadiumD(A, B, D) {
+    const dx = B.x - A.x, dy = B.y - A.y;
+    const L = Math.hypot(dx, dy) || 1;
+    const ux = dx / L, uy = dy / L;
+    const nx = -uy, ny = ux;
+    const r = D / 2;
+    const Ap = { x: A.x + nx * r, y: A.y + ny * r };
+    const Bp = { x: B.x + nx * r, y: B.y + ny * r };
+    const Am = { x: A.x - nx * r, y: A.y - ny * r };
+    const Bm = { x: B.x - nx * r, y: B.y - ny * r };
+    return `M ${Ap.x} ${Ap.y} L ${Bp.x} ${Bp.y} A ${r} ${r} 0 0 0 ${Bm.x} ${Bm.y} L ${Am.x} ${Am.y} A ${r} ${r} 0 0 0 ${Ap.x} ${Ap.y} Z`;
+}
+
 async function laadBanen() {
     // Org-context komt uit instellingen.js — we lezen de bestaande globale.
     // Geen actieve org? Dan tabel leeg laten + form sluiten.
@@ -67,6 +189,10 @@ function renderBanenTabel() {
         } else {
             logo = '<span class="bn-geen-logo">—</span>';
         }
+        const layoutData = _bnParseLayout(b.layout_data);
+        const layoutSvg = layoutData
+            ? renderBaanLayoutThumb(layoutData, 40)
+            : '<span class="bn-geen-logo">—</span>';
         const verNaam = b.vereniging_naam
             ? escHtml(b.vereniging_naam)
             : (b.gedeeld_vereniging_naam
@@ -75,6 +201,7 @@ function renderBanenTabel() {
         const actief = b.id === bnActieveId ? ' bn-actief' : '';
         return `<tr class="bn-rij${actief}" data-id="${escHtml(b.id)}">
             <td class="bn-logo-cel">${logo}</td>
+            <td class="bn-logo-cel bn-layout-cel">${layoutSvg}</td>
             <td class="bn-naam"><b>${escHtml(b.naam)}</b>${b.stad ? `<span class="bn-stad"> · ${escHtml(b.stad)}</span>` : ''}</td>
             <td>${verNaam}</td>
             <td class="tc"><span class="bn-aliasteller">${b.aliassen_aantal ?? 0}</span></td>
@@ -89,7 +216,7 @@ function renderBanenTabel() {
     container.innerHTML = `
         <table class="bn-tabel">
             <thead><tr>
-                <th>Logo</th><th>Naam · stad</th><th>Gastheer-vereniging</th>
+                <th>Logo</th><th>Layout</th><th>Naam · stad</th><th>Gastheer-vereniging</th>
                 <th class="tc">Aliassen</th><th class="tc">Wedstrijden</th><th></th>
             </tr></thead>
             <tbody>${rijen}</tbody>
@@ -161,6 +288,22 @@ function bouwBaanForm(id) {
             </div>
         </div>` : ''}
 
+        ${b.id ? `<div class="bn-layout-blok">
+            <div class="inst-subtitel">Baan-layout <span class="inst-subtitel-hint">(piste + wegparcours + infield — getekend via de editor)</span></div>
+            <div class="bn-layout-rij">
+                <div class="bn-layout-preview" id="bn-layout-preview">
+                    ${b.layout_data
+                        ? renderBaanLayoutThumb(_bnParseLayout(b.layout_data), 120)
+                        : '<span class="bn-layout-leeg">Nog geen layout getekend</span>'}
+                </div>
+                <div class="bn-layout-acties">
+                    <button class="btn-secondary" id="bn-layout-edit" type="button">${b.layout_data ? '✎ Layout bewerken…' : '＋ Layout tekenen…'}</button>
+                    ${b.layout_data ? `<button class="btn-del btn-small" id="bn-layout-del" type="button" title="Layout verwijderen">🗑</button>` : ''}
+                </div>
+            </div>
+            <div class="status-msg bn-layout-msg" id="bn-layout-msg" hidden></div>
+        </div>` : ''}
+
         ${b.id ? `<div class="bn-sponsors-blok">
             <div class="inst-subtitel">Sponsors <span class="inst-subtitel-hint">(verschijnen in public/coach-footer en op de poster bij wedstrijden op deze baan)</span></div>
             <div id="bn-sponsors-list" class="bn-sponsors-list">Laden…</div>
@@ -186,6 +329,8 @@ function bindBaanForm() {
     document.getElementById('bn-logo-file')?.addEventListener('change', uploadBaanLogo);
     document.getElementById('bn-alias-ok')?.addEventListener('click', voegAliasToe);
     document.getElementById('bn-sponsor-add')?.addEventListener('click', () => voegSponsorRijToeBaan(null));
+    document.getElementById('bn-layout-edit')?.addEventListener('click', openBaanLayoutEditor);
+    document.getElementById('bn-layout-del')?.addEventListener('click', verwijderBaanLayout);
 
     if (bnActieveId && bnActieveId !== 'NIEUW') {
         laadAliassen(bnActieveId);
@@ -429,3 +574,55 @@ document.addEventListener('click', e => {
         renderBanenTabel();
     }
 });
+
+// ── Baan-layout: editor openen + verwijderen ─────────────────────────────
+// De editor-module zit in js/baanlayout_editor.js — PoC-port met piste,
+// wegparcours en infield (stadium / freecurve / follow-piste per sub-path).
+function openBaanLayoutEditor() {
+    const b = bnLijst.find(x => x.id === bnActieveId);
+    if (!b) return;
+    if (typeof window.openBaanlayoutEditorModal !== 'function') {
+        toonBevestigDialog(
+            'De baan-layout-editor kon niet geladen worden (js/baanlayout_editor.js ontbreekt of is nog niet gedeployed).',
+            'Baan-layout', 'OK', ''
+        );
+        return;
+    }
+    window.openBaanlayoutEditorModal({
+        baanNaam: b.naam,
+        initial:  _bnParseLayout(b.layout_data),
+        onSave:   (data) => _bnLayoutSave(b.id, data),
+    });
+}
+
+async function _bnLayoutSave(baanId, layoutData) {
+    const meld = document.getElementById('bn-layout-msg');
+    if (meld) { meld.hidden = false; meld.className = 'status-msg loading bn-layout-msg'; meld.textContent = 'Opslaan…'; }
+    try {
+        const r = await fetch('api/banen.php?action=save_layout', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ baan_id: baanId, layout_data: layoutData }),
+        });
+        const d = await r.json();
+        if (d.error) throw new Error(d.error);
+        // Lokale cache bijwerken en lijst + preview refresh
+        const b = bnLijst.find(x => x.id === baanId);
+        if (b) b.layout_data = layoutData ? JSON.stringify(layoutData) : null;
+        renderBanenTabel();
+        if (meld) { meld.className = 'status-msg ok bn-layout-msg'; meld.textContent = 'Opgeslagen.'; }
+    } catch (e) {
+        if (meld) { meld.className = 'status-msg error bn-layout-msg'; meld.textContent = '⚠ ' + (e.message || e); }
+    }
+}
+
+async function verwijderBaanLayout() {
+    const b = bnLijst.find(x => x.id === bnActieveId);
+    if (!b) return;
+    const ok = await toonBevestigDialog(
+        `Baan-layout van "${b.naam}" verwijderen? De getekende piste, wegparcours en infield verdwijnen; aliassen, sponsors en logo blijven staan.`,
+        'Layout verwijderen', 'Verwijderen', 'Annuleren'
+    );
+    if (!ok) return;
+    await _bnLayoutSave(b.id, null);
+}

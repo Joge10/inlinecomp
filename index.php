@@ -892,6 +892,7 @@ function magSchrijven(module) {
 <script src="js/klassement_serie_ui.js"></script>
 <script src="js/instellingen.js"></script>
 <script src="js/banen.js"></script>
+<script src="js/baanlayout_editor.js?v=<?= filemtime(__DIR__ . '/js/baanlayout_editor.js') ?>"></script>
 <script src="js/coach_beheer.js"></script>
 <script src="js/meldingen.js"></script>
 <script src="js/gebruikers.js"></script>

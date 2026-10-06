@@ -135,9 +135,12 @@ try {
         // of vereniging-naam heeft ingevuld. Zo kan de UI een visuele hint tonen
         // ("logo gedeeld met andere organisatie") zodat de beheerder snapt waarom
         // er bij de print toch een logo verschijnt.
+        // layout_data meesturen voor de thumbnail-render in de tabel; blijft
+        // compact (JSON met een handvol punten per sub-path), geen aparte
+        // detail-fetch nodig per rij.
         $stmt = $pdo->prepare("
             SELECT b.id, b.organisatie_id, b.naam, b.stad, b.vereniging_naam,
-                   b.logo_path, b.logo_updated_at, b.updated_at,
+                   b.logo_path, b.logo_updated_at, b.updated_at, b.layout_data,
                    (SELECT b2.logo_path FROM banen b2
                     WHERE b2.naam = b.naam AND b2.id != b.id
                       AND b2.logo_path IS NOT NULL AND b2.logo_path != ''
@@ -270,6 +273,39 @@ try {
         }
 
         echo json_encode(['ok' => true, 'id' => $bid]);
+        exit;
+    }
+
+    // ── Baan-layout opslaan (editor-state als JSON) ────────────────────────
+    // POST body (JSON): {baan_id, layout_data: object|null}
+    // null = reset / layout verwijderen. Geen schema-validatie op layout_data
+    // — client is source-of-truth voor de PoC-structuur en de renderer
+    // detecteert ongeldige input zelf (fallback: tekst "ongeldige layout").
+    if ($action === 'save_layout') {
+        $body = json_decode(file_get_contents('php://input'), true);
+        if (!is_array($body)) {
+            http_response_code(400);
+            echo json_encode(['error' => 'JSON-body vereist']);
+            exit;
+        }
+        $bid = trim($body['baan_id'] ?? '');
+        if ($bid === '') {
+            http_response_code(400);
+            echo json_encode(['error' => 'baan_id ontbreekt']);
+            exit;
+        }
+        $chk = $pdo->prepare("SELECT 1 FROM banen WHERE id = ?");
+        $chk->execute([$bid]);
+        if (!$chk->fetchColumn()) {
+            http_response_code(404);
+            echo json_encode(['error' => 'Baan niet gevonden']);
+            exit;
+        }
+        $layout = $body['layout_data'] ?? null;
+        $layoutJson = ($layout === null) ? null : json_encode($layout, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+        $pdo->prepare("UPDATE banen SET layout_data = ? WHERE id = ?")
+            ->execute([$layoutJson, $bid]);
+        echo json_encode(['ok' => true]);
         exit;
     }
 

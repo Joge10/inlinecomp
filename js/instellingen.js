@@ -1768,7 +1768,7 @@ async function wedstrijdDocsDialog(compId, compNaam) {
                     dat jij hoeft bij te werken). Als de bron offline is, valt de view
                     terug op een "openen"-tegel die naar de originele URL linkt.
                     Google-Drive-links werken niet direct als PDF-URL; gebruik dan de
-                    "Direct download"-link (`uc?export=download&id=…`) of upload hieronder.
+                    "Direct download"-link (uc?export=download&amp;id=…) of upload hieronder.
                 </div>
 
                 <div class="pd-sec-titel pd-sec-titel-na">

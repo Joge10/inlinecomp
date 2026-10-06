@@ -3732,6 +3732,8 @@ th.rk-totaal, td.rk-totaal { width:55px; font-weight:700; color:var(--blauw); ba
 .bn-rij.bn-actief td  { background: #eef4fa; }
 .bn-logo-cel          { width: 50px; }
 .bn-logo-mini         { max-height: 28px; max-width: 60px; object-fit: contain; }
+.bn-layout-cel        { width: 50px; }
+.bn-layout-thumb      { height: 28px; width: 40px; display: block; }
 .bn-geen-logo         { color: #bbb; }
 .bn-stad              { color: #666; font-weight: normal; font-size: .85em; }
 .bn-aliasteller, .bn-comp-teller { background: #eef2f7; color: #444;
@@ -3750,6 +3752,133 @@ th.rk-totaal, td.rk-totaal { width:55px; font-weight:700; color:var(--blauw); ba
 .bn-sponsors-blok     { margin-top: 1rem; }
 .bn-sponsors-list     { margin-bottom: .5rem; }
 .bn-sponsors-list .alias-leeg { color: #999; font-style: italic; padding: .3rem 0; }
+
+/* ── Baan-layout: preview + bewerk-knop in het baan-form ─────────────── */
+.bn-layout-blok       { margin-top: 1rem; }
+.bn-layout-rij        { display: flex; align-items: center; gap: 12px; }
+.bn-layout-preview {
+    width: 120px; height: 120px;
+    display: flex; align-items: center; justify-content: center;
+    background: #fff; border: 1px solid var(--border); border-radius: 6px;
+    overflow: hidden;
+}
+.bn-layout-preview svg { max-width: 100%; max-height: 100%; display: block; }
+.bn-layout-leeg       { color: #bbb; font-size: .78rem; text-align: center; padding: 8px; }
+.bn-layout-acties     { display: flex; flex-direction: column; gap: 6px; }
+.bn-layout-msg        { margin-top: .5rem; }
+
+/* ── Baan-layout-editor (modal) ──────────────────────────────────────────
+   PoC-port uit scratchpad/baanlayout_editor.html. `bl-`-prefix voorkomt
+   conflicten met bestaande classes (bv. .btn uit app.js). */
+.bl-overlay {
+    position: fixed; inset: 0; background: rgba(0,0,0,.5);
+    z-index: 9500; display: flex; align-items: flex-start; justify-content: center;
+    padding: 16px; overflow-y: auto;
+}
+.bl-modal {
+    background: #fff; border-radius: 10px;
+    max-width: 1280px; width: 100%; padding: 16px 18px;
+    box-shadow: 0 8px 32px rgba(0,0,0,.3);
+}
+.bl-header { display: flex; align-items: center; gap: 12px; margin-bottom: 12px; }
+.bl-header h2 { margin: 0; font-size: 1.1rem; color: var(--blauw); flex: 1; }
+.bl-header .bl-dirty { color: var(--oranje); font-size: .75rem; font-weight: 700; }
+.bl-toolbar {
+    background: #f6f7f9; border: 1px solid #dde3ea; border-radius: 10px;
+    padding: 10px 12px; margin-bottom: 12px;
+    display: flex; flex-wrap: wrap; gap: 10px; align-items: center;
+}
+.bl-toolbar label { font-size: .82rem; color: #67748a; font-weight: 600; }
+.bl-toolbar input[type="file"] {
+    padding: 4px 8px; border: 1px solid #dde3ea; border-radius: 5px;
+    background: #fff; font-size: .82rem;
+}
+.bl-main { display: grid; grid-template-columns: 1fr 300px; gap: 14px; }
+@media (max-width: 920px) { .bl-main { grid-template-columns: 1fr; } }
+.bl-canvas-wrap {
+    background: #fff; border: 1px solid #dde3ea; border-radius: 10px;
+    padding: 10px; min-width: 0;
+}
+.bl-stage {
+    position: relative; aspect-ratio: 4/3;
+    background: #f6f7f9; border: 1px solid #dde3ea; border-radius: 6px;
+    overflow: hidden; touch-action: none;
+}
+.bl-stage-img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: contain; pointer-events: none; user-select: none; }
+.bl-stage-svg { position: absolute; inset: 0; width: 100%; height: 100%; cursor: crosshair; }
+.bl-stage-empty {
+    position: absolute; inset: 0; display: flex; align-items: center; justify-content: center;
+    color: #67748a; font-size: .88rem; text-align: center; padding: 20px; pointer-events: none;
+}
+.bl-side { display: flex; flex-direction: column; gap: 12px; min-width: 0; }
+.bl-panel { background: #fff; border: 1px solid #dde3ea; border-radius: 10px; padding: 12px; }
+.bl-panel h3 { margin: 0 0 8px; font-size: .72rem; font-weight: 700; text-transform: uppercase; letter-spacing: .06em; color: #67748a; }
+.bl-layers { display: flex; flex-direction: column; gap: 6px; }
+.bl-layer-btn {
+    display: flex; align-items: center; gap: 10px;
+    background: #f6f7f9; border: 2px solid transparent; border-radius: 7px;
+    padding: 8px 10px; cursor: pointer; text-align: left;
+    font-weight: 600; font-size: .85rem; color: var(--tekst);
+}
+.bl-layer-btn:hover { border-color: #dde3ea; }
+.bl-layer-btn.active { border-color: var(--oranje); background: #fff5ea; }
+.bl-layer-dot { width: 12px; height: 12px; border-radius: 50%; flex-shrink: 0; }
+.bl-layer-dot[data-layer="piste"]   { background: #4a4a4a; }
+.bl-layer-dot[data-layer="weg"]     { background: #5a7bc0; }
+.bl-layer-dot[data-layer="infield"] { background: #4a9050; }
+.bl-layer-count { margin-left: auto; font-size: .72rem; color: #67748a; font-weight: 500; font-variant-numeric: tabular-nums; }
+.bl-ctrls { display: flex; flex-direction: column; gap: 10px; }
+.bl-ctrl-row { display: flex; align-items: center; gap: 8px; font-size: .82rem; }
+.bl-ctrl-row label { color: #67748a; font-weight: 600; }
+.bl-ctrl-row input[type="range"] { flex: 1; min-width: 0; accent-color: var(--oranje); }
+.bl-ctrl-val { font-variant-numeric: tabular-nums; font-weight: 600; min-width: 30px; text-align: right; }
+.bl-sub-list { display: flex; flex-direction: column; gap: 6px; }
+.bl-sub-row { background: #f6f7f9; border: 1px solid transparent; border-radius: 6px; padding: 6px 8px; display: flex; flex-direction: column; gap: 4px; }
+.bl-sub-row.active { border-color: var(--oranje); background: #fff5ea; }
+.bl-sub-head { display: flex; align-items: center; gap: 6px; }
+.bl-sub-head button { background: none; border: none; cursor: pointer; color: #67748a; padding: 2px 6px; border-radius: 4px; font-size: .95rem; }
+.bl-sub-head button:hover { color: var(--tekst); background: #dde3ea; }
+.bl-sub-label { flex: 1; cursor: pointer; font-size: .78rem; font-weight: 600; }
+.bl-sub-shape { padding: 3px 6px; border: 1px solid #dde3ea; border-radius: 4px; background: #fff; color: var(--tekst); font-size: .76rem; }
+.bl-sub-ctrl { display: flex; align-items: center; gap: 6px; font-size: .76rem; }
+.bl-sub-ctrl label { color: #67748a; font-weight: 600; min-width: 48px; }
+.bl-sub-ctrl input[type="range"] { flex: 1; accent-color: var(--oranje); }
+.bl-sub-ctrl-val { min-width: 26px; text-align: right; font-weight: 600; font-variant-numeric: tabular-nums; }
+.bl-sub-ring { display: flex; justify-content: flex-end; font-size: .72rem; color: #67748a; }
+.bl-sub-ring input { accent-color: var(--oranje); }
+.bl-actions { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 6px; }
+.bl-help { font-size: .78rem; color: #67748a; line-height: 1.5; }
+.bl-help p { margin: 0 0 .5rem; }
+.bl-help p:last-child { margin-bottom: 0; }
+.bl-footer { display: flex; justify-content: flex-end; gap: 8px; margin-top: 12px; padding-top: 12px; border-top: 1px solid #dde3ea; }
+.bl-stage-svg .bl-stroke-piste   { fill: none; stroke: #4a4a4a; stroke-opacity: .55; stroke-linecap: round; stroke-linejoin: round; }
+.bl-stage-svg .bl-stroke-weg     { fill: none; stroke: #5a7bc0; stroke-opacity: .55; stroke-linecap: round; stroke-linejoin: round; }
+.bl-stage-svg .bl-fill-infield   { fill: #4a9050; fill-opacity: .35; stroke: #4a9050; stroke-opacity: .9; stroke-width: 1.5; }
+.bl-stage-svg .bl-pt { fill: #fff; stroke-width: 2; cursor: grab; }
+.bl-stage-svg .bl-pt.piste   { stroke: #4a4a4a; }
+.bl-stage-svg .bl-pt.weg     { stroke: #5a7bc0; }
+.bl-stage-svg .bl-pt.infield { stroke: #4a9050; }
+.bl-stage-svg .bl-pt.active-sub { fill: var(--oranje); }
+.bl-stage-svg .bl-pt:hover { fill: var(--oranje); }
+.bl-stage-svg .bl-pt.dragging { cursor: grabbing; }
+.bl-stage-svg .bl-pt.stadium-handle { fill: var(--oranje); stroke: #d55608; stroke-width: 1.5; }
+.bl-seg-popup {
+    position: fixed; background: #fff; border: 1px solid #dde3ea; border-radius: 7px;
+    padding: 5px; display: flex; gap: 5px; z-index: 9600;
+    box-shadow: 0 6px 20px rgba(0,0,0,.18);
+    transform: translate(-50%, calc(-100% - 10px));
+}
+.bl-seg-popup button {
+    background: #f6f7f9; border: 1px solid #dde3ea; padding: 6px 12px; border-radius: 5px;
+    cursor: pointer; font-size: .82rem; font-weight: 600; color: var(--tekst);
+}
+.bl-seg-popup button:hover,
+.bl-seg-popup button.active { background: var(--oranje); color: #fff; border-color: var(--oranje); }
+.bl-btn-add-sub {
+    background: #f6f7f9; border: 1px solid #dde3ea; border-radius: 5px;
+    padding: 5px 10px; cursor: pointer; font-size: .78rem; font-weight: 600; color: var(--tekst);
+}
+.bl-btn-add-sub:hover { background: #e9eef5; }
 
 /* ── Mededelingen-modal (Beheer → Wedstrijden) ─────────────────────────── */
 .mld-overlay      { position: fixed; inset: 0; background: rgba(0,0,0,.45);
