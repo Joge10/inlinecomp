@@ -45,10 +45,25 @@ let _huidigStempel = '';
         document.querySelectorAll('.auto-stempel').forEach(el => { el.innerHTML = ''; });
     };
 
+    // Setup-strip is dé indicator van wedstrijd-view (zichtbaar daar, hidden
+    // in hub/org/wi) — gebruikt door _scheduleTick, PTR en de online-hook om
+    // te beslissen of een refresh überhaupt zin heeft. Zonder deze check zou
+    // een refresh in de hub/org de kinderen opnieuw renderen en de safety-net
+    // in renderKinderen de UI naar wedstrijd-view duwen (bug 2026-10-06).
+    const _inWedstrijdView = () => {
+        const strip = document.getElementById('setup-strip');
+        return !!(strip && !strip.hidden);
+    };
+
     // Stille refresh: alle kinderen + gedeeld programma in één parallel-batch
     // (geen loader-flash, geen UI-tussenstaten). Bij faal: stempel niet
     // bijwerken — gebruiker ziet dat de tijd "blijft staan".
     const stilleRefresh = async () => {
+        // Niet in wedstrijd-view (= hub of org): niets te verversen. Zonder
+        // deze guard zou een refresh (auto, PTR of online-hook) renderKinderen
+        // aanroepen, dat de safety-net _setViewState('wedstrijd') triggert en
+        // de user ineens in de laatste wedstrijd parkeert.
+        if (!_inWedstrijdView()) return;
         // Scroll-positie bewaren: renderKinderen() vervangt divResult.innerHTML
         // en dat zet scroll naar 0. Zonder deze save/restore springt de pagina
         // elke 60s naar boven — hinderlijk als je aan het lezen bent.
@@ -179,12 +194,16 @@ let _huidigStempel = '';
         return AUTO_REFRESH_MS;
     };
 
+    // Alleen tikken als we daadwerkelijk in de wedstrijd-view zijn (zie
+    // _inWedstrijdView bovenaan) — anders zou een auto-refresh in de hub-
+    // of org-view onzichtbaar in de achtergrond de kinderen-render
+    // re-triggeren, wat de UI naar wedstrijd-view kon duwen (bug 2026-10-06).
     const _scheduleTick = () => {
         stop();
-        if (!selComp.value || document.hidden) return;
+        if (!selComp.value || document.hidden || !_inWedstrijdView()) return;
         autoTick = setTimeout(async () => {
             autoTick = null;
-            if (document.hidden || !selComp.value) return _scheduleTick();
+            if (document.hidden || !selComp.value || !_inWedstrijdView()) return _scheduleTick();
             await stilleRefresh();
             _scheduleTick();
         }, _tickInterval());
@@ -198,7 +217,7 @@ let _huidigStempel = '';
 
     // Hook voor _conn: bij online-event direct refresh + scheduling resetten.
     _conn.refreshHook = () => {
-        if (selComp.value && !document.hidden) {
+        if (selComp.value && !document.hidden && _inWedstrijdView()) {
             stilleRefresh().finally(_scheduleTick);
         }
     };
@@ -243,7 +262,10 @@ let _huidigStempel = '';
     let ptrLaatste = 0;
 
     async function ptrHerlaad() {
-        if (!selComp.value || ptrBezig) return;
+        // PTR heeft alleen zin in wedstrijd-view (verst kinderen-data). In
+        // hub/org/wi doet 'ie niets zichtbaars en zou 'ie zelfs de UI naar
+        // wedstrijd kunnen duwen via de renderKinderen safety-net.
+        if (!selComp.value || ptrBezig || !_inWedstrijdView()) return;
         // Cooldown: bij PTR < 30s na vorige tonen we kort een melding ipv
         // de server opnieuw aanroepen. Voorkomt burst bij ongeduld of
         // per-ongeluk-twee-keer-pullen.
@@ -285,7 +307,11 @@ let _huidigStempel = '';
     }
 
     document.addEventListener('touchstart', e => {
-        if (window.scrollY > 0 || ptrBezig || !selComp.value) { ptrStartY = null; return; }
+        // In hub/org helemaal niet aan onze PTR beginnen — zonder preventDefault
+        // in touchmove laten we de native browser-PTR 'em overnemen (= page
+        // reload), die via sessionStorage-restore netjes terugbrengt naar
+        // hub-tab of org-view. Zie bug 2026-10-06.
+        if (window.scrollY > 0 || ptrBezig || !selComp.value || !_inWedstrijdView()) { ptrStartY = null; return; }
         if (e.touches.length !== 1) { ptrStartY = null; return; }
         if (_ptrGeblokkeerd(e.target)) { ptrStartY = null; return; }
         ptrStartY = e.touches[0].clientY;

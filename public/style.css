@@ -743,17 +743,11 @@ select:focus, input:focus { border-color: var(--middenblauw); outline: none; }
 /* ── Setup-strook: klikbare compacte header met huidige wedstrijd-keuze,
       opent de setup-modal voor wijzigen. Bespaart veel verticale ruimte
       op mobiel t.o.v. de oude altijd-zichtbare stap 1/2 secties. ─── */
-/* Setup-strip = header van de wedstrijd-view. Styling matcht .org-view-header
-   zodat beide views (wedstrijd / organisatie) visueel hetzelfde oogpunt
-   hebben. Alleen de ←-knop is clickbaar (zoals bij org-view-header). */
-.setup-strip {
-    display: flex; align-items: center; gap: 12px;
-    padding: 14px 16px;
-    background: #fff;
-    border: 1px solid #dde3ea;
-    border-radius: 10px;
-    margin-bottom: 12px;
-}
+/* Setup-strip (wedstrijd-view-kop) en org-view-header: visueel + semantisch
+   dezelfde "header-strip-met-terugknop". De CSS wordt gedeeld — zie het
+   gezamenlijke blok verderop bij .org-view-header. Hier alleen setup-strip-
+   SPECIFIEKE kinderen (tekst-wrap, empty-state) staan apart; de rest hangt
+   aan de gegroepeerde selectors. */
 .setup-strip-tekst {
     flex: 1 1 auto; min-width: 0;
     font-size: 1.05rem; font-weight: 700; color: var(--blauw);
@@ -766,16 +760,6 @@ select:focus, input:focus { border-color: var(--middenblauw); outline: none; }
     margin-top: 2px;
 }
 .setup-strip-empty { color: #888; font-style: italic; font-weight: normal; }
-/* ←-knop: identiek aan .org-view-terug (rond vlak, grijs, blauwe chevron). */
-.setup-strip-edit {
-    background: #f4f6f8; border: 1px solid #dde3ea;
-    width: 32px; height: 32px; border-radius: 50%;
-    font-size: 1.3rem; color: var(--blauw);
-    cursor: pointer; line-height: 1;
-    display: flex; align-items: center; justify-content: center;
-    flex-shrink: 0;
-}
-.setup-strip-edit:hover { background: #e9eef5; }
 /* Modal-overlay voor setup (stap 1 + 2). Opent bij klik op setup-strip
    of automatisch bij eerste bezoek van de dag (localStorage-detectie). */
 .setup-modal-overlay {
@@ -874,11 +858,17 @@ select:focus, input:focus { border-color: var(--middenblauw); outline: none; }
 
 /* ── PWA install banner ── */
 .pwa-banner {
+    position: relative;   /* anker voor de absolute .btn-sluit (zie onder) */
     background: linear-gradient(135deg, var(--blauw), var(--middenblauw));
-    color: var(--wit); padding: 10px 16px; display: flex; align-items: center;
+    color: var(--wit); padding: 10px 36px 10px 16px; display: flex; align-items: center;
     gap: 10px; font-size: .85rem; border-radius: 10px; margin-bottom: 12px;
     box-shadow: 0 2px 8px rgba(0,0,0,.15);
 }
+/* Lucht boven een zichtbare banner of setup-strip — alleen als die écht
+   wordt getoond, zodat de hub-tabs (zonder banner ertussen) tegen de
+   header blijven plakken zoals voorheen. */
+.container > .pwa-banner:not([hidden]),
+.container > .setup-strip:not([hidden]) { margin-top: 10px; }
 .pwa-banner-tekst { flex: 1; }
 .pwa-banner-tekst b { display: block; font-size: .95rem; }
 .pwa-banner .btn-install {
@@ -892,9 +882,18 @@ select:focus, input:focus { border-color: var(--middenblauw); outline: none; }
     margin-top: 4px; opacity: .92; cursor: pointer; }
 .promo-niet input { margin: 0; }
 .pwa-banner .btn-sluit {
-    color: rgba(255,255,255,.6);
-    font-size: 1.2rem; padding: 0 4px;
+    /* Absoluut rechtsboven zodat de X altijd zichtbaar blijft, ook bij
+       Chrome-page-zoom of hele smalle viewports (bug 2026-10-06: X viel
+       buiten de flex-rij door de "nowrap" op .btn-install). */
+    position: absolute; top: 4px; right: 6px;
+    background: transparent; border: 0;
+    color: rgba(255,255,255,.75);
+    font-size: 1.3rem; line-height: 1;
+    width: 28px; height: 28px; padding: 0; cursor: pointer;
+    display: flex; align-items: center; justify-content: center;
 }
+.pwa-banner .btn-sluit:hover,
+.pwa-banner .btn-sluit:focus { color: #fff; }
 
 /* ── Uitslagen tab ── */
 .uitsl-selects { display: flex; gap: 8px; margin-bottom: 12px; }
@@ -1430,29 +1429,27 @@ select:focus, input:focus { border-color: var(--middenblauw); outline: none; }
    .wmodal-*-prefix voor tabs/panes/kaarten (reuse van bestaande styling).
    ────────────────────────────────────────────────────────────────────── */
 .hub-view { margin: 0; padding: 0; }
-.hub-view[hidden] { display: none; }
+/* [hidden]{display:none} is globaal (zie top), geen herhaling nodig. */
 
-/* Tabs — identiek aan .tabs/.tab-btn van de wedstrijd-view (programma/heats/
-   rondes/uitslagen) voor UI-consistentie. Platte strook met oranje underline
-   op actief; icoon boven label via flex-column (want HTML heeft aparte spans
-   voor icoon en tekst, i.p.v. de \n-truc van .tab-btn). */
-.wmodal-tabs {
+/* Tabs — gedeelde basis tussen hub-view (.wmodal-*) en org-view (.org-view-*)
+   én wedstrijd-info-view (gebruikt .org-view-* classes). Platte strook met
+   oranje underline op actief; icoon boven label via flex-column. */
+.wmodal-tabs,
+.org-view-tabs {
     display: flex;
     background: var(--wit);
     border-bottom: 2px solid #dde3ea;
     margin: 0;
-    overflow: hidden;        /* nooit scrollen, labels afkappen (zie .wmodal-tab) */
+}
+.wmodal-tabs {
+    /* Hub-tabs mogen nooit scrollen: labels afkappen bij ruimtegebrek. */
+    overflow: hidden;
     flex-shrink: 0;
 }
-/* Inactieve tabs delen de resterende vrije ruimte gelijk; de actieve tab
-   pakt alleen zoveel als 'ie nodig heeft voor zijn (volledige) label, met
-   een plafond van 45% van de rij-breedte zodat 'ie de andere drie niet
-   platdrukt. Zo passen 4 tabs met lange labels ("Mijn InlineComp" / "Mein
-   InlineComp") op smalle schermen. */
-.wmodal-tab {
+.wmodal-tab,
+.org-view-tab {
     flex: 1 1 0; min-width: 0;
     background: none; border: none;
-    padding: 8px 4px;
     text-align: center;
     font-size: .72rem; font-weight: 600;
     color: #888;
@@ -1464,20 +1461,31 @@ select:focus, input:focus { border-color: var(--middenblauw); outline: none; }
     line-height: 1.2;
     overflow: hidden;
 }
+.wmodal-tab  { padding: 8px 4px; }
+.org-view-tab { padding: 8px 2px; }
 .wmodal-tab > span:not(.wmodal-tab-ico) {
     overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
     min-width: 0; max-width: 100%;
 }
-.wmodal-tab:hover  { color: #555; }
+.wmodal-tab:hover,
+.org-view-tab:hover { color: #555; }
+.wmodal-tab.actief,
+.org-view-tab.actief {
+    color: var(--blauw); border-bottom-color: var(--oranje);
+}
+/* Inactieve hub-tabs delen de resterende vrije ruimte gelijk; de actieve tab
+   pakt alleen zoveel als 'ie nodig heeft voor zijn (volledige) label, met
+   een plafond van 45% zodat 'ie de andere drie niet platdrukt. Zo passen 4
+   lange labels ("Mijn InlineComp" / "Mein InlineComp") op smalle schermen. */
 .wmodal-tab.actief {
     flex: 0 0 auto;
     max-width: 45%;
     padding-left: 8px; padding-right: 8px;
-    color: var(--blauw); border-bottom-color: var(--oranje);
 }
-.wmodal-tab-ico    { font-size: 1rem; line-height: 1; }
-.wmodal-pane       { padding: 12px 0 8px; }
-.wmodal-pane[hidden] { display: none; }
+.wmodal-tab-ico,
+.org-view-tab-ico { font-size: 1rem; line-height: 1; }
+.wmodal-pane,
+.org-view-pane { padding: 12px 0 8px; }
 
 /* Seizoen-selector bovenin Wedstrijden-tab */
 .wmodal-seizoen-rij {
@@ -1511,19 +1519,25 @@ select:focus, input:focus { border-color: var(--middenblauw); outline: none; }
 }
 .wmodal-periode-hdr:first-child { padding-top: 2px; }
 
-/* Wedstrijd-kaart */
-.wmodal-kaart {
+/* Wedstrijd-kaart + org-kaart: gedeelde basis (witte container met rand +
+   hover-highlight). Delta's: wedstrijd-kaart heeft datum-blok links top-
+   aligned, org-kaart heeft logo links center-aligned. */
+.wmodal-kaart,
+.wmodal-org-kaart {
     background: #fff;
     border: 1px solid #dde3ea;
     border-radius: 8px;
     padding: 10px 12px;
-    display: flex; gap: 10px;
-    align-items: flex-start;
+    display: flex;
     cursor: pointer;
     transition: border-color .12s, box-shadow .12s;
 }
+.wmodal-kaart     { gap: 10px; align-items: flex-start; }
+.wmodal-org-kaart { gap: 12px; align-items: center; }
 .wmodal-kaart:hover,
-.wmodal-kaart:focus {
+.wmodal-kaart:focus,
+.wmodal-org-kaart:hover,
+.wmodal-org-kaart:focus {
     border-color: var(--middenblauw);
     box-shadow: 0 2px 6px rgba(31,78,121,.08);
     outline: none;
@@ -1554,7 +1568,10 @@ select:focus, input:focus { border-color: var(--middenblauw); outline: none; }
 .wmodal-info {
     flex: 1; min-width: 0;   /* min-width:0 nodig voor ellipsis in flex-child */
 }
-.wmodal-naam {
+/* Naam-regel in wedstrijd- én organisatie-kaarten: 2-line clamp + ellipsis.
+   .wmodal-org-naam deelt deze styling (zie org-sectie). */
+.wmodal-naam,
+.wmodal-org-naam {
     font-size: .92rem; font-weight: 600; color: var(--tekst);
     line-height: 1.25;
     overflow: hidden; text-overflow: ellipsis;
@@ -1579,24 +1596,9 @@ select:focus, input:focus { border-color: var(--middenblauw); outline: none; }
 .wmodal-tag--binnenkort { background: #0d6efd; color: #fff; }
 
 /* ── Organisaties-tab: lijst met org-kaarten ──
-   Vergelijkbaar met wedstrijd-kaart, maar met logo links. */
+   Kaart-styling is gedeeld met .wmodal-kaart (zie het blok daarvoor);
+   hier alleen de org-specifieke sub-elementen (logo + info-blok). */
 .wmodal-organisatie-lijst { display: flex; flex-direction: column; gap: 6px; }
-.wmodal-org-kaart {
-    background: #fff;
-    border: 1px solid #dde3ea;
-    border-radius: 8px;
-    padding: 10px 12px;
-    display: flex; gap: 12px;
-    align-items: center;
-    cursor: pointer;
-    transition: border-color .12s, box-shadow .12s;
-}
-.wmodal-org-kaart:hover,
-.wmodal-org-kaart:focus {
-    border-color: var(--middenblauw);
-    box-shadow: 0 2px 6px rgba(31,78,121,.08);
-    outline: none;
-}
 .wmodal-org-logo {
     width: 44px; height: 44px;
     border-radius: 8px;
@@ -1604,24 +1606,27 @@ select:focus, input:focus { border-color: var(--middenblauw); outline: none; }
     background: #f4f6f8;
     flex-shrink: 0;
 }
-.wmodal-org-logo--letters {
-    background: var(--blauw);
-    color: #fff;
-    font-size: .95rem; font-weight: 700;
+/* Letter-fallback-logo (gebruikt in zowel org-kaart als org-view-header). */
+.wmodal-org-logo--letters,
+.org-view-logo--letters {
+    background: var(--blauw); color: #fff;
+    font-weight: 700;
     display: flex; align-items: center; justify-content: center;
     letter-spacing: .5px;
 }
+.wmodal-org-logo--letters { font-size: .95rem; }
+.org-view-logo--letters   { font-size: 1.05rem; }
 .wmodal-org-info { flex: 1; min-width: 0; }
-.wmodal-org-naam {
-    font-size: .92rem; font-weight: 600; color: var(--tekst);
-    line-height: 1.25;
-    overflow: hidden; text-overflow: ellipsis;
-    display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical;
-}
+/* .wmodal-org-naam: zie gedeelde regel bij .wmodal-naam. */
 .wmodal-org-stat { font-size: .76rem; color: #888; margin-top: 2px; }
 
 /* ── Organisatie-view in main-content (placeholder, fase 5b vult tabs) ── */
-.org-view { padding: 0; }
+.org-view { padding: 0; margin-top: 10px; }
+/* Header-strip-met-terugknop: gedeeld tussen de wedstrijd-view (.setup-strip)
+   en de organisatie-/wedstrijd-info-view (.org-view-header). Beide hebben
+   dezelfde functie: witte container met ‹-knop + logo + titel bovenaan de
+   view. */
+.setup-strip,
 .org-view-header {
     display: flex; align-items: center; gap: 12px;
     padding: 14px 16px;
@@ -1630,6 +1635,7 @@ select:focus, input:focus { border-color: var(--middenblauw); outline: none; }
     border-radius: 10px;
     margin-bottom: 12px;
 }
+.setup-strip-edit,
 .org-view-terug {
     background: #f4f6f8; border: 1px solid #dde3ea;
     width: 32px; height: 32px; border-radius: 50%;
@@ -1638,6 +1644,7 @@ select:focus, input:focus { border-color: var(--middenblauw); outline: none; }
     display: flex; align-items: center; justify-content: center;
     flex-shrink: 0;
 }
+.setup-strip-edit:hover,
 .org-view-terug:hover { background: #e9eef5; }
 .org-view-logo {
     width: 48px; height: 48px;
@@ -1646,64 +1653,17 @@ select:focus, input:focus { border-color: var(--middenblauw); outline: none; }
     background: #f4f6f8;
     flex-shrink: 0;
 }
-.org-view-logo--letters {
-    background: var(--blauw); color: #fff;
-    font-size: 1.05rem; font-weight: 700;
-    display: flex; align-items: center; justify-content: center;
-    letter-spacing: .5px;
-}
-.org-view-naam {
-    flex: 1; min-width: 0;
-    font-size: 1.05rem; font-weight: 700; color: var(--blauw);
-    margin: 0;
-    overflow: hidden; text-overflow: ellipsis;
-    display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical;
-}
-.org-view-placeholder {
-    background: #fff;
-    border: 1px solid #dde3ea;
-    border-radius: 10px;
-    padding: 32px 16px;
-    text-align: center;
-    color: #666;
-}
-.org-view-placeholder p {
-    margin: 0 0 .4rem;
-    font-weight: 600;
-    color: var(--blauw);
-}
+/* .org-view-logo--letters: zie gedeeld blok hierboven. */
+/* .org-view-naam styling: gedeeld met .wi-naam (zie wedstrijd-info-view-
+   sectie), met de extra flex-layout-props hier als delta. */
+.org-view-naam { flex: 1; min-width: 0; margin: 0; }
+/* .org-view-placeholder styling: gedeeld met .wi-placeholder (zie wedstrijd-
+   info-view-sectie); alleen de padding is per view anders. */
+.org-view-placeholder { padding: 32px 16px; }
 
-/* Org-view tabs (Agenda / Algemeen / Nieuws) — zelfde ritueel als wmodal-tabs:
-   icoon boven label, oranje underline op actief, binnen een witte kaart-rand. */
-/* Org-view-tabs — identiek aan .tabs/.tab-btn (UI-consistentie met wedstrijd-
-   view én hub-view tabs). Platte strook met oranje underline op actief. */
-.org-view-tabs {
-    display: flex;
-    background: var(--wit);
-    border-bottom: 2px solid #dde3ea;
-    margin: 0;
-}
-.org-view-tab {
-    flex: 1 1 0; min-width: 0;
-    background: none; border: none;
-    padding: 8px 2px;
-    text-align: center;
-    font-size: .72rem; font-weight: 600;
-    color: #888;
-    border-bottom: 3px solid transparent;
-    margin-bottom: -2px;
-    cursor: pointer;
-    display: flex; flex-direction: column; align-items: center; justify-content: center;
-    gap: 2px; line-height: 1.2;
-    overflow: hidden;
-}
-.org-view-tab:hover  { color: #555; }
-.org-view-tab.actief { color: var(--blauw); border-bottom-color: var(--oranje); }
-.org-view-tab-ico    { font-size: 1rem; line-height: 1; }
-.org-view-pane       { padding: 12px 0 8px; }
-.org-view-pane[hidden] { display: none; }
-/* De placeholder binnen een pane hoort geen eigen rand te hebben (de pane
-   heeft al een rand). Reset de rand-styling. */
+/* Org-view-tabs/-tab/-pane styling: zie gedeeld blok bij .wmodal-tabs
+   (hub-view sectie). Alleen deze lokale override blijft: placeholder in
+   een pane hoort geen eigen rand te hebben (de pane heeft die al). */
 .org-view-pane > .org-view-placeholder {
     background: transparent; border: none; padding: 24px 8px;
 }
@@ -1714,7 +1674,7 @@ select:focus, input:focus { border-color: var(--middenblauw); outline: none; }
    een documenten-sectie (nu placeholder, later uit DB); knop "Open
    wedstrijd" opent het reguliere programma/heats/rondes/uitslagen.
    ────────────────────────────────────────────────────────────────────── */
-.wi-view { padding: 0; }
+.wi-view { padding: 0; margin-top: 10px; }
 .wi-view .org-view-header {
     /* Datum-blok + titel-blok ipv logo + naam; verder zelfde kader-styling. */
     gap: 12px;
@@ -1729,21 +1689,105 @@ select:focus, input:focus { border-color: var(--middenblauw); outline: none; }
 .wi-datum-dag { font-size: 1.1rem; font-weight: 700; color: var(--blauw); line-height: 1; }
 .wi-datum-mnd { font-size: .7rem; font-weight: 600; color: var(--blauw); text-transform: uppercase; margin-top: 2px; }
 .wi-titel-blok { flex: 1; min-width: 0; }
-.wi-naam {
+/* Titel-regel in wedstrijd-info-view-header én organisatie-view-header:
+   blauw, bold, 2-line clamp. .org-view-naam heeft extra flex-layout
+   (zie delta aldaar). */
+.wi-naam,
+.org-view-naam {
     font-size: 1.05rem; font-weight: 700; color: var(--blauw);
-    margin: 0;
     overflow: hidden; text-overflow: ellipsis;
     display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical;
 }
+.wi-naam { margin: 0; }
 .wi-plaats { font-size: .78rem; color: #666; margin-top: 2px; }
 .wi-documenten { margin: 12px 0; }
-.wi-placeholder {
+/* Placeholder-kaart in wi-view én org-view: witte container met rand,
+   gecentreerd tekst-blok. Alleen padding verschilt per view. */
+.wi-placeholder,
+.org-view-placeholder {
     background: #fff; border: 1px solid #dde3ea; border-radius: 10px;
-    padding: 24px 12px; text-align: center; color: #666;
+    text-align: center; color: #666;
 }
+.wi-placeholder { padding: 24px 12px; }
 .wi-placeholder-ico { font-size: 1.6rem; margin-bottom: 6px; }
 .wi-placeholder p { font-size: .9rem; font-weight: 600; color: #333; margin: 0; }
 .wi-placeholder-sub { font-size: .78rem; font-weight: normal; color: #666; margin-top: 4px; }
+/* Wedstrijd-docs renderen (fase 5b-content):
+   - Infobulletin: PDF.js canvas-rendering (werkt mobile én desktop,
+     geen 3rd-party privacy-leak — alleen de lib komt van cdnjs).
+     Fallback-tegel bij CORS of lade-fout.
+   - Flyer: afbeelding inline. */
+/* Zoom-knopbar bovenaan de PDF-container — sticky zodat de controls bij
+   scrollen zichtbaar blijven. Zoom-% in het midden als niet-klikbare label. */
+.wi-pdf-controls {
+    position: sticky; top: 0; z-index: 2;
+    display: flex; gap: 8px; align-items: center; justify-content: center;
+    padding: 6px 8px;
+    background: rgba(255,255,255,.96);
+    border: 1px solid #dde3ea; border-bottom: none;
+    border-radius: 10px 10px 0 0;
+    backdrop-filter: blur(4px);
+}
+.wi-pdf-ctl {
+    width: 36px; height: 36px; font-size: 1.1rem; font-weight: 700;
+    background: #fff; color: #333;
+    border: 1px solid #dde3ea; border-radius: 6px;
+    cursor: pointer; line-height: 1;
+}
+.wi-pdf-ctl:hover,
+.wi-pdf-ctl:focus { background: #f5f5f5; border-color: #999; }
+.wi-pdf-ctl:active { transform: scale(.95); }
+.wi-pdf-zoom {
+    min-width: 48px; text-align: center;
+    font-size: .85rem; font-weight: 600; color: #555;
+    user-select: none;
+}
+.wi-pdf-container {
+    display: block;
+    background: #fff; border: 1px solid #dde3ea; border-radius: 0 0 10px 10px;
+    padding: 6px; overflow-x: auto;   /* bij ingezoomd: horizontaal scrollen */
+}
+/* Als er een controls-bar BOVEN de container staat, is de top al afgerond
+   via de controls — anders (loose container) blijft 'ie standaard rond. */
+.wi-pdf-controls + .wi-pdf-container { border-top: none; }
+.wi-pdf-page {
+    display: block; margin: 0 auto 10px;
+    box-shadow: 0 1px 3px rgba(0,0,0,.08);
+}
+.wi-pdf-page:last-child { margin-bottom: 0; }
+.wi-pdf-loading {
+    text-align: center; padding: 40px 12px; color: #666; font-size: .9rem;
+    background: #fff; border: 1px solid #dde3ea; border-radius: 10px;
+}
+.wi-doc-pdf-tegel {
+    display: flex; flex-direction: column; align-items: center;
+    gap: 10px;
+    background: #fff; border: 1px solid #dde3ea; border-radius: 10px;
+    padding: 32px 16px; text-decoration: none; color: inherit;
+    transition: box-shadow .15s, transform .15s;
+}
+.wi-doc-pdf-tegel:hover,
+.wi-doc-pdf-tegel:focus {
+    box-shadow: 0 4px 12px rgba(0,0,0,.08);
+    transform: translateY(-1px);
+}
+.wi-doc-pdf-ico   { font-size: 3rem; line-height: 1; }
+.wi-doc-pdf-titel { font-size: 1.1rem; font-weight: 700; color: #333; }
+.wi-doc-pdf-bestand {
+    font-size: .78rem; color: #888;
+    word-break: break-all; text-align: center;
+}
+.wi-doc-pdf-knop {
+    margin-top: 8px;
+    background: var(--oranje); color: #fff;
+    padding: 10px 24px; border-radius: 8px;
+    font-weight: 700; font-size: .95rem;
+    box-shadow: 0 2px 6px rgba(0,0,0,.1);
+}
+.wi-doc-img {
+    width: 100%; max-height: 80vh; object-fit: contain;
+    border-radius: 6px; background: #f6f6f6;
+}
 .wi-open-wedstrijd {
     width: 100%;
     background: var(--oranje); color: #fff;
@@ -1756,17 +1800,6 @@ select:focus, input:focus { border-color: var(--middenblauw); outline: none; }
 .wi-open-wedstrijd:focus { background: #d55608; }
 .wi-open-wedstrijd:active { transform: scale(.98); }
 
-/* Wedstrijd-kaart in org-agenda: hergebruikt .wmodal-kaart-styling maar
-   kan disabled zijn (binnenkort/verborgen → niet klikbaar). */
-.wmodal-kaart.disabled {
-    opacity: .55;
-    cursor: not-allowed;
-}
-.wmodal-kaart.disabled:hover,
-.wmodal-kaart.disabled:focus {
-    border-color: #dde3ea;
-    box-shadow: none;
-}
 /* Labels op org-agenda-kaarten (publiek / binnenkort / verborgen). */
 .org-wed-tag {
     font-size: .62rem; font-weight: 700;
@@ -1800,7 +1833,10 @@ select:focus, input:focus { border-color: var(--middenblauw); outline: none; }
     margin-bottom: .5rem;
     opacity: .7;
 }
-.wmodal-placeholder p {
+/* Hoofdregel in placeholder-blok, gedeeld tussen hub-view placeholders en
+   organisatie-view placeholders (identieke blauw-vette intro-tekst). */
+.wmodal-placeholder p,
+.org-view-placeholder p {
     margin: 0 0 .4rem;
     font-weight: 600;
     color: var(--blauw);

@@ -102,6 +102,13 @@ Options -Indexes
     </IfModule>
 </FilesMatch>
 
+# Composer /vendor/ (PHP backend-deps voor Web Push) hoort server-side te
+# blijven — PHP leest 'm via het filesystem (require __DIR__ . '/../vendor/...')
+# en dat gaat niet via Apache's URL-router, dus deze block raakt dat niet.
+# Vangnet voor als /vendor/ ooit per ongeluk via SFTP op de webroot belandt
+# (zoals bijvoorbeeld bij de 2026-10-06-upload) — altijd 403 voor HTTP.
+RewriteRule ^vendor($|/) - [F,L]
+
 # ──────────────────────────────────────────────────────────────────────
 #  Referrer-Policy: same-origin — vangnet zodat URL's met parameters
 #  (person_id, competition_id, enz.) nooit als Referer naar externe
@@ -113,6 +120,12 @@ Options -Indexes
 <IfModule mod_headers.c>
     Header always set Referrer-Policy "same-origin"
 </IfModule>
+
+# Cache-Control-regels voor statische assets staan in app-specifieke
+# .htaccess-bestanden (zie public/.htaccess), NIET root-wide. Reden: niet
+# alle apps gebruiken ?v=filemtime()-cachebusting op JS/CSS (coach + check
+# niet), en lange cache-tijden daar zouden updates kunnen vertragen —
+# tijden/uitslagen/jury-wijzigingen moeten instant doorkomen.
 
 # ──────────────────────────────────────────────────────────────────────
 #  B. PHP-RUNTIME-INSTELLINGEN  →  via cPanel MultiPHP INI Editor (NIET hier)

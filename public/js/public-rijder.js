@@ -641,7 +641,14 @@ let _wmodalLaatstKozenComp = null;  // comp-id net gekozen uit hub → auto-prom
 // Centrale view-state helper. 'hub' = hoofdview, 'wedstrijd' = wedstrijd-
 // content (strip + chips + programma/heats/…), 'org' = organisatie-detail
 // (strip verborgen, alleen org-view in #resultaat).
-function _setViewState(mode) {
+//
+// `save` (default true) stuurt of de sessionStorage-view-restore wordt
+// bijgewerkt. Safety-net-calls (bv. vanuit renderKinderen) passen `false`,
+// want een stale async-render mag niet de laatste echte user-navigatie
+// overschrijven — zie bug 2026-10-06: pull-to-refresh in org-view parkeerde
+// de bezoeker in de laatste wedstrijd omdat een lingering kinderen-render
+// de org-save over had geschreven.
+function _setViewState(mode, save = true) {
     const hub   = document.getElementById('hub-view');
     const strip = document.getElementById('setup-strip');
     const res   = document.getElementById('resultaat');
@@ -664,6 +671,7 @@ function _setViewState(mode) {
     // onverwacht in een wedstrijd-view. 'org'/'wedstrijdinfo' slaan we voor
     // nu niet op (zouden org- of comp-cache nodig hebben om te heropenen) —
     // bij refresh landt een org-user terug in hub, Organisaties-tab.
+    if (!save) return;
     if (mode === 'wedstrijd' && selComp?.value) {
         _onthoudViewState({ mode: 'wedstrijd', compId: selComp.value });
     } else if (mode === 'org') {
@@ -699,11 +707,20 @@ function toonHubView(tab) {
 // Server-side max-age=30/60 vangt eventuele dubbele requests op bij snel
 // hub-open/dicht/open. Ook aan te roepen vanuit andere flows (bv. kinderen-
 // wijziging die niet via hub-close loopt — zie _saveKids).
+//
+// Belangrijk: ook de LIJST-DOM leegmaken, anders blijven stale kaartjes
+// zichtbaar tijdens de eerstvolgende async fetch — klik erop faalt dan want
+// `_wmodalComps` is nog null in `_activeerWedstrijd` → option niet gevonden
+// → `selComp.value` wordt stil leeg → "Kies je wedstrijd..." (bug 2026-10-06).
 function _invalideerWedstrijdModalCaches() {
     _wmodalComps        = null;
     _wmodalOrgCache     = null;
     _wmodalOrgSig       = null;
     for (const k of Object.keys(_orgWedstrijdenCache)) delete _orgWedstrijdenCache[k];
+    const wl = document.getElementById('wmodal-wedstrijd-lijst');
+    if (wl) wl.innerHTML = '';
+    const ol = document.getElementById('wmodal-organisatie-lijst');
+    if (ol) ol.innerHTML = '';
 }
 // Backwards-compat alias: nog door andere JS-paden gebruikt (bv. als er in
 // de toekomst code is die refereert aan "modal open"). Nu zet 'ie view-state
@@ -737,6 +754,10 @@ function switchWedstrijdTab(tabId) {
         if (typeof _ppRender === 'function') _ppRender();
         _wmodalSettingsLeegUpdate();
     }
+    // Wedstrijden-tab: lijst laden (defensief — als cache gevuld is, skipt
+    // de fetch en re-rendert alleen de kaartjes; nodig na een hub-switch
+    // waar _invalideerWedstrijdModalCaches de DOM leegmaakte).
+    if (tabId === 'wedstrijden')  _laadWedstrijdLijst();
     // Organisaties-tab: lijst laden (alleen orgs waar rijders uit volglijst
     // gereden hebben; AVG-correct, alleen bekende contexten tonen).
     if (tabId === 'organisaties') _laadOrganisatieLijst();
@@ -774,6 +795,10 @@ async function _laadWedstrijdLijst() {
     if (!lijst) return;
     try {
         if (!_wmodalComps) {
+            // Spinner tijdens laad, zodat user ziet dat er iets gebeurt
+            // (en niet op stale kaartjes kan klikken — zie bug-notitie bij
+            // _invalideerWedstrijdModalCaches).
+            lijst.innerHTML = `<div class="wmodal-geen-wedstrijden"><span class="spinner"></span></div>`;
             // Parallel: competitions-lijst én eigen-rijder-markering per
             // wedstrijd (voornaam-pillen op kaarten). mijn_wedstrijden levert
             // {wedstrijden: {comp_id: pids}, licenses: {lkey: person_id}}
@@ -1352,7 +1377,7 @@ function _renderOrgAgenda(orgId) {
         htmlStukken.push(`<div class="wmodal-geen-wedstrijden">${esc(t('wmodal_geen_wedstrijden'))}</div>`);
     }
     lijst.innerHTML = htmlStukken.join('');
-    lijst.querySelectorAll('.wmodal-kaart:not(.disabled)').forEach(el => {
+    lijst.querySelectorAll('.wmodal-kaart').forEach(el => {
         el.addEventListener('click', () => _kiesWedstrijdUitOrgView(el.dataset.compId));
     });
 }
@@ -1363,17 +1388,17 @@ function _orgAgendaKaartHtml(c) {
     const mnd = d ? _mndKort(d) : '';
     const plaats = c.baan_vereniging ? esc(c.baan_vereniging) : '';
     const label = _wedstrijdLabel(c);
-    // Click-restrictie puur op basis van publieke zichtbaarheid: operator
-    // heeft die bewust aan/uit gezet. Eigen-rijder-check doet NIET mee
-    // (publieke wedstrijd is ook via de wedstrijd-tab bereikbaar voor
-    // iedereen — hier blokkeren zou alleen de UX breken).
-    const disabled = label.key !== 'publiek';
+    // Alle labels (publiek/binnenkort/verborgen) zijn klikbaar — "verborgen"
+    // betekent alleen dat de wedstrijd niet live via InlineComp gevolgd wordt,
+    // niet dat de wedstrijd-info-view (infobulletin, flyer, vereniging) niet
+    // getoond mag worden. De "Open wedstrijd"-knop in de info-view valt wel
+    // weg bij niet-publieke wedstrijden (zie _toonWedstrijdInfoView).
     const labelHtml = `<span class="org-wed-tag org-wed-tag--${label.key}">${esc(t(label.i18n))}</span>`;
     // Fase 5a-UX-flat (2026-10-03): voornaam-pillen van gevolgde rijders
     // verhuisd naar de hub Wedstrijden-tab. In de org-agenda houden we
     // ruimte over voor nog-te-komen org-tag-labels.
     return `
-        <div class="wmodal-kaart${disabled ? ' disabled' : ''}" data-comp-id="${esc(c.id)}"${disabled ? '' : ' tabindex="0" role="button"'}>
+        <div class="wmodal-kaart" data-comp-id="${esc(c.id)}" tabindex="0" role="button">
             <div class="wmodal-datum">
                 <div class="wmodal-datum-dag">${dag}</div>
                 <div class="wmodal-datum-mnd">${esc(mnd)}</div>
@@ -1438,8 +1463,13 @@ function _toonWedstrijdInfoView(comp) {
                 </div>
             </div>
             <div class="org-view-tabs" role="tablist">
-                <button type="button" class="org-view-tab actief" data-tab="infobulletin"
-                        role="tab" aria-selected="true" onclick="switchWiTab('infobulletin')">
+                <button type="button" class="org-view-tab actief" data-tab="vereniging"
+                        role="tab" aria-selected="true" onclick="switchWiTab('vereniging')">
+                    <span class="org-view-tab-ico">🛡️</span>
+                    <span data-i18n="wi_tab_vereniging">Vereniging</span>
+                </button>
+                <button type="button" class="org-view-tab" data-tab="infobulletin"
+                        role="tab" aria-selected="false" onclick="switchWiTab('infobulletin')">
                     <span class="org-view-tab-ico">📄</span>
                     <span data-i18n="wi_tab_infobulletin">Infobulletin</span>
                 </button>
@@ -1448,13 +1478,15 @@ function _toonWedstrijdInfoView(comp) {
                     <span class="org-view-tab-ico">🖼</span>
                     <span data-i18n="wi_tab_flyer">Flyer</span>
                 </button>
-                <button type="button" class="org-view-tab" data-tab="vereniging"
-                        role="tab" aria-selected="false" onclick="switchWiTab('vereniging')">
-                    <span class="org-view-tab-ico">🛡️</span>
-                    <span data-i18n="wi_tab_vereniging">Vereniging</span>
-                </button>
             </div>
-            <div class="org-view-pane actief" id="wi-pane-infobulletin" role="tabpanel">
+            <div class="org-view-pane actief" id="wi-pane-vereniging" role="tabpanel">
+                <div class="wi-placeholder">
+                    <div class="wi-placeholder-ico">🛡️</div>
+                    <p data-i18n="wi_vereniging_binnenkort">${esc(t('wi_vereniging_binnenkort'))}</p>
+                    <p class="wi-placeholder-sub" data-i18n="wi_vereniging_binnenkort_sub">${esc(t('wi_vereniging_binnenkort_sub'))}</p>
+                </div>
+            </div>
+            <div class="org-view-pane" id="wi-pane-infobulletin" role="tabpanel" hidden>
                 <div class="wi-placeholder">
                     <div class="wi-placeholder-ico">📄</div>
                     <p data-i18n="wi_infobulletin_binnenkort">${esc(t('wi_infobulletin_binnenkort'))}</p>
@@ -1468,14 +1500,9 @@ function _toonWedstrijdInfoView(comp) {
                     <p class="wi-placeholder-sub" data-i18n="wi_flyer_binnenkort_sub">${esc(t('wi_flyer_binnenkort_sub'))}</p>
                 </div>
             </div>
-            <div class="org-view-pane" id="wi-pane-vereniging" role="tabpanel" hidden>
-                <div class="wi-placeholder">
-                    <div class="wi-placeholder-ico">🛡️</div>
-                    <p data-i18n="wi_vereniging_binnenkort">${esc(t('wi_vereniging_binnenkort'))}</p>
-                    <p class="wi-placeholder-sub" data-i18n="wi_vereniging_binnenkort_sub">${esc(t('wi_vereniging_binnenkort_sub'))}</p>
-                </div>
-            </div>
-            <button class="wi-open-wedstrijd" type="button" data-i18n="wi_open_wedstrijd">${esc(t('wi_open_wedstrijd'))}</button>
+            ${Number(comp.public_zichtbaar)
+                ? `<button class="wi-open-wedstrijd" type="button" data-i18n="wi_open_wedstrijd">${esc(t('wi_open_wedstrijd'))}</button>`
+                : ''}
         </div>`;
     const terug = divResult.querySelector('.wi-terug');
     if (terug) terug.addEventListener('click', _terugUitWedstrijdInfo);
@@ -1487,6 +1514,166 @@ function _toonWedstrijdInfoView(comp) {
     });
     if (typeof applyI18n === 'function') applyI18n(divResult);
     divResult.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    _laadWedstrijdDocs(comp.id);
+}
+
+// Fetch infobulletin + flyer en vul of verberg de corresponderende tabs.
+// Infobulletin: URL (iframe + "open in nieuw tabblad"-fallback voor Drive-DENY)
+// heeft voorrang; anders zelf-gehoste file (iframe, geen fallback nodig).
+// Flyer: alleen upload (afbeelding). Tab zonder content wordt verborgen; als
+// de huidige actieve tab verdwijnt, springt de view naar vereniging.
+async function _laadWedstrijdDocs(compId) {
+    try {
+        const res  = await safeFetch(`?action=wedstrijd_docs&comp_id=${encodeURIComponent(compId)}`);
+        if (!res) return;
+        const data = await res.json();
+        if (!data || !_aktieveWedstrijdInfo || _aktieveWedstrijdInfo.id !== compId) return;
+
+        const infoUrl  = data.infobulletin_url      || null;
+        const infoFile = data.infobulletin_file_url || null;
+        const flyerUrl = data.flyer_file_url        || null;
+
+        const infoTab   = document.querySelector('.wi-view .org-view-tab[data-tab="infobulletin"]');
+        const infoPane  = document.getElementById('wi-pane-infobulletin');
+        const flyerTab  = document.querySelector('.wi-view .org-view-tab[data-tab="flyer"]');
+        const flyerPane = document.getElementById('wi-pane-flyer');
+
+        // PDF-rendering: PDF.js (lazy-geladen) rendert naar canvas, werkt
+        // consistent op mobile én desktop. Externe URL's gaan via de
+        // server-side proxy (zelfde origin → geen CORS); eigen uploads
+        // worden direct door PDF.js opgehaald. Bij render-fout (upstream
+        // offline, verkeerd mime) toont de helper een "openen"-tegel die
+        // altijd naar de originele bron wijst.
+        if (infoUrl && infoPane) {
+            const proxyUrl = `?action=wedstrijd_doc_proxy&comp_id=${encodeURIComponent(compId)}&kind=infobulletin`;
+            _renderInfobulletin(infoPane, proxyUrl, infoUrl, null);
+        } else if (infoFile && infoPane) {
+            _renderInfobulletin(infoPane, infoFile, infoFile, infoFile);
+        } else {
+            if (infoTab)  infoTab.hidden  = true;
+            if (infoPane) infoPane.hidden = true;
+        }
+
+        if (flyerUrl && flyerPane) {
+            flyerPane.innerHTML = `<img class="wi-doc-img" src="${esc(flyerUrl)}" alt="Flyer" loading="lazy">`;
+        } else {
+            if (flyerTab)  flyerTab.hidden  = true;
+            if (flyerPane) flyerPane.hidden = true;
+        }
+
+        // Actieve tab verborgen? → terugvallen op vereniging.
+        const actief = document.querySelector('.wi-view .org-view-tab.actief');
+        if (actief && actief.hidden) switchWiTab('vereniging');
+
+        if (typeof applyI18n === 'function') applyI18n(divResult);
+    } catch (e) {
+        // Stil falen — tabs blijven in placeholder-staat.
+    }
+}
+
+// PDF.js lazy-loader (zelf-gehost in /assets/vendor/pdfjs/, UMD-versie 3.11.174).
+// /assets/vendor/ ≠ /vendor/ (Composer): /vendor/ is PHP-backend-deps die
+// server-side worden ge-require'd en moeten gitignored blijven; /assets/vendor/
+// is front-end libs die /public, /coach etc. in de browser laden.
+// Blijft op window gecached zodat tabbladen binnen één sessie 'em delen.
+// Updaten = de 2 files handmatig vervangen vanaf https://cdnjs.cloudflare.com/ajax/libs/pdf.js/
+let _pdfjsLadenPromise = null;
+function _laadPdfjs() {
+    if (window.pdfjsLib) return Promise.resolve(window.pdfjsLib);
+    if (_pdfjsLadenPromise) return _pdfjsLadenPromise;
+    const base = '/assets/vendor/pdfjs/';
+    _pdfjsLadenPromise = new Promise((resolve, reject) => {
+        const s = document.createElement('script');
+        s.src = base + 'pdf.min.js';
+        s.onload = () => {
+            try {
+                window.pdfjsLib.GlobalWorkerOptions.workerSrc = base + 'pdf.worker.min.js';
+                resolve(window.pdfjsLib);
+            } catch (e) { reject(e); }
+        };
+        s.onerror = () => reject(new Error('PDF.js kon niet geladen worden'));
+        document.head.appendChild(s);
+    });
+    return _pdfjsLadenPromise;
+}
+
+// Render de PDF inline in `pane`. Elke pagina wordt op schermbreedte
+// geschaald en met DPR-aware canvas-scaling getekend (scherp op retina).
+// Bij fout (proxy/upstream offline, kapot bestand) fallback-tegel die naar
+// `openBron` (de ORIGINELE URL/file) wijst zodat de bezoeker alsnog kan
+// doorklikken.
+async function _renderInfobulletin(pane, laadBron, openBron, fileRel) {
+    pane.innerHTML = `<div class="wi-pdf-loading" data-i18n="wi_doc_pdf_laden">${esc(t('wi_doc_pdf_laden'))}</div>`;
+    try {
+        const pdfjsLib = await _laadPdfjs();
+        const pdf = await pdfjsLib.getDocument(laadBron).promise;
+        pane.innerHTML = `
+            <div class="wi-pdf-controls">
+                <button type="button" class="wi-pdf-ctl" data-act="out"   data-i18n-title="wi_doc_pdf_zoom_uit"    title="${esc(t('wi_doc_pdf_zoom_uit'))}">−</button>
+                <span class="wi-pdf-zoom">100%</span>
+                <button type="button" class="wi-pdf-ctl" data-act="in"    data-i18n-title="wi_doc_pdf_zoom_in"     title="${esc(t('wi_doc_pdf_zoom_in'))}">+</button>
+                <button type="button" class="wi-pdf-ctl" data-act="reset" data-i18n-title="wi_doc_pdf_zoom_reset"  title="${esc(t('wi_doc_pdf_zoom_reset'))}">⟳</button>
+            </div>
+            <div class="wi-pdf-container"></div>`;
+        const container  = pane.querySelector('.wi-pdf-container');
+        const zoomLabel  = pane.querySelector('.wi-pdf-zoom');
+        const containerW = Math.max(container.clientWidth - 4, 300);
+        const dpr        = Math.min(window.devicePixelRatio || 1, 2);
+        // Baseline = fit-to-width op pagina 1. zoom=1 betekent "schermbreedte",
+        // zoom=1.25 is 125% van de schermbreedte-fit, enz. Buffer in gewone
+        // CSS-pixels; canvas-buffer wordt met DPR vermenigvuldigd (retina).
+        const page1     = await pdf.getPage(1);
+        const baseScale = containerW / page1.getViewport({ scale: 1 }).width;
+        let zoom = 1;
+        let bezig = false;
+
+        async function renderAll() {
+            if (bezig) return;
+            bezig = true;
+            zoomLabel.textContent = Math.round(zoom * 100) + '%';
+            container.innerHTML = '';
+            const scale = baseScale * zoom;
+            for (let i = 1; i <= pdf.numPages; i++) {
+                const page     = await pdf.getPage(i);
+                const viewport = page.getViewport({ scale });
+                const canvas   = document.createElement('canvas');
+                canvas.className = 'wi-pdf-page';
+                canvas.width  = Math.floor(viewport.width  * dpr);
+                canvas.height = Math.floor(viewport.height * dpr);
+                canvas.style.width  = viewport.width  + 'px';
+                canvas.style.height = viewport.height + 'px';
+                const ctx = canvas.getContext('2d');
+                ctx.scale(dpr, dpr);
+                container.appendChild(canvas);
+                await page.render({ canvasContext: ctx, viewport }).promise;
+            }
+            bezig = false;
+        }
+
+        await renderAll();
+
+        pane.querySelectorAll('.wi-pdf-ctl').forEach(btn => {
+            btn.addEventListener('click', () => {
+                const act = btn.dataset.act;
+                if (act === 'in')    zoom = Math.min(zoom * 1.25, 4);
+                if (act === 'out')   zoom = Math.max(zoom / 1.25, 0.5);
+                if (act === 'reset') zoom = 1;
+                renderAll();
+            });
+        });
+
+        if (typeof applyI18n === 'function') applyI18n(pane);
+    } catch (e) {
+        const naam = fileRel ? (fileRel.split('/').pop() || '') : '';
+        pane.innerHTML = `
+            <a class="wi-doc-pdf-tegel" href="${esc(openBron)}" target="_blank" rel="noopener">
+                <div class="wi-doc-pdf-ico">📄</div>
+                <div class="wi-doc-pdf-titel" data-i18n="wi_doc_infobulletin_openen">${esc(t('wi_doc_infobulletin_openen'))}</div>
+                ${naam ? `<div class="wi-doc-pdf-bestand">${esc(naam)}</div>` : ''}
+                <div class="wi-doc-pdf-knop" data-i18n="wi_doc_open_knop">${esc(t('wi_doc_open_knop'))}</div>
+            </a>`;
+        if (typeof applyI18n === 'function') applyI18n(pane);
+    }
 }
 
 function switchWiTab(tabId) {
@@ -1802,7 +1989,12 @@ function renderKinderen() {
     // kan de setup-strip hidden blijven na een race-conditie (bv. een
     // snelle sequence van hub/org-switches gevolgd door een wedstrijd-
     // load) — dan ziet de user content zonder terug-knop.
-    if (_kinderen.length && selComp.value) _setViewState('wedstrijd');
+    //
+    // save=false: de UI-correctie wel toepassen, maar de sessionStorage
+    // niet overschrijven. Zo kan deze safety-net nooit een echte user-
+    // navigatie naar org/hub overrulen bij een pull-to-refresh (bug
+    // 2026-10-06).
+    if (_kinderen.length && selComp.value) _setViewState('wedstrijd', false);
     if (!_kinderen.length) { divResult.innerHTML = ''; return; }
     // Bij render van een rijder-tab: reset klap-state naar default-collapsed.
     _progIngeklaptPub.clear();

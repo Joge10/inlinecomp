@@ -1,0 +1,12 @@
+# Cache-Control voor front-end vendor-libs (PDF.js etc.) — deze bestanden
+# worden handmatig vervangen bij een lib-update, dus 1 jaar + "immutable"
+# is veilig: zolang de filename hetzelfde blijft is de content hetzelfde.
+# Bij een update: nieuwe bestandsnaam gebruiken (bv. pdf.4.2.min.js), of
+# een cache-buster-querystring vanuit de aanroeper, zodat clients de
+# nieuwe versie zien zonder hard-refresh.
+
+<IfModule mod_headers.c>
+    <FilesMatch "\.(js|css|woff2)$">
+        Header set Cache-Control "public, max-age=31536000, immutable"
+    </FilesMatch>
+</IfModule>

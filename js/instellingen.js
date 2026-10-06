@@ -478,6 +478,8 @@ async function laadOrgWedstrijden() {
             <span class="bwl-sep">·</span>
             <span class="bwl-item"><b>📄</b> posters <small>(public/coach/check)</small></span>
             <span class="bwl-sep">·</span>
+            <span class="bwl-item"><b>📎</b> documenten <small>(infobulletin + flyer)</small></span>
+            <span class="bwl-sep">·</span>
             <span class="bwl-item"><b>⚖/🖨</b> protokol <small>(data / genereren)</small></span>
             <span class="bwl-sep">·</span>
             <span class="bwl-item"><b>🔑</b> jury-wachtwoord</span>
@@ -537,6 +539,7 @@ async function laadOrgWedstrijden() {
                 ${zichtBtn}
                 ${kanActies ? `<button class="btn-secondary btn-sm beheer-comp-meld beheer-icon-btn" data-id="${escHtml(w.id)}" data-naam="${escHtml(w.name ?? w.id)}" title="Mededelingen — verstuur push-bericht naar /coach + /public">📢</button>` : ''}
                 ${kanActies ? `<button class="btn-secondary btn-sm beheer-comp-poster beheer-icon-btn" data-id="${escHtml(w.id)}" title="Posters — download QR-poster voor public, coach of check (kies type + taal in dialog)">📄</button>` : ''}
+                ${kanActies ? `<button class="btn-secondary btn-sm beheer-comp-docs beheer-icon-btn" data-id="${escHtml(w.id)}" data-naam="${escHtml(w.name ?? w.id)}" title="Documenten — infobulletin (URL of PDF-upload) + flyer-upload voor de wedstrijd-info-view">📎</button>` : ''}
                 ${kanActies ? `<div class="beheer-rapport-group" role="group" aria-label="Protokol">
                     <button class="btn-secondary btn-sm beheer-comp-protokol beheer-icon-btn" data-id="${escHtml(w.id)}" data-naam="${escHtml(w.name ?? w.id)}" title="Protokol-data — officials + nawoord voor het protokol">⚖</button>
                     <button class="btn-secondary btn-sm beheer-comp-print beheer-icon-btn" data-id="${escHtml(w.id)}" data-naam="${escHtml(w.name ?? w.id)}" title="Protokol genereren — print of opslaan als PDF (via browser-print)">🖨</button>
@@ -565,6 +568,9 @@ async function laadOrgWedstrijden() {
     });
     lijst.querySelectorAll('.beheer-comp-poster').forEach(btn => {
         btn.addEventListener('click', () => downloadPoster(btn.dataset.id));
+    });
+    lijst.querySelectorAll('.beheer-comp-docs').forEach(btn => {
+        btn.addEventListener('click', () => wedstrijdDocsDialog(btn.dataset.id, btn.dataset.naam));
     });
     lijst.querySelectorAll('.beheer-comp-meld').forEach(btn => {
         btn.addEventListener('click', () =>
@@ -1699,6 +1705,230 @@ async function protokolDataDialog(compId, compNaam) {
             meld.textContent = '⚠ ' + (e.message || e);
             meld.className = 'status-msg error';
             btn.disabled = false;
+        }
+    });
+}
+
+// ── Wedstrijd-documenten: infobulletin + flyer ───────────────────────────
+// Triggered vanuit Beheer → Organisaties → tab Wedstrijden, 📎-knop per rij.
+// Vult de twee kolommen op `competitions` (infobulletin_url + _file + flyer_file)
+// die in de public wedstrijd-info-view (fase 5b-content) als tabs verschijnen.
+//
+// - Infobulletin: URL heeft voorrang (iframe + "open in nieuw tab"-fallback
+//   voor Drive-DENY); zonder URL valt de view terug op de geuploade PDF.
+// - Flyer: alleen upload (jpg/png/webp).
+//
+// Uploads lopen via api/upload.php (types 'wedstrijd_doc_info' en
+// 'wedstrijd_doc_flyer'); URL opslaan + bestand-verwijderen via
+// api/wedstrijd_docs_admin.php.
+async function wedstrijdDocsDialog(compId, compNaam) {
+    if (!compId) return;
+    let huidig = { infobulletin_url: '', infobulletin_file: null, flyer_file: null };
+    try {
+        const res = await fetch('api/wedstrijd_docs_admin.php?competition_id=' + encodeURIComponent(compId));
+        const d   = await res.json();
+        if (d.error) throw new Error(d.error);
+        huidig = {
+            infobulletin_url:  d.infobulletin_url  || '',
+            infobulletin_file: d.infobulletin_file || null,
+            flyer_file:        d.flyer_file        || null,
+        };
+    } catch (e) {
+        toonBevestigDialog('Kon documenten niet ophalen: ' + (e.message || e), 'Documenten');
+        return;
+    }
+
+    const overlay = document.createElement('div');
+    overlay.className = 'modal-overlay';
+    // Hergebruikt de pd-* classes uit protokolDataDialog voor consistente
+    // layout (sectie-titels, foto-blok, status-regel).
+    const infoFileNaam  = huidig.infobulletin_file ? huidig.infobulletin_file.split('/').pop() : '';
+    const flyerPubUrl   = huidig.flyer_file ? '/' + huidig.flyer_file.replace(/^\/+/, '') : '';
+    overlay.innerHTML = `
+        <div class="modal-dialog pd-dialog">
+            <div class="modal-header">
+                <span>📎 Documenten — ${escHtml(compNaam || '')}</span>
+            </div>
+            <div class="modal-body pd-body">
+                <div class="pd-uitleg">
+                    Infobulletin en flyer verschijnen als tabs in de wedstrijd-info-view
+                    (de view die bezoekers zien als ze op een wedstrijd klikken bij een
+                    organisatie). Tabs zonder content worden verborgen.
+                </div>
+
+                <div class="pd-sec-titel">
+                    Infobulletin — URL <small>(optioneel; heeft voorrang op upload)</small>
+                </div>
+                <input type="url" id="wd-info-url" class="inp"
+                       value="${escHtml(huidig.infobulletin_url)}"
+                       placeholder="https://… (bv. Google-Drive-link naar PDF)">
+                <div class="pd-uitleg" style="margin-top:4px">
+                    De PDF wordt inline gerenderd op mobile én desktop (via een
+                    server-side proxy — bezoekers zien altijd de laatste versie zonder
+                    dat jij hoeft bij te werken). Als de bron offline is, valt de view
+                    terug op een "openen"-tegel die naar de originele URL linkt.
+                    Google-Drive-links werken niet direct als PDF-URL; gebruik dan de
+                    "Direct download"-link (`uc?export=download&id=…`) of upload hieronder.
+                </div>
+
+                <div class="pd-sec-titel pd-sec-titel-na">
+                    Infobulletin — PDF-upload <small>(fallback; alleen gebruikt als URL leeg is)</small>
+                </div>
+                <div class="pd-foto-blok" id="wd-info-blok">
+                    <div class="pd-foto-preview pd-foto-preview-klein ${huidig.infobulletin_file ? '' : 'is-leeg'}">
+                        ${huidig.infobulletin_file
+                            ? `<span style="font-size:2rem">📄</span><div style="font-size:.75rem;color:#555;margin-top:4px">${escHtml(infoFileNaam)}</div>`
+                            : `<span class="pd-foto-leeg-tekst">Geen PDF</span>`}
+                    </div>
+                    <div class="pd-foto-rechts">
+                        <div class="pd-foto-acties">
+                            <label class="btn-secondary pd-foto-upload-lbl">
+                                <input type="file" accept="application/pdf" class="wd-upload" data-veld="info" hidden>
+                                📄 PDF kiezen…
+                            </label>
+                            <button class="btn-secondary wd-verwijder" type="button" data-veld="info" ${huidig.infobulletin_file ? '' : 'disabled'}>🗑 Verwijderen</button>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="pd-sec-titel pd-sec-titel-na">
+                    Flyer <small>(afbeelding — JPG/PNG/WebP)</small>
+                </div>
+                <div class="pd-foto-blok" id="wd-flyer-blok">
+                    <div class="pd-foto-preview ${huidig.flyer_file ? '' : 'is-leeg'}">
+                        ${huidig.flyer_file
+                            ? `<img src="${escHtml(flyerPubUrl)}" alt="flyer">`
+                            : `<span class="pd-foto-leeg-tekst">Geen flyer</span>`}
+                    </div>
+                    <div class="pd-foto-acties">
+                        <label class="btn-secondary pd-foto-upload-lbl">
+                            <input type="file" accept="image/*" class="wd-upload" data-veld="flyer" hidden>
+                            🖼 Flyer kiezen…
+                        </label>
+                        <button class="btn-secondary wd-verwijder" type="button" data-veld="flyer" ${huidig.flyer_file ? '' : 'disabled'}>🗑 Verwijderen</button>
+                    </div>
+                </div>
+
+                <div id="wd-melding" class="status-msg pd-melding"></div>
+            </div>
+            <div class="modal-knoppen pd-knoppen">
+                <button class="modal-btn modal-annuleer" id="wd-annul" type="button">Sluiten</button>
+                <button class="modal-btn modal-doorgaan" id="wd-opslaan" type="button">URL opslaan</button>
+            </div>
+        </div>`;
+    document.body.appendChild(overlay);
+
+    const sluit = () => overlay.remove();
+    overlay.querySelector('#wd-annul').addEventListener('click', sluit);
+    overlay.addEventListener('click', e => { if (e.target === overlay) sluit(); });
+
+    const meld = overlay.querySelector('#wd-melding');
+    const _setMeld = (tekst, klass) => {
+        meld.textContent = tekst;
+        meld.className   = 'status-msg ' + (klass || '');
+    };
+
+    const _updateInfoBestand = (relPath) => {
+        const blok = overlay.querySelector('#wd-info-blok');
+        const prev = blok.querySelector('.pd-foto-preview');
+        const del  = blok.querySelector('.wd-verwijder');
+        if (relPath) {
+            const naam = relPath.split('/').pop();
+            prev.innerHTML = `<span style="font-size:2rem">📄</span><div style="font-size:.75rem;color:#555;margin-top:4px">${escHtml(naam)}</div>`;
+            prev.classList.remove('is-leeg');
+            del.disabled = false;
+            huidig.infobulletin_file = relPath;
+        } else {
+            prev.innerHTML = `<span class="pd-foto-leeg-tekst">Geen PDF</span>`;
+            prev.classList.add('is-leeg');
+            del.disabled = true;
+            huidig.infobulletin_file = null;
+        }
+    };
+    const _updateFlyer = (relPath) => {
+        const blok = overlay.querySelector('#wd-flyer-blok');
+        const prev = blok.querySelector('.pd-foto-preview');
+        const del  = blok.querySelector('.wd-verwijder');
+        if (relPath) {
+            const src = '/' + relPath.replace(/^\/+/, '') + '?t=' + Date.now();
+            prev.innerHTML = `<img src="${escHtml(src)}" alt="flyer">`;
+            prev.classList.remove('is-leeg');
+            del.disabled = false;
+            huidig.flyer_file = relPath;
+        } else {
+            prev.innerHTML = `<span class="pd-foto-leeg-tekst">Geen flyer</span>`;
+            prev.classList.add('is-leeg');
+            del.disabled = true;
+            huidig.flyer_file = null;
+        }
+    };
+
+    // Upload-handlers (info-PDF + flyer).
+    overlay.querySelectorAll('.wd-upload').forEach(inp => {
+        inp.addEventListener('change', async () => {
+            const file = inp.files?.[0];
+            if (!file) return;
+            const veld = inp.dataset.veld;    // 'info' of 'flyer'
+            const type = veld === 'info' ? 'wedstrijd_doc_info' : 'wedstrijd_doc_flyer';
+            _setMeld(veld === 'info' ? 'PDF uploaden…' : 'Flyer uploaden…', 'loading');
+            try {
+                const fd = new FormData();
+                fd.append('type', type);
+                fd.append('id',   compId);
+                fd.append('logo', file);
+                const r = await fetch('api/upload.php', { method: 'POST', body: fd });
+                const d = await r.json();
+                if (d.error) throw new Error(d.error);
+                if (veld === 'info') _updateInfoBestand(d.path);
+                else                 _updateFlyer(d.path);
+                _setMeld('Opgeslagen.', 'ok');
+            } catch (e) {
+                _setMeld('⚠ ' + (e.message || e), 'error');
+            } finally {
+                inp.value = '';
+            }
+        });
+    });
+
+    // Verwijder-handlers.
+    overlay.querySelectorAll('.wd-verwijder').forEach(btn => {
+        btn.addEventListener('click', async () => {
+            const veld = btn.dataset.veld;
+            const key  = veld === 'info' ? 'delete_infobulletin_file' : 'delete_flyer_file';
+            _setMeld('Verwijderen…', 'loading');
+            try {
+                const r = await fetch('api/wedstrijd_docs_admin.php', {
+                    method:  'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body:    JSON.stringify({ competition_id: compId, [key]: true }),
+                });
+                const d = await r.json();
+                if (d.error) throw new Error(d.error);
+                if (veld === 'info') _updateInfoBestand(null);
+                else                 _updateFlyer(null);
+                _setMeld('Verwijderd.', 'ok');
+            } catch (e) {
+                _setMeld('⚠ ' + (e.message || e), 'error');
+            }
+        });
+    });
+
+    // URL opslaan.
+    overlay.querySelector('#wd-opslaan').addEventListener('click', async () => {
+        const url = overlay.querySelector('#wd-info-url').value.trim();
+        _setMeld('URL opslaan…', 'loading');
+        try {
+            const r = await fetch('api/wedstrijd_docs_admin.php', {
+                method:  'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body:    JSON.stringify({ competition_id: compId, infobulletin_url: url }),
+            });
+            const d = await r.json();
+            if (d.error) throw new Error(d.error);
+            huidig.infobulletin_url = d.infobulletin_url || '';
+            _setMeld(url ? 'URL opgeslagen.' : 'URL gewist.', 'ok');
+        } catch (e) {
+            _setMeld('⚠ ' + (e.message || e), 'error');
         }
     });
 }

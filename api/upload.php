@@ -5,8 +5,10 @@
 //  POST multipart/form-data
 //    type  = 'org' | 'sponsor' | 'baan' | 'baan_sponsor'
 //          | 'protokol_voorblad' | 'protokol_nawoord'
+//          | 'wedstrijd_doc_info' (PDF)
+//          | 'wedstrijd_doc_flyer' (image)
 //    id    = UUID van organisatie / sponsor / baan / wedstrijd
-//    logo  = bestandsveld (image/*)
+//    logo  = bestandsveld (image/* of application/pdf voor wedstrijd_doc_info)
 // ============================================================
 
 header('Content-Type: application/json; charset=utf-8');
@@ -47,15 +49,26 @@ $allowedDocs   = ['application/pdf' => 'pdf',
                   'application/vnd.ms-excel' => 'xls',
                   'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' => 'xlsx',
                   'text/plain' => 'txt'];
-$allowed = ($type === 'melding')
-    ? array_merge($allowedImages, $allowedDocs)
-    : $allowedImages;
+if ($type === 'melding') {
+    $allowed = array_merge($allowedImages, $allowedDocs);
+} elseif ($type === 'wedstrijd_doc_info') {
+    // Infobulletin: alleen PDF — het bestand wordt in een iframe
+    // getoond in de wedstrijd-info-view.
+    $allowed = ['application/pdf' => 'pdf'];
+} else {
+    // Logo's / foto's / flyers: alleen images.
+    $allowed = $allowedImages;
+}
 
 if (!isset($allowed[$mime])) {
     http_response_code(400);
-    $msg = ($type === 'melding')
-        ? 'Alleen PDF, Word, Excel, txt of afbeelding (PNG/JPG/GIF/SVG/WebP) toegestaan'
-        : 'Alleen PNG, JPG, GIF, SVG of WebP toegestaan';
+    if ($type === 'melding') {
+        $msg = 'Alleen PDF, Word, Excel, txt of afbeelding (PNG/JPG/GIF/SVG/WebP) toegestaan';
+    } elseif ($type === 'wedstrijd_doc_info') {
+        $msg = 'Alleen PDF toegestaan voor het infobulletin';
+    } else {
+        $msg = 'Alleen PNG, JPG, GIF, SVG of WebP toegestaan';
+    }
     echo json_encode(['error' => $msg]);
     exit;
 }
@@ -82,6 +95,14 @@ if ($type === 'protokol_voorblad' || $type === 'protokol_nawoord') {
     $stamp     = time();
     $filename  = 'bijlage_' . $stamp . '.' . $ext;
     $relPath   = 'uploads/meldingen/' . $safeId . '/' . $filename;
+} elseif ($type === 'wedstrijd_doc_info' || $type === 'wedstrijd_doc_flyer') {
+    // Wedstrijd-documenten: eigen submap per wedstrijd, cache-buster via
+    // timestamp in filename. Veld-naam uit type ('info' of 'flyer').
+    $uploadDir = __DIR__ . '/../uploads/wedstrijd_docs/' . $safeId . '/';
+    $veld      = $type === 'wedstrijd_doc_info' ? 'info' : 'flyer';
+    $stamp     = time();
+    $filename  = $veld . '_' . $stamp . '.' . $ext;
+    $relPath   = 'uploads/wedstrijd_docs/' . $safeId . '/' . $filename;
 } else {
     $uploadDir = __DIR__ . '/../uploads/logos/';
     $filename  = $type . '_' . $safeId . '.' . $ext;
@@ -133,6 +154,17 @@ try {
             : 'protokol_nawoord_foto';
         // Oude foto eerst opzoeken zodat we 'm na de update kunnen wissen
         // (anders blijven obsolete bestanden eindeloos rondhangen).
+        $oudStmt = $pdo->prepare("SELECT $kolom FROM competitions WHERE id = ?");
+        $oudStmt->execute([$id]);
+        $oudPad = $oudStmt->fetchColumn();
+        $pdo->prepare("UPDATE competitions SET $kolom = ? WHERE id = ?")
+            ->execute([$relPath, $id]);
+        if ($oudPad && $oudPad !== $relPath) {
+            $oudFs = __DIR__ . '/../' . $oudPad;
+            if (is_file($oudFs)) @unlink($oudFs);
+        }
+    } elseif ($type === 'wedstrijd_doc_info' || $type === 'wedstrijd_doc_flyer') {
+        $kolom = $type === 'wedstrijd_doc_info' ? 'infobulletin_file' : 'flyer_file';
         $oudStmt = $pdo->prepare("SELECT $kolom FROM competitions WHERE id = ?");
         $oudStmt->execute([$id]);
         $oudPad = $oudStmt->fetchColumn();

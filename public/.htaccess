@@ -1,0 +1,30 @@
+# Cache-Control voor statische assets van de /public app — repeat-visitors
+# krijgen JS/CSS/afbeeldingen uit browser-cache i.p.v. telkens opnieuw
+# downloaden. Lighthouse-insight "Use efficient cache lifetimes".
+#
+# SCOPE: alleen /public — niet root-wide, want coach + check gebruiken
+# geen ?v=filemtime()-cache-busting op hun JS/CSS, dus lange caches
+# daar zouden updates (nieuwe tijden, bugfixes) kunnen vertragen.
+#
+# Looptijd per type:
+#  - JS/CSS: 1 jaar + "immutable". Veilig want public/index.php linkt
+#    ze met ?v=filemtime() als cache-buster — wijzigt het bestand, dan
+#    is de URL anders en gaat de cache voorbij.
+#  - Afbeeldingen (logo's, favicons, icons): 1 week. Lang genoeg voor
+#    snelle repeat-visits, kort genoeg om updates binnen een paar
+#    dagen zichtbaar te hebben zonder hard refresh.
+#  - sw.js: GEEN cache, anders missen clients nieuwe PWA-versies.
+#  - PHP-endpoints: onaangeraakt — die beheren hun eigen Cache-Control
+#    in de endpoint-headers (bv. public/wedstrijd_docs.php max-age=60).
+
+<IfModule mod_headers.c>
+    <FilesMatch "\.(js|css)$">
+        Header set Cache-Control "public, max-age=31536000, immutable"
+    </FilesMatch>
+    <FilesMatch "\.(svg|png|webp|jpg|jpeg|gif|ico|woff2)$">
+        Header set Cache-Control "public, max-age=604800"
+    </FilesMatch>
+    <FilesMatch "^sw\.js$">
+        Header set Cache-Control "no-cache, no-store, must-revalidate"
+    </FilesMatch>
+</IfModule>

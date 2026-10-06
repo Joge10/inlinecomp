@@ -192,6 +192,8 @@ $actionRoutes = [
     'organisaties'     => 'public_organisaties.php',
     'org_wedstrijden'  => 'public_org_wedstrijden.php',
     'mijn_wedstrijden' => 'public_mijn_wedstrijden.php',
+    'wedstrijd_docs'   => 'public_wedstrijd_docs.php',
+    'wedstrijd_doc_proxy' => 'public_wedstrijd_doc_proxy.php',
 ];
 if (isset($actionRoutes[$action])) {
     define('INLINECOMP_PUBLIC_BOOTED', true);
