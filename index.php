@@ -360,22 +360,22 @@ if (is_array($eigenScope) && !empty($eigenScope)) {
                             <div class="inst-veld">
                                 <label>Logo</label>
                                 <div class="logo-preview-wrap">
-                                    <img id="org-logo-preview" src="" alt="" style="display:none">
+                                    <img id="org-logo-preview" src="" alt="" hidden>
                                     <span id="org-logo-geen" class="logo-geen">Geen logo</span>
                                 </div>
                                 <label class="btn-upload" for="org-logo-file">&#128247; Logo uploaden</label>
-                                <input type="file" id="org-logo-file" accept="image/*" style="display:none">
+                                <input type="file" id="org-logo-file" accept="image/*" hidden>
                             </div>
 
                             <div class="inst-subtitel">Naam-varianten <span class="inst-subtitel-hint">(aliassen)</span></div>
                             <div id="org-aliassen-list" class="org-aliassen-list"></div>
-                            <div class="alias-toevoeg-rij" id="alias-toevoeg-rij" style="display:none">
+                            <div class="alias-toevoeg-rij" id="alias-toevoeg-rij" hidden>
                                 <input type="text" id="alias-nieuw-naam" class="inp alias-inp"
                                        placeholder="Alternatieve naam…">
                                 <button class="btn-alias-ok"  id="btn-alias-ok">&#10003; Toevoegen</button>
                                 <button class="btn-alias-ann" id="btn-alias-ann">&#10005;</button>
                             </div>
-                            <button class="btn-alias-add" id="btn-alias-add" style="display:none">
+                            <button class="btn-alias-add" id="btn-alias-add" hidden>
                                 + Alias toevoegen
                             </button>
 
@@ -385,16 +385,16 @@ if (is_array($eigenScope) && !empty($eigenScope)) {
 
                             <div class="inst-acties">
                                 <button class="btn-primary" id="btn-org-opslaan">Opslaan</button>
-                                <button class="btn-samenvoeg" id="btn-samenvoeg" style="display:none">
+                                <button class="btn-samenvoeg" id="btn-samenvoeg" hidden>
                                     &#8596; Samenvoegen…
                                 </button>
                                 <button class="btn-secondary" id="btn-org-poster" title="Download een A4-promotie-poster voor deze organisatie">📄 Promotie-poster</button>
-                                <button class="btn-danger" id="btn-org-verwijderen" style="display:none">Verwijderen</button>
+                                <button class="btn-danger" id="btn-org-verwijderen" hidden>Verwijderen</button>
                             </div>
                             <div id="org-status"></div>
 
                             <!-- Samenvoeg-modal -->
-                            <div id="samenvoeg-panel" class="samenvoeg-panel" style="display:none">
+                            <div id="samenvoeg-panel" class="samenvoeg-panel" hidden>
                                 <div class="samenvoeg-titel">Samenvoegen met…</div>
                                 <p class="samenvoeg-uitleg">
                                     De geselecteerde organisatie <strong>verdwijnt</strong> en haar naam

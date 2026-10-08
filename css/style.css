@@ -2816,6 +2816,7 @@ col.heat-tp   { width: 72px; }   /* XX-12345 = 8 monospace tekens */
     border: none;
     border-radius: 6px;
     padding: 7px 12px;
+    margin-top: .8rem;
     cursor: pointer;
     font-size: .85rem;
     font-weight: 600;
@@ -2829,7 +2830,10 @@ col.heat-tp   { width: 72px; }   /* XX-12345 = 8 monospace tekens */
 .inst-veld          { margin-bottom: .9rem; }
 .inst-veld label    { display: block; font-size: .8rem; font-weight: 600;
                       color: #555; margin-bottom: 3px; }
-.inst-veld input    { width: 100%; max-width: 380px; }
+.inst-veld input,
+.inst-veld textarea { width: 100%; max-width: 380px; box-sizing: border-box;
+                      font-family: inherit; }
+.inst-veld textarea { max-width: 520px; }
 .inst-subtitel      { font-size: .85rem; font-weight: 700; color: var(--blauw);
                       border-bottom: 1px solid var(--border); padding-bottom: 4px;
                       margin: 1.2rem 0 .6rem; }
@@ -2842,17 +2846,22 @@ col.heat-tp   { width: 72px; }   /* XX-12345 = 8 monospace tekens */
 
 .btn-upload {
     display: inline-block;
-    background: var(--lichtblauw);
-    border: 1px solid var(--border);
+    background: var(--middenblauw);
+    border: none;
     border-radius: 5px;
-    padding: 4px 10px;
+    padding: 5px 12px;
     font-size: .82rem;
     cursor: pointer;
-    color: var(--blauw);
+    color: var(--wit);
     transition: background .15s;
 }
-.btn-upload:hover   { background: #c9d8e8; }
-.btn-upload.btn-small { font-size: .76rem; padding: 2px 7px; }
+.btn-upload:hover   { background: var(--blauw); }
+.btn-upload.btn-small { font-size: .76rem; padding: 3px 9px; }
+/* .inst-veld label krijgt display:block (voor de titel-label boven de
+   input) + color:#555. Een geneste .btn-upload-label moet daar los van
+   compact blijven én de witte knop-tekst houden (anders overschrijft het
+   grijs van .inst-veld label de .btn-upload-kleur). */
+.inst-veld label.btn-upload { display: inline-block; color: var(--wit); }
 
 /* Sponsor rijen */
 /* Transponder-inventaris */
@@ -3745,13 +3754,99 @@ th.rk-totaal, td.rk-totaal { width:55px; font-weight:700; color:var(--blauw); ba
                         background: #f7fafd; border-radius: 6px; margin-bottom: 1rem; }
 .bn-form-wrap         { background: #f7fafd; border: 1px solid var(--border);
                         border-radius: 6px; padding: 1rem 1.2rem; margin-top: .5rem; }
+.bn-form-head         {
+    display: flex; align-items: center; justify-content: space-between;
+    gap: 10px; margin-bottom: 1rem;
+}
+.bn-form-head h3      { color: var(--blauw); margin: 0; font-size: 1.05rem; }
 .bn-form-wrap h3      { color: var(--blauw); margin: 0 0 .8rem 0; font-size: 1rem; }
 .bn-form-acties       { display: flex; gap: 8px; justify-content: flex-end;
                         margin-top: .8rem; }
+
+/* Autosave-status rechtsboven in de baan-form (vervangt de Opslaan-knop). */
+.bn-save-status {
+    font-size: .78rem; font-weight: 600; color: #888;
+    padding: 4px 10px; border-radius: 4px;
+    background: #eef4f9;
+    transition: background .2s, color .2s;
+}
+.bn-save-status--opslaan { background: #fff3e0; color: #a56714; }
+.bn-save-status--ok      { background: #e3f3e4; color: #2a7a35; }
+.bn-save-status--fout    { background: #fbe2e2; color: #a3202c; }
+
+/* (Baan-form gebruikt sinds okt 2026 de .inst-veld/.inst-subtitel
+   conventies van de org-gegevens-tab — geen eigen sectie-styling meer.) */
+
+/* 2-kolommen layout: links hoofd-identiteit (naam-velden + logo via een
+   geneste subgrid), rechts aliassen (boven) of baan-layout+foto (onder).
+   De aliassen-kolom lijnt daardoor uit met de rechter-kolom van de
+   onderste grid. Op smalle schermen alles terug naar één kolom. Inputs
+   /textareas binnen een kolom vullen de kolom-breedte (overschrijft de
+   globale max-width-regels van .inst-veld). */
+.bn-form-grid {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+    gap: 1.2rem 2.5rem;
+    margin-bottom: .4rem;
+}
+.bn-form-col { min-width: 0; }
+.bn-form-col .inst-veld input,
+.bn-form-col .inst-veld textarea { max-width: 100%; }
+
+/* Subgrid in de linker-kolom boven: naam-velden (fr) + logo (auto). */
+.bn-form-subgrid {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    gap: 0 1.5rem;
+    align-items: start;
+}
+
+/* Markdown-toolbar boven over-tekst-textarea: compact, grijs, met kleine
+   knopjes. B/I/U = formatting (wrapt selectie), Lijst = regel-prefix,
+   Alinea = lege regel invoegen. */
+.bn-md-toolbar {
+    display: flex; flex-wrap: wrap; gap: 3px;
+    margin-bottom: 3px;
+}
+.bn-md-btn {
+    background: #eef4f9; border: 1px solid var(--border);
+    border-radius: 3px; padding: 2px 8px; cursor: pointer;
+    font-size: .8rem; color: #444; line-height: 1.2;
+}
+.bn-md-btn:hover  { background: #d9e5f0; }
+.bn-md-btn:active { background: #c0d0e0; }
+.bn-md-btn b, .bn-md-btn i, .bn-md-btn u { font-size: .9rem; }
+
+@media (max-width: 720px) {
+    .bn-form-grid,
+    .bn-form-subgrid { grid-template-columns: 1fr; gap: 0; }
+}
+
+/* Form-locked: tot er een baan-naam is kan de rest nog niet opgeslagen
+   worden (geen DB-rij om aan te hangen), dus visueel grijsmaken +
+   interactie blokkeren. */
+.bn-form-locked {
+    opacity: .45; pointer-events: none; user-select: none;
+}
+.bn-form-lock-hint {
+    background: #fff3e0; border: 1px solid #f0d896; border-radius: 6px;
+    padding: 10px 14px; margin-top: 1rem;
+    font-size: .85rem; color: #7a5614;
+}
+
 .bn-aliassen-blok     { margin-top: 1rem; }
 .bn-sponsors-blok     { margin-top: 1rem; }
 .bn-sponsors-list     { margin-bottom: .5rem; }
 .bn-sponsors-list .alias-leeg { color: #999; font-style: italic; padding: .3rem 0; }
+
+/* Shared-styling helpers (vervangen inline-styles in js/banen.js). */
+.bn-gedeeld-img       { opacity: .55; }
+.bn-gedeeld-tekst     { opacity: .65; font-style: italic; }
+.bn-hint-info         { color: #888; font-style: italic; font-size: .76rem; margin-top: 4px; line-height: 1.4; }
+.bn-hint-small        { color: #888; font-size: .78rem; font-weight: normal; }
+.bn-img-opacity-65    { opacity: .65; }
+.bn-foto-verwijder    { margin-top: 6px; }
+.bn-upload-disabled   { opacity: .5; pointer-events: none; }
 
 /* ── Baan-layout: preview + bewerk-knop in het baan-form ─────────────── */
 .bn-layout-blok       { margin-top: 1rem; }

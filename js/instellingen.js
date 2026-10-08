@@ -335,14 +335,14 @@ function initInstellingen() {
     }
 
     on('btn-alias-add', 'click', () => {
-        el('alias-toevoeg-rij').style.display = '';
-        el('btn-alias-add').style.display     = 'none';
-        el('alias-nieuw-naam').value          = '';
+        el('alias-toevoeg-rij').hidden = false;
+        el('btn-alias-add').hidden     = true;
+        el('alias-nieuw-naam').value   = '';
         el('alias-nieuw-naam').focus();
     });
     on('btn-alias-ann', 'click', () => {
-        el('alias-toevoeg-rij').style.display = 'none';
-        el('btn-alias-add').style.display     = '';
+        el('alias-toevoeg-rij').hidden = true;
+        el('btn-alias-add').hidden     = false;
     });
     on('btn-alias-ok',    'click',   () => voegAliasToe());
     on('alias-nieuw-naam','keydown', e => {
@@ -353,7 +353,7 @@ function initInstellingen() {
     // Samenvoeg-knoppen
     on('btn-samenvoeg',     'click', () => toonSamenvoegPanel());
     on('btn-samenvoeg-ann', 'click', () => {
-        el('samenvoeg-panel').style.display = 'none';
+        el('samenvoeg-panel').hidden = true;
     });
     on('btn-samenvoeg-ok',  'click', () => voerSamenvoegUit());
 
@@ -859,23 +859,23 @@ function vulOrgFormulier(org) {
     el('org-sportity').value           = org?.sportity_kanaal ?? '';
     el('org-status').innerHTML         = '';
     const isBestaand = !!org;
-    el('btn-org-verwijderen').style.display             = isBestaand ? '' : 'none';
-    if (el('samenvoeg-panel'))    el('samenvoeg-panel').style.display    = 'none';
-    if (el('alias-toevoeg-rij'))  el('alias-toevoeg-rij').style.display  = 'none';
-    if (el('btn-samenvoeg'))      el('btn-samenvoeg').style.display      = isBestaand ? '' : 'none';
-    if (el('btn-alias-add'))      el('btn-alias-add').style.display      = isBestaand ? '' : 'none';
+    el('btn-org-verwijderen').hidden         = !isBestaand;
+    if (el('samenvoeg-panel'))    el('samenvoeg-panel').hidden   = true;
+    if (el('alias-toevoeg-rij'))  el('alias-toevoeg-rij').hidden = true;
+    if (el('btn-samenvoeg'))      el('btn-samenvoeg').hidden     = !isBestaand;
+    if (el('btn-alias-add'))      el('btn-alias-add').hidden     = !isBestaand;
 
     // Logo
     const preview = el('org-logo-preview');
     const geen    = el('org-logo-geen');
     if (org?.logo_path) {
-        preview.src           = org.logo_path + '?t=' + Date.now();
-        preview.style.display = '';
-        geen.style.display    = 'none';
+        preview.src     = org.logo_path + '?t=' + Date.now();
+        preview.hidden  = false;
+        geen.hidden     = true;
     } else {
-        preview.src           = '';
-        preview.style.display = 'none';
-        geen.style.display    = '';
+        preview.src     = '';
+        preview.hidden  = true;
+        geen.hidden     = false;
     }
     el('org-logo-file').value = '';
 
@@ -928,8 +928,8 @@ async function voegAliasToe() {
         if (data.error) throw new Error(data.error);
         actieveOrg = data;
         renderAliassen(data.aliassen ?? []);
-        el('alias-toevoeg-rij').style.display = 'none';
-        el('btn-alias-add').style.display     = '';
+        el('alias-toevoeg-rij').hidden = true;
+        el('btn-alias-add').hidden     = false;
         await laadOrgs();
     } catch(e) {
         el('org-status').innerHTML = `<div class="status-msg error">⚠ ${escHtml(e.message)}</div>`;
@@ -969,7 +969,7 @@ function toonSamenvoegPanel() {
         kies.appendChild(opt);
     });
     el('samenvoeg-naar-naam').textContent = actieveOrg.naam;
-    el('samenvoeg-panel').style.display   = '';
+    el('samenvoeg-panel').hidden          = false;
 }
 
 async function voerSamenvoegUit() {
@@ -1000,7 +1000,7 @@ async function voerSamenvoegUit() {
         const data = await res.json();
         if (data.error) throw new Error(data.error);
         actieveOrg = data;
-        el('samenvoeg-panel').style.display = 'none';
+        el('samenvoeg-panel').hidden = true;
         vulOrgFormulier(data);
         await laadOrgs();
         el('org-status').innerHTML = '<div class="status-msg success">✓ Samengevoegd.</div>';
@@ -3702,9 +3702,9 @@ async function uploadLogo(type, id, file, sponsorRij = null) {
 
         if (type === 'org') {
             const prev = el('org-logo-preview');
-            prev.src           = data.path + '?t=' + Date.now();
-            prev.style.display = '';
-            el('org-logo-geen').style.display = 'none';
+            prev.src    = data.path + '?t=' + Date.now();
+            prev.hidden = false;
+            el('org-logo-geen').hidden = true;
             if (actieveOrg) actieveOrg.logo_path = data.path;
         } else if (sponsorRij) {
             const wrap = sponsorRij.querySelector('.sponsor-logo-wrap');

@@ -345,8 +345,9 @@ if (isset($actionRoutes[$action])) {
         <div class="wmodal-pane" id="wmodal-pane-mijn_ic" role="tabpanel" hidden>
             <div class="wmodal-placeholder">
                 <div class="wmodal-placeholder-ico">👤</div>
-                <p data-i18n="setup_mijn_ic_binnenkort">Mijn InlineComp komt hier binnenkort</p>
-                <p class="wmodal-placeholder-sub" data-i18n="setup_mijn_ic_binnenkort_sub">Hier bekijk en beheer je persoonlijke profielen van gevolgde rijders.</p>
+                <p data-i18n="setup_mijn_ic_binnenkort">Mijn InlineComp — nog in de maak</p>
+                <p class="wmodal-placeholder-sub" data-i18n="setup_mijn_ic_binnenkort_sub">Hier komt straks jouw eigen rijderprofiel — en als ouder dat van je kinderen. Rechtstreeks inloggen per profiel kan nu al (naam + PIN).</p>
+                <a class="wmodal-cta" href="../check/profiel.php" data-i18n="setup_mijn_ic_cta">Open mijn rijderprofiel →</a>
             </div>
         </div>
 

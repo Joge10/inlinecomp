@@ -1790,6 +1790,16 @@ select:focus, input:focus { border-color: var(--middenblauw); outline: none; }
     padding: 14px;
     font-size: .9rem; line-height: 1.5; color: #333;
 }
+/* Markdown-subset (H/B/I/U/lijst/alinea) uit beheer-form. */
+.wi-ver-over-tekst h3 { margin: .4em 0 .3em; font-size: 1rem;
+                        font-weight: 600; color: var(--blauw, #1a4fb0); }
+.wi-ver-over-tekst h3:first-child { margin-top: 0; }
+.wi-ver-over-tekst p  { margin: 0 0 .8em; }
+.wi-ver-over-tekst p:last-child { margin-bottom: 0; }
+.wi-ver-over-tekst ul { margin: 0 0 .8em; padding-left: 1.3em; }
+.wi-ver-over-tekst li { margin: 0 0 .2em; }
+.wi-ver-over-tekst strong { font-weight: 600; }
+.wi-ver-over-tekst u  { text-decoration: underline; }
 
 /* Google-Maps click-to-load (fase A-blok 3c): placeholder = fictief
    kaartje-SVG + knop; iframe wordt pas na expliciete klik ingevoegd zodat
@@ -1981,3 +1991,17 @@ select:focus, input:focus { border-color: var(--middenblauw); outline: none; }
     font-size: .88rem;
     line-height: 1.4;
 }
+/* CTA-knop in placeholder-blok (bv. "open mijn rijderprofiel" in de
+   Mijn-InlineComp-tab zolang de verzamelpagina er nog niet is). */
+.wmodal-cta {
+    display: inline-block;
+    margin-top: 1rem;
+    padding: 8px 16px;
+    background: var(--middenblauw, #3a6ab8);
+    color: #fff;
+    text-decoration: none;
+    border-radius: 5px;
+    font-size: .88rem;
+    font-weight: 600;
+}
+.wmodal-cta:hover { background: var(--blauw, #1a4fb0); }

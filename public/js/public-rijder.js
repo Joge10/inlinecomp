@@ -1575,6 +1575,56 @@ async function _laadWedstrijdDocs(compId) {
     }
 }
 
+// Lichte markdown-subset voor de "Over deze vereniging"-tekst — beheer
+// gebruikt dezelfde markers (H/B/I/U/Lijst/Alinea-toolbar in js/banen.js).
+// Volgorde: eerst HTML-escape, dán pattern-replace op de SAFE string zodat
+// gebruikersinvoer nooit als HTML wordt geïnterpreteerd.
+//   # Kop      → <h3>  (block, breekt een paragraph)
+//   **vet**     → <strong>
+//   *cursief*   → <em>
+//   __onder__   → <u>  (niet-standaard markdown, maar past bij toolbar)
+//   - item      → <li> (regels achter elkaar → één <ul>)
+//   lege regel  → paragraaf-grens (<p>…</p>)
+//   enkele \n   → <br>
+function _renderOverTekst(raw) {
+    if (!raw) return '';
+    const inlineMd = s => s
+        .replace(/\*\*([^*\n]+)\*\*/g, '<strong>$1</strong>')
+        .replace(/__([^_\n]+)__/g, '<u>$1</u>')
+        .replace(/\*([^*\n]+)\*/g, '<em>$1</em>');
+    const safe  = esc(raw);
+    const paras = safe.split(/\n\s*\n/);
+    return paras.map(para => {
+        const lines = para.split('\n');
+        // Volledig bullet-blok → <ul>
+        if (lines.length && lines.every(l => /^- /.test(l))) {
+            const items = lines
+                .map(l => `<li>${inlineMd(l.replace(/^- /, ''))}</li>`)
+                .join('');
+            return `<ul>${items}</ul>`;
+        }
+        // Anders regel-voor-regel: "# "-regels worden <h3>-blokken, rest
+        // wordt gebundeld in <p>.
+        const blocks = [];
+        let buf = [];
+        const flushP = () => {
+            if (!buf.length) return;
+            blocks.push(`<p>${inlineMd(buf.join('\n')).replace(/\n/g, '<br>')}</p>`);
+            buf = [];
+        };
+        for (const l of lines) {
+            if (/^# /.test(l)) {
+                flushP();
+                blocks.push(`<h3>${inlineMd(l.replace(/^# /, ''))}</h3>`);
+            } else {
+                buf.push(l);
+            }
+        }
+        flushP();
+        return blocks.join('');
+    }).join('');
+}
+
 // Render de Vereniging-tab met baan-info + layout-tekening. Fallback-tekst
 // als er geen baan gekoppeld is of geen layout getekend; de tab verbergen
 // we niet (vereniging-tab is de default-view bij geen docs).
@@ -1667,7 +1717,7 @@ function _renderVerenigingTab(pane, baan) {
             ? `<img class="wi-ver-over-media${mediaIsFoto ? '' : ' wi-ver-over-media--logo'}" src="${esc(mediaSrc)}" alt="">`
             : '';
         const tekstHtml = overTekst
-            ? `<div class="wi-ver-over-tekst">${esc(overTekst).replace(/\n/g, '<br>')}</div>`
+            ? `<div class="wi-ver-over-tekst">${_renderOverTekst(overTekst)}</div>`
             : '';
         overBlok = `<div class="wi-ver-over">
             ${mediaHtml}
@@ -1776,9 +1826,11 @@ function _pblRenderLayoutSvg(layout) {
     }
     if (!paden.length || !isFinite(minX)) return '';
     const w = (maxX - minX) || 1, h = (maxY - minY) || 1;
-    // 3% padding (was 8%): voorkomt dat de baan tegen de rand klapt, maar
-    // laat geen onnodige witruimte eromheen.
-    const pad = Math.max(w, h) * 0.03;
+    // 3% padding + halve max-stroke: bounding-box is op centerlines
+    // berekend, dus de dikke piste-stroke steekt daar buiten uit en wordt
+    // anders afgesneden.
+    const maxStroke = paden.reduce((m, p) => Math.max(m, p.width || 0), 0);
+    const pad = Math.max(w, h) * 0.03 + maxStroke / 2;
     const vb = `${minX - pad} ${minY - pad} ${w + pad * 2} ${h + pad * 2}`;
     const paths = paden.map(p =>
         `<path d="${p.d}" fill="${p.fill}" ${p.fillOpacity ? `fill-opacity="${p.fillOpacity}"` : ''} stroke="${p.stroke}" stroke-width="${p.width}" stroke-linecap="round" stroke-linejoin="round"/>`
