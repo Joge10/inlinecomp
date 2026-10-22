@@ -153,8 +153,9 @@ function _coachAuthGate(PDO $pdo, string $action): void {
     if ($action === '' || $action === 'auth_status') return;
     // Ingelogde coach (eigen account) passeert de gedeelde-wachtwoord-gate:
     // identiteit vervangt de anti-misbruik-drempel. Anonieme bezoekers houden
-    // het gedeelde wachtwoord.
-    if (getCoachSession($pdo)) return;
+    // het gedeelde wachtwoord. Alleen een goedgekeurd account; pending = anoniem.
+    $cs = getCoachSession($pdo);
+    if ($cs && ($cs['status'] ?? '') === 'approved') return;
     $st = $pdo->prepare("SELECT password FROM coach_app_settings WHERE id = 1 LIMIT 1");
     $st->execute();
     $stored = $st->fetchColumn();
@@ -178,7 +179,10 @@ _coachAuthGate($pdo, $action);
 // Gedeeld wachtwoord / open = publieke laag → exact de /public-venster-regel
 // (naam binnen [wedstrijddag −1 … +1], daarbuiten gemaskeerd; anonieme rijders
 // niet op naam vindbaar). Eén keer bepaald, hergebruikt in alle handlers.
-$coachLaag = getCoachSession($pdo) ? 'operationeel' : 'public';
+// Alleen een GOEDGEKEURD account krijgt de operationele laag: een pending
+// account kan al inloggen, maar mag anonieme rijders niet ontmaskeren.
+$_coachSessie = getCoachSession($pdo);
+$coachLaag = ($_coachSessie && ($_coachSessie['status'] ?? '') === 'approved') ? 'operationeel' : 'public';
 
 // SQL-fragment: in de publieke laag anonieme rijders weglaten uit NAAM-zoek
 // (nooit op naam vindbaar); account-coach ziet ze wel.

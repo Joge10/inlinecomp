@@ -70,6 +70,18 @@ return [
         ],
     ],
 
+    // ── Patch 22-10-2026 (onder H2160.18.09, publiek anoniem / coach-accounts, alleen Beheer) ──
+    [
+        'versie' => 'H2160.18.09', 'datum' => '22-10-2026',
+        'soort'  => 'patch', 'onderdelen' => ['patch'],
+        'tekst' => [
+            'nl' => '🔒 <b>Publiek anoniem — coach-accounts in afwachting</b> — een coach-account dat nog niet is goedgekeurd, kon de echte naam van publiek-anonieme rijders zien. Zo\'n account krijgt nu dezelfde weergave als het publiek: anonieme rijders zijn niet vindbaar en staan als “Anoniem” in de eigen atletenlijst. Alleen goedgekeurde coaches zien de echte naam. Daarnaast is de uitleg in Mijn InlineComp gecorrigeerd: ook het startnummer wordt buiten de wedstrijddagen verborgen.',
+            'en' => '🔒 <b>Publicly anonymous — pending coach accounts</b> — a coach account that had not yet been approved could see the real name of publicly anonymous skaters. Such an account now gets the same view as the public: anonymous skaters cannot be found and appear as “Anonymous” in the coach\'s own athlete list. Only approved coaches see the real name. The explanation in My InlineComp has also been corrected: the start number is hidden outside the competition days as well.',
+            'de' => '🔒 <b>Öffentlich anonym — Trainerkonten in Prüfung</b> — ein noch nicht genehmigtes Trainerkonto konnte den echten Namen öffentlich anonymer Fahrer sehen. Ein solches Konto erhält jetzt dieselbe Ansicht wie die Öffentlichkeit: anonyme Fahrer sind nicht auffindbar und erscheinen in der eigenen Athletenliste als „Anonym“. Nur genehmigte Trainer sehen den echten Namen. Außerdem wurde die Erklärung in Mein InlineComp korrigiert: auch die Startnummer wird außerhalb der Wettkampftage verborgen.',
+            'fr' => '🔒 <b>Anonyme en public — comptes entraîneur en attente</b> — un compte entraîneur pas encore approuvé pouvait voir le vrai nom des patineurs anonymes en public. Un tel compte reçoit désormais la même vue que le public : les patineurs anonymes sont introuvables et apparaissent comme « Anonyme » dans sa propre liste d\'athlètes. Seuls les entraîneurs approuvés voient le vrai nom. L\'explication dans Mon InlineComp a également été corrigée : le numéro de départ est lui aussi masqué en dehors des jours de compétition.',
+        ],
+    ],
+
     // ── Patch 24-09-2026 (onder H2160.18.09, privacyverklaring herzien, alleen Beheer) ──
     [
         'versie' => 'H2160.18.09', 'datum' => '24-09-2026',

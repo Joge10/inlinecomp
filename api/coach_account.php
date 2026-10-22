@@ -22,6 +22,7 @@ require_once __DIR__ . '/../../config_inlinecomp.php';
 require_once __DIR__ . '/lib_coach_auth.php';
 require_once __DIR__ . '/../inc/coach_mail.php';   // COACH_MAIL_* + coachMail() + mailteksten
 require_once __DIR__ . '/../inc/person_id.php';    // person_id-resolutie (fase 3d-iii)
+require_once __DIR__ . '/../inc/anoniem.php';      // maskeerAnoniemeRij (pending coach)
 
 $method = $_SERVER['REQUEST_METHOD'] ?? 'GET';
 $action = $_GET['action'] ?? '';
@@ -131,6 +132,16 @@ function jsonOut(array $data, int $code = 200): void {
 function vereisCoachLogin(PDO $pdo): array {
     $c = getCoachSession($pdo);
     if (!$c) jsonOut(['error' => 'Niet ingelogd'], 401);
+    return $c;
+}
+
+/**
+ * Vereist een GOEDGEKEURDE coach — voor endpoints die echte namen teruggeven, ook
+ * van publiek-anonieme rijders. Pending/afgewezen → 403. Geeft het account terug.
+ */
+function vereisGoedgekeurdeCoach(PDO $pdo): array {
+    $c = vereisCoachLogin($pdo);
+    if (($c['status'] ?? '') !== 'approved') jsonOut(['error' => 'Je account wacht nog op goedkeuring.'], 403);
     return $c;
 }
 
@@ -331,14 +342,26 @@ try {
     if ($method === 'GET' && $action === 'roster_list') {
         $c = vereisCoachLogin($pdo);
         $stmt = $pdo->prepare("
-            SELECT p.person_id AS license_key, p.person_id, p.full_name, p.club_full, p.category, p.start_number, ca.added_at
+            SELECT p.person_id AS license_key, p.person_id, p.full_name, p.club_full, p.category, p.start_number,
+                   p.publiek_anoniem, ca.added_at
             FROM   coach_athletes ca
             JOIN   persons p ON p.person_id = ca.person_id
             WHERE  ca.coach_account_id = ?
             ORDER  BY p.full_name
         ");
         $stmt->execute([$c['id']]);
-        jsonOut(['roster' => $stmt->fetchAll(PDO::FETCH_ASSOC)]);
+        $roster = $stmt->fetchAll(PDO::FETCH_ASSOC);
+        // Pending coach: anonieme rijders (bv. via club toegevoegd) gemaskeerd;
+        // ids blijven staan zodat verwijderen uit de roster blijft werken.
+        if (($c['status'] ?? '') !== 'approved') {
+            foreach ($roster as &$r) {
+                if ($r['publiek_anoniem'] !== null) $r = maskeerAnoniemeRij($r, ['ids' => []]);
+            }
+            unset($r);
+        }
+        foreach ($roster as &$r) unset($r['publiek_anoniem']);
+        unset($r);
+        jsonOut(['roster' => $roster]);
     }
 
     // ── GET zoek_personen — kandidaten om aan de roster toe te voegen ──────────
@@ -346,6 +369,9 @@ try {
     // aan of de rijder al in de roster van deze coach zit (voor de UI).
     if ($method === 'GET' && $action === 'zoek_personen') {
         $c = vereisCoachLogin($pdo);
+        // Pending coach mag z'n roster al opbouwen, maar vindt anonieme rijders
+        // niet (zelfde regel als de publieke laag: nooit op naam/nummer vindbaar).
+        $anonExcl = ($c['status'] ?? '') === 'approved' ? '' : ' AND p.publiek_anoniem IS NULL';
         $q = trim($_GET['q'] ?? '');
         if (strlen($q) < 2) jsonOut(['personen' => []]);   // te kort → geen zoekstorm
         $like = '%' . $q . '%';
@@ -361,6 +387,7 @@ try {
             WHERE  p.anonymized_at IS NULL
               AND  COALESCE(p.extern_federatie,'') <> 'DEMO'   -- demo/test-rijders nooit in coach-zoek
               AND  (p.full_name LIKE ? OR p.club_full LIKE ? OR p.start_number = ?)
+              $anonExcl
             ORDER  BY p.full_name
             LIMIT  25
         ");
@@ -432,7 +459,7 @@ try {
     // Per roster-rijder: startnummer + entry_status voor DEZE wedstrijd. NULL
     // entry_status = niet ingeschreven (zelfde signaal als /public).
     if ($method === 'GET' && $action === 'roster_hydrate') {
-        $c = vereisCoachLogin($pdo);
+        $c = vereisGoedgekeurdeCoach($pdo);
         $compId = trim($_GET['competition_id'] ?? '');
         if ($compId === '') jsonOut(['riders' => []]);
         $stmt = $pdo->prepare("
