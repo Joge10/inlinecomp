@@ -28,6 +28,14 @@ if (session_status() === PHP_SESSION_NONE) {
 if (empty($_SESSION['csrf'])) $_SESSION['csrf'] = bin2hex(random_bytes(16));
 $CSRF = $_SESSION['csrf'];
 
+// "from=public" onthouden over POST-cycli (login) heen zodat de "←"-link
+// terugverwijst naar /public als de user daar vandaan kwam via de Mijn-
+// InlineComp-CTA. Geldig tot de sessie afloopt / expliciet uitloggen.
+if (isset($_GET['from'])) {
+    $_SESSION['profiel_from'] = (string)$_GET['from'];
+}
+$profielFrom = $_SESSION['profiel_from'] ?? '';
+
 function esc($s) { return htmlspecialchars((string)$s, ENT_QUOTES, 'UTF-8'); }
 
 $fout = '';          // foutmelding onder een formulier
@@ -495,7 +503,13 @@ table.pr tbody tr:last-child td{border-bottom:0}
       // Geheim volg-token (lazy gemint) — voor de instellingen-modal.
       $volgToken = $isEigen ? (zorgVoorVolgToken($pdo, (string)$pr['license_key']) ?? '') : ''; ?>
   <div class="topbar">
-    <a class="home" href="<?= $demo ? 'profiel.php' : './' ?>"><?= $demo ? '← Terug' : '← InlineComp Check' ?></a>
+    <?php if ($demo): ?>
+      <a class="home" href="profiel.php">← Terug</a>
+    <?php elseif ($profielFrom === 'public'): ?>
+      <a class="home" href="../public/">← Mijn InlineComp</a>
+    <?php else: ?>
+      <a class="home" href="./">← InlineComp Check</a>
+    <?php endif; ?>
     <?php if ($demo): ?>
       <a class="btn" href="profiel.php">Vraag je eigen profiel aan</a>
     <?php elseif ($adminPreview): ?>
@@ -835,6 +849,9 @@ table.pr tbody tr:last-child td{border-bottom:0}
   </div>
 
 <?php else: ?>
+  <?php if ($profielFrom === 'public'): ?>
+    <div class="topbar"><a class="home" href="../public/">← Mijn InlineComp</a></div>
+  <?php endif; ?>
   <div class="authcard">
     <h1>Mijn InlineComp</h1>
     <div class="sub">Log in met je gebruikersnaam en PIN om je persoonlijke profiel te zien — je resultaten, records en progressie.</div>
