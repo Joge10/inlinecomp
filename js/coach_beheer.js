@@ -20,11 +20,9 @@ async function toonCoachBeheer() {
 }
 
 function _cbBadge(status) {
-    const s = { padding: '2px 8px', 'border-radius': '6px', 'font-size': '.78rem', 'white-space': 'nowrap' };
-    const stijl = (extra) => Object.entries({ ...s, ...extra }).map(([k, v]) => `${k}:${v}`).join(';');
-    if (status === 'approved') return `<span style="${stijl({ background: '#e7f5e9', color: '#2e7d32' })}">goedgekeurd</span>`;
-    if (status === 'rejected') return `<span style="${stijl({ background: '#fdecea', color: '#b71c1c' })}">afgewezen</span>`;
-    return `<span style="${stijl({ background: '#fff6e5', color: '#8a5a00' })}">wacht op goedkeuring</span>`;
+    if (status === 'approved') return '<span class="cb-badge cb-badge--ok">goedgekeurd</span>';
+    if (status === 'rejected') return '<span class="cb-badge cb-badge--afgewezen">afgewezen</span>';
+    return '<span class="cb-badge cb-badge--wacht">wacht op goedkeuring</span>';
 }
 
 function _cbRender(lijst) {
@@ -33,7 +31,7 @@ function _cbRender(lijst) {
         const vanLabel = a.coacht_van_type === 'club' ? 'Club'
                        : a.coacht_van_type === 'team' ? 'Team' : 'Anders';
         const inactief = (+a.actief) ? '' :
-            ` <span style="background:#eee;color:#666;padding:2px 7px;border-radius:6px;font-size:.75rem">inactief</span>`;
+            ` <span class="cb-badge cb-badge--inactief">inactief</span>`;
         const last = a.last_login_at ? new Date(a.last_login_at.replace(' ', 'T') + 'Z')
             .toLocaleDateString('nl-NL', { day: '2-digit', month: '2-digit', year: 'numeric' }) : '—';
         // 4 vaste actie-slots (zelfde patroon als Gebruikers): goedkeuren,
@@ -51,25 +49,25 @@ function _cbRender(lijst) {
             : `<button class="btn-secondary gb-btn-toggle gb-btn-toggle-actief cb-act" data-act="activeren" data-id="${a.id}" title="Account is gedeactiveerd — klik om te activeren">&#128274;</button>`);
         acties.push(`<button class="btn-del cb-act" data-act="verwijderen" data-id="${a.id}" title="Verwijderen">&#128465;</button>`);
         return `<tr>
-            <td>${escHtml(a.naam)}<div style="color:#888;font-size:.8rem">${escHtml(a.email)}</div></td>
-            <td>${vanLabel}<div style="color:#888;font-size:.8rem">${escHtml(a.coacht_van)}</div></td>
-            <td style="text-align:center">${a.roster_count}</td>
-            <td style="text-align:center;color:#888;font-size:.85rem">${last}</td>
+            <td>${escHtml(a.naam)}<div class="cb-sub">${escHtml(a.email)}</div></td>
+            <td>${vanLabel}<div class="cb-sub">${escHtml(a.coacht_van)}</div></td>
+            <td class="cb-midden">${a.roster_count}</td>
+            <td class="cb-laatst">${last}</td>
             <td>${_cbBadge(a.status)}${inactief}</td>
-            <td class="gb-acties">${acties.join('')}</td>
+            <td class="gb-acties"><div class="gb-acties-grid">${acties.join('')}</div></td>
         </tr>`;
     }).join('');
 
     return `
         <div class="gb-kop">
-            <div class="section-title">Coach-accounts${nPending ? ` — <span style="color:#b26a00">${nPending} wacht op goedkeuring</span>` : ''}</div>
+            <div class="section-title">Coach-accounts${nPending ? ` — <span class="cb-pending">${nPending} wacht op goedkeuring</span>` : ''}</div>
             <button class="btn-secondary" id="cb-verversen" title="Lijst verversen">&#8635; Verversen</button>
         </div>
         <div class="hp-info">
             Individuele coach-logins. Een coach werkt tot goedkeuring gewoon met de <strong>anonieme lijst</strong>;
             goedkeuring ontgrendelt de persoonlijke roster + auto-highlight. Afwijzen of deactiveren trekt lopende sessies direct in.
         </div>
-        <div style="overflow-x:auto">
+        <div class="cb-scroll">
         <table class="gb-tabel">
             <thead><tr>
                 <th>Naam</th><th>Coach van</th><th>Atleten</th><th>Laatste login</th><th>Status</th><th>Acties</th>

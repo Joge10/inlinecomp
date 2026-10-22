@@ -406,6 +406,8 @@ try {
         $vStmt->execute([$user['id']]);
         $vRow  = $vStmt->fetch(PDO::FETCH_ASSOC);
         if (!$vRow || !password_verify($huidigPw, $vRow['password_hash'])) {
+            // Fout huidig wachtwoord = mogelijk een overgenomen sessie → loggen.
+            schrijfLog($pdo, (int)$user['id'], (string)$user['naam'], (string)$user['username'], 'profiel_mislukt');
             http_response_code(403);
             echo json_encode(['error' => 'Huidig wachtwoord onjuist']);
             exit;
@@ -454,6 +456,8 @@ try {
         $vStmt->execute([$user['id']]);
         $vRow  = $vStmt->fetch(PDO::FETCH_ASSOC);
         if (!$vRow || !password_verify($huidigPw, $vRow['password_hash'])) {
+            // Fout huidig wachtwoord = mogelijk een overgenomen sessie → loggen.
+            schrijfLog($pdo, (int)$user['id'], (string)$user['naam'], (string)$user['username'], 'wachtwoord_mislukt');
             http_response_code(403);
             echo json_encode(['error' => 'Huidig wachtwoord onjuist']);
             exit;

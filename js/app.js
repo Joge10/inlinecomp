@@ -294,7 +294,7 @@ async function toonOnderhoudPagina() {
         st = await r.json();
         if (!r.ok) throw new Error(st.error || 'Laden mislukt');
     } catch (e) {
-        c.innerHTML = `<div class="status-msg" style="color:#c00">Kon status niet laden: ${escHtml(e.message)}</div>`;
+        c.innerHTML = `<div class="status-msg error">Kon status niet laden: ${escHtml(e.message)}</div>`;
         return;
     }
     const aan     = st.mode === '1';
@@ -343,7 +343,7 @@ async function toonOnderhoudPagina() {
             if (!r.ok || !d.ok) throw new Error(d.error || 'Opslaan mislukt');
             toonOnderhoudPagina();   // herlaad met verse status
         } catch (e) {
-            meld.innerHTML = `<span style="color:#c00">Fout: ${escHtml(e.message)}</span>`;
+            meld.innerHTML = `<span class="ond-fout">Fout: ${escHtml(e.message)}</span>`;
         }
     };
     document.getElementById('ond-btn-aan')?.addEventListener('click', () => bewaar('1'));
@@ -369,14 +369,14 @@ async function toonNoodstopBlok(blok) {
         st = await r.json();
         if (!r.ok) throw new Error(st.error || 'Laden mislukt');
     } catch (e) {
-        blok.innerHTML = `<div class="status-msg" style="color:#c00">Kon noodstop-status niet laden: ${escHtml(e.message)}</div>`;
+        blok.innerHTML = `<div class="status-msg error">Kon noodstop-status niet laden: ${escHtml(e.message)}</div>`;
         return;
     }
     const sinds = st.sinds ? _updateMailFmtTijd(st.sinds) : '';
 
     blok.innerHTML = `
-        <h3 style="margin:28px 0 6px">🛑 Noodstop — hele site hard offline</h3>
-        <p class="ond-hint" style="margin:0 0 12px">Voor noodgevallen zoals een lek in PHP zelf: de webserver weigert dan
+        <h3 class="ns-kop">🛑 Noodstop — hele site hard offline</h3>
+        <p class="ond-hint ns-intro">Voor noodgevallen zoals een lek in PHP zelf: de webserver weigert dan
            <b>elk</b> verzoek (ook jury, coach en API) vóórdat PHP het ziet, en toont een offline-pagina met jouw reden.
            De onderhoudsmodus hierboven draait zelf in PHP en beschermt daar niet tegen.</p>
         <div class="ond-status ${st.aan ? 'aan' : 'uit'}">
@@ -399,12 +399,12 @@ async function toonNoodstopBlok(blok) {
         <div class="ond-veld">
             <label class="ond-radio"><input type="checkbox" id="ns-ip">
                 Mijn IP-adres (<code>${escHtml(st.jouw_ip || '?')}</code>) uitzonderen, zodat ik zelf nog bij Beheer kan</label>
-            <div class="ond-hint" style="margin-top:4px">⚠ Iedereen met hetzelfde IP-adres komt er dan ook door. Niet aanvinken
+            <div class="ond-hint ns-ip-hint">⚠ Iedereen met hetzelfde IP-adres komt er dan ook door. Niet aanvinken
                op mobiel internet (4G/5G) of openbare wifi — daar delen veel mensen één IP-adres.
                Zonder uitzondering zet je de site weer aan via cPanel (zie de bevestiging).</div>
         </div>
         <div class="ond-acties">
-            <button class="btn-primary" id="ns-btn-aan" style="background:#c62828;border-color:#c62828">🛑 Noodstop AAN</button>
+            <button class="btn-primary ns-btn-stop" id="ns-btn-aan">🛑 Noodstop AAN</button>
         </div>`}
         <div class="ond-melding" id="ns-melding"></div>`;
 
@@ -424,7 +424,7 @@ async function toonNoodstopBlok(blok) {
     blok.querySelector('#ns-btn-aan')?.addEventListener('click', async () => {
         const reden = blok.querySelector('#ns-reden').value.trim();
         const metIp = blok.querySelector('#ns-ip').checked;
-        if (!reden) { meld.innerHTML = '<span style="color:#c00">Vul eerst een reden in.</span>'; return; }
+        if (!reden) { meld.innerHTML = '<span class="ond-fout">Vul eerst een reden in.</span>'; return; }
         const ok = await toonBevestigDialog(
             'De hele site gaat direct offline — publiek, coach, jury, check en API.\n\n'
             + (metIp
@@ -444,11 +444,11 @@ async function toonNoodstopBlok(blok) {
                 return;
             }
             if (d.check && d.check !== 503) {
-                meld.innerHTML = `<span style="color:#c60">Let op: controle gaf HTTP ${d.check} i.p.v. 503 — check de site zelf (bv. via mobiel zonder wifi).</span>`;
+                meld.innerHTML = `<span class="ond-waarschuw">Let op: controle gaf HTTP ${d.check} i.p.v. 503 — check de site zelf (bv. via mobiel zonder wifi).</span>`;
             }
             toonNoodstopBlok(blok);
         } catch (e) {
-            meld.innerHTML = `<span style="color:#c00">Fout: ${escHtml(e.message)}</span>`;
+            meld.innerHTML = `<span class="ond-fout">Fout: ${escHtml(e.message)}</span>`;
         }
     });
 
@@ -461,7 +461,7 @@ async function toonNoodstopBlok(blok) {
             await verstuur({ actie: 'uit' });
             toonNoodstopBlok(blok);
         } catch (e) {
-            meld.innerHTML = `<span style="color:#c00">Fout: ${escHtml(e.message)}</span>`;
+            meld.innerHTML = `<span class="ond-fout">Fout: ${escHtml(e.message)}</span>`;
         }
     });
 }

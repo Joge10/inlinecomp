@@ -79,6 +79,11 @@ async function laadLogboek(filterValue = '') {
             login:                       '<span class="gb-log-badge gb-log-in">ingelogd</span>',
             logout:                      '<span class="gb-log-badge gb-log-out">uitgelogd</span>',
             login_mislukt:               '<span class="gb-log-badge gb-log-fout">mislukt</span>',
+            // Mijn account (self-service). *_mislukt = fout huidig wachtwoord.
+            wachtwoord_aangepast:        '<span class="gb-log-badge gb-log-warn">eigen ww gewijzigd</span>',
+            wachtwoord_mislukt:          '<span class="gb-log-badge gb-log-fout">eigen ww: fout huidig ww</span>',
+            profiel_aangepast:           '<span class="gb-log-badge gb-log-info">profiel gewijzigd</span>',
+            profiel_mislukt:             '<span class="gb-log-badge gb-log-fout">profiel: fout huidig ww</span>',
             // Jury-app: hergebruik bestaande kleuren (groen/rood/grijs) zodat
             // de badges meteen herkenbaar zijn met dezelfde semantiek.
             'jury-login':                '<span class="gb-log-badge gb-log-in">jury-login</span>',
@@ -103,6 +108,14 @@ async function laadLogboek(filterValue = '') {
                 const rol = actie.slice('jury-rol-'.length);
                 return `<span class="gb-log-badge gb-log-jury-rol">rol: ${escHtml(rol)}</span>`;
             }
+            // Wachtwoord-reset van een ánder account: rij staat op naam van wie
+            // het deed, het doel-account zit achter de dubbele punt.
+            if (typeof actie === 'string' && actie.startsWith('ww-reset-geweigerd:')) {
+                return `<span class="gb-log-badge gb-log-fout">ww-reset geweigerd → @${escHtml(actie.slice(19))}</span>`;
+            }
+            if (typeof actie === 'string' && actie.startsWith('ww-reset:')) {
+                return `<span class="gb-log-badge gb-log-warn">ww gereset → @${escHtml(actie.slice(9))}</span>`;
+            }
             return `<span class="gb-log-badge">${escHtml(actie)}</span>`;
         }
 
@@ -117,7 +130,8 @@ async function laadLogboek(filterValue = '') {
             const locatie = r.land
                 ? escHtml(r.land) + (r.stad ? `<span class="gb-log-stad">, ${escHtml(r.stad)}</span>` : '')
                 : '—';
-            const isFout = r.actie === 'login_mislukt' || r.actie === 'coach-login-mislukt';
+            const isFout = ['login_mislukt', 'coach-login-mislukt', 'wachtwoord_mislukt', 'profiel_mislukt'].includes(r.actie)
+                        || (typeof r.actie === 'string' && r.actie.startsWith('ww-reset-geweigerd:'));
             return `<tr class="${isFout ? 'gb-log-rij-fout' : ''}">
                 <td class="gb-log-ts">${ts}</td>
                 <td>${escHtml(r.naam)}<span class="gb-username"> @${escHtml(r.username)}</span></td>
@@ -264,7 +278,7 @@ function renderGebruikersTabel() {
             <td><span class="gb-rol-badge gb-rol-${u.role}">${ROL_LABELS[u.role] ?? u.role}</span></td>
             <td>${orgBadge}</td>
             <td>${escHtml(u.email ?? '—')}</td>
-            <td class="gb-acties">
+            <td class="gb-acties"><div class="gb-acties-grid">
                 ${magWijzig
                     ? `<button class="btn-secondary gb-btn-edit" data-id="${u.id}" title="Bewerken">&#9998;</button>`
                     : `<span class="gb-btn-leeg"></span>`}
@@ -279,7 +293,7 @@ function renderGebruikersTabel() {
                 ${magDel
                     ? `<button class="btn-del gb-btn-del" data-id="${u.id}" title="Verwijderen">&#128465;</button>`
                     : `<span class="gb-btn-leeg"></span>`}
-            </td>
+            </div></td>
         </tr>`;
     }).join('');
 
@@ -300,7 +314,7 @@ function renderGebruikersTabel() {
             </thead>
             <tbody>${rijen}</tbody>
         </table>
-        <div id="gb-form-wrap" style="display:none"></div>`;
+        <div id="gb-form-wrap" hidden></div>`;
 
     // Events
     el('gb-btn-nieuw').addEventListener('click', () => openGbForm(null));
@@ -308,8 +322,17 @@ function renderGebruikersTabel() {
     container.querySelectorAll('.gb-btn-edit').forEach(btn =>
         btn.addEventListener('click', () => openGbForm(parseInt(btn.dataset.id))));
 
+    // Eigen rij → Mijn account (vraagt het huidige wachtwoord); de server
+    // weigert het eigen wachtwoord via set_password.
     container.querySelectorAll('.gb-btn-ww').forEach(btn =>
-        btn.addEventListener('click', () => openWwForm(parseInt(btn.dataset.id))));
+        btn.addEventListener('click', () => {
+            const id = parseInt(btn.dataset.id);
+            if (id === Number(currentUser.id) && typeof toonMijnAccountDialog === 'function') {
+                toonMijnAccountDialog();
+            } else {
+                openWwForm(id);
+            }
+        }));
 
     container.querySelectorAll('.gb-btn-toggle').forEach(btn =>
         btn.addEventListener('click', () => toggleActief(parseInt(btn.dataset.id))));
@@ -757,7 +780,7 @@ function openGbForm(id) {
             </div>`;
     }
 
-    wrap.style.display = '';
+    wrap.hidden = false;
     wrap.innerHTML = `
         <div class="gb-form">
             <div class="gb-form-titel">${id ? 'Gebruiker bewerken' : 'Nieuwe gebruiker'}</div>
@@ -787,14 +810,14 @@ function openGbForm(id) {
                 </label>
             </div>` : ''}
             ${orgVeldHtml}
-            <div id="gbf-fout" class="status-msg error" style="display:none;margin:.5rem 0"></div>
+            <div id="gbf-fout" class="status-msg error gb-fout" hidden></div>
             <div class="gb-form-acties">
                 <button class="btn-secondary" id="gbf-annuleer">Annuleren</button>
                 <button class="btn-primary"   id="gbf-opslaan">Opslaan</button>
             </div>
         </div>`;
 
-    el('gbf-annuleer').addEventListener('click', () => { wrap.style.display = 'none'; });
+    el('gbf-annuleer').addEventListener('click', () => { wrap.hidden = true; });
     el('gbf-opslaan') .addEventListener('click', () => slaGebruikerOp(id));
     wrap.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
 }
@@ -808,7 +831,7 @@ async function slaGebruikerOp(id) {
     const pw2      = el('gbf-pw2')?.value ?? null;
     const foutEl   = el('gbf-fout');
 
-    foutEl.style.display = 'none';
+    foutEl.hidden = true;
 
     if (!naam || !username) { toonGbFout('Naam en gebruikersnaam zijn verplicht.'); return; }
     if (!id && (!pw || pw.length < 8)) { toonGbFout('Wachtwoord min. 8 tekens.'); return; }
@@ -836,13 +859,13 @@ async function slaGebruikerOp(id) {
     const data = await res.json();
     if (!res.ok) { toonGbFout(data.error ?? 'Fout bij opslaan.'); return; }
 
-    el('gb-form-wrap').style.display = 'none';
+    el('gb-form-wrap').hidden = true;
     await herlaadGebruikers();
 }
 
 function toonGbFout(tekst) {
     const e = el('gbf-fout');
-    if (e) { e.textContent = tekst; e.style.display = ''; }
+    if (e) { e.textContent = tekst; e.hidden = false; }
 }
 
 // ── Wachtwoord wijzigen ───────────────────────────────────────────────────────
@@ -852,44 +875,51 @@ function openWwForm(id) {
     // Number() coercion: PDO geeft u.id als string terug, id is een number
     // uit parseInt(dataset.id) — zonder coercion failt === en wordt user undef.
     const user = gbGebruikers.find(u => Number(u.id) === id);
-    wrap.style.display = '';
+    wrap.hidden = false;
     wrap.innerHTML = `
         <div class="gb-form">
             <div class="gb-form-titel">Wachtwoord wijzigen — ${escHtml(user?.naam ?? '')}</div>
             <div class="mf-rij mf-2col">
                 <label class="mf-lbl"><span>Nieuw wachtwoord <span class="vereist">*</span></span>
-                    <input type="password" id="gbw-pw" class="inp" required minlength="8">
+                    <input type="password" id="gbw-pw" class="inp" required minlength="8" autocomplete="new-password">
                 </label>
                 <label class="mf-lbl"><span>Herhalen <span class="vereist">*</span></span>
-                    <input type="password" id="gbw-pw2" class="inp" required>
+                    <input type="password" id="gbw-pw2" class="inp" required autocomplete="new-password">
                 </label>
             </div>
-            <div id="gbw-fout" class="status-msg error" style="display:none;margin:.5rem 0"></div>
+            <div class="mf-rij">
+                <label class="mf-lbl"><span>Jouw eigen wachtwoord ter bevestiging <span class="vereist">*</span></span>
+                    <input type="password" id="gbw-eigen" class="inp" required autocomplete="current-password">
+                </label>
+            </div>
+            <div id="gbw-fout" class="status-msg error gb-fout" hidden></div>
             <div class="gb-form-acties">
                 <button class="btn-secondary" id="gbw-annuleer">Annuleren</button>
                 <button class="btn-primary"   id="gbw-opslaan">Opslaan</button>
             </div>
         </div>`;
 
-    el('gbw-annuleer').addEventListener('click', () => { wrap.style.display = 'none'; });
+    el('gbw-annuleer').addEventListener('click', () => { wrap.hidden = true; });
     el('gbw-opslaan') .addEventListener('click', async () => {
         const pw  = el('gbw-pw').value;
         const pw2 = el('gbw-pw2').value;
         if (pw.length < 8) { toonWwFout('Min. 8 tekens.'); return; }
         if (pw !== pw2)    { toonWwFout('Wachtwoorden komen niet overeen.'); return; }
+        const eigen = el('gbw-eigen').value;
+        if (!eigen)        { toonWwFout('Vul ter bevestiging je eigen wachtwoord in.'); return; }
         const res  = await fetch('api/gebruikers.php', {
             method: 'POST', headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ action: 'set_password', id, password: pw }),
+            body: JSON.stringify({ action: 'set_password', id, password: pw, eigen_wachtwoord: eigen }),
         });
         const data = await res.json();
         if (!res.ok) { toonWwFout(data.error ?? 'Fout.'); return; }
-        wrap.style.display = 'none';
+        wrap.hidden = true;
     });
 }
 
 function toonWwFout(tekst) {
     const e = el('gbw-fout');
-    if (e) { e.textContent = tekst; e.style.display = ''; }
+    if (e) { e.textContent = tekst; e.hidden = false; }
 }
 
 // ── Acties ────────────────────────────────────────────────────────────────────

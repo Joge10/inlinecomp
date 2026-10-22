@@ -614,20 +614,8 @@ if (is_array($eigenScope) && !empty($eigenScope)) {
                         Zet de publieke apps (Publiek, Coach, Check) tijdelijk op een onderhoudspagina.
                         Jij blijft — afhankelijk van de gekozen toegang — gewoon inloggen en op productie
                         testen. Vergeet 'm daarna weer uit te zetten. Voor een <strong>harde</strong> offline
-                        (bijv. tijdens het uploaden van bestanden) blijft de <code>.htaccess</code>-noodrem beschikbaar.
+                        (bijv. bij een lek in PHP zelf) is er de <strong>Noodstop</strong> hieronder (alleen owner).
                     </div>
-                    <style>
-                        #sys-tab-onderhoud .ond-status{padding:12px 14px;border-radius:8px;margin:0 0 18px;font-size:1rem}
-                        #sys-tab-onderhoud .ond-status.aan{background:#fdecea;border:1px solid #f5c6c0}
-                        #sys-tab-onderhoud .ond-status.uit{background:#eafaf1;border:1px solid #bfe6cf}
-                        #sys-tab-onderhoud .ond-veld{margin:0 0 16px;max-width:560px}
-                        #sys-tab-onderhoud .ond-lbl{display:block;font-weight:600;margin:0 0 6px}
-                        #sys-tab-onderhoud .ond-radio{display:block;margin:4px 0;cursor:pointer}
-                        #sys-tab-onderhoud .ond-hint{color:#777;font-size:.88rem}
-                        #sys-tab-onderhoud #ond-bericht{width:100%;max-width:560px}
-                        #sys-tab-onderhoud .ond-acties{display:flex;gap:10px;flex-wrap:wrap;margin:18px 0 0}
-                        #sys-tab-onderhoud .ond-melding{margin:12px 0 0;min-height:1.2em}
-                    </style>
                     <div id="onderhoud-container">
                         <div class="status-msg loading"><span class="spinner"></span>Laden…</div>
                     </div>
@@ -707,7 +695,7 @@ if (is_array($eigenScope) && !empty($eigenScope)) {
                         <h3>Versie en techniek</h3>
                         <ul class="info-lijst">
                             <li>Versie: <code><?= htmlspecialchars(INLINECOMP_VERSIE) ?></code>
-                                <span style="color:#888">(<?= htmlspecialchars(INLINECOMP_VERSIE_DATUM) ?>)</span></li>
+                                <span class="info-sub">(<?= htmlspecialchars(INLINECOMP_VERSIE_DATUM) ?>)</span></li>
                             <li>Eén gedeeld versienummer voor alle onderdelen van InlineComp
                                 (Beheer, Public, Coach, Check en Jury).</li>
                             <li>InlineComp draait in jouw browser; alle gegevens worden
@@ -732,7 +720,7 @@ if (is_array($eigenScope) && !empty($eigenScope)) {
                                 }
                             ?>
                             <li>PHP: <code><?= htmlspecialchars(PHP_VERSION) ?></code>
-                                <?php if ($phpBuild !== ''): ?><span style="color:#888">(build <?= htmlspecialchars($phpBuild) ?>)</span><?php endif; ?></li>
+                                <?php if ($phpBuild !== ''): ?><span class="info-sub">(build <?= htmlspecialchars($phpBuild) ?>)</span><?php endif; ?></li>
                             <?php
                                 try { $dbVersie = (string) $pdo->query('SELECT VERSION()')->fetchColumn(); }
                                 catch (Throwable $e) { $dbVersie = 'onbekend'; }

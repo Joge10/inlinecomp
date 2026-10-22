@@ -20,6 +20,24 @@ $method = $_SERVER['REQUEST_METHOD'];
 $body   = json_decode(file_get_contents('php://input'), true) ?? [];
 $action = $body['action'] ?? $_GET['action'] ?? '';
 
+/**
+ * Logboek-regel (login_logs, zichtbaar in Gebruikers → Logboek) voor een
+ * wachtwoord-reset van een ánder account. De rij staat op naam van wie het
+ * deed; het doel-account zit in de actie ('ww-reset:<username>'). Zelfde
+ * IP-bepaling als schrijfLog() in api/auth.php; geo/browser bewust leeg.
+ * Logging mag de hoofd-flow nooit blokkeren.
+ */
+function _gbLogWachtwoord(PDO $pdo, array $ik, string $actie): void {
+    try {
+        $ip = $_SERVER['HTTP_X_FORWARDED_FOR'] ?? $_SERVER['HTTP_X_REAL_IP'] ?? $_SERVER['REMOTE_ADDR'] ?? '';
+        $ip = trim(explode(',', $ip)[0]);
+        $pdo->prepare("INSERT INTO login_logs (user_id, naam, username, actie, ip_adres, user_agent)
+                       VALUES (?,?,?,?,?,?)")
+            ->execute([(int)$ik['id'], (string)($ik['naam'] ?? ''), (string)($ik['username'] ?? ''),
+                       mb_substr($actie, 0, 60), mb_substr($ip, 0, 45), $_SERVER['HTTP_USER_AGENT'] ?? '']);
+    } catch (Throwable) { /* logging mag nooit de hoofd-flow blokkeren */ }
+}
+
 try {
 
     // ── Eerste-owner-bootstrap is uitgeschakeld ─────────────────────────────
@@ -304,6 +322,31 @@ try {
                 echo json_encode(['error' => 'id en wachtwoord (min. 8 tekens) verplicht']);
                 exit;
             }
+            // Eigen wachtwoord alleen via Mijn account (auth.php change_password),
+            // dat het huidige wachtwoord vraagt — anders omzeil je die controle hier.
+            if ($id === (int)$ik['id']) {
+                http_response_code(403);
+                echo json_encode(['error' => 'Je eigen wachtwoord wijzig je via Mijn account (menu rechtsboven).']);
+                exit;
+            }
+            // Andermans wachtwoord: bevestigen met het EIGEN wachtwoord van wie het
+            // doet. Zo kan een overgenomen sessie geen accounts kapen of beheerders
+            // buitensluiten; het herstelpad (admin zet nieuw wachtwoord) blijft werken.
+            // Doel-account voor het logboek (wie is er gereset).
+            $tStmt = $pdo->prepare("SELECT username FROM users WHERE id = ? LIMIT 1");
+            $tStmt->execute([$id]);
+            $doelUsername = (string)($tStmt->fetchColumn() ?: ('#' . $id));
+
+            $eigenPw = (string)($body['eigen_wachtwoord'] ?? '');
+            $vStmt = $pdo->prepare("SELECT password_hash FROM users WHERE id = ? LIMIT 1");
+            $vStmt->execute([(int)$ik['id']]);
+            $eigenHash = $vStmt->fetchColumn();
+            if ($eigenPw === '' || !$eigenHash || !password_verify($eigenPw, $eigenHash)) {
+                _gbLogWachtwoord($pdo, $ik, 'ww-reset-geweigerd:' . $doelUsername);
+                http_response_code(403);
+                echo json_encode(['error' => 'Je eigen wachtwoord klopt niet.']);
+                exit;
+            }
             // Admin mag wachtwoord owner/andere admin niet wijzigen
             if ($ik['role'] === 'admin' && $id !== (int)$ik['id']) {
                 $r = $pdo->prepare("SELECT role FROM users WHERE id=?");
@@ -319,6 +362,7 @@ try {
             $hash = password_hash($password, PASSWORD_DEFAULT);
             $pdo->prepare("UPDATE users SET password_hash=?, updated_at=NOW() WHERE id=?")
                 ->execute([$hash, $id]);
+            _gbLogWachtwoord($pdo, $ik, 'ww-reset:' . $doelUsername);
             echo json_encode(['ok' => true]);
             exit;
         }

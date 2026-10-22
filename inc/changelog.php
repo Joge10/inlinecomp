@@ -88,6 +88,29 @@ return [
         ],
     ],
 
+    // ── Patch 22-10-2026 (onder H2989.22.10, wachtwoorden + logboek, alleen Beheer) ──
+    [
+        'versie' => 'H2989.22.10', 'datum' => '22-10-2026',
+        'soort'  => 'patch', 'onderdelen' => ['patch'],
+        'tekst' => [
+            'nl' => '🔒 <b>Wachtwoorden en logboek</b> — je eigen wachtwoord wijzig je alleen nog via <i>Mijn account</i> (met je huidige wachtwoord); in Systeem → Gebruikers kan dat niet meer. Het wachtwoord van een ander account resetten vraagt nu ter bevestiging je eigen wachtwoord, zodat een overgenomen sessie geen accounts kan kapen. Resets, eigen wijzigingen en mislukte pogingen (fout wachtwoord) verschijnen met een duidelijke badge in het logboek.',
+            'en' => '🔒 <b>Passwords and log</b> — you now change your own password only via <i>My account</i> (with your current password); this is no longer possible in System → Users. Resetting another account\'s password now asks for your own password as confirmation, so a hijacked session cannot take over accounts. Resets, own changes and failed attempts (wrong password) appear in the log with a clear badge.',
+            'de' => '🔒 <b>Passwörter und Protokoll</b> — dein eigenes Passwort änderst du nur noch über <i>Mein Konto</i> (mit deinem aktuellen Passwort); unter System → Benutzer ist das nicht mehr möglich. Das Zurücksetzen des Passworts eines anderen Kontos verlangt jetzt dein eigenes Passwort zur Bestätigung, sodass eine übernommene Sitzung keine Konten kapern kann. Zurücksetzungen, eigene Änderungen und fehlgeschlagene Versuche (falsches Passwort) erscheinen mit einem deutlichen Badge im Protokoll.',
+            'fr' => '🔒 <b>Mots de passe et journal</b> — vous modifiez désormais votre propre mot de passe uniquement via <i>Mon compte</i> (avec votre mot de passe actuel) ; ce n\'est plus possible dans Système → Utilisateurs. Réinitialiser le mot de passe d\'un autre compte demande maintenant votre propre mot de passe en confirmation, afin qu\'une session détournée ne puisse pas s\'emparer de comptes. Les réinitialisations, vos propres modifications et les tentatives échouées (mauvais mot de passe) apparaissent dans le journal avec un badge clair.',
+        ],
+    ],
+    // ── Patch 22-10-2026 (onder H2989.22.10, tabel-layout, alleen Beheer) ──
+    [
+        'versie' => 'H2989.22.10', 'datum' => '22-10-2026',
+        'soort'  => 'patch', 'onderdelen' => ['patch'],
+        'tekst' => [
+            'nl' => '🔧 <b>Tabellen Gebruikers en Coaches</b> — de scheidingslijnen lopen weer door tot onder de knoppen.',
+            'en' => '🔧 <b>Users and Coaches tables</b> — the row lines now run through underneath the buttons again.',
+            'de' => '🔧 <b>Tabellen Benutzer und Trainer</b> — die Trennlinien laufen wieder bis unter die Schaltflächen durch.',
+            'fr' => '🔧 <b>Tableaux Utilisateurs et Entraîneurs</b> — les lignes de séparation se prolongent à nouveau sous les boutons.',
+        ],
+    ],
+
     // ── Release H2160.18.09 ────────────────────────────────────────────────
     [
         'versie' => 'H2160.18.09', 'datum' => '18-09-2026', 'onderdelen' => ['public', 'coach', 'check'],
