@@ -83,3 +83,5 @@ vapid_keygen.php
 # LET OP: al-getrackte bestanden blijven getrackt — .gitignore raakt alleen
 # untracked bestanden. Zie `git ls-files docs_internal/` voor wat er nog in zit.
 docs_internal/
+offline.html
+.htaccess.noodstop-backup

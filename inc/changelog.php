@@ -72,6 +72,15 @@ return [
     [
         'versie' => 'H2989.22.10', 'datum' => '22-10-2026', 'onderdelen' => ['admin'],
         'tekst' => [
+            'nl' => '🛑 <b>Noodstop</b> — in Systeem → Onderhoud kan een owner de hele site met één knop hard offline zetten, met een reden die op de offline-pagina verschijnt. Anders dan de onderhoudsmodus weigert de webserver dan elk verzoek vóórdat PHP het ziet — bedoeld voor noodgevallen zoals een lek in PHP zelf. Optioneel kun je je eigen IP-adres uitzonderen om de site via dezelfde knop weer aan te zetten.',
+            'en' => '🛑 <b>Emergency stop</b> — in System → Maintenance an owner can take the whole site hard offline with one button, with a reason shown on the offline page. Unlike maintenance mode, the web server then refuses every request before PHP sees it — intended for emergencies such as a vulnerability in PHP itself. Optionally you can exempt your own IP address so you can bring the site back with the same button.',
+            'de' => '🛑 <b>Notstopp</b> — unter System → Wartung kann ein Owner die gesamte Seite mit einem Klick hart offline nehmen, mit einem Grund, der auf der Offline-Seite erscheint. Anders als im Wartungsmodus lehnt der Webserver dann jede Anfrage ab, bevor PHP sie sieht — gedacht für Notfälle wie eine Sicherheitslücke in PHP selbst. Optional kannst du deine eigene IP-Adresse ausnehmen, um die Seite mit derselben Taste wieder einzuschalten.',
+            'fr' => '🛑 <b>Arrêt d\'urgence</b> — dans Système → Maintenance, un owner peut mettre tout le site hors ligne d\'un seul clic, avec une raison affichée sur la page hors ligne. Contrairement au mode maintenance, le serveur web refuse alors chaque requête avant que PHP ne la voie — prévu pour les urgences comme une faille dans PHP lui-même. En option, vous pouvez exempter votre propre adresse IP pour remettre le site en ligne avec le même bouton.',
+        ],
+    ],
+    [
+        'versie' => 'H2989.22.10', 'datum' => '22-10-2026', 'onderdelen' => ['admin'],
+        'tekst' => [
             'nl' => '🔧 <b>Kleine verbeteringen</b> — Info → Versie toont voor owners en admins de PHP-versie (met builddatum) en de databaseversie. De update-mail aan beheerders heeft een nette opmaak, is gegroepeerd per onderdeel, en bij opnieuw versturen kun je een reden opgeven.',
             'en' => '🔧 <b>Small improvements</b> — Info → Version shows owners and admins the PHP version (with build date) and the database version. The update mail to administrators has a clean layout, is grouped per section, and when resending you can give a reason.',
             'de' => '🔧 <b>Kleine Verbesserungen</b> — Info → Version zeigt Ownern und Admins die PHP-Version (mit Build-Datum) und die Datenbankversion. Die Update-Mail an Administratoren ist sauber formatiert, nach Bereichen gruppiert, und beim erneuten Senden kannst du einen Grund angeben.',

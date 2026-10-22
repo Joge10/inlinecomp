@@ -349,6 +349,121 @@ async function toonOnderhoudPagina() {
     document.getElementById('ond-btn-aan')?.addEventListener('click', () => bewaar('1'));
     document.getElementById('ond-btn-uit')?.addEventListener('click', () => bewaar('0'));
     document.getElementById('ond-btn-opslaan')?.addEventListener('click', () => bewaar(aan ? '1' : '0'));
+
+    if (currentUser.role === 'owner') {
+        const blok = document.createElement('div');
+        blok.id = 'noodstop-blok';
+        c.appendChild(blok);
+        toonNoodstopBlok(blok);
+    }
+}
+
+// ── Systeem → Onderhoud → Noodstop (harde offline via .htaccess, alleen owner) ─
+// Anders dan de onderhoudsmodus hierboven blokkeert dit op Apache-niveau, vóór
+// PHP — bedoeld voor een lek in PHP zelf (zie inc/noodstop.php).
+async function toonNoodstopBlok(blok) {
+    blok.innerHTML = '<div class="status-msg loading"><span class="spinner"></span>Noodstop-status laden…</div>';
+    let st;
+    try {
+        const r = await fetch('api/noodstop.php');
+        st = await r.json();
+        if (!r.ok) throw new Error(st.error || 'Laden mislukt');
+    } catch (e) {
+        blok.innerHTML = `<div class="status-msg" style="color:#c00">Kon noodstop-status niet laden: ${escHtml(e.message)}</div>`;
+        return;
+    }
+    const sinds = st.sinds ? _updateMailFmtTijd(st.sinds) : '';
+
+    blok.innerHTML = `
+        <h3 style="margin:28px 0 6px">🛑 Noodstop — hele site hard offline</h3>
+        <p class="ond-hint" style="margin:0 0 12px">Voor noodgevallen zoals een lek in PHP zelf: de webserver weigert dan
+           <b>elk</b> verzoek (ook jury, coach en API) vóórdat PHP het ziet, en toont een offline-pagina met jouw reden.
+           De onderhoudsmodus hierboven draait zelf in PHP en beschermt daar niet tegen.</p>
+        <div class="ond-status ${st.aan ? 'aan' : 'uit'}">
+            <strong>Status:</strong> ${st.aan
+                ? '🔴 Noodstop is <b>AAN</b>' + (sinds ? ` — sinds ${escHtml(sinds)}` : '')
+                  + (st.ip_uitzondering ? ` — uitzondering voor IP ${escHtml(st.ip_uitzondering)}` : ' — zonder IP-uitzondering')
+                : '🟢 Noodstop staat uit'}
+        </div>
+        ${st.aan ? `
+        <div class="ond-veld"><label class="ond-lbl">Reden op de offline-pagina</label>
+            <div>${escHtml(st.reden || '')}</div></div>
+        <div class="ond-acties">
+            <button class="btn-primary" id="ns-btn-uit">Site weer online zetten</button>
+        </div>` : `
+        <div class="ond-veld">
+            <label class="ond-lbl" for="ns-reden">Reden (komt op de offline-pagina, verplicht)</label>
+            <textarea id="ns-reden" class="inp" rows="3" maxlength="500"
+                placeholder="Bijv. Er is een ernstig beveiligingslek in PHP ontdekt. Uit voorzorg is de site offline tot de update is geïnstalleerd.">${escHtml(st.reden || '')}</textarea>
+        </div>
+        <div class="ond-veld">
+            <label class="ond-radio"><input type="checkbox" id="ns-ip">
+                Mijn IP-adres (<code>${escHtml(st.jouw_ip || '?')}</code>) uitzonderen, zodat ik zelf nog bij Beheer kan</label>
+            <div class="ond-hint" style="margin-top:4px">⚠ Iedereen met hetzelfde IP-adres komt er dan ook door. Niet aanvinken
+               op mobiel internet (4G/5G) of openbare wifi — daar delen veel mensen één IP-adres.
+               Zonder uitzondering zet je de site weer aan via cPanel (zie de bevestiging).</div>
+        </div>
+        <div class="ond-acties">
+            <button class="btn-primary" id="ns-btn-aan" style="background:#c62828;border-color:#c62828">🛑 Noodstop AAN</button>
+        </div>`}
+        <div class="ond-melding" id="ns-melding"></div>`;
+
+    const meld = blok.querySelector('#ns-melding');
+    const verstuur = async (payload) => {
+        meld.textContent = 'Bezig…';
+        const r = await fetch('api/noodstop.php', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload),
+        });
+        const d = await r.json();
+        if (!r.ok || !d.ok) throw new Error(d.error || 'Mislukt');
+        return d;
+    };
+
+    blok.querySelector('#ns-btn-aan')?.addEventListener('click', async () => {
+        const reden = blok.querySelector('#ns-reden').value.trim();
+        const metIp = blok.querySelector('#ns-ip').checked;
+        if (!reden) { meld.innerHTML = '<span style="color:#c00">Vul eerst een reden in.</span>'; return; }
+        const ok = await toonBevestigDialog(
+            'De hele site gaat direct offline — publiek, coach, jury, check en API.\n\n'
+            + (metIp
+                ? `Alleen jouw IP-adres (${st.jouw_ip}) komt er nog door. Via deze pagina zet je de site weer aan.`
+                : 'Ook jij komt er dan niet meer in. Weer online zetten doe je via cPanel → Bestandsbeheer:\n'
+                  + 'open .htaccess in de hoofdmap en verwijder het blok dat begint met\n'
+                  + '"# >>> INLINECOMP NOODSTOP" tot en met "# <<< INLINECOMP NOODSTOP <<<".')
+            + '\n\nUpload geen .htaccess zolang de noodstop aan staat — dan verdwijnt het blok.',
+            'Noodstop aanzetten?', 'Noodstop AAN', 'Annuleren');
+        if (!ok) return;
+        try {
+            const d = await verstuur({ actie: 'aan', reden, ip_uitzonderen: metIp });
+            if (!metIp) {
+                blok.innerHTML = `<div class="ond-status aan"><strong>🔴 Noodstop staat AAN.</strong>
+                    Je hebt geen IP-uitzondering, dus vanaf nu kom je ook zelf niet meer in Beheer.
+                    Weer online: cPanel → Bestandsbeheer → .htaccess → het NOODSTOP-blok verwijderen.</div>`;
+                return;
+            }
+            if (d.check && d.check !== 503) {
+                meld.innerHTML = `<span style="color:#c60">Let op: controle gaf HTTP ${d.check} i.p.v. 503 — check de site zelf (bv. via mobiel zonder wifi).</span>`;
+            }
+            toonNoodstopBlok(blok);
+        } catch (e) {
+            meld.innerHTML = `<span style="color:#c00">Fout: ${escHtml(e.message)}</span>`;
+        }
+    });
+
+    blok.querySelector('#ns-btn-uit')?.addEventListener('click', async () => {
+        const ok = await toonBevestigDialog('De site gaat weer online voor iedereen.\n\n'
+            + 'Doe dit pas als de oorzaak is opgelost (bv. de PHP-update is actief — zie Info → Versie).',
+            'Site weer online?', 'Weer online', 'Annuleren');
+        if (!ok) return;
+        try {
+            await verstuur({ actie: 'uit' });
+            toonNoodstopBlok(blok);
+        } catch (e) {
+            meld.innerHTML = `<span style="color:#c00">Fout: ${escHtml(e.message)}</span>`;
+        }
+    });
 }
 
 // ── Info-pagina vullen ────────────────────────────────────────────────────────
