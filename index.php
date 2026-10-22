@@ -714,6 +714,15 @@ if (is_array($eigenScope) && !empty($eigenScope)) {
                                 opgeslagen op de server van de organisatie.</li>
                             <li>Browser: <code id="info-browser">…</code></li>
                             <li>Verbinding: <code id="info-online">…</code></li>
+                            <?php /* PHP- en DB-versie alleen voor owner/admin: publiek zichtbaar helpt aanvallers kwetsbare versies te vinden. */ ?>
+                            <?php if (in_array($gebruiker['role'] ?? '', ['owner', 'admin'], true)): ?>
+                            <li>PHP: <code><?= htmlspecialchars(PHP_VERSION) ?></code></li>
+                            <?php
+                                try { $dbVersie = (string) $pdo->query('SELECT VERSION()')->fetchColumn(); }
+                                catch (Throwable $e) { $dbVersie = 'onbekend'; }
+                            ?>
+                            <li>Database: <code><?= htmlspecialchars($dbVersie) ?></code></li>
+                            <?php endif; ?>
                         </ul>
                     </div>
 

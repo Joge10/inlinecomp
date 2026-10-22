@@ -1,4 +1,18 @@
 RewriteEngine on
+
+# === TIJDELIJK: PHP2Shell — site offline tot iFastNet PHP gepatcht heeft ===
+# Weghalen zodra de gepatchte PHP-versie (8.3.36+) actief is.
+#ErrorDocument 503 /onderhoud.html
+#RewriteCond %{ENV:REDIRECT_STATUS} ^$
+# xx.xx.xx.xx
+#RewriteCond %{REMOTE_ADDR} !^xx\.xx\.xx\.xx$
+#RewriteCond %{REQUEST_URI} !^/onderhoud\.html$
+#RewriteRule ^ - [R=503,L]
+#<IfModule mod_headers.c>
+#    Header always set Retry-After "7200"
+#</IfModule>
+# === EINDE TIJDELIJK ===
+
 RewriteCond %{HTTPS} off
 RewriteCond %{HTTP:X-Forwarded-SSL} !on
 RewriteCond %{HTTP_HOST} ^inlineresults\.devriesen\.com$ [OR]
@@ -18,18 +32,6 @@ RewriteRule ^/?$ "https\:\/\/inlineresults\.devriesen\.com\/" [R=301,L]
    php_flag log_errors On
 </IfModule>
 # END cPanel-generated php ini directives, do not edit
-
-
-# === ONDERHOUD ===
-# RewriteCond %{QUERY_STRING} maintenance_bypass=geheimwoord123
-# RewriteRule ^(.*)$ - [CO=bypass:1:%{HTTP_HOST}:1440,L]
-
-# RewriteCond %{HTTP_COOKIE} !bypass=1
-# RewriteCond %{REQUEST_URI} !^/maintenance\.html$
-# RewriteRule ^(.*)$ /maintenance.html [R=503,L]
-# ErrorDocument 503 /maintenance.html
-# Header always set Retry-After "3600"
-# === EINDE ONDERHOUD ===
 
 
 # ════════════════════════════════════════════════════════════════════════
