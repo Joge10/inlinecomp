@@ -716,7 +716,23 @@ if (is_array($eigenScope) && !empty($eigenScope)) {
                             <li>Verbinding: <code id="info-online">…</code></li>
                             <?php /* PHP- en DB-versie alleen voor owner/admin: publiek zichtbaar helpt aanvallers kwetsbare versies te vinden. */ ?>
                             <?php if (in_array($gebruiker['role'] ?? '', ['owner', 'admin'], true)): ?>
-                            <li>PHP: <code><?= htmlspecialchars(PHP_VERSION) ?></code></li>
+                            <?php
+                                // Builddatum: hosting (CloudLinux) backport security-fixes soms zonder
+                                // het versienummer op te hogen — de builddatum laat dan zien of de patch erin zit.
+                                // Geen PHP-constante voor; alleen uit phpinfo() te halen.
+                                $phpBuild = '';
+                                if (function_exists('phpinfo')) {
+                                    ob_start();
+                                    phpinfo(INFO_GENERAL);
+                                    $info = strip_tags((string) ob_get_clean());
+                                    if (preg_match('/Build Date\s*(?:=>)?\s*([A-Za-z]{3}\s+\d{1,2}\s+\d{4})/', $info, $m)) {
+                                        $ts = strtotime($m[1]);
+                                        $phpBuild = $ts ? date('d-m-Y', $ts) : $m[1];
+                                    }
+                                }
+                            ?>
+                            <li>PHP: <code><?= htmlspecialchars(PHP_VERSION) ?></code>
+                                <?php if ($phpBuild !== ''): ?><span style="color:#888">(build <?= htmlspecialchars($phpBuild) ?>)</span><?php endif; ?></li>
                             <?php
                                 try { $dbVersie = (string) $pdo->query('SELECT VERSION()')->fetchColumn(); }
                                 catch (Throwable $e) { $dbVersie = 'onbekend'; }
