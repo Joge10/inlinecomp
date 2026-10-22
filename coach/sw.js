@@ -26,7 +26,7 @@
 //  maar versie-string maakt 't expliciet + diagnose makkelijk).
 // ============================================================
 
-const SW_VERSIE = 'coach-2026.08.08.001';
+const SW_VERSIE = 'coach-H2989.22.10';
 
 self.addEventListener('install', () => {
     self.skipWaiting();

@@ -14,6 +14,71 @@
 //     en wordt in de changelog genest + gedempt getoond onder de versie.
 //     Triviale copy/typo-fixes komen NERGENS in de changelog — los committen.
 return [
+    // ── Release H2989.22.10 ──────────────────────────────────────────
+    [
+        'versie' => 'H2989.22.10', 'datum' => '22-10-2026', 'onderdelen' => ['public'],
+        'tekst' => [
+            'nl' => '🧭 <b>Nieuwe startpagina</b> — de app opent nu met een overzicht met de tabbladen <i>Wedstrijden</i>, <i>Organisaties</i>, <i>Mijn InlineComp</i> en <i>Instellingen</i>. Wedstrijden staan gegroepeerd (vandaag, deze week, recent bekeken, overige) met een seizoenkeuze, en bij elke wedstrijd zie je de voornamen van je gevolgde rijders die meedoen. Met de terugknop ga je vanuit een wedstrijd weer naar het overzicht.',
+            'en' => '🧭 <b>New start page</b> — the app now opens with an overview with the tabs <i>Competitions</i>, <i>Organisations</i>, <i>My InlineComp</i> and <i>Settings</i>. Competitions are grouped (today, this week, recently viewed, other) with a season selector, and each competition shows the first names of the skaters you follow who take part. The back button takes you from a competition to the overview.',
+            'de' => '🧭 <b>Neue Startseite</b> — die App öffnet jetzt mit einer Übersicht mit den Tabs <i>Wettkämpfe</i>, <i>Organisationen</i>, <i>Mein InlineComp</i> und <i>Einstellungen</i>. Wettkämpfe sind gruppiert (heute, diese Woche, zuletzt angesehen, weitere) mit Saisonauswahl, und bei jedem Wettkampf siehst du die Vornamen der Fahrer, denen du folgst und die teilnehmen. Mit der Zurück-Taste kommst du vom Wettkampf zur Übersicht.',
+            'fr' => '🧭 <b>Nouvelle page d\'accueil</b> — l\'application s\'ouvre désormais sur un aperçu avec les onglets <i>Compétitions</i>, <i>Organisations</i>, <i>Mon InlineComp</i> et <i>Paramètres</i>. Les compétitions sont regroupées (aujourd\'hui, cette semaine, consultées récemment, autres) avec un choix de saison, et chaque compétition affiche les prénoms des patineurs que vous suivez qui y participent. Le bouton retour vous ramène de la compétition à l\'aperçu.',
+        ],
+    ],
+    [
+        'versie' => 'H2989.22.10', 'datum' => '22-10-2026', 'onderdelen' => ['public'],
+        'tekst' => [
+            'nl' => '🏟️ <b>Organisaties en wedstrijdinfo</b> — onder <i>Organisaties</i> zie je de organisaties waar jouw rijders hebben gereden, met per seizoen de agenda. Elke wedstrijd heeft een infopagina met <i>Vereniging</i> (baanindeling, adres, website en een kaart die pas na een klik wordt geladen), het <i>Infobulletin</i> (PDF direct in de app) en de <i>Flyer</i>. Via <i>Open wedstrijd</i> ga je naar programma, heats en uitslagen.',
+            'en' => '🏟️ <b>Organisations and competition info</b> — under <i>Organisations</i> you see the organisations where your skaters have raced, with the calendar per season. Each competition has an info page with <i>Club</i> (track layout, address, website and a map that only loads after a click), the <i>Info bulletin</i> (PDF directly in the app) and the <i>Flyer</i>. <i>Open race</i> takes you to the programme, heats and results.',
+            'de' => '🏟️ <b>Organisationen und Wettkampfinfo</b> — unter <i>Organisationen</i> siehst du die Organisationen, bei denen deine Fahrer gefahren sind, mit dem Kalender pro Saison. Jeder Wettkampf hat eine Infoseite mit <i>Verein</i> (Bahnaufteilung, Adresse, Website und eine Karte, die erst nach einem Klick geladen wird), dem <i>Infobulletin</i> (PDF direkt in der App) und dem <i>Flyer</i>. Über <i>Wettkampf öffnen</i> gelangst du zu Programm, Läufen und Ergebnissen.',
+            'fr' => '🏟️ <b>Organisations et infos de compétition</b> — sous <i>Organisations</i>, vous voyez les organisations où vos patineurs ont couru, avec le calendrier par saison. Chaque compétition a une page d\'infos avec <i>Club</i> (plan de la piste, adresse, site web et une carte qui ne se charge qu\'après un clic), le <i>Bulletin</i> (PDF directement dans l\'application) et l\'<i>Affiche</i>. <i>Ouvrir la course</i> vous mène au programme, aux séries et aux résultats.',
+        ],
+    ],
+    [
+        'versie' => 'H2989.22.10', 'datum' => '22-10-2026', 'onderdelen' => ['public', 'check'],
+        'tekst' => [
+            'nl' => '👤 <b>Mijn InlineComp</b> — het nieuwe tabblad <i>Mijn InlineComp</i> brengt je direct naar je persoonlijke rijderprofiel. Vanuit het profiel kom je met één klik terug in de app.',
+            'en' => '👤 <b>My InlineComp</b> — the new <i>My InlineComp</i> tab takes you straight to your personal skater profile. From the profile, one click brings you back to the app.',
+            'de' => '👤 <b>Mein InlineComp</b> — der neue Tab <i>Mein InlineComp</i> bringt dich direkt zu deinem persönlichen Fahrerprofil. Vom Profil kommst du mit einem Klick zurück in die App.',
+            'fr' => '👤 <b>Mon InlineComp</b> — le nouvel onglet <i>Mon InlineComp</i> vous mène directement à votre profil personnel de patineur. Depuis le profil, un clic vous ramène dans l\'application.',
+        ],
+    ],
+    [
+        'versie' => 'H2989.22.10', 'datum' => '22-10-2026', 'onderdelen' => ['public'],
+        'tekst' => [
+            'nl' => '🔒 <b>Privacy</b> — zoektermen, startnummers en volg-ID\'s gaan niet meer via het webadres mee, zodat ze niet in serverlogboeken terechtkomen. De privacyverklaring is hierop bijgewerkt. Daarnaast is de beveiliging van de weergave van namen en titels verbeterd.',
+            'en' => '🔒 <b>Privacy</b> — search terms, start numbers and follow IDs are no longer sent via the web address, so they do not end up in server logs. The privacy statement has been updated accordingly. The security of how names and titles are displayed has also been improved.',
+            'de' => '🔒 <b>Datenschutz</b> — Suchbegriffe, Startnummern und Folge-IDs werden nicht mehr über die Webadresse übertragen, sodass sie nicht in Serverprotokollen landen. Die Datenschutzerklärung wurde entsprechend aktualisiert. Außerdem wurde die Sicherheit der Anzeige von Namen und Titeln verbessert.',
+            'fr' => '🔒 <b>Confidentialité</b> — les termes de recherche, numéros de départ et identifiants de suivi ne passent plus par l\'adresse web, afin qu\'ils n\'apparaissent pas dans les journaux du serveur. La déclaration de confidentialité a été mise à jour en conséquence. La sécurité de l\'affichage des noms et titres a également été améliorée.',
+        ],
+    ],
+    [
+        'versie' => 'H2989.22.10', 'datum' => '22-10-2026', 'onderdelen' => ['admin'],
+        'tekst' => [
+            'nl' => '🗺️ <b>Baanindeling en vereniging-info</b> — in Beheer → Organisaties → Banen teken je de baanindeling (piste, wegparcours, infield) en vul je adres, website, een beschrijving met opmaak en een foto in. Dit verschijnt op de publieke infopagina van elke wedstrijd op die baan, onder <i>Vereniging</i>. Gebruiken meerdere organisaties dezelfde baan, dan wordt de informatie gedeeld.',
+            'en' => '🗺️ <b>Track layout and club info</b> — in Admin → Organisations → Tracks you draw the track layout (rink, road course, infield) and enter the address, website, a formatted description and a photo. This appears on the public info page of every competition on that track, under <i>Club</i>. If several organisations use the same track, the information is shared.',
+            'de' => '🗺️ <b>Bahnaufteilung und Vereinsinfo</b> — unter Verwaltung → Organisationen → Bahnen zeichnest du die Bahnaufteilung (Piste, Straßenkurs, Innenfeld) und trägst Adresse, Website, eine formatierte Beschreibung und ein Foto ein. Dies erscheint auf der öffentlichen Infoseite jedes Wettkampfs auf dieser Bahn, unter <i>Verein</i>. Nutzen mehrere Organisationen dieselbe Bahn, wird die Information geteilt.',
+            'fr' => '🗺️ <b>Plan de la piste et infos du club</b> — dans Gestion → Organisations → Pistes, vous dessinez le plan de la piste (piste, parcours routier, infield) et renseignez l\'adresse, le site web, une description mise en forme et une photo. Cela apparaît sur la page d\'infos publique de chaque compétition sur cette piste, sous <i>Club</i>. Si plusieurs organisations utilisent la même piste, les informations sont partagées.',
+        ],
+    ],
+    [
+        'versie' => 'H2989.22.10', 'datum' => '22-10-2026', 'onderdelen' => ['admin'],
+        'tekst' => [
+            'nl' => '📎 <b>Wedstrijddocumenten</b> — met de 📎-knop bij een wedstrijd voeg je het infobulletin (link of PDF) en een flyer toe. Bezoekers zien ze op de publieke infopagina van de wedstrijd.',
+            'en' => '📎 <b>Competition documents</b> — the 📎 button next to a competition lets you add the info bulletin (link or PDF) and a flyer. Visitors see them on the competition\'s public info page.',
+            'de' => '📎 <b>Wettkampfdokumente</b> — mit der 📎-Taste bei einem Wettkampf fügst du das Infobulletin (Link oder PDF) und einen Flyer hinzu. Besucher sehen sie auf der öffentlichen Infoseite des Wettkampfs.',
+            'fr' => '📎 <b>Documents de compétition</b> — le bouton 📎 à côté d\'une compétition permet d\'ajouter le bulletin d\'info (lien ou PDF) et un flyer. Les visiteurs les voient sur la page d\'infos publique de la compétition.',
+        ],
+    ],
+    [
+        'versie' => 'H2989.22.10', 'datum' => '22-10-2026', 'onderdelen' => ['admin'],
+        'tekst' => [
+            'nl' => '🔧 <b>Kleine verbeteringen</b> — Info → Versie toont voor owners en admins de PHP-versie (met builddatum) en de databaseversie. De update-mail aan beheerders heeft een nette opmaak, is gegroepeerd per onderdeel, en bij opnieuw versturen kun je een reden opgeven.',
+            'en' => '🔧 <b>Small improvements</b> — Info → Version shows owners and admins the PHP version (with build date) and the database version. The update mail to administrators has a clean layout, is grouped per section, and when resending you can give a reason.',
+            'de' => '🔧 <b>Kleine Verbesserungen</b> — Info → Version zeigt Ownern und Admins die PHP-Version (mit Build-Datum) und die Datenbankversion. Die Update-Mail an Administratoren ist sauber formatiert, nach Bereichen gruppiert, und beim erneuten Senden kannst du einen Grund angeben.',
+            'fr' => '🔧 <b>Petites améliorations</b> — Info → Version affiche aux owners et admins la version de PHP (avec date de compilation) et la version de la base de données. Le mail de mise à jour aux administrateurs a une mise en page soignée, est groupé par section, et lors d\'un renvoi vous pouvez indiquer une raison.',
+        ],
+    ],
+
     // ── Release H2160.18.09 ────────────────────────────────────────────────
     [
         'versie' => 'H2160.18.09', 'datum' => '18-09-2026', 'onderdelen' => ['public', 'coach', 'check'],

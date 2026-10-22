@@ -8,7 +8,7 @@
 //  toch waardeloos.
 // ============================================================
 
-const SW_VERSIE = 'public-2026.09.23.001';
+const SW_VERSIE = 'public-H2989.22.10';
 
 self.addEventListener('install', () => {
     self.skipWaiting();

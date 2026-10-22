@@ -8,7 +8,7 @@
 //  cache komt). Altijd vers.
 // ============================================================
 
-const SW_VERSIE = 'jury-2026.05.27.001';
+const SW_VERSIE = 'jury-H2989.22.10';
 
 self.addEventListener('install', () => {
     self.skipWaiting();
