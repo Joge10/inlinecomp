@@ -15,8 +15,8 @@ header('Pragma: no-cache');
 $ORG_NAAM   = 'InlineComp';                 // TODO: aanpassen naar jouw vereniging / beheerder
 $ORG_EMAIL  = 'inlinecomp@devriesen.com';   // TODO: e-mailadres voor verzoeken
 $ORG_ADRES  = '';                           // TODO: eventueel postadres
-$LAATSTE_UPDATE_NL = '6 oktober 2026';
-$LAATSTE_UPDATE_EN = '6 October 2026';
+$LAATSTE_UPDATE_NL = '23 oktober 2026';
+$LAATSTE_UPDATE_EN = '23 October 2026';
 ?><!DOCTYPE html>
 <html lang="nl">
 <head>
@@ -93,9 +93,9 @@ staat hieronder — bij twijfel geldt die volledige tekst.</em></p>
     <li>Voor het digitaliseren van oude papieren uitslagen en voor het vertalen van
         mededelingen gebruiken we soms AI (Anthropic Claude, een Amerikaans bedrijf)
         — met de wettelijk vereiste waarborgen.</li>
-    <li>Onze website draait bij een hostingpartij in het Verenigd Koninkrijk;
-        technische bezoekgegevens (zoals IP-adres) worden daar kort bewaard voor
-        beveiliging.</li>
+    <li>Onze website draait bij een hostingpartij in het Verenigd Koninkrijk.
+        Technische bezoekgegevens (zoals IP-adres) bewaren wij zelf niet; de
+        hostingpartij bewaart ze voor beveiliging doorgaans 30 dagen, uiterlijk 60 dagen.</li>
     <li>Je kunt altijd opvragen welke gegevens we van je hebben, ze laten corrigeren,
         of vragen om verwijdering (waarbij we je naam vervangen door “Verwijderd” zodat
         de wedstrijdhistorie blijft kloppen).</li>
@@ -200,7 +200,8 @@ de rijder aan wedstrijden heeft deelgenomen — er komt <strong>geen nieuwe info
         bekend is (zie §1) — niet aan het KNSB-licentienummer.</li>
 </ul>
 <p>Wij bewaren <strong>geen e-mailadres</strong> bij het profiel. Een aanvraag verloopt via een
-formulier aan ons. Je e-mailadres bewaren wij daarbij alleen <strong>tijdelijk</strong> —
+formulier aan ons. Wij maken het profiel pas aan als vaststaat dat de aanvrager de rijder is
+of, bij een minderjarige, de ouder/verzorger (zie §10). Je e-mailadres bewaren wij daarbij alleen <strong>tijdelijk</strong> —
 tot de aanvraag is goedgekeurd of afgewezen — om je een ontvangstbevestiging en (bij goedkeuring)
 de aanmaaklink te sturen; daarna verwijderen wij het e-mailadres. Het wordt niet aan het profiel
 zelf gekoppeld. Het profiel is <strong>privé</strong>:
@@ -218,7 +219,7 @@ archief (zie §7).</p>
 <p>Een rijder kan ervoor kiezen <strong>publiek anoniem</strong> te zijn; bij jeugd regelt
 de ouder/verzorger dat. Wij tonen dan op de openbare pagina's <strong>“Anoniem”</strong> in
 plaats van je naam, vereniging en woonplaats, en we verbergen ook je <strong>startnummer</strong>
-(dat is in Nederland meerjarig vast, dus zichtbaar laten zou je alsnog herleidbaar maken). De
+(je houdt het jarenlang binnen je categoriegroep — bij de jeugd van pupil tot en met junioren B — en samen met de categorie wijst het vrijwel altijd één rijder aan, dus zichtbaar laten zou je alsnog herleidbaar maken). De
 gegevens zelf blijven bij ons bewaard — het is uitsluitend een <strong>weergave-keuze</strong> en
 volledig omkeerbaar.</p>
 <ul>
@@ -229,10 +230,14 @@ volledig omkeerbaar.</p>
         zelf: gedurende het evenement is inzichtelijk wie deelneemt en wat de resultaten zijn, wat
         past bij een eerlijk en transparant wedstrijdverloop. Buiten dit venster, en in het
         permanente uitslag- en serie-klassement-archief, blijf je anoniem. In de publieke
-        zoekfunctie ben je bovendien nooit op naam te vinden.</li>
+        zoekfunctie ben je bovendien nooit op naam te vinden. Let op: wie tijdens dit venster een
+        kopie van de pagina maakt, heeft daarmee je naam, startnummer en categorie. Publiek anoniem
+        geldt voor wat wij daarna tonen, niet voor kopieën die eerder door anderen zijn gemaakt.</li>
     <li><strong>Zelf instellen</strong>: via je persoonlijke profiel “Mijn InlineComp” (§1d), of
         — zonder profiel — door ons te mailen; wij zetten de keuze voor je
-        (en kunnen 'm op jouw verzoek weer opheffen).</li>
+        (en kunnen 'm op jouw verzoek weer opheffen). Een verzoek per mail voeren wij pas uit als
+        vaststaat dat het van de rijder komt of, bij een minderjarige, van de ouder/verzorger
+        (zie §10).</li>
     <li><strong>Gericht laten volgen</strong>: wie jou tóch wil volgen (bijvoorbeeld een ouder of
         coach) kan dat met een <strong>persoonlijk, geheim volg-ID</strong> dat je zelf deelt;
         alleen wie dat ID heeft, ziet je naam. Je kunt dit volg-ID op elk moment vernieuwen,
@@ -348,7 +353,10 @@ en bieden wij de mogelijkheid om de naam publiek af te schermen (§1e).</p>
     <li><strong>Publiek (uitslagen)</strong>: namen, verenigingen, startnummers
         en eindtijden worden openbaar gepubliceerd op onze uitslagpagina, zoals
         gangbaar in de sport — behalve van rijders die voor <strong>publiek
-        anoniem</strong> hebben gekozen; die tonen wij als “Anoniem” (zie §1e).</li>
+        anoniem</strong> hebben gekozen; die tonen wij als “Anoniem” (zie §1e).
+        Gepubliceerde uitslagen blijven publiek zichtbaar zolang de wedstrijd openbaar
+        staat; een vaste termijn is er (nog) niet. Wil je niet met naam zichtbaar blijven,
+        dan kun je kiezen voor publiek anoniem (§1e) of verwijdering (§9).</li>
     <li><strong>AI-dienstverlener (Anthropic)</strong>: zie §5b voor uitleg.</li>
     <li><strong>Push-diensten (Google/Mozilla/Apple)</strong>: uitsluitend voor het
         bezorgen van pushmeldingen die je zelf hebt aangezet — zie §1c.</li>
@@ -401,10 +409,11 @@ Claude</strong> aan via hun API:</p>
 
 <h2>5c. Serverlogbestanden &amp; Hosting</h2>
 <p>Onze website wordt gehost door <strong>iFastNet Ltd</strong> (Verenigd Koninkrijk).
-Wanneer je onze website bezoekt, slaat de webserver automatisch technische informatie op
+Met iFastNet hebben wij een verwerkersovereenkomst (art. 28 AVG); de server en de back-ups
+staan in het Verenigd Koninkrijk. Wanneer je onze website bezoekt, slaat de webserver automatisch technische informatie op
 in serverlogbestanden (Raw Access Logs). Dit omvat onder andere je IP-adres, browsertype,
 de opgevraagde pagina en de datum/tijd van het bezoek.</p>
-<p>De publieke app vraagt gegevens op via parameters in de URL. In de serverlogbestanden
+<p>De publieke app en de coach-app vragen gegevens op via parameters in de URL. In de serverlogbestanden
 komen daardoor ook technische identifiers voor, zoals een wedstrijd-ID of een intern
 rijder-ID (zie §1g). Dit zijn interne nummers zonder naam. Zoektermen, startnummers, je
 persoonlijke <strong>volg-token</strong> en KNSB-licentienummers sturen wij bewust niet via
@@ -418,10 +427,14 @@ de URL mee. Wij analyseren deze logs niet en gebruiken ze niet voor profilering 
         waarborgen (zoals SCC's), op basis van het adequaatheidsbesluit van de Europese
         Commissie voor het Verenigd Koninkrijk (laatst verlengd tot december 2031). De
         VK-locatie is geverifieerd via het RIPE-netwerkregister.</li>
-    <li><strong>Bewaartermijn</strong>: de ruwe serverlogs worden na de dagelijkse
-        verwerking door het hostingsysteem verwijderd, doorgaans binnen 24 uur; wij
-        archiveren ze niet. Alleen bij een concreet beveiligingsincident bewaren wij de
-        relevante logregels langer, zolang dat voor het onderzoek nodig is.</li>
+    <li><strong>Bewaartermijn</strong>: de kopie van de serverlogs in ons eigen
+        hostingaccount wordt na de dagelijkse verwerking verwijderd, doorgaans binnen 24 uur;
+        wij archiveren ze niet. Daarnaast bewaart onze hostingprovider iFastNet de serverlogs
+        (IP-adres, browser, opgevraagde pagina, datum/tijd) op serverniveau voor
+        netwerkbeveiliging en het tegengaan van misbruik. Die logs worden doorlopend vervangen en
+        doorgaans na 30 dagen, uiterlijk na 60 dagen definitief verwijderd, tenzij een wettelijk
+        bevel (bijvoorbeeld van justitie) langere bewaring vereist. Alleen bij een concreet beveiligingsincident bewaren wij zelf de relevante logregels
+        langer, zolang dat voor het onderzoek nodig is.</li>
     <li>Deze logs worden niet gekoppeld aan een gebruikersaccount en niet gebruikt voor
         tracking — zie ook de “Anonieme bezoek-statistieken” op de publieke pagina, die
         los hiervan géén IP-adressen bewaren.</li>
@@ -455,8 +468,8 @@ brute-force-aanvallen te detecteren.</p>
 </ul>
 
 <h2>6. Waar staan de gegevens?</h2>
-<p>Al onze wedstrijd-, account- en technische gegevens (§1, §1b, §1c, §5c) staan op
-dezelfde webserver bij onze hostingprovider <strong>iFastNet Ltd in het Verenigd
+<p>Al onze wedstrijd-, account- en technische gegevens (§1, §1b, §1c, §5c), inclusief
+back-ups, staan op dezelfde webserver bij onze hostingprovider <strong>iFastNet Ltd in het Verenigd
 Koninkrijk</strong>. Toegang is beperkt tot beheerders van
 <?= htmlspecialchars($ORG_NAAM) ?> via wachtwoord-beveiligde accounts.</p>
 <p>Eén uitzondering: <strong>AI-verwerking</strong> (zie §5b) gebeurt op servers van
@@ -475,6 +488,9 @@ ze zijn verzameld:</p>
         overige persoonsgegevens (inclusief de licentie-koppeling), zodat alleen
         het naamloze resultaat onder dat interne ID overblijft, dat alleen in ons
         eigen systeem betekenis heeft (zie §9).</li>
+    <li><strong>Publieke zichtbaarheid van uitslagen</strong>: zolang de wedstrijd openbaar
+        staat, zonder vaste termijn (nog) — zie §5. Dit staat los van hoe lang wij de gegevens
+        bewaren.</li>
     <li><strong>Login-gegevens van beheerders</strong>: zo lang het account
         actief is; uiterlijk 12 maanden na laatste login worden inactieve
         accounts verwijderd.</li>
@@ -483,15 +499,16 @@ ze zijn verzameld:</p>
         30 dagen voor abuse-monitoring, niet gebruikt voor training).</li>
     <li><strong>Push-abonnementen</strong>: zolang je de meldingen aan hebt
         staan; ze worden verwijderd zodra je ze uitzet of het abonnement verloopt.</li>
-    <li><strong>Serverlogbestanden</strong>: doorgaans binnen 24 uur verwijderd (niet
-        gearchiveerd), tenzij langer nodig voor een concreet beveiligingsincident — zie §5c.</li>
+    <li><strong>Serverlogbestanden</strong>: de kopie in ons eigen hostingaccount doorgaans
+        binnen 24 uur verwijderd (niet gearchiveerd); bij de hostingprovider doorgaans 30, uiterlijk 60 dagen;
+        langer alleen bij een concreet beveiligingsincident — zie §5c.</li>
     <li><strong>Login-logboek (beheer/coach/jury)</strong>: 30 dagen — zie §5d.</li>
     <li><strong>Coach-accounts</strong>: zolang het account bestaat; je kunt het zelf
         verwijderen en het vervalt automatisch na één jaar zonder inloggen — zie §1b.</li>
-    <li><strong>Persoonlijk profiel ("Mijn InlineComp")</strong>: gebruikersnaam en
-        versleutelde pincode blijven bewaard zolang het profiel bestaat; het wordt op verzoek
-        van de rijder of door ons verwijderd. De onderliggende wedstrijduitslagen
-        blijven bestaan als onderdeel van het historisch archief — zie §1d.</li>
+    <li><strong>Persoonlijk profiel ("Mijn InlineComp")</strong>: je gebruikersnaam en
+        versleutelde pincode bewaren wij zolang je het profiel hebt. Vraag je ons het profiel
+        te verwijderen, dan wissen wij beide. Je wedstrijduitslagen blijven daarbij bestaan
+        als onderdeel van het historisch archief — zie §1d.</li>
     <li><strong>Publiek-anoniem-keuze</strong>: de voorkeur (en het bijbehorende volg-ID)
         blijft bewaard zolang die geldt; je kunt 'm zelf of via ons weer opheffen — zie §1e.</li>
 </ul>
@@ -530,7 +547,9 @@ ze zijn verzameld:</p>
         genomen pseudonimisering: wij zorgen ervoor dat de resterende
         sporttechnische gegevens redelijkerwijs niet meer tot jou als persoon
         herleidbaar zijn, ook niet in combinatie met een externe
-        ledendatabase.</li>
+        ledendatabase. Uitslagen die elders zijn gepubliceerd, bijvoorbeeld
+        door de KNSB, de organisator of de pers, vallen buiten ons bereik en
+        blijven daar staan.</li>
     <li><strong>Bezwaar en beperking</strong> — je kunt bezwaar maken tegen
         de verwerking (inclusief de AI-verwerking uit §5b) of vragen om
         tijdelijke beperking. Wil je niet uit de uitslagen verdwijnen maar wél
@@ -554,7 +573,9 @@ ze zijn verzameld:</p>
     </p>
     <p>Wij reageren binnen vier weken op jouw verzoek. Om misbruik te voorkomen
         kunnen wij je vragen je identiteit aan te tonen, bijvoorbeeld door in te loggen
-        op je persoonlijk profiel of via bevestiging door je vereniging.</p>
+        op je persoonlijk profiel, via een e-mailadres of telefoonnummer dat wij al van je
+        kennen, met je KNSB-relatienummer (bijvoorbeeld een schermafbeelding uit Mijn KNSB),
+        of persoonlijk bij een volgende wedstrijd.</p>
 </div>
 
 <h2>11. Wijzigingen in deze verklaring</h2>
@@ -609,8 +630,9 @@ case of doubt, that full text applies.</em></p>
         follow-ID that you share yourself.</li>
     <li>For digitising old paper results and translating announcements, we sometimes use
         AI (Anthropic Claude, a US company) — with the legally required safeguards in place.</li>
-    <li>Our website runs with a hosting provider in the United Kingdom; technical visit
-        data (such as IP address) is briefly retained there for security purposes.</li>
+    <li>Our website runs with a hosting provider in the United Kingdom. We do not keep
+        technical visit data (such as IP address) ourselves; the hosting provider keeps it
+        for security purposes, usually for 30 days and for no more than 60 days.</li>
     <li>You can always ask what data we hold about you, have it corrected, or request
         deletion (in which case we replace your name with “Removed” so the competition
         history stays intact).</li>
@@ -711,7 +733,8 @@ hold because the skater took part in competitions — <strong>no new information
         our system (see §1) — not to the KNSB licence number.</li>
 </ul>
 <p>We store <strong>no e-mail address</strong> with the profile. A request is made via a form to
-us. We keep your e-mail address only <strong>temporarily</strong> for this — until
+us. We only create the profile once it is established that the requester is the skater or, for
+a minor, the parent/guardian (see §10). We keep your e-mail address only <strong>temporarily</strong> for this — until
 the request is approved or rejected — to send you an acknowledgement and (on approval) the
 activation link; after that we delete the e-mail address. It is not linked to the profile itself. The profile is <strong>private</strong>: it is visible only
 after logging in with a username and PIN, is not indexed by search engines, and the data is
@@ -727,8 +750,9 @@ us; the underlying competition results remain as part of the sport-historical ar
 <p>A skater can choose to be <strong>publicly anonymous</strong>; for youth, the
 parent/guardian arranges this. On the public pages we then show <strong>“Anonymous”</strong>
 instead of the name, club and place of residence, and we also hide the <strong>start number</strong>
-(in the Netherlands it stays the same for years, so leaving it visible would still make you
-identifiable). The data itself is retained — it is purely a <strong>display choice</strong> and
+(you keep it for years within your category group — for youth, from pupil up to junior B — and
+together with the category it almost always points to a single skater, so leaving it visible would
+still make you identifiable). The data itself is retained — it is purely a <strong>display choice</strong> and
 fully reversible.</p>
 <ul>
     <li><strong>Around the competition day</strong> (from the day before through the day after) we
@@ -738,10 +762,14 @@ fully reversible.</p>
         itself: during the event it is apparent who is taking part and what the results are,
         consistent with a fair and transparent competition. Outside this window, and in the
         permanent results and series-standings archive, you remain anonymous. In the public
-        search you are never findable by name.</li>
+        search you are never findable by name. Please note: anyone who makes a copy of the page
+        during this window has your name, start number and category. Public anonymity applies to
+        what we show afterwards, not to copies made earlier by others.</li>
     <li><strong>Setting it yourself</strong>: via your personal “My InlineComp” profile (§1d), or
         — without a profile — by e-mailing us, and we set the choice for you
-        (and can lift it again at your request).</li>
+        (and can lift it again at your request). We only act on a request by e-mail once it is
+        established that it comes from the skater or, for a minor, from the parent/guardian
+        (see §10).</li>
     <li><strong>Letting specific people follow you</strong>: someone who still wants to follow you
         (for example a parent or coach) can do so with a <strong>personal, secret follow-ID</strong>
         that you share yourself; only someone with that ID sees your name. You can renew this
@@ -852,7 +880,10 @@ GDPR) additionally applies as the legal basis — see sections 1b and 1c.</p>
     <li><strong>The public (results)</strong>: names, clubs, start numbers
         and finishing times are published on our public results page, as is
         customary in the sport — except for skaters who have chosen to be
-        <strong>publicly anonymous</strong>, who are shown as “Anonymous” (see §1e).</li>
+        <strong>publicly anonymous</strong>, who are shown as “Anonymous” (see §1e).
+        Published results remain publicly visible for as long as the competition is set to
+        public; there is no fixed period (yet). If you do not want to remain visible by name,
+        you can choose public anonymity (§1e) or erasure (§9).</li>
     <li><strong>AI provider (Anthropic)</strong>: see §5b for details.</li>
     <li><strong>Push services (Google/Mozilla/Apple)</strong>: solely to deliver
         push notifications you enabled yourself — see §1c.</li>
@@ -900,11 +931,13 @@ GDPR) additionally applies as the legal basis — see sections 1b and 1c.</p>
 </ul>
 
 <h2>5c. Server logs &amp; Hosting</h2>
-<p>Our website is hosted by <strong>iFastNet Ltd</strong> (United Kingdom). When you visit
+<p>Our website is hosted by <strong>iFastNet Ltd</strong> (United Kingdom). We have a data
+processing agreement with iFastNet (Article 28 GDPR); the server and the backups are located in
+the United Kingdom. When you visit
 our website, the web server automatically stores technical information in server log files
 (Raw Access Logs). This includes your IP address, browser type, the page requested, and the
 date/time of the visit.</p>
-<p>The public app requests data using URL parameters. As a result, the server log files also
+<p>The public app and the coach app request data using URL parameters. As a result, the server log files also
 contain technical identifiers, such as a competition ID or an internal skater ID (see §1g).
 These are internal numbers without a name. Search terms, start numbers, your personal
 <strong>follow token</strong> and KNSB licence numbers are deliberately not sent via the URL.
@@ -918,10 +951,15 @@ We do not analyse these logs and do not use them for profiling or tracking.</p>
         on the basis of the European Commission's adequacy decision for the United Kingdom (last
         renewed until December 2031). The UK location has been verified via the RIPE network
         registry.</li>
-    <li><strong>Retention period</strong>: the raw server logs are deleted after daily
-        processing by the hosting system, usually within 24 hours; we do not archive them.
-        Only in the case of a specific security incident do we retain the relevant log lines
-        for longer, for as long as the investigation requires.</li>
+    <li><strong>Retention period</strong>: the copy of the server logs in our own hosting
+        account is deleted after daily processing, usually within 24 hours; we do not archive
+        them. In addition, our hosting provider iFastNet keeps the server logs (IP address,
+        browser, requested page, date/time) at server level for network security and abuse
+        prevention. These logs are rotated continuously and permanently deleted, usually after
+        30 days and at the latest after 60 days, unless a legal order (for example from law
+        enforcement) requires longer retention. Only in the case of a specific security
+        incident do we retain the relevant log lines ourselves for longer, for as long as the
+        investigation requires.</li>
     <li>These logs are not linked to a user account and are not used for tracking — see also the
         “anonymous visit statistics” on the public page, which separately store no IP addresses.</li>
 </ul>
@@ -950,8 +988,8 @@ sign-in attempts are also logged, to detect abuse and brute-force attacks.</p>
 </ul>
 
 <h2>6. Where is the data stored?</h2>
-<p>All our competition, account and technical data (sections 1, 1b, 1c, 5c) is stored on the
-same web server at our hosting provider, <strong>iFastNet Ltd in the United Kingdom</strong>.
+<p>All our competition, account and technical data (sections 1, 1b, 1c, 5c), including
+backups, is stored on the same web server at our hosting provider, <strong>iFastNet Ltd in the United Kingdom</strong>.
 Access is limited to administrators of <?= htmlspecialchars($ORG_NAAM) ?> via
 password-protected accounts.</p>
 <p>One exception: <strong>AI processing</strong> (see §5b) takes place on Anthropic's servers
@@ -969,6 +1007,9 @@ for which it was collected:</p>
         personal data (including the licence link) so that only the nameless
         result under that internal ID remains, which only has meaning within our
         own system (see §9).</li>
+    <li><strong>Public visibility of results</strong>: for as long as the competition is set
+        to public, without a fixed period (yet) — see §5. This is separate from how long we
+        retain the data.</li>
     <li><strong>Administrator login data</strong>: as long as the account is
         active; inactive accounts are removed no later than 12 months after
         last login.</li>
@@ -977,14 +1018,15 @@ for which it was collected:</p>
         abuse-monitoring, not used for training).</li>
     <li><strong>Push subscriptions</strong>: as long as you keep notifications
         enabled; they are deleted as soon as you turn them off or the subscription expires.</li>
-    <li><strong>Server log files</strong>: usually deleted within 24 hours (not archived),
-        unless needed longer for a specific security incident — see section 5c.</li>
+    <li><strong>Server log files</strong>: the copy in our own hosting account is usually
+        deleted within 24 hours (not archived); at the hosting provider usually 30, at most 60 days;
+        longer only for a specific security incident — see section 5c.</li>
     <li><strong>Login log (admin/coach/jury)</strong>: 30 days — see section 5d.</li>
     <li><strong>Coach accounts</strong>: for as long as the account exists; you can delete it
         yourself and it expires automatically after one year without login — see section 1b.</li>
-    <li><strong>Personal profile ("My InlineComp")</strong>: the username and encrypted PIN are
-        kept for as long as the profile exists; it is deleted at the skater's request or by
-        us. The underlying competition results remain as part of the historical archive
+    <li><strong>Personal profile ("My InlineComp")</strong>: we keep your username and
+        encrypted PIN for as long as you have the profile. If you ask us to delete the profile,
+        we erase both. Your competition results remain as part of the historical archive
         — see section 1d.</li>
     <li><strong>Publicly-anonymous choice</strong>: the preference (and its follow-ID) is kept for
         as long as it applies; you can lift it yourself or via us — see section 1e.</li>
@@ -1022,7 +1064,9 @@ for which it was collected:</p>
         own system. Strictly speaking this is pseudonymisation: we ensure that
         the remaining sport-technical data can no longer reasonably be traced
         back to you as an individual, not even in combination with an external
-        membership database.</li>
+        membership database. Results published elsewhere, for example by the
+        KNSB, the organiser or the press, are outside our control and remain
+        there.</li>
     <li><strong>Objection and restriction</strong> — you may object to the
         processing (including the AI processing in §5b) or request
         temporary restriction. If you don't want to disappear from the results
@@ -1047,7 +1091,9 @@ for which it was collected:</p>
     </p>
     <p>We respond to your request within four weeks. To prevent abuse we
         may ask you to prove your identity, for example by logging in to your personal
-        profile or through confirmation by your club.</p>
+        profile, via an e-mail address or phone number we already know for you, with your
+        KNSB membership number (for example a screenshot from Mijn KNSB), or in person at
+        a next competition.</p>
 </div>
 
 <h2>11. Changes to this statement</h2>
