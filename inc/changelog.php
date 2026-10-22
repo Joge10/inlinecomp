@@ -88,6 +88,17 @@ return [
         ],
     ],
 
+    // ── Patch 22-10-2026 (onder H2989.22.10, zelf-gehoste libs + open-source-overzicht, alleen Beheer) ──
+    [
+        'versie' => 'H2989.22.10', 'datum' => '22-10-2026',
+        'soort'  => 'patch', 'onderdelen' => ['patch'],
+        'tekst' => [
+            'nl' => '🔒 <b>Geen externe scripts meer in Beheer</b> — de bibliotheken voor PDF- en ZIP-export (html2pdf.js en JSZip) staan nu op onze eigen server in plaats van bij een externe CDN (Cloudflare), zodat bij het openen van Beheer geen IP-adres meer naar derden gaat. Onder Info → Versie staat een overzicht van de gebruikte open-source software met licenties.',
+            'en' => '🔒 <b>No more external scripts in Admin</b> — the libraries for PDF and ZIP export (html2pdf.js and JSZip) are now hosted on our own server instead of an external CDN (Cloudflare), so opening Admin no longer sends an IP address to third parties. Info → Version now lists the open-source software used, with licences.',
+            'de' => '🔒 <b>Keine externen Skripte mehr in der Verwaltung</b> — die Bibliotheken für PDF- und ZIP-Export (html2pdf.js und JSZip) liegen jetzt auf unserem eigenen Server statt bei einem externen CDN (Cloudflare), sodass beim Öffnen der Verwaltung keine IP-Adresse mehr an Dritte geht. Unter Info → Version steht eine Übersicht der verwendeten Open-Source-Software mit Lizenzen.',
+            'fr' => '🔒 <b>Plus de scripts externes dans la gestion</b> — les bibliothèques d\'export PDF et ZIP (html2pdf.js et JSZip) sont désormais hébergées sur notre propre serveur au lieu d\'un CDN externe (Cloudflare), de sorte que l\'ouverture de la gestion n\'envoie plus d\'adresse IP à des tiers. Info → Version présente la liste des logiciels open source utilisés, avec leurs licences.',
+        ],
+    ],
     // ── Patch 22-10-2026 (onder H2989.22.10, wachtwoorden + logboek, alleen Beheer) ──
     [
         'versie' => 'H2989.22.10', 'datum' => '22-10-2026',

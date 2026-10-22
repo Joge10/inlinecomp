@@ -1858,7 +1858,7 @@ select:focus, input:focus { border-color: var(--middenblauw); outline: none; }
 }
 /* Wedstrijd-docs renderen (fase 5b-content):
    - Infobulletin: PDF.js canvas-rendering (werkt mobile én desktop,
-     geen 3rd-party privacy-leak — alleen de lib komt van cdnjs).
+     geen 3rd-party privacy-leak — de lib is zelf gehost in assets/vendor/pdfjs/).
      Fallback-tegel bij CORS of lade-fout.
    - Flyer: afbeelding inline. */
 /* Zoom-knopbar bovenaan de PDF-container — sticky zodat de controls bij

@@ -29,8 +29,9 @@ if (is_array($eigenScope) && !empty($eigenScope)) {
     <link rel="icon" type="image/svg+xml" href="favicon.svg">
     <link rel="stylesheet" href="css/style.css">
     <link rel="stylesheet" href="css/wizard.css">
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js" defer></script>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js" defer></script>
+    <?php /* Zelf gehost (geen IP naar Cloudflare); bron: cdnjs, SRI-gecontroleerd 22-10-2026. Zie inc/open_source.php. */ ?>
+    <script src="assets/vendor/html2pdf/html2pdf.bundle.min.js" defer></script>
+    <script src="assets/vendor/jszip/jszip.min.js" defer></script>
 </head>
 <body>
 
@@ -739,6 +740,48 @@ if (is_array($eigenScope) && !empty($eigenScope)) {
                         <button type="button" class="btn-primary" id="btn-update-mail" disabled>
                             📧 Beheerders informeren
                         </button>
+                    </div>
+
+                    <?php
+                        // Gebruikte open-source software. Namen/licenties voor iedereen;
+                        // versienummers alleen owner/admin (zelfde reden als de PHP-versie).
+                        require_once __DIR__ . '/inc/open_source.php';
+                        $__oss      = openSourceLijst();
+                        $__ossVers  = in_array($gebruiker['role'] ?? '', ['owner', 'admin'], true);
+                        $__ossNaam  = function (array $p): string {
+                            $n = htmlspecialchars($p['naam']);
+                            return $p['url'] !== ''
+                                ? '<a href="' . htmlspecialchars($p['url']) . '" target="_blank" rel="noopener">' . $n . '</a>'
+                                : $n;
+                        };
+                    ?>
+                    <div class="info-blok info-oss">
+                        <h3>Gebruikte open-source software</h3>
+                        <p>InlineComp is zelf gebouwd, maar maakt dankbaar gebruik van deze open-source
+                           onderdelen. Met dank aan hun makers.</p>
+                        <h4>In de browser</h4>
+                        <table class="info-oss-tabel">
+                            <thead><tr><th>Onderdeel</th><th>Waarvoor</th><th>Licentie</th><?php if ($__ossVers): ?><th>Versie</th><?php endif; ?></tr></thead>
+                            <tbody>
+                            <?php foreach ($__oss['browser'] as $__p): ?>
+                                <tr><td><?= $__ossNaam($__p) ?></td><td><?= htmlspecialchars($__p['waar']) ?></td>
+                                    <td><?= htmlspecialchars($__p['licentie']) ?></td>
+                                    <?php if ($__ossVers): ?><td><code><?= htmlspecialchars($__p['versie'] ?: '—') ?></code></td><?php endif; ?></tr>
+                            <?php endforeach; ?>
+                            </tbody>
+                        </table>
+                        <?php if ($__oss['server']): ?>
+                        <h4>Op de server — pushmeldingen</h4>
+                        <table class="info-oss-tabel">
+                            <thead><tr><th>Pakket</th><th>Licentie</th><?php if ($__ossVers): ?><th>Versie</th><?php endif; ?></tr></thead>
+                            <tbody>
+                            <?php foreach ($__oss['server'] as $__p): ?>
+                                <tr><td><?= $__ossNaam($__p) ?></td><td><?= htmlspecialchars($__p['licentie']) ?></td>
+                                    <?php if ($__ossVers): ?><td><code><?= htmlspecialchars($__p['versie']) ?></code></td><?php endif; ?></tr>
+                            <?php endforeach; ?>
+                            </tbody>
+                        </table>
+                        <?php endif; ?>
                     </div>
                 </div>
 

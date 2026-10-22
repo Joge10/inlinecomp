@@ -7457,3 +7457,9 @@ col.live-col-rondes  { width: 40px; }
 
 /* Info → Versie: grijze toelichting achter een waarde (datum, PHP-build). */
 .info-sub { color: #888; }
+
+/* Info → Versie: gebruikte open-source software (inc/open_source.php) */
+.info-oss h4 { margin: 14px 0 6px; font-size: .92rem; color: var(--blauw); }
+.info-oss-tabel { width: 100%; max-width: 720px; border-collapse: collapse; font-size: .85rem; }
+.info-oss-tabel th { text-align: left; font-weight: 600; color: #555; padding: 4px 8px; border-bottom: 2px solid var(--border); }
+.info-oss-tabel td { padding: 4px 8px; border-bottom: 1px solid var(--border); }
