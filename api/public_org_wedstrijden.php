@@ -35,28 +35,7 @@ if ($action === 'org_wedstrijden') {
                 fn($x) => preg_match('/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i', $x)
             )));
         }
-        // Legacy support: license_keys van pre-GUID-migratie volglijst-items
-        // resolven naar person_ids via person_external_ids. Zonder dit krijgt
-        // een user met legacy-items geen pil-markering op zijn eigen
-        // historische wedstrijden in de agenda.
-        $lkRaw = trim($_GET['license_keys'] ?? '');
-        if ($lkRaw !== '') {
-            $lkeys = array_values(array_unique(array_filter(
-                array_map('trim', explode(',', $lkRaw)),
-                fn($x) => $x !== '' && strlen($x) <= 32
-            )));
-            if ($lkeys) {
-                if (count($lkeys) > 20) $lkeys = array_slice($lkeys, 0, 20);
-                $lph = implode(',', array_fill(0, count($lkeys), '?'));
-                $stmt = $pdo->prepare(
-                    "SELECT person_id FROM person_external_ids
-                     WHERE systeem = 'knsb' AND extern_id IN ($lph)"
-                );
-                $stmt->execute($lkeys);
-                $extra = $stmt->fetchAll(PDO::FETCH_COLUMN, 0);
-                $pids = array_values(array_unique(array_merge($pids, $extra)));
-            }
-        }
+        // Geen KNSB-licentienummers meer via de URL — zie api/public_volglijst_migreer.php.
         if (count($pids) > 20) $pids = array_slice($pids, 0, 20);
 
         if ($pids) {

@@ -88,6 +88,17 @@ return [
         ],
     ],
 
+    // ── Patch 22-10-2026 (onder H2989.22.10, geen licentienummers/zoektermen in URL's, alleen Beheer) ──
+    [
+        'versie' => 'H2989.22.10', 'datum' => '22-10-2026',
+        'soort'  => 'patch', 'onderdelen' => ['patch'],
+        'tekst' => [
+            'nl' => '🔒 <b>Geen licentienummers en zoektermen meer in webadressen</b> — volglijsten van vóór 17 september bevatten nog KNSB-licentienummers, die bij het opvragen in het webadres meegingen en zo in de serverlogs van de hostingprovider belandden. De publieke app zet zo\'n volglijst nu eenmalig en onzichtbaar om naar interne ID\'s; daarna gaat er nergens meer een licentienummer in een webadres mee, en de server negeert ze ook. In de coach-app gaan zoektermen (startnummer, naam, licentie) voortaan in het verzoek zelf mee in plaats van in het webadres.',
+            'en' => '🔒 <b>No more licence numbers and search terms in web addresses</b> — follow lists from before 17 September still contained KNSB licence numbers, which were sent in the web address and so ended up in the hosting provider\'s server logs. The public app now converts such a follow list once and invisibly to internal IDs; after that no licence number is sent in a web address anywhere, and the server ignores them. In the coach app, search terms (start number, name, licence) are now sent in the request itself instead of in the web address.',
+            'de' => '🔒 <b>Keine Lizenznummern und Suchbegriffe mehr in Webadressen</b> — Folgelisten von vor dem 17. September enthielten noch KNSB-Lizenznummern, die beim Abruf in der Webadresse mitgingen und so in den Serverprotokollen des Hosting-Anbieters landeten. Die öffentliche App wandelt eine solche Folgeliste jetzt einmalig und unsichtbar in interne IDs um; danach geht nirgends mehr eine Lizenznummer in einer Webadresse mit, und der Server ignoriert sie. In der Trainer-App werden Suchbegriffe (Startnummer, Name, Lizenz) jetzt in der Anfrage selbst statt in der Webadresse übertragen.',
+            'fr' => '🔒 <b>Plus de numéros de licence ni de termes de recherche dans les adresses web</b> — les listes de suivi d\'avant le 17 septembre contenaient encore des numéros de licence KNSB, envoyés dans l\'adresse web et donc enregistrés dans les journaux du serveur de l\'hébergeur. L\'application publique convertit désormais une telle liste une seule fois et de manière invisible en identifiants internes ; ensuite plus aucun numéro de licence n\'est envoyé dans une adresse web, et le serveur les ignore. Dans l\'application entraîneur, les termes de recherche (numéro de départ, nom, licence) sont désormais envoyés dans la requête elle-même plutôt que dans l\'adresse web.',
+        ],
+    ],
     // ── Patch 22-10-2026 (onder H2989.22.10, zelf-gehoste libs + open-source-overzicht, alleen Beheer) ──
     [
         'versie' => 'H2989.22.10', 'datum' => '22-10-2026',

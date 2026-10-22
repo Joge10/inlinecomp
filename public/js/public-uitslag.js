@@ -540,7 +540,7 @@ function renderResultaat(data, snr, prog) {
             // Alle unieke DC-IDs waar deze rijder in zit — een rijder kan in
             // meerdere categorie-combinaties meedoen (bv. eigen cat + open cat).
             const _dcIdsRes = [...new Set((r.heats || []).map(h => h.distance_combination_id).filter(Boolean))].join(',');
-            const _licRes   = esc(p.license_key ?? '');
+            const _licRes   = esc(_isPersonId(p.license_key) ? p.license_key : '');   // alleen UUID, nooit een licentienummer in de URL
             html += `<div class="tab-content" data-tab="rondes">
                 <div class="ronde-uitslagen-container"
                      data-dc-ids="${esc(_dcIdsRes)}" data-lic="${_licRes}" data-geladen="0">

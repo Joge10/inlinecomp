@@ -53,7 +53,11 @@ if ($action === 'lookup') {
     // beide). De client gebruikt sinds plan URL/log-reductie 2026-10-02
     // overal `person_id=`; `license_key=` blijft als fallback voor oude PWA-
     // JS tot de deprecation-fase afloopt.
-    $token   = trim($_GET['person_id'] ?? '') ?: trim($_GET['license_key'] ?? '');
+    // Alleen een person_id (UUID) via de URL; een KNSB-licentienummer (persoonsgegeven,
+    // zou in de serverlogs belanden) wordt genegeerd. Oude volglijsten: zie
+    // api/public_volglijst_migreer.php.
+    $token   = trim($_GET['person_id'] ?? '');
+    if ($token !== '' && !preg_match('/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i', $token)) $token = '';
     $pid      = '';
     $entitled = false;
     if ($volgTok !== '') {

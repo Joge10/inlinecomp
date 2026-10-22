@@ -27,31 +27,9 @@ if ($action === 'mijn_wedstrijden') {
             fn($x) => preg_match('/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i', $x)
         )));
 
-        // Legacy license_keys resolven naar person_ids via person_external_ids.
-        // Mapping teruggeven zodat de client de pid → naam-hint-resolve ook
-        // voor legacy-items in zijn volglijst kan uitvoeren (anders ⭐-fallback).
+        // Geen KNSB-licentienummers meer via de URL — zie api/public_volglijst_migreer.php.
+        // 'licenses' blijft als leeg object in de response (vorm voor oude app-versies).
         $licenseMap = [];
-        $lkRaw = trim($_GET['license_keys'] ?? '');
-        if ($lkRaw !== '') {
-            $lkeys = array_values(array_unique(array_filter(
-                array_map('trim', explode(',', $lkRaw)),
-                fn($x) => $x !== '' && strlen($x) <= 32
-            )));
-            if ($lkeys) {
-                if (count($lkeys) > 20) $lkeys = array_slice($lkeys, 0, 20);
-                $lph = implode(',', array_fill(0, count($lkeys), '?'));
-                $stmt = $pdo->prepare(
-                    "SELECT extern_id, person_id FROM person_external_ids
-                     WHERE systeem = 'knsb' AND extern_id IN ($lph)"
-                );
-                $stmt->execute($lkeys);
-                foreach ($stmt->fetchAll(PDO::FETCH_ASSOC) as $r) {
-                    $licenseMap[$r['extern_id']] = $r['person_id'];
-                    $ids[] = $r['person_id'];
-                }
-                $ids = array_values(array_unique($ids));
-            }
-        }
 
         if (!$ids) {
             echo json_encode(['wedstrijden' => new stdClass(), 'licenses' => (object)$licenseMap]);

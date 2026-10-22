@@ -183,6 +183,7 @@ selComp.addEventListener('change', async () => {
     _kinderen = [];
     _activeKindIdx = 0;
     if (!selComp.value) return;
+    await (window._volglijstMigratie || null);   // oude volglijst eerst omzetten (zie onderaan)
     const opgeslagen = _loadKidsUitStorage();
     if (!opgeslagen.length) {
         // Lege volglijst: als deze wedstrijd-change het directe gevolg was
@@ -452,7 +453,11 @@ function toonChooserModal(rijen, term, compId) {
             // resolveNaarPersonId() wordt afgehandeld. Beide als `person_id`-
             // param (plan URL/log-reductie 2026-10-02: parameter-naam
             // `license_key` is sinds de GUID-migratie misleidend).
-            const param = `person_id=${encodeURIComponent(pid || lic)}`;
+            // Alleen een echte person_id (UUID) gaat in de URL — nooit een
+            // KNSB-licentienummer (persoonsgegeven; zou in de serverlogs belanden).
+            const idVoorUrl = _isPersonId(pid) ? pid : (_isPersonId(lic) ? lic : null);
+            if (!idVoorUrl) continue;
+            const param = `person_id=${encodeURIComponent(idVoorUrl)}`;
             try {
                 const r = await safeFetch(`?action=lookup&competition_id=${encodeURIComponent(compId)}&${param}`);
                 const d = await r.json();
@@ -803,6 +808,7 @@ async function _laadWedstrijdLijst() {
             // wedstrijd (voornaam-pillen op kaarten). mijn_wedstrijden levert
             // {wedstrijden: {comp_id: pids}, licenses: {lkey: person_id}}
             // alleen voor niet-demo wedstrijden; lege shape als volglijst leeg.
+            await (window._volglijstMigratie || null);
             const vl = _volglijstEndpointParams(_loadKidsUitStorage());
             const [resComps, resMijn] = await Promise.all([
                 safeFetch('?action=competitions' + (DEMO_MODE ? '&demo=1' : '')),
@@ -1088,28 +1094,25 @@ let _wmodalOrgCache = null;      // laatste fetch-response per volglijst-sig
 let _wmodalOrgSig   = null;      // sig = sorted comma-string van person_ids
 let _wmodalAktieveOrg = null;    // momenteel actieve organisatie (voor placeholder-view)
 
-// Volglijst → query-params voor organisaties/org_wedstrijden-endpoints.
-// Haalt person_ids op voor nieuwe items en license_keys als fallback voor
-// legacy pre-GUID-migratie-items (nog niet via wedstrijd-opening passief
-// gemigreerd). Returnt {qs: '&person_ids=…&license_keys=…', sig: '…'} —
-// sig voor cache-matching.
+// Volglijst → query-params voor organisaties/org_wedstrijden/mijn_wedstrijden.
+// Alleen person_ids (UUID). KNSB-licentienummers gaan nooit meer in een URL:
+// oude volglijst-items worden eenmalig via POST omgezet (_migreerLegacyVolglijst,
+// onderaan). Returnt {qs: '&person_ids=…', sig: '…'} — sig voor cache-matching.
 function _volglijstEndpointParams(kinderen) {
-    const pids  = kinderen.map(k => k.person_id).filter(Boolean);
-    const lkeys = kinderen.filter(k => !k.person_id && k.license_key)
-                          .map(k => k.license_key);
+    const pids  = kinderen.map(k => k.person_id).filter(_isPersonId);
     const parts = [];
     if (pids.length)  parts.push('person_ids='  + encodeURIComponent([...pids].sort().join(',')));
-    if (lkeys.length) parts.push('license_keys=' + encodeURIComponent([...lkeys].sort().join(',')));
     return {
         qs:  parts.length ? '&' + parts.join('&') : '',
-        sig: 'p:' + [...pids].sort().join(',') + '|l:' + [...lkeys].sort().join(','),
-        empty: pids.length === 0 && lkeys.length === 0,
+        sig: 'p:' + [...pids].sort().join(','),
+        empty: pids.length === 0,
     };
 }
 
 async function _laadOrganisatieLijst() {
     const container = document.getElementById('wmodal-organisatie-lijst');
     if (!container) return;
+    await (window._volglijstMigratie || null);
     const kinderen = _loadKidsUitStorage();
     if (!kinderen.length) {
         container.innerHTML = `
@@ -1284,11 +1287,12 @@ async function _laadOrgAgenda(orgId) {
     try {
         if (!_orgWedstrijdenCache[orgId]) {
             // Stuur volglijst mee zodat de server per wedstrijd kan markeren
-            // of een eigen rijder meedeed (voornaam-pil in UI). Zowel
-            // person_ids als license_keys (legacy) via _volglijstEndpointParams.
+            // of een eigen rijder meedeed (voornaam-pil in UI). Alleen
+            // person_ids via _volglijstEndpointParams.
             // Klikbaarheid hangt NIET af van eigen rijder — dat is door
             // operator geregeld via public_zichtbaar; eigen-rijder is puur
             // een visuele hint "jij hebt hier gereden".
+            await (window._volglijstMigratie || null);
             const vl  = _volglijstEndpointParams(_loadKidsUitStorage());
             const url = '?action=org_wedstrijden&org_id=' + encodeURIComponent(orgId) + vl.qs;
             const res  = await safeFetch(url);
@@ -2294,20 +2298,24 @@ function _loadKidsUitStorage() {
 async function _fetchKind({ person_id = null, license_key = null, snr = null, volg = null }, compId, gedeeldeProg = null) {
     if (!person_id && !license_key && !snr && !volg) return null;
     // Volg-token eerst (enige sleutel die een anonieme rijder ontsluit), daarna
-    // de stabiele person_id, dan license_key (oude items), tot slot startnummer.
-    // Volg-token én startnummer via POST (plan URL/log-reductie 2026-10-02);
-    // person_id/license_key blijven GET.
+    // de stabiele person_id, tot slot startnummer. Volg-token én startnummer via
+    // POST (plan URL/log-reductie 2026-10-02); alleen een echte person_id (UUID)
+    // gaat via GET. `license_key` bevat bij nieuwe items de person_id (alias van
+    // de server); een échte KNSB-licentie (oud item) gaat nooit in de URL.
+    const pidVoorUrl = _isPersonId(person_id) ? person_id
+                     : (_isPersonId(license_key) ? license_key : null);
     const lookupUrl = `?action=lookup&competition_id=${encodeURIComponent(compId)}`;
     const bodyParam = volg ? { volg }
-                    : (!person_id && !license_key && snr) ? { startnummer: snr }
+                    : (!pidVoorUrl && snr) ? { startnummer: snr }
                     : null;
+    if (!bodyParam && !pidVoorUrl) return null;   // oud item, nog niet omgezet
     const lookupPromise = bodyParam
         ? safeFetch(lookupUrl, {
             method:  'POST',
             headers: { 'Content-Type': 'application/json' },
             body:    JSON.stringify(bodyParam),
           })
-        : safeFetch(lookupUrl + `&person_id=${encodeURIComponent(person_id || license_key)}`);
+        : safeFetch(lookupUrl + `&person_id=${encodeURIComponent(pidVoorUrl)}`);
     const [lookupRes, progRes] = await Promise.all([
         lookupPromise,
         gedeeldeProg
@@ -2542,3 +2550,41 @@ function toonStatusModal(license) {
     document.body.appendChild(overlay);
 }
 
+
+// ── Eenmalige omzetting oude volglijst (licentienummer → person_id) ──────────
+// Volglijsten van vóór de GUID-migratie (17-09-2026) bevatten nog KNSB-
+// licentienummers. Die gaan één keer via POST (in de body, dus niet in de URL
+// en niet in de serverlogs van de hostingprovider) naar de server; daarna
+// bewaart de browser alleen person_id's. Items die niet om te zetten zijn
+// (onbekend, verwijderd of publiek anoniem) vallen uit de lijst. Mislukt het
+// verzoek (offline), dan blijft de lijst staan en volgt een nieuwe poging bij
+// de volgende start; tot die tijd worden die items nergens meegestuurd.
+function _isPersonId(x) {
+    return typeof x === 'string' && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(x);
+}
+async function _migreerLegacyVolglijst() {
+    const lijst = _loadKidsUitStorage();
+    const isOud = it => !_isPersonId(it.person_id) && !it.volg && it.license_key && !_isPersonId(it.license_key);
+    const oud = lijst.filter(isOud);
+    if (!oud.length) return;
+    try {
+        const r = await safeFetch('?action=volglijst_migreer', {
+            method:  'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body:    JSON.stringify({ license_keys: oud.map(it => it.license_key).slice(0, 20) }),
+        });
+        if (!r.ok) return;
+        const map = (await r.json())?.map || {};
+        const nieuw = lijst
+            .map(it => {
+                if (!isOud(it)) return it;
+                const pid = map[it.license_key];
+                // license_key krijgt de person_id, net als bij nieuwe items (server-alias).
+                return pid ? { ...it, person_id: pid, license_key: pid } : null;
+            })
+            .filter(Boolean);
+        localStorage.setItem(KIDS_LS_KEY, JSON.stringify(nieuw));
+        if (typeof _invalideerWedstrijdModalCaches === 'function') _invalideerWedstrijdModalCaches();
+    } catch (e) { /* volgende start opnieuw */ }
+}
+window._volglijstMigratie = _migreerLegacyVolglijst();

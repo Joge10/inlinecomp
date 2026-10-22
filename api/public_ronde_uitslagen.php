@@ -16,7 +16,9 @@ if ($action === 'ronde_uitslagen') {
     // zit. Zonder: alle rondes (admin-preview). license_key-fallback blijft
     // tijdens de deprecation-fase van plan URL/log-reductie 2026-10-02;
     // waarde is al sinds de GUID-migratie een person_id-UUID.
-    $rijderLic = trim($_GET['person_id'] ?? '') ?: trim($_GET['license_key'] ?? '');
+    // Alleen een person_id (UUID); een KNSB-licentienummer in de URL wordt genegeerd.
+    $rijderLic = trim($_GET['person_id'] ?? '');
+    if ($rijderLic !== '' && !preg_match('/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i', $rijderLic)) $rijderLic = '';
     if (!$compId || !$dcId) { echo json_encode(['error' => 'competition_id and dc_id required']); exit; }
 
     try {

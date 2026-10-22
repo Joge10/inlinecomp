@@ -107,7 +107,8 @@ let _huidigStempel = '';
             //   4. clamp kozen_idx als allerlaatste vangnet
             const kindRefreshes = _kinderen.map(async k => {
                 const eerderePersoon = k?.data?.[k.kozen_idx ?? 0]?.persoon;
-                const eerderLic = eerderePersoon?.license_key;
+                // Alleen een echte person_id (UUID) mag in de URL — nooit een licentienummer.
+                const eerderLic = _isPersonId(eerderePersoon?.license_key) ? eerderePersoon.license_key : null;
                 const eerderCat = eerderePersoon?.category;
                 // Plan URL/log-reductie 2026-10-02: person_id blijft GET
                 // (identifier zonder herleidbare waarde, cache-vriendelijk);

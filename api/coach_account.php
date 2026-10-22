@@ -367,12 +367,14 @@ try {
     // ── GET zoek_personen — kandidaten om aan de roster toe te voegen ──────────
     // Zoekt in de hele rijders-DB (elke persoon heeft geracet). in_roster geeft
     // aan of de rijder al in de roster van deze coach zit (voor de UI).
-    if ($method === 'GET' && $action === 'zoek_personen') {
+    // POST: de zoekterm (naam/startnummer) hoort niet in de URL en dus niet in de
+    // serverlogs van de hostingprovider.
+    if ($method === 'POST' && $action === 'zoek_personen') {
         $c = vereisCoachLogin($pdo);
         // Pending coach mag z'n roster al opbouwen, maar vindt anonieme rijders
         // niet (zelfde regel als de publieke laag: nooit op naam/nummer vindbaar).
         $anonExcl = ($c['status'] ?? '') === 'approved' ? '' : ' AND p.publiek_anoniem IS NULL';
-        $q = trim($_GET['q'] ?? '');
+        $q = trim((string)($body['q'] ?? ''));
         if (strlen($q) < 2) jsonOut(['personen' => []]);   // te kort → geen zoekstorm
         $like = '%' . $q . '%';
         // Startnummer-zoek: NL-rijders hebben een vast startnummer (niet uniek —

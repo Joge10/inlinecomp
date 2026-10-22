@@ -505,7 +505,9 @@ if ($action === 'personen_by_sponsor') {
 if ($action === 'person_by_startnummer') {
     header('Content-Type: application/json; charset=utf-8');
     $compId = trim($_GET['competition_id'] ?? '');
-    $snr    = (int)($_GET['snr'] ?? 0);
+    // Startnummer alleen uit de POST-body (niet in de URL/serverlogs). Oude
+    // app-versies die nog GET gebruiken krijgen null en vallen terug.
+    $snr    = (int)($_POST_BODY['snr'] ?? 0);
     if (!$compId || !$snr) { echo json_encode(null); exit; }
     try {
         $stmt = $pdo->prepare("
@@ -544,11 +546,19 @@ if ($action === 'person_by_startnummer') {
 //   naam        → LIKE %naam% op full_name, alleen ingeschreven rijders
 if ($action === 'person_lookup') {
     header('Content-Type: application/json; charset=utf-8');
-    $compId  = trim($_GET['competition_id'] ?? '');
-    $snr     = trim($_GET['snr'] ?? '');
-    $license = trim($_GET['license_key'] ?? '');
+    // Zoektermen (startnummer, licentie/ID, naam) alleen uit de POST-body: wat een
+    // coach intikt hoort niet in de URL en dus niet in de serverlogs van de
+    // hostingprovider (30-60 dagen). competition_id mag in de URL (geen persoonsgegeven).
+    if (($_SERVER['REQUEST_METHOD'] ?? 'GET') !== 'POST') {
+        http_response_code(405);
+        echo json_encode(['error' => 'POST vereist']);
+        exit;
+    }
+    $compId  = trim($_GET['competition_id'] ?? (string)($_POST_BODY['competition_id'] ?? ''));
+    $snr     = trim((string)($_POST_BODY['snr'] ?? ''));
+    $license = trim((string)($_POST_BODY['license_key'] ?? ''));
     if ($license !== '') $license = (string)(resolveNaarPersonId($pdo, $license) ?? $license);  // token → person_id
-    $naam    = trim($_GET['naam'] ?? '');
+    $naam    = trim((string)($_POST_BODY['naam'] ?? ''));
     if (!$compId || (!$snr && !$license && !$naam)) {
         echo json_encode(['error' => 'competition_id + snr/license_key/naam verplicht']);
         exit;
@@ -7625,10 +7635,14 @@ async function opCompetitionChange() {
 //   1 match    → direct toevoegen aan coach-lijst
 //   ≥2 matches → keuze-modal zodat user beslist welke(n)
 async function _coachLookupEnToevoegen(param, meldingen, foutMeldingen, label) {
-    const qs = new URLSearchParams({ competition_id: selComp.value, ...param });
+    // Zoekterm in de POST-body, niet in de URL (komt anders in de serverlogs).
     let lijst;
     try {
-        const res = await safeFetch('?action=person_lookup&' + qs.toString());
+        const res = await coachFetch('?action=person_lookup&competition_id=' + encodeURIComponent(selComp.value), {
+            method:  'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body:    JSON.stringify(param),
+        });
         lijst = await res.json();
     } catch (e) {
         foutMeldingen.push(t('fb_lookup_mislukt', {label, msg: e.message}));
@@ -9151,7 +9165,7 @@ window.addEventListener('appinstalled', () => {
   async function _caNaamZoek(ov, q) {
     const res = ov.querySelector('#ca-naam-res'); if (!res) return;
     if (q.length < 2) { res.innerHTML = ''; return; }
-    const r = await get('zoek_personen&q=' + encodeURIComponent(q));
+    const r = await post('zoek_personen', { q });   // zoekterm in de body, niet in de URL
     const lijst = r.personen || [];
     res.innerHTML = lijst.length ? lijst.map(p => `<div class="ca-zoek-rij">
       <span>${p.start_number != null ? '<b>' + esc2(p.start_number) + '</b> ' : ''}${esc2(p.full_name)} <small>${esc2(p.club_full || '')}</small></span>
